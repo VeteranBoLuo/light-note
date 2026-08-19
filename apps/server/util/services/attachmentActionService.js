@@ -550,6 +550,7 @@ export async function createImageNoteFromAttachment({
 
   let imageCreated = false;
   try {
+    await fsP.mkdir(imageDir, { recursive: true });
     try {
       await fsP.writeFile(imagePath, buffer, { mode: 0o644, flag: 'wx' });
       imageCreated = true;

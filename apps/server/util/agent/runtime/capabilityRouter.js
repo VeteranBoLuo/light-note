@@ -1,10 +1,13 @@
 const DEFAULT_MAX_CANDIDATE_TOOLS = 10;
 const HARD_MAX_CANDIDATE_TOOLS = 12;
+const PLATFORM_TARGET_PATTERN =
+  /(?:全平台|平台(?:全部|所有)?|全站|本站|所有用户|全部用户|全体用户|大家|这些用户|上述用户|他们|新增用户|新用户|新注册用户|注册用户|platform[-\s]?wide|site[-\s]?wide|all\s+users?|new\s+users?)/iu;
+const SINGLE_OWNER_TARGET_PATTERN =
+  /(?:我的|(?<![给帮诉让替请为])我(?!们)|本人|当前(?:用户|账号)|这个账号|该账号|某一位用户|某个用户)/iu;
 
 const TOOL_DEPENDENCIES = Object.freeze({
   restore_trash: ['query_trash'],
   save_attachment_to_cloud: ['query_cloud_folders'],
-  create_image_note: ['query_cloud_folders'],
   set_todo_status: ['query_todos'],
   delete_todo: ['query_todos'],
   create_todo_plan: ['preview_todo_plan'],
@@ -35,31 +38,76 @@ function semanticScore(goal, capability) {
   return overlap;
 }
 
+function patternMatches(pattern, text) {
+  if (pattern instanceof RegExp) {
+    pattern.lastIndex = 0;
+    return pattern.test(text);
+  }
+  const needle = normalizeText(pattern);
+  return Boolean(needle) && normalizeText(text).includes(needle);
+}
+
+function matchesAny(patterns, text) {
+  return (Array.isArray(patterns) ? patterns : []).some((pattern) => patternMatches(pattern, text));
+}
+
+function targetScopeEligible(scope, text) {
+  if (scope === 'single_owner' && PLATFORM_TARGET_PATTERN.test(text)) return false;
+  if (scope === 'platform' && SINGLE_OWNER_TARGET_PATTERN.test(text) && !PLATFORM_TARGET_PATTERN.test(text)) {
+    return false;
+  }
+  return true;
+}
+
+function routingText(goal, turnSpec, message) {
+  return [message, goal?.description, goal?.targetDescription, turnSpec?.clarificationQuestion]
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
+function routingEligible(capability, text) {
+  const routing = capability?.routing;
+  if (!routing) return true;
+  if (!targetScopeEligible(routing.targetScope, text)) return false;
+  if (matchesAny(routing.excludeAny, text)) return false;
+  return !routing.requireAny?.length || matchesAny(routing.requireAny, text);
+}
+
+function routedSemanticScore(goal, capability, turnSpec, message) {
+  const text = routingText(goal, turnSpec, message);
+  const preferenceBonus = matchesAny(capability?.routing?.preferAny, text) ? 10_000 : 0;
+  return preferenceBonus + semanticScore(goal, capability);
+}
+
 function goalEffect(goal) {
   return goal.kind === 'read' ? 'read' : 'write';
 }
 
 function requestedOperation(goal, turnSpec) {
+  if (goal?.operation) return goal.operation;
   if (goal?.kind === 'read') return 'read';
   if (goal?.kind === 'transform' && turnSpec?.requestKind === 'create_artifact') return 'create';
   if (goal?.kind === 'transform' && turnSpec?.requestKind === 'revise_artifact') return 'update';
   return '';
 }
 
-function pickCapabilities(goal, catalog, turnSpec) {
-  const domainCandidates = (Array.isArray(catalog) ? catalog : [])
-    .filter(
-      (entry) =>
-        (Array.isArray(entry?.appliesToDomains)
-          ? entry.appliesToDomains.includes(goal.capabilityDomain)
-          : entry?.domain === goal.capabilityDomain) && entry?.effect === goalEffect(goal),
-    );
+function pickCapabilities(goal, catalog, turnSpec, message) {
+  const text = routingText(goal, turnSpec, message);
+  const domainCandidates = (Array.isArray(catalog) ? catalog : []).filter(
+    (entry) =>
+      (Array.isArray(entry?.appliesToDomains)
+        ? entry.appliesToDomains.includes(goal.capabilityDomain)
+        : entry?.domain === goal.capabilityDomain) &&
+      entry?.effect === goalEffect(goal) &&
+      routingEligible(entry, text),
+  );
   const operation = requestedOperation(goal, turnSpec);
   const operationCandidates = operation
     ? domainCandidates.filter((entry) => Array.isArray(entry?.operations) && entry.operations.includes(operation))
     : [];
   const candidates = (operationCandidates.length ? operationCandidates : domainCandidates)
-    .map((entry) => ({ entry, score: semanticScore(goal, entry) }))
+    .map((entry) => ({ entry, score: routedSemanticScore(goal, entry, turnSpec, message) }))
     .sort((left, right) => right.score - left.score || left.entry.id.localeCompare(right.entry.id));
   if (!candidates.length) return [];
   if (goalEffect(goal) === 'write') return [candidates[0].entry];
@@ -75,7 +123,7 @@ function safeLimit(value) {
   return Math.max(1, Math.min(HARD_MAX_CANDIDATE_TOOLS, Math.trunc(numeric)));
 }
 
-export function routeTurnSpecCapabilities({ turnSpec, catalog = [], tools = [], maxTools } = {}) {
+export function routeTurnSpecCapabilities({ turnSpec, catalog = [], tools = [], maxTools, message = '' } = {}) {
   if (!turnSpec) return { state: 'blocked', reason: 'turn_spec_missing', candidates: [], goalRoutes: [] };
   if (turnSpec.confidence === 'low' || turnSpec.missingSlots.length > 0) {
     return { state: 'clarification', reason: 'turn_spec_ambiguous', candidates: [], goalRoutes: [] };
@@ -94,12 +142,14 @@ export function routeTurnSpecCapabilities({ turnSpec, catalog = [], tools = [], 
       goalRoutes.push({ goalId: goal.id, capabilityIds: [], toolNames: [], status: 'unsupported' });
       continue;
     }
-    const selected = pickCapabilities(goal, catalog, turnSpec);
+    const selected = pickCapabilities(goal, catalog, turnSpec, message);
     const policyCapability = selected.find((entry) => ['forbidden', 'planned'].includes(entry.status));
     const enabled = selected.filter((entry) => entry.status === 'enabled');
     if (
       policyCapability &&
-      (!enabled.length || semanticScore(goal, policyCapability) >= semanticScore(goal, enabled[0]))
+      (!enabled.length ||
+        routedSemanticScore(goal, policyCapability, turnSpec, message) >=
+          routedSemanticScore(goal, enabled[0], turnSpec, message))
     ) {
       unsupportedGoals.push(goal.id);
       goalRoutes.push({
@@ -156,4 +206,12 @@ export function routeTurnSpecCapabilities({ turnSpec, catalog = [], tools = [], 
   };
 }
 
-export const __testing = Object.freeze({ requestedOperation, semanticScore, safeLimit });
+export const __testing = Object.freeze({
+  matchesAny,
+  requestedOperation,
+  routedSemanticScore,
+  routingEligible,
+  semanticScore,
+  safeLimit,
+  targetScopeEligible,
+});

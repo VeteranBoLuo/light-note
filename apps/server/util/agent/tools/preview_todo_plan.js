@@ -1,13 +1,21 @@
 import { previewTodoPlan } from '../../services/todoSeriesService.js';
 import { assertTodoPlanFeatureEnabled } from '../../todoPlanFeature.js';
 import { normalizeTodoPlanToolArgs, TODO_PLAN_TOOL_PARAMETERS } from '../todoPlanToolShared.js';
+import { EXPLICIT_PREVIEW_ONLY_PATTERN } from '../semanticPatterns.js';
 
 export default {
   name: 'preview_todo_plan',
   description:
     '确定性预览待办与提醒，不写入数据。每日/每周/每月提醒默认预览为一条待办上的 singleTaskReminder；只有用户明确要求每次分别完成时才预览 independent 多实例计划。',
+  routing: {
+    requireAny: [EXPLICIT_PREVIEW_ONLY_PATTERN],
+    preferAny: [/(?:预览|模拟|试算|演示|preview|dry[ -]?run|simulate)/iu],
+  },
   parameters: TODO_PLAN_TOOL_PARAMETERS,
   normalizeArgs: normalizeTodoPlanToolArgs,
+  validatePlanArgs(input) {
+    previewTodoPlan(normalizeTodoPlanToolArgs(input));
+  },
   requireRoot: false,
   async execute(input) {
     assertTodoPlanFeatureEnabled('ai');

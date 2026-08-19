@@ -14,6 +14,16 @@ export default {
   sourceType: 'folder',
   description:
     '查询当前账号已有的云空间文件夹，返回可用于保存文件的 folderId 和准确名称。用户询问有哪些文件夹、要求选择保存位置，或没有给出明确目标时调用；已给出精确文件夹名的保存请求应直接传给 save_attachment_to_cloud.folderName。本工具只查询，不会新建文件夹。',
+  routing: {
+    targetScope: 'single_owner',
+    requireAny: [
+      /(?:有哪些|列出|查询|查找|查看|搜索).{0,20}(?:云空间)?(?:文件夹|目录)|(?:云空间)?(?:文件夹|目录).{0,20}(?:有哪些|列表|清单|保存位置)|folder(?:s)?.{0,20}(?:list|search|available)/iu,
+    ],
+    preferAny: [/(?:云空间)?(?:文件夹|目录|保存位置)|folders?/iu],
+    excludeAny: [
+      /(?:文件夹|目录).{0,12}(?:中的|里的|下面的).{0,16}(?:文件|图片|文档)|(?:查询|列出|查找).{0,16}(?:文件|图片|文档).{0,20}(?:文件夹|目录)/iu,
+    ],
+  },
   parameters: {
     type: 'object',
     properties: {

@@ -122,7 +122,6 @@ export function matchAgentWriteActionToolNames(message, contextTypes = []) {
 const TOOL_DEPENDENCIES = {
   restore_trash: ['query_trash'],
   save_attachment_to_cloud: ['query_cloud_folders'],
-  create_image_note: ['query_cloud_folders'],
   set_todo_status: ['query_todos'],
   delete_todo: ['query_todos'],
   create_todo_plan: ['preview_todo_plan'],

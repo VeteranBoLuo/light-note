@@ -1025,7 +1025,9 @@ describe('confirmAgentTool', () => {
     const confirmation = {
       id: 'confirm-replay',
       sessionId: 'session-image',
-      toolName: 'create_image_note',
+      // settled binding 故意不带 args；create_note 的 schema 有必填 title，能防止
+      // 回放路径误入参数校验后被当成新执行拒绝。
+      toolName: 'create_note',
       resourceUserId: 'user-1',
       resourceUserRole: 'user',
       adminContextId: null,
@@ -1037,9 +1039,9 @@ describe('confirmAgentTool', () => {
       outcome: {
         httpStatus: 200,
         data: {
-          toolName: 'create_image_note',
-          summary: '图片笔记已创建',
-          sources: [{ type: 'note', id: 'note-1', title: '测试图片' }],
+          toolName: 'create_note',
+          summary: '笔记已创建',
+          sources: [{ type: 'note', id: 'note-1', title: '测试笔记' }],
         },
         message: '',
       },
@@ -1060,8 +1062,13 @@ describe('confirmAgentTool', () => {
       expect.objectContaining({
         status: 200,
         data: expect.objectContaining({
-          summary: '图片笔记已创建',
+          summary: '笔记已创建',
           sources: [expect.objectContaining({ id: 'note-1' })],
+          actionReceipt: expect.objectContaining({
+            actionId: 'confirm-replay',
+            toolName: 'create_note',
+            status: 'succeeded',
+          }),
         }),
       }),
     );

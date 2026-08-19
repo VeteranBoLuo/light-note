@@ -36,6 +36,9 @@ export async function runAgentRuntime({
   outputContract,
   completedGoalIds = [],
   dependencyResults = [],
+  executionContext = {},
+  timeZone,
+  now,
   signal,
   traceId,
   request,
@@ -71,7 +74,7 @@ export async function runAgentRuntime({
       toolCalls: [],
     };
   }
-  const routed = route({ turnSpec, catalog, tools });
+  const routed = route({ turnSpec, catalog, tools, message });
   if (routed.state === 'clarification') {
     return {
       runner: 'clarification',
@@ -99,10 +102,14 @@ export async function runAgentRuntime({
     route: routed,
     planExecution: () =>
       plan({
+        message,
         turnSpec,
         route: routed,
         completedGoalIds,
         dependencyResults,
+        executionContext,
+        timeZone,
+        now,
         signal,
         traceId,
         request,

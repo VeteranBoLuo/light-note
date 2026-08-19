@@ -2,6 +2,7 @@ const VALID_CAPABILITY_STATUSES = new Set(['enabled', 'planned', 'forbidden']);
 const VALID_RISKS = new Set(['low', 'medium', 'high']);
 const VALID_CONFIRMATION_POLICIES = new Set(['default', 'always']);
 const SEMANTIC_READ_CAPABILITY_PREFIX = 'read.';
+const SEMANTIC_OPERATION_CAPABILITY_PREFIX = 'operation.';
 const ALL_CONTENT_CAPABILITY_DOMAINS = Object.freeze(['content', 'note', 'bookmark', 'file', 'todo', 'tag']);
 
 function domainFromResource(resource) {
@@ -51,12 +52,29 @@ function inferReadToolDomain(tool) {
   return 'content';
 }
 
-function capabilityScopePolicy(tool, domain) {
+function declaredReadDomains(tool, fallbackDomain) {
+  const declared = Array.isArray(tool?.appliesToDomains) ? tool.appliesToDomains.map(String).filter(Boolean) : [];
+  return Object.freeze([...new Set(declared.length ? declared : [fallbackDomain])]);
+}
+
+function capabilityScopePolicy(tool, domain, effect) {
   if (tool?.isWrite === true) return 'confirmation_owner_bound';
+  if (effect === 'write') return 'owner_bound';
   if (domain === 'web') return 'explicit_url_only';
   if (['note', 'bookmark', 'file', 'todo', 'tag', 'content'].includes(domain)) return 'grounding_scope_bound';
   if (domain === 'admin') return 'root_context_bound';
   return 'owner_bound';
+}
+
+function freezeRoutingHints(routing) {
+  if (!routing || typeof routing !== 'object' || Array.isArray(routing)) return null;
+  const targetScope = ['single_owner', 'platform'].includes(routing.targetScope) ? routing.targetScope : '';
+  return Object.freeze({
+    targetScope,
+    requireAny: Object.freeze(Array.isArray(routing.requireAny) ? [...routing.requireAny] : []),
+    preferAny: Object.freeze(Array.isArray(routing.preferAny) ? [...routing.preferAny] : []),
+    excludeAny: Object.freeze(Array.isArray(routing.excludeAny) ? [...routing.excludeAny] : []),
+  });
 }
 
 function defineCapability(input) {
@@ -142,6 +160,7 @@ export const AGENT_ACTION_CAPABILITIES = Object.freeze([
     labels: { zh: '创建图片笔记', en: 'create an image note' },
     actionPatterns: [
       /(?:创建|新建|生成).{0,12}(?:图片笔记|图文笔记)|(?:图片笔记|图文笔记).{0,12}(?:创建|新建|生成)/i,
+      /(?:把|将).{0,48}(?:图片|原图|附件).{0,48}(?:创建|新建|生成|做成).{0,160}(?:图片笔记|图文笔记)/i,
       /(?:create|make).{0,20}(?:image|picture)\s+note|(?:image|picture)\s+note.{0,20}(?:create|make)/i,
     ],
     operationPatterns: [CREATE_PATTERN],
@@ -502,6 +521,7 @@ export function getAgentCapabilityByToolName(toolName) {
 export function getSemanticCapabilityIdForTool(tool) {
   if (!tool?.name) return '';
   if (tool.isWrite === true) return getAgentCapabilityByToolName(tool.name)?.id || '';
+  if (tool.semanticEffect === 'write') return `${SEMANTIC_OPERATION_CAPABILITY_PREFIX}${tool.name}`;
   return `${SEMANTIC_READ_CAPABILITY_PREFIX}${tool.name}`;
 }
 
@@ -525,21 +545,32 @@ export function buildAgentSemanticCapabilityCatalog(tools, { availableToolNames 
     if (!capabilityId) continue;
     if (actionCapability) includedActionCapabilities.add(actionCapability.id);
     const domain = actionCapability ? domainFromResources(actionCapability.resources) : inferReadToolDomain(tool);
+    const semanticEffect = tool.semanticEffect === 'write' ? 'write' : tool.isWrite === true ? 'write' : 'read';
+    const semanticOperations = actionCapability
+      ? [...actionCapability.operations]
+      : Array.isArray(tool.semanticOperations) && tool.semanticOperations.length
+        ? [...new Set(tool.semanticOperations.map(String))]
+        : [semanticEffect === 'write' ? 'update' : 'read'];
     const appliesToDomains = actionCapability
-      ? capabilityDomainsFromResources(actionCapability.resources)
-      : Object.freeze([domain]);
+      ? Object.freeze([
+          ...new Set([
+            ...capabilityDomainsFromResources(actionCapability.resources),
+            ...(Array.isArray(tool?.appliesToDomains) ? tool.appliesToDomains.map(String).filter(Boolean) : []),
+          ]),
+        ])
+      : declaredReadDomains(tool, domain);
     entries.push(
       Object.freeze({
         id: capabilityId,
-        effect: tool.isWrite === true ? 'write' : 'read',
+        effect: semanticEffect,
         status: available.has(tool.name) ? 'enabled' : 'unavailable',
         domain,
         appliesToDomains,
-        operations: Object.freeze(actionCapability ? [...actionCapability.operations] : ['read']),
+        operations: Object.freeze(semanticOperations),
         requiredSlots: Object.freeze(
           Array.isArray(tool?.parameters?.required) ? [...new Set(tool.parameters.required.map(String))] : [],
         ),
-        scopePolicy: capabilityScopePolicy(tool, domain),
+        scopePolicy: capabilityScopePolicy(tool, domain, semanticEffect),
         toolNames: Object.freeze(available.has(tool.name) ? [tool.name] : []),
         description: String(tool.description || actionCapability?.labels?.zh || tool.name).trim(),
         label: String(actionCapability?.labels?.zh || tool.description || tool.name).trim(),
@@ -552,6 +583,7 @@ export function buildAgentSemanticCapabilityCatalog(tools, { availableToolNames 
           zh: String(actionCapability?.guidance?.zh || '').trim(),
           en: String(actionCapability?.guidance?.en || '').trim(),
         }),
+        routing: freezeRoutingHints(tool.routing),
       }),
     );
   }

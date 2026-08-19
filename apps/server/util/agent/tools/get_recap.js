@@ -5,6 +5,14 @@ export default {
   name: 'get_recap',
   description:
     '生成内容回顾：包含最近7天新增的书签/笔记、"那年今日"以及很久没动过的尘封收藏。优先回答"生成我的本周回顾""那年今日我存了啥""有什么久没看的收藏"；仅列出最近内容时可改用书签/笔记查询。',
+  routing: {
+    targetScope: 'single_owner',
+    requireAny: [
+      /(?:本周|这周|最近\s*7\s*天).{0,16}(?:内容)?(?:回顾|复盘)|(?:那年今日|历史上的今天|尘封(?:内容|收藏)?|很久没看|久未查看|weekly\s+(?:recap|review))/iu,
+    ],
+    preferAny: [/(?:回顾|复盘|那年今日|历史上的今天|尘封|很久没看|久未查看|recap|review)/iu],
+    excludeAny: [/(?:挑战|任务|积分|领奖|创建|新建|保存为|写入|导出)/iu],
+  },
   parameters: { type: 'object', properties: {} },
   requireRoot: false,
   async execute(args, ctx) {

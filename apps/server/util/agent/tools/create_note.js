@@ -34,6 +34,14 @@ export default {
   sourceType: 'note',
   description:
     '创建一条新笔记。参数 title 为笔记标题，content 为正文内容；parentId 是可选的目标父页面 ID，省略时创建在“我的知识库”根目录。仅创建笔记本身，不处理标签关联。',
+  routing: {
+    targetScope: 'single_owner',
+    requireAny: [
+      /(?:创建|新建|生成|写|整理|保存|产出).{0,24}(?:Markdown\s*)?(?:笔记|新笔记)|(?:笔记|新笔记).{0,24}(?:创建|新建|生成|写|整理|保存|产出)|(?:create|generate|write|save).{0,24}(?:markdown\s+)?note/iu,
+    ],
+    preferAny: [/(?:笔记|新笔记|markdown\s+note)/iu],
+    excludeAny: [/(?:知识库|帮助中心|知识条目|knowledge\s+base|help\s+center)/iu],
+  },
   parameters: {
     type: 'object',
     properties: {
@@ -47,16 +55,7 @@ export default {
   isWrite: true,
   riskLevel: 'low',
   confirmationPolicy: 'default',
-  argumentAliases: [
-    'noteTitle',
-    'note_title',
-    'name',
-    'noteContent',
-    'note_content',
-    'body',
-    'markdown',
-    'parent_id',
-  ],
+  argumentAliases: ['noteTitle', 'note_title', 'name', 'noteContent', 'note_content', 'body', 'markdown', 'parent_id'],
   normalizeArgs: normalizeCreateNoteArgs,
   async preview(args, ctx = {}) {
     const { title, content, parentId } = validateCreateNoteArgs(args);

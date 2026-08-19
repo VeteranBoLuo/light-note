@@ -4,6 +4,7 @@ import { assertTodoPlanReady } from '../../todoPlanCalculator.js';
 import { createTodoPlan, previewTodoPlan } from '../../services/todoSeriesService.js';
 import { assertTodoPlanFeatureEnabled } from '../../todoPlanFeature.js';
 import { normalizeTodoPlanToolArgs, TODO_PLAN_TOOL_PARAMETERS, todoPlanPreviewCard } from '../todoPlanToolShared.js';
+import { EXPLICIT_PREVIEW_ONLY_PATTERN } from '../semanticPatterns.js';
 
 function ensureAllowed(ctx) {
   assertTodoPlanFeatureEnabled('ai');
@@ -43,7 +44,13 @@ export default {
   directAction: true,
   riskLevel: 'medium',
   confirmationPolicy: 'always',
+  routing: {
+    excludeAny: [EXPLICIT_PREVIEW_ONLY_PATTERN],
+  },
   normalizeArgs: normalizeTodoPlanToolArgs,
+  validatePlanArgs(input) {
+    previewTodoPlan(normalizeTodoPlanToolArgs(input));
+  },
   async prepareArgs(input, ctx) {
     ensureAllowed(ctx);
     const args = normalizeTodoPlanToolArgs(input);

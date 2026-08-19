@@ -43,6 +43,7 @@ describe('Agent Runtime V2', () => {
     expect(compile).toHaveBeenCalledTimes(1);
     expect(route).toHaveBeenCalledTimes(1);
     expect(plan).toHaveBeenCalledTimes(1);
+    expect(plan).toHaveBeenCalledWith(expect.objectContaining({ message: '总结并创建笔记' }));
   });
 
   it('低置信 TurnSpec 在 Planner 前统一澄清', async () => {

@@ -55,6 +55,12 @@ export default {
     '查询笔记。keyword 应为短关键词或词组（如"开发计划"），不要传整句问题；可按时间范围筛选，返回笔记标题、内容片段和创建时间。' +
     '需要按语义查找"资料里怎么说"或跨资料检索正文证据时，优先使用 search_content。' +
     personalScopeHint('笔记'),
+  routing: {
+    targetScope: 'single_owner',
+    preferAny: [
+      /(?:多少|哪些|列出|查找|查询|最近|今天|昨天|本周|本月).{0,20}(?:笔记|记录)|(?:笔记|记录).{0,20}(?:多少|哪些|列表|清单)/iu,
+    ],
+  },
   parameters: {
     type: 'object',
     properties: {
@@ -93,9 +99,7 @@ export default {
            ELSE 10
          END DESC, n.create_time DESC`
       : 'ORDER BY n.create_time DESC';
-    const orderParams = keyword
-      ? [keyword, `${escapeLikePattern(keyword)}%`, `%${escapeLikePattern(keyword)}%`]
-      : [];
+    const orderParams = keyword ? [keyword, `${escapeLikePattern(keyword)}%`, `%${escapeLikePattern(keyword)}%`] : [];
 
     const [[rows], [countRes]] = await Promise.all([
       pool.query(

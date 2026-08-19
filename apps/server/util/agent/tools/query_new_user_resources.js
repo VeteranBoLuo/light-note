@@ -7,10 +7,23 @@ import queryPlatformResources from './query_platform_resources.js';
  */
 export default {
   name: 'query_new_user_resources',
+  appliesToDomains: ['admin', 'content', 'note', 'bookmark', 'file'],
   description:
     '【管理员】一次查询某时间段新注册用户创建的书签、笔记和云空间文件。' +
     '专门回答“今天新增用户今天新增了哪些资源”“本周新用户都创建了什么”这类同时限定用户注册时间与资源创建时间的问题。' +
     '这类问题只调用本工具一次；不要再并行调用 query_notes、query_bookmarks、query_files，也不需要先调用 query_users。',
+  routing: {
+    targetScope: 'platform',
+    requireAny: [
+      /(?:新增|新注册|注册).{0,24}(?:用户|账号).{0,48}(?:新增|创建|产生|保存|上传|收藏|都有什么).{0,18}(?:资源|内容|书签|笔记|文件|什么)/iu,
+      /(?:这些|上述|他们|新用户).{0,28}(?:新增|创建|产生|保存|上传|收藏|资源|书签|笔记|文件)/iu,
+    ],
+    preferAny: [
+      /(?:新增|新注册|注册).{0,24}(?:用户|账号).{0,48}(?:资源|内容|书签|笔记|文件)/iu,
+      /(?:这些|上述|他们|新用户).{0,28}(?:资源|书签|笔记|文件|创建了什么)/iu,
+    ],
+    excludeAny: [/(?:最多|排行|排名|榜单|第[一1]名|top\s*\d*)/iu],
+  },
   parameters: {
     type: 'object',
     additionalProperties: false,

@@ -127,6 +127,7 @@ function buildUnion(resourceType, time) {
 
 export default {
   name: 'query_platform_resources',
+  appliesToDomains: ['admin', 'content', 'note', 'bookmark', 'file'],
   description:
     '【管理员】跨用户列出全平台新增的书签/笔记/云空间文件清单，返回每一条的标题、归属用户和创建时间。' +
     '回答“今天平台新增的笔记都有哪些”“这些资源的标题分别是什么”“昨天大家都收藏了什么”这类需要逐条明细、且不限定某一个用户的问题时用它。' +
@@ -134,6 +135,15 @@ export default {
     '只查某一位用户自己的资源时用 query_notes / query_bookmarks / query_files 并传 user。' +
     '如果是在“今天新增了哪些用户”之后追问“他们今天新增了哪些资源”，必须同时传 registeredWithin="今天" 与 timeRange="今天"。' +
     '本工具不返回正文内容。timeRange 必填，问累计或当前总量时传“全部”。',
+  routing: {
+    targetScope: 'platform',
+    requireAny: [
+      /(?:平台|大家|所有用户|全站|这些用户|他们).{0,28}(?:资源|内容|书签|笔记|文件)/iu,
+      /(?:这些|上述|刚才|前面).{0,20}(?:资源|内容|书签|笔记|文件).{0,28}(?:清单|明细|标题|分别是什么|有哪些)/iu,
+    ],
+    preferAny: [/(?:哪些|清单|明细|标题|分别是什么|都收藏了什么)/iu],
+    excludeAny: [/(?:最多|排行|排名|榜单|第[一1]名|top\s*\d*)/iu],
+  },
   parameters: {
     type: 'object',
     additionalProperties: false,

@@ -5,13 +5,24 @@ export default {
   name: 'query_users',
   description:
     '查询平台用户列表/总数。可按关键词匹配昵称/邮箱/ID；可用 registeredWithin 按注册时间段筛选，回答"最近N天/本周/本月新增了多少用户"这类问题。',
+  routing: {
+    preferAny: [
+      /(?:新增|新注册|注册).{0,16}(?:用户|账号)|(?:用户|账号).{0,16}(?:新增|新注册|注册)/iu,
+      /\b(?:new|registered|signup).{0,16}(?:users?|accounts?)\b/iu,
+    ],
+    excludeAny: [
+      /(?:新增|注册).{0,24}(?:用户|账号).{0,40}(?:新增|创建|产生|保存|上传|收藏).{0,16}(?:资源|内容|书签|笔记|文件)/iu,
+      /(?:这些|上述|他们|新用户).{0,28}(?:资源|书签|笔记|文件|创建了什么)/iu,
+    ],
+  },
   parameters: {
     type: 'object',
     properties: {
       keyword: { type: 'string', description: '搜索关键词，匹配用户昵称或邮箱' },
       registeredWithin: {
         type: 'string',
-        description: '按注册时间筛选，如"最近7天"、"本周"、"本月"、"今天"；问"新增用户数"时用此参数，total 即为该时段新增数',
+        description:
+          '按注册时间筛选，如"最近7天"、"本周"、"本月"、"今天"；问"新增用户数"时用此参数，total 即为该时段新增数',
       },
       limit: { type: 'integer', description: '返回条数，默认10，最大50' },
     },

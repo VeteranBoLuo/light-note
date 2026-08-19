@@ -39,6 +39,12 @@ const NOTE_WRITE_PATTERN =
   /(?:生成|创建|新建|写|整理|转(?:换)?|保存|产出).{0,16}(?:篇|个|一篇|一份)?\s*(?:markdown\s*)?笔记|(?:markdown\s*)?笔记.{0,16}(?:生成|创建|新建|写|整理|转换|保存|产出)|\b(?:create|generate|write|turn|convert|save)\b.{0,28}\bnote\b|\bnote\b.{0,28}\b(?:create|generate|write|turn|convert|save)\b/i;
 const DRAFT_REVISION_PATTERN =
   /(?:重新|再)(?:生成|写|做)|重写|重做|改写|润色|优化|扩写|补充|展开|\b(?:regenerate|rewrite|revise|polish|expand|elaborate)\b/i;
+const DRAFT_TITLE_CHANGE_PATTERN =
+  /(?:(?:标题|题目|名称).{0,20}(?:改|换|重写|重拟|重新拟|调整|优化|改成|改为|换成|换为|叫作|命名)|(?:改|换|重写|重拟|调整|优化|重命名).{0,16}(?:标题|题目|名称)|\b(?:rename|retitle)\b|\b(?:change|update|rewrite|improve|use)\b.{0,24}\btitle\b|\b(?:new|different|better)\b.{0,12}\btitle\b)/i;
+const PENDING_DRAFT_MATERIAL_CONTINUITY_PATTERN =
+  /(?:保留|沿用|继续使用|继续基于|仍然使用|不要更换|别换).{0,20}(?:本轮|这轮|当前|刚才|之前|原(?:来|有)?|已(?:经)?引用|材料|来源|核心事实)|(?:本轮|这轮|当前|刚才|之前|原(?:来|有)?|已(?:经)?引用).{0,20}(?:材料|来源|核心事实)|\b(?:keep|reuse|continue\s+using|same)\b.{0,28}\b(?:sources?|materials?|facts?|references?)\b/i;
+const PENDING_DRAFT_NEW_SCOPE_PATTERN =
+  /(?:改为|改成|换成|改用|换用|重新根据|重新基于|另用|不要用原).{0,28}(?:今天|今日|昨天|最近|本周|上周|本月|笔记|书签|文件|待办|材料|附件|来源)|(?:根据|基于|使用).{0,20}(?:今天|今日|昨天|最近\s*\d+\s*天|本周|上周|本月|新材料|新附件|另一|其他).{0,24}(?:笔记|书签|文件|待办|材料|附件|来源)?|\b(?:switch|replace|use\s+new|based\s+on\s+new)\b.{0,32}\b(?:scope|sources?|materials?|notes?|bookmarks?|files?)\b/i;
 const COMPOUND_CLAUSE_SEPARATOR = /(?:，|,|；|;|并且|同时|然后|接着|随后|之后|再|并|\b(?:and\s+then|then|and)\b)/i;
 // 高召回传感器：只决定是否值得花一次语义分类，不参与最终判定，因此宁可宽松也不能漏。
 // 必须严格宽于 NOTE_WRITE_PATTERN，否则会缩小现有覆盖面。
@@ -302,6 +308,22 @@ export async function classifyPendingNoteDraftFollowUp({
 }
 
 /**
+ * 待确认草稿上的明确续写指令不应再次依赖模型猜测指代。
+ *
+ * “更详细/至少 N 字”天然只是在调整当前产物；“重新生成”在没有新材料范围时也
+ * 指向当前草稿。若用户明确切换时间、资源或材料范围，则仍交给语义分类器重新规划，
+ * 避免把“改为今天全部笔记”错误继承成上一轮 7 天材料。
+ */
+export function isExplicitPendingNoteDraftRefinement(message) {
+  const text = String(message || '').trim();
+  if (!text) return false;
+  if (isRelativeGrowthInstruction(text)) return true;
+  if (!DRAFT_REVISION_PATTERN.test(text)) return false;
+  if (PENDING_DRAFT_MATERIAL_CONTINUITY_PATTERN.test(text)) return true;
+  return !PENDING_DRAFT_NEW_SCOPE_PATTERN.test(text);
+}
+
+/**
  * 统一笔记草稿通道只接管已由能力注册表判定为“仅创建笔记”的明确写请求。
  * 查询、教程问题、复合写操作和未注册动作继续交给 Semantic Planner 处理。
  */
@@ -337,9 +359,22 @@ export function isNoteDraftRequest(message, actionIntent) {
  * 产物词不能单独成立——“帮我删除我的笔记”“总结我最近新增的书签和笔记”都含产物词，
  * 却与产出笔记无关。
  */
-export function shouldClassifyNoteDraftTask({ message, contextTypes = [], scopeCount = 0, attachmentCount = 0 } = {}) {
+export function shouldClassifyNoteDraftTask({
+  message,
+  contextTypes = [],
+  scopeCount = 0,
+  attachmentCount = 0,
+  actionIntent = null,
+} = {}) {
   const text = String(message || '').trim();
   if (!text) return false;
+  // 已由封闭动作注册表识别出的专用写操作（如“把图片做成图片笔记”或“保存附件到云空间”）
+  // 必须继续走对应工具。高召回的笔记传感器不能因为消息里同时出现“附件/保存/笔记”而
+  // 抢走这些请求；只有唯一 create_note 能进入通用 Markdown 草稿通道。
+  if (actionIntent?.kind === 'action' && actionIntent?.resolution === 'enabled') {
+    const toolNames = [...new Set((actionIntent.toolNames || []).map(String).filter(Boolean))];
+    if (toolNames.length > 0 && !(toolNames.length === 1 && toolNames[0] === 'create_note')) return false;
+  }
   const hasProduceVerb = NOTE_PRODUCE_SENSOR.test(text);
   const hasDraftRevision = isRelativeGrowthInstruction(text) || DRAFT_REVISION_PATTERN.test(text);
   const hasMaterial =
@@ -723,6 +758,10 @@ export function countNoteDraftCharacters(content) {
   return countOutputCharacters(content);
 }
 
+export function requestsNoteDraftTitleChange(instruction) {
+  return DRAFT_TITLE_CHANGE_PATTERN.test(String(instruction || ''));
+}
+
 function buildDraftTool(outputContract) {
   const minimumCharacters = requiredMinimumCharacters(outputContract);
   const maximumCharacters = allowedMaximumCharacters(outputContract);
@@ -791,6 +830,7 @@ function buildDraftMessages({ materials, instruction, previousDraft, outputContr
     .trim()
     .slice(0, MAX_PREVIOUS_DRAFT_CHARS);
   const isRevision = Boolean(previousTitle || previousContent);
+  const preservePreviousTitle = Boolean(previousTitle) && !requestsNoteDraftTitleChange(instruction);
   const system = [
     '你是轻笺的统一笔记草稿引擎。你的唯一任务是根据已校验材料生成或改写一篇可保存的 Markdown 笔记。',
     '必须调用 submit_note_draft，一次只提交一个 title 和一份完整 content；不要在普通文本中回答。',
@@ -809,6 +849,7 @@ function buildDraftMessages({ materials, instruction, previousDraft, outputContr
     isRevision
       ? '请在保留有依据事实和有效结构的前提下，严格按用户当前要求改写整篇草稿。不要只解释你会怎么改。'
       : '请直接产出一篇结构完整、可以确认保存的笔记草稿。',
+    preservePreviousTitle ? `用户没有要求修改标题；title 必须原样返回：${previousTitle}` : '',
     repairReason ? `上一次草稿未通过完整性检查：${repairReason} 请修正后重新提交完整草稿。` : '',
   ]
     .filter(Boolean)
@@ -895,7 +936,10 @@ export async function generateNoteDraft({
     onValidation?.(validation.trace, attempt);
     if (!repairReason) {
       return {
-        title: draft.title,
+        title:
+          previousDraft?.title && !requestsNoteDraftTitleChange(instruction)
+            ? String(previousDraft.title).trim().slice(0, MAX_TITLE_CHARS)
+            : draft.title,
         content: draft.content,
         finishReason: response?.finishReason || null,
         attempts: attempt,

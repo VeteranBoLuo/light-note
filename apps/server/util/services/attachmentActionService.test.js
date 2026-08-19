@@ -424,6 +424,29 @@ describe('attachmentActionService', () => {
     }
   });
 
+  it('图片目录尚不存在时自动创建，避免部署目录缺失导致确认后失败', async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), 'light-note-image-note-parent-'));
+    const imageDir = path.join(rootDir, 'nested', 'images');
+    const source = attachment({ status: 'ready', error_code: 'NO_TEXT_CONTENT' });
+    pool.query.mockResolvedValueOnce([[source]]).mockResolvedValueOnce([[source]]);
+    getObjectMetadataFromObs.mockResolvedValue({ contentLength: ONE_PIXEL_PNG.length });
+    getObjectBufferFromObs.mockResolvedValue(ONE_PIXEL_PNG);
+    createNote.mockResolvedValue({ id: 'note-1', title: '自动建目录', type: 'html' });
+
+    try {
+      const result = await createImageNoteFromAttachment({
+        userId: 'user-1',
+        attachmentId: 'attachment-1',
+        title: '自动建目录',
+        imageDir,
+      });
+      const savedName = new URL(result.imageUrl).pathname.split('/').pop();
+      expect(await readFile(path.join(imageDir, savedName))).toEqual(ONE_PIXEL_PNG);
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
+  });
+
   it('图片笔记提交结果不明后重试时复用图片路径，并把幂等键传给笔记创建', async () => {
     const imageDir = await mkdtemp(path.join(os.tmpdir(), 'light-note-image-note-'));
     const source = attachment();

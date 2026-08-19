@@ -4,6 +4,14 @@ import { parseTimeRange } from '../timeRange.js';
 export default {
   name: 'get_active_users',
   description: '查询最近活跃的用户排行，按 API 请求次数降序排列。支持按时间范围筛选。',
+  routing: {
+    targetScope: 'platform',
+    requireAny: [
+      /(?:活跃).{0,16}(?:用户|账号|排行)|(?:用户|账号).{0,16}(?:活跃|API\s*请求)|API\s*请求(?:次数)?.{0,12}(?:排行|最多)/iu,
+    ],
+    preferAny: [/(?:活跃用户|用户活跃|API\s*请求)/iu],
+    excludeAny: [/(?:书签|笔记|文件|资源|内容).{0,16}(?:新增|创建|最多|排行)/iu],
+  },
   parameters: {
     type: 'object',
     properties: {

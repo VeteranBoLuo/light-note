@@ -13,6 +13,18 @@ export const TURN_REQUEST_KINDS = Object.freeze([
   'revise_artifact',
 ]);
 export const TURN_GOAL_KINDS = Object.freeze(['read', 'write', 'transform']);
+export const TURN_GOAL_OPERATIONS = Object.freeze([
+  'read',
+  'create',
+  'update',
+  'delete',
+  'restore',
+  'save',
+  'upload',
+  'complete',
+  'reopen',
+  'move',
+]);
 export const CAPABILITY_DOMAINS = Object.freeze([
   'content',
   'note',
@@ -41,6 +53,7 @@ const MAX_DEPENDENCY_DEPTH = 3;
 const MAX_TEXT = 240;
 const MAX_SLOT_NAME = 80;
 const MAX_CLARIFICATION = 300;
+const SYNTHESIZABLE_NOTE_SLOT_PATTERN = /^(?:title|note[_\s-]?title|document[_\s-]?title|标题|笔记标题|文档标题)$/iu;
 
 function normalizeText(value, maxLength = MAX_TEXT) {
   return String(value || '')
@@ -62,6 +75,31 @@ function normalizeMissingSlot(value) {
   return name && reason && question ? Object.freeze({ name, reason, question }) : null;
 }
 
+function isNoteArtifactOutputContract(outputContract) {
+  return String(outputContract?.format || '') === 'note_markdown';
+}
+
+function validatesNoteArtifactBinding({ requestKind, goals, groundingPolicy, missingSlots, outputContract }) {
+  if (!isNoteArtifactOutputContract(outputContract)) return true;
+  const noteTransforms = goals.filter((goal) => goal.kind === 'transform' && goal.capabilityDomain === 'note');
+  if (noteTransforms.length !== 1) return false;
+  if (goals.some((goal) => goal.kind === 'transform' && goal.capabilityDomain !== 'note')) return false;
+  if (missingSlots.some((slot) => SYNTHESIZABLE_NOTE_SLOT_PATTERN.test(slot.name))) return false;
+
+  const independentMutations = goals.filter(
+    (goal) => (goal.kind === 'write' || goal.kind === 'transform') && goal !== noteTransforms[0],
+  );
+  if (independentMutations.length > 0) {
+    if (requestKind !== 'mixed') return false;
+  } else if (!['create_artifact', 'revise_artifact'].includes(requestKind)) {
+    // “先读取工作区材料，再生成一篇笔记”仍是一个产物目标；读取只是依赖，不能误报成 mixed。
+    return false;
+  }
+  const hasReadGoal = goals.some((goal) => goal.kind === 'read');
+  if (groundingPolicy === 'workspace_query' && hasReadGoal && !noteTransforms[0].dependsOn.length) return false;
+  return true;
+}
+
 function canonicalTurnSpec(value) {
   return JSON.stringify({
     version: value.version,
@@ -70,6 +108,7 @@ function canonicalTurnSpec(value) {
     goals: value.goals.map((goal) => ({
       id: goal.id,
       kind: goal.kind,
+      operation: goal.operation,
       capabilityDomain: goal.capabilityDomain,
       description: goal.description,
       targetDescription: goal.targetDescription,
@@ -102,8 +141,13 @@ export function normalizeTurnSpec(
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
     const id = normalizeText(value.id, 40);
     const kind = TURN_GOAL_KINDS.includes(value.kind) ? value.kind : '';
+    const operation = TURN_GOAL_OPERATIONS.includes(value.operation) ? value.operation : '';
     const capabilityDomain = allowedDomainSet.has(value.capabilityDomain) ? value.capabilityDomain : '';
-    if (!id || goalIds.has(id) || !kind || !capabilityDomain) return null;
+    if (!id || goalIds.has(id) || !kind || !operation || !capabilityDomain) return null;
+    if (kind === 'read' && operation !== 'read') return null;
+    if (kind !== 'read' && operation === 'read') return null;
+    if (kind === 'transform' && raw.requestKind === 'create_artifact' && operation !== 'create') return null;
+    if (kind === 'transform' && raw.requestKind === 'revise_artifact' && operation !== 'update') return null;
     if (!Array.isArray(value.dependsOn) || value.dependsOn.length > MAX_GOALS) return null;
     const dependsOn = uniqueStrings(value.dependsOn);
     if (dependsOn.some((dependencyId) => !goalIds.has(dependencyId))) return null;
@@ -112,6 +156,7 @@ export function normalizeTurnSpec(
       Object.freeze({
         id,
         kind,
+        operation,
         capabilityDomain,
         description: normalizeText(value.description),
         targetDescription: normalizeText(value.targetDescription),
@@ -163,7 +208,19 @@ export function normalizeTurnSpec(
   if (
     requestedGroundingPolicy === 'workspace_query' &&
     ['create_artifact', 'revise_artifact'].includes(raw.requestKind) &&
-    (!hasRead || goals.filter((goal) => goal.kind === 'transform').some((goal) => !goal.dependsOn.length))
+    hasRead &&
+    goals.filter((goal) => goal.kind === 'transform').some((goal) => !goal.dependsOn.length)
+  ) {
+    return null;
+  }
+  if (
+    !validatesNoteArtifactBinding({
+      requestKind: raw.requestKind,
+      goals,
+      groundingPolicy: requestedGroundingPolicy,
+      missingSlots,
+      outputContract,
+    })
   ) {
     return null;
   }
@@ -203,12 +260,21 @@ export function buildTurnSpecToolDefinition({ allowedDomains = CAPABILITY_DOMAIN
               properties: {
                 id: { type: 'string', minLength: 1, maxLength: 40 },
                 kind: { type: 'string', enum: TURN_GOAL_KINDS },
+                operation: { type: 'string', enum: TURN_GOAL_OPERATIONS },
                 capabilityDomain: { type: 'string', enum: allowedDomains },
                 description: { type: 'string', maxLength: MAX_TEXT },
                 targetDescription: { type: 'string', maxLength: MAX_TEXT },
                 dependsOn: { type: 'array', maxItems: MAX_GOALS, items: { type: 'string', maxLength: 40 } },
               },
-              required: ['id', 'kind', 'capabilityDomain', 'description', 'targetDescription', 'dependsOn'],
+              required: [
+                'id',
+                'kind',
+                'operation',
+                'capabilityDomain',
+                'description',
+                'targetDescription',
+                'dependsOn',
+              ],
             },
           },
           groundingPolicy: {
@@ -268,4 +334,8 @@ export function groundingPolicyFromScopeMode(mode) {
   return 'none';
 }
 
-export const __testing = Object.freeze({ canonicalTurnSpec });
+export const __testing = Object.freeze({
+  canonicalTurnSpec,
+  isNoteArtifactOutputContract,
+  validatesNoteArtifactBinding,
+});

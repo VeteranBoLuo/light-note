@@ -2267,6 +2267,7 @@
             : {}),
           clientCapabilities: [...AI_AGENT_CLIENT_CAPABILITIES],
           locale: locale.value,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai',
         },
         {
           headers: {

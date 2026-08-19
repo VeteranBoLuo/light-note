@@ -16,6 +16,7 @@ describe('Agent 动作意图安全策略', () => {
     ['创建一个每天 14 点、共 30 天的学习任务', 'enabled', 'create_todo_plan'],
     ['帮我安排完成后 1 天再次生成的任务', 'enabled', 'create_todo_plan'],
     ['set up a weekly recurring task', 'enabled', 'create_todo_plan'],
+    ['把本轮上传的图片创建成标题为“项目现场记录”的图片笔记', 'enabled', 'create_image_note'],
   ])('%s 解析为已启用能力', (message, resolution, toolName) => {
     expect(resolveAgentActionIntent({ message })).toMatchObject({
       kind: 'action',

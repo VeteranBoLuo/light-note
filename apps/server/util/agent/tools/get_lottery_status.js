@@ -3,7 +3,13 @@ import { getLotteryStatus } from '../../lottery.js';
 // 抽奖状态(只读)。
 export default {
   name: 'get_lottery_status',
-  description: '查询积分抽奖状态:当前积分、单抽/十连消耗、今日剩余免费次数、距下次保底还差几抽。回答"我还能免费抽吗""抽一次多少积分""距保底还差几抽"。',
+  description:
+    '查询积分抽奖状态:当前积分、单抽/十连消耗、今日剩余免费次数、距下次保底还差几抽。回答"我还能免费抽吗""抽一次多少积分""距保底还差几抽"。',
+  routing: {
+    targetScope: 'single_owner',
+    requireAny: [/(?:抽奖|免费抽|单抽|十连|保底|lottery|draw)/iu],
+    preferAny: [/(?:抽奖|免费抽|单抽|十连|保底|lottery)/iu],
+  },
   parameters: { type: 'object', properties: {} },
   requireRoot: false,
   async execute(args, ctx) {

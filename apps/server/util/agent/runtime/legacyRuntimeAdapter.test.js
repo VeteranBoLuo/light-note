@@ -62,4 +62,32 @@ describe('Runtime V2 legacy execution adapter', () => {
       message: '请问要处理哪一篇笔记？',
     });
   });
+
+  it('不支持目标的说明只包含真正被阻断的能力，不把同轮正常读取误报为禁止', () => {
+    const result = adaptRuntimeOutcomeToLegacy(
+      {
+        state: 'unsupported',
+        turnSpec: {
+          requestKind: 'mixed',
+          confidence: 'high',
+          goals: [
+            { id: 'read', kind: 'read', description: '读取笔记', targetDescription: '', dependsOn: [] },
+            { id: 'delete', kind: 'write', description: '永久删除', targetDescription: '', dependsOn: ['read'] },
+          ],
+        },
+        route: {
+          goalRoutes: [
+            { goalId: 'read', capabilityIds: ['note.query'] },
+            { goalId: 'delete', capabilityIds: ['data.permanent_delete'] },
+          ],
+        },
+      },
+      [...catalog, { id: 'data.permanent_delete', effect: 'write', status: 'forbidden', toolNames: [] }],
+    );
+    expect(result.semanticPolicy).toMatchObject({
+      state: 'blocked',
+      resolution: 'forbidden',
+      capabilities: [{ id: 'data.permanent_delete' }],
+    });
+  });
 });

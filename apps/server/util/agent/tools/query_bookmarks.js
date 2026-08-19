@@ -66,6 +66,7 @@ export default {
     '查询书签。keyword 应为短关键词或词组（匹配名称和URL），不要传整句问题；可按标签名、时间范围筛选。' +
     '需要按语义查找书签快照正文时优先使用 search_content。跨类型搜索时可同时调用 query_notes 和 query_files。' +
     personalScopeHint('书签'),
+  routing: { targetScope: 'single_owner' },
   parameters: {
     type: 'object',
     properties: {
@@ -104,15 +105,14 @@ export default {
            ELSE 40
          END DESC, b.create_time DESC`
       : 'ORDER BY b.create_time DESC';
-    const orderParams = keyword
-      ? [keyword, `${escapeLikePattern(keyword)}%`, `%${escapeLikePattern(keyword)}%`]
-      : [];
+    const orderParams = keyword ? [keyword, `${escapeLikePattern(keyword)}%`, `%${escapeLikePattern(keyword)}%`] : [];
 
     const [[rows], [countRes]] = await Promise.all([
-      pool.query(
-        `SELECT b.id, b.name, b.url, b.create_time FROM bookmark b WHERE ${where} ${order} LIMIT ?`,
-        [...baseParams, ...orderParams, take],
-      ),
+      pool.query(`SELECT b.id, b.name, b.url, b.create_time FROM bookmark b WHERE ${where} ${order} LIMIT ?`, [
+        ...baseParams,
+        ...orderParams,
+        take,
+      ]),
       pool.query(`SELECT COUNT(*) as total FROM bookmark b WHERE ${where}`, baseParams),
     ]);
 

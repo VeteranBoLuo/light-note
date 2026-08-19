@@ -67,7 +67,7 @@ describe('Agent 待办计划工具', () => {
     });
 
     expect(TODO_PLAN_TOOL_PARAMETERS.properties.timing.required).toEqual(['timezone']);
-    expect(normalized.timing).toMatchObject({ anchorDate: '', startTime: null, dueTime: null });
+    expect(normalized.timing).toEqual({ timezone: 'Asia/Shanghai', dueDayOffset: 0 });
     expect(normalized.reminder.trigger).toEqual({ type: 'fixed_time', fixedTime: '09:00' });
   });
 
@@ -117,5 +117,42 @@ describe('Agent 待办计划工具', () => {
 
     const independent = normalizeTodoPlanToolArgs({ ...input, taskMode: 'independent' });
     expect(independent.plan.type).toBe('scheduled');
+  });
+
+  it('single + 通用 scheduled 参数会规范化为一条待办上的重复提醒，不再静默丢失日程', async () => {
+    const normalized = normalizeTodoPlanToolArgs({
+      taskMode: 'single',
+      title: '每天复盘',
+      timing: { timezone: 'Asia/Shanghai', anchorDate: '2099-08-20', startTime: '09:00' },
+      plan: {
+        type: 'scheduled',
+        frequency: 'daily',
+        interval: 1,
+        end: { mode: 'until', untilDate: '2099-08-21' },
+      },
+      reminder: {
+        mode: 'once_per_instance',
+        trigger: { type: 'at_start' },
+        channels: ['in_app'],
+      },
+    });
+
+    expect(normalized).toMatchObject({
+      taskMode: 'single',
+      plan: { type: 'once' },
+      singleTaskReminder: {
+        mode: 'repeat',
+        repeat: {
+          kind: 'interval',
+          startAt: '2099-08-20 09:00',
+          intervalMinutes: 1440,
+          stop: { type: 'until', until: '2099-08-21 23:59' },
+        },
+        channels: ['in_app'],
+      },
+    });
+    const preview = await previewTodoPlan.execute(normalized);
+    expect(preview.occurrenceCount).toBe(1);
+    expect(preview.reminderJobCount).toBe(2);
   });
 });

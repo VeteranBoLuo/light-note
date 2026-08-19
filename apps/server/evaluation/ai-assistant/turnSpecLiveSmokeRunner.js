@@ -116,7 +116,7 @@ async function runProvider({ provider, suite, repeat, requestAi, allTools, getAc
         message: smokeCase.message,
         history: [],
         domainCatalog: catalog,
-        contextSummary: {},
+        contextSummary: { actorRole: smokeCase.role === 'root' ? 'root' : 'user' },
         authoritativeGroundingPolicy: /https?:\/\//iu.test(smokeCase.message)
           ? 'current_explicit_only'
           : 'general_knowledge',
@@ -129,7 +129,12 @@ async function runProvider({ provider, suite, repeat, requestAi, allTools, getAc
       } else if (compiled.turnSpec.requestKind === 'conversation' && compiled.turnSpec.goals.length === 0) {
         outcome = { state: 'ready_for_composer', turnSpec: compiled.turnSpec, toolCalls: [] };
       } else {
-        const route = routeTurnSpecCapabilities({ turnSpec: compiled.turnSpec, catalog, tools });
+        const route = routeTurnSpecCapabilities({
+          turnSpec: compiled.turnSpec,
+          catalog,
+          tools,
+          message: smokeCase.message,
+        });
         if (route.state === 'clarification' || route.state === 'unsupported' || !route.candidates.length) {
           outcome = { state: route.state, turnSpec: compiled.turnSpec, route, toolCalls: [] };
         } else {

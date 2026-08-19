@@ -38,7 +38,13 @@ describe('Agent 动作能力注册表', () => {
 
   it('语义能力目录同时覆盖读取工具、可用写能力和未开放动作', () => {
     const catalog = buildAgentSemanticCapabilityCatalog(tools, {
-      availableToolNames: new Set(['query_notes', 'set_todo_status', 'delete_todo', 'get_checkin_ranking']),
+      availableToolNames: new Set([
+        'query_notes',
+        'set_todo_status',
+        'delete_todo',
+        'get_checkin_ranking',
+        'start_link_health_check',
+      ]),
     });
 
     expect(catalog.find((entry) => entry.id === 'read.query_notes')).toMatchObject({
@@ -86,11 +92,25 @@ describe('Agent 动作能力注册表', () => {
       effect: 'read',
       status: 'unavailable',
       toolNames: [],
+      appliesToDomains: ['admin', 'content', 'note', 'bookmark', 'file'],
+      routing: expect.objectContaining({ requireAny: expect.any(Array), preferAny: expect.any(Array) }),
+    });
+    expect(catalog.find((entry) => entry.id === 'read.query_platform_resources')).toMatchObject({
+      appliesToDomains: ['admin', 'content', 'note', 'bookmark', 'file'],
+    });
+    expect(catalog.find((entry) => entry.id === 'read.query_new_user_resources')).toMatchObject({
+      appliesToDomains: ['admin', 'content', 'note', 'bookmark', 'file'],
     });
     expect(catalog.find((entry) => entry.id === 'read.get_checkin_ranking')).toMatchObject({
       effect: 'read',
       status: 'enabled',
       toolNames: ['get_checkin_ranking'],
+    });
+    expect(catalog.find((entry) => entry.id === 'operation.start_link_health_check')).toMatchObject({
+      effect: 'write',
+      operations: ['create'],
+      scopePolicy: 'owner_bound',
+      toolNames: ['start_link_health_check'],
     });
     expect(new Set(catalog.map((entry) => entry.id)).size).toBe(catalog.length);
   });

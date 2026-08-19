@@ -10,6 +10,7 @@ function validSpec(overrides = {}) {
       {
         id: 'goal-1',
         kind: 'write',
+        operation: 'create',
         capabilityDomain: 'todo',
         description: '创建待办',
         targetDescription: '用户指定的新待办',
@@ -26,11 +27,12 @@ function validSpec(overrides = {}) {
 describe('TurnSpec V2', () => {
   it('严格归一多目标依赖，绑定服务端 OutputContract 并生成稳定摘要', () => {
     const raw = validSpec({
-      requestKind: 'mixed',
+      requestKind: 'create_artifact',
       goals: [
         {
           id: 'read-materials',
           kind: 'read',
+          operation: 'read',
           capabilityDomain: 'note',
           description: '读取今天的笔记',
           targetDescription: '今天的全部笔记',
@@ -38,7 +40,8 @@ describe('TurnSpec V2', () => {
         },
         {
           id: 'create-note',
-          kind: 'write',
+          kind: 'transform',
+          operation: 'create',
           capabilityDomain: 'note',
           description: '创建汇总笔记',
           targetDescription: '新的 Markdown 笔记',
@@ -51,7 +54,7 @@ describe('TurnSpec V2', () => {
       authoritativeGroundingPolicy: 'workspace_query',
       outputContract: { format: 'note_markdown', length: { mode: 'minimum', minChars: 2000 } },
     });
-    expect(spec).toMatchObject({ version: '2.0', requestKind: 'mixed', confidence: 'high' });
+    expect(spec).toMatchObject({ version: '2.0', requestKind: 'create_artifact', confidence: 'high' });
     expect(spec.goals[1].dependsOn).toEqual(['read-materials']);
     expect(spec.outputContract.length.minChars).toBe(2000);
     expect(spec.digest).toBe(digestTurnSpec(spec));
@@ -91,6 +94,68 @@ describe('TurnSpec V2', () => {
     ).toBeNull();
   });
 
+  it('笔记 OutputContract 绑定单一 note transform，并拒绝空标题追问与知识库串线', () => {
+    const outputContract = { format: 'note_markdown', length: { mode: 'minimum', minChars: 2000 } };
+    const readGoal = {
+      id: 'read-materials',
+      kind: 'read',
+      operation: 'read',
+      capabilityDomain: 'note',
+      description: '读取今天的全部笔记',
+      targetDescription: '今天',
+      dependsOn: [],
+    };
+    const noteGoal = {
+      id: 'create-note',
+      kind: 'transform',
+      operation: 'create',
+      capabilityDomain: 'note',
+      description: '生成总结笔记',
+      targetDescription: '一篇 Markdown 笔记',
+      dependsOn: ['read-materials'],
+    };
+    const options = { authoritativeGroundingPolicy: 'workspace_query', outputContract };
+
+    expect(
+      normalizeTurnSpec(
+        validSpec({
+          requestKind: 'create_artifact',
+          goals: [readGoal, noteGoal],
+          groundingPolicy: 'workspace_query',
+        }),
+        options,
+      ),
+    ).toMatchObject({ requestKind: 'create_artifact', outputContract });
+    expect(
+      normalizeTurnSpec(
+        validSpec({ requestKind: 'mixed', goals: [readGoal, noteGoal], groundingPolicy: 'workspace_query' }),
+        options,
+      ),
+    ).toBeNull();
+    expect(
+      normalizeTurnSpec(
+        validSpec({
+          requestKind: 'create_artifact',
+          goals: [readGoal, { ...noteGoal, capabilityDomain: 'content' }],
+          groundingPolicy: 'workspace_query',
+        }),
+        options,
+      ),
+    ).toBeNull();
+    expect(
+      normalizeTurnSpec(
+        validSpec({
+          requestKind: 'create_artifact',
+          goals: [readGoal, noteGoal],
+          groundingPolicy: 'workspace_query',
+          missingSlots: [{ name: 'title', reason: '没有标题', question: '标题是什么？' }],
+          clarificationQuestion: '标题是什么？',
+        }),
+        options,
+      ),
+    ).toBeNull();
+  });
+
   it('Intent Compiler 单轮最多选择 3 个能力域，防止重新膨胀成完整工具目录', () => {
     expect(
       normalizeTurnSpec(
@@ -99,6 +164,7 @@ describe('TurnSpec V2', () => {
           goals: ['note', 'todo', 'bookmark', 'file'].map((capabilityDomain, index) => ({
             id: `goal-${index}`,
             kind: 'read',
+            operation: 'read',
             capabilityDomain,
             description: `查询 ${capabilityDomain}`,
             targetDescription: capabilityDomain,

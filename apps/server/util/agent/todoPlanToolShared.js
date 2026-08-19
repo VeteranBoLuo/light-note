@@ -2,6 +2,9 @@ import crypto from 'crypto';
 
 const MAX_TITLE = 200;
 const MAX_DESCRIPTION = 2_000;
+const DATE_PATTERN = '^\\d{4}-\\d{2}-\\d{2}$';
+const TIME_PATTERN = '^(?:[01]\\d|2[0-3]):[0-5]\\d$';
+const DATE_TIME_PATTERN = '^\\d{4}-\\d{2}-\\d{2} (?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d)?$';
 
 function object(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -24,6 +27,86 @@ function normalizeChecklist(value) {
     .map((item) => ({ id: item.id || crypto.randomUUID(), text: item.text, done: false }));
 }
 
+function dateWeekday(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return null;
+  const date = new Date(`${value}T00:00:00Z`);
+  if (!Number.isFinite(date.getTime())) return null;
+  return date.getUTCDay() || 7;
+}
+
+function derivedSingleRepeatReminder({ timing, plan, reminder }) {
+  if (String(plan.type || '') !== 'scheduled') return null;
+  const frequency = cleanString(plan.frequency || 'daily', 16);
+  const interval = Number(plan.interval || 1);
+  const anchorDate = cleanString(timing.anchorDate, 10);
+  const localTime =
+    cleanString(
+      timing.startTime ||
+        timing.dueTime ||
+        (reminder.trigger?.type === 'fixed_time' ? reminder.trigger.fixedTime : '') ||
+        '09:00',
+      5,
+    ) || '09:00';
+  const end = object(plan.end);
+  const stop =
+    end.mode === 'until' && end.untilDate
+      ? { type: 'until', until: `${cleanString(end.untilDate, 10)} 23:59` }
+      : end.mode === 'count' && Number.isFinite(Number(end.count))
+        ? { type: 'max_count', maxCount: Number(end.count) }
+        : { type: 'completion_or_due' };
+  const channels = Array.isArray(reminder.channels)
+    ? reminder.channels.map((item) => cleanString(item, 16)).filter(Boolean)
+    : [];
+  const base = {
+    version: 1,
+    mode: 'repeat',
+    channels,
+    ...(reminder.targetEmail ? { targetEmail: cleanString(reminder.targetEmail, 254) } : {}),
+  };
+  if (frequency === 'daily') {
+    return {
+      ...base,
+      repeat: {
+        kind: 'interval',
+        ...(anchorDate ? { startAt: `${anchorDate} ${localTime}` } : {}),
+        intervalMinutes: Math.max(1, interval) * 24 * 60,
+        stop,
+      },
+    };
+  }
+  if (frequency === 'weekly' && interval === 1) {
+    const weekdays = Array.isArray(plan.weekdays)
+      ? plan.weekdays.map(Number)
+      : [dateWeekday(anchorDate)].filter(Boolean);
+    return {
+      ...base,
+      repeat: {
+        kind: 'weekly',
+        ...(anchorDate ? { startDate: anchorDate } : {}),
+        weekdays,
+        localTime,
+        stop,
+      },
+    };
+  }
+  if (frequency === 'monthly' && interval === 1) {
+    const anchorDay = Number(anchorDate.slice(8, 10));
+    const monthDay = Number(plan.monthDay || anchorDay);
+    return {
+      ...base,
+      repeat: {
+        kind: 'monthly',
+        ...(anchorDate ? { startDate: anchorDate } : {}),
+        monthDays: Number.isInteger(monthDay) && monthDay > 0 ? [monthDay] : [],
+        localTime,
+        shortMonthPolicy: cleanString(plan.shortMonthPolicy || 'last_day', 16),
+        stop,
+      },
+    };
+  }
+  return null;
+}
+
 export function normalizeTodoPlanToolArgs(input = {}) {
   const timing = object(input.timing);
   const plan = object(input.plan);
@@ -38,9 +121,6 @@ export function normalizeTodoPlanToolArgs(input = {}) {
   );
   const planType = taskMode === 'single' ? 'once' : requestedPlanType;
   const singleTaskReminder = object(input.singleTaskReminder);
-  const singleOnce = object(singleTaskReminder.once);
-  const singleRepeat = object(singleTaskReminder.repeat);
-  const singleStop = object(singleRepeat.stop);
   const priority = Number(input.priority ?? 1);
   const startTime = cleanString(timing.startTime || input.startTime, 5) || null;
   const dueTime = cleanString(timing.dueTime || input.dueTime, 5) || null;
@@ -48,6 +128,14 @@ export function normalizeTodoPlanToolArgs(input = {}) {
     trigger.type || (startTime ? 'at_start' : dueTime ? 'before_due' : 'fixed_time'),
     24,
   );
+  const inferredSingleReminder =
+    taskMode === 'single' && !cleanString(singleTaskReminder.mode, 16)
+      ? derivedSingleRepeatReminder({ timing, plan, reminder })
+      : null;
+  const effectiveSingleTaskReminder = inferredSingleReminder || singleTaskReminder;
+  const effectiveSingleRepeat = object(effectiveSingleTaskReminder.repeat);
+  const effectiveSingleOnce = object(effectiveSingleTaskReminder.once);
+  const effectiveSingleStop = object(effectiveSingleRepeat.stop);
   return {
     taskMode,
     title: cleanString(input.title, MAX_TITLE),
@@ -56,9 +144,11 @@ export function normalizeTodoPlanToolArgs(input = {}) {
     checklist: normalizeChecklist(input.checklist),
     timing: {
       timezone: cleanString(timing.timezone || input.timezone || 'Asia/Shanghai', 64),
-      anchorDate: cleanString(timing.anchorDate || input.anchorDate, 10),
-      startTime,
-      dueTime,
+      ...(cleanString(timing.anchorDate || input.anchorDate, 10)
+        ? { anchorDate: cleanString(timing.anchorDate || input.anchorDate, 10) }
+        : {}),
+      ...(startTime ? { startTime } : {}),
+      ...(dueTime ? { dueTime } : {}),
       dueDayOffset: Number(timing.dueDayOffset || input.dueDayOffset || 0),
     },
     plan: {
@@ -92,9 +182,7 @@ export function normalizeTodoPlanToolArgs(input = {}) {
       mode: cleanString(reminder.mode || 'none', 24),
       trigger: {
         type: reminderTriggerType,
-        ...(reminderTriggerType === 'fixed_time'
-          ? { fixedTime: cleanString(trigger.fixedTime || '09:00', 5) }
-          : {}),
+        ...(reminderTriggerType === 'fixed_time' ? { fixedTime: cleanString(trigger.fixedTime || '09:00', 5) } : {}),
         ...(trigger.offsetMinutes === undefined ? {} : { offsetMinutes: Number(trigger.offsetMinutes) }),
       },
       channels: Array.isArray(reminder.channels) ? reminder.channels.map((item) => cleanString(item, 16)) : [],
@@ -114,46 +202,58 @@ export function normalizeTodoPlanToolArgs(input = {}) {
       ? {
           singleTaskReminder: {
             version: 1,
-            mode: cleanString(singleTaskReminder.mode || 'none', 16),
-            ...(singleTaskReminder.mode === 'once'
+            mode: cleanString(effectiveSingleTaskReminder.mode || 'none', 16),
+            ...(effectiveSingleTaskReminder.mode === 'once'
               ? {
                   once: {
-                    type: cleanString(singleOnce.type || 'at_due', 24),
-                    ...(singleOnce.offsetMinutes === undefined
+                    type: cleanString(effectiveSingleOnce.type || 'at_due', 24),
+                    ...(effectiveSingleOnce.offsetMinutes === undefined
                       ? {}
-                      : { offsetMinutes: Number(singleOnce.offsetMinutes) }),
-                    ...(singleOnce.fixedAt ? { fixedAt: cleanString(singleOnce.fixedAt, 32) } : {}),
+                      : { offsetMinutes: Number(effectiveSingleOnce.offsetMinutes) }),
+                    ...(effectiveSingleOnce.fixedAt ? { fixedAt: cleanString(effectiveSingleOnce.fixedAt, 32) } : {}),
                   },
                 }
               : {}),
-            ...(singleTaskReminder.mode === 'repeat'
+            ...(effectiveSingleTaskReminder.mode === 'repeat'
               ? {
                   repeat: {
-                    kind: cleanString(singleRepeat.kind || 'interval', 16),
-                    ...(singleRepeat.startAt ? { startAt: cleanString(singleRepeat.startAt, 32) } : {}),
-                    ...(singleRepeat.startDate ? { startDate: cleanString(singleRepeat.startDate, 10) } : {}),
-                    ...(singleRepeat.intervalMinutes === undefined
+                    kind: cleanString(effectiveSingleRepeat.kind || 'interval', 16),
+                    ...(effectiveSingleRepeat.startAt
+                      ? { startAt: cleanString(effectiveSingleRepeat.startAt, 32) }
+                      : {}),
+                    ...(effectiveSingleRepeat.startDate
+                      ? { startDate: cleanString(effectiveSingleRepeat.startDate, 10) }
+                      : {}),
+                    ...(effectiveSingleRepeat.intervalMinutes === undefined
                       ? {}
-                      : { intervalMinutes: Number(singleRepeat.intervalMinutes) }),
-                    ...(Array.isArray(singleRepeat.weekdays) ? { weekdays: singleRepeat.weekdays.map(Number) } : {}),
-                    ...(Array.isArray(singleRepeat.monthDays) ? { monthDays: singleRepeat.monthDays.map(Number) } : {}),
-                    ...(singleRepeat.localTime ? { localTime: cleanString(singleRepeat.localTime, 5) } : {}),
-                    ...(singleRepeat.shortMonthPolicy
-                      ? { shortMonthPolicy: cleanString(singleRepeat.shortMonthPolicy, 16) }
+                      : { intervalMinutes: Number(effectiveSingleRepeat.intervalMinutes) }),
+                    ...(Array.isArray(effectiveSingleRepeat.weekdays)
+                      ? { weekdays: effectiveSingleRepeat.weekdays.map(Number) }
+                      : {}),
+                    ...(Array.isArray(effectiveSingleRepeat.monthDays)
+                      ? { monthDays: effectiveSingleRepeat.monthDays.map(Number) }
+                      : {}),
+                    ...(effectiveSingleRepeat.localTime
+                      ? { localTime: cleanString(effectiveSingleRepeat.localTime, 5) }
+                      : {}),
+                    ...(effectiveSingleRepeat.shortMonthPolicy
+                      ? { shortMonthPolicy: cleanString(effectiveSingleRepeat.shortMonthPolicy, 16) }
                       : {}),
                     stop: {
-                      type: cleanString(singleStop.type || 'completion_or_due', 32),
-                      ...(singleStop.until ? { until: cleanString(singleStop.until, 32) } : {}),
-                      ...(singleStop.maxCount === undefined ? {} : { maxCount: Number(singleStop.maxCount) }),
+                      type: cleanString(effectiveSingleStop.type || 'completion_or_due', 32),
+                      ...(effectiveSingleStop.until ? { until: cleanString(effectiveSingleStop.until, 32) } : {}),
+                      ...(effectiveSingleStop.maxCount === undefined
+                        ? {}
+                        : { maxCount: Number(effectiveSingleStop.maxCount) }),
                     },
                   },
                 }
               : {}),
-            channels: Array.isArray(singleTaskReminder.channels)
-              ? singleTaskReminder.channels.map((item) => cleanString(item, 16))
+            channels: Array.isArray(effectiveSingleTaskReminder.channels)
+              ? effectiveSingleTaskReminder.channels.map((item) => cleanString(item, 16))
               : [],
-            ...(singleTaskReminder.targetEmail
-              ? { targetEmail: cleanString(singleTaskReminder.targetEmail, 254) }
+            ...(effectiveSingleTaskReminder.targetEmail
+              ? { targetEmail: cleanString(effectiveSingleTaskReminder.targetEmail, 254) }
               : {}),
           },
         }
@@ -164,13 +264,15 @@ export function normalizeTodoPlanToolArgs(input = {}) {
 const timingSchema = {
   type: 'object',
   properties: {
-    timezone: { type: 'string', description: 'IANA 时区，例如 Asia/Shanghai' },
+    timezone: { type: 'string', description: 'IANA 时区，例如 Asia/Shanghai；必须采用服务端 temporalContext.timeZone' },
     anchorDate: {
       type: 'string',
-      description: '首项日期 YYYY-MM-DD，可选；独立重复计划省略时按计划时区的今天开始，且不会补写开始或截止时间',
+      pattern: DATE_PATTERN,
+      description:
+        '首项日期 YYYY-MM-DD，可选；用户说今天/明天等相对日期时，必须依据 temporalContext 换算后填写具体日期',
     },
-    startTime: { type: 'string', description: '每项开始时刻 HH:mm，可选' },
-    dueTime: { type: 'string', description: '每项截止时刻 HH:mm，可选' },
+    startTime: { type: 'string', pattern: TIME_PATTERN, description: '每项开始时刻 HH:mm，可选' },
+    dueTime: { type: 'string', pattern: TIME_PATTERN, description: '每项截止时刻 HH:mm，可选' },
     dueDayOffset: {
       type: 'integer',
       minimum: 0,
@@ -199,7 +301,7 @@ const planSchema = {
       type: 'object',
       properties: {
         mode: { type: 'string', enum: ['never', 'until', 'count'] },
-        untilDate: { type: 'string', description: '包含当天，YYYY-MM-DD' },
+        untilDate: { type: 'string', pattern: DATE_PATTERN, description: '包含当天，YYYY-MM-DD' },
         count: { type: 'integer', minimum: 1, maximum: 366 },
       },
       required: ['mode'],
@@ -216,7 +318,7 @@ const reminderSchema = {
       type: 'object',
       properties: {
         type: { type: 'string', enum: ['at_start', 'fixed_time', 'before_due'] },
-        fixedTime: { type: 'string', description: 'HH:mm' },
+        fixedTime: { type: 'string', pattern: TIME_PATTERN, description: 'HH:mm' },
         offsetMinutes: { type: 'integer', minimum: 0, maximum: 43200 },
       },
       required: ['type'],
@@ -247,19 +349,19 @@ const singleTaskReminderSchema = {
       properties: {
         type: { type: 'string', enum: ['at_due', 'at_start', 'before_due', 'fixed_at'] },
         offsetMinutes: { type: 'integer', minimum: 0, maximum: 43200 },
-        fixedAt: { type: 'string', description: 'YYYY-MM-DD HH:mm' },
+        fixedAt: { type: 'string', pattern: DATE_TIME_PATTERN, description: 'YYYY-MM-DD HH:mm' },
       },
     },
     repeat: {
       type: 'object',
       properties: {
         kind: { type: 'string', enum: ['interval', 'weekly', 'monthly'] },
-        startAt: { type: 'string', description: '首次提醒 YYYY-MM-DD HH:mm' },
-        startDate: { type: 'string', description: '本地开始日期 YYYY-MM-DD' },
+        startAt: { type: 'string', pattern: DATE_TIME_PATTERN, description: '首次提醒 YYYY-MM-DD HH:mm' },
+        startDate: { type: 'string', pattern: DATE_PATTERN, description: '本地开始日期 YYYY-MM-DD' },
         intervalMinutes: { type: 'integer', minimum: 5, maximum: 525600 },
         weekdays: { type: 'array', items: { type: 'integer', minimum: 1, maximum: 7 } },
         monthDays: { type: 'array', items: { type: 'integer', minimum: 1, maximum: 31 } },
-        localTime: { type: 'string', description: '本地提醒时间 HH:mm' },
+        localTime: { type: 'string', pattern: TIME_PATTERN, description: '本地提醒时间 HH:mm' },
         shortMonthPolicy: { type: 'string', enum: ['last_day', 'skip'] },
         stop: {
           type: 'object',
@@ -268,7 +370,10 @@ const singleTaskReminderSchema = {
               type: 'string',
               enum: ['completion_or_due', 'completion', 'until', 'max_count', 'manual'],
             },
-            until: { type: 'string' },
+            until: {
+              type: 'string',
+              pattern: `^(?:${DATE_PATTERN.slice(1, -1)}|${DATE_TIME_PATTERN.slice(1, -1)})$`,
+            },
             maxCount: { type: 'integer', minimum: 1, maximum: 500 },
           },
           required: ['type'],
@@ -289,7 +394,7 @@ export const TODO_PLAN_TOOL_PARAMETERS = {
       type: 'string',
       enum: ['single', 'independent'],
       description:
-        '默认必须用 single：每天/每周/每月提醒同一件事。只有用户明确要求每次日程分别完成、每天生成一条独立待办时才用 independent。',
+        '默认必须用 single：每天/每周/每月提醒同一件事。single + scheduled 会由服务端规范化为一条待办上的重复提醒；只有用户明确要求每次日程分别完成、每天生成一条独立待办时才用 independent。',
     },
     title: { type: 'string', maxLength: MAX_TITLE },
     description: { type: 'string', maxLength: MAX_DESCRIPTION },
@@ -297,8 +402,16 @@ export const TODO_PLAN_TOOL_PARAMETERS = {
     checklist: {
       type: 'array',
       maxItems: 50,
-      items: { type: 'string', maxLength: 200 },
-      description: '清单文本数组，可选',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', maxLength: 64 },
+          text: { type: 'string', maxLength: 200 },
+          done: { type: 'boolean' },
+        },
+        required: ['text'],
+      },
+      description: '清单数组，可选；每项至少填写 text',
     },
     timing: timingSchema,
     plan: planSchema,

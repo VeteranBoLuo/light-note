@@ -3,7 +3,16 @@ import { parseTimeRange } from '../timeRange.js';
 
 export default {
   name: 'get_security_events',
+  appliesToDomains: ['admin', 'account'],
   description: '查询安全攻击事件记录。可按攻击类型、源IP、处理状态和时间范围筛选。',
+  routing: {
+    targetScope: 'platform',
+    requireAny: [
+      /(?:安全|攻击|风控).{0,20}(?:事件|记录|明细)|(?:SQL_INJECTION|XSS|AUTH_FAIL)|security.{0,20}(?:events?|records?|details?)/iu,
+    ],
+    preferAny: [/(?:事件|记录|明细|events?|records?|details?)/iu],
+    excludeAny: [/(?:安全|风险).{0,12}(?:概览|总览)|(?:高风险|风险最高).{0,12}(?:IP|账号)/iu],
+  },
   parameters: {
     type: 'object',
     properties: {

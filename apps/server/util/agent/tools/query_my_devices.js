@@ -5,6 +5,13 @@ export default {
   name: 'query_my_devices',
   description:
     '查询当前用户最近登录的设备(IP、设备信息、最后活跃时间)。回答"我在哪些设备登录过""最近的登录记录""我的登录设备"。',
+  routing: {
+    targetScope: 'single_owner',
+    requireAny: [
+      /(?:登录).{0,12}(?:设备|记录|终端|IP)|(?:设备|终端).{0,12}(?:登录|活跃)|devices?|login\s+(?:devices?|sessions?|records?)/iu,
+    ],
+    preferAny: [/(?:登录设备|设备登录|登录记录|devices?)/iu],
+  },
   parameters: { type: 'object', properties: {} },
   requireRoot: false,
   async execute(args, ctx) {

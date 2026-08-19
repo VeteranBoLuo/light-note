@@ -71,6 +71,15 @@ pnpm --filter server check:schema
 
 任何断言输出都表示基线表、关键列或索引尚未就绪；应先应用待执行 migration 并重新检查，禁止让依赖新结构的应用进程先启动。
 
+涉及 Agent 运行时、语义能力目录、工具参数、确认协议或笔记生成链时，发布前还必须执行 root 真实链路门禁。先用 dry-run 验证注册工具与测试矩阵精确覆盖，再用获授权环境的真实 root 账号、真实 Provider、真实 Handler 和数据库执行完整矩阵：
+
+```bash
+pnpm --filter server smoke:ai-root-e2e
+pnpm --filter server smoke:ai-root-e2e -- --live --suite full --execute-writes --provider deepseek
+```
+
+完整门禁必须同时满足：所有注册工具逐项通过；所有写工具返回正确确认卡并在确认后产生可核验结果；同一确认重放不重复写入；笔记材料范围、硬字数下限和续写保持通过；测试夹具清理成功。任一项失败都禁止发布或开启 V2，不能用孤立用例的偶然成功代替完整矩阵。真实报告必须脱敏，不保存问题、回答、工具参数、资源 ID 或账号标识。
+
 涉及积分获取 C5 时，发布前还必须完成以下顺序：
 
 1. 保持 `POINTS_EARNING_C5_ENABLED`、`POINTS_ADMIN_GOVERNANCE_V2_ENABLED` 和 `POINTS_CAMPAIGN_ENABLED` 关闭，在维护窗口执行 `20260814_points_earning_c5.sql` 与 `20260814_points_earning_c5_knowledge.sql`。

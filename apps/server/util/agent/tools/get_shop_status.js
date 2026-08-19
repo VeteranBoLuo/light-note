@@ -7,6 +7,11 @@ export default {
   name: 'get_shop_status',
   description:
     '查询积分兑换与头像框:当前积分、已拥有装扮、积分商品价格与等级、成就头像框进度和领取状态。回答"我有哪些头像框""商店能买啥""哪个成就框可领取"。',
+  routing: {
+    targetScope: 'single_owner',
+    requireAny: [/(?:积分商店|商店|兑换|商品|装扮|头像框|称号)/iu],
+    preferAny: [/(?:积分商店|商店|兑换|商品|装扮|头像框|称号)/iu],
+  },
   parameters: { type: 'object', properties: {} },
   requireRoot: false,
   async execute(args, ctx) {

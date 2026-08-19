@@ -33,6 +33,14 @@ export default {
   name: 'query_points_log',
   description:
     '查询当前用户的积分明细流水(赚分/花分记录),按时间倒序。回答"我积分怎么赚的/花在哪""上次抽奖/购买了啥""最近积分变动"等。',
+  routing: {
+    targetScope: 'single_owner',
+    requireAny: [
+      /(?:积分).{0,20}(?:明细|流水|记录|变动|收入|支出|赚|花)|(?:明细|流水|收入|支出|赚分|花分).{0,16}(?:积分)/iu,
+    ],
+    preferAny: [/(?:明细|流水|记录|变动|收入|支出|赚分|花分)/iu],
+    excludeAny: [/(?:来源分布|节奏|目标进度|多久能兑换|商店|装扮|头像框)/iu],
+  },
   parameters: {
     type: 'object',
     properties: { limit: { type: 'integer', description: '返回条数,默认 15,最大 50' } },

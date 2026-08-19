@@ -61,11 +61,14 @@ export function adaptRuntimeOutcomeToLegacy(outcome, catalog = []) {
       message: outcome.question,
     };
   } else if (outcome.state === 'unsupported') {
-    const firstStatus = selectedCapabilities.find((capability) => capability.status !== 'enabled')?.status;
+    const unsupportedCapabilities = selectedCapabilities.filter((capability) => capability.status !== 'enabled');
+    const firstStatus = unsupportedCapabilities[0]?.status;
     semanticPolicy = {
       state: 'blocked',
       resolution: firstStatus === 'planned' || firstStatus === 'forbidden' ? firstStatus : 'unknown_mutation',
-      capabilities: selectedCapabilities,
+      // 同一 TurnSpec 里可能既有正常读取，又有一个不支持的目标。失败说明只展示真正
+      // 被阻断的能力，不能把已启用的 read_note 等工具误报成“出于安全原因被禁止”。
+      capabilities: unsupportedCapabilities.length ? unsupportedCapabilities : selectedCapabilities,
     };
   } else if (outcome.state === 'blocked') {
     semanticPolicy = {

@@ -1,4 +1,5 @@
 import { validateToolArgumentsAgainstSchema } from '../toolPolicy.js';
+import { normalizeToolArguments } from '../toolArguments.js';
 
 function toolCall(step, index) {
   return {
@@ -10,8 +11,32 @@ function toolCall(step, index) {
   };
 }
 
-export function validateExecutionPlan({ turnSpec, route, parsed, completedGoalIds = [] } = {}) {
+function bindAuthoritativeContextArguments(tool, args, executionContext) {
+  const normalized = normalizeToolArguments(tool, args);
+  const required = new Set(Array.isArray(tool?.parameters?.required) ? tool.parameters.required.map(String) : []);
+  if (required.has('attachmentId')) {
+    const attachmentIds = [
+      ...new Set((Array.isArray(executionContext?.attachmentIds) ? executionContext.attachmentIds : []).map(String)),
+    ].filter(Boolean);
+    // 模型不能把本轮附件 ID 改写为历史附件或猜测值。唯一附件直接由服务端绑定；
+    // 多附件时只接受服务端已校验集合中的明确选择；没有上下文时一律拒绝。
+    if (attachmentIds.length === 1) return { ...normalized, attachmentId: attachmentIds[0] };
+    const requestedAttachmentId = String(normalized?.attachmentId || '').trim();
+    if (attachmentIds.length > 1 && requestedAttachmentId && attachmentIds.includes(requestedAttachmentId)) {
+      return normalized;
+    }
+    const error = new Error(
+      attachmentIds.length > 1 ? '存在多个本轮附件，必须从已校验列表中明确选择。' : '本轮没有可用的已校验附件。',
+    );
+    error.code = attachmentIds.length > 1 ? 'TOOL_ATTACHMENT_SELECTION_INVALID' : 'TOOL_ATTACHMENT_CONTEXT_REQUIRED';
+    throw error;
+  }
+  return normalized;
+}
+
+export function validateExecutionPlan({ turnSpec, route, parsed, completedGoalIds = [], executionContext = {} } = {}) {
   const issues = [];
+  const repairFeedback = [];
   const toolsByName = new Map((route?.candidates || []).map((tool) => [tool.name, tool]));
   const goalsById = new Map((turnSpec?.goals || []).map((goal) => [goal.id, goal]));
   const routesByGoal = new Map((route?.goalRoutes || []).map((item) => [item.goalId, item]));
@@ -63,10 +88,22 @@ export function validateExecutionPlan({ turnSpec, route, parsed, completedGoalId
       implicitlyDeferred.add(goal.id);
       continue;
     }
+    let acceptedStep = step;
     try {
-      validateToolArgumentsAgainstSchema(tool.parameters, step.arguments);
+      // 与真实 Tool Policy 使用完全相同的归一化顺序，避免 Planner 门禁验证 raw，
+      // 执行阶段却验证 normalized 后产生“计划通过、工具拒绝”的双重契约。
+      const normalizedArguments = bindAuthoritativeContextArguments(tool, step.arguments, executionContext);
+      validateToolArgumentsAgainstSchema(tool.parameters, normalizedArguments);
+      if (typeof tool.validatePlanArgs === 'function') tool.validatePlanArgs(normalizedArguments);
+      acceptedStep = { ...step, arguments: normalizedArguments };
     } catch (error) {
-      issues.push(error?.code || 'tool_arguments_invalid');
+      const code = error?.code || 'tool_arguments_invalid';
+      issues.push(code);
+      repairFeedback.push({
+        code,
+        toolName: tool.name,
+        message: String(error?.message || '工具参数不符合业务约束。').slice(0, 240),
+      });
       continue;
     }
     if (tool.isWrite === true && writeGoals.has(goal.id)) {
@@ -74,7 +111,7 @@ export function validateExecutionPlan({ turnSpec, route, parsed, completedGoalId
       continue;
     }
     if (tool.isWrite === true) writeGoals.add(goal.id);
-    acceptedSteps.push(step);
+    acceptedSteps.push(acceptedStep);
   }
 
   const deferred = new Set([...(parsed?.plan?.deferredGoalIds || []), ...implicitlyDeferred]);
@@ -93,6 +130,7 @@ export function validateExecutionPlan({ turnSpec, route, parsed, completedGoalId
   return {
     valid: uniqueIssues.length === 0,
     issues: uniqueIssues,
+    repairFeedback,
     toolCalls: uniqueIssues.length ? [] : acceptedSteps.map(toolCall),
     ignoredExtraReadCount: (parsed?.extraCalls || []).filter(
       (call) => toolsByName.get(call?.function?.name)?.isWrite !== true && toolsByName.has(call?.function?.name),

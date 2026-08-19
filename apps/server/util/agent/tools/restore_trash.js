@@ -2,8 +2,16 @@ import { previewTrashRestore, restoreTrashResources } from '../../services/trash
 
 export default {
   name: 'restore_trash',
+  appliesToDomains: ['content', 'note', 'bookmark', 'file'],
   description:
     '从回收站恢复已删除的内容。支持按 id 恢复单个、按 type 恢复某类内容、按 timeRange 恢复某时间段删除的内容；至少应提供一个筛选条件以避免误恢复。',
+  routing: {
+    targetScope: 'single_owner',
+    requireAny: [
+      /(?:恢复|还原).{0,20}(?:回收站|已删除|删除的|书签|笔记|文件)|(?:回收站|已删除|删除的).{0,20}(?:恢复|还原)|\b(?:restore|recover)\b.{0,24}\b(?:trash|deleted|bookmark|note|file)\b/iu,
+    ],
+    preferAny: [/(?:恢复|还原|restore|recover)/iu],
+  },
   parameters: {
     type: 'object',
     properties: {

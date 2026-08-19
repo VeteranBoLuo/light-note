@@ -189,6 +189,7 @@ import {
   classifyPendingNoteDraftFollowUp,
   createNoteDraftPrivateContext,
   generateNoteDraft,
+  isExplicitPendingNoteDraftRefinement,
   isNoteDraftRequest,
   normalizeNoteDraftPrivateContext,
   normalizeNoteDraftRefinement,
@@ -1635,7 +1636,7 @@ function buildAgentEvidenceBundle(rawSources, requestId) {
   return { sources: [...sourceById.values()], evidence };
 }
 
-function buildAgentEntityRefs(rawSources) {
+function buildAgentEntityRefs(rawSources, maxItems = 5) {
   const allowedTypes = new Set(['bookmark', 'note', 'file', 'tag', 'todo']);
   const seen = new Set();
   const refs = [];
@@ -1647,7 +1648,7 @@ function buildAgentEntityRefs(rawSources) {
     if (seen.has(key)) continue;
     seen.add(key);
     refs.push({ type, id: id.slice(0, 255), title: String(source?.title || '').slice(0, 255) });
-    if (refs.length >= 5) break;
+    if (refs.length >= Math.max(1, Math.min(MAX_PRIVATE_NOTE_DRAFT_CONTEXTS, Number(maxItems) || 1))) break;
   }
   return refs;
 }
@@ -1989,6 +1990,7 @@ export async function agentChat(req, res) {
       attachmentIds = [],
       clientCapabilities = [],
       locale = '',
+      timeZone = '',
       memoryMode = 'off',
       conversationId = '',
       sourceMessageId = '',
@@ -2400,6 +2402,7 @@ export async function agentChat(req, res) {
         }
       } catch (error) {
         trace.pendingDraftCandidateError = stableAgentErrorCode(error);
+        console.warn('[Agent] pending note draft unavailable code=%s', trace.pendingDraftCandidateError);
         pendingNoteDraftInspection = null;
         pendingNoteDraftPrivateContext = null;
       }
@@ -2408,28 +2411,33 @@ export async function agentChat(req, res) {
       // 不应再进入“改写旧令牌”路径；本轮若携带回答中的稳定材料引用，会按新请求
       // 重新复核材料并签发新确认，既不复活旧令牌，也不因确认生命周期丢掉引用。
       if (pendingNoteDraftInspection && pendingNoteDraftPrivateContext) {
-        const intentStartedAt = Date.now();
-        const intent = await classifyPendingNoteDraftFollowUp({
-          message,
-          history,
-          sourceMessage: pendingNoteDraftPrivateContext.sourceMessage,
-          draftTitle: pendingNoteDraftInspection.confirmation?.args?.title || '',
-          draftContent: pendingNoteDraftInspection.confirmation?.args?.content || '',
-          signal: agentAbortController.signal,
-          traceId: requestId,
-          onResponse(response) {
-            pendingDraftIntentCalls += 1;
-            apiCallsForLog = pendingDraftIntentCalls;
-            const usage = response?.usage || {};
-            totalUsage.promptTokens += Number(usage.promptTokens || 0);
-            totalUsage.completionTokens += Number(usage.completionTokens || 0);
-            totalUsage.totalTokens += Number(usage.totalTokens || 0);
-            pendingDraftIntentUsageReported = pendingDraftIntentUsageReported && response?.usageStatus === 'reported';
-            trace.finishReason = response?.finishReason || trace.finishReason;
-          },
-        });
-        trace.pendingDraftIntentMs = Date.now() - intentStartedAt;
-        refinementRequested = intent.decision === 'revise_pending_draft';
+        if (isExplicitPendingNoteDraftRefinement(message)) {
+          refinementRequested = true;
+          trace.pendingDraftIntent = 'deterministic_refinement';
+        } else {
+          const intentStartedAt = Date.now();
+          const intent = await classifyPendingNoteDraftFollowUp({
+            message,
+            history,
+            sourceMessage: pendingNoteDraftPrivateContext.sourceMessage,
+            draftTitle: pendingNoteDraftInspection.confirmation?.args?.title || '',
+            draftContent: pendingNoteDraftInspection.confirmation?.args?.content || '',
+            signal: agentAbortController.signal,
+            traceId: requestId,
+            onResponse(response) {
+              pendingDraftIntentCalls += 1;
+              apiCallsForLog = pendingDraftIntentCalls;
+              const usage = response?.usage || {};
+              totalUsage.promptTokens += Number(usage.promptTokens || 0);
+              totalUsage.completionTokens += Number(usage.completionTokens || 0);
+              totalUsage.totalTokens += Number(usage.totalTokens || 0);
+              pendingDraftIntentUsageReported = pendingDraftIntentUsageReported && response?.usageStatus === 'reported';
+              trace.finishReason = response?.finishReason || trace.finishReason;
+            },
+          });
+          trace.pendingDraftIntentMs = Date.now() - intentStartedAt;
+          refinementRequested = intent.decision === 'revise_pending_draft';
+        }
       }
     }
 
@@ -2885,6 +2893,7 @@ export async function agentChat(req, res) {
           contextTypes: noteDraftContextTypes,
           scopeCount: resolvedScopes.refs.length,
           attachmentCount: Array.isArray(effectiveRequestAttachmentIds) ? effectiveRequestAttachmentIds.length : 0,
+          actionIntent: legacyIntentSuspicion,
         });
       if (classifyNoteDraft) {
         const noteDraftTaskStartedAt = Date.now();
@@ -2908,6 +2917,7 @@ export async function agentChat(req, res) {
               history,
               domainCatalog: compilerCatalog,
               contextSummary: {
+                actorRole: userRole,
                 selectedResourceTypes: noteDraftContextTypes,
                 selectedResourceCount:
                   (Array.isArray(effectiveRequestContexts) ? effectiveRequestContexts.length : 0) +
@@ -2934,6 +2944,7 @@ export async function agentChat(req, res) {
               },
             });
             const turnSpec = precompiledTurnSpecResult.turnSpec;
+            const readGoalIds = new Set(turnSpec.goals.filter((goal) => goal.kind === 'read').map((goal) => goal.id));
             const noteGoals = turnSpec.goals.filter(
               (goal) => goal.kind === 'transform' && goal.capabilityDomain === 'note',
             );
@@ -2945,7 +2956,9 @@ export async function agentChat(req, res) {
                   ['write', 'transform'].includes(goal.kind) &&
                   !(goal.kind === 'transform' && goal.capabilityDomain === 'note'),
               ),
-              needsWorkspaceRetrieval: noteGoals.length > 0 && turnSpec.groundingPolicy === 'workspace_query',
+              needsWorkspaceRetrieval: noteGoals.some((goal) =>
+                goal.dependsOn.some((dependencyId) => readGoalIds.has(dependencyId)),
+              ),
               workspaceQueries: [],
             };
             trace.noteDraftRouteSource = 'turn_spec_v2';
@@ -3016,7 +3029,8 @@ export async function agentChat(req, res) {
               ? 'unsupported_filter'
               : 'missing';
         }
-        const classifiedNoteDraftRouteRequested = noteDraftRequested || noteDraftWorkspaceDirectRequested;
+        const classifiedNoteDraftRouteRequested =
+          noteDraftRequested || noteDraftWorkspaceDirectRequested || trace.noteDraftWorkspaceRetrievalNeeded === true;
         trace.noteDraftLegacyAgreement =
           classifiedNoteDraftRouteRequested === legacyNoteDraftRequested
             ? 'agree'
@@ -3034,7 +3048,7 @@ export async function agentChat(req, res) {
         '[Agent] note draft route classify=%s source=%s taken=%s legacy=%s agreement=%s ms=%s error=%s',
         classifyNoteDraft,
         trace.noteDraftRouteSource,
-        noteDraftRequested || noteDraftWorkspaceDirectRequested,
+        noteDraftRequested || noteDraftWorkspaceDirectRequested || trace.noteDraftWorkspaceRetrievalNeeded === true,
         legacyNoteDraftRequested,
         trace.noteDraftLegacyAgreement || '-',
         trace.noteDraftClassifyMs ?? '-',
@@ -3347,16 +3361,19 @@ export async function agentChat(req, res) {
       if (!privateContext) {
         privateContext = createNoteDraftPrivateContext({
           sourceMessage,
-          contextRefs: noteDraftContextRefs(effectiveContexts),
+          contextRefs: noteDraftContextRefs(effectiveContexts, MAX_PRIVATE_NOTE_DRAFT_CONTEXTS),
           scopeRefs: noteDraftScopeRefs(resolvedScopes),
           attachmentIds: noteDraftAttachmentIds(effectiveAttachments),
         });
       }
-      const entityRefs = buildAgentEntityRefs([
-        ...(effectiveContexts.sources || []),
-        ...noteDraftAttachmentEntitySources(effectiveAttachments),
-        ...scopedDraftMaterials.entityRefs,
-      ]);
+      const entityRefs = buildAgentEntityRefs(
+        [
+          ...(effectiveContexts.sources || []),
+          ...noteDraftAttachmentEntitySources(effectiveAttachments),
+          ...scopedDraftMaterials.entityRefs,
+        ],
+        MAX_PRIVATE_NOTE_DRAFT_CONTEXTS,
+      );
 
       if (!routeResponse) {
         try {
@@ -3812,6 +3829,7 @@ export async function agentChat(req, res) {
     const semanticPlanningEnabled = semanticCatalog.length > 0 && !deterministicResponseRequested;
     const runtimeV2Enforced = runtimeV2Mode === 'enforce' && semanticPlanningEnabled;
     const runtimeContextSummary = {
+      actorRole: userRole,
       selectedResourceTypes: [
         ...new Set([
           ...requestContextTypes,
@@ -3823,6 +3841,10 @@ export async function agentChat(req, res) {
         resolvedContexts.sources.length + resolvedScopes.refs.length + resolvedAttachments.sources.length,
       attachmentCount: attachmentIds.length,
       hasPendingArtifact: false,
+    };
+    const runtimeExecutionContext = {
+      contextRefs: noteDraftContextRefs(resolvedContexts, MAX_PRIVATE_NOTE_DRAFT_CONTEXTS),
+      attachmentIds: noteDraftAttachmentIds(resolvedAttachments),
     };
     const turnSpecShadowPromise =
       runtimeV2Mode === 'shadow' && semanticPlanningEnabled
@@ -4298,6 +4320,7 @@ export async function agentChat(req, res) {
     let turnSpecShadowUsageReported = true;
     let runtimeV2Outcome = null;
     let runtimeV2ErrorCode = null;
+    let runtimeV2ReadFallback = false;
     const runtimeV2Responses = [];
     if (runtimeV2Enforced) {
       try {
@@ -4310,8 +4333,10 @@ export async function agentChat(req, res) {
           groundingPolicy: groundingPolicyFromScopeMode(groundingScope.mode),
           outputContract: precompiledOutputContract,
           compiledTurnSpecResult: precompiledTurnSpecResult,
+          executionContext: runtimeExecutionContext,
           signal: agentAbortController.signal,
           traceId: requestId,
+          timeZone,
           onCompilerResponse: (response) => runtimeV2Responses.push(response),
           onPlannerResponse: (response) => runtimeV2Responses.push(response),
         });
@@ -4368,12 +4393,78 @@ export async function agentChat(req, res) {
           errorCode: runtimeV2ErrorCode || 'TURN_SPEC_INVALID',
         });
       }
-      selectedTools = runtimeV2Outcome?.route?.candidates || [];
-      selectedToolNames = new Set(selectedTools.map((tool) => tool.name));
+      const runtimeHasMutationGoal = (runtimeV2Outcome?.turnSpec?.goals || []).some((goal) =>
+        ['write', 'transform'].includes(goal?.kind),
+      );
+      const canUseReadOnlyFallback =
+        legacyIntentSuspicion.kind === 'query' &&
+        !runtimeHasMutationGoal &&
+        (!runtimeV2Outcome || ['blocked', 'unsupported'].includes(runtimeV2Outcome.state));
+      if (canUseReadOnlyFallback) {
+        const fallbackTools = selectedTools.filter((tool) => tool?.isWrite !== true);
+        const fallbackToolNames = new Set(fallbackTools.map((tool) => tool.name));
+        const fallbackCatalog = buildAgentSemanticCapabilityCatalog([...toolRegistry.values()], {
+          availableToolNames: fallbackToolNames,
+        }).filter((entry) => entry.effect === 'read' && entry.status === 'enabled');
+        if (fallbackTools.length && fallbackCatalog.length) {
+          const fallbackPromptBase = buildPlannerPrompt(fallbackTools, userRole, {
+            semanticCatalog: fallbackCatalog,
+            semanticCatalogText: formatSemanticCapabilityCatalog(fallbackCatalog),
+          });
+          const fallbackScopePrompt = [scopePrompt, webScopePrompt, noteDraftWorkspacePrompt, memoryPrompt]
+            .filter(Boolean)
+            .join('\n');
+          const fallbackMessages = [
+            { role: 'system', content: `${fallbackPromptBase}\n\n${fallbackScopePrompt}` },
+            ...messages.slice(1),
+          ];
+          const fallbackStartedAt = Date.now();
+          try {
+            plannerResponse = await requestAi(fallbackMessages, {
+              tools: [buildSemanticPlanToolDefinition(fallbackCatalog, fallbackTools)],
+              toolChoice: { type: 'function', function: { name: SEMANTIC_PLAN_TOOL_NAME } },
+              signal: agentAbortController.signal,
+              maxTokens: getPlannerMaxTokens({
+                message,
+                attachmentCount: attachmentIds.length,
+                selectedToolNames: fallbackToolNames,
+              }),
+              trace: { traceId: requestId, stage: 'planner_v2_read_fallback' },
+            });
+            apiCalls += 1;
+            apiCallsForLog = apiCalls;
+            totalUsage.promptTokens += Number(plannerResponse?.usage?.promptTokens || 0);
+            totalUsage.completionTokens += Number(plannerResponse?.usage?.completionTokens || 0);
+            totalUsage.totalTokens += Number(plannerResponse?.usage?.totalTokens || 0);
+            selectedTools = fallbackTools;
+            selectedToolNames = fallbackToolNames;
+            semanticCatalog = fallbackCatalog;
+            runtimeV2ReadFallback = true;
+            trace.runtimeV2ReadFallback = 'legacy_semantic_read_only';
+            trace.runtimeV2ReadFallbackMs = Date.now() - fallbackStartedAt;
+          } catch (error) {
+            if (
+              agentAbortController.signal.aborted ||
+              error?.name === 'AbortError' ||
+              error?.code === 'AGENT_HARD_DEADLINE_EXCEEDED'
+            ) {
+              throw error;
+            }
+            trace.runtimeV2ReadFallback = 'provider_error';
+            trace.runtimeV2ReadFallbackError = stableAgentErrorCode(error);
+          }
+        }
+      }
+      if (!runtimeV2ReadFallback) {
+        selectedTools = runtimeV2Outcome?.route?.candidates || [];
+        selectedToolNames = new Set(selectedTools.map((tool) => tool.name));
+      }
       trace.selectedTools = [...selectedToolNames];
       recordCandidateSet(trace.turnContract, {
         tools: [...selectedToolNames],
-        capabilityIds: (runtimeV2Outcome?.route?.goalRoutes || []).flatMap((route) => route.capabilityIds || []),
+        capabilityIds: runtimeV2ReadFallback
+          ? semanticCatalog.map((entry) => entry.id)
+          : (runtimeV2Outcome?.route?.goalRoutes || []).flatMap((route) => route.capabilityIds || []),
       });
     } else if (toolDefs.length) {
       const plannerRequest = requestAi(messages, {
@@ -4420,7 +4511,7 @@ export async function agentChat(req, res) {
     // 语义计划本身的无效/冲突和已确认读取计划的漏调用，分别在下方走受限恢复。
     plannerResponse = normalizePlannerToolCallResponse(plannerResponse, 'planner_round_1');
 
-    if (semanticPlanningEnabled && !runtimeV2Enforced) {
+    if (semanticPlanningEnabled && (!runtimeV2Enforced || runtimeV2ReadFallback)) {
       let parsedSemantic = parseSemanticPlannerResponse(plannerResponse, semanticCatalog, {
         toolCallIdPrefix: 'semantic-plan-round-1',
       });
@@ -4849,7 +4940,7 @@ export async function agentChat(req, res) {
       }
     }
 
-    if (runtimeV2Enforced) {
+    if (runtimeV2Enforced && !runtimeV2ReadFallback) {
       const adapted = adaptRuntimeOutcomeToLegacy(runtimeV2Outcome, semanticCatalog);
       semanticPlan = adapted.semanticPlan;
       semanticPolicy = adapted.semanticPolicy;
@@ -5051,6 +5142,7 @@ export async function agentChat(req, res) {
             .filter(Boolean);
           const runtimeResponses = [];
           const planned = await planAgentExecution({
+            message,
             turnSpec: runtimeV2Outcome.turnSpec,
             route: {
               ...runtimeV2Outcome.route,
@@ -5059,9 +5151,11 @@ export async function agentChat(req, res) {
             },
             completedGoalIds,
             dependencyResults,
+            executionContext: runtimeExecutionContext,
             signal: agentAbortController.signal,
             traceId: requestId,
             stagePrefix: `execution_planner_round_${round}`,
+            timeZone,
             validate: validateExecutionPlan,
             onResponse: (response) => runtimeResponses.push(response),
           });
@@ -5688,11 +5782,10 @@ export async function agentChat(req, res) {
     const scopedToolEntitySources = groundingV2Enabled
       ? inspectGroundingSubset(toolEntitySources, groundingScope).allowed
       : toolEntitySources;
-    const entityRefs = buildAgentEntityRefs([
-      ...resolvedContexts.sources,
-      ...publicSources,
-      ...scopedToolEntitySources,
-    ]);
+    const entityRefs = buildAgentEntityRefs(
+      [...resolvedContexts.sources, ...publicSources, ...scopedToolEntitySources],
+      trace.noteDraftWorkspaceRetrievalNeeded === true ? MAX_PRIVATE_NOTE_DRAFT_CONTEXTS : 5,
+    );
     // 覆盖报告与公开文档来源保持一致,否则会出现「来源 1 个,覆盖统计 2 份文件」。
     const publicDocumentCoverage = selectDocumentCoverage(
       resolvedAttachments.coverage,
@@ -6513,18 +6606,6 @@ export async function confirmAgentTool(req, res) {
     if (confirmation.capabilityId && confirmation.capabilityId !== tool.capabilityId) {
       throw new ToolConfirmationError('TOOL_CONFIRMATION_INVALID', '确认令牌对应的能力已发生变化，请重新发起操作。');
     }
-    assertAgentNoteTargetDirectoryFeature(req, confirmation.toolName, confirmation.args || {});
-    await enforceToolPolicy({
-      registry: toolRegistry,
-      toolName: confirmation.toolName,
-      args: confirmation.args || {},
-      context: toolRuntimeContext(req, identity),
-      phase: 'execute',
-      confirmed: true,
-      trustedPreparedArgs: true,
-      prepare: false,
-    });
-
     const sendOutcome = async (outcome) => {
       const authoritativeOutcome = withConfirmedActionReceipt(outcome, confirmation);
       await settleSessionAction({
@@ -6578,6 +6659,21 @@ export async function confirmAgentTool(req, res) {
 
     if (attempt.state === 'settled') return sendOutcome(attempt.outcome);
     if (attempt.state === 'running') return sendInProgress();
+
+    // 已结算回放只保留了不可变 binding 与权威 outcome，不再保存原始写参数。
+    // 参数和策略校验必须只发生在 ready 阶段；否则同一 token 的安全重放会拿空参数
+    // 再次校验，并被必填字段误判为失败。owner/session/能力绑定已经在上方完成校验。
+    assertAgentNoteTargetDirectoryFeature(req, confirmation.toolName, confirmation.args || {});
+    await enforceToolPolicy({
+      registry: toolRegistry,
+      toolName: confirmation.toolName,
+      args: confirmation.args || {},
+      context: toolRuntimeContext(req, identity),
+      phase: 'execute',
+      confirmed: true,
+      trustedPreparedArgs: true,
+      prepare: false,
+    });
 
     attempt = await claimToolConfirmationExecution(confirmation);
     confirmation = attempt.confirmation;

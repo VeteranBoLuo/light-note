@@ -15,6 +15,14 @@ export default {
   sourceType: 'bookmark',
   description:
     '收藏一个网址为书签。参数 url 必填;name/description 可选(不传则自动抓取网页标题与描述补全);tags 可选(标签名数组,自动创建并关联,最多 4 个)。用于"帮我收藏这个链接"等请求。',
+  routing: {
+    targetScope: 'single_owner',
+    requireAny: [
+      /(?:收藏|保存|创建|新增|添加).{0,16}(?:书签|网址|https?:\/\/|链接)|(?:书签|网址|https?:\/\/|链接).{0,16}(?:收藏|保存|创建|新增|添加)/iu,
+    ],
+    preferAny: [/(?:收藏|保存|创建|新增|添加).{0,16}(?:书签|网址|https?:\/\/|链接)/iu],
+    excludeAny: [/(?:死链|失效链接|链接体检|检查链接|体检链接)/iu],
+  },
   parameters: {
     type: 'object',
     properties: {

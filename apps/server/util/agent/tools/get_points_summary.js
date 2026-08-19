@@ -6,6 +6,14 @@ export default {
   description:
     '查询当前用户的积分中心摘要：余额、今日/本周节奏、近 28 天来源分布、积分目标进度与稳定收入估算。' +
     '回答“积分目标还差多少”“最近积分怎么来的”“按现在节奏多久能兑换”等。只读，不会领取、消费或修改目标。',
+  routing: {
+    targetScope: 'single_owner',
+    requireAny: [
+      /(?:积分).{0,24}(?:来源|分布|节奏|目标|进度|估算|多久|策略)|(?:来源|分布|节奏|目标进度|稳定收入).{0,20}(?:积分|兑换)/iu,
+    ],
+    preferAny: [/(?:来源|分布|节奏|目标|进度|估算|多久能兑换)/iu],
+    excludeAny: [/(?:明细|流水|逐条|商店|装扮|头像框)/iu],
+  },
   parameters: { type: 'object', properties: {} },
   requireRoot: false,
   async execute(args, ctx) {

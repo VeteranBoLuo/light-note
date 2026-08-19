@@ -9,7 +9,15 @@ const TABLE_CONFIG = {
 
 export default {
   name: 'query_trash',
-  description: '查询回收站中被删除的内容。可按资源类型（bookmark/note/file）、关键词、时间范围筛选。不传 type 则查询全部类型。',
+  appliesToDomains: ['file', 'content', 'bookmark', 'note'],
+  description:
+    '查询回收站中被删除的内容。可按资源类型（bookmark/note/file）、关键词、时间范围筛选。不传 type 则查询全部类型。',
+  routing: {
+    targetScope: 'single_owner',
+    requireAny: [/(?:回收站|垃圾箱|已删除|删除的内容|trash)/iu],
+    preferAny: [/(?:回收站|垃圾箱|trash)/iu],
+    excludeAny: [/(?:待整理|收集箱|inbox)/iu],
+  },
   parameters: {
     type: 'object',
     properties: {
@@ -53,18 +61,10 @@ export default {
           [type, ...params, take],
         ),
       );
-      countQueries.push(
-        pool.query(
-          `SELECT COUNT(*) AS cnt FROM \`${cfg.table}\` WHERE ${where}`,
-          params,
-        ),
-      );
+      countQueries.push(pool.query(`SELECT COUNT(*) AS cnt FROM \`${cfg.table}\` WHERE ${where}`, params));
     }
 
-    const [queryResults, countResults] = await Promise.all([
-      Promise.all(queries),
-      Promise.all(countQueries),
-    ]);
+    const [queryResults, countResults] = await Promise.all([Promise.all(queries), Promise.all(countQueries)]);
 
     let allItems = [];
     for (const [rows] of queryResults) {

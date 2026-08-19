@@ -6,6 +6,13 @@ export default {
   name: 'query_link_health',
   description:
     '只读取当前或最近一次书签死链体检的真实状态、检测时间、进度和疑似失效清单；绝对不会启动新体检。仅适用于“上次/最近体检结果”“现在检查到哪里了”“不要重新检查，只看记录”。对无时间限定的“我有哪些失效链接”，必须使用 start_link_health_check 获取当下真实结果。',
+  routing: {
+    targetScope: 'single_owner',
+    requireAny: [
+      /(?:上次|最近一次|历史|记录|进度|不要重新|只看).{0,24}(?:体检|检查|死链|失效|链接)|(?:体检|检查).{0,16}(?:结果|状态|进度|记录)/iu,
+    ],
+    preferAny: [/(?:上次|最近一次|不要重新|只看|结果|进度|记录)/iu],
+  },
   parameters: { type: 'object', properties: {} },
   requireRoot: false,
   toSources(raw) {

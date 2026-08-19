@@ -365,7 +365,25 @@ function toolCall(name, args, id = `call-${name}`) {
 }
 
 function turnSpecCall(input) {
-  return toolCall('submit_turn_spec', { version: '2.0', ...input }, 'turn-spec-1');
+  const goals = (input.goals || []).map((goal) => {
+    if (goal.operation) return goal;
+    if (goal.kind === 'read') return { ...goal, operation: 'read' };
+    if (goal.kind === 'transform') {
+      return { ...goal, operation: input.requestKind === 'revise_artifact' ? 'update' : 'create' };
+    }
+    const text = `${goal.description || ''} ${goal.targetDescription || ''}`;
+    let operation = 'update';
+    if (/(?:删除|删掉|移除|delete|remove)/iu.test(text)) operation = 'delete';
+    else if (/(?:恢复|还原|restore|recover)/iu.test(text)) operation = 'restore';
+    else if (/(?:重新打开|reopen)/iu.test(text)) operation = 'reopen';
+    else if (/(?:完成|complete)/iu.test(text)) operation = 'complete';
+    else if (/(?:上传|upload)/iu.test(text)) operation = 'upload';
+    else if (/(?:保存|save)/iu.test(text)) operation = 'save';
+    else if (/(?:移动|move)/iu.test(text)) operation = 'move';
+    else if (/(?:创建|新建|新增|添加|写入|收藏|create|add|write)/iu.test(text)) operation = 'create';
+    return { ...goal, operation };
+  });
+  return toolCall('submit_turn_spec', { version: '2.0', ...input, goals }, 'turn-spec-1');
 }
 
 function executionPlanCall(input) {
@@ -839,6 +857,254 @@ describe('agentChat 主链路', () => {
     ]);
     expect(mocks.createToolConfirmation).toHaveBeenCalledOnce();
     expect(res.send.mock.calls[0][0].data.confirmations).toHaveLength(1);
+  });
+
+  it('Runtime V2 按最新的今天范围读取全部材料，并生成满足 2000 字契约的非空确认草稿', async () => {
+    vi.stubEnv('AI_AGENT_RUNTIME_V2_MODE', 'enforce');
+    mocks.selectAgentTools.mockImplementation((registry) =>
+      [registry.get('query_notes'), registry.get('create_note')].filter(Boolean),
+    );
+    const noteRefs = Array.from({ length: 6 }, (_, index) => ({ type: 'note', id: `today-note-${index + 1}` }));
+    mocks.toolExecute.mockResolvedValueOnce({
+      value: '今天共 6 篇笔记',
+      dependencyRefs: noteRefs,
+    });
+    mocks.findOwnedNoteForAi.mockImplementation(async ({ noteId }) => {
+      const index = Number(String(noteId).split('-').at(-1));
+      return {
+        id: noteId,
+        title: `今日记录 ${index}`,
+        content: `这是今日第 ${index} 篇笔记的真实正文。`.repeat(100),
+      };
+    });
+    const completeContent = `# 今日全部笔记总结\n\n${'基于六篇真实材料整理的事实、分析、经验与下一步建议。'.repeat(110)}`;
+    expect(completeContent.length).toBeGreaterThanOrEqual(2000);
+
+    mocks.requestAi.mockImplementation(async (messages, options = {}) => {
+      if (options?.trace?.stage === 'intent_compiler') {
+        const payload = JSON.parse(messages[1].content);
+        expect(payload.latestMessage).toContain('今天的全部笔记');
+        expect(payload.authoritativeOutputContract).toMatchObject({
+          format: 'note_markdown',
+          length: { mode: 'minimum', minChars: 2000 },
+        });
+        return {
+          content: '',
+          toolCalls: [
+            turnSpecCall({
+              requestKind: 'create_artifact',
+              confidence: 'high',
+              goals: [
+                {
+                  id: 'read-today-notes',
+                  kind: 'read',
+                  capabilityDomain: 'note',
+                  description: '读取今天新增的全部笔记',
+                  targetDescription: '今天的全部笔记',
+                  dependsOn: [],
+                },
+                {
+                  id: 'create-summary-note',
+                  kind: 'transform',
+                  capabilityDomain: 'note',
+                  description: '根据真实材料生成一篇详细总结笔记',
+                  targetDescription: '至少 2000 字的 Markdown 笔记',
+                  dependsOn: ['read-today-notes'],
+                },
+              ],
+              groundingPolicy: payload.authoritativeGroundingPolicy,
+              missingSlots: [],
+              clarificationQuestion: '',
+            }),
+          ],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      if (options?.trace?.stage === 'execution_planner') {
+        const payload = JSON.parse(messages[1].content);
+        return {
+          content: '',
+          toolCalls: [
+            executionPlanCall({
+              turnSpecDigest: payload.turnSpec.digest,
+              steps: [
+                {
+                  id: 'query-today',
+                  goalId: 'read-today-notes',
+                  toolName: 'query_notes',
+                  arguments: { timeRange: '今天', limit: 50 },
+                  dependsOn: [],
+                  expectedResultKind: 'note_refs',
+                },
+              ],
+              deferredGoalIds: ['create-summary-note'],
+              unsupportedGoalIds: [],
+            }),
+          ],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      if (options?.trace?.stage === 'execution_planner_round_2') {
+        const payload = JSON.parse(messages[1].content);
+        expect(payload.completedGoalIds).toEqual(['read-today-notes']);
+        expect(payload.dependencyResults[0].capabilities[0].dependencyRefs).toHaveLength(6);
+        return {
+          content: '',
+          toolCalls: [
+            executionPlanCall({
+              turnSpecDigest: payload.turnSpec.digest,
+              steps: [
+                {
+                  id: 'create-summary',
+                  goalId: 'create-summary-note',
+                  toolName: 'create_note',
+                  arguments: { title: '由草稿协议生成' },
+                  dependsOn: [],
+                  expectedResultKind: 'note_confirmation',
+                },
+              ],
+              deferredGoalIds: [],
+              unsupportedGoalIds: [],
+            }),
+          ],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      if (options?.trace?.stage === 'note_draft') {
+        expect(options.tools[0].function.parameters.properties.content.minLength).toBe(2000);
+        expect(messages[1].content).toContain('今日记录 1');
+        expect(messages[1].content).toContain('今日记录 6');
+        return {
+          content: '',
+          toolCalls: [
+            toolCall('submit_note_draft', {
+              title: '今日全部笔记总结',
+              content: completeContent,
+            }),
+          ],
+          usage: usage(8),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      throw new Error(`unexpected stage: ${options?.trace?.stage}`);
+    });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '根据我今天的全部笔记生成一篇新笔记，至少 2000 字，不要编造材料事实。',
+        history: [{ role: 'user', content: '改为按最近 7 天' }],
+        stream: false,
+        contexts: [],
+        attachmentIds: [],
+        scope: { mode: 'workspace' },
+      }),
+      res,
+    );
+
+    expect(mocks.requestAi.mock.calls.map(([, options]) => options?.trace?.stage)).toEqual([
+      'intent_compiler',
+      'execution_planner',
+      'execution_planner_round_2',
+      'note_draft',
+    ]);
+    expect(mocks.toolExecute).toHaveBeenCalledWith(
+      { timeRange: '今天', limit: 50 },
+      expect.objectContaining({ userId: 'user-1' }),
+    );
+    expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: 'create_note',
+        args: { title: '今日全部笔记总结', content: completeContent },
+        privateContext: expect.objectContaining({ contextRefs: noteRefs }),
+      }),
+    );
+    expect(res.send.mock.calls.at(-1)?.[0]?.data).toMatchObject({
+      confirmations: [expect.objectContaining({ toolName: 'create_note' })],
+      entityRefs: noteRefs.map((ref, index) =>
+        expect.objectContaining({ type: ref.type, id: ref.id, title: `今日记录 ${index + 1}` }),
+      ),
+    });
+  });
+
+  it('Runtime V2 编译连续失败时，纯查询只降级到只读语义计划并继续返回真实结果', async () => {
+    vi.stubEnv('AI_AGENT_RUNTIME_V2_MODE', 'enforce');
+    mocks.selectAgentTools.mockImplementation((registry) => [registry.get('query_notes')].filter(Boolean));
+    mocks.toolExecute.mockResolvedValueOnce({
+      value: '今天新增 2 篇笔记：发布记录、客户反馈',
+      dependencyRefs: [
+        { type: 'note', id: 'note-today-1' },
+        { type: 'note', id: 'note-today-2' },
+      ],
+    });
+    mocks.requestAi.mockImplementation(async (_messages, options = {}) => {
+      if (['intent_compiler', 'intent_compiler_repair'].includes(options?.trace?.stage)) {
+        return {
+          content: '没有提交结构化 TurnSpec',
+          toolCalls: [],
+          usage: usage(1),
+          usageStatus: 'reported',
+          finishReason: 'stop',
+        };
+      }
+      if (options?.trace?.stage === 'planner_v2_read_fallback') {
+        return {
+          content: '',
+          toolCalls: [
+            semanticPlanCall({
+              requestClass: 'data_query',
+              intents: [
+                {
+                  kind: 'read',
+                  capabilityId: 'read.query_notes',
+                  goal: '查询今天新增的笔记',
+                  targetDescription: '今天',
+                  dependsOn: [],
+                },
+              ],
+              toolCalls: [{ toolName: 'query_notes', arguments: { timeRange: '今天', limit: 50 } }],
+            }),
+          ],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      if (options?.trace?.stage === 'final') {
+        return {
+          content: '你今天新增了 2 篇笔记：发布记录、客户反馈。',
+          toolCalls: [],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'stop',
+        };
+      }
+      throw new Error(`unexpected stage: ${options?.trace?.stage}`);
+    });
+    const res = response();
+
+    await agentChat(request({ message: '我今天新增了哪些笔记？', stream: false, scope: { mode: 'workspace' } }), res);
+
+    expect(mocks.requestAi.mock.calls.map(([, options]) => options?.trace?.stage)).toEqual([
+      'intent_compiler',
+      'intent_compiler_repair',
+      'intent_compiler_repair',
+      'planner_v2_read_fallback',
+      'final',
+    ]);
+    expect(mocks.toolExecute).toHaveBeenCalledWith(
+      { timeRange: '今天', limit: 50 },
+      expect.objectContaining({ userId: 'user-1' }),
+    );
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toBe('你今天新增了 2 篇笔记：发布记录、客户反馈。');
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).not.toContain('没有返回可核验的语义计划');
   });
 
   it('卡片续答允许空消息内部触发，只读取服务端成功回执且不重新开放 Planner 或工具', async () => {
@@ -1922,13 +2188,7 @@ describe('agentChat 主链路', () => {
       return notes[noteId] || null;
     });
     mocks.requestAi
-      .mockResolvedValueOnce({
-        content: '',
-        toolCalls: [toolCall('classify_pending_note_draft_intent', { decision: 'revise_pending_draft' })],
-        usage: usage(4),
-        usageStatus: 'reported',
-        finishReason: 'tool_calls',
-      })
+      // “重新生成”由确定性续写门禁识别，不再浪费一次意图分类调用。
       .mockResolvedValueOnce({
         content: '',
         toolCalls: [
@@ -1958,13 +2218,14 @@ describe('agentChat 主链路', () => {
     );
 
     expect(mocks.findOwnedNoteForAi).toHaveBeenCalledTimes(2);
-    expect(mocks.requestAi.mock.calls[1][0][1].content).toContain('上午真实正文');
-    expect(mocks.requestAi.mock.calls[1][0][1].content).toContain('下午真实正文');
+    expect(mocks.requestAi).toHaveBeenCalledOnce();
+    expect(mocks.requestAi.mock.calls[0][0][1].content).toContain('上午真实正文');
+    expect(mocks.requestAi.mock.calls[0][0][1].content).toContain('下午真实正文');
     expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
       expect.objectContaining({
         replaceToken: oldToken,
         replaceConfirmationId: 'workspace-draft-confirmation',
-        args: expect.objectContaining({ title: '今日笔记详细总结' }),
+        args: expect.objectContaining({ title: '今日笔记总结' }),
         privateContext: expect.objectContaining({
           contextRefs: [
             { type: 'note', id: 'today-note-1' },
@@ -2165,7 +2426,7 @@ describe('agentChat 主链路', () => {
       expect.objectContaining({
         replaceToken: oldToken,
         replaceConfirmationId: 'old-confirmation',
-        args: expect.objectContaining({ title: '扩写后的标题', parentId: 'directory-stable' }),
+        args: expect.objectContaining({ title: '旧标题', parentId: 'directory-stable' }),
         privateContext: expect.objectContaining({
           contextRefs: [{ type: 'bookmark', id: 'bookmark-1' }],
           scopeRefs: [{ type: 'note_branch', id: 'directory-stable' }],
@@ -4514,9 +4775,8 @@ describe('agentChat 主链路', () => {
       dependencyRefs: [{ type: 'todo', id: 'todo-1' }],
     });
     mocks.requestAi
-      // 同一句里还要改待办：笔记入口必须把复合写请求交回 Semantic Planner，
-      // 否则待办那一步会被统一草稿协议静默丢弃。
-      .mockResolvedValueOnce(noteDraftTaskResponse({ producesNote: true, otherMutations: true }))
+      // 封闭动作注册表已经识别到专用待办写操作，直接交回 Semantic Planner，
+      // 不再额外调用通用笔记分类器。
       .mockResolvedValueOnce({
         content: '',
         toolCalls: [
@@ -4593,9 +4853,9 @@ describe('agentChat 主链路', () => {
       res,
     );
 
-    // 入口分类 + 语义计划 + Final Reply。
-    expect(mocks.requestAi).toHaveBeenCalledTimes(3);
-    expect(mocks.requestAi.mock.calls[0][1].trace.stage).toBe('note_draft_task');
+    // 两轮语义计划：先查询依赖，再基于权威待办 ID 生成第二张确认卡。
+    expect(mocks.requestAi).toHaveBeenCalledTimes(2);
+    expect(mocks.requestAi.mock.calls[0][1].trace.stage).toBe('planner');
     expect(mocks.createToolConfirmation).toHaveBeenCalledTimes(2);
     expect(mocks.createToolConfirmation.mock.calls.map(([input]) => input.toolName)).toEqual([
       'create_note',
@@ -4632,39 +4892,37 @@ describe('agentChat 主链路', () => {
         confirmation: { ...input, id: 'confirmation-todo' },
         expiresIn: 300,
       }));
-    mocks.requestAi
-      .mockResolvedValueOnce(noteDraftTaskResponse({ producesNote: true, otherMutations: true }))
-      .mockResolvedValueOnce({
-        content: '',
-        toolCalls: [
-          semanticPlanCall({
-            requestClass: 'data_action',
-            intents: [
-              {
-                kind: 'write',
-                capabilityId: 'note.create',
-                goal: '创建笔记',
-                targetDescription: '材料汇总笔记',
-                dependsOn: [],
-              },
-              {
-                kind: 'write',
-                capabilityId: 'todo.create',
-                goal: '创建待办',
-                targetDescription: '今天晚上 21 点查看笔记',
-                dependsOn: [],
-              },
-            ],
-            toolCalls: [
-              { toolName: 'create_note', arguments: { title: '材料汇总', content: '正文内容。' } },
-              { toolName: 'create_todo', arguments: { title: '查看材料汇总笔记', dueAt: '2026-08-04 21:00:00' } },
-            ],
-          }),
-        ],
-        usage: usage(4),
-        usageStatus: 'reported',
-        finishReason: 'tool_calls',
-      });
+    mocks.requestAi.mockResolvedValueOnce({
+      content: '',
+      toolCalls: [
+        semanticPlanCall({
+          requestClass: 'data_action',
+          intents: [
+            {
+              kind: 'write',
+              capabilityId: 'note.create',
+              goal: '创建笔记',
+              targetDescription: '材料汇总笔记',
+              dependsOn: [],
+            },
+            {
+              kind: 'write',
+              capabilityId: 'todo.create',
+              goal: '创建待办',
+              targetDescription: '今天晚上 21 点查看笔记',
+              dependsOn: [],
+            },
+          ],
+          toolCalls: [
+            { toolName: 'create_note', arguments: { title: '材料汇总', content: '正文内容。' } },
+            { toolName: 'create_todo', arguments: { title: '查看材料汇总笔记', dueAt: '2026-08-04 21:00:00' } },
+          ],
+        }),
+      ],
+      usage: usage(4),
+      usageStatus: 'reported',
+      finishReason: 'tool_calls',
+    });
     const res = response();
 
     await agentChat(
@@ -5050,39 +5308,37 @@ describe('agentChat 主链路', () => {
     mocks.selectAgentTools.mockImplementation((registry) =>
       [registry.get('create_note'), registry.get('create_todo'), registry.get('read_url')].filter(Boolean),
     );
-    mocks.requestAi
-      .mockResolvedValueOnce(noteDraftTaskResponse({ producesNote: true, otherMutations: true }))
-      .mockResolvedValueOnce({
-        content: '',
-        toolCalls: [
-          semanticPlanCall({
-            requestClass: 'data_action',
-            intents: [
-              {
-                kind: 'write',
-                capabilityId: 'note.create',
-                goal: '创建分析笔记',
-                targetDescription: '书签分析笔记',
-                dependsOn: [],
-              },
-              {
-                kind: 'write',
-                capabilityId: 'todo.create',
-                goal: '创建今晚待办',
-                targetDescription: '今晚 21 点待办',
-                dependsOn: [],
-              },
-            ],
-            toolCalls: [
-              { toolName: 'create_note', arguments: { title: '书签分析', content: '分析正文。' } },
-              { toolName: 'create_todo', arguments: { title: '查看笔记', dueAt: '2026-08-04 21:00:00' } },
-            ],
-          }),
-        ],
-        usage: usage(4),
-        usageStatus: 'reported',
-        finishReason: 'tool_calls',
-      });
+    mocks.requestAi.mockResolvedValueOnce({
+      content: '',
+      toolCalls: [
+        semanticPlanCall({
+          requestClass: 'data_action',
+          intents: [
+            {
+              kind: 'write',
+              capabilityId: 'note.create',
+              goal: '创建分析笔记',
+              targetDescription: '书签分析笔记',
+              dependsOn: [],
+            },
+            {
+              kind: 'write',
+              capabilityId: 'todo.create',
+              goal: '创建今晚待办',
+              targetDescription: '今晚 21 点待办',
+              dependsOn: [],
+            },
+          ],
+          toolCalls: [
+            { toolName: 'create_note', arguments: { title: '书签分析', content: '分析正文。' } },
+            { toolName: 'create_todo', arguments: { title: '查看笔记', dueAt: '2026-08-04 21:00:00' } },
+          ],
+        }),
+      ],
+      usage: usage(4),
+      usageStatus: 'reported',
+      finishReason: 'tool_calls',
+    });
     const res = response();
 
     await agentChat(
@@ -5098,8 +5354,8 @@ describe('agentChat 主链路', () => {
     );
 
     const data = res.send.mock.calls.at(-1)?.[0]?.data;
-    // 分类 + planner 各一次：就绪计划不再进修复轮。
-    expect(mocks.requestAi).toHaveBeenCalledTimes(2);
+    // 动作注册表已识别复合写操作，直接进入 planner，且就绪计划不再进修复轮。
+    expect(mocks.requestAi).toHaveBeenCalledOnce();
     expect(data?.confirmations?.map((item) => item.toolName)).toEqual(['create_note', 'create_todo']);
     expect(String(data?.response || '')).not.toContain('该操作尚未执行');
   });
@@ -5117,7 +5373,6 @@ describe('agentChat 主链路', () => {
       finishReason: 'tool_calls',
     });
     mocks.requestAi
-      .mockResolvedValueOnce(noteDraftTaskResponse({ producesNote: true, otherMutations: true }))
       .mockResolvedValueOnce(conversationPlan())
       .mockResolvedValueOnce(conversationPlan())
       .mockResolvedValueOnce(conversationPlan());

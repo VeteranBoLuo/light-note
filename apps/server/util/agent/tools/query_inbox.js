@@ -46,8 +46,15 @@ function cannotReadInbox(ctx) {
 
 export default {
   name: 'query_inbox',
+  appliesToDomains: ['todo', 'content', 'bookmark', 'note', 'file'],
   description:
     '查询当前账号待整理的书签、笔记和文件。可按资源类型、关键词和加入时间排序筛选，返回资源标题、类型、加入时间与来源；不读取笔记正文、书签 URL 或文件内容。需要继续查看更多结果时传回上一页返回的 cursor。',
+  routing: {
+    targetScope: 'single_owner',
+    requireAny: [/(?:待整理(?:箱|区|内容|资源)?|收集箱|inbox)/iu],
+    preferAny: [/(?:待整理|收集箱|inbox)/iu],
+    excludeAny: [/(?:回收站|垃圾箱|已删除|trash)/iu],
+  },
   parameters: {
     type: 'object',
     properties: {

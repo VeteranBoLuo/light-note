@@ -6,6 +6,14 @@ export default {
   description:
     '查询当前用户的成长与积分:等级、经验、积分余额、连签天数、今日是否已签到、今日任务完成度、成就进度(已解锁/待领取/总数)。' +
     '回答"我几级""多少积分""连签几天""今天签到/任务了吗""成就进度""我的等级权益"等。',
+  routing: {
+    targetScope: 'single_owner',
+    requireAny: [/(?:成长|等级|经验|连签|签到|今日任务|等级权益|成就进度|积分余额|多少积分)/iu],
+    preferAny: [/(?:成长|等级|经验|连签|签到|今日任务|等级权益|成就进度|积分余额|多少积分)/iu],
+    excludeAny: [
+      /(?:积分).{0,20}(?:明细|流水|收入|支出|变动|来源|分布|节奏|目标|估算|商店|兑换|商品)|(?:商店|装扮|头像框|抽奖|免费抽|单抽|十连|保底|lottery|draw)/iu,
+    ],
+  },
   parameters: { type: 'object', properties: {} },
   requireRoot: false,
   async execute(args, ctx) {

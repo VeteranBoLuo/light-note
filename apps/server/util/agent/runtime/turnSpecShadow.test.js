@@ -11,8 +11,8 @@ describe('TurnSpec shadow', () => {
         usageStatus: 'reported',
       }),
     });
-    expect(result).toMatchObject({ state: 'invalid', attempts: 2 });
-    expect(result.usage.totalTokens).toBe(6);
+    expect(result).toMatchObject({ state: 'invalid', attempts: 3 });
+    expect(result.usage.totalTokens).toBe(9);
   });
 
   it('只输出不含正文和参数的安全分歧摘要', () => {

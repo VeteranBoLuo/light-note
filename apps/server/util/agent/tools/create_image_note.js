@@ -40,6 +40,13 @@ export default {
   sourceType: 'note',
   description:
     '把用户本轮上传的 PNG、JPG、JPEG 或 WebP 原图插入一篇新的 HTML 图片笔记。attachmentId 必须取自本轮 [attachment:ID] 上下文；不要求图片含文字，也不依赖 OCR 成功。',
+  routing: {
+    targetScope: 'single_owner',
+    requireAny: [
+      /(?:图片|原图|PNG|JPG|JPEG|WebP|image).{0,24}(?:图片笔记|笔记)|(?:图片笔记|笔记).{0,24}(?:图片|原图|PNG|JPG|JPEG|WebP|image)/iu,
+    ],
+    preferAny: [/(?:图片笔记|图片.{0,16}笔记|image.{0,16}note)/iu],
+  },
   parameters: {
     type: 'object',
     properties: {

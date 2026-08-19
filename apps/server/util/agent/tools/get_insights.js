@@ -3,7 +3,17 @@ import pool from '../../../db/index.js';
 // 收藏洞察(只读):跨模块统计。回答"帮我分析下我的收藏"。
 export default {
   name: 'get_insights',
-  description: '对当前用户的收藏做数据洞察:各类内容总量、本月新增、高频标签 Top、未打标签的书签数。回答"帮我分析下我的收藏""我最常用的标签""我这个月存了多少""我的收藏概况"。',
+  appliesToDomains: ['content', 'bookmark', 'note', 'file', 'tag'],
+  description:
+    '对当前用户的收藏做数据洞察:各类内容总量、本月新增、高频标签 Top、未打标签的书签数。回答"帮我分析下我的收藏""我最常用的标签""我这个月存了多少""我的收藏概况"。',
+  routing: {
+    targetScope: 'single_owner',
+    requireAny: [
+      /(?:收藏).{0,20}(?:洞察|概况|分析|总量|本月新增)|(?:高频|常用).{0,8}(?:标签)|未打标签|(?:本月|这个月).{0,12}(?:收藏|新增)|collection.{0,16}(?:insights?|overview|analysis)/iu,
+    ],
+    preferAny: [/(?:收藏洞察|收藏概况|分析.{0,8}收藏|高频标签|未打标签)/iu],
+    excludeAny: [/(?:死链|失效链接|链接体检)/iu],
+  },
   parameters: { type: 'object', properties: {} },
   requireRoot: false,
   async execute(args, ctx) {

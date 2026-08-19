@@ -58,8 +58,17 @@ function normalizeArgs(args = {}) {
 
 export default {
   name: 'get_resource_creation_ranking',
+  appliesToDomains: ['admin', 'content', 'note', 'bookmark', 'file'],
   description:
     '【管理员】按用户统计书签、笔记或云空间文件排行。既支持“昨天谁新增的资源最多”“本周新增内容排行榜”等时间段新增排行，也支持“目前项目的书签数量排行”“当前笔记最多的是谁”等当前有效存量排行。resourceType 指定 all/bookmark/note/file；问当前、目前、累计或总量时必须传 timeRange="全部"。如果用户没有说明当前存量或具体新增时间范围，必须先追问时间口径，不得默认成昨天，也不得调用本工具。不要改查操作日志。如果是在“昨天新增了哪些用户”之后追问这些新用户中谁新增资源最多，同时传 registeredWithin="昨天"限制用户注册范围。',
+  routing: {
+    targetScope: 'platform',
+    requireAny: [
+      /(?:书签|笔记|文件|资源|内容).{0,24}(?:最多|排行|排名|榜单|第[一1]名|top\s*\d*)|(?:最多|排行|排名|榜单|第[一1]名|top\s*\d*).{0,24}(?:书签|笔记|文件|资源|内容)/iu,
+    ],
+    preferAny: [/(?:书签|笔记|文件|资源|内容).{0,24}(?:新增|创建|存量|总量|最多|排行|排名)/iu],
+    excludeAny: [/(?:活跃用户|用户活跃|API\s*请求|安全|风险|签到|积分)/iu],
+  },
   parameters: {
     type: 'object',
     additionalProperties: false,

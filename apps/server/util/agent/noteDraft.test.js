@@ -7,9 +7,11 @@ import {
   createNoteDraftPrivateContext,
   extractMinimumNoteDraftCharacters,
   generateNoteDraft,
+  isExplicitPendingNoteDraftRefinement,
   isNoteDraftRequest,
   normalizeNoteDraftPrivateContext,
   normalizeNoteDraftRefinement,
+  requestsNoteDraftTitleChange,
   requestsRichTextNote,
   shouldClassifyNoteDraftTask,
 } from './noteDraft.js';
@@ -175,6 +177,55 @@ describe('noteDraft', () => {
     expect(shouldClassifyNoteDraftTask({ message: '字数要至少 2000 字' })).toBe(false);
   });
 
+  it('专用写能力已明确命中时不会被通用笔记草稿传感器抢走', () => {
+    expect(
+      shouldClassifyNoteDraftTask({
+        message: '把本轮上传的图片创建成一篇图片笔记',
+        attachmentCount: 1,
+        actionIntent: {
+          kind: 'action',
+          resolution: 'enabled',
+          toolNames: ['create_image_note'],
+        },
+      }),
+    ).toBe(false);
+    expect(
+      shouldClassifyNoteDraftTask({
+        message: '把本轮附件原文件保存到云空间',
+        attachmentCount: 1,
+        actionIntent: {
+          kind: 'action',
+          resolution: 'enabled',
+          toolNames: ['save_attachment_to_cloud'],
+        },
+      }),
+    ).toBe(false);
+    expect(
+      shouldClassifyNoteDraftTask({
+        message: '根据这些材料创建一篇新笔记',
+        contextTypes: ['note'],
+        actionIntent: noteCreateIntent,
+      }),
+    ).toBe(true);
+  });
+
+  it('确定性识别草稿续写，同时把明确的新材料范围交回语义规划', () => {
+    for (const message of [
+      '内容太少，至少 2000 字。',
+      '重新生成，内容尽量详细。',
+      '重新生成，保留本轮已经引用的全部材料，至少 2500 字。',
+    ]) {
+      expect(isExplicitPendingNoteDraftRefinement(message)).toBe(true);
+    }
+    for (const message of [
+      '改为只根据我今天的全部笔记生成一篇新笔记。',
+      '重新根据最近 7 天的书签生成。',
+      '深圳今天会下雨吗？',
+    ]) {
+      expect(isExplicitPendingNoteDraftRefinement(message)).toBe(false);
+    }
+  });
+
   it('传感器严格宽于旧正则，避免传感器不命中时回落正则又漏判', () => {
     // 主链在传感器不命中时会回落到 isNoteDraftRequest。只要存在“正则命中但传感器
     // 不命中”的表达，那条请求就既不分类也不接管，等于静默漏判。
@@ -198,6 +249,37 @@ describe('noteDraft', () => {
     for (const message of ['归并成新的 Markdown 笔记', '把这两个资源合并成一条笔记', '生成一篇笔记']) {
       expect(requestsRichTextNote(message)).toBe(false);
     }
+  });
+
+  it('改稿默认保持已确认范围的标题，只有用户明确要求时才允许改标题', async () => {
+    expect(requestsNoteDraftTitleChange('重新生成，内容更详细，至少 2500 字')).toBe(false);
+    expect(requestsNoteDraftTitleChange('标题改为“新的复盘标题”')).toBe(true);
+    expect(requestsNoteDraftTitleChange('use a better title and expand the content')).toBe(true);
+
+    const previousDraft = { title: '今日笔记总结', content: '旧稿。'.repeat(300) };
+    const preserved = await generateNoteDraft({
+      materials: [{ type: 'note', id: 'n1', title: '来源', content: '材料。'.repeat(200) }],
+      instruction: '重新生成，内容更详细',
+      previousDraft,
+      request: vi
+        .fn()
+        .mockResolvedValue(
+          response({ title: '模型擅自改掉的标题', content: `${previousDraft.content}${'补充。'.repeat(200)}` }),
+        ),
+    });
+    expect(preserved.title).toBe('今日笔记总结');
+
+    const renamed = await generateNoteDraft({
+      materials: [{ type: 'note', id: 'n1', title: '来源', content: '材料。'.repeat(200) }],
+      instruction: '把标题改为“新的复盘标题”，并扩写正文',
+      previousDraft,
+      request: vi
+        .fn()
+        .mockResolvedValue(
+          response({ title: '新的复盘标题', content: `${previousDraft.content}${'补充。'.repeat(200)}` }),
+        ),
+    });
+    expect(renamed.title).toBe('新的复盘标题');
   });
 
   it('语义分类接管笔记入口，复合写请求交回 Semantic Planner', async () => {

@@ -3,8 +3,15 @@ import { resolveKnowledgeSourceTarget } from '../sourceUtils.js';
 
 export default {
   name: 'write_knowledge_base',
+  appliesToDomains: ['content', 'note'],
   description:
     '新增或更新知识库条目。当用户要求"记录""写一篇""存到知识库""新增知识"时使用。如果 title 匹配已有条目则更新，否则新建。仅限 root 用户使用。',
+  routing: {
+    requireAny: [
+      /(?:写入|新增|创建|新建|更新|保存|存入|记录).{0,24}(?:知识库|帮助中心|知识条目)|(?:知识库|帮助中心|知识条目).{0,24}(?:写入|新增|创建|新建|更新|保存|存入|记录)|(?:write|add|create|update|save).{0,24}(?:knowledge\s+base|help\s+center)/iu,
+    ],
+    preferAny: [/(?:知识库|帮助中心|知识条目|knowledge\s+base|help\s+center)/iu],
+  },
   parameters: {
     type: 'object',
     properties: {

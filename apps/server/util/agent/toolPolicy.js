@@ -62,6 +62,9 @@ export function normalizeRegisteredTool(tool) {
   if (tool.getDependencyRefs != null && typeof tool.getDependencyRefs !== 'function') {
     throw new Error(`Agent 工具 ${tool.name} 的 getDependencyRefs 必须是函数`);
   }
+  if (tool.validatePlanArgs != null && typeof tool.validatePlanArgs !== 'function') {
+    throw new Error(`Agent 工具 ${tool.name} 的 validatePlanArgs 必须是函数`);
+  }
   const rawDependencyBindings = tool.dependencyBindings == null ? [] : tool.dependencyBindings;
   if (!Array.isArray(rawDependencyBindings) || rawDependencyBindings.length > 8) {
     throw new Error(`Agent 工具 ${tool.name} 的 dependencyBindings 无效`);
