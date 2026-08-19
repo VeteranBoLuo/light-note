@@ -53,6 +53,12 @@
             </div>
           </template>
         </template>
+        <div v-else class="aio-center aio-muted">
+          <p>{{ $t('bookmarkMg.aiOrganizeQuoteFailed') }}</p>
+          <div class="aio-actions aio-actions--center">
+            <BButton size="small" @click="loadQuote">{{ $t('bookmarkMg.aiOrganizeRetry') }}</BButton>
+          </div>
+        </div>
       </template>
 
       <!-- 运行中 -->
@@ -218,6 +224,7 @@
   }
 
   async function loadQuote() {
+    quote.value = null;
     quoteLoading.value = true;
     try {
       const res = await apiBasePost(
@@ -337,23 +344,27 @@
     quote.value = null;
     suggestions.value = [];
     appliedCount.value = 0;
-    loadQuote();
+    void loadQuote();
   }
 
-  watch(visible, (v) => {
-    if (v) {
-      resourceType.value = props.initType || 'bookmark';
-      selectedQueue.value = normalizeSelectedIds(props.selectedIds);
-      selectedMode.value = selectedQueue.value.length > 0;
-      selectedOriginalCount.value = selectedQueue.value.length;
-      step.value = 'confirm';
-      quote.value = null;
-      suggestions.value = [];
-      appliedCount.value = 0;
-      fillMeta.value = true;
-      loadQuote();
-    }
-  });
+  watch(
+    visible,
+    (v) => {
+      if (v) {
+        resourceType.value = props.initType || 'bookmark';
+        selectedQueue.value = normalizeSelectedIds(props.selectedIds);
+        selectedMode.value = selectedQueue.value.length > 0;
+        selectedOriginalCount.value = selectedQueue.value.length;
+        step.value = 'confirm';
+        quote.value = null;
+        suggestions.value = [];
+        appliedCount.value = 0;
+        fillMeta.value = true;
+        void loadQuote();
+      }
+    },
+    { immediate: true },
+  );
 </script>
 
 <style lang="less" scoped>

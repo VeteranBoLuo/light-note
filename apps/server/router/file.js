@@ -40,6 +40,11 @@ import {
   getStorageUsageBreakdown,
   storageBytesToMb,
 } from '../util/storageUsage.js';
+import {
+  abortManagedCloudUpload,
+  confirmManagedCloudUpload,
+  prepareManagedCloudUpload,
+} from '../util/services/managedCloudUploadService.js';
 const router = express.Router();
 const fileShareAccessLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -203,6 +208,59 @@ router.post('/uploadFiles', async (req, res) => {
     res.send(resultData(results));
   } catch (e) {
     return sendFileServerError(res, 'prepare-upload', e);
+  }
+});
+
+// 笔记等需要“创建新文件”的入口使用托管单文件上传：随机对象键与展示名解耦，
+// 同名只自动改名，不覆盖旧文件记录，避免破坏已经保存的资源引用。
+router.post('/prepareManagedUpload', async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const data = await prepareManagedCloudUpload({
+      userId: req.user?.id,
+      userRole: req.user?.role,
+      fileName: req.body?.fileName,
+      fileType: req.body?.fileType,
+      fileSize: req.body?.fileSize,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    if (error?.code) {
+      return res.send(resultData(error.details || { errorCode: error.code }, error.httpStatus || 400, error.message));
+    }
+    return sendFileServerError(res, 'prepare-managed-upload', error);
+  }
+});
+
+router.post('/confirmManagedUpload', async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const data = await confirmManagedCloudUpload({
+      userId: req.user?.id,
+      userRole: req.user?.role,
+      objectKey: req.body?.objectKey,
+      fileName: req.body?.fileName,
+      fileType: req.body?.fileType,
+      folderId: req.body?.folderId,
+      request: req,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    if (error?.code) {
+      return res.send(resultData(error.details || { errorCode: error.code }, error.httpStatus || 400, error.message));
+    }
+    return sendFileServerError(res, 'confirm-managed-upload', error);
+  }
+});
+
+router.post('/abortManagedUpload', async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const data = await abortManagedCloudUpload({ userId: req.user?.id, objectKey: req.body?.objectKey });
+    return res.send(resultData(data));
+  } catch (error) {
+    if (error?.code) return res.send(resultData({ errorCode: error.code }, 400, error.message));
+    return sendFileServerError(res, 'abort-managed-upload', error);
   }
 });
 

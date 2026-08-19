@@ -190,6 +190,15 @@
       triggerless
       @change="onRichMediaTextImagePicked"
     />
+    <BUpload
+      v-if="props.context === 'note'"
+      ref="noteFileInputRef"
+      :multiple="false"
+      raw-file
+      :max-total-size="null"
+      triggerless
+      @change="onNoteFilePicked"
+    />
     <BPopover
       v-if="currentType === 'html' && !readonly"
       v-model:open="richMediaTextToolbarVisible"
@@ -310,6 +319,14 @@
         @close="closeMentionPicker"
       />
     </BModal>
+    <NoteFileUploadModal
+      v-model:visible="noteFileUploadVisible"
+      :file="noteFileUploadFile"
+      :saved-file="noteFileUploadSavedFile"
+      @uploaded="handleNoteFileUploaded"
+      @retry-insert="retryNoteFileInsert"
+      @close="resetNoteFileUpload"
+    />
     <BModal
       v-model:visible="shortcutHelpVisible"
       :title="t('noteDetail.editor.shortcutsTitle')"
@@ -719,6 +736,7 @@
   import EditorToolbarV2, { type EditorToolbarAction } from './EditorToolbarV2.vue';
   import NoteDetailLoadingState from './NoteDetailLoadingState.vue';
   import NoteEditorWarmupPreview from './NoteEditorWarmupPreview.vue';
+  import NoteFileUploadModal from './NoteFileUploadModal.vue';
   import { useDelayedEditorWarmup } from './useDelayedEditorWarmup';
   import type { MarkdownCodeMirrorExpose, MarkdownSearchRequest } from './MarkdownCodeMirror.vue';
   import { MERMAID_TEMPLATES, mermaidTemplateMarkdown } from '@/config/mermaidTemplates.ts';
@@ -814,6 +832,7 @@
     readTextGradientConfig,
     type TextGradientAngle,
   } from '@/utils/richTextEffects';
+  import type { CloudUploadResult } from '@/api/cloudFileUploadApi';
 
   // 两套重型编辑引擎按笔记类型分包，Markdown 不再下载 TinyMCE，富文本也不下载 CodeMirror。
   const TinyMceEditor = defineAsyncComponent({
@@ -1136,6 +1155,14 @@
   const richImageInputRef = ref<{ open: () => void } | null>(null);
   const richImageUploading = ref(false);
   const richImageUploadIntent = shallowRef<RichImageUploadIntent | null>(null);
+  type NoteFileInsertIntent =
+    | { kind: 'markdown'; noteId: string; source: string; from: number; to: number }
+    | { kind: 'html'; noteId: string; editor: any; bookmark: any };
+  const noteFileInputRef = ref<{ open: () => void } | null>(null);
+  const noteFileUploadVisible = ref(false);
+  const noteFileUploadFile = shallowRef<File | null>(null);
+  const noteFileUploadSavedFile = shallowRef<CloudUploadResult | null>(null);
+  const noteFileInsertIntent = shallowRef<NoteFileInsertIntent | null>(null);
   type RichMediaTextUploadContext = { editor: any; noteId: string };
   type RichMediaTextUploadIntent =
     | ({ kind: 'insert' } & RichMediaTextUploadContext)
@@ -2429,32 +2456,11 @@
     }
     const editor = editorRef.value;
     if (!editor) return false;
-    const attrs = buildResourceAnchorAttrs(item);
-    const html = `<a href="${href}" contenteditable="false" data-ln-resource-type="${attrs['data-ln-resource-type']}" data-ln-resource-id="${attrs['data-ln-resource-id']}">${escapeHtmlText(item.title || item.id)}</a>`;
     let inserted = false;
     try {
       editor.focus();
       if (!restoreTinyMceMentionSelection(editor)) throw new Error('mention selection expired');
-      const insert = () => {
-        if (typeof editor.insertContent === 'function') {
-          editor.insertContent(html);
-        } else {
-          editor.selection.setContent(html);
-        }
-        // 资源引用是原子 chip；显式把光标放到链接之后，之后输入自然成为普通文字。
-        moveTinyMceCaretAfterResourceMention(editor, item);
-      };
-      if (editor.undoManager?.transact) editor.undoManager.transact(insert);
-      else insert();
-
-      // TinyMCE 的插入事件在不同版本中不一定会同步 v-model；显式更新正文事实源，
-      // 保证“选中资源 → 看见链接 → 自动保存”是同一条闭环。
-      const nextHtml = editor.getContent({ format: 'html' });
-      if (!collectResourceRefsFromHtml(nextHtml).some((ref) => resourceRefKey(ref) === resourceRefKey(item))) {
-        throw new Error('mention insertion missing from editor content');
-      }
-      content.value = nextHtml;
-      inserted = true;
+      inserted = insertRichResourceReferenceAtSelection(editor, item);
     } catch {
       message.warning(t('note.resourceMention.insertFailed'));
     } finally {
@@ -2462,11 +2468,141 @@
     }
     if (!inserted) return false;
     recordResourceMentionOperation('插入资源提及成功');
+    return true;
+  }
+
+  function resourceReferenceHtml(item: ResourceRef & { title: string }) {
+    const href = buildResourceHref(item);
+    if (!href) return '';
+    const attrs = buildResourceAnchorAttrs(item);
+    return `<a href="${href}" contenteditable="false" data-ln-resource-type="${attrs['data-ln-resource-type']}" data-ln-resource-id="${attrs['data-ln-resource-id']}">${escapeHtmlText(item.title || item.id)}</a>`;
+  }
+
+  function insertRichResourceReferenceAtSelection(editor: any, item: ResourceRef & { title: string }) {
+    const html = resourceReferenceHtml(item);
+    if (!html) return false;
+    const insert = () => {
+      if (typeof editor.insertContent === 'function') editor.insertContent(html);
+      else editor.selection.setContent(html);
+      moveTinyMceCaretAfterResourceMention(editor, item);
+    };
+    if (editor.undoManager?.transact) editor.undoManager.transact(insert);
+    else insert();
+
+    // TinyMCE 的插入事件在不同版本中不一定会同步 v-model；显式更新正文事实源。
+    const nextHtml = editor.getContent({ format: 'html' });
+    if (!collectResourceRefsFromHtml(nextHtml).some((ref) => resourceRefKey(ref) === resourceRefKey(item))) {
+      throw new Error('resource insertion missing from editor content');
+    }
+    content.value = nextHtml;
     window.setTimeout(() => {
       publishResourceRefs(editor.getContent({ format: 'html' }));
       decorateTinyMceResourceRefs();
     }, 0);
     return true;
+  }
+
+  function captureNoteFileInsertIntent(): NoteFileInsertIntent | null {
+    if (props.readonly || props.context !== 'note') return null;
+    if (currentType.value === 'markdown') {
+      const editor = mdCodeMirrorRef.value;
+      const source = editor?.getValue() ?? mdContent.value ?? '';
+      const selection = editor?.getSelection() || { from: source.length, to: source.length };
+      return {
+        kind: 'markdown',
+        noteId: props.noteId || '',
+        source,
+        from: selection.from,
+        to: selection.to,
+      };
+    }
+    const editor = editorRef.value;
+    if (!editor) return null;
+    editor.focus?.();
+    return {
+      kind: 'html',
+      noteId: props.noteId || '',
+      editor,
+      bookmark: editor.selection?.getBookmark?.(2, true),
+    };
+  }
+
+  function openNoteFileUpload() {
+    if (noteFileUploadVisible.value || props.readonly || props.context !== 'note') return;
+    const intent = captureNoteFileInsertIntent();
+    if (!intent) return;
+    noteFileInsertIntent.value = intent;
+    noteFileInputRef.value?.open();
+  }
+
+  function onNoteFilePicked(files: File[]) {
+    const file = files[0];
+    if (!file || !noteFileInsertIntent.value) return;
+    noteFileUploadFile.value = file;
+    noteFileUploadSavedFile.value = null;
+    noteFileUploadVisible.value = true;
+  }
+
+  function insertUploadedFileReference(file: CloudUploadResult, intent: NoteFileInsertIntent | null) {
+    if (!intent || (intent.noteId && intent.noteId !== props.noteId)) return false;
+    const item: ResourceRef & { title: string } = { type: 'file', id: file.fileId, title: file.filename };
+    const href = buildResourceHref(item);
+    if (!href) return false;
+    try {
+      if (intent.kind === 'markdown') {
+        const editor = mdCodeMirrorRef.value;
+        const source = editor?.getValue() ?? mdContent.value ?? '';
+        // 上传期间只要正文发生过变化，就不再猜测旧偏移；文件已安全保存在云空间，交给用户重试插入。
+        if (currentType.value !== 'markdown' || source !== intent.source) return false;
+        const title = escapeMarkdownLinkTitle(item.title) || item.id;
+        const markdown = `[${title}](${href})`;
+        const caret = intent.from + markdown.length;
+        if (editor) editor.replaceRange(intent.from, intent.to, markdown, caret, caret);
+        else onMdInput(`${source.slice(0, intent.from)}${markdown}${source.slice(intent.to)}`);
+        return true;
+      }
+
+      const editor = editorRef.value;
+      if (currentType.value !== 'html' || !editor || editor !== intent.editor) return false;
+      editor.focus?.();
+      if (intent.bookmark) editor.selection?.moveToBookmark?.(intent.bookmark);
+      const range = editor.selection?.getRng?.() as Range | null;
+      if (!rangeBelongsToTinyMce(editor, range)) return false;
+      return insertRichResourceReferenceAtSelection(editor, item);
+    } catch {
+      return false;
+    }
+  }
+
+  async function handleNoteFileUploaded(file: CloudUploadResult) {
+    noteFileUploadSavedFile.value = file;
+    if (!insertUploadedFileReference(file, noteFileInsertIntent.value)) {
+      message.warning(t('noteDetail.editor.fileUpload.insertPending'));
+      return;
+    }
+    void recordOperation({ module: '笔记', operation: '上传文件并插入资源引用' }).catch(() => {});
+    message.success(t('noteDetail.editor.fileUpload.success', { name: file.filename }));
+    resetNoteFileUpload();
+  }
+
+  function retryNoteFileInsert() {
+    const file = noteFileUploadSavedFile.value;
+    if (!file) return;
+    const currentIntent = captureNoteFileInsertIntent();
+    if (!insertUploadedFileReference(file, currentIntent)) {
+      message.warning(t('note.resourceMention.insertFailed'));
+      return;
+    }
+    void recordOperation({ module: '笔记', operation: '插入已上传文件引用' }).catch(() => {});
+    message.success(t('noteDetail.editor.fileUpload.inserted'));
+    resetNoteFileUpload();
+  }
+
+  function resetNoteFileUpload() {
+    noteFileUploadVisible.value = false;
+    noteFileUploadFile.value = null;
+    noteFileUploadSavedFile.value = null;
+    noteFileInsertIntent.value = null;
   }
 
   function handleMentionPickerSelect(item: ResourceRef & { title: string }) {
@@ -3389,6 +3525,9 @@
       }),
       ...(props.context === 'note'
         ? [
+            action('insertFile', t('noteDetail.editor.fileUpload.action'), icon.file_upload, {
+              disabled: disabled || noteFileUploadVisible.value,
+            }),
             action('insertResource', t('noteDetail.editor.resource'), icon.noteDetail.toolbar.mention, {
               disabled: disabled || !canEditResourceMentions.value,
             }),
@@ -3623,6 +3762,7 @@
     }
     if (key === 'insertImage') return openMarkdownImageInsert();
     if (key === 'insertMediaText') return openMarkdownMediaTextInsert();
+    if (key === 'insertFile') return openNoteFileUpload();
     if (key === 'insertResource') return openResourceMentionPicker();
     if (key === 'insertCodeBlock') return void applyMarkdownEdit((input) => insertBlock(input, buildCodeBlock()));
     if (key.startsWith('insertDiagram:')) return insertDiagramTemplate(key.slice('insertDiagram:'.length));
@@ -3658,6 +3798,7 @@
     if (key === 'insertTable') return editor.execCommand('mceInsertTableDialog');
     if (key === 'insertImage') return openRichImageInsert();
     if (key === 'insertMediaText') return openRichMediaTextInsert();
+    if (key === 'insertFile') return openNoteFileUpload();
     if (key === 'insertResource') return openRichResourceMentionPicker(editor);
     if (key === 'insertCodeBlock') return editor.execCommand('codesample');
     if (key.startsWith('insertDiagram:')) return insertHtmlDiagramTemplate(editor, key.slice('insertDiagram:'.length));

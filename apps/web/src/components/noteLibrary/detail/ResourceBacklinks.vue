@@ -1,5 +1,9 @@
 <template>
-  <section v-if="visible" class="resource-backlinks" :class="`resource-backlinks--${placement}`">
+  <section
+    v-if="visible"
+    class="resource-backlinks"
+    :class="[`resource-backlinks--${placement}`, { 'resource-backlinks--compact': compact }]"
+  >
     <BButton class="resource-backlinks__trigger" :aria-expanded="expanded" @click="expanded = !expanded">
       <span class="resource-backlinks__title">{{ t('note.resourceBacklinks.title') }}</span>
       <span class="resource-backlinks__count">{{ items.length }}{{ hasMore ? '+' : '' }}</span>
@@ -9,10 +13,14 @@
       <BButton v-for="item in items" :key="item.id" class="resource-backlinks__item" @click="openSourceNote(item.id)">
         <span class="resource-backlinks__item-copy">
           <strong>{{ item.title || t('note.resourceBacklinks.untitled') }}</strong>
-          <small v-if="item.updateTime">{{
-            t('note.resourceBacklinks.updatedAt', { time: formatTime(item.updateTime) })
-          }}</small>
-          <small>{{ t('note.resourceBacklinks.locateReference') }}</small>
+          <span class="resource-backlinks__item-meta">
+            <small v-if="item.updateTime">{{
+              t('note.resourceBacklinks.updatedAt', { time: formatTime(item.updateTime) })
+            }}</small>
+            <small class="resource-backlinks__locate">{{
+              t(compact ? 'note.resourceBacklinks.locateReferenceCompact' : 'note.resourceBacklinks.locateReference')
+            }}</small>
+          </span>
         </span>
       </BButton>
       <BButton v-if="hasMore" class="resource-backlinks__more" :loading="loading" :disabled="loading" @click="showMore">
@@ -36,8 +44,9 @@
       targetType: ResourceRefType;
       targetId: string;
       placement?: 'panel' | 'inline' | 'header';
+      compact?: boolean;
     }>(),
-    { placement: 'panel' },
+    { placement: 'panel', compact: false },
   );
 
   const { t, locale } = useI18n();
@@ -239,6 +248,12 @@
     gap: 2px;
   }
 
+  .resource-backlinks__item-meta {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+  }
+
   .resource-backlinks__item-copy strong,
   .resource-backlinks__item-copy small {
     overflow: hidden;
@@ -249,11 +264,76 @@
   .resource-backlinks__item-copy strong {
     color: var(--text-color);
     font-weight: 550;
+    line-height: 1.35;
   }
 
   .resource-backlinks__item-copy small {
     color: var(--desc-color);
     font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .resource-backlinks--compact {
+    :deep(.resource-backlinks__trigger.b_btn.default_btn) {
+      min-height: 32px;
+      padding: 4px 9px;
+      font-size: 12px;
+      line-height: 1.2;
+    }
+
+    .resource-backlinks__content {
+      gap: 1px;
+      padding: 3px;
+    }
+
+    :deep(.resource-backlinks__item.b_btn.default_btn) {
+      min-height: 44px;
+      padding: 6px 8px;
+    }
+
+    .resource-backlinks__item-copy {
+      width: 100%;
+      gap: 3px;
+    }
+
+    .resource-backlinks__item-copy strong {
+      font-size: 13px;
+      line-height: 1.3;
+    }
+
+    .resource-backlinks__item-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow: hidden;
+    }
+
+    .resource-backlinks__item-meta small {
+      min-width: 0;
+      font-size: 11px;
+      line-height: 1.3;
+    }
+
+    .resource-backlinks__locate {
+      flex: 1 1 auto;
+      color: var(--primary-color);
+    }
+
+    .resource-backlinks__item-meta small:not(.resource-backlinks__locate) {
+      flex: 0 0 auto;
+    }
+
+    .resource-backlinks__item-meta small + small::before {
+      margin-right: 6px;
+      color: var(--desc-color);
+      content: '·';
+    }
+
+    :deep(.resource-backlinks__more.b_btn.default_btn) {
+      min-height: 32px;
+      padding: 4px 8px;
+      line-height: 1.2;
+    }
   }
 
   :deep(.resource-backlinks__more.b_btn.default_btn) {
@@ -283,6 +363,14 @@
     .resource-backlinks__item,
     .resource-backlinks__more {
       min-height: 44px;
+    }
+
+    .resource-backlinks--compact {
+      :deep(.resource-backlinks__trigger.b_btn.default_btn),
+      :deep(.resource-backlinks__item.b_btn.default_btn),
+      :deep(.resource-backlinks__more.b_btn.default_btn) {
+        min-height: 44px;
+      }
     }
   }
 </style>

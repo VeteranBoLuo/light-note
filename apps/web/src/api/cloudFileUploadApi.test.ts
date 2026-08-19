@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import axios from 'axios';
 import { apiBasePost } from '@/http/request';
-import { ensureCloudFolder, uploadCloudFile } from './cloudFileUploadApi';
+import { ensureCloudFolder, fetchCloudFolders, uploadCloudFile, uploadManagedCloudFile } from './cloudFileUploadApi';
 
 vi.mock('axios', () => ({ default: { put: vi.fn() } }));
 vi.mock('@/http/request', () => ({ apiBasePost: vi.fn() }));
@@ -64,6 +64,81 @@ describe('cloudFileUploadApi', () => {
 
     await expect(uploadCloudFile(new File(['poster'], '周报.png', { type: 'image/png' }), '7')).rejects.toThrow(
       'invalid',
+    );
+  });
+
+  it('读取可选云空间文件夹并过滤无效项', async () => {
+    postMock.mockResolvedValue({
+      status: 200,
+      msg: '',
+      data: { items: [{ id: 7, name: '资料' }, { id: null, name: '无效' }, { id: 9, name: '  ' }] },
+    });
+
+    await expect(fetchCloudFolders()).resolves.toEqual([{ id: '7', name: '资料' }]);
+    expect(postMock).toHaveBeenCalledWith('/api/file/queryFolder', { filters: {} }, { silent: true });
+  });
+
+  it('托管上传把自定义名称、随机对象键、目录和上传进度带入安全确认链路', async () => {
+    postMock
+      .mockResolvedValueOnce({
+        status: 200,
+        msg: '',
+        data: {
+          filename: '项目资料.pdf',
+          fileType: 'application/pdf',
+          objectKey: 'files/user-1/uploads/random.pdf',
+          uploadUrl: 'https://obs.example/managed',
+          headers: { 'x-test': '1' },
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 200,
+        msg: '',
+        data: { filename: '项目资料 (1).pdf', status: '已上传', fileId: 27 },
+      });
+    putMock.mockImplementation(async (_url, _file, config: any) => {
+      config.onUploadProgress({ loaded: 5, total: 10 });
+      return {} as never;
+    });
+    const progress = vi.fn();
+    const file = new File(['document'], '原始名称.pdf', { type: 'application/pdf' });
+
+    await expect(
+      uploadManagedCloudFile(file, { fileName: '项目资料.pdf', folderId: '7', onProgress: progress }),
+    ).resolves.toEqual({ filename: '项目资料 (1).pdf', status: '已上传', fileId: '27' });
+    expect(progress).toHaveBeenCalledWith(50);
+    expect(progress).toHaveBeenLastCalledWith(100);
+    expect(postMock).toHaveBeenLastCalledWith(
+      '/api/file/confirmManagedUpload',
+      {
+        objectKey: 'files/user-1/uploads/random.pdf',
+        fileName: '项目资料.pdf',
+        fileType: 'application/pdf',
+        folderId: '7',
+      },
+      { silent: true },
+    );
+  });
+
+  it('托管上传确认失败时调用安全中止接口清理未落库对象', async () => {
+    postMock
+      .mockResolvedValueOnce({
+        status: 200,
+        data: {
+          fileType: 'text/plain',
+          objectKey: 'files/user-1/uploads/random.txt',
+          uploadUrl: 'https://obs.example/managed',
+        },
+      })
+      .mockResolvedValueOnce({ status: 409, msg: '确认失败', data: null })
+      .mockResolvedValueOnce({ status: 200, data: { deleted: true } });
+    putMock.mockResolvedValue({} as never);
+
+    await expect(uploadManagedCloudFile(new File(['x'], 'x.txt'), {})).rejects.toThrow('确认失败');
+    expect(postMock).toHaveBeenLastCalledWith(
+      '/api/file/abortManagedUpload',
+      { objectKey: 'files/user-1/uploads/random.txt' },
+      { silent: true },
     );
   });
 });

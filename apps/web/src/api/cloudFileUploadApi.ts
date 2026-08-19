@@ -13,6 +13,18 @@ export type CloudUploadResult = {
   fileId: string;
 };
 
+export type CloudFolderOption = {
+  id: string;
+  name: string;
+};
+
+export type ManagedCloudUploadOptions = {
+  fileName?: string;
+  folderId?: string | null;
+  signal?: AbortSignal;
+  onProgress?: (percent: number) => void;
+};
+
 function apiError(response: { status?: number; msg?: string }, fallback: string) {
   return new Error(response?.msg || fallback);
 }
@@ -27,6 +39,78 @@ export async function ensureCloudFolder(name: string): Promise<EnsuredCloudFolde
     name: String(response.data.name || name),
     created: Boolean(response.data.created),
   };
+}
+
+export async function fetchCloudFolders(): Promise<CloudFolderOption[]> {
+  const response = await apiBasePost('/api/file/queryFolder', { filters: {} }, { silent: true });
+  if (response.status !== 200) throw apiError(response, 'FOLDER_LIST_FAILED');
+  return (Array.isArray(response.data?.items) ? response.data.items : [])
+    .filter((item: any) => item?.id != null && String(item?.name || '').trim())
+    .map((item: any) => ({ id: String(item.id), name: String(item.name).trim() }));
+}
+
+async function abortManagedUpload(objectKey: string) {
+  await apiBasePost('/api/file/abortManagedUpload', { objectKey }, { silent: true });
+}
+
+/**
+ * 创建一个全新的云空间文件。对象键由服务端随机生成，同名展示名在确认事务中自动加序号，
+ * 因而不会覆盖旧文件或改变已经被笔记引用的文件 ID。
+ */
+export async function uploadManagedCloudFile(
+  file: File,
+  options: ManagedCloudUploadOptions = {},
+): Promise<CloudUploadResult> {
+  const metadata = {
+    fileName: String(options.fileName || file.name).trim(),
+    fileType: file.type || 'application/octet-stream',
+    fileSize: file.size,
+  };
+  const prepareResponse = await apiBasePost('/api/file/prepareManagedUpload', metadata, { silent: true });
+  const uploadInfo = prepareResponse.data;
+  if (prepareResponse.status !== 200 || !uploadInfo?.uploadUrl || !uploadInfo?.objectKey) {
+    throw apiError(prepareResponse, 'UPLOAD_PREPARE_FAILED');
+  }
+
+  let confirmed = false;
+  try {
+    await axios.put(uploadInfo.uploadUrl, file, {
+      headers: {
+        ...(uploadInfo.headers || {}),
+        'Content-Type': uploadInfo.fileType || metadata.fileType,
+      },
+      signal: options.signal,
+      onUploadProgress: (event) => {
+        if (!event.total || event.total <= 0) return;
+        options.onProgress?.(Math.min(100, Math.max(0, Math.round((event.loaded / event.total) * 100))));
+      },
+    });
+    options.onProgress?.(100);
+
+    const confirmResponse = await apiBasePost(
+      '/api/file/confirmManagedUpload',
+      {
+        objectKey: uploadInfo.objectKey,
+        fileName: metadata.fileName,
+        fileType: uploadInfo.fileType || metadata.fileType,
+        folderId: options.folderId ?? null,
+      },
+      { silent: true },
+    );
+    const result = confirmResponse.data;
+    if (confirmResponse.status !== 200 || !result?.fileId || result.status !== '已上传') {
+      throw apiError(confirmResponse, 'UPLOAD_CONFIRM_FAILED');
+    }
+    confirmed = true;
+    return {
+      filename: String(result.filename || metadata.fileName),
+      status: '已上传',
+      fileId: String(result.fileId),
+    };
+  } catch (error) {
+    if (!confirmed) await abortManagedUpload(String(uploadInfo.objectKey)).catch(() => {});
+    throw error;
+  }
 }
 
 /**

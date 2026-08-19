@@ -70,6 +70,11 @@ vi.mock('../util/resourceInbox.js', () => ({
 vi.mock('../util/aiDocument/service.js', () => ({
   purgeDocumentSourcesForCloudFiles: mocks.purgeDocumentSourcesForCloudFiles,
 }));
+vi.mock('../util/services/managedCloudUploadService.js', () => ({
+  prepareManagedCloudUpload: vi.fn(),
+  confirmManagedCloudUpload: vi.fn(),
+  abortManagedCloudUpload: vi.fn(),
+}));
 
 await import('./file.js');
 

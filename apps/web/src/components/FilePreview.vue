@@ -57,6 +57,7 @@
           target-type="file"
           :target-id="String(fileInfo.id)"
           placement="inline"
+          compact
         />
         <!-- 加载状态 -->
         <div v-if="loading" class="preview-loading">
@@ -1450,7 +1451,7 @@
         left: 14px;
         z-index: 20;
         // 反链是辅助信息，不应在文件预览中抢占画面；长标题仍可在卡片内省略显示。
-        width: min(320px, calc(100% - 48px));
+        width: min(276px, calc(100% - 32px));
         box-shadow: 0 8px 24px color-mix(in srgb, #000 12%, transparent);
       }
 

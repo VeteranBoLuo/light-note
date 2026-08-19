@@ -32,12 +32,10 @@
   /* 零占位锚点：只浮动圆形按钮，不生成整行空白或背景条。 */
   .scroll-prompt {
     position: relative;
-    width: 0;
+    width: 100%;
     height: 0;
     min-height: 0;
     flex: 0 0 0;
-    align-self: flex-end;
-    margin-right: 12px;
     pointer-events: none;
     animation: slideInUp 0.3s ease;
   }
@@ -45,7 +43,8 @@
   .prompt-icon {
     position: absolute;
     bottom: 12px;
-    right: 0;
+    left: 50%;
+    transform: translateX(-50%);
     width: 36px;
     min-width: 36px;
     height: 36px;

@@ -36,7 +36,13 @@ vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
 }));
 
 vi.mock('@/components/noteLibrary/detail/ResourceBacklinks.vue', () => ({
-  default: { template: '<div />' },
+  default: {
+    props: {
+      compact: Boolean,
+      placement: String,
+    },
+    template: '<div class="resource-backlinks-stub" :data-compact="String(compact)" :data-placement="placement" />',
+  },
 }));
 
 vi.mock('@/components/cloudSpace/PdfPreview.vue', () => ({
@@ -632,6 +638,16 @@ describe('FilePreview text request lifecycle', () => {
 
     expect(document.body.querySelector('.preview-text')?.textContent).toContain('new file content');
     expect(document.body.querySelector('.preview-text')?.textContent).not.toContain('old file content');
+  });
+});
+
+describe('FilePreview resource backlinks', () => {
+  it('uses the compact inline backlink card so it does not cover the preview content', async () => {
+    await mountImagePreview();
+
+    const backlinks = document.body.querySelector<HTMLElement>('.file-preview-backlinks');
+    expect(backlinks?.dataset.compact).toBe('true');
+    expect(backlinks?.dataset.placement).toBe('inline');
   });
 });
 

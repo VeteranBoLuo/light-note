@@ -148,6 +148,9 @@ declare(ADMIN_POLICIES.READ, 'file', [
 declare(ADMIN_POLICIES.CONTENT_WRITE, 'file', [
   ['POST', '/file/uploadFiles'],
   ['POST', '/file/confirmUpload'],
+  ['POST', '/file/prepareManagedUpload'],
+  ['POST', '/file/confirmManagedUpload'],
+  ['POST', '/file/abortManagedUpload'],
   ['POST', '/file/deleteFileById'],
   ['POST', '/file/updateFile'],
   ['POST', '/file/preview/prepare'],

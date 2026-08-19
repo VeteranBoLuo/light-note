@@ -77,7 +77,7 @@
             <SvgIcon :src="icon.noteDetail.delete" size="16" />
             {{ $t('note.deleteSelected') }}
           </BButton>
-          <BButton class="note-action-button" @click="exitBatch">{{ $t('note.batchDone') }}</BButton>
+          <BButton class="note-action-button" @click="exitBatch">{{ $t('note.exitBatch') }}</BButton>
         </template>
       </template>
       <template v-else>

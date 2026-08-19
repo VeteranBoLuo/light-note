@@ -75,9 +75,10 @@ describe('笔记库批量 AI 操作语义', () => {
     expect(source).not.toContain('@click="openBatchTags(\'add\')"');
     expect(source).not.toContain('@click="openBatchTags(\'remove\')"');
     expect(source).not.toContain('@click="openBatchExportModal"');
-    expect(source).toContain("{{ $t('note.batchDone') }}");
-    expect(zhLocaleSource).toContain("batchDone: '完成'");
-    expect(enLocaleSource).toContain("batchDone: 'Done'");
+    expect(source).toContain("{{ $t('note.exitBatch') }}");
+    expect(source).not.toContain("{{ $t('note.batchDone') }}");
+    expect(zhLocaleSource).toContain("exitBatch: '退出批量操作'");
+    expect(enLocaleSource).toContain("exitBatch: 'Exit Batch'");
   });
 
   it('AI 智能整理把当前所选笔记 ID 交给自动打标签弹窗', () => {

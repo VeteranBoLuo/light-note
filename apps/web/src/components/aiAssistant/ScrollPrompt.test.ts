@@ -15,7 +15,10 @@ const workspaceShellSource = readFileSync(
   resolve(process.cwd(), 'src/components/aiAssistant/AiWorkspaceShell.vue'),
   'utf8',
 );
-const mobileWorkspaceSource = readFileSync(resolve(process.cwd(), 'src/view/aiAssistant/MobileAiWorkspace.vue'), 'utf8');
+const mobileWorkspaceSource = readFileSync(
+  resolve(process.cwd(), 'src/view/aiAssistant/MobileAiWorkspace.vue'),
+  'utf8',
+);
 const floatQuestionSource = readFileSync(
   resolve(process.cwd(), 'src/components/aiAssistant/FloatQuestion.vue'),
   'utf8',
@@ -71,14 +74,14 @@ describe('ScrollPrompt', () => {
       /\.prompt-icon\.is-loading \.loading-spinner\s*\{[\s\S]*?border:\s*2px solid rgba\(97, 92, 237, 0\.14\);/,
     );
     expect(scrollPromptSource).not.toContain('position: sticky');
-    expect(scrollPromptSource).toMatch(/\.scroll-prompt\s*\{[\s\S]*?width:\s*0;/);
+    expect(scrollPromptSource).toMatch(/\.scroll-prompt\s*\{[\s\S]*?width:\s*100%;/);
     expect(scrollPromptSource).toMatch(/\.scroll-prompt\s*\{[\s\S]*?height:\s*0;/);
     expect(scrollPromptSource).toMatch(/\.scroll-prompt\s*\{[\s\S]*?flex:\s*0 0 0;/);
     expect(scrollPromptSource).toMatch(/\.scroll-prompt\s*\{[\s\S]*?pointer-events:\s*none;/);
     expect(scrollPromptSource).toMatch(/\.prompt-icon\s*\{[\s\S]*?position:\s*absolute;/);
-    expect(scrollPromptSource).toMatch(/\.scroll-prompt\s*\{[\s\S]*?align-self:\s*flex-end;/);
     expect(scrollPromptSource).toMatch(/\.prompt-icon\s*\{[\s\S]*?bottom:\s*12px;/);
-    expect(scrollPromptSource).toMatch(/\.prompt-icon\s*\{[\s\S]*?right:\s*0;/);
+    expect(scrollPromptSource).toMatch(/\.prompt-icon\s*\{[\s\S]*?left:\s*50%;/);
+    expect(scrollPromptSource).toMatch(/\.prompt-icon\s*\{[\s\S]*?transform:\s*translateX\(-50%\);/);
     expect(scrollPromptSource).toMatch(/\.prompt-icon\s*\{[\s\S]*?pointer-events:\s*auto;/);
     expect(scrollPromptSource).not.toMatch(/\.scroll-prompt\s*\{[\s\S]*?z-index:/);
     expect(chatContainerSource).toMatch(/<\/main>\s*[\s\S]*?<ScrollPrompt/);
