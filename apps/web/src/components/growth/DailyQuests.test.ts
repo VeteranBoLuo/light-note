@@ -28,8 +28,8 @@ function mountBonus(
   const locale = options.locale ?? 'zh-CN';
   const quests = [
     { key: 'checkin', done: true },
-    { key: 'create', done: true },
-    { key: options.questKey ?? 'daily_todo', done: false, random: true, cur: 0, target: 1 },
+    { key: 'daily_bookmark', done: true, random: true, cur: 1, target: 1 },
+    { key: options.questKey ?? 'daily_todo_create', done: false, random: true, cur: 0, target: 1 },
   ];
   const app = createApp({
     setup: () => () =>
@@ -59,6 +59,7 @@ function mountBonus(
     labels: [...host.querySelectorAll('.dq-label')].map((node) => node.childNodes[0]?.textContent?.trim()),
     stages: [...host.querySelectorAll('.dq-stage')].map((node) => node.textContent?.replace(/\s+/g, ' ').trim()),
     random: host.querySelector('.dq-random')?.textContent?.trim(),
+    randomCount: host.querySelectorAll('.dq-random').length,
     experienceGuide: host.querySelector('.dq-exp-guide')?.textContent?.replace(/\s+/g, ' ').trim(),
     experienceCap: host.querySelector('.dq-exp-cap')?.textContent?.replace(/\s+/g, ' ').trim(),
     experienceCapPercent: host.querySelector('.dq-exp-cap [role="progressbar"]')?.getAttribute('aria-valuenow'),
@@ -77,9 +78,10 @@ describe('每日任务阶梯奖励', () => {
         { key: 'complete', required: 3, exp: 10, points: 20, claimed: false, claimable: false },
       ],
     });
-    expect(result.labels).toEqual(['完成每日签到', '新增一条内容', '完成一个待办']);
+    expect(result.labels).toEqual(['完成每日签到', '收藏一条书签', '创建一个待办']);
     expect(result.stages).toEqual(['完成 2/3+5 经验 · +10 积分可领取', '完成 3/3+10 经验 · +20 积分2/3']);
     expect(result.random).toBe('今日随机');
+    expect(result.randomCount).toBe(2);
     expect(result.experienceGuide).toContain('经验获取来源');
     expect(result.experienceGuide).toContain('每日签到+5~10 经验 / 天');
     expect(result.experienceGuide).toContain('新增书签 / 笔记 / 文件每类前 3 条，每条：书签 +10 · 文件 +12 · 笔记 +15');
@@ -110,7 +112,7 @@ describe('每日任务阶梯奖励', () => {
 
   it('英语环境展示待办任务文案而不是原始多语言 key', () => {
     const result = mountBonus({ exp: 0, points: 30, claimed: false, claimable: false }, { locale: 'en-US' });
-    expect(result.labels).toEqual(['Check in for the day', 'Create one item', 'Complete one to-do']);
+    expect(result.labels).toEqual(['Check in for the day', 'Save one bookmark', 'Create one to-do']);
     expect(result.labels.join(' ')).not.toContain('growth.quest_');
   });
 

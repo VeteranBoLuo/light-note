@@ -9,7 +9,7 @@ export const NOTE_TREE_ROOT_KEY = '__light_note_root__';
 const EXPANDED_SESSION_KEY = 'light-note-note-tree-expanded-ids';
 const LAYOUT_STORAGE_KEY = 'light-note-workspace-layout';
 
-export type NoteWorkspacePrimaryTab = 'pages' | 'tags' | 'outline';
+export type NoteWorkspacePrimaryTab = 'pages' | 'outline';
 
 interface NoteWorkspaceLayoutPreference {
   sidebarPreferredOpen: boolean;
@@ -170,7 +170,6 @@ export default defineStore('noteWorkspace', () => {
   const ownerKey = ref('');
   const activePageId = ref<string | null>(null);
   const browseParentId = ref<string | null>(null);
-  const libraryTab = ref<NoteWorkspacePrimaryTab>('pages');
   const detailTab = ref<NoteWorkspacePrimaryTab>('pages');
   const detailTreeScrollTop = ref(0);
   const sidebarPreferredOpen = ref(layout.sidebarPreferredOpen);
@@ -574,7 +573,6 @@ export default defineStore('noteWorkspace', () => {
     detailTab,
     detailTreeScrollTop,
     expandedIds,
-    libraryTab,
     loadedKeys,
     loadingKeys,
     ownerKey,

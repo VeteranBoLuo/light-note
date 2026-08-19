@@ -14,12 +14,11 @@ describe('noteLibraryCache', () => {
   it('按账号、范围、标签和搜索词隔离列表快照', () => {
     const store = useNoteLibraryCacheStore();
     const firstKey = buildNoteLibraryListCacheKey('user-a', {
-      mode: 'directory',
       parentId: 'root-a',
       keyword: ' Test ',
     });
     const secondKey = buildNoteLibraryListCacheKey('user-b', {
-      mode: 'tags',
+      parentId: 'root-a',
       tagId: 'tag-1',
       keyword: 'test',
     });
@@ -34,8 +33,8 @@ describe('noteLibraryCache', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-10T00:00:00Z'));
     const store = useNoteLibraryCacheStore();
-    const firstKey = buildNoteLibraryListCacheKey('user-a', { mode: 'directory' });
-    const secondKey = buildNoteLibraryListCacheKey('user-b', { mode: 'directory' });
+    const firstKey = buildNoteLibraryListCacheKey('user-a', {});
+    const secondKey = buildNoteLibraryListCacheKey('user-b', {});
     store.writeList(firstKey, { items: [], total: 0, page: 1, hasMore: false });
     store.writeList(secondKey, { items: [], total: 0, page: 1, hasMore: false });
 
@@ -47,7 +46,7 @@ describe('noteLibraryCache', () => {
 
   it('读取快照时返回副本，不会把界面选中态写回缓存', () => {
     const store = useNoteLibraryCacheStore();
-    const key = buildNoteLibraryListCacheKey('user-a', { mode: 'directory' });
+    const key = buildNoteLibraryListCacheKey('user-a', {});
     store.writeList(key, { items: [{ id: 'note-a' }], total: 1, page: 1, hasMore: false });
     const snapshot = store.readList(key)!;
     snapshot.items[0].title = 'changed';
@@ -60,9 +59,9 @@ describe('noteLibraryCache', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-13T00:00:00Z'));
     const store = useNoteLibraryCacheStore();
-    const firstKey = buildNoteLibraryListCacheKey('user-a', { mode: 'directory' });
-    const secondKey = buildNoteLibraryListCacheKey('user-a', { mode: 'tags', tagId: 'tag-a' });
-    const otherUserKey = buildNoteLibraryListCacheKey('user-b', { mode: 'directory' });
+    const firstKey = buildNoteLibraryListCacheKey('user-a', {});
+    const secondKey = buildNoteLibraryListCacheKey('user-a', { tagId: 'tag-a' });
+    const otherUserKey = buildNoteLibraryListCacheKey('user-b', {});
     store.writeList(firstKey, {
       items: [{ id: 'note-a', isPending: false }],
       total: 1,
@@ -91,8 +90,8 @@ describe('noteLibraryCache', () => {
 
   it('按列表范围隔离一次性返回位置，并允许恢复后清除', () => {
     const store = useNoteLibraryCacheStore();
-    const firstKey = buildNoteLibraryListCacheKey('user-a', { mode: 'directory', parentId: 'folder-a' });
-    const secondKey = buildNoteLibraryListCacheKey('user-a', { mode: 'tags', tagId: 'tag-a' });
+    const firstKey = buildNoteLibraryListCacheKey('user-a', { parentId: 'folder-a' });
+    const secondKey = buildNoteLibraryListCacheKey('user-a', { parentId: 'folder-a', tagId: 'tag-a' });
     const snapshot = {
       top: 640,
       left: 0,
@@ -113,7 +112,7 @@ describe('noteLibraryCache', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-12T00:00:00Z'));
     const store = useNoteLibraryCacheStore();
-    const key = buildNoteLibraryListCacheKey('user-a', { mode: 'directory' });
+    const key = buildNoteLibraryListCacheKey('user-a', {});
     store.writeReturnScroll(key, {
       top: 240,
       left: 0,

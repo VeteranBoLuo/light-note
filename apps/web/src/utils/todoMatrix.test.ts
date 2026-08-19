@@ -15,6 +15,12 @@ describe('todo matrix classification', () => {
     expect(getTodoMatrixQuadrant({ priority: 1, dueAt: 'not-a-date' }, now)).toBe('otherNotUrgent');
   });
 
+  it('没有截止时间的重复实例按计划日期判断紧急性', () => {
+    expect(isTodoMatrixUrgent({ priority: 1, dueAt: null, occurrenceDate: '2026-08-10' }, now)).toBe(true);
+    expect(isTodoMatrixUrgent({ priority: 1, dueAt: null, occurrenceDate: '2026-08-11' }, now)).toBe(true);
+    expect(isTodoMatrixUrgent({ priority: 1, dueAt: null, occurrenceDate: '2026-08-12' }, now)).toBe(false);
+  });
+
   it('把普通与低优先级合并，并保持服务端返回顺序', () => {
     const items = [
       { id: 'normal-today', priority: 1 as const, dueAt: '2026-08-11T18:00:00' },

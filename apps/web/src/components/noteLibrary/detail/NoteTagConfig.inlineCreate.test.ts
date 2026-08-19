@@ -78,6 +78,7 @@ function mount(noteTagIds: string[] = []) {
   app.use(createPinia());
   app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
   app.directive('click-log', {});
+  app.directive('auto-scrollbar', {});
   app.mount(host);
   cleanup = () => {
     app.unmount();
@@ -106,7 +107,6 @@ async function createTag(host: HTMLElement, name: string) {
 function selectedCount(host: HTMLElement) {
   return Number(host.querySelector('.overview-count')?.textContent?.trim() || '0');
 }
-
 
 /** 点某个标签行的「改名」并提交新名字 */
 async function renameTag(host: HTMLElement, index: number, next: string) {

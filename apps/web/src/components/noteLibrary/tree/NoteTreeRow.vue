@@ -108,7 +108,6 @@
             @toggle-top="emit('toggleTop', $event)"
             @move="emit('move', $event)"
             @rename="emit('rename', $event)"
-            @copy-link="emit('copyLink', $event)"
             @share="emit('share', $event)"
             @delete="emit('delete', $event)"
             @drag-start="(childNode, event) => emit('dragStart', childNode, event)"
@@ -174,7 +173,6 @@
     toggleTop: [node: NoteTreeItem];
     move: [node: NoteTreeItem];
     rename: [node: NoteTreeItem];
-    copyLink: [node: NoteTreeItem];
     share: [node: NoteTreeItem];
     delete: [node: NoteTreeItem];
     dragStart: [node: NoteTreeItem, event: DragEvent];
@@ -188,9 +186,7 @@
   const expanded = computed(() => props.expandedIds.has(props.node.id));
   const loading = computed(() => props.loadingKeys.has(props.node.id));
   // 未传集合时保持详情页等既有调用方的动画；笔记库传入集合后，只允许用户手动操作的节点过渡。
-  const animateChildren = computed(
-    () => !props.motionExpansionIds || props.motionExpansionIds.has(props.node.id),
-  );
+  const animateChildren = computed(() => !props.motionExpansionIds || props.motionExpansionIds.has(props.node.id));
   const children = computed(() => props.childrenByParent[props.node.id || NOTE_TREE_ROOT_KEY] || []);
   const rowStyle = computed(() => ({ '--note-tree-depth': String(props.depth) }));
   const showDropBefore = computed(() => props.dropTargetKey === props.node.id && props.dropTargetPosition === 'before');
@@ -240,11 +236,6 @@
           },
         ]
       : []),
-    {
-      key: 'copy-link',
-      label: t('common.copyLink'),
-      icon: icon.cloudSpace.preview.copy,
-    },
     ...(props.writeEnabled
       ? [
           {
@@ -278,7 +269,6 @@
       'toggle-top': () => emit('toggleTop', props.node),
       rename: () => emit('rename', props.node),
       move: () => emit('move', props.node),
-      'copy-link': () => emit('copyLink', props.node),
       share: () => emit('share', props.node),
       delete: () => emit('delete', props.node),
     };

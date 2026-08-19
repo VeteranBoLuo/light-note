@@ -3,8 +3,7 @@ import {
   earningPolicyVersionForDay,
   earningPolicyVersionForWeek,
   getPointsEarningRuntime,
-  LEGACY_POINTS_EARNING_POLICY_VERSION,
-  POINTS_EARNING_POLICY_VERSION,
+  SUPPORTED_POINTS_EARNING_POLICY_VERSIONS,
 } from './pointsEarningPolicy.js';
 
 const PERIOD_TYPES = new Set(['day', 'week']);
@@ -19,7 +18,11 @@ function normalizePeriod(periodType, periodKey) {
 }
 
 function safeVersion(value, fallback) {
-  return [LEGACY_POINTS_EARNING_POLICY_VERSION, POINTS_EARNING_POLICY_VERSION].includes(value) ? value : fallback;
+  return SUPPORTED_POINTS_EARNING_POLICY_VERSIONS.includes(value) ? value : fallback;
+}
+
+function hasConfiguredBoundary(type, runtime) {
+  return type === 'day' ? Boolean(runtime.c6EffectiveDay || runtime.effectiveDay) : Boolean(runtime.effectiveWeek);
 }
 
 /**
@@ -37,10 +40,10 @@ export async function resolvePointsEarningPeriodVersion(
     type === 'day'
       ? earningPolicyVersionForDay(key, effectiveRuntime)
       : earningPolicyVersionForWeek(key, effectiveRuntime);
-  // C5 尚未配置全局切换边界时，系统只有 legacy 一种可选策略，不必让每次看板读取
+  // 尚未配置全局切换边界时，系统只有 legacy 一种可选策略，不必让每次看板读取
   // 都访问周期锁表。配置了边界后（包括边界到来前）才持久化选择，保证临近切换期
   // 修改环境变量也不会让已经打开的日/周口径漂移。
-  if (!(type === 'day' ? effectiveRuntime.effectiveDay : effectiveRuntime.effectiveWeek)) return fallback;
+  if (!hasConfiguredBoundary(type, effectiveRuntime)) return fallback;
   const [[existing]] = await db.query(
     `SELECT policy_version AS policyVersion
        FROM points_earning_period_policy

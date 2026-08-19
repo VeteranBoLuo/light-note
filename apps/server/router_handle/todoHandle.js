@@ -117,9 +117,16 @@ export async function countTodo(req, res) {
 
 export async function createTodo(req, res) {
   if (!ensureNotVisitor(req, res)) return;
-  return withTransaction(res, (connection) => createTodoItem(connection, req.user.id, req.body || {}), {
-    afterCommit: () => completeGrowthTask(req.user.id, 'first_todo', { userRole: req.user.role }),
-  });
+  return withTransaction(
+    res,
+    (connection) =>
+      createTodoItem(connection, req.user.id, req.body || {}, {
+        suppressUserRewards: Boolean(req.suppressUserRewards || req.adminContext),
+      }),
+    {
+      afterCommit: () => completeGrowthTask(req.user.id, 'first_todo', { userRole: req.user.role }),
+    },
+  );
 }
 
 export function todoPlanConfigV2(_req, res) {

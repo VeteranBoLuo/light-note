@@ -43,8 +43,10 @@ import {
   awardCreate,
   grantExp,
   getGrowth,
+  getDailyQuestState,
   generateGrowthNudges,
 } from './growth.js';
+import { POINTS_EARNING_C6_POLICY_VERSION } from './pointsEarningPolicy.js';
 
 function accountCalendar(dayKey, makeupDays = []) {
   return {
@@ -118,6 +120,27 @@ describe('rankOf 越界钳制', () => {
     expect(rankOf(15).name).toBe('文圣');
     expect(rankOf(0).name).toBe('蒙童');
     expect(rankOf(99).name).toBe('文圣');
+  });
+});
+
+describe('C6 每日任务状态', () => {
+  it('成长看板返回签到和两个具体随机任务，不再返回重复知识行动槽', async () => {
+    const db = { query: vi.fn().mockResolvedValue([[]]) };
+    const state = await getDailyQuestState(
+      'user-1',
+      { checkedInToday: false },
+      {
+        db,
+        calendar: accountCalendar('20260820'),
+        policyVersion: POINTS_EARNING_C6_POLICY_VERSION,
+      },
+    );
+
+    expect(state.policyVersion).toBe('points-earning-c6');
+    expect(state.quests[0].key).toBe('checkin');
+    expect(state.quests.slice(1).every((quest) => quest.key.startsWith('daily_') && quest.random)).toBe(true);
+    expect(new Set(state.quests.map((quest) => quest.key)).size).toBe(3);
+    expect(state.quests.some((quest) => quest.key.startsWith('knowledge_action_'))).toBe(false);
   });
 });
 

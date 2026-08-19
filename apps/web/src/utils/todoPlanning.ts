@@ -237,13 +237,18 @@ export function todoGroupKey(
   const occurrenceDate = normalizeTodoDateOnly(item.occurrenceDate);
   const todayDate = normalizeTodoDateOnly(now);
   if (!item.dueAt && occurrenceDate && occurrenceDate < todayDate) return 'overdue';
-  const actionAt = todoActionAt(item);
+  // 提醒时间已过只表示通知已经触发，不等于任务逾期。日期分组优先使用计划本身；
+  // 只有没有开始/截止/实例日期时，才用仍在今天或未来的提醒作为分组依据。
+  const scheduledAt = todoScheduleAt(item);
+  const reminderAt = todoNextReminderAt(item);
+  const reminderTime = reminderAt ? parseTodoDate(reminderAt).getTime() : Number.NaN;
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const actionAt = scheduledAt || (Number.isFinite(reminderTime) && reminderTime >= startOfToday ? reminderAt : '');
   if (!actionAt) return 'noDate';
   const action = parseTodoDate(actionAt).getTime();
   if (!Number.isFinite(action)) return 'noDate';
   const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
   const nextWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 8).getTime();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   if (action < startOfToday) return 'overdue';
   if (action < tomorrow) return 'today';
   if (action < nextWeek) return 'upcoming';

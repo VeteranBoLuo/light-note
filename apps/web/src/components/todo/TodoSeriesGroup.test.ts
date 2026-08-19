@@ -65,15 +65,16 @@ afterEach(() => {
 });
 
 describe('TodoSeriesGroup', () => {
-  it('默认只展示下一项，点击后展开同系列其余实例', async () => {
+  it('默认只展示当前项，点击后在系列明细抽屉查看独立实例', async () => {
     const host = mountGroup();
     await nextTick();
     expect(host.querySelectorAll('.todo-item')).toHaveLength(1);
-    expect(host.querySelector('.todo-series-group__toggle')?.textContent).toContain('同系列另有 1 项');
+    expect(host.querySelector('.todo-series-group__toggle')?.textContent).toContain('查看同系列 2 项');
 
     host.querySelector<HTMLButtonElement>('.todo-series-group__toggle')!.click();
     await nextTick();
-    expect(host.querySelectorAll('.todo-item')).toHaveLength(2);
+    expect(document.querySelector('.b-drawer-wrapper')).not.toBeNull();
+    expect(document.querySelectorAll('.todo-item')).toHaveLength(3);
   });
 
   it('批量选择态自动展开全部实例，避免隐藏已选项', async () => {

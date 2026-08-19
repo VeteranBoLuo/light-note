@@ -81,7 +81,6 @@ describe('NoteTreeRow 显式页面操作', () => {
       toggleTop: vi.fn(),
       rename: vi.fn(),
       move: vi.fn(),
-      copyLink: vi.fn(),
       share: vi.fn(),
       delete: vi.fn(),
       dragStart: vi.fn(),
@@ -112,7 +111,6 @@ describe('NoteTreeRow 显式页面操作', () => {
           onToggleTop: events.toggleTop,
           onRename: events.rename,
           onMove: events.move,
-          onCopyLink: events.copyLink,
           onShare: events.share,
           onDelete: events.delete,
           onDragStart: events.dragStart,
@@ -144,7 +142,6 @@ describe('NoteTreeRow 显式页面操作', () => {
     clickOption(zhCN.common.unpin);
     clickOption(zhCN.note.renamePage);
     clickOption(zhCN.note.moveThisPage);
-    clickOption(zhCN.common.copyLink);
     clickOption(zhCN.noteShare.shareAction);
     clickOption(zhCN.note.moveToTrash);
 
@@ -153,8 +150,8 @@ describe('NoteTreeRow 显式页面操作', () => {
     expect(events.toggleTop).toHaveBeenCalledWith(node);
     expect(events.rename).toHaveBeenCalledWith(node);
     expect(events.move).toHaveBeenCalledWith(node);
-    expect(events.copyLink).toHaveBeenCalledWith(node);
     expect(events.share).toHaveBeenCalledWith(node);
+    expect(options.some((item) => item.textContent?.includes(zhCN.common.copyLink))).toBe(false);
     expect(events.delete).toHaveBeenCalledWith(node);
     expect(host.querySelector('.action-menu-option--danger')?.textContent).toContain(zhCN.note.moveToTrash);
 

@@ -5,6 +5,7 @@ import {
   POINTS_EARNING_POLICY_VERSION,
   earningWritesEnabled,
   resolveWeeklyChallenges,
+  usesC5EarningRules,
   weeklyClaimRef,
   weeklyClaimRefCandidates,
 } from './pointsEarningPolicy.js';
@@ -56,7 +57,7 @@ export async function weekProgress(userId, db = pool, { calendar = null, weekKey
     weekKey || effectiveCalendar.weekKey || weekKeyAtOffset(new Date(), effectiveCalendar.utcOffsetMinutes),
   );
   const version = policyVersion || (await resolveWeeklyEarningPolicyVersion(week, { db }));
-  if (version !== POINTS_EARNING_POLICY_VERSION) {
+  if (!usesC5EarningRules(version)) {
     return legacyWeekProgress(userId, db, effectiveCalendar, week);
   }
   const facts = await getMeaningfulActivityFacts(userId, { db, calendar: effectiveCalendar, weekKey: week });

@@ -465,6 +465,32 @@ describe('笔记置顶 handler', () => {
     });
   });
 
+  it('具体目录与标签可组合筛选，并由服务端限定到该目录的全部后代', async () => {
+    poolQuery
+      .mockResolvedValueOnce([
+        [
+          { id: 'parent', parent_id: null, title: '项目', sort: 0, is_top: 0, del_flag: 0 },
+          { id: 'child', parent_id: 'parent', title: '模块', sort: 0, is_top: 0, del_flag: 0 },
+          { id: 'grandchild', parent_id: 'child', title: '复盘', sort: 0, is_top: 0, del_flag: 0 },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ id: 'grandchild', parent_id: 'child', title: '复盘', tags: null }]])
+      .mockResolvedValueOnce([[{ total: 1 }]]);
+    const res = mockRes();
+
+    await queryNoteList(
+      { user: { id: 'u1' }, body: { page: 1, pageSize: 48, parentId: 'parent', tagId: 'tag-project' } },
+      res,
+    );
+
+    const [listSql, listParams] = poolQuery.mock.calls[1];
+    expect(listSql).toContain('n.id IN (?,?)');
+    expect(listSql).toContain("nr.resource_type = 'note'");
+    expect(listSql).toContain('nr.tag_id = ?');
+    expect(listParams).toEqual(['u1', 'child', 'grandchild', 'tag-project', 48, 0]);
+    expect(lastSent(res)).toMatchObject({ status: 200, data: { total: 1 } });
+  });
+
   it('页面树模式拒绝不属于当前用户的 parentId', async () => {
     poolQuery.mockResolvedValueOnce([[]]);
     const res = mockRes();

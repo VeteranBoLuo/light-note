@@ -29,6 +29,7 @@ const ACTION_BY_QUEST = Object.freeze({
   daily_note: 'create_note',
   daily_bookmark: 'create_bookmark',
   daily_file: 'upload_file',
+  daily_todo_create: 'create_todo',
   daily_todo: 'open_todos',
   daily_organize: 'open_inbox',
 });

@@ -54,13 +54,15 @@ describe('笔记库路由布局根节点', () => {
   it('普通目录切换仍回到顶部，只有匹配的详情返回快照会恢复旧位置', () => {
     expect(source).toContain('if (returnScrollSnapshot) scheduleMobileReturnScrollRestore(returnScrollSnapshot, true)');
     expect(source).toContain('else if (bookmark.isMobile) scheduleMobileListScrollReset()');
-    expect(source).toContain('if (returnScrollSnapshot) scheduleMobileReturnScrollRestore(returnScrollSnapshot, false)');
+    expect(source).toContain(
+      'if (returnScrollSnapshot) scheduleMobileReturnScrollRestore(returnScrollSnapshot, false)',
+    );
     expect(source).toContain('else scheduleMobileListScrollReset()');
   });
 
   it('移动目录首次打开后保持挂载，关闭抽屉后仍能派发目录选择', () => {
     expect(templateSource).toContain('v-if="bookmark.isMobile && mobileDirectoryMounted"');
-    const start = source.indexOf("function openMobileDirectory(tab: 'directory' | 'tags')");
+    const start = source.indexOf('function openMobileDirectory()');
     const end = source.indexOf('let consumingDirectoryOpenRequest', start);
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
@@ -79,9 +81,11 @@ describe('笔记库路由布局根节点', () => {
     expect(source).toMatch(/\.note-library-body[\s\S]*?overflow-anchor:\s*none/u);
   });
 
-  it('桌面侧栏和移动抽屉切换目录/标签时共用账号偏好保存逻辑', () => {
-    expect(templateSource).toContain('@update:mode="setNoteSidebarModeFromUser"');
-    expect(templateSource).toContain('@mode-change="setNoteSidebarModeFromUser"');
-    expect(source).toContain('updatePreference({ noteSidebarMode: mode })');
+  it('标签作为独立筛选入口，预览侧栏在页面与大纲之间切换', () => {
+    expect(templateSource).toContain('<TagFilterSelector :all-tags="visibleNoteTags"');
+    expect(templateSource).toContain('v-model:mode="librarySidebarMode"');
+    expect(templateSource).toContain(':outline-enabled="desktopPreviewOpen"');
+    expect(templateSource).toContain('<NoteOutlineList');
+    expect(source).not.toContain('setNoteSidebarModeFromUser');
   });
 });

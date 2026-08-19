@@ -15,7 +15,7 @@ import {
   setV2TodoStatus,
   snoozeV2Todo,
 } from './todoSeriesService.js';
-import { recordTodoCompletion } from '../growthActivityHistory.js';
+import { recordTodoCompletion, recordTodoCreation } from '../growthActivityHistory.js';
 
 const STATUS = new Set(['pending', 'completed']);
 const FILTER_STATUS = new Set(['all', ...STATUS]);
@@ -26,14 +26,18 @@ const TODO_STATUS_TARGET_FIELDS = `id, title, description, checklist, priority, 
   start_at AS startAt, due_at AS dueAt, sort_order AS sortOrder, recurrence_rule AS recurrenceRule,
   completed_at AS completedAt, update_time AS updatedAt,
   plan_version AS planVersion, series_id AS seriesId, occurrence_no AS occurrenceNo`;
-// 工作台今日行动流的时间窗筛选：逾期与前端列表统一按“当前时刻”判断；
-// today 只包含今天尚未到期的任务，避免同一条待办同时计入两个摘要。
+// 工作台今日行动流的时间窗筛选：有截止时间按当前时刻，无截止的固定日程按实例日；
+// today 与 overdue 保持互斥，未来预生成实例不会提前计入今日摘要。
 const DUE_FILTERS = new Set(['overdue', 'today']);
 const DUE_SQL = Object.freeze({
-  overdue: 'due_at IS NOT NULL AND due_at < NOW()',
-  today: 'due_at IS NOT NULL AND due_at >= NOW() AND due_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)',
-  week: `due_at IS NOT NULL AND due_at >= NOW()
-    AND due_at < DATE_ADD(CURDATE(), INTERVAL (7 - WEEKDAY(CURDATE())) DAY)`,
+  overdue: `((due_at IS NOT NULL AND due_at < NOW())
+    OR (due_at IS NULL AND occurrence_date IS NOT NULL AND occurrence_date < CURDATE()))`,
+  today: `((due_at IS NOT NULL AND due_at >= NOW() AND due_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY))
+    OR (due_at IS NULL AND occurrence_date = CURDATE()))`,
+  week: `((due_at IS NOT NULL AND due_at >= NOW()
+    AND due_at < DATE_ADD(CURDATE(), INTERVAL (7 - WEEKDAY(CURDATE())) DAY))
+    OR (due_at IS NULL AND occurrence_date >= CURDATE()
+    AND occurrence_date < DATE_ADD(CURDATE(), INTERVAL (7 - WEEKDAY(CURDATE())) DAY)))`,
 });
 const NEXT_REMINDER_AT_SQL = `COALESCE(
   (SELECT MIN(j.scheduled_at_local)
@@ -66,8 +70,11 @@ const SORT_SQL = Object.freeze({
   priority: `priority DESC, CASE WHEN actionAt IS NULL THEN 1 ELSE 0 END, actionAt ASC,
     occurrence_no ASC, sort_order ASC, update_time DESC, id DESC`,
   due: 'CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at ASC, sort_order ASC, update_time DESC, id DESC',
-  newest: 'create_time DESC, id DESC',
-  oldest: 'create_time ASC, id ASC',
+  // 固定日程的后续实例由后台滚动生成，不能把实例 create_time 当成“系列最近创建”。
+  newest: `COALESCE((SELECT s.create_time FROM todo_series s WHERE s.id = todo_items.series_id), create_time) DESC,
+    occurrence_no ASC, id DESC`,
+  oldest: `COALESCE((SELECT s.create_time FROM todo_series s WHERE s.id = todo_items.series_id), create_time) ASC,
+    occurrence_no ASC, id ASC`,
 });
 
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
@@ -413,7 +420,12 @@ async function syncReminder(connection, { todoId, userId, reminder }) {
   }
 }
 
-export async function createTodo(connection, userId, values, { invalidateSearch = true } = {}) {
+export async function createTodo(
+  connection,
+  userId,
+  values,
+  { invalidateSearch = true, suppressUserRewards = false } = {},
+) {
   const todo = normalizeTodo(values);
   const id = crypto.randomUUID();
   const seriesId = todo.recurrence ? id : null;
@@ -439,6 +451,7 @@ export async function createTodo(connection, userId, values, { invalidateSearch 
   if (resourceRefs?.length) {
     await replaceTodoResourceRefs(connection, { userId, todoId: row.id, refs: resourceRefs });
   }
+  if (!suppressUserRewards) await recordTodoCreation(connection, { userId, todoId: row.id });
   if (invalidateSearch) await invalidatePersonalKnowledgeCache(userId, { database: connection });
   return { id: row.id };
 }

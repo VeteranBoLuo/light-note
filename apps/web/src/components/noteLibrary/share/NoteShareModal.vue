@@ -71,23 +71,28 @@
         <p v-else-if="!records.length" class="note-share-modal__empty">{{ t('noteShare.noLinks') }}</p>
         <article v-for="record in records" v-else :key="record.id" class="note-share-modal__record">
           <div class="note-share-modal__record-main">
-            <div>
-              <strong>{{ t(record.scopeType === 'subtree' ? 'noteShare.subtreeScope' : 'noteShare.singleScope') }}</strong>
+            <div class="note-share-modal__record-heading">
+              <strong>{{
+                t(record.scopeType === 'subtree' ? 'noteShare.subtreeScope' : 'noteShare.singleScope')
+              }}</strong>
               <span class="note-share-modal__state" :class="`is-${record.state}`">{{ stateLabel(record.state) }}</span>
             </div>
             <p>
               {{ t('noteShare.linkMeta', { hint: record.tokenHint, expires: formatDate(record.expiresAt) }) }}
             </p>
-            <p>
-              {{ t('noteShare.visitMeta', { current: record.accessCount, limit: record.maxAccessCount ?? t('noteShare.unlimited') }) }}
-            </p>
+            <div class="note-share-modal__record-stats">
+              <div>
+                <span>{{ t('noteShare.accessCount') }}</span>
+                <strong>{{ record.accessCount }}</strong>
+              </div>
+              <div>
+                <span>{{ t('noteShare.limitCount') }}</span>
+                <strong>{{ record.maxAccessCount ?? t('noteShare.unlimited') }}</strong>
+              </div>
+            </div>
           </div>
           <div class="note-share-modal__record-actions">
-            <BButton
-              size="small"
-              :disabled="record.state !== 'active' || submitting"
-              @click="confirmRotate(record.id)"
-            >
+            <BButton size="small" :disabled="record.state !== 'active' || submitting" @click="confirmRotate(record.id)">
               {{ t('noteShare.rotate') }}
             </BButton>
             <BButton
@@ -143,6 +148,7 @@
   const description = ref('');
   const lastCreatedToken = ref('');
   const lastCreatedUrl = ref('');
+  let stateVersion = 0;
 
   const scopeOptions = computed(() => [
     { value: 'single', label: t('noteShare.singleScope') },
@@ -174,6 +180,9 @@
   }
 
   function resetState() {
+    stateVersion += 1;
+    loading.value = false;
+    submitting.value = false;
     records.value = [];
     lastCreatedToken.value = '';
     lastCreatedUrl.value = '';
@@ -187,21 +196,30 @@
   }
 
   async function loadRecords() {
-    if (!props.note.id) return;
+    const version = stateVersion;
+    const noteId = props.note.id;
+    if (!visible.value || !noteId) return;
     loading.value = true;
     try {
-      records.value = await listNoteShares(props.note.id);
+      const nextRecords = await listNoteShares(noteId);
+      if (version !== stateVersion || !visible.value || props.note.id !== noteId) return;
+      records.value = nextRecords;
     } catch {
-      message.error(t('noteShare.loadFailed'));
+      if (version === stateVersion && visible.value && props.note.id === noteId) {
+        message.error(t('noteShare.loadFailed'));
+      }
     } finally {
-      loading.value = false;
+      if (version === stateVersion && props.note.id === noteId) loading.value = false;
     }
   }
 
   async function createAndCopy(create: () => Promise<{ token: string }>) {
+    const version = stateVersion;
+    const noteId = props.note.id;
     submitting.value = true;
     try {
       const result = await create();
+      if (version !== stateVersion || !visible.value || props.note.id !== noteId) return;
       lastCreatedToken.value = result.token;
       try {
         lastCreatedUrl.value = await copyNoteShareUrl(result.token);
@@ -213,9 +231,11 @@
       resetForm();
       await loadRecords();
     } catch (error: any) {
-      message.error(error?.message || t('noteShare.manageFailed'));
+      if (version === stateVersion && visible.value && props.note.id === noteId) {
+        message.error(error?.message || t('noteShare.manageFailed'));
+      }
     } finally {
-      submitting.value = false;
+      if (version === stateVersion && props.note.id === noteId) submitting.value = false;
     }
   }
 
@@ -247,15 +267,20 @@
       title: t('noteShare.revokeTitle'),
       content: t('noteShare.revokeConfirm'),
       onOk: async () => {
+        const version = stateVersion;
+        const noteId = props.note.id;
         submitting.value = true;
         try {
           await revokeNoteShare(shareId);
+          if (version !== stateVersion || !visible.value || props.note.id !== noteId) return;
           message.success(t('noteShare.revoked'));
           await loadRecords();
         } catch {
-          message.error(t('noteShare.manageFailed'));
+          if (version === stateVersion && visible.value && props.note.id === noteId) {
+            message.error(t('noteShare.manageFailed'));
+          }
         } finally {
-          submitting.value = false;
+          if (version === stateVersion && props.note.id === noteId) submitting.value = false;
         }
       },
     });
@@ -274,11 +299,22 @@
   }
 
   watch(
-    () => [visible.value, props.note.id] as const,
-    ([open]) => {
+    visible,
+    (open) => {
+      resetState();
       if (open) void loadRecords();
     },
     { immediate: true },
+  );
+
+  watch(
+    () => props.note.id,
+    (noteId, previousNoteId) => {
+      if (noteId === previousNoteId) return;
+      resetState();
+      if (visible.value) void loadRecords();
+    },
+    { flush: 'sync' },
   );
 </script>
 
@@ -376,7 +412,7 @@
     background: var(--selected-bg-color);
     font-size: 12px;
 
-    > div {
+    .note-share-modal__record-heading {
       display: flex;
       align-items: center;
       gap: 8px;
@@ -436,6 +472,35 @@
       margin: 4px 0 0;
       color: var(--desc-color);
       font-size: 12px;
+    }
+  }
+
+  .note-share-modal__record-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(88px, 1fr));
+    gap: 8px;
+    max-width: 240px;
+    margin-top: 8px;
+
+    > div {
+      display: grid;
+      gap: 2px;
+      padding: 7px 9px;
+      border: 1px solid var(--card-border-color);
+      border-radius: 8px;
+      background: var(--menu-item-bg-color);
+    }
+
+    span {
+      color: var(--desc-color);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    strong {
+      color: var(--text-color);
+      font-size: 13px;
+      line-height: 1.4;
     }
   }
 

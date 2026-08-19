@@ -1,5 +1,5 @@
 <template>
-  <section class="todo-series-group" :class="{ 'is-expanded': expanded, 'is-selecting': selectable }">
+  <section class="todo-series-group" :class="{ 'is-selecting': selectable }">
     <TodoItem
       :item="representative"
       :selectable="selectable"
@@ -22,22 +22,17 @@
     />
 
     <BButton
-      v-if="hiddenItems.length && !selectable"
+      v-if="allSeriesItems.length > 1 && !selectable"
       class="todo-series-group__toggle"
-      :aria-expanded="showAll"
+      :aria-expanded="drawerOpen"
       :disabled="disabled"
-      @click="expanded = !expanded"
+      @click="openSeriesDrawer"
     >
-      <span>{{ toggleLabel }}</span>
-      <SvgIcon
-        :src="icon.noteTree.chevron"
-        size="14"
-        aria-hidden="true"
-        :class="{ 'is-expanded': showAll }"
-      />
+      <SvgIcon :src="icon.todo.repeat" size="14" aria-hidden="true" />
+      <span>{{ t('inbox.todoSeriesViewAll', { count: allSeriesItems.length }) }}</span>
     </BButton>
 
-    <div v-if="showAll" class="todo-series-group__children">
+    <div v-if="selectable" class="todo-series-group__children">
       <TodoItem
         v-for="item in hiddenItems"
         :key="item.id"
@@ -61,6 +56,22 @@
         @series-action="emit('series-action', item, $event)"
       />
     </div>
+
+    <TodoSeriesDrawer
+      v-model:open="drawerOpen"
+      :representative="representative"
+      :items="allSeriesItems"
+      :disabled="disabled"
+      :deleting-id="deletingId"
+      @toggle-complete="(item, completed) => emit('toggle-complete', item, completed)"
+      @update-checklist="(item, checklist) => emit('update-checklist', item, checklist)"
+      @edit="(item) => emit('edit', item)"
+      @delete="(item) => emit('delete', item)"
+      @add-to-calendar="(item) => emit('add-to-calendar', item)"
+      @snooze="(item, preset) => emit('snooze', item, preset)"
+      @update-priority="(item, priority) => emit('update-priority', item, priority)"
+      @series-action="(item, action) => emit('series-action', item, action)"
+    />
   </section>
 </template>
 
@@ -71,6 +82,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import TodoItem from '@/components/todo/TodoItem.vue';
+  import TodoSeriesDrawer from '@/components/todo/TodoSeriesDrawer.vue';
   import type { TodoSnoozePreset } from '@/utils/todoPlanning';
   import icon from '@/config/icon';
 
@@ -79,6 +91,7 @@
       seriesId: string;
       representative: TodoItemType;
       items: TodoItemType[];
+      seriesItems?: TodoItemType[];
       disabled?: boolean;
       deletingId?: string;
       selectable?: boolean;
@@ -93,6 +106,7 @@
       selectedIds: () => [],
       swipeEnabled: false,
       openSwipeId: '',
+      seriesItems: () => [],
     },
   );
   const emit = defineEmits<{
@@ -109,19 +123,18 @@
     'series-action': [item: TodoItemType, action: 'skip' | 'pause' | 'resume' | 'stop'];
   }>();
   const { t } = useI18n();
-  const expanded = ref(false);
+  const drawerOpen = ref(false);
   const hiddenItems = computed(() => props.items.filter((item) => item.id !== props.representative.id));
-  const showAll = computed(() => props.selectable || expanded.value);
-  const toggleLabel = computed(() =>
-    showAll.value
-      ? t('inbox.todoSeriesCollapse')
-      : t('inbox.todoSeriesExpandCount', { count: hiddenItems.value.length }),
-  );
+  const allSeriesItems = computed(() => (props.seriesItems.length ? props.seriesItems : props.items));
+
+  function openSeriesDrawer() {
+    drawerOpen.value = true;
+  }
 
   watch(
     () => props.seriesId,
     () => {
-      expanded.value = false;
+      drawerOpen.value = false;
     },
   );
 </script>
@@ -149,14 +162,6 @@
     border-radius: 0;
     color: var(--desc-color);
     background: var(--workspace-panel-bg-color, var(--hover-background));
-
-    :deep(svg) {
-      transition: transform 0.2s ease;
-    }
-
-    :deep(svg.is-expanded) {
-      transform: rotate(180deg);
-    }
   }
 
   .todo-series-group__children {

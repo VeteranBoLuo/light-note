@@ -18,12 +18,13 @@ const noteState = reactive({
   generateTOC: vi.fn(),
 });
 const scrollIntoContainer = vi.fn();
+const scrollNearestIntoContainer = vi.fn();
 
 vi.mock('@/store', () => ({
   bookmarkStore: () => bookmarkState,
   noteStore: () => noteState,
 }));
-vi.mock('@/utils/zoom.ts', () => ({ scrollIntoContainer }));
+vi.mock('@/utils/zoom.ts', () => ({ scrollIntoContainer, scrollNearestIntoContainer }));
 vi.mock('@/components/base/BasicComponents/BDrawer.vue', () => ({
   default: {
     name: 'BDrawer',
@@ -83,6 +84,7 @@ afterEach(() => {
   ];
   noteState.generateTOC.mockClear();
   scrollIntoContainer.mockClear();
+  scrollNearestIntoContainer.mockClear();
 });
 
 function mountCatalog(options: { noteType?: string; drawerOpen?: boolean } = {}) {
@@ -118,6 +120,7 @@ function mountCatalog(options: { noteType?: string; drawerOpen?: boolean } = {})
     }),
   );
   app.directive('click-log', () => undefined);
+  app.directive('auto-scrollbar', {});
   app.mount(host);
   cleanup = () => {
     app.unmount();

@@ -81,29 +81,20 @@
         </template>
       </template>
       <template v-else>
-        <!-- 当前目录按钮内已经同时提供目录/标签选择，不再重复放一个标签按钮。 -->
         <div v-if="bookmark.isMobile" class="note-mobile-actions">
           <BButton
+            v-if="!noteTreeFeaturesReady || noteTreeMobileEnabled"
             class="note-mobile-directory"
             :class="{ 'is-loading': !noteTreeFeaturesReady }"
             :disabled="!noteTreeFeaturesReady"
             :title="mobileScopeLabel"
-            @click="openMobileDirectory(noteSidebarMode)"
+            @click="openMobileDirectory"
           >
-            <SvgIcon
-              :src="
-                noteSidebarMode === 'tags'
-                  ? icon.manage_categoryBtn_tag
-                  : currentParentId
-                    ? icon.resource.note
-                    : icon.noteTree.root
-              "
-              size="16"
-              aria-hidden="true"
-            />
+            <SvgIcon :src="currentParentId ? icon.resource.note : icon.noteTree.root" size="16" aria-hidden="true" />
             <span>{{ mobileScopeLabel }}</span>
             <SvgIcon :src="icon.noteTree.chevron" size="12" aria-hidden="true" />
           </BButton>
+          <TagFilterSelector compact :all-tags="visibleNoteTags" @select="handleTagFilterSelect" />
           <ViewModeToggle compact />
         </div>
         <template v-else>
@@ -122,6 +113,7 @@
             {{ $t('note.templateManager.title') }}
           </BButton>
           <ViewModeToggle />
+          <TagFilterSelector :all-tags="visibleNoteTags" @select="handleTagFilterSelect" />
           <div class="note-search" v-click-log="OPERATION_LOG_MAP.noteLibrary.searchNote">
             <BInput v-model:value="searchValue" :placeholder="$t('note.searchNote')" clearable>
               <template #prefix>
@@ -172,7 +164,7 @@
       <template #sidebar>
         <aside class="note-sidebar-panel">
           <NoteWorkspaceSidebar
-            :mode="noteSidebarMode"
+            v-model:mode="librarySidebarMode"
             :current-parent-id="currentParentId"
             :active-page-id="previewNoteId"
             :browse-parent-id="currentParentId"
@@ -182,12 +174,9 @@
             :loading-keys="sidebarTreeLoadingKeys"
             :motion-expansion-ids="treeMotionExpansionIds"
             :tree-error="sidebarTreeError"
-            :all-tags="visibleNoteTags"
-            :total-count="allNoteCount"
-            :untagged-count="untaggedNoteCount"
-            :tag-loading="tagLoading"
             :search-value="treeSearchValue"
             :directory-enabled="!noteTreeFeaturesReady || noteTreeReadEnabled"
+            :outline-enabled="desktopPreviewOpen"
             :write-enabled="noteTreeWriteEnabled"
             :search-active="treeSearchActive"
             :search-loading="treeSearchLoading"
@@ -196,10 +185,8 @@
             :drop-target-active="dragDropTargetActive"
             :drop-target-position="dragDropTarget?.position || ''"
             :menu-disabled="noteDragging"
-            @update:mode="setNoteSidebarModeFromUser"
             @toggle="toggleTreeNode"
             @select="selectDirectory"
-            @select-tag="selectMobileDirectoryTag"
             @open="openLibraryNote"
             @browse-children="selectDirectory"
             @create="showNewChildPicker"
@@ -207,13 +194,20 @@
             @toggle-top="toggleTreeNoteTop"
             @move="openMoveNote"
             @rename="openRenameNote"
-            @copy-link="copyNoteLink"
             @share="openNoteShare"
             @delete="deleteSingleNote"
             @search="treeSearchValue = $event"
             @drag-start="onTreeDragStart"
             @drag-end="onTreeDragEnd"
-          />
+          >
+            <template #outline>
+              <NoteOutlineList
+                :headings="previewOutline"
+                :active-index="previewActiveOutlineIndex"
+                @select="selectPreviewOutline"
+              />
+            </template>
+          </NoteWorkspaceSidebar>
         </aside>
       </template>
 
@@ -224,10 +218,14 @@
           :seed="previewNoteSeed"
           :child-count="previewChildCount"
           :menu-options="previewMenuOptions"
+          :outline-target="previewOutlineTarget"
           @close="closeDesktopPreview"
+          @open-page="openPreviewBreadcrumbPage"
           @edit="openDirectoryPage(previewNoteId)"
           @browse-children="selectDirectory(previewNoteId)"
           @pending-state="syncPreviewNotePendingState"
+          @outline-change="previewOutline = $event"
+          @outline-active-change="previewActiveOutlineId = $event"
         />
         <header v-else-if="showDesktopDirectoryHeader" class="note-directory-header">
           <nav class="note-directory-breadcrumbs" :aria-label="$t('note.currentDirectory')">
@@ -303,7 +301,7 @@
           </div>
         </header>
         <BButton
-          v-if="bookmark.isMobile && currentParentId && noteSidebarMode === 'directory'"
+          v-if="bookmark.isMobile && currentParentId"
           class="note-mobile-current-page-card"
           @click="openDirectoryPage(currentParentId)"
         >
@@ -574,17 +572,10 @@
     <NoteDirectoryDrawer
       v-if="bookmark.isMobile && mobileDirectoryMounted"
       v-model:open="mobileDirectoryOpen"
-      :initial-tab="mobileDirectoryInitialTab"
       :current-parent-id="currentParentId"
-      :all-tags="visibleNoteTags"
-      :total-count="allNoteCount"
-      :untagged-count="untaggedNoteCount"
-      :tag-loading="tagLoading"
       :directory-enabled="noteTreeMobileEnabled"
       :write-enabled="noteTreeWriteEnabled"
       @select="selectDirectory"
-      @select-tag="selectMobileDirectoryTag"
-      @mode-change="setNoteSidebarModeFromUser"
       @open-page="openDirectoryPage($event.id)"
       @create="showNewChildPicker"
       @attach="openAttachPages"
@@ -633,6 +624,8 @@
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import NoteCard from '@/components/noteLibrary/library/NoteCard.vue';
   import NoteListItem from '@/components/noteLibrary/library/NoteListItem.vue';
+  import TagFilterSelector from '@/components/noteLibrary/library/TagFilterSelector.vue';
+  import NoteOutlineList from '@/components/noteLibrary/detail/NoteOutlineList.vue';
   import { preloadNoteEditorRuntime } from '@/components/noteLibrary/detail/editorRuntimeLoader';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
@@ -670,7 +663,6 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { NOTE_TREE_ROOT_KEY, useNoteTree } from '@/composables/useNoteTree';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
-  import { copyTextToClipboard } from '@/utils/clipboard';
   import { deliverGeneratedFile } from '@/utils/fileDelivery';
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { prefetchResolvedRoute } from '@/utils/routePrefetch';
@@ -692,7 +684,6 @@
     type NoteTreeDropTarget,
   } from '@/utils/noteTreeDrop';
   import { resolveNoteTreeDragScrollStep } from '@/utils/noteTreeDragScroll';
-  import { updatePreference } from '@/utils/savePreference';
   import { getRootZoom } from '@/utils/zoom';
   import { requestNoteShareExposureConfirmation } from '@/utils/noteShareExposure';
   import AsyncFeatureLoadingOverlay from '@/components/base/AsyncFeatureLoadingOverlay.vue';
@@ -752,8 +743,11 @@
   const noteWorkspace = useNoteWorkspaceStore();
   const noteLibraryCache = useNoteLibraryCacheStore();
   const noteCacheScope = computed(() => buildNoteDetailRequestScope(user));
-  const { sidebarPreferredOpen: noteSidebarExpanded, sidebarWidth: noteWorkspaceSidebarWidth } =
-    storeToRefs(noteWorkspace);
+  const {
+    detailTab,
+    sidebarPreferredOpen: noteSidebarExpanded,
+    sidebarWidth: noteWorkspaceSidebarWidth,
+  } = storeToRefs(noteWorkspace);
   const librarySidebarOverlayOpen = ref(false);
   const libraryWorkspaceMode = ref<NoteWorkspaceLayoutState['mode'] | null>(null);
 
@@ -778,76 +772,22 @@
   const noteTreeSubtreeTrashEnabled = computed(
     () => noteTreeWriteEnabled.value && noteTreeFeatures.value.note_tree_subtree_trash,
   );
-  function initialNoteClassificationMode(): 'directory' | 'tags' {
-    const query = router.currentRoute.value.query;
-    if (query.parent != null && query.tag == null) return 'directory';
-    if (query.tag != null && query.parent == null) return 'tags';
-    return user.preferences.noteSidebarMode === 'tags' ? 'tags' : 'directory';
-  }
-
-  const noteSidebarMode = ref<'directory' | 'tags'>(initialNoteClassificationMode());
-
-  function setNoteSidebarModeFromUser(mode: 'directory' | 'tags') {
-    noteSidebarMode.value = mode;
-    if (user.preferences.noteSidebarMode === mode) return;
-    void updatePreference({ noteSidebarMode: mode }).catch(() => message.warning(t('settings.saveFailed')));
-  }
   // 目录能力快照返回前先按账号的目录偏好渲染同尺寸标题栏，避免首屏骨架整体下移。
   const showDesktopDirectoryHeader = computed(
-    () =>
-      !bookmark.isMobile &&
-      noteSidebarMode.value === 'directory' &&
-      (!noteTreeFeaturesReady.value || noteTreeReadEnabled.value),
+    () => !bookmark.isMobile && (!noteTreeFeaturesReady.value || noteTreeReadEnabled.value),
   );
   // Store 在 setup 时已从 localStorage 同步恢复展开偏好；展开用户先占住最终侧栏宽度，折叠用户维持单栏。
   const showNoteWorkspaceSidebar = computed(
     () =>
-      noteTreeReadEnabled.value || (!bookmark.isMobile && !noteTreeFeaturesReady.value && noteSidebarExpanded.value),
+      noteTreeReadEnabled.value ||
+      (!bookmark.isMobile && desktopPreviewOpen.value) ||
+      (!bookmark.isMobile && !noteTreeFeaturesReady.value && noteSidebarExpanded.value),
   );
   const isMediumNoteLayout = computed(() => bookmark.isTablet);
   const showNoteSidebar = computed(
     () => !bookmark.isMobile && (!isMediumNoteLayout.value || noteSidebarExpanded.value),
   );
 
-  watch(
-    () => user.preferences.noteSidebarMode,
-    (mode) => {
-      const query = router.currentRoute.value.query;
-      if (query.parent != null || query.tag != null) return;
-      noteSidebarMode.value = mode === 'tags' ? 'tags' : 'directory';
-    },
-  );
-
-  watch(
-    [
-      noteTreeFeaturesReady,
-      noteSidebarMode,
-      () => router.currentRoute.value.query.parent,
-      () => router.currentRoute.value.query.tag,
-    ],
-    ([featuresReady, mode, parent, tag], previous) => {
-      if (!featuresReady || !noteTreeReadEnabled.value) return;
-
-      // 浏览器前进/后退恢复了某一套明确范围时，同步对应的导航页签。
-      if (parent != null && tag == null && previous && parent !== previous[2]) {
-        if (mode !== 'directory') noteSidebarMode.value = 'directory';
-        return;
-      }
-      if (tag != null && parent == null && previous && tag !== previous[3]) {
-        if (mode !== 'tags') noteSidebarMode.value = 'tags';
-        return;
-      }
-
-      // 历史 URL 可能同时残留 parent/tag；按当前导航保留一套，彻底禁止组合过滤。
-      const query = { ...router.currentRoute.value.query };
-      const staleKey = mode === 'directory' ? 'tag' : 'parent';
-      if (!Object.prototype.hasOwnProperty.call(query, staleKey)) return;
-      delete query[staleKey];
-      delete query._rt;
-      void router.replace({ path: '/noteLibrary', query });
-    },
-    { immediate: true },
-  );
   const { resetCurrentResourceScroll } = useMobileNavigationState();
   const { addResourcesToInbox, removeResourcesFromInbox } = useInboxEnqueue();
   const {
@@ -884,7 +824,6 @@
     noteTreeFeatures.value = next;
     noteLibraryCache.writeFeatures(requestScope, next);
     if (!next.note_tree_read) {
-      noteSidebarMode.value = 'tags';
       const query = { ...router.currentRoute.value.query };
       if (Object.prototype.hasOwnProperty.call(query, 'parent')) {
         delete query.parent;
@@ -916,7 +855,6 @@
   // 只切标签时走软刷新:保留旧列表并降透明度,不整屏换骨架屏
   const refreshing = ref(false);
   const initialTagSnapshot = noteLibraryCache.readTags(noteCacheScope.value);
-  const tagLoading = ref(!initialTagSnapshot);
   const noteTotal = ref(0);
   const notePage = ref(0);
   const noteHasMore = ref(false);
@@ -943,7 +881,7 @@
     treeSearchActive.value ? treeSearchExpandedIds.value : expandedIds.value,
   );
   const sidebarTreeLoadingKeys = computed(() => {
-    if (!noteTreeFeaturesReady.value && showNoteWorkspaceSidebar.value && noteSidebarMode.value === 'directory') {
+    if (!noteTreeFeaturesReady.value && showNoteWorkspaceSidebar.value) {
       return new Set([NOTE_TREE_ROOT_KEY]);
     }
     if (treeSearchActive.value && treeSearchLoading.value) return new Set([NOTE_TREE_ROOT_KEY]);
@@ -976,11 +914,41 @@
   // 首次打开仍然懒加载；之后保持实例挂载。抽屉关闭会先释放移动端 history 占位，
   // 若随 open=false 立即卸载，子组件稍后派发的目录 select 会被 Vue 丢弃。
   const mobileDirectoryMounted = ref(false);
-  const mobileDirectoryInitialTab = ref<'directory' | 'tags'>('directory');
   const previewNoteId = ref<string | null>(null);
   const previewNoteSeed = ref<Record<string, any> | null>(null);
+  interface PreviewOutlineItem {
+    id?: string;
+    text: string;
+    level: number;
+  }
+  interface PreviewBreadcrumbTarget {
+    id: string;
+    title?: string;
+  }
+  const previewOutline = ref<PreviewOutlineItem[]>([]);
+  const previewActiveOutlineId = ref<string | null>(null);
+  const previewOutlineTarget = ref<{ id: string; requestId: number } | null>(null);
+  let previewOutlineRequestId = 0;
   let previewPendingLocallyChanged = false;
   const desktopPreviewOpen = computed(() => !bookmark.isMobile && Boolean(previewNoteId.value));
+  const librarySidebarMode = computed<'directory' | 'outline'>({
+    get: () => (desktopPreviewOpen.value && detailTab.value === 'outline' ? 'outline' : 'directory'),
+    set: (value) => {
+      if (desktopPreviewOpen.value) detailTab.value = value === 'outline' ? 'outline' : 'pages';
+    },
+  });
+  const previewActiveOutlineIndex = computed(() => {
+    if (!previewActiveOutlineId.value) return null;
+    const index = previewOutline.value.findIndex((heading) => heading.id === previewActiveOutlineId.value);
+    return index >= 0 ? index : null;
+  });
+
+  function selectPreviewOutline(index: number) {
+    const headingId = previewOutline.value[index]?.id;
+    if (!headingId) return;
+    previewActiveOutlineId.value = headingId;
+    previewOutlineTarget.value = { id: headingId, requestId: ++previewOutlineRequestId };
+  }
   const previewChildCount = computed(() => Math.max(0, Number(previewNoteSeed.value?.childCount || 0)));
   interface DesktopPreviewScrollSnapshot {
     top: number;
@@ -1349,7 +1317,6 @@
 
   async function selectDirectory(noteId: string | null) {
     closeDesktopPreview(false);
-    noteSidebarMode.value = 'directory';
     void recordNoteTreeProductEvent('note_tree_branch_selected', {
       surface: noteTreeSurface(),
       ...noteTreeNodeMetrics(noteId),
@@ -1360,6 +1327,29 @@
 
   function findNoteForWarmup(noteId: string) {
     return noteList.value.find((item) => String(item.id) === noteId) || findLoadedTreeNode(noteId);
+  }
+
+  function setDesktopPreviewPage(noteId: string, source: Record<string, any>) {
+    previewPendingLocallyChanged = false;
+    previewOutline.value = [];
+    previewActiveOutlineId.value = null;
+    previewOutlineTarget.value = null;
+    previewNoteSeed.value = { ...source, id: noteId };
+    previewNoteId.value = noteId;
+  }
+
+  function openPreviewBreadcrumbPage(page: PreviewBreadcrumbTarget) {
+    const noteId = String(page?.id || '').trim();
+    if (!desktopPreviewOpen.value || !noteId || noteId === previewNoteId.value) return;
+    const source = findNoteForWarmup(noteId) || page;
+    prefetchNoteDetail(user, noteId);
+    // 面包屑是在当前阅读链路中切换页面，不重新记录列表滚动位置；退出预览后仍回到最初打开处。
+    setDesktopPreviewPage(noteId, source);
+    void recordNoteTreeProductEvent('note_tree_page_opened', {
+      surface: 'desktop',
+      ...noteTreeNodeMetrics(noteId),
+      result: 'success',
+    });
   }
 
   async function openDirectoryPage(noteId: string) {
@@ -1410,9 +1400,7 @@
     }
     prefetchNoteDetail(user, noteId);
     captureDesktopPreviewScroll();
-    previewPendingLocallyChanged = false;
-    previewNoteSeed.value = { ...source, id: noteId };
-    previewNoteId.value = noteId;
+    setDesktopPreviewPage(noteId, source);
     void recordNoteTreeProductEvent('note_tree_page_opened', {
       surface: 'desktop',
       ...noteTreeNodeMetrics(noteId),
@@ -1424,6 +1412,9 @@
     const snapshot = restoreScroll ? desktopPreviewScrollSnapshot : null;
     desktopPreviewScrollSnapshot = null;
     previewPendingLocallyChanged = false;
+    previewOutline.value = [];
+    previewActiveOutlineId.value = null;
+    previewOutlineTarget.value = null;
     previewNoteId.value = null;
     previewNoteSeed.value = null;
     if (snapshot) void restoreDesktopPreviewScroll(snapshot);
@@ -1457,9 +1448,9 @@
 
   let desktopTreeOpenedRecorded = false;
   watch(
-    [noteTreeReadEnabled, showNoteSidebar, noteSidebarMode],
-    ([enabled, visible, mode]) => {
-      if (!enabled || !visible || mode !== 'directory' || desktopTreeOpenedRecorded) return;
+    [noteTreeReadEnabled, showNoteSidebar],
+    ([enabled, visible]) => {
+      if (!enabled || !visible || desktopTreeOpenedRecorded) return;
       desktopTreeOpenedRecorded = true;
       void recordNoteTreeProductEvent('note_tree_opened', {
         surface: 'desktop',
@@ -1509,11 +1500,6 @@
           ]
         : []),
       {
-        label: t('common.copyLink'),
-        icon: icon.cloudSpace.preview.copy,
-        function: () => copyNoteLink(note),
-      },
-      {
         label: t('noteShare.shareAction'),
         icon: icon.share,
         function: () => openNoteShare(note),
@@ -1555,22 +1541,6 @@
     recordOperation({ module: '笔记库', operation: `重命名笔记【${updated.title}】` });
     await Promise.all([refreshTree(), reloadNotes()]);
     activeRenameNote.value = null;
-  }
-
-  async function copyNoteLink(note: any) {
-    const noteId = String(note?.id || '').trim();
-    if (!noteId) return;
-    const relative = router.resolve({ path: `/noteLibrary/${encodeURIComponent(noteId)}` }).href;
-    let link = relative;
-    if (typeof window !== 'undefined') {
-      try {
-        link = new URL(relative, window.location.origin).toString();
-      } catch {
-        // 某些 APK WebView 使用不完整的自定义 origin；相对路由仍可安全复制和打开。
-      }
-    }
-    if (await copyTextToClipboard(link)) message.success(t('common.linkCopied'));
-    else message.error(t('note.copyLinkFailed'));
   }
 
   function isDeleteScopeConflict(response: any) {
@@ -1872,22 +1842,7 @@
       !batchMode.value && !loading.value && !refreshing.value && !loadingMore.value && !noteDragging.value,
   });
   const allTags = ref<any[]>(initialTagSnapshot?.items || []);
-  const untaggedNoteCount = ref<number | null>(initialTagSnapshot?.untaggedCount ?? null);
-  const totalNoteCount = ref<number | null>(initialTagSnapshot?.totalCount ?? null);
-  // 侧栏的三个计数取同一次标签查询的快照,避免"全部"和各标签之和对不上;
-  // 旧后端没有该字段时回退到无筛选列表写入的 user.noteTotal
-  const allNoteCount = computed(() => totalNoteCount.value ?? user.noteTotal ?? 0);
-  const activeMobileTagLabel = computed(() => {
-    const tagId = getActiveNoteTagId();
-    if (!tagId) return t('note.allNote');
-    if (tagId === 'null') return t('note.noTagNote');
-    const active = allTags.value.find((tag) => String(tag?.id || '') === tagId);
-    return String(active?.name || active?.title || '');
-  });
-  const mobileScopeLabel = computed(() => {
-    if (noteSidebarMode.value === 'tags') return activeMobileTagLabel.value;
-    return currentDirectoryTitle.value || t('note.knowledgeRoot');
-  });
+  const mobileScopeLabel = computed(() => currentDirectoryTitle.value || t('note.knowledgeRoot'));
 
   async function init() {
     await Promise.all([reloadNotes(), getAllTags(true), refreshTree()]);
@@ -1902,9 +1857,8 @@
 
   const currentListCacheKey = computed(() =>
     buildNoteLibraryListCacheKey(noteCacheScope.value, {
-      mode: noteSidebarMode.value,
-      parentId: noteTreeReadEnabled.value && noteSidebarMode.value === 'directory' ? currentParentId.value : null,
-      tagId: noteSidebarMode.value === 'tags' ? getActiveNoteTagId() : null,
+      parentId: noteTreeReadEnabled.value ? currentParentId.value : null,
+      tagId: getActiveNoteTagId(),
       keyword: debouncedSearch.value,
     }),
   );
@@ -1953,11 +1907,9 @@
           // v2 让服务端返回已生成的纯文本摘要/首图位置，并省略正文前缀。
           // 旧服务端会忽略该字段，客户端仍保留 content 解析兜底，支持滚动发布。
           previewVersion: 2,
-          ...(noteTreeReadEnabled.value && noteSidebarMode.value === 'directory'
-            ? { parentId: currentParentId.value }
-            : {}),
+          ...(noteTreeReadEnabled.value ? { parentId: currentParentId.value } : {}),
           keyword: debouncedSearch.value,
-          tagId: noteSidebarMode.value === 'tags' ? getActiveNoteTagId() : undefined,
+          tagId: getActiveNoteTagId(),
         },
         // 列表有本地骨架/软刷新状态，不再同时点亮全局顶部请求条。
         { feedback: false },
@@ -2031,12 +1983,7 @@
     const cached = noteLibraryCache.readTags(requestScope);
     if (cached) {
       allTags.value = cached.items;
-      untaggedNoteCount.value = cached.untaggedCount;
-      totalNoteCount.value = cached.totalCount;
-      tagLoading.value = false;
       if (!force && Date.now() - cached.updatedAt <= NOTE_LIBRARY_TAGS_FRESH_MS) return;
-    } else {
-      tagLoading.value = true;
     }
     try {
       const res = await apiBasePost('/api/note/queryNoteTagList', { userId: user.id }, { feedback: false });
@@ -2046,18 +1993,14 @@
         const payload: any = res.data;
         const isLegacyArray = Array.isArray(payload);
         allTags.value = isLegacyArray ? payload : Array.isArray(payload?.items) ? payload.items : [];
-        untaggedNoteCount.value = isLegacyArray ? null : toFiniteCount(payload?.untaggedCount);
-        totalNoteCount.value = isLegacyArray ? null : toFiniteCount(payload?.totalCount);
         noteLibraryCache.writeTags(requestScope, {
           items: allTags.value,
-          untaggedCount: untaggedNoteCount.value,
-          totalCount: totalNoteCount.value,
+          untaggedCount: isLegacyArray ? null : toFiniteCount(payload?.untaggedCount),
+          totalCount: isLegacyArray ? null : toFiniteCount(payload?.totalCount),
         });
       }
     } catch (error) {
       console.warn('fetchNoteTags fallback', error);
-    } finally {
-      tagLoading.value = false;
     }
   }
 
@@ -2066,11 +2009,9 @@
     return Number.isFinite(parsed) ? parsed : null;
   }
 
-  // 空态区分用：搜索词或“标签分类”中的具体标签任一激活；目录范围本身不是筛选条件。
+  // 空态区分用：搜索词或标签筛选任一激活；目录范围本身不是筛选条件。
   const hasActiveFilter = computed(
-    () =>
-      Boolean(debouncedSearch.value.trim()) ||
-      (noteSidebarMode.value === 'tags' && router.currentRoute.value.query.tag != null),
+    () => Boolean(debouncedSearch.value.trim()) || router.currentRoute.value.query.tag != null,
   );
   function clearFilters() {
     searchValue.value = '';
@@ -2090,13 +2031,11 @@
       !loadingMore.value &&
       !treeMovePending.value &&
       !debouncedSearch.value &&
-      noteSidebarMode.value === 'directory' &&
+      router.currentRoute.value.query.tag == null &&
       visibleDragNoteList.value.length > (noteTreeReadEnabled.value ? 0 : 1) &&
       !noteList.value.some((note) => note.isCheck === true),
   );
-  const browsingAllDirectoryNotes = computed(
-    () => noteTreeReadEnabled.value && noteSidebarMode.value === 'directory' && currentParentId.value === null,
-  );
+  const browsingAllDirectoryNotes = computed(() => noteTreeReadEnabled.value && currentParentId.value === null);
 
   watch(
     () => searchValue.value,
@@ -2129,9 +2068,8 @@
       () => router.currentRoute.value.query.tag,
       () => router.currentRoute.value.query._rt,
       currentParentId,
-      noteSidebarMode,
     ],
-    ([featuresReady, search, tag, refreshToken, parentId, mode], previous) => {
+    ([featuresReady, search, tag, refreshToken, parentId], previous) => {
       if (!featuresReady) return;
       const forceRefresh = Array.isArray(previous) && refreshToken !== previous[3];
       const cached = noteLibraryCache.readList(currentListCacheKey.value);
@@ -2151,7 +2089,6 @@
         search === previous[1] &&
         refreshToken === previous[3] &&
         parentId === previous[4] &&
-        mode === previous[5] &&
         tag !== previous[2];
       const soft = Boolean(cached) || (onlyTagChanged && visibleDragNoteList.value.length > 0);
       if (batchMode.value) exitBatch();
@@ -2475,23 +2412,21 @@
     handleNoteMenuSelect(action.key, target);
   }
 
-  function openMobileDirectory(tab: 'directory' | 'tags') {
+  function openMobileDirectory() {
+    if (!noteTreeMobileEnabled.value) return;
     mobileDirectoryMounted.value = true;
-    mobileDirectoryInitialTab.value = tab === 'directory' && !noteTreeMobileEnabled.value ? 'tags' : tab;
     mobileDirectoryOpen.value = true;
-    if (mobileDirectoryInitialTab.value === 'directory') {
-      const metrics = noteTreeNodeMetrics(currentParentId.value);
-      void recordNoteTreeProductEvent('note_tree_opened', {
-        surface: 'mobile',
-        ...metrics,
-        result: 'success',
-      });
-      void recordNoteTreeProductEvent('note_tree_mobile_sheet_opened', {
-        surface: 'mobile',
-        ...metrics,
-        result: 'success',
-      });
-    }
+    const metrics = noteTreeNodeMetrics(currentParentId.value);
+    void recordNoteTreeProductEvent('note_tree_opened', {
+      surface: 'mobile',
+      ...metrics,
+      result: 'success',
+    });
+    void recordNoteTreeProductEvent('note_tree_mobile_sheet_opened', {
+      surface: 'mobile',
+      ...metrics,
+      result: 'success',
+    });
   }
 
   let consumingDirectoryOpenRequest = false;
@@ -2505,8 +2440,7 @@
         const query = { ...router.currentRoute.value.query };
         delete query.openDirectory;
         await router.replace({ path: '/noteLibrary', query });
-        noteSidebarMode.value = 'directory';
-        openMobileDirectory('directory');
+        openMobileDirectory();
       } finally {
         consumingDirectoryOpenRequest = false;
       }
@@ -2514,15 +2448,8 @@
     { immediate: true },
   );
 
-  function selectMobileDirectoryTag(key: string) {
+  function handleTagFilterSelect() {
     closeDesktopPreview(false);
-    noteSidebarMode.value = 'tags';
-    const query = { ...router.currentRoute.value.query };
-    delete query._rt;
-    delete query.parent;
-    if (key === 'all') delete query.tag;
-    else query.tag = key;
-    void router.push({ path: '/noteLibrary', query });
   }
 
   function handleMobileBatchAction(action: MobilePageActionItem) {
@@ -2755,10 +2682,9 @@
   }
 
   const handleNodeTypeChange = (tag) => {
-    noteSidebarMode.value = 'tags';
+    closeDesktopPreview(false);
     const query = { ...router.currentRoute.value.query };
     delete query._rt;
-    delete query.parent;
     if (tag === null) delete query.tag;
     else query.tag = String(tag.id);
     router.push({ path: '/noteLibrary', query });
@@ -3653,21 +3579,23 @@
 
   .note-mobile-actions {
     width: 100%;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    display: flex;
+    justify-content: flex-end;
     gap: 10px;
   }
 
   .note-mobile-actions :deep(.noteType-select) {
-    width: 100%;
+    width: 44px;
     min-width: 0;
     justify-content: center;
+    padding-inline: 8px;
   }
 
   .note-mobile-directory {
-    width: 100%;
+    width: auto;
     max-width: 100%;
     min-width: 0;
+    flex: 1 1 auto;
     height: 36px;
     padding: 0 9px;
     gap: 6px;

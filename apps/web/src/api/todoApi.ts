@@ -161,6 +161,7 @@ export interface TodoSeriesView {
   status: 'active' | 'paused' | 'ended';
   timezone: string;
   version: number;
+  createdAt?: string | null;
   plan: TodoPlanConfig | null;
   timing: TodoPlanTiming | null;
   progress: { completed: number; skipped: number; generated: number; total: number | null };

@@ -1,4 +1,5 @@
 import pool from '../db/index.js';
+import { selectC6DailyQuests } from './dailyQuestPolicy.js';
 import { DAILY_MEANINGFUL_ACTIVITY_TYPES } from './pointsEarningPolicy.js';
 import { getGrowthCalendarContext } from './growthPreferences.js';
 
@@ -6,6 +7,7 @@ const SOURCE_BY_KIND = Object.freeze({
   bookmark: 'activity_bookmark',
   note: 'activity_note',
   file: 'activity_file',
+  todo_create: 'todo_create',
   todo: 'todo_complete',
   organize: 'organize_complete',
 });
@@ -69,7 +71,7 @@ function buildEventRangeClause({ dayKey = null, weekKey = null }) {
  */
 export async function getMeaningfulActivityFacts(
   userId,
-  { db = pool, calendar = null, dayKey = null, weekKey = null } = {},
+  { db = pool, calendar = null, dayKey = null, weekKey = null, activityKinds = null } = {},
 ) {
   if (!userId || userId === 'visitor') {
     return { total: 0, byType: {}, activeDays: 0, variety: 0, events: [] };
@@ -79,7 +81,11 @@ export async function getMeaningfulActivityFacts(
   const week = safeWeek(weekKey);
   const rangeClause = buildEventRangeClause({ dayKey: day, weekKey: week });
   const rangeKey = day || week;
-  const sources = Object.values(SOURCE_BY_KIND);
+  const kinds = Array.isArray(activityKinds)
+    ? [...new Set(activityKinds.filter((kind) => SOURCE_BY_KIND[kind]))]
+    : [...DAILY_MEANINGFUL_ACTIVITY_TYPES];
+  if (!kinds.length) return { total: 0, byType: {}, activeDays: 0, variety: 0, events: [] };
+  const sources = kinds.map((kind) => SOURCE_BY_KIND[kind]);
   const sourcePlaceholders = sources.map(() => '?').join(',');
   const [rows] = await db.query(
     `SELECT id, source, ref_id AS refId, create_time AS createTime,
@@ -92,21 +98,22 @@ export async function getMeaningfulActivityFacts(
     [effectiveCalendar.shiftMinutes, String(userId), ...sources, effectiveCalendar.shiftMinutes, rangeKey],
   );
   const kindBySource = Object.fromEntries(Object.entries(SOURCE_BY_KIND).map(([kind, source]) => [source, kind]));
-  const byType = Object.fromEntries(DAILY_MEANINGFUL_ACTIVITY_TYPES.map((kind) => [kind, 0]));
+  const byType = Object.fromEntries(kinds.map((kind) => [kind, 0]));
   const events = rows.map((row) => {
     const kind = kindBySource[row.source] || row.source;
     if (Object.hasOwn(byType, kind)) byType[kind] += 1;
     return { eventId: Number(row.id), kind, day: row.day, time: row.createTime || null };
   });
   const activeDays = new Set(events.map((event) => event.day).filter(Boolean)).size;
-  const variety = DAILY_MEANINGFUL_ACTIVITY_TYPES.filter((kind) => Number(byType[kind] || 0) > 0).length;
+  const variety = kinds.filter((kind) => Number(byType[kind] || 0) > 0).length;
   return { total: events.length, byType, activeDays, variety, events };
 }
 
 export async function getMeaningfulActiveDays(userId, { db = pool, calendar = null } = {}) {
   if (!userId || userId === 'visitor') return 0;
   const effectiveCalendar = calendar || (await getGrowthCalendarContext(userId, { db }));
-  const sources = Object.values(SOURCE_BY_KIND);
+  // C6 的 todo_create 只服务每日随机任务；有效活跃日与成就继续沿用 C5 的五类事实。
+  const sources = DAILY_MEANINGFUL_ACTIVITY_TYPES.map((kind) => SOURCE_BY_KIND[kind]);
   const placeholders = sources.map(() => '?').join(',');
   const [[row]] = await db.query(
     `SELECT COUNT(DISTINCT DATE_FORMAT(DATE_ADD(create_time, INTERVAL ? MINUTE), '%Y%m%d')) AS activeDays
@@ -136,4 +143,20 @@ export function c5DailyQuestsFromFacts({ checkedInToday = false, facts = null } 
       countedEvent: events[1] ? { type: events[1].kind, time: events[1].time } : null,
     },
   ];
+}
+
+export function c6DailyQuestsFromFacts({ userId, dayKey, checkedInToday = false, facts = null } = {}) {
+  const events = facts?.events || [];
+  const byType = facts?.byType || {};
+  const randomQuests = selectC6DailyQuests(userId, dayKey).map(({ key, kind }) => {
+    const count = Number(byType[kind] ?? events.filter((event) => event.kind === kind).length);
+    return {
+      key,
+      done: count >= 1,
+      cur: Math.min(count, 1),
+      target: 1,
+      random: true,
+    };
+  });
+  return [{ key: 'checkin', done: Boolean(checkedInToday), cur: checkedInToday ? 1 : 0, target: 1 }, ...randomQuests];
 }

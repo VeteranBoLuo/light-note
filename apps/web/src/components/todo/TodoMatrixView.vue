@@ -55,7 +55,7 @@
             v-for="item in quadrant.items"
             :key="item.id"
             class="todo-matrix-card"
-            :class="{ 'is-completed': item.status === 'completed' }"
+            :class="{ 'is-completed': item.status === 'completed', 'is-series': seriesCount(item) > 1 }"
           >
             <template #leading>
               <BCheckbox
@@ -68,30 +68,38 @@
               />
             </template>
 
-            <BButton
-              class="todo-matrix-card__content"
-              :disabled="disabled"
-              :title="item.title"
-              @click="emit('edit', item)"
-            >
-              <span class="todo-matrix-card__title">{{ item.title }}</span>
+            <div class="todo-matrix-card__body">
+              <BButton
+                class="todo-matrix-card__content"
+                :disabled="disabled"
+                :title="item.title"
+                @click="emit('edit', item)"
+              >
+                <span class="todo-matrix-card__title">{{ item.title }}</span>
+              </BButton>
               <span class="todo-matrix-card__meta">
                 <span class="todo-matrix-card__priority" :class="`is-priority-${item.priority}`">
                   {{ t(`inbox.todoPriority${item.priority}`) }}
                 </span>
-                <span
+                <BButton
                   v-if="seriesCount(item) > 1"
-                  class="todo-matrix-card__series"
+                  class="todo-matrix-card__series-trigger"
                   :title="t('inbox.todoMatrixSeriesBadge', { count: seriesCount(item) })"
+                  :aria-label="t('inbox.todoMatrixSeriesOpen', { title: item.title, count: seriesCount(item) })"
+                  :aria-expanded="seriesDrawerOpen && activeSeriesId === item.seriesId"
+                  :disabled="disabled"
+                  @click="openSeriesDrawer(item)"
                 >
-                  <SvgIcon :src="icon.todo.repeat" size="12" aria-hidden="true" />
-                  <span>{{ t('inbox.todoMatrixSeriesBadge', { count: seriesCount(item) }) }}</span>
-                </span>
+                  <span class="todo-matrix-card__series">
+                    <SvgIcon :src="icon.todo.repeat" size="12" aria-hidden="true" />
+                    <span>{{ seriesSummary(item) }}</span>
+                  </span>
+                </BButton>
                 <span v-if="dueLabel(item)" class="todo-matrix-card__due" :class="{ 'is-overdue': isOverdue(item) }">
                   {{ dueLabel(item) }}
                 </span>
               </span>
-            </BButton>
+            </div>
 
             <template #trailing>
               <BButton
@@ -138,13 +146,29 @@
       :actions="mobileRowActions"
       @action="handleMobileAction"
     />
+    <TodoSeriesDrawer
+      v-if="activeSeriesRepresentative"
+      v-model:open="seriesDrawerOpen"
+      :representative="activeSeriesRepresentative"
+      :items="activeSeriesItems"
+      :disabled="disabled"
+      :deleting-id="deletingId"
+      @toggle-complete="(item, completed) => emit('toggle-complete', item, completed)"
+      @update-checklist="(item, checklist) => emit('update-checklist', item, checklist)"
+      @edit="(item) => emit('edit', item)"
+      @delete="(item) => emit('delete', item)"
+      @add-to-calendar="(item) => emit('add-to-calendar', item)"
+      @snooze="(item, preset) => emit('snooze', item, preset)"
+      @update-priority="(item, priority) => emit('update-priority', item, priority)"
+      @series-action="(item, action) => emit('series-action', item, action)"
+    />
   </section>
 </template>
 
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import type { TodoItem } from '@/api/todoApi';
+  import type { TodoChecklistItem, TodoItem, TodoPriority } from '@/api/todoApi';
   import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
   import type { BActionMenuItem } from '@/components/base/BasicComponents/actionMenu';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -153,8 +177,9 @@
   import MobileListRow from '@/components/mobile/MobileListRow.vue';
   import MobileListSurface from '@/components/mobile/MobileListSurface.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
+  import TodoSeriesDrawer from '@/components/todo/TodoSeriesDrawer.vue';
   import icon from '@/config/icon';
-  import { formatTodoDateTime, parseTodoDate } from '@/utils/todoPlanning';
+  import { formatTodoDateTime, normalizeTodoDateOnly, todoGroupKey, type TodoSnoozePreset } from '@/utils/todoPlanning';
   import { groupTodosByMatrix, TODO_MATRIX_QUADRANT_ORDER, type TodoMatrixQuadrantKey } from '@/utils/todoMatrix';
   import { buildTodoMatrixEntries } from '@/utils/todoSeriesGrouping';
 
@@ -175,12 +200,17 @@
     edit: [item: TodoItem];
     delete: [item: TodoItem];
     'toggle-complete': [item: TodoItem, completed: boolean];
+    'update-checklist': [item: TodoItem, checklist: TodoChecklistItem[]];
+    'add-to-calendar': [item: TodoItem];
+    snooze: [item: TodoItem, preset: TodoSnoozePreset];
+    'update-priority': [item: TodoItem, priority: TodoPriority];
+    'series-action': [item: TodoItem, action: 'skip' | 'pause' | 'resume' | 'stop'];
   }>();
   const { t, locale } = useI18n();
   const matrixNow = ref(new Date());
   let midnightTimer = 0;
 
-  const matrixEntries = computed(() => buildTodoMatrixEntries(props.items));
+  const matrixEntries = computed(() => buildTodoMatrixEntries(props.items, matrixNow.value));
   const matrixEntryById = computed(() => new Map(matrixEntries.value.map((entry) => [entry.item.id, entry])));
   const groupedItems = computed(() =>
     groupTodosByMatrix(
@@ -207,6 +237,18 @@
   const visibleQuadrants = computed(() => (props.mobile ? [selectedQuadrant.value] : quadrants.value));
   const mobileActionsOpen = ref(false);
   const mobileActionItem = ref<TodoItem | null>(null);
+  const seriesDrawerOpen = ref(false);
+  const activeSeriesId = ref('');
+  const activeSeriesRepresentativeId = ref('');
+  const activeSeriesItems = computed(() =>
+    activeSeriesId.value ? props.items.filter((item) => item.seriesId === activeSeriesId.value) : [],
+  );
+  const activeSeriesRepresentative = computed(
+    () =>
+      activeSeriesItems.value.find((item) => item.id === activeSeriesRepresentativeId.value) ||
+      activeSeriesItems.value[0] ||
+      null,
+  );
   const mobileRowActions = computed<MobilePageActionItem[]>(() => {
     const item = mobileActionItem.value;
     return [
@@ -229,14 +271,13 @@
   });
 
   function isOverdue(item: TodoItem) {
-    if (item.status !== 'pending' || !item.dueAt) return false;
-    const dueAt = parseTodoDate(item.dueAt).getTime();
-    return Number.isFinite(dueAt) && dueAt < matrixNow.value.getTime();
+    return todoGroupKey(item, matrixNow.value) === 'overdue';
   }
 
   function dueLabel(item: TodoItem) {
-    if (!item.dueAt) return '';
-    const value = formatTodoDateTime(item.dueAt, locale.value, {
+    const dateValue = item.dueAt || normalizeTodoDateOnly(item.occurrenceDate);
+    if (!dateValue) return '';
+    const value = formatTodoDateTime(dateValue, locale.value, {
       relative: true,
       includeYear: false,
       now: matrixNow.value,
@@ -246,11 +287,31 @@
       },
     });
     if (!value) return '';
-    return isOverdue(item) ? t('inbox.todoOverdue', { time: value }) : t('inbox.todoDue', { time: value });
+    if (isOverdue(item)) return t('inbox.todoOverdue', { time: value });
+    return item.dueAt ? t('inbox.todoDue', { time: value }) : t('inbox.todoScheduledDate', { time: value });
   }
 
   function seriesCount(item: TodoItem) {
     return matrixEntryById.value.get(item.id)?.seriesCount || 1;
+  }
+
+  function seriesSummary(item: TodoItem) {
+    const entry = matrixEntryById.value.get(item.id);
+    if (!entry) return '';
+    return t('inbox.todoMatrixSeriesSummary', {
+      today: entry.todayCount,
+      missed: entry.missedCount,
+      future: entry.futureCount,
+    });
+  }
+
+  function openSeriesDrawer(item: TodoItem) {
+    if (props.disabled) return;
+    const entry = matrixEntryById.value.get(item.id);
+    if (!entry?.seriesId || entry.seriesCount <= 1) return;
+    activeSeriesId.value = entry.seriesId;
+    activeSeriesRepresentativeId.value = item.id;
+    seriesDrawerOpen.value = true;
   }
 
   function rowActions(item: TodoItem): BActionMenuItem[] {
@@ -309,6 +370,11 @@
       if (mobileActionItem.value && !itemIds.includes(mobileActionItem.value.id)) {
         mobileActionsOpen.value = false;
         mobileActionItem.value = null;
+      }
+      if (seriesDrawerOpen.value && activeSeriesItems.value.length === 0) {
+        seriesDrawerOpen.value = false;
+        activeSeriesId.value = '';
+        activeSeriesRepresentativeId.value = '';
       }
     },
   );
@@ -472,18 +538,25 @@
     min-width: 32px;
   }
 
-  .todo-matrix-card :deep(.todo-matrix-card__content) {
+  .todo-matrix-card__body {
     width: 100%;
-    height: auto;
     min-height: 42px;
     min-width: 0;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     justify-content: center;
-    gap: 4px;
-    padding: 2px 0;
+    gap: 1px;
     overflow: hidden;
+  }
+
+  .todo-matrix-card :deep(.todo-matrix-card__content) {
+    width: 100%;
+    height: auto;
+    min-height: 20px;
+    min-width: 0;
+    justify-content: flex-start;
+    padding: 0;
     border: 0;
     border-radius: 5px;
     background: transparent !important;
@@ -519,6 +592,16 @@
     color: var(--desc-color);
   }
 
+  .todo-matrix-card :deep(.todo-matrix-card__series-trigger) {
+    min-width: 0;
+    height: 24px;
+    flex: 0 1 auto;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+  }
+
   .todo-matrix-card__series {
     min-width: 0;
     max-width: 180px;
@@ -546,6 +629,12 @@
 
   .todo-matrix-card__series :deep(.svg-icon) {
     flex: 0 0 auto;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .todo-matrix-card :deep(.todo-matrix-card__series-trigger:hover) .todo-matrix-card__series {
+      background: var(--hover-background);
+    }
   }
 
   .todo-matrix-card__priority.is-priority-2,
@@ -718,8 +807,11 @@
     border-radius: 13px;
   }
 
-  .todo-matrix.is-mobile .todo-matrix-card :deep(.todo-matrix-card__content),
   .todo-matrix.is-mobile .todo-matrix-card :deep(.todo-matrix-card__more) {
+    min-height: 44px;
+  }
+
+  .todo-matrix.is-mobile .todo-matrix-card :deep(.todo-matrix-card__series-trigger) {
     min-height: 44px;
   }
 

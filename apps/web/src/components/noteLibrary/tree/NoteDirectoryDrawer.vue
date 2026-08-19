@@ -1,7 +1,7 @@
 <template>
   <BDrawer
     :open="open"
-    :title="t('note.chooseBrowseScope')"
+    :title="t('note.chooseDirectory')"
     placement="bottom"
     height="min(88dvh, 760px)"
     body-padding="10px 12px max(10px, env(safe-area-inset-bottom))"
@@ -10,9 +10,7 @@
     @close="requestClose"
   >
     <div class="note-directory-drawer">
-      <BTabs v-model:active-tab="activeTab" :options="tabs" variant="segment" @change="handleModeChange" />
-
-      <template v-if="activeTab === 'directory'">
+      <template v-if="directoryEnabled">
         <nav class="note-drawer-breadcrumb" :aria-label="t('note.currentDirectory')">
           <BButton
             :class="{
@@ -99,16 +97,7 @@
         </div>
       </template>
 
-      <NoteTagSidebar
-        v-else
-        class="note-drawer-tags"
-        :all-tags="allTags"
-        :total-count="totalCount"
-        :untagged-count="untaggedCount"
-        :loading="tagLoading"
-        defer-navigation
-        @select="selectTag"
-      />
+      <p v-else class="note-drawer-empty">{{ t('note.treeLoadFailed') }}</p>
     </div>
   </BDrawer>
   <MobilePageActionsDrawer
@@ -125,12 +114,8 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
-  import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import MobilePageActionsDrawer, {
-    type MobilePageActionItem,
-  } from '@/components/mobile/MobilePageActionsDrawer.vue';
-  import NoteTagSidebar from '@/components/noteLibrary/library/NoteTagSidebar.vue';
+  import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import icon from '@/config/icon';
   import { apiBasePost } from '@/http/request';
   import type { NoteBreadcrumbItem, NoteTreeItem, NoteTreeQueryResult } from '@/types/noteTree';
@@ -146,11 +131,6 @@
   const props = withDefaults(
     defineProps<{
       currentParentId: string | null;
-      initialTab?: 'directory' | 'tags';
-      allTags?: any[];
-      totalCount?: number;
-      untaggedCount?: number | null;
-      tagLoading?: boolean;
       directoryEnabled?: boolean;
       writeEnabled?: boolean;
       loadDirectoryLevel?: (parentId: string | null) => Promise<{
@@ -159,11 +139,6 @@
       }>;
     }>(),
     {
-      initialTab: 'directory',
-      allTags: () => [],
-      totalCount: 0,
-      untaggedCount: null,
-      tagLoading: false,
       directoryEnabled: true,
       writeEnabled: true,
     },
@@ -171,8 +146,6 @@
   const open = defineModel<boolean>('open', { default: false });
   const emit = defineEmits<{
     select: [parentId: string | null];
-    selectTag: [key: string];
-    modeChange: [mode: 'directory' | 'tags'];
     openPage: [node: NoteTreeItem];
     create: [node: NoteTreeItem];
     attach: [node: NoteTreeItem];
@@ -182,7 +155,6 @@
     delete: [node: NoteTreeItem];
   }>();
   const { t } = useI18n();
-  const activeTab = ref<'directory' | 'tags'>('directory');
   const browseParentId = ref<string | null>(null);
   const breadcrumb = ref<NoteBreadcrumbItem[]>([]);
   const items = ref<NoteTreeItem[]>([]);
@@ -195,16 +167,8 @@
   let historyHandle: MobileOverlayHistoryHandle | null = null;
   let forceClosing = false;
 
-  const tabs = computed(() => [
-    ...(props.directoryEnabled ? [{ key: 'directory', label: t('note.pagesTab') }] : []),
-    { key: 'tags', label: t('note.tagsTab') },
-  ]);
   const browseTitle = computed(() => breadcrumb.value[breadcrumb.value.length - 1]?.title || t('note.knowledgeRoot'));
   const isBrowsingSelectedDirectory = computed(() => browseParentId.value === props.currentParentId);
-
-  function handleModeChange(mode: string) {
-    if (mode === 'directory' || mode === 'tags') emit('modeChange', mode);
-  }
 
   function registerHistory() {
     if (!open.value || historyHandle) return;
@@ -218,7 +182,7 @@
       open.value = false;
       return;
     }
-    if (activeTab.value === 'directory' && browseParentId.value) {
+    if (browseParentId.value) {
       const path = breadcrumb.value;
       browseParentId.value = path.length > 1 ? path[path.length - 2].id : null;
       registerHistory();
@@ -250,10 +214,6 @@
     browseParentId.value = parentId;
     emit('select', parentId);
     await loadLevel();
-  }
-
-  async function selectTag(key: string) {
-    await closeThen(() => emit('selectTag', key));
   }
 
   async function closeAndEmit(
@@ -372,7 +332,10 @@
       if (treeResponse.status !== 200 || breadcrumbResponse.status !== 200) {
         items.value = [];
         breadcrumb.value = [];
-        error.value = treeResponse.msg || breadcrumbResponse.msg || t('note.treeLoadFailed');
+        error.value =
+          ('msg' in treeResponse ? treeResponse.msg : '') ||
+          ('msg' in breadcrumbResponse ? breadcrumbResponse.msg : '') ||
+          t('note.treeLoadFailed');
         return;
       }
       const treeData = (treeResponse.data || {}) as NoteTreeQueryResult;
@@ -392,7 +355,7 @@
   function scheduleDirectoryLevelLoad() {
     const scheduleSeq = ++loadScheduleSeq;
     void nextTick(() => {
-      if (scheduleSeq !== loadScheduleSeq || !open.value || activeTab.value !== 'directory') return;
+      if (scheduleSeq !== loadScheduleSeq || !open.value || !props.directoryEnabled) return;
       void loadLevel();
     });
   }
@@ -401,11 +364,12 @@
     open,
     (isOpen) => {
       if (isOpen) {
-        activeTab.value = props.directoryEnabled ? props.initialTab : 'tags';
         browseParentId.value = props.currentParentId;
         forceClosing = false;
-        registerHistory();
-        scheduleDirectoryLevelLoad();
+        if (props.directoryEnabled) {
+          registerHistory();
+          scheduleDirectoryLevelLoad();
+        }
         return;
       }
       directoryActionDrawerOpen.value = false;
@@ -417,12 +381,6 @@
     },
     { immediate: true },
   );
-
-  watch(activeTab, (tab) => {
-    if (!open.value) return;
-    void nextTick(registerHistory);
-    if (tab === 'directory') scheduleDirectoryLevelLoad();
-  });
 
   onBeforeUnmount(() => {
     loadScheduleSeq += 1;
@@ -513,8 +471,7 @@
     }
   }
 
-  .note-drawer-directory-list,
-  .note-drawer-tags {
+  .note-drawer-directory-list {
     flex: 1;
     min-height: 0;
     overflow-y: auto;

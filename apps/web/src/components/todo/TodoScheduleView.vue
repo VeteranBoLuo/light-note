@@ -42,6 +42,10 @@
             <strong>{{ item.title }}</strong>
           </span>
           <span class="todo-calendar-item__meta">
+            <small v-if="isScheduledSeries(item)" class="is-series">
+              <SvgIcon :src="icon.todo.repeat" size="11" aria-hidden="true" />
+              {{ t('inbox.todoRecurringInstance') }}
+            </small>
             <small :class="todoStateClass(item)">{{ todoStateLabel(item) }}</small>
             <small>{{ t(`inbox.todoPriority${item.priority}`) }}</small>
           </span>
@@ -109,6 +113,14 @@
             <span class="todo-agenda-card__content">
               <strong>{{ entry.item.title }}</strong>
               <span class="todo-agenda-card__meta">
+                <small v-if="entry.seriesId" class="is-series">
+                  <SvgIcon :src="icon.todo.repeat" size="12" aria-hidden="true" />
+                  {{
+                    entry.missedCount
+                      ? t('inbox.todoAgendaMissedSeries', { count: entry.missedCount })
+                      : t('inbox.todoRecurringInstance')
+                  }}
+                </small>
                 <small :class="todoStateClass(entry.item)">{{ todoStateLabel(entry.item) }}</small>
                 <small>{{ t(`inbox.todoPriority${entry.item.priority}`) }}</small>
               </span>
@@ -116,12 +128,15 @@
           </BButton>
         </MobileSwipeDelete>
       </article>
+      <BButton v-if="agendaHasMore" class="todo-agenda__more" @click="agendaHorizonDays += 14">
+        {{ t('inbox.todoAgendaLoadMore') }}
+      </BButton>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-  import { computed, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import MobileSwipeDelete from '@/components/mobile/MobileSwipeDelete.vue';
@@ -129,7 +144,8 @@
   import icon from '@/config/icon';
   import { bookmarkStore } from '@/store';
   import type { TodoItem } from '@/api/todoApi';
-  import { normalizeTodoDateOnly, todoScheduleAt } from '@/utils/todoPlanning';
+  import { normalizeTodoDateOnly, todoGroupKey, todoScheduleAt } from '@/utils/todoPlanning';
+  import { buildTodoAgendaEntries } from '@/utils/todoSeriesGrouping';
 
   const props = defineProps<{
     items: TodoItem[];
@@ -148,6 +164,9 @@
   const visibleMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const selectedDayKey = ref('');
   const openSwipeId = ref('');
+  const agendaHorizonDays = ref(14);
+  const scheduleNow = ref(new Date());
+  let midnightTimer = 0;
 
   watch(
     () => [props.disabled, props.items.map((item) => item.id).join(',')],
@@ -176,11 +195,21 @@
       (item) => itemScheduleAt(item) && Number.isFinite(parseDate(itemScheduleAt(item) as string).getTime()),
     ),
   );
+  const scheduledItemsByDay = computed(() => {
+    const map = new Map<string, TodoItem[]>();
+    for (const item of scheduledItems.value) {
+      const key = dateKey(parseDate(itemScheduleAt(item) as string));
+      const current = map.get(key) || [];
+      current.push(item);
+      map.set(key, current);
+    }
+    return map;
+  });
   const calendarDays = computed(() => {
     const first = visibleMonth.value;
     const mondayOffset = (first.getDay() + 6) % 7;
     const start = new Date(first.getFullYear(), first.getMonth(), 1 - mondayOffset);
-    const todayKey = dateKey(new Date());
+    const todayKey = dateKey(scheduleNow.value);
     return Array.from({ length: 42 }, (_, index) => {
       const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + index);
       const key = dateKey(date);
@@ -189,7 +218,7 @@
         date,
         currentMonth: date.getMonth() === first.getMonth(),
         today: key === todayKey,
-        items: scheduledItems.value.filter((item) => dateKey(parseDate(itemScheduleAt(item) as string)) === key),
+        items: scheduledItemsByDay.value.get(key) || [],
       };
     });
   });
@@ -206,18 +235,29 @@
     },
     { immediate: true },
   );
+  const agendaCutoff = computed(() => {
+    const now = scheduleNow.value;
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate() + agendaHorizonDays.value + 1).getTime();
+  });
+  const agendaProjection = computed(() => buildTodoAgendaEntries(scheduledItems.value, scheduleNow.value));
+  const agendaHasMore = computed(() =>
+    agendaProjection.value.some((entry) => {
+      const value = itemScheduleAt(entry.item);
+      return value && parseDate(value).getTime() >= agendaCutoff.value;
+    }),
+  );
   const agendaItems = computed(() =>
-    [...scheduledItems.value]
-      .sort(
-        (left, right) =>
-          parseDate(itemScheduleAt(left) as string).getTime() - parseDate(itemScheduleAt(right) as string).getTime(),
-      )
-      .map((item) => {
-        const date = parseDate(itemScheduleAt(item) as string);
+    agendaProjection.value
+      .filter((entry) => {
+        const value = itemScheduleAt(entry.item);
+        return Boolean(value && parseDate(value).getTime() < agendaCutoff.value);
+      })
+      .map((entry) => {
+        const date = parseDate(itemScheduleAt(entry.item) as string);
         return {
-          item,
+          ...entry,
           day: new Intl.DateTimeFormat(locale.value, { month: 'short', day: 'numeric', weekday: 'short' }).format(date),
-          time: scheduleTime(item),
+          time: scheduleTime(entry.item),
         };
       }),
   );
@@ -283,9 +323,10 @@
     return new Intl.DateTimeFormat(locale.value, { hour: '2-digit', minute: '2-digit' }).format(date);
   }
   function isOverdue(item: TodoItem) {
-    if (item.status !== 'pending' || !item.dueAt) return false;
-    const dueAt = parseDate(item.dueAt).getTime();
-    return Number.isFinite(dueAt) && dueAt < Date.now();
+    return todoGroupKey(item, scheduleNow.value) === 'overdue';
+  }
+  function isScheduledSeries(item: TodoItem) {
+    return Boolean(item.seriesId && item.series?.repeatMode === 'scheduled');
   }
   function todoStateClass(item: TodoItem) {
     if (item.status === 'completed') return 'is-completed';
@@ -304,6 +345,16 @@
     visibleMonth.value = new Date(visibleMonth.value.getFullYear(), visibleMonth.value.getMonth() + step, 1);
     selectedDayKey.value = '';
   }
+  function scheduleMidnightRefresh() {
+    const now = new Date();
+    const nextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 100);
+    midnightTimer = window.setTimeout(() => {
+      scheduleNow.value = new Date();
+      scheduleMidnightRefresh();
+    }, nextDay.getTime() - now.getTime());
+  }
+  onMounted(scheduleMidnightRefresh);
+  onBeforeUnmount(() => window.clearTimeout(midnightTimer));
 </script>
 
 <style scoped lang="less">
@@ -429,6 +480,14 @@
     line-height: 1.2;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .todo-calendar-item__meta small.is-series,
+  .todo-agenda-card__meta small.is-series {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    color: var(--primary-color);
+    font-weight: 650;
   }
   .todo-calendar-item__meta small.is-overdue,
   .todo-agenda-card__meta small.is-overdue {
@@ -635,6 +694,11 @@
   .todo-agenda-card__meta small {
     color: var(--desc-color);
     font-size: 10px;
+  }
+  .todo-agenda__more {
+    justify-self: center;
+    min-width: 180px;
+    margin-top: 5px;
   }
   .todo-schedule-empty {
     margin: 0 18px 10px;

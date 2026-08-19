@@ -1,6 +1,66 @@
 import { apiBasePost, type ApiResponse } from '@/http/request';
 import { copyTextToClipboard } from '@/utils/clipboard';
 
+const NOTE_SHARE_SESSION_KEY = 'light-note:note-share-reading-session';
+
+interface StoredNoteShareSession {
+  tokenHint: string;
+  accessTicket: string;
+  expiresAt: number;
+}
+
+function noteShareTokenHint(token: string) {
+  return String(token || '').slice(-16);
+}
+
+function sessionStorageOrNull() {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+export function readNoteShareSessionTicket(token: string) {
+  const storage = sessionStorageOrNull();
+  if (!storage) return '';
+  try {
+    const value = JSON.parse(storage.getItem(NOTE_SHARE_SESSION_KEY) || 'null') as StoredNoteShareSession | null;
+    if (
+      !value?.accessTicket ||
+      value.tokenHint !== noteShareTokenHint(token) ||
+      !Number.isFinite(value.expiresAt) ||
+      value.expiresAt <= Date.now()
+    ) {
+      if (value?.tokenHint === noteShareTokenHint(token)) storage.removeItem(NOTE_SHARE_SESSION_KEY);
+      return '';
+    }
+    return String(value.accessTicket);
+  } catch {
+    storage.removeItem(NOTE_SHARE_SESSION_KEY);
+    return '';
+  }
+}
+
+export function saveNoteShareSessionTicket(token: string, accessTicket: string, expiresInSeconds: number) {
+  const storage = sessionStorageOrNull();
+  const ttl = Number(expiresInSeconds);
+  if (!storage || !token || !accessTicket || !Number.isFinite(ttl) || ttl <= 0) return;
+  try {
+    storage.setItem(
+      NOTE_SHARE_SESSION_KEY,
+      JSON.stringify({
+        tokenHint: noteShareTokenHint(token),
+        accessTicket,
+        expiresAt: Date.now() + ttl * 1000,
+      } satisfies StoredNoteShareSession),
+    );
+  } catch {
+    // 隐私模式或禁用存储时保持可阅读；只是无法跨刷新复用短时会话。
+  }
+}
+
 export type NoteShareScope = 'single' | 'subtree';
 
 export interface NoteShareInput {
@@ -103,7 +163,10 @@ export async function listNoteShares(rootNoteId: string) {
 }
 
 export async function revokeNoteShare(shareId: string) {
-  requireSuccess(await apiBasePost('/api/note/share/revoke', { shareId }, { silent: true }), 'NOTE_SHARE_REVOKE_FAILED');
+  requireSuccess(
+    await apiBasePost('/api/note/share/revoke', { shareId }, { silent: true }),
+    'NOTE_SHARE_REVOKE_FAILED',
+  );
 }
 
 export async function rotateNoteShare(shareId: string, input: NoteShareInput) {
@@ -113,9 +176,9 @@ export async function rotateNoteShare(shareId: string, input: NoteShareInput) {
   );
 }
 
-export async function resolvePublicNoteShare(token: string, accessCode = '', pageId = '') {
+export async function resolvePublicNoteShare(token: string, accessCode = '', pageId = '', accessTicket = '') {
   return requireSuccess<PublicNoteShareData>(
-    await apiBasePost('/api/note/share/resolve', { token, accessCode, pageId }, { silent: true }),
+    await apiBasePost('/api/note/share/resolve', { token, accessCode, pageId, accessTicket }, { silent: true }),
     'NOTE_SHARE_RESOLVE_FAILED',
   );
 }

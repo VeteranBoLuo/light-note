@@ -3,10 +3,19 @@
     <header class="note-readonly-preview__header">
       <div class="note-readonly-preview__heading">
         <nav class="note-readonly-preview__breadcrumb" :aria-label="t('note.currentDirectory')">
-          <BButton size="small" @click="emit('close')">{{ t('note.knowledgeRoot') }}</BButton>
+          <BButton size="small" class="note-readonly-preview__crumb" @click="emit('close')">
+            {{ t('note.knowledgeRoot') }}
+          </BButton>
           <template v-for="item in parentBreadcrumb" :key="item.id">
-            <span aria-hidden="true">/</span>
-            <span>{{ item.title || t('note.untitled') }}</span>
+            <span class="note-readonly-preview__crumb-separator" aria-hidden="true">/</span>
+            <BButton
+              size="small"
+              class="note-readonly-preview__crumb"
+              :title="item.title || t('note.untitled')"
+              @click="emit('openPage', item)"
+            >
+              {{ item.title || t('note.untitled') }}
+            </BButton>
           </template>
         </nav>
         <div class="note-readonly-preview__title-row">
@@ -44,7 +53,7 @@
       </div>
     </header>
 
-    <div v-auto-scrollbar class="note-readonly-preview__scroll">
+    <div ref="previewScrollRef" v-auto-scrollbar class="note-readonly-preview__scroll">
       <div v-if="loading" class="note-readonly-preview__loading">
         <BLoading inline loading :title="t('common.loading')" />
       </div>
@@ -124,7 +133,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -150,6 +159,7 @@
   import { handleNoteContentImagePreviewEvent, prepareNoteContentPreviewImages } from '@/utils/noteImagePreview';
   import { normalizeReferencedFilePreviewInfo, type ReferencedFilePreviewInfo } from '@/utils/noteResourceNavigation';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
+  import { scrollIntoContainer } from '@/utils/zoom';
   import {
     resolveAiSourceNavigation,
     type AiSource,
@@ -175,24 +185,40 @@
     function?: () => void;
   }
 
+  interface NoteOutlineItem {
+    id?: string;
+    text: string;
+    level: number;
+  }
+
+  interface PreviewOutlineTarget {
+    id: string;
+    requestId: number;
+  }
+
   const props = withDefaults(
     defineProps<{
       noteId: string;
       seed?: Record<string, any> | null;
       childCount?: number;
       menuOptions?: PreviewMenuOption[];
+      outlineTarget?: PreviewOutlineTarget | null;
     }>(),
     {
       seed: null,
       childCount: 0,
       menuOptions: () => [],
+      outlineTarget: null,
     },
   );
   const emit = defineEmits<{
     close: [];
+    openPage: [page: PreviewBreadcrumbItem];
     edit: [];
     browseChildren: [];
     pendingState: [pending: boolean];
+    outlineChange: [headings: NoteOutlineItem[]];
+    outlineActiveChange: [id: string | null];
   }>();
   const { t } = useI18n();
   const router = useRouter();
@@ -202,6 +228,7 @@
   const previewHtml = ref('');
   const previewSourceHtml = ref('');
   const previewContentRef = ref<HTMLElement | null>(null);
+  const previewScrollRef = ref<HTMLElement | null>(null);
   const resolvedResourceRefs = ref<ResolvedResourceReference[]>([]);
   const resourcePreviewVisible = ref(false);
   const resourcePreview = ref<{ ref: ResourceRef; title: string } | null>(null);
@@ -213,6 +240,9 @@
   let requestSeq = 0;
   let resourceResolveSeq = 0;
   let inlineFilePreviewRequestId = 0;
+  const previewHeadingElements = new Map<string, HTMLElement>();
+  let outlineSpyRoot: HTMLElement | null = null;
+  let outlineSpyFrame = 0;
 
   const displayNote = computed(() => ({ ...(props.seed || {}), ...detail.value }));
   // 操作成功后父级会立即更新 seed；优先使用它，避免刚加载的详情副本把新状态覆盖回去。
@@ -361,9 +391,68 @@
     inlineFilePreviewInfo.value = null;
   }
 
-  async function decoratePreviewImages() {
+  function clearPreviewOutline() {
+    previewHeadingElements.clear();
+    emit('outlineChange', []);
+    emit('outlineActiveChange', null);
+  }
+
+  function updateActivePreviewHeading() {
+    const root = previewScrollRef.value;
+    if (!root || !previewHeadingElements.size) {
+      emit('outlineActiveChange', null);
+      return;
+    }
+    const rootRect = root.getBoundingClientRect();
+    const anchor = rootRect.top + Math.min(80, Math.max(16, rootRect.height * 0.16));
+    let activeId: string | null = null;
+    for (const [id, element] of previewHeadingElements) {
+      if (element.getBoundingClientRect().top <= anchor) activeId = id;
+      else break;
+    }
+    emit('outlineActiveChange', activeId || previewHeadingElements.keys().next().value || null);
+  }
+
+  function scheduleActivePreviewHeading() {
+    if (outlineSpyFrame) return;
+    outlineSpyFrame = window.requestAnimationFrame(() => {
+      outlineSpyFrame = 0;
+      updateActivePreviewHeading();
+    });
+  }
+
+  function setupPreviewOutlineSpy() {
+    const root = previewScrollRef.value;
+    if (outlineSpyRoot === root) return;
+    outlineSpyRoot?.removeEventListener('scroll', scheduleActivePreviewHeading);
+    window.removeEventListener('resize', scheduleActivePreviewHeading);
+    outlineSpyRoot = root;
+    outlineSpyRoot?.addEventListener('scroll', scheduleActivePreviewHeading, { passive: true });
+    if (outlineSpyRoot) window.addEventListener('resize', scheduleActivePreviewHeading, { passive: true });
+  }
+
+  async function decoratePreviewContent(parentRequestSeq: number) {
     await nextTick();
+    if (parentRequestSeq !== requestSeq) return;
     prepareNoteContentPreviewImages(previewContentRef.value, t('noteDetail.editor.imagePreview'));
+    setupPreviewOutlineSpy();
+    previewHeadingElements.clear();
+    const headings = previewContentRef.value
+      ? Array.from(previewContentRef.value.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6')).filter((heading) =>
+          Boolean(String(heading.textContent || '').trim()),
+        )
+      : [];
+    const outline = headings.map((heading, index) => {
+      const id = `preview:${props.noteId}:${index}`;
+      previewHeadingElements.set(id, heading);
+      return {
+        id,
+        text: String(heading.textContent || '').trim(),
+        level: Number(heading.tagName.slice(1)) || 1,
+      };
+    });
+    emit('outlineChange', outline);
+    updateActivePreviewHeading();
   }
 
   async function resolvePreviewResourceRefs(html: string, parentRequestSeq: number) {
@@ -378,7 +467,7 @@
       previewHtml.value = presentResourceReferenceChips(html, resolved, {
         unavailableLabel: (snapshotTitle) => t('note.resourceRefUnavailable', { title: snapshotTitle }),
       });
-      void decoratePreviewImages();
+      void decoratePreviewContent(parentRequestSeq);
     } catch {
       // 引用解析失败时保留正文，但不允许未经归属校验的链接直接导航。
     }
@@ -396,6 +485,7 @@
     previewSourceHtml.value = '';
     resolvedResourceRefs.value = [];
     resourceResolveSeq += 1;
+    clearPreviewOutline();
     closeResourcePreview();
     closeReferencedFileInlinePreview();
     try {
@@ -427,12 +517,30 @@
     } finally {
       if (seq === requestSeq) {
         loading.value = false;
-        void decoratePreviewImages();
+        void decoratePreviewContent(seq);
       }
     }
   }
 
   watch(() => props.noteId, loadPreview, { immediate: true });
+  watch(
+    () => props.outlineTarget,
+    (target) => {
+      if (!target?.id) return;
+      const heading = previewHeadingElements.get(target.id);
+      const root = previewScrollRef.value;
+      if (!heading || !root) return;
+      emit('outlineActiveChange', target.id);
+      scrollIntoContainer(root, heading, 8);
+    },
+  );
+
+  onBeforeUnmount(() => {
+    if (outlineSpyFrame) window.cancelAnimationFrame(outlineSpyFrame);
+    outlineSpyRoot?.removeEventListener('scroll', scheduleActivePreviewHeading);
+    window.removeEventListener('resize', scheduleActivePreviewHeading);
+    previewHeadingElements.clear();
+  });
 </script>
 
 <style lang="less" scoped>
@@ -480,19 +588,27 @@
     color: var(--desc-color);
     font-size: 12px;
 
-    > button {
+    .note-readonly-preview__crumb.b_btn {
+      min-width: 0;
+      max-width: 180px;
       min-height: 26px;
       padding: 0;
-      border: 0;
-      color: var(--desc-color);
-      background: transparent;
-    }
-
-    > span {
-      min-width: 0;
       overflow: hidden;
+      border: 0 !important;
+      color: var(--desc-color);
+      background: transparent !important;
       text-overflow: ellipsis;
       white-space: nowrap;
+
+      &:hover,
+      &:focus-visible {
+        color: var(--resource-note-color, #00a884);
+        background: transparent !important;
+      }
+    }
+
+    .note-readonly-preview__crumb-separator {
+      flex: 0 0 auto;
     }
   }
 

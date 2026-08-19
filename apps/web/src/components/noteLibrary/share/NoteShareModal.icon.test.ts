@@ -12,4 +12,21 @@ describe('NoteShareModal 图标配置', () => {
     expect(icon.share).toContain('M13.5 4h5.25');
     expect(icon.share).not.toBe(icon.nullImg);
   });
+
+  it('切换分享目标或重新打开时清空上一篇笔记的临时状态', () => {
+    expect(source).toMatch(/function resetState\(\)[\s\S]*?stateVersion \+= 1;[\s\S]*?lastCreatedUrl\.value = ''/);
+    expect(source).toMatch(/watch\(\s*visible,[\s\S]*?resetState\(\);[\s\S]*?if \(open\) void loadRecords\(\)/);
+    expect(source).toMatch(
+      /watch\(\s*\(\) => props\.note\.id,[\s\S]*?resetState\(\);[\s\S]*?if \(visible\.value\) void loadRecords\(\)/,
+    );
+    expect(source).toContain('version !== stateVersion || !visible.value || props.note.id !== noteId');
+  });
+
+  it('将访问次数和限制次数分开展示', () => {
+    expect(source).toContain("t('noteShare.accessCount')");
+    expect(source).toContain('{{ record.accessCount }}');
+    expect(source).toContain("t('noteShare.limitCount')");
+    expect(source).toContain("record.maxAccessCount ?? t('noteShare.unlimited')");
+    expect(source).not.toContain("t('noteShare.visitMeta'");
+  });
 });

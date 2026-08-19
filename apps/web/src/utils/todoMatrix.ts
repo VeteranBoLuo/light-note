@@ -1,5 +1,5 @@
 import type { TodoItem } from '@/api/todoApi';
-import { parseTodoDate } from '@/utils/todoPlanning';
+import { normalizeTodoDateOnly, parseTodoDate } from '@/utils/todoPlanning';
 
 export type TodoMatrixQuadrantKey = 'importantUrgent' | 'importantNotUrgent' | 'otherUrgent' | 'otherNotUrgent';
 
@@ -10,14 +10,17 @@ export const TODO_MATRIX_QUADRANT_ORDER: TodoMatrixQuadrantKey[] = [
   'otherNotUrgent',
 ];
 
-type TodoMatrixSource = Pick<TodoItem, 'priority' | 'dueAt'>;
+type TodoMatrixSource = Pick<TodoItem, 'priority'> & Partial<Pick<TodoItem, 'dueAt' | 'occurrenceDate'>>;
 
 /**
- * 四象限中的“紧急”使用本地日历日判断：已逾期或今天截止都算紧急。
- * 明天 00:00 起、无截止时间以及非法时间都归为不紧急。
+ * 四象限中的“紧急”使用本地日历日判断：已逾期、今天截止或今天/此前的固定实例都算紧急。
+ * 明天 00:00 起、普通无日期以及非法时间归为不紧急。
  */
 export function isTodoMatrixUrgent(item: TodoMatrixSource, now = new Date()) {
-  if (!item.dueAt) return false;
+  if (!item.dueAt) {
+    const occurrenceDate = normalizeTodoDateOnly(item.occurrenceDate);
+    return Boolean(occurrenceDate && occurrenceDate <= normalizeTodoDateOnly(now));
+  }
   const dueAt = parseTodoDate(item.dueAt).getTime();
   if (!Number.isFinite(dueAt)) return false;
   const nextLocalDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();

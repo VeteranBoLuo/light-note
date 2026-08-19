@@ -76,6 +76,7 @@ describe('note share public resolve', () => {
     mocks.connection.rollback.mockResolvedValue();
     mocks.pool.query.mockResolvedValue([{ affectedRows: 0 }]);
     mocks.issueNoteShareTicket.mockResolvedValue({ token: 'ticket-value', expiresIn: 1800 });
+    mocks.readNoteShareTicket.mockResolvedValue(null);
     mocks.getSharedNotePage.mockResolvedValue({
       page: {
         id: 'root-1',
@@ -106,9 +107,9 @@ describe('note share public resolve', () => {
     expect(mocks.connection.query.mock.calls[0][0]).toContain('s.token_hash = ?');
     expect(mocks.connection.query.mock.calls[0][1][0]).toMatch(/^[a-f0-9]{64}$/u);
     expect(mocks.connection.query.mock.calls[0][1][0]).not.toContain(token);
-    expect(mocks.connection.query.mock.calls.some(([sql]) => String(sql).includes('access_count = access_count + 1'))).toBe(
-      true,
-    );
+    expect(
+      mocks.connection.query.mock.calls.some(([sql]) => String(sql).includes('access_count = access_count + 1')),
+    ).toBe(true);
     expect(mocks.connection.commit).toHaveBeenCalledTimes(1);
     expect(mocks.issueNoteShareTicket).toHaveBeenCalledWith({
       shareId: 'share-1',
@@ -139,10 +140,7 @@ describe('note share public resolve', () => {
       .mockResolvedValueOnce([{ affectedRows: 1 }]);
     const res = mockRes();
 
-    await resolveNoteShare(
-      { body: { token: 't'.repeat(43) }, ip: '203.0.113.8', headers: {}, socket: {} },
-      res,
-    );
+    await resolveNoteShare({ body: { token: 't'.repeat(43) }, ip: '203.0.113.8', headers: {}, socket: {} }, res);
 
     expect(mocks.getSharedNotePage).not.toHaveBeenCalled();
     expect(mocks.issueNoteShareTicket).not.toHaveBeenCalled();
@@ -150,6 +148,72 @@ describe('note share public resolve', () => {
       mocks.connection.query.mock.calls.some(([sql]) => String(sql).includes('access_count = access_count + 1')),
     ).toBe(false);
     expect(mocks.connection.commit).toHaveBeenCalledTimes(1);
+    expect(res.body).toMatchObject({ status: 410, data: { errorCode: 'SHARE_ACCESS_LIMIT_REACHED' } });
+  });
+
+  it('同一阅读会话刷新时不重复计数，达到上限后仍可继续当前会话', async () => {
+    const existingTicket = {
+      shareId: 'share-1',
+      rootNoteId: 'root-1',
+      ownerUserId: 'owner-1',
+      scopeType: 'subtree',
+    };
+    mocks.readNoteShareTicket.mockResolvedValue(existingTicket);
+    mocks.connection.query
+      .mockResolvedValueOnce([
+        [activeShareRow({ access_count: 1, max_access_count: 1, access_code_hash: 'protected' })],
+      ])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]);
+    const res = mockRes();
+
+    await resolveNoteShare(
+      {
+        body: { token: 't'.repeat(43), accessTicket: 'a'.repeat(43) },
+        ip: '203.0.113.8',
+        headers: {},
+        socket: {},
+      },
+      res,
+    );
+
+    expect(mocks.readNoteShareTicket).toHaveBeenCalledWith('a'.repeat(43));
+    expect(mocks.getSharedNotePage).toHaveBeenCalled();
+    expect(mocks.issueNoteShareTicket).toHaveBeenCalledWith(existingTicket);
+    expect(
+      mocks.connection.query.mock.calls.some(([sql]) => String(sql).includes('access_count = access_count + 1')),
+    ).toBe(false);
+    expect(
+      mocks.connection.query.mock.calls.some(
+        ([sql, params]) => String(sql).includes('INSERT INTO note_share_events') && params?.[2] === 'session_resumed',
+      ),
+    ).toBe(true);
+    expect(res.body).toMatchObject({ status: 200, data: { accessTicket: 'ticket-value' } });
+  });
+
+  it('其他分享的阅读票据不能绕过当前分享的访问上限', async () => {
+    mocks.readNoteShareTicket.mockResolvedValue({
+      shareId: 'share-2',
+      rootNoteId: 'root-2',
+      ownerUserId: 'owner-1',
+      scopeType: 'subtree',
+    });
+    mocks.connection.query
+      .mockResolvedValueOnce([[activeShareRow({ access_count: 1, max_access_count: 1 })]])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]);
+    const res = mockRes();
+
+    await resolveNoteShare(
+      {
+        body: { token: 't'.repeat(43), accessTicket: 'a'.repeat(43) },
+        ip: '203.0.113.8',
+        headers: {},
+        socket: {},
+      },
+      res,
+    );
+
+    expect(mocks.getSharedNotePage).not.toHaveBeenCalled();
+    expect(mocks.issueNoteShareTicket).not.toHaveBeenCalled();
     expect(res.body).toMatchObject({ status: 410, data: { errorCode: 'SHARE_ACCESS_LIMIT_REACHED' } });
   });
 

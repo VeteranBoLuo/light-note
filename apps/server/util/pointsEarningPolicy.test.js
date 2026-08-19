@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  POINTS_EARNING_C6_POLICY_VERSION,
   POINTS_EARNING_POLICY_VERSION,
   applyAchievementEarningPolicy,
-  assertPointsEarningC5ActivationReady,
+  assertPointsEarningActivationReady,
   checkinPointsForStreak,
+  dailyClaimRef,
+  earningWritesEnabled,
   earningPolicyVersionForDay,
   earningPolicyVersionForWeek,
   getEarningPolicySnapshot,
@@ -26,7 +29,7 @@ describe('pointsEarningPolicy', () => {
 
   it('激活写入要求完整日周边界，用户积分中心可单独灰度', async () => {
     await expect(
-      assertPointsEarningC5ActivationReady({
+      assertPointsEarningActivationReady({
         db: { query: vi.fn() },
         runtime: {
           enabled: true,
@@ -40,7 +43,7 @@ describe('pointsEarningPolicy', () => {
 
     const db = { query: vi.fn() };
     await expect(
-      assertPointsEarningC5ActivationReady({
+      assertPointsEarningActivationReady({
         db,
         runtime: {
           enabled: false,
@@ -58,7 +61,7 @@ describe('pointsEarningPolicy', () => {
   it('开启治理时缺任一迁移标记都失败关闭', async () => {
     const db = { query: vi.fn().mockResolvedValue([[{ migrationKey: 'points-earning-c5-baseline-v1' }]]) };
     await expect(
-      assertPointsEarningC5ActivationReady({
+      assertPointsEarningActivationReady({
         db,
         runtime: {
           enabled: false,
@@ -79,7 +82,7 @@ describe('pointsEarningPolicy', () => {
     ];
     const db = { query: vi.fn().mockResolvedValue([completeMarkers]) };
     await expect(
-      assertPointsEarningC5ActivationReady({
+      assertPointsEarningActivationReady({
         db,
         runtime: {
           enabled: false,
@@ -93,7 +96,7 @@ describe('pointsEarningPolicy', () => {
     ).rejects.toMatchObject({ code: 'POINTS_CAMPAIGN_GOVERNANCE_REQUIRED' });
 
     await expect(
-      assertPointsEarningC5ActivationReady({
+      assertPointsEarningActivationReady({
         db,
         runtime: {
           enabled: false,
@@ -134,6 +137,59 @@ describe('pointsEarningPolicy', () => {
     expect(getPointsEarningRuntime({ POINTS_EARNING_C5_ENABLED: 'surprise' }).enabled).toBe(false);
   });
 
+  it('C6 只在新的完整自然日切换任务，复用 C5 奖励并使用独立领取 ref', () => {
+    const runtime = getPointsEarningRuntime({
+      POINTS_EARNING_C5_ENABLED: 'true',
+      POINTS_EARNING_C5_EFFECTIVE_DAY: '20260818',
+      POINTS_EARNING_C5_EFFECTIVE_WEEK: '202634',
+      POINTS_EARNING_C6_ENABLED: 'true',
+      POINTS_EARNING_C6_EFFECTIVE_DAY: '20260820',
+    });
+
+    expect(earningPolicyVersionForDay('20260819', runtime)).toBe('points-earning-c5');
+    expect(earningPolicyVersionForDay('20260820', runtime)).toBe(POINTS_EARNING_C6_POLICY_VERSION);
+    expect(resolveDailyQuestStages(POINTS_EARNING_C6_POLICY_VERSION).map(({ points }) => points)).toEqual([15, 25]);
+    expect(checkinPointsForStreak(6, POINTS_EARNING_C6_POLICY_VERSION)).toBe(20);
+    expect(dailyClaimRef('20260820', 3, POINTS_EARNING_C6_POLICY_VERSION)).toBe('daily:c6:20260820:3');
+    expect(earningWritesEnabled(POINTS_EARNING_C6_POLICY_VERSION, runtime)).toBe(true);
+    expect(earningWritesEnabled(undefined, runtime)).toBe(true);
+    expect(earningWritesEnabled('points-earning-future', runtime)).toBe(false);
+    expect(
+      earningWritesEnabled(
+        POINTS_EARNING_C6_POLICY_VERSION,
+        getPointsEarningRuntime({
+          POINTS_EARNING_C5_ENABLED: 'true',
+          POINTS_EARNING_C6_ENABLED: 'false',
+          POINTS_EARNING_C6_EFFECTIVE_DAY: '20260820',
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it('C6 写闸要求 C5 基础开关和合法的新日边界', async () => {
+    await expect(
+      assertPointsEarningActivationReady({
+        db: { query: vi.fn() },
+        runtime: getPointsEarningRuntime({
+          POINTS_EARNING_C6_ENABLED: 'true',
+          POINTS_EARNING_C6_EFFECTIVE_DAY: '20260820',
+        }),
+      }),
+    ).rejects.toMatchObject({ code: 'POINTS_EARNING_C6_EFFECTIVE_BOUNDARY_REQUIRED' });
+
+    await expect(
+      assertPointsEarningActivationReady({
+        db: { query: vi.fn() },
+        runtime: getPointsEarningRuntime({
+          POINTS_EARNING_C5_ENABLED: 'true',
+          POINTS_EARNING_C5_EFFECTIVE_DAY: '20260820',
+          POINTS_EARNING_C5_EFFECTIVE_WEEK: '202634',
+          POINTS_EARNING_C6_EFFECTIVE_DAY: '20260819',
+        }),
+      }),
+    ).rejects.toMatchObject({ code: 'POINTS_EARNING_C6_BOUNDARY_INVALID' });
+  });
+
   it('未配置边界不查锁表；配置边界后读取既有版本且不因暂停回退', async () => {
     const dbWithoutBoundary = { query: vi.fn() };
     await expect(
@@ -152,6 +208,18 @@ describe('pointsEarningPolicy', () => {
     const db = { query: vi.fn().mockResolvedValueOnce([[{ policyVersion: 'points-earning-c5' }]]) };
     await expect(resolvePointsEarningPeriodVersion('day', '20260818', { db, runtime: pausedRuntime })).resolves.toBe(
       'points-earning-c5',
+    );
+
+    const c6Runtime = getPointsEarningRuntime({
+      POINTS_EARNING_C5_ENABLED: 'true',
+      POINTS_EARNING_C5_EFFECTIVE_DAY: '20260818',
+      POINTS_EARNING_C5_EFFECTIVE_WEEK: '202634',
+      POINTS_EARNING_C6_ENABLED: 'false',
+      POINTS_EARNING_C6_EFFECTIVE_DAY: '20260820',
+    });
+    const c6Db = { query: vi.fn().mockResolvedValueOnce([[{ policyVersion: 'points-earning-c6' }]]) };
+    await expect(resolvePointsEarningPeriodVersion('day', '20260820', { db: c6Db, runtime: c6Runtime })).resolves.toBe(
+      'points-earning-c6',
     );
   });
 });

@@ -950,10 +950,22 @@
     align-items: center;
     gap: 7px;
     padding-left: 10px;
-    border: 1px solid var(--card-border-color);
+    border: 0;
     border-radius: 10px;
     color: var(--resource-file-color, #ff8a00);
-    background: var(--menu-body-bg-color);
+    background: var(--bl-input-noBorder-bg-color);
+    transition:
+      color 0.2s,
+      background-color 0.2s;
+  }
+
+  .cloud-sort-control:hover {
+    background: var(--primary-btn-h-bg-color);
+  }
+
+  .cloud-sort-control:focus-within {
+    outline: 2px solid var(--focus-ring-color);
+    outline-offset: 1px;
   }
 
   .cloud-sort-select {

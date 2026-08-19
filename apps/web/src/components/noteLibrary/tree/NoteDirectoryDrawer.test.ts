@@ -386,7 +386,7 @@ describe('NoteDirectoryDrawer 返回层级', () => {
     expect(toggledTop).toHaveBeenCalledWith(expect.objectContaining({ id: 'local', isTop: true }));
   });
 
-  it('目录能力关闭时只展示标签且不会发送隐藏的目录请求', async () => {
+  it('目录能力关闭时不再把标签伪装成目录页签，也不会发送隐藏的目录请求', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const app = createApp(
@@ -415,40 +415,8 @@ describe('NoteDirectoryDrawer 返回层级', () => {
     unmount = () => app.unmount();
     await flushUi();
 
-    expect(document.querySelector('.note-drawer-tags')).not.toBeNull();
+    expect(document.querySelector('.note-drawer-tags')).toBeNull();
+    expect(document.querySelector('.note-drawer-empty')).not.toBeNull();
     expect(mocks.apiBasePost).not.toHaveBeenCalled();
-  });
-
-  it('用户直接切换目录与标签时向页面层派发偏好模式', async () => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    const modeChanged = vi.fn();
-    const app = createApp(
-      defineComponent({
-        setup() {
-          return () => h(NoteDirectoryDrawer, { open: true, currentParentId: null, onModeChange: modeChanged });
-        },
-      }),
-    );
-    app.use(
-      createI18n({
-        legacy: false,
-        locale: 'zh-CN',
-        messages: { 'zh-CN': { note: {}, common: {} } },
-        missingWarn: false,
-        fallbackWarn: false,
-      }),
-    );
-    app.directive('auto-scrollbar', {});
-    app.mount(host);
-    unmount = () => app.unmount();
-    await flushUi();
-
-    const tabs = document.querySelectorAll<HTMLElement>('[role="tab"]');
-    expect(tabs).toHaveLength(2);
-    tabs[1].click();
-    await flushUi();
-
-    expect(modeChanged).toHaveBeenCalledWith('tags');
   });
 });

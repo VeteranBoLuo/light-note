@@ -79,7 +79,6 @@
               @toggle-top="toggleSidebarPageTop"
               @move="openMoveSelf"
               @rename="openRenamePage"
-              @copy-link="copySidebarPageLink"
               @share="openNoteShare"
               @delete="deleteSidebarPage"
               @go-library="openBreadcrumbPage(null)"
@@ -238,7 +237,6 @@
         @toggle-top="toggleSidebarPageTop"
         @move="openMoveSelf"
         @rename="openRenamePage"
-        @copy-link="copySidebarPageLink"
         @share="openNoteShare"
         @delete="deleteSidebarPage"
         @markdown-heading-click="scrollToMarkdownHeading"
@@ -359,7 +357,6 @@
   import { resolveNoteDetailReturnPath } from '@/utils/noteDetailNavigation';
   import { resolveNoteWorkspaceLayout, type NoteWorkspaceLayoutState } from '@/utils/noteWorkspaceLayout';
   import { markNoteDraftPromoted } from '@/utils/routeViewKey';
-  import { copyTextToClipboard } from '@/utils/clipboard';
   import { NOTE_TREE_ROOT_KEY, useNoteTree } from '@/composables/useNoteTree';
   import type { NoteTreeItem } from '@/types/noteTree';
   import {
@@ -391,9 +388,7 @@
     () => import('@/components/noteLibrary/tree/NoteAttachPagesModal.vue'),
   );
   const NoteMoveModal = createDeferredDetailFeature(() => import('@/components/noteLibrary/tree/NoteMoveModal.vue'));
-  const NoteShareModal = createDeferredDetailFeature(
-    () => import('@/components/noteLibrary/share/NoteShareModal.vue'),
-  );
+  const NoteShareModal = createDeferredDetailFeature(() => import('@/components/noteLibrary/share/NoteShareModal.vue'));
   const NoteRenameModal = createDeferredDetailFeature(
     () => import('@/components/noteLibrary/tree/NoteRenameModal.vue'),
   );
@@ -1265,18 +1260,6 @@
     invalidateNoteReadCaches(target.id);
     message.success(target.isTop ? t('common.pinned') : t('common.unpinned'));
     await refreshTree();
-  }
-
-  async function copySidebarPageLink(target: NoteTreeItem) {
-    const relative = router.resolve({ path: `/noteLibrary/${encodeURIComponent(target.id)}` }).href;
-    let link = relative;
-    try {
-      link = new URL(relative, window.location.origin).toString();
-    } catch {
-      // 自定义 WebView origin 不完整时仍可复制站内相对地址。
-    }
-    if (await copyTextToClipboard(link)) message.success(t('common.linkCopied'));
-    else message.error(t('note.copyLinkFailed'));
   }
 
   async function deleteSidebarPage(target: NoteTreeItem) {

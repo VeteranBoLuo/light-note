@@ -4,11 +4,20 @@
       class="noteType-select"
       :class="{ active: filterVisible || tag !== undefined }"
       :aria-expanded="filterVisible"
+      :aria-label="`${t('note.tagsTab')}：${viewNoteFilter}`"
+      :title="viewNoteFilter"
       @click="filterVisible = true"
       v-click-log="OPERATION_LOG_MAP.noteLibrary.filterNote"
     >
-      <span class="filter-label text-hidden">{{ viewNoteFilter }}</span>
-      <svg-icon :src="icon.arrow_left" :style="{ rotate: filterVisible ? '-90deg' : '90deg' }" />
+      <SvgIcon :src="icon.manage_categoryBtn_tag" size="16" aria-hidden="true" />
+      <span v-if="!compact" class="filter-label text-hidden">{{ viewNoteFilter }}</span>
+      <SvgIcon
+        class="filter-chevron"
+        :class="{ 'is-open': filterVisible }"
+        :src="icon.noteTree.chevron"
+        size="14"
+        aria-hidden="true"
+      />
     </BButton>
     <BDrawer
       :open="filterVisible"
@@ -81,10 +90,19 @@
       class="noteType-select"
       :class="{ active: filterVisible || tag !== undefined }"
       :aria-expanded="filterVisible"
+      :aria-label="`${t('note.tagsTab')}：${viewNoteFilter}`"
+      :title="viewNoteFilter"
       v-click-log="OPERATION_LOG_MAP.noteLibrary.filterNote"
     >
+      <SvgIcon :src="icon.manage_categoryBtn_tag" size="16" aria-hidden="true" />
       <span class="filter-label text-hidden">{{ viewNoteFilter }}</span>
-      <svg-icon :src="icon.arrow_left" :style="{ rotate: filterVisible ? '-90deg' : '90deg' }" />
+      <SvgIcon
+        class="filter-chevron"
+        :class="{ 'is-open': filterVisible }"
+        :src="icon.noteTree.chevron"
+        size="14"
+        aria-hidden="true"
+      />
     </BButton>
     <template #content>
       <div class="filter-container" role="listbox" :aria-label="t('note.tagDirectory')">
@@ -161,12 +179,17 @@
   import { bookmarkStore } from '@/store';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
 
-  const props = defineProps({
-    allTags: {
-      type: Array as () => Array<{ id: string; name: string }>,
-      default: () => [],
+  const props = withDefaults(
+    defineProps<{
+      allTags?: Array<{ id: string; name: string }>;
+      compact?: boolean;
+    }>(),
+    {
+      allTags: () => [],
+      compact: false,
     },
-  });
+  );
+  const emit = defineEmits<{ select: [key: 'all' | 'null' | string] }>();
 
   const filterVisible = ref(false);
   const keyword = ref('');
@@ -201,14 +224,12 @@
     } else {
       query.tag = String(tag);
     }
+    emit('select', tag === 'all' || tag === undefined ? 'all' : String(tag));
     const navigate = () => router.push({ path: '/noteLibrary', query });
     if (bookmark.isMobile) {
-      void closeCurrentMobileOverlayThen(
-        () => {
-          filterVisible.value = false;
-        },
-        navigate,
-      );
+      void closeCurrentMobileOverlayThen(() => {
+        filterVisible.value = false;
+      }, navigate);
       return;
     }
     filterVisible.value = false;
@@ -239,6 +260,28 @@
 
   .filter-label {
     max-width: 112px;
+  }
+  .filter-chevron {
+    flex: 0 0 auto;
+    opacity: 0.68;
+    transform: rotate(0deg);
+    transition:
+      transform 160ms ease,
+      opacity 160ms ease;
+
+    &.is-open {
+      transform: rotate(180deg);
+    }
+  }
+  .noteType-select:hover .filter-chevron,
+  .noteType-select.active .filter-chevron {
+    opacity: 0.88;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .filter-chevron {
+      transition: none;
+    }
   }
   .filter-container {
     /* 背景/圆角/阴影由 BPopover 面板统一提供,这里只管尺寸与布局,避免双重卡片 */

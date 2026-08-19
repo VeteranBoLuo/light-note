@@ -69,7 +69,11 @@
         >
           <SvgIcon :src="icon.arrow_right" size="17" aria-hidden="true" />
         </BButton>
-        <BButton class="note-mobile-page-level-list__more" :aria-label="t('common.more')" @click="openPageActions(item)">
+        <BButton
+          class="note-mobile-page-level-list__more"
+          :aria-label="t('common.more')"
+          @click="openPageActions(item)"
+        >
           <SvgIcon :src="icon.common.more" size="17" aria-hidden="true" />
         </BButton>
       </div>
@@ -95,9 +99,7 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import MobilePageActionsDrawer, {
-    type MobilePageActionItem,
-  } from '@/components/mobile/MobilePageActionsDrawer.vue';
+  import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import icon from '@/config/icon';
   import useNoteWorkspaceStore, { NOTE_TREE_ROOT_KEY } from '@/store/noteWorkspace';
   import type { NoteBreadcrumbItem, NoteTreeItem } from '@/types/noteTree';
@@ -131,7 +133,6 @@
     toggleTop: [node: NoteTreeItem];
     move: [node: NoteTreeItem];
     rename: [node: NoteTreeItem];
-    copyLink: [node: NoteTreeItem];
     share: [node: NoteTreeItem];
     delete: [node: NoteTreeItem];
   }>();
@@ -242,11 +243,6 @@
             },
           ]
         : []),
-      {
-        key: 'copyLink',
-        label: t('common.copyLink'),
-        icon: icon.cloudSpace.preview.copy,
-      },
       ...(props.writeEnabled
         ? [
             {
@@ -284,7 +280,6 @@
     else if (action.key === 'attach') emit('attach', item);
     else if (action.key === 'rename') emit('rename', item);
     else if (action.key === 'move') emit('move', item);
-    else if (action.key === 'copyLink') emit('copyLink', item);
     else if (action.key === 'share') emit('share', item);
     else if (action.key === 'delete') emit('delete', item);
   }

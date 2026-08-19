@@ -213,12 +213,17 @@ export default {
     ensureTodoMutationAllowed(ctx);
     const args = normalizePreparedCreateTodoArgs(input);
     const created = await withTransaction((connection) =>
-      createTodo(connection, ctx.userId, {
-        title: args.title,
-        description: args.description,
-        priority: args.priority,
-        dueAt: args.dueAt || null,
-      }),
+      createTodo(
+        connection,
+        ctx.userId,
+        {
+          title: args.title,
+          description: args.description,
+          priority: args.priority,
+          dueAt: args.dueAt || null,
+        },
+        { suppressUserRewards: Boolean(ctx.suppressUserRewards || ctx.adminContext) },
+      ),
     );
     return { id: created.id, title: args.title, dueAt: args.dueAt || null };
   },

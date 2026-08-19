@@ -1,6 +1,6 @@
 <template>
   <nav class="note-library-sidebar" :aria-label="t('note.libraryNavigation')">
-    <BTabs v-model:active-tab="activeTab" :options="tabs" variant="segment" />
+    <BTabs v-if="tabs.length > 1" v-model:active-tab="activeTab" :options="tabs" variant="segment" />
 
     <div v-if="activeTab === 'directory'" class="note-directory-panel">
       <BInput
@@ -70,7 +70,6 @@
           @toggle-top="emit('toggleTop', $event)"
           @move="emit('move', $event)"
           @rename="emit('rename', $event)"
-          @copy-link="emit('copyLink', $event)"
           @share="emit('share', $event)"
           @delete="emit('delete', $event)"
           @drag-start="(node, event) => emit('dragStart', node, event)"
@@ -82,17 +81,6 @@
       </p>
       <p v-if="treeError" class="note-tree-error">{{ t('note.treeLoadFailed') }}</p>
     </div>
-
-    <NoteTagSidebar
-      v-else-if="activeTab === 'tags'"
-      class="note-sidebar-tags"
-      :all-tags="allTags"
-      :total-count="totalCount"
-      :untagged-count="untaggedCount"
-      :loading="tagLoading"
-      defer-navigation
-      @select="emit('selectTag', $event)"
-    />
 
     <div v-else class="note-sidebar-outline">
       <slot name="outline" />
@@ -107,7 +95,6 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import NoteTagSidebar from '@/components/noteLibrary/library/NoteTagSidebar.vue';
   import NoteTreeRow from '@/components/noteLibrary/tree/NoteTreeRow.vue';
   import { NOTE_TREE_ROOT_KEY } from '@/composables/useNoteTree';
   import icon from '@/config/icon';
@@ -121,17 +108,14 @@
       treeScrollTop?: number;
       browseParentId?: string | null;
       surface?: 'library' | 'detail';
-      childrenByParent: Record<string, NoteTreeItem[]>;
-      expandedIds: Set<string>;
-      loadingKeys: Set<string>;
+      childrenByParent?: Record<string, NoteTreeItem[]>;
+      expandedIds?: Set<string>;
+      loadingKeys?: Set<string>;
       motionExpansionIds?: Set<string>;
       treeError?: string;
-      allTags?: any[];
-      totalCount?: number;
-      untaggedCount?: number | null;
-      tagLoading?: boolean;
       searchValue?: string;
       directoryEnabled?: boolean;
+      outlineEnabled?: boolean;
       writeEnabled?: boolean;
       dragEnabled?: boolean;
       searchActive?: boolean;
@@ -144,12 +128,12 @@
     }>(),
     {
       treeError: '',
-      allTags: () => [],
-      totalCount: 0,
-      untaggedCount: null,
-      tagLoading: false,
+      childrenByParent: () => ({}),
+      expandedIds: () => new Set<string>(),
+      loadingKeys: () => new Set<string>(),
       searchValue: '',
       directoryEnabled: true,
+      outlineEnabled: false,
       writeEnabled: true,
       dragEnabled: true,
       searchActive: false,
@@ -170,7 +154,6 @@
   const emit = defineEmits<{
     toggle: [node: NoteTreeItem];
     select: [id: string | null];
-    selectTag: [key: string];
     open: [id: string];
     browseChildren: [id: string];
     goLibrary: [];
@@ -179,7 +162,6 @@
     toggleTop: [node: NoteTreeItem];
     move: [node: NoteTreeItem];
     rename: [node: NoteTreeItem];
-    copyLink: [node: NoteTreeItem];
     share: [node: NoteTreeItem];
     delete: [node: NoteTreeItem];
     search: [value: string];
@@ -187,18 +169,11 @@
     dragEnd: [];
   }>();
   const { t } = useI18n();
-  const activeTab = defineModel<'directory' | 'tags' | 'outline'>('mode', { default: 'directory' });
-  const tabs = computed(() =>
-    props.surface === 'detail'
-      ? [
-          { key: 'directory', label: t('note.pagesTab') },
-          { key: 'outline', label: t('note.outlineTab') },
-        ]
-      : [
-          ...(props.directoryEnabled ? [{ key: 'directory', label: t('note.pagesTab') }] : []),
-          { key: 'tags', label: t('note.tagsTab') },
-        ],
-  );
+  const activeTab = defineModel<'directory' | 'outline'>('mode', { default: 'directory' });
+  const tabs = computed(() => [
+    ...(props.directoryEnabled ? [{ key: 'directory', label: t('note.pagesTab') }] : []),
+    ...(props.outlineEnabled || props.surface === 'detail' ? [{ key: 'outline', label: t('note.outlineTab') }] : []),
+  ]);
   const rootItems = computed(() => props.childrenByParent[NOTE_TREE_ROOT_KEY] || []);
   const treeScrollRef = ref<HTMLElement | null>(null);
   const directorySearch = computed({
@@ -206,9 +181,11 @@
     set: (value: string) => emit('search', value),
   });
   watch(
-    () => props.directoryEnabled,
-    (enabled) => {
-      if (!enabled && activeTab.value === 'directory' && props.surface === 'library') activeTab.value = 'tags';
+    tabs,
+    (options) => {
+      if (options.some((option) => option.key === activeTab.value)) return;
+      const first = options[0]?.key;
+      if (first === 'directory' || first === 'outline') activeTab.value = first;
     },
     { immediate: true },
   );
@@ -243,7 +220,6 @@
   }
 
   .note-directory-panel,
-  .note-sidebar-tags,
   .note-sidebar-outline {
     flex: 1;
     min-height: 0;

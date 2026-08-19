@@ -2,6 +2,7 @@ import pool from '../db/index.js';
 import { getActiveShopItems } from './points.js';
 import { getEconomyRuntime } from './pointsEconomyCatalog.js';
 import {
+  C5_EARNING_RULE_POLICY_VERSIONS,
   getEarningPolicySnapshot,
   ONE_TIME_POINTS_REASONS,
   OPERATIONS_POINTS_REASONS,
@@ -498,10 +499,11 @@ export async function getPointsGovernanceAnomalies(input = {}, { db = pool } = {
     db.query(
       `SELECT user_id AS userId, DATE(create_time) AS day, SUM(delta) AS amount
          FROM points_log
-        WHERE ${where.sql} AND policy_version = ? AND delta > 0 AND reason IN ('checkin', 'quest')
+        WHERE ${where.sql} AND policy_version IN (${C5_EARNING_RULE_POLICY_VERSIONS.map(() => '?').join(',')})
+          AND delta > 0 AND reason IN ('checkin', 'quest')
         GROUP BY user_id, DATE(create_time) HAVING SUM(delta) > 60
         ORDER BY amount DESC LIMIT ${limit}`,
-      [...where.params, POINTS_EARNING_POLICY_VERSION],
+      [...where.params, ...C5_EARNING_RULE_POLICY_VERSIONS],
     ),
     db.query(
       `SELECT user_id AS userId, reason, ref, COUNT(*) AS occurrences, MAX(create_time) AS latestAt

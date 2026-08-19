@@ -325,8 +325,13 @@
             :disabled="hasPendingOperation || todoBatchMutating"
             :deleting-id="deletingTodoId"
             @toggle-complete="toggleTodo"
+            @update-checklist="updateTodoChecklist"
             @edit="openTodoEditor"
             @delete="confirmDeleteTodo"
+            @add-to-calendar="openTodoCalendar"
+            @snooze="snoozeTodoItem"
+            @update-priority="updateTodoPriority"
+            @series-action="handleTodoSeriesAction"
           />
           <TodoScheduleView
             v-else-if="isTodoFocused && (todoView === 'agenda' || todoView === 'calendar')"
@@ -353,6 +358,7 @@
                     :series-id="node.seriesId"
                     :representative="node.representative"
                     :items="node.items"
+                    :series-items="node.seriesItems"
                     :selectable="todoSelectionMode"
                     :selected-ids="selectedTodoIds"
                     :disabled="hasPendingOperation || todoBatchMutating"
@@ -505,7 +511,7 @@
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
-  import { todoGroupKey, todoSnoozeAt, type TodoGroupKey, type TodoSnoozePreset } from '@/utils/todoPlanning';
+  import { todoSnoozeAt, type TodoGroupKey, type TodoSnoozePreset } from '@/utils/todoPlanning';
   import { buildTodoListNodes, type TodoListNode } from '@/utils/todoSeriesGrouping';
   import { updatePreference } from '@/utils/savePreference';
   import { generateUUID } from '@/utils/common';
@@ -546,6 +552,7 @@
   const todoUndoing = ref(false);
   const todoGroupLists = ref<Array<{ key: TodoGroupKey; count: number; items: TodoListNode[] }>>([]);
   let todoUndoTimer = 0;
+  let todoMidnightTimer = 0;
   const ensuredCalendarRanges = new Set<string>();
   const scrollContainer = ref<HTMLElement | null>(null);
   const showTopFade = ref(false);
@@ -677,8 +684,19 @@
     if (!validSorts.includes(todo.sort)) todo.sort = 'smart';
   }
   // 桌面与移动端共用的待办状态切换页签(未完成/已完成/全部)。
+  const todoPendingDisplayTotal = computed(() => {
+    if (todo.keyword || !['pending', 'all'].includes(todo.effectiveStatus)) return todo.pendingTotal;
+    const scheduledSeries = new Set<string>();
+    let standaloneCount = 0;
+    for (const item of todo.items) {
+      if (item.status !== 'pending') continue;
+      if (item.seriesId && item.series?.repeatMode === 'scheduled') scheduledSeries.add(item.seriesId);
+      else standaloneCount += 1;
+    }
+    return standaloneCount + scheduledSeries.size;
+  });
   const todoStatusTabOptions = computed<Array<{ key: TodoFilterStatus; label: string; badge?: number }>>(() => [
-    { key: 'pending', label: t('inbox.todoPending'), badge: todo.pendingTotal },
+    { key: 'pending', label: t('inbox.todoPending'), badge: todoPendingDisplayTotal.value },
     { key: 'completed', label: t('inbox.todoCompleted') },
     { key: 'all', label: t('inbox.all') },
   ]);
@@ -730,10 +748,12 @@
       resizeObserver = new ResizeObserver(updateScrollFade);
       resizeObserver.observe(scrollContainer.value);
     }
+    scheduleTodoMidnightRefresh();
   });
   onBeforeUnmount(() => {
     resizeObserver?.disconnect();
     window.clearTimeout(todoUndoTimer);
+    window.clearTimeout(todoMidnightTimer);
   });
 
   watch(
@@ -974,18 +994,28 @@
         : todo.status === 'all'
           ? ['overdue', 'today', 'upcoming', 'later', 'noDate', 'completed']
           : ['overdue', 'today', 'upcoming', 'later', 'noDate'];
-    const nodes = buildTodoListNodes(todo.items);
+    const nodes = buildTodoListNodes(todo.items, { sort: todo.sort });
     todoGroupLists.value = keys
       .map((key) => ({
         key,
-        items: nodes.filter((node) => todoGroupKey(node.kind === 'series' ? node.representative : node.item) === key),
+        items: nodes.filter((node) => node.bucket === key),
       }))
       .map((group) => ({
         ...group,
-        count: group.items.reduce((total, node) => total + (node.kind === 'series' ? node.items.length : 1), 0),
+        // 分组角标表达当前可操作的展示对象数；系列真实实例数在卡片入口和明细中单独披露。
+        count: group.items.length,
       }))
       .filter((group) => group.count > 0);
     selectedTodoIds.value = selectedTodoIds.value.filter((id) => todo.items.some((item) => item.id === id));
+  }
+  function scheduleTodoMidnightRefresh() {
+    window.clearTimeout(todoMidnightTimer);
+    const now = new Date();
+    const nextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 100);
+    todoMidnightTimer = window.setTimeout(() => {
+      syncTodoGroups();
+      scheduleTodoMidnightRefresh();
+    }, nextDay.getTime() - now.getTime());
   }
   async function updateTodoPriority(item: TodoItemType, priority: TodoPriority) {
     if (item.priority === priority) return;

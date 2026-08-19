@@ -170,6 +170,7 @@
     daily_note: 'growth.quest_daily_note',
     daily_bookmark: 'growth.quest_daily_bookmark',
     daily_file: 'growth.quest_daily_file',
+    daily_todo_create: 'growth.quest_daily_todo_create',
     daily_todo: 'growth.quest_daily_todo',
     daily_organize: 'growth.quest_daily_organize',
     knowledge_action_1: 'growth.quest_knowledge_action_1',

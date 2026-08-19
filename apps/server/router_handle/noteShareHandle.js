@@ -14,11 +14,7 @@ import {
   verifyShareAccessCode,
 } from '../util/sharePolicy.js';
 import { issueNoteShareTicket, readNoteShareTicket } from '../util/noteShareTicket.js';
-import {
-  NoteShareScopeError,
-  getSharedNotePage,
-  listSharedNoteChildren,
-} from '../util/services/noteShareService.js';
+import { NoteShareScopeError, getSharedNotePage, listSharedNoteChildren } from '../util/services/noteShareService.js';
 import { normalizeCanonicalNoteRecord } from '../util/noteReadModel.js';
 
 const NOTE_SHARE_SELECT = `
@@ -105,10 +101,7 @@ function shareInputError(req, res, error) {
   const messages = {
     SHARE_EXPIRY_INVALID: ['分享有效期无效', 'The share expiry is invalid'],
     SHARE_DESCRIPTION_TOO_LONG: ['分享说明不能超过 200 个字符', 'The share description is too long'],
-    SHARE_ACCESS_CODE_INVALID: [
-      '访问码需为 4～12 位字母或数字',
-      'The access code must contain 4–12 letters or digits',
-    ],
+    SHARE_ACCESS_CODE_INVALID: ['访问码需为 4～12 位字母或数字', 'The access code must contain 4–12 letters or digits'],
     SHARE_ACCESS_LIMIT_INVALID: ['访问次数限制需为 1～10000', 'The access limit must be between 1 and 10000'],
     NOTE_SHARE_SCOPE_INVALID: ['分享范围无效', 'The share scope is invalid'],
   };
@@ -295,6 +288,16 @@ function scopeError(req, res, error) {
   return true;
 }
 
+function ticketMatchesShare(ticket, row) {
+  return Boolean(
+    ticket &&
+    String(ticket.shareId) === String(row.id) &&
+    String(ticket.rootNoteId) === String(row.root_note_id) &&
+    String(ticket.ownerUserId) === String(row.owner_user_id) &&
+    String(ticket.scopeType) === String(row.scope_type),
+  );
+}
+
 export async function resolveNoteShare(req, res) {
   setPublicShareHeaders(res);
   const token = String(req.body?.token || '').trim();
@@ -320,20 +323,23 @@ export async function resolveNoteShare(req, res) {
       return publicError(req, res, 404, 'SHARE_NOT_FOUND', '分享链接不存在或已失效', 'The share is unavailable');
     }
     const row = rows[0];
-    const state = getNoteShareState(row);
+    const providedTicket = String(req.body?.accessTicket || '').trim();
+    const resumedTicket = providedTicket ? await readNoteShareTicket(providedTicket) : null;
+    const resumesReadingSession = ticketMatchesShare(resumedTicket, row);
+    const state = getNoteShareState(row, Date.now(), resumesReadingSession ? 'session' : 'access');
     if (state !== 'active') {
       await appendShareEvent(connection, req, row.id, 'viewed', state);
       await connection.commit();
       transactionStarted = false;
       return shareStateError(req, res, state);
     }
-    if (row.access_code_hash && !String(req.body?.accessCode || '').trim()) {
+    if (!resumesReadingSession && row.access_code_hash && !String(req.body?.accessCode || '').trim()) {
       await appendShareEvent(connection, req, row.id, 'viewed', 'code_required');
       await connection.commit();
       transactionStarted = false;
       return publicError(req, res, 403, 'SHARE_CODE_REQUIRED', '请输入访问码', 'Enter the access code');
     }
-    if (!verifyShareAccessCode(req.body?.accessCode, row.access_code_hash)) {
+    if (!resumesReadingSession && !verifyShareAccessCode(req.body?.accessCode, row.access_code_hash)) {
       await appendShareEvent(connection, req, row.id, 'viewed', 'code_invalid');
       await connection.commit();
       transactionStarted = false;
@@ -355,13 +361,15 @@ export async function resolveNoteShare(req, res) {
       parentId: row.root_note_id,
     });
     const ticket = await issueNoteShareTicket(ticketScope);
-    await connection.query(
-      `UPDATE note_shares
-          SET access_count = access_count + 1, last_access_at = NOW(), update_time = NOW()
-        WHERE id = ?`,
-      [row.id],
-    );
-    await appendShareEvent(connection, req, row.id, 'viewed', 'succeeded');
+    if (!resumesReadingSession) {
+      await connection.query(
+        `UPDATE note_shares
+            SET access_count = access_count + 1, last_access_at = NOW(), update_time = NOW()
+          WHERE id = ?`,
+        [row.id],
+      );
+    }
+    await appendShareEvent(connection, req, row.id, 'viewed', resumesReadingSession ? 'session_resumed' : 'succeeded');
     await connection.commit();
     transactionStarted = false;
     void cleanupOldShareEvents();
@@ -408,11 +416,25 @@ async function authorizeNoteShareTicket(req, res, db = pool) {
     ticket = await readNoteShareTicket(req.body?.accessTicket);
   } catch (error) {
     console.error('[note-share] session read failed code=%s', stableAgentErrorCode(error));
-    publicError(req, res, 503, 'NOTE_SHARE_SESSION_UNAVAILABLE', '阅读会话暂时不可用', 'The reading session is unavailable');
+    publicError(
+      req,
+      res,
+      503,
+      'NOTE_SHARE_SESSION_UNAVAILABLE',
+      '阅读会话暂时不可用',
+      'The reading session is unavailable',
+    );
     return null;
   }
   if (!ticket) {
-    publicError(req, res, 403, 'NOTE_SHARE_SESSION_INVALID', '阅读会话已过期，请重新打开', 'The reading session expired');
+    publicError(
+      req,
+      res,
+      403,
+      'NOTE_SHARE_SESSION_INVALID',
+      '阅读会话已过期，请重新打开',
+      'The reading session expired',
+    );
     return null;
   }
   try {

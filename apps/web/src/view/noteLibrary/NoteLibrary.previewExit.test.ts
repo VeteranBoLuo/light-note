@@ -22,11 +22,18 @@ describe('笔记库桌面预览退出', () => {
     expect(source).toContain('element.scrollLeft = snapshot.left');
   });
 
+  it('沿父级面包屑切换预览不会覆盖最初的列表滚动快照', () => {
+    const openBreadcrumbFunction = source.match(/function openPreviewBreadcrumbPage[\s\S]*?\n  }/)?.[0] || '';
+    expect(openBreadcrumbFunction).toContain('setDesktopPreviewPage(noteId, source)');
+    expect(openBreadcrumbFunction).not.toContain('captureDesktopPreviewScroll');
+    expect(openBreadcrumbFunction).not.toContain('closeDesktopPreview');
+  });
+
   it('切换目录、标签和完整重置不会错误恢复旧列表位置', () => {
     const discardCalls = source.match(/closeDesktopPreview\(false\);/g) || [];
     expect(discardCalls.length).toBeGreaterThanOrEqual(3);
     expect(source).toMatch(/async function selectDirectory[\s\S]*closeDesktopPreview\(false\);/);
-    expect(source).toMatch(/function selectMobileDirectoryTag[\s\S]*closeDesktopPreview\(false\);/);
+    expect(source).toMatch(/function handleTagFilterSelect[\s\S]*closeDesktopPreview\(false\);/);
     expect(source).toMatch(/async function resetNoteLibrary[\s\S]*closeDesktopPreview\(false\);/);
   });
 

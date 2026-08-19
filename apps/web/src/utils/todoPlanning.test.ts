@@ -113,6 +113,23 @@ describe('todoPlanning', () => {
     expect(todoConfiguredReminderAt(item)).toBe('2026-08-18T10:30:00');
     expect(todoPastReminderAt(item, new Date('2026-08-18T12:00:00'))).toBe('2026-08-18T10:30:00');
     expect(todoPastReminderAt(item, new Date('2026-08-18T10:00:00'))).toBe('');
+    expect(todoGroupKey(item, new Date('2026-08-19T12:00:00'))).toBe('overdue');
+  });
+
+  it('只有提醒已过、计划仍在未来时不误归为逾期', () => {
+    expect(
+      todoGroupKey(
+        {
+          status: 'pending',
+          dueAt: '2026-08-21T18:00:00',
+          startAt: null,
+          occurrenceDate: null,
+          reminder: { mode: 'once', channels: ['in_app'], startAt: '2026-08-18T10:30:00' },
+          reminderAt: '2026-08-18T10:30:00',
+        } as any,
+        new Date('2026-08-19T12:00:00'),
+      ),
+    ).toBe('upcoming');
   });
 
   it('暂停、已完成或仍有未来提醒的待办不显示已过提醒', () => {

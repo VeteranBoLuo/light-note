@@ -16,4 +16,12 @@ describe('云空间排序入口', () => {
     expect(source).toMatch(/\.cloud-sort-select :deep\(\.select-text\) \{\s*display: none;/);
     expect(source).toMatch(/\.cloud-sort-select :deep\(\.select-suffix\) \{\s*display: none;/);
   });
+
+  it('使用与相邻操作按钮一致的无边框操作面', () => {
+    expect(source).toMatch(
+      /\.cloud-sort-control \{[\s\S]*?border: 0;[\s\S]*?background: var\(--bl-input-noBorder-bg-color\);/,
+    );
+    expect(source).toMatch(/\.cloud-sort-control:hover \{\s*background: var\(--primary-btn-h-bg-color\);/);
+    expect(source).toMatch(/\.cloud-sort-control:focus-within \{\s*outline: 2px solid var\(--focus-ring-color\);/);
+  });
 });

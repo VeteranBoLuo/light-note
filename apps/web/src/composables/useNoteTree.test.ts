@@ -149,20 +149,20 @@ describe('useNoteTree', () => {
     scope.stop();
   });
 
-  it('切换目录时清除标签筛选，只保留目录分类范围', async () => {
+  it('切换目录时保留标签筛选，使目录范围与标签条件可以组合', async () => {
     const scope = effectScope();
     const tree = scope.run(() => useNoteTree());
 
     await tree?.selectDirectory('project');
     expect(mocks.push).toHaveBeenLastCalledWith({
       path: '/noteLibrary',
-      query: { parent: 'project' },
+      query: { parent: 'project', tag: 'tag-1' },
     });
 
     await tree?.selectDirectory(null);
     expect(mocks.push).toHaveBeenLastCalledWith({
       path: '/noteLibrary',
-      query: {},
+      query: { tag: 'tag-1' },
     });
     scope.stop();
   });

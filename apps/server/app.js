@@ -13,7 +13,7 @@ import { ensurePointsSchema } from './util/points.js';
 import { assertPointsEconomyActivationReady } from './util/pointsEconomyOperations.js';
 import { ensureGrowthTaskSchema } from './util/growthTaskSchema.js';
 import { ensureGrowthCenterSchema } from './util/growthCenterSchema.js';
-import { assertPointsEarningC5ActivationReady, getPointsEarningRuntime } from './util/pointsEarningPolicy.js';
+import { assertPointsEarningActivationReady, getPointsEarningRuntime } from './util/pointsEarningPolicy.js';
 import { getPointsCampaignRuntime } from './util/pointsCampaignService.js';
 import { generateGrowthNudges } from './util/growth.js';
 import { ensureBookmarkSnapshotTable } from './util/snapshot.js';
@@ -117,7 +117,7 @@ try {
   await assertPointsEconomyActivationReady();
   await ensureGrowthTaskSchema();
   await ensureGrowthCenterSchema();
-  await assertPointsEarningC5ActivationReady({
+  await assertPointsEarningActivationReady({
     db: pool,
     runtime: getPointsEarningRuntime(),
     campaignRuntime: getPointsCampaignRuntime(),

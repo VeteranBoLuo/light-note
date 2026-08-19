@@ -46,9 +46,6 @@
           :children-by-parent="childrenByParent"
           :expanded-ids="expandedIds"
           :loading-keys="loadingKeys"
-          :all-tags="tags"
-          :total-count="12"
-          :untagged-count="2"
           :search-value="searchValue"
           :search-active="Boolean(searchValue)"
           :search-match-count="searchValue ? 1 : 0"
@@ -142,12 +139,8 @@
       v-if="isMobile"
       v-model:open="drawerOpen"
       :current-parent-id="currentParentId"
-      :all-tags="tags"
-      :total-count="12"
-      :untagged-count="2"
       :load-directory-level="loadDirectoryLevel"
       @select="selectDirectory"
-      @select-tag="noop"
       @open-page="noop"
       @create="noop"
       @move="noop"
@@ -193,7 +186,7 @@
   onBeforeUnmount(() => window.removeEventListener('resize', syncViewport));
 
   const isMobile = computed(() => bookmark.isMobile);
-  const sidebarMode = ref<'directory' | 'tags'>('directory');
+  const sidebarMode = ref<'directory' | 'outline'>('directory');
   const currentParentId = ref<string | null>('project');
   const searchValue = ref('');
   const loadingKeys = new Set<string>();

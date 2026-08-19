@@ -1,13 +1,15 @@
 <template>
-  <div class="note-share-reader">
+  <div ref="readerRef" class="note-share-reader">
     <header class="note-share-reader__header">
       <BButton class="note-share-reader__brand" @click="router.push('/')">
         <span class="note-share-reader__brand-mark">L</span>
         <span>LIGHT NOTE</span>
       </BButton>
       <nav class="note-share-reader__nav" :aria-label="t('noteShare.siteNavigation')">
-        <BButton class="note-share-reader__nav-help" @click="router.push('/help')">{{ t('noteShare.help') }}</BButton>
-        <BButton type="primary" @click="router.push('/app')">{{ t('noteShare.openLightNote') }}</BButton>
+        <BButton class="note-share-reader__nav-help" @click="openInNewPage('/help')">
+          {{ t('noteShare.help') }}
+        </BButton>
+        <BButton type="primary" @click="openInNewPage('/app')">{{ t('noteShare.openLightNote') }}</BButton>
       </nav>
     </header>
 
@@ -66,7 +68,10 @@
         <h2 v-else class="note-share-reader__sidebar-title">
           {{ t(isSubtreeShare ? 'noteShare.pages' : 'noteShare.outline') }}
         </h2>
-        <div class="note-share-reader__sidebar-scroll">
+        <div
+          class="note-share-reader__sidebar-scroll"
+          :class="{ 'is-outline': !isSubtreeShare || sidebarTab === 'outline' }"
+        >
           <template v-if="isSubtreeShare && sidebarTab === 'pages'">
             <PublicNoteTree
               v-if="rootTreeNode"
@@ -77,18 +82,13 @@
               @open="openPage"
             />
           </template>
-          <nav v-else class="note-share-reader__outline" :aria-label="t('noteShare.outline')">
-            <BButton
-              v-for="heading in headings"
-              :key="heading.id"
-              class="note-share-reader__outline-item"
-              :style="{ '--outline-depth': String(heading.depth) }"
-              @click="scrollToHeading(heading.id)"
-            >
-              {{ heading.text }}
-            </BButton>
-            <p v-if="!headings.length">{{ t('noteShare.noOutline') }}</p>
-          </nav>
+          <NoteOutlineList
+            v-else
+            class="note-share-reader__outline-list"
+            :headings="headings"
+            :active-index="activeHeadingIndex"
+            @select="scrollToHeading"
+          />
         </div>
       </aside>
 
@@ -101,7 +101,11 @@
           <span>{{ t('noteShare.readonly') }}</span>
         </div>
         <article class="note-share-reader__article" :aria-busy="pageLoading">
-          <nav v-if="breadcrumb.length > 1" class="note-share-reader__breadcrumb" :aria-label="t('noteShare.breadcrumb')">
+          <nav
+            v-if="breadcrumb.length > 1"
+            class="note-share-reader__breadcrumb"
+            :aria-label="t('noteShare.breadcrumb')"
+          >
             <template v-for="(item, index) in breadcrumb" :key="item.id">
               <span v-if="index" aria-hidden="true">/</span>
               <BButton v-if="item.id !== page.id" @click="openPage(item.id)">{{ item.title }}</BButton>
@@ -161,12 +165,14 @@
           class="note-share-reader__tab"
           :class="{ 'is-active': sidebarTab === 'pages' }"
           @click="sidebarTab = 'pages'"
-        >{{ t('noteShare.pages') }}</BButton>
+          >{{ t('noteShare.pages') }}</BButton
+        >
         <BButton
           class="note-share-reader__tab"
           :class="{ 'is-active': sidebarTab === 'outline' }"
           @click="sidebarTab = 'outline'"
-        >{{ t('noteShare.outline') }}</BButton>
+          >{{ t('noteShare.outline') }}</BButton
+        >
       </div>
       <PublicNoteTree
         v-if="isSubtreeShare && sidebarTab === 'pages' && rootTreeNode"
@@ -176,15 +182,14 @@
         default-expanded
         @open="openPageFromDrawer"
       />
-      <nav v-else class="note-share-reader__outline">
-        <BButton
-          v-for="heading in headings"
-          :key="heading.id"
-          class="note-share-reader__outline-item"
-          :style="{ '--outline-depth': String(heading.depth) }"
-          @click="scrollFromDrawer(heading.id)"
-        >{{ heading.text }}</BButton>
-      </nav>
+      <NoteOutlineList
+        v-else
+        class="note-share-reader__drawer-outline"
+        :headings="headings"
+        :active-index="activeHeadingIndex"
+        mobile
+        @select="scrollFromDrawer"
+      />
     </BDrawer>
   </div>
 </template>
@@ -200,16 +205,20 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import icon from '@/config/icon';
+  import NoteOutlineList from '@/components/noteLibrary/detail/NoteOutlineList.vue';
   import PublicNoteTree from '@/components/noteLibrary/share/PublicNoteTree.vue';
   import {
     getPublicNoteSharePage,
     getPublicNoteShareTree,
+    readNoteShareSessionTicket,
     resolvePublicNoteShare,
+    saveNoteShareSessionTicket,
     type PublicNoteSharePage,
     type PublicNoteShareTreeItem,
   } from '@/api/noteShare';
   import { normalizeNoteContentResourceUrls, noteContentToHtml } from '@/utils/common';
   import { parseResourceHref } from '@/utils/noteResourceRefs';
+  import { scrollIntoContainer } from '@/utils/zoom';
 
   const DrawingNoteEditor = defineAsyncComponent(
     () => import('@/components/noteLibrary/drawing/DrawingNoteEditor.vue'),
@@ -225,13 +234,16 @@
   const accessTicket = ref('');
   const mobileNavigationOpen = ref(false);
   const sidebarTab = ref<'pages' | 'outline'>('pages');
+  const readerRef = ref<HTMLElement | null>(null);
   const contentRef = ref<HTMLElement | null>(null);
   const renderedHtml = ref('');
-  const headings = ref<Array<{ id: string; text: string; depth: number }>>([]);
+  const headings = ref<Array<{ id: string; text: string; level: number; element: HTMLElement }>>([]);
+  const activeHeadingIndex = ref<number | null>(null);
   const breadcrumb = ref<Array<{ id: string; title: string }>>([]);
   const treeChildren = new Map<string, PublicNoteShareTreeItem[]>();
   let referrerMeta: HTMLMetaElement | null = null;
   let previousReferrerPolicy: string | null = null;
+  let headingSpyFrame = 0;
   const share = reactive({
     rootNoteId: '',
     rootTitle: '',
@@ -280,6 +292,7 @@
 
   async function renderPage() {
     headings.value = [];
+    activeHeadingIndex.value = null;
     renderedHtml.value = '';
     if (page.type === 'drawing') return;
     renderedHtml.value = await noteContentToHtml(normalizeNoteContentResourceUrls(page.content), page.type);
@@ -292,10 +305,12 @@
       return {
         id,
         text: String(element.textContent || '').trim() || t('noteDetail.catalogUntitled'),
-        depth: Math.min(3, Math.max(0, Number(element.tagName.slice(1)) - minimum)),
+        level: Math.min(minimum + 3, Number(element.tagName.slice(1))),
+        element,
       };
     });
     if (!isSubtreeShare.value) sidebarTab.value = 'outline';
+    updateActiveHeading();
   }
 
   async function resolveShare() {
@@ -308,8 +323,10 @@
     errorMessage.value = '';
     try {
       const requestedPage = String(route.query.page || '');
-      const data = await resolvePublicNoteShare(token.value, accessCode.value.trim(), requestedPage);
+      const sessionTicket = readNoteShareSessionTicket(token.value);
+      const data = await resolvePublicNoteShare(token.value, accessCode.value.trim(), requestedPage, sessionTicket);
       accessTicket.value = data.accessTicket;
+      saveNoteShareSessionTicket(token.value, data.accessTicket, data.ticketExpiresIn);
       Object.assign(share, data.share);
       treeChildren.clear();
       treeChildren.set(data.share.rootNoteId, data.children || []);
@@ -358,8 +375,11 @@
     }
   }
 
-  function scrollToHeading(id: string) {
-    contentRef.value?.querySelector<HTMLElement>(`#${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  function scrollToHeading(index: number) {
+    const heading = headings.value[index];
+    if (!readerRef.value || !heading?.element) return;
+    activeHeadingIndex.value = index;
+    scrollIntoContainer(readerRef.value, heading.element, 84);
   }
 
   function openPageFromDrawer(noteId: string) {
@@ -367,9 +387,35 @@
     void openPage(noteId);
   }
 
-  function scrollFromDrawer(id: string) {
+  function scrollFromDrawer(index: number) {
     mobileNavigationOpen.value = false;
-    nextTick(() => scrollToHeading(id));
+    nextTick(() => scrollToHeading(index));
+  }
+
+  function openInNewPage(path: string) {
+    const href = router.resolve(path).href;
+    const opened = window.open(href, '_blank', 'noopener,noreferrer');
+    if (opened) opened.opener = null;
+  }
+
+  function scheduleActiveHeading() {
+    if (headingSpyFrame) return;
+    headingSpyFrame = window.requestAnimationFrame(() => {
+      headingSpyFrame = 0;
+      updateActiveHeading();
+    });
+  }
+
+  function updateActiveHeading() {
+    const reader = readerRef.value;
+    if (!reader || !headings.value.length) return;
+    const anchor = reader.getBoundingClientRect().top + 86;
+    let selected = 0;
+    for (const [index, heading] of headings.value.entries()) {
+      if (heading.element.getBoundingClientRect().top <= anchor) selected = index;
+      else break;
+    }
+    activeHeadingIndex.value = selected;
   }
 
   function handleContentClick(event: MouseEvent) {
@@ -403,13 +449,23 @@
   }
 
   watch(token, () => {
-    Object.assign(page, { id: '', parentId: null, title: '', content: '', type: 'html', revision: 1, updateTime: null });
+    Object.assign(page, {
+      id: '',
+      parentId: null,
+      title: '',
+      content: '',
+      type: 'html',
+      revision: 1,
+      updateTime: null,
+    });
     accessTicket.value = '';
     requiresCode.value = false;
     void resolveShare();
   });
 
   onMounted(() => {
+    readerRef.value?.addEventListener('scroll', scheduleActiveHeading, { passive: true });
+    window.addEventListener('resize', scheduleActiveHeading, { passive: true });
     referrerMeta = document.head.querySelector<HTMLMetaElement>('meta[name="referrer"]');
     if (!referrerMeta) {
       referrerMeta = document.createElement('meta');
@@ -424,6 +480,9 @@
   });
 
   onBeforeUnmount(() => {
+    if (headingSpyFrame) window.cancelAnimationFrame(headingSpyFrame);
+    readerRef.value?.removeEventListener('scroll', scheduleActiveHeading);
+    window.removeEventListener('resize', scheduleActiveHeading);
     if (!referrerMeta) return;
     if (referrerMeta.dataset.noteShareReferrer === 'true') referrerMeta.remove();
     else referrerMeta.content = previousReferrerPolicy || '';
@@ -433,8 +492,12 @@
 
 <style scoped lang="less">
   .note-share-reader {
+    height: 100%;
     min-height: 100vh;
     min-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     color: var(--text-color, #24231f);
     background: var(--body-bg-color, #f5f3ee);
   }
@@ -447,7 +510,8 @@
     align-items: center;
     justify-content: space-between;
     height: 62px;
-    padding: 0 24px;
+    padding: 0 clamp(24px, 3vw, 48px);
+    box-sizing: border-box;
     border-bottom: 1px solid var(--card-border-color, #e5e1d8);
     background: var(--menu-body-bg-color, #fff);
   }
@@ -456,7 +520,7 @@
     display: flex;
     align-items: center;
     gap: 9px;
-    padding: 0;
+    padding: 0 14px 0 0;
     font-weight: 750;
     letter-spacing: 0.08em;
   }
@@ -550,7 +614,12 @@
   .note-share-reader__sidebar-scroll {
     height: calc(100% - 54px);
     padding: 10px;
+    box-sizing: border-box;
     overflow: auto;
+
+    &.is-outline {
+      overflow: hidden;
+    }
   }
 
   .note-share-reader__tabs {
@@ -582,24 +651,12 @@
     font-size: 14px;
   }
 
-  .note-share-reader__outline {
-    display: grid;
-    gap: 3px;
-
-    p {
-      padding: 8px;
-      color: var(--desc-color);
-      font-size: 13px;
-    }
+  .note-share-reader__outline-list {
+    height: calc(100% - 12px);
   }
 
-  .note-share-reader__outline-item {
-    justify-content: flex-start;
-    padding-left: calc(10px + var(--outline-depth) * 15px);
-    overflow: hidden;
-    text-align: left;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .note-share-reader__drawer-outline {
+    min-height: 0;
   }
 
   .note-share-reader__document-shell {
@@ -782,7 +839,7 @@
   @media (max-width: 640px) {
     .note-share-reader__header {
       height: 56px;
-      padding: 0 14px;
+      padding: 0 max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left));
     }
 
     .note-share-reader__brand {

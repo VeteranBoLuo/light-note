@@ -38,7 +38,6 @@ interface NoteLibraryFeatureSnapshot {
 }
 
 export interface NoteLibraryCacheQuery {
-  mode: 'directory' | 'tags';
   parentId?: string | null;
   tagId?: string | null;
   keyword?: string;
@@ -55,7 +54,6 @@ function cloneItems(items: any[]) {
 export function buildNoteLibraryListCacheKey(scope: string, query: NoteLibraryCacheQuery) {
   return JSON.stringify({
     scope: String(scope || 'anonymous'),
-    mode: query.mode,
     parentId: String(query.parentId || ''),
     tagId: String(query.tagId || ''),
     keyword: String(query.keyword || '')

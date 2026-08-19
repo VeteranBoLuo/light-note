@@ -208,26 +208,6 @@
               </div>
             </div>
 
-            <div class="field">
-              <div class="field-head">
-                <span class="field-label">{{ t('settings.noteSidebarMode') }}</span>
-                <span class="field-desc">{{ t('settings.noteSidebarModeDesc') }}</span>
-              </div>
-              <div class="seg" :class="{ 'seg--two-column': noteSidebarModeOpts.length >= 4 }">
-                <BButton
-                  v-for="o in noteSidebarModeOpts"
-                  :key="o.v"
-                  class="seg-btn"
-                  :class="{ active: (user.preferences.noteSidebarMode || 'directory') === o.v }"
-                  :type="(user.preferences.noteSidebarMode || 'directory') === o.v ? 'primary' : undefined"
-                  :aria-pressed="(user.preferences.noteSidebarMode || 'directory') === o.v"
-                  @click="set('noteSidebarMode', o.v)"
-                >
-                  {{ o.label }}
-                </BButton>
-              </div>
-            </div>
-
             <!-- 移动端点击笔记始终直接进入编辑器；该偏好只改变 PC 的库内打开方式。 -->
             <div v-if="!bookmark.isMobile" class="field">
               <div class="field-head">
@@ -789,7 +769,11 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { getGlobalShortcutKeys, getGlobalShortcutLabel } from '@/config/keyboardShortcuts.ts';
   import { usePwaInstall } from '@/composables/usePwaInstall';
-  import { isLightNoteAndroidApp, postAndroidOpenLegalDocument, type AndroidLegalDocument } from '@/utils/androidBridge.ts';
+  import {
+    isLightNoteAndroidApp,
+    postAndroidOpenLegalDocument,
+    type AndroidLegalDocument,
+  } from '@/utils/androidBridge.ts';
   import { getHomePagePreference, getMobileHomePreference } from '@/utils/preferences.ts';
   import { APP_FILING_NUMBER, MIIT_QUERY_URL } from '@/config/androidRelease.ts';
   import SettingsMobileIndex, { type SettingsIndexRow } from './SettingsMobileIndex.vue';
@@ -1190,10 +1174,6 @@
   const viewOpts = computed(() => [
     { v: 'card', label: t('settings.cardView') },
     { v: 'list', label: t('settings.listView') },
-  ]);
-  const noteSidebarModeOpts = computed(() => [
-    { v: 'directory', label: t('note.directoryTab') },
-    { v: 'tags', label: t('note.tagsTab') },
   ]);
   const resourceViewOpts = computed(() => [
     { v: 'card', label: t('resourceCenter.view.card') },

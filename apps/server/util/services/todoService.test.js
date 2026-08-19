@@ -76,9 +76,18 @@ describe('todoService', () => {
       reminderAt: '2026-07-20T17:00',
     });
 
-    expect(connection.query).toHaveBeenCalledTimes(4);
+    expect(connection.query).toHaveBeenCalledTimes(5);
     expect(connection.query.mock.calls[0][0]).toContain('INSERT INTO todo_items');
     expect(connection.query.mock.calls[3][0]).toContain('INSERT INTO todo_reminders');
+    expect(connection.query.mock.calls[4][0]).toContain('INSERT IGNORE INTO growth_events');
+  });
+
+  it('管理员维护上下文创建待办时不写成长事实', async () => {
+    connection.query.mockResolvedValue([{ affectedRows: 1 }]);
+    await createTodo(connection, 'user-1', { title: '代用户维护' }, { suppressUserRewards: true });
+    expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('INSERT IGNORE INTO growth_events'))).toBe(
+      false,
+    );
   });
 
   it('创建周期提醒时分别写入站内和邮箱渠道', async () => {
@@ -462,7 +471,7 @@ describe('todoService', () => {
     await expect(listTodoPage(connection, 'user-4', { sort: 'random' })).rejects.toThrow('无效的待办筛选参数');
   });
 
-  it('工作台逾期筛选只取截止时间早于今天的待办', async () => {
+  it('工作台逾期筛选同时覆盖已过截止时间和已错过的计划实例', async () => {
     connection.query.mockResolvedValueOnce([[]]);
 
     const result = await listTodoPage(connection, 'user-4', {
@@ -477,10 +486,11 @@ describe('todoService', () => {
     const [sql, params] = connection.query.mock.calls[0];
     expect(sql).toContain('status = ?');
     expect(sql).toContain('due_at IS NOT NULL AND due_at < NOW()');
+    expect(sql).toContain('occurrence_date IS NOT NULL AND occurrence_date < CURDATE()');
     expect(params).toEqual(['user-4', 'pending', 4, 0]);
   });
 
-  it('工作台今日筛选限定今天窗口内到期', async () => {
+  it('工作台今日筛选覆盖今天到期和今天计划的实例', async () => {
     connection.query.mockResolvedValueOnce([[]]);
 
     await listTodoPage(connection, 'user-4', {
@@ -493,6 +503,15 @@ describe('todoService', () => {
 
     const [sql] = connection.query.mock.calls[0];
     expect(sql).toContain('due_at >= NOW() AND due_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)');
+    expect(sql).toContain('occurrence_date = CURDATE()');
+  });
+
+  it('最近创建按系列创建时间排序，不被后台滚动生成实例顶到最前', async () => {
+    connection.query.mockResolvedValueOnce([[]]);
+    await listTodoPage(connection, 'user-4', { status: 'pending', sort: 'newest', includeTotal: false });
+    const [sql] = connection.query.mock.calls[0];
+    expect(sql).toContain('SELECT s.create_time FROM todo_series s WHERE s.id = todo_items.series_id');
+    expect(sql).toContain('occurrence_no ASC');
   });
 
   it('拒绝未知的 due 筛选取值', async () => {
@@ -546,7 +565,7 @@ describe('todoService', () => {
      * 互斥性是这个口径的正确性前提：overdue 用 `< NOW()`、today 用 `>= NOW()`，
      * 同一条待办不可能同时落进两个 SUM，因此总数恒等于两个分项之和。
      */
-    it('逾期与今天互斥，无日期待办被两段条件同时排除', async () => {
+    it('逾期与今天互斥，普通无日期待办仍被排除，计划实例按 occurrence_date 归档', async () => {
       connection.query.mockResolvedValueOnce([[{ todoOverdueTotal: 4, todoDueTodayTotal: 3 }]]);
 
       const result = await queryTodoAttentionCounts(connection, 'user-9');
@@ -558,8 +577,10 @@ describe('todoService', () => {
       expect(sql).toContain('due_at >= NOW()');
       // 上界封在明天 00:00，未来待办不计入
       expect(sql).toContain('DATE_ADD(CURDATE(), INTERVAL 1 DAY)');
-      // 两段都要求有截止时间，无日期待办不进任何一档
+      // 普通无日期待办不进任何一档；固定日程即使没有 due_at，也按实例日统计。
       expect(sql.match(/due_at IS NOT NULL/g)).toHaveLength(3);
+      expect(sql).toContain('occurrence_date < CURDATE()');
+      expect(sql).toContain('occurrence_date = CURDATE()');
     });
 
     it('没有任何待办时 SUM 返回 NULL，计数归一为 0 而不是 NaN', async () => {
@@ -766,7 +787,9 @@ describe('todoService', () => {
     expect(connection.query.mock.calls[1][0]).toContain('COUNT(*)');
     expect(connection.query.mock.calls[2][0]).toContain('SELECT * FROM todo_items');
     expect(connection.query.mock.calls[4][0]).toContain('UPDATE todo_items');
-    const pauseReminderCall = connection.query.mock.calls.find(([sql]) => String(sql).includes("status = 'paused_complete'"));
+    const pauseReminderCall = connection.query.mock.calls.find(([sql]) =>
+      String(sql).includes("status = 'paused_complete'"),
+    );
     expect(pauseReminderCall?.[0]).toContain('UPDATE todo_reminders');
     expect(result).toMatchObject({
       state: 'changed',

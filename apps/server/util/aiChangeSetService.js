@@ -578,12 +578,7 @@ async function applyItem(connection, identity, item) {
     });
     await connection.query(
       'UPDATE note SET title = ?, update_by = ?, revision = revision + 1 WHERE id = ? AND create_by = ? AND del_flag = 0',
-      [
-      after.title,
-      identity.actorUserId,
-      item.resourceId,
-      identity.subjectUserId,
-      ],
+      [after.title, identity.actorUserId, item.resourceId, identity.subjectUserId],
     );
     return { before, after, afterHash: stateHash(after) };
   }
@@ -612,7 +607,10 @@ async function applyItem(connection, identity, item) {
     return { before, after, afterHash: stateHash(after) };
   }
   if (item.operation === 'create_todo') {
-    const created = await createTodo(connection, identity.subjectUserId, after, { invalidateSearch: false });
+    const created = await createTodo(connection, identity.subjectUserId, after, {
+      invalidateSearch: false,
+      suppressUserRewards: identity.adminContextMode !== 'normal',
+    });
     return { before: null, after, afterHash: stateHash(after), createdResourceId: created.id };
   }
   throw changeError('OPERATION_UNSUPPORTED', '不支持的变更类型');

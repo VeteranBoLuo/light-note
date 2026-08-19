@@ -49,6 +49,15 @@ describe('NoteReadonlyPreview', () => {
     expect(source).toMatch(/\.note-readonly-preview__child-count\.b_btn\s*\{[\s\S]*height:\s*30px;/u);
   });
 
+  it('父级面包屑可在预览态逐级打开，悬浮时不绘制按钮底色', () => {
+    expect(source).toContain('openPage: [page: PreviewBreadcrumbItem]');
+    expect(source).toContain('@click="emit(\'openPage\', item)"');
+    expect(source).toContain('class="note-readonly-preview__crumb"');
+    expect(source).toMatch(
+      /\.note-readonly-preview__crumb\.b_btn\s*\{[\s\S]*background:\s*transparent !important;[\s\S]*&:hover,[\s\S]*background:\s*transparent !important;/u,
+    );
+  });
+
   it('桌面预览轻微收紧标题区，且不在正文重复展示预览提示', () => {
     expect(source).toMatch(
       /\.note-readonly-preview__header\s*\{[\s\S]*min-height:\s*74px;[\s\S]*padding:\s*8px 16px;/u,
@@ -58,5 +67,13 @@ describe('NoteReadonlyPreview', () => {
 
   it('手绘阅读态只保留外层阅读区滚动，可以抵达整张纸底部', () => {
     expect(source).toMatch(/\.note-readonly-preview__drawing\s*\{[\s\S]*min-height:\s*0;[\s\S]*height:\s*auto;/u);
+  });
+
+  it('从实际预览 DOM 提取标题并在同一个滚动容器内定位和高亮', () => {
+    expect(source).toContain("querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6')");
+    expect(source).toContain("emit('outlineChange', outline)");
+    expect(source).toContain("emit('outlineActiveChange', activeId");
+    expect(source).toContain('scrollIntoContainer(root, heading, 8)');
+    expect(source).toContain('ref="previewScrollRef"');
   });
 });

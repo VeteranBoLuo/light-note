@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick } from 'vue';
 import { createI18n } from 'vue-i18n';
+import { createPinia } from 'pinia';
 import TodoMatrixView from './TodoMatrixView.vue';
 import type { TodoItem } from '@/api/todoApi';
+import zhCN from '@/i18n/locales/zh-CN';
 
 let cleanup: (() => void) | undefined;
 
@@ -55,46 +57,14 @@ function mountMatrix(options: { mobile?: boolean; items?: TodoItem[] } = {}) {
     },
   });
   app.component('OriginalIcon', { render: () => h('span', { 'aria-hidden': 'true' }) });
+  app.use(createPinia());
   app.use(
     createI18n({
       legacy: false,
       locale: 'zh-CN',
       missingWarn: false,
       fallbackWarn: false,
-      messages: {
-        'zh-CN': {
-          common: { delete: '删除', more: '更多' },
-          inbox: {
-            todoMatrixLabel: '待办四象限',
-            todoMatrixGuide: '自动分类说明',
-            todoMatrixCount: '{count} 项待办',
-            todoMatrixEmpty: '暂无待办',
-            todoMatrixSeriesBadge: '重复系列 · {count} 项',
-            todoMatrixQuadrants: {
-              importantUrgent: '重要且紧急',
-              importantNotUrgent: '重要但不紧急',
-              otherUrgent: '普通或低优先且紧急',
-              otherNotUrgent: '普通或低优先且不紧急',
-            },
-            todoMatrixDescriptions: {
-              importantUrgent: '高优先，今天截止',
-              importantNotUrgent: '高优先，稍后截止',
-              otherUrgent: '普通或低优先，今天截止',
-              otherNotUrgent: '普通或低优先，稍后截止',
-            },
-            todoSelect: '选择待办“{title}”',
-            editTodo: '编辑待办',
-            deleteTodo: '删除待办',
-            todoPriority0: '低',
-            todoPriority1: '普通',
-            todoPriority2: '高',
-            todoToday: '今天',
-            todoTomorrow: '明天',
-            todoDue: '截止 {time}',
-            todoOverdue: '已逾期 · {time}',
-          },
-        },
-      },
+      messages: { 'zh-CN': zhCN },
     }),
   );
   app.mount(host);
@@ -149,7 +119,7 @@ describe('TodoMatrixView', () => {
     expect(host.querySelector('.todo-matrix-card__title')?.textContent).toBe('低优先无日期');
   });
 
-  it('固定日程在四象限只显示下一项，并保留紧凑的系列标识和实例数', async () => {
+  it('固定日程在四象限只显示下一项，系列胶囊可打开共享明细抽屉且不误触编辑', async () => {
     const now = new Date();
     const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 12);
     const series = { id: 'series-1', repeatMode: 'scheduled', status: 'active' } as TodoItem['series'];
@@ -167,11 +137,22 @@ describe('TodoMatrixView', () => {
       occurrenceNo: 2,
       occurrenceDate: '2026-08-19',
     };
-    const { host } = mountMatrix({ items: [first, second, todo('single', '单个待办', 1, null)] });
+    const { host, onEdit } = mountMatrix({ items: [first, second, todo('single', '单个待办', 1, null)] });
     await nextTick();
 
     expect(host.querySelectorAll('.todo-matrix-card')).toHaveLength(2);
     expect(host.querySelectorAll('.todo-matrix-card__series')).toHaveLength(1);
-    expect(host.querySelector('.todo-matrix-card__series')?.textContent).toContain('重复系列 · 2 项');
+    expect(host.querySelector('.todo-matrix-card__series')?.textContent).toContain('今天 1 · 错过 1 · 后续 0');
+
+    const trigger = host.querySelector<HTMLButtonElement>('.todo-matrix-card__series-trigger')!;
+    expect(trigger.getAttribute('aria-label')).toContain('查看“每日推广”系列明细，共 2 项');
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    trigger.click();
+    await nextTick();
+
+    expect(onEdit).not.toHaveBeenCalled();
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(document.querySelector('.b-drawer-wrapper')).not.toBeNull();
+    expect(document.querySelectorAll('.todo-series-drawer__list .todo-item')).toHaveLength(2);
   });
 });

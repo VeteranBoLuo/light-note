@@ -76,7 +76,7 @@ describe('todoHandle', () => {
     const req = { user: { id: 'u1', role: 'user' }, body: { title: '测试' } };
     const res = mockRes();
     await createTodo(req, res);
-    expect(createTodoItem).toHaveBeenCalledWith(connection, 'u1', req.body);
+    expect(createTodoItem).toHaveBeenCalledWith(connection, 'u1', req.body, { suppressUserRewards: false });
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(connection.release).toHaveBeenCalledTimes(1);
   });

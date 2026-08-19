@@ -92,8 +92,7 @@ export function useNoteTree(
   async function selectDirectory(parentId: string | null) {
     const query = { ...router.currentRoute.value.query };
     delete query._rt;
-    // 目录与标签是两套独立分类体系，切换目录时只清理标签范围。
-    delete query.tag;
+    // 目录决定浏览范围，标签只是范围内的筛选；切换目录时保留当前标签条件。
     if (parentId) query.parent = parentId;
     else delete query.parent;
     await router.push({ path: '/noteLibrary', query });

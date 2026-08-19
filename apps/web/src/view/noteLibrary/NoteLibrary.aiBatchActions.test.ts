@@ -34,6 +34,7 @@ const mobileNavigationDrawerSource = readFileSync(
   'utf8',
 );
 const treeRowSource = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/tree/NoteTreeRow.vue'), 'utf8');
+const noteTreeComposableSource = readFileSync(resolve(process.cwd(), 'src/composables/useNoteTree.ts'), 'utf8');
 const workspaceShellSource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/workspace/NoteWorkspaceShell.vue'),
   'utf8',
@@ -208,34 +209,34 @@ describe('笔记库页面树交互接线', () => {
     );
   });
 
-  it('移动端唯一范围入口按当前分类只显示目录或标签，不把两套范围拼在一起', () => {
+  it('移动端把目录范围与标签筛选拆成两个职责明确的入口', () => {
     expect(source).toContain('<span>{{ mobileScopeLabel }}</span>');
-    expect(source).toContain('const activeMobileTagLabel = computed(() => {');
-    expect(source).toMatch(
-      /const mobileScopeLabel = computed[\s\S]*noteSidebarMode\.value === 'tags'[\s\S]*activeMobileTagLabel/,
+    expect(source).toContain('<TagFilterSelector compact');
+    expect(noteDirectoryDrawerSource).not.toContain('NoteTagSidebar');
+    expect(noteDirectoryDrawerSource).not.toContain("'tags'");
+  });
+
+  it('目录范围、标签与搜索可以组合查询，切换目录或标签不清理另一项', () => {
+    expect(source).toContain('...(noteTreeReadEnabled.value ? { parentId: currentParentId.value } : {})');
+    expect(source).toContain('tagId: getActiveNoteTagId()');
+    expect(noteTreeComposableSource).not.toContain('delete query.tag');
+    const tagChange = source.slice(
+      source.indexOf('const handleNodeTypeChange'),
+      source.indexOf('function clearDragDropTarget'),
     );
-    expect(source).not.toMatch(/`\$\{directory\} · \$\{activeMobileTagLabel\.value\}`/);
-    expect(source).not.toContain('class="note-mobile-tag"');
+    expect(tagChange).not.toContain('delete query.parent');
   });
 
-  it('目录与标签请求互斥，切换分类时会清理另一套 URL 范围', () => {
-    expect(source).toContain("noteSidebarMode.value === 'directory'");
-    expect(source).toContain("tagId: noteSidebarMode.value === 'tags' ? getActiveNoteTagId() : undefined");
-    expect(source).toMatch(/function selectMobileDirectoryTag[\s\S]*delete query\.parent/);
-    expect(source).toMatch(/const handleNodeTypeChange[\s\S]*delete query\.parent/);
-  });
-
-  it('功能开关快照还在加载时保留账号的默认目录偏好', () => {
+  it('功能开关快照还在加载时预留目录导航，标签不再作为默认侧栏模式', () => {
     expect(source).toContain(':directory-enabled="!noteTreeFeaturesReady || noteTreeReadEnabled"');
-    expect(source).toMatch(
-      /function initialNoteClassificationMode[\s\S]*user\.preferences\.noteSidebarMode === 'tags'[\s\S]*'directory'/,
-    );
+    expect(source).not.toContain('initialNoteClassificationMode');
+    expect(source).not.toContain('preferences.noteSidebarMode');
   });
 
   it('目录能力快照返回前先渲染主区标题栏，避免骨架列表纵向跳动', () => {
     expect(source).toContain('v-else-if="showDesktopDirectoryHeader"');
     expect(source).toMatch(
-      /const showDesktopDirectoryHeader = computed\([\s\S]*!bookmark\.isMobile[\s\S]*noteSidebarMode\.value === 'directory'[\s\S]*!noteTreeFeaturesReady\.value \|\| noteTreeReadEnabled\.value/,
+      /const showDesktopDirectoryHeader = computed\([\s\S]*!bookmark\.isMobile[\s\S]*!noteTreeFeaturesReady\.value \|\| noteTreeReadEnabled\.value/,
     );
     expect(source).toMatch(/\.note-directory-header\s*\{[\s\S]*?flex: 0 0 auto;/);
   });
@@ -375,6 +376,20 @@ describe('笔记库页面树交互接线', () => {
     expect(detailSource).not.toContain('function openBreadcrumbDirectory');
   });
 
+  it('预览页父级面包屑在当前预览区打开，且预览与编辑面包屑都不显示 hover 背景', () => {
+    expect(readonlyPreviewSource).toContain('@click="emit(\'openPage\', item)"');
+    expect(source).toContain('@open-page="openPreviewBreadcrumbPage"');
+    expect(source).toMatch(
+      /function openPreviewBreadcrumbPage[\s\S]*prefetchNoteDetail\(user, noteId\);[\s\S]*setDesktopPreviewPage\(noteId, source\);/u,
+    );
+    expect(readonlyPreviewSource).toMatch(
+      /\.note-readonly-preview__crumb\.b_btn\s*\{[\s\S]*&:hover,[\s\S]*background:\s*transparent !important;/u,
+    );
+    expect(detailSource).toMatch(
+      /\.note-detail-crumb\s*\{[\s\S]*&:hover,[\s\S]*background:\s*transparent !important;/u,
+    );
+  });
+
   it('编辑页先预取未缓存目标再切换路由，且快速连点只进入最后目标', () => {
     const openFunction = detailSource.match(/async function openNoteDetailPage[\s\S]*?\n  }/)?.[0] || '';
     expect(openFunction.indexOf('await prefetchNoteDetail(user, normalizedId)')).toBeGreaterThan(-1);
@@ -451,7 +466,8 @@ describe('笔记库页面树交互接线', () => {
     expect(mobilePageListSource).toContain("emit('attach', item)");
     expect(mobilePageListSource).toContain("emit('rename', item)");
     expect(mobilePageListSource).toContain("emit('move', item)");
-    expect(mobilePageListSource).toContain("emit('copyLink', item)");
+    expect(mobilePageListSource).not.toContain("emit('copyLink', item)");
+    expect(mobilePageListSource).toContain("emit('share', item)");
     expect(mobilePageListSource).toContain("emit('delete', item)");
     expect(detailSource).toContain(':write-enabled="noteTreeWriteEnabled && !readonly"');
     expect(detailSource).toContain(':drag-enabled="false"');
@@ -476,7 +492,7 @@ describe('笔记库页面树交互接线', () => {
   it('移动端从详情返回知识库会打开根目录抽屉，抽屉内层级跳转会等待遮罩历史释放', () => {
     expect(detailSource).toContain("query: { openDirectory: '1' }");
     expect(source).toContain('router.currentRoute.value.query.openDirectory');
-    expect(source).toContain("openMobileDirectory('directory')");
+    expect(source).toContain('openMobileDirectory();');
     expect(mobileNavigationDrawerSource).toContain('closeCurrentMobileOverlayThen');
     expect(mobileNavigationDrawerSource).toMatch(
       /async function openPage[\s\S]*closeCurrentMobileOverlayThen[\s\S]*emit\('openPage', id\)/,

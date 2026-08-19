@@ -1440,7 +1440,7 @@ export async function loadV2SeriesMap(db, userId, items) {
   if (!seriesIds.length) return new Map();
   const [rows] = await db.query(
     `SELECT s.id, s.repeat_mode AS repeatMode, s.status, s.timezone, s.schedule_rule AS scheduleRule,
-            s.version,
+            s.version, s.create_time AS createdAt,
             SUM(CASE WHEN i.instance_state = 'normal' THEN 1 ELSE 0 END) AS generatedCount,
             SUM(CASE WHEN i.status = 'completed' AND i.instance_state = 'normal' THEN 1 ELSE 0 END) AS completedCount,
             SUM(CASE WHEN i.instance_state = 'skipped' THEN 1 ELSE 0 END) AS skippedCount
@@ -1462,6 +1462,7 @@ export async function loadV2SeriesMap(db, userId, items) {
           status: row.status,
           timezone: row.timezone,
           version: Number(row.version),
+          createdAt: row.createdAt || null,
           plan: schedule.plan || null,
           timing: schedule.timing || null,
           progress: {

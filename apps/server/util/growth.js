@@ -10,7 +10,6 @@
  * EXP 只用于升级、不是货币。所有发放都走本文件,不在业务处各写一套。
  */
 import pool from '../db/index.js';
-import crypto from 'crypto';
 import { earnPoints, earnStorage, getAchievementFrameByKey, titleName } from './points.js';
 import { grantItem } from './items.js';
 import { createNotification } from './notification.js';
@@ -19,6 +18,7 @@ import { finishAdminAction } from './adminActionExecution.js';
 import { dayKeyAtOffset, getGrowthCalendarContext } from './growthPreferences.js';
 import {
   POINTS_EARNING_POLICY_VERSION,
+  POINTS_EARNING_C6_POLICY_VERSION,
   applyAchievementEarningPolicy,
   checkinPointsForStreak,
   dailyClaimRef,
@@ -30,7 +30,13 @@ import {
   MAKEUP_CARD_SUPPLY_POLICY,
 } from './pointsEarningPolicy.js';
 import { resolveDailyEarningPolicyVersion } from './pointsEarningPolicyState.js';
-import { c5DailyQuestsFromFacts, getMeaningfulActiveDays, getMeaningfulActivityFacts } from './meaningfulActivity.js';
+import { C6_DAILY_QUEST_KINDS, selectLegacyDailyQuestKey } from './dailyQuestPolicy.js';
+import {
+  c5DailyQuestsFromFacts,
+  c6DailyQuestsFromFacts,
+  getMeaningfulActiveDays,
+  getMeaningfulActivityFacts,
+} from './meaningfulActivity.js';
 
 // 15 级段位表:cumExp=升到该级的累计经验阈值;spaceMb/aiTokenDaily=该级权益。
 // 容量曲线(前期平滑、中期明显、后期加速):Lv1 1G → Lv10 6G → Lv15 20G。
@@ -70,7 +76,6 @@ const DAILY_EXP_CAP_EXEMPT_SOURCES = Object.freeze([
 ]);
 const DAILY_EXP_CAP_EXEMPT_PLACEHOLDERS = DAILY_EXP_CAP_EXEMPT_SOURCES.map(() => '?').join(', ');
 export const DAILY_QUEST_STAGES = resolveDailyQuestStages();
-export const DAILY_QUEST_KEYS = ['daily_note', 'daily_bookmark', 'daily_file', 'daily_todo', 'daily_organize'];
 
 // 连签里程碑大奖:累计连续签到命中当天即发(积分/永久存储/补签卡),按 ref=days 一次性幂等。
 // 把签到从「+5 经验」升级为值得长期坚持的习惯养成:越久回报越丰厚(存储是最实在的诱惑)。
@@ -572,11 +577,6 @@ function safeParseMeta(m) {
   }
 }
 
-function dailyQuestKeyFor(userId, day) {
-  const digest = crypto.createHash('sha256').update(`growth-daily-v1\0${userId}\0${day}`).digest();
-  return DAILY_QUEST_KEYS[digest.readUInt32BE(0) % DAILY_QUEST_KEYS.length];
-}
-
 export async function getDailyQuestState(
   userId,
   growth,
@@ -588,11 +588,24 @@ export async function getDailyQuestState(
     (isGuest
       ? earningPolicyVersionForDay(effectiveDayKey)
       : await resolveDailyEarningPolicyVersion(effectiveDayKey, { db }));
-  if (earningPolicyVersion === POINTS_EARNING_POLICY_VERSION) {
+  if ([POINTS_EARNING_POLICY_VERSION, POINTS_EARNING_C6_POLICY_VERSION].includes(earningPolicyVersion)) {
     const facts = isGuest
       ? { total: 0, byType: {}, activeDays: 0, variety: 0, events: [] }
-      : await getMeaningfulActivityFacts(userId, { db, calendar, dayKey: effectiveDayKey });
-    const quests = c5DailyQuestsFromFacts({ checkedInToday: Boolean(growth?.checkedInToday), facts });
+      : await getMeaningfulActivityFacts(userId, {
+          db,
+          calendar,
+          dayKey: effectiveDayKey,
+          ...(earningPolicyVersion === POINTS_EARNING_C6_POLICY_VERSION ? { activityKinds: C6_DAILY_QUEST_KINDS } : {}),
+        });
+    const quests =
+      earningPolicyVersion === POINTS_EARNING_C6_POLICY_VERSION
+        ? c6DailyQuestsFromFacts({
+            userId,
+            dayKey: effectiveDayKey,
+            checkedInToday: Boolean(growth?.checkedInToday),
+            facts,
+          })
+        : c5DailyQuestsFromFacts({ checkedInToday: Boolean(growth?.checkedInToday), facts });
     return {
       policyVersion: earningPolicyVersion,
       quests,
@@ -602,7 +615,7 @@ export async function getDailyQuestState(
   }
   const dailyCondition = (column) =>
     calendar ? `DATE_FORMAT(DATE_ADD(${column}, INTERVAL ? MINUTE), '%Y%m%d') = ?` : `${column} >= CURDATE()`;
-  const randomKey = dailyQuestKeyFor(userId || 'visitor', effectiveDayKey);
+  const randomKey = selectLegacyDailyQuestKey(userId, effectiveDayKey);
   let metrics = {
     created: 0,
     daily_note: 0,
@@ -1198,8 +1211,8 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
   const unlockedCount = achievements.filter((a) => a.unlocked).length;
   const claimableCount = achievements.filter((a) => a.claimable).length; // 待领取数(前端红点/汇总)
 
-  // 每日三任务：签到、创建任一内容、按用户+日期稳定抽取的一项随机任务。
-  // 随机项不依赖完成后的可选集合，因此同一天刷新、跨 PC/移动端都不会换题。
+  // 每日任务由对应策略派生：legacy 为一个通用创建槽和一个稳定随机槽，C5 为两个
+  // 通用知识行动槽，C6 为两个行为类型不同且无需前置库存的具体任务；所有版本同日跨端都保持稳定。
   const expGranted = userRole !== 'root';
   const {
     quests,

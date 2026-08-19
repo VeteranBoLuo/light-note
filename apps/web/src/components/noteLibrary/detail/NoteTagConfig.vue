@@ -18,108 +18,120 @@
     -->
     <div class="tag-config-shell" :class="{ 'is-sheet': bookmark.isMobile }">
       <div class="tag-config" :class="{ mobile: bookmark.isMobile }">
-      <div class="panel selected-panel">
-        <div class="panel-header">
-          <div class="title">{{ $t('note.tagConfig.selectedTags') }}</div>
-          <b-button size="small" @click="resetTags" v-click-log="{ module: '笔记-标签配置', operation: '重置标签' }">{{
-            $t('note.tagConfig.reset')
-          }}</b-button>
-        </div>
-        <div class="panel-subtitle">{{ $t('note.tagConfig.selectedDesc') }}</div>
-        <div class="selected-overview">
-          <div class="overview-count">{{ noteTags.length }}</div>
-          <div class="overview-text">{{ $t('note.tagConfig.selectedCountText', { count: noteTags.length }) }}</div>
-        </div>
-        <div class="chip-list" v-if="noteTags.length">
-          <BChip v-for="tag in noteTags" :key="tag.id" class="chip" tone="tag" size="medium">
-            <span class="color-dot" />
-            <span class="chip-text">{{ tag.name }}</span>
-            <BButton
-              class="chip-close"
-              :title="t('common.delete')"
-              :aria-label="t('common.delete')"
-              @click.stop="unbindTag(tag)"
-              v-click-log="{ module: '笔记-标签配置', operation: `解绑标签【${tag.name}】` }"
+        <div class="panel selected-panel">
+          <div class="panel-header">
+            <div class="title">
+              {{ $t('note.tagConfig.selectedTags') }}
+              <span class="selected-count-badge">{{ noteTags.length }}</span>
+            </div>
+            <b-button
+              size="small"
+              @click="resetTags"
+              v-click-log="{ module: '笔记-标签配置', operation: '重置标签' }"
+              >{{ $t('note.tagConfig.reset') }}</b-button
             >
-              <SvgIcon :src="icon.common.close" size="13" aria-hidden="true" />
-            </BButton>
-          </BChip>
+          </div>
+          <div class="panel-subtitle">{{ $t('note.tagConfig.selectedDesc') }}</div>
+          <div class="selected-overview">
+            <div class="overview-count">{{ noteTags.length }}</div>
+            <div class="overview-text">{{ $t('note.tagConfig.selectedCountText', { count: noteTags.length }) }}</div>
+          </div>
+          <div class="chip-list" v-if="noteTags.length">
+            <BChip v-for="tag in noteTags" :key="tag.id" class="chip" tone="tag" size="medium">
+              <span class="color-dot" />
+              <span class="chip-text">{{ tag.name }}</span>
+              <BButton
+                class="chip-close"
+                :title="t('common.delete')"
+                :aria-label="t('common.delete')"
+                @click.stop="unbindTag(tag)"
+                v-click-log="{ module: '笔记-标签配置', operation: `解绑标签【${tag.name}】` }"
+              >
+                <SvgIcon :src="icon.common.close" size="13" aria-hidden="true" />
+              </BButton>
+            </BChip>
+          </div>
+          <div class="empty" v-else>{{ $t('note.tagConfig.noTags') }}</div>
         </div>
-        <div class="empty" v-else>{{ $t('note.tagConfig.noTags') }}</div>
-      </div>
 
-      <div class="panel library-panel">
-        <div class="panel-header panel-header--library">
-          <div>
-            <!--
+        <div class="panel library-panel">
+          <div class="panel-header panel-header--library">
+            <div>
+              <!--
               「刷新」与「标签管理」都已移除：
               新建、改名都在弹框内就地完成，列表由操作本身即时更新，没有「去别处改完
               回来同步」的场景了，刷新按钮失去了用途。而「标签管理」是一次跳页 ——
               在这个「给笔记绑标签」的流程里点它意味着放弃当前未保存的绑定改动；
               标签管理在桌面顶部导航和移动端「资料」区都有独立入口，不必在这里重复。
             -->
-            <div class="title flex-align-center-gap">{{ $t('note.tagConfig.tagLibrary') }}</div>
-            <div class="panel-subtitle panel-subtitle--tight">{{ $t('note.tagConfig.sharedDesc') }}</div>
-          </div>
-          <div class="tag-actions">
-            <!--
+              <div class="title flex-align-center-gap">{{ $t('note.tagConfig.tagLibrary') }}</div>
+              <div class="panel-subtitle panel-subtitle--tight">{{ $t('note.tagConfig.sharedDesc') }}</div>
+            </div>
+            <div class="tag-actions">
+              <!--
               就地新建：原来 window.open 到标签编辑页，用户要离开当前上下文、
               建完自己切回来、手动刷新标签库、再手动点绑定。这里建完即绑。
             -->
-            <InlineTagCreate
-              :existing-tags="allTags"
-              guard-scene="create-note-tag"
-              @created="handleTagCreated"
-              @reused="handleTagReused"
-              @stale="fetchAllTags"
-            />
+              <InlineTagCreate
+                :existing-tags="allTags"
+                guard-scene="create-note-tag"
+                @created="handleTagCreated"
+                @reused="handleTagReused"
+                @stale="fetchAllTags"
+              />
+            </div>
           </div>
-        </div>
 
-        <div class="tag-toolbar">
-          <b-input v-model:value="searchValue" :maxlength="20" :placeholder="t('note.tagConfig.tagSearch')" />
-        </div>
+          <div class="tag-toolbar">
+            <b-input v-model:value="searchValue" :maxlength="20" :placeholder="t('note.tagConfig.tagSearch')" />
+          </div>
 
-        <div class="tag-list" v-if="filteredTags.length">
-          <div
-            v-for="tag in filteredTags"
-            :key="tag.id"
-            class="tag-row"
-            :class="{ active: isTagBound(tag.id), 'is-renaming': renamingTagId === tag.id }"
-            @click="renamingTagId === tag.id ? undefined : toggleTag(tag)"
-            v-click-log="{ module: '笔记-标签配置', operation: `切换标签绑定【${tag.name}】` }"
-          >
-            <!-- 改名就地进行：整行换成输入行，不再跳到标签编辑页 -->
-            <InlineTagRename
-              v-if="renamingTagId === tag.id"
-              :tag="tag"
-              :existing-tags="allTags"
-              guard-scene="rename-note-tag"
-              @renamed="handleTagRenamed"
-              @cancel="renamingTagId = ''"
-            />
-            <template v-else>
-              <div class="tag-left">
-                <span class="color-dot" />
-                <div class="tag-text">
-                  <div class="tag-name">{{ tag.name }}</div>
-                  <div class="tag-state">{{
-                    isTagBound(tag.id) ? $t('note.tagConfig.bound') : $t('note.tagConfig.unbound')
-                  }}</div>
+          <div v-auto-scrollbar class="tag-list">
+            <div
+              v-for="tag in filteredTags"
+              :key="tag.id"
+              class="tag-row"
+              :class="{ active: isTagBound(tag.id), 'is-renaming': renamingTagId === tag.id }"
+              @click="renamingTagId === tag.id ? undefined : toggleTag(tag)"
+              v-click-log="{ module: '笔记-标签配置', operation: `切换标签绑定【${tag.name}】` }"
+            >
+              <!-- 改名就地进行：整行换成输入行，不再跳到标签编辑页 -->
+              <InlineTagRename
+                v-if="renamingTagId === tag.id"
+                :tag="tag"
+                :existing-tags="allTags"
+                guard-scene="rename-note-tag"
+                @renamed="handleTagRenamed"
+                @cancel="renamingTagId = ''"
+              />
+              <template v-else>
+                <div class="tag-left">
+                  <span class="color-dot" />
+                  <div class="tag-text">
+                    <div class="tag-name">{{ tag.name }}</div>
+                    <div class="tag-state">
+                      <SvgIcon
+                        v-if="bookmark.isMobile && isTagBound(tag.id)"
+                        :src="icon.filterPanel.check"
+                        size="13"
+                        aria-hidden="true"
+                      />
+                      {{ isTagBound(tag.id) ? $t('note.tagConfig.bound') : $t('note.tagConfig.unbound') }}
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div class="tag-meta">
-                <b-button
-                  size="small"
-                  @click.stop="renamingTagId = tag.id"
-                  v-click-log="{ module: '笔记-标签配置', operation: `改名标签【${tag.name}】` }"
-                  >{{ t('tagInlineRename.entry') }}</b-button
-                >
-              </div>
-            </template>
+                <div class="tag-meta">
+                  <b-button
+                    size="small"
+                    @click.stop="renamingTagId = tag.id"
+                    v-click-log="{ module: '笔记-标签配置', operation: `改名标签【${tag.name}】` }"
+                    >{{ t('tagInlineRename.entry') }}</b-button
+                  >
+                </div>
+              </template>
+            </div>
+            <div v-if="!filteredTags.length" class="empty">{{ $t('note.tagConfig.noTagsCreate') }}</div>
           </div>
-        </div>
-          <div class="empty" v-else>{{ $t('note.tagConfig.noTagsCreate') }}</div>
         </div>
       </div>
 
@@ -182,7 +194,7 @@
           open: visible.value === true,
           title: t('note.tagConfig.title'),
           placement: 'bottom' as const,
-          height: 'min(86dvh, 720px)',
+          height: 'min(92dvh, 760px)',
           // 底部 padding 交给操作条自己承担：sticky 的 bottom:0 停在 padding box 内边缘，
           // 留着 12px 就会从操作条下方透出滚动内容
           bodyPadding: '12px 12px 0',
@@ -371,8 +383,13 @@
 
     &.mobile {
       width: 100%;
-      grid-template-columns: 1fr;
-      gap: 16px;
+      height: auto;
+      min-height: 0;
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow: hidden;
     }
   }
 
@@ -388,8 +405,10 @@
    */
   .tag-config-shell.is-sheet {
     display: flex;
+    height: 100%;
     min-height: 100%;
     flex-direction: column;
+    overflow: hidden;
   }
   .tag-config-shell.is-sheet .tag-config-footer {
     margin-top: auto;
@@ -398,6 +417,7 @@
   .tag-config-footer {
     position: sticky;
     bottom: 0;
+    flex: 0 0 auto;
     display: flex;
     gap: 10px;
     /* 抽屉 body 底部 padding 已归零，这里补齐呼吸位与安全区 */
@@ -414,6 +434,8 @@
   }
 
   .panel {
+    min-width: 0;
+    min-height: 0;
     background: var(--background-color);
     border: 1px solid var(--card-border-color);
     border-radius: 14px;
@@ -433,10 +455,19 @@
     align-items: flex-start;
   }
 
+  .library-panel {
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+
   .title {
     font-weight: 600;
     font-size: 16px;
     color: var(--text-color);
+  }
+
+  .selected-count-badge {
+    display: none;
   }
 
   .panel-subtitle {
@@ -552,6 +583,7 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
+    min-height: 0;
     max-height: 360px;
     overflow: auto;
     padding: 2px 2px 0;
@@ -606,6 +638,9 @@
 
   .tag-state {
     margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
     font-size: 12px;
     color: var(--desc-color);
   }
@@ -630,5 +665,112 @@
     .tag-actions {
       justify-content: flex-start;
     }
+
+    .tag-config.mobile {
+      .panel {
+        padding: 10px;
+        border-radius: var(--mobile-control-radius, 10px);
+        box-shadow: none;
+      }
+
+      .selected-panel {
+        display: grid;
+        flex: 0 0 auto;
+        gap: 8px;
+      }
+
+      .panel-header {
+        align-items: center;
+        margin: 0;
+      }
+
+      .panel-subtitle,
+      .selected-overview {
+        display: none;
+      }
+
+      .title {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 14px;
+      }
+
+      .selected-count-badge {
+        min-width: 23px;
+        height: 23px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 6px;
+        box-sizing: border-box;
+        border: 1px solid var(--resource-tag-color);
+        border-radius: 999px;
+        color: var(--resource-tag-color);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .chip-list {
+        min-height: 0;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding-bottom: 2px;
+        scrollbar-width: thin;
+      }
+
+      .chip {
+        flex: 0 0 auto;
+        max-width: min(72vw, 250px);
+      }
+
+      .selected-panel > .empty {
+        padding: 4px 0;
+        text-align: left;
+      }
+
+      .library-panel {
+        flex: 1 1 auto;
+        grid-template-rows: auto auto minmax(0, 1fr);
+        overflow: hidden;
+      }
+
+      .panel-header--library {
+        min-height: 34px;
+        flex-direction: row;
+      }
+
+      .tag-actions {
+        flex: 0 0 auto;
+        justify-content: flex-end;
+      }
+
+      .tag-toolbar {
+        margin: 8px 0;
+      }
+
+      .tag-list {
+        max-height: none;
+        overscroll-behavior: contain;
+        scrollbar-gutter: stable;
+      }
+
+      .tag-row {
+        min-height: 58px;
+        padding: 8px 10px;
+
+        &.active {
+          border-color: var(--resource-tag-color);
+          box-shadow: 0 0 0 1px color-mix(in srgb, var(--resource-tag-color) 18%, transparent);
+          background: color-mix(in srgb, var(--resource-tag-color) 8%, var(--background-color));
+        }
+      }
+    }
+  }
+
+  html.light-note-mobile-rendering .tag-config.mobile .tag-row.active,
+  html.light-note-mobile-rendering .tag-config.mobile .selected-count-badge {
+    border-color: var(--resource-tag-color);
   }
 </style>
