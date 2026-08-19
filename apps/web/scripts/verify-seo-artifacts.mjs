@@ -36,6 +36,7 @@ function plainText(html) {
 
 async function main() {
   const spaFile = path.join(DIST, 'index.html');
+  const communityChatSpaFile = path.join(DIST, 'community-chat/index.html');
   const rootFile = path.join(DIST, '__seo/root/index.html');
   const legacyLandingFile = path.join(DIST, 'landing/index.html');
   const manifestFile = path.join(DIST, 'site.webmanifest');
@@ -43,13 +44,17 @@ async function main() {
   const skipPrerender = process.env.SKIP_PRERENDER === '1';
 
   assert(existsSync(spaFile), '缺少通用 SPA 入口 dist/index.html');
+  assert(existsSync(communityChatSpaFile), '缺少聊天室静态目录 SPA 入口 dist/community-chat/index.html');
   assert(!existsSync(legacyLandingFile), '不应继续生成 /landing 独立预渲染页面');
 
-  const [spaHtml, manifestText, robotsText] = await Promise.all([
+  const [spaHtml, communityChatSpaHtml, manifestText, robotsText] = await Promise.all([
     readFile(spaFile, 'utf8'),
+    readFile(communityChatSpaFile, 'utf8'),
     readFile(manifestFile, 'utf8'),
     readFile(robotsFile, 'utf8'),
   ]);
+
+  assert(communityChatSpaHtml === spaHtml, '聊天室静态目录 SPA 入口必须与通用 SPA 入口一致');
 
   const spaRobots = findTag(
     spaHtml,
