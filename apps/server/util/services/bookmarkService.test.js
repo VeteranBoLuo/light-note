@@ -12,6 +12,7 @@ const ensureTag = vi.fn();
 const insertResourceTagRelations = vi.fn();
 const validateUserTags = vi.fn();
 const fetchWebMeta = vi.fn();
+const triggerResourceCreateEffects = vi.fn();
 
 vi.mock('../../db/index.js', () => ({ default: pool }));
 vi.mock('./tagService.js', () => ({ ensureTag }));
@@ -26,7 +27,7 @@ vi.mock('../fetchWebMeta.js', () => ({
   EXPLICIT_WEB_READ_MAX_BYTES: 4 * 1024 * 1024,
   fetchWebMeta,
 }));
-vi.mock('./resourceCreateEffects.js', () => ({ triggerResourceCreateEffects: vi.fn() }));
+vi.mock('./resourceCreateEffects.js', () => ({ triggerResourceCreateEffects }));
 
 const { createBookmark, shouldResetBookmarkIcon } = await import('./bookmarkService.js');
 
@@ -46,6 +47,7 @@ describe('bookmarkService.createBookmark', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fetchWebMeta.mockResolvedValue({ ok: false, reason: 'FETCH_FAILED' });
+    triggerResourceCreateEffects.mockResolvedValue(undefined);
     connection.beginTransaction.mockResolvedValue();
     connection.commit.mockResolvedValue();
     connection.rollback.mockResolvedValue();
@@ -116,6 +118,24 @@ describe('bookmarkService.createBookmark', () => {
       signal: undefined,
       maxContentBytes: 4 * 1024 * 1024,
     });
+  });
+
+  it('书签提交后旁路副作用同步失败仍返回成功', async () => {
+    triggerResourceCreateEffects.mockImplementationOnce(() => {
+      throw new ReferenceError('crypto is not defined');
+    });
+
+    await expect(
+      createBookmark({
+        userId: 'root-1',
+        userRole: 'root',
+        bookmark: { url: 'https://example.com/saved', name: '已保存书签' },
+        saveSnapshot: false,
+      }),
+    ).resolves.toMatchObject({ name: '已保存书签', url: 'https://example.com/saved' });
+
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(connection.rollback).not.toHaveBeenCalled();
   });
 
   it.each(['', 'javascript:alert(1)', 'https:// bad.example.com'])(

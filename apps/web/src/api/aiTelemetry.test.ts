@@ -28,4 +28,19 @@ describe('AI telemetry client', () => {
       { silent: true },
     );
   });
+
+  it('does not fail when the runtime does not expose Web Crypto', async () => {
+    const originalCrypto = globalThis.crypto;
+    Object.defineProperty(globalThis, 'crypto', { configurable: true, value: undefined });
+    try {
+      await expect(recordAiProductEvent('ai_result_saved')).resolves.toEqual({});
+      expect(apiBasePost).toHaveBeenCalledWith(
+        '/api/common/recordAiEvent',
+        { id: undefined, event: 'ai_result_saved', dimensions: {} },
+        { silent: true },
+      );
+    } finally {
+      Object.defineProperty(globalThis, 'crypto', { configurable: true, value: originalCrypto });
+    }
+  });
 });

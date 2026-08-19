@@ -9,6 +9,7 @@
  *
  * EXP 只用于升级、不是货币。所有发放都走本文件,不在业务处各写一套。
  */
+import { createHash } from 'node:crypto';
 import pool from '../db/index.js';
 import { earnPoints, earnStorage, getAchievementFrameByKey, titleName } from './points.js';
 import { grantItem } from './items.js';
@@ -346,8 +347,7 @@ function createAmount(kind, nth) {
 
 // 内容判重键:对 url 等取 sha256 hex,落 growth_events.ref_id 做永久判重(删了重建也不再发)
 export function hashRef(str) {
-  return crypto
-    .createHash('sha256')
+  return createHash('sha256')
     .update(String(str || ''))
     .digest('hex');
 }

@@ -125,6 +125,6 @@ export function aiDurationBucket(durationMs: number): AiProductEventDimensions['
 }
 
 export function recordAiProductEvent(event: AiProductEventName, dimensions: AiProductEventDimensions = {}) {
-  const id = typeof crypto?.randomUUID === 'function' ? crypto.randomUUID() : undefined;
+  const id = typeof globalThis.crypto?.randomUUID === 'function' ? globalThis.crypto.randomUUID() : undefined;
   return apiBasePost('/api/common/recordAiEvent', { id, event, dimensions }, { silent: true }).catch(() => undefined);
 }

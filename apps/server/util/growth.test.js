@@ -41,6 +41,7 @@ import {
   getGrowthDashboard,
   getActivityHeatmap,
   awardCreate,
+  hashRef,
   grantExp,
   getGrowth,
   getDailyQuestState,
@@ -64,6 +65,12 @@ function accountCalendar(dayKey, makeupDays = []) {
 afterEach(() => vi.useRealTimers());
 
 describe('growth 段位表', () => {
+  it('书签判重键在 Node 运行时稳定生成 SHA-256', () => {
+    expect(hashRef('https://example.com')).toMatch(/^[a-f0-9]{64}$/);
+    expect(hashRef('https://example.com')).toBe(hashRef('https://example.com'));
+    expect(hashRef('https://example.com')).not.toBe(hashRef('https://example.org'));
+  });
+
   it('15 级、cumExp 从 0 严格递增到 50000', () => {
     expect(RANKS).toHaveLength(15);
     expect(MAX_LEVEL).toBe(15);

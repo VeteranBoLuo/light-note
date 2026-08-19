@@ -137,15 +137,20 @@ export async function createBookmark({
     connection.release();
   }
 
-  await triggerResourceCreateEffects({
-    request,
-    userId,
-    userRole,
-    resourceType: 'bookmark',
-    resourceId: data.id,
-    url,
-    suppressUserRewards,
-  });
+  try {
+    await triggerResourceCreateEffects({
+      request,
+      userId,
+      userRole,
+      resourceType: 'bookmark',
+      resourceId: data.id,
+      url,
+      suppressUserRewards,
+    });
+  } catch {
+    // 书签已经提交；成长、转化与知识缓存失效都属于旁路副作用，
+    // 任何同步异常都不能把一次成功收藏伪装成 500，诱导用户重试并撞上重复书签。
+  }
   if (saveSnapshot) archiveBookmarkBackground(userId, data.id);
   return {
     id: data.id,
