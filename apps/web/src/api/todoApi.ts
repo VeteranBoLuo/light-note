@@ -13,6 +13,7 @@ export type TodoPastPolicy = 'keep_overdue' | 'restart_today_keep_count' | 'skip
 export type TodoReminderV2Mode = 'none' | 'once_per_instance' | 'nudge';
 export type TodoReminderTriggerType = 'at_start' | 'fixed_time' | 'before_due';
 export type TodoPlanScope = 'current' | 'future' | 'series';
+export type TodoSeriesAction = 'skip' | 'pause' | 'resume';
 export type TodoTaskMode = 'single' | 'independent';
 export type TodoSingleReminderMode = 'none' | 'once' | 'repeat';
 export type TodoSingleRepeatKind = 'interval' | 'weekly' | 'monthly';
@@ -274,8 +275,6 @@ export const pauseTodoSeriesV2 = (seriesId: string, idempotencyKey: string) =>
   apiBasePost('/api/todo/v2/series/pause', { seriesId, idempotencyKey });
 export const resumeTodoSeriesV2 = (seriesId: string, idempotencyKey: string) =>
   apiBasePost('/api/todo/v2/series/resume', { seriesId, idempotencyKey });
-export const stopTodoSeriesV2 = (seriesId: string, idempotencyKey: string) =>
-  apiBasePost('/api/todo/v2/series/stop', { seriesId, idempotencyKey });
 export const skipTodoInstanceV2 = (todoId: string, idempotencyKey: string) =>
   apiBasePost('/api/todo/v2/instance/skip', { todoId, idempotencyKey });
 export const deleteTodoPlanV2 = (todoId: string, scope: TodoPlanScope, idempotencyKey: string) =>

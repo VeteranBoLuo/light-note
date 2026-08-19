@@ -1784,10 +1784,9 @@ export default {
     todoSeriesActions: 'Series actions',
     todoSeriesSkipInstance: 'Skip this item',
     todoSeriesPause: 'Pause series',
+    todoSeriesPauseConfirm:
+      'No new items will be generated while paused, and all unsent reminders will be paused. Existing todos stay available, and you can resume the series at any time.',
     todoSeriesResume: 'Resume series',
-    todoSeriesStop: 'Stop entire series',
-    todoSeriesStopConfirm:
-      'No more items will be generated and all future reminder jobs will be cancelled. Completed history stays intact.',
     todoSeriesDeleteChoice:
       '“{name}” is part of a series. Choose the delete scope; completed history will not be rewritten.',
     todoSeriesDeleteCurrent: 'Delete this item',

@@ -722,11 +722,56 @@ h1 {
 }
 
 /*
- * 笔记正文预览共用图文组合布局。编辑器 iframe 内仍由 TinyMCE 的 content_style
+ * 笔记正文预览共用结构样式。编辑器 iframe 内仍由 TinyMCE 的 content_style
  * 提供同一套规则；这里覆盖详情预览、Markdown 预览与编辑器热身预览，避免 v-html
- * 离开 Editor.vue 的 scoped 样式后退化成「大图一行、文字下一行」。
+ * 离开 Editor.vue 的 scoped 样式后出现表格无边框或图文组合布局退化。
  */
 .note-rich-content {
+  table {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    margin: 0.9em auto;
+    overflow-x: auto;
+    border-collapse: collapse;
+    border-spacing: 0;
+    scrollbar-width: thin;
+  }
+
+  .ln-rich-table-scroll {
+    width: 100%;
+    max-width: 100%;
+    margin: 0.9em auto;
+    overflow-x: auto;
+    scrollbar-width: thin;
+
+    > table {
+      display: table;
+      width: 100%;
+      min-width: 100%;
+      max-width: none;
+      margin: 0;
+      overflow: visible;
+    }
+  }
+
+  th,
+  td {
+    min-width: 96px;
+    padding: 8px 10px;
+    border: 1px solid var(--surface-border-color);
+    box-sizing: border-box;
+    vertical-align: top;
+    overflow-wrap: break-word;
+    word-break: normal;
+  }
+
+  th {
+    background: var(--menu-body-bg-color);
+    font-weight: 650;
+    text-align: left;
+  }
+
   .ln-media-text {
     --ln-media-width: 36%;
     --ln-media-max-width: 340px;

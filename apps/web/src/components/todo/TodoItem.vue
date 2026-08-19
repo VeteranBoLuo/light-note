@@ -168,9 +168,6 @@
                   <BButton v-else @click="runMenuAction(() => emit('series-action', 'pause'))">
                     {{ t('inbox.todoSeriesPause') }}
                   </BButton>
-                  <BButton type="danger" @click="runMenuAction(() => emit('series-action', 'stop'))">
-                    {{ t('inbox.todoSeriesStop') }}
-                  </BButton>
                 </template>
               </template>
               <span class="todo-more-menu__divider" aria-hidden="true"></span>
@@ -224,7 +221,7 @@
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap';
   import { useRouter } from 'vue-router';
-  import type { TodoChecklistItem, TodoItem, TodoPriority, TodoResourceRefView } from '@/api/todoApi';
+  import type { TodoChecklistItem, TodoItem, TodoPriority, TodoResourceRefView, TodoSeriesAction } from '@/api/todoApi';
   import { resolveResourceRoute } from '@/utils/resourceNavigation';
   import {
     formatTodoDateTime,
@@ -255,7 +252,7 @@
     'update-priority': [priority: TodoPriority];
     'swipe-start': [];
     'update:swipe-open': [open: boolean];
-    'series-action': [action: 'skip' | 'pause' | 'resume' | 'stop'];
+    'series-action': [action: TodoSeriesAction];
   }>();
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -458,12 +455,6 @@
             props.item.series?.status === 'paused'
               ? { key: 'series-resume', label: t('inbox.todoSeriesResume'), icon: icon.common.play }
               : { key: 'series-pause', label: t('inbox.todoSeriesPause'), icon: icon.common.pause },
-            {
-              key: 'series-stop',
-              label: t('inbox.todoSeriesStop'),
-              icon: icon.common.stop,
-              danger: true,
-            },
           ]
         : [];
     return [
@@ -499,7 +490,6 @@
     else if (action.key === 'series-skip') emit('series-action', 'skip');
     else if (action.key === 'series-pause') emit('series-action', 'pause');
     else if (action.key === 'series-resume') emit('series-action', 'resume');
-    else if (action.key === 'series-stop') emit('series-action', 'stop');
     else if (action.key === 'delete') emit('delete');
   }
 
@@ -856,12 +846,16 @@
   }
 
   .todo-item__actions {
-    align-self: center;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
     gap: 6px;
+  }
+  .todo-item__actions--desktop {
+    align-self: start;
+    flex-wrap: nowrap;
+    margin-top: 5px;
   }
   .todo-item__actions--mobile {
     display: none;
@@ -931,6 +925,16 @@
   @media (pointer: coarse) {
     .todo-snooze-menu :deep(.b_btn) {
       min-height: 44px;
+    }
+  }
+  @media (min-width: 768px) and (max-width: 900px) {
+    .todo-item {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .todo-item__actions--desktop {
+      grid-column: 1 / -1;
+      justify-self: end;
+      margin: 0 0 0 30px;
     }
   }
   @media (max-width: 767px) {

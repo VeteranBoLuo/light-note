@@ -80,7 +80,8 @@ describe('移动端待办页签布局', () => {
     expect(inboxSource).toMatch(/\.inbox-toolbar\s*\{[\s\S]*?border:\s*0;[\s\S]*?box-shadow:\s*none;/);
   });
 
-  it('待办工作区不叠加底部渐隐遮罩，避免最后一项内容看起来被遮挡', () => {
+  it('待办工作区不叠加上下渐隐遮罩，避免页签附近和最后一项内容看起来被遮挡', () => {
+    expect(inboxSource).toContain("'has-top-fade': showTopFade && !isTodoFocused");
     expect(inboxSource).toContain("'has-bottom-fade': showBottomFade && !isTodoFocused");
   });
 

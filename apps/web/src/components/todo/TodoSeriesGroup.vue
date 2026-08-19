@@ -78,7 +78,7 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import type { TodoChecklistItem, TodoItem as TodoItemType, TodoPriority } from '@/api/todoApi';
+  import type { TodoChecklistItem, TodoItem as TodoItemType, TodoPriority, TodoSeriesAction } from '@/api/todoApi';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import TodoItem from '@/components/todo/TodoItem.vue';
@@ -120,7 +120,7 @@
     'add-to-calendar': [item: TodoItemType];
     snooze: [item: TodoItemType, preset: TodoSnoozePreset];
     'update-priority': [item: TodoItemType, priority: TodoPriority];
-    'series-action': [item: TodoItemType, action: 'skip' | 'pause' | 'resume' | 'stop'];
+    'series-action': [item: TodoItemType, action: TodoSeriesAction];
   }>();
   const { t } = useI18n();
   const drawerOpen = ref(false);

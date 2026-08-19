@@ -290,7 +290,10 @@
 
     <section
       class="inbox-content"
-      :class="{ 'has-top-fade': showTopFade, 'has-bottom-fade': showBottomFade && !isTodoFocused }"
+      :class="{
+        'has-top-fade': showTopFade && !isTodoFocused,
+        'has-bottom-fade': showBottomFade && !isTodoFocused,
+      }"
     >
       <div
         ref="scrollContainer"
@@ -497,6 +500,7 @@
     TodoFilterStatus,
     TodoItem as TodoItemType,
     TodoPriority,
+    TodoSeriesAction,
     TodoSort,
   } from '@/api/todoApi';
   import {
@@ -505,7 +509,6 @@
     pauseTodoSeriesV2,
     resumeTodoSeriesV2,
     skipTodoInstanceV2,
-    stopTodoSeriesV2,
     type TodoPlanScope,
   } from '@/api/todoApi';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
@@ -1455,7 +1458,7 @@
     }
   }
 
-  async function runTodoSeriesAction(item: TodoItemType, action: 'skip' | 'pause' | 'resume' | 'stop') {
+  async function runTodoSeriesAction(item: TodoItemType, action: TodoSeriesAction) {
     if (!item.seriesId || hasPendingOperation.value) return;
     updatingTodoId.value = item.id;
     try {
@@ -1465,9 +1468,7 @@
           ? await skipTodoInstanceV2(item.id, key)
           : action === 'pause'
             ? await pauseTodoSeriesV2(item.seriesId, key)
-            : action === 'resume'
-              ? await resumeTodoSeriesV2(item.seriesId, key)
-              : await stopTodoSeriesV2(item.seriesId, key);
+            : await resumeTodoSeriesV2(item.seriesId, key);
       if (response.status !== 200) {
         message.error(response.msg || t('inbox.todoSaveFailed'));
         return;
@@ -1481,15 +1482,15 @@
     }
   }
 
-  function handleTodoSeriesAction(item: TodoItemType, action: 'skip' | 'pause' | 'resume' | 'stop') {
-    if (action !== 'stop') {
+  function handleTodoSeriesAction(item: TodoItemType, action: TodoSeriesAction) {
+    if (action !== 'pause') {
       void runTodoSeriesAction(item, action);
       return;
     }
     Alert.alert({
-      title: t('inbox.todoSeriesStop'),
-      content: t('inbox.todoSeriesStopConfirm'),
-      okText: t('inbox.todoSeriesStop'),
+      title: t('inbox.todoSeriesPause'),
+      content: t('inbox.todoSeriesPauseConfirm'),
+      okText: t('inbox.todoSeriesPause'),
       cancelText: t('common.cancel'),
       onOk: () => runTodoSeriesAction(item, action),
     });

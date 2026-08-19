@@ -1,8 +1,12 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import TodoItem from './TodoItem.vue';
 import type { TodoItem as TodoItemType } from '@/api/todoApi';
+
+const todoItemSource = readFileSync(resolve(process.cwd(), 'src/components/todo/TodoItem.vue'), 'utf8');
 
 const routerPush = vi.fn();
 vi.mock('vue-router', () => ({
@@ -105,7 +109,6 @@ function mountTodoItem(item: TodoItemType = todo, options: { selectable?: boolea
             todoSeriesSkipInstance: '跳过本次',
             todoSeriesPause: '暂停系列',
             todoSeriesResume: '恢复系列',
-            todoSeriesStop: '结束系列',
             todoRecurrenceSummary: { daily: '每 {interval} 天生成下一项' },
             todoSnoozeOneHour: '1 小时后',
             todoSnoozeThreeHours: '3 小时后',
@@ -134,6 +137,15 @@ afterEach(() => {
 });
 
 describe('TodoItem card editing', () => {
+  it('桌面操作区靠右上单行展示，窄桌面空间不足时落到正文下方', () => {
+    expect(todoItemSource).toMatch(
+      /\.todo-item__actions--desktop\s*\{[\s\S]*?align-self:\s*start;[\s\S]*?flex-wrap:\s*nowrap;[\s\S]*?margin-top:\s*5px;/,
+    );
+    expect(todoItemSource).toMatch(
+      /@media \(min-width: 768px\) and \(max-width: 900px\)[\s\S]*?\.todo-item\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\);[\s\S]*?\.todo-item__actions--desktop\s*\{[\s\S]*?grid-column:\s*1 \/ -1;[\s\S]*?justify-self:\s*end;/,
+    );
+  });
+
   it('点击正文进入编辑，子待办、参考资料和操作按钮不会透传到卡片编辑', async () => {
     const { host, onEdit } = mountTodoItem();
     await nextTick();
@@ -318,6 +330,9 @@ describe('TodoItem card editing', () => {
       document.body.querySelectorAll<HTMLButtonElement>('.mobile-page-actions__item'),
     ).find((button) => button.textContent?.includes('暂停系列'));
     expect(pauseButton).toBeTruthy();
+    expect(document.body.textContent).toContain('删除');
+    expect(document.body.textContent).not.toContain('停止整个系列');
+    expect(document.body.textContent).not.toContain('结束系列');
     pauseButton?.click();
     await vi.waitFor(() => {
       expect(onSeriesAction).toHaveBeenCalledWith('pause');

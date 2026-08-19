@@ -25,6 +25,22 @@ describe('NoteReadonlyPreview', () => {
     expect(commonStyles).toContain("&[data-ln-media-position='right'] .ln-media-text__item");
   });
 
+  it('只读正文表格保留原生排版并由独立容器承接横向滚动', () => {
+    expect(source).toContain("root.querySelectorAll<HTMLTableElement>('table')");
+    expect(source).toContain("table.parentElement?.classList.contains('ln-rich-table-scroll')");
+    expect(source).toContain("scrollContainer.className = 'ln-rich-table-scroll'");
+    expect(source).toContain('preparePreviewContentTables(previewContentRef.value)');
+    expect(commonStyles).toMatch(
+      /\.note-rich-content\s*\{[\s\S]*?table\s*\{[\s\S]*?display:\s*block;[\s\S]*?max-width:\s*100%;[\s\S]*?margin:\s*0\.9em auto;[\s\S]*?overflow-x:\s*auto;/u,
+    );
+    expect(commonStyles).toMatch(
+      /th,\s*\n\s*td\s*\{[\s\S]*?min-width:\s*96px;[\s\S]*?border:\s*1px solid var\(--surface-border-color\);[\s\S]*?overflow-wrap:\s*break-word;[\s\S]*?word-break:\s*normal;/u,
+    );
+    expect(commonStyles).toMatch(
+      /\.ln-rich-table-scroll\s*\{[\s\S]*?overflow-x:\s*auto;[\s\S]*?> table\s*\{[\s\S]*?display:\s*table;[\s\S]*?width:\s*100%;[\s\S]*?min-width:\s*100%;/u,
+    );
+  });
+
   it('阅读预览拦截站内引用，文件可选择本页预览或进入云空间', () => {
     expect(source).toContain("parseResourceHref(anchor.getAttribute('href'))");
     expect(source).toContain('resolveNoteResourceRefs(refs)');
@@ -62,6 +78,7 @@ describe('NoteReadonlyPreview', () => {
     expect(source).toMatch(
       /\.note-readonly-preview__header\s*\{[\s\S]*min-height:\s*74px;[\s\S]*padding:\s*8px 16px;/u,
     );
+    expect(source).toMatch(/\.note-readonly-preview__article\s*\{[\s\S]*width:\s*min\(100%, 1600px\);/u);
     expect(source).not.toContain('note-readonly-preview__notice');
   });
 

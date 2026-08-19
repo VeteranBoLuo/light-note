@@ -168,7 +168,7 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import type { TodoChecklistItem, TodoItem, TodoPriority } from '@/api/todoApi';
+  import type { TodoChecklistItem, TodoItem, TodoPriority, TodoSeriesAction } from '@/api/todoApi';
   import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
   import type { BActionMenuItem } from '@/components/base/BasicComponents/actionMenu';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -204,7 +204,7 @@
     'add-to-calendar': [item: TodoItem];
     snooze: [item: TodoItem, preset: TodoSnoozePreset];
     'update-priority': [item: TodoItem, priority: TodoPriority];
-    'series-action': [item: TodoItem, action: 'skip' | 'pause' | 'resume' | 'stop'];
+    'series-action': [item: TodoItem, action: TodoSeriesAction];
   }>();
   const { t, locale } = useI18n();
   const matrixNow = ref(new Date());

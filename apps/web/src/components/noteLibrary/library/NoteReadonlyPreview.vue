@@ -431,9 +431,21 @@
     if (outlineSpyRoot) window.addEventListener('resize', scheduleActivePreviewHeading, { passive: true });
   }
 
+  function preparePreviewContentTables(root: HTMLElement | null) {
+    if (!root) return;
+    root.querySelectorAll<HTMLTableElement>('table').forEach((table) => {
+      if (table.parentElement?.classList.contains('ln-rich-table-scroll')) return;
+      const scrollContainer = document.createElement('div');
+      scrollContainer.className = 'ln-rich-table-scroll';
+      table.before(scrollContainer);
+      scrollContainer.append(table);
+    });
+  }
+
   async function decoratePreviewContent(parentRequestSeq: number) {
     await nextTick();
     if (parentRequestSeq !== requestSeq) return;
+    preparePreviewContentTables(previewContentRef.value);
     prepareNoteContentPreviewImages(previewContentRef.value, t('noteDetail.editor.imagePreview'));
     setupPreviewOutlineSpy();
     previewHeadingElements.clear();
@@ -693,7 +705,7 @@
   }
 
   .note-readonly-preview__article {
-    width: min(100%, 780px);
+    width: min(100%, 1600px);
     margin: 0 auto;
     color: var(--text-color);
   }
