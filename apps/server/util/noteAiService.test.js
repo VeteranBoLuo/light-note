@@ -20,7 +20,32 @@ describe('noteAiService', () => {
 
     expect(note.id).toBe('note-1');
     expect(query.mock.calls[0][0]).toContain("IF(type = 'drawing', '', content) AS content");
+    expect(query.mock.calls[0][0]).toContain("JSON_EXTRACT(content, '$.elements[*].text')");
     expect(query.mock.calls[0][1]).toEqual(['note-1', 'user-1']);
+  });
+
+  it('手绘笔记只向 AI 提供安全派生摘要，不泄露轨迹坐标或冒充视觉识别', async () => {
+    query.mockResolvedValueOnce([
+      [
+        {
+          id: 'drawing-1',
+          title: '草图',
+          content: '',
+          type: 'drawing',
+          drawing_element_count: 177,
+          drawing_texts_json: '["尺寸 145 cm"]',
+        },
+      ],
+    ]);
+
+    const note = await findOwnedNoteForAi({ userId: 'user-1', noteId: 'drawing-1' });
+    const result = await buildNoteAiPayload({
+      note: { ...note, content: '{"elements":[{"points":[12,34,56,78]}]}' },
+    });
+
+    expect(note.aiContent).toContain('画布包含 177 个绘制元素');
+    expect(result.content).toContain('尺寸 145 cm');
+    expect(result.content).not.toContain('12,34,56,78');
   });
 
   it('读取正文阶段只做语义解析，不隐式执行 OCR', async () => {

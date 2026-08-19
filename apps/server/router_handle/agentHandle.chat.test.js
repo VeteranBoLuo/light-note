@@ -1034,6 +1034,130 @@ describe('agentChat 主链路', () => {
     });
   });
 
+  it('Runtime V2 的今天范围为空时返回可核验日期和跨零点建议，不生成空白确认卡', async () => {
+    vi.stubEnv('AI_AGENT_RUNTIME_V2_MODE', 'enforce');
+    mocks.selectAgentTools.mockImplementation((registry) =>
+      [registry.get('query_notes'), registry.get('create_note')].filter(Boolean),
+    );
+    mocks.toolExecute.mockResolvedValueOnce({
+      value: '今天（2026-08-20，截至 00:06）没有找到笔记',
+      dependencyRefs: [],
+    });
+    mocks.requestAi.mockImplementation(async (messages, options = {}) => {
+      if (options?.trace?.stage === 'intent_compiler') {
+        const payload = JSON.parse(messages[1].content);
+        return {
+          content: '',
+          toolCalls: [
+            turnSpecCall({
+              requestKind: 'create_artifact',
+              confidence: 'high',
+              goals: [
+                {
+                  id: 'read-today-notes',
+                  kind: 'read',
+                  capabilityDomain: 'note',
+                  description: '读取今天新增的全部笔记',
+                  targetDescription: '今天的全部笔记',
+                  dependsOn: [],
+                },
+                {
+                  id: 'create-summary-note',
+                  kind: 'transform',
+                  capabilityDomain: 'note',
+                  description: '根据真实材料生成总结笔记',
+                  targetDescription: '新的 Markdown 笔记',
+                  dependsOn: ['read-today-notes'],
+                },
+              ],
+              groundingPolicy: payload.authoritativeGroundingPolicy,
+              missingSlots: [],
+              clarificationQuestion: '',
+            }),
+          ],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      if (options?.trace?.stage === 'execution_planner') {
+        const payload = JSON.parse(messages[1].content);
+        return {
+          content: '',
+          toolCalls: [
+            executionPlanCall({
+              turnSpecDigest: payload.turnSpec.digest,
+              steps: [
+                {
+                  id: 'query-today',
+                  goalId: 'read-today-notes',
+                  toolName: 'query_notes',
+                  arguments: { timeRange: '今天', limit: 50 },
+                  dependsOn: [],
+                  expectedResultKind: 'note_refs',
+                },
+              ],
+              deferredGoalIds: ['create-summary-note'],
+              unsupportedGoalIds: [],
+            }),
+          ],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      if (options?.trace?.stage === 'execution_planner_round_2') {
+        const payload = JSON.parse(messages[1].content);
+        return {
+          content: '',
+          toolCalls: [
+            executionPlanCall({
+              turnSpecDigest: payload.turnSpec.digest,
+              steps: [
+                {
+                  id: 'create-summary',
+                  goalId: 'create-summary-note',
+                  toolName: 'create_note',
+                  arguments: { title: '今天的笔记总结' },
+                  dependsOn: [],
+                  expectedResultKind: 'note_confirmation',
+                },
+              ],
+              deferredGoalIds: [],
+              unsupportedGoalIds: [],
+            }),
+          ],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      throw new Error(`unexpected stage: ${options?.trace?.stage}`);
+    });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '把我今天的全部笔记总结成一篇新笔记',
+        stream: false,
+        contexts: [],
+        attachmentIds: [],
+        scope: { mode: 'workspace' },
+      }),
+      res,
+    );
+
+    expect(mocks.requestAi.mock.calls.map(([, options]) => options?.trace?.stage)).toEqual([
+      'intent_compiler',
+      'execution_planner',
+      'execution_planner_round_2',
+    ]);
+    expect(mocks.createToolConfirmation).not.toHaveBeenCalled();
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toContain('今天（2026-08-20，截至 00:06）');
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toContain('最近24小时');
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toContain('昨天');
+  });
+
   it('Runtime V2 编译连续失败时，纯查询只降级到只读语义计划并继续返回真实结果', async () => {
     vi.stubEnv('AI_AGENT_RUNTIME_V2_MODE', 'enforce');
     mocks.selectAgentTools.mockImplementation((registry) => [registry.get('query_notes')].filter(Boolean));
@@ -1883,7 +2007,10 @@ describe('agentChat 主链路', () => {
   });
 
   it('结构化工作区查询为空时直接失败关闭，不再让模型生成占位笔记', async () => {
-    mocks.toolExecute.mockResolvedValueOnce({ value: '没有找到笔记', dependencyRefs: [] });
+    mocks.toolExecute.mockResolvedValueOnce({
+      value: '今天（2026-08-20，截至 00:05）没有找到笔记',
+      dependencyRefs: [],
+    });
     mocks.requestAi.mockResolvedValueOnce(
       noteDraftTaskResponse({
         needsWorkspaceRetrieval: true,
@@ -1907,9 +2034,11 @@ describe('agentChat 主链路', () => {
     expect(mocks.selectAgentTools).not.toHaveBeenCalled();
     expect(mocks.createToolConfirmation).not.toHaveBeenCalled();
     expect(res.send.mock.calls.at(-1)?.[0]?.data).toMatchObject({
-      response: expect.stringContaining('没有查询到符合本次范围的真实工作区材料'),
+      response: expect.stringContaining('今天（2026-08-20，截至 00:05）没有找到笔记'),
       confirmations: [],
     });
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toContain('最近24小时');
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toContain('昨天');
   });
 
   it('单一目录范围生成笔记时，确认卡默认写入该目录并显示目标目录', async () => {

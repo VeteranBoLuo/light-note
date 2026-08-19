@@ -78,6 +78,12 @@ pnpm --filter server smoke:ai-root-e2e
 pnpm --filter server smoke:ai-root-e2e -- --live --suite full --execute-writes --provider deepseek
 ```
 
+同一发布基线已经完成完整门禁、后续只修复单一工具链且发布负责人明确要求节省真实模型消耗时，可定点重跑受影响用例，并把长草稿改写轮数临时收窄到 1；该参数只控制本次定点复测，不改变完整门禁默认的 5 轮：
+
+```bash
+pnpm --filter server smoke:ai-root-e2e -- --live --execute-writes --provider deepseek --case create-note --artifact-refinement-rounds 1
+```
+
 完整门禁必须同时满足：所有注册工具逐项通过；所有写工具返回正确确认卡并在确认后产生可核验结果；同一确认重放不重复写入；笔记材料范围、硬字数下限和续写保持通过；测试夹具清理成功。任一项失败都禁止发布或开启 V2，不能用孤立用例的偶然成功代替完整矩阵。真实报告必须脱敏，不保存问题、回答、工具参数、资源 ID 或账号标识。
 
 涉及积分获取 C5 时，发布前还必须完成以下顺序：

@@ -64,6 +64,7 @@ function lastDayOfMonth(year, month) {
  *
  * 支持的表达式：
  *   "最近N天" / "近N天"  →  N 天前 00:00 → 现在
+ *   "最近N小时" / "近N小时" → 精确向前滚动 N 小时 → 现在
  *   "最近N周" / "近N周"  →  N 周前周一 00:00 → 现在
  *   "最近N个月" / "近N个月" → N 个月前 1 日 00:00 → 现在
  *   "今天" / "今日"     →  今天 00:00 → 现在
@@ -80,18 +81,29 @@ function lastDayOfMonth(year, month) {
  *   "N月" / "N月份"    →  该月 1 日 → 该月最后一天（如 "5月"）
  *
  * @param {string|null|undefined} expr
+ * @param {{ now?: Date|string|number }} options 测试或调用方可注入基准时间
  * @returns {{ start: string, end: string } | null}
  */
-export function parseTimeRange(expr) {
+export function parseTimeRange(expr, { now: nowInput = new Date() } = {}) {
   if (!expr || typeof expr !== 'string') return null;
 
   const s = expr.trim();
   if (!s || s === '全部' || s.toLowerCase() === 'all') return null;
 
-  const now = new Date();
+  const now = new Date(nowInput);
+  if (!Number.isFinite(now.getTime())) return null;
+
+  // ---- 最近 N 小时（滚动窗口，不按自然日取整） ----
+  let m = s.match(/^(?:最近|近)\s*(\d+)\s*个?\s*小时$/);
+  if (m) {
+    const n = parseInt(m[1], 10);
+    if (n <= 0) return null;
+    const start = new Date(now.getTime() - n * 60 * 60 * 1000);
+    return { start: fmt(start), end: fmt(now) };
+  }
 
   // ---- 最近 N 天 ----
-  let m = s.match(/^(?:最近|近)\s*(\d+)\s*天$/);
+  m = s.match(/^(?:最近|近)\s*(\d+)\s*天$/);
   if (m) {
     const n = parseInt(m[1], 10);
     const start = new Date(now);
@@ -220,6 +232,47 @@ export function parseTimeRange(expr) {
   return null;
 }
 
+function shortDateTime(value, { withTime = false } = {}) {
+  const text = String(value || '');
+  return withTime ? text.slice(0, 16) : text.slice(0, 10);
+}
+
+/**
+ * 将后端已经解析完成的时间范围转换成用户可核验的口径说明。
+ * 这里只展示解析结果，不重新计算范围，避免界面文案与真实 SQL 边界漂移。
+ */
+export function describeResolvedTimeRange(expr, range, locale = 'zh-CN') {
+  if (!range?.start || !range?.end) return '';
+  const expression = String(expr || '').trim();
+  const english = String(locale || '')
+    .toLowerCase()
+    .startsWith('en');
+  const startDate = shortDateTime(range.start);
+  const endDate = shortDateTime(range.end);
+  const endTime = String(range.end).slice(11, 16);
+
+  if (expression === '今天' || expression === '今日') {
+    return english ? `today (${startDate}, through ${endTime})` : `今天（${startDate}，截至 ${endTime}）`;
+  }
+  if (expression === '昨天' || expression === '昨日') {
+    return english ? `yesterday (${startDate})` : `昨天（${startDate}）`;
+  }
+  if (/^(?:最近|近)\s*24\s*个?\s*小时$/u.test(expression)) {
+    const window = `${shortDateTime(range.start, { withTime: true })} 至 ${shortDateTime(range.end, { withTime: true })}`;
+    return english
+      ? `the last 24 hours (${shortDateTime(range.start, { withTime: true })} to ${shortDateTime(range.end, { withTime: true })})`
+      : `最近24小时（${window}）`;
+  }
+  if (startDate === endDate) {
+    return english
+      ? `${expression || 'the requested range'} (${startDate})`
+      : `${expression || '所选范围'}（${startDate}）`;
+  }
+  return english
+    ? `${expression || 'the requested range'} (${startDate} to ${endDate})`
+    : `${expression || '所选范围'}（${startDate} 至 ${endDate}）`;
+}
+
 /**
  * 明确表示「不限时间」的说法。
  *
@@ -247,7 +300,11 @@ const ALL_TIME_EXPRESSIONS = new Set([
 ]);
 
 export function isAllTimeExpression(value) {
-  return ALL_TIME_EXPRESSIONS.has(String(value || '').trim().toLowerCase());
+  return ALL_TIME_EXPRESSIONS.has(
+    String(value || '')
+      .trim()
+      .toLowerCase(),
+  );
 }
 
 /**

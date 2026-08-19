@@ -32,6 +32,7 @@ export function parseRootE2EArgs(argv = []) {
     provider: 'deepseek',
     format: 'text',
     artifactRegression: true,
+    artifactRefinementRounds: 5,
     caseIds: [],
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -40,7 +41,9 @@ export function parseRootE2EArgs(argv = []) {
     if (arg === '--live') options.live = true;
     else if (arg === '--execute-writes') options.executeWrites = true;
     else if (arg === '--no-artifact-regression') options.artifactRegression = false;
-    else if (arg === '--suite') options.suite = argv[++index] || 'full';
+    else if (arg === '--artifact-refinement-rounds') {
+      options.artifactRefinementRounds = Number(argv[++index]);
+    } else if (arg === '--suite') options.suite = argv[++index] || 'full';
     else if (arg === '--provider') options.provider = argv[++index] || 'deepseek';
     else if (arg === '--format') options.format = argv[++index] || 'text';
     else if (arg === '--case') {
@@ -58,6 +61,13 @@ export function parseRootE2EArgs(argv = []) {
   if (unknownCaseIds.length) throw new Error(`未知用例：${unknownCaseIds.join(',')}`);
   if (!PROVIDERS.has(options.provider)) throw new Error('--provider 仅支持 deepseek 或 qwen');
   if (!['text', 'json'].includes(options.format)) throw new Error('--format 仅支持 text 或 json');
+  if (
+    !Number.isInteger(options.artifactRefinementRounds) ||
+    options.artifactRefinementRounds < 1 ||
+    options.artifactRefinementRounds > 5
+  ) {
+    throw new Error('--artifact-refinement-rounds 仅支持 1 到 5');
+  }
   if (options.live && options.suite === 'full' && !options.executeWrites) {
     throw new Error('完整真实链路必须显式添加 --execute-writes，确认允许写入并清理专属测试夹具');
   }
@@ -226,11 +236,13 @@ async function countToday(pool, table, ownerColumn, ownerId = null) {
   return Number(rows[0]?.count || 0);
 }
 
-function answerMentionsCount(answer, count) {
+export function answerMentionsCount(answer, count) {
+  const text = String(answer || '');
+  if (Number(count) === 0 && /(?:没有(?:找到|新增|查询到)?|未找到|暂无)[^。；;\n]{0,18}(?:笔记|记录)/u.test(text)) {
+    return true;
+  }
   const escaped = String(count).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(?:共|有|新增|创建|笔记|用户)[^\\d]{0,12}${escaped}(?:\\s*(?:个|位|篇|条))?`, 'u').test(
-    String(answer || ''),
-  );
+  return new RegExp(`(?:共|有|新增|创建|笔记|用户)[^\\d]{0,12}${escaped}(?:\\s*(?:个|位|篇|条))?`, 'u').test(text);
 }
 
 async function executeConfirmation({ handlers, user, confirmation, runId }) {
@@ -608,11 +620,10 @@ function clientLikeFollowUpGrounding(data) {
   };
 }
 
-async function runNoteArtifactRegression({ state, pool, handlers, toolsByName }) {
+async function runNoteArtifactRegression({ state, pool, handlers, toolsByName, refinementRounds = 5 }) {
   const startedAt = Date.now();
   const sevenDayPrefix = `${state.prefix} 7天总结`;
   const summaryPrefix = `${state.prefix} 今日总结`;
-  const refinementRounds = 5;
   try {
     const createNoteTool = toolsByName.get('create_note');
     const sevenDayMessage =
@@ -1178,7 +1189,13 @@ export async function runRootE2E(options) {
       process.stderr.write(formatProgress(item, results.length, selectedCases.length));
     }
     if (options.artifactRegression) {
-      artifact = await runNoteArtifactRegression({ state, pool, handlers, toolsByName });
+      artifact = await runNoteArtifactRegression({
+        state,
+        pool,
+        handlers,
+        toolsByName,
+        refinementRounds: options.artifactRefinementRounds,
+      });
       process.stderr.write(formatProgress(artifact, selectedCases.length + 1, selectedCases.length + 1));
     }
   } finally {

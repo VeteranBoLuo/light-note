@@ -1,27 +1,35 @@
 import pool from '../db/index.js';
+import { drawingNoteAiProjection, renderDrawingNoteForAi } from './drawingNoteAi.js';
 import { parseNoteContent, renderNoteForAi } from './noteSemantic.js';
 import { recognizeNoteImages } from './noteImageOcr.js';
+
+function withDrawingAiContent(note) {
+  if (!note || note.type !== 'drawing') return note;
+  return { ...note, aiContent: renderDrawingNoteForAi(note, { maxChars: 11_000 }) };
+}
 
 export async function findOwnedNoteForAi({ userId, noteId = '', title = '' }) {
   if (noteId) {
     const [rows] = await pool.query(
-      `SELECT id, title, IF(type = 'drawing', '', content) AS content, type, create_time, update_time
+      `SELECT id, title, IF(type = 'drawing', '', content) AS content,
+              ${drawingNoteAiProjection()}, type, create_time, update_time
          FROM note
         WHERE id = ? AND create_by = ? AND del_flag = 0
         LIMIT 1`,
       [noteId, userId],
     );
-    return rows[0] || null;
+    return withDrawingAiContent(rows[0] || null);
   }
   if (!title) throw new Error('ID_REQUIRED: 请提供笔记名称或笔记 ID');
   const [rows] = await pool.query(
-    `SELECT id, title, IF(type = 'drawing', '', content) AS content, type, create_time, update_time
+    `SELECT id, title, IF(type = 'drawing', '', content) AS content,
+            ${drawingNoteAiProjection()}, type, create_time, update_time
       FROM note
       WHERE create_by = ? AND del_flag = 0 AND (title = ? OR title LIKE ?)
       ORDER BY (title = ?) DESC, update_time DESC LIMIT 1`,
     [userId, title, `%${title}%`, title],
   );
-  return rows[0] || null;
+  return withDrawingAiContent(rows[0] || null);
 }
 
 export async function recognizeOwnedNoteImages({ note, document, signal, limit = 2, imageNumbers = [] }) {
@@ -54,11 +62,14 @@ export async function buildNoteAiPayload({
   const document = parseNoteContent({ content: note?.content, type: note?.type });
   return {
     document,
-    content: renderNoteForAi(document, {
-      question,
-      focus,
-      taskStatus,
-      maxChars,
-    }),
+    content:
+      note?.type === 'drawing'
+        ? String(note.aiContent || renderDrawingNoteForAi(note, { maxChars })).slice(0, maxChars)
+        : renderNoteForAi(document, {
+            question,
+            focus,
+            taskStatus,
+            maxChars,
+          }),
   };
 }

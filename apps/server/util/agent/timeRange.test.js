@@ -1,5 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { isAllTimeExpression, parseRequiredTimeRange } from './timeRange.js';
+import { describeResolvedTimeRange, isAllTimeExpression, parseRequiredTimeRange, parseTimeRange } from './timeRange.js';
+
+describe('parseTimeRange', () => {
+  const now = new Date(2026, 7, 20, 0, 6, 30);
+
+  it('在跨零点场景中把今天解析为当前自然日，并可核验地展示日期', () => {
+    const range = parseTimeRange('今天', { now });
+
+    expect(range).toEqual({
+      start: '2026-08-20 00:00:00',
+      end: '2026-08-20 00:06:30',
+    });
+    expect(describeResolvedTimeRange('今天', range)).toBe('今天（2026-08-20，截至 00:06）');
+  });
+
+  it('最近24小时使用精确滚动窗口，不退化成自然日或最近7天', () => {
+    const range = parseTimeRange('最近24小时', { now });
+
+    expect(range).toEqual({
+      start: '2026-08-19 00:06:30',
+      end: '2026-08-20 00:06:30',
+    });
+    expect(describeResolvedTimeRange('最近24小时', range)).toBe('最近24小时（2026-08-19 00:06 至 2026-08-20 00:06）');
+  });
+});
 
 // 平台级统计与平台级清单共用这里的口径。口径一旦漂移，同一个问题的「共 N 条」
 // 和逐条明细会互相矛盾，所以两个工具的入口在这里集中约束。
@@ -11,9 +35,7 @@ describe('parseRequiredTimeRange', () => {
   });
 
   it('识别不了就抛错，不静默降级成全量', () => {
-    expect(() => parseRequiredTimeRange('随便什么时候', { label: '资源新增时间' })).toThrow(
-      '资源新增时间范围无法识别',
-    );
+    expect(() => parseRequiredTimeRange('随便什么时候', { label: '资源新增时间' })).toThrow('资源新增时间范围无法识别');
     expect(() => parseRequiredTimeRange('', { label: '用户注册时间' })).toThrow('用户注册时间范围无法识别');
   });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ROOT_E2E_TOOL_CASES, rootE2EToolNames, selectRootE2ECases } from './rootE2ECases.js';
-import { parseRootE2EArgs, validateRootE2ECoverage } from './rootE2ERunner.js';
+import { answerMentionsCount, parseRootE2EArgs, validateRootE2ECoverage } from './rootE2ERunner.js';
 
 describe('root 真实链路门禁', () => {
   it('完整矩阵中的每个工具只出现一次', () => {
@@ -42,6 +42,20 @@ describe('root 真实链路门禁', () => {
         .caseIds,
     ).toEqual(['create-note', 'create-todo', 'query-notes']);
     expect(() => parseRootE2EArgs(['--case', 'missing-case'])).toThrow('未知用例');
+  });
+
+  it('定点复测可收窄长草稿改写轮数，但正式默认仍保持五轮', () => {
+    expect(parseRootE2EArgs([]).artifactRefinementRounds).toBe(5);
+    expect(parseRootE2EArgs(['--artifact-refinement-rounds', '1']).artifactRefinementRounds).toBe(1);
+    expect(() => parseRootE2EArgs(['--artifact-refinement-rounds', '0'])).toThrow('仅支持 1 到 5');
+    expect(() => parseRootE2EArgs(['--artifact-refinement-rounds', '6'])).toThrow('仅支持 1 到 5');
+  });
+
+  it('零条结果同时接受数字 0 和自然中文的“没有笔记”', () => {
+    expect(answerMentionsCount('今天有 0 篇笔记。', 0)).toBe(true);
+    expect(answerMentionsCount('今天（2026-08-20，截至 00:06）没有找到笔记。', 0)).toBe(true);
+    expect(answerMentionsCount('今天暂无新增记录。', 0)).toBe(true);
+    expect(answerMentionsCount('今天有 1 篇笔记。', 0)).toBe(false);
   });
 
   it('关键集只保留相邻管理员语义回归', () => {

@@ -1,5 +1,6 @@
 import pool from '../../../db/index.js';
-import { parseTimeRange } from '../timeRange.js';
+import { drawingNoteAiProjection, renderDrawingNoteForAi } from '../../drawingNoteAi.js';
+import { describeResolvedTimeRange, parseTimeRange } from '../timeRange.js';
 import { parseNoteContent, renderNoteForAi } from '../../noteSemantic.js';
 import { searchPersonalKnowledge } from '../../personalKnowledgeSearch.js';
 import { PERSONAL_SCOPE_USER_PARAM, personalScopeHint } from '../ownerScope.js';
@@ -40,7 +41,8 @@ async function semanticFallback({ userId, keyword, take, time }) {
     params.push(time.start, time.end);
   }
   const [rows] = await pool.query(
-    `SELECT n.id, n.title, IF(n.type = 'drawing', '', LEFT(COALESCE(n.content, ''), 30000)) AS content, n.type, n.create_time
+    `SELECT n.id, n.title, IF(n.type = 'drawing', '', LEFT(COALESCE(n.content, ''), 30000)) AS content,
+            ${drawingNoteAiProjection('n')}, n.type, n.create_time
        FROM note n WHERE ${where}`,
     params,
   );
@@ -65,7 +67,7 @@ export default {
     type: 'object',
     properties: {
       keyword: { type: 'string', description: '搜索关键词或短词组，匹配笔记标题和内容；不要传整句问题' },
-      timeRange: { type: 'string', description: '时间范围，如"最近7天"、"上个月"、"全部"' },
+      timeRange: { type: 'string', description: '时间范围，如"今天"、"昨天"、"最近24小时"、"最近7天"、"全部"' },
       limit: { type: 'integer', description: '返回条数，默认10，最大50' },
       user: { type: 'string', description: PERSONAL_SCOPE_USER_PARAM },
     },
@@ -74,6 +76,13 @@ export default {
   async execute(args, ctx) {
     const { keyword, timeRange, limit = 10 } = args;
     const time = parseTimeRange(timeRange);
+    const resolvedTimeRange = time
+      ? {
+          expression: String(timeRange || '').trim(),
+          ...time,
+        }
+      : null;
+    const timeRangeMetadata = resolvedTimeRange ? { resolvedTimeRange } : {};
     const take = Math.min(Math.max(limit || 10, 1), 50);
 
     let where = "n.create_by = ? AND n.del_flag = '0'";
@@ -103,7 +112,8 @@ export default {
 
     const [[rows], [countRes]] = await Promise.all([
       pool.query(
-        `SELECT n.id, n.title, IF(n.type = 'drawing', '', LEFT(COALESCE(n.content, ''), 30000)) AS content, n.type, n.create_time
+        `SELECT n.id, n.title, IF(n.type = 'drawing', '', LEFT(COALESCE(n.content, ''), 30000)) AS content,
+                ${drawingNoteAiProjection('n')}, n.type, n.create_time
            FROM note n WHERE ${where} ${order} LIMIT ?`,
         [...baseParams, ...orderParams, take],
       ),
@@ -111,7 +121,7 @@ export default {
     ]);
 
     if (rows.length || !keyword) {
-      return { total: countRes[0].total, items: rows, matchMode: 'like' };
+      return { total: countRes[0].total, items: rows, matchMode: 'like', ...timeRangeMetadata };
     }
 
     // LIKE 零结果 → 语义降级。降级自身失败必须 fail-open 回到"空结果"，不能把正常的
@@ -119,12 +129,12 @@ export default {
     try {
       const fallbackRows = await semanticFallback({ userId: ctx.userId, keyword, take, time });
       if (fallbackRows.length) {
-        return { total: fallbackRows.length, items: fallbackRows, matchMode: 'semantic' };
+        return { total: fallbackRows.length, items: fallbackRows, matchMode: 'semantic', ...timeRangeMetadata };
       }
     } catch (error) {
       console.warn('[query_notes] semantic fallback failed code=%s', error?.code || error?.message);
     }
-    return { total: 0, items: [], matchMode: 'like' };
+    return { total: 0, items: [], matchMode: 'like', ...timeRangeMetadata };
   },
   getDependencyRefs(raw) {
     return (Array.isArray(raw?.items) ? raw.items : []).map((item) => ({ type: 'note', id: item.id }));
@@ -133,12 +143,18 @@ export default {
     const items = raw?.items || [];
     if (!items.length) {
       const kw = args.keyword ? `（关键词"${args.keyword}"）` : '';
-      return `没有找到笔记${kw}`;
+      const scope = describeResolvedTimeRange(
+        raw?.resolvedTimeRange?.expression || args.timeRange,
+        raw?.resolvedTimeRange,
+      );
+      return `${scope ? `${scope}` : ''}没有找到笔记${kw}`;
     }
     const lines = items.map((r, i) => {
       const title = r.title || '无标题';
-      const document = parseNoteContent({ content: r.content, type: r.type });
-      const preview = renderNoteForAi(document, { maxChars: 1800 });
+      const preview =
+        r.type === 'drawing'
+          ? renderDrawingNoteForAi(r, { maxChars: 1800 })
+          : renderNoteForAi(parseNoteContent({ content: r.content, type: r.type }), { maxChars: 1800 });
       const time = r.create_time ? new Date(r.create_time).toLocaleString('zh-CN') : '';
       return `${i + 1}. [note:${r.id}]《${title}》\n   内容：${preview}\n   创建时间：${time}`;
     });
@@ -150,7 +166,13 @@ export default {
     return `${header}\n${lines.join('\n\n')}`;
   },
   summarize(raw, args) {
-    if (!raw?.total) return `笔记查询：无结果`;
+    if (!raw?.total) {
+      const scope = describeResolvedTimeRange(
+        raw?.resolvedTimeRange?.expression || args.timeRange,
+        raw?.resolvedTimeRange,
+      );
+      return `笔记查询${scope ? `（${scope}）` : ''}：无结果`;
+    }
     const keyword = args.keyword ? `关键词"${args.keyword}"` : '';
     const mode = raw?.matchMode === 'semantic' ? '（语义匹配）' : '';
     return `笔记查询${keyword ? `（${keyword}）` : ''}${mode}：共 ${raw.total} 条，已返回内容片段`;

@@ -19,13 +19,16 @@ describe('query_notes 工具', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('有关键词时按相关度排序，通配符按字面转义', async () => {
-    mockMainQuery({ rows: [{ id: 'n1', title: '100%完成', content: '', type: 'markdown', create_time: null }], total: 1 });
+    mockMainQuery({
+      rows: [{ id: 'n1', title: '100%完成', content: '', type: 'markdown', create_time: null }],
+      total: 1,
+    });
 
     const result = await tool.execute({ keyword: '100%完成' }, ctx);
 
     const [sql, params] = poolQuery.mock.calls[0];
     expect(sql).toContain('ORDER BY CASE');
-    expect(sql).toContain("LOWER(n.title) = LOWER(?)");
+    expect(sql).toContain('LOWER(n.title) = LOWER(?)');
     // where 里的 LIKE 模式必须转义 %（否则 "100%完成" 会通配成 "100任意字符完成"）
     expect(params).toContain('%100\\%完成%');
     // 排序参数：精确比较用原词，前缀/包含用转义模式
@@ -45,6 +48,49 @@ describe('query_notes 工具', () => {
     expect(sql).toContain('ORDER BY n.create_time DESC');
     // 无关键词的零结果不触发语义降级
     expect(searchPersonalKnowledge).not.toHaveBeenCalled();
+  });
+
+  it('返回后端实际解析的时间范围，空结果文案明确自然日口径', async () => {
+    mockMainQuery({ rows: [], total: 0 });
+
+    const result = await tool.execute({ timeRange: '今天' }, ctx);
+    const text = tool.transform(result, { timeRange: '今天' });
+
+    expect(result.resolvedTimeRange).toMatchObject({
+      expression: '今天',
+      start: expect.stringMatching(/^\d{4}-\d{2}-\d{2} 00:00:00$/),
+      end: expect.stringMatching(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/),
+    });
+    expect(text).toMatch(/^今天（\d{4}-\d{2}-\d{2}，截至 \d{2}:\d{2}）没有找到笔记$/);
+    expect(tool.summarize(result, { timeRange: '今天' })).toContain('今天（');
+  });
+
+  it('手绘笔记只投影结构摘要和可验证文字，不读取完整 scene JSON', async () => {
+    mockMainQuery({
+      rows: [
+        {
+          id: 'drawing-1',
+          title: '设计草图',
+          content: '',
+          type: 'drawing',
+          drawing_element_count: 3,
+          drawing_texts_json: '["首页布局","安全"]',
+          create_time: null,
+        },
+      ],
+      total: 1,
+    });
+
+    const result = await tool.execute({}, ctx);
+    const [sql] = poolQuery.mock.calls[0];
+    const text = tool.transform(result, {});
+
+    expect(sql).toContain("JSON_LENGTH(n.content, '$.elements')");
+    expect(sql).toContain("JSON_EXTRACT(n.content, '$.elements[*].text')");
+    expect(sql).toContain("IF(n.type = 'drawing', ''");
+    expect(text).toContain('[手绘笔记]');
+    expect(text).toContain('画布包含 3 个绘制元素');
+    expect(text).toContain('首页布局；安全');
   });
 
   it('LIKE 零结果时降级语义索引，按索引顺序返回并二次校验归属', async () => {
