@@ -588,133 +588,229 @@ async function callExpectedFailure({ handler, user, confirmation, runId, expecte
   }
 }
 
+function clientLikeFollowUpGrounding(data) {
+  const sourceSetId = String(data?.resolvedGrounding?.sourceSetId || '').trim();
+  const contextRefs = (Array.isArray(data?.entityRefs) ? data.entityRefs : [])
+    .map((item) => ({ type: String(item?.type || '').trim(), id: String(item?.id || '').trim() }))
+    .filter((item) => item.type && item.id);
+  const hasMaterialCandidate = Boolean(sourceSetId || contextRefs.length);
+  return {
+    grounding: {
+      mode: hasMaterialCandidate ? 'inherit_candidate' : 'workspace',
+      contextRefs: [],
+      scopeRefs: [],
+      attachmentIds: [],
+      ...(sourceSetId ? { sourceSetId } : {}),
+    },
+    ...(!sourceSetId && contextRefs.length
+      ? { followUpMaterials: { contextRefs, scopeRefs: [], attachmentIds: [] } }
+      : {}),
+  };
+}
+
 async function runNoteArtifactRegression({ state, pool, handlers, toolsByName }) {
   const startedAt = Date.now();
+  const sevenDayPrefix = `${state.prefix} 7天总结`;
   const summaryPrefix = `${state.prefix} 今日总结`;
+  const refinementRounds = 5;
   try {
-    const initialMessage =
-      `改为只根据我今天的全部笔记生成一篇新笔记，标题必须以“${summaryPrefix}”开头，` +
-      '正文至少 2000 字；可以补充分析、经验和下一步建议，但不要编造材料里的事实。';
-    const initialBody = {
-      message: initialMessage,
+    const createNoteTool = toolsByName.get('create_note');
+    const sevenDayMessage =
+      `总结我最近 7 天的全部笔记，生成一篇新笔记，标题必须以“${sevenDayPrefix}”开头，` +
+      '正文至少 800 字；不要编造材料里的事实。';
+    const sevenDayBody = {
+      message: sevenDayMessage,
       sessionId: '',
       stream: false,
-      history: [
-        { role: 'user', content: '总结我最近 7 天的笔记，生成一篇新笔记。' },
-        { role: 'assistant', content: '可以，我会按最近 7 天整理。' },
-      ],
+      history: [],
       scope: { mode: 'workspace', externalWeb: false },
       clientCapabilities: [...CLIENT_CAPABILITIES],
+      timeZone: 'Asia/Shanghai',
     };
-    const expectedMaterialCount = await countToday(pool, 'note', 'create_by', state.user.id);
-    const firstRequest = makeRequest({
+    const sevenDayRequest = makeRequest({
       user: state.user,
-      body: initialBody,
-      fingerprint: `${state.runId}-artifact-initial`,
+      body: sevenDayBody,
+      fingerprint: `${state.runId}-artifact-seven-day`,
     });
-    const first = await invokeHandler(handlers.agentChat, firstRequest);
-    const firstData = first.body?.data || {};
-    if (first.statusCode !== 200 || Number(first.body?.status) !== 200)
+    const sevenDay = await invokeHandler(handlers.agentChat, sevenDayRequest);
+    const sevenDayData = sevenDay.body?.data || {};
+    const sevenDayCard = sevenDayData.confirmations?.[0];
+    if (sevenDay.statusCode !== 200 || Number(sevenDay.body?.status) !== 200) {
       throw new Error('ROOT_E2E_ARTIFACT_HTTP_FAILED');
-    const firstCard = firstData.confirmations?.[0];
-    const createNoteTool = toolsByName.get('create_note');
-    if (firstData.confirmations?.length !== 1 || !nonEmptyCard(firstCard, createNoteTool)) {
+    }
+    if (sevenDayData.confirmations?.length !== 1 || !nonEmptyCard(sevenDayCard, createNoteTool)) {
       throw new Error('ROOT_E2E_ARTIFACT_CARD_INVALID');
     }
-    const firstTitle = String(firstCard.args?.title || '');
-    const firstContent = String(firstCard.args?.content || '');
-    if (!firstTitle.startsWith(summaryPrefix) || /最近\s*7\s*天/iu.test(firstTitle)) {
-      throw new Error('ROOT_E2E_ARTIFACT_SCOPE_TITLE_MISMATCH');
+    if (!String(sevenDayCard.args?.title || '').startsWith(sevenDayPrefix)) {
+      throw new Error('ROOT_E2E_ARTIFACT_SEVEN_DAY_TITLE_MISMATCH');
     }
-    if (firstContent.replace(/\s/gu, '').length < 2000) throw new Error('ROOT_E2E_ARTIFACT_TOO_SHORT');
-    const firstEntityCount = Array.isArray(firstData.entityRefs) ? firstData.entityRefs.length : 0;
-    if (firstEntityCount < Math.min(12, expectedMaterialCount)) {
-      throw new Error('ROOT_E2E_ARTIFACT_MATERIALS_INCOMPLETE');
+    if (String(sevenDayCard.args?.content || '').replace(/\s/gu, '').length < 800) {
+      throw new Error('ROOT_E2E_ARTIFACT_SEVEN_DAY_TOO_SHORT');
     }
-    const sessionId = String(firstData.sessionId || firstCard.sessionId || '');
-    if (!sessionId || firstCard.sessionId !== sessionId) {
+    const sessionId = String(sevenDayData.sessionId || sevenDayCard.sessionId || '');
+    if (!sessionId || sevenDayCard.sessionId !== sessionId) {
       throw new Error('ROOT_E2E_ARTIFACT_SESSION_INVALID');
     }
 
-    const refinementMessage = '重新生成，保留本轮已经引用的全部材料，内容更详细，至少 2500 字。';
-    const refinementRequest = makeRequest({
+    // 完整复刻页面行为：同一会话内保留旧待确认卡，并机械续带上一轮 Source Set
+    //（旧客户端则续带 entityRefs）。最新消息把“最近 7 天”改成“今天”，服务端必须
+    // 丢弃旧范围、重新查询今天，并原子替换旧卡。
+    const todayMessage =
+      `改为只根据我今天的全部笔记生成一篇新笔记，标题必须以“${summaryPrefix}”开头，` +
+      '正文至少 2000 字；可以补充分析、经验和下一步建议，但不要编造材料里的事实。';
+    const [todayNoteRows] = await pool.query(
+      `SELECT id FROM note
+        WHERE create_by = ? AND create_time >= CURDATE()
+          AND create_time < DATE_ADD(CURDATE(), INTERVAL 1 DAY) AND COALESCE(del_flag, 0) = 0`,
+      [state.user.id],
+    );
+    const expectedTodayNoteIds = new Set(todayNoteRows.map((item) => String(item.id)));
+    const assertTodayMaterials = (data, errorCode) => {
+      const refs = (Array.isArray(data?.entityRefs) ? data.entityRefs : []).filter(
+        (item) => item?.type === 'note' && item?.id,
+      );
+      if (
+        refs.length < Math.min(12, expectedTodayNoteIds.size) ||
+        refs.some((item) => !expectedTodayNoteIds.has(String(item.id)))
+      ) {
+        const error = new Error(errorCode);
+        error.code = errorCode;
+        throw error;
+      }
+      return refs.length;
+    };
+    const todayRequest = makeRequest({
       user: state.user,
       body: {
-        message: refinementMessage,
+        message: todayMessage,
         sessionId,
         stream: false,
-        history: [
-          ...initialBody.history,
-          { role: 'user', content: initialMessage },
-          { role: 'assistant', content: '笔记草稿已准备好，请确认。' },
-        ],
+        history: [{ role: 'user', content: sevenDayMessage }],
         scope: { mode: 'workspace', externalWeb: false },
         clientCapabilities: [...CLIENT_CAPABILITIES],
-        pendingNoteDraft: { confirmationId: firstCard.id, confirmationToken: firstCard.token },
+        timeZone: 'Asia/Shanghai',
+        pendingNoteDraft: { confirmationId: sevenDayCard.id, confirmationToken: sevenDayCard.token },
+        ...clientLikeFollowUpGrounding(sevenDayData),
       },
-      fingerprint: `${state.runId}-artifact-refine`,
+      fingerprint: `${state.runId}-artifact-today`,
     });
-    const refined = await invokeHandler(handlers.agentChat, refinementRequest);
-    const refinedData = refined.body?.data || {};
-    const refinedCard = refinedData.confirmations?.[0];
+    const today = await invokeHandler(handlers.agentChat, todayRequest);
+    const todayData = today.body?.data || {};
+    const todayCard = todayData.confirmations?.[0];
     if (
-      refined.statusCode !== 200 ||
-      Number(refined.body?.status) !== 200 ||
-      refinedData.confirmations?.length !== 1 ||
-      !nonEmptyCard(refinedCard, createNoteTool) ||
-      refinedCard.token === firstCard.token
+      today.statusCode !== 200 ||
+      Number(today.body?.status) !== 200 ||
+      todayData.confirmations?.length !== 1 ||
+      !nonEmptyCard(todayCard, createNoteTool) ||
+      todayCard.token === sevenDayCard.token
     ) {
-      throw new Error('ROOT_E2E_ARTIFACT_REFINEMENT_CARD_INVALID');
+      throw new Error('ROOT_E2E_ARTIFACT_TODAY_CARD_INVALID');
     }
-    const refinedTitle = String(refinedCard.args?.title || '');
-    const refinedContent = String(refinedCard.args?.content || '');
-    if (!refinedTitle.startsWith(summaryPrefix) || /最近\s*7\s*天/iu.test(refinedTitle)) {
-      throw new Error('ROOT_E2E_ARTIFACT_REFINEMENT_SCOPE_MISMATCH');
+    const todayTitle = String(todayCard.args?.title || '');
+    const todayContent = String(todayCard.args?.content || '');
+    if (!todayTitle.startsWith(summaryPrefix) || /最近\s*7\s*天|7\s*天/iu.test(todayTitle)) {
+      throw new Error('ROOT_E2E_ARTIFACT_SCOPE_TITLE_MISMATCH');
     }
-    if (refinedContent.replace(/\s/gu, '').length < 2500) {
-      throw new Error('ROOT_E2E_ARTIFACT_REFINEMENT_TOO_SHORT');
-    }
-    const refinedEntityCount = Array.isArray(refinedData.entityRefs) ? refinedData.entityRefs.length : 0;
-    if (refinedEntityCount < Math.min(12, expectedMaterialCount)) {
-      throw new Error('ROOT_E2E_ARTIFACT_REFINEMENT_MATERIALS_INCOMPLETE');
-    }
-
+    if (todayContent.replace(/\s/gu, '').length < 2000) throw new Error('ROOT_E2E_ARTIFACT_TOO_SHORT');
+    assertTodayMaterials(todayData, 'ROOT_E2E_ARTIFACT_MATERIALS_INCOMPLETE');
     await callExpectedFailure({
       handler: handlers.confirmAgentTool,
       user: state.user,
-      confirmation: firstCard,
+      confirmation: sevenDayCard,
       runId: state.runId,
       expectedStatus: 410,
       expectedCode: 'TOOL_CONFIRMATION_EXPIRED',
     });
+
+    let latestCard = todayCard;
+    let latestData = todayData;
+    const userHistory = [
+      { role: 'user', content: sevenDayMessage },
+      { role: 'user', content: todayMessage },
+    ];
+    for (let round = 1; round <= refinementRounds; round += 1) {
+      const refinementMessage =
+        `第 ${round} 次重新生成：保留当前草稿已经引用的全部材料和核心事实，` +
+        '内容更详细，至少 2500 字，不要编造材料里的事实。';
+      const refinementRequest = makeRequest({
+        user: state.user,
+        body: {
+          message: refinementMessage,
+          sessionId,
+          stream: false,
+          history: [...userHistory],
+          scope: { mode: 'workspace', externalWeb: false },
+          clientCapabilities: [...CLIENT_CAPABILITIES],
+          timeZone: 'Asia/Shanghai',
+          pendingNoteDraft: { confirmationId: latestCard.id, confirmationToken: latestCard.token },
+          ...clientLikeFollowUpGrounding(latestData),
+        },
+        fingerprint: `${state.runId}-artifact-refine-${round}`,
+      });
+      const refined = await invokeHandler(handlers.agentChat, refinementRequest);
+      const refinedData = refined.body?.data || {};
+      const refinedCard = refinedData.confirmations?.[0];
+      if (
+        refined.statusCode !== 200 ||
+        Number(refined.body?.status) !== 200 ||
+        refinedData.confirmations?.length !== 1 ||
+        !nonEmptyCard(refinedCard, createNoteTool) ||
+        refinedCard.token === latestCard.token
+      ) {
+        throw new Error('ROOT_E2E_ARTIFACT_REFINEMENT_CARD_INVALID');
+      }
+      const refinedTitle = String(refinedCard.args?.title || '');
+      const refinedContent = String(refinedCard.args?.content || '');
+      if (!refinedTitle.startsWith(summaryPrefix) || /最近\s*7\s*天|7\s*天/iu.test(refinedTitle)) {
+        throw new Error('ROOT_E2E_ARTIFACT_REFINEMENT_SCOPE_MISMATCH');
+      }
+      if (refinedContent.replace(/\s/gu, '').length < 2500) {
+        throw new Error('ROOT_E2E_ARTIFACT_REFINEMENT_TOO_SHORT');
+      }
+      assertTodayMaterials(refinedData, 'ROOT_E2E_ARTIFACT_REFINEMENT_MATERIALS_INCOMPLETE');
+      await callExpectedFailure({
+        handler: handlers.confirmAgentTool,
+        user: state.user,
+        confirmation: latestCard,
+        runId: `${state.runId}-round-${round}`,
+        expectedStatus: 410,
+        expectedCode: 'TOOL_CONFIRMATION_EXPIRED',
+      });
+      userHistory.push({ role: 'user', content: refinementMessage });
+      latestCard = refinedCard;
+      latestData = refinedData;
+    }
+
     const confirmed = await executeConfirmation({
       handlers,
       user: state.user,
-      confirmation: refinedCard,
+      confirmation: latestCard,
       runId: state.runId,
     });
+    const finalTitle = String(latestCard.args?.title || '');
     const [persisted] = await pool.query(
       `SELECT id, content FROM note
         WHERE create_by = ? AND title = ? AND del_flag = 0
         ORDER BY create_time DESC LIMIT 2`,
-      [state.user.id, refinedTitle],
+      [state.user.id, finalTitle],
     );
     if (persisted.length !== 1 || String(persisted[0].content || '').replace(/\s/gu, '').length < 2500) {
       throw new Error('ROOT_E2E_ARTIFACT_NOT_PERSISTED');
     }
     return {
-      id: 'note-artifact-scope-length-refinement',
+      id: 'note-artifact-multiturn-scope-length-refinement',
       passed: true,
       outcome: 'executed',
       minimumChars: 2500,
-      materialCount: refinedEntityCount,
-      staleTokenRejected: true,
+      materialCount: Array.isArray(latestData.entityRefs) ? latestData.entityRefs.length : 0,
+      refinementRounds,
+      staleTokensRejected: refinementRounds + 1,
       replayVerified: confirmed.replayVerified,
       durationMs: Date.now() - startedAt,
     };
   } catch (error) {
     return {
-      id: 'note-artifact-scope-length-refinement',
+      id: 'note-artifact-multiturn-scope-length-refinement',
       passed: false,
       outcome: 'failed',
       errorCode: stableCode(error),
@@ -985,7 +1081,7 @@ export function formatRootE2EText(report) {
   const lines = [
     `Root 真实链路门禁：${report.passed ? '通过' : '未通过'}`,
     `Provider：${report.provider}；工具 ${report.summary.passedTools}/${report.summary.totalTools}；写操作 ${report.summary.executedWrites}/${report.summary.totalWrites}；幂等重放 ${report.summary.replayVerified}/${report.summary.totalWrites}`,
-    `笔记范围/字数/续写：${report.artifact?.passed ? '通过' : `未通过(${report.artifact?.errorCode || '未运行'})`}；夹具清理：${report.cleanup.passed ? '通过' : `未通过(${report.cleanup.errorCode})`}`,
+    `笔记 7 天→今天/字数/连续续写：${report.artifact?.passed ? '通过' : `未通过(${report.artifact?.errorCode || '未运行'})`}；夹具清理：${report.cleanup.passed ? '通过' : `未通过(${report.cleanup.errorCode})`}`,
     `脱敏报告：${report.reportPath}`,
   ];
   const failures = report.cases.filter((item) => !item.passed);
@@ -1065,7 +1161,7 @@ export async function runRootE2E(options) {
   );
   if (!selectedCases.length) throw new Error('ROOT_E2E_CASE_SELECTION_EMPTY');
   const results = [];
-  let artifact = { id: 'note-artifact-scope-length-refinement', passed: true, outcome: 'skipped' };
+  let artifact = { id: 'note-artifact-multiturn-scope-length-refinement', passed: true, outcome: 'skipped' };
   let cleanup = { passed: false, errorCode: 'ROOT_E2E_CLEANUP_NOT_RUN' };
   try {
     for (const smokeCase of selectedCases) {

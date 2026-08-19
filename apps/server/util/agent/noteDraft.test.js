@@ -7,7 +7,6 @@ import {
   createNoteDraftPrivateContext,
   extractMinimumNoteDraftCharacters,
   generateNoteDraft,
-  isExplicitPendingNoteDraftRefinement,
   isNoteDraftRequest,
   normalizeNoteDraftPrivateContext,
   normalizeNoteDraftRefinement,
@@ -207,23 +206,6 @@ describe('noteDraft', () => {
         actionIntent: noteCreateIntent,
       }),
     ).toBe(true);
-  });
-
-  it('确定性识别草稿续写，同时把明确的新材料范围交回语义规划', () => {
-    for (const message of [
-      '内容太少，至少 2000 字。',
-      '重新生成，内容尽量详细。',
-      '重新生成，保留本轮已经引用的全部材料，至少 2500 字。',
-    ]) {
-      expect(isExplicitPendingNoteDraftRefinement(message)).toBe(true);
-    }
-    for (const message of [
-      '改为只根据我今天的全部笔记生成一篇新笔记。',
-      '重新根据最近 7 天的书签生成。',
-      '深圳今天会下雨吗？',
-    ]) {
-      expect(isExplicitPendingNoteDraftRefinement(message)).toBe(false);
-    }
   });
 
   it('传感器严格宽于旧正则，避免传感器不命中时回落正则又漏判', () => {
@@ -434,7 +416,7 @@ describe('noteDraft', () => {
       .fn()
       .mockResolvedValueOnce(intentResponse('revise_pending_draft'))
       .mockResolvedValueOnce(intentResponse('separate_request'))
-      .mockResolvedValueOnce(intentResponse('separate_request'));
+      .mockResolvedValueOnce(intentResponse('replace_pending_draft_scope'));
     const onResponse = vi.fn();
 
     const revision = await classifyPendingNoteDraftFollowUp({
@@ -465,10 +447,10 @@ describe('noteDraft', () => {
 
     expect(revision.decision).toBe('revise_pending_draft');
     expect(separate.decision).toBe('separate_request');
-    expect(newMaterialScope.decision).toBe('separate_request');
+    expect(newMaterialScope.decision).toBe('replace_pending_draft_scope');
     expect(request).toHaveBeenCalledTimes(3);
     expect(request.mock.calls[0][0][0].content).toContain('整体含义、指代和最近对话');
-    expect(request.mock.calls[2][0][0].content).toContain('重新指定了一个可独立查询的材料范围');
+    expect(request.mock.calls[2][0][0].content).toContain('最新范围永远覆盖旧范围');
     expect(request.mock.calls[0][0][1].content).toContain('面向刚入门的人重新组织一下');
     expect(request.mock.calls[0][0][1].content).toContain('正文里包含安装步骤和使用示例');
     expect(request.mock.calls[0][1]).toMatchObject({

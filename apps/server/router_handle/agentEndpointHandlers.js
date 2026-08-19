@@ -189,7 +189,6 @@ import {
   classifyPendingNoteDraftFollowUp,
   createNoteDraftPrivateContext,
   generateNoteDraft,
-  isExplicitPendingNoteDraftRefinement,
   isNoteDraftRequest,
   normalizeNoteDraftPrivateContext,
   normalizeNoteDraftRefinement,
@@ -2373,6 +2372,8 @@ export async function agentChat(req, res) {
     let pendingNoteDraftPrivateContext = null;
     let pendingDraftIntentCalls = 0;
     let pendingDraftIntentUsageReported = true;
+    let pendingDraftReplacementRequested = false;
+    let pendingDraftReplacementSettled = false;
     if (!enableTranslation && normalizedPendingNoteDraft) {
       try {
         const inspected = await inspectToolConfirmationExecution(
@@ -2411,34 +2412,47 @@ export async function agentChat(req, res) {
       // 不应再进入“改写旧令牌”路径；本轮若携带回答中的稳定材料引用，会按新请求
       // 重新复核材料并签发新确认，既不复活旧令牌，也不因确认生命周期丢掉引用。
       if (pendingNoteDraftInspection && pendingNoteDraftPrivateContext) {
-        if (isExplicitPendingNoteDraftRefinement(message)) {
-          refinementRequested = true;
-          trace.pendingDraftIntent = 'deterministic_refinement';
-        } else {
-          const intentStartedAt = Date.now();
-          const intent = await classifyPendingNoteDraftFollowUp({
-            message,
-            history,
-            sourceMessage: pendingNoteDraftPrivateContext.sourceMessage,
-            draftTitle: pendingNoteDraftInspection.confirmation?.args?.title || '',
-            draftContent: pendingNoteDraftInspection.confirmation?.args?.content || '',
-            signal: agentAbortController.signal,
-            traceId: requestId,
-            onResponse(response) {
-              pendingDraftIntentCalls += 1;
-              apiCallsForLog = pendingDraftIntentCalls;
-              const usage = response?.usage || {};
-              totalUsage.promptTokens += Number(usage.promptTokens || 0);
-              totalUsage.completionTokens += Number(usage.completionTokens || 0);
-              totalUsage.totalTokens += Number(usage.totalTokens || 0);
-              pendingDraftIntentUsageReported = pendingDraftIntentUsageReported && response?.usageStatus === 'reported';
-              trace.finishReason = response?.finishReason || trace.finishReason;
-            },
-          });
-          trace.pendingDraftIntentMs = Date.now() - intentStartedAt;
-          refinementRequested = intent.decision === 'revise_pending_draft';
-        }
+        const intentStartedAt = Date.now();
+        const intent = await classifyPendingNoteDraftFollowUp({
+          message,
+          history,
+          sourceMessage: pendingNoteDraftPrivateContext.sourceMessage,
+          draftTitle: pendingNoteDraftInspection.confirmation?.args?.title || '',
+          draftContent: pendingNoteDraftInspection.confirmation?.args?.content || '',
+          signal: agentAbortController.signal,
+          traceId: requestId,
+          onResponse(response) {
+            pendingDraftIntentCalls += 1;
+            apiCallsForLog = pendingDraftIntentCalls;
+            const usage = response?.usage || {};
+            totalUsage.promptTokens += Number(usage.promptTokens || 0);
+            totalUsage.completionTokens += Number(usage.completionTokens || 0);
+            totalUsage.totalTokens += Number(usage.totalTokens || 0);
+            pendingDraftIntentUsageReported = pendingDraftIntentUsageReported && response?.usageStatus === 'reported';
+            trace.finishReason = response?.finishReason || trace.finishReason;
+          },
+        });
+        trace.pendingDraftIntentMs = Date.now() - intentStartedAt;
+        trace.pendingDraftIntent = intent.decision;
+        refinementRequested = intent.decision === 'revise_pending_draft';
+        pendingDraftReplacementRequested = intent.decision === 'replace_pending_draft_scope';
       }
+    }
+
+    // “改为今天/换成另一批材料”仍然是在替换当前草稿，但材料范围必须从最新消息重新查询。
+    // 客户端会机械续带上一轮 Source Set；它只是候选，不能覆盖语义路由已经确认的新范围。
+    if (pendingDraftReplacementRequested) {
+      const replacementHasExplicitMaterials = Boolean(
+        requestContexts.length || requestScopeRefs.length || requestAttachmentIds.length,
+      );
+      recordRequestedScope(
+        trace.turnContract,
+        replacementHasExplicitMaterials
+          ? 'explicit'
+          : String(scope?.mode || '').trim() === 'workspace'
+            ? 'workspace'
+            : 'none',
+      );
     }
 
     // 语义确认是改写待确认草稿后，客户端本轮续带的引用必须完全退出解析链；这样无效、
@@ -2453,16 +2467,20 @@ export async function agentChat(req, res) {
     // 正则漏判（真实追问 83% 不含指代词）时前端只带上轮材料的候选引用，由受约束语义分类
     // 决定是否沿用。候选只有 type+id，实际内容仍由 resolveResourceContexts 按归属解析；
     // 分类失败 fail-open 不继承（与旧行为一致）。
-    const requestedSourceSetIds = clarificationSourceSetIds.length
-      ? clarificationSourceSetIds
-      : turnEnvelope.grounding.sourceSetId
-        ? [turnEnvelope.grounding.sourceSetId]
-        : [];
+    const requestedSourceSetIds = pendingDraftReplacementRequested
+      ? []
+      : clarificationSourceSetIds.length
+        ? clarificationSourceSetIds
+        : turnEnvelope.grounding.sourceSetId
+          ? [turnEnvelope.grounding.sourceSetId]
+          : [];
     const sourceSetInspections = requestedSourceSetIds.map((sourceSetId) =>
       resolveSessionSourceSet(session, sourceSetId),
     );
     const unavailableSourceSet = sourceSetInspections.find((inspection) => inspection.state !== 'ready');
-    if (unavailableSourceSet) {
+    // 澄清令牌是用户显式选择，目标集合不可用时必须失败关闭；普通 sourceSetId 只是
+    // 客户端续带候选，要先由语义分类确认本轮确实承接，独立请求不应被陈旧候选阻断。
+    if (unavailableSourceSet && clarificationSourceSetIds.length) {
       throw new AgentSourceSetError(
         unavailableSourceSet.state === 'expired' ? 'AGENT_SOURCE_SET_EXPIRED' : 'AGENT_SOURCE_SET_UNAVAILABLE',
         '上轮材料集合已过期、已变化或不属于当前会话，请重新选择材料后再试。',
@@ -2477,21 +2495,32 @@ export async function agentChat(req, res) {
           attachmentIds: readySourceSets.flatMap((sourceSet) => sourceSet.attachmentSourceIds),
         })
       : null;
+    const legacyFollowUpCandidate = pendingDraftReplacementRequested
+      ? null
+      : normalizeFollowUpMaterialCandidate(followUpMaterials);
     const followUpCandidate =
       !enableTranslation &&
       !refinementRequested &&
+      !pendingDraftReplacementRequested &&
       !requestContexts.length &&
       !requestScopeRefs.length &&
       !requestAttachmentIds.length
-        ? sourceSetCandidate || normalizeFollowUpMaterialCandidate(followUpMaterials)
+        ? sourceSetCandidate || legacyFollowUpCandidate
         : null;
-    if (followUpCandidate) {
+    const unavailableSourceSetCandidate =
+      !pendingDraftReplacementRequested &&
+      !clarificationSourceSetIds.length &&
+      Boolean(turnEnvelope.grounding.sourceSetId) &&
+      Boolean(unavailableSourceSet);
+    let inheritedReadySourceSet = false;
+    if (followUpCandidate || unavailableSourceSetCandidate) {
       const followUpStartedAt = Date.now();
       if (clarificationSourceSetIds.length) {
         trace.materialFollowUpDecision = 'continue_with_materials';
         effectiveRequestContexts = followUpCandidate.contextRefs;
         effectiveRequestScopeRefs = followUpCandidate.scopeRefs;
         effectiveRequestAttachmentIds = followUpCandidate.attachmentIds;
+        inheritedReadySourceSet = Boolean(sourceSetCandidate);
       } else {
         try {
           const followUp = await classifyMaterialFollowUp({
@@ -2515,66 +2544,80 @@ export async function agentChat(req, res) {
           });
           trace.materialFollowUpDecision = followUp.decision;
           if (followUp.decision === 'continue_with_materials') {
+            if (!followUpCandidate) {
+              throw new AgentSourceSetError(
+                unavailableSourceSet?.state === 'expired' ? 'AGENT_SOURCE_SET_EXPIRED' : 'AGENT_SOURCE_SET_UNAVAILABLE',
+                '上轮材料集合已过期、已变化或不属于当前会话，请重新选择材料后再试。',
+              );
+            }
             effectiveRequestContexts = followUpCandidate.contextRefs;
             effectiveRequestScopeRefs = followUpCandidate.scopeRefs;
             effectiveRequestAttachmentIds = followUpCandidate.attachmentIds;
+            inheritedReadySourceSet = Boolean(sourceSetCandidate);
           } else if (followUp.decision === 'needs_clarification') {
             const candidates = listSessionSourceSets(session);
-            const clarification = await createSessionMaterialClarification(session, {
-              originalMessage: message,
-              sourceSetIds: candidates.map((item) => item.id),
-            });
-            if (!clarification) {
-              throw new AgentSourceSetError(
-                'AGENT_SOURCE_SET_CLARIFICATION_UNAVAILABLE',
-                '无法确认要沿用的材料，请重新选择材料后再试。',
-              );
-            }
-            const answer = clarification.question;
-            if (stream) {
-              sseLifecycle = buildSseLifecycle(getSessionId(session));
-              sseLifecycle.start();
-              sseLifecycle.stage('material_clarification');
-              sseLifecycle.send('delta', { output: { text: answer, session_id: getSessionId(session) } });
-              responseGenerationFinished = true;
-              await sseLifecycle.complete({
-                snapshotAnswer: answer,
-                answer,
-                output: { session_id: getSessionId(session) },
-                usage: totalUsage,
-                followUpAvailable: false,
-                materialClarification: clarification,
-              });
+            // 只有两组以上真实可用集合才存在“选哪组”的问题。模型对 0/1 组返回澄清
+            // 属协议矛盾，安全降级为不继承，不能把内部状态错误抛给用户。
+            if (candidates.length < 2) {
+              trace.materialFollowUpDecision = 'classify_failed';
+              trace.materialFollowUpError = 'MATERIAL_FOLLOW_UP_CLARIFICATION_INVALID';
             } else {
-              res.send(
-                resultData({
-                  response: answer,
-                  sessionId: getSessionId(session),
-                  confirmations: [],
-                  interactions: [],
-                  sources: [],
-                  evidence: [],
+              const clarification = await createSessionMaterialClarification(session, {
+                originalMessage: message,
+                sourceSetIds: candidates.map((item) => item.id),
+              });
+              if (!clarification) {
+                throw new AgentSourceSetError(
+                  'AGENT_SOURCE_SET_CLARIFICATION_UNAVAILABLE',
+                  '无法确认要沿用的材料，请重新选择材料后再试。',
+                );
+              }
+              const answer = clarification.question;
+              if (stream) {
+                sseLifecycle = buildSseLifecycle(getSessionId(session));
+                sseLifecycle.start();
+                sseLifecycle.stage('material_clarification');
+                sseLifecycle.send('delta', { output: { text: answer, session_id: getSessionId(session) } });
+                responseGenerationFinished = true;
+                await sseLifecycle.complete({
+                  snapshotAnswer: answer,
+                  answer,
+                  output: { session_id: getSessionId(session) },
                   usage: totalUsage,
-                  requestId,
                   followUpAvailable: false,
                   materialClarification: clarification,
-                }),
-              );
+                });
+              } else {
+                res.send(
+                  resultData({
+                    response: answer,
+                    sessionId: getSessionId(session),
+                    confirmations: [],
+                    interactions: [],
+                    sources: [],
+                    evidence: [],
+                    usage: totalUsage,
+                    requestId,
+                    followUpAvailable: false,
+                    materialClarification: clarification,
+                  }),
+                );
+              }
+              logAgentRequest({
+                userId: logUserId,
+                userAlias: logUserAlias,
+                question: message,
+                toolsUsed: [],
+                iterations: pendingDraftIntentCalls,
+                totalUsage,
+                durationMs: Date.now() - requestStartedAt,
+                status: 'material_clarification',
+                answer,
+                trace: { ...trace, delivered: !clientDisconnected },
+              });
+              res.removeListener('close', onClientClose);
+              return;
             }
-            logAgentRequest({
-              userId: logUserId,
-              userAlias: logUserAlias,
-              question: message,
-              toolsUsed: [],
-              iterations: pendingDraftIntentCalls,
-              totalUsage,
-              durationMs: Date.now() - requestStartedAt,
-              status: 'material_clarification',
-              answer,
-              trace: { ...trace, delivered: !clientDisconnected },
-            });
-            res.removeListener('close', onClientClose);
-            return;
           }
         } catch (error) {
           if (error?.name === 'AbortError' || error?.code === 'AGENT_HARD_DEADLINE_EXCEEDED') throw error;
@@ -2614,7 +2657,7 @@ export async function agentChat(req, res) {
           ]),
           agentAbortController.signal,
         );
-    if (sourceSetCandidate) {
+    if (sourceSetCandidate && inheritedReadySourceSet) {
       const sourceSetResolution = inspectResolvedSourceSet(sourceSetCandidate, {
         resolvedContexts,
         resolvedAttachments,
@@ -2643,7 +2686,7 @@ export async function agentChat(req, res) {
       resolvedContexts,
       resolvedAttachments,
       resolvedScopes,
-      sourceSetId: responseSourceSet?.id || sourceSetInspection?.sourceSet?.id || '',
+      sourceSetId: responseSourceSet?.id || (inheritedReadySourceSet ? sourceSetInspection?.sourceSet?.id || '' : ''),
     });
     const groundingV2Enabled = isGroundingScopeV2Enabled({ userId, userRole });
     const resolvedScopeMode =
@@ -3086,6 +3129,7 @@ export async function agentChat(req, res) {
       let sourceMessage = message;
       let privateContext = null;
       let previousConfirmation = null;
+      let replacedConfirmation = null;
       let confirmation = null;
       let routeResponse = '';
       let routeStatus = 'confirmation_pending';
@@ -3216,6 +3260,11 @@ export async function agentChat(req, res) {
         }
       }
 
+      // 已签发的待确认草稿本身也是当前改写目标。原资源正文暂时不可读时，可以继续
+      // 在这份服务端保存的草稿上做结构、语气和篇幅调整；不得把它误报成“0 项材料”。
+      // 生成器仍会把旧草稿放在不可信数据边界内，并禁止补写无依据的具体事实。
+      const hasReusablePreviousDraft = Boolean(String(previousConfirmation?.args?.content || '').trim());
+
       let scopedDraftMaterials = {
         materials: [],
         entityRefs: [],
@@ -3235,7 +3284,7 @@ export async function agentChat(req, res) {
           );
           trace.noteDraftScopeMatchedPages = scopedDraftMaterials.matchedPageCount;
           trace.noteDraftScopeTotalPages = scopedDraftMaterials.totalPages;
-          if (!scopedDraftMaterials.materials.length) {
+          if (!scopedDraftMaterials.materials.length && !hasReusablePreviousDraft) {
             routeStatus = 'material_read_failed';
             routeError = 'NOTE_DRAFT_SCOPE_MATERIAL_UNAVAILABLE';
             routeResponse = String(locale || '')
@@ -3264,19 +3313,23 @@ export async function agentChat(req, res) {
           }
         } catch (error) {
           if (error?.name === 'AbortError' || error?.code === 'AGENT_HARD_DEADLINE_EXCEEDED') throw error;
-          routeStatus = 'material_read_failed';
-          routeError = 'NOTE_DRAFT_SCOPE_RETRIEVAL_FAILED';
-          routeResponse = String(locale || '')
-            .toLowerCase()
-            .startsWith('en')
-            ? 'The selected directory could not be searched safely right now. No note was created; please try again later.'
-            : '当前无法安全检索所选目录。本次没有创建笔记，请稍后重试。';
+          if (!hasReusablePreviousDraft) {
+            routeStatus = 'material_read_failed';
+            routeError = 'NOTE_DRAFT_SCOPE_RETRIEVAL_FAILED';
+            routeResponse = String(locale || '')
+              .toLowerCase()
+              .startsWith('en')
+              ? 'The selected directory could not be searched safely right now. No note was created; please try again later.'
+              : '当前无法安全检索所选目录。本次没有创建笔记，请稍后重试。';
+          }
           usedTools.push({
             name: 'search_content',
-            status: 'error',
-            error: 'NOTE_DRAFT_SCOPE_RETRIEVAL_FAILED',
+            status: hasReusablePreviousDraft ? 'unavailable_using_previous_draft' : 'error',
+            error: hasReusablePreviousDraft ? undefined : 'NOTE_DRAFT_SCOPE_RETRIEVAL_FAILED',
             dataSummary: '目录范围检索失败',
-            summary: '目录范围检索失败，未生成草稿。',
+            summary: hasReusablePreviousDraft
+              ? '目录范围暂不可读，继续基于待确认草稿改写。'
+              : '目录范围检索失败，未生成草稿。',
             round: 1,
           });
         }
@@ -3327,7 +3380,8 @@ export async function agentChat(req, res) {
           hydrated.unreadableBookmarkCount >= bookmarkCount &&
           !hasIndependentMaterial &&
           !hasReadableAttachment &&
-          !hasPastedText
+          !hasPastedText &&
+          !hasReusablePreviousDraft
         ) {
           routeStatus = 'material_read_failed';
           routeError = 'BOOKMARK_CONTENT_UNAVAILABLE';
@@ -3346,7 +3400,8 @@ export async function agentChat(req, res) {
           !hasReadableBookmark &&
           !hasIndependentMaterial &&
           !hasReadableAttachment &&
-          !hasPastedText
+          !hasPastedText &&
+          !hasReusablePreviousDraft
         ) {
           routeStatus = 'material_read_failed';
           routeError = 'NOTE_DRAFT_MATERIAL_UNAVAILABLE';
@@ -3402,8 +3457,11 @@ export async function agentChat(req, res) {
           });
           trace.finalMs = Date.now() - draftStartedAt;
           const createNoteTool = toolRegistry.get('create_note');
+          replacedConfirmation =
+            previousConfirmation ||
+            (pendingDraftReplacementRequested ? pendingNoteDraftInspection?.confirmation || null : null);
           const draftParentId = String(
-            previousConfirmation?.args?.parentId ||
+            replacedConfirmation?.args?.parentId ||
               (resolvedScopes.branches.length === 1 ? resolvedScopes.branches[0]?.id : ''),
           ).trim();
           confirmation = await createPendingWriteConfirmation({
@@ -3417,8 +3475,8 @@ export async function agentChat(req, res) {
             identity,
             req,
             session,
-            replaceToken: previousConfirmation ? normalizedPendingNoteDraft.confirmationToken : undefined,
-            replaceConfirmationId: previousConfirmation?.id,
+            replaceToken: replacedConfirmation ? normalizedPendingNoteDraft.confirmationToken : undefined,
+            replaceConfirmationId: replacedConfirmation?.id,
             privateContext,
             originRequestId: requestId,
             previewDetails: [
@@ -3440,14 +3498,15 @@ export async function agentChat(req, res) {
           });
           // recordPendingActionBatch 使用本轮持有的 session 对象；先把新动作写入，再由
           // settleSessionAction 读取最新会话结算旧动作，避免旧 session 快照反向覆盖 cancelled 状态。
-          if (previousConfirmation) {
+          if (replacedConfirmation) {
             await settleSessionAction({
               ownerKey: identity.ownerKey,
               sessionId: getSessionId(session),
-              confirmationId: previousConfirmation.id,
+              confirmationId: replacedConfirmation.id,
               state: 'cancelled',
               summary: '已由新草稿替换。',
             });
+            pendingDraftReplacementSettled = pendingDraftReplacementRequested;
           }
           usedTools.push({
             name: 'create_note',
@@ -3516,10 +3575,10 @@ export async function agentChat(req, res) {
         sourcesUsed: draftSourcesUsed,
       });
       if (stream) {
-        if (previousConfirmation && confirmation) {
+        if (replacedConfirmation && confirmation) {
           sseLifecycle?.send('tool_confirmation_replaced', {
-            confirmationId: previousConfirmation.id,
-            toolName: previousConfirmation.toolName,
+            confirmationId: replacedConfirmation.id,
+            toolName: replacedConfirmation.toolName,
           });
         }
         if (confirmation) {
@@ -4196,6 +4255,14 @@ export async function agentChat(req, res) {
                 identity,
                 req,
                 session,
+                replaceToken:
+                  pendingDraftReplacementRequested && tc.function.name === 'create_note'
+                    ? normalizedPendingNoteDraft?.confirmationToken
+                    : undefined,
+                replaceConfirmationId:
+                  pendingDraftReplacementRequested && tc.function.name === 'create_note'
+                    ? pendingNoteDraftInspection?.confirmation?.id
+                    : undefined,
                 privateContext: confirmationPrivateContext,
                 originRequestId: requestId,
               });
@@ -4271,6 +4338,25 @@ export async function agentChat(req, res) {
       const pendingActions = results.map((item) => item.pendingAction).filter(Boolean);
       if (pendingActions.length) {
         await recordPendingActionBatch(session, { batchId: requestId, actions: pendingActions });
+      }
+      const replacementConfirmation = pendingDraftReplacementRequested
+        ? roundConfirmations.find((item) => item?.toolName === 'create_note')
+        : null;
+      if (replacementConfirmation && !pendingDraftReplacementSettled) {
+        await settleSessionAction({
+          ownerKey: identity.ownerKey,
+          sessionId: getSessionId(session),
+          confirmationId: pendingNoteDraftInspection.confirmation.id,
+          state: 'cancelled',
+          summary: '已由新材料范围生成的草稿替换。',
+        });
+        pendingDraftReplacementSettled = true;
+        if (stream) {
+          sseLifecycle?.send('tool_confirmation_replaced', {
+            confirmationId: pendingNoteDraftInspection.confirmation.id,
+            toolName: 'create_note',
+          });
+        }
       }
       // 新客户端的卡片必须等整轮规划结束后再发：只有那时才能确认本轮是否恰好一张卡，
       // 避免第一张卡先携带续答令牌、随后又出现第二张卡。老客户端保持原发送时序。

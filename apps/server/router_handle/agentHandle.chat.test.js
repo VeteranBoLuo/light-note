@@ -2188,7 +2188,13 @@ describe('agentChat 主链路', () => {
       return notes[noteId] || null;
     });
     mocks.requestAi
-      // “重新生成”由确定性续写门禁识别，不再浪费一次意图分类调用。
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [toolCall('classify_pending_note_draft_intent', { decision: 'revise_pending_draft' })],
+        usage: usage(4),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
       .mockResolvedValueOnce({
         content: '',
         toolCalls: [
@@ -2218,9 +2224,10 @@ describe('agentChat 主链路', () => {
     );
 
     expect(mocks.findOwnedNoteForAi).toHaveBeenCalledTimes(2);
-    expect(mocks.requestAi).toHaveBeenCalledOnce();
-    expect(mocks.requestAi.mock.calls[0][0][1].content).toContain('上午真实正文');
-    expect(mocks.requestAi.mock.calls[0][0][1].content).toContain('下午真实正文');
+    expect(mocks.requestAi).toHaveBeenCalledTimes(2);
+    expect(mocks.requestAi.mock.calls[0][1].trace.stage).toBe('note_draft_intent');
+    expect(mocks.requestAi.mock.calls[1][0][1].content).toContain('上午真实正文');
+    expect(mocks.requestAi.mock.calls[1][0][1].content).toContain('下午真实正文');
     expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
       expect.objectContaining({
         replaceToken: oldToken,
@@ -2238,6 +2245,202 @@ describe('agentChat 主链路', () => {
       expect.objectContaining({ confirmationId: 'workspace-draft-confirmation', state: 'cancelled' }),
     );
     expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).not.toContain('原材料已不可用');
+  });
+
+  it('原引用暂时没有可读正文时，长文重生成继续基于服务端待确认草稿且保留引用', async () => {
+    const oldToken = 'u'.repeat(43);
+    const oldContent = `# 原草稿\n\n${'原草稿中已经形成的结构与内容。'.repeat(130)}`;
+    const expandedContent = `${oldContent}\n\n${'在不新增具体事实的前提下补充分析、经验和下一步建议。'.repeat(90)}`;
+    expect(expandedContent.replace(/\s/gu, '').length).toBeGreaterThanOrEqual(2500);
+    mocks.inspectToolConfirmationExecution.mockResolvedValueOnce({
+      state: 'ready',
+      confirmation: {
+        id: 'unreadable-source-confirmation',
+        sessionId: 'session-1',
+        toolName: 'create_note',
+        args: { title: '材料总结', content: oldContent },
+        privateContext: {
+          kind: 'note_draft_materials',
+          version: 1,
+          sourceMessage: '根据所选笔记生成一篇总结',
+          contextRefs: [{ type: 'note', id: 'empty-note-1' }],
+          scopeRefs: [],
+          attachmentIds: [],
+        },
+      },
+    });
+    mocks.findOwnedNoteForAi.mockResolvedValueOnce({
+      id: 'empty-note-1',
+      title: '仍然存在但正文为空的笔记',
+      content: '',
+    });
+    mocks.requestAi
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [toolCall('classify_pending_note_draft_intent', { decision: 'revise_pending_draft' })],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [toolCall('submit_note_draft', { title: '材料总结', content: expandedContent })],
+        usage: usage(8),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '重新生成，内容尽量详细，至少 2500 字。',
+        sessionId: 'session-1',
+        stream: false,
+        contexts: [],
+        attachmentIds: [],
+        pendingNoteDraft: {
+          confirmationId: 'unreadable-source-confirmation',
+          confirmationToken: oldToken,
+        },
+      }),
+      res,
+    );
+
+    expect(mocks.requestAi.mock.calls.map(([, options]) => options?.trace?.stage)).toEqual([
+      'note_draft_intent',
+      'note_draft',
+    ]);
+    expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        replaceToken: oldToken,
+        privateContext: expect.objectContaining({ contextRefs: [{ type: 'note', id: 'empty-note-1' }] }),
+      }),
+    );
+    expect(res.send.mock.calls.at(-1)?.[0]?.data).toMatchObject({
+      response: expect.stringContaining('笔记草稿已准备好'),
+      confirmations: [expect.objectContaining({ toolName: 'create_note' })],
+      entityRefs: [expect.objectContaining({ type: 'note', id: 'empty-note-1' })],
+    });
+  });
+
+  it('待确认的 7 天草稿改为今天时丢弃旧候选，按最新范围查询并原子替换确认', async () => {
+    const oldToken = 'r'.repeat(43);
+    const sourceSetId = 'd7f5f8f6-4ca0-4d14-8a4d-88c813e3b031';
+    const todayRefs = [
+      { type: 'note', id: 'today-note-1' },
+      { type: 'note', id: 'today-note-2' },
+    ];
+    mocks.inspectToolConfirmationExecution.mockResolvedValueOnce({
+      state: 'ready',
+      confirmation: {
+        id: 'seven-day-confirmation',
+        sessionId: 'session-1',
+        toolName: 'create_note',
+        args: { title: '最近 7 天笔记总结', content: '旧范围正文。'.repeat(80) },
+        privateContext: {
+          kind: 'note_draft_materials',
+          version: 1,
+          sourceMessage: '总结我最近 7 天的笔记，生成一篇新笔记。',
+          contextRefs: [{ type: 'note', id: 'old-seven-day-note' }],
+          scopeRefs: [],
+          attachmentIds: [],
+        },
+      },
+    });
+    mocks.resolveSessionSourceSet.mockReturnValue({
+      state: 'ready',
+      sourceSet: {
+        id: sourceSetId,
+        refs: [{ type: 'note', id: 'old-seven-day-note' }],
+        scopeRefs: [],
+        attachmentSourceIds: [],
+      },
+    });
+    mocks.selectAgentTools.mockImplementation((registry) =>
+      [registry.get('query_notes'), registry.get('create_note')].filter(Boolean),
+    );
+    mocks.toolExecute.mockResolvedValueOnce({ value: '今天共 2 篇笔记', dependencyRefs: todayRefs });
+    mocks.findOwnedNoteForAi.mockImplementation(async ({ noteId }) => ({
+      id: noteId,
+      title: noteId === 'today-note-1' ? '今日上午记录' : '今日下午记录',
+      content: `${noteId} 的今日真实正文。`.repeat(80),
+    }));
+    mocks.requestAi
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [toolCall('classify_pending_note_draft_intent', { decision: 'replace_pending_draft_scope' })],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce(
+        noteDraftTaskResponse({
+          needsWorkspaceRetrieval: true,
+          workspaceQueries: [{ resourceType: 'note', timeRange: '今天' }],
+        }),
+      )
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          toolCall('submit_note_draft', {
+            title: '今日全部笔记总结',
+            content: `# 今日全部笔记总结\n\n${'基于今日两篇真实正文整理。'.repeat(100)}`,
+          }),
+        ],
+        usage: usage(8),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '改为只总结我今天的全部笔记，生成一篇新笔记。',
+        sessionId: 'session-1',
+        stream: false,
+        history: [
+          { role: 'user', content: '总结我最近 7 天的笔记，生成一篇新笔记。' },
+          { role: 'assistant', content: '笔记草稿已准备好。' },
+        ],
+        contexts: [],
+        attachmentIds: [],
+        grounding: { mode: 'inherit_candidate', sourceSetId },
+        scope: { mode: 'workspace' },
+        pendingNoteDraft: {
+          confirmationId: 'seven-day-confirmation',
+          confirmationToken: oldToken,
+        },
+      }),
+      res,
+    );
+
+    expect(mocks.requestAi.mock.calls.map(([, options]) => options?.trace?.stage)).toEqual([
+      'note_draft_intent',
+      'note_draft_task',
+      'note_draft',
+    ]);
+    expect(mocks.resolveSessionSourceSet).not.toHaveBeenCalled();
+    expect(mocks.toolExecute).toHaveBeenCalledWith(
+      { timeRange: '今天', limit: 50 },
+      expect.objectContaining({ userId: 'user-1' }),
+    );
+    expect(mocks.findOwnedNoteForAi).not.toHaveBeenCalledWith(
+      expect.objectContaining({ noteId: 'old-seven-day-note' }),
+    );
+    expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        replaceToken: oldToken,
+        replaceConfirmationId: 'seven-day-confirmation',
+        privateContext: expect.objectContaining({
+          sourceMessage: expect.stringContaining('今天'),
+          contextRefs: todayRefs,
+        }),
+      }),
+    );
+    expect(mocks.settleSessionAction).toHaveBeenCalledWith(
+      expect.objectContaining({ confirmationId: 'seven-day-confirmation', state: 'cancelled' }),
+    );
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.confirmations?.[0]?.args?.title).toBe('今日全部笔记总结');
   });
 
   it('失效草稿候选不会复活旧令牌，稳定引用会生成满足字数的新确认', async () => {
@@ -5131,6 +5334,13 @@ describe('agentChat 主链路', () => {
 
   it('PR3 Source Set：缺失或跨会话集合失败关闭，不进入材料解析和 Planner', async () => {
     mocks.resolveSessionSourceSet.mockReturnValue({ state: 'missing' });
+    mocks.requestAi.mockResolvedValueOnce({
+      content: '',
+      toolCalls: [toolCall('classify_material_follow_up', { decision: 'continue_with_materials' })],
+      usage: usage(2),
+      usageStatus: 'reported',
+      finishReason: 'tool_calls',
+    });
     const res = response();
 
     await agentChat(
@@ -5147,7 +5357,8 @@ describe('agentChat 主链路', () => {
 
     expect(res.status).toHaveBeenCalledWith(409);
     expect(res.send.mock.calls.at(-1)?.[0]?.msg).toContain('重新选择材料');
-    expect(mocks.requestAi).not.toHaveBeenCalled();
+    expect(mocks.requestAi).toHaveBeenCalledOnce();
+    expect(mocks.requestAi.mock.calls[0][1].trace.stage).toBe('material_follow_up');
   });
 
   it('G-09：Source Set 内资源已删除时明确披露，不扩大到历史或工作区材料', async () => {
@@ -5186,6 +5397,114 @@ describe('agentChat 主链路', () => {
     expect(res.send.mock.calls.at(-1)?.[0]?.msg).toContain('已删除、失效或不再可读');
     expect(mocks.recordSessionSourceSet).not.toHaveBeenCalled();
     expect(mocks.requestAi).toHaveBeenCalledTimes(1);
+  });
+
+  it('独立新请求不会因客户端续带的旧 Source Set 资源失效而失败', async () => {
+    const sourceSetId = 'd7f5f8f6-4ca0-4d14-8a4d-88c813e3b013';
+    mocks.resolveSessionSourceSet.mockReturnValue({
+      state: 'ready',
+      sourceSet: {
+        id: sourceSetId,
+        refs: [{ type: 'note', id: 'deleted-note' }],
+        scopeRefs: [],
+        attachmentSourceIds: [],
+      },
+    });
+    mocks.listSessionSourceSets.mockReturnValue([
+      { id: sourceSetId, contextRefCount: 1, scopeRefCount: 0, attachmentCount: 0 },
+    ]);
+    mocks.requestAi
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [toolCall('classify_material_follow_up', { decision: 'independent_request' })],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [semanticPlanCall({ requestClass: 'conversation', intents: [] })],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '这是一个独立的新回答。',
+        toolCalls: [],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '深圳今天会下雨吗？',
+        stream: false,
+        grounding: { mode: 'inherit_candidate', sourceSetId },
+        scope: { mode: 'workspace' },
+      }),
+      res,
+    );
+
+    expect(res.status).not.toHaveBeenCalledWith(409);
+    expect(mocks.findOwnedNoteForAi).not.toHaveBeenCalled();
+    expect(res.send.mock.calls.at(-1)?.[0]?.data).toMatchObject({
+      response: '这是一个独立的新回答。',
+      resolvedGrounding: expect.objectContaining({ sourceSetId: null }),
+    });
+  });
+
+  it('只有一组材料时模型误返 needs_clarification 会安全降级，不再抛内部澄清错误', async () => {
+    const sourceSetId = 'd7f5f8f6-4ca0-4d14-8a4d-88c813e3b014';
+    mocks.resolveSessionSourceSet.mockReturnValue({
+      state: 'ready',
+      sourceSet: {
+        id: sourceSetId,
+        refs: [{ type: 'note', id: 'note-1' }],
+        scopeRefs: [],
+        attachmentSourceIds: [],
+      },
+    });
+    mocks.listSessionSourceSets.mockReturnValue([
+      { id: sourceSetId, contextRefCount: 1, scopeRefCount: 0, attachmentCount: 0 },
+    ]);
+    mocks.requestAi
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [toolCall('classify_material_follow_up', { decision: 'needs_clarification' })],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [semanticPlanCall({ requestClass: 'conversation', intents: [] })],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '请再说明你想了解的内容。',
+        toolCalls: [],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '继续看看',
+        stream: false,
+        grounding: { mode: 'inherit_candidate', sourceSetId },
+      }),
+      res,
+    );
+
+    expect(mocks.createSessionMaterialClarification).not.toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalledWith(409);
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toBe('请再说明你想了解的内容。');
   });
 
   it('PR3 ClarificationState：多个集合指向不唯一时返回可续接澄清，不默认多带材料', async () => {
