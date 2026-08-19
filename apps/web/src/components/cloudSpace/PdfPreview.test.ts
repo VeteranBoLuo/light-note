@@ -13,12 +13,12 @@ const pdfMocks = vi.hoisted(() => ({
   getDocument: vi.fn(),
 }));
 
-vi.mock('pdfjs-dist/legacy/build/pdf.js', () => ({
+vi.mock('pdfjs-dist/legacy/build/pdf.mjs', () => ({
   GlobalWorkerOptions: pdfMocks.workerOptions,
   getDocument: pdfMocks.getDocument,
 }));
 
-vi.mock('pdfjs-dist/legacy/build/pdf.worker.min.js?url', () => ({
+vi.mock('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url', () => ({
   default: '/assets/pdf.worker.js',
 }));
 

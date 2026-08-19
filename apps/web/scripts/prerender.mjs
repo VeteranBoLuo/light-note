@@ -21,7 +21,7 @@
  *   - <meta name="robots"> → 仅预渲染成功的公开页改为 index, follow
  *   - /updateLogs 另有独立 title/description（避免全站同名同描述被判重复）
  *
- * 用 puppeteer-core + 系统 Chrome（不引入 170MB 的 Chromium 下载）：
+ * 用 playwright-core + 系统 Chrome（不下载捆绑浏览器）：
  *   - 优先读 PRERENDER_CHROME 环境变量
  *   - macOS 默认路径 / Linux(CI) 常见命令名依次探测
  * SKIP_PRERENDER=1 仅供排查；完整 build 后的 SEO 产物校验会拒绝缺失官网首页的产物。
@@ -33,7 +33,7 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import puppeteer from 'puppeteer-core';
+import { chromium } from 'playwright-core';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.resolve(__dirname, '../dist');
@@ -202,19 +202,17 @@ async function renderPage(browser, port, pageConf) {
   const { route, waitSelector, head, outputFile } = pageConf;
   const url = `http://127.0.0.1:${port}${route}`;
 
-  const page = await browser.newPage();
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   try {
-    await page.setViewport({ width: 1280, height: 800 });
-
-    // 必须用 evaluateOnNewDocument(在页面自身脚本执行前跑),普通 page.evaluate
+    // 必须用 addInitScript(在页面自身脚本执行前跑),普通 page.evaluate
     // 要等 goto 完成后才执行,那时 App.vue 的 onMounted 早已检查过 localStorage
-    await page.evaluateOnNewDocument(() => {
+    await page.addInitScript(() => {
       // 预渲染标志:前端据此跳过 ChatContainer 等首屏无关 chunk 的预热,避免被烘焙进静态首屏 preload
       window.__PRERENDER__ = true;
     });
 
     console.log(`🌐  渲染 ${url} …`);
-    await page.goto(url, { waitUntil: 'networkidle0', timeout: TIMEOUT });
+    await page.goto(url, { waitUntil: 'networkidle', timeout: TIMEOUT });
     await page.waitForSelector(waitSelector, { timeout: TIMEOUT });
 
     let html = await page.content();
@@ -292,7 +290,7 @@ async function main() {
   const server = await startStaticServer();
   const port = server.address().port;
 
-  const browser = await puppeteer.launch({
+  const browser = await chromium.launch({
     executablePath: chromePath,
     headless: true,
     args: ['--no-sandbox', '--disable-dev-shm-usage'], // CI 容器环境兼容

@@ -3,8 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const imageSize = vi.hoisted(() => vi.fn());
-vi.mock('image-size', () => ({ imageSize }));
+const safeImageSize = vi.hoisted(() => vi.fn());
+vi.mock('./safeImageSize.js', () => ({ safeImageSize }));
 
 const {
   clearNoteImageThumbnailRuntimeState,
@@ -35,7 +35,7 @@ async function fixture() {
 describe('笔记卡片缩略图', () => {
   beforeEach(() => {
     clearNoteImageThumbnailRuntimeState();
-    imageSize.mockImplementation((buffer) =>
+    safeImageSize.mockImplementation((buffer) =>
       buffer.toString() === 'source-image'
         ? { type: 'png', width: 1600, height: 900 }
         : { type: 'webp', width: 720, height: 405 },

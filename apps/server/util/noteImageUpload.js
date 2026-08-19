@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { imageSize } from 'image-size';
+import { safeImageSize } from './safeImageSize.js';
 
 export const NOTE_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
 export const NOTE_IMAGE_MAX_PIXELS = 64_000_000;
@@ -44,7 +44,7 @@ export async function validateNoteImageUpload(file, { readFile = fs.readFile } =
   }
   let dimensions;
   try {
-    dimensions = imageSize(buffer);
+    dimensions = safeImageSize(buffer);
   } catch {
     throw uploadError(
       'NOTE_IMAGE_CONTENT_INVALID',

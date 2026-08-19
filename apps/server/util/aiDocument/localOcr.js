@@ -3,7 +3,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { imageSize } from 'image-size';
+import { safeImageSize } from '../safeImageSize.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -89,7 +89,7 @@ export function inspectOcrImage(buffer, extension) {
   if (!expectedType) throw ocrError('UNSUPPORTED_FILE_TYPE', 'OCR 图片格式不受支持');
   let dimensions;
   try {
-    dimensions = imageSize(buffer);
+    dimensions = safeImageSize(buffer);
   } catch (error) {
     throw ocrError('FILE_CONTENT_INVALID', '图片内容无法识别或已经损坏', error);
   }

@@ -2,7 +2,7 @@ import { access } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import puppeteer from 'puppeteer-core';
+import { chromium } from 'playwright-core';
 import { createServer } from 'vite';
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -45,16 +45,16 @@ try {
   await server.listen();
   const address = server.httpServer.address();
   const origin = `http://127.0.0.1:${address.port}`;
-  browser = await puppeteer.launch({
+  browser = await chromium.launch({
     executablePath: await resolveChrome(),
     headless: true,
     args: ['--no-sandbox', '--disable-dev-shm-usage'],
   });
   const page = await browser.newPage();
-  await page.setRequestInterception(true);
-  page.on('request', (request) => {
+  await page.route('**/*', async (route) => {
+    const request = route.request();
     if (request.url().includes('/api/search/global')) {
-      request.respond({
+      await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
@@ -68,9 +68,9 @@ try {
           },
         }),
       });
-    } else request.continue();
+    } else await route.continue();
   });
-  await page.goto(`${origin}/e2e/ai-critical.html`, { waitUntil: 'networkidle0' });
+  await page.goto(`${origin}/e2e/ai-critical.html`, { waitUntil: 'networkidle' });
   await page.waitForSelector('[data-testid="ai-critical-harness"]');
 
   const textarea = await page.$('[data-testid="mention-flow"] textarea');
@@ -85,7 +85,7 @@ try {
 
   await page.click('[data-testid="seed-confirmation"]');
   await page.waitForSelector('[data-testid="restored-confirmation"]');
-  await page.reload({ waitUntil: 'networkidle0' });
+  await page.reload({ waitUntil: 'networkidle' });
   await page.waitForSelector('[data-testid="restored-confirmation"]');
   assert(
     (await page.$eval('[data-testid="restored-confirmation"]', (node) => node.textContent)) === '合成测试笔记',

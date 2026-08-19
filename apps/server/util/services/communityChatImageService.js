@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
-import { imageSize } from 'image-size';
+import { safeImageSize } from '../safeImageSize.js';
 import pool from '../../db/index.js';
 import { COMMUNITY_CHAT_PRIMARY_ROOM_SLUG } from '../communityChatFeature.js';
 import { stableAgentErrorCode } from '../agent/logSafety.js';
@@ -99,7 +99,7 @@ export async function validateCommunityChatImage(file) {
 
   let dimensions;
   try {
-    dimensions = imageSize(buffer);
+    dimensions = safeImageSize(buffer);
   } catch {
     throw chatError(
       'COMMUNITY_CHAT_IMAGE_CONTENT_INVALID',

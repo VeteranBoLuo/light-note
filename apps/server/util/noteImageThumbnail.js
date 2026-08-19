@@ -5,7 +5,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { imageSize } from 'image-size';
+import { safeImageSize } from './safeImageSize.js';
 import { NOTE_IMAGE_DIR } from './noteImages.js';
 
 const execFileAsync = promisify(execFile);
@@ -98,7 +98,7 @@ async function generateThumbnail(sourceUrl, outputPath, { runner = execFileAsync
   }
   let dimensions;
   try {
-    dimensions = imageSize(buffer);
+    dimensions = safeImageSize(buffer);
   } catch {
     throw Object.assign(new Error('NOTE_IMAGE_SOURCE_INVALID'), { code: 'NOTE_IMAGE_SOURCE_INVALID' });
   }
@@ -148,7 +148,7 @@ async function generateThumbnail(sourceUrl, outputPath, { runner = execFileAsync
       throw error;
     }
     const preview = await fs.readFile(temporaryOutput);
-    const previewSize = imageSize(preview);
+    const previewSize = safeImageSize(preview);
     if (
       previewSize.type !== 'webp' ||
       !Number(previewSize.width || 0) ||

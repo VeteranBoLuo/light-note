@@ -275,7 +275,7 @@
   const pinchPreviewScale = ref(1);
   const pinchOrigin = ref('50% 50%');
 
-  let pdfRuntimePromise: Promise<typeof import('pdfjs-dist/legacy/build/pdf.js')> | null = null;
+  let pdfRuntimePromise: Promise<typeof import('pdfjs-dist/legacy/build/pdf.mjs')> | null = null;
 
   const zoomPercent = computed(() => Math.round(zoomScale.value * 100));
   const spreadViewAvailable = computed(() => !isMobileLayout.value || viewportWidth.value > viewportHeight.value);
@@ -292,8 +292,8 @@
   async function loadPdfRuntime() {
     if (!pdfRuntimePromise) {
       pdfRuntimePromise = Promise.all([
-        import('pdfjs-dist/legacy/build/pdf.js'),
-        import('pdfjs-dist/legacy/build/pdf.worker.min.js?url'),
+        import('pdfjs-dist/legacy/build/pdf.mjs'),
+        import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'),
       ]).then(([pdfjs, workerModule]) => {
         pdfjs.GlobalWorkerOptions.workerSrc = workerModule.default;
         return pdfjs;

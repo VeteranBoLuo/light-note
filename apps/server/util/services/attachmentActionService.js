@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { promises as fsP } from 'node:fs';
-import { imageSize } from 'image-size';
+import { safeImageSize } from '../safeImageSize.js';
 import pool from '../../db/index.js';
 import { getUserSpaceMb } from '../growth.js';
 import { BYTES_PER_MB, getAccountedStorageBytes } from '../storageUsage.js';
@@ -494,7 +494,7 @@ export async function prepareCreateImageNoteFromAttachment({
 function validateImageBuffer(buffer, extension) {
   let dimensions;
   try {
-    dimensions = imageSize(buffer);
+    dimensions = safeImageSize(buffer);
   } catch {
     throw serviceError('FILE_CONTENT_INVALID', '图片内容无法识别或已经损坏');
   }
