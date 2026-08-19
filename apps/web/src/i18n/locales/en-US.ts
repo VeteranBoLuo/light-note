@@ -5986,6 +5986,8 @@ export default {
       activeReminderCount: 'Pending reminders',
       deleteScope: 'Deletion scope',
       targetDirectory: 'Destination directory',
+      actualChars: 'Actual length',
+      targetChars: 'Target length',
     },
     risk: {
       low: 'Low-risk write',
@@ -5999,6 +6001,13 @@ export default {
     viewAllSources: 'All {count}',
     attachedResources: 'Referenced items',
     attachedFiles: 'Uploaded files',
+    materialMode: {
+      current: 'Using only the {count} item(s) selected for this turn',
+      inherited: 'Continuing with {count} item(s) from the previous turn',
+      workspace: 'Searching the current workspace for this turn',
+      none: 'No previous materials used for this turn',
+      itemCount: '{count} item(s)',
+    },
     sourceTypes: {
       note: 'Note',
       bookmark: 'Bookmark',

@@ -44,11 +44,16 @@ describe('Agent 动作能力注册表', () => {
     expect(catalog.find((entry) => entry.id === 'read.query_notes')).toMatchObject({
       effect: 'read',
       status: 'enabled',
+      domain: 'note',
+      scopePolicy: 'grounding_scope_bound',
       toolNames: ['query_notes'],
     });
     expect(catalog.find((entry) => entry.id === 'todo.status.set')).toMatchObject({
       effect: 'write',
       status: 'enabled',
+      domain: 'todo',
+      requiredSlots: ['status'],
+      scopePolicy: 'confirmation_owner_bound',
       toolNames: ['set_todo_status'],
     });
     expect(catalog.find((entry) => entry.id === 'todo.delete')).toMatchObject({
@@ -59,7 +64,18 @@ describe('Agent 动作能力注册表', () => {
     expect(catalog.find((entry) => entry.id === 'note.delete')).toMatchObject({
       effect: 'write',
       status: 'planned',
+      domain: 'note',
+      scopePolicy: 'manual_only',
       toolNames: [],
+    });
+    expect(catalog.find((entry) => entry.id === 'data.permanent_delete')).toMatchObject({
+      effect: 'write',
+      status: 'forbidden',
+      domain: 'content',
+      appliesToDomains: ['content', 'note', 'bookmark', 'file', 'todo', 'tag'],
+    });
+    expect(catalog.find((entry) => entry.id === 'tag.assign')).toMatchObject({
+      appliesToDomains: ['tag', 'bookmark', 'note', 'file'],
     });
     expect(catalog.find((entry) => entry.id === 'read.query_bookmarks')).toMatchObject({
       effect: 'read',

@@ -52,9 +52,7 @@ describe('materialFollowUp', () => {
     expect(overflow.attachmentIds).toHaveLength(5);
 
     expect(normalizeFollowUpMaterialCandidate(null)).toBeNull();
-    expect(
-      normalizeFollowUpMaterialCandidate({ contextRefs: [], scopeRefs: [], attachmentIds: [] }),
-    ).toBeNull();
+    expect(normalizeFollowUpMaterialCandidate({ contextRefs: [], scopeRefs: [], attachmentIds: [] })).toBeNull();
     expect(normalizeFollowUpMaterialCandidate([{ type: 'note', id: 'n1' }])).toBeNull();
   });
 
@@ -83,6 +81,29 @@ describe('materialFollowUp', () => {
       maxTokens: 256,
       temperature: 0,
     });
+  });
+
+  it('G-04：无法唯一指向多个历史材料集合时返回澄清态', async () => {
+    const request = vi.fn().mockResolvedValue(response('needs_clarification'));
+
+    await expect(
+      classifyMaterialFollowUp({
+        message: '把这些对比一下',
+        history: [
+          { role: 'assistant', content: '上一轮使用了 source-set-a。' },
+          { role: 'assistant', content: '另一轮使用了 source-set-b。' },
+        ],
+        availableSourceSets: [
+          { selectedByClient: true, contextRefCount: 1 },
+          { selectedByClient: false, attachmentCount: 1 },
+        ],
+        request,
+      }),
+    ).resolves.toMatchObject({ decision: 'needs_clarification' });
+    expect(JSON.parse(request.mock.calls[0][0][1].content).sourceSetCandidates).toEqual([
+      { ordinal: 1, selectedByClient: true, contextRefCount: 1, scopeRefCount: 0, attachmentCount: 0 },
+      { ordinal: 2, selectedByClient: false, contextRefCount: 0, scopeRefCount: 0, attachmentCount: 1 },
+    ]);
   });
 
   it('协议缺失或非法时显式失败，由调用方决定 fail-open', async () => {

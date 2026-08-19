@@ -96,13 +96,21 @@
             </div>
           </div>
         </div>
-        <AiSystemErrorCard
-          v-else-if="message.role === 'assistant' && isFailedMessage"
-          :code="failedErrorCode"
-        />
+        <AiSystemErrorCard v-else-if="message.role === 'assistant' && isFailedMessage" :code="failedErrorCode" />
         <ReplyLoading
           v-else-if="!message.toolEvents?.length && !message.confirmations?.length && !message.interactions?.length"
         />
+        <p v-if="message.role === 'assistant' && materialModeText" class="material-mode-notice">
+          {{ materialModeText }}
+        </p>
+        <div
+          v-if="message.role === 'assistant' && message.materialClarification?.options.length"
+          class="material-clarification-options"
+        >
+          <span v-for="option in message.materialClarification.options" :key="option.ordinal">
+            {{ option.label }} · {{ t('ai.materialMode.itemCount', { count: option.itemCount }) }}
+          </span>
+        </div>
         <p
           v-if="message.role === 'assistant' && message.citationAudit?.invalidKeys?.length"
           class="citation-audit-notice"
@@ -187,6 +195,7 @@
     type AiSource,
   } from '@/components/aiAssistant/aiSourceNavigation';
   import { getRootZoom } from '@/utils/zoom';
+  import type { AiMaterialClarification, AiResolvedGrounding } from '@/types/aiGrounding';
 
   const { t } = useI18n();
 
@@ -215,6 +224,8 @@
       verifiedCitationCount: number;
       evidenceCount: number;
     };
+    resolvedGrounding?: AiResolvedGrounding;
+    materialClarification?: AiMaterialClarification;
     activity?: Array<Record<string, unknown> | string>;
     confirmations?: unknown[];
     interactions?: unknown[];
@@ -240,6 +251,15 @@
       resolveLegacyAiSystemErrorCode(props.message.content),
   );
   const isFailedMessage = computed(() => Boolean(failedErrorCode.value));
+  const materialModeText = computed(() => {
+    const grounding = props.message.resolvedGrounding;
+    if (!grounding?.enabled) return '';
+    const count = grounding.allowedSourceCount;
+    if (grounding.materialMode === 'current_explicit') return t('ai.materialMode.current', { count });
+    if (grounding.materialMode === 'inherited') return t('ai.materialMode.inherited', { count });
+    if (grounding.materialMode === 'workspace') return t('ai.materialMode.workspace');
+    return t('ai.materialMode.none');
+  });
 
   // 流式阶段就实时渲染 Markdown(轻量路径:补全未闭合语法 → marked → DOMPurify,跳过高亮与引用装饰),
   // 不再显示原始 ##/**/``` 符号。打字机逐帧更新 content,computed 依赖追踪天然每帧至多算一次。
@@ -718,6 +738,33 @@
   .time {
     font-size: 0.75rem;
     opacity: 0.6;
+  }
+
+  .material-mode-notice {
+    margin: 0.3rem 0 0;
+    padding: 0.2rem 0.55rem;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    color: var(--text-color-secondary, var(--text-color));
+    background: var(--card-background-color, transparent);
+    font-size: 0.75rem;
+    line-height: 1.4;
+  }
+
+  .material-clarification-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.35rem;
+  }
+
+  .material-clarification-options > span {
+    padding: 0.25rem 0.55rem;
+    border: 1px solid var(--primary-color);
+    border-radius: 999px;
+    color: var(--primary-color);
+    font-size: 0.75rem;
+    line-height: 1.35;
   }
 
   /* 气泡列：气泡与操作条上下排列；操作条移到气泡外，气泡才能收窄贴合内容 */

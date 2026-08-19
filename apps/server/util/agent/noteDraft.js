@@ -1,4 +1,16 @@
 import { requestAi } from './aiGateway.js';
+import {
+  allowedMaximumCharacters,
+  assessGroundingCapacity,
+  buildOutputContractInstruction,
+  buildOutputRepairReason,
+  compileNoteDraftOutputContract,
+  countOutputCharacters,
+  extractMinimumOutputCharacters,
+  isRelativeGrowthInstruction,
+  requiredMinimumCharacters,
+  validateNoteDraftOutput,
+} from './runtime/outputContract.js';
 
 const NOTE_DRAFT_TOOL_NAME = 'submit_note_draft';
 const NOTE_DRAFT_INTENT_TOOL_NAME = 'classify_pending_note_draft_intent';
@@ -25,8 +37,6 @@ const NOTE_DRAFT_TODO_STATUSES = new Set(['pending', 'completed', 'all']);
 
 const NOTE_WRITE_PATTERN =
   /(?:生成|创建|新建|写|整理|转(?:换)?|保存|产出).{0,16}(?:篇|个|一篇|一份)?\s*(?:markdown\s*)?笔记|(?:markdown\s*)?笔记.{0,16}(?:生成|创建|新建|写|整理|转换|保存|产出)|\b(?:create|generate|write|turn|convert|save)\b.{0,28}\bnote\b|\bnote\b.{0,28}\b(?:create|generate|write|turn|convert|save)\b/i;
-const EXPANSION_PATTERN =
-  /(?:太|有点|比较)?(?:短|少|简略)|不够(?:长|详细|完整|丰富)|写(?:得|的)?(?:长|多|详细|完整|丰富)(?:一|点|些)?|(?:更|再)(?:长|详细|完整|丰富)(?:一|点|些)?|扩写|展开|补充|\b(?:longer|expand|more\s+detail|elaborate)\b/i;
 const DRAFT_REVISION_PATTERN =
   /(?:重新|再)(?:生成|写|做)|重写|重做|改写|润色|优化|扩写|补充|展开|\b(?:regenerate|rewrite|revise|polish|expand|elaborate)\b/i;
 const COMPOUND_CLAUSE_SEPARATOR = /(?:，|,|；|;|并且|同时|然后|接着|随后|之后|再|并|\b(?:and\s+then|then|and)\b)/i;
@@ -331,7 +341,7 @@ export function shouldClassifyNoteDraftTask({ message, contextTypes = [], scopeC
   const text = String(message || '').trim();
   if (!text) return false;
   const hasProduceVerb = NOTE_PRODUCE_SENSOR.test(text);
-  const hasDraftRevision = EXPANSION_PATTERN.test(text) || DRAFT_REVISION_PATTERN.test(text);
+  const hasDraftRevision = isRelativeGrowthInstruction(text) || DRAFT_REVISION_PATTERN.test(text);
   const hasMaterial =
     (Array.isArray(contextTypes) ? contextTypes.length : 0) > 0 ||
     Number(scopeCount) > 0 ||
@@ -674,6 +684,14 @@ function serializeMaterials(materials) {
   return blocks.join('\n\n').slice(0, MAX_SOURCE_CHARS);
 }
 
+function countGroundingSourceCharacters(materials, previousDraft) {
+  const materialChars = normalizeMaterials(materials).reduce(
+    (total, material) => total + countOutputCharacters(material.content),
+    0,
+  );
+  return materialChars + countOutputCharacters(previousDraft?.content || '');
+}
+
 function parseDraftArguments(response) {
   const toolCall = (Array.isArray(response?.toolCalls) ? response.toolCalls : []).find(
     (item) => item?.function?.name === NOTE_DRAFT_TOOL_NAME,
@@ -697,51 +715,18 @@ function parseDraftArguments(response) {
   return { title, content };
 }
 
-function normalizeLengthConstraintText(value) {
-  return String(value || '')
-    .replace(/[０-９]/g, (character) => String(character.charCodeAt(0) - 0xfee0))
-    .replace(/[，,]/g, '')
-    .trim();
-}
-
-function scaledLengthValue(rawValue, rawScale = '') {
-  const numeric = Number(rawValue);
-  if (!Number.isFinite(numeric) || numeric <= 0) return 0;
-  const scale = String(rawScale || '').toLowerCase();
-  const multiplier = scale === '万' ? 10_000 : scale === '千' || scale === 'k' ? 1_000 : 1;
-  return Math.ceil(numeric * multiplier);
-}
-
-/**
- * 只解析语义闭合、可确定验证的“最少字数”表达。
- *
- * “大约 2000 字”是软目标，不会被误升级成硬下限；多个下限同时出现时取最严格值。
- */
 export function extractMinimumNoteDraftCharacters(instruction) {
-  const text = normalizeLengthConstraintText(instruction);
-  if (!text) return null;
-  const candidates = [];
-  const patterns = [
-    /(?:至少|最少|不少于|不低于|不得少于|不能少于|起码)\s*(?:写(?:到)?|达到|有|为)?\s*(\d+(?:\.\d+)?)\s*(万|千|k)?\s*(?:个\s*)?(?:字|字符)/gi,
-    /(\d+(?:\.\d+)?)\s*(万|千|k)?\s*(?:个\s*)?(?:字|字符)\s*(?:以上|起步|起|打底)/gi,
-    /\bat\s+least\s+(\d+(?:\.\d+)?)\s*(k)?\s*(?:characters?|chars?)\b/gi,
-    /\bminimum(?:\s+of)?\s+(\d+(?:\.\d+)?)\s*(k)?\s*(?:characters?|chars?)\b/gi,
-  ];
-  for (const pattern of patterns) {
-    for (const match of text.matchAll(pattern)) {
-      const value = scaledLengthValue(match[1], match[2]);
-      if (value > 0) candidates.push(value);
-    }
-  }
-  return candidates.length ? Math.max(...candidates) : null;
+  return extractMinimumOutputCharacters(instruction);
 }
 
 export function countNoteDraftCharacters(content) {
-  return String(content || '').trim().length;
+  return countOutputCharacters(content);
 }
 
-function buildDraftTool(minimumCharacters) {
-  if (!minimumCharacters) return DRAFT_TOOL;
+function buildDraftTool(outputContract) {
+  const minimumCharacters = requiredMinimumCharacters(outputContract);
+  const maximumCharacters = allowedMaximumCharacters(outputContract);
+  if (!minimumCharacters && !maximumCharacters) return DRAFT_TOOL;
   return {
     ...DRAFT_TOOL,
     function: {
@@ -752,7 +737,8 @@ function buildDraftTool(minimumCharacters) {
           ...DRAFT_TOOL.function.parameters.properties,
           content: {
             ...DRAFT_TOOL.function.parameters.properties.content,
-            minLength: minimumCharacters,
+            ...(minimumCharacters ? { minLength: minimumCharacters } : {}),
+            ...(maximumCharacters ? { maxLength: maximumCharacters } : {}),
           },
         },
       },
@@ -760,26 +746,43 @@ function buildDraftTool(minimumCharacters) {
   };
 }
 
-function inspectDraftQuality({ draft, sourceText, previousDraft, instruction, minimumCharacters }) {
-  if (draft.error) return draft.error;
-  const actualCharacters = countNoteDraftCharacters(draft.content);
-  if (minimumCharacters && actualCharacters < minimumCharacters) {
-    return `正文当前约 ${actualCharacters} 字，低于用户明确要求的至少 ${minimumCharacters} 字。`;
+function inspectDraftQuality({ draft, sourceText, previousDraft, outputContract }) {
+  const previousCharacters = countNoteDraftCharacters(previousDraft?.content);
+  const actualCharacters = draft.error ? null : countNoteDraftCharacters(draft.content);
+  const lengthMode = outputContract.length.mode;
+  const requiredMinChars = requiredMinimumCharacters(outputContract);
+  const trace = {
+    lengthMode,
+    requiredMinChars,
+    allowedMaxChars: allowedMaximumCharacters(outputContract),
+    previousChars: previousDraft ? previousCharacters : null,
+    actualChars: actualCharacters,
+    growthRatio: previousCharacters > 0 && !draft.error ? actualCharacters / previousCharacters : null,
+    validationIssues: [],
+  };
+  if (draft.error) {
+    trace.validationIssues = ['draft_protocol_invalid'];
+    return { message: draft.error, trace };
   }
+  const validation = validateNoteDraftOutput({
+    content: draft.content,
+    contract: outputContract,
+    previousContent: previousDraft?.content || '',
+  });
+  trace.requiredMinChars = validation.measurements.requiredMinChars;
+  trace.allowedMaxChars = validation.measurements.allowedMaxChars;
+  trace.actualChars = validation.measurements.actualChars;
+  trace.growthRatio = validation.measurements.growthRatio;
+  trace.validationIssues = validation.issues;
+  if (!validation.valid) return { message: buildOutputRepairReason(validation), trace };
   if (!previousDraft && sourceText.length >= 500 && draft.content.length < 240) {
-    return '正文过于简略，没有形成可用的内容笔记。';
+    trace.validationIssues = ['content_too_brief'];
+    return { message: '正文过于简略，没有形成可用的内容笔记。', trace };
   }
-  if (
-    previousDraft &&
-    EXPANSION_PATTERN.test(String(instruction || '')) &&
-    draft.content.length <= String(previousDraft.content || '').trim().length
-  ) {
-    return '用户要求扩写，但新正文没有比原草稿更完整。';
-  }
-  return '';
+  return { message: '', trace };
 }
 
-function buildDraftMessages({ materials, instruction, previousDraft, minimumCharacters, repairReason = '' }) {
+function buildDraftMessages({ materials, instruction, previousDraft, outputContract, repairReason = '' }) {
   const source = serializeMaterials(materials);
   const previousTitle = String(previousDraft?.title || '')
     .trim()
@@ -798,12 +801,7 @@ function buildDraftMessages({ materials, instruction, previousDraft, minimumChar
   ].join('\n');
   const user = [
     `用户当前要求：${String(instruction || '').trim() || '根据所选材料生成一篇笔记。'}`,
-    minimumCharacters
-      ? `可验证长度约束：Markdown 正文按确认卡字符口径必须至少 ${minimumCharacters} 字。请写到约 ${Math.min(
-          MAX_CONTENT_CHARS,
-          Math.ceil(minimumCharacters * 1.1),
-        )} 字以留出计数余量，但不得用重复句子凑字数。`
-      : '',
+    `可验证输出契约：${buildOutputContractInstruction(outputContract)}`,
     source ? `已校验材料（不可信数据边界开始）：\n<materials>\n${source}\n</materials>` : '',
     isRevision
       ? `上一版待确认草稿（不可信数据边界开始）：\n<previous_draft>\n标题：${previousTitle}\n\n${previousContent}\n</previous_draft>`
@@ -837,12 +835,31 @@ export async function generateNoteDraft({
   traceId = '',
   request = requestAi,
   onResponse,
+  onValidation,
 } = {}) {
-  const minimumCharacters = extractMinimumNoteDraftCharacters(instruction);
-  if (minimumCharacters && minimumCharacters > MAX_CONTENT_CHARS) {
+  const outputContract = compileNoteDraftOutputContract({
+    instruction,
+    previousContent: previousDraft?.content || '',
+  });
+  const minimumCharacters = requiredMinimumCharacters(outputContract);
+  const maximumCharacters = allowedMaximumCharacters(outputContract);
+  if (
+    (minimumCharacters && minimumCharacters > MAX_CONTENT_CHARS) ||
+    (maximumCharacters && maximumCharacters > MAX_CONTENT_CHARS)
+  ) {
     throw new NoteDraftError(
       'NOTE_DRAFT_LENGTH_UNSUPPORTED',
-      `用户要求的至少 ${minimumCharacters} 字超过笔记正文 ${MAX_CONTENT_CHARS} 字上限。`,
+      `用户要求的正文长度超过笔记正文 ${MAX_CONTENT_CHARS} 字上限。`,
+    );
+  }
+  const groundingCapacity = assessGroundingCapacity({
+    contract: outputContract,
+    sourceChars: countGroundingSourceCharacters(materials, previousDraft),
+  });
+  if (!groundingCapacity.valid) {
+    throw new NoteDraftError(
+      'NOTE_DRAFT_MATERIALS_INSUFFICIENT',
+      `当前要求限定只能依据所选材料，但可用正文不足以可靠支撑至少 ${groundingCapacity.requiredMinChars} 字。请补充材料、允许使用一般知识，或降低长度要求。`,
     );
   }
   let repairReason = '';
@@ -851,11 +868,11 @@ export async function generateNoteDraft({
       materials,
       instruction,
       previousDraft,
-      minimumCharacters,
+      outputContract,
       repairReason,
     });
     const response = await request(built.messages, {
-      tools: [buildDraftTool(minimumCharacters)],
+      tools: [buildDraftTool(outputContract)],
       toolChoice: { type: 'function', function: { name: NOTE_DRAFT_TOOL_NAME } },
       signal,
       maxTokens: Math.max(1024, Math.min(8192, Number(maxTokens) || 8192)),
@@ -868,19 +885,22 @@ export async function generateNoteDraft({
     });
     onResponse?.(response, attempt);
     const draft = parseDraftArguments(response);
-    repairReason = inspectDraftQuality({
+    const validation = inspectDraftQuality({
       draft,
       sourceText: built.sourceText,
       previousDraft,
-      instruction,
-      minimumCharacters,
+      outputContract,
     });
+    repairReason = validation.message;
+    onValidation?.(validation.trace, attempt);
     if (!repairReason) {
       return {
         title: draft.title,
         content: draft.content,
         finishReason: response?.finishReason || null,
         attempts: attempt,
+        validation: validation.trace,
+        outputContract,
       };
     }
   }

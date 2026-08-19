@@ -60,7 +60,7 @@ const DATASETS = Object.freeze([
   {
     key: 'usageLogs',
     sql: 'SELECT * FROM agent_logs WHERE user_id = ? ORDER BY created_at, id',
-    json: ['selected_tools'],
+    json: ['selected_tools', 'turn_contract_trace'],
   },
   {
     key: 'quotaUsage',

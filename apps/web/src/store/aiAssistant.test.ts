@@ -4,7 +4,9 @@ import useAiAssistantStore, {
   buildAiAssistantDomainKey,
   createAiAssistantMaterialSnapshot,
   resolveAiAssistantFollowUpMaterialSnapshot,
+  resolveAiAssistantMaterialClarificationToken,
   resolveAiAssistantPendingNoteDraftReference,
+  resolveAiAssistantSourceSetId,
   resolveAiAssistantRequestEdgeStatus,
   resolveAiAssistantIdentity,
   shouldAutoInheritAiAssistantMaterials,
@@ -26,6 +28,77 @@ describe('材料生命周期:默认一次性(P0-A/B)', () => {
   });
 
   const ctx = (id: string) => ({ type: 'note' as const, id, title: `笔记${id}` });
+
+  it('优先使用服务端签发的 Source Set ID，不从旧消息正文推导', () => {
+    const sourceSetId = 'd7f5f8f6-4ca0-4d14-8a4d-88c813e3b001';
+    expect(
+      resolveAiAssistantSourceSetId([
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: '回答正文',
+          timestamp: new Date(),
+          resolvedGrounding: {
+            schemaVersion: 2,
+            enabled: true,
+            mode: 'current_explicit_only',
+            historyPolicy: 'discourse_projection_only',
+            allowedSourceCount: 1,
+            sourcesUsedCount: 1,
+            sourceSubsetValid: true,
+            sourceSetId,
+            materialMode: 'current_explicit',
+          },
+        },
+      ]),
+    ).toBe(sourceSetId);
+    expect(resolveAiAssistantSourceSetId([])).toBe('');
+    expect(
+      resolveAiAssistantSourceSetId([
+        {
+          id: 'assistant-old',
+          role: 'assistant',
+          content: '材料回答',
+          timestamp: new Date(),
+          resolvedGrounding: {
+            schemaVersion: 2,
+            enabled: true,
+            mode: 'current_explicit_only',
+            historyPolicy: 'discourse_projection_only',
+            allowedSourceCount: 1,
+            sourcesUsedCount: 1,
+            sourceSubsetValid: true,
+            sourceSetId,
+          },
+        },
+        { id: 'assistant-new', role: 'assistant', content: '独立回答', timestamp: new Date() },
+      ]),
+    ).toBe('');
+  });
+
+  it('只续传最新且未过期的材料澄清令牌', () => {
+    const token = 'b'.repeat(43);
+    expect(
+      resolveAiAssistantMaterialClarificationToken([
+        {
+          id: 'assistant-clarification',
+          role: 'assistant',
+          content: '请选择材料',
+          timestamp: new Date(),
+          materialClarification: {
+            type: 'material_source_set',
+            token,
+            question: '请选择',
+            options: [
+              { ordinal: 1, label: '最近一组', itemCount: 1 },
+              { ordinal: 2, label: '上一组', itemCount: 1 },
+            ],
+            expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          },
+        },
+      ]),
+    ).toBe(token);
+  });
   const attachment = (id: string) => ({ id, fileName: `${id}.pdf`, status: 'ready' }) as never;
 
   it('发送后按快照消费输入区材料,消息快照独立于输入区', () => {

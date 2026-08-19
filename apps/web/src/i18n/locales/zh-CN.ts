@@ -5774,6 +5774,8 @@ export default {
       activeReminderCount: '未触发提醒',
       deleteScope: '删除范围',
       targetDirectory: '目标目录',
+      actualChars: '实际字数',
+      targetChars: '目标字数',
     },
     risk: {
       low: '低风险写入',
@@ -5787,6 +5789,13 @@ export default {
     viewAllSources: '全部 {count} 个',
     attachedResources: '引用内容',
     attachedFiles: '上传文件',
+    materialMode: {
+      current: '本轮仅使用当前选择的 {count} 项材料',
+      inherited: '本轮继续使用上轮的 {count} 项材料',
+      workspace: '本轮按当前工作区检索',
+      none: '本轮未使用历史材料',
+      itemCount: '{count} 项材料',
+    },
     sourceTypes: {
       note: '笔记',
       bookmark: '书签',

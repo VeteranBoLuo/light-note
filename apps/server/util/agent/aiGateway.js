@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { requestDeepSeek, requestDeepSeekStream } from './deepseekClient.js';
 import { stableAgentErrorCode } from './logSafety.js';
+import { resolveAgentStageModelOptions } from './stageModelPolicy.js';
 
 const DEFAULT_COMPLETE_TIMEOUT_MS = 90_000;
 const MIN_TIMEOUT_MS = 1_000;
@@ -66,6 +67,10 @@ export function createAiGateway({
     const timeoutMs = normalizeTimeoutMs(options.timeoutMs, kind);
     const deadline = createDeadlineSignal(options.signal, timeoutMs);
     const { trace: _trace, timeoutMs: _timeoutMs, governance, ...clientOptions } = options;
+    const stageModel = resolveAgentStageModelOptions(stage);
+    if (!clientOptions.providerOverride) clientOptions.providerOverride = stageModel.providerOverride;
+    if (!clientOptions.modelOverride && stageModel.modelOverride)
+      clientOptions.modelOverride = stageModel.modelOverride;
     clientOptions.signal = deadline.signal;
     // 非工具调用显式关闭 tool choice；即使未来 Provider 默认策略变化，也不会让历史功能绕开 Tool Policy。
     if (!clientOptions.tools?.length && clientOptions.toolChoice === undefined) clientOptions.toolChoice = 'none';

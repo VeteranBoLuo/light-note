@@ -22,6 +22,7 @@
     "backfill:community-chat-identities": "node scripts/backfillCommunityChatIdentities.js",
     "eval:ai-assistant": "node evaluation/ai-assistant/runner.js",
     "smoke:ai-assistant": "node evaluation/ai-assistant/liveSmokeRunner.js",
+    "smoke:ai-turn-v2": "node evaluation/ai-assistant/turnSpecLiveSmokeRunner.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },

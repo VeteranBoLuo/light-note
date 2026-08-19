@@ -9,6 +9,12 @@ import { sanitizeAiMessageActivity } from '@/utils/aiMemoryInfluence';
 import { compareAiConversationRecency, type AiConversationRecency } from '@/utils/aiConversationContinuity';
 import type { AiResourceContext, AiScopeRef } from '@/types/aiScope';
 import { normalizeAiArtifacts, type AiArtifact } from '@/types/aiArtifact';
+import {
+  normalizeAiMaterialClarification,
+  normalizeAiResolvedGrounding,
+  type AiMaterialClarification,
+  type AiResolvedGrounding,
+} from '@/types/aiGrounding';
 
 interface AiToolStatusItem {
   name: string;
@@ -55,6 +61,9 @@ export interface AiAssistantMessage {
   evidence?: AiEvidence[];
   coverage?: Record<string, unknown> | null;
   citationAudit?: { citedKeys: string[]; invalidKeys: string[]; verifiedCitationCount: number; evidenceCount: number };
+  /** 服务端裁决后的材料边界摘要；不含资源 ID、标题或正文。 */
+  resolvedGrounding?: AiResolvedGrounding;
+  materialClarification?: AiMaterialClarification;
   activity?: Array<Record<string, unknown> | string>;
   cloudId?: string;
   requestId?: string;
@@ -462,6 +471,35 @@ export function resolveAiAssistantFollowUpMaterialSnapshot(
   return createAiAssistantMaterialSnapshot(contextRefs, attachmentRefs, parentScopes);
 }
 
+/**
+ * 返回最近一次服务端成功回答签发的 Source Set。新客户端只续传这个短期 ID，
+ * 不再从消息展示字段反向拼装材料引用；实际引用由服务端按 owner 和 session 重新解析。
+ */
+export function resolveAiAssistantSourceSetId(messages: AiAssistantMessage[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role !== 'assistant') continue;
+    const sourceSetId = String(message.resolvedGrounding?.sourceSetId || '').trim();
+    if (/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(sourceSetId)) return sourceSetId;
+    // 澄清消息不替代原回答的材料集合；其余任何新助手终态都是材料生命周期边界。
+    if (message.materialClarification) continue;
+    return '';
+  }
+  return '';
+}
+
+export function resolveAiAssistantMaterialClarificationToken(messages: AiAssistantMessage[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role !== 'assistant') continue;
+    const clarification = normalizeAiMaterialClarification(message.materialClarification);
+    if (!clarification) return '';
+    if (Date.parse(clarification.expiresAt) <= Date.now()) return '';
+    return clarification.token;
+  }
+  return '';
+}
+
 function safeCloneArray<T>(value: unknown): T[] {
   if (!Array.isArray(value)) return [];
   try {
@@ -599,6 +637,8 @@ function normalizePersistedMessage(value: unknown): AiAssistantMessage | null {
       raw.citationAudit && typeof raw.citationAudit === 'object'
         ? (safeCloneArray([raw.citationAudit])[0] as AiAssistantMessage['citationAudit'])
         : undefined,
+    resolvedGrounding: normalizeAiResolvedGrounding(raw.resolvedGrounding),
+    materialClarification: normalizeAiMaterialClarification(raw.materialClarification),
     activity: sanitizeAiMessageActivity(raw.activity),
     cloudId: typeof raw.cloudId === 'string' ? raw.cloudId : undefined,
     requestId: typeof raw.requestId === 'string' ? raw.requestId : undefined,
@@ -659,6 +699,8 @@ function serializeMessage(message: AiAssistantMessage): Record<string, unknown> 
     evidence: safeCloneArray<AiEvidence>(message.evidence),
     coverage: message.coverage ? safeCloneArray([message.coverage])[0] : null,
     citationAudit: message.citationAudit ? safeCloneArray([message.citationAudit])[0] : undefined,
+    resolvedGrounding: normalizeAiResolvedGrounding(message.resolvedGrounding),
+    materialClarification: normalizeAiMaterialClarification(message.materialClarification),
     activity: sanitizeAiMessageActivity(message.activity),
     cloudId: message.cloudId,
     requestId: message.requestId,

@@ -91,8 +91,8 @@ function getProviderFetch() {
   return fetchImpl;
 }
 
-function getModel(cfg) {
-  return process.env[cfg.modelEnv] || cfg.defaultModel;
+function getModel(cfg, modelOverride) {
+  return String(modelOverride || process.env[cfg.modelEnv] || cfg.defaultModel).trim();
 }
 
 const NOTE_ASSIST_MIN_TOKENS = 1024;
@@ -119,11 +119,11 @@ export function getActiveProviderPricing() {
   return { provider: cfg.name, price: cfg.price };
 }
 
-export function getActiveProviderInfo(providerOverride) {
+export function getActiveProviderInfo(providerOverride, modelOverride) {
   const cfg = getProviderConfig(providerOverride);
   return {
     provider: cfg.name,
-    model: getModel(cfg),
+    model: getModel(cfg, modelOverride),
     price: cfg.price,
     noteAssistMaxTokens: getNoteAssistMaxTokens(cfg),
   };
@@ -180,7 +180,7 @@ export async function requestDeepSeek(messages, options = {}) {
   const apiKey = getApiKey(cfg);
   const providerFetch = getProviderFetch();
   const body = {
-    model: getModel(cfg),
+    model: getModel(cfg, options.modelOverride),
     messages,
     stream: false,
     ...cfg.extraBody,
@@ -268,7 +268,7 @@ export async function requestDeepSeekStream(messages, options = {}) {
       // 客户端断开(options.signal)与空闲超时,任一触发即中止
       signal: combineSignals([options.signal, idleController.signal]),
       body: JSON.stringify({
-        model: getModel(cfg),
+        model: getModel(cfg, options.modelOverride),
         messages,
         stream: true,
         stream_options: { include_usage: true },
@@ -390,7 +390,7 @@ export async function requestDeepSeekStream(messages, options = {}) {
       usage,
       usageStatus: usage.totalTokens > 0 ? 'reported' : 'missing',
       provider: cfg.name,
-      model: getModel(cfg),
+      model: getModel(cfg, options.modelOverride),
       finishReason: consumerStopReason ? 'consumer_stop' : finishReason,
     };
   } finally {

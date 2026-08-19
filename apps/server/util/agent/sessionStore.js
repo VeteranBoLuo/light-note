@@ -10,6 +10,9 @@ import crypto from 'crypto';
 
 const MAX_TURNS = 10;
 const MAX_ACTION_BATCHES = 3;
+const MAX_SOURCE_SETS = 6;
+const MAX_CLARIFICATIONS = 3;
+const CLARIFICATION_TTL_MS = 5 * 60 * 1000;
 const MAX_TEXT_LENGTH = 700;
 const TTL_MS = 30 * 60 * 1000;
 const MAX_SESSIONS = 100;
@@ -77,6 +80,8 @@ function makeSession(id, ownerKey) {
     turns: [],
     lastTool: null,
     actionBatches: [],
+    sourceSets: [],
+    clarifications: [],
     createdAt: now(),
     updatedAt: now(),
   };
@@ -86,7 +91,62 @@ function normalizeSession(session) {
   if (!session || typeof session !== 'object') return null;
   if (!Array.isArray(session.turns)) session.turns = [];
   if (!Array.isArray(session.actionBatches)) session.actionBatches = [];
+  if (!Array.isArray(session.sourceSets)) session.sourceSets = [];
+  if (!Array.isArray(session.clarifications)) session.clarifications = [];
   return session;
+}
+
+const SOURCE_REF_TYPES = new Set(['note', 'bookmark', 'file', 'todo', 'tag']);
+
+function normalizeSourceRefs(values, { scope = false, limit = 20 } = {}) {
+  const output = [];
+  const seen = new Set();
+  for (const value of Array.isArray(values) ? values : []) {
+    const type = String(value?.type || '').trim();
+    const id = String(value?.id || '').trim();
+    if ((!scope && !SOURCE_REF_TYPES.has(type)) || (scope && type !== 'note_branch')) continue;
+    if (!id || id.length > 255) continue;
+    const key = `${type}:${id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push({ type, id });
+    if (output.length >= limit) break;
+  }
+  return output;
+}
+
+function normalizeAttachmentIds(values, limit = 20) {
+  const output = [];
+  const seen = new Set();
+  for (const value of Array.isArray(values) ? values : []) {
+    const id = String(value || '').trim();
+    if (!id || id.length > 255 || seen.has(id)) continue;
+    seen.add(id);
+    output.push(id);
+    if (output.length >= limit) break;
+  }
+  return output;
+}
+
+function sourceVersionDigest({ refs, scopeRefs, attachmentSourceIds }) {
+  const canonical = JSON.stringify({ refs, scopeRefs, attachmentSourceIds });
+  return crypto.createHash('sha256').update(`agent-source-set-v1\0${canonical}`).digest('hex');
+}
+
+function sourceSetExpired(sourceSet) {
+  return !Number.isFinite(Number(sourceSet?.expiresAt)) || Number(sourceSet.expiresAt) <= now();
+}
+
+function publicSourceSet(sourceSet) {
+  if (!sourceSet) return null;
+  return Object.freeze({
+    id: sourceSet.id,
+    contextRefCount: sourceSet.refs.length,
+    scopeRefCount: sourceSet.scopeRefs.length,
+    attachmentCount: sourceSet.attachmentSourceIds.length,
+    createdAt: new Date(sourceSet.createdAt).toISOString(),
+    expiresAt: new Date(sourceSet.expiresAt).toISOString(),
+  });
 }
 
 function cloneActionArgs(value) {
@@ -199,6 +259,177 @@ export async function recordTurn(session, userMsg, assistantMsg, toolResults = [
 
   // 异步写 Redis
   persistSession(session);
+}
+
+/**
+ * 保存本轮已经通过 owner 校验的材料锚点。只保存稳定引用和版本摘要，不保存标题、正文或模型输出。
+ * 相同材料集合会复用现有 ID，避免连续追问制造无意义的多个候选集合。
+ */
+export async function recordSessionSourceSet(session, { refs = [], scopeRefs = [], attachmentSourceIds = [] } = {}) {
+  if (!session) return null;
+  normalizeSession(session);
+  const normalized = {
+    refs: normalizeSourceRefs(refs),
+    scopeRefs: normalizeSourceRefs(scopeRefs, { scope: true }),
+    attachmentSourceIds: normalizeAttachmentIds(attachmentSourceIds),
+  };
+  if (!normalized.refs.length && !normalized.scopeRefs.length && !normalized.attachmentSourceIds.length) {
+    return null;
+  }
+  const digest = sourceVersionDigest(normalized);
+  const reusable = [...session.sourceSets]
+    .reverse()
+    .find((sourceSet) => sourceSet?.sourceVersionDigest === digest && !sourceSetExpired(sourceSet));
+  if (reusable) return publicSourceSet(reusable);
+
+  const createdAt = now();
+  const sourceSet = {
+    id: crypto.randomUUID(),
+    refs: normalized.refs,
+    scopeRefs: normalized.scopeRefs,
+    attachmentSourceIds: normalized.attachmentSourceIds,
+    createdAt,
+    expiresAt: createdAt + TTL_MS,
+    sourceVersionDigest: digest,
+  };
+  session.sourceSets = [...session.sourceSets.filter((item) => !sourceSetExpired(item)), sourceSet].slice(
+    -MAX_SOURCE_SETS,
+  );
+  await persistSession(session);
+  return publicSourceSet(sourceSet);
+}
+
+/**
+ * 只从当前 owner 已解析出的 session 内查找 Source Set。返回的引用仍必须在本轮重新做归属解析。
+ */
+export function resolveSessionSourceSet(session, sourceSetId) {
+  normalizeSession(session);
+  const id = String(sourceSetId || '').trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+    return { state: 'missing' };
+  }
+  const sourceSet = session.sourceSets.find((item) => item?.id === id);
+  if (!sourceSet) return { state: 'missing' };
+  if (sourceSetExpired(sourceSet)) return { state: 'expired' };
+  return {
+    state: 'ready',
+    sourceSet: {
+      id: sourceSet.id,
+      refs: normalizeSourceRefs(sourceSet.refs),
+      scopeRefs: normalizeSourceRefs(sourceSet.scopeRefs, { scope: true }),
+      attachmentSourceIds: normalizeAttachmentIds(sourceSet.attachmentSourceIds),
+      sourceVersionDigest: String(sourceSet.sourceVersionDigest || ''),
+      createdAt: Number(sourceSet.createdAt),
+      expiresAt: Number(sourceSet.expiresAt),
+    },
+  };
+}
+
+export function listSessionSourceSets(session, { limit = MAX_SOURCE_SETS } = {}) {
+  normalizeSession(session);
+  return session.sourceSets
+    .filter((sourceSet) => !sourceSetExpired(sourceSet))
+    .slice(-Math.max(1, Math.min(MAX_SOURCE_SETS, Number(limit) || MAX_SOURCE_SETS)))
+    .reverse()
+    .map(publicSourceSet);
+}
+
+function clarificationTokenDigest(token) {
+  return crypto.createHash('sha256').update(`agent-material-clarification-v1\0${token}`).digest('hex');
+}
+
+function publicClarification(clarification, sourceSets) {
+  const byId = new Map(sourceSets.map((sourceSet) => [sourceSet.id, sourceSet]));
+  return {
+    type: 'material_source_set',
+    token: clarification.token,
+    question: '当前会话里有多组可能的材料。请说明使用“最近一组”“上一组”，或“两组都用”。',
+    options: clarification.sourceSetIds.map((id, index) => {
+      const sourceSet = byId.get(id);
+      return {
+        ordinal: index + 1,
+        label: index === 0 ? '最近一组' : `往前第 ${index} 组`,
+        itemCount:
+          Number(sourceSet?.contextRefCount || 0) +
+          Number(sourceSet?.scopeRefCount || 0) +
+          Number(sourceSet?.attachmentCount || 0),
+      };
+    }),
+    expiresAt: new Date(clarification.expiresAt).toISOString(),
+  };
+}
+
+/** 创建私有澄清状态。公开部分只含短期令牌、序号和数量，不泄露 Source Set ID。 */
+export async function createSessionMaterialClarification(session, { originalMessage, sourceSetIds } = {}) {
+  if (!session) return null;
+  normalizeSession(session);
+  const available = listSessionSourceSets(session);
+  const availableIds = new Set(available.map((item) => item.id));
+  const ids = [...new Set((Array.isArray(sourceSetIds) ? sourceSetIds : []).map((id) => String(id || '').trim()))]
+    .filter((id) => availableIds.has(id))
+    .slice(0, MAX_SOURCE_SETS);
+  if (ids.length < 2) return null;
+  const token = crypto.randomBytes(32).toString('base64url');
+  const createdAt = now();
+  const clarification = {
+    id: crypto.randomUUID(),
+    tokenDigest: clarificationTokenDigest(token),
+    originalMessage: String(originalMessage || '').slice(0, 12_000),
+    sourceSetIds: ids,
+    createdAt,
+    expiresAt: createdAt + CLARIFICATION_TTL_MS,
+  };
+  session.clarifications = [
+    ...session.clarifications.filter((item) => Number(item?.expiresAt) > createdAt),
+    clarification,
+  ].slice(-MAX_CLARIFICATIONS);
+  await persistSession(session);
+  return publicClarification({ ...clarification, token }, available);
+}
+
+function parseClarificationSelection(message, size) {
+  const text = String(message || '')
+    .trim()
+    .toLowerCase();
+  if (!text) return [];
+  if (/(?:两组|全部|都用|一起|对比|比较|both|all)/i.test(text)) {
+    return Array.from({ length: size }, (_, index) => index);
+  }
+  if (/(?:最近(?:一组)?|第一组?|第一个|^\s*1\s*$|latest|first)/i.test(text)) return [0];
+  if (size > 1 && /(?:上一组|前一组|第二组?|第二个|^\s*2\s*$|previous|second)/i.test(text)) return [1];
+  const ordinal = text.match(/第\s*(\d+)\s*组?/u);
+  if (ordinal) {
+    const index = Number(ordinal[1]) - 1;
+    if (Number.isSafeInteger(index) && index >= 0 && index < size) return [index];
+  }
+  return [];
+}
+
+/** 用下一条用户消息填充澄清槽位；无法识别时保持 pending，绝不默认选择更多材料。 */
+export async function resolveSessionMaterialClarification(session, token, answer) {
+  if (!session) return { state: 'missing' };
+  normalizeSession(session);
+  const normalizedToken = String(token || '').trim();
+  if (!/^[A-Za-z0-9_-]{40,}$/.test(normalizedToken)) return { state: 'missing' };
+  const digest = clarificationTokenDigest(normalizedToken);
+  const clarification = session.clarifications.find((item) => item?.tokenDigest === digest);
+  if (!clarification) return { state: 'missing' };
+  if (Number(clarification.expiresAt) <= now()) return { state: 'expired' };
+  const indexes = parseClarificationSelection(answer, clarification.sourceSetIds.length);
+  if (!indexes.length) {
+    return {
+      state: 'pending',
+      clarification: publicClarification({ ...clarification, token: normalizedToken }, listSessionSourceSets(session)),
+    };
+  }
+  const selectedSourceSetIds = indexes.map((index) => clarification.sourceSetIds[index]).filter(Boolean);
+  session.clarifications = session.clarifications.filter((item) => item.id !== clarification.id);
+  await persistSession(session);
+  return {
+    state: 'ready',
+    originalMessage: clarification.originalMessage,
+    selectedSourceSetIds,
+  };
 }
 
 /**

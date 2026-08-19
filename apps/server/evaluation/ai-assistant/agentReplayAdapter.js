@@ -90,6 +90,20 @@ export function evaluateAgentReplayObservation(replayCase, observation) {
   for (const text of expected.responseExcludes || []) {
     if (response.includes(text)) errors.push(`回答不应包含“${text}”`);
   }
+  if (expected.turnContractTrace && typeof expected.turnContractTrace === 'object') {
+    const actualTrace = observation.turnContractTrace;
+    if (!actualTrace || typeof actualTrace !== 'object') {
+      errors.push('缺少 Agent Turn Contract trace');
+    } else {
+      for (const [key, expectedValue] of Object.entries(expected.turnContractTrace)) {
+        if (JSON.stringify(actualTrace[key]) !== JSON.stringify(expectedValue)) {
+          errors.push(
+            `Turn Contract trace.${key} 应为 ${JSON.stringify(expectedValue)}，实际 ${JSON.stringify(actualTrace[key])}`,
+          );
+        }
+      }
+    }
+  }
   return { id: replayCase.id, passed: errors.length === 0, errors, observation };
 }
 

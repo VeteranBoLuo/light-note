@@ -25,6 +25,23 @@ describe('Agent AI Gateway', () => {
     expect(onTrace).toHaveBeenCalledTimes(2);
   });
 
+  it('按阶段下发独立 Provider/Model，未显式覆盖时不再只有全局开关', async () => {
+    vi.stubEnv('AGENT_LLM_PROVIDER', 'deepseek');
+    vi.stubEnv('AGENT_INTENT_PROVIDER', 'qwen');
+    vi.stubEnv('AGENT_INTENT_MODEL', 'qwen-intent-test');
+    try {
+      const client = vi.fn().mockResolvedValue({ content: 'ok', usageStatus: 'reported' });
+      const gateway = createAiGateway({ completeClient: client, streamClient: vi.fn() });
+      await gateway.complete([], { trace: { stage: 'intent_compiler' } });
+      expect(client).toHaveBeenCalledWith(
+        [],
+        expect.objectContaining({ providerOverride: 'qwen', modelOverride: 'qwen-intent-test' }),
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('失败时只记录清洗后的错误并把 span 附到异常', async () => {
     const error = new Error('Authorization: Bearer secret-token password=hunter2');
     const gateway = createAiGateway({ completeClient: vi.fn().mockRejectedValue(error), streamClient: vi.fn() });

@@ -24,6 +24,11 @@ describe('AI Agent 回放适配器', () => {
           confirmations: 0,
           responseIncludes: ['摘要'],
           responseExcludes: ['(ID:'],
+          turnContractTrace: {
+            requestedScopeMode: 'explicit',
+            allowedSourceCount: 2,
+            validationIssues: [],
+          },
         },
       },
       {
@@ -31,6 +36,11 @@ describe('AI Agent 回放适配器', () => {
         executedTools: ['read_url'],
         confirmations: [],
         response: '合成摘要',
+        turnContractTrace: {
+          requestedScopeMode: 'explicit',
+          allowedSourceCount: 2,
+          validationIssues: [],
+        },
       },
     );
     expect(result).toMatchObject({ passed: true, errors: [] });

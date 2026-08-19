@@ -181,6 +181,7 @@
   import type { AiCoverageReport, AiSourceCoverage } from '@/components/aiAssistant/aiSourceNavigation';
   import type { AiToolStatusItem } from '@/components/aiAssistant/AiToolStatusList.vue';
   import type { AiResourceContext, AiScopeRef } from '@/types/aiScope';
+  import { normalizeAiMaterialClarification, normalizeAiResolvedGrounding } from '@/types/aiGrounding';
   import {
     clearAiTemporaryAttachments,
     fetchAiAttachmentStatuses,
@@ -269,7 +270,9 @@
     createAiAssistantMaterialSnapshot,
     createAiAssistantMessageId,
     resolveAiAssistantFollowUpMaterialSnapshot,
+    resolveAiAssistantMaterialClarificationToken,
     resolveAiAssistantPendingNoteDraftReference,
+    resolveAiAssistantSourceSetId,
     resolveAiAssistantRequestEdgeStatus,
     resolveAiAssistantIdentity,
     shouldAutoInheritAiAssistantMaterials,
@@ -1138,6 +1141,8 @@
       recovered: cloudMessage.modelMeta?.recovered === true,
       artifacts: normalizeAiArtifacts(cloudMessage.modelMeta?.artifacts),
       generatedBy: cloudMessage.modelMeta?.generatedBy === 'action_continuation' ? 'action_continuation' : undefined,
+      resolvedGrounding: normalizeAiResolvedGrounding(cloudMessage.modelMeta?.resolvedGrounding),
+      materialClarification: normalizeAiMaterialClarification(cloudMessage.modelMeta?.materialClarification),
       entityRefs: normalizeCloudEntityRefs(cloudMessage.modelMeta?.entityRefs),
       actionSettlements: normalizeCloudActionSettlements(cloudMessage.modelMeta?.actionSettlements),
       stage: typeof cloudMessage.modelMeta?.stage === 'string' ? cloudMessage.modelMeta.stage : undefined,
@@ -1454,6 +1459,12 @@
       ...(chatMessage.entityRefs?.length ? { entityRefs: chatMessage.entityRefs.slice(0, 5) } : {}),
       ...(chatMessage.artifacts?.length ? { artifacts: normalizeAiArtifacts(chatMessage.artifacts) } : {}),
       ...(chatMessage.generatedBy ? { generatedBy: chatMessage.generatedBy } : {}),
+      ...(chatMessage.resolvedGrounding
+        ? { resolvedGrounding: normalizeAiResolvedGrounding(chatMessage.resolvedGrounding) }
+        : {}),
+      ...(chatMessage.materialClarification
+        ? { materialClarification: normalizeAiMaterialClarification(chatMessage.materialClarification) }
+        : {}),
     };
     try {
       const saved = await saveAiCloudMessage(cloudConversationId, {
@@ -1780,12 +1791,29 @@
       !attachments.value.length
         ? resolveAiAssistantPendingNoteDraftReference(messages.value)
         : null;
+    const followUpSourceSetId =
+      !actionContinuation &&
+      !options.materialSnapshot &&
+      !contexts.value.length &&
+      !scopeRefs.value.length &&
+      !attachments.value.length
+        ? resolveAiAssistantSourceSetId(messages.value)
+        : '';
+    const materialClarificationToken =
+      !actionContinuation &&
+      !options.materialSnapshot &&
+      !contexts.value.length &&
+      !scopeRefs.value.length &&
+      !attachments.value.length
+        ? resolveAiAssistantMaterialClarificationToken(messages.value)
+        : '';
     const autoInheritedMaterialSnapshot =
       !actionContinuation &&
       !options.materialSnapshot &&
       !contexts.value.length &&
       !scopeRefs.value.length &&
       !attachments.value.length &&
+      !followUpSourceSetId &&
       shouldAutoInheritAiAssistantMaterials(inputText)
         ? resolveAiAssistantFollowUpMaterialSnapshot(messages.value)
         : null;
@@ -1798,6 +1826,7 @@
       !contexts.value.length &&
       !scopeRefs.value.length &&
       !attachments.value.length &&
+      !followUpSourceSetId &&
       !autoInheritedMaterialSnapshot
         ? resolveAiAssistantFollowUpMaterialSnapshot(messages.value)
         : null;
@@ -2134,6 +2163,8 @@
             if (data.coverage && typeof data.coverage === 'object') currentMsg.coverage = data.coverage;
             currentMsg.entityRefs = normalizeCloudEntityRefs(data.entityRefs);
             if (data.citationAudit) currentMsg.citationAudit = data.citationAudit;
+            currentMsg.resolvedGrounding = normalizeAiResolvedGrounding(data.resolvedGrounding);
+            currentMsg.materialClarification = normalizeAiMaterialClarification(data.materialClarification);
             currentMsg.artifacts = normalizeAiArtifacts(data.artifacts);
             if (typeof data.answer === 'string') authoritativeAnswerSnapshot = data.answer;
           }
@@ -2185,7 +2216,22 @@
           contexts: contextSnapshot,
           scopeRefs: scopeSnapshot.map((item) => ({ type: item.type, id: item.id })),
           attachmentIds: attachmentSnapshot.map((item) => item.id),
+          grounding: {
+            mode:
+              contextSnapshot.length || scopeSnapshot.length || attachmentSnapshot.length
+                ? 'explicit'
+                : followUpSourceSetId || followUpMaterialCandidate
+                  ? 'inherit_candidate'
+                  : scopeMode.value === 'workspace'
+                    ? 'workspace'
+                    : 'none',
+            contextRefs: contextSnapshot.map((item) => ({ type: item.type, id: item.id })),
+            scopeRefs: scopeSnapshot.map((item) => ({ type: item.type, id: item.id })),
+            attachmentIds: attachmentSnapshot.map((item) => item.id),
+            ...(followUpSourceSetId ? { sourceSetId: followUpSourceSetId } : {}),
+          },
           ...(pendingNoteDraft ? { pendingNoteDraft } : {}),
+          ...(materialClarificationToken ? { materialClarificationToken } : {}),
           ...(followUpMaterialCandidate &&
           (followUpMaterialCandidate.contextRefs.length ||
             followUpMaterialCandidate.scopeRefs.length ||
@@ -2471,7 +2517,7 @@
   const handleRecommendationClick = createQuickQuestionDispatcher({
     isBusy: () => isLoading.value,
     send: (question) => {
-      const inherited = buildFollowUpMaterialSnapshot();
+      const inherited = resolveAiAssistantSourceSetId(messages.value) ? null : buildFollowUpMaterialSnapshot();
       return sendMessage({ inputText: question, ...(inherited ? { materialSnapshot: inherited } : {}) });
     },
   });

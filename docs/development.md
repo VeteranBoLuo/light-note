@@ -593,6 +593,10 @@ cd apps/android
 - 页面树能力由 `util/noteTreeFeatureFlags.js` 统一裁决，前端只消费 `/api/note/getNoteTreeFeatures` 的账号级快照。生产环境未配置时默认全部关闭；本地开发和测试默认开启，便于离线回归。
 - 页面树 Schema 同时维护幂等迁移 `migrations/20260806_note_page_tree.sql`、启动保障 `util/noteTreeSchema.js` 与只读断言 `migrations/schema-assertions.sql`；启动保障只补缺失列/索引，发现同名结构不一致时失败关闭，不自动删除或重建未知结构。`note` 的 owner、父节点、删除状态和 ID 均为 `varchar(255) utf8mb4`，复合索引必须使用足以容纳 UUID 的 64/8 字符前缀，禁止用四个全长字段突破 MySQL 5.7 InnoDB 的 3072 字节键长上限。
 - 六个开关分别使用 `NOTE_TREE_READ`、`NOTE_TREE_WRITE`、`NOTE_TREE_MOBILE`、`NOTE_TREE_SUBTREE_TRASH`、`AI_NOTE_BRANCH_SCOPE`、`AI_NOTE_BRANCH_ANALYSIS` 前缀，可配置 `<PREFIX>_ENABLED=true|false` 与 `<PREFIX>_ROLLOUT_PERCENT=0..100`。`NOTE_TREE_TEST_USER_IDS` 可声明逗号分隔的测试账号。
+- Agent GroundingScope V2 使用 `AI_GROUNDING_SCOPE_V2_ENABLED=true|false`、`AI_GROUNDING_SCOPE_V2_ROLLOUT_PERCENT=0..100` 和 `AI_GROUNDING_SCOPE_V2_TEST_USER_IDS`。生产环境未配置时默认 0%，Root 默认开启；显式 `false` 是最高优先级急停，Root 与测试账号也不能绕过。显式材料轮的 Planner 可读取 intent history，但 Final Reply 只能读取本轮消息、当前 evidence 和不含正文的 DiscourseProjection；不得把 `session.lastTool`、长期记忆或旧助手正文重新拼回事实生成。
+- 笔记草稿 OutputContract 必须由服务端编译和验收，当前消息的明确约束优先于旧草稿和历史消息。`minimum`、`target_range`、`relative_growth`、`preserve_length` 的测量值必须同时进入工具 Schema、修复提示、无正文 trace 和确认预览；任何验证失败都不得下发确认卡。定性扩写默认至少达到 `max(旧稿 × 1.4, 旧稿 + 300)`，保持篇幅默认容差 ±10%，可通过 `AI_NOTE_DRAFT_MIN_GROWTH_RATIO`、`AI_NOTE_DRAFT_MIN_GROWTH_CHARS`、`AI_NOTE_DRAFT_LENGTH_TOLERANCE_RATIO` 调整。用户明确禁止外部知识时，材料容量使用 `AI_NOTE_DRAFT_MAX_GROUNDED_EXPANSION_RATIO` 与 `AI_NOTE_DRAFT_GROUNDED_EXPANSION_ALLOWANCE` 裁决；禁止为了满足长度而放宽 GroundingScope 或重复段落凑字数。
+- Agent Runtime V2 默认使用 `AI_AGENT_RUNTIME_V2_MODE=enforce`；仅排障回退可显式设置 `legacy`，语义对照可设置 `shadow`。Compiler 产出的 TurnSpec 是本轮唯一顶层意图，后续 router/planner/runner 只能消费或缩小它，禁止 material、note task、action 正则或依赖轮重新覆盖 request kind、grounding policy、output contract 和 goals。Compiler 的一次修复必须携带服务端得到的稳定约束提示，最终仍以严格 schema 为准，不能用纠错提示代替验证。
+- 阶段模型配置使用 `AGENT_INTENT_PROVIDER/MODEL`、`AGENT_PLANNER_PROVIDER/MODEL`、`AGENT_COMPOSER_PROVIDER/MODEL`、`AGENT_NOTE_DRAFT_PROVIDER/MODEL`；未配置时继承全局 Provider。变更默认模型前必须运行 `pnpm --filter server smoke:ai-turn-v2 -- --live --provider both --repeat 20`，严格正确率须至少 95%、候选工具 p95 须不超过 12、额外工具或澄清时调用工具等灾难性失败必须为 0。该命令只验证协议和计划，不执行业务工具；默认不带 `--live` 时必须保持 dry-run。
 - 显式 `false` 是最高优先级事故急停，Root 和测试账号也不能绕过；其余情况下 Root/测试账号先行放行，普通账号按 subject ID 做稳定 SHA-256 分桶。依赖关系固定为：写入依赖读取、移动端依赖读取、子树回收站依赖写入、AI 完整分析依赖 AI 目录范围。
 - 灰度顺序保持“Root/测试 → 5% → 20% → 50% → 100%”，并先开读取再开写入。服务端在查询、创建、移动、排序、子树删除、AI 范围解析、AI 指定目录准备/替换/确认等边界重新校验，不能只靠前端隐藏入口。
 - 页面树搜索只读取标题元数据；服务端返回当前目录后代中的匹配节点及其完整祖先路径，不返回正文，也不补入无关兄弟或后代。
@@ -672,6 +676,7 @@ AI 助手（轻笺智域）回答"怎么用 / 是什么 / 在哪设置"依赖 `k
 - **字段**：`title` / `content`（html 或 markdown）/ `category`（帮助中心 · 内部知识 · FAQ · 系统行为）/ `status`（`public` 普通用户可搜、`internal` 仅 root）。
 - **写入方式**：root 让 AI 用 `write_knowledge_base` 工具；或写 `.mjs` 脚本 `import { generateUUID }` + INSERT `knowledge_base`（title 已存在则 UPDATE，幂等），放服务器 `node` 跑。
 - **配套**：若新功能涉及"可查询的实时数据"（如额度、用量），除知识库说明外，考虑给 Agent 加对应查询工具（见 `util/agent/tools/`，如 `get_ai_quota`）。
+- Agent 跨轮材料不能从助手正文、来源卡片或前端缓存重新拼装：只允许提交服务端签发的短期 `sourceSetId`，并在每轮按 owner/session 重新解析。存在多个候选且用户指向不唯一时必须进入 ClarificationState；分类失败或澄清不明确均不得默认“多带一些材料”。
 
 ### 待办重复、提醒与撤销约束
 

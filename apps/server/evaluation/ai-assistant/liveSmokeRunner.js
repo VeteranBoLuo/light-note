@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
@@ -44,8 +45,8 @@ export function parseLiveSmokeArgs(argv) {
     else if (arg === '--depth') options.depth = argv[++index] || 'plan';
     else throw new Error(`未知参数：${arg}`);
   }
-  if (!Number.isInteger(options.repeat) || options.repeat < 1 || options.repeat > 5) {
-    throw new Error('--repeat 必须是 1～5 的整数');
+  if (!Number.isInteger(options.repeat) || options.repeat < 1 || options.repeat > 20) {
+    throw new Error('--repeat 必须是 1～20 的整数');
   }
   if (!['text', 'json'].includes(options.format)) throw new Error('--format 仅支持 text 或 json');
   if (!LIVE_SMOKE_DEPTHS.has(options.depth)) throw new Error('--depth 仅支持 plan 或 answer');
@@ -208,6 +209,50 @@ function summarizeLayers(results) {
   return summary;
 }
 
+function attemptOutcomeDigest(attempt) {
+  const stableOutcome = {
+    passed: attempt?.passed === true,
+    capabilities: [...(attempt?.capabilities || [])].map(String).sort(),
+    tools: [...(attempt?.tools || [])].map(String).sort(),
+    planning: attempt?.layers?.planning?.status || 'skipped',
+    toolContract: attempt?.layers?.toolContract?.status || 'skipped',
+    answer: attempt?.layers?.answer?.status || 'skipped',
+    answerSource: attempt?.layers?.answer?.source || null,
+    qualityIssues: [...(attempt?.layers?.answer?.qualityIssues || [])].map(String).sort(),
+  };
+  return crypto.createHash('sha256').update(JSON.stringify(stableOutcome)).digest('hex');
+}
+
+export function summarizeAttemptConsistency(attempts = []) {
+  const digests = [...new Set((Array.isArray(attempts) ? attempts : []).map(attemptOutcomeDigest))].sort();
+  const passedAttempts = (Array.isArray(attempts) ? attempts : []).filter((attempt) => attempt?.passed === true).length;
+  return {
+    consistent: digests.length <= 1,
+    distinctOutcomeCount: digests.length,
+    outcomeDigests: digests,
+    passedAttempts,
+    totalAttempts: Array.isArray(attempts) ? attempts.length : 0,
+  };
+}
+
+function summarizeConsistency(results) {
+  const cases = results.map((result) => ({
+    id: result.id,
+    ...summarizeAttemptConsistency(result.attempts),
+  }));
+  const totalAttempts = cases.reduce((sum, item) => sum + item.totalAttempts, 0);
+  const passedAttempts = cases.reduce((sum, item) => sum + item.passedAttempts, 0);
+  return {
+    totalAttempts,
+    passedAttempts,
+    strictPassRate: totalAttempts ? passedAttempts / totalAttempts : 0,
+    repeatedCases: cases.filter((item) => item.totalAttempts > 1).length,
+    fullyConsistentCases: cases.filter((item) => item.consistent).length,
+    inconsistentCases: cases.filter((item) => !item.consistent).map((item) => item.id),
+    cases,
+  };
+}
+
 export function buildLiveSmokeReport({ suiteId, totalCases, provider, results, depth = 'plan' }) {
   const completedCases = results.length;
   const passed =
@@ -221,6 +266,7 @@ export function buildLiveSmokeReport({ suiteId, totalCases, provider, results, d
     depth,
     usage: summarizeUsage(results),
     layers: summarizeLayers(results),
+    consistency: summarizeConsistency(results),
     results,
     progress: { completedCases, totalCases },
     // 工具层只检查当前注册 schema；回答层只使用合成资料，从未调用任何 tool.execute。
@@ -457,6 +503,7 @@ export async function runLiveSmokeSuite(options) {
           (id) => catalog.find((entry) => entry.id === id)?.effect === 'write',
         ),
       },
+      consistency: summarizeAttemptConsistency(attempts),
       attempts,
     });
     if (typeof options.onProgress === 'function') {

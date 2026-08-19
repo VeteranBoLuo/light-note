@@ -126,6 +126,15 @@ describe('Agent SSE lifecycle', () => {
       snapshotAnswer: '基于材料的最终答案',
       output: { session_id: 's4' },
       entityRefs: [{ type: 'note', id: 'note-1', title: '测试笔记' }],
+      resolvedGrounding: {
+        schemaVersion: 2,
+        enabled: true,
+        mode: 'current_explicit_only',
+        historyPolicy: 'discourse_projection_only',
+        allowedSourceCount: 1,
+        sourcesUsedCount: 1,
+        sourceSubsetValid: true,
+      },
     });
 
     const snapshot = onTerminal.mock.calls[0][0].snapshot;
@@ -138,6 +147,10 @@ describe('Agent SSE lifecycle', () => {
         citations: [expect.objectContaining({ citationKey: '1' })],
         coverage: { overall: { complete: false, coverageRatio: 0.6 } },
         citationAudit: { evidenceCount: 1, verifiedCitationCount: 1 },
+        resolvedGrounding: expect.objectContaining({
+          mode: 'current_explicit_only',
+          sourceSubsetValid: true,
+        }),
         artifacts: [expect.objectContaining({ id: 'bookmark-health:run-1', status: 'running' })],
         stage: 'completed',
       }),

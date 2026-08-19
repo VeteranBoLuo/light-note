@@ -22,6 +22,11 @@ const mocks = vi.hoisted(() => ({
   inspectToolConfirmationExecution: vi.fn(),
   recordPendingActionBatch: vi.fn(),
   recordPendingActionBatchById: vi.fn(),
+  recordSessionSourceSet: vi.fn(),
+  createSessionMaterialClarification: vi.fn(),
+  resolveSessionMaterialClarification: vi.fn(() => ({ state: 'missing' })),
+  resolveSessionSourceSet: vi.fn(() => ({ state: 'missing' })),
+  listSessionSourceSets: vi.fn(() => []),
   resolveSessionActionRetry: vi.fn(() => ({ state: 'none' })),
   settleSessionAction: vi.fn(),
   createActionContinuation: vi.fn(),
@@ -68,9 +73,14 @@ vi.mock('../util/agent/secondRound.js', () => ({
 }));
 vi.mock('../util/agent/sessionStore.js', () => ({
   getOrCreateSession: mocks.getOrCreateSession,
+  createSessionMaterialClarification: mocks.createSessionMaterialClarification,
   recordPendingActionBatch: mocks.recordPendingActionBatch,
   recordPendingActionBatchById: mocks.recordPendingActionBatchById,
+  recordSessionSourceSet: mocks.recordSessionSourceSet,
   recordTurn: mocks.recordTurn,
+  resolveSessionSourceSet: mocks.resolveSessionSourceSet,
+  resolveSessionMaterialClarification: mocks.resolveSessionMaterialClarification,
+  listSessionSourceSets: mocks.listSessionSourceSets,
   resolveSessionActionRetry: mocks.resolveSessionActionRetry,
   settleSessionAction: mocks.settleSessionAction,
   getSessionId: (session) => session.id,
@@ -354,6 +364,14 @@ function toolCall(name, args, id = `call-${name}`) {
   };
 }
 
+function turnSpecCall(input) {
+  return toolCall('submit_turn_spec', { version: '2.0', ...input }, 'turn-spec-1');
+}
+
+function executionPlanCall(input) {
+  return toolCall('submit_execution_plan', { version: '2.0', ...input }, 'execution-plan-1');
+}
+
 /**
  * 笔记入口的受约束语义分类响应。
  *
@@ -425,12 +443,24 @@ function sseEvents(res) {
     .map((chunk) => JSON.parse(chunk.slice(6)));
 }
 
+function latestAgentLogRecord() {
+  const call = mocks.poolQuery.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO agent_logs'));
+  if (!call) return null;
+  const columns = String(call[0])
+    .match(/INSERT INTO agent_logs\s*\(([^)]+)\)/iu)?.[1]
+    ?.split(',')
+    .map((item) => item.trim());
+  if (!columns?.length || columns.length !== call[1]?.length) return null;
+  return Object.fromEntries(columns.map((column, index) => [column, call[1][index]]));
+}
+
 describe('agentChat 主链路', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
   });
 
   beforeEach(() => {
+    vi.stubEnv('AI_AGENT_RUNTIME_V2_MODE', 'legacy');
     vi.clearAllMocks();
     mocks.poolQuery.mockResolvedValue([[]]);
     mocks.reserve.mockResolvedValue({
@@ -445,6 +475,11 @@ describe('agentChat 主链路', () => {
     });
     mocks.reconcile.mockResolvedValue(undefined);
     mocks.getOrCreateSession.mockResolvedValue({ id: 'session-1', turns: [], lastTool: null });
+    mocks.recordSessionSourceSet.mockResolvedValue(null);
+    mocks.createSessionMaterialClarification.mockResolvedValue(null);
+    mocks.resolveSessionMaterialClarification.mockReturnValue({ state: 'missing' });
+    mocks.resolveSessionSourceSet.mockReturnValue({ state: 'missing' });
+    mocks.listSessionSourceSets.mockReturnValue([]);
     mocks.toolExecute.mockResolvedValue({ value: 'ok' });
     mocks.requestAi.mockImplementation(async (_messages, options = {}) => {
       if (options?.trace?.stage === 'planner') {
@@ -534,6 +569,276 @@ describe('agentChat 主链路', () => {
       matchedPageCount: 1,
       totalPages: 1,
     });
+  });
+
+  it('Runtime V2 enforce 以 TurnSpec 为唯一意图并只向 Planner 暴露收窄后的真实工具', async () => {
+    vi.stubEnv('AI_AGENT_RUNTIME_V2_MODE', 'enforce');
+    mocks.requestAi.mockImplementation(async (messages, options = {}) => {
+      if (options?.trace?.stage === 'intent_compiler') {
+        const payload = JSON.parse(messages[1].content);
+        return {
+          content: '',
+          toolCalls: [
+            turnSpecCall({
+              requestKind: 'answer',
+              confidence: 'high',
+              goals: [
+                {
+                  id: 'query',
+                  kind: 'read',
+                  capabilityDomain: 'content',
+                  description: '查询演示数据',
+                  targetDescription: '今天',
+                  dependsOn: [],
+                },
+              ],
+              groundingPolicy: payload.authoritativeGroundingPolicy,
+              missingSlots: [],
+              clarificationQuestion: '',
+            }),
+          ],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      if (options?.trace?.stage === 'execution_planner') {
+        const payload = JSON.parse(messages[1].content);
+        return {
+          content: '',
+          toolCalls: [
+            executionPlanCall({
+              turnSpecDigest: payload.turnSpec.digest,
+              steps: [
+                {
+                  id: 'query-step',
+                  goalId: 'query',
+                  toolName: 'query_demo',
+                  arguments: { keyword: '今天' },
+                  dependsOn: [],
+                  expectedResultKind: 'demo_result',
+                },
+              ],
+              deferredGoalIds: [],
+              unsupportedGoalIds: [],
+            }),
+          ],
+          usage: usage(3),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      return {
+        content: '今天的演示数据如下。',
+        toolCalls: [],
+        usage: usage(4),
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      };
+    });
+    mocks.toolExecute.mockResolvedValue({ value: '今日数据' });
+    const res = response();
+
+    await agentChat(request({ message: '查询今天的演示数据', stream: false }), res);
+
+    expect(mocks.toolExecute).toHaveBeenCalledOnce();
+    expect(mocks.requestAi.mock.calls.map(([, options]) => options?.trace?.stage)).toEqual([
+      'intent_compiler',
+      'execution_planner',
+      'final',
+    ]);
+    const plannerTools = mocks.requestAi.mock.calls[1][1].tools[0].function.parameters.properties.steps.items;
+    expect(JSON.stringify(plannerTools)).toContain('query_demo');
+    expect(JSON.stringify(plannerTools)).not.toContain('create_todo');
+    const log = latestAgentLogRecord();
+    expect(JSON.parse(log.turn_contract_trace)).toMatchObject({
+      intentCompilerMode: 'enforce',
+      intentCompilerState: 'ready',
+      turnSpecRequestKind: 'answer',
+      candidateToolCount: 1,
+    });
+  });
+
+  it('Runtime V2 依赖轮复用同一 TurnSpec，只把权威前置引用交给收窄后的下一轮 Planner', async () => {
+    vi.stubEnv('AI_AGENT_RUNTIME_V2_MODE', 'enforce');
+    mocks.selectAgentTools.mockImplementation((registry) =>
+      [registry.get('query_demo'), registry.get('query_detail')].filter(Boolean),
+    );
+    mocks.toolExecute
+      .mockResolvedValueOnce({ value: '候选详情', dependencyRefs: [{ type: 'detail', id: 'detail-1' }] })
+      .mockResolvedValueOnce({ value: '权威详情' });
+    mocks.requestAi.mockImplementation(async (messages, options = {}) => {
+      if (options?.trace?.stage === 'intent_compiler') {
+        const payload = JSON.parse(messages[1].content);
+        return {
+          content: '',
+          toolCalls: [
+            turnSpecCall({
+              requestKind: 'answer',
+              confidence: 'high',
+              goals: [
+                {
+                  id: 'query-list',
+                  kind: 'read',
+                  capabilityDomain: 'content',
+                  description: '查询演示数据',
+                  targetDescription: '目标列表',
+                  dependsOn: [],
+                },
+                {
+                  id: 'query-detail',
+                  kind: 'read',
+                  capabilityDomain: 'content',
+                  description: '查询演示详情',
+                  targetDescription: '唯一命中项',
+                  dependsOn: ['query-list'],
+                },
+              ],
+              groundingPolicy: payload.authoritativeGroundingPolicy,
+              missingSlots: [],
+              clarificationQuestion: '',
+            }),
+          ],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      if (options?.trace?.stage === 'execution_planner') {
+        const payload = JSON.parse(messages[1].content);
+        return {
+          content: '',
+          toolCalls: [
+            executionPlanCall({
+              turnSpecDigest: payload.turnSpec.digest,
+              steps: [
+                {
+                  id: 'list-step',
+                  goalId: 'query-list',
+                  toolName: 'query_demo',
+                  arguments: { keyword: '目标' },
+                  dependsOn: [],
+                  expectedResultKind: 'detail_refs',
+                },
+              ],
+              deferredGoalIds: ['query-detail'],
+              unsupportedGoalIds: [],
+            }),
+          ],
+          usage: usage(3),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      if (options?.trace?.stage === 'execution_planner_round_2') {
+        const payload = JSON.parse(messages[1].content);
+        expect(payload.completedGoalIds).toEqual(['query-list']);
+        expect(payload.dependencyResults[0].capabilities[0].dependencyRefs).toEqual([
+          { type: 'detail', id: 'detail-1' },
+        ]);
+        return {
+          content: '',
+          toolCalls: [
+            executionPlanCall({
+              turnSpecDigest: payload.turnSpec.digest,
+              steps: [
+                {
+                  id: 'detail-step',
+                  goalId: 'query-detail',
+                  toolName: 'query_detail',
+                  arguments: { id: 'detail-1' },
+                  dependsOn: [],
+                  expectedResultKind: 'detail',
+                },
+              ],
+              deferredGoalIds: [],
+              unsupportedGoalIds: [],
+            }),
+          ],
+          usage: usage(3),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      return {
+        content: '已取得权威详情。',
+        toolCalls: [],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      };
+    });
+    const res = response();
+
+    await agentChat(request({ message: '先查询演示数据，再读取命中项详情', stream: false }), res);
+
+    expect(mocks.toolExecute).toHaveBeenCalledTimes(2);
+    expect(mocks.requestAi.mock.calls.map(([, options]) => options?.trace?.stage)).toEqual([
+      'intent_compiler',
+      'execution_planner',
+      'execution_planner_round_2',
+      'final',
+    ]);
+  });
+
+  it('Runtime V2 统一决定笔记产物路由，不再调用独立 note task classifier', async () => {
+    vi.stubEnv('AI_AGENT_RUNTIME_V2_MODE', 'enforce');
+    const sourceText = '这是用户明确提供的产品复盘材料，包含目标、现状、风险和下一步行动。'.repeat(8);
+    mocks.requestAi.mockImplementation(async (messages, options = {}) => {
+      if (options?.trace?.stage === 'intent_compiler') {
+        const payload = JSON.parse(messages[1].content);
+        return {
+          content: '',
+          toolCalls: [
+            turnSpecCall({
+              requestKind: 'create_artifact',
+              confidence: 'high',
+              goals: [
+                {
+                  id: 'create-note',
+                  kind: 'transform',
+                  capabilityDomain: 'note',
+                  description: '根据用户提供的材料创建总结笔记',
+                  targetDescription: '新的 Markdown 笔记',
+                  dependsOn: [],
+                },
+              ],
+              groundingPolicy: payload.authoritativeGroundingPolicy,
+              missingSlots: [],
+              clarificationQuestion: '',
+            }),
+          ],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      if (options?.trace?.stage === 'note_draft') {
+        return {
+          content: '',
+          toolCalls: [
+            toolCall('submit_note_draft', {
+              title: '产品复盘总结',
+              content: `# 产品复盘总结\n\n${sourceText}`,
+            }),
+          ],
+          usage: usage(4),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      throw new Error(`unexpected stage: ${options?.trace?.stage}`);
+    });
+    const res = response();
+
+    await agentChat(request({ message: `请把下面材料整理成一篇笔记：\n${sourceText}`, stream: false }), res);
+
+    expect(mocks.requestAi.mock.calls.map(([, options]) => options?.trace?.stage)).toEqual([
+      'intent_compiler',
+      'note_draft',
+    ]);
+    expect(mocks.createToolConfirmation).toHaveBeenCalledOnce();
+    expect(res.send.mock.calls[0][0].data.confirmations).toHaveLength(1);
   });
 
   it('卡片续答允许空消息内部触发，只读取服务端成功回执且不重新开放 Planner 或工具', async () => {
@@ -644,9 +949,20 @@ describe('agentChat 主链路', () => {
       expect.objectContaining({ answer: '你好，我在。', status: 'completed', sessionId: 'session-1' }),
     );
     expect(mocks.recordTurn).toHaveBeenCalledWith(expect.anything(), '你好', '你好，我在。', []);
-    const agentLogInsert = mocks.poolQuery.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO agent_logs'));
-    expect(agentLogInsert[1][16]).toBe('你好');
-    expect(agentLogInsert[1][16]).not.toContain('你好，我在。');
+    const logged = latestAgentLogRecord();
+    expect(logged.question).toBe('你好');
+    expect(logged.question).not.toContain('你好，我在。');
+    const contractTrace = JSON.parse(logged.turn_contract_trace);
+    expect(contractTrace).toMatchObject({
+      version: '2.0-shadow',
+      requestedScopeMode: 'none',
+      resolvedScopeMode: 'none',
+      allowedSourceCount: 0,
+      sourcesUsedCount: 0,
+      candidateToolCount: 0,
+    });
+    expect(logged.turn_contract_trace).not.toContain('你好');
+    expect(logged.turn_contract_trace).not.toContain('你好，我在。');
   });
 
   it('目录范围灰度关闭时在会话和额度创建前失败关闭', async () => {
@@ -1382,7 +1698,11 @@ describe('agentChat 主链路', () => {
           parentId: 'branch-root',
         }),
         preview: expect.objectContaining({
-          details: [{ key: 'targetDirectory', value: '轻笺项目' }],
+          details: expect.arrayContaining([
+            { key: 'targetDirectory', value: '轻笺项目' },
+            { key: 'actualChars', value: expect.any(String) },
+            { key: 'targetChars', value: '未指定' },
+          ]),
         }),
         privateContext: expect.objectContaining({
           scopeRefs: [{ type: 'note_branch', id: 'branch-root' }],
@@ -1403,7 +1723,7 @@ describe('agentChat 主链路', () => {
           toolName: 'create_note',
           args: expect.objectContaining({ parentId: 'branch-root' }),
           preview: expect.objectContaining({
-            details: [{ key: 'targetDirectory', value: '轻笺项目' }],
+            details: expect.arrayContaining([{ key: 'targetDirectory', value: '轻笺项目' }]),
           }),
         }),
       ],
@@ -3107,6 +3427,124 @@ describe('agentChat 主链路', () => {
     });
   });
 
+  it.each(Array.from({ length: 20 }, (_, index) => index + 1))(
+    'G-01/G-02 repeat %i：本轮显式 C/D/E 时最终事实生成不得携带旧助手事实正文',
+    async () => {
+      mocks.getOrCreateSession.mockResolvedValue({
+        id: 'session-1',
+        turns: [],
+        lastTool: { name: 'query_notes', summary: 'OLD_LAST_TOOL_FACT' },
+      });
+      mocks.findOwnedNoteForAi.mockImplementation(async ({ noteId }) => ({
+        id: noteId,
+        title: `合成新材料 ${noteId}`,
+        content: `NEW_ONLY_FACT-${noteId}`,
+      }));
+      mocks.requestAi.mockImplementation(async (_messages, options = {}) => {
+        if (options?.trace?.stage === 'planner') {
+          return {
+            content: '',
+            toolCalls: [
+              semanticPlanCall({
+                requestClass: 'conversation',
+                intents: [],
+                toolCalls: [],
+              }),
+            ],
+            usage: usage(2),
+            usageStatus: 'reported',
+            finishReason: 'tool_calls',
+          };
+        }
+        return {
+          content: '本轮只回答 NEW_ONLY_FACT。[1]',
+          toolCalls: [],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'stop',
+        };
+      });
+      const res = response();
+
+      await agentChat(
+        request({
+          message: '只根据这三个资源回答，不要使用历史材料。',
+          stream: false,
+          history: [
+            { role: 'user', content: '总结旧材料。' },
+            { role: 'assistant', content: '旧材料的唯一事实是 OLD_ONLY_FACT。' },
+          ],
+          contexts: [
+            { type: 'note', id: 'note-c' },
+            { type: 'note', id: 'note-d' },
+            { type: 'note', id: 'note-e' },
+          ],
+          scopeRefs: [],
+          attachmentIds: [],
+        }),
+        res,
+      );
+
+      const finalMessages = mocks.requestAi.mock.calls.find(([, options]) => options?.trace?.stage === 'final')?.[0];
+      expect(JSON.stringify(finalMessages)).toContain('NEW_ONLY_FACT-note-c');
+      expect(JSON.stringify(finalMessages)).not.toContain('OLD_ONLY_FACT');
+      expect(JSON.stringify(finalMessages)).not.toContain('OLD_LAST_TOOL_FACT');
+      expect(res.send.mock.calls.at(-1)?.[0]?.data?.resolvedGrounding).toMatchObject({
+        enabled: true,
+        mode: 'current_explicit_only',
+        historyPolicy: 'discourse_projection_only',
+        allowedSourceCount: 3,
+        sourcesUsedCount: 1,
+        sourceSubsetValid: true,
+      });
+      expect(JSON.parse(latestAgentLogRecord()?.turn_contract_trace || 'null')).toMatchObject({
+        groundingV2Enabled: true,
+        historyPolicy: 'discourse_projection_only',
+        sourceSubsetValid: true,
+        sourceSubsetViolationCount: 0,
+      });
+    },
+  );
+
+  it('GroundingScope V2 急停后保留旧链路，同时继续记录 shadow 差异', async () => {
+    vi.stubEnv('AI_GROUNDING_SCOPE_V2_ENABLED', 'false');
+    mocks.findOwnedNoteForAi.mockResolvedValue({
+      id: 'note-current',
+      title: '本轮材料',
+      content: 'NEW_ONLY_FACT',
+    });
+    mocks.requestAi.mockImplementation(async (_messages, options = {}) => ({
+      content: options?.trace?.stage === 'final' ? '兼容回答' : '',
+      toolCalls:
+        options?.trace?.stage === 'planner'
+          ? [semanticPlanCall({ requestClass: 'conversation', intents: [], toolCalls: [] })]
+          : [],
+      usage: usage(2),
+      usageStatus: 'reported',
+      finishReason: options?.trace?.stage === 'planner' ? 'tool_calls' : 'stop',
+    }));
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '根据本轮材料回答。',
+        stream: false,
+        history: [{ role: 'assistant', content: 'OLD_ONLY_FACT' }],
+        contexts: [{ type: 'note', id: 'note-current' }],
+        attachmentIds: [],
+      }),
+      res,
+    );
+
+    const finalMessages = mocks.requestAi.mock.calls.find(([, options]) => options?.trace?.stage === 'final')?.[0];
+    expect(JSON.stringify(finalMessages)).toContain('OLD_ONLY_FACT');
+    expect(JSON.parse(latestAgentLogRecord()?.turn_contract_trace || 'null')).toMatchObject({
+      groundingV2Enabled: false,
+      groundingV2ShadowMode: 'current_explicit_only',
+      historyPolicy: 'legacy_conversation',
+    });
+  });
+
   it.each(AGENT_REPLAY_CASES)('真实 Agent 主链回放：$id', async (replayCase) => {
     const result = await runAgentReplayCase(replayCase, {
       setProviderResponses(responses) {
@@ -3130,6 +3568,7 @@ describe('agentChat 主链路', () => {
           confirmations: payload.confirmations,
           providerStages: mocks.requestAi.mock.calls.map(([, options]) => options?.trace?.stage).filter(Boolean),
           executedTools: mocks.toolExecute.mock.calls.length ? [...selectedTools] : [],
+          turnContractTrace: JSON.parse(latestAgentLogRecord()?.turn_contract_trace || 'null'),
         };
       },
     });
@@ -4356,7 +4795,199 @@ describe('agentChat 主链路', () => {
     expect(data?.entityRefs || []).toHaveLength(0);
   });
 
+  it('PR3 Source Set：客户端只传集合 ID，服务端恢复引用、重新解析 owner 并返回继承模式', async () => {
+    mocks.resolveSessionSourceSet.mockReturnValue({
+      state: 'ready',
+      sourceSet: {
+        id: 'd7f5f8f6-4ca0-4d14-8a4d-88c813e3b001',
+        refs: [{ type: 'bookmark', id: 'bookmark-1' }],
+        scopeRefs: [],
+        attachmentSourceIds: [],
+      },
+    });
+    mocks.listSessionSourceSets.mockReturnValue([
+      {
+        id: 'd7f5f8f6-4ca0-4d14-8a4d-88c813e3b001',
+        contextRefCount: 1,
+        scopeRefCount: 0,
+        attachmentCount: 0,
+      },
+    ]);
+    mocks.recordSessionSourceSet.mockResolvedValue({ id: 'd7f5f8f6-4ca0-4d14-8a4d-88c813e3b001' });
+    mocks.requestAi
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [toolCall('classify_material_follow_up', { decision: 'continue_with_materials' })],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [semanticPlanCall({ requestClass: 'conversation', intents: [] })],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '继续回答。',
+        toolCalls: [],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      });
+    mocks.poolQuery.mockImplementation(async (sql) => {
+      if (String(sql).includes('FROM bookmark b')) {
+        return [[{ id: 'bookmark-1', title: '材料', url: '', snapshot_content: '材料正文'.repeat(40) }]];
+      }
+      return [[]];
+    });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '继续详细一点',
+        stream: false,
+        grounding: {
+          mode: 'inherit_candidate',
+          sourceSetId: 'd7f5f8f6-4ca0-4d14-8a4d-88c813e3b001',
+        },
+      }),
+      res,
+    );
+
+    expect(mocks.resolveSessionSourceSet).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'session-1' }),
+      'd7f5f8f6-4ca0-4d14-8a4d-88c813e3b001',
+    );
+    expect(mocks.recordSessionSourceSet).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ refs: [{ type: 'bookmark', id: 'bookmark-1' }] }),
+    );
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.resolvedGrounding).toMatchObject({
+      mode: 'inherited_source_set',
+      sourceSetId: 'd7f5f8f6-4ca0-4d14-8a4d-88c813e3b001',
+      materialMode: 'inherited',
+    });
+  });
+
+  it('PR3 Source Set：缺失或跨会话集合失败关闭，不进入材料解析和 Planner', async () => {
+    mocks.resolveSessionSourceSet.mockReturnValue({ state: 'missing' });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '继续总结',
+        stream: false,
+        grounding: {
+          mode: 'inherit_candidate',
+          sourceSetId: 'd7f5f8f6-4ca0-4d14-8a4d-88c813e3b099',
+        },
+      }),
+      res,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.send.mock.calls.at(-1)?.[0]?.msg).toContain('重新选择材料');
+    expect(mocks.requestAi).not.toHaveBeenCalled();
+  });
+
+  it('G-09：Source Set 内资源已删除时明确披露，不扩大到历史或工作区材料', async () => {
+    const sourceSetId = 'd7f5f8f6-4ca0-4d14-8a4d-88c813e3b010';
+    mocks.resolveSessionSourceSet.mockReturnValue({
+      state: 'ready',
+      sourceSet: {
+        id: sourceSetId,
+        refs: [{ type: 'note', id: 'deleted-note' }],
+        scopeRefs: [],
+        attachmentSourceIds: [],
+      },
+    });
+    mocks.listSessionSourceSets.mockReturnValue([
+      { id: sourceSetId, contextRefCount: 1, scopeRefCount: 0, attachmentCount: 0 },
+    ]);
+    mocks.requestAi.mockResolvedValueOnce({
+      content: '',
+      toolCalls: [toolCall('classify_material_follow_up', { decision: 'continue_with_materials' })],
+      usage: usage(2),
+      usageStatus: 'reported',
+      finishReason: 'tool_calls',
+    });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '继续上面的材料',
+        stream: false,
+        grounding: { mode: 'inherit_candidate', sourceSetId },
+      }),
+      res,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.send.mock.calls.at(-1)?.[0]?.msg).toContain('已删除、失效或不再可读');
+    expect(mocks.recordSessionSourceSet).not.toHaveBeenCalled();
+    expect(mocks.requestAi).toHaveBeenCalledTimes(1);
+  });
+
+  it('PR3 ClarificationState：多个集合指向不唯一时返回可续接澄清，不默认多带材料', async () => {
+    const sourceSetId = 'd7f5f8f6-4ca0-4d14-8a4d-88c813e3b011';
+    mocks.resolveSessionSourceSet.mockReturnValue({
+      state: 'ready',
+      sourceSet: {
+        id: sourceSetId,
+        refs: [{ type: 'note', id: 'note-1' }],
+        scopeRefs: [],
+        attachmentSourceIds: [],
+      },
+    });
+    mocks.listSessionSourceSets.mockReturnValue([
+      { id: sourceSetId, contextRefCount: 1, scopeRefCount: 0, attachmentCount: 0 },
+      {
+        id: 'd7f5f8f6-4ca0-4d14-8a4d-88c813e3b012',
+        contextRefCount: 1,
+        scopeRefCount: 0,
+        attachmentCount: 0,
+      },
+    ]);
+    mocks.createSessionMaterialClarification.mockResolvedValue({
+      type: 'material_source_set',
+      token: 'c'.repeat(43),
+      question: '当前会话里有多组可能的材料。请选择。',
+      options: [
+        { ordinal: 1, label: '最近一组', itemCount: 1 },
+        { ordinal: 2, label: '往前第 1 组', itemCount: 1 },
+      ],
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    mocks.requestAi.mockResolvedValueOnce({
+      content: '',
+      toolCalls: [toolCall('classify_material_follow_up', { decision: 'needs_clarification' })],
+      usage: usage(2),
+      usageStatus: 'reported',
+      finishReason: 'tool_calls',
+    });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '把这些对比一下',
+        stream: false,
+        grounding: { mode: 'inherit_candidate', sourceSetId },
+      }),
+      res,
+    );
+
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.materialClarification).toMatchObject({
+      type: 'material_source_set',
+      options: [{ ordinal: 1 }, { ordinal: 2 }],
+    });
+    expect(mocks.recordSessionSourceSet).not.toHaveBeenCalled();
+    expect(mocks.requestAi).toHaveBeenCalledTimes(1);
+  });
+
   it('本轮已带显式材料时不触发续问分类', async () => {
+    mocks.recordSessionSourceSet.mockResolvedValue({ id: 'd7f5f8f6-4ca0-4d14-8a4d-88c813e3b021' });
     mocks.poolQuery.mockImplementation(async (sql) => {
       if (String(sql).includes('FROM bookmark b')) {
         return [
@@ -4404,6 +5035,11 @@ describe('agentChat 主链路', () => {
 
     // 第一次 provider 调用直接是 planner，没有 material_follow_up 阶段
     expect(mocks.requestAi.mock.calls[0][1].trace.stage).not.toBe('material_follow_up');
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.resolvedGrounding).toMatchObject({
+      mode: 'current_explicit_only',
+      sourceSetId: 'd7f5f8f6-4ca0-4d14-8a4d-88c813e3b021',
+      materialMode: 'current_explicit',
+    });
   });
 
   it('传感器多判的能力不再强制修复：就绪计划按模型语义放行并出全确认卡', async () => {

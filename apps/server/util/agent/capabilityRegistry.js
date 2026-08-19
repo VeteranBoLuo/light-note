@@ -2,6 +2,62 @@ const VALID_CAPABILITY_STATUSES = new Set(['enabled', 'planned', 'forbidden']);
 const VALID_RISKS = new Set(['low', 'medium', 'high']);
 const VALID_CONFIRMATION_POLICIES = new Set(['default', 'always']);
 const SEMANTIC_READ_CAPABILITY_PREFIX = 'read.';
+const ALL_CONTENT_CAPABILITY_DOMAINS = Object.freeze(['content', 'note', 'bookmark', 'file', 'todo', 'tag']);
+
+function domainFromResource(resource) {
+  if (resource === 'note') return 'note';
+  if (resource === 'bookmark') return 'bookmark';
+  if (resource === 'file' || resource === 'trash') return 'file';
+  if (resource === 'todo' || resource === 'inbox') return 'todo';
+  if (resource === 'tag') return 'tag';
+  if (resource === 'account' || resource === 'security') return 'account';
+  if (resource === 'growth') return 'growth';
+  if (resource === 'user') return 'admin';
+  return 'content';
+}
+
+function domainFromResources(resources = []) {
+  const normalized = new Set(resources);
+  if (normalized.has('note')) return 'note';
+  if (normalized.has('bookmark')) return 'bookmark';
+  if (normalized.has('file') || normalized.has('trash')) return 'file';
+  if (normalized.has('todo') || normalized.has('inbox')) return 'todo';
+  if (normalized.has('tag')) return 'tag';
+  if (normalized.has('account') || normalized.has('security')) return 'account';
+  if (normalized.has('growth')) return 'growth';
+  if (normalized.has('user')) return 'admin';
+  return 'content';
+}
+
+function capabilityDomainsFromResources(resources = []) {
+  if (resources.includes('all')) return ALL_CONTENT_CAPABILITY_DOMAINS;
+  const domains = [...new Set(resources.map(domainFromResource))];
+  return Object.freeze(domains.length ? domains : ['content']);
+}
+
+function inferReadToolDomain(tool) {
+  const name = String(tool?.name || '');
+  if (name === 'read_url') return 'web';
+  if (/note/i.test(name)) return 'note';
+  if (/bookmark|link_health/i.test(name)) return 'bookmark';
+  if (/file|folder|storage/i.test(name)) return 'file';
+  if (/todo|inbox/i.test(name)) return 'todo';
+  if (/tag/i.test(name)) return 'tag';
+  if (/growth|points|lottery|shop|weekly|recap|checkin/i.test(name)) return 'growth';
+  if (tool?.requireRoot === true || /users|platform|security|api_logs|operation_logs|token_usage/i.test(name)) {
+    return 'admin';
+  }
+  if (/notification|device|feedback|user_info|ai_quota/i.test(name)) return 'account';
+  return 'content';
+}
+
+function capabilityScopePolicy(tool, domain) {
+  if (tool?.isWrite === true) return 'confirmation_owner_bound';
+  if (domain === 'web') return 'explicit_url_only';
+  if (['note', 'bookmark', 'file', 'todo', 'tag', 'content'].includes(domain)) return 'grounding_scope_bound';
+  if (domain === 'admin') return 'root_context_bound';
+  return 'owner_bound';
+}
 
 function defineCapability(input) {
   const capability = {
@@ -468,11 +524,22 @@ export function buildAgentSemanticCapabilityCatalog(tools, { availableToolNames 
     const capabilityId = actionCapability?.id || getSemanticCapabilityIdForTool(tool);
     if (!capabilityId) continue;
     if (actionCapability) includedActionCapabilities.add(actionCapability.id);
+    const domain = actionCapability ? domainFromResources(actionCapability.resources) : inferReadToolDomain(tool);
+    const appliesToDomains = actionCapability
+      ? capabilityDomainsFromResources(actionCapability.resources)
+      : Object.freeze([domain]);
     entries.push(
       Object.freeze({
         id: capabilityId,
         effect: tool.isWrite === true ? 'write' : 'read',
         status: available.has(tool.name) ? 'enabled' : 'unavailable',
+        domain,
+        appliesToDomains,
+        operations: Object.freeze(actionCapability ? [...actionCapability.operations] : ['read']),
+        requiredSlots: Object.freeze(
+          Array.isArray(tool?.parameters?.required) ? [...new Set(tool.parameters.required.map(String))] : [],
+        ),
+        scopePolicy: capabilityScopePolicy(tool, domain),
         toolNames: Object.freeze(available.has(tool.name) ? [tool.name] : []),
         description: String(tool.description || actionCapability?.labels?.zh || tool.name).trim(),
         label: String(actionCapability?.labels?.zh || tool.description || tool.name).trim(),
@@ -496,6 +563,11 @@ export function buildAgentSemanticCapabilityCatalog(tools, { availableToolNames 
         id: capability.id,
         effect: 'write',
         status: capability.status,
+        domain: domainFromResources(capability.resources),
+        appliesToDomains: capabilityDomainsFromResources(capability.resources),
+        operations: Object.freeze([...capability.operations]),
+        requiredSlots: Object.freeze([]),
+        scopePolicy: capability.status === 'forbidden' ? 'forbidden' : 'manual_only',
         toolNames: Object.freeze([]),
         description: String(capability.labels?.zh || capability.id).trim(),
         label: String(capability.labels?.zh || capability.id).trim(),

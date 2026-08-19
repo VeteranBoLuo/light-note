@@ -7,6 +7,7 @@ import {
   parseLiveSmokeArgs,
   runAnswerLayer,
   runLiveSmokeSuite,
+  summarizeAttemptConsistency,
 } from './liveSmokeRunner.js';
 import { FULL_LIVE_SMOKE_CASES } from './liveSmokeCases.js';
 
@@ -49,6 +50,44 @@ describe('DeepSeek 小型冒烟 Runner', () => {
     });
     expect(() => parseLiveSmokeArgs(['--suite', 'unknown'])).toThrow('SUITE_NOT_SUPPORTED');
     expect(() => parseLiveSmokeArgs(['--depth', 'execute'])).toThrow('--depth 仅支持 plan 或 answer');
+    expect(parseLiveSmokeArgs(['--repeat', '20']).repeat).toBe(20);
+    expect(() => parseLiveSmokeArgs(['--repeat', '21'])).toThrow('--repeat 必须是 1～20 的整数');
+  });
+
+  it('repeat 报告只用契约结果摘要衡量一致性，不保存回答正文', () => {
+    const attempts = [
+      {
+        passed: true,
+        capabilities: ['read.query_notes'],
+        tools: ['query_notes'],
+        layers: {
+          planning: { status: 'passed' },
+          toolContract: { status: 'passed' },
+          answer: { status: 'passed', source: 'synthetic_tool_result', qualityIssues: [] },
+        },
+        content: '不得进入摘要的正文 OLD_ONLY_FACT',
+      },
+      {
+        passed: true,
+        capabilities: ['read.query_notes'],
+        tools: ['query_notes'],
+        layers: {
+          planning: { status: 'passed' },
+          toolContract: { status: 'passed' },
+          answer: { status: 'passed', source: 'synthetic_tool_result', qualityIssues: [] },
+        },
+        content: '另一份不得进入摘要的正文',
+      },
+    ];
+
+    const summary = summarizeAttemptConsistency(attempts);
+    expect(summary).toMatchObject({
+      consistent: true,
+      distinctOutcomeCount: 1,
+      passedAttempts: 2,
+      totalAttempts: 2,
+    });
+    expect(JSON.stringify(summary)).not.toContain('OLD_ONLY_FACT');
   });
 
   it('阶段性报告会累计已完成用例和 Token，但不会提前判整套通过', () => {
@@ -84,6 +123,13 @@ describe('DeepSeek 小型冒烟 Runner', () => {
         planning: { skipped: 1 },
         toolContract: { skipped: 1 },
         answer: { skipped: 1 },
+      },
+      consistency: {
+        totalAttempts: 1,
+        passedAttempts: 1,
+        strictPassRate: 1,
+        fullyConsistentCases: 1,
+        inconsistentCases: [],
       },
     });
   });

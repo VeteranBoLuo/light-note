@@ -619,7 +619,17 @@ describe('getAgentLogs 请求摘要', () => {
       if (statement.includes('SELECT a.*')) {
         return [
           [
-            { id: '3', task_type: 'agent', question: '帮我总结这篇笔记', created_at: '2026-08-06 12:03:00' },
+            {
+              id: '3',
+              task_type: 'agent',
+              question: '帮我总结这篇笔记',
+              turn_contract_trace: JSON.stringify({
+                version: '2.0-shadow',
+                requestedScopeMode: 'explicit',
+                allowedSourceCount: 3,
+              }),
+              created_at: '2026-08-06 12:03:00',
+            },
             {
               id: '2',
               task_type: 'note_assist',
@@ -648,7 +658,13 @@ describe('getAgentLogs 请求摘要', () => {
       requestPreview: '帮我总结这篇笔记',
       requestKind: 'user_question',
       requestLabel: '提问',
+      turnContractTrace: {
+        version: '2.0-shadow',
+        requestedScopeMode: 'explicit',
+        allowedSourceCount: 3,
+      },
     });
+    expect(items[0]).not.toHaveProperty('turn_contract_trace');
     expect(items[1]).toMatchObject({ requestPreview: '笔记助手（请求正文未记录）', requestKind: 'redacted' });
     expect(items[2].requestTruncated).toBe(true);
     expect(items[2].requestPreview).toHaveLength(501);

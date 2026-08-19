@@ -2085,6 +2085,17 @@ const AGENT_TASK_TYPE_LABELS = {
 };
 
 function normalizeAgentLogRequest(row) {
+  const { turn_contract_trace: rawTurnContractTrace, ...safeRow } = row || {};
+  let turnContractTrace = null;
+  if (rawTurnContractTrace && typeof rawTurnContractTrace === 'object') {
+    turnContractTrace = rawTurnContractTrace;
+  } else if (typeof rawTurnContractTrace === 'string' && rawTurnContractTrace.trim()) {
+    try {
+      turnContractTrace = JSON.parse(rawTurnContractTrace);
+    } catch {
+      turnContractTrace = null;
+    }
+  }
   const taskType = String(row.task_type || 'agent');
   const taskTypeLabel = AGENT_TASK_TYPE_LABELS[taskType] || taskType || 'AI 请求';
   const raw = String(row.question || '')
@@ -2108,7 +2119,8 @@ function normalizeAgentLogRequest(row) {
   const requestTruncated = requestChars > 500;
   const requestPreview = requestTruncated ? `${source.slice(0, 500)}…` : source;
   return {
-    ...row,
+    ...safeRow,
+    turnContractTrace,
     // 兼容旧前端字段，但列表接口不再返回可能长达 12000 字的完整问题。
     question: requestPreview,
     requestPreview,

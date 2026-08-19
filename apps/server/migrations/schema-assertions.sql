@@ -1808,3 +1808,15 @@ LEFT JOIN information_schema.columns actual
  AND actual.table_name=expected.tn
  AND actual.column_name=expected.col
 WHERE actual.column_name IS NULL;
+
+-- 50) Agent Turn Contract V2 shadow trace 必须可持久化（期望 0 行）
+SELECT '[50] missing_agent_turn_contract_trace_column' AS check_name,
+  'agent_logs.turn_contract_trace' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM information_schema.columns actual
+  WHERE actual.table_schema=DATABASE()
+    AND actual.table_name='agent_logs'
+    AND actual.column_name='turn_contract_trace'
+);

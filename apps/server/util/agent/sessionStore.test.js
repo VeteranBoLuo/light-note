@@ -10,8 +10,13 @@ vi.mock('../redisClient.js', () => ({ default: redis }));
 const {
   getOrCreateSession,
   getSessionId,
+  createSessionMaterialClarification,
   recordPendingActionBatch,
+  recordSessionSourceSet,
   recordTurn,
+  resolveSessionSourceSet,
+  resolveSessionMaterialClarification,
+  listSessionSourceSets,
   resolveSessionActionRetry,
   settleSessionAction,
 } = await import('./sessionStore.js');
@@ -106,5 +111,69 @@ describe('agent sessionStore', () => {
       ],
     });
     expect(resolveSessionActionRetry(session)).toEqual({ state: 'ambiguous', count: 2 });
+  });
+
+  it('Source Set 只保存稳定引用、相同集合复用 ID，并可在当前会话解析', async () => {
+    const session = await getOrCreateSession('user:source-owner', '');
+    const first = await recordSessionSourceSet(session, {
+      refs: [
+        { type: 'note', id: 'note-1', title: '不得保存' },
+        { type: 'note', id: 'note-1' },
+        { type: 'user', id: 'user-1' },
+      ],
+      scopeRefs: [{ type: 'note_branch', id: 'branch-1', content: '不得保存' }],
+      attachmentSourceIds: ['doc-1', 'doc-1'],
+    });
+    const reused = await recordSessionSourceSet(session, {
+      refs: [{ type: 'note', id: 'note-1' }],
+      scopeRefs: [{ type: 'note_branch', id: 'branch-1' }],
+      attachmentSourceIds: ['doc-1'],
+    });
+
+    expect(reused.id).toBe(first.id);
+    expect(listSessionSourceSets(session)).toEqual([first]);
+    expect(resolveSessionSourceSet(session, first.id)).toMatchObject({
+      state: 'ready',
+      sourceSet: {
+        refs: [{ type: 'note', id: 'note-1' }],
+        scopeRefs: [{ type: 'note_branch', id: 'branch-1' }],
+        attachmentSourceIds: ['doc-1'],
+      },
+    });
+    expect(JSON.stringify(session.sourceSets)).not.toContain('不得保存');
+  });
+
+  it('Source Set ID 不能跨 owner 或跨 session 解析', async () => {
+    const ownerSession = await getOrCreateSession('user:source-a', '');
+    const foreignSession = await getOrCreateSession('user:source-b', '');
+    const sourceSet = await recordSessionSourceSet(ownerSession, { refs: [{ type: 'note', id: 'n1' }] });
+
+    expect(resolveSessionSourceSet(foreignSession, sourceSet.id)).toEqual({ state: 'missing' });
+    expect(resolveSessionSourceSet(ownerSession, 'invalid-id')).toEqual({ state: 'missing' });
+  });
+
+  it('ClarificationState 不公开 Source Set ID，并由下一轮确定性填充单组或多组', async () => {
+    const session = await getOrCreateSession('user:clarification', '');
+    const first = await recordSessionSourceSet(session, { refs: [{ type: 'note', id: 'n1' }] });
+    const second = await recordSessionSourceSet(session, { refs: [{ type: 'note', id: 'n2' }] });
+    const clarification = await createSessionMaterialClarification(session, {
+      originalMessage: '把这些对比一下',
+      sourceSetIds: [second.id, first.id],
+    });
+
+    expect(clarification.options).toHaveLength(2);
+    expect(JSON.stringify(clarification)).not.toContain(first.id);
+    expect(JSON.stringify(clarification)).not.toContain(second.id);
+    expect(await resolveSessionMaterialClarification(session, clarification.token, '哪一个都行')).toMatchObject({
+      state: 'pending',
+    });
+    expect(await resolveSessionMaterialClarification(session, clarification.token, '两组都用')).toEqual({
+      state: 'ready',
+      originalMessage: '把这些对比一下',
+      selectedSourceSetIds: [second.id, first.id],
+    });
+    expect(await resolveSessionMaterialClarification(session, clarification.token, '最近一组')).toEqual({
+      state: 'missing',
+    });
   });
 });

@@ -81,6 +81,32 @@ export const AGENT_REPLAY_CASES = Object.freeze([
     },
   },
   {
+    id: 'note-draft-minimum-length-fails-closed-after-one-repair',
+    request: {
+      message: '请创建一篇至少 2000 字的笔记，主题是合成回归测试',
+      stream: false,
+      contexts: [],
+      attachmentIds: [],
+      selectedTools: ['create_note'],
+    },
+    providerSteps: [
+      { task: { producesNote: true } },
+      { draft: { title: '第一次短稿', content: '合成短稿。'.repeat(100) } },
+      { draft: { title: '第二次短稿', content: '合成短稿仍不足。'.repeat(120) } },
+    ],
+    expected: {
+      providerCalls: 3,
+      requiredStages: ['note_draft_task', 'note_draft', 'note_draft_repair'],
+      confirmations: 0,
+      responseIncludes: ['没有生成完整可确认的笔记草稿'],
+      turnContractTrace: {
+        lengthMode: 'minimum',
+        requiredMinChars: 2000,
+        validationIssues: ['length_below_minimum'],
+      },
+    },
+  },
+  {
     id: 'explicit-url-read-with-web-disabled',
     request: {
       message: 'https://example.test/spec 这个链接是干嘛的？',

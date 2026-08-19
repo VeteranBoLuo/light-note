@@ -175,6 +175,31 @@ describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
     expect(requestBody).not.toHaveProperty('thinking');
   });
 
+  it('阶段 modelOverride 只覆盖模型名，仍保留对应 Provider 的协议参数', async () => {
+    process.env.DASHSCOPE_API_KEY = 'test-key';
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    await requestDeepSeek([{ role: 'user', content: 'hi' }], {
+      providerOverride: 'qwen',
+      modelOverride: 'qwen-stage-test',
+    });
+
+    const requestBody = JSON.parse(globalThis.fetch.mock.calls[0][1].body);
+    expect(requestBody).toMatchObject({
+      model: 'qwen-stage-test',
+      enable_thinking: false,
+    });
+    expect(requestBody).not.toHaveProperty('thinking');
+  });
+
   it('首字长期未到时返回可识别的超时码，并清理流式计时器', async () => {
     delete process.env.AGENT_LLM_PROVIDER;
     process.env.DEEPSEEK_API_KEY = 'test-key';

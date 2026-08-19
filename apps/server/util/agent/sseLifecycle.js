@@ -49,6 +49,8 @@ export function createAgentSseLifecycle({
     citations: [],
     evidence: [],
     citationAudit: null,
+    resolvedGrounding: null,
+    materialClarification: null,
     coverage: null,
     artifacts: [],
     activity: [],
@@ -133,6 +135,12 @@ export function createAgentSseLifecycle({
       }
       if (payload.coverage != null) snapshot.coverage = cloneSerializable(payload.coverage, null);
       if (payload.citationAudit != null) snapshot.citationAudit = cloneSerializable(payload.citationAudit, null);
+      if (payload.resolvedGrounding != null) {
+        snapshot.resolvedGrounding = cloneSerializable(payload.resolvedGrounding, null);
+      }
+      if (payload.materialClarification != null) {
+        snapshot.materialClarification = cloneSerializable(payload.materialClarification, null);
+      }
       if (Array.isArray(payload.artifacts)) snapshot.artifacts = cloneSerializable(payload.artifacts, []);
     }
     if (event === 'stage.changed' && payload.stage) {

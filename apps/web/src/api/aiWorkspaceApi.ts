@@ -1,4 +1,5 @@
 import { apiBasePost } from '@/http/request';
+import type { AiResolvedGrounding } from '@/types/aiGrounding';
 
 export type AiConversationStatus = 'active' | 'archived';
 export type AiRetentionMode = 'standard' | 'temporary' | 'indefinite';
@@ -101,6 +102,8 @@ export interface AiAgentRecoverySnapshot {
     verifiedCitationCount: number;
     evidenceCount: number;
   } | null;
+  resolvedGrounding?: AiResolvedGrounding | null;
+  materialClarification?: import('@/types/aiGrounding').AiMaterialClarification | null;
   coverage: Record<string, unknown> | null;
   artifacts?: import('@/types/aiArtifact').AiArtifact[];
   activity: Array<Record<string, unknown> | string>;

@@ -41,7 +41,8 @@ vite.config.ts
 HANDOFF.md
 ln-ai-intro.md
 docs/fix
-docs/plan
+docs/plan/*
+!docs/plan/ai-agent-turn-contract-v2.md
 docs/done
 .hermes/desktop-attachments/
 skills
