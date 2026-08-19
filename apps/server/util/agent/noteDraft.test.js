@@ -3,7 +3,9 @@ import {
   buildNoteDraftWorkspaceQueryCalls,
   classifyNoteDraftTask,
   classifyPendingNoteDraftFollowUp,
+  countNoteDraftCharacters,
   createNoteDraftPrivateContext,
+  extractMinimumNoteDraftCharacters,
   generateNoteDraft,
   isNoteDraftRequest,
   normalizeNoteDraftPrivateContext,
@@ -159,6 +161,18 @@ describe('noteDraft', () => {
       false,
     );
     expect(shouldClassifyNoteDraftTask({ message: '', contextTypes: ['note'] })).toBe(false);
+  });
+
+  it('已绑定材料时把草稿扩写要求送入封闭语义分类，不把纯材料问答误判为写入', () => {
+    expect(
+      shouldClassifyNoteDraftTask({
+        message: '内容太少，字数要至少 2000 字',
+        contextTypes: ['note'],
+      }),
+    ).toBe(true);
+    expect(shouldClassifyNoteDraftTask({ message: '重新生成并润色一下', attachmentCount: 1 })).toBe(true);
+    expect(shouldClassifyNoteDraftTask({ message: '内容讲了什么？', contextTypes: ['note'] })).toBe(false);
+    expect(shouldClassifyNoteDraftTask({ message: '字数要至少 2000 字' })).toBe(false);
   });
 
   it('传感器严格宽于旧正则，避免传感器不命中时回落正则又漏判', () => {
@@ -533,5 +547,66 @@ describe('noteDraft', () => {
 
     expect(result.attempts).toBe(2);
     expect(result.content.length).toBeGreaterThan(previousContent.length);
+  });
+
+  it('确定性解析明确的最少字数，并与确认卡使用同一字符口径', () => {
+    expect(extractMinimumNoteDraftCharacters('字数要至少 2000 字')).toBe(2000);
+    expect(extractMinimumNoteDraftCharacters('正文不少于 2,000 字')).toBe(2000);
+    expect(extractMinimumNoteDraftCharacters('请写 2千字以上')).toBe(2000);
+    expect(extractMinimumNoteDraftCharacters('重新生成并至少写到 2000 字')).toBe(2000);
+    expect(extractMinimumNoteDraftCharacters('at least 2k characters')).toBe(2000);
+    expect(extractMinimumNoteDraftCharacters('至少 800 字，但最终不得少于 2 千字')).toBe(2000);
+    expect(extractMinimumNoteDraftCharacters('大约 2000 字即可')).toBeNull();
+    expect(countNoteDraftCharacters('  中文\nMarkdown  ')).toBe('中文\nMarkdown'.length);
+  });
+
+  it('最少字数是服务端硬约束，短稿会带实际字数定向修复一次', async () => {
+    const shortContent = '短稿内容。'.repeat(190);
+    const completeContent = `# 完整长文\n\n${'经过材料校验的详细分析。'.repeat(200)}`;
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(response({ title: '短稿', content: shortContent }))
+      .mockResolvedValueOnce(response({ title: '完整长文', content: completeContent }));
+
+    const result = await generateNoteDraft({
+      materials: [{ type: 'note', id: 'n1', title: '来源', content: '可靠材料。'.repeat(100) }],
+      instruction: '内容太少，请重新生成，字数要至少 2000 字',
+      request,
+    });
+
+    expect(shortContent.length).toBeLessThan(2000);
+    expect(result.attempts).toBe(2);
+    expect(countNoteDraftCharacters(result.content)).toBeGreaterThanOrEqual(2000);
+    expect(request.mock.calls[0][1].tools[0].function.parameters.properties.content.minLength).toBe(2000);
+    expect(request.mock.calls[0][0][1].content).toContain('必须至少 2000 字');
+    expect(request.mock.calls[1][0][1].content).toContain(`正文当前约 ${shortContent.length} 字`);
+  });
+
+  it('模型连续两次未达到明确下限时失败关闭，不生成缩水确认卡', async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(response({ title: '第一次短稿', content: '不足内容。'.repeat(100) }))
+      .mockResolvedValueOnce(response({ title: '第二次短稿', content: '仍然不足。'.repeat(180) }));
+
+    await expect(
+      generateNoteDraft({
+        materials: [{ type: 'note', id: 'n1', title: '来源', content: '可靠材料。'.repeat(100) }],
+        instruction: '正文不得少于 2000 字',
+        request,
+      }),
+    ).rejects.toMatchObject({ code: 'NOTE_DRAFT_INCOMPLETE' });
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it('超过笔记正文上限的最少字数在调用模型前显式拒绝', async () => {
+    const request = vi.fn();
+    await expect(
+      generateNoteDraft({
+        materials: [{ type: 'text', title: '来源', content: '材料正文' }],
+        instruction: '至少 70000 字',
+        request,
+      }),
+    ).rejects.toMatchObject({ code: 'NOTE_DRAFT_LENGTH_UNSUPPORTED' });
+    expect(request).not.toHaveBeenCalled();
   });
 });

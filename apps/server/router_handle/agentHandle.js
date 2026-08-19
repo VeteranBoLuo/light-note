@@ -2212,7 +2212,6 @@ export async function agentChat(req, res) {
     let refinementRequested = false;
     let pendingNoteDraftInspection = null;
     let pendingNoteDraftPrivateContext = null;
-    let pendingNoteDraftInspectionError = null;
     let pendingDraftIntentCalls = 0;
     let pendingDraftIntentUsageReported = true;
     if (!enableTranslation && normalizedPendingNoteDraft) {
@@ -2243,33 +2242,38 @@ export async function agentChat(req, res) {
           );
         }
       } catch (error) {
-        pendingNoteDraftInspectionError = error;
+        trace.pendingDraftCandidateError = stableAgentErrorCode(error);
         pendingNoteDraftInspection = null;
         pendingNoteDraftPrivateContext = null;
       }
 
-      const intentStartedAt = Date.now();
-      const intent = await classifyPendingNoteDraftFollowUp({
-        message,
-        history,
-        sourceMessage: pendingNoteDraftPrivateContext?.sourceMessage || '',
-        draftTitle: pendingNoteDraftInspection?.confirmation?.args?.title || '',
-        draftContent: pendingNoteDraftInspection?.confirmation?.args?.content || '',
-        signal: agentAbortController.signal,
-        traceId: requestId,
-        onResponse(response) {
-          pendingDraftIntentCalls += 1;
-          apiCallsForLog = pendingDraftIntentCalls;
-          const usage = response?.usage || {};
-          totalUsage.promptTokens += Number(usage.promptTokens || 0);
-          totalUsage.completionTokens += Number(usage.completionTokens || 0);
-          totalUsage.totalTokens += Number(usage.totalTokens || 0);
-          pendingDraftIntentUsageReported = pendingDraftIntentUsageReported && response?.usageStatus === 'reported';
-          trace.finishReason = response?.finishReason || trace.finishReason;
-        },
-      });
-      trace.pendingDraftIntentMs = Date.now() - intentStartedAt;
-      refinementRequested = intent.decision === 'revise_pending_draft';
+      // 只有当前仍可执行的确认才能被原子替换。已取消/过期的候选只是过时客户端状态，
+      // 不应再进入“改写旧令牌”路径；本轮若携带回答中的稳定材料引用，会按新请求
+      // 重新复核材料并签发新确认，既不复活旧令牌，也不因确认生命周期丢掉引用。
+      if (pendingNoteDraftInspection && pendingNoteDraftPrivateContext) {
+        const intentStartedAt = Date.now();
+        const intent = await classifyPendingNoteDraftFollowUp({
+          message,
+          history,
+          sourceMessage: pendingNoteDraftPrivateContext.sourceMessage,
+          draftTitle: pendingNoteDraftInspection.confirmation?.args?.title || '',
+          draftContent: pendingNoteDraftInspection.confirmation?.args?.content || '',
+          signal: agentAbortController.signal,
+          traceId: requestId,
+          onResponse(response) {
+            pendingDraftIntentCalls += 1;
+            apiCallsForLog = pendingDraftIntentCalls;
+            const usage = response?.usage || {};
+            totalUsage.promptTokens += Number(usage.promptTokens || 0);
+            totalUsage.completionTokens += Number(usage.completionTokens || 0);
+            totalUsage.totalTokens += Number(usage.totalTokens || 0);
+            pendingDraftIntentUsageReported = pendingDraftIntentUsageReported && response?.usageStatus === 'reported';
+            trace.finishReason = response?.finishReason || trace.finishReason;
+          },
+        });
+        trace.pendingDraftIntentMs = Date.now() - intentStartedAt;
+        refinementRequested = intent.decision === 'revise_pending_draft';
+      }
     }
 
     // 语义确认是改写待确认草稿后，客户端本轮续带的引用必须完全退出解析链；这样无效、
@@ -2750,7 +2754,6 @@ export async function agentChat(req, res) {
 
       if (refinementRequested) {
         try {
-          if (pendingNoteDraftInspectionError) throw pendingNoteDraftInspectionError;
           previousConfirmation = pendingNoteDraftInspection?.confirmation || null;
           privateContext = pendingNoteDraftPrivateContext;
           if (!previousConfirmation || !privateContext) {

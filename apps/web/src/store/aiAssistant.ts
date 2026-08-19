@@ -348,7 +348,13 @@ export function resolveAiAssistantPendingNoteDraftReference(
     const message = messages[index];
     if (message?.role !== 'assistant') continue;
     // 普通误答不会让仍在页面上且未过期的确认卡失去上下文；继续向前寻找最近的待确认动作。
-    if (!message.pendingConfirmationIds?.length) continue;
+    if (!message.pendingConfirmationIds?.length) {
+      // 取消、过期、已执行或已被替换的 create_note 是草稿生命周期边界。
+      // 跨过这个边界去找更早的卡片，会把本轮续写绑到旧令牌；材料续用应由
+      // entityRefs / sources 的稳定引用单独承担。
+      if ((message.actionSettlements || []).some((item) => item.toolName === 'create_note')) return null;
+      continue;
+    }
     const pendingIds = new Set(message.pendingConfirmationIds);
     const confirmations = [...(message.confirmations || [])].reverse().filter((item) => pendingIds.has(item.id));
     // 有待确认 ID 却没有对应详情时，不能越过未知的新动作去操作更早的卡片。
@@ -358,7 +364,11 @@ export function resolveAiAssistantPendingNoteDraftReference(
         !item.expiresAt || (Number.isFinite(Date.parse(item.expiresAt)) && Date.parse(item.expiresAt) > Date.now()),
     );
     // 此轮动作均已过期时继续寻找；更晚的有效动作不是笔记草稿时则不得越过。
-    if (!confirmation) continue;
+    if (!confirmation) {
+      // 最新一轮确实是 create_note，但已过期时不得回退到更早草稿。
+      if (confirmations.some((item) => item.toolName === 'create_note')) return null;
+      continue;
+    }
     if (confirmation.toolName !== 'create_note') return null;
     if (!confirmation.id || !/^[A-Za-z0-9_-]{40,}$/.test(String(confirmation.token || ''))) return null;
     return { confirmationId: confirmation.id, confirmationToken: confirmation.token };

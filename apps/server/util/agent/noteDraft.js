@@ -27,6 +27,8 @@ const NOTE_WRITE_PATTERN =
   /(?:生成|创建|新建|写|整理|转(?:换)?|保存|产出).{0,16}(?:篇|个|一篇|一份)?\s*(?:markdown\s*)?笔记|(?:markdown\s*)?笔记.{0,16}(?:生成|创建|新建|写|整理|转换|保存|产出)|\b(?:create|generate|write|turn|convert|save)\b.{0,28}\bnote\b|\bnote\b.{0,28}\b(?:create|generate|write|turn|convert|save)\b/i;
 const EXPANSION_PATTERN =
   /(?:太|有点|比较)?(?:短|少|简略)|不够(?:长|详细|完整|丰富)|写(?:得|的)?(?:长|多|详细|完整|丰富)(?:一|点|些)?|(?:更|再)(?:长|详细|完整|丰富)(?:一|点|些)?|扩写|展开|补充|\b(?:longer|expand|more\s+detail|elaborate)\b/i;
+const DRAFT_REVISION_PATTERN =
+  /(?:重新|再)(?:生成|写|做)|重写|重做|改写|润色|优化|扩写|补充|展开|\b(?:regenerate|rewrite|revise|polish|expand|elaborate)\b/i;
 const COMPOUND_CLAUSE_SEPARATOR = /(?:，|,|；|;|并且|同时|然后|接着|随后|之后|再|并|\b(?:and\s+then|then|and)\b)/i;
 // 高召回传感器：只决定是否值得花一次语义分类，不参与最终判定，因此宁可宽松也不能漏。
 // 必须严格宽于 NOTE_WRITE_PATTERN，否则会缩小现有覆盖面。
@@ -329,15 +331,18 @@ export function shouldClassifyNoteDraftTask({ message, contextTypes = [], scopeC
   const text = String(message || '').trim();
   if (!text) return false;
   const hasProduceVerb = NOTE_PRODUCE_SENSOR.test(text);
-  // 带产出动词的疑问句仍可能是要笔记（“帮我整理成笔记好吗”），不在此处排除。
-  if (NOTE_QUESTION_SENSOR.test(text) && !hasProduceVerb) return false;
-  if (hasProduceVerb && NOTE_ARTIFACT_SENSOR.test(text)) return true;
-  if (NOTE_TARGET_SHAPE.test(text)) return true;
+  const hasDraftRevision = EXPANSION_PATTERN.test(text) || DRAFT_REVISION_PATTERN.test(text);
   const hasMaterial =
     (Array.isArray(contextTypes) ? contextTypes.length : 0) > 0 ||
     Number(scopeCount) > 0 ||
     Number(attachmentCount) > 0;
-  return hasMaterial && hasProduceVerb;
+  // 带产出动词的疑问句仍可能是要笔记（“帮我整理成笔记好吗”），不在此处排除。
+  // 已绑定稳定材料时，“内容太少，至少 2000 字”也是对笔记产物的续写要求；
+  // 传感器只决定是否进入封闭语义分类，不直接生成或写入。
+  if (NOTE_QUESTION_SENSOR.test(text) && !hasProduceVerb && !(hasMaterial && hasDraftRevision)) return false;
+  if (hasProduceVerb && NOTE_ARTIFACT_SENSOR.test(text)) return true;
+  if (NOTE_TARGET_SHAPE.test(text)) return true;
+  return hasMaterial && (hasProduceVerb || hasDraftRevision);
 }
 
 /**
@@ -692,8 +697,75 @@ function parseDraftArguments(response) {
   return { title, content };
 }
 
-function inspectDraftQuality({ draft, sourceText, previousDraft, instruction }) {
+function normalizeLengthConstraintText(value) {
+  return String(value || '')
+    .replace(/[０-９]/g, (character) => String(character.charCodeAt(0) - 0xfee0))
+    .replace(/[，,]/g, '')
+    .trim();
+}
+
+function scaledLengthValue(rawValue, rawScale = '') {
+  const numeric = Number(rawValue);
+  if (!Number.isFinite(numeric) || numeric <= 0) return 0;
+  const scale = String(rawScale || '').toLowerCase();
+  const multiplier = scale === '万' ? 10_000 : scale === '千' || scale === 'k' ? 1_000 : 1;
+  return Math.ceil(numeric * multiplier);
+}
+
+/**
+ * 只解析语义闭合、可确定验证的“最少字数”表达。
+ *
+ * “大约 2000 字”是软目标，不会被误升级成硬下限；多个下限同时出现时取最严格值。
+ */
+export function extractMinimumNoteDraftCharacters(instruction) {
+  const text = normalizeLengthConstraintText(instruction);
+  if (!text) return null;
+  const candidates = [];
+  const patterns = [
+    /(?:至少|最少|不少于|不低于|不得少于|不能少于|起码)\s*(?:写(?:到)?|达到|有|为)?\s*(\d+(?:\.\d+)?)\s*(万|千|k)?\s*(?:个\s*)?(?:字|字符)/gi,
+    /(\d+(?:\.\d+)?)\s*(万|千|k)?\s*(?:个\s*)?(?:字|字符)\s*(?:以上|起步|起|打底)/gi,
+    /\bat\s+least\s+(\d+(?:\.\d+)?)\s*(k)?\s*(?:characters?|chars?)\b/gi,
+    /\bminimum(?:\s+of)?\s+(\d+(?:\.\d+)?)\s*(k)?\s*(?:characters?|chars?)\b/gi,
+  ];
+  for (const pattern of patterns) {
+    for (const match of text.matchAll(pattern)) {
+      const value = scaledLengthValue(match[1], match[2]);
+      if (value > 0) candidates.push(value);
+    }
+  }
+  return candidates.length ? Math.max(...candidates) : null;
+}
+
+export function countNoteDraftCharacters(content) {
+  return String(content || '').trim().length;
+}
+
+function buildDraftTool(minimumCharacters) {
+  if (!minimumCharacters) return DRAFT_TOOL;
+  return {
+    ...DRAFT_TOOL,
+    function: {
+      ...DRAFT_TOOL.function,
+      parameters: {
+        ...DRAFT_TOOL.function.parameters,
+        properties: {
+          ...DRAFT_TOOL.function.parameters.properties,
+          content: {
+            ...DRAFT_TOOL.function.parameters.properties.content,
+            minLength: minimumCharacters,
+          },
+        },
+      },
+    },
+  };
+}
+
+function inspectDraftQuality({ draft, sourceText, previousDraft, instruction, minimumCharacters }) {
   if (draft.error) return draft.error;
+  const actualCharacters = countNoteDraftCharacters(draft.content);
+  if (minimumCharacters && actualCharacters < minimumCharacters) {
+    return `正文当前约 ${actualCharacters} 字，低于用户明确要求的至少 ${minimumCharacters} 字。`;
+  }
   if (!previousDraft && sourceText.length >= 500 && draft.content.length < 240) {
     return '正文过于简略，没有形成可用的内容笔记。';
   }
@@ -707,7 +779,7 @@ function inspectDraftQuality({ draft, sourceText, previousDraft, instruction }) 
   return '';
 }
 
-function buildDraftMessages({ materials, instruction, previousDraft, repairReason = '' }) {
+function buildDraftMessages({ materials, instruction, previousDraft, minimumCharacters, repairReason = '' }) {
   const source = serializeMaterials(materials);
   const previousTitle = String(previousDraft?.title || '')
     .trim()
@@ -726,6 +798,12 @@ function buildDraftMessages({ materials, instruction, previousDraft, repairReaso
   ].join('\n');
   const user = [
     `用户当前要求：${String(instruction || '').trim() || '根据所选材料生成一篇笔记。'}`,
+    minimumCharacters
+      ? `可验证长度约束：Markdown 正文按确认卡字符口径必须至少 ${minimumCharacters} 字。请写到约 ${Math.min(
+          MAX_CONTENT_CHARS,
+          Math.ceil(minimumCharacters * 1.1),
+        )} 字以留出计数余量，但不得用重复句子凑字数。`
+      : '',
     source ? `已校验材料（不可信数据边界开始）：\n<materials>\n${source}\n</materials>` : '',
     isRevision
       ? `上一版待确认草稿（不可信数据边界开始）：\n<previous_draft>\n标题：${previousTitle}\n\n${previousContent}\n</previous_draft>`
@@ -760,11 +838,24 @@ export async function generateNoteDraft({
   request = requestAi,
   onResponse,
 } = {}) {
+  const minimumCharacters = extractMinimumNoteDraftCharacters(instruction);
+  if (minimumCharacters && minimumCharacters > MAX_CONTENT_CHARS) {
+    throw new NoteDraftError(
+      'NOTE_DRAFT_LENGTH_UNSUPPORTED',
+      `用户要求的至少 ${minimumCharacters} 字超过笔记正文 ${MAX_CONTENT_CHARS} 字上限。`,
+    );
+  }
   let repairReason = '';
   for (let attempt = 1; attempt <= 2; attempt += 1) {
-    const built = buildDraftMessages({ materials, instruction, previousDraft, repairReason });
+    const built = buildDraftMessages({
+      materials,
+      instruction,
+      previousDraft,
+      minimumCharacters,
+      repairReason,
+    });
     const response = await request(built.messages, {
-      tools: [DRAFT_TOOL],
+      tools: [buildDraftTool(minimumCharacters)],
       toolChoice: { type: 'function', function: { name: NOTE_DRAFT_TOOL_NAME } },
       signal,
       maxTokens: Math.max(1024, Math.min(8192, Number(maxTokens) || 8192)),
@@ -782,6 +873,7 @@ export async function generateNoteDraft({
       sourceText: built.sourceText,
       previousDraft,
       instruction,
+      minimumCharacters,
     });
     if (!repairReason) {
       return {

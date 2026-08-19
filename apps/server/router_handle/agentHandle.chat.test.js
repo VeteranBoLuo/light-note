@@ -1659,6 +1659,71 @@ describe('agentChat 主链路', () => {
     expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).not.toContain('原材料已不可用');
   });
 
+  it('失效草稿候选不会复活旧令牌，稳定引用会生成满足字数的新确认', async () => {
+    const staleToken = 'x'.repeat(43);
+    const completeContent = `# 工具书签与安全意识\n\n${'基于原始材料展开的背景、分析、实践建议与风险说明。'.repeat(120)}`;
+    const staleError = Object.assign(new Error('原操作确认已过期或已经使用，请重新发起。'), {
+      code: 'TOOL_CONFIRMATION_EXPIRED',
+    });
+    mocks.inspectToolConfirmationExecution.mockRejectedValueOnce(staleError);
+    mocks.findOwnedNoteForAi.mockResolvedValueOnce({
+      id: 'note-1',
+      title: '工具书签与安全材料',
+      content: '工具书签分类、安全边界与实践记录。'.repeat(120),
+    });
+    mocks.requestAi.mockResolvedValueOnce(noteDraftTaskResponse()).mockResolvedValueOnce({
+      content: '',
+      toolCalls: [
+        toolCall('submit_note_draft', {
+          title: '工具书签与安全意识',
+          content: completeContent,
+        }),
+      ],
+      usage: usage(30),
+      usageStatus: 'reported',
+      finishReason: 'tool_calls',
+    });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '内容太少，请重新生成并至少写 2000 字。',
+        stream: false,
+        contexts: [{ type: 'note', id: 'note-1' }],
+        attachmentIds: [],
+        pendingNoteDraft: {
+          confirmationId: 'expired-draft-confirmation',
+          confirmationToken: staleToken,
+        },
+      }),
+      res,
+    );
+
+    expect(completeContent.length).toBeGreaterThanOrEqual(2000);
+    expect(mocks.inspectToolConfirmationExecution).toHaveBeenCalledWith(staleToken, 'user:user-1', 'session-1');
+    expect(mocks.requestAi).toHaveBeenCalledTimes(2);
+    expect(mocks.requestAi.mock.calls[0][1].trace.stage).toBe('note_draft_task');
+    expect(mocks.requestAi.mock.calls[1][1].trace.stage).toBe('note_draft');
+    expect(mocks.requestAi.mock.calls[1][1].tools[0].function.parameters.properties.content.minLength).toBe(2000);
+    expect(mocks.requestAi.mock.calls[1][0][1].content).toContain('工具书签分类、安全边界与实践记录');
+    expect(mocks.createToolConfirmation).toHaveBeenCalledOnce();
+    const confirmationInput = mocks.createToolConfirmation.mock.calls[0][0];
+    expect(confirmationInput).toMatchObject({
+      toolName: 'create_note',
+      args: { title: '工具书签与安全意识', content: completeContent },
+      privateContext: expect.objectContaining({
+        contextRefs: [{ type: 'note', id: 'note-1' }],
+      }),
+    });
+    expect(confirmationInput.replaceToken).toBeUndefined();
+    expect(confirmationInput.replaceConfirmationId).toBeUndefined();
+    expect(mocks.settleSessionAction).not.toHaveBeenCalled();
+    expect(res.send.mock.calls.at(-1)?.[0]?.data).toMatchObject({
+      response: expect.stringContaining('笔记草稿已准备好'),
+      confirmations: [expect.objectContaining({ id: 'confirmation-1', toolName: 'create_note' })],
+    });
+  });
+
   it('待确认草稿语境中的省略表达走语义判断，并用新确认原子替换旧确认', async () => {
     const oldToken = 'o'.repeat(43);
     const oldContent = '旧正文。'.repeat(80);

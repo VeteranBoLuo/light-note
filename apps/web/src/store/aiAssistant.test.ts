@@ -233,6 +233,48 @@ describe('材料生命周期:默认一次性(P0-A/B)', () => {
       confirmationId: 'confirmation-1',
       confirmationToken: 'a'.repeat(43),
     });
+
+    const settledNewerDraft = [
+      ...messages,
+      {
+        id: 'assistant-5',
+        role: 'assistant' as const,
+        content: '已取消操作',
+        timestamp: new Date(),
+        actionSettlements: [
+          {
+            confirmationId: 'confirmation-4',
+            toolName: 'create_note',
+            status: 'cancelled' as const,
+            settledAt: new Date().toISOString(),
+          },
+        ],
+      },
+    ];
+    expect(resolveAiAssistantPendingNoteDraftReference(settledNewerDraft)).toBeNull();
+
+    const expiredNewerDraft = [
+      ...messages,
+      {
+        id: 'assistant-6',
+        role: 'assistant' as const,
+        content: '已过期的笔记草稿',
+        timestamp: new Date(),
+        pendingConfirmationIds: ['confirmation-5'],
+        confirmations: [
+          {
+            id: 'confirmation-5',
+            token: 'd'.repeat(43),
+            sessionId: 'session-1',
+            toolName: 'create_note',
+            args: { title: '新草稿', content: '新正文' },
+            expiresIn: 300,
+            expiresAt: new Date(Date.now() - 1_000).toISOString(),
+          },
+        ],
+      },
+    ];
+    expect(resolveAiAssistantPendingNoteDraftReference(expiredNewerDraft)).toBeNull();
   });
 
   it('把服务端工具返回的待办来源转成稳定追问锚点', () => {
