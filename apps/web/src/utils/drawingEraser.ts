@@ -91,7 +91,9 @@ function appendPoint(target: number[], point: DrawingPoint) {
 }
 
 function eraseStroke(stroke: DrawingStrokeElement, center: DrawingPoint, radius: number) {
-  const effectiveRadius = radius + stroke.width / 2;
+  // 橡皮擦光标表示中心线裁切范围。若再叠加 stroke.width / 2，光标仅擦到粗笔画下沿时，
+  // 整条矢量中心线也会被切断，造成远离光标的上半部分一起消失。
+  const effectiveRadius = radius;
   const bounds = strokeBounds(stroke);
   if (
     center.x + effectiveRadius < bounds.minX ||

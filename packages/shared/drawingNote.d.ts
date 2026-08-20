@@ -27,13 +27,14 @@ export interface DrawingTextElement {
 export type DrawingElement = DrawingStrokeElement | DrawingTextElement;
 
 export interface DrawingScene {
-  v: 1;
-  page: { width: 1024; height: 1448 };
+  v: 1 | 2;
+  page: { width: 1024 | 1448; height: 1448 };
   elements: DrawingElement[];
 }
 
 export declare const DRAWING_NOTE_TYPE: 'drawing';
-export declare const DRAWING_SCENE_VERSION: 1;
+export declare const DRAWING_SCENE_VERSION: 2;
+export declare const DRAWING_LEGACY_SCENE_VERSION: 1;
 export declare const DRAWING_SCENE_MAX_BYTES: 750000;
 export declare const DRAWING_SCENE_LIMITS: Readonly<{
   maxElements: 1000;
@@ -43,7 +44,8 @@ export declare const DRAWING_SCENE_LIMITS: Readonly<{
   maxTextCharacters: 50000;
   maxTextElementCharacters: 4000;
 }>;
-export declare const DRAWING_PAGE: Readonly<{ width: 1024; height: 1448 }>;
+export declare const DRAWING_PAGE: Readonly<{ width: 1448; height: 1448 }>;
+export declare const DRAWING_LEGACY_PAGE: Readonly<{ width: 1024; height: 1448 }>;
 export declare const DRAWING_COLORS: readonly DrawingColor[];
 export declare const DRAWING_STROKE_WIDTH_RANGE: Readonly<{ min: 1; max: 24 }>;
 export declare const DRAWING_FONT_SIZE_RANGE: Readonly<{ min: 12; max: 72 }>;
@@ -61,3 +63,9 @@ export declare function createEmptyDrawingScene(): DrawingScene;
 export declare function normalizeDrawingScene(input: unknown): DrawingScene;
 export declare function parseDrawingScene(input: unknown): DrawingScene;
 export declare function serializeDrawingScene(input: unknown): string;
+/** 将 V1 竖版场景在水平方向居中平移为当前方形场景，不缩放或裁剪元素。 */
+export declare function upgradeDrawingScene(input: unknown): DrawingScene & {
+  v: 2;
+  page: { width: 1448; height: 1448 };
+};
+export declare function serializeCurrentDrawingScene(input: unknown): string;

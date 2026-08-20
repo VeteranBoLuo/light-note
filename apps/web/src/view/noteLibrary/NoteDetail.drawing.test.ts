@@ -16,6 +16,10 @@ const noteHeaderSource = readFileSync(
   'utf8',
 );
 const librarySource = readFileSync(resolve(process.cwd(), 'src/view/noteLibrary/NoteLibrary.vue'), 'utf8');
+const conflictSource = readFileSync(
+  resolve(process.cwd(), 'src/components/noteLibrary/detail/NoteConflictModal.vue'),
+  'utf8',
+);
 
 describe('手绘笔记详情边界', () => {
   it('画布保持独立异步组件，普通详情不静态导入', () => {
@@ -106,18 +110,16 @@ describe('手绘笔记详情边界', () => {
     expect(drawingSource).toContain('height: 44px');
   });
 
-  it('移动端初始缩放同时利用可用宽高且不拉伸画纸', () => {
-    const zoomStart = drawingSource.indexOf('function resolveInitialZoomIndex()');
-    const zoomEnd = drawingSource.indexOf('function fitReadonlyPage()', zoomStart);
+  it('编辑区按可用宽高连续适配方形画布，不产生原生滚动条', () => {
+    const zoomStart = drawingSource.indexOf('function fitEditablePage()');
+    const zoomEnd = drawingSource.indexOf('function scheduleDraw()', zoomStart);
     const zoomSource = drawingSource.slice(zoomStart, zoomEnd);
 
     expect(drawingSource).toContain('const ZOOM_LEVELS = [0.3, 0.35, 0.4, 0.5, 0.6, 0.75, 1, 1.25, 1.5]');
-    expect(zoomSource).toContain('workspace.clientWidth - horizontalPadding');
-    expect(zoomSource).toContain('workspace.clientHeight - verticalPadding');
-    expect(zoomSource).toContain('widthFit * 1.4');
-    expect(drawingSource).toContain(
-      'workspace.scrollLeft = Math.max(0, (workspace.scrollWidth - workspace.clientWidth) / 2)',
-    );
+    expect(zoomSource).toContain('size.width / DRAWING_PAGE.width');
+    expect(zoomSource).toContain('size.height / DRAWING_PAGE.height');
+    expect(drawingSource).toContain('cameraX.value = (size.width - DRAWING_PAGE.width * zoom.value) / 2');
+    expect(drawingSource).toContain('overflow: hidden');
     expect(drawingSource).toContain('height: 100%');
   });
 
@@ -173,6 +175,7 @@ describe('手绘笔记详情边界', () => {
     expect(keySource).toContain("commandKey && key === 'c'");
     expect(keySource).toContain("commandKey && key === 'x'");
     expect(keySource).toContain("commandKey && key === 'v'");
+    expect(keySource).toContain("commandKey && key === 'y'");
     expect(keySource).toContain('setSelectedIds(scene.value.elements.map((element) => element.id))');
     expect(drawingSource).toContain('writeDrawingClipboard(elements)');
     expect(drawingSource).toContain('readDrawingClipboard(createElementId)');
@@ -184,6 +187,24 @@ describe('手绘笔记详情边界', () => {
     expect(drawingSource).toContain('void nextTick(() => rootRef.value?.focus({ preventScroll: true }))');
   });
 
+  it('未松开指针时撤销优先取消当前手势，不回退上一条已提交历史', () => {
+    const cancelStart = drawingSource.indexOf('function cancelActiveGesture()');
+    const cancelEnd = drawingSource.indexOf('function handlePointerUp', cancelStart);
+    const cancelSource = drawingSource.slice(cancelStart, cancelEnd);
+    const undoStart = drawingSource.indexOf('function undo()');
+    const undoEnd = drawingSource.indexOf('function redo()', undoStart);
+    const undoSource = drawingSource.slice(undoStart, undoEnd);
+    const redoEnd = drawingSource.indexOf('function copySelectedElements()', undoEnd);
+    const redoSource = drawingSource.slice(undoEnd, redoEnd);
+
+    expect(cancelSource).toContain('activeStroke = null');
+    expect(cancelSource).toContain("mutationSnapshot = ''");
+    expect(cancelSource).toContain('activePointerId = null');
+    expect(undoSource).toContain('if (cancelActiveGesture()) return');
+    expect(undoSource.indexOf('cancelActiveGesture()')).toBeLessThan(undoSource.indexOf('undoStack.value.pop()'));
+    expect(redoSource).toContain('if (hasActiveGesture()) return');
+  });
+
   it('只读预览按容器真实内容宽度连续缩放并保持画纸居中', () => {
     const fitStart = drawingSource.indexOf('function fitReadonlyPage()');
     const fitEnd = drawingSource.indexOf('function canvasPoint', fitStart);
@@ -193,13 +214,35 @@ describe('手绘笔记详情边界', () => {
     const mountSource = drawingSource.slice(mountStart, mountEnd);
 
     expect(drawingSource).toContain(
-      'const zoom = computed(() => (props.readonly ? readonlyFitZoom.value : ZOOM_LEVELS[zoomIndex.value]))',
+      'const zoom = computed(() => (props.readonly ? readonlyFitZoom.value : editableZoom.value))',
     );
     expect(fitSource).toContain('getComputedStyle(workspace)');
     expect(fitSource).toContain('workspace.clientWidth - horizontalPadding');
     expect(fitSource).toContain('contentWidth - horizontalBorder');
     expect(mountSource).toContain('workspaceResizeObserver = new ResizeObserver(fitReadonlyPage)');
     expect(mountSource).toContain('workspaceResizeObserver?.disconnect()');
+  });
+
+  it('绘画冲突对比展示两份真实画布，橡皮擦默认为 18px 且只显示尺寸圆环', () => {
+    expect(conflictSource).toContain("() => import('@/components/noteLibrary/drawing/DrawingNoteEditor.vue')");
+    expect(conflictSource.match(/<DrawingNoteEditor/g)).toHaveLength(2);
+    expect(conflictSource).toContain(':content="cloudVersion.content"');
+    expect(conflictSource).toContain(':content="localVersion.content"');
+    expect(drawingSource).toContain('const DEFAULT_ERASER_SIZE = 18');
+    expect(drawingSource).toContain('const eraserSize = ref(DEFAULT_ERASER_SIZE)');
+    expect(drawingSource).toMatch(/\.drawing-canvas\.is-tool-eraser\s*\{\s*cursor:\s*none;/u);
+    expect(drawingSource).toContain('context.arc(eraserCursorPoint.x, eraserCursorPoint.y, eraserSize.value / 2');
+  });
+
+  it('右上角保存按钮独立创建历史版本，子页支持三种笔记类型', () => {
+    expect(noteHeaderSource).toContain("$t('noteDetail.saveVersion')");
+    expect(noteHeaderSource).toContain("$emit('saveVersion')");
+    expect(source).toContain('@save-version="saveManualVersion"');
+    expect(source).toContain("apiBasePost('/api/note/createNoteVersion'");
+    expect(source).toContain('void saveManualVersion()');
+    expect(source).toContain('blank-only');
+    expect(source).toContain("function createChildPageWithType(type: 'html' | 'markdown' | 'drawing')");
+    expect(source).toContain('query: { type, parent: childCreateParentId.value');
   });
 
   it('历史版本仅在手绘预览分支按需加载只读画布', () => {

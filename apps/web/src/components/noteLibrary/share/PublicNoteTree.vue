@@ -9,7 +9,9 @@
         :aria-expanded="expanded"
         @click="toggle"
       >
-        <SvgIcon :src="icon.noteTree.chevron" size="14" aria-hidden="true" />
+        <span class="public-note-tree__chevron" aria-hidden="true">
+          <SvgIcon :src="icon.noteTree.chevron" size="14" />
+        </span>
       </BButton>
       <span v-else class="public-note-tree__toggle-placeholder" />
       <BButton class="public-note-tree__label" :title="node.title" @click="emit('open', node.id)">
@@ -89,16 +91,18 @@
 
 <style scoped lang="less">
   .public-note-tree__row {
+    position: relative;
     display: flex;
     align-items: center;
     min-height: 36px;
     padding-left: calc(var(--tree-depth) * 13px);
-    border: 1px solid transparent;
+    border: 0;
     border-radius: 8px;
 
     &.is-active {
-      border-color: var(--primary-color);
-      background: var(--selected-bg-color);
+      color: var(--primary-color);
+      background: var(--primary-btn-h-bg-color);
+      box-shadow: inset 3px 0 0 var(--primary-color);
     }
   }
 
@@ -108,14 +112,28 @@
     min-width: 26px;
     height: 28px;
     padding: 0;
+    border: 0 !important;
+    background: transparent !important;
   }
 
-  .public-note-tree__toggle :deep(.svg-icon) {
+  .public-note-tree__toggle {
+    margin-right: 6px;
+    border-radius: 7px;
+    color: var(--desc-color);
+  }
+
+  .public-note-tree__toggle:hover {
+    color: var(--primary-color);
+    background: var(--primary-btn-h-bg-color) !important;
+  }
+
+  .public-note-tree__chevron {
+    display: inline-flex;
     transform: rotate(-90deg);
     transition: transform 0.15s ease;
   }
 
-  .public-note-tree__toggle.is-expanded :deep(.svg-icon) {
+  .public-note-tree__toggle.is-expanded .public-note-tree__chevron {
     transform: rotate(0deg);
   }
 
@@ -126,7 +144,14 @@
     min-width: 0;
     flex: 1;
     padding: 0 6px;
+    border: 0 !important;
     color: var(--text-color);
+    background: transparent !important;
+  }
+
+  .public-note-tree__row.is-active .public-note-tree__label {
+    color: var(--primary-color);
+    font-weight: 600;
   }
 
   .public-note-tree__label span {

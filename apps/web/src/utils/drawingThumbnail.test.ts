@@ -36,9 +36,37 @@ describe('drawingThumbnail', () => {
     });
 
     expect(renderDrawingThumbnail(context, content, 480, 270)).toBe(true);
-    expect(context.lineTo).toHaveBeenCalledWith(300, 360);
-    expect(context.fillText).toHaveBeenCalledWith('测试', 360, 180, 240);
+    expect(context.lineTo).toHaveBeenCalledWith(512, 360);
+    expect(context.fillText).toHaveBeenCalledWith('测试', 572, 180, 240);
     expect(context.setTransform).toHaveBeenCalledTimes(3);
+  });
+
+  it('按完整方形画纸缩放，小点不会按内容包围盒放大铺满卡片', () => {
+    const context = mockContext();
+    const content = JSON.stringify({
+      v: 2,
+      page: { width: 1448, height: 1448 },
+      elements: [{ id: 'dot', kind: 'stroke', color: '#1f2937', width: 4, points: [724, 724] }],
+    });
+
+    expect(renderDrawingThumbnail(context, content, 480, 270)).toBe(true);
+    const [scale, , , , offsetX, offsetY] = context.setTransform.mock.calls[1];
+    expect(scale).toBeCloseTo(242 / 1448);
+    expect(offsetX).toBeCloseTo(119);
+    expect(offsetY).toBeCloseTo(14);
+    expect(context.arc).toHaveBeenCalledWith(724, 724, 0.5 / scale, 0, Math.PI * 2);
+  });
+
+  it('旧竖版场景先升级并居中到方形画纸再生成缩略图', () => {
+    const context = mockContext();
+    const content = JSON.stringify({
+      v: 1,
+      page: { width: 1024, height: 1448 },
+      elements: [{ id: 'dot', kind: 'stroke', color: '#1f2937', width: 4, points: [0, 100] }],
+    });
+
+    expect(renderDrawingThumbnail(context, content, 480, 270)).toBe(true);
+    expect(context.arc).toHaveBeenCalledWith(212, 100, expect.any(Number), 0, Math.PI * 2);
   });
 
   it('无元素或无效场景安全退化为占位态', () => {

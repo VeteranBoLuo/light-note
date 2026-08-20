@@ -31,6 +31,29 @@ describe('drawingEraser', () => {
     expect(result.elements).toBe(elements);
   });
 
+  it('只擦除光标内的目标，不因相邻粗笔画宽度扩大命中范围', () => {
+    const nearbyThickStroke: DrawingElement = {
+      id: 'nearby-thick',
+      kind: 'stroke',
+      color: '#1f2937',
+      width: 40,
+      points: [0, 50, 100, 50],
+    };
+    const targetDot: DrawingElement = {
+      id: 'target-dot',
+      kind: 'stroke',
+      color: '#1f2937',
+      width: 4,
+      points: [50, 78],
+    };
+
+    const result = eraseDrawingElementsAt([nearbyThickStroke, targetDot], { x: 50, y: 78 }, 9, () => 'split');
+
+    expect(result.changed).toBe(true);
+    expect(result.elements).toEqual([nearbyThickStroke]);
+    expect(result.elements[0]).toBe(nearbyThickStroke);
+  });
+
   it('橡皮擦不删除文本对象', () => {
     const text: DrawingElement = {
       id: 'text',

@@ -143,7 +143,7 @@
       <BButton
         size="small"
         class="drawing-value-button"
-        :disabled="zoomIndex === ZOOM_LEVELS.length - 1"
+        :disabled="zoom >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]"
         @click="changeZoom(1)"
       >
         +
@@ -154,7 +154,7 @@
       <div
         ref="pageRef"
         class="drawing-page"
-        :style="{ width: `${DRAWING_PAGE.width * zoom}px`, height: `${DRAWING_PAGE.height * zoom}px` }"
+        :style="pageStyle"
       >
         <canvas
           ref="canvasRef"
@@ -210,6 +210,7 @@
     createEmptyDrawingScene,
     parseDrawingScene,
     serializeDrawingScene,
+    upgradeDrawingScene,
     type DrawingColor,
     type DrawingElement,
     type DrawingFontSize,
@@ -229,7 +230,6 @@
   import { buildExportFileName, deliverGeneratedFile } from '@/utils/fileDelivery';
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { deliverExportViaAndroidBridge } from '@/utils/androidFileExport';
-  import { bookmarkStore } from '@/store';
   import { eraseDrawingElementsAt, type DrawingPoint } from '@/utils/drawingEraser';
   import {
     cloneDrawingElement,
@@ -257,7 +257,6 @@
     ready: [];
   }>();
   const { t } = useI18n();
-  const bookmark = bookmarkStore();
 
   const rootRef = ref<HTMLElement | null>(null);
   const workspaceRef = ref<HTMLElement | null>(null);
@@ -269,7 +268,8 @@
   const activeColor = ref<DrawingColor>(DRAWING_COLORS[0]);
   const strokeWidth = ref<DrawingStrokeWidth>(DRAWING_STROKE_WIDTHS[1]);
   const fontSize = ref<DrawingFontSize>(DRAWING_FONT_SIZES[0]);
-  const eraserSize = ref(18);
+  const DEFAULT_ERASER_SIZE = 18;
+  const eraserSize = ref(DEFAULT_ERASER_SIZE);
   const selectedIds = ref<string[]>([]);
   const colorPopoverOpen = ref(false);
   const sizePopoverOpen = ref(false);
@@ -285,9 +285,20 @@
   const undoStack = ref<string[]>([]);
   const redoStack = ref<string[]>([]);
   const ZOOM_LEVELS = [0.3, 0.35, 0.4, 0.5, 0.6, 0.75, 1, 1.25, 1.5] as const;
-  const zoomIndex = ref(6);
+  const editableZoom = ref(1);
   const readonlyFitZoom = ref(1);
-  const zoom = computed(() => (props.readonly ? readonlyFitZoom.value : ZOOM_LEVELS[zoomIndex.value]));
+  const zoom = computed(() => (props.readonly ? readonlyFitZoom.value : editableZoom.value));
+  const zoomIndex = computed(() => {
+    const exactIndex = ZOOM_LEVELS.findIndex((value) => value >= zoom.value - 0.0001);
+    return exactIndex < 0 ? ZOOM_LEVELS.length - 1 : exactIndex;
+  });
+  const cameraX = ref(0);
+  const cameraY = ref(0);
+  const pageStyle = computed(() => ({
+    width: `${DRAWING_PAGE.width * zoom.value}px`,
+    height: `${DRAWING_PAGE.height * zoom.value}px`,
+    transform: props.readonly ? undefined : `translate3d(${cameraX.value}px, ${cameraY.value}px, 0)`,
+  }));
   const HISTORY_MAX_STATES = 20;
   const HISTORY_MAX_CHARS = 8_000_000;
   const TEXT_DRAG_THRESHOLD_PX = 4;
@@ -344,7 +355,7 @@
   } | null = null;
   let marqueeSelection: { start: DrawingPoint; current: DrawingPoint; baseIds: string[] } | null = null;
   let editSelectedTextOnRelease = false;
-  let panStart: { x: number; y: number; left: number; top: number } | null = null;
+  let panStart: { x: number; y: number; cameraX: number; cameraY: number } | null = null;
   let workspaceResizeObserver: ResizeObserver | null = null;
   let frameId = 0;
   let lastEmittedContent = '';
@@ -441,11 +452,75 @@
   }
 
   function changeZoom(delta: number) {
-    zoomIndex.value = Math.max(0, Math.min(ZOOM_LEVELS.length - 1, zoomIndex.value + delta));
+    const next =
+      delta > 0
+        ? ZOOM_LEVELS.find((value) => value > zoom.value + 0.0001) || ZOOM_LEVELS[ZOOM_LEVELS.length - 1]
+        : [...ZOOM_LEVELS].reverse().find((value) => value < zoom.value - 0.0001) || ZOOM_LEVELS[0];
+    setEditableZoom(next);
     nextTick(() => {
       resizeCanvas();
-      centerMobileWorkspace();
     });
+  }
+
+  function workspaceContentSize() {
+    const workspace = workspaceRef.value;
+    if (!workspace) return { width: 1, height: 1 };
+    const style = getComputedStyle(workspace);
+    return {
+      width: Math.max(
+        1,
+        workspace.clientWidth - (Number.parseFloat(style.paddingLeft) || 0) - (Number.parseFloat(style.paddingRight) || 0),
+      ),
+      height: Math.max(
+        1,
+        workspace.clientHeight - (Number.parseFloat(style.paddingTop) || 0) - (Number.parseFloat(style.paddingBottom) || 0),
+      ),
+    };
+  }
+
+  function centerCamera() {
+    if (props.readonly) return;
+    const size = workspaceContentSize();
+    cameraX.value = (size.width - DRAWING_PAGE.width * zoom.value) / 2;
+    cameraY.value = (size.height - DRAWING_PAGE.height * zoom.value) / 2;
+  }
+
+  function clampCamera() {
+    if (props.readonly) return;
+    const size = workspaceContentSize();
+    const pageWidth = DRAWING_PAGE.width * zoom.value;
+    const pageHeight = DRAWING_PAGE.height * zoom.value;
+    const visibleMargin = 56;
+    cameraX.value =
+      pageWidth <= size.width
+        ? (size.width - pageWidth) / 2
+        : Math.max(size.width - pageWidth - visibleMargin, Math.min(visibleMargin, cameraX.value));
+    cameraY.value =
+      pageHeight <= size.height
+        ? (size.height - pageHeight) / 2
+        : Math.max(size.height - pageHeight - visibleMargin, Math.min(visibleMargin, cameraY.value));
+  }
+
+  function setEditableZoom(nextZoom: number) {
+    if (props.readonly) return;
+    const size = workspaceContentSize();
+    const anchorX = size.width / 2;
+    const anchorY = size.height / 2;
+    const oldZoom = Math.max(0.01, editableZoom.value);
+    const documentX = (anchorX - cameraX.value) / oldZoom;
+    const documentY = (anchorY - cameraY.value) / oldZoom;
+    editableZoom.value = Math.max(ZOOM_LEVELS[0], Math.min(ZOOM_LEVELS[ZOOM_LEVELS.length - 1], nextZoom));
+    cameraX.value = anchorX - documentX * editableZoom.value;
+    cameraY.value = anchorY - documentY * editableZoom.value;
+    clampCamera();
+  }
+
+  function fitEditablePage() {
+    if (props.readonly) return;
+    const size = workspaceContentSize();
+    editableZoom.value = Math.min(1, size.width / DRAWING_PAGE.width, size.height / DRAWING_PAGE.height);
+    centerCamera();
+    resizeCanvas();
   }
 
   function scheduleDraw() {
@@ -619,29 +694,6 @@
     scheduleDraw();
   }
 
-  function centerMobileWorkspace() {
-    const workspace = workspaceRef.value;
-    if (!bookmark.isMobile || !workspace || workspace.scrollWidth <= workspace.clientWidth) return;
-    workspace.scrollLeft = Math.max(0, (workspace.scrollWidth - workspace.clientWidth) / 2);
-  }
-
-  function resolveInitialZoomIndex() {
-    const workspace = workspaceRef.value;
-    if (!workspace) return 0;
-    const style = getComputedStyle(workspace);
-    const horizontalPadding =
-      (Number.parseFloat(style.paddingLeft) || 0) + (Number.parseFloat(style.paddingRight) || 0);
-    const verticalPadding = (Number.parseFloat(style.paddingTop) || 0) + (Number.parseFloat(style.paddingBottom) || 0);
-    const widthFit = Math.max(0.1, (workspace.clientWidth - horizontalPadding) / DRAWING_PAGE.width);
-    const heightFit = Math.max(0.1, (workspace.clientHeight - verticalPadding) / DRAWING_PAGE.height);
-    // 手机竖屏若只按宽度适配，会在短画纸下方留下大量不可用区域；允许有限横向平移来换取更大的书写面积。
-    const preferred = bookmark.isMobile ? Math.min(1, heightFit, widthFit * 1.4) : Math.min(1, widthFit);
-    return ZOOM_LEVELS.reduce(
-      (best, value, index) => (Math.abs(value - preferred) < Math.abs(ZOOM_LEVELS[best] - preferred) ? index : best),
-      0,
-    );
-  }
-
   function fitReadonlyPage() {
     const workspace = workspaceRef.value;
     if (!props.readonly || !workspace) return;
@@ -795,7 +847,7 @@
     if (tool.value === 'hand') {
       const workspace = workspaceRef.value;
       if (workspace)
-        panStart = { x: event.clientX, y: event.clientY, left: workspace.scrollLeft, top: workspace.scrollTop };
+        panStart = { x: event.clientX, y: event.clientY, cameraX: cameraX.value, cameraY: cameraY.value };
       return;
     }
     event.preventDefault();
@@ -894,8 +946,9 @@
     }
     if (event.pointerId !== activePointerId) return;
     if (panStart && workspaceRef.value) {
-      workspaceRef.value.scrollLeft = panStart.left - (event.clientX - panStart.x);
-      workspaceRef.value.scrollTop = panStart.top - (event.clientY - panStart.y);
+      cameraX.value = panStart.cameraX + (event.clientX - panStart.x);
+      cameraY.value = panStart.cameraY + (event.clientY - panStart.y);
+      clampCamera();
       return;
     }
     event.preventDefault();
@@ -934,6 +987,51 @@
     activePointerId = null;
     activeCanvasRect = null;
     panStart = null;
+    return true;
+  }
+
+  function hasActiveGesture() {
+    return Boolean(
+      activePointerId !== null ||
+        activeStroke ||
+        mutationSnapshot ||
+        eraserPreviewElements ||
+        dragStart ||
+        marqueeSelection ||
+        panStart,
+    );
+  }
+
+  function cancelActiveGesture() {
+    if (!hasActiveGesture()) return false;
+    const cameraSnapshot = panStart;
+    const pointerId = activePointerId;
+    if (pointerId !== null) {
+      try {
+        canvasRef.value?.releasePointerCapture(pointerId);
+      } catch {
+        // 指针捕获可能已由浏览器释放；仍需继续清理本地手势状态。
+      }
+    }
+    if (mutationSnapshot) scene.value = parseDrawingScene(mutationSnapshot);
+    if (cameraSnapshot) {
+      cameraX.value = cameraSnapshot.cameraX;
+      cameraY.value = cameraSnapshot.cameraY;
+      clampCamera();
+    }
+    activePointerId = null;
+    activeCanvasRect = null;
+    mutationSnapshot = '';
+    activeStroke = null;
+    activeStrokeMaxPairs = 0;
+    eraserChanged = false;
+    eraserLimitReached = false;
+    eraserPreviewElements = null;
+    dragStart = null;
+    marqueeSelection = null;
+    panStart = null;
+    editSelectedTextOnRelease = false;
+    scheduleDraw();
     return true;
   }
 
@@ -983,18 +1081,8 @@
   }
 
   function handlePointerCancel(event: PointerEvent) {
-    if (!releasePointer(event)) return;
-    if (mutationSnapshot) scene.value = parseDrawingScene(mutationSnapshot);
-    mutationSnapshot = '';
-    activeStroke = null;
-    activeStrokeMaxPairs = 0;
-    eraserChanged = false;
-    eraserLimitReached = false;
-    eraserPreviewElements = null;
-    dragStart = null;
-    marqueeSelection = null;
-    editSelectedTextOnRelease = false;
-    scheduleDraw();
+    if (event.pointerId !== activePointerId) return;
+    cancelActiveGesture();
   }
 
   function handlePointerLeave() {
@@ -1035,11 +1123,15 @@
   }
 
   function undo() {
+    // pointerup 前的笔画/擦除/拖动尚未进入 scene，撤销必须先取消这次临时手势，不能误删上一条已提交历史。
+    if (cancelActiveGesture()) return;
     const previous = undoStack.value.pop();
     if (previous) applyHistory(previous, redoStack.value);
   }
 
   function redo() {
+    // 临时手势仍在进行时不允许切换已提交历史，否则松开指针会把手势追加到错误的 scene。
+    if (hasActiveGesture()) return;
     const next = redoStack.value.pop();
     if (next) applyHistory(next, undoStack.value);
   }
@@ -1121,6 +1213,11 @@
       else undo();
       return;
     }
+    if (commandKey && key === 'y') {
+      event.preventDefault();
+      redo();
+      return;
+    }
     if (commandKey && key === 'a') {
       event.preventDefault();
       tool.value = 'select';
@@ -1145,6 +1242,7 @@
     }
     if (event.key === 'Escape') {
       event.preventDefault();
+      if (cancelActiveGesture()) return;
       selectedIds.value = [];
       marqueeSelection = null;
       scheduleDraw();
@@ -1205,7 +1303,7 @@
   async function replaceContentWithUndo(content: string) {
     try {
       const previous = serializeDrawingScene(scene.value);
-      const next = parseDrawingScene(content);
+      const next = upgradeDrawingScene(content);
       const serialized = serializeDrawingScene(next);
       if (serialized === previous) return true;
       undoStack.value.push(previous);
@@ -1227,7 +1325,7 @@
     (content) => {
       if (content === lastEmittedContent) return;
       try {
-        scene.value = content ? parseDrawingScene(content) : createEmptyDrawingScene();
+        scene.value = content ? upgradeDrawingScene(content) : createEmptyDrawingScene();
         lastEmittedContent = serializeDrawingScene(scene.value);
         selectedIds.value = [];
         eraserPreviewElements = null;
@@ -1260,9 +1358,11 @@
         workspaceResizeObserver.observe(workspaceRef.value);
       }
     } else {
-      zoomIndex.value = resolveInitialZoomIndex();
-      resizeCanvas();
-      nextTick(centerMobileWorkspace);
+      fitEditablePage();
+      if (typeof ResizeObserver !== 'undefined' && workspaceRef.value) {
+        workspaceResizeObserver = new ResizeObserver(fitEditablePage);
+        workspaceResizeObserver.observe(workspaceRef.value);
+      }
     }
     emit('ready');
   });
@@ -1423,9 +1523,10 @@
   }
 
   .drawing-workspace {
+    position: relative;
     flex: 1 1 auto;
     min-height: 0;
-    overflow: auto;
+    overflow: hidden;
     padding: 24px;
     overscroll-behavior: contain;
     background: var(--body-background, #f4f5f7);
@@ -1445,6 +1546,14 @@
     box-shadow: 0 3px 14px rgba(31, 41, 55, 0.12);
   }
 
+  .drawing-editor:not(.is-readonly) .drawing-page {
+    position: absolute;
+    top: 24px;
+    left: 24px;
+    margin: 0;
+    will-change: transform;
+  }
+
   .drawing-canvas {
     position: absolute;
     inset: 0;
@@ -1458,7 +1567,7 @@
   }
 
   .drawing-canvas.is-tool-eraser {
-    cursor: cell;
+    cursor: none;
   }
 
   .drawing-canvas.is-tool-select {
@@ -1523,6 +1632,11 @@
 
     .drawing-workspace {
       padding: 12px;
+    }
+
+    .drawing-editor:not(.is-readonly) .drawing-page {
+      top: 12px;
+      left: 12px;
     }
 
     .drawing-color-panel,

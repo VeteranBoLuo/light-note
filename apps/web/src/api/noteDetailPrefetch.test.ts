@@ -32,7 +32,7 @@ describe('noteDetailPrefetch', () => {
     expect(apiBasePost).toHaveBeenCalledTimes(1);
     expect(apiBasePost).toHaveBeenCalledWith(
       '/api/note/getNoteDetail',
-      { id: 'note-1', drawingSceneVersion: 1 },
+      { id: 'note-1', drawingSceneVersion: 2 },
       { silent: true, timeout: 15_000 },
     );
   });

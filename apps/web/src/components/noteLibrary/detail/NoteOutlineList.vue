@@ -3,7 +3,7 @@
     ref="rootRef"
     v-auto-scrollbar
     class="note-outline-list"
-    :class="{ 'is-mobile': mobile }"
+    :class="{ 'is-mobile': mobile, 'is-share': variant === 'share' }"
     :aria-label="t('noteDetail.catalogTitle')"
   >
     <BButton
@@ -42,11 +42,13 @@
       activeIndex?: number | null;
       mobile?: boolean;
       showEmpty?: boolean;
+      variant?: 'default' | 'share';
     }>(),
     {
       activeIndex: null,
       mobile: false,
       showEmpty: true,
+      variant: 'default',
     },
   );
   const emit = defineEmits<{ select: [index: number] }>();
@@ -140,6 +142,18 @@
   .toc-item.active .toc-marker {
     background: currentColor;
     box-shadow: 0 0 0 4px color-mix(in srgb, var(--resource-note-color, #00a884) 12%, transparent);
+  }
+
+  .note-outline-list.is-share .toc-item.active {
+    border-color: transparent;
+    color: var(--primary-color);
+    background: var(--primary-btn-h-bg-color);
+    box-shadow: inset 3px 0 0 var(--primary-color);
+  }
+
+  .note-outline-list.is-share .toc-item.active .toc-marker {
+    background: var(--primary-color);
+    box-shadow: none;
   }
 
   .toc-text {

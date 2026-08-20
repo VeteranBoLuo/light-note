@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { parseDrawingScene } from '@lightnote/shared/drawing-note';
+import { DRAWING_PAGE, DRAWING_SCENE_VERSION, parseDrawingScene } from '@lightnote/shared/drawing-note';
 import { sanitizeNoteHtml } from '../noteHtmlSanitizer.js';
 
 const poolQuery = vi.fn();
@@ -79,7 +79,9 @@ describe('newUserSeedService', () => {
     for (const seed of [zh, en]) {
       const drawing = seed.notes.find((note) => note.key === 'drawing-demo');
       expect(drawing).toMatchObject({ title: '手绘笔记示例', type: 'drawing', sort: 4 });
-      expect(parseDrawingScene(drawing.content).elements.length).toBeGreaterThan(0);
+      const scene = parseDrawingScene(drawing.content);
+      expect(scene).toMatchObject({ v: DRAWING_SCENE_VERSION, page: DRAWING_PAGE });
+      expect(scene.elements.length).toBeGreaterThan(0);
     }
     for (const seed of [zh, en]) {
       const richText = seed.notes.find((note) => note.key === 'rich-text-demo');
@@ -182,7 +184,9 @@ describe('newUserSeedService', () => {
     expect(richTextNote.content).toContain('欢迎使用轻笺');
     const drawingNote = noteInserts.map(([, [row]]) => row).find((row) => row.type === 'drawing');
     expect(drawingNote).toMatchObject({ title: '手绘笔记示例', sort: 4 });
-    expect(parseDrawingScene(drawingNote.content).elements.length).toBeGreaterThan(0);
+    const drawingScene = parseDrawingScene(drawingNote.content);
+    expect(drawingScene).toMatchObject({ v: DRAWING_SCENE_VERSION, page: DRAWING_PAGE });
+    expect(drawingScene.elements.length).toBeGreaterThan(0);
     // 五篇笔记 sort 递增，保证新用户笔记库顺序稳定（is_top DESC, sort, update_time DESC）
     expect(noteInserts.map(([, [row]]) => row.sort)).toEqual([0, 1, 2, 3, 4]);
     expect(relationInserts.flatMap(([, [values]]) => values).every((row) => row[4] === 'onboarding')).toBe(true);

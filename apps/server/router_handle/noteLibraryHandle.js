@@ -401,6 +401,26 @@ async function pruneNoteVersions(connection, noteId, keep = NOTE_VERSION_KEEP) {
   await connection.query(`DELETE FROM note_versions WHERE id IN (${placeholders})`, ids);
 }
 
+async function insertCurrentNoteVersion(connection, { noteId, userId, currentNote, reason, keep }) {
+  const type = normalizeNoteType(currentNote.type);
+  const canonicalContent = normalizeCanonicalMarkdownContent(currentNote.content ?? '', type);
+  const versionData = insertData({
+    noteId,
+    title: currentNote.title,
+    content:
+      type === 'drawing' || type === 'markdown'
+        ? canonicalContent
+        : sanitizePersistedNoteContent(canonicalContent, 'html', 'snapshot-note-version'),
+    type: currentNote.type,
+    sourceRevision: Math.max(1, Number(currentNote.revision || 1)),
+    reason,
+    createBy: userId,
+  });
+  const [result] = await connection.query('INSERT INTO note_versions SET ?', [versionData]);
+  await pruneNoteVersions(connection, noteId, keep);
+  return result.insertId;
+}
+
 // 覆盖笔记前,把"改动前"的旧内容存为一个历史版本(按闸门策略决定是否真正落库)
 async function snapshotNoteVersion(
   connection,
@@ -440,23 +460,70 @@ async function snapshotNoteVersion(
       return;
     }
   }
-  const versionData = insertData({
-    noteId,
-    title: current.title,
-    content:
-      normalizeNoteType(current.type) === 'drawing'
-        ? oldContent
-        : normalizeNoteType(current.type) === 'markdown'
-          ? oldContent
-          : sanitizePersistedNoteContent(oldContent, 'html', 'snapshot-note-version'),
-    type: current.type,
-    sourceRevision: Math.max(1, Number(current.revision || 1)),
-    reason,
-    createBy: userId,
-  });
-  await connection.query('INSERT INTO note_versions SET ?', [versionData]);
-  await pruneNoteVersions(connection, noteId, keep);
+  await insertCurrentNoteVersion(connection, { noteId, userId, currentNote: current, reason, keep });
 }
+
+// 用户明确点击“保存版本”时，强制把当前已落库内容存成还原点。
+// 这条链路与高频自动保存解耦，不受时间合并窗口影响。
+export const createNoteVersion = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  const noteId = String(req.body?.id || '').trim();
+  const expectedRevision = Number(req.body?.revision);
+  if (!noteId || noteId.length > 255 || !Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
+    return res.send(resultData(null, 400, L(req, '笔记参数无效', 'Invalid note parameters')));
+  }
+  let connection;
+  let transactionStarted = false;
+  try {
+    const userId = req.user.id;
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    transactionStarted = true;
+    const [rows] = await connection.query(
+      'SELECT id, title, content, type, revision, update_time FROM note WHERE id=? AND create_by=? AND del_flag=0 FOR UPDATE',
+      [noteId, userId],
+    );
+    if (!rows.length) throw new NoteTreeError('NOTE_TREE_NODE_NOT_FOUND', '笔记不存在', 404);
+    const current = rows[0];
+    const currentRevision = Math.max(1, Number(current.revision || 1));
+    if (currentRevision !== expectedRevision) {
+      const safeCurrent = normalizeCanonicalMarkdownRecord(current);
+      throw new NoteTreeError('NOTE_VERSION_CONFLICT', '笔记版本冲突', 409, {
+        current: {
+          id: noteId,
+          title: String(current.title || ''),
+          content: String(safeCurrent.content || ''),
+          type: normalizeNoteType(current.type),
+          revision: currentRevision,
+          updateTime: current.update_time || null,
+        },
+      });
+    }
+    const keep = normalizeNoteType(current.type) === 'drawing' ? DRAWING_VERSION_KEEP : NOTE_VERSION_KEEP;
+    const versionId = await insertCurrentNoteVersion(connection, {
+      noteId,
+      userId,
+      currentNote: current,
+      reason: 'manual',
+      keep,
+    });
+    await connection.commit();
+    transactionStarted = false;
+    return res.send(resultData({ id: versionId, noteId, revision: currentRevision }));
+  } catch (error) {
+    if (transactionStarted) {
+      try {
+        await connection.rollback();
+      } catch {
+        // 保留原始业务错误。
+      }
+    }
+    if (error instanceof NoteTreeError) return sendNoteTreeError(req, res, 'create-note-version', error);
+    return sendNoteServerError(res, 'create-note-version', error);
+  } finally {
+    connection?.release();
+  }
+};
 
 export const updateNote = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
@@ -1143,7 +1210,16 @@ export const getNoteDetail = async (req, res) => {
     }
 
     const normalized = normalizeCanonicalMarkdownRecord(result[0]);
-    const drawingSupported = Number(req.body?.drawingSceneVersion || 0) === DRAWING_SCENE_VERSION;
+    let contentDrawingVersion = DRAWING_SCENE_VERSION;
+    if (normalized.type === 'drawing') {
+      try {
+        contentDrawingVersion = Number(JSON.parse(String(normalized.content || '{}')).v || DRAWING_SCENE_VERSION);
+      } catch {
+        contentDrawingVersion = DRAWING_SCENE_VERSION;
+      }
+    }
+    // 客户端上报的是“最高支持版本”：V2 客户仍可读 V1，V1 客户不会误读 V2。
+    const drawingSupported = Number(req.body?.drawingSceneVersion || 0) >= contentDrawingVersion;
     if (normalized.type === 'drawing' && !drawingSupported) {
       // 老客户端会把未知类型回退为 TinyMCE。不给 scene 正文，并由通用更新接口拒绝 drawing 正文提交，
       // 可以确保它最多看到空白只读内容，不能把 JSON 或空 HTML 覆盖回数据库。

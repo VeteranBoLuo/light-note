@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import pool from '../../db/index.js';
 import { buildResourceHref, normalizeMarkdownBlockquoteEntities } from '@lightnote/shared';
-import { serializeDrawingScene } from '@lightnote/shared/drawing-note';
+import { serializeDrawingScene, upgradeDrawingScene } from '@lightnote/shared/drawing-note';
 import { insertData } from '../agent/data.js';
 import { bucketBaseUrl, putObjectBodyToObs } from '../obsClient.js';
 import { markOnboardingSeedResource, ONBOARDING_SEED_VERSION } from '../onboardingSeed.js';
@@ -421,7 +421,7 @@ export function buildNewUserSeedContent({ lang = 'zh-CN', siteUrl } = {}) {
     title: '手绘笔记示例',
     type: 'drawing',
     sort: content.notes.length,
-    content: NEW_USER_DRAWING_NOTE_EXAMPLE_SCENE,
+    content: upgradeDrawingScene(NEW_USER_DRAWING_NOTE_EXAMPLE_SCENE),
     tagKeys: ['getting-started'],
   });
   return content;

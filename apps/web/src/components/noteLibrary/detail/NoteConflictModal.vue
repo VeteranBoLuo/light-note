@@ -18,7 +18,10 @@
             <span>{{ versionMeta(cloudVersion) }}</span>
           </div>
           <div class="note-conflict__title">{{ cloudVersion.title || t('noteDetail.unnamedDoc') }}</div>
-          <pre>{{ previewText(cloudVersion) }}</pre>
+          <div v-if="cloudVersion.type === 'drawing'" class="note-conflict__drawing-preview">
+            <DrawingNoteEditor :content="cloudVersion.content" readonly />
+          </div>
+          <pre v-else>{{ previewText(cloudVersion) }}</pre>
         </section>
         <section class="note-conflict__version is-local">
           <div class="note-conflict__version-head">
@@ -26,7 +29,10 @@
             <span>{{ versionMeta(localVersion) }}</span>
           </div>
           <div class="note-conflict__title">{{ localVersion.title || t('noteDetail.unnamedDoc') }}</div>
-          <pre>{{ previewText(localVersion) }}</pre>
+          <div v-if="localVersion.type === 'drawing'" class="note-conflict__drawing-preview">
+            <DrawingNoteEditor :content="localVersion.content" readonly />
+          </div>
+          <pre v-else>{{ previewText(localVersion) }}</pre>
         </section>
       </div>
       <p class="note-conflict__hint">{{ t('noteDetail.conflict.hint') }}</p>
@@ -51,10 +57,14 @@
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, defineAsyncComponent } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+
+  const DrawingNoteEditor = defineAsyncComponent(
+    () => import('@/components/noteLibrary/drawing/DrawingNoteEditor.vue'),
+  );
 
   interface NoteConflictVersion {
     id?: string;
@@ -91,18 +101,6 @@
   }
 
   function previewText(version: NoteConflictVersion) {
-    if (version.type === 'drawing') {
-      try {
-        const scene = JSON.parse(version.content);
-        const elements = Array.isArray(scene?.elements) ? scene.elements : [];
-        return t('note.drawingConflictSummary', {
-          strokes: elements.filter((element) => element?.kind === 'stroke').length,
-          texts: elements.filter((element) => element?.kind === 'text').length,
-        });
-      } catch {
-        return t('note.drawingInvalid');
-      }
-    }
     const source = version.type === 'markdown' ? version.content : htmlText(version.content);
     const normalized = source.replace(/\u00a0/g, ' ').trim() || t('noteDetail.conflict.emptyContent');
     return normalized.length > 1600 ? `${normalized.slice(0, 1600)}\n…` : normalized;
@@ -200,6 +198,19 @@
     overflow-wrap: anywhere;
   }
 
+  .note-conflict__drawing-preview {
+    height: min(34vh, 320px);
+    margin-top: 10px;
+    overflow: auto;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 8px;
+    background: var(--surface-panel-bg);
+
+    :deep(.drawing-workspace) {
+      padding: 12px;
+    }
+  }
+
   .note-conflict__actions {
     display: flex;
     justify-content: flex-end;
@@ -218,6 +229,10 @@
 
     .note-conflict__version pre {
       height: 150px;
+    }
+
+    .note-conflict__drawing-preview {
+      height: min(44vh, 300px);
     }
 
     .note-conflict__actions {

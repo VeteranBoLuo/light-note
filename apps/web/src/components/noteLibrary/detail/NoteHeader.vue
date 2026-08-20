@@ -168,11 +168,11 @@
             <SvgIcon :src="icon.common.more" size="18" aria-hidden="true" />
           </BButton>
         </BDropdown>
-        <BTooltip :title="$t('noteDetail.save')">
+        <BTooltip :title="$t('noteDetail.saveVersion')">
           <BButton
             class="note-header-title-icon note-header-title-icon--save"
-            :aria-label="$t('noteDetail.save')"
-            @click="$emit('save', true)"
+            :aria-label="$t('noteDetail.saveVersion')"
+            @click="$emit('saveVersion')"
           >
             <SvgIcon :src="icon.noteDetail.saveLine" />
           </BButton>
@@ -260,6 +260,7 @@
     'focusout',
     'del',
     'save',
+    'saveVersion',
     'switchMode',
     'undoSwitch',
     'history',
