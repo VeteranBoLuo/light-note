@@ -31,7 +31,8 @@
       "@/*": ["src/*"],
       "@lightnote/shared/drawing-note": ["../../packages/shared/drawingNote.d.ts"],
       "@lightnote/shared/community-chat-stickers": ["../../packages/shared/communityChatStickers.d.ts"],
-      "@lightnote/shared/todo-reminder": ["../../packages/shared/todoReminder.d.ts"]
+      "@lightnote/shared/todo-reminder": ["../../packages/shared/todoReminder.d.ts"],
+      "@lightnote/shared/host-agent-protocol": ["../../packages/shared/hostAgentProtocol.d.ts"]
     },
     "types": ["vite/client"]
   },

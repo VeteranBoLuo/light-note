@@ -34,6 +34,7 @@
     "typecheck": "pnpm --filter web typecheck",
     "deploy:all": "bash scripts/deploy.sh",
     "deploy:web": "bash scripts/deploy-web.sh",
-    "deploy:server": "bash scripts/deploy-server.sh"
+    "deploy:server": "bash scripts/deploy-server.sh",
+    "deploy:host-agent": "bash scripts/deploy-host-agent.sh"
   }
 }

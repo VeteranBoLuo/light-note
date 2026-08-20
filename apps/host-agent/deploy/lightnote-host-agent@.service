@@ -1,0 +1,35 @@
+[Unit]
+Description=Light Note Host Agent
+After=network.target
+
+[Service]
+Type=simple
+User=%i
+Group=%i
+WorkingDirectory=/opt/lightnote-host-agent
+ExecStart=/usr/bin/node /opt/lightnote-host-agent/src/index.js
+EnvironmentFile=-/etc/lightnote-host-agent/agent.env
+RuntimeDirectory=lightnote-host-agent
+RuntimeDirectoryMode=0750
+StateDirectory=lightnote-host-agent
+StateDirectoryMode=0700
+UMask=0007
+Restart=on-failure
+RestartSec=3
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=tmpfs
+BindReadOnlyPaths=-%h/.pm2
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX
+SystemCallArchitectures=native
+ReadWritePaths=/run/lightnote-host-agent /var/lib/lightnote-host-agent
+
+[Install]
+WantedBy=multi-user.target

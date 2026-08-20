@@ -29,6 +29,8 @@ const ADMIN_ACTION_DEFINITIONS = Object.freeze(
     ['knowledge_base.update', 'knowledge_base', 'medium', true],
     ['knowledge_base.publish', 'knowledge_base', 'high', true],
     ['knowledge_base.archive', 'knowledge_base', 'high', true],
+    ['infra.nginx_reload', 'host_service', 'high', true],
+    ['infra.service_restart', 'host_service', 'high', true],
   ].map(([action, targetType, riskLevel, recoverable]) =>
     Object.freeze({
       action,

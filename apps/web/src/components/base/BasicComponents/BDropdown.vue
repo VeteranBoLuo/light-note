@@ -6,7 +6,7 @@
     @mouseleave="onLeave"
     @click="onTriggerClick"
   >
-    <slot />
+    <slot :open="visible" />
     <Teleport :to="teleportTarget">
       <transition name="b-dropdown-fade">
         <div
@@ -17,18 +17,22 @@
           :style="panelStyle"
           @mouseenter="onPanelEnter"
           @mouseleave="onLeave"
+          role="menu"
         >
           <template v-for="(item, index) in menuOptions" :key="item.key || item.label || `divider-${index}`">
             <div v-if="item.divider" class="b-dropdown-divider" />
-            <div
+            <BButton
               v-else
               class="b-dropdown-item"
-              :class="{ 'b-dropdown-item--danger': item.danger }"
+              :class="{ 'b-dropdown-item--danger': item.danger, 'b-dropdown-item--active': item.active }"
+              block
+              role="menuitem"
+              :aria-current="item.active ? 'page' : undefined"
               @click="onItemClick(item)"
             >
               <svg-icon v-if="item.icon" :src="item.icon" size="15" />
               <span>{{ item.label }}</span>
-            </div>
+            </BButton>
           </template>
         </div>
       </transition>
@@ -39,6 +43,7 @@
 <script lang="ts" setup>
   import { computed, onBeforeUnmount, nextTick, reactive, ref } from 'vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { getRootZoom } from '@/utils/zoom';
 
   type BDropdownTrigger = 'hover' | 'click';
@@ -48,6 +53,7 @@
     label?: string;
     icon?: string;
     danger?: boolean;
+    active?: boolean;
     divider?: boolean;
     function?: () => void;
   }
@@ -286,7 +292,11 @@
     align-items: center;
     gap: 8px;
     padding: 5px 12px;
+    height: auto;
+    justify-content: flex-start;
+    border: 0 !important;
     border-radius: 4px;
+    background: transparent !important;
     font-size: 14px;
     line-height: 22px;
     color: var(--text-color);
@@ -295,7 +305,13 @@
     transition: background-color 0.2s;
   }
   .b-dropdown-item:hover {
-    background-color: var(--menu-item-h-bg-color);
+    background-color: var(--menu-item-h-bg-color) !important;
+  }
+  .b-dropdown-item--active {
+    border-left: 3px solid var(--primary-color) !important;
+    color: var(--primary-color);
+    font-weight: 650;
+    background: var(--menu-item-h-bg-color) !important;
   }
   .b-dropdown-item--danger {
     color: var(--danger-color, #f04455);

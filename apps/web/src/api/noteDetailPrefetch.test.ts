@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { DRAWING_SCENE_VERSION } from '@lightnote/shared/drawing-note';
 
 const apiBasePost = vi.fn();
 
@@ -32,7 +33,7 @@ describe('noteDetailPrefetch', () => {
     expect(apiBasePost).toHaveBeenCalledTimes(1);
     expect(apiBasePost).toHaveBeenCalledWith(
       '/api/note/getNoteDetail',
-      { id: 'note-1', drawingSceneVersion: 2 },
+      { id: 'note-1', drawingSceneVersion: DRAWING_SCENE_VERSION },
       { silent: true, timeout: 15_000 },
     );
   });

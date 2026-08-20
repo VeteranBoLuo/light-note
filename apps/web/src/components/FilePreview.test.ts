@@ -241,11 +241,33 @@ async function mountImagePreview() {
   app.mount(host);
   await nextTick();
 
+  const image = document.body.querySelector<HTMLImageElement>('.preview-image')!;
+  await prepareImageLayout(image);
+
   cleanup = () => {
     app.unmount();
     host.remove();
   };
-  return document.body.querySelector<HTMLImageElement>('.preview-image')!;
+  return image;
+}
+
+async function prepareImageLayout(image: HTMLImageElement, naturalWidth = 720, naturalHeight = 6000) {
+  const viewport = image.closest<HTMLElement>('.preview-image-container');
+  if (!viewport) throw new Error('Image viewport did not render');
+  Object.defineProperty(viewport, 'clientWidth', { configurable: true, value: 360 });
+  Object.defineProperty(viewport, 'clientHeight', { configurable: true, value: 640 });
+  Object.defineProperty(viewport, 'scrollWidth', {
+    configurable: true,
+    get: () => Number.parseFloat(viewport.querySelector<HTMLElement>('.preview-image-stage')?.style.width || '360'),
+  });
+  Object.defineProperty(viewport, 'scrollHeight', {
+    configurable: true,
+    get: () => Number.parseFloat(viewport.querySelector<HTMLElement>('.preview-image-stage')?.style.height || '640'),
+  });
+  Object.defineProperty(image, 'naturalWidth', { configurable: true, value: naturalWidth });
+  Object.defineProperty(image, 'naturalHeight', { configurable: true, value: naturalHeight });
+  image.dispatchEvent(new Event('load'));
+  await nextTick();
 }
 
 async function mountUnsupportedPreview() {
@@ -658,7 +680,7 @@ describe('FilePreview mobile image gestures', () => {
     expect(window.history.state[MOBILE_OVERLAY_HISTORY_STATE_KEY]).toMatch(/^overlay-/);
   });
 
-  it('supports pinch zoom and pans the enlarged image with one finger', async () => {
+  it('turns an enlarged long image into a native scroll surface while retaining pinch zoom', async () => {
     const image = await mountImagePreview();
 
     const pinchStart = dispatchTouch(image, 'touchstart', [
@@ -673,13 +695,31 @@ describe('FilePreview mobile image gestures', () => {
 
     expect(pinchStart.defaultPrevented).toBe(true);
     expect(pinchMove.defaultPrevented).toBe(true);
-    expect(image.getAttribute('style')).toContain('scale(1.4)');
+    expect(document.body.querySelector('.zoom-value-btn')?.textContent).toContain('140%');
+    const stage = document.body.querySelector<HTMLElement>('.preview-image-stage');
+    expect(Number.parseFloat(stage?.style.height || '0')).toBeGreaterThan(640);
 
-    dispatchTouch(image, 'touchend', [{ clientX: 150, clientY: 150 }]);
-    dispatchTouch(image, 'touchmove', [{ clientX: 180, clientY: 190 }]);
+    dispatchTouch(image, 'touchend', []);
+    const singleTouchStart = dispatchTouch(image, 'touchstart', [{ clientX: 150, clientY: 150 }]);
+    const singleTouchMove = dispatchTouch(image, 'touchmove', [{ clientX: 150, clientY: 110 }]);
+
+    expect(singleTouchStart.defaultPrevented).toBe(false);
+    expect(singleTouchMove.defaultPrevented).toBe(false);
+    expect(image.closest('.preview-image-container')?.classList.contains('is-scrollable')).toBe(true);
+  });
+
+  it('lets desktop users drag the scroll surface after zooming a long image', async () => {
+    const image = await mountImagePreview();
+    const viewport = image.closest<HTMLElement>('.preview-image-container')!;
+    document.body.querySelectorAll<HTMLButtonElement>('.image-control-group button')[2]?.click();
     await nextTick();
+    viewport.scrollTop = 240;
 
-    expect(image.getAttribute('style')).toContain('translate(30px, 40px)');
+    viewport.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientY: 120 }));
+    viewport.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientY: 70 }));
+    viewport.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0, clientY: 70 }));
+
+    expect(viewport.scrollTop).toBe(290);
   });
 
   it('resets image transform when switching to another file', async () => {
@@ -705,6 +745,7 @@ describe('FilePreview mobile image gestures', () => {
     };
 
     const firstImage = document.body.querySelector<HTMLImageElement>('.preview-image')!;
+    await prepareImageLayout(firstImage);
     dispatchTouch(firstImage, 'touchstart', [
       { clientX: 100, clientY: 100 },
       { clientX: 200, clientY: 100 },
@@ -714,7 +755,7 @@ describe('FilePreview mobile image gestures', () => {
       { clientX: 220, clientY: 100 },
     ]);
     await nextTick();
-    expect(firstImage.getAttribute('style')).toContain('scale(1.4)');
+    expect(document.body.querySelector('.zoom-value-btn')?.textContent).toContain('140%');
 
     fileInfo.value = {
       ...fileInfo.value,
@@ -725,6 +766,8 @@ describe('FilePreview mobile image gestures', () => {
     await nextTick();
 
     const secondImage = document.body.querySelector<HTMLImageElement>('.preview-image')!;
-    expect(secondImage.getAttribute('style')).toContain('translate(0px, 0px) scale(1) rotate(0deg)');
+    await prepareImageLayout(secondImage);
+    expect(document.body.querySelector('.zoom-value-btn')?.textContent).toContain('100%');
+    expect(secondImage.getAttribute('style')).toContain('rotate(0deg)');
   });
 });

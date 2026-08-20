@@ -7,6 +7,16 @@ const MOBILE_ADMIN_META = { title: '后台管理', requireAuth: true, roles: [Ro
 
 const adminRouter: RouteRecordRaw[] = [
   {
+    path: '/serverManagement',
+    name: 'serverManagement',
+    meta: {
+      title: '服务器管理',
+      requireAuth: true,
+      roles: [RoleEnum.Root],
+    },
+    component: () => import('@/view/serverManagement/ServerManagement.vue'),
+  },
+  {
     meta: {
       title: '后台管理',
       keepAlive: true,

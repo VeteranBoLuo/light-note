@@ -1,0 +1,17 @@
+# 安装时把 <agent-user> 替换为运行 Host Agent 的现有非 root 应用用户；文件必须由 root 拥有且 chmod 0440。
+# 只授权 root 拥有、不可由应用用户改写的 helper 及固定参数；每一项都是精确命令，不使用通配参数。
+Cmnd_Alias LIGHTNOTE_HOST_AGENT = \
+  /usr/local/libexec/lightnote-host-helper capabilities, \
+  /usr/local/libexec/lightnote-host-helper nginx-reload, \
+  /usr/local/libexec/lightnote-host-helper pm2-status, \
+  /usr/local/libexec/lightnote-host-helper pm2-logs lightnote-api, \
+  /usr/local/libexec/lightnote-host-helper pm2-logs lightnote-document-worker, \
+  /usr/local/libexec/lightnote-host-helper pm2-logs lightnote-bookmark-icon-worker, \
+  /usr/local/libexec/lightnote-host-helper pm2-logs lightnote-resource-governance-worker, \
+  /usr/local/libexec/lightnote-host-helper journal-logs nginx, \
+  /usr/local/libexec/lightnote-host-helper journal-logs mysql, \
+  /usr/local/libexec/lightnote-host-helper journal-logs redis, \
+  /usr/local/libexec/lightnote-host-helper pm2-restart lightnote-document-worker, \
+  /usr/local/libexec/lightnote-host-helper pm2-restart lightnote-bookmark-icon-worker, \
+  /usr/local/libexec/lightnote-host-helper pm2-restart lightnote-resource-governance-worker
+<agent-user> ALL=(root) NOPASSWD: LIGHTNOTE_HOST_AGENT

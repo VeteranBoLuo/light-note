@@ -376,6 +376,31 @@ describe('手绘笔记专用保存边界', () => {
     expect(syncNoteResourceRefs).not.toHaveBeenCalled();
   });
 
+  it('专用保存接受 V3 笔画局部擦除采样', async () => {
+    const scene = JSON.stringify({
+      v: 3,
+      page: { width: 1448, height: 1448 },
+      elements: [
+        {
+          id: 's1',
+          kind: 'stroke',
+          color: '#1f2937',
+          width: 20,
+          points: [100, 200, 500, 200],
+          erasures: [{ id: 'erase1', width: 4, points: [300, 200] }],
+        },
+      ],
+    });
+    const res = mockRes();
+    await updateDrawingNote({ user: { id: 'u1' }, body: { id: 'drawing-1', title: '新草图', scene, revision: 3 } }, res);
+
+    expect(lastSent(res)).toMatchObject({ status: 200, data: { id: 'drawing-1', revision: 4 } });
+    expect(connection.query).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE note SET title=?, content=?'),
+      ['新草图', scene, 'u1', 4, 'drawing-1', 'u1'],
+    );
+  });
+
   it('无效或超限 scene 在获取事务连接前拒绝', async () => {
     const res = mockRes();
     await updateDrawingNote(

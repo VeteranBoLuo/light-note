@@ -6,6 +6,7 @@ import {
   normalizeDrawingRect,
   readDrawingClipboard,
   resetDrawingClipboard,
+  transformDrawingShapeErasures,
   translateDrawingElement,
   writeDrawingClipboard,
 } from './drawingSelection';
@@ -107,5 +108,40 @@ describe('drawingSelection', () => {
     expect(second.sequence).toBe(2);
     expect(second.elements.map((element) => element.id)).toEqual(['copy-3', 'copy-4']);
     resetDrawingClipboard();
+  });
+
+  it('形状移动、复制和缩放时擦除遮罩跟随对象且不共享坐标数组', () => {
+    const erasedShape: DrawingShapeElement = {
+      ...shape,
+      erasures: [{ id: 'erase', width: 8, points: [150, 120] }],
+    };
+    const cloned = cloneDrawingElement(erasedShape, 'shape-copy');
+    const translated = translateDrawingElement(erasedShape, 20, 30);
+    const resized = transformDrawingShapeErasures(erasedShape, { ...erasedShape, width: 400, height: 280 });
+
+    expect(cloned).toMatchObject({ erasures: [{ points: [150, 120] }] });
+    if (cloned.kind !== 'shape') throw new Error('expected shape');
+    expect(cloned.erasures?.[0].points).not.toBe(erasedShape.erasures?.[0].points);
+    expect(translated).toMatchObject({ x: 120, y: 150, erasures: [{ points: [170, 150] }] });
+    expect(resized.erasures?.[0].points).toEqual([200, 120]);
+
+    const horizontalLine: DrawingShapeElement = {
+      ...shape,
+      shape: 'line',
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 0,
+      erasures: [{ id: 'line-erase', width: 8, points: [50, 0] }],
+    };
+    const verticalLine = transformDrawingShapeErasures(horizontalLine, {
+      ...horizontalLine,
+      x: 10,
+      y: 20,
+      width: 0,
+      height: 200,
+    });
+    expect(verticalLine.erasures?.[0].points[0]).toBeCloseTo(10);
+    expect(verticalLine.erasures?.[0].points[1]).toBeCloseTo(120);
   });
 });

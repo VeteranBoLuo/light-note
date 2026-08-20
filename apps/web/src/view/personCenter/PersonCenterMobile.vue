@@ -194,6 +194,14 @@
               <template #subtitle>{{ t('personCenter.logs_user_mg') }}</template>
               <template #trailing><SvgIcon class="profile-row-arrow" :src="icon.arrow_right" size="17" /></template>
             </MobileListRow>
+            <MobileListRow interactive @click="goToProfileModule('/serverManagement')">
+              <template #leading
+                ><span class="profile-entry-icon"><SvgIcon :src="icon.infrastructure.server" size="20" /></span
+              ></template>
+              <template #title>{{ t('personCenter.serverManagement') }}</template>
+              <template #subtitle>{{ t('personCenter.serverManagementDescription') }}</template>
+              <template #trailing><SvgIcon class="profile-row-arrow" :src="icon.arrow_right" size="17" /></template>
+            </MobileListRow>
           </MobileListSurface>
         </section>
 

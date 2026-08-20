@@ -21,6 +21,10 @@
     "./todo-reminder": {
       "types": "./todoReminder.d.ts",
       "default": "./todoReminder.js"
+    },
+    "./host-agent-protocol": {
+      "types": "./hostAgentProtocol.d.ts",
+      "default": "./hostAgentProtocol.js"
     }
   }
 }

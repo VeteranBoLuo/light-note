@@ -1,0 +1,21 @@
+{
+  "name": "host-agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "轻笺本机服务器指标与封闭运维动作 Agent",
+  "type": "module",
+  "engines": {
+    "node": ">=18.20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "HOST_AGENT_SOCKET_PATH=/tmp/lightnote-host-agent.sock HOST_AGENT_STATE_DIR=/tmp/lightnote-host-agent-state node --watch --watch-preserve-output src/index.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@lightnote/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.6"
+  }
+}

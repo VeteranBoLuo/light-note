@@ -11,6 +11,14 @@ export interface DrawingStrokeElement {
   color: DrawingColor;
   width: DrawingStrokeWidth;
   points: number[];
+  /** 只作用于当前笔画的持久化像素擦除采样。 */
+  erasures?: DrawingErasureTrail[];
+}
+
+export interface DrawingErasureTrail {
+  id: string;
+  width: number;
+  points: number[];
 }
 
 export interface DrawingTextElement {
@@ -45,6 +53,8 @@ export interface DrawingShapeElement {
   height: number;
   color: DrawingColor;
   strokeWidth: DrawingStrokeWidth;
+  /** 只作用于当前形状轮廓的持久化像素擦除采样。 */
+  erasures?: DrawingErasureTrail[];
 }
 
 export type DrawingLegacyElement = DrawingStrokeElement | DrawingTextElement;
@@ -57,21 +67,31 @@ export interface DrawingLegacyScene {
 }
 
 export interface DrawingCurrentScene {
+  v: 3;
+  page: { width: 1448; height: 1448 };
+  elements: DrawingElement[];
+}
+
+export interface DrawingShapeScene {
   v: 2;
   page: { width: 1448; height: 1448 };
   elements: DrawingElement[];
 }
 
-export type DrawingScene = DrawingLegacyScene | DrawingCurrentScene;
+export type DrawingScene =
+  DrawingLegacyScene | DrawingShapeScene | DrawingCurrentScene;
 
 export declare const DRAWING_NOTE_TYPE: "drawing";
-export declare const DRAWING_SCENE_VERSION: 2;
+export declare const DRAWING_SCENE_VERSION: 3;
 export declare const DRAWING_LEGACY_SCENE_VERSION: 1;
+export declare const DRAWING_SHAPE_SCENE_VERSION: 2;
 export declare const DRAWING_SCENE_MAX_BYTES: 750000;
 export declare const DRAWING_SCENE_LIMITS: Readonly<{
   maxElements: 1000;
   maxStrokes: 800;
   maxPointPairs: 50000;
+  maxErasureTrails: 2000;
+  maxErasurePointPairs: 50000;
   maxTexts: 200;
   maxShapes: 300;
   maxTextCharacters: 50000;

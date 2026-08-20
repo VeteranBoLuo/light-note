@@ -602,6 +602,13 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/featureRequest/admin/edit'],
 ]);
 
+// 本机服务器信息与动作只能在 Root 自己的普通管理上下文访问；管理员预览/代管一律失败关闭。
+declare(ADMIN_POLICIES.ADMIN_ONLY, 'infrastructure', [
+  ['GET', '/infra/dashboard'],
+  ['GET', '/infra/logs/:serviceId'],
+  ['POST', '/infra/actions'],
+]);
+
 const normalizePath = (req) => {
   let path = String(req.originalUrl || req.path || '').split('?')[0];
   path = path.replace(/^\/api(?=\/)/, '');
@@ -653,6 +660,9 @@ function resolvePolicy(method, path) {
   if (/^\/resource-governance\/jobs\/[^/]+\/(?:retry|cancel)$/.test(path)) {
     const action = path.endsWith('/retry') ? 'retry' : 'cancel';
     return routePolicies.get(`${method} /resource-governance/jobs/:id/${action}`);
+  }
+  if (/^\/infra\/logs\/[^/]+$/.test(path)) {
+    return routePolicies.get(`${method} /infra/logs/:serviceId`);
   }
   return null;
 }

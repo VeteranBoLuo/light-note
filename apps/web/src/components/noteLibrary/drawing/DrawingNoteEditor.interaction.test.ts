@@ -1,6 +1,7 @@
-import { createApp, nextTick } from 'vue';
+import { createApp, nextTick, ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DrawingNoteEditor from './DrawingNoteEditor.vue';
+import { MOBILE_LAYOUT_CONTEXT } from '@/composables/useMobileLayout';
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),
@@ -46,6 +47,7 @@ function canvasContextStub() {
     moveTo: vi.fn(),
     lineTo: vi.fn(),
     stroke: vi.fn(),
+    drawImage: vi.fn(),
     fillText: vi.fn(),
     measureText: vi.fn(() => ({ width: 10 })),
     save: vi.fn(),
@@ -59,6 +61,7 @@ function canvasContextStub() {
     lineJoin: 'miter',
     font: '',
     textBaseline: 'alphabetic',
+    globalCompositeOperation: 'source-over',
   } as unknown as CanvasRenderingContext2D;
 }
 
@@ -130,8 +133,8 @@ describe('DrawingNoteEditor 活动手势撤销', () => {
   });
 
   it('中键和右键可直接平移画布，不切换工具或生成笔画', async () => {
-    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800);
-    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
+    const clientWidthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800);
+    const clientHeightSpy = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
     const updates: string[] = [];
     const host = document.createElement('div');
     document.body.append(host);
@@ -179,6 +182,8 @@ describe('DrawingNoteEditor 活动手势撤销', () => {
     expect(canvasElement.releasePointerCapture).toHaveBeenCalledTimes(2);
     app.unmount();
     host.remove();
+    clientWidthSpy.mockRestore();
+    clientHeightSpy.mockRestore();
   });
 
   it('P 与 V 切换画笔和选择工具，输入法组合与活动手势期间不误切换', async () => {
@@ -266,6 +271,144 @@ describe('DrawingNoteEditor 活动手势撤销', () => {
     expect(textButton.getAttribute('aria-pressed')).toBe('true');
     textarea.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
     await nextTick();
+
+    app.unmount();
+    host.remove();
+  });
+
+  it('移动端可从整条工具栏横滑，并用边界按钮翻到更多工具', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp(DrawingNoteEditor, {
+      content: JSON.stringify({ v: 2, page: { width: 1448, height: 1448 }, elements: [] }),
+    });
+    app.provide(MOBILE_LAYOUT_CONTEXT, ref(true));
+    app.mount(host);
+    await nextTick();
+
+    const toolbar = host.querySelector('.drawing-toolbar') as HTMLElement;
+    const scroll = host.querySelector('.drawing-toolbar-scroll') as HTMLElement;
+    Object.defineProperties(toolbar, {
+      setPointerCapture: { value: vi.fn() },
+      releasePointerCapture: { value: vi.fn() },
+    });
+    Object.defineProperties(scroll, {
+      clientWidth: { value: 180, configurable: true },
+      scrollWidth: { value: 420, configurable: true },
+    });
+    scroll.dispatchEvent(new Event('scroll'));
+    await nextTick();
+
+    const moreButton = host.querySelector('button[aria-label="note.drawingToolbarMoreTools"]') as HTMLButtonElement;
+    expect(moreButton).not.toBeNull();
+    expect(moreButton.disabled).toBe(false);
+    expect(moreButton.classList.contains('is-forward')).toBe(true);
+    expect(scroll.clientWidth).toBe(180);
+    expect(scroll.scrollWidth).toBe(420);
+    const mobileZoom = scroll.querySelector('.drawing-toolbar-zoom-mobile') as HTMLElement;
+    expect(mobileZoom).not.toBeNull();
+    expect(mobileZoom.querySelectorAll('button')).toHaveLength(3);
+    const history = host.querySelector('.drawing-toolbar-history') as HTMLElement;
+    const styleButton = history.querySelector('button[aria-label="note.drawingStyle"]') as HTMLButtonElement;
+    const eraserButton = scroll.querySelector('button[aria-label="note.drawingEraser"]') as HTMLButtonElement;
+    const selectButton = scroll.querySelector('button[aria-label="note.drawingSelect"]') as HTMLButtonElement;
+    const handButton = scroll.querySelector('button[aria-label="note.drawingHand"]') as HTMLButtonElement;
+    expect(selectButton.compareDocumentPosition(handButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(handButton.compareDocumentPosition(mobileZoom) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(scroll.querySelector('button[aria-label="note.drawingStyle"]')).toBeNull();
+    expect(styleButton.classList.contains('drawing-style-trigger-mobile')).toBe(true);
+    expect(styleButton.querySelector('.drawing-color-dot')).not.toBeNull();
+    expect(styleButton.querySelector('.drawing-style-size')?.textContent?.trim()).toBe('4');
+    expect(styleButton.disabled).toBe(false);
+    eraserButton.click();
+    await nextTick();
+    expect(styleButton.querySelector('.drawing-color-dot')).toBeNull();
+    expect(styleButton.querySelector('.drawing-style-size')?.textContent?.trim()).toBe('18');
+    expect(styleButton.disabled).toBe(false);
+    handButton.click();
+    await nextTick();
+    expect(styleButton.disabled).toBe(true);
+    expect(history.querySelector('button[aria-label="note.drawingStyle"]')).toBe(styleButton);
+    moreButton.click();
+    await nextTick();
+    expect(scroll.scrollLeft).toBeGreaterThan(0);
+
+    scroll.scrollLeft = 0;
+    scroll.dispatchEvent(new Event('scroll'));
+    const helpButton = host.querySelector('button[aria-label="note.drawingTouchHelp"]') as HTMLButtonElement;
+    const pointer = (target: Element, type: string, pointerId: number, clientX: number, clientY: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX, clientY });
+      Object.defineProperties(event, {
+        pointerId: { value: pointerId },
+        pointerType: { value: 'touch' },
+      });
+      target.dispatchEvent(event);
+    };
+    pointer(helpButton, 'pointerdown', 31, 150, 20);
+    pointer(toolbar, 'pointermove', 31, 50, 22);
+    pointer(toolbar, 'pointerup', 31, 50, 22);
+    expect(scroll.scrollLeft).toBe(100);
+    expect(toolbar.setPointerCapture).toHaveBeenCalledOnce();
+    expect(toolbar.releasePointerCapture).toHaveBeenCalledOnce();
+
+    app.unmount();
+    host.remove();
+  });
+
+  it('移动端手形工具支持双指以手势中心缩放并继续单指平移', async () => {
+    const updates: string[] = [];
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp(DrawingNoteEditor, {
+      content: JSON.stringify({ v: 2, page: { width: 1448, height: 1448 }, elements: [] }),
+      'onUpdate:content': (content: string) => updates.push(content),
+    });
+    app.provide(MOBILE_LAYOUT_CONTEXT, ref(true));
+    app.mount(host);
+    await nextTick();
+
+    const workspace = host.querySelector('.drawing-workspace') as HTMLElement;
+    const canvasElement = host.querySelector('canvas') as HTMLCanvasElement;
+    const handButton = host.querySelector('button[aria-label="note.drawingHand"]') as HTMLButtonElement;
+    Object.defineProperties(workspace, {
+      clientWidth: { value: 375 },
+      clientHeight: { value: 600 },
+      getBoundingClientRect: {
+        value: () => ({ left: 0, top: 0, right: 375, bottom: 600, width: 375, height: 600 }),
+      },
+    });
+    Object.defineProperties(canvasElement, {
+      setPointerCapture: { value: vi.fn() },
+      releasePointerCapture: { value: vi.fn() },
+      getBoundingClientRect: {
+        value: () => ({ left: 0, top: 0, right: 1448, bottom: 1448, width: 1448, height: 1448 }),
+      },
+    });
+
+    const zoomInButton = host.querySelector('.drawing-toolbar-zoom button:last-child') as HTMLButtonElement;
+    zoomInButton.click();
+    handButton.click();
+    const pointer = (type: string, pointerId: number, clientX: number, clientY: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX, clientY });
+      Object.defineProperties(event, {
+        pointerId: { value: pointerId },
+        pointerType: { value: 'touch' },
+      });
+      canvasElement.dispatchEvent(event);
+    };
+
+    pointer('pointerdown', 41, 100, 180);
+    pointer('pointerdown', 42, 200, 180);
+    pointer('pointermove', 42, 300, 180);
+    await nextTick();
+    expect((host.querySelector('.drawing-mobile-zoom-value') as HTMLButtonElement).textContent?.trim()).toBe('60%');
+
+    pointer('pointerup', 42, 300, 180);
+    pointer('pointermove', 41, 120, 200);
+    pointer('pointerup', 41, 120, 200);
+    expect(canvasElement.releasePointerCapture).toHaveBeenCalledWith(42);
+    expect(canvasElement.releasePointerCapture).toHaveBeenCalledWith(41);
+    expect(updates).toHaveLength(0);
 
     app.unmount();
     host.remove();
@@ -543,6 +686,138 @@ describe('DrawingNoteEditor 活动手势撤销', () => {
     expect(workspaceElement.dispatchEvent(shiftHorizontalEvent)).toBe(false);
     await nextTick();
     expect(cameraX()).toBeLessThan(horizontalCameraX);
+    app.unmount();
+    host.remove();
+  });
+
+  it('缩放按钮可达到 200% 并在上限停止', async () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(848);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(648);
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp(DrawingNoteEditor, {
+      content: JSON.stringify({ v: 2, page: { width: 1448, height: 1448 }, elements: [] }),
+    });
+    app.mount(host);
+    await nextTick();
+
+    const zoomInButton = host.querySelector('.drawing-toolbar-zoom button:last-child') as HTMLButtonElement;
+    for (let index = 0; index < 8; index += 1) zoomInButton.click();
+    await nextTick();
+
+    expect(host.querySelector('.drawing-zoom-label')?.textContent?.trim()).toBe('200%');
+    expect(zoomInButton.disabled).toBe(true);
+
+    app.unmount();
+    host.remove();
+  });
+
+  it('橡皮点击粗笔画后提交 V3 笔画遮罩而不是拆分中心线', async () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1496);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(1496);
+    const updates: string[] = [];
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp(DrawingNoteEditor, {
+      content: JSON.stringify({
+        v: 2,
+        page: { width: 1448, height: 1448 },
+        elements: [{ id: 'thick', kind: 'stroke', color: '#1f2937', width: 20, points: [100, 200, 500, 200] }],
+      }),
+      'onUpdate:content': (content: string) => updates.push(content),
+    });
+    app.mount(host);
+    await nextTick();
+    const canvasElement = host.querySelector('canvas') as HTMLCanvasElement;
+    const eraserButton = host.querySelector('button[aria-label="note.drawingEraser"]') as HTMLButtonElement;
+    Object.defineProperties(canvasElement, {
+      setPointerCapture: { value: vi.fn() },
+      releasePointerCapture: { value: vi.fn() },
+      getBoundingClientRect: {
+        value: () => ({ left: 0, top: 0, right: 1448, bottom: 1448, width: 1448, height: 1448 }),
+      },
+    });
+    eraserButton.click();
+    const pointer = (type: string) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: 300, clientY: 200 });
+      Object.defineProperty(event, 'pointerId', { value: 71 });
+      canvasElement.dispatchEvent(event);
+    };
+    pointer('pointerdown');
+    pointer('pointerup');
+    await nextTick();
+
+    expect(updates).toHaveLength(1);
+    const saved = JSON.parse(updates[0]);
+    expect(saved.v).toBe(3);
+    expect(saved.elements).toHaveLength(1);
+    expect(saved.elements[0]).toMatchObject({
+      id: 'thick',
+      points: [100, 200, 500, 200],
+      erasures: [{ width: 18, points: [300, 200] }],
+    });
+    app.unmount();
+    host.remove();
+  });
+
+  it('橡皮点击形状轮廓后提交 V3 形状遮罩', async () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1496);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(1496);
+    const updates: string[] = [];
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp(DrawingNoteEditor, {
+      content: JSON.stringify({
+        v: 2,
+        page: { width: 1448, height: 1448 },
+        elements: [
+          {
+            id: 'rectangle',
+            kind: 'shape',
+            shape: 'rectangle',
+            x: 100,
+            y: 200,
+            width: 400,
+            height: 300,
+            color: '#1f2937',
+            strokeWidth: 20,
+          },
+        ],
+      }),
+      'onUpdate:content': (content: string) => updates.push(content),
+    });
+    app.mount(host);
+    await nextTick();
+    const canvasElement = host.querySelector('canvas') as HTMLCanvasElement;
+    const eraserButton = host.querySelector('button[aria-label="note.drawingEraser"]') as HTMLButtonElement;
+    Object.defineProperties(canvasElement, {
+      setPointerCapture: { value: vi.fn() },
+      releasePointerCapture: { value: vi.fn() },
+      getBoundingClientRect: {
+        value: () => ({ left: 0, top: 0, right: 1448, bottom: 1448, width: 1448, height: 1448 }),
+      },
+    });
+    eraserButton.click();
+    const pointer = (type: string) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: 300, clientY: 200 });
+      Object.defineProperty(event, 'pointerId', { value: 72 });
+      canvasElement.dispatchEvent(event);
+    };
+    pointer('pointerdown');
+    pointer('pointerup');
+    await nextTick();
+
+    expect(updates).toHaveLength(1);
+    expect(JSON.parse(updates[0])).toMatchObject({
+      v: 3,
+      elements: [
+        {
+          id: 'rectangle',
+          kind: 'shape',
+          erasures: [{ width: 18, points: [300, 200] }],
+        },
+      ],
+    });
     app.unmount();
     host.remove();
   });

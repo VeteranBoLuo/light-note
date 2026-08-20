@@ -1,20 +1,19 @@
 #!/usr/bin/env bash
-# 总控:并行部署 web + server(总耗时 ≈ max,非相加)
-set -uo pipefail
+# 总控：按共享协议兼容顺序部署 Host Agent → server → web
+set -euo pipefail
 cd "$(dirname "$0")"
 
 if [ -n "$(git -C .. status --porcelain)" ]; then
   echo "⚠️  工作树有未提交改动 —— 你正在部署未提交/未推送的代码"
 fi
 
-echo "🚀  并行部署 web + server…"
-bash deploy-web.sh    >/tmp/ln-dep-web.log 2>&1 & WEB=$!
-bash deploy-server.sh >/tmp/ln-dep-srv.log 2>&1 & SRV=$!
+echo "🚀  部署 Host Agent…"
+bash deploy-host-agent.sh
 
-FAIL=0
-wait "$WEB" || { echo "❌ 前端部署失败"; FAIL=1; }
-wait "$SRV" || { echo "❌ 后端部署失败"; FAIL=1; }
+echo "🚀  部署后端…"
+bash deploy-server.sh
 
-echo "──────── web ────────";   tail -5 /tmp/ln-dep-web.log
-echo "──────── server ─────";   tail -5 /tmp/ln-dep-srv.log
-[ "$FAIL" -eq 0 ] && echo "🎉 全部完成" || { echo "⚠️ 有失败,见上方日志"; exit 1; }
+echo "🚀  部署前端…"
+bash deploy-web.sh
+
+echo "🎉 全部完成"

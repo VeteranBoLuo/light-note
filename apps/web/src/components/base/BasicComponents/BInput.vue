@@ -165,7 +165,11 @@
     inputEl.value?.focus();
   }
 
-  defineExpose({ focus, inputEl });
+  function select() {
+    inputEl.value?.select();
+  }
+
+  defineExpose({ focus, select, inputEl });
 
   const inputTheme = computed(() => {
     if (props.theme) {

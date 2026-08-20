@@ -24,6 +24,7 @@ import aiEvaluationRouter from '../router/aiEvaluation.js';
 import resourceGovernanceRouter from '../router/resourceGovernance.js';
 import communityChatRouter from '../router/communityChat.js';
 import supportRouter from '../router/support.js';
+import infraRouter from '../router/infra.js';
 
 export { INTERNAL_ROLES } from './internalRoles.js';
 
@@ -205,6 +206,10 @@ export const baseRouter = [
   {
     path: '/common',
     router: commonRouter,
+  },
+  {
+    path: '/infra',
+    router: infraRouter,
   },
   {
     path: '/note',

@@ -38,4 +38,16 @@ describe('adminActionRegistry', () => {
       });
     }
   });
+
+  it('服务器重载与 Worker 重启均纳入高风险审计且声明可恢复', () => {
+    for (const action of ['infra.nginx_reload', 'infra.service_restart']) {
+      expect(assertRegisteredAdminAction(action)).toMatchObject({
+        action,
+        targetType: 'host_service',
+        riskLevel: 'high',
+        recoverable: true,
+        auditRequired: true,
+      });
+    }
+  });
 });

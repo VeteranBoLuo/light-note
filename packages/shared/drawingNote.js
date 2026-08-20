@@ -1,11 +1,14 @@
 export const DRAWING_NOTE_TYPE = "drawing";
-export const DRAWING_SCENE_VERSION = 2;
+export const DRAWING_SCENE_VERSION = 3;
 export const DRAWING_LEGACY_SCENE_VERSION = 1;
+export const DRAWING_SHAPE_SCENE_VERSION = 2;
 export const DRAWING_SCENE_MAX_BYTES = 750_000;
 export const DRAWING_SCENE_LIMITS = Object.freeze({
   maxElements: 1_000,
   maxStrokes: 800,
   maxPointPairs: 50_000,
+  maxErasureTrails: 2_000,
+  maxErasurePointPairs: 50_000,
   maxTexts: 200,
   maxShapes: 300,
   maxTextCharacters: 50_000,
@@ -41,8 +44,9 @@ const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/u;
 const COLOR_PATTERN = /^#[0-9a-f]{6}$/iu;
 const SHAPE_TYPES = new Set(DRAWING_SHAPE_TYPES);
 const MIN_COORDINATE = -4096;
-// V1 最右侧合法坐标升级时会整体右移 212，V2 上限需覆盖该值，避免旧数据在升级时被截断或拒绝。
+// V1 最右侧合法坐标升级时会整体右移 212，当前协议上限需覆盖该值，避免旧数据在升级时被截断或拒绝。
 const MAX_COORDINATE = 8404;
+const ERASER_WIDTH_RANGE = Object.freeze({ min: 4, max: 64 });
 
 export class DrawingSceneValidationError extends Error {
   constructor(code, message) {
@@ -97,7 +101,42 @@ function normalizeColor(value) {
   return color.toLowerCase();
 }
 
-function normalizeStroke(element) {
+function normalizeErasureTrail(trail) {
+  if (
+    !trail ||
+    typeof trail !== "object" ||
+    Array.isArray(trail) ||
+    !Array.isArray(trail.points) ||
+    trail.points.length < 2 ||
+    trail.points.length % 2 !== 0
+  ) {
+    invalid("DRAWING_INVALID_ERASURE", "橡皮擦轨迹坐标无效");
+  }
+  return {
+    id: normalizeElementId(trail.id),
+    width: boundedInteger(trail.width, ERASER_WIDTH_RANGE, "橡皮擦宽度"),
+    points: trail.points.map((point, index) =>
+      finiteCoordinate(point, `erasures.points[${index}]`),
+    ),
+  };
+}
+
+function normalizeElementErasures(element, allowErasures) {
+  if (!allowErasures || element.erasures === undefined) return undefined;
+  if (!Array.isArray(element.erasures)) {
+    invalid("DRAWING_INVALID_ERASURE", "橡皮擦轨迹无效");
+  }
+  const erasures = element.erasures.map(normalizeErasureTrail);
+  const ids = new Set();
+  erasures.forEach((trail) => {
+    if (ids.has(trail.id))
+      invalid("DRAWING_DUPLICATE_ERASURE_ID", "橡皮擦轨迹 ID 重复");
+    ids.add(trail.id);
+  });
+  return erasures.length ? erasures : undefined;
+}
+
+function normalizeStroke(element, allowErasures) {
   if (
     !Array.isArray(element.points) ||
     element.points.length < 2 ||
@@ -105,7 +144,7 @@ function normalizeStroke(element) {
   ) {
     invalid("DRAWING_INVALID_POINTS", "画笔轨迹坐标无效");
   }
-  return {
+  const stroke = {
     id: normalizeElementId(element.id),
     kind: "stroke",
     color: normalizeColor(element.color),
@@ -118,6 +157,9 @@ function normalizeStroke(element) {
       finiteCoordinate(point, `points[${index}]`),
     ),
   };
+  const erasures = normalizeElementErasures(element, allowErasures);
+  if (erasures) stroke.erasures = erasures;
+  return stroke;
 }
 
 function normalizeText(element) {
@@ -141,7 +183,7 @@ function normalizeText(element) {
   };
 }
 
-function normalizeShape(element) {
+function normalizeShape(element, allowErasures) {
   const shape = String(element.shape || "");
   if (!SHAPE_TYPES.has(shape))
     invalid("DRAWING_INVALID_SHAPE", "手绘形状不受支持");
@@ -154,7 +196,7 @@ function normalizeShape(element) {
   ) {
     invalid("DRAWING_INVALID_SHAPE", "手绘形状尺寸无效");
   }
-  return {
+  const normalized = {
     id: normalizeElementId(element.id),
     kind: "shape",
     shape,
@@ -169,6 +211,9 @@ function normalizeShape(element) {
       "形状线宽",
     ),
   };
+  const erasures = normalizeElementErasures(element, allowErasures);
+  if (erasures) normalized.erasures = erasures;
+  return normalized;
 }
 
 export function createEmptyDrawingScene() {
@@ -186,6 +231,7 @@ export function normalizeDrawingScene(input) {
   const version = Number(input.v);
   if (
     version !== DRAWING_SCENE_VERSION &&
+    version !== DRAWING_SHAPE_SCENE_VERSION &&
     version !== DRAWING_LEGACY_SCENE_VERSION
   ) {
     invalid("DRAWING_UNSUPPORTED_VERSION", "手绘正文版本不受支持");
@@ -211,6 +257,8 @@ export function normalizeDrawingScene(input) {
   const ids = new Set();
   let strokeCount = 0;
   let pointPairCount = 0;
+  let erasureTrailCount = 0;
+  let erasurePointPairCount = 0;
   let textCount = 0;
   let shapeCount = 0;
   let textCharacterCount = 0;
@@ -220,16 +268,31 @@ export function normalizeDrawingScene(input) {
     }
     let normalized;
     if (element.kind === "stroke") {
-      normalized = normalizeStroke(element);
+      normalized = normalizeStroke(element, version === DRAWING_SCENE_VERSION);
       strokeCount += 1;
       pointPairCount += normalized.points.length / 2;
+      erasureTrailCount += normalized.erasures?.length || 0;
+      erasurePointPairCount +=
+        normalized.erasures?.reduce(
+          (count, trail) => count + trail.points.length / 2,
+          0,
+        ) || 0;
     } else if (element.kind === "text") {
       normalized = normalizeText(element);
       textCount += 1;
       textCharacterCount += normalized.text.length;
-    } else if (element.kind === "shape" && version === DRAWING_SCENE_VERSION) {
-      normalized = normalizeShape(element);
+    } else if (
+      element.kind === "shape" &&
+      version !== DRAWING_LEGACY_SCENE_VERSION
+    ) {
+      normalized = normalizeShape(element, version === DRAWING_SCENE_VERSION);
       shapeCount += 1;
+      erasureTrailCount += normalized.erasures?.length || 0;
+      erasurePointPairCount +=
+        normalized.erasures?.reduce(
+          (count, trail) => count + trail.points.length / 2,
+          0,
+        ) || 0;
     } else {
       invalid("DRAWING_UNSUPPORTED_ELEMENT", "手绘元素类型不受支持");
     }
@@ -244,6 +307,12 @@ export function normalizeDrawingScene(input) {
   }
   if (pointPairCount > DRAWING_SCENE_LIMITS.maxPointPairs) {
     invalid("DRAWING_TOO_MANY_POINTS", "画笔轨迹点数量超出限制");
+  }
+  if (
+    erasureTrailCount > DRAWING_SCENE_LIMITS.maxErasureTrails ||
+    erasurePointPairCount > DRAWING_SCENE_LIMITS.maxErasurePointPairs
+  ) {
+    invalid("DRAWING_TOO_MANY_ERASURES", "橡皮擦轨迹数量超出限制");
   }
   if (
     textCount > DRAWING_SCENE_LIMITS.maxTexts ||
@@ -287,7 +356,10 @@ export function serializeDrawingScene(value) {
 export function upgradeDrawingScene(value) {
   const scene = parseDrawingScene(value);
   if (scene.v === DRAWING_SCENE_VERSION) return scene;
-  const offsetX = (DRAWING_PAGE.width - DRAWING_LEGACY_PAGE.width) / 2;
+  const offsetX =
+    scene.v === DRAWING_LEGACY_SCENE_VERSION
+      ? (DRAWING_PAGE.width - DRAWING_LEGACY_PAGE.width) / 2
+      : 0;
   return normalizeDrawingScene({
     v: DRAWING_SCENE_VERSION,
     page: DRAWING_PAGE,
