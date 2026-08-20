@@ -24,7 +24,9 @@
               layout-mode="slot"
               pause-when-offscreen
             />
-            <SvgIcon v-else :src="userInfo?.headPicture || icon.navigation.user" size="38" />
+            <span v-else class="user-360__plain-avatar">
+              <SvgIcon :src="userInfo?.headPicture || icon.navigation.user" size="38" />
+            </span>
           </span>
           <span class="user-360__identity-copy">
             <strong>{{ displayName }}</strong>
@@ -506,9 +508,22 @@
     color: var(--primary-color);
   }
 
-  .user-360__avatar :deep(img) {
-    width: 100%;
-    height: 100%;
+  .user-360__plain-avatar {
+    display: inline-flex;
+    width: 38px;
+    height: 38px;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-radius: 50%;
+  }
+
+  .user-360__plain-avatar :deep(img),
+  .user-360__plain-avatar :deep(.icon-base64),
+  .user-360__plain-avatar :deep(.icon-fixed-base64) {
+    width: 100% !important;
+    height: 100% !important;
+    border-radius: inherit;
     object-fit: cover;
   }
 

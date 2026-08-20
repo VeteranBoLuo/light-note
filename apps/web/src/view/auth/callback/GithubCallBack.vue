@@ -40,6 +40,7 @@
     rememberGithubOAuthFlow,
   } from '@/utils/githubOAuth.ts';
   import { clearQuickSaveAuthReturnPath, resolveQuickSaveAuthReturnPath } from '@/utils/quickSaveAuthReturn.ts';
+  import { persistAndroidAuthSession } from '@/utils/androidBridge.ts';
   import { bookmarkStore, useUserStore } from '@/store';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
 
@@ -136,6 +137,8 @@
       status.value = cRes.status;
       if (cRes.status === 200) {
         markLoggedIn();
+        if (cRes.data?.sid) localStorage.setItem('rememberedSid', cRes.data.sid);
+        persistAndroidAuthSession();
         // 与邮箱认证一致：成功后先把 /me 返回的偏好落到 localStorage，
         // 再按登录/注册流程进入应用。GitHub 换票接口不含 preferences，因此需要单独拉 /me。
         let finalPrefs = {};

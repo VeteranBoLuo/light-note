@@ -170,12 +170,14 @@
       <li class="admin-stat-card">
         <span class="admin-stat-label">活跃用户</span>
         <strong class="admin-stat-value">{{ n(data?.active.today) }}</strong>
-        <span class="admin-stat-hint">登录会话口径</span>
+        <span class="admin-stat-hint">{{ t('adminOverview.activeUserHint') }}</span>
+        <span v-if="baselineText('activeUsers')" class="ov-today__baseline">{{ baselineText('activeUsers') }}</span>
       </li>
       <li class="admin-stat-card">
         <span class="admin-stat-label">AI 调用</span>
         <strong class="admin-stat-value">{{ n(data?.ai.todayCount) }}</strong>
         <span class="admin-stat-hint">Token {{ n(data?.ai.todayTokens) }}</span>
+        <span v-if="baselineText('aiCalls')" class="ov-today__baseline">{{ baselineText('aiCalls') }}</span>
       </li>
       <li class="admin-stat-card">
         <span class="admin-stat-label">API 请求</span>

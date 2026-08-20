@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createPinia } from 'pinia';
@@ -35,6 +35,7 @@ function item(id: string, occurrenceNo: number): TodoItem {
 
 function mountGroup(selectable = false) {
   const items = [item('day-1', 1), item('day-2', 2)];
+  const onPreview = vi.fn();
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp({
@@ -45,6 +46,7 @@ function mountGroup(selectable = false) {
           representative: items[0],
           items,
           selectable,
+          onPreview,
         });
     },
   });
@@ -56,7 +58,7 @@ function mountGroup(selectable = false) {
     app.unmount();
     host.remove();
   };
-  return host;
+  return { host, items, onPreview };
 }
 
 afterEach(() => {
@@ -66,7 +68,7 @@ afterEach(() => {
 
 describe('TodoSeriesGroup', () => {
   it('默认只展示当前项，点击后在系列明细抽屉查看独立实例', async () => {
-    const host = mountGroup();
+    const { host } = mountGroup();
     await nextTick();
     expect(host.querySelectorAll('.todo-item')).toHaveLength(1);
     expect(host.querySelector('.todo-series-group__toggle')?.textContent).toContain('查看同系列 2 项');
@@ -78,9 +80,17 @@ describe('TodoSeriesGroup', () => {
   });
 
   it('批量选择态自动展开全部实例，避免隐藏已选项', async () => {
-    const host = mountGroup(true);
+    const { host } = mountGroup(true);
     await nextTick();
     expect(host.querySelectorAll('.todo-item')).toHaveLength(2);
     expect(host.querySelector('.todo-series-group__toggle')).toBeNull();
+  });
+
+  it('代表项正文默认向上层发出预览', async () => {
+    const { host, items, onPreview } = mountGroup();
+    await nextTick();
+
+    host.querySelector<HTMLElement>('.todo-item__body')!.click();
+    expect(onPreview).toHaveBeenCalledWith(items[0]);
   });
 });

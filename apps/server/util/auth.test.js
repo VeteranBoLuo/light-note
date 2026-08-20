@@ -1,7 +1,8 @@
-import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 const query = vi.fn();
 const getSession = vi.fn();
+const removeSession = vi.fn();
 const getAdminContext = vi.fn();
 const getAdminContextMetadata = vi.fn();
 const recordAdminContextAudit = vi.fn();
@@ -11,7 +12,7 @@ vi.mock('./sessionStore.js', () => ({
   cleanupLegacyElevatedVisitorSessions: vi.fn(),
   createSession: vi.fn(),
   getSession,
-  removeSession: vi.fn(),
+  removeSession,
 }));
 vi.mock('./adminContextStore.js', () => ({ getAdminContext, getAdminContextMetadata }));
 vi.mock('./adminContextAudit.js', () => ({ recordAdminContextAudit }));
@@ -20,8 +21,14 @@ vi.mock('./conversion.js', () => ({ recordConversionEvent: vi.fn() }));
 // auth.js 依赖 common.js(resultData),存在 common.js↔router↔handler 循环依赖:
 // 先 import common.js 让 handler 作为叶子完成初始化,规避循环(同 commonHandle.test.js)。
 await import('./common.js');
-const { accountBanMiddleware, authMiddleware, ensureNotVisitor, ensureUserOrAdminPolicy, issueLoginSession } =
-  await import('./auth.js');
+const {
+  accountBanMiddleware,
+  authMiddleware,
+  ensureNotVisitor,
+  ensureUserOrAdminPolicy,
+  issueLoginSession,
+  logoutCurrentSession,
+} = await import('./auth.js');
 
 function mockRes() {
   const res = {};
@@ -37,7 +44,15 @@ function mockRes() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  query.mockReset();
+  getSession.mockReset();
+  getAdminContext.mockReset();
+  getAdminContextMetadata.mockReset();
   getAdminContextMetadata.mockResolvedValue(null);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe('issueLoginSession 设备归并', () => {
@@ -64,6 +79,120 @@ describe('issueLoginSession 设备归并', () => {
       expect.objectContaining({ userId: 'user-1', deviceId: 'new-device-id-1234' }),
     );
     expect(res.cookie).toHaveBeenCalledWith('sid', 'new-session', expect.objectContaining({ httpOnly: true }));
+  });
+});
+
+describe('authMiddleware 会话候选恢复', () => {
+  it('Cookie 与 Header 都有效时始终使用 Cookie 身份', async () => {
+    getSession.mockResolvedValue({ user_id: 'cookie-user', expires_in_seconds: 600 });
+    query.mockResolvedValueOnce([[{ id: 'cookie-user', alias: 'cookie', role: 'user', del_flag: 0 }]]);
+    const req = {
+      headers: { cookie: 'sid=cookie-sid', 'x-session-id': 'header-sid' },
+      originalUrl: '/api/user/me',
+      path: '/user/me',
+    };
+    const res = mockRes();
+    const next = vi.fn();
+
+    await authMiddleware(req, res, next);
+
+    expect(getSession).toHaveBeenCalledTimes(1);
+    expect(getSession).toHaveBeenCalledWith('cookie-sid');
+    expect(req.user).toMatchObject({ id: 'cookie-user', sessionId: 'cookie-sid', isAuthenticated: true });
+    expect(res.cookie).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('旧 Cookie 失效但备用 SID 有效时恢复登录并修复 Cookie', async () => {
+    getSession.mockResolvedValueOnce(null).mockResolvedValueOnce({ user_id: 'root-1', expires_in_seconds: 420 });
+    query.mockResolvedValueOnce([[{ id: 'root-1', alias: 'root', role: 'root', del_flag: 0 }]]);
+    const req = {
+      headers: { cookie: 'sid=stale-cookie', 'x-session-id': 'current-sid' },
+      originalUrl: '/api/user/me',
+      path: '/user/me',
+    };
+    const res = mockRes();
+    const next = vi.fn();
+
+    await authMiddleware(req, res, next);
+
+    expect(getSession.mock.calls.map(([sid]) => sid)).toEqual(['stale-cookie', 'current-sid']);
+    expect(req.user).toMatchObject({ id: 'root-1', role: 'root', sessionId: 'current-sid', isAuthenticated: true });
+    expect(res.cookie).toHaveBeenCalledWith(
+      'sid',
+      'current-sid',
+      expect.objectContaining({ httpOnly: true, maxAge: 420_000 }),
+    );
+    expect(res.clearCookie).not.toHaveBeenCalled();
+    expect(res.setHeader).not.toHaveBeenCalledWith('X-Auth-Expired', '1');
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('Cookie 缺失但备用 SID 有效时同样补写 Cookie', async () => {
+    getSession.mockResolvedValue({ user_id: 'user-1', expires_in_seconds: 300 });
+    query.mockResolvedValueOnce([[{ id: 'user-1', role: 'user', del_flag: 0 }]]);
+    const req = {
+      headers: { 'x-session-id': 'remembered-sid' },
+      originalUrl: '/api/user/me',
+      path: '/user/me',
+    };
+    const res = mockRes();
+
+    await authMiddleware(req, res, vi.fn());
+
+    expect(req.user).toMatchObject({ id: 'user-1', sessionId: 'remembered-sid', isAuthenticated: true });
+    expect(res.cookie).toHaveBeenCalledWith('sid', 'remembered-sid', expect.objectContaining({ maxAge: 300_000 }));
+  });
+
+  it('Cookie 与备用 SID 均失效时才明确降级游客并清理 Cookie', async () => {
+    getSession.mockResolvedValue(null);
+    query.mockResolvedValueOnce([[{ id: 'visitor-1', role: 'visitor', del_flag: 0 }]]);
+    const req = {
+      headers: { cookie: 'sid=stale-cookie', 'x-session-id': 'stale-header' },
+      originalUrl: '/api/user/me',
+      path: '/user/me',
+    };
+    const res = mockRes();
+    const next = vi.fn();
+
+    await authMiddleware(req, res, next);
+
+    expect(getSession.mock.calls.map(([sid]) => sid)).toEqual(['stale-cookie', 'stale-header']);
+    expect(req.user).toMatchObject({ id: 'visitor-1', role: 'visitor', isAuthenticated: false });
+    expect(res.setHeader).toHaveBeenCalledWith('X-Auth-Expired', '1');
+    expect(res.clearCookie).toHaveBeenCalledTimes(1);
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('会话基础设施异常时返回可重试错误，不伪装成游客或清理凭证', async () => {
+    getSession.mockRejectedValue(new Error('database unavailable'));
+    const req = {
+      headers: { cookie: 'sid=current-cookie', 'x-session-id': 'remembered-sid' },
+      originalUrl: '/api/user/me',
+      path: '/user/me',
+    };
+    const res = mockRes();
+    const next = vi.fn();
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await authMiddleware(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'AUTH_UNAVAILABLE' } }));
+    expect(res.clearCookie).not.toHaveBeenCalled();
+    expect(query).not.toHaveBeenCalled();
+  });
+});
+
+describe('logoutCurrentSession', () => {
+  it('优先撤销中间件实际认证的恢复会话，而不是请求中的陈旧 Cookie', async () => {
+    const res = mockRes();
+
+    await logoutCurrentSession({ headers: { cookie: 'sid=stale-cookie' }, user: { sessionId: 'recovered-sid' } }, res);
+
+    expect(removeSession).toHaveBeenCalledWith('recovered-sid');
+    expect(res.clearCookie).toHaveBeenCalledTimes(1);
   });
 });
 

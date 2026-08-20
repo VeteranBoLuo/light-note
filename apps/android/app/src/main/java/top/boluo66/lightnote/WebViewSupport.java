@@ -198,6 +198,11 @@ final class WebViewSupport {
         cookieManager.setAcceptThirdPartyCookies(webView, true);
     }
 
+    /** 把内存中的最新 Cookie 同步到磁盘，避免进程关闭后恢复出登录前的旧会话。 */
+    static void flushCookies() {
+        CookieManager.getInstance().flush();
+    }
+
     /** 系统主题名，与网页侧 data-theme 用同一套字面量（night / day），省掉两边的映射。 */
     static String systemThemeName(Context context) {
         return WindowInsetsSupport.isNightMode(context) ? "night" : "day";

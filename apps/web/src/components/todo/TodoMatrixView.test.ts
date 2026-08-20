@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick } from 'vue';
 import { createI18n } from 'vue-i18n';
@@ -6,6 +8,7 @@ import TodoMatrixView from './TodoMatrixView.vue';
 import type { TodoItem } from '@/api/todoApi';
 import zhCN from '@/i18n/locales/zh-CN';
 
+const source = readFileSync(resolve(process.cwd(), 'src/components/todo/TodoMatrixView.vue'), 'utf8');
 let cleanup: (() => void) | undefined;
 
 function localDateTime(date: Date) {
@@ -39,6 +42,7 @@ function mountMatrix(options: { mobile?: boolean; items?: TodoItem[] } = {}) {
     todo('other-urgent', '普通优先今天截止', 1, localDateTime(today)),
     todo('other-later', '低优先无日期', 0, null),
   ];
+  const onPreview = vi.fn();
   const onEdit = vi.fn();
   const onDelete = vi.fn();
   const onToggleComplete = vi.fn();
@@ -50,6 +54,7 @@ function mountMatrix(options: { mobile?: boolean; items?: TodoItem[] } = {}) {
         h(TodoMatrixView, {
           items,
           mobile: options.mobile,
+          onPreview,
           onEdit,
           onDelete,
           onToggleComplete,
@@ -72,7 +77,7 @@ function mountMatrix(options: { mobile?: boolean; items?: TodoItem[] } = {}) {
     app.unmount();
     host.remove();
   };
-  return { host, items, onEdit, onDelete, onToggleComplete };
+  return { host, items, onPreview, onEdit, onDelete, onToggleComplete };
 }
 
 afterEach(() => {
@@ -81,8 +86,8 @@ afterEach(() => {
 });
 
 describe('TodoMatrixView', () => {
-  it('桌面端在中性 2×2 矩阵中渲染计数，并复用既有编辑、完成、删除动作', async () => {
-    const { host, items, onEdit, onDelete, onToggleComplete } = mountMatrix();
+  it('桌面端在中性 2×2 矩阵中渲染计数，并复用既有预览、完成、删除动作', async () => {
+    const { host, items, onPreview, onEdit, onDelete, onToggleComplete } = mountMatrix();
     await nextTick();
 
     expect(host.querySelectorAll('.todo-matrix__quadrant')).toHaveLength(4);
@@ -91,14 +96,26 @@ describe('TodoMatrixView', () => {
     }
 
     host.querySelector<HTMLButtonElement>('.todo-matrix-card__content')!.click();
-    expect(onEdit).toHaveBeenCalledWith(items[0]);
+    expect(onPreview).toHaveBeenCalledWith(items[0]);
+    expect(onEdit).not.toHaveBeenCalled();
 
+    onPreview.mockClear();
+    host.querySelector<HTMLElement>('.todo-matrix-card')!.click();
+    expect(onPreview).toHaveBeenCalledWith(items[0]);
+
+    onPreview.mockClear();
+    host.querySelector<HTMLElement>('.todo-matrix-card__priority')!.click();
+    expect(onPreview).toHaveBeenCalledWith(items[0]);
+
+    onPreview.mockClear();
     host.querySelector<HTMLElement>('.todo-matrix-card__checkbox')!.click();
     expect(onToggleComplete).toHaveBeenCalledWith(items[0], true);
+    expect(onPreview).not.toHaveBeenCalled();
 
     host.querySelector<HTMLButtonElement>('.todo-matrix-card__more')!.click();
     await nextTick();
     await nextTick();
+    expect(onPreview).not.toHaveBeenCalled();
     document.querySelector<HTMLButtonElement>('.b-action-menu__item.is-danger')!.click();
     expect(onDelete).toHaveBeenCalledWith(items[0]);
   });
@@ -122,27 +139,34 @@ describe('TodoMatrixView', () => {
   it('固定日程在四象限只显示下一项，系列胶囊可打开共享明细抽屉且不误触编辑', async () => {
     const now = new Date();
     const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 12);
+    const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    const occurrenceDate = (value: Date) =>
+      `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
     const series = { id: 'series-1', repeatMode: 'scheduled', status: 'active' } as TodoItem['series'];
     const first = {
       ...todo('series-1', '每日推广', 1, localDateTime(tomorrow)),
       seriesId: 'series-1',
       series,
       occurrenceNo: 1,
-      occurrenceDate: '2026-08-18',
+      occurrenceDate: occurrenceDate(yesterday),
     };
     const second = {
       ...todo('series-2', '每日推广', 1, localDateTime(tomorrow)),
       seriesId: 'series-1',
       series,
       occurrenceNo: 2,
-      occurrenceDate: '2026-08-19',
+      occurrenceDate: occurrenceDate(now),
     };
-    const { host, onEdit } = mountMatrix({ items: [first, second, todo('single', '单个待办', 1, null)] });
+    const { host, onPreview, onEdit } = mountMatrix({
+      items: [first, second, todo('single', '单个待办', 1, null)],
+    });
     await nextTick();
 
     expect(host.querySelectorAll('.todo-matrix-card')).toHaveLength(2);
     expect(host.querySelectorAll('.todo-matrix-card__series')).toHaveLength(1);
     expect(host.querySelector('.todo-matrix-card__series')?.textContent).toContain('今天 1 · 错过 1 · 后续 0');
+    expect(source).not.toContain('max-width: 180px;');
+    expect(source).toMatch(/\.todo-matrix-card__series\s*\{[\s\S]*?max-width:\s*100%;/);
 
     const trigger = host.querySelector<HTMLButtonElement>('.todo-matrix-card__series-trigger')!;
     expect(trigger.getAttribute('aria-label')).toContain('查看“每日推广”系列明细，共 2 项');
@@ -151,6 +175,7 @@ describe('TodoMatrixView', () => {
     await nextTick();
 
     expect(onEdit).not.toHaveBeenCalled();
+    expect(onPreview).not.toHaveBeenCalled();
     expect(trigger.getAttribute('aria-expanded')).toBe('true');
     expect(document.querySelector('.b-drawer-wrapper')).not.toBeNull();
     expect(document.querySelectorAll('.todo-series-drawer__list .todo-item')).toHaveLength(2);

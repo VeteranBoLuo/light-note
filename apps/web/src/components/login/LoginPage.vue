@@ -81,6 +81,7 @@
   import { markLoggedIn } from '@/utils/authStorage';
   import { createGithubAuthorizationUrl, rememberGithubOAuthFlow } from '@/utils/githubOAuth';
   import { clearQuickSaveAuthReturnPath, resolveQuickSaveAuthReturnPath } from '@/utils/quickSaveAuthReturn.ts';
+  import { persistAndroidAuthSession } from '@/utils/androidBridge.ts';
   import { isValidEmail } from '@/utils/validator.ts';
   import GithubOAuthConsentModal from './GithubOAuthConsentModal.vue';
 
@@ -131,6 +132,7 @@
         localStorage.removeItem(REMEMBERED_EMAIL_KEY);
         localStorage.removeItem('rememberedSid');
       }
+      persistAndroidAuthSession();
       user.setUserInfo(res.data);
       const authenticatedUserId = String(user.id || '');
       const tags = await bookmark.loadTagList(authenticatedUserId, { showLoading: false });

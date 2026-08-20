@@ -40,11 +40,13 @@
             </span>
           </label>
           <div v-if="resourceRefs.length" class="todo-simple-editor__resource-list">
-            <span v-for="ref in resourceRefs" :key="`${ref.type}:${ref.id}`">
-              <b>{{ t(`ai.sourceTypes.${ref.type}`) }}</b>
-              <span>{{ ref.title }}</span>
-              <BButton :aria-label="t('common.delete')" @click="removeResourceRef(ref)">×</BButton>
-            </span>
+            <TodoResourceLinks
+              :items="resourceRefs"
+              removable
+              :disabled="saving"
+              @open="emit('open-resource', $event)"
+              @remove="removeResourceRef"
+            />
           </div>
           <BModal
             v-model:visible="resourcePickerVisible"
@@ -204,6 +206,7 @@
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
+  import TodoResourceLinks from '@/components/todo/TodoResourceLinks.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import TodoIndependentTaskPlanEditor from './TodoIndependentTaskPlanEditor.vue';
   import TodoPlanPreviewCard from './TodoPlanPreviewCard.vue';
@@ -237,6 +240,7 @@
     submit: [submission: TodoEditorSubmission];
     cancel: [];
     'advanced-change': [enabled: boolean];
+    'open-resource': [resource: TodoResourceRefView];
   }>();
   const { t } = useI18n();
   const { draft, reset } = useTodoCreateDraft();
@@ -628,37 +632,7 @@
   }
 
   .todo-simple-editor__resource-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 7px;
-  }
-
-  .todo-simple-editor__resource-list > span {
-    display: inline-flex;
     min-width: 0;
-    align-items: center;
-    gap: 6px;
-    padding: 3px 5px 3px 9px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 999px;
-    background: var(--workspace-panel-bg-color);
-    color: var(--text-color);
-    font-size: 12px;
-  }
-
-  .todo-simple-editor__resource-list b {
-    color: var(--primary-color);
-    font-size: 11px;
-  }
-
-  .todo-simple-editor__resource-list :deep(.b_btn) {
-    width: 26px;
-    min-width: 26px;
-    height: 26px;
-    min-height: 26px;
-    padding: 0;
-    border: 0;
-    background: transparent;
   }
 
   .todo-simple-editor__priority :deep(.b_btn.is-active) {

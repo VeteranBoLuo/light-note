@@ -48,6 +48,7 @@ function pointerEvent(type: string, x: number, y: number, pointerId = 1) {
 }
 
 function mountTodoItem(item: TodoItemType = todo, options: { selectable?: boolean; swipeEnabled?: boolean } = {}) {
+  const onPreview = vi.fn();
   const onEdit = vi.fn();
   const onDelete = vi.fn();
   const onSeriesAction = vi.fn();
@@ -62,6 +63,7 @@ function mountTodoItem(item: TodoItemType = todo, options: { selectable?: boolea
           selectable: options.selectable,
           swipeEnabled: options.swipeEnabled,
           swipeOpen: swipeOpen.value,
+          onPreview,
           onEdit,
           onDelete,
           onSeriesAction,
@@ -88,6 +90,10 @@ function mountTodoItem(item: TodoItemType = todo, options: { selectable?: boolea
             todoChecklist: '子待办',
             todoChecklistProgress: '{done}/{total}',
             todoResourceRefsTitle: '参考资料',
+            todoOpenResource: '打开{type}“{title}”',
+            todoRemoveResource: '移除关联资料“{title}”',
+            todoMoreResources: '还有 {count} 个关联资料',
+            todoResourceUnavailable: '已不可用',
             editTodo: '编辑',
             addToCalendar: '添加日历',
             deleteTodo: '删除',
@@ -125,7 +131,7 @@ function mountTodoItem(item: TodoItemType = todo, options: { selectable?: boolea
     app.unmount();
     host.remove();
   };
-  return { host, onEdit, onDelete, onSeriesAction, swipeOpen };
+  return { host, onPreview, onEdit, onDelete, onSeriesAction, swipeOpen };
 }
 
 afterEach(() => {
@@ -136,7 +142,7 @@ afterEach(() => {
   document.querySelectorAll('.b-popover-panel, .select-dropdown').forEach((element) => element.remove());
 });
 
-describe('TodoItem card editing', () => {
+describe('TodoItem card preview', () => {
   it('桌面操作区靠右上单行展示，窄桌面空间不足时落到正文下方', () => {
     expect(todoItemSource).toMatch(
       /\.todo-item__actions--desktop\s*\{[\s\S]*?align-self:\s*start;[\s\S]*?flex-wrap:\s*nowrap;[\s\S]*?margin-top:\s*5px;/,
@@ -146,12 +152,13 @@ describe('TodoItem card editing', () => {
     );
   });
 
-  it('点击正文进入编辑，子待办、参考资料和操作按钮不会透传到卡片编辑', async () => {
-    const { host, onEdit } = mountTodoItem();
+  it('点击正文进入预览，子待办、参考资料和操作按钮不会透传到卡片预览', async () => {
+    const { host, onPreview, onEdit } = mountTodoItem();
     await nextTick();
 
     host.querySelector<HTMLElement>('.todo-item__description')!.click();
-    expect(onEdit).toHaveBeenCalledTimes(1);
+    expect(onPreview).toHaveBeenCalledTimes(1);
+    expect(onEdit).not.toHaveBeenCalled();
 
     host.querySelector<HTMLElement>('.todo-checklist')!.click();
     host.querySelector<HTMLElement>('.todo-resource-refs')!.click();
@@ -159,15 +166,15 @@ describe('TodoItem card editing', () => {
     host.querySelector<HTMLButtonElement>('.todo-item__actions--desktop button:last-child')!.click();
     await nextTick();
 
-    expect(onEdit).toHaveBeenCalledTimes(1);
+    expect(onPreview).toHaveBeenCalledTimes(1);
   });
 
-  it('批量选择态不通过正文打开编辑', async () => {
-    const { host, onEdit } = mountTodoItem(todo, { selectable: true });
+  it('批量选择态不通过正文打开预览', async () => {
+    const { host, onPreview } = mountTodoItem(todo, { selectable: true });
     await nextTick();
 
     host.querySelector<HTMLElement>('.todo-item__body')!.click();
-    expect(onEdit).not.toHaveBeenCalled();
+    expect(onPreview).not.toHaveBeenCalled();
   });
 
   it('批量选择框位于标题行的正常布局流中，不占用截止时间区域', async () => {
@@ -235,16 +242,16 @@ describe('TodoItem card editing', () => {
     expect(drawerText).toContain('1 天后');
   });
 
-  it('已完成卡片也能通过正文进入编辑', async () => {
-    const { host, onEdit } = mountTodoItem({ ...todo, status: 'completed' });
+  it('已完成卡片也能通过正文进入预览', async () => {
+    const { host, onPreview } = mountTodoItem({ ...todo, status: 'completed' });
     await nextTick();
 
     host.querySelector<HTMLElement>('.todo-item__body')!.click();
-    expect(onEdit).toHaveBeenCalledOnce();
+    expect(onPreview).toHaveBeenCalledOnce();
   });
 
-  it('左滑卡片只展开删除操作，不透传编辑；点击操作后才请求删除', async () => {
-    const { host, onEdit, onDelete, swipeOpen } = mountTodoItem(todo, { swipeEnabled: true });
+  it('左滑卡片只展开删除操作，不透传预览；点击操作后才请求删除', async () => {
+    const { host, onPreview, onEdit, onDelete, swipeOpen } = mountTodoItem(todo, { swipeEnabled: true });
     await nextTick();
     const content = host.querySelector<HTMLElement>('.mobile-swipe-delete__content')!;
     const description = host.querySelector<HTMLElement>('.todo-item__description')!;
@@ -256,6 +263,7 @@ describe('TodoItem card editing', () => {
     await nextTick();
 
     expect(swipeOpen.value).toBe(true);
+    expect(onPreview).not.toHaveBeenCalled();
     expect(onEdit).not.toHaveBeenCalled();
     host.querySelector<HTMLButtonElement>('.mobile-swipe-delete__action button')!.click();
     expect(onDelete).toHaveBeenCalledOnce();

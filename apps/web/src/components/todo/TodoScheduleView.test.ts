@@ -25,12 +25,13 @@ const todo: TodoItem = {
 };
 
 function mountSchedule(view: 'agenda' | 'calendar', item: TodoItem = todo) {
+  const onPreview = vi.fn();
   const onDelete = vi.fn();
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp({
     setup() {
-      return () => h(TodoScheduleView, { items: [item], view, swipeEnabled: true, onDelete });
+      return () => h(TodoScheduleView, { items: [item], view, swipeEnabled: true, onPreview, onDelete });
     },
   });
   app.use(createPinia());
@@ -61,7 +62,7 @@ function mountSchedule(view: 'agenda' | 'calendar', item: TodoItem = todo) {
     app.unmount();
     host.remove();
   };
-  return { host, onDelete };
+  return { host, onPreview, onDelete };
 }
 
 afterEach(() => {
@@ -70,6 +71,14 @@ afterEach(() => {
 });
 
 describe('TodoScheduleView mobile swipe delete', () => {
+  it('议程条目默认发出预览而不是编辑', async () => {
+    const { host, onPreview } = mountSchedule('agenda');
+    await nextTick();
+
+    host.querySelector<HTMLButtonElement>('.todo-agenda-card')!.click();
+    expect(onPreview).toHaveBeenCalledWith(todo);
+  });
+
   it('议程卡片的滑动操作会把对应待办交给上层确认删除', async () => {
     const { host, onDelete } = mountSchedule('agenda');
     await nextTick();
@@ -145,7 +154,8 @@ describe('TodoScheduleView mobile swipe delete', () => {
     document.body.append(host);
     const app = createApp({
       setup() {
-        return () => h(TodoScheduleView, { items: [todo], view: 'calendar', onRangeChange: (range) => ranges.push(range) });
+        return () =>
+          h(TodoScheduleView, { items: [todo], view: 'calendar', onRangeChange: (range) => ranges.push(range) });
       },
     });
     app.use(createPinia());

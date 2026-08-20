@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick } from 'vue';
+import BButton from '@/components/base/BasicComponents/BButton.vue';
 import MobileListRow from './MobileListRow.vue';
 import MobileListSurface from './MobileListSurface.vue';
 import MobilePageActionsDrawer, { type MobilePageActionItem } from './MobilePageActionsDrawer.vue';
@@ -73,6 +74,43 @@ describe('mobile interaction primitives', () => {
     expect(rows[0].classList.contains('is-selected')).toBe(true);
 
     rows[0].click();
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it('lets a complex row expose pointer-wide surface clicks without nesting its child controls', async () => {
+    const onClick = vi.fn();
+    const childClick = vi.fn();
+    const host = mount(() =>
+      h(
+        MobileListRow,
+        { surfaceClickable: true, onClick },
+        {
+          default: () => [
+            h('span', { class: 'row-copy' }, '待办正文'),
+            h(
+              BButton,
+              {
+                class: 'row-child',
+                onClick: (event: MouseEvent) => {
+                  event.stopPropagation();
+                  childClick();
+                },
+              },
+              () => '系列',
+            ),
+          ],
+        },
+      ),
+    );
+    await nextTick();
+
+    const row = host.querySelector<HTMLElement>('.mobile-list-row')!;
+    expect(row.tagName).toBe('DIV');
+    row.click();
+    expect(onClick).toHaveBeenCalledOnce();
+
+    host.querySelector<HTMLButtonElement>('.row-child')!.click();
+    expect(childClick).toHaveBeenCalledOnce();
     expect(onClick).toHaveBeenCalledOnce();
   });
 

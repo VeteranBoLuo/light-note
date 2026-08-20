@@ -5,6 +5,7 @@ import {
   hasLightNoteAndroidUserAgent,
   isAndroidWebViewRuntime,
   isLightNoteAndroidApp,
+  persistAndroidAuthSession,
   postAndroidAppReady,
   postAndroidMessage,
   postAndroidOpenLegalDocument,
@@ -57,6 +58,14 @@ describe('androidBridge', () => {
 
     expect(postAndroidAppReady()).toBe(true);
     expect(postMessage).toHaveBeenCalledWith(JSON.stringify({ type: 'app.ready' }));
+  });
+
+  it('登录完成后可要求原生壳立即持久化会话 Cookie', () => {
+    const postMessage = vi.fn();
+    window.LightNoteAndroid = { postMessage };
+
+    expect(persistAndroidAuthSession()).toBe(true);
+    expect(postMessage).toHaveBeenCalledWith(JSON.stringify({ type: 'auth.session.persist' }));
   });
 
   it('设置页可让原生壳打开内置协议文档', () => {

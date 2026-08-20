@@ -41,6 +41,9 @@ describe('后台用户管理头像框展示', () => {
     expect(content).toContain('return frameVariant(frameId) ? frameId : null');
     expect(content).toContain('v-if="equippedFrameId"');
     expect(content).toContain('layout-mode="slot"');
+    expect(content).toContain('class="user-360__plain-avatar"');
+    expect(content).not.toMatch(/\.user-360__avatar\s+:deep\(img\)/u);
+    expect(content).toMatch(/\.user-360__plain-avatar\s+:deep\(img\)/u);
   });
 
   it('普通头像缩到与 30px 头像框的约 36px 总外径一致，同时保留 44px 装饰安全槽', () => {

@@ -327,6 +327,7 @@
             :mobile="bookmark.isMobile"
             :disabled="hasPendingOperation || todoBatchMutating"
             :deleting-id="deletingTodoId"
+            @preview="openTodoPreview"
             @toggle-complete="toggleTodo"
             @update-checklist="updateTodoChecklist"
             @edit="openTodoEditor"
@@ -344,6 +345,7 @@
             :swipe-enabled="bookmark.isMobile"
             :disabled="hasPendingOperation || todoBatchMutating"
             :deleting-id="deletingTodoId"
+            @preview="openTodoPreview"
             @edit="openTodoEditor"
             @delete="confirmDeleteTodo"
             @range-change="ensureCalendarRange"
@@ -373,6 +375,7 @@
                     @select="(item, selected) => toggleTodoSelected(item.id, selected)"
                     @toggle-complete="toggleTodo"
                     @update-checklist="updateTodoChecklist"
+                    @preview="openTodoPreview"
                     @edit="openTodoEditor"
                     @delete="confirmDeleteTodo"
                     @add-to-calendar="openTodoCalendar"
@@ -394,6 +397,7 @@
                     @select="toggleTodoSelected(node.item.id, $event)"
                     @toggle-complete="toggleTodo(node.item, $event)"
                     @update-checklist="updateTodoChecklist(node.item, $event)"
+                    @preview="openTodoPreview(node.item)"
                     @edit="openTodoEditor(node.item)"
                     @delete="confirmDeleteTodo(node.item)"
                     @add-to-calendar="openTodoCalendar(node.item)"
@@ -437,6 +441,7 @@
                 @update:swipe-open="updateTodoSwipe(action.item.id, $event)"
                 @toggle-complete="toggleTodo(action.item, $event)"
                 @update-checklist="updateTodoChecklist(action.item, $event)"
+                @preview="openTodoPreview(action.item)"
                 @edit="openTodoEditor(action.item)"
                 @delete="confirmDeleteTodo(action.item)"
                 @add-to-calendar="openTodoCalendar(action.item)"
@@ -449,6 +454,14 @@
         </BLoading>
       </div>
     </section>
+    <TodoPreviewDrawer
+      v-if="previewTodo"
+      v-model:visible="todoPreviewVisible"
+      :item="previewTodo"
+      :disabled="hasPendingOperation || todoBatchMutating"
+      @edit="openTodoEditor"
+      @update-checklist="updateTodoChecklist"
+    />
     <TodoEditorModal v-model:visible="todoEditorVisible" :item="editingTodo" @saved="afterTodoSaved" />
     <TodoCalendarModal
       v-model:visible="todoCalendarVisible"
@@ -479,6 +492,7 @@
   import TodoItem from '@/components/todo/TodoItem.vue';
   import TodoSeriesGroup from '@/components/todo/TodoSeriesGroup.vue';
   import TodoEditorModal from '@/components/todo/TodoEditorModal.vue';
+  import TodoPreviewDrawer from '@/components/todo/TodoPreviewDrawer.vue';
   import TodoCalendarModal from '@/components/todo/TodoCalendarModal.vue';
   import TodoMatrixView from '@/components/todo/TodoMatrixView.vue';
   import TodoScheduleView from '@/components/todo/TodoScheduleView.vue';
@@ -533,6 +547,12 @@
   const batchDeleting = ref(false);
   const todoEditorVisible = ref(false);
   const editingTodo = ref<TodoItemType | null>(null);
+  const todoPreviewVisible = ref(false);
+  const previewTodoId = ref('');
+  const previewTodoSeed = ref<TodoItemType | null>(null);
+  const previewTodo = computed(
+    () => todo.items.find((item) => item.id === previewTodoId.value) || previewTodoSeed.value,
+  );
   const calendarTodo = ref<TodoItemType | null>(null);
   const todoCalendarVisible = ref(false);
   const exportingCalendar = ref(false);
@@ -725,6 +745,9 @@
   watch(
     () => user.id,
     async (id) => {
+      todoPreviewVisible.value = false;
+      previewTodoId.value = '';
+      previewTodoSeed.value = null;
       todoView.value = normalizeTodoView(user.preferences.todoView);
       inbox.resetForOwner(id || 'visitor');
       todo.resetForOwner(id || 'visitor');
@@ -805,7 +828,7 @@
    * 定位并打开指定待办。
    *
    * 从全局搜索点待办结果时组件通常已经挂载，只有路由 query 变化，
-   * 因此不能只在 onMounted 里处理，否则地址变了却要刷新才弹出编辑框。
+   * 因此不能只在 onMounted 里处理，否则地址变了却要刷新才弹出详情。
    */
   async function openRequestedTodo(todoId: string, options: { listReady?: boolean } = {}) {
     if (!todoId) return;
@@ -817,10 +840,10 @@
       requestedTodo = todo.items.find((item) => item.id === todoId);
     }
     if (!requestedTodo) return;
-    openTodoEditor(requestedTodo);
     const query = { ...route.query };
     delete query.todoId;
-    void router.replace({ query });
+    await router.replace({ query });
+    openTodoPreview(requestedTodo);
   }
 
   watch(
@@ -1254,8 +1277,16 @@
       void router.push({ name: 'todoCreate' });
       return;
     }
+    todoPreviewVisible.value = false;
     editingTodo.value = item;
     todoEditorVisible.value = true;
+  }
+  function openTodoPreview(item: TodoItemType) {
+    openSwipeTodoId.value = '';
+    scheduleViewRef.value?.closeSwipe();
+    previewTodoId.value = item.id;
+    previewTodoSeed.value = item;
+    todoPreviewVisible.value = true;
   }
   async function afterTodoSaved() {
     await refreshList();

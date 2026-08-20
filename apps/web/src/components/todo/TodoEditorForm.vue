@@ -97,17 +97,13 @@
           <BButton size="small" @click="openResourcePicker">@ {{ t('inbox.todoAddResource') }}</BButton>
         </div>
         <div v-if="resourceRefs.length" class="todo-resource-refs__list">
-          <span v-for="ref in resourceRefs" :key="`${ref.type}:${ref.id}`" class="todo-resource-chip">
-            <span class="todo-resource-chip__type">{{ t(`ai.sourceTypes.${ref.type}`) }}</span>
-            <span class="todo-resource-chip__title">{{ ref.title }}</span>
-            <BButton
-              class="todo-resource-chip__remove"
-              :aria-label="t('common.delete')"
-              @click="removeResourceRef(ref)"
-            >
-              ×
-            </BButton>
-          </span>
+          <TodoResourceLinks
+            :items="resourceRefs"
+            removable
+            :disabled="saving"
+            @open="emit('open-resource', $event)"
+            @remove="removeResourceRef"
+          />
         </div>
       </section>
       <section v-if="advancedContentOpen" class="todo-checklist-editor">
@@ -319,6 +315,7 @@
   import { generateUUID } from '@/utils/common';
   import { toTodoLocalInput } from '@/utils/todoPlanning';
   import TodoPlanScheduleEditor from '@/components/todo/TodoPlanScheduleEditor.vue';
+  import TodoResourceLinks from '@/components/todo/TodoResourceLinks.vue';
 
   const props = withDefaults(
     defineProps<{
@@ -349,6 +346,7 @@
     submit: [submission: TodoEditorSubmission];
     cancel: [];
     'mobile-step-change': [step: 1 | 2 | 3];
+    'open-resource': [resource: TodoResourceRefView];
   }>();
   const { t } = useI18n();
   const checklistItems = ref<TodoChecklistItem[]>([]);
@@ -1281,45 +1279,6 @@
   }
 
   .todo-resource-refs__list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .todo-resource-chip {
-    display: inline-flex;
-    align-items: center;
-    max-width: 100%;
-    gap: 6px;
-    padding: 4px 6px 4px 8px;
-    border: 1px solid var(--card-border-color);
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--primary-color) 5%, var(--background-color));
-    font-size: 12px;
-  }
-
-  .todo-resource-chip__type {
-    flex: 0 0 auto;
-    color: var(--primary-color);
-  }
-
-  .todo-resource-chip__title {
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--text-color);
-  }
-
-  .todo-resource-chip__remove {
-    width: 18px;
-    min-width: 18px;
-    height: 18px;
-    padding: 0;
-    flex: 0 0 auto;
-    border-radius: 50%;
-    color: var(--desc-color);
-    background: transparent !important;
-    line-height: 1;
   }
 </style>

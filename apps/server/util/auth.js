@@ -30,18 +30,33 @@ const parseCookies = (cookieHeader = '') => {
     const key = pair.slice(0, index).trim();
     const value = pair.slice(index + 1).trim();
     if (key) {
-      cookies[key] = decodeURIComponent(value);
+      try {
+        cookies[key] = decodeURIComponent(value);
+      } catch {
+        // 畸形转义仍作为普通无效凭证进入校验/清理，不能让解析异常把整条鉴权链打成 503。
+        cookies[key] = value;
+      }
     }
     return cookies;
   }, {});
 };
 
-export const getRequestSid = (req) => {
-  const cookieSid = parseCookies(req.headers.cookie || '')[COOKIE_NAME] || '';
-  if (cookieSid) return cookieSid;
-  // 后备：移动端浏览器可能清除 httpOnly cookie，从 X-Session-Id 头读取
-  return req.headers['x-session-id'] || '';
+const normalizeSid = (value) => {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  return String(candidate || '').trim();
 };
+
+const getRequestCookieSid = (req) => normalizeSid(parseCookies(req.headers.cookie || '')[COOKIE_NAME]);
+
+export const getRequestSidCandidates = (req) => {
+  const cookieSid = getRequestCookieSid(req);
+  // 后备：移动端 WebView 可能尚未把刚登录的 httpOnly Cookie 持久化，冷启动时先恢复出旧 Cookie。
+  // Header 仍只是第二候选；有效 Cookie 必须优先，避免调用方用 Header 覆盖当前浏览器身份。
+  const headerSid = normalizeSid(req.headers['x-session-id']);
+  return [...new Set([cookieSid, headerSid].filter(Boolean))];
+};
+
+export const getRequestSid = (req) => getRequestSidCandidates(req)[0] || '';
 
 const getCookieOptions = (maxAge) => ({
   httpOnly: true,
@@ -168,15 +183,25 @@ export const authMiddleware = async (req, res, next) => {
     req.billingUser = null;
     req.resourceUser = null;
 
-    const sid = getRequestSid(req);
-    if (!sid) {
+    const cookieSid = getRequestCookieSid(req);
+    const sidCandidates = getRequestSidCandidates(req);
+    if (sidCandidates.length === 0) {
       // 请求显式携带管理员上下文时必须 fail closed，不能降级为游客后继续读取共享游客数据。
       if (adminContextToken) return rejectAdminContextWithoutActorSession(res);
       attachUserToRequest(req, res, await findVisitorUser());
       return next();
     }
 
-    const session = await getSession(sid);
+    let sid = '';
+    let session = null;
+    for (const candidate of sidCandidates) {
+      const candidateSession = await getSession(candidate);
+      if (candidateSession) {
+        sid = candidate;
+        session = candidateSession;
+        break;
+      }
+    }
     if (!session) {
       if (shouldMarkAuthExpired(req)) {
         markAuthExpired(res);
@@ -185,6 +210,15 @@ export const authMiddleware = async (req, res, next) => {
       if (adminContextToken) return rejectAdminContextWithoutActorSession(res);
       attachUserToRequest(req, res, await findVisitorUser());
       return next();
+    }
+
+    // Cookie 缺失/失效但 X-Session-Id 仍对应有效会话时，用服务端权威剩余时间修复 Cookie。
+    // 有效 Cookie 从不被 Header 覆盖。
+    if (sid !== cookieSid) {
+      const remainingSeconds = Number(session.expires_in_seconds || 0);
+      const remainingMaxAgeMs = (Number.isFinite(remainingSeconds) ? Math.max(1, remainingSeconds) : 1) * 1000;
+      setAuthCookie(res, sid, remainingMaxAgeMs);
+      res.removeHeader(AUTH_EXPIRED_HEADER);
     }
 
     const [rows] = await pool.query(
@@ -346,8 +380,13 @@ export const authMiddleware = async (req, res, next) => {
         msg: '管理员预览上下文暂时不可用，请稍后重试。',
       });
     }
-    attachUserToRequest(req, res, await findVisitorUser());
-    return next();
+    // 数据库/会话基础设施异常不能伪装成“已确认游客”，否则客户端会删除仍有效的本地凭证。
+    // 保留 Cookie 与备用 SID，交给冷启动恢复页或现有界面的重试机制收口。
+    return res.status(503).json({
+      data: { code: 'AUTH_UNAVAILABLE' },
+      status: 503,
+      msg: '登录状态暂时无法确认，请稍后重试。',
+    });
   }
 };
 
@@ -389,7 +428,8 @@ export const accountBanMiddleware = async (req, res, next) => {
 };
 
 export const logoutCurrentSession = async (req, res) => {
-  const sid = getRequestSid(req) || req.user?.sessionId;
+  // authMiddleware 可能已用备用 SID 修复了陈旧 Cookie；登出必须撤销实际认证的会话。
+  const sid = req.user?.sessionId || getRequestSid(req);
   if (sid) {
     await removeSession(sid);
   }

@@ -1439,7 +1439,9 @@ function buildAdminTodayBaseline(rows, dates, cutoffTime) {
     };
   }
 
-  const daily = new Map(dates.map((date) => [date, { users: 0, bookmarks: 0, notes: 0, files: 0, todos: 0 }]));
+  const daily = new Map(
+    dates.map((date) => [date, { users: 0, bookmarks: 0, notes: 0, files: 0, todos: 0, activeUsers: 0, aiCalls: 0 }]),
+  );
   rows.forEach((row) => {
     const bucket = daily.get(String(row.d || ''));
     const kind = String(row.kind || '');
@@ -1476,6 +1478,8 @@ function buildAdminTodayBaseline(rows, dates, cutoffTime) {
       notes: metric('notes'),
       files: metric('files'),
       todos: metric('todos'),
+      activeUsers: metric('activeUsers'),
+      aiCalls: metric('aiCalls'),
     },
   };
 }
@@ -1748,6 +1752,7 @@ export const getAdminOverview = async (req, res) => {
     const notIntCreateBy = hideInternal
       ? ` AND create_by NOT IN (SELECT id FROM \`user\` WHERE role IN (${irSql}))`
       : '';
+    const activeApiInternalRole = hideInternal ? ` AND active_user.role NOT IN (${irSql})` : '';
     // 用户逻辑删除后，历史书签仍会保留，以支持后续的数据清理；后台总览不应继续把它们算入有效内容。
     const activeBookmarkOwner = ` AND EXISTS (
       SELECT 1 FROM \`user\` bookmark_owner
@@ -1861,13 +1866,18 @@ export const getAdminOverview = async (req, res) => {
           [today, today, today, today],
         )
         .catch(() => [[{ total: 0, createdToday: 0, pending: 0, dueToday: 0, overdue: 0, completedToday: 0 }]]),
-      // 活跃用户(会话表 last_active_time;排除游客会话)
+      // 活跃用户以有效业务 API 行为为事实源：日志不会因退出或会话过期消失，可稳定计算历史同期。
       pool
         .query(
           `SELECT
-             COUNT(DISTINCT CASE WHEN last_active_time >= ? THEN user_id END) AS activeToday,
-             COUNT(DISTINCT CASE WHEN last_active_time >= ? THEN user_id END) AS active7d
-           FROM user_sessions WHERE role != 'visitor'${notIntRole}`,
+             COUNT(DISTINCT CASE WHEN api_log.request_time >= ? THEN api_log.user_id END) AS activeToday,
+             COUNT(DISTINCT api_log.user_id) AS active7d
+           FROM api_logs api_log
+           INNER JOIN \`user\` active_user ON active_user.id = api_log.user_id
+           WHERE api_log.del_flag = '0'
+             AND api_log.request_time >= ?
+             AND active_user.del_flag = 0
+             AND active_user.role <> 'visitor'${activeApiInternalRole}`,
           [today, weekAgo],
         )
         .catch(() => [[{ activeToday: 0, active7d: 0 }]]),
@@ -1933,9 +1943,30 @@ export const getAdminOverview = async (req, res) => {
              FROM todo_items
              WHERE del_flag = 0 AND create_time >= ? AND create_time < ? AND TIME(create_time) <= ?${notIntUser}
              GROUP BY d
+             UNION ALL
+             SELECT DATE_FORMAT(api_log.request_time, '%Y-%m-%d') AS d, 'activeUsers' AS kind,
+                    COUNT(DISTINCT api_log.user_id) AS c
+             FROM api_logs api_log
+             INNER JOIN \`user\` active_user ON active_user.id = api_log.user_id
+             WHERE api_log.del_flag = '0'
+               AND api_log.request_time >= ? AND api_log.request_time < ? AND TIME(api_log.request_time) <= ?
+               AND active_user.del_flag = 0
+               AND active_user.role <> 'visitor'${activeApiInternalRole}
+             GROUP BY d
+             UNION ALL
+             SELECT DATE_FORMAT(created_at, '%Y-%m-%d') AS d, 'aiCalls' AS kind, COUNT(*) AS c
+             FROM agent_logs
+             WHERE created_at >= ? AND created_at < ? AND TIME(created_at) <= ?${notIntUser}
+             GROUP BY d
            ) same_time_baseline
            GROUP BY d, kind`,
           [
+            baselineStart,
+            today,
+            baselineCutoffTime,
+            baselineStart,
+            today,
+            baselineCutoffTime,
             baselineStart,
             today,
             baselineCutoffTime,

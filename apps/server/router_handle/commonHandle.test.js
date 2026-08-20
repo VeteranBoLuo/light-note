@@ -278,7 +278,7 @@ describe('getAdminOverview 资源统计口径', () => {
       if (statement.includes('FROM todo_items')) {
         return [[{ total: 0, createdToday: 0, pending: 0, dueToday: 0, overdue: 0, completedToday: 0 }]];
       }
-      if (statement.includes('FROM user_sessions')) return [[{ activeToday: 0, active7d: 0 }]];
+      if (statement.includes('AS activeToday')) return [[{ activeToday: 0, active7d: 0 }]];
       if (statement.includes('FROM api_logs')) {
         return [[{ total: 0, businessErrors: 0, invalidRequests: 0, serverErrors: 0 }]];
       }
@@ -323,6 +323,8 @@ describe('getAdminOverview 资源统计口径', () => {
         { d, kind: 'notes', c: 2 },
         { d, kind: 'files', c: 1 },
         { d, kind: 'todos', c: 5 },
+        { d, kind: 'activeUsers', c: day === 11 ? 6 : 3 },
+        { d, kind: 'aiCalls', c: day === 11 ? 8 : 4 },
       );
     }
 
@@ -356,7 +358,7 @@ describe('getAdminOverview 资源统计口径', () => {
         if (statement.includes('FROM todo_items')) {
           return [[{ total: 12, createdToday: 3, pending: 2, dueToday: 1, overdue: 0, completedToday: 1 }]];
         }
-        if (statement.includes('FROM user_sessions')) return [[{ activeToday: 1, active7d: 2 }]];
+        if (statement.includes('AS activeToday')) return [[{ activeToday: 1, active7d: 2 }]];
         if (statement.includes('FROM api_logs')) {
           return [[{ total: 0, businessErrors: 0, invalidRequests: 0, serverErrors: 0 }]];
         }
@@ -369,11 +371,19 @@ describe('getAdminOverview 资源统计口径', () => {
 
       const baselineCall = query.mock.calls.find(([sql]) => String(sql).includes('same_time_baseline'));
       expect(baselineCall?.[0]).toContain('TIME(create_time) <= ?');
+      expect(baselineCall?.[0]).toContain('COUNT(DISTINCT api_log.user_id)');
+      expect(baselineCall?.[0]).toContain("'activeUsers' AS kind");
+      expect(baselineCall?.[0]).toContain("'aiCalls' AS kind");
       expect(baselineCall?.[0]).toContain('onboarding_seed_resources');
       expect(baselineCall?.[0]).toContain("role <> 'visitor'");
       expect(baselineCall?.[1]).toEqual(
-        Array.from({ length: 5 }, () => ['2026-08-05', '2026-08-12', '17:40:30']).flat(),
+        Array.from({ length: 7 }, () => ['2026-08-05', '2026-08-12', '17:40:30']).flat(),
       );
+
+      const activeCall = query.mock.calls.find(([sql]) => String(sql).includes('AS activeToday'));
+      expect(activeCall?.[0]).toContain("api_log.del_flag = '0'");
+      expect(activeCall?.[0]).toContain('api_log.request_time >= ?');
+      expect(activeCall?.[0]).not.toContain('user_sessions');
 
       const payload = res.send.mock.calls[0][0].data;
       expect(payload.todayBaseline).toEqual({
@@ -389,6 +399,8 @@ describe('getAdminOverview 资源统计口径', () => {
           notes: { yesterday: 2, average7d: 2 },
           files: { yesterday: 1, average7d: 1 },
           todos: { yesterday: 5, average7d: 5 },
+          activeUsers: { yesterday: 6, average7d: 3.4 },
+          aiCalls: { yesterday: 8, average7d: 4.6 },
         },
       });
     } finally {

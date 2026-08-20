@@ -1,4 +1,4 @@
-import { createApp, nextTick } from 'vue';
+import { createApp } from 'vue';
 import App from '@/App.vue';
 import router, { getPendingNavigationTarget, reloadOnceTo } from '@/router';
 import '@/assets/css/index.less';
@@ -7,11 +7,7 @@ import globalDirect from '@/config/globalDirect';
 import { createPinia } from 'pinia';
 import i18n, { prepareInitialLocale } from '@/i18n';
 import { initializePwaInstall } from '@/composables/usePwaInstall';
-import {
-  isAndroidWebViewRuntime,
-  isLightNoteAndroidApp,
-  postAndroidAppReady,
-} from '@/utils/androidBridge';
+import { isAndroidWebViewRuntime, isLightNoteAndroidApp } from '@/utils/androidBridge';
 import { installRenderingProfileSync } from '@/config/renderingProfile';
 
 // Android 系统 WebView 的部分旧版本会把 color-mix() 与多层阴影渲染成实心黑框。
@@ -43,27 +39,10 @@ globalDirect(app);
 if (!isAndroidApp) {
   initializePwaInstall();
 }
-// 挂载实例
-async function notifyAndroidInitialViewReady() {
-  await router.isReady();
-  await nextTick();
-  await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
-  await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
-  postAndroidAppReady();
-}
-
 async function mountApplication() {
   // 中文词典已经在主包中；只有英文用户会并行等待英文词典分包，避免先显示翻译 key 再闪变。
   await prepareInitialLocale();
   app.mount('#app');
-
-  if (isAndroidWebView) {
-    // 原生品牌封面持续显示到首个异步路由组件真正完成绘制，避免 HTML
-    // 到达后 Vue 首帧尚未出现时短暂露出 WebView 白底。
-    void notifyAndroidInitialViewReady().catch((error) => {
-      console.warn('Android 首屏就绪通知失败:', error);
-    });
-  }
 }
 
 void mountApplication();

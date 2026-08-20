@@ -50,9 +50,7 @@ declare global {
   }
 }
 
-export function hasLightNoteAndroidUserAgent(
-  userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent,
-) {
+export function hasLightNoteAndroidUserAgent(userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent) {
   return /\bLightNoteAndroid\/[\w.-]+/i.test(userAgent);
 }
 
@@ -125,19 +123,12 @@ export function hasAndroidBridge(): boolean {
   return typeof window !== 'undefined' && typeof window.LightNoteAndroid?.postMessage === 'function';
 }
 
-export function isLightNoteAndroidApp(
-  userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent,
-) {
+export function isLightNoteAndroidApp(userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent) {
   return hasAndroidBridge() || hasLightNoteAndroidUserAgent(userAgent);
 }
 
-export function isAndroidWebViewRuntime(
-  userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent,
-) {
-  return (
-    isLightNoteAndroidApp(userAgent) ||
-    (/Android/i.test(userAgent) && /;\s*wv\)/i.test(userAgent))
-  );
+export function isAndroidWebViewRuntime(userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent) {
+  return isLightNoteAndroidApp(userAgent) || (/Android/i.test(userAgent) && /;\s*wv\)/i.test(userAgent));
 }
 
 export function postAndroidMessage(payload: Record<string, unknown>): boolean {
@@ -310,9 +301,7 @@ function ensureApkInstallHook() {
 }
 
 function normalizeApkInstallReason(value: unknown): AndroidApkInstallResult['reason'] {
-  return value === 'need_permission' || value === 'not_found' || value === 'unsupported'
-    ? value
-    : 'failed';
+  return value === 'need_permission' || value === 'not_found' || value === 'unsupported' ? value : 'failed';
 }
 
 /**
@@ -344,6 +333,11 @@ export function installApkViaAndroid(downloadId: string): Promise<AndroidApkInst
 
 export function postAndroidAppReady(): boolean {
   return postAndroidMessage({ type: 'app.ready' });
+}
+
+/** 登录响应完成后要求原生 WebView 立即把最新 httpOnly Cookie 刷入持久存储。 */
+export function persistAndroidAuthSession(): boolean {
+  return postAndroidMessage({ type: 'auth.session.persist' });
 }
 
 export function postAndroidOpenLegalDocument(document: AndroidLegalDocument): boolean {

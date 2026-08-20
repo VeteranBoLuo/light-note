@@ -77,7 +77,7 @@
         @update:open="updateSwipe(item.id, $event)"
         @delete="deleteFromSwipe(item)"
       >
-        <BButton class="todo-calendar-dayitem" :class="todoStateClass(item)" @click="$emit('edit', item)">
+        <BButton class="todo-calendar-dayitem" :class="todoStateClass(item)" @click="$emit('preview', item)">
           <span class="todo-calendar-dayitem__priority" :class="`is-priority-${item.priority}`"></span>
           <span class="todo-calendar-dayitem__content">
             <strong>{{ item.title }}</strong>
@@ -108,7 +108,7 @@
           @update:open="updateSwipe(entry.item.id, $event)"
           @delete="deleteFromSwipe(entry.item)"
         >
-          <BButton class="todo-agenda-card" :class="todoStateClass(entry.item)" @click="$emit('edit', entry.item)">
+          <BButton class="todo-agenda-card" :class="todoStateClass(entry.item)" @click="$emit('preview', entry.item)">
             <span class="todo-agenda-card__priority" :class="`is-priority-${entry.item.priority}`"></span>
             <span class="todo-agenda-card__content">
               <strong>{{ entry.item.title }}</strong>
@@ -155,6 +155,7 @@
     deletingId?: string;
   }>();
   const emit = defineEmits<{
+    preview: [item: TodoItem];
     edit: [item: TodoItem];
     delete: [item: TodoItem];
     'range-change': [range: { startDate: string; endDate: string }];
@@ -292,14 +293,14 @@
   defineExpose({ closeSwipe });
   /**
    * 窄屏格子只放得下截断的标题,点它应该先展开当天详情看清楚,而不是直接弹编辑框;
-   * 桌面格子信息完整,保持点条目即编辑。
+   * 桌面格子信息完整,点条目直接打开详情预览。
    */
   function activateCalendarItem(day: { key: string }, item: TodoItem) {
     if (bookmark.isMobile) {
       selectedDayKey.value = day.key;
       return;
     }
-    emit('edit', item);
+    emit('preview', item);
   }
   function dateKey(date: Date) {
     return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;

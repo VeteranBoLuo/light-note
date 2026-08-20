@@ -13,6 +13,7 @@
       @select="emit('select', representative, $event)"
       @toggle-complete="emit('toggle-complete', representative, $event)"
       @update-checklist="emit('update-checklist', representative, $event)"
+      @preview="emit('preview', representative)"
       @edit="emit('edit', representative)"
       @delete="emit('delete', representative)"
       @add-to-calendar="emit('add-to-calendar', representative)"
@@ -48,6 +49,7 @@
         @select="emit('select', item, $event)"
         @toggle-complete="emit('toggle-complete', item, $event)"
         @update-checklist="emit('update-checklist', item, $event)"
+        @preview="emit('preview', item)"
         @edit="emit('edit', item)"
         @delete="emit('delete', item)"
         @add-to-calendar="emit('add-to-calendar', item)"
@@ -65,6 +67,7 @@
       :deleting-id="deletingId"
       @toggle-complete="(item, completed) => emit('toggle-complete', item, completed)"
       @update-checklist="(item, checklist) => emit('update-checklist', item, checklist)"
+      @preview="(item) => emit('preview', item)"
       @edit="(item) => emit('edit', item)"
       @delete="(item) => emit('delete', item)"
       @add-to-calendar="(item) => emit('add-to-calendar', item)"
@@ -115,6 +118,7 @@
     select: [item: TodoItemType, selected: boolean];
     'toggle-complete': [item: TodoItemType, completed: boolean];
     'update-checklist': [item: TodoItemType, checklist: TodoChecklistItem[]];
+    preview: [item: TodoItemType];
     edit: [item: TodoItemType];
     delete: [item: TodoItemType];
     'add-to-calendar': [item: TodoItemType];

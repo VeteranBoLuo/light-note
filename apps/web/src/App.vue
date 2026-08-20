@@ -11,26 +11,58 @@
         },
       }"
     >
-      <MobileAppShell
-        :enabled="mobileShellEnabled"
-        :show-top-bar="mobileTopBarActive"
-        :show-top-switcher="mobileTopSwitcherActive"
-        :show-bottom-nav="mobileBottomNavActive"
+      <div
+        v-if="applicationAuthGateVisible"
+        class="app-loading"
+        :role="applicationAuthStatus === 'error' ? 'alert' : 'status'"
+        aria-live="polite"
       >
-        <router-view />
-      </MobileAppShell>
-      <Login v-if="bookmark.isShowLogin && !publicStandaloneRoute" />
-      <BViewer v-if="bookmark.viewerKey && !publicStandaloneRoute" />
-      <FloatQuestion v-if="aiVisible" :hide-trigger="aiEdgeTriggerHidden" />
-      <GuestNudge v-if="nudgeVisible && !publicStandaloneRoute" />
-      <AndroidDownloadProgress v-if="isAndroidApp && !publicStandaloneRoute" />
-      <DisplayScaleSuggestion v-if="!publicStandaloneRoute" />
-      <AdminContextBanner v-if="user.adminContext && !publicStandaloneRoute" />
-      <QuickCaptureModal
-        v-if="inbox.quickCaptureVisible && !publicStandaloneRoute"
-        v-model:visible="inbox.quickCaptureVisible"
-      />
-      <PwaInstallGuideModal v-if="!isAndroidApp && pwaGuideVisible && !publicStandaloneRoute" />
+        <div class="loading-container">
+          <BLoading
+            v-if="applicationAuthStatus === 'pending'"
+            :loading="true"
+            inline
+            class="auth-startup-loading"
+            :title="t('app.authRestoring')"
+          />
+          <div class="loading-text">
+            <h2 v-if="applicationAuthStatus === 'error'">{{ t('app.authRestoreFailed') }}</h2>
+            <p>
+              {{ applicationAuthStatus === 'error' ? t('app.authRestoreFailedHint') : t('app.authRestoringHint') }}
+            </p>
+            <BButton
+              v-if="applicationAuthStatus === 'error'"
+              type="primary"
+              class="auth-startup-retry"
+              @click="retryApplicationAuth"
+            >
+              {{ t('common.retry') }}
+            </BButton>
+          </div>
+        </div>
+      </div>
+      <template v-else>
+        <MobileAppShell
+          :enabled="mobileShellEnabled"
+          :show-top-bar="mobileTopBarActive"
+          :show-top-switcher="mobileTopSwitcherActive"
+          :show-bottom-nav="mobileBottomNavActive"
+        >
+          <router-view />
+        </MobileAppShell>
+        <Login v-if="bookmark.isShowLogin && !publicStandaloneRoute" />
+        <BViewer v-if="bookmark.viewerKey && !publicStandaloneRoute" />
+        <FloatQuestion v-if="aiVisible" :hide-trigger="aiEdgeTriggerHidden" />
+        <GuestNudge v-if="nudgeVisible && !publicStandaloneRoute" />
+        <AndroidDownloadProgress v-if="isAndroidApp && !publicStandaloneRoute" />
+        <DisplayScaleSuggestion v-if="!publicStandaloneRoute" />
+        <AdminContextBanner v-if="user.adminContext && !publicStandaloneRoute" />
+        <QuickCaptureModal
+          v-if="inbox.quickCaptureVisible && !publicStandaloneRoute"
+          v-model:visible="inbox.quickCaptureVisible"
+        />
+        <PwaInstallGuideModal v-if="!isAndroidApp && pwaGuideVisible && !publicStandaloneRoute" />
+      </template>
     </a-config-provider>
   </div>
 </template>
@@ -38,7 +70,7 @@
   import { bookmarkStore, inboxStore, useAiAssistantStore, useUserStore } from '@/store';
   import { buildAiAssistantRuntimeIdentityKey, resolveAiAssistantIdentity } from '@/store/aiAssistant';
   import { useGrowth } from '@/composables/useGrowth';
-  import { onMounted, onBeforeUnmount, watch, computed, defineAsyncComponent, provide, ref } from 'vue';
+  import { onMounted, onBeforeUnmount, watch, computed, defineAsyncComponent, nextTick, provide, ref } from 'vue';
   import { apiBaseGet, apiBasePost } from '@/http/request';
   import { getNoticeSummary, resetBookmarkIconRefreshRequests } from '@/api/commonApi.ts';
   import { useRouter, type RouteLocationNormalized } from 'vue-router';
@@ -67,7 +99,8 @@
   import { applyDocumentTheme } from '@/utils/theme.ts';
   import { shouldHideAiEdgeTrigger } from '@/utils/aiEntry.ts';
   import AsyncFeatureLoadingOverlay from '@/components/base/AsyncFeatureLoadingOverlay.vue';
-  import { isLightNoteAndroidApp, postAndroidMessage } from '@/utils/androidBridge';
+  import { isLightNoteAndroidApp, postAndroidAppReady, postAndroidMessage } from '@/utils/androidBridge';
+  import { isDefinitiveAuthResultStatus, type ApplicationAuthStatus } from '@/utils/authBootstrap.ts';
   import { onSystemThemeChange } from '@/utils/systemTheme';
   import { MOBILE_LAYOUT_CONTEXT } from '@/composables/useMobileLayout';
   import { useCommunityChatUnreadRuntime } from '@/composables/useCommunityChatUnreadRuntime';
@@ -75,6 +108,8 @@
   import { usePwaInstall } from '@/composables/usePwaInstall';
   import { prefetchResolvedRoute } from '@/utils/routePrefetch';
   import { scheduleNoteEditorStartupPreload } from '@/utils/noteEditorStartupPreload';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
 
   const Login = defineAsyncComponent(() => import('@/view/login/UserAuthModal.vue'));
   // 图片查看器包含 viewer.js，只有用户真正打开图片时才下载，避免每次启动都解析第三方预览运行时。
@@ -322,10 +357,32 @@
   let noticeTimer: number | null = null;
   let lastNoticeRefreshAt = 0;
   let noticeRequest: Promise<void> | null = null;
-  let userInfoRequest: Promise<any> | null = null;
+  let userInfoRequest: Promise<boolean> | null = null;
   let userInfoLoaded = false;
   let disposeNoteEditorStartupPreload: (() => void) | null = null;
   const appStartupReady = ref(false);
+  const identityOptionalRoutes = [
+    'help',
+    'updateLogs',
+    'githubCallBack',
+    'not-found',
+    'not-role',
+    'landing',
+    'banned',
+    'quickSave',
+    'noteShare',
+  ];
+  const applicationAuthStatus = ref<ApplicationAuthStatus>('pending');
+  const applicationAuthGateVisible = computed(() => {
+    const route = router.currentRoute.value;
+    const routeName = String(route.name || '');
+    return (
+      Boolean(routeName) &&
+      applicationAuthStatus.value !== 'ready' &&
+      route.meta.publicStandalone !== true &&
+      !identityOptionalRoutes.includes(routeName)
+    );
+  });
   // 官网 CTA 单独等待 /me 的确定结果，避免 Pinia 初始游客值在登录态恢复前短暂露出注册入口。
   // 它不参与登录、会话或路由鉴权，只影响 Landing 的按钮展示与点击资格。
   const landingAuthStatus = ref<LandingAuthStatus>('pending');
@@ -469,22 +526,27 @@
     }
   }
 
-  async function getUserInfo(force = false) {
+  async function getUserInfo(force = false): Promise<boolean> {
     if (!force && userInfoLoaded) {
-      return;
+      return true;
     }
     if (userInfoRequest) {
       return userInfoRequest;
     }
 
+    const wasUserInfoLoaded = userInfoLoaded;
+    if (!wasUserInfoLoaded) {
+      applicationAuthStatus.value = 'pending';
+    }
     landingAuthStatus.value = 'pending';
     userInfoRequest = (async () => {
       // 记录发起本次 /me 时的登录身份,用于识别并丢弃「陈旧的在途响应」
       const reqUserId = user.id || '';
       const isLandingRequest = router.currentRoute.value.name === 'landing';
+      let authResolved = false;
       try {
         const res = await apiBaseGet('/api/user/me', undefined, {
-          silent: isLandingRequest,
+          silent: isLandingRequest || !wasUserInfoLoaded,
           // /me 是身份初始化的权威请求，由本函数统一处理游客/登录结果。
           // 禁止响应拦截器先把旧会话痕迹解释成“立即打开登录框”。
           suppressAuthExpired: true,
@@ -493,22 +555,36 @@
         // 该响应已过时。若继续 applyUserInfo 会用游客数据覆盖刚登录的账号,导致登录态被冲掉且无从恢复,
         // 故整体丢弃——不写 user、不改登录框、不刷通知。当前身份的数据以登录时写入的为准。
         if ((user.id || '') !== reqUserId) {
-          return res;
+          userInfoLoaded = true;
+          applicationAuthStatus.value = 'ready';
+          return true;
         }
-        userInfoLoaded = true;
         const responseStatus: unknown = res.status;
-        const hasDefinitiveAuthResult =
-          responseStatus === 200 || responseStatus === 'visitor' || responseStatus === 401;
-        if (isLandingRequest && !hasDefinitiveAuthResult) {
-          // 官网认证探测异常不能覆盖现有身份、弹登录框或要求用户处理；
-          // 页面继续正常浏览，并在后台按渐进退避自动恢复。
-          landingAuthStatus.value = 'error';
-          bookmark.isShowLogin = false;
-          scheduleLandingAuthRetry();
-          return res;
+        if (!isDefinitiveAuthResultStatus(responseStatus)) {
+          // 非鉴权业务错误、网关异常或格式异常都不能证明用户已经退出。
+          // 冷启动保持身份未知并展示重试页，已有页面则保留当前账号与凭证。
+          userInfoLoaded = wasUserInfoLoaded;
+          if (!wasUserInfoLoaded) {
+            applicationAuthStatus.value = 'error';
+          } else if (!isLandingRequest) {
+            message.error(t('app.loadUserFailed'));
+          }
+          if (isLandingRequest) {
+            landingAuthStatus.value = 'error';
+            bookmark.isShowLogin = false;
+            scheduleLandingAuthRetry();
+          }
+          return false;
         }
 
         applyUserInfo(res.data);
+        authResolved = true;
+        userInfoLoaded = true;
+        applicationAuthStatus.value = 'ready';
+        if (responseStatus === 'visitor' || responseStatus === 401) {
+          // 服务端已经同时验证 Cookie 与备用 SID，明确为游客后才清理本地备用凭证。
+          localStorage.removeItem('rememberedSid');
+        }
         if (user.id && user.role !== RoleEnum.VISITOR) {
           // 兼容功能上线前已存在的有效 Cookie：本次 /me 确认后补写/续期本地记录，
           // 后续移动端访问根路径即可在官网首次绘制前直接进入资料模块。
@@ -532,22 +608,40 @@
           bookmark.isShowLogin = false;
           stopOpinionNoticePolling();
         }
-        return res;
+        return true;
       } catch (error) {
-        userInfoLoaded = true;
+        if ((user.id || '') !== reqUserId) {
+          // 请求失败期间用户已通过另一条登录/退出路径切换身份；当前显式操作比旧请求权威。
+          userInfoLoaded = true;
+          applicationAuthStatus.value = 'ready';
+          return true;
+        }
+        if (authResolved) {
+          // 身份已确认后的通知或路由副作用失败，不得反向把账号状态改成未知。
+          userInfoLoaded = true;
+          applicationAuthStatus.value = 'ready';
+          return true;
+        }
+        userInfoLoaded = wasUserInfoLoaded;
+        if (!wasUserInfoLoaded) {
+          // 即使请求从官网发起，失败后也可能立即导航到应用路由；预先落为可重试态，
+          // 避免共享中的官网请求返回失败后让业务路由永远停在 pending。
+          applicationAuthStatus.value = 'error';
+        }
         if (isLandingRequest) {
           // 官网是公开内容页：网络波动时静默保留页面与当前身份，由后台自动重试。
           // 不把“认证确认失败”转嫁为按钮、弹窗或手动刷新任务。
           landingAuthStatus.value = 'error';
           bookmark.isShowLogin = false;
           scheduleLandingAuthRetry();
-          return null;
+          return false;
         }
-        message.error(t('app.loadUserFailed'), error);
-        handleUserLogout();
-        // 非官网页面沿用既有会话失效处理；官网分支已在上方静默恢复。
+        if (wasUserInfoLoaded) {
+          message.error(t('app.loadUserFailed'), error);
+        }
+        // 网络或接口异常不删除 rememberedSid，也不把当前 Pinia 身份重置成游客。
         landingAuthStatus.value = 'error';
-        return null;
+        return false;
       } finally {
         userInfoRequest = null;
       }
@@ -786,17 +880,7 @@
     { immediate: true },
   );
 
-  const skipRouter = [
-    'help',
-    'updateLogs',
-    'githubCallBack',
-    'not-found',
-    'not-role',
-    'landing',
-    'banned',
-    'quickSave',
-    'noteShare',
-  ];
+  const skipRouter = identityOptionalRoutes;
   const mobileAdminRoute = ['/apiLog', '/operationLog', '/userMg', '/userOpinion', '/imageMg', '/resourceGovernance'];
 
   function getRequiredRoles(to: RouteLocationNormalized): string[] {
@@ -811,10 +895,29 @@
     return [];
   }
 
+  async function retryApplicationAuth() {
+    applicationAuthStatus.value = 'pending';
+    const resolved = await getUserInfo(true);
+    if (!resolved) return;
+
+    const currentRoute = router.currentRoute.value;
+    const requiredRoles = getRequiredRoles(currentRoute);
+    const isPublicRoute = requiredRoles.includes(RoleEnum.VISITOR);
+    if (requiredRoles.length === 0 || isPublicRoute || requiredRoles.includes(user.role)) return;
+
+    if (!user.id || user.role === RoleEnum.VISITOR) {
+      handleUserLogout();
+      await redirectToGuestHome();
+      return;
+    }
+    await router.replace('/403');
+  }
+
   // 路由发生变化触发
   router.beforeEach(async (to, from, next) => {
+    let authResolved = true;
     if (from.name === 'githubCallBack') {
-      await getUserInfo(true);
+      authResolved = await getUserInfo(true);
     }
 
     if (skipRouter.includes(<string>to.name)) {
@@ -823,9 +926,14 @@
       return;
     }
 
-    // 用户刷新后 store 为空时，先尝试恢复用户信息再做权限判断。
-    if (!user.id) {
-      await getUserInfo();
+    // 冷启动必须先得到 /me 的确定结果再做角色判断；暂时失败时放行到身份恢复门禁，
+    // 不能把 Pinia 的默认游客值当成真实游客并清掉本地会话。
+    if (!userInfoLoaded && authResolved) {
+      authResolved = await getUserInfo();
+    }
+    if (!authResolved) {
+      next();
+      return;
     }
 
     const requiredRoles = getRequiredRoles(to);
@@ -880,10 +988,24 @@
     }
   }
 
+  async function notifyAndroidInitialViewReady() {
+    if (!isAndroidApp) return;
+    await nextTick();
+    await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+    await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+    postAndroidAppReady();
+  }
+
   onMounted(async () => {
     initApp();
     await init();
     appStartupReady.value = true;
+    try {
+      // 原生封面只在身份已确定或恢复错误页已经绘制后撤掉，避免先露出 Pinia 默认游客界面。
+      await notifyAndroidInitialViewReady();
+    } catch (error) {
+      console.warn('Android 首屏就绪通知失败:', error);
+    }
     // 根路径是纯官网展示页，不应该出现任何账号相关的通知/弹窗。
     if (router.currentRoute.value.name === 'landing') return;
     startOpinionNoticePolling();
@@ -1010,8 +1132,9 @@
   }
   .app-loading {
     height: 100vh;
+    height: 100dvh;
     width: 100vw;
-    background: linear-gradient(135deg, #f5f7fa 0%, #8999b3 100%);
+    background: var(--surface-raised-background, var(--background-color));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1026,9 +1149,8 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background:
-      radial-gradient(circle at 30% 40%, rgba(78, 75, 70, 0.1) 0%, transparent 50%),
-      radial-gradient(circle at 70% 60%, rgba(78, 75, 70, 0.05) 0%, transparent 50%);
+    background: var(--surface-page-bg, var(--background-color));
+    opacity: 0.28;
     animation: backgroundShift 8s ease-in-out infinite;
   }
 
@@ -1054,56 +1176,31 @@
     position: relative;
   }
 
-  .loading-spinner {
-    position: relative;
-    width: 80px;
-    height: 80px;
-    margin: 0 auto 20px;
-  }
-
-  .spinner-ring {
-    position: absolute;
-    border: 3px solid rgba(78, 75, 70, 0.1);
-    border-top: 3px solid #4e4b46;
-    border-radius: 50%;
-    width: 100%;
-    height: 100%;
-    animation: spin 1.5s linear infinite;
-  }
-
-  .spinner-ring:nth-child(2) {
-    animation-delay: 0.2s;
-    border-top-color: #6b7280;
-  }
-
-  .spinner-ring:nth-child(3) {
-    animation-delay: 0.4s;
-    border-top-color: #9ca3af;
-  }
-
-  @keyframes spin {
-    0% {
-      transform: rotate(0deg);
-    }
-    100% {
-      transform: rotate(360deg);
-    }
+  .app-loading .auth-startup-loading {
+    justify-content: center;
+    margin-bottom: 14px;
+    color: var(--text-color);
+    font-size: 1.25rem;
+    font-weight: 700;
   }
 
   .loading-text h2 {
     font-size: 2rem;
     font-weight: 700;
-    color: #4e4b46;
+    color: var(--text-color);
     margin: 0 0 10px 0;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     animation: fadeInUp 1s ease-out;
   }
 
   .loading-text p {
     font-size: 1rem;
-    color: #6b7280;
+    color: var(--desc-color);
     margin: 0;
     animation: fadeInUp 1.2s ease-out;
+  }
+
+  .auth-startup-retry {
+    margin: 20px auto 0;
   }
 
   @keyframes fadeInUp {
@@ -1119,10 +1216,6 @@
 
   /* 响应式设计 */
   @media (max-width: 768px) {
-    .loading-spinner {
-      width: 60px;
-      height: 60px;
-    }
     .loading-text h2 {
       font-size: 1.5rem;
     }

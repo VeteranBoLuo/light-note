@@ -1,4 +1,5 @@
-export type AdminTodayMetricKey = 'users' | 'resources' | 'bookmarks' | 'notes' | 'files' | 'todos';
+export type AdminTodayMetricKey =
+  'users' | 'resources' | 'bookmarks' | 'notes' | 'files' | 'todos' | 'activeUsers' | 'aiCalls';
 export type AdminTodayInsightMetricKey = 'users' | 'resources';
 export type AdminTodayResourceMetricKey = 'bookmarks' | 'notes' | 'files';
 

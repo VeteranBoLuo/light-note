@@ -33,6 +33,7 @@
         :mobile="bookmark.isMobile"
         :advanced-enabled="todoPlanFeatures.independentTaskAdvancedEnabled"
         @advanced-change="simpleAdvanced = $event"
+        @open-resource="openResourceRef"
         @submit="save"
         @cancel="close"
       />
@@ -47,6 +48,7 @@
         :legacy-conversion-enabled="todoPlanFeatures.conversionEnabled"
         sticky-actions
         @mobile-step-change="mobileStep = $event"
+        @open-resource="openResourceRef"
         @submit="save"
         @cancel="close"
       />
@@ -57,6 +59,7 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { useRouter } from 'vue-router';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import TodoEditorForm from '@/components/todo/TodoEditorForm.vue';
@@ -73,10 +76,13 @@
     type TodoCreateInitialValues,
     type TodoItem,
     type TodoPlanFeatureState,
+    type TodoResourceRefView,
   } from '@/api/todoApi';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { bookmarkStore } from '@/store';
   import icon from '@/config/icon';
+  import { resolveResourceRoute } from '@/utils/resourceNavigation';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
 
   const props = defineProps<{
     item?: TodoItem | null;
@@ -88,6 +94,7 @@
     closed: [];
   }>();
   const { t } = useI18n();
+  const router = useRouter();
   const bookmark = bookmarkStore();
   const saving = ref(false);
   const mobileStep = ref<1 | 2 | 3>(1);
@@ -163,6 +170,18 @@
     } finally {
       saving.value = false;
     }
+  }
+
+  function openResourceRef(resource: TodoResourceRefView) {
+    const target = resolveResourceRoute(resource);
+    if (!target) return;
+    void closeCurrentMobileOverlayThen(
+      () => {
+        visible.value = false;
+        emit('closed');
+      },
+      () => router.push(target),
+    );
   }
 
   function close() {

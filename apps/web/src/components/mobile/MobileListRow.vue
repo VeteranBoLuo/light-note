@@ -1,10 +1,6 @@
 <template>
   <div v-if="interactive" class="mobile-list-row__item-shell" role="listitem" @click="emit('click')">
-    <BButton
-      class="mobile-list-row"
-      :class="rowClasses"
-      :aria-current="selected ? 'true' : undefined"
-    >
+    <BButton class="mobile-list-row" :class="rowClasses" :aria-current="selected ? 'true' : undefined">
       <span v-if="$slots.leading" class="mobile-list-row__leading"><slot name="leading" /></span>
       <span v-if="$slots.default" class="mobile-list-row__body"><slot /></span>
       <span v-else class="mobile-list-row__body">
@@ -15,7 +11,13 @@
       <span v-if="$slots.trailing" class="mobile-list-row__trailing"><slot name="trailing" /></span>
     </BButton>
   </div>
-  <div v-else class="mobile-list-row" :class="rowClasses" role="listitem">
+  <div
+    v-else
+    class="mobile-list-row"
+    :class="[rowClasses, { 'is-surface-clickable': surfaceClickable }]"
+    role="listitem"
+    @click="handleSurfaceClick"
+  >
     <span v-if="$slots.leading" class="mobile-list-row__leading"><slot name="leading" /></span>
     <span v-if="$slots.default" class="mobile-list-row__body"><slot /></span>
     <span v-else class="mobile-list-row__body">
@@ -32,8 +34,14 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
 
   const props = withDefaults(
-    defineProps<{ interactive?: boolean; selected?: boolean; complex?: boolean; accent?: string }>(),
-    { interactive: false, selected: false, complex: false, accent: '' },
+    defineProps<{
+      interactive?: boolean;
+      selected?: boolean;
+      complex?: boolean;
+      accent?: string;
+      surfaceClickable?: boolean;
+    }>(),
+    { interactive: false, selected: false, complex: false, accent: '', surfaceClickable: false },
   );
   const emit = defineEmits<{ click: [] }>();
   const rowClasses = computed(() => ({
@@ -41,6 +49,10 @@
     'is-complex': props.complex,
     'has-accent': Boolean(props.accent),
   }));
+
+  function handleSurfaceClick() {
+    if (props.surfaceClickable) emit('click');
+  }
 </script>
 
 <style scoped lang="less">
@@ -82,6 +94,10 @@
     color: var(--primary-color);
     background: var(--mobile-selected-bg) !important;
     font-weight: 650;
+  }
+
+  .mobile-list-row.is-surface-clickable {
+    cursor: pointer;
   }
 
   .mobile-list-row__leading,

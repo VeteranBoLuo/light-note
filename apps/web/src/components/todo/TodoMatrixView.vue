@@ -56,6 +56,8 @@
             :key="item.id"
             class="todo-matrix-card"
             :class="{ 'is-completed': item.status === 'completed', 'is-series': seriesCount(item) > 1 }"
+            :surface-clickable="!disabled"
+            @click="emit('preview', item)"
           >
             <template #leading>
               <BCheckbox
@@ -73,7 +75,7 @@
                 class="todo-matrix-card__content"
                 :disabled="disabled"
                 :title="item.title"
-                @click="emit('edit', item)"
+                @click.stop="emit('preview', item)"
               >
                 <span class="todo-matrix-card__title">{{ item.title }}</span>
               </BButton>
@@ -88,7 +90,7 @@
                   :aria-label="t('inbox.todoMatrixSeriesOpen', { title: item.title, count: seriesCount(item) })"
                   :aria-expanded="seriesDrawerOpen && activeSeriesId === item.seriesId"
                   :disabled="disabled"
-                  @click="openSeriesDrawer(item)"
+                  @click.stop="openSeriesDrawer(item)"
                 >
                   <span class="todo-matrix-card__series">
                     <SvgIcon :src="icon.todo.repeat" size="12" aria-hidden="true" />
@@ -108,7 +110,7 @@
                 :disabled="disabled"
                 :loading="deletingId === item.id"
                 :aria-label="t('common.more')"
-                @click="openMobileActions(item)"
+                @click.stop="openMobileActions(item)"
               >
                 <SvgIcon v-if="deletingId !== item.id" :src="icon.common.more" size="18" aria-hidden="true" />
               </BButton>
@@ -120,6 +122,7 @@
                 placement="bottom-right"
                 :width="148"
                 :aria-label="t('common.more')"
+                @click.stop
                 @select="(key) => handleRowAction(key, item)"
               >
                 <BButton
@@ -155,6 +158,7 @@
       :deleting-id="deletingId"
       @toggle-complete="(item, completed) => emit('toggle-complete', item, completed)"
       @update-checklist="(item, checklist) => emit('update-checklist', item, checklist)"
+      @preview="(item) => emit('preview', item)"
       @edit="(item) => emit('edit', item)"
       @delete="(item) => emit('delete', item)"
       @add-to-calendar="(item) => emit('add-to-calendar', item)"
@@ -197,6 +201,7 @@
     },
   );
   const emit = defineEmits<{
+    preview: [item: TodoItem];
     edit: [item: TodoItem];
     delete: [item: TodoItem];
     'toggle-complete': [item: TodoItem, completed: boolean];
@@ -594,6 +599,7 @@
 
   .todo-matrix-card :deep(.todo-matrix-card__series-trigger) {
     min-width: 0;
+    max-width: 100%;
     height: 24px;
     flex: 0 1 auto;
     padding: 0;
@@ -604,7 +610,7 @@
 
   .todo-matrix-card__series {
     min-width: 0;
-    max-width: 180px;
+    max-width: 100%;
     box-sizing: border-box;
     display: inline-flex;
     flex: 0 1 auto;

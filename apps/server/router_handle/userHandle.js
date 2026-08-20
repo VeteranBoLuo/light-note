@@ -555,7 +555,7 @@ export const startAdminContext = async (req, res) => {
     const mode = String(req.body?.mode || 'readonly').trim();
     const result = await createAdminContext({
       actor,
-      actorSessionId: getRequestSid(req),
+      actorSessionId: req.user?.sessionId || getRequestSid(req),
       subjectUserId,
       mode,
     });
@@ -1411,7 +1411,7 @@ export const getMySessions = async (req, res) => {
     return res.send(resultData(null, 401, L(req, '请先登录', 'Please sign in first.')));
   }
   try {
-    const currentSid = getRequestSid(req);
+    const currentSid = req.user?.sessionId || getRequestSid(req);
     const rows = await listUserSessions(userId);
     const items = groupUserSessions(rows, currentSid).map((group) => ({
       // groupKey 比“最近活跃的 sid”稳定，设备内任一会话活跃都不会让前端刚拿到的句柄失效。
@@ -1438,7 +1438,7 @@ export const revokeSession = async (req, res) => {
   }
   try {
     const { id, others } = req.body || {};
-    const currentSid = getRequestSid(req);
+    const currentSid = req.user?.sessionId || getRequestSid(req);
     const rows = await listUserSessions(userId);
     const deviceGroups = groupUserSessions(rows, currentSid);
     let targets = [];

@@ -5,6 +5,7 @@
     width="620px"
     :mobile-full-screen="true"
     body-padding="0"
+    :mask-closable="true"
     @close="emit('update:open', false)"
   >
     <div class="todo-series-drawer__summary">
@@ -25,7 +26,8 @@
           :deleting="deletingId === item.id"
           @toggle-complete="emit('toggle-complete', item, $event)"
           @update-checklist="emit('update-checklist', item, $event)"
-          @edit="emit('edit', item)"
+          @preview="openPreview(item)"
+          @edit="openEditor(item)"
           @delete="emit('delete', item)"
           @add-to-calendar="emit('add-to-calendar', item)"
           @snooze="emit('snooze', item, $event)"
@@ -52,6 +54,7 @@
   import TodoItem from '@/components/todo/TodoItem.vue';
   import icon from '@/config/icon';
   import { compareTodoOccurrences, todoGroupKey, type TodoGroupKey, type TodoSnoozePreset } from '@/utils/todoPlanning';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
 
   const props = withDefaults(
     defineProps<{
@@ -70,6 +73,7 @@
     'update:open': [open: boolean];
     'toggle-complete': [item: TodoItemType, completed: boolean];
     'update-checklist': [item: TodoItemType, checklist: TodoChecklistItem[]];
+    preview: [item: TodoItemType];
     edit: [item: TodoItemType];
     delete: [item: TodoItemType];
     'add-to-calendar': [item: TodoItemType];
@@ -88,6 +92,20 @@
       .map((key) => ({ key, items: visibleItems.value.filter((item) => todoGroupKey(item) === key) }))
       .filter((group) => group.items.length > 0);
   });
+
+  function openPreview(item: TodoItemType) {
+    void closeCurrentMobileOverlayThen(
+      () => emit('update:open', false),
+      () => emit('preview', item),
+    );
+  }
+
+  function openEditor(item: TodoItemType) {
+    void closeCurrentMobileOverlayThen(
+      () => emit('update:open', false),
+      () => emit('edit', item),
+    );
+  }
 
   watch([() => props.open, () => props.representative.seriesId], ([open]) => {
     if (open) visibleCount.value = PAGE_SIZE;

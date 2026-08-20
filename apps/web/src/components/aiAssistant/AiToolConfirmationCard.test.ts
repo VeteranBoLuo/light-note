@@ -175,7 +175,7 @@ describe('AiToolConfirmationCard note preview', () => {
       confirmationToken: 'token',
       sessionId: 'session-1',
       continuationToken: 'continuation-token',
-      clientCapabilities: ['agent_interaction_v1', 'agent_continuation_v1'],
+      clientCapabilities: ['agent_interaction_v1', 'agent_continuation_v1', 'grounding_scope_v2'],
     });
     expect(onResolved).toHaveBeenCalledWith(expect.objectContaining({ continuation }));
   });
@@ -238,7 +238,7 @@ describe('AiToolConfirmationCard note preview', () => {
       confirmationToken: 'token',
       sessionId: 'session-1',
       parentId: 'directory-2',
-      clientCapabilities: ['agent_interaction_v1', 'agent_continuation_v1'],
+      clientCapabilities: ['agent_interaction_v1', 'agent_continuation_v1', 'grounding_scope_v2'],
     });
     expect(onReplaced).toHaveBeenCalledWith({
       previousConfirmationId: 'confirmation-1',
@@ -271,7 +271,7 @@ describe('AiToolConfirmationCard note preview', () => {
       confirmationToken: 'token',
       sessionId: 'session-1',
       parentId: null,
-      clientCapabilities: ['agent_interaction_v1', 'agent_continuation_v1'],
+      clientCapabilities: ['agent_interaction_v1', 'agent_continuation_v1', 'grounding_scope_v2'],
     });
     expect(onReplaced).toHaveBeenCalledWith({
       previousConfirmationId: 'confirmation-1',

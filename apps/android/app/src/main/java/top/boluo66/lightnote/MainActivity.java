@@ -220,6 +220,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onPause() {
+        WebViewSupport.flushCookies();
         super.onPause();
         WebViewSupport.setDownloadOpenPrompt(null);
     }
@@ -978,6 +979,8 @@ public final class MainActivity extends Activity {
                 }
             } else if ("app.ready".equals(messageType)) {
                 runOnUiThread(this::hideLaunchOverlay);
+            } else if ("auth.session.persist".equals(messageType)) {
+                runOnUiThread(WebViewSupport::flushCookies);
             } else if ("theme.changed".equals(messageType)) {
                 String theme = payload.optString("theme");
                 runOnUiThread(() -> applyWebTheme(theme));
@@ -1416,6 +1419,7 @@ public final class MainActivity extends Activity {
             fileCallback = null;
         }
         if (webView != null) {
+            WebViewSupport.flushCookies();
             webView.stopLoading();
             webView.destroy();
         }

@@ -10,7 +10,7 @@
     @delete="emit('delete')"
   >
     <article class="todo-item" :class="{ 'is-overdue': overdue, 'is-completed': item.status === 'completed' }">
-      <div class="todo-item__body" :class="{ 'is-editable': cardEditable }" @click="openEditorFromCard">
+      <div class="todo-item__body" :class="{ 'is-editable': cardPreviewable }" @click="openPreviewFromCard">
         <!-- 标题始终独立于勾选框:完成/恢复只能点方框,点名字不触发状态切换 -->
         <div v-if="!selectable" class="todo-item__main-line">
           <BCheckbox
@@ -72,24 +72,10 @@
             </BCheckbox>
           </div>
         </section>
-        <!-- 参考资料:最多展示 3 个,失效目标标注不可用且不可点击 -->
+        <!-- 参考资料:共享紧凑胶囊最多展示 3 个,失效目标标注不可用且不可点击 -->
         <section v-if="item.resourceRefs?.length" class="todo-resource-refs" @click.stop>
           <span class="todo-resource-refs__label">{{ t('inbox.todoResourceRefsTitle') }}</span>
-          <div class="todo-resource-refs__list">
-            <BButton
-              v-for="ref in visibleResourceRefs"
-              :key="`${ref.type}:${ref.id}`"
-              class="todo-resource-chip"
-              :class="{ 'is-unavailable': !ref.available }"
-              :disabled="!ref.available"
-              :title="ref.available ? ref.title : t('inbox.todoResourceUnavailable')"
-              @click.stop="openResourceRef(ref)"
-            >
-              <span class="todo-resource-chip__type">{{ t(`ai.sourceTypes.${ref.type}`) }}</span>
-              <span class="todo-resource-chip__title">{{ ref.title || t('inbox.todoResourceUnavailable') }}</span>
-            </BButton>
-            <span v-if="hiddenResourceRefCount" class="todo-resource-more">+{{ hiddenResourceRefCount }}</span>
-          </div>
+          <TodoResourceLinks :items="item.resourceRefs" :max-visible="3" @open="openResourceRef" />
         </section>
         <section v-if="reminderLabel" class="todo-reminder-summary" :class="{ 'is-past': pastReminderLabel }">
           <strong>{{ reminderLabel }}</strong>
@@ -219,6 +205,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import MobileSwipeDelete from '@/components/mobile/MobileSwipeDelete.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
+  import TodoResourceLinks from '@/components/todo/TodoResourceLinks.vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap';
   import { useRouter } from 'vue-router';
   import type { TodoChecklistItem, TodoItem, TodoPriority, TodoResourceRefView, TodoSeriesAction } from '@/api/todoApi';
@@ -244,6 +231,7 @@
   const emit = defineEmits<{
     'toggle-complete': [completed: boolean];
     'update-checklist': [checklist: TodoChecklistItem[]];
+    preview: [];
     edit: [];
     delete: [];
     'add-to-calendar': [];
@@ -418,10 +406,7 @@
     return labels;
   });
   const priorityOptions = computed(() => [0, 1, 2].map((value) => ({ value, label: t(`inbox.todoPriority${value}`) })));
-  const MAX_VISIBLE_REFS = 3;
-  const visibleResourceRefs = computed(() => (props.item.resourceRefs || []).slice(0, MAX_VISIBLE_REFS));
-  const hiddenResourceRefCount = computed(() => Math.max(0, (props.item.resourceRefs?.length || 0) - MAX_VISIBLE_REFS));
-  const cardEditable = computed(() => !props.selectable && !props.disabled);
+  const cardPreviewable = computed(() => !props.selectable && !props.disabled);
   const mobileMenuTitle = computed(() => {
     if (mobileMenu.value === 'priority') return t('inbox.todoPriority');
     if (mobileMenu.value === 'snooze') return t('inbox.todoSnooze');
@@ -493,8 +478,8 @@
     else if (action.key === 'delete') emit('delete');
   }
 
-  function openEditorFromCard(event: MouseEvent) {
-    if (!cardEditable.value) return;
+  function openPreviewFromCard(event: MouseEvent) {
+    if (!cardPreviewable.value) return;
     const target = event.target as HTMLElement | null;
     if (
       target?.closest(
@@ -503,7 +488,7 @@
     ) {
       return;
     }
-    emit('edit');
+    emit('preview');
   }
 
   function openResourceRef(ref: TodoResourceRefView) {
@@ -773,49 +758,6 @@
   .todo-resource-refs__label {
     flex: 0 0 auto;
     padding-top: 4px;
-    color: var(--desc-color);
-    font-size: 12px;
-  }
-
-  .todo-resource-refs__list {
-    min-width: 0;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .todo-resource-chip {
-    max-width: 220px;
-    height: auto;
-    min-height: 26px;
-    padding: 3px 9px;
-    gap: 5px;
-    border: 1px solid var(--card-border-color);
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--primary-color) 5%, transparent) !important;
-    font-size: 12px;
-
-    &.is-unavailable {
-      opacity: 0.55;
-      cursor: not-allowed;
-    }
-  }
-
-  .todo-resource-chip__type {
-    flex: 0 0 auto;
-    color: var(--primary-color);
-  }
-
-  .todo-resource-chip__title {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--text-color);
-  }
-
-  .todo-resource-more {
     color: var(--desc-color);
     font-size: 12px;
   }

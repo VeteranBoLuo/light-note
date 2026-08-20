@@ -46,9 +46,10 @@ describe('后台运营总览指标去重', () => {
   });
 
   it('今日卡片显示同一时刻基线，显著波动只生成用户和资源两类运营提示', () => {
-    for (const metric of ['users', 'resources', 'bookmarks', 'notes', 'files', 'todos']) {
+    for (const metric of ['users', 'resources', 'bookmarks', 'notes', 'files', 'todos', 'activeUsers', 'aiCalls']) {
       expect(template).toContain(`baselineText('${metric}')`);
     }
+    expect(template).toContain("t('adminOverview.activeUserHint')");
     expect(template).toContain('v-for="insight in todayInsights"');
     expect(source).toContain('buildAdminTodayInsights');
     expect(source).toContain("files: 'file'");

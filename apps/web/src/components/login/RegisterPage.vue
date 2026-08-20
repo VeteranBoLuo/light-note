@@ -96,6 +96,7 @@
   import { setLocale } from '@/i18n';
   import { createGithubAuthorizationUrl, rememberGithubOAuthFlow } from '@/utils/githubOAuth';
   import { clearQuickSaveAuthReturnPath, resolveQuickSaveAuthReturnPath } from '@/utils/quickSaveAuthReturn.ts';
+  import { persistAndroidAuthSession } from '@/utils/androidBridge.ts';
   import GithubOAuthConsentModal from './GithubOAuthConsentModal.vue';
 
   type AuthMode = '登录' | '注册' | '重置';
@@ -157,6 +158,7 @@
 
       recordOperation(OPERATION_LOG_MAP.register.register);
       markLoggedIn();
+      persistAndroidAuthSession();
       user.setUserInfo(res.data);
       const registeredUserId = String(user.id || '');
       const tags = await bookmark.loadTagList(registeredUserId, { showLoading: false });
