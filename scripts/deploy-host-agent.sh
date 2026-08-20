@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Host Agent 部署：本地打包 → 远端快照 → 安装专用账户、固定 helper、sudoers 与 systemd unit → Socket 健康检查
+# Host Agent 部署：本地打包 → 远端快照 → 安装专用账户、Socket 激活的 root helper 与 Agent unit → 健康检查
 set -euo pipefail
 
 HOST="${LIGHTNOTE_DEPLOY_HOST:?请设置 LIGHTNOTE_DEPLOY_HOST，例如 deploy-user@example.com}"
@@ -15,11 +15,12 @@ echo "📦  打包 Host Agent（仅生产依赖）…"
 rm -rf "$OUT"
 pnpm --filter host-agent deploy --prod --legacy "$OUT"
 
-echo "🔎  预检 Node、systemd、sudo 与 PM2 运行时…"
+echo "🔎  预检 Node、systemd、runuser 与 PM2 运行时…"
 ssh -i "$KEY" "$HOST" "set -eu; \
   test -x /usr/bin/node; \
   test -x /usr/bin/systemctl; \
-  test -x /usr/bin/sudo; \
+  test -x /usr/bin/systemd-analyze; \
+  test -x /usr/sbin/runuser; \
   test -x /usr/bin/pm2; \
   test -x /usr/bin/nsenter; \
   major=\$(/usr/bin/node -p 'Number(process.versions.node.split(\".\")[0])'); \
@@ -34,7 +35,7 @@ ssh -i "$KEY" "$HOST" "{ [ -d '$REMOTE' ] && cp -al '$REMOTE' '${REMOTE}_bak_$TS
 echo "🚚  同步 Host Agent 程序包…"
 rsync -az --no-owner --no-group --delete -e "ssh -i $KEY" "$OUT"/ "$HOST:$REMOTE/"
 
-echo "🛡  安装专用账户、固定 helper、精确 sudoers 与 systemd unit…"
+echo "🛡  安装专用账户、Socket 激活的固定 helper 与 systemd unit…"
 ssh -i "$KEY" "$HOST" "set -eu; \
   if ! id -u '$AGENT_USER' >/dev/null 2>&1; then \
     useradd --system --home-dir /var/lib/lightnote-host-agent --no-create-home --shell /usr/sbin/nologin '$AGENT_USER'; \
@@ -42,38 +43,53 @@ ssh -i "$KEY" "$HOST" "set -eu; \
   install -d -o root -g root -m 0755 /usr/local/libexec /etc/lightnote-host-agent; \
   install -o root -g root -m 0755 '$REMOTE/privileged/lightnote-host-helper.mjs' /usr/local/libexec/lightnote-host-helper.mjs; \
   install -o root -g root -m 0644 '$REMOTE/deploy/lightnote-host-agent@.service' /etc/systemd/system/lightnote-host-agent@.service; \
-  sudoers_tmp=\$(mktemp /etc/sudoers.d/lightnote-host-agent.XXXXXX); \
+  install -o root -g root -m 0644 '$REMOTE/deploy/lightnote-host-helper@.service' /etc/systemd/system/lightnote-host-helper@.service; \
+  socket_tmp=\$(mktemp /etc/systemd/system/lightnote-host-helper.socket.XXXXXX); \
   env_tmp=\$(mktemp /etc/lightnote-host-agent/agent.env.XXXXXX); \
-  trap 'rm -f \"\$sudoers_tmp\" \"\$env_tmp\"' EXIT; \
-  sed 's/<agent-user>/$AGENT_USER/g' '$REMOTE/deploy/lightnote-host-agent.sudoers.example' > \"\$sudoers_tmp\"; \
-  chmod 0440 \"\$sudoers_tmp\"; \
-  visudo -cf \"\$sudoers_tmp\" >/dev/null; \
-  install -o root -g root -m 0440 \"\$sudoers_tmp\" /etc/sudoers.d/lightnote-host-agent; \
+  trap 'rm -f \"\$socket_tmp\" \"\$env_tmp\"' EXIT; \
+  sed 's/<agent-user>/$AGENT_USER/g' '$REMOTE/deploy/lightnote-host-helper.socket.example' > \"\$socket_tmp\"; \
+  install -o root -g root -m 0644 \"\$socket_tmp\" /etc/systemd/system/lightnote-host-helper.socket; \
   if [ ! -f /etc/lightnote-host-agent/agent.env ]; then \
     sed \
       -e 's#HOST_AGENT_PM2_HOME=/home/<agent-user>/.pm2#HOST_AGENT_PM2_HOME=/var/lib/lightnote-host-agent/pm2-unused#' \
       -e 's/HOST_AGENT_PM2_ACCESS_MODE=direct/HOST_AGENT_PM2_ACCESS_MODE=helper/' \
       '$REMOTE/deploy/agent.env.example' > \"\$env_tmp\"; \
-    install -o root -g '$AGENT_USER' -m 0640 \"\$env_tmp\" /etc/lightnote-host-agent/agent.env; \
-  elif grep -qx 'HOST_AGENT_PRIVILEGED_HELPER=/usr/local/libexec/lightnote-host-helper' /etc/lightnote-host-agent/agent.env; then \
-    sed 's#^HOST_AGENT_PRIVILEGED_HELPER=/usr/local/libexec/lightnote-host-helper\$#HOST_AGENT_PRIVILEGED_HELPER=/usr/local/libexec/lightnote-host-helper.mjs#' /etc/lightnote-host-agent/agent.env > "\$env_tmp"; \
-    install -o root -g '$AGENT_USER' -m 0640 "\$env_tmp" /etc/lightnote-host-agent/agent.env; \
+  else \
+    sed \
+      -e '/^HOST_AGENT_PRIVILEGED_HELPER=/d' \
+      -e '/^HOST_AGENT_SUDO_BIN=/d' \
+      -e '/^HOST_AGENT_PRIVILEGED_HELPER_SOCKET=/d' \
+      /etc/lightnote-host-agent/agent.env > \"\$env_tmp\"; \
+    printf '%s\\n' 'HOST_AGENT_PRIVILEGED_HELPER_SOCKET=/run/lightnote-host-helper.sock' >> \"\$env_tmp\"; \
   fi; \
+  install -o root -g '$AGENT_USER' -m 0640 \"\$env_tmp\" /etc/lightnote-host-agent/agent.env; \
   ! grep -q '<agent-user>' /etc/lightnote-host-agent/agent.env; \
   grep -qx 'HOST_AGENT_PM2_ACCESS_MODE=helper' /etc/lightnote-host-agent/agent.env; \
+  grep -qx 'HOST_AGENT_PRIVILEGED_HELPER_SOCKET=/run/lightnote-host-helper.sock' /etc/lightnote-host-agent/agent.env; \
   systemctl daemon-reload; \
+  systemd-analyze verify \
+    /etc/systemd/system/lightnote-host-agent@.service \
+    /etc/systemd/system/lightnote-host-helper.socket \
+    /etc/systemd/system/lightnote-host-helper@.service >/dev/null; \
+  systemctl enable --now lightnote-host-helper.socket; \
+  systemctl restart lightnote-host-helper.socket; \
   systemctl enable --now 'lightnote-host-agent@$AGENT_USER.service'; \
   systemctl restart 'lightnote-host-agent@$AGENT_USER.service'"
 
-echo "✅  验证 Socket、协议与固定 helper 能力…"
+echo "✅  验证两个 Socket、协议与固定 helper 能力…"
 ssh -i "$KEY" "$HOST" "set -eu; \
+  systemctl is-active --quiet lightnote-host-helper.socket; \
   systemctl is-active --quiet 'lightnote-host-agent@$AGENT_USER.service'; \
+  test -S /run/lightnote-host-helper.sock; \
+  test \"\$(stat -c '%a %U %G' /run/lightnote-host-helper.sock)\" = '660 root $AGENT_USER'; \
   test -S /run/lightnote-host-agent/agent.sock; \
   curl --fail --silent --show-error --unix-socket /run/lightnote-host-agent/agent.sock http://localhost/v1/health >/dev/null; \
-  sudo -u '$AGENT_USER' sudo -n /usr/local/libexec/lightnote-host-helper.mjs capabilities >/dev/null; \
+  /usr/sbin/runuser -u '$AGENT_USER' -- env HOST_AGENT_PRIVILEGED_HELPER_SOCKET=/run/lightnote-host-helper.sock \
+    /usr/bin/node '$REMOTE/src/helperClient.js' capabilities >/dev/null; \
   curl --fail --silent --show-error --unix-socket /run/lightnote-host-agent/agent.sock http://localhost/v1/dashboard | \
     /usr/bin/node -e 'let source=\"\"; process.stdin.on(\"data\", chunk => source += chunk).on(\"end\", () => { const payload = JSON.parse(source); const expected = new Set([\"lightnote-api\", \"lightnote-document-worker\", \"lightnote-bookmark-icon-worker\", \"lightnote-resource-governance-worker\"]); const services = payload?.data?.services || []; for (const service of services) { if (expected.has(service.id) && service.state !== \"unknown\") expected.delete(service.id); } if (!payload?.ok || expected.size) process.exit(1); });'; \
-  rm -f /usr/local/libexec/lightnote-host-helper; \
-  echo 'Host Agent health and fixed helper checks passed'"
+  rm -f /etc/sudoers.d/lightnote-host-agent /usr/local/libexec/lightnote-host-helper; \
+  test ! -e /etc/sudoers.d/lightnote-host-agent; \
+  echo 'Host Agent health and Socket helper checks passed'"
 
 echo "🎉  Host Agent 部署完成"

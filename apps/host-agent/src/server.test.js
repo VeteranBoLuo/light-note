@@ -50,8 +50,6 @@ describe("Host Agent Unix Socket API", () => {
       path.join(os.tmpdir(), "lightnote-host-agent-"),
     );
     const socketPath = path.join(directory, "agent.sock");
-    const helperPath = path.join(directory, "helper");
-    await fs.writeFile(helperPath, "#!/bin/sh\n", { mode: 0o700 });
     const runner = vi.fn(async (file, args) => {
       if (args[0] === "jlist") {
         return {
@@ -83,8 +81,7 @@ describe("Host Agent Unix Socket API", () => {
     const config = {
       socketPath,
       stateDir: path.join(directory, "jobs"),
-      privilegedHelperPath: helperPath,
-      sudoBin: "/usr/bin/true",
+      privilegedHelperSocketPath: path.join(directory, "helper.sock"),
       systemctlBin: "/usr/bin/systemctl",
       journalctlBin: "/usr/bin/true",
       pm2Bin: "/usr/bin/true",
@@ -97,7 +94,16 @@ describe("Host Agent Unix Socket API", () => {
       socketMode: 0o660,
       services: SERVICE_DEFINITIONS,
     };
-    const agent = await createHostAgent({ config, commandRunner: runner });
+    const helperRequester = vi.fn(async () => ({
+      exitCode: 0,
+      stdout: '{"nginxReload":false}',
+      stderr: "",
+    }));
+    const agent = await createHostAgent({
+      config,
+      commandRunner: runner,
+      helperRequester,
+    });
     await agent.listen();
     cleanups.push(async () => {
       await agent.close();

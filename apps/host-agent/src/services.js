@@ -1,7 +1,6 @@
-import { constants } from "node:fs";
-import fs from "node:fs/promises";
 import { HOST_AGENT_ACTIONS } from "@lightnote/shared/host-agent-protocol";
 import { runCommand, safeCommandEnvironment } from "./commandRunner.js";
+import { requestPrivilegedHelper } from "./helperClient.js";
 import { redactOperationalText, stableErrorCode } from "./redaction.js";
 
 function serviceState(value) {
@@ -52,20 +51,64 @@ function parsePm2Item(item) {
   };
 }
 
-async function readPrivilegedCapabilities(config, runner = runCommand) {
+function parseHelperServiceStatus(stdout) {
+  const payload = JSON.parse(stdout || "{}");
+  if (
+    !payload ||
+    !["running", "degraded", "stopped", "unknown"].includes(payload.state) ||
+    typeof payload.detail !== "string" ||
+    payload.detail.length > 120 ||
+    !(
+      payload.pid === null ||
+      (Number.isSafeInteger(payload.pid) && payload.pid > 0)
+    ) ||
+    !(
+      payload.uptimeSeconds === null ||
+      (Number.isSafeInteger(payload.uptimeSeconds) &&
+        payload.uptimeSeconds >= 0)
+    )
+  ) {
+    throw Object.assign(new Error("helper service status is invalid"), {
+      code: "HOST_HELPER_RESPONSE_INVALID",
+    });
+  }
+  return {
+    state: payload.state,
+    detail: payload.detail,
+    pid: payload.pid,
+    uptimeSeconds: payload.uptimeSeconds,
+  };
+}
+
+function runHelper(
+  config,
+  action,
+  targetId,
+  options,
+  helperRequester = requestPrivilegedHelper,
+) {
+  return helperRequester(
+    config.privilegedHelperSocketPath,
+    action,
+    targetId,
+    options,
+  );
+}
+
+async function readPrivilegedCapabilities(
+  config,
+  helperRequester = requestPrivilegedHelper,
+) {
   try {
-    await Promise.all([
-      fs.access(config.sudoBin, constants.X_OK),
-      fs.access(config.privilegedHelperPath, constants.X_OK),
-    ]);
-    const result = await runner(
-      config.sudoBin,
-      ["-n", config.privilegedHelperPath, "capabilities"],
+    const result = await runHelper(
+      config,
+      "capabilities",
+      undefined,
       {
         timeoutMs: 5000,
         maxOutputBytes: 16 * 1024,
-        env: safeCommandEnvironment(),
       },
+      helperRequester,
     );
     if (result.exitCode !== 0) return null;
     const capabilities = JSON.parse(result.stdout || "{}");
@@ -77,34 +120,37 @@ async function readPrivilegedCapabilities(config, runner = runCommand) {
   }
 }
 
-export async function canExecuteNginxReload(config, runner = runCommand) {
-  const capabilities = await readPrivilegedCapabilities(config, runner);
+export async function canExecuteNginxReload(
+  config,
+  helperRequester = requestPrivilegedHelper,
+) {
+  const capabilities = await readPrivilegedCapabilities(
+    config,
+    helperRequester,
+  );
   return capabilities?.nginxReload === true;
 }
 
-async function readPm2Items(config, runner) {
+async function readPm2Items(config, runner, helperRequester) {
   if (config.pm2AccessMode === "disabled") {
     throw Object.assign(new Error("PM2 access is disabled"), {
       code: "PM2_ACCESS_DISABLED",
     });
   }
-  const command =
+  const result =
     config.pm2AccessMode === "helper"
-      ? {
-          file: config.sudoBin,
-          args: ["-n", config.privilegedHelperPath, "pm2-status"],
-          env: safeCommandEnvironment(),
-        }
-      : {
-          file: config.pm2Bin,
-          args: ["jlist"],
+      ? await runHelper(
+          config,
+          "pm2-status",
+          undefined,
+          { timeoutMs: 5000, maxOutputBytes: 512 * 1024 },
+          helperRequester,
+        )
+      : await runner(config.pm2Bin, ["jlist"], {
+          timeoutMs: 5000,
+          maxOutputBytes: 512 * 1024,
           env: safeCommandEnvironment({ PM2_HOME: config.pm2Home }),
-        };
-  const result = await runner(command.file, command.args, {
-    timeoutMs: 5000,
-    maxOutputBytes: 512 * 1024,
-    env: command.env,
-  });
+        });
   if (result.exitCode !== 0)
     throw Object.assign(new Error("pm2 status failed"), {
       code: "PM2_QUERY_FAILED",
@@ -117,18 +163,22 @@ async function readPm2Items(config, runner) {
   return items;
 }
 
-export async function collectServiceSnapshots(config, runner = runCommand) {
+export async function collectServiceSnapshots(
+  config,
+  runner = runCommand,
+  helperRequester = requestPrivilegedHelper,
+) {
   const errors = [];
   let pm2Items = [];
   let pm2Available = false;
   try {
-    pm2Items = await readPm2Items(config, runner);
+    pm2Items = await readPm2Items(config, runner, helperRequester);
     pm2Available = true;
   } catch (error) {
     errors.push({ source: "pm2", code: stableErrorCode(error) });
   }
 
-  const nginxReload = await canExecuteNginxReload(config, runner);
+  const nginxReload = await canExecuteNginxReload(config, helperRequester);
   const snapshots = await Promise.all(
     config.services.map(async (definition) => {
       const actions = [];
@@ -153,6 +203,35 @@ export async function collectServiceSnapshots(config, runner = runCommand) {
               }),
           actions,
         };
+      }
+      if (
+        config.pm2AccessMode === "helper" &&
+        (definition.id === "nginx" || definition.id === "redis")
+      ) {
+        try {
+          const result = await runHelper(
+            config,
+            "service-status",
+            definition.id,
+            { timeoutMs: 5000, maxOutputBytes: 16 * 1024 },
+            helperRequester,
+          );
+          if (result.exitCode !== 0) {
+            throw Object.assign(new Error("helper service status failed"), {
+              code: "HOST_HELPER_QUERY_FAILED",
+            });
+          }
+          return {
+            id: definition.id,
+            ...parseHelperServiceStatus(result.stdout),
+            actions,
+          };
+        } catch (error) {
+          errors.push({
+            source: definition.id,
+            code: stableErrorCode(error),
+          });
+        }
       }
       try {
         const result = await runner(
@@ -199,54 +278,57 @@ export async function readServiceLogs(
   serviceId,
   limit,
   runner = runCommand,
+  helperRequester = requestPrivilegedHelper,
 ) {
   const definition = config.services.find((item) => item.id === serviceId);
   if (!definition)
     throw Object.assign(new Error("Service is not allowlisted"), {
       code: "HOST_AGENT_SERVICE_FORBIDDEN",
     });
-  const command =
-    config.pm2AccessMode === "helper"
-      ? {
-          file: config.sudoBin,
-          args: [
-            "-n",
-            config.privilegedHelperPath,
-            definition.kind === "pm2" ? "pm2-logs" : "journal-logs",
-            serviceId,
-          ],
-          env: safeCommandEnvironment(),
-        }
-      : definition.kind === "pm2"
-      ? {
-          file: config.pm2Bin,
-          args: [
-            "logs",
-            definition.target,
-            "--lines",
-            String(limit),
-            "--nostream",
-            "--raw",
-          ],
-          env: safeCommandEnvironment({ PM2_HOME: config.pm2Home }),
-        }
-      : {
-          file: config.journalctlBin,
-          args: [
-            "--unit",
-            definition.target,
-            "--lines",
-            String(limit),
-            "--no-pager",
-            "--output=short-iso",
-          ],
-          env: safeCommandEnvironment(),
-        };
-  const result = await runner(command.file, command.args, {
-    timeoutMs: 8000,
-    maxOutputBytes: 256 * 1024,
-    env: command.env,
-  });
+  let result;
+  if (config.pm2AccessMode === "helper") {
+    result = await runHelper(
+      config,
+      definition.kind === "pm2" ? "pm2-logs" : "journal-logs",
+      serviceId,
+      { timeoutMs: 8000, maxOutputBytes: 256 * 1024 },
+      helperRequester,
+    );
+  } else if (definition.kind === "pm2") {
+    result = await runner(
+      config.pm2Bin,
+      [
+        "logs",
+        definition.target,
+        "--lines",
+        String(limit),
+        "--nostream",
+        "--raw",
+      ],
+      {
+        timeoutMs: 8000,
+        maxOutputBytes: 256 * 1024,
+        env: safeCommandEnvironment({ PM2_HOME: config.pm2Home }),
+      },
+    );
+  } else {
+    result = await runner(
+      config.journalctlBin,
+      [
+        "--unit",
+        definition.target,
+        "--lines",
+        String(limit),
+        "--no-pager",
+        "--output=short-iso",
+      ],
+      {
+        timeoutMs: 8000,
+        maxOutputBytes: 256 * 1024,
+        env: safeCommandEnvironment(),
+      },
+    );
+  }
   if (result.exitCode !== 0) {
     throw Object.assign(new Error("Service logs could not be read"), {
       code: "HOST_AGENT_LOG_READ_FAILED",
@@ -265,18 +347,24 @@ export async function readServiceLogs(
   };
 }
 
-export async function executeHostAction(config, request, runner = runCommand) {
+export async function executeHostAction(
+  config,
+  request,
+  runner = runCommand,
+  helperRequester = requestPrivilegedHelper,
+) {
   const startedAt = Date.now();
   let result;
   if (request.action === HOST_AGENT_ACTIONS.NGINX_RELOAD) {
-    result = await runner(
-      config.sudoBin,
-      ["-n", config.privilegedHelperPath, "nginx-reload"],
+    result = await runHelper(
+      config,
+      "nginx-reload",
+      undefined,
       {
         timeoutMs: 20_000,
         maxOutputBytes: 64 * 1024,
-        env: safeCommandEnvironment(),
       },
+      helperRequester,
     );
   } else {
     const definition = config.services.find(
@@ -294,28 +382,20 @@ export async function executeHostAction(config, request, runner = runCommand) {
         code: "PM2_ACCESS_DISABLED",
       });
     }
-    const command =
+    result =
       config.pm2AccessMode === "helper"
-        ? {
-            file: config.sudoBin,
-            args: [
-              "-n",
-              config.privilegedHelperPath,
-              "pm2-restart",
-              request.targetId,
-            ],
-            env: safeCommandEnvironment(),
-          }
-        : {
-            file: config.pm2Bin,
-            args: ["restart", definition.target],
+        ? await runHelper(
+            config,
+            "pm2-restart",
+            request.targetId,
+            { timeoutMs: 20_000, maxOutputBytes: 64 * 1024 },
+            helperRequester,
+          )
+        : await runner(config.pm2Bin, ["restart", definition.target], {
+            timeoutMs: 20_000,
+            maxOutputBytes: 64 * 1024,
             env: safeCommandEnvironment({ PM2_HOME: config.pm2Home }),
-          };
-    result = await runner(command.file, command.args, {
-      timeoutMs: 20_000,
-      maxOutputBytes: 64 * 1024,
-      env: command.env,
-    });
+          });
   }
   const summary = redactOperationalText(
     [result.stdout, result.stderr].filter(Boolean).join("\n"),

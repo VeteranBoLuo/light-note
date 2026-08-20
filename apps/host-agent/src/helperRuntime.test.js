@@ -37,4 +37,44 @@ describe("privileged helper production runtime", () => {
       }),
     );
   });
+
+  it("Socket 模式只接受固定字段并返回受限结果结构", () => {
+    const accepted = spawnSync(process.execPath, [helperPath, "socket"], {
+      encoding: "utf8",
+      input: '{"action":"capabilities"}\n',
+      env: { PATH: "/usr/sbin:/usr/bin:/sbin:/bin" },
+    });
+    expect(accepted.status).toBe(0);
+    expect(JSON.parse(accepted.stdout)).toEqual({
+      exitCode: 0,
+      stdout: expect.any(String),
+      stderr: "",
+    });
+    expect(JSON.parse(JSON.parse(accepted.stdout).stdout)).toEqual(
+      expect.objectContaining({ pm2Status: expect.any(Boolean) }),
+    );
+
+    const status = spawnSync(process.execPath, [helperPath, "socket"], {
+      encoding: "utf8",
+      input: '{"action":"service-status","targetId":"redis"}\n',
+      env: { PATH: "/usr/sbin:/usr/bin:/sbin:/bin" },
+    });
+    expect(JSON.parse(JSON.parse(status.stdout).stdout)).toEqual(
+      expect.objectContaining({
+        state: expect.stringMatching(/^(running|stopped)$/u),
+        detail: expect.any(String),
+      }),
+    );
+
+    const denied = spawnSync(process.execPath, [helperPath, "socket"], {
+      encoding: "utf8",
+      input: '{"action":"capabilities","command":"whoami"}\n',
+      env: { PATH: "/usr/sbin:/usr/bin:/sbin:/bin" },
+    });
+    expect(JSON.parse(denied.stdout)).toEqual({
+      exitCode: 64,
+      stdout: "",
+      stderr: "action denied\n",
+    });
+  });
 });

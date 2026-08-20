@@ -747,7 +747,7 @@ page_view（打开站点）→ wall_hit（触发拦截）→ cta_click（点注�
 - 浏览器只访问 Express 的 `/api/infra/*`。Express 是控制面，继续承担登录态、每请求角色校验、管理员预览失败关闭、高风险确认、意图/终态审计和幂等键派生。
 - `apps/host-agent` 是独立 Node.js 进程，不是 AI Agent。它只监听 `/run/lightnote-host-agent/agent.sock`，不开放 TCP 端口；Express 与 Agent 共享 `@lightnote/shared/host-agent-protocol` 版本化封闭协议。
 - Agent 采集 CPU、负载、内存、根磁盘、网络速率、主机与服务状态，内存保留最近 60 分钟采样；日志按服务白名单、行数、输出大小和脱敏规则返回，不提供任意路径读取。
-- 写动作只有 `nginx.reload` 与三个固定 Worker 的 `service.restart`。Nginx 必须通过 root 所有的固定 helper 先 `nginx -t` 再 reload；PM2 只允许精确进程名且不使用 `--update-env`。非 root PM2 优先由同账户 Agent 直连；遗留 root PM2 只允许通过精确 helper 读取受限状态/日志和重启三个固定 Worker，不共享 `/root/.pm2`。轻笺 API、MySQL、Redis 没有页面重启能力。
+- 写动作只有 `nginx.reload` 与三个固定 Worker 的 `service.restart`。Nginx 必须匹配受支持的 systemd 或固定面板路径拓扑并确认主进程身份，才通过 root 所有的固定 helper 先 `nginx -t` 再 reload；PM2 只允许精确进程名且不使用 `--update-env`。非 root PM2 优先由同账户 Agent 直连；遗留 root PM2 只允许通过 `0660 root:<agent-user>` 的专用 Unix Socket 请求 systemd 按连接启动的 root helper，以固定 action/target 读取受限状态/日志和重启三个固定 Worker，不共享 `/root/.pm2`。面板托管的 Nginx/Redis 状态也由 helper 校验固定 PID 文件与 `/proc/<pid>/exe` 后返回，避免把失效的兼容 systemd unit 当成真实状态。Agent 自身继续运行于 `no_new_privileges` 沙箱，不使用 sudo；轻笺 API、MySQL、Redis 没有页面重启能力。
 - 每次动作由 Root 填写原因并显式确认，Express 先写 intent 审计；Agent 按派生 job ID 在执行前原子落「结果未知」占位，再以成功/失败终态回执原子替换。同一幂等键并发、网络重试或 Agent 中途崩溃都不会自动重复执行；Express 再写 succeeded/failed 终态审计。
 - Agent 不加载后端 `.env`，不持有数据库、Redis、对象存储或 SSH 凭据。部署配置只含 Socket、状态目录、二进制和 PM2 home 等非敏感绝对路径；详细安装与回滚见 `apps/host-agent/README.md`。
 - v1 只管理轻笺当前所在主机。网站或主 API 完全不可用时页面也不可用，紧急恢复仍走人工 SSH；未来增加少量其他主机时再引入主机注册、双向认证与远端 Agent，不提前建设多主机控制面。

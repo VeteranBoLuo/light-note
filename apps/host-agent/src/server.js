@@ -75,6 +75,7 @@ function assertAllowedQuery(url, allowedKeys = []) {
 export async function createHostAgent({
   config = loadHostAgentConfig(),
   commandRunner,
+  helperRequester,
 } = {}) {
   const startedAt = new Date().toISOString();
   const sampler = new MetricSampler({
@@ -114,7 +115,7 @@ export async function createHostAgent({
         assertAllowedQuery(url);
         const [metricState, serviceState] = await Promise.all([
           sampler.latest ? Promise.resolve(sampler.latest) : sampler.sample(),
-          collectServiceSnapshots(config, commandRunner),
+          collectServiceSnapshots(config, commandRunner, helperRequester),
         ]);
         const sampled = sampler.snapshot();
         return sendJson(res, 200, {
@@ -155,6 +156,7 @@ export async function createHostAgent({
           serviceId,
           normalizeHostAgentLogLimit(url.searchParams.get("limit")),
           commandRunner,
+          helperRequester,
         );
         return sendJson(res, 200, { ok: true, data });
       }
@@ -164,7 +166,13 @@ export async function createHostAgent({
         );
         const data = await jobStore.execute(
           request.jobId,
-          () => executeHostAction(config, request, commandRunner),
+          () =>
+            executeHostAction(
+              config,
+              request,
+              commandRunner,
+              helperRequester,
+            ),
           { action: request.action, targetId: request.targetId },
         );
         return sendJson(res, 200, { ok: true, data });

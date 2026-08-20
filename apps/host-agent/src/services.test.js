@@ -9,8 +9,7 @@ const baseConfig = {
   pm2Bin: "/usr/bin/pm2",
   pm2Home: "/var/lib/lightnote-pm2",
   pm2AccessMode: "direct",
-  sudoBin: "/usr/bin/sudo",
-  privilegedHelperPath: "/usr/local/libexec/lightnote-host-helper.mjs",
+  privilegedHelperSocketPath: "/run/lightnote-host-helper.sock",
   services: [
     {
       id: "lightnote-document-worker",
@@ -43,7 +42,8 @@ describe("executeHostAction", () => {
   });
 
   it("root PM2 兼容模式只通过固定 helper 重启枚举 Worker", async () => {
-    const runner = vi.fn(async () => ({
+    const runner = vi.fn();
+    const helperRequester = vi.fn(async () => ({
       exitCode: 0,
       stdout: "ok",
       stderr: "",
@@ -52,21 +52,20 @@ describe("executeHostAction", () => {
       { ...baseConfig, pm2AccessMode: "helper" },
       { action: "service.restart", targetId: "lightnote-document-worker" },
       runner,
+      helperRequester,
     );
-    expect(runner).toHaveBeenCalledWith(
-      "/usr/bin/sudo",
-      [
-        "-n",
-        "/usr/local/libexec/lightnote-host-helper.mjs",
-        "pm2-restart",
-        "lightnote-document-worker",
-      ],
+    expect(runner).not.toHaveBeenCalled();
+    expect(helperRequester).toHaveBeenCalledWith(
+      "/run/lightnote-host-helper.sock",
+      "pm2-restart",
+      "lightnote-document-worker",
       expect.objectContaining({ timeoutMs: 20_000 }),
     );
   });
 
-  it("Nginx 只通过固定 helper 执行校验后重载动作", async () => {
-    const runner = vi.fn(async () => ({
+  it("Nginx 只通过 root Socket helper 执行校验后重载动作", async () => {
+    const runner = vi.fn();
+    const helperRequester = vi.fn(async () => ({
       exitCode: 0,
       stdout: "ok",
       stderr: "",
@@ -75,10 +74,13 @@ describe("executeHostAction", () => {
       baseConfig,
       { action: "nginx.reload", targetId: "nginx" },
       runner,
+      helperRequester,
     );
-    expect(runner).toHaveBeenCalledWith(
-      "/usr/bin/sudo",
-      ["-n", "/usr/local/libexec/lightnote-host-helper.mjs", "nginx-reload"],
+    expect(runner).not.toHaveBeenCalled();
+    expect(helperRequester).toHaveBeenCalledWith(
+      "/run/lightnote-host-helper.sock",
+      "nginx-reload",
+      undefined,
       expect.objectContaining({ timeoutMs: 20_000 }),
     );
   });
@@ -109,7 +111,8 @@ describe("executeHostAction", () => {
   });
 
   it("root PM2 兼容模式只读取 helper 脱敏后的固定服务日志", async () => {
-    const runner = vi.fn(async () => ({
+    const runner = vi.fn();
+    const helperRequester = vi.fn(async () => ({
       exitCode: 0,
       stdout: "worker online",
       stderr: "",
@@ -120,19 +123,17 @@ describe("executeHostAction", () => {
         "lightnote-document-worker",
         120,
         runner,
+        helperRequester,
       ),
     ).resolves.toMatchObject({
       serviceId: "lightnote-document-worker",
       lines: ["worker online"],
     });
-    expect(runner).toHaveBeenCalledWith(
-      "/usr/bin/sudo",
-      [
-        "-n",
-        "/usr/local/libexec/lightnote-host-helper.mjs",
-        "pm2-logs",
-        "lightnote-document-worker",
-      ],
+    expect(runner).not.toHaveBeenCalled();
+    expect(helperRequester).toHaveBeenCalledWith(
+      "/run/lightnote-host-helper.sock",
+      "pm2-logs",
+      "lightnote-document-worker",
       expect.anything(),
     );
   });
@@ -146,11 +147,12 @@ describe("executeHostAction", () => {
         restartable: true,
       },
     ];
-    const runner = vi.fn(async (_file, args) => {
-      if (args.at(-1) === "capabilities") {
+    const runner = vi.fn();
+    const helperRequester = vi.fn(async (_socketPath, action) => {
+      if (action === "capabilities") {
         return { exitCode: 0, stdout: '{"nginxReload":true}', stderr: "" };
       }
-      if (args.at(-1) === "pm2-status") {
+      if (action === "pm2-status") {
         return {
           exitCode: 0,
           stdout: JSON.stringify([
@@ -163,18 +165,17 @@ describe("executeHostAction", () => {
           stderr: "",
         };
       }
-      throw new Error(`unexpected args: ${args.join(" ")}`);
+      throw new Error(`unexpected action: ${action}`);
     });
 
     const result = await collectServiceSnapshots(
       {
         ...baseConfig,
         pm2AccessMode: "helper",
-        sudoBin: "/usr/bin/true",
-        privilegedHelperPath: "/usr/bin/true",
         services,
       },
       runner,
+      helperRequester,
     );
 
     expect(result.services[0]).toMatchObject({
@@ -186,5 +187,74 @@ describe("executeHostAction", () => {
       nginxReload: true,
       workerRestart: true,
     });
+    expect(runner).not.toHaveBeenCalled();
+  });
+
+  it("面板托管的 Nginx 与 Redis 通过 helper 返回已校验进程状态", async () => {
+    const runner = vi.fn();
+    const helperRequester = vi.fn(async (_socketPath, action, targetId) => {
+      if (action === "capabilities") {
+        return {
+          exitCode: 0,
+          stdout: '{"nginxReload":true}',
+          stderr: "",
+        };
+      }
+      if (action === "pm2-status") {
+        return { exitCode: 0, stdout: "[]", stderr: "" };
+      }
+      if (action === "service-status") {
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({
+            state: "running",
+            detail: `active / panel-managed ${targetId}`,
+            pid: targetId === "nginx" ? 101 : 102,
+            uptimeSeconds: null,
+          }),
+          stderr: "",
+        };
+      }
+      throw new Error(`unexpected action: ${action}`);
+    });
+
+    const result = await collectServiceSnapshots(
+      {
+        ...baseConfig,
+        pm2AccessMode: "helper",
+        services: [
+          {
+            id: "nginx",
+            kind: "systemd",
+            target: "nginx.service",
+            restartable: false,
+          },
+          {
+            id: "redis",
+            kind: "systemd",
+            target: "redis-server.service",
+            restartable: false,
+          },
+        ],
+      },
+      runner,
+      helperRequester,
+    );
+
+    expect(result.services).toEqual([
+      expect.objectContaining({
+        id: "nginx",
+        state: "running",
+        pid: 101,
+        actions: ["nginx.reload"],
+      }),
+      expect.objectContaining({
+        id: "redis",
+        state: "running",
+        pid: 102,
+        actions: [],
+      }),
+    ]);
+    expect(runner).not.toHaveBeenCalled();
   });
 });

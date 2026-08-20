@@ -98,12 +98,11 @@ export function loadHostAgentConfig(environment = process.env) {
       "HOST_AGENT_STATE_DIR",
       "/var/lib/lightnote-host-agent/jobs",
     ),
-    privilegedHelperPath: absolutePath(
+    privilegedHelperSocketPath: absolutePath(
       environment,
-      "HOST_AGENT_PRIVILEGED_HELPER",
-      "/usr/local/libexec/lightnote-host-helper.mjs",
+      "HOST_AGENT_PRIVILEGED_HELPER_SOCKET",
+      "/run/lightnote-host-helper.sock",
     ),
-    sudoBin: absolutePath(environment, "HOST_AGENT_SUDO_BIN", "/usr/bin/sudo"),
     systemctlBin: absolutePath(
       environment,
       "HOST_AGENT_SYSTEMCTL_BIN",
