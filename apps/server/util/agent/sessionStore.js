@@ -12,6 +12,8 @@ const MAX_TURNS = 10;
 const MAX_ACTION_BATCHES = 3;
 const MAX_SOURCE_SETS = 6;
 const MAX_CLARIFICATIONS = 3;
+const MAX_RESULT_SETS = 6;
+const MAX_ARTIFACT_STATES = 4;
 const CLARIFICATION_TTL_MS = 5 * 60 * 1000;
 const MAX_TEXT_LENGTH = 700;
 const TTL_MS = 30 * 60 * 1000;
@@ -82,6 +84,19 @@ function makeSession(id, ownerKey) {
     actionBatches: [],
     sourceSets: [],
     clarifications: [],
+    resultSets: [],
+    artifactStates: [],
+    discourseState: {
+      schemaVersion: 3,
+      revision: 0,
+      topicEpoch: 0,
+      activeDomain: '',
+      lastCapabilityIds: [],
+      lastResultSetId: '',
+      activeResultSetIds: [],
+      pendingArtifactId: '',
+      unresolvedReference: false,
+    },
     createdAt: now(),
     updatedAt: now(),
   };
@@ -93,10 +108,52 @@ function normalizeSession(session) {
   if (!Array.isArray(session.actionBatches)) session.actionBatches = [];
   if (!Array.isArray(session.sourceSets)) session.sourceSets = [];
   if (!Array.isArray(session.clarifications)) session.clarifications = [];
+  if (!Array.isArray(session.resultSets)) session.resultSets = [];
+  if (!Array.isArray(session.artifactStates)) session.artifactStates = [];
+  if (!session.discourseState || typeof session.discourseState !== 'object' || Array.isArray(session.discourseState)) {
+    session.discourseState = {};
+  }
+  session.discourseState = {
+    schemaVersion: 3,
+    revision: Math.max(0, Number(session.discourseState.revision) || 0),
+    topicEpoch: Math.max(0, Number(session.discourseState.topicEpoch) || 0),
+    activeDomain: String(session.discourseState.activeDomain || ''),
+    lastCapabilityIds: [...new Set((session.discourseState.lastCapabilityIds || []).map(String))].slice(0, 8),
+    lastResultSetId: String(session.discourseState.lastResultSetId || ''),
+    activeResultSetIds: [
+      ...new Set(
+        (Array.isArray(session.discourseState.activeResultSetIds)
+          ? session.discourseState.activeResultSetIds
+          : [session.discourseState.lastResultSetId]
+        )
+          .map(String)
+          .filter(Boolean),
+      ),
+    ].slice(-MAX_RESULT_SETS),
+    pendingArtifactId: String(session.discourseState.pendingArtifactId || ''),
+    unresolvedReference: session.discourseState.unresolvedReference === true,
+  };
   return session;
 }
 
 const SOURCE_REF_TYPES = new Set(['note', 'bookmark', 'file', 'todo', 'tag']);
+const RESULT_REF_TYPE_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/;
+
+function normalizeResultRefs(values, limit = 50) {
+  const output = [];
+  const seen = new Set();
+  for (const value of Array.isArray(values) ? values : []) {
+    const type = String(value?.type || '').trim();
+    const id = String(value?.id || value?.resourceId || '').trim();
+    if (!RESULT_REF_TYPE_PATTERN.test(type) || !id || id.length > 255) continue;
+    const key = `${type}:${id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push({ type, id });
+    if (output.length >= limit) break;
+  }
+  return output;
+}
 
 function normalizeSourceRefs(values, { scope = false, limit = 20 } = {}) {
   const output = [];
@@ -259,6 +316,224 @@ export async function recordTurn(session, userMsg, assistantMsg, toolResults = [
 
   // 异步写 Redis
   persistSession(session);
+}
+
+/**
+ * 提交本轮结构化语义状态。只保存能力 ID、领域和主题纪元，不保存用户/助手正文。
+ * V3 编译器只读取这个投影，历史消息仍仅供 legacy 链路兼容使用。
+ */
+export async function commitSessionTurnSpec(session, turnSpec) {
+  if (!session || !turnSpec) return false;
+  normalizeSession(session);
+  const capabilityIds = [
+    ...new Set(
+      (Array.isArray(turnSpec.goals) ? turnSpec.goals : [])
+        .map((goal) => String(goal?.capabilityId || ''))
+        .filter(Boolean),
+    ),
+  ].slice(0, 8);
+  const explicitDomains = [
+    ...new Set(
+      (Array.isArray(turnSpec.goals) ? turnSpec.goals : [])
+        .filter((goal) => goal?.implicit !== true)
+        .map((goal) => String(goal?.capabilityDomain || ''))
+        .filter(Boolean),
+    ),
+  ];
+  const priorResultSetIds = [...session.discourseState.activeResultSetIds];
+  const startsFreshResultScope =
+    turnSpec.topicEpochAction === 'advance' ||
+    (Array.isArray(turnSpec.goals) && turnSpec.goals.some((goal) => goal?.kind === 'read'));
+  session.discourseState = {
+    ...session.discourseState,
+    revision: session.discourseState.revision + 1,
+    topicEpoch:
+      turnSpec.topicEpochAction === 'advance'
+        ? Math.max(0, Number(session.discourseState.topicEpoch) || 0) + 1
+        : Math.max(0, Number(session.discourseState.topicEpoch) || 0),
+    activeDomain: explicitDomains.length === 1 ? explicitDomains[0] : explicitDomains.length ? 'mixed' : '',
+    lastCapabilityIds: capabilityIds,
+    lastResultSetId: startsFreshResultScope ? '' : String(session.discourseState.lastResultSetId || ''),
+    activeResultSetIds: startsFreshResultScope ? [] : priorResultSetIds,
+    unresolvedReference: turnSpec.continuationMode === 'refer_last_result' && priorResultSetIds.length === 0,
+  };
+  await persistSession(session);
+  return true;
+}
+
+/** 保存一次真实工具结果的稳定引用集合；不保存标题、URL、正文、摘要或模型输出。 */
+export async function recordSessionResultSet(
+  session,
+  { capabilityId = '', domains = [], refs = [], status = 'success' } = {},
+) {
+  if (!session) return null;
+  normalizeSession(session);
+  const normalizedStatus = ['success', 'empty', 'error'].includes(status) ? status : 'success';
+  const resultSet = {
+    id: crypto.randomUUID(),
+    capabilityId: String(capabilityId || '').slice(0, 120),
+    domains: [...new Set((Array.isArray(domains) ? domains : []).map(String).filter(Boolean))].slice(0, 8),
+    refs: normalizeResultRefs(refs),
+    status: normalizedStatus,
+    topicEpoch: Math.max(0, Number(session.discourseState.topicEpoch) || 0),
+    createdAt: now(),
+    expiresAt: now() + TTL_MS,
+  };
+  session.resultSets = [...session.resultSets.filter((item) => Number(item?.expiresAt) > now()), resultSet].slice(
+    -MAX_RESULT_SETS,
+  );
+  session.discourseState = {
+    ...session.discourseState,
+    revision: session.discourseState.revision + 1,
+    lastResultSetId: resultSet.id,
+    activeResultSetIds: [...new Set([...session.discourseState.activeResultSetIds, resultSet.id])].slice(
+      -MAX_RESULT_SETS,
+    ),
+    unresolvedReference: false,
+  };
+  await persistSession(session);
+  return Object.freeze({
+    id: resultSet.id,
+    capabilityId: resultSet.capabilityId,
+    domains: Object.freeze([...resultSet.domains]),
+    refTypes: Object.freeze([...new Set(resultSet.refs.map((ref) => ref.type))]),
+    refCount: resultSet.refs.length,
+    status: resultSet.status,
+  });
+}
+
+export function resolveSessionResultSet(session, { id = '', types = [], ordinal = null } = {}) {
+  normalizeSession(session);
+  const requestedId = String(id || '');
+  const activeIds = requestedId
+    ? [requestedId]
+    : session.discourseState.activeResultSetIds.length
+      ? session.discourseState.activeResultSetIds
+      : [session.discourseState.lastResultSetId].filter(Boolean);
+  const typeSet = new Set((Array.isArray(types) ? types : []).map(String).filter(Boolean));
+  const candidates = activeIds
+    .map((targetId) => session.resultSets.find((item) => item?.id === targetId))
+    .filter((item) => item && Number(item.expiresAt) > now())
+    .filter((item) => {
+      if (!typeSet.size) return true;
+      const refTypes = new Set(normalizeResultRefs(item.refs).map((ref) => ref.type));
+      return [...typeSet].some((type) => refTypes.has(type) || (item.domains || []).includes(type));
+    });
+  if (candidates.length > 1) return { state: 'ambiguous', count: candidates.length, refs: [] };
+  const resultSet = candidates[0];
+  if (!resultSet) return { state: 'missing', refs: [] };
+  if (Number(resultSet.expiresAt) <= now()) return { state: 'expired', refs: [] };
+  let refs = normalizeResultRefs(resultSet.refs).filter((ref) => !typeSet.size || typeSet.has(ref.type));
+  const position = Number(ordinal);
+  if (Number.isSafeInteger(position) && position > 0) refs = refs.slice(position - 1, position);
+  return {
+    state: refs.length || resultSet.status === 'empty' ? 'ready' : 'empty',
+    resultSet: {
+      id: resultSet.id,
+      capabilityId: String(resultSet.capabilityId || ''),
+      domains: [...new Set((resultSet.domains || []).map(String))],
+      status: String(resultSet.status || ''),
+    },
+    refs,
+  };
+}
+
+/** 保存待确认产物的生命周期指针；正文继续只存在确认存储，不复制进 session。 */
+export async function recordSessionArtifactState(
+  session,
+  { id = '', capabilityId = '', domain = '', state = 'pending' } = {},
+) {
+  if (!session || !String(id || '').trim()) return false;
+  normalizeSession(session);
+  const normalizedState = ['pending', 'confirmed', 'cancelled', 'expired', 'failed', 'unknown'].includes(state)
+    ? state
+    : 'pending';
+  const artifact = {
+    id: String(id).trim().slice(0, 255),
+    capabilityId: String(capabilityId || '').slice(0, 120),
+    domain: String(domain || '').slice(0, 40),
+    state: normalizedState,
+    updatedAt: now(),
+    expiresAt: now() + TTL_MS,
+  };
+  session.artifactStates = [
+    ...session.artifactStates.filter((item) => item?.id !== artifact.id && Number(item?.expiresAt) > now()),
+    artifact,
+  ].slice(-MAX_ARTIFACT_STATES);
+  session.discourseState = {
+    ...session.discourseState,
+    revision: session.discourseState.revision + 1,
+    pendingArtifactId:
+      normalizedState === 'pending'
+        ? artifact.id
+        : session.discourseState.pendingArtifactId === artifact.id
+          ? ''
+          : session.discourseState.pendingArtifactId,
+  };
+  await persistSession(session);
+  return true;
+}
+
+/**
+ * 通过 owner/session 绑定推进产物状态；找不到既有会话时失败关闭，禁止为确认卡伪造新会话。
+ * 供确认卡替换、交互晋级等不持有 session 对象的入口复用。
+ */
+export async function recordSessionArtifactStateById({ ownerKey, sessionId, artifact } = {}) {
+  const session = await findSession(ownerKey, sessionId);
+  if (!session) return false;
+  return recordSessionArtifactState(session, artifact);
+}
+
+export function getSessionDiscourseProjection(session) {
+  normalizeSession(session);
+  const result = resolveSessionResultSet(session);
+  const activeResultSets = session.discourseState.activeResultSetIds
+    .map((id) => session.resultSets.find((item) => item?.id === id))
+    .filter((item) => item && Number(item.expiresAt) > now())
+    .map((item) =>
+      Object.freeze({
+        available: true,
+        domains: Object.freeze([...new Set((item.domains || []).map(String))]),
+        refTypes: Object.freeze([...new Set(normalizeResultRefs(item.refs).map((ref) => ref.type))]),
+        refCount: normalizeResultRefs(item.refs).length,
+        status: String(item.status || ''),
+      }),
+    );
+  const pendingArtifact = session.artifactStates.find(
+    (item) => item?.id === session.discourseState.pendingArtifactId && Number(item?.expiresAt) > now(),
+  );
+  return Object.freeze({
+    schemaVersion: 3,
+    revision: session.discourseState.revision,
+    topicEpoch: session.discourseState.topicEpoch,
+    activeDomain: session.discourseState.activeDomain,
+    lastCapabilityIds: Object.freeze([...session.discourseState.lastCapabilityIds]),
+    lastResultSet:
+      activeResultSets.length === 1 && result.state === 'ready'
+        ? Object.freeze({
+            available: true,
+            domains: Object.freeze([...result.resultSet.domains]),
+            refTypes: Object.freeze([...new Set(result.refs.map((ref) => ref.type))]),
+            refCount: result.refs.length,
+          })
+        : result.resultSet?.status === 'empty'
+          ? Object.freeze({
+              available: true,
+              domains: Object.freeze([...result.resultSet.domains]),
+              refTypes: Object.freeze([]),
+              refCount: 0,
+            })
+          : null,
+    resultSetCandidates: Object.freeze(activeResultSets),
+    pendingArtifact: pendingArtifact
+      ? Object.freeze({
+          available: pendingArtifact.state === 'pending',
+          domain: String(pendingArtifact.domain || ''),
+          state: String(pendingArtifact.state || ''),
+        })
+      : null,
+    unresolvedReference: session.discourseState.unresolvedReference === true,
+  });
 }
 
 /**
@@ -498,6 +773,26 @@ export async function settleSessionAction({ ownerKey, sessionId, confirmationId,
   target.summary = truncate(summary);
   target.updatedAt = now();
   if (state === 'succeeded' || state === 'unknown') target.retryArgs = {};
+  const artifact = session.artifactStates.find((item) => item?.id === actionId);
+  if (artifact) {
+    const previousState = artifact.state;
+    const previousPendingArtifactId = session.discourseState.pendingArtifactId;
+    artifact.state =
+      state === 'succeeded'
+        ? 'confirmed'
+        : state === 'cancelled'
+          ? 'cancelled'
+          : state === 'failed'
+            ? 'failed'
+            : 'unknown';
+    artifact.updatedAt = now();
+    if (artifact.state !== 'pending' && session.discourseState.pendingArtifactId === artifact.id) {
+      session.discourseState.pendingArtifactId = '';
+    }
+    if (artifact.state !== previousState || session.discourseState.pendingArtifactId !== previousPendingArtifactId) {
+      session.discourseState.revision += 1;
+    }
+  }
   await persistSession(session);
   return true;
 }

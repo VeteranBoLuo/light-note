@@ -206,7 +206,12 @@ describe('AI conversation isolation', () => {
         if (found) found.version_group_id = params[0];
         return [{ affectedRows: found ? 1 : 0 }];
       }
-      if (normalizedSql.startsWith('SELECT * FROM ai_messages WHERE conversation_id = ?')) return [recoveredMessages];
+      if (
+        normalizedSql.startsWith('SELECT * FROM ai_messages WHERE conversation_id = ?') ||
+        normalizedSql.startsWith('SELECT * FROM ( SELECT * FROM ai_messages WHERE conversation_id = ?')
+      ) {
+        return [recoveredMessages];
+      }
       if (normalizedSql.startsWith('SELECT * FROM ai_message_sources')) return [[]];
       if (normalizedSql.startsWith('SELECT * FROM ai_message_evidence')) return [[]];
       if (normalizedSql.startsWith('SELECT message_id, rating, reason, resolved')) return [[]];
@@ -424,6 +429,8 @@ describe('AI conversation isolation', () => {
       reason: 'unsupported',
       resolved: false,
     });
+    expect(query.mock.calls[1][0]).toContain('ORDER BY create_time DESC, id DESC LIMIT ?');
+    expect(query.mock.calls[1][0]).toContain('ORDER BY create_time ASC, id ASC');
     expect(query.mock.calls[4][0]).toContain('actor_user_id = ?');
     expect(query.mock.calls[4][1]).toEqual(['actor-1', 'conversation-1', 'message-1']);
   });

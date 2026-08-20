@@ -52,7 +52,7 @@ describe('Agent 工具注册表', () => {
       ]);
     }
     expect(tools.find((tool) => tool.name === 'read_url')?.resourceBindings).toEqual([
-      { argument: 'url', refType: 'bookmark', sourceField: 'url', allowLiteral: true },
+      { argument: 'url', refTypes: ['bookmark', 'web'], sourceField: 'url', allowLiteral: true },
     ]);
   });
 

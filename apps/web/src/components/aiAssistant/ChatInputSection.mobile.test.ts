@@ -142,6 +142,7 @@ function mountInput(isMobile: boolean, withAttachment = false) {
       messages: {
         'zh-CN': {
           ai: {
+            capabilityScope: { label: '限定本轮模块' },
             material: {
               mobileTitle: '添加与管理材料',
               mobileAdd: '添加材料',
@@ -158,6 +159,7 @@ function mountInput(isMobile: boolean, withAttachment = false) {
             send: '发送',
             pause: '暂停',
           },
+          common: { noMatch: '无匹配项' },
         },
       },
     }),

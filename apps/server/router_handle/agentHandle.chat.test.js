@@ -22,10 +22,26 @@ const mocks = vi.hoisted(() => ({
   inspectToolConfirmationExecution: vi.fn(),
   recordPendingActionBatch: vi.fn(),
   recordPendingActionBatchById: vi.fn(),
+  recordSessionArtifactState: vi.fn(),
+  recordSessionArtifactStateById: vi.fn(),
+  recordSessionResultSet: vi.fn(),
+  commitSessionTurnSpec: vi.fn(),
+  getSessionDiscourseProjection: vi.fn(() => ({
+    schemaVersion: 3,
+    revision: 0,
+    topicEpoch: 0,
+    activeDomain: '',
+    lastCapabilityIds: [],
+    lastResultSet: null,
+    resultSetCandidates: [],
+    pendingArtifact: null,
+    unresolvedReference: false,
+  })),
   recordSessionSourceSet: vi.fn(),
   createSessionMaterialClarification: vi.fn(),
   resolveSessionMaterialClarification: vi.fn(() => ({ state: 'missing' })),
   resolveSessionSourceSet: vi.fn(() => ({ state: 'missing' })),
+  resolveSessionResultSet: vi.fn(() => ({ state: 'missing', refs: [] })),
   listSessionSourceSets: vi.fn(() => []),
   resolveSessionActionRetry: vi.fn(() => ({ state: 'none' })),
   settleSessionAction: vi.fn(),
@@ -76,9 +92,15 @@ vi.mock('../util/agent/sessionStore.js', () => ({
   createSessionMaterialClarification: mocks.createSessionMaterialClarification,
   recordPendingActionBatch: mocks.recordPendingActionBatch,
   recordPendingActionBatchById: mocks.recordPendingActionBatchById,
+  recordSessionArtifactState: mocks.recordSessionArtifactState,
+  recordSessionArtifactStateById: mocks.recordSessionArtifactStateById,
+  recordSessionResultSet: mocks.recordSessionResultSet,
+  commitSessionTurnSpec: mocks.commitSessionTurnSpec,
+  getSessionDiscourseProjection: mocks.getSessionDiscourseProjection,
   recordSessionSourceSet: mocks.recordSessionSourceSet,
   recordTurn: mocks.recordTurn,
   resolveSessionSourceSet: mocks.resolveSessionSourceSet,
+  resolveSessionResultSet: mocks.resolveSessionResultSet,
   resolveSessionMaterialClarification: mocks.resolveSessionMaterialClarification,
   listSessionSourceSets: mocks.listSessionSourceSets,
   resolveSessionActionRetry: mocks.resolveSessionActionRetry,
@@ -126,6 +148,10 @@ vi.mock('../util/agent/tools/index.js', () => ({
       execute: mocks.toolExecute,
       getDependencyRefs: (raw) => raw.dependencyRefs || [],
       toArtifacts: (raw) => (raw.artifact ? [raw.artifact] : []),
+      getAnswerRequirements: (raw) =>
+        raw.requiredFact
+          ? [{ id: 'demo.required_fact', anyOf: [raw.requiredFact], appendText: raw.requiredFact }]
+          : [],
       transform: (raw) => `结果:${raw.value}`,
       summarize: (raw) => `结果:${raw.value}`,
     },
@@ -171,7 +197,7 @@ vi.mock('../util/agent/tools/index.js', () => ({
         properties: { url: { type: 'string' } },
         required: ['url'],
       },
-      resourceBindings: [{ argument: 'url', refType: 'bookmark', sourceField: 'url', allowLiteral: true }],
+      resourceBindings: [{ argument: 'url', refTypes: ['bookmark', 'web'], sourceField: 'url', allowLiteral: true }],
       requireRoot: false,
       timeoutMs: 1000,
       execute: mocks.toolExecute,
@@ -387,6 +413,10 @@ function turnSpecCall(input) {
   return toolCall('submit_turn_spec', { version: '2.0', ...input, goals }, 'turn-spec-1');
 }
 
+function turnSpecV3Call(input) {
+  return toolCall('submit_turn_spec_v3', { version: '3.0', ...input }, 'turn-spec-v3-1');
+}
+
 function executionPlanCall(input) {
   return toolCall('submit_execution_plan', { version: '2.0', ...input }, 'execution-plan-1');
 }
@@ -479,6 +509,7 @@ describe('agentChat 主链路', () => {
   });
 
   beforeEach(() => {
+    vi.stubEnv('AI_AGENT_RUNTIME_MODE', 'legacy');
     vi.stubEnv('AI_AGENT_RUNTIME_V2_MODE', 'legacy');
     vi.clearAllMocks();
     mocks.poolQuery.mockResolvedValue([[]]);
@@ -498,6 +529,7 @@ describe('agentChat 主链路', () => {
     mocks.createSessionMaterialClarification.mockResolvedValue(null);
     mocks.resolveSessionMaterialClarification.mockReturnValue({ state: 'missing' });
     mocks.resolveSessionSourceSet.mockReturnValue({ state: 'missing' });
+    mocks.resolveSessionResultSet.mockReturnValue({ state: 'missing', refs: [] });
     mocks.listSessionSourceSets.mockReturnValue([]);
     mocks.toolExecute.mockResolvedValue({ value: 'ok' });
     mocks.requestAi.mockImplementation(async (_messages, options = {}) => {
@@ -590,6 +622,311 @@ describe('agentChat 主链路', () => {
     });
   });
 
+  it('Runtime V3 配置存在但账号未命中灰度时继续旧链，且不产生额外 Compiler 调用', async () => {
+    vi.stubEnv('AI_AGENT_RUNTIME_MODE', 'v3_shadow');
+    vi.stubEnv('AI_AGENT_RUNTIME_V3_ROLLOUT', 'root');
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '你好',
+        history: [],
+        stream: false,
+        scope: { mode: 'workspace' },
+      }),
+      res,
+    );
+
+    expect(mocks.requestAi.mock.calls.map(([, options]) => options?.trace?.stage)).not.toContain('intent_compiler_v3');
+    expect(JSON.parse(latestAgentLogRecord().turn_contract_trace)).toMatchObject({
+      runtimeConfiguredMode: 'v3_shadow',
+      runtimeMode: 'legacy',
+      runtimeRolloutReason: 'not_selected',
+      runtimeRolloutPercentage: 0,
+    });
+  });
+
+  it('Root 代管普通账号时按真实操作账号命中 V3 灰度，不按资源账号误判', async () => {
+    vi.stubEnv('AI_AGENT_RUNTIME_MODE', 'v3_shadow');
+    vi.stubEnv('AI_AGENT_RUNTIME_V3_ROLLOUT', 'root');
+    const req = request({
+      message: '你好',
+      history: [],
+      stream: false,
+      scope: { mode: 'workspace' },
+    });
+    req.user = { id: 'user-subject', role: 'user', alias: '目标用户' };
+    req.resourceUser = { id: 'user-subject', role: 'user', alias: '目标用户' };
+    req.billingUser = { id: 'root-actor', role: 'root', alias: '管理员' };
+    req.adminContext = { id: 'context-1', mode: 'readonly' };
+
+    await agentChat(req, response());
+
+    expect(mocks.requestAi.mock.calls.map(([, options]) => options?.trace?.stage)).toContain('intent_compiler_v3');
+    expect(JSON.parse(latestAgentLogRecord().turn_contract_trace)).toMatchObject({
+      runtimeConfiguredMode: 'v3_shadow',
+      runtimeMode: 'v3_shadow',
+      runtimeRolloutReason: 'role_allowlist',
+    });
+  });
+
+  it('Runtime V3 主链只使用最新消息编译今天范围，精确路由并记录可继承结果集', async () => {
+    vi.stubEnv('AI_AGENT_RUNTIME_MODE', 'v3_enforce');
+    vi.stubEnv('AI_AGENT_RUNTIME_V3_ROLLOUT', 'root');
+    mocks.selectAgentTools.mockImplementation((registry) => [registry.get('query_notes')].filter(Boolean));
+    mocks.toolExecute.mockResolvedValue({
+      value: '今天新增 2 篇笔记',
+      dependencyRefs: [
+        { type: 'note', id: 'today-note-1' },
+        { type: 'note', id: 'today-note-2' },
+      ],
+    });
+    mocks.requestAi.mockImplementation(async (messages, options = {}) => {
+      if (options?.trace?.stage === 'intent_compiler_v3') {
+        const payload = JSON.parse(messages[1].content);
+        expect(payload.latestMessage).toBe('我今天新增了哪些笔记？');
+        expect(JSON.stringify(payload)).not.toContain('最近 7 天');
+        expect(payload.structuredDiscourse).not.toHaveProperty('turns');
+        return {
+          content: '',
+          toolCalls: [
+            turnSpecV3Call({
+              requestKind: 'answer',
+              confidence: 'high',
+              continuationMode: 'independent',
+              topicEpochAction: 'advance',
+              goals: [
+                {
+                  id: 'query-today-notes',
+                  capabilityId: 'note.query',
+                  operation: 'read',
+                  description: '查询今天新增的笔记',
+                  targetDescription: '今天',
+                  dependsOn: [],
+                  referentSelectors: [],
+                },
+              ],
+              groundingPolicy: payload.authoritativeGroundingPolicy,
+              temporalConstraints: [],
+              missingSlots: [],
+              clarificationQuestion: '',
+            }),
+          ],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      if (options?.trace?.stage === 'execution_planner') {
+        const payload = JSON.parse(messages[1].content);
+        const stepSchema = options.tools[0].function.parameters.properties.steps.items;
+        expect(JSON.stringify(stepSchema)).not.toContain('timeRange');
+        expect(payload.turnSpec.temporalConstraints).toEqual([
+          expect.objectContaining({
+            goalId: 'query-today-notes',
+            slot: 'timeRange',
+            argumentValue: '今天',
+          }),
+        ]);
+        return {
+          content: '',
+          toolCalls: [
+            executionPlanCall({
+              turnSpecDigest: payload.turnSpec.digest,
+              steps: [
+                {
+                  id: 'query-today-step',
+                  goalId: 'query-today-notes',
+                  toolName: 'query_notes',
+                  arguments: { limit: 50 },
+                  dependsOn: [],
+                  expectedResultKind: 'note_list',
+                },
+              ],
+              deferredGoalIds: [],
+              unsupportedGoalIds: [],
+            }),
+          ],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      expect(options?.trace?.stage).toBe('final');
+      expect(JSON.stringify(messages)).not.toContain('最近 7 天');
+      return {
+        content: '你今天新增了 2 篇笔记。',
+        toolCalls: [],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      };
+    });
+    const res = response();
+
+    const req = request({
+      message: '我今天新增了哪些笔记？',
+      history: [{ role: 'user', content: '总结最近 7 天的笔记' }],
+      stream: false,
+      scope: { mode: 'workspace' },
+    });
+    req.user = { id: 'user-1', role: 'root', alias: 'Root' };
+    await agentChat(req, res);
+
+    expect(mocks.requestAi.mock.calls.map(([, options]) => options?.trace?.stage)).toEqual([
+      'intent_compiler_v3',
+      'execution_planner',
+      'final',
+    ]);
+    expect(mocks.toolExecute).toHaveBeenCalledWith(
+      { limit: 50, timeRange: '今天' },
+      expect.objectContaining({ userId: 'user-1' }),
+    );
+    expect(mocks.commitSessionTurnSpec).toHaveBeenCalledOnce();
+    expect(mocks.recordSessionResultSet).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'session-1' }),
+      expect.objectContaining({
+        capabilityId: 'note.query',
+        refs: [
+          { type: 'note', id: 'today-note-1' },
+          { type: 'note', id: 'today-note-2' },
+        ],
+      }),
+    );
+    expect(JSON.parse(latestAgentLogRecord().turn_contract_trace)).toMatchObject({
+      intentCompilerMode: 'v3_enforce',
+      intentCompilerState: 'ready',
+      runtimeConfiguredMode: 'v3_enforce',
+      runtimeMode: 'v3_enforce',
+      runtimeRolloutReason: 'role_allowlist',
+      rawHistoryMessageCount: 0,
+      legacyStageCount: 0,
+      historyPolicy: 'discourse_projection_only',
+    });
+  });
+
+  it('Runtime V3 通过 ResultSet 的稳定 web 引用继续读取网页，不要求用户重复粘贴 URL', async () => {
+    vi.stubEnv('AI_AGENT_RUNTIME_MODE', 'v3_enforce');
+    vi.stubEnv('AI_AGENT_RUNTIME_V3_ROLLOUT', 'root');
+    const inheritedUrl = 'https://example.com/docs';
+    mocks.selectAgentTools.mockImplementation((registry) => [registry.get('read_url')].filter(Boolean));
+    mocks.getSessionDiscourseProjection.mockReturnValue({
+      schemaVersion: 3,
+      revision: 2,
+      topicEpoch: 1,
+      activeDomain: 'web',
+      lastCapabilityIds: ['web.read'],
+      lastResultSet: { available: true, domains: ['web', 'bookmark'], refTypes: ['web'], refCount: 1 },
+      resultSetCandidates: [{ available: true, domains: ['web', 'bookmark'], refTypes: ['web'], refCount: 1 }],
+      pendingArtifact: null,
+      unresolvedReference: false,
+    });
+    mocks.resolveSessionResultSet.mockReturnValue({
+      state: 'ready',
+      resultSet: { capabilityId: 'web.read', domains: ['web', 'bookmark'], status: 'success' },
+      refs: [{ type: 'web', id: inheritedUrl }],
+    });
+    mocks.toolExecute.mockResolvedValue({ value: '网页正文摘要' });
+    mocks.requestAi.mockImplementation(async (messages, options = {}) => {
+      if (options?.trace?.stage === 'intent_compiler_v3') {
+        const payload = JSON.parse(messages[1].content);
+        return {
+          content: '',
+          toolCalls: [
+            turnSpecV3Call({
+              requestKind: 'answer',
+              confidence: 'high',
+              continuationMode: 'refer_last_result',
+              topicEpochAction: 'keep',
+              goals: [
+                {
+                  id: 'read-last-web',
+                  capabilityId: 'web.read',
+                  operation: 'read',
+                  description: '继续读取并总结上一网页结果',
+                  targetDescription: '上一网页结果',
+                  dependsOn: [],
+                  referentSelectors: [{ source: 'last_result', types: ['web'], ordinal: null }],
+                },
+              ],
+              groundingPolicy: payload.authoritativeGroundingPolicy,
+              temporalConstraints: [],
+              missingSlots: [],
+              clarificationQuestion: '',
+            }),
+          ],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      if (options?.trace?.stage === 'execution_planner') {
+        const payload = JSON.parse(messages[1].content);
+        expect(payload.availableContext).toMatchObject({
+          contextRefs: [{ type: 'web', id: inheritedUrl }],
+          resourceBindings: [
+            {
+              toolName: 'read_url',
+              argument: 'url',
+              refs: [{ type: 'web', id: inheritedUrl }],
+            },
+          ],
+        });
+        return {
+          content: '',
+          toolCalls: [
+            executionPlanCall({
+              turnSpecDigest: payload.turnSpec.digest,
+              steps: [
+                {
+                  id: 'read-last-web-step',
+                  goalId: 'read-last-web',
+                  toolName: 'read_url',
+                  arguments: {},
+                  dependsOn: [],
+                  expectedResultKind: 'web_document',
+                },
+              ],
+              deferredGoalIds: [],
+              unsupportedGoalIds: [],
+            }),
+          ],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      expect(options?.trace?.stage).toBe('final');
+      return {
+        content: '已根据刚才的网页结果完成总结。',
+        toolCalls: [],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      };
+    });
+    const req = request({
+      message: '总结网页内容',
+      sessionId: 'session-1',
+      history: [],
+      stream: false,
+      scope: { mode: 'workspace' },
+    });
+    req.user = { id: 'user-1', role: 'root', alias: 'Root' };
+    const res = response();
+
+    await agentChat(req, res);
+
+    expect(mocks.toolExecute).toHaveBeenCalledWith(
+      { url: inheritedUrl },
+      expect.objectContaining({ userId: 'user-1' }),
+    );
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.resolvedGrounding).toMatchObject({
+      materialMode: 'inherited',
+      allowedSourceCount: 1,
+    });
+  });
+
   it('Runtime V2 enforce 以 TurnSpec 为唯一意图并只向 Planner 暴露收窄后的真实工具', async () => {
     vi.stubEnv('AI_AGENT_RUNTIME_V2_MODE', 'enforce');
     mocks.requestAi.mockImplementation(async (messages, options = {}) => {
@@ -655,12 +992,13 @@ describe('agentChat 主链路', () => {
         finishReason: 'stop',
       };
     });
-    mocks.toolExecute.mockResolvedValue({ value: '今日数据' });
+    mocks.toolExecute.mockResolvedValue({ value: '今日数据', requiredFact: '关键事实：完成 3/4。' });
     const res = response();
 
     await agentChat(request({ message: '查询今天的演示数据', stream: false }), res);
 
     expect(mocks.toolExecute).toHaveBeenCalledOnce();
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toContain('关键事实：完成 3/4。');
     expect(mocks.requestAi.mock.calls.map(([, options]) => options?.trace?.stage)).toEqual([
       'intent_compiler',
       'execution_planner',
@@ -2694,6 +3032,133 @@ describe('agentChat 主链路', () => {
       expect.objectContaining({ confirmationId: 'seven-day-confirmation', state: 'cancelled' }),
     );
     expect(res.send.mock.calls.at(-1)?.[0]?.data?.confirmations?.[0]?.args?.title).toBe('今日全部笔记总结');
+  });
+
+  it('Runtime V3 的 scope_replacement 通过统一产物协议原子替换旧确认', async () => {
+    vi.stubEnv('AI_AGENT_RUNTIME_MODE', 'v3_enforce');
+    vi.stubEnv('AI_AGENT_RUNTIME_V3_ROLLOUT', 'root');
+    const oldToken = 'v'.repeat(43);
+    mocks.selectAgentTools.mockImplementation((registry) => [registry.get('create_note')].filter(Boolean));
+    mocks.getSessionDiscourseProjection.mockReturnValue({
+      schemaVersion: 3,
+      revision: 2,
+      topicEpoch: 1,
+      activeDomain: 'note',
+      lastCapabilityIds: ['note.create'],
+      lastResultSet: null,
+      resultSetCandidates: [],
+      pendingArtifact: null,
+      unresolvedReference: false,
+    });
+    mocks.inspectToolConfirmationExecution.mockResolvedValueOnce({
+      state: 'ready',
+      confirmation: {
+        id: 'old-v3-note-confirmation',
+        sessionId: 'session-1',
+        toolName: 'create_note',
+        args: { title: '旧范围总结', content: '旧正文。'.repeat(80) },
+        privateContext: {
+          kind: 'note_draft_materials',
+          version: 1,
+          sourceMessage: '按旧范围生成笔记',
+          contextRefs: [],
+          scopeRefs: [],
+          attachmentIds: [],
+        },
+      },
+    });
+    mocks.requestAi.mockImplementation(async (messages, options = {}) => {
+      if (options?.trace?.stage === 'intent_compiler_v3') {
+        const payload = JSON.parse(messages[1].content);
+        return {
+          content: '',
+          toolCalls: [
+            turnSpecV3Call({
+              requestKind: 'create_artifact',
+              confidence: 'high',
+              continuationMode: 'scope_replacement',
+              topicEpochAction: 'advance',
+              goals: [
+                {
+                  id: 'replace-note-draft',
+                  capabilityId: 'note.create',
+                  operation: 'create',
+                  description: '按新范围重新生成笔记草稿',
+                  targetDescription: '新范围笔记草稿',
+                  dependsOn: [],
+                  referentSelectors: [{ source: 'pending_artifact', types: ['note'], ordinal: null }],
+                },
+              ],
+              groundingPolicy: payload.authoritativeGroundingPolicy,
+              temporalConstraints: [],
+              missingSlots: [],
+              clarificationQuestion: '',
+            }),
+          ],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      expect(options?.trace?.stage).toBe('note_draft');
+      return {
+        content: '',
+        toolCalls: [
+          toolCall('submit_note_draft', {
+            title: '新范围总结',
+            content: `# 新范围总结\n\n${'这是按本轮新范围生成的完整草稿。'.repeat(80)}`,
+          }),
+        ],
+        usage: usage(8),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      };
+    });
+    const res = response();
+
+    const req = request({
+      message: '改用新的范围重新生成一篇笔记',
+      sessionId: 'session-1',
+      stream: false,
+      contexts: [],
+      attachmentIds: [],
+      scope: { mode: 'selected' },
+      pendingNoteDraft: {
+        confirmationId: 'old-v3-note-confirmation',
+        confirmationToken: oldToken,
+      },
+    });
+    req.user = { id: 'user-1', role: 'root', alias: 'Root' };
+    await agentChat(req, res);
+
+    const compilerPayload = JSON.parse(mocks.requestAi.mock.calls[0][0][1].content);
+    expect(compilerPayload.currentContext.hasPendingArtifact).toBe(true);
+    expect(compilerPayload.structuredDiscourse.pendingArtifact).toEqual({
+      available: true,
+      domain: 'note',
+      state: 'pending',
+    });
+    expect(mocks.requestAi.mock.calls.map(([, options]) => options?.trace?.stage)).toEqual([
+      'intent_compiler_v3',
+      'note_draft',
+    ]);
+    expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        replaceToken: oldToken,
+        replaceConfirmationId: 'old-v3-note-confirmation',
+      }),
+    );
+    expect(mocks.settleSessionAction).toHaveBeenCalledWith(
+      expect.objectContaining({ confirmationId: 'old-v3-note-confirmation', state: 'cancelled' }),
+    );
+    expect(JSON.parse(latestAgentLogRecord().turn_contract_trace)).toMatchObject({
+      runtimeConfiguredMode: 'v3_enforce',
+      runtimeMode: 'v3_enforce',
+      runtimeRolloutReason: 'role_allowlist',
+      rawHistoryMessageCount: 0,
+      legacyStageCount: 0,
+      turnSpecContinuationMode: 'scope_replacement',
+    });
   });
 
   it('失效草稿候选不会复活旧令牌，稳定引用会生成满足字数的新确认', async () => {

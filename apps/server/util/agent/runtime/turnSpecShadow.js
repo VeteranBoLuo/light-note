@@ -92,6 +92,8 @@ export function turnSpecTraceSummary(shadow, divergences = [], mode = 'shadow') 
     state: shadow?.state === 'ready' ? 'ready' : 'invalid',
     requestKind: turnSpec?.requestKind || 'unknown',
     confidence: turnSpec?.confidence || 'unknown',
+    continuationMode: turnSpec?.continuationMode || 'unknown',
+    topicEpochAction: turnSpec?.topicEpochAction || 'unknown',
     goalCount: turnSpec?.goals?.length || 0,
     domainCount: new Set((turnSpec?.goals || []).map((goal) => goal.capabilityDomain)).size,
     missingSlotCount: turnSpec?.missingSlots?.length || 0,

@@ -202,6 +202,18 @@ describe('query_todos 工具', () => {
     expect(exact).toContain('计划日期：2026-08-20');
     expect(exact).toContain('提醒时间：2026-08-20 16:00（站内提醒）');
     expect(exact).toContain('清单：3/4');
+    expect(
+      tool.getAnswerRequirements({
+        total: 1,
+        items: [{ checklistProgress: { completed: 3, total: 4 } }],
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        id: 'todo.checklist_progress',
+        anyOf: expect.arrayContaining(['3/4']),
+        appendText: '清单进度：已完成 3 项，还差 1 项（3/4）。',
+      }),
+    ]);
 
     const partial = tool.transform({
       total: 60,

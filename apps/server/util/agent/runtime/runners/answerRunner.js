@@ -7,6 +7,7 @@ export async function runAnswerTurn({ turnSpec, route, planExecution }) {
     route,
     plan: planned.plan,
     validation: planned.validation,
+    plannerAttempts: planned.attempts,
     toolCalls: planned.validation?.toolCalls || [],
   };
 }

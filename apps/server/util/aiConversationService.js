@@ -345,8 +345,11 @@ export async function getAiConversation(identity, conversationId, options = {}, 
   const messageLimit = Math.max(0, Math.min(200, Number(options.messageLimit ?? 100)));
   if (!messageLimit) return { ...mapConversation(conversation), messages: [] };
   const [rows] = await database.query(
-    `SELECT * FROM ai_messages WHERE conversation_id = ?
-     ORDER BY create_time ASC, id ASC LIMIT ?`,
+    `SELECT * FROM (
+       SELECT * FROM ai_messages WHERE conversation_id = ?
+       ORDER BY create_time DESC, id DESC LIMIT ?
+     ) AS recent_messages
+     ORDER BY create_time ASC, id ASC`,
     [conversation.id, messageLimit],
   );
   const messageIds = rows.map((row) => row.id);

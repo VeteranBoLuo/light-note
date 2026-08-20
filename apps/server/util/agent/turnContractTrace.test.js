@@ -3,7 +3,10 @@ import {
   createTurnContractTrace,
   recordCandidateSet,
   recordGroundingDecision,
+  recordIntentCompiler,
+  recordExecutionPlanner,
   recordOutputContract,
+  recordRuntimeIsolation,
   recordRequestedScope,
   recordResolvedScope,
   recordSourcesUsed,
@@ -43,6 +46,28 @@ describe('Agent Turn Contract trace', () => {
       subsetValid: false,
       subsetViolationCount: 1,
     });
+    recordRuntimeIsolation(trace, {
+      mode: 'v3_enforce',
+      configuredMode: 'v3_enforce',
+      rolloutReason: 'role_allowlist',
+      rolloutPercentage: 5,
+      rawHistoryMessageCount: 0,
+      legacyStageCount: 0,
+    });
+    recordIntentCompiler(trace, {
+      mode: 'v3_enforce',
+      state: 'ready',
+      requestKind: 'answer',
+      confidence: 'high',
+      continuationMode: 'refer_last_result',
+      topicEpochAction: 'keep',
+      goalCount: 1,
+    });
+    recordExecutionPlanner(trace, {
+      state: 'blocked',
+      attempts: 3,
+      issues: ['required_goal_step_missing', 'secret value must not survive'],
+    });
 
     const safe = sanitizeTurnContractTrace(trace);
     const serialized = JSON.stringify(safe);
@@ -62,6 +87,20 @@ describe('Agent Turn Contract trace', () => {
       historyPolicy: 'discourse_projection_only',
       sourceSubsetValid: false,
       sourceSubsetViolationCount: 1,
+      runtimeMode: 'v3_enforce',
+      runtimeConfiguredMode: 'v3_enforce',
+      runtimeRolloutReason: 'role_allowlist',
+      runtimeRolloutPercentage: 5,
+      rawHistoryMessageCount: 0,
+      legacyStageCount: 0,
+      intentCompilerMode: 'v3_enforce',
+      intentCompilerState: 'ready',
+      turnSpecRequestKind: 'answer',
+      turnSpecContinuationMode: 'refer_last_result',
+      turnSpecTopicEpochAction: 'keep',
+      executionPlannerState: 'blocked',
+      executionPlannerAttempts: 3,
+      executionPlannerIssues: ['required_goal_step_missing', 'secret_value_must_not_survive'],
     });
     expect(safe.allowedSourceDigest).toMatch(/^[a-f0-9]{64}$/u);
     expect(safe.sourcesUsedDigest).toMatch(/^[a-f0-9]{64}$/u);

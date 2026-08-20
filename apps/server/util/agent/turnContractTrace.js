@@ -12,8 +12,9 @@ const RESOLVED_SCOPE_MODES = new Set([
 const LENGTH_MODES = new Set(['unspecified', 'minimum', 'target_range', 'relative_growth', 'preserve_length']);
 const TRACE_VERSION = '2.0-shadow';
 const HISTORY_POLICIES = new Set(['legacy_conversation', 'discourse_projection_only']);
-const INTENT_COMPILER_MODES = new Set(['off', 'shadow', 'enforce']);
+const INTENT_COMPILER_MODES = new Set(['off', 'shadow', 'enforce', 'v3_shadow', 'v3_enforce']);
 const INTENT_COMPILER_STATES = new Set(['not_run', 'ready', 'invalid']);
+const EXECUTION_PLANNER_STATES = new Set(['not_run', 'ready', 'blocked', 'clarification', 'unsupported']);
 const TURN_REQUEST_KINDS = new Set([
   'unknown',
   'conversation',
@@ -25,6 +26,26 @@ const TURN_REQUEST_KINDS = new Set([
   'revise_artifact',
 ]);
 const CONFIDENCE_LEVELS = new Set(['unknown', 'high', 'medium', 'low']);
+const CONTINUATION_MODES = new Set([
+  'unknown',
+  'independent',
+  'refer_last_result',
+  'refine_last_artifact',
+  'scope_replacement',
+]);
+const TOPIC_EPOCH_ACTIONS = new Set(['unknown', 'keep', 'advance']);
+const RUNTIME_MODES = new Set(['legacy', 'v3_shadow', 'v3_enforce']);
+const RUNTIME_ROLLOUT_REASONS = new Set([
+  'global_legacy',
+  'policy_disabled',
+  'invalid_policy',
+  'excluded',
+  'actor_allowlist',
+  'role_allowlist',
+  'percentage',
+  'not_selected',
+  'all',
+]);
 
 function safeEnum(value, allowed, fallback) {
   const normalized = String(value || '').trim();
@@ -45,6 +66,12 @@ function safeRatio(value) {
   const number = Number(value);
   if (!Number.isFinite(number) || number < 0) return null;
   return Number(number.toFixed(4));
+}
+
+function safePercentage(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0 || number > 100) return 0;
+  return Number(number.toFixed(2));
 }
 
 function canonicalRef(value) {
@@ -106,6 +133,8 @@ export function createTurnContractTrace() {
     intentCompilerState: 'not_run',
     turnSpecRequestKind: 'unknown',
     turnSpecConfidence: 'unknown',
+    turnSpecContinuationMode: 'unknown',
+    turnSpecTopicEpochAction: 'unknown',
     turnSpecGoalCount: 0,
     turnSpecDomainCount: 0,
     turnSpecMissingSlotCount: 0,
@@ -113,6 +142,15 @@ export function createTurnContractTrace() {
     intentCompilerMs: 0,
     intentDivergenceCodes: [],
     intentCompilerErrorCode: null,
+    executionPlannerState: 'not_run',
+    executionPlannerAttempts: 0,
+    executionPlannerIssues: [],
+    runtimeMode: 'legacy',
+    runtimeConfiguredMode: 'legacy',
+    runtimeRolloutReason: 'global_legacy',
+    runtimeRolloutPercentage: 0,
+    rawHistoryMessageCount: 0,
+    legacyStageCount: 1,
   };
 }
 
@@ -196,6 +234,8 @@ export function recordIntentCompiler(trace, input = {}) {
   trace.intentCompilerState = safeEnum(input.state, INTENT_COMPILER_STATES, 'not_run');
   trace.turnSpecRequestKind = safeEnum(input.requestKind, TURN_REQUEST_KINDS, 'unknown');
   trace.turnSpecConfidence = safeEnum(input.confidence, CONFIDENCE_LEVELS, 'unknown');
+  trace.turnSpecContinuationMode = safeEnum(input.continuationMode, CONTINUATION_MODES, 'unknown');
+  trace.turnSpecTopicEpochAction = safeEnum(input.topicEpochAction, TOPIC_EPOCH_ACTIONS, 'unknown');
   trace.turnSpecGoalCount = safeCount(input.goalCount);
   trace.turnSpecDomainCount = safeCount(input.domainCount);
   trace.turnSpecMissingSlotCount = safeCount(input.missingSlotCount);
@@ -203,6 +243,28 @@ export function recordIntentCompiler(trace, input = {}) {
   trace.intentCompilerMs = safeCount(input.durationMs);
   trace.intentDivergenceCodes = safeIssues(input.divergenceCodes);
   trace.intentCompilerErrorCode = input.errorCode ? safeIssues([input.errorCode])[0] || 'intent_compiler_failed' : null;
+}
+
+export function recordExecutionPlanner(trace, input = {}) {
+  if (!trace || typeof trace !== 'object') return;
+  trace.executionPlannerState = safeEnum(input.state, EXECUTION_PLANNER_STATES, 'not_run');
+  trace.executionPlannerAttempts = safeCount(input.attempts);
+  trace.executionPlannerIssues = safeIssues(input.issues);
+}
+
+export function recordRuntimeIsolation(trace, input = {}) {
+  if (!trace || typeof trace !== 'object') return;
+  const mode = safeEnum(input.mode, RUNTIME_MODES, 'legacy');
+  trace.runtimeMode = mode;
+  trace.runtimeConfiguredMode = safeEnum(input.configuredMode, RUNTIME_MODES, mode);
+  trace.runtimeRolloutReason = safeEnum(
+    input.rolloutReason,
+    RUNTIME_ROLLOUT_REASONS,
+    mode === 'legacy' ? 'global_legacy' : 'all',
+  );
+  trace.runtimeRolloutPercentage = safePercentage(input.rolloutPercentage);
+  trace.rawHistoryMessageCount = safeCount(input.rawHistoryMessageCount);
+  trace.legacyStageCount = safeCount(input.legacyStageCount ?? (mode === 'v3_enforce' ? 0 : 1));
 }
 
 /**
@@ -230,6 +292,8 @@ export function sanitizeTurnContractTrace(value) {
     state: value?.intentCompilerState,
     requestKind: value?.turnSpecRequestKind,
     confidence: value?.turnSpecConfidence,
+    continuationMode: value?.turnSpecContinuationMode,
+    topicEpochAction: value?.turnSpecTopicEpochAction,
     goalCount: value?.turnSpecGoalCount,
     domainCount: value?.turnSpecDomainCount,
     missingSlotCount: value?.turnSpecMissingSlotCount,
@@ -237,6 +301,19 @@ export function sanitizeTurnContractTrace(value) {
     durationMs: value?.intentCompilerMs,
     divergenceCodes: value?.intentDivergenceCodes,
     errorCode: value?.intentCompilerErrorCode,
+  });
+  recordExecutionPlanner(trace, {
+    state: value?.executionPlannerState,
+    attempts: value?.executionPlannerAttempts,
+    issues: value?.executionPlannerIssues,
+  });
+  recordRuntimeIsolation(trace, {
+    mode: value?.runtimeMode,
+    configuredMode: value?.runtimeConfiguredMode,
+    rolloutReason: value?.runtimeRolloutReason,
+    rolloutPercentage: value?.runtimeRolloutPercentage,
+    rawHistoryMessageCount: value?.rawHistoryMessageCount,
+    legacyStageCount: value?.legacyStageCount,
   });
   return trace;
 }

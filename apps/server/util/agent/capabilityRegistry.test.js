@@ -91,7 +91,7 @@ describe('Agent 动作能力注册表', () => {
     expect(catalog.find((entry) => entry.id === 'read.read_url')).toMatchObject({
       domain: 'web',
       appliesToDomains: ['web', 'bookmark'],
-      resourceBindingDomains: ['bookmark'],
+      resourceBindingDomains: ['bookmark', 'web'],
     });
     expect(catalog.find((entry) => entry.id === 'read.get_resource_creation_ranking')).toMatchObject({
       effect: 'read',

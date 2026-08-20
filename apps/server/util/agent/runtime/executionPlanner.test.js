@@ -226,11 +226,82 @@ describe('Execution Planner / Validator V2', () => {
     ).toContain('TOOL_RESOURCE_CONTEXT_REQUIRED');
   });
 
+  it('可选资源绑定不会被误升级为必填，也不会采纳模型编造的资源 ID', () => {
+    const optionalResourceTool = {
+      name: 'query_todos',
+      isWrite: false,
+      resourceBindings: [{ argument: 'todoId', refType: 'todo', sourceField: 'id' }],
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { todoId: { type: 'string' }, status: { type: 'string' } },
+      },
+    };
+    const optionalSpec = {
+      ...turnSpec,
+      requestKind: 'answer',
+      goals: [{ id: 'read-target', kind: 'read', capabilityDomain: 'todo', dependsOn: [] }],
+    };
+    const optionalRoute = {
+      state: 'ready',
+      candidates: [optionalResourceTool],
+      goalRoutes: [{ goalId: 'read-target', status: 'ready', toolNames: ['query_todos'] }],
+    };
+    const plannerStepSchema = buildExecutionPlanToolDefinition({
+      turnSpec: optionalSpec,
+      route: optionalRoute,
+      candidateTools: [optionalResourceTool],
+    }).function.parameters.properties.steps.items;
+    expect(plannerStepSchema.properties.arguments.properties).not.toHaveProperty('todoId');
+    expect(plannerStepSchema.properties.arguments.properties).toHaveProperty('status');
+    const parsed = {
+      invalid: false,
+      extraCalls: [],
+      plan: {
+        version: '2.0',
+        turnSpecDigest: 'digest-1',
+        steps: [
+          {
+            id: 'read-step',
+            goalId: 'read-target',
+            toolName: 'query_todos',
+            arguments: { status: 'pending' },
+            dependsOn: [],
+            expectedResultKind: 'todo_list',
+          },
+        ],
+        deferredGoalIds: [],
+        unsupportedGoalIds: [],
+      },
+    };
+
+    const workspaceQuery = validateExecutionPlan({
+      turnSpec: optionalSpec,
+      route: optionalRoute,
+      parsed,
+      executionContext: {},
+    });
+    expect(workspaceQuery.valid).toBe(true);
+    expect(JSON.parse(workspaceQuery.toolCalls[0].function.arguments)).toEqual({ status: 'pending' });
+
+    parsed.plan.steps[0].arguments.todoId = 'model-invented';
+    const inventedOptionalId = validateExecutionPlan({
+      turnSpec: optionalSpec,
+      route: optionalRoute,
+      parsed,
+      executionContext: {},
+    });
+    expect(inventedOptionalId.valid).toBe(true);
+    expect(JSON.parse(inventedOptionalId.toolCalls[0].function.arguments)).toEqual({ status: 'pending' });
+  });
+
   it('通用资源绑定只向 Planner 暴露稳定引用，并由服务端注入书签 URL', async () => {
     const readUrlTool = {
       name: 'read_url',
       isWrite: false,
-      resourceBindings: [{ argument: 'url', refType: 'bookmark', sourceField: 'url', allowLiteral: true }],
+      resourceBindings: [
+        { argument: 'url', refTypes: ['bookmark', 'web'], sourceField: 'url', allowLiteral: true },
+      ],
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -299,6 +370,43 @@ describe('Execution Planner / Validator V2', () => {
     const stepSchema = request.mock.calls[0][1].tools[0].function.parameters.properties.steps.items;
     expect(stepSchema.properties.arguments.required).toEqual([]);
     expect(stepSchema.properties.argumentBindings).toBeTruthy();
+
+    const inheritedWeb = validateExecutionPlan({
+      turnSpec: readSpec,
+      route: readRoute,
+      parsed: {
+        invalid: false,
+        extraCalls: [],
+        plan: {
+          version: '2.0',
+          turnSpecDigest: 'digest-1',
+          steps: [
+            {
+              id: 'read-inherited-web',
+              goalId: 'read-target',
+              toolName: 'read_url',
+              arguments: {},
+              dependsOn: [],
+              expectedResultKind: 'web_page',
+            },
+          ],
+          deferredGoalIds: [],
+          unsupportedGoalIds: [],
+        },
+      },
+      executionContext: {
+        contextRefs: [{ type: 'web', id: 'https://www.baidu.com/' }],
+        resources: [
+          {
+            type: 'web',
+            id: 'https://www.baidu.com/',
+            values: { url: 'https://www.baidu.com/' },
+          },
+        ],
+      },
+    });
+    expect(inheritedWeb.valid).toBe(true);
+    expect(JSON.parse(inheritedWeb.toolCalls[0].function.arguments)).toEqual({ url: 'https://www.baidu.com/' });
   });
 
   it('多资源必须选本轮稳定引用；没有资源时仅声明允许 literal 的工具可直接使用参数', () => {
@@ -359,6 +467,14 @@ describe('Execution Planner / Validator V2', () => {
     }).function.parameters.properties.steps.items;
     expect(multiResourceStepSchema.required).toContain('argumentBindings');
     expect(multiResourceStepSchema.properties.argumentBindings.required).toEqual(['url']);
+    const literalStepSchema = buildExecutionPlanToolDefinition({
+      turnSpec: scopedTurnSpec,
+      route: scopedRoute,
+      candidateTools: [tool],
+      executionContext: {},
+    }).function.parameters.properties.steps.items;
+    expect(literalStepSchema.properties.arguments.properties).toHaveProperty('url');
+    expect(literalStepSchema.properties.arguments.required).toContain('url');
     expect(
       validateExecutionPlan({ turnSpec: scopedTurnSpec, route: scopedRoute, parsed, executionContext: context }).issues,
     ).toContain('TOOL_RESOURCE_SELECTION_REQUIRED');
@@ -523,5 +639,149 @@ describe('Execution Planner / Validator V2', () => {
     const result = validateExecutionPlan({ turnSpec, route, parsed });
     expect(result.valid).toBe(true);
     expect(result.toolCalls.map((call) => call.function.name)).toEqual(['query_todos']);
+  });
+
+  it('服务端时间约束从 Planner schema 移除并在校验阶段权威注入', () => {
+    const temporalTool = {
+      name: 'query_notes',
+      isWrite: false,
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { timeRange: { type: 'string' }, limit: { type: 'integer' } },
+        required: ['timeRange'],
+      },
+    };
+    const temporalSpec = {
+      ...turnSpec,
+      version: '3.0',
+      requestKind: 'answer',
+      goals: [{ id: 'notes', kind: 'read', capabilityDomain: 'note', dependsOn: [] }],
+      temporalConstraints: [
+        {
+          goalId: 'notes',
+          slot: 'timeRange',
+          kind: 'range',
+          expression: '今天',
+          argumentValue: '今天',
+          implicit: true,
+        },
+      ],
+    };
+    const temporalRoute = {
+      state: 'ready',
+      candidates: [temporalTool],
+      goalRoutes: [{ goalId: 'notes', status: 'ready', toolNames: ['query_notes'] }],
+      capabilityByTool: new Map([
+        [
+          'query_notes',
+          {
+            resultKind: 'note_list',
+            temporalSlots: [{ name: 'timeRange', kind: 'range', autoBind: true }],
+          },
+        ],
+      ]),
+    };
+    const stepSchema = buildExecutionPlanToolDefinition({
+      turnSpec: temporalSpec,
+      route: temporalRoute,
+      candidateTools: [temporalTool],
+    }).function.parameters.properties.steps.items;
+    expect(stepSchema.properties.arguments.properties).not.toHaveProperty('timeRange');
+    expect(stepSchema.properties.arguments.required).not.toContain('timeRange');
+    expect(stepSchema.properties.expectedResultKind).toEqual({ type: 'string', enum: ['note_list'] });
+
+    const parsed = {
+      invalid: false,
+      extraCalls: [],
+      plan: {
+        version: '2.0',
+        turnSpecDigest: 'digest-1',
+        steps: [
+          {
+            id: 'notes-step',
+            goalId: 'notes',
+            toolName: 'query_notes',
+            arguments: { timeRange: '最近7天', limit: 50 },
+            dependsOn: [],
+            expectedResultKind: 'note_list',
+          },
+        ],
+        deferredGoalIds: [],
+        unsupportedGoalIds: [],
+      },
+    };
+    const validated = validateExecutionPlan({ turnSpec: temporalSpec, route: temporalRoute, parsed });
+    expect(validated.valid).toBe(true);
+    expect(JSON.parse(validated.toolCalls[0].function.arguments)).toEqual({ timeRange: '今天', limit: 50 });
+
+    parsed.plan.steps[0].expectedResultKind = 'bookmark_list';
+    expect(validateExecutionPlan({ turnSpec: temporalSpec, route: temporalRoute, parsed }).issues).toContain(
+      'execution_step_result_kind_mismatch',
+    );
+  });
+
+  it('Manifest 声明的时间参数即使 TurnSpec 尚无值，也不交给模型猜测', () => {
+    const temporalTool = {
+      name: 'query_notes',
+      isWrite: false,
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { timeRange: { type: 'string' }, limit: { type: 'integer' } },
+        required: ['timeRange'],
+      },
+    };
+    const specWithoutTime = {
+      ...turnSpec,
+      version: '3.0',
+      requestKind: 'answer',
+      goals: [{ id: 'notes', kind: 'read', capabilityDomain: 'note', dependsOn: [] }],
+      temporalConstraints: [],
+    };
+    const temporalRoute = {
+      state: 'ready',
+      candidates: [temporalTool],
+      goalRoutes: [{ goalId: 'notes', status: 'ready', toolNames: ['query_notes'] }],
+      capabilityByTool: new Map([
+        [
+          'query_notes',
+          {
+            resultKind: 'note_list',
+            temporalSlots: [{ name: 'timeRange', kind: 'range', autoBind: true }],
+          },
+        ],
+      ]),
+    };
+    const stepSchema = buildExecutionPlanToolDefinition({
+      turnSpec: specWithoutTime,
+      route: temporalRoute,
+      candidateTools: [temporalTool],
+    }).function.parameters.properties.steps.items;
+    expect(stepSchema.properties.arguments.properties).not.toHaveProperty('timeRange');
+
+    const parsed = {
+      invalid: false,
+      extraCalls: [],
+      plan: {
+        version: '2.0',
+        turnSpecDigest: 'digest-1',
+        steps: [
+          {
+            id: 'notes-step',
+            goalId: 'notes',
+            toolName: 'query_notes',
+            arguments: { limit: 10 },
+            dependsOn: [],
+            expectedResultKind: 'note_list',
+          },
+        ],
+        deferredGoalIds: [],
+        unsupportedGoalIds: [],
+      },
+    };
+    expect(validateExecutionPlan({ turnSpec: specWithoutTime, route: temporalRoute, parsed }).issues).toContain(
+      'TOOL_ARGUMENT_REQUIRED',
+    );
   });
 });

@@ -151,12 +151,15 @@
         :contexts="contexts"
         :scope-refs="scopeRefs"
         :attachments="attachments"
+        :capability-module="capabilityModule"
+        :capability-module-options="capabilityModuleOptions"
         :prepare-attachment-action-fn="prepareAttachmentAction"
         @update:enable-translation="enableTranslation = $event"
         @update:translation-config="translationConfig = $event"
         @update:contexts="contexts = $event"
         @update:scope-refs="scopeRefs = $event"
         @update:attachments="attachments = $event"
+        @update:capability-module="capabilityModule = $event"
       />
     </div>
   </div>
@@ -181,6 +184,12 @@
   import type { AiCoverageReport, AiSourceCoverage } from '@/components/aiAssistant/aiSourceNavigation';
   import type { AiToolStatusItem } from '@/components/aiAssistant/AiToolStatusList.vue';
   import type { AiResourceContext, AiScopeRef } from '@/types/aiScope';
+  import {
+    buildAiCapabilityModuleOptions,
+    buildAiCapabilityScope,
+    normalizeAiCapabilityModule,
+    type AiCapabilityModule,
+  } from '@/types/aiCapabilityScope';
   import { normalizeAiMaterialClarification, normalizeAiResolvedGrounding } from '@/types/aiGrounding';
   import {
     clearAiTemporaryAttachments,
@@ -314,6 +323,10 @@
   const bookmark = bookmarkStore();
 
   const user = useUserStore();
+  const capabilityModule = ref<AiCapabilityModule>('auto');
+  const capabilityModuleOptions = computed(() =>
+    buildAiCapabilityModuleOptions((key) => t(key), { includeAdmin: user.role === 'root' }),
+  );
 
   function handleSourceNavigate(source: AiSource) {
     emit('source-navigate', source);
@@ -822,7 +835,10 @@
         activity: chatMessage.activity || [],
         coverage: chatMessage.coverage || null,
         modelMeta:
-          chatMessage.recovered || chatMessage.terminal || chatMessage.scopeRefs?.length
+          chatMessage.recovered ||
+          chatMessage.terminal ||
+          chatMessage.scopeRefs?.length ||
+          normalizeAiCapabilityModule(chatMessage.capabilityModule) !== 'auto'
             ? {
                 ...(chatMessage.recovered || chatMessage.terminal
                   ? {
@@ -832,6 +848,9 @@
                     }
                   : {}),
                 ...(chatMessage.scopeRefs?.length ? { scopeRefs: chatMessage.scopeRefs.slice(0, 3) } : {}),
+                ...(normalizeAiCapabilityModule(chatMessage.capabilityModule) !== 'auto'
+                  ? { capabilityModule: normalizeAiCapabilityModule(chatMessage.capabilityModule) }
+                  : {}),
               }
             : null,
         sources,
@@ -893,6 +912,7 @@
     aiAssistant.clearCloudConversationRecovery();
     // 待发送材料随会话边界失效:会话 A 挂的引用不能跟进会话 B
     aiAssistant.detachAllComposerMaterials();
+    capabilityModule.value = 'auto';
     validatedCloudConversationId.value = cloudConversation.id;
     persistHistory();
     resetScrollState();
@@ -1114,6 +1134,7 @@
       contexts,
       contextRefs: contexts,
       scopeRefs: normalizeCloudScopeRefs(cloudMessage.modelMeta?.scopeRefs),
+      capabilityModule: normalizeAiCapabilityModule(cloudMessage.modelMeta?.capabilityModule),
       attachmentRefs: (cloudMessage.attachmentRefs || [])
         .filter(
           (item) =>
@@ -1430,7 +1451,15 @@
         status: 'completed',
         contextRefs: chatMessage.contextRefs || chatMessage.contexts || [],
         attachmentRefs: chatMessage.attachmentRefs || [],
-        modelMeta: chatMessage.scopeRefs?.length ? { scopeRefs: chatMessage.scopeRefs.slice(0, 3) } : null,
+        modelMeta:
+          chatMessage.scopeRefs?.length || normalizeAiCapabilityModule(chatMessage.capabilityModule) !== 'auto'
+            ? {
+                ...(chatMessage.scopeRefs?.length ? { scopeRefs: chatMessage.scopeRefs.slice(0, 3) } : {}),
+                ...(normalizeAiCapabilityModule(chatMessage.capabilityModule) !== 'auto'
+                  ? { capabilityModule: normalizeAiCapabilityModule(chatMessage.capabilityModule) }
+                  : {}),
+              }
+            : null,
       });
       if (aiAssistant.runtimeIdentityKey === runtimeKey) chatMessage.cloudId = saved.id;
       return saved;
@@ -1528,6 +1557,7 @@
     if (isLoading.value) stopResponse('cancelled');
     activeAnswerTypewriter = null;
     aiAssistant.clearCurrentConversation(t('ai.greeting'));
+    capabilityModule.value = 'auto';
     resetScrollState();
     if (!user.id || user.role === 'visitor') return true;
     try {
@@ -1771,6 +1801,7 @@
       versionGroupId?: string;
       historySnapshot?: ChatMessage[];
       actionContinuation?: AiActionContinuation;
+      capabilityModule?: AiCapabilityModule;
     } = {},
   ) => {
     if (isLoading.value || cloudRecoveryPending.value || latestConversationChoicePending) return;
@@ -1814,6 +1845,9 @@
     const contextSnapshot = materialSnapshot.contextRefs;
     const scopeSnapshot = materialSnapshot.scopeRefs;
     const attachmentSnapshot = materialSnapshot.attachmentRefs;
+    const capabilityModuleSnapshot = actionContinuation
+      ? 'auto'
+      : normalizeAiCapabilityModule(options.capabilityModule ?? capabilityModule.value);
     if (attachmentSnapshot.some((item) => item.status === 'awaiting_upload')) return;
     const cloudPreparation = await prepareCloudConversationForSend(aiAssistant.runtimeIdentityKey);
     if (cloudPreparation === 'cancelled') return;
@@ -1848,6 +1882,7 @@
           contextRefs: contextSnapshot,
           scopeRefs: scopeSnapshot,
           attachmentRefs: attachmentSnapshot,
+          capabilityModule: capabilityModuleSnapshot,
           parentMessageId: cloudPreparation === 'replaced' ? undefined : options.parentMessageId,
         };
     if (userMessage) messages.value.push(userMessage);
@@ -1904,6 +1939,7 @@
       // (按快照身份过滤,异步期间新挂的材料不受影响)。重放/重生成走 materialSnapshot
       // 且 clearComposer:false,不会动当前输入区。
       if (!options.materialSnapshot) aiAssistant.consumeComposerMaterials(materialSnapshot);
+      if (!options.materialSnapshot && !actionContinuation) capabilityModule.value = 'auto';
     }
     await nextTick();
     if (!aiAssistant.isRequestCurrent(requestLease)) return;
@@ -2212,6 +2248,9 @@
             mode: scopeMode.value,
             externalWeb: false,
           },
+          ...(!actionContinuation
+            ? { capabilityScope: buildAiCapabilityScope(capabilityModuleSnapshot) }
+            : {}),
           // 长期记忆已关闭:不再请求 active(否则后端会读取/注入/推断并写入候选,而前端已无任何查看/停用/删除入口——
           // 属隐私控制面与运行面脱节)。临时会话本就不涉记忆,保持 temporary。
           memoryMode: temporarySession.value ? 'temporary' : 'off',
@@ -2501,10 +2540,12 @@
     content: string,
     attachedContexts: AiResourceContext[] = [],
     attachedScopes: AiScopeRef[] = [],
+    attachedCapabilityModule: AiCapabilityModule = 'auto',
   ) => {
     userInput.value = content;
     contexts.value = attachedContexts.map((item) => ({ ...item }));
     scopeRefs.value = attachedScopes.map((item) => ({ ...item }));
+    capabilityModule.value = normalizeAiCapabilityModule(attachedCapabilityModule);
     nextTick(() => {
       chatInputRef.value?.focus();
     });
@@ -2691,6 +2732,7 @@
         parentMessageId: originalUserMessage.cloudId || originalUserMessage.id,
         versionGroupId,
         historySnapshot: messages.value.slice(0, userIdx),
+        capabilityModule: normalizeAiCapabilityModule(originalUserMessage.capabilityModule),
       });
     } finally {
       regenerationPreparing.value = false;

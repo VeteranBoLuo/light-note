@@ -54,6 +54,9 @@ function normalizeArgs(input = {}) {
     .replace('T', ' ')
     .slice(0, 16);
   return {
+    todoId: String(input.todoId ?? input.id ?? '')
+      .trim()
+      .slice(0, 255),
     status: String(input.status ?? input.todoStatus ?? input.todo_status ?? 'pending').toLowerCase(),
     keyword: String(input.keyword ?? input.query ?? '')
       .trim()
@@ -99,6 +102,11 @@ export default {
         description:
           '待办状态，默认 pending。定位“标记完成”的目标用 pending；定位“重新打开/恢复为待处理”的目标必须用 completed；定位“删除”的目标必须用 all',
       },
+      todoId: {
+        type: 'string',
+        maxLength: 255,
+        description: '可选，服务端已校验上下文中的待办 ID；存在时精确定位该待办',
+      },
       keyword: { type: 'string', maxLength: 100, description: '可选，按待办标题或说明搜索' },
       planDate: {
         type: 'string',
@@ -127,13 +135,18 @@ export default {
       cursor: { type: 'string', maxLength: 256, description: '上一页结果返回的下一页游标' },
     },
   },
-  argumentAliases: ['todoStatus', 'todo_status', 'query', 'scheduleDate'],
+  argumentAliases: ['id', 'todoStatus', 'todo_status', 'query', 'scheduleDate'],
   normalizeArgs,
+  resourceBindings: [{ argument: 'todoId', refType: 'todo', sourceField: 'id' }],
   requireRoot: false,
   async execute(input, ctx) {
     const args = normalizeArgs(input);
     if (cannotReadTodos(ctx)) return { items: [], total: 0, nextCursor: null };
-    const page = await listTodoPage(pool, ctx.userId, { ...args, view: 'summary' });
+    const page = await listTodoPage(pool, ctx.userId, {
+      ...args,
+      ...(args.todoId ? { ids: [args.todoId] } : {}),
+      view: 'summary',
+    });
     if (page.items.length || !args.keyword || args.cursor) {
       return { ...page, matchMode: 'like' };
     }
@@ -203,5 +216,25 @@ export default {
     const keyword = args.keyword ? `（关键词“${args.keyword}”）` : '';
     const mode = raw?.matchMode === 'semantic' ? '（语义匹配）' : '';
     return `待办查询${keyword}${mode}：共 ${raw.total} 条，已返回 ${raw.items?.length || 0} 条安全摘要`;
+  },
+  getAnswerRequirements(raw) {
+    const items = Array.isArray(raw?.items) ? raw.items : [];
+    if (items.length !== 1) return [];
+    const checklist = items[0]?.checklistProgress || { completed: 0, total: 0 };
+    const completed = Math.max(0, Number(checklist.completed || 0));
+    const total = Math.max(0, Number(checklist.total || 0));
+    if (!Number.isFinite(completed) || !Number.isFinite(total) || total < 1) return [];
+    const remaining = Math.max(0, total - completed);
+    return [
+      {
+        id: 'todo.checklist_progress',
+        anyOf: [
+          `${completed}/${total}`,
+          `已完成${completed}项还差${remaining}项`,
+          `完成${completed}项剩余${remaining}项`,
+        ],
+        appendText: `清单进度：已完成 ${completed} 项，还差 ${remaining} 项（${completed}/${total}）。`,
+      },
+    ];
   },
 };

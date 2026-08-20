@@ -450,6 +450,26 @@ src/
 
 ## 轻笺智域（AI Agent）
 
+### Agent Runtime V3
+
+Runtime V3 把每轮请求拆成四个边界清晰、可独立验证的阶段：
+
+```text
+最新用户消息 + 服务端结构化会话投影
+  → Intent Compiler（唯一一次语义编译）
+  → 不可变 TurnSpec（目标、时间、指代、输出约束）
+  → Capability Manifest 精确路由 + Execution Planner 参数规划
+  → 服务端权威绑定 / Tool Runner / 确认生命周期 / Final Reply
+```
+
+- `util/agent/runtime/v3/capabilityManifest.js` 是 V3 读取与写入能力的统一运行时目录。每项能力声明 ID、领域、effect、工具、角色、时间槽、资源绑定和结果引用，启动校验保证注册工具、能力注册表与 Manifest 没有漂移；正常 V3 路由只接受 TurnSpec 中的精确 capability ID，不使用关键词、正则或相似度猜工具。
+- Intent Compiler 只接收当前用户消息、当前身份、服务端解析后的材料摘要和 `DiscourseProjection`，不接收原始历史消息、旧助手正文或工具正文。它每轮只生成一次不可变 TurnSpec；Planner 和依赖轮只能消费或缩小该计划，不能重新解释顶层目标。
+- 时间表达被编译为绑定到具体 goal/slot 的 `temporalConstraints`；资源指代被编译为类型化 `referentSelectors`。Manifest 声明的时间参数和权威资源参数会从模型工具 schema 中移除，再由服务端从 TurnSpec 或归属校验后的资源字段注入，模型不能复制、改写或臆造日期、资源 ID、URL 和对象键。
+- Redis 会话只向下一轮投影最小结构状态：`ResultSet` 保存可继承的稳定引用，`ArtifactState` 保存待确认/已替换/已结算产物，`DiscourseState` 保存领域、主题代际和最近能力。正文、展示标题和模型回答不承担执行指代；跨领域新请求推进主题代际，不会无脑继承上一轮其他类型材料。
+- Web 输入区的能力模块选择是单轮限制：默认“自动判断”，用户可显式收窄到笔记、书签、待办、文件等模块，消息发送后立即恢复自动；它只减少本轮候选能力，不改变长期会话状态，也不能扩大当前身份权限。
+- 生命周期和语义计划分离。写操作仍沿用已有 owner 校验、风险卡、一次性令牌、幂等和回执链；替换草稿、取消、过期和成功只更新 ArtifactState，不把旧卡或自然语言历史重新送给模型判断。
+- `AI_AGENT_RUNTIME_MODE=legacy|v3_shadow|v3_enforce` 只声明目标模式，默认 `legacy`；`AI_AGENT_RUNTIME_V3_ROLLOUT` 再按真实 actor 的角色、账号白名单和稳定百分比分桶裁决本请求的 effective mode。受众缺失或无效时失败关闭到 legacy，未命中账号不运行 V3 Compiler；排除列表高于所有纳入规则，Root 代管按 billing actor 而不是资源 subject 裁决。`v3_shadow` 只用于命中账号的结构化差异观测，`v3_enforce` 才以 V3 TurnSpec 执行；急停可直接退回 legacy，旧链路在完成灰度前不得删除。
+
 - 待办写入能力包括状态修改与安全删除。`delete_todo` 只接受单个待办目标：稳定 `[todo:ID]` 直接冻结，标题重名先进入服务端白名单选择卡，选定后仍要生成中风险确认卡。确认执行在同一事务内复查 owner 和目标版本，并复用 `todoService` / `todoSeriesService` 的软删除、提醒取消和任务系列范围删除。任务系列必须明确 `current / future / series`，未说明时失败关闭；后两种范围只删除对应范围内的未完成项并保留已完成历史
 - 待办查询复用 `todoService.listTodoPage()` 作为页面与 Agent 的唯一事实源。`query_todos` 可用计划日期和精确到分钟的本地提醒时间收窄同名实例；提醒时间同时覆盖仍待投递和已经投递的持久 Job，结果再通过 `@lightnote/shared/todo-reminder` 从规则还原安全摘要，因此不会把“未设置截止时间”误解为“没有提醒”，也不会向模型暴露说明、提醒邮箱或 Provider 数据。语义检索降级只提供候选 ID，二次筛选仍必须回到同一 Service；分页未覆盖全部结果时工具会明确禁止把当前页概括成全量
 - 主力供应商：DeepSeek（`DEEPSEEK_API_KEY`）

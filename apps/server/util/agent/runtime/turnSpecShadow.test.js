@@ -19,6 +19,8 @@ describe('TurnSpec shadow', () => {
     const turnSpec = {
       requestKind: 'mixed',
       confidence: 'medium',
+      continuationMode: 'refer_last_result',
+      topicEpochAction: 'keep',
       goals: [{ capabilityDomain: 'note' }, { capabilityDomain: 'todo' }],
       missingSlots: [{ name: 'target' }],
     };
@@ -35,6 +37,8 @@ describe('TurnSpec shadow', () => {
       state: 'ready',
       requestKind: 'mixed',
       confidence: 'medium',
+      continuationMode: 'refer_last_result',
+      topicEpochAction: 'keep',
       goalCount: 2,
       domainCount: 2,
       missingSlotCount: 1,

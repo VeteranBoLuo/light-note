@@ -63,13 +63,13 @@ function lastDayOfMonth(year, month) {
  * 解析时间表达式，返回 { start, end } 或 null（表示"全部"，不加时间过滤）。
  *
  * 支持的表达式：
- *   "最近N天" / "近N天"  →  N 天前 00:00 → 现在
+ *   "最近N天" / "近N天"  →  含今天的最近 N 个自然日 00:00 → 现在
  *   "最近N小时" / "近N小时" → 精确向前滚动 N 小时 → 现在
  *   "最近N周" / "近N周"  →  N 周前周一 00:00 → 现在
  *   "最近N个月" / "近N个月" → N 个月前 1 日 00:00 → 现在
  *   "今天" / "今日"     →  今天 00:00 → 现在
  *   "昨天" / "昨日"     →  昨天 00:00 → 昨天 23:59
- *   "前天"             →  前天 00:00 → 前天 23:59
+ *   "前天" / "明天" / "后天" → 对应自然日 00:00 → 23:59（今天截至现在）
  *   "本周" / "这周"    →  本周一 00:00 → 现在
  *   "上周"             →  上周一 00:00 → 上周日 23:59
  *   "本月" / "这个月"  →  本月 1 日 00:00 → 现在
@@ -79,6 +79,7 @@ function lastDayOfMonth(year, month) {
  *   "全部" / "all" / "" / null / undefined → null
  *   "YYYY年"           →  该年 1 月 1 日 → 该年 12 月 31 日（如 "2025年"）
  *   "N月" / "N月份"    →  该月 1 日 → 该月最后一天（如 "5月"）
+ *   "YYYY-MM-DD" / "YYYY年M月D日" → 指定自然日
  *
  * @param {string|null|undefined} expr
  * @param {{ now?: Date|string|number }} options 测试或调用方可注入基准时间
@@ -106,8 +107,9 @@ export function parseTimeRange(expr, { now: nowInput = new Date() } = {}) {
   m = s.match(/^(?:最近|近)\s*(\d+)\s*天$/);
   if (m) {
     const n = parseInt(m[1], 10);
+    if (n <= 0) return null;
     const start = new Date(now);
-    start.setDate(start.getDate() - n);
+    start.setDate(start.getDate() - (n - 1));
     return { start: dayStart(start), end: fmt(now) };
   }
 
@@ -152,6 +154,14 @@ export function parseTimeRange(expr, { now: nowInput = new Date() } = {}) {
   if (s === '前天') {
     const d = new Date(now);
     d.setDate(d.getDate() - 2);
+    const d2 = new Date(d);
+    return { start: dayStart(d), end: dayEnd(d2) };
+  }
+
+  // ---- 明天 / 后天 ----
+  if (s === '明天' || s === '后天') {
+    const d = new Date(now);
+    d.setDate(d.getDate() + (s === '明天' ? 1 : 2));
     const d2 = new Date(d);
     return { start: dayStart(d), end: dayEnd(d2) };
   }
@@ -225,6 +235,18 @@ export function parseTimeRange(expr, { now: nowInput = new Date() } = {}) {
     const y = now.getFullYear();
     const start = new Date(y, month - 1, 1);
     const end = lastDayOfMonth(y, month);
+    return { start: dayStart(start), end: dayEnd(end) };
+  }
+  // ---- YYYY-MM-DD / YYYY年M月D日 ----
+  m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+  if (!m) m = s.match(/^(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]$/);
+  if (m) {
+    const y = parseInt(m[1], 10);
+    const month = parseInt(m[2], 10);
+    const day = parseInt(m[3], 10);
+    const start = new Date(y, month - 1, day);
+    if (start.getFullYear() !== y || start.getMonth() !== month - 1 || start.getDate() !== day) return null;
+    const end = new Date(start);
     return { start: dayStart(start), end: dayEnd(end) };
   }
 

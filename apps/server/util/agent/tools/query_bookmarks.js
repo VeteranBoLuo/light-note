@@ -70,6 +70,11 @@ export default {
   parameters: {
     type: 'object',
     properties: {
+      bookmarkId: {
+        type: 'string',
+        maxLength: 255,
+        description: '可选，服务端已校验上下文中的书签 ID；存在时精确定位该书签',
+      },
       keyword: { type: 'string', description: '搜索关键词或短词组，匹配书签名称和URL；不要传整句问题' },
       tag: { type: 'string', description: '标签名称，精确匹配' },
       timeRange: { type: 'string', description: '时间范围，如"最近7天"、"上个月"、"今年"、"全部"' },
@@ -77,14 +82,20 @@ export default {
       user: { type: 'string', description: PERSONAL_SCOPE_USER_PARAM },
     },
   },
+  resourceBindings: [{ argument: 'bookmarkId', refType: 'bookmark', sourceField: 'id' }],
   requireRoot: false,
   async execute(args, ctx) {
-    const { keyword, tag, timeRange, limit = 10 } = args;
+    const { bookmarkId, keyword, tag, timeRange, limit = 10 } = args;
     const time = parseTimeRange(timeRange);
     const take = Math.min(Math.max(limit || 10, 1), 50);
 
     let where = 'b.user_id = ? AND b.del_flag = 0';
     const baseParams = [ctx.userId];
+
+    if (bookmarkId) {
+      where += ' AND b.id = ?';
+      baseParams.push(String(bookmarkId));
+    }
 
     if (keyword) {
       where += ` AND (b.name LIKE ? OR b.url LIKE ?)`;
@@ -130,6 +141,19 @@ export default {
       console.warn('[query_bookmarks] semantic fallback failed code=%s', error?.code || error?.message);
     }
     return { total: 0, items: [], matchMode: 'like' };
+  },
+  getDependencyRefs(raw) {
+    return (Array.isArray(raw?.items) ? raw.items : []).map((item) => ({ type: 'bookmark', id: item.id }));
+  },
+  toSources(raw) {
+    return (Array.isArray(raw?.items) ? raw.items : []).map((item) => ({
+      type: 'bookmark',
+      id: String(item.id || ''),
+      title: item.name || '未命名书签',
+      url: item.url || '',
+      target: item.url || 'bookmark-list',
+      excerpt: item.url || '',
+    }));
   },
   transform(raw, args) {
     const items = raw?.items || [];

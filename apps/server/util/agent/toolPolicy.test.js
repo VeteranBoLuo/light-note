@@ -81,6 +81,17 @@ describe('Agent Tool Policy', () => {
       { argument: 'url', refType: 'bookmark', sourceField: 'url', allowLiteral: true },
     ]);
     expect(Object.isFrozen(tool.resourceBindings)).toBe(true);
+    const multiTypeTool = makeTool({
+      parameters: {
+        type: 'object',
+        properties: { url: { type: 'string' } },
+      },
+      resourceBindings: [{ argument: 'url', refTypes: ['BOOKMARK', 'web', 'bookmark'], sourceField: 'url' }],
+    });
+    expect(multiTypeTool.resourceBindings).toEqual([
+      { argument: 'url', refTypes: ['bookmark', 'web'], sourceField: 'url' },
+    ]);
+    expect(Object.isFrozen(multiTypeTool.resourceBindings[0].refTypes)).toBe(true);
     expect(() =>
       makeTool({ resourceBindings: [{ argument: 'missing', refType: 'bookmark', sourceField: 'url' }] }),
     ).toThrow(/资源绑定/);
@@ -97,8 +108,33 @@ describe('Agent Tool Policy', () => {
     ).toThrow(/资源绑定/);
     expect(() =>
       makeTool({
+        resourceBindings: [{ argument: 'limit', refTypes: [], sourceField: 'id' }],
+      }),
+    ).toThrow(/资源绑定/);
+    expect(() =>
+      makeTool({
+        resourceBindings: [{ argument: 'limit', refType: 'page', refTypes: ['page'], sourceField: 'id' }],
+      }),
+    ).toThrow(/资源绑定/);
+    expect(() =>
+      makeTool({
         dependencyBindings: [{ argument: 'limit', refType: 'page' }],
         resourceBindings: [{ argument: 'limit', refType: 'bookmark', sourceField: 'id' }],
+      }),
+    ).toThrow(/资源绑定/);
+    expect(
+      makeTool({
+        dependencyBindings: [{ argument: 'limit', refType: 'page' }],
+        resourceBindings: [{ argument: 'limit', refType: 'page', sourceField: 'id' }],
+      }),
+    ).toMatchObject({
+      dependencyBindings: [{ argument: 'limit', refType: 'page' }],
+      resourceBindings: [{ argument: 'limit', refType: 'page', sourceField: 'id' }],
+    });
+    expect(() =>
+      makeTool({
+        dependencyBindings: [{ argument: 'limit', refType: 'page' }],
+        resourceBindings: [{ argument: 'limit', refType: 'page', sourceField: 'url' }],
       }),
     ).toThrow(/资源绑定/);
   });

@@ -6,6 +6,7 @@ const SEMANTIC_OPERATION_CAPABILITY_PREFIX = 'operation.';
 const ALL_CONTENT_CAPABILITY_DOMAINS = Object.freeze(['content', 'note', 'bookmark', 'file', 'todo', 'tag']);
 
 function domainFromResource(resource) {
+  if (resource === 'web') return 'web';
   if (resource === 'note') return 'note';
   if (resource === 'bookmark') return 'bookmark';
   if (resource === 'file' || resource === 'trash') return 'file';
@@ -56,7 +57,8 @@ function resourceBindingDomains(tool) {
   return [
     ...new Set(
       (Array.isArray(tool?.resourceBindings) ? tool.resourceBindings : [])
-        .map((binding) => domainFromResource(String(binding?.refType || '')))
+        .flatMap((binding) => (Array.isArray(binding?.refTypes) ? binding.refTypes : [binding?.refType]))
+        .map((refType) => domainFromResource(String(refType || '')))
         .filter(Boolean),
     ),
   ];

@@ -13,16 +13,22 @@ import { resultData, generateUUID } from '../util/agent/data.js';
 import { getActiveProviderInfo, looksLikeLeakedToolCall, parseLeakedToolCalls } from '../util/agent/deepseekClient.js';
 import { requestAi } from '../util/agent/aiGateway.js';
 import {
+  commitSessionTurnSpec,
   createSessionMaterialClarification,
+  getSessionDiscourseProjection,
   getOrCreateSession,
   getSessionId,
   listSessionSourceSets,
   recordPendingActionBatch,
   recordPendingActionBatchById,
+  recordSessionArtifactState,
+  recordSessionArtifactStateById,
+  recordSessionResultSet,
   recordSessionSourceSet,
   recordTurn,
   resolveSessionSourceSet,
   resolveSessionActionRetry,
+  resolveSessionResultSet,
   resolveSessionMaterialClarification,
   settleSessionAction,
 } from '../util/agent/sessionStore.js';
@@ -34,6 +40,13 @@ import {
   getAgentCapabilityByToolName,
   getSemanticCapabilityIdForTool,
 } from '../util/agent/capabilityRegistry.js';
+import {
+  assertAgentV3CapabilityManifest,
+  buildAgentV3CapabilityCatalog,
+  getAgentV3CapabilityByToolName,
+} from '../util/agent/runtime/v3/capabilityManifest.js';
+import { projectAgentV3ResultSet } from '../util/agent/runtime/v3/resultSetProjection.js';
+import { canToolConsumeAgentV3ResultSet } from '../util/agent/runtime/v3/candidateAvailability.js';
 import { resolveAgentTargetUser } from '../util/agent/userLookup.js';
 import { resolveAgentActionIntent } from '../util/agent/actionIntentPolicy.js';
 import {
@@ -110,6 +123,10 @@ import {
   resolveToolSources,
 } from '../util/agent/sourceUtils.js';
 import { generateFinalReply, resolveFinalReplyTemperature } from '../util/agent/finalReply.js';
+import {
+  applyAgentAnswerRequirements,
+  normalizeAgentAnswerRequirements,
+} from '../util/agent/answerRequirements.js';
 import { AgentToolPolicyError, enforceToolPolicy, normalizeRegisteredTool } from '../util/agent/toolPolicy.js';
 import { decideDirectAgentRoute } from '../util/agent/directRoute.js';
 import {
@@ -125,16 +142,26 @@ import {
   recordCandidateSet,
   recordGroundingDecision,
   recordIntentCompiler,
+  recordExecutionPlanner,
   recordOutputContract,
   recordRequestedScope,
   recordResolvedScope,
+  recordRuntimeIsolation,
   recordSourcesUsed,
   sanitizeTurnContractTrace,
 } from '../util/agent/turnContractTrace.js';
-import { resolveAgentRuntimeV2Mode } from '../util/agent/runtime/runtimeMode.js';
+import {
+  resolveAgentRuntimeDecision,
+  resolveAgentRuntimeMode,
+  resolveAgentRuntimeV2Mode,
+} from '../util/agent/runtime/runtimeMode.js';
+import { selectAgentConversationHistory } from '../util/agent/runtime/conversationHistory.js';
 import { runAgentRuntime } from '../util/agent/runtime/agentRuntime.js';
+import { runAgentRuntimeV3 } from '../util/agent/runtime/v3/agentRuntime.js';
+import { compileAgentTurnSpecV3 } from '../util/agent/runtime/v3/intentCompiler.js';
+import { attachTurnSpecV3OutputContract, resolveArtifactContinuationV3 } from '../util/agent/runtime/v3/turnSpec.js';
 import { adaptRuntimeOutcomeToLegacy } from '../util/agent/runtime/legacyRuntimeAdapter.js';
-import { planAgentExecution } from '../util/agent/runtime/executionPlanner.js';
+import { buildPlannerTemporalContext, planAgentExecution } from '../util/agent/runtime/executionPlanner.js';
 import { validateExecutionPlan } from '../util/agent/runtime/planValidator.js';
 import {
   buildAuthoritativeExecutionContext,
@@ -155,6 +182,7 @@ import {
   isGroundingScopeV2Enabled,
   publicResolvedGrounding,
   resolveGroundingScope,
+  resolveResultSetGroundingScope,
   selectGroundedAnswerMessages,
 } from '../util/agent/runtime/groundingScope.js';
 import { normalizeAgentArtifacts } from '../util/agent/artifact.js';
@@ -268,6 +296,9 @@ function registerTool(tool) {
 
 // 注册所有工具
 toolDefsArray.forEach((t) => registerTool(t));
+if (resolveAgentRuntimeMode() !== 'legacy') {
+  assertAgentV3CapabilityManifest([...toolRegistry.values()]);
+}
 
 /**
  * 获取 OpenAI function-calling 格式的工具定义列表
@@ -626,10 +657,21 @@ async function executeTool(name, args, ctx) {
         console.error('[Agent] artifact projection failed name=%s code=%s', name, stableAgentErrorCode(artifactError));
       }
     }
+    let answerRequirements = [];
+    if (typeof tool.getAnswerRequirements === 'function') {
+      try {
+        answerRequirements = normalizeAgentAnswerRequirements(tool.getAnswerRequirements(raw, args, ctx));
+      } catch (requirementError) {
+        // 防遗漏投影属于回答增强；异常不能把一次已经成功的只读查询改成失败。
+        console.error('[Agent] answer requirements failed name=%s code=%s', name, stableAgentErrorCode(requirementError));
+      }
+    }
     let dependencyRefs = [];
+    let referenceProjectionComplete = false;
     if (typeof tool.getDependencyRefs === 'function') {
       try {
         dependencyRefs = normalizeToolDependencyRefs(tool.getDependencyRefs(raw, args));
+        referenceProjectionComplete = true;
       } catch (dependencyError) {
         // 依赖元数据只用于约束后续写操作，不能反过来让一次已成功的纯读取失效。
         // 元数据异常时保留查询结果、清空引用；若后续存在写入，它会因没有权威目标而失败关闭。
@@ -644,7 +686,9 @@ async function executeTool(name, args, ctx) {
       sources: resolveToolSources(tool, raw, args, ctx),
       nextActions: Array.isArray(raw?.nextActions) ? raw.nextActions.slice(0, 4) : [],
       artifacts,
+      ...(answerRequirements.length ? { answerRequirements } : {}),
       dependencyRefs,
+      referenceProjectionComplete,
       ...(ctx.includeRawResult === true ? { raw } : {}),
     };
   } catch (err) {
@@ -1449,6 +1493,51 @@ const NOTE_DRAFT_WORKSPACE_QUERY_TOOLS = new Set([
 // 可用于“基于我的资料生成笔记”的真实材料。集合按工具能力维护，不依赖用户措辞。
 const NOTE_DRAFT_MATERIAL_READ_TOOLS = new Set([...NOTE_DRAFT_WORKSPACE_QUERY_TOOLS, 'read_note']);
 
+function selectSemanticAgentToolsForTurn({
+  registry,
+  message,
+  contextTypes,
+  userRole,
+  allowWrite,
+  allowVisitorWrite,
+  contentScope,
+  capabilityScope,
+  discourseProjection,
+}) {
+  const acceptsLastResult = (tool) => canToolConsumeAgentV3ResultSet(tool, discourseProjection);
+  let tools = selectAgentTools(registry, {
+    message,
+    contextTypes,
+    userRole,
+    allowWrite,
+    allowVisitorWrite,
+    semanticPlanner: true,
+  });
+  if (contentScope?.mode === 'selected') {
+    // 显式选择模式仍禁止无边界地查询整个工作区；但上一轮 ResultSet 是服务端保存、
+    // 带 owner/session 边界的稳定引用，可以按 Manifest 与资源绑定继续读取。
+    tools = tools.filter((tool) => !BROAD_PERSONAL_CONTENT_TOOLS.has(tool.name) || acceptsLastResult(tool));
+    if (contentScope.entityRefs?.length && !contentScope.resourceIds?.length) {
+      tools = tools.filter((tool) => tool.name !== 'search_content');
+    }
+  }
+  if (contentScope?.noteBranches?.length && !tools.some((tool) => tool.name === 'search_content')) {
+    const scopedSearchTool = registry.get('search_content');
+    if (scopedSearchTool) tools.push(scopedSearchTool);
+  }
+  if (!contentScope?.externalWeb && !contentScope?.explicitUrlRead && !contentScope?.allowedWebUrls?.length) {
+    tools = tools.filter((tool) => tool.name !== 'read_url' || acceptsLastResult(tool));
+  }
+  const allowedDomains = new Set(Array.isArray(capabilityScope?.domains) ? capabilityScope.domains : []);
+  if (allowedDomains.size) {
+    tools = tools.filter((tool) => {
+      const capability = getAgentV3CapabilityByToolName(tool.name);
+      return capability?.domains?.some((domain) => allowedDomains.has(domain));
+    });
+  }
+  return tools;
+}
+
 function buildNoteDraftMaterialEmptyMessage(entries, locale = 'zh-CN') {
   const normalized = (Array.isArray(entries) ? entries : []).map((entry) => ({
     toolName: String(entry?.toolName || entry?.name || ''),
@@ -1607,6 +1696,31 @@ function normalizeAgentContentScope(rawScope, resolvedContexts, message, resolve
           .slice(0, 5)
       : [],
   };
+}
+
+function projectTrustedResultWebContexts(refs) {
+  const projectedRefs = [];
+  const entities = [];
+  const allowedWebUrls = [];
+  const seen = new Set();
+  for (const ref of Array.isArray(refs) ? refs : []) {
+    if (String(ref?.type || '').trim() !== 'web') continue;
+    const id = String(ref?.id || '').trim();
+    try {
+      const url = new URL(id);
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.href.length > 2048) {
+        continue;
+      }
+      if (seen.has(url.href)) continue;
+      seen.add(url.href);
+      projectedRefs.push({ type: 'web', id });
+      entities.push({ type: 'web', id, url: url.href });
+      allowedWebUrls.push(url.href);
+    } catch {
+      // ResultSet 中的异常 URL 不能进入执行上下文或网页白名单。
+    }
+  }
+  return { refs: projectedRefs, entities, allowedWebUrls };
 }
 
 function applyAgentContentScope(toolName, args, contentScope) {
@@ -2003,10 +2117,11 @@ export async function agentChat(req, res) {
   try {
     providerInfo = getActiveProviderInfo();
     trace.providerInfo = providerInfo;
+    const configuredRuntimeMode = resolveAgentRuntimeMode();
     const runtimeV2Mode = resolveAgentRuntimeV2Mode();
     let precompiledTurnSpecResult = null;
     let precompiledOutputContract = null;
-    recordIntentCompiler(trace.turnContract, { mode: runtimeV2Mode });
+    let precompiledTurnSpecError = null;
     const turnEnvelope = adaptAgentTurnEnvelope(req.body);
     const normalizedRequestBody = {
       ...req.body,
@@ -2057,6 +2172,29 @@ export async function agentChat(req, res) {
 
     // 资源归属(subject)与 AI 计费(actor)分离。普通请求二者相同；管理员上下文由鉴权层分别注入。
     const identity = getAgentIdentity(req);
+    const runtimeDecision = resolveAgentRuntimeDecision({
+      configuredMode: configuredRuntimeMode,
+      actorId: identity.billingUserId,
+      actorRole: identity.billingUserRole,
+      actorKey: identity.billingUserRole === 'visitor' ? identity.ownerKey : identity.billingUserId,
+    });
+    const runtimeMode = runtimeDecision.effectiveMode;
+    const runtimeV3ModeEnforced = runtimeMode === 'v3_enforce';
+    const recordResolvedRuntimeIsolation = (rawHistoryMessageCount = 0) =>
+      recordRuntimeIsolation(trace.turnContract, {
+        mode: runtimeMode,
+        configuredMode: runtimeDecision.configuredMode,
+        rolloutReason: runtimeDecision.reason,
+        rolloutPercentage: runtimeDecision.rolloutPercentage,
+        rawHistoryMessageCount,
+        legacyStageCount: runtimeMode === 'v3_enforce' ? 0 : 1,
+      });
+    recordIntentCompiler(trace.turnContract, {
+      mode: runtimeMode === 'legacy' ? runtimeV2Mode : runtimeMode,
+    });
+    // 专用草稿、确定性澄清等分支可能早于通用 Planner 返回；先记录权威 Runtime 决策，
+    // 后续进入消息组装时再用实际入模历史条数覆盖，避免成功走 V3 却被观测误标为 legacy。
+    recordResolvedRuntimeIsolation(0);
     const noteTreeFeatures = resolveNoteTreeFeatures(noteTreeFeatureIdentity(req));
     if (Array.isArray(scopeRefs) && scopeRefs.length && !noteTreeFeatures.ai_note_branch_scope) {
       throw new NoteBranchScopeError(
@@ -2431,13 +2569,10 @@ export async function agentChat(req, res) {
         }
         pendingNoteDraftInspection = inspected;
         pendingNoteDraftPrivateContext = normalizeNoteDraftPrivateContext(inspected.confirmation.privateContext);
-        if (!pendingNoteDraftPrivateContext) {
-          throw new ToolConfirmationError(
-            'TOOL_CONFIRMATION_CONTEXT_MISSING',
-            '原草稿没有可恢复的材料上下文，请重新发起生成。',
-            409,
-          );
-        }
+        // 确认生命周期与材料恢复是两项独立事实。旧卡仍然有效但私有材料上下文缺失时，
+        // “基于旧材料继续润色”必须失败关闭；“按全新范围重做”仍应原子替换旧卡，不能
+        // 因材料上下文缺失而把一个有效令牌遗留成第二张可执行卡。
+        if (!pendingNoteDraftPrivateContext) trace.pendingDraftCandidateError = 'TOOL_CONFIRMATION_CONTEXT_MISSING';
       } catch (error) {
         trace.pendingDraftCandidateError = stableAgentErrorCode(error);
         console.warn('[Agent] pending note draft unavailable code=%s', trace.pendingDraftCandidateError);
@@ -2448,7 +2583,7 @@ export async function agentChat(req, res) {
       // 只有当前仍可执行的确认才能被原子替换。已取消/过期的候选只是过时客户端状态，
       // 不应再进入“改写旧令牌”路径；本轮若携带回答中的稳定材料引用，会按新请求
       // 重新复核材料并签发新确认，既不复活旧令牌，也不因确认生命周期丢掉引用。
-      if (pendingNoteDraftInspection && pendingNoteDraftPrivateContext) {
+      if (pendingNoteDraftInspection && pendingNoteDraftPrivateContext && !runtimeV3ModeEnforced) {
         const intentStartedAt = Date.now();
         const intent = await classifyPendingNoteDraftFollowUp({
           message,
@@ -2554,7 +2689,10 @@ export async function agentChat(req, res) {
       Boolean(turnEnvelope.grounding.sourceSetId) &&
       Boolean(unavailableSourceSet);
     let inheritedReadySourceSet = false;
-    if (followUpCandidate || unavailableSourceSetCandidate) {
+    if (
+      (followUpCandidate || unavailableSourceSetCandidate) &&
+      (!runtimeV3ModeEnforced || clarificationSourceSetIds.length)
+    ) {
       const followUpStartedAt = Date.now();
       if (clarificationSourceSetIds.length) {
         trace.materialFollowUpDecision = 'continue_with_materials';
@@ -2719,8 +2857,32 @@ export async function agentChat(req, res) {
           scopeRefs: effectiveRequestScopeRefs,
           attachmentSourceIds: effectiveRequestAttachmentIds,
         });
-    const contentScope = normalizeAgentContentScope(scope, resolvedContexts, message, resolvedScopes);
-    const groundingScope = resolveGroundingScope({
+    let contentScope = normalizeAgentContentScope(scope, resolvedContexts, message, resolvedScopes);
+    const sessionDiscourseProjection = runtimeMode.startsWith('v3_')
+      ? getSessionDiscourseProjection(session)
+      : Object.freeze({ pendingArtifact: null, lastResultSet: null, resultSetCandidates: [] });
+    const pendingDraftCapability = pendingNoteDraftInspection
+      ? getAgentV3CapabilityByToolName(pendingNoteDraftInspection.confirmation?.toolName)
+      : null;
+    // Redis 确认存储是待确认动作是否仍可执行的权威来源。Session 中的 artifact 指针只用于
+    // 对话投影，可能因旧客户端/旧卡或会话写入时序暂时缺失；已重新校验的确认候选应补入
+    // 本轮只读投影，使 Compiler 能稳定判断 refine / scope replacement。能力与产物领域均从
+    // Manifest 获取，不依赖 create_note 等具体工具名。
+    const structuredDiscourseProjection =
+      runtimeMode.startsWith('v3_') &&
+      pendingNoteDraftInspection &&
+      pendingDraftCapability &&
+      pendingDraftCapability.artifactKind !== 'none'
+        ? Object.freeze({
+            ...sessionDiscourseProjection,
+            pendingArtifact: Object.freeze({
+              available: true,
+              domain: pendingDraftCapability.artifactKind,
+              state: 'pending',
+            }),
+          })
+        : sessionDiscourseProjection;
+    let groundingScope = resolveGroundingScope({
       requestedMode: turnEnvelope.grounding.mode,
       inheritedDecision: trace.materialFollowUpDecision,
       contentScope,
@@ -2753,7 +2915,8 @@ export async function agentChat(req, res) {
       shadowMode: resolvedScopeMode,
       clientModeMismatch: turnEnvelope.grounding.clientModeMismatch,
       historyPolicy:
-        groundingV2Enabled && ['current_explicit_only', 'source_set_inherited'].includes(resolvedScopeMode)
+        runtimeV3ModeEnforced ||
+        (groundingV2Enabled && ['current_explicit_only', 'source_set_inherited'].includes(resolvedScopeMode))
           ? 'discourse_projection_only'
           : 'legacy_conversation',
       subsetValid: true,
@@ -2764,7 +2927,12 @@ export async function agentChat(req, res) {
     // 语义分类确认“覆盖全部页面”时，才进入同步 Map/Reduce；普通问答继续走 Top-N
     // search_content。目录根、后代和正文都只取服务端 owner 校验后的数据。
     let fullBranchAnalysisRequested = false;
-    if (!enableTranslation && resolvedScopes.branches.length && noteTreeFeatures.ai_note_branch_analysis) {
+    if (
+      !runtimeV3ModeEnforced &&
+      !enableTranslation &&
+      resolvedScopes.branches.length &&
+      noteTreeFeatures.ai_note_branch_analysis
+    ) {
       const intentStartedAt = Date.now();
       try {
         const intent = await classifyNoteBranchAnalysisIntent({
@@ -2971,70 +3139,126 @@ export async function agentChat(req, res) {
         extractPastedNoteDraftText(message).length >= 20;
       const legacyNoteDraftRequested = isNoteDraftRequest(message, legacyIntentSuspicion);
       const classifyNoteDraft =
-        NOTE_DRAFT_SEMANTIC_ROUTE_ENABLED &&
-        shouldClassifyNoteDraftTask({
-          message,
-          contextTypes: noteDraftContextTypes,
-          scopeCount: resolvedScopes.refs.length,
-          attachmentCount: Array.isArray(effectiveRequestAttachmentIds) ? effectiveRequestAttachmentIds.length : 0,
-          actionIntent: legacyIntentSuspicion,
-        });
+        runtimeV3ModeEnforced ||
+        (NOTE_DRAFT_SEMANTIC_ROUTE_ENABLED &&
+          shouldClassifyNoteDraftTask({
+            message,
+            contextTypes: noteDraftContextTypes,
+            scopeCount: resolvedScopes.refs.length,
+            attachmentCount: Array.isArray(effectiveRequestAttachmentIds) ? effectiveRequestAttachmentIds.length : 0,
+            actionIntent: legacyIntentSuspicion,
+          }));
       if (classifyNoteDraft) {
         const noteDraftTaskStartedAt = Date.now();
         try {
           let task;
-          if (runtimeV2Mode === 'enforce') {
-            const compilerTools = selectAgentTools(toolRegistry, {
+          if (runtimeMode === 'v3_enforce' || (runtimeMode === 'legacy' && runtimeV2Mode === 'enforce')) {
+            const compilerTools = selectSemanticAgentToolsForTurn({
+              registry: toolRegistry,
               message,
               contextTypes: [...noteDraftContextTypes, ...(resolvedScopes.refs.length ? ['note'] : [])],
               userRole,
               allowWrite: !req.adminContext || req.adminContext.mode === 'maintain',
               allowVisitorWrite: req.adminContext?.mode === 'maintain',
-              semanticPlanner: true,
+              contentScope,
+              capabilityScope: turnEnvelope.capabilityScope,
+              discourseProjection: structuredDiscourseProjection,
             });
-            const compilerCatalog = buildAgentSemanticCapabilityCatalog([...toolRegistry.values()], {
-              availableToolNames: new Set(compilerTools.map((tool) => tool.name)),
-            });
-            precompiledOutputContract = compileNoteDraftOutputContract({ instruction: message });
-            precompiledTurnSpecResult = await compileAgentTurnSpec({
-              message,
-              history,
-              domainCatalog: compilerCatalog,
-              contextSummary: {
-                actorRole: userRole,
-                selectedResourceTypes: noteDraftContextTypes,
-                selectedResourceCount:
-                  (Array.isArray(effectiveRequestContexts) ? effectiveRequestContexts.length : 0) +
-                  resolvedScopes.refs.length,
-                attachmentCount: Array.isArray(effectiveRequestAttachmentIds)
-                  ? effectiveRequestAttachmentIds.length
-                  : 0,
-                hasPendingArtifact: false,
-              },
-              authoritativeGroundingPolicy: groundingPolicyFromScopeMode(groundingScope.mode),
-              outputContract: precompiledOutputContract,
-              signal: agentAbortController.signal,
-              traceId: requestId,
-              onResponse(response) {
-                pendingDraftIntentCalls += 1;
-                apiCallsForLog = pendingDraftIntentCalls;
-                const usage = response?.usage || {};
-                totalUsage.promptTokens += Number(usage.promptTokens || 0);
-                totalUsage.completionTokens += Number(usage.completionTokens || 0);
-                totalUsage.totalTokens += Number(usage.totalTokens || 0);
-                pendingDraftIntentUsageReported =
-                  pendingDraftIntentUsageReported && response?.usageStatus === 'reported';
-                trace.finishReason = response?.finishReason || trace.finishReason;
-              },
-            });
-            const turnSpec = precompiledTurnSpecResult.turnSpec;
+            const compilerCatalog =
+              runtimeMode === 'v3_enforce'
+                ? buildAgentV3CapabilityCatalog([...toolRegistry.values()], {
+                    availableToolNames: new Set(compilerTools.map((tool) => tool.name)),
+                    actorRole: userRole,
+                    capabilityScope: turnEnvelope.capabilityScope,
+                  })
+                : buildAgentSemanticCapabilityCatalog([...toolRegistry.values()], {
+                    availableToolNames: new Set(compilerTools.map((tool) => tool.name)),
+                  });
+            // V3 先只编译意图。确认它确实是笔记产物后，再由服务端从最新消息确定性附加
+            // 字数/格式契约；普通问答不会被错误套上 note_markdown，也不需要第二次模型调用。
+            precompiledOutputContract =
+              runtimeMode === 'v3_enforce' ? null : compileNoteDraftOutputContract({ instruction: message });
+            const compilerContextSummary = {
+              actorRole: userRole,
+              selectedResourceTypes: noteDraftContextTypes,
+              selectedResourceCount:
+                (Array.isArray(effectiveRequestContexts) ? effectiveRequestContexts.length : 0) +
+                resolvedScopes.refs.length,
+              attachmentCount: Array.isArray(effectiveRequestAttachmentIds) ? effectiveRequestAttachmentIds.length : 0,
+              hasPendingArtifact:
+                runtimeV3ModeEnforced && Boolean(structuredDiscourseProjection.pendingArtifact?.available),
+            };
+            const onCompilerResponse = (response) => {
+              pendingDraftIntentCalls += 1;
+              apiCallsForLog = pendingDraftIntentCalls;
+              const usage = response?.usage || {};
+              totalUsage.promptTokens += Number(usage.promptTokens || 0);
+              totalUsage.completionTokens += Number(usage.completionTokens || 0);
+              totalUsage.totalTokens += Number(usage.totalTokens || 0);
+              pendingDraftIntentUsageReported = pendingDraftIntentUsageReported && response?.usageStatus === 'reported';
+              trace.finishReason = response?.finishReason || trace.finishReason;
+            };
+            precompiledTurnSpecResult =
+              runtimeMode === 'v3_enforce'
+                ? await compileAgentTurnSpecV3({
+                    message,
+                    catalog: compilerCatalog,
+                    discourseProjection: structuredDiscourseProjection,
+                    contextSummary: compilerContextSummary,
+                    capabilityScope: turnEnvelope.capabilityScope,
+                    authoritativeGroundingPolicy: groundingPolicyFromScopeMode(groundingScope.mode),
+                    outputContract: precompiledOutputContract,
+                    temporalContext: buildPlannerTemporalContext({ timeZone }),
+                    actorRole: userRole,
+                    signal: agentAbortController.signal,
+                    traceId: requestId,
+                    onResponse: onCompilerResponse,
+                  })
+                : await compileAgentTurnSpec({
+                    message,
+                    history,
+                    domainCatalog: compilerCatalog,
+                    contextSummary: compilerContextSummary,
+                    authoritativeGroundingPolicy: groundingPolicyFromScopeMode(groundingScope.mode),
+                    outputContract: precompiledOutputContract,
+                    signal: agentAbortController.signal,
+                    traceId: requestId,
+                    onResponse: onCompilerResponse,
+                  });
+            let turnSpec = precompiledTurnSpecResult.turnSpec;
+            const isNoteArtifact =
+              ['create_artifact', 'revise_artifact'].includes(turnSpec.requestKind) &&
+              turnSpec.goals.some((goal) => goal.capabilityId === 'note.create' && goal.kind === 'transform');
+            if (runtimeMode === 'v3_enforce' && isNoteArtifact) {
+              precompiledOutputContract = compileNoteDraftOutputContract({
+                instruction: message,
+                previousContent:
+                  turnSpec.requestKind === 'revise_artifact'
+                    ? String(pendingNoteDraftInspection?.confirmation?.args?.content || '')
+                    : '',
+              });
+              const contractedTurnSpec = attachTurnSpecV3OutputContract(turnSpec, precompiledOutputContract);
+              if (!contractedTurnSpec) {
+                const error = new Error('V3 笔记产物与输出契约不一致');
+                error.code = 'TURN_SPEC_V3_OUTPUT_CONTRACT_INVALID';
+                throw error;
+              }
+              turnSpec = contractedTurnSpec;
+              precompiledTurnSpecResult = Object.freeze({
+                ...precompiledTurnSpecResult,
+                turnSpec,
+              });
+            }
             const readGoalIds = new Set(turnSpec.goals.filter((goal) => goal.kind === 'read').map((goal) => goal.id));
             const noteGoals = turnSpec.goals.filter(
               (goal) => goal.kind === 'transform' && goal.capabilityDomain === 'note',
             );
             task = {
               producesNote:
-                ['create_artifact', 'revise_artifact'].includes(turnSpec.requestKind) && noteGoals.length > 0,
+                ['create_artifact', 'revise_artifact'].includes(turnSpec.requestKind) &&
+                noteGoals.length > 0 &&
+                turnSpec.confidence !== 'low' &&
+                turnSpec.missingSlots.length === 0,
               otherMutations: turnSpec.goals.some(
                 (goal) =>
                   ['write', 'transform'].includes(goal.kind) &&
@@ -3045,7 +3269,12 @@ export async function agentChat(req, res) {
               ),
               workspaceQueries: [],
             };
-            trace.noteDraftRouteSource = 'turn_spec_v2';
+            if (runtimeMode === 'v3_enforce' && task.producesNote && pendingNoteDraftInspection) {
+              const artifactContinuation = resolveArtifactContinuationV3(turnSpec);
+              refinementRequested = artifactContinuation === 'refine';
+              pendingDraftReplacementRequested = artifactContinuation === 'replace_scope';
+            }
+            trace.noteDraftRouteSource = runtimeMode === 'v3_enforce' ? 'turn_spec_v3' : 'turn_spec_v2';
             recordIntentCompiler(
               trace.turnContract,
               turnSpecTraceSummary(
@@ -3056,7 +3285,7 @@ export async function agentChat(req, res) {
                   durationMs: Date.now() - noteDraftTaskStartedAt,
                 },
                 [],
-                'enforce',
+                runtimeMode === 'v3_enforce' ? 'v3_enforce' : 'enforce',
               ),
             );
           } else {
@@ -3096,8 +3325,9 @@ export async function agentChat(req, res) {
           if (error?.name === 'AbortError' || error?.code === 'AGENT_HARD_DEADLINE_EXCEEDED') throw error;
           // 分类不可用时，只有已经绑定了可靠材料的请求才进入专用草稿链路；没有材料的
           // 请求交回 Planner，避免再次把一句创作指令当作唯一来源。
-          noteDraftRequested = legacyNoteDraftRequested && hasBoundDraftMaterial;
-          trace.noteDraftRouteSource = 'legacy_fallback';
+          noteDraftRequested = runtimeV3ModeEnforced ? false : legacyNoteDraftRequested && hasBoundDraftMaterial;
+          if (runtimeV3ModeEnforced) precompiledTurnSpecError = error;
+          trace.noteDraftRouteSource = runtimeV3ModeEnforced ? 'turn_spec_v3_failed' : 'legacy_fallback';
           trace.noteDraftClassifyError = stableAgentErrorCode(error);
         }
         trace.noteDraftClassifyMs = Date.now() - noteDraftTaskStartedAt;
@@ -3140,6 +3370,9 @@ export async function agentChat(req, res) {
       );
     }
     if (noteDraftRequested || refinementRequested || noteDraftWorkspaceDirectRequested) {
+      if (runtimeV3ModeEnforced && precompiledTurnSpecResult?.turnSpec) {
+        await commitSessionTurnSpec(session, precompiledTurnSpecResult.turnSpec);
+      }
       const dedicatedMemoryMode = normalizeAiMemoryMode(memoryMode);
       memoryInfluence = buildAiMemoryNotUsedInfluence(
         dedicatedMemoryMode === 'temporary'
@@ -3502,6 +3735,7 @@ export async function agentChat(req, res) {
           });
           trace.finalMs = Date.now() - draftStartedAt;
           const createNoteTool = toolRegistry.get('create_note');
+          const createNoteCapability = getAgentV3CapabilityByToolName(createNoteTool?.name);
           replacedConfirmation =
             previousConfirmation ||
             (pendingDraftReplacementRequested ? pendingNoteDraftInspection?.confirmation || null : null);
@@ -3541,6 +3775,14 @@ export async function agentChat(req, res) {
             batchId: requestId,
             actions: [pendingActionRecord(confirmation, {})],
           });
+          if (runtimeV3ModeEnforced && precompiledTurnSpecResult?.turnSpec && createNoteCapability) {
+            await recordSessionArtifactState(session, {
+              id: confirmation.id,
+              capabilityId: createNoteCapability.id,
+              domain: createNoteCapability.artifactKind,
+              state: 'pending',
+            });
+          }
           // recordPendingActionBatch 使用本轮持有的 session 对象；先把新动作写入，再由
           // settleSessionAction 读取最新会话结算旧动作，避免旧 session 快照反向覆盖 cancelled 状态。
           if (replacedConfirmation) {
@@ -3606,7 +3848,8 @@ export async function agentChat(req, res) {
         shadowMode: resolvedScopeMode,
         clientModeMismatch: turnEnvelope.grounding.clientModeMismatch,
         historyPolicy:
-          groundingV2Enabled && ['current_explicit_only', 'source_set_inherited'].includes(resolvedScopeMode)
+          runtimeV3ModeEnforced ||
+          (groundingV2Enabled && ['current_explicit_only', 'source_set_inherited'].includes(resolvedScopeMode))
             ? 'discourse_projection_only'
             : 'legacy_conversation',
         subsetValid: draftSubsetInspection.valid,
@@ -3750,21 +3993,29 @@ export async function agentChat(req, res) {
         ...(runtimeAttachmentIds.length ? ['file'] : []),
       ]),
     ];
-    const directRoute = decideDirectAgentRoute({
-      message,
-      contextCount: runtimeContextRefs.length + (Array.isArray(resolvedScopes?.refs) ? resolvedScopes.refs.length : 0),
-      attachmentCount: runtimeAttachmentIds.length,
-      translation: enableTranslation,
-    });
+    const directRoute = runtimeV3ModeEnforced
+      ? { direct: false, reason: 'planner' }
+      : decideDirectAgentRoute({
+          message,
+          contextCount:
+            runtimeContextRefs.length + (Array.isArray(resolvedScopes?.refs) ? resolvedScopes.refs.length : 0),
+          attachmentCount: runtimeAttachmentIds.length,
+          translation: enableTranslation,
+        });
     const capabilityOverviewRequested =
-      !enableTranslation && !resolvedResourceTypes.length && isAgentCapabilityOverviewRequest(message);
+      !runtimeV3ModeEnforced &&
+      !enableTranslation &&
+      !resolvedResourceTypes.length &&
+      isAgentCapabilityOverviewRequest(message);
     const deterministicInputClarification = enableTranslation
       ? ''
-      : resolveAgentInputClarification({
-          message,
-          contextTypes: resolvedResourceTypes,
-          locale,
-        });
+      : runtimeV3ModeEnforced
+        ? ''
+        : resolveAgentInputClarification({
+            message,
+            contextTypes: resolvedResourceTypes,
+            locale,
+          });
     trace.route = directRoute.direct ? directRoute.reason : 'planner';
     if (capabilityOverviewRequested) trace.route = 'capability_overview';
     if (deterministicInputClarification) trace.route = 'required_input_clarification';
@@ -3777,29 +4028,17 @@ export async function agentChat(req, res) {
     let selectedTools =
       enableTranslation || (directRoute.direct && !capabilityOverviewRequested)
         ? []
-        : selectAgentTools(toolRegistry, {
+        : selectSemanticAgentToolsForTurn({
+            registry: toolRegistry,
             message,
             contextTypes: resolvedResourceTypes,
             userRole,
             allowWrite: !req.adminContext || req.adminContext.mode === 'maintain',
             allowVisitorWrite: req.adminContext?.mode === 'maintain',
-            semanticPlanner: true,
+            contentScope,
+            capabilityScope: turnEnvelope.capabilityScope,
+            discourseProjection: structuredDiscourseProjection,
           });
-    if (contentScope.mode === 'selected') {
-      selectedTools = selectedTools.filter((tool) => !BROAD_PERSONAL_CONTENT_TOOLS.has(tool.name));
-      if (contentScope.entityRefs.length && !contentScope.resourceIds.length) {
-        selectedTools = selectedTools.filter((tool) => tool.name !== 'search_content');
-      }
-    }
-    // 目录没有可直接注入 Prompt 的正文；只要目录范围有效，本轮必须保留受 allowlist
-    // 约束的 search_content，避免 Planner 因措辞宽泛而在无证据时直接概括。
-    if (contentScope.noteBranches.length && !selectedTools.some((tool) => tool.name === 'search_content')) {
-      const scopedSearchTool = toolRegistry.get('search_content');
-      if (scopedSearchTool) selectedTools.push(scopedSearchTool);
-    }
-    if (!contentScope.externalWeb && !contentScope.explicitUrlRead && !contentScope.allowedWebUrls.length) {
-      selectedTools = selectedTools.filter((tool) => tool.name !== 'read_url');
-    }
     if (trace.noteDraftWorkspaceRetrievalNeeded === true) {
       // 受约束语义分类已经确认这是“读取个人材料 → 只创建一篇笔记”的任务。
       // 不再把近百个无关能力塞进 submit_agent_plan 的嵌套 schema；读取工具仍由模型
@@ -3830,9 +4069,17 @@ export async function agentChat(req, res) {
       semanticCatalog = semanticCatalog.filter((entry) => scopedCapabilityIds.has(entry.id));
       trace.noteDraftWorkspaceCapabilityScope = semanticCatalog.map((entry) => entry.id);
     }
+    const runtimeV3Catalog = runtimeMode.startsWith('v3_')
+      ? buildAgentV3CapabilityCatalog([...toolRegistry.values()], {
+          availableToolNames: new Set(selectedTools.map((tool) => tool.name)),
+          actorRole: userRole,
+          capabilityScope: turnEnvelope.capabilityScope,
+        })
+      : [];
+    const activeCapabilityCatalog = runtimeMode.startsWith('v3_') ? runtimeV3Catalog : semanticCatalog;
     recordCandidateSet(trace.turnContract, {
       tools: selectedTools.map((tool) => tool.name),
-      capabilityIds: semanticCatalog.map((entry) => entry.id),
+      capabilityIds: activeCapabilityCatalog.map((entry) => entry.id),
     });
 
     // 构建 system prompt（动态：根据角色决定工具提示详略）
@@ -3861,7 +4108,7 @@ export async function agentChat(req, res) {
     // 只把「最近一次成功工具调用」放 system,帮助理解省略式追问(如「那第二个呢」);
     // 对话历史不再塞进 system 的 JSON 块,而是作为真实多轮消息注入(见下方 messages),模型才真有记忆。
     const systemContent =
-      session.lastTool && trace.noteDraftWorkspaceRetrievalNeeded !== true
+      !runtimeV3ModeEnforced && session.lastTool && trace.noteDraftWorkspaceRetrievalNeeded !== true
         ? `${prompt}\n\n---\n\n最近一次成功的工具调用（供理解省略式追问）：${JSON.stringify(session.lastTool)}`
         : prompt;
 
@@ -3884,39 +4131,12 @@ export async function agentChat(req, res) {
       : '';
     userMessage += resolvedContexts.text + resolvedAttachments.text + resolvedScopeText;
 
-    // 构建 messages 数组:历史拼成真正的多轮 user/assistant 消息(而非塞进 system 的 JSON 块),模型才真有记忆。
-    // 优先用前端带来的完整对话(显示=发送,一致);按字符预算截「最近」部分兜底防超长/超上下文窗口;
-    // 没带 history(老客户端 / 笔记助手等)则回退服务端 session.turns。
-    const HISTORY_CHAR_BUDGET = 16000; // ≈ 8K token(中文),远低于 DeepSeek 64K,给系统提示/工具/生成留足空间
-    /** @type {import('../util/agent/deepseekClient.js').DeepSeekMessage[]} */
-    let historyMessages;
-    if (Array.isArray(history) && history.length) {
-      const valid = history
-        .slice(-40)
-        .filter(
-          (m) =>
-            m &&
-            (m.role === 'user' || m.role === 'assistant') &&
-            typeof m.content === 'string' &&
-            m.content &&
-            m.content.length <= 8000,
-        );
-      const kept = [];
-      let chars = 0;
-      for (let i = valid.length - 1; i >= 0; i--) {
-        chars += valid[i].content.length;
-        if (chars > HISTORY_CHAR_BUDGET && kept.length) break; // 超预算就丢最老的,始终保留最近
-        kept.unshift({ role: valid[i].role, content: valid[i].content });
-      }
-      historyMessages = kept;
-    } else {
-      historyMessages = (session.turns || [])
-        .flatMap((t) => [
-          { role: 'user', content: t.user },
-          { role: 'assistant', content: t.assistant },
-        ])
-        .filter((m) => m.content);
-    }
+    const historyMessages = selectAgentConversationHistory({
+      runtimeMode,
+      clientHistory: history,
+      sessionTurns: session.turns,
+    });
+    recordResolvedRuntimeIsolation(historyMessages.length);
     const discourseProjection = buildDiscourseProjection(historyMessages);
     const messages = [
       { role: 'system', content: systemContent },
@@ -3934,14 +4154,18 @@ export async function agentChat(req, res) {
     // Semantic Planner 与既有工具规划共用一次模型请求。Provider 只调用唯一的元计划工具，
     // 真实工具名与参数内嵌在计划中，再由服务端展开、求交和校验；不依赖并行调用多个工具。
     const deterministicResponseRequested = capabilityOverviewRequested || Boolean(deterministicInputClarification);
-    const semanticPlanningEnabled = semanticCatalog.length > 0 && !deterministicResponseRequested;
-    const runtimeV2Enforced = runtimeV2Mode === 'enforce' && semanticPlanningEnabled;
+    const semanticPlanningEnabled = runtimeV3ModeEnforced
+      ? !enableTranslation
+      : activeCapabilityCatalog.length > 0 && !deterministicResponseRequested;
+    const runtimeV3Enforced = runtimeMode === 'v3_enforce' && semanticPlanningEnabled;
+    const runtimeV2Enforced = runtimeMode === 'legacy' && runtimeV2Mode === 'enforce' && semanticPlanningEnabled;
+    const runtimeContractEnforced = runtimeV3Enforced || runtimeV2Enforced;
     const runtimeContextSummary = {
       actorRole: userRole,
       selectedResourceTypes: resolvedResourceTypes,
       selectedResourceCount: runtimeContextRefs.length + resolvedScopes.refs.length + runtimeAttachmentIds.length,
       attachmentCount: runtimeAttachmentIds.length,
-      hasPendingArtifact: false,
+      hasPendingArtifact: Boolean(structuredDiscourseProjection.pendingArtifact?.available),
     };
     const runtimeExecutionContext = buildAuthoritativeExecutionContext({
       contextRefs: runtimeContextRefs,
@@ -3949,8 +4173,69 @@ export async function agentChat(req, res) {
       entities: resolvedContexts.entities,
       candidateTools: selectedTools,
     });
-    const turnSpecShadowPromise =
-      runtimeV2Mode === 'shadow' && semanticPlanningEnabled
+    let runtimeV3ResolvedExecutionContext = runtimeExecutionContext;
+    let runtimeV3InheritedResultRefs = [];
+    let runtimeV3InheritedWebUrls = [];
+    const turnSpecV3ShadowPromise =
+      runtimeMode === 'v3_shadow' && semanticPlanningEnabled
+        ? (async () => {
+            const startedAt = Date.now();
+            const responses = [];
+            try {
+              const result = await compileAgentTurnSpecV3({
+                message,
+                catalog: runtimeV3Catalog,
+                discourseProjection: structuredDiscourseProjection,
+                contextSummary: runtimeContextSummary,
+                capabilityScope: turnEnvelope.capabilityScope,
+                authoritativeGroundingPolicy: groundingPolicyFromScopeMode(groundingScope.mode),
+                outputContract: precompiledOutputContract,
+                temporalContext: buildPlannerTemporalContext({ timeZone }),
+                actorRole: userRole,
+                signal: agentAbortController.signal,
+                traceId: requestId,
+                onResponse: (response) => responses.push(response),
+              });
+              return {
+                state: 'ready',
+                turnSpec: result.turnSpec,
+                attempts: result.attempts,
+                durationMs: Date.now() - startedAt,
+                usage: responses.reduce(
+                  (total, response) => ({
+                    promptTokens: total.promptTokens + Number(response?.usage?.promptTokens || 0),
+                    completionTokens: total.completionTokens + Number(response?.usage?.completionTokens || 0),
+                    totalTokens: total.totalTokens + Number(response?.usage?.totalTokens || 0),
+                  }),
+                  { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+                ),
+                usageReported: responses.every((response) => response?.usageStatus === 'reported'),
+                mode: 'v3_shadow',
+              };
+            } catch (error) {
+              return {
+                state: 'invalid',
+                turnSpec: null,
+                attempts: responses.length,
+                durationMs: Date.now() - startedAt,
+                usage: responses.reduce(
+                  (total, response) => ({
+                    promptTokens: total.promptTokens + Number(response?.usage?.promptTokens || 0),
+                    completionTokens: total.completionTokens + Number(response?.usage?.completionTokens || 0),
+                    totalTokens: total.totalTokens + Number(response?.usage?.totalTokens || 0),
+                  }),
+                  { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+                ),
+                usageReported: responses.every((response) => response?.usageStatus === 'reported'),
+                errorCode: stableAgentErrorCode(error),
+                mode: 'v3_shadow',
+              };
+            }
+          })()
+        : null;
+    const turnSpecShadowPromise = turnSpecV3ShadowPromise
+      ? turnSpecV3ShadowPromise
+      : runtimeMode === 'legacy' && runtimeV2Mode === 'shadow' && semanticPlanningEnabled
         ? compileTurnSpecShadow({
             message,
             history: historyMessages,
@@ -3965,7 +4250,7 @@ export async function agentChat(req, res) {
       ? []
       : deterministicInputClarification
         ? []
-        : semanticPlanningEnabled && !runtimeV2Enforced
+        : semanticPlanningEnabled && !runtimeContractEnforced
           ? [buildSemanticPlanToolDefinition(semanticCatalog, selectedTools)]
           : getToolDefinitions(selectedTools);
     let selectedToolNames = new Set(selectedTools.map((tool) => tool.name));
@@ -3979,6 +4264,7 @@ export async function agentChat(req, res) {
     const sources = [...resolvedContexts.sources, ...resolvedAttachments.sources];
     const toolEntitySources = [];
     const artifacts = [];
+    const finalAnswerRequirements = [];
     let finalContent = '';
     let apiCalls = pendingDraftIntentCalls;
     let remainingToolResultBudget = 24000;
@@ -4180,6 +4466,9 @@ export async function agentChat(req, res) {
                     trace.usageStatus = plannerUsageReported ? 'reported' : 'missing';
                     trace.finishReason = response?.finishReason || trace.finishReason;
                   },
+                  onValidation(validation) {
+                    recordOutputContract(trace.turnContract, validation);
+                  },
                 });
                 const parentId = String(args?.parentId || args?.parent_id || '').trim();
                 args = {
@@ -4360,6 +4649,9 @@ export async function agentChat(req, res) {
               if (stream) sseLifecycle?.send('artifact.created', { artifact });
             }
           }
+          if (Array.isArray(result.answerRequirements)) {
+            finalAnswerRequirements.push(...result.answerRequirements);
+          }
           usedTools.push({
             name: tc.function.name,
             status: result.status,
@@ -4381,6 +4673,23 @@ export async function agentChat(req, res) {
         agentAbortController.signal,
       );
       trace.toolMs += Date.now() - toolStartedAt;
+
+      if (runtimeV3Enforced) {
+        for (const item of results) {
+          const capability = getAgentV3CapabilityByToolName(item.toolName);
+          if (!capability) continue;
+          const resultSet = projectAgentV3ResultSet({ capability, result: item.result });
+          if (resultSet) await recordSessionResultSet(session, resultSet);
+          if (item.pendingAction?.confirmationId && capability.artifactKind !== 'none') {
+            await recordSessionArtifactState(session, {
+              id: item.pendingAction.confirmationId,
+              capabilityId: capability.id,
+              domain: capability.artifactKind,
+              state: 'pending',
+            });
+          }
+        }
+      }
 
       const pendingActions = results.map((item) => item.pendingAction).filter(Boolean);
       if (pendingActions.length) {
@@ -4455,24 +4764,85 @@ export async function agentChat(req, res) {
     let runtimeV2ErrorCode = null;
     let runtimeV2ReadFallback = false;
     const runtimeV2Responses = [];
-    if (runtimeV2Enforced) {
+    if (runtimeContractEnforced) {
       try {
-        runtimeV2Outcome = await runAgentRuntime({
-          message,
-          history: historyMessages,
-          catalog: semanticCatalog,
-          tools: selectedTools,
-          contextSummary: runtimeContextSummary,
-          groundingPolicy: groundingPolicyFromScopeMode(groundingScope.mode),
-          outputContract: precompiledOutputContract,
-          compiledTurnSpecResult: precompiledTurnSpecResult,
-          executionContext: runtimeExecutionContext,
-          signal: agentAbortController.signal,
-          traceId: requestId,
-          timeZone,
-          onCompilerResponse: (response) => runtimeV2Responses.push(response),
-          onPlannerResponse: (response) => runtimeV2Responses.push(response),
-        });
+        if (runtimeV3Enforced && precompiledTurnSpecError) throw precompiledTurnSpecError;
+        runtimeV2Outcome = runtimeV3Enforced
+          ? await runAgentRuntimeV3({
+              message,
+              catalog: runtimeV3Catalog,
+              tools: selectedTools,
+              discourseProjection: structuredDiscourseProjection,
+              contextSummary: runtimeContextSummary,
+              capabilityScope: turnEnvelope.capabilityScope,
+              groundingPolicy: groundingPolicyFromScopeMode(groundingScope.mode),
+              outputContract: precompiledOutputContract,
+              compiledTurnSpecResult: precompiledTurnSpecResult,
+              executionContext: runtimeExecutionContext,
+              resolveExecutionContext: async ({ turnSpec, route, executionContext }) => {
+                if (turnSpec.continuationMode !== 'refer_last_result') return executionContext;
+                const selectors = turnSpec.goals
+                  .flatMap((goal) => goal.referentSelectors || [])
+                  .filter((selector) => selector.source === 'last_result');
+                const effectiveSelectors = selectors.length ? selectors : [{ types: [], ordinal: null }];
+                const inheritedRefs = [];
+                const seen = new Set();
+                for (const selector of effectiveSelectors) {
+                  const resolved = resolveSessionResultSet(session, {
+                    types: selector.types,
+                    ordinal: selector.ordinal,
+                  });
+                  if (resolved.state !== 'ready') continue;
+                  for (const ref of resolved.refs) {
+                    const key = `${ref.type}:${ref.id}`;
+                    if (seen.has(key)) continue;
+                    seen.add(key);
+                    inheritedRefs.push(ref);
+                  }
+                }
+                if (!inheritedRefs.length) return executionContext;
+                const trustedWeb = projectTrustedResultWebContexts(inheritedRefs);
+                const ownedRefs = inheritedRefs.filter((ref) => ref.type !== 'web');
+                const inheritedContexts = await resolveResourceContexts(userId, ownedRefs, message, {
+                  maxItems: Math.max(1, ownedRefs.length),
+                });
+                const hydratedOwnedRefs = inheritedContexts.entities.map((entity) => ({
+                  type: String(entity.type || ''),
+                  id: String(entity.id || ''),
+                }));
+                runtimeV3InheritedResultRefs = [...hydratedOwnedRefs, ...trustedWeb.refs];
+                runtimeV3InheritedWebUrls = trustedWeb.allowedWebUrls;
+                trace.runtimeV3InheritedResultRefCount = runtimeV3InheritedResultRefs.length;
+                runtimeV3ResolvedExecutionContext = buildAuthoritativeExecutionContext({
+                  contextRefs: [...runtimeContextRefs, ...runtimeV3InheritedResultRefs],
+                  attachmentIds: runtimeAttachmentIds,
+                  entities: [...resolvedContexts.entities, ...inheritedContexts.entities, ...trustedWeb.entities],
+                  candidateTools: route.candidates,
+                });
+                return runtimeV3ResolvedExecutionContext;
+              },
+              signal: agentAbortController.signal,
+              traceId: requestId,
+              timeZone,
+              onCompilerResponse: (response) => runtimeV2Responses.push(response),
+              onPlannerResponse: (response) => runtimeV2Responses.push(response),
+            })
+          : await runAgentRuntime({
+              message,
+              history: historyMessages,
+              catalog: semanticCatalog,
+              tools: selectedTools,
+              contextSummary: runtimeContextSummary,
+              groundingPolicy: groundingPolicyFromScopeMode(groundingScope.mode),
+              outputContract: precompiledOutputContract,
+              compiledTurnSpecResult: precompiledTurnSpecResult,
+              executionContext: runtimeExecutionContext,
+              signal: agentAbortController.signal,
+              traceId: requestId,
+              timeZone,
+              onCompilerResponse: (response) => runtimeV2Responses.push(response),
+              onPlannerResponse: (response) => runtimeV2Responses.push(response),
+            });
       } catch (error) {
         if (
           agentAbortController.signal.aborted ||
@@ -4482,6 +4852,23 @@ export async function agentChat(req, res) {
           throw error;
         }
         runtimeV2ErrorCode = stableAgentErrorCode(error);
+      }
+      if (
+        runtimeV3Enforced &&
+        runtimeV2Outcome?.turnSpec?.continuationMode === 'refer_last_result' &&
+        runtimeV3InheritedResultRefs.length
+      ) {
+        contentScope = {
+          ...contentScope,
+          allowedWebUrls: [...new Set([...(contentScope.allowedWebUrls || []), ...runtimeV3InheritedWebUrls])].slice(
+            0,
+            12,
+          ),
+        };
+        groundingScope = resolveResultSetGroundingScope({
+          refs: runtimeV3InheritedResultRefs,
+          webUrls: runtimeV3InheritedWebUrls,
+        });
       }
       const runtimeUsage = runtimeV2Responses.reduce(
         (total, response) => ({
@@ -4514,7 +4901,7 @@ export async function agentChat(req, res) {
               durationMs: Date.now() - plannerStartedAt,
             },
             [],
-            'enforce',
+            runtimeV3Enforced ? 'v3_enforce' : 'enforce',
           ),
         );
       } else {
@@ -4526,10 +4913,23 @@ export async function agentChat(req, res) {
           errorCode: runtimeV2ErrorCode || 'TURN_SPEC_INVALID',
         });
       }
+      recordExecutionPlanner(trace.turnContract, {
+        state:
+          runtimeV2Outcome?.state === 'ready_for_tools'
+            ? 'ready'
+            : ['clarification', 'unsupported'].includes(runtimeV2Outcome?.state)
+              ? runtimeV2Outcome.state
+              : runtimeV2Outcome?.state === 'blocked'
+                ? 'blocked'
+                : 'not_run',
+        attempts: runtimeV2Outcome?.plannerAttempts,
+        issues: runtimeV2Outcome?.validation?.issues,
+      });
       const runtimeHasMutationGoal = (runtimeV2Outcome?.turnSpec?.goals || []).some((goal) =>
         ['write', 'transform'].includes(goal?.kind),
       );
       const canUseReadOnlyFallback =
+        !runtimeV3Enforced &&
         legacyIntentSuspicion.kind === 'query' &&
         !runtimeHasMutationGoal &&
         (!runtimeV2Outcome || ['blocked', 'unsupported'].includes(runtimeV2Outcome.state));
@@ -4592,6 +4992,7 @@ export async function agentChat(req, res) {
         selectedTools = runtimeV2Outcome?.route?.candidates || [];
         selectedToolNames = new Set(selectedTools.map((tool) => tool.name));
       }
+      if (runtimeV3Enforced) semanticCatalog = runtimeV3Catalog;
       trace.selectedTools = [...selectedToolNames];
       recordCandidateSet(trace.turnContract, {
         tools: [...selectedToolNames],
@@ -4632,7 +5033,10 @@ export async function agentChat(req, res) {
       totalUsage.completionTokens += turnSpecShadowResult.usage.completionTokens;
       totalUsage.totalTokens += turnSpecShadowResult.usage.totalTokens;
       turnSpecShadowUsageReported = turnSpecShadowResult.usageReported;
-      recordIntentCompiler(trace.turnContract, turnSpecTraceSummary(turnSpecShadowResult));
+      recordIntentCompiler(
+        trace.turnContract,
+        turnSpecTraceSummary(turnSpecShadowResult, [], turnSpecShadowResult.mode || 'shadow'),
+      );
     }
     trace.plannerMs = Date.now() - plannerStartedAt;
     trace.finishReason = plannerResponse.finishReason;
@@ -4644,7 +5048,7 @@ export async function agentChat(req, res) {
     // 语义计划本身的无效/冲突和已确认读取计划的漏调用，分别在下方走受限恢复。
     plannerResponse = normalizePlannerToolCallResponse(plannerResponse, 'planner_round_1');
 
-    if (semanticPlanningEnabled && (!runtimeV2Enforced || runtimeV2ReadFallback)) {
+    if (semanticPlanningEnabled && (!runtimeContractEnforced || runtimeV2ReadFallback)) {
       let parsedSemantic = parseSemanticPlannerResponse(plannerResponse, semanticCatalog, {
         toolCallIdPrefix: 'semantic-plan-round-1',
       });
@@ -4934,9 +5338,10 @@ export async function agentChat(req, res) {
           const completionPrompt = memoryPrompt
             ? `${completionPromptBase}\n\n${scopePrompt}\n\n---\n\n${memoryPrompt}`
             : `${completionPromptBase}\n\n${scopePrompt}`;
-          const completionSystemContent = session.lastTool
-            ? `${completionPrompt}\n\n---\n\n最近一次成功的工具调用（供理解省略式追问）：${JSON.stringify(session.lastTool)}`
-            : completionPrompt;
+          const completionSystemContent =
+            !runtimeV3ModeEnforced && session.lastTool
+              ? `${completionPrompt}\n\n---\n\n最近一次成功的工具调用（供理解省略式追问）：${JSON.stringify(session.lastTool)}`
+              : completionPrompt;
           const completionInstruction = [
             PLAN_COMPLETION_ROUND_INSTRUCTION,
             `本轮只补齐这些读取能力：${missingCapabilityIds.join(', ')}。`,
@@ -5073,12 +5478,19 @@ export async function agentChat(req, res) {
       }
     }
 
-    if (runtimeV2Enforced && !runtimeV2ReadFallback) {
-      const adapted = adaptRuntimeOutcomeToLegacy(runtimeV2Outcome, semanticCatalog);
+    if (runtimeV3Enforced && runtimeV2Outcome?.turnSpec) {
+      await commitSessionTurnSpec(session, runtimeV2Outcome.turnSpec);
+    }
+
+    if (runtimeContractEnforced && !runtimeV2ReadFallback) {
+      const adapted = adaptRuntimeOutcomeToLegacy(
+        runtimeV2Outcome,
+        runtimeV3Enforced ? runtimeV3Catalog : semanticCatalog,
+      );
       semanticPlan = adapted.semanticPlan;
       semanticPolicy = adapted.semanticPolicy;
       writeIntentToolNames = new Set(adapted.writeToolNames);
-      trace.semanticPlanSource = 'turn_spec_v2';
+      trace.semanticPlanSource = runtimeV3Enforced ? 'turn_spec_v3' : 'turn_spec_v2';
       trace.semanticPlanInvalid = !runtimeV2Outcome?.turnSpec;
       trace.semanticRequestClass = semanticPlan?.requestClass || null;
       trace.semanticConfidence = semanticPlan?.confidence || null;
@@ -5257,7 +5669,7 @@ export async function agentChat(req, res) {
         let followUpPlannerResponse;
         let parsedFollowUp;
         let followUpDecision;
-        if (runtimeV2Enforced) {
+        if (runtimeContractEnforced) {
           const completedGoalIds = runtimeV2Outcome.turnSpec.goals
             .filter((goal) => {
               const goalRoute = runtimeV2Outcome.route.goalRoutes.find((item) => item.goalId === goal.id);
@@ -5291,7 +5703,7 @@ export async function agentChat(req, res) {
             },
             completedGoalIds,
             dependencyResults,
-            executionContext: runtimeExecutionContext,
+            executionContext: runtimeV3Enforced ? runtimeV3ResolvedExecutionContext : runtimeExecutionContext,
             signal: agentAbortController.signal,
             traceId: requestId,
             stagePrefix: `execution_planner_round_${round}`,
@@ -5618,7 +6030,8 @@ export async function agentChat(req, res) {
       shadowMode: resolvedScopeMode,
       clientModeMismatch: turnEnvelope.grounding.clientModeMismatch,
       historyPolicy:
-        groundingV2Enabled && ['current_explicit_only', 'source_set_inherited'].includes(resolvedScopeMode)
+        runtimeV3ModeEnforced ||
+        (groundingV2Enabled && ['current_explicit_only', 'source_set_inherited'].includes(resolvedScopeMode))
           ? 'discourse_projection_only'
           : 'legacy_conversation',
       subsetValid: sourceSubsetInspection.valid,
@@ -5641,7 +6054,8 @@ export async function agentChat(req, res) {
         actionRelated: verifyExecutionClaims,
         locale,
       });
-      finalContent = claimGuard.answer;
+      const requiredFacts = applyAgentAnswerRequirements(claimGuard.answer, finalAnswerRequirements);
+      finalContent = requiredFacts.answer;
       if (claimGuard.guarded) {
         actionPolicy = {
           resolution: 'unverified_claim',
@@ -5713,15 +6127,20 @@ export async function agentChat(req, res) {
       // 有工具时总结真实结果；无工具时重新基于原始对话直接作答。两条路径统一从供应商流式接口输出正文。
       const finalPromptBase = buildPlannerPrompt([], userRole, { phase: 'final' });
       const finalPrompt = memoryPrompt ? `${finalPromptBase}\n\n---\n\n${memoryPrompt}` : finalPromptBase;
-      const finalSystemContent = session.lastTool
-        ? `${finalPrompt}\n\n---\n\n最近一次成功的工具调用（供理解省略式追问）：${JSON.stringify(session.lastTool)}`
-        : finalPrompt;
+      const finalSystemContent =
+        !runtimeV3ModeEnforced && session.lastTool
+          ? `${finalPrompt}\n\n---\n\n最近一次成功的工具调用（供理解省略式追问）：${JSON.stringify(session.lastTool)}`
+          : finalPrompt;
       const isolatedGroundedAnswer = groundingV2Enabled && groundingScope.mode === 'current_explicit_only';
-      const groundedFinalSystemContent = isolatedGroundedAnswer
-        ? `${finalPromptBase}\n\n---\n\n【对话状态投影；不含历史事实正文】\n${JSON.stringify(
-            discourseProjection,
-          )}\n本轮事实只能来自当前问题中由服务端提供的材料与本轮工具资料，不得补用历史回答中的事实。`
-        : finalSystemContent;
+      const groundedFinalSystemContent = runtimeV3ModeEnforced
+        ? `${finalPromptBase}\n\n---\n\n【服务端结构化对话状态；不含历史事实正文】\n${JSON.stringify(
+            structuredDiscourseProjection,
+          )}\n只回答最新用户消息。本轮事实只能来自最新消息中已校验的显式材料和本轮真实工具结果，不得复用历史回答、旧工具摘要或旧范围。`
+        : isolatedGroundedAnswer
+          ? `${finalPromptBase}\n\n---\n\n【对话状态投影；不含历史事实正文】\n${JSON.stringify(
+              discourseProjection,
+            )}\n本轮事实只能来自当前问题中由服务端提供的材料与本轮工具资料，不得补用历史回答中的事实。`
+          : finalSystemContent;
       const citationGuide = buildCitationGuide(evidence, candidateSources);
       // Final 阶段不再携带 OpenAI 工具协议消息。它们在没有 tools 定义的请求中仍会
       // 诱导部分模型续写 tool_calls/DSML，并最终触发格式泄漏保护。工具结果改为明确
@@ -5807,7 +6226,8 @@ export async function agentChat(req, res) {
           locale,
         },
       );
-      finalContent = claimGuard.answer;
+      const requiredFacts = applyAgentAnswerRequirements(claimGuard.answer, finalAnswerRequirements);
+      finalContent = requiredFacts.answer;
       if (claimGuard.guarded) {
         actionPolicy = {
           resolution: 'unverified_claim',
@@ -5912,7 +6332,8 @@ export async function agentChat(req, res) {
       shadowMode: resolvedScopeMode,
       clientModeMismatch: turnEnvelope.grounding.clientModeMismatch,
       historyPolicy:
-        groundingV2Enabled && ['current_explicit_only', 'source_set_inherited'].includes(resolvedScopeMode)
+        runtimeV3ModeEnforced ||
+        (groundingV2Enabled && ['current_explicit_only', 'source_set_inherited'].includes(resolvedScopeMode))
           ? 'discourse_projection_only'
           : 'legacy_conversation',
       subsetValid: sourceSubsetValid,
@@ -6523,6 +6944,19 @@ export async function respondAgentInteraction(req, res) {
       batchId: requestId,
       actions: [pendingActionRecord(confirmation, policy.retryArgs)],
     });
+    const capability = getAgentV3CapabilityByToolName(resolved.toolName);
+    if (capability?.artifactKind !== 'none') {
+      await recordSessionArtifactStateById({
+        ownerKey: identity.ownerKey,
+        sessionId,
+        artifact: {
+          id: confirmation.id,
+          capabilityId: capability.id,
+          domain: capability.artifactKind,
+          state: 'pending',
+        },
+      });
+    }
     await settleAgentInteractionResponse(interaction, response, outcome);
     logAgentRequest({
       userId: identity.billingUserId,
@@ -6658,6 +7092,19 @@ export async function replaceAgentNoteTargetDirectory(req, res) {
       batchId: requestId,
       actions: [pendingActionRecord(replacement, {})],
     });
+    const createNoteCapability = getAgentV3CapabilityByToolName('create_note');
+    if (createNoteCapability?.artifactKind !== 'none') {
+      await recordSessionArtifactStateById({
+        ownerKey: identity.ownerKey,
+        sessionId,
+        artifact: {
+          id: replacement.id,
+          capabilityId: createNoteCapability.id,
+          domain: createNoteCapability.artifactKind,
+          state: 'pending',
+        },
+      });
+    }
     await settleSessionAction({
       ownerKey: identity.ownerKey,
       sessionId,

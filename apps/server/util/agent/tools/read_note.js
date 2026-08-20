@@ -41,6 +41,7 @@ export default {
   },
   argumentAliases: ['id', 'name', 'keyword', 'mode', 'status'],
   normalizeArgs,
+  resourceBindings: [{ argument: 'noteId', refType: 'note', sourceField: 'id' }],
   requireRoot: false,
   timeoutMs: 60_000,
   resultBudget: 12_000,

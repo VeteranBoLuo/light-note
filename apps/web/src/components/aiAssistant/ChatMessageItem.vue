@@ -43,6 +43,9 @@
             @focusout="hideCitationTip"
             @keydown="onCitationKeydown"
           ></div>
+          <p v-if="message.role === 'user' && capabilityModuleText" class="user-capability-scope">
+            {{ capabilityModuleText }}
+          </p>
           <div v-if="message.role === 'user' && message.contexts?.length" class="user-contexts">
             <div class="user-contexts__title">{{ t('ai.attachedResources') }} · {{ message.contexts.length }}</div>
             <div class="user-contexts__list">
@@ -200,6 +203,11 @@
     type AiMaterialClarification,
     type AiResolvedGrounding,
   } from '@/types/aiGrounding';
+  import {
+    aiCapabilityModuleLabelKey,
+    normalizeAiCapabilityModule,
+    type AiCapabilityModule,
+  } from '@/types/aiCapabilityScope';
 
   const { t } = useI18n();
 
@@ -219,6 +227,7 @@
       estimatedResourceCount?: number;
     }>;
     attachmentRefs?: Array<{ id: string; fileName: string }>;
+    capabilityModule?: AiCapabilityModule;
     toolEvents?: AiToolStatusItem[];
     sources?: AiSource[];
     evidence?: AiEvidenceReference[];
@@ -255,6 +264,11 @@
       resolveLegacyAiSystemErrorCode(props.message.content),
   );
   const isFailedMessage = computed(() => Boolean(failedErrorCode.value));
+  const capabilityModuleText = computed(() => {
+    const module = normalizeAiCapabilityModule(props.message.capabilityModule);
+    if (module === 'auto') return '';
+    return t('ai.capabilityScope.applied', { module: t(aiCapabilityModuleLabelKey(module)) });
+  });
   const materialModeText = computed(() => {
     const grounding = props.message.resolvedGrounding;
     if (!shouldShowAiMaterialModeNotice(grounding)) return '';
@@ -274,6 +288,7 @@
       content: string,
       contexts: NonNullable<ChatMessage['contexts']>,
       scopes: NonNullable<ChatMessage['scopeRefs']>,
+      capabilityModule: AiCapabilityModule,
     ): void;
     (e: 'regenerate'): void;
     (e: 'source-navigate'): void;
@@ -288,7 +303,13 @@
 
   // 编辑：把内容回填到输入框（由 ChatContainer 处理并聚焦）
   const handleEdit = () => {
-    emit('edit', props.message.content, props.message.contexts || [], props.message.scopeRefs || []);
+    emit(
+      'edit',
+      props.message.content,
+      props.message.contexts || [],
+      props.message.scopeRefs || [],
+      normalizeAiCapabilityModule(props.message.capabilityModule),
+    );
   };
 
   // 重新生成：请求容器用上一条用户消息重发本轮（仅 AI 回答用）
@@ -459,6 +480,21 @@
 
   .user-text {
     white-space: pre-wrap;
+  }
+
+  .user-capability-scope {
+    width: max-content;
+    max-width: 100%;
+    margin: 7px 0 0 auto;
+    padding: 3px 7px;
+    border: 1px solid var(--primary-color);
+    border-radius: 999px;
+    background: var(--card-background);
+    background: color-mix(in srgb, var(--primary-color) 9%, var(--card-background));
+    color: var(--primary-color);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.35;
   }
 
   .citation-audit-notice {

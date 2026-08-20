@@ -23,6 +23,24 @@ describe('parseTimeRange', () => {
     });
     expect(describeResolvedTimeRange('最近24小时', range)).toBe('最近24小时（2026-08-19 00:06 至 2026-08-20 00:06）');
   });
+
+  it('最近 7 天包含今天且恰好覆盖 7 个自然日', () => {
+    expect(parseTimeRange('最近7天', { now })).toEqual({
+      start: '2026-08-14 00:00:00',
+      end: '2026-08-20 00:06:30',
+    });
+  });
+
+  it('支持未来相对日期和绝对自然日，供权威时间绑定复用', () => {
+    expect(parseTimeRange('明天', { now })).toEqual({
+      start: '2026-08-21 00:00:00',
+      end: '2026-08-21 23:59:59',
+    });
+    expect(parseTimeRange('2026-08-03', { now })).toEqual({
+      start: '2026-08-03 00:00:00',
+      end: '2026-08-03 23:59:59',
+    });
+  });
 });
 
 // 平台级统计与平台级清单共用这里的口径。口径一旦漂移，同一个问题的「共 N 条」

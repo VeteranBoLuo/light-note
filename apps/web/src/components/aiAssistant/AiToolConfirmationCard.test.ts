@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick } from 'vue';
 import { createI18n } from 'vue-i18n';
+import { AI_AGENT_CLIENT_CAPABILITIES } from '@/api/aiAttachmentApi';
 import zhCN from '@/i18n/locales/zh-CN';
 import type { AiToolConfirmation } from '@/types/aiAgent';
 
@@ -175,7 +176,7 @@ describe('AiToolConfirmationCard note preview', () => {
       confirmationToken: 'token',
       sessionId: 'session-1',
       continuationToken: 'continuation-token',
-      clientCapabilities: ['agent_interaction_v1', 'agent_continuation_v1', 'grounding_scope_v2'],
+      clientCapabilities: [...AI_AGENT_CLIENT_CAPABILITIES],
     });
     expect(onResolved).toHaveBeenCalledWith(expect.objectContaining({ continuation }));
   });
@@ -238,7 +239,7 @@ describe('AiToolConfirmationCard note preview', () => {
       confirmationToken: 'token',
       sessionId: 'session-1',
       parentId: 'directory-2',
-      clientCapabilities: ['agent_interaction_v1', 'agent_continuation_v1', 'grounding_scope_v2'],
+      clientCapabilities: [...AI_AGENT_CLIENT_CAPABILITIES],
     });
     expect(onReplaced).toHaveBeenCalledWith({
       previousConfirmationId: 'confirmation-1',
@@ -271,7 +272,7 @@ describe('AiToolConfirmationCard note preview', () => {
       confirmationToken: 'token',
       sessionId: 'session-1',
       parentId: null,
-      clientCapabilities: ['agent_interaction_v1', 'agent_continuation_v1', 'grounding_scope_v2'],
+      clientCapabilities: [...AI_AGENT_CLIENT_CAPABILITIES],
     });
     expect(onReplaced).toHaveBeenCalledWith({
       previousConfirmationId: 'confirmation-1',

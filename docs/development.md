@@ -253,6 +253,17 @@ try {
 - 网页正文读取默认并行使用直接 Cheerio 提取和本地 Mozilla Readability 服务，首个有效结果返回后必须中止败余请求；单次正文预算为 12000 字，无敏感查询参数的公开 URL 可缓存 10 分钟。网页下载体积与正文预算必须分离：底层抓取默认最多接收 1.5MB 解压后响应，用户明确触发的 `read_url`、书签 AI 智能生成/整理、Agent 主动补全书签及需要正文的网页快照统一复用 4MB 显式网页读取预算，禁止按站点堆叠域名特判或取消硬上限；超限与人机验证页必须分别返回稳定错误，不能归并成普通 `FETCH_FAILED` 或把验证文案交给模型。`READABILITY_SERVICE_URL` 默认指向 `http://127.0.0.1:3466/`，可设为 `off`/`false`/`disabled` 关闭；`WEB_READER_EXTERNAL_FALLBACK_TEMPLATE` 只是显式选配的外部最后降级，模板必须含 `{encodedUrl}` 或 `{rawUrl}`，且替换目标后不得改变阅读器 origin。开启外部降级前必须完成隐私评估，因为目标 URL 会发给第三方；带 URL 凭据、fragment 或 token/auth/key/signature/credential/password/session/expires 等敏感参数的链接只允许服务端直连目标站点，不得进入二级 Readability 服务、缓存或外部降级。任一内部路径已判定为内网/非法地址时必须直接失败关闭，禁止交给外部阅读器绕过 SSRF 边界。
 - 单条资源“不得参与 AI”是服务端数据政策，不是前端展示偏好。永久排除与单轮临时排除必须在搜索、显式上下文和文件附件读取前统一求并集，并重新校验 subject 归属；偏好表、归属查询或排除查询失败时必须失败关闭，不能继续把材料交给模型。
 
+**Agent Runtime V3 语义边界：**
+
+- V3 的目标模式使用 `AI_AGENT_RUNTIME_MODE=legacy|v3_shadow|v3_enforce`，默认 `legacy`；账号受众独立使用 `AI_AGENT_RUNTIME_V3_ROLLOUT`。受众缺失、`none` 或配置无效时，本请求一律回到 legacy，单独设置目标模式不会触发 V3 或增加 shadow 模型调用。受众可用 `root`、`all`，或严格 JSON：`{"roles":["root"],"actorIds":["<user-id>"],"excludeActorIds":[],"percentage":5,"salt":"release-v3"}`。角色、账号和百分比按 OR 命中，排除账号优先；百分比按认证后的真实 actor 做稳定 SHA-256 分桶，同一轮灰度期间不得修改 salt。任何启用比例调整必须保留 legacy 急停；尚未完成灰度和生产指标验收前，不得删除旧路径。
+- `runtime/v3/capabilityManifest.js` 是 V3 能力、工具、角色、时间槽、资源绑定和结果引用的单一声明源。新增或修改工具时必须同步 Manifest 并通过完整性校验；Router 只能按 TurnSpec 中的 capability ID 精确匹配，禁止新增关键词、正则、相似度或工具名特判作为正常 V3 路由。
+- Intent Compiler 每轮只运行一次，只能看到最新用户消息、认证身份、服务端材料摘要和结构化 `DiscourseProjection`；`v3_enforce` 下 Compiler、Planner 与 Composer 的原始历史消息数必须为 0。旧助手正文、旧工具正文、展示标题和前端缓存不能成为本轮执行事实。
+- TurnSpec 是本轮不可变语义计划。时间范围、精确提醒时间、结构化指代和输出约束必须绑定到具体 goal/slot；后续阶段只能校验、补齐权威值或缩小范围，不得把“最近 7 天”带进用户已经改成“今天”的新轮，也不得把旧笔记 ResultSet 带入新的书签请求。
+- Manifest 声明为 temporal slot 或 `resourceBindings` 的参数必须从模型可见 schema 中移除。Planner 只规划仍需模型表达的普通参数；服务端从 TurnSpec、当前 ResultSet 或重新校验归属后的资源字段注入权威值。禁止让模型抄写资源 ID、URL、对象键、日期和提醒分钟，禁止为单个事故增加工具名或中文句式分支。
+- `ResultSet` 只记录工具显式返回的稳定类型化引用，未知或缺少引用投影的结果不得猜测为可继承材料；权威空结果可以记录为空集。`ArtifactState` 只由创建、替换、取消、过期、失败和成功等真实生命周期更新；`DiscourseState` 以 revision/topic epoch 管理跨轮指代，跨领域独立请求必须推进主题代际。
+- 前端能力模块选择只作用于当前一轮，并在发送后恢复“自动判断”；服务端仍需按认证角色、代管模式和 Manifest 再次求交。模块选择只能收窄候选能力，不能授权新能力，也不能替代自然语言 TurnSpec。
+- V3 开发默认使用单测、Handler mock、dry-run 和确定性夹具，不调用真实模型。`pnpm --filter server smoke:ai-turn-v3` 必须保持零模型、零业务工具；真实模式必须显式 `--live`、点名 1～2 个 `--case`，重复最多 3 次，而且仍只验证 Compiler。只有实际准备启用或扩大 V3 灰度时，才按发布文档执行获授权的 root 真实业务矩阵。
+
 **SSE 生命周期与终态：**
 
 - Agent 流式响应统一通过 `createAgentSseLifecycle()` 发送，不在旁路自行拼 `data:`、递增 ID 或提前 `res.end()`。
@@ -602,6 +613,7 @@ cd apps/android
 - Agent GroundingScope V2 使用 `AI_GROUNDING_SCOPE_V2_ENABLED=true|false`、`AI_GROUNDING_SCOPE_V2_ROLLOUT_PERCENT=0..100` 和 `AI_GROUNDING_SCOPE_V2_TEST_USER_IDS`。生产环境未配置时默认 0%，Root 默认开启；显式 `false` 是最高优先级急停，Root 与测试账号也不能绕过。显式材料轮的 Planner 可读取 intent history，但 Final Reply 只能读取本轮消息、当前 evidence 和不含正文的 DiscourseProjection；不得把 `session.lastTool`、长期记忆或旧助手正文重新拼回事实生成。
 - 笔记草稿 OutputContract 必须由服务端编译和验收，当前消息的明确约束优先于旧草稿和历史消息。`minimum`、`target_range`、`relative_growth`、`preserve_length` 的测量值必须同时进入工具 Schema、修复提示、无正文 trace 和确认预览；任何验证失败都不得下发确认卡。定性扩写默认至少达到 `max(旧稿 × 1.4, 旧稿 + 300)`，保持篇幅默认容差 ±10%，可通过 `AI_NOTE_DRAFT_MIN_GROWTH_RATIO`、`AI_NOTE_DRAFT_MIN_GROWTH_CHARS`、`AI_NOTE_DRAFT_LENGTH_TOLERANCE_RATIO` 调整。用户明确禁止外部知识时，材料容量使用 `AI_NOTE_DRAFT_MAX_GROUNDED_EXPANSION_RATIO` 与 `AI_NOTE_DRAFT_GROUNDED_EXPANSION_ALLOWANCE` 裁决；禁止为了满足长度而放宽 GroundingScope 或重复段落凑字数。
 - Agent Runtime V2 默认使用 `AI_AGENT_RUNTIME_V2_MODE=enforce`；仅排障回退可显式设置 `legacy`，语义对照可设置 `shadow`。Compiler 产出的 TurnSpec 是本轮唯一顶层意图，后续 router/planner/runner 只能消费或缩小它，禁止 material、note task、action 正则或依赖轮重新覆盖 request kind、grounding policy、output contract 和 goals。Compiler 的一次修复必须携带服务端得到的稳定约束提示，最终仍以严格 schema 为准，不能用纠错提示代替验证。
+- Runtime V3 的目标模式独立使用 `AI_AGENT_RUNTIME_MODE`，实际请求模式还必须与 `AI_AGENT_RUNTIME_V3_ROLLOUT` 求交；未显式配置受众时继续执行 legacy/V2，不因代码部署自动改变线上语义。Root 代管上下文按认证后的 billing/actor Root 灰度，不能按被查看的 subject 账号决定；普通账号未命中时不得运行 V3 Compiler。trace 必须同时记录 configured/effective mode、无 ID 的 rollout reason 和百分比；`v3_enforce` 还必须满足 `rawHistoryMessageCount=0`、`legacyStageCount=0`，否则视为 V3 链路回流旧分类器并阻止扩大灰度。
 - 阶段模型配置使用 `AGENT_INTENT_PROVIDER/MODEL`、`AGENT_PLANNER_PROVIDER/MODEL`、`AGENT_COMPOSER_PROVIDER/MODEL`、`AGENT_NOTE_DRAFT_PROVIDER/MODEL`；未配置时继承全局 Provider。变更默认模型前必须运行 `pnpm --filter server smoke:ai-turn-v2 -- --live --provider both --repeat 20`，严格正确率须至少 95%、候选工具 p95 须不超过 12、额外工具或澄清时调用工具等灾难性失败必须为 0。该命令只验证协议和计划，不执行业务工具；默认不带 `--live` 时必须保持 dry-run。
 - 显式 `false` 是最高优先级事故急停，Root 和测试账号也不能绕过；其余情况下 Root/测试账号先行放行，普通账号按 subject ID 做稳定 SHA-256 分桶。依赖关系固定为：写入依赖读取、移动端依赖读取、子树回收站依赖写入、AI 完整分析依赖 AI 目录范围。
 - 灰度顺序保持“Root/测试 → 5% → 20% → 50% → 100%”，并先开读取再开写入。服务端在查询、创建、移动、排序、子树删除、AI 范围解析、AI 指定目录准备/替换/确认等边界重新校验，不能只靠前端隐藏入口。

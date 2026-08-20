@@ -70,7 +70,7 @@ export function normalizeRegisteredTool(tool) {
   if (!Array.isArray(rawDependencyBindings) || rawDependencyBindings.length > 8) {
     throw new Error(`Agent 工具 ${tool.name} 的 dependencyBindings 无效`);
   }
-  const dependencyArguments = new Set();
+  const dependencyArguments = new Map();
   const dependencyBindings = rawDependencyBindings.map((binding) => {
     const argument = String(binding?.argument || '').trim();
     const refType = String(binding?.refType || '')
@@ -85,12 +85,13 @@ export function normalizeRegisteredTool(tool) {
     ) {
       throw new Error(`Agent 工具 ${tool.name} 的依赖绑定 ${argument || 'unknown'} 无效`);
     }
-    dependencyArguments.add(argument);
-    return Object.freeze({
+    const normalizedBinding = Object.freeze({
       argument,
       refType,
       ...(binding?.requireUnique === true ? { requireUnique: true } : {}),
     });
+    dependencyArguments.set(argument, normalizedBinding);
+    return normalizedBinding;
   });
   const rawResourceBindings = tool.resourceBindings == null ? [] : tool.resourceBindings;
   if (!Array.isArray(rawResourceBindings) || rawResourceBindings.length > 8) {
@@ -99,25 +100,35 @@ export function normalizeRegisteredTool(tool) {
   const resourceArguments = new Set();
   const resourceBindings = rawResourceBindings.map((binding) => {
     const argument = String(binding?.argument || '').trim();
-    const refType = String(binding?.refType || '')
-      .trim()
-      .toLowerCase();
+    const hasRefTypes = Array.isArray(binding?.refTypes);
+    const refTypes = [
+      ...new Set(
+        (hasRefTypes ? binding.refTypes : [binding?.refType])
+          .map((value) => String(value || '').trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    ];
     const sourceField = String(binding?.sourceField || '').trim();
+    const dependencyBinding = dependencyArguments.get(argument);
     if (
       !argument ||
       !Object.hasOwn(tool.parameters?.properties || {}, argument) ||
-      !DEPENDENCY_REF_TYPE_PATTERN.test(refType) ||
+      !refTypes.length ||
+      refTypes.length > 8 ||
+      refTypes.some((refType) => !DEPENDENCY_REF_TYPE_PATTERN.test(refType)) ||
+      (hasRefTypes && binding?.refType != null) ||
       !RESOURCE_SOURCE_FIELD_PATTERN.test(sourceField) ||
       (binding?.allowLiteral != null && typeof binding.allowLiteral !== 'boolean') ||
       resourceArguments.has(argument) ||
-      dependencyArguments.has(argument)
+      (dependencyBinding &&
+        (refTypes.length !== 1 || dependencyBinding.refType !== refTypes[0] || sourceField !== 'id'))
     ) {
       throw new Error(`Agent 工具 ${tool.name} 的资源绑定 ${argument || 'unknown'} 无效`);
     }
     resourceArguments.add(argument);
     return Object.freeze({
       argument,
-      refType,
+      ...(hasRefTypes ? { refTypes: Object.freeze(refTypes) } : { refType: refTypes[0] }),
       sourceField,
       ...(binding?.allowLiteral === true ? { allowLiteral: true } : {}),
     });

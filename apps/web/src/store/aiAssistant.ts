@@ -9,6 +9,7 @@ import { sanitizeAiMessageActivity } from '@/utils/aiMemoryInfluence';
 import { compareAiConversationRecency, type AiConversationRecency } from '@/utils/aiConversationContinuity';
 import type { AiResourceContext, AiScopeRef } from '@/types/aiScope';
 import { normalizeAiArtifacts, type AiArtifact } from '@/types/aiArtifact';
+import { normalizeAiCapabilityModule, type AiCapabilityModule } from '@/types/aiCapabilityScope';
 import {
   normalizeAiMaterialClarification,
   normalizeAiResolvedGrounding,
@@ -88,6 +89,8 @@ export interface AiAssistantMessage {
   scopeRefs?: AiScopeRef[];
   /** 发送瞬间的不可变附件快照，重试/重新生成只能读取该字段。 */
   attachmentRefs?: AiAttachment[];
+  /** 用户发送时显式选择的本轮能力模块；auto 不限制工具领域。 */
+  capabilityModule?: AiCapabilityModule;
   transient?: boolean;
   transientGroupId?: string;
   pendingConfirmationIds?: string[];
@@ -656,6 +659,7 @@ function normalizePersistedMessage(value: unknown): AiAssistantMessage | null {
     scopeRefs: freezeSnapshotItems(scopeRefs),
     entityRefs: normalizeContextRefs(raw.entityRefs),
     attachmentRefs: freezeSnapshotItems(attachmentRefs),
+    capabilityModule: normalizeAiCapabilityModule(raw.capabilityModule),
     confirmations,
     transient: raw.transient === true,
     transientGroupId: typeof raw.transientGroupId === 'string' ? raw.transientGroupId : undefined,
@@ -715,6 +719,7 @@ function serializeMessage(message: AiAssistantMessage): Record<string, unknown> 
     scopeRefs: normalizeScopeRefs(message.scopeRefs),
     entityRefs: normalizeContextRefs(message.entityRefs),
     attachmentRefs: normalizeAttachmentRefs(message.attachmentRefs),
+    capabilityModule: normalizeAiCapabilityModule(message.capabilityModule),
     confirmations: normalizePendingConfirmations(message.confirmations).filter((confirmation) =>
       pendingIdSet.has(confirmation.id),
     ),
