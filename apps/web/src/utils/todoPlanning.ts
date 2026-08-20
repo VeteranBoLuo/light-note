@@ -1,4 +1,5 @@
 import type { TodoItem } from '@/api/todoApi';
+import { resolveTodoConfiguredReminderAt, resolveTodoNextReminderAt } from '@lightnote/shared/todo-reminder';
 
 export type TodoGroupKey = 'overdue' | 'today' | 'upcoming' | 'later' | 'noDate' | 'completed';
 export type TodoSnoozePreset = 'tenMinutes' | 'oneHour' | 'threeHours' | 'oneDay' | 'tomorrow' | 'nextWeek';
@@ -34,18 +35,7 @@ export function normalizeTodoDateOnly(value: string | Date | null | undefined) {
 }
 
 export function todoNextReminderAt(item: Pick<TodoItem, 'reminder' | 'reminderAt'>) {
-  const reminder = item.reminder;
-  if (reminder && 'paused' in reminder && reminder.paused) return '';
-  const hydratedNext = reminder && 'nextAt' in reminder ? reminder.nextAt : null;
-  const legacyStart = reminder && 'startAt' in reminder ? reminder.startAt : null;
-  return hydratedNext || legacyStart || item.reminderAt || '';
-}
-
-function todoReminderOffsetAt(value: string | null | undefined, offsetMinutes: number | null | undefined) {
-  if (!value) return '';
-  const date = parseTodoDate(value);
-  if (!Number.isFinite(date.getTime())) return '';
-  return localTodoDateTime(new Date(date.getTime() - Number(offsetMinutes || 0) * 60_000));
+  return resolveTodoNextReminderAt(item);
 }
 
 /**
@@ -55,31 +45,7 @@ function todoReminderOffsetAt(value: string | null | undefined, offsetMinutes: n
 export function todoConfiguredReminderAt(
   item: Pick<TodoItem, 'reminder' | 'reminderAt' | 'startAt' | 'dueAt' | 'occurrenceDate'>,
 ) {
-  const reminder = item.reminder;
-  if (!reminder || ('paused' in reminder && reminder.paused)) return '';
-
-  if ('version' in reminder && reminder.mode === 'once' && reminder.once) {
-    const once = reminder.once;
-    if (once.type === 'fixed_at') return once.fixedAt || '';
-    if (once.type === 'at_start') return item.startAt || '';
-    if (once.type === 'at_due') return item.dueAt || '';
-    if (once.type === 'before_due') return todoReminderOffsetAt(item.dueAt, once.offsetMinutes);
-  }
-
-  if ('trigger' in reminder && reminder.mode === 'once_per_instance' && reminder.trigger) {
-    const trigger = reminder.trigger;
-    if (trigger.type === 'at_start') return item.startAt || '';
-    if (trigger.type === 'before_due') return todoReminderOffsetAt(item.dueAt, trigger.offsetMinutes);
-    if (trigger.type === 'fixed_time') {
-      const occurrenceDate = normalizeTodoDateOnly(item.occurrenceDate);
-      const fixedTime = String(trigger.fixedTime || '').trim();
-      return occurrenceDate && /^\d{2}:\d{2}(?::\d{2})?$/.test(fixedTime)
-        ? `${occurrenceDate}T${fixedTime.length === 5 ? `${fixedTime}:00` : fixedTime}`
-        : '';
-    }
-  }
-
-  return item.reminderAt || '';
+  return resolveTodoConfiguredReminderAt(item);
 }
 
 /** 已过提醒只表达提醒时刻，不等同于待办超过截止时间。 */

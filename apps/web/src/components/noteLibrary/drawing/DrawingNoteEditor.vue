@@ -1,165 +1,268 @@
 <template>
   <div ref="rootRef" class="drawing-editor" :class="{ 'is-readonly': readonly }" tabindex="0" @keydown="handleKeydown">
     <div v-if="!readonly" class="drawing-toolbar" role="toolbar" :aria-label="t('note.drawingToolbar')">
-      <BTooltip v-for="item in tools" :key="item.key" :title="item.label">
-        <BButton
-          size="small"
-          class="drawing-tool-button"
-          :class="{ 'is-active': tool === item.key }"
-          :aria-label="item.label"
-          :aria-pressed="tool === item.key"
-          @click="tool = item.key"
-        >
-          <SvgIcon :src="item.icon" size="17" aria-hidden="true" />
-        </BButton>
-      </BTooltip>
-
-      <span class="drawing-toolbar-separator" aria-hidden="true" />
-      <BPopover
-        v-model:open="colorPopoverOpen"
-        trigger="click"
-        placement="bottom-left"
-        overlay-class-name="drawing-color-popover"
-        @open-change="handleColorPopoverChange"
-      >
-        <BTooltip :title="t('note.drawingChooseColor')">
-          <BButton size="small" class="drawing-color-button" :aria-label="t('note.drawingChooseColor')">
-            <span class="drawing-color-dot" :style="{ backgroundColor: activeColor }" />
-          </BButton>
-        </BTooltip>
-        <template #content>
-          <div class="drawing-color-panel">
-            <strong>{{ t('note.drawingColor') }}</strong>
-            <div class="drawing-color-presets" role="list" :aria-label="t('note.drawingPresetColors')">
+      <div class="drawing-toolbar-scroll">
+        <template v-for="item in tools" :key="item.key">
+          <BPopover
+            v-if="item.key === 'shape'"
+            v-model:open="shapePopoverOpen"
+            trigger="click"
+            placement="bottom-left"
+            overlay-class-name="drawing-shape-popover"
+            @open-change="(open) => open && switchDrawingTool('shape')"
+          >
+            <BTooltip :title="`${item.label}：${activeShapeLabel}`">
               <BButton
-                v-for="color in DRAWING_COLORS"
-                :key="color"
-                class="drawing-color-preset"
-                :class="{ 'is-active': activeColor === color }"
-                :aria-label="color"
-                :aria-pressed="activeColor === color"
-                @click="selectColor(color)"
+                size="small"
+                class="drawing-tool-button"
+                :class="{ 'is-active': tool === item.key }"
+                :aria-label="`${item.label}：${activeShapeLabel}`"
+                :aria-pressed="tool === item.key"
+                @click="switchDrawingTool(item.key)"
               >
-                <span class="drawing-color-dot" :style="{ backgroundColor: color }" />
+                <SvgIcon :src="item.icon" size="17" aria-hidden="true" />
               </BButton>
-            </div>
-            <label for="drawing-custom-color">{{ t('note.drawingCustomColor') }}</label>
-            <BInput
-              id="drawing-custom-color"
-              v-model:value="activeColor"
-              class="drawing-custom-color"
-              type="color"
-              height="40px"
-              @change="colorPopoverOpen = false"
+            </BTooltip>
+            <template #content>
+              <div class="drawing-shape-panel" role="list" :aria-label="t('note.drawingChooseShape')">
+                <BButton
+                  v-for="shape in shapeOptions"
+                  :key="shape.key"
+                  class="drawing-shape-option"
+                  :class="{ 'is-active': activeShapeType === shape.key }"
+                  :aria-label="shape.label"
+                  :aria-pressed="activeShapeType === shape.key"
+                  @click="rememberShapeType(shape.key)"
+                >
+                  <SvgIcon :src="shape.icon" size="20" aria-hidden="true" />
+                  <span>{{ shape.label }}</span>
+                </BButton>
+              </div>
+            </template>
+          </BPopover>
+          <BTooltip v-else :title="item.label">
+            <BButton
+              size="small"
+              class="drawing-tool-button"
+              :class="{ 'is-active': tool === item.key }"
+              :aria-label="item.label"
+              :aria-pressed="tool === item.key"
+              @click="switchDrawingTool(item.key)"
+            >
+              <SvgIcon :src="item.icon" size="17" aria-hidden="true" />
+            </BButton>
+          </BTooltip>
+        </template>
+
+        <span class="drawing-toolbar-separator" aria-hidden="true" />
+        <BPopover
+          v-if="(showColorControl || showSizeControl) && !isMobileLayout"
+          v-model:open="stylePopoverOpen"
+          trigger="click"
+          placement="bottom-left"
+          overlay-class-name="drawing-style-popover"
+        >
+          <BTooltip :title="t('note.drawingStyle')">
+            <BButton size="small" class="drawing-style-trigger" :aria-label="t('note.drawingStyle')">
+              <SvgIcon :src="icon.drawingNote.style" size="16" aria-hidden="true" />
+              <span v-if="showColorControl" class="drawing-color-dot" :style="{ backgroundColor: displayedColor }" />
+              <span v-if="showSizeControl" class="drawing-style-size">{{ activeSize }}</span>
+            </BButton>
+          </BTooltip>
+          <template #content>
+            <DrawingStylePanel
+              :active-color="displayedColor"
+              :common-colors="DRAWING_COLORS"
+              :palette-colors="DRAWING_PALETTE"
+              :recent-colors="recentColors"
+              :color-enabled="showColorControl"
+              :size-enabled="showSizeControl"
+              :active-size="activeSize"
+              :size-label="activeSizeLabel"
+              :size-options="activeSizeOptions"
+              :size-range="activeSizeRange"
+              @choose-color="selectColor"
+              @choose-size="setActiveSize"
             />
-          </div>
-        </template>
-      </BPopover>
-      <BPopover
-        v-if="showSizeControl"
-        v-model:open="sizePopoverOpen"
-        trigger="click"
-        placement="bottom-left"
-        overlay-class-name="drawing-size-popover"
-        @open-change="handleSizePopoverChange"
-      >
-        <BTooltip :title="activeSizeLabel">
-          <BButton size="small" class="drawing-value-button drawing-size-trigger" :aria-label="activeSizeLabel">
-            {{ activeSize }} px
+          </template>
+        </BPopover>
+        <BTooltip v-else-if="showColorControl || showSizeControl" :title="t('note.drawingStyle')">
+          <BButton
+            size="small"
+            class="drawing-style-trigger"
+            :aria-label="t('note.drawingStyle')"
+            @click="styleDrawerOpen = true"
+          >
+            <SvgIcon :src="icon.drawingNote.style" size="16" aria-hidden="true" />
+            <span v-if="showColorControl" class="drawing-color-dot" :style="{ backgroundColor: displayedColor }" />
+            <span v-if="showSizeControl" class="drawing-style-size">{{ activeSize }}</span>
           </BButton>
         </BTooltip>
-        <template #content>
-          <div class="drawing-size-panel">
-            <strong>{{ activeSizeLabel }}</strong>
-            <div class="drawing-size-options" role="list" :aria-label="activeSizeLabel">
+
+        <BTooltip :title="t('note.drawingClear')">
+          <BButton
+            size="small"
+            class="drawing-tool-button drawing-clear-desktop"
+            :disabled="!scene.elements.length"
+            :aria-label="t('note.drawingClear')"
+            @click="confirmClearDrawing"
+          >
+            <SvgIcon :src="icon.noteDetail.imageToolbar.delete" size="17" aria-hidden="true" />
+          </BButton>
+        </BTooltip>
+      </div>
+
+      <div class="drawing-toolbar-history">
+        <BTooltip :title="t('note.drawingUndo')">
+          <BButton
+            size="small"
+            class="drawing-tool-button"
+            :disabled="!undoStack.length"
+            :aria-label="t('note.drawingUndo')"
+            @click="undo"
+          >
+            <SvgIcon :src="icon.noteDetail.toolbar.undo" size="17" aria-hidden="true" />
+          </BButton>
+        </BTooltip>
+        <BTooltip :title="t('note.drawingRedo')">
+          <BButton
+            size="small"
+            class="drawing-tool-button"
+            :disabled="!redoStack.length"
+            :aria-label="t('note.drawingRedo')"
+            @click="redo"
+          >
+            <SvgIcon :src="icon.noteDetail.toolbar.redo" size="17" aria-hidden="true" />
+          </BButton>
+        </BTooltip>
+        <BPopover
+          v-model:open="helpPopoverOpen"
+          trigger="click"
+          placement="bottom-right"
+          overlay-class-name="drawing-help-popover"
+        >
+          <BTooltip :title="t('note.drawingHelp')">
+            <BButton size="small" class="drawing-tool-button drawing-help-button" :aria-label="t('note.drawingHelp')">
+              <SvgIcon :src="icon.drawingNote.help" size="17" aria-hidden="true" />
+            </BButton>
+          </BTooltip>
+          <template #content>
+            <div class="drawing-help-panel">
+              <strong>{{ t('note.drawingHelpTitle') }}</strong>
+              <dl>
+                <div
+                  ><dt><kbd>P</kbd></dt
+                  ><dd>{{ t('note.drawingPen') }}</dd></div
+                >
+                <div
+                  ><dt><kbd>V</kbd></dt
+                  ><dd>{{ t('note.drawingSelect') }}</dd></div
+                >
+                <div
+                  ><dt><kbd>⌘/Ctrl Z</kbd></dt
+                  ><dd>{{ t('note.drawingUndo') }}</dd></div
+                >
+                <div
+                  ><dt><kbd>⌘/Ctrl ⇧ Z</kbd></dt
+                  ><dd>{{ t('note.drawingRedo') }}</dd></div
+                >
+                <div
+                  ><dt><kbd>⌘/Ctrl A</kbd></dt
+                  ><dd>{{ t('note.drawingShortcutSelectAll') }}</dd></div
+                >
+                <div
+                  ><dt><kbd>⌘/Ctrl C / V</kbd></dt
+                  ><dd>{{ t('note.drawingShortcutCopyPaste') }}</dd></div
+                >
+                <div
+                  ><dt><kbd>⌫ / Delete</kbd></dt
+                  ><dd>{{ t('note.drawingShortcutDelete') }}</dd></div
+                >
+                <div
+                  ><dt><kbd>Esc</kbd></dt
+                  ><dd>{{ t('note.drawingShortcutCancel') }}</dd></div
+                >
+                <div
+                  ><dt>{{ t('note.drawingMouseWheel') }}</dt
+                  ><dd>{{ t('note.drawingShortcutZoom') }}</dd></div
+                >
+                <div
+                  ><dt>{{ t('note.drawingHorizontalWheel') }}</dt
+                  ><dd>{{ t('note.drawingShortcutHorizontalPan') }}</dd></div
+                >
+                <div
+                  ><dt>{{ t('note.drawingMiddleRightMouse') }}</dt
+                  ><dd>{{ t('note.drawingShortcutPan') }}</dd></div
+                >
+                <div
+                  ><dt><kbd>Shift</kbd></dt
+                  ><dd>{{ t('note.drawingShortcutConstrainShape') }}</dd></div
+                >
+              </dl>
               <BButton
-                v-for="size in activeSizeOptions"
-                :key="size"
-                class="drawing-size-option"
-                :class="{ 'is-active': activeSize === size }"
-                :aria-label="`${activeSizeLabel} ${size} px`"
-                :aria-pressed="activeSize === size"
-                @click="setActiveSize(size)"
+                type="danger"
+                size="small"
+                class="drawing-help-clear"
+                :disabled="!scene.elements.length"
+                @click="
+                  helpPopoverOpen = false;
+                  confirmClearDrawing();
+                "
               >
-                {{ size }} px
+                {{ t('note.drawingClear') }}
               </BButton>
             </div>
-            <div class="drawing-size-range-row">
-              <input
-                class="drawing-size-range"
-                type="range"
-                :min="activeSizeRange.min"
-                :max="activeSizeRange.max"
-                :value="activeSize"
-                :aria-label="activeSizeLabel"
-                @input="setActiveSizeFromInput"
-              />
-              <span class="drawing-size-current">{{ activeSize }} px</span>
-            </div>
-          </div>
-        </template>
-      </BPopover>
+          </template>
+        </BPopover>
+      </div>
 
-      <span class="drawing-toolbar-separator" aria-hidden="true" />
-      <BTooltip :title="t('note.drawingUndo')">
+      <div class="drawing-toolbar-zoom">
+        <BButton size="small" class="drawing-value-button" :disabled="zoomIndex === 0" @click="changeZoom(-1)">
+          −
+        </BButton>
+        <span class="drawing-zoom-label">{{ Math.round(zoom * 100) }}%</span>
         <BButton
           size="small"
-          class="drawing-tool-button"
-          :disabled="!undoStack.length"
-          :aria-label="t('note.drawingUndo')"
-          @click="undo"
+          class="drawing-value-button"
+          :disabled="zoom >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]"
+          @click="changeZoom(1)"
         >
-          <SvgIcon :src="icon.noteDetail.toolbar.undo" size="17" aria-hidden="true" />
+          +
         </BButton>
-      </BTooltip>
-      <BTooltip :title="t('note.drawingRedo')">
-        <BButton
-          size="small"
-          class="drawing-tool-button"
-          :disabled="!redoStack.length"
-          :aria-label="t('note.drawingRedo')"
-          @click="redo"
-        >
-          <SvgIcon :src="icon.noteDetail.toolbar.redo" size="17" aria-hidden="true" />
-        </BButton>
-      </BTooltip>
-      <BTooltip :title="t('note.drawingClear')">
-        <BButton
-          size="small"
-          class="drawing-tool-button"
-          :disabled="!scene.elements.length"
-          :aria-label="t('note.drawingClear')"
-          @click="confirmClearDrawing"
-        >
-          <SvgIcon :src="icon.noteDetail.imageToolbar.delete" size="17" aria-hidden="true" />
-        </BButton>
-      </BTooltip>
-
-      <span class="drawing-toolbar-spacer" />
-      <BButton size="small" class="drawing-value-button" :disabled="zoomIndex === 0" @click="changeZoom(-1)">
-        −
-      </BButton>
-      <span class="drawing-zoom-label">{{ Math.round(zoom * 100) }}%</span>
-      <BButton
-        size="small"
-        class="drawing-value-button"
-        :disabled="zoom >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]"
-        @click="changeZoom(1)"
-      >
-        +
-      </BButton>
+      </div>
     </div>
 
-    <div ref="workspaceRef" class="drawing-workspace">
-      <div
-        ref="pageRef"
-        class="drawing-page"
-        :style="pageStyle"
-      >
+    <BDrawer
+      :open="styleDrawerOpen"
+      placement="bottom"
+      height="min(78dvh, 680px)"
+      :title="t('note.drawingStyle')"
+      :mobile-centered-header="true"
+      body-padding="12px"
+      @close="styleDrawerOpen = false"
+    >
+      <DrawingStylePanel
+        :active-color="displayedColor"
+        :common-colors="DRAWING_COLORS"
+        :palette-colors="DRAWING_PALETTE"
+        :recent-colors="recentColors"
+        :color-enabled="showColorControl"
+        :size-enabled="showSizeControl"
+        :active-size="activeSize"
+        :size-label="activeSizeLabel"
+        :size-options="activeSizeOptions"
+        :size-range="activeSizeRange"
+        @choose-color="selectColor"
+        @choose-size="setActiveSize"
+      />
+    </BDrawer>
+
+    <div ref="workspaceRef" class="drawing-workspace" @wheel="handleWheel">
+      <div ref="pageRef" class="drawing-page" :style="pageStyle">
         <canvas
           ref="canvasRef"
           class="drawing-canvas"
-          :class="`is-tool-${tool}`"
+          :class="[`is-tool-${tool}`, { 'is-panning': isPanning }]"
           :aria-label="t('note.drawingCanvas')"
           @contextmenu.prevent
           @pointerdown="handlePointerDown"
@@ -188,6 +291,7 @@
             submit-on-enter
             :placeholder="t('note.drawingTextPlaceholder')"
             @enter="commitTextDraft"
+            @keydown="handleTextDraftKeydown"
             @focusout="commitTextDraft"
           />
         </div>
@@ -197,7 +301,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
+  import { computed, getCurrentInstance, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import {
     DRAWING_COLORS,
@@ -205,6 +309,7 @@
     DRAWING_FONT_SIZES,
     DRAWING_PAGE,
     DRAWING_SCENE_LIMITS,
+    DRAWING_SHAPE_TYPES,
     DRAWING_STROKE_WIDTH_RANGE,
     DRAWING_STROKE_WIDTHS,
     createEmptyDrawingScene,
@@ -215,14 +320,18 @@
     type DrawingElement,
     type DrawingFontSize,
     type DrawingScene,
+    type DrawingShapeElement,
+    type DrawingShapeType,
     type DrawingStrokeElement,
     type DrawingStrokeWidth,
     type DrawingTextElement,
   } from '@lightnote/shared/drawing-note';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import DrawingStylePanel from './DrawingStylePanel.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
@@ -231,6 +340,14 @@
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { deliverExportViaAndroidBridge } from '@/utils/androidFileExport';
   import { eraseDrawingElementsAt, type DrawingPoint } from '@/utils/drawingEraser';
+  import { getRootZoom } from '@/utils/zoom';
+  import { useMobileLayout } from '@/composables/useMobileLayout';
+  import {
+    constrainDrawingShapeEnd,
+    drawingShapeBounds,
+    drawingShapeBox,
+    paintDrawingShape,
+  } from '@/utils/drawingShape';
   import {
     cloneDrawingElement,
     drawingRectsIntersect,
@@ -241,7 +358,8 @@
     type DrawingRect,
   } from '@/utils/drawingSelection';
 
-  type DrawingTool = 'pen' | 'eraser' | 'text' | 'select' | 'hand';
+  type DrawingTool = 'pen' | 'eraser' | 'text' | 'shape' | 'select' | 'hand';
+  type ShapeResizeHandle = 'nw' | 'ne' | 'sw' | 'se' | 'start' | 'end';
 
   const props = withDefaults(
     defineProps<{
@@ -257,6 +375,9 @@
     ready: [];
   }>();
   const { t } = useI18n();
+  const isMobileLayout = useMobileLayout();
+  const activePinia = getCurrentInstance()?.appContext.config.globalProperties.$pinia as
+    { state: { value: Record<string, unknown> } } | undefined;
 
   const rootRef = ref<HTMLElement | null>(null);
   const workspaceRef = ref<HTMLElement | null>(null);
@@ -270,9 +391,13 @@
   const fontSize = ref<DrawingFontSize>(DRAWING_FONT_SIZES[0]);
   const DEFAULT_ERASER_SIZE = 18;
   const eraserSize = ref(DEFAULT_ERASER_SIZE);
+  const activeShapeType = ref<DrawingShapeType>(readSavedShapeType());
   const selectedIds = ref<string[]>([]);
-  const colorPopoverOpen = ref(false);
-  const sizePopoverOpen = ref(false);
+  const stylePopoverOpen = ref(false);
+  const styleDrawerOpen = ref(false);
+  const shapePopoverOpen = ref(false);
+  const helpPopoverOpen = ref(false);
+  const recentColors = ref<DrawingColor[]>(readRecentColors());
   const textDraft = ref<DrawingTextElement | null>(null);
   const textDraftRows = computed(() => {
     const draft = textDraft.value;
@@ -294,6 +419,7 @@
   });
   const cameraX = ref(0);
   const cameraY = ref(0);
+  const isPanning = ref(false);
   const pageStyle = computed(() => ({
     width: `${DRAWING_PAGE.width * zoom.value}px`,
     height: `${DRAWING_PAGE.height * zoom.value}px`,
@@ -306,39 +432,119 @@
   const DRAWING_TEXT_LINE_HEIGHT = 1.35;
   const DRAWING_ERASER_SIZE_RANGE = Object.freeze({ min: 4, max: 64 });
   const DRAWING_ERASER_SIZES = Object.freeze([8, 18, 36]);
+  const WHEEL_ZOOM_SENSITIVITY = 0.0015;
+  const SHAPE_MIN_SIZE = 4;
+  const SHAPE_HANDLE_RADIUS_PX = 6;
+  const DRAWING_PALETTE = Object.freeze([
+    '#7f1d1d',
+    '#b91c1c',
+    '#ef4444',
+    '#fca5a5',
+    '#7c2d12',
+    '#c2410c',
+    '#f97316',
+    '#fdba74',
+    '#713f12',
+    '#ca8a04',
+    '#facc15',
+    '#fde047',
+    '#14532d',
+    '#15803d',
+    '#22c55e',
+    '#86efac',
+    '#134e4a',
+    '#0f766e',
+    '#14b8a6',
+    '#99f6e4',
+    '#1e3a8a',
+    '#1d4ed8',
+    '#3b82f6',
+    '#93c5fd',
+    '#4c1d95',
+    '#6d28d9',
+    '#8b5cf6',
+    '#c4b5fd',
+    '#701a75',
+    '#a21caf',
+    '#d946ef',
+    '#f0abfc',
+  ] as DrawingColor[]);
 
   const tools = computed(() => [
     { key: 'pen' as const, label: t('note.drawingPen'), icon: icon.drawingNote.pen },
     { key: 'eraser' as const, label: t('note.drawingEraser'), icon: icon.drawingNote.eraser },
     { key: 'text' as const, label: t('note.drawingText'), icon: icon.drawingNote.text },
+    { key: 'shape' as const, label: t('note.drawingShape'), icon: icon.drawingNote.shape },
     { key: 'select' as const, label: t('note.drawingSelect'), icon: icon.drawingNote.select },
     { key: 'hand' as const, label: t('note.drawingHand'), icon: icon.drawingNote.hand },
   ]);
-  const showSizeControl = computed(() => tool.value === 'pen' || tool.value === 'eraser' || tool.value === 'text');
+  const shapeOptions = computed(() => [
+    { key: 'line' as const, label: t('note.drawingShapeLine'), icon: icon.drawingNote.shapeTypes.line },
+    { key: 'arrow' as const, label: t('note.drawingShapeArrow'), icon: icon.drawingNote.shapeTypes.arrow },
+    { key: 'rectangle' as const, label: t('note.drawingShapeRectangle'), icon: icon.drawingNote.shapeTypes.rectangle },
+    {
+      key: 'rounded-rectangle' as const,
+      label: t('note.drawingShapeRoundedRectangle'),
+      icon: icon.drawingNote.shapeTypes.roundedRectangle,
+    },
+    { key: 'ellipse' as const, label: t('note.drawingShapeEllipse'), icon: icon.drawingNote.shapeTypes.ellipse },
+    { key: 'triangle' as const, label: t('note.drawingShapeTriangle'), icon: icon.drawingNote.shapeTypes.triangle },
+    { key: 'diamond' as const, label: t('note.drawingShapeDiamond'), icon: icon.drawingNote.shapeTypes.diamond },
+  ]);
+  const activeShapeLabel = computed(
+    () => shapeOptions.value.find((shape) => shape.key === activeShapeType.value)?.label || t('note.drawingShape'),
+  );
+  const showSizeControl = computed(
+    () =>
+      tool.value === 'pen' ||
+      tool.value === 'eraser' ||
+      tool.value === 'text' ||
+      tool.value === 'shape' ||
+      (tool.value === 'select' && selectedIds.value.length > 0),
+  );
+  const showColorControl = computed(
+    () => tool.value !== 'eraser' && tool.value !== 'hand' && (tool.value !== 'select' || selectedIds.value.length > 0),
+  );
   const activeSize = computed(() => {
     if (tool.value === 'text') return fontSize.value;
     if (tool.value === 'eraser') return eraserSize.value;
+    if (tool.value === 'select') {
+      const first = selectedElements()[0];
+      if (first?.kind === 'text') return first.fontSize;
+      if (first?.kind === 'shape') return first.strokeWidth;
+      if (first?.kind === 'stroke') return first.width;
+    }
     return strokeWidth.value;
   });
   const activeSizeLabel = computed(() => {
     if (tool.value === 'text') return t('note.drawingTextSize');
     if (tool.value === 'eraser') return t('note.drawingEraserSize');
+    if (tool.value === 'select' && selectedElements()[0]?.kind === 'text') return t('note.drawingTextSize');
     return t('note.drawingStrokeSize');
   });
   const activeSizeOptions = computed<readonly number[]>(() => {
-    if (tool.value === 'text') return DRAWING_FONT_SIZES;
+    if (tool.value === 'text' || (tool.value === 'select' && selectedElements()[0]?.kind === 'text')) {
+      return DRAWING_FONT_SIZES;
+    }
     if (tool.value === 'eraser') return DRAWING_ERASER_SIZES;
     return DRAWING_STROKE_WIDTHS;
   });
   const activeSizeRange = computed(() => {
-    if (tool.value === 'text') return DRAWING_FONT_SIZE_RANGE;
+    if (tool.value === 'text' || (tool.value === 'select' && selectedElements()[0]?.kind === 'text')) {
+      return DRAWING_FONT_SIZE_RANGE;
+    }
     if (tool.value === 'eraser') return DRAWING_ERASER_SIZE_RANGE;
     return DRAWING_STROKE_WIDTH_RANGE;
+  });
+  const displayedColor = computed(() => {
+    if (tool.value === 'select') return selectedElements()[0]?.color || activeColor.value;
+    return activeColor.value;
   });
 
   let activePointerId: number | null = null;
   let activeCanvasRect: DOMRect | null = null;
   let activeStroke: DrawingStrokeElement | null = null;
+  let activeShape: DrawingShapeElement | null = null;
   let activeStrokeMaxPairs = 0;
   let mutationSnapshot = '';
   let eraserChanged = false;
@@ -353,14 +559,68 @@
     dx: number;
     dy: number;
   } | null = null;
+  let resizeStart: {
+    element: DrawingShapeElement;
+    handle: ShapeResizeHandle;
+    anchor: DrawingPoint;
+    current: DrawingPoint;
+    start: DrawingPoint;
+    constrained: boolean;
+  } | null = null;
   let marqueeSelection: { start: DrawingPoint; current: DrawingPoint; baseIds: string[] } | null = null;
   let editSelectedTextOnRelease = false;
   let panStart: { x: number; y: number; cameraX: number; cameraY: number } | null = null;
   let workspaceResizeObserver: ResizeObserver | null = null;
   let frameId = 0;
+  let zoomResizeFrame = 0;
   let lastEmittedContent = '';
   const textLayoutCache = new Map<string, string[]>();
   const elementBoundsCache = new WeakMap<DrawingElement, { x: number; y: number; width: number; height: number }>();
+
+  function drawingPreferenceKey(name: string) {
+    const userId = (activePinia?.state.value.user as { id?: string } | undefined)?.id || 'visitor';
+    return `light-note:drawing:${userId}:${name}`;
+  }
+
+  function readSavedShapeType(): DrawingShapeType {
+    try {
+      const value = localStorage.getItem(drawingPreferenceKey('shape')) as DrawingShapeType | null;
+      return value && DRAWING_SHAPE_TYPES.includes(value) ? value : 'line';
+    } catch {
+      return 'line';
+    }
+  }
+
+  function readRecentColors(): DrawingColor[] {
+    try {
+      const value = JSON.parse(localStorage.getItem(drawingPreferenceKey('recent-colors')) || '[]');
+      return Array.isArray(value)
+        ? value.filter((color): color is DrawingColor => /^#[0-9a-f]{6}$/iu.test(String(color))).slice(0, 6)
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function rememberShapeType(shape: DrawingShapeType) {
+    activeShapeType.value = shape;
+    switchDrawingTool('shape');
+    shapePopoverOpen.value = false;
+    try {
+      localStorage.setItem(drawingPreferenceKey('shape'), shape);
+    } catch {
+      // 隐私模式或存储配额不足时，仅保留当前编辑会话内的选择。
+    }
+  }
+
+  function rememberColor(color: DrawingColor) {
+    recentColors.value = [color, ...recentColors.value.filter((item) => item !== color)].slice(0, 6);
+    try {
+      localStorage.setItem(drawingPreferenceKey('recent-colors'), JSON.stringify(recentColors.value));
+    } catch {
+      // 最近颜色是可选偏好，存储失败不影响绘画。
+    }
+  }
 
   function createElementId() {
     const cryptoSource = globalThis.crypto;
@@ -401,6 +661,7 @@
   }
 
   function previewElement(element: DrawingElement) {
+    if (resizeStart && element.id === resizeStart.element.id) return resizedShapePreview() || element;
     if (!dragStart) return element;
     const original = dragStart.elementsById.get(element.id);
     return original ? translateDrawingElement(original, dragStart.dx, dragStart.dy) : element;
@@ -416,39 +677,134 @@
     return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
   }
 
+  function pointInRect(point: DrawingPoint, rect: DrawingRect) {
+    return point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height;
+  }
+
+  function shapeResizeHandles(element: DrawingShapeElement) {
+    if (element.shape === 'line' || element.shape === 'arrow') {
+      return [
+        { handle: 'start' as const, point: { x: element.x, y: element.y } },
+        { handle: 'end' as const, point: { x: element.x + element.width, y: element.y + element.height } },
+      ];
+    }
+    const box = drawingShapeBox(element);
+    return [
+      { handle: 'nw' as const, point: { x: box.x, y: box.y } },
+      { handle: 'ne' as const, point: { x: box.x + box.width, y: box.y } },
+      { handle: 'sw' as const, point: { x: box.x, y: box.y + box.height } },
+      { handle: 'se' as const, point: { x: box.x + box.width, y: box.y + box.height } },
+    ];
+  }
+
+  function oppositeShapeAnchor(element: DrawingShapeElement, handle: ShapeResizeHandle) {
+    if (handle === 'start') return { x: element.x + element.width, y: element.y + element.height };
+    if (handle === 'end') return { x: element.x, y: element.y };
+    const box = drawingShapeBox(element);
+    if (handle === 'nw') return { x: box.x + box.width, y: box.y + box.height };
+    if (handle === 'ne') return { x: box.x, y: box.y + box.height };
+    if (handle === 'sw') return { x: box.x + box.width, y: box.y };
+    return { x: box.x, y: box.y };
+  }
+
+  function hitShapeResizeHandle(point: DrawingPoint) {
+    const selected = selectedElements();
+    if (selected.length !== 1 || selected[0].kind !== 'shape') return null;
+    const radius = (SHAPE_HANDLE_RADIUS_PX + 4) / Math.max(zoom.value, 0.01);
+    return (
+      shapeResizeHandles(selected[0]).find(
+        (item) => Math.hypot(point.x - item.point.x, point.y - item.point.y) <= radius,
+      ) || null
+    );
+  }
+
+  function resizedShapePreview() {
+    if (!resizeStart) return null;
+    const original = resizeStart.element;
+    let current = resizeStart.current;
+    if (resizeStart.constrained) {
+      current = constrainDrawingShapeEnd(
+        { ...original, x: resizeStart.anchor.x, y: resizeStart.anchor.y },
+        current,
+        true,
+      );
+    }
+    current = clampShapeEnd(resizeStart.anchor, current);
+    if (resizeStart.handle === 'start') {
+      return {
+        ...original,
+        x: current.x,
+        y: current.y,
+        width: resizeStart.anchor.x - current.x,
+        height: resizeStart.anchor.y - current.y,
+      };
+    }
+    return {
+      ...original,
+      x: resizeStart.anchor.x,
+      y: resizeStart.anchor.y,
+      width: current.x - resizeStart.anchor.x,
+      height: current.y - resizeStart.anchor.y,
+    };
+  }
+
+  function clampShapeEnd(start: DrawingPoint, end: DrawingPoint) {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    let scale = 1;
+    if (dx > 0) scale = Math.min(scale, (DRAWING_PAGE.width - start.x) / dx);
+    if (dx < 0) scale = Math.min(scale, -start.x / dx);
+    if (dy > 0) scale = Math.min(scale, (DRAWING_PAGE.height - start.y) / dy);
+    if (dy < 0) scale = Math.min(scale, -start.y / dy);
+    return { x: start.x + dx * scale, y: start.y + dy * scale };
+  }
+
   function setActiveSize(size: number) {
     const range = activeSizeRange.value;
     const normalized = Math.max(range.min, Math.min(range.max, Math.round(size)));
+    if (tool.value === 'select' && selectedIds.value.length) {
+      const firstKind = selectedElements()[0]?.kind;
+      beginMutation();
+      scene.value = {
+        ...scene.value,
+        elements: scene.value.elements.map((element) => {
+          const sameSizeFamily = firstKind === 'text' ? element.kind === 'text' : element.kind !== 'text';
+          if (!selectedIds.value.includes(element.id) || !sameSizeFamily) return element;
+          if (element.kind === 'text') return { ...element, fontSize: normalized };
+          if (element.kind === 'shape') return { ...element, strokeWidth: normalized };
+          return { ...element, width: normalized };
+        }),
+      };
+      emitScene();
+      scheduleDraw();
+      return;
+    }
     if (tool.value === 'text') {
       fontSize.value = normalized;
-      sizePopoverOpen.value = false;
       return;
     }
     if (tool.value === 'eraser') eraserSize.value = normalized;
     else strokeWidth.value = normalized;
-    sizePopoverOpen.value = false;
-  }
-
-  function setActiveSizeFromInput(event: Event) {
-    const value = Number((event.target as HTMLInputElement).value);
-    const range = activeSizeRange.value;
-    const normalized = Math.max(range.min, Math.min(range.max, Math.round(value)));
-    if (tool.value === 'text') fontSize.value = normalized;
-    else if (tool.value === 'eraser') eraserSize.value = normalized;
-    else strokeWidth.value = normalized;
   }
 
   function selectColor(color: DrawingColor) {
-    activeColor.value = color;
-    colorPopoverOpen.value = false;
-  }
-
-  function handleColorPopoverChange(open: boolean) {
-    if (open) sizePopoverOpen.value = false;
-  }
-
-  function handleSizePopoverChange(open: boolean) {
-    if (open) colorPopoverOpen.value = false;
+    const normalized = color.toLowerCase();
+    if (!/^#[0-9a-f]{6}$/u.test(normalized)) return;
+    rememberColor(normalized);
+    if (tool.value === 'select' && selectedIds.value.length) {
+      beginMutation();
+      const ids = new Set(selectedIds.value);
+      scene.value = {
+        ...scene.value,
+        elements: scene.value.elements.map((element) =>
+          ids.has(element.id) ? { ...element, color: normalized } : element,
+        ),
+      };
+      emitScene();
+      scheduleDraw();
+      return;
+    }
+    activeColor.value = normalized;
   }
 
   function changeZoom(delta: number) {
@@ -457,7 +813,13 @@
         ? ZOOM_LEVELS.find((value) => value > zoom.value + 0.0001) || ZOOM_LEVELS[ZOOM_LEVELS.length - 1]
         : [...ZOOM_LEVELS].reverse().find((value) => value < zoom.value - 0.0001) || ZOOM_LEVELS[0];
     setEditableZoom(next);
-    nextTick(() => {
+    scheduleCanvasResize();
+  }
+
+  function scheduleCanvasResize() {
+    if (zoomResizeFrame) return;
+    zoomResizeFrame = requestAnimationFrame(() => {
+      zoomResizeFrame = 0;
       resizeCanvas();
     });
   }
@@ -469,11 +831,15 @@
     return {
       width: Math.max(
         1,
-        workspace.clientWidth - (Number.parseFloat(style.paddingLeft) || 0) - (Number.parseFloat(style.paddingRight) || 0),
+        workspace.clientWidth -
+          (Number.parseFloat(style.paddingLeft) || 0) -
+          (Number.parseFloat(style.paddingRight) || 0),
       ),
       height: Math.max(
         1,
-        workspace.clientHeight - (Number.parseFloat(style.paddingTop) || 0) - (Number.parseFloat(style.paddingBottom) || 0),
+        workspace.clientHeight -
+          (Number.parseFloat(style.paddingTop) || 0) -
+          (Number.parseFloat(style.paddingBottom) || 0),
       ),
     };
   }
@@ -501,11 +867,11 @@
         : Math.max(size.height - pageHeight - visibleMargin, Math.min(visibleMargin, cameraY.value));
   }
 
-  function setEditableZoom(nextZoom: number) {
+  function setEditableZoom(nextZoom: number, anchor?: DrawingPoint) {
     if (props.readonly) return;
     const size = workspaceContentSize();
-    const anchorX = size.width / 2;
-    const anchorY = size.height / 2;
+    const anchorX = anchor?.x ?? size.width / 2;
+    const anchorY = anchor?.y ?? size.height / 2;
     const oldZoom = Math.max(0.01, editableZoom.value);
     const documentX = (anchorX - cameraX.value) / oldZoom;
     const documentY = (anchorY - cameraY.value) / oldZoom;
@@ -515,10 +881,47 @@
     clampCamera();
   }
 
+  function normalizedWheelDelta(value: number, deltaMode: number, pageSize: number) {
+    if (deltaMode === 1) return value * 16;
+    if (deltaMode === 2) return value * pageSize;
+    return value;
+  }
+
+  function handleWheel(event: WheelEvent) {
+    const workspace = workspaceRef.value;
+    if (props.readonly || !workspace) return;
+    event.preventDefault();
+    if (activePointerId !== null) return;
+    rootRef.value?.focus({ preventScroll: true });
+    const size = workspaceContentSize();
+    const style = getComputedStyle(workspace);
+    const rootZoom = getRootZoom();
+    const rect = workspace.getBoundingClientRect();
+    const anchor = {
+      x: (event.clientX - rect.left) / rootZoom - (Number.parseFloat(style.paddingLeft) || 0),
+      y: (event.clientY - rect.top) / rootZoom - (Number.parseFloat(style.paddingTop) || 0),
+    };
+    const rawDeltaX = normalizedWheelDelta(event.deltaX, event.deltaMode, size.width);
+    const rawDeltaY = normalizedWheelDelta(event.deltaY, event.deltaMode, size.height);
+    const horizontalDelta = event.shiftKey && Math.abs(rawDeltaX) < 0.01 ? rawDeltaY : rawDeltaX;
+    const zoomDelta = event.shiftKey ? 0 : rawDeltaY;
+    if (Math.abs(zoomDelta) >= 0.01) {
+      const limitedDelta = Math.max(-240, Math.min(240, zoomDelta));
+      setEditableZoom(editableZoom.value * Math.exp(-limitedDelta * WHEEL_ZOOM_SENSITIVITY), anchor);
+      scheduleCanvasResize();
+    }
+    if (Math.abs(horizontalDelta) >= 0.01) {
+      cameraX.value -= horizontalDelta / rootZoom;
+      clampCamera();
+    }
+  }
+
   function fitEditablePage() {
     if (props.readonly) return;
     const size = workspaceContentSize();
-    editableZoom.value = Math.min(1, size.width / DRAWING_PAGE.width, size.height / DRAWING_PAGE.height);
+    // 编辑态优先提供足够大的书写区域：宽屏保持 100%，窄屏才按可用宽度缩小。
+    // 画纸高度超出视口时仍由相机居中，并通过手形工具平移查看，不引入原生滚动条。
+    editableZoom.value = Math.min(1, size.width / DRAWING_PAGE.width);
     centerCamera();
     resizeCanvas();
   }
@@ -577,6 +980,8 @@
           lines.length * element.fontSize * DRAWING_TEXT_LINE_HEIGHT,
         ),
       };
+    } else if (element.kind === 'shape') {
+      bounds = drawingShapeBounds(element);
     } else {
       let minX = Infinity;
       let minY = Infinity;
@@ -619,6 +1024,10 @@
       context.stroke();
       return;
     }
+    if (element.kind === 'shape') {
+      paintDrawingShape(context, element);
+      return;
+    }
     context.fillStyle = element.color;
     context.font = `${element.fontSize}px sans-serif`;
     context.textBaseline = 'top';
@@ -640,11 +1049,19 @@
       }
     });
     if (activeStroke) paintElement(context, activeStroke);
-    if (showSelection) {
+    if (activeShape) paintElement(context, activeShape);
+    if (showSelection && tool.value === 'select') {
       const activeSelectedIds = new Set(marqueeSelectedIds(context, paintedElements));
-      paintedElements.forEach((element) => {
-        if (!activeSelectedIds.has(element.id) || textDraft.value?.id === element.id) return;
-        const bounds = elementBounds(context, previewElement(element));
+      const selectedPreviewElements = paintedElements
+        .filter((element) => activeSelectedIds.has(element.id) && textDraft.value?.id !== element.id)
+        .map((element) => previewElement(element));
+      const selectionBounds =
+        !marqueeSelection && selectedPreviewElements.length > 1
+          ? [unionElementBounds(context, selectedPreviewElements)].filter((bounds): bounds is DrawingRect =>
+              Boolean(bounds),
+            )
+          : selectedPreviewElements.map((element) => elementBounds(context, element));
+      selectionBounds.forEach((bounds) => {
         context.save();
         context.strokeStyle = '#615ced';
         context.lineWidth = 1.5;
@@ -652,6 +1069,19 @@
         context.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
         context.restore();
       });
+      if (!marqueeSelection && selectedPreviewElements.length === 1 && selectedPreviewElements[0].kind === 'shape') {
+        shapeResizeHandles(selectedPreviewElements[0]).forEach(({ point }) => {
+          context.save();
+          context.beginPath();
+          context.arc(point.x, point.y, SHAPE_HANDLE_RADIUS_PX / Math.max(zoom.value, 0.01), 0, Math.PI * 2);
+          context.fillStyle = '#ffffff';
+          context.strokeStyle = '#615ced';
+          context.lineWidth = 1.5 / Math.max(zoom.value, 0.01);
+          context.fill();
+          context.stroke();
+          context.restore();
+        });
+      }
       const marqueeRect = currentMarqueeRect();
       if (marqueeRect) {
         context.save();
@@ -687,11 +1117,18 @@
     const canvas = canvasRef.value;
     if (!canvas) return;
     const ratio = Math.min(1.5, Math.max(0.5, (window.devicePixelRatio || 1) * zoom.value));
-    canvas.width = Math.round(DRAWING_PAGE.width * ratio);
-    canvas.height = Math.round(DRAWING_PAGE.height * ratio);
+    const nextWidth = Math.round(DRAWING_PAGE.width * ratio);
+    const nextHeight = Math.round(DRAWING_PAGE.height * ratio);
+    const backingStoreChanged = canvas.width !== nextWidth || canvas.height !== nextHeight;
+    if (backingStoreChanged) {
+      // 修改 width/height 会立即清空 Canvas；必须在同一任务内重绘，不能再延后一帧，否则连续滚轮缩放会暴露空白帧。
+      canvas.width = nextWidth;
+      canvas.height = nextHeight;
+    }
     canvas.style.width = `${DRAWING_PAGE.width * zoom.value}px`;
     canvas.style.height = `${DRAWING_PAGE.height * zoom.value}px`;
-    scheduleDraw();
+    if (backingStoreChanged) draw();
+    else scheduleDraw();
   }
 
   function fitReadonlyPage() {
@@ -732,7 +1169,7 @@
     for (let index = scene.value.elements.length - 1; index >= 0; index -= 1) {
       const element = scene.value.elements[index];
       const bounds = elementBounds(context, element);
-      const boundsPadding = element.kind === 'text' ? 6 : Math.max(8, element.width + 5);
+      const boundsPadding = element.kind === 'text' ? 6 : element.kind === 'shape' ? 6 : Math.max(8, element.width + 5);
       if (
         point.x < bounds.x - boundsPadding ||
         point.x > bounds.x + bounds.width + boundsPadding ||
@@ -748,6 +1185,26 @@
           point.y >= bounds.y - 6 &&
           point.y <= bounds.y + bounds.height + 6
         ) {
+          return element;
+        }
+        continue;
+      }
+      if (element.kind === 'shape') {
+        const threshold = Math.max(8, element.strokeWidth + 5);
+        if (element.shape === 'line' || element.shape === 'arrow') {
+          if (
+            pointSegmentDistance(
+              point.x,
+              point.y,
+              element.x,
+              element.y,
+              element.x + element.width,
+              element.y + element.height,
+            ) <= threshold
+          ) {
+            return element;
+          }
+        } else if (pointInRect(point, bounds)) {
           return element;
         }
         continue;
@@ -838,16 +1295,23 @@
   }
 
   function handlePointerDown(event: PointerEvent) {
-    if (props.readonly || textDraft.value || activePointerId !== null || event.button !== 0) return;
+    const isDirectPanButton = event.button === 1 || event.button === 2;
+    if (props.readonly || textDraft.value || activePointerId !== null || (!isDirectPanButton && event.button !== 0))
+      return;
     rootRef.value?.focus({ preventScroll: true });
     activePointerId = event.pointerId;
     canvasRef.value?.setPointerCapture(event.pointerId);
     activeCanvasRect = canvasRef.value?.getBoundingClientRect() || null;
     const point = canvasPoint(event);
-    if (tool.value === 'hand') {
+    if (isDirectPanButton || tool.value === 'hand') {
+      event.preventDefault();
       const workspace = workspaceRef.value;
-      if (workspace)
+      if (workspace) {
         panStart = { x: event.clientX, y: event.clientY, cameraX: cameraX.value, cameraY: cameraY.value };
+        isPanning.value = true;
+        eraserCursorPoint = null;
+        scheduleDraw();
+      }
       return;
     }
     event.preventDefault();
@@ -904,11 +1368,74 @@
       nextTick(() => textInputRef.value?.focus?.());
       return;
     }
+    if (tool.value === 'shape') {
+      if (
+        scene.value.elements.length >= DRAWING_SCENE_LIMITS.maxElements ||
+        scene.value.elements.filter((element) => element.kind === 'shape').length >= DRAWING_SCENE_LIMITS.maxShapes
+      ) {
+        message.warning(t('note.drawingLimitReached'));
+        canvasRef.value?.releasePointerCapture(event.pointerId);
+        activePointerId = null;
+        activeCanvasRect = null;
+        return;
+      }
+      beginMutation();
+      selectedIds.value = [];
+      activeShape = {
+        id: createElementId(),
+        kind: 'shape',
+        shape: activeShapeType.value,
+        x: point.x,
+        y: point.y,
+        width: 0,
+        height: 0,
+        color: activeColor.value,
+        strokeWidth: strokeWidth.value,
+      };
+      scheduleDraw();
+      return;
+    }
+    const resizeHandle = hitShapeResizeHandle(point);
+    if (resizeHandle) {
+      const selected = selectedElements()[0] as DrawingShapeElement;
+      beginMutation();
+      resizeStart = {
+        element: cloneDrawingElement(selected) as DrawingShapeElement,
+        handle: resizeHandle.handle,
+        anchor: oppositeShapeAnchor(selected, resizeHandle.handle),
+        current: resizeHandle.point,
+        start: resizeHandle.point,
+        constrained: event.shiftKey,
+      };
+      scheduleDraw();
+      return;
+    }
     const hit = hitElement(point);
     const additiveSelection = event.shiftKey || event.metaKey || event.ctrlKey;
     const wasSelected = Boolean(hit && selectedIds.value.includes(hit.id));
     const shouldEditSelectedText =
       !additiveSelection && hit?.kind === 'text' && wasSelected && selectedIds.value.length === 1;
+    const context = canvasRef.value?.getContext('2d');
+    const selectedBounds =
+      !additiveSelection && context && selectedIds.value.length
+        ? unionElementBounds(context, selectedElements())
+        : null;
+    if (!hit && selectedBounds && pointInRect(point, selectedBounds)) {
+      const originals = selectedElements().map((element) => cloneDrawingElement(element));
+      if (originals.length) {
+        beginMutation();
+        dragStart = {
+          x: point.x,
+          y: point.y,
+          elements: originals,
+          elementsById: new Map(originals.map((element) => [element.id, element])),
+          dx: 0,
+          dy: 0,
+        };
+      }
+      scheduleDraw();
+      return;
+    }
     if (!hit) {
       const baseIds = additiveSelection ? [...selectedIds.value] : [];
       setSelectedIds(baseIds);
@@ -940,7 +1467,7 @@
   }
 
   function handlePointerMove(event: PointerEvent) {
-    if (tool.value === 'eraser') {
+    if (tool.value === 'eraser' && !panStart) {
       eraserCursorPoint = canvasPoint(event);
       scheduleDraw();
     }
@@ -961,11 +1488,24 @@
       scheduleDraw();
       return;
     }
+    if (activeShape) {
+      const end = clampShapeEnd(activeShape, constrainDrawingShapeEnd(activeShape, canvasPoint(event), event.shiftKey));
+      activeShape.width = end.x - activeShape.x;
+      activeShape.height = end.y - activeShape.y;
+      scheduleDraw();
+      return;
+    }
     if (tool.value === 'eraser') {
       for (const sample of samples) eraseAt(canvasPoint(sample));
       return;
     }
     const point = canvasPoint(event);
+    if (resizeStart) {
+      resizeStart.current = point;
+      resizeStart.constrained = event.shiftKey;
+      scheduleDraw();
+      return;
+    }
     if (marqueeSelection) {
       marqueeSelection.current = point;
       scheduleDraw();
@@ -987,19 +1527,29 @@
     activePointerId = null;
     activeCanvasRect = null;
     panStart = null;
+    isPanning.value = false;
     return true;
   }
 
   function hasActiveGesture() {
     return Boolean(
       activePointerId !== null ||
-        activeStroke ||
-        mutationSnapshot ||
-        eraserPreviewElements ||
-        dragStart ||
-        marqueeSelection ||
-        panStart,
+      activeStroke ||
+      activeShape ||
+      mutationSnapshot ||
+      eraserPreviewElements ||
+      dragStart ||
+      resizeStart ||
+      marqueeSelection ||
+      panStart,
     );
+  }
+
+  function switchDrawingTool(nextTool: DrawingTool) {
+    if (hasActiveGesture()) return false;
+    tool.value = nextTool;
+    scheduleDraw();
+    return true;
   }
 
   function cancelActiveGesture() {
@@ -1023,13 +1573,16 @@
     activeCanvasRect = null;
     mutationSnapshot = '';
     activeStroke = null;
+    activeShape = null;
     activeStrokeMaxPairs = 0;
     eraserChanged = false;
     eraserLimitReached = false;
     eraserPreviewElements = null;
     dragStart = null;
+    resizeStart = null;
     marqueeSelection = null;
     panStart = null;
+    isPanning.value = false;
     editSelectedTextOnRelease = false;
     scheduleDraw();
     return true;
@@ -1042,6 +1595,41 @@
       activeStroke = null;
       activeStrokeMaxPairs = 0;
       emitScene();
+    } else if (activeShape) {
+      const isLinear = activeShape.shape === 'line' || activeShape.shape === 'arrow';
+      const isLargeEnough = isLinear
+        ? Math.hypot(activeShape.width, activeShape.height) >= SHAPE_MIN_SIZE
+        : Math.abs(activeShape.width) >= SHAPE_MIN_SIZE && Math.abs(activeShape.height) >= SHAPE_MIN_SIZE;
+      if (isLargeEnough) {
+        scene.value = { ...scene.value, elements: [...scene.value.elements, activeShape] };
+        emitScene();
+      } else {
+        mutationSnapshot = '';
+      }
+      activeShape = null;
+    } else if (resizeStart) {
+      const resized = resizedShapePreview();
+      const movedEnough =
+        Math.hypot(resizeStart.current.x - resizeStart.start.x, resizeStart.current.y - resizeStart.start.y) *
+          zoom.value >=
+        2;
+      const isLinear = resized?.shape === 'line' || resized?.shape === 'arrow';
+      const isLargeEnough = Boolean(
+        resized &&
+        (isLinear
+          ? Math.hypot(resized.width, resized.height) >= SHAPE_MIN_SIZE
+          : Math.abs(resized.width) >= SHAPE_MIN_SIZE && Math.abs(resized.height) >= SHAPE_MIN_SIZE),
+      );
+      if (resized && isLargeEnough && movedEnough) {
+        scene.value = {
+          ...scene.value,
+          elements: scene.value.elements.map((element) => (element.id === resized.id ? resized : element)),
+        };
+        emitScene();
+      } else {
+        mutationSnapshot = '';
+      }
+      resizeStart = null;
     } else if (marqueeSelection) {
       const context = canvasRef.value?.getContext('2d');
       if (context) setSelectedIds(marqueeSelectedIds(context, scene.value.elements));
@@ -1075,6 +1663,7 @@
     eraserLimitReached = false;
     eraserPreviewElements = null;
     dragStart = null;
+    resizeStart = null;
     marqueeSelection = null;
     editSelectedTextOnRelease = false;
     scheduleDraw();
@@ -1105,10 +1694,30 @@
         ? scene.value.elements.map((element) => (element.id === draft.id ? committedDraft : element))
         : [...scene.value.elements, committedDraft],
     };
-    setSelectedIds([draft.id]);
+    if (tool.value === 'select') setSelectedIds([draft.id]);
+    else selectedIds.value = [];
     textLayoutCache.clear();
     emitScene();
     scheduleDraw();
+  }
+
+  function cancelTextDraft(event: KeyboardEvent) {
+    if (!textDraft.value || event.isComposing || event.keyCode === 229) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const draftId = textDraft.value.id;
+    textDraft.value = null;
+    if (tool.value === 'select' && scene.value.elements.some((element) => element.id === draftId)) {
+      setSelectedIds([draftId]);
+    } else {
+      selectedIds.value = [];
+    }
+    scheduleDraw();
+    void nextTick(() => rootRef.value?.focus({ preventScroll: true }));
+  }
+
+  function handleTextDraftKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') cancelTextDraft(event);
   }
 
   function applyHistory(serialized: string, targetStack: string[]) {
@@ -1171,7 +1780,7 @@
     scene.value = { ...scene.value, elements: [...scene.value.elements, ...pasted] };
     setSelectedIds(pasted.map((element) => element.id));
     if (!emitScene()) setSelectedIds(previousSelection);
-    else tool.value = 'select';
+    else switchDrawingTool('select');
     scheduleDraw();
   }
 
@@ -1182,7 +1791,9 @@
     selectedIds.value = [];
     textDraft.value = null;
     eraserPreviewElements = null;
+    activeShape = null;
     dragStart = null;
+    resizeStart = null;
     marqueeSelection = null;
     textLayoutCache.clear();
     emitScene();
@@ -1204,7 +1815,7 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (props.readonly || textDraft.value) return;
+    if (props.readonly || textDraft.value || event.isComposing || event.keyCode === 229) return;
     const commandKey = event.metaKey || event.ctrlKey;
     const key = event.key.toLowerCase();
     if (commandKey && key === 'z') {
@@ -1220,7 +1831,7 @@
     }
     if (commandKey && key === 'a') {
       event.preventDefault();
-      tool.value = 'select';
+      switchDrawingTool('select');
       setSelectedIds(scene.value.elements.map((element) => element.id));
       scheduleDraw();
       return;
@@ -1238,6 +1849,11 @@
     if (commandKey && key === 'v') {
       event.preventDefault();
       pasteDrawingElements();
+      return;
+    }
+    if (!commandKey && !event.altKey && !event.shiftKey && (key === 'p' || key === 'v')) {
+      if (!switchDrawingTool(key === 'p' ? 'pen' : 'select')) return;
+      event.preventDefault();
       return;
     }
     if (event.key === 'Escape') {
@@ -1343,10 +1959,12 @@
     { immediate: true },
   );
 
-  watch(tool, () => {
-    colorPopoverOpen.value = false;
-    sizePopoverOpen.value = false;
+  watch(tool, (nextTool) => {
+    stylePopoverOpen.value = false;
+    styleDrawerOpen.value = false;
+    if (nextTool !== 'shape') shapePopoverOpen.value = false;
     eraserCursorPoint = null;
+    if (nextTool !== 'select') selectedIds.value = [];
     scheduleDraw();
   });
 
@@ -1370,6 +1988,7 @@
   onBeforeUnmount(() => {
     workspaceResizeObserver?.disconnect();
     if (frameId) cancelAnimationFrame(frameId);
+    if (zoomResizeFrame) cancelAnimationFrame(zoomResizeFrame);
   });
 
   defineExpose({ exportJson, exportPng, replaceContentWithUndo });
@@ -1400,14 +2019,45 @@
     gap: 5px;
     min-width: 0;
     padding: 8px 10px;
-    overflow-x: auto;
+    overflow: hidden;
     border-bottom: 1px solid var(--surface-border-color, var(--card-border-color));
     background: var(--card-background);
-    scrollbar-width: thin;
+  }
+
+  .drawing-toolbar-scroll {
+    display: flex;
+    flex: 0 1 auto;
+    align-items: center;
+    min-width: 0;
+    gap: 5px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+  }
+
+  .drawing-toolbar-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .drawing-toolbar-history,
+  .drawing-toolbar-zoom {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .drawing-toolbar-history {
+    padding-left: 8px;
+    border-left: 1px solid var(--surface-border-color, var(--card-border-color));
+  }
+
+  .drawing-toolbar-zoom {
+    margin-left: auto;
   }
 
   .drawing-tool-button,
-  .drawing-color-button,
+  .drawing-style-trigger,
   .drawing-value-button {
     flex: 0 0 auto;
     min-width: 30px;
@@ -1420,22 +2070,34 @@
   }
 
   .drawing-tool-button.is-active,
-  .drawing-color-preset.is-active,
-  .drawing-size-option.is-active {
+  .drawing-shape-option.is-active {
     color: var(--primary-color);
     border-color: var(--primary-color) !important;
     background: var(--primary-btn-h-bg-color);
   }
 
-  .drawing-color-button {
-    padding: 0;
+  .drawing-style-trigger {
+    gap: 5px;
+    min-width: 48px;
+    padding-inline: 7px;
   }
 
   .drawing-color-dot {
+    flex: 0 0 auto;
     width: 14px;
     height: 14px;
     border: 1px solid rgba(0, 0, 0, 0.14);
     border-radius: 50%;
+  }
+
+  .drawing-style-size {
+    flex: 0 0 24px;
+    width: 24px;
+    color: var(--desc-color);
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+    line-height: 1;
+    text-align: right;
   }
 
   .drawing-toolbar-separator {
@@ -1446,10 +2108,6 @@
     background: var(--surface-border-color, var(--card-border-color));
   }
 
-  .drawing-toolbar-spacer {
-    flex: 1 0 12px;
-  }
-
   .drawing-zoom-label {
     flex: 0 0 42px;
     color: var(--desc-color);
@@ -1457,69 +2115,94 @@
     text-align: center;
   }
 
-  .drawing-color-panel,
-  .drawing-size-panel {
-    width: 236px;
+  .drawing-shape-panel {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 268px;
     padding: 12px;
     box-sizing: border-box;
-    display: grid;
-    gap: 10px;
+    gap: 8px;
     color: var(--text-color);
     font-size: 12px;
   }
 
-  .drawing-color-presets,
-  .drawing-size-options {
+  .drawing-shape-option {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-  }
-
-  .drawing-color-preset,
-  .drawing-size-option {
-    flex: 0 0 44px;
-    width: 44px;
-    min-width: 44px;
-    height: 44px;
-    min-height: 44px;
-    padding: 0;
-    border: 1px solid var(--surface-border-color, var(--card-border-color)) !important;
-    border-radius: 10px;
-    background: var(--card-background);
-  }
-
-  .drawing-color-preset .drawing-color-dot {
-    width: 20px;
-    height: 20px;
-  }
-
-  .drawing-size-range-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .drawing-size-range {
-    flex: 1 1 auto;
     min-width: 0;
-    height: 28px;
-    margin: 0;
-    accent-color: #615ced;
-    cursor: pointer;
-  }
-
-  .drawing-size-current {
-    flex: 0 0 42px;
-    color: var(--desc-color);
-    text-align: right;
-  }
-
-  .drawing-custom-color :deep(.b-input) {
-    padding: 3px !important;
-    border: 1px solid var(--surface-border-color) !important;
+    height: 42px;
+    padding: 0 10px;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    border: 1px solid var(--surface-border-color, var(--card-border-color)) !important;
     background: var(--card-background);
-    cursor: pointer;
+  }
+
+  .drawing-help-button {
+    width: 30px;
+    min-width: 30px;
+    max-width: 30px;
+    padding: 0;
+    color: var(--primary-color, #615ced);
+    border-radius: 6px;
+    background: var(--primary-btn-bg-color);
+    box-shadow: none;
+  }
+
+  .drawing-help-panel {
+    display: grid;
+    width: min(340px, calc(100vw - 24px));
+    max-height: min(70vh, 520px);
+    padding: 14px;
+    overflow: auto;
+    box-sizing: border-box;
+    gap: 12px;
+    color: var(--text-color);
+    font-size: 12px;
+  }
+
+  .drawing-help-panel dl {
+    display: grid;
+    margin: 0;
+    gap: 8px;
+  }
+
+  .drawing-help-panel dl > div {
+    display: grid;
+    grid-template-columns: minmax(108px, auto) 1fr;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .drawing-help-panel dt,
+  .drawing-help-panel dd {
+    margin: 0;
+  }
+
+  .drawing-help-panel dt {
+    color: var(--text-color);
+    font-weight: 600;
+  }
+
+  .drawing-help-panel dd {
+    color: var(--desc-color);
+  }
+
+  .drawing-help-panel kbd {
+    padding: 2px 5px;
+    border: 1px solid var(--surface-border-color, var(--card-border-color));
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    color: var(--text-color);
+    background: var(--surface-panel-bg, #f4f5f7);
+    font-family: inherit;
+    font-size: 11px;
+  }
+
+  .drawing-help-clear {
+    display: none;
+    justify-self: stretch;
+    width: 100%;
   }
 
   .drawing-workspace {
@@ -1562,7 +2245,8 @@
   }
 
   .drawing-canvas.is-tool-pen,
-  .drawing-canvas.is-tool-text {
+  .drawing-canvas.is-tool-text,
+  .drawing-canvas.is-tool-shape {
     cursor: crosshair;
   }
 
@@ -1579,6 +2263,10 @@
   }
 
   .drawing-canvas.is-tool-hand:active {
+    cursor: grabbing;
+  }
+
+  .drawing-canvas.is-panning {
     cursor: grabbing;
   }
 
@@ -1612,8 +2300,7 @@
     }
 
     .drawing-tool-button.is-active,
-    .drawing-color-preset.is-active,
-    .drawing-size-option.is-active {
+    .drawing-shape-option.is-active {
       color: #615ced;
       border-color: #615ced !important;
       background: #eeedff;
@@ -1630,6 +2317,27 @@
       padding-inline: 8px;
     }
 
+    .drawing-toolbar-scroll {
+      padding-right: 8px;
+      box-shadow: inset -12px 0 10px -13px rgba(31, 41, 55, 0.5);
+    }
+
+    .drawing-toolbar-history {
+      position: relative;
+      z-index: 1;
+      padding-left: 6px;
+      background: var(--card-background);
+    }
+
+    .drawing-toolbar-zoom,
+    .drawing-clear-desktop {
+      display: none;
+    }
+
+    .drawing-help-clear {
+      display: flex;
+    }
+
     .drawing-workspace {
       padding: 12px;
     }
@@ -1639,9 +2347,8 @@
       left: 12px;
     }
 
-    .drawing-color-panel,
-    .drawing-size-panel {
-      width: min(236px, calc(100vw - 24px));
+    .drawing-shape-panel {
+      width: min(286px, calc(100vw - 24px));
     }
   }
 </style>

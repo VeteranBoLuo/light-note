@@ -54,104 +54,138 @@
         （逾期 + 今天）。统计口径不变，只收口用户可见文案。
         内部命名沿用 todaySummary*，留给后续专门的工作台命名重构，不在此处机械改名。
       -->
-      <section class="today-summary" :aria-label="t('workbench.panel.actionOverview')">
-        <div class="today-summary-heading">
-          <span class="today-summary-heading__icon" aria-hidden="true">
-            <SvgIcon :src="icon.noteDetail.toolbar.todo" size="22" />
-          </span>
-          <span class="today-summary-heading__copy">
-            <strong>{{ t('workbench.panel.actionOverview') }}</strong>
-            <small>{{ t('workbench.panel.actionOverviewHint') }}</small>
-          </span>
-          <span class="today-summary-total">
-            <strong>{{ displayCount(inbox.actionTotal) }}</strong>
-            <small>{{ t('workbench.today.actionTotalUnit') }}</small>
-          </span>
-        </div>
-        <div class="today-summary-grid">
-          <BButton
-            v-for="item in todaySummaryItems"
-            :key="item.key"
-            class="today-summary-item"
-            :class="`today-summary-item--${item.key}`"
-            @click="openTodaySummaryItem(item.key)"
-          >
-            <span class="today-summary-item__icon" aria-hidden="true">
-              <SvgIcon :src="item.icon" size="17" />
+      <section class="workbench-first-fold">
+        <section class="today-summary" :aria-label="t('workbench.panel.actionOverview')">
+          <div class="today-summary-heading">
+            <span class="today-summary-heading__icon" aria-hidden="true">
+              <SvgIcon :src="icon.noteDetail.toolbar.todo" size="22" />
             </span>
-            <span class="today-summary-item__copy">
-              <span>{{ item.label }}</span>
-              <small>{{ item.hint }}</small>
+            <span class="today-summary-heading__copy">
+              <strong>{{ t('workbench.panel.actionOverview') }}</strong>
+              <small>{{ t('workbench.panel.actionOverviewHint') }}</small>
             </span>
-            <strong>{{ item.value }}</strong>
-          </BButton>
-        </div>
-        <div class="today-summary-body">
-          <div class="today-summary-details">
-            <!-- 只传待整理总数：summary 接口的 todoPendingTotal 是「全部未完成」，
-                 不是这里展示的「逾期 + 今天」，传错反而误导；待办计数回落到明细条数。 -->
-            <TodayActionSection
-              :inbox-total="todayStats.inboxPendingTotal"
-              :overdue-todos="todayOverdueTodos"
-              :due-today-todos="todayDueTodos"
-              :inbox-items="todayInboxItems"
-              :loading="summaryLoading"
-              :show-header="false"
-              contained
-              @refresh="fetchWorkbenchSummary"
-            />
+            <span class="today-summary-total">
+              <strong>{{ displayCount(inbox.actionTotal) }}</strong>
+              <small>{{ t('workbench.today.actionTotalUnit') }}</small>
+            </span>
           </div>
-
-          <article class="today-continue">
-            <div class="panel-header today-continue__header">
-              <div>
-                <h2>{{ t('workbench.panel.continueWorking') }}</h2>
-                <p>{{ t('workbench.panel.continueHint') }}</p>
-              </div>
-              <BButton size="small" class="quiet-button" @click="openActiveCollection">
-                {{ t('workbench.panel.viewAll') }}
-              </BButton>
-            </div>
-
-            <BTabs v-model:active-tab="activeContinueTab" variant="pill" :options="continueTabOptions" />
-
-            <div v-if="summaryLoading" class="content-list content-list--loading content-list--distributed">
-              <div v-for="index in CONTINUE_ITEM_LIMIT" :key="`content-skeleton-${index}`" class="content-skeleton-row">
-                <span class="skeleton-block skeleton-row-icon"></span>
-                <span class="content-skeleton-copy">
-                  <span class="skeleton-block content-skeleton-title"></span>
-                  <span class="skeleton-block content-skeleton-subtitle"></span>
-                </span>
-                <span class="skeleton-block skeleton-row-meta"></span>
-              </div>
-            </div>
-            <div
-              v-else-if="activeContinueItems.length"
-              class="content-list"
-              :class="{ 'content-list--distributed': activeContinueItems.length === CONTINUE_ITEM_LIMIT }"
+          <div class="today-summary-grid">
+            <BButton
+              v-for="item in todaySummaryItems"
+              :key="item.key"
+              class="today-summary-item"
+              :class="`today-summary-item--${item.key}`"
+              @click="openTodaySummaryItem(item.key)"
             >
-              <BButton
-                v-for="item in activeContinueItems"
-                :key="item.key"
-                class="content-row"
-                @click="openContinueItem(item)"
-              >
-                <span class="content-row-icon" :class="`content-row-icon--${item.type}`">
-                  <SvgIcon :src="item.icon" size="18" />
-                </span>
-                <span class="content-row-main">
-                  <strong>{{ item.title }}</strong>
-                  <span>{{ item.description }}</span>
-                </span>
-                <span class="content-row-meta">{{ item.meta }}</span>
-              </BButton>
+              <span class="today-summary-item__icon" aria-hidden="true">
+                <SvgIcon :src="item.icon" size="17" />
+              </span>
+              <span class="today-summary-item__copy">
+                <span>{{ item.label }}</span>
+                <small>{{ item.hint }}</small>
+              </span>
+              <strong>{{ item.value }}</strong>
+            </BButton>
+          </div>
+          <div class="today-summary-body">
+            <div class="today-summary-details">
+              <!-- 只传待整理总数：summary 接口的 todoPendingTotal 是「全部未完成」，
+                 不是这里展示的「逾期 + 今天」，传错反而误导；待办计数回落到明细条数。 -->
+              <TodayActionSection
+                :inbox-total="todayStats.inboxPendingTotal"
+                :overdue-todos="todayOverdueTodos"
+                :due-today-todos="todayDueTodos"
+                :inbox-items="todayInboxItems"
+                :loading="summaryLoading"
+                :show-header="false"
+                contained
+                @refresh="fetchWorkbenchSummary"
+              />
             </div>
-            <div v-else class="compact-empty compact-empty--continue">
-              <strong>{{ t('workbench.empty.continueTitle') }}</strong>
-              <span>{{ t('workbench.empty.continueDesc') }}</span>
+
+            <article class="today-continue">
+              <div class="panel-header today-continue__header">
+                <div>
+                  <h2>{{ t('workbench.panel.continueWorking') }}</h2>
+                  <p>{{ t('workbench.panel.continueHint') }}</p>
+                </div>
+                <BButton size="small" class="quiet-button" @click="openActiveCollection">
+                  {{ t('workbench.panel.viewAll') }}
+                </BButton>
+              </div>
+
+              <BTabs v-model:active-tab="activeContinueTab" variant="pill" :options="continueTabOptions" />
+
+              <div v-if="summaryLoading" class="content-list content-list--loading content-list--distributed">
+                <div
+                  v-for="index in CONTINUE_ITEM_LIMIT"
+                  :key="`content-skeleton-${index}`"
+                  class="content-skeleton-row"
+                >
+                  <span class="skeleton-block skeleton-row-icon"></span>
+                  <span class="content-skeleton-copy">
+                    <span class="skeleton-block content-skeleton-title"></span>
+                    <span class="skeleton-block content-skeleton-subtitle"></span>
+                  </span>
+                  <span class="skeleton-block skeleton-row-meta"></span>
+                </div>
+              </div>
+              <div
+                v-else-if="activeContinueItems.length"
+                class="content-list"
+                :class="{ 'content-list--distributed': activeContinueItems.length === CONTINUE_ITEM_LIMIT }"
+              >
+                <BButton
+                  v-for="item in activeContinueItems"
+                  :key="item.key"
+                  class="content-row"
+                  @click="openContinueItem(item)"
+                >
+                  <span class="content-row-icon" :class="`content-row-icon--${item.type}`">
+                    <SvgIcon :src="item.icon" size="18" />
+                  </span>
+                  <span class="content-row-main">
+                    <strong>{{ item.title }}</strong>
+                    <span>{{ item.description }}</span>
+                  </span>
+                  <span class="content-row-meta">{{ item.meta }}</span>
+                </BButton>
+              </div>
+              <div v-else class="compact-empty compact-empty--continue">
+                <strong>{{ t('workbench.empty.continueTitle') }}</strong>
+                <span>{{ t('workbench.empty.continueDesc') }}</span>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <aside class="workbench-first-fold__rail" :aria-label="t('workbench.panel.quickCreate')">
+          <article class="panel-card quick-create-panel">
+            <div class="panel-header">
+              <div>
+                <h2>{{ t('workbench.panel.quickCreate') }}</h2>
+                <p>{{ t('workbench.panel.quickCreateHint') }}</p>
+              </div>
+            </div>
+            <div class="quick-create-grid">
+              <BButton
+                v-for="action in quickCreateActions"
+                :key="action.key"
+                class="quick-create-action"
+                @click="openQuickCapture(action.type)"
+              >
+                <span class="quick-create-icon" :class="`quick-create-icon--${action.key}`">
+                  <SvgIcon :src="action.icon" size="19" />
+                </span>
+                <span>
+                  <strong>{{ action.label }}</strong>
+                  <small>{{ action.desc }}</small>
+                </span>
+              </BButton>
             </div>
           </article>
-        </div>
+          <WorkbenchGrowth expanded />
+        </aside>
       </section>
 
       <section v-if="growthSectionLoading" class="growth-task-grid growth-task-grid--loading" aria-hidden="true">
@@ -204,8 +238,8 @@
         </article>
       </section>
 
-      <section class="primary-grid">
-        <section class="summary-grid" :aria-label="t('workbench.panel.resourceOverview')">
+      <section class="primary-grid" :aria-label="t('workbench.panel.resourceOverview')">
+        <section class="summary-grid">
           <template v-if="summaryLoading">
             <div v-for="index in 4" :key="`summary-skeleton-${index}`" class="summary-card summary-skeleton">
               <div class="summary-skeleton__header">
@@ -266,34 +300,6 @@
             </div>
           </RouterLink>
         </section>
-
-        <aside class="side-column">
-          <article class="panel-card quick-create-panel">
-            <div class="panel-header">
-              <div>
-                <h2>{{ t('workbench.panel.quickCreate') }}</h2>
-                <p>{{ t('workbench.panel.quickCreateHint') }}</p>
-              </div>
-            </div>
-            <div class="quick-create-grid">
-              <BButton
-                v-for="action in quickCreateActions"
-                :key="action.key"
-                class="quick-create-action"
-                @click="openQuickCapture(action.type)"
-              >
-                <span class="quick-create-icon" :class="`quick-create-icon--${action.key}`">
-                  <SvgIcon :src="action.icon" size="19" />
-                </span>
-                <span>
-                  <strong>{{ action.label }}</strong>
-                  <small>{{ action.desc }}</small>
-                </span>
-              </BButton>
-            </div>
-          </article>
-          <WorkbenchGrowth />
-        </aside>
       </section>
 
       <section class="analytics-section">
@@ -1170,6 +1176,27 @@
     border-color: transparent;
   }
 
+  .workbench-first-fold {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(330px, 0.29fr);
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .workbench-first-fold__rail {
+    min-width: 0;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    align-content: stretch;
+    align-self: stretch;
+    gap: 12px;
+  }
+
+  .workbench-first-fold__rail :deep(.growth-card) {
+    height: 100%;
+  }
+
   .today-summary {
     position: relative;
     overflow: hidden;
@@ -1387,8 +1414,7 @@
   .summary-grid {
     min-width: 0;
     display: grid;
-    grid-column: span 2;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     grid-auto-rows: minmax(176px, 1fr);
     gap: 12px;
   }
@@ -1799,17 +1825,9 @@
 
   .primary-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
     align-items: stretch;
-  }
-
-  .side-column {
-    min-width: 0;
-    grid-column: span 1;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
   }
 
   .panel-card {
@@ -1991,7 +2009,7 @@
   }
 
   .quick-create-panel {
-    flex: 1 1 auto;
+    height: auto;
   }
 
   .quick-create-grid {
@@ -2002,7 +2020,7 @@
 
   .quick-create-action {
     width: 100%;
-    height: 66px;
+    height: 58px;
     padding: 0 10px;
     gap: 9px;
     justify-content: flex-start;
@@ -2344,24 +2362,25 @@
     }
   }
 
-  @media (max-width: 1180px) {
-    .primary-grid {
-      grid-template-columns: 1fr;
+  @media (max-width: 1380px) {
+    .workbench-first-fold {
+      grid-template-columns: minmax(0, 1fr);
     }
 
-    .summary-grid,
-    .side-column {
-      grid-column: auto;
-    }
-
-    .side-column {
+    .workbench-first-fold__rail {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-rows: minmax(0, 1fr);
       align-items: stretch;
+      align-self: stretch;
     }
 
     .quick-create-panel {
       height: 100%;
+    }
+
+    .summary-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 
@@ -2393,9 +2412,17 @@
 
     .summary-grid,
     .today-summary-grid,
-    .side-column,
+    .workbench-first-fold__rail,
     .lower-grid {
       grid-template-columns: 1fr;
+    }
+
+    .workbench-first-fold__rail {
+      grid-template-rows: auto;
+    }
+
+    .workbench-first-fold__rail :deep(.growth-card) {
+      height: auto;
     }
 
     .today-summary-grid {

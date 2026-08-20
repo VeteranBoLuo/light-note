@@ -80,6 +80,25 @@ export function scrollIntoContainer(
 }
 
 /**
+ * 把目标元素中心对齐到指定滚动容器的可视中心；用于画纸、海报等整体内容的首次落点。
+ * 只滚动调用方传入的容器，并限制到合法滚动范围，避免目标较短或靠近边缘时产生过量位移。
+ */
+export function scrollCenterIntoContainer(
+  container: HTMLElement,
+  el: HTMLElement,
+  behavior: ScrollBehavior = 'auto',
+): void {
+  const containerRect = container.getBoundingClientRect();
+  const elementRect = el.getBoundingClientRect();
+  const zoom = getRootZoom();
+  const centerDelta =
+    (elementRect.top + elementRect.height / 2 - (containerRect.top + containerRect.height / 2)) / zoom;
+  const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+  const top = Math.max(0, Math.min(maxScrollTop, container.scrollTop + centerDelta));
+  container.scrollTo({ top, behavior });
+}
+
+/**
  * 仅当目标元素越出滚动容器可视区时，把它移动到最近边缘。
  *
  * 与原生 `scrollIntoView({ block: 'nearest' })` 相比，这里只滚动调用方明确传入的容器，

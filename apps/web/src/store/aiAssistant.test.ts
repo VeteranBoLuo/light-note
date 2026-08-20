@@ -10,7 +10,6 @@ import useAiAssistantStore, {
   resolveAiAssistantSourceSetId,
   resolveAiAssistantRequestEdgeStatus,
   resolveAiAssistantIdentity,
-  shouldOfferAiAssistantSourceSetCandidate,
   type AiAssistantIdentity,
 } from './aiAssistant';
 
@@ -169,16 +168,12 @@ describe('材料生命周期:默认一次性(P0-A/B)', () => {
       },
     ];
 
-    expect(shouldOfferAiAssistantSourceSetCandidate('不够详细，重新生成')).toBe(true);
-    expect(shouldOfferAiAssistantSourceSetCandidate('今天天气怎么样')).toBe(false);
-    expect(shouldOfferAiAssistantSourceSetCandidate('请详细介绍深圳旅游')).toBe(false);
-    expect(shouldOfferAiAssistantSourceSetCandidate('补充一个新的待办')).toBe(false);
     expect(resolveAiAssistantFollowUpMaterialSnapshot(messages)?.contextRefs).toEqual([
       { type: 'bookmark', id: 'bookmark-1', title: '示例书签' },
     ]);
   });
 
-  it('完整的新范围查询不提交旧 Source Set，明确承接才提交服务端候选', () => {
+  it('只提交服务端 Source Set 稳定句柄，把省略式承接与独立请求留给服务端语义判断', () => {
     const sourceSetId = 'd7f5f8f6-4ca0-4d14-8a4d-88c813e3b001';
     const messages = [
       {
@@ -200,9 +195,7 @@ describe('材料生命周期:默认一次性(P0-A/B)', () => {
       },
     ];
 
-    expect(resolveAiAssistantSourceSetCandidateId(messages, '查看最近 7 天书签的详细链接')).toBe('');
-    expect(resolveAiAssistantSourceSetCandidateId(messages, '继续分析这些材料')).toBe(sourceSetId);
-    expect(resolveAiAssistantSourceSetCandidateId(messages, '把上面第二个翻译成英文')).toBe(sourceSetId);
+    expect(resolveAiAssistantSourceSetCandidateId(messages)).toBe(sourceSetId);
   });
 
   it('工作区回答的公开引用不能反向冒充 Source Set 候选', () => {
@@ -219,7 +212,7 @@ describe('材料生命周期:默认一次性(P0-A/B)', () => {
       },
     ];
 
-    expect(resolveAiAssistantSourceSetCandidateId(messages, '继续查看这些书签')).toBe('');
+    expect(resolveAiAssistantSourceSetCandidateId(messages)).toBe('');
     expect(resolveAiAssistantFollowUpMaterialSnapshot(messages)).toBeNull();
   });
 

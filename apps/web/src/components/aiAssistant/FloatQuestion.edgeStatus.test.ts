@@ -9,6 +9,7 @@ import useUserStore from '@/store/useUser';
 import { openAiAssistant } from '@/utils/aiEntry';
 
 const applyLaunchContext = vi.fn(async () => undefined);
+const telemetryMocks = vi.hoisted(() => ({ recordAiProductEvent: vi.fn(async () => undefined) }));
 
 vi.mock('@/store', async () => {
   const { default: useAiAssistantStore } = await import('@/store/aiAssistant');
@@ -21,22 +22,21 @@ vi.mock('@/store', async () => {
 });
 
 vi.mock('@/api/commonApi.ts', () => ({ recordOperation: vi.fn() }));
-vi.mock('@/api/aiTelemetry.ts', () => ({ recordAiProductEvent: vi.fn(async () => undefined) }));
+vi.mock('@/api/aiTelemetry.ts', () => ({ recordAiProductEvent: telemetryMocks.recordAiProductEvent }));
 vi.mock('@/components/base/BasicComponents/BDrawer.vue', async () => {
   const { h } = await import('vue');
   return {
     default: {
       name: 'BDrawer',
       props: { open: Boolean, fullScreen: Boolean },
-      setup: (
-        props: { open?: boolean; fullScreen?: boolean },
-        { slots }: { slots: Record<string, () => unknown> },
-      ) => () =>
-        h(
-          'div',
-          { class: 'mock-drawer', 'data-full-screen': String(props.fullScreen) },
-          props.open ? [slots['header-actions']?.(), slots.default?.()] : [],
-        ),
+      setup:
+        (props: { open?: boolean; fullScreen?: boolean }, { slots }: { slots: Record<string, () => unknown> }) =>
+        () =>
+          h(
+            'div',
+            { class: 'mock-drawer', 'data-full-screen': String(props.fullScreen) },
+            props.open ? [slots['header-actions']?.(), slots.default?.()] : [],
+          ),
     },
   };
 });
@@ -70,16 +70,20 @@ afterEach(() => {
 beforeEach(() => {
   localStorage.clear();
   applyLaunchContext.mockClear();
+  telemetryMocks.recordAiProductEvent.mockClear();
   (window as Window & { __PRERENDER__?: boolean }).__PRERENDER__ = true;
   if (!window.requestAnimationFrame) window.requestAnimationFrame = (callback) => window.setTimeout(callback, 0);
 });
 
-function mountEdge(locale: 'zh-CN' | 'en-US' = 'zh-CN', aiDefaultFullscreen = false) {
+function mountEdge(locale: 'zh-CN' | 'en-US' = 'zh-CN', aiDefaultFullscreen = false, authenticated = false) {
   const pinia = createPinia();
   setActivePinia(pinia);
   const store = useAiAssistantStore();
   const user = useUserStore();
-  user.$patch({ preferences: { ...user.preferences, aiDefaultFullscreen } });
+  user.$patch({
+    ...(authenticated ? { id: 'user-a', role: 'user' } : { id: '', role: 'visitor' }),
+    preferences: { ...user.preferences, aiDefaultFullscreen },
+  });
   store.switchConversation(
     {
       actorUserId: 'root-user',
@@ -115,6 +119,21 @@ function edgeButton(host: HTMLElement) {
 }
 
 describe('FloatQuestion edge status contract', () => {
+  it('只为已登录账号发送 AI 入口曝光，游客不产生注定失败请求', async () => {
+    mountEdge();
+    await nextTick();
+    expect(telemetryMocks.recordAiProductEvent).not.toHaveBeenCalled();
+
+    cleanup?.();
+    cleanup = undefined;
+    mountEdge('zh-CN', false, true);
+    await nextTick();
+    expect(telemetryMocks.recordAiProductEvent).toHaveBeenCalledWith(
+      'ai_entry_impression',
+      expect.objectContaining({ surface: 'edge' }),
+    );
+  });
+
   it.each([
     ['generating', '正在生成回答'],
     ['completed', '回答已完成，打开查看'],

@@ -334,8 +334,7 @@ export async function noteSummaryText(
       const { parseDrawingScene } = await import('@lightnote/shared/drawing-note');
       const scene = parseDrawingScene(content);
       const text = scene.elements
-        .filter((element) => element.kind === 'text')
-        .map((element) => element.text.trim())
+        .flatMap((element) => (element.kind === 'text' ? [element.text.trim()] : []))
         .filter(Boolean)
         .join(singleLine ? ' ' : '\n');
       return truncateSummary(text, maxLength);

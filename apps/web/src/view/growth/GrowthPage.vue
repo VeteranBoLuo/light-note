@@ -48,6 +48,7 @@
                   <SvgIcon :src="section.icon" size="17" />
                 </span>
                 <span class="growth-side-nav-label">{{ section.label }}</span>
+                <span v-if="section.badge !== undefined" class="growth-side-nav-badge">{{ section.badge }}</span>
                 <SvgIcon
                   v-if="section.key === 'rewards'"
                   class="growth-side-nav-chevron"
@@ -188,16 +189,18 @@
                 <h2>{{ t('growth.taskCenterTitle') }}</h2>
                 <p>{{ t('growth.taskCenterSubtitle') }}</p>
               </div>
-              <BButton
-                v-if="claimableCount > 0"
-                type="primary"
-                :loading="claimingRewards"
-                :disabled="isAdminContext || claimingRewards"
-                @click="onClaimAll"
-              >
-                <SvgIcon :src="icon.growth.reward" size="15" />
-                {{ t('growth.claimAllCount', { n: claimableCount }) }}
-              </BButton>
+              <BTooltip v-if="claimableCount > 0" :title="claimAllTooltip" :disabled="!bookmark.isDesktop" :delay="160">
+                <BButton
+                  class="growth-claim-all"
+                  type="primary"
+                  :loading="claimingRewards"
+                  :disabled="isAdminContext || claimingRewards"
+                  @click="onClaimAll"
+                >
+                  <SvgIcon :src="icon.growth.reward" size="15" />
+                  {{ t('growth.claimAllCount', { n: claimableCount }) }}
+                </BButton>
+              </BTooltip>
             </header>
 
             <section v-if="!dashboard && (dashboardLoading || !dashboardError)" class="growth-panel growth-state">
@@ -239,8 +242,8 @@
               />
             </section>
 
-            <section class="growth-panel">
-              <WeeklyChallenge :read-only="isAdminContext" />
+            <section id="growth-weekly" class="growth-panel">
+              <WeeklyChallenge :read-only="isAdminContext" @loaded="handleWeeklyLoaded" />
             </section>
           </template>
 
@@ -340,11 +343,13 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { recordOperation } from '@/api/commonApi.ts';
   import { useGrowth } from '@/composables/useGrowth.ts';
+  import { useGrowthClaimFeedback } from '@/composables/useGrowthClaimFeedback';
   import WeeklyReportModal from '@/components/growth/WeeklyReportModal.vue';
   import growthApi from '@/api/growthApi.ts';
   import { bookmarkStore, useUserStore } from '@/store';
@@ -356,7 +361,7 @@
 
   type GrowthSection = 'overview' | 'tasks' | 'achievements' | 'rewards';
   type RewardSection = 'center' | 'shop' | 'lottery' | 'inventory' | 'ledger';
-  type GrowthNavOption<T extends string> = { key: T; label: string; icon: string };
+  type GrowthNavOption<T extends string> = { key: T; label: string; icon: string; badge?: number };
 
   const { t } = useI18n();
   const route = useRoute();
@@ -379,17 +384,25 @@
   const growthPageRef = ref<HTMLElement | null>(null);
   const growthMainRef = ref<HTMLElement | null>(null);
   const useWideDesktopLayout = computed(() => bookmark.isDesktop && !bookmark.isCompactLayout);
-  const sectionOptions = computed<GrowthNavOption<GrowthSection>[]>(() => [
-    { key: 'overview', label: t('growth.mobileTabOverview'), icon: icon.growth.rank },
-    { key: 'tasks', label: t('growth.mobileTabTasks'), icon: icon.growth.action },
-    { key: 'achievements', label: t('growth.mobileTabAchievements'), icon: icon.growth.level },
-    {
-      key: 'rewards',
-      label:
-        growthV2Enabled.value && !bookmark.isMobile ? t('growth.assetsRewardsTitle') : t('growth.mobileTabRewards'),
-      icon: icon.growth.reward,
-    },
-  ]);
+  const sectionOptions = computed<GrowthNavOption<GrowthSection>[]>(() => {
+    const achievementBadge = achievementClaimableCount.value;
+    return [
+      { key: 'overview', label: t('growth.mobileTabOverview'), icon: icon.growth.rank },
+      { key: 'tasks', label: t('growth.mobileTabTasks'), icon: icon.growth.action },
+      {
+        key: 'achievements',
+        label: t('growth.mobileTabAchievements'),
+        icon: icon.growth.level,
+        badge: achievementBadge > 0 ? achievementBadge : undefined,
+      },
+      {
+        key: 'rewards',
+        label:
+          growthV2Enabled.value && !bookmark.isMobile ? t('growth.assetsRewardsTitle') : t('growth.mobileTabRewards'),
+        icon: icon.growth.reward,
+      },
+    ];
+  });
   const rewardSectionOptions = computed<GrowthNavOption<RewardSection>[]>(() => {
     const options: GrowthNavOption<RewardSection>[] = [
       { key: 'center', label: t('growth.rewardTabPointsCenter'), icon: icon.growth.coin },
@@ -444,6 +457,8 @@
   );
   const showRecap = computed(() => hasRecap.value);
   const claimableCount = computed(() => Number(claimable.value?.count || 0));
+  const { achievementClaimableCount, claimAllTooltip, snapshotClaimableBreakdown, claimSuccessMessage } =
+    useGrowthClaimFeedback(claimable);
   const lowPressureMode = computed(() => Boolean(preferences.value?.lowPressureMode));
   const freeLotteryRemaining = computed(() => Number(lottery.value?.freeRemaining || 0));
   const preferencesSaving = ref(false);
@@ -451,6 +466,7 @@
 
   function sectionForHash(hash: string): GrowthSection | null {
     if (hash === '#growth-tasks') return 'tasks';
+    if (hash === '#growth-weekly') return 'tasks';
     if (hash === '#growth-heatmap') return 'overview';
     if (hash === '#growth-recap') return growthV2Enabled.value ? 'overview' : 'achievements';
     return null;
@@ -465,8 +481,15 @@
       activeSection.value = targetSection;
     }
     void nextTick(() => {
-      document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document
+        .getElementById(targetId)
+        ?.scrollIntoView({ behavior: 'smooth', block: route.hash === '#growth-weekly' ? 'end' : 'start' });
     });
+  }
+
+  function handleWeeklyLoaded() {
+    // 每周挑战会在挂载后异步撑开；数据回来后再对齐一次，避免只滚到加载占位的位置。
+    if (route.hash === '#growth-weekly') scrollToHash();
   }
 
   function refreshOverview() {
@@ -568,19 +591,20 @@
 
   async function onClaimAll() {
     if (isAdminContext.value || claimingRewards.value) return;
+    const pendingBreakdown = snapshotClaimableBreakdown();
     try {
       const res = await claimAllRewards();
       if (res?.status === 200 && res.data?.ok) {
         const claimed = Number(res.data.claimed || 0);
         if (claimed > 0) {
-          const frameCount = Array.isArray(res.data.frames) ? res.data.frames.length : 0;
+          const sourceMessage = claimSuccessMessage(res.data.receipts, pendingBreakdown);
           message.success(
-            t(frameCount > 0 ? 'growth.claimAllSuccessWithFrames' : 'growth.claimAllSuccess', {
-              n: claimed,
-              exp: Number(res.data.exp || 0),
-              points: Number(res.data.points || 0),
-              frames: frameCount,
-            }),
+            sourceMessage ||
+              t('growth.claimAllSuccess', {
+                n: claimed,
+                exp: Number(res.data.exp || 0),
+                points: Number(res.data.points || 0),
+              }),
           );
           recordOperation({ module: '成长', operation: '一键领取成长奖励成功' });
         } else {
@@ -959,6 +983,23 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .growth-side-nav-badge {
+    min-width: 20px;
+    height: 20px;
+    margin-left: auto;
+    padding: 0 6px;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--primary-color);
+    border-radius: 10px;
+    background: var(--primary-color);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+  }
   .growth-side-nav-chevron {
     margin-left: auto;
     transition: transform 0.18s ease;
@@ -1184,6 +1225,12 @@
     flex: 1 1 25%;
     justify-content: center;
   }
+  .growth-section-tabs :deep(.tab-badge) {
+    border: 1px solid var(--primary-color);
+    background: var(--primary-color);
+    color: #fff;
+    opacity: 1;
+  }
   .growth-reward-tabs {
     align-self: stretch;
     border-bottom: 1px solid var(--card-border-color);
@@ -1227,6 +1274,9 @@
     .growth-section-heading {
       align-items: flex-start;
       flex-direction: column;
+    }
+    .growth-section-heading :deep(.b-tooltip-wrap) {
+      width: 100%;
     }
     .growth-section-heading .b_btn {
       width: 100%;

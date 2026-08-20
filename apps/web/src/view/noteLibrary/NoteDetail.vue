@@ -1083,7 +1083,9 @@
   const isLeaving = ref(false);
   const updateTime = ref('');
   const timer = ref<ReturnType<typeof setTimeout> | null>(null);
-  const TEXT_SAVE_DEBOUNCE_DELAY = 500;
+  // 正文草稿已由 IndexedDB 以更短合并窗口托底；服务端保存放宽到 1.5s，
+  // 离开路由、切换笔记和显式保存仍会立即 flush，减少连续输入的重复写入。
+  const TEXT_SAVE_DEBOUNCE_DELAY = 1_500;
   const DRAWING_SAVE_DEBOUNCE_DELAY = 3_000;
   let requestedSaveVersion = 0;
   let persistedSaveVersion = 0;

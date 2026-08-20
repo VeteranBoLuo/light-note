@@ -1,6 +1,6 @@
 /**
  * 书签图标补全批次的创建、查询与重试管理。
- * 在导入事务提交后调用，独立于 Worker。
+ * 在书签创建或导入事务提交后调用，独立于 Worker。
  */
 
 import { createHash, randomUUID } from 'crypto';
@@ -40,7 +40,7 @@ async function insertIconJobChunk(sql, params) {
 /**
  * 为新建/受影响的书签创建图标补全任务。
  * 核心逻辑：
- * - 只给没有 icon_url 的书签创建任务（明确需要补全）
+ * - 调用方只传入没有 icon_url、明确需要补全的书签
  * - 幂等：同 bookmark + url_hash 不会重复插入
  *
  * @param {string} userId

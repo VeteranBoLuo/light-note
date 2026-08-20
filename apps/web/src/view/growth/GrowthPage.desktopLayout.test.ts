@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(resolve(process.cwd(), 'src/view/growth/GrowthPage.vue'), 'utf8');
+const feedbackSource = readFileSync(resolve(process.cwd(), 'src/composables/useGrowthClaimFeedback.ts'), 'utf8');
 
 describe('GrowthPage 宽屏桌面导航布局', () => {
   it('复用全站桌面与紧凑布局判断，只在宽屏显示左侧导航', () => {
@@ -97,5 +98,36 @@ describe('GrowthPage 宽屏桌面导航布局', () => {
     expect(sidebar).toContain('<SvgIcon');
     expect(sidebar).not.toMatch(/<(?:button|input|select|textarea)(?:\s|>)/i);
     expect(sidebar).not.toMatch(/<svg(?:\s|>)/i);
+  });
+
+  it('可领取成就同时映射到桌面侧栏与移动端共用 Tab 的角标', () => {
+    expect(source).toContain('const achievementBadge = achievementClaimableCount.value');
+    expect(source).toContain('badge: achievementBadge > 0 ? achievementBadge : undefined');
+    expect(source).toContain('class="growth-side-nav-badge"');
+    expect(source).toMatch(
+      /\.growth-side-nav-badge\s*\{[\s\S]*?border:\s*1px solid var\(--primary-color\)[\s\S]*?background:\s*var\(--primary-color\)[\s\S]*?color:\s*#fff/,
+    );
+    expect(source).toMatch(
+      /\.growth-section-tabs :deep\(\.tab-badge\)\s*\{[\s\S]*?background:\s*var\(--primary-color\)[\s\S]*?color:\s*#fff/,
+    );
+  });
+
+  it('一键领取只保留一份按钮模板，桌面显示构成 Tooltip，成功提示读取服务端回执', () => {
+    const taskHeading =
+      source.match(/<header v-if="growthV2Enabled" class="growth-section-heading">[\s\S]*?<\/header>/)?.[0] || '';
+    expect(taskHeading).toContain('<BTooltip');
+    expect(taskHeading).toContain(':disabled="!bookmark.isDesktop"');
+    expect(taskHeading.match(/class="growth-claim-all"/g)).toHaveLength(1);
+    expect(source).toContain('const pendingBreakdown = snapshotClaimableBreakdown()');
+    expect(source).toContain('claimSuccessMessage(res.data.receipts, pendingBreakdown)');
+    expect(feedbackSource).toContain("t('growth.claimAllSuccessBySource', { sources })");
+  });
+
+  it('工作台周挑战入口定位到任务分区末尾，并在异步挑战数据加载后重新对齐', () => {
+    expect(source).toContain('<section id="growth-weekly" class="growth-panel">');
+    expect(source).toContain("if (hash === '#growth-weekly') return 'tasks'");
+    expect(source).toContain("block: route.hash === '#growth-weekly' ? 'end' : 'start'");
+    expect(source).toContain('@loaded="handleWeeklyLoaded"');
+    expect(source).toMatch(/function handleWeeklyLoaded[\s\S]*?route\.hash === '#growth-weekly'[\s\S]*?scrollToHash/);
   });
 });

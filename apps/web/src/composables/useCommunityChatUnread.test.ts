@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ getAccess: vi.fn(), getRooms: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getRooms: vi.fn() }));
 vi.mock('@/api/communityChatApi', () => ({
-  getCommunityChatAccess: mocks.getAccess,
   getCommunityChatRooms: mocks.getRooms,
 }));
 
@@ -12,12 +11,12 @@ describe('useCommunityChatUnread', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useCommunityChatUnread().reset();
-    mocks.getAccess.mockResolvedValue({ data: { canEnter: true, messagingEnabled: true } });
   });
 
   it('只在服务端确认消息试点开启时累计房间角标', async () => {
     mocks.getRooms.mockResolvedValue({
       data: {
+        access: { canEnter: true, messagingEnabled: true, realtimeEnabled: true },
         messagingEnabled: true,
         items: [
           { slug: 'newcomers', unreadCount: 2, mentionCount: 1 },
@@ -47,14 +46,20 @@ describe('useCommunityChatUnread', () => {
     expect(unread.totalUnread.value).toBe(0);
   });
 
-  it('访问或消息开关关闭时不请求受保护频道接口，并清空旧账号角标', async () => {
+  it('目录返回未准入状态时不需要第二个 access 请求，并清空旧账号角标', async () => {
     const unread = useCommunityChatUnread();
     unread.syncDirectory({ messagingEnabled: true, items: [{ slug: 'tips', unreadCount: 4, mentionCount: 0 }] } as any);
-    mocks.getAccess.mockResolvedValue({ data: { canEnter: false, messagingEnabled: false } });
+    mocks.getRooms.mockResolvedValue({
+      data: {
+        access: { canEnter: false, messagingEnabled: false, realtimeEnabled: false },
+        messagingEnabled: false,
+        items: [],
+      },
+    });
 
     await unread.refresh();
 
-    expect(mocks.getRooms).not.toHaveBeenCalled();
+    expect(mocks.getRooms).toHaveBeenCalledTimes(1);
     expect(unread.totalUnread.value).toBe(0);
   });
 

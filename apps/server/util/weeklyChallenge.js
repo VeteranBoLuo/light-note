@@ -10,7 +10,7 @@ import {
   weeklyClaimRefCandidates,
 } from './pointsEarningPolicy.js';
 import { resolveWeeklyEarningPolicyVersion } from './pointsEarningPolicyState.js';
-import { getGrowthCalendarContext, weekKeyAtOffset } from './growthPreferences.js';
+import { dayKeyAtOffset, getGrowthCalendarContext, weekKeyAtOffset } from './growthPreferences.js';
 
 export const WEEKLY_CHALLENGES = resolveWeeklyChallenges();
 
@@ -77,6 +77,7 @@ export async function getWeeklyChallenges(userId, { db = pool, calendar = null }
       weekKey: null,
       timezone: null,
       policyVersion: guestVersion,
+      todayActive: false,
       earnedPoints: 0,
       totalPoints: resolveWeeklyChallenges(guestVersion).reduce((sum, challenge) => sum + challenge.reward, 0),
       challenges: resolveWeeklyChallenges(guestVersion).map((challenge) => ({
@@ -97,6 +98,13 @@ export async function getWeeklyChallenges(userId, { db = pool, calendar = null }
     weekKey,
     policyVersion,
   });
+  const todayFacts = usesC5EarningRules(policyVersion)
+    ? await getMeaningfulActivityFacts(userId, {
+        db,
+        calendar: effectiveCalendar,
+        dayKey: effectiveCalendar.dayKey || dayKeyAtOffset(new Date(), effectiveCalendar.utcOffsetMinutes),
+      })
+    : null;
   const refCandidates = [
     ...new Set(catalog.flatMap((challenge) => weeklyClaimRefCandidates(weekKey, challenge.key, policyVersion))),
   ];
@@ -116,6 +124,7 @@ export async function getWeeklyChallenges(userId, { db = pool, calendar = null }
     weekKey,
     timezone: effectiveCalendar.timezone,
     policyVersion,
+    todayActive: Boolean(todayFacts?.total),
     challenges,
     claimableCount: challenges.filter((challenge) => challenge.claimable).length,
     earnedPoints: challenges

@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
     getConnection: vi.fn(),
     query: vi.fn(),
   },
+  fetchFaviconFromApi: vi.fn(),
   saveIconToDisk: vi.fn(),
   cleanupBookmarkIconFiles: vi.fn(),
   cleanupPreviousBookmarkIcon: vi.fn(),
@@ -12,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../db/index.js', () => ({ default: mocks.pool }));
 vi.mock('./bookmarkIconClient.js', () => ({
-  fetchFaviconFromApi: vi.fn(),
+  fetchFaviconFromApi: mocks.fetchFaviconFromApi,
   normalizeOrigin: vi.fn((value) => new URL(value).origin),
   isRetryableError: vi.fn(() => false),
 }));
@@ -22,7 +23,7 @@ vi.mock('./bookmarkIconService.js', () => ({
   cleanupPreviousBookmarkIcon: mocks.cleanupPreviousBookmarkIcon,
 }));
 
-const { claimTasks, updateTaskResult } = await import('./bookmarkIconWorkerService.js');
+const { claimTasks, processTaskBatch, updateTaskResult } = await import('./bookmarkIconWorkerService.js');
 
 function createConnection(queryResults = []) {
   return {
@@ -144,6 +145,36 @@ describe('bookmark icon worker result updates', () => {
     expect(updateConnection.release.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.cleanupBookmarkIconFiles.mock.invocationCallOrder[0],
     );
+  });
+});
+
+describe('bookmark icon worker batch processing', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('前台已经补好图标时直接完成任务，不重复请求 favicon 服务', async () => {
+    mocks.pool.query.mockResolvedValueOnce([{ affectedRows: 1 }]).mockResolvedValueOnce([[]]);
+
+    const result = await processTaskBatch(
+      [
+        {
+          id: 7,
+          bookmark_id: 'bookmark-1',
+          user_id: 'user-1',
+          url_snapshot: 'https://example.com/path',
+          origin_key: 'https://example.com',
+          attempts: 0,
+        },
+      ],
+      'worker-1',
+    );
+
+    expect(result).toEqual({ processed: 1 });
+    expect(mocks.pool.query.mock.calls[0][0]).toContain("b.icon_url <> ''");
+    expect(mocks.pool.query.mock.calls[0][0]).toContain('b.url = j.url_snapshot');
+    expect(mocks.pool.query.mock.calls[0][1]).toEqual([7, 'worker-1']);
+    expect(mocks.fetchFaviconFromApi).not.toHaveBeenCalled();
   });
 });
 

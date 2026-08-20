@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeAiMaterialClarification, normalizeAiResolvedGrounding } from './aiGrounding';
+import {
+  normalizeAiMaterialClarification,
+  normalizeAiResolvedGrounding,
+  shouldShowAiMaterialModeNotice,
+  type AiResolvedGrounding,
+} from './aiGrounding';
 
 describe('AiResolvedGrounding', () => {
   it('只保留无正文的固定摘要字段和短期 Source Set 锚点', () => {
@@ -39,6 +44,24 @@ describe('AiResolvedGrounding', () => {
         historyPolicy: 'legacy_conversation',
       }),
     ).toBeUndefined();
+  });
+
+  it('只有本轮显式或服务端继承了真实材料时显示材料提示', () => {
+    const grounding = {
+      schemaVersion: 2,
+      enabled: true,
+      mode: 'current_explicit_only',
+      historyPolicy: 'discourse_projection_only',
+      allowedSourceCount: 1,
+      sourcesUsedCount: 1,
+      sourceSubsetValid: true,
+      materialMode: 'current_explicit',
+    } satisfies AiResolvedGrounding;
+    expect(shouldShowAiMaterialModeNotice(grounding)).toBe(true);
+    expect(shouldShowAiMaterialModeNotice({ ...grounding, materialMode: 'inherited' })).toBe(true);
+    expect(shouldShowAiMaterialModeNotice({ ...grounding, materialMode: 'workspace' })).toBe(false);
+    expect(shouldShowAiMaterialModeNotice({ ...grounding, materialMode: 'none' })).toBe(false);
+    expect(shouldShowAiMaterialModeNotice({ ...grounding, allowedSourceCount: 0 })).toBe(false);
   });
 
   it('澄清状态只接受短期令牌、固定类型和至少两个公开选项', () => {

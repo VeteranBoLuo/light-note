@@ -27,11 +27,30 @@ describe('aiTelemetryHandle', () => {
 
   it('records an event under the resolved AI identity', async () => {
     recordAiProductEvent.mockResolvedValue({ id: 'event-id', accepted: true });
-    const req = { body: { event: 'ai_entry_opened', dimensions: { surface: 'edge' } } };
+    const req = {
+      user: { id: 'user-1', role: 'user' },
+      body: { event: 'ai_entry_opened', dimensions: { surface: 'edge' } },
+    };
     const res = response();
     await recordAiEvent(req, res);
     expect(recordAiProductEvent).toHaveBeenCalledWith({ actorUserId: 'a', subjectUserId: 's' }, req.body);
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+  });
+
+  it('游客事件幂等忽略，不进入 owner 解析或返回 401', async () => {
+    const res = response();
+
+    await recordAiEvent(
+      { user: { id: 'visitor-1', role: 'visitor' }, body: { event: 'ai_entry_impression', dimensions: {} } },
+      res,
+    );
+
+    expect(resolveAiConversationIdentity).not.toHaveBeenCalled();
+    expect(recordAiProductEvent).not.toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalled();
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 200, data: { accepted: false, reason: 'authentication_required' } }),
+    );
   });
 
   it('returns a stable client error without echoing dimensions', async () => {
@@ -40,7 +59,10 @@ describe('aiTelemetryHandle', () => {
     error.status = 400;
     recordAiProductEvent.mockRejectedValue(error);
     const res = response();
-    await recordAiEvent({ body: { event: 'bad', dimensions: { query: 'secret' } } }, res);
+    await recordAiEvent(
+      { user: { id: 'user-1', role: 'user' }, body: { event: 'bad', dimensions: { query: 'secret' } } },
+      res,
+    );
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.send).toHaveBeenCalledWith(
       expect.objectContaining({ status: 400, data: { code: 'AI_EVENT_UNSUPPORTED' } }),

@@ -2,13 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, ref } from 'vue';
 
 const mocks = vi.hoisted(() => ({
-  getAccess: vi.fn(),
   getRooms: vi.fn(),
   socketOptions: null as Record<string, any> | null,
 }));
 
 vi.mock('@/api/communityChatApi', () => ({
-  getCommunityChatAccess: mocks.getAccess,
   getCommunityChatRooms: mocks.getRooms,
 }));
 
@@ -56,7 +54,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   useCommunityChatUnread().reset();
   Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
-  mocks.getAccess.mockResolvedValue({ data: { canEnter: true, messagingEnabled: true, realtimeEnabled: true } });
   mocks.getRooms.mockResolvedValue({
     data: {
       access: { realtimeEnabled: true },
@@ -77,7 +74,6 @@ describe('useCommunityChatUnreadRuntime', () => {
     await mountRuntime();
     expect(mocks.socketOptions?.enabled.value).toBe(true);
     expect(mocks.socketOptions?.roomSlug.value).toBe('general');
-    mocks.getAccess.mockClear();
     mocks.getRooms.mockClear();
     mocks.getRooms.mockResolvedValue({
       data: {
@@ -128,6 +124,15 @@ describe('useCommunityChatUnreadRuntime', () => {
     runtime.realtimeActive.value = false;
     await nextTick();
     expect(mocks.socketOptions?.enabled.value).toBe(false);
+    mocks.getRooms.mockClear();
+    await vi.advanceTimersByTimeAsync(__test__.FALLBACK_REFRESH_INTERVAL_MS);
+    await flushRequests();
+    expect(mocks.getRooms).not.toHaveBeenCalled();
+
+    runtime.realtimeActive.value = true;
+    await nextTick();
+    await flushRequests();
+    expect(mocks.getRooms).toHaveBeenCalledTimes(1);
   });
 
   it('退出登录时立即清空旧账号角标并停止订阅', async () => {
@@ -152,7 +157,6 @@ describe('useCommunityChatUnreadRuntime', () => {
     runtime.userRole.value = 'visitor';
     await flushRequests();
 
-    mocks.getAccess.mockClear();
     mocks.getRooms.mockClear();
     await vi.advanceTimersByTimeAsync(__test__.FALLBACK_REFRESH_INTERVAL_MS);
     await flushRequests();
@@ -160,12 +164,10 @@ describe('useCommunityChatUnreadRuntime', () => {
     expect(mocks.socketOptions?.enabled.value).toBe(true);
     expect(mocks.socketOptions?.roomSlug.value).toBe('general');
     expect(useCommunityChatUnread().totalUnread.value).toBe(0);
-    expect(mocks.getAccess).not.toHaveBeenCalled();
     expect(mocks.getRooms).not.toHaveBeenCalled();
   });
 
   it('服务端关闭 realtime 时保留低频 REST 兜底但不反复建立 WebSocket', async () => {
-    mocks.getAccess.mockResolvedValue({ data: { canEnter: true, messagingEnabled: true, realtimeEnabled: false } });
     mocks.getRooms.mockResolvedValue({
       data: {
         access: { realtimeEnabled: false },

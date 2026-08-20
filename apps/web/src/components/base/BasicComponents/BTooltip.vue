@@ -10,12 +10,13 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, ref, reactive } from 'vue';
+  import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
   import { getRootZoom } from '@/utils/zoom';
 
   const props = defineProps<{
     title: string;
     always?: boolean;
+    disabled?: boolean;
     delay?: number;
     zIndex?: number;
   }>();
@@ -28,7 +29,7 @@
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   function show() {
-    if (!props.always && window.innerWidth < 1024) return;
+    if (props.disabled || (!props.always && window.innerWidth < 1024)) return;
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       visible.value = true;
@@ -63,6 +64,20 @@
       visible.value = false;
     }, 150);
   }
+
+  watch(
+    () => props.disabled,
+    (disabled) => {
+      if (!disabled) return;
+      if (timer) clearTimeout(timer);
+      timer = null;
+      visible.value = false;
+    },
+  );
+
+  onBeforeUnmount(() => {
+    if (timer) clearTimeout(timer);
+  });
 </script>
 
 <style scoped>

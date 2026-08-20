@@ -7,6 +7,10 @@ const drawingSource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/drawing/DrawingNoteEditor.vue'),
   'utf8',
 );
+const drawingStyleSource = readFileSync(
+  resolve(process.cwd(), 'src/components/noteLibrary/drawing/DrawingStylePanel.vue'),
+  'utf8',
+);
 const versionHistorySource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/detail/NoteVersionHistory.vue'),
   'utf8',
@@ -84,43 +88,72 @@ describe('手绘笔记详情边界', () => {
     expect(pointerMoveSource).toContain('for (const sample of samples) eraseAt(canvasPoint(sample))');
   });
 
-  it('颜色与尺寸各自只保留一个工具栏入口，导出统一进入页面更多菜单', () => {
+  it('颜色与尺寸合并为样式入口，移动端固定历史操作，导出仍进入页面更多菜单', () => {
     const toolbarEnd = drawingSource.indexOf('<div ref="workspaceRef"');
     const toolbarSource = drawingSource.slice(0, toolbarEnd);
 
-    expect(toolbarSource.match(/class="drawing-color-button"/gu)).toHaveLength(1);
-    expect(toolbarSource).toContain('v-model:value="activeColor"');
-    expect(toolbarSource).toContain('type="color"');
-    expect(toolbarSource).toContain('v-model:open="colorPopoverOpen"');
-    expect(toolbarSource).toContain('v-model:open="sizePopoverOpen"');
-    expect(toolbarSource).toContain('v-if="showSizeControl"');
-    expect(toolbarSource.match(/drawing-size-trigger/gu)).toHaveLength(1);
-    expect(toolbarSource).toContain('v-for="size in activeSizeOptions"');
-    expect(toolbarSource).toContain('class="drawing-size-range"');
-    expect(toolbarSource).toContain(':min="activeSizeRange.min"');
+    expect(toolbarSource).not.toContain('drawing-color-button');
+    expect(toolbarSource).not.toContain('drawing-size-trigger');
+    expect(toolbarSource).toContain('class="drawing-style-trigger"');
+    expect(toolbarSource).toContain('<DrawingStylePanel');
+    expect(toolbarSource).toContain('class="drawing-toolbar-scroll"');
+    expect(toolbarSource).toContain('class="drawing-toolbar-history"');
+    expect(toolbarSource).toContain('v-model:open="helpPopoverOpen"');
+    expect(drawingSource).toContain('class="drawing-tool-button drawing-help-button"');
+    expect(drawingSource).toContain('<kbd>P</kbd>');
+    expect(drawingSource).toContain('<kbd>V</kbd>');
+    expect(drawingSource).toContain('<kbd>⌫ / Delete</kbd>');
+    expect(drawingSource).toContain('background: var(--surface-panel-bg, #f4f5f7)');
+    expect(drawingSource).toContain('font-variant-numeric: tabular-nums');
+    expect(drawingSource).toContain('flex: 0 0 24px');
+    expect(drawingStyleSource).toContain('drawing-style-colors--common');
+    expect(drawingStyleSource).toContain('drawing-style-colors--palette');
+    expect(drawingStyleSource).toContain('drawing-style-colors--recent');
+    expect(drawingStyleSource).toContain('type="color"');
+    expect(drawingStyleSource).toContain('type="range"');
     expect(toolbarSource).not.toContain("t('note.drawingExportPng')");
     expect(toolbarSource).not.toContain("t('note.drawingExportJson')");
     expect(noteHeaderSource).toContain("props.noteType === 'drawing' || !bookmark.isDesktop");
     expect(noteHeaderSource).toContain("emit('exportDrawing', 'png')");
     expect(noteHeaderSource).toContain("emit('exportDrawing', 'json')");
     expect(source).toContain('@export-drawing="exportDrawingNote"');
-    expect(drawingSource).toContain('if (open) sizePopoverOpen.value = false');
-    expect(drawingSource).toContain('if (open) colorPopoverOpen.value = false');
-    expect(drawingSource).toContain('width: 44px');
-    expect(drawingSource).toContain('height: 44px');
+    expect(drawingSource).toContain('.drawing-toolbar-zoom,');
+    expect(drawingSource).toContain('.drawing-clear-desktop');
   });
 
-  it('编辑区按可用宽高连续适配方形画布，不产生原生滚动条', () => {
+  it('基础形状是正式 scene 元素，并覆盖创建、选择缩放与历史摘要', () => {
+    expect(drawingSource).toContain("type DrawingTool = 'pen' | 'eraser' | 'text' | 'shape' | 'select' | 'hand'");
+    expect(drawingSource).toContain("kind: 'shape'");
+    expect(drawingSource).toContain('constrainDrawingShapeEnd');
+    expect(drawingSource).toContain('hitShapeResizeHandle(point)');
+    expect(drawingSource).toContain('resizedShapePreview()');
+    expect(drawingSource).toContain('paintDrawingShape(context, element)');
+    expect(versionHistorySource).toContain("element?.kind === 'shape'");
+  });
+
+  it('编辑区宽屏默认 100%，窄屏按可用宽度适配且不产生原生滚动条', () => {
     const zoomStart = drawingSource.indexOf('function fitEditablePage()');
     const zoomEnd = drawingSource.indexOf('function scheduleDraw()', zoomStart);
     const zoomSource = drawingSource.slice(zoomStart, zoomEnd);
 
     expect(drawingSource).toContain('const ZOOM_LEVELS = [0.3, 0.35, 0.4, 0.5, 0.6, 0.75, 1, 1.25, 1.5]');
     expect(zoomSource).toContain('size.width / DRAWING_PAGE.width');
-    expect(zoomSource).toContain('size.height / DRAWING_PAGE.height');
+    expect(zoomSource).not.toContain('size.height / DRAWING_PAGE.height');
+    expect(zoomSource).toContain('editableZoom.value = Math.min(1, size.width / DRAWING_PAGE.width)');
     expect(drawingSource).toContain('cameraX.value = (size.width - DRAWING_PAGE.width * zoom.value) / 2');
     expect(drawingSource).toContain('overflow: hidden');
     expect(drawingSource).toContain('height: 100%');
+  });
+
+  it('Canvas 像素尺寸变化后在同一帧重绘，连续滚轮缩放不暴露空白帧', () => {
+    const resizeStart = drawingSource.indexOf('function resizeCanvas()');
+    const resizeEnd = drawingSource.indexOf('function fitReadonlyPage()', resizeStart);
+    const resizeSource = drawingSource.slice(resizeStart, resizeEnd);
+
+    expect(resizeSource).toContain('const backingStoreChanged =');
+    expect(resizeSource).toContain('if (backingStoreChanged) draw();');
+    expect(resizeSource.indexOf('canvas.height = nextHeight')).toBeLessThan(resizeSource.indexOf('draw();'));
+    expect(resizeSource).toContain('else scheduleDraw();');
   });
 
   it('选择工具再次点击已选中文本时进入编辑，并原位替换而非追加副本', () => {

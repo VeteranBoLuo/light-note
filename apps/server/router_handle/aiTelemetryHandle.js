@@ -4,6 +4,11 @@ import { recordAiProductEvent } from '../util/aiProductTelemetry.js';
 
 export async function recordAiEvent(req, res) {
   try {
+    // AI 产品事件按登录 owner 隔离。游客客户端可能是旧版或在会话失效前已排队，
+    // 服务端应幂等忽略，不把无正文遥测变成持续 401 业务错误。
+    if (!req.user?.id || req.user.role === 'visitor') {
+      return res.send(resultData({ accepted: false, reason: 'authentication_required' }));
+    }
     const identity = resolveAiConversationIdentity(req);
     const result = await recordAiProductEvent(identity, req.body || {});
     return res.send(resultData(result));

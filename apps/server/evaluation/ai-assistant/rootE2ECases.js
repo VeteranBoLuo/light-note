@@ -27,7 +27,16 @@ export const ROOT_E2E_TOOL_CASES = Object.freeze([
   writeCase('create-todo', 'create_todo', '创建一条标题为“{{TODO_TITLE}}”的普通待办，优先级普通。', {
     after: 'capture_todo',
   }),
-  readCase('query-todos', 'query_todos', '查询标题包含“{{PREFIX}}”的全部待办。'),
+  readCase(
+    'query-todos',
+    'query_todos',
+    '查询标题为“{{REMINDER_TODO_TITLE}}”、计划在今天且提醒时间是今天 16:00 的未完成待办，并告诉我清单已完成几项、还差几项。',
+    {
+      before: 'seed_todo_reminder_query',
+      assertion: 'todo_reminder_lookup',
+      fixtureWrite: true,
+    },
+  ),
   writeCase('set-todo-status', 'set_todo_status', '把待办 [todo:{{TODO_ID}}] 标记为已完成。'),
   writeCase('delete-todo', 'delete_todo', '删除普通待办 [todo:{{TODO_ID}}]，只删除当前这一条。'),
   readCase(
@@ -89,10 +98,12 @@ export const ROOT_E2E_TOOL_CASES = Object.freeze([
     'create-bookmark',
     'create_bookmark',
     '把 {{BOOKMARK_URL}} 收藏为书签，名称为“{{BOOKMARK_TITLE}}”，描述为“{{PREFIX}} 真实链路测试”。',
+    { after: 'capture_bookmark' },
   ),
   readCase('query-bookmarks', 'query_bookmarks', '查询名称包含“{{PREFIX}}”的书签。'),
-  readCase('read-url', 'read_url', '读取 https://example.com/ 并根据网页真实内容用一句话概括。', {
-    externalWeb: true,
+  readCase('read-url', 'read_url', '分析这个地址', {
+    contextFixture: 'bookmark',
+    followUpMessage: '总结网页内容',
   }),
   readCase('get-growth', 'get_growth', '查看我的成长等级、经验、积分余额和签到状态。'),
   readCase('query-points-log', 'query_points_log', '查看我最近的积分收入和支出明细。'),

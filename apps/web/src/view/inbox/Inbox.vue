@@ -5,6 +5,7 @@
       'inbox-page--todo-focused': isTodoFocused,
       'inbox-page--mobile-todo': isMobileTodoPrimary,
       'inbox-page--mobile-resources': isMobileResourceInbox,
+      'inbox-page--resource-workspace': !isTodoFocused && !bookmark.isMobile,
       'is-selection-mode': todoSelectionMode,
     }"
   >
@@ -40,6 +41,7 @@
         </div>
         <p>{{ isTodoFocused ? t('inbox.todoPageSubtitle') : t('inbox.subtitle') }}</p>
       </div>
+      <ResourceCenterSectionNav v-if="!isTodoFocused" class="section-switcher section-switcher--hero" />
       <BButton v-if="isTodoFocused" type="primary" @click="openTodoEditor()">
         {{ t('inbox.createTodo') }}
       </BButton>
@@ -84,10 +86,40 @@
       </article>
     </section>
 
-    <ResourceCenterSectionNav
-      v-if="!isTodoFocused && (!bookmark.isMobile || isMobileResourceInbox)"
-      class="section-switcher"
-    />
+    <ResourceCenterSectionNav v-if="!isTodoFocused && isMobileResourceInbox" class="section-switcher" />
+
+    <aside
+      v-if="!isTodoFocused && !bookmark.isMobile"
+      class="resource-inbox-scope"
+      :aria-label="t('inbox.pendingScopeTitle')"
+    >
+      <span class="resource-inbox-scope__title">{{ t('inbox.pendingScopeTitle') }}</span>
+      <BButton
+        v-for="item in filterOptions"
+        :key="item.key"
+        class="resource-inbox-scope__item"
+        :class="{ active: inbox.filterType === item.key }"
+        :aria-pressed="inbox.filterType === item.key"
+        @click="changeInboxScope(item.key)"
+      >
+        <span class="resource-inbox-scope__dot" :class="`is-${item.key}`" aria-hidden="true"></span>
+        <span class="resource-inbox-scope__label">{{ item.label }}</span>
+        <span class="resource-inbox-scope__count">{{ item.badge }}</span>
+      </BButton>
+      <div class="resource-inbox-scope__divider"></div>
+      <span class="resource-inbox-scope__title">{{ t('inbox.sortTitle') }}</span>
+      <BButton
+        v-for="item in sortOptions"
+        :key="item.value"
+        class="resource-inbox-scope__item resource-inbox-scope__item--sort"
+        :class="{ active: inbox.sort === item.value }"
+        :aria-pressed="inbox.sort === item.value"
+        @click="changeInboxSort(item.value)"
+      >
+        <span class="resource-inbox-scope__dot" aria-hidden="true"></span>
+        <span class="resource-inbox-scope__label">{{ item.label }}</span>
+      </BButton>
+    </aside>
 
     <section
       class="inbox-toolbar"
@@ -152,8 +184,14 @@
         </template>
       </template>
       <template v-else>
-        <BTabs v-model:active-tab="inbox.filterType" :options="filterOptions" variant="pill" @change="changeFilter" />
-        <div class="inbox-toolbar__right">
+        <BTabs
+          v-if="bookmark.isMobile"
+          v-model:active-tab="inbox.filterType"
+          :options="filterOptions"
+          variant="pill"
+          @change="changeFilter"
+        />
+        <div class="inbox-toolbar__right inbox-toolbar__right--resources">
           <BInput
             v-if="!bookmark.isMobile"
             v-model:value="inbox.keyword"
@@ -161,7 +199,11 @@
             clearable
             @enter="search"
           />
-          <BSelect v-model:value="inbox.sort" :options="sortOptions" @change="search" />
+          <BSelect v-if="bookmark.isMobile" v-model:value="inbox.sort" :options="sortOptions" @change="search" />
+          <BButton v-if="!bookmark.isMobile" type="primary" class="inbox-resource-capture" @click="openCapture">
+            <SvgIcon :src="icon.common.plus" size="16" aria-hidden="true" />
+            {{ t('inbox.quickCapture') }}
+          </BButton>
         </div>
       </template>
     </section>
@@ -412,24 +454,31 @@
           <div v-else class="inbox-list">
             <!-- 资源中心只展示资源；待办由独立工作区承载。 -->
             <template v-for="action in actionItems" :key="action.key">
-              <InboxItem
+              <div
                 v-if="action.actionType === 'resource'"
-                :item="action.item"
-                :selectable="!isMobileResourceInbox || resourceSelectionMode"
-                :selected="inbox.selectedKeys.includes(inbox.resourceKey(action.item))"
-                :completing="completingKey === inbox.resourceKey(action.item)"
-                :deleting="deletingKey === inbox.resourceKey(action.item)"
-                :disabled="hasPendingOperation"
-                :selection-mode="resourceSelectionMode"
-                :swipe-enabled="bookmark.isMobile"
-                :swipe-open="openSwipeResourceKey === inbox.resourceKey(action.item)"
-                @swipe-start="beginResourceSwipe(action.item)"
-                @update:swipe-open="updateResourceSwipe(action.item, $event)"
-                @select="toggleSelected(action.item, $event)"
-                @open="openResource(action.item)"
-                @complete="completeOne(action.item)"
-                @delete="confirmDelete([action.item])"
-              />
+                class="resource-inbox-entry"
+                :class="{
+                  'is-inspected': !bookmark.isMobile && activeInspectedInboxKey === inbox.resourceKey(action.item),
+                }"
+              >
+                <InboxItem
+                  :item="action.item"
+                  :selectable="!isMobileResourceInbox || resourceSelectionMode"
+                  :selected="inbox.selectedKeys.includes(inbox.resourceKey(action.item))"
+                  :completing="completingKey === inbox.resourceKey(action.item)"
+                  :deleting="deletingKey === inbox.resourceKey(action.item)"
+                  :disabled="hasPendingOperation"
+                  :selection-mode="resourceSelectionMode"
+                  :swipe-enabled="bookmark.isMobile"
+                  :swipe-open="openSwipeResourceKey === inbox.resourceKey(action.item)"
+                  @swipe-start="beginResourceSwipe(action.item)"
+                  @update:swipe-open="updateResourceSwipe(action.item, $event)"
+                  @select="toggleSelected(action.item, $event)"
+                  @open="handleInboxItemOpen(action.item)"
+                  @complete="completeOne(action.item)"
+                  @delete="confirmDelete([action.item])"
+                />
+              </div>
               <TodoItem
                 v-else
                 :item="action.item"
@@ -454,6 +503,52 @@
         </BLoading>
       </div>
     </section>
+
+    <aside v-if="!isTodoFocused && !bookmark.isMobile" class="resource-inbox-inspector">
+      <template v-if="inspectedInboxItem">
+        <div class="resource-inbox-inspector__eyebrow">{{ t('inbox.currentPendingResource') }}</div>
+        <span class="resource-inbox-inspector__type">{{ t(`inbox.${inspectedInboxItem.resourceType}`) }}</span>
+        <h2>{{ inspectedInboxItem.title || t('inbox.untitled') }}</h2>
+        <p>{{ inspectedInboxSummary }}</p>
+        <dl class="resource-inbox-inspector__meta">
+          <div>
+            <dt>{{ t('inbox.collectedAt') }}</dt>
+            <dd>{{ inspectedInboxItem.collectedAt || '-' }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('inbox.resourceLocation') }}</dt>
+            <dd>{{ inspectedInboxItem.detail || inspectedInboxItem.source || '-' }}</dd>
+          </div>
+        </dl>
+        <div class="resource-inbox-inspector__actions">
+          <BButton block size="large" type="primary" @click="openResource(inspectedInboxItem)">
+            {{ t('inbox.organize') }}
+          </BButton>
+          <BButton
+            block
+            size="large"
+            class="resource-inbox-inspector__action--complete"
+            :loading="completingKey === inbox.resourceKey(inspectedInboxItem)"
+            @click="completeOne(inspectedInboxItem)"
+          >
+            {{ t('inbox.complete') }}
+          </BButton>
+          <BButton
+            block
+            size="large"
+            class="resource-inbox-inspector__action--delete"
+            :loading="deletingKey === inbox.resourceKey(inspectedInboxItem)"
+            @click="confirmDelete([inspectedInboxItem])"
+          >
+            {{ t('inbox.deleteResource') }}
+          </BButton>
+        </div>
+      </template>
+      <div v-else class="resource-inbox-inspector__empty">
+        <strong>{{ t('inbox.inspectorEmptyTitle') }}</strong>
+        <p>{{ t('inbox.inspectorEmptyDesc') }}</p>
+      </div>
+    </aside>
     <TodoPreviewDrawer
       v-if="previewTodo"
       v-model:visible="todoPreviewVisible"
@@ -580,6 +675,7 @@
   const scrollContainer = ref<HTMLElement | null>(null);
   const showTopFade = ref(false);
   const showBottomFade = ref(false);
+  const inspectedInboxKey = ref('');
   let resizeObserver: ResizeObserver | null = null;
 
   const isMobileResourceInbox = computed(() => bookmark.isMobile && isMobileResourceInboxTab(route.query.tab));
@@ -596,6 +692,21 @@
   const selectedItems = computed(() =>
     inbox.items.filter((item) => inbox.selectedKeys.includes(inbox.resourceKey(item))),
   );
+  const inspectedInboxItem = computed(
+    () => inbox.items.find((item) => inbox.resourceKey(item) === inspectedInboxKey.value) || inbox.items[0] || null,
+  );
+  const activeInspectedInboxKey = computed(() =>
+    inspectedInboxItem.value ? inbox.resourceKey(inspectedInboxItem.value) : '',
+  );
+  const inspectedInboxSummary = computed(() => {
+    const raw = inspectedInboxItem.value?.summary || '';
+    const text = raw
+      .replace(/<br\s*\/?>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return text || t('inbox.noSummary');
+  });
   const allItemsSelected = computed(() => inbox.items.length > 0 && selectedItems.value.length === inbox.items.length);
   const someItemsSelected = computed(
     () => selectedItems.value.length > 0 && selectedItems.value.length < inbox.items.length,
@@ -890,6 +1001,30 @@
     if (blockGuestWrite('inbox-capture', t('inbox.guestPrompt'))) return;
     recordOperation(OPERATION_LOG_MAP.inbox.openCapture);
     inbox.openQuickCapture(inbox.filterType === 'all' ? 'note' : inbox.filterType);
+  }
+
+  async function changeInboxScope(filter: 'all' | InboxItemType['resourceType']) {
+    if (inbox.filterType === filter) return;
+    inbox.filterType = filter;
+    await changeFilter();
+  }
+
+  async function changeInboxSort(sort: 'newest' | 'oldest') {
+    if (inbox.sort === sort) return;
+    inbox.sort = sort;
+    await search();
+  }
+
+  function inspectInboxResource(item: InboxItemType) {
+    inspectedInboxKey.value = inbox.resourceKey(item);
+  }
+
+  function handleInboxItemOpen(item: InboxItemType) {
+    if (bookmark.isMobile) {
+      openResource(item);
+      return;
+    }
+    inspectInboxResource(item);
   }
 
   function setMobileInboxKeyword(value: string) {
@@ -1552,6 +1687,10 @@
     flex-shrink: 0;
     align-self: flex-start;
   }
+  .section-switcher--hero {
+    margin: 0;
+    align-self: center;
+  }
   .inbox-hero {
     display: flex;
     justify-content: space-between;
@@ -1785,6 +1924,17 @@
   .inbox-toolbar__right--todo {
     grid-template-columns: minmax(160px, 230px) 120px auto;
   }
+  .inbox-toolbar__right--resources {
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) auto;
+    flex: 1 1 auto;
+  }
+  .inbox-resource-capture {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
   .inbox-toolbar__todo-tabs {
     display: flex;
     min-width: 0;
@@ -1924,6 +2074,361 @@
     flex-direction: column;
     gap: 12px;
     padding: 10px 12px 22px;
+  }
+  .resource-inbox-entry {
+    min-width: 0;
+    border-radius: 16px;
+    outline: none;
+  }
+  .resource-inbox-entry.is-inspected :deep(.inbox-item),
+  .resource-inbox-entry:focus-visible :deep(.inbox-item) {
+    border-color: var(--primary-color);
+  }
+
+  .resource-inbox-scope,
+  .resource-inbox-inspector {
+    min-width: 0;
+    min-height: 0;
+    box-sizing: border-box;
+    overflow: hidden auto;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 16px;
+    background: var(--card-background);
+  }
+
+  .resource-inbox-scope {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 10px;
+  }
+
+  .resource-inbox-scope__title {
+    padding: 3px 10px 6px;
+    color: var(--desc-color);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .resource-inbox-scope__item {
+    width: 100%;
+    min-height: 40px;
+    display: grid;
+    grid-template-columns: 8px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 9px;
+    padding: 0 10px;
+    border: 1px solid transparent;
+    border-radius: 11px;
+    background: transparent;
+    color: var(--text-color);
+    text-align: left;
+  }
+
+  .resource-inbox-scope__item:hover,
+  .resource-inbox-scope__item.active {
+    border-color: color-mix(in srgb, var(--primary-color) 30%, var(--surface-border-color));
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--card-background));
+    color: var(--primary-color);
+  }
+
+  .resource-inbox-scope__item--sort {
+    grid-template-columns: 8px minmax(0, 1fr);
+  }
+
+  .resource-inbox-scope__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--desc-color);
+  }
+
+  .resource-inbox-scope__dot.is-bookmark {
+    background: var(--resource-bookmark-color, #615ced);
+  }
+
+  .resource-inbox-scope__dot.is-note {
+    background: var(--resource-note-color, #00a884);
+  }
+
+  .resource-inbox-scope__dot.is-file {
+    background: var(--resource-file-color, #f59e0b);
+  }
+
+  .resource-inbox-scope__label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .resource-inbox-scope__count {
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+
+  .resource-inbox-scope__divider {
+    height: 1px;
+    margin: 8px 6px;
+    background: var(--surface-border-color);
+  }
+
+  .resource-inbox-inspector {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 18px;
+  }
+
+  .resource-inbox-inspector__eyebrow,
+  .resource-inbox-inspector__type {
+    color: var(--primary-color);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .resource-inbox-inspector h2 {
+    margin: 0;
+    font-size: 18px;
+    line-height: 1.45;
+  }
+
+  .resource-inbox-inspector > p,
+  .resource-inbox-inspector__empty p {
+    margin: 0;
+    color: var(--desc-color);
+    font-size: 13px;
+    line-height: 1.65;
+  }
+
+  .resource-inbox-inspector__meta {
+    display: grid;
+    gap: 10px;
+    margin: 4px 0 0;
+    padding: 12px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
+    background: var(--workspace-panel-bg-color, var(--background-color));
+  }
+
+  .resource-inbox-inspector__meta > div {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .resource-inbox-inspector__meta dt,
+  .resource-inbox-inspector__meta dd {
+    margin: 0;
+    font-size: 12px;
+  }
+
+  .resource-inbox-inspector__meta dt {
+    color: var(--desc-color);
+  }
+
+  .resource-inbox-inspector__meta dd {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .resource-inbox-inspector__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: auto;
+    padding-top: 14px;
+    border-top: 1px solid var(--surface-border-color);
+  }
+
+  .resource-inbox-inspector__actions :deep(.b_btn) {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 12px;
+    font-size: 14px;
+  }
+
+  .resource-inbox-inspector__actions :deep(.b_btn:first-child) {
+    grid-column: 1 / -1;
+  }
+
+  .resource-inbox-inspector__action--complete {
+    border-color: color-mix(in srgb, var(--primary-color) 28%, var(--surface-border-color));
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--card-background));
+  }
+
+  .resource-inbox-inspector__action--delete {
+    border-color: color-mix(in srgb, var(--danger-color, #e5484d) 32%, var(--surface-border-color));
+    color: var(--danger-color, #e5484d);
+    background: color-mix(in srgb, var(--danger-color, #e5484d) 6%, var(--card-background));
+  }
+
+  .resource-inbox-inspector__empty {
+    min-height: 220px;
+    display: grid;
+    align-content: center;
+    gap: 8px;
+    text-align: center;
+  }
+
+  @media (min-width: 981px) {
+    .inbox-page--resource-workspace {
+      display: grid;
+      grid-template-columns: 210px minmax(0, 1fr) 320px;
+      grid-template-rows: auto auto auto auto minmax(0, 1fr);
+      column-gap: 14px;
+    }
+
+    .inbox-page--resource-workspace > .inbox-hero {
+      grid-column: 1 / -1;
+      grid-row: 1;
+    }
+
+    .inbox-page--resource-workspace > .resource-inbox-scope {
+      grid-column: 1;
+      grid-row: 2 / 6;
+    }
+
+    .inbox-page--resource-workspace > .inbox-toolbar,
+    .inbox-page--resource-workspace > .inbox-batch,
+    .inbox-page--resource-workspace > .inbox-error-banner,
+    .inbox-page--resource-workspace > .inbox-content {
+      grid-column: 2;
+    }
+
+    .inbox-page--resource-workspace > .inbox-toolbar {
+      grid-row: 2;
+    }
+
+    .inbox-page--resource-workspace > .inbox-batch {
+      grid-row: 3;
+    }
+
+    .inbox-page--resource-workspace > .inbox-error-banner {
+      grid-row: 4;
+    }
+
+    .inbox-page--resource-workspace > .inbox-content {
+      grid-row: 5;
+    }
+
+    .inbox-page--resource-workspace > .resource-inbox-inspector {
+      grid-column: 3;
+      grid-row: 2 / 6;
+    }
+  }
+
+  @media (min-width: 981px) and (max-width: 1380px) {
+    .inbox-page--resource-workspace {
+      grid-template-columns: 210px minmax(0, 1fr);
+    }
+
+    .resource-inbox-inspector {
+      display: none;
+    }
+  }
+
+  @media (min-width: 768px) and (max-width: 980px) {
+    .inbox-page--resource-workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto auto auto auto minmax(0, 1fr);
+    }
+
+    .resource-inbox-scope,
+    .resource-inbox-inspector {
+      display: none;
+    }
+
+    .inbox-page--resource-workspace > .inbox-hero,
+    .inbox-page--resource-workspace > .inbox-toolbar,
+    .inbox-page--resource-workspace > .inbox-batch,
+    .inbox-page--resource-workspace > .inbox-error-banner,
+    .inbox-page--resource-workspace > .inbox-content {
+      grid-column: 1;
+    }
+
+    .inbox-page--resource-workspace > .inbox-hero {
+      grid-row: 1;
+    }
+
+    .inbox-page--resource-workspace > .inbox-toolbar {
+      grid-row: 2;
+    }
+
+    .inbox-page--resource-workspace > .inbox-batch {
+      grid-row: 3;
+    }
+
+    .inbox-page--resource-workspace > .inbox-error-banner {
+      grid-row: 4;
+    }
+
+    .inbox-page--resource-workspace > .inbox-content {
+      grid-row: 5;
+    }
+  }
+
+  /* 桌面列表也沿用移动端已验证过的独立卡片层级，避免完成态在整块面板中连成一片。
+     只放在桌面断点，移动浏览器与 App 保持现有布局和触控密度。 */
+  @media (min-width: 768px) {
+    .inbox-page--todo-focused .todo-group {
+      gap: 9px;
+      overflow: visible;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    .inbox-page--todo-focused .todo-group > header {
+      min-height: 40px;
+      padding: 0 2px;
+      border-bottom: 0;
+    }
+    .inbox-page--todo-focused .todo-group__items {
+      gap: 10px;
+    }
+    .inbox-page--todo-focused .todo-group__items :deep(.todo-item) {
+      border: 1px solid var(--surface-border-color);
+      border-left: 4px solid var(--todo-accent-color, var(--primary-color));
+      border-radius: 17px;
+      background: var(--card-background);
+      box-shadow: none;
+    }
+    .inbox-page--todo-focused .todo-group__items :deep(.todo-item::before) {
+      display: none;
+    }
+    .inbox-page--todo-focused .todo-group__items :deep(.todo-item.is-overdue) {
+      border-color: var(--surface-border-color);
+      border-left-color: var(--danger-color, #d83c45);
+    }
+    .inbox-page--todo-focused .todo-group__items :deep(.todo-item.is-completed) {
+      border-color: var(--surface-border-color);
+      border-left-color: var(--success-color, #00a884);
+      background: var(--card-background);
+    }
+    .inbox-page--todo-focused .todo-group__items :deep(.todo-series-group) {
+      overflow: hidden;
+      border: 1px solid var(--surface-border-color);
+      border-radius: 17px;
+      background: var(--card-background);
+    }
+    .inbox-page--todo-focused .todo-group__items :deep(.todo-series-group .todo-item) {
+      border: 0;
+      border-bottom: 1px solid var(--surface-divider-color);
+      border-left: 4px solid var(--todo-accent-color, var(--primary-color));
+      border-radius: 0;
+    }
+    .inbox-page--todo-focused .todo-group__items :deep(.todo-series-group .todo-item:last-child) {
+      border-bottom: 0;
+    }
+    .inbox-page--todo-focused .todo-group__items :deep(.todo-series-group .todo-item.is-overdue) {
+      border-left-color: var(--danger-color, #d83c45);
+    }
+    .inbox-page--todo-focused .todo-group__items :deep(.todo-series-group .todo-item.is-completed) {
+      border-left-color: var(--success-color, #00a884);
+    }
   }
   .inbox-empty {
     min-height: 100%;

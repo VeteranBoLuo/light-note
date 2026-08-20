@@ -95,19 +95,59 @@ export async function claimTasks(workerId, batchSize, lockTimeoutMinutes) {
 
 // ── 批量处理 ──────────────────────────────────────────────
 
+async function filterTasksNeedingFetch(tasks, workerId) {
+  const jobIds = tasks.map((task) => task.id).filter((id) => id !== undefined && id !== null);
+  if (!jobIds.length) return [];
+  const placeholders = jobIds.map(() => '?').join(',');
+
+  // 编辑页可能已在前台即时补好图标。先把这些任务安全终结，避免 Worker 再请求同一站点。
+  await pool.query(
+    `UPDATE bookmark_icon_jobs j
+     INNER JOIN bookmark b
+       ON b.id = j.bookmark_id
+      AND b.user_id = j.user_id
+      AND b.del_flag = 0
+     SET j.status = 'success',
+         j.error_code = NULL,
+         j.finished_at = NOW(3),
+         j.locked_at = NULL,
+         j.locked_by = NULL
+     WHERE j.id IN (${placeholders})
+       AND j.status = 'processing'
+       AND j.locked_by = ?
+       AND b.url = j.url_snapshot
+       AND b.icon_url IS NOT NULL
+       AND b.icon_url <> ''`,
+    [...jobIds, workerId],
+  );
+
+  const [remainingRows] = await pool.query(
+    `SELECT id
+     FROM bookmark_icon_jobs
+     WHERE id IN (${placeholders})
+       AND status = 'processing'
+       AND locked_by = ?`,
+    [...jobIds, workerId],
+  );
+  const remainingIds = new Set((remainingRows || []).map((row) => String(row.id)));
+  return tasks.filter((task) => remainingIds.has(String(task.id)));
+}
+
 export async function processTaskBatch(tasks, workerId) {
   if (!tasks?.length) return { processed: 0 };
 
+  const pendingTasks = await filterTasksNeedingFetch(tasks, workerId);
+
   // 按 Origin 分组
   const originGroups = new Map();
-  for (const task of tasks) {
+  for (const task of pendingTasks) {
     const key = task.origin_key;
     if (!originGroups.has(key)) originGroups.set(key, []);
     originGroups.get(key).push(task);
   }
 
   const entries = [...originGroups.entries()];
-  let processed = 0;
+  let processed = tasks.length - pendingTasks.length;
 
   // 并发处理所有 Origin（受 WORKER_CONCURRENCY 限制）
   await runPool(entries, WORKER_CONCURRENCY, async ([, groupTasks]) => {

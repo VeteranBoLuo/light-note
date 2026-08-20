@@ -77,7 +77,9 @@
           @click="runCapture(action)"
           v-click-log="{ module: '今日', operation: `快速记录-${action.label}` }"
         >
-          <SvgIcon :src="action.icon" size="22" aria-hidden="true" />
+          <span class="mobile-today__capture-icon" aria-hidden="true">
+            <SvgIcon :src="action.icon" size="20" />
+          </span>
           <span>{{ action.label }}</span>
         </BButton>
       </div>
@@ -88,35 +90,26 @@
         <strong>{{ t('workbench.mobileToday.continueTitle') }}</strong>
         <span>{{ t('workbench.mobileToday.continueHint') }}</span>
       </div>
-      <BButton
-        v-for="item in continueItems"
-        :key="`${item.type}-${item.id}`"
-        class="mobile-today__continue-item"
-        @click="openContinueItem(item)"
-        v-click-log="{ module: '今日', operation: `继续处理-${item.type}` }"
-      >
-        <span class="mobile-today__continue-icon" :class="`is-${item.type}`" aria-hidden="true">
-          <SvgIcon :src="item.type === 'note' ? icon.resource.note : icon.resource.file" size="16" />
-        </span>
-        <span class="mobile-today__continue-main">
-          <strong>{{ item.title }}</strong>
-          <small>{{ continueMeta(item) }}</small>
-        </span>
-      </BButton>
+      <div class="mobile-today__continue-list">
+        <BButton
+          v-for="item in continueItems"
+          :key="`${item.type}-${item.id}`"
+          class="mobile-today__continue-item"
+          @click="openContinueItem(item)"
+          v-click-log="{ module: '今日', operation: `继续处理-${item.type}` }"
+        >
+          <span class="mobile-today__continue-icon" :class="`is-${item.type}`" aria-hidden="true">
+            <SvgIcon :src="item.type === 'note' ? icon.resource.note : icon.resource.file" size="16" />
+          </span>
+          <span class="mobile-today__continue-main">
+            <strong>{{ item.title }}</strong>
+            <small>{{ continueMeta(item) }}</small>
+          </span>
+        </BButton>
+      </div>
     </section>
 
-    <section v-if="todaySettled && growthClaimableCount > 0" class="mobile-today__growth-claim">
-      <span><SvgIcon :src="icon.growth.reward" size="17" />{{ t('growth.claimAllCount', { n: growthClaimableCount }) }}</span>
-      <BButton
-        type="primary"
-        size="small"
-        :loading="claimingRewards"
-        :disabled="growthReadOnly || claimingRewards"
-        @click="claimAllGrowth"
-      >
-        {{ t('growth.claimAll') }}
-      </BButton>
-    </section>
+    <WorkbenchGrowth v-if="todaySettled" class="mobile-today__growth-card" compact-today />
 
     <section v-if="todaySettled && showDailyGrowthTasks" class="mobile-today__growth">
       <DailyQuests
@@ -124,6 +117,7 @@
         :bonus="dailyGrowthBonus"
         :claiming="claimingDailyGrowth || claimingRewards"
         :read-only="growthReadOnly"
+        :show-claim-action="false"
         @claim="claimDailyGrowth"
       />
     </section>
@@ -150,6 +144,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import TodayActionSection from '@/components/workbenches/TodayActionSection.vue';
+  import WorkbenchGrowth from '@/components/workbenches/WorkbenchGrowth.vue';
   import DailyQuests from '@/components/growth/DailyQuests.vue';
   import GrowthTasks from '@/components/growth/GrowthTasks.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
@@ -186,17 +181,8 @@
   const inbox = inboxStore();
   const user = useUserStore();
   const scrollRef = ref<HTMLElement | null>(null);
-  const {
-    dashboard,
-    growthTasks,
-    claimable,
-    claimingRewards,
-    loadDashboard,
-    loadGrowthTasks,
-    loadClaimable,
-    claimDailyBonus,
-    claimAllRewards,
-  } = useGrowth();
+  const { dashboard, growthTasks, claimingRewards, loadDashboard, loadGrowthTasks, loadClaimable, claimDailyBonus } =
+    useGrowth();
   const growthReadOnly = computed(() => Boolean(user.adminContext));
   const dailyGrowthQuests = computed(() => dashboard.value?.quests || []);
   const dailyGrowthBonus = computed(
@@ -206,33 +192,6 @@
   const showDailyGrowthTasks = computed(() => Boolean(dashboard.value && !dailyGrowthBonus.value.claimed));
   const claimingDailyGrowth = ref(false);
   const showGrowthTasks = computed(() => Boolean(growthTasks.value?.tasks.some((task) => !task.claimed)));
-  const growthClaimableCount = computed(() => Number(claimable.value?.count || 0));
-
-  async function claimAllGrowth() {
-    if (growthReadOnly.value || claimingRewards.value) return;
-    try {
-      const res = await claimAllRewards();
-      if (res?.status === 200 && res.data?.ok) {
-        const claimed = Number(res.data.claimed || 0);
-        if (claimed > 0) {
-          const frames = Array.isArray(res.data.frames) ? res.data.frames.length : 0;
-          message.success(
-            t(frames > 0 ? 'growth.claimAllSuccessWithFrames' : 'growth.claimAllSuccess', {
-              n: claimed,
-              exp: Number(res.data.exp || 0),
-              points: Number(res.data.points || 0),
-              frames,
-            }),
-          );
-          recordOperation({ module: '工作台', operation: '一键领取成长奖励成功' });
-        } else message.info(t('growth.claimAllEmpty'));
-      }
-    } catch (error) {
-      console.error('今日一键领取成长奖励失败:', error);
-      message.error(t('growth.claimAllFailed'));
-    }
-  }
-
   async function claimDailyGrowth() {
     if (growthReadOnly.value || claimingDailyGrowth.value || claimingRewards.value) return;
     claimingDailyGrowth.value = true;
@@ -501,7 +460,7 @@
   onActivated(() => {
     if (dashboard.value) void loadDashboard();
     if (growthTasks.value) void loadGrowthTasks(true);
-    if (claimable.value) void loadClaimable();
+    void loadClaimable();
   });
 </script>
 
@@ -510,7 +469,7 @@
     position: relative;
     width: 100%;
     height: 100%;
-    padding: 14px 12px calc(18px + env(safe-area-inset-bottom));
+    padding: 12px 12px calc(18px + env(safe-area-inset-bottom));
     box-sizing: border-box;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
@@ -521,7 +480,7 @@
   /* 下拉刷新指示器现在是全站唯一一个,挂在 MobileAppShell 的内容区顶部 */
 
   .mobile-today__head {
-    margin-bottom: 14px;
+    margin: 1px 2px 13px;
   }
 
   .mobile-today__growth {
@@ -532,34 +491,27 @@
     background: var(--card-background);
   }
 
-  .mobile-today__growth-claim {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin: 12px 0;
-    padding: 10px 12px;
-    border: 1px solid var(--primary-color);
-    border-radius: 14px;
-    background: var(--card-background);
-  }
-
-  .mobile-today__growth-claim > span {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    color: var(--text-color);
-    font-size: 13px;
-    font-weight: 700;
+  .mobile-today__growth-card {
+    margin: 14px 0;
   }
 
   .mobile-today__pending {
+    position: relative;
+    overflow: hidden;
     margin-bottom: 14px;
-    padding: 14px;
+    padding: 15px 13px 13px;
     border: 1px solid var(--surface-border-color);
     border-radius: 17px;
     background: var(--card-background);
-    box-shadow: none;
+    box-shadow: 0 10px 28px rgba(37, 40, 72, 0.06);
+  }
+
+  .mobile-today__pending::before {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 3px;
+    background: var(--primary-color);
+    content: '';
   }
 
   .mobile-today__pending-head {
@@ -610,8 +562,8 @@
     gap: 0;
     overflow: hidden;
     border: 1px solid var(--surface-border-color);
-    border-radius: 12px;
-    background: var(--card-background);
+    border-radius: 13px;
+    background: var(--workspace-panel-bg-color, var(--card-background));
   }
 
   .mobile-today__pending-details {
@@ -633,6 +585,14 @@
     border-radius: 0;
     color: var(--text-color);
     background: transparent !important;
+  }
+
+  .mobile-today__summary-item:active,
+  .mobile-today__summary-item:focus-visible {
+    z-index: 1;
+    outline: 1px solid var(--primary-color);
+    outline-offset: -1px;
+    background: var(--card-background) !important;
   }
 
   .mobile-today__summary-item:not(:last-child)::after {
@@ -738,16 +698,38 @@
   .mobile-today__capture-action {
     width: 100%;
     min-width: 0;
-    height: 94px;
-    padding: 12px 4px;
-    gap: 7px;
+    height: 86px;
+    padding: 9px 4px;
+    gap: 6px;
     flex-direction: column;
+    align-items: center;
     justify-content: center;
     border: 1px solid var(--surface-border-color);
-    border-radius: 15px;
+    border-radius: 14px;
     color: var(--text-color);
     background: var(--card-background) !important;
+    box-shadow: 0 8px 22px rgba(37, 40, 72, 0.045);
     font-size: 12px;
+  }
+
+  .mobile-today__capture-action:active,
+  .mobile-today__capture-action:focus-visible {
+    border-color: var(--capture-accent, var(--primary-color));
+    outline: none;
+  }
+
+  .mobile-today__capture-icon {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    margin-inline: auto;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 11px;
+    color: var(--capture-accent, var(--primary-color));
+    background: var(--card-background);
+    line-height: 0;
   }
 
   /* 图标是 column flex 的子项，不锁定收缩会被压扁成一条（实测 22px 只剩 9px） */
@@ -757,22 +739,42 @@
   }
 
   .mobile-today__capture-action.is-note {
-    color: var(--resource-note-color);
+    --capture-accent: var(--resource-note-color, #00a884);
+  }
+
+  .mobile-today__capture-action.is-note .mobile-today__capture-icon {
+    border-color: color-mix(in srgb, var(--resource-note-color, #00a884) 18%, var(--surface-border-color));
+    background: color-mix(in srgb, var(--resource-note-color, #00a884) 11%, var(--card-background));
   }
 
   .mobile-today__capture-action.is-bookmark {
-    color: var(--resource-bookmark-color);
+    --capture-accent: var(--resource-bookmark-color, #615ced);
+  }
+
+  .mobile-today__capture-action.is-bookmark .mobile-today__capture-icon {
+    border-color: color-mix(in srgb, var(--resource-bookmark-color, #615ced) 18%, var(--surface-border-color));
+    background: color-mix(in srgb, var(--resource-bookmark-color, #615ced) 11%, var(--card-background));
   }
 
   .mobile-today__capture-action.is-file {
-    color: var(--resource-file-color);
+    --capture-accent: var(--resource-file-color, #ff8a00);
+  }
+
+  .mobile-today__capture-action.is-file .mobile-today__capture-icon {
+    border-color: color-mix(in srgb, var(--resource-file-color, #ff8a00) 18%, var(--surface-border-color));
+    background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 11%, var(--card-background));
   }
 
   .mobile-today__capture-action.is-todo {
-    color: var(--primary-color);
+    --capture-accent: var(--todo-accent-color, #0ea5e9);
   }
 
-  .mobile-today__capture-action span {
+  .mobile-today__capture-action.is-todo .mobile-today__capture-icon {
+    border-color: color-mix(in srgb, var(--todo-accent-color, #0ea5e9) 18%, var(--surface-border-color));
+    background: color-mix(in srgb, var(--todo-accent-color, #0ea5e9) 11%, var(--card-background));
+  }
+
+  .mobile-today__capture-action > span:last-child {
     color: var(--text-color);
   }
 
@@ -802,21 +804,30 @@
     font-size: 11px;
   }
 
+  .mobile-today__continue-list {
+    overflow: hidden;
+    padding: 0 11px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 14px;
+    background: var(--card-background);
+    box-shadow: 0 8px 22px rgba(37, 40, 72, 0.04);
+  }
+
   .mobile-today__continue-item {
     width: 100%;
     min-height: 60px;
-    padding: 12px;
+    padding: 10px 1px;
     gap: 10px;
     justify-content: flex-start;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 12px;
+    border: 0;
+    border-radius: 0;
     color: var(--text-color);
-    background: var(--card-background) !important;
+    background: transparent !important;
     text-align: left;
   }
 
   .mobile-today__continue-item + .mobile-today__continue-item {
-    margin-top: 8px;
+    border-top: 1px solid var(--surface-divider-color);
   }
 
   .mobile-today__continue-icon {

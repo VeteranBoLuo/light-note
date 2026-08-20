@@ -38,13 +38,15 @@
       </div>
       <ul v-else class="chat-online-members-modal__list" :style="{ minHeight: loadingListMinHeight }">
         <li v-for="(member, index) in snapshot?.members || []" :key="`${member.alias}-${member.role}-${index}`">
-          <AvatarFramePreview
-            :frame-id="member.frameId"
-            :src="member.avatar || icon.communityChat.defaultAvatar"
-            :size="38"
-            :animated="false"
-            class="chat-online-members-modal__avatar"
-          />
+          <span class="chat-online-members-modal__avatar-slot">
+            <AvatarFramePreview
+              :frame-id="member.frameId"
+              :src="member.avatar || icon.communityChat.defaultAvatar"
+              :size="38"
+              :animated="false"
+              class="chat-online-members-modal__avatar"
+            />
+          </span>
           <span class="chat-online-members-modal__copy">
             <strong>{{ member.alias || t('communityChat.memberFallback') }}</strong>
             <small>{{ roleLabel(member.role) }}</small>
@@ -122,6 +124,8 @@
 
 <style scoped lang="less">
   .chat-online-members-modal {
+    --chat-online-members-avatar-column: 88px;
+
     display: grid;
     gap: 12px;
     color: var(--text-color);
@@ -179,7 +183,7 @@
     padding: 8px 10px;
     box-sizing: border-box;
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: var(--chat-online-members-avatar-column) minmax(0, 1fr) auto;
     align-items: center;
     gap: 10px;
     border: 1px solid var(--surface-border-color);
@@ -206,6 +210,7 @@
   .chat-online-members-modal__skeleton-avatar {
     width: 38px;
     height: 38px;
+    justify-self: center;
     border-radius: 50%;
   }
 
@@ -262,11 +267,16 @@
     gap: 3px;
   }
 
-  .chat-online-members-modal__avatar :deep(img),
-  .chat-online-members-modal__avatar :deep(.icon-base64),
-  .chat-online-members-modal__avatar :deep(.icon-fixed-base64) {
-    border-radius: 50%;
-    object-fit: cover;
+  /*
+   * 横向槽位按 38px 头像下目录最大 artSize 缩放后再留 6px 安全量，
+   * 所有成员共用同一列宽；子组件保留自然高度，避免外饰覆盖昵称或相邻成员。
+   */
+  .chat-online-members-modal__avatar-slot {
+    min-width: 0;
+    display: grid;
+    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+    place-items: center;
+    overflow: visible;
   }
 
   .chat-online-members-modal__copy strong,
@@ -295,6 +305,7 @@
   .chat-online-members-modal__guest-avatar {
     width: 38px;
     height: 38px;
+    justify-self: center;
     display: grid;
     place-items: center;
     border: 1px solid var(--surface-border-color);

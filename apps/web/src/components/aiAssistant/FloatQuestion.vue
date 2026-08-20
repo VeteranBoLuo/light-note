@@ -528,11 +528,13 @@
   }
 
   onMounted(() => {
-    void recordAiProductEvent('ai_entry_impression', {
-      surface: 'edge',
-      device: telemetryDevice(),
-      mode: activeMode.value,
-    });
+    if (user.id && user.role !== 'visitor') {
+      void recordAiProductEvent('ai_entry_impression', {
+        surface: 'edge',
+        device: telemetryDevice(),
+        mode: activeMode.value,
+      });
+    }
     // 只在桌面正常网络的空闲期预热。移动端、弱网或省流模式下，后台下载大型 AI
     // 运行时会与用户刚点击的页面争抢带宽，正是“页面还能滚，但点击像没反应”的来源之一。
     const warmChat = () => import('@/view/aiAssistant/ChatContainer.vue').catch(() => {});

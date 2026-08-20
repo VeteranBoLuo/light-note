@@ -323,6 +323,7 @@ export default {
     },
     required: ['url'],
   },
+  resourceBindings: [{ argument: 'url', refType: 'bookmark', sourceField: 'url', allowLiteral: true }],
   requireRoot: false,
   isWrite: false,
   timeoutMs: 24_000,

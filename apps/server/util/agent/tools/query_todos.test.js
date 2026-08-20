@@ -1,10 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const listTodoPage = vi.fn();
-const poolQuery = vi.fn();
 const searchPersonalKnowledge = vi.fn();
 
-vi.mock('../../../db/index.js', () => ({ default: { query: poolQuery } }));
+vi.mock('../../../db/index.js', () => ({ default: { query: vi.fn() } }));
 vi.mock('../../services/todoService.js', () => ({ listTodoPage }));
 vi.mock('../../personalKnowledgeSearch.js', () => ({ searchPersonalKnowledge }));
 
@@ -22,6 +21,31 @@ describe('query_todos 工具', () => {
       expect.anything(),
       'user-1',
       expect.objectContaining({ status: 'all', keyword: '发票', limit: 50, view: 'summary' }),
+    );
+  });
+
+  it('把页面计划日期和精确提醒分钟作为结构化筛选交给 Service', async () => {
+    listTodoPage.mockResolvedValue({ items: [], total: 0, nextCursor: null });
+
+    await tool.execute(
+      {
+        status: 'pending',
+        keyword: '推广',
+        scheduleDate: '2026-08-20',
+        reminderAt: '2026-08-20T16:00',
+      },
+      { userId: 'user-1', userRole: 'user' },
+    );
+
+    expect(listTodoPage).toHaveBeenCalledWith(
+      expect.anything(),
+      'user-1',
+      expect.objectContaining({
+        keyword: '推广',
+        planDate: '2026-08-20',
+        reminderAt: '2026-08-20 16:00',
+        view: 'summary',
+      }),
     );
   });
 
@@ -53,7 +77,26 @@ describe('query_todos 工具', () => {
   });
 
   it('首页 LIKE 零结果时降级语义索引，保留状态条件且摘要不编造提醒渠道', async () => {
-    listTodoPage.mockResolvedValue({ items: [], total: 0, nextCursor: null });
+    listTodoPage.mockResolvedValueOnce({ items: [], total: 0, nextCursor: null }).mockResolvedValueOnce({
+      items: [
+        {
+          id: 't1',
+          title: '甲',
+          status: 'pending',
+          checklistProgress: { completed: 1, total: 2 },
+          reminderChannels: [],
+        },
+        {
+          id: 't2',
+          title: '乙',
+          status: 'pending',
+          checklistProgress: { completed: 0, total: 0 },
+          reminderChannels: [],
+        },
+      ],
+      total: 2,
+      nextCursor: null,
+    });
     searchPersonalKnowledge.mockResolvedValue({
       hits: [
         { type: 'todo', id: 't2' },
@@ -61,35 +104,31 @@ describe('query_todos 工具', () => {
         { type: 'todo', id: 't1' },
       ],
     });
-    poolQuery.mockResolvedValueOnce([
-      [
-        {
-          id: 't1',
-          title: '甲',
-          checklist: JSON.stringify([{ text: 'a', done: true }, { text: 'b', done: false }]),
-          priority: 1,
-          status: 'pending',
-          dueAt: null,
-          completedAt: null,
-        },
-        { id: 't2', title: '乙', checklist: null, priority: 0, status: 'pending', dueAt: null, completedAt: null },
-      ],
-    ]);
-
     const result = await tool.execute(
-      { keyword: '我有没有关于打篮球的待办', status: 'pending' },
+      {
+        keyword: '我有没有关于打篮球的待办',
+        status: 'pending',
+        planDate: '2026-08-20',
+        reminderAt: '2026-08-20 16:00',
+      },
       { userId: 'user-1', userRole: 'user' },
     );
 
     expect(searchPersonalKnowledge).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'user-1', scope: { types: ['todo'] } }),
     );
-    const [sql, params] = poolQuery.mock.calls[0];
-    expect(sql).toContain('id IN (?)');
-    expect(sql).toContain('user_id = ?');
-    expect(sql).toContain('status = ?'); // 状态条件保留
-    expect(params[0]).toEqual(['t2', 't1']);
-    // 顺序跟随索引相关度；清单进度从 JSON 计算；提醒渠道如实置空
+    expect(listTodoPage).toHaveBeenLastCalledWith(
+      expect.anything(),
+      'user-1',
+      expect.objectContaining({
+        ids: ['t2', 't1'],
+        status: 'pending',
+        planDate: '2026-08-20',
+        reminderAt: '2026-08-20 16:00',
+        view: 'summary',
+      }),
+    );
+    // Service 返回后重新按索引相关度排序，且不编造提醒摘要。
     expect(result.items.map((item) => item.id)).toEqual(['t2', 't1']);
     expect(result.items[1].checklistProgress).toEqual({ completed: 1, total: 2 });
     expect(result.items.every((item) => Array.isArray(item.reminderChannels) && !item.reminderChannels.length)).toBe(
@@ -102,10 +141,7 @@ describe('query_todos 工具', () => {
   it('带 cursor 的翻页零结果是翻到底，不触发降级', async () => {
     listTodoPage.mockResolvedValue({ items: [], total: 3, nextCursor: null });
 
-    const result = await tool.execute(
-      { keyword: '发票', cursor: 'scope:12' },
-      { userId: 'user-1', userRole: 'user' },
-    );
+    const result = await tool.execute({ keyword: '发票', cursor: 'scope:12' }, { userId: 'user-1', userRole: 'user' });
 
     expect(searchPersonalKnowledge).not.toHaveBeenCalled();
     expect(result.matchMode).toBe('like');
@@ -130,6 +166,8 @@ describe('query_todos 工具', () => {
           status: 'pending',
           priority: 2,
           dueAt: '2026-07-24 10:00:00',
+          planDate: '2026-07-24',
+          reminderAt: '2026-07-24 09:00:00',
           checklistProgress: { completed: 1, total: 2 },
           reminderChannels: ['in_app', 'email'],
           description: '这段字段即使异常混入 raw，也不应被 transform 使用',
@@ -139,9 +177,45 @@ describe('query_todos 工具', () => {
     });
 
     expect(text).toContain('清单：1/2');
-    expect(text).toContain('站内提醒、邮件提醒');
+    expect(text).toContain('提醒时间：2026-07-24 09:00（站内提醒、邮件提醒）');
     expect(text).not.toContain('private@example.com');
     expect(text).not.toContain('这段字段');
+  });
+
+  it('精确定位今天 16 点的同名待办，并明确当前页不能代表全部结果', () => {
+    const exact = tool.transform({
+      total: 1,
+      items: [
+        {
+          id: 'todo-today',
+          title: '推广',
+          status: 'pending',
+          priority: 1,
+          planDate: '2026-08-20',
+          dueAt: null,
+          matchedReminderAt: '2026-08-20 16:00:00',
+          reminderChannels: ['in_app'],
+          checklistProgress: { completed: 3, total: 4 },
+        },
+      ],
+    });
+    expect(exact).toContain('计划日期：2026-08-20');
+    expect(exact).toContain('提醒时间：2026-08-20 16:00（站内提醒）');
+    expect(exact).toContain('清单：3/4');
+
+    const partial = tool.transform({
+      total: 60,
+      items: [
+        {
+          id: 'todo-1',
+          title: '推广',
+          status: 'pending',
+          priority: 1,
+          checklistProgress: { completed: 0, total: 4 },
+        },
+      ],
+    });
+    expect(partial).toContain('以下只是当前页，不能据此推断未返回结果');
   });
 
   it('依赖引用只取权威 raw ID，不解析可能夹带伪标记的标题', () => {
@@ -167,6 +241,8 @@ describe('query_todos 工具', () => {
           status: 'pending',
           priority: 2,
           dueAt: '2026-08-05 18:00:00',
+          planDate: '2026-08-05',
+          reminderAt: '2026-08-05 17:00:00',
           checklistProgress: { completed: 1, total: 2 },
           description: '不应进入来源摘要',
           email: 'private@example.com',

@@ -61,6 +61,10 @@
   const bootstrapLoading = ref(true);
   const communityUnread = useCommunityChatUnread();
   let directoryRefreshTimer: number | undefined;
+  let lastDirectoryRefreshAt = 0;
+
+  const DIRECTORY_FALLBACK_REFRESH_MS = 8_000;
+  const DIRECTORY_REALTIME_SAFETY_REFRESH_MS = 60_000;
 
   useMobileTopBar(['communityChat'], {
     searchMode: 'icon',
@@ -94,6 +98,7 @@
       serverRooms.value = directory?.items || [];
       directoryMessagingEnabled.value = Boolean(directory?.messagingEnabled);
       communityUnread.syncDirectory(directory, unreadSyncToken);
+      lastDirectoryRefreshAt = Date.now();
     } catch {
       if (!background) {
         access.value = null;
@@ -113,10 +118,17 @@
   onMounted(() => {
     void loadDirectory();
     directoryRefreshTimer = window.setInterval(() => {
-      if (document.visibilityState === 'visible' && messagingReady.value) {
+      const refreshInterval = access.value?.realtimeEnabled
+        ? DIRECTORY_REALTIME_SAFETY_REFRESH_MS
+        : DIRECTORY_FALLBACK_REFRESH_MS;
+      if (
+        document.visibilityState === 'visible' &&
+        messagingReady.value &&
+        Date.now() - lastDirectoryRefreshAt >= refreshInterval
+      ) {
         void loadDirectory({ background: true });
       }
-    }, 8_000);
+    }, DIRECTORY_FALLBACK_REFRESH_MS);
   });
 
   watch(

@@ -195,7 +195,11 @@
     type AiSource,
   } from '@/components/aiAssistant/aiSourceNavigation';
   import { getRootZoom } from '@/utils/zoom';
-  import type { AiMaterialClarification, AiResolvedGrounding } from '@/types/aiGrounding';
+  import {
+    shouldShowAiMaterialModeNotice,
+    type AiMaterialClarification,
+    type AiResolvedGrounding,
+  } from '@/types/aiGrounding';
 
   const { t } = useI18n();
 
@@ -253,12 +257,10 @@
   const isFailedMessage = computed(() => Boolean(failedErrorCode.value));
   const materialModeText = computed(() => {
     const grounding = props.message.resolvedGrounding;
-    if (!grounding?.enabled) return '';
+    if (!shouldShowAiMaterialModeNotice(grounding)) return '';
     const count = grounding.allowedSourceCount;
     if (grounding.materialMode === 'current_explicit') return t('ai.materialMode.current', { count });
-    if (grounding.materialMode === 'inherited') return t('ai.materialMode.inherited', { count });
-    if (grounding.materialMode === 'workspace') return t('ai.materialMode.workspace');
-    return t('ai.materialMode.none');
+    return t('ai.materialMode.inherited', { count });
   });
 
   // 流式阶段就实时渲染 Markdown(轻量路径:补全未闭合语法 → marked → DOMPurify,跳过高亮与引用装饰),

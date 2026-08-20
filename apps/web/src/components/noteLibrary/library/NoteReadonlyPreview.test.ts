@@ -86,6 +86,13 @@ describe('NoteReadonlyPreview', () => {
     expect(source).toMatch(/\.note-readonly-preview__drawing\s*\{[\s\S]*min-height:\s*0;[\s\S]*height:\s*auto;/u);
   });
 
+  it('手绘画板适配完成后只在外层阅读区执行一次居中定位', () => {
+    expect(source).toContain('@ready="centerDrawingPreview"');
+    expect(source).toContain("root?.querySelector<HTMLElement>('.drawing-page')");
+    expect(source).toContain("scrollCenterIntoContainer(root, page, 'auto')");
+    expect(source).toContain("if (seq !== requestSeq || displayNote.value.type !== 'drawing') return");
+  });
+
   it('从实际预览 DOM 提取标题并在同一个滚动容器内定位和高亮', () => {
     expect(source).toContain("querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6')");
     expect(source).toContain("emit('outlineChange', outline)");

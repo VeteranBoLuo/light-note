@@ -159,12 +159,14 @@
       });
       window.addEventListener('scroll', computePosition, true);
       window.addEventListener('resize', computePosition);
+      window.addEventListener('keydown', onWindowKeydown, true);
       if (isClick.value) document.addEventListener('mousedown', onDocMouseDown, true);
     } else {
       resizeObserver?.disconnect();
       resizeObserver = null;
       window.removeEventListener('scroll', computePosition, true);
       window.removeEventListener('resize', computePosition);
+      window.removeEventListener('keydown', onWindowKeydown, true);
       document.removeEventListener('mousedown', onDocMouseDown, true);
     }
   });
@@ -203,6 +205,21 @@
     doClose();
   }
 
+  function onWindowKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Escape' || event.isComposing || event.keyCode === 229 || !open.value) return;
+    const openPanels = document.querySelectorAll<HTMLElement>('.b-popover-panel');
+    if (panelRef.value !== openPanels.item(openPanels.length - 1)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    doClose();
+    void nextTick(() => {
+      const focusTarget = triggerRef.value?.querySelector<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      focusTarget?.focus({ preventScroll: true });
+    });
+  }
+
   defineExpose({ close: doClose, open: doOpen });
 
   onBeforeUnmount(() => {
@@ -210,6 +227,7 @@
     resizeObserver?.disconnect();
     window.removeEventListener('scroll', computePosition, true);
     window.removeEventListener('resize', computePosition);
+    window.removeEventListener('keydown', onWindowKeydown, true);
     document.removeEventListener('mousedown', onDocMouseDown, true);
   });
 </script>

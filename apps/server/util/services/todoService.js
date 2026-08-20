@@ -16,6 +16,7 @@ import {
   snoozeV2Todo,
 } from './todoSeriesService.js';
 import { recordTodoCompletion, recordTodoCreation } from '../growthActivityHistory.js';
+import { resolveTodoConfiguredReminderAt, resolveTodoNextReminderAt } from '@lightnote/shared/todo-reminder';
 
 const STATUS = new Set(['pending', 'completed']);
 const FILTER_STATUS = new Set(['all', ...STATUS]);
@@ -55,6 +56,24 @@ const ACTION_AT_SQL = `NULLIF(LEAST(
   COALESCE(due_at, '9999-12-31 23:59:59'),
   COALESCE(CAST(occurrence_date AS DATETIME), '9999-12-31 23:59:59')
 ), '9999-12-31 23:59:59')`;
+const REMINDER_AT_FILTER_SQL = `(
+  EXISTS (
+    SELECT 1 FROM todo_reminder_jobs reminder_job
+     WHERE reminder_job.todo_id = todo_items.id
+       AND reminder_job.user_id = todo_items.user_id
+       AND reminder_job.status <> 'cancelled'
+       AND reminder_job.scheduled_at_local >= ?
+       AND reminder_job.scheduled_at_local < ?
+  )
+  OR EXISTS (
+    SELECT 1 FROM todo_reminders legacy_reminder
+     WHERE legacy_reminder.todo_id = todo_items.id
+       AND legacy_reminder.user_id = todo_items.user_id
+       AND legacy_reminder.status NOT IN ('cancelled', 'paused_delete')
+       AND legacy_reminder.scheduled_at >= ?
+       AND legacy_reminder.scheduled_at < ?
+  )
+)`;
 const SORT_SQL = Object.freeze({
   smart: `CASE
       WHEN due_at IS NOT NULL AND due_at < NOW() THEN 0
@@ -78,6 +97,63 @@ const SORT_SQL = Object.freeze({
 });
 
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
+
+function validDateParts(year, month, day) {
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() + 1 === month && date.getUTCDate() === day;
+}
+
+function normalizePlanDateFilter(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const raw = String(value).trim();
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/u);
+  if (!match) throw new Error('无效的待办计划日期');
+  const [, year, month, day] = match.map(Number);
+  if (!validDateParts(year, month, day)) throw new Error('无效的待办计划日期');
+  return raw;
+}
+
+function sqlDateTimeFromUtcParts(value) {
+  const pad = (part) => String(part).padStart(2, '0');
+  return `${value.getUTCFullYear()}-${pad(value.getUTCMonth() + 1)}-${pad(value.getUTCDate())} ${pad(
+    value.getUTCHours(),
+  )}:${pad(value.getUTCMinutes())}:00`;
+}
+
+function normalizeReminderAtFilter(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const raw = String(value).trim();
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})$/u);
+  if (!match) throw new Error('无效的待办提醒时间');
+  const [, year, month, day, hour, minute] = match.map(Number);
+  if (!validDateParts(year, month, day) || hour > 23 || minute > 59) {
+    throw new Error('无效的待办提醒时间');
+  }
+  const start = new Date(Date.UTC(year, month - 1, day, hour, minute));
+  return {
+    value: `${raw.slice(0, 10)} ${raw.slice(11, 16)}`,
+    start: sqlDateTimeFromUtcParts(start),
+    end: sqlDateTimeFromUtcParts(new Date(start.getTime() + 60_000)),
+  };
+}
+
+function normalizeTodoIds(value) {
+  if (value === undefined || value === null) return null;
+  if (!Array.isArray(value)) throw new Error('无效的待办 ID 筛选');
+  const normalized = value.map((id) => String(id || '').trim());
+  if (normalized.some((id) => !id || id.length > 64)) throw new Error('无效的待办 ID 筛选');
+  return [...new Set(normalized)].slice(0, 50);
+}
+
+function todoPlanDate(item) {
+  const value = item.startAt || item.dueAt || item.occurrenceDate || '';
+  if (value instanceof Date && Number.isFinite(value.getTime())) {
+    const pad = (part) => String(part).padStart(2, '0');
+    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+  }
+  const match = String(value).match(/^(\d{4}-\d{2}-\d{2})/u);
+  return match?.[1] || null;
+}
 
 function todoStatusError(code, message, status = 400, data) {
   const error = new Error(message);
@@ -1092,6 +1168,9 @@ function normalizeTodoListOptions(input = {}) {
   if (!FILTER_STATUS.has(status) || !SORT_SQL[sort]) throw new Error('无效的待办筛选参数');
   const due = input.due === undefined || input.due === null ? null : String(input.due).toLowerCase();
   if (due !== null && !DUE_FILTERS.has(due)) throw new Error('无效的待办筛选参数');
+  const ids = normalizeTodoIds(input.ids);
+  const planDate = normalizePlanDateFilter(input.planDate);
+  const reminderAt = normalizeReminderAtFilter(input.reminderAt);
 
   const keyword = String(input.keyword || '')
     .trim()
@@ -1101,7 +1180,7 @@ function normalizeTodoListOptions(input = {}) {
   const offset = paginated ? decodeOffsetCursor(input.cursor, TODO_PAGE_CURSOR_SCOPE) : 0;
   const view = input.view === 'summary' ? 'summary' : 'full';
   const includeTotal = input.includeTotal !== false;
-  return { status, sort, keyword, due, paginated, limit, offset, view, includeTotal };
+  return { status, sort, keyword, due, ids, planDate, reminderAt, paginated, limit, offset, view, includeTotal };
 }
 
 function todoOrderSql(status, sort) {
@@ -1110,39 +1189,44 @@ function todoOrderSql(status, sort) {
   return SORT_SQL[sort];
 }
 
-async function loadTodoReminderMap(db, items, userId, view) {
+async function loadTodoReminderMap(db, items, userId, view, matchedReminderAt = null) {
   if (!items.length) return new Map();
   const placeholders = items.map(() => '?').join(',');
   const fields =
     view === 'summary'
-      ? 'todo_id AS todoId, channel'
+      ? `todo_id AS todoId, channel, scheduled_at AS scheduledAt, schedule_start_at AS startAt,
+            repeat_interval_minutes AS intervalMinutes`
       : `todo_id AS todoId, channel, scheduled_at AS scheduledAt, schedule_start_at AS startAt,
             repeat_interval_minutes AS intervalMinutes, repeat_end_at AS endAt, target_email AS email`;
+  const matchHistoricalReminder = view === 'summary' && matchedReminderAt;
+  const reminderStatusSql = matchHistoricalReminder
+    ? `status NOT IN ('cancelled','paused_delete') AND scheduled_at >= ? AND scheduled_at < ?`
+    : `status IN ('pending','processing')`;
+  const reminderParams = [
+    ...items.map((item) => item.id),
+    userId,
+    ...(matchHistoricalReminder ? [matchedReminderAt.start, matchedReminderAt.end] : []),
+  ];
   const [reminderRows] = await db.query(
     `SELECT ${fields}
      FROM todo_reminders
-     WHERE todo_id IN (${placeholders}) AND user_id = ? AND status IN ('pending','processing')
+     WHERE todo_id IN (${placeholders}) AND user_id = ? AND ${reminderStatusSql}
      ORDER BY create_time ASC`,
-    [...items.map((item) => item.id), userId],
+    reminderParams,
   );
   const reminders = new Map();
   for (const row of reminderRows) {
-    if (view === 'summary') {
-      const channels = reminders.get(row.todoId) || [];
-      if (['in_app', 'email'].includes(row.channel) && !channels.includes(row.channel)) channels.push(row.channel);
-      reminders.set(row.todoId, channels);
-      continue;
-    }
     const current = reminders.get(row.todoId) || {
       mode: row.intervalMinutes ? 'repeat' : 'once',
       channels: [],
       startAt: row.startAt || row.scheduledAt,
-      endAt: row.endAt || null,
-      intervalMinutes: row.intervalMinutes === null ? null : Number(row.intervalMinutes),
-      email: null,
+      intervalMinutes: row.intervalMinutes == null ? null : Number(row.intervalMinutes),
+      ...(view === 'full' ? { endAt: row.endAt || null, email: null } : {}),
     };
-    current.channels.push(row.channel);
-    if (row.channel === 'email') current.email = row.email || null;
+    if (['in_app', 'email'].includes(row.channel) && !current.channels.includes(row.channel)) {
+      current.channels.push(row.channel);
+    }
+    if (view === 'full' && row.channel === 'email') current.email = row.email || null;
     reminders.set(row.todoId, current);
   }
   return reminders;
@@ -1153,9 +1237,18 @@ async function loadTodoReminderMap(db, items, userId, view) {
  * 因此待办说明和提醒邮箱不会进入模型上下文。
  */
 export async function listTodoPage(db, userId, input = {}) {
-  const { status, sort, keyword, due, paginated, limit, offset, view, includeTotal } = normalizeTodoListOptions(input);
+  const { status, sort, keyword, due, ids, planDate, reminderAt, paginated, limit, offset, view, includeTotal } =
+    normalizeTodoListOptions(input);
   const where = ['user_id = ?', 'del_flag = 0', "COALESCE(instance_state, 'normal') = 'normal'"];
   const params = [userId];
+  if (ids !== null) {
+    if (ids.length) {
+      where.push('todo_items.id IN (?)');
+      params.push(ids);
+    } else {
+      where.push('1 = 0');
+    }
+  }
   if (status !== 'all') {
     where.push('status = ?');
     params.push(status);
@@ -1167,6 +1260,18 @@ export async function listTodoPage(db, userId, input = {}) {
     where.push('(title LIKE ? OR description LIKE ?)');
     const like = `%${keyword}%`;
     params.push(like, like);
+  }
+  if (planDate) {
+    where.push(`(
+      (start_at >= ? AND start_at < DATE_ADD(?, INTERVAL 1 DAY))
+      OR (start_at IS NULL AND due_at >= ? AND due_at < DATE_ADD(?, INTERVAL 1 DAY))
+      OR (start_at IS NULL AND due_at IS NULL AND occurrence_date = ?)
+    )`);
+    params.push(planDate, planDate, planDate, planDate, planDate);
+  }
+  if (reminderAt) {
+    where.push(REMINDER_AT_FILTER_SQL);
+    params.push(reminderAt.start, reminderAt.end, reminderAt.start, reminderAt.end);
   }
   const fields =
     view === 'summary'
@@ -1195,7 +1300,7 @@ export async function listTodoPage(db, userId, input = {}) {
   const legacyItems = items.filter((item) => Number(item.planVersion || 1) !== 2);
   const v2Items = items.filter((item) => Number(item.planVersion || 1) === 2);
   const [reminders, v2Reminders, seriesMap] = await Promise.all([
-    loadTodoReminderMap(db, legacyItems, userId, view),
+    loadTodoReminderMap(db, legacyItems, userId, view, reminderAt),
     loadV2ReminderMap(db, userId, v2Items),
     loadV2SeriesMap(db, userId, v2Items),
   ]);
@@ -1208,23 +1313,34 @@ export async function listTodoPage(db, userId, input = {}) {
     if (view === 'summary') {
       const checklist = parseChecklist(item.checklist);
       const v2Reminder = v2Reminders.get(String(item.id));
+      const legacyReminder = reminders.get(item.id) || null;
+      const reminder = v2Reminder || legacyReminder;
+      const reminderProjectionInput = { ...item, reminder };
+      const nextReminderAt = resolveTodoNextReminderAt(reminderProjectionInput) || null;
+      const configuredReminderAt = resolveTodoConfiguredReminderAt(reminderProjectionInput) || null;
+      const matchedReminderAt = reminderAt ? `${reminderAt.value}:00` : null;
       const summary = {
         id: String(item.id),
         title: item.title || '未命名待办',
         priority: Number(item.priority || 0),
         status: item.status,
+        startAt: item.startAt || null,
         dueAt: item.dueAt || null,
         actionAt: item.actionAt || null,
+        planDate: todoPlanDate(item),
         completedAt: item.completedAt || null,
         checklistProgress: {
           completed: checklist.filter((entry) => Boolean(entry?.done)).length,
           total: checklist.length,
         },
-        reminderChannels: v2Reminder?.channels || reminders.get(item.id) || [],
+        reminderChannels: reminder?.channels || [],
+        nextReminderAt,
+        configuredReminderAt,
+        reminderAt: nextReminderAt || configuredReminderAt,
+        ...(matchedReminderAt ? { matchedReminderAt } : {}),
       };
       if (Number(item.planVersion || 1) === 2) {
         Object.assign(summary, {
-          startAt: item.startAt || null,
           planVersion: 2,
           seriesId: item.seriesId || null,
           occurrenceNo: item.occurrenceNo == null ? null : Number(item.occurrenceNo),

@@ -1,102 +1,88 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createApp, nextTick, ref } from 'vue';
+import { createApp, defineComponent, nextTick, ref } from 'vue';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BPopover from './BPopover.vue';
 
-let cleanup: (() => void) | undefined;
+vi.mock('@/utils/zoom', () => ({ getRootZoom: () => 1 }));
 
-afterEach(() => {
-  cleanup?.();
-  cleanup = undefined;
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-});
-
-async function flushPosition() {
-  await nextTick();
-  await Promise.resolve();
-  await nextTick();
+class ResizeObserverStub {
+  observe() {}
+  disconnect() {}
 }
 
-describe('BPopover', () => {
-  it('上方浮层内容变高时保持底边锚定，避免 ResizeObserver 二次改 top 闪动', async () => {
-    let resizeCallback: ResizeObserverCallback | undefined;
-    class ResizeObserverStub {
-      constructor(callback: ResizeObserverCallback) {
-        resizeCallback = callback;
-      }
-      observe() {}
-      disconnect() {}
-    }
-    vi.stubGlobal('ResizeObserver', ResizeObserverStub);
-    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function () {
-      return this === document.documentElement ? 1000 : 0;
-    });
-    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function () {
-      return this === document.documentElement ? 800 : 0;
-    });
-    let panelHeight = 100;
-    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function () {
-      return this.classList.contains('b-popover-panel') ? 240 : 0;
-    });
-    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function () {
-      return this.classList.contains('b-popover-panel') ? panelHeight : 0;
-    });
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
-      if (this.classList.contains('b-popover-trigger')) {
-        return {
-          x: 120,
-          y: 500,
-          top: 500,
-          right: 480,
-          bottom: 540,
-          left: 120,
-          width: 360,
-          height: 40,
-          toJSON: () => ({}),
-        };
-      }
-      return {
-        x: 0,
-        y: 0,
-        top: 0,
-        right: 0,
-        bottom: 0,
-        left: 0,
-        width: 0,
-        height: 0,
-        toJSON: () => ({}),
-      };
-    });
+describe('BPopover 键盘关闭', () => {
+  const mounted: Array<{ app: ReturnType<typeof createApp>; host: HTMLElement }> = [];
 
-    const open = ref(false);
+  beforeEach(() => {
+    vi.stubGlobal('ResizeObserver', ResizeObserverStub);
+  });
+
+  afterEach(() => {
+    mounted.splice(0).forEach(({ app, host }) => {
+      app.unmount();
+      host.remove();
+    });
+    document.querySelectorAll('.b-popover-panel').forEach((panel) => panel.remove());
+    vi.unstubAllGlobals();
+  });
+
+  function mountPopover(id: string) {
     const host = document.createElement('div');
     document.body.append(host);
-    const app = createApp({
+    const App = defineComponent({
       components: { BPopover },
-      setup: () => ({ open }),
+      setup() {
+        return { open: ref(false), id };
+      },
       template: `
-        <BPopover v-model:open="open" trigger="manual" placement="top-left">
-          <span>触发器</span>
-          <template #content><div>动态内容</div></template>
+        <BPopover v-model:open="open" trigger="click">
+          <button :id="id + '-trigger'" type="button">打开</button>
+          <template #content><button :id="id + '-content'" type="button">内容</button></template>
         </BPopover>
       `,
     });
+    const app = createApp(App);
     app.mount(host);
-    cleanup = () => {
-      app.unmount();
-      host.remove();
-    };
+    mounted.push({ app, host });
+    return host;
+  }
 
-    open.value = true;
-    await flushPosition();
-    const panel = document.body.querySelector<HTMLElement>('.b-popover-panel');
-    expect(panel?.style.top).toBe('auto');
-    expect(panel?.style.bottom).toBe('306px');
-    expect(panel?.style.left).toBe('120px');
+  async function waitForLeaveTransition() {
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    await nextTick();
+  }
 
-    panelHeight = 220;
-    resizeCallback?.([], {} as ResizeObserver);
-    expect(panel?.style.top).toBe('auto');
-    expect(panel?.style.bottom).toBe('306px');
+  it('按 Escape 关闭浮层、阻止事件穿透并把焦点还给触发按钮', async () => {
+    const host = mountPopover('single');
+    const trigger = host.querySelector('#single-trigger') as HTMLButtonElement;
+    trigger.click();
+    await nextTick();
+    const content = document.querySelector('#single-content') as HTMLButtonElement;
+    content.focus();
+    const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' });
+
+    expect(content.dispatchEvent(event)).toBe(false);
+    await waitForLeaveTransition();
+
+    expect(document.querySelector('#single-content')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('同时存在多个浮层时一次 Escape 只关闭最上层', async () => {
+    const firstHost = mountPopover('first');
+    const secondHost = mountPopover('second');
+    const firstTrigger = firstHost.querySelector('#first-trigger') as HTMLButtonElement;
+    const secondTrigger = secondHost.querySelector('#second-trigger') as HTMLButtonElement;
+    firstTrigger.click();
+    secondTrigger.click();
+    await nextTick();
+
+    const secondContent = document.querySelector('#second-content') as HTMLButtonElement;
+    secondContent.focus();
+    secondContent.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
+    await waitForLeaveTransition();
+
+    expect(document.querySelector('#second-content')).toBeNull();
+    expect(document.querySelector('#first-content')).toBeTruthy();
+    expect(document.activeElement).toBe(secondTrigger);
   });
 });

@@ -52,9 +52,23 @@ function inferReadToolDomain(tool) {
   return 'content';
 }
 
+function resourceBindingDomains(tool) {
+  return [
+    ...new Set(
+      (Array.isArray(tool?.resourceBindings) ? tool.resourceBindings : [])
+        .map((binding) => domainFromResource(String(binding?.refType || '')))
+        .filter(Boolean),
+    ),
+  ];
+}
+
 function declaredReadDomains(tool, fallbackDomain) {
   const declared = Array.isArray(tool?.appliesToDomains) ? tool.appliesToDomains.map(String).filter(Boolean) : [];
-  return Object.freeze([...new Set(declared.length ? declared : [fallbackDomain])]);
+  // resourceBindings 已声明“这个工具可以从哪类服务端资源补齐参数”，能力路由必须复用
+  // 同一份元数据，否则编译器把“分析已选书签”归到 bookmark 域时，web 工具会在绑定前
+  // 被错误淘汰。这里只扩展候选域，不授予读取权限；owner/session 与参数值仍在运行时校验。
+  const boundResourceDomains = resourceBindingDomains(tool);
+  return Object.freeze([...new Set([fallbackDomain, ...declared, ...boundResourceDomains])]);
 }
 
 function capabilityScopePolicy(tool, domain, effect) {
@@ -559,6 +573,7 @@ export function buildAgentSemanticCapabilityCatalog(tools, { availableToolNames 
           ]),
         ])
       : declaredReadDomains(tool, domain);
+    const boundResourceDomains = actionCapability ? [] : resourceBindingDomains(tool);
     entries.push(
       Object.freeze({
         id: capabilityId,
@@ -566,6 +581,7 @@ export function buildAgentSemanticCapabilityCatalog(tools, { availableToolNames 
         status: available.has(tool.name) ? 'enabled' : 'unavailable',
         domain,
         appliesToDomains,
+        resourceBindingDomains: Object.freeze(boundResourceDomains),
         operations: Object.freeze(semanticOperations),
         requiredSlots: Object.freeze(
           Array.isArray(tool?.parameters?.required) ? [...new Set(tool.parameters.required.map(String))] : [],

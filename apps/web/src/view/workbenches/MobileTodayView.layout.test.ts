@@ -30,6 +30,43 @@ describe('移动端今日加载布局', () => {
     expect(source).not.toMatch(/\.mobile-today__summary-item\s*\{[^}]*flex-direction:\s*column/);
   });
 
+  it('快速记录保持四列横排，继续处理收进一个带分隔线的列表容器', () => {
+    expect(source).toMatch(
+      /\.mobile-today__capture-grid\s*\{[\s\S]*?grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/,
+    );
+    expect(source).toContain('class="mobile-today__continue-list"');
+    expect(source).toMatch(
+      /\.mobile-today__capture-icon\s*\{[\s\S]*?place-items:\s*center[\s\S]*?color:\s*var\(--capture-accent[\s\S]*?line-height:\s*0/,
+    );
+    expect(source).toMatch(
+      /\.mobile-today__capture-action\.is-note\s*\{[\s\S]*?--capture-accent:\s*var\(--resource-note-color/,
+    );
+    expect(source).toMatch(
+      /\.mobile-today__capture-action\.is-note \.mobile-today__capture-icon\s*\{[\s\S]*?background:\s*color-mix\(in srgb, var\(--resource-note-color/,
+    );
+    expect(source).toMatch(
+      /\.mobile-today__capture-action\.is-todo\s*\{[\s\S]*?--capture-accent:\s*var\(--todo-accent-color/,
+    );
+    expect(source).toMatch(
+      /\.mobile-today__capture-action\.is-bookmark\s*\{[\s\S]*?--capture-accent:\s*var\(--resource-bookmark-color/,
+    );
+    expect(source).toMatch(
+      /\.mobile-today__capture-action\.is-file\s*\{[\s\S]*?--capture-accent:\s*var\(--resource-file-color/,
+    );
+    expect(source).not.toContain('.mobile-today__capture-action span {');
+    expect(source).toMatch(
+      /\.mobile-today__continue-item \+ \.mobile-today__continue-item\s*\{[\s\S]*?border-top:\s*1px solid var\(--surface-divider-color\)/,
+    );
+  });
+
+  it('继续处理下方展示移动端紧凑成长卡，不再用孤立的领奖提示条', () => {
+    expect(source).toContain('<WorkbenchGrowth v-if="todaySettled" class="mobile-today__growth-card" compact-today />');
+    expect(source).toContain("import WorkbenchGrowth from '@/components/workbenches/WorkbenchGrowth.vue'");
+    expect(source).not.toContain('class="mobile-today__growth-claim"');
+    expect(source).toContain(':show-claim-action="false"');
+    expect(source).toMatch(/\.mobile-today__growth-card\s*\{[\s\S]*?margin:\s*14px 0/);
+  });
+
   it('骨架分组与真实待处理列表一样不显示内层外框', () => {
     expect(source).toMatch(
       /\.mobile-today__pending-details :deep\(\.today-actions__skeleton-group\)[\s\S]*?border:\s*0[\s\S]*?border-radius:\s*0[\s\S]*?background:\s*transparent/,

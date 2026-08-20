@@ -6,6 +6,9 @@ import { runActionTurn } from './runners/actionRunner.js';
 import { runAnswerTurn } from './runners/answerRunner.js';
 import { runConversationTurn } from './runners/conversationRunner.js';
 import { runMixedTurn } from './runners/mixedRunner.js';
+import { RESOURCE_BINDING_ERROR_CODES } from './executionContext.js';
+
+const CLARIFICATION_VALIDATION_ISSUES = new Set(['TOOL_ARGUMENT_REQUIRED', ...RESOURCE_BINDING_ERROR_CODES]);
 
 function goalStates(turnSpec, route) {
   const routes = new Map((route?.goalRoutes || []).map((item) => [item.goalId, item]));
@@ -74,7 +77,13 @@ export async function runAgentRuntime({
       toolCalls: [],
     };
   }
-  const routed = route({ turnSpec, catalog, tools, message });
+  const routed = route({
+    turnSpec,
+    catalog,
+    tools,
+    message,
+    contextTypes: contextSummary?.selectedResourceTypes,
+  });
   if (routed.state === 'clarification') {
     return {
       runner: 'clarification',
@@ -117,7 +126,10 @@ export async function runAgentRuntime({
         onResponse: onPlannerResponse,
       }),
   });
-  if (outcome.state === 'blocked' && outcome.validation?.issues?.includes('TOOL_ARGUMENT_REQUIRED')) {
+  if (
+    outcome.state === 'blocked' &&
+    outcome.validation?.issues?.some((issue) => CLARIFICATION_VALIDATION_ISSUES.has(issue))
+  ) {
     return {
       ...outcome,
       runner: 'clarification',

@@ -11,6 +11,7 @@ import { parseTimeRange } from '../../util/agent/timeRange.js';
 import { ROOT_E2E_TOOL_CASES, rootE2EToolNames, selectRootE2ECases } from './rootE2ECases.js';
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+export const ROOT_E2E_WEB_FIXTURE_URL = 'https://www.iana.org/help/example-domains';
 const SERVER_ROOT = path.resolve(moduleDir, '../..');
 export const ROOT_E2E_CLIENT_CAPABILITIES = Object.freeze([
   'agent_interaction_v1',
@@ -82,7 +83,7 @@ export function parseRootE2EArgs(argv = []) {
   if (
     options.live &&
     !options.executeWrites &&
-    (options.artifactRegression || selectedCases.some((item) => item.kind === 'write'))
+    (options.artifactRegression || selectedCases.some((item) => item.kind === 'write' || item.fixtureWrite === true))
   ) {
     throw new Error('所选真实链路包含写操作或笔记产物回归，必须显式添加 --execute-writes');
   }
@@ -333,6 +334,7 @@ function placeholders(state) {
     NOTE_ID: state.noteId,
     TODO_TITLE: state.todoTitle,
     TODO_ID: state.todoId,
+    REMINDER_TODO_TITLE: state.reminderTodoTitle,
     PLAN_TITLE: state.planTitle,
     ATTACHMENT_ID: state.attachmentId,
     IMAGE_NOTE_TITLE: state.imageNoteTitle,
@@ -397,6 +399,90 @@ async function runHook(name, state, pool) {
     state.todoId = String(rows[0].id);
     return;
   }
+  if (name === 'seed_todo_reminder_query') {
+    if (state.reminderTodoId) return;
+    const connection = await pool.getConnection();
+    const fixtures = [
+      {
+        id: crypto.randomUUID(),
+        ruleId: crypto.randomUUID(),
+        reminderAt: `${state.reminderPlanDate} 16:00:00`,
+        checklist: [
+          { id: 'one', text: '小红书', done: false },
+          { id: 'two', text: 'CSDN', done: true },
+          { id: 'three', text: '掘金', done: true },
+          { id: 'four', text: 'OSChina', done: true },
+        ],
+      },
+      {
+        id: crypto.randomUUID(),
+        ruleId: crypto.randomUUID(),
+        reminderAt: `${state.reminderPlanDate} 17:00:00`,
+        checklist: [
+          { id: 'one', text: '小红书', done: false },
+          { id: 'two', text: 'CSDN', done: false },
+          { id: 'three', text: '掘金', done: false },
+          { id: 'four', text: 'OSChina', done: false },
+        ],
+      },
+    ];
+    try {
+      await connection.beginTransaction();
+      for (const [index, fixture] of fixtures.entries()) {
+        const localInstant = new Date(`${fixture.reminderAt.replace(' ', 'T')}+08:00`);
+        const scheduledAtUtc = localInstant.toISOString().slice(0, 19).replace('T', ' ');
+        const jobId = crypto.randomUUID();
+        await connection.query(
+          `INSERT INTO todo_items
+             (id, user_id, title, checklist, priority, sort_order, status, plan_version,
+              occurrence_no, occurrence_date, instance_timezone, instance_state, del_flag)
+           VALUES (?, ?, ?, ?, 1, ?, 'pending', 2, ?, ?, 'Asia/Shanghai', 'normal', 0)`,
+          [
+            fixture.id,
+            state.user.id,
+            state.reminderTodoTitle,
+            JSON.stringify(fixture.checklist),
+            Date.now() + index,
+            index + 1,
+            state.reminderPlanDate,
+          ],
+        );
+        await connection.query(
+          `INSERT INTO todo_reminder_rules
+             (id, user_id, todo_id, version, mode, trigger_type, fixed_local_time,
+              channels, quiet_policy, timezone, enabled)
+           VALUES (?, ?, ?, 1, 'once_per_instance', 'fixed_time', ?, ?, 'defer_once', 'Asia/Shanghai', 1)`,
+          [fixture.ruleId, state.user.id, fixture.id, fixture.reminderAt.slice(11), JSON.stringify(['in_app'])],
+        );
+        await connection.query(
+          `INSERT INTO todo_reminder_jobs
+             (id, user_id, todo_id, rule_id, rule_version, channel, sequence_no,
+              original_scheduled_at_utc, scheduled_at_utc, scheduled_at_local,
+              timezone, status, sent_at, dedupe_key)
+           VALUES (?, ?, ?, ?, 1, 'in_app', 1, ?, ?, ?, 'Asia/Shanghai', 'sent', ?, ?)`,
+          [
+            jobId,
+            state.user.id,
+            fixture.id,
+            fixture.ruleId,
+            scheduledAtUtc,
+            scheduledAtUtc,
+            fixture.reminderAt,
+            scheduledAtUtc,
+            crypto.createHash('sha256').update(`${state.runId}:${fixture.id}:in_app`).digest('hex'),
+          ],
+        );
+      }
+      await connection.commit();
+      state.reminderTodoId = fixtures[0].id;
+    } catch (error) {
+      await connection.rollback().catch(() => {});
+      throw error;
+    } finally {
+      connection.release();
+    }
+    return;
+  }
   if (name === 'capture_todo_plan') {
     const [rows] = await pool.query(
       'SELECT id, series_id FROM todo_items WHERE user_id = ? AND title = ? AND del_flag = 0 ORDER BY create_time DESC LIMIT 2',
@@ -416,6 +502,15 @@ async function runHook(name, state, pool) {
     state.cloudFileId = String(rows[0].id);
     return;
   }
+  if (name === 'capture_bookmark') {
+    const [rows] = await pool.query(
+      'SELECT id FROM bookmark WHERE user_id = ? AND name = ? AND del_flag = 0 ORDER BY create_time DESC LIMIT 2',
+      [state.user.id, state.bookmarkTitle],
+    );
+    if (rows.length !== 1) throw new Error('ROOT_E2E_BOOKMARK_FIXTURE_COUNT_INVALID');
+    state.bookmarkId = String(rows[0].id);
+    return;
+  }
   if (name === 'trash_note') {
     if (!state.noteId) throw new Error('ROOT_E2E_NOTE_FIXTURE_MISSING');
     const [result] = await pool.query(
@@ -426,6 +521,27 @@ async function runHook(name, state, pool) {
     return;
   }
   throw new Error(`ROOT_E2E_HOOK_UNKNOWN_${name}`);
+}
+
+async function resolveCaseContexts(smokeCase, state, pool) {
+  if (!smokeCase.contextFixture) return [];
+  if (smokeCase.contextFixture === 'bookmark') {
+    const params = [state.user.id];
+    const idFilter = state.bookmarkId ? 'AND b.id = ?' : '';
+    if (state.bookmarkId) params.push(state.bookmarkId);
+    const [rows] = await pool.query(
+      `SELECT b.id, b.name AS title
+         FROM bookmark b
+        WHERE b.user_id = ? AND b.del_flag = 0 AND NULLIF(TRIM(b.url), '') IS NOT NULL
+          ${idFilter}
+        ORDER BY b.create_time DESC
+        LIMIT 1`,
+      params,
+    );
+    if (!rows[0]) throw new Error('ROOT_E2E_BOOKMARK_CONTEXT_UNAVAILABLE');
+    return [{ type: 'bookmark', id: String(rows[0].id), title: String(rows[0].title || '书签') }];
+  }
+  throw new Error('ROOT_E2E_CONTEXT_FIXTURE_UNSUPPORTED');
 }
 
 async function assertWriteOutcome(toolName, state, pool) {
@@ -509,7 +625,7 @@ async function assertWriteOutcome(toolName, state, pool) {
   }
 }
 
-async function assertCaseAnswer(smokeCase, answer, state, pool) {
+async function assertCaseAnswer(smokeCase, answer, state, pool, data) {
   if (!smokeCase.assertion) return;
   if (smokeCase.assertion === 'today_new_user_count') {
     const expected = await countToday(pool, 'user', 'id');
@@ -521,7 +637,44 @@ async function assertCaseAnswer(smokeCase, answer, state, pool) {
     if (!answerMentionsCount(answer, expected)) throw new Error('ROOT_E2E_TODAY_NOTE_COUNT_MISMATCH');
     return;
   }
+  if (smokeCase.assertion === 'todo_reminder_lookup') {
+    const todoRefs = (Array.isArray(data?.entityRefs) ? data.entityRefs : []).filter((item) => item?.type === 'todo');
+    if (todoRefs.length !== 1 || String(todoRefs[0]?.id || '') !== state.reminderTodoId) {
+      throw new Error('ROOT_E2E_TODO_REMINDER_TARGET_MISMATCH');
+    }
+    const compact = String(answer || '').replace(/\s+/gu, '');
+    const hasProgress =
+      /3\/4/u.test(compact) ||
+      /(?:已完成|完成了?)(?:3|三)(?:项)?[^。；;]{0,24}(?:(?:还差|剩余|未完成)(?:1|一)(?:项)?)/u.test(compact);
+    if (!hasProgress) throw new Error('ROOT_E2E_TODO_REMINDER_PROGRESS_MISMATCH');
+    return;
+  }
   throw new Error('ROOT_E2E_ASSERTION_UNKNOWN');
+}
+
+async function invokeCaseTurn({ handlers, state, pool, body, fingerprint, expectedToolName, phase = 'initial' }) {
+  const request = makeRequest({
+    user: state.user,
+    body,
+    fingerprint: `${state.runId}-${fingerprint}`,
+  });
+  const response = await invokeHandler(handlers.agentChat, request);
+  const data = response.body?.data || {};
+  if (response.statusCode !== 200 || Number(response.body?.status) !== 200) {
+    const error = new Error(data.code || 'ROOT_E2E_AGENT_HTTP_FAILED');
+    error.code = data.code || 'ROOT_E2E_AGENT_HTTP_FAILED';
+    throw error;
+  }
+  const log = await waitForAgentLog(pool, data.requestId);
+  const usedTools = parseJsonArray(log.tools_used);
+  const actual = usedTools.find((item) => item?.name === expectedToolName);
+  if (!actual) {
+    throw new Error(
+      phase === 'follow_up' ? 'ROOT_E2E_FOLLOW_UP_EXPECTED_TOOL_NOT_EXECUTED' : 'ROOT_E2E_EXPECTED_TOOL_NOT_EXECUTED',
+    );
+  }
+  if (usedTools.some((item) => item?.status === 'error')) throw new Error('ROOT_E2E_TOOL_RESULT_ERROR');
+  return { data, usedTools, actual };
 }
 
 async function runToolCase({ smokeCase, state, pool, handlers, toolsByName, options, services }) {
@@ -529,6 +682,7 @@ async function runToolCase({ smokeCase, state, pool, handlers, toolsByName, opti
   try {
     if (smokeCase.attachment) await ensureAttachmentFixture(state, services, pool);
     await runHook(smokeCase.before, state, pool);
+    const contexts = await resolveCaseContexts(smokeCase, state, pool);
     const message = interpolate(smokeCase.message, placeholders(state));
     const sessionId = `${state.runId}-${smokeCase.id}`.slice(0, 96);
     const body = {
@@ -536,27 +690,31 @@ async function runToolCase({ smokeCase, state, pool, handlers, toolsByName, opti
       sessionId,
       stream: false,
       history: [],
-      scope: { mode: 'workspace', externalWeb: smokeCase.externalWeb === true },
+      scope: { mode: contexts.length ? 'selected' : 'workspace', externalWeb: smokeCase.externalWeb === true },
+      ...(contexts.length ? { contexts } : {}),
+      ...(contexts.length
+        ? {
+            grounding: {
+              mode: 'explicit',
+              contextRefs: contexts.map(({ type, id }) => ({ type, id })),
+              scopeRefs: [],
+              attachmentIds: [],
+            },
+          }
+        : {}),
       clientCapabilities: [...ROOT_E2E_CLIENT_CAPABILITIES],
       timeZone: 'Asia/Shanghai',
       ...(smokeCase.attachment ? { attachmentIds: [state.attachmentId] } : {}),
     };
-    const request = makeRequest({
-      user: state.user,
+    const initialTurn = await invokeCaseTurn({
+      handlers,
+      state,
+      pool,
       body,
-      fingerprint: `${state.runId}-${smokeCase.id}`,
+      fingerprint: smokeCase.id,
+      expectedToolName: smokeCase.toolName,
     });
-    const response = await invokeHandler(handlers.agentChat, request);
-    const data = response.body?.data || {};
-    if (response.statusCode !== 200 || Number(response.body?.status) !== 200) {
-      const error = new Error(data.code || 'ROOT_E2E_AGENT_HTTP_FAILED');
-      error.code = data.code || 'ROOT_E2E_AGENT_HTTP_FAILED';
-      throw error;
-    }
-    const log = await waitForAgentLog(pool, data.requestId);
-    const usedTools = parseJsonArray(log.tools_used);
-    const actual = usedTools.find((item) => item?.name === smokeCase.toolName);
-    if (!actual) throw new Error('ROOT_E2E_EXPECTED_TOOL_NOT_EXECUTED');
+    const { data, usedTools, actual } = initialTurn;
     if (smokeCase.kind === 'read' && actual.status !== 'success') {
       throw new Error('ROOT_E2E_READ_TOOL_FAILED');
     }
@@ -569,13 +727,62 @@ async function runToolCase({ smokeCase, state, pool, handlers, toolsByName, opti
     if (smokeCase.kind === 'read') {
       if (answerFailed(answer)) throw new Error('ROOT_E2E_ANSWER_INVALID');
       if ((data.confirmations || []).length) throw new Error('ROOT_E2E_UNEXPECTED_CONFIRMATION');
-      await assertCaseAnswer(smokeCase, answer, state, pool);
+      await assertCaseAnswer(smokeCase, answer, state, pool, data);
+      let responseChars = answer.length;
+      let turnCount = 1;
+      if (smokeCase.followUpMessage) {
+        const sourceSetId = String(data.resolvedGrounding?.sourceSetId || '').trim();
+        if (!/^[0-9a-f]{8}-[0-9a-f-]{27}$/iu.test(sourceSetId)) {
+          throw new Error('ROOT_E2E_FOLLOW_UP_SOURCE_SET_MISSING');
+        }
+        const followUpMessage = interpolate(smokeCase.followUpMessage, placeholders(state));
+        const followUpTurn = await invokeCaseTurn({
+          handlers,
+          state,
+          pool,
+          fingerprint: `${smokeCase.id}-follow-up`,
+          expectedToolName: smokeCase.toolName,
+          phase: 'follow_up',
+          body: {
+            message: followUpMessage,
+            sessionId: String(data.sessionId || sessionId),
+            stream: false,
+            history: [
+              { role: 'user', content: message },
+              { role: 'assistant', content: answer },
+            ],
+            scope: { mode: 'workspace', externalWeb: false },
+            grounding: {
+              mode: 'inherit_candidate',
+              sourceSetId,
+              contextRefs: [],
+              scopeRefs: [],
+              attachmentIds: [],
+            },
+            clientCapabilities: [...ROOT_E2E_CLIENT_CAPABILITIES],
+            timeZone: 'Asia/Shanghai',
+          },
+        });
+        const followUpAnswer = String(followUpTurn.data.response || '');
+        if (followUpTurn.actual.status !== 'success') throw new Error('ROOT_E2E_FOLLOW_UP_READ_TOOL_FAILED');
+        if (answerFailed(followUpAnswer)) throw new Error('ROOT_E2E_FOLLOW_UP_ANSWER_INVALID');
+        if ((followUpTurn.data.confirmations || []).length) throw new Error('ROOT_E2E_UNEXPECTED_CONFIRMATION');
+        if (
+          followUpTurn.data.resolvedGrounding?.materialMode !== 'inherited' ||
+          Number(followUpTurn.data.resolvedGrounding?.allowedSourceCount || 0) < 1
+        ) {
+          throw new Error('ROOT_E2E_FOLLOW_UP_GROUNDING_INVALID');
+        }
+        responseChars += followUpAnswer.length;
+        turnCount += 1;
+      }
       return {
         id: smokeCase.id,
         toolName: smokeCase.toolName,
         passed: true,
         outcome: 'answer',
-        responseChars: answer.length,
+        responseChars,
+        turnCount,
         durationMs: Date.now() - startedAt,
       };
     }
@@ -1217,6 +1424,17 @@ function buildState({ user, targetUserId }) {
   const runId = `root-e2e-${stamp}-${nonce}`;
   const prefix = `[AI-E2E ${stamp}-${nonce}]`;
   const assetPrefix = `ai-e2e-${stamp}-${nonce}`;
+  const reminderPlanDate = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    })
+      .formatToParts(new Date())
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, part.value]),
+  );
   return {
     runId,
     prefix,
@@ -1225,6 +1443,8 @@ function buildState({ user, targetUserId }) {
     targetUserId,
     noteTitle: `${prefix} 短笔记`,
     todoTitle: `${prefix} 普通待办`,
+    reminderTodoTitle: `${prefix} 推广`,
+    reminderPlanDate: `${reminderPlanDate.year}-${reminderPlanDate.month}-${reminderPlanDate.day}`,
     planTitle: `${prefix} 重复提醒计划`,
     imageNoteTitle: `${prefix} 图片笔记`,
     folderName: `${prefix} 文件夹`,
@@ -1232,14 +1452,18 @@ function buildState({ user, targetUserId }) {
     tagName: `${prefix} 标签`,
     kbTitle: `${prefix} 内部知识`,
     bookmarkTitle: `${prefix} 书签`,
-    bookmarkUrl: `https://example.com/?lightnote_e2e=${encodeURIComponent(assetPrefix)}`,
+    // example.com 首页正文短于 read_url 的有效正文门槛，外部阅读器抖动时会把发布门禁误判为失败。
+    // IANA 的 Example Domains 说明页同样是长期稳定的官方测试资源，但正文足以走本地直接提取。
+    bookmarkUrl: `${ROOT_E2E_WEB_FIXTURE_URL}?lightnote_e2e=${encodeURIComponent(assetPrefix)}`,
     summaryPrefix: `${prefix} 今日总结`,
     attachmentId: '',
     noteId: '',
     todoId: '',
+    reminderTodoId: '',
     todoPlanTodoId: '',
     todoSeriesId: '',
     cloudFileId: '',
+    bookmarkId: '',
   };
 }
 

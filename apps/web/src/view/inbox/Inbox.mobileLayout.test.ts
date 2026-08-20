@@ -14,6 +14,50 @@ const mobileTodoTemplate = inboxSource.slice(
 );
 
 describe('移动端待办页签布局', () => {
+  it('待整理桌面端使用范围、队列和检查器三栏，移动端回落到单列', () => {
+    expect(inboxSource).toContain('class="resource-inbox-scope"');
+    expect(inboxSource).toContain("'inbox-page--resource-workspace': !isTodoFocused && !bookmark.isMobile");
+    expect(inboxSource).toContain('class="resource-inbox-inspector"');
+    expect(inboxSource).toMatch(
+      /\.inbox-page--resource-workspace\s*\{[\s\S]*?grid-template-columns:\s*210px minmax\(0, 1fr\) 320px/,
+    );
+    expect(inboxSource).toMatch(
+      /@media \(min-width: 768px\) and \(max-width: 980px\)[\s\S]*?\.resource-inbox-scope,[\s\S]*?\.resource-inbox-inspector\s*\{[\s\S]*?display:\s*none/,
+    );
+    expect(inboxSource).toContain('v-if="!isTodoFocused && isMobileResourceInbox"');
+  });
+
+  it('待整理范围继续复用原类型、排序和资源操作', () => {
+    expect(inboxSource).toContain('v-for="item in filterOptions"');
+    expect(inboxSource).toContain('@click="changeInboxScope(item.key)"');
+    expect(inboxSource).toContain('v-for="item in sortOptions"');
+    expect(inboxSource).toContain('@click="changeInboxSort(item.value)"');
+    expect(inboxSource).toContain('@click="openResource(inspectedInboxItem)"');
+    expect(inboxSource).toContain('@click="completeOne(inspectedInboxItem)"');
+    expect(inboxSource).toContain('@click="confirmDelete([inspectedInboxItem])"');
+    expect(inboxSource).toMatch(
+      /\.resource-inbox-inspector__actions\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/,
+    );
+    expect(inboxSource).toMatch(
+      /\.resource-inbox-inspector__actions :deep\(\.b_btn:first-child\)[\s\S]*?grid-column:\s*1 \/ -1/,
+    );
+  });
+
+  it('桌面待整理搜索框占满工具栏剩余宽度，快速添加固定在最右侧', () => {
+    expect(inboxSource).toContain('class="inbox-toolbar__right inbox-toolbar__right--resources"');
+    expect(inboxSource).toMatch(
+      /\.inbox-toolbar__right--resources\s*\{[\s\S]*?width:\s*100%;[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) auto;[\s\S]*?flex:\s*1 1 auto;/,
+    );
+  });
+
+  it('桌面点击待整理卡片更新检查器，移动端仍直接打开资源', () => {
+    expect(inboxSource).not.toContain('@mouseenter="inspectInboxResource(action.item)"');
+    expect(inboxSource).not.toContain('@focusin="inspectInboxResource(action.item)"');
+    expect(inboxSource).toContain('@open="handleInboxItemOpen(action.item)"');
+    expect(inboxSource).toMatch(/const inspectedInboxItem = computed\([\s\S]*?inbox\.items\[0\]/);
+    expect(inboxSource).toMatch(/function handleInboxItemOpen[\s\S]*?bookmark\.isMobile[\s\S]*?openResource\(item\)/);
+  });
+
   it('切换议程或日历时仍保留状态页签，避免视图栏上移', () => {
     expect(mobileTodoTemplate).toMatch(/<BTabs\s+v-model:active-tab="todo\.status"/);
     expect(mobileTodoTemplate).not.toContain('v-if="todoView === \'list\'"');
@@ -69,13 +113,19 @@ describe('移动端待办页签布局', () => {
     expect(nightThemeSource).toContain('--todo-summary-icon-border: #514d76');
   });
 
-  it('桌面按原型使用单层分组面板，组内任务只用分隔线', () => {
+  it('桌面待办复用移动端独立卡片边界，移动端规则保持独立', () => {
     expect(inboxSource).toMatch(/\.inbox-content\s*\{[\s\S]*?border:\s*0;[\s\S]*?background:\s*transparent;/);
     expect(inboxSource).toMatch(
-      /\.todo-group\s*\{[\s\S]*?border:\s*1px solid var\(--surface-border-color\);[\s\S]*?background:\s*var\(--card-background\);/,
+      /@media \(min-width: 768px\)[\s\S]*?\.inbox-page--todo-focused \.todo-group\s*\{[\s\S]*?border:\s*0;[\s\S]*?background:\s*transparent;/,
     );
     expect(inboxSource).toMatch(
-      /\.todo-group__items :deep\(\.todo-item\)\s*\{[\s\S]*?border:\s*0;[\s\S]*?border-bottom:\s*1px solid/,
+      /@media \(min-width: 768px\)[\s\S]*?\.inbox-page--todo-focused \.todo-group__items :deep\(\.todo-item\)\s*\{[\s\S]*?border:\s*1px solid var\(--surface-border-color\);[\s\S]*?border-left:\s*4px solid/,
+    );
+    expect(inboxSource).toMatch(
+      /\.inbox-page--todo-focused \.todo-group__items :deep\(\.todo-item\.is-completed\)\s*\{[\s\S]*?border-left-color:\s*var\(--success-color/,
+    );
+    expect(inboxSource).toMatch(
+      /\.inbox-page--mobile-todo \.todo-group__items :deep\(\.todo-item\)\s*\{[\s\S]*?border-left:\s*4px solid/,
     );
     expect(inboxSource).toMatch(/\.inbox-toolbar\s*\{[\s\S]*?border:\s*0;[\s\S]*?box-shadow:\s*none;/);
   });

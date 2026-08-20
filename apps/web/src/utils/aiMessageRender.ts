@@ -97,6 +97,78 @@ function safeAnchorPart(value: string) {
     .slice(0, 64);
 }
 
+const CJK_URL_SENTENCE_BOUNDARY = /[，。；：！？、）】》」』”’]/u;
+
+function canonicalHttpUrl(value: string) {
+  try {
+    const url = new URL(String(value || '').trim());
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+  } catch {
+    return '';
+  }
+}
+
+function hrefMatchesBareUrlText(href: string, visibleText: string) {
+  if (!/^https?:\/\//iu.test(visibleText)) return false;
+  try {
+    if (href === visibleText || href === encodeURI(visibleText)) return true;
+  } catch {
+    return false;
+  }
+  const canonicalText = canonicalHttpUrl(visibleText);
+  return Boolean(canonicalText) && canonicalText === canonicalHttpUrl(href);
+}
+
+function bareUrlSentenceBoundary(value: string) {
+  const cjkBoundary = CJK_URL_SENTENCE_BOUNDARY.exec(value)?.index ?? -1;
+  let roundDepth = 0;
+  let squareDepth = 0;
+  let curlyDepth = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (char === '(') roundDepth += 1;
+    else if (char === ')') {
+      if (roundDepth === 0) return cjkBoundary === -1 ? index : Math.min(index, cjkBoundary);
+      roundDepth -= 1;
+    } else if (char === '[') squareDepth += 1;
+    else if (char === ']') {
+      if (squareDepth === 0) return cjkBoundary === -1 ? index : Math.min(index, cjkBoundary);
+      squareDepth -= 1;
+    } else if (char === '{') curlyDepth += 1;
+    else if (char === '}') {
+      if (curlyDepth === 0) return cjkBoundary === -1 ? index : Math.min(index, cjkBoundary);
+      curlyDepth -= 1;
+    }
+  }
+  return cjkBoundary;
+}
+
+/**
+ * marked 的 GFM 裸链接会把紧随 URL 的中文标点与正文一起吞进 href，例如
+ * `https://example.com），标题…`。这里只修正“可见文字与 href 指向同一完整 URL”的
+ * 自动链接；显式 Markdown 链接、代码和自定义文案链接保持原语义。
+ */
+export function repairAiBareUrlBoundaries(html: string): string {
+  if (typeof document === 'undefined' || !html) return html;
+  const root = document.createElement('div');
+  root.innerHTML = html;
+  for (const anchor of root.querySelectorAll<HTMLAnchorElement>('a[href]')) {
+    if (anchor.childElementCount > 0) continue;
+    const visibleText = String(anchor.textContent || '');
+    const originalHref = String(anchor.getAttribute('href') || '');
+    if (!hrefMatchesBareUrlText(originalHref, visibleText)) continue;
+    const boundary = bareUrlSentenceBoundary(visibleText);
+    if (boundary <= 0) continue;
+    const urlText = visibleText.slice(0, boundary);
+    if (!canonicalHttpUrl(urlText)) continue;
+    const trailingText = visibleText.slice(boundary);
+    anchor.textContent = urlText;
+    anchor.setAttribute('href', urlText);
+    anchor.after(document.createTextNode(trailingText));
+  }
+  return root.innerHTML;
+}
+
 export function getAiEvidenceAnchorId(citationKey: string, scope = ''): string {
   const safeScope = safeAnchorPart(scope);
   const safeKey = safeAnchorPart(citationKey);
@@ -162,16 +234,12 @@ export function decorateAiCitations(html: string, citationKeys: string[] = [], a
 
 export function renderAssistantMarkdown(content: string, citationKeys: string[] = [], anchorScope = ''): string {
   try {
-    const processedContent = String(content || '').replace(
-      /([\s\n]|^)(https?:\/\/[^\s<]*?)(?=[）\)】」』」。，、；：\s<]|$)/g,
-      '$1<$2>',
-    );
-    const html = DOMPurify.sanitize(marked.parse(processedContent) as string, {
+    const html = DOMPurify.sanitize(marked.parse(String(content || '')) as string, {
       ALLOWED_TAGS,
       ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'target', 'class', 'data-citation-key', 'aria-label'],
       ALLOWED_URI_REGEXP: /^(?:(?:https?):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
     });
-    return decorateAiCitations(html, citationKeys, anchorScope);
+    return decorateAiCitations(repairAiBareUrlBoundaries(html), citationKeys, anchorScope);
   } catch {
     return DOMPurify.sanitize(String(content || ''), { ALLOWED_TAGS: [], ALLOWED_ATTR: [] }).replace(/\n/g, '<br>');
   }

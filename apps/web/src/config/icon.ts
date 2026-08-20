@@ -40,9 +40,29 @@ export default {
     eraser:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="m4.2 14.3l8.8-9a2 2 0 0 1 2.8 0l3 3a2 2 0 0 1 0 2.8L10 20H6.7l-2.5-2.5a2.3 2.3 0 0 1 0-3.2Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="m9.2 9.2l5.6 5.6M10 20h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
     text: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M5 5h14M12 5v14M8.5 19h7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>',
+    shape:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="3.5" y="4" width="8" height="7" rx="1.5" stroke="currentColor" stroke-width="1.7"/><circle cx="16.5" cy="15.5" r="4" stroke="currentColor" stroke-width="1.7"/><path d="m5 19l4-5l3 5H5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
+    shapeTypes: {
+      line: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M4 19L20 5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>',
+      arrow:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M4 19L19 5M12.5 5H19v6.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      rectangle:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="3.5" y="5" width="17" height="14" stroke="currentColor" stroke-width="1.8"/></svg>',
+      roundedRectangle:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="3.5" y="5" width="17" height="14" rx="3.5" stroke="currentColor" stroke-width="1.8"/></svg>',
+      ellipse:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><ellipse cx="12" cy="12" rx="8.5" ry="6.5" stroke="currentColor" stroke-width="1.8"/></svg>',
+      triangle:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="m12 4l9 16H3L12 4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
+      diamond:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="m12 3.5l8.5 8.5L12 20.5L3.5 12L12 3.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
+    },
     select:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M5 3.5v13.8l3.7-3.2l2.7 6.4l2.5-1.1l-2.7-6.2l5-.3L5 3.5Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     hand: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M7 11V6.5a1.5 1.5 0 0 1 3 0V10V4.8a1.5 1.5 0 0 1 3 0V10V5.8a1.5 1.5 0 0 1 3 0V11V8.2a1.5 1.5 0 0 1 3 0v5.3c0 4.4-2.7 7-7 7h-.5c-2.5 0-4.3-1.1-5.7-3L3.3 14a1.6 1.6 0 0 1 2.4-2.1L7 13.2" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    style:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M4 7h10M18 7h2M4 17h2M10 17h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="16" cy="7" r="2" stroke="currentColor" stroke-width="1.8"/><circle cx="8" cy="17" r="2" stroke="currentColor" stroke-width="1.8"/></svg>',
+    help: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M9.6 9.1a2.55 2.55 0 1 1 3.4 2.4c-.8.35-1 .85-1 1.65v.35M12 17.35h.01" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>',
   },
   // 笔记模板：统一为轻量线性图标，通过卡片的笔记语义色建立系列感。
   noteTemplate: {

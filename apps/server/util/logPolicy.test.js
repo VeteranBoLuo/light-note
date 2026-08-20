@@ -13,6 +13,10 @@ describe('API 日志跳过策略', () => {
     '/api/support/state',
     '/api/support/afdian/webhook',
     '/api/support/afdian/oauth/callback?code=temporary&state=temporary',
+    '/api/community-chat/access',
+    '/api/community-chat/rooms',
+    '/api/common/recordAiEvent',
+    '/api/me',
   ])('跳过无审计价值的被动读取接口：%s', (url) => {
     expect(shouldSkipApiLog(url)).toBe(true);
   });
@@ -24,6 +28,7 @@ describe('API 日志跳过策略', () => {
     '/api/bookmark/getBookmarkList',
     '/api/updateLog/save',
     '/api/support/checkout?option=coffee',
+    '/api/community-chat/rooms/general/messages',
   ])('保留真实读取与写入接口日志：%s', (url) => {
     expect(shouldSkipApiLog(url)).toBe(false);
   });

@@ -4,6 +4,7 @@ import {
   getRootZoom,
   normalizeRectForRootZoom,
   parseCssZoom,
+  scrollCenterIntoContainer,
   scrollIntoContainer,
   scrollNearestIntoContainer,
 } from './zoom';
@@ -73,6 +74,30 @@ describe('scrollIntoContainer', () => {
 
     expect(scrollTo).toHaveBeenNthCalledWith(1, { top: 280, behavior: 'smooth' });
     expect(scrollTo).toHaveBeenNthCalledWith(2, { top: 280, behavior: 'auto' });
+  });
+});
+
+describe('scrollCenterIntoContainer', () => {
+  it('把目标中心对齐到容器中心，并限制在合法滚动范围内', () => {
+    const container = document.createElement('div');
+    const target = document.createElement('div');
+    const scrollTo = vi.fn();
+    Object.defineProperties(container, {
+      scrollTop: { configurable: true, writable: true, value: 100 },
+      scrollHeight: { configurable: true, value: 1000 },
+      clientHeight: { configurable: true, value: 300 },
+      scrollTo: { configurable: true, value: scrollTo },
+    });
+    vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({ top: 100, height: 300 } as DOMRect);
+    const targetRect = vi.spyOn(target, 'getBoundingClientRect');
+
+    targetRect.mockReturnValue({ top: 400, height: 200 } as DOMRect);
+    scrollCenterIntoContainer(container, target);
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 350, behavior: 'auto' });
+
+    targetRect.mockReturnValue({ top: 1200, height: 300 } as DOMRect);
+    scrollCenterIntoContainer(container, target, 'smooth');
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 700, behavior: 'smooth' });
   });
 });
 

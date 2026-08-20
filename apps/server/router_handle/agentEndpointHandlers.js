@@ -137,6 +137,10 @@ import { adaptRuntimeOutcomeToLegacy } from '../util/agent/runtime/legacyRuntime
 import { planAgentExecution } from '../util/agent/runtime/executionPlanner.js';
 import { validateExecutionPlan } from '../util/agent/runtime/planValidator.js';
 import {
+  buildAuthoritativeExecutionContext,
+  RESOURCE_BINDING_ERROR_CODES,
+} from '../util/agent/runtime/executionContext.js';
+import {
   compareTurnSpecWithLegacyPlan,
   compileTurnSpecShadow,
   turnSpecTraceSummary,
@@ -409,6 +413,7 @@ const PUBLIC_TOOL_ERROR_CODES = new Set([
   'TOOL_ARGUMENT_REQUIRED',
   'TOOL_ARGUMENTS_INVALID',
   'TOOL_ARGUMENTS_ADDITIONAL_PROPERTY',
+  ...RESOURCE_BINDING_ERROR_CODES,
   'TOOL_DEPENDENCY_TARGET_AMBIGUOUS',
   'TOOL_DEPENDENCY_TARGET_REQUIRED',
   'TOOL_DEPENDENCY_TARGET_MISMATCH',
@@ -435,10 +440,12 @@ const PUBLIC_TOOL_ERROR_CODES = new Set([
   'CANDIDATE_CONFIRMATION_REQUIRED',
   'USER_REQUIRED',
 ]);
+const REQUIRED_INPUT_ERROR_CODES = new Set(['TOOL_ARGUMENT_REQUIRED', ...RESOURCE_BINDING_ERROR_CODES]);
 const TERMINAL_DEPENDENCY_ERROR_CODES = new Set([
   'TOOL_ARGUMENT_REQUIRED',
   'TOOL_ARGUMENTS_INVALID',
   'TOOL_ARGUMENTS_ADDITIONAL_PROPERTY',
+  ...RESOURCE_BINDING_ERROR_CODES,
   'TOOL_DEPENDENCY_TARGET_AMBIGUOUS',
   'TOOL_DEPENDENCY_TARGET_REQUIRED',
   'TOOL_DEPENDENCY_TARGET_MISMATCH',
@@ -485,7 +492,8 @@ function publicToolError(error, fallback = '操作失败，请稍后重试。') 
     // 参数路径与模型臆造字段属于内部诊断信息（例如 args.completed），对用户没有修复价值，
     // 也会让产品看起来像直接暴露了函数协议。保留稳定错误码供日志定位，界面只显示场景化提示。
     if (
-      ['TOOL_ARGUMENT_REQUIRED', 'TOOL_ARGUMENTS_INVALID', 'TOOL_ARGUMENTS_ADDITIONAL_PROPERTY'].includes(error.code)
+      REQUIRED_INPUT_ERROR_CODES.has(error.code) ||
+      ['TOOL_ARGUMENTS_INVALID', 'TOOL_ARGUMENTS_ADDITIONAL_PROPERTY'].includes(error.code)
     ) {
       return { code: error.code, message: String(fallback).slice(0, 300) };
     }
@@ -2492,10 +2500,9 @@ export async function agentChat(req, res) {
       : requestScopeRefs;
     let effectiveRequestAttachmentIds = refinementRequested ? [] : requestAttachmentIds;
 
-    // 材料续问兜底：前端指代/命令正则命中时会直接带真实材料（误判率实测 0，零成本通道）；
-    // 正则漏判（真实追问 83% 不含指代词）时前端只带上轮材料的候选引用，由受约束语义分类
-    // 决定是否沿用。候选只有 type+id，实际内容仍由 resolveResourceContexts 按归属解析；
-    // 分类失败 fail-open 不继承（与旧行为一致）。
+    // 客户端只续传服务端签发的 Source Set ID，不再用句式白名单猜测是否承接。该 ID 只是
+    // 候选而非授权：服务端先做受约束语义分类，再按 owner/session 重新解析稳定引用；
+    // 分类失败 fail-open 不继承，独立请求也不会被陈旧材料污染。
     const requestedSourceSetIds = pendingDraftReplacementRequested
       ? []
       : clarificationSourceSetIds.length
@@ -3734,24 +3741,28 @@ export async function agentChat(req, res) {
       }
     }
 
+    const runtimeContextRefs = noteDraftContextRefs(resolvedContexts, MAX_PRIVATE_NOTE_DRAFT_CONTEXTS);
+    const runtimeAttachmentIds = noteDraftAttachmentIds(resolvedAttachments);
+    const resolvedResourceTypes = [
+      ...new Set([
+        ...runtimeContextRefs.map((item) => item.type),
+        ...(resolvedScopes.refs.length ? ['note'] : []),
+        ...(runtimeAttachmentIds.length ? ['file'] : []),
+      ]),
+    ];
     const directRoute = decideDirectAgentRoute({
       message,
-      contextCount:
-        (Array.isArray(contexts) ? contexts.length : 0) +
-        (Array.isArray(resolvedScopes?.refs) ? resolvedScopes.refs.length : 0),
-      attachmentCount: Array.isArray(attachmentIds) ? attachmentIds.length : 0,
+      contextCount: runtimeContextRefs.length + (Array.isArray(resolvedScopes?.refs) ? resolvedScopes.refs.length : 0),
+      attachmentCount: runtimeAttachmentIds.length,
       translation: enableTranslation,
     });
     const capabilityOverviewRequested =
-      !enableTranslation &&
-      !requestContextTypes.length &&
-      !resolvedScopes.refs.length &&
-      isAgentCapabilityOverviewRequest(message);
+      !enableTranslation && !resolvedResourceTypes.length && isAgentCapabilityOverviewRequest(message);
     const deterministicInputClarification = enableTranslation
       ? ''
       : resolveAgentInputClarification({
           message,
-          contextTypes: requestContextTypes,
+          contextTypes: resolvedResourceTypes,
           locale,
         });
     trace.route = directRoute.direct ? directRoute.reason : 'planner';
@@ -3768,7 +3779,7 @@ export async function agentChat(req, res) {
         ? []
         : selectAgentTools(toolRegistry, {
             message,
-            contextTypes: [...requestContextTypes, ...(resolvedScopes.refs.length ? ['note'] : [])],
+            contextTypes: resolvedResourceTypes,
             userRole,
             allowWrite: !req.adminContext || req.adminContext.mode === 'maintain',
             allowVisitorWrite: req.adminContext?.mode === 'maintain',
@@ -3927,22 +3938,17 @@ export async function agentChat(req, res) {
     const runtimeV2Enforced = runtimeV2Mode === 'enforce' && semanticPlanningEnabled;
     const runtimeContextSummary = {
       actorRole: userRole,
-      selectedResourceTypes: [
-        ...new Set([
-          ...requestContextTypes,
-          ...(resolvedScopes.refs.length ? ['note'] : []),
-          ...(attachmentIds.length ? ['file'] : []),
-        ]),
-      ],
-      selectedResourceCount:
-        resolvedContexts.sources.length + resolvedScopes.refs.length + resolvedAttachments.sources.length,
-      attachmentCount: attachmentIds.length,
+      selectedResourceTypes: resolvedResourceTypes,
+      selectedResourceCount: runtimeContextRefs.length + resolvedScopes.refs.length + runtimeAttachmentIds.length,
+      attachmentCount: runtimeAttachmentIds.length,
       hasPendingArtifact: false,
     };
-    const runtimeExecutionContext = {
-      contextRefs: noteDraftContextRefs(resolvedContexts, MAX_PRIVATE_NOTE_DRAFT_CONTEXTS),
-      attachmentIds: noteDraftAttachmentIds(resolvedAttachments),
-    };
+    const runtimeExecutionContext = buildAuthoritativeExecutionContext({
+      contextRefs: runtimeContextRefs,
+      attachmentIds: runtimeAttachmentIds,
+      entities: resolvedContexts.entities,
+      candidateTools: selectedTools,
+    });
     const turnSpecShadowPromise =
       runtimeV2Mode === 'shadow' && semanticPlanningEnabled
         ? compileTurnSpecShadow({
@@ -5115,7 +5121,7 @@ export async function agentChat(req, res) {
         finishReason: plannerResponse.finishReason,
       });
       const missingRequiredParameter = results.find(
-        (item) => item.result?.status === 'error' && item.result?.error === 'TOOL_ARGUMENT_REQUIRED',
+        (item) => item.result?.status === 'error' && REQUIRED_INPUT_ERROR_CODES.has(String(item.result?.error || '')),
       );
       if (missingRequiredParameter) {
         // JSON Schema 必填参数缺失意味着 Planner 没有从用户原话或权威上下文得到足够信息。
@@ -5559,20 +5565,19 @@ export async function agentChat(req, res) {
         if (terminalDependencyFailure) {
           // 目标越界、缺失或 schema 错误不是瞬时故障。禁止让模型在同一请求里换一个
           // ID 继续试探；保留本次确定性失败说明并结束依赖链。
-          semanticPolicy =
-            terminalDependencyFailure.result.error === 'TOOL_ARGUMENT_REQUIRED'
-              ? {
-                  state: 'clarification',
-                  resolution: 'ambiguous',
-                  capabilities: followUpCatalog,
-                  message: missingRequiredParameterMessage(locale),
-                }
-              : {
-                  state: 'blocked',
-                  resolution: 'dependency_failed',
-                  capabilities: followUpCatalog,
-                  message: String(terminalDependencyFailure.result.summary || '').trim(),
-                };
+          semanticPolicy = REQUIRED_INPUT_ERROR_CODES.has(String(terminalDependencyFailure.result.error || ''))
+            ? {
+                state: 'clarification',
+                resolution: 'ambiguous',
+                capabilities: followUpCatalog,
+                message: missingRequiredParameterMessage(locale),
+              }
+            : {
+                state: 'blocked',
+                resolution: 'dependency_failed',
+                capabilities: followUpCatalog,
+                message: String(terminalDependencyFailure.result.summary || '').trim(),
+              };
           break;
         }
         // 写工具在 Agent 主请求中只负责生成一次确认/选择或返回一次可靠预检错误。

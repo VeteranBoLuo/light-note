@@ -1,5 +1,12 @@
 <template>
-  <div v-if="g" class="growth-card">
+  <div
+    v-if="g"
+    class="growth-card"
+    :class="{
+      'growth-card--expanded': props.expanded,
+      'growth-card--compact-today': props.compactToday,
+    }"
+  >
     <div class="growth-header">
       <div class="growth-identity">
         <div class="growth-badge" :style="{ background: tierGradient(g.level) }">
@@ -24,7 +31,16 @@
     </div>
 
     <div class="growth-progress-area">
-      <template v-if="!g.isMax">
+      <template v-if="props.compactToday">
+        <div class="growth-progress-copy growth-progress-copy--today">
+          <span>{{ t('growth.todayGrowthProgress') }}</span>
+          <strong>{{ dailyProgress.completed }}/{{ dailyProgress.total }}</strong>
+        </div>
+        <div class="growth-progress growth-progress--today" :title="`${dailyProgressPercent}%`">
+          <span :style="{ width: `${dailyProgressPercent}%` }"></span>
+        </div>
+      </template>
+      <template v-else-if="!g.isMax">
         <div class="growth-progress-copy">
           <span>{{ t('workbench.growth.progress') }}</span>
           <strong>{{ g.progress }}%</strong>
@@ -37,8 +53,66 @@
       <span v-else class="max-hint">{{ t('workbench.growth.maxHint') }}</span>
     </div>
 
+    <template v-if="props.expanded">
+      <div class="growth-insights" :aria-label="t('growth.todayTitle')">
+        <div class="growth-insight growth-insight--daily">
+          <span class="growth-insight__icon" aria-hidden="true">
+            <SvgIcon :src="icon.growth.action" size="17" />
+          </span>
+          <span>{{ t('growth.todayDailyProgress') }}</span>
+          <strong>{{ dailyProgress.completed }}/{{ dailyProgress.total }}</strong>
+        </div>
+        <div class="growth-insight growth-insight--exp">
+          <span class="growth-insight__icon" aria-hidden="true">
+            <SvgIcon :src="icon.growth.level" size="17" />
+          </span>
+          <span>{{ t('growth.todayExpCap') }}</span>
+          <strong>{{ dailyExp }}/{{ dailyCap }}</strong>
+        </div>
+        <div class="growth-insight growth-insight--reward">
+          <span class="growth-insight__icon" aria-hidden="true">
+            <SvgIcon :src="icon.growth.reward" size="17" />
+          </span>
+          <span>{{ t('growth.todayClaimable') }}</span>
+          <strong>{{ claimable }}</strong>
+        </div>
+      </div>
+
+      <BButton v-if="nextAction" class="growth-next" @click="openGrowthTasks">
+        <span class="growth-next__icon" aria-hidden="true">
+          <SvgIcon :src="nextActionIcon" size="19" />
+        </span>
+        <span class="growth-next__copy">
+          <small>{{ t('growth.nextActionLabel') }}</small>
+          <strong>{{ nextActionTitle }}</strong>
+          <span class="growth-next__meta">
+            <span v-if="nextAction.progress">
+              {{
+                t('growth.nextActionProgress', {
+                  current: nextAction.progress.current,
+                  target: nextAction.progress.target,
+                })
+              }}
+            </span>
+            <span v-if="Number(nextAction.reward?.exp || 0) > 0">
+              {{ t('growth.nextActionExpReward', { n: nextAction.reward?.exp || 0 }) }}
+            </span>
+            <span v-if="Number(nextAction.reward?.points || 0) > 0">
+              {{ t('growth.nextActionPointsReward', { n: nextAction.reward?.points || 0 }) }}
+            </span>
+          </span>
+        </span>
+        <SvgIcon class="growth-next__arrow" :src="icon.ai.sourceArrow" size="15" aria-hidden="true" />
+      </BButton>
+    </template>
+
     <div class="growth-footer">
-      <span class="streak">{{ t('growth.streak') }} · {{ t('growth.daysVal', { n: g.streak }) }}</span>
+      <div class="growth-footer__summary">
+        <span class="streak">{{ t('growth.streak') }} · {{ t('growth.daysVal', { n: g.streak }) }}</span>
+        <span v-if="props.compactToday" class="claimable-summary">
+          {{ t('growth.claimableSummary', { n: claimable }) }}
+        </span>
+      </div>
       <div class="growth-actions">
         <BButton
           size="small"
@@ -51,18 +125,19 @@
         >
           {{ g.checkedInToday ? t('growth.checkedIn') : t('growth.checkin') }}
         </BButton>
-        <BButton
-          v-if="claimable > 0"
-          size="small"
-          type="success"
-          :loading="claimingRewards"
-          :disabled="readOnly || claimingRewards"
-          :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
-          class="claim-button"
-          @click="onClaimAll"
-        >
-          {{ t('growth.claimAll') }} · {{ claimable }}
-        </BButton>
+        <BTooltip v-if="claimable > 0" :title="claimAllTooltip" :disabled="!bookmark.isDesktop" :delay="160">
+          <BButton
+            size="small"
+            type="success"
+            :loading="claimingRewards"
+            :disabled="readOnly || claimingRewards"
+            :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
+            class="claim-button"
+            @click="onClaimAll"
+          >
+            {{ t('growth.claimAll') }} · {{ claimable }}
+          </BButton>
+        </BTooltip>
       </div>
     </div>
   </div>
@@ -75,13 +150,29 @@
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { tierGradient } from '@/config/growthTier.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { recordOperation } from '@/api/commonApi.ts';
-  import { useUserStore } from '@/store';
+  import { bookmarkStore, useUserStore } from '@/store';
+  import icon from '@/config/icon.ts';
+  import { useGrowthClaimFeedback } from '@/composables/useGrowthClaimFeedback';
+
+  const props = withDefaults(
+    defineProps<{
+      expanded?: boolean;
+      compactToday?: boolean;
+    }>(),
+    {
+      expanded: false,
+      compactToday: false,
+    },
+  );
 
   const { t } = useI18n();
   const router = useRouter();
   const user = useUserStore();
+  const bookmark = bookmarkStore();
   const readOnly = computed(() => Boolean(user.adminContext));
   const {
     growth: g,
@@ -94,22 +185,46 @@
   } = useGrowth();
   const checking = ref(false);
   const claimable = computed(() => Number(claimableData.value?.count || 0));
+  const { claimAllTooltip, snapshotClaimableBreakdown, claimSuccessMessage } = useGrowthClaimFeedback(claimableData);
+  const dailyProgress = computed(() => ({
+    completed: Number(claimableData.value?.today?.completed || 0),
+    total: Number(claimableData.value?.today?.total ?? 3),
+  }));
+  const dailyProgressPercent = computed(() => {
+    const total = Math.max(0, dailyProgress.value.total);
+    if (!total) return 0;
+    return Math.min(100, Math.round((Math.max(0, dailyProgress.value.completed) / total) * 100));
+  });
+  const dailyExp = computed(() => Number(g.value?.dailyExp || 0));
+  const dailyCap = computed(() => Number(g.value?.dailyCap ?? 200));
+  const nextAction = computed(() => claimableData.value?.nextAction || null);
+  const nextActionIcon = computed(() => {
+    const action = nextAction.value?.action || '';
+    if (action.includes('todo')) return icon.growth.action;
+    if (action.includes('inbox')) return icon.contextMenu.inbox;
+    if (action.includes('reuse')) return icon.noteTemplate.knowledge;
+    if (action.includes('file')) return icon.resource.file;
+    if (action.includes('bookmark')) return icon.resource.bookmark;
+    if (action.includes('report')) return icon.noteDetail.history;
+    return icon.growth.create;
+  });
+  const nextActionTitle = computed(() => {
+    if (!nextAction.value) return '';
+    const key = `growth.nextActions.${nextAction.value.key}`;
+    const translated = t(key);
+    return translated === key ? t(`growth.nextActionTypes.${nextAction.value.type}`) : translated;
+  });
 
   async function onClaimAll() {
     if (readOnly.value || claimingRewards.value) return;
+    const pendingBreakdown = snapshotClaimableBreakdown();
     try {
       const res = await claimAllRewards();
       if (res?.status === 200 && res.data?.ok) {
         if (res.data.claimed > 0) {
-          const frameCount = Array.isArray(res.data.frames) ? res.data.frames.length : 0;
+          const sourceMessage = claimSuccessMessage(res.data.receipts, pendingBreakdown);
           message.success(
-            frameCount
-              ? t('growth.claimAllOkWithFrames', {
-                  exp: res.data.exp || 0,
-                  points: res.data.points || 0,
-                  frames: frameCount,
-                })
-              : t('growth.claimAllOkMixed', { exp: res.data.exp || 0, points: res.data.points || 0 }),
+            sourceMessage || t('growth.claimAllOkMixed', { exp: res.data.exp || 0, points: res.data.points || 0 }),
           );
           recordOperation({
             module: '工作台',
@@ -126,6 +241,10 @@
 
   function goGrowth() {
     router.push('/growth');
+  }
+
+  function openGrowthTasks() {
+    router.push({ path: '/growth', query: { section: 'tasks' }, hash: '#growth-weekly' });
   }
 
   async function onCheckin() {
@@ -145,11 +264,16 @@
           if (res.data.leveledUp && res.data.growth) {
             message.success(t('growth.leveledUp', { lv: res.data.growth.level, name: res.data.growth.name }));
           }
-          await loadClaimable();
         }
+        // 成长卡可能与进入页面时的 /growth/me 并发；签到完成后强制回读服务端快照，
+        // 避免旧的首屏响应把 checkedInToday 又覆盖回 false。
+        await Promise.all([load(true), loadClaimable()]);
+      } else if (String(res?.status || '') !== 'preview') {
+        message.error(res?.msg || t('growth.checkinFailed'));
       }
     } catch (error) {
       console.error('签到失败:', error);
+      message.error(t('growth.checkinFailed'));
     } finally {
       checking.value = false;
     }
@@ -178,6 +302,26 @@
       var(--menu-body-bg-color)
     );
     box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--primary-color) 70%, transparent);
+  }
+
+  .growth-card--expanded {
+    min-height: 0;
+    height: 100%;
+  }
+
+  .growth-card--compact-today {
+    min-height: 0;
+    padding: 16px;
+    gap: 13px;
+    border-color: var(--primary-color);
+    border-radius: 17px;
+    background: var(--card-background);
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--primary-color) 7%, var(--card-background)),
+      color-mix(in srgb, var(--resource-file-color, #ff8a00) 4%, var(--card-background))
+    );
+    box-shadow: 0 12px 30px rgba(37, 40, 72, 0.06);
   }
 
   .growth-header,
@@ -276,6 +420,11 @@
     font-variant-numeric: tabular-nums;
   }
 
+  .growth-progress-copy--today,
+  .growth-progress-copy--today strong {
+    font-size: 12px;
+  }
+
   .growth-progress {
     height: 6px;
     overflow: hidden;
@@ -291,8 +440,144 @@
     transition: width 0.35s ease;
   }
 
+  .growth-progress--today {
+    height: 7px;
+    background: var(--surface-divider-color);
+  }
+
+  .growth-progress--today span {
+    background: linear-gradient(90deg, var(--primary-color), #ec4899, var(--resource-file-color, #ff8a00));
+  }
+
+  .growth-insights {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  .growth-insight {
+    min-width: 0;
+    padding: 9px 7px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 4px 6px;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 14%, var(--card-border-color));
+    border-radius: 11px;
+    background: color-mix(in srgb, var(--primary-color) 4%, var(--menu-body-bg-color));
+  }
+
+  .growth-insight__icon {
+    width: 28px;
+    height: 28px;
+    grid-row: 1 / 3;
+    display: grid;
+    place-items: center;
+    border-radius: 9px;
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+  }
+
+  .growth-insight > span:not(.growth-insight__icon) {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--desc-color);
+    font-size: 9.5px;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .growth-insight strong {
+    color: var(--text-color);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+  }
+
+  .growth-insight--daily .growth-insight__icon {
+    color: var(--resource-note-color, #00a884);
+    background: color-mix(in srgb, var(--resource-note-color, #00a884) 11%, transparent);
+  }
+
+  .growth-insight--reward .growth-insight__icon {
+    color: var(--resource-file-color, #ff8a00);
+    background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 11%, transparent);
+  }
+
+  .growth-next {
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    min-height: 68px;
+    padding: 10px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 9px;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 22%, var(--card-border-color));
+    border-radius: 11px;
+    color: var(--text-color);
+    background: color-mix(in srgb, var(--primary-color) 5%, var(--menu-body-bg-color));
+    text-align: left;
+    line-height: 1.25;
+  }
+
+  .growth-next__icon {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 11%, transparent);
+  }
+
+  .growth-next__copy {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+  }
+
+  .growth-next__copy > small,
+  .growth-next__meta {
+    color: var(--desc-color);
+    font-size: 9.5px;
+  }
+
+  .growth-next__copy > strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11.5px;
+  }
+
+  .growth-next__meta {
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 8px;
+  }
+
+  .growth-next__arrow {
+    color: var(--primary-color);
+  }
+
   .growth-footer {
     margin-top: auto;
+  }
+
+  .growth-footer__summary {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+  }
+
+  .claimable-summary {
+    color: var(--desc-color);
+    font-size: 10.5px;
+    white-space: nowrap;
   }
 
   .streak {
@@ -314,14 +599,54 @@
   }
 
   @media (max-width: 760px) {
+    .growth-card--expanded {
+      height: auto;
+    }
+
+    .growth-insights {
+      grid-template-columns: 1fr;
+    }
+
     .growth-footer {
       align-items: flex-start;
       flex-direction: column;
     }
 
+    .growth-card--compact-today .growth-header,
+    .growth-card--compact-today .growth-footer {
+      flex-direction: row;
+      align-items: center;
+    }
+
+    .growth-card--compact-today .growth-footer {
+      margin-top: 0;
+    }
+
+    .growth-card--compact-today .growth-badge {
+      width: 44px;
+      height: 44px;
+      border-radius: 13px;
+    }
+
+    .growth-card--compact-today .growth-name strong {
+      font-size: 15px;
+    }
+
+    .growth-card--compact-today .growth-meta > span,
+    .growth-card--compact-today .streak,
+    .growth-card--compact-today .claimable-summary {
+      font-size: 11.5px;
+    }
+
     .growth-actions {
       width: 100%;
       justify-content: flex-start;
+    }
+
+    .growth-card--compact-today .growth-actions {
+      width: auto;
+      flex: 0 0 auto;
+      justify-content: flex-end;
     }
   }
 

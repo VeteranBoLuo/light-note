@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ROOT_E2E_TOOL_CASES, rootE2EToolNames, selectRootE2ECases } from './rootE2ECases.js';
 import {
   ROOT_E2E_CLIENT_CAPABILITIES,
+  ROOT_E2E_WEB_FIXTURE_URL,
   answerMentionsCount,
   formatRootE2EText,
   parseRootE2EArgs,
@@ -50,6 +51,19 @@ describe('root 真实链路门禁', () => {
     expect(() => parseRootE2EArgs(['--case', 'missing-case'])).toThrow('未知用例');
   });
 
+  it('read_url 的真实用例使用已校验书签上下文，不再以手输 URL 冒充资源指代', () => {
+    const readUrlCase = ROOT_E2E_TOOL_CASES.find((item) => item.id === 'read-url');
+    expect(readUrlCase).toMatchObject({
+      toolName: 'read_url',
+      contextFixture: 'bookmark',
+      followUpMessage: '总结网页内容',
+    });
+    expect(readUrlCase.message).toBe('分析这个地址');
+    expect(readUrlCase.message).not.toMatch(/https?:\/\//u);
+    expect(ROOT_E2E_WEB_FIXTURE_URL).toBe('https://www.iana.org/help/example-domains');
+    expect(ROOT_E2E_WEB_FIXTURE_URL).not.toBe('https://example.com');
+  });
+
   it('真实客户端协议包含来源隔离能力，并支持只运行对应的两轮回归', () => {
     expect(ROOT_E2E_CLIENT_CAPABILITIES).toContain('grounding_scope_v2');
     expect(
@@ -88,6 +102,15 @@ describe('root 真实链路门禁', () => {
     expect(parseRootE2EArgs(['--artifact-refinement-rounds', '1']).artifactRefinementRounds).toBe(1);
     expect(() => parseRootE2EArgs(['--artifact-refinement-rounds', '0'])).toThrow('仅支持 1 到 5');
     expect(() => parseRootE2EArgs(['--artifact-refinement-rounds', '6'])).toThrow('仅支持 1 到 5');
+  });
+
+  it('待办提醒真实查询包含测试夹具写入，必须显式授权执行并可单独运行', () => {
+    expect(() => parseRootE2EArgs(['--live', '--case', 'query-todos', '--no-artifact-regression'])).toThrow(
+      '必须显式添加 --execute-writes',
+    );
+    expect(
+      parseRootE2EArgs(['--live', '--execute-writes', '--case', 'query-todos', '--no-artifact-regression']),
+    ).toMatchObject({ caseIds: ['query-todos'], executeWrites: true, artifactRegression: false });
   });
 
   it('零条结果同时接受数字 0 和自然中文的“没有笔记”', () => {

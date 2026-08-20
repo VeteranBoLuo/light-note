@@ -5,6 +5,29 @@ import { describe, expect, it } from 'vitest';
 const desktopSource = readFileSync(resolve(process.cwd(), 'src/view/workbenches/DesktopWorkbenchView.vue'), 'utf8');
 
 describe('桌面工作台头部布局稳定性', () => {
+  it('首屏把待处理总览与快速创建、成长卡片组成主次分栏，资源概览继续保留在下方', () => {
+    const firstFoldStart = desktopSource.indexOf('<section class="workbench-first-fold">');
+    const firstFoldEnd = desktopSource.indexOf('</section>', desktopSource.indexOf('</aside>', firstFoldStart)) + 10;
+    const firstFoldSource = desktopSource.slice(firstFoldStart, firstFoldEnd);
+    const resourceOverviewStart = desktopSource.indexOf(
+      '<section class="primary-grid" :aria-label="t(\'workbench.panel.resourceOverview\')">',
+    );
+
+    expect(firstFoldStart).toBeGreaterThan(-1);
+    expect(firstFoldSource).toContain('class="today-summary"');
+    expect(firstFoldSource).toContain('quick-create-panel');
+    expect(firstFoldSource).toContain('<WorkbenchGrowth expanded />');
+    expect(resourceOverviewStart).toBeGreaterThan(firstFoldEnd);
+    expect(desktopSource).toMatch(
+      /\.workbench-first-fold\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) minmax\(330px, 0\.29fr\)/,
+    );
+    expect(desktopSource).toMatch(
+      /\.workbench-first-fold__rail\s*\{[\s\S]*?grid-template-rows:\s*auto minmax\(0, 1fr\)[\s\S]*?align-content:\s*stretch/,
+    );
+    expect(desktopSource).toMatch(/\.workbench-first-fold__rail :deep\(\.growth-card\)\s*\{[\s\S]*?height:\s*100%/);
+    expect(desktopSource).toMatch(/\.quick-create-panel\s*\{[\s\S]*?height:\s*auto/);
+  });
+
   it('首屏常驻数据范围行并显示更新时间加载状态', () => {
     expect(desktopSource).toContain('<small class="workbench-data-scope">');
     expect(desktopSource).not.toContain('<small v-if="lastUpdatedAt" class="workbench-data-scope">');

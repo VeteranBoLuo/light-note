@@ -69,6 +69,40 @@ describe('Agent Tool Policy', () => {
     ).toThrow(/依赖绑定/);
   });
 
+  it('注册时校验并冻结声明式资源字段绑定', () => {
+    const tool = makeTool({
+      parameters: {
+        type: 'object',
+        properties: { url: { type: 'string' }, limit: { type: 'integer' } },
+      },
+      resourceBindings: [{ argument: 'url', refType: 'BOOKMARK', sourceField: 'url', allowLiteral: true }],
+    });
+    expect(tool.resourceBindings).toEqual([
+      { argument: 'url', refType: 'bookmark', sourceField: 'url', allowLiteral: true },
+    ]);
+    expect(Object.isFrozen(tool.resourceBindings)).toBe(true);
+    expect(() =>
+      makeTool({ resourceBindings: [{ argument: 'missing', refType: 'bookmark', sourceField: 'url' }] }),
+    ).toThrow(/资源绑定/);
+    expect(() =>
+      makeTool({ resourceBindings: [{ argument: 'limit', refType: 'bad type', sourceField: 'id' }] }),
+    ).toThrow(/资源绑定/);
+    expect(() =>
+      makeTool({ resourceBindings: [{ argument: 'limit', refType: 'bookmark', sourceField: '__proto__' }] }),
+    ).toThrow(/资源绑定/);
+    expect(() =>
+      makeTool({
+        resourceBindings: [{ argument: 'limit', refType: 'bookmark', sourceField: 'id', allowLiteral: 'yes' }],
+      }),
+    ).toThrow(/资源绑定/);
+    expect(() =>
+      makeTool({
+        dependencyBindings: [{ argument: 'limit', refType: 'page' }],
+        resourceBindings: [{ argument: 'limit', refType: 'bookmark', sourceField: 'id' }],
+      }),
+    ).toThrow(/资源绑定/);
+  });
+
   it('拒绝 schema 之外的模型参数', async () => {
     const tool = makeTool();
     await expect(

@@ -66,6 +66,7 @@ export default {
     },
     required: ['attachmentId'],
   },
+  resourceBindings: [{ argument: 'attachmentId', refType: 'attachment', sourceField: 'id' }],
   requireRoot: false,
   isWrite: true,
   directAction: true,

@@ -63,6 +63,14 @@ export function normalizeAiResolvedGrounding(value: unknown): AiResolvedGroundin
   };
 }
 
+export function shouldShowAiMaterialModeNotice(value: AiResolvedGrounding | undefined) {
+  return (
+    value?.enabled === true &&
+    value.allowedSourceCount > 0 &&
+    (value.materialMode === 'current_explicit' || value.materialMode === 'inherited')
+  );
+}
+
 export function normalizeAiMaterialClarification(value: unknown): AiMaterialClarification | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const raw = value as Record<string, unknown>;

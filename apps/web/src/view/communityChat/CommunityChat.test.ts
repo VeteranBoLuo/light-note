@@ -190,6 +190,24 @@ describe('CommunityChat workspace bootstrap', () => {
     expect(host.querySelector<HTMLElement>('.community-workspace-stub')?.dataset.canPost).toBe('false');
   });
 
+  it('实时连接正常时不每 8 秒请求目录，只保留 60 秒安全刷新', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    mocks.getRooms.mockResolvedValue({
+      data: { access: access({ realtimeEnabled: true }), messagingEnabled: true, items: [room] },
+    });
+
+    await mountPage();
+    await vi.advanceTimersByTimeAsync(8_000);
+    await flushAsync();
+    expect(mocks.getRooms).toHaveBeenCalledTimes(1);
+
+    // 兜底调度器每 8 秒检查一次，60 秒阈值会在第一个不小于阈值的 64 秒刻度触发。
+    await vi.advanceTimersByTimeAsync(56_000);
+    await flushAsync();
+    expect(mocks.getRooms).toHaveBeenCalledTimes(2);
+  });
+
   it('接口失败时只在聊天室容器内提供重连，不回退到访问状态页', async () => {
     mocks.getRooms.mockRejectedValue(new Error('backend unavailable'));
 

@@ -1,11 +1,5 @@
 import { computed, readonly, ref } from 'vue';
-import {
-  getCommunityChatAccess,
-  getCommunityChatRooms,
-  type CommunityChatAccess,
-  type CommunityChatRoom,
-  type CommunityChatRoomDirectory,
-} from '@/api/communityChatApi';
+import { getCommunityChatRooms, type CommunityChatRoom, type CommunityChatRoomDirectory } from '@/api/communityChatApi';
 
 const rooms = ref<CommunityChatRoom[]>([]);
 const loading = ref(false);
@@ -78,15 +72,8 @@ async function refresh(options: { afterCurrent?: boolean } = {}) {
     do {
       refreshQueuedAfterCurrent = false;
       const requestToken = captureDirectorySyncToken();
-      directory = await getCommunityChatAccess()
-        .then(async (accessResponse) => {
-          const access = accessResponse.data as CommunityChatAccess;
-          if (requestGeneration === generation) realtimeAvailable.value = Boolean(access?.realtimeEnabled);
-          if (!access?.canEnter || !access.messagingEnabled) {
-            if (requestGeneration === generation) syncDirectory(null, requestToken);
-            return null;
-          }
-          const response = await getCommunityChatRooms();
+      directory = await getCommunityChatRooms()
+        .then((response) => {
           const nextDirectory = response.data as CommunityChatRoomDirectory;
           if (requestGeneration === generation) syncDirectory(nextDirectory, requestToken);
           return nextDirectory;

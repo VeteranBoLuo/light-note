@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { DrawingStrokeElement, DrawingTextElement } from '@lightnote/shared/drawing-note';
+import type { DrawingShapeElement, DrawingStrokeElement, DrawingTextElement } from '@lightnote/shared/drawing-note';
 import {
   cloneDrawingElement,
   drawingRectsIntersect,
@@ -29,6 +29,18 @@ const text: DrawingTextElement = {
   text: '示例',
 };
 
+const shape: DrawingShapeElement = {
+  id: 'shape-1',
+  kind: 'shape',
+  shape: 'ellipse',
+  x: 100,
+  y: 120,
+  width: 200,
+  height: 140,
+  color: '#615ced',
+  strokeWidth: 4,
+};
+
 describe('drawingSelection', () => {
   it('按任意拖动方向归一化框选矩形', () => {
     expect(normalizeDrawingRect({ x: 80, y: 50 }, { x: 20, y: 10 })).toEqual({
@@ -56,7 +68,7 @@ describe('drawingSelection', () => {
     expect(cloned.points).not.toBe(stroke.points);
   });
 
-  it('平移笔迹和文本时不修改原元素', () => {
+  it('平移笔迹、文本和形状时不修改原元素', () => {
     expect(translateDrawingElement(stroke, 5, -10, 'stroke-copy')).toEqual({
       ...stroke,
       id: 'stroke-copy',
@@ -68,8 +80,15 @@ describe('drawingSelection', () => {
       x: 40,
       y: 80,
     });
+    expect(translateDrawingElement(shape, 12, -8, 'shape-copy')).toEqual({
+      ...shape,
+      id: 'shape-copy',
+      x: 112,
+      y: 112,
+    });
     expect(stroke.points).toEqual([10, 20, 30, 40]);
     expect(text).toMatchObject({ x: 50, y: 60 });
+    expect(shape).toMatchObject({ x: 100, y: 120 });
   });
 
   it('剪贴板跨编辑器保存深拷贝，并为每次粘贴生成新 id 和递增序号', () => {

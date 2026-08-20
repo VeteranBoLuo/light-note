@@ -50,4 +50,28 @@ describe('drawingPreview', () => {
       .reduce((sum, element) => sum + element.text.length, 0);
     expect(textLength).toBeLessThanOrEqual(DRAWING_PREVIEW_MAX_TEXT_CHARACTERS);
   });
+
+  it('保留 V2 形状元素供卡片完整渲染', () => {
+    const preview = buildDrawingScenePreview({
+      v: 2,
+      page: { width: 1448, height: 1448 },
+      elements: [
+        {
+          id: 'shape-1',
+          kind: 'shape',
+          shape: 'ellipse',
+          x: 100,
+          y: 120,
+          width: 260,
+          height: 180,
+          color: '#615ced',
+          strokeWidth: 4,
+        },
+      ],
+    });
+
+    expect(preview.elements).toEqual([
+      expect.objectContaining({ id: 'shape-1', kind: 'shape', shape: 'ellipse', width: 260, height: 180 }),
+    ]);
+  });
 });

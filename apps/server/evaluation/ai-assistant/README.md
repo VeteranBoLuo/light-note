@@ -88,6 +88,12 @@ pnpm --filter server run smoke:ai-assistant -- --suite quick --depth answer --li
 pnpm --filter server run smoke:ai-turn-v2 -- --live --provider both --repeat 20
 ```
 
+排查单一能力时可重复传入 `--case`，只调用对应的合成用例，避免运行整套工具并浪费 Token。例如待办日期与提醒时间规划回归：
+
+```bash
+pnpm --filter server run smoke:ai-turn-v2 -- --live --suite full --provider both --repeat 1 --case query-todos
+```
+
 TurnSpec V2 的默认发布门槛为：两家可用 Provider 使用同一契约；严格正确率至少 95%，额外工具调用等灾难性失败为 0，候选工具 p95 不超过 12。先按契约通过率筛选，再比较协议失败率、p95 延迟和成本；不得因为更便宜而选择未过安全契约的 Provider。
 
 2026-08-19 的 20 轮基线中，DeepSeek `deepseek-v4-flash` strict=100%、Qwen `qwen3.5-flash` strict=95%，两者协议/灾难性失败均为 0、候选工具 p95 均为 2。当前默认继续使用 DeepSeek，Qwen 只作为通过同一契约的 fallback；模型或 Prompt 变化后必须重跑，不能永久沿用这次结论。

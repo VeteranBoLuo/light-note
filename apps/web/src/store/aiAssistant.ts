@@ -330,23 +330,9 @@ export function createAiAssistantMaterialSnapshot(
   };
 }
 
-const MATERIAL_ANAPHORIC_PATTERN =
-  /(?:这个|那个|这些|那些|它们?|刚才|刚刚|上面|前面|之前|上述|前述|基于(?:它|这个|那个|上述|前述)|\b(?:this|that|these|those|it|they|above|previous|earlier)\b)/i;
-const MATERIAL_FOLLOW_UP_COMMAND_PATTERN =
-  /^(?:(?:请|麻烦|帮我|能否|可以)\s*)?(?:继续|接着|重新生成|再生成|重写|重做|再写|写(?:得|的)?(?:(?:太|有点|比较)?(?:短|少|简略)|(?:长|多|详细|完整|丰富)(?:一|点|些)?)|(?:太|有点|比较)?(?:短|少|简略)|补充(?:一下|一点|些)|补充(?=[，。！？,.!?\s]|$)|展开(?:一下|说说)?|更(?:长|详细|完整|丰富)(?:一点|些)?|再(?:长|详细|完整|丰富)(?:一点|些)?|不够(?:长|详细|完整|丰富)|扩写|改写|优化(?:一下)?|润色|continue\b|expand\b|regenerate\b|rewrite\b|longer\b|more\s+detail\b)/i;
-
 export interface AiAssistantPendingNoteDraftReference {
   confirmationId: string;
   confirmationToken: string;
-}
-
-/**
- * 只在用户明确承接上一轮材料时提交服务端 Source Set 候选。
- * 候选仍需服务端重新判断、校验和解析；这里绝不从公开引用反向拼装本轮显式材料。
- */
-export function shouldOfferAiAssistantSourceSetCandidate(input: string) {
-  const normalized = String(input || '').trim();
-  return MATERIAL_ANAPHORIC_PATTERN.test(normalized) || MATERIAL_FOLLOW_UP_COMMAND_PATTERN.test(normalized);
 }
 
 /**
@@ -492,11 +478,11 @@ export function resolveAiAssistantSourceSetId(messages: AiAssistantMessage[]) {
 }
 
 /**
- * Source Set 只承接服务端已经签发的显式材料集合；完整的新查询不携带候选，避免额外分类
- * 调用和旧范围污染。工作区查询返回的公开 entityRefs/sources 不能在这里充当 Source Set。
+ * Source Set 候选只是服务端签发的短期稳定句柄，不等于授权继承。客户端不再用关键词
+ * 白名单猜测“总结网页内容”之类省略式追问；只要最近回答带有真实 Source Set 就提交候选，
+ * 由服务端结合完整语义三态判断承接、独立或澄清。工作区公开引用仍不能冒充 Source Set。
  */
-export function resolveAiAssistantSourceSetCandidateId(messages: AiAssistantMessage[], input: string) {
-  if (!shouldOfferAiAssistantSourceSetCandidate(input)) return '';
+export function resolveAiAssistantSourceSetCandidateId(messages: AiAssistantMessage[]) {
   return resolveAiAssistantSourceSetId(messages);
 }
 

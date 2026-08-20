@@ -74,10 +74,20 @@ function routingEligible(capability, text) {
   return !routing.requireAny?.length || matchesAny(routing.requireAny, text);
 }
 
-function routedSemanticScore(goal, capability, turnSpec, message) {
+function routedSemanticScore(goal, capability, turnSpec, message, contextTypes = []) {
   const text = routingText(goal, turnSpec, message);
   const preferenceBonus = matchesAny(capability?.routing?.preferAny, text) ? 10_000 : 0;
-  return preferenceBonus + semanticScore(goal, capability);
+  const selectedTypes = new Set(
+    (Array.isArray(contextTypes) ? contextTypes : []).map((item) => String(item || '').trim()).filter(Boolean),
+  );
+  // 已选资源能通过工具的声明式 resourceBindings 满足必填参数时，这是比文本相似度更强的
+  // 结构化路由信号。只提高候选优先级，不读取绑定值，也不绕过后续 owner/session 校验。
+  const resourceBindingBonus = (capability?.resourceBindingDomains || []).some(
+    (domain) => domain === goal?.capabilityDomain && selectedTypes.has(domain),
+  )
+    ? 20_000
+    : 0;
+  return resourceBindingBonus + preferenceBonus + semanticScore(goal, capability);
 }
 
 function goalEffect(goal) {
@@ -92,7 +102,7 @@ function requestedOperation(goal, turnSpec) {
   return '';
 }
 
-function pickCapabilities(goal, catalog, turnSpec, message) {
+function pickCapabilities(goal, catalog, turnSpec, message, contextTypes) {
   const text = routingText(goal, turnSpec, message);
   const domainCandidates = (Array.isArray(catalog) ? catalog : []).filter(
     (entry) =>
@@ -107,7 +117,7 @@ function pickCapabilities(goal, catalog, turnSpec, message) {
     ? domainCandidates.filter((entry) => Array.isArray(entry?.operations) && entry.operations.includes(operation))
     : [];
   const candidates = (operationCandidates.length ? operationCandidates : domainCandidates)
-    .map((entry) => ({ entry, score: routedSemanticScore(goal, entry, turnSpec, message) }))
+    .map((entry) => ({ entry, score: routedSemanticScore(goal, entry, turnSpec, message, contextTypes) }))
     .sort((left, right) => right.score - left.score || left.entry.id.localeCompare(right.entry.id));
   if (!candidates.length) return [];
   if (goalEffect(goal) === 'write') return [candidates[0].entry];
@@ -123,7 +133,14 @@ function safeLimit(value) {
   return Math.max(1, Math.min(HARD_MAX_CANDIDATE_TOOLS, Math.trunc(numeric)));
 }
 
-export function routeTurnSpecCapabilities({ turnSpec, catalog = [], tools = [], maxTools, message = '' } = {}) {
+export function routeTurnSpecCapabilities({
+  turnSpec,
+  catalog = [],
+  tools = [],
+  maxTools,
+  message = '',
+  contextTypes = [],
+} = {}) {
   if (!turnSpec) return { state: 'blocked', reason: 'turn_spec_missing', candidates: [], goalRoutes: [] };
   if (turnSpec.confidence === 'low' || turnSpec.missingSlots.length > 0) {
     return { state: 'clarification', reason: 'turn_spec_ambiguous', candidates: [], goalRoutes: [] };
@@ -142,14 +159,14 @@ export function routeTurnSpecCapabilities({ turnSpec, catalog = [], tools = [], 
       goalRoutes.push({ goalId: goal.id, capabilityIds: [], toolNames: [], status: 'unsupported' });
       continue;
     }
-    const selected = pickCapabilities(goal, catalog, turnSpec, message);
+    const selected = pickCapabilities(goal, catalog, turnSpec, message, contextTypes);
     const policyCapability = selected.find((entry) => ['forbidden', 'planned'].includes(entry.status));
     const enabled = selected.filter((entry) => entry.status === 'enabled');
     if (
       policyCapability &&
       (!enabled.length ||
-        routedSemanticScore(goal, policyCapability, turnSpec, message) >=
-          routedSemanticScore(goal, enabled[0], turnSpec, message))
+        routedSemanticScore(goal, policyCapability, turnSpec, message, contextTypes) >=
+          routedSemanticScore(goal, enabled[0], turnSpec, message, contextTypes))
     ) {
       unsupportedGoals.push(goal.id);
       goalRoutes.push({

@@ -43,6 +43,7 @@ export function buildDrawingScenePreview(content) {
       if (element.kind === 'stroke') {
         return [{ ...element, points: sampleStrokePoints(element.points, maxPairsPerStroke) }];
       }
+      if (element.kind === 'shape') return [element];
       if (remainingTextCharacters <= 0) return [];
       const text = element.text.slice(0, Math.min(240, remainingTextCharacters));
       remainingTextCharacters -= text.length;

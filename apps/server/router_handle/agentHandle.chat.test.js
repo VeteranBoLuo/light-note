@@ -171,6 +171,7 @@ vi.mock('../util/agent/tools/index.js', () => ({
         properties: { url: { type: 'string' } },
         required: ['url'],
       },
+      resourceBindings: [{ argument: 'url', refType: 'bookmark', sourceField: 'url', allowLiteral: true }],
       requireRoot: false,
       timeoutMs: 1000,
       execute: mocks.toolExecute,
@@ -675,6 +676,129 @@ describe('agentChat 主链路', () => {
       turnSpecRequestKind: 'answer',
       candidateToolCount: 1,
     });
+  });
+
+  it('Runtime V2 用本轮书签引用绑定权威 URL，不再要求用户重复粘贴地址', async () => {
+    vi.stubEnv('AI_AGENT_RUNTIME_V2_MODE', 'enforce');
+    mocks.selectAgentTools.mockImplementation((registry) => [registry.get('read_url')].filter(Boolean));
+    mocks.poolQuery.mockImplementation(async (sql) => {
+      if (String(sql).includes('FROM bookmark b')) {
+        return [
+          [
+            {
+              id: 'bookmark-1',
+              title: '百度一下，你就知道',
+              url: 'https://www.baidu.com',
+              snapshot_content: '',
+              description: '中文搜索引擎',
+              content: '中文搜索引擎',
+            },
+          ],
+        ];
+      }
+      return [[]];
+    });
+    mocks.toolExecute.mockResolvedValue({ value: '百度网页正文' });
+    mocks.requestAi.mockImplementation(async (messages, options = {}) => {
+      if (options?.trace?.stage === 'intent_compiler') {
+        const payload = JSON.parse(messages[1].content);
+        expect(payload.contextSummary).toMatchObject({
+          selectedResourceTypes: ['bookmark'],
+          selectedResourceCount: 1,
+        });
+        return {
+          content: '',
+          toolCalls: [
+            turnSpecCall({
+              requestKind: 'answer',
+              confidence: 'high',
+              goals: [
+                {
+                  id: 'read-bookmark',
+                  kind: 'read',
+                  capabilityDomain: 'web',
+                  description: '读取并分析本轮选择的书签地址',
+                  targetDescription: '本轮书签',
+                  dependsOn: [],
+                },
+              ],
+              groundingPolicy: payload.authoritativeGroundingPolicy,
+              missingSlots: [],
+              clarificationQuestion: '',
+            }),
+          ],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      if (options?.trace?.stage === 'execution_planner') {
+        const payload = JSON.parse(messages[1].content);
+        expect(payload.availableContext).toEqual({
+          contextRefs: [{ type: 'bookmark', id: 'bookmark-1' }],
+          attachmentIds: [],
+          resourceBindings: [
+            {
+              toolName: 'read_url',
+              argument: 'url',
+              refs: [{ type: 'bookmark', id: 'bookmark-1' }],
+            },
+          ],
+        });
+        expect(JSON.stringify(payload)).not.toContain('https://www.baidu.com');
+        return {
+          content: '',
+          toolCalls: [
+            executionPlanCall({
+              turnSpecDigest: payload.turnSpec.digest,
+              steps: [
+                {
+                  id: 'read-bookmark-step',
+                  goalId: 'read-bookmark',
+                  toolName: 'read_url',
+                  arguments: {},
+                  dependsOn: [],
+                  expectedResultKind: 'web_page',
+                },
+              ],
+              deferredGoalIds: [],
+              unsupportedGoalIds: [],
+            }),
+          ],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      if (options?.trace?.stage === 'final') {
+        return {
+          content: '这是该书签地址的分析结果。',
+          toolCalls: [],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'stop',
+        };
+      }
+      throw new Error(`unexpected stage: ${options?.trace?.stage}`);
+    });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '分析这个地址',
+        stream: false,
+        contexts: [{ type: 'bookmark', id: 'bookmark-1', title: '百度一下，你就知道' }],
+        attachmentIds: [],
+        scope: { mode: 'selected' },
+      }),
+      res,
+    );
+
+    expect(mocks.toolExecute).toHaveBeenCalledWith(
+      { url: 'https://www.baidu.com' },
+      expect.objectContaining({ question: '分析这个地址' }),
+    );
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toBe('这是该书签地址的分析结果。');
   });
 
   it('Runtime V2 依赖轮复用同一 TurnSpec，只把权威前置引用交给收窄后的下一轮 Planner', async () => {
@@ -5424,6 +5548,7 @@ describe('agentChat 主链路', () => {
   });
 
   it('PR3 Source Set：客户端只传集合 ID，服务端恢复引用、重新解析 owner 并返回继承模式', async () => {
+    vi.stubEnv('AI_AGENT_RUNTIME_V2_MODE', 'enforce');
     mocks.resolveSessionSourceSet.mockReturnValue({
       state: 'ready',
       sourceSet: {
@@ -5450,12 +5575,28 @@ describe('agentChat 主链路', () => {
         usageStatus: 'reported',
         finishReason: 'tool_calls',
       })
-      .mockResolvedValueOnce({
-        content: '',
-        toolCalls: [semanticPlanCall({ requestClass: 'conversation', intents: [] })],
-        usage: usage(2),
-        usageStatus: 'reported',
-        finishReason: 'tool_calls',
+      .mockImplementationOnce(async (messages) => {
+        const payload = JSON.parse(messages[1].content);
+        expect(payload.contextSummary).toMatchObject({
+          selectedResourceTypes: ['bookmark'],
+          selectedResourceCount: 1,
+        });
+        return {
+          content: '',
+          toolCalls: [
+            turnSpecCall({
+              requestKind: 'conversation',
+              confidence: 'high',
+              goals: [],
+              groundingPolicy: payload.authoritativeGroundingPolicy,
+              missingSlots: [],
+              clarificationQuestion: '',
+            }),
+          ],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
       })
       .mockResolvedValueOnce({
         content: '继续回答。',

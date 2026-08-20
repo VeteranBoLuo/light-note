@@ -1,5 +1,7 @@
 import pool from '../../db/index.js';
 import { insertData } from '../agent/data.js';
+import { stableAgentErrorCode } from '../agent/logSafety.js';
+import { createIconBatch } from '../bookmarkIconBatchService.js';
 import { EXPLICIT_WEB_READ_MAX_BYTES, fetchWebMeta } from '../fetchWebMeta.js';
 import { enqueueResources } from '../resourceInbox.js';
 import { RESOURCE_TYPE, insertResourceTagRelations, validateUserTags } from '../resourceTags.js';
@@ -135,6 +137,15 @@ export async function createBookmark({
     throw error;
   } finally {
     connection.release();
+  }
+
+  if (!data.icon_url) {
+    try {
+      await createIconBatch(userId, [{ id: data.id, url }]);
+    } catch (error) {
+      // 书签主事务已经提交。图标补全属于可恢复的后台任务，入队失败不能让前端误判收藏失败。
+      console.error('[bookmark-icon] 新书签补全任务创建失败 code=%s', stableAgentErrorCode(error));
+    }
   }
 
   try {

@@ -269,6 +269,7 @@ export interface WeeklyChallenge {
 export interface WeeklyData {
   weekKey: string | null;
   challenges: WeeklyChallenge[];
+  todayActive?: boolean;
   claimableCount?: number;
   earnedPoints?: number;
   totalPoints?: number;

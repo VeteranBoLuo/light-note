@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { parseTurnSpecSmokeArgs, selectTurnSpecProvider } from './turnSpecLiveSmokeRunner.js';
+import {
+  evaluateTurnSpecSmokeAttempt,
+  parseTurnSpecSmokeArgs,
+  selectTurnSpecProvider,
+} from './turnSpecLiveSmokeRunner.js';
 
 describe('TurnSpec V2 Provider A/B runner', () => {
   it('默认对两家 Provider 的关键用例重复 20 次，且必须显式 --live 才联网', () => {
@@ -10,11 +14,43 @@ describe('TurnSpec V2 Provider A/B runner', () => {
       format: 'text',
       suite: 'quick',
       provider: 'both',
+      caseIds: [],
     });
-    expect(parseTurnSpecSmokeArgs(['--live', '--provider', 'qwen', '--repeat', '3'])).toMatchObject({
+    expect(
+      parseTurnSpecSmokeArgs(['--live', '--provider', 'qwen', '--repeat', '3', '--case', 'query-todos']),
+    ).toMatchObject({
       live: true,
       provider: 'qwen',
       repeat: 3,
+      caseIds: ['query-todos'],
+    });
+  });
+
+  it('定向待办用例会核验计划日期和精确提醒时间，而不只检查工具名', () => {
+    const smokeCase = {
+      requiredTools: ['query_todos'],
+      requiredToolArguments: {
+        query_todos: {
+          status: 'pending',
+          planDate: '2026-08-20',
+          reminderAt: ['2026-08-20 16:00', '2026-08-20T16:00'],
+        },
+      },
+    };
+    const call = (argumentsValue) => ({
+      state: 'ready_for_tools',
+      toolCalls: [{ function: { name: 'query_todos', arguments: JSON.stringify(argumentsValue) } }],
+    });
+
+    expect(
+      evaluateTurnSpecSmokeAttempt(
+        smokeCase,
+        call({ status: 'pending', planDate: '2026-08-20', reminderAt: '2026-08-20 16:00' }),
+      ).passed,
+    ).toBe(true);
+    expect(evaluateTurnSpecSmokeAttempt(smokeCase, call({ status: 'pending', planDate: '2026-08-20' }))).toMatchObject({
+      passed: false,
+      errors: ['invalid_tool_argument:query_todos.reminderAt'],
     });
   });
 

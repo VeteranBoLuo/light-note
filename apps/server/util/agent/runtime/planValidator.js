@@ -1,5 +1,6 @@
 import { validateToolArgumentsAgainstSchema } from '../toolPolicy.js';
 import { normalizeToolArguments } from '../toolArguments.js';
+import { bindAuthoritativeResourceArguments } from './executionContext.js';
 
 function toolCall(step, index) {
   return {
@@ -9,29 +10,6 @@ function toolCall(step, index) {
     type: 'function',
     function: { name: step.toolName, arguments: JSON.stringify(step.arguments) },
   };
-}
-
-function bindAuthoritativeContextArguments(tool, args, executionContext) {
-  const normalized = normalizeToolArguments(tool, args);
-  const required = new Set(Array.isArray(tool?.parameters?.required) ? tool.parameters.required.map(String) : []);
-  if (required.has('attachmentId')) {
-    const attachmentIds = [
-      ...new Set((Array.isArray(executionContext?.attachmentIds) ? executionContext.attachmentIds : []).map(String)),
-    ].filter(Boolean);
-    // 模型不能把本轮附件 ID 改写为历史附件或猜测值。唯一附件直接由服务端绑定；
-    // 多附件时只接受服务端已校验集合中的明确选择；没有上下文时一律拒绝。
-    if (attachmentIds.length === 1) return { ...normalized, attachmentId: attachmentIds[0] };
-    const requestedAttachmentId = String(normalized?.attachmentId || '').trim();
-    if (attachmentIds.length > 1 && requestedAttachmentId && attachmentIds.includes(requestedAttachmentId)) {
-      return normalized;
-    }
-    const error = new Error(
-      attachmentIds.length > 1 ? '存在多个本轮附件，必须从已校验列表中明确选择。' : '本轮没有可用的已校验附件。',
-    );
-    error.code = attachmentIds.length > 1 ? 'TOOL_ATTACHMENT_SELECTION_INVALID' : 'TOOL_ATTACHMENT_CONTEXT_REQUIRED';
-    throw error;
-  }
-  return normalized;
 }
 
 export function validateExecutionPlan({ turnSpec, route, parsed, completedGoalIds = [], executionContext = {} } = {}) {
@@ -92,7 +70,12 @@ export function validateExecutionPlan({ turnSpec, route, parsed, completedGoalId
     try {
       // 与真实 Tool Policy 使用完全相同的归一化顺序，避免 Planner 门禁验证 raw，
       // 执行阶段却验证 normalized 后产生“计划通过、工具拒绝”的双重契约。
-      const normalizedArguments = bindAuthoritativeContextArguments(tool, step.arguments, executionContext);
+      const normalizedArguments = bindAuthoritativeResourceArguments({
+        tool,
+        args: normalizeToolArguments(tool, step.arguments),
+        argumentBindings: step.argumentBindings,
+        executionContext,
+      });
       validateToolArgumentsAgainstSchema(tool.parameters, normalizedArguments);
       if (typeof tool.validatePlanArgs === 'function') tool.validatePlanArgs(normalizedArguments);
       acceptedStep = { ...step, arguments: normalizedArguments };

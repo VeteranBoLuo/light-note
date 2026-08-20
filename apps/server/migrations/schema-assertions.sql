@@ -1820,3 +1820,28 @@ WHERE NOT EXISTS (
     AND actual.table_name='agent_logs'
     AND actual.column_name='turn_contract_trace'
 );
+
+-- 51) API 日志文本必须支持 emoji，保留期清理必须按时间索引取数（期望 0 行）
+SELECT '[51] invalid_api_log_text_charset' AS check_name,
+  CONCAT('api_logs.', expected.col, ' charset=', COALESCE(actual.character_set_name, 'missing')) AS detail
+FROM (
+  SELECT 'url' col UNION ALL
+  SELECT 'req' UNION ALL
+  SELECT 'system'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='api_logs'
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL OR actual.character_set_name <> 'utf8mb4';
+
+SELECT '[51] missing_api_log_retention_index' AS check_name,
+  'api_logs.idx_api_logs_retention' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM information_schema.statistics actual
+  WHERE actual.table_schema=DATABASE()
+    AND actual.table_name='api_logs'
+    AND actual.index_name='idx_api_logs_retention'
+);

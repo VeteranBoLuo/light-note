@@ -506,6 +506,50 @@ describe('todoService', () => {
     expect(sql).toContain('occurrence_date = CURDATE()');
   });
 
+  it('Agent 可按计划日期和已触发的精确提醒分钟筛选同名待办', async () => {
+    connection.query.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ total: 0 }]]);
+
+    await listTodoPage(connection, 'user-4', {
+      status: 'pending',
+      keyword: '推广',
+      planDate: '2026-08-20',
+      reminderAt: '2026-08-20 16:00',
+      limit: 20,
+      view: 'summary',
+    });
+
+    const [sql, params] = connection.query.mock.calls[0];
+    expect(sql).toContain('reminder_job.scheduled_at_local >= ?');
+    expect(sql).toContain("reminder_job.status <> 'cancelled'");
+    expect(sql).toContain('legacy_reminder.scheduled_at >= ?');
+    expect(sql).toContain('occurrence_date = ?');
+    expect(params).toEqual([
+      'user-4',
+      'pending',
+      '%推广%',
+      '%推广%',
+      '2026-08-20',
+      '2026-08-20',
+      '2026-08-20',
+      '2026-08-20',
+      '2026-08-20',
+      '2026-08-20 16:00:00',
+      '2026-08-20 16:01:00',
+      '2026-08-20 16:00:00',
+      '2026-08-20 16:01:00',
+      21,
+      0,
+    ]);
+  });
+
+  it('拒绝不存在的计划日期和提醒时间，不把无效条件降级成全量查询', async () => {
+    await expect(listTodoPage(connection, 'user-4', { planDate: '2026-02-30' })).rejects.toThrow('无效的待办计划日期');
+    await expect(listTodoPage(connection, 'user-4', { reminderAt: '2026-08-20 25:00' })).rejects.toThrow(
+      '无效的待办提醒时间',
+    );
+    expect(connection.query).not.toHaveBeenCalled();
+  });
+
   it('最近创建按系列创建时间排序，不被后台滚动生成实例顶到最前', async () => {
     connection.query.mockResolvedValueOnce([[]]);
     await listTodoPage(connection, 'user-4', { status: 'pending', sort: 'newest', includeTotal: false });
@@ -619,7 +663,9 @@ describe('todoService', () => {
             ]),
             priority: 2,
             status: 'pending',
+            startAt: null,
             dueAt: '2026-07-24 10:00:00',
+            actionAt: '2026-07-23 09:00:00',
             completedAt: null,
           },
           {
@@ -634,8 +680,8 @@ describe('todoService', () => {
       .mockResolvedValueOnce([[{ total: 2 }]])
       .mockResolvedValueOnce([
         [
-          { todoId: 'todo-1', channel: 'in_app' },
-          { todoId: 'todo-1', channel: 'email' },
+          { todoId: 'todo-1', channel: 'in_app', scheduledAt: '2026-07-23 09:00:00', startAt: null },
+          { todoId: 'todo-1', channel: 'email', scheduledAt: '2026-07-23 09:00:00', startAt: null },
         ],
       ]);
 
@@ -652,16 +698,185 @@ describe('todoService', () => {
           title: '整理发票',
           priority: 2,
           status: 'pending',
+          startAt: null,
           dueAt: '2026-07-24 10:00:00',
-          actionAt: null,
+          actionAt: '2026-07-23 09:00:00',
+          planDate: '2026-07-24',
           completedAt: null,
           checklistProgress: { completed: 1, total: 2 },
           reminderChannels: ['in_app', 'email'],
+          nextReminderAt: '2026-07-23 09:00:00',
+          configuredReminderAt: '2026-07-23 09:00:00',
+          reminderAt: '2026-07-23 09:00:00',
         },
       ],
       total: 2,
       nextCursor: expect.any(String),
     });
+  });
+
+  it('Agent 摘要在提醒 Job 已投递后仍从 V2 实例规则还原精确提醒时间', async () => {
+    connection.query
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'todo-v2',
+            title: '推广',
+            checklist: JSON.stringify([
+              { id: 'a', text: '小红书', done: false },
+              { id: 'b', text: 'CSDN', done: true },
+              { id: 'c', text: '掘金', done: true },
+              { id: 'd', text: 'OSChina', done: true },
+            ]),
+            priority: 1,
+            status: 'pending',
+            startAt: null,
+            dueAt: null,
+            actionAt: '2026-08-20 00:00:00',
+            completedAt: null,
+            planVersion: 2,
+            seriesId: null,
+            occurrenceNo: 1,
+            occurrenceDate: '2026-08-20',
+            instanceTimezone: 'Asia/Shanghai',
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ total: 1 }]])
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'rule-1',
+            todoId: 'todo-v2',
+            seriesId: null,
+            mode: 'once_per_instance',
+            triggerType: 'fixed_time',
+            fixedTime: '16:00:00',
+            offsetMinutes: null,
+            intervalMinutes: null,
+            maxCount: null,
+            stopType: null,
+            channels: JSON.stringify(['in_app']),
+            targetEmail: null,
+            quietPolicy: 'defer_once',
+            scheduleJson: null,
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([[]]);
+
+    const result = await listTodoPage(connection, 'user-5', {
+      status: 'pending',
+      keyword: '推广',
+      reminderAt: '2026-08-20 16:00',
+      limit: 20,
+      view: 'summary',
+    });
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        id: 'todo-v2',
+        planDate: '2026-08-20',
+        checklistProgress: { completed: 3, total: 4 },
+        reminderChannels: ['in_app'],
+        nextReminderAt: null,
+        configuredReminderAt: '2026-08-20T16:00:00',
+        reminderAt: '2026-08-20T16:00:00',
+        matchedReminderAt: '2026-08-20 16:00:00',
+      }),
+    ]);
+  });
+
+  it('Agent 精确查询旧版已投递提醒时仍返回安全的提醒时间和渠道', async () => {
+    connection.query
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'todo-legacy-sent',
+            title: '推广',
+            checklist: '[]',
+            priority: 1,
+            status: 'pending',
+            startAt: null,
+            dueAt: null,
+            actionAt: null,
+            completedAt: null,
+            planVersion: 1,
+            seriesId: null,
+            occurrenceNo: null,
+            occurrenceDate: '2026-08-20',
+            instanceTimezone: null,
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ total: 1 }]])
+      .mockResolvedValueOnce([
+        [
+          {
+            todoId: 'todo-legacy-sent',
+            channel: 'in_app',
+            scheduledAt: '2026-08-20 16:00:00',
+            startAt: null,
+            intervalMinutes: null,
+          },
+        ],
+      ]);
+
+    const result = await listTodoPage(connection, 'user-5', {
+      status: 'pending',
+      reminderAt: '2026-08-20 16:00',
+      limit: 20,
+      view: 'summary',
+    });
+
+    expect(connection.query.mock.calls[2][0]).toContain("status NOT IN ('cancelled','paused_delete')");
+    expect(connection.query.mock.calls[2][1]).toEqual([
+      'todo-legacy-sent',
+      'user-5',
+      '2026-08-20 16:00:00',
+      '2026-08-20 16:01:00',
+    ]);
+    expect(result.items[0]).toMatchObject({
+      reminderChannels: ['in_app'],
+      configuredReminderAt: '2026-08-20 16:00:00',
+      reminderAt: '2026-08-20 16:00:00',
+      matchedReminderAt: '2026-08-20 16:00:00',
+    });
+  });
+
+  it('Agent 摘要兼容数据库以 Date 对象返回开始时间', async () => {
+    const startAt = new Date(2026, 7, 20, 9, 30, 0);
+    connection.query
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'todo-date-object',
+            title: '线下会议',
+            checklist: '[]',
+            priority: 1,
+            status: 'pending',
+            startAt,
+            dueAt: null,
+            actionAt: startAt,
+            completedAt: null,
+            planVersion: 1,
+            seriesId: null,
+            occurrenceNo: null,
+            occurrenceDate: null,
+            instanceTimezone: null,
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ total: 1 }]])
+      .mockResolvedValueOnce([[]]);
+
+    const result = await listTodoPage(connection, 'user-5', {
+      status: 'pending',
+      limit: 20,
+      view: 'summary',
+    });
+
+    expect(result.items[0].planDate).toBe('2026-08-20');
   });
 
   it('为 Agent 状态修改按关键词冻结单个待办和权威版本，不向模型暴露待办说明', async () => {

@@ -1,7 +1,7 @@
 import pool from '../db/index.js';
 import { resultData, formatDateTime, insertData } from './common.js';
 import { isSelfTraffic } from './logExclude.js';
-import { shouldSkipApiLog } from './logPolicy.js';
+import { shouldSkipApiLog, summarizeApiLogPayload } from './logPolicy.js';
 import { redactSensitiveText, stableAgentErrorCode } from './agent/logSafety.js';
 import { buildApiLogSystem } from './apiLogSystem.js';
 
@@ -112,7 +112,8 @@ export async function logFunction(req, res, next) {
       next();
       return;
     }
-    const rawRequestPayload = sanitizeSensitivePayload(req.method === 'GET' ? req.query : req.body);
+    const sourceRequestPayload = req.method === 'GET' ? req.query : req.body;
+    const rawRequestPayload = sanitizeSensitivePayload(summarizeApiLogPayload(req.originalUrl, sourceRequestPayload));
     const requestPayload = JSON.stringify(
       isVisitorWorkspaceWrite
         ? {

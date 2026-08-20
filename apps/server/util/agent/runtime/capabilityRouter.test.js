@@ -88,6 +88,36 @@ describe('Capability Router V2', () => {
     expect(route.candidateToolCount).toBe(1);
   });
 
+  it('已选资源通过声明式绑定满足参数时，优先使用可执行工具而不是不可用的宽查询', () => {
+    const selectedTools = registeredTools.filter((tool) => tool.name === 'read_url');
+    const selectedCatalog = buildAgentSemanticCapabilityCatalog(registeredTools, {
+      availableToolNames: new Set(selectedTools.map((tool) => tool.name)),
+    });
+    const turnSpec = spec([
+      {
+        id: 'read-selected-bookmark-url',
+        kind: 'read',
+        operation: 'read',
+        capabilityDomain: 'bookmark',
+        description: '分析用户选中的书签地址',
+        targetDescription: '当前选中的一个书签资源',
+        dependsOn: [],
+      },
+    ]);
+    turnSpec.requestKind = 'answer';
+
+    const route = routeTurnSpecCapabilities({
+      turnSpec,
+      catalog: selectedCatalog,
+      tools: selectedTools,
+      message: '分析这个地址',
+      contextTypes: ['bookmark'],
+    });
+
+    expect(route).toMatchObject({ state: 'ready', candidateToolCount: 1 });
+    expect(route.candidates.map((item) => item.name)).toEqual(['read_url']);
+  });
+
   it('I-04：未开放的删除笔记不会错误路由到创建笔记', () => {
     const route = routeTurnSpecCapabilities({
       turnSpec: spec([

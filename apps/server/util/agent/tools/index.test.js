@@ -46,6 +46,14 @@ describe('Agent 工具注册表', () => {
       expect(typeof tool?.prepareArgs).toBe('function');
       expect(typeof tool?.preview).toBe('function');
     }
+    for (const name of ['save_attachment_to_cloud', 'create_image_note']) {
+      expect(tools.find((tool) => tool.name === name)?.resourceBindings).toEqual([
+        { argument: 'attachmentId', refType: 'attachment', sourceField: 'id' },
+      ]);
+    }
+    expect(tools.find((tool) => tool.name === 'read_url')?.resourceBindings).toEqual([
+      { argument: 'url', refType: 'bookmark', sourceField: 'url', allowLiteral: true },
+    ]);
   });
 
   it('待办计划预览、待办与待整理查询工具、单条待办状态与删除工具已注册', () => {

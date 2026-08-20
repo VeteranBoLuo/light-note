@@ -14,7 +14,6 @@
         </span>
         <span class="dq-label">
           {{ questLabel(q) }}
-          <span v-if="q.random" class="dq-random">{{ t('growth.questRandomTag') }}</span>
           <small v-if="q.countedEvent" class="dq-counted">
             {{ t('growth.questCountedEvent', { type: activityTypeLabel(q.countedEvent.type) }) }}
           </small>
@@ -118,7 +117,7 @@
       <p v-else class="dq-exp-guide-disabled">{{ t('growth.questExperienceUnavailable') }}</p>
     </aside>
 
-    <div v-if="bonus.claimable" class="dq-bonus claimable">
+    <div v-if="showClaimAction && bonus.claimable" class="dq-bonus claimable">
       <span class="dq-bonus-text">{{ t('growth.questAvailableReward') }}</span>
       <BButton
         class="dq-claim"
@@ -148,6 +147,7 @@
       claiming?: boolean;
       readOnly?: boolean;
       showExperienceSources?: boolean;
+      showClaimAction?: boolean;
       dailyExp?: number;
       dailyCap?: number;
       dailyCapReached?: boolean;
@@ -155,6 +155,7 @@
     {
       readOnly: false,
       showExperienceSources: false,
+      showClaimAction: true,
       dailyExp: 0,
       dailyCap: 0,
       dailyCapReached: false,
@@ -278,15 +279,11 @@
     gap: 10px;
     padding: 9px 12px;
     border-radius: 10px;
-    background: color-mix(in srgb, var(--primary-color) 4%, var(--background-color));
-    border: 1px solid color-mix(in srgb, var(--card-border-color) 40%, transparent);
+    border: 1px solid color-mix(in srgb, var(--primary-color) 14%, var(--surface-border-color));
+    background: color-mix(in srgb, var(--primary-color) 4%, var(--card-background));
     transition:
       background 0.2s,
       border-color 0.2s;
-  }
-  .dq-item.done {
-    background: color-mix(in srgb, #34d399 8%, var(--background-color));
-    border-color: color-mix(in srgb, #34d399 32%, transparent);
   }
   .dq-check {
     flex: 0 0 auto;
@@ -296,12 +293,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 1.5px solid var(--card-border-color);
-    color: #fff;
+    border: 1.5px solid var(--surface-border-color);
+    color: var(--desc-color);
+    background: var(--card-background);
   }
   .dq-item.done .dq-check {
-    background: linear-gradient(135deg, #34d399, #22d3ee);
-    border-color: transparent;
+    border-color: var(--success-color);
+    color: var(--success-color);
   }
   .dq-label {
     flex: 1 1 auto;
@@ -314,19 +312,6 @@
     color: var(--desc-color);
     font-size: 10.5px;
   }
-  .dq-item.done .dq-label {
-    color: var(--desc-color);
-  }
-  .dq-random {
-    display: inline-flex;
-    margin-left: 6px;
-    padding: 1px 6px;
-    border: 1px solid var(--primary-color);
-    border-radius: 999px;
-    color: var(--primary-color);
-    font-size: 10px;
-    font-weight: 700;
-  }
   .dq-prog {
     font-size: 12px;
     font-weight: 600;
@@ -336,7 +321,7 @@
   .dq-tag {
     font-size: 11px;
     font-weight: 600;
-    color: #10b981;
+    color: var(--success-color);
   }
   .dq-stages {
     display: grid;
@@ -349,16 +334,9 @@
     gap: 8px;
     min-width: 0;
     padding: 9px 10px;
-    border: 1px solid var(--card-border-color);
+    border: 1px solid var(--surface-border-color);
     border-radius: 10px;
-    background: var(--background-color);
-  }
-  .dq-stage.claimable {
-    border-color: #d97706;
-    background: rgba(245, 158, 11, 0.08);
-  }
-  .dq-stage.claimed {
-    border-color: #16a34a;
+    background: var(--card-background);
   }
   .dq-stage-dot {
     display: grid;
@@ -366,13 +344,18 @@
     width: 24px;
     height: 24px;
     flex: 0 0 24px;
+    border: 1px solid currentColor;
     border-radius: 50%;
-    color: #d97706;
-    background: rgba(245, 158, 11, 0.12);
+    color: var(--desc-color);
+    background: var(--card-background);
   }
-  .dq-stage.claimed .dq-stage-dot {
-    color: #16a34a;
-    background: rgba(22, 163, 74, 0.12);
+  .dq-stage.claimable .dq-stage-dot,
+  .dq-stage.claimable .dq-stage-state {
+    color: var(--warning-color);
+  }
+  .dq-stage.claimed .dq-stage-dot,
+  .dq-stage.claimed .dq-stage-state {
+    color: var(--success-color);
   }
   .dq-stage-main {
     display: flex;
@@ -503,18 +486,9 @@
     justify-content: space-between;
     gap: 10px;
     padding: 10px 12px;
+    border: 1px solid var(--surface-border-color);
     border-radius: 10px;
-    border: 1px dashed color-mix(in srgb, var(--card-border-color) 55%, transparent);
-    background: color-mix(in srgb, var(--primary-color) 3%, transparent);
-  }
-  .dq-bonus.claimable {
-    border-style: solid;
-    border-color: color-mix(in srgb, #f59e0b 45%, transparent);
-    background: color-mix(in srgb, #f59e0b 10%, transparent);
-  }
-  .dq-bonus.claimed {
-    border-color: color-mix(in srgb, #34d399 40%, transparent);
-    background: color-mix(in srgb, #34d399 8%, transparent);
+    background: var(--card-background);
   }
   .dq-bonus-text {
     font-size: 12.5px;

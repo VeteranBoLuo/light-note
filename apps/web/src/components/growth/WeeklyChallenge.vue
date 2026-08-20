@@ -40,7 +40,7 @@
             ><SvgIcon :src="icon.message.success" size="13" />{{ t('growth.weeklyClaimed') }}</span
           >
           <BButton
-            v-else-if="!c.done && !readOnly"
+            v-else-if="!c.done && !readOnly && !(c.metric === 'activeDays' && todayActive)"
             size="small"
             class="wc-go"
             v-click-log="{ module: '成长', operation: `前往每周挑战-${c.key}` }"
@@ -48,6 +48,9 @@
           >
             {{ t('growth.tasksGoTo') }}
           </BButton>
+          <span v-else-if="!c.done && c.metric === 'activeDays' && todayActive" class="wc-today-done">
+            <SvgIcon :src="icon.message.success" size="13" />{{ t('growth.weeklyActiveTodayDone') }}
+          </span>
           <span v-else class="wc-reward"><SvgIcon :src="icon.growth.coin" size="13" />{{ c.reward }}</span>
         </div>
       </div>
@@ -72,6 +75,7 @@
 
   const { t, te } = useI18n();
   const props = withDefaults(defineProps<{ readOnly?: boolean }>(), { readOnly: false });
+  const emit = defineEmits<{ (event: 'loaded'): void }>();
   const { weekly, loadWeekly, claimWeekly, claimingRewards } = useGrowth();
   const router = useRouter();
   const bookmark = bookmarkStore();
@@ -90,6 +94,7 @@
     wk_variety: icon.growth.organize,
   };
   const challenges = computed(() => weekly.value?.challenges || []);
+  const todayActive = computed(() => Boolean(weekly.value?.todayActive));
 
   function nameOf(key: string) {
     const k = 'growth.weeklyName.' + key;
@@ -137,9 +142,13 @@
   async function reload() {
     loading.value = true;
     loadError.value = false;
-    const value = await loadWeekly();
-    loadError.value = !value;
-    loading.value = false;
+    try {
+      const value = await loadWeekly();
+      loadError.value = !value;
+    } finally {
+      loading.value = false;
+      emit('loaded');
+    }
   }
 
   onMounted(reload);
@@ -239,6 +248,17 @@
   }
   .wc-action {
     flex: 0 0 auto;
+  }
+
+  .wc-today-done {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 5px;
+    color: var(--success-color, #12a579);
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
   }
   .wc-claim {
     padding: 5px 12px;

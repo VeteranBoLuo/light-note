@@ -28,6 +28,9 @@
       layout="workspace"
       :class="{ 'search-center-shell--mobile': bookmark.isMobile }"
     >
+      <template v-if="!bookmark.isMobile" #actions>
+        <ResourceCenterSectionNav class="section-switcher" />
+      </template>
       <div
         class="search-page"
         :class="{
@@ -35,104 +38,91 @@
           'search-page--mobile': bookmark.isMobile,
         }"
       >
-        <div class="search-page-topbar">
+        <div v-if="bookmark.isMobile" class="search-page-topbar">
           <ResourceCenterSectionNav class="section-switcher" />
         </div>
 
         <template v-if="!isKnowledgeMapView">
-          <BCard v-if="!bookmark.isMobile" as="section" variant="raised" padding="16px 20px" class="search-header">
-            <div class="search-header-input">
-              <b-input
-                id="search-center-input"
-                v-model:value="queryState.keyword"
-                :placeholder="t('resourceCenter.searchPlaceholder')"
-                height="42px"
-                @input="syncQueryDebounced"
-                @enter="submitSearch"
-              >
-                <template #prefix>
-                  <svg-icon :src="icon.navigation.search" size="18" />
-                </template>
-              </b-input>
-              <BButton
-                class="search-ai-entry"
-                :disabled="!queryState.keyword.trim() && !selectedIds.length"
-                @click="openSearchAi(selectedIds.length > 1 ? 'compare' : 'find')"
-              >
-                <svg-icon :src="icon.ai.ask" size="16" />
-                {{ t('ai.entry.askSearch') }}
-              </BButton>
-              <BTooltip :title="t('resourceCenter.refresh')">
-                <BButton
-                  class="search-header-icon-btn refresh-btn"
-                  :disabled="viewState.loading"
-                  :aria-label="t('resourceCenter.refresh')"
-                  @click="refreshData()"
-                  v-click-log="{ module: '资源中心', operation: '刷新搜索结果' }"
-                >
-                  <span
-                    class="refresh-icon"
-                    :class="{ 'refresh-icon--spinning': viewState.loading }"
-                    aria-hidden="true"
-                  >
-                    <SvgIcon :src="icon.cloudSpace.preview.retry" size="17" />
-                  </span>
-                </BButton>
-              </BTooltip>
-            </div>
-          </BCard>
-
           <section class="search-layout">
-            <!-- 移动端不放一排类型 Tab：用户搜索时先看最佳匹配，而不是先决定类型。
-               类型收进底部筛选抽屉，这里只保留一行类型数量作为结果概览。 -->
-            <BCard as="main" variant="card" padding="16px" class="result-panel">
-              <div class="result-toolbar result-toolbar--summary">
-                <div class="result-heading">
-                  <template v-if="bookmark.isMobile">
-                    <div class="result-title">{{ t('resourceCenter.results') }}</div>
-                    <div class="result-subtitle">{{ mobileResultSubtitle }}</div>
-                  </template>
-                  <BPopover
-                    v-else
-                    v-model:open="desktopTypeMenuOpen"
-                    trigger="click"
-                    placement="bottom-left"
-                    overlay-class-name="desktop-type-filter-popover"
+            <aside v-if="!bookmark.isMobile" class="resource-scope-pane" :aria-label="t('resourceCenter.scopeTitle')">
+              <section class="resource-scope-section">
+                <BButton
+                  class="resource-scope-title"
+                  :aria-expanded="scopeTypesExpanded"
+                  :title="t(scopeTypesExpanded ? 'common.collapse' : 'common.expand')"
+                  @click="scopeTypesExpanded = !scopeTypesExpanded"
+                >
+                  <span>{{ t('resourceCenter.scopeTitle') }}</span>
+                  <SvgIcon
+                    class="resource-scope-chevron"
+                    :class="{ 'is-expanded': scopeTypesExpanded }"
+                    :src="icon.noteTree.chevron"
+                    size="13"
+                    aria-hidden="true"
+                  />
+                </BButton>
+                <div v-show="scopeTypesExpanded" class="resource-scope-list">
+                  <BButton
+                    v-for="item in typeFilters"
+                    :key="item.value"
+                    class="resource-scope-item"
+                    :class="{ active: isTypeFilterActive(item.value) }"
+                    :aria-pressed="isTypeFilterActive(item.value)"
+                    @click="selectDesktopType(item.value)"
                   >
-                    <BButton
-                      class="desktop-type-trigger"
-                      :aria-label="t('resourceCenter.typeFilter')"
-                      :aria-expanded="desktopTypeMenuOpen"
-                    >
-                      <span
-                        class="filter-dot"
-                        :class="`filter-dot--${desktopTypeSummary.value}`"
-                        aria-hidden="true"
-                      ></span>
-                      <span class="desktop-type-trigger__label">{{ desktopTypeSummary.label }}</span>
-                      <span class="filter-count">{{ desktopTypeSummary.count }}</span>
-                      <span class="desktop-type-trigger__arrow" aria-hidden="true">▾</span>
-                    </BButton>
-                    <template #content>
-                      <div class="desktop-type-menu" role="menu" :aria-label="t('resourceCenter.typeFilter')">
-                        <BButton
-                          v-for="item in typeFilters"
-                          :key="item.value"
-                          class="filter-item"
-                          :class="{ active: isTypeFilterActive(item.value) }"
-                          role="menuitemcheckbox"
-                          :aria-checked="isTypeFilterActive(item.value)"
-                          @click="selectDesktopType(item.value)"
-                        >
-                          <span class="filter-dot" :class="`filter-dot--${item.value}`" aria-hidden="true"></span>
-                          <span>{{ item.label }}</span>
-                          <span class="filter-count">{{ item.count }}</span>
-                        </BButton>
-                      </div>
-                    </template>
-                  </BPopover>
+                    <span class="filter-dot" :class="`filter-dot--${item.value}`" aria-hidden="true"></span>
+                    <span class="resource-scope-item__label">{{ item.label }}</span>
+                    <span class="filter-count">{{ item.count }}</span>
+                  </BButton>
                 </div>
-                <div v-if="!bookmark.isMobile" class="desktop-result-controls">
+              </section>
+              <div class="resource-scope-divider"></div>
+              <section class="resource-scope-section">
+                <BButton
+                  class="resource-scope-title"
+                  :aria-expanded="scopeStateExpanded"
+                  :title="t(scopeStateExpanded ? 'common.collapse' : 'common.expand')"
+                  @click="scopeStateExpanded = !scopeStateExpanded"
+                >
+                  <span>{{ t('resourceCenter.resourceState') }}</span>
+                  <SvgIcon
+                    class="resource-scope-chevron"
+                    :class="{ 'is-expanded': scopeStateExpanded }"
+                    :src="icon.noteTree.chevron"
+                    size="13"
+                    aria-hidden="true"
+                  />
+                </BButton>
+                <div v-show="scopeStateExpanded" class="resource-scope-list">
+                  <BButton
+                    class="resource-scope-item"
+                    :class="{ active: queryState.untagged }"
+                    :aria-pressed="queryState.untagged"
+                    @click="toggleUntagged"
+                  >
+                    <span class="filter-dot" aria-hidden="true"></span>
+                    <span class="resource-scope-item__label">{{ t('resourceCenter.untagged') }}</span>
+                  </BButton>
+                </div>
+              </section>
+            </aside>
+
+            <BCard v-if="!bookmark.isMobile" as="section" variant="raised" padding="16px 20px" class="search-header">
+              <div class="search-header-input">
+                <b-input
+                  id="search-center-input"
+                  v-model:value="queryState.keyword"
+                  :placeholder="t('resourceCenter.searchPlaceholder')"
+                  height="42px"
+                  @input="syncQueryDebounced"
+                  @enter="submitSearch"
+                >
+                  <template #prefix>
+                    <svg-icon :src="icon.navigation.search" size="18" />
+                  </template>
+                </b-input>
+
+                <div class="desktop-result-controls">
                   <label class="select-wrap select-wrap--compact">
                     <span>{{ t('resourceCenter.sort.label') }}</span>
                     <BSelect
@@ -142,7 +132,6 @@
                       @change="applyQueryState('切换排序')"
                     />
                   </label>
-
                   <label class="select-wrap select-wrap--compact">
                     <span>{{ t('resourceCenter.date.label') }}</span>
                     <BSelect
@@ -152,27 +141,62 @@
                       @change="applyQueryState('筛选时间范围')"
                     />
                   </label>
-
                   <div class="view-switch">
                     <BButton class="view-btn" :class="{ active: queryState.view === 'card' }" @click="setView('card')">
-                      {{ t('resourceCenter.view.card') }}
+                      {{ t('resourceCenter.view.cardShort') }}
                     </BButton>
                     <BButton class="view-btn" :class="{ active: queryState.view === 'list' }" @click="setView('list')">
-                      {{ t('resourceCenter.view.list') }}
+                      {{ t('resourceCenter.view.listShort') }}
                     </BButton>
                   </div>
-
                   <BButton class="tagless-btn" :class="{ active: queryState.untagged }" @click="toggleUntagged">
                     {{ t('resourceCenter.untagged') }}
                   </BButton>
+                </div>
 
+                <BTooltip :title="t('ai.entry.askSearch')">
                   <BButton
-                    class="select-visible-btn"
-                    :disabled="!selectableVisibleItems.length"
-                    @click="toggleBatchMode"
+                    class="search-header-icon-btn search-ai-entry"
+                    :disabled="!queryState.keyword.trim() && !selectedIds.length"
+                    :aria-label="t('ai.entry.askSearch')"
+                    @click="openSearchAi(selectedIds.length > 1 ? 'compare' : 'find')"
                   >
-                    {{ batchMode ? t('resourceCenter.batch.exit') : t('resourceCenter.batch.enter') }}
+                    <svg-icon :src="icon.ai.ask" size="16" />
                   </BButton>
+                </BTooltip>
+                <BTooltip :title="t('resourceCenter.refresh')">
+                  <BButton
+                    class="search-header-icon-btn refresh-btn"
+                    :disabled="viewState.loading"
+                    :aria-label="t('resourceCenter.refresh')"
+                    @click="refreshData()"
+                    v-click-log="{ module: '资源中心', operation: '刷新搜索结果' }"
+                  >
+                    <span
+                      class="refresh-icon"
+                      :class="{ 'refresh-icon--spinning': viewState.loading }"
+                      aria-hidden="true"
+                    >
+                      <SvgIcon :src="icon.cloudSpace.preview.retry" size="17" />
+                    </span>
+                  </BButton>
+                </BTooltip>
+              </div>
+            </BCard>
+
+            <!-- 移动端不放一排类型 Tab：用户搜索时先看最佳匹配，而不是先决定类型。
+               类型收进底部筛选抽屉，这里只保留一行类型数量作为结果概览。 -->
+            <BCard as="main" variant="card" padding="16px" class="result-panel">
+              <div class="result-toolbar result-toolbar--summary">
+                <div class="result-heading">
+                  <template v-if="bookmark.isMobile">
+                    <div class="result-title">{{ t('resourceCenter.results') }}</div>
+                    <div class="result-subtitle">{{ mobileResultSubtitle }}</div>
+                  </template>
+                  <div v-else class="desktop-result-heading">
+                    <strong>{{ desktopTypeSummary.label }}</strong>
+                    <span>{{ t('resourceCenter.count', { count: desktopTypeSummary.count }) }}</span>
+                  </div>
                 </div>
                 <div v-if="bookmark.isMobile" class="toolbar-actions toolbar-actions--mobile">
                   <BButton
@@ -217,6 +241,14 @@
                 <div v-else class="toolbar-actions">
                   <BButton
                     size="small"
+                    class="select-visible-btn"
+                    :disabled="!selectableVisibleItems.length"
+                    @click="toggleBatchMode"
+                  >
+                    {{ batchMode ? t('resourceCenter.batch.exit') : t('resourceCenter.batch.enter') }}
+                  </BButton>
+                  <BButton
+                    size="small"
                     class="clear-btn"
                     :disabled="!queryState.keyword"
                     @click="clearKeyword"
@@ -238,7 +270,10 @@
 
               <section v-if="!bookmark.isMobile" class="advanced-filters">
                 <div class="tag-filter-wrap" v-if="tagOptions.length">
-                  <div class="tag-filter-label">{{ t('resourceCenter.tagFilter') }}</div>
+                  <div class="tag-filter-label">
+                    <span>{{ t('resourceCenter.tagFilter') }}</span>
+                    <small>{{ t('resourceCenter.tagFilterAnyHint') }}</small>
+                  </div>
                   <div class="tag-filter-main">
                     <div class="tag-filter-list">
                       <ResourceTagChip
@@ -371,6 +406,11 @@
                         @select="handleItemMenu($event, item)"
                         v-for="item in group.items"
                         :key="`${item.type}-${item.id}`"
+                        class="resource-result-entry"
+                        :class="{
+                          'is-inspected':
+                            !bookmark.isMobile && activeInspectedResourceKey === getItemSelectionKey(item),
+                        }"
                       >
                         <SearchResultItem
                           :item="item"
@@ -380,7 +420,7 @@
                           :selectable="batchMode"
                           :view="effectiveView"
                           :compact="bookmark.isMobile"
-                          @open="openItem(item)"
+                          @open="handleResultOpen(item)"
                           @toggle-select="toggleSelect(item)"
                         />
                       </RightMenu>
@@ -442,6 +482,71 @@
                 </div>
               </div>
             </BCard>
+
+            <aside v-if="!bookmark.isMobile" class="resource-inspector-pane">
+              <template v-if="inspectedResource">
+                <div class="resource-inspector-hero" :class="`is-${inspectedResource.type}`">
+                  <div class="resource-inspector-identity">
+                    <span class="resource-inspector-icon" aria-hidden="true">
+                      <SvgIcon :src="inspectedResourceIcon" size="23" />
+                    </span>
+                    <div class="resource-inspector-identity__copy">
+                      <span>{{ t('resourceCenter.currentResource') }}</span>
+                      <strong>{{ getSearchTypeLabel(t, inspectedResource.type) }}</strong>
+                    </div>
+                  </div>
+                  <h2>{{ inspectedResource.title || '-' }}</h2>
+                  <p class="resource-inspector-description">{{
+                    inspectedResource.description || inspectedResource.snippet || inspectedResource.matchReason || '-'
+                  }}</p>
+                </div>
+                <dl class="resource-inspector-meta">
+                  <div>
+                    <dt>{{ t('resourceCenter.source') }}</dt>
+                    <dd>{{ inspectedResource.domain || inspectedResource.category || '-' }}</dd>
+                  </div>
+                  <div>
+                    <dt>{{ t('resourceCenter.updatedAt') }}</dt>
+                    <dd>{{ inspectedResource.updatedAtText || inspectedResource.extra || '-' }}</dd>
+                  </div>
+                </dl>
+                <div v-if="inspectedResource.tagNames.length" class="resource-inspector-tags">
+                  <span>{{ t('resourceCenter.tags') }}</span>
+                  <ResourceTagChip
+                    v-for="tag in inspectedResource.tagNames.slice(0, 6)"
+                    :key="tag"
+                    :tag="{ name: tag }"
+                    size="small"
+                  />
+                </div>
+                <div class="resource-inspector-actions">
+                  <BButton block size="large" type="primary" @click="openItem(inspectedResource)">
+                    {{ t('resourceCenter.openResource') }}
+                  </BButton>
+                  <BButton
+                    v-if="inspectedResource.type !== 'tag'"
+                    block
+                    size="large"
+                    class="resource-inspector-action--inbox"
+                    @click="handleItemMenu('addInbox', inspectedResource)"
+                  >
+                    {{ t('inbox.addExisting') }}
+                  </BButton>
+                  <BButton
+                    block
+                    size="large"
+                    class="resource-inspector-action--delete"
+                    @click="handleItemMenu('delete', inspectedResource)"
+                  >
+                    {{ t('inbox.deleteResource') }}
+                  </BButton>
+                </div>
+              </template>
+              <div v-else class="resource-inspector-empty">
+                <strong>{{ t('resourceCenter.inspectorEmptyTitle') }}</strong>
+                <p>{{ t('resourceCenter.inspectorEmptyDesc') }}</p>
+              </div>
+            </aside>
           </section>
         </template>
         <div v-else class="resource-center-map">
@@ -646,10 +751,11 @@
   const isRouteApplying = ref(false);
   const mobileFilterVisible = ref(false);
   const mobileBatchActionsOpen = ref(false);
-  const desktopTypeMenuOpen = ref(false);
   const batchMode = ref(false);
   const tagSearch = ref('');
   const showLoadingSkeleton = ref(false);
+  const scopeTypesExpanded = ref(true);
+  const scopeStateExpanded = ref(true);
   let skeletonTimer: number | null = null;
   const resultScrollRef = ref<HTMLElement | null>(null);
 
@@ -758,6 +864,26 @@
   const visibleGroups = computed(() => buildVisibleGroups(mappedItems.value, selectedTypes.value));
 
   const allVisibleItems = computed(() => visibleGroups.value.flatMap((group) => group.items));
+  const inspectedResourceKey = ref('');
+  const inspectedResource = computed(
+    () =>
+      allVisibleItems.value.find((item) => getItemSelectionKey(item) === inspectedResourceKey.value) ||
+      allVisibleItems.value[0] ||
+      null,
+  );
+  const activeInspectedResourceKey = computed(() =>
+    inspectedResource.value ? getItemSelectionKey(inspectedResource.value) : '',
+  );
+  const RESOURCE_INSPECTOR_ICONS: Record<GlobalSearchType, string> = {
+    bookmark: icon.resource.bookmark,
+    note: icon.resource.note,
+    file: icon.resource.file,
+    tag: icon.resource.tag,
+    todo: icon.growth.action,
+  };
+  const inspectedResourceIcon = computed(
+    () => RESOURCE_INSPECTOR_ICONS[inspectedResource.value?.type || 'tag'] || icon.resource.tag,
+  );
   // 资源中心数据域固定为书签、笔记、文件和标签。
   const selectableVisibleItems = computed(() =>
     allVisibleItems.value.filter((item) => isResourceSearchType(item.type)),
@@ -872,14 +998,23 @@
     return breakdown ? `${total} · ${breakdown}` : total;
   });
   function menuForSearchItem(item: DisplaySearchItem) {
+    const openItem = {
+      key: 'open',
+      label: t('resourceCenter.openResource'),
+      icon: icon.noteTree.openPage,
+    };
     const deleteItem = {
       key: 'delete',
       label: t('common.delete'),
       icon: icon.table_delete,
       danger: true,
     };
-    if (item.type === 'tag') return [deleteItem];
+    if (item.type === 'tag') {
+      return [openItem, { key: 'resource-open-divider', divider: true }, deleteItem];
+    }
     return [
+      openItem,
+      { key: 'resource-open-divider', divider: true },
       { key: 'addInbox', label: t('inbox.addExisting'), icon: icon.contextMenu.inbox },
       { key: 'resource-actions-divider', divider: true },
       deleteItem,
@@ -1055,12 +1190,7 @@
    *   顶部指示器负责表达进度。游标仍要重置（刷新等于回到第一页），
    *   但 rawItems 不清空，请求失败时结果原样保留。
    */
-  async function loadData(
-    force = false,
-    skeletonDelayMs = SKELETON_DELAY_MS,
-    append = false,
-    silent = false,
-  ) {
+  async function loadData(force = false, skeletonDelayMs = SKELETON_DELAY_MS, append = false, silent = false) {
     if (append && (viewState.loading || viewState.loadingMore || !viewState.hasMore)) return false;
     const seq = append ? requestSeq : ++requestSeq;
     let loadSucceeded = false;
@@ -1198,25 +1328,23 @@
     syncQueryNow();
   }
 
-  function setActiveType(type: GlobalSearchType | 'all') {
-    if (type === 'all') {
-      queryState.types = [];
-    } else if (!queryState.types.length) {
-      queryState.types = [type];
-    } else if (queryState.types.includes(type)) {
-      const next = queryState.types.filter((item) => item !== type);
-      queryState.types = next.length ? next : [];
-    } else {
-      queryState.types = SEARCH_CENTER_TYPE_LIST.filter((item) => [...queryState.types, type].includes(item));
-      if (queryState.types.length === SEARCH_CENTER_TYPE_LIST.length) queryState.types = [];
-    }
-    queryState.type = queryState.types.length === 1 ? queryState.types[0] : 'all';
-    applyQueryState(`筛选搜索类型【${getSearchTypeLabel(t, type)}】`);
+  function selectDesktopType(type: GlobalSearchType | 'all') {
+    if (isTypeFilterActive(type) && (type === 'all' || queryState.types.length === 1)) return;
+    queryState.types = type === 'all' ? [] : [type];
+    queryState.type = type;
+    applyQueryState(`切换资源类型【${getSearchTypeLabel(t, type)}】`);
   }
 
-  function selectDesktopType(type: GlobalSearchType | 'all') {
-    setActiveType(type);
-    desktopTypeMenuOpen.value = false;
+  function inspectResource(item: DisplaySearchItem) {
+    inspectedResourceKey.value = getItemSelectionKey(item);
+  }
+
+  function handleResultOpen(item: DisplaySearchItem) {
+    if (bookmark.isMobile) {
+      openItem(item);
+      return;
+    }
+    inspectResource(item);
   }
 
   function setView(view: ResourceView) {
@@ -1471,6 +1599,10 @@
   }
 
   function handleItemMenu(action: string, item: DisplaySearchItem) {
+    if (action === 'open') {
+      openItem(item);
+      return;
+    }
     if (action === 'addInbox' && item.type !== 'tag') {
       addItemsToInbox([item]);
       return;
@@ -1834,6 +1966,305 @@
   .result-subtitle,
   .filter-count {
     color: var(--desc-color);
+  }
+
+  .desktop-result-heading {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    white-space: nowrap;
+  }
+
+  .desktop-result-heading span {
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+
+  .resource-scope-pane,
+  .resource-inspector-pane {
+    min-width: 0;
+    box-sizing: border-box;
+    border: 1px solid var(--search-border-color);
+    border-radius: 16px;
+    background: var(--search-card-bg);
+  }
+
+  .resource-scope-pane {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 12px 10px;
+  }
+
+  .resource-scope-section,
+  .resource-scope-list {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+  }
+
+  .resource-scope-title {
+    width: 100%;
+    height: auto;
+    min-height: 30px;
+    padding: 3px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--desc-color);
+    background: transparent;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.2;
+    text-align: left;
+  }
+
+  .resource-scope-title:hover {
+    color: var(--text-color);
+    background: var(--search-muted-bg);
+  }
+
+  .resource-scope-chevron {
+    flex: 0 0 auto;
+    transform: rotate(-90deg);
+    transition: transform 0.18s ease;
+  }
+
+  .resource-scope-chevron.is-expanded {
+    transform: rotate(0deg);
+  }
+
+  .resource-scope-item {
+    width: 100%;
+    min-height: 40px;
+    display: grid;
+    grid-template-columns: 8px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 9px;
+    padding: 0 10px;
+    border: 1px solid transparent;
+    border-radius: 11px;
+    background: transparent;
+    color: var(--text-color);
+    text-align: left;
+  }
+
+  .resource-scope-item:hover,
+  .resource-scope-item.active {
+    border-color: color-mix(in srgb, var(--primary-color) 30%, var(--search-border-color));
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--search-card-bg));
+    color: var(--primary-color);
+  }
+
+  .resource-scope-item__label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .resource-scope-divider {
+    height: 1px;
+    margin: 8px 6px;
+    background: var(--search-border-color);
+  }
+
+  .resource-inspector-pane {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px;
+    overflow: hidden auto;
+  }
+
+  .resource-inspector-hero {
+    --inspector-accent: var(--primary-color);
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+    padding: 14px;
+    border: 1px solid var(--search-border-color);
+    border-radius: 14px;
+    background:
+      linear-gradient(145deg, color-mix(in srgb, var(--inspector-accent) 10%, transparent), transparent 62%),
+      var(--search-card-bg);
+  }
+
+  .resource-inspector-hero.is-bookmark {
+    --inspector-accent: var(--resource-bookmark-color, #7166ff);
+  }
+
+  .resource-inspector-hero.is-note {
+    --inspector-accent: var(--resource-note-color, #10a77a);
+  }
+
+  .resource-inspector-hero.is-file {
+    --inspector-accent: var(--resource-file-color, #f58b22);
+  }
+
+  .resource-inspector-hero.is-tag {
+    --inspector-accent: var(--resource-tag-color, #e5488f);
+  }
+
+  .resource-inspector-identity {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .resource-inspector-icon {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+    display: grid;
+    place-items: center;
+    border: 1px solid color-mix(in srgb, var(--inspector-accent) 28%, var(--search-border-color));
+    border-radius: 13px;
+    color: var(--inspector-accent);
+    background: color-mix(in srgb, var(--inspector-accent) 11%, var(--search-card-bg));
+  }
+
+  .resource-inspector-identity__copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .resource-inspector-identity__copy > span {
+    color: var(--desc-color);
+    font-size: 11px;
+  }
+
+  .resource-inspector-identity__copy > strong {
+    color: var(--inspector-accent);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .resource-inspector-hero h2 {
+    margin: 0;
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 17px;
+    line-height: 1.4;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .resource-inspector-description,
+  .resource-inspector-empty p {
+    margin: 0;
+    color: var(--desc-color);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .resource-inspector-description {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
+
+  .resource-inspector-meta {
+    display: grid;
+    gap: 7px;
+    margin: 0;
+    padding: 10px;
+    border: 1px solid var(--search-border-color);
+    border-radius: 12px;
+    background: var(--search-muted-bg);
+  }
+
+  .resource-inspector-meta > div {
+    display: grid;
+    grid-template-columns: 74px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .resource-inspector-meta dt,
+  .resource-inspector-meta dd {
+    margin: 0;
+    font-size: 12px;
+  }
+
+  .resource-inspector-meta dt {
+    color: var(--desc-color);
+  }
+
+  .resource-inspector-meta dd {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .resource-inspector-tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .resource-inspector-tags > span {
+    width: 100%;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+
+  .resource-inspector-tags :deep(.resource-tag-chip) {
+    width: auto;
+    max-width: 100%;
+  }
+
+  .resource-inspector-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: auto;
+    padding-top: 10px;
+    border-top: 1px solid var(--search-border-color);
+  }
+
+  .resource-inspector-actions :deep(.b_btn) {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 12px;
+    font-size: 14px;
+  }
+
+  .resource-inspector-actions :deep(.b_btn:first-child) {
+    grid-column: 1 / -1;
+  }
+
+  .resource-inspector-action--inbox {
+    border-color: color-mix(in srgb, var(--primary-color) 28%, var(--search-border-color));
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--search-card-bg));
+  }
+
+  .resource-inspector-action--delete {
+    border-color: color-mix(in srgb, var(--danger-color, #e5484d) 32%, var(--search-border-color));
+    color: var(--danger-color, #e5484d);
+    background: color-mix(in srgb, var(--danger-color, #e5484d) 6%, var(--search-card-bg));
+  }
+
+  .resource-inspector-empty {
+    min-height: 220px;
+    display: grid;
+    align-content: center;
+    gap: 8px;
+    text-align: center;
+  }
+
+  .resource-result-entry {
+    border-radius: 14px;
+  }
+
+  .resource-result-entry.is-inspected :deep(.result-item) {
+    border-color: var(--primary-color);
+    box-shadow: none;
   }
 
   .search-layout {
@@ -2385,7 +2816,8 @@
     }
 
     .search-header {
-      flex: 0 0 auto;
+      grid-column: 2;
+      grid-row: 1;
       min-height: 58px;
       box-sizing: border-box;
       padding: 8px 12px;
@@ -2418,13 +2850,15 @@
     .search-header-input {
       width: 100%;
       flex: 1 1 auto;
-      min-width: 360px;
-      display: grid;
-      grid-template-columns: minmax(260px, 1fr) auto 42px;
+      min-width: 0;
+      display: flex;
+      align-items: center;
       gap: 8px;
     }
 
     :deep(.search-header-input .b-input) {
+      min-width: 220px;
+      flex: 1 1 320px;
       border-radius: 12px;
     }
 
@@ -2436,10 +2870,9 @@
     }
 
     .search-ai-entry {
-      flex-shrink: 0;
-      min-width: 118px;
-      padding: 0 14px;
-      gap: 6px;
+      width: 42px;
+      min-width: 42px;
+      padding: 0;
       color: #fff;
       background: var(--primary-color);
     }
@@ -2459,10 +2892,31 @@
       flex: 1 1 auto;
       min-height: 0;
       margin-top: 0;
-      grid-template-columns: minmax(0, 1fr);
-      gap: 0;
+      grid-template-columns: clamp(220px, 14vw, 280px) minmax(0, 1fr) clamp(350px, 20vw, 410px);
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 12px 14px;
       align-items: stretch;
       overflow: hidden;
+    }
+
+    .resource-scope-pane,
+    .resource-inspector-pane {
+      min-height: 0;
+      height: 100%;
+      grid-row: 1 / 3;
+    }
+
+    .resource-scope-pane {
+      grid-column: 1;
+    }
+
+    .resource-inspector-pane {
+      grid-column: 3;
+    }
+
+    .result-panel {
+      grid-column: 2;
+      grid-row: 2;
     }
 
     .filter-item {
@@ -2524,27 +2978,23 @@
     }
 
     .desktop-result-controls {
-      min-width: 0;
-      flex: 1 1 auto;
+      min-width: max-content;
+      flex: 0 0 auto;
       display: flex;
       align-items: center;
       gap: 7px;
-      overflow-x: auto;
-      overscroll-behavior-x: contain;
-      scrollbar-width: none;
+      overflow: visible;
     }
 
-    .desktop-result-controls::-webkit-scrollbar {
+    .search-header .select-wrap > span,
+    .search-header .tagless-btn {
       display: none;
-    }
-
-    .desktop-result-controls .select-visible-btn {
-      margin-left: 0;
     }
 
     .result-toolbar--summary > .toolbar-actions {
       flex: 0 0 auto;
       margin-left: auto;
+      white-space: nowrap;
     }
 
     .advanced-filters {
@@ -2566,7 +3016,8 @@
     }
 
     .filter-select {
-      min-width: 116px;
+      width: 112px;
+      min-width: 112px;
     }
 
     .view-switch {
@@ -2609,7 +3060,15 @@
 
     .tag-filter-label {
       flex: 0 0 auto;
-      line-height: 26px;
+      display: grid;
+      gap: 1px;
+      line-height: 1.2;
+    }
+
+    .tag-filter-label small {
+      color: var(--desc-color);
+      font-size: 10px;
+      font-weight: 400;
     }
 
     .tag-filter-main {
@@ -2719,8 +3178,80 @@
 
     .desktop-result-controls {
       width: 100%;
+      min-width: 0;
       order: 3;
       flex-basis: 100%;
+      flex-wrap: wrap;
+    }
+
+    .search-header-input {
+      flex-wrap: wrap;
+    }
+
+    :deep(.search-header-input > .input-container) {
+      flex: 1 1 calc(100% - 100px);
+      min-width: 220px;
+    }
+
+    :deep(.search-header-input > .b-tooltip-wrap) {
+      flex: 0 0 auto;
+    }
+  }
+
+  @media (min-width: 768px) and (max-width: 1380px) {
+    .search-layout {
+      grid-template-columns: minmax(176px, 200px) minmax(0, 1fr) minmax(270px, 300px);
+      gap: 10px;
+    }
+
+    .result-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  @media (min-width: 768px) and (max-width: 980px) {
+    .search-layout {
+      grid-template-columns: minmax(96px, 120px) minmax(240px, 1fr) minmax(210px, 28vw);
+      gap: 8px;
+    }
+
+    .resource-scope-pane {
+      padding: 9px 6px;
+    }
+
+    .resource-scope-item {
+      grid-template-columns: 8px minmax(0, 1fr);
+      gap: 7px;
+      padding-inline: 7px;
+    }
+
+    .resource-scope-item .filter-count {
+      display: none;
+    }
+
+    .resource-scope-title {
+      padding-inline: 6px;
+    }
+
+    .resource-inspector-pane {
+      padding: 10px;
+    }
+
+    .resource-inspector-hero {
+      padding: 11px;
+    }
+
+    .resource-inspector-hero h2 {
+      font-size: 15px;
+    }
+
+    .resource-inspector-meta > div {
+      grid-template-columns: minmax(58px, auto) minmax(0, 1fr);
+    }
+
+    .resource-inspector-actions :deep(.b_btn) {
+      padding-inline: 8px;
+      font-size: 12px;
     }
   }
 

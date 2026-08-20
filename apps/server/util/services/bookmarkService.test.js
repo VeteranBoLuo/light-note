@@ -13,6 +13,7 @@ const insertResourceTagRelations = vi.fn();
 const validateUserTags = vi.fn();
 const fetchWebMeta = vi.fn();
 const triggerResourceCreateEffects = vi.fn();
+const createIconBatch = vi.fn();
 
 vi.mock('../../db/index.js', () => ({ default: pool }));
 vi.mock('./tagService.js', () => ({ ensureTag }));
@@ -22,7 +23,8 @@ vi.mock('../resourceTags.js', () => ({
   validateUserTags,
 }));
 vi.mock('../resourceInbox.js', () => ({ enqueueResources: vi.fn() }));
-vi.mock('../snapshot.js', () => ({ archiveBookmark: vi.fn() }));
+vi.mock('../snapshot.js', () => ({ archiveBookmarkBackground: vi.fn() }));
+vi.mock('../bookmarkIconBatchService.js', () => ({ createIconBatch }));
 vi.mock('../fetchWebMeta.js', () => ({
   EXPLICIT_WEB_READ_MAX_BYTES: 4 * 1024 * 1024,
   fetchWebMeta,
@@ -48,6 +50,7 @@ describe('bookmarkService.createBookmark', () => {
     vi.clearAllMocks();
     fetchWebMeta.mockResolvedValue({ ok: false, reason: 'FETCH_FAILED' });
     triggerResourceCreateEffects.mockResolvedValue(undefined);
+    createIconBatch.mockResolvedValue({ batchId: 'batch-1', total: 1, status: 'queued' });
     connection.beginTransaction.mockResolvedValue();
     connection.commit.mockResolvedValue();
     connection.rollback.mockResolvedValue();
@@ -80,6 +83,51 @@ describe('bookmarkService.createBookmark', () => {
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(connection.rollback).not.toHaveBeenCalled();
     expect(connection.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('无图标书签在主事务提交并释放连接后进入持久化补全队列', async () => {
+    const result = await createBookmark({
+      userId: 'user-1',
+      bookmark: { url: 'https://example.com/path', name: 'Example' },
+      saveSnapshot: false,
+    });
+
+    expect(createIconBatch).toHaveBeenCalledWith('user-1', [{ id: result.id, url: 'https://example.com/path' }]);
+    expect(connection.commit.mock.invocationCallOrder[0]).toBeLessThan(createIconBatch.mock.invocationCallOrder[0]);
+    expect(connection.release.mock.invocationCallOrder[0]).toBeLessThan(createIconBatch.mock.invocationCallOrder[0]);
+  });
+
+  it('书签已带图标时不创建后台补全任务', async () => {
+    await createBookmark({
+      userId: 'user-1',
+      bookmark: {
+        url: 'https://example.com/path',
+        name: 'Example',
+        iconUrl: '/uploads/bookmark-icon/existing.png',
+      },
+      saveSnapshot: false,
+    });
+
+    expect(createIconBatch).not.toHaveBeenCalled();
+  });
+
+  it('图标任务入队失败不把已提交的收藏伪装成失败', async () => {
+    const logSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    createIconBatch.mockRejectedValueOnce(Object.assign(new Error('table unavailable'), { code: 'ER_NO_SUCH_TABLE' }));
+
+    try {
+      await expect(
+        createBookmark({
+          userId: 'user-1',
+          bookmark: { url: 'https://example.com/path', name: 'Example' },
+          saveSnapshot: false,
+        }),
+      ).resolves.toMatchObject({ name: 'Example', url: 'https://example.com/path' });
+      expect(logSpy).toHaveBeenCalledWith('[bookmark-icon] 新书签补全任务创建失败 code=%s', 'ER_NO_SUCH_TABLE');
+      expect(connection.rollback).not.toHaveBeenCalled();
+    } finally {
+      logSpy.mockRestore();
+    }
   });
 
   it('标签阶段失败时回滚整个收藏事务', async () => {

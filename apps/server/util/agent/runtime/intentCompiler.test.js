@@ -274,6 +274,84 @@ describe('Intent Compiler V2', () => {
     expect(request.mock.calls[1][0][0].content).toContain('已经明确给出时间范围');
   });
 
+  it('唯一已选资源的通用分析请求默认执行，不把分析偏好伪装成必填项', async () => {
+    const readGoal = {
+      id: 'read-selected-resource',
+      kind: 'read',
+      operation: 'read',
+      capabilityDomain: 'web',
+      description: '分析已选网页',
+      targetDescription: '本轮唯一已选书签',
+      dependsOn: [],
+    };
+    const invalid = response({
+      ...base,
+      requestKind: 'answer',
+      confidence: 'medium',
+      goals: [readGoal],
+      groundingPolicy: 'current_explicit_only',
+      missingSlots: [
+        {
+          name: 'analysisFocus',
+          reason: '没有指定分析侧重点',
+          question: '你希望如何分析这个地址？',
+        },
+      ],
+      clarificationQuestion: '你希望如何分析这个地址？',
+    });
+    const valid = response({
+      ...base,
+      requestKind: 'answer',
+      confidence: 'high',
+      goals: [readGoal],
+      groundingPolicy: 'current_explicit_only',
+      missingSlots: [],
+      clarificationQuestion: '',
+    });
+    const request = vi.fn().mockResolvedValueOnce(invalid).mockResolvedValueOnce(valid);
+
+    const result = await compileAgentTurnSpec({
+      message: '分析这个地址',
+      domainCatalog: [{ domain: 'web', effect: 'read', status: 'enabled', description: '读取网页正文' }],
+      contextSummary: { selectedResourceTypes: ['bookmark'], selectedResourceCount: 1 },
+      authoritativeGroundingPolicy: 'current_explicit_only',
+      request,
+    });
+
+    expect(result).toMatchObject({ attempts: 2, turnSpec: { confidence: 'high', missingSlots: [] } });
+    expect(request.mock.calls[1][0][0].content).toContain('唯一已选资源已经确定读取目标');
+  });
+
+  it('多个已选资源或非读取目标仍保留真实歧义，不擅自套用默认分析', () => {
+    const ambiguous = {
+      requestKind: 'answer',
+      groundingPolicy: 'current_explicit_only',
+      goals: [{ kind: 'read', operation: 'read' }],
+      missingSlots: [{ name: 'target', reason: '目标不唯一', question: '分析哪一个？' }],
+    };
+    expect(
+      __testing.contradictedSelectedResourceReadFeedback(ambiguous, {
+        selectedResourceTypes: ['bookmark'],
+        selectedResourceCount: 2,
+      }),
+    ).toBe('');
+    expect(
+      __testing.contradictedSelectedResourceReadFeedback(
+        { ...ambiguous, requestKind: 'action', goals: [{ kind: 'write', operation: 'create' }] },
+        { selectedResourceTypes: ['bookmark'], selectedResourceCount: 1 },
+      ),
+    ).toBe('');
+    expect(
+      __testing.contradictedSelectedResourceReadFeedback(
+        {
+          ...ambiguous,
+          missingSlots: [{ name: 'comparisonTarget', reason: '缺少要对比的另一个网页', question: '与谁对比？' }],
+        },
+        { selectedResourceTypes: ['bookmark'], selectedResourceCount: 1 },
+      ),
+    ).toBe('');
+  });
+
   it('“最近/近期”也是完整的相对排序范围，不追问精确日期', () => {
     for (const message of ['查询我最近登录过的设备。', '列出近期保存的书签。']) {
       expect(

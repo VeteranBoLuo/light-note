@@ -40,11 +40,14 @@ export function useCommunityChatUnreadRuntime(options: UseCommunityChatUnreadRun
   }
 
   function refreshNow({ afterCurrent = false } = {}) {
+    // 聊天室页面由 Workspace 的实时连接和目录刷新维护状态，
+    // 根层角标运行时不应再发起一组重复 REST 请求。
+    if (!options.realtimeActive.value) return;
     void unread.refresh({ afterCurrent });
   }
 
   function scheduleAuthoritativeRefresh() {
-    if (!authenticated.value || realtimeRefreshTimer !== undefined) return;
+    if (!options.realtimeActive.value || !authenticated.value || realtimeRefreshTimer !== undefined) return;
     realtimeRefreshTimer = window.setTimeout(() => {
       realtimeRefreshTimer = undefined;
       refreshNow({ afterCurrent: true });
@@ -79,18 +82,27 @@ export function useCommunityChatUnreadRuntime(options: UseCommunityChatUnreadRun
     { flush: 'post' },
   );
 
+  watch(
+    options.realtimeActive,
+    (active) => {
+      clearRealtimeRefreshTimer();
+      if (mounted && active) refreshNow();
+    },
+    { flush: 'post' },
+  );
+
   function handleVisibilityChange() {
     if (document.visibilityState === 'visible') refreshNow();
   }
 
   onMounted(() => {
     mounted = true;
-    refreshNow();
+    if (options.realtimeActive.value) refreshNow();
     document.addEventListener('visibilitychange', handleVisibilityChange);
     fallbackRefreshTimer = window.setInterval(() => {
       // 游客没有未读状态，首次读取开放策略后由 WebSocket 自身负责在线状态；
       // 只有登录账号需要用低频 REST 覆盖断线期间可能遗漏的角标变化。
-      if (authenticated.value && document.visibilityState === 'visible') refreshNow();
+      if (options.realtimeActive.value && authenticated.value && document.visibilityState === 'visible') refreshNow();
     }, FALLBACK_REFRESH_INTERVAL_MS);
   });
 

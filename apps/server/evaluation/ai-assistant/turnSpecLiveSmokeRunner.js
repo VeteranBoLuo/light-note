@@ -15,7 +15,7 @@ const PROVIDERS = new Set(['deepseek', 'qwen', 'both']);
 const LIVE_EVALUATION_CONCURRENCY = 4;
 
 export function parseTurnSpecSmokeArgs(argv) {
-  const options = { live: false, repeat: 20, format: 'text', suite: 'quick', provider: 'both' };
+  const options = { live: false, repeat: 20, format: 'text', suite: 'quick', provider: 'both', caseIds: [] };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--') continue;
@@ -24,6 +24,7 @@ export function parseTurnSpecSmokeArgs(argv) {
     else if (arg === '--format') options.format = argv[++index] || 'text';
     else if (arg === '--suite') options.suite = argv[++index] || 'quick';
     else if (arg === '--provider') options.provider = argv[++index] || 'both';
+    else if (arg === '--case') options.caseIds.push(String(argv[++index] || '').trim());
     else throw new Error(`未知参数：${arg}`);
   }
   if (!Number.isInteger(options.repeat) || options.repeat < 1 || options.repeat > 20) {
@@ -31,6 +32,7 @@ export function parseTurnSpecSmokeArgs(argv) {
   }
   if (!['text', 'json'].includes(options.format)) throw new Error('--format 仅支持 text 或 json');
   if (!PROVIDERS.has(options.provider)) throw new Error('--provider 仅支持 deepseek、qwen 或 both');
+  if (options.caseIds.some((caseId) => !caseId)) throw new Error('--case 后必须提供用例 ID');
   getLiveSmokeSuite(options.suite);
   return options;
 }
@@ -66,8 +68,20 @@ async function mapWithConcurrency(items, limit, worker) {
   return results;
 }
 
-function strictAttempt(smokeCase, outcome) {
-  const toolNames = (outcome.toolCalls || []).map((call) => call?.function?.name).filter(Boolean);
+export function evaluateTurnSpecSmokeAttempt(smokeCase, outcome) {
+  const calls = outcome.toolCalls || [];
+  const toolNames = calls.map((call) => call?.function?.name).filter(Boolean);
+  const toolArguments = Object.fromEntries(
+    calls.flatMap((call) => {
+      const toolName = call?.function?.name;
+      if (!toolName) return [];
+      try {
+        return [[toolName, JSON.parse(call.function?.arguments || '{}')]];
+      } catch {
+        return [[toolName, null]];
+      }
+    }),
+  );
   const errors = [];
   const clarified = outcome.state === 'clarification';
   if (Boolean(smokeCase.expectedNeedsClarification) !== clarified) {
@@ -78,6 +92,19 @@ function strictAttempt(smokeCase, outcome) {
   }
   for (const toolName of smokeCase.forbiddenTools || []) {
     if (toolNames.includes(toolName)) errors.push(`extra_tool:${toolName}`);
+  }
+  for (const [toolName, expectedArguments] of Object.entries(smokeCase.requiredToolArguments || {})) {
+    const actualArguments = toolArguments[toolName];
+    if (!actualArguments || typeof actualArguments !== 'object') {
+      errors.push(`missing_tool_arguments:${toolName}`);
+      continue;
+    }
+    for (const [key, expectedValue] of Object.entries(expectedArguments || {})) {
+      const acceptedValues = Array.isArray(expectedValue) ? expectedValue : [expectedValue];
+      if (!acceptedValues.includes(actualArguments[key])) {
+        errors.push(`invalid_tool_argument:${toolName}.${key}`);
+      }
+    }
   }
   if (!(smokeCase.requiredTools || []).length && toolNames.length) {
     errors.push(`unexpected_tools:${toolNames.join(',')}`);
@@ -159,7 +186,7 @@ async function runProvider({ provider, suite, repeat, requestAi, allTools, getAc
       protocolFailure = stableAgentErrorCode(error);
       outcome = { state: 'blocked', toolCalls: [] };
     }
-    const strict = strictAttempt(smokeCase, outcome);
+    const strict = evaluateTurnSpecSmokeAttempt(smokeCase, outcome);
     const usage = responses.reduce(
       (total, response) => ({
         promptTokens: total.promptTokens + Number(response?.usage?.promptTokens || 0),
@@ -254,7 +281,13 @@ export function selectTurnSpecProvider(reports = []) {
 }
 
 export async function runTurnSpecLiveSmoke(options) {
-  const suite = getLiveSmokeSuite(options.suite || 'quick');
+  const sourceSuite = getLiveSmokeSuite(options.suite || 'quick');
+  const requestedCaseIds = new Set(options.caseIds || []);
+  const selectedCases = sourceSuite.cases.filter(
+    (smokeCase) => !requestedCaseIds.size || requestedCaseIds.has(smokeCase.id),
+  );
+  if (!selectedCases.length) throw new Error('没有匹配 --case 的 TurnSpec V2 用例');
+  const suite = { ...sourceSuite, cases: selectedCases };
   const providers = options.provider === 'both' ? ['deepseek', 'qwen'] : [options.provider];
   if (!options.live) {
     return {

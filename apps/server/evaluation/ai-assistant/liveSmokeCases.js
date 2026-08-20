@@ -38,7 +38,22 @@ export const QUICK_LIVE_SMOKE_CASES = Object.freeze([
 const TOOL_COVERAGE_CASES = Object.freeze([
   smokeCase('query-bookmarks', '查找我名称或网址中包含“合成关键词”的书签。', 'read.query_bookmarks', 'query_bookmarks'),
   smokeCase('query-notes', '查找我标题或正文中包含“合成关键词”的笔记。', 'read.query_notes', 'query_notes'),
-  smokeCase('query-todos', '列出我尚未完成并包含“合成关键词”的待办。', 'read.query_todos', 'query_todos'),
+  smokeCase(
+    'query-todos',
+    '查询计划日期为 2026-08-20、提醒时间为 2026-08-20 16:00、标题包含“推广”的未完成待办，并告诉我清单进度。',
+    'read.query_todos',
+    'query_todos',
+    {
+      requiredToolArguments: {
+        query_todos: {
+          status: 'pending',
+          keyword: '推广',
+          planDate: '2026-08-20',
+          reminderAt: ['2026-08-20 16:00', '2026-08-20T16:00'],
+        },
+      },
+    },
+  ),
   smokeCase(
     'set-todo-status',
     '把 ID 为 11111111-1111-4111-8111-111111111111 的待办标记为已完成。',

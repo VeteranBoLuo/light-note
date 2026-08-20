@@ -214,6 +214,32 @@ describe('communityChatAccessService', () => {
     expect(access).toMatchObject({ status: 'rules_required', canAcceptRules: true, canEnter: false });
   });
 
+  it('目录接口在未准入时也返回 access 与空房间，避免客户端先查 access', async () => {
+    const db = {
+      query: vi.fn(async (sql) => {
+        if (String(sql).includes('community_chat_access_requests')) return [[], []];
+        if (String(sql).includes('community_chat_members')) {
+          return [[{ role: 'member', status: 'invited', rulesVersion: null }], []];
+        }
+        if (String(sql).includes('community_chat_user_settings')) return [[], []];
+        throw new Error(`unexpected query: ${sql}`);
+      }),
+    };
+
+    const result = await listCommunityChatRooms({
+      user: { id: 'user-1', role: 'user' },
+      env: INVITE_ENV,
+      db,
+    });
+
+    expect(result).toMatchObject({
+      access: { status: 'rules_required', canEnter: false },
+      messagingEnabled: false,
+      items: [],
+    });
+    expect(db.query.mock.calls.some(([sql]) => String(sql).includes('FROM community_chat_rooms'))).toBe(false);
+  });
+
   it('当前规则已确认的 active 成员可读取服务端频道目录，并尊重已保存的关闭选择', async () => {
     const db = {
       query: vi.fn(async (sql) => {

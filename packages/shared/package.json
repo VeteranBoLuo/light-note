@@ -17,6 +17,10 @@
     "./community-chat-stickers": {
       "types": "./communityChatStickers.d.ts",
       "default": "./communityChatStickers.js"
+    },
+    "./todo-reminder": {
+      "types": "./todoReminder.d.ts",
+      "default": "./todoReminder.js"
     }
   }
 }

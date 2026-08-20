@@ -21,6 +21,8 @@ const EXPLICIT_COLLECTIVE_SCOPE_PATTERN =
 const TIME_SLOT_PATTERN = /(?:time|date|period|range|when|时间|日期|时段|范围|口径)/iu;
 const COLLECTIVE_SCOPE_SLOT_PATTERN =
   /(?:user|account|owner|subject|target|scope|用户|账号|所有者|归属|对象|目标|范围|平台)/iu;
+const OPTIONAL_ANALYSIS_PREFERENCE_SLOT_PATTERN =
+  /(?:analysis[_\s-]?(?:focus|angle|style|depth)|focus|angle|style|tone|length|detail|depth|format|structure|presentation|侧重|重点|角度|风格|语气|篇幅|字数|长度|详细程度|深度|格式|结构|呈现方式|如何分析|怎么分析)/iu;
 
 export class IntentCompilerError extends Error {
   constructor(code, message) {
@@ -78,6 +80,7 @@ function compilerSystemPrompt(repairFeedback = '') {
     '问“怎么用、在哪里操作、是否支持”属于 product_help，不得生成真实写目标；需要查询产品帮助中心时应生成 content 域 read goal。普通寒暄和无需产品数据的闲聊使用 conversation 且 goals=[]。',
     '目标、时间、数量、位置、状态或对象会改变结果且无法唯一确定时，列出 missingSlots；confidence=low 或存在 missingSlots 时必须给出一个具体 clarificationQuestion。',
     'missingSlots 只表示用户确实没有提供、且无法从最新消息或上下文唯一确定的信息；绝不能因为你猜测某个工具不可用而制造 missingSlot。能力是否可用由后续服务端路由裁决。',
+    '分析风格、侧重点、篇幅和输出结构属于可选偏好，不是执行必填项。当 contextSummary 表明本轮只有一个已选资源，用户要求读取、查看、分析、总结、概括或解读它时，必须默认给出包含核心内容、关键事实和必要结论的有用回答，不得追问“想如何分析”或把偏好列为 missingSlot。',
     '“今天/昨天/本周/本月/最近 N 天”等相对时间是完整时间条件；“全平台/所有用户/全部新用户/大家”等集合表达是完整对象范围，不得追问具体日期或单个用户。',
     'contextSummary.actorRole 是服务端鉴权后的权威角色；actorRole=root 时允许编译跨用户、平台统计和管理员只读目标，不得根据能力摘要臆测为仅能查询当前用户。',
     '无注册能力的动作仍要用 capabilityDomain=none 明确记录，后续服务端会标为 unsupported；不要把它改成普通闲聊。',
@@ -110,6 +113,34 @@ function contradictedMissingSlotFeedback(turnSpec, latestMessage, actorRole) {
   }
   if (!contradictions.length) return '';
   return `最新消息已经明确给出${[...new Set(contradictions)].join('和')}，必须移除相应 missingSlots 并按原请求编译；不要用工具可用性猜测替代用户语义`;
+}
+
+function contradictedSelectedResourceReadFeedback(turnSpec, contextSummary) {
+  const slots = Array.isArray(turnSpec?.missingSlots) ? turnSpec.missingSlots : [];
+  const goals = Array.isArray(turnSpec?.goals) ? turnSpec.goals : [];
+  const selectedTypes = Array.isArray(contextSummary?.selectedResourceTypes)
+    ? [...new Set(contextSummary.selectedResourceTypes.map(String).filter(Boolean))]
+    : [];
+  const singleSelectedResource = Number(contextSummary?.selectedResourceCount) === 1 && selectedTypes.length === 1;
+  const singleReadGoal =
+    turnSpec?.requestKind === 'answer' &&
+    goals.length === 1 &&
+    goals[0]?.kind === 'read' &&
+    goals[0]?.operation === 'read';
+  const onlyOptionalPreferences =
+    slots.length > 0 &&
+    slots.every((slot) =>
+      OPTIONAL_ANALYSIS_PREFERENCE_SLOT_PATTERN.test(
+        [slot?.name, slot?.reason, slot?.question].map((value) => String(value || '')).join(' '),
+      ),
+    );
+  const groundedToSelectedResource = ['current_explicit_only', 'inherit_confirmed_source_set'].includes(
+    turnSpec?.groundingPolicy,
+  );
+  if (!onlyOptionalPreferences || !singleSelectedResource || !singleReadGoal || !groundedToSelectedResource) {
+    return '';
+  }
+  return '本轮唯一已选资源已经确定读取目标；分析方式、侧重点、篇幅和输出结构只是可选偏好，必须移除 missingSlots，并默认给出核心内容、关键事实和必要结论';
 }
 
 function contradictedReadOnlyIntentFeedback(turnSpec, latestMessage) {
@@ -262,6 +293,11 @@ export async function compileAgentTurnSpec({
         repairFeedback = semanticFeedback;
         continue;
       }
+      const selectedResourceFeedback = contradictedSelectedResourceReadFeedback(turnSpec, payload.contextSummary);
+      if (selectedResourceFeedback) {
+        repairFeedback = selectedResourceFeedback;
+        continue;
+      }
       const ambiguityFeedback = contradictedMissingSlotFeedback(
         turnSpec,
         latestMessage,
@@ -279,6 +315,7 @@ export async function compileAgentTurnSpec({
 export const __testing = Object.freeze({
   contradictedMissingSlotFeedback,
   contradictedReadOnlyIntentFeedback,
+  contradictedSelectedResourceReadFeedback,
   normalizeDomainCatalog,
   normalizeHistory,
   repairFeedbackForResponse,

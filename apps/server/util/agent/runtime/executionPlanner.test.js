@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  buildExecutionPlanToolDefinition,
   buildPlannerTemporalContext,
   normalizePlannerExecutionContext,
   planAgentExecution,
@@ -149,6 +150,7 @@ describe('Execution Planner / Validator V2', () => {
     const attachmentTool = {
       name: 'create_image_note',
       isWrite: true,
+      resourceBindings: [{ argument: 'attachmentId', refType: 'attachment', sourceField: 'id' }],
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -212,7 +214,7 @@ describe('Execution Planner / Validator V2', () => {
         parsed,
         executionContext: { attachmentIds: ['attachment-1', 'attachment-2'] },
       }).issues,
-    ).toContain('TOOL_ATTACHMENT_SELECTION_INVALID');
+    ).toContain('TOOL_RESOURCE_SELECTION_REQUIRED');
 
     expect(
       validateExecutionPlan({
@@ -221,7 +223,189 @@ describe('Execution Planner / Validator V2', () => {
         parsed,
         executionContext: { attachmentIds: [] },
       }).issues,
-    ).toContain('TOOL_ATTACHMENT_CONTEXT_REQUIRED');
+    ).toContain('TOOL_RESOURCE_CONTEXT_REQUIRED');
+  });
+
+  it('通用资源绑定只向 Planner 暴露稳定引用，并由服务端注入书签 URL', async () => {
+    const readUrlTool = {
+      name: 'read_url',
+      isWrite: false,
+      resourceBindings: [{ argument: 'url', refType: 'bookmark', sourceField: 'url', allowLiteral: true }],
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { url: { type: 'string' } },
+        required: ['url'],
+      },
+    };
+    const readSpec = {
+      ...turnSpec,
+      requestKind: 'answer',
+      goals: [{ id: 'read-target', kind: 'read', capabilityDomain: 'web', dependsOn: [] }],
+    };
+    const readRoute = {
+      state: 'ready',
+      candidates: [readUrlTool],
+      goalRoutes: [{ goalId: 'read-target', status: 'ready', toolNames: ['read_url'] }],
+    };
+    const request = vi.fn().mockResolvedValue(
+      response({
+        version: '2.0',
+        turnSpecDigest: 'digest-1',
+        steps: [
+          {
+            id: 'read-step',
+            goalId: 'read-target',
+            toolName: 'read_url',
+            arguments: { url: 'https://model-invented.invalid' },
+            dependsOn: [],
+            expectedResultKind: 'web_page',
+          },
+        ],
+        deferredGoalIds: [],
+        unsupportedGoalIds: [],
+      }),
+    );
+    const result = await planAgentExecution({
+      message: '分析这个地址',
+      turnSpec: readSpec,
+      route: readRoute,
+      executionContext: {
+        contextRefs: [{ type: 'bookmark', id: 'bookmark-1' }],
+        resources: [
+          { type: 'bookmark', id: 'bookmark-1', values: { url: 'https://www.baidu.com', description: 'secret' } },
+        ],
+      },
+      request,
+      validate: validateExecutionPlan,
+    });
+
+    expect(result.validation).toMatchObject({ valid: true });
+    expect(JSON.parse(result.validation.toolCalls[0].function.arguments)).toEqual({ url: 'https://www.baidu.com' });
+    const payload = JSON.parse(request.mock.calls[0][0][1].content);
+    expect(payload.availableContext).toEqual({
+      contextRefs: [{ type: 'bookmark', id: 'bookmark-1' }],
+      attachmentIds: [],
+      resourceBindings: [
+        {
+          toolName: 'read_url',
+          argument: 'url',
+          refs: [{ type: 'bookmark', id: 'bookmark-1' }],
+        },
+      ],
+    });
+    expect(JSON.stringify(payload)).not.toContain('https://www.baidu.com');
+    expect(JSON.stringify(payload)).not.toContain('secret');
+    const stepSchema = request.mock.calls[0][1].tools[0].function.parameters.properties.steps.items;
+    expect(stepSchema.properties.arguments.required).toEqual([]);
+    expect(stepSchema.properties.argumentBindings).toBeTruthy();
+  });
+
+  it('多资源必须选本轮稳定引用；没有资源时仅声明允许 literal 的工具可直接使用参数', () => {
+    const tool = {
+      name: 'read_url',
+      isWrite: false,
+      resourceBindings: [{ argument: 'url', refType: 'bookmark', sourceField: 'url', allowLiteral: true }],
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { url: { type: 'string' } },
+        required: ['url'],
+      },
+    };
+    const scopedTurnSpec = {
+      ...turnSpec,
+      requestKind: 'answer',
+      goals: [{ id: 'read-target', kind: 'read', capabilityDomain: 'web', dependsOn: [] }],
+    };
+    const scopedRoute = {
+      state: 'ready',
+      candidates: [tool],
+      goalRoutes: [{ goalId: 'read-target', status: 'ready', toolNames: ['read_url'] }],
+    };
+    const step = {
+      id: 'read-step',
+      goalId: 'read-target',
+      toolName: 'read_url',
+      arguments: {},
+      dependsOn: [],
+      expectedResultKind: 'web_page',
+    };
+    const parsed = {
+      invalid: false,
+      extraCalls: [],
+      plan: {
+        version: '2.0',
+        turnSpecDigest: 'digest-1',
+        steps: [step],
+        deferredGoalIds: [],
+        unsupportedGoalIds: [],
+      },
+    };
+    const context = {
+      contextRefs: [
+        { type: 'bookmark', id: 'bookmark-1' },
+        { type: 'bookmark', id: 'bookmark-2' },
+      ],
+      resources: [
+        { type: 'bookmark', id: 'bookmark-1', values: { url: 'https://one.example' } },
+        { type: 'bookmark', id: 'bookmark-2', values: { url: 'https://two.example' } },
+      ],
+    };
+    const multiResourceStepSchema = buildExecutionPlanToolDefinition({
+      turnSpec: scopedTurnSpec,
+      candidateTools: [tool],
+      executionContext: context,
+    }).function.parameters.properties.steps.items;
+    expect(multiResourceStepSchema.required).toContain('argumentBindings');
+    expect(multiResourceStepSchema.properties.argumentBindings.required).toEqual(['url']);
+    expect(
+      validateExecutionPlan({ turnSpec: scopedTurnSpec, route: scopedRoute, parsed, executionContext: context }).issues,
+    ).toContain('TOOL_RESOURCE_SELECTION_REQUIRED');
+
+    step.arguments = { url: 'https://two.example' };
+    expect(
+      validateExecutionPlan({ turnSpec: scopedTurnSpec, route: scopedRoute, parsed, executionContext: context }).issues,
+    ).toContain('TOOL_RESOURCE_SELECTION_REQUIRED');
+    step.arguments = {};
+
+    step.argumentBindings = { url: { type: 'bookmark', id: 'bookmark-2' } };
+    const selected = validateExecutionPlan({
+      turnSpec: scopedTurnSpec,
+      route: scopedRoute,
+      parsed,
+      executionContext: context,
+    });
+    expect(selected.valid).toBe(true);
+    expect(JSON.parse(selected.toolCalls[0].function.arguments)).toEqual({ url: 'https://two.example' });
+
+    step.argumentBindings = { url: { type: 'bookmark', id: 'bookmark-outside' } };
+    expect(
+      validateExecutionPlan({ turnSpec: scopedTurnSpec, route: scopedRoute, parsed, executionContext: context }).issues,
+    ).toContain('TOOL_RESOURCE_SELECTION_INVALID');
+
+    delete step.argumentBindings;
+    step.arguments = { url: 'https://literal.example' };
+    const literal = validateExecutionPlan({
+      turnSpec: scopedTurnSpec,
+      route: scopedRoute,
+      parsed,
+      executionContext: {},
+    });
+    expect(literal.valid).toBe(true);
+    expect(JSON.parse(literal.toolCalls[0].function.arguments)).toEqual({ url: 'https://literal.example' });
+
+    step.arguments = {};
+    const unavailable = validateExecutionPlan({
+      turnSpec: scopedTurnSpec,
+      route: scopedRoute,
+      parsed,
+      executionContext: {
+        contextRefs: [{ type: 'bookmark', id: 'bookmark-empty' }],
+        resources: [{ type: 'bookmark', id: 'bookmark-empty', values: { url: '' } }],
+      },
+    });
+    expect(unavailable.issues).toContain('TOOL_RESOURCE_VALUE_UNAVAILABLE');
   });
 
   it('只执行依赖已满足且属于 goal route 的步骤', async () => {

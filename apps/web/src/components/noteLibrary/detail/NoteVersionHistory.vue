@@ -248,6 +248,7 @@
         text: t('note.drawingConflictSummary', {
           strokes: elements.filter((element) => element?.kind === 'stroke').length,
           texts: elements.filter((element) => element?.kind === 'text').length,
+          shapes: elements.filter((element) => element?.kind === 'shape').length,
         }),
       };
     } catch {

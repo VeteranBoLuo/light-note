@@ -1797,7 +1797,7 @@
       !contexts.value.length &&
       !scopeRefs.value.length &&
       !attachments.value.length
-        ? resolveAiAssistantSourceSetCandidateId(messages.value, inputText)
+        ? resolveAiAssistantSourceSetCandidateId(messages.value)
         : '';
     const materialClarificationToken =
       !actionContinuation &&

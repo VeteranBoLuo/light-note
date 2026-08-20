@@ -24,11 +24,11 @@ DROP TABLE IF EXISTS `api_logs`;
 CREATE TABLE `api_logs` (
   `id` varchar(255) NOT NULL,
   `user_id` varchar(255) NOT NULL COMMENT '用户ID',
-  `url` varchar(255) DEFAULT NULL COMMENT '调用的接口路径',
+  `url` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '调用的接口路径',
   `method` varchar(255) DEFAULT NULL COMMENT '请求方法（如GET, POST等）',
-  `req` longtext,
+  `req` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci,
   `ip` varchar(255) NOT NULL COMMENT 'ip地址',
-  `system` varchar(255) DEFAULT NULL COMMENT '系统信息',
+  `system` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '系统信息',
   `request_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '用户调用接口的时间',
   `del_flag` varchar(255) NOT NULL DEFAULT '0',
   `status_code` varchar(255) DEFAULT NULL COMMENT '状态码',
@@ -38,7 +38,8 @@ CREATE TABLE `api_logs` (
   KEY `idx_api_logs_admin_list` (`del_flag`,`request_time`,`id`),
   KEY `idx_api_logs_request_id` (`request_id`),
   KEY `idx_api_logs_status_time` (`del_flag`,`status_code`,`request_time`,`id`),
-  KEY `idx_api_logs_user_time` (`user_id`,`request_time`)
+  KEY `idx_api_logs_user_time` (`user_id`,`request_time`),
+  KEY `idx_api_logs_retention` (`request_time`,`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC COMMENT='api日志';
 
 -- ----------------------------

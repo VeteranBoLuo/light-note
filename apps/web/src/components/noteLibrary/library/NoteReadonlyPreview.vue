@@ -71,6 +71,7 @@
           :title="String(displayNote.title || '')"
           :note-id="String(displayNote.id || noteId)"
           readonly
+          @ready="centerDrawingPreview"
         />
         <div
           v-else-if="previewHtml"
@@ -159,7 +160,7 @@
   import { handleNoteContentImagePreviewEvent, prepareNoteContentPreviewImages } from '@/utils/noteImagePreview';
   import { normalizeReferencedFilePreviewInfo, type ReferencedFilePreviewInfo } from '@/utils/noteResourceNavigation';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
-  import { scrollIntoContainer } from '@/utils/zoom';
+  import { scrollCenterIntoContainer, scrollIntoContainer } from '@/utils/zoom';
   import {
     resolveAiSourceNavigation,
     type AiSource,
@@ -243,6 +244,7 @@
   const previewHeadingElements = new Map<string, HTMLElement>();
   let outlineSpyRoot: HTMLElement | null = null;
   let outlineSpyFrame = 0;
+  let drawingCenterFrame = 0;
 
   const displayNote = computed(() => ({ ...(props.seed || {}), ...detail.value }));
   // 操作成功后父级会立即更新 seed；优先使用它，避免刚加载的详情副本把新状态覆盖回去。
@@ -467,6 +469,22 @@
     updateActivePreviewHeading();
   }
 
+  function centerDrawingPreview() {
+    const seq = requestSeq;
+    if (drawingCenterFrame) window.cancelAnimationFrame(drawingCenterFrame);
+    void nextTick(() => {
+      if (seq !== requestSeq) return;
+      drawingCenterFrame = window.requestAnimationFrame(() => {
+        drawingCenterFrame = 0;
+        if (seq !== requestSeq || displayNote.value.type !== 'drawing') return;
+        const root = previewScrollRef.value;
+        const page = root?.querySelector<HTMLElement>('.drawing-page');
+        if (!root || !page) return;
+        scrollCenterIntoContainer(root, page, 'auto');
+      });
+    });
+  }
+
   async function resolvePreviewResourceRefs(html: string, parentRequestSeq: number) {
     const refs = collectResourceRefsFromHtml(html).slice(0, 100);
     const seq = ++resourceResolveSeq;
@@ -489,6 +507,10 @@
     const noteId = String(props.noteId || '').trim();
     if (!noteId) return;
     const seq = ++requestSeq;
+    if (drawingCenterFrame) {
+      window.cancelAnimationFrame(drawingCenterFrame);
+      drawingCenterFrame = 0;
+    }
     loading.value = true;
     error.value = false;
     detail.value = {};
@@ -549,6 +571,7 @@
 
   onBeforeUnmount(() => {
     if (outlineSpyFrame) window.cancelAnimationFrame(outlineSpyFrame);
+    if (drawingCenterFrame) window.cancelAnimationFrame(drawingCenterFrame);
     outlineSpyRoot?.removeEventListener('scroll', scheduleActivePreviewHeading);
     window.removeEventListener('resize', scheduleActivePreviewHeading);
     previewHeadingElements.clear();

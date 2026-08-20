@@ -496,7 +496,13 @@ export async function acceptCommunityChatRules({ user, rulesVersion, env = proce
 export async function listCommunityChatRooms({ user, locale = 'zh-CN', env = process.env, db = pool }) {
   const access = await getCommunityChatAccess({ user, env, db });
   if (!access.canEnter) {
-    throw chatError('INVITE_REQUIRED', 403, '当前账号还不能查看聊天室频道', 'This account cannot view chat rooms yet');
+    // 目录是客户端的唯一状态源：未准入时也返回 access + 空房间，
+    // 避免前端每次刷新都先请求 /access，再请求实际上重复返回 access 的 /rooms。
+    return {
+      access,
+      messagingEnabled: access.messagingEnabled,
+      items: [],
+    };
   }
 
   const nameColumn = locale === 'en-US' ? 'name_en' : 'name_zh';

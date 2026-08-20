@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { renderDrawingThumbnail } from './drawingThumbnail';
+import { DRAWING_THUMBNAIL_MAX_PAGE_ZOOM, renderDrawingThumbnail } from './drawingThumbnail';
 
 function mockContext() {
   return {
@@ -7,6 +7,12 @@ function mockContext() {
     clearRect: vi.fn(),
     fillRect: vi.fn(),
     beginPath: vi.fn(),
+    save: vi.fn(),
+    restore: vi.fn(),
+    rect: vi.fn(),
+    quadraticCurveTo: vi.fn(),
+    bezierCurveTo: vi.fn(),
+    closePath: vi.fn(),
     arc: vi.fn(),
     fill: vi.fn(),
     moveTo: vi.fn(),
@@ -41,7 +47,7 @@ describe('drawingThumbnail', () => {
     expect(context.setTransform).toHaveBeenCalledTimes(3);
   });
 
-  it('按完整方形画纸缩放，小点不会按内容包围盒放大铺满卡片', () => {
+  it('智能取景最多放大到整页缩略图的三倍，小点仍保持像素级尺寸', () => {
     const context = mockContext();
     const content = JSON.stringify({
       v: 2,
@@ -51,10 +57,60 @@ describe('drawingThumbnail', () => {
 
     expect(renderDrawingThumbnail(context, content, 480, 270)).toBe(true);
     const [scale, , , , offsetX, offsetY] = context.setTransform.mock.calls[1];
-    expect(scale).toBeCloseTo(242 / 1448);
-    expect(offsetX).toBeCloseTo(119);
-    expect(offsetY).toBeCloseTo(14);
-    expect(context.arc).toHaveBeenCalledWith(724, 724, 0.5 / scale, 0, Math.PI * 2);
+    expect(scale).toBeCloseTo((242 / 1448) * DRAWING_THUMBNAIL_MAX_PAGE_ZOOM);
+    expect(offsetX + 724 * scale).toBeCloseTo(240);
+    expect(offsetY + 724 * scale).toBeCloseTo(135);
+    const dotRadius = Math.max(2, 0.5 / scale);
+    expect(context.arc).toHaveBeenCalledWith(724, 724, dotRadius, 0, Math.PI * 2);
+    expect(2 * dotRadius * scale).toBeLessThanOrEqual(2.1);
+  });
+
+  it('正常绘画使用受限内容取景，比完整画纸缩略图更易辨认', () => {
+    const context = mockContext();
+    const content = JSON.stringify({
+      v: 2,
+      page: { width: 1448, height: 1448 },
+      elements: [
+        {
+          id: 'drawing',
+          kind: 'stroke',
+          color: '#1f2937',
+          width: 4,
+          points: [500, 560, 620, 440, 760, 500, 900, 720],
+        },
+      ],
+    });
+
+    expect(renderDrawingThumbnail(context, content, 480, 270)).toBe(true);
+    const [scale] = context.setTransform.mock.calls[1];
+    const pageFitScale = 242 / 1448;
+    expect(scale).toBeGreaterThan(pageFitScale);
+    expect(scale).toBeLessThanOrEqual(pageFitScale * DRAWING_THUMBNAIL_MAX_PAGE_ZOOM);
+  });
+
+  it('V2 形状参与智能取景并使用同一矢量渲染', () => {
+    const context = mockContext();
+    const content = JSON.stringify({
+      v: 2,
+      page: { width: 1448, height: 1448 },
+      elements: [
+        {
+          id: 'shape',
+          kind: 'shape',
+          shape: 'rectangle',
+          x: 500,
+          y: 540,
+          width: 360,
+          height: 240,
+          color: '#615ced',
+          strokeWidth: 4,
+        },
+      ],
+    });
+
+    expect(renderDrawingThumbnail(context, content, 480, 270)).toBe(true);
+    expect(context.rect).toHaveBeenCalledWith(500, 540, 360, 240);
+    expect(context.stroke).toHaveBeenCalled();
   });
 
   it('旧竖版场景先升级并居中到方形画纸再生成缩略图', () => {
