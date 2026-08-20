@@ -140,7 +140,11 @@ describe("Host Agent Unix Socket API", () => {
     const security = await request(socketPath, "/v1/security");
     expect(security).toMatchObject({
       status: 200,
-      body: { ok: true, data: { listeningPorts: expect.any(Array) } },
+      body: {
+        protocolVersion: 1,
+        ok: true,
+        data: { protocolVersion: 1, listeningPorts: expect.any(Array) },
+      },
     });
     const unknownQuery = await request(
       socketPath,

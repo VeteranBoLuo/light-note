@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { HOST_AGENT_PROTOCOL_VERSION } from "@lightnote/shared/host-agent-protocol";
 import { requestPrivilegedHelper } from "./helperClient.js";
 import { stableErrorCode } from "./redaction.js";
 
@@ -200,5 +201,10 @@ export async function collectSecuritySnapshot(
       code: stableErrorCode(error),
     });
   }
-  return { ...host, listeningPorts, collectionErrors };
+  return {
+    protocolVersion: HOST_AGENT_PROTOCOL_VERSION,
+    ...host,
+    listeningPorts,
+    collectionErrors,
+  };
 }

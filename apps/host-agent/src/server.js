@@ -21,7 +21,7 @@ import {
   readServiceLogs,
 } from "./services.js";
 
-const AGENT_VERSION = "1.1.0";
+const AGENT_VERSION = "1.1.1";
 
 function sendJson(res, statusCode, payload) {
   const body = JSON.stringify({
