@@ -59,13 +59,16 @@ ssh -i "$KEY" "$HOST" "set -eu; \
       -e '/^HOST_AGENT_PRIVILEGED_HELPER=/d' \
       -e '/^HOST_AGENT_SUDO_BIN=/d' \
       -e '/^HOST_AGENT_PRIVILEGED_HELPER_SOCKET=/d' \
+      -e '/^HOST_AGENT_SAMPLE_INTERVAL_MS=/d' \
       /etc/lightnote-host-agent/agent.env > \"\$env_tmp\"; \
     printf '%s\\n' 'HOST_AGENT_PRIVILEGED_HELPER_SOCKET=/run/lightnote-host-helper.sock' >> \"\$env_tmp\"; \
+    printf '%s\\n' 'HOST_AGENT_SAMPLE_INTERVAL_MS=3000' >> \"\$env_tmp\"; \
   fi; \
   install -o root -g '$AGENT_USER' -m 0640 \"\$env_tmp\" /etc/lightnote-host-agent/agent.env; \
   ! grep -q '<agent-user>' /etc/lightnote-host-agent/agent.env; \
   grep -qx 'HOST_AGENT_PM2_ACCESS_MODE=helper' /etc/lightnote-host-agent/agent.env; \
   grep -qx 'HOST_AGENT_PRIVILEGED_HELPER_SOCKET=/run/lightnote-host-helper.sock' /etc/lightnote-host-agent/agent.env; \
+  grep -qx 'HOST_AGENT_SAMPLE_INTERVAL_MS=3000' /etc/lightnote-host-agent/agent.env; \
   systemctl daemon-reload; \
   systemd-analyze verify \
     /etc/systemd/system/lightnote-host-agent@.service \

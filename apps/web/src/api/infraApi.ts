@@ -3,7 +3,10 @@ import type {
   HostAgentAction,
   HostAgentDashboard,
   HostAgentJobState,
+  HostAgentSecuritySnapshot,
   HostAgentServiceId,
+  HostAgentServicesSnapshot,
+  HostAgentStorageSnapshot,
 } from '@lightnote/shared/host-agent-protocol';
 
 export type InfraAgentStatus = 'online' | 'offline' | 'incompatible';
@@ -44,6 +47,18 @@ export interface InfraActionResultPayload {
   code?: string;
 }
 
+export type InfraSecurityFindingState = 'pass' | 'fail' | 'unknown';
+export interface InfraSecurityFinding {
+  id: string;
+  state: InfraSecurityFindingState;
+  severity: 'high' | 'medium' | 'low';
+  evidence: Record<string, unknown>;
+}
+export interface InfraSecurityPayload extends HostAgentSecuritySnapshot {
+  findings: InfraSecurityFinding[];
+  summary: { failed: number; passed: number; unknown: number };
+}
+
 export class InfraApiError extends Error {
   code: string;
   status: number;
@@ -68,6 +83,23 @@ export async function getInfraDashboard(): Promise<ApiResponse & { data: InfraDa
     data: InfraDashboardPayload;
   };
   return requireSuccess(response);
+}
+
+async function getSnapshot<T>(path: string): Promise<ApiResponse & { data: T }> {
+  const response = (await apiBaseGet(path, undefined, { silent: true })) as ApiResponse & { data: T };
+  return requireSuccess(response);
+}
+
+export function getInfraServices(): Promise<ApiResponse & { data: HostAgentServicesSnapshot }> {
+  return getSnapshot('/api/infra/services');
+}
+
+export function getInfraStorage(): Promise<ApiResponse & { data: HostAgentStorageSnapshot }> {
+  return getSnapshot('/api/infra/storage');
+}
+
+export function getInfraSecurity(): Promise<ApiResponse & { data: InfraSecurityPayload }> {
+  return getSnapshot('/api/infra/security');
 }
 
 export async function getInfraLogs(

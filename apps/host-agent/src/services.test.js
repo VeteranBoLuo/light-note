@@ -186,6 +186,7 @@ describe("executeHostAction", () => {
     expect(result.capabilities).toEqual({
       nginxReload: true,
       workerRestart: true,
+      securitySnapshot: false,
     });
     expect(runner).not.toHaveBeenCalled();
   });

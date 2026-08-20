@@ -20,6 +20,10 @@ const PASSIVE_API_PATHS = new Set([
   '/support/afdian/oauth/callback', // 回调查询参数含短时 code/state，由领域日志只记稳定结果码。
   '/community-chat/access', // 公共聊天室权限快照：前台恢复/安全刷新会反复读取，无操作审计价值。
   '/community-chat/rooms', // 频道目录与未读快照：属于被动状态同步。
+  '/infra/dashboard', // 服务器管理前台默认每 3 秒读取一次快照，由独立运维审计记录真正的写动作。
+  '/infra/services', // 固定服务状态为被动轮询快照，不复制到通用 API 日志。
+  '/infra/storage', // 存储与 IO 为被动只读快照。
+  '/infra/security', // 安全快照含登录来源等敏感运维信息，仅在页面内受限展示。
   '/common/recordAiEvent', // AI 产品事件已落独立无正文事件表，不在通用 API 日志重复保存。
   '/me', // 身份恢复探针只同步会话状态；使用精确路径，避免误伤 /messages。
 ]);

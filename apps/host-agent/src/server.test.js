@@ -124,6 +124,24 @@ describe("Host Agent Unix Socket API", () => {
       state: "running",
       actions: [],
     });
+    const services = await request(socketPath, "/v1/services");
+    expect(services).toMatchObject({
+      status: 200,
+      body: { ok: true, data: { services: expect.any(Array) } },
+    });
+    const storage = await request(socketPath, "/v1/storage");
+    expect(storage).toMatchObject({
+      status: 200,
+      body: {
+        ok: true,
+        data: { mounts: expect.any(Array), history: expect.any(Array) },
+      },
+    });
+    const security = await request(socketPath, "/v1/security");
+    expect(security).toMatchObject({
+      status: 200,
+      body: { ok: true, data: { listeningPorts: expect.any(Array) } },
+    });
     const unknownQuery = await request(
       socketPath,
       "/v1/dashboard?command=whoami",

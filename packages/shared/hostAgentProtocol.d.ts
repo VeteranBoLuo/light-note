@@ -3,6 +3,9 @@ export declare const HOST_AGENT_API_PREFIX: "/v1";
 export declare const HOST_AGENT_ENDPOINTS: {
   readonly health: "/v1/health";
   readonly dashboard: "/v1/dashboard";
+  readonly services: "/v1/services";
+  readonly storage: "/v1/storage";
+  readonly security: "/v1/security";
   readonly jobs: "/v1/jobs";
   readonly logsPrefix: "/v1/logs";
 };
@@ -52,6 +55,11 @@ export interface HostAgentMetricPoint {
   load1: number | null;
   networkRxBytesPerSecond: number | null;
   networkTxBytesPerSecond: number | null;
+  diskReadBytesPerSecond: number | null;
+  diskWriteBytesPerSecond: number | null;
+  diskReadsPerSecond: number | null;
+  diskWritesPerSecond: number | null;
+  diskIoBusyPercent: number | null;
 }
 
 export interface HostAgentServiceSnapshot {
@@ -60,6 +68,10 @@ export interface HostAgentServiceSnapshot {
   detail: string;
   pid: number | null;
   uptimeSeconds: number | null;
+  cpuPercent: number | null;
+  memoryBytes: number | null;
+  restartCount: number | null;
+  startedAt: string | null;
   actions: HostAgentAction[];
 }
 
@@ -92,7 +104,12 @@ export interface HostAgentMetrics {
     usedBytes: number;
     freeBytes: number;
     percent: number | null;
+    totalInodes: number | null;
+    usedInodes: number | null;
+    freeInodes: number | null;
+    inodePercent: number | null;
   } | null;
+  diskIo: HostAgentDiskIo | null;
   network: {
     rxBytes: number;
     txBytes: number;
@@ -106,6 +123,74 @@ export interface HostAgentMetrics {
 export interface HostAgentCapabilities {
   nginxReload: boolean;
   workerRestart: boolean;
+  securitySnapshot: boolean;
+}
+
+export interface HostAgentDiskIo {
+  readBytesPerSecond: number | null;
+  writeBytesPerSecond: number | null;
+  readsPerSecond: number | null;
+  writesPerSecond: number | null;
+  busyPercent: number | null;
+}
+
+export interface HostAgentServicesSnapshot {
+  protocolVersion: 1;
+  capturedAt: string;
+  services: HostAgentServiceSnapshot[];
+  capabilities: HostAgentCapabilities;
+  collectionErrors: HostAgentCollectionError[];
+}
+
+export interface HostAgentStorageSnapshot {
+  protocolVersion: 1;
+  capturedAt: string;
+  mounts: Array<NonNullable<HostAgentMetrics["disk"]>>;
+  io: HostAgentDiskIo | null;
+  history: HostAgentMetricPoint[];
+  collectionErrors: HostAgentCollectionError[];
+}
+
+export type HostAgentSecurityState = "enabled" | "disabled" | "unknown";
+export interface HostAgentListeningPort {
+  protocol: "tcp" | "tcp6" | "udp" | "udp6";
+  address: string;
+  port: number;
+  exposure: "public" | "loopback" | "local";
+}
+export interface HostAgentSshActivityEntry {
+  occurredAt: string;
+  outcome: "succeeded" | "failed";
+  sourceAddress: string | null;
+  user: string | null;
+  method: string | null;
+}
+export interface HostAgentSecuritySnapshot {
+  protocolVersion: 1;
+  capturedAt: string;
+  ssh: {
+    available: boolean;
+    port: number | null;
+    permitRootLogin: string | null;
+    passwordAuthentication: boolean | null;
+    publicKeyAuthentication: boolean | null;
+    successes24h: number | null;
+    failures24h: number | null;
+    recent: HostAgentSshActivityEntry[];
+  };
+  firewall: {
+    available: boolean;
+    provider: string | null;
+    state: HostAgentSecurityState;
+  };
+  fail2ban: { available: boolean; state: HostAgentSecurityState };
+  updates: {
+    available: boolean;
+    pending: number | null;
+    security: number | null;
+  };
+  listeningPorts: HostAgentListeningPort[];
+  collectionErrors: HostAgentCollectionError[];
 }
 
 export interface HostAgentDashboard {

@@ -76,8 +76,8 @@ export function loadHostAgentConfig(environment = process.env) {
   const sampleIntervalMs = integer(
     environment,
     "HOST_AGENT_SAMPLE_INTERVAL_MS",
-    10_000,
-    5_000,
+    3_000,
+    1_000,
     60_000,
   );
   const historyMinutes = integer(

@@ -51,20 +51,58 @@ async function readDisk(mountPoint) {
   const totalBytes = Number(stats.blocks || 0) * blockSize;
   const freeBytes = Number(stats.bavail || 0) * blockSize;
   const usedBytes = Math.max(0, totalBytes - freeBytes);
+  const totalInodes = Number(stats.files || 0);
+  const freeInodes = Number(stats.ffree || 0);
+  const usedInodes = Math.max(0, totalInodes - freeInodes);
   return {
     mountPoint,
     totalBytes,
     usedBytes,
     freeBytes,
     percent: totalBytes > 0 ? percent((usedBytes / totalBytes) * 100) : null,
+    totalInodes: totalInodes > 0 ? totalInodes : null,
+    usedInodes: totalInodes > 0 ? usedInodes : null,
+    freeInodes: totalInodes > 0 ? freeInodes : null,
+    inodePercent:
+      totalInodes > 0 ? percent((usedInodes / totalInodes) * 100) : null,
   };
+}
+
+const PHYSICAL_BLOCK_DEVICE =
+  /^(?:sd[a-z]+|vd[a-z]+|xvd[a-z]+|nvme\d+n\d+|mmcblk\d+|dm-\d+)$/u;
+
+async function readDiskIoTotals() {
+  if (process.platform !== "linux") return null;
+  const source = await fs.readFile("/proc/diskstats", "utf8");
+  const totals = {
+    readBytes: 0,
+    writeBytes: 0,
+    reads: 0,
+    writes: 0,
+    busyMs: 0,
+    devices: 0,
+  };
+  for (const line of source.split("\n")) {
+    const fields = line.trim().split(/\s+/u);
+    const name = String(fields[2] || "");
+    if (!PHYSICAL_BLOCK_DEVICE.test(name) || fields.length < 14) continue;
+    const values = fields.slice(3).map(Number);
+    if (values.slice(0, 10).some((value) => !Number.isFinite(value))) continue;
+    totals.reads += values[0];
+    totals.readBytes += values[2] * 512;
+    totals.writes += values[4];
+    totals.writeBytes += values[6] * 512;
+    totals.busyMs += values[9];
+    totals.devices += 1;
+  }
+  return totals.devices ? totals : null;
 }
 
 export class MetricSampler {
   constructor({
     mountPoint = "/",
-    intervalMs = 10_000,
-    maxSamples = 360,
+    intervalMs = 3_000,
+    maxSamples = 1_200,
   } = {}) {
     this.mountPoint = mountPoint;
     this.intervalMs = intervalMs;
@@ -73,6 +111,7 @@ export class MetricSampler {
     this.latest = null;
     this.previousCpu = null;
     this.previousNetwork = null;
+    this.previousDiskIo = null;
     this.timer = null;
     this.collecting = null;
   }
@@ -163,6 +202,51 @@ export class MetricSampler {
       });
     }
 
+    let diskIo = null;
+    try {
+      const totals = await readDiskIoTotals();
+      if (totals) {
+        const elapsedSeconds = this.previousDiskIo
+          ? Math.max(
+              0.001,
+              (sampledAtMs - this.previousDiskIo.sampledAtMs) / 1000,
+            )
+          : null;
+        const rate = (current, previous) =>
+          elapsedSeconds == null
+            ? null
+            : Math.max(0, Math.round((current - previous) / elapsedSeconds));
+        diskIo = {
+          readBytesPerSecond: this.previousDiskIo
+            ? rate(totals.readBytes, this.previousDiskIo.readBytes)
+            : null,
+          writeBytesPerSecond: this.previousDiskIo
+            ? rate(totals.writeBytes, this.previousDiskIo.writeBytes)
+            : null,
+          readsPerSecond: this.previousDiskIo
+            ? rate(totals.reads, this.previousDiskIo.reads)
+            : null,
+          writesPerSecond: this.previousDiskIo
+            ? rate(totals.writes, this.previousDiskIo.writes)
+            : null,
+          busyPercent:
+            elapsedSeconds == null || !this.previousDiskIo
+              ? null
+              : percent(
+                  (Math.max(0, totals.busyMs - this.previousDiskIo.busyMs) /
+                    (elapsedSeconds * 1000)) *
+                    100,
+                ),
+        };
+        this.previousDiskIo = { ...totals, sampledAtMs };
+      }
+    } catch (error) {
+      collectionErrors.push({
+        source: "disk-io",
+        code: String(error?.code || "DISK_IO_READ_FAILED"),
+      });
+    }
+
     const loadAverage = os.loadavg();
     const point = {
       sampledAt,
@@ -174,6 +258,11 @@ export class MetricSampler {
         : null,
       networkRxBytesPerSecond: network?.rxBytesPerSecond ?? null,
       networkTxBytesPerSecond: network?.txBytesPerSecond ?? null,
+      diskReadBytesPerSecond: diskIo?.readBytesPerSecond ?? null,
+      diskWriteBytesPerSecond: diskIo?.writeBytesPerSecond ?? null,
+      diskReadsPerSecond: diskIo?.readsPerSecond ?? null,
+      diskWritesPerSecond: diskIo?.writesPerSecond ?? null,
+      diskIoBusyPercent: diskIo?.busyPercent ?? null,
     };
     this.latest = {
       sampledAt,
@@ -186,6 +275,7 @@ export class MetricSampler {
       },
       disk,
       network,
+      diskIo,
       uptimeSeconds: Math.floor(os.uptime()),
       collectionErrors,
     };

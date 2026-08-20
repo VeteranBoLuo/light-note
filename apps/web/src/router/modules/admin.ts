@@ -14,7 +14,35 @@ const adminRouter: RouteRecordRaw[] = [
       requireAuth: true,
       roles: [RoleEnum.Root],
     },
-    component: () => import('@/view/serverManagement/ServerManagement.vue'),
+    redirect: '/serverManagement/overview',
+    component: () => import('@/view/serverManagement/ServerManagementShell.vue'),
+    children: [
+      {
+        path: 'overview',
+        meta: { infraModule: 'overview' },
+        component: () => import('@/view/serverManagement/ServerManagement.vue'),
+      },
+      {
+        path: 'services',
+        meta: { infraModule: 'services' },
+        component: () => import('@/view/serverManagement/ServerServices.vue'),
+      },
+      {
+        path: 'security',
+        meta: { infraModule: 'security' },
+        component: () => import('@/view/serverManagement/ServerSecurity.vue'),
+      },
+      {
+        path: 'storage',
+        meta: { infraModule: 'storage' },
+        component: () => import('@/view/serverManagement/ServerStorage.vue'),
+      },
+      {
+        path: 'events',
+        meta: { infraModule: 'events' },
+        component: () => import('@/view/serverManagement/ServerEvents.vue'),
+      },
+    ],
   },
   {
     meta: {

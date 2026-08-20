@@ -743,10 +743,11 @@ page_view（打开站点）→ wall_hit（触发拦截）→ cta_click（点注�
 
 ## 本机服务器管理（Host Agent）
 
-- PC 顶栏 Root「管理」下拉与移动个人中心同时提供「后台管理」和「服务器管理」；`/serverManagement` 仍在现有应用外壳内，由 Root 路由守卫保护。
+- PC 顶栏 Root「管理」下拉与移动个人中心同时提供「后台管理」和「服务器管理」；`/serverManagement` 仍在现有应用外壳内，由 Root 路由守卫保护。服务器管理内部使用自己的响应式模块壳：PC 左侧导航、移动端 `BTabs`，固定子路由为 `/overview`、`/services`、`/security`、`/storage`、`/events`。
 - 浏览器只访问 Express 的 `/api/infra/*`。Express 是控制面，继续承担登录态、每请求角色校验、管理员预览失败关闭、高风险确认、意图/终态审计和幂等键派生。
 - `apps/host-agent` 是独立 Node.js 进程，不是 AI Agent。它只监听 `/run/lightnote-host-agent/agent.sock`，不开放 TCP 端口；Express 与 Agent 共享 `@lightnote/shared/host-agent-protocol` 版本化封闭协议。
-- Agent 采集 CPU、负载、内存、根磁盘、网络速率、主机与服务状态，内存保留最近 60 分钟采样；日志按服务白名单、行数、输出大小和脱敏规则返回，不提供任意路径读取。
+- Agent 采集 CPU、负载、内存、根磁盘容量与 inode、物理块设备 IO、网络速率、监听端口、SSH/防火墙/Fail2ban/安全更新事实以及主机与服务状态，内存保留最近 60 分钟采样；日志按服务白名单、行数、输出大小和脱敏规则返回，不提供任意路径读取。安全页不生成不透明分数，而由 Express 根据事实派生稳定检查项，并分别标注通过、风险或未知；未知不得算作通过。
+- 实时指标由 Agent 每 3 秒采样；服务快照在 Agent 内最多缓存 10 秒，安全慢检查最多缓存 5 分钟，存储页复用实时采样历史。分域 Socket/API 端点为 `/dashboard`、`/services`、`/storage`、`/security`，禁止把 SSH 日志、APT 或防火墙等慢检查塞回 3 秒仪表盘。概览前台默认每 3 秒刷新，可切换为 10 秒、30 秒、1 分钟、5 分钟或暂停；服务页 10 秒、存储页 3 秒、审计事件页 30 秒，安全页按需刷新。页面隐藏时停止请求，已有可用数据后的瞬时失败保留旧快照并明确提示。所有被动快照均不写通用 API 日志，运维写动作继续进入独立审计。
 - 写动作只有 `nginx.reload` 与三个固定 Worker 的 `service.restart`。Nginx 必须匹配受支持的 systemd 或固定面板路径拓扑并确认主进程身份，才通过 root 所有的固定 helper 先 `nginx -t` 再 reload；PM2 只允许精确进程名且不使用 `--update-env`。非 root PM2 优先由同账户 Agent 直连；遗留 root PM2 只允许通过 `0660 root:<agent-user>` 的专用 Unix Socket 请求 systemd 按连接启动的 root helper，以固定 action/target 读取受限状态/日志和重启三个固定 Worker，不共享 `/root/.pm2`。面板托管的 Nginx/Redis 状态也由 helper 校验固定 PID 文件与 `/proc/<pid>/exe` 后返回，避免把失效的兼容 systemd unit 当成真实状态。Agent 自身继续运行于 `no_new_privileges` 沙箱，不使用 sudo；轻笺 API、MySQL、Redis 没有页面重启能力。
 - 每次动作由 Root 填写原因并显式确认，Express 先写 intent 审计；Agent 按派生 job ID 在执行前原子落「结果未知」占位，再以成功/失败终态回执原子替换。同一幂等键并发、网络重试或 Agent 中途崩溃都不会自动重复执行；Express 再写 succeeded/failed 终态审计。
 - Agent 不加载后端 `.env`，不持有数据库、Redis、对象存储或 SSH 凭据。部署配置只含 Socket、状态目录、二进制和 PM2 home 等非敏感绝对路径；详细安装与回滚见 `apps/host-agent/README.md`。

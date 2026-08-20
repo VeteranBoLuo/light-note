@@ -5,7 +5,8 @@ const apiBasePost = vi.fn();
 
 vi.mock('@/http/request', () => ({ apiBaseGet, apiBasePost }));
 
-const { executeInfraAction, getInfraDashboard, getInfraLogs, InfraApiError } = await import('./infraApi');
+const { executeInfraAction, getInfraDashboard, getInfraLogs, getInfraSecurity, InfraApiError } =
+  await import('./infraApi');
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -45,5 +46,14 @@ describe('infraApi 状态信封', () => {
     const error = await request.catch((value) => value);
     expect(error).toBeInstanceOf(InfraApiError);
     expect(error).toMatchObject({ data: { receipt: { state: 'failed' } } });
+  });
+
+  it('分域快照沿用统一错误信封，不把 Agent 离线当成空安全数据', async () => {
+    apiBaseGet.mockResolvedValue({ status: 503, msg: '安全快照暂时不可用', data: { code: 'HOST_AGENT_OFFLINE' } });
+    await expect(getInfraSecurity()).rejects.toMatchObject({
+      name: 'InfraApiError',
+      status: 503,
+      code: 'HOST_AGENT_OFFLINE',
+    });
   });
 });

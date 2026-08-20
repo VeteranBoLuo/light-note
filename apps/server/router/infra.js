@@ -1,6 +1,13 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import { executeInfraAction, getInfraDashboard, getInfraLogs } from '../router_handle/infraHandle.js';
+import {
+  executeInfraAction,
+  getInfraDashboard,
+  getInfraLogs,
+  getInfraSecurity,
+  getInfraServices,
+  getInfraStorage,
+} from '../router_handle/infraHandle.js';
 
 const router = express.Router();
 const actionLimiter = rateLimit({
@@ -17,6 +24,9 @@ const actionLimiter = rateLimit({
 });
 
 router.get('/dashboard', getInfraDashboard);
+router.get('/services', getInfraServices);
+router.get('/storage', getInfraStorage);
+router.get('/security', getInfraSecurity);
 router.get('/logs/:serviceId', getInfraLogs);
 router.post('/actions', actionLimiter, executeInfraAction);
 

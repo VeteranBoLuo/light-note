@@ -13,6 +13,7 @@ const DIRECT_AUDIT_ACTION_DEFINITIONS = [
 const ACTION_DEFINITIONS = [...listAdminActionDefinitions(), ...DIRECT_AUDIT_ACTION_DEFINITIONS];
 const ACTIONS = new Set(['all', ...ACTION_DEFINITIONS.map((item) => item.action)]);
 const OUTCOMES = new Set(['all', 'intent', 'succeeded', 'failed', 'denied']);
+const ACTION_SCOPES = new Set(['all', 'infra']);
 
 function safeDate(value, endOfDay = false) {
   const date = String(value || '').trim();
@@ -40,6 +41,7 @@ export async function getAdminOperationAudits(req, res) {
     const currentPage = Math.max(Number(req.body?.currentPage) || 1, 1);
     const offset = (currentPage - 1) * pageSize;
     const action = ACTIONS.has(req.body?.action) ? req.body.action : 'all';
+    const actionScope = ACTION_SCOPES.has(req.body?.actionScope) ? req.body.actionScope : 'all';
     const outcome = OUTCOMES.has(req.body?.outcome) ? req.body.outcome : 'all';
     const keyword = String(req.body?.keyword || '')
       .trim()
@@ -52,6 +54,8 @@ export async function getAdminOperationAudits(req, res) {
     if (action !== 'all') {
       where.push('a.action = ?');
       params.push(action);
+    } else if (actionScope === 'infra') {
+      where.push("a.action LIKE 'infra.%'");
     }
     if (outcome !== 'all') {
       where.push('a.outcome = ?');

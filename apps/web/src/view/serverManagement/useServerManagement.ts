@@ -2,10 +2,37 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import { executeInfraAction, getInfraDashboard, type InfraActionPayload, type InfraAgentStatus } from '@/api/infraApi';
 import type { HostAgentAction, HostAgentDashboard, HostAgentServiceId } from '@lightnote/shared/host-agent-protocol';
 
-const POLL_INTERVAL_MS = 10_000;
-const STALE_AFTER_MS = 15_000;
+const DEFAULT_REFRESH_INTERVAL_MS = 3_000;
+const REFRESH_INTERVAL_VALUES = [0, 3_000, 10_000, 30_000, 60_000, 300_000] as const;
+const REFRESH_INTERVAL_STORAGE_KEY = 'lightnote:infra-refresh-interval-ms';
 const ACTION_KEY_STORAGE_PREFIX = 'lightnote:infra-action:';
 const ACTION_KEY_PATTERN = /^[a-zA-Z0-9-]{16,64}$/u;
+
+export type ServerRefreshIntervalMs = (typeof REFRESH_INTERVAL_VALUES)[number];
+
+function normalizeRefreshInterval(value: unknown): ServerRefreshIntervalMs {
+  const interval = Number(value);
+  return REFRESH_INTERVAL_VALUES.includes(interval as ServerRefreshIntervalMs)
+    ? (interval as ServerRefreshIntervalMs)
+    : DEFAULT_REFRESH_INTERVAL_MS;
+}
+
+function readStoredRefreshInterval() {
+  try {
+    const value = window.localStorage.getItem(REFRESH_INTERVAL_STORAGE_KEY);
+    return value === null ? DEFAULT_REFRESH_INTERVAL_MS : normalizeRefreshInterval(value);
+  } catch {
+    return DEFAULT_REFRESH_INTERVAL_MS;
+  }
+}
+
+function storeRefreshInterval(value: ServerRefreshIntervalMs) {
+  try {
+    window.localStorage.setItem(REFRESH_INTERVAL_STORAGE_KEY, String(value));
+  } catch {
+    // 隐私模式或存储被禁用时，本次页面会话仍可正常使用所选间隔。
+  }
+}
 
 function createIdempotencyKey() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
@@ -50,12 +77,37 @@ export function useServerManagement() {
   const refreshing = ref(false);
   const refreshError = ref('');
   const lastLoadedAt = ref(0);
+  const refreshIntervalMs = ref<ServerRefreshIntervalMs>(readStoredRefreshInterval());
+  const nextRefreshAt = ref<number | null>(null);
+  const now = ref(Date.now());
   const actionKeys = new Map<string, string>();
   let refreshTask: Promise<void> | null = null;
-  let timer: number | null = null;
+  let refreshTimer: number | null = null;
+  let clockTimer: number | null = null;
+  let mounted = false;
+
+  function clearRefreshSchedule() {
+    if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+    refreshTimer = null;
+    nextRefreshAt.value = null;
+  }
+
+  function scheduleNextRefresh(delayMs: number = refreshIntervalMs.value) {
+    clearRefreshSchedule();
+    if (!mounted || refreshIntervalMs.value === 0 || document.visibilityState !== 'visible') return;
+    const safeDelay = Math.max(0, Number(delayMs) || 0);
+    now.value = Date.now();
+    nextRefreshAt.value = now.value + safeDelay;
+    refreshTimer = window.setTimeout(() => {
+      refreshTimer = null;
+      nextRefreshAt.value = null;
+      void refresh();
+    }, safeDelay);
+  }
 
   async function refresh() {
     if (refreshTask) return refreshTask;
+    clearRefreshSchedule();
     refreshing.value = true;
     refreshTask = (async () => {
       try {
@@ -67,21 +119,53 @@ export function useServerManagement() {
         refreshError.value = '';
         lastLoadedAt.value = Date.now();
       } catch (error) {
-        agentStatus.value = 'offline';
-        agentCode.value = error && typeof error === 'object' && 'code' in error ? String(error.code || '') : '';
+        // 已经有可用仪表盘时，网络或登录态的瞬时失败只标记刷新异常；
+        // 保留上一次权威数据，避免后台轮询把整个页面闪成离线空态。
+        if (!dashboard.value) {
+          agentStatus.value = 'offline';
+          agentCode.value = error && typeof error === 'object' && 'code' in error ? String(error.code || '') : '';
+        }
         refreshError.value = errorMessage(error);
       } finally {
         initialLoading.value = false;
         refreshing.value = false;
         refreshTask = null;
+        scheduleNextRefresh();
       }
     })();
     return refreshTask;
   }
 
   function onVisibilityChange() {
-    if (document.visibilityState !== 'visible') return;
-    if (Date.now() - lastLoadedAt.value >= STALE_AFTER_MS) void refresh();
+    now.value = Date.now();
+    if (document.visibilityState !== 'visible') {
+      clearRefreshSchedule();
+      return;
+    }
+    if (refreshIntervalMs.value === 0) return;
+    const elapsed = Math.max(0, Date.now() - lastLoadedAt.value);
+    if (!lastLoadedAt.value || elapsed >= refreshIntervalMs.value) {
+      void refresh();
+      return;
+    }
+    scheduleNextRefresh(refreshIntervalMs.value - elapsed);
+  }
+
+  function setRefreshInterval(value: unknown) {
+    const interval = normalizeRefreshInterval(value);
+    refreshIntervalMs.value = interval;
+    storeRefreshInterval(interval);
+    if (!mounted) return;
+    if (interval === 0 || document.visibilityState !== 'visible') {
+      clearRefreshSchedule();
+      return;
+    }
+    const elapsed = Math.max(0, Date.now() - lastLoadedAt.value);
+    if (!lastLoadedAt.value || elapsed >= interval) {
+      void refresh();
+      return;
+    }
+    scheduleNextRefresh(interval - elapsed);
   }
 
   async function runAction(
@@ -115,16 +199,20 @@ export function useServerManagement() {
   }
 
   onMounted(() => {
+    mounted = true;
+    now.value = Date.now();
+    clockTimer = window.setInterval(() => {
+      now.value = Date.now();
+    }, 1_000);
     void refresh();
-    timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void refresh();
-    }, POLL_INTERVAL_MS);
     document.addEventListener('visibilitychange', onVisibilityChange);
   });
 
   onBeforeUnmount(() => {
-    if (timer !== null) window.clearInterval(timer);
-    timer = null;
+    mounted = false;
+    clearRefreshSchedule();
+    if (clockTimer !== null) window.clearInterval(clockTimer);
+    clockTimer = null;
     document.removeEventListener('visibilitychange', onVisibilityChange);
   });
 
@@ -135,10 +223,24 @@ export function useServerManagement() {
     initialLoading,
     refreshing,
     refreshError,
+    lastLoadedAt,
+    refreshIntervalMs,
+    nextRefreshAt,
+    nextRefreshInSeconds: computed(() =>
+      nextRefreshAt.value === null ? null : Math.max(0, Math.ceil((nextRefreshAt.value - now.value) / 1_000)),
+    ),
+    now,
     isOnline: computed(() => agentStatus.value === 'online' && Boolean(dashboard.value)),
+    isAutoRefreshPaused: computed(() => refreshIntervalMs.value === 0),
     refresh,
+    setRefreshInterval,
     runAction,
   };
 }
 
-export const serverManagementRuntime = { POLL_INTERVAL_MS, STALE_AFTER_MS, ACTION_KEY_STORAGE_PREFIX };
+export const serverManagementRuntime = {
+  DEFAULT_REFRESH_INTERVAL_MS,
+  REFRESH_INTERVAL_VALUES,
+  REFRESH_INTERVAL_STORAGE_KEY,
+  ACTION_KEY_STORAGE_PREFIX,
+};

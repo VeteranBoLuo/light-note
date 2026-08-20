@@ -15,6 +15,10 @@ describe('API 日志跳过策略', () => {
     '/api/support/afdian/oauth/callback?code=temporary&state=temporary',
     '/api/community-chat/access',
     '/api/community-chat/rooms',
+    '/api/infra/dashboard',
+    '/api/infra/services',
+    '/api/infra/storage',
+    '/api/infra/security',
     '/api/common/recordAiEvent',
     '/api/me',
   ])('跳过无审计价值的被动读取接口：%s', (url) => {

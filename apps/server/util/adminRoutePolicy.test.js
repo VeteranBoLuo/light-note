@@ -97,6 +97,9 @@ describe('adminRoutePolicyMiddleware', () => {
   it('服务器指标、日志和动作在任何管理员代管上下文都失败关闭', () => {
     for (const [method, path] of [
       ['GET', '/infra/dashboard'],
+      ['GET', '/infra/services'],
+      ['GET', '/infra/storage'],
+      ['GET', '/infra/security'],
       ['GET', '/infra/logs/nginx'],
       ['POST', '/infra/actions'],
     ]) {
@@ -105,9 +108,7 @@ describe('adminRoutePolicyMiddleware', () => {
       adminRoutePolicyMiddleware(createReq(path, method, 'maintain'), res, next);
       expect(next).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(403);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }),
-      );
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }));
     }
   });
 
@@ -203,9 +204,7 @@ describe('adminRoutePolicyMiddleware', () => {
       adminRoutePolicyMiddleware(createReq('/todo/v2/calendar-range', 'POST', mode), res, next);
       expect(next).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(403);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }),
-      );
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }));
     }
   });
 

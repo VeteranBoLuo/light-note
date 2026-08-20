@@ -1,6 +1,6 @@
 # Light Note Host Agent
 
-Host Agent 是服务器管理页的本机执行端，不是 AI Agent。它只监听 Unix Domain Socket，负责采集本机指标、读取受限日志，并执行极少量白名单运维动作。
+Host Agent 是服务器管理页的本机执行端，不是 AI Agent。它只监听 Unix Domain Socket，负责采集本机指标、服务资源、容量/inode/磁盘 IO、监听端口与安全事实，读取受限日志，并执行极少量白名单运维动作。
 
 ## 边界
 
@@ -10,6 +10,8 @@ Host Agent 是服务器管理页的本机执行端，不是 AI Agent。它只监
 - `lightnote-api`、MySQL、Redis 仅观察，不能从页面重启。
 - 可写动作只有：Nginx 处于已识别的 systemd 或面板托管拓扑且配置校验通过后重载，以及三个固定 Worker 的 PM2 重启。生产机仍由 root PM2 托管时，状态、日志和重启只经 root 所有、由 systemd Socket 按请求启动的 helper 进入；Socket 仅允许 Agent 账户连接，helper 内部再次校验固定 action/target，输出 PM2 状态前删除全部环境字段，日志先脱敏。
 - 命令均使用绝对路径、参数数组和 `shell: false`，并受超时、输出大小、日志脱敏和持久化幂等回执保护。Agent 在执行命令前先原子落「结果未知」占位；即使进程中途崩溃，相同 job ID 也只会返回原回执，不会自动重放。
+- 实时指标每 3 秒采样并保留 60 分钟；服务快照最多缓存 10 秒，SSH/防火墙/Fail2ban/本地 APT 索引等安全慢检查最多缓存 5 分钟。同一缓存窗口内的并发请求复用一个采集任务，慢检查不得放入实时 `/v1/dashboard`。
+- 安全采集只返回结构化事实和限定数量的 SSH 登录摘要，不返回完整认证日志；安全判断由 Express 生成“通过 / 风险 / 未知”检查项，采集失败必须保持未知，不能当作通过。
 
 ## 运行账户与 PM2
 
