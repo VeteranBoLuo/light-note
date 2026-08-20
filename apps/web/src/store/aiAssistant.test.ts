@@ -6,10 +6,11 @@ import useAiAssistantStore, {
   resolveAiAssistantFollowUpMaterialSnapshot,
   resolveAiAssistantMaterialClarificationToken,
   resolveAiAssistantPendingNoteDraftReference,
+  resolveAiAssistantSourceSetCandidateId,
   resolveAiAssistantSourceSetId,
   resolveAiAssistantRequestEdgeStatus,
   resolveAiAssistantIdentity,
-  shouldAutoInheritAiAssistantMaterials,
+  shouldOfferAiAssistantSourceSetCandidate,
   type AiAssistantIdentity,
 } from './aiAssistant';
 
@@ -168,13 +169,58 @@ describe('材料生命周期:默认一次性(P0-A/B)', () => {
       },
     ];
 
-    expect(shouldAutoInheritAiAssistantMaterials('不够详细，重新生成')).toBe(true);
-    expect(shouldAutoInheritAiAssistantMaterials('今天天气怎么样')).toBe(false);
-    expect(shouldAutoInheritAiAssistantMaterials('请详细介绍深圳旅游')).toBe(false);
-    expect(shouldAutoInheritAiAssistantMaterials('补充一个新的待办')).toBe(false);
+    expect(shouldOfferAiAssistantSourceSetCandidate('不够详细，重新生成')).toBe(true);
+    expect(shouldOfferAiAssistantSourceSetCandidate('今天天气怎么样')).toBe(false);
+    expect(shouldOfferAiAssistantSourceSetCandidate('请详细介绍深圳旅游')).toBe(false);
+    expect(shouldOfferAiAssistantSourceSetCandidate('补充一个新的待办')).toBe(false);
     expect(resolveAiAssistantFollowUpMaterialSnapshot(messages)?.contextRefs).toEqual([
       { type: 'bookmark', id: 'bookmark-1', title: '示例书签' },
     ]);
+  });
+
+  it('完整的新范围查询不提交旧 Source Set，明确承接才提交服务端候选', () => {
+    const sourceSetId = 'd7f5f8f6-4ca0-4d14-8a4d-88c813e3b001';
+    const messages = [
+      {
+        id: 'assistant-1',
+        role: 'assistant' as const,
+        content: '上一轮材料回答',
+        timestamp: new Date(),
+        resolvedGrounding: {
+          schemaVersion: 2 as const,
+          enabled: true,
+          mode: 'current_explicit_only' as const,
+          historyPolicy: 'discourse_projection_only' as const,
+          allowedSourceCount: 2,
+          sourcesUsedCount: 2,
+          sourceSubsetValid: true,
+          sourceSetId,
+          materialMode: 'current_explicit' as const,
+        },
+      },
+    ];
+
+    expect(resolveAiAssistantSourceSetCandidateId(messages, '查看最近 7 天书签的详细链接')).toBe('');
+    expect(resolveAiAssistantSourceSetCandidateId(messages, '继续分析这些材料')).toBe(sourceSetId);
+    expect(resolveAiAssistantSourceSetCandidateId(messages, '把上面第二个翻译成英文')).toBe(sourceSetId);
+  });
+
+  it('工作区回答的公开引用不能反向冒充 Source Set 候选', () => {
+    const messages = [
+      {
+        id: 'assistant-workspace',
+        role: 'assistant' as const,
+        content: '最近 7 天共有 6 条书签和 9 条笔记。',
+        timestamp: new Date(),
+        entityRefs: [
+          { type: 'note' as const, id: 'note-1', title: '尺寸' },
+          { type: 'bookmark' as const, id: 'bookmark-1', title: '百度' },
+        ],
+      },
+    ];
+
+    expect(resolveAiAssistantSourceSetCandidateId(messages, '继续查看这些书签')).toBe('');
+    expect(resolveAiAssistantFollowUpMaterialSnapshot(messages)).toBeNull();
   });
 
   it('确认操作结算轮即使没有普通来源，也能恢复父消息的原始引用', () => {

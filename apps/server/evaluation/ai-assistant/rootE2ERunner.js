@@ -7,11 +7,16 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 import { getAgentCapabilityByToolName } from '../../util/agent/capabilityRegistry.js';
+import { parseTimeRange } from '../../util/agent/timeRange.js';
 import { ROOT_E2E_TOOL_CASES, rootE2EToolNames, selectRootE2ECases } from './rootE2ECases.js';
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_ROOT = path.resolve(moduleDir, '../..');
-const CLIENT_CAPABILITIES = Object.freeze(['agent_interaction_v1', 'agent_continuation_v1']);
+export const ROOT_E2E_CLIENT_CAPABILITIES = Object.freeze([
+  'agent_interaction_v1',
+  'agent_continuation_v1',
+  'grounding_scope_v2',
+]);
 const PROVIDERS = new Set(['deepseek', 'qwen']);
 const GENERIC_FAILURE_PATTERNS = Object.freeze([
   /AI\s*没有返回可核验的语义计划/iu,
@@ -33,6 +38,7 @@ export function parseRootE2EArgs(argv = []) {
     format: 'text',
     artifactRegression: true,
     artifactRefinementRounds: 5,
+    groundingScopeRegression: false,
     caseIds: [],
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -41,6 +47,7 @@ export function parseRootE2EArgs(argv = []) {
     if (arg === '--live') options.live = true;
     else if (arg === '--execute-writes') options.executeWrites = true;
     else if (arg === '--no-artifact-regression') options.artifactRegression = false;
+    else if (arg === '--grounding-scope-regression') options.groundingScopeRegression = true;
     else if (arg === '--artifact-refinement-rounds') {
       options.artifactRefinementRounds = Number(argv[++index]);
     } else if (arg === '--suite') options.suite = argv[++index] || 'full';
@@ -59,6 +66,10 @@ export function parseRootE2EArgs(argv = []) {
   const knownCaseIds = new Set(ROOT_E2E_TOOL_CASES.map((item) => item.id));
   const unknownCaseIds = options.caseIds.filter((id) => !knownCaseIds.has(id));
   if (unknownCaseIds.length) throw new Error(`未知用例：${unknownCaseIds.join(',')}`);
+  const requestedCaseIds = new Set(options.caseIds);
+  const selectedCases = selectRootE2ECases(options.suite).filter(
+    (item) => !requestedCaseIds.size || requestedCaseIds.has(item.id),
+  );
   if (!PROVIDERS.has(options.provider)) throw new Error('--provider 仅支持 deepseek 或 qwen');
   if (!['text', 'json'].includes(options.format)) throw new Error('--format 仅支持 text 或 json');
   if (
@@ -68,11 +79,12 @@ export function parseRootE2EArgs(argv = []) {
   ) {
     throw new Error('--artifact-refinement-rounds 仅支持 1 到 5');
   }
-  if (options.live && options.suite === 'full' && !options.executeWrites) {
-    throw new Error('完整真实链路必须显式添加 --execute-writes，确认允许写入并清理专属测试夹具');
-  }
-  if (options.live && options.artifactRegression && !options.executeWrites) {
-    throw new Error('笔记产物回归会确认执行专属测试笔记，必须显式添加 --execute-writes');
+  if (
+    options.live &&
+    !options.executeWrites &&
+    (options.artifactRegression || selectedCases.some((item) => item.kind === 'write'))
+  ) {
+    throw new Error('所选真实链路包含写操作或笔记产物回归，必须显式添加 --execute-writes');
   }
   return options;
 }
@@ -238,18 +250,35 @@ async function countToday(pool, table, ownerColumn, ownerId = null) {
 
 export function answerMentionsCount(answer, count) {
   const text = String(answer || '');
-  if (Number(count) === 0 && /(?:没有(?:找到|新增|查询到)?|未找到|暂无)[^。；;\n]{0,18}(?:笔记|记录)/u.test(text)) {
+  if (
+    Number(count) === 0 &&
+    /(?:没有(?:找到|新增|查询到)?|未找到|暂无)[^。；;\n]{0,18}(?:笔记|书签|记录)/u.test(text)
+  ) {
     return true;
   }
   const escaped = String(count).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(?:共|有|新增|创建|笔记|用户)[^\\d]{0,12}${escaped}(?:\\s*(?:个|位|篇|条))?`, 'u').test(text);
+  const chineseDigits = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+  const numericCount = Number(count);
+  let chinese = '';
+  if (Number.isInteger(numericCount) && numericCount >= 0 && numericCount < 100) {
+    if (numericCount < 10) chinese = chineseDigits[numericCount];
+    else {
+      const tens = Math.floor(numericCount / 10);
+      const ones = numericCount % 10;
+      chinese = `${tens === 1 ? '' : chineseDigits[tens]}十${ones ? chineseDigits[ones] : ''}`;
+    }
+  }
+  const countPattern = chinese ? `(?:${escaped}|${chinese})` : escaped;
+  return new RegExp(`(?:共|有|新增|创建|笔记|书签|用户)[^\\d]{0,12}${countPattern}(?:\\s*(?:个|位|篇|条))?`, 'u').test(
+    text,
+  );
 }
 
 async function executeConfirmation({ handlers, user, confirmation, runId }) {
   const requestBody = {
     confirmationToken: confirmation.token,
     sessionId: confirmation.sessionId,
-    clientCapabilities: [...CLIENT_CAPABILITIES],
+    clientCapabilities: [...ROOT_E2E_CLIENT_CAPABILITIES],
     ...(confirmation.continuation?.token ? { continuationToken: confirmation.continuation.token } : {}),
   };
   const request = makeRequest({
@@ -508,7 +537,7 @@ async function runToolCase({ smokeCase, state, pool, handlers, toolsByName, opti
       stream: false,
       history: [],
       scope: { mode: 'workspace', externalWeb: smokeCase.externalWeb === true },
-      clientCapabilities: [...CLIENT_CAPABILITIES],
+      clientCapabilities: [...ROOT_E2E_CLIENT_CAPABILITIES],
       timeZone: 'Asia/Shanghai',
       ...(smokeCase.attachment ? { attachmentIds: [state.attachmentId] } : {}),
     };
@@ -585,6 +614,140 @@ async function runToolCase({ smokeCase, state, pool, handlers, toolsByName, opti
   }
 }
 
+async function runGroundingScopeRegression({ state, pool, handlers }) {
+  const startedAt = Date.now();
+  const firstMessage = '分别列出我最近 7 天新增的书签和笔记数量与标题。';
+  const secondMessage = '查看最近 7 天书签的详细链接，并明确说明总数。';
+  try {
+    const firstRequest = makeRequest({
+      user: state.user,
+      body: {
+        message: firstMessage,
+        sessionId: '',
+        stream: false,
+        history: [],
+        scope: { mode: 'workspace', externalWeb: false },
+        clientCapabilities: [...ROOT_E2E_CLIENT_CAPABILITIES],
+        timeZone: 'Asia/Shanghai',
+      },
+      fingerprint: `${state.runId}-grounding-scope-mixed`,
+    });
+    const first = await invokeHandler(handlers.agentChat, firstRequest);
+    const firstData = first.body?.data || {};
+    if (
+      first.statusCode !== 200 ||
+      Number(first.body?.status) !== 200 ||
+      answerFailed(firstData.response) ||
+      !firstData.requestId
+    ) {
+      throw new Error(firstData.code || 'ROOT_E2E_GROUNDING_FIRST_TURN_FAILED');
+    }
+    const firstLog = await waitForAgentLog(pool, firstData.requestId);
+    const firstTools = parseJsonArray(firstLog.tools_used);
+    for (const toolName of ['query_bookmarks', 'query_notes']) {
+      if (!firstTools.some((item) => item?.name === toolName && item?.status === 'success')) {
+        throw new Error(`ROOT_E2E_GROUNDING_FIRST_TURN_MISSING_${toolName.toUpperCase()}`);
+      }
+    }
+
+    // 故意模拟旧页面把上轮公开引用反向拼成混合材料。grounding_scope_v2 必须忽略这组
+    // 客户端候选，让第二轮按最新问题重新查询工作区，而不是把某条旧笔记带进书签回答。
+    const [[noteRows], [bookmarkRows]] = await Promise.all([
+      pool.query("SELECT id FROM note WHERE create_by = ? AND del_flag = '0' ORDER BY create_time DESC LIMIT 1", [
+        state.user.id,
+      ]),
+      pool.query('SELECT id FROM bookmark WHERE user_id = ? AND del_flag = 0 ORDER BY create_time DESC LIMIT 1', [
+        state.user.id,
+      ]),
+    ]);
+    if (!noteRows[0]?.id || !bookmarkRows[0]?.id) {
+      throw new Error('ROOT_E2E_GROUNDING_MIXED_FIXTURE_MISSING');
+    }
+    const sessionId = String(firstData.sessionId || '').trim();
+    if (!sessionId) throw new Error('ROOT_E2E_GROUNDING_SESSION_MISSING');
+    const secondRequest = makeRequest({
+      user: state.user,
+      body: {
+        message: secondMessage,
+        sessionId,
+        stream: false,
+        history: [
+          { role: 'user', content: firstMessage },
+          { role: 'assistant', content: String(firstData.response || '') },
+        ],
+        scope: { mode: 'workspace', externalWeb: false },
+        clientCapabilities: [...ROOT_E2E_CLIENT_CAPABILITIES],
+        timeZone: 'Asia/Shanghai',
+        followUpMaterials: {
+          contextRefs: [
+            { type: 'note', id: String(noteRows[0].id) },
+            { type: 'bookmark', id: String(bookmarkRows[0].id) },
+          ],
+          scopeRefs: [],
+          attachmentIds: [],
+        },
+      },
+      fingerprint: `${state.runId}-grounding-scope-bookmarks-only`,
+    });
+    const second = await invokeHandler(handlers.agentChat, secondRequest);
+    const secondData = second.body?.data || {};
+    if (
+      second.statusCode !== 200 ||
+      Number(second.body?.status) !== 200 ||
+      answerFailed(secondData.response) ||
+      !secondData.requestId
+    ) {
+      throw new Error(secondData.code || 'ROOT_E2E_GROUNDING_SECOND_TURN_FAILED');
+    }
+    const secondLog = await waitForAgentLog(pool, secondData.requestId);
+    const secondTools = parseJsonArray(secondLog.tools_used);
+    if (!secondTools.some((item) => item?.name === 'query_bookmarks' && item?.status === 'success')) {
+      throw new Error('ROOT_E2E_GROUNDING_BOOKMARK_QUERY_MISSING');
+    }
+    if (secondTools.some((item) => ['query_notes', 'read_note'].includes(item?.name))) {
+      throw new Error('ROOT_E2E_GROUNDING_NOTE_TOOL_LEAKED');
+    }
+    const sevenDayRange = parseTimeRange('最近 7 天');
+    const [bookmarkCountRows] = await pool.query(
+      `SELECT COUNT(*) AS count FROM bookmark
+        WHERE user_id = ? AND del_flag = 0 AND create_time >= ? AND create_time <= ?`,
+      [state.user.id, sevenDayRange.start, sevenDayRange.end],
+    );
+    const expectedBookmarkCount = Number(bookmarkCountRows[0]?.count || 0);
+    if (!answerMentionsCount(secondData.response, expectedBookmarkCount)) {
+      throw new Error('ROOT_E2E_GROUNDING_BOOKMARK_COUNT_MISMATCH');
+    }
+    if (expectedBookmarkCount > 0 && !(secondData.entityRefs || []).length) {
+      throw new Error('ROOT_E2E_GROUNDING_BOOKMARK_SOURCE_MISSING');
+    }
+    if ((secondData.entityRefs || []).some((item) => item?.type !== 'bookmark')) {
+      throw new Error('ROOT_E2E_GROUNDING_NOTE_SOURCE_LEAKED');
+    }
+    if (
+      secondData.resolvedGrounding?.mode !== 'workspace_query' ||
+      secondData.resolvedGrounding?.materialMode !== 'workspace' ||
+      secondData.resolvedGrounding?.sourceSetId
+    ) {
+      throw new Error('ROOT_E2E_GROUNDING_SCOPE_MISMATCH');
+    }
+    return {
+      id: 'grounding-scope-mixed-to-bookmarks',
+      passed: true,
+      outcome: 'answer',
+      turns: 2,
+      durationMs: Date.now() - startedAt,
+    };
+  } catch (error) {
+    return {
+      id: 'grounding-scope-mixed-to-bookmarks',
+      passed: false,
+      outcome: 'failed',
+      errorCode: stableCode(error),
+      durationMs: Date.now() - startedAt,
+    };
+  }
+}
+
 async function callExpectedFailure({ handler, user, confirmation, runId, expectedStatus, expectedCode }) {
   const request = makeRequest({
     user,
@@ -635,7 +798,7 @@ async function runNoteArtifactRegression({ state, pool, handlers, toolsByName, r
       stream: false,
       history: [],
       scope: { mode: 'workspace', externalWeb: false },
-      clientCapabilities: [...CLIENT_CAPABILITIES],
+      clientCapabilities: [...ROOT_E2E_CLIENT_CAPABILITIES],
       timeZone: 'Asia/Shanghai',
     };
     const sevenDayRequest = makeRequest({
@@ -698,7 +861,7 @@ async function runNoteArtifactRegression({ state, pool, handlers, toolsByName, r
         stream: false,
         history: [{ role: 'user', content: sevenDayMessage }],
         scope: { mode: 'workspace', externalWeb: false },
-        clientCapabilities: [...CLIENT_CAPABILITIES],
+        clientCapabilities: [...ROOT_E2E_CLIENT_CAPABILITIES],
         timeZone: 'Asia/Shanghai',
         pendingNoteDraft: { confirmationId: sevenDayCard.id, confirmationToken: sevenDayCard.token },
         ...clientLikeFollowUpGrounding(sevenDayData),
@@ -751,7 +914,7 @@ async function runNoteArtifactRegression({ state, pool, handlers, toolsByName, r
           stream: false,
           history: [...userHistory],
           scope: { mode: 'workspace', externalWeb: false },
-          clientCapabilities: [...CLIENT_CAPABILITIES],
+          clientCapabilities: [...ROOT_E2E_CLIENT_CAPABILITIES],
           timeZone: 'Asia/Shanghai',
           pendingNoteDraft: { confirmationId: latestCard.id, confirmationToken: latestCard.token },
           ...clientLikeFollowUpGrounding(latestData),
@@ -1089,10 +1252,13 @@ export function formatRootE2EText(report) {
   if (report.dryRun) {
     return `Root 真实链路门禁 dry-run：注册 ${report.coverage.registered} 个工具，矩阵覆盖 ${report.coverage.covered} 个；未调用模型、工具或数据库。`;
   }
+  const formatRegression = (item) =>
+    item?.outcome === 'skipped' ? '未运行' : item?.passed ? '通过' : `未通过(${item?.errorCode || '未知错误'})`;
   const lines = [
     `Root 真实链路门禁：${report.passed ? '通过' : '未通过'}`,
     `Provider：${report.provider}；工具 ${report.summary.passedTools}/${report.summary.totalTools}；写操作 ${report.summary.executedWrites}/${report.summary.totalWrites}；幂等重放 ${report.summary.replayVerified}/${report.summary.totalWrites}`,
-    `笔记 7 天→今天/字数/连续续写：${report.artifact?.passed ? '通过' : `未通过(${report.artifact?.errorCode || '未运行'})`}；夹具清理：${report.cleanup.passed ? '通过' : `未通过(${report.cleanup.errorCode})`}`,
+    `混合来源→仅查书签隔离：${formatRegression(report.groundingScope)}`,
+    `笔记 7 天→今天/字数/连续续写：${formatRegression(report.artifact)}；夹具清理：${report.cleanup.passed ? '通过' : `未通过(${report.cleanup.errorCode})`}`,
     `脱敏报告：${report.reportPath}`,
   ];
   const failures = report.cases.filter((item) => !item.passed);
@@ -1172,6 +1338,7 @@ export async function runRootE2E(options) {
   );
   if (!selectedCases.length) throw new Error('ROOT_E2E_CASE_SELECTION_EMPTY');
   const results = [];
+  let groundingScope = { id: 'grounding-scope-mixed-to-bookmarks', passed: true, outcome: 'skipped' };
   let artifact = { id: 'note-artifact-multiturn-scope-length-refinement', passed: true, outcome: 'skipped' };
   let cleanup = { passed: false, errorCode: 'ROOT_E2E_CLEANUP_NOT_RUN' };
   try {
@@ -1187,6 +1354,10 @@ export async function runRootE2E(options) {
       });
       results.push(item);
       process.stderr.write(formatProgress(item, results.length, selectedCases.length));
+    }
+    if (options.groundingScopeRegression) {
+      groundingScope = await runGroundingScopeRegression({ state, pool, handlers });
+      process.stderr.write(formatProgress(groundingScope, selectedCases.length + 1, selectedCases.length + 1));
     }
     if (options.artifactRegression) {
       artifact = await runNoteArtifactRegression({
@@ -1214,6 +1385,7 @@ export async function runRootE2E(options) {
     coverage.valid &&
     results.length === selectedCases.length &&
     results.every((item) => item.passed) &&
+    groundingScope.passed &&
     artifact.passed &&
     cleanup.passed &&
     (!options.executeWrites || summary.replayVerified === summary.totalWrites);
@@ -1229,6 +1401,7 @@ export async function runRootE2E(options) {
     coverage,
     summary,
     cases: results,
+    groundingScope,
     artifact,
     cleanup,
     reportPath,

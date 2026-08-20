@@ -272,10 +272,9 @@
     resolveAiAssistantFollowUpMaterialSnapshot,
     resolveAiAssistantMaterialClarificationToken,
     resolveAiAssistantPendingNoteDraftReference,
-    resolveAiAssistantSourceSetId,
+    resolveAiAssistantSourceSetCandidateId,
     resolveAiAssistantRequestEdgeStatus,
     resolveAiAssistantIdentity,
-    shouldAutoInheritAiAssistantMaterials,
     type AiAssistantMaterialSnapshot,
     type AiAssistantMessage,
     type AiAssistantRequestLease,
@@ -1793,11 +1792,12 @@
         : null;
     const followUpSourceSetId =
       !actionContinuation &&
+      !pendingNoteDraft &&
       !options.materialSnapshot &&
       !contexts.value.length &&
       !scopeRefs.value.length &&
       !attachments.value.length
-        ? resolveAiAssistantSourceSetId(messages.value)
+        ? resolveAiAssistantSourceSetCandidateId(messages.value, inputText)
         : '';
     const materialClarificationToken =
       !actionContinuation &&
@@ -1807,33 +1807,9 @@
       !attachments.value.length
         ? resolveAiAssistantMaterialClarificationToken(messages.value)
         : '';
-    const autoInheritedMaterialSnapshot =
-      !actionContinuation &&
-      !options.materialSnapshot &&
-      !contexts.value.length &&
-      !scopeRefs.value.length &&
-      !attachments.value.length &&
-      !followUpSourceSetId &&
-      shouldAutoInheritAiAssistantMaterials(inputText)
-        ? resolveAiAssistantFollowUpMaterialSnapshot(messages.value)
-        : null;
-    // 指代/命令正则没命中时不再直接放弃继承：把上轮材料的稳定引用作为候选交给服务端，
-    // 由受约束语义分类判断本轮是否承接（真实追问 83% 不含指代词，"作者是谁""翻译成英文"
-    // 这类问法此前必然丢材料）。候选只含 type+id，是否使用及内容解析都在服务端完成。
-    const followUpMaterialCandidate =
-      !actionContinuation &&
-      !options.materialSnapshot &&
-      !contexts.value.length &&
-      !scopeRefs.value.length &&
-      !attachments.value.length &&
-      !followUpSourceSetId &&
-      !autoInheritedMaterialSnapshot
-        ? resolveAiAssistantFollowUpMaterialSnapshot(messages.value)
-        : null;
     const materialSnapshot = actionContinuation
       ? createAiAssistantMaterialSnapshot([], [], [])
       : options.materialSnapshot ||
-        autoInheritedMaterialSnapshot ||
         createAiAssistantMaterialSnapshot(contexts.value, attachments.value, scopeRefs.value);
     const contextSnapshot = materialSnapshot.contextRefs;
     const scopeSnapshot = materialSnapshot.scopeRefs;
@@ -2220,7 +2196,7 @@
             mode:
               contextSnapshot.length || scopeSnapshot.length || attachmentSnapshot.length
                 ? 'explicit'
-                : followUpSourceSetId || followUpMaterialCandidate
+                : followUpSourceSetId
                   ? 'inherit_candidate'
                   : scopeMode.value === 'workspace'
                     ? 'workspace'
@@ -2232,26 +2208,6 @@
           },
           ...(pendingNoteDraft ? { pendingNoteDraft } : {}),
           ...(materialClarificationToken ? { materialClarificationToken } : {}),
-          ...(followUpMaterialCandidate &&
-          (followUpMaterialCandidate.contextRefs.length ||
-            followUpMaterialCandidate.scopeRefs.length ||
-            followUpMaterialCandidate.attachmentRefs.length)
-            ? {
-                followUpMaterials: {
-                  contextRefs: followUpMaterialCandidate.contextRefs.map((item) => ({
-                    type: item.type,
-                    id: item.id,
-                  })),
-                  scopeRefs: followUpMaterialCandidate.scopeRefs.map((item) => ({
-                    type: item.type,
-                    id: item.id,
-                  })),
-                  attachmentIds: followUpMaterialCandidate.attachmentRefs
-                    .filter((item) => item.status === 'ready')
-                    .map((item) => item.id),
-                },
-              }
-            : {}),
           scope: {
             mode: scopeMode.value,
             externalWeb: false,
@@ -2514,13 +2470,11 @@
   }
 
   // 常见问题与回答后的推荐项是一键提问；附件提示词仍由 ChatInputSection 负责回填并允许修改。
-  // 推荐追问自动继承上一回答实际引用的材料(仅这一次,不写回输入区)。
+  // 推荐问题只发送它自身的文字。上一轮公开来源可能是工作区查询的截断展示，不能被
+  // 静默升级成本轮显式材料；确实需要沿用时使用下方「继续基于上轮来源」入口。
   const handleRecommendationClick = createQuickQuestionDispatcher({
     isBusy: () => isLoading.value,
-    send: (question) => {
-      const inherited = resolveAiAssistantSourceSetId(messages.value) ? null : buildFollowUpMaterialSnapshot();
-      return sendMessage({ inputText: question, ...(inherited ? { materialSnapshot: inherited } : {}) });
-    },
+    send: (question) => sendMessage({ inputText: question }),
   });
 
   // 「继续基于上轮来源」:手动追问的显式入口 —— 把上轮实际引用的材料恢复为

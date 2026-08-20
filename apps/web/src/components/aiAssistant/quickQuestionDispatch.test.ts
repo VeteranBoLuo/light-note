@@ -1,5 +1,9 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { createQuickQuestionDispatcher } from './quickQuestionDispatch';
+
+const chatContainerSource = readFileSync(resolve(process.cwd(), 'src/view/aiAssistant/ChatContainer.vue'), 'utf8');
 
 describe('createQuickQuestionDispatcher', () => {
   it('推荐问题不经过输入框，直接把规范化文本交给发送流程', async () => {
@@ -44,5 +48,15 @@ describe('createQuickQuestionDispatcher', () => {
     releaseSend?.();
     await expect(first).resolves.toBe(true);
     expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('推荐问题只发送文字，不把上一轮公开引用升级为显式材料', () => {
+    const handler = chatContainerSource.match(
+      /const handleRecommendationClick = createQuickQuestionDispatcher\([\s\S]*?\n\s*\}\);/,
+    )?.[0];
+    expect(handler).toContain('sendMessage({ inputText: question })');
+    expect(handler).not.toContain('materialSnapshot');
+    expect(chatContainerSource).not.toContain('followUpMaterials:');
+    expect(chatContainerSource).toContain('function continueWithLastSources()');
   });
 });

@@ -55,4 +55,28 @@ describe('TurnEnvelope V2 legacy adapter', () => {
       clientModeMismatch: false,
     });
   });
+
+  it('grounding_scope_v2 客户端忽略旧 followUpMaterials，完整新查询保持工作区范围', () => {
+    const envelope = adaptAgentTurnEnvelope({
+      message: '查看最近 7 天书签的详细链接',
+      clientCapabilities: ['grounding_scope_v2'],
+      followUpMaterials: {
+        contextRefs: [
+          { type: 'note', id: 'old-note' },
+          { type: 'bookmark', id: 'old-bookmark' },
+        ],
+      },
+      grounding: { mode: 'workspace' },
+      scope: { mode: 'workspace' },
+    });
+
+    expect(envelope.grounding).toMatchObject({
+      mode: 'workspace',
+      sourceSetId: '',
+      contextRefs: [],
+      scopeRefs: [],
+      attachmentIds: [],
+      clientModeMismatch: false,
+    });
+  });
 });

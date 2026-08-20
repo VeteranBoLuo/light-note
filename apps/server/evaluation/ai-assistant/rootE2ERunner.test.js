@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { ROOT_E2E_TOOL_CASES, rootE2EToolNames, selectRootE2ECases } from './rootE2ECases.js';
-import { answerMentionsCount, parseRootE2EArgs, validateRootE2ECoverage } from './rootE2ERunner.js';
+import {
+  ROOT_E2E_CLIENT_CAPABILITIES,
+  answerMentionsCount,
+  formatRootE2EText,
+  parseRootE2EArgs,
+  validateRootE2ECoverage,
+} from './rootE2ERunner.js';
 
 describe('root 真实链路门禁', () => {
   it('完整矩阵中的每个工具只出现一次', () => {
@@ -44,6 +50,39 @@ describe('root 真实链路门禁', () => {
     expect(() => parseRootE2EArgs(['--case', 'missing-case'])).toThrow('未知用例');
   });
 
+  it('真实客户端协议包含来源隔离能力，并支持只运行对应的两轮回归', () => {
+    expect(ROOT_E2E_CLIENT_CAPABILITIES).toContain('grounding_scope_v2');
+    expect(
+      parseRootE2EArgs([
+        '--live',
+        '--case',
+        'query-bookmarks',
+        '--no-artifact-regression',
+        '--grounding-scope-regression',
+      ]),
+    ).toMatchObject({
+      live: true,
+      executeWrites: false,
+      groundingScopeRegression: true,
+    });
+  });
+
+  it('定点报告不会把未运行的其他回归误报成通过', () => {
+    const output = formatRootE2EText({
+      passed: true,
+      provider: 'deepseek',
+      summary: { passedTools: 1, totalTools: 1, executedWrites: 0, totalWrites: 0, replayVerified: 0 },
+      groundingScope: { passed: true, outcome: 'answer' },
+      artifact: { passed: true, outcome: 'skipped' },
+      cleanup: { passed: true },
+      reportPath: '/tmp/redacted.json',
+      cases: [],
+    });
+
+    expect(output).toContain('混合来源→仅查书签隔离：通过');
+    expect(output).toContain('笔记 7 天→今天/字数/连续续写：未运行');
+  });
+
   it('定点复测可收窄长草稿改写轮数，但正式默认仍保持五轮', () => {
     expect(parseRootE2EArgs([]).artifactRefinementRounds).toBe(5);
     expect(parseRootE2EArgs(['--artifact-refinement-rounds', '1']).artifactRefinementRounds).toBe(1);
@@ -54,7 +93,9 @@ describe('root 真实链路门禁', () => {
   it('零条结果同时接受数字 0 和自然中文的“没有笔记”', () => {
     expect(answerMentionsCount('今天有 0 篇笔记。', 0)).toBe(true);
     expect(answerMentionsCount('今天（2026-08-20，截至 00:06）没有找到笔记。', 0)).toBe(true);
+    expect(answerMentionsCount('最近 7 天没有找到书签。', 0)).toBe(true);
     expect(answerMentionsCount('今天暂无新增记录。', 0)).toBe(true);
+    expect(answerMentionsCount('最近 7 天共有六条书签。', 6)).toBe(true);
     expect(answerMentionsCount('今天有 1 篇笔记。', 0)).toBe(false);
   });
 

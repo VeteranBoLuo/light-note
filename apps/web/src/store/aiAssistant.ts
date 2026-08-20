@@ -340,8 +340,11 @@ export interface AiAssistantPendingNoteDraftReference {
   confirmationToken: string;
 }
 
-/** 只在用户明确承接上一轮材料时自动续用，避免把一次引用永久变成整段会话的隐式粘性材料。 */
-export function shouldAutoInheritAiAssistantMaterials(input: string) {
+/**
+ * 只在用户明确承接上一轮材料时提交服务端 Source Set 候选。
+ * 候选仍需服务端重新判断、校验和解析；这里绝不从公开引用反向拼装本轮显式材料。
+ */
+export function shouldOfferAiAssistantSourceSetCandidate(input: string) {
   const normalized = String(input || '').trim();
   return MATERIAL_ANAPHORIC_PATTERN.test(normalized) || MATERIAL_FOLLOW_UP_COMMAND_PATTERN.test(normalized);
 }
@@ -486,6 +489,15 @@ export function resolveAiAssistantSourceSetId(messages: AiAssistantMessage[]) {
     return '';
   }
   return '';
+}
+
+/**
+ * Source Set 只承接服务端已经签发的显式材料集合；完整的新查询不携带候选，避免额外分类
+ * 调用和旧范围污染。工作区查询返回的公开 entityRefs/sources 不能在这里充当 Source Set。
+ */
+export function resolveAiAssistantSourceSetCandidateId(messages: AiAssistantMessage[], input: string) {
+  if (!shouldOfferAiAssistantSourceSetCandidate(input)) return '';
+  return resolveAiAssistantSourceSetId(messages);
 }
 
 export function resolveAiAssistantMaterialClarificationToken(messages: AiAssistantMessage[]) {

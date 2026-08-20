@@ -5385,6 +5385,44 @@ describe('agentChat 主链路', () => {
     expect(data?.entityRefs || []).toHaveLength(0);
   });
 
+  it('grounding_scope_v2 新客户端不会让旧公开引用污染完整的工作区查询', async () => {
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '查看最近 7 天书签的详细链接',
+        stream: false,
+        contexts: [],
+        attachmentIds: [],
+        scope: { mode: 'workspace' },
+        clientCapabilities: ['grounding_scope_v2'],
+        // 模拟旧页面状态或篡改请求仍误带混合公开引用；新协议必须忽略。
+        followUpMaterials: {
+          contextRefs: [
+            { type: 'note', id: 'old-note' },
+            { type: 'bookmark', id: 'old-bookmark' },
+          ],
+          attachmentIds: [],
+        },
+      }),
+      res,
+    );
+
+    expect(mocks.requestAi.mock.calls[0][1].trace.stage).toBe('planner');
+    expect(mocks.requestAi.mock.calls.some(([, options]) => options?.trace?.stage === 'material_follow_up')).toBe(
+      false,
+    );
+    expect(res.send.mock.calls.at(-1)?.[0]?.data).toMatchObject({
+      response: 'DIRECT_REPLY',
+      entityRefs: [],
+      resolvedGrounding: expect.objectContaining({
+        mode: 'workspace_query',
+        sourceSetId: null,
+        materialMode: 'workspace',
+      }),
+    });
+  });
+
   it('PR3 Source Set：客户端只传集合 ID，服务端恢复引用、重新解析 owner 并返回继承模式', async () => {
     mocks.resolveSessionSourceSet.mockReturnValue({
       state: 'ready',

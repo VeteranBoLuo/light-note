@@ -8,7 +8,11 @@ import type {
   AiToolConfirmation,
 } from '@/types/aiAgent';
 
-export const AI_AGENT_CLIENT_CAPABILITIES = ['agent_interaction_v1', 'agent_continuation_v1'] as const;
+export const AI_AGENT_CLIENT_CAPABILITIES = [
+  'agent_interaction_v1',
+  'agent_continuation_v1',
+  'grounding_scope_v2',
+] as const;
 
 export type AiAttachmentStatus = 'awaiting_upload' | 'queued' | 'parsing' | 'ready' | 'no_text' | 'failed';
 

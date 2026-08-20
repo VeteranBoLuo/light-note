@@ -31,9 +31,14 @@ export function adaptAgentTurnEnvelope(body = {}) {
       : [];
   const explicit = nonEmptyArray(contextRefs) || nonEmptyArray(scopeRefs) || nonEmptyArray(attachmentIds);
   const sourceSetId = String(body.grounding?.sourceSetId || '').trim();
+  const clientCapabilities = Array.isArray(body.clientCapabilities) ? body.clientCapabilities : [];
+  const acceptsLegacyFollowUpMaterials = !clientCapabilities.includes('grounding_scope_v2');
   const inherited =
     Boolean(sourceSetId) ||
-    (body.followUpMaterials && typeof body.followUpMaterials === 'object' && !Array.isArray(body.followUpMaterials));
+    (acceptsLegacyFollowUpMaterials &&
+      body.followUpMaterials &&
+      typeof body.followUpMaterials === 'object' &&
+      !Array.isArray(body.followUpMaterials));
   const workspace = String(body.scope?.mode || '').trim() === 'workspace';
   const derivedMode = explicit ? 'explicit' : inherited ? 'inherit_candidate' : workspace ? 'workspace' : 'none';
   const clientMode = normalizeRequestedMode(body.grounding?.mode);
@@ -56,6 +61,6 @@ export function adaptAgentTurnEnvelope(body = {}) {
     discourse: Object.freeze({
       recentTurns: Array.isArray(body.history) ? body.history : [],
     }),
-    clientCapabilities: Array.isArray(body.clientCapabilities) ? body.clientCapabilities : [],
+    clientCapabilities,
   });
 }

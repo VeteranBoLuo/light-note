@@ -2524,9 +2524,14 @@ export async function agentChat(req, res) {
           attachmentIds: readySourceSets.flatMap((sourceSet) => sourceSet.attachmentSourceIds),
         })
       : null;
-    const legacyFollowUpCandidate = pendingDraftReplacementRequested
-      ? null
-      : normalizeFollowUpMaterialCandidate(followUpMaterials);
+    // grounding_scope_v2 客户端不再从公开 entityRefs/sources 反向拼装材料；即使请求被
+    // 篡改或旧状态误带 followUpMaterials，也只接受服务端签发的 Source Set。旧客户端
+    // 暂时保留兼容，待自然升级后可移除。
+    const acceptsLegacyFollowUpMaterials = !clientCapabilities.includes('grounding_scope_v2');
+    const legacyFollowUpCandidate =
+      !pendingDraftReplacementRequested && acceptsLegacyFollowUpMaterials
+        ? normalizeFollowUpMaterialCandidate(followUpMaterials)
+        : null;
     const followUpCandidate =
       !enableTranslation &&
       !refinementRequested &&
