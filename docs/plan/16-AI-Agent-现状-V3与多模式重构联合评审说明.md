@@ -326,13 +326,13 @@ Execution Planner / Validator
 
 - V3 主体位于独立工作树 `/Users/boluo/project/light-note-agent-runtime-v3`；
 - 分支名为 `codex/agent-runtime-v3`；
-- V3 主体将作为独立实验分支提交并推送，便于其他 AI 直接审阅真实代码；
+- V3 主体已提交到独立实验分支，远程评审地址为 `origin/codex/agent-runtime-v3`，便于其他 AI 直接审阅真实代码；
 - 该实验分支不会因此合入当前 `main`，也不是发布候选；
 - 没有数据库迁移已经因为 V3 而在线上启用；
 - 默认运行模式仍应为 legacy；
 - 因此不能描述为“V3 已完成，只差上线”。
 
-远程评审分支发布前会普通合并当时最新的 `origin/main`；后续若继续开发，仍需先同步新的主干提交，避免把无关功能差异带入 Agent 重构。
+远程评审分支发布时已普通合并当时最新的 `origin/main`；后续若继续开发，仍需先同步新的主干提交，避免把无关功能差异带入 Agent 重构。
 
 ### 6.2 V3 想解决什么
 

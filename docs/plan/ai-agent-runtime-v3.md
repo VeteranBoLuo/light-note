@@ -154,7 +154,7 @@ pnpm --filter server smoke:ai-root-e2e -- --runtime v3 --live --suite full --exe
 
 ## 七、独立分支落地状态（2026-08-21）
 
-当前实现位于独立工作树和 `codex/agent-runtime-v3` 实验分支；即使该分支作为评审代码发布到远程，也不代表已经合入 `main` 或部署。该分支不是发布候选，默认 Runtime 仍为 legacy。已经完成：
+当前实现位于独立工作树和 `codex/agent-runtime-v3` 实验分支，该分支用于远程代码评审；这不代表已经合入 `main` 或部署。该分支不是发布候选，默认 Runtime 仍为 legacy。已经完成：
 
 - TurnSpec V3、Manifest 精确路由、服务端时间/资源绑定和不携带原始历史的执行链；
 - `ResultSet / DiscourseState / ArtifactState` 的窄状态投影、跨领域隔离和类型兼容继承；
