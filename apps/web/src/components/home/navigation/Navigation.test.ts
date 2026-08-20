@@ -269,27 +269,38 @@ describe('Navigation', () => {
     });
   });
 
-  /**
-   * 管理是 root 单入口：知识库/通知中心/安全中心已经在 /admin 的侧边导航里，
-   * 顶部不再挂下拉，点一次直达后台总览。锁住的是「入口存在且只有一跳」。
-   */
+  /** 管理入口只对 root 展示，并从同一个下拉进入后台管理或服务器管理。 */
   describe('管理入口', () => {
     it('非 root 看不到管理入口', async () => {
       const host = await mountNavigation();
       expect(host.querySelector('#nav-admin-entry')).toBeNull();
     });
 
-    it('root 点击管理直接进后台总览', async () => {
+    it('root 可从管理下拉分别进入后台管理和服务器管理', async () => {
       user.role = 'root';
 
       const host = await mountNavigation();
       const entry = host.querySelector<HTMLElement>('#nav-admin-entry');
 
-      expect(entry?.textContent?.trim()).toBe('管理');
+      expect(entry?.textContent).toContain('管理');
+      expect(entry?.getAttribute('aria-haspopup')).toBe('menu');
       entry?.click();
       await nextTick();
+      const items = Array.from(document.querySelectorAll<HTMLButtonElement>('.b-dropdown-item'));
+      expect(items.map((item) => item.textContent?.trim())).toEqual(['后台管理', '服务器管理']);
 
+      items[0]?.click();
+      await nextTick();
       expect(mocks.routerPush).toHaveBeenCalledWith('/admin');
+
+      entry?.click();
+      await nextTick();
+      const serverItem = Array.from(document.querySelectorAll<HTMLButtonElement>('.b-dropdown-item')).find((item) =>
+        item.textContent?.includes('服务器管理'),
+      );
+      serverItem?.click();
+      await nextTick();
+      expect(mocks.routerPush).toHaveBeenCalledWith('/serverManagement');
     });
   });
 });

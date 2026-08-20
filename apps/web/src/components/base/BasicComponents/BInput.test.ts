@@ -11,6 +11,35 @@ afterEach(() => {
 });
 
 describe('BInput change payload', () => {
+  it('对外暴露 focus 与 select，供新建页聚焦并全选默认标题', async () => {
+    const inputRef = ref<InstanceType<typeof BInput> | null>(null);
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      setup: () => () => h(BInput, { ref: inputRef, value: '未命名文档' }),
+    });
+    app.use(
+      createI18n({
+        legacy: false,
+        locale: 'zh-CN',
+        messages: { 'zh-CN': { placeholder: { input: '请输入' } } },
+      }),
+    );
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+    await nextTick();
+
+    inputRef.value?.focus();
+    inputRef.value?.select();
+    const input = host.querySelector<HTMLInputElement>('input')!;
+    expect(document.activeElement).toBe(input);
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe('未命名文档'.length);
+  });
+
   it('原生 change 时对外发送当前字符串值，并保持 v-model 同步', async () => {
     const value = ref('');
     const onChange = vi.fn();

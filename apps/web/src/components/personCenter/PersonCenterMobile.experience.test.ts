@@ -24,6 +24,12 @@ const opinionSource = source('src/components/personCenter/opinions/OpinionPanel.
 const passwordDialogSource = source('src/components/personCenter/myInfo/PassConfigDlg.vue');
 
 describe('mobile personal center experience', () => {
+  it('root 管理工具区同时提供后台管理与服务器管理入口', () => {
+    expect(personCenterSource).toContain("goToProfileModule('/admin')");
+    expect(personCenterSource).toContain("goToProfileModule('/serverManagement')");
+    expect(personCenterSource).toContain('icon.infrastructure.server');
+  });
+
   it('keeps quick access entries in a strict four-column equal-width grid', () => {
     expect(personCenterSource).toContain('grid-template-columns: repeat(4, minmax(0, 1fr))');
     expect(personCenterSource).toMatch(/\.profile-quick-item\s*\{[\s\S]*?width:\s*100%;/);

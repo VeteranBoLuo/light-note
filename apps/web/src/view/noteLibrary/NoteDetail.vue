@@ -167,6 +167,7 @@
             <div class="note-body-title n-title">
               <BInput
                 v-if="bookmark.isMobile"
+                ref="titleInputRef"
                 class="note-title-mobile"
                 height="50px"
                 :disabled="readonly"
@@ -177,6 +178,7 @@
               />
               <BInput
                 v-else
+                ref="titleInputRef"
                 :disabled="readonly"
                 v-model:value="note.title"
                 @change="inputBlur"
@@ -482,6 +484,8 @@
     parentId: null as string | null,
     isPending: false,
   });
+  const titleInputRef = ref<InstanceType<typeof BInput> | null>(null);
+  let pendingNewNoteTitleFocus = false;
   const isDrawingNote = computed(() => note.type === 'drawing');
   const nodeType = ref<'edit' | 'add' | 'share'>('edit');
   const noteWorkspace = useNoteWorkspaceStore();
@@ -1165,6 +1169,12 @@
     editorRuntimeReady.value = true;
     contentAutosaveReady.value = true;
     isNoteSwitching.value = false;
+    if (currentRouteId === 'add' && pendingNewNoteTitleFocus) {
+      pendingNewNoteTitleFocus = false;
+      await nextTick();
+      titleInputRef.value?.focus();
+      if (note.title === DEFAULT_NOTE_TITLE) titleInputRef.value?.select();
+    }
     // 不 await:目录解析最长要等 6 次重试，focusRef 定位不该被它拖着
     void refreshCatalog();
     const raw = String(router.currentRoute.value.query.focusRef || '');
@@ -2044,6 +2054,7 @@
     subpageCount.value = 0;
     catalogDrawerOpen.value = false;
     mobileNavigationOpen.value = false;
+    pendingNewNoteTitleFocus = false;
   }
 
   let noteLoadVersion = 0;
@@ -2102,6 +2113,7 @@
       });
       updateTime.value = '';
       nodeType.value = 'add';
+      pendingNewNoteTitleFocus = true;
       await applyTemplateFromQuery(query, () => requestVersion === noteLoadVersion);
       if (requestVersion !== noteLoadVersion) return;
       latestRequestedTitle = note.title;

@@ -18,11 +18,11 @@ describe("drawingNote scene protocol", () => {
 
   it("创建并稳定序列化空白场景", () => {
     const empty = createEmptyDrawingScene();
-    expect(empty).toEqual({ v: 2, page: DRAWING_PAGE, elements: [] });
+    expect(empty).toEqual({ v: 3, page: DRAWING_PAGE, elements: [] });
     expect(parseDrawingScene(serializeDrawingScene(empty))).toEqual(empty);
   });
 
-  it("无损将 V1 竖版场景水平居中升级为 V2 方形场景", () => {
+  it("无损将 V1 竖版场景水平居中升级为当前方形场景", () => {
     const upgraded = upgradeDrawingScene({
       v: 1,
       page: { width: 1024, height: 1448 },
@@ -198,6 +198,111 @@ describe("drawingNote scene protocol", () => {
       color: "#615ced",
       strokeWidth: 4,
     });
+  });
+
+  it("V3 保存笔画专属擦除轨迹，升级 V2 时不改变现有坐标", () => {
+    const upgraded = upgradeDrawingScene({
+      v: 2,
+      page: DRAWING_PAGE,
+      elements: [
+        {
+          id: "s",
+          kind: "stroke",
+          color: "#1f2937",
+          width: 20,
+          points: [20, 30, 120, 30],
+        },
+      ],
+    });
+    expect(upgraded).toEqual({
+      v: 3,
+      page: DRAWING_PAGE,
+      elements: [
+        {
+          id: "s",
+          kind: "stroke",
+          color: "#1f2937",
+          width: 20,
+          points: [20, 30, 120, 30],
+        },
+      ],
+    });
+
+    const parsed = parseDrawingScene({
+      ...upgraded,
+      elements: [
+        {
+          ...upgraded.elements[0],
+          erasures: [{ id: "erase_1", width: 4, points: [70.126, 30.125] }],
+        },
+      ],
+    });
+    expect(parsed.elements[0].erasures).toEqual([
+      { id: "erase_1", width: 4, points: [70.13, 30.13] },
+    ]);
+  });
+
+  it("V3 同样保存形状专属擦除轨迹并计入统一擦除上限", () => {
+    const parsed = parseDrawingScene({
+      v: 3,
+      page: DRAWING_PAGE,
+      elements: [
+        {
+          id: "shape_1",
+          kind: "shape",
+          shape: "rectangle",
+          x: 10,
+          y: 20,
+          width: 100,
+          height: 80,
+          color: "#1f2937",
+          strokeWidth: 20,
+          erasures: [{ id: "erase_shape", width: 4, points: [60.126, 20.125] }],
+        },
+      ],
+    });
+
+    expect(parsed.elements[0].erasures).toEqual([
+      { id: "erase_shape", width: 4, points: [60.13, 20.13] },
+    ]);
+  });
+
+  it("V3 拒绝非法或超量的擦除轨迹", () => {
+    const base = {
+      id: "s",
+      kind: "stroke",
+      color: "#1f2937",
+      width: 20,
+      points: [20, 30, 120, 30],
+    };
+    expect(() =>
+      parseDrawingScene({
+        v: 3,
+        page: DRAWING_PAGE,
+        elements: [
+          { ...base, erasures: [{ id: "erase", width: 3, points: [70, 30] }] },
+        ],
+      }),
+    ).toThrow("橡皮擦宽度 不受支持");
+    expect(() =>
+      parseDrawingScene({
+        v: 3,
+        page: DRAWING_PAGE,
+        elements: [
+          {
+            ...base,
+            erasures: Array.from(
+              { length: DRAWING_SCENE_LIMITS.maxErasureTrails + 1 },
+              (_, index) => ({
+                id: `e${index}`,
+                width: 4,
+                points: [70, 30],
+              }),
+            ),
+          },
+        ],
+      }),
+    ).toThrow("橡皮擦轨迹数量超出限制");
   });
 
   it("V1 拒绝形状元素，避免旧协议客户端误接收未知内容", () => {

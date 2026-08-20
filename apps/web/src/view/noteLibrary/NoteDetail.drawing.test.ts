@@ -26,6 +26,25 @@ const conflictSource = readFileSync(
 );
 
 describe('手绘笔记详情边界', () => {
+  it('三种新建笔记共用标题聚焦，并在编辑器 ready 后全选默认标题', () => {
+    const titleStart = source.indexOf('<div class="note-body-title n-title">');
+    const titleEnd = source.indexOf('</div>', titleStart);
+    const titleSource = source.slice(titleStart, titleEnd);
+    const readyStart = source.indexOf('async function handleEditorReady()');
+    const readyEnd = source.indexOf('function scrollToMarkdownHeading', readyStart);
+    const readySource = source.slice(readyStart, readyEnd);
+    const addStart = source.indexOf("if (routeId === 'add')");
+    const addEnd = source.indexOf('let contentApplied = false', addStart);
+    const addSource = source.slice(addStart, addEnd);
+
+    expect(titleSource.match(/ref="titleInputRef"/gu)).toHaveLength(2);
+    expect(addSource).toContain('pendingNewNoteTitleFocus = true');
+    expect(readySource).toContain("currentRouteId === 'add'");
+    expect(readySource).toContain('titleInputRef.value?.focus()');
+    expect(readySource).toContain('if (note.title === DEFAULT_NOTE_TITLE) titleInputRef.value?.select()');
+    expect(readySource).not.toMatch(/note\.type\s*===/u);
+  });
+
   it('画布保持独立异步组件，普通详情不静态导入', () => {
     expect(source).not.toMatch(/^\s*import\s+DrawingNoteEditor\b/mu);
     expect(source).toContain("() => import('@/components/noteLibrary/drawing/DrawingNoteEditor.vue')");
@@ -82,7 +101,7 @@ describe('手绘笔记详情边界', () => {
     expect(pointerMoveSource).toContain('dragStart.dx = point.x - dragStart.x');
     expect(pointerMoveSource).toContain('marqueeSelection.current = point');
     expect(pointerMoveSource).not.toContain('scene.value =');
-    expect(eraseSource).toContain('eraseDrawingElementsAt(source, point, eraserSize.value / 2, createElementId, {');
+    expect(eraseSource).toContain('eraseDrawingElementsAt(source, point, eraserSize.value, activeErasureId, {');
     expect(eraseSource).toContain('eraserPreviewElements = result.elements');
     expect(eraseSource).not.toContain('scene.value =');
     expect(pointerMoveSource).toContain('for (const sample of samples) eraseAt(canvasPoint(sample))');
@@ -95,6 +114,10 @@ describe('手绘笔记详情边界', () => {
     expect(toolbarSource).not.toContain('drawing-color-button');
     expect(toolbarSource).not.toContain('drawing-size-trigger');
     expect(toolbarSource).toContain('class="drawing-style-trigger"');
+    expect(toolbarSource).toContain('class="drawing-style-trigger drawing-style-trigger-mobile"');
+    const mobileStyleStart = toolbarSource.indexOf('class="drawing-style-trigger drawing-style-trigger-mobile"');
+    const mobileStyleEnd = toolbarSource.indexOf('</BButton>', mobileStyleStart);
+    expect(toolbarSource.slice(mobileStyleStart, mobileStyleEnd)).not.toContain('<SvgIcon');
     expect(toolbarSource).toContain('<DrawingStylePanel');
     expect(toolbarSource).toContain('class="drawing-toolbar-scroll"');
     expect(toolbarSource).toContain('class="drawing-toolbar-history"');
@@ -102,10 +125,20 @@ describe('手绘笔记详情边界', () => {
     expect(drawingSource).toContain('class="drawing-tool-button drawing-help-button"');
     expect(drawingSource).toContain('<kbd>P</kbd>');
     expect(drawingSource).toContain('<kbd>V</kbd>');
+    expect(drawingSource).toContain('v-if="isMobileLayout"');
+    expect(drawingSource).toContain("t('note.drawingTouchHelpTitle')");
+    expect(drawingSource).toContain("t('note.drawingToolbarSwipeHint')");
+    expect(drawingSource).toContain('class="drawing-toolbar-more"');
+    expect(drawingSource).toContain('class="drawing-toolbar-zoom-mobile"');
+    expect(drawingSource).toContain('class="drawing-mobile-zoom-value"');
+    expect(drawingSource).not.toContain('class="drawing-mobile-zoom-trigger"');
+    expect(drawingSource).toContain("event.pointerType !== 'touch'");
+    expect(drawingSource).toContain("tool.value !== 'hand' || event.pointerType !== 'touch'");
     expect(drawingSource).toContain('<kbd>⌫ / Delete</kbd>');
     expect(drawingSource).toContain('background: var(--surface-panel-bg, #f4f5f7)');
     expect(drawingSource).toContain('font-variant-numeric: tabular-nums');
     expect(drawingSource).toContain('flex: 0 0 24px');
+    expect(drawingSource).toContain('flex: 0 0 54px');
     expect(drawingStyleSource).toContain('drawing-style-colors--common');
     expect(drawingStyleSource).toContain('drawing-style-colors--palette');
     expect(drawingStyleSource).toContain('drawing-style-colors--recent');
@@ -127,7 +160,7 @@ describe('手绘笔记详情边界', () => {
     expect(drawingSource).toContain('constrainDrawingShapeEnd');
     expect(drawingSource).toContain('hitShapeResizeHandle(point)');
     expect(drawingSource).toContain('resizedShapePreview()');
-    expect(drawingSource).toContain('paintDrawingShape(context, element)');
+    expect(drawingSource).toContain('paintDrawingShape(context, element, scale)');
     expect(versionHistorySource).toContain("element?.kind === 'shape'");
   });
 
@@ -136,7 +169,7 @@ describe('手绘笔记详情边界', () => {
     const zoomEnd = drawingSource.indexOf('function scheduleDraw()', zoomStart);
     const zoomSource = drawingSource.slice(zoomStart, zoomEnd);
 
-    expect(drawingSource).toContain('const ZOOM_LEVELS = [0.3, 0.35, 0.4, 0.5, 0.6, 0.75, 1, 1.25, 1.5]');
+    expect(drawingSource).toContain('const ZOOM_LEVELS = [0.3, 0.35, 0.4, 0.5, 0.6, 0.75, 1, 1.25, 1.5, 1.75, 2]');
     expect(zoomSource).toContain('size.width / DRAWING_PAGE.width');
     expect(zoomSource).not.toContain('size.height / DRAWING_PAGE.height');
     expect(zoomSource).toContain('editableZoom.value = Math.min(1, size.width / DRAWING_PAGE.width)');
@@ -261,6 +294,10 @@ describe('手绘笔记详情边界', () => {
     expect(conflictSource.match(/<DrawingNoteEditor/g)).toHaveLength(2);
     expect(conflictSource).toContain(':content="cloudVersion.content"');
     expect(conflictSource).toContain(':content="localVersion.content"');
+    expect(conflictSource).toContain('content-class="note-conflict-modal__content"');
+    expect(conflictSource).toMatch(/\.note-conflict-modal__content\s*\{[\s\S]*?overflow-y:\s*auto;/u);
+    expect(conflictSource).toMatch(/\.note-conflict-modal__content\s*\{[\s\S]*?touch-action:\s*pan-y;/u);
+    expect(drawingSource).toMatch(/\.drawing-editor\.is-readonly \.drawing-canvas\s*\{\s*touch-action:\s*pan-y;/u);
     expect(drawingSource).toContain('const DEFAULT_ERASER_SIZE = 18');
     expect(drawingSource).toContain('const eraserSize = ref(DEFAULT_ERASER_SIZE)');
     expect(drawingSource).toMatch(/\.drawing-canvas\.is-tool-eraser\s*\{\s*cursor:\s*none;/u);

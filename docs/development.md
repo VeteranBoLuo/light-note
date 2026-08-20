@@ -644,9 +644,9 @@ cd apps/android
 
 ### 手绘笔记协议与性能边界
 
-- 手绘正文必须通过 `@lightnote/shared/drawing-note` 共享子路径创建、解析和序列化；前后端不得复制 scene 类型、允许值或容量上限，也不得把协议重新并入共享包主入口，避免无关页面增加打包体积。
+- 手绘正文必须通过 `@lightnote/shared/drawing-note` 共享子路径创建、解析和序列化；前后端不得复制 scene 类型、允许值或容量上限，也不得把协议重新并入共享包主入口，避免无关页面增加打包体积。局部擦除必须保存为目标笔画自身的圆形擦除采样，并在该笔画独立透明层内执行 `destination-out` 后合成；禁止通过拆分中心线伪造像素擦除，也禁止在主画布直接擦除而误伤其他元素。
 - 手绘编辑器必须保持独立异步加载。HTML、Markdown、应用启动和笔记库后台预热路径不得导入画布组件；手绘路径也不得回退加载 TinyMCE 或 CodeMirror。
-- `pointermove` 只允许修改非响应式的当前笔画、拖动预览、局部擦除预览或相机偏移，并用单个 `requestAnimationFrame` 合并绘制；一次笔画、擦除、移动或文本提交结束后才允许序列化和触发 Vue 状态更新。橡皮擦默认为 18px，按光标圆形范围裁切笔画中心线并保留两侧线段，命中半径不得再叠加笔画半宽，禁止靠近粗笔画边缘时切断整条笔画；橡皮擦激活时隐藏浏览器系统光标，以画布内随尺寸缩放的圆环作为唯一命中范围提示，避免系统十字遮挡小尺寸圆环。文本对象由选择工具和 Delete 删除，不参与像素式擦除。
+- `pointermove` 只允许修改非响应式的当前笔画、拖动预览、局部擦除预览或相机偏移，并用单个 `requestAnimationFrame` 合并绘制；一次笔画、擦除、移动或文本提交结束后才允许序列化和触发 Vue 状态更新。橡皮擦默认为 18px，按光标圆形范围给命中的笔画或形状轮廓写入元素专属像素遮罩，小尺寸橡皮只能移除实际覆盖像素，禁止通过拆分中心线或整对象删除模拟局部擦除；橡皮擦激活时隐藏浏览器系统光标，以画布内随尺寸缩放的圆环作为唯一命中范围提示，避免系统十字遮挡小尺寸圆环。文本对象由选择工具和 Delete 删除，不参与像素式擦除。
 - 手绘撤销只处理已经在 `pointerup` 提交的 scene 历史；若笔画、擦除、元素拖动、框选或画布平移仍在进行，`Command/Ctrl+Z` 与 Escape 必须先取消临时手势并释放指针捕获，不得弹出上一条已提交历史。临时手势期间重做必须保持无操作，防止松开指针后把内容追加到错误 scene。
 - 列表、摘要、搜索、AI、知识索引、标签图谱和历史列表不得读取或回传完整 scene；确实需要正文的详情、冲突、单版本恢复、原格式导出必须按 owner、类型、revision 和协议版本校验。
 - 卡片缩略图只能在接近可视区后经专用批量接口读取受限预览场景；单批最多 12 篇，必须按 owner 与 `type = drawing` 查询。客户端固定低分辨率绘制并使用有上限、带 revision 的短期缓存；允许按内容范围智能居中取景，但缩放必须限制在完整画纸 `contain` 的 1～3 倍，并把相机限制在画纸内，禁止无上限铺满内容、逐卡详情请求、离屏绘制或把完整 scene 放回通用列表。
@@ -654,9 +654,9 @@ cd apps/android
 - 手绘历史差异使用当前版与所选历史版两个只读画板并排比较，两个画板必须同宽并共用外层滚动轴；移动端改为上下排列。新增、删除、修改/移动数量按稳定元素 ID 在客户端计算，禁止生成像素差异图、调用服务端图像处理或批量读取全部历史 scene。只有进入差异页才允许同时挂载两个画板。
 - 手绘工具栏只保留高频画布操作：颜色与当前工具对应的尺寸各使用一个 `BPopover` 入口，常用值是快捷项而不是协议全集；画笔、橡皮擦和文字尺寸必须同时提供有界连续整数滑杆。弹层快捷项使用居中、等宽高的点击区，不能由网格拉伸成长方形。颜色协议仅接受并规范化六位十六进制色值。PNG/JSON 属于笔记级导出，桌面与移动端都必须从详情页“更多 → 导出”进入，禁止在横向工具栏重复常驻。编辑态默认按 workspace 可用宽度连续适应 1448 × 1448 画纸并居中，最高 100%；高度超出时由手形工具修改相机偏移，不产生原生滚动条，也不得拉伸画纸。鼠标中键或右键按下时必须临时平移画布，不切换当前工具、不生成元素或历史记录，并阻止浏览器自动滚动与右键菜单。滚轮纵向增量必须在 30%～150% 内连续缩放，缩放前后保持指针下的逻辑坐标不动；原生横向增量和 Shift+滚轮用于水平平移，CSS zoom 坐标需要换算，连续滚轮只允许每帧重建一次 Canvas 位图。只读预览、历史与分享仍按容器完整展示整张画纸。
 - 文字工具提交新文字后必须清空选择态，选择框只在选择工具中绘制；从选择工具编辑既有文字时允许提交后继续选中。批量框选结束后使用一个组合包围框，点击实际元素或组合框内部空白均应开始整体拖动；只有点击组合框外部才清空旧选择并开始新框选。
-- 基础形状必须保存为正式 `shape` 元素，禁止展开成 stroke 冒充。v2 只允许直线、箭头、矩形、圆角矩形、椭圆、三角形和菱形，元素保存有符号宽高、六位十六进制颜色与有界整数线宽；创建与缩放在 pointermove 仅预览、pointerup 只提交一条历史。Shift 对线和箭头吸附 45°，对其他形状约束等宽高；单选形状显示端点或四角手柄。橡皮擦不得修改 shape，删除必须走选择工具与 Delete。新增或修改形状时必须同步共享校验、服务端受限预览、编辑/只读/分享/历史/冲突、缩略图与 PNG/JSON 导出测试。
+- 基础形状必须保存为正式 `shape` 元素，禁止展开成 stroke 冒充。v2 只允许直线、箭头、矩形、圆角矩形、椭圆、三角形和菱形，元素保存有符号宽高、六位十六进制颜色与有界整数线宽；v3 允许形状和笔画复用元素专属擦除遮罩。创建与缩放在 pointermove 仅预览、pointerup 只提交一条历史。Shift 对线和箭头吸附 45°，对其他形状约束等宽高；单选形状显示端点或四角手柄。橡皮擦局部擦除形状轮廓但不处理文本，整对象删除仍走选择工具与 Delete；形状移动、复制与缩放必须同步变换其擦除采样。新增或修改形状时必须同步共享校验、服务端受限预览、编辑/只读/分享/历史/冲突、缩略图与 PNG/JSON 导出测试。
 - 手绘工具栏在移动端分成可横向滚动的创建/样式区与固定的撤销、重做、帮助区，禁止让新增工具把历史操作挤出首屏。颜色和尺寸共用样式入口；桌面使用 `BPopover`，移动端使用底部 `BDrawer`。色板包含 8 个常用色、32 个完整色、按当前账号保存在本机的最近 6 色以及 `#RRGGBB` 自定义输入；选中态必须同时使用实色描边与对勾，不能只靠阴影或混色。帮助入口必须明确列出键盘快捷键、滚轮缩放、横向滚动以及鼠标中键/右键平移；清屏在移动端放入该低频区。连续尺寸当前因 B 系列尚无 Slider 可保留原生 `range`，不得再新增其他原生表单控件。
-- 当前 scene v2 为 1448 × 1448；v1 1024 × 1448 只能通过共享升级函数在内存中水平平移 212 升级，禁止读取时批量回写、缩放或裁剪。新 scene 元素、页面尺寸、容量上限或导出格式属于协议变更，必须同步更新共享实现与声明、前后端回归、旧客户端保护和人工性能验收；未知元素失败关闭，禁止“尽量渲染”后再覆盖存库。
+- 当前 scene v3 为 1448 × 1448，并在 stroke 内支持受限的圆形擦除采样；v1 1024 × 1448 只能通过共享升级函数在内存中水平平移 212，v2 方形 scene 升级时坐标保持不变，禁止读取时批量回写、缩放或裁剪。新 scene 元素、页面尺寸、容量上限或导出格式属于协议变更，必须同步更新共享实现与声明、前后端回归、旧客户端保护和人工性能验收；未知元素失败关闭，禁止“尽量渲染”后再覆盖存库。
 
 ### 手动历史版本
 
@@ -734,8 +734,9 @@ AI 助手（轻笺智域）回答"怎么用 / 是什么 / 在哪设置"依赖 `k
 5. **资源治理 Worker：** 通过 pm2 单独启动 `resourceGovernanceWorker.js`（进程名 `light-note-resource-governance-worker`）；项目根目录的 `pnpm dev:server`、`pnpm dev:server:watch` 和 `pnpm preview` 会自动同时托管该 Worker，单独调试时可运行 `pnpm --filter server worker:resource-governance`。发布前必须执行 `pnpm --filter server check:resource-governance`。`RESOURCE_GOVERNANCE_SCAN_ENABLED` 默认开启；`RESOURCE_GOVERNANCE_CLEANUP_ENABLED` 必须显式为 `true` 且确认密钥不少于 32 字符才允许低风险图片任务。共享书签图标和未知图片来源仍无删除执行器；用户行缺失或 `del_flag=1` 的账号残留资源，只允许 Root 输入确认短语后通过账号注销领域服务归并清理。
 6. **本地 OCR 运行时：** 服务器需安装 Poppler、Tesseract、简体中文和英文语言包；Debian/Ubuntu 可安装 `poppler-utils tesseract-ocr tesseract-ocr-chi-sim tesseract-ocr-eng`，安装后执行 `pnpm --filter server check:ocr` 验证
 7. **文件预览运行时：** 服务器需安装提供 `7zz` 的 7-Zip 和 LibreOffice Writer/Calc/Impress；发布前先应用 `20260808_file_preview_artifacts.sql`，再执行 `pnpm --filter server check:file-previews`。自定义二进制可用 `FILE_PREVIEW_7Z_BIN`、`FILE_PREVIEW_OFFICE_BIN` 指定；`FILE_PREVIEW_ARCHIVE_ENABLED=false` 或 `FILE_PREVIEW_OFFICE_ENABLED=false` 可分别急停对应新能力。Worker 应使用无特权系统用户，7-Zip/LibreOffice 子进程只继承运行所需的白名单环境变量，不得把数据库、Redis 或对象存储凭据传给文件解析器；生产网络策略应只放行 Worker 必需的数据库、Redis 和 OBS 目标
-8. 根用户用 `pm2 restart app --update-env` 刷新环境变量；`scripts/deploy-server.sh` 会同步启动或重启 AI 文档/文件预览 Worker、书签图标 Worker 与资源治理 Worker
-9. 爱发电接入发布前应用 `20260813_afdian_integration.sql` 与 `20260814_afdian_support_management.sql` 并执行 Schema 门禁；服务端配置 `AFDIAN_OAUTH_CLIENT_ID`、`AFDIAN_OAUTH_CLIENT_SECRET`、`AFDIAN_OAUTH_REDIRECT_URI`、`AFDIAN_CREATOR_USER_ID`、`AFDIAN_API_TOKEN`，禁止写入前端环境变量、仓库、日志或补丁。开发者后台 Webhook 指向 `/api/support/afdian/webhook`；Secret 或 API Token 一旦进入截图、聊天或日志，应先轮换再部署
+8. **本机服务器管理 Agent：** `apps/host-agent` 必须作为独立 systemd unit 部署，先按 `apps/host-agent/README.md` 完成专用账户、Unix Socket、PM2 访问模式与 Socket 激活的 root helper 预检。非 root PM2 使用同账户 `direct`；遗留 root PM2 只能使用 `helper` 的固定 action/target Socket 桥接，不得共享 `/root/.pm2`、加入 root 组、开放 `pm2 *` 或在 Agent unit 内使用 sudo。Agent unit 必须保留会隐式启用 `no_new_privileges` 的沙箱项，特权 helper 由独立 systemd socket 按请求短暂启动。它不得加载 `apps/server/.env`，不得开放 TCP 端口，不得把 Socket 放宽到 `0666`。发布顺序为共享协议 → Host Agent → Express → Web；协议不一致时页面必须失败关闭。发布后通过 `/v1/health` Socket 请求、helper Socket 能力检查、Agent unit 日志和 Root 服务器管理页共同验收。
+9. 根用户用 `pm2 restart app --update-env` 刷新环境变量；`scripts/deploy-server.sh` 会同步启动或重启 AI 文档/文件预览 Worker、书签图标 Worker 与资源治理 Worker。服务器管理页发起的 Worker 重启不携带 `--update-env`，只复用 PM2 现有进程配置。
+10. 爱发电接入发布前应用 `20260813_afdian_integration.sql` 与 `20260814_afdian_support_management.sql` 并执行 Schema 门禁；服务端配置 `AFDIAN_OAUTH_CLIENT_ID`、`AFDIAN_OAUTH_CLIENT_SECRET`、`AFDIAN_OAUTH_REDIRECT_URI`、`AFDIAN_CREATOR_USER_ID`、`AFDIAN_API_TOKEN`，禁止写入前端环境变量、仓库、日志或补丁。开发者后台 Webhook 指向 `/api/support/afdian/webhook`；Secret 或 API Token 一旦进入截图、聊天或日志，应先轮换再部署
 
 资源治理的 finding 只是候选，不是删除授权：扫描必须只读；用户行只要存在（包括 `del_flag=1`）就不能判为 owner 缺失；本地图片至少经过两次跨 24 小时无引用检查；preview、建 Job 和 Worker 执行分别重新核验。API 只能接收 finding ID 或受 Root + session + 证据哈希绑定的短时 token，禁止接收表名、路径、对象 key 或任意待删除资源 ID；前端创建任务前还必须由 Root 手工输入服务端返回的确认短语，禁止代填。本地图片必须核验 `note_images`、笔记正文、笔记历史、笔记模板和书签图标引用，unlink 前再复核文件身份并执行第二轮引用查询；任一来源命中或状态变化都只能阻断。失效账号业务资源的手工清理必须按 owner 归并，并在创建/恢复清理请求与数据库物理删除两个事务阶段分别锁定 `user` 行；只有用户行不存在或 `del_flag=1` 才可继续，任何正常账号状态都必须失败关闭。软删除账号只清理其资源并保留用户行，只有正式注销且 `role=deleted` 的账号才会删除用户行。失败任务不会自动重试，只允许 Root 显式重试；待执行任务允许显式取消，两种操作都必须记录审计日志。
 

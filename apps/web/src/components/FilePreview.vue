@@ -149,30 +149,36 @@
           </div>
 
           <!-- 3. 图片预览 -->
-          <div v-else-if="previewType === 'image'" class="preview-image-container">
-            <img
-              :src="effectiveFileUrl"
-              :alt="fileInfo.fileName"
-              class="preview-image"
-              :style="{
-                transform: `translate(${imagePosition.x}px, ${imagePosition.y}px) scale(${scale}) rotate(${rotate}deg)`,
-                cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
-                userSelect: 'none',
-              }"
-              draggable="false"
-              @load="onImageLoad"
-              @error="onError"
-              @click="previewImage"
-              @dblclick="handleImageDblClick"
-              @mousedown="startDrag"
-              @mousemove="drag"
-              @mouseup="stopDrag"
-              @mouseleave="stopDrag"
-              @touchstart="startTouch"
-              @touchmove="moveTouch"
-              @touchend="endTouch"
-              @touchcancel="endTouch"
-            />
+          <div
+            v-else-if="previewType === 'image'"
+            ref="imageViewportRef"
+            v-auto-scrollbar
+            class="preview-image-container"
+            :class="{
+              'is-scrollable': isImageScrollable,
+              'is-dragging': isDragging,
+            }"
+            @mousedown="startDrag"
+            @mousemove="drag"
+            @mouseup="stopDrag"
+            @mouseleave="stopDrag"
+            @touchstart="startTouch"
+            @touchmove="moveTouch"
+            @touchend="endTouch"
+            @touchcancel="endTouch"
+          >
+            <div class="preview-image-stage" :style="imageStageStyle">
+              <img
+                :src="effectiveFileUrl"
+                :alt="fileInfo.fileName"
+                class="preview-image"
+                :style="imageStyle"
+                draggable="false"
+                @load="onImageLoad"
+                @error="onError"
+                @dblclick="handleImageDblClick"
+              />
+            </div>
           </div>
 
           <!-- 4. Word文档预览 -->
@@ -288,7 +294,7 @@
           <span v-if="previewType === 'image' && (showNext || sourceDownloadUrl)" class="control-divider"></span>
           <div v-if="previewType === 'image'" class="preview-control-group image-control-group">
             <BTooltip :title="t('cloudSpace.previewPanel.zoomOut')">
-              <BButton size="small" @click="zoomOut" :disabled="scale <= 0.1" class="action-btn">
+              <BButton size="small" @click="zoomOut()" :disabled="scale <= 0.1" class="action-btn">
                 <SvgIcon :src="icon.cloudSpace.preview.zoomOut" size="17" />
               </BButton>
             </BTooltip>
@@ -298,7 +304,7 @@
               </BButton>
             </BTooltip>
             <BTooltip :title="t('cloudSpace.previewPanel.zoomIn')">
-              <BButton size="small" @click="zoomIn" :disabled="scale >= 5" class="action-btn">
+              <BButton size="small" @click="zoomIn()" :disabled="scale >= 5" class="action-btn">
                 <SvgIcon :src="icon.cloudSpace.preview.zoomIn" size="17" />
               </BButton>
             </BTooltip>
@@ -315,7 +321,8 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+  import type { CSSProperties } from 'vue';
   import { useI18n } from 'vue-i18n';
   import VideoPreview from '@/components/base/VideoPreview.vue';
   import PdfPreview from '@/components/cloudSpace/PdfPreview.vue';
@@ -357,6 +364,7 @@
   } from '@/utils/mobileOverlayHistory';
   import { configureMarkdownRenderer } from '@/utils/markdownRenderer';
   import { getFilePreviewPollDelay, hasFilePreviewPollingTimedOut } from '@/utils/filePreviewPolling';
+  import { getRootZoom } from '@/utils/zoom';
 
   const VueOfficeDocx = defineAsyncComponent(() => import('@vue-office/docx/lib/v3/vue-office-docx.mjs'));
   const VueOfficeExcel = defineAsyncComponent(() => import('@vue-office/excel/lib/v3/vue-office-excel.mjs'));
@@ -392,20 +400,22 @@
   const rotate = ref(0);
   const scale = ref(1);
   const isDragging = ref(false);
-  const dragStart = ref({ x: 0, y: 0 });
-  const imagePosition = ref({ x: 0, y: 0 });
+  const dragStart = ref({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
   const MIN_IMAGE_SCALE = 0.1;
   const MAX_IMAGE_SCALE = 5;
   const MAX_TEXT_PREVIEW_CHARS = 1_000_000;
-  let touchGesture: 'pan' | 'pinch' | null = null;
+  let touchGesture: 'pinch' | null = null;
   let pinchStartDistance = 0;
   let pinchStartScale = 1;
-  let pinchStartCenter = { x: 0, y: 0 };
-  let pinchStartPosition = { x: 0, y: 0 };
+  let pinchAnchor: ImageViewportAnchor | null = null;
   const textContent = ref('');
   const wrapText = ref(true);
   const htmlBlobUrl = ref<string>('');
   const previewRootRef = ref<HTMLElement | null>(null);
+  const imageViewportRef = ref<HTMLElement | null>(null);
+  const imageNaturalSize = ref({ width: 0, height: 0 });
+  const imageViewportSize = ref({ width: 0, height: 0 });
+  const imageViewportPadding = ref({ x: 24, top: 24, bottom: 86 });
   const isHtmlFullscreen = ref(false);
   let previewHistoryHandle: MobileOverlayHistoryHandle | null = null;
   const markdownContainerRef = ref<HTMLElement | null>(null);
@@ -426,6 +436,14 @@
   let markdownSanitizer: ((html: string) => string) | null = null;
   let previousBodyOverflow = '';
   let releaseEscapeLock: (() => void) | null = null;
+  let imageResizeObserver: ResizeObserver | null = null;
+
+  interface ImageViewportAnchor {
+    ratioX: number;
+    ratioY: number;
+    offsetX: number;
+    offsetY: number;
+  }
 
   const currentCategory = computed(() => getCloudFileCategory(props.fileInfo));
   const previewType = computed(() => getCloudPreviewType(props.fileInfo));
@@ -446,6 +464,58 @@
     t(legacyOfficeFile.value ? 'cloudSpace.previewPanel.legacyOfficeDesc' : 'cloudSpace.previewPanel.unsupportedDesc'),
   );
   const zoomPercent = computed(() => `${Math.round(scale.value * 100)}%`);
+  const imageLayout = computed(() => {
+    const naturalWidth = imageNaturalSize.value.width;
+    const naturalHeight = imageNaturalSize.value.height;
+    const viewportWidth = imageViewportSize.value.width;
+    const viewportHeight = imageViewportSize.value.height;
+    const padding = imageViewportPadding.value;
+    if (!naturalWidth || !naturalHeight || !viewportWidth || !viewportHeight) {
+      return {
+        imageWidth: 0,
+        imageHeight: 0,
+        boundsWidth: 0,
+        boundsHeight: 0,
+        stageWidth: viewportWidth,
+        stageHeight: viewportHeight,
+      };
+    }
+
+    const quarterTurn = Math.abs(Math.round(rotate.value / 90)) % 2 === 1;
+    const naturalBoundsWidth = quarterTurn ? naturalHeight : naturalWidth;
+    const naturalBoundsHeight = quarterTurn ? naturalWidth : naturalHeight;
+    const availableWidth = Math.max(1, viewportWidth - padding.x * 2);
+    const availableHeight = Math.max(1, viewportHeight - padding.top - padding.bottom);
+    const fitScale = Math.min(1, availableWidth / naturalBoundsWidth, availableHeight / naturalBoundsHeight);
+    const imageWidth = naturalWidth * fitScale * scale.value;
+    const imageHeight = naturalHeight * fitScale * scale.value;
+    const boundsWidth = quarterTurn ? imageHeight : imageWidth;
+    const boundsHeight = quarterTurn ? imageWidth : imageHeight;
+
+    return {
+      imageWidth,
+      imageHeight,
+      boundsWidth,
+      boundsHeight,
+      stageWidth: Math.max(viewportWidth, boundsWidth + padding.x * 2),
+      stageHeight: Math.max(viewportHeight, boundsHeight + padding.top + padding.bottom),
+    };
+  });
+  const imageStageStyle = computed<CSSProperties>(() => ({
+    width: `${imageLayout.value.stageWidth}px`,
+    height: `${imageLayout.value.stageHeight}px`,
+  }));
+  const imageStyle = computed<CSSProperties>(() => ({
+    width: imageLayout.value.imageWidth ? `${imageLayout.value.imageWidth}px` : undefined,
+    height: imageLayout.value.imageHeight ? `${imageLayout.value.imageHeight}px` : undefined,
+    transform: `rotate(${rotate.value}deg)`,
+    userSelect: 'none',
+  }));
+  const isImageScrollable = computed(
+    () =>
+      imageLayout.value.stageWidth > imageViewportSize.value.width + 1 ||
+      imageLayout.value.stageHeight > imageViewportSize.value.height + 1,
+  );
   const unsupportedTypes = ['unsupported'];
   const isMarkdownFile = computed(() => {
     const fileName = props.fileInfo?.fileName?.toLowerCase() || '';
@@ -852,7 +922,15 @@
     errorMessage.value = err?.message || t('cloudSpace.previewPanel.genericLoadFailed');
   }
 
-  function onImageLoad() {
+  function onImageLoad(event: Event) {
+    const image = event.currentTarget as HTMLImageElement | null;
+    if (image) {
+      imageNaturalSize.value = {
+        width: image.naturalWidth,
+        height: image.naturalHeight,
+      };
+    }
+    observeImageViewport();
     loading.value = false;
   }
 
@@ -988,10 +1066,6 @@
 
   function onTextScroll() {}
 
-  function previewImage() {
-    // 这里可以调用外部的图片预览逻辑
-  }
-
   function downloadFile() {
     if (!sourceDownloadUrl.value) return;
 
@@ -1051,7 +1125,13 @@
   function resetImageView() {
     rotate.value = 0;
     scale.value = 1;
-    imagePosition.value = { x: 0, y: 0 };
+    imageNaturalSize.value = { width: 0, height: 0 };
+    imageResizeObserver?.disconnect();
+    const viewport = imageViewportRef.value;
+    if (viewport) {
+      viewport.scrollLeft = 0;
+      viewport.scrollTop = 0;
+    }
     resetTouchGesture();
   }
 
@@ -1072,24 +1152,92 @@
     emit('next');
   }
 
+  function readCssPixel(style: CSSStyleDeclaration, property: string, fallback: number) {
+    const value = Number.parseFloat(style.getPropertyValue(property));
+    return Number.isFinite(value) ? value : fallback;
+  }
+
+  function syncImageViewportMetrics() {
+    const viewport = imageViewportRef.value;
+    if (!viewport) return;
+    const style = window.getComputedStyle(viewport);
+    imageViewportSize.value = {
+      width: viewport.clientWidth,
+      height: viewport.clientHeight,
+    };
+    imageViewportPadding.value = {
+      x: readCssPixel(style, '--file-preview-image-padding-x', 24),
+      top: readCssPixel(style, '--file-preview-image-padding-top', 24),
+      bottom: readCssPixel(style, '--file-preview-image-padding-bottom', 86),
+    };
+  }
+
+  function observeImageViewport() {
+    const viewport = imageViewportRef.value;
+    if (!viewport) return;
+    syncImageViewportMetrics();
+    imageResizeObserver?.disconnect();
+    if (typeof ResizeObserver === 'undefined') return;
+    imageResizeObserver = new ResizeObserver(() => {
+      const anchor = captureImageViewportAnchor();
+      syncImageViewportMetrics();
+      void restoreImageViewportAnchor(anchor);
+    });
+    imageResizeObserver.observe(viewport);
+  }
+
+  function captureImageViewportAnchor(clientX?: number, clientY?: number): ImageViewportAnchor | null {
+    const viewport = imageViewportRef.value;
+    if (!viewport) return null;
+    const rect = viewport.getBoundingClientRect();
+    const rootZoom = getRootZoom();
+    const offsetX = clientX == null ? viewport.clientWidth / 2 : (clientX - rect.left) / rootZoom;
+    const offsetY = clientY == null ? viewport.clientHeight / 2 : (clientY - rect.top) / rootZoom;
+    return {
+      ratioX: (viewport.scrollLeft + offsetX) / Math.max(1, viewport.scrollWidth),
+      ratioY: (viewport.scrollTop + offsetY) / Math.max(1, viewport.scrollHeight),
+      offsetX,
+      offsetY,
+    };
+  }
+
+  async function restoreImageViewportAnchor(anchor: ImageViewportAnchor | null) {
+    if (!anchor) return;
+    await nextTick();
+    const viewport = imageViewportRef.value;
+    if (!viewport) return;
+    viewport.scrollLeft = anchor.ratioX * viewport.scrollWidth - anchor.offsetX;
+    viewport.scrollTop = anchor.ratioY * viewport.scrollHeight - anchor.offsetY;
+  }
+
+  function setImageScale(nextScale: number, clientX?: number, clientY?: number) {
+    const clampedScale = Math.min(Math.max(nextScale, MIN_IMAGE_SCALE), MAX_IMAGE_SCALE);
+    if (Math.abs(clampedScale - scale.value) < 0.001) return;
+    const anchor = captureImageViewportAnchor(clientX, clientY);
+    scale.value = clampedScale;
+    void restoreImageViewportAnchor(anchor);
+  }
+
   function rotateImage() {
+    const anchor = captureImageViewportAnchor();
     rotate.value = (rotate.value + 90) % 360;
+    void restoreImageViewportAnchor(anchor);
   }
 
-  function zoomIn() {
-    scale.value = Math.min(scale.value * 1.2, MAX_IMAGE_SCALE);
+  function zoomIn(clientX?: number, clientY?: number) {
+    setImageScale(scale.value * 1.2, clientX, clientY);
   }
 
-  function zoomOut() {
-    scale.value = Math.max(scale.value / 1.2, MIN_IMAGE_SCALE);
-    if (scale.value <= 1) imagePosition.value = { x: 0, y: 0 };
+  function zoomOut(clientX?: number, clientY?: number) {
+    setImageScale(scale.value / 1.2, clientX, clientY);
   }
 
   function resetZoom() {
+    const anchor = captureImageViewportAnchor();
     scale.value = 1;
     rotate.value = 0;
-    imagePosition.value = { x: 0, y: 0 };
     resetTouchGesture();
+    void restoreImageViewportAnchor(anchor);
   }
 
   function handleImageDblClick() {
@@ -1111,24 +1259,25 @@
   }
 
   function startDrag(e: MouseEvent) {
-    if (scale.value > 1) {
-      isDragging.value = true;
-      dragStart.value = {
-        x: e.clientX - imagePosition.value.x,
-        y: e.clientY - imagePosition.value.y,
-      };
-      e.preventDefault();
-    }
+    const viewport = imageViewportRef.value;
+    if (!viewport || e.button !== 0 || !isImageScrollable.value) return;
+    isDragging.value = true;
+    dragStart.value = {
+      x: e.clientX,
+      y: e.clientY,
+      scrollLeft: viewport.scrollLeft,
+      scrollTop: viewport.scrollTop,
+    };
+    e.preventDefault();
   }
 
   function drag(e: MouseEvent) {
-    if (isDragging.value) {
-      imagePosition.value = {
-        x: e.clientX - dragStart.value.x,
-        y: e.clientY - dragStart.value.y,
-      };
-      e.preventDefault();
-    }
+    const viewport = imageViewportRef.value;
+    if (!viewport || !isDragging.value) return;
+    const rootZoom = getRootZoom();
+    viewport.scrollLeft = dragStart.value.scrollLeft - (e.clientX - dragStart.value.x) / rootZoom;
+    viewport.scrollTop = dragStart.value.scrollTop - (e.clientY - dragStart.value.y) / rootZoom;
+    e.preventDefault();
   }
 
   function stopDrag() {
@@ -1157,6 +1306,7 @@
   function resetTouchGesture() {
     touchGesture = null;
     pinchStartDistance = 0;
+    pinchAnchor = null;
     isDragging.value = false;
   }
 
@@ -1166,21 +1316,9 @@
       touchGesture = 'pinch';
       pinchStartDistance = getTouchDistance(e.touches);
       pinchStartScale = scale.value;
-      pinchStartCenter = getTouchCenter(e.touches);
-      pinchStartPosition = { ...imagePosition.value };
+      const center = getTouchCenter(e.touches);
+      pinchAnchor = captureImageViewportAnchor(center.x, center.y);
       isDragging.value = false;
-      e.preventDefault();
-      return;
-    }
-
-    if (e.touches.length === 1 && scale.value > 1) {
-      const point = getTouchPoint(e.touches[0]);
-      touchGesture = 'pan';
-      dragStart.value = {
-        x: point.x - imagePosition.value.x,
-        y: point.y - imagePosition.value.y,
-      };
-      isDragging.value = true;
       e.preventDefault();
     }
   }
@@ -1190,43 +1328,15 @@
     if (e.touches.length >= 2) {
       if (touchGesture !== 'pinch' || pinchStartDistance <= 0) startTouch(e);
       const distanceRatio = getTouchDistance(e.touches) / pinchStartDistance;
-      const center = getTouchCenter(e.touches);
       scale.value = Math.min(Math.max(pinchStartScale * distanceRatio, MIN_IMAGE_SCALE), MAX_IMAGE_SCALE);
-      imagePosition.value = {
-        x: pinchStartPosition.x + center.x - pinchStartCenter.x,
-        y: pinchStartPosition.y + center.y - pinchStartCenter.y,
-      };
-      if (scale.value <= 1) imagePosition.value = { x: 0, y: 0 };
+      void restoreImageViewportAnchor(pinchAnchor);
       isDragging.value = false;
-      e.preventDefault();
-      return;
-    }
-
-    if (e.touches.length === 1 && touchGesture === 'pan' && isDragging.value) {
-      const point = getTouchPoint(e.touches[0]);
-      imagePosition.value = {
-        x: point.x - dragStart.value.x,
-        y: point.y - dragStart.value.y,
-      };
       e.preventDefault();
     }
   }
 
   function endTouch(e: TouchEvent) {
-    if (e.touches.length === 0) {
-      resetTouchGesture();
-      return;
-    }
-
-    if (e.touches.length === 1 && touchGesture === 'pinch') {
-      const point = getTouchPoint(e.touches[0]);
-      touchGesture = scale.value > 1 ? 'pan' : null;
-      isDragging.value = scale.value > 1;
-      dragStart.value = {
-        x: point.x - imagePosition.value.x,
-        y: point.y - imagePosition.value.y,
-      };
-    }
+    if (e.touches.length < 2) resetTouchGesture();
   }
 
   function getFileTypeName(type: string) {
@@ -1275,9 +1385,9 @@
     if (e.ctrlKey && previewType.value === 'image') {
       e.preventDefault();
       if (e.deltaY < 0) {
-        zoomIn();
+        zoomIn(e.clientX, e.clientY);
       } else {
-        zoomOut();
+        zoomOut(e.clientX, e.clientY);
       }
       return;
     }
@@ -1301,6 +1411,8 @@
     document.removeEventListener('mousedown', handleMiddleDblClick);
     document.removeEventListener('selectstart', preventSelect);
     document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    imageResizeObserver?.disconnect();
+    imageResizeObserver = null;
     if (previewHistoryHandle) releaseMobileOverlayHistory(previewHistoryHandle);
     previewHistoryHandle = null;
     document.body.style.overflow = previousBodyOverflow;
@@ -1607,21 +1719,47 @@
         }
 
         .preview-image-container {
+          --file-preview-image-padding-x: 24px;
+          --file-preview-image-padding-top: 24px;
+          --file-preview-image-padding-bottom: 86px;
+
           width: 100%;
           height: 100%;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          padding: 24px 24px 86px;
+          min-width: 0;
+          min-height: 0;
           box-sizing: border-box;
-          overflow: hidden;
+          overflow: auto;
+          overscroll-behavior: contain;
+          touch-action: pan-x pan-y;
+          -webkit-overflow-scrolling: touch;
+
+          &.is-scrollable {
+            cursor: grab;
+          }
+
+          &.is-dragging {
+            cursor: grabbing;
+          }
+
+          .preview-image-stage {
+            position: relative;
+            display: grid;
+            place-items: center;
+            min-width: 100%;
+            min-height: 100%;
+            padding: var(--file-preview-image-padding-top) var(--file-preview-image-padding-x)
+              var(--file-preview-image-padding-bottom);
+            box-sizing: border-box;
+          }
 
           .preview-image {
-            max-width: 100%;
-            max-height: 100%;
+            display: block;
+            max-width: none;
+            max-height: none;
             object-fit: contain;
             border-radius: 4px;
-            touch-action: none;
+            transform-origin: center;
+            pointer-events: auto;
             box-shadow: 0 10px 30px color-mix(in srgb, #000 14%, transparent);
           }
         }
@@ -1876,7 +2014,9 @@
 
       .preview-content {
         .preview-main .preview-image-container {
-          padding: 14px 14px 78px;
+          --file-preview-image-padding-x: 14px;
+          --file-preview-image-padding-top: 14px;
+          --file-preview-image-padding-bottom: 78px;
         }
 
         .preview-main .preview-audio-container {

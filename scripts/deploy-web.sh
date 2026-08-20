@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # 前端部署:本地增量构建 → tar → scp → 服务器原子切换(滚动保留 1 个旧 dist 备份,可回滚且不累积)
 set -euo pipefail
-HOST="root@113.45.143.76"
-KEY="$HOME/.ssh/hermes_server"
+HOST="${LIGHTNOTE_DEPLOY_HOST:?请设置 LIGHTNOTE_DEPLOY_HOST，例如 deploy-user@example.com}"
+KEY="${LIGHTNOTE_DEPLOY_SSH_KEY:?请设置 LIGHTNOTE_DEPLOY_SSH_KEY 为本机 SSH 私钥绝对路径}"
+[ -f "$KEY" ] || { echo "SSH 私钥不存在: $KEY" >&2; exit 1; }
 REMOTE="/www/wwwroot"
 TS="$(date +%Y%m%d%H%M%S)"
 cd "$(dirname "$0")/.."
@@ -20,5 +21,10 @@ scp -i "$KEY" /tmp/ln-web-dist.tgz "$HOST:/tmp/ln-web-dist.tgz"
 ssh -i "$KEY" "$HOST" "cd $REMOTE && { [ -d dist ] && mv dist dist_bak_$TS; }; tar xzf /tmp/ln-web-dist.tgz && rm -f /tmp/ln-web-dist.tgz && ls -1dt dist_bak_* 2>/dev/null | tail -n +2 | xargs -r rm -rf"
 rm -f /tmp/ln-web-dist.tgz
 
-echo -n "✅  前端健康检查 HTTP "
-curl -s -o /dev/null -w '%{http_code}\n' -m 10 https://boluo66.top || echo "(curl 失败,手动确认)"
+code="$(curl -s -o /dev/null -w '%{http_code}' -m 10 https://boluo66.top || echo 000)"
+if [ "$code" = "200" ]; then
+  echo "✅  前端健康检查 HTTP 200"
+else
+  echo "⚠️  前端健康检查 HTTP $code —— 已停止总发布流程，请核对 Nginx 与当前 dist"
+  exit 1
+fi

@@ -6,6 +6,7 @@
     :esc-closable="false"
     :history-closable="false"
     modal-class="note-conflict-modal"
+    content-class="note-conflict-modal__content"
     :show-footer="false"
     width="min(920px, calc(100vw - 24px))"
   >
@@ -43,12 +44,7 @@
         <BButton :loading="busyAction === 'copy'" :disabled="busy" @click="emit('save-copy')">
           {{ t('noteDetail.conflict.saveCopy') }}
         </BButton>
-        <BButton
-          type="primary"
-          :loading="busyAction === 'overwrite'"
-          :disabled="busy"
-          @click="emit('overwrite')"
-        >
+        <BButton type="primary" :loading="busyAction === 'overwrite'" :disabled="busy" @click="emit('overwrite')">
           {{ t('noteDetail.conflict.overwrite') }}
         </BButton>
       </div>
@@ -193,7 +189,13 @@
     border-radius: 8px;
     color: var(--text-color);
     background: var(--pre-bg-color, var(--surface-panel-bg));
-    font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font:
+      13px/1.55 ui-monospace,
+      SFMono-Regular,
+      Menlo,
+      Monaco,
+      Consolas,
+      monospace;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
@@ -252,5 +254,12 @@
      背后的编辑器会处于“保存已阻断但用户看不见原因”的危险状态。 */
   .note-conflict-modal .modal-close {
     display: none;
+  }
+
+  .note-conflict-modal__content {
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
   }
 </style>

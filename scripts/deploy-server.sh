@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # 后端部署:本地 pnpm deploy(--legacy)打平自包含 node_modules → 服务器备份 → rsync 增量(--delete) → pm2 restart
 set -euo pipefail
-HOST="root@113.45.143.76"
-KEY="$HOME/.ssh/hermes_server"
+HOST="${LIGHTNOTE_DEPLOY_HOST:?请设置 LIGHTNOTE_DEPLOY_HOST，例如 deploy-user@example.com}"
+KEY="${LIGHTNOTE_DEPLOY_SSH_KEY:?请设置 LIGHTNOTE_DEPLOY_SSH_KEY 为本机 SSH 私钥绝对路径}"
+[ -f "$KEY" ] || { echo "SSH 私钥不存在: $KEY" >&2; exit 1; }
 REMOTE="/www/wwwroot/light-note-back"
 PM2="app"                     # pm2 进程名(实测,非 light-note-back)
 DOCUMENT_WORKER_PM2="light-note-document-worker"
@@ -78,4 +79,5 @@ if [ "$code" = "200" ]; then
 else
   echo "⚠️  后端健康检查 HTTP $code —— 请查 pm2 logs app;必要时回滚:"
   echo "    ssh -i $KEY $HOST \"rm -rf $REMOTE && mv ${REMOTE}_bak_$TS $REMOTE && pm2 restart $PM2 --update-env\""
+  exit 1
 fi

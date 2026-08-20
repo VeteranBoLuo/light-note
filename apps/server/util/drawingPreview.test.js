@@ -74,4 +74,52 @@ describe('drawingPreview', () => {
       expect.objectContaining({ id: 'shape-1', kind: 'shape', shape: 'ellipse', width: 260, height: 180 }),
     ]);
   });
+
+  it('保留 V3 笔画擦除轨迹供卡片按像素语义渲染', () => {
+    const preview = buildDrawingScenePreview({
+      v: 3,
+      page: { width: 1448, height: 1448 },
+      elements: [
+        {
+          id: 'stroke',
+          kind: 'stroke',
+          color: '#1f2937',
+          width: 20,
+          points: [0, 50, 100, 50],
+          erasures: [{ id: 'erase', width: 4, points: [50, 50] }],
+        },
+      ],
+    });
+
+    expect(preview.elements[0]).toMatchObject({
+      id: 'stroke',
+      erasures: [{ id: 'erase', width: 4, points: [50, 50] }],
+    });
+  });
+
+  it('保留 V3 形状擦除轨迹供卡片按像素语义渲染', () => {
+    const preview = buildDrawingScenePreview({
+      v: 3,
+      page: { width: 1448, height: 1448 },
+      elements: [
+        {
+          id: 'shape',
+          kind: 'shape',
+          shape: 'ellipse',
+          x: 100,
+          y: 120,
+          width: 200,
+          height: 140,
+          color: '#1f2937',
+          strokeWidth: 20,
+          erasures: [{ id: 'erase', width: 4, points: [200, 120] }],
+        },
+      ],
+    });
+
+    expect(preview.elements[0]).toMatchObject({
+      id: 'shape',
+      erasures: [{ id: 'erase', width: 4, points: [200, 120] }],
+    });
+  });
 });

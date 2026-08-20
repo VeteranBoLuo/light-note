@@ -1218,7 +1218,7 @@ export const getNoteDetail = async (req, res) => {
         contentDrawingVersion = DRAWING_SCENE_VERSION;
       }
     }
-    // 客户端上报的是“最高支持版本”：V2 客户仍可读 V1，V1 客户不会误读 V2。
+    // 客户端上报的是“最高支持版本”：高版本客户仍可读低版本，低版本客户不会误读新 scene。
     const drawingSupported = Number(req.body?.drawingSceneVersion || 0) >= contentDrawingVersion;
     if (normalized.type === 'drawing' && !drawingSupported) {
       // 老客户端会把未知类型回退为 TinyMCE。不给 scene 正文，并由通用更新接口拒绝 drawing 正文提交，

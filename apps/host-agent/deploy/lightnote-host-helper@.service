@@ -1,0 +1,25 @@
+[Unit]
+Description=Light Note privileged host helper request
+
+[Service]
+Type=exec
+User=root
+Group=root
+ExecStart=/usr/bin/node /usr/local/libexec/lightnote-host-helper.mjs socket
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+UMask=0077
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=tmpfs
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX
+SystemCallArchitectures=native
+NoNewPrivileges=true

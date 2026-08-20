@@ -5,6 +5,7 @@ import {
   type DrawingTextElement,
 } from '@lightnote/shared/drawing-note';
 import { drawingShapeBounds, paintDrawingShape } from './drawingShape';
+import { paintDrawingStroke } from './drawingStroke';
 
 interface DrawingBounds {
   minX: number;
@@ -93,27 +94,11 @@ function drawElement(context: CanvasRenderingContext2D, element: DrawingElement,
     return;
   }
   if (element.kind === 'shape') {
-    paintDrawingShape(context, { ...element, strokeWidth: Math.max(1 / scale, element.strokeWidth) });
+    paintDrawingShape(context, element, scale, { minimumDeviceWidth: 1 });
     return;
   }
-  context.beginPath();
-  context.strokeStyle = element.color;
-  context.fillStyle = element.color;
-  context.lineWidth = Math.max(1 / scale, element.width);
-  context.lineCap = 'round';
-  context.lineJoin = 'round';
-  if (element.points.length === 2) {
-    // 单击形成的点同样按整张画纸缩放，只保留 1 个输出像素的可辨识下限，禁止自动放大填满卡片。
-    const radius = Math.max(element.width / 2, 0.5 / scale);
-    context.arc(element.points[0], element.points[1], radius, 0, Math.PI * 2);
-    context.fill();
-    return;
-  }
-  context.moveTo(element.points[0], element.points[1]);
-  for (let index = 2; index < element.points.length; index += 2) {
-    context.lineTo(element.points[index], element.points[index + 1]);
-  }
-  context.stroke();
+  // 单击形成的点同样按整张画纸缩放，只保留 1 个输出像素的可辨识下限，禁止自动放大填满卡片。
+  paintDrawingStroke(context, element, scale, { minimumDeviceWidth: 1 });
 }
 
 export function renderDrawingThumbnail(

@@ -1,7 +1,18 @@
 <template>
   <div ref="rootRef" class="drawing-editor" :class="{ 'is-readonly': readonly }" tabindex="0" @keydown="handleKeydown">
-    <div v-if="!readonly" class="drawing-toolbar" role="toolbar" :aria-label="t('note.drawingToolbar')">
-      <div class="drawing-toolbar-scroll">
+    <div
+      v-if="!readonly"
+      ref="toolbarRef"
+      class="drawing-toolbar"
+      role="toolbar"
+      :aria-label="t('note.drawingToolbar')"
+      @pointerdown="handleToolbarPointerDown"
+      @pointermove="handleToolbarPointerMove"
+      @pointerup="finishToolbarPointerGesture"
+      @pointercancel="finishToolbarPointerGesture"
+      @click.capture="handleToolbarClickCapture"
+    >
+      <div ref="toolbarScrollRef" class="drawing-toolbar-scroll" @scroll.passive="syncToolbarScrollState">
         <template v-for="item in tools" :key="item.key">
           <BPopover
             v-if="item.key === 'shape'"
@@ -54,7 +65,36 @@
           </BTooltip>
         </template>
 
-        <span class="drawing-toolbar-separator" aria-hidden="true" />
+        <div v-if="isMobileLayout" class="drawing-toolbar-zoom-mobile" :aria-label="t('note.drawingZoom')">
+          <BButton
+            size="small"
+            class="drawing-value-button"
+            :disabled="zoomIndex === 0"
+            :aria-label="t('note.drawingZoomOut')"
+            @click="changeZoom(-1)"
+          >
+            <SvgIcon :src="icon.cloudSpace.preview.zoomOut" size="16" aria-hidden="true" />
+          </BButton>
+          <BButton
+            size="small"
+            class="drawing-mobile-zoom-value"
+            :aria-label="t('note.drawingFitCanvas')"
+            @click="fitEditablePage"
+          >
+            {{ Math.round(zoom * 100) }}%
+          </BButton>
+          <BButton
+            size="small"
+            class="drawing-value-button"
+            :disabled="zoom >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]"
+            :aria-label="t('note.drawingZoomIn')"
+            @click="changeZoom(1)"
+          >
+            <SvgIcon :src="icon.cloudSpace.preview.zoomIn" size="16" aria-hidden="true" />
+          </BButton>
+        </div>
+
+        <span v-if="!isMobileLayout" class="drawing-toolbar-separator" aria-hidden="true" />
         <BPopover
           v-if="(showColorControl || showSizeControl) && !isMobileLayout"
           v-model:open="stylePopoverOpen"
@@ -86,19 +126,6 @@
             />
           </template>
         </BPopover>
-        <BTooltip v-else-if="showColorControl || showSizeControl" :title="t('note.drawingStyle')">
-          <BButton
-            size="small"
-            class="drawing-style-trigger"
-            :aria-label="t('note.drawingStyle')"
-            @click="styleDrawerOpen = true"
-          >
-            <SvgIcon :src="icon.drawingNote.style" size="16" aria-hidden="true" />
-            <span v-if="showColorControl" class="drawing-color-dot" :style="{ backgroundColor: displayedColor }" />
-            <span v-if="showSizeControl" class="drawing-style-size">{{ activeSize }}</span>
-          </BButton>
-        </BTooltip>
-
         <BTooltip :title="t('note.drawingClear')">
           <BButton
             size="small"
@@ -112,7 +139,37 @@
         </BTooltip>
       </div>
 
+      <BButton
+        v-if="isMobileLayout"
+        v-show="toolbarCanScrollLeft || toolbarCanScrollRight"
+        size="small"
+        class="drawing-toolbar-more"
+        :class="{ 'is-forward': toolbarCanScrollRight }"
+        :aria-label="toolbarCanScrollRight ? t('note.drawingToolbarMoreTools') : t('note.drawingToolbarPreviousTools')"
+        @click.stop="nudgeToolbarTools"
+      >
+        <SvgIcon :src="toolbarCanScrollRight ? icon.arrow_right : icon.arrow_left" size="16" aria-hidden="true" />
+      </BButton>
+
       <div class="drawing-toolbar-history">
+        <BTooltip v-if="isMobileLayout" :title="t('note.drawingStyle')">
+          <BButton
+            size="small"
+            class="drawing-style-trigger drawing-style-trigger-mobile"
+            :disabled="mobileStyleUsesFallback"
+            :aria-label="t('note.drawingStyle')"
+            @click="styleDrawerOpen = true"
+          >
+            <span
+              v-if="showColorControl || mobileStyleUsesFallback"
+              class="drawing-color-dot"
+              :style="{ backgroundColor: mobileDisplayedColor }"
+            />
+            <span v-if="showSizeControl || mobileStyleUsesFallback" class="drawing-style-size">
+              {{ mobileDisplayedSize }}
+            </span>
+          </BButton>
+        </BTooltip>
         <BTooltip :title="t('note.drawingUndo')">
           <BButton
             size="small"
@@ -141,15 +198,37 @@
           placement="bottom-right"
           overlay-class-name="drawing-help-popover"
         >
-          <BTooltip :title="t('note.drawingHelp')">
-            <BButton size="small" class="drawing-tool-button drawing-help-button" :aria-label="t('note.drawingHelp')">
+          <BTooltip :title="isMobileLayout ? t('note.drawingTouchHelp') : t('note.drawingHelp')">
+            <BButton
+              size="small"
+              class="drawing-tool-button drawing-help-button"
+              :aria-label="isMobileLayout ? t('note.drawingTouchHelp') : t('note.drawingHelp')"
+            >
               <SvgIcon :src="icon.drawingNote.help" size="17" aria-hidden="true" />
             </BButton>
           </BTooltip>
           <template #content>
             <div class="drawing-help-panel">
-              <strong>{{ t('note.drawingHelpTitle') }}</strong>
-              <dl>
+              <strong>{{ isMobileLayout ? t('note.drawingTouchHelpTitle') : t('note.drawingHelpTitle') }}</strong>
+              <dl v-if="isMobileLayout">
+                <div>
+                  <dt>{{ t('note.drawingToolbarSwipe') }}</dt>
+                  <dd>{{ t('note.drawingToolbarSwipeHint') }}</dd>
+                </div>
+                <div>
+                  <dt>{{ t('note.drawingTouchPan') }}</dt>
+                  <dd>{{ t('note.drawingTouchPanHint') }}</dd>
+                </div>
+                <div>
+                  <dt>{{ t('note.drawingTouchPinch') }}</dt>
+                  <dd>{{ t('note.drawingTouchPinchHint') }}</dd>
+                </div>
+                <div>
+                  <dt>{{ t('note.drawingTouchZoomControl') }}</dt>
+                  <dd>{{ t('note.drawingTouchZoomControlHint') }}</dd>
+                </div>
+              </dl>
+              <dl v-else>
                 <div
                   ><dt><kbd>P</kbd></dt
                   ><dd>{{ t('note.drawingPen') }}</dd></div
@@ -217,17 +296,24 @@
       </div>
 
       <div class="drawing-toolbar-zoom">
-        <BButton size="small" class="drawing-value-button" :disabled="zoomIndex === 0" @click="changeZoom(-1)">
-          −
+        <BButton
+          size="small"
+          class="drawing-value-button"
+          :disabled="zoomIndex === 0"
+          :aria-label="t('note.drawingZoomOut')"
+          @click="changeZoom(-1)"
+        >
+          <SvgIcon :src="icon.cloudSpace.preview.zoomOut" size="16" aria-hidden="true" />
         </BButton>
         <span class="drawing-zoom-label">{{ Math.round(zoom * 100) }}%</span>
         <BButton
           size="small"
           class="drawing-value-button"
           :disabled="zoom >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]"
+          :aria-label="t('note.drawingZoomIn')"
           @click="changeZoom(1)"
         >
-          +
+          <SvgIcon :src="icon.cloudSpace.preview.zoomIn" size="16" aria-hidden="true" />
         </BButton>
       </div>
     </div>
@@ -353,10 +439,12 @@
     drawingRectsIntersect,
     normalizeDrawingRect,
     readDrawingClipboard,
+    transformDrawingShapeErasures,
     translateDrawingElement,
     writeDrawingClipboard,
     type DrawingRect,
   } from '@/utils/drawingSelection';
+  import { paintDrawingStroke } from '@/utils/drawingStroke';
 
   type DrawingTool = 'pen' | 'eraser' | 'text' | 'shape' | 'select' | 'hand';
   type ShapeResizeHandle = 'nw' | 'ne' | 'sw' | 'se' | 'start' | 'end';
@@ -380,6 +468,8 @@
     { state: { value: Record<string, unknown> } } | undefined;
 
   const rootRef = ref<HTMLElement | null>(null);
+  const toolbarRef = ref<HTMLElement | null>(null);
+  const toolbarScrollRef = ref<HTMLElement | null>(null);
   const workspaceRef = ref<HTMLElement | null>(null);
   const pageRef = ref<HTMLElement | null>(null);
   const canvasRef = ref<HTMLCanvasElement | null>(null);
@@ -397,6 +487,8 @@
   const styleDrawerOpen = ref(false);
   const shapePopoverOpen = ref(false);
   const helpPopoverOpen = ref(false);
+  const toolbarCanScrollLeft = ref(false);
+  const toolbarCanScrollRight = ref(false);
   const recentColors = ref<DrawingColor[]>(readRecentColors());
   const textDraft = ref<DrawingTextElement | null>(null);
   const textDraftRows = computed(() => {
@@ -409,7 +501,7 @@
   });
   const undoStack = ref<string[]>([]);
   const redoStack = ref<string[]>([]);
-  const ZOOM_LEVELS = [0.3, 0.35, 0.4, 0.5, 0.6, 0.75, 1, 1.25, 1.5] as const;
+  const ZOOM_LEVELS = [0.3, 0.35, 0.4, 0.5, 0.6, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
   const editableZoom = ref(1);
   const readonlyFitZoom = ref(1);
   const zoom = computed(() => (props.readonly ? readonlyFitZoom.value : editableZoom.value));
@@ -540,6 +632,11 @@
     if (tool.value === 'select') return selectedElements()[0]?.color || activeColor.value;
     return activeColor.value;
   });
+  const mobileStyleUsesFallback = computed(() => !showColorControl.value && !showSizeControl.value);
+  const mobileDisplayedColor = computed(() =>
+    mobileStyleUsesFallback.value ? activeColor.value : displayedColor.value,
+  );
+  const mobileDisplayedSize = computed(() => (mobileStyleUsesFallback.value ? strokeWidth.value : activeSize.value));
 
   let activePointerId: number | null = null;
   let activeCanvasRect: DOMRect | null = null;
@@ -550,6 +647,7 @@
   let eraserChanged = false;
   let eraserLimitReached = false;
   let eraserPreviewElements: DrawingElement[] | null = null;
+  let activeErasureId = '';
   let eraserCursorPoint: DrawingPoint | null = null;
   let dragStart: {
     x: number;
@@ -570,9 +668,28 @@
   let marqueeSelection: { start: DrawingPoint; current: DrawingPoint; baseIds: string[] } | null = null;
   let editSelectedTextOnRelease = false;
   let panStart: { x: number; y: number; cameraX: number; cameraY: number } | null = null;
+  const handTouchPoints = new Map<number, DrawingPoint>();
+  let pinchStart: {
+    distance: number;
+    zoom: number;
+    cameraX: number;
+    cameraY: number;
+    documentX: number;
+    documentY: number;
+  } | null = null;
+  let toolbarPointerGesture: {
+    pointerId: number;
+    x: number;
+    y: number;
+    scrollLeft: number;
+    moved: boolean;
+  } | null = null;
+  let suppressToolbarClick = false;
   let workspaceResizeObserver: ResizeObserver | null = null;
+  let toolbarResizeObserver: ResizeObserver | null = null;
   let frameId = 0;
   let zoomResizeFrame = 0;
+  let toolbarClickResetFrame = 0;
   let lastEmittedContent = '';
   const textLayoutCache = new Map<string, string[]>();
   const elementBoundsCache = new WeakMap<DrawingElement, { x: number; y: number; width: number; height: number }>();
@@ -731,21 +848,21 @@
     }
     current = clampShapeEnd(resizeStart.anchor, current);
     if (resizeStart.handle === 'start') {
-      return {
+      return transformDrawingShapeErasures(original, {
         ...original,
         x: current.x,
         y: current.y,
         width: resizeStart.anchor.x - current.x,
         height: resizeStart.anchor.y - current.y,
-      };
+      });
     }
-    return {
+    return transformDrawingShapeErasures(original, {
       ...original,
       x: resizeStart.anchor.x,
       y: resizeStart.anchor.y,
       width: current.x - resizeStart.anchor.x,
       height: current.y - resizeStart.anchor.y,
-    };
+    });
   }
 
   function clampShapeEnd(start: DrawingPoint, end: DrawingPoint) {
@@ -807,6 +924,86 @@
     activeColor.value = normalized;
   }
 
+  function syncToolbarScrollState() {
+    const toolbar = toolbarScrollRef.value;
+    if (!toolbar || !isMobileLayout.value) {
+      toolbarCanScrollLeft.value = false;
+      toolbarCanScrollRight.value = false;
+      return;
+    }
+    const maxScrollLeft = Math.max(0, toolbar.scrollWidth - toolbar.clientWidth);
+    toolbarCanScrollLeft.value = toolbar.scrollLeft > 2;
+    toolbarCanScrollRight.value = toolbar.scrollLeft < maxScrollLeft - 2;
+  }
+
+  function nudgeToolbarTools() {
+    const toolbar = toolbarScrollRef.value;
+    if (!toolbar) return;
+    const direction = toolbarCanScrollRight.value ? 1 : -1;
+    const maxScrollLeft = Math.max(0, toolbar.scrollWidth - toolbar.clientWidth);
+    const nextScrollLeft = Math.min(
+      maxScrollLeft,
+      Math.max(0, toolbar.scrollLeft + direction * Math.max(96, toolbar.clientWidth * 0.72)),
+    );
+    toolbar.scrollLeft = nextScrollLeft;
+    syncToolbarScrollState();
+  }
+
+  function handleToolbarPointerDown(event: PointerEvent) {
+    const toolbar = toolbarScrollRef.value;
+    if (!isMobileLayout.value || event.pointerType !== 'touch' || !toolbar) return;
+    if (toolbar.scrollWidth <= toolbar.clientWidth + 2) return;
+    toolbarPointerGesture = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      scrollLeft: toolbar.scrollLeft,
+      moved: false,
+    };
+  }
+
+  function handleToolbarPointerMove(event: PointerEvent) {
+    const gesture = toolbarPointerGesture;
+    const toolbar = toolbarScrollRef.value;
+    if (!gesture || !toolbar || gesture.pointerId !== event.pointerId) return;
+    const dx = event.clientX - gesture.x;
+    const dy = event.clientY - gesture.y;
+    if (!gesture.moved) {
+      if (Math.abs(dx) < 7 || Math.abs(dx) <= Math.abs(dy)) return;
+      gesture.moved = true;
+      toolbarRef.value?.setPointerCapture(event.pointerId);
+    }
+    event.preventDefault();
+    toolbar.scrollLeft = gesture.scrollLeft - dx;
+    syncToolbarScrollState();
+  }
+
+  function finishToolbarPointerGesture(event: PointerEvent) {
+    const gesture = toolbarPointerGesture;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    if (gesture.moved) suppressToolbarClick = true;
+    if (gesture.moved) {
+      try {
+        toolbarRef.value?.releasePointerCapture(event.pointerId);
+      } catch {
+        // 纵向页面滚动可能先触发 pointercancel，捕获已释放时只清理本地状态。
+      }
+    }
+    toolbarPointerGesture = null;
+    syncToolbarScrollState();
+    if (toolbarClickResetFrame) cancelAnimationFrame(toolbarClickResetFrame);
+    toolbarClickResetFrame = requestAnimationFrame(() => {
+      toolbarClickResetFrame = 0;
+      suppressToolbarClick = false;
+    });
+  }
+
+  function handleToolbarClickCapture(event: MouseEvent) {
+    if (!suppressToolbarClick) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
   function changeZoom(delta: number) {
     const next =
       delta > 0
@@ -841,6 +1038,18 @@
           (Number.parseFloat(style.paddingTop) || 0) -
           (Number.parseFloat(style.paddingBottom) || 0),
       ),
+    };
+  }
+
+  function workspacePointFromClient(clientX: number, clientY: number) {
+    const workspace = workspaceRef.value;
+    if (!workspace) return { x: 0, y: 0 };
+    const style = getComputedStyle(workspace);
+    const rect = workspace.getBoundingClientRect();
+    const rootZoom = getRootZoom();
+    return {
+      x: (clientX - rect.left) / rootZoom - (Number.parseFloat(style.paddingLeft) || 0),
+      y: (clientY - rect.top) / rootZoom - (Number.parseFloat(style.paddingTop) || 0),
     };
   }
 
@@ -894,13 +1103,8 @@
     if (activePointerId !== null) return;
     rootRef.value?.focus({ preventScroll: true });
     const size = workspaceContentSize();
-    const style = getComputedStyle(workspace);
     const rootZoom = getRootZoom();
-    const rect = workspace.getBoundingClientRect();
-    const anchor = {
-      x: (event.clientX - rect.left) / rootZoom - (Number.parseFloat(style.paddingLeft) || 0),
-      y: (event.clientY - rect.top) / rootZoom - (Number.parseFloat(style.paddingTop) || 0),
-    };
+    const anchor = workspacePointFromClient(event.clientX, event.clientY);
     const rawDeltaX = normalizedWheelDelta(event.deltaX, event.deltaMode, size.width);
     const rawDeltaY = normalizedWheelDelta(event.deltaY, event.deltaMode, size.height);
     const horizontalDelta = event.shiftKey && Math.abs(rawDeltaX) < 0.01 ? rawDeltaY : rawDeltaX;
@@ -1005,27 +1209,13 @@
     return bounds;
   }
 
-  function paintElement(context: CanvasRenderingContext2D, element: DrawingElement) {
+  function paintElement(context: CanvasRenderingContext2D, element: DrawingElement, scale: number) {
     if (element.kind === 'stroke') {
-      const points = element.points;
-      context.beginPath();
-      context.strokeStyle = element.color;
-      context.fillStyle = element.color;
-      context.lineWidth = element.width;
-      context.lineCap = 'round';
-      context.lineJoin = 'round';
-      if (points.length === 2) {
-        context.arc(points[0], points[1], element.width / 2, 0, Math.PI * 2);
-        context.fill();
-        return;
-      }
-      context.moveTo(points[0], points[1]);
-      for (let index = 2; index < points.length; index += 2) context.lineTo(points[index], points[index + 1]);
-      context.stroke();
+      paintDrawingStroke(context, element, scale);
       return;
     }
     if (element.kind === 'shape') {
-      paintDrawingShape(context, element);
+      paintDrawingShape(context, element, scale);
       return;
     }
     context.fillStyle = element.color;
@@ -1045,11 +1235,11 @@
     paintedElements.forEach((element) => {
       // 编辑框已经承载同一文本；画布暂时隐藏原元素，避免视觉上叠成两份。
       if (textDraft.value?.id !== element.id) {
-        paintElement(context, previewElement(element));
+        paintElement(context, previewElement(element), scale);
       }
     });
-    if (activeStroke) paintElement(context, activeStroke);
-    if (activeShape) paintElement(context, activeShape);
+    if (activeStroke) paintElement(context, activeStroke, scale);
+    if (activeShape) paintElement(context, activeShape, scale);
     if (showSelection && tool.value === 'select') {
       const activeSelectedIds = new Set(marqueeSelectedIds(context, paintedElements));
       const selectedPreviewElements = paintedElements
@@ -1282,9 +1472,9 @@
 
   function eraseAt(point: { x: number; y: number }) {
     const source = eraserPreviewElements || scene.value.elements;
-    const result = eraseDrawingElementsAt(source, point, eraserSize.value / 2, createElementId, {
-      maxElements: DRAWING_SCENE_LIMITS.maxElements,
-      maxStrokes: DRAWING_SCENE_LIMITS.maxStrokes,
+    const result = eraseDrawingElementsAt(source, point, eraserSize.value, activeErasureId, {
+      maxErasureTrails: DRAWING_SCENE_LIMITS.maxErasureTrails,
+      maxErasurePointPairs: DRAWING_SCENE_LIMITS.maxErasurePointPairs,
     });
     if (result.limitReached) eraserLimitReached = true;
     if (!result.changed) return;
@@ -1294,10 +1484,108 @@
     scheduleDraw();
   }
 
+  function handTouchPair() {
+    const points = Array.from(handTouchPoints.values());
+    if (points.length < 2) return null;
+    const [first, second] = points;
+    return {
+      distance: Math.max(1, Math.hypot(second.x - first.x, second.y - first.y)),
+      midpoint: { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 },
+    };
+  }
+
+  function handleHandTouchPointerDown(event: PointerEvent) {
+    if (tool.value !== 'hand' || event.pointerType !== 'touch') return false;
+    if (handTouchPoints.size >= 2 && !handTouchPoints.has(event.pointerId)) {
+      event.preventDefault();
+      return true;
+    }
+    event.preventDefault();
+    rootRef.value?.focus({ preventScroll: true });
+    handTouchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    canvasRef.value?.setPointerCapture(event.pointerId);
+    eraserCursorPoint = null;
+    isPanning.value = true;
+    if (handTouchPoints.size === 1) {
+      activePointerId = event.pointerId;
+      panStart = { x: event.clientX, y: event.clientY, cameraX: cameraX.value, cameraY: cameraY.value };
+      pinchStart = null;
+      scheduleDraw();
+      return true;
+    }
+    const pair = handTouchPair();
+    if (!pair) return true;
+    const anchor = workspacePointFromClient(pair.midpoint.x, pair.midpoint.y);
+    const startZoom = Math.max(0.01, editableZoom.value);
+    activePointerId = null;
+    panStart = null;
+    pinchStart = {
+      distance: pair.distance,
+      zoom: editableZoom.value,
+      cameraX: cameraX.value,
+      cameraY: cameraY.value,
+      documentX: (anchor.x - cameraX.value) / startZoom,
+      documentY: (anchor.y - cameraY.value) / startZoom,
+    };
+    return true;
+  }
+
+  function handleHandTouchPointerMove(event: PointerEvent) {
+    if (!handTouchPoints.has(event.pointerId)) return false;
+    event.preventDefault();
+    handTouchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pinchStart && handTouchPoints.size >= 2) {
+      const pair = handTouchPair();
+      if (!pair) return true;
+      const anchor = workspacePointFromClient(pair.midpoint.x, pair.midpoint.y);
+      editableZoom.value = Math.max(
+        ZOOM_LEVELS[0],
+        Math.min(ZOOM_LEVELS[ZOOM_LEVELS.length - 1], pinchStart.zoom * (pair.distance / pinchStart.distance)),
+      );
+      cameraX.value = anchor.x - pinchStart.documentX * editableZoom.value;
+      cameraY.value = anchor.y - pinchStart.documentY * editableZoom.value;
+      clampCamera();
+      scheduleCanvasResize();
+      return true;
+    }
+    if (panStart && handTouchPoints.size === 1) {
+      cameraX.value = panStart.cameraX + (event.clientX - panStart.x);
+      cameraY.value = panStart.cameraY + (event.clientY - panStart.y);
+      clampCamera();
+    }
+    return true;
+  }
+
+  function finishHandTouchPointer(event: PointerEvent) {
+    if (!handTouchPoints.has(event.pointerId)) return false;
+    try {
+      canvasRef.value?.releasePointerCapture(event.pointerId);
+    } catch {
+      // 系统手势可能先释放指针捕获；本地触控状态仍需结束。
+    }
+    handTouchPoints.delete(event.pointerId);
+    pinchStart = null;
+    const remaining = Array.from(handTouchPoints.entries())[0];
+    if (remaining) {
+      const [pointerId, point] = remaining;
+      activePointerId = pointerId;
+      panStart = { x: point.x, y: point.y, cameraX: cameraX.value, cameraY: cameraY.value };
+      isPanning.value = true;
+    } else {
+      activePointerId = null;
+      activeCanvasRect = null;
+      panStart = null;
+      isPanning.value = false;
+    }
+    scheduleDraw();
+    return true;
+  }
+
   function handlePointerDown(event: PointerEvent) {
     const isDirectPanButton = event.button === 1 || event.button === 2;
-    if (props.readonly || textDraft.value || activePointerId !== null || (!isDirectPanButton && event.button !== 0))
-      return;
+    if (props.readonly || textDraft.value) return;
+    if (handleHandTouchPointerDown(event)) return;
+    if (activePointerId !== null || (!isDirectPanButton && event.button !== 0)) return;
     rootRef.value?.focus({ preventScroll: true });
     activePointerId = event.pointerId;
     canvasRef.value?.setPointerCapture(event.pointerId);
@@ -1340,6 +1628,7 @@
     }
     if (tool.value === 'eraser') {
       beginMutation();
+      activeErasureId = createElementId();
       eraserChanged = false;
       eraserLimitReached = false;
       eraserPreviewElements = scene.value.elements;
@@ -1467,6 +1756,7 @@
   }
 
   function handlePointerMove(event: PointerEvent) {
+    if (handleHandTouchPointerMove(event)) return;
     if (tool.value === 'eraser' && !panStart) {
       eraserCursorPoint = canvasPoint(event);
       scheduleDraw();
@@ -1534,6 +1824,8 @@
   function hasActiveGesture() {
     return Boolean(
       activePointerId !== null ||
+      handTouchPoints.size > 0 ||
+      pinchStart ||
       activeStroke ||
       activeShape ||
       mutationSnapshot ||
@@ -1555,10 +1847,13 @@
   function cancelActiveGesture() {
     if (!hasActiveGesture()) return false;
     const cameraSnapshot = panStart;
+    const pinchSnapshot = pinchStart;
     const pointerId = activePointerId;
-    if (pointerId !== null) {
+    const pointerIds = new Set(handTouchPoints.keys());
+    if (pointerId !== null) pointerIds.add(pointerId);
+    for (const capturedPointerId of pointerIds) {
       try {
-        canvasRef.value?.releasePointerCapture(pointerId);
+        canvasRef.value?.releasePointerCapture(capturedPointerId);
       } catch {
         // 指针捕获可能已由浏览器释放；仍需继续清理本地手势状态。
       }
@@ -1568,9 +1863,17 @@
       cameraX.value = cameraSnapshot.cameraX;
       cameraY.value = cameraSnapshot.cameraY;
       clampCamera();
+    } else if (pinchSnapshot) {
+      editableZoom.value = pinchSnapshot.zoom;
+      cameraX.value = pinchSnapshot.cameraX;
+      cameraY.value = pinchSnapshot.cameraY;
+      clampCamera();
+      scheduleCanvasResize();
     }
     activePointerId = null;
     activeCanvasRect = null;
+    handTouchPoints.clear();
+    pinchStart = null;
     mutationSnapshot = '';
     activeStroke = null;
     activeShape = null;
@@ -1578,6 +1881,7 @@
     eraserChanged = false;
     eraserLimitReached = false;
     eraserPreviewElements = null;
+    activeErasureId = '';
     dragStart = null;
     resizeStart = null;
     marqueeSelection = null;
@@ -1589,6 +1893,7 @@
   }
 
   function handlePointerUp(event: PointerEvent) {
+    if (finishHandTouchPointer(event)) return;
     if (!releasePointer(event)) return;
     if (activeStroke) {
       scene.value = { ...scene.value, elements: [...scene.value.elements, activeStroke] };
@@ -1662,6 +1967,7 @@
     eraserChanged = false;
     eraserLimitReached = false;
     eraserPreviewElements = null;
+    activeErasureId = '';
     dragStart = null;
     resizeStart = null;
     marqueeSelection = null;
@@ -1670,6 +1976,7 @@
   }
 
   function handlePointerCancel(event: PointerEvent) {
+    if (finishHandTouchPointer(event)) return;
     if (event.pointerId !== activePointerId) return;
     cancelActiveGesture();
   }
@@ -1968,6 +2275,10 @@
     scheduleDraw();
   });
 
+  watch(isMobileLayout, () => {
+    void nextTick(syncToolbarScrollState);
+  });
+
   onMounted(() => {
     if (props.readonly) {
       fitReadonlyPage();
@@ -1982,13 +2293,20 @@
         workspaceResizeObserver.observe(workspaceRef.value);
       }
     }
+    if (typeof ResizeObserver !== 'undefined' && toolbarScrollRef.value) {
+      toolbarResizeObserver = new ResizeObserver(syncToolbarScrollState);
+      toolbarResizeObserver.observe(toolbarScrollRef.value);
+    }
+    void nextTick(syncToolbarScrollState);
     emit('ready');
   });
 
   onBeforeUnmount(() => {
     workspaceResizeObserver?.disconnect();
+    toolbarResizeObserver?.disconnect();
     if (frameId) cancelAnimationFrame(frameId);
     if (zoomResizeFrame) cancelAnimationFrame(zoomResizeFrame);
+    if (toolbarClickResetFrame) cancelAnimationFrame(toolbarClickResetFrame);
   });
 
   defineExpose({ exportJson, exportPng, replaceContentWithUndo });
@@ -2039,6 +2357,14 @@
     display: none;
   }
 
+  .drawing-toolbar-more {
+    display: none;
+  }
+
+  .drawing-toolbar-zoom-mobile {
+    display: none;
+  }
+
   .drawing-toolbar-history,
   .drawing-toolbar-zoom {
     display: flex;
@@ -2080,6 +2406,20 @@
     gap: 5px;
     min-width: 48px;
     padding-inline: 7px;
+  }
+
+  .drawing-style-trigger-mobile {
+    flex: 0 0 54px;
+    width: 54px;
+    min-width: 54px;
+    padding-inline: 5px;
+    gap: 4px;
+
+    .drawing-style-size {
+      flex-basis: 20px;
+      width: 20px;
+      text-align: center;
+    }
   }
 
   .drawing-color-dot {
@@ -2205,6 +2545,28 @@
     width: 100%;
   }
 
+  .drawing-toolbar-zoom-mobile {
+    flex: 0 0 auto;
+    align-items: center;
+    margin-left: 2px;
+    padding-left: 6px;
+    gap: 3px;
+    border-left: 1px solid var(--surface-border-color, var(--card-border-color));
+  }
+
+  .drawing-mobile-zoom-value {
+    flex: 0 0 42px;
+    width: 42px;
+    min-width: 42px;
+    padding: 0 3px;
+    color: var(--text-color);
+    border: 1px solid transparent !important;
+    background: var(--primary-btn-bg-color);
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+    text-align: center;
+  }
+
   .drawing-workspace {
     position: relative;
     flex: 1 1 auto;
@@ -2242,6 +2604,10 @@
     inset: 0;
     display: block;
     touch-action: none;
+  }
+
+  .drawing-editor.is-readonly .drawing-canvas {
+    touch-action: pan-y;
   }
 
   .drawing-canvas.is-tool-pen,
@@ -2314,18 +2680,40 @@
     }
 
     .drawing-toolbar {
+      gap: 3px;
       padding-inline: 8px;
+      touch-action: pan-y;
     }
 
     .drawing-toolbar-scroll {
-      padding-right: 8px;
-      box-shadow: inset -12px 0 10px -13px rgba(31, 41, 55, 0.5);
+      padding-right: 4px;
+      scroll-behavior: smooth;
+    }
+
+    .drawing-toolbar-more {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      flex: 0 0 26px;
+      width: 26px;
+      min-width: 26px;
+      padding: 0;
+      color: var(--primary-color);
+      border: 1px solid var(--primary-color) !important;
+      background: var(--card-background);
+      box-shadow: -7px 0 10px var(--card-background);
+    }
+
+    .drawing-toolbar-more.is-forward {
+      color: #fff;
+      background: var(--primary-color);
     }
 
     .drawing-toolbar-history {
       position: relative;
       z-index: 1;
-      padding-left: 6px;
+      padding-left: 4px;
+      gap: 3px;
       background: var(--card-background);
     }
 
@@ -2334,8 +2722,17 @@
       display: none;
     }
 
+    .drawing-toolbar-zoom-mobile {
+      display: flex;
+    }
+
     .drawing-help-clear {
       display: flex;
+    }
+
+    .drawing-help-panel dl > div {
+      grid-template-columns: minmax(92px, auto) 1fr;
+      gap: 10px;
     }
 
     .drawing-workspace {
