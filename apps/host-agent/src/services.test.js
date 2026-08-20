@@ -10,7 +10,7 @@ const baseConfig = {
   pm2Home: "/var/lib/lightnote-pm2",
   pm2AccessMode: "direct",
   sudoBin: "/usr/bin/sudo",
-  privilegedHelperPath: "/usr/local/libexec/lightnote-host-helper",
+  privilegedHelperPath: "/usr/local/libexec/lightnote-host-helper.mjs",
   services: [
     {
       id: "lightnote-document-worker",
@@ -57,7 +57,7 @@ describe("executeHostAction", () => {
       "/usr/bin/sudo",
       [
         "-n",
-        "/usr/local/libexec/lightnote-host-helper",
+        "/usr/local/libexec/lightnote-host-helper.mjs",
         "pm2-restart",
         "lightnote-document-worker",
       ],
@@ -78,7 +78,7 @@ describe("executeHostAction", () => {
     );
     expect(runner).toHaveBeenCalledWith(
       "/usr/bin/sudo",
-      ["-n", "/usr/local/libexec/lightnote-host-helper", "nginx-reload"],
+      ["-n", "/usr/local/libexec/lightnote-host-helper.mjs", "nginx-reload"],
       expect.objectContaining({ timeoutMs: 20_000 }),
     );
   });
@@ -129,7 +129,7 @@ describe("executeHostAction", () => {
       "/usr/bin/sudo",
       [
         "-n",
-        "/usr/local/libexec/lightnote-host-helper",
+        "/usr/local/libexec/lightnote-host-helper.mjs",
         "pm2-logs",
         "lightnote-document-worker",
       ],

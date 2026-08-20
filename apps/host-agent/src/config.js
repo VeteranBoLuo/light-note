@@ -101,7 +101,7 @@ export function loadHostAgentConfig(environment = process.env) {
     privilegedHelperPath: absolutePath(
       environment,
       "HOST_AGENT_PRIVILEGED_HELPER",
-      "/usr/local/libexec/lightnote-host-helper",
+      "/usr/local/libexec/lightnote-host-helper.mjs",
     ),
     sudoBin: absolutePath(environment, "HOST_AGENT_SUDO_BIN", "/usr/bin/sudo"),
     systemctlBin: absolutePath(

@@ -40,7 +40,7 @@ ssh -i "$KEY" "$HOST" "set -eu; \
     useradd --system --home-dir /var/lib/lightnote-host-agent --no-create-home --shell /usr/sbin/nologin '$AGENT_USER'; \
   fi; \
   install -d -o root -g root -m 0755 /usr/local/libexec /etc/lightnote-host-agent; \
-  install -o root -g root -m 0755 '$REMOTE/privileged/lightnote-host-helper' /usr/local/libexec/lightnote-host-helper; \
+  install -o root -g root -m 0755 '$REMOTE/privileged/lightnote-host-helper.mjs' /usr/local/libexec/lightnote-host-helper.mjs; \
   install -o root -g root -m 0644 '$REMOTE/deploy/lightnote-host-agent@.service' /etc/systemd/system/lightnote-host-agent@.service; \
   sudoers_tmp=\$(mktemp /etc/sudoers.d/lightnote-host-agent.XXXXXX); \
   env_tmp=\$(mktemp /etc/lightnote-host-agent/agent.env.XXXXXX); \
@@ -55,6 +55,9 @@ ssh -i "$KEY" "$HOST" "set -eu; \
       -e 's/HOST_AGENT_PM2_ACCESS_MODE=direct/HOST_AGENT_PM2_ACCESS_MODE=helper/' \
       '$REMOTE/deploy/agent.env.example' > \"\$env_tmp\"; \
     install -o root -g '$AGENT_USER' -m 0640 \"\$env_tmp\" /etc/lightnote-host-agent/agent.env; \
+  elif grep -qx 'HOST_AGENT_PRIVILEGED_HELPER=/usr/local/libexec/lightnote-host-helper' /etc/lightnote-host-agent/agent.env; then \
+    sed 's#^HOST_AGENT_PRIVILEGED_HELPER=/usr/local/libexec/lightnote-host-helper\$#HOST_AGENT_PRIVILEGED_HELPER=/usr/local/libexec/lightnote-host-helper.mjs#' /etc/lightnote-host-agent/agent.env > "\$env_tmp"; \
+    install -o root -g '$AGENT_USER' -m 0640 "\$env_tmp" /etc/lightnote-host-agent/agent.env; \
   fi; \
   ! grep -q '<agent-user>' /etc/lightnote-host-agent/agent.env; \
   grep -qx 'HOST_AGENT_PM2_ACCESS_MODE=helper' /etc/lightnote-host-agent/agent.env; \
@@ -67,9 +70,10 @@ ssh -i "$KEY" "$HOST" "set -eu; \
   systemctl is-active --quiet 'lightnote-host-agent@$AGENT_USER.service'; \
   test -S /run/lightnote-host-agent/agent.sock; \
   curl --fail --silent --show-error --unix-socket /run/lightnote-host-agent/agent.sock http://localhost/v1/health >/dev/null; \
-  sudo -u '$AGENT_USER' sudo -n /usr/local/libexec/lightnote-host-helper capabilities >/dev/null; \
+  sudo -u '$AGENT_USER' sudo -n /usr/local/libexec/lightnote-host-helper.mjs capabilities >/dev/null; \
   curl --fail --silent --show-error --unix-socket /run/lightnote-host-agent/agent.sock http://localhost/v1/dashboard | \
     /usr/bin/node -e 'let source=\"\"; process.stdin.on(\"data\", chunk => source += chunk).on(\"end\", () => { const payload = JSON.parse(source); const expected = new Set([\"lightnote-api\", \"lightnote-document-worker\", \"lightnote-bookmark-icon-worker\", \"lightnote-resource-governance-worker\"]); const services = payload?.data?.services || []; for (const service of services) { if (expected.has(service.id) && service.state !== \"unknown\") expected.delete(service.id); } if (!payload?.ok || expected.size) process.exit(1); });'; \
+  rm -f /usr/local/libexec/lightnote-host-helper; \
   echo 'Host Agent health and fixed helper checks passed'"
 
 echo "🎉  Host Agent 部署完成"

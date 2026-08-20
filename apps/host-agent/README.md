@@ -27,8 +27,8 @@ sudo install -d -o root -g root -m 0755 /opt/lightnote-host-agent
 sudo rsync -a --delete /tmp/lightnote-host-agent-package/ /opt/lightnote-host-agent/
 
 sudo install -o root -g root -m 0755 \
-  apps/host-agent/privileged/lightnote-host-helper \
-  /usr/local/libexec/lightnote-host-helper
+  apps/host-agent/privileged/lightnote-host-helper.mjs \
+  /usr/local/libexec/lightnote-host-helper.mjs
 sudo install -o root -g root -m 0644 \
   apps/host-agent/deploy/lightnote-host-agent@.service \
   /etc/systemd/system/lightnote-host-agent@.service
