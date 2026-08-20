@@ -1,4 +1,5 @@
 import { apiBasePost } from '@/http/request';
+import { DRAWING_SCENE_VERSION } from '@lightnote/shared/drawing-note';
 
 const NOTE_DETAIL_PREFETCH_TTL = 30_000;
 const NOTE_DETAIL_LOCAL_SNAPSHOT_TTL = 2 * 60_000;
@@ -55,7 +56,7 @@ function createRequest(identity: NoteDetailRequestIdentity, noteId: string) {
   const key = cacheKey(identity, noteId);
   const promise = apiBasePost(
     '/api/note/getNoteDetail',
-    { id: noteId, drawingSceneVersion: 1 },
+    { id: noteId, drawingSceneVersion: DRAWING_SCENE_VERSION },
     {
       silent: true,
       timeout: NOTE_DETAIL_INTERACTIVE_TIMEOUT,

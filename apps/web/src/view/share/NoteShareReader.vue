@@ -48,18 +48,18 @@
         <div v-if="isSubtreeShare && headings.length" class="note-share-reader__tabs" role="tablist">
           <BButton
             class="note-share-reader__tab"
-            :class="{ 'is-active': sidebarTab === 'pages' }"
+            :class="{ 'is-active': effectiveSidebarTab === 'pages' }"
             role="tab"
-            :aria-selected="sidebarTab === 'pages'"
+            :aria-selected="effectiveSidebarTab === 'pages'"
             @click="sidebarTab = 'pages'"
           >
             {{ t('noteShare.pages') }}
           </BButton>
           <BButton
             class="note-share-reader__tab"
-            :class="{ 'is-active': sidebarTab === 'outline' }"
+            :class="{ 'is-active': effectiveSidebarTab === 'outline' }"
             role="tab"
-            :aria-selected="sidebarTab === 'outline'"
+            :aria-selected="effectiveSidebarTab === 'outline'"
             @click="sidebarTab = 'outline'"
           >
             {{ t('noteShare.outline') }}
@@ -70,9 +70,9 @@
         </h2>
         <div
           class="note-share-reader__sidebar-scroll"
-          :class="{ 'is-outline': !isSubtreeShare || sidebarTab === 'outline' }"
+          :class="{ 'is-outline': !isSubtreeShare || effectiveSidebarTab === 'outline' }"
         >
-          <template v-if="isSubtreeShare && sidebarTab === 'pages'">
+          <template v-if="isSubtreeShare && effectiveSidebarTab === 'pages'">
             <PublicNoteTree
               v-if="rootTreeNode"
               :node="rootTreeNode"
@@ -87,6 +87,7 @@
             class="note-share-reader__outline-list"
             :headings="headings"
             :active-index="activeHeadingIndex"
+            variant="share"
             @select="scrollToHeading"
           />
         </div>
@@ -163,19 +164,19 @@
       <div v-if="isSubtreeShare && headings.length" class="note-share-reader__tabs" role="tablist">
         <BButton
           class="note-share-reader__tab"
-          :class="{ 'is-active': sidebarTab === 'pages' }"
+          :class="{ 'is-active': effectiveSidebarTab === 'pages' }"
           @click="sidebarTab = 'pages'"
           >{{ t('noteShare.pages') }}</BButton
         >
         <BButton
           class="note-share-reader__tab"
-          :class="{ 'is-active': sidebarTab === 'outline' }"
+          :class="{ 'is-active': effectiveSidebarTab === 'outline' }"
           @click="sidebarTab = 'outline'"
           >{{ t('noteShare.outline') }}</BButton
         >
       </div>
       <PublicNoteTree
-        v-if="isSubtreeShare && sidebarTab === 'pages' && rootTreeNode"
+        v-if="isSubtreeShare && effectiveSidebarTab === 'pages' && rootTreeNode"
         :node="rootTreeNode"
         :active-id="page.id"
         :get-children="getTreeChildren"
@@ -187,6 +188,7 @@
         class="note-share-reader__drawer-outline"
         :headings="headings"
         :active-index="activeHeadingIndex"
+        variant="share"
         mobile
         @select="scrollFromDrawer"
       />
@@ -244,6 +246,7 @@
   let referrerMeta: HTMLMetaElement | null = null;
   let previousReferrerPolicy: string | null = null;
   let headingSpyFrame = 0;
+  let pageRenderVersion = 0;
   const share = reactive({
     rootNoteId: '',
     rootTitle: '',
@@ -268,6 +271,9 @@
     return new URLSearchParams(hash).get('token') || '';
   });
   const isSubtreeShare = computed(() => share.scopeType === 'subtree');
+  const effectiveSidebarTab = computed<'pages' | 'outline'>(() =>
+    isSubtreeShare.value && sidebarTab.value === 'outline' && !headings.value.length ? 'pages' : sidebarTab.value,
+  );
   const desktopSidebarVisible = computed(() => isSubtreeShare.value || headings.value.length > 0);
   const rootTreeNode = computed<PublicNoteShareTreeItem | null>(() =>
     share.rootNoteId
@@ -291,12 +297,18 @@
   }
 
   async function renderPage() {
+    const renderVersion = ++pageRenderVersion;
+    const sourceContent = page.content;
+    const sourceType = page.type;
     headings.value = [];
     activeHeadingIndex.value = null;
     renderedHtml.value = '';
-    if (page.type === 'drawing') return;
-    renderedHtml.value = await noteContentToHtml(normalizeNoteContentResourceUrls(page.content), page.type);
+    if (sourceType === 'drawing') return;
+    const nextHtml = await noteContentToHtml(normalizeNoteContentResourceUrls(sourceContent), sourceType);
+    if (renderVersion !== pageRenderVersion) return;
+    renderedHtml.value = nextHtml;
     await nextTick();
+    if (renderVersion !== pageRenderVersion) return;
     const elements = Array.from(contentRef.value?.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6') || []);
     const minimum = elements.length ? Math.min(...elements.map((element) => Number(element.tagName.slice(1)))) : 1;
     headings.value = elements.map((element, index) => {

@@ -1,18 +1,44 @@
 import { describe, expect, it } from 'vitest';
 import {
   DRAWING_PAGE,
+  DRAWING_SCENE_VERSION,
   DRAWING_SCENE_LIMITS,
   DrawingSceneValidationError,
   createEmptyDrawingScene,
   parseDrawingScene,
   serializeDrawingScene,
+  upgradeDrawingScene,
 } from './drawingNote.js';
 
 describe('drawingNote scene protocol', () => {
   it('创建并稳定序列化空白场景', () => {
     const empty = createEmptyDrawingScene();
-    expect(empty).toEqual({ v: 1, page: DRAWING_PAGE, elements: [] });
+    expect(empty).toEqual({ v: 2, page: DRAWING_PAGE, elements: [] });
     expect(parseDrawingScene(serializeDrawingScene(empty))).toEqual(empty);
+  });
+
+  it('无损将 V1 竖版场景水平居中升级为 V2 方形场景', () => {
+    const upgraded = upgradeDrawingScene({
+      v: 1,
+      page: { width: 1024, height: 1448 },
+      elements: [
+        { id: 's', kind: 'stroke', color: '#1f2937', width: 2, points: [0, 10, 1024, 20] },
+        { id: 't', kind: 'text', x: 20, y: 30, width: 180, fontSize: 20, color: '#1f2937', text: '文本' },
+      ],
+    });
+    expect(upgraded.v).toBe(DRAWING_SCENE_VERSION);
+    expect(upgraded.page).toEqual(DRAWING_PAGE);
+    expect(upgraded.elements[0].points).toEqual([212, 10, 1236, 20]);
+    expect(upgraded.elements[1].x).toBe(232);
+  });
+
+  it('升级时保留 V1 协议允许的最右侧坐标', () => {
+    const upgraded = upgradeDrawingScene({
+      v: 1,
+      page: { width: 1024, height: 1448 },
+      elements: [{ id: 's', kind: 'stroke', color: '#1f2937', width: 2, points: [8192, 10, 8192, 20] }],
+    });
+    expect(upgraded.elements[0].points).toEqual([8404, 10, 8404, 20]);
   });
 
   it('只保留受支持字段并规范坐标精度', () => {

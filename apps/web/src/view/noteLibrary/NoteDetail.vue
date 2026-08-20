@@ -17,6 +17,7 @@
         :page-tree-writable="noteTreeWriteEnabled"
         @del="delNote"
         @save="clickSaveNote"
+        @save-version="saveManualVersion"
         @retry-save="retryPendingSave"
         @switch-mode="triggerEditorSwitch"
         @undo-switch="triggerEditorUndo"
@@ -288,6 +289,13 @@
       :note="activeShareNote"
       @close="activeShareNote = null"
     />
+    <NewNotePickerModal
+      v-if="childTypePickerVisible"
+      v-model:visible="childTypePickerVisible"
+      blank-only
+      :title="t('note.newChildPage')"
+      @select-blank="createChildPageWithType"
+    />
     <NoteConflictModal
       v-if="conflictVisible && conflictCloudVersion && conflictLocalVersion"
       v-model:visible="conflictVisible"
@@ -389,6 +397,9 @@
   );
   const NoteMoveModal = createDeferredDetailFeature(() => import('@/components/noteLibrary/tree/NoteMoveModal.vue'));
   const NoteShareModal = createDeferredDetailFeature(() => import('@/components/noteLibrary/share/NoteShareModal.vue'));
+  const NewNotePickerModal = createDeferredDetailFeature(
+    () => import('@/components/noteLibrary/library/NewNotePickerModal.vue'),
+  );
   const NoteRenameModal = createDeferredDetailFeature(
     () => import('@/components/noteLibrary/tree/NoteRenameModal.vue'),
   );
@@ -427,7 +438,7 @@
   const { addResourcesToInbox, removeResourcesFromInbox } = useInboxEnqueue();
   const DEFAULT_NOTE_TITLE = t('note.untitledDoc');
   const DEFAULT_NOTE_CONTENT = '<p><br></p>';
-  const DEFAULT_DRAWING_CONTENT = '{"v":1,"page":{"width":1024,"height":1448},"elements":[]}';
+  const DEFAULT_DRAWING_CONTENT = '{"v":2,"page":{"width":1448,"height":1448},"elements":[]}';
   const routeQueryValue = (value: unknown) => {
     const raw = Array.isArray(value) ? value[0] : value;
     return String(raw ?? '').trim();
@@ -1182,6 +1193,8 @@
   const mobileNavigationOpen = ref(false);
   const mobileNavigationParentId = ref<string | null>(null);
   const mobileNavigationInitialTab = ref<'pages' | 'outline'>('pages');
+  const childTypePickerVisible = ref(false);
+  const childCreateParentId = ref('');
   const currentTreeNote = computed(() => ({
     id: note.id,
     title: note.title,
@@ -1192,9 +1205,16 @@
 
   function createChildPage(target?: NoteTreeItem) {
     if (!noteTreeWriteEnabled.value || !note.id || readonly.value) return;
+    childCreateParentId.value = target?.id || note.id;
+    childTypePickerVisible.value = true;
+  }
+
+  function createChildPageWithType(type: 'html' | 'markdown' | 'drawing') {
+    if (!childCreateParentId.value) return;
+    childTypePickerVisible.value = false;
     router.push({
       path: '/noteLibrary/add',
-      query: { type: 'html', parent: target?.id || note.id, ...detailSourceQuery() },
+      query: { type, parent: childCreateParentId.value, ...detailSourceQuery() },
     });
   }
 
@@ -1750,6 +1770,31 @@
     void saveImmediately(flag);
   }
 
+  const savingManualVersion = ref(false);
+  async function saveManualVersion() {
+    if (savingManualVersion.value || readonly.value) return;
+    savingManualVersion.value = true;
+    try {
+      const saved = await saveImmediately(false);
+      if (!saved || !note.id) return;
+      const response = await apiBasePost('/api/note/createNoteVersion', {
+        id: note.id,
+        revision: note.revision,
+      });
+      if (response.status === 409 && response.data?.code === 'NOTE_VERSION_CONFLICT') {
+        const cloud = normalizeConflictVersion(response.data?.details?.current, note.id);
+        if (cloud) openVersionConflict(cloud, currentNoteVersion());
+        return;
+      }
+      if (response.status !== 200) throw new Error(response.msg || t('noteDetail.saveVersionFailed'));
+      message.success(t('noteDetail.saveVersionSuccess'));
+    } catch (error: any) {
+      message.error(error?.message || t('noteDetail.saveVersionFailed'));
+    } finally {
+      savingManualVersion.value = false;
+    }
+  }
+
   async function retryPendingSave() {
     if (!navigator.onLine) {
       saveStatus.value = 'offline';
@@ -1878,7 +1923,7 @@
     // Windows/Linux 使用 Ctrl，macOS 使用 Command；两端统一拦截浏览器“保存网页”。
     if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 's') {
       event.preventDefault(); // 阻止默认的保存行为
-      void saveImmediately(true);
+      void saveManualVersion();
     }
   };
 

@@ -69,8 +69,16 @@ vi.mock('../util/services/noteReferenceService.js', () => ({
   listOwnedResourceBacklinks,
 }));
 
-const { updateNote, updateDrawingNote, convertNoteMode, restoreNoteVersion, delNote, resolveResourceRefs, resourceBacklinks } =
-  await import('./noteLibraryHandle.js');
+const {
+  updateNote,
+  updateDrawingNote,
+  createNoteVersion,
+  convertNoteMode,
+  restoreNoteVersion,
+  delNote,
+  resolveResourceRefs,
+  resourceBacklinks,
+} = await import('./noteLibraryHandle.js');
 
 const mockRes = () => ({ send: vi.fn() });
 const lastSent = (res) => res.send.mock.calls.at(-1)?.[0];
@@ -407,6 +415,47 @@ describe('手绘笔记专用保存边界', () => {
     );
     expect(lastSent(contentRes)).toMatchObject({ status: 400, data: { code: 'INVALID_DRAWING_SCENE' } });
     expect(connection.commit).not.toHaveBeenCalled();
+  });
+});
+
+describe('手动保存历史版本', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    ensureNotVisitor.mockReturnValue(true);
+    connection.query.mockImplementation(async (sql) => {
+      if (/SELECT id, title, content, type, revision, update_time FROM note/.test(sql)) {
+        return [[{ id: 'note-1', title: '当前笔记', content: '<p>正文</p>', type: 'html', revision: 5 }]];
+      }
+      if (/INSERT INTO note_versions/.test(sql)) return [{ insertId: 'version-1' }];
+      if (/SELECT COUNT\(\*\) AS n FROM note_versions/.test(sql)) return [[{ n: 1 }]];
+      return [{ affectedRows: 1 }];
+    });
+  });
+
+  it('按当前 revision 强制创建 manual 还原点并提交事务', async () => {
+    const res = mockRes();
+    await createNoteVersion({ user: { id: 'u1' }, body: { id: 'note-1', revision: 5 } }, res);
+
+    expect(lastSent(res)).toMatchObject({ status: 200, data: { id: 'version-1', noteId: 'note-1', revision: 5 } });
+    const historyInsert = connection.query.mock.calls.find(([sql]) => sql === 'INSERT INTO note_versions SET ?');
+    expect(historyInsert?.[1]?.[0]).toMatchObject({
+      noteId: 'note-1',
+      title: '当前笔记',
+      content: '<p>正文</p>',
+      sourceRevision: 5,
+      reason: 'manual',
+      createBy: 'u1',
+    });
+    expect(connection.commit).toHaveBeenCalledOnce();
+  });
+
+  it('revision 已变化时不创建版本', async () => {
+    const res = mockRes();
+    await createNoteVersion({ user: { id: 'u1' }, body: { id: 'note-1', revision: 4 } }, res);
+
+    expect(lastSent(res)).toMatchObject({ status: 409, data: { code: 'NOTE_VERSION_CONFLICT' } });
+    expect(connection.query).not.toHaveBeenCalledWith('INSERT INTO note_versions SET ?', expect.anything());
+    expect(connection.rollback).toHaveBeenCalledOnce();
   });
 });
 

@@ -129,6 +129,7 @@ router.post('/delNoteTag', noteLibraryHandle.delNoteTag);
 router.post('/updateNoteTags', noteLibraryHandle.updateNoteTags);
 
 router.post('/getNoteVersions', noteLibraryHandle.getNoteVersions);
+router.post('/createNoteVersion', noteLibraryHandle.createNoteVersion);
 router.post('/getNoteVersionDetail', noteLibraryHandle.getNoteVersionDetail);
 router.post('/restoreNoteVersion', noteLibraryHandle.restoreNoteVersion);
 

@@ -1,15 +1,21 @@
 <template>
   <BModal
     v-model:visible="visible"
-    :title="t('note.newNote')"
+    :title="title || t('note.newNote')"
     :mask-closable="false"
     :show-footer="false"
     width="min(420px, calc(100% - 24px))"
   >
     <div class="new-note-picker">
-      <BTabs v-model:active-tab="activeTab" class="new-note-picker__tabs" variant="segment" :options="tabOptions" />
+      <BTabs
+        v-if="!blankOnly"
+        v-model:active-tab="activeTab"
+        class="new-note-picker__tabs"
+        variant="segment"
+        :options="tabOptions"
+      />
 
-      <section v-if="activeTab === 'blank'" class="new-note-picker__section">
+      <section v-if="blankOnly || activeTab === 'blank'" class="new-note-picker__section">
         <p class="new-note-picker__heading">{{ t('note.pickMode') }}</p>
         <div class="new-note-picker__mode-grid">
           <BButton class="new-note-picker__mode" @click="emit('selectBlank', 'html')">
@@ -119,12 +125,24 @@
     type: string;
   }
 
-  const props = defineProps<{
-    builtinTemplates: readonly BuiltinNoteTemplate[];
-    myTemplates: MyTemplate[];
-    myTemplatesState: TemplateLoadState;
-    templateIcons: Record<string, string>;
-  }>();
+  const props = withDefaults(
+    defineProps<{
+      builtinTemplates?: readonly BuiltinNoteTemplate[];
+      myTemplates?: MyTemplate[];
+      myTemplatesState?: TemplateLoadState;
+      templateIcons?: Record<string, string>;
+      blankOnly?: boolean;
+      title?: string;
+    }>(),
+    {
+      builtinTemplates: () => [],
+      myTemplates: () => [],
+      myTemplatesState: 'idle',
+      templateIcons: () => ({}),
+      blankOnly: false,
+      title: '',
+    },
+  );
 
   const visible = defineModel<boolean>('visible');
   const emit = defineEmits<{

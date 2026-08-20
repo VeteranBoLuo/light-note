@@ -1,4 +1,4 @@
-import { parseDrawingScene, type DrawingElement } from '@lightnote/shared/drawing-note';
+import { upgradeDrawingScene, type DrawingElement } from '@lightnote/shared/drawing-note';
 
 export interface DrawingVersionDiffSummary {
   added: number;
@@ -8,7 +8,7 @@ export interface DrawingVersionDiffSummary {
 
 function parseElements(content: string): DrawingElement[] {
   try {
-    return parseDrawingScene(String(content || '')).elements;
+    return upgradeDrawingScene(String(content || '')).elements;
   } catch {
     return [];
   }

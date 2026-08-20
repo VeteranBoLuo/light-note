@@ -55,7 +55,7 @@
         </div>
         <div v-if="lastCreatedUrl" class="note-share-modal__new-link" role="status">
           <strong>{{ t('noteShare.newLinkReady') }}</strong>
-          <div>
+          <div class="note-share-modal__new-link-row">
             <BInput v-model:value="lastCreatedUrl" readonly />
             <BButton @click="copyLastCreatedLink">{{ t('noteShare.copyLink') }}</BButton>
           </div>
@@ -420,6 +420,17 @@
     }
   }
 
+  .note-share-modal__new-link-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+
+    :deep(.b_btn) {
+      min-height: 36px;
+    }
+  }
+
   .note-share-modal__records {
     display: grid;
     gap: 10px;
@@ -527,6 +538,9 @@
   }
 
   @media (max-width: 720px) {
+    .note-share-modal__new-link-row {
+      grid-template-columns: 1fr;
+    }
     .note-share-modal__grid {
       grid-template-columns: 1fr;
     }

@@ -50,11 +50,36 @@ describe('note share URL', () => {
     expect(readerSource).toContain("import NoteOutlineList from '@/components/noteLibrary/detail/NoteOutlineList.vue'");
     expect(readerSource).toContain(':active-index="activeHeadingIndex"');
     expect(readerSource).toContain("readerRef.value?.addEventListener('scroll', scheduleActiveHeading");
-    expect(readerSource).toContain(":class=\"{ 'is-outline': !isSubtreeShare || sidebarTab === 'outline' }\"");
+    expect(readerSource).toContain(":class=\"{ 'is-outline': !isSubtreeShare || effectiveSidebarTab === 'outline' }\"");
     expect(readerSource).toMatch(/\.note-share-reader__sidebar-scroll[\s\S]*?box-sizing:\s*border-box/);
     expect(readerSource).toMatch(/&\.is-outline\s*\{\s*overflow:\s*hidden/);
     expect(outlineSource).toContain('v-auto-scrollbar');
     expect(readerSource).not.toContain('note-share-reader__outline-item');
+  });
+
+  it('切换无大纲页面时临时回退到页面树，并阻止旧页异步渲染覆盖新页', () => {
+    const readerSource = readFileSync(resolve(process.cwd(), 'src/view/share/NoteShareReader.vue'), 'utf8');
+    expect(readerSource).toContain("const effectiveSidebarTab = computed<'pages' | 'outline'>(() =>");
+    expect(readerSource).toContain("sidebarTab.value === 'outline' && !headings.value.length ? 'pages'");
+    expect(readerSource).toContain('const renderVersion = ++pageRenderVersion');
+    expect(readerSource.match(/if \(renderVersion !== pageRenderVersion\) return;/g)).toHaveLength(2);
+    expect(readerSource).toContain('variant="share"');
+  });
+
+  it('分享目录折叠箭头旋转真实包裹层，新链接复制区保留间距', () => {
+    const treeSource = readFileSync(
+      resolve(process.cwd(), 'src/components/noteLibrary/share/PublicNoteTree.vue'),
+      'utf8',
+    );
+    const modalSource = readFileSync(
+      resolve(process.cwd(), 'src/components/noteLibrary/share/NoteShareModal.vue'),
+      'utf8',
+    );
+    expect(treeSource).toContain('class="public-note-tree__chevron"');
+    expect(treeSource).toContain('.public-note-tree__toggle.is-expanded .public-note-tree__chevron');
+    expect(treeSource).toContain('box-shadow: inset 3px 0 0 var(--primary-color)');
+    expect(modalSource).toContain('class="note-share-modal__new-link-row"');
+    expect(modalSource).toContain('gap: 10px');
   });
 
   it('页头及品牌保留安全间距，操作在新页面打开', () => {
