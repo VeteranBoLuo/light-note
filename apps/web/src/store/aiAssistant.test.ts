@@ -876,6 +876,22 @@ describe('aiAssistant store', () => {
         message: null,
         at: '2026-07-19T00:00:01.000Z',
       },
+      queryScopes: [
+        {
+          schemaVersion: 1,
+          tool: 'query_todos',
+          total: 4,
+          returned: 4,
+          totalExact: true,
+          completeness: 'complete',
+          truncated: false,
+          truncationReason: null,
+          stableReferenceCount: 4,
+          stableIdCoverage: 'complete',
+          projection: { completeness: 'complete', truncated: false, truncationReason: null },
+          resolvedRanges: [],
+        },
+      ],
     });
 
     store.switchConversation(subjectB, '你好');
@@ -885,6 +901,7 @@ describe('aiAssistant store', () => {
       recovered: true,
       stage: 'completed',
       terminal: { status: 'completed', eventId: 8 },
+      queryScopes: [expect.objectContaining({ tool: 'query_todos', total: 4 })],
     });
   });
 

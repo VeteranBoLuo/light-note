@@ -135,6 +135,15 @@ describe('Agent SSE lifecycle', () => {
         sourcesUsedCount: 1,
         sourceSubsetValid: true,
       },
+      queryScopes: [
+        {
+          schemaVersion: 1,
+          tool: 'query_notes',
+          total: 2,
+          returned: 2,
+          resolvedRanges: [{ slot: 'timeRange', description: '今天（2026-08-21 · Asia/Shanghai）' }],
+        },
+      ],
     });
 
     const snapshot = onTerminal.mock.calls[0][0].snapshot;
@@ -151,6 +160,12 @@ describe('Agent SSE lifecycle', () => {
           mode: 'current_explicit_only',
           sourceSubsetValid: true,
         }),
+        queryScopes: [
+          expect.objectContaining({
+            tool: 'query_notes',
+            resolvedRanges: [expect.objectContaining({ slot: 'timeRange' })],
+          }),
+        ],
         artifacts: [expect.objectContaining({ id: 'bookmark-health:run-1', status: 'running' })],
         stage: 'completed',
       }),

@@ -244,6 +244,7 @@
     AiToolConfirmationSettlement,
   } from '@/types/aiAgent';
   import { normalizeAiArtifacts, type AiArtifact } from '@/types/aiArtifact';
+  import { normalizeAiQueryScopes } from '@/types/aiQueryScope';
   import { useI18n } from 'vue-i18n';
   import axios from 'axios';
   import { apiBasePost } from '@/http/request';
@@ -837,6 +838,7 @@
         modelMeta:
           chatMessage.recovered ||
           chatMessage.terminal ||
+          chatMessage.queryScopes?.length ||
           chatMessage.scopeRefs?.length ||
           normalizeAiCapabilityModule(chatMessage.capabilityModule) !== 'auto'
             ? {
@@ -848,6 +850,9 @@
                     }
                   : {}),
                 ...(chatMessage.scopeRefs?.length ? { scopeRefs: chatMessage.scopeRefs.slice(0, 3) } : {}),
+                ...(chatMessage.queryScopes?.length
+                  ? { queryScopes: normalizeAiQueryScopes(chatMessage.queryScopes) }
+                  : {}),
                 ...(normalizeAiCapabilityModule(chatMessage.capabilityModule) !== 'auto'
                   ? { capabilityModule: normalizeAiCapabilityModule(chatMessage.capabilityModule) }
                   : {}),
@@ -1163,6 +1168,7 @@
       generatedBy: cloudMessage.modelMeta?.generatedBy === 'action_continuation' ? 'action_continuation' : undefined,
       resolvedGrounding: normalizeAiResolvedGrounding(cloudMessage.modelMeta?.resolvedGrounding),
       materialClarification: normalizeAiMaterialClarification(cloudMessage.modelMeta?.materialClarification),
+      queryScopes: normalizeAiQueryScopes(cloudMessage.modelMeta?.queryScopes),
       entityRefs: normalizeCloudEntityRefs(cloudMessage.modelMeta?.entityRefs),
       actionSettlements: normalizeCloudActionSettlements(cloudMessage.modelMeta?.actionSettlements),
       stage: typeof cloudMessage.modelMeta?.stage === 'string' ? cloudMessage.modelMeta.stage : undefined,
@@ -1493,6 +1499,7 @@
       ...(chatMessage.materialClarification
         ? { materialClarification: normalizeAiMaterialClarification(chatMessage.materialClarification) }
         : {}),
+      ...(chatMessage.queryScopes?.length ? { queryScopes: normalizeAiQueryScopes(chatMessage.queryScopes) } : {}),
     };
     try {
       const saved = await saveAiCloudMessage(cloudConversationId, {
@@ -2177,6 +2184,7 @@
             if (data.citationAudit) currentMsg.citationAudit = data.citationAudit;
             currentMsg.resolvedGrounding = normalizeAiResolvedGrounding(data.resolvedGrounding);
             currentMsg.materialClarification = normalizeAiMaterialClarification(data.materialClarification);
+            currentMsg.queryScopes = normalizeAiQueryScopes(data.queryScopes);
             currentMsg.artifacts = normalizeAiArtifacts(data.artifacts);
             if (typeof data.answer === 'string') authoritativeAnswerSnapshot = data.answer;
           }
@@ -2248,9 +2256,7 @@
             mode: scopeMode.value,
             externalWeb: false,
           },
-          ...(!actionContinuation
-            ? { capabilityScope: buildAiCapabilityScope(capabilityModuleSnapshot) }
-            : {}),
+          ...(!actionContinuation ? { capabilityScope: buildAiCapabilityScope(capabilityModuleSnapshot) } : {}),
           // 长期记忆已关闭:不再请求 active(否则后端会读取/注入/推断并写入候选,而前端已无任何查看/停用/删除入口——
           // 属隐私控制面与运行面脱节)。临时会话本就不涉记忆,保持 temporary。
           memoryMode: temporarySession.value ? 'temporary' : 'off',

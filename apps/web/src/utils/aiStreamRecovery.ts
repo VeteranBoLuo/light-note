@@ -2,6 +2,7 @@ import type { AiEvidence, AiAgentRecoverySnapshot, AiAgentRecoveryTerminal } fro
 import type { AiSource } from '@/components/aiAssistant/aiSourceNavigation';
 import { sanitizeAiMessageActivity } from '@/utils/aiMemoryInfluence';
 import { normalizeAiArtifacts, type AiArtifact } from '@/types/aiArtifact';
+import { normalizeAiQueryScopes, type AiQueryScope } from '@/types/aiQueryScope';
 import {
   normalizeAiMaterialClarification,
   normalizeAiResolvedGrounding,
@@ -29,6 +30,7 @@ export interface AiRecoveryMessageTarget {
   artifacts?: AiArtifact[];
   resolvedGrounding?: AiResolvedGrounding;
   materialClarification?: AiMaterialClarification;
+  queryScopes?: AiQueryScope[];
 }
 
 export interface AiStreamRecoveryDecision {
@@ -121,6 +123,7 @@ export function applyAiRecoverySnapshot(target: AiRecoveryMessageTarget, snapsho
   target.citationAudit = normalizeCitationAudit(snapshot.citationAudit);
   target.resolvedGrounding = normalizeAiResolvedGrounding(snapshot.resolvedGrounding);
   target.materialClarification = normalizeAiMaterialClarification(snapshot.materialClarification);
+  target.queryScopes = normalizeAiQueryScopes(snapshot.queryScopes);
   target.activity = sanitizeAiMessageActivity(snapshot.activity);
   target.recovered = true;
   target.stage = String(snapshot.stage || status);

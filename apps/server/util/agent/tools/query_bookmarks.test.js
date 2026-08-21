@@ -100,4 +100,18 @@ describe('query_bookmarks 工具', () => {
     expect(semantic).not.toContain('共 1 条书签');
     expect(tool.summarize({ matchMode: 'semantic', total: 1 }, { keyword: 'x' })).toContain('语义匹配');
   });
+
+  it('转换层不再写死只展示前 10 条，由公共结果预算统一决定截断', () => {
+    const items = Array.from({ length: 12 }, (_, index) => ({
+      id: `bookmark-${index + 1}`,
+      name: `书签 ${index + 1}`,
+      url: `https://example.test/${index + 1}`,
+      create_time: null,
+    }));
+
+    const text = tool.transform({ total: 12, items, matchMode: 'like' }, {});
+
+    expect(text).toContain('《书签 12》');
+    expect(text).not.toContain('仅展示前 10 条');
+  });
 });

@@ -167,7 +167,7 @@ export default {
       const tagHint = args.tag ? `（标签"${args.tag}"）` : '';
       return `没有找到书签${tagHint}`;
     }
-    const lines = items.slice(0, 10).map((r, i) => {
+    const lines = items.map((r, i) => {
       const name = r.name || '无标题';
       const url = r.url || '';
       const time = r.create_time ? new Date(r.create_time).toLocaleString('zh-CN') : '';
@@ -178,9 +178,7 @@ export default {
       raw?.matchMode === 'semantic'
         ? `关键词没有精确匹配，以下是语义相关的 ${items.length} 条书签：`
         : `共 ${raw.total} 条书签：`;
-    let result = `${head}\n${lines.join('\n')}`;
-    if (raw?.matchMode !== 'semantic' && raw.total > 10) result += `\n...（仅展示前 10 条，共 ${raw.total} 条）`;
-    return result;
+    return `${head}\n${lines.join('\n')}`;
   },
   summarize(raw, args) {
     if (!raw?.total) return `书签查询：无结果`;

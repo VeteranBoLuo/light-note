@@ -2476,10 +2476,10 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **影响范围：** 笔记、书签、文件、回收站、Root 用户/日志/统计/安全事件查询，以及携带时间条件的写操作二次确认。
 - **误导线索：** 单看工具转换文案或 SQL 可能都“看起来正常”；真正偏差来自 Planner、Tool Policy、工具执行和确认回放多次重新解析，以及结果合同没有区分 `total` 与 `returned`。
 - **根因：** 时间表达式只有字符串，没有请求级 IANA 时区和一次绑定的 canonical range；旧 SQL 混用包含结束时刻和进程本地 `Date`。工具输出又主要是一段自然语言，缺少统一的总量、返回量、完整性、截断原因和稳定引用。管理域同时使用 `user` 表示账号范围，与普通业务参数发生语义冲突。
-- **修复：** 时间解析收口到基于 Temporal 的唯一解析器，Binder/Tool Policy 按请求级 `currentInstant + IANA timeZone + storageTimeZone` 只绑定一次，SQL 统一使用 `[start, endExclusive)`；确认令牌的服务端私有上下文保存签发时的权威范围。列表/计数工具统一投影 `total/returned/complete/partial/resolvedRanges/truncationReason`和稳定 ID，执行器优先把确定性查询口径送入回答上下文，再受文本预算限制。管理账号范围迁移为 `scope_user`，旧 `user` 别名仅在服务端兼容层归一化并记录不含账号值的弃用告警。
-- **防回归约束：** 新增时间工具必须在 Manifest 声明 `temporalSlots`，工具内只读权威绑定，不得再用 `new Date()` 解释用户日历语义；新列表工具必须返回结构化 metadata 和稳定业务 ID，不得用当前页长度冒充总量。任何截断都必须显式标记；签发后确认不得重新解析“今天”。新管理工具的公开 schema 只允许 `scope_user`，兼容别名必须通过统一参数层实现，禁止在单个工具复制转换逻辑。
+- **修复：** 时间解析收口到基于 Temporal 的唯一解析器，Binder/Tool Policy 按请求级 `currentInstant + IANA timeZone + storageTimeZone` 只绑定一次，SQL 统一使用 `[start, endExclusive)`；确认令牌的服务端私有上下文保存签发时的权威范围。列表/计数工具统一投影 `total/returned/complete/partial/resolvedRanges/truncationReason`和稳定 ID，执行器优先把确定性查询口径送入回答上下文，再受文本预算限制。查询集合完整性与回答材料投影完整性分层记录，避免“数据已查全、文本被截断”仍被笼统标成完整结果；安全查询口径同时进入 SSE、普通响应和断流恢复快照，不再依赖最终模型主动复述。管理账号范围迁移为 `scope_user`，旧 `user` 别名仅在服务端兼容层归一化并记录不含账号值的弃用告警。
+- **防回归约束：** 新增时间工具必须在 Manifest 声明 `temporalSlots`，工具内只读权威绑定，不得再用 `new Date()` 解释用户日历语义；新列表工具必须返回结构化 metadata 和稳定业务 ID，不得用当前页长度冒充总量，也不得在 `transform/summarize` 中另设与公共 `resultBudget` 冲突的展示条数上限。查询集合和回答材料任一层发生截断都必须显式、分别标记；resolved range 必须通过安全公共投影进入权威终态响应和恢复快照，不能只放入模型提示。签发后确认不得重新解析“今天”。新管理工具的公开 schema 只允许 `scope_user`，兼容别名必须通过统一参数层实现，禁止在单个工具复制转换逻辑。
 - **验证方法：** 在 `TZ=UTC` 进程下固定 `currentInstant`，验证上海、纽约及 DST 跨越日的 local/storage 边界；断言 SQL 为 `>= start AND < endExclusive`。对空、完整、超 `limit`、总量未知和 resultBudget 截断分别校验 metadata/披露；确认链路断言 execute 收到的范围与签发时完全一致。对 `scope_user`、旧 `user`、两者相同和两者冲突都保留 fixture；全部使用 mock/固定性测试，日常回归不调真实模型。
-- **相关代码：** `apps/server/util/agent/timeRange.js`、`apps/server/util/agent/toolResultMetadata.js`、`apps/server/util/agent/toolArguments.js`、`apps/server/util/agent/toolPolicy.js`、`apps/server/util/agent/sessionStore.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/server/util/agent/tools/`。
+- **相关代码：** `apps/server/util/agent/timeRange.js`、`apps/server/util/agent/toolResultMetadata.js`、`apps/server/util/agent/toolArguments.js`、`apps/server/util/agent/toolPolicy.js`、`apps/server/util/agent/sessionStore.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/server/util/agent/tools/`、`apps/web/src/types/aiQueryScope.ts`、`apps/web/src/utils/aiStreamRecovery.ts`。
 
 ### LN-PIT-071：父组件不能用宽泛深度选择器改写头像框内部图片
 

@@ -1,6 +1,7 @@
 import type { AiAgentInteraction, AiToolConfirmation } from '@/types/aiAgent';
 import type { AiEvidence } from '@/api/aiWorkspaceApi';
 import type { AiArtifact } from '@/types/aiArtifact';
+import type { AiQueryScope } from '@/types/aiQueryScope';
 
 export interface AiSseEvent {
   event?: string;
@@ -20,6 +21,7 @@ export interface AiSseEvent {
   entityRefs?: Array<{ type: 'bookmark' | 'note' | 'file' | 'tag' | 'todo'; id: string; title: string }>;
   evidence?: AiEvidence[];
   coverage?: Record<string, unknown>;
+  queryScopes?: AiQueryScope[];
   citationAudit?: {
     citedKeys: string[];
     invalidKeys: string[];

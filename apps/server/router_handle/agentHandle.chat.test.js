@@ -151,9 +151,7 @@ vi.mock('../util/agent/tools/index.js', () => ({
       getDependencyRefs: (raw) => raw.dependencyRefs || [],
       toArtifacts: (raw) => (raw.artifact ? [raw.artifact] : []),
       getAnswerRequirements: (raw) =>
-        raw.requiredFact
-          ? [{ id: 'demo.required_fact', anyOf: [raw.requiredFact], appendText: raw.requiredFact }]
-          : [],
+        raw.requiredFact ? [{ id: 'demo.required_fact', anyOf: [raw.requiredFact], appendText: raw.requiredFact }] : [],
       transform: (raw) => `结果:${raw.value}`,
       summarize: (raw) => `结果:${raw.value}`,
     },
@@ -827,6 +825,13 @@ describe('agentChat 主链路', () => {
         ],
       }),
     );
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.queryScopes).toEqual([
+      expect.objectContaining({
+        tool: 'query_notes',
+        totalExact: false,
+        resolvedRanges: [expect.objectContaining({ slot: 'timeRange', expression: '今天' })],
+      }),
+    ]);
     expect(JSON.parse(latestAgentLogRecord().turn_contract_trace)).toMatchObject({
       intentCompilerMode: 'v3_enforce',
       intentCompilerState: 'ready',

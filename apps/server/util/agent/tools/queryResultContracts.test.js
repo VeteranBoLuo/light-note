@@ -6,6 +6,7 @@ vi.mock('../../../db/index.js', () => ({ default: { query: mocks.query } }));
 const { default: getActiveUsers } = await import('./get_active_users.js');
 const { default: getSecurityEvents } = await import('./get_security_events.js');
 const { default: getTokenUsage } = await import('./get_token_usage.js');
+const { default: getPendingFeedback } = await import('./get_pending_feedback.js');
 const { default: queryApiLogs } = await import('./query_api_logs.js');
 const { default: queryOperationLogs } = await import('./query_operation_logs.js');
 const { default: queryTrash } = await import('./query_trash.js');
@@ -35,6 +36,7 @@ describe('Agent 列表工具最低结果契约', () => {
     expect(listParams).toContain('target-user');
     expect(raw.resultMetadata).toMatchObject({ total: 3, returned: 1, completeness: 'partial' });
     expect(queryApiLogs.getDependencyRefs(raw)).toEqual([{ type: 'api_log', id: 'api-1' }]);
+    expect(queryApiLogs.summarize(raw)).toBe('API 日志：共 3 条；已返回 1 条（状态码：200:1）');
   });
 
   it('操作日志使用同一管理账号契约和半开时间边界', async () => {
@@ -49,6 +51,7 @@ describe('Agent 列表工具最低结果契约', () => {
     expect(params).toContain('target-user');
     expect(raw.resultMetadata).toMatchObject({ total: 1, returned: 1, completeness: 'complete' });
     expect(queryOperationLogs.getDependencyRefs(raw)).toEqual([{ type: 'operation_log', id: 'op-1' }]);
+    expect(queryOperationLogs.summarize(raw)).toBe('操作日志：共 1 条；已返回 1 条（模块：note）');
   });
 
   it('用户与活跃用户列表都返回精确总数和用户稳定引用', async () => {
@@ -93,5 +96,19 @@ describe('Agent 列表工具最低结果契约', () => {
       completeness: 'complete',
       resolvedRanges: { timeRange: { expression: '今天', range: { timeZone: 'Asia/Shanghai' } } },
     });
+  });
+
+  it('Root 待回复反馈返回精确 total 和稳定反馈 ID', async () => {
+    mocks.query
+      .mockResolvedValueOnce([[{ c: '4' }]])
+      .mockResolvedValueOnce([
+        [{ id: 'feedback-1', type: 'bug', content: '无法保存', alias: '甲', create_time: null }],
+      ]);
+
+    const raw = await getPendingFeedback.execute({ limit: 1 }, context);
+
+    expect(raw).toMatchObject({ total: 4, pending: 4 });
+    expect(raw.resultMetadata).toMatchObject({ total: 4, returned: 1, completeness: 'partial' });
+    expect(getPendingFeedback.getDependencyRefs(raw)).toEqual([{ type: 'feedback', id: 'feedback-1' }]);
   });
 });

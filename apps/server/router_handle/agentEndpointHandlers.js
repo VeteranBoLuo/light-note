@@ -55,7 +55,11 @@ import {
 import { canToolConsumeAgentV3ResultSet } from '../util/agent/runtime/v3/candidateAvailability.js';
 import { resolveAgentTargetUser } from '../util/agent/userLookup.js';
 import { scopedTargetUser } from '../util/agent/ownerScope.js';
-import { finalizeToolResultMetadata, formatToolResultMetadataDisclosure } from '../util/agent/toolResultMetadata.js';
+import {
+  buildPublicToolQueryScopes,
+  finalizeToolResultMetadata,
+  formatToolResultMetadataDisclosure,
+} from '../util/agent/toolResultMetadata.js';
 import { projectAgentTemporalRanges } from '../util/agent/timeRange.js';
 import { resolveAgentActionIntent } from '../util/agent/actionIntentPolicy.js';
 import {
@@ -3954,6 +3958,7 @@ export async function agentChat(req, res) {
         subsetValid: draftSubsetInspection.valid,
         sourcesUsed: draftSourcesUsed,
       });
+      const queryScopes = buildPublicToolQueryScopes(usedTools, locale);
       if (stream) {
         if (replacedConfirmation && confirmation) {
           sseLifecycle?.send('tool_confirmation_replaced', {
@@ -3990,6 +3995,7 @@ export async function agentChat(req, res) {
           evidence: [],
           citationAudit: { citedKeys: [], invalidKeys: [], verifiedCitationCount: 0, evidenceCount: 0 },
           resolvedGrounding: draftResolvedGrounding,
+          queryScopes,
         });
       } else {
         res.send(
@@ -4007,6 +4013,7 @@ export async function agentChat(req, res) {
             followUpAvailable: false,
             memoryContext: memoryInfluence,
             resolvedGrounding: draftResolvedGrounding,
+            queryScopes,
           }),
         );
       }
@@ -6469,6 +6476,7 @@ export async function agentChat(req, res) {
       subsetValid: sourceSubsetValid,
       sourcesUsed: publicSources,
     });
+    const queryScopes = buildPublicToolQueryScopes(usedTools, locale);
     // 公开来源继续只展示真实引用项；跨轮锚点额外保留本轮成功工具返回的稳定实体 ID，
     // 避免模型漏写引用编号时“刚才第二个待办”失去目标。只返回安全 type/id/title，不返回工具原始数据。
     const scopedToolEntitySources = groundingV2Enabled
@@ -6531,6 +6539,7 @@ export async function agentChat(req, res) {
         citationAudit,
         artifacts,
         resolvedGrounding,
+        queryScopes,
       });
       res.removeListener('close', onClientClose);
     } else {
@@ -6551,6 +6560,7 @@ export async function agentChat(req, res) {
           followUpAvailable,
           memoryContext: memoryInfluence,
           resolvedGrounding,
+          queryScopes,
           ...(actionPolicy ? { actionPolicy } : {}),
         }),
       );

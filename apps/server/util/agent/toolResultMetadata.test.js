@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildPublicToolQueryScopes,
   buildQueryResultMetadata,
   finalizeToolResultMetadata,
   formatToolResultMetadataDisclosure,
@@ -83,8 +84,76 @@ describe('Agent 工具结果元数据', () => {
     });
 
     expect(formatToolResultMetadataDisclosure(metadata, 'zh-CN')).toBe(
-      '【已核验查询口径】时间范围: 今天（2026-08-21，截至 12:00 · Asia/Shanghai）；已返回 5/12 条；部分结果 (受返回条数上限限制)',
+      '【已核验查询口径】时间范围: 今天（2026-08-21，截至 12:00 · Asia/Shanghai）；已返回 5/12 条；查询集合为部分结果 (受返回条数上限限制)',
     );
+  });
+
+  it('查询集合完整但回答材料被文本预算截断时分别披露两层完整性', () => {
+    const metadata = finalizeToolResultMetadata({
+      raw: { total: 1, items: [{ id: 'bookmark-1' }] },
+      dependencyRefs: [{ type: 'bookmark', id: 'bookmark-1' }],
+      summaryOriginalLength: 7000,
+      summaryReturnedLength: 6000,
+    });
+
+    expect(formatToolResultMetadataDisclosure(metadata, 'zh-CN')).toBe(
+      '【已核验查询口径】已返回 1/1 条；查询集合完整；回答材料为部分结果 (受结果文本预算限制)',
+    );
+  });
+
+  it('公开查询口径只投影安全计数、稳定引用覆盖和用户本地时间范围', () => {
+    const metadata = finalizeToolResultMetadata({
+      raw: {
+        total: 2,
+        items: [{ id: 'n1' }],
+        resultMetadata: buildQueryResultMetadata({
+          total: 2,
+          returned: 1,
+          resolvedRanges: {
+            timeRange: {
+              expression: '今天',
+              range: {
+                start: '2026-08-20 16:00:00',
+                endExclusive: '2026-08-21 04:00:01',
+                storageTimeZone: 'UTC',
+                localStart: '2026-08-21 00:00:00',
+                localEnd: '2026-08-21 12:00:00',
+                localEndExclusive: '2026-08-21 12:00:01',
+                timeZone: 'Asia/Shanghai',
+              },
+            },
+          },
+        }),
+      },
+      dependencyRefs: [{ type: 'note', id: 'n1' }],
+      summaryOriginalLength: 20,
+      summaryReturnedLength: 20,
+    });
+
+    expect(buildPublicToolQueryScopes([{ name: 'query_notes', status: 'success', resultMetadata: metadata }])).toEqual([
+      expect.objectContaining({
+        schemaVersion: 1,
+        tool: 'query_notes',
+        total: 2,
+        returned: 1,
+        completeness: 'partial',
+        projection: expect.objectContaining({ completeness: 'complete', truncated: false }),
+        resolvedRanges: [
+          expect.objectContaining({
+            slot: 'timeRange',
+            description: '今天（2026-08-21，截至 12:00 · Asia/Shanghai）',
+            localStart: '2026-08-21 00:00:00',
+            localEndExclusive: '2026-08-21 12:00:01',
+            timeZone: 'Asia/Shanghai',
+          }),
+        ],
+      }),
+    ]);
+    expect(
+      JSON.stringify(
+        buildPublicToolQueryScopes([{ name: 'query_notes', status: 'success', resultMetadata: metadata }]),
+      ),
+    ).not.toContain('storageTimeZone');
   });
 
   it('普通写操作没有查询口径时不生成多余披露', () => {
@@ -93,5 +162,33 @@ describe('Agent 工具结果元数据', () => {
         buildQueryResultMetadata({ total: null, returned: 0, exactTotal: false, coverage: 'complete' }),
       ),
     ).toBe('');
+  });
+
+  it('公开时间口径缺少本地边界时不会回退泄露存储时区边界', () => {
+    const metadata = finalizeToolResultMetadata({
+      raw: {
+        total: 1,
+        items: [{ id: 'n1' }],
+        resultMetadata: buildQueryResultMetadata({
+          total: 1,
+          returned: 1,
+          resolvedRanges: {
+            timeRange: {
+              expression: '今天',
+              range: {
+                start: '2026-08-20 16:00:00',
+                endExclusive: '2026-08-21 16:00:00',
+                timeZone: 'Asia/Shanghai',
+              },
+            },
+          },
+        }),
+      },
+      dependencyRefs: [{ type: 'note', id: 'n1' }],
+    });
+
+    const [scope] = buildPublicToolQueryScopes([{ name: 'query_notes', status: 'success', resultMetadata: metadata }]);
+    expect(scope.resolvedRanges).toEqual([]);
+    expect(JSON.stringify(scope)).not.toContain('2026-08-20 16:00:00');
   });
 });

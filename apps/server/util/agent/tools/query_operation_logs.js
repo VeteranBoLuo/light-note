@@ -76,7 +76,8 @@ export default {
   summarize(raw) {
     const rows = raw?.items || [];
     if (!rows?.length) return '操作日志：无记录';
+    const total = Number.isFinite(Number(raw?.total)) ? Number(raw.total) : rows.length;
     const modules = [...new Set(rows.map((r) => r.module))];
-    return `操作日志：共 ${rows.length} 条，模块：${modules.join('、')}`;
+    return `操作日志：共 ${total} 条；已返回 ${rows.length} 条（模块：${modules.join('、')}）`;
   },
 };

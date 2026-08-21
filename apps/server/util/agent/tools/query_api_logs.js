@@ -70,6 +70,7 @@ export default {
   summarize(raw) {
     const rows = raw?.items || [];
     if (!rows?.length) return 'API 日志：无记录';
+    const total = Number.isFinite(Number(raw?.total)) ? Number(raw.total) : rows.length;
     const codes = {};
     rows.forEach((r) => {
       codes[r.status_code] = (codes[r.status_code] || 0) + 1;
@@ -77,6 +78,6 @@ export default {
     const stats = Object.entries(codes)
       .map(([k, v]) => `${k}:${v}`)
       .join(', ');
-    return `API 日志：共 ${rows.length} 条 (${stats})`;
+    return `API 日志：共 ${total} 条；已返回 ${rows.length} 条（状态码：${stats}）`;
   },
 };

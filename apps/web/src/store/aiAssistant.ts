@@ -10,6 +10,7 @@ import { compareAiConversationRecency, type AiConversationRecency } from '@/util
 import type { AiResourceContext, AiScopeRef } from '@/types/aiScope';
 import { normalizeAiArtifacts, type AiArtifact } from '@/types/aiArtifact';
 import { normalizeAiCapabilityModule, type AiCapabilityModule } from '@/types/aiCapabilityScope';
+import { normalizeAiQueryScopes, type AiQueryScope } from '@/types/aiQueryScope';
 import {
   normalizeAiMaterialClarification,
   normalizeAiResolvedGrounding,
@@ -65,6 +66,8 @@ export interface AiAssistantMessage {
   /** 服务端裁决后的材料边界摘要；不含资源 ID、标题或正文。 */
   resolvedGrounding?: AiResolvedGrounding;
   materialClarification?: AiMaterialClarification;
+  /** 服务端签发的安全查询口径；只用于持久化与核验，不参与下一轮材料或工具选择。 */
+  queryScopes?: AiQueryScope[];
   activity?: Array<Record<string, unknown> | string>;
   cloudId?: string;
   requestId?: string;
@@ -640,6 +643,7 @@ function normalizePersistedMessage(value: unknown): AiAssistantMessage | null {
         : undefined,
     resolvedGrounding: normalizeAiResolvedGrounding(raw.resolvedGrounding),
     materialClarification: normalizeAiMaterialClarification(raw.materialClarification),
+    queryScopes: normalizeAiQueryScopes(raw.queryScopes),
     activity: sanitizeAiMessageActivity(raw.activity),
     cloudId: typeof raw.cloudId === 'string' ? raw.cloudId : undefined,
     requestId: typeof raw.requestId === 'string' ? raw.requestId : undefined,
@@ -703,6 +707,7 @@ function serializeMessage(message: AiAssistantMessage): Record<string, unknown> 
     citationAudit: message.citationAudit ? safeCloneArray([message.citationAudit])[0] : undefined,
     resolvedGrounding: normalizeAiResolvedGrounding(message.resolvedGrounding),
     materialClarification: normalizeAiMaterialClarification(message.materialClarification),
+    queryScopes: normalizeAiQueryScopes(message.queryScopes),
     activity: sanitizeAiMessageActivity(message.activity),
     cloudId: message.cloudId,
     requestId: message.requestId,

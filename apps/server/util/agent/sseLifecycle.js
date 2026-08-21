@@ -50,6 +50,7 @@ export function createAgentSseLifecycle({
     evidence: [],
     citationAudit: null,
     resolvedGrounding: null,
+    queryScopes: [],
     materialClarification: null,
     coverage: null,
     artifacts: [],
@@ -138,6 +139,7 @@ export function createAgentSseLifecycle({
       if (payload.resolvedGrounding != null) {
         snapshot.resolvedGrounding = cloneSerializable(payload.resolvedGrounding, null);
       }
+      if (Array.isArray(payload.queryScopes)) snapshot.queryScopes = cloneSerializable(payload.queryScopes, []);
       if (payload.materialClarification != null) {
         snapshot.materialClarification = cloneSerializable(payload.materialClarification, null);
       }
