@@ -18,6 +18,7 @@ function compactCatalog(catalog) {
     id: entry.id,
     label: entry.label,
     domains: entry.domains,
+    acceptedSourceDomains: entry.acceptedSourceDomains,
     effect: entry.effect,
     operations: entry.operations,
     status: entry.status,
@@ -74,11 +75,30 @@ function compactDiscourseProjection(value = {}) {
   });
 }
 
+function compactRecentDialogue(messages = []) {
+  return Object.freeze(
+    (Array.isArray(messages) ? messages : [])
+      .filter(
+        (message) =>
+          ['user', 'assistant'].includes(message?.role) &&
+          typeof message?.content === 'string' &&
+          message.content.trim(),
+      )
+      .slice(-8)
+      .map((message) =>
+        Object.freeze({
+          role: message.role,
+          content: message.content.trim().slice(0, 1_600),
+        }),
+      ),
+  );
+}
+
 function compilerPrompt(repairFeedback = '') {
   return [
     '你是轻笺 Agent V3 的唯一语义编译器。你只把“最新一条用户消息”编译成产品能力任务规格。',
     '只允许从 capabilityCatalog 选择 capabilityId；禁止输出工具名、工具参数、SQL 或执行结果。',
-    'latestMessage 是本轮意图的唯一文字权威。structuredDiscourse 只含服务端结构化状态，用于理解“这个、刚才那个、继续、重新生成”等省略指代；它不授权复用旧目标、旧时间范围、旧工具参数或旧事实。',
+    'latestMessage 是本轮动作、对象、时间、参数和事实的唯一文字权威。recentDialogue 是服务端裁剪的最近语义对话，只能帮助理解普通连续问答和“这个、刚才那个、继续”等省略表达；不得从中复制旧时间、旧范围、旧 ID、旧工具参数或私有事实到本轮执行。structuredDiscourse 只含服务端结构化状态，用于解析真实结果集和待确认产物。',
     '用户本轮明确改变对象、领域、时间范围、动作或输出要求时，必须以最新消息为准，并把 topicEpochAction 设为 advance。真正承接上一结果/产物时才设为 keep。',
     'continuationMode=refer_last_result 只表示引用服务端上一结果集；refine_last_artifact 只表示修改仍可用的待确认产物。没有相应结构化状态时不得假装存在。',
     'scope_replacement 只表示：用户正在改写同一份待确认产物，但本轮明确更换了输入材料、时间范围或检索对象；此时新确认必须原子替换旧确认。待确认产物存在时，同领域的 create_artifact 若不是明确要求另建一份互不相关的产物，就不得标成 independent。',
@@ -103,9 +123,8 @@ function resultSetValues(item) {
 }
 
 function availableResultSets(structuredDiscourse = {}) {
-  const candidates = (Array.isArray(structuredDiscourse.resultSetCandidates)
-    ? structuredDiscourse.resultSetCandidates
-    : []
+  const candidates = (
+    Array.isArray(structuredDiscourse.resultSetCandidates) ? structuredDiscourse.resultSetCandidates : []
   ).filter((item) => item?.available === true);
   if (candidates.length) return candidates;
   return structuredDiscourse.lastResultSet?.available === true ? [structuredDiscourse.lastResultSet] : [];
@@ -126,7 +145,8 @@ function discourseConsistency(
   { independentReviewed = false, artifactIndependentReviewed = false } = {},
 ) {
   const pendingArtifact = payload?.structuredDiscourse?.pendingArtifact;
-  const hasPendingArtifact = pendingArtifact?.available === true || payload?.currentContext?.hasPendingArtifact === true;
+  const hasPendingArtifact =
+    pendingArtifact?.available === true || payload?.currentContext?.hasPendingArtifact === true;
   const artifactGoals = turnSpec.goals.filter((goal) => goal.kind === 'transform');
   const artifactRequest = ['create_artifact', 'revise_artifact'].includes(turnSpec.requestKind);
   const pendingDomain = String(pendingArtifact?.domain || '');
@@ -209,7 +229,8 @@ function discourseConsistency(
     return { blocking: false, feedback: '' };
   }
   const currentContext = payload?.currentContext || {};
-  const hasCurrentContext = Number(currentContext.selectedResourceCount || 0) > 0 || Number(currentContext.attachmentCount || 0) > 0;
+  const hasCurrentContext =
+    Number(currentContext.selectedResourceCount || 0) > 0 || Number(currentContext.attachmentCount || 0) > 0;
   const hasCurrentSelector = turnSpec.goals.some((goal) =>
     (goal.referentSelectors || []).some((selector) => selector.source === 'current_explicit'),
   );
@@ -246,6 +267,7 @@ function responseFeedback(response) {
 export async function compileAgentTurnSpecV3({
   message,
   catalog = [],
+  recentDialogue = [],
   discourseProjection = {},
   contextSummary = {},
   capabilityScope = null,
@@ -268,13 +290,17 @@ export async function compileAgentTurnSpecV3({
   }
   const payload = Object.freeze({
     latestMessage,
+    recentDialogue: compactRecentDialogue(recentDialogue),
     structuredDiscourse: compactDiscourseProjection(discourseProjection),
     currentContext: Object.freeze({
       selectedResourceTypes: Object.freeze(
-        [...new Set((Array.isArray(contextSummary.selectedResourceTypes) ? contextSummary.selectedResourceTypes : []).map(String))].slice(
-          0,
-          12,
-        ),
+        [
+          ...new Set(
+            (Array.isArray(contextSummary.selectedResourceTypes) ? contextSummary.selectedResourceTypes : []).map(
+              String,
+            ),
+          ),
+        ].slice(0, 12),
       ),
       selectedResourceCount: Math.max(0, Number(contextSummary.selectedResourceCount) || 0),
       attachmentCount: Math.max(0, Number(contextSummary.attachmentCount) || 0),
@@ -302,7 +328,9 @@ export async function compileAgentTurnSpecV3({
         { role: 'user', content: JSON.stringify(payload) },
       ],
       {
-        tools: [buildTurnSpecV3ToolDefinition({ catalog: compilerCatalog, groundingPolicy: authoritativeGroundingPolicy })],
+        tools: [
+          buildTurnSpecV3ToolDefinition({ catalog: compilerCatalog, groundingPolicy: authoritativeGroundingPolicy }),
+        ],
         toolChoice: { type: 'function', function: { name: TURN_SPEC_V3_TOOL_NAME } },
         signal,
         maxTokens: 1_800,
@@ -343,6 +371,7 @@ export const __testing = Object.freeze({
   availableResultSets,
   compactCatalog,
   compactDiscourseProjection,
+  compactRecentDialogue,
   compilerPrompt,
   discourseConsistency,
   responseFeedback,

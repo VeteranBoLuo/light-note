@@ -1,5 +1,6 @@
 import pool from '../../../db/index.js';
 import { escapeLikePattern } from '../sqlPatterns.js';
+import { withQueryResultMetadata } from '../toolResultMetadata.js';
 
 export default {
   name: 'query_tags',
@@ -36,7 +37,7 @@ export default {
       pool.query(`SELECT COUNT(*) as total FROM tag t WHERE ${where}`, params),
     ]);
 
-    return { total: countRes[0].total, items: rows };
+    return withQueryResultMetadata({ total: Number(countRes[0]?.total || 0), items: rows });
   },
   transform(raw) {
     const items = raw?.items || [];

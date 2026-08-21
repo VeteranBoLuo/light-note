@@ -69,10 +69,14 @@ const validSpec = {
 };
 
 describe('Intent Compiler V3', () => {
-  it('模型输入只含最新消息与结构化状态，不注入任何历史正文', async () => {
+  it('模型只把最新消息当动作与时间权威，recentDialogue 仅用于语义承接', async () => {
     const request = vi.fn().mockResolvedValue(response(validSpec));
     const result = await compileAgentTurnSpecV3({
       message: '只查询今天的笔记',
+      recentDialogue: [
+        { role: 'user', content: '先查询最近 7 天的书签' },
+        { role: 'assistant', content: '找到了 5 条，你还想了解什么？' },
+      ],
       catalog,
       discourseProjection: {
         topicEpoch: 2,
@@ -91,6 +95,13 @@ describe('Intent Compiler V3', () => {
     expect(payload.authoritativeTemporalMentions).toEqual([
       expect.objectContaining({ expression: '今天', precision: 'date' }),
     ]);
+    expect(payload.recentDialogue).toEqual([
+      { role: 'user', content: '先查询最近 7 天的书签' },
+      { role: 'assistant', content: '找到了 5 条，你还想了解什么？' },
+    ]);
+    expect(payload.authoritativeTemporalMentions).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ expression: expect.stringContaining('7 天') })]),
+    );
     expect(payload.structuredDiscourse).toMatchObject({ activeDomain: 'bookmark' });
     expect(JSON.stringify(payload)).not.toContain('recentDiscourse');
     expect(JSON.stringify(payload)).not.toContain('history');
@@ -143,9 +154,7 @@ describe('Intent Compiler V3', () => {
       catalog: continuationCatalog,
       discourseProjection: {
         lastResultSet: { available: true, domains: ['web', 'bookmark'], refTypes: ['web'], refCount: 1 },
-        resultSetCandidates: [
-          { available: true, domains: ['web', 'bookmark'], refTypes: ['web'], refCount: 1 },
-        ],
+        resultSetCandidates: [{ available: true, domains: ['web', 'bookmark'], refTypes: ['web'], refCount: 1 }],
       },
       authoritativeGroundingPolicy: 'workspace_query',
       request,

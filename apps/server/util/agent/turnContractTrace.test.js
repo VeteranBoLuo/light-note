@@ -53,6 +53,8 @@ describe('Agent Turn Contract trace', () => {
       rolloutReason: 'role_allowlist',
       rolloutPercentage: 5,
       rawHistoryMessageCount: 0,
+      recentDialogueMessageCount: 4,
+      recentDialogueSource: 'cloud',
       legacyStageCount: 0,
     });
     recordIntentCompiler(trace, {
@@ -97,6 +99,8 @@ describe('Agent Turn Contract trace', () => {
       runtimeRolloutReason: 'role_allowlist',
       runtimeRolloutPercentage: 5,
       rawHistoryMessageCount: 0,
+      recentDialogueMessageCount: 4,
+      recentDialogueSource: 'cloud',
       legacyStageCount: 0,
       intentCompilerMode: 'v3_enforce',
       intentCompilerState: 'ready',

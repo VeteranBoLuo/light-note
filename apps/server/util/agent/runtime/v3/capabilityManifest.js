@@ -80,6 +80,7 @@ function defineToolCapability(toolName, input) {
     temporalSlots: Object.freeze([]),
     ...input,
     domains: freezeStrings(input.domains),
+    acceptedSourceDomains: freezeStrings(input.acceptedSourceDomains),
     operations: freezeStrings(input.operations),
     acceptedInputKinds: freezeStrings(input.acceptedInputKinds || ['latest_message']),
     requiredSlots: freezeStrings(input.requiredSlots),
@@ -368,6 +369,9 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     operations: ['create'],
     requiredSlots: ['title'],
     acceptedInputKinds: ['latest_message', 'selected_resource', 'workspace_query', 'last_result_refs'],
+    // domains 表示产物领域；acceptedSourceDomains 表示该产物可由哪些材料领域生成。
+    // 模块范围按这两个正交事实求闭包，不依赖“书签生成笔记”等固定问法。
+    acceptedSourceDomains: ['content', 'note', 'bookmark', 'file', 'todo', 'tag', 'web'],
     scopePolicy: 'confirmation_owner_bound',
     resultKind: 'note_draft',
     artifactKind: 'note',
@@ -761,6 +765,7 @@ export const NON_EXECUTABLE_CAPABILITY_MANIFEST = Object.freeze(
       status: capability.status,
       toolName: '',
       domains: freezeStrings(metadata.domains),
+      acceptedSourceDomains: Object.freeze([]),
       effect: 'write',
       operations: freezeStrings(capability.operations),
       acceptedInputKinds: Object.freeze(['latest_message']),
@@ -810,7 +815,7 @@ export function normalizeCapabilityScope(value, { actorRole } = {}) {
         ? value.domains
         : []
     ).map((domain) => String(domain || '').toLowerCase()),
-  ).slice(0, 4);
+  ).slice(0, AGENT_CAPABILITY_DOMAINS.length);
   const canonicalRole = actorRole == null ? null : actorRole === 'root' ? 'root' : 'user';
   const roleDomains = canonicalRole
     ? new Set(
@@ -831,10 +836,14 @@ export function normalizeCapabilityScope(value, { actorRole } = {}) {
   });
 }
 
-function capabilityInScope(capability, scope) {
+export function capabilityMatchesScope(capability, scope) {
+  if (!capability || typeof capability !== 'object') return false;
   if (scope?.mode === 'forbidden') return false;
   if (!scope?.domains?.length) return true;
-  return capability.domains.some((domain) => scope.domains.includes(domain));
+  const requested = new Set(scope.domains);
+  if ((capability.domains || []).some((domain) => requested.has(domain))) return true;
+  // 只有显式声明了来源域的能力才允许跨域进入模块；没有声明的写能力不会被扩大。
+  return (capability.acceptedSourceDomains || []).some((domain) => requested.has(domain));
 }
 
 export function buildAgentV3CapabilityCatalog(
@@ -851,7 +860,7 @@ export function buildAgentV3CapabilityCatalog(
   const catalog = [];
   for (const capability of AGENT_CAPABILITY_MANIFEST) {
     if (!capability.rolePolicy.includes(actorRole === 'root' ? 'root' : 'user')) continue;
-    if (!capabilityInScope(capability, scope)) continue;
+    if (!capabilityMatchesScope(capability, scope)) continue;
     const tool = capability.toolName ? registeredByName.get(capability.toolName) : null;
     const status = capability.toolName
       ? tool && available.has(capability.toolName)
@@ -885,6 +894,9 @@ export function validateAgentV3CapabilityManifest(tools) {
     if (!capability.domains.length) errors.push(`能力 ${capability.id} 缺少 domains`);
     if (capability.domains.some((domain) => !VALID_DOMAINS.has(domain))) {
       errors.push(`能力 ${capability.id} 含未知 domain`);
+    }
+    if (capability.acceptedSourceDomains.some((domain) => !VALID_DOMAINS.has(domain))) {
+      errors.push(`能力 ${capability.id} 含未知 acceptedSourceDomain`);
     }
     if (!capability.operations.length) errors.push(`能力 ${capability.id} 缺少 operations`);
     if (!capability.resultKind) errors.push(`能力 ${capability.id} 缺少 resultKind`);
@@ -991,4 +1003,4 @@ export function assertAgentV3CapabilityManifest(tools) {
   return true;
 }
 
-export const __testing = Object.freeze({ capabilityInScope, defineToolCapability });
+export const __testing = Object.freeze({ capabilityMatchesScope, defineToolCapability });

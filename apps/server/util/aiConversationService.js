@@ -404,6 +404,49 @@ export async function getAiConversation(identity, conversationId, options = {}, 
   };
 }
 
+/**
+ * 为 Agent V3 提供服务端权威的轻量最近对话。这里只读取语义连续性所需字段，
+ * 不加载来源、证据和反馈；sourceMessageId 存在时只返回当前用户消息之前的时间线。
+ */
+export async function getAiConversationRecentDialogue(identity, conversationId, options = {}, database = pool) {
+  const conversation = await getOwnedConversationRow(database, identity, conversationId);
+  if (!conversation) throw serviceError('CONVERSATION_NOT_FOUND', '会话不存在或无权访问', 404);
+  const limit = Math.max(2, Math.min(40, Number(options.limit) || 24));
+  const sourceMessageId = asString(options.sourceMessageId, 36);
+  const fields = `m.id, m.role, m.content, m.status, m.version_group_id,
+    m.create_time, m.update_time`;
+  let rows;
+  if (sourceMessageId) {
+    [rows] = await database.query(
+      `SELECT ${fields}
+       FROM ai_messages AS m
+       INNER JOIN ai_messages AS anchor
+         ON anchor.id = ? AND anchor.conversation_id = m.conversation_id
+       WHERE m.conversation_id = ? AND m.role IN ('user', 'assistant') AND m.status = 'completed'
+         AND m.id <> anchor.id AND m.create_time <= anchor.create_time
+       ORDER BY m.create_time DESC, m.id DESC LIMIT ?`,
+      [sourceMessageId, conversation.id, limit],
+    );
+  } else {
+    [rows] = await database.query(
+      `SELECT ${fields}
+       FROM ai_messages AS m
+       WHERE m.conversation_id = ? AND m.role IN ('user', 'assistant') AND m.status = 'completed'
+       ORDER BY m.create_time DESC, m.id DESC LIMIT ?`,
+      [conversation.id, limit],
+    );
+  }
+  return rows.reverse().map((row) => ({
+    id: String(row.id),
+    role: row.role,
+    content: row.content || '',
+    status: row.status || 'completed',
+    versionGroupId: row.version_group_id || null,
+    createdAt: row.create_time,
+    updatedAt: row.update_time,
+  }));
+}
+
 export async function listAiMessageVersions(identity, conversationId, messageId, database = pool) {
   const conversation = await getOwnedConversationRow(database, identity, conversationId);
   if (!conversation) throw serviceError('CONVERSATION_NOT_FOUND', '会话不存在或无权访问', 404);

@@ -1,6 +1,7 @@
 import pool from '../../../db/index.js';
 import { listTodoPage } from '../../services/todoService.js';
 import { searchPersonalKnowledge } from '../../personalKnowledgeSearch.js';
+import { withQueryResultMetadata } from '../toolResultMetadata.js';
 
 const PRIORITY_LABELS = Object.freeze({ 0: '低优先级', 1: '普通优先级', 2: '高优先级' });
 const REMINDER_LABELS = Object.freeze({ in_app: '站内提醒', email: '邮件提醒' });
@@ -141,14 +142,17 @@ export default {
   requireRoot: false,
   async execute(input, ctx) {
     const args = normalizeArgs(input);
-    if (cannotReadTodos(ctx)) return { items: [], total: 0, nextCursor: null };
+    if (cannotReadTodos(ctx)) return withQueryResultMetadata({ items: [], total: 0, nextCursor: null });
     const page = await listTodoPage(pool, ctx.userId, {
       ...args,
       ...(args.todoId ? { ids: [args.todoId] } : {}),
       view: 'summary',
     });
     if (page.items.length || !args.keyword || args.cursor) {
-      return { ...page, matchMode: 'like' };
+      return withQueryResultMetadata(
+        { ...page, matchMode: 'like' },
+        { truncationReason: page.nextCursor ? 'cursor' : null },
+      );
     }
     // 首页 LIKE 零结果 → 语义降级；降级自身失败 fail-open 回空结果，不升级成报错。
     try {
@@ -161,12 +165,15 @@ export default {
         reminderAt: args.reminderAt,
       });
       if (fallbackItems.length) {
-        return { items: fallbackItems, total: fallbackItems.length, nextCursor: null, matchMode: 'semantic' };
+        return withQueryResultMetadata(
+          { items: fallbackItems, total: fallbackItems.length, nextCursor: null, matchMode: 'semantic' },
+          { exactTotal: false, coverage: 'partial', truncationReason: 'semantic_recall' },
+        );
       }
     } catch (error) {
       console.warn('[query_todos] semantic fallback failed code=%s', error?.code || error?.message);
     }
-    return { ...page, matchMode: 'like' };
+    return withQueryResultMetadata({ ...page, matchMode: 'like' });
   },
   getDependencyRefs(raw) {
     return (Array.isArray(raw?.items) ? raw.items : []).map((item) => ({ type: 'todo', id: item.id }));

@@ -1,5 +1,6 @@
 import pool from '../../../db/index.js';
 import { escapeLikePattern } from '../sqlPatterns.js';
+import { withQueryResultMetadata } from '../toolResultMetadata.js';
 
 function normalizeArgs(args = {}) {
   const keyword = String(args.keyword || args.name || args.folderName || args.folder_name || '').trim();
@@ -43,28 +44,30 @@ export default {
       where += " AND folders.name LIKE ? ESCAPE '\\\\'";
       params.push(`%${escapeLikePattern(args.keyword)}%`);
     }
-    params.push(args.limit);
-    const [rows] = await pool.query(
-      `SELECT folders.id, folders.name, folders.parent_id, COUNT(files.id) AS file_count
-         FROM folders
-         LEFT JOIN files ON files.folder_id = folders.id
-                        AND files.create_by = folders.create_by
-                        AND files.del_flag = 0
-        WHERE ${where}
-        GROUP BY folders.id, folders.name, folders.parent_id, folders.sort, folders.create_time
-        ORDER BY folders.sort ASC, folders.create_time DESC
-        LIMIT ?`,
-      params,
-    );
-    return {
-      total: rows.length,
+    const [[rows], [countRows]] = await Promise.all([
+      pool.query(
+        `SELECT folders.id, folders.name, folders.parent_id, COUNT(files.id) AS file_count
+           FROM folders
+           LEFT JOIN files ON files.folder_id = folders.id
+                          AND files.create_by = folders.create_by
+                          AND files.del_flag = 0
+          WHERE ${where}
+          GROUP BY folders.id, folders.name, folders.parent_id, folders.sort, folders.create_time
+          ORDER BY folders.sort ASC, folders.create_time DESC
+          LIMIT ?`,
+        [...params, args.limit],
+      ),
+      pool.query(`SELECT COUNT(*) AS total FROM folders WHERE ${where}`, params),
+    ]);
+    return withQueryResultMetadata({
+      total: Number(countRows[0]?.total || 0),
       items: rows.map((row) => ({
         id: String(row.id),
         name: row.name || '未命名文件夹',
         parentId: row.parent_id == null ? null : String(row.parent_id),
         fileCount: Number(row.file_count || 0),
       })),
-    };
+    });
   },
   transform(raw) {
     const items = raw?.items || [];

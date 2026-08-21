@@ -20,9 +20,7 @@ describe('Agent V3 capability manifest', () => {
   it('每个真实注册工具恰好对应一项显式能力，且依赖、风险和必填参数契约完整', () => {
     expect(Object.keys(TOOL_CAPABILITY_MANIFEST)).toHaveLength(tools.length);
     expect(validateAgentV3CapabilityManifest(tools)).toEqual([]);
-    expect(new Set(AGENT_CAPABILITY_MANIFEST.map((item) => item.id)).size).toBe(
-      AGENT_CAPABILITY_MANIFEST.length,
-    );
+    expect(new Set(AGENT_CAPABILITY_MANIFEST.map((item) => item.id)).size).toBe(AGENT_CAPABILITY_MANIFEST.length);
   });
 
   it('读网页能力稳定绑定到 read_url，不从工具名或中文描述推断', () => {
@@ -31,6 +29,35 @@ describe('Agent V3 capability manifest', () => {
       domains: ['web', 'bookmark'],
       resultKind: 'web_document',
     });
+  });
+
+  it('模块范围依据产出域与显式来源域做通用闭包，不依赖固定问法', () => {
+    const available = new Set(tools.map((tool) => tool.name));
+    const bookmarkCatalog = buildAgentV3CapabilityCatalog(tools, {
+      availableToolNames: available,
+      actorRole: 'user',
+      capabilityScope: { domains: ['bookmark', 'web'] },
+    });
+    const bookmarkIds = new Set(bookmarkCatalog.map((item) => item.id));
+    expect(bookmarkIds.has('bookmark.query')).toBe(true);
+    expect(bookmarkIds.has('web.read')).toBe(true);
+    expect(bookmarkIds.has('note.create')).toBe(true);
+    expect(bookmarkIds.has('todo.create')).toBe(false);
+    expect(bookmarkIds.has('account.profile.read')).toBe(false);
+
+    const contentDomains = ['content', 'note', 'bookmark', 'file', 'todo', 'tag'];
+    expect(normalizeCapabilityScope({ domains: contentDomains }, { actorRole: 'user' }).domains).toEqual(
+      contentDomains,
+    );
+    const contentCatalog = buildAgentV3CapabilityCatalog(tools, {
+      availableToolNames: available,
+      actorRole: 'user',
+      capabilityScope: { domains: contentDomains },
+    });
+    const contentIds = new Set(contentCatalog.map((item) => item.id));
+    for (const id of ['note.query', 'bookmark.query', 'file.query', 'todo.query', 'tag.query', 'note.create']) {
+      expect(contentIds.has(id)).toBe(true);
+    }
   });
 
   it('用户显式模块范围只收窄能力，不扩大角色权限', () => {

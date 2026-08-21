@@ -36,15 +36,19 @@ V3 的目标是把这些判断从散落的关键词和模型自由发挥中收�
 
 模型只能选择 Manifest 中的 capability ID；Router 只做精确映射，不用关键词、正则、相似度或工具文件名做第二次语义猜测。新增工具时扩展声明和测试，不为某句问法增加分支。
 
-### 3. 对话历史不作为事实来源
+### 3. 语义历史与事实证据分层
 
-V3 不向模型发送原始历史消息，`rawHistoryMessageCount` 必须为 0。会话仅保留服务端生成的窄状态：
+V3 不信任客户端 `history`，也不把历史当成当前私有事实。为了不破坏普通知识问答、产品帮助追问和“这个/刚才那个”类语义承接，服务端从有归属校验的云端消息构建有界 `recentDialogue`；无云端会话时才回退到服务端 session turns。
+
+模型阶段使用不同预算：Compiler 最多 4 轮 / 1600 字符，普通 Dialogue Composer 最多 10 轮 / 8000 字符，Grounded Composer 最多 4 轮 / 2400 字符；Planner 和 Tool 固定为 0。`rawHistoryMessageCount=0` 仅表示 V3 Planner/Tool 没有原始历史，`recentDialogueMessageCount/recentDialogueSource` 单独记录语义上下文的有界投影。
+
+跨轮权威状态仍只保留：
 
 - `DiscourseState`：当前领域、上一能力、topic epoch 和可解析指代；
 - `ResultSet`：本轮真实执行结果的稳定资源引用；
 - `ArtifactState`：草稿、确认、执行、替换、失效和结果未知状态。
 
-旧回答正文、旧工具参数和旧材料正文都不能自动进入新一轮。用户明确说“这些、刚才那条、继续基于上轮结果”时，只能通过类型兼容的 `ResultSet` 引用恢复；跨领域或歧义时必须重新查询或澄清。
+`recentDialogue` 只帮助理解语言：最新用户消息仍是当轮动作、对象、时间、参数和文字事实的唯一权威。旧回答里的私有数字、旧工具参数和旧材料正文不能直接成为新一轮的事实证据。用户明确说“这些、刚才那条、继续基于上轮结果”时，私有资源只能通过类型兼容的 `ResultSet/SourceSet` 重新读取；跨领域或歧义时必须重新查询或澄清。普通公共知识对话则可以使用经裁剪的近期原话保持连贯。
 
 候选能力裁剪发生在 Compiler 之前时，也只能依据 Manifest 声明的输入类型和 ResultSet 的结构化领域/引用类型判断。例如上一轮返回了经工具投影的书签或网页引用，下一轮省略 URL 要求继续总结时可以开放网页读取能力；仅凭标题、摘要、中文指代词或某个工具名不得开放，也不得把跨领域旧结果自动带入。
 
@@ -70,7 +74,7 @@ Planner 看不到这些可由服务端确定的自由参数，因此不能把旧
 ## 三、当前实现链路
 
 ```text
-最新用户消息 + 当前显式资源 + 窄会话投影 + 模块约束
+最新用户消息 + 服务端 recentDialogue + 当前显式资源 + 结构化状态 + 模块约束
                          │
                          ▼
                 Intent Compiler V3
@@ -115,7 +119,10 @@ V3 复用现有工具实现、owner 校验、Tool Policy、确认令牌、幂等
 - Compiler/TurnSpec：复合目标、时间约束、当前资源、跨域切换、缺失槽和低置信澄清。
 - Router/Validator：精确 capability 路由、模块收窄、部分不支持披露、额外工具和额外写入失败关闭。
 - 会话状态：同域引用、跨域隔离、歧义集合、topic epoch、草稿替换、确认完成/失效/结果未知。
-- Handler：旧 7 天历史不能覆盖本轮“今天”，权威时间进入查询，结果集可核验。
+- 分层历史：云端权威优先、session 回退、重新生成版本折叠、各阶段预算和 Planner/Tool 零历史。
+- Handler：旧 7 天语义上下文不能覆盖本轮“今天”，权威时间进入查询，私有回答只使用本轮证据。
+- 结果契约：`totalCount/returned/totalExact/completeness/nextCursor` 显式投影，数值型 `raw.total` 不再被执行器自动当成精确总量。
+- 能力范围：产物领域与可接受的材料领域分开声明，模块约束既不跨域泄漏，也不会误关闭“书签/笔记/文件 → 生成笔记”这类通用转换。
 - 前端：模块选择、发送后复位、历史消息展示和无材料时不显示多余来源标签。
 - 全量 server 测试、web 测试、类型检查、生产构建和 `git diff --check`。
 
@@ -146,7 +153,7 @@ pnpm --filter server smoke:ai-root-e2e -- --runtime v3 --live --suite full --exe
 
 - 默认模式仍为 `legacy`，部署不能隐式启用 V3。
 - 目标模式和账号受众必须同时命中；非灰度账号的 V3 Compiler 调用数必须为 0。
-- V3 trace 中 `rawHistoryMessageCount=0`、`legacyStageCount=0`。
+- V3 trace 中 Planner/Tool 必须 `rawHistoryMessageCount=0`、`legacyStageCount=0`；`recentDialogueMessageCount` 不得超预算，来源只能是 `cloud/session/none`。
 - 不得出现范围外资源、跨领域旧 ResultSet、未确认写入、重复写入或额外写工具。
 - 时间约束必须绑定到 Manifest 声明的正确槽，服务端权威值覆盖模型参数。
 - 每个目标都有 completed、clarification、unsupported、failed 或 unknown 的可见终态，不能静默丢失。
@@ -154,19 +161,22 @@ pnpm --filter server smoke:ai-root-e2e -- --runtime v3 --live --suite full --exe
 
 ## 七、独立分支落地状态（2026-08-21）
 
-当前实现位于独立工作树和 `codex/agent-runtime-v3` 实验分支，该分支用于远程代码评审；这不代表已经合入 `main` 或部署。该分支不是发布候选，默认 Runtime 仍为 legacy。已经完成：
+当前实现位于独立工作树和 `codex/agent-runtime-v3-phase0b` 分支，用于继续代码评审和确定性回归；这不代表已经合入 `main` 或部署。分支默认 Runtime 仍为 legacy，不会因代码存在而自动影响用户。已经完成：
 
-- TurnSpec V3、Manifest 精确路由、服务端时间/资源绑定和不携带原始历史的执行链；
+- TurnSpec V3、Manifest 精确路由、服务端时间/资源绑定和 Planner/Tool 零历史的执行链；
 - `ResultSet / DiscourseState / ArtifactState` 的窄状态投影、跨领域隔离和类型兼容继承；
 - 同领域待确认草稿的 refine / scope replacement / independent 语义，以及旧确认原子失效；
 - 模块级单轮能力约束、无真实材料时隐藏多余检索提示；
-- Root 真实门禁的 Runtime 证明、定点成本开关、正式 Service 夹具和自动清理。
+- Root 真实门禁的 Runtime 证明、定点成本开关、正式 Service 夹具和自动清理；
+- Phase 0B 最低结果契约：关键查询工具显式返回总量、本页数量、完整性、游标和截断原因；
+- Phase 1 核心：服务端权威 `recentDialogue`、Compiler/Composer 分层预算、Grounded Composer 事实隔离和低基数 trace；
+- Manifest 的 `acceptedSourceDomains`：用声明式数据表达“某产物能由哪些材料域生成”，同一匹配函数被目录与 Handler 共用。
 
-本轮只对历史失败链做了一次真实 DeepSeek + Root Handler 定点验证：`query_notes` 成功；“最近 7 天生成草稿 → 改为今天且至少 2000 字 → 再生成至少 2500 字 → 确认最新版”成功；两张旧确认均失效、最终确认幂等、夹具清理成功。执行命令为 `pnpm --filter server smoke:ai-root-e2e -- --runtime v3 --live --execute-writes --provider deepseek --case query-notes --artifact-refinement-rounds 1 --format json`。该结果证明独立分支能连接当前真实依赖完成目标链路，不代表代码已经上线，也不能替代扩大到非 Root 灰度前的一次获授权全矩阵门禁。
+早期实验分支曾对历史失败链做过一次获授权的真实 DeepSeek + Root Handler 定点验证：`query_notes` 和“7 天草稿 → 改今天/2000 字 → 再扩到 2500 字 → 确认最新版”链路通过。当前 Phase 0B/1 的日常开发不再重复该真实调用，只使用确定性测试、Mock Provider 和 zero-token smoke；只有首次灰度或扩大受众时才在重新授权后运行最小真实门禁。
 
-### Phase 0A 修复分支
+### Phase 0A / 0B / 1 渐进分支
 
-最终统一重构决策的 Phase 0A 在 `codex/agent-runtime-v3-phase0a` 独立分支继续实施，不直接修改本地 `main`，也不在本阶段启用生产 V3、迁移数据库或删除旧链。该阶段只处理阻断缺陷与安全边界：
+最终统一重构决策按 Phase 0A → 0B → 1 在独立工作树渐进实施，不直接修改本地 `main`，也不在本阶段启用生产 V3、迁移数据库或删除旧链。已经处理的通用边界包括：
 
 - 显式能力范围在身份解析后重新授权，纯越权范围在模型前确定性拒绝；
 - Manifest 明确时间默认和副作用策略，Root 全量统计不再依赖模型补出时间参数；
@@ -180,7 +190,9 @@ pnpm --filter server smoke:ai-root-e2e -- --runtime v3 --live --suite full --exe
 ## 八、后续演进边界
 
 - 新能力优先扩展 Manifest、类型和测试，不在 Handler 中新增自然语言特判。
-- 新的上下文继承需求优先扩展 ResultSet/DiscourseState schema，不恢复原始历史正文注入。
+- 新的私有资源继承需求优先扩展 ResultSet/SourceSet/DiscourseState schema；普通语义承接只扩展服务端 `recentDialogue` 的统一预算和裁剪规则，不把它变成私有事实源。
+- 能力的产物域与输入材料域分别由 `domains/acceptedSourceDomains` 声明，不在前端或 Handler 按问法、工具名或截图故障增加特判。
+- 列表总量只有在工具显式证明 `totalExact=true` 时才可对用户声称“全部/只有”；执行器不得从字段名或当前页长度推断完整性。
 - 新的时间字段优先声明 temporal slot 和服务端绑定器，不让模型自由拼日期。
 - 新写操作必须复用确认、owner、幂等和 unknown 终态，不能在 V3 内另建副作用通道。
 - 只有 V3 enforce 稳定覆盖全部核心场景并完成生产观测后，才另开任务删除 legacy/V2；本阶段不做大爆炸式替换。

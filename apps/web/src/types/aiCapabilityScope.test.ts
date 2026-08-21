@@ -19,12 +19,19 @@ describe('AI 本轮能力范围', () => {
     });
   });
 
+  it('综合内容模块完整覆盖轻笺内部内容来源域', () => {
+    expect(buildAiCapabilityScope('content')).toEqual({
+      mode: 'restricted',
+      domains: ['content', 'note', 'bookmark', 'file', 'todo', 'tag'],
+    });
+  });
+
   it('管理模块只向 root 的选项列表开放', () => {
     const translate = (key: string) => key;
     expect(buildAiCapabilityModuleOptions(translate).some((item) => item.value === 'admin')).toBe(false);
-    expect(buildAiCapabilityModuleOptions(translate, { includeAdmin: true }).some((item) => item.value === 'admin')).toBe(
-      true,
-    );
+    expect(
+      buildAiCapabilityModuleOptions(translate, { includeAdmin: true }).some((item) => item.value === 'admin'),
+    ).toBe(true);
     expect(aiCapabilityModuleLabelKey('todo')).toBe('ai.capabilityScope.todo');
   });
 });

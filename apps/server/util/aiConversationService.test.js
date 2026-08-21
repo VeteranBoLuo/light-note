@@ -20,6 +20,7 @@ import {
   deleteAiConversation,
   exportAiConversations,
   getAiConversation,
+  getAiConversationRecentDialogue,
   listAiConversations,
   listAiMessageVersions,
   prepareAiMessageVersionGroup,
@@ -433,6 +434,47 @@ describe('AI conversation isolation', () => {
     expect(query.mock.calls[1][0]).toContain('ORDER BY create_time ASC, id ASC');
     expect(query.mock.calls[4][0]).toContain('actor_user_id = ?');
     expect(query.mock.calls[4][1]).toEqual(['actor-1', 'conversation-1', 'message-1']);
+  });
+
+  it('recentDialogue 只读取 owner 会话中当前消息之前的轻量已完成对话', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce([[{ id: 'conversation-1', title: 'Conversation', status: 'active' }]])
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'answer-1',
+            role: 'assistant',
+            content: '上一轮回答',
+            status: 'completed',
+            version_group_id: 'answer-group-1',
+            create_time: '2026-08-21 10:01:00',
+          },
+          {
+            id: 'question-1',
+            role: 'user',
+            content: '上一轮问题',
+            status: 'completed',
+            create_time: '2026-08-21 10:00:00',
+          },
+        ],
+      ]);
+
+    const dialogue = await getAiConversationRecentDialogue(
+      normalIdentity,
+      'conversation-1',
+      { sourceMessageId: 'question-2', limit: 12 },
+      { query },
+    );
+
+    expect(dialogue).toEqual([
+      expect.objectContaining({ id: 'question-1', role: 'user', content: '上一轮问题' }),
+      expect.objectContaining({ id: 'answer-1', role: 'assistant', content: '上一轮回答' }),
+    ]);
+    expect(query.mock.calls[0][1]).toEqual(['conversation-1', 'user-1', 'user-1', 'normal', null]);
+    expect(query.mock.calls[1][0]).toContain('INNER JOIN ai_messages AS anchor');
+    expect(query.mock.calls[1][0]).toContain("m.status = 'completed'");
+    expect(query.mock.calls[1][1]).toEqual(['question-2', 'conversation-1', 12]);
   });
 
   it('soft deletes a conversation and restores it only inside the owner-scoped undo window', async () => {

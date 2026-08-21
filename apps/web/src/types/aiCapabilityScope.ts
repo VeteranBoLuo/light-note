@@ -1,31 +1,16 @@
 import type { BaseOptions } from '@/config/bookmarkCfg';
 
 export type AiCapabilityDomain =
-  | 'content'
-  | 'note'
-  | 'bookmark'
-  | 'file'
-  | 'todo'
-  | 'tag'
-  | 'account'
-  | 'growth'
-  | 'admin'
-  | 'web';
+  'content' | 'note' | 'bookmark' | 'file' | 'todo' | 'tag' | 'account' | 'growth' | 'admin' | 'web';
 
 export type AiCapabilityModule =
-  | 'auto'
-  | 'content'
-  | 'note'
-  | 'bookmark'
-  | 'file'
-  | 'todo'
-  | 'tag'
-  | 'account_growth'
-  | 'admin';
+  'auto' | 'content' | 'note' | 'bookmark' | 'file' | 'todo' | 'tag' | 'account_growth' | 'admin';
 
 const MODULE_DOMAINS: Readonly<Record<AiCapabilityModule, readonly AiCapabilityDomain[]>> = Object.freeze({
   auto: [] as const,
-  content: ['content'] as const,
+  // “综合内容”是轻笺内部内容的聚合入口；来源域必须完整下发，服务端再依据 Manifest
+  // 的产出域/acceptedSourceDomains 做能力闭包，不能靠具体问法临时补工具。
+  content: ['content', 'note', 'bookmark', 'file', 'todo', 'tag'] as const,
   note: ['note'] as const,
   bookmark: ['bookmark', 'web'] as const,
   file: ['file'] as const,

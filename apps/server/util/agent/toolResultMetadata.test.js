@@ -42,6 +42,7 @@ describe('Agent 工具结果元数据', () => {
         raw: {
           total: 2,
           items: [{ id: 'n1' }, { id: 'n2' }],
+          resultMetadata: buildQueryResultMetadata({ totalCount: 2, returned: 2 }),
         },
         args,
         dependencyRefs: [
@@ -90,7 +91,11 @@ describe('Agent 工具结果元数据', () => {
 
   it('查询集合完整但回答材料被文本预算截断时分别披露两层完整性', () => {
     const metadata = finalizeToolResultMetadata({
-      raw: { total: 1, items: [{ id: 'bookmark-1' }] },
+      raw: {
+        total: 1,
+        items: [{ id: 'bookmark-1' }],
+        resultMetadata: buildQueryResultMetadata({ totalCount: 1, returned: 1 }),
+      },
       dependencyRefs: [{ type: 'bookmark', id: 'bookmark-1' }],
       summaryOriginalLength: 7000,
       summaryReturnedLength: 6000,
@@ -99,6 +104,49 @@ describe('Agent 工具结果元数据', () => {
     expect(formatToolResultMetadataDisclosure(metadata, 'zh-CN')).toBe(
       '【已核验查询口径】已返回 1/1 条；查询集合完整；回答材料为部分结果 (受结果文本预算限制)',
     );
+  });
+
+  it('执行器不再把工具自报的数字 total 自动当成精确总量', () => {
+    const metadata = finalizeToolResultMetadata({
+      raw: { total: 60, items: [{ id: 'todo-1' }] },
+      dependencyRefs: [{ type: 'todo', id: 'todo-1' }],
+    });
+
+    expect(metadata).toMatchObject({
+      totalCount: 60,
+      returned: 1,
+      totalExact: false,
+      completeness: 'partial',
+      truncationReason: 'unverified_total',
+    });
+    expect(formatToolResultMetadataDisclosure(metadata, 'zh-CN')).toContain('总量未精确计算');
+    expect(formatToolResultMetadataDisclosure(metadata, 'zh-CN')).not.toContain('1/60');
+  });
+
+  it('nextCursor 是分页不完整的权威信号，并进入公开查询口径', () => {
+    const metadata = finalizeToolResultMetadata({
+      raw: {
+        total: 5,
+        items: [{ id: 'todo-1' }],
+        nextCursor: 'next-page-token',
+        resultMetadata: buildQueryResultMetadata({
+          totalCount: 5,
+          returned: 1,
+          nextCursor: 'next-page-token',
+        }),
+      },
+      dependencyRefs: [{ type: 'todo', id: 'todo-1' }],
+    });
+    expect(metadata).toMatchObject({
+      totalCount: 5,
+      complete: false,
+      truncated: true,
+      truncationReason: 'cursor',
+      nextCursor: 'next-page-token',
+    });
+    expect(
+      buildPublicToolQueryScopes([{ name: 'query_todos', status: 'success', resultMetadata: metadata }])[0],
+    ).toMatchObject({ nextCursor: 'next-page-token', completeness: 'partial' });
   });
 
   it('公开查询口径只投影安全计数、稳定引用覆盖和用户本地时间范围', () => {

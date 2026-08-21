@@ -49,6 +49,7 @@ function availableInputKinds({ contextSummary = {}, discourseProjection = {}, gr
 
 export async function runAgentRuntimeV3({
   message,
+  recentDialogue = [],
   catalog,
   tools,
   discourseProjection,
@@ -78,6 +79,7 @@ export async function runAgentRuntimeV3({
     compiledTurnSpecResult ||
     (await compile({
       message,
+      recentDialogue,
       catalog,
       discourseProjection,
       contextSummary,

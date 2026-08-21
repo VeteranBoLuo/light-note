@@ -1,7 +1,7 @@
 import { projectAgentTemporalRanges } from './timeRange.js';
 import { describeResolvedTimeRange } from './timeRange.js';
 
-const RESULT_METADATA_VERSION = '0.1';
+const RESULT_METADATA_VERSION = '0.2';
 
 function finiteCount(value) {
   const count = Number(value);
@@ -24,29 +24,39 @@ function freezeRanges(value = {}) {
 }
 
 /**
- * 列表/计数工具的最低结果闭环。cursor 留给 ResultSet 2.0；Phase 0B 先确保模型和
- * trace 能区分总量、实际返回量、完整/部分与截断原因。
+ * 列表/计数工具的最低结果闭环。工具必须显式证明 totalCount 是否精确，并同时返回
+ * 实际数量、分页游标、完整/部分与截断原因；执行器不会再猜测数字 total 的可信度。
  */
 export function buildQueryResultMetadata({
+  totalCount,
   total,
   returned,
   exactTotal = true,
   coverage,
   truncationReason,
+  nextCursor = null,
   resolvedRanges = {},
 } = {}) {
-  const normalizedTotal = finiteCount(total);
+  const normalizedTotal = finiteCount(totalCount ?? total);
   const normalizedReturned = finiteCount(returned) ?? 0;
   const totalKnown = exactTotal === true && normalizedTotal != null;
+  const normalizedNextCursor =
+    typeof nextCursor === 'string' && nextCursor.trim() ? nextCursor.trim().slice(0, 512) : null;
   const complete =
     coverage === 'complete'
       ? true
       : coverage === 'partial'
         ? false
-        : totalKnown && normalizedReturned >= normalizedTotal;
-  const truncated = totalKnown ? normalizedReturned < normalizedTotal : Boolean(truncationReason === 'limit');
+        : !normalizedNextCursor && totalKnown && normalizedReturned >= normalizedTotal;
+  const truncated = normalizedNextCursor
+    ? true
+    : totalKnown
+      ? normalizedReturned < normalizedTotal
+      : Boolean(truncationReason === 'limit');
   return Object.freeze({
     version: RESULT_METADATA_VERSION,
+    totalCount: normalizedTotal,
+    // total 保留为 0.1 协议兼容字段；新代码以 totalCount 为唯一语义名。
     total: normalizedTotal,
     returned: normalizedReturned,
     totalExact: totalKnown,
@@ -54,7 +64,10 @@ export function buildQueryResultMetadata({
     complete,
     partial: !complete,
     truncated,
-    truncationReason: truncationReason || (truncated ? 'limit' : !complete ? 'unknown_coverage' : null),
+    truncationReason:
+      truncationReason ||
+      (normalizedNextCursor ? 'cursor' : truncated ? 'limit' : !complete ? 'unknown_coverage' : null),
+    nextCursor: normalizedNextCursor,
     resolvedRanges: freezeRanges(resolvedRanges),
   });
 }
@@ -72,6 +85,7 @@ export function withQueryResultMetadata(
       exactTotal,
       coverage,
       truncationReason,
+      nextCursor: result?.nextCursor,
       resolvedRanges,
     }),
   };
@@ -86,14 +100,17 @@ export function finalizeToolResultMetadata({
   summaryReturnedLength = 0,
 } = {}) {
   const items = Array.isArray(raw?.items) ? raw.items : Array.isArray(raw) ? raw : [];
-  const hasExactTotal = raw && !Array.isArray(raw) && Number.isFinite(Number(raw.total));
+  const hasUnverifiedTotal =
+    raw && !Array.isArray(raw) && Array.isArray(raw.items) && Number.isFinite(Number(raw.total));
   const base =
     raw?.resultMetadata ||
     buildQueryResultMetadata({
       total: raw && !Array.isArray(raw) ? raw.total : null,
       returned: items.length,
-      exactTotal: hasExactTotal,
-      coverage: hasExactTotal ? undefined : items.length ? 'partial' : 'complete',
+      exactTotal: false,
+      coverage: hasUnverifiedTotal || items.length ? 'partial' : 'complete',
+      truncationReason: hasUnverifiedTotal ? 'unverified_total' : undefined,
+      nextCursor: raw && !Array.isArray(raw) ? raw.nextCursor : null,
     });
   const temporalRanges = projectAgentTemporalRanges(args);
   const stableReferenceCount = Array.isArray(dependencyRefs) ? dependencyRefs.length : 0;
@@ -132,7 +149,7 @@ export function formatToolResultMetadataDisclosure(metadata, locale = 'zh-CN') {
     .map((record) => formatResolvedRangeRecord(record, locale))
     .filter(Boolean);
   const returned = finiteCount(metadata.returned);
-  const total = metadata.totalExact === true ? finiteCount(metadata.total) : null;
+  const total = metadata.totalExact === true ? finiteCount(metadata.totalCount ?? metadata.total) : null;
   const hasCount = returned != null && (total != null || returned > 0 || metadata.partial === true);
   const facts = [];
 
@@ -153,13 +170,25 @@ export function formatToolResultMetadataDisclosure(metadata, locale = 'zh-CN') {
         ? english
           ? 'limited by the result cap'
           : '受返回条数上限限制'
-        : reason === 'result_budget'
+        : reason === 'cursor'
           ? english
-            ? 'limited by the result text budget'
-            : '受结果文本预算限制'
-          : english
-            ? 'coverage is not complete'
-            : '覆盖范围不完整';
+            ? 'more pages are available'
+            : '仍有后续分页'
+          : reason === 'semantic_recall'
+            ? english
+              ? 'semantic recall does not prove the exact total'
+              : '语义召回无法证明精确总量'
+            : reason === 'unverified_total'
+              ? english
+                ? 'the tool did not prove its reported total'
+                : '工具未证明其总量口径'
+              : reason === 'result_budget'
+                ? english
+                  ? 'limited by the result text budget'
+                  : '受结果文本预算限制'
+                : english
+                  ? 'coverage is not complete'
+                  : '覆盖范围不完整';
     facts.push(`${english ? 'partial query set' : '查询集合为部分结果'} (${reasonText})`);
   } else if (metadata.complete === true && (hasCount || resolvedRanges.length)) {
     facts.push(english ? 'complete query set' : '查询集合完整');
@@ -209,7 +238,7 @@ export function buildPublicToolQueryScopes(toolResults = [], locale = 'zh-CN') {
     if (item?.status !== 'success' || !item?.resultMetadata || typeof item.resultMetadata !== 'object') continue;
     const metadata = item.resultMetadata;
     const returned = finiteCount(metadata.returned) ?? 0;
-    const total = metadata.totalExact === true ? finiteCount(metadata.total) : null;
+    const total = metadata.totalExact === true ? finiteCount(metadata.totalCount ?? metadata.total) : null;
     const totalExact = metadata.totalExact === true && total != null;
     const resolvedRanges = Object.entries(metadata.resolvedRanges || {})
       .map(([slot, record]) => publicRangeRecord(slot, record, locale))
@@ -229,6 +258,10 @@ export function buildPublicToolQueryScopes(toolResults = [], locale = 'zh-CN') {
         completeness: metadata.complete === true ? 'complete' : 'partial',
         truncated: metadata.truncated === true,
         truncationReason: metadata.truncationReason ? String(metadata.truncationReason).slice(0, 64) : null,
+        nextCursor:
+          typeof metadata.nextCursor === 'string' && metadata.nextCursor.trim()
+            ? metadata.nextCursor.trim().slice(0, 512)
+            : null,
         stableReferenceCount: finiteCount(metadata.stableReferenceCount) ?? 0,
         stableIdCoverage: metadata.stableIdCoverage === 'complete' ? 'complete' : 'partial',
         projection: Object.freeze({

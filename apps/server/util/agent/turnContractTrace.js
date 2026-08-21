@@ -37,6 +37,7 @@ const CONTINUATION_MODES = new Set([
 ]);
 const TOPIC_EPOCH_ACTIONS = new Set(['unknown', 'keep', 'advance']);
 const RUNTIME_MODES = new Set(['legacy', 'v3_shadow', 'v3_enforce']);
+const RUNTIME_RECENT_DIALOGUE_SOURCES = new Set(['none', 'cloud', 'session']);
 const RUNTIME_ROLLOUT_REASONS = new Set([
   'global_legacy',
   'policy_disabled',
@@ -154,6 +155,8 @@ export function createTurnContractTrace() {
     runtimeRolloutReason: 'global_legacy',
     runtimeRolloutPercentage: 0,
     rawHistoryMessageCount: 0,
+    recentDialogueMessageCount: 0,
+    recentDialogueSource: 'none',
     legacyStageCount: 1,
   };
 }
@@ -284,6 +287,8 @@ export function recordRuntimeIsolation(trace, input = {}) {
   );
   trace.runtimeRolloutPercentage = safePercentage(input.rolloutPercentage);
   trace.rawHistoryMessageCount = safeCount(input.rawHistoryMessageCount);
+  trace.recentDialogueMessageCount = safeCount(input.recentDialogueMessageCount);
+  trace.recentDialogueSource = safeEnum(input.recentDialogueSource, RUNTIME_RECENT_DIALOGUE_SOURCES, 'none');
   trace.legacyStageCount = safeCount(input.legacyStageCount ?? (mode === 'v3_enforce' ? 0 : 1));
 }
 
@@ -334,6 +339,8 @@ export function sanitizeTurnContractTrace(value) {
     rolloutReason: value?.runtimeRolloutReason,
     rolloutPercentage: value?.runtimeRolloutPercentage,
     rawHistoryMessageCount: value?.rawHistoryMessageCount,
+    recentDialogueMessageCount: value?.recentDialogueMessageCount,
+    recentDialogueSource: value?.recentDialogueSource,
     legacyStageCount: value?.legacyStageCount,
   });
   return trace;

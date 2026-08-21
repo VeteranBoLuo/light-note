@@ -50,10 +50,11 @@ describe('query_todos 工具', () => {
   });
 
   it('游客不会读取待办数据', async () => {
-    await expect(tool.execute({}, { userId: 'visitor', userRole: 'visitor' })).resolves.toEqual({
+    await expect(tool.execute({}, { userId: 'visitor', userRole: 'visitor' })).resolves.toMatchObject({
       items: [],
       total: 0,
       nextCursor: null,
+      resultMetadata: { totalCount: 0, returned: 0, completeness: 'complete' },
     });
     expect(listTodoPage).not.toHaveBeenCalled();
   });
@@ -135,6 +136,11 @@ describe('query_todos 工具', () => {
       true,
     );
     expect(result.matchMode).toBe('semantic');
+    expect(result.resultMetadata).toMatchObject({
+      totalExact: false,
+      completeness: 'partial',
+      truncationReason: 'semantic_recall',
+    });
     expect(tool.transform(result, { keyword: '打篮球' })).toContain('没有精确匹配');
   });
 

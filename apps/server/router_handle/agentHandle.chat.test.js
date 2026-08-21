@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   reserve: vi.fn(),
   reconcile: vi.fn(),
   getOrCreateSession: vi.fn(),
+  getAiConversationRecentDialogue: vi.fn(),
   recordTurn: vi.fn(),
   resolveAttachments: vi.fn(),
   resolveAiMemoryIdentity: vi.fn(),
@@ -122,6 +123,9 @@ vi.mock('../util/aiMemoryService.js', () => ({
   resolveAiMemoryIdentity: mocks.resolveAiMemoryIdentity,
   getActiveAiMemoriesForPrompt: mocks.getActiveAiMemoriesForPrompt,
   createAiMemoryCandidate: mocks.createAiMemoryCandidate,
+}));
+vi.mock('../util/aiConversationService.js', () => ({
+  getAiConversationRecentDialogue: mocks.getAiConversationRecentDialogue,
 }));
 vi.mock('../util/noteAiService.js', () => ({
   buildNoteAiPayload: mocks.buildNoteAiPayload,
@@ -525,6 +529,7 @@ describe('agentChat 主链路', () => {
     });
     mocks.reconcile.mockResolvedValue(undefined);
     mocks.getOrCreateSession.mockResolvedValue({ id: 'session-1', turns: [], lastTool: null });
+    mocks.getAiConversationRecentDialogue.mockResolvedValue([]);
     mocks.commitSessionTurnSpec.mockImplementation(async (_session, turnSpec) =>
       turnSpec?.goals?.some((goal) => goal?.kind === 'read')
         ? { id: 'focus-1', state: 'pending' }
@@ -711,11 +716,18 @@ describe('agentChat 主链路', () => {
         { type: 'note', id: 'today-note-2' },
       ],
     });
+    mocks.getAiConversationRecentDialogue.mockResolvedValue([
+      { id: 'old-user', role: 'user', content: '总结最近 7 天的笔记', status: 'completed' },
+      { id: 'old-assistant', role: 'assistant', content: '你最近 7 天有 8 篇笔记。', status: 'completed' },
+    ]);
     mocks.requestAi.mockImplementation(async (messages, options = {}) => {
       if (options?.trace?.stage === 'intent_compiler_v3') {
         const payload = JSON.parse(messages[1].content);
         expect(payload.latestMessage).toBe('我今天新增了哪些笔记？');
-        expect(JSON.stringify(payload)).not.toContain('最近 7 天');
+        expect(payload.recentDialogue).toEqual([
+          { role: 'user', content: '总结最近 7 天的笔记' },
+          { role: 'assistant', content: '你最近 7 天有 8 篇笔记。' },
+        ]);
         expect(payload.structuredDiscourse).not.toHaveProperty('turns');
         return {
           content: '',
@@ -783,7 +795,8 @@ describe('agentChat 主链路', () => {
         };
       }
       expect(options?.trace?.stage).toBe('final');
-      expect(JSON.stringify(messages)).not.toContain('最近 7 天');
+      expect(JSON.stringify(messages)).toContain('最近 7 天');
+      expect(JSON.stringify(messages)).toContain('事实只能来自最新消息中已校验的显式材料和本轮真实工具结果');
       expect(JSON.stringify(messages)).toContain('【已核验查询口径】时间范围: 今天');
       return {
         content: '你今天新增了 2 篇笔记。',
@@ -798,6 +811,8 @@ describe('agentChat 主链路', () => {
     const req = request({
       message: '我今天新增了哪些笔记？',
       history: [{ role: 'user', content: '总结最近 7 天的笔记' }],
+      conversationId: 'conversation-1',
+      sourceMessageId: 'current-user-message',
       stream: false,
       scope: { mode: 'workspace' },
     });
@@ -839,6 +854,8 @@ describe('agentChat 主链路', () => {
       runtimeMode: 'v3_enforce',
       runtimeRolloutReason: 'role_allowlist',
       rawHistoryMessageCount: 0,
+      recentDialogueMessageCount: 2,
+      recentDialogueSource: 'cloud',
       legacyStageCount: 0,
       historyPolicy: 'discourse_projection_only',
     });

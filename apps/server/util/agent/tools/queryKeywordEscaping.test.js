@@ -63,9 +63,11 @@ describe('Agent 模糊查询字面量边界', () => {
   it('云空间文件夹名称查询也把用户通配符视为普通字符', async () => {
     await queryCloudFolders.execute({ keyword: String.raw`100%_done\path` }, { userId: 'user-1' });
 
-    expect(mocks.poolQuery).toHaveBeenCalledOnce();
+    expect(mocks.poolQuery).toHaveBeenCalledTimes(2);
     const [sql, params] = mocks.poolQuery.mock.calls[0];
     expect(String(sql)).toContain("folders.name LIKE ? ESCAPE '\\\\'");
     expect(params).toContain(String.raw`%100\%\_done\\path%`);
+    expect(String(mocks.poolQuery.mock.calls[1][0])).toContain('COUNT(*) AS total');
+    expect(mocks.poolQuery.mock.calls[1][1]).toContain(String.raw`%100\%\_done\\path%`);
   });
 });

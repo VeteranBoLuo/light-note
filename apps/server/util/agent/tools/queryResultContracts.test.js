@@ -8,6 +8,7 @@ const { default: getSecurityEvents } = await import('./get_security_events.js');
 const { default: getTokenUsage } = await import('./get_token_usage.js');
 const { default: getPendingFeedback } = await import('./get_pending_feedback.js');
 const { default: queryApiLogs } = await import('./query_api_logs.js');
+const { default: queryFeedback } = await import('./query_feedback.js');
 const { default: queryOperationLogs } = await import('./query_operation_logs.js');
 const { default: queryTrash } = await import('./query_trash.js');
 const { default: queryUsers } = await import('./query_users.js');
@@ -110,5 +111,18 @@ describe('Agent 列表工具最低结果契约', () => {
     expect(raw).toMatchObject({ total: 4, pending: 4 });
     expect(raw.resultMetadata).toMatchObject({ total: 4, returned: 1, completeness: 'partial' });
     expect(getPendingFeedback.getDependencyRefs(raw)).toEqual([{ type: 'feedback', id: 'feedback-1' }]);
+  });
+
+  it('个人反馈的 total 来自独立 COUNT，而不是当前 LIMIT 页长度', async () => {
+    mocks.query
+      .mockResolvedValueOnce([[{ type: 'bug', content: '无法保存', status: 'pending', create_time: null }]])
+      .mockResolvedValueOnce([[{ total: '7' }]]);
+
+    const raw = await queryFeedback.execute({ limit: 1 }, { userId: 'user-1', userRole: 'user' });
+
+    expect(raw).toMatchObject({ total: 7, items: [expect.objectContaining({ content: '无法保存' })] });
+    expect(raw.resultMetadata).toMatchObject({ totalCount: 7, returned: 1, completeness: 'partial' });
+    expect(mocks.query.mock.calls[1][0]).toContain('COUNT(*) AS total');
+    expect(queryFeedback.transform(raw)).toContain('共 7 条，当前返回 1 条');
   });
 });
