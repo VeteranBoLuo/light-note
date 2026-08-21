@@ -109,6 +109,10 @@ describe('noteDraft', () => {
       }),
     ).toEqual({ confirmationId: 'confirmation-1', confirmationToken: 'a'.repeat(43) });
     expect(normalizeNoteDraftRefinement({ confirmationId: 'confirmation-1', confirmationToken: 'short' })).toBe(null);
+    expect(normalizeNoteDraftRefinement({ artifactVersionId: '10000000-0000-4000-8000-000000000001' })).toEqual({
+      artifactVersionId: '10000000-0000-4000-8000-000000000001',
+    });
+    expect(normalizeNoteDraftRefinement({ artifactVersionId: 'not-an-artifact-id' })).toBe(null);
   });
 
   it('开放的笔记产出表达在旧正则下会漏判，这是语义路由必须接管入口的原因', () => {
@@ -522,9 +526,23 @@ describe('noteDraft', () => {
       ],
       scopeRefs: [{ type: 'note_branch', id: 'branch-1' }],
       attachmentIds: ['file-source-1'],
+      sourceSetId: '',
     });
     expect(normalizeNoteDraftPrivateContext(context)).toEqual(context);
     expect(normalizeNoteDraftPrivateContext({ ...context, kind: 'other' })).toBe(null);
+  });
+
+  it('私有上下文只记录 SourceSet 句柄，不复制 Dialogue Anchor 正文', () => {
+    const context = createNoteDraftPrivateContext({
+      sourceMessage: '把刚才讨论整理成笔记',
+      sourceSetId: '10000000-0000-4000-8000-000000000001',
+    });
+
+    expect(context).toMatchObject({
+      sourceSetId: '10000000-0000-4000-8000-000000000001',
+    });
+    expect(JSON.stringify(context)).not.toContain('对话正文');
+    expect(normalizeNoteDraftPrivateContext(context)).toEqual(context);
   });
 
   it('服务端查询生成的私有材料快照最多保留草稿引擎可消费的 12 项', () => {

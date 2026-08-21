@@ -337,8 +337,9 @@ export function createAiAssistantMaterialSnapshot(
 }
 
 export interface AiAssistantPendingNoteDraftReference {
-  confirmationId: string;
-  confirmationToken: string;
+  confirmationId?: string;
+  confirmationToken?: string;
+  artifactVersionId?: string;
 }
 
 /**
@@ -348,6 +349,11 @@ export interface AiAssistantPendingNoteDraftReference {
 export function resolveAiAssistantPendingNoteDraftReference(
   messages: AiAssistantMessage[],
 ): AiAssistantPendingNoteDraftReference | null {
+  const expiredSettlementIds = new Set<string>();
+  const normalizeArtifactId = (value: unknown) => {
+    const id = String(value || '');
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) ? id : '';
+  };
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (message?.role !== 'assistant') continue;
@@ -356,7 +362,9 @@ export function resolveAiAssistantPendingNoteDraftReference(
       // 取消、过期、已执行或已被替换的 create_note 是草稿生命周期边界。
       // 跨过这个边界去找更早的卡片，会把本轮续写绑到旧令牌；材料续用应由
       // entityRefs / sources 的稳定引用单独承担。
-      if ((message.actionSettlements || []).some((item) => item.toolName === 'create_note')) return null;
+      const noteSettlements = (message.actionSettlements || []).filter((item) => item.toolName === 'create_note');
+      if (noteSettlements.some((item) => item.status !== 'expired')) return null;
+      noteSettlements.forEach((item) => expiredSettlementIds.add(item.confirmationId));
       continue;
     }
     const pendingIds = new Set(message.pendingConfirmationIds);
@@ -365,17 +373,28 @@ export function resolveAiAssistantPendingNoteDraftReference(
     if (!confirmations.length) return null;
     const confirmation = confirmations.find(
       (item) =>
-        !item.expiresAt || (Number.isFinite(Date.parse(item.expiresAt)) && Date.parse(item.expiresAt) > Date.now()),
+        !expiredSettlementIds.has(item.id) &&
+        (!item.expiresAt || (Number.isFinite(Date.parse(item.expiresAt)) && Date.parse(item.expiresAt) > Date.now())),
     );
     // 此轮动作均已过期时继续寻找；更晚的有效动作不是笔记草稿时则不得越过。
     if (!confirmation) {
-      // 最新一轮确实是 create_note，但已过期时不得回退到更早草稿。
-      if (confirmations.some((item) => item.toolName === 'create_note')) return null;
+      // 确认令牌过期只终止“执行旧动作”，不销毁已持久化 ArtifactVersion。客户端只续带
+      // 公开的版本 ID；服务端仍会按 owner / subject / conversation 和版本链重新读取正文。
+      const expiredNote = confirmations.find((item) => item.toolName === 'create_note');
+      if (expiredNote) {
+        const artifactVersionId = normalizeArtifactId(expiredNote.artifactVersion?.id);
+        return artifactVersionId ? { artifactVersionId } : null;
+      }
       continue;
     }
     if (confirmation.toolName !== 'create_note') return null;
     if (!confirmation.id || !/^[A-Za-z0-9_-]{40,}$/.test(String(confirmation.token || ''))) return null;
-    return { confirmationId: confirmation.id, confirmationToken: confirmation.token };
+    const artifactVersionId = normalizeArtifactId(confirmation.artifactVersion?.id);
+    return {
+      confirmationId: confirmation.id,
+      confirmationToken: confirmation.token,
+      ...(artifactVersionId ? { artifactVersionId } : {}),
+    };
   }
   return null;
 }

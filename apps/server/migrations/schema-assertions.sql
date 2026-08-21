@@ -9,6 +9,9 @@ SELECT '[1] missing_table' AS check_name, expected.t AS detail FROM (
   UNION ALL SELECT 'ai_memories' UNION ALL SELECT 'ai_response_events'
   UNION ALL SELECT 'ai_product_events' UNION ALL SELECT 'ai_token_reservations'
   UNION ALL SELECT 'ai_evaluation_runs'
+  UNION ALL SELECT 'ai_agent_conversation_state' UNION ALL SELECT 'ai_agent_run'
+  UNION ALL SELECT 'ai_agent_source_set' UNION ALL SELECT 'ai_agent_result_set'
+  UNION ALL SELECT 'ai_agent_artifact_version'
 ) expected
 LEFT JOIN information_schema.tables a ON a.table_schema=DATABASE() AND a.table_name=expected.t
 WHERE a.table_name IS NULL;
@@ -31,7 +34,15 @@ SELECT '[3] missing_column' AS check_name, t.n AS detail FROM (
   SELECT 'ai_change_sets','last_attempt_at','ai_change_sets.last_attempt_at' UNION ALL
   SELECT 'ai_change_sets','admin_context_scope','ai_change_sets.admin_context_scope' UNION ALL
   SELECT 'ai_response_events','admin_context_scope','ai_response_events.admin_context_scope' UNION ALL
-  SELECT 'ai_content_generations','generation','ai_content_generations.generation'
+  SELECT 'ai_content_generations','generation','ai_content_generations.generation' UNION ALL
+  SELECT 'ai_agent_conversation_state','owner_key_hash','ai_agent_conversation_state.owner_key_hash' UNION ALL
+  SELECT 'ai_agent_conversation_state','revision','ai_agent_conversation_state.revision' UNION ALL
+  SELECT 'ai_agent_run','execution_receipt','ai_agent_run.execution_receipt' UNION ALL
+  SELECT 'ai_agent_source_set','source_digest','ai_agent_source_set.source_digest' UNION ALL
+  SELECT 'ai_agent_result_set','query_fingerprint','ai_agent_result_set.query_fingerprint' UNION ALL
+  SELECT 'ai_agent_result_set','completeness','ai_agent_result_set.completeness' UNION ALL
+  SELECT 'ai_agent_artifact_version','content_hash','ai_agent_artifact_version.content_hash' UNION ALL
+  SELECT 'ai_agent_artifact_version','source_set_id','ai_agent_artifact_version.source_set_id'
 ) t
 LEFT JOIN information_schema.columns c
   ON c.table_schema=DATABASE() AND c.table_name=t.tab AND c.column_name=t.col
@@ -71,6 +82,19 @@ WHERE s.index_name IS NULL;
 SELECT '[8] missing_lineage_index' AS check_name, CONCAT(x.tn,'.',x.ix) AS detail FROM (
   SELECT 'ai_conversations' tn,'idx_ai_conversation_lineage_owner' ix UNION ALL
   SELECT 'ai_conversations','idx_ai_conversation_parent'
+) x
+LEFT JOIN information_schema.statistics s
+  ON s.table_schema=DATABASE() AND s.table_name=x.tn AND s.index_name=x.ix
+WHERE s.index_name IS NULL;
+
+-- 8A) Agent Runtime Phase 2 的关键 CAS、恢复与生命周期索引应存在（期望 0 行）
+SELECT '[8A] missing_agent_runtime_index' AS check_name, CONCAT(x.tn,'.',x.ix) AS detail FROM (
+  SELECT 'ai_agent_conversation_state' tn,'idx_ai_agent_state_owner_updated' ix UNION ALL
+  SELECT 'ai_agent_run','idx_ai_agent_run_conversation_created' UNION ALL
+  SELECT 'ai_agent_source_set','idx_ai_agent_source_digest' UNION ALL
+  SELECT 'ai_agent_result_set','uk_ai_agent_result_handle' UNION ALL
+  SELECT 'ai_agent_result_set','idx_ai_agent_result_run_goal' UNION ALL
+  SELECT 'ai_agent_artifact_version','uk_ai_agent_artifact_chain_version'
 ) x
 LEFT JOIN information_schema.statistics s
   ON s.table_schema=DATABASE() AND s.table_name=x.tn AND s.index_name=x.ix

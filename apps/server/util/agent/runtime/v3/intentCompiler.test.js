@@ -120,6 +120,60 @@ describe('Intent Compiler V3', () => {
     expect(request).toHaveBeenCalledTimes(2);
   });
 
+  it('Dialogue Anchor 只有服务端存在稳定消息锚点时才允许进入规格', async () => {
+    const dialogueSpec = {
+      ...validSpec,
+      requestKind: 'create_artifact',
+      groundingPolicy: 'none',
+      goals: [
+        {
+          ...validSpec.goals[0],
+          capabilityId: 'note.create',
+          operation: 'create',
+          referentSelectors: [{ source: 'dialogue_anchor', types: ['dialogue'], ordinal: null }],
+        },
+      ],
+    };
+    const dialogueCatalog = buildAgentV3CapabilityCatalog(
+      [{ name: 'create_note', description: '创建笔记', parameters: { type: 'object', properties: {} } }],
+      { availableToolNames: new Set(['create_note']), actorRole: 'user' },
+    );
+    const request = vi.fn().mockResolvedValue(response(dialogueSpec));
+    await expect(
+      compileAgentTurnSpecV3({
+        message: '把刚才讨论整理成笔记',
+        recentDialogue: [{ role: 'assistant', content: '刚才的讨论内容' }],
+        catalog: dialogueCatalog,
+        contextSummary: { dialogueAnchorAvailable: true },
+        authoritativeGroundingPolicy: 'none',
+        outputContract: { format: 'note_markdown' },
+        request,
+      }),
+    ).resolves.toMatchObject({
+      turnSpec: {
+        goals: [
+          expect.objectContaining({
+            referentSelectors: [{ source: 'dialogue_anchor', types: ['dialogue'], ordinal: null }],
+          }),
+        ],
+      },
+    });
+
+    const unavailable = vi.fn().mockResolvedValue(response(dialogueSpec));
+    await expect(
+      compileAgentTurnSpecV3({
+        message: '把刚才讨论整理成笔记',
+        recentDialogue: [{ role: 'assistant', content: '临时 session 内容' }],
+        catalog: dialogueCatalog,
+        contextSummary: { dialogueAnchorAvailable: false },
+        authoritativeGroundingPolicy: 'none',
+        outputContract: { format: 'note_markdown' },
+        request: unavailable,
+      }),
+    ).rejects.toMatchObject({ code: 'TURN_SPEC_V3_INVALID' });
+    expect(unavailable).toHaveBeenCalledTimes(2);
+  });
+
   it('唯一网页结果被误编译成笔记读取时进行一次通用语义复核并改回兼容能力', async () => {
     const wrong = {
       ...validSpec,

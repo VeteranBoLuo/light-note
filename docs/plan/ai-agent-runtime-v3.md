@@ -172,11 +172,11 @@ pnpm --filter server smoke:ai-root-e2e -- --runtime v3 --live --suite full --exe
 - Phase 1 核心：服务端权威 `recentDialogue`、Compiler/Composer 分层预算、Grounded Composer 事实隔离和低基数 trace；
 - Manifest 的 `acceptedSourceDomains`：用声明式数据表达“某产物能由哪些材料域生成”，同一匹配函数被目录与 Handler 共用。
 
-早期实验分支曾对历史失败链做过一次获授权的真实 DeepSeek + Root Handler 定点验证：`query_notes` 和“7 天草稿 → 改今天/2000 字 → 再扩到 2500 字 → 确认最新版”链路通过。当前 Phase 0B/1 的日常开发不再重复该真实调用，只使用确定性测试、Mock Provider 和 zero-token smoke；只有首次灰度或扩大受众时才在重新授权后运行最小真实门禁。
+早期实验分支曾对历史失败链做过一次获授权的真实 DeepSeek + Root Handler 定点验证：`query_notes` 和“7 天草稿 → 改今天/2000 字 → 再扩到 2500 字 → 确认最新版”链路通过。当前 Phase 0B/1/2 的日常开发不再重复该真实调用，只使用确定性测试、Mock Provider 和 zero-token smoke；只有首次灰度或扩大受众时才在重新授权后运行最小真实门禁。
 
-### Phase 0A / 0B / 1 渐进分支
+### Phase 0A / 0B / 1 / 2 渐进分支
 
-最终统一重构决策按 Phase 0A → 0B → 1 在独立工作树渐进实施，不直接修改本地 `main`，也不在本阶段启用生产 V3、迁移数据库或删除旧链。已经处理的通用边界包括：
+最终统一重构决策按 Phase 0A → 0B → 1 → 2 在独立工作树渐进实施，不直接修改本地 `main`，也不在本阶段启用生产 V3、迁移数据库或删除旧链。已经处理的通用边界包括：
 
 - 显式能力范围在身份解析后重新授权，纯越权范围在模型前确定性拒绝；
 - Manifest 明确时间默认和副作用策略，Root 全量统计不再依赖模型补出时间参数；
@@ -184,6 +184,15 @@ pnpm --filter server smoke:ai-root-e2e -- --runtime v3 --live --suite full --exe
 - TurnSpec 拆分语义摘要与执行合同摘要，`refer_last_result` 使用最终权威材料范围；
 - shadow/enforce trace、continuation 枚举和能力差异统一到 V3 Manifest；
 - SQL `LIKE`（含云文件夹查询）统一转义用户通配符，幂等链接体检与确认型写入明确区分；V3 Compiler 使用 Manifest 自有时间描述，不继承 legacy 工具的冲突追问文案。
+
+Phase 2 已完成五实体持久状态与产物连续性底座，但尚未应用任何线上 migration，也未切换 persistence 模式：
+
+- `ConversationState / Run / SourceSet / ResultSet / ArtifactVersion` 分别保存会话 revision、运行目标终态、不可变材料句柄、查询稳定引用和产物版本链，避免把不同生命周期塞进一个可变大对象；
+- Redis 继续承担热状态和短期确认，MySQL 由独立的 `AI_AGENT_STATE_PERSISTENCE_MODE=disabled|shadow|enforce` 控制；默认 disabled，不能由 Runtime V3 模式隐式启用；
+- Run 固化语义 digest、执行 digest、逐目标终态和 unknown，只有真实工具或确认回执完成后才提交会话焦点；并发写通过 revision CAS，迟到旧轮不得覆盖新轮；
+- 确认过期不再等同于草稿过期：服务端可凭公开 ArtifactVersion ID，在 owner/subject/conversation 与版本链约束内恢复最新可编辑版本，并按 SourceSet 重读材料后签发新版本，旧 token 永不复活；
+- 普通连续问答仍使用有界 `recentDialogue`；只有用户明确要求把指定对话整理成产物时，Compiler 才能选择 `dialogue_anchor`。服务端用云消息稳定 ID、topic epoch 和 digest 创建 SourceSet，生成与改写时精确重读并校验，不持久化客户端 history 或临时 session 原文；
+- 并发工具回调不直接决定确认卡顺序，Runner 在有序 join 后统一发送；公开投影不包含 Dialogue Anchor 的消息 ID、正文或私有材料。
 
 该分支的日常验证只跑确定性测试、Mock Provider 和零调用 smoke；真实 Provider 与 Root 数据链仍留到获授权的最终灰度阶段。
 

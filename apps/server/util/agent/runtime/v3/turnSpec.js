@@ -40,6 +40,7 @@ const MAX_RAW_GOALS = 5;
 const MAX_NORMALIZED_GOALS = 8;
 const MAX_TEXT = 300;
 const MAX_CLARIFICATION = 320;
+const REFERENT_SOURCES_V3 = Object.freeze(['current_explicit', 'last_result', 'pending_artifact', 'dialogue_anchor']);
 
 function text(value, max = MAX_TEXT) {
   return String(value || '')
@@ -61,7 +62,7 @@ function normalizeMissingSlot(value) {
 
 function normalizeReferentSelector(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const source = ['current_explicit', 'last_result', 'pending_artifact'].includes(value.source) ? value.source : '';
+  const source = REFERENT_SOURCES_V3.includes(value.source) ? value.source : '';
   if (!source) return null;
   const ordinalValue = Number(value.ordinal);
   const ordinal = Number.isSafeInteger(ordinalValue) && ordinalValue > 0 && ordinalValue <= 50 ? ordinalValue : null;
@@ -332,7 +333,11 @@ export function normalizeTurnSpecV3(
   if (!goals) return null;
   const goalIds = new Set(goals.map((goal) => goal.id));
   if (goals.some((goal) => goal.dependsOn.some((dependencyId) => !goalIds.has(dependencyId)))) return null;
-  if (goals.some((goal) => goal.dependsOn.some((dependencyId) => goals.find((item) => item.id === dependencyId)?.kind !== 'read'))) {
+  if (
+    goals.some((goal) =>
+      goal.dependsOn.some((dependencyId) => goals.find((item) => item.id === dependencyId)?.kind !== 'read'),
+    )
+  ) {
     return null;
   }
 
@@ -362,10 +367,7 @@ export function normalizeTurnSpecV3(
   const clarificationQuestion =
     declaredClarificationQuestion ||
     (temporalMissingSlots.length
-      ? `请补充${[...new Set(temporalMissingSlots.map((slot) => slot.label))].join('和')}。`.slice(
-          0,
-          MAX_CLARIFICATION,
-        )
+      ? `请补充${[...new Set(temporalMissingSlots.map((slot) => slot.label))].join('和')}。`.slice(0, MAX_CLARIFICATION)
       : '');
 
   const normalized = {
@@ -426,7 +428,7 @@ export function buildTurnSpecV3ToolDefinition({ catalog = [], groundingPolicy } 
                     properties: {
                       source: {
                         type: 'string',
-                        enum: ['current_explicit', 'last_result', 'pending_artifact'],
+                        enum: REFERENT_SOURCES_V3,
                       },
                       types: { type: 'array', maxItems: 6, items: { type: 'string', maxLength: 32 } },
                       ordinal: { anyOf: [{ type: 'integer', minimum: 1, maximum: 50 }, { type: 'null' }] },

@@ -387,6 +387,17 @@ describe('材料生命周期:默认一次性(P0-A/B)', () => {
       },
     ];
     expect(resolveAiAssistantPendingNoteDraftReference(expiredNewerDraft)).toBeNull();
+
+    const recoverableExpiredDraft = structuredClone(expiredNewerDraft);
+    recoverableExpiredDraft.at(-1)!.confirmations![0].artifactVersion = {
+      id: '10000000-0000-4000-8000-000000000001',
+      artifactChainId: '10000000-0000-4000-8000-000000000002',
+      version: 1,
+      state: 'ready',
+    };
+    expect(resolveAiAssistantPendingNoteDraftReference(recoverableExpiredDraft)).toEqual({
+      artifactVersionId: '10000000-0000-4000-8000-000000000001',
+    });
   });
 
   it('把服务端工具返回的待办来源转成稳定追问锚点', () => {

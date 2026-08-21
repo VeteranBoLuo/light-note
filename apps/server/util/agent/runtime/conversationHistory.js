@@ -1,6 +1,9 @@
+import crypto from 'node:crypto';
+
 const DEFAULT_HISTORY_CHAR_BUDGET = 16_000;
 const MAX_CLIENT_MESSAGES = 40;
 const MAX_MESSAGE_CHARS = 8_000;
+const MAX_DIALOGUE_ANCHOR_MESSAGES = 20;
 
 export const AGENT_RECENT_DIALOGUE_STAGES = Object.freeze({
   compiler: Object.freeze({ maxTurns: 4, charBudget: 1_600 }),
@@ -56,6 +59,26 @@ function clipDialogueContent(content, limit) {
   return `${content.slice(0, head)}${marker}${content.slice(content.length - (available - head))}`;
 }
 
+export function buildServerDialogueAnchor(messages, { maxMessages = MAX_DIALOGUE_ANCHOR_MESSAGES } = {}) {
+  const normalized = (Array.isArray(messages) ? messages : []).map(normalizeDialogueMessage).filter(Boolean);
+  if (!normalized.length || normalized.some((message) => !message.id)) return null;
+  const limit = Math.max(
+    1,
+    Math.min(MAX_DIALOGUE_ANCHOR_MESSAGES, Number(maxMessages) || MAX_DIALOGUE_ANCHOR_MESSAGES),
+  );
+  const anchored = normalized.slice(-limit);
+  const messageIds = anchored.map((message) => message.id);
+  const canonical = anchored.map(({ id, role, content }) => ({ id, role, content }));
+  return Object.freeze({
+    messageIds: Object.freeze(messageIds),
+    digest: crypto
+      .createHash('sha256')
+      .update(`agent-dialogue-anchor-v1\0${JSON.stringify(canonical)}`)
+      .digest('hex'),
+    charCount: anchored.reduce((total, message) => total + message.content.length, 0),
+  });
+}
+
 /**
  * V3 的原始语义上下文只能来自服务端：云端 Conversation 可用时以消息表为准，
  * 临时会话才回退到服务端 session turns。客户端 history 永远不参与此选择。
@@ -75,6 +98,9 @@ export function resolveServerAuthoritativeRecentDialogue({ cloudMessages = [], s
   return Object.freeze({
     source: cloudDialogue.length ? 'cloud' : sessionDialogue.length ? 'session' : 'none',
     messages,
+    // Dialogue Anchor 只能由带服务端消息 ID 的云端记录创建。临时 session turns 没有
+    // 可重新读取的稳定身份，因此仍可用于普通连续对话，但绝不能升级成持久材料。
+    dialogueAnchor: cloudDialogue.length ? buildServerDialogueAnchor(cloudDialogue) : null,
   });
 }
 
@@ -148,6 +174,7 @@ export function selectAgentConversationHistory({
 export const __testing = Object.freeze({
   DEFAULT_HISTORY_CHAR_BUDGET,
   MAX_CLIENT_MESSAGES,
+  MAX_DIALOGUE_ANCHOR_MESSAGES,
   MAX_MESSAGE_CHARS,
   clipDialogueContent,
   normalizeCloudDialogue,

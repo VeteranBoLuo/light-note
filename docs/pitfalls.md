@@ -25,6 +25,7 @@
 
 | 编号                                                                                           | 日期       | 模块                | 关键词                                             | 状态         |
 | ---------------------------------------------------------------------------------------------- | ---------- | ------------------- | -------------------------------------------------- | ------------ |
+| [LN-PIT-095](#ln-pit-095agent-确认产物材料和运行状态不能共用一个生命周期)                      | 2026-08-21 | Agent、持久化       | ArtifactVersion、SourceSet、Run、Dialogue Anchor   | 已修复待合入 |
 | [LN-PIT-094](#ln-pit-094agent-时间范围和列表完整性不能由各工具或模型自行解释)                  | 2026-08-21 | Agent、工具协议     | IANA、半开区间、total、partial、参数兼容           | 已修复待合入 |
 | [LN-PIT-093](#ln-pit-093agent-不能在工具成功前提交新焦点也不能把空能力范围降级成自动模式)      | 2026-08-21 | Agent、Runtime V3   | scope、ResultSet、digest、时间默认、副作用         | 已修复待合入 |
 | [LN-PIT-092](#ln-pit-092协议版本不能只放在响应信封而遗漏数据快照)                              | 2026-08-21 | Host Agent、协议    | protocolVersion、响应信封、快照、线上验收          | 已修复已上线 |
@@ -2469,6 +2470,17 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **灰度约束：** `AI_AGENT_RUNTIME_MODE` 默认 `legacy`，且只表示目标模式；必须再与 `AI_AGENT_RUNTIME_V3_ROLLOUT` 的真实 actor 受众求交，缺失、非法或未命中均失败关闭到 legacy，不能让全局 shadow 意外增加所有用户的模型调用。Root 代管按 billing actor，不按资源 subject；排除项优先于角色、账号和百分比，百分比使用固定 salt 稳定分桶。只允许按 `legacy → Root/白名单 v3_shadow → Root/白名单 v3_enforce → 稳定百分比` 推进并保留即时回退。模块选择只是单轮候选能力限制，发送后恢复自动，不能成为长期会话状态或权限来源。V3 trace 中 Planner/Tool 只要出现原始历史或任一 legacy 分类阶段，就必须阻止扩大灰度；Compiler/Composer 的 `recentDialogueMessageCount` 和 `recentDialogueSource` 必须符合预算及服务端来源枚举。
 - **验收：** 合成测试覆盖“7 天 → 今天 → 至少 2000 字 → 再扩到 2500 字”、笔记切换书签、选中书签分析、网页 ResultSet 省略 URL 续问、今天 16:00 待办、Root 今天新增用户、序数指代和待确认草稿替换；断言 Planner 看不到 Manifest 声明的时间/资源参数，服务端执行参数为权威值，类型兼容的 ResultSet 能在 Compiler 前开放所需候选，跨领域不继承旧 ResultSet，ArtifactState 结算后不可复活。Root 产物真实门禁必须通过正式 Note Service 创建带唯一前缀、可清理的“今天”正文夹具，不能依赖账号恰好已有当天笔记；否则跨零点或空账号会把正确的空材料失败关闭误报成 Agent 回归。门禁结束必须验证旧确认至少两次失效、最终确认幂等、正文落库一次且夹具全部清理。`pnpm --filter server smoke:ai-turn-v3` 默认必须报告模型调用 0、业务工具 0；真实 Compiler 冒烟只有显式点名用例才允许，单次最多 2 个。首次启用或扩大 V3 灰度前仍执行获授权的 root 真实矩阵，日常开发不得无边界重复消耗 Token。
 - **相关代码：** `apps/server/util/agent/runtime/v3/`、`apps/server/util/agent/runtime/conversationHistory.js`、`apps/server/util/agent/sessionStore.js`、`apps/server/util/agent/runtime/executionPlanner.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/server/evaluation/ai-assistant/turnSpecV3LiveSmokeRunner.js`、`apps/web/src/types/aiCapabilityScope.ts`。
+
+### LN-PIT-095：Agent 确认、产物、材料和运行状态不能共用一个生命周期
+
+- **现象：** 确认卡过期后，即使用户仍能看到旧草稿和引用材料，也只能收到“原操作过期”；并发工具完成顺序偶尔会让确认卡乱序；会话状态只在 Redis 时，重启或 TTL 后无法继续修改草稿。另一方面，如果直接把近期对话都当材料保存，又会让普通问答历史串入新产物。
+- **影响范围：** 笔记生成与多轮改写、确认替换/过期、跨进程恢复、并发复合目标、对话整理成笔记，以及 Runtime V3 灰度发布。
+- **误导线索：** 确认卡里有预览正文，看起来可以依靠客户端重新提交；Redis 里也同时有草稿、来源和确认状态，看起来延长 TTL 就能解决。这样会把展示数据误当权威材料，并让执行授权、产物版本和材料可用性继续相互牵连。
+- **根因：** `Run / ConversationState / SourceSet / ResultSet / ArtifactVersion / confirmation` 的职责和生命周期没有拆开；Runtime 模式与数据库可用性也缺少独立闸门。普通 `recentDialogue` 与明确用于产物的对话材料没有类型边界。并发工具在各自回调里直接发卡，使用户可见顺序依赖完成时序而非计划顺序。
+- **修复：** 建立五个最小 MySQL 权威实体，Redis 继续作为热层和短期确认层。`Run` 保存双 digest、逐目标终态和 unknown，`ConversationState` 使用 revision CAS，`SourceSet` 保存不可变材料句柄，`ResultSet` 保存稳定查询引用，`ArtifactVersion` 保存产物链和验收结果。确认令牌过期只撤销旧执行授权；客户端仅保留公开 ArtifactVersion ID，服务端在相同 owner、subject、conversation 和版本链内恢复最新可编辑版本，按 SourceSet 重读材料并签发新版本，绝不复活旧 token 或信任客户端正文。普通连续问答仍只用有界 `recentDialogue`；只有 TurnSpec 明确选择 `dialogue_anchor` 时，才从归属校验后的云消息生成 message IDs + topic epoch + digest 的 SourceSet，并在每次生成时精确重读校验。并发确认在有序 join 后统一发送。
+- **防回归约束：** `AI_AGENT_STATE_PERSISTENCE_MODE=disabled|shadow|enforce` 必须独立于 `AI_AGENT_RUNTIME_MODE`，默认 disabled；migration 与 schema assertions 未通过前禁止开启 shadow/enforce。shadow 只能单调镜像且 fail-open，enforce 恢复或 CAS 冲突必须 fail-closed。公开 SourceSet/ArtifactVersion 投影不得暴露对话消息 ID、正文、私有资源参数或旧 token。SourceSet 缺失、digest 变化、归属不匹配必须拒绝恢复。普通 prepared-action 没有 ArtifactVersion 时仍只按确认 TTL 处理。Run 只有在真实执行或确认回执后才能提交焦点，不能由模型计划或卡片展示文案提前标成功；Planner 生成的每个 tool call 必须由服务端绑定到 TurnSpec goal，并用真实 `success/error/confirmation_required/interaction_required` 结果结算逐目标状态，`planned/unsupported/unavailable/forbidden` 终态不得被整轮成功覆盖。
+- **验证方法：** 使用内存仓储、Mock Provider 和固定时钟覆盖 disabled/shadow/enforce、Redis miss 恢复、revision 竞争、迟到旧轮、双 digest、逐目标 unknown、ArtifactVersion 链恢复、旧确认不可复活、SourceSet 缺失失败关闭、Dialogue Anchor 精确重读与 digest 不一致、并发工具乱序但卡片有序。开发阶段不得调用真实 Provider 或线上数据；首次灰度再按发布门禁做最小 Root 验证。
+- **相关代码：** `apps/server/migrations/20260821_agent_runtime_state.sql`、`apps/server/util/agent/persistence/`、`apps/server/util/agent/sessionStore.js`、`apps/server/util/agent/persistence/agentArtifactLifecycle.js`、`apps/server/util/agent/runtime/conversationHistory.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/web/src/store/aiAssistant.ts`。
 
 ### LN-PIT-094：Agent 时间范围和列表完整性不能由各工具或模型自行解释
 

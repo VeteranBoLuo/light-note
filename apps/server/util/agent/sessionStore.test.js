@@ -21,6 +21,7 @@ vi.mock('../redisClient.js', () => ({ default: redis }));
 
 const {
   commitSessionTurnSpec,
+  configureAgentSessionPersistence,
   getOrCreateSession,
   getSessionDiscourseProjection,
   getSessionId,
@@ -28,6 +29,7 @@ const {
   recordPendingActionBatch,
   recordSessionArtifactState,
   recordSessionArtifactStateById,
+  recordSessionArtifactVersion,
   recordSessionResultSet,
   recordSessionSourceSet,
   recordTurn,
@@ -160,6 +162,87 @@ describe('agent sessionStore', () => {
       },
     });
     expect(JSON.stringify(session.sourceSets)).not.toContain('不得保存');
+  });
+
+  it('Dialogue Anchor 作为 Source Set 稳定来源保存，但不保存对话正文', async () => {
+    const session = await getOrCreateSession('user:dialogue-owner', '');
+    const dialogueAnchor = {
+      conversationId: '10000000-0000-4000-8000-000000000001',
+      messageIds: ['message-1', 'message-2'],
+      topicEpoch: 3,
+      digest: 'a'.repeat(64),
+    };
+    const sourceSet = await recordSessionSourceSet(session, { dialogueAnchor });
+
+    expect(sourceSet).toMatchObject({ contextRefCount: 0, dialogueMessageCount: 2 });
+    expect(resolveSessionSourceSet(session, sourceSet.id)).toMatchObject({
+      state: 'ready',
+      sourceSet: { dialogueAnchor },
+    });
+    expect(JSON.stringify(session.sourceSets)).not.toContain('对话正文');
+  });
+
+  it('enforce 从权威快照恢复，并将 SourceSet 与焦点放进同一次 revision CAS', async () => {
+    const session = await getOrCreateSession('user:persistent-source', '');
+    const commitFocus = vi.fn().mockImplementation(async ({ expectedRevision }) => ({
+      state: 'committed',
+      revision: expectedRevision + 1,
+    }));
+    const persistence = {
+      authoritative: true,
+      restore: vi.fn().mockResolvedValue({
+        discourseState: {
+          schemaVersion: 3,
+          revision: 4,
+          topicEpoch: 1,
+          activeDomain: 'note',
+          lastCapabilityIds: ['note.query'],
+          lastResultSetId: '',
+          activeSourceSetIds: [],
+          activeResultSetIds: [],
+          pendingFocus: null,
+          activeReadRunId: '',
+          lastRunState: 'success',
+          pendingArtifactId: '',
+          unresolvedReference: false,
+        },
+        sourceSets: [],
+        resultSets: [],
+        artifactStates: [],
+      }),
+      commitFocus,
+    };
+    await expect(configureAgentSessionPersistence(session, persistence)).resolves.toEqual({
+      restored: true,
+      revision: 4,
+    });
+
+    const sourceSet = await recordSessionSourceSet(session, { refs: [{ type: 'note', id: 'note-1' }] });
+
+    expect(sourceSet).toBeTruthy();
+    expect(commitFocus).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedRevision: 4,
+        snapshot: expect.objectContaining({
+          discourseState: expect.objectContaining({ revision: 5, activeSourceSetIds: [sourceSet.id] }),
+        }),
+        durable: {
+          sourceSets: [expect.objectContaining({ id: sourceSet.id, refs: [{ type: 'note', id: 'note-1' }] })],
+        },
+      }),
+    );
+    expect(resolveSessionSourceSet(session, sourceSet.id)).toMatchObject({ state: 'ready' });
+  });
+
+  it('shadow 镜像故障不改变本地成功结果', async () => {
+    const session = await getOrCreateSession('user:persistent-shadow-fail-open', '');
+    await configureAgentSessionPersistence(session, {
+      authoritative: false,
+      mirrorFocus: vi.fn().mockRejectedValue(new Error('shadow unavailable')),
+    });
+
+    await expect(recordSessionSourceSet(session, { refs: [{ type: 'note', id: 'note-1' }] })).resolves.toBeTruthy();
+    expect(listSessionSourceSets(session)).toHaveLength(1);
   });
 
   it('Source Set ID 不能跨 owner 或跨 session 解析', async () => {
@@ -487,6 +570,62 @@ describe('agent sessionStore', () => {
     });
     expect(getSessionDiscourseProjection(session).pendingArtifact).toBeNull();
     expect(getSessionDiscourseProjection(session).revision).toBe(revisionBeforeSettlement + 1);
+  });
+
+  it('ArtifactVersion 正文不进入 session，新版本以同一次 CAS 替换旧版本', async () => {
+    const session = await getOrCreateSession('user:v3-artifact-version', '');
+    const commitFocus = vi.fn().mockImplementation(async ({ expectedRevision }) => ({
+      state: 'committed',
+      revision: expectedRevision + 1,
+    }));
+    await configureAgentSessionPersistence(session, {
+      authoritative: true,
+      restore: vi.fn().mockResolvedValue({
+        discourseState: {
+          schemaVersion: 3,
+          revision: 0,
+          topicEpoch: 0,
+          activeDomain: '',
+          lastCapabilityIds: [],
+          lastResultSetId: '',
+          activeSourceSetIds: [],
+          activeResultSetIds: [],
+          pendingFocus: null,
+          activeReadRunId: '',
+          lastRunState: 'idle',
+          pendingArtifactId: '',
+          unresolvedReference: false,
+        },
+        sourceSets: [],
+        resultSets: [],
+        artifactStates: [],
+      }),
+      commitFocus,
+    });
+    const first = await recordSessionArtifactVersion(session, {
+      capabilityId: 'note.create',
+      domain: 'note',
+      content: '# 私有正文\n第一版',
+      outputContract: { title: '标题' },
+    });
+    const second = await recordSessionArtifactVersion(session, {
+      supersedesId: first.id,
+      capabilityId: 'note.create',
+      domain: 'note',
+      content: '# 私有正文\n第二版',
+      outputContract: { title: '标题' },
+    });
+
+    expect(second).toMatchObject({ artifactChainId: first.artifactChainId, parentVersionId: first.id, version: 2 });
+    expect(JSON.stringify(session)).not.toContain('私有正文');
+    expect(session.artifactStates.find((item) => item.id === first.id)?.state).toBe('superseded');
+    expect(getSessionDiscourseProjection(session).pendingArtifact).toMatchObject({ available: true, state: 'ready' });
+    expect(commitFocus.mock.calls[1][0].durable).toMatchObject({
+      artifactVersions: [expect.objectContaining({ id: second.id, content: '# 私有正文\n第二版' })],
+      artifactTransitions: [
+        expect.objectContaining({ id: first.id, state: 'superseded', contentHash: first.contentHash }),
+      ],
+    });
   });
 
   it('可通过 owner/session 绑定替换当前产物，且不会为未知会话创建状态', async () => {

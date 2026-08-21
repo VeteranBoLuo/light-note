@@ -87,6 +87,29 @@ describe('TurnSpec V3', () => {
     expect(missingReadDependency).toBeNull();
   });
 
+  it('明确整理对话时使用 Dialogue Anchor 指代，不把 recentDialogue 当普通资源 ID', () => {
+    const catalog = catalogFor(['create_note']);
+    const spec = normalizeTurnSpecV3(
+      rawSpec(
+        [
+          rawGoal('note.create', 'create', {
+            referentSelectors: [{ source: 'dialogue_anchor', types: ['dialogue'], ordinal: null }],
+          }),
+        ],
+        { requestKind: 'create_artifact', groundingPolicy: 'none' },
+      ),
+      {
+        catalog,
+        authoritativeGroundingPolicy: 'none',
+        outputContract: { format: 'note_markdown' },
+      },
+    );
+
+    expect(spec.goals[0].referentSelectors).toEqual([
+      { source: 'dialogue_anchor', types: ['dialogue'], ordinal: null },
+    ]);
+  });
+
   it('未知能力 ID 或不属于能力清单的 operation 直接失败关闭', () => {
     const catalog = catalogFor(['query_notes']);
     expect(
@@ -167,20 +190,15 @@ describe('TurnSpec V3', () => {
 
   it('semanticDigest 保持语义稳定，executionDigest 纳入服务端实际绑定', () => {
     const catalog = catalogFor(['read_note']);
-    const spec = normalizeTurnSpecV3(
-      rawSpec([rawGoal('note.read')], { groundingPolicy: 'current_explicit_only' }),
-      {
+    const spec = normalizeTurnSpecV3(rawSpec([rawGoal('note.read')], { groundingPolicy: 'current_explicit_only' }), {
       catalog,
       authoritativeGroundingPolicy: 'current_explicit_only',
       latestMessage: '分析这篇笔记',
-      },
-    );
+    });
     expect(spec.semanticDigest).toBe(spec.digest);
     expect(spec.semanticDigest).toMatch(/^[a-f0-9]{64}$/u);
     const route = {
-      goalRoutes: [
-        { goalId: 'goal-1', capabilityIds: ['note.read'], toolNames: ['read_note'], status: 'ready' },
-      ],
+      goalRoutes: [{ goalId: 'goal-1', capabilityIds: ['note.read'], toolNames: ['read_note'], status: 'ready' }],
     };
     const first = digestExecutionContractV3({
       turnSpec: spec,

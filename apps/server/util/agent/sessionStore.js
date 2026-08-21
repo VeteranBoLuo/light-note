@@ -7,6 +7,7 @@
  */
 import redisClient from '../redisClient.js';
 import crypto from 'crypto';
+import { normalizeAgentUuid } from './identifiers.js';
 
 const MAX_TURNS = 10;
 const MAX_ACTION_BATCHES = 3;
@@ -21,6 +22,7 @@ const MAX_SESSIONS = 100;
 const REDIS_PREFIX = 'chat:sess:';
 const REDIS_FOCUS_PREFIX = 'chat:sess:focus:';
 const REDIS_TTL = 30 * 60;
+const SESSION_PERSISTENCE = Symbol('agentSessionPersistence');
 
 const sessions = new Map();
 const focusSnapshots = new Map();
@@ -102,6 +104,7 @@ function makeSession(id, ownerKey) {
       activeDomain: '',
       lastCapabilityIds: [],
       lastResultSetId: '',
+      activeSourceSetIds: [],
       activeResultSetIds: [],
       pendingFocus: null,
       activeReadRunId: '',
@@ -132,6 +135,7 @@ function normalizeSession(session) {
     activeDomain: String(session.discourseState.activeDomain || ''),
     lastCapabilityIds: [...new Set((session.discourseState.lastCapabilityIds || []).map(String))].slice(0, 8),
     lastResultSetId: String(session.discourseState.lastResultSetId || ''),
+    activeSourceSetIds: uniqueSessionIds(session.discourseState.activeSourceSetIds, MAX_SOURCE_SETS),
     activeResultSetIds: [
       ...new Set(
         (Array.isArray(session.discourseState.activeResultSetIds)
@@ -165,6 +169,10 @@ function normalizeSession(session) {
     unresolvedReference: session.discourseState.unresolvedReference === true,
   };
   return session;
+}
+
+function uniqueSessionIds(values, max) {
+  return [...new Set((Array.isArray(values) ? values : []).map(String).filter(Boolean))].slice(-max);
 }
 
 const SOURCE_REF_TYPES = new Set(['note', 'bookmark', 'file', 'todo', 'tag']);
@@ -218,7 +226,8 @@ function normalizeResultSetMetadata(value) {
       : 'partial';
   return {
     version: String(value.version || '').slice(0, 20),
-    total: count(value.total),
+    totalCount: count(value.totalCount ?? value.total),
+    total: count(value.totalCount ?? value.total),
     returned: count(value.returned) ?? 0,
     totalExact: value.totalExact === true,
     completeness,
@@ -226,6 +235,7 @@ function normalizeResultSetMetadata(value) {
     partial: completeness === 'partial' || completeness === 'unknown',
     truncated: value.truncated === true,
     truncationReason: value.truncationReason ? String(value.truncationReason).slice(0, 80) : null,
+    nextCursor: value.nextCursor ? String(value.nextCursor).slice(0, 8_192) : null,
     resolvedRanges,
     stableReferenceCount: count(value.stableReferenceCount) ?? 0,
     stableIdCoverage: value.stableIdCoverage === 'complete' ? 'complete' : 'partial',
@@ -262,9 +272,25 @@ function normalizeAttachmentIds(values, limit = 20) {
   return output;
 }
 
-function sourceVersionDigest({ refs, scopeRefs, attachmentSourceIds }) {
-  const canonical = JSON.stringify({ refs, scopeRefs, attachmentSourceIds });
-  return crypto.createHash('sha256').update(`agent-source-set-v1\0${canonical}`).digest('hex');
+function normalizeDialogueAnchor(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const conversationId = String(value.conversationId || '').trim();
+  const messageIds = normalizeAttachmentIds(value.messageIds, 40);
+  const topicEpoch = Math.max(0, Number.isSafeInteger(Number(value.topicEpoch)) ? Number(value.topicEpoch) : 0);
+  const digest = String(value.digest || '').trim();
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(conversationId) ||
+    !messageIds.length ||
+    !/^[a-f0-9]{64}$/i.test(digest)
+  ) {
+    return null;
+  }
+  return Object.freeze({ conversationId, messageIds, topicEpoch, digest: digest.toLowerCase() });
+}
+
+function sourceVersionDigest({ refs, scopeRefs, attachmentSourceIds, dialogueAnchor }) {
+  const canonical = JSON.stringify({ refs, scopeRefs, attachmentSourceIds, dialogueAnchor });
+  return crypto.createHash('sha256').update(`agent-source-set-v2\0${canonical}`).digest('hex');
 }
 
 function sourceSetExpired(sourceSet) {
@@ -278,6 +304,7 @@ function publicSourceSet(sourceSet) {
     contextRefCount: sourceSet.refs.length,
     scopeRefCount: sourceSet.scopeRefs.length,
     attachmentCount: sourceSet.attachmentSourceIds.length,
+    dialogueMessageCount: sourceSet.dialogueAnchor?.messageIds?.length || 0,
     createdAt: new Date(sourceSet.createdAt).toISOString(),
     expiresAt: new Date(sourceSet.expiresAt).toISOString(),
   });
@@ -302,6 +329,21 @@ function focusSnapshotFromSession(session) {
     discourseState: structuredClone(session.discourseState),
     resultSets: structuredClone(session.resultSets),
   };
+}
+
+function applyPersistentSessionSnapshot(session, snapshot) {
+  if (!session || !snapshot || typeof snapshot !== 'object') return session;
+  if (snapshot.discourseState && typeof snapshot.discourseState === 'object') {
+    session.discourseState = structuredClone(snapshot.discourseState);
+  }
+  if (Array.isArray(snapshot.sourceSets)) session.sourceSets = structuredClone(snapshot.sourceSets);
+  if (Array.isArray(snapshot.resultSets)) session.resultSets = structuredClone(snapshot.resultSets);
+  if (Array.isArray(snapshot.artifactStates)) session.artifactStates = structuredClone(snapshot.artifactStates);
+  normalizeSession(session);
+  const key = sessionStorageKey(session);
+  focusSnapshots.set(key, focusSnapshotFromSession(session));
+  sessions.set(key, session);
+  return session;
 }
 
 function normalizeFocusSnapshot(value, fallbackSession) {
@@ -421,6 +463,15 @@ async function redisGetFocus(key) {
   }
 }
 
+async function redisSetFocus(key, snapshot) {
+  if (!redisOk) return;
+  try {
+    await redisClient.setEx(REDIS_FOCUS_PREFIX + key, REDIS_TTL, JSON.stringify(snapshot));
+  } catch {
+    /* MySQL enforce 模式下 Redis 只是热缓存，写入失败不能改写已提交的权威状态。 */
+  }
+}
+
 const FOCUS_CAS_SCRIPT = `
 local current = redis.call('GET', KEYS[1])
 if current then
@@ -456,6 +507,46 @@ async function mutateSessionFocus(session, mutation) {
   if (!session || typeof mutation !== 'function') return null;
   normalizeSession(session);
   const key = sessionStorageKey(session);
+  const persistence = session[SESSION_PERSISTENCE];
+  if (persistence?.authoritative === true && typeof persistence.commitFocus === 'function') {
+    return withFocusMutationQueue(key, async () => {
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        const base = focusSnapshotFromSession(session);
+        const outcome = mutation(structuredClone(base));
+        if (!outcome?.snapshot) return outcome?.value ?? null;
+        const next = normalizeFocusSnapshot(outcome.snapshot, session);
+        const committed = await persistence.commitFocus({
+          expectedRevision: focusRevision(base),
+          snapshot: next,
+          durable: outcome.durable || null,
+        });
+        if (committed?.state === 'conflict') {
+          const restored = await persistence.restore();
+          if (restored) applyPersistentSessionSnapshot(session, restored);
+          continue;
+        }
+        if (committed?.state !== 'committed') return null;
+        applyFocusSnapshot(session, next);
+        await redisSetFocus(key, next);
+        await persistSession(session);
+        return outcome.value ?? null;
+      }
+      return null;
+    });
+  }
+
+  const mirrorFocus = async (base, next, durable) => {
+    if (typeof persistence?.mirrorFocus !== 'function') return;
+    try {
+      await persistence.mirrorFocus({
+        expectedRevision: focusRevision(base),
+        snapshot: next,
+        durable: durable || null,
+      });
+    } catch {
+      // 非权威镜像只能用于观测和预热，任何故障都不能改变 Redis/内存主链路的结果。
+    }
+  };
   const mutateLocally = () =>
     withFocusMutationQueue(key, async () => {
       const base = newestFocusSnapshot(focusSnapshots.get(key), focusSnapshotFromSession(session));
@@ -468,6 +559,7 @@ async function mutateSessionFocus(session, mutation) {
       focusSnapshots.set(key, next);
       applyFocusSnapshot(session, next);
       await persistSession(session);
+      await mirrorFocus(base, next, outcome.durable);
       return outcome.value ?? null;
     });
 
@@ -496,12 +588,36 @@ async function mutateSessionFocus(session, mutation) {
     focusSnapshots.set(key, next);
     applyFocusSnapshot(session, next);
     await persistSession(session);
+    await mirrorFocus(base, next, outcome.durable);
     return outcome.value ?? null;
   }
   return null;
 }
 
 // ---- 公开 API ----
+
+/**
+ * 给当前请求绑定可选的 MySQL 权威适配器。适配器使用 Symbol 挂载，不会被序列化进 Redis。
+ * enforce 会先恢复权威快照；shadow 只接收后续镜像写，不改变当前会话行为。
+ */
+export async function configureAgentSessionPersistence(session, persistence) {
+  if (!session || !persistence || typeof persistence !== 'object') return { restored: false };
+  Object.defineProperty(session, SESSION_PERSISTENCE, {
+    value: persistence,
+    writable: true,
+    configurable: true,
+    enumerable: false,
+  });
+  if (persistence.authoritative !== true || typeof persistence.restore !== 'function') {
+    return { restored: false };
+  }
+  const snapshot = await persistence.restore();
+  if (!snapshot) return { restored: false };
+  applyPersistentSessionSnapshot(session, snapshot);
+  await redisSetFocus(sessionStorageKey(session), focusSnapshotFromSession(session));
+  await persistSession(session);
+  return { restored: true, revision: session.discourseState.revision };
+}
 
 export async function getOrCreateSession(ownerKey, sessionId) {
   cleanupExpired();
@@ -642,7 +758,19 @@ export async function commitSessionTurnSpec(session, turnSpec) {
 /** 保存一次真实工具结果的稳定引用与有界查询元数据；不保存标题、URL、正文、摘要或模型输出。 */
 export async function recordSessionResultSet(
   session,
-  { capabilityId = '', domains = [], refs = [], status = 'success', focusId = '', metadata = null } = {},
+  {
+    capabilityId = '',
+    domains = [],
+    refs = [],
+    status = 'success',
+    focusId = '',
+    goalId = '',
+    handleId = '',
+    filters = null,
+    ordering = [],
+    fieldMask = [],
+    metadata = null,
+  } = {},
 ) {
   if (!session) return null;
   normalizeSession(session);
@@ -655,9 +783,17 @@ export async function recordSessionResultSet(
   const normalizedMetadata = normalizeResultSetMetadata(metadata);
   const resultSet = {
     id: crypto.randomUUID(),
+    handleId: String(handleId || `rsh-${crypto.randomUUID()}`).slice(0, 64),
     capabilityId: String(capabilityId || '').slice(0, 120),
+    goalId: String(goalId || capabilityId || '').slice(0, 64),
     domains: [...new Set((Array.isArray(domains) ? domains : []).map(String).filter(Boolean))].slice(0, 8),
     refs: normalizeResultRefs(refs),
+    filters:
+      filters && typeof filters === 'object' && !Array.isArray(filters)
+        ? structuredClone(filters)
+        : normalizedMetadata?.resolvedRanges || {},
+    ordering: Array.isArray(ordering) ? structuredClone(ordering.slice(0, 8)) : [],
+    fieldMask: uniqueSessionIds(fieldMask, 32),
     ...(normalizedMetadata ? { metadata: normalizedMetadata } : {}),
     status: normalizedStatus,
     topicEpoch: 0,
@@ -677,7 +813,11 @@ export async function recordSessionResultSet(
       commitsPending && pendingFocus?.topicEpochAction === 'advance'
         ? Math.max(0, Number(discourseState.topicEpoch) || 0) + 1
         : Math.max(0, Number(discourseState.topicEpoch) || 0);
-    const committedResultSet = { ...resultSet, topicEpoch: targetTopicEpoch };
+    const committedResultSet = {
+      ...resultSet,
+      runId: effectiveFocusId || crypto.randomUUID(),
+      topicEpoch: targetTopicEpoch,
+    };
     const resultSets = [
       ...snapshot.resultSets.filter((item) => Number(item?.expiresAt) > now()),
       committedResultSet,
@@ -705,8 +845,10 @@ export async function recordSessionResultSet(
           unresolvedReference: false,
         },
       },
+      durable: { resultSets: [committedResultSet] },
       value: Object.freeze({
         id: committedResultSet.id,
+        handleId: committedResultSet.handleId,
         capabilityId: committedResultSet.capabilityId,
         domains: Object.freeze([...committedResultSet.domains]),
         refTypes: Object.freeze([...new Set(committedResultSet.refs.map((ref) => ref.type))]),
@@ -810,6 +952,125 @@ export function resolveSessionResultSet(session, { id = '', types = [], ordinal 
   };
 }
 
+/**
+ * 保存不可变产物版本；session 只保留版本指针和摘要，正文仅通过持久适配器进入 ArtifactVersion。
+ * 新版本与被替换版本的 superseded 迁移和最新焦点共用同一次 revision CAS。
+ */
+export async function recordSessionArtifactVersion(
+  session,
+  {
+    id = '',
+    artifactChainId = '',
+    parentVersionId = '',
+    supersedesId = '',
+    supersedes = null,
+    capabilityId = '',
+    domain = '',
+    state = 'ready',
+    version = 0,
+    content = '',
+    contentHash = '',
+    sourceSetId = '',
+    outputContract = null,
+    validationReport = null,
+  } = {},
+) {
+  if (!session || !String(capabilityId || '').trim()) return null;
+  normalizeSession(session);
+  const suppliedSupersededId = normalizeAgentUuid(supersedes?.id || supersedesId);
+  const sessionSuperseded = session.artifactStates.find((item) => item?.id === suppliedSupersededId) || null;
+  const superseded =
+    sessionSuperseded ||
+    (suppliedSupersededId
+      ? {
+          id: suppliedSupersededId,
+          artifactChainId: normalizeAgentUuid(supersedes?.artifactChainId),
+          version: Math.max(1, Math.trunc(Number(supersedes?.version) || 1)),
+          state: ['draft', 'ready'].includes(supersedes?.state) ? supersedes.state : 'ready',
+          contentHash: String(supersedes?.contentHash || '').toLowerCase(),
+        }
+      : null);
+  const artifactId = normalizeAgentUuid(id) || crypto.randomUUID();
+  const chainId = normalizeAgentUuid(artifactChainId) || superseded?.artifactChainId || crypto.randomUUID();
+  const normalizedContent = String(content || '');
+  const normalizedHash = /^[a-f0-9]{64}$/i.test(String(contentHash || ''))
+    ? String(contentHash).toLowerCase()
+    : crypto.createHash('sha256').update(normalizedContent).digest('hex');
+  const normalizedState = ['draft', 'ready'].includes(state) ? state : 'ready';
+  const artifact = {
+    id: artifactId,
+    artifactChainId: chainId,
+    parentVersionId: normalizeAgentUuid(parentVersionId) || superseded?.id || '',
+    capabilityId: String(capabilityId).slice(0, 120),
+    domain: String(domain || '').slice(0, 40),
+    state: normalizedState,
+    version: Math.max(1, Math.trunc(Number(version) || Number(superseded?.version || 0) + 1)),
+    contentHash: normalizedHash,
+    sourceSetId: normalizeAgentUuid(sourceSetId),
+    updatedAt: now(),
+    expiresAt: now() + TTL_MS,
+  };
+  const artifactStates = [
+    ...session.artifactStates
+      .filter((item) => item?.id !== artifact.id && Number(item?.expiresAt) > now())
+      .map((item) => (item.id === superseded?.id ? { ...item, state: 'superseded', updatedAt: now() } : item)),
+    artifact,
+  ].slice(-MAX_ARTIFACT_STATES);
+  const artifactTransitions =
+    superseded && ['draft', 'ready'].includes(superseded.state) && /^[a-f0-9]{64}$/i.test(superseded.contentHash)
+      ? [
+          {
+            id: superseded.id,
+            state: 'superseded',
+            expectedStates: [superseded.state],
+            contentHash: superseded.contentHash,
+          },
+        ]
+      : [];
+  const committed = await mutateSessionFocus(session, (snapshot) => ({
+    snapshot: {
+      ...snapshot,
+      discourseState: {
+        ...snapshot.discourseState,
+        revision: snapshot.discourseState.revision + 1,
+        pendingArtifactId: artifact.id,
+      },
+    },
+    durable: {
+      artifactVersions: [
+        {
+          ...artifact,
+          content: normalizedContent,
+          outputContract,
+          validationReport,
+        },
+      ],
+      artifactTransitions,
+    },
+    value: true,
+  }));
+  if (!committed) return null;
+  session.artifactStates = artifactStates;
+  await persistSession(session);
+  return Object.freeze({
+    id: artifact.id,
+    artifactChainId: artifact.artifactChainId,
+    parentVersionId: artifact.parentVersionId || null,
+    capabilityId: artifact.capabilityId,
+    domain: artifact.domain,
+    state: artifact.state,
+    version: artifact.version,
+    contentHash: artifact.contentHash,
+    sourceSetId: artifact.sourceSetId || null,
+  });
+}
+
+export async function recordSessionArtifactVersionById({ ownerKey, sessionId, artifact } = {}) {
+  const session = await findSession(ownerKey, sessionId);
+  if (!session) return null;
+  return recordSessionArtifactVersion(session, artifact);
+}
+
 /** 保存待确认产物的生命周期指针；正文继续只存在确认存储，不复制进 session。 */
 export async function recordSessionArtifactState(
   session,
@@ -817,7 +1078,19 @@ export async function recordSessionArtifactState(
 ) {
   if (!session || !String(id || '').trim()) return false;
   normalizeSession(session);
-  const normalizedState = ['pending', 'confirmed', 'cancelled', 'expired', 'failed', 'unknown'].includes(state)
+  const normalizedState = [
+    'draft',
+    'ready',
+    'committed',
+    'cancelled',
+    'superseded',
+    'failed',
+    'unknown',
+    // 兼容尚未迁移为 ArtifactVersion 的确认卡指针。
+    'pending',
+    'confirmed',
+    'expired',
+  ].includes(state)
     ? state
     : 'pending';
   const artifact = {
@@ -828,28 +1101,30 @@ export async function recordSessionArtifactState(
     updatedAt: now(),
     expiresAt: now() + TTL_MS,
   };
-  session.artifactStates = [
+  const artifactStates = [
     ...session.artifactStates.filter((item) => item?.id !== artifact.id && Number(item?.expiresAt) > now()),
     artifact,
   ].slice(-MAX_ARTIFACT_STATES);
-  return Boolean(
-    await mutateSessionFocus(session, (snapshot) => ({
-      snapshot: {
-        ...snapshot,
-        discourseState: {
-          ...snapshot.discourseState,
-          revision: snapshot.discourseState.revision + 1,
-          pendingArtifactId:
-            normalizedState === 'pending'
-              ? artifact.id
-              : snapshot.discourseState.pendingArtifactId === artifact.id
-                ? ''
-                : snapshot.discourseState.pendingArtifactId,
-        },
+  const keepsPendingFocus = ['draft', 'ready', 'pending'].includes(normalizedState);
+  const committed = await mutateSessionFocus(session, (snapshot) => ({
+    snapshot: {
+      ...snapshot,
+      discourseState: {
+        ...snapshot.discourseState,
+        revision: snapshot.discourseState.revision + 1,
+        pendingArtifactId: keepsPendingFocus
+          ? artifact.id
+          : snapshot.discourseState.pendingArtifactId === artifact.id
+            ? ''
+            : snapshot.discourseState.pendingArtifactId,
       },
-      value: true,
-    })),
-  );
+    },
+    value: true,
+  }));
+  if (!committed) return false;
+  session.artifactStates = artifactStates;
+  await persistSession(session);
+  return true;
 }
 
 /**
@@ -906,7 +1181,7 @@ export function getSessionDiscourseProjection(session) {
     resultSetCandidates: Object.freeze(activeResultSets),
     pendingArtifact: pendingArtifact
       ? Object.freeze({
-          available: pendingArtifact.state === 'pending',
+          available: ['draft', 'ready', 'pending'].includes(pendingArtifact.state),
           domain: String(pendingArtifact.domain || ''),
           state: String(pendingArtifact.state || ''),
         })
@@ -919,33 +1194,79 @@ export function getSessionDiscourseProjection(session) {
  * 保存本轮已经通过 owner 校验的材料锚点。只保存稳定引用和版本摘要，不保存标题、正文或模型输出。
  * 相同材料集合会复用现有 ID，避免连续追问制造无意义的多个候选集合。
  */
-export async function recordSessionSourceSet(session, { refs = [], scopeRefs = [], attachmentSourceIds = [] } = {}) {
+export async function recordSessionSourceSet(
+  session,
+  { refs = [], scopeRefs = [], attachmentSourceIds = [], dialogueAnchor = null } = {},
+) {
   if (!session) return null;
   normalizeSession(session);
   const normalized = {
     refs: normalizeSourceRefs(refs),
     scopeRefs: normalizeSourceRefs(scopeRefs, { scope: true }),
     attachmentSourceIds: normalizeAttachmentIds(attachmentSourceIds),
+    dialogueAnchor: normalizeDialogueAnchor(dialogueAnchor),
   };
-  if (!normalized.refs.length && !normalized.scopeRefs.length && !normalized.attachmentSourceIds.length) {
+  if (
+    !normalized.refs.length &&
+    !normalized.scopeRefs.length &&
+    !normalized.attachmentSourceIds.length &&
+    !normalized.dialogueAnchor
+  ) {
     return null;
   }
   const digest = sourceVersionDigest(normalized);
   const reusable = [...session.sourceSets]
     .reverse()
     .find((sourceSet) => sourceSet?.sourceVersionDigest === digest && !sourceSetExpired(sourceSet));
-  if (reusable) return publicSourceSet(reusable);
+  if (reusable) {
+    if (!session.discourseState.activeSourceSetIds.includes(reusable.id)) {
+      const activated = await mutateSessionFocus(session, (snapshot) => ({
+        snapshot: {
+          ...snapshot,
+          discourseState: {
+            ...snapshot.discourseState,
+            revision: snapshot.discourseState.revision + 1,
+            activeSourceSetIds: uniqueSessionIds(
+              [...snapshot.discourseState.activeSourceSetIds, reusable.id],
+              MAX_SOURCE_SETS,
+            ),
+          },
+        },
+        value: true,
+      }));
+      if (!activated) return null;
+    }
+    return publicSourceSet(reusable);
+  }
 
   const createdAt = now();
   const sourceSet = {
     id: crypto.randomUUID(),
+    runId: String(session.discourseState.activeReadRunId || ''),
     refs: normalized.refs,
     scopeRefs: normalized.scopeRefs,
     attachmentSourceIds: normalized.attachmentSourceIds,
+    dialogueAnchor: normalized.dialogueAnchor,
     createdAt,
     expiresAt: createdAt + TTL_MS,
     sourceVersionDigest: digest,
   };
+  const committed = await mutateSessionFocus(session, (snapshot) => ({
+    snapshot: {
+      ...snapshot,
+      discourseState: {
+        ...snapshot.discourseState,
+        revision: snapshot.discourseState.revision + 1,
+        activeSourceSetIds: uniqueSessionIds(
+          [...snapshot.discourseState.activeSourceSetIds, sourceSet.id],
+          MAX_SOURCE_SETS,
+        ),
+      },
+    },
+    durable: { sourceSets: [sourceSet] },
+    value: true,
+  }));
+  if (!committed) return null;
   session.sourceSets = [...session.sourceSets.filter((item) => !sourceSetExpired(item)), sourceSet].slice(
     -MAX_SOURCE_SETS,
   );
@@ -972,6 +1293,7 @@ export function resolveSessionSourceSet(session, sourceSetId) {
       refs: normalizeSourceRefs(sourceSet.refs),
       scopeRefs: normalizeSourceRefs(sourceSet.scopeRefs, { scope: true }),
       attachmentSourceIds: normalizeAttachmentIds(sourceSet.attachmentSourceIds),
+      dialogueAnchor: normalizeDialogueAnchor(sourceSet.dialogueAnchor),
       sourceVersionDigest: String(sourceSet.sourceVersionDigest || ''),
       createdAt: Number(sourceSet.createdAt),
       expiresAt: Number(sourceSet.expiresAt),
@@ -1155,7 +1477,7 @@ export async function settleSessionAction({ ownerKey, sessionId, confirmationId,
   const artifact = session.artifactStates.find((item) => item?.id === actionId);
   if (artifact) {
     const previousState = artifact.state;
-    artifact.state =
+    const nextArtifactState =
       state === 'succeeded'
         ? 'confirmed'
         : state === 'cancelled'
@@ -1163,25 +1485,27 @@ export async function settleSessionAction({ ownerKey, sessionId, confirmationId,
           : state === 'failed'
             ? 'failed'
             : 'unknown';
-    artifact.updatedAt = now();
-    return Boolean(
-      await mutateSessionFocus(session, (snapshot) => {
-        const clearsPendingArtifact =
-          artifact.state !== 'pending' && snapshot.discourseState.pendingArtifactId === artifact.id;
-        return {
-          snapshot: {
-            ...snapshot,
-            discourseState: {
-              ...snapshot.discourseState,
-              revision:
-                snapshot.discourseState.revision + (artifact.state !== previousState || clearsPendingArtifact ? 1 : 0),
-              pendingArtifactId: clearsPendingArtifact ? '' : snapshot.discourseState.pendingArtifactId,
-            },
+    const committed = await mutateSessionFocus(session, (snapshot) => {
+      const clearsPendingArtifact =
+        nextArtifactState !== 'pending' && snapshot.discourseState.pendingArtifactId === artifact.id;
+      return {
+        snapshot: {
+          ...snapshot,
+          discourseState: {
+            ...snapshot.discourseState,
+            revision:
+              snapshot.discourseState.revision + (nextArtifactState !== previousState || clearsPendingArtifact ? 1 : 0),
+            pendingArtifactId: clearsPendingArtifact ? '' : snapshot.discourseState.pendingArtifactId,
           },
-          value: true,
-        };
-      }),
-    );
+        },
+        value: true,
+      };
+    });
+    if (!committed) return false;
+    artifact.state = nextArtifactState;
+    artifact.updatedAt = now();
+    await persistSession(session);
+    return true;
   }
   await persistSession(session);
   return true;

@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   recordPendingActionBatch: vi.fn(),
   recordPendingActionBatchById: vi.fn(),
   recordSessionArtifactStateById: vi.fn(),
+  recordSessionArtifactVersion: vi.fn(),
+  recordSessionArtifactVersionById: vi.fn(),
   resolveSessionActionRetry: vi.fn(() => ({ state: 'none' })),
   settleSessionAction: vi.fn(),
   rejectToolConfirmation: vi.fn(),
@@ -68,6 +70,8 @@ vi.mock('../util/agent/sessionStore.js', () => ({
   recordPendingActionBatch: mocks.recordPendingActionBatch,
   recordPendingActionBatchById: mocks.recordPendingActionBatchById,
   recordSessionArtifactStateById: mocks.recordSessionArtifactStateById,
+  recordSessionArtifactVersion: mocks.recordSessionArtifactVersion,
+  recordSessionArtifactVersionById: mocks.recordSessionArtifactVersionById,
   recordTurn: vi.fn(),
   resolveSessionActionRetry: mocks.resolveSessionActionRetry,
   settleSessionAction: mocks.settleSessionAction,
@@ -250,6 +254,11 @@ function agentLogInsert() {
   expect(columns.length).toBe(params.length);
   return Object.fromEntries(columns.map((column, index) => [column, params[index]]));
 }
+
+beforeEach(() => {
+  mocks.recordSessionArtifactVersion.mockImplementation(async (_session, artifact) => artifact);
+  mocks.recordSessionArtifactVersionById.mockImplementation(async ({ artifact }) => artifact);
+});
 
 describe('prepareAgentToolAction', () => {
   beforeEach(() => {
@@ -655,7 +664,16 @@ describe('replaceAgentNoteTargetDirectory', () => {
         args: { title: '可信标题', content: '可信正文', parentId: 'directory-new' },
         replaceToken: 'old-token',
         replaceConfirmationId: 'confirm-note-old',
-        privateContext: previousConfirmation.privateContext,
+        privateContext: expect.objectContaining({
+          ...previousConfirmation.privateContext,
+          agentArtifactVersion: expect.objectContaining({
+            capabilityId: 'note.create',
+            domain: 'note',
+            parentVersionId: null,
+            state: 'ready',
+            version: 1,
+          }),
+        }),
         originRequestId: 'request-original',
       }),
     );

@@ -44,6 +44,7 @@ function availableInputKinds({ contextSummary = {}, discourseProjection = {}, gr
     values.add('last_result_refs');
   }
   if (contextSummary.attachmentCount > 0) values.add('selected_resource');
+  if (contextSummary.dialogueAnchorAvailable === true) values.add('dialogue_anchor');
   return Object.freeze([...values]);
 }
 

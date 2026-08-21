@@ -71,6 +71,8 @@ pnpm --filter server check:schema
 
 任何断言输出都表示基线表、关键列或索引尚未就绪；应先应用待执行 migration 并重新检查，禁止让依赖新结构的应用进程先启动。
 
+涉及 Agent 五实体持久层时，发布顺序固定为：先应用 `20260821_agent_runtime_state.sql`，再运行 `pnpm --filter server check:schema` 验证 `ConversationState / Run / SourceSet / ResultSet / ArtifactVersion` 的表、列和索引；随后部署代码但保持 `AI_AGENT_STATE_PERSISTENCE_MODE=disabled`，确认基础链路稳定后只对 Root/白名单开启 `shadow`，最后才进入 `enforce`。`AI_AGENT_RUNTIME_MODE` 与持久层开关彼此独立，启用 Runtime V3 不能被当作 Schema 已存在的证明。shadow 镜像失败必须 fail-open，但需记录低基数错误；enforce 的 revision 冲突或权威恢复失败必须 fail-closed。回退 persistence 只切回 `disabled`，不得删除五实体表或清空已经写入的版本链。
+
 涉及 Agent 运行时、语义能力目录、工具参数、确认协议或笔记生成链时，先以单元测试、Handler 集成测试、dry-run 和合成夹具作为开发主门禁；默认不得为了日常开发或每次措辞修复反复调用真实 Provider。Runtime V3 可先运行零模型、零业务工具的低成本清单：
 
 ```bash

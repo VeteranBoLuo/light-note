@@ -447,6 +447,47 @@ export async function getAiConversationRecentDialogue(identity, conversationId, 
   }));
 }
 
+/**
+ * 按服务端签发的 Dialogue Anchor 重新读取精确消息集合。
+ *
+ * 调用方只能提交已持久化 SourceSet 中的消息 ID；这里再次校验 conversation owner、
+ * 消息归属与 completed 状态，并要求整组仍完整可用。任何缺失都失败关闭，避免把残缺
+ * 对话悄悄当成完整材料继续生成产物。
+ */
+export async function getAiConversationDialogueByIds(identity, conversationId, messageIds, database = pool) {
+  const conversation = await getOwnedConversationRow(database, identity, conversationId);
+  if (!conversation) throw serviceError('CONVERSATION_NOT_FOUND', '会话不存在或无权访问', 404);
+  const ids = [
+    ...new Set((Array.isArray(messageIds) ? messageIds : []).map((value) => asString(value, 36)).filter(Boolean)),
+  ].slice(0, 40);
+  if (!ids.length) throw serviceError('DIALOGUE_ANCHOR_INVALID', '对话材料锚点无效', 400);
+  const placeholders = ids.map(() => '?').join(',');
+  const [rows] = await database.query(
+    `SELECT id, role, content, status, version_group_id, create_time, update_time
+       FROM ai_messages
+      WHERE conversation_id = ? AND id IN (${placeholders})
+        AND role IN ('user', 'assistant') AND status = 'completed'
+      ORDER BY create_time ASC, id ASC`,
+    [conversation.id, ...ids],
+  );
+  const byId = new Map(rows.map((row) => [String(row.id), row]));
+  if (ids.some((id) => !byId.has(id))) {
+    throw serviceError('DIALOGUE_ANCHOR_STALE', '对话材料已变化，请重新选择要整理的对话', 409);
+  }
+  return ids.map((id) => {
+    const row = byId.get(id);
+    return {
+      id,
+      role: row.role,
+      content: row.content || '',
+      status: row.status || 'completed',
+      versionGroupId: row.version_group_id || null,
+      createdAt: row.create_time,
+      updatedAt: row.update_time,
+    };
+  });
+}
+
 export async function listAiMessageVersions(identity, conversationId, messageId, database = pool) {
   const conversation = await getOwnedConversationRow(database, identity, conversationId);
   if (!conversation) throw serviceError('CONVERSATION_NOT_FOUND', '会话不存在或无权访问', 404);

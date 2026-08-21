@@ -466,13 +466,17 @@ Runtime V3 把每轮请求拆成四个边界清晰、可独立验证的阶段：
 - Manifest 同时声明时间槽的 `required/defaultPolicy/disclosure` 和工具的 `sideEffectPolicy`。必填时间槽只能显式默认到“全部”、要求澄清或由服务端默认，不能在从 Planner schema 隐藏参数后留下未绑定值；非确认型操作只有声明为幂等后台任务时才允许执行，其他写入继续进入确认协议。
 - Intent Compiler 只接收当前用户消息、当前身份、服务端解析后的材料摘要和 `DiscourseProjection`，不接收原始历史消息、旧助手正文或工具正文。它每轮只生成一次不可变 TurnSpec；Planner 和依赖轮只能消费或缩小该计划，不能重新解释顶层目标。
 - 时间表达被编译为绑定到具体 goal/slot 的 `temporalConstraints`；资源指代被编译为类型化 `referentSelectors`。Manifest 声明的时间参数和权威资源参数会从模型工具 schema 中移除，再由服务端从 TurnSpec 或归属校验后的资源字段注入，模型不能复制、改写或臆造日期、资源 ID、URL 和对象键。
-- Redis 会话只向下一轮投影最小结构状态：`ResultSet` 保存可继承的稳定引用，`ArtifactState` 保存待确认/已替换/已结算产物，`DiscourseState` 保存领域、主题代际和最近能力。正文、展示标题和模型回答不承担执行指代；跨领域新请求推进主题代际，不会无脑继承上一轮其他类型材料。
+- Redis 会话只作为短期热层，向下一轮投影最小结构状态：`ResultSet` 保存可继承的稳定引用，`ArtifactState` 保存待确认/已替换/已结算产物，`DiscourseState` 保存领域、主题代际和最近能力。正文、展示标题和模型回答不承担执行指代；跨领域新请求推进主题代际，不会无脑继承上一轮其他类型材料。
+- MySQL 持久层使用五个最小权威实体：`ConversationState` 保存 revision/focus，`Run` 保存本轮规格、双 digest、目标终态和错误，`SourceSet` 保存显式资源/附件/Dialogue Anchor 的不可变材料句柄，`ResultSet` 保存查询快照及稳定引用，`ArtifactVersion` 保存产物版本链和输出验收。它们不会合并成一张大 JSON 状态表，也不保存默认注入模型的长期正文。
+- `SourceSet` 与 `ArtifactVersion`、确认令牌是三条独立生命周期。确认令牌过期只表示旧执行授权失效，不会删除已经验收的草稿或材料句柄；V3 enforce 可凭公开的 ArtifactVersion ID 在同一 owner/subject/conversation 内选择最新可编辑版本，并按其 SourceSet 重读材料后签发新版本，绝不复活旧令牌或接受客户端回传正文。
+- 普通连续对话仍只使用有界 `recentDialogue`。只有 TurnSpec 明确选择 `dialogue_anchor` 且云端消息具备稳定服务端 ID 时，才把有界消息集合写成 SourceSet；生成或改写产物时再按 owner + conversation + message IDs 精确读取并校验 digest。临时 session 文本和客户端 history 不能升级为持久材料。
 - 新读轮采用两阶段焦点提交：编译成功只暂存带唯一运行令牌的 `pendingFocus`，工具结果必须携带同一令牌才能提交；同一会话并发请求由 Redis revision CAS 采用 latest-run-wins，迟到旧轮不能写入新轮焦点。真实读工具成功并产生稳定引用或明确空集后原子替换当前 `ResultSet`；统计/概览类读取成功但没有可投影引用时仍提交本轮语义并清空旧资源范围；失败或降级不让旧结果冒充刚失败的新查询。
 - TurnSpec 的 `semanticDigest` 只标识规范化语义；能力路由、最终材料引用和服务端绑定完成后再生成 `executionDigest`。续问、缓存和 trace 必须区分二者，不能用绑定前摘要证明绑定后的执行合同。
 - Web 输入区的能力模块选择是单轮限制：默认“自动判断”，用户可显式收窄到笔记、书签、待办、文件等模块，消息发送后立即恢复自动；它只减少本轮候选能力，不改变长期会话状态，也不能扩大当前身份权限。
 - 显式模块范围会在解析真实身份后重新授权。若用户请求的范围全部不属于当前角色，接口在创建会话和调用模型前确定性返回 `forbidden_scope`；只有部分被拒绝时才保留合法子集，禁止把空目录退化为自动模式。
 - 生命周期和语义计划分离。写操作仍沿用已有 owner 校验、风险卡、一次性令牌、幂等和回执链；替换草稿、取消、过期和成功只更新 ArtifactState，不把旧卡或自然语言历史重新送给模型判断。
 - `AI_AGENT_RUNTIME_MODE=legacy|v3_shadow|v3_enforce` 只声明目标模式，默认 `legacy`；`AI_AGENT_RUNTIME_V3_ROLLOUT` 再按真实 actor 的角色、账号白名单和稳定百分比分桶裁决本请求的 effective mode。受众缺失或无效时失败关闭到 legacy，未命中账号不运行 V3 Compiler；排除列表高于所有纳入规则，Root 代管按 billing actor 而不是资源 subject 裁决。`v3_shadow` 只用于命中账号的结构化差异观测，`v3_enforce` 才以 V3 TurnSpec 执行；急停可直接退回 legacy，旧链路在完成灰度前不得删除。
+- `AI_AGENT_STATE_PERSISTENCE_MODE=disabled|shadow|enforce` 独立控制五实体持久层，默认 `disabled`。Runtime V3 开关绝不能隐式启用数据库读写：`shadow` 只做单调镜像、失败不影响请求；`enforce` 才在 Redis miss 时从 MySQL 恢复并使用 revision CAS。上线必须先应用并验证 migration，再单独推进 persistence shadow/enforce。
 
 - 待办写入能力包括状态修改与安全删除。`delete_todo` 只接受单个待办目标：稳定 `[todo:ID]` 直接冻结，标题重名先进入服务端白名单选择卡，选定后仍要生成中风险确认卡。确认执行在同一事务内复查 owner 和目标版本，并复用 `todoService` / `todoSeriesService` 的软删除、提醒取消和任务系列范围删除。任务系列必须明确 `current / future / series`，未说明时失败关闭；后两种范围只删除对应范围内的未完成项并保留已完成历史
 - 待办查询复用 `todoService.listTodoPage()` 作为页面与 Agent 的唯一事实源。`query_todos` 可用计划日期和精确到分钟的本地提醒时间收窄同名实例；提醒时间同时覆盖仍待投递和已经投递的持久 Job，结果再通过 `@lightnote/shared/todo-reminder` 从规则还原安全摘要，因此不会把“未设置截止时间”误解为“没有提醒”，也不会向模型暴露说明、提醒邮箱或 Provider 数据。语义检索降级只提供候选 ID，二次筛选仍必须回到同一 Service；分页未覆盖全部结果时工具会明确禁止把当前页概括成全量

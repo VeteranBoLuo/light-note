@@ -10,10 +10,12 @@
 import pool from '../db/index.js';
 import crypto from 'node:crypto';
 import { resultData, generateUUID } from '../util/agent/data.js';
+import { normalizeAgentUuid } from '../util/agent/identifiers.js';
 import { getActiveProviderInfo, looksLikeLeakedToolCall, parseLeakedToolCalls } from '../util/agent/deepseekClient.js';
 import { requestAi } from '../util/agent/aiGateway.js';
 import {
   commitSessionTurnSpec,
+  configureAgentSessionPersistence,
   createSessionMaterialClarification,
   getSessionDiscourseProjection,
   getOrCreateSession,
@@ -21,8 +23,8 @@ import {
   listSessionSourceSets,
   recordPendingActionBatch,
   recordPendingActionBatchById,
-  recordSessionArtifactState,
-  recordSessionArtifactStateById,
+  recordSessionArtifactVersion,
+  recordSessionArtifactVersionById,
   recordSessionResultSet,
   recordSessionSourceSet,
   recordTurn,
@@ -33,6 +35,17 @@ import {
   settleSessionResultFocus,
   settleSessionAction,
 } from '../util/agent/sessionStore.js';
+import { resolveAgentPersistenceMode } from '../util/agent/persistence/agentPersistenceMode.js';
+import { createAgentSessionPersistence } from '../util/agent/persistence/agentSessionPersistence.js';
+import {
+  deriveAgentRunStatus,
+  mergeAgentRunGoalOutcomes,
+  settleAgentRunGoalStates,
+} from '../util/agent/persistence/agentRunLifecycle.js';
+import {
+  settleAgentArtifactConfirmation,
+  verifyAgentArtifactConfirmation,
+} from '../util/agent/persistence/agentArtifactLifecycle.js';
 import { buildPlannerPrompt } from '../util/agent/prompt.js';
 import toolDefsArray from '../util/agent/tools/index.js';
 import { selectAgentTools } from '../util/agent/toolRouter.js';
@@ -46,6 +59,7 @@ import {
   buildAgentV3CapabilityCatalog,
   capabilityMatchesScope,
   capabilityProducesAgentV3Artifact,
+  getAgentV3CapabilityById,
   getAgentV3CapabilityByToolName,
   normalizeCapabilityScope,
 } from '../util/agent/runtime/v3/capabilityManifest.js';
@@ -168,6 +182,7 @@ import {
   resolveAgentRuntimeV2Mode,
 } from '../util/agent/runtime/runtimeMode.js';
 import {
+  buildServerDialogueAnchor,
   budgetAgentRecentDialogue,
   resolveServerAuthoritativeRecentDialogue,
   selectAgentConversationHistory,
@@ -203,7 +218,7 @@ import {
 } from '../util/agent/runtime/groundingScope.js';
 import { normalizeAgentArtifacts } from '../util/agent/artifact.js';
 import { persistAiResponseSnapshot, resolveAiResponseRecoveryIdentity } from '../util/aiResponseRecoveryService.js';
-import { getAiConversationRecentDialogue } from '../util/aiConversationService.js';
+import { getAiConversationDialogueByIds, getAiConversationRecentDialogue } from '../util/aiConversationService.js';
 import {
   createAiMemoryCandidate,
   getActiveAiMemoriesForPrompt,
@@ -800,6 +815,19 @@ function aiConversationIdentityFromAgent(req, identity) {
   };
 }
 
+function agentPersistenceContextFromAgent(req, identity, conversationId) {
+  return {
+    conversationId: String(conversationId || ''),
+    actorId: identity.billingUserId,
+    actorRole: identity.billingUserRole,
+    subjectId: identity.resourceUserId,
+    ownerKey: identity.ownerKey,
+    adminContextMode: req.adminContext?.mode || 'normal',
+    adminContextId: req.adminContext?.id || null,
+    runtimeVersion: 'v3',
+  };
+}
+
 function confirmationContext(req, identity) {
   return {
     resourceUserId: identity.resourceUserId,
@@ -864,6 +892,47 @@ function assertAgentNoteTargetDirectoryFeature(req, toolName, args) {
   }
 }
 
+function planAgentArtifactVersion({ toolName, args, privateContext, artifactOptions = {} }) {
+  const capability = getAgentV3CapabilityByToolName(toolName);
+  if (!capabilityProducesAgentV3Artifact(capability)) return null;
+  const content = String(args?.content || '');
+  const previous = artifactOptions.previousArtifact || privateContext?.agentArtifactVersion || null;
+  const previousId = normalizeAgentUuid(previous?.id);
+  const artifactChainId = normalizeAgentUuid(previous?.artifactChainId) || crypto.randomUUID();
+  const id = crypto.randomUUID();
+  const contentHash = crypto.createHash('sha256').update(content).digest('hex');
+  const version = Math.max(1, Math.trunc(Number(previous?.version) || 0) + 1);
+  const sourceSetId = normalizeAgentUuid(artifactOptions.sourceSetId);
+  const binding = Object.freeze({
+    id,
+    artifactChainId,
+    parentVersionId: previousId || null,
+    capabilityId: capability.id,
+    domain: capability.artifactKind,
+    version,
+    state: 'ready',
+    contentHash,
+    sourceSetId: sourceSetId || null,
+    conversationId: String(artifactOptions.conversationId || ''),
+  });
+  return Object.freeze({
+    binding,
+    privateContext: { ...(privateContext || {}), agentArtifactVersion: binding },
+    record: {
+      ...binding,
+      content,
+      supersedes: previous,
+      outputContract: {
+        ...(artifactOptions.outputContract && typeof artifactOptions.outputContract === 'object'
+          ? artifactOptions.outputContract
+          : {}),
+        title: String(args?.title || ''),
+      },
+      validationReport: artifactOptions.validationReport || null,
+    },
+  });
+}
+
 async function createPendingWriteConfirmation({
   tool,
   toolName,
@@ -877,6 +946,7 @@ async function createPendingWriteConfirmation({
   privateContext,
   originRequestId,
   previewDetails = [],
+  artifactOptions = {},
 }) {
   assertAgentNoteTargetDirectoryFeature(req, toolName, args);
   const policy = await enforceToolPolicy({
@@ -891,13 +961,20 @@ async function createPendingWriteConfirmation({
   tool = policy.tool;
   args = policy.args;
   const temporalRanges = projectAgentTemporalRanges(args);
-  const storedPrivateContext =
+  let storedPrivateContext =
     privateContext || Object.keys(temporalRanges).length
       ? {
           ...(privateContext || {}),
           ...(Object.keys(temporalRanges).length ? { agentTemporalRanges: temporalRanges } : {}),
         }
       : null;
+  const artifactVersionPlan = planAgentArtifactVersion({
+    toolName,
+    args,
+    privateContext: storedPrivateContext,
+    artifactOptions,
+  });
+  if (artifactVersionPlan) storedPrivateContext = artifactVersionPlan.privateContext;
   const preview =
     typeof tool.preview === 'function'
       ? await tool.preview(args, {
@@ -927,6 +1004,23 @@ async function createPendingWriteConfirmation({
     privateContext: storedPrivateContext,
     originRequestId,
   });
+  if (artifactVersionPlan) {
+    const recorded = session?.discourseState
+      ? await recordSessionArtifactVersion(session, artifactVersionPlan.record)
+      : await recordSessionArtifactVersionById({
+          ownerKey: identity.ownerKey,
+          sessionId: getSessionId(session),
+          artifact: artifactVersionPlan.record,
+        });
+    if (!recorded) {
+      await rejectToolConfirmation(pending.token, identity.ownerKey, getSessionId(session)).catch(() => false);
+      throw new ToolConfirmationError(
+        'AGENT_ARTIFACT_VERSION_UNAVAILABLE',
+        '草稿版本未能安全保存，请重新生成后再确认。',
+        409,
+      );
+    }
+  }
   return publicToolConfirmation(pending.token, pending.confirmation, pending.expiresIn);
 }
 
@@ -1363,6 +1457,72 @@ function buildNoteDraftMaterials(resolvedContexts, resolvedAttachments, sourceMe
     });
   }
   return materials;
+}
+
+function turnSpecUsesDialogueAnchor(turnSpec) {
+  return (Array.isArray(turnSpec?.goals) ? turnSpec.goals : []).some((goal) =>
+    (Array.isArray(goal?.referentSelectors) ? goal.referentSelectors : []).some(
+      (selector) => selector?.source === 'dialogue_anchor',
+    ),
+  );
+}
+
+function dialogueAnchorSource({ resolution, conversationId, topicEpoch }) {
+  const anchor = resolution?.dialogueAnchor;
+  const normalizedConversationId = String(conversationId || '').trim();
+  if (
+    !anchor ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalizedConversationId)
+  ) {
+    return null;
+  }
+  return Object.freeze({
+    conversationId: normalizedConversationId,
+    messageIds: Object.freeze([...(anchor.messageIds || [])]),
+    topicEpoch: Math.max(0, Number(topicEpoch) || 0),
+    digest: String(anchor.digest || ''),
+  });
+}
+
+function buildDialogueNoteDraftMaterial(messages) {
+  const normalized = (Array.isArray(messages) ? messages : [])
+    .filter(
+      (item) => ['user', 'assistant'].includes(item?.role) && typeof item?.content === 'string' && item.content.trim(),
+    )
+    .slice(-20);
+  if (!normalized.length) return null;
+  return Object.freeze({
+    type: 'dialogue',
+    id: '',
+    title: '用户明确选定的会话片段',
+    content: normalized.map((item) => `${item.role === 'user' ? '用户' : '助手'}：${item.content.trim()}`).join('\n\n'),
+  });
+}
+
+async function hydrateDialogueAnchorMaterial({ anchor, req, identity, conversationId }) {
+  if (!anchor?.conversationId || !Array.isArray(anchor.messageIds) || !anchor.messageIds.length || !anchor.digest) {
+    throw new AgentSourceSetError('AGENT_DIALOGUE_ANCHOR_INVALID', '这段对话材料的稳定引用无效，请重新选择。');
+  }
+  if (String(anchor.conversationId) !== String(conversationId || '')) {
+    throw new AgentSourceSetError('AGENT_DIALOGUE_ANCHOR_CONVERSATION_MISMATCH', '这段对话材料不属于当前会话。');
+  }
+  const messages = await getAiConversationDialogueByIds(
+    aiConversationIdentityFromAgent(req, identity),
+    anchor.conversationId,
+    anchor.messageIds,
+  );
+  const verified = buildServerDialogueAnchor(messages, { maxMessages: anchor.messageIds.length });
+  const sameMessageIds =
+    verified?.messageIds?.length === anchor.messageIds.length &&
+    verified.messageIds.every((id, index) => id === anchor.messageIds[index]);
+  if (!sameMessageIds || verified?.digest !== anchor.digest) {
+    throw new AgentSourceSetError('AGENT_DIALOGUE_ANCHOR_STALE', '这段对话材料已经变化，请重新选择要整理的对话。');
+  }
+  const material = buildDialogueNoteDraftMaterial(messages);
+  if (!material) {
+    throw new AgentSourceSetError('AGENT_DIALOGUE_ANCHOR_EMPTY', '这段对话没有可用于生成笔记的正文。');
+  }
+  return Object.freeze({ material, messages });
 }
 
 function hasReadableNoteDraftAttachment(resolvedAttachments) {
@@ -2189,6 +2349,15 @@ export async function agentChat(req, res) {
   let logContext = null;
   let usedToolsForLog = [];
   let apiCallsForLog = 0;
+  let sessionPersistence = null;
+  let persistentRunStarted = false;
+  let persistentRunStatus = 'completed';
+  let persistentRunErrorCode = null;
+  let persistentRunTurnSpec = null;
+  let persistentRunSemanticDigest = null;
+  let persistentRunExecutionDigest = null;
+  let persistentRunGoalStates = [];
+  let persistentRunGoalOutcomes = Object.freeze({});
   const sendMemoryInfluence = () => {
     if (!sseLifecycle || memoryInfluenceSent) return;
     sseLifecycle.send('memory_context', memoryInfluence);
@@ -2310,10 +2479,31 @@ export async function agentChat(req, res) {
           ),
         );
     }
+    const runtimeUsesV3Semantics = runtimeMode === 'v3_enforce' || runtimeMode === 'v3_shadow';
     res.on('close', onClientClose);
     const session = await raceWithSignal(getOrCreateSession(identity.ownerKey, sessionId), agentAbortController.signal);
+    sessionPersistence =
+      runtimeUsesV3Semantics && identity.billingUserRole !== 'visitor' && String(conversationId || '').trim()
+        ? createAgentSessionPersistence({
+            mode: resolveAgentPersistenceMode(),
+            context: agentPersistenceContextFromAgent(req, identity, conversationId),
+          })
+        : null;
+    if (sessionPersistence) {
+      await raceWithSignal(configureAgentSessionPersistence(session, sessionPersistence), agentAbortController.signal);
+      if (typeof sessionPersistence.startRun === 'function') {
+        await raceWithSignal(
+          sessionPersistence.startRun({
+            id: requestId,
+            baseRevision: getSessionDiscourseProjection(session).revision,
+            status: 'running',
+          }),
+          agentAbortController.signal,
+        );
+        persistentRunStarted = true;
+      }
+    }
     let cloudRecentDialogue = [];
-    const runtimeUsesV3Semantics = runtimeMode === 'v3_enforce' || runtimeMode === 'v3_shadow';
     if (
       runtimeUsesV3Semantics &&
       identity.billingUserRole !== 'visitor' &&
@@ -2363,6 +2553,7 @@ export async function agentChat(req, res) {
         );
       }
       if (clarification.state === 'pending') {
+        persistentRunStatus = 'clarification';
         const answer = clarification.clarification.question;
         if (stream) {
           sseLifecycle = buildSseLifecycle(getSessionId(session));
@@ -2686,39 +2877,126 @@ export async function agentChat(req, res) {
     let refinementRequested = false;
     let pendingNoteDraftInspection = null;
     let pendingNoteDraftPrivateContext = null;
+    let pendingNoteDraftRecoveredSourceSet = null;
+    let pendingNoteDraftCanReplaceConfirmation = false;
     let pendingDraftIntentCalls = 0;
     let pendingDraftIntentUsageReported = true;
     let pendingDraftReplacementRequested = false;
     let pendingDraftReplacementSettled = false;
     if (!enableTranslation && normalizedPendingNoteDraft) {
-      try {
-        const inspected = await inspectToolConfirmationExecution(
-          normalizedPendingNoteDraft.confirmationToken,
-          identity.ownerKey,
-          getSessionId(session),
-        );
-        if (
-          inspected.state !== 'ready' ||
-          inspected.confirmation?.id !== normalizedPendingNoteDraft.confirmationId ||
-          inspected.confirmation?.toolName !== 'create_note'
-        ) {
-          throw new ToolConfirmationError(
-            'TOOL_CONFIRMATION_CONFLICT',
-            '原草稿状态已经变化，请基于当前会话重新发起生成。',
-            409,
+      if (normalizedPendingNoteDraft.confirmationToken) {
+        try {
+          const inspected = await inspectToolConfirmationExecution(
+            normalizedPendingNoteDraft.confirmationToken,
+            identity.ownerKey,
+            getSessionId(session),
           );
+          if (
+            inspected.state !== 'ready' ||
+            inspected.confirmation?.id !== normalizedPendingNoteDraft.confirmationId ||
+            inspected.confirmation?.toolName !== 'create_note'
+          ) {
+            throw new ToolConfirmationError(
+              'TOOL_CONFIRMATION_CONFLICT',
+              '原草稿状态已经变化，请基于当前会话重新发起生成。',
+              409,
+            );
+          }
+          pendingNoteDraftInspection = inspected;
+          pendingNoteDraftCanReplaceConfirmation = true;
+          pendingNoteDraftPrivateContext = normalizeNoteDraftPrivateContext(inspected.confirmation.privateContext);
+          if (
+            pendingNoteDraftPrivateContext &&
+            !pendingNoteDraftPrivateContext.sourceSetId &&
+            inspected.confirmation.privateContext?.agentArtifactVersion?.sourceSetId
+          ) {
+            pendingNoteDraftPrivateContext = createNoteDraftPrivateContext({
+              ...pendingNoteDraftPrivateContext,
+              sourceSetId: inspected.confirmation.privateContext.agentArtifactVersion.sourceSetId,
+            });
+          }
+          // 确认生命周期与材料恢复是两项独立事实。旧卡仍然有效但私有材料上下文缺失时，
+          // “基于旧材料继续润色”必须失败关闭；“按全新范围重做”仍应原子替换旧卡，不能
+          // 因材料上下文缺失而把一个有效令牌遗留成第二张可执行卡。
+          if (!pendingNoteDraftPrivateContext) trace.pendingDraftCandidateError = 'TOOL_CONFIRMATION_CONTEXT_MISSING';
+        } catch (error) {
+          trace.pendingDraftCandidateError = stableAgentErrorCode(error);
+          console.warn('[Agent] pending note draft unavailable code=%s', trace.pendingDraftCandidateError);
+          pendingNoteDraftInspection = null;
+          pendingNoteDraftPrivateContext = null;
+          pendingNoteDraftCanReplaceConfirmation = false;
         }
-        pendingNoteDraftInspection = inspected;
-        pendingNoteDraftPrivateContext = normalizeNoteDraftPrivateContext(inspected.confirmation.privateContext);
-        // 确认生命周期与材料恢复是两项独立事实。旧卡仍然有效但私有材料上下文缺失时，
-        // “基于旧材料继续润色”必须失败关闭；“按全新范围重做”仍应原子替换旧卡，不能
-        // 因材料上下文缺失而把一个有效令牌遗留成第二张可执行卡。
-        if (!pendingNoteDraftPrivateContext) trace.pendingDraftCandidateError = 'TOOL_CONFIRMATION_CONTEXT_MISSING';
-      } catch (error) {
-        trace.pendingDraftCandidateError = stableAgentErrorCode(error);
-        console.warn('[Agent] pending note draft unavailable code=%s', trace.pendingDraftCandidateError);
-        pendingNoteDraftInspection = null;
-        pendingNoteDraftPrivateContext = null;
+      }
+
+      // 确认过期不等于草稿过期。V3 enforce 通过公开 ArtifactVersion ID 在持久层重新绑定
+      // owner / subject / conversation，并从同一版本链选择最新可编辑版本。客户端不能提供
+      // 标题、正文或材料；SourceSet 缺失时也不会只靠旧摘要继续编造。
+      if (
+        !pendingNoteDraftInspection &&
+        normalizedPendingNoteDraft.artifactVersionId &&
+        typeof sessionPersistence?.recoverEditableArtifact === 'function'
+      ) {
+        try {
+          const recovered = await sessionPersistence.recoverEditableArtifact(
+            normalizedPendingNoteDraft.artifactVersionId,
+          );
+          const artifact = recovered?.artifact;
+          const capability = getAgentV3CapabilityById(artifact?.capabilityId);
+          if (
+            !artifact ||
+            !['draft', 'ready'].includes(artifact.state) ||
+            !capabilityProducesAgentV3Artifact(capability) ||
+            capability.artifactKind !== 'note' ||
+            !String(artifact.content || '').trim()
+          ) {
+            throw new ToolConfirmationError(
+              'AGENT_ARTIFACT_VERSION_UNAVAILABLE',
+              '上一版草稿已经不可继续修改，请重新生成。',
+              409,
+            );
+          }
+          const items = recovered.sourceSet?.items || {};
+          pendingNoteDraftRecoveredSourceSet = recovered.sourceSet || null;
+          pendingNoteDraftPrivateContext = {
+            ...createNoteDraftPrivateContext({
+              contextRefs: items.refs,
+              scopeRefs: items.scopeRefs,
+              attachmentIds: items.attachmentIds,
+              sourceSetId: artifact.sourceSetId,
+            }),
+            agentArtifactVersion: {
+              id: artifact.id,
+              artifactChainId: artifact.artifactChainId,
+              parentVersionId: artifact.parentVersionId,
+              capabilityId: artifact.capabilityId,
+              domain: capability.artifactKind,
+              version: artifact.version,
+              state: artifact.state,
+              contentHash: artifact.contentHash,
+              sourceSetId: artifact.sourceSetId,
+              conversationId,
+            },
+          };
+          pendingNoteDraftInspection = {
+            state: 'artifact_ready',
+            confirmation: {
+              id: '',
+              toolName: 'create_note',
+              args: {
+                title: String(artifact.outputContract?.title || '未命名笔记'),
+                content: String(artifact.content),
+              },
+              privateContext: pendingNoteDraftPrivateContext,
+            },
+          };
+          trace.pendingDraftCandidateError = null;
+          trace.pendingDraftRecovery = 'artifact_version';
+        } catch (error) {
+          trace.pendingDraftCandidateError = stableAgentErrorCode(error);
+          console.warn('[Agent] pending artifact recovery unavailable code=%s', trace.pendingDraftCandidateError);
+          pendingNoteDraftInspection = null;
+          pendingNoteDraftPrivateContext = null;
+        }
       }
 
       // 只有当前仍可执行的确认才能被原子替换。已取消/过期的候选只是过时客户端状态，
@@ -2991,7 +3269,7 @@ export async function agentChat(req, res) {
         );
       }
     }
-    const responseSourceSet = enableTranslation
+    let responseSourceSet = enableTranslation
       ? null
       : await recordSessionSourceSet(session, {
           refs: effectiveRequestContexts,
@@ -3266,6 +3544,8 @@ export async function agentChat(req, res) {
     let noteDraftWorkspaceQueries = [];
     let noteDraftWorkspaceQueryCalls = [];
     let noteDraftWorkspaceDirectRequested = false;
+    let noteDraftDialogueAnchor = null;
+    let noteDraftDialogueMaterial = null;
     if (!enableTranslation && !refinementRequested) {
       const noteDraftContextTypes = [
         ...(Array.isArray(effectiveRequestContexts) ? effectiveRequestContexts : [])
@@ -3327,6 +3607,7 @@ export async function agentChat(req, res) {
               attachmentCount: Array.isArray(effectiveRequestAttachmentIds) ? effectiveRequestAttachmentIds.length : 0,
               hasPendingArtifact:
                 runtimeV3ModeEnforced && Boolean(structuredDiscourseProjection.pendingArtifact?.available),
+              dialogueAnchorAvailable: Boolean(recentDialogueResolution.dialogueAnchor),
             };
             const onCompilerResponse = (response) => {
               pendingDraftIntentCalls += 1;
@@ -3390,6 +3671,47 @@ export async function agentChat(req, res) {
                 turnSpec,
               });
             }
+            if (runtimeMode === 'v3_enforce' && isNoteArtifact && turnSpecUsesDialogueAnchor(turnSpec)) {
+              noteDraftDialogueAnchor = dialogueAnchorSource({
+                resolution: recentDialogueResolution,
+                conversationId,
+                topicEpoch: structuredDiscourseProjection.topicEpoch,
+              });
+              if (!noteDraftDialogueAnchor) {
+                throw new AgentSourceSetError(
+                  'AGENT_DIALOGUE_ANCHOR_UNAVAILABLE',
+                  '当前对话没有可重新读取的稳定消息锚点，请在已保存的会话中重试。',
+                );
+              }
+              const hydratedDialogue = await raceWithSignal(
+                hydrateDialogueAnchorMaterial({
+                  anchor: noteDraftDialogueAnchor,
+                  req,
+                  identity,
+                  conversationId,
+                }),
+                agentAbortController.signal,
+              );
+              noteDraftDialogueMaterial = hydratedDialogue.material;
+              responseSourceSet = await recordSessionSourceSet(session, {
+                refs: effectiveRequestContexts,
+                scopeRefs: effectiveRequestScopeRefs,
+                attachmentSourceIds: effectiveRequestAttachmentIds,
+                dialogueAnchor: noteDraftDialogueAnchor,
+              });
+              if (!responseSourceSet) {
+                throw new AgentSourceSetError(
+                  'AGENT_DIALOGUE_ANCHOR_PERSIST_FAILED',
+                  '当前无法保存这段对话的材料锚点，请稍后重试。',
+                );
+              }
+            }
+            persistentRunTurnSpec = turnSpec;
+            persistentRunSemanticDigest = String(turnSpec.semanticDigest || turnSpec.digest || '') || null;
+            persistentRunGoalStates = (turnSpec.goals || []).map((goal) => ({
+              goalId: goal.id,
+              status: 'pending',
+            }));
             const readGoalIds = new Set(turnSpec.goals.filter((goal) => goal.kind === 'read').map((goal) => goal.id));
             const noteGoals = turnSpec.goals.filter(
               (goal) => goal.kind === 'transform' && goal.capabilityDomain === 'note',
@@ -3706,7 +4028,29 @@ export async function agentChat(req, res) {
         matchedPageCount: 0,
         totalPages: Number(resolvedScopes?.noteIds?.length || 0),
       };
+      if (!noteDraftDialogueMaterial && privateContext?.sourceSetId) {
+        const sourceSetInspection = resolveSessionSourceSet(session, privateContext.sourceSetId);
+        const anchor =
+          sourceSetInspection.state === 'ready'
+            ? sourceSetInspection.sourceSet?.dialogueAnchor
+            : pendingNoteDraftRecoveredSourceSet?.items?.dialogueAnchor;
+        if (anchor) {
+          try {
+            const hydratedDialogue = await raceWithSignal(
+              hydrateDialogueAnchorMaterial({ anchor, req, identity, conversationId }),
+              agentAbortController.signal,
+            );
+            noteDraftDialogueAnchor = anchor;
+            noteDraftDialogueMaterial = hydratedDialogue.material;
+          } catch (error) {
+            routeStatus = 'material_read_failed';
+            routeError = stableAgentErrorCode(error);
+            routeResponse = String(error.message || '这段对话材料已经不可用，请重新选择。').slice(0, 300);
+          }
+        }
+      }
       let materials = buildNoteDraftMaterials(effectiveContexts, effectiveAttachments, sourceMessage);
+      if (noteDraftDialogueMaterial) materials.unshift(noteDraftDialogueMaterial);
       if (!routeResponse && resolvedScopes.refs.length) {
         try {
           scopedDraftMaterials = await raceWithSignal(
@@ -3854,6 +4198,7 @@ export async function agentChat(req, res) {
           contextRefs: noteDraftContextRefs(effectiveContexts, MAX_PRIVATE_NOTE_DRAFT_CONTEXTS),
           scopeRefs: noteDraftScopeRefs(resolvedScopes),
           attachmentIds: noteDraftAttachmentIds(effectiveAttachments),
+          sourceSetId: responseSourceSet?.id || privateContext?.sourceSetId || '',
         });
       }
       const entityRefs = buildAgentEntityRefs(
@@ -3892,12 +4237,12 @@ export async function agentChat(req, res) {
           });
           trace.finalMs = Date.now() - draftStartedAt;
           const createNoteTool = toolRegistry.get('create_note');
-          const createNoteCapability = getAgentV3CapabilityByToolName(createNoteTool?.name);
-          replacedConfirmation =
+          const draftBaseConfirmation =
             previousConfirmation ||
             (pendingDraftReplacementRequested ? pendingNoteDraftInspection?.confirmation || null : null);
+          replacedConfirmation = pendingNoteDraftCanReplaceConfirmation ? draftBaseConfirmation : null;
           const draftParentId = String(
-            replacedConfirmation?.args?.parentId ||
+            draftBaseConfirmation?.args?.parentId ||
               (resolvedScopes.branches.length === 1 ? resolvedScopes.branches[0]?.id : ''),
           ).trim();
           confirmation = await createPendingWriteConfirmation({
@@ -3927,19 +4272,19 @@ export async function agentChat(req, res) {
                       : '未指定',
               },
             ],
+            artifactOptions: {
+              previousArtifact: draftBaseConfirmation?.privateContext?.agentArtifactVersion || null,
+              sourceSetId:
+                responseSourceSet?.id || draftBaseConfirmation?.privateContext?.agentArtifactVersion?.sourceSetId || '',
+              conversationId,
+              outputContract: precompiledOutputContract,
+              validationReport: draft.validation,
+            },
           });
           await recordPendingActionBatch(session, {
             batchId: requestId,
             actions: [pendingActionRecord(confirmation, {})],
           });
-          if (runtimeV3ModeEnforced && precompiledTurnSpecResult?.turnSpec && createNoteCapability) {
-            await recordSessionArtifactState(session, {
-              id: confirmation.id,
-              capabilityId: createNoteCapability.id,
-              domain: createNoteCapability.artifactKind,
-              state: 'pending',
-            });
-          }
           // recordPendingActionBatch 使用本轮持有的 session 对象；先把新动作写入，再由
           // settleSessionAction 读取最新会话结算旧动作，避免旧 session 快照反向覆盖 cancelled 状态。
           if (replacedConfirmation) {
@@ -3992,6 +4337,8 @@ export async function agentChat(req, res) {
       }
 
       trace.usageStatus = allUsageReported ? 'reported' : 'missing';
+      persistentRunStatus = confirmation ? 'awaiting_confirmation' : routeError ? 'failed' : 'completed';
+      persistentRunErrorCode = routeError || null;
       trace.plannerMs = Number(trace.pendingDraftIntentMs || 0) + Number(trace.noteDraftClassifyMs || 0);
       const draftGroundingSources = [
         ...(effectiveContexts.sources || []),
@@ -4326,6 +4673,7 @@ export async function agentChat(req, res) {
       selectedResourceCount: runtimeContextRefs.length + resolvedScopes.refs.length + runtimeAttachmentIds.length,
       attachmentCount: runtimeAttachmentIds.length,
       hasPendingArtifact: Boolean(structuredDiscourseProjection.pendingArtifact?.available),
+      dialogueAnchorAvailable: Boolean(recentDialogueResolution.dialogueAnchor),
     };
     const runtimeExecutionContext = buildAuthoritativeExecutionContext({
       contextRefs: runtimeContextRefs,
@@ -4515,6 +4863,7 @@ export async function agentChat(req, res) {
       emptyMaterialDependencyMessagesByCallId = new Map(),
       noteDraftMaterialRefsByCallId = new Map(),
       temporalBindingsByCallId = {},
+      goalIdsByCallId = {},
     }) => {
       const toolCalls = (Array.isArray(rawToolCalls) ? rawToolCalls : []).slice(0, 8);
       if (!toolCalls.length) return [];
@@ -4535,6 +4884,7 @@ export async function agentChat(req, res) {
           let tool = toolRegistry.get(tc.function.name);
           let result;
           let pendingInteraction = null;
+          let pendingConfirmation = null;
           let pendingAction = null;
           let retryArgs = null;
           let confirmationPrivateContext = null;
@@ -4701,8 +5051,6 @@ export async function agentChat(req, res) {
                   pendingInteraction = created.interaction;
                   const continuation = await issueActionContinuation('interaction', pendingInteraction.id);
                   if (continuation) pendingInteraction.continuation = continuation;
-                  interactions.push(created.interaction);
-                  roundInteractions.push(created.interaction);
                   args = error.normalizedToolArgs || args;
                 } else {
                   const publicError = publicToolError(error, 'AI 生成的操作参数无效，请重新发起操作。');
@@ -4750,7 +5098,7 @@ export async function agentChat(req, res) {
             };
           } else if (tool.isWrite) {
             try {
-              const confirmation = await createPendingWriteConfirmation({
+              pendingConfirmation = await createPendingWriteConfirmation({
                 tool,
                 toolName: tc.function.name,
                 args,
@@ -4758,21 +5106,35 @@ export async function agentChat(req, res) {
                 req,
                 session,
                 replaceToken:
-                  pendingDraftReplacementRequested && tc.function.name === 'create_note'
+                  pendingDraftReplacementRequested &&
+                  pendingNoteDraftCanReplaceConfirmation &&
+                  tc.function.name === 'create_note'
                     ? normalizedPendingNoteDraft?.confirmationToken
                     : undefined,
                 replaceConfirmationId:
-                  pendingDraftReplacementRequested && tc.function.name === 'create_note'
+                  pendingDraftReplacementRequested &&
+                  pendingNoteDraftCanReplaceConfirmation &&
+                  tc.function.name === 'create_note'
                     ? pendingNoteDraftInspection?.confirmation?.id
                     : undefined,
                 privateContext: confirmationPrivateContext,
                 originRequestId: requestId,
+                artifactOptions: {
+                  previousArtifact:
+                    pendingDraftReplacementRequested && tc.function.name === 'create_note'
+                      ? pendingNoteDraftInspection?.confirmation?.privateContext?.agentArtifactVersion || null
+                      : null,
+                  sourceSetId:
+                    responseSourceSet?.id ||
+                    pendingNoteDraftInspection?.confirmation?.privateContext?.agentArtifactVersion?.sourceSetId ||
+                    '',
+                  conversationId,
+                  outputContract: precompiledOutputContract,
+                },
               });
-              const continuation = await issueActionContinuation('confirmation', confirmation.id);
-              if (continuation) confirmation.continuation = continuation;
-              confirmations.push(confirmation);
-              roundConfirmations.push(confirmation);
-              pendingAction = pendingActionRecord(confirmation, retryArgs || {});
+              const continuation = await issueActionContinuation('confirmation', pendingConfirmation.id);
+              if (continuation) pendingConfirmation.continuation = continuation;
+              pendingAction = pendingActionRecord(pendingConfirmation, retryArgs || {});
               result = {
                 status: 'confirmation_required',
                 summary: `该操作会修改数据，尚未执行。请用户确认后再执行工具 ${tc.function.name}。`,
@@ -4836,26 +5198,37 @@ export async function agentChat(req, res) {
               round,
             });
           }
-          return { toolCallId: tc.id, toolName: tc.function.name, result, pendingAction };
+          return {
+            toolCallId: tc.id,
+            toolName: tc.function.name,
+            result,
+            pendingAction,
+            pendingConfirmation,
+            pendingInteraction,
+          };
         },
         agentAbortController.signal,
       );
       trace.toolMs += Date.now() - toolStartedAt;
+      persistentRunGoalOutcomes = mergeAgentRunGoalOutcomes(persistentRunGoalOutcomes, results, goalIdsByCallId);
+
+      // 工具可以并发准备，但用户可见动作必须严格按 Planner 的 tool_call 顺序提交。
+      // 直接在并发任务内 push 会让较快的预览先出现，造成确认卡顺序随机，甚至让
+      // 同一复合请求的主次关系在不同运行间变化。mapWithConcurrency 会保留输入顺序，
+      // 因而统一在汇合点收集即可兼顾并发性能与确定性。
+      for (const item of results) {
+        if (item.pendingConfirmation) {
+          confirmations.push(item.pendingConfirmation);
+          roundConfirmations.push(item.pendingConfirmation);
+        }
+        if (item.pendingInteraction) {
+          interactions.push(item.pendingInteraction);
+          roundInteractions.push(item.pendingInteraction);
+        }
+      }
 
       if (runtimeV3Enforced) {
         await settleAgentV3ReadFocus(session, results, { focusId: runtimeV3ReadFocusId });
-        for (const item of results) {
-          const capability = getAgentV3CapabilityByToolName(item.toolName);
-          if (!capability) continue;
-          if (item.pendingAction?.confirmationId && capabilityProducesAgentV3Artifact(capability)) {
-            await recordSessionArtifactState(session, {
-              id: item.pendingAction.confirmationId,
-              capabilityId: capability.id,
-              domain: capability.artifactKind,
-              state: 'pending',
-            });
-          }
-        }
       }
 
       const pendingActions = results.map((item) => item.pendingAction).filter(Boolean);
@@ -4865,7 +5238,7 @@ export async function agentChat(req, res) {
       const replacementConfirmation = pendingDraftReplacementRequested
         ? roundConfirmations.find((item) => item?.toolName === 'create_note')
         : null;
-      if (replacementConfirmation && !pendingDraftReplacementSettled) {
+      if (replacementConfirmation && pendingNoteDraftCanReplaceConfirmation && !pendingDraftReplacementSettled) {
         await settleSessionAction({
           ownerKey: identity.ownerKey,
           sessionId: getSessionId(session),
@@ -5020,6 +5393,12 @@ export async function agentChat(req, res) {
               onCompilerResponse: (response) => runtimeV2Responses.push(response),
               onPlannerResponse: (response) => runtimeV2Responses.push(response),
             });
+        if (runtimeV2Outcome?.turnSpec) {
+          persistentRunTurnSpec = runtimeV2Outcome.turnSpec;
+          persistentRunSemanticDigest = String(runtimeV2Outcome.semanticDigest || '') || null;
+          persistentRunExecutionDigest = String(runtimeV2Outcome.executionDigest || '') || null;
+          persistentRunGoalStates = Array.isArray(runtimeV2Outcome.goalStates) ? runtimeV2Outcome.goalStates : [];
+        }
       } catch (error) {
         if (
           agentAbortController.signal.aborted ||
@@ -5721,6 +6100,7 @@ export async function agentChat(req, res) {
         round: 1,
         finishReason: plannerResponse.finishReason,
         temporalBindingsByCallId: runtimeV2Outcome?.validation?.temporalBindingsByCallId || {},
+        goalIdsByCallId: runtimeV2Outcome?.validation?.goalIdsByCallId || {},
       });
       const missingRequiredParameter = results.find(
         (item) => item.result?.status === 'error' && REQUIRED_INPUT_ERROR_CODES.has(String(item.result?.error || '')),
@@ -5860,6 +6240,7 @@ export async function agentChat(req, res) {
         let parsedFollowUp;
         let followUpDecision;
         let followUpTemporalBindingsByCallId = {};
+        let followUpGoalIdsByCallId = {};
         if (runtimeContractEnforced) {
           const completedGoalIds = runtimeV2Outcome.turnSpec.goals
             .filter((goal) => {
@@ -5930,6 +6311,7 @@ export async function agentChat(req, res) {
               .flatMap((capability) => capability.toolNames || []),
           };
           followUpTemporalBindingsByCallId = planned.validation?.temporalBindingsByCallId || {};
+          followUpGoalIdsByCallId = planned.validation?.goalIdsByCallId || {};
         } else {
           const followUpPromptBase = buildPlannerPrompt(followUpTools, userRole, {
             semanticCatalog: followUpCatalog,
@@ -6102,6 +6484,14 @@ export async function agentChat(req, res) {
         const emptyMaterialDependencyCallIds = new Set();
         const emptyMaterialDependencyMessagesByCallId = new Map();
         const noteDraftMaterialRefsByCallId = new Map();
+        if (!runtimeContractEnforced) {
+          for (const call of followUpDecision.toolCalls) {
+            const capabilityId = followUpCatalog.find((entry) => entry.toolNames?.includes(call?.function?.name))?.id;
+            const intentIndex = semanticPlan.intents.findIndex((intent) => intent.capabilityId === capabilityId);
+            const goalId = persistentRunTurnSpec?.goals?.[intentIndex]?.id;
+            if (goalId) followUpGoalIdsByCallId[call.id] = goalId;
+          }
+        }
         if (dependencyRound) {
           for (const call of followUpDecision.toolCalls) {
             const capabilityId = followUpCatalog.find((entry) => entry.toolNames?.includes(call?.function?.name))?.id;
@@ -6158,6 +6548,7 @@ export async function agentChat(req, res) {
           emptyMaterialDependencyMessagesByCallId,
           noteDraftMaterialRefsByCallId,
           temporalBindingsByCallId: followUpTemporalBindingsByCallId,
+          goalIdsByCallId: followUpGoalIdsByCallId,
         });
         recordSuccessfulCapabilityResults(previousRoundResults, followUpCatalog);
         const terminalDependencyFailure = dependencyRound
@@ -6213,6 +6604,11 @@ export async function agentChat(req, res) {
     // 不再请求模型生成“最终回复”：模型即使读到“尚未执行”也可能把意图误说成结果，
     // 造成用户看到“已完成”但服务端从未写入的严重误导。
     const pendingUserAction = confirmations.length > 0 || interactions.length > 0;
+    persistentRunStatus = confirmations.length
+      ? 'awaiting_confirmation'
+      : interactions.length
+        ? 'awaiting_interaction'
+        : 'completed';
     // candidate = 本轮拥有过的材料(供 citationGuide 编号与模型引用);
     // public = 回答实际引用的材料(citedKeys 过滤,见 selectCitedAgentGrounding)。
     // 两者必须分开:候选直接对外上报,就会把挂着的旧引用误标成「参考来源」。
@@ -6692,6 +7088,8 @@ export async function agentChat(req, res) {
       },
     });
   } catch (error) {
+    persistentRunStatus = clientDisconnected ? 'cancelled' : 'failed';
+    persistentRunErrorCode = stableAgentErrorCode(error);
     const deadlineExceeded = agentAbortController.signal.reason?.code === 'AGENT_HARD_DEADLINE_EXCEEDED';
     if (!clientDisconnected) console.error('[Agent] request failed code=%s', stableAgentErrorCode(error));
     const scopeError = error instanceof NoteBranchScopeError;
@@ -6771,6 +7169,28 @@ export async function agentChat(req, res) {
     }
     res.removeListener('close', onClientClose);
   } finally {
+    if (persistentRunStarted && typeof sessionPersistence?.settleRun === 'function') {
+      try {
+        const terminalGoalStates = settleAgentRunGoalStates({
+          goalStates: persistentRunGoalStates,
+          goalOutcomes: persistentRunGoalOutcomes,
+          turnSpec: persistentRunTurnSpec,
+          runStatus: persistentRunStatus,
+        });
+        const terminalRunStatus = deriveAgentRunStatus(persistentRunStatus, terminalGoalStates);
+        await sessionPersistence.settleRun(requestId, {
+          status: terminalRunStatus,
+          turnSpec: persistentRunTurnSpec,
+          semanticDigest: persistentRunSemanticDigest,
+          executionDigest: persistentRunExecutionDigest,
+          goalStates: terminalGoalStates,
+          errorCode: persistentRunErrorCode,
+        });
+      } catch (error) {
+        // 回答已经进入终态；运行审计结算失败只能记录稳定错误码，不能改写用户已收到的结果。
+        console.warn('[Agent] persistent run settlement failed code=%s', stableAgentErrorCode(error));
+      }
+    }
     // AI token 额度回写:正常/异常/abort 都执行。abort 按已消耗结算、不退还占位(见 aiQuota.reconcile)。
     try {
       const reconciledTokens =
@@ -7150,19 +7570,6 @@ export async function respondAgentInteraction(req, res) {
       batchId: requestId,
       actions: [pendingActionRecord(confirmation, policy.retryArgs)],
     });
-    const capability = getAgentV3CapabilityByToolName(resolved.toolName);
-    if (capabilityProducesAgentV3Artifact(capability)) {
-      await recordSessionArtifactStateById({
-        ownerKey: identity.ownerKey,
-        sessionId,
-        artifact: {
-          id: confirmation.id,
-          capabilityId: capability.id,
-          domain: capability.artifactKind,
-          state: 'pending',
-        },
-      });
-    }
     await settleAgentInteractionResponse(interaction, response, outcome);
     logAgentRequest({
       userId: identity.billingUserId,
@@ -7275,6 +7682,10 @@ export async function replaceAgentNoteTargetDirectory(req, res) {
       replaceConfirmationId: previousConfirmation.id,
       privateContext: previousConfirmation.privateContext,
       originRequestId: previousConfirmation.originRequestId || requestId,
+      artifactOptions: {
+        previousArtifact: previousConfirmation.privateContext?.agentArtifactVersion || null,
+        conversationId: previousConfirmation.privateContext?.agentArtifactVersion?.conversationId || '',
+      },
     });
     const continuationToken = supportsAgentActionContinuation(req.body?.clientCapabilities)
       ? String(req.body?.continuationToken || '')
@@ -7298,19 +7709,6 @@ export async function replaceAgentNoteTargetDirectory(req, res) {
       batchId: requestId,
       actions: [pendingActionRecord(replacement, {})],
     });
-    const createNoteCapability = getAgentV3CapabilityByToolName('create_note');
-    if (capabilityProducesAgentV3Artifact(createNoteCapability)) {
-      await recordSessionArtifactStateById({
-        ownerKey: identity.ownerKey,
-        sessionId,
-        artifact: {
-          id: replacement.id,
-          capabilityId: createNoteCapability.id,
-          domain: createNoteCapability.artifactKind,
-          state: 'pending',
-        },
-      });
-    }
     await settleSessionAction({
       ownerKey: identity.ownerKey,
       sessionId,
@@ -7389,6 +7787,7 @@ export async function confirmAgentTool(req, res) {
   let toolExecutionStarted = false;
   let resultSettlementStarted = false;
   let actionLockAcquired = false;
+  let settleArtifactLifecycle = async () => ({ state: 'skipped' });
   try {
     identity = getAgentIdentity(req);
     let attempt = await inspectToolConfirmationExecution(
@@ -7407,6 +7806,23 @@ export async function confirmAgentTool(req, res) {
     if (confirmation.capabilityId && confirmation.capabilityId !== tool.capabilityId) {
       throw new ToolConfirmationError('TOOL_CONFIRMATION_INVALID', '确认令牌对应的能力已发生变化，请重新发起操作。');
     }
+    const artifactBinding = confirmation.privateContext?.agentArtifactVersion || null;
+    const artifactPersistenceMode = resolveAgentPersistenceMode();
+    const artifactPersistenceContext = agentPersistenceContextFromAgent(req, identity, artifactBinding?.conversationId);
+    settleArtifactLifecycle = async (state) => {
+      try {
+        return await settleAgentArtifactConfirmation({
+          mode: artifactPersistenceMode,
+          context: artifactPersistenceContext,
+          binding: artifactBinding,
+          state,
+        });
+      } catch (error) {
+        // 写工具结果才是用户可见权威事实；产物审计推进失败必须报警，但不能把已完成写入伪装成失败。
+        console.warn('[Agent] artifact confirmation settlement failed code=%s', stableAgentErrorCode(error));
+        return { state: 'skipped', errorCode: stableAgentErrorCode(error) };
+      }
+    };
     const sendOutcome = async (outcome) => {
       const authoritativeOutcome = withConfirmedActionReceipt(outcome, confirmation);
       await settleSessionAction({
@@ -7476,6 +7892,11 @@ export async function confirmAgentTool(req, res) {
       trustedPreparedArgs: true,
       prepare: false,
     });
+    await verifyAgentArtifactConfirmation({
+      mode: artifactPersistenceMode,
+      context: artifactPersistenceContext,
+      binding: artifactBinding,
+    });
 
     attempt = await claimToolConfirmationExecution(confirmation);
     confirmation = attempt.confirmation;
@@ -7508,6 +7929,7 @@ export async function confirmAgentTool(req, res) {
         data: { code: result.error || 'TOOL_EXECUTION_FAILED', toolName: confirmation.toolName },
         message: result.summary,
       };
+      await settleArtifactLifecycle('failed');
       resultSettlementStarted = true;
       await settleToolConfirmationExecution(confirmation, failureOutcome);
       executionSettled = true;
@@ -7547,6 +7969,7 @@ export async function confirmAgentTool(req, res) {
       },
       message: '',
     };
+    await settleArtifactLifecycle('committed');
     resultSettlementStarted = true;
     await settleToolConfirmationExecution(confirmation, successOutcome);
     executionSettled = true;
@@ -7604,6 +8027,7 @@ export async function confirmAgentTool(req, res) {
       status = 503;
       code = 'TOOL_CONFIRMATION_RESULT_PENDING';
       message = '操作结果仍在同步中，请稍后安全重试；系统不会重复执行。';
+      await settleArtifactLifecycle('unknown');
       if (confirmation) {
         await settleSessionAction({
           ownerKey: identity?.ownerKey,
@@ -7649,6 +8073,17 @@ export async function rejectAgentTool(req, res) {
   try {
     identity = getAgentIdentity(req);
     const rejected = await rejectToolConfirmation(req.body?.confirmationToken, identity.ownerKey, req.body?.sessionId);
+    const artifactBinding = rejected.privateContext?.agentArtifactVersion || null;
+    try {
+      await settleAgentArtifactConfirmation({
+        mode: resolveAgentPersistenceMode(),
+        context: agentPersistenceContextFromAgent(req, identity, artifactBinding?.conversationId),
+        binding: artifactBinding,
+        state: 'cancelled',
+      });
+    } catch (error) {
+      console.warn('[Agent] artifact rejection settlement failed code=%s', stableAgentErrorCode(error));
+    }
     await settleSessionAction({
       ownerKey: identity.ownerKey,
       sessionId: req.body?.sessionId,
@@ -7683,7 +8118,11 @@ export async function rejectAgentTool(req, res) {
       },
     });
     // originRequestId 只服务后台链路串联，不进客户端响应体。
-    const { originRequestId: _rejectedOriginRequestId, ...publicRejected } = rejected;
+    const {
+      originRequestId: _rejectedOriginRequestId,
+      privateContext: _rejectedPrivateContext,
+      ...publicRejected
+    } = rejected;
     return res.send(resultData(publicRejected));
   } catch (error) {
     const status = error instanceof ToolConfirmationError ? error.status : 500;

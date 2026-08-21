@@ -368,7 +368,13 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     effect: 'write',
     operations: ['create'],
     requiredSlots: ['title'],
-    acceptedInputKinds: ['latest_message', 'selected_resource', 'workspace_query', 'last_result_refs'],
+    acceptedInputKinds: [
+      'latest_message',
+      'selected_resource',
+      'workspace_query',
+      'last_result_refs',
+      'dialogue_anchor',
+    ],
     // domains 表示产物领域；acceptedSourceDomains 表示该产物可由哪些材料领域生成。
     // 模块范围按这两个正交事实求闭包，不依赖“书签生成笔记”等固定问法。
     acceptedSourceDomains: ['content', 'note', 'bookmark', 'file', 'todo', 'tag', 'web'],

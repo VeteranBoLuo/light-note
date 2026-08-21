@@ -18,6 +18,36 @@ describe('Agent 会话历史边界', () => {
   });
 
   it('recentDialogue 只选择服务端云消息，并折叠同一回答的重新生成版本', () => {
+    const cloudResolution = resolveServerAuthoritativeRecentDialogue({
+      cloudMessages: [
+        { id: 'question-1', role: 'user', content: '解释知识库检索' },
+        {
+          id: 'answer-old',
+          role: 'assistant',
+          content: '旧版本',
+          versionGroupId: 'answer-1',
+          status: 'completed',
+        },
+        {
+          id: 'answer-new',
+          role: 'assistant',
+          content: '新版本',
+          versionGroupId: 'answer-1',
+          status: 'completed',
+        },
+        { id: 'answer-pending', role: 'assistant', content: '生成中内容', status: 'generating' },
+      ],
+      sessionTurns: [{ user: '客户端无法伪造这里', assistant: '服务端 session 回答' }],
+    });
+    expect(cloudResolution.messages).toEqual([
+      { role: 'user', content: '解释知识库检索' },
+      { role: 'assistant', content: '新版本' },
+    ]);
+    expect(cloudResolution.dialogueAnchor).toMatchObject({
+      messageIds: ['question-1', 'answer-new'],
+      charCount: '解释知识库检索'.length + '新版本'.length,
+      digest: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
     expect(
       selectServerAuthoritativeRecentDialogue({
         cloudMessages: [
@@ -43,6 +73,7 @@ describe('Agent 会话历史边界', () => {
         { role: 'user', content: '临时追问' },
         { role: 'assistant', content: '临时回答' },
       ],
+      dialogueAnchor: null,
     });
   });
 

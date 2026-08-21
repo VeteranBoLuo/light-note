@@ -730,6 +730,7 @@ describe('Execution Planner / Validator V2', () => {
         },
       },
     });
+    expect(validated.goalIdsByCallId).toEqual({ 'execution-plan-notes-step': 'notes' });
 
     parsed.plan.steps[0].expectedResultKind = 'bookmark_list';
     expect(validateExecutionPlan({ turnSpec: temporalSpec, route: temporalRoute, parsed }).issues).toContain(

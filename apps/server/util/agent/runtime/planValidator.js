@@ -133,6 +133,11 @@ export function validateExecutionPlan({ turnSpec, route, parsed, completedGoalId
     issues: uniqueIssues,
     repairFeedback,
     toolCalls: uniqueIssues.length ? [] : acceptedSteps.map(toolCall),
+    goalIdsByCallId: uniqueIssues.length
+      ? Object.freeze({})
+      : Object.freeze(
+          Object.fromEntries(acceptedSteps.map((step, index) => [toolCallId(step, index), String(step.goalId)])),
+        ),
     temporalBindingsByCallId: uniqueIssues.length
       ? Object.freeze({})
       : Object.freeze(

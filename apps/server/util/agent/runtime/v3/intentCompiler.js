@@ -106,6 +106,7 @@ function compilerPrompt(repairFeedback = '') {
     'structuredDiscourse.lastRunState 为 failed/degraded 时，旧 ResultSet 只代表更早的已提交结果，不能冒充刚失败查询的新结果；只有用户明确指回旧结果时才允许引用。',
     '省略指代里的通用对象名称不构成切换产品领域的证据。没有当前显式资源、最新消息也没有明确的新目标类型或新范围时，应优先承接唯一兼容的 ResultSet；确实要切换领域才使用 independent。',
     '当前显式选择的资源足以确定目标时，不要追问用户再次粘贴链接、ID 或标题；使用 current_explicit referentSelector。上一结果集足以确定目标时，使用 last_result selector。',
+    '只有用户明确要求把刚才讨论、这段对话或指定会话内容作为待转换材料，并且 currentContext.dialogueAnchorAvailable=true 时，才使用 dialogue_anchor selector。普通连续问答继续只使用 recentDialogue 的语言上下文，不得把它升级成事实材料。',
     '相对日期由 temporalContext 解释，不得把“今天、昨天、最近 N 天”误报为缺少日期。requiredSlots 只表示执行阶段需要抽取的参数，不等于应该向用户追问；只有确实会改变目标且无法从最新消息、当前显式资源或结构化指代得到时，才填写 missingSlots。',
     '时间表达只允许从 authoritativeTemporalMentions 选择，并通过 temporalConstraints 绑定到对应 goalId 与 manifest temporalSlots；不要把时间写进工具参数。单一时间表达式可留空让服务端按 autoBind 绑定，多时间表达式必须逐一分配，不能沿用旧范围。',
     '一个写能力需要前置读取时可以只提交写目标；服务端会按 manifest.dependencies 确定性补齐依赖。需要查询工作区材料后生成笔记时，必须显式提交相应读取能力，并让 note.create 依赖它。',
@@ -148,6 +149,16 @@ function discourseConsistency(
   const hasPendingArtifact =
     pendingArtifact?.available === true || payload?.currentContext?.hasPendingArtifact === true;
   const artifactGoals = turnSpec.goals.filter((goal) => goal.kind === 'transform');
+  const dialogueAnchorSelectors = turnSpec.goals.flatMap((goal) =>
+    (goal.referentSelectors || []).filter((selector) => selector.source === 'dialogue_anchor'),
+  );
+  if (dialogueAnchorSelectors.length && payload?.currentContext?.dialogueAnchorAvailable !== true) {
+    return {
+      blocking: true,
+      feedback:
+        '规格引用了 dialogue_anchor，但服务端没有可重新读取的云端消息锚点；不得把临时 session 文本或客户端历史升级成材料。',
+    };
+  }
   const artifactRequest = ['create_artifact', 'revise_artifact'].includes(turnSpec.requestKind);
   const pendingDomain = String(pendingArtifact?.domain || '');
   const sameArtifactDomain =
@@ -305,6 +316,7 @@ export async function compileAgentTurnSpecV3({
       selectedResourceCount: Math.max(0, Number(contextSummary.selectedResourceCount) || 0),
       attachmentCount: Math.max(0, Number(contextSummary.attachmentCount) || 0),
       hasPendingArtifact: contextSummary.hasPendingArtifact === true,
+      dialogueAnchorAvailable: contextSummary.dialogueAnchorAvailable === true,
     }),
     temporalContext: Object.freeze({
       timeZone: String(temporalContext.timeZone || ''),
