@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  getPointsGovernanceAnomalies,
   getPointsGovernanceOverview,
   getPointsGovernanceSources,
   pointsGovernanceInternals,
@@ -131,7 +132,7 @@ describe('C5 积分治理时间窗与只读模拟器', () => {
     expect(sampleSql).toContain('NOT EXISTS');
     expect(sampleSql).toContain('prior.create_time < candidate.create_time');
     expect(sampleSql).toContain('LIMIT 5001');
-    expect(sampleParams).toEqual(['2026-08-01', '2026-08-15']);
+    expect(sampleParams).toEqual(['2026-08-01', '2026-08-15', 'root', 'test']);
   });
 
   it('健康总览返回普通有效账号的当前积分 Top 20，不按用户追加查询', async () => {
@@ -174,12 +175,50 @@ describe('C5 积分治理时间窗与只读模拟器', () => {
 
     expect(query).toHaveBeenCalledTimes(6);
     const leaderboardSql = String(query.mock.calls[5][0]);
-    expect(leaderboardSql).toContain("COALESCE(u.role, 'user') = 'user'");
+    expect(leaderboardSql).toContain('u.role NOT IN (?,?)');
     expect(leaderboardSql).toContain('u.del_flag = 0');
     expect(leaderboardSql).toContain('ORDER BY ug.points DESC');
     expect(leaderboardSql).toContain('LIMIT 20');
     expect(result.balanceLeaderboard).toEqual([
       expect.objectContaining({ rank: 1, userId: 'u2', alias: '菠萝', points: 50, level: 6 }),
     ]);
+    expect(result.filters.hideInternal).toBe(true);
+    expect(query.mock.calls.every(([, params]) => Array.isArray(params))).toBe(true);
+  });
+
+  it('显式关闭过滤时保留内部账号，且不注入内部角色子查询', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[]]);
+
+    const result = await getPointsGovernanceSources(
+      { startDate: '2026-08-01', endDate: '2026-08-14', hideInternal: false },
+      { db: { query } },
+    );
+
+    expect(result.filters.hideInternal).toBe(false);
+    expect(query.mock.calls.every(([sql]) => !String(sql).includes('internal_user'))).toBe(true);
+    expect(query.mock.calls[3][1]).toEqual(['2026-08-01', '2026-08-15']);
+  });
+
+  it('异常规则也在聚合前排除内部账号与内部活动领取记录', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[]]);
+
+    const result = await getPointsGovernanceAnomalies(
+      { startDate: '2026-08-01', endDate: '2026-08-14' },
+      { db: { query } },
+    );
+
+    expect(result.filters.hideInternal).toBe(true);
+    expect(query.mock.calls.every(([sql]) => String(sql).includes('internal_user.role IN (?,?)'))).toBe(true);
+    expect(query.mock.calls.every(([, params]) => params.includes('root') && params.includes('test'))).toBe(true);
   });
 });

@@ -209,7 +209,7 @@
 <style scoped lang="less">
   .toc-container {
     height: calc(100% - 60px);
-    overflow: auto;
+    overflow: hidden;
     box-sizing: border-box;
   }
 

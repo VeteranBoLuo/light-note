@@ -152,142 +152,15 @@
           </template>
           <ServerMetricChart :points="dashboard?.history || []" />
         </BCard>
-
-        <BCard :title="t('serverManagement.servicesTitle')" class="server-management-services">
-          <template #extra>
-            <span class="server-management-service-summary">{{ serviceSummary }}</span>
-          </template>
-
-          <div class="server-management-service-table">
-            <BTable :data="services" :columns="serviceColumns" row-key="id">
-              <template #bodyCell="{ column, record }">
-                <template v-if="column.key === 'name'">
-                  <span class="server-service-name">
-                    <SvgIcon :src="icon.infrastructure.service" size="17" aria-hidden="true" />
-                    <strong>{{ serviceName(record.id) }}</strong>
-                  </span>
-                </template>
-                <template v-else-if="column.key === 'state'">
-                  <BChip :tone="serviceTone(record.state)">
-                    <span class="server-service-state-dot" aria-hidden="true"></span
-                    >{{ serviceStateLabel(record.state) }}
-                  </BChip>
-                </template>
-                <template v-else-if="column.key === 'uptime'">{{ formatDuration(record.uptimeSeconds) }}</template>
-                <template v-else-if="column.key === 'actions'">
-                  <div class="server-service-actions">
-                    <BButton size="small" @click="openLogs(record)">
-                      <SvgIcon :src="icon.infrastructure.logs" size="14" aria-hidden="true" />
-                      {{ t('serverManagement.viewLogs') }}
-                    </BButton>
-                    <BButton
-                      v-for="action in record.actions"
-                      :key="action"
-                      size="small"
-                      type="danger"
-                      :disabled="actionLoading"
-                      @click="openAction(record, action)"
-                    >
-                      <SvgIcon :src="icon.infrastructure.restart" size="14" aria-hidden="true" />
-                      {{ actionLabel(action) }}
-                    </BButton>
-                  </div>
-                </template>
-              </template>
-            </BTable>
-          </div>
-
-          <MobileListSurface class="server-management-service-mobile" :aria-label="t('serverManagement.servicesTitle')">
-            <MobileListRow v-for="service in services" :key="service.id" complex>
-              <template #leading>
-                <span class="server-service-mobile-icon"><SvgIcon :src="icon.infrastructure.service" size="19" /></span>
-              </template>
-              <template #title>{{ serviceName(service.id) }}</template>
-              <template #subtitle>{{ service.detail || '—' }} · {{ formatDuration(service.uptimeSeconds) }}</template>
-              <template #meta>
-                <BChip :tone="serviceTone(service.state)">
-                  <span class="server-service-state-dot" aria-hidden="true"></span
-                  >{{ serviceStateLabel(service.state) }}
-                </BChip>
-              </template>
-              <template #trailing>
-                <div class="server-service-mobile-actions">
-                  <BButton
-                    size="small"
-                    :aria-label="t('serverManagement.viewServiceLogs', { service: serviceName(service.id) })"
-                    @click="openLogs(service)"
-                  >
-                    <SvgIcon :src="icon.infrastructure.logs" size="15" aria-hidden="true" />
-                  </BButton>
-                  <BButton
-                    v-for="action in service.actions"
-                    :key="action"
-                    size="small"
-                    type="danger"
-                    :disabled="actionLoading"
-                    :aria-label="actionAriaLabel(service, action)"
-                    @click="openAction(service, action)"
-                  >
-                    <SvgIcon :src="icon.infrastructure.restart" size="15" aria-hidden="true" />
-                  </BButton>
-                </div>
-              </template>
-            </MobileListRow>
-          </MobileListSurface>
-        </BCard>
       </template>
     </div>
-
-    <BModal
-      v-model:visible="logsVisible"
-      :title="
-        t('serverManagement.logsTitle', { service: selectedLogService ? serviceName(selectedLogService.id) : '' })
-      "
-      width="min(900px, 94vw)"
-      :show-footer="false"
-      fullscreen-mobile
-    >
-      <div class="server-logs">
-        <BLoading v-if="logsLoading" inline :loading="true" :title="t('serverManagement.logsLoading')" />
-        <div v-else-if="logsError" class="server-logs__state server-logs__state--error">
-          <SvgIcon :src="icon.message.error" size="22" aria-hidden="true" />
-          <span>{{ logsError }}</span>
-          <BButton size="small" @click="reloadLogs">{{ t('serverManagement.retry') }}</BButton>
-        </div>
-        <div v-else-if="!logLines.length" class="server-logs__state">
-          <SvgIcon :src="icon.infrastructure.logs" size="22" aria-hidden="true" />
-          <span>{{ t('serverManagement.logsEmpty') }}</span>
-        </div>
-        <template v-else>
-          <p v-if="logsTruncated" class="server-logs__notice">{{ t('serverManagement.logsTruncated') }}</p>
-          <pre><code>{{ logLines.join('\n') }}</code></pre>
-        </template>
-      </div>
-    </BModal>
-
-    <AdminRiskActionModal
-      v-model:visible="actionVisible"
-      :title="selectedAction ? actionDialogTitle(selectedAction) : t('serverManagement.actionTitle')"
-      :impact="selectedAction ? actionImpact(selectedAction.action) : ''"
-      :confirm-label="selectedAction ? actionLabel(selectedAction.action) : ''"
-      :loading="actionLoading"
-      @confirm="confirmAction"
-    />
   </main>
 </template>
 
 <script setup lang="ts">
-  import { computed, ref } from 'vue';
+  import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import router from '@/router';
-  import { HOST_AGENT_ACTIONS } from '@lightnote/shared/host-agent-protocol';
-  import type {
-    HostAgentAction,
-    HostAgentServiceId,
-    HostAgentServiceSnapshot,
-    HostAgentServiceState,
-  } from '@lightnote/shared/host-agent-protocol';
-  import { getInfraLogs } from '@/api/infraApi';
   import icon from '@/config/icon';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -295,17 +168,8 @@
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
-  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
-  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
-  import MobileListSurface from '@/components/mobile/MobileListSurface.vue';
-  import MobileListRow from '@/components/mobile/MobileListRow.vue';
-  import AdminRiskActionModal from '@/components/admin/AdminRiskActionModal.vue';
-  import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import ServerMetricChart from './ServerMetricChart.vue';
   import { useServerManagement } from './useServerManagement';
-
-  type ChipTone = 'neutral' | 'success' | 'danger' | 'pending';
-  type SelectedAction = { action: HostAgentAction; targetId: HostAgentServiceId; serviceName: string };
 
   const { t, locale } = useI18n();
   const {
@@ -323,11 +187,9 @@
     isAutoRefreshPaused,
     refresh,
     setRefreshInterval,
-    runAction,
   } = useServerManagement();
   const metrics = computed(() => dashboard.value?.metrics);
   const host = computed(() => dashboard.value?.host);
-  const services = computed(() => dashboard.value?.services || []);
   const refreshIntervalOptions = computed(() => [
     { label: t('serverManagement.refreshIntervals.default'), value: 3_000 },
     { label: t('serverManagement.refreshIntervals.tenSeconds'), value: 10_000 },
@@ -419,27 +281,6 @@
       },
     ];
   });
-  const serviceColumns = computed(() => [
-    { key: 'name', title: t('serverManagement.columns.service'), width: '1.5fr', ellipsis: false },
-    { key: 'state', title: t('serverManagement.columns.state'), width: '120px', ellipsis: false },
-    { key: 'detail', title: t('serverManagement.columns.detail'), width: '1fr' },
-    { key: 'uptime', title: t('serverManagement.columns.uptime'), width: '130px', ellipsis: false },
-    { key: 'actions', title: t('serverManagement.columns.actions'), width: '280px', ellipsis: false },
-  ]);
-  const serviceSummary = computed(() => {
-    const running = services.value.filter((item) => item.state === 'running').length;
-    return t('serverManagement.serviceSummary', { running, total: services.value.length });
-  });
-
-  const logsVisible = ref(false);
-  const logsLoading = ref(false);
-  const logsError = ref('');
-  const logLines = ref<string[]>([]);
-  const logsTruncated = ref(false);
-  const selectedLogService = ref<HostAgentServiceSnapshot | null>(null);
-  const actionVisible = ref(false);
-  const actionLoading = ref(false);
-  const selectedAction = ref<SelectedAction | null>(null);
 
   function validPercent(value: unknown) {
     if (value === null || value === undefined || value === '') return null;
@@ -490,86 +331,6 @@
       date,
     );
   }
-
-  function serviceName(id: HostAgentServiceId) {
-    return t(`serverManagement.serviceNames.${id}`);
-  }
-
-  function serviceTone(state: HostAgentServiceState): ChipTone {
-    if (state === 'running') return 'success';
-    if (state === 'stopped') return 'pending';
-    if (state === 'degraded') return 'danger';
-    return 'neutral';
-  }
-
-  function serviceStateLabel(state: HostAgentServiceState) {
-    return t(`serverManagement.serviceStates.${state}`);
-  }
-
-  function actionLabel(action: HostAgentAction) {
-    return action === HOST_AGENT_ACTIONS.NGINX_RELOAD
-      ? t('serverManagement.reloadNginx')
-      : t('serverManagement.restartService');
-  }
-
-  function actionAriaLabel(service: HostAgentServiceSnapshot, action: HostAgentAction) {
-    return t('serverManagement.actionForService', { action: actionLabel(action), service: serviceName(service.id) });
-  }
-
-  function actionDialogTitle(action: SelectedAction) {
-    return t('serverManagement.actionDialogTitle', { action: actionLabel(action.action), service: action.serviceName });
-  }
-
-  function actionImpact(action: HostAgentAction) {
-    return action === HOST_AGENT_ACTIONS.NGINX_RELOAD
-      ? t('serverManagement.nginxReloadImpact')
-      : t('serverManagement.serviceRestartImpact');
-  }
-
-  function openAction(service: HostAgentServiceSnapshot, action: HostAgentAction) {
-    selectedAction.value = { action, targetId: service.id, serviceName: serviceName(service.id) };
-    actionVisible.value = true;
-  }
-
-  async function confirmAction(confirmation: { reason: string; confirmed: true; confirmText: string }) {
-    if (!selectedAction.value || actionLoading.value) return;
-    actionLoading.value = true;
-    try {
-      await runAction(selectedAction.value.action, selectedAction.value.targetId, confirmation);
-      actionVisible.value = false;
-      message.success(t('serverManagement.actionSucceeded'));
-    } catch (error) {
-      const detail = error && typeof error === 'object' && 'message' in error ? String(error.message || '') : '';
-      message.error(detail || t('serverManagement.actionFailed'));
-    } finally {
-      actionLoading.value = false;
-    }
-  }
-
-  function openLogs(service: HostAgentServiceSnapshot) {
-    selectedLogService.value = service;
-    logsVisible.value = true;
-    void reloadLogs();
-  }
-
-  async function reloadLogs() {
-    if (!selectedLogService.value || logsLoading.value) return;
-    logsLoading.value = true;
-    logsError.value = '';
-    logLines.value = [];
-    try {
-      const response = await getInfraLogs(selectedLogService.value.id);
-      logLines.value = response.data.lines || [];
-      logsTruncated.value = response.data.truncated === true;
-    } catch (error) {
-      logsError.value =
-        error && typeof error === 'object' && 'message' in error
-          ? String(error.message || t('serverManagement.logsFailed'))
-          : t('serverManagement.logsFailed');
-    } finally {
-      logsLoading.value = false;
-    }
-  }
 </script>
 
 <style scoped lang="less">
@@ -597,11 +358,8 @@
   .server-management-title-row,
   .server-management-refresh-controls,
   .server-metric-card__heading,
-  .server-service-name,
   .server-management-warning,
-  .server-management-refresh-warning,
-  .server-service-actions,
-  .server-service-mobile-actions {
+  .server-management-refresh-warning {
     display: flex;
     align-items: center;
   }
@@ -610,8 +368,7 @@
     gap: 12px;
   }
   .server-management-header__icon,
-  .server-metric-card__icon,
-  .server-service-mobile-icon {
+  .server-metric-card__icon {
     display: inline-flex;
     flex: 0 0 auto;
     align-items: center;
@@ -644,8 +401,7 @@
     font-size: 12px;
     line-height: 1.45;
   }
-  .server-management-status-dot,
-  .server-service-state-dot {
+  .server-management-status-dot {
     display: inline-block;
     width: 7px;
     height: 7px;
@@ -883,77 +639,10 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .server-management-sampled-at,
-  .server-management-service-summary {
+  .server-management-sampled-at {
     color: var(--desc-color);
     font-size: 12px;
     font-weight: 400;
-  }
-  .server-service-name {
-    gap: 8px;
-  }
-  .server-service-name svg {
-    color: var(--primary-color);
-  }
-  .server-service-actions {
-    flex-wrap: wrap;
-    gap: 7px;
-  }
-  .server-service-actions :deep(.b_btn),
-  .server-service-mobile-actions :deep(.b_btn) {
-    gap: 5px;
-  }
-  .server-management-service-mobile {
-    display: none;
-  }
-  .server-service-mobile-icon {
-    width: 34px;
-    height: 34px;
-    border-radius: 10px;
-  }
-  .server-service-mobile-actions {
-    gap: 6px;
-  }
-  .server-service-mobile-actions :deep(.b_btn) {
-    width: 30px;
-    padding: 0;
-  }
-  .server-logs {
-    min-height: 260px;
-  }
-  .server-logs pre {
-    max-height: min(65vh, 620px);
-    margin: 0;
-    overflow: auto;
-    padding: 14px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 10px;
-    color: var(--text-color);
-    background: var(--workspace-panel-bg-color, var(--background-color));
-    font:
-      12px/1.65 ui-monospace,
-      SFMono-Regular,
-      Menlo,
-      Consolas,
-      monospace;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-  .server-logs__state {
-    min-height: 240px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    color: var(--desc-color);
-  }
-  .server-logs__state--error {
-    color: var(--error-color, #d14343);
-  }
-  .server-logs__notice {
-    margin: 0 0 10px;
-    color: var(--warning-color, #ad6800);
-    font-size: 12px;
   }
   html.light-note-mobile-rendering .server-management-header__icon,
   html.light-note-mobile-rendering .server-metric-card__icon,
@@ -966,12 +655,6 @@
   @media (max-width: 1023px) {
     .server-management-metrics {
       grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    .server-management-service-table {
-      display: none;
-    }
-    .server-management-service-mobile {
-      display: block;
     }
     .server-management-runtime__grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1062,9 +745,6 @@
       grid-column: 1 / 3;
       width: 100%;
     }
-    .server-management-service-summary {
-      display: none;
-    }
     .server-management-sampled-at {
       font-size: 10px;
       white-space: nowrap;
@@ -1084,10 +764,6 @@
     .server-management-runtime__grid > div:nth-child(odd) {
       padding: 0;
       border-left: 0;
-    }
-    .server-logs__state {
-      flex-direction: column;
-      text-align: center;
     }
   }
   @media (prefers-reduced-motion: reduce) {

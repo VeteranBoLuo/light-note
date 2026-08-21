@@ -10,8 +10,7 @@
         >
           <!-- 只有一项的分类不给组头：「总览 / 系统总览」这种重复标题白占一行 -->
           <template v-if="entry.kind === 'item'">
-            <button
-              type="button"
+            <BButton
               class="admin-nav__item is-standalone"
               :class="{ 'is-active': activeId === entry.item.id }"
               :aria-current="activeId === entry.item.id ? 'page' : undefined"
@@ -24,7 +23,7 @@
                 <span class="admin-nav__badge-sr">{{ entry.item.badgeHint }}</span>
               </span>
               <span v-if="entry.item.external" class="admin-nav__external" aria-label="在独立页面打开">↗</span>
-            </button>
+            </BButton>
           </template>
           <template v-else>
             <h2 :id="`admin-nav-${entry.key}`" class="admin-nav__group-title">
@@ -33,8 +32,7 @@
             </h2>
             <ul class="admin-nav__items" :aria-labelledby="`admin-nav-${entry.key}`">
               <li v-for="item in entry.items" :key="item.id">
-                <button
-                  type="button"
+                <BButton
                   class="admin-nav__item"
                   :class="{ 'is-active': activeId === item.id }"
                   :aria-current="activeId === item.id ? 'page' : undefined"
@@ -48,7 +46,7 @@
                   </span>
                   <!-- 离开后台外壳的入口要标出来，否则点下去侧边菜单突然消失会让人以为出了错 -->
                   <span v-if="item.external" class="admin-nav__external" aria-label="在独立页面打开">↗</span>
-                </button>
+                </BButton>
               </li>
             </ul>
           </template>
@@ -64,6 +62,7 @@
 <script lang="ts" setup>
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { computed, onMounted, ref, watch } from 'vue';
   import { useRoute } from 'vue-router';
   import router from '@/router';
@@ -90,6 +89,7 @@
         log: icon.userCenter.log,
         security: icon.navigation.permissions,
         tool: icon.userCenter.sql,
+        server: icon.infrastructure.server,
       },
       pendingOpinion: pendingOpinion.value,
       pendingSecurity: pendingSecurity.value,
@@ -139,9 +139,7 @@
     (path, prev) => {
       if (
         prev &&
-        (prev.includes('userOpinion') ||
-          prev.includes('securityCenter') ||
-          prev.includes('communityChatModeration')) &&
+        (prev.includes('userOpinion') || prev.includes('securityCenter') || prev.includes('communityChatModeration')) &&
         path !== prev
       )
         loadPending();
@@ -211,14 +209,18 @@
     opacity: 0.75;
   }
 
-  .admin-nav__item {
+  .admin-nav__item.b_btn {
     .admin-focus-ring(8px);
 
     display: flex;
     align-items: center;
+    justify-content: flex-start;
     gap: 6px;
     width: 100%;
     padding: 5px 10px 5px 26px; /* 左缩进对齐分组标题的文字起点，让层级一眼可见 */
+    height: auto;
+    min-height: 30px;
+    line-height: 1.3;
     border: none;
     border-radius: 8px;
     background: none;
@@ -239,7 +241,7 @@
   }
 
   /* 无组头的顶层条目（总览、安全中心）：不缩进，自带类别图标，与分组标题同一层级 */
-  .admin-nav__item.is-standalone {
+  .admin-nav__item.b_btn.is-standalone {
     padding-left: 8px;
     font-weight: 600;
   }

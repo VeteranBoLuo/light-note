@@ -138,7 +138,8 @@ CREATE TABLE `folders` (
   `parent_id` int(11) DEFAULT NULL,
   `del_flag` int(1) NOT NULL DEFAULT '0',
   `sort` int(10) NOT NULL DEFAULT '0',
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  KEY `idx_folders_owner_parent_order` (`create_by`(64),`parent_id`,`del_flag`,`sort`,`create_time`,`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=28 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------

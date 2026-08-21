@@ -259,18 +259,26 @@
     saving.value = true;
     try {
       const response = isBatchMove.value
-        ? await apiBasePost('/api/note/moveNoteNodes', {
-            ids: [...selectedIds.value],
-            parentId: selectedParentId.value,
-            ...(shareExposureAcknowledged ? { shareExposureAcknowledged: true } : {}),
-          })
-        : await apiBasePost('/api/note/moveNoteNode', {
-            id: [...selectedIds.value][0],
-            parentId: selectedParentId.value,
-            previousId: null,
-            nextId: null,
-            ...(shareExposureAcknowledged ? { shareExposureAcknowledged: true } : {}),
-          });
+        ? await apiBasePost(
+            '/api/note/moveNoteNodes',
+            {
+              ids: [...selectedIds.value],
+              parentId: selectedParentId.value,
+              ...(shareExposureAcknowledged ? { shareExposureAcknowledged: true } : {}),
+            },
+            { silent: true },
+          )
+        : await apiBasePost(
+            '/api/note/moveNoteNode',
+            {
+              id: [...selectedIds.value][0],
+              parentId: selectedParentId.value,
+              previousId: null,
+              nextId: null,
+              ...(shareExposureAcknowledged ? { shareExposureAcknowledged: true } : {}),
+            },
+            { silent: true },
+          );
       if (response.status !== 200) {
         if (requestNoteShareExposureConfirmation(response, () => confirmMove(true))) return;
         void recordNoteTreeProductEvent('note_tree_move_rejected', {

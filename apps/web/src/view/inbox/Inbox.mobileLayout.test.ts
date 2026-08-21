@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const inboxSource = readFileSync(resolve(process.cwd(), 'src/view/inbox/Inbox.vue'), 'utf8');
+const resourcePageShellSource = readFileSync(resolve(process.cwd(), 'src/components/base/ResourcePageShell.vue'), 'utf8');
 const themeSource = readFileSync(resolve(process.cwd(), 'src/assets/css/theme.less'), 'utf8');
 const dayThemeStart = themeSource.indexOf("\n[data-theme='day'] {") + 1;
 const nightThemeStart = themeSource.indexOf("\n[data-theme='night'] {") + 1;
@@ -25,6 +26,18 @@ describe('移动端待办页签布局', () => {
       /@media \(min-width: 768px\) and \(max-width: 980px\)[\s\S]*?\.resource-inbox-scope,[\s\S]*?\.resource-inbox-inspector\s*\{[\s\S]*?display:\s*none/,
     );
     expect(inboxSource).toContain('v-if="!isTodoFocused && isMobileResourceInbox"');
+  });
+
+  it('桌面待整理与资源中心其他视图保持相同标题和正文纵向基线', () => {
+    expect(resourcePageShellSource).toMatch(/\.resource-page-shell\s*\{[\s\S]*?gap:\s*14px/);
+    expect(resourcePageShellSource).toMatch(/\.resource-page-header\s*\{[\s\S]*?min-height:\s*54px/);
+    expect(resourcePageShellSource).toMatch(/p\s*\{[\s\S]*?margin:\s*5px 0 0 17px/);
+    expect(inboxSource).toMatch(
+      /\.inbox-page--resource-workspace > \.inbox-hero\s*\{[\s\S]*?min-height:\s*54px;[\s\S]*?margin-bottom:\s*14px/,
+    );
+    expect(inboxSource).toMatch(
+      /\.inbox-page--resource-workspace \.inbox-hero p\s*\{[\s\S]*?margin-top:\s*5px/,
+    );
   });
 
   it('待整理范围继续复用原类型、排序和资源操作', () => {

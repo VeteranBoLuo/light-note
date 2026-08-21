@@ -585,14 +585,18 @@
     border-radius: 0;
     color: var(--text-color);
     background: transparent !important;
+    transition: none;
   }
 
+  .mobile-today__summary-item:hover,
   .mobile-today__summary-item:active,
+  .mobile-today__summary-item:focus,
   .mobile-today__summary-item:focus-visible {
-    z-index: 1;
-    outline: 1px solid var(--primary-color);
-    outline-offset: -1px;
-    background: var(--card-background) !important;
+    outline: none;
+    opacity: 1 !important;
+    box-shadow: none;
+    color: var(--text-color);
+    background: transparent !important;
   }
 
   .mobile-today__summary-item:not(:last-child)::after {

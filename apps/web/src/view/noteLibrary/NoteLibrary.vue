@@ -685,7 +685,10 @@
   } from '@/utils/noteTreeDrop';
   import { resolveNoteTreeDragScrollStep } from '@/utils/noteTreeDragScroll';
   import { getRootZoom } from '@/utils/zoom';
-  import { requestNoteShareExposureConfirmation } from '@/utils/noteShareExposure';
+  import {
+    confirmNoteCreateShareExposure,
+    requestNoteShareExposureConfirmation,
+  } from '@/utils/noteShareExposure';
   import AsyncFeatureLoadingOverlay from '@/components/base/AsyncFeatureLoadingOverlay.vue';
   import {
     NOTE_LIBRARY_FEATURES_FRESH_MS,
@@ -985,16 +988,26 @@
       showTypePicker.value = false;
       return;
     }
+    const targetQuery = { ...query };
+    const requestedParentId =
+      createParentOverride.value === undefined ? currentParentId.value : createParentOverride.value;
+    const parentId = noteTreeWriteEnabled.value ? requestedParentId : null;
+    if (parentId) {
+      targetQuery.parent = parentId;
+      try {
+        const exposureDecision = await confirmNoteCreateShareExposure(parentId);
+        if (exposureDecision === false) return;
+        if (exposureDecision === true) targetQuery.shareExposureAcknowledged = 'true';
+      } catch {
+        message.error(t('noteShare.manageFailed'));
+        return;
+      }
+    }
     const usageKey = query.builtin ? `builtin:${query.builtin}` : query.templateId ? `mine:${query.templateId}` : '';
     if (usageKey) {
       templateUsage.value = { ...templateUsage.value, [usageKey]: Date.now() };
       localStorage.setItem('note-template-recent-usage', JSON.stringify(templateUsage.value));
     }
-    const targetQuery = { ...query };
-    const requestedParentId =
-      createParentOverride.value === undefined ? currentParentId.value : createParentOverride.value;
-    const parentId = noteTreeWriteEnabled.value ? requestedParentId : null;
-    if (parentId) targetQuery.parent = parentId;
     try {
       await closeCurrentMobileOverlayThen(
         () => {
@@ -3002,13 +3015,17 @@
     try {
       let response;
       try {
-        response = await apiBasePost('/api/note/moveNoteNode', {
-          id: sourceId,
-          parentId: target.parentId,
-          previousId: target.previousId,
-          nextId: target.nextId,
-          ...(shareExposureAcknowledged ? { shareExposureAcknowledged: true } : {}),
-        });
+        response = await apiBasePost(
+          '/api/note/moveNoteNode',
+          {
+            id: sourceId,
+            parentId: target.parentId,
+            previousId: target.previousId,
+            nextId: target.nextId,
+            ...(shareExposureAcknowledged ? { shareExposureAcknowledged: true } : {}),
+          },
+          { silent: true },
+        );
       } catch (error) {
         if (optimisticMove.applied) childrenByParent.value = previousTree;
         throw error;

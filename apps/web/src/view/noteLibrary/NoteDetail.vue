@@ -379,7 +379,7 @@
   import { preloadNoteEditorRuntime } from '@/components/noteLibrary/detail/editorRuntimeLoader';
   import { NOTE_LIBRARY_FEATURES_FRESH_MS } from '@/store/noteLibraryCache';
   import AsyncFeatureLoadingOverlay from '@/components/base/AsyncFeatureLoadingOverlay.vue';
-  import { confirmNoteShareExposure } from '@/utils/noteShareExposure';
+  import { confirmNoteCreateShareExposure, confirmNoteShareExposure } from '@/utils/noteShareExposure';
 
   const createDeferredDetailFeature = (loader: () => Promise<any>) =>
     defineAsyncComponent({
@@ -860,11 +860,15 @@
         type: local.type,
         parentId: local.parentId ?? note.parentId ?? null,
       };
-      let response = await apiBasePost('/api/note/addNote', payload);
+      let response = await apiBasePost('/api/note/addNote', payload, { silent: true });
       const exposureDecision = await confirmNoteShareExposure(response);
       if (exposureDecision === false) return;
       if (exposureDecision === true) {
-        response = await apiBasePost('/api/note/addNote', { ...payload, shareExposureAcknowledged: true });
+        response = await apiBasePost(
+          '/api/note/addNote',
+          { ...payload, shareExposureAcknowledged: true },
+          { silent: true },
+        );
       }
       if (response.status !== 200 || !response.data?.id) {
         message.error(response.msg || t('noteDetail.saveFailed'));
@@ -1221,13 +1225,25 @@
     childTypePickerVisible.value = true;
   }
 
-  function createChildPageWithType(type: 'html' | 'markdown' | 'drawing') {
-    if (!childCreateParentId.value) return;
-    childTypePickerVisible.value = false;
-    router.push({
-      path: '/noteLibrary/add',
-      query: { type, parent: childCreateParentId.value, ...detailSourceQuery() },
-    });
+  async function createChildPageWithType(type: 'html' | 'markdown' | 'drawing') {
+    const parentId = childCreateParentId.value;
+    if (!parentId) return;
+    try {
+      const exposureDecision = await confirmNoteCreateShareExposure(parentId);
+      if (exposureDecision === false) return;
+      childTypePickerVisible.value = false;
+      await router.push({
+        path: '/noteLibrary/add',
+        query: {
+          type,
+          parent: parentId,
+          ...(exposureDecision === true ? { shareExposureAcknowledged: 'true' } : {}),
+          ...detailSourceQuery(),
+        },
+      });
+    } catch {
+      message.error(t('noteShare.manageFailed'));
+    }
   }
 
   function openAttachPages(target?: NoteTreeItem) {
@@ -1539,13 +1555,26 @@
         const parentId = noteTreeWriteEnabled.value ? routeQueryValue(router.currentRoute.value.query.parent) : '';
         if (parentId) params.parentId = parentId;
       }
-      let res = await apiBasePost('/api/note/addNote', params);
+      const shareExposureAcknowledged =
+        routeQueryValue(router.currentRoute.value.query.shareExposureAcknowledged) === 'true';
+      let res = await apiBasePost(
+        '/api/note/addNote',
+        {
+          ...params,
+          ...(shareExposureAcknowledged ? { shareExposureAcknowledged: true } : {}),
+        },
+        { silent: true },
+      );
       const exposureDecision = await confirmNoteShareExposure(res);
       if (exposureDecision === false) {
         throw Object.assign(new Error('NOTE_SHARE_EXPOSURE_CANCELLED'), { code: 'NOTE_SHARE_EXPOSURE_CANCELLED' });
       }
       if (exposureDecision === true) {
-        res = await apiBasePost('/api/note/addNote', { ...params, shareExposureAcknowledged: true });
+        res = await apiBasePost(
+          '/api/note/addNote',
+          { ...params, shareExposureAcknowledged: true },
+          { silent: true },
+        );
       }
       if (res.status === 200 && res.data?.id) {
         note.id = res.data.id;
@@ -1560,7 +1589,9 @@
         // replace 保留原 query(type/builtin)，让刷新后的编辑器类型仍能按原始模板恢复。
         promotedDraftRouteId = note.id as string;
         markNoteDraftPromoted(promotedDraftRouteId);
-        router.replace({ path: `/noteLibrary/${note.id}`, query: router.currentRoute.value.query }).then();
+        const nextQuery = { ...router.currentRoute.value.query };
+        delete nextQuery.shareExposureAcknowledged;
+        router.replace({ path: `/noteLibrary/${note.id}`, query: nextQuery }).then();
         recordOperation({
           module: '笔记',
           operation: `新建笔记成功【${note.title}】${appliedTemplateName ? `（模板：${appliedTemplateName}）` : ''}`,

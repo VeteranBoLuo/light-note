@@ -88,6 +88,7 @@ router.post('/queryNoteList', noteLibraryHandle.queryNoteList);
 router.post('/queryDrawingPreviews', noteLibraryHandle.queryDrawingPreviews);
 router.get('/image-thumbnail/:fileName', noteLibraryHandle.getNoteImageThumbnail);
 router.post('/getNoteTreeFeatures', noteLibraryHandle.getNoteTreeFeatures);
+router.post('/previewNoteCreateTarget', noteLibraryHandle.previewNoteCreateTarget);
 router.post('/queryNoteTree', noteLibraryHandle.queryNoteTree);
 router.post('/queryNoteBreadcrumb', noteLibraryHandle.queryNoteBreadcrumb);
 router.post('/moveNoteNode', noteLibraryHandle.moveNoteNode);

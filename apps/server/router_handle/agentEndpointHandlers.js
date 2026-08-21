@@ -47,6 +47,7 @@ import {
   SEMANTIC_PLAN_TOOL_NAME,
 } from '../util/agent/semanticPlanner.js';
 import { guardUnverifiedExecutionClaim } from '../util/agent/executionClaimGuard.js';
+import { ensureRequestedToolFacts } from '../util/agent/requestedFactGuard.js';
 import { enforceToolDependencyBindings, normalizeToolDependencyRefs } from '../util/agent/dependencyGuard.js';
 import { actionControlMessage, parseAgentActionControl } from '../util/agent/actionControl.js';
 import {
@@ -5843,6 +5844,16 @@ export async function agentChat(req, res) {
           locale,
         });
     }
+
+    // 所有回答分支在同一出口校验用户明确点名的结构化事实，避免语义策略、
+    // 确认卡或普通 Final Reply 之间出现“同一工具结果、不同完整性”的分叉。
+    const requestedFactGuard = ensureRequestedToolFacts({
+      question: message,
+      answer: finalContent,
+      usedTools,
+    });
+    finalContent = requestedFactGuard.answer;
+    trace.requestedFactGuardApplied = requestedFactGuard.applied;
 
     // ---- 兜底披露未处理的写操作 ----
     // 分类器已用 otherMutations 识别出「用户在同一句里还要求了笔记之外的写操作」，但模型的

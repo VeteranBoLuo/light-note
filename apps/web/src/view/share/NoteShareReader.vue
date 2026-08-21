@@ -307,9 +307,19 @@
     const nextHtml = await noteContentToHtml(normalizeNoteContentResourceUrls(sourceContent), sourceType);
     if (renderVersion !== pageRenderVersion) return;
     renderedHtml.value = nextHtml;
+    await collectRenderedHeadings(renderVersion);
+  }
+
+  async function collectRenderedHeadings(renderVersion = pageRenderVersion) {
     await nextTick();
     if (renderVersion !== pageRenderVersion) return;
-    const elements = Array.from(contentRef.value?.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6') || []);
+    const content = contentRef.value;
+    // 从目录切换子页面时 pageLoading 会暂时卸载正文；等 loading 分支结束后由下方 watch 再收集，
+    // 不能在这里把“DOM 尚未挂载”误判成“页面没有标题”。
+    if (!content) return;
+    const elements = Array.from(content.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6')).filter((element) =>
+      Boolean(String(element.textContent || '').trim()),
+    );
     const minimum = elements.length ? Math.min(...elements.map((element) => Number(element.tagName.slice(1)))) : 1;
     headings.value = elements.map((element, index) => {
       const id = `shared-heading-${index}`;
@@ -473,6 +483,10 @@
     accessTicket.value = '';
     requiresCode.value = false;
     void resolveShare();
+  });
+
+  watch(pageLoading, (busy) => {
+    if (!busy && renderedHtml.value) void collectRenderedHeadings(pageRenderVersion);
   });
 
   onMounted(() => {

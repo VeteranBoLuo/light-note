@@ -1,34 +1,8 @@
 <template>
   <div class="knowledge-map-page" :class="{ 'knowledge-map-page--mobile': bookmark.isMobile }">
-    <header class="km-header">
-      <div v-if="!bookmark.isMobile" class="km-heading">
-        <div class="km-eyebrow">{{ t('knowledgeMap.eyebrow') }}</div>
-        <h1>{{ t('knowledgeMap.title') }}</h1>
-        <p>
-          {{ t('knowledgeMap.subtitle') }}
-          <span v-if="stats.truncated" class="km-warning">{{ t('knowledgeMap.truncated') }}</span>
-        </p>
-      </div>
-      <div v-if="bookmark.isMobile" class="km-mobile-overview" :aria-label="t('knowledgeMap.overview')">
+    <header v-if="bookmark.isMobile" class="km-header">
+      <div class="km-mobile-overview" :aria-label="t('knowledgeMap.overview')">
         {{ t('knowledgeMap.mobileOverview', { topics: stats.tagCount, resources: stats.taggedResourceCount }) }}
-      </div>
-      <div v-else class="km-stats" :aria-label="t('knowledgeMap.overview')">
-        <div class="km-stat km-stat--tag">
-          <strong>{{ stats.tagCount }}</strong>
-          <span>{{ t('knowledgeMap.stats.tags') }}</span>
-        </div>
-        <div class="km-stat km-stat--tagged">
-          <strong>{{ stats.taggedResourceCount }}</strong>
-          <span>{{ t('knowledgeMap.stats.tagged') }}</span>
-        </div>
-        <div class="km-stat km-stat--untagged">
-          <strong>{{ stats.untaggedResourceCount }}</strong>
-          <span>{{ t('knowledgeMap.stats.untagged') }}</span>
-        </div>
-        <div class="km-stat km-stat--empty">
-          <strong>{{ stats.emptyTagCount }}</strong>
-          <span>{{ t('knowledgeMap.stats.emptyTags') }}</span>
-        </div>
       </div>
     </header>
 
@@ -57,6 +31,25 @@
         <BButton class="km-toggle" :class="{ active: hideIsolated }" @click="hideIsolated = !hideIsolated">
           {{ t('knowledgeMap.hideIsolated') }}
         </BButton>
+        <div class="km-stats" :aria-label="t('knowledgeMap.overview')">
+          <div class="km-stat km-stat--tag">
+            <strong>{{ stats.tagCount }}</strong>
+            <span>{{ t('knowledgeMap.stats.tags') }}</span>
+          </div>
+          <div class="km-stat km-stat--tagged">
+            <strong>{{ stats.taggedResourceCount }}</strong>
+            <span>{{ t('knowledgeMap.stats.tagged') }}</span>
+          </div>
+          <div class="km-stat km-stat--untagged">
+            <strong>{{ stats.untaggedResourceCount }}</strong>
+            <span>{{ t('knowledgeMap.stats.untagged') }}</span>
+          </div>
+          <div class="km-stat km-stat--empty">
+            <strong>{{ stats.emptyTagCount }}</strong>
+            <span>{{ t('knowledgeMap.stats.emptyTags') }}</span>
+          </div>
+        </div>
+        <span v-if="stats.truncated" class="km-warning">{{ t('knowledgeMap.truncated') }}</span>
         <BButton class="km-reset" @click="resetMap">{{ t('knowledgeMap.reset') }}</BButton>
       </template>
     </section>
@@ -620,39 +613,18 @@
     flex: 0 0 auto;
   }
 
-  .km-heading {
-    min-width: 0;
-
-    h1 {
-      margin: 2px 0;
-      font-size: 22px;
-      line-height: 1.3;
-    }
-
-    p {
-      margin: 0;
-      color: var(--sub-text-color);
-      font-size: 12px;
-    }
-  }
-
-  .km-eyebrow {
-    color: var(--resource-tag-color);
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
   .km-warning {
-    margin-left: 6px;
+    max-width: 120px;
     color: var(--resource-file-color);
+    font-size: 11px;
+    line-height: 1.25;
   }
 
   .km-stats {
     display: flex;
     gap: 8px;
     flex: 0 0 auto;
+    margin-left: auto;
   }
 
   .km-mobile-overview {
@@ -1104,17 +1076,6 @@
       min-height: 28px;
     }
 
-    .km-heading h1 {
-      font-size: 20px;
-    }
-
-    .km-heading p {
-      display: -webkit-box;
-      overflow: hidden;
-      -webkit-box-orient: vertical;
-      -webkit-line-clamp: 2;
-    }
-
     .km-toolbar {
       display: flex;
     }
@@ -1144,6 +1105,42 @@
 
     .km-stat {
       min-width: 72px;
+      padding-inline: 8px;
+    }
+  }
+
+  @media (max-width: 900px) and (min-width: 701px) {
+    .km-search {
+      width: auto;
+      min-width: 120px;
+      flex: 1 1 180px;
+    }
+
+    .km-select--strength {
+      width: 122px;
+    }
+
+    .km-toggle,
+    .km-reset {
+      padding-inline: 8px;
+    }
+
+    .km-stats {
+      gap: 4px;
+    }
+
+    .km-stat {
+      min-width: 0;
+      gap: 3px;
+      padding-inline: 5px;
+
+      strong {
+        font-size: 14px;
+      }
+
+      span {
+        font-size: 9px;
+      }
     }
   }
 </style>

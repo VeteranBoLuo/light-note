@@ -3,6 +3,8 @@ import { apiBasePost, apiQueryPost } from '@/http/request.ts';
 import { CLOUD_FILE_CATEGORY_ORDER, type CloudFileCategory } from '@/constants/cloudFileCategory.ts';
 import i18n from '@/i18n';
 import { RESOURCE_LIST_PAGE_SIZE, mergeResourcePage } from '@/utils/resourcePagination';
+import type { CloudFolderNode } from '@/types/cloudFolder';
+import { cloudFolderAncestors, normalizeCloudFolderList } from '@/utils/cloudFolderTree';
 
 export type CloudFileSortField = 'createTime' | 'fileName' | 'fileSize';
 export type CloudFileSortOrder = 'asc' | 'desc';
@@ -47,7 +49,10 @@ export default defineStore('dom', {
         trashSpace: number;
         maxSpace: number;
         sharedWithTrash: boolean;
-        folderList: { name: string; id?: string; isRename?: boolean }[];
+        folderList: CloudFolderNode[];
+        allFileCount: number;
+        folderMaxDepth: number;
+        expandedFolderIds: string[];
         fileList: {
           id: string;
           fileName: string;
@@ -86,6 +91,9 @@ export default defineStore('dom', {
       maxSpace: 1024, // 兜底为 Lv.1 1GB；真实配额由后端按角色、等级与永久扩容权益覆盖
       sharedWithTrash: true,
       folderList: [],
+      allFileCount: 0,
+      folderMaxDepth: 8,
+      expandedFolderIds: [],
       fileList: [],
       typeCheckValue: [...CLOUD_FILE_CATEGORY_ORDER],
       folder: {
@@ -172,6 +180,10 @@ export default defineStore('dom', {
     loadMoreFiles() {
       return this.queryFieldList({ append: true });
     },
+    async refreshAfterFileMutation() {
+      const [filesOk, foldersOk] = await Promise.all([this.queryFieldList(), this.queryFolder()]);
+      return filesOk && foldersOk;
+    },
     setFileSortValue(sort: CloudFileSort) {
       const nextSort = normalizeCloudFileSort(sort);
       if (this.fileSort.field === nextSort.field && this.fileSort.order === nextSort.order) {
@@ -217,10 +229,21 @@ export default defineStore('dom', {
       const requestVersion = ++this.folderRequestVersion;
       if (!this.folderList.length) this.folderLoading = true;
       try {
-        const res = await apiQueryPost('/api/file/queryFolder');
+        const res = await apiBasePost('/api/file/queryFolder', { treeVersion: 2 });
         if (requestVersion !== this.folderRequestVersion) return false;
         if (res?.status !== 200) return false;
-        this.folderList = Array.isArray(res.data?.items) ? res.data.items : this.folderList;
+        const folders = normalizeCloudFolderList(res.data?.items);
+        this.folderList = folders;
+        this.allFileCount = Math.max(0, Number(res.data?.allFileCount || 0));
+        const maxDepth = Number(res.data?.maxDepth);
+        if (Number.isInteger(maxDepth) && maxDepth > 0) this.folderMaxDepth = maxDepth;
+        if (this.folder?.id && this.folder.id !== 'all') {
+          const current = folders.find((folder) => folder.id === String(this.folder?.id));
+          if (current) {
+            this.folder = { id: current.id, name: current.name };
+            this.expandFolderAncestors(current.id);
+          }
+        }
         return true;
       } catch (error) {
         console.warn('加载云空间文件夹失败:', error);
@@ -228,6 +251,26 @@ export default defineStore('dom', {
       } finally {
         if (requestVersion === this.folderRequestVersion) this.folderLoading = false;
       }
+    },
+    setFolderExpanded(folderId: string, expanded: boolean) {
+      const id = String(folderId || '').trim();
+      if (!id) return;
+      const next = new Set(this.expandedFolderIds);
+      if (expanded) next.add(id);
+      else next.delete(id);
+      this.expandedFolderIds = [...next];
+    },
+    toggleFolderExpanded(folderId: string) {
+      const id = String(folderId || '').trim();
+      if (!id) return;
+      this.setFolderExpanded(id, !this.expandedFolderIds.includes(id));
+    },
+    expandFolderAncestors(folderId: string) {
+      const next = new Set(this.expandedFolderIds);
+      for (const folder of cloudFolderAncestors(this.folderList, folderId)) {
+        if (folder.id !== String(folderId)) next.add(folder.id);
+      }
+      this.expandedFolderIds = [...next];
     },
     /**
      * 账号身份变化时清空所有账号归属数据，并递增请求版本使旧身份的在途响应失效。
@@ -243,6 +286,9 @@ export default defineStore('dom', {
       this.maxSpace = 1024;
       this.sharedWithTrash = true;
       this.folderList = [];
+      this.allFileCount = 0;
+      this.folderMaxDepth = 8;
+      this.expandedFolderIds = [];
       this.fileList = [];
       this.typeCheckValue = [...CLOUD_FILE_CATEGORY_ORDER];
       this.folder = {

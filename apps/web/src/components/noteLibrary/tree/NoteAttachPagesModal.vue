@@ -236,11 +236,15 @@
     if (saving.value || loading.value || !targetId.value || !selectedIds.value.size) return;
     saving.value = true;
     try {
-      const response = await apiBasePost('/api/note/moveNoteNodes', {
-        ids: [...selectedIds.value],
-        parentId: targetId.value,
-        ...(shareExposureAcknowledged ? { shareExposureAcknowledged: true } : {}),
-      });
+      const response = await apiBasePost(
+        '/api/note/moveNoteNodes',
+        {
+          ids: [...selectedIds.value],
+          parentId: targetId.value,
+          ...(shareExposureAcknowledged ? { shareExposureAcknowledged: true } : {}),
+        },
+        { silent: true },
+      );
       if (response.status !== 200) {
         if (requestNoteShareExposureConfirmation(response, () => confirmAttach(true))) return;
         message.error(response.msg || t('note.moveFailed'));

@@ -77,18 +77,18 @@ afterEach(() => {
 });
 
 describe('ResourceCenterSectionNav', () => {
-  it('只把资源范围作为页签，并将知识地图标记为独立查看方式', async () => {
+  it('桌面端将三个入口作为同级页签，知识地图不再是低存在感的独立按钮', async () => {
     const { host } = await mountNav('/search?section=map');
     const tabs = host.querySelectorAll<HTMLElement>('[role="tab"]');
     const mapButton = host.querySelector<HTMLButtonElement>('.knowledge-map-view');
 
-    expect(tabs).toHaveLength(2);
-    expect(tabs[0].getAttribute('aria-selected')).toBe('true');
+    expect(tabs).toHaveLength(3);
+    expect(tabs[0].getAttribute('aria-selected')).toBe('false');
     expect(tabs[0].classList.contains('active')).toBe(false);
     expect(tabs[1].getAttribute('aria-selected')).toBe('false');
-    expect(mapButton?.getAttribute('role')).toBeNull();
+    expect(mapButton?.getAttribute('role')).toBe('tab');
     expect(mapButton?.getAttribute('aria-label')).toBe('知识地图');
-    expect(mapButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(mapButton?.getAttribute('aria-selected')).toBe('true');
   });
 
   it('从待整理进入和退出知识地图时保持范围与查看状态一致', async () => {
@@ -101,14 +101,12 @@ describe('ResourceCenterSectionNav', () => {
     await settleNavigation();
 
     expect(router.currentRoute.value.fullPath).toBe('/search?section=map');
-    expect(tabs[0].getAttribute('aria-selected')).toBe('true');
-    expect(mapButton.getAttribute('aria-pressed')).toBe('true');
+    expect(tabs[0].getAttribute('aria-selected')).toBe('false');
+    expect(mapButton.getAttribute('aria-selected')).toBe('true');
 
     mapButton.click();
     await settleNavigation();
-
-    expect(router.currentRoute.value.fullPath).toBe('/search');
-    expect(mapButton.getAttribute('aria-pressed')).toBe('false');
+    expect(router.currentRoute.value.fullPath).toBe('/search?section=map');
   });
 
   it('移动端把知识地图纳入三段式单选导航', async () => {

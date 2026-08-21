@@ -1,6 +1,6 @@
 import path from 'path';
 import pool from '../db/index.js';
-import { resultData, snakeCaseKeys, insertData } from '../util/common.js';
+import { resultData, insertData, L } from '../util/common.js';
 import { bucketBaseUrl, buildObjectKey, copyObjectInObs, deleteObjectFromObs } from '../util/obsClient.js';
 import { buildSignedDownloadUrl } from '../router/file.js';
 import { getFileExtension, resolveFileCategory } from '../util/fileCategory.js';
@@ -15,6 +15,23 @@ import { purgeDocumentSourcesForCloudFiles } from '../util/aiDocument/service.js
 import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { ensureOwnedCloudFolder } from '../util/services/cloudFolderService.js';
+import {
+  clearOwnedCloudFolderFiles,
+  createOwnedCloudFolder,
+  deleteEmptyOwnedCloudFolder,
+  deleteOwnedCloudFolderTree,
+  listOwnedCloudFolders,
+  moveOwnedCloudFolder,
+  renameOwnedCloudFolder,
+  reorderOwnedCloudFolders,
+} from '../util/services/cloudFolderTreeService.js';
+
+function sendFolderServiceError(req, res, error, fallback) {
+  const status = Number(error?.status || 500);
+  if (status >= 500) console.error('[file] cloud folder operation failed code=%s', stableAgentErrorCode(error));
+  const message = status >= 500 ? fallback : String(error?.message || fallback).replace(/^[A-Z_]+:\s*/u, '');
+  return res.send(resultData({ code: error?.code || 'FOLDER_OPERATION_FAILED' }, status, message));
+}
 
 export const getFileInfo = async (req, res) => {
   try {
@@ -139,58 +156,44 @@ export const updateFile = async (req, res) => {
 };
 
 export const queryFolder = async (req, res) => {
-  const { filters } = req.body;
-  const connection = await pool.getConnection();
-
   try {
-    const userId = req.user.id;
-    const params = [userId];
-    // 获取用户ID
-    let query = `SELECT * FROM folders`;
-    let whereClauses = ['create_by = ?', 'del_flag = 0'];
-
-    const key = filters?.name?.trim() || '';
-
-    // 可选的模糊查询
-    if (key.length > 0) {
-      whereClauses.push(`name LIKE CONCAT('%', ?, '%')`);
-      params.push(key);
+    const result = await listOwnedCloudFolders({
+      userId: req.user.id,
+      filters: req.body?.filters,
+    });
+    // 旧客户端只理解平铺列表：默认仅返回一级文件夹，避免把子级误画成同级并错误重排。
+    if (Number(req.body?.treeVersion || 1) < 2) {
+      const items = result.items.filter((item) => item.parent_id == null);
+      return res.send(resultData({ items, total: items.length }, 200));
     }
-
-    // 动态构建 WHERE 条件
-    if (whereClauses.length > 0) {
-      query += ` WHERE ` + whereClauses.join(' AND ');
-    }
-
-    // 固定排序
-    query += ` ORDER BY sort, create_time DESC`;
-
-    const [result] = await connection.query(query, params);
-    res.send(resultData({ items: result, total: result.length }, 200));
+    return res.send(resultData(result, 200));
   } catch (e) {
-    res.send(resultData(null, 500, `服务器内部错误: ${e.message}`));
-  } finally {
-    connection.release();
+    return sendFolderServiceError(
+      req,
+      res,
+      e,
+      L(req, '文件夹目录暂时无法加载，请稍后重试', 'Folders are temporarily unavailable. Try again later.'),
+    );
   }
 };
 
 export const addFolder = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
-  const connection = await pool.getConnection();
   try {
-    const { name } = req.body;
-    const createBy = req.user.id;
-    const folder = {
-      name: name,
-      createBy,
-      del_flag: 0,
-    };
-    const [result] = await connection.query(`INSERT INTO folders SET ?`, [snakeCaseKeys(folder)]);
-    res.send(resultData(result.insertId, 200, '新增文件夹成功'));
+    const folder = await createOwnedCloudFolder({
+      userId: req.user.id,
+      name: req.body?.name,
+      parentId: req.body?.parentId,
+    });
+    // 保持旧客户端只读取数字 ID 的响应契约；目录元数据通过 treeVersion=2 的查询统一刷新。
+    return res.send(resultData(Number(folder.id), 200, L(req, '新增文件夹成功', 'Folder created')));
   } catch (e) {
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
-  } finally {
-    connection.release();
+    return sendFolderServiceError(
+      req,
+      res,
+      e,
+      L(req, '文件夹创建暂时失败，请稍后重试', 'The folder could not be created. Try again later.'),
+    );
   }
 };
 
@@ -223,10 +226,10 @@ export const associateFile = async (req, res) => {
       return res.send(resultData(null, 400, 'fileIds 必须是一个非空数组'));
     }
     if (folderId) {
-      const [folderRows] = await connection.query(`SELECT id FROM folders WHERE id = ? AND create_by = ?`, [
-        folderId,
-        userId,
-      ]);
+      const [folderRows] = await connection.query(
+        `SELECT id FROM folders WHERE id = ? AND create_by = ? AND del_flag = 0`,
+        [folderId, userId],
+      );
       if (folderRows.length === 0) {
         return res.send(resultData(null, 404, '文件夹不存在或无权限'));
       }
@@ -237,75 +240,105 @@ export const associateFile = async (req, res) => {
     const [result] = await connection.query(sql, params);
     res.send(resultData(result.affectedRows, 200, '关联成功'));
   } catch (e) {
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+    console.error('[file] associate file with folder failed code=%s', stableAgentErrorCode(e));
+    res.send(resultData(null, 500, '服务器暂时无法处理，请稍后重试'));
   } finally {
     connection.release();
   }
 };
 
-// 删除文件夹（物理删除，其下文件 folder_id 由 FK ON DELETE SET NULL 自动置空）
+// 新客户端明确确认后可删除整棵子目录并把文件移回未分类；旧客户端仍只能删空目录。
 export const deleteFolder = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
-  const connection = await pool.getConnection();
   try {
-    const { id } = req.body;
-    await connection.beginTransaction();
-    const [result] = await connection.query(`DELETE FROM folders WHERE id = ? AND create_by = ?`, [id, req.user.id]);
-    if (result.affectedRows === 0) {
-      await connection.rollback();
-      return res.send(resultData(null, 404, '文件夹不存在或无权限'));
-    }
-    await connection.commit();
-    res.send(resultData(null, 200, '删除成功'));
+    const deleteTree = req.body?.recursive === true;
+    const result = deleteTree
+      ? await deleteOwnedCloudFolderTree({ userId: req.user.id, id: req.body?.id })
+      : await deleteEmptyOwnedCloudFolder({ userId: req.user.id, id: req.body?.id });
+    return res.send(resultData(result, 200, L(req, '删除成功', 'Folder deleted')));
   } catch (e) {
-    await connection.rollback();
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
-  } finally {
-    connection.release();
+    return sendFolderServiceError(
+      req,
+      res,
+      e,
+      L(req, '文件夹删除暂时失败，请稍后重试', 'The folder could not be deleted. Try again later.'),
+    );
+  }
+};
+
+export const clearFolderFiles = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const result = await clearOwnedCloudFolderFiles({
+      userId: req.user.id,
+      id: req.body?.id,
+      deleteFolders: req.body?.deleteFolders === true,
+    });
+    return res.send(resultData(result, 200, L(req, '目录内文件已移入回收站', 'Folder files moved to Trash')));
+  } catch (e) {
+    return sendFolderServiceError(
+      req,
+      res,
+      e,
+      L(req, '目录文件删除暂时失败，请稍后重试', 'Folder files could not be deleted. Try again later.'),
+    );
   }
 };
 
 // 修改文件夹名称
 export const updateFolder = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
-  const connection = await pool.getConnection();
   try {
-    const { id, name } = req.body;
-    const [result] = await connection.query(`UPDATE folders SET name = ? WHERE id = ? AND create_by = ?`, [
-      name,
-      id,
-      req.user.id,
-    ]);
-    if (result.affectedRows === 0) {
-      return res.send(resultData(null, 404, '文件夹不存在或无权限'));
-    }
-    res.send(resultData(result.affectedRows, 200, '修改成功'));
+    const folder = await renameOwnedCloudFolder({ userId: req.user.id, id: req.body?.id, name: req.body?.name });
+    return res.send(resultData(folder, 200, L(req, '修改成功', 'Folder renamed')));
   } catch (e) {
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
-  } finally {
-    connection.release();
+    return sendFolderServiceError(
+      req,
+      res,
+      e,
+      L(req, '文件夹重命名暂时失败，请稍后重试', 'The folder could not be renamed. Try again later.'),
+    );
+  }
+};
+
+export const moveFolder = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const result = await moveOwnedCloudFolder({
+      userId: req.user.id,
+      id: req.body?.id,
+      parentId: req.body?.parentId,
+      anchorId: req.body?.anchorId,
+      position: req.body?.position,
+    });
+    return res.send(resultData(result, 200, L(req, '移动成功', 'Folder moved')));
+  } catch (e) {
+    return sendFolderServiceError(
+      req,
+      res,
+      e,
+      L(req, '文件夹移动暂时失败，请稍后重试', 'The folder could not be moved. Try again later.'),
+    );
   }
 };
 
 export const updateFolderSort = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
-  const connection = await pool.getConnection();
   try {
-    const userId = req.user.id;
-    await connection.beginTransaction(); // 开始事务
-    const { tags } = req.body;
-    for (const tag of tags) {
-      const { id, sort } = tag;
-      const sql = 'UPDATE folders SET sort = ? WHERE id = ? AND create_by = ?';
-      await connection.query(sql, [sort, id, userId]);
-    }
-    await connection.commit(); // 提交事务
-    res.send(resultData(null, 200, 'Sort updated successfully'));
+    const items = Array.isArray(req.body?.folders) ? req.body.folders : req.body?.tags;
+    const result = await reorderOwnedCloudFolders({
+      userId: req.user.id,
+      parentId: req.body?.parentId,
+      items,
+    });
+    return res.send(resultData(result, 200, L(req, '排序成功', 'Folder order updated')));
   } catch (e) {
-    await connection.rollback(); // 如果发生错误，回滚事务
-    res.send(resultData(null, 500, '服务器内部错误' + e)); // 设置状态码为400
-  } finally {
-    connection.release(); // 释放连接回连接池
+    return sendFolderServiceError(
+      req,
+      res,
+      e,
+      L(req, '文件夹排序暂时失败，请稍后重试', 'The folder order could not be updated. Try again later.'),
+    );
   }
 };
 

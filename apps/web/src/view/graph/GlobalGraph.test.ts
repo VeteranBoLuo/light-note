@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { createApp, h, nextTick } from 'vue';
 import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
@@ -145,6 +147,15 @@ afterEach(() => {
 });
 
 describe('GlobalGraph mobile topic exploration', () => {
+  it('桌面地图去掉重复标题说明，并把四项统计与重置放在同一工具栏', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/view/graph/GlobalGraph.vue'), 'utf8');
+    const toolbar = source.match(/<section class="km-toolbar">([\s\S]*?)<section class="km-content"/)?.[1] || '';
+    expect(source).not.toContain('class="km-heading"');
+    expect(source).not.toContain('class="km-eyebrow"');
+    expect(toolbar).toContain('class="km-stats"');
+    expect(toolbar).toContain("t('knowledgeMap.reset')");
+  });
+
   it('opens a topic drawer with focused API relations and switches related topics without routing', async () => {
     const host = await mountGraph();
     const firstTopic = host.querySelector<HTMLButtonElement>('.km-mobile-item');

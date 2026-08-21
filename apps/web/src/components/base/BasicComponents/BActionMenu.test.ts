@@ -122,6 +122,20 @@ describe('BActionMenu', () => {
     expect(onSelect).toHaveBeenCalledWith('delete', 'contextmenu');
   });
 
+  it('点击菜单浮层高于抽屉，并标记为抽屉内部的外置交互层', async () => {
+    const { anchor, onSelect } = mountMenu({ triggers: ['click'], zIndex: 800 });
+
+    anchor.click();
+    await nextTick();
+    await nextTick();
+
+    const panel = document.querySelector<HTMLElement>('.b-action-menu-panel:not(.b-action-menu-leave-active)');
+    expect(panel?.style.zIndex).toBe('800');
+    expect(panel?.hasAttribute('data-drawer-keep-open')).toBe(true);
+    panel?.querySelector<HTMLButtonElement>('.b-action-menu__item')?.click();
+    expect(onSelect).toHaveBeenCalledWith('rename', 'click');
+  });
+
   it('支持 Shift+F10 打开、方向键切换和 Escape 关闭', async () => {
     const { anchor } = mountMenu();
 

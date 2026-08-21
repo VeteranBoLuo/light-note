@@ -255,7 +255,7 @@ export default {
       const name = r.file_name || '未知';
       const size = formatSize(r.file_size);
       const time = r.create_time ? new Date(r.create_time).toLocaleString('zh-CN') : '';
-      const folder = r.folderName || r.folder_name || '云空间根目录';
+      const folder = r.folderName || r.folder_name || '未放入文件夹';
       return `${i + 1}. [file:${r.id}] ${name} (${size}) · 文件夹：${folder}${time ? ` · ${time}` : ''}`;
     });
     // 降级结果不能冒充精确计数

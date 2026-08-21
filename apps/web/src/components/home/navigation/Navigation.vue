@@ -122,33 +122,17 @@
             </span>
           </BButton>
 
-          <BDropdown
+          <BButton
             v-if="user.role === 'root'"
-            :menu-options="managementMenuOptions"
-            :trigger="['hover', 'click']"
-            align="right"
+            id="nav-admin-entry"
+            class="navigation-management-entry"
+            :class="{ 'is-active': adminRouteActive }"
+            :aria-current="adminRouteActive ? 'page' : undefined"
+            v-click-log="OPERATION_LOG_MAP.navigation.admin"
+            @click="router.push('/admin')"
           >
-            <template #default="{ open }">
-              <BButton
-                id="nav-admin-entry"
-                class="navigation-management-entry"
-                :class="{ 'is-active': adminRouteActive }"
-                aria-haspopup="menu"
-                :aria-expanded="open"
-                :aria-current="adminRouteActive ? 'page' : undefined"
-                v-click-log="OPERATION_LOG_MAP.navigation.admin"
-              >
-                {{ $t('navigation.management') }}
-                <SvgIcon
-                  class="navigation-management-entry__chevron"
-                  :class="{ 'is-open': open }"
-                  :src="icon.noteTree.chevron"
-                  size="14"
-                  aria-hidden="true"
-                />
-              </BButton>
-            </template>
-          </BDropdown>
+            {{ $t('navigation.management') }}
+          </BButton>
         </template>
       </div>
       <RightArea />
@@ -165,7 +149,6 @@
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import RightArea from '@/components/home/navigation/RightArea.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { useCommunityChatUnread } from '@/composables/useCommunityChatUnread';
   import icon from '@/config/icon';
@@ -187,22 +170,6 @@
       route.path.includes('/notificationCenter') ||
       route.path.includes('/serverManagement'),
   );
-  const managementMenuOptions = computed(() => [
-    {
-      key: 'admin',
-      label: t('navigation.backendManagement'),
-      icon: icon.user_admin,
-      active: route.path.includes('/admin'),
-      function: () => router.push('/admin'),
-    },
-    {
-      key: 'server',
-      label: t('navigation.serverManagement'),
-      icon: icon.infrastructure.server,
-      active: route.path.includes('/serverManagement'),
-      function: () => router.push('/serverManagement'),
-    },
-  ]);
   const isTodoRoute = computed(() => route.path === '/inbox' && String(route.query?.tab || '') === 'todo');
   const displayTodoAttention = computed(() =>
     inbox.todoAttentionTotal > 99 ? '99+' : String(inbox.todoAttentionTotal),
@@ -309,15 +276,6 @@
   .navigation-management-entry:hover,
   .navigation-management-entry.is-active {
     color: var(--primary-color, #615ced);
-  }
-  .navigation-management-entry.is-active {
-    box-shadow: inset 0 -2px 0 var(--primary-color, #615ced);
-  }
-  .navigation-management-entry__chevron {
-    transition: transform 0.16s ease;
-  }
-  .navigation-management-entry__chevron.is-open {
-    transform: rotate(180deg);
   }
   .navigation-community-entry:hover {
     color: var(--navigation-community-hover-fg);

@@ -240,8 +240,8 @@ function buildChineseSeed(siteUrl) {
           folder: null,
           tagKeys: ['read-later'],
           content:
-            '# 待整理清单\n\n这份文件放在云空间根目录，不属于“轻笺示例”文件夹。\n\n' +
-            '你可以把暂时不知道如何分类的文件先放在这里，之后再移动到合适的文件夹。\n\n' +
+            '# 待整理清单\n\n这份文件没有放入文件夹，不属于“轻笺示例”文件夹，但仍会显示在“全部文件”中。\n\n' +
+            '你可以把暂时不知道如何分类的文件先保留在这里，之后再移动到合适的文件夹。\n\n' +
             '- [ ] 整理一份最近下载的资料\n- [ ] 给文件加上标签\n- [ ] 建立自己的第一个文件夹\n',
         },
       ],
@@ -403,8 +403,8 @@ function buildEnglishSeed(siteUrl) {
           folder: null,
           tagKeys: ['read-later'],
           content:
-            '# To Organize\n\nThis file lives at the root of cloud storage rather than inside the “Light Note Examples” folder.\n\n' +
-            'Keep files here when you have not decided how to organize them, then move them into a folder later.\n\n' +
+            '# To Organize\n\nThis file is not in a folder, but it still appears under “All Files” and is not inside “Light Note Examples.”\n\n' +
+            'Leave files unfiled when you have not decided how to organize them, then move them into a folder later.\n\n' +
             '- [ ] Organize a recent download\n- [ ] Add a tag to a file\n- [ ] Create your first folder\n',
         },
       ],

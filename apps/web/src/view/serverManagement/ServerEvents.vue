@@ -46,40 +46,15 @@
             </li>
           </ol>
         </BCard>
-        <BCard :title="t('serverManagement.eventsPage.logsTitle')">
-          <p class="events-hint">{{ t('serverManagement.eventsPage.logsHint') }}</p>
-          <div class="events-log-grid">
-            <BButton v-for="service in serviceIds" :key="service" class="events-log-button" @click="openLogs(service)">
-              <SvgIcon :src="icon.infrastructure.logs" size="17" /><span>{{ serviceName(service) }}</span>
-            </BButton>
-          </div>
-        </BCard>
       </template>
     </div>
-    <BModal
-      v-model:visible="logsVisible"
-      :title="t('serverManagement.logsTitle', { service: selectedService ? serviceName(selectedService) : '' })"
-      width="min(900px, 94vw)"
-      :show-footer="false"
-      fullscreen-mobile
-    >
-      <BLoading v-if="logsLoading" inline :loading="true" :title="t('serverManagement.logsLoading')" />
-      <div v-else-if="logsError" class="logs-state"
-        ><span>{{ logsError }}</span
-        ><BButton size="small" @click="loadLogs">{{ t('serverManagement.retry') }}</BButton></div
-      >
-      <div v-else-if="!logLines.length" class="logs-state">{{ t('serverManagement.logsEmpty') }}</div>
-      <pre v-else class="events-logs"><code>{{ logLines.join('\n') }}</code></pre>
-    </BModal>
   </main>
 </template>
 
 <script setup lang="ts">
   import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { HOST_AGENT_SERVICE_IDS, type HostAgentServiceId } from '@lightnote/shared/host-agent-protocol';
   import { getAdminOperationAudits } from '@/api/commonApi';
-  import { getInfraLogs } from '@/api/infraApi';
   import icon from '@/config/icon';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -87,7 +62,6 @@
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
-  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import InfraModuleHeader from './InfraModuleHeader.vue';
   import { useInfraSnapshot } from './useInfraSnapshot';
 
@@ -128,16 +102,6 @@
   const filteredItems = computed(() =>
     (data.value?.items || []).filter((item) => outcome.value === 'all' || item.outcome === outcome.value),
   );
-  const serviceIds = HOST_AGENT_SERVICE_IDS;
-  const logsVisible = ref(false);
-  const logsLoading = ref(false);
-  const logsError = ref('');
-  const logLines = ref<string[]>([]);
-  const selectedService = ref<HostAgentServiceId | null>(null);
-
-  function serviceName(id: HostAgentServiceId) {
-    return t(`serverManagement.serviceNames.${id}`);
-  }
   function actionLabel(action: string) {
     return action === 'infra.nginx_reload'
       ? t('serverManagement.reloadNginx')
@@ -165,27 +129,6 @@
   function formatTime(value: string) {
     const date = new Date(String(value).replace(' ', 'T'));
     return Number.isFinite(date.getTime()) ? date.toLocaleString(locale.value, { hour12: false }) : value;
-  }
-  function openLogs(service: HostAgentServiceId) {
-    selectedService.value = service;
-    logsVisible.value = true;
-    void loadLogs();
-  }
-  async function loadLogs() {
-    if (!selectedService.value || logsLoading.value) return;
-    logsLoading.value = true;
-    logsError.value = '';
-    try {
-      const response = await getInfraLogs(selectedService.value);
-      logLines.value = response.data.lines || [];
-    } catch (cause) {
-      logsError.value =
-        cause && typeof cause === 'object' && 'message' in cause
-          ? String(cause.message || '')
-          : t('serverManagement.logsFailed');
-    } finally {
-      logsLoading.value = false;
-    }
   }
 </script>
 
@@ -287,68 +230,22 @@
     color: var(--text-color);
     font-size: 13px;
   }
-  .events-timeline small,
-  .events-hint {
+  .events-timeline small {
     color: var(--desc-color);
     font-size: 12px;
   }
-  .events-hint {
-    margin: 0 0 14px;
-    line-height: 1.6;
-  }
-  .events-log-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 10px;
-  }
-  .events-log-button {
-    min-height: 48px;
-    justify-content: flex-start;
-    gap: 8px;
-  }
-  .events-log-button span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .events-empty,
-  .logs-state {
+  .events-empty {
     min-height: 110px;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
     color: var(--desc-color);
-  }
-  .events-logs {
-    max-height: 60vh;
-    margin: 0;
-    padding: 14px;
-    overflow: auto;
-    border-radius: 10px;
-    background: #111827;
-    color: #dbe7f5 !important;
-    font-size: 12px;
-    line-height: 1.65;
-    white-space: pre-wrap;
-  }
-  .events-logs code {
-    color: inherit !important;
-    font: inherit;
-  }
-  @media (max-width: 1000px) {
-    .events-log-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
   }
   @media (max-width: 760px) {
     .infra-module-content {
       width: calc(100% - 24px);
       padding: 18px 0 32px;
       gap: 14px;
-    }
-    .events-log-grid {
-      grid-template-columns: 1fr;
     }
   }
 </style>

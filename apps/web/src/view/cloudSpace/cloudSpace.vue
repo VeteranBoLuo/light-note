@@ -99,30 +99,16 @@
       </div>
       <!-- 移动端不放第二个文本搜索框：找文件统一走顶栏全局搜索，这里只保留文件夹与类型筛选 -->
       <div v-if="bookmark.isMobile" class="mobile-folder-filter">
-        <div ref="mobileFolderListRef" class="mobile-folder-list">
-          <div
-            class="mobile-folder-item"
-            :class="{ active: cloud.folder.id === 'all' }"
-            data-folder-id="all"
-            @click="selectAllFolder"
-            v-click-log="{ module: '云空间', operation: '查看全部文件' }"
-            :title="$t('cloudSpace.allFile')"
-          >
-            {{ $t('cloudSpace.allFile') }}
-          </div>
-          <div
-            v-for="folder in cloud.folderList"
-            :key="folder.id"
-            class="mobile-folder-item"
-            :class="{ active: cloud.folder.id === folder.id }"
-            :data-folder-id="folder.id"
-            :title="folder.name"
-            @click="selectFolder(folder)"
-            v-click-log="{ module: '云空间', operation: `查看文件夹【${folder.name}】` }"
-          >
-            {{ folder.name }}
-          </div>
-        </div>
+        <BButton
+          class="mobile-folder-trigger"
+          :class="{ 'is-folder': cloud.folder.id !== 'all' }"
+          :aria-label="$t('cloudSpace.openFolderTree')"
+          @click="mobileFolderDrawerOpen = true"
+        >
+          <SvgIcon :src="icon.common.folder" size="18" aria-hidden="true" />
+          <span class="mobile-folder-trigger__label">{{ mobileCurrentFolderLabel }}</span>
+          <SvgIcon :src="icon.noteTree.chevron" size="15" aria-hidden="true" />
+        </BButton>
       </div>
       <div class="content-area">
         <CloudFolder v-if="!bookmark.isMobile" @uploadFiles="onUploadFiles" />
@@ -139,6 +125,29 @@
       </div>
     </div>
     <MoveFile v-model:visible="moveCfg.moveFileVisible" :files="moveCfg.files" @moved="handleMoveDone" />
+    <MobileCloudFolderDrawer
+      v-if="bookmark.isMobile"
+      v-model:open="mobileFolderDrawerOpen"
+      :folders="cloud.folderList"
+      :current-folder-id="String(cloud.folder.id || 'all')"
+      :all-file-count="cloud.allFileCount"
+      :expanded-ids="cloud.expandedFolderIds"
+      :loading="cloud.folderLoading"
+      @select="selectMobileFolderFromTree"
+      @toggle="cloud.toggleFolderExpanded"
+    />
+    <CloudFolderMoveModal
+      v-if="bookmark.isMobile"
+      v-model:visible="mobileFolderMoveVisible"
+      :folder="mobileMovingFolder"
+      @moved="handleMobileFolderMoved"
+    />
+    <CloudFolderClearModal
+      v-if="bookmark.isMobile"
+      v-model:visible="mobileFolderClearVisible"
+      :folder="mobileClearingFolder"
+      :folders="cloud.folderList"
+    />
 
     <!-- 全屏文件预览 -->
     <FilePreview
@@ -157,6 +166,7 @@
       :creating="mobileFolderCreating"
       :folders="cloud.folderList"
       :current-folder-id="String(cloud.folder.id || '')"
+      :max-depth="cloud.folderMaxDepth"
       :folder-mutation-id="mobileFolderMutationId"
       :sort-value="cloudSortValue"
       :sort-options="cloudSortOptions"
@@ -166,6 +176,8 @@
       @sort="changeCloudSort"
       @create-folder="createMobileFolder"
       @rename-folder="renameMobileFolder"
+      @move-folder="openMobileFolderMove"
+      @clear-folder-files="openMobileFolderClear"
       @delete-folder="requestMobileFolderDelete"
     />
   </ResourcePageShell>
@@ -174,7 +186,6 @@
 <script lang="ts" setup>
   import icon from '@/config/icon';
   import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
-  import { scrollChipIntoCenter } from '@/utils/horizontalChipScroll';
   import { bookmarkStore, cloudSpaceStore, useUserStore } from '@/store';
   import HandleBtnGroup from '@/components/cloudSpace/HandleBtnGroup.vue';
   import CloudStorageBar from '@/components/cloudSpace/CloudStorageBar.vue';
@@ -200,11 +211,16 @@
   import { apiBasePost } from '@/http/request';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import MobileCloudSpaceActionsDrawer from '@/components/cloudSpace/MobileCloudSpaceActionsDrawer.vue';
+  import MobileCloudFolderDrawer from '@/components/cloudSpace/MobileCloudFolderDrawer.vue';
+  import CloudFolderMoveModal from '@/components/cloudSpace/CloudFolderMoveModal.vue';
+  import CloudFolderClearModal from '@/components/cloudSpace/CloudFolderClearModal.vue';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import FilePreviewLoadingState from '@/components/cloudSpace/FilePreviewLoadingState.vue';
   import type { CloudFileSort, CloudFileSortField, CloudFileSortOrder } from '@/store/cloudSpace';
+  import type { CloudFolderNode } from '@/types/cloudFolder';
+  import { cloudFolderAncestors, collectCloudFolderDescendantIds } from '@/utils/cloudFolderTree';
   const FilePreview = defineAsyncComponent({
     loader: () => import('@/components/FilePreview.vue'),
     loadingComponent: FilePreviewLoadingState,
@@ -292,18 +308,18 @@
     openFileDialog: (folderId?: string | null) => void;
   }
 
-  interface MobileFolderItem {
-    id: string;
-    name: string;
-  }
-
   const handleBtnGroup = ref<HandleBtnGroupExposed | null>(null);
   const mobileCloudStorageBar = ref<{ openDetails: (shortfallMb?: number) => void } | null>(null);
   const batchMode = ref(false);
   const mobilePageActionsOpen = ref(false);
+  const mobileFolderDrawerOpen = ref(false);
   const cloudContainerRef = ref<HTMLElement | null>(null);
   const mobileFolderCreating = ref(false);
   const mobileFolderMutationId = ref('');
+  const mobileFolderMoveVisible = ref(false);
+  const mobileMovingFolder = ref<CloudFolderNode | null>(null);
+  const mobileFolderClearVisible = ref(false);
+  const mobileClearingFolder = ref<CloudFolderNode | null>(null);
 
   function openMobileStorageDetails(shortfallMb: number) {
     mobileCloudStorageBar.value?.openDetails(shortfallMb);
@@ -382,38 +398,24 @@
   // 拖拽状态
   const dragActive = ref(false);
 
-  const mobileFolderListRef = ref<HTMLElement | null>(null);
+  const mobileCurrentFolderLabel = computed(() => {
+    if (cloud.folder.id === 'all') return t('cloudSpace.allFile');
+    const breadcrumbs = cloudFolderAncestors(cloud.folderList, String(cloud.folder.id));
+    return breadcrumbs.length ? breadcrumbs.map((folder) => folder.name).join(' / ') : cloud.folder.name;
+  });
 
-  function selectAllFolder() {
-    cloud.folder = {
-      name: t('cloudSpace.allFile'),
-      id: 'all',
-    };
-    cloud.queryFieldList();
+  async function selectMobileFolderFromTree(folder: CloudFolderNode | null) {
+    await closeCurrentMobileOverlayThen(
+      () => {
+        mobileFolderDrawerOpen.value = false;
+      },
+      async () => {
+        cloud.folder = folder ? { id: folder.id, name: folder.name } : { name: t('cloudSpace.allFile'), id: 'all' };
+        if (folder) cloud.expandFolderAncestors(folder.id);
+        await cloud.queryFieldList();
+      },
+    );
   }
-
-  function selectFolder(folder) {
-    cloud.folder = folder;
-    cloud.queryFieldList();
-  }
-
-  // 移动端目录条:当前目录变化后把选中项滚入视野。
-  // 用 watch 而非点击事件,因为切目录会重新拉取列表导致重渲染,直接在点击里滚动会被打断;
-  // 同时覆盖「全部文件」和从其他入口(路由/上传后)切换目录的情况。
-  watch(
-    () => [cloud.folder.id, cloud.folderList.length, bookmark.isMobile],
-    () => {
-      if (!bookmark.isMobile) return;
-      nextTick(() => {
-        const container = mobileFolderListRef.value;
-        const active = container?.querySelector<HTMLElement>(
-          `[data-folder-id="${CSS.escape(String(cloud.folder.id ?? 'all'))}"]`,
-        );
-        scrollChipIntoCenter(container, active);
-      });
-    },
-    { immediate: true },
-  );
 
   function getRouteFileName() {
     const value = route.query.fileName;
@@ -515,32 +517,30 @@
     return !blockGuestWrite('manage-folder');
   }
 
-  async function createMobileFolder(name: string) {
+  async function createMobileFolder(name: string, parentId: string | null) {
     if (blockGuestWrite('manage-folder') || mobileFolderCreating.value) return;
     mobileFolderCreating.value = true;
     try {
-      const res = await apiBasePost('/api/file/addFolder', { name }, { silent: true });
+      const res = await apiBasePost('/api/file/addFolder', { name, parentId }, { silent: true });
       if (res?.status !== 200 || res.data === undefined || res.data === null) {
-        message.error(t('cloudSpace.createFolderFailed'));
+        message.error(res?.msg || t('cloudSpace.createFolderFailed'));
         return;
       }
 
       const folderId = String(res.data);
-      const createdFolder = { id: folderId, name };
-      cloud.folderList = [createdFolder, ...cloud.folderList.filter((folder) => String(folder.id) !== folderId)];
-      cloud.folder = createdFolder;
+      if (parentId) cloud.setFolderExpanded(parentId, true);
+      const folderRefreshed = await cloud.queryFolder();
+      const createdFolder = folderRefreshed
+        ? cloud.folderList.find((folder) => String(folder.id) === folderId)
+        : undefined;
+      if (createdFolder) {
+        cloud.folder = { id: createdFolder.id, name: createdFolder.name };
+        cloud.expandFolderAncestors(createdFolder.id);
+      }
       clearSelectionKey.value += 1;
       mobilePageActionsOpen.value = false;
       recordOperation({ module: '云空间', operation: `新增文件夹成功【${name}】` });
       message.success(t('cloudSpace.createFolderSuccess', { name }));
-
-      const folderRefreshed = await cloud.queryFolder();
-      if (folderRefreshed) {
-        const refreshedFolder = cloud.folderList.find((folder) => String(folder.id) === folderId);
-        if (refreshedFolder?.id) {
-          cloud.folder = { id: refreshedFolder.id, name: refreshedFolder.name };
-        }
-      }
       await cloud.queryFieldList();
     } catch {
       message.error(t('cloudSpace.createFolderFailed'));
@@ -549,7 +549,7 @@
     }
   }
 
-  async function renameMobileFolder(folder: MobileFolderItem, done: (success: boolean) => void) {
+  async function renameMobileFolder(folder: CloudFolderNode, done: (success: boolean) => void) {
     if (blockGuestWrite('manage-folder') || mobileFolderMutationId.value) {
       done(false);
       return;
@@ -559,7 +559,7 @@
     try {
       const res = await apiBasePost('/api/file/updateFolder', folder, { silent: true });
       if (res?.status !== 200) {
-        message.error(t('cloudSpace.renameFolderFailed'));
+        message.error(res?.msg || t('cloudSpace.renameFolderFailed'));
         return;
       }
 
@@ -582,7 +582,42 @@
     }
   }
 
-  function requestMobileFolderDelete(folder: MobileFolderItem) {
+  function openMobileFolderMove(folder: CloudFolderNode) {
+    if (blockGuestWrite('manage-folder')) return;
+    void closeCurrentMobileOverlayThen(
+      () => {
+        mobilePageActionsOpen.value = false;
+      },
+      () => {
+        mobileMovingFolder.value = folder;
+        mobileFolderMoveVisible.value = true;
+      },
+    );
+  }
+
+  function handleMobileFolderMoved() {
+    const folderId = mobileMovingFolder.value?.id;
+    if (folderId) cloud.expandFolderAncestors(folderId);
+    void cloud.queryFieldList();
+  }
+
+  function openMobileFolderClear(folder: CloudFolderNode) {
+    if (blockGuestWrite('delete-file')) {
+      mobilePageActionsOpen.value = false;
+      return;
+    }
+    void closeCurrentMobileOverlayThen(
+      () => {
+        mobilePageActionsOpen.value = false;
+      },
+      () => {
+        mobileClearingFolder.value = folder;
+        mobileFolderClearVisible.value = true;
+      },
+    );
+  }
+
+  function requestMobileFolderDelete(folder: CloudFolderNode) {
     if (blockGuestWrite('delete-folder')) {
       mobilePageActionsOpen.value = false;
       return;
@@ -594,7 +629,7 @@
       () => {
         Alert.alert({
           title: t('cloudSpace.deleteFolderTitle'),
-          content: t('cloudSpace.deleteFolderConfirm', { name: folder.name }),
+          content: t('cloudSpace.deleteFolderTreeConfirm', { name: folder.name }),
           okText: t('common.delete'),
           okType: 'danger',
           cancelText: t('common.cancel'),
@@ -604,18 +639,20 @@
     );
   }
 
-  async function deleteMobileFolder(folder: MobileFolderItem) {
+  async function deleteMobileFolder(folder: CloudFolderNode) {
     if (mobileFolderMutationId.value) return;
     mobileFolderMutationId.value = folder.id;
+    const deletedFolderIds = collectCloudFolderDescendantIds(cloud.folderList, folder.id);
+    deletedFolderIds.add(folder.id);
     try {
-      const res = await apiBasePost('/api/file/deleteFolder', { id: folder.id }, { silent: true });
+      const res = await apiBasePost('/api/file/deleteFolder', { id: folder.id, recursive: true }, { silent: true });
       if (res?.status !== 200) {
-        message.error(t('cloudSpace.deleteFolderFailed'));
+        message.error(res?.msg || t('cloudSpace.deleteFolderFailed'));
         return;
       }
 
-      const deletingCurrentFolder = String(cloud.folder.id) === folder.id;
-      cloud.folderList = cloud.folderList.filter((item) => String(item.id) !== folder.id);
+      const deletingCurrentFolder = deletedFolderIds.has(String(cloud.folder.id));
+      cloud.folderList = cloud.folderList.filter((item) => !deletedFolderIds.has(String(item.id)));
       if (deletingCurrentFolder) {
         cloud.folder = { id: 'all', name: t('cloudSpace.allFile') };
       }
@@ -1108,38 +1145,37 @@
     }
   }
 
-  .mobile-folder-list {
-    /* 作为 offsetParent,供选中项自动滚动按 offsetLeft 计算 */
-    position: relative;
-    display: flex;
-    align-items: center;
+  .mobile-folder-trigger {
+    width: 100%;
+    min-width: 0;
+    height: 40px;
+    justify-content: flex-start;
     gap: 8px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    padding: 0 24px 6px 0;
-    box-shadow: inset -20px 0 16px -18px color-mix(in srgb, var(--text-color) 46%, transparent);
-  }
-
-  .mobile-folder-item {
-    max-width: 140px;
-    min-width: fit-content;
-    min-height: 32px;
-    padding: 5px 10px;
-    box-sizing: border-box;
-    border-radius: 9px;
-    border: 1px solid color-mix(in srgb, var(--card-border-color) 78%, transparent);
-    background: var(--menu-body-bg-color);
+    padding: 0 11px;
+    border: 1px solid var(--card-border-color);
+    border-radius: var(--mobile-control-radius, 10px);
     color: var(--text-color);
-    font-size: 12px;
-    line-height: 20px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    background: var(--menu-body-bg-color);
   }
 
-  .mobile-folder-item.active {
-    border-color: color-mix(in srgb, var(--resource-file-color, #ff8a00) 42%, var(--card-border-color));
-    background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 9%, var(--menu-body-bg-color));
+  .mobile-folder-trigger.is-folder {
+    border-color: var(--resource-file-color, #ff8a00);
+    color: var(--resource-file-color, #ff8a00);
+  }
+
+  .mobile-folder-trigger__label {
+    min-width: 0;
+    overflow: hidden;
+    flex: 1 1 auto;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  html.light-note-mobile-rendering .mobile-folder-trigger.is-folder {
+    border-color: var(--resource-file-color, #ff8a00);
     color: var(--resource-file-color, #ff8a00);
   }
 
@@ -1199,17 +1235,6 @@
       margin-bottom: 6px;
     }
 
-    .mobile-folder-list {
-      gap: 6px;
-      padding-bottom: 4px;
-    }
-
-    .mobile-folder-item {
-      font-size: 12px;
-      padding: 5px 9px;
-      max-width: 120px;
-    }
-
     .content-area {
       flex: 1;
       min-height: 0;
@@ -1217,33 +1242,6 @@
 
     .content-area :deep(.field-list) {
       border-radius: 12px;
-    }
-
-    .file-container {
-      height: calc(100% - 20px);
-    }
-
-    .file-label {
-      width: 150px;
-    }
-
-    // 移动端预览样式调整
-    .file-preview-modal {
-      :deep(.ant-modal) {
-        width: 95vw !important;
-        max-width: 95vw;
-        margin: 10px;
-      }
-
-      .preview-content {
-        height: 60vh;
-      }
-
-      .preview-controls {
-        flex-direction: column;
-        gap: 12px;
-        align-items: stretch;
-      }
     }
   }
 
@@ -1303,10 +1301,6 @@
 
     .header-handle-group {
       margin-left: auto;
-    }
-
-    .mobile-folder-list {
-      padding-bottom: 2px;
     }
 
     .content-area :deep(.field-list) {

@@ -26,8 +26,8 @@ function folderOptions({ canCreate }) {
   options.push(
     {
       id: 'save_to_root',
-      label: '改存云空间根目录',
-      description: '不创建文件夹，直接把文件保存到云空间根目录。',
+      label: '不放入文件夹',
+      description: '不创建文件夹，文件仍可在“全部文件”中查看。',
       i18nKey: 'ai.interaction.folderMissing.options.root',
     },
     {

@@ -94,6 +94,40 @@ describe('ChatOnlineMembersModal', () => {
     expect(host.querySelectorAll('.chat-online-members-modal__skeleton-row')).toHaveLength(7);
   });
 
+  it('打开期间在线心跳变化不改占位高度，重新打开才采用最新人数', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const visible = ref(true);
+    const onlineCount = ref(1);
+    const app = createApp(
+      defineComponent({
+        setup() {
+          return () =>
+            h(ChatOnlineMembersModal, {
+              visible: visible.value,
+              'onUpdate:visible': (value: boolean) => (visible.value = value),
+              onlineCount: onlineCount.value,
+              loading: true,
+            });
+        },
+      }),
+    );
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.mount(host);
+    cleanup = () => app.unmount();
+
+    expect(host.querySelectorAll('.chat-online-members-modal__skeleton-row')).toHaveLength(1);
+    onlineCount.value = 5;
+    await nextTick();
+    expect(host.querySelectorAll('.chat-online-members-modal__skeleton-row')).toHaveLength(1);
+
+    visible.value = false;
+    await nextTick();
+    visible.value = true;
+    await nextTick();
+    expect(host.querySelectorAll('.chat-online-members-modal__skeleton-row')).toHaveLength(5);
+  });
+
   it('头像框只由固定横向槽位承载，业务样式不穿透改写内部图片', () => {
     expect(source).toContain('class="chat-online-members-modal__avatar-slot"');
     expect(source).not.toMatch(/chat-online-members-modal__avatar\s+:deep\(/);

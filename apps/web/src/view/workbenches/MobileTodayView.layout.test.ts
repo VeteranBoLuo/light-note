@@ -78,4 +78,10 @@ describe('移动端今日加载布局', () => {
       /\.mobile-today__growth\s*\{[\s\S]*?border:\s*1px solid var\(--surface-border-color\);[\s\S]*?background:\s*var\(--card-background\);/,
     );
   });
+
+  it('触屏点击总结卡片不保留 hover、active 或焦点填充', () => {
+    expect(source).toMatch(
+      /\.mobile-today__summary-item:hover,[\s\S]*?\.mobile-today__summary-item:focus-visible[\s\S]*?outline:\s*none;[\s\S]*?opacity:\s*1 !important;[\s\S]*?box-shadow:\s*none;[\s\S]*?background:\s*transparent/,
+    );
+  });
 });

@@ -79,7 +79,7 @@
 
     <div v-else-if="isManageFoldersView" class="mobile-folder-manager">
       <div class="mobile-folder-manager__create-wrap">
-        <BButton class="mobile-folder-manager__create" :disabled="isBusy" @click="openCreateFolderForm">
+        <BButton class="mobile-folder-manager__create" :disabled="isBusy" @click="openCreateFolderForm(null)">
           <SvgIcon :src="icon.common.plus" size="18" aria-hidden="true" />
           <span>{{ t('cloudSpace.newFolder') }}</span>
         </BButton>
@@ -90,10 +90,11 @@
           {{ t('cloudSpace.noFoldersToManage') }}
         </div>
         <div
-          v-for="folder in folders"
+          v-for="folder in flatFolders"
           :key="folder.id"
           class="mobile-folder-manager__row"
           :class="{ 'is-current': String(folder.id) === String(currentFolderId) }"
+          :style="{ '--mobile-folder-manager-depth': String(Math.min(folder.depth, 4)) }"
           role="listitem"
         >
           <span class="mobile-folder-manager__folder-icon" aria-hidden="true">
@@ -103,25 +104,23 @@
           <span v-if="String(folder.id) === String(currentFolderId)" class="mobile-folder-manager__current">
             {{ t('cloudSpace.currentFolder') }}
           </span>
-          <div class="mobile-folder-manager__actions">
+          <BActionMenu
+            :items="folderActionItems(folder)"
+            :triggers="['click']"
+            placement="bottom-right"
+            :z-index="800"
+            :disabled="Boolean(folderMutationId)"
+            :aria-label="t('cloudSpace.folderActionsFor', { name: folder.name })"
+            @select="(action) => handleFolderAction(action, folder)"
+          >
             <BButton
               class="mobile-folder-manager__action"
               :disabled="Boolean(folderMutationId)"
-              :aria-label="t('cloudSpace.renameFolderAction', { name: folder.name })"
-              @click="openRenameFolderForm(folder)"
+              :aria-label="t('cloudSpace.folderActionsFor', { name: folder.name })"
             >
-              <SvgIcon :src="icon.table_edit" size="18" aria-hidden="true" />
+              <SvgIcon :src="icon.common.more" size="19" aria-hidden="true" />
             </BButton>
-            <BButton
-              class="mobile-folder-manager__action mobile-folder-manager__action--danger"
-              type="danger"
-              :disabled="Boolean(folderMutationId)"
-              :aria-label="t('cloudSpace.deleteFolderAction', { name: folder.name })"
-              @click="requestDeleteFolder(folder)"
-            >
-              <SvgIcon :src="icon.table_delete" size="18" aria-hidden="true" />
-            </BButton>
-          </div>
+          </BActionMenu>
         </div>
       </div>
     </div>
@@ -146,6 +145,9 @@
           <span v-else class="mobile-folder-form__hint">{{ t('cloudSpace.folderNameHint') }}</span>
           <span class="mobile-folder-form__counter">{{ folderName.length }}/255</span>
         </div>
+        <p v-if="isCreateFolderView && createParent" class="mobile-folder-form__parent">
+          {{ t('cloudSpace.createSubfolderUnder', { path: createParent.fullPath }) }}
+        </p>
       </div>
 
       <div class="mobile-folder-form__actions">
@@ -163,20 +165,20 @@
 <script lang="ts" setup>
   import { computed, nextTick, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
+  import type { BActionMenuItem } from '@/components/base/BasicComponents/actionMenu';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
+  import type { CloudFolderNode } from '@/types/cloudFolder';
+  import { flattenCloudFolderTree, normalizeCloudFolderList } from '@/utils/cloudFolderTree';
 
   type DrawerView = 'actions' | 'sort' | 'create-folder' | 'manage-folders' | 'rename-folder';
   interface SortOption {
     value: string;
     label: string;
-  }
-  interface FolderItem {
-    id?: string;
-    name: string;
   }
   type FolderMutationDone = (success: boolean) => void;
 
@@ -185,8 +187,9 @@
       open: boolean;
       batchMode?: boolean;
       creating?: boolean;
-      folders?: FolderItem[];
+      folders?: CloudFolderNode[];
       currentFolderId?: string;
+      maxDepth?: number;
       folderMutationId?: string;
       beforeOpenCreateFolder?: () => boolean;
       beforeManageFolders?: () => boolean;
@@ -198,6 +201,7 @@
       creating: false,
       folders: () => [],
       currentFolderId: '',
+      maxDepth: 8,
       folderMutationId: '',
       sortValue: '',
       sortOptions: () => [],
@@ -208,16 +212,19 @@
     'update:open': [open: boolean];
     batch: [];
     sort: [value: string];
-    'create-folder': [name: string];
-    'rename-folder': [folder: { id: string; name: string }, done: FolderMutationDone];
-    'delete-folder': [folder: { id: string; name: string }];
+    'create-folder': [name: string, parentId: string | null];
+    'rename-folder': [folder: CloudFolderNode, done: FolderMutationDone];
+    'move-folder': [folder: CloudFolderNode];
+    'clear-folder-files': [folder: CloudFolderNode];
+    'delete-folder': [folder: CloudFolderNode];
   }>();
 
   const { t } = useI18n();
   const view = ref<DrawerView>('actions');
   const folderName = ref('');
   const folderNameError = ref('');
-  const editingFolder = ref<FolderItem | null>(null);
+  const editingFolder = ref<CloudFolderNode | null>(null);
+  const createParent = ref<CloudFolderNode | null>(null);
   const renamePending = ref(false);
   const folderInputRef = ref<InstanceType<typeof BInput> | null>(null);
   const folderInputId = `mobile-cloud-folder-name-${Math.random().toString(36).slice(2)}`;
@@ -229,6 +236,8 @@
   const currentSortLabel = computed(
     () => props.sortOptions.find((option) => option.value === props.sortValue)?.label || t('cloudSpace.sortLatest'),
   );
+  const normalizedFolders = computed(() => normalizeCloudFolderList(props.folders));
+  const flatFolders = computed(() => flattenCloudFolderTree(normalizedFolders.value));
   const formSubmitting = computed(() =>
     isRenameFolderView.value
       ? renamePending.value || String(props.folderMutationId) === String(editingFolder.value?.id || '')
@@ -236,7 +245,7 @@
   );
   const isBusy = computed(() => formSubmitting.value || Boolean(props.folderMutationId));
   const drawerTitle = computed(() => {
-    if (isCreateFolderView.value) return t('cloudSpace.newFolder');
+    if (isCreateFolderView.value) return t(createParent.value ? 'cloudSpace.newSubfolder' : 'cloudSpace.newFolder');
     if (isSortView.value) return t('cloudSpace.sort');
     if (isRenameFolderView.value) return t('cloudSpace.renameFolder');
     if (isManageFoldersView.value) return t('cloudSpace.manageFolders');
@@ -247,6 +256,7 @@
     folderName.value = '';
     folderNameError.value = '';
     editingFolder.value = null;
+    createParent.value = null;
     renamePending.value = false;
   }
 
@@ -260,8 +270,10 @@
     emit('update:open', false);
   }
 
-  function openCreateFolderForm() {
+  function openCreateFolderForm(parent: CloudFolderNode | null) {
     if (props.beforeOpenCreateFolder && !props.beforeOpenCreateFolder()) return;
+    if (parent && parent.depth >= props.maxDepth) return;
+    createParent.value = parent;
     view.value = 'create-folder';
     folderNameError.value = '';
     nextTick(() => folderInputRef.value?.focus());
@@ -273,9 +285,9 @@
     view.value = 'manage-folders';
   }
 
-  function openRenameFolderForm(folder: FolderItem) {
+  function openRenameFolderForm(folder: CloudFolderNode) {
     if (!folder.id || props.folderMutationId) return;
-    editingFolder.value = { id: String(folder.id), name: folder.name };
+    editingFolder.value = folder;
     folderName.value = folder.name;
     folderNameError.value = '';
     view.value = 'rename-folder';
@@ -315,7 +327,7 @@
         return;
       }
       renamePending.value = true;
-      emit('rename-folder', { id: String(editingFolder.value.id), name }, (success) => {
+      emit('rename-folder', { ...editingFolder.value, name }, (success) => {
         renamePending.value = false;
         if (!success) return;
         resetFolderForm();
@@ -323,12 +335,41 @@
       });
       return;
     }
-    emit('create-folder', name);
+    emit('create-folder', name, createParent.value?.id || null);
   }
 
-  function requestDeleteFolder(folder: FolderItem) {
+  function requestDeleteFolder(folder: CloudFolderNode) {
     if (!folder.id || props.folderMutationId) return;
-    emit('delete-folder', { id: String(folder.id), name: folder.name });
+    emit('delete-folder', folder);
+  }
+
+  function folderActionItems(folder: CloudFolderNode): BActionMenuItem[] {
+    return [
+      {
+        key: 'new-child',
+        label: t('cloudSpace.newSubfolder'),
+        icon: icon.common.plus,
+        disabled: folder.depth >= props.maxDepth,
+      },
+      { key: 'move', label: t('cloudSpace.moveFolder'), icon: icon.noteTree.move },
+      { key: 'rename', label: t('cloudSpace.renameFolder'), icon: icon.table_edit },
+      { key: 'folder-actions-divider', divider: true },
+      {
+        key: 'clear-files',
+        label: t('cloudSpace.clearFolderFilesAction'),
+        icon: icon.table_delete,
+        danger: true,
+      },
+      { key: 'delete', label: t('common.delete'), icon: icon.table_delete, danger: true },
+    ];
+  }
+
+  function handleFolderAction(action: string, folder: CloudFolderNode) {
+    if (action === 'new-child') openCreateFolderForm(folder);
+    if (action === 'move') emit('move-folder', folder);
+    if (action === 'rename') openRenameFolderForm(folder);
+    if (action === 'clear-files') emit('clear-folder-files', folder);
+    if (action === 'delete') requestDeleteFolder(folder);
   }
 
   function selectBatchAction() {
@@ -501,7 +542,7 @@
     grid-template-columns: 26px minmax(0, 1fr) auto auto;
     align-items: center;
     gap: 10px;
-    padding: 8px 10px 8px 12px;
+    padding: 8px 10px 8px calc(12px + (var(--mobile-folder-manager-depth, 1) - 1) * 14px);
     box-sizing: border-box;
     border: 1px solid var(--card-border-color);
     border-radius: var(--mobile-control-radius, 10px);
@@ -552,6 +593,10 @@
     padding: 0;
     border: 1px solid var(--card-border-color);
     border-radius: 10px;
+  }
+
+  .mobile-folder-manager :deep(.b-action-menu-anchor) {
+    display: inline-flex;
   }
 
   .mobile-folder-manager__action--danger {
@@ -614,6 +659,13 @@
   .mobile-folder-form__counter {
     flex: 0 0 auto;
     font-variant-numeric: tabular-nums;
+  }
+
+  .mobile-folder-form__parent {
+    margin: 0;
+    color: var(--desc-color);
+    font-size: 12px;
+    line-height: 1.5;
   }
 
   .mobile-folder-form__actions {

@@ -17,7 +17,7 @@ describe('用户身份切换资源隔离', () => {
     bookmark.bookmarkList = [{ id: 'guest-bookmark' }];
     bookmark.tagList = [{ id: 'guest-tag', name: '游客标签' }] as any;
     cloud.fileList = [{ id: 'guest-file', fileName: '游客文件' }] as any;
-    cloud.folderList = [{ id: 'guest-folder', name: '游客文件夹' }];
+    cloud.folderList = [{ id: 'guest-folder', name: '游客文件夹' }] as any;
 
     user.setUserInfo({ id: 'user-1', role: 'user' });
 

@@ -42,11 +42,14 @@ export async function ensureCloudFolder(name: string): Promise<EnsuredCloudFolde
 }
 
 export async function fetchCloudFolders(): Promise<CloudFolderOption[]> {
-  const response = await apiBasePost('/api/file/queryFolder', { filters: {} }, { silent: true });
+  const response = await apiBasePost('/api/file/queryFolder', { filters: {}, treeVersion: 2 }, { silent: true });
   if (response.status !== 200) throw apiError(response, 'FOLDER_LIST_FAILED');
   return (Array.isArray(response.data?.items) ? response.data.items : [])
     .filter((item: any) => item?.id != null && String(item?.name || '').trim())
-    .map((item: any) => ({ id: String(item.id), name: String(item.name).trim() }));
+    .map((item: any) => ({
+      id: String(item.id),
+      name: String(item.fullPath || item.name).trim(),
+    }));
 }
 
 async function abortManagedUpload(objectKey: string) {

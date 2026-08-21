@@ -269,38 +269,32 @@ describe('Navigation', () => {
     });
   });
 
-  /** 管理入口只对 root 展示，并从同一个下拉进入后台管理或服务器管理。 */
+  /** 顶栏只保留一个管理入口；服务器管理由后台左侧导航承接。 */
   describe('管理入口', () => {
     it('非 root 看不到管理入口', async () => {
       const host = await mountNavigation();
       expect(host.querySelector('#nav-admin-entry')).toBeNull();
     });
 
-    it('root 可从管理下拉分别进入后台管理和服务器管理', async () => {
+    it('root 点击管理直接进入后台，不再渲染二级下拉', async () => {
       user.role = 'root';
 
       const host = await mountNavigation();
-      const entry = host.querySelector<HTMLElement>('#nav-admin-entry');
+      const entry = host.querySelector<HTMLButtonElement>('#nav-admin-entry');
 
-      expect(entry?.textContent).toContain('管理');
-      expect(entry?.getAttribute('aria-haspopup')).toBe('menu');
+      expect(entry?.textContent?.trim()).toBe('管理');
+      expect(entry?.hasAttribute('aria-haspopup')).toBe(false);
       entry?.click();
-      await nextTick();
-      const items = Array.from(document.querySelectorAll<HTMLButtonElement>('.b-dropdown-item'));
-      expect(items.map((item) => item.textContent?.trim())).toEqual(['后台管理', '服务器管理']);
-
-      items[0]?.click();
       await nextTick();
       expect(mocks.routerPush).toHaveBeenCalledWith('/admin');
+      expect(document.querySelector('.b-dropdown-menu')).toBeNull();
+    });
 
-      entry?.click();
-      await nextTick();
-      const serverItem = Array.from(document.querySelectorAll<HTMLButtonElement>('.b-dropdown-item')).find((item) =>
-        item.textContent?.includes('服务器管理'),
-      );
-      serverItem?.click();
-      await nextTick();
-      expect(mocks.routerPush).toHaveBeenCalledWith('/serverManagement');
+    it('选中态只改变文字颜色，不绘制额外底边', () => {
+      const activeOnlyRule = navigationSource.match(/\.navigation-management-entry\.is-active\s*\{([^}]*)\}/u)?.[1] || '';
+
+      expect(navigationSource).toContain('.navigation-management-entry:hover,\n  .navigation-management-entry.is-active');
+      expect(activeOnlyRule).not.toMatch(/box-shadow|border-bottom/u);
     });
   });
 });

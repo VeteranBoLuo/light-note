@@ -263,7 +263,9 @@ describe('noteTreeService 只读树模型', () => {
   });
 
   it('新建目标预览复用 owner、面包屑和 8 层深度校验', async () => {
-    const db = { query: vi.fn().mockResolvedValue([rows]) };
+    const db = {
+      query: vi.fn().mockResolvedValueOnce([rows]).mockResolvedValueOnce([[]]),
+    };
     await expect(resolveOwnedNoteCreateTarget({ userId: 'user-1', parentId: 'child-a', db })).resolves.toEqual({
       parentId: 'child-a',
       depth: 3,
@@ -343,6 +345,13 @@ describe('noteTreeService 写入落点与移动', () => {
       }),
     };
 
+    await expect(
+      resolveOwnedNoteCreateTarget({ userId: 'u1', parentId: 'shared-root', db: connection }),
+    ).rejects.toMatchObject({
+      code: 'NOTE_SHARE_EXPOSURE_CONFIRMATION_REQUIRED',
+      status: 409,
+      details: { shareCount: 1, roots: [{ id: 'shared-root', title: '公开项目' }] },
+    });
     await expect(
       prepareOwnedNotePlacement(connection, { userId: 'u1', parentId: 'shared-root' }),
     ).rejects.toMatchObject({

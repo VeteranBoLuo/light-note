@@ -85,6 +85,10 @@ async function withTransaction(res, callback, { afterCommit } = {}) {
   }
 }
 
+function shouldSuppressUserRewards(req) {
+  return Boolean(req.suppressUserRewards || req.adminContext);
+}
+
 export async function listTodo(req, res) {
   // 游客只读共享示例待办；写入接口仍统一由 ensureNotVisitor 拦截。
   if (!req.user?.id) {
@@ -117,14 +121,17 @@ export async function countTodo(req, res) {
 
 export async function createTodo(req, res) {
   if (!ensureNotVisitor(req, res)) return;
+  const suppressUserRewards = shouldSuppressUserRewards(req);
   return withTransaction(
     res,
     (connection) =>
       createTodoItem(connection, req.user.id, req.body || {}, {
-        suppressUserRewards: Boolean(req.suppressUserRewards || req.adminContext),
+        suppressUserRewards,
       }),
     {
-      afterCommit: () => completeGrowthTask(req.user.id, 'first_todo', { userRole: req.user.role }),
+      afterCommit: suppressUserRewards
+        ? undefined
+        : () => completeGrowthTask(req.user.id, 'first_todo', { userRole: req.user.role }),
     },
   );
 }
@@ -152,9 +159,19 @@ export async function createTodoV2(req, res) {
   } catch (error) {
     return sendTodoError(res, error);
   }
-  return withTransaction(res, (connection) => createTodoPlan(connection, req.user.id, req.body || {}), {
-    afterCommit: () => completeGrowthTask(req.user.id, 'first_todo', { userRole: req.user.role }),
-  });
+  const suppressUserRewards = shouldSuppressUserRewards(req);
+  return withTransaction(
+    res,
+    (connection) =>
+      createTodoPlan(connection, req.user.id, req.body || {}, {
+        suppressUserRewards,
+      }),
+    {
+      afterCommit: suppressUserRewards
+        ? undefined
+        : () => completeGrowthTask(req.user.id, 'first_todo', { userRole: req.user.role }),
+    },
+  );
 }
 
 export async function ensureTodoCalendarRangeV2(req, res) {

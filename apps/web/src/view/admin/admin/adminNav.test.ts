@@ -44,6 +44,7 @@ const ICONS = {
   log: 'i-log',
   security: 'i-security',
   tool: 'i-tool',
+  server: 'i-server',
 };
 
 function nav(pendingOpinion = 0, pendingSecurity = 0, pendingModeration = 0) {
@@ -68,9 +69,9 @@ function allItems(entries: AdminNavEntry[]) {
 }
 
 describe('后台导航菜单', () => {
-  it('覆盖全部 22 个常驻后台模块，专业诊断工具不占菜单入口', () => {
+  it('覆盖全部 23 个常驻后台模块，专业诊断工具不占菜单入口', () => {
     const ids = allItems(nav()).map((item) => item.id);
-    // 18 个常驻 /admin 子路由；独立任务系列诊断只保留专业深链
+    // 后台子路由与跨外壳入口统一由一个配置维护；独立任务系列诊断只保留专业深链。
     expect(ids).toEqual(
       expect.arrayContaining([
         'overview',
@@ -94,16 +95,24 @@ describe('后台导航菜单', () => {
         'adminGovernance',
       ]),
     );
-    // 3 个独立顶级路由：此前完全没有后台入口，只能从主导航下拉进
-    expect(ids).toEqual(expect.arrayContaining(['knowledgeBase', 'notificationCenter', 'securityCenter']));
-    expect(ids).toHaveLength(22);
-    expect(new Set(ids).size).toBe(22);
+    // 独立顶级路由统一从后台侧栏进入，服务器管理固定放在最底部。
+    expect(ids).toEqual(
+      expect.arrayContaining(['knowledgeBase', 'notificationCenter', 'securityCenter', 'serverManagement']),
+    );
+    expect(ids).toHaveLength(23);
+    expect(new Set(ids).size).toBe(23);
+    expect(ids.at(-1)).toBe('serverManagement');
   });
 
   it('跨外壳的入口给绝对路径并标记 external，后台子路由拼 /admin/{id}', () => {
     const items = allItems(nav());
     const external = items.filter((item) => item.external);
-    expect(external.map((item) => item.id).sort()).toEqual(['knowledgeBase', 'notificationCenter', 'securityCenter']);
+    expect(external.map((item) => item.id).sort()).toEqual([
+      'knowledgeBase',
+      'notificationCenter',
+      'securityCenter',
+      'serverManagement',
+    ]);
     for (const item of external) {
       expect(item.path?.startsWith('/')).toBe(true);
       expect(item.path?.startsWith('/admin/')).toBe(false);
@@ -146,6 +155,7 @@ describe('后台导航菜单', () => {
       'growth',
       'security',
       'tool',
+      'server',
     ]);
   });
 
@@ -179,7 +189,7 @@ describe('后台导航菜单', () => {
   it('只有一项的类别不给组头，多项的才分组', () => {
     const entries = nav();
     const standalone = entries.filter((entry) => entry.kind === 'item');
-    expect(standalone.map((entry) => entry.key)).toEqual(['overview', 'action', 'security']);
+    expect(standalone.map((entry) => entry.key)).toEqual(['overview', 'action', 'security', 'server']);
     for (const entry of entries) {
       if (entry.kind === 'group') expect(entry.items.length).toBeGreaterThan(1);
     }
@@ -214,6 +224,7 @@ describe('resolveActiveNavId', () => {
     expect(resolveActiveNavId('/securityCenter/ips')).toBe('securityCenter');
     expect(resolveActiveNavId('/notificationCenter')).toBe('notificationCenter');
     expect(resolveActiveNavId('/knowledgeBase')).toBe('knowledgeBase');
+    expect(resolveActiveNavId('/serverManagement/services')).toBe('serverManagement');
   });
 
   it('前缀判定不误伤同前缀的其他路径', () => {
@@ -230,6 +241,7 @@ describe('resolveActiveNavId', () => {
       '/securityCenter/events',
       '/notificationCenter',
       '/knowledgeBase',
+      '/serverManagement/events',
     ]) {
       expect(ids.has(resolveActiveNavId(path))).toBe(true);
     }

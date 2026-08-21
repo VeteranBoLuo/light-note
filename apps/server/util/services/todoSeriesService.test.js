@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  createTodoPlan,
   deleteTodoPlan,
   ensureSeriesBuffer,
   ensureTodoCalendarRange,
@@ -16,6 +17,70 @@ import {
 } from './todoSeriesService.js';
 
 describe('todoSeriesService v2', () => {
+  const singlePlanDraft = {
+    taskMode: 'single',
+    title: '记录创建事实',
+    timing: {
+      timezone: 'Asia/Shanghai',
+      anchorDate: '2026-08-07',
+      startTime: '09:00',
+      dueTime: '10:00',
+      dueDayOffset: 0,
+    },
+    plan: { type: 'once' },
+    reminder: { mode: 'none', channels: [] },
+    singleTaskReminder: { version: 1, mode: 'none', channels: [] },
+  };
+  const singlePlanOptions = { now: new Date('2026-08-06T00:00:00.000Z') };
+
+  it('v2 新建计划只为首条待办固化一次创建事实', async () => {
+    const preview = previewTodoPlan(singlePlanDraft, singlePlanOptions);
+    const db = {
+      query: vi.fn(async (sql) => {
+        if (sql.includes('FROM todo_plan_requests')) return [[]];
+        return [{ affectedRows: 1 }];
+      }),
+    };
+
+    const result = await createTodoPlan(
+      db,
+      'user-1',
+      {
+        ...singlePlanDraft,
+        previewHash: preview.previewHash,
+        idempotencyKey: 'create-fact-1',
+      },
+      singlePlanOptions,
+    );
+
+    const factCalls = db.query.mock.calls.filter(([sql]) => sql.includes('INSERT IGNORE INTO growth_events'));
+    expect(factCalls).toHaveLength(1);
+    expect(factCalls[0][1]).toEqual(['user-1', 'todo_create', 'todo_create:', 'todo_create', result.todoId, 'user-1']);
+  });
+
+  it('v2 管理员代操作或奖励抑制上下文不记录创建事实', async () => {
+    const preview = previewTodoPlan(singlePlanDraft, singlePlanOptions);
+    const db = {
+      query: vi.fn(async (sql) => {
+        if (sql.includes('FROM todo_plan_requests')) return [[]];
+        return [{ affectedRows: 1 }];
+      }),
+    };
+
+    await createTodoPlan(
+      db,
+      'user-1',
+      {
+        ...singlePlanDraft,
+        previewHash: preview.previewHash,
+        idempotencyKey: 'create-fact-suppressed-1',
+      },
+      { ...singlePlanOptions, suppressUserRewards: true },
+    );
+
+    expect(db.query.mock.calls.every(([sql]) => !sql.includes('INSERT IGNORE INTO growth_events'))).toBe(true);
+  });
+
   it('单任务预览范围使用真实开始与截止日期', () => {
     const preview = previewTodoPlan(
       {

@@ -295,6 +295,7 @@ describe('BDrawer compositor cleanup', () => {
             placement: 'bottom',
             height: '60dvh',
             zIndex: 960,
+            showHandle: true,
           });
       },
     });
@@ -312,6 +313,8 @@ describe('BDrawer compositor cleanup', () => {
     const wrapper = document.querySelector<HTMLElement>('.b-drawer-wrapper');
     expect(wrapper?.style.zIndex).toBe('960');
     expect(panel?.classList.contains('b-drawer-panel--bottom')).toBe(true);
+    expect(panel?.classList.contains('b-drawer-panel--with-handle')).toBe(true);
+    expect(panel?.querySelector('.b-drawer-handle')).not.toBeNull();
     expect(panel?.style.width).toBe('100%');
     // jsdom 不支持 dvh，基础组件必须和旧 WebView 一样降级到 vh，而不是丢掉整条高度。
     expect(panel?.style.height).toBe('60vh');

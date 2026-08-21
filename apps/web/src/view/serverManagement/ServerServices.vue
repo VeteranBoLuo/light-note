@@ -48,9 +48,21 @@
                 <template v-else-if="column.key === 'restarts'">{{ record.restartCount ?? '—' }}</template>
                 <template v-else-if="column.key === 'uptime'">{{ formatDuration(record.uptimeSeconds) }}</template>
                 <template v-else-if="column.key === 'actions'">
-                  <BButton size="small" @click="openLogs(record)">
-                    <SvgIcon :src="icon.infrastructure.logs" size="14" />{{ t('serverManagement.viewLogs') }}
-                  </BButton>
+                  <div class="service-actions">
+                    <BButton size="small" @click="openLogs(record)">
+                      <SvgIcon :src="icon.infrastructure.logs" size="14" />{{ t('serverManagement.viewLogs') }}
+                    </BButton>
+                    <BButton
+                      v-for="action in record.actions"
+                      :key="action"
+                      type="danger"
+                      size="small"
+                      :disabled="actionLoading"
+                      @click="openAction(record, action)"
+                    >
+                      <SvgIcon :src="icon.infrastructure.restart" size="14" />{{ actionLabel(action) }}
+                    </BButton>
+                  </div>
                 </template>
               </template>
             </BTable>
@@ -67,13 +79,31 @@
                 ><BChip :tone="tone(service.state)">{{ stateLabel(service.state) }}</BChip></template
               >
               <template #trailing>
-                <BButton
-                  size="small"
-                  :aria-label="t('serverManagement.viewServiceLogs', { service: serviceName(service.id) })"
-                  @click="openLogs(service)"
-                >
-                  <SvgIcon :src="icon.infrastructure.logs" size="15" />
-                </BButton>
+                <div class="service-mobile-actions">
+                  <BButton
+                    size="small"
+                    :aria-label="t('serverManagement.viewServiceLogs', { service: serviceName(service.id) })"
+                    @click="openLogs(service)"
+                  >
+                    <SvgIcon :src="icon.infrastructure.logs" size="15" />
+                  </BButton>
+                  <BButton
+                    v-for="action in service.actions"
+                    :key="action"
+                    type="danger"
+                    size="small"
+                    :disabled="actionLoading"
+                    :aria-label="
+                      t('serverManagement.actionForService', {
+                        action: actionLabel(action),
+                        service: serviceName(service.id),
+                      })
+                    "
+                    @click="openAction(service, action)"
+                  >
+                    <SvgIcon :src="icon.infrastructure.restart" size="15" />
+                  </BButton>
+                </div>
               </template>
             </MobileListRow>
           </MobileListSurface>
@@ -89,15 +119,73 @@
       fullscreen-mobile
     >
       <div class="service-logs">
-        <BLoading v-if="logsLoading" inline :loading="true" :title="t('serverManagement.logsLoading')" />
-        <div v-else-if="logsError" class="infra-state-card"
-          ><span>{{ logsError }}</span
-          ><BButton size="small" @click="loadLogs">{{ t('serverManagement.retry') }}</BButton></div
-        >
-        <p v-else-if="!logLines.length">{{ t('serverManagement.logsEmpty') }}</p>
-        <pre v-else><code>{{ logLines.join('\n') }}</code></pre>
+        <div class="service-logs__toolbar">
+          <div class="service-logs__identity">
+            <span class="service-logs__icon"><SvgIcon :src="icon.infrastructure.service" size="18" /></span>
+            <div>
+              <strong>{{ selectedService ? serviceName(selectedService.id) : '—' }}</strong>
+              <BChip tone="neutral">{{ t('serverManagement.logsReadOnly') }}</BChip>
+            </div>
+          </div>
+          <div class="service-logs__controls">
+            <label :id="logLimitLabelId">{{ t('serverManagement.logsLimitLabel') }}</label>
+            <BSelect
+              class="service-logs__limit"
+              :value="logLimit"
+              :options="logLimitOptions"
+              :aria-labelledby="logLimitLabelId"
+              :disabled="logsLoading"
+              @change="setLogLimit"
+            />
+            <BButton size="small" :loading="logsLoading" @click="loadLogs">
+              <SvgIcon :src="icon.infrastructure.refresh" size="14" />{{ t('serverManagement.refreshLogs') }}
+            </BButton>
+          </div>
+        </div>
+
+        <div v-if="logLines.length && !logsLoading" class="service-logs__meta" role="status">
+          <span>{{ t('serverManagement.logsLineCount', { count: logLines.length }) }}</span>
+          <span v-if="logsCapturedAt">{{
+            t('serverManagement.logsCapturedAt', { time: formatLogTime(logsCapturedAt) })
+          }}</span>
+          <span v-if="logsTruncated" class="is-warning">{{ t('serverManagement.logsTruncated') }}</span>
+        </div>
+
+        <div v-if="logsLoading" class="service-logs__state">
+          <BLoading inline :loading="true" :title="t('serverManagement.logsLoading')" />
+        </div>
+        <div v-else-if="logsError" class="service-logs__state is-error">
+          <SvgIcon :src="icon.message.warning" size="22" />
+          <span>{{ logsError }}</span>
+          <BButton size="small" @click="loadLogs">{{ t('serverManagement.retry') }}</BButton>
+        </div>
+        <div v-else-if="!logLines.length" class="service-logs__state">
+          <SvgIcon :src="icon.infrastructure.logs" size="22" />
+          <span>{{ t('serverManagement.logsEmpty') }}</span>
+        </div>
+        <div v-else class="service-log-viewer">
+          <div class="service-log-viewer__header" aria-hidden="true">
+            <span>{{ t('serverManagement.logsLineColumn') }}</span>
+            <span>{{ t('serverManagement.logsOutputColumn') }}</span>
+          </div>
+          <ol :aria-label="logViewerLabel">
+            <li v-for="(line, index) in logLines" :key="`${index}-${line}`">
+              <span aria-hidden="true">{{ index + 1 }}</span
+              ><code>{{ line || ' ' }}</code>
+            </li>
+          </ol>
+        </div>
       </div>
     </BModal>
+    <AdminRiskActionModal
+      v-model:visible="actionVisible"
+      :title="actionDialogTitle"
+      :impact="actionImpact"
+      :confirm-phrase="actionConfirmPhrase"
+      :confirm-label="actionConfirmLabel"
+      :loading="actionLoading"
+      @confirm="confirmAction"
+    />
   </main>
 </template>
 
@@ -105,10 +193,12 @@
   import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type {
+    HostAgentAction,
     HostAgentServiceId,
     HostAgentServiceSnapshot,
     HostAgentServiceState,
   } from '@lightnote/shared/host-agent-protocol';
+  import { HOST_AGENT_ACTIONS } from '@lightnote/shared/host-agent-protocol';
   import { getInfraLogs, getInfraServices } from '@/api/infraApi';
   import icon from '@/config/icon';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -118,15 +208,27 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
+  import AdminRiskActionModal from '@/components/admin/AdminRiskActionModal.vue';
   import MobileListSurface from '@/components/mobile/MobileListSurface.vue';
   import MobileListRow from '@/components/mobile/MobileListRow.vue';
   import InfraModuleHeader from './InfraModuleHeader.vue';
   import { useInfraSnapshot } from './useInfraSnapshot';
+  import { useInfraActions } from './useInfraActions';
   import { formatBytes, formatDuration, formatPercent } from './serverManagementFormat';
 
   type ChipTone = 'neutral' | 'success' | 'danger' | 'pending';
-  const { t } = useI18n();
+  type LogLimit = 80 | 160 | 300;
+  interface SelectedAction {
+    action: HostAgentAction;
+    targetId: HostAgentServiceId;
+    serviceName: string;
+  }
+
+  const { t, locale } = useI18n();
   const { data, initialLoading, refreshing, error, refresh } = useInfraSnapshot(getInfraServices, 10_000);
+  const { runAction } = useInfraActions(refresh);
   const services = computed(() => data.value?.services || []);
   const summaryCards = computed(() => {
     const running = services.value.filter((item) => item.state === 'running').length;
@@ -166,13 +268,46 @@
     { key: 'memory', title: t('serverManagement.memory'), width: '110px', ellipsis: false },
     { key: 'restarts', title: t('serverManagement.servicesPage.restarts'), width: '90px', ellipsis: false },
     { key: 'uptime', title: t('serverManagement.columns.uptime'), width: '110px', ellipsis: false },
-    { key: 'actions', title: t('serverManagement.columns.actions'), width: '130px', ellipsis: false },
+    { key: 'actions', title: t('serverManagement.columns.actions'), width: 'minmax(180px, auto)', ellipsis: false },
   ]);
   const logsVisible = ref(false);
   const logsLoading = ref(false);
   const logsError = ref('');
   const logLines = ref<string[]>([]);
+  const logsTruncated = ref(false);
+  const logsCapturedAt = ref('');
+  const logLimit = ref<LogLimit>(160);
   const selectedService = ref<HostAgentServiceSnapshot | null>(null);
+  const actionVisible = ref(false);
+  const actionLoading = ref(false);
+  const selectedAction = ref<SelectedAction | null>(null);
+  const logLimitLabelId = 'service-logs-limit-label';
+  const logLimitOptions = computed(() => [
+    { value: 80, label: t('serverManagement.logLimits.short') },
+    { value: 160, label: t('serverManagement.logLimits.standard') },
+    { value: 300, label: t('serverManagement.logLimits.extended') },
+  ]);
+  const logViewerLabel = computed(() =>
+    selectedService.value
+      ? t('serverManagement.logsTitle', { service: serviceName(selectedService.value.id) })
+      : t('serverManagement.logsTitle', { service: '' }),
+  );
+  const actionDialogTitle = computed(() =>
+    selectedAction.value
+      ? t('serverManagement.actionDialogTitle', {
+          action: actionLabel(selectedAction.value.action),
+          service: selectedAction.value.serviceName,
+        })
+      : t('serverManagement.actionTitle'),
+  );
+  const actionImpact = computed(() =>
+    selectedAction.value?.action === HOST_AGENT_ACTIONS.NGINX_RELOAD
+      ? t('serverManagement.nginxReloadImpact')
+      : t('serverManagement.serviceRestartImpact'),
+  );
+  const actionConfirmLabel = computed(() => (selectedAction.value ? actionLabel(selectedAction.value.action) : ''));
+  const actionConfirmPhrase = '';
+  let logsRequestId = 0;
 
   function serviceName(id: HostAgentServiceId) {
     return t(`serverManagement.serviceNames.${id}`);
@@ -195,19 +330,62 @@
     void loadLogs();
   }
   async function loadLogs() {
-    if (!selectedService.value || logsLoading.value) return;
+    if (!selectedService.value) return;
+    const requestId = ++logsRequestId;
+    const serviceId = selectedService.value.id;
+    const limit = logLimit.value;
     logsLoading.value = true;
     logsError.value = '';
+    logLines.value = [];
+    logsTruncated.value = false;
+    logsCapturedAt.value = '';
     try {
-      const response = await getInfraLogs(selectedService.value.id);
+      const response = await getInfraLogs(serviceId, limit);
+      if (requestId !== logsRequestId) return;
       logLines.value = response.data.lines || [];
+      logsTruncated.value = Boolean(response.data.truncated);
+      logsCapturedAt.value = response.data.capturedAt || '';
     } catch (cause) {
+      if (requestId !== logsRequestId) return;
       logsError.value =
         cause && typeof cause === 'object' && 'message' in cause
           ? String(cause.message || '')
           : t('serverManagement.logsFailed');
     } finally {
-      logsLoading.value = false;
+      if (requestId === logsRequestId) logsLoading.value = false;
+    }
+  }
+  function setLogLimit(value: unknown) {
+    const next = Number(value);
+    if (![80, 160, 300].includes(next) || next === logLimit.value) return;
+    logLimit.value = next as LogLimit;
+    void loadLogs();
+  }
+  function formatLogTime(value: string) {
+    const date = new Date(String(value).replace(' ', 'T'));
+    return Number.isFinite(date.getTime()) ? date.toLocaleString(locale.value, { hour12: false }) : value;
+  }
+  function actionLabel(action: HostAgentAction) {
+    return action === HOST_AGENT_ACTIONS.NGINX_RELOAD
+      ? t('serverManagement.reloadNginx')
+      : t('serverManagement.restartService');
+  }
+  function openAction(service: HostAgentServiceSnapshot, action: HostAgentAction) {
+    selectedAction.value = { action, targetId: service.id, serviceName: serviceName(service.id) };
+    actionVisible.value = true;
+  }
+  async function confirmAction(confirmation: { reason: string; confirmed: true; confirmText: string }) {
+    if (!selectedAction.value || actionLoading.value) return;
+    actionLoading.value = true;
+    try {
+      await runAction(selectedAction.value.action, selectedAction.value.targetId, confirmation);
+      actionVisible.value = false;
+      message.success(t('serverManagement.actionSucceeded'));
+    } catch (cause) {
+      const detail = cause && typeof cause === 'object' && 'message' in cause ? String(cause.message || '') : '';
+      message.error(detail || t('serverManagement.actionFailed'));
+    } finally {
+      actionLoading.value = false;
     }
   }
 </script>
@@ -272,20 +450,172 @@
     gap: 7px;
     font-weight: 600;
   }
+  .service-actions,
+  .service-mobile-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+  .service-actions :deep(.b_btn),
+  .service-mobile-actions :deep(.b_btn) {
+    gap: 5px;
+  }
   .services-mobile {
     display: none;
   }
-  .service-logs pre {
-    max-height: 60vh;
-    margin: 0;
-    padding: 14px;
-    overflow: auto;
+  .service-logs {
+    min-height: 310px;
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    gap: 12px;
+  }
+  .service-logs__toolbar,
+  .service-logs__identity,
+  .service-logs__identity > div,
+  .service-logs__controls,
+  .service-logs__meta,
+  .service-logs__state {
+    display: flex;
+    align-items: center;
+  }
+  .service-logs__toolbar {
+    min-width: 0;
+    justify-content: space-between;
+    gap: 18px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--surface-divider-color);
+  }
+  .service-logs__identity {
+    min-width: 0;
+    gap: 10px;
+  }
+  .service-logs__identity > div {
+    min-width: 0;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+  .service-logs__identity strong {
+    overflow: hidden;
+    color: var(--text-color);
+    font-size: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .service-logs__icon {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--surface-border-color);
     border-radius: 10px;
-    background: #111827;
-    color: #dbe7f5;
+    color: var(--primary-color);
+    background: var(--workspace-panel-bg-color);
+  }
+  .service-logs__controls {
+    flex: 0 0 auto;
+    gap: 8px;
+  }
+  .service-logs__controls label {
+    color: var(--desc-color);
     font-size: 12px;
-    line-height: 1.65;
-    white-space: pre-wrap;
+  }
+  .service-logs__limit {
+    width: 132px;
+  }
+  .service-logs__meta {
+    min-height: 18px;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    color: var(--pre-muted-color, var(--desc-color));
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+  .service-logs__meta .is-warning {
+    color: var(--warning-color, #ad6800);
+  }
+  .service-logs__state {
+    min-height: 240px;
+    justify-content: center;
+    gap: 10px;
+    border: 1px dashed var(--surface-border-color);
+    border-radius: 12px;
+    color: var(--desc-color);
+    background: var(--workspace-panel-bg-color);
+  }
+  .service-logs__state.is-error {
+    border-style: solid;
+    border-color: var(--error-color, #d14343);
+    color: var(--error-color, #d14343);
+  }
+  .service-log-viewer {
+    max-height: min(58vh, 560px);
+    overflow: auto;
+    border: 1px solid var(--pre-border-color);
+    border-radius: 12px;
+    color: var(--pre-text-color);
+    background: var(--pre-bg-color);
+    box-shadow: inset 0 1px 0 var(--pre-highlight-color, transparent);
+  }
+  .service-log-viewer__header,
+  .service-log-viewer li {
+    min-width: max-content;
+    display: grid;
+    grid-template-columns: 58px minmax(660px, 1fr);
+  }
+  .service-log-viewer__header {
+    position: sticky;
+    z-index: 1;
+    top: 0;
+    border-bottom: 1px solid var(--pre-border-color);
+    color: var(--pre-muted-color);
+    background: var(--pre-bg-color);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .service-log-viewer__header span {
+    padding: 8px 12px;
+  }
+  .service-log-viewer__header span:first-child,
+  .service-log-viewer li > span {
+    border-right: 1px solid var(--pre-border-color);
+    text-align: right;
+  }
+  .service-log-viewer ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .service-log-viewer li:not(:last-child) {
+    border-bottom: 1px solid var(--pre-border-color);
+  }
+  .service-log-viewer li > span,
+  .service-log-viewer code {
+    padding: 5px 12px;
+    font:
+      11px/1.55 'Fira Code',
+      ui-monospace,
+      SFMono-Regular,
+      Menlo,
+      Consolas,
+      monospace !important;
+  }
+  .service-log-viewer li > span {
+    color: var(--pre-muted-color);
+    font-variant-numeric: tabular-nums;
+    user-select: none;
+  }
+  .service-log-viewer code {
+    color: var(--pre-text-color);
+    white-space: pre;
+    text-shadow: none !important;
+  }
+  html.light-note-mobile-rendering .service-logs__icon,
+  html.light-note-mobile-rendering .service-log-viewer {
+    box-shadow: none;
   }
   @media (max-width: 900px) {
     .service-summary-grid {
@@ -310,6 +640,50 @@
     }
     .service-summary-card strong {
       font-size: 21px;
+    }
+    .service-mobile-actions {
+      flex-wrap: nowrap;
+    }
+    .service-mobile-actions :deep(.b_btn) {
+      width: 32px;
+      padding: 0;
+    }
+    .service-logs {
+      min-height: calc(100vh - 150px);
+    }
+    .service-logs__toolbar {
+      align-items: stretch;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .service-logs__controls {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .service-logs__controls label {
+      grid-column: 1 / 3;
+    }
+    .service-logs__limit {
+      width: 100%;
+    }
+    .service-logs__state {
+      min-height: 220px;
+      flex-direction: column;
+      padding: 18px;
+      text-align: center;
+    }
+    .service-log-viewer {
+      max-height: calc(100vh - 330px);
+    }
+    .service-log-viewer__header,
+    .service-log-viewer li {
+      grid-template-columns: 46px minmax(560px, 1fr);
+    }
+    .service-log-viewer__header span,
+    .service-log-viewer li > span,
+    .service-log-viewer code {
+      padding-right: 9px;
+      padding-left: 9px;
     }
   }
 </style>

@@ -71,11 +71,17 @@ describe('cloudFileUploadApi', () => {
     postMock.mockResolvedValue({
       status: 200,
       msg: '',
-      data: { items: [{ id: 7, name: '资料' }, { id: null, name: '无效' }, { id: 9, name: '  ' }] },
+      data: {
+        items: [
+          { id: 7, name: '资料', fullPath: '工作 / 资料' },
+          { id: null, name: '无效' },
+          { id: 9, name: '  ' },
+        ],
+      },
     });
 
-    await expect(fetchCloudFolders()).resolves.toEqual([{ id: '7', name: '资料' }]);
-    expect(postMock).toHaveBeenCalledWith('/api/file/queryFolder', { filters: {} }, { silent: true });
+    await expect(fetchCloudFolders()).resolves.toEqual([{ id: '7', name: '工作 / 资料' }]);
+    expect(postMock).toHaveBeenCalledWith('/api/file/queryFolder', { filters: {}, treeVersion: 2 }, { silent: true });
   });
 
   it('托管上传把自定义名称、随机对象键、目录和上传进度带入安全确认链路', async () => {

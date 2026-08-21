@@ -5,7 +5,14 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/http/request', () => ({ apiBasePost: vi.fn() }));
 vi.mock('@/utils/clipboard', () => ({ copyTextToClipboard: vi.fn() }));
 
-const { buildNoteShareUrl, readNoteShareSessionTicket, saveNoteShareSessionTicket } = await import('./noteShare');
+const {
+  buildNoteShareUrl,
+  forgetOwnedNoteShareToken,
+  readNoteShareSessionTicket,
+  readOwnedNoteShareToken,
+  rememberOwnedNoteShareToken,
+  saveNoteShareSessionTicket,
+} = await import('./noteShare');
 
 describe('note share URL', () => {
   it('在当前标签页保存短时阅读票据，刷新时可复用且不落完整分享令牌', () => {
@@ -27,6 +34,19 @@ describe('note share URL', () => {
     expect(url.searchParams.get('page')).toBe('page-2');
     expect(url.hash).toBe(`#token=${token}`);
     expect(`${url.pathname}${url.search}`).not.toContain(token);
+  });
+
+  it('仅在所有者当前标签页记住新建链接，并用尾部提示防止错配旧记录', () => {
+    sessionStorage.clear();
+    const token = `owner-${'a'.repeat(43)}`;
+    rememberOwnedNoteShareToken('share-1', token);
+
+    expect(readOwnedNoteShareToken('share-1', token.slice(-16))).toBe(token);
+    expect(readOwnedNoteShareToken('share-1', 'wrong-hint')).toBe('');
+    expect(sessionStorage.getItem('light-note:note-share-reading-session')).toBeNull();
+
+    forgetOwnedNoteShareToken('share-1');
+    expect(readOwnedNoteShareToken('share-1')).toBe('');
   });
 
   it('目录内切换页面时保留承载令牌的 fragment', () => {
@@ -63,7 +83,22 @@ describe('note share URL', () => {
     expect(readerSource).toContain("sidebarTab.value === 'outline' && !headings.value.length ? 'pages'");
     expect(readerSource).toContain('const renderVersion = ++pageRenderVersion');
     expect(readerSource.match(/if \(renderVersion !== pageRenderVersion\) return;/g)).toHaveLength(2);
+    expect(readerSource).toContain('if (!busy && renderedHtml.value) void collectRenderedHeadings(pageRenderVersion)');
+    expect(readerSource).toContain('if (!content) return');
     expect(readerSource).toContain('variant="share"');
+  });
+
+  it('编辑页大纲只有内部列表承接滚动，单个标题不再出现双层滚动条', () => {
+    const catalogSource = readFileSync(
+      resolve(process.cwd(), 'src/components/noteLibrary/detail/Catalog.vue'),
+      'utf8',
+    );
+    const outlineSource = readFileSync(
+      resolve(process.cwd(), 'src/components/noteLibrary/detail/NoteOutlineList.vue'),
+      'utf8',
+    );
+    expect(catalogSource).toMatch(/\.toc-container\s*\{[\s\S]*?overflow:\s*hidden/);
+    expect(outlineSource).toMatch(/\.note-outline-list[\s\S]*?height:\s*calc\(100% - 12px\)/);
   });
 
   it('分享目录折叠箭头旋转真实包裹层，新链接复制区保留间距', () => {
@@ -80,6 +115,9 @@ describe('note share URL', () => {
     expect(treeSource).toContain('box-shadow: inset 3px 0 0 var(--primary-color)');
     expect(modalSource).toContain('class="note-share-modal__new-link-row"');
     expect(modalSource).toContain('gap: 10px');
+    expect(modalSource).toContain('@click="copyRecordLink(record)"');
+    expect(modalSource).toContain('readOwnedNoteShareToken(record.id, record.tokenHint)');
+    expect(modalSource).toContain("okText: t('noteShare.rotateAndCopy')");
   });
 
   it('页头及品牌保留安全间距，操作在新页面打开', () => {

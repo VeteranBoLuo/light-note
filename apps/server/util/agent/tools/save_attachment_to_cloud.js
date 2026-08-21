@@ -57,7 +57,7 @@ export default {
       attachmentId: { type: 'string', description: '本轮附件上下文中的 attachment ID，必填' },
       fileName: { type: 'string', description: '可选的新文件名；不能改变原扩展名' },
       folderId: { type: 'string', description: '可选，目标云空间文件夹 ID；来自文件夹选择器时以它为准' },
-      folderName: { type: 'string', description: '可选，目标已有文件夹的精确名称；不填则保存到根目录' },
+      folderName: { type: 'string', description: '可选，目标已有文件夹的精确名称；不填则不放入文件夹' },
       folderStrategy: {
         type: 'string',
         enum: ['existing', 'root', 'create_if_missing'],
@@ -96,7 +96,7 @@ export default {
   },
   preview(args) {
     const normalized = { ...args, ...validateArgs(args) };
-    const targetFolder = normalized.folderName || '云空间根目录';
+    const targetFolder = normalized.folderName || '不放入文件夹';
     const createsFolder = normalized.folderStrategy === 'create_if_missing';
     return {
       title: '保存附件到云空间',
@@ -125,7 +125,7 @@ export default {
     });
   },
   transform(raw) {
-    const location = raw.folderName ? `文件夹“${raw.folderName}”` : '云空间根目录';
+    const location = raw.folderName ? `文件夹“${raw.folderName}”` : '“全部文件”（未放入文件夹）';
     const folderPrefix = raw.folderCreated ? `已新建文件夹“${raw.folderName}”，` : '';
     return raw.alreadySaved
       ? `文件“${raw.fileName}”已经在${location}中，无需重复保存。`

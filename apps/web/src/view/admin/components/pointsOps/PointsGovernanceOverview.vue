@@ -132,6 +132,7 @@
     lastActiveTime: string | null;
   }
 
+  const props = withDefaults(defineProps<{ hideInternal?: boolean }>(), { hideInternal: true });
   const emit = defineEmits<{ 'select-user': [user: BalanceLeaderboardUser] }>();
   const bookmark = bookmarkStore();
 
@@ -250,7 +251,7 @@
   }
 
   async function reload() {
-    const payload: Record<string, unknown> = {};
+    const payload: Record<string, unknown> = { hideInternal: props.hideInternal };
     if (rangeMode.value === 'custom') {
       if (!customStartDate.value || !customEndDate.value) {
         message.info('请选择自定义开始和结束日期');

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
 import { finishAdminAction } from './adminActionExecution.js';
+import { INTERNAL_ROLES } from './internalRoles.js';
 import { POINTS_EARNING_POLICY_VERSION } from './pointsEarningPolicy.js';
 import { pointsGrantHash, PointsGrantError } from './pointsGrantOperations.js';
 
@@ -18,7 +19,7 @@ function decodeCursor(cursor) {
 }
 
 export async function getPointsReconciliation(
-  { cursor = null, limit = 50, onlyMismatch = true } = {},
+  { cursor = null, limit = 50, onlyMismatch = true, hideInternal = true } = {},
   { db = pool } = {},
 ) {
   const safeLimit = Math.min(100, Math.max(1, Math.trunc(Number(limit) || 50)));
@@ -26,20 +27,41 @@ export async function getPointsReconciliation(
   // 只看异常时每次最多扫描 500 个账号；先取有序账号页，再对这一小页做两次 GROUP BY。
   // 这样不会为列表中的每一行执行相关子查询，也不会在一个 HTTP 请求里聚合全站流水。
   const scanLimit = onlyMismatch ? Math.min(500, Math.max(100, safeLimit * 5)) : safeLimit;
+  const userClauses = [];
+  const userParams = [];
+  if (afterUserId) {
+    userClauses.push('ug.user_id > ?');
+    userParams.push(afterUserId);
+  }
+  if (hideInternal !== false) {
+    userClauses.push(`NOT EXISTS (
+      SELECT 1 FROM user internal_user
+       WHERE internal_user.id = ug.user_id
+         AND internal_user.role IN (${INTERNAL_ROLES.map(() => '?').join(',')})
+    )`);
+    userParams.push(...INTERNAL_ROLES);
+  }
   const [users] = await db.query(
     `SELECT ug.user_id AS userId, u.alias, u.email, CAST(ug.points AS SIGNED) AS balance,
             COALESCE(bl.baseline_delta, 0) AS baselineDelta
        FROM user_growth ug
        LEFT JOIN user u ON u.id = ug.user_id
        LEFT JOIN points_ledger_baselines bl ON bl.user_id = ug.user_id
-      ${afterUserId ? 'WHERE ug.user_id > ?' : ''}
+      ${userClauses.length ? `WHERE ${userClauses.join(' AND ')}` : ''}
       ORDER BY ug.user_id ASC
       LIMIT ${scanLimit + 1}`,
-    afterUserId ? [afterUserId] : [],
+    userParams,
   );
   const scannedUsers = users.slice(0, scanLimit);
   if (!scannedUsers.length) {
-    return { scanned: 0, consistent: 0, mismatched: 0, rows: [], nextCursor: null };
+    return {
+      scanned: 0,
+      consistent: 0,
+      mismatched: 0,
+      rows: [],
+      nextCursor: null,
+      filters: { hideInternal: hideInternal !== false },
+    };
   }
   const userIds = scannedUsers.map((row) => String(row.userId));
   const marks = userIds.map(() => '?').join(',');
@@ -86,6 +108,7 @@ export async function getPointsReconciliation(
     mismatched: calculated.filter((item) => item.difference !== 0).length,
     rows: page,
     nextCursor: hasBufferedMatches || hasUnscannedUsers ? encodeCursor(cursorUserId) : null,
+    filters: { hideInternal: hideInternal !== false },
   };
 }
 

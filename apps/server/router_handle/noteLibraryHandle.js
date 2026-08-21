@@ -57,6 +57,7 @@ import {
   resolveNoteBreadcrumbFromSnapshot,
   resolveNoteDescendantIdsFromSnapshot,
   resolveOwnedNoteBreadcrumb,
+  resolveOwnedNoteCreateTarget,
 } from '../util/services/noteTreeService.js';
 import {
   EXPORT_FORMATS,
@@ -267,6 +268,25 @@ export const addNote = async (req, res) => {
 
 export const getNoteTreeFeatures = (req, res) =>
   res.send(resultData({ features: resolveNoteTreeFeatures(noteTreeFeatureIdentity(req)) }));
+
+// 新建子页面进入编辑器前的只读预检：与真正 addNote 的事务写入复用同一套
+// 父级归属、深度和公开分享祖先校验，避免先进入新建页、自动保存时才补弹确认。
+export const previewNoteCreateTarget = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    assertNoteTreeFeature(req, NOTE_TREE_FEATURE.WRITE);
+    const parentId = String(req.body?.parentId || '').trim();
+    if (!parentId) {
+      return res.send(
+        resultData({ code: 'NOTE_TREE_PARENT_REQUIRED' }, 400, L(req, '缺少父页面 ID', 'Parent page ID is required')),
+      );
+    }
+    const target = await resolveOwnedNoteCreateTarget({ userId: req.user.id, parentId });
+    return res.send(resultData({ parentId: target.parentId, depth: target.depth }));
+  } catch (error) {
+    return sendNoteTreeError(req, res, 'preview-note-create-target', error);
+  }
+};
 
 // 页面树只读元数据：不返回正文，服务端始终按 auth/admin context 中的 subject 用户建树。
 export const queryNoteTree = async (req, res) => {

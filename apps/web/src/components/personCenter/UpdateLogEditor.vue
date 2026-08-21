@@ -116,6 +116,7 @@
           :placeholder="t('changelog.placeholders.markdown')"
           @click="syncImageSizeFromCursor"
           @keyup="syncImageSizeFromCursor"
+          @paste="handleMarkdownPaste"
         />
       </div>
 
@@ -158,6 +159,7 @@
   import {
     createUpdateLogImageHtml,
     detectUpdateLogImageSizeAtCursor,
+    insertUpdateLogImageAtSelection,
     resizeUpdateLogImageAtCursor,
     type UpdateLogImageSize,
   } from '@/utils/updateLogImageSize';
@@ -211,6 +213,15 @@
   const renderedPreview = ref('');
   let previewSequence = 0;
 
+  const UPDATE_LOG_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+  const UPDATE_LOG_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif']);
+
+  interface MarkdownSelectionSnapshot {
+    markdown: string;
+    start: number;
+    end: number;
+  }
+
   const logId = computed(() => props.logId);
   const statusOptions = computed(() => [
     { label: t('changelog.status.draft'), value: 'draft' },
@@ -255,9 +266,7 @@
     tagsText.value = (item.tags || []).join('，');
     contentMarkdown.value =
       item.contentMarkdown ||
-      (item.highlights || [])
-        .map((highlight, index) => `${index + 1}. ${highlight}`)
-        .join('\n\n');
+      (item.highlights || []).map((highlight, index) => `${index + 1}. ${highlight}`).join('\n\n');
     status.value = item.status || 'draft';
     imageKeys.value = [...(item.imageKeys || [])];
     pendingImageKeys.value = [];
@@ -329,6 +338,23 @@
     });
   }
 
+  function readMarkdownSelection(): MarkdownSelectionSnapshot {
+    const textarea = markdownInputRef.value?.inputEl as HTMLTextAreaElement | null | undefined;
+    const fallback = contentMarkdown.value.length;
+    return {
+      markdown: contentMarkdown.value,
+      start: textarea?.selectionStart ?? fallback,
+      end: textarea?.selectionEnd ?? textarea?.selectionStart ?? fallback,
+    };
+  }
+
+  async function focusMarkdownSelection(selectionStart: number) {
+    await nextTick();
+    const textarea = markdownInputRef.value?.inputEl as HTMLTextAreaElement | null | undefined;
+    textarea?.focus();
+    textarea?.setSelectionRange(selectionStart, selectionStart);
+  }
+
   function syncImageSizeFromCursor() {
     const textarea = markdownInputRef.value?.inputEl as HTMLTextAreaElement | null | undefined;
     if (!textarea) return;
@@ -349,9 +375,17 @@
     });
   }
 
-  async function uploadImage(files: File[]) {
+  async function uploadImage(files: File[], requestedSelection = readMarkdownSelection()) {
     const file = files[0];
     if (!file || uploading.value || !logId.value) return;
+    if (!UPDATE_LOG_IMAGE_TYPES.has(String(file.type || '').toLowerCase())) {
+      message.warning(t('changelog.imageTypeUnsupported'));
+      return;
+    }
+    if (!file.size || file.size > UPDATE_LOG_IMAGE_MAX_BYTES) {
+      message.warning(t('common.maxTotalSize', { n: 5 }));
+      return;
+    }
     uploading.value = true;
     uploadProgress.value = 0;
     try {
@@ -366,12 +400,19 @@
       imageKeys.value.push(objectKey);
       pendingImageKeys.value.push(objectKey);
       const alt = file.name.replace(/\.[^.]+$/, '').replace(/[\[\]]/g, '') || t('changelog.imageAlt');
-      const prefix = contentMarkdown.value && !contentMarkdown.value.endsWith('\n') ? '\n\n' : '';
-      contentMarkdown.value += `${prefix}${createUpdateLogImageHtml(
-        res.data.url,
-        alt,
-        imageDisplaySize.value,
-      )}\n`;
+      // 用户可能在上传期间继续编辑。正文不再相同时改用完成时的真实光标，
+      // 不能用已经过期的字符偏移把图片插进另一段内容。
+      const currentSelection = readMarkdownSelection();
+      const insertionSelection =
+        contentMarkdown.value === requestedSelection.markdown ? requestedSelection : currentSelection;
+      const result = insertUpdateLogImageAtSelection(
+        contentMarkdown.value,
+        insertionSelection.start,
+        insertionSelection.end,
+        createUpdateLogImageHtml(res.data.url, alt, imageDisplaySize.value),
+      );
+      contentMarkdown.value = result.markdown;
+      await focusMarkdownSelection(result.selectionStart);
       message.success(t('changelog.imageUploadSuccess'));
     } catch {
       message.error(t('changelog.imageUploadFailed'));
@@ -379,6 +420,30 @@
       uploading.value = false;
       uploadProgress.value = 0;
     }
+  }
+
+  function clipboardImageFiles(event: ClipboardEvent) {
+    const clipboard = event.clipboardData;
+    if (!clipboard) return [];
+    const itemFiles = Array.from(clipboard.items || [])
+      .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file));
+    return itemFiles.length
+      ? itemFiles
+      : Array.from(clipboard.files || []).filter((file) => file.type.startsWith('image/'));
+  }
+
+  function handleMarkdownPaste(event: ClipboardEvent) {
+    const files = clipboardImageFiles(event);
+    // 纯文字粘贴继续使用 textarea 的浏览器原生行为。
+    if (!files.length) return;
+    event.preventDefault();
+    if (uploading.value) {
+      message.warning(t('changelog.imageUploadBusy'));
+      return;
+    }
+    void uploadImage(files, readMarkdownSelection());
   }
 
   async function save() {
