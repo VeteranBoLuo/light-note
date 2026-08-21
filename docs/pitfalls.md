@@ -2564,3 +2564,11 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **约束：** 用户明确询问数量、时间、状态、进度等结构化字段时，最终回答层必须能够用已脱敏的工具摘要校验必要事实；模型遗漏时，只能从同一安全摘要追加最小确定性补充，禁止读取 raw 业务对象、复制内部 ID，或放宽真实链路断言。具体领域兜底必须同时满足“问题明确点名、对应工具成功、摘要字段合法”三个条件，不能把未询问字段强塞给用户。
 - **验收：** 模拟 `query_todos` 成功摘要含 `清单：3/4`，最终回答漏答时自动补为“3/4（已完成 3 项，剩余 1 项）”，且不出现 `[todo:ID]`；回答已包含 `3/4` 或等价完成/剩余表述时不重复，未询问、工具失败、非法比例和空结果均不补。Root 完整真实链路仍按原断言要求最终用户答案包含清单进度，不能用隔离用例或弱化断言代替。
 - **相关代码：** `apps/server/util/agent/requestedFactGuard.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/server/evaluation/ai-assistant/rootE2ERunner.js`。
+
+### LN-PIT-100：复合菜单项的对齐不能输给基础按钮默认样式
+
+- **现象：** 同样是“图标＋文字”操作菜单，目录右键菜单左对齐，笔记详情的更多菜单却整体居中；菜单越宽、文案长短差越大，对齐混乱越明显。
+- **根因：** `BDropdown` 使用 `BButton` 渲染菜单项，但业务选择器只有单类名优先级，会被 `BButton` 根节点的 `justify-content: center` 和 `text-align: center` 覆盖。模板中已写“左对齐”不代表浏览器最终计算样式生效。
+- **防回归约束：** `BDropdown`、`BActionMenu` 等基于 `BButton` 的文字操作菜单，必须在共享组件层用能够稳定压过按钮默认值的根容器＋菜单项＋`.b_btn` 选择器同时指定 `justify-content: flex-start` 和 `text-align: left`；业务页不得通过局部样式逐页补丁。缩短危险操作入口时，完整范围和后果继续留在二次确认中。
+- **验收：** 回归测试锁定共享选择器与两个对齐属性；浏览器在 PC/移动、浅色/深色下检查普通项、危险项、分隔线、hover/focus 和长文案，图标列与文字起点一致，不出现单页居中。
+- **相关代码：** `apps/web/src/components/base/BasicComponents/BButton.vue`、`apps/web/src/components/base/BasicComponents/BDropdown.vue`、`apps/web/src/components/base/BasicComponents/BActionMenu.vue`。

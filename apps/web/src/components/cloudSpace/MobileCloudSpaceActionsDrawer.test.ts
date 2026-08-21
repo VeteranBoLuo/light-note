@@ -100,7 +100,7 @@ function mountDrawer(props: Record<string, unknown> = {}) {
           renameFolderAction: '重命名“{name}”',
           saveFolderName: '保存修改',
           deleteFolderAction: '删除“{name}”',
-          clearFolderFilesAction: '删除目录内全部文件…',
+          clearFolderFilesAction: '删除全部文件',
         },
       },
     },
@@ -292,7 +292,7 @@ describe('MobileCloudSpaceActionsDrawer', () => {
     host.querySelector<HTMLButtonElement>('.mobile-folder-manager__action')?.click();
     await nextTick();
     [...document.querySelectorAll<HTMLButtonElement>('.b-action-menu__item')]
-      .find((button) => button.textContent?.includes('删除目录内全部文件'))
+      .find((button) => button.textContent?.includes('删除全部文件'))
       ?.click();
     expect(onClearFolderFiles).toHaveBeenCalledWith(expect.objectContaining({ id: 'folder-1', name: 'iCloud' }));
 
