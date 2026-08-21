@@ -15,7 +15,8 @@ describe('query_cloud_folders 工具', () => {
     const raw = await tool.execute({ folderName: '项目', limit: 200 }, { userId: 'user-1' });
 
     expect(query.mock.calls[0][0]).toContain('folders.create_by = ? AND folders.del_flag = 0');
-    expect(query.mock.calls[0][1]).toEqual(['user-1', '项目', 50]);
+    expect(query.mock.calls[0][0]).toContain("folders.name LIKE ? ESCAPE '\\\\'");
+    expect(query.mock.calls[0][1]).toEqual(['user-1', '%项目%', 50]);
     expect(raw).toEqual({
       total: 1,
       items: [{ id: '7', name: '项目资料', parentId: null, fileCount: 3 }],

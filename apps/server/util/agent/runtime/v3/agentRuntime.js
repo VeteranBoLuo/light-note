@@ -6,6 +6,7 @@ import { runConversationTurn } from '../runners/conversationRunner.js';
 import { runMixedTurn } from '../runners/mixedRunner.js';
 import { RESOURCE_BINDING_ERROR_CODES } from '../executionContext.js';
 import { compileAgentTurnSpecV3 } from './intentCompiler.js';
+import { digestExecutionContractV3 } from './turnSpec.js';
 import { routeTurnSpecCapabilitiesV3 } from './capabilityRouter.js';
 
 const CLARIFICATION_VALIDATION_ISSUES = new Set(['TOOL_ARGUMENT_REQUIRED', ...RESOURCE_BINDING_ERROR_CODES]);
@@ -91,6 +92,7 @@ export async function runAgentRuntimeV3({
       onResponse: onCompilerResponse,
     }));
   const turnSpec = compiled.turnSpec;
+  const semanticDigest = String(turnSpec?.semanticDigest || turnSpec?.digest || '');
   if (turnSpec.confidence === 'low' || turnSpec.missingSlots.length > 0) {
     return {
       runner: 'clarification',
@@ -99,6 +101,8 @@ export async function runAgentRuntimeV3({
       question: turnSpec.clarificationQuestion,
       goalStates: goalStates(turnSpec, null),
       toolCalls: [],
+      semanticDigest,
+      executionDigest: null,
     };
   }
 
@@ -117,6 +121,8 @@ export async function runAgentRuntimeV3({
       question: '这个请求包含的独立任务较多，请先说明最希望优先完成哪一项。',
       goalStates: goalStates(turnSpec, routed),
       toolCalls: [],
+      semanticDigest,
+      executionDigest: null,
     };
   }
   if (routed.state === 'unsupported') {
@@ -127,6 +133,8 @@ export async function runAgentRuntimeV3({
       route: routed,
       goalStates: goalStates(turnSpec, routed),
       toolCalls: [],
+      semanticDigest,
+      executionDigest: null,
     };
   }
 
@@ -134,6 +142,12 @@ export async function runAgentRuntimeV3({
     typeof resolveExecutionContext === 'function'
       ? await resolveExecutionContext({ turnSpec, route: routed, executionContext })
       : executionContext;
+  const effectiveExecutionContext = resolvedExecutionContext || executionContext;
+  const executionDigest = digestExecutionContractV3({
+    turnSpec,
+    route: routed,
+    executionContext: effectiveExecutionContext,
+  });
 
   const runner = runnerForRequestKind(turnSpec.requestKind);
   const outcome = await runner({
@@ -146,7 +160,7 @@ export async function runAgentRuntimeV3({
         route: routed,
         completedGoalIds,
         dependencyResults,
-        executionContext: resolvedExecutionContext || executionContext,
+        executionContext: effectiveExecutionContext,
         timeZone,
         now,
         signal,
@@ -168,6 +182,8 @@ export async function runAgentRuntimeV3({
       toolCalls: [],
       goalStates: goalStates(turnSpec, routed),
       compilerAttempts: compiled.attempts,
+      semanticDigest,
+      executionDigest,
     };
   }
   return {
@@ -175,6 +191,8 @@ export async function runAgentRuntimeV3({
     goalStates: goalStates(turnSpec, routed),
     compilerAttempts: compiled.attempts,
     runtimeVersion: '3.0',
+    semanticDigest,
+    executionDigest,
   };
 }
 

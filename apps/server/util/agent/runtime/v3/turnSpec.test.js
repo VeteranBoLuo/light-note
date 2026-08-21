@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildAgentV3CapabilityCatalog } from './capabilityManifest.js';
 import {
   attachTurnSpecV3OutputContract,
+  digestExecutionContractV3,
   normalizeTurnSpecV3,
   resolveArtifactContinuationV3,
 } from './turnSpec.js';
@@ -132,6 +133,104 @@ describe('TurnSpec V3', () => {
       },
     );
     expect(stale).toBeNull();
+  });
+
+  it('Root 必填时间槽按 Manifest 默认全部或确定性进入澄清', () => {
+    const rankingCatalog = catalogFor(['get_resource_creation_ranking'], 'root');
+    const ranking = normalizeTurnSpecV3(rawSpec([rawGoal('admin.resource.ranking.read')]), {
+      catalog: rankingCatalog,
+      actorRole: 'root',
+      authoritativeGroundingPolicy: 'workspace_query',
+      latestMessage: '查看资源创建排行',
+    });
+    expect(ranking.temporalConstraints).toEqual([
+      expect.objectContaining({ slot: 'timeRange', argumentValue: '全部', implicit: true }),
+    ]);
+    expect(ranking.missingSlots).toEqual([]);
+
+    const newUserCatalog = catalogFor(['query_new_user_resources'], 'root');
+    const newUser = normalizeTurnSpecV3(rawSpec([rawGoal('admin.new_user.resource.query')]), {
+      catalog: newUserCatalog,
+      actorRole: 'root',
+      authoritativeGroundingPolicy: 'workspace_query',
+      latestMessage: '查看新增用户创建的资源',
+    });
+    expect(newUser.missingSlots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'goal-1.registeredWithin' }),
+        expect.objectContaining({ name: 'goal-1.resourceTimeRange' }),
+      ]),
+    );
+    expect(newUser.clarificationQuestion).toContain('用户注册时间');
+    expect(newUser.clarificationQuestion).toContain('资源创建时间');
+  });
+
+  it('semanticDigest 保持语义稳定，executionDigest 纳入服务端实际绑定', () => {
+    const catalog = catalogFor(['read_note']);
+    const spec = normalizeTurnSpecV3(
+      rawSpec([rawGoal('note.read')], { groundingPolicy: 'current_explicit_only' }),
+      {
+      catalog,
+      authoritativeGroundingPolicy: 'current_explicit_only',
+      latestMessage: '分析这篇笔记',
+      },
+    );
+    expect(spec.semanticDigest).toBe(spec.digest);
+    expect(spec.semanticDigest).toMatch(/^[a-f0-9]{64}$/u);
+    const route = {
+      goalRoutes: [
+        { goalId: 'goal-1', capabilityIds: ['note.read'], toolNames: ['read_note'], status: 'ready' },
+      ],
+    };
+    const first = digestExecutionContractV3({
+      turnSpec: spec,
+      route,
+      executionContext: { contextRefs: [{ type: 'note', id: 'note-1' }], attachmentIds: [], resources: [] },
+    });
+    const second = digestExecutionContractV3({
+      turnSpec: spec,
+      route,
+      executionContext: { contextRefs: [{ type: 'note', id: 'note-2' }], attachmentIds: [], resources: [] },
+    });
+    expect(first).toMatch(/^[a-f0-9]{64}$/u);
+    expect(first).not.toBe(second);
+    expect(spec.semanticDigest).toBe(spec.digest);
+
+    const reordered = digestExecutionContractV3({
+      turnSpec: spec,
+      route: {
+        goalRoutes: [
+          { goalId: 'goal-2', capabilityIds: ['note.read'], toolNames: ['read_note'], status: 'ready' },
+          ...route.goalRoutes,
+        ],
+      },
+      executionContext: {
+        contextRefs: [
+          { type: 'note', id: 'note-2' },
+          { type: 'note', id: 'note-1' },
+        ],
+        attachmentIds: ['attachment-2', 'attachment-1'],
+        resources: [],
+      },
+    });
+    const canonicalOrder = digestExecutionContractV3({
+      turnSpec: spec,
+      route: {
+        goalRoutes: [
+          ...route.goalRoutes,
+          { goalId: 'goal-2', capabilityIds: ['note.read'], toolNames: ['read_note'], status: 'ready' },
+        ],
+      },
+      executionContext: {
+        contextRefs: [
+          { type: 'note', id: 'note-1' },
+          { type: 'note', id: 'note-2' },
+        ],
+        attachmentIds: ['attachment-1', 'attachment-2'],
+        resources: [],
+      },
+    });
+    expect(reordered).toBe(canonicalOrder);
   });
 
   it('精确提醒时间自动绑定提醒和计划日期，可用于定位写操作的隐式查询依赖', () => {

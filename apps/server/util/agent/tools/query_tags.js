@@ -1,4 +1,5 @@
 import pool from '../../../db/index.js';
+import { escapeLikePattern } from '../sqlPatterns.js';
 
 export default {
   name: 'query_tags',
@@ -20,8 +21,8 @@ export default {
     const params = [ctx.userId];
 
     if (keyword) {
-      where += ' AND t.name LIKE ?';
-      params.push(`%${keyword}%`);
+      where += " AND t.name LIKE ? ESCAPE '\\\\'";
+      params.push(`%${escapeLikePattern(keyword)}%`);
     }
 
     const [[rows], [countRes]] = await Promise.all([

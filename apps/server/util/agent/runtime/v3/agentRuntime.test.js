@@ -46,6 +46,8 @@ describe('Agent Runtime V3', () => {
       resolveExecutionContext,
     });
     expect(result).toMatchObject({ runtimeVersion: '3.0', state: 'ready_for_tools', runner: 'answer' });
+    expect(result.semanticDigest).toBe('digest-v3');
+    expect(result.executionDigest).toMatch(/^[a-f0-9]{64}$/u);
     expect(resolveExecutionContext).toHaveBeenCalledWith(
       expect.objectContaining({ turnSpec, route: expect.objectContaining({ state: 'ready' }) }),
     );

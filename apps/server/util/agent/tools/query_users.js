@@ -1,4 +1,5 @@
 import pool from '../../../db/index.js';
+import { escapeLikePattern } from '../sqlPatterns.js';
 import { parseTimeRange } from '../timeRange.js';
 
 export default {
@@ -36,8 +37,9 @@ export default {
     const params = [];
 
     if (keyword) {
-      where += ` AND (u.alias LIKE ? OR u.email LIKE ? OR u.id LIKE ?)`;
-      params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
+      where += ` AND (u.alias LIKE ? ESCAPE '\\\\' OR u.email LIKE ? ESCAPE '\\\\' OR u.id LIKE ? ESCAPE '\\\\')`;
+      const pattern = `%${escapeLikePattern(keyword)}%`;
+      params.push(pattern, pattern, pattern);
     }
 
     // 注册时间段:让"最近一周新增多少用户"可答;total 直接是该时段的新增数

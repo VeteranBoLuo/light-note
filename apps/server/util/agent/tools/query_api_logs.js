@@ -1,4 +1,5 @@
 import pool from '../../../db/index.js';
+import { escapeLikePattern } from '../sqlPatterns.js';
 import { parseTimeRange } from '../timeRange.js';
 
 export default {
@@ -23,8 +24,8 @@ export default {
     const params = [];
 
     if (keyword) {
-      where += ` AND a.url LIKE ?`;
-      params.push(`%${keyword}%`);
+      where += ` AND a.url LIKE ? ESCAPE '\\\\'`;
+      params.push(`%${escapeLikePattern(keyword)}%`);
     }
     if (time) {
       where += ` AND a.request_time >= ? AND a.request_time <= ?`;

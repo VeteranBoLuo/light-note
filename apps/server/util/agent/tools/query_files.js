@@ -3,11 +3,7 @@ import { parseTimeRange } from '../timeRange.js';
 import { categoryCondition, FILE_CATEGORY_CASE, FILE_CATEGORY_LABEL, breakdownFromRows } from '../fileCategory.js';
 import { searchPersonalKnowledge } from '../../personalKnowledgeSearch.js';
 import { PERSONAL_SCOPE_USER_PARAM, personalScopeHint } from '../ownerScope.js';
-
-// LIKE 通配符按字面处理：文件名里的 % 和 _ 不能变成通配（与 query_notes/todoService 同规则）。
-function escapeLikePattern(keyword) {
-  return String(keyword).replace(/[\\%_]/g, '\\$&');
-}
+import { escapeLikePattern } from '../sqlPatterns.js';
 
 /**
  * 文件名 LIKE 对口语化问法（"我上传过一个讲X的文档"）召回为零，且它只匹配文件名、
@@ -138,7 +134,7 @@ export default {
     let baseWhere = 'f.create_by = ? AND f.del_flag = 0';
     const baseParams = [ctx.userId];
     if (keyword) {
-      baseWhere += ' AND f.file_name LIKE ?';
+      baseWhere += " AND f.file_name LIKE ? ESCAPE '\\\\'";
       baseParams.push(`%${escapeLikePattern(keyword)}%`);
     }
     if (resolvedFolderId) {
@@ -160,7 +156,7 @@ export default {
     const order = keyword
       ? `ORDER BY CASE
            WHEN LOWER(f.file_name) = LOWER(?) THEN 100
-           WHEN LOWER(f.file_name) LIKE LOWER(?) THEN 80
+           WHEN LOWER(f.file_name) LIKE LOWER(?) ESCAPE '\\\\' THEN 80
            ELSE 60
          END DESC, f.create_time DESC`
       : 'ORDER BY f.create_time DESC';

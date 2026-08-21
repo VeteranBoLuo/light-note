@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   recordSessionArtifactState: vi.fn(),
   recordSessionArtifactStateById: vi.fn(),
   recordSessionResultSet: vi.fn(),
+  settleSessionResultFocus: vi.fn(),
   commitSessionTurnSpec: vi.fn(),
   getSessionDiscourseProjection: vi.fn(() => ({
     schemaVersion: 3,
@@ -95,6 +96,7 @@ vi.mock('../util/agent/sessionStore.js', () => ({
   recordSessionArtifactState: mocks.recordSessionArtifactState,
   recordSessionArtifactStateById: mocks.recordSessionArtifactStateById,
   recordSessionResultSet: mocks.recordSessionResultSet,
+  settleSessionResultFocus: mocks.settleSessionResultFocus,
   commitSessionTurnSpec: mocks.commitSessionTurnSpec,
   getSessionDiscourseProjection: mocks.getSessionDiscourseProjection,
   recordSessionSourceSet: mocks.recordSessionSourceSet,
@@ -525,6 +527,13 @@ describe('agentChat 主链路', () => {
     });
     mocks.reconcile.mockResolvedValue(undefined);
     mocks.getOrCreateSession.mockResolvedValue({ id: 'session-1', turns: [], lastTool: null });
+    mocks.commitSessionTurnSpec.mockImplementation(async (_session, turnSpec) =>
+      turnSpec?.goals?.some((goal) => goal?.kind === 'read')
+        ? { id: 'focus-1', state: 'pending' }
+        : { id: '', state: 'committed' },
+    );
+    mocks.recordSessionResultSet.mockResolvedValue({ id: 'result-set-1' });
+    mocks.settleSessionResultFocus.mockResolvedValue(true);
     mocks.recordSessionSourceSet.mockResolvedValue(null);
     mocks.createSessionMaterialClarification.mockResolvedValue(null);
     mocks.resolveSessionMaterialClarification.mockReturnValue({ state: 'missing' });
@@ -620,6 +629,29 @@ describe('agentChat 主链路', () => {
       matchedPageCount: 1,
       totalPages: 1,
     });
+  });
+
+  it('普通账号显式请求纯管理员能力范围时在模型和会话创建前确定性拒绝', async () => {
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '查询平台新增用户',
+        history: [],
+        stream: false,
+        capabilityScope: { domains: ['admin'] },
+      }),
+      res,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.send).toHaveBeenCalledWith({
+      data: { code: 'AGENT_CAPABILITY_SCOPE_FORBIDDEN', reason: 'forbidden_scope' },
+      status: 403,
+      msg: '当前账号无权使用所请求的 AI 能力范围。',
+    });
+    expect(mocks.getOrCreateSession).not.toHaveBeenCalled();
+    expect(mocks.requestAi).not.toHaveBeenCalled();
   });
 
   it('Runtime V3 配置存在但账号未命中灰度时继续旧链，且不产生额外 Compiler 调用', async () => {
@@ -787,6 +819,7 @@ describe('agentChat 主链路', () => {
       expect.objectContaining({ id: 'session-1' }),
       expect.objectContaining({
         capabilityId: 'note.query',
+        focusId: 'focus-1',
         refs: [
           { type: 'note', id: 'today-note-1' },
           { type: 'note', id: 'today-note-2' },

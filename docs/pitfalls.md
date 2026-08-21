@@ -25,6 +25,7 @@
 
 | 编号                                                                                           | 日期       | 模块                | 关键词                                             | 状态         |
 | ---------------------------------------------------------------------------------------------- | ---------- | ------------------- | -------------------------------------------------- | ------------ |
+| [LN-PIT-093](#ln-pit-093agent-不能在工具成功前提交新焦点也不能把空能力范围降级成自动模式)      | 2026-08-21 | Agent、Runtime V3   | scope、ResultSet、digest、时间默认、副作用         | 已修复待合入 |
 | [LN-PIT-092](#ln-pit-092协议版本不能只放在响应信封而遗漏数据快照)                              | 2026-08-21 | Host Agent、协议    | protocolVersion、响应信封、快照、线上验收          | 已修复已上线 |
 | [LN-PIT-091](#ln-pit-091固定深色日志面板必须覆盖全局-pre-code-主题色)                          | 2026-08-21 | 前端、服务器管理    | 日志、代码块、主题、对比度、移动端                 | 已修复已上线 |
 | [LN-PIT-090](#ln-pit-090自动刷新不能隐藏调度状态也不能用瞬时失败清空旧数据)                    | 2026-08-21 | 前端、服务器管理    | 自动刷新、倒计时、可见性、旧数据、轮询             | 已修复已上线 |
@@ -140,6 +141,14 @@
 ```
 
 ## 案例记录
+
+### LN-PIT-093：Agent 不能在工具成功前提交新焦点，也不能把空能力范围降级成自动模式
+
+- **现象：** 非 Root 显式选择只有管理员可用的模块时，候选能力可能被过滤为空后又按“自动”继续；新一轮读查询刚完成语义编译就清空旧 ResultSet，随后工具失败会导致“刚才那些”既找不到本轮结果，也失去上轮可靠结果。Root 全量统计能力若从 Planner schema 删除时间参数但没有默认绑定，还会随机追问或带入旧时间范围。
+- **根因：** 权限过滤、语义计划和执行状态没有区分“请求为空”与“授权后为空”；会话把计划完成误当成执行完成；同一个 TurnSpec digest 同时承担语义和最终材料合同；时间默认、副作用性质和 shadow 对比又散落在工具或 Handler 中，没有由 Manifest 统一声明。
+- **防回归约束：** 能力范围必须保留用户原始请求域并在真实身份解析后重新授权：全部拒绝返回 `forbidden_scope`，部分拒绝只保留合法子集，无显式请求才允许自动模式。读 TurnSpec 只能暂存带运行令牌的 `pendingFocus`，结果提交和终态结算必须校验同一令牌；焦点投影用 Redis revision CAS 保护并采用 latest-run-wins，禁止迟到旧轮借用另一请求的 pending 状态。成功/空 ResultSet 原子提交；成功但没有稳定资源引用的统计读取也必须提交新语义并清除旧资源焦点；失败或部分失败只结算 `failed/degraded`，旧 ResultSet 可以保留但不得冒充失败轮的新结果。语义摘要与最终路由、资源、URL/ID 绑定后的执行摘要必须分离。Manifest 必须为必填时间槽声明 `all/clarify/server_default`，并为 Compiler 提供与该策略一致的描述；操作工具声明 `confirmation_required/idempotent_background_job`，目录与实际工具在普通测试中恒做完整性校验。模糊查询统一通过共享函数转义 `\\/%/_` 并显式声明 SQL `ESCAPE`，禁止各工具复制实现。
+- **验收：** 普通账号请求纯 `admin` 范围在创建会话和模型调用前返回 403；混合范围只暴露合法模块。连续执行“成功查询 A → 查询 B 失败 → 指代刚才结果”时，状态显示失败且不会把 A 当作 B；并发提交 A、B 后，A 的迟到结果和结算都不能改写 B。统计/概览读取成功但不返回稳定 ID 时，焦点切到新领域且旧资源不再成为“刚才那些”。Root 未给时间的全量能力由服务端绑定“全部”，Compiler 目录不再同时出现“默认全部”和“必须追问”；`clarify` 策略生成缺失槽。同一 TurnSpec 换权威资源时 `semanticDigest` 不变而 `executionDigest` 改变。标签、笔记、书签、文件、云文件夹与回收站关键词含 `%/_/\\` 时只能按字面量匹配。所有验证使用 Mock Provider/零调用 smoke，不消耗真实模型 Token。
+- **相关代码：** `apps/server/util/agent/runtime/v3/capabilityManifest.js`、`apps/server/util/agent/runtime/v3/turnSpec.js`、`apps/server/util/agent/sessionStore.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/server/util/agent/toolPolicy.js`、`apps/server/util/agent/sqlPatterns.js`。
 
 ### LN-PIT-092：协议版本不能只放在响应信封而遗漏数据快照
 

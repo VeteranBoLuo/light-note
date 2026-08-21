@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   authoritativeTemporalArgumentsForGoal,
+  collectMissingTemporalSlotsV3,
   compileTemporalConstraintsV3,
   extractTemporalMentionsV3,
   resolveTemporalExpressionV3,
@@ -57,5 +58,55 @@ describe('Temporal Constraints V3', () => {
       registeredWithin: '昨天',
       resourceTimeRange: '今天',
     });
+  });
+
+  it('无时间表达时只按 Manifest 的显式默认策略补值或澄清', () => {
+    const goals = [
+      { id: 'ranking', capabilityId: 'admin.resource.ranking.read' },
+      { id: 'new-user', capabilityId: 'admin.new_user.resource.query' },
+    ];
+    const catalog = [
+      {
+        id: 'admin.resource.ranking.read',
+        temporalSlots: [
+          {
+            name: 'timeRange',
+            kind: 'range',
+            label: '资源创建时间',
+            required: true,
+            allowAll: true,
+            defaultPolicy: 'all',
+          },
+        ],
+      },
+      {
+        id: 'admin.new_user.resource.query',
+        temporalSlots: [
+          {
+            name: 'registeredWithin',
+            kind: 'range',
+            label: '用户注册时间',
+            required: true,
+            defaultPolicy: 'clarify',
+          },
+        ],
+      },
+    ];
+    const constraints = compileTemporalConstraintsV3([], { goals, catalog, latestMessage: '', temporalContext: context });
+    expect(constraints).toEqual([
+      expect.objectContaining({
+        goalId: 'ranking',
+        slot: 'timeRange',
+        expression: '全部',
+        argumentValue: '全部',
+        implicit: true,
+      }),
+    ]);
+    expect(collectMissingTemporalSlotsV3({ goals, catalog, constraints })).toEqual([
+      expect.objectContaining({
+        name: 'new-user.registeredWithin',
+        reason: 'manifest_temporal_scope_required',
+      }),
+    ]);
   });
 });

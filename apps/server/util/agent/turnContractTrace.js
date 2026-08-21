@@ -32,6 +32,8 @@ const CONTINUATION_MODES = new Set([
   'refer_last_result',
   'refine_last_artifact',
   'scope_replacement',
+  'answer_clarification',
+  'action_continuation',
 ]);
 const TOPIC_EPOCH_ACTIONS = new Set(['unknown', 'keep', 'advance']);
 const RUNTIME_MODES = new Set(['legacy', 'v3_shadow', 'v3_enforce']);
@@ -145,6 +147,8 @@ export function createTurnContractTrace() {
     executionPlannerState: 'not_run',
     executionPlannerAttempts: 0,
     executionPlannerIssues: [],
+    semanticDigest: null,
+    executionDigest: null,
     runtimeMode: 'legacy',
     runtimeConfiguredMode: 'legacy',
     runtimeRolloutReason: 'global_legacy',
@@ -230,7 +234,13 @@ export function recordGroundingDecision(trace, input = {}) {
 
 export function recordIntentCompiler(trace, input = {}) {
   if (!trace || typeof trace !== 'object') return;
-  trace.intentCompilerMode = safeEnum(input.mode, INTENT_COMPILER_MODES, 'off');
+  const nextMode = safeEnum(input.mode, INTENT_COMPILER_MODES, 'off');
+  // V3 Runtime 决策是权威隔离边界。后续 legacy shadow/enforce 对照只能补充状态，
+  // 不能把已记录的 v3_shadow/v3_enforce 降级成同名 V2 模式。
+  trace.intentCompilerMode =
+    String(trace.intentCompilerMode || '').startsWith('v3_') && !nextMode.startsWith('v3_')
+      ? trace.intentCompilerMode
+      : nextMode;
   trace.intentCompilerState = safeEnum(input.state, INTENT_COMPILER_STATES, 'not_run');
   trace.turnSpecRequestKind = safeEnum(input.requestKind, TURN_REQUEST_KINDS, 'unknown');
   trace.turnSpecConfidence = safeEnum(input.confidence, CONFIDENCE_LEVELS, 'unknown');
@@ -250,6 +260,16 @@ export function recordExecutionPlanner(trace, input = {}) {
   trace.executionPlannerState = safeEnum(input.state, EXECUTION_PLANNER_STATES, 'not_run');
   trace.executionPlannerAttempts = safeCount(input.attempts);
   trace.executionPlannerIssues = safeIssues(input.issues);
+}
+
+export function recordExecutionContract(trace, input = {}) {
+  if (!trace || typeof trace !== 'object') return;
+  trace.semanticDigest = /^[a-f0-9]{64}$/u.test(String(input.semanticDigest || ''))
+    ? String(input.semanticDigest)
+    : null;
+  trace.executionDigest = /^[a-f0-9]{64}$/u.test(String(input.executionDigest || ''))
+    ? String(input.executionDigest)
+    : null;
 }
 
 export function recordRuntimeIsolation(trace, input = {}) {
@@ -307,6 +327,7 @@ export function sanitizeTurnContractTrace(value) {
     attempts: value?.executionPlannerAttempts,
     issues: value?.executionPlannerIssues,
   });
+  recordExecutionContract(trace, value);
   recordRuntimeIsolation(trace, {
     mode: value?.runtimeMode,
     configuredMode: value?.runtimeConfiguredMode,

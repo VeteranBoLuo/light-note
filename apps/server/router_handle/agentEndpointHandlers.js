@@ -30,6 +30,7 @@ import {
   resolveSessionActionRetry,
   resolveSessionResultSet,
   resolveSessionMaterialClarification,
+  settleSessionResultFocus,
   settleSessionAction,
 } from '../util/agent/sessionStore.js';
 import { buildPlannerPrompt } from '../util/agent/prompt.js';
@@ -43,9 +44,14 @@ import {
 import {
   assertAgentV3CapabilityManifest,
   buildAgentV3CapabilityCatalog,
+  capabilityProducesAgentV3Artifact,
   getAgentV3CapabilityByToolName,
+  normalizeCapabilityScope,
 } from '../util/agent/runtime/v3/capabilityManifest.js';
-import { projectAgentV3ResultSet } from '../util/agent/runtime/v3/resultSetProjection.js';
+import {
+  projectAgentV3ResultSet,
+  resolveAgentV3ReadFocusSettlement,
+} from '../util/agent/runtime/v3/resultSetProjection.js';
 import { canToolConsumeAgentV3ResultSet } from '../util/agent/runtime/v3/candidateAvailability.js';
 import { resolveAgentTargetUser } from '../util/agent/userLookup.js';
 import { resolveAgentActionIntent } from '../util/agent/actionIntentPolicy.js';
@@ -142,6 +148,7 @@ import {
   recordCandidateSet,
   recordGroundingDecision,
   recordIntentCompiler,
+  recordExecutionContract,
   recordExecutionPlanner,
   recordOutputContract,
   recordRequestedScope,
@@ -1538,6 +1545,32 @@ function selectSemanticAgentToolsForTurn({
   return tools;
 }
 
+async function settleAgentV3ReadFocus(session, results = [], { focusId = '' } = {}) {
+  // V3 结果只能写入本轮 commit 返回的运行令牌。令牌申请失败时仍可完成当前回答，
+  // 但绝不能借用 session 上另一个并发请求的 pendingFocus 去提交或结算它。
+  const pendingAtStart = Boolean(focusId);
+  let readAttempted = false;
+  let committed = false;
+  let failed = false;
+  for (const item of Array.isArray(results) ? results : []) {
+    const capability = getAgentV3CapabilityByToolName(item?.toolName);
+    if (!capability || capability.effect !== 'read') continue;
+    readAttempted = true;
+    failed = failed || item?.result?.status === 'error';
+    const resultSet = projectAgentV3ResultSet({ capability, result: item?.result });
+    if (!resultSet || !focusId) continue;
+    const recorded = await recordSessionResultSet(session, { ...resultSet, focusId });
+    if (recorded) committed = true;
+  }
+  const settlement = resolveAgentV3ReadFocusSettlement({ readAttempted, committed, failed });
+  if (pendingAtStart && settlement) {
+    // 部分读取成功时保留本轮已核验的结果集，但明确标记为降级，避免后续把不完整结果
+    // 误述成完整成功；成功但不可投影的统计结果则提交本轮语义并清空旧资源范围。
+    await settleSessionResultFocus(session, { status: settlement, focusId });
+  }
+  return Object.freeze({ readAttempted, committed, failed });
+}
+
 function buildNoteDraftMaterialEmptyMessage(entries, locale = 'zh-CN') {
   const normalized = (Array.isArray(entries) ? entries : []).map((entry) => ({
     toolName: String(entry?.toolName || entry?.name || ''),
@@ -2122,7 +2155,7 @@ export async function agentChat(req, res) {
     let precompiledTurnSpecResult = null;
     let precompiledOutputContract = null;
     let precompiledTurnSpecError = null;
-    const turnEnvelope = adaptAgentTurnEnvelope(req.body);
+    let turnEnvelope = adaptAgentTurnEnvelope(req.body);
     const normalizedRequestBody = {
       ...req.body,
       contexts: turnEnvelope.grounding.contextRefs,
@@ -2210,8 +2243,20 @@ export async function agentChat(req, res) {
     const logUserId = identity.billingUserId;
     const logUserAlias = req.adminActor?.alias || userAlias;
     logContext = { userId: logUserId, userAlias: logUserAlias, question: message };
+    const authorizedCapabilityScope = normalizeCapabilityScope(turnEnvelope.capabilityScope, { actorRole: userRole });
+    turnEnvelope = Object.freeze({ ...turnEnvelope, capabilityScope: authorizedCapabilityScope });
+    if (authorizedCapabilityScope.mode === 'forbidden') {
+      return res.status(403).send(
+        resultData(
+          { code: 'AGENT_CAPABILITY_SCOPE_FORBIDDEN', reason: 'forbidden_scope' },
+          403,
+          '当前账号无权使用所请求的 AI 能力范围。',
+        ),
+      );
+    }
     res.on('close', onClientClose);
     const session = await raceWithSignal(getOrCreateSession(identity.ownerKey, sessionId), agentAbortController.signal);
+    let runtimeV3ReadFocusId = '';
     let clarificationSourceSetIds = [];
     if (materialClarificationToken) {
       const clarification = await resolveSessionMaterialClarification(session, materialClarificationToken, message);
@@ -2871,8 +2916,7 @@ export async function agentChat(req, res) {
     const structuredDiscourseProjection =
       runtimeMode.startsWith('v3_') &&
       pendingNoteDraftInspection &&
-      pendingDraftCapability &&
-      pendingDraftCapability.artifactKind !== 'none'
+      capabilityProducesAgentV3Artifact(pendingDraftCapability)
         ? Object.freeze({
             ...sessionDiscourseProjection,
             pendingArtifact: Object.freeze({
@@ -3371,7 +3415,13 @@ export async function agentChat(req, res) {
     }
     if (noteDraftRequested || refinementRequested || noteDraftWorkspaceDirectRequested) {
       if (runtimeV3ModeEnforced && precompiledTurnSpecResult?.turnSpec) {
-        await commitSessionTurnSpec(session, precompiledTurnSpecResult.turnSpec);
+        const hasReadGoal = precompiledTurnSpecResult.turnSpec.goals.some((goal) => goal.kind === 'read');
+        // 只有本分支确定会执行读工具时才暂存读焦点。显式材料已经在服务端绑定的草稿
+        // 不需要再跑读工具，若提前暂存会留下永远无法提交或回滚的 pendingFocus。
+        if (!hasReadGoal || noteDraftWorkspaceDirectRequested) {
+          const focus = await commitSessionTurnSpec(session, precompiledTurnSpecResult.turnSpec);
+          runtimeV3ReadFocusId = String(focus?.id || '');
+        }
       }
       const dedicatedMemoryMode = normalizeAiMemoryMode(memoryMode);
       memoryInfluence = buildAiMemoryNotUsedInfluence(
@@ -3453,6 +3503,16 @@ export async function agentChat(req, res) {
           agentAbortController.signal,
         );
         trace.toolMs = Date.now() - queryStartedAt;
+        if (runtimeV3ModeEnforced) {
+          await settleAgentV3ReadFocus(
+            session,
+            queryResults.map((result, index) => ({
+              toolName: noteDraftWorkspaceQueryCalls[index]?.toolName,
+              result,
+            })),
+            { focusId: runtimeV3ReadFocusId },
+          );
+        }
         const materialRefs = mergeNoteDraftMaterialRefs(queryResults);
         trace.noteDraftWorkspaceMaterialCount = materialRefs.length;
 
@@ -4675,12 +4735,11 @@ export async function agentChat(req, res) {
       trace.toolMs += Date.now() - toolStartedAt;
 
       if (runtimeV3Enforced) {
+        await settleAgentV3ReadFocus(session, results, { focusId: runtimeV3ReadFocusId });
         for (const item of results) {
           const capability = getAgentV3CapabilityByToolName(item.toolName);
           if (!capability) continue;
-          const resultSet = projectAgentV3ResultSet({ capability, result: item.result });
-          if (resultSet) await recordSessionResultSet(session, resultSet);
-          if (item.pendingAction?.confirmationId && capability.artifactKind !== 'none') {
+          if (item.pendingAction?.confirmationId && capabilityProducesAgentV3Artifact(capability)) {
             await recordSessionArtifactState(session, {
               id: item.pendingAction.confirmationId,
               capabilityId: capability.id,
@@ -4869,7 +4928,15 @@ export async function agentChat(req, res) {
           refs: runtimeV3InheritedResultRefs,
           webUrls: runtimeV3InheritedWebUrls,
         });
+        recordResolvedScope(trace.turnContract, {
+          mode: groundingScope.mode,
+          allowedRefs: groundingScope.allowedRefs,
+        });
       }
+      recordExecutionContract(trace.turnContract, {
+        semanticDigest: runtimeV2Outcome?.semanticDigest,
+        executionDigest: runtimeV2Outcome?.executionDigest,
+      });
       const runtimeUsage = runtimeV2Responses.reduce(
         (total, response) => ({
           promptTokens: total.promptTokens + Number(response?.usage?.promptTokens || 0),
@@ -4906,7 +4973,7 @@ export async function agentChat(req, res) {
         );
       } else {
         recordIntentCompiler(trace.turnContract, {
-          mode: 'enforce',
+          mode: runtimeV3Enforced ? 'v3_enforce' : 'enforce',
           state: 'invalid',
           attempts: runtimeV2Responses.length,
           durationMs: Date.now() - plannerStartedAt,
@@ -5055,7 +5122,10 @@ export async function agentChat(req, res) {
       semanticPlan = parsedSemantic.plan;
       if (turnSpecShadowResult) {
         const divergences = compareTurnSpecWithLegacyPlan(turnSpecShadowResult.turnSpec, semanticPlan, semanticCatalog);
-        recordIntentCompiler(trace.turnContract, turnSpecTraceSummary(turnSpecShadowResult, divergences));
+        recordIntentCompiler(
+          trace.turnContract,
+          turnSpecTraceSummary(turnSpecShadowResult, divergences, turnSpecShadowResult.mode || 'shadow'),
+        );
       }
       let adjudicated = adjudicateSemanticPlan({
         plan: semanticPlan,
@@ -5478,8 +5548,13 @@ export async function agentChat(req, res) {
       }
     }
 
-    if (runtimeV3Enforced && runtimeV2Outcome?.turnSpec) {
-      await commitSessionTurnSpec(session, runtimeV2Outcome.turnSpec);
+    if (
+      runtimeV3Enforced &&
+      runtimeV2Outcome?.turnSpec &&
+      runtimeV2Outcome.state === 'ready_for_tools'
+    ) {
+      const focus = await commitSessionTurnSpec(session, runtimeV2Outcome.turnSpec);
+      runtimeV3ReadFocusId = String(focus?.id || '');
     }
 
     if (runtimeContractEnforced && !runtimeV2ReadFallback) {
@@ -6945,7 +7020,7 @@ export async function respondAgentInteraction(req, res) {
       actions: [pendingActionRecord(confirmation, policy.retryArgs)],
     });
     const capability = getAgentV3CapabilityByToolName(resolved.toolName);
-    if (capability?.artifactKind !== 'none') {
+    if (capabilityProducesAgentV3Artifact(capability)) {
       await recordSessionArtifactStateById({
         ownerKey: identity.ownerKey,
         sessionId,
@@ -7093,7 +7168,7 @@ export async function replaceAgentNoteTargetDirectory(req, res) {
       actions: [pendingActionRecord(replacement, {})],
     });
     const createNoteCapability = getAgentV3CapabilityByToolName('create_note');
-    if (createNoteCapability?.artifactKind !== 'none') {
+    if (capabilityProducesAgentV3Artifact(createNoteCapability)) {
       await recordSessionArtifactStateById({
         ownerKey: identity.ownerKey,
         sessionId,

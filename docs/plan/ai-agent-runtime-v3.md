@@ -164,6 +164,19 @@ pnpm --filter server smoke:ai-root-e2e -- --runtime v3 --live --suite full --exe
 
 本轮只对历史失败链做了一次真实 DeepSeek + Root Handler 定点验证：`query_notes` 成功；“最近 7 天生成草稿 → 改为今天且至少 2000 字 → 再生成至少 2500 字 → 确认最新版”成功；两张旧确认均失效、最终确认幂等、夹具清理成功。执行命令为 `pnpm --filter server smoke:ai-root-e2e -- --runtime v3 --live --execute-writes --provider deepseek --case query-notes --artifact-refinement-rounds 1 --format json`。该结果证明独立分支能连接当前真实依赖完成目标链路，不代表代码已经上线，也不能替代扩大到非 Root 灰度前的一次获授权全矩阵门禁。
 
+### Phase 0A 修复分支
+
+最终统一重构决策的 Phase 0A 在 `codex/agent-runtime-v3-phase0a` 独立分支继续实施，不直接修改本地 `main`，也不在本阶段启用生产 V3、迁移数据库或删除旧链。该阶段只处理阻断缺陷与安全边界：
+
+- 显式能力范围在身份解析后重新授权，纯越权范围在模型前确定性拒绝；
+- Manifest 明确时间默认和副作用策略，Root 全量统计不再依赖模型补出时间参数；
+- 读结果焦点改为带运行令牌的两阶段提交，并用 Redis revision CAS 隔离同会话并发请求；迟到旧轮不能覆盖最新焦点，成功但无稳定引用的统计读取也能正确提交语义；
+- TurnSpec 拆分语义摘要与执行合同摘要，`refer_last_result` 使用最终权威材料范围；
+- shadow/enforce trace、continuation 枚举和能力差异统一到 V3 Manifest；
+- SQL `LIKE`（含云文件夹查询）统一转义用户通配符，幂等链接体检与确认型写入明确区分；V3 Compiler 使用 Manifest 自有时间描述，不继承 legacy 工具的冲突追问文案。
+
+该分支的日常验证只跑确定性测试、Mock Provider 和零调用 smoke；真实 Provider 与 Root 数据链仍留到获授权的最终灰度阶段。
+
 ## 八、后续演进边界
 
 - 新能力优先扩展 Manifest、类型和测试，不在 Handler 中新增自然语言特判。

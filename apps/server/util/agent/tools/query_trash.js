@@ -1,5 +1,6 @@
 import pool from '../../../db/index.js';
 import { parseTimeRange } from '../timeRange.js';
+import { escapeLikePattern } from '../sqlPatterns.js';
 
 const TABLE_CONFIG = {
   bookmark: { table: 'bookmark', userIdField: 'user_id', nameField: 'name' },
@@ -45,8 +46,8 @@ export default {
       const params = [ctx.userId];
 
       if (keyword) {
-        where += ` AND ${cfg.nameField} LIKE ?`;
-        params.push(`%${keyword}%`);
+        where += ` AND ${cfg.nameField} LIKE ? ESCAPE '\\\\'`;
+        params.push(`%${escapeLikePattern(keyword)}%`);
       }
       if (time) {
         where += ' AND deleted_at >= ? AND deleted_at <= ?';

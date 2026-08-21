@@ -2,11 +2,7 @@ import pool from '../../../db/index.js';
 import { parseTimeRange } from '../timeRange.js';
 import { searchPersonalKnowledge } from '../../personalKnowledgeSearch.js';
 import { PERSONAL_SCOPE_USER_PARAM, personalScopeHint } from '../ownerScope.js';
-
-// LIKE 通配符按字面处理：名称里的 % 和 _ 不能变成通配（与 query_notes/todoService 同规则）。
-function escapeLikePattern(keyword) {
-  return String(keyword).replace(/[\\%_]/g, '\\$&');
-}
+import { escapeLikePattern } from '../sqlPatterns.js';
 
 function buildScopeConditions({ userId, tag, time }) {
   let where = '';
@@ -98,7 +94,7 @@ export default {
     }
 
     if (keyword) {
-      where += ` AND (b.name LIKE ? OR b.url LIKE ?)`;
+      where += ` AND (b.name LIKE ? ESCAPE '\\\\' OR b.url LIKE ? ESCAPE '\\\\')`;
       const pattern = `%${escapeLikePattern(keyword)}%`;
       baseParams.push(pattern, pattern);
     }
@@ -111,8 +107,8 @@ export default {
     const order = keyword
       ? `ORDER BY CASE
            WHEN LOWER(b.name) = LOWER(?) THEN 100
-           WHEN LOWER(b.name) LIKE LOWER(?) THEN 80
-           WHEN LOWER(b.name) LIKE LOWER(?) THEN 60
+           WHEN LOWER(b.name) LIKE LOWER(?) ESCAPE '\\\\' THEN 80
+           WHEN LOWER(b.name) LIKE LOWER(?) ESCAPE '\\\\' THEN 60
            ELSE 40
          END DESC, b.create_time DESC`
       : 'ORDER BY b.create_time DESC';

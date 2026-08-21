@@ -31,7 +31,13 @@ describe('TurnSpec shadow', () => {
       needsClarification: false,
     };
     const divergences = compareTurnSpecWithLegacyPlan(turnSpec, legacyPlan, [{ id: 'note.create', domain: 'note' }]);
-    expect(divergences).toEqual(['request_kind', 'confidence', 'capability_domains', 'clarification']);
+    expect(divergences).toEqual([
+      'request_kind',
+      'confidence',
+      'capability_ids',
+      'capability_domains',
+      'clarification',
+    ]);
     expect(turnSpecTraceSummary({ state: 'ready', turnSpec, attempts: 1, durationMs: 9 }, divergences)).toEqual({
       mode: 'shadow',
       state: 'ready',
@@ -47,5 +53,32 @@ describe('TurnSpec shadow', () => {
       divergenceCodes: divergences,
       errorCode: null,
     });
+  });
+
+  it('legacy 与 V3 两侧都经工具到 Manifest 能力 ID 投影后比较', () => {
+    const turnSpec = {
+      requestKind: 'answer',
+      confidence: 'high',
+      goals: [{ capabilityId: 'note.query', capabilityDomain: 'note' }],
+      missingSlots: [],
+    };
+    const legacyPlan = {
+      requestClass: 'query',
+      confidence: 'high',
+      intents: [{ capabilityId: 'read.query_notes' }],
+      needsClarification: false,
+    };
+    const catalog = [
+      { id: 'read.query_notes', domain: 'note', toolNames: ['query_notes'] },
+    ];
+    expect(compareTurnSpecWithLegacyPlan(turnSpec, legacyPlan, catalog)).toEqual([]);
+
+    expect(
+      compareTurnSpecWithLegacyPlan(
+        { ...turnSpec, goals: [{ capabilityId: 'bookmark.query', capabilityDomain: 'bookmark' }] },
+        legacyPlan,
+        catalog,
+      ),
+    ).toEqual(expect.arrayContaining(['capability_ids', 'capability_domains']));
   });
 });

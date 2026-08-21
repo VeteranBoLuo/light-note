@@ -19,9 +19,12 @@ const MAX_TEXT_LENGTH = 700;
 const TTL_MS = 30 * 60 * 1000;
 const MAX_SESSIONS = 100;
 const REDIS_PREFIX = 'chat:sess:';
+const REDIS_FOCUS_PREFIX = 'chat:sess:focus:';
 const REDIS_TTL = 30 * 60;
 
 const sessions = new Map();
+const focusSnapshots = new Map();
+const focusMutationQueues = new Map();
 let redisOk = true;
 
 redisClient.on('error', () => {
@@ -50,7 +53,10 @@ function isExpired(session) {
 
 function cleanupExpired() {
   for (const [id, session] of sessions) {
-    if (isExpired(session)) sessions.delete(id);
+    if (isExpired(session)) {
+      sessions.delete(id);
+      focusSnapshots.delete(id);
+    }
   }
 }
 
@@ -60,7 +66,10 @@ function evictOldest() {
     for (const [key, s] of sessions) {
       if (!oldest || s.updatedAt < oldest.updatedAt) oldest = { key, updatedAt: s.updatedAt };
     }
-    if (oldest) sessions.delete(oldest.key);
+    if (oldest) {
+      sessions.delete(oldest.key);
+      focusSnapshots.delete(oldest.key);
+    }
   }
 }
 
@@ -94,6 +103,9 @@ function makeSession(id, ownerKey) {
       lastCapabilityIds: [],
       lastResultSetId: '',
       activeResultSetIds: [],
+      pendingFocus: null,
+      activeReadRunId: '',
+      lastRunState: 'idle',
       pendingArtifactId: '',
       unresolvedReference: false,
     },
@@ -130,6 +142,25 @@ function normalizeSession(session) {
           .filter(Boolean),
       ),
     ].slice(-MAX_RESULT_SETS),
+    pendingFocus:
+      session.discourseState.pendingFocus && typeof session.discourseState.pendingFocus === 'object'
+        ? {
+            id: String(session.discourseState.pendingFocus.id || ''),
+            topicEpochAction: session.discourseState.pendingFocus.topicEpochAction === 'advance' ? 'advance' : 'keep',
+            activeDomain: String(session.discourseState.pendingFocus.activeDomain || ''),
+            lastCapabilityIds: [
+              ...new Set((session.discourseState.pendingFocus.lastCapabilityIds || []).map(String)),
+            ].slice(0, 8),
+            replaceResultScope: session.discourseState.pendingFocus.replaceResultScope === true,
+            unresolvedReference: session.discourseState.pendingFocus.unresolvedReference === true,
+          }
+        : null,
+    activeReadRunId: String(session.discourseState.activeReadRunId || ''),
+    lastRunState: ['idle', 'pending', 'success', 'empty', 'failed', 'degraded'].includes(
+      session.discourseState.lastRunState,
+    )
+      ? session.discourseState.lastRunState
+      : 'idle',
     pendingArtifactId: String(session.discourseState.pendingArtifactId || ''),
     unresolvedReference: session.discourseState.unresolvedReference === true,
   };
@@ -215,9 +246,73 @@ function cloneActionArgs(value) {
   }
 }
 
+function sessionStorageKey(session) {
+  return `${session.ownerKey}:${session.id}`;
+}
+
+function focusSnapshotFromSession(session) {
+  normalizeSession(session);
+  return {
+    discourseState: structuredClone(session.discourseState),
+    resultSets: structuredClone(session.resultSets),
+  };
+}
+
+function normalizeFocusSnapshot(value, fallbackSession) {
+  const carrier = {
+    discourseState: value?.discourseState || fallbackSession?.discourseState || {},
+    resultSets: Array.isArray(value?.resultSets) ? value.resultSets : fallbackSession?.resultSets || [],
+    turns: [],
+    actionBatches: [],
+    sourceSets: [],
+    clarifications: [],
+    artifactStates: [],
+  };
+  normalizeSession(carrier);
+  return focusSnapshotFromSession(carrier);
+}
+
+function focusRevision(snapshot) {
+  return Math.max(0, Number(snapshot?.discourseState?.revision) || 0);
+}
+
+function newestFocusSnapshot(...values) {
+  return values
+    .filter(Boolean)
+    .map((value) => normalizeFocusSnapshot(value))
+    .sort((left, right) => focusRevision(right) - focusRevision(left))[0] || null;
+}
+
+function applyFocusSnapshot(session, snapshot) {
+  if (!session || !snapshot) return session;
+  session.discourseState = structuredClone(snapshot.discourseState);
+  session.resultSets = structuredClone(snapshot.resultSets);
+  normalizeSession(session);
+  const key = sessionStorageKey(session);
+  focusSnapshots.set(key, focusSnapshotFromSession(session));
+  sessions.set(key, session);
+  return session;
+}
+
+async function withFocusMutationQueue(key, task) {
+  const previous = focusMutationQueues.get(key) || Promise.resolve();
+  let release;
+  const current = new Promise((resolve) => {
+    release = resolve;
+  });
+  focusMutationQueues.set(key, current);
+  await previous;
+  try {
+    return await task();
+  } finally {
+    release();
+    if (focusMutationQueues.get(key) === current) focusMutationQueues.delete(key);
+  }
+}
+
 function persistSession(session) {
   session.updatedAt = now();
-  return redisSet(`${session.ownerKey}:${session.id}`, session);
+  return redisSet(sessionStorageKey(session), session);
 }
 
 async function findSession(ownerKey, sessionId) {
@@ -227,14 +322,23 @@ async function findSession(ownerKey, sessionId) {
   const ownerHash = normalizeOwnerKey(ownerKey);
   const redisSession = normalizeSession(await redisGet(key));
   if (redisSession && redisSession.ownerKey === ownerHash && !isExpired(redisSession)) {
+    const focus = newestFocusSnapshot(
+      await redisGetFocus(key),
+      focusSnapshots.get(key),
+      focusSnapshotFromSession(redisSession),
+    );
+    if (focus) applyFocusSnapshot(redisSession, focus);
     sessions.set(key, redisSession);
     return redisSession;
   }
   const memorySession = normalizeSession(sessions.get(key));
   if (memorySession && memorySession.ownerKey === ownerHash && !isExpired(memorySession)) {
+    const focus = newestFocusSnapshot(focusSnapshots.get(key), focusSnapshotFromSession(memorySession));
+    if (focus) applyFocusSnapshot(memorySession, focus);
     return memorySession;
   }
   sessions.delete(key);
+  focusSnapshots.delete(key);
   return null;
 }
 
@@ -259,6 +363,96 @@ async function redisSet(key, data) {
   }
 }
 
+async function redisGetFocus(key) {
+  if (!redisOk) return null;
+  try {
+    const raw = await redisClient.get(REDIS_FOCUS_PREFIX + key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+const FOCUS_CAS_SCRIPT = `
+local current = redis.call('GET', KEYS[1])
+if current then
+  local decoded = cjson.decode(current)
+  local currentRevision = 0
+  if decoded['discourseState'] and decoded['discourseState']['revision'] then
+    currentRevision = tonumber(decoded['discourseState']['revision']) or 0
+  end
+  if currentRevision ~= tonumber(ARGV[1]) then
+    return {0, current}
+  end
+end
+redis.call('SETEX', KEYS[1], tonumber(ARGV[2]), ARGV[3])
+return {1, ''}
+`;
+
+async function redisCompareAndSetFocus(key, expectedRevision, snapshot) {
+  if (!redisOk || typeof redisClient.eval !== 'function') return { state: 'unavailable' };
+  try {
+    const result = await redisClient.eval(FOCUS_CAS_SCRIPT, {
+      keys: [REDIS_FOCUS_PREFIX + key],
+      arguments: [String(expectedRevision), String(REDIS_TTL), JSON.stringify(snapshot)],
+    });
+    if (Number(result?.[0]) === 1) return { state: 'committed' };
+    const current = String(result?.[1] || '');
+    return { state: 'conflict', snapshot: current ? JSON.parse(current) : null };
+  } catch {
+    return { state: 'unavailable' };
+  }
+}
+
+async function mutateSessionFocus(session, mutation) {
+  if (!session || typeof mutation !== 'function') return null;
+  normalizeSession(session);
+  const key = sessionStorageKey(session);
+  const mutateLocally = () =>
+    withFocusMutationQueue(key, async () => {
+      const base = newestFocusSnapshot(focusSnapshots.get(key), focusSnapshotFromSession(session));
+      const outcome = mutation(structuredClone(base));
+      if (!outcome?.snapshot) {
+        applyFocusSnapshot(session, base);
+        return outcome?.value ?? null;
+      }
+      const next = normalizeFocusSnapshot(outcome.snapshot, session);
+      focusSnapshots.set(key, next);
+      applyFocusSnapshot(session, next);
+      await persistSession(session);
+      return outcome.value ?? null;
+    });
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const base = newestFocusSnapshot(
+      await redisGetFocus(key),
+      focusSnapshots.get(key),
+      focusSnapshotFromSession(session),
+    );
+    const outcome = mutation(structuredClone(base));
+    if (!outcome?.snapshot) {
+      applyFocusSnapshot(session, base);
+      return outcome?.value ?? null;
+    }
+    const next = normalizeFocusSnapshot(outcome.snapshot, session);
+    const persisted = await redisCompareAndSetFocus(key, focusRevision(base), next);
+    if (persisted.state === 'unavailable') return mutateLocally();
+    if (persisted.state === 'conflict') {
+      if (persisted.snapshot) {
+        const current = normalizeFocusSnapshot(persisted.snapshot, session);
+        focusSnapshots.set(key, current);
+        applyFocusSnapshot(session, current);
+      }
+      continue;
+    }
+    focusSnapshots.set(key, next);
+    applyFocusSnapshot(session, next);
+    await persistSession(session);
+    return outcome.value ?? null;
+  }
+  return null;
+}
+
 // ---- 公开 API ----
 
 export async function getOrCreateSession(ownerKey, sessionId) {
@@ -281,6 +475,7 @@ export async function getOrCreateSession(ownerKey, sessionId) {
   const key = storageKey(ownerKey, newId);
   const session = makeSession(newId, ownerKey);
   sessions.set(key, session);
+  focusSnapshots.set(key, focusSnapshotFromSession(session));
   evictOldest();
 
   // 异步写 Redis
@@ -323,7 +518,7 @@ export async function recordTurn(session, userMsg, assistantMsg, toolResults = [
  * V3 编译器只读取这个投影，历史消息仍仅供 legacy 链路兼容使用。
  */
 export async function commitSessionTurnSpec(session, turnSpec) {
-  if (!session || !turnSpec) return false;
+  if (!session || !turnSpec) return null;
   normalizeSession(session);
   const capabilityIds = [
     ...new Set(
@@ -340,65 +535,194 @@ export async function commitSessionTurnSpec(session, turnSpec) {
         .filter(Boolean),
     ),
   ];
-  const priorResultSetIds = [...session.discourseState.activeResultSetIds];
-  const startsFreshResultScope =
-    turnSpec.topicEpochAction === 'advance' ||
-    (Array.isArray(turnSpec.goals) && turnSpec.goals.some((goal) => goal?.kind === 'read'));
-  session.discourseState = {
-    ...session.discourseState,
-    revision: session.discourseState.revision + 1,
-    topicEpoch:
-      turnSpec.topicEpochAction === 'advance'
-        ? Math.max(0, Number(session.discourseState.topicEpoch) || 0) + 1
-        : Math.max(0, Number(session.discourseState.topicEpoch) || 0),
-    activeDomain: explicitDomains.length === 1 ? explicitDomains[0] : explicitDomains.length ? 'mixed' : '',
-    lastCapabilityIds: capabilityIds,
-    lastResultSetId: startsFreshResultScope ? '' : String(session.discourseState.lastResultSetId || ''),
-    activeResultSetIds: startsFreshResultScope ? [] : priorResultSetIds,
-    unresolvedReference: turnSpec.continuationMode === 'refer_last_result' && priorResultSetIds.length === 0,
-  };
-  await persistSession(session);
-  return true;
+  const hasReadGoal = Array.isArray(turnSpec.goals) && turnSpec.goals.some((goal) => goal?.kind === 'read');
+  const readRunId = hasReadGoal ? crypto.randomUUID() : '';
+  if (hasReadGoal) {
+    return mutateSessionFocus(session, (snapshot) => {
+      const discourseState = snapshot.discourseState;
+      const priorResultSetIds = [...discourseState.activeResultSetIds];
+      return {
+        snapshot: {
+          ...snapshot,
+          discourseState: {
+            ...discourseState,
+            revision: discourseState.revision + 1,
+            pendingFocus: {
+              id: readRunId,
+              topicEpochAction: turnSpec.topicEpochAction === 'advance' ? 'advance' : 'keep',
+              activeDomain: explicitDomains.length === 1 ? explicitDomains[0] : explicitDomains.length ? 'mixed' : '',
+              lastCapabilityIds: capabilityIds,
+              replaceResultScope: true,
+              unresolvedReference: turnSpec.continuationMode === 'refer_last_result' && priorResultSetIds.length === 0,
+            },
+            lastRunState: 'pending',
+          },
+        },
+        value: Object.freeze({ id: readRunId, state: 'pending' }),
+      };
+    });
+  }
+  return mutateSessionFocus(session, (snapshot) => {
+    const discourseState = snapshot.discourseState;
+    const priorResultSetIds = [...discourseState.activeResultSetIds];
+    const startsFreshResultScope = turnSpec.topicEpochAction === 'advance';
+    return {
+      snapshot: {
+        ...snapshot,
+        discourseState: {
+          ...discourseState,
+          revision: discourseState.revision + 1,
+          topicEpoch:
+            turnSpec.topicEpochAction === 'advance'
+              ? Math.max(0, Number(discourseState.topicEpoch) || 0) + 1
+              : Math.max(0, Number(discourseState.topicEpoch) || 0),
+          activeDomain: explicitDomains.length === 1 ? explicitDomains[0] : explicitDomains.length ? 'mixed' : '',
+          lastCapabilityIds: capabilityIds,
+          lastResultSetId: startsFreshResultScope ? '' : String(discourseState.lastResultSetId || ''),
+          activeResultSetIds: startsFreshResultScope ? [] : priorResultSetIds,
+          pendingFocus: null,
+          activeReadRunId: '',
+          lastRunState: 'success',
+          unresolvedReference: turnSpec.continuationMode === 'refer_last_result' && priorResultSetIds.length === 0,
+        },
+      },
+      value: Object.freeze({ id: '', state: 'committed' }),
+    };
+  });
 }
 
 /** 保存一次真实工具结果的稳定引用集合；不保存标题、URL、正文、摘要或模型输出。 */
 export async function recordSessionResultSet(
   session,
-  { capabilityId = '', domains = [], refs = [], status = 'success' } = {},
+  { capabilityId = '', domains = [], refs = [], status = 'success', focusId = '' } = {},
 ) {
   if (!session) return null;
   normalizeSession(session);
   const normalizedStatus = ['success', 'empty', 'error'].includes(status) ? status : 'success';
+  if (normalizedStatus === 'error') {
+    await settleSessionResultFocus(session, { status: 'failed', focusId });
+    return null;
+  }
+  const requestedFocusId = String(focusId || '');
   const resultSet = {
     id: crypto.randomUUID(),
     capabilityId: String(capabilityId || '').slice(0, 120),
     domains: [...new Set((Array.isArray(domains) ? domains : []).map(String).filter(Boolean))].slice(0, 8),
     refs: normalizeResultRefs(refs),
     status: normalizedStatus,
-    topicEpoch: Math.max(0, Number(session.discourseState.topicEpoch) || 0),
+    topicEpoch: 0,
     createdAt: now(),
     expiresAt: now() + TTL_MS,
   };
-  session.resultSets = [...session.resultSets.filter((item) => Number(item?.expiresAt) > now()), resultSet].slice(
-    -MAX_RESULT_SETS,
-  );
-  session.discourseState = {
-    ...session.discourseState,
-    revision: session.discourseState.revision + 1,
-    lastResultSetId: resultSet.id,
-    activeResultSetIds: [...new Set([...session.discourseState.activeResultSetIds, resultSet.id])].slice(
-      -MAX_RESULT_SETS,
-    ),
-    unresolvedReference: false,
-  };
-  await persistSession(session);
-  return Object.freeze({
-    id: resultSet.id,
-    capabilityId: resultSet.capabilityId,
-    domains: Object.freeze([...resultSet.domains]),
-    refTypes: Object.freeze([...new Set(resultSet.refs.map((ref) => ref.type))]),
-    refCount: resultSet.refs.length,
-    status: resultSet.status,
+  return mutateSessionFocus(session, (snapshot) => {
+    const discourseState = snapshot.discourseState;
+    const pendingFocus = discourseState.pendingFocus;
+    const effectiveFocusId = requestedFocusId || String(pendingFocus?.id || '');
+    const commitsPending = Boolean(pendingFocus && requestedFocusId && pendingFocus.id === requestedFocusId);
+    const appendsCommitted =
+      Boolean(effectiveFocusId) &&
+      !pendingFocus &&
+      discourseState.activeReadRunId === effectiveFocusId;
+    if ((pendingFocus || requestedFocusId) && !commitsPending && !appendsCommitted) return { value: null };
+
+    const targetTopicEpoch =
+      commitsPending && pendingFocus?.topicEpochAction === 'advance'
+        ? Math.max(0, Number(discourseState.topicEpoch) || 0) + 1
+        : Math.max(0, Number(discourseState.topicEpoch) || 0);
+    const committedResultSet = { ...resultSet, topicEpoch: targetTopicEpoch };
+    const resultSets = [
+      ...snapshot.resultSets.filter((item) => Number(item?.expiresAt) > now()),
+      committedResultSet,
+    ].slice(-MAX_RESULT_SETS);
+    const activeResultSetIds = [
+      ...new Set([
+        ...(commitsPending && pendingFocus?.replaceResultScope === true ? [] : discourseState.activeResultSetIds),
+        committedResultSet.id,
+      ]),
+    ].slice(-MAX_RESULT_SETS);
+    return {
+      snapshot: {
+        resultSets,
+        discourseState: {
+          ...discourseState,
+          revision: discourseState.revision + 1,
+          topicEpoch: targetTopicEpoch,
+          activeDomain: commitsPending ? pendingFocus?.activeDomain || '' : discourseState.activeDomain,
+          lastCapabilityIds: commitsPending ? pendingFocus?.lastCapabilityIds || [] : discourseState.lastCapabilityIds,
+          lastResultSetId: committedResultSet.id,
+          activeResultSetIds,
+          pendingFocus: null,
+          activeReadRunId: effectiveFocusId || discourseState.activeReadRunId,
+          lastRunState: normalizedStatus,
+          unresolvedReference: false,
+        },
+      },
+      value: Object.freeze({
+        id: committedResultSet.id,
+        capabilityId: committedResultSet.capabilityId,
+        domains: Object.freeze([...committedResultSet.domains]),
+        refTypes: Object.freeze([...new Set(committedResultSet.refs.map((ref) => ref.type))]),
+        refCount: committedResultSet.refs.length,
+        status: committedResultSet.status,
+      }),
+    };
+  });
+}
+
+export async function settleSessionResultFocus(session, { status = 'failed', focusId = '' } = {}) {
+  if (!session) return false;
+  normalizeSession(session);
+  const normalizedStatus = ['success', 'failed', 'degraded'].includes(status) ? status : 'failed';
+  const requestedFocusId = String(focusId || '');
+  return mutateSessionFocus(session, (snapshot) => {
+    const discourseState = snapshot.discourseState;
+    const pendingFocus = discourseState.pendingFocus;
+    const effectiveFocusId = requestedFocusId || String(pendingFocus?.id || '');
+    const settlesPending = Boolean(pendingFocus && requestedFocusId && pendingFocus.id === requestedFocusId);
+    const settlesCommitted =
+      Boolean(effectiveFocusId) &&
+      !pendingFocus &&
+      discourseState.activeReadRunId === effectiveFocusId;
+    if ((pendingFocus || requestedFocusId) && !settlesPending && !settlesCommitted) return { value: false };
+
+    if (normalizedStatus === 'success' && settlesPending) {
+      const targetTopicEpoch =
+        pendingFocus.topicEpochAction === 'advance'
+          ? Math.max(0, Number(discourseState.topicEpoch) || 0) + 1
+          : Math.max(0, Number(discourseState.topicEpoch) || 0);
+      return {
+        snapshot: {
+          ...snapshot,
+          discourseState: {
+            ...discourseState,
+            revision: discourseState.revision + 1,
+            topicEpoch: targetTopicEpoch,
+            activeDomain: pendingFocus.activeDomain,
+            lastCapabilityIds: pendingFocus.lastCapabilityIds,
+            lastResultSetId: pendingFocus.replaceResultScope ? '' : discourseState.lastResultSetId,
+            activeResultSetIds: pendingFocus.replaceResultScope ? [] : discourseState.activeResultSetIds,
+            pendingFocus: null,
+            activeReadRunId: effectiveFocusId,
+            lastRunState: 'success',
+            unresolvedReference: false,
+          },
+        },
+        value: true,
+      };
+    }
+
+    return {
+      snapshot: {
+        ...snapshot,
+        discourseState: {
+          ...discourseState,
+          revision: discourseState.revision + 1,
+          pendingFocus: settlesPending ? null : pendingFocus,
+          lastRunState: normalizedStatus,
+        },
+      },
+      value: true,
+    };
   });
 }
 
@@ -460,18 +784,24 @@ export async function recordSessionArtifactState(
     ...session.artifactStates.filter((item) => item?.id !== artifact.id && Number(item?.expiresAt) > now()),
     artifact,
   ].slice(-MAX_ARTIFACT_STATES);
-  session.discourseState = {
-    ...session.discourseState,
-    revision: session.discourseState.revision + 1,
-    pendingArtifactId:
-      normalizedState === 'pending'
-        ? artifact.id
-        : session.discourseState.pendingArtifactId === artifact.id
-          ? ''
-          : session.discourseState.pendingArtifactId,
-  };
-  await persistSession(session);
-  return true;
+  return Boolean(
+    await mutateSessionFocus(session, (snapshot) => ({
+      snapshot: {
+        ...snapshot,
+        discourseState: {
+          ...snapshot.discourseState,
+          revision: snapshot.discourseState.revision + 1,
+          pendingArtifactId:
+            normalizedState === 'pending'
+              ? artifact.id
+              : snapshot.discourseState.pendingArtifactId === artifact.id
+                ? ''
+                : snapshot.discourseState.pendingArtifactId,
+        },
+      },
+      value: true,
+    })),
+  );
 }
 
 /**
@@ -508,6 +838,7 @@ export function getSessionDiscourseProjection(session) {
     topicEpoch: session.discourseState.topicEpoch,
     activeDomain: session.discourseState.activeDomain,
     lastCapabilityIds: Object.freeze([...session.discourseState.lastCapabilityIds]),
+    lastRunState: session.discourseState.lastRunState,
     lastResultSet:
       activeResultSets.length === 1 && result.state === 'ready'
         ? Object.freeze({
@@ -776,7 +1107,6 @@ export async function settleSessionAction({ ownerKey, sessionId, confirmationId,
   const artifact = session.artifactStates.find((item) => item?.id === actionId);
   if (artifact) {
     const previousState = artifact.state;
-    const previousPendingArtifactId = session.discourseState.pendingArtifactId;
     artifact.state =
       state === 'succeeded'
         ? 'confirmed'
@@ -786,12 +1116,25 @@ export async function settleSessionAction({ ownerKey, sessionId, confirmationId,
             ? 'failed'
             : 'unknown';
     artifact.updatedAt = now();
-    if (artifact.state !== 'pending' && session.discourseState.pendingArtifactId === artifact.id) {
-      session.discourseState.pendingArtifactId = '';
-    }
-    if (artifact.state !== previousState || session.discourseState.pendingArtifactId !== previousPendingArtifactId) {
-      session.discourseState.revision += 1;
-    }
+    return Boolean(
+      await mutateSessionFocus(session, (snapshot) => {
+        const clearsPendingArtifact =
+          artifact.state !== 'pending' && snapshot.discourseState.pendingArtifactId === artifact.id;
+        return {
+          snapshot: {
+            ...snapshot,
+            discourseState: {
+              ...snapshot.discourseState,
+              revision:
+                snapshot.discourseState.revision +
+                (artifact.state !== previousState || clearsPendingArtifact ? 1 : 0),
+              pendingArtifactId: clearsPendingArtifact ? '' : snapshot.discourseState.pendingArtifactId,
+            },
+          },
+          value: true,
+        };
+      }),
+    );
   }
   await persistSession(session);
   return true;

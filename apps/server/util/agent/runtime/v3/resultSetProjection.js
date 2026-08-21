@@ -28,4 +28,16 @@ export function projectAgentV3ResultSet({ capability, result } = {}) {
   });
 }
 
+/**
+ * 根据真实读取和 ResultSet 投影结果决定会话焦点的终态。
+ *
+ * “读取成功”与“产生可跨轮资源引用”是两个维度：统计、概览等工具可能成功回答，
+ * 却没有稳定资源 ID。此时应提交语义焦点并清空旧资源范围，而不是误标为 degraded。
+ */
+export function resolveAgentV3ReadFocusSettlement({ readAttempted = false, committed = false, failed = false } = {}) {
+  if (committed) return failed ? 'degraded' : null;
+  if (failed) return 'failed';
+  return readAttempted ? 'success' : 'degraded';
+}
+
 export const __testing = Object.freeze({ rawResultRefs });

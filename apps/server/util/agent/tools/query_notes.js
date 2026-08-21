@@ -4,11 +4,7 @@ import { describeResolvedTimeRange, parseTimeRange } from '../timeRange.js';
 import { parseNoteContent, renderNoteForAi } from '../../noteSemantic.js';
 import { searchPersonalKnowledge } from '../../personalKnowledgeSearch.js';
 import { PERSONAL_SCOPE_USER_PARAM, personalScopeHint } from '../ownerScope.js';
-
-// LIKE 通配符按字面处理：用户标题里的 % 和 _ 不能变成通配（与 todoService 同规则）。
-function escapeLikePattern(keyword) {
-  return String(keyword).replace(/[\\%_]/g, '\\$&');
-}
+import { escapeLikePattern } from '../sqlPatterns.js';
 
 /**
  * 裸 LIKE 对口语化问法（"我记得有一篇讲X的笔记"）召回为零——整句不可能是任何正文的子串。
@@ -89,7 +85,7 @@ export default {
     const baseParams = [ctx.userId];
 
     if (keyword) {
-      where += ` AND (n.title LIKE ? OR (COALESCE(n.type, 'html') <> 'drawing' AND n.content LIKE ?))`;
+      where += ` AND (n.title LIKE ? ESCAPE '\\\\' OR (COALESCE(n.type, 'html') <> 'drawing' AND n.content LIKE ? ESCAPE '\\\\'))`;
       const pattern = `%${escapeLikePattern(keyword)}%`;
       baseParams.push(pattern, pattern);
     }
@@ -103,8 +99,8 @@ export default {
     const order = keyword
       ? `ORDER BY CASE
            WHEN LOWER(n.title) = LOWER(?) THEN 100
-           WHEN LOWER(n.title) LIKE LOWER(?) THEN 80
-           WHEN LOWER(n.title) LIKE LOWER(?) THEN 60
+           WHEN LOWER(n.title) LIKE LOWER(?) ESCAPE '\\\\' THEN 80
+           WHEN LOWER(n.title) LIKE LOWER(?) ESCAPE '\\\\' THEN 60
            ELSE 10
          END DESC, n.create_time DESC`
       : 'ORDER BY n.create_time DESC';

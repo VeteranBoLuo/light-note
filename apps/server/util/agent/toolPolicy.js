@@ -3,6 +3,7 @@ import { getAgentCapabilityByToolName } from './capabilityRegistry.js';
 
 const VALID_RISKS = new Set(['low', 'medium', 'high']);
 const VALID_CONFIRMATION_POLICIES = new Set(['none', 'default', 'always']);
+const VALID_SIDE_EFFECT_POLICIES = new Set(['none', 'confirmation_required', 'idempotent_background_job']);
 const KNOWN_ADMIN_MODES = new Set(['readonly', 'maintain']);
 const DEPENDENCY_REF_TYPE_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/;
 const RESOURCE_SOURCE_FIELD_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
@@ -53,12 +54,26 @@ export function normalizeRegisteredTool(tool) {
   }
   const riskLevel = capability?.riskLevel || tool.riskLevel || 'low';
   const confirmationPolicy = capability?.confirmationPolicy || tool.confirmationPolicy || 'none';
+  const sideEffectPolicy =
+    tool.sideEffectPolicy || (isWrite ? 'confirmation_required' : 'none');
   if (!VALID_RISKS.has(riskLevel)) throw new Error(`Agent 工具 ${tool.name} 缺少有效 riskLevel`);
   if (!VALID_CONFIRMATION_POLICIES.has(confirmationPolicy)) {
     throw new Error(`Agent 工具 ${tool.name} 缺少有效 confirmationPolicy`);
   }
   if (isWrite && confirmationPolicy === 'none') {
     throw new Error(`Agent 写工具 ${tool.name} 禁止关闭确认`);
+  }
+  if (!VALID_SIDE_EFFECT_POLICIES.has(sideEffectPolicy)) {
+    throw new Error(`Agent 工具 ${tool.name} 缺少有效 sideEffectPolicy`);
+  }
+  if (isWrite !== (sideEffectPolicy === 'confirmation_required')) {
+    throw new Error(`Agent 工具 ${tool.name} 的 isWrite 与 sideEffectPolicy 不一致`);
+  }
+  if (tool.semanticEffect === 'write' && !isWrite && sideEffectPolicy !== 'idempotent_background_job') {
+    throw new Error(`Agent 操作型工具 ${tool.name} 必须显式声明安全副作用策略`);
+  }
+  if (sideEffectPolicy === 'idempotent_background_job' && tool.semanticEffect !== 'write') {
+    throw new Error(`Agent 工具 ${tool.name} 的后台任务策略只能用于操作型能力`);
   }
   if (tool.getDependencyRefs != null && typeof tool.getDependencyRefs !== 'function') {
     throw new Error(`Agent 工具 ${tool.name} 的 getDependencyRefs 必须是函数`);
@@ -142,6 +157,7 @@ export function normalizeRegisteredTool(tool) {
     category: tool.category || tool.name.split('_').slice(-1)[0] || 'general',
     riskLevel,
     confirmationPolicy,
+    sideEffectPolicy,
     timeoutMs: Number(tool.timeoutMs || (isWrite ? 10_000 : 8_000)),
     allowedRoles,
     resultBudget: Number(tool.resultBudget || 6000),

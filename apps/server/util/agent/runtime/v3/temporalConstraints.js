@@ -285,6 +285,19 @@ export function compileTemporalConstraintsV3(
     }
   }
 
+  // 必填时间槽只能按 Manifest 的显式策略补值。只有 defaultPolicy=all 才能注入
+  // “全部”；clarify 留给 TurnSpec 归一化层生成确定性缺失槽，禁止 Planner 猜默认值。
+  for (const goal of goalsById.values()) {
+    const capability = capabilityForGoal(goal, catalogById);
+    for (const slot of capability?.temporalSlots || []) {
+      const key = constraintKey(goal.id, slot.name);
+      if (slot.required !== true || output.has(key) || slot.defaultPolicy !== 'all') continue;
+      const resolved = resolveTemporalExpressionV3('全部', slot, temporalContext);
+      if (!resolved) return null;
+      output.set(key, constraintRecord({ goalId: goal.id, slot, resolved, implicit: true }));
+    }
+  }
+
   if (mentions.length > 1) {
     const usedExpressions = new Set([...output.values()].map((item) => item.expression));
     const hasTemporalGoal = [...goalsById.values()].some(
@@ -294,6 +307,38 @@ export function compileTemporalConstraintsV3(
   }
 
   return Object.freeze([...output.values()].slice(0, MAX_CONSTRAINTS));
+}
+
+export function collectMissingTemporalSlotsV3({ goals = [], catalog = [], constraints = [] } = {}) {
+  const catalogById = new Map((Array.isArray(catalog) ? catalog : []).map((entry) => [entry.id, entry]));
+  const bound = new Set(
+    (Array.isArray(constraints) ? constraints : []).map((constraint) =>
+      constraintKey(String(constraint?.goalId || ''), String(constraint?.slot || '')),
+    ),
+  );
+  const missing = [];
+  for (const goal of Array.isArray(goals) ? goals : []) {
+    const capability = capabilityForGoal(goal, catalogById);
+    for (const slot of capability?.temporalSlots || []) {
+      if (
+        slot.required !== true ||
+        slot.defaultPolicy !== 'clarify' ||
+        bound.has(constraintKey(goal.id, slot.name))
+      ) {
+        continue;
+      }
+      const label = String(slot.label || slot.name || '时间范围');
+      missing.push(
+        Object.freeze({
+          name: `${goal.id}.${slot.name}`.slice(0, 80),
+          reason: 'manifest_temporal_scope_required',
+          question: `请补充${label}。`.slice(0, 240),
+          label,
+        }),
+      );
+    }
+  }
+  return Object.freeze(missing.slice(0, 8));
 }
 
 export function authoritativeTemporalArgumentsForGoal(turnSpec, goalId) {

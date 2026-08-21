@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { projectAgentV3ResultSet } from './resultSetProjection.js';
+import { projectAgentV3ResultSet, resolveAgentV3ReadFocusSettlement } from './resultSetProjection.js';
 
 const capability = Object.freeze({ id: 'bookmark.query', domains: ['bookmark'], resultKind: 'bookmark_list' });
 
@@ -24,5 +24,20 @@ describe('V3 ResultSet 投影', () => {
       }),
     ).toMatchObject({ status: 'empty', refs: [] });
     expect(projectAgentV3ResultSet({ capability, result: { status: 'error' } })).toBeNull();
+  });
+
+  it('读取成功但没有稳定引用时仍结算为 success，而非 degraded', () => {
+    expect(
+      resolveAgentV3ReadFocusSettlement({ readAttempted: true, committed: false, failed: false }),
+    ).toBe('success');
+    expect(
+      resolveAgentV3ReadFocusSettlement({ readAttempted: true, committed: true, failed: false }),
+    ).toBeNull();
+    expect(
+      resolveAgentV3ReadFocusSettlement({ readAttempted: true, committed: true, failed: true }),
+    ).toBe('degraded');
+    expect(
+      resolveAgentV3ReadFocusSettlement({ readAttempted: true, committed: false, failed: true }),
+    ).toBe('failed');
   });
 });

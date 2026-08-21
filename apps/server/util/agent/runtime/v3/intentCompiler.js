@@ -53,6 +53,9 @@ function compactDiscourseProjection(value = {}) {
     lastCapabilityIds: Object.freeze(
       [...new Set((Array.isArray(value.lastCapabilityIds) ? value.lastCapabilityIds : []).map(String))].slice(0, 8),
     ),
+    lastRunState: ['idle', 'pending', 'success', 'empty', 'failed', 'degraded'].includes(value.lastRunState)
+      ? value.lastRunState
+      : 'idle',
     lastResultSet: compactResultSet(value.lastResultSet),
     resultSetCandidates: Object.freeze(
       (Array.isArray(value.resultSetCandidates) ? value.resultSetCandidates : [])
@@ -80,6 +83,7 @@ function compilerPrompt(repairFeedback = '') {
     'continuationMode=refer_last_result 只表示引用服务端上一结果集；refine_last_artifact 只表示修改仍可用的待确认产物。没有相应结构化状态时不得假装存在。',
     'scope_replacement 只表示：用户正在改写同一份待确认产物，但本轮明确更换了输入材料、时间范围或检索对象；此时新确认必须原子替换旧确认。待确认产物存在时，同领域的 create_artifact 若不是明确要求另建一份互不相关的产物，就不得标成 independent。',
     'resultSetCandidates 多于一个时，只有 types 能唯一筛到一组才允许 refer_last_result；“这些、刚才那些”仍指向多组时必须澄清，不得默认取最后一组或合并。',
+    'structuredDiscourse.lastRunState 为 failed/degraded 时，旧 ResultSet 只代表更早的已提交结果，不能冒充刚失败查询的新结果；只有用户明确指回旧结果时才允许引用。',
     '省略指代里的通用对象名称不构成切换产品领域的证据。没有当前显式资源、最新消息也没有明确的新目标类型或新范围时，应优先承接唯一兼容的 ResultSet；确实要切换领域才使用 independent。',
     '当前显式选择的资源足以确定目标时，不要追问用户再次粘贴链接、ID 或标题；使用 current_explicit referentSelector。上一结果集足以确定目标时，使用 last_result selector。',
     '相对日期由 temporalContext 解释，不得把“今天、昨天、最近 N 天”误报为缺少日期。requiredSlots 只表示执行阶段需要抽取的参数，不等于应该向用户追问；只有确实会改变目标且无法从最新消息、当前显式资源或结构化指代得到时，才填写 missingSlots。',

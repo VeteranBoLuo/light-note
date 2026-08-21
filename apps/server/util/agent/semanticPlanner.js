@@ -357,7 +357,10 @@ export function parseSemanticPlannerResponse(plannerResponse, catalog, options =
   // 只有 Provider 完全漏掉 meta call、但给出了可核验的只读调用时才兼容派生。
   // 显式但格式无效/重复的计划必须失败关闭；写工具绝不允许绕过 Intent Envelope。
   const derivedPlan = planCalls.length === 0 ? derivePlanFromToolCalls(toolCalls, catalog) : null;
-  const safeDerivedPlan = derivedPlan?.intents.some((intent) => intent.kind === 'write') ? null : derivedPlan;
+  const hasDerivedWriteIntent = Array.isArray(derivedPlan?.intents)
+    ? derivedPlan.intents.some((intent) => intent.kind === 'write')
+    : false;
+  const safeDerivedPlan = hasDerivedWriteIntent ? null : derivedPlan;
   const plan = validSemanticPlan || safeDerivedPlan;
   return {
     plan,

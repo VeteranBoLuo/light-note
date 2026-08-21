@@ -1,9 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
 
+const redisFocusValues = new Map();
+
 const redis = {
   on: vi.fn(),
-  get: vi.fn().mockResolvedValue(null),
+  get: vi.fn(async (key) => (String(key).startsWith('chat:sess:focus:') ? redisFocusValues.get(key) || null : null)),
   setEx: vi.fn().mockResolvedValue('OK'),
+  eval: vi.fn(async (_script, { keys, arguments: args }) => {
+    const key = keys[0];
+    const current = redisFocusValues.get(key) || '';
+    if (current) {
+      const revision = Number(JSON.parse(current)?.discourseState?.revision || 0);
+      if (revision !== Number(args[0])) return [0, current];
+    }
+    redisFocusValues.set(key, args[2]);
+    return [1, ''];
+  }),
 };
 vi.mock('../redisClient.js', () => ({ default: redis }));
 
@@ -24,6 +36,7 @@ const {
   resolveSessionMaterialClarification,
   listSessionSourceSets,
   resolveSessionActionRetry,
+  settleSessionResultFocus,
   settleSessionAction,
 } = await import('./sessionStore.js');
 
@@ -160,11 +173,12 @@ describe('agent sessionStore', () => {
 
   it('V3 会话只投影能力、主题纪元和稳定引用，不复制事实正文', async () => {
     const session = await getOrCreateSession('user:v3-state', '');
-    await commitSessionTurnSpec(session, {
+    const focus = await commitSessionTurnSpec(session, {
       topicEpochAction: 'advance',
       continuationMode: 'independent',
       goals: [
         {
+          kind: 'read',
           capabilityId: 'bookmark.query',
           capabilityDomain: 'bookmark',
           implicit: false,
@@ -175,6 +189,7 @@ describe('agent sessionStore', () => {
       capabilityId: 'bookmark.query',
       domains: ['bookmark'],
       refs: [{ type: 'bookmark', id: 'bookmark-1', title: '不得保存的标题', url: 'https://secret.test' }],
+      focusId: focus.id,
     });
     expect(getSessionDiscourseProjection(session)).toEqual({
       schemaVersion: 3,
@@ -182,6 +197,7 @@ describe('agent sessionStore', () => {
       topicEpoch: 1,
       activeDomain: 'bookmark',
       lastCapabilityIds: ['bookmark.query'],
+      lastRunState: 'success',
       lastResultSet: { available: true, domains: ['bookmark'], refTypes: ['bookmark'], refCount: 1 },
       resultSetCandidates: [
         {
@@ -203,9 +219,52 @@ describe('agent sessionStore', () => {
     expect(JSON.stringify(session.resultSets)).not.toContain('secret.test');
   });
 
+  it('新读取轮失败时保留旧的已提交 ResultSet 焦点', async () => {
+    const session = await getOrCreateSession('user:v3-focus-two-phase', '');
+    const previousFocus = await commitSessionTurnSpec(session, {
+      topicEpochAction: 'advance',
+      continuationMode: 'independent',
+      goals: [{ kind: 'read', capabilityId: 'bookmark.query', capabilityDomain: 'bookmark', implicit: false }],
+    });
+    const previous = await recordSessionResultSet(session, {
+      capabilityId: 'bookmark.query',
+      domains: ['bookmark'],
+      refs: [{ type: 'bookmark', id: 'bookmark-old' }],
+      focusId: previousFocus.id,
+    });
+
+    const nextFocus = await commitSessionTurnSpec(session, {
+      topicEpochAction: 'advance',
+      continuationMode: 'independent',
+      goals: [{ kind: 'read', capabilityId: 'note.query', capabilityDomain: 'note', implicit: false }],
+    });
+    expect(resolveSessionResultSet(session)).toMatchObject({
+      state: 'ready',
+      resultSet: { id: previous.id, capabilityId: 'bookmark.query' },
+    });
+
+    await recordSessionResultSet(session, {
+      capabilityId: 'note.query',
+      domains: ['note'],
+      refs: [],
+      status: 'error',
+      focusId: nextFocus.id,
+    });
+    expect(resolveSessionResultSet(session)).toMatchObject({
+      state: 'ready',
+      resultSet: { id: previous.id, capabilityId: 'bookmark.query' },
+    });
+    expect(getSessionDiscourseProjection(session)).toMatchObject({
+      activeDomain: 'bookmark',
+      lastCapabilityIds: ['bookmark.query'],
+      lastRunState: 'failed',
+      lastResultSet: { refTypes: ['bookmark'], refCount: 1 },
+    });
+  });
+
   it('同一轮多个结果集不默认取最后一个，可按资源类型确定性消歧', async () => {
     const session = await getOrCreateSession('user:v3-result-ambiguity', '');
-    await commitSessionTurnSpec(session, {
+    const focus = await commitSessionTurnSpec(session, {
       topicEpochAction: 'advance',
       continuationMode: 'independent',
       goals: [
@@ -217,11 +276,13 @@ describe('agent sessionStore', () => {
       capabilityId: 'bookmark.query',
       domains: ['bookmark'],
       refs: [{ type: 'bookmark', id: 'bookmark-1' }],
+      focusId: focus.id,
     });
     await recordSessionResultSet(session, {
       capabilityId: 'note.query',
       domains: ['note'],
       refs: [{ type: 'note', id: 'note-1' }],
+      focusId: focus.id,
     });
 
     expect(resolveSessionResultSet(session)).toEqual({ state: 'ambiguous', count: 2, refs: [] });
@@ -253,6 +314,121 @@ describe('agent sessionStore', () => {
     expect(resolveSessionResultSet(session, { id: resultSet.id })).toMatchObject({
       state: 'ready',
       refs: [{ type: 'future_resource', id: 'future-1' }],
+    });
+  });
+
+  it('并发读取采用 latest-run-wins，旧轮结果和结算不能串改新轮焦点', async () => {
+    const session = await getOrCreateSession('user:v3-concurrent-focus', '');
+    const bookmarkFocus = await commitSessionTurnSpec(session, {
+      topicEpochAction: 'advance',
+      continuationMode: 'independent',
+      goals: [{ kind: 'read', capabilityId: 'bookmark.query', capabilityDomain: 'bookmark', implicit: false }],
+    });
+    const noteFocus = await commitSessionTurnSpec(session, {
+      topicEpochAction: 'advance',
+      continuationMode: 'independent',
+      goals: [{ kind: 'read', capabilityId: 'note.query', capabilityDomain: 'note', implicit: false }],
+    });
+
+    await expect(
+      recordSessionResultSet(session, {
+        capabilityId: 'bookmark.query',
+        domains: ['bookmark'],
+        refs: [{ type: 'bookmark', id: 'stale-bookmark' }],
+        focusId: bookmarkFocus.id,
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      settleSessionResultFocus(session, { status: 'failed', focusId: bookmarkFocus.id }),
+    ).resolves.toBe(false);
+
+    await expect(
+      recordSessionResultSet(session, {
+        capabilityId: 'note.query',
+        domains: ['note'],
+        refs: [{ type: 'note', id: 'current-note' }],
+        focusId: noteFocus.id,
+      }),
+    ).resolves.toMatchObject({ capabilityId: 'note.query', refTypes: ['note'] });
+    expect(getSessionDiscourseProjection(session)).toMatchObject({
+      activeDomain: 'note',
+      lastCapabilityIds: ['note.query'],
+      lastRunState: 'success',
+      resultSetCandidates: [{ domains: ['note'], refTypes: ['note'], refCount: 1 }],
+    });
+    expect(JSON.stringify(session.resultSets)).not.toContain('stale-bookmark');
+  });
+
+  it('同一 revision 的并发提交通过 Redis CAS 重试收敛到唯一最新读轮', async () => {
+    const session = await getOrCreateSession('user:v3-concurrent-cas', '');
+    const [bookmarkFocus, noteFocus] = await Promise.all([
+      commitSessionTurnSpec(session, {
+        topicEpochAction: 'advance',
+        continuationMode: 'independent',
+        goals: [{ kind: 'read', capabilityId: 'bookmark.query', capabilityDomain: 'bookmark', implicit: false }],
+      }),
+      commitSessionTurnSpec(session, {
+        topicEpochAction: 'advance',
+        continuationMode: 'independent',
+        goals: [{ kind: 'read', capabilityId: 'note.query', capabilityDomain: 'note', implicit: false }],
+      }),
+    ]);
+    const currentFocus = [bookmarkFocus, noteFocus].find(
+      (focus) => focus.id === session.discourseState.pendingFocus?.id,
+    );
+    const staleFocus = [bookmarkFocus, noteFocus].find((focus) => focus.id !== currentFocus?.id);
+
+    expect(currentFocus).toBeTruthy();
+    expect(staleFocus).toBeTruthy();
+    await expect(
+      recordSessionResultSet(session, {
+        capabilityId: 'stale.query',
+        domains: ['content'],
+        refs: [{ type: 'note', id: 'stale' }],
+        focusId: staleFocus.id,
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      recordSessionResultSet(session, {
+        capabilityId: 'current.query',
+        domains: ['content'],
+        refs: [{ type: 'note', id: 'current' }],
+        focusId: currentFocus.id,
+      }),
+    ).resolves.toMatchObject({ refCount: 1 });
+    expect(JSON.stringify(session.resultSets)).not.toContain('"id":"stale"');
+  });
+
+  it('真实读取成功但没有可投影引用时提交本轮语义，并清除旧资源焦点', async () => {
+    const session = await getOrCreateSession('user:v3-success-without-resultset', '');
+    const bookmarkFocus = await commitSessionTurnSpec(session, {
+      topicEpochAction: 'advance',
+      continuationMode: 'independent',
+      goals: [{ kind: 'read', capabilityId: 'bookmark.query', capabilityDomain: 'bookmark', implicit: false }],
+    });
+    await recordSessionResultSet(session, {
+      capabilityId: 'bookmark.query',
+      domains: ['bookmark'],
+      refs: [{ type: 'bookmark', id: 'bookmark-old' }],
+      focusId: bookmarkFocus.id,
+    });
+
+    const statsFocus = await commitSessionTurnSpec(session, {
+      topicEpochAction: 'advance',
+      continuationMode: 'independent',
+      goals: [{ kind: 'read', capabilityId: 'admin.stats.read', capabilityDomain: 'admin', implicit: false }],
+    });
+    await expect(
+      settleSessionResultFocus(session, { status: 'success', focusId: statsFocus.id }),
+    ).resolves.toBe(true);
+
+    expect(resolveSessionResultSet(session)).toEqual({ state: 'missing', refs: [] });
+    expect(getSessionDiscourseProjection(session)).toMatchObject({
+      activeDomain: 'admin',
+      lastCapabilityIds: ['admin.stats.read'],
+      lastRunState: 'success',
+      lastResultSet: null,
+      resultSetCandidates: [],
     });
   });
 
@@ -350,6 +526,32 @@ describe('agent sessionStore', () => {
     });
     expect(session.artifactStates.find((item) => item.id === 'artifact-current')?.state).toBe('unknown');
     expect(getSessionDiscourseProjection(session).pendingArtifact).toBeNull();
+  });
+
+  it('幂等结算也会修复指向已终态产物的陈旧 pending 指针', async () => {
+    const ownerKey = 'user:v3-artifact-stale-pointer';
+    const session = await getOrCreateSession(ownerKey, '');
+    await recordPendingActionBatch(session, {
+      batchId: 'artifact-stale-pointer-batch',
+      actions: [{ confirmationId: 'artifact-stale', toolName: 'create_note', retryArgs: {} }],
+    });
+    await recordSessionArtifactState(session, {
+      id: 'artifact-stale',
+      capabilityId: 'note.create',
+      domain: 'note',
+    });
+    session.artifactStates.find((item) => item.id === 'artifact-stale').state = 'confirmed';
+    const revisionBeforeSettlement = getSessionDiscourseProjection(session).revision;
+
+    await settleSessionAction({
+      ownerKey,
+      sessionId: session.id,
+      confirmationId: 'artifact-stale',
+      state: 'succeeded',
+    });
+
+    expect(getSessionDiscourseProjection(session).pendingArtifact).toBeNull();
+    expect(getSessionDiscourseProjection(session).revision).toBe(revisionBeforeSettlement + 1);
   });
 
   it('ClarificationState 不公开 Source Set ID，并由下一轮确定性填充单组或多组', async () => {

@@ -87,22 +87,21 @@ describe('selectAgentTools', () => {
   });
 
   it('Semantic Planner 模式不按关键词预裁剪，稳定提供当前身份全部可用工具', () => {
-    const first = selectAgentTools(registry, {
-      message: '帮我回顾很久没看的收藏',
-      userRole: 'user',
-      semanticPlanner: true,
-    });
-    const second = selectAgentTools(registry, {
-      message: '把待办标记为完成',
-      userRole: 'user',
-      semanticPlanner: true,
-    });
-
-    expect(first.map((tool) => tool.name)).toEqual(second.map((tool) => tool.name));
-    expect(first.map((tool) => tool.name)).toEqual(
-      [...first.map((tool) => tool.name)].sort((left, right) => left.localeCompare(right)),
+    const candidateSets = [
+      '帮我回顾很久没看的收藏',
+      '把待办标记为完成',
+      '今天新增了哪些笔记？',
+      '分析刚才引用的网页',
+      '整理一份最近资料的长总结',
+    ].map((message) =>
+      selectAgentTools(registry, { message, userRole: 'user', semanticPlanner: true }).map((tool) => tool.name),
     );
-    expect(first.some((tool) => tool.requireRoot)).toBe(false);
+
+    for (const candidates of candidateSets.slice(1)) expect(candidates).toEqual(candidateSets[0]);
+    expect(candidateSets[0]).toEqual(
+      [...candidateSets[0]].sort((left, right) => left.localeCompare(right)),
+    );
+    expect(candidateSets[0].some((name) => registry.get(name)?.requireRoot)).toBe(false);
   });
 
   it('Semantic Planner 模式仍在模型前过滤 visitor 写工具', () => {

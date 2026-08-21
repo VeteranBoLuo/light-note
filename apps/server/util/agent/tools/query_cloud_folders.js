@@ -1,4 +1,5 @@
 import pool from '../../../db/index.js';
+import { escapeLikePattern } from '../sqlPatterns.js';
 
 function normalizeArgs(args = {}) {
   const keyword = String(args.keyword || args.name || args.folderName || args.folder_name || '').trim();
@@ -39,8 +40,8 @@ export default {
     let where = 'folders.create_by = ? AND folders.del_flag = 0';
     const params = [ctx.userId];
     if (args.keyword) {
-      where += " AND folders.name LIKE CONCAT('%', ?, '%')";
-      params.push(args.keyword);
+      where += " AND folders.name LIKE ? ESCAPE '\\\\'";
+      params.push(`%${escapeLikePattern(args.keyword)}%`);
     }
     params.push(args.limit);
     const [rows] = await pool.query(

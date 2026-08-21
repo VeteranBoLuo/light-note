@@ -35,6 +35,21 @@ describe('Agent Tool Policy', () => {
     expect(tool.parameters.additionalProperties).toBe(false);
   });
 
+  it('非确认型操作必须显式声明幂等后台副作用策略', () => {
+    const backgroundTool = makeTool({
+      semanticEffect: 'write',
+      sideEffectPolicy: 'idempotent_background_job',
+    });
+    expect(backgroundTool).toMatchObject({
+      semanticEffect: 'write',
+      sideEffectPolicy: 'idempotent_background_job',
+    });
+    expect(() => makeTool({ semanticEffect: 'write' })).toThrow(/安全副作用策略/);
+    expect(() => makeTool({ semanticEffect: 'read', sideEffectPolicy: 'idempotent_background_job' })).toThrow(
+      /只能用于操作型能力/,
+    );
+  });
+
   it('注册时校验并冻结写工具的结构化依赖绑定', () => {
     const tool = makeTool({
       name: 'set_todo_status',

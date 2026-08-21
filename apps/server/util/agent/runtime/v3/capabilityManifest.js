@@ -6,6 +6,8 @@ const VALID_EFFECTS = new Set(['read', 'write']);
 const VALID_STATUSES = new Set(['enabled', 'planned', 'forbidden']);
 const VALID_ROLES = new Set(['user', 'root']);
 const VALID_TEMPORAL_KINDS = new Set(['range', 'date', 'datetime']);
+const VALID_TEMPORAL_DEFAULT_POLICIES = new Set(['all', 'clarify', 'server_default', 'none']);
+const VALID_SIDE_EFFECT_POLICIES = new Set(['none', 'confirmation_required', 'idempotent_background_job']);
 export const AGENT_CAPABILITY_DOMAINS = Object.freeze([
   'content',
   'note',
@@ -42,8 +44,13 @@ function freezeTemporalSlots(values = []) {
         name: String(value?.name || '').trim(),
         kind: String(value?.kind || '').trim(),
         label: String(value?.label || '').trim(),
+        required: value?.required === true,
         allowAll: value?.allowAll === true,
         autoBind: value?.autoBind === true,
+        defaultPolicy: VALID_TEMPORAL_DEFAULT_POLICIES.has(String(value?.defaultPolicy || ''))
+          ? String(value.defaultPolicy)
+          : 'none',
+        disclosure: String(value?.disclosure || '').trim(),
         coBind: freezeStrings(value?.coBind),
       }),
     ),
@@ -60,6 +67,7 @@ function defineToolCapability(toolName, input) {
     rolePolicy: Object.freeze(['user', 'root']),
     riskLevel: input.effect === 'write' ? 'low' : 'low',
     confirmationPolicy: input.effect === 'write' ? 'default' : 'none',
+    sideEffectPolicy: input.effect === 'write' ? 'confirmation_required' : 'none',
     coverage: 'summary',
     artifactKind: 'none',
     temporalSlots: Object.freeze([]),
@@ -71,6 +79,7 @@ function defineToolCapability(toolName, input) {
     dependencies: freezeStrings(input.dependencies),
     rolePolicy: freezeStrings(input.rolePolicy || ['user', 'root']),
     temporalSlots: freezeTemporalSlots(input.temporalSlots),
+    compilerDescription: String(input.compilerDescription || '').trim(),
   });
 }
 
@@ -521,6 +530,7 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     scopePolicy: 'owner_bound',
     resultKind: 'link_health_job',
     confirmationPolicy: 'none',
+    sideEffectPolicy: 'idempotent_background_job',
   }),
   get_recap: defineToolCapability('get_recap', {
     id: 'content.recap.read',
@@ -619,6 +629,8 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
   get_resource_creation_ranking: defineToolCapability('get_resource_creation_ranking', {
     id: 'admin.resource.ranking.read',
     label: '查询资源创建排行',
+    compilerDescription:
+      '按用户统计书签、笔记或云空间文件排行，可查询指定时间段的新增排行或当前有效存量排行；未指定时间口径时按全部时间统计当前有效存量。',
     domains: ['admin', 'content', 'note', 'bookmark', 'file'],
     effect: 'read',
     operations: ['read'],
@@ -627,13 +639,24 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     scopePolicy: 'root_context_bound',
     resultKind: 'resource_ranking',
     temporalSlots: [
-      { name: 'timeRange', kind: 'range', label: '资源创建时间', allowAll: true, autoBind: true },
+      {
+        name: 'timeRange',
+        kind: 'range',
+        label: '资源创建时间',
+        required: true,
+        allowAll: true,
+        autoBind: true,
+        defaultPolicy: 'all',
+        disclosure: '未指定时间时按全部时间统计',
+      },
       { name: 'registeredWithin', kind: 'range', label: '用户注册时间' },
     ],
   }),
   query_platform_resources: defineToolCapability('query_platform_resources', {
     id: 'admin.resource.query',
     label: '查询平台资源',
+    compilerDescription:
+      '查询平台书签、笔记或云空间文件明细，可限定资源创建时间与用户注册时间；未指定资源创建时间时按全部时间查询当前有效资源。',
     domains: ['admin', 'content', 'note', 'bookmark', 'file'],
     effect: 'read',
     operations: ['read'],
@@ -642,13 +665,24 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     scopePolicy: 'root_context_bound',
     resultKind: 'platform_resource_list',
     temporalSlots: [
-      { name: 'timeRange', kind: 'range', label: '资源创建时间', allowAll: true, autoBind: true },
+      {
+        name: 'timeRange',
+        kind: 'range',
+        label: '资源创建时间',
+        required: true,
+        allowAll: true,
+        autoBind: true,
+        defaultPolicy: 'all',
+        disclosure: '未指定时间时按全部时间统计',
+      },
       { name: 'registeredWithin', kind: 'range', label: '用户注册时间' },
     ],
   }),
   query_new_user_resources: defineToolCapability('query_new_user_resources', {
     id: 'admin.new_user.resource.query',
     label: '查询新增用户创建的资源',
+    compilerDescription:
+      '查询指定注册时间范围内的新增用户在指定资源创建时间范围内创建的书签、笔记或文件；两个时间范围缺失时必须先澄清。',
     domains: ['admin', 'content', 'note', 'bookmark', 'file'],
     effect: 'read',
     operations: ['read'],
@@ -657,8 +691,24 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     scopePolicy: 'root_context_bound',
     resultKind: 'new_user_resource_list',
     temporalSlots: [
-      { name: 'registeredWithin', kind: 'range', label: '用户注册时间', autoBind: true },
-      { name: 'resourceTimeRange', kind: 'range', label: '资源创建时间', autoBind: true },
+      {
+        name: 'registeredWithin',
+        kind: 'range',
+        label: '用户注册时间',
+        required: true,
+        autoBind: true,
+        defaultPolicy: 'clarify',
+        disclosure: '未指定新增用户范围时先澄清',
+      },
+      {
+        name: 'resourceTimeRange',
+        kind: 'range',
+        label: '资源创建时间',
+        required: true,
+        autoBind: true,
+        defaultPolicy: 'clarify',
+        disclosure: '未指定资源创建范围时先澄清',
+      },
     ],
   }),
   get_checkin_ranking: defineToolCapability('get_checkin_ranking', {
@@ -714,6 +764,7 @@ export const NON_EXECUTABLE_CAPABILITY_MANIFEST = Object.freeze(
       resultKind: 'none',
       riskLevel: capability.status === 'forbidden' ? 'high' : 'medium',
       confirmationPolicy: 'none',
+      sideEffectPolicy: 'none',
       coverage: 'none',
       artifactKind: 'none',
       temporalSlots: Object.freeze([]),
@@ -740,21 +791,41 @@ export function getAgentV3CapabilityByToolName(toolName) {
   return TOOL_CAPABILITY_MANIFEST[String(toolName || '')] || null;
 }
 
-export function normalizeCapabilityScope(value) {
+export function capabilityProducesAgentV3Artifact(capability) {
+  return Boolean(capability && capability.artifactKind !== 'none');
+}
+
+export function normalizeCapabilityScope(value, { actorRole } = {}) {
   const requestedDomains = freezeStrings(
-    (Array.isArray(value?.domains) ? value.domains : []).map((domain) => String(domain || '').toLowerCase()),
-  )
-    .filter((domain) => VALID_DOMAINS.has(domain))
-    .slice(0, 4);
-  const domains = requestedDomains;
+    (Array.isArray(value?.requestedDomains)
+      ? value.requestedDomains
+      : Array.isArray(value?.domains)
+        ? value.domains
+        : []
+    ).map((domain) => String(domain || '').toLowerCase()),
+  ).slice(0, 4);
+  const canonicalRole = actorRole == null ? null : actorRole === 'root' ? 'root' : 'user';
+  const roleDomains = canonicalRole
+    ? new Set(
+        AGENT_CAPABILITY_MANIFEST.filter((capability) => capability.rolePolicy.includes(canonicalRole)).flatMap(
+          (capability) => capability.domains,
+        ),
+      )
+    : VALID_DOMAINS;
+  const domains = requestedDomains.filter((domain) => VALID_DOMAINS.has(domain) && roleDomains.has(domain));
+  const rejectedDomains = requestedDomains.filter((domain) => !domains.includes(domain));
+  const mode = requestedDomains.length ? (domains.length ? 'restricted' : 'forbidden') : 'auto';
   return Object.freeze({
-    mode: domains.length ? 'restricted' : 'auto',
+    mode,
     domains: Object.freeze(domains),
-    provenance: domains.length ? 'user_explicit' : 'automatic',
+    requestedDomains: Object.freeze(requestedDomains),
+    rejectedDomains: Object.freeze(rejectedDomains),
+    provenance: requestedDomains.length ? 'user_explicit' : 'automatic',
   });
 }
 
 function capabilityInScope(capability, scope) {
+  if (scope?.mode === 'forbidden') return false;
   if (!scope?.domains?.length) return true;
   return capability.domains.some((domain) => scope.domains.includes(domain));
 }
@@ -783,7 +854,7 @@ export function buildAgentV3CapabilityCatalog(
         ...capability,
         status,
         toolNames: Object.freeze(status === 'enabled' && capability.toolName ? [capability.toolName] : []),
-        description: String(tool?.description || capability.label),
+        description: String(capability.compilerDescription || tool?.description || capability.label),
       }),
     );
   }
@@ -809,11 +880,29 @@ export function validateAgentV3CapabilityManifest(tools) {
     if (!capability.operations.length) errors.push(`能力 ${capability.id} 缺少 operations`);
     if (!capability.resultKind) errors.push(`能力 ${capability.id} 缺少 resultKind`);
     if (!['none', 'note'].includes(capability.artifactKind)) errors.push(`能力 ${capability.id} 的 artifactKind 无效`);
+    if (!VALID_SIDE_EFFECT_POLICIES.has(capability.sideEffectPolicy)) {
+      errors.push(`能力 ${capability.id} 的 sideEffectPolicy 无效`);
+    }
     const temporalNames = new Set();
     for (const slot of capability.temporalSlots || []) {
       if (!slot.name || temporalNames.has(slot.name)) errors.push(`能力 ${capability.id} 的时间槽重复或为空`);
       temporalNames.add(slot.name);
       if (!VALID_TEMPORAL_KINDS.has(slot.kind)) errors.push(`能力 ${capability.id} 的时间槽 ${slot.name} 类型无效`);
+      if (!VALID_TEMPORAL_DEFAULT_POLICIES.has(slot.defaultPolicy)) {
+        errors.push(`能力 ${capability.id} 的时间槽 ${slot.name} 默认策略无效`);
+      }
+      if (slot.defaultPolicy === 'all' && slot.allowAll !== true) {
+        errors.push(`能力 ${capability.id} 的时间槽 ${slot.name} 默认全部但未允许全部范围`);
+      }
+      if (slot.required === true && slot.defaultPolicy === 'none') {
+        errors.push(`能力 ${capability.id} 的必填时间槽 ${slot.name} 缺少默认策略`);
+      }
+      if (slot.required === true && slot.defaultPolicy !== 'none' && !capability.compilerDescription) {
+        errors.push(`能力 ${capability.id} 的编译器描述未声明时间默认策略`);
+      }
+      if (slot.required !== capability.requiredSlots.includes(slot.name)) {
+        errors.push(`能力 ${capability.id} 的时间槽 ${slot.name} required 与 requiredSlots 不一致`);
+      }
       if ((slot.coBind || []).some((name) => !(capability.temporalSlots || []).some((item) => item.name === name))) {
         errors.push(`能力 ${capability.id} 的时间槽 ${slot.name} 引用了不存在的联动槽`);
       }
@@ -829,6 +918,12 @@ export function validateAgentV3CapabilityManifest(tools) {
       const properties = capability.toolName ? toolNames.has(capability.toolName) : false;
       if (properties) {
         const registeredTool = toolList.find((tool) => tool?.name === capability.toolName);
+        const toolSideEffectPolicy =
+          registeredTool?.sideEffectPolicy ||
+          (registeredTool?.isWrite === true ? 'confirmation_required' : 'none');
+        if (capability.sideEffectPolicy !== toolSideEffectPolicy) {
+          errors.push(`工具 ${capability.toolName} 的副作用策略与能力清单不一致`);
+        }
         for (const slot of capability.temporalSlots || []) {
           if (!registeredTool?.parameters?.properties?.[slot.name]) {
             errors.push(`工具 ${capability.toolName} 缺少能力清单声明的时间参数 ${slot.name}`);

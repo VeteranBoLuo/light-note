@@ -463,10 +463,14 @@ Runtime V3 把每轮请求拆成四个边界清晰、可独立验证的阶段：
 ```
 
 - `util/agent/runtime/v3/capabilityManifest.js` 是 V3 读取与写入能力的统一运行时目录。每项能力声明 ID、领域、effect、工具、角色、时间槽、资源绑定和结果引用，启动校验保证注册工具、能力注册表与 Manifest 没有漂移；正常 V3 路由只接受 TurnSpec 中的精确 capability ID，不使用关键词、正则或相似度猜工具。
+- Manifest 同时声明时间槽的 `required/defaultPolicy/disclosure` 和工具的 `sideEffectPolicy`。必填时间槽只能显式默认到“全部”、要求澄清或由服务端默认，不能在从 Planner schema 隐藏参数后留下未绑定值；非确认型操作只有声明为幂等后台任务时才允许执行，其他写入继续进入确认协议。
 - Intent Compiler 只接收当前用户消息、当前身份、服务端解析后的材料摘要和 `DiscourseProjection`，不接收原始历史消息、旧助手正文或工具正文。它每轮只生成一次不可变 TurnSpec；Planner 和依赖轮只能消费或缩小该计划，不能重新解释顶层目标。
 - 时间表达被编译为绑定到具体 goal/slot 的 `temporalConstraints`；资源指代被编译为类型化 `referentSelectors`。Manifest 声明的时间参数和权威资源参数会从模型工具 schema 中移除，再由服务端从 TurnSpec 或归属校验后的资源字段注入，模型不能复制、改写或臆造日期、资源 ID、URL 和对象键。
 - Redis 会话只向下一轮投影最小结构状态：`ResultSet` 保存可继承的稳定引用，`ArtifactState` 保存待确认/已替换/已结算产物，`DiscourseState` 保存领域、主题代际和最近能力。正文、展示标题和模型回答不承担执行指代；跨领域新请求推进主题代际，不会无脑继承上一轮其他类型材料。
+- 新读轮采用两阶段焦点提交：编译成功只暂存带唯一运行令牌的 `pendingFocus`，工具结果必须携带同一令牌才能提交；同一会话并发请求由 Redis revision CAS 采用 latest-run-wins，迟到旧轮不能写入新轮焦点。真实读工具成功并产生稳定引用或明确空集后原子替换当前 `ResultSet`；统计/概览类读取成功但没有可投影引用时仍提交本轮语义并清空旧资源范围；失败或降级不让旧结果冒充刚失败的新查询。
+- TurnSpec 的 `semanticDigest` 只标识规范化语义；能力路由、最终材料引用和服务端绑定完成后再生成 `executionDigest`。续问、缓存和 trace 必须区分二者，不能用绑定前摘要证明绑定后的执行合同。
 - Web 输入区的能力模块选择是单轮限制：默认“自动判断”，用户可显式收窄到笔记、书签、待办、文件等模块，消息发送后立即恢复自动；它只减少本轮候选能力，不改变长期会话状态，也不能扩大当前身份权限。
+- 显式模块范围会在解析真实身份后重新授权。若用户请求的范围全部不属于当前角色，接口在创建会话和调用模型前确定性返回 `forbidden_scope`；只有部分被拒绝时才保留合法子集，禁止把空目录退化为自动模式。
 - 生命周期和语义计划分离。写操作仍沿用已有 owner 校验、风险卡、一次性令牌、幂等和回执链；替换草稿、取消、过期和成功只更新 ArtifactState，不把旧卡或自然语言历史重新送给模型判断。
 - `AI_AGENT_RUNTIME_MODE=legacy|v3_shadow|v3_enforce` 只声明目标模式，默认 `legacy`；`AI_AGENT_RUNTIME_V3_ROLLOUT` 再按真实 actor 的角色、账号白名单和稳定百分比分桶裁决本请求的 effective mode。受众缺失或无效时失败关闭到 legacy，未命中账号不运行 V3 Compiler；排除列表高于所有纳入规则，Root 代管按 billing actor 而不是资源 subject 裁决。`v3_shadow` 只用于命中账号的结构化差异观测，`v3_enforce` 才以 V3 TurnSpec 执行；急停可直接退回 legacy，旧链路在完成灰度前不得删除。
 

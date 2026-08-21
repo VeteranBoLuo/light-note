@@ -1,6 +1,10 @@
 import crypto from 'node:crypto';
-import { getAgentV3CapabilityById, normalizeCapabilityScope } from './capabilityManifest.js';
-import { compileTemporalConstraintsV3 } from './temporalConstraints.js';
+import {
+  AGENT_CAPABILITY_MANIFEST_VERSION,
+  getAgentV3CapabilityById,
+  normalizeCapabilityScope,
+} from './capabilityManifest.js';
+import { collectMissingTemporalSlotsV3, compileTemporalConstraintsV3 } from './temporalConstraints.js';
 
 export const TURN_SPEC_V3_VERSION = '3.0';
 export const TURN_SPEC_V3_TOOL_NAME = 'submit_turn_spec_v3';
@@ -159,6 +163,62 @@ export function digestTurnSpecV3(value) {
   return crypto.createHash('sha256').update(canonicalTurnSpec(value)).digest('hex');
 }
 
+function stableCanonicalValue(value) {
+  if (Array.isArray(value)) return value.map(stableCanonicalValue);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, stableCanonicalValue(value[key])]),
+  );
+}
+
+function compareCanonicalText(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function canonicalExecutionContractV3({ turnSpec, route, executionContext } = {}) {
+  const refs = (Array.isArray(executionContext?.contextRefs) ? executionContext.contextRefs : [])
+    .map((ref) => ({ type: String(ref?.type || ''), id: String(ref?.id || '') }))
+    .filter((ref) => ref.type && ref.id)
+    .sort((left, right) => compareCanonicalText(`${left.type}:${left.id}`, `${right.type}:${right.id}`));
+  const resources = (Array.isArray(executionContext?.resources) ? executionContext.resources : [])
+    .map((resource) => ({
+      type: String(resource?.type || ''),
+      id: String(resource?.id || ''),
+      values: stableCanonicalValue(resource?.values || {}),
+    }))
+    .filter((resource) => resource.type && resource.id)
+    .sort((left, right) => compareCanonicalText(`${left.type}:${left.id}`, `${right.type}:${right.id}`));
+  const routes = (Array.isArray(route?.goalRoutes) ? route.goalRoutes : [])
+    .map((goalRoute) => ({
+      goalId: String(goalRoute?.goalId || ''),
+      capabilityIds: [...new Set((goalRoute?.capabilityIds || []).map(String))].sort(),
+      toolNames: [...new Set((goalRoute?.toolNames || []).map(String))].sort(),
+      status: String(goalRoute?.status || ''),
+    }))
+    .sort((left, right) => compareCanonicalText(left.goalId, right.goalId));
+  return JSON.stringify(
+    stableCanonicalValue({
+      version: TURN_SPEC_V3_VERSION,
+      manifestVersion: AGENT_CAPABILITY_MANIFEST_VERSION,
+      semanticDigest: String(turnSpec?.semanticDigest || turnSpec?.digest || ''),
+      groundingPolicy: String(turnSpec?.groundingPolicy || ''),
+      capabilityScope: turnSpec?.capabilityScope || null,
+      routes,
+      effectiveEvidenceScope: {
+        refs,
+        attachmentIds: [...new Set((executionContext?.attachmentIds || []).map(String))].sort(),
+        resources,
+      },
+    }),
+  );
+}
+
+export function digestExecutionContractV3(input = {}) {
+  return crypto.createHash('sha256').update(canonicalExecutionContractV3(input)).digest('hex');
+}
+
 /**
  * 输出约束来自服务端对最新消息的确定性编译，不需要为“至少 2000 字”再调用一次模型。
  * 该函数只允许给已经确认的单篇笔记产物附加契约，并重新计算摘要；任何不匹配都失败关闭。
@@ -170,8 +230,10 @@ export function attachTurnSpecV3OutputContract(turnSpec, outputContract) {
     outputContract: Object.freeze(structuredClone(outputContract)),
   };
   delete candidate.digest;
+  delete candidate.semanticDigest;
   if (!validateOutputContract(candidate)) return null;
-  return Object.freeze({ ...candidate, digest: digestTurnSpecV3(candidate) });
+  const semanticDigest = digestTurnSpecV3(candidate);
+  return Object.freeze({ ...candidate, digest: semanticDigest, semanticDigest });
 }
 
 /**
@@ -275,10 +337,10 @@ export function normalizeTurnSpecV3(
   }
 
   if (!Array.isArray(raw.missingSlots) || raw.missingSlots.length > 8) return null;
-  const missingSlots = raw.missingSlots.map(normalizeMissingSlot);
-  if (missingSlots.some((slot) => !slot)) return null;
-  const clarificationQuestion = text(raw.clarificationQuestion, MAX_CLARIFICATION);
-  if ((raw.confidence === 'low' || missingSlots.length) && !clarificationQuestion) return null;
+  const declaredMissingSlots = raw.missingSlots.map(normalizeMissingSlot);
+  if (declaredMissingSlots.some((slot) => !slot)) return null;
+  const declaredClarificationQuestion = text(raw.clarificationQuestion, MAX_CLARIFICATION);
+  if ((raw.confidence === 'low' || declaredMissingSlots.length) && !declaredClarificationQuestion) return null;
   if (!GROUNDING_POLICIES_V3.includes(raw.groundingPolicy)) return null;
   if (authoritativeGroundingPolicy && raw.groundingPolicy !== authoritativeGroundingPolicy) return null;
   const temporalConstraints = compileTemporalConstraintsV3(raw.temporalConstraints, {
@@ -288,6 +350,23 @@ export function normalizeTurnSpecV3(
     temporalContext,
   });
   if (!temporalConstraints) return null;
+  const temporalMissingSlots = collectMissingTemporalSlotsV3({ goals, catalog, constraints: temporalConstraints });
+  const normalizedTemporalMissingSlots = temporalMissingSlots.map(({ name, reason, question }) =>
+    Object.freeze({ name, reason, question }),
+  );
+  const missingSlots = Object.freeze(
+    [...declaredMissingSlots, ...normalizedTemporalMissingSlots]
+      .filter((slot, index, values) => values.findIndex((item) => item.name === slot.name) === index)
+      .slice(0, 8),
+  );
+  const clarificationQuestion =
+    declaredClarificationQuestion ||
+    (temporalMissingSlots.length
+      ? `请补充${[...new Set(temporalMissingSlots.map((slot) => slot.label))].join('和')}。`.slice(
+          0,
+          MAX_CLARIFICATION,
+        )
+      : '');
 
   const normalized = {
     version: TURN_SPEC_V3_VERSION,
@@ -300,11 +379,12 @@ export function normalizeTurnSpecV3(
     groundingPolicy: authoritativeGroundingPolicy || raw.groundingPolicy,
     temporalConstraints,
     outputContract: outputContract ? Object.freeze(structuredClone(outputContract)) : null,
-    missingSlots: Object.freeze(missingSlots),
+    missingSlots,
     clarificationQuestion,
   };
   if (!validateRequestKind(normalized) || !validateOutputContract(normalized)) return null;
-  return Object.freeze({ ...normalized, digest: digestTurnSpecV3(normalized) });
+  const semanticDigest = digestTurnSpecV3(normalized);
+  return Object.freeze({ ...normalized, digest: semanticDigest, semanticDigest });
 }
 
 export function buildTurnSpecV3ToolDefinition({ catalog = [], groundingPolicy } = {}) {
@@ -431,6 +511,7 @@ export function parseTurnSpecV3Response(response, options = {}) {
 
 export const __testing = Object.freeze({
   canonicalTurnSpec,
+  canonicalExecutionContractV3,
   expandGoalDependencies,
   goalKind,
   normalizeReferentSelector,
