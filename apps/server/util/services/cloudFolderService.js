@@ -37,7 +37,7 @@ export async function ensureOwnedCloudFolder({ userId, name, database = pool } =
 
     const [folderRows] = await connection.query(
       `SELECT id, name FROM folders
-       WHERE create_by = ? AND name = ? AND del_flag = 0
+       WHERE create_by = ? AND name = ? AND parent_id IS NULL AND del_flag = 0
        ORDER BY id ASC LIMIT 1`,
       [normalizedUserId, normalizedName],
     );
@@ -48,7 +48,7 @@ export async function ensureOwnedCloudFolder({ userId, name, database = pool } =
     }
 
     const [insertResult] = await connection.query('INSERT INTO folders SET ?', [
-      { name: normalizedName, create_by: normalizedUserId, del_flag: 0 },
+      { name: normalizedName, create_by: normalizedUserId, parent_id: null, del_flag: 0 },
     ]);
     await connection.commit();
     transactionStarted = false;

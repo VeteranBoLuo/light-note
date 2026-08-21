@@ -10,7 +10,7 @@ export type AdminNavItem = {
   title: string;
   /** 后台子路由只给 id（拼成 /admin/{id}）；跨外壳的入口给绝对路径 */
   path?: string;
-  /** 独立顶级路由（安全中心/通知中心/知识库）不在 /admin 外壳内，点击会整页切换 */
+  /** 独立顶级路由不在 /admin 外壳内，点击会整页切换 */
   external?: boolean;
   badge?: number;
   badgeHint?: string;
@@ -29,6 +29,7 @@ export type AdminNavIcons = {
   log: string;
   security: string;
   tool: string;
+  server: string;
 };
 
 export type AdminNavInput = {
@@ -51,6 +52,7 @@ const EXTERNAL_PATHS: Record<string, string> = {
   knowledgeBase: '/knowledgeBase',
   notificationCenter: '/notificationCenter',
   securityCenter: '/securityCenter',
+  serverManagement: '/serverManagement',
 };
 
 /**
@@ -173,6 +175,17 @@ export function buildAdminNav({
         { id: 'resourceGovernance', title: '资源治理' },
       ],
     },
+    {
+      kind: 'item',
+      key: 'server',
+      icon: icons.server,
+      item: {
+        id: 'serverManagement',
+        title: '服务器管理',
+        path: EXTERNAL_PATHS.serverManagement,
+        external: true,
+      },
+    },
   ];
 }
 
@@ -203,6 +216,7 @@ export function adminNavTarget(item: AdminNavItem): string {
  * 故意不收录：
  * - knowledgeBase：双栏工作台（编辑器占满高度），手机屏放不下；
  * - pointsOps：无手机路由，且发放积分是需要核对的写操作，不适合在手机上顺手做。
+ * - serverManagement：移动个人中心已有独立入口，手机后台不重复展示。
  */
 const MOBILE_PATHS: Record<string, string> = {
   overview: '/overview',

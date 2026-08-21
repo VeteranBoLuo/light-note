@@ -92,6 +92,13 @@
             </div>
           </div>
           <div class="note-share-modal__record-actions">
+            <BButton
+              size="small"
+              :disabled="record.state !== 'active' || submitting"
+              @click="copyRecordLink(record)"
+            >
+              {{ t('noteShare.copyLink') }}
+            </BButton>
             <BButton size="small" :disabled="record.state !== 'active' || submitting" @click="confirmRotate(record.id)">
               {{ t('noteShare.rotate') }}
             </BButton>
@@ -129,6 +136,9 @@
     listNoteShares,
     revokeNoteShare,
     rotateNoteShare,
+    forgetOwnedNoteShareToken,
+    readOwnedNoteShareToken,
+    rememberOwnedNoteShareToken,
     type NoteShareInput,
     type NoteShareRecord,
     type NoteShareScope,
@@ -213,13 +223,17 @@
     }
   }
 
-  async function createAndCopy(create: () => Promise<{ token: string }>) {
+  async function createAndCopy(
+    create: () => Promise<{ id: string; token: string; replacedShareId?: string }>,
+  ) {
     const version = stateVersion;
     const noteId = props.note.id;
     submitting.value = true;
     try {
       const result = await create();
       if (version !== stateVersion || !visible.value || props.note.id !== noteId) return;
+      if (result.replacedShareId) forgetOwnedNoteShareToken(result.replacedShareId);
+      rememberOwnedNoteShareToken(result.id, result.token);
       lastCreatedToken.value = result.token;
       try {
         lastCreatedUrl.value = await copyNoteShareUrl(result.token);
@@ -249,6 +263,28 @@
     }
   }
 
+  async function copyKnownRecordLink(record: NoteShareRecord) {
+    const token = readOwnedNoteShareToken(record.id, record.tokenHint);
+    if (!token) return false;
+    try {
+      await copyNoteShareUrl(token);
+      message.success(t('noteShare.copied'));
+    } catch {
+      message.warning(t('noteShare.copyFailed'));
+    }
+    return true;
+  }
+
+  async function copyRecordLink(record: NoteShareRecord) {
+    if (await copyKnownRecordLink(record)) return;
+    Alert.alert({
+      title: t('noteShare.copyUnavailableTitle'),
+      content: t('noteShare.copyUnavailableConfirm'),
+      okText: t('noteShare.rotateAndCopy'),
+      onOk: () => createAndCopy(() => rotateNoteShare(record.id, currentInput())),
+    });
+  }
+
   function submitShare() {
     if (!props.note.id) return;
     void createAndCopy(() => createNoteShare(props.note.id, currentInput()));
@@ -274,6 +310,7 @@
           await revokeNoteShare(shareId);
           if (version !== stateVersion || !visible.value || props.note.id !== noteId) return;
           message.success(t('noteShare.revoked'));
+          forgetOwnedNoteShareToken(shareId);
           await loadRecords();
         } catch {
           if (version === stateVersion && visible.value && props.note.id === noteId) {

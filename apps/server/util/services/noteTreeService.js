@@ -464,6 +464,10 @@ export async function resolveOwnedNoteBreadcrumb({ userId, noteId, db = pool } =
 export async function resolveOwnedNoteCreateTarget({ userId, parentId = null, db = pool } = {}) {
   const snapshot = await loadOwnedNoteTree(userId, { db });
   const placement = assertValidNoteParentFromSnapshot(snapshot, { parentId });
+  await assertNewInheritedShareExposure(db, snapshot, {
+    userId,
+    targetParentId: placement.parentId,
+  });
   return {
     parentId: placement.parentId,
     depth: placement.resultingMaxDepth,

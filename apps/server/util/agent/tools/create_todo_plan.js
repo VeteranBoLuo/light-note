@@ -92,11 +92,16 @@ export default {
       throw error;
     }
     return withTransaction((connection) =>
-      createTodoPlan(connection, ctx.userId, {
-        ...args,
-        previewHash: input._previewHash,
-        idempotencyKey: input._idempotencyKey,
-      }),
+      createTodoPlan(
+        connection,
+        ctx.userId,
+        {
+          ...args,
+          previewHash: input._previewHash,
+          idempotencyKey: input._idempotencyKey,
+        },
+        { suppressUserRewards: Boolean(ctx.suppressUserRewards || ctx.adminContext || ctx.request?.adminContext) },
+      ),
     );
   },
   transform(raw) {

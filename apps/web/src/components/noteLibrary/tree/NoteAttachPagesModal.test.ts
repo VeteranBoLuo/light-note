@@ -52,7 +52,7 @@ describe('NoteAttachPagesModal', () => {
     mocks.apiBasePost.mockReset();
     mocks.success.mockReset();
     mocks.error.mockReset();
-    mocks.apiBasePost.mockImplementation(async (url: string, body: any) => {
+    mocks.apiBasePost.mockImplementation(async (url: string, body: any, options?: any) => {
       if (url.endsWith('queryNoteTree')) {
         return {
           status: 200,
@@ -94,6 +94,7 @@ describe('NoteAttachPagesModal', () => {
       }
       expect(url).toBe('/api/note/moveNoteNodes');
       expect(body).toEqual({ ids: ['candidate'], parentId: 'target' });
+      expect(options).toEqual({ silent: true });
       return { status: 200, data: { affectedCount: 1 } };
     });
   });

@@ -94,13 +94,40 @@ describe('getUsedSpace / queryFolder 可等待且失败不清空', () => {
 
   it('文件夹成功时返回 true，失败时保留旧文件夹', async () => {
     const cloud = cloudSpaceStore();
-    apiQueryPost.mockResolvedValueOnce({ status: 200, data: { items: [{ id: 'f1', folderName: '文档' }] } });
+    apiBasePost.mockResolvedValueOnce({
+      status: 200,
+      data: {
+        maxDepth: 8,
+        allFileCount: 7,
+        items: [
+          { id: 'f1', name: '文档', parentId: null, depth: 1, childCount: 1 },
+          { id: 'f2', name: '合同', parentId: 'f1', depth: 2, fullPath: '文档 / 合同' },
+        ],
+      },
+    });
     await expect(cloud.queryFolder()).resolves.toBe(true);
-    expect(cloud.folderList).toHaveLength(1);
+    expect(apiBasePost).toHaveBeenCalledWith('/api/file/queryFolder', { treeVersion: 2 });
+    expect(cloud.folderList).toHaveLength(2);
+    expect(cloud.allFileCount).toBe(7);
+    expect(cloud.folderList[1]).toMatchObject({ id: 'f2', parentId: 'f1', fullPath: '文档 / 合同' });
 
-    apiQueryPost.mockResolvedValueOnce({ status: 500, data: null });
+    apiBasePost.mockResolvedValueOnce({ status: 500, data: null });
     await expect(cloud.queryFolder()).resolves.toBe(false);
-    expect(cloud.folderList).toHaveLength(1);
+    expect(cloud.folderList).toHaveLength(2);
+    expect(cloud.allFileCount).toBe(7);
+  });
+
+  it('文件归属变化后同时刷新文件列表与文件夹计数快照', async () => {
+    const cloud = cloudSpaceStore();
+    const filesSpy = vi.spyOn(cloud, 'queryFieldList').mockResolvedValue(true);
+    const foldersSpy = vi.spyOn(cloud, 'queryFolder').mockResolvedValue(true);
+
+    await expect(cloud.refreshAfterFileMutation()).resolves.toBe(true);
+    expect(filesSpy).toHaveBeenCalledOnce();
+    expect(foldersSpy).toHaveBeenCalledOnce();
+
+    foldersSpy.mockResolvedValueOnce(false);
+    await expect(cloud.refreshAfterFileMutation()).resolves.toBe(false);
   });
 });
 
@@ -108,7 +135,7 @@ describe('账号身份切换', () => {
   it('立即清空账号归属数据并进入加载态', () => {
     const cloud = cloudSpaceStore();
     cloud.fileList = [file('guest')] as any;
-    cloud.folderList = [{ id: 'guest-folder', name: '游客文件夹' }];
+    cloud.folderList = [{ id: 'guest-folder', name: '游客文件夹' }] as any;
     cloud.usedSpace = 42;
     cloud.fileTotal = 1;
 
@@ -130,8 +157,9 @@ describe('账号身份切换', () => {
     const cloud = cloudSpaceStore();
     let resolveFolder!: (value: any) => void;
     let resolveSpace!: (value: any) => void;
-    apiQueryPost.mockReturnValueOnce(new Promise((resolve) => (resolveFolder = resolve)));
-    apiBasePost.mockReturnValueOnce(new Promise((resolve) => (resolveSpace = resolve)));
+    apiBasePost
+      .mockReturnValueOnce(new Promise((resolve) => (resolveFolder = resolve)))
+      .mockReturnValueOnce(new Promise((resolve) => (resolveSpace = resolve)));
 
     const folderRequest = cloud.queryFolder();
     const spaceRequest = cloud.getUsedSpace();

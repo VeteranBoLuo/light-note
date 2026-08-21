@@ -292,11 +292,12 @@ describe('笔记库页面树交互接线', () => {
     expect(source).toContain("t('note.moveAfterSuccess'");
     expect(source).toContain("t('note.moveRootStartSuccess'");
     expect(source).toContain("t('note.moveIntoSuccess'");
+    expect(source).toMatch(/'\/api\/note\/moveNoteNode',[\s\S]{0,300}\{ silent: true \}/);
   });
 
   it('目录拖拽先乐观更新，接口失败回滚，成功后不清空整树重载', () => {
     expect(source).toMatch(
-      /moveNoteTreeNodeOptimistically\(previousTree,[\s\S]*childrenByParent\.value = optimisticMove\.childrenByParent[\s\S]*await apiBasePost\('\/api\/note\/moveNoteNode'/,
+      /moveNoteTreeNodeOptimistically\(previousTree,[\s\S]*childrenByParent\.value = optimisticMove\.childrenByParent[\s\S]*await apiBasePost\([\s\S]*?'\/api\/note\/moveNoteNode'/,
     );
     expect(source).toMatch(
       /catch \(error\) \{[\s\S]{0,180}childrenByParent\.value = previousTree[\s\S]{0,80}throw error/,
@@ -320,6 +321,12 @@ describe('笔记库页面树交互接线', () => {
     expect(source).toContain('@click="showRootNotePicker"');
     expect(source).toMatch(/function showRootNotePicker\(\)[\s\S]*createParentOverride\.value = null/);
     expect(source).toMatch(/class="note-new-child-page"[\s\S]{0,180}@click="showNewNotePicker"/);
+  });
+
+  it('新建子页面先确认公开分享暴露，再进入编辑器并传递一次确认结果', () => {
+    expect(source).toMatch(/async function gotoNewNote[\s\S]*?await confirmNoteCreateShareExposure\(parentId\)/);
+    expect(source).toContain("targetQuery.shareExposureAcknowledged = 'true'");
+    expect(source).toMatch(/if \(exposureDecision === false\) return;/);
   });
 
   it('页面菜单和详情入口均可关联已有页面', () => {

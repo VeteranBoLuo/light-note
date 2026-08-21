@@ -12,7 +12,7 @@ import {
 import { validateOwnedResourceRefs } from './noteReferenceService.js';
 import { normalizeTodoResourceRefs, replaceTodoResourceRefs } from './todoReferenceService.js';
 import { incrementTodoPlanMetric } from '../todoPlanMetrics.js';
-import { recordTodoCompletion } from '../growthActivityHistory.js';
+import { recordTodoCompletion, recordTodoCreation } from '../growthActivityHistory.js';
 
 const WRITE_SCOPES = new Set(['current', 'future', 'series']);
 const DELETE_SCOPES = new Set(['current', 'future', 'series']);
@@ -497,7 +497,8 @@ async function createFromPreview(
 }
 
 export async function createTodoPlan(connection, userId, input = {}, options = {}) {
-  const preview = assertTodoPlanReady(previewTodoPlan(input, options));
+  const { suppressUserRewards = false, ...previewOptions } = options || {};
+  const preview = assertTodoPlanReady(previewTodoPlan(input, previewOptions));
   if (!input.previewHash || input.previewHash !== preview.previewHash) {
     throw serviceError('TODO_PREVIEW_STALE', '任务计划预览已变化，请重新确认', 409, {
       preview: { ...preview, occurrences: preview.occurrences.slice(0, 12), reminderMoments: undefined },
@@ -507,6 +508,8 @@ export async function createTodoPlan(connection, userId, input = {}, options = {
   const request = await beginIdempotentRequest(connection, userId, input, hash);
   if (request.replay) return { ...request.replay, replayed: true };
   const response = await createFromPreview(connection, userId, input, preview, { requestId: request.requestId });
+  // 一个计划可能预生成多条实例，但每日任务统计的是一次用户创建动作，只固化首条待办事实。
+  if (!suppressUserRewards) await recordTodoCreation(connection, { userId, todoId: response.todoId });
   await invalidatePersonalKnowledgeCache(userId, { database: connection });
   return response;
 }
@@ -531,7 +534,8 @@ export async function convertLegacyTodoPlan(connection, userId, input = {}, opti
   const legacy = rows[0];
   if (!legacy) throw serviceError('TODO_LEGACY_NOT_FOUND', '旧版待办不存在、已转换或无权操作', 404);
 
-  const response = await createTodoPlan(connection, userId, input, options);
+  // 转换只替换已有待办的计划语义，不属于“创建一个待办”，不得完成每日创建任务。
+  const response = await createTodoPlan(connection, userId, input, { ...options, suppressUserRewards: true });
   if (response.replayed) {
     // createTodoPlan 的业务幂等命中时，旧任务应已在首次事务中退休；不重复触碰它。
     return { ...response, convertedFromTodoId: legacyTodoId };

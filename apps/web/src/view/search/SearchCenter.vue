@@ -31,6 +31,7 @@
       <template v-if="!bookmark.isMobile" #actions>
         <ResourceCenterSectionNav class="section-switcher" />
       </template>
+
       <div
         class="search-page"
         :class="{
@@ -485,7 +486,13 @@
 
             <aside v-if="!bookmark.isMobile" class="resource-inspector-pane">
               <template v-if="inspectedResource">
-                <div class="resource-inspector-hero" :class="`is-${inspectedResource.type}`">
+                <div
+                  class="resource-inspector-hero"
+                  :class="[
+                    'is-' + inspectedResource.type,
+                    { 'resource-inspector-hero--expanded': inspectedResource.type === 'note' },
+                  ]"
+                >
                   <div class="resource-inspector-identity">
                     <span class="resource-inspector-icon" aria-hidden="true">
                       <SvgIcon :src="inspectedResourceIcon" size="23" />
@@ -496,14 +503,22 @@
                     </div>
                   </div>
                   <h2>{{ inspectedResource.title || '-' }}</h2>
-                  <p class="resource-inspector-description">{{
-                    inspectedResource.description || inspectedResource.snippet || inspectedResource.matchReason || '-'
-                  }}</p>
+                  <p class="resource-inspector-description">{{ inspectedResourcePreview }}</p>
                 </div>
                 <dl class="resource-inspector-meta">
+                  <div v-if="inspectedResource.type === 'note'">
+                    <dt>{{ t('resourceCenter.noteType') }}</dt>
+                    <dd>{{ inspectedNoteTypeLabel }}</dd>
+                  </div>
                   <div>
-                    <dt>{{ t('resourceCenter.source') }}</dt>
-                    <dd>{{ inspectedResource.domain || inspectedResource.category || '-' }}</dd>
+                    <dt>{{
+                      t(inspectedResource.type === 'note' ? 'resourceCenter.location' : 'resourceCenter.source')
+                    }}</dt>
+                    <dd>{{
+                      inspectedResource.type === 'note'
+                        ? inspectedResource.path || t('resourceCenter.rootLocation')
+                        : inspectedResource.domain || inspectedResource.category || '-'
+                    }}</dd>
                   </div>
                   <div>
                     <dt>{{ t('resourceCenter.updatedAt') }}</dt>
@@ -884,6 +899,41 @@
   const inspectedResourceIcon = computed(
     () => RESOURCE_INSPECTOR_ICONS[inspectedResource.value?.type || 'tag'] || icon.resource.tag,
   );
+  function compactInspectorText(value: unknown, format = '') {
+    const source = String(value || '');
+    if (!source) return '';
+    let text = source;
+    if (format === 'html') {
+      try {
+        text = new DOMParser().parseFromString(source, 'text/html').body.textContent || '';
+      } catch {
+        text = source.replace(/<[^>]+>/g, ' ');
+      }
+    } else if (format === 'markdown') {
+      text = source
+        .replace(/\x60{3}[\s\S]*?\x60{3}/g, ' ')
+        .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+        .replace(/^[#>*+\-]\s+/gm, ' ');
+    }
+    return text.replace(/\s+/g, ' ').trim().slice(0, 1800);
+  }
+  const inspectedResourcePreview = computed(() => {
+    const item = inspectedResource.value;
+    if (!item) return '-';
+    const noteFormat = String(item.raw?.type || '').toLowerCase();
+    const source = item.type === 'note' && noteFormat !== 'drawing' ? item.raw?.content : '';
+    return (
+      compactInspectorText(source, noteFormat) ||
+      compactInspectorText(item.description || item.snippet || item.matchReason) ||
+      '-'
+    );
+  });
+  const inspectedNoteTypeLabel = computed(() => {
+    const format = String(inspectedResource.value?.raw?.type || 'html').toLowerCase();
+    const key = format === 'drawing' ? 'drawing' : format === 'markdown' || format === 'md' ? 'markdown' : 'html';
+    return t('resourceCenter.noteTypes.' + key);
+  });
   // 资源中心数据域固定为书签、笔记、文件和标签。
   const selectableVisibleItems = computed(() =>
     allVisibleItems.value.filter((item) => isResourceSearchType(item.type)),
@@ -2099,6 +2149,11 @@
     --inspector-accent: var(--resource-note-color, #10a77a);
   }
 
+  .resource-inspector-hero--expanded {
+    min-height: min(420px, 44vh);
+    flex: 1 1 280px;
+  }
+
   .resource-inspector-hero.is-file {
     --inspector-accent: var(--resource-file-color, #f58b22);
   }
@@ -2166,6 +2221,14 @@
     overflow: hidden;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 3;
+  }
+
+  .resource-inspector-hero--expanded .resource-inspector-description {
+    min-height: 0;
+    display: block;
+    flex: 1 1 auto;
+    overflow: hidden auto;
+    -webkit-line-clamp: unset;
   }
 
   .resource-inspector-meta {

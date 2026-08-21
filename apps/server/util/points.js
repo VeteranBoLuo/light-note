@@ -8,6 +8,7 @@ import {
   PointsEconomyError,
 } from './pointsEconomyOperations.js';
 import { POINTS_SYSTEM_VERSION } from './pointsEarningPolicy.js';
+import { INTERNAL_ROLES } from './internalRoles.js';
 import { pointsOperationHash } from './pointsOperationHash.js';
 
 // 积分系统:经验(EXP)管段位、只增;积分(points)管消费、可赚可花。
@@ -661,7 +662,41 @@ function resolveLotteryAssetChange(reason, ref, meta) {
 }
 
 // 经济总览(root 运营):发放/消耗/存量、按来源分布、抽奖返还率、持有人 Top。
-export async function getPointsOverview() {
+export async function getPointsOverview({ hideInternal = true } = {}) {
+  const roleMarks = INTERNAL_ROLES.map(() => '?').join(',');
+  const ledgerInternalSql =
+    hideInternal !== false
+      ? ` AND NOT EXISTS (
+          SELECT 1 FROM user internal_user
+           WHERE internal_user.id = points_log.user_id
+             AND internal_user.role IN (${roleMarks})
+        )`
+      : '';
+  const balanceInternalSql =
+    hideInternal !== false
+      ? ` AND NOT EXISTS (
+          SELECT 1 FROM user internal_user
+           WHERE internal_user.id = user_growth.user_id
+             AND internal_user.role IN (${roleMarks})
+        )`
+      : '';
+  const operationInternalSql =
+    hideInternal !== false
+      ? ` AND NOT EXISTS (
+          SELECT 1 FROM user internal_user
+           WHERE internal_user.id = points_economy_operations.user_id
+             AND internal_user.role IN (${roleMarks})
+        )`
+      : '';
+  const topInternalSql =
+    hideInternal !== false
+      ? ` AND NOT EXISTS (
+          SELECT 1 FROM user internal_user
+           WHERE internal_user.id = g.user_id
+             AND internal_user.role IN (${roleMarks})
+        )`
+      : '';
+  const internalParams = hideInternal !== false ? [...INTERNAL_ROLES] : [];
   const [
     [[issued]],
     [[spent]],
@@ -676,26 +711,44 @@ export async function getPointsOverview() {
     [[holders]],
     [top],
   ] = await Promise.all([
-    pool.query('SELECT COALESCE(SUM(delta),0) AS s FROM points_log WHERE delta > 0'),
-    pool.query('SELECT COALESCE(SUM(-delta),0) AS s FROM points_log WHERE delta < 0'),
-    pool.query('SELECT COALESCE(SUM(points),0) AS s FROM user_growth'),
+    pool.query(`SELECT COALESCE(SUM(delta),0) AS s FROM points_log WHERE delta > 0${ledgerInternalSql}`, internalParams),
     pool.query(
-      'SELECT reason, COALESCE(SUM(delta),0) AS delta, COUNT(*) AS cnt FROM points_log GROUP BY reason ORDER BY ABS(SUM(delta)) DESC',
+      `SELECT COALESCE(SUM(-delta),0) AS s FROM points_log WHERE delta < 0${ledgerInternalSql}`,
+      internalParams,
     ),
     pool.query(
-      "SELECT COALESCE(SUM(-delta),0) AS s FROM points_log WHERE reason IN ('lottery_cost','lottery_paid_cost')",
+      `SELECT COALESCE(SUM(points),0) AS s FROM user_growth WHERE 1 = 1${balanceInternalSql}`,
+      internalParams,
     ),
     pool.query(
-      "SELECT COALESCE(SUM(delta),0) AS s FROM points_log WHERE reason IN ('lottery_win','lottery_compensation','lottery_paid_win','lottery_paid_compensation')",
+      `SELECT reason, COALESCE(SUM(delta),0) AS delta, COUNT(*) AS cnt
+         FROM points_log WHERE 1 = 1${ledgerInternalSql}
+        GROUP BY reason ORDER BY ABS(SUM(delta)) DESC`,
+      internalParams,
     ),
-    pool.query("SELECT COALESCE(SUM(delta),0) AS s FROM points_log WHERE reason='lottery_free_win'"),
+    pool.query(
+      `SELECT COALESCE(SUM(-delta),0) AS s FROM points_log
+        WHERE reason IN ('lottery_cost','lottery_paid_cost')${ledgerInternalSql}`,
+      internalParams,
+    ),
+    pool.query(
+      `SELECT COALESCE(SUM(delta),0) AS s FROM points_log
+        WHERE reason IN ('lottery_win','lottery_compensation','lottery_paid_win','lottery_paid_compensation')${ledgerInternalSql}`,
+      internalParams,
+    ),
+    pool.query(
+      `SELECT COALESCE(SUM(delta),0) AS s FROM points_log
+        WHERE reason='lottery_free_win'${ledgerInternalSql}`,
+      internalParams,
+    ),
     pool.query(
       `SELECT economy_version AS economyVersion, operation_type AS operationType, COUNT(*) AS operations,
               COALESCE(SUM(replay_count), 0) AS replays
          FROM points_economy_operations
-        WHERE status = 'succeeded'
+        WHERE status = 'succeeded'${operationInternalSql}
         GROUP BY economy_version, operation_type
         ORDER BY economy_version, operation_type`,
+      internalParams,
     ),
     pool.query(
       `SELECT economy_version AS economyVersion, operation_type AS operationType, item_id AS itemId,
@@ -706,14 +759,25 @@ export async function getPointsOverview() {
               COALESCE(SUM(makeup_cards_granted),0) AS makeupCardsGranted,
               COALESCE(SUM(draw_count),0) AS drawCount, COALESCE(SUM(pity_hits),0) AS pityHits
          FROM points_economy_operations
-        WHERE status = 'succeeded'
+        WHERE status = 'succeeded'${operationInternalSql}
         GROUP BY economy_version, operation_type, item_id
         ORDER BY economy_version, operation_type, item_id`,
+      internalParams,
     ),
-    pool.query('SELECT COALESCE(SUM(lottery_count),0) AS s FROM user_growth'),
-    pool.query('SELECT COUNT(*) AS c FROM user_growth WHERE points > 0'),
     pool.query(
-      'SELECT g.user_id, g.points, u.alias, u.email FROM user_growth g LEFT JOIN user u ON u.id = g.user_id WHERE g.points > 0 ORDER BY g.points DESC LIMIT 10',
+      `SELECT COALESCE(SUM(lottery_count),0) AS s FROM user_growth WHERE 1 = 1${balanceInternalSql}`,
+      internalParams,
+    ),
+    pool.query(
+      `SELECT COUNT(*) AS c FROM user_growth WHERE points > 0${balanceInternalSql}`,
+      internalParams,
+    ),
+    pool.query(
+      `SELECT g.user_id, g.points, u.alias, u.email
+         FROM user_growth g LEFT JOIN user u ON u.id = g.user_id
+        WHERE g.points > 0${topInternalSql}
+        ORDER BY g.points DESC LIMIT 10`,
+      internalParams,
     ),
   ]);
   const cost = Number(lotCost.s);
@@ -749,6 +813,7 @@ export async function getPointsOverview() {
       pityHits: Number(row.pityHits || 0),
     })),
     holders: Number(holders.c),
+    filters: { hideInternal: hideInternal !== false },
     top: top.map((r) => ({
       userId: r.user_id,
       points: Number(r.points),

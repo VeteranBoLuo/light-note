@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createUpdateLogImageHtml,
   detectUpdateLogImageSizeAtCursor,
+  insertUpdateLogImageAtSelection,
   resizeUpdateLogImageAtCursor,
 } from './updateLogImageSize';
 
@@ -17,9 +18,7 @@ describe('更新日志图片尺寸', () => {
     const result = resizeUpdateLogImageAtCursor(source, source.indexOf('截图'), 'small');
 
     expect(result.changed).toBe(true);
-    expect(result.markdown).toContain(
-      '<img src="/api/updateLog/image/log/a.png" alt="截图" data-ln-size="small" />',
-    );
+    expect(result.markdown).toContain('<img src="/api/updateLog/image/log/a.png" alt="截图" data-ln-size="small" />');
     expect(detectUpdateLogImageSizeAtCursor(result.markdown, result.selectionStart)).toBe('small');
   });
 
@@ -38,6 +37,26 @@ describe('更新日志图片尺寸', () => {
       changed: false,
       markdown: '普通正文',
       selectionStart: 2,
+    });
+  });
+
+  it('把图片作为独立块插入当前光标，而不是追加到长文末尾', () => {
+    const source = '第一段\n\n第二段';
+    const image = createUpdateLogImageHtml('/api/updateLog/image/log/a.png', '截图', 'medium');
+    const cursor = source.indexOf('第二段');
+    const result = insertUpdateLogImageAtSelection(source, cursor, cursor, image);
+
+    expect(result.markdown).toBe(`第一段\n\n${image}\n\n第二段`);
+    expect(result.selectionStart).toBe(`第一段\n\n${image}\n\n`.length);
+  });
+
+  it('插入图片时替换选区、规范空行并约束越界位置', () => {
+    const image = createUpdateLogImageHtml('/image.png', '截图', 'small');
+
+    expect(insertUpdateLogImageAtSelection('前缀-替换-后缀', 3, 5, image).markdown).toBe(`前缀-\n\n${image}\n\n-后缀`);
+    expect(insertUpdateLogImageAtSelection('', 99, 120, image)).toEqual({
+      markdown: `${image}\n`,
+      selectionStart: `${image}\n`.length,
     });
   });
 });

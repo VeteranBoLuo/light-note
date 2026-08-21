@@ -1,6 +1,13 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { createApp, h, nextTick } from 'vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import BDropdown from './BDropdown.vue';
+
+const dropdownSource = readFileSync(
+  resolve(process.cwd(), 'src/components/base/BasicComponents/BDropdown.vue'),
+  'utf8',
+);
 
 async function flushPosition() {
   await nextTick();
@@ -71,7 +78,7 @@ describe('BDropdown 视口定位', () => {
     expect(panel.style.maxHeight).toBe('584px');
   });
 
-  it('菜单项使用可聚焦按钮并向当前项暴露 aria-current', async () => {
+  it('菜单项使用可聚焦按钮、统一左对齐并向当前项暴露 aria-current', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const onSelect = vi.fn();
@@ -98,6 +105,9 @@ describe('BDropdown 视口定位', () => {
     expect(items).toHaveLength(2);
     expect(items[0].tagName).toBe('BUTTON');
     expect(items[0].getAttribute('aria-current')).toBe('page');
+    expect(dropdownSource).toMatch(
+      /\.b-dropdown-panel \.b-dropdown-item\.b_btn\s*\{[\s\S]*?justify-content:\s*flex-start;[\s\S]*?text-align:\s*left;/,
+    );
     items[0].focus();
     expect(document.activeElement).toBe(items[0]);
     items[0].click();

@@ -25,13 +25,21 @@
 
 | 编号                                                                                           | 日期       | 模块                | 关键词                                             | 状态         |
 | ---------------------------------------------------------------------------------------------- | ---------- | ------------------- | -------------------------------------------------- | ------------ |
-| [LN-PIT-097](#ln-pit-097turnspec-升级和确定性工作流不能一刀切替换旧-planner)                   | 2026-08-21 | Agent、Runtime V3   | TurnSpec 3.1、handle、workflow、Planner 回退       | 已修复待合入 |
-| [LN-PIT-096](#ln-pit-096agent-精确事实和处理记录不能由模型文案或前端展示反推)                  | 2026-08-21 | Agent、结果协议     | FactBundle、ExecutionReceipt、ResponseEnvelope     | 已修复待合入 |
-| [LN-PIT-095](#ln-pit-095agent-确认产物材料和运行状态不能共用一个生命周期)                      | 2026-08-21 | Agent、持久化       | ArtifactVersion、SourceSet、Run、Dialogue Anchor   | 已修复待合入 |
-| [LN-PIT-094](#ln-pit-094agent-时间范围和列表完整性不能由各工具或模型自行解释)                  | 2026-08-21 | Agent、工具协议     | IANA、半开区间、total、partial、参数兼容           | 已修复待合入 |
-| [LN-PIT-093](#ln-pit-093agent-不能在工具成功前提交新焦点也不能把空能力范围降级成自动模式)      | 2026-08-21 | Agent、Runtime V3   | scope、ResultSet、digest、时间默认、副作用         | 已修复待合入 |
+| [LN-PIT-105](#ln-pit-105turnspec-升级和确定性工作流不能一刀切替换旧-planner)                   | 2026-08-21 | Agent、Runtime V3   | TurnSpec 3.1、handle、workflow、Planner 回退       | 已修复待合入 |
+| [LN-PIT-104](#ln-pit-104agent-精确事实和处理记录不能由模型文案或前端展示反推)                  | 2026-08-21 | Agent、结果协议     | FactBundle、ExecutionReceipt、ResponseEnvelope     | 已修复待合入 |
+| [LN-PIT-103](#ln-pit-103agent-确认产物材料和运行状态不能共用一个生命周期)                      | 2026-08-21 | Agent、持久化       | ArtifactVersion、SourceSet、Run、Dialogue Anchor   | 已修复待合入 |
+| [LN-PIT-102](#ln-pit-102agent-时间范围和列表完整性不能由各工具或模型自行解释)                  | 2026-08-21 | Agent、工具协议     | IANA、半开区间、total、partial、参数兼容           | 已修复待合入 |
+| [LN-PIT-101](#ln-pit-101agent-不能在工具成功前提交新焦点也不能把空能力范围降级成自动模式)      | 2026-08-21 | Agent、Runtime V3   | scope、ResultSet、digest、时间默认、副作用         | 已修复待合入 |
+| [LN-PIT-100](#ln-pit-100复合菜单项的对齐不能输给基础按钮默认样式)                              | 2026-08-21 | 前端、基础组件      | BDropdown、BActionMenu、BButton、左对齐            | 已修复并上线 |
+| [LN-PIT-099](#ln-pit-099事实型最终回答不能把模型有看到当成用户一定看到)                        | 2026-08-21 | Agent、事实回答     | 工具摘要、字段完整性、清单进度、真实链路           | 已修复并上线 |
+| [LN-PIT-098](#ln-pit-098异步图片上传不能把请求成功当成正文插入成功)                            | 2026-08-21 | 更新日志、前端      | 图片上传、粘贴、光标、异步插入、成功提示           | 已修复并上线 |
+| [LN-PIT-097](#ln-pit-097写入确认不能只挂在持久化请求上草稿路由必须先预检)                      | 2026-08-21 | 笔记、分享、前后端  | 分享暴露、草稿路由、权威预检、事务竞态             | 已修复并上线 |
+| [LN-PIT-096](#ln-pit-096同级资源视图不能各自维护标题区纵向基线)                                | 2026-08-21 | 前端、资源中心      | 路由切换、标题区、纵向基线、布局位移               | 已修复并上线 |
+| [LN-PIT-095](#ln-pit-095运营统计的内部账号过滤必须覆盖整条聚合链路)                            | 2026-08-21 | 积分治理、前后端    | 内部账号、聚合、对账、筛选口径                     | 已修复并上线 |
+| [LN-PIT-094](#ln-pit-094目录树不能复用平铺文件夹的删除和全量排序语义)                          | 2026-08-21 | 云空间、前后端      | 目录树、删除、排序、循环、浮层、旧客户端           | 已修复并上线 |
+| [LN-PIT-093](#ln-pit-093服务状态日志与操作入口不能在多个服务器页面重复维护)                    | 2026-08-21 | 前端、服务器管理    | 信息架构、重复视图、日志、操作审计                 | 已修复并上线 |
 | [LN-PIT-092](#ln-pit-092协议版本不能只放在响应信封而遗漏数据快照)                              | 2026-08-21 | Host Agent、协议    | protocolVersion、响应信封、快照、线上验收          | 已修复已上线 |
-| [LN-PIT-091](#ln-pit-091固定深色日志面板必须覆盖全局-pre-code-主题色)                          | 2026-08-21 | 前端、服务器管理    | 日志、代码块、主题、对比度、移动端                 | 已修复已上线 |
+| [LN-PIT-091](#ln-pit-091固定日志查看器不能和全局-pre-code-主题规则争夺文字色)                  | 2026-08-21 | 前端、服务器管理    | 日志、代码块、主题、对比度、移动端                 | 已修复已上线 |
 | [LN-PIT-090](#ln-pit-090自动刷新不能隐藏调度状态也不能用瞬时失败清空旧数据)                    | 2026-08-21 | 前端、服务器管理    | 自动刷新、倒计时、可见性、旧数据、轮询             | 已修复已上线 |
 | [LN-PIT-089](#ln-pit-089图片用-transform-放大不会自动产生可滚动范围)                           | 2026-08-20 | 云空间、文件预览    | 长图、缩放、transform、overflow、移动端滚动        | 已修复待上线 |
 | [LN-PIT-086](#ln-pit-086周期策略锁已升级时缺失本地开关会安全暂停写入而不是回退旧策略)          | 2026-08-20 | 成长、配置、发布    | C6、周期锁、环境变量、earning_paused               | 已修复待上线 |
@@ -146,13 +154,32 @@
 
 ## 案例记录
 
-### LN-PIT-093：Agent 不能在工具成功前提交新焦点，也不能把空能力范围降级成自动模式
+### LN-PIT-101：Agent 不能在工具成功前提交新焦点，也不能把空能力范围降级成自动模式
 
 - **现象：** 非 Root 显式选择只有管理员可用的模块时，候选能力可能被过滤为空后又按“自动”继续；新一轮读查询刚完成语义编译就清空旧 ResultSet，随后工具失败会导致“刚才那些”既找不到本轮结果，也失去上轮可靠结果。Root 全量统计能力若从 Planner schema 删除时间参数但没有默认绑定，还会随机追问或带入旧时间范围。
 - **根因：** 权限过滤、语义计划和执行状态没有区分“请求为空”与“授权后为空”；会话把计划完成误当成执行完成；同一个 TurnSpec digest 同时承担语义和最终材料合同；时间默认、副作用性质和 shadow 对比又散落在工具或 Handler 中，没有由 Manifest 统一声明。
 - **防回归约束：** 能力范围必须保留用户原始请求域并在真实身份解析后重新授权：全部拒绝返回 `forbidden_scope`，部分拒绝只保留合法子集，无显式请求才允许自动模式。读 TurnSpec 只能暂存带运行令牌的 `pendingFocus`，结果提交和终态结算必须校验同一令牌；焦点投影用 Redis revision CAS 保护并采用 latest-run-wins，禁止迟到旧轮借用另一请求的 pending 状态。成功/空 ResultSet 原子提交；成功但没有稳定资源引用的统计读取也必须提交新语义并清除旧资源焦点；失败或部分失败只结算 `failed/degraded`，旧 ResultSet 可以保留但不得冒充失败轮的新结果。语义摘要与最终路由、资源、URL/ID 绑定后的执行摘要必须分离。Manifest 必须为必填时间槽声明 `all/clarify/server_default`，并为 Compiler 提供与该策略一致的描述；操作工具声明 `confirmation_required/idempotent_background_job`，目录与实际工具在普通测试中恒做完整性校验。模糊查询统一通过共享函数转义 `\\/%/_` 并显式声明 SQL `ESCAPE`，禁止各工具复制实现。
 - **验收：** 普通账号请求纯 `admin` 范围在创建会话和模型调用前返回 403；混合范围只暴露合法模块。连续执行“成功查询 A → 查询 B 失败 → 指代刚才结果”时，状态显示失败且不会把 A 当作 B；并发提交 A、B 后，A 的迟到结果和结算都不能改写 B。统计/概览读取成功但不返回稳定 ID 时，焦点切到新领域且旧资源不再成为“刚才那些”。Root 未给时间的全量能力由服务端绑定“全部”，Compiler 目录不再同时出现“默认全部”和“必须追问”；`clarify` 策略生成缺失槽。同一 TurnSpec 换权威资源时 `semanticDigest` 不变而 `executionDigest` 改变。标签、笔记、书签、文件、云文件夹与回收站关键词含 `%/_/\\` 时只能按字面量匹配。所有验证使用 Mock Provider/零调用 smoke，不消耗真实模型 Token。
 - **相关代码：** `apps/server/util/agent/runtime/v3/capabilityManifest.js`、`apps/server/util/agent/runtime/v3/turnSpec.js`、`apps/server/util/agent/sessionStore.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/server/util/agent/toolPolicy.js`、`apps/server/util/agent/sqlPatterns.js`。
+
+### LN-PIT-094：目录树不能复用平铺文件夹的删除和全量排序语义
+
+- **现象：** 平铺文件夹升级为目录树后，如果继续沿用旧删除逻辑，删除父文件夹会把其中文件静默移到未分类位置，并留下孤儿子目录；继续把整份文件夹列表按一个序号更新，也会把不同父级的顺序互相覆盖。旧客户端若收到所有子级，还可能把它们当成第一层重新排序。
+- **根因：** 旧模型只有“文件夹列表”，删除等同于解除文件关联，排序也只有一个全局作用域；目录树引入父子关系后，写入约束变成 `(create_by, parent_id)` 兄弟组和整棵子树，不能靠前端当前可见节点或单条 SQL 局部判断。
+- **修复：** 文件夹创建、重命名、移动、同层排序和删除统一进入账号行锁保护的目录树服务；服务端读取同 owner 完整快照，校验父级、循环、同层重名和最大 8 层。新客户端只在危险确认后显式提交递归删除意图，服务端在同一事务中把整棵子目录中的文件移回未分类后删除目录；旧客户端未提交该意图时仍只能删空文件夹。同层排序必须提交该父级下的完整兄弟集合；新版前端显式发送 `treeVersion: 2`，旧客户端只收到第一层。
+- **防回归约束：** 云空间目录关系只有服务端目录树服务一个写入事实源。不得恢复“删除文件夹时把文件设为 NULL”的隐式迁移，也不得跨父级批量编号；改变父级必须调用移动接口并校验整棵子树。PC 文件夹行继续使用悬停自动展开操作菜单并保留右键入口，不新增常驻或 hover“…”按钮；中宽布局不得仅因 `isDesktop=false` 禁用移动、重命名等目录操作。文件夹拖放必须在任意层级保留三段语义：目标行上沿插到目标同级之前，中部移入目标，下沿插到目标同级之后；“全部文件”仅作为移到第一层末尾的拖放出口，不能因此显示虚假根箭头。跨父级前后插入必须由移动接口在账号行锁内一次完成父级与目标兄弟顺序更新，禁止前端串行发“移动 + 排序”两个请求。拖拽期间必须显示“移到前面 / 移入 / 移到后面 / 移到第一层”的实时文字提示，提示应占用底部“新建文件夹”固定槽位而不覆盖目录，并把动作、可省略的目标名称和不可省略的“之前 / 里面 / 之后”关系词分成独立 flex 区域；排序使用清晰横线、移入使用整行实色描边，不能只靠一条难辨认的细线。菜单中的显式移动继续作为键盘和触控入口。前端可基于完整快照预判自身/后代循环、无变化、深度、锚点层级和同名冲突，但服务端账号行锁内的校验才是权威结果。目录右侧直接文件数来自服务端目录快照，文件上传、覆盖、移动、单个删除或批量删除成功后必须统一刷新当前文件页和目录快照，不能只刷新右侧列表而把旧计数留到整页刷新；“全部文件”同样由目录快照返回不受当前搜索、类型或目录筛选影响的活动文件总数，即使为 0 也显示真实数字，普通空目录才用短横线保留计数列。目录批量清空不得由前端收集当前已加载文件 ID：必须由服务端锁定完整目录快照和子树文件，并复用单文件软删除事实源，保证文件进入回收站、待整理关系移除、分享撤销的语义一致；默认保留目录归属，只有明确勾选删除文件夹时才清空回收站记录的 `folder_id` 并删除目录树。目录损坏应失败关闭并由 Schema 门禁报告，不能把孤儿节点伪装成第一层。PC 与移动端必须根据完整目录快照决定布局：没有任何父子关系时使用无展开列的紧凑平铺模式；只要存在层级，整棵树就使用稳定的“展开列、文件夹图标、名称、右侧计数”骨架，父级显示箭头、叶子和“全部文件”保留同宽空位，同层图标和计数对齐，子级只增加固定缩进。移动端目录项必须整行可点击，只有真实父级的箭头单独负责展开。目录选择必须先通过 `closeCurrentMobileOverlayThen` 等待抽屉 history 占位释放，再更新 `folderId` 路由和查询文件；禁止在同一事件轮同时关闭抽屉并改目录，否则 `history.back()` 会恢复旧目录。移动文件夹管理中的 `BActionMenu` Teleport 面板必须标记为抽屉内部外置浮层，并使用规范中的弹框内浮层 800 层，不能停留在低于抽屉的右键菜单 500 层；其他页面默认操作菜单仍保持 500，禁止为修一个抽屉全局抬高所有菜单。禁止按单行是否有子级切换内容起点，也禁止用负偏移或贴边绝对定位压缩箭头。
+- **验收：** 服务测试覆盖孤儿、循环、同层重名、跨层同名、深度上限、移动到后代、旧客户端非空删除被拒绝、新客户端递归删除后文件移回未分类、删除竞态回滚和兄弟完整排序；前端检查 PC/移动端、浅色/深色下的平铺/树形模式切换、同层图标与计数对齐、全部文件无箭头和真实总数、普通空目录短横线、子级缩进、折叠箭头、展开箭头、移动端整行点击、hover/focus、选中、移动抽屉拖动提示、文件夹管理“更多”菜单的默认/展开/选择/禁用状态、新建子级、合法/非法移动、删除取消/确认/成功/失败、空/加载/错误状态，以及旧版平铺响应兼容。
+- **相关代码：** `apps/server/util/services/cloudFolderTreeService.js`、`apps/server/router_handle/fileHandle.js`、`apps/server/migrations/schema-assertions.sql`、`apps/web/src/components/base/BasicComponents/BActionMenu.vue`、`apps/web/src/components/cloudSpace/CloudFolder.vue`、`apps/web/src/components/cloudSpace/MobileCloudFolderDrawer.vue`、`apps/web/src/components/cloudSpace/MobileCloudSpaceActionsDrawer.vue`。
+
+### LN-PIT-093：服务状态、日志与操作入口不能在多个服务器页面重复维护
+
+- **现象：** 运行概览和服务进程同时展示完整服务状态，运行概览与服务进程又各自提供日志和重启操作；事件与日志页还维护了第二套“固定服务日志”按钮与弹窗。三个入口都像是服务详情，但数据密度、刷新节奏和日志样式不同，用户无法判断哪个才是权威入口。
+- **误导线索：** 仪表盘已经拿到 `dashboard.services`，直接把列表附在指标下方看起来成本最低；事件页面含“日志”二字，也容易顺手复制一套日志选择器。每个局部功能都能工作，但组合后会形成职责漂移和多份加载、错误、截断状态。
+- **根因：** 页面按后端返回字段和功能清单堆叠，没有先按用户任务定义唯一事实入口。服务状态、日志与白名单写操作属于同一个排障闭环，却被拆散并复制；操作审计是写入事实记录，不应再兼任日志浏览器。
+- **修复：** 运行概览收口为主机指标、运行事实和趋势；服务进程统一承接固定服务状态、资源占用、受限日志及安全操作，并把日志弹窗改为带只读边界、采集时间、行数范围、行号、空/加载/错误/截断状态的主题化查看器；事件页改名为操作审计，只展示服务器写动作的意图、结果与原因。
+- **防回归约束：** 每类运维事实必须有且只有一个主入口。概览不得复制完整服务表、日志或写操作；服务进程是服务状态、日志和白名单动作的唯一入口；操作审计不得调用日志 API。新增页面前先定义任务边界，不能因为接口已返回某字段就直接重复渲染。
+- **验收：** `ServerInformationArchitecture.test.ts` 固定检查三页依赖与职责；浏览器分别检查 PC/移动端、浅色/深色下的导航默认/悬停/选中，以及服务正常/异常、日志加载/空/错误/截断/有数据和审计加载/空/错误/筛选状态。
+- **相关代码：** `apps/web/src/view/serverManagement/ServerManagement.vue`、`apps/web/src/view/serverManagement/ServerServices.vue`、`apps/web/src/view/serverManagement/ServerEvents.vue`、`apps/web/src/view/serverManagement/ServerInformationArchitecture.test.ts`。
 
 ### LN-PIT-092：协议版本不能只放在响应信封而遗漏数据快照
 
@@ -162,13 +189,13 @@
 - **验收：** Host Agent 测试断言 `/v1/security` 的顶层与 `data` 均为协议版本 1；生产直连 `/v1/dashboard`、`/v1/services`、`/v1/storage`、`/v1/security`，所有版本化数据快照均返回版本 1，且采集错误为空。
 - **相关代码：** `apps/host-agent/src/security.js`、`apps/host-agent/src/server.test.js`、`packages/shared/hostAgentProtocol.d.ts`。
 
-### LN-PIT-091：固定深色日志面板必须覆盖全局 `pre code` 主题色
+### LN-PIT-091：固定日志查看器不能和全局 `pre code` 主题规则争夺文字色
 
 - **现象：** 服务器日志弹窗的深色代码块背景正常，但桌面与 `?renderProfile=mobile` 下日志文字仍被渲染成接近黑色，实际几乎不可读。
 - **根因：** 全局 `:root pre` 与 `:root pre code` 使用带 `!important` 的主题变量控制代码块文字；业务容器只写普通 `color` 或让子级继承时，无法覆盖该规则。
-- **防回归约束：** 固定使用深色背景的业务日志面板必须在容器和内部 `code` 上以更高选择器优先级显式声明浅色前景；不能只依赖父级普通继承，也不能改变全局笔记代码块主题规则来迁就单一业务弹窗。
-- **验收：** 桌面浅色、桌面深色和移动渲染基线分别打开固定服务日志，正文均清晰可读；`ServerEvents.style.test.ts` 固定检查容器及子级的覆盖规则。
-- **相关代码：** `apps/web/src/view/serverManagement/ServerEvents.vue`、`apps/web/src/view/serverManagement/ServerEvents.style.test.ts`。
+- **防回归约束：** 业务日志查看器优先直接复用 `--pre-*` 主题变量，但不要用 `<pre>` 包裹整份日志后再和全局高优先级规则互相覆盖。结构化日志应使用独立滚动容器、行号列和逐行 `code`，明确声明前景、背景与边框；不能改变全局笔记代码块主题规则来迁就单一业务弹窗。
+- **验收：** 桌面浅色、桌面深色和移动渲染基线分别打开服务进程日志，容器、行号和正文均清晰可读，且加载、空、错误、截断及有数据状态不会发生高度突变或文字失去对比度。
+- **相关代码：** `apps/web/src/view/serverManagement/ServerServices.vue`、`apps/web/src/view/serverManagement/ServerInformationArchitecture.test.ts`。
 
 ### LN-PIT-089：图片用 transform 放大不会自动产生可滚动范围
 
@@ -809,6 +836,7 @@ Word 目录链接是 `#书签` 形式。浏览器执行默认 hash 导航时会�
 - 新增独立 `points-earning-c5` 策略目录；日/周版本写入 `points_earning_period_policy`，获取总闸只控制是否发放，不控制已经生效周期回退。
 - C6 把每日任务升级为固定签到，加“收藏书签/新建笔记/上传文件/创建待办”中两个不同任务；这些任务无需用户预先拥有待办或待整理资源。账号与自然日稳定生成 6 日组合周期，GET 不写分配状态，同一事实只能完成自己的具体任务。
 - 资源成功后幂等写入低敏感 `growth_events` 事实，排除游客、新手种子、管理员上下文和 suppressed 奖励；每日/每周统一按事实聚合。
+- 同一业务实体的 v1、v2、快捷入口和 Agent 入口必须在最内层创建 Service 复用同一事实写入；只给旧入口补 `growth_events` 会导致新版待办已经存在、每日任务仍为 0/1。计划一次预生成多项时只记录首条待办，表达一次用户创建动作；旧版转 v2、编辑拆分和日历补齐不得伪装成新建。
 - 管理员维护上下文允许写业务状态时，Handler 必须把 `suppressUserRewards` 继续传到最内层 Service；只在路由中标记却不由 Service 消费，会把代操作误记为用户有效活跃。回归验收需同时断言业务状态成功、`growth_events`/成长任务/成就副作用均未触发。
 - 成就解锁时固化积分、头像框与策略版本，迁移先保护已满足旧资格或已解锁未领取的账号。
 - 对账先捕获期初差额，之后只报告 `baseline + 流水和` 与余额的差异；人工修正只补幂等流水。
@@ -825,12 +853,14 @@ Word 目录链接是 `#书签` 形式。浏览器执行默认 hash 导航时会�
 7. 用户摘要限制 28 天，后台范围最大 365 天，活动和对账使用批次/游标；启动 ensure 禁止全量业务回填或账本聚合。
 8. Root 资产调整不能只依赖按钮 loading 或审计 request ID；必须由客户端在未知结果重试时复用请求号，服务端在业务事务内锁定收据并校验负载哈希。
 9. 商品指标缺少购买后 AI/空间使用归因时必须明确不可用；不得用当前余额、当前容量或全站总量倒推某笔购买效果。首兑画像只能读取有硬上限的样本，并用历史记录排除统计窗口前已经兑换过同商品的账号，禁止把“窗口内首笔”冒充“历史首兑”。
+10. 新增同类资源创建入口时，必须枚举所有创建 Service 并断言每次用户动作恰好写入一个对应事实；幂等重放、管理员代操作、旧数据转换、编辑替换和后台补齐分别验证不重复、不误记。
 
 #### 验证方法
 
 - 在日/周边界前后和开关暂停/恢复时重复读取与领取，确认同一周期始终只有一个策略版本和一组 ref。
 - C5 历史周期创建一个、两个不同知识事件并重复刷新/删除重建，确认任务分别为 2/3、3/3，同一判重键不重复完成。
 - C6 连续检查 6 个账号自然日，确认组合不重复且相邻两天不会出现完全相同的组合；当天只创建任一选中类型的一个事实，确认只能完成对应任务，不能同时完成另一随机槽。
+- 分别从待办 v1、v2 页面和 Agent 创建一次待办，确认 `todo_create` 各增加 1；v2 多实例计划仍只增加 1。重放同一幂等请求、转换旧待办、编辑拆分和管理员代操作均不得增加事实。
 - 模拟成长事实写失败，确认资源仍成功且既有 EXP/成就旁路继续执行；模拟既有旁路失败，确认事实仍尝试写入。
 - 用已解锁未领取、已满足旧资格未持久化、新账号三类样本执行迁移并领取，核对奖励快照与条件。
 - 检查 `ensureGrowthCenterSchema()` 不调用任何历史 migration；用户摘要 SQL 含 28 天 WHERE，后台/API 都有范围和 LIMIT。
@@ -2473,7 +2503,7 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **验收：** 合成测试覆盖“7 天 → 今天 → 至少 2000 字 → 再扩到 2500 字”、笔记切换书签、选中书签分析、网页 ResultSet 省略 URL 续问、今天 16:00 待办、Root 今天新增用户、序数指代和待确认草稿替换；断言 Planner 看不到 Manifest 声明的时间/资源参数，服务端执行参数为权威值，类型兼容的 ResultSet 能在 Compiler 前开放所需候选，跨领域不继承旧 ResultSet，ArtifactState 结算后不可复活。Root 产物真实门禁必须通过正式 Note Service 创建带唯一前缀、可清理的“今天”正文夹具，不能依赖账号恰好已有当天笔记；否则跨零点或空账号会把正确的空材料失败关闭误报成 Agent 回归。门禁结束必须验证旧确认至少两次失效、最终确认幂等、正文落库一次且夹具全部清理。`pnpm --filter server smoke:ai-turn-v3` 默认必须报告模型调用 0、业务工具 0；真实 Compiler 冒烟只有显式点名用例才允许，单次最多 2 个。首次启用或扩大 V3 灰度前仍执行获授权的 root 真实矩阵，日常开发不得无边界重复消耗 Token。
 - **相关代码：** `apps/server/util/agent/runtime/v3/`、`apps/server/util/agent/runtime/conversationHistory.js`、`apps/server/util/agent/sessionStore.js`、`apps/server/util/agent/runtime/executionPlanner.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/server/evaluation/ai-assistant/turnSpecV3LiveSmokeRunner.js`、`apps/web/src/types/aiCapabilityScope.ts`。
 
-### LN-PIT-095：Agent 确认、产物、材料和运行状态不能共用一个生命周期
+### LN-PIT-103：Agent 确认、产物、材料和运行状态不能共用一个生命周期
 
 - **现象：** 确认卡过期后，即使用户仍能看到旧草稿和引用材料，也只能收到“原操作过期”；并发工具完成顺序偶尔会让确认卡乱序；会话状态只在 Redis 时，重启或 TTL 后无法继续修改草稿。另一方面，如果直接把近期对话都当材料保存，又会让普通问答历史串入新产物。
 - **影响范围：** 笔记生成与多轮改写、确认替换/过期、跨进程恢复、并发复合目标、对话整理成笔记，以及 Runtime V3 灰度发布。
@@ -2484,7 +2514,7 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **验证方法：** 使用内存仓储、Mock Provider 和固定时钟覆盖 disabled/shadow/enforce、Redis miss 恢复、revision 竞争、迟到旧轮、双 digest、逐目标 unknown、ArtifactVersion 链恢复、旧确认不可复活、SourceSet 缺失失败关闭、Dialogue Anchor 精确重读与 digest 不一致、并发工具乱序但卡片有序。开发阶段不得调用真实 Provider 或线上数据；首次灰度再按发布门禁做最小 Root 验证。
 - **相关代码：** `apps/server/migrations/20260821_agent_runtime_state.sql`、`apps/server/util/agent/persistence/`、`apps/server/util/agent/sessionStore.js`、`apps/server/util/agent/persistence/agentArtifactLifecycle.js`、`apps/server/util/agent/runtime/conversationHistory.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/web/src/store/aiAssistant.ts`。
 
-### LN-PIT-096：Agent 精确事实和处理记录不能由模型文案或前端展示反推
+### LN-PIT-104：Agent 精确事实和处理记录不能由模型文案或前端展示反推
 
 - **现象：** 工具明明返回了精确总量，最终回答仍可能少报、多报或漏掉截断；前端有时因为出现“参考来源/本轮检索”标签就认为工具执行过，有时真实执行完成却没有可核验的处理记录。SSE 断线恢复后，临时文本、来源和执行状态还可能互相不一致。
 - **影响范围：** 所有读工具的计数、时间口径与列表完整性，写操作风险披露，SSE 终态/恢复，会话消息持久化和前端处理记录。
@@ -2495,7 +2525,7 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **验证方法：** Mock 成功、空结果、部分结果、文本预算截断、工具失败和混合多工具；断言只有成功工具产生 FactBundle，exact facts 与公共披露稳定，receipt/envelope 在同步响应、`response.completed`、恢复 snapshot 和前端 normalize 后一致。全部为确定性测试，不调用真实模型。
 - **相关代码：** `apps/server/util/agent/runtime/v3/factBundle.js`、`executionReceipt.js`、`responseEnvelope.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/server/util/agent/sseLifecycle.js`、`apps/web/src/types/aiExecutionReceipt.ts`、`apps/web/src/utils/aiSse.ts`、`apps/web/src/utils/aiStreamRecovery.ts`、`apps/web/src/components/aiAssistant/ChatMessageItem.vue`。
 
-### LN-PIT-097：TurnSpec 升级和确定性工作流不能一刀切替换旧 Planner
+### LN-PIT-105：TurnSpec 升级和确定性工作流不能一刀切替换旧 Planner
 
 - **现象：** 为减少模型漏选工具，若直接把 TurnSpec schema、所有能力参数和执行路径一次升级，原来能工作的工具可能因新字段缺失、旧会话 ID 不兼容或未迁移的参数来源而全部失败；反过来若长期让客户端 ID、展示标题和自然语言序数承担指代，又会继续出现“刚才那个”选错材料。
 - **影响范围：** Runtime V3 Compiler/Parser、跨轮 ResultSet 指代、Manifest 迁移、Execution Planner、灰度观测和所有读写能力。
@@ -2506,7 +2536,7 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **验证方法：** 固定夹具覆盖 3.0/3.1 等价语义、合法/未知/跨组 handle、ordinal 越界、冲突 temporal claims、未声明 slot claims，以及 deterministic 成功、Slot Filler 补齐/越权字段拒绝、Validator 拒绝、自动 Planner 回退、fatal/goal/write 歧义与依赖传播。Agent Runtime 测试必须证明 3.1 受限补槽不暴露权威上下文、3.0 和非适用能力仍调用原 Planner；日常测试保持零 Provider。
 - **相关代码：** `apps/server/util/agent/runtime/v3/turnSpec.js`、`intentCompiler.js`、`workflowCompiler.js`、`slotFiller.js`、`ambiguityGate.js`、`agentRuntime.js`、`capabilityManifest.js`、`apps/server/util/agent/runtime/legacyRuntimeAdapter.js`、`apps/server/util/agent/sessionStore.js`、`apps/server/util/agent/turnContractTrace.js`。
 
-### LN-PIT-094：Agent 时间范围和列表完整性不能由各工具或模型自行解释
+### LN-PIT-102：Agent 时间范围和列表完整性不能由各工具或模型自行解释
 
 - **现象：** 用户把“最近 7 天”改为“今天”后，后续轮仍可能沿用旧范围；同一个“今天”在不同进程时区下得到不同 SQL 边界。列表工具只返回当前 `LIMIT` 内的数据，模型却可能把“返回 1 条”说成“全部只有 1 条”；文本预算截断时也没有稳定披露。
 - **影响范围：** 笔记、书签、文件、回收站、Root 用户/日志/统计/安全事件查询，以及携带时间条件的写操作二次确认。
@@ -2559,3 +2589,53 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **约束：** 自动刷新间隔、下一次调度时间、倒计时和页面状态必须来自同一组合式函数；默认 3 秒并提供受控的 10 秒、30 秒、1 分钟、5 分钟与暂停选项，用 `BSelect` 展示和保存在当前浏览器。页面默认间隔与 Host Agent 默认采样间隔必须同步，部署升级也要迁移服务器上的非敏感采样配置，禁止用更快轮询伪装实时数据。使用上一轮完成后再排程的单次定时器，禁止重叠请求和固定间隔漂移；页面隐藏时清除调度，返回前台仅在所选间隔已到期时刷新，暂停状态返回前台也不得自行请求。服务、存储和安全必须使用独立只读快照及与成本匹配的缓存周期，禁止让 3 秒概览轮询反复执行 PM2/systemd、SSH 日志、防火墙、APT 或目录扫描；同一分域快照并发请求必须合并为单个采集任务。所有被动快照不写通用 API 日志，真正的运维写动作仍进独立审计。首次连接失败进入阻断态；已有权威数据后的请求异常必须保留旧数据、明确标注刷新失败并继续重试，后端明确返回 Agent 离线或协议不兼容时仍切换为对应硬状态。
 - **验收：** 假时钟测试覆盖默认 3 秒倒计时、30 秒改选与本地保存、暂停后手动刷新、后台停止/前台到期刷新、旧数据上的瞬时失败与重试；Host Agent 配置测试断言默认 3 秒与 60 分钟容量，部署脚本断言现有配置升级为 3000ms，日志策略断言 `/infra/dashboard` 被排除。浏览器分别在 PC/移动、浅色/深色下检查默认、下拉展开与选中、刷新中、暂停、倒计时、上次更新时间、采样时间、错误提示和初始离线布局，确认窄屏不溢出且状态不只靠颜色表达。
 - **相关代码：** `apps/web/src/view/serverManagement/useServerManagement.ts`、`apps/web/src/view/serverManagement/useInfraSnapshot.ts`、`apps/web/src/view/serverManagement/ServerManagement.vue`、`apps/host-agent/src/snapshotCache.js`。
+
+### LN-PIT-095：运营统计的内部账号过滤必须覆盖整条聚合链路
+
+- **现象：** 积分治理的总产出、余额分布、排行榜、来源去向、异常和对账会混入 Root 与测试账号；页面即使增加“隐藏内部账号”，不同页签仍可能得到互相矛盾的数据。
+- **根因：** 运营指标来自 `points_log`、`user_growth`、`points_economy_operations`、活动名单和对账账号页等多个事实源。只在排行榜连接 `user` 过滤角色，或只在前端过滤已返回行，无法修正总和、分位数、去重人数和异常数量。
+- **约束：** 积分运营默认排除 `internalRoles.js` 中统一定义的内部角色，并允许 Root 通过与 API 日志一致的显式开关临时包含。过滤条件必须在每条数据库聚合开始前按用户 ID 生效，覆盖旧版总览、治理健康度、来源去向、商品样本、异常规则和对账账号游标；单用户 360 与人工调整是明确目标查询，不受全局开关拦截。禁止在 Node 或浏览器收到聚合结果后再减去内部账号，也禁止在不同服务复制另一份角色名单。
+- **验收：** 默认请求的所有积分聚合 SQL 均引用统一的 `root/test` 角色参数，返回过滤口径；关闭开关后 SQL 不注入内部账号子查询，分页游标与后续加载保持同一口径。构造 Root、测试和普通账号各自的余额、流水、消费收据及异常，逐页签核对默认只计算普通账号，关闭开关后全部计入；单用户搜索仍可查 Root 并执行受审计的人工操作。
+- **相关代码：** `apps/server/util/internalRoles.js`、`apps/server/util/points.js`、`apps/server/util/pointsGovernanceService.js`、`apps/server/util/pointsReconciliationService.js`、`apps/web/src/view/admin/components/pointsOps/PointsOps.vue`。
+
+### LN-PIT-096：同级资源视图不能各自维护标题区纵向基线
+
+- **现象：** 资源中心从“全部资源”或“知识地图”切换到“待整理”时，Tab 会向上移动约 1px，正文整体向上移动 8px；切回后又落回原位，形成明显的页面跳动。
+- **根因：** 全部资源与知识地图使用 `ResourcePageShell`，标题最小高度、描述上边距和正文间距分别为 54px、5px、14px；待整理为了兼容同路由下的待办视图，单独实现了 `inbox-hero`，对应值却是 44px、3px、8px。三个同级 Tab 虽复用了同一个导航组件，但没有共享导航外层的垂直几何。
+- **约束：** 同一组 Tab 对应的桌面路由必须保持标题起点、标题实际高度、Tab 中线和正文起点一致。暂时无法共用页面壳时，独立页面只在对应业务状态下对齐共享壳的明确基线，不能用 `transform`、负边距或延迟测量补偿；移动端和同组件内的其他业务模式必须由显式状态类隔离。
+- **验收：** 在同一桌面视口依次切换全部资源、待整理和知识地图，三态标题均从同一 Y 坐标开始，Tab 与正文起点的 Y 坐标差均为 0；浅色和深色主题下重复检查。移动端 390px 视口确认不出现桌面资源工作区类，全部资源与待整理继续使用各自的移动布局。
+- **相关代码：** `apps/web/src/components/base/ResourcePageShell.vue`、`apps/web/src/view/search/SearchCenter.vue`、`apps/web/src/view/inbox/Inbox.vue`、`apps/web/src/view/inbox/Inbox.mobileLayout.test.ts`。
+
+### LN-PIT-097：写入确认不能只挂在持久化请求上，草稿路由必须先预检
+
+- **现象：** 用户在公开分享目录下点击“新建子页面”并选择笔记类型后，界面直接进入新建编辑页；只有稍后首次保存时才可能提醒页面会被分享链接读取，提醒时机与用户刚刚执行的动作脱节。
+- **根因：** 旧实现只处理 `/addNote` 返回的 `NOTE_SHARE_EXPOSURE_CONFIRMATION_REQUIRED`，而子页面流程会先创建前端草稿路由、后持久化。把事务写入当成唯一确认入口，遗漏了“进入草稿页面”本身就是用户可见状态转换；若改为前端查询分享列表，又会复制有效期、祖先范围和 owner 规则，形成第二套事实源。
+- **约束：** 任何会先进入草稿、向导或编辑页、后执行真实写入的操作，只要后续写入需要用户确认，就必须在路由转换前调用只读权威预检。笔记新建预检必须复用服务端真实的父级归属、深度和有效分享祖先校验；取消后留在当前页面并保留类型选择上下文，确认后才进入编辑器，并把一次确认结果传给首次保存，避免重复弹框。事务写入仍保留同一校验，覆盖预检后分享状态变化的竞态；禁止仅依赖预检放宽最终写入。
+- **验收：** 私有目录选择任意笔记类型后静默进入编辑器；有效分享目录选择类型后 URL 在确认前保持不变，取消后仍停留原页且不创建笔记，确认后才进入带父目录的新建页，首次保存不再重复询问。模拟预检通过后目录新增分享，首次保存必须再次返回确认；预检接口异常时留在原页并显示单一业务错误。桌面与移动、浅色与深色都检查确认框的默认、取消和确认状态，自动化测试覆盖私有、确认、取消及事务竞态。
+- **相关代码：** `apps/server/util/services/noteTreeService.js`、`apps/server/router_handle/noteLibraryHandle.js`、`apps/web/src/utils/noteShareExposure.ts`、`apps/web/src/view/noteLibrary/NoteLibrary.vue`、`apps/web/src/view/noteLibrary/NoteDetail.vue`。
+
+### LN-PIT-098：异步图片上传不能把请求成功当成正文插入成功
+
+- **现象：** 更新日志编辑器提示“图片已上传并插入正文”，当前编辑位置却看不到图片；长文保存后也很难在文章中找到。直接把截图粘贴进正文则完全没有反应，纯文字粘贴正常。
+- **误导线索：** 上传接口返回稳定站内 URL，既有已发布图片在源码、预览和文章中也都能正常加载，因此容易继续排查 OBS、签名地址或 Markdown 净化。实际上传和渲染链路可用，丢失的是用户当前编辑位置与异步插入结果之间的可见联系。
+- **根因：** 文件选择器上传成功后无条件把图片 HTML 追加到整篇 Markdown 末尾，不读取 textarea 当前选区，也不把焦点移动到插入结果；长文当前视区不变时看起来就像没有插入。剪贴板图片又没有接入上传处理，而成功提示只依据请求成功发出，没有以正文实际完成插入为门槛。
+- **修复：** 抽出唯一的图片块插入函数，按钮上传和剪贴板图片共用同一服务端上传、登记、正文插入与焦点恢复链路。发起上传时保存正文和选区快照；完成时仅在正文未变化时沿用该选区，否则读取 textarea 当前真实光标，避免旧偏移写进错误段落。图片实际写入响应式正文并恢复光标后才提示成功；纯文字粘贴不阻止浏览器默认行为。
+- **防回归约束：** 同一编辑器的选择文件、拖拽和粘贴图片不得维护多套上传或正文拼接逻辑。异步任务不能只保存裸字符偏移；要么验证原正文仍一致，要么使用完成时的权威光标/显式恢复入口。成功提示必须对应用户可见状态已经落地，不能只代表网络请求返回 200。图片剪贴板事件只有识别到图片文件时才能 `preventDefault()`，不得破坏普通文本粘贴。
+- **验收：** 自动测试覆盖按钮在两段文字之间插入、图片粘贴复用同一路径、光标落到图片之后、纯文字粘贴不被阻止、大小和 MIME 失败不上传。浏览器在 PC 与 390px 移动渲染基线、浅色与深色主题分别检查编辑默认/聚焦、上传中、成功、失败和预览图片；长文把光标放在中段上传，图片必须出现在中段而不是全文末尾，保存并重新展开后仍可见。
+- **相关代码：** `apps/web/src/components/personCenter/UpdateLogEditor.vue`、`apps/web/src/utils/updateLogImageSize.ts`、`apps/web/src/components/personCenter/UpdateLogEditor.imageUpload.test.ts`。
+
+### LN-PIT-099：事实型最终回答不能把“模型有看到”当成“用户一定看到”
+
+- **现象：** 待办查询工具稳定返回目标、提醒时间和“清单：3/4”，Agent 最终回答却偶发只说找到了待办，漏掉用户明确要求的清单进度；单用例有时通过，完整真实链路门禁会再次失败。
+- **根因：** 工具 transform 只保证安全事实已经进入模型上下文，最终回答质量门禁只检查空答、截断、重复和协议泄漏，没有验证用户在原问题中点名的结构化字段是否仍保留。低温度和更强提示只能降低概率，不能给供应商生成建立确定性契约。
+- **约束：** 用户明确询问数量、时间、状态、进度等结构化字段时，最终回答层必须能够用已脱敏的工具摘要校验必要事实；模型遗漏时，只能从同一安全摘要追加最小确定性补充，禁止读取 raw 业务对象、复制内部 ID，或放宽真实链路断言。具体领域兜底必须同时满足“问题明确点名、对应工具成功、摘要字段合法”三个条件，不能把未询问字段强塞给用户。
+- **验收：** 模拟 `query_todos` 成功摘要含 `清单：3/4`，最终回答漏答时自动补为“3/4（已完成 3 项，剩余 1 项）”，且不出现 `[todo:ID]`；回答已包含 `3/4` 或等价完成/剩余表述时不重复，未询问、工具失败、非法比例和空结果均不补。Root 完整真实链路仍按原断言要求最终用户答案包含清单进度，不能用隔离用例或弱化断言代替。
+- **相关代码：** `apps/server/util/agent/requestedFactGuard.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/server/evaluation/ai-assistant/rootE2ERunner.js`。
+
+### LN-PIT-100：复合菜单项的对齐不能输给基础按钮默认样式
+
+- **现象：** 同样是“图标＋文字”操作菜单，目录右键菜单左对齐，笔记详情的更多菜单却整体居中；菜单越宽、文案长短差越大，对齐混乱越明显。
+- **根因：** `BDropdown` 使用 `BButton` 渲染菜单项，但业务选择器只有单类名优先级，会被 `BButton` 根节点的 `justify-content: center` 和 `text-align: center` 覆盖。模板中已写“左对齐”不代表浏览器最终计算样式生效。
+- **防回归约束：** `BDropdown`、`BActionMenu` 等基于 `BButton` 的文字操作菜单，必须在共享组件层用能够稳定压过按钮默认值的根容器＋菜单项＋`.b_btn` 选择器同时指定 `justify-content: flex-start` 和 `text-align: left`；业务页不得通过局部样式逐页补丁。缩短危险操作入口时，完整范围和后果继续留在二次确认中。
+- **验收：** 回归测试锁定共享选择器与两个对齐属性；浏览器在 PC/移动、浅色/深色下检查普通项、危险项、分隔线、hover/focus 和长文案，图标列与文字起点一致，不出现单页居中。
+- **相关代码：** `apps/web/src/components/base/BasicComponents/BButton.vue`、`apps/web/src/components/base/BasicComponents/BDropdown.vue`、`apps/web/src/components/base/BasicComponents/BActionMenu.vue`。

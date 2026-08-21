@@ -29,6 +29,39 @@ vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
   default: { name: 'SvgIconStub', render: () => h('span', { class: 'svg-icon-stub', 'aria-hidden': 'true' }) },
 }));
 
+vi.mock('@/components/base/BasicComponents/BActionMenu.vue', () => ({
+  default: {
+    name: 'BActionMenuStub',
+    props: ['items', 'disabled', 'zIndex'],
+    emits: ['select'],
+    setup(
+      props: {
+        items: Array<{ key: string; label?: string; divider?: boolean; disabled?: boolean }>;
+        disabled?: boolean;
+      },
+      { slots, emit }: { slots: Record<string, () => unknown>; emit: (event: string, key: string) => void },
+    ) {
+      return () =>
+        h('div', { class: 'action-menu-stub', 'data-z-index': props.zIndex }, [
+          slots.default?.(),
+          ...props.items
+            .filter((item) => !item.divider)
+            .map((item) =>
+              h(
+                'button',
+                {
+                  class: 'b-action-menu__item',
+                  disabled: props.disabled || item.disabled,
+                  onClick: () => emit('select', item.key),
+                },
+                item.label,
+              ),
+            ),
+        ]);
+    },
+  },
+}));
+
 let cleanup: (() => void) | undefined;
 
 function mountDrawer(props: Record<string, unknown> = {}) {
@@ -39,12 +72,13 @@ function mountDrawer(props: Record<string, unknown> = {}) {
     locale: 'zh-CN',
     messages: {
       'zh-CN': {
-        common: { back: '返回', close: '关闭', cancel: '取消' },
+        common: { back: '返回', close: '关闭', cancel: '取消', delete: '删除' },
         cloudSpace: {
           mobileActionsTitle: '云空间操作',
           newFolder: '新建文件夹',
           manageFolders: '文件夹管理',
-          manageFoldersDescription: '新建、重命名或删除文件夹',
+          newSubfolder: '新建子文件夹',
+          manageFoldersDescription: '新建子级、移动、重命名或删除文件夹',
           sort: '文件排序',
           sortDescription: '排序会作用于全部文件',
           sortLatest: '最近上传',
@@ -58,11 +92,15 @@ function mountDrawer(props: Record<string, unknown> = {}) {
           folderNameHint: '最多 255 个字符',
           folderNameRequired: '请输入文件夹名称',
           createAndEnterFolder: '创建并进入',
+          createSubfolderUnder: '将在“{path}”下创建子文件夹',
           currentFolder: '当前',
+          folderActionsFor: '“{name}”的文件夹操作',
+          moveFolder: '移动文件夹',
           renameFolder: '重命名文件夹',
           renameFolderAction: '重命名“{name}”',
           saveFolderName: '保存修改',
           deleteFolderAction: '删除“{name}”',
+          clearFolderFilesAction: '删除全部文件',
         },
       },
     },
@@ -94,7 +132,7 @@ describe('MobileCloudSpaceActionsDrawer', () => {
     expect(host.querySelector('.drawer-stub')?.getAttribute('data-title')).toBe('云空间操作');
     const actions = host.querySelectorAll<HTMLButtonElement>('.mobile-cloud-actions__item');
     expect(actions).toHaveLength(3);
-    expect(host.textContent).toContain('新建、重命名或删除文件夹');
+    expect(host.textContent).toContain('新建子级、移动、重命名或删除文件夹');
 
     actions[0].click();
     await nextTick();
@@ -115,7 +153,7 @@ describe('MobileCloudSpaceActionsDrawer', () => {
     input.dispatchEvent(new Event('input', { bubbles: true }));
     await nextTick();
     host.querySelector<HTMLButtonElement>('.mobile-folder-form__button.primary_btn')?.click();
-    expect(onCreateFolder).toHaveBeenCalledWith('项目资料');
+    expect(onCreateFolder).toHaveBeenCalledWith('项目资料', null);
   });
 
   it('游客守卫可阻止进入表单，批量操作仍关闭抽屉并发出动作', async () => {
@@ -209,6 +247,7 @@ describe('MobileCloudSpaceActionsDrawer', () => {
       done(true),
     );
     const onDeleteFolder = vi.fn();
+    const onClearFolderFiles = vi.fn();
     const host = mountDrawer({
       folders: [
         { id: 'folder-1', name: 'iCloud' },
@@ -217,6 +256,7 @@ describe('MobileCloudSpaceActionsDrawer', () => {
       currentFolderId: 'folder-1',
       onRenameFolder,
       onDeleteFolder,
+      onClearFolderFiles,
     });
     await nextTick();
 
@@ -226,8 +266,13 @@ describe('MobileCloudSpaceActionsDrawer', () => {
     expect(host.querySelector('.mobile-folder-manager__create')).not.toBeNull();
     expect(host.querySelectorAll('.mobile-folder-manager__row')).toHaveLength(2);
     expect(host.querySelector('.mobile-folder-manager__row.is-current')?.textContent).toContain('当前');
+    expect(host.querySelector('.action-menu-stub')?.getAttribute('data-z-index')).toBe('800');
 
     host.querySelector<HTMLButtonElement>('.mobile-folder-manager__action')?.click();
+    await nextTick();
+    [...document.querySelectorAll<HTMLButtonElement>('.b-action-menu__item')]
+      .find((button) => button.textContent?.includes('重命名'))
+      ?.click();
     await nextTick();
     expect(host.querySelector('.drawer-stub')?.getAttribute('data-title')).toBe('重命名文件夹');
     const input = host.querySelector<HTMLInputElement>('.b-input');
@@ -238,10 +283,70 @@ describe('MobileCloudSpaceActionsDrawer', () => {
     await nextTick();
     host.querySelector<HTMLButtonElement>('.mobile-folder-form__button.primary_btn')?.click();
     await nextTick();
-    expect(onRenameFolder).toHaveBeenCalledWith({ id: 'folder-1', name: '工作资料' }, expect.any(Function));
+    expect(onRenameFolder).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'folder-1', name: '工作资料', parentId: null, depth: 1 }),
+      expect.any(Function),
+    );
     expect(host.querySelector('.drawer-stub')?.getAttribute('data-title')).toBe('文件夹管理');
 
-    host.querySelector<HTMLButtonElement>('.mobile-folder-manager__action--danger')?.click();
-    expect(onDeleteFolder).toHaveBeenCalledWith({ id: 'folder-1', name: 'iCloud' });
+    host.querySelector<HTMLButtonElement>('.mobile-folder-manager__action')?.click();
+    await nextTick();
+    [...document.querySelectorAll<HTMLButtonElement>('.b-action-menu__item')]
+      .find((button) => button.textContent?.includes('删除全部文件'))
+      ?.click();
+    expect(onClearFolderFiles).toHaveBeenCalledWith(expect.objectContaining({ id: 'folder-1', name: 'iCloud' }));
+
+    host.querySelector<HTMLButtonElement>('.mobile-folder-manager__action')?.click();
+    await nextTick();
+    [...document.querySelectorAll<HTMLButtonElement>('.b-action-menu__item')]
+      .find((button) => button.textContent === '删除')
+      ?.click();
+    expect(onDeleteFolder).toHaveBeenCalledWith(expect.objectContaining({ id: 'folder-1', name: 'iCloud' }));
+  });
+
+  it('在文件夹操作中创建子级并发出移动请求', async () => {
+    const onCreateFolder = vi.fn();
+    const onMoveFolder = vi.fn();
+    const host = mountDrawer({
+      folders: [
+        { id: 'folder-1', name: '工作', parentId: null, depth: 1, sort: 0 },
+        { id: 'folder-2', name: '周报', parentId: 'folder-1', depth: 2, sort: 0 },
+      ],
+      onCreateFolder,
+      onMoveFolder,
+    });
+    await nextTick();
+    host.querySelectorAll<HTMLButtonElement>('.mobile-cloud-actions__item')[0].click();
+    await nextTick();
+
+    expect(host.querySelectorAll('.mobile-folder-manager__row')).toHaveLength(2);
+    host.querySelector<HTMLButtonElement>('.mobile-folder-manager__action')?.click();
+    await nextTick();
+    await nextTick();
+    const createChildAction = [...document.querySelectorAll<HTMLButtonElement>('.b-action-menu__item')].find((button) =>
+      button.textContent?.includes('新建子文件夹'),
+    );
+    expect(createChildAction).toBeTruthy();
+    expect(createChildAction?.disabled).toBe(false);
+    createChildAction?.click();
+    await nextTick();
+    expect(host.textContent).toContain('将在“工作”下创建子文件夹');
+
+    const input = host.querySelector<HTMLInputElement>('.b-input');
+    if (!input) throw new Error('child folder input not found');
+    input.value = '季度';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await nextTick();
+    host.querySelector<HTMLButtonElement>('.mobile-folder-form__button.primary_btn')?.click();
+    expect(onCreateFolder).toHaveBeenCalledWith('季度', 'folder-1');
+
+    host.querySelector<HTMLButtonElement>('.mobile-cloud-actions__back')?.click();
+    await nextTick();
+    host.querySelector<HTMLButtonElement>('.mobile-folder-manager__action')?.click();
+    await nextTick();
+    [...document.querySelectorAll<HTMLButtonElement>('.b-action-menu__item')]
+      .find((button) => button.textContent?.includes('移动文件夹'))
+      ?.click();
+    expect(onMoveFolder).toHaveBeenCalledWith(expect.objectContaining({ id: 'folder-1', fullPath: '工作' }));
   });
 });

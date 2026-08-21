@@ -63,6 +63,7 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { pointsReasonLabel } from './pointsLogSource';
 
+  const props = withDefaults(defineProps<{ hideInternal?: boolean }>(), { hideInternal: true });
   const loading = ref(false);
   const data = ref<any>(null);
   const rangeMode = ref<number | 'custom'>(28);
@@ -166,6 +167,7 @@
     const payload: Record<string, unknown> = {
       policyVersion: policyVersion.value.trim() || undefined,
       economyVersion: economyVersion.value.trim() || undefined,
+      hideInternal: props.hideInternal,
     };
     if (rangeMode.value === 'custom') {
       if (!customStartDate.value || !customEndDate.value) {

@@ -1,6 +1,6 @@
 import i18n from '@/i18n';
 import Alert from '@/components/base/BasicComponents/BModal/Alert';
-import type { ApiResponse } from '@/http/request';
+import { apiBasePost, type ApiResponse } from '@/http/request';
 
 export function isNoteShareExposureConfirmation(response: ApiResponse | null | undefined) {
   return (
@@ -36,4 +36,27 @@ export function confirmNoteShareExposure(response: ApiResponse | null | undefine
   return new Promise<boolean | null>((resolve) => {
     requestNoteShareExposureConfirmation(response, () => resolve(true), () => resolve(false));
   });
+}
+
+/**
+ * 新建子页面进入编辑器前执行只读权威预检。
+ * null 表示目标不在公开分享目录，true/false 分别表示用户确认或取消。
+ */
+export async function confirmNoteCreateShareExposure(parentId: string) {
+  const normalizedParentId = String(parentId || '').trim();
+  if (!normalizedParentId) return null;
+  const response = await apiBasePost(
+    '/api/note/previewNoteCreateTarget',
+    { parentId: normalizedParentId },
+    { silent: true },
+  );
+  const decision = await confirmNoteShareExposure(response);
+  if (decision !== null) return decision;
+  if (response.status !== 200) {
+    throw Object.assign(new Error(response.msg || 'NOTE_CREATE_TARGET_PREVIEW_FAILED'), {
+      code: String(response.data?.code || 'NOTE_CREATE_TARGET_PREVIEW_FAILED'),
+      status: response.status,
+    });
+  }
+  return null;
 }

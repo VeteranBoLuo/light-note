@@ -65,13 +65,17 @@ describe('aiAttachmentApi', () => {
       status: 200,
       data: {
         items: [
-          { id: 12, name: '项目资料' },
+          { id: 12, name: '项目资料', fullPath: '工作 / 项目资料' },
           { id: null, name: '无效项' },
         ],
       },
     });
-    await expect(fetchAiCloudFolders()).resolves.toEqual([{ id: '12', name: '项目资料' }]);
-    expect(apiBasePostMock).toHaveBeenCalledWith('/api/file/queryFolder', { filters: {} }, { silent: true });
+    await expect(fetchAiCloudFolders()).resolves.toEqual([{ id: '12', name: '工作 / 项目资料' }]);
+    expect(apiBasePostMock).toHaveBeenCalledWith(
+      '/api/file/queryFolder',
+      { filters: {}, treeVersion: 2 },
+      { silent: true },
+    );
   });
 
   it('附件直接动作使用结构化参数准备确认，不拼接固定提示词', async () => {

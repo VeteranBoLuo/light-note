@@ -25,7 +25,21 @@ describe('C5 余额对账与人工纠正', () => {
     ]);
     expect(query).toHaveBeenCalledTimes(3);
     expect(String(query.mock.calls[0][0])).toContain('LIMIT 251');
+    expect(String(query.mock.calls[0][0])).toContain('internal_user.role IN (?,?)');
+    expect(query.mock.calls[0][1]).toEqual(['root', 'test']);
     expect(String(query.mock.calls[1][0])).toContain('user_id IN (?,?)');
+    expect(result.filters.hideInternal).toBe(true);
+  });
+
+  it('显式关闭过滤时允许内部账号进入人工对账', async () => {
+    const query = vi.fn().mockResolvedValueOnce([[]]);
+    const result = await getPointsReconciliation(
+      { limit: 10, onlyMismatch: false, hideInternal: false },
+      { db: { query } },
+    );
+    expect(String(query.mock.calls[0][0])).not.toContain('internal_user');
+    expect(query.mock.calls[0][1]).toEqual([]);
+    expect(result.filters.hideInternal).toBe(false);
   });
 
   it('纠正只补齐缺失流水，不再次修改当前余额', async () => {

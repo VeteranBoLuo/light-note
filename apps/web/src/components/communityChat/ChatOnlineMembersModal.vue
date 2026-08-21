@@ -80,7 +80,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
@@ -108,10 +108,21 @@
   const emit = defineEmits<{ retry: [] }>();
   const visible = defineModel<boolean>('visible', { default: false });
   const { t } = useI18n();
-  const loadingRowCount = computed(() => {
-    const onlineCount = Number.isFinite(props.onlineCount) ? Math.round(props.onlineCount) : 0;
-    return Math.min(Math.max(onlineCount, 1), 7);
-  });
+  const reservedRowCount = ref(1);
+  function boundedRowCount(value: number) {
+    const count = Number.isFinite(value) ? Math.round(value) : 0;
+    return Math.min(Math.max(count, 1), 7);
+  }
+  // 打开期间冻结占位行数：在线心跳可能在名单请求完成前更新人数，若跟着实时值重算，
+  // 居中的 BModal 会因内容高度二次变化而整体向上跳。
+  watch(
+    visible,
+    (open) => {
+      if (open) reservedRowCount.value = boundedRowCount(props.onlineCount);
+    },
+    { immediate: true, flush: 'sync' },
+  );
+  const loadingRowCount = computed(() => reservedRowCount.value);
   const loadingListMinHeight = computed(() => {
     const rowsHeight = loadingRowCount.value * 62 + (loadingRowCount.value - 1) * 7;
     return `min(${Math.min(rowsHeight, 430)}px, 54vh)`;

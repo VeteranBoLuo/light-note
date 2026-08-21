@@ -84,8 +84,15 @@
         v-for="item in cloud.fileList"
         :key="item.id"
         class="file-card"
-        :class="{ 'file-card--batch': batchMode, 'file-card--selected': batchMode && selectedRows.includes(item.id) }"
+        :class="{
+          'file-card--draggable': canDragFile(item),
+          'file-card--batch': batchMode,
+          'file-card--selected': batchMode && selectedRows.includes(item.id),
+        }"
+        :draggable="canDragFile(item)"
         @click="onCardClick(item)"
+        @dragstart="onFileDragStart($event, item)"
+        @dragend="onFileDragEnd"
       >
         <div class="file-card-cover">
           <span v-if="batchMode" class="card-checkbox" @click.stop>
@@ -128,7 +135,7 @@
               <span>{{ getFilePreviewLabel(item) }}</span>
             </div>
           </div>
-          <div v-if="!batchMode" class="file-card-overlay">
+          <div v-if="!batchMode && !bookmark.isMobile" class="file-card-overlay">
             <BTooltip :title="$t('cloudSpace.download')">
               <svg-icon
                 class="overlay-btn"
@@ -882,6 +889,7 @@
   const indeterminate = computed(
     () => selectedRows.value.length > 0 && selectedRows.value.length < cloud.fileList.length,
   );
+  let suppressCardClickUntil = 0;
 
   const onToggleSelectAll = (e: any) => {
     const checked = e.target.checked;
@@ -899,6 +907,7 @@
   };
 
   const onCardClick = (item: any) => {
+    if (Date.now() < suppressCardClickUntil) return;
     if (batchMode.value) {
       toggleRow(item.id, !selectedRows.value.includes(item.id));
     } else {
@@ -1180,7 +1189,7 @@
           if (success) {
             recordOperation({ module: '云空间', operation: `删除文件成功【${file.fileName}】` });
             emit('filesDeleted', [String(file.id)]);
-            cloud.queryFieldList();
+            void cloud.refreshAfterFileMutation();
           }
         });
       },
@@ -1224,7 +1233,7 @@
             message.error(res.msg || t('cloudSpace.deleteFailed'));
           }
 
-          cloud.queryFieldList();
+          void cloud.refreshAfterFileMutation();
           selectedRows.value = [];
           selectAll.value = false;
         });
@@ -1696,7 +1705,7 @@
     }
 
     const dragTarget = event.currentTarget as HTMLElement | null;
-    const fileLabel = dragTarget?.querySelector('.file-label') as HTMLElement | null;
+    const fileLabel = dragTarget?.querySelector('.file-label, .file-card-name') as HTMLElement | null;
     if (fileLabel) {
       const preview = fileLabel.cloneNode(true) as HTMLElement;
       preview.style.position = 'fixed';
@@ -1723,6 +1732,8 @@
       id: String(file.id),
       folderId: String(file.folderId || ''),
     };
+    // 卡片拖放结束后浏览器可能补发 click；短暂抑制，避免移动完成后又打开预览。
+    suppressCardClickUntil = Number.POSITIVE_INFINITY;
 
     event.dataTransfer.clearData();
     if (fileUrl) {
@@ -1739,6 +1750,7 @@
   function onFileDragEnd(event) {
     event.dataTransfer.dropEffect = 'none';
     cloud.draggingFile = null;
+    suppressCardClickUntil = Date.now() + 250;
     if (dragPreviewEl.value) {
       dragPreviewEl.value.remove();
       dragPreviewEl.value = null;
@@ -2348,6 +2360,14 @@
     &:hover {
       box-shadow: var(--surface-hover-shadow);
       border-color: color-mix(in srgb, var(--resource-file-color) 26%, var(--surface-border-color));
+    }
+  }
+
+  .file-card--draggable {
+    cursor: grab;
+
+    &:active {
+      cursor: grabbing;
     }
   }
 

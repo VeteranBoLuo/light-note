@@ -88,4 +88,18 @@ describe('资源中心工作区布局', () => {
     expect(source).toMatch(/function selectDesktopType[\s\S]*?queryState\.types = type === 'all' \? \[\] : \[type\]/);
     expect(source).toContain('function toggleTypeFilter(type: GlobalSearchType)');
   });
+
+  it('桌面三个资源分区入口位于标题右侧，移动端保留独立顶栏', () => {
+    expect(source).toContain('<template v-if="!bookmark.isMobile" #actions>');
+    expect(source).toMatch(/#actions>[\s\S]*?<ResourceCenterSectionNav class="section-switcher"/);
+    expect(source).toContain('<div v-if="bookmark.isMobile" class="search-page-topbar">');
+  });
+
+  it('笔记检查器优先展示更高的正文预览，并补充类型和资源位置', () => {
+    expect(source).toContain("inspectedResource.type === 'note'");
+    expect(source).toContain('item.raw?.content');
+    expect(source).toContain("t('resourceCenter.noteType')");
+    expect(source).toContain("t(inspectedResource.type === 'note' ? 'resourceCenter.location' : 'resourceCenter.source')");
+    expect(source).toMatch(/\.resource-inspector-hero--expanded[\s\S]*?min-height:\s*min\(420px, 44vh\)/);
+  });
 });

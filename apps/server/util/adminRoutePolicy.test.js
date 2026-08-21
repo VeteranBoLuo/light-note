@@ -329,7 +329,12 @@ describe('adminRoutePolicyMiddleware', () => {
   });
 
   it('maintain 模式放行可逆内容写入并抑制成长/转化副作用', () => {
-    for (const path of ['/bookmark/updateBookmark', '/chat/change-sets/revalidate-retry', '/chat/change-sets/retry']) {
+    for (const path of [
+      '/bookmark/updateBookmark',
+      '/chat/change-sets/revalidate-retry',
+      '/chat/change-sets/retry',
+      '/file/clearFolderFiles',
+    ]) {
       const next = vi.fn();
       const req = createReq(path, 'POST', 'maintain');
       adminRoutePolicyMiddleware(req, createRes(), next);

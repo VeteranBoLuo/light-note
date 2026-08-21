@@ -20,6 +20,7 @@
           'b-drawer-panel--fullscreen': fullScreen,
           'b-drawer-panel--mobile-fullscreen': mobileFullScreen,
           'b-drawer-panel--bottom': placement === 'bottom',
+          'b-drawer-panel--with-handle': placement === 'bottom' && showHandle,
         }"
         :style="panelStyle"
         role="dialog"
@@ -30,6 +31,7 @@
         @keydown="handleKeydown"
         @transitionend="handlePanelTransitionEnd"
       >
+        <span v-if="placement === 'bottom' && showHandle" class="b-drawer-handle" aria-hidden="true"></span>
         <div
           v-if="resizable && !fullScreen"
           class="b-drawer-resize-handle"
@@ -120,6 +122,7 @@
       closeOnClickOutside?: boolean;
       historyClosable?: boolean;
       zIndex?: number;
+      showHandle?: boolean;
     }>(),
     {
       title: '',
@@ -142,6 +145,7 @@
       resizeLabel: '',
       closeOnClickOutside: false,
       historyClosable: true,
+      showHandle: false,
     },
   );
 
@@ -625,6 +629,26 @@
     .b-drawer-body {
       padding-bottom: max(18px, env(safe-area-inset-bottom));
     }
+  }
+
+  .b-drawer-panel--with-handle {
+    .b-drawer-header {
+      padding-top: 24px;
+      border-bottom-color: var(--surface-divider-color);
+    }
+  }
+
+  .b-drawer-handle {
+    position: absolute;
+    z-index: 1;
+    top: 8px;
+    left: 50%;
+    width: 36px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--surface-border-color, #d8d8d8);
+    transform: translateX(-50%);
+    pointer-events: none;
   }
 
   .b-drawer-header.b-drawer-header--centered {

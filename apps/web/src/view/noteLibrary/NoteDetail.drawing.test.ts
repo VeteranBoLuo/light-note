@@ -311,8 +311,9 @@ describe('手绘笔记详情边界', () => {
     expect(source).toContain("apiBasePost('/api/note/createNoteVersion'");
     expect(source).toContain('void saveManualVersion()');
     expect(source).toContain('blank-only');
-    expect(source).toContain("function createChildPageWithType(type: 'html' | 'markdown' | 'drawing')");
-    expect(source).toContain('query: { type, parent: childCreateParentId.value');
+    expect(source).toContain("async function createChildPageWithType(type: 'html' | 'markdown' | 'drawing')");
+    expect(source).toContain('await confirmNoteCreateShareExposure(parentId)');
+    expect(source).toContain("parent: parentId");
   });
 
   it('历史版本仅在手绘预览分支按需加载只读画布', () => {

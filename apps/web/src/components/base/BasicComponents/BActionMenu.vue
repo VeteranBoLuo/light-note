@@ -20,9 +20,10 @@
           v-if="open"
           ref="panelRef"
           class="b-action-menu-panel"
+          data-drawer-keep-open
           :data-placement="resolvedPlacement"
           :data-source="openSource"
-          :style="[panelStyle, { width: menuWidth }]"
+          :style="[panelStyle, { width: menuWidth, zIndex }]"
           role="menu"
           :aria-label="ariaLabel || undefined"
           @mouseenter="handlePanelEnter"
@@ -67,6 +68,7 @@
       closeDelay?: number;
       offset?: number;
       width?: number | string;
+      zIndex?: number;
       disabled?: boolean;
       ariaLabel?: string;
     }>(),
@@ -77,6 +79,7 @@
       closeDelay: 180,
       offset: 8,
       width: 176,
+      zIndex: 500,
       disabled: false,
       ariaLabel: '',
     },

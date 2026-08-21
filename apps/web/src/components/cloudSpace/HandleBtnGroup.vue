@@ -302,7 +302,7 @@
           }
 
           if (successFiles.length > 0 || existedFiles.length > 0) {
-            cloud.queryFieldList();
+            await cloud.refreshAfterFileMutation();
           }
         } else {
           throw new Error(confirmRes.msg || t('cloudSpace.confirmUploadFailed'));

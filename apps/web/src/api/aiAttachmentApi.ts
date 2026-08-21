@@ -113,12 +113,14 @@ export async function clearAiTemporaryAttachments(): Promise<{ deleted: number; 
 }
 
 export async function fetchAiCloudFolders(): Promise<AiCloudFolderOption[]> {
-  const data = assertSuccess(await apiBasePost('/api/file/queryFolder', { filters: {} }, { silent: true })) as {
-    items?: Array<{ id?: string | number; name?: string }>;
+  const data = assertSuccess(
+    await apiBasePost('/api/file/queryFolder', { filters: {}, treeVersion: 2 }, { silent: true }),
+  ) as {
+    items?: Array<{ id?: string | number; name?: string; fullPath?: string }>;
   };
   return (data.items || [])
     .filter((item) => item.id != null && String(item.name || '').trim())
-    .map((item) => ({ id: String(item.id), name: String(item.name).trim() }));
+    .map((item) => ({ id: String(item.id), name: String(item.fullPath || item.name).trim() }));
 }
 
 export async function prepareAiAttachmentAction({

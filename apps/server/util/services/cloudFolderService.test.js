@@ -51,7 +51,7 @@ describe('ensureOwnedCloudFolder', () => {
     });
     expect(db.connection.query.mock.calls[2]).toEqual([
       'INSERT INTO folders SET ?',
-      [{ name: '周报', create_by: 'user-1', del_flag: 0 }],
+      [{ name: '周报', create_by: 'user-1', parent_id: null, del_flag: 0 }],
     ]);
     expect(db.connection.commit).toHaveBeenCalledOnce();
   });

@@ -67,6 +67,7 @@
   import { generateUUID } from '@/utils/common';
   import { isAmbiguousAdminWriteFailure } from './adminWriteRequest';
 
+  const props = withDefaults(defineProps<{ hideInternal?: boolean }>(), { hideInternal: true });
   const loading = ref(false);
   const loadingMore = ref(false);
   const correcting = ref(false);
@@ -132,8 +133,8 @@
     loading.value = true;
     try {
       const [reconResult, anomalyResult] = await Promise.all([
-        growthApi.adminPointsReconciliation({ limit: 50, onlyMismatch: true }),
-        growthApi.adminPointsAnomalies({ presetDays: 28, limit: 50 }),
+        growthApi.adminPointsReconciliation({ limit: 50, onlyMismatch: true, hideInternal: props.hideInternal }),
+        growthApi.adminPointsAnomalies({ presetDays: 28, limit: 50, hideInternal: props.hideInternal }),
       ]);
       if (reconResult.status === 200) reconciliation.value = reconResult.data;
       else message.error(reconResult.msg || '积分对账加载失败');
@@ -149,7 +150,12 @@
     if (!cursor) return;
     loadingMore.value = true;
     try {
-      const result = await growthApi.adminPointsReconciliation({ cursor, limit: 50, onlyMismatch: true });
+      const result = await growthApi.adminPointsReconciliation({
+        cursor,
+        limit: 50,
+        onlyMismatch: true,
+        hideInternal: props.hideInternal,
+      });
       if (result.status === 200) {
         reconciliation.value = {
           ...result.data,

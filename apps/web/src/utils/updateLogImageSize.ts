@@ -5,11 +5,7 @@ const HTML_IMAGE_PATTERN = /<img\b[^>]*>/i;
 const IMAGE_SIZE_PATTERN = /\sdata-ln-size=(["'])(original|small|medium|large|full)\1/i;
 
 function escapeHtmlAttribute(value: string) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  return String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function stripImageDimensionStyles(tag: string) {
@@ -39,12 +35,38 @@ function currentLine(markdown: string, selectionStart: number) {
   return { start, end, text: markdown.slice(start, end) };
 }
 
-export function createUpdateLogImageHtml(
-  url: string,
-  alt: string,
-  size: UpdateLogImageSize = 'medium',
-) {
+export function createUpdateLogImageHtml(url: string, alt: string, size: UpdateLogImageSize = 'medium') {
   return `<img src="${escapeHtmlAttribute(url)}" alt="${escapeHtmlAttribute(alt)}" data-ln-size="${size}" />`;
+}
+
+function clampSelection(value: number, length: number) {
+  const normalized = Number.isFinite(value) ? Math.trunc(value) : length;
+  return Math.max(0, Math.min(normalized, length));
+}
+
+/**
+ * 把已上传图片作为独立 Markdown 块插入当前选区，并返回插入后的稳定光标位置。
+ * 上传按钮和剪贴板粘贴共用这一条路径，避免一处插入光标、一处悄悄追加到长文末尾。
+ */
+export function insertUpdateLogImageAtSelection(
+  markdown: string,
+  selectionStart: number,
+  selectionEnd: number,
+  imageHtml: string,
+) {
+  const source = String(markdown || '');
+  const start = clampSelection(selectionStart, source.length);
+  const end = Math.max(start, clampSelection(selectionEnd, source.length));
+  const before = source.slice(0, start);
+  const after = source.slice(end);
+  const leadingBreak = !before ? '' : before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n';
+  const trailingBreak = !after ? '\n' : after.startsWith('\n\n') ? '' : after.startsWith('\n') ? '\n' : '\n\n';
+  const insertedBlock = `${leadingBreak}${imageHtml}${trailingBreak}`;
+
+  return {
+    markdown: before + insertedBlock + after,
+    selectionStart: before.length + insertedBlock.length,
+  };
 }
 
 export function detectUpdateLogImageSizeAtCursor(markdown: string, selectionStart: number) {
@@ -56,11 +78,7 @@ export function detectUpdateLogImageSizeAtCursor(markdown: string, selectionStar
   return MARKDOWN_IMAGE_PATTERN.test(line) ? 'original' : null;
 }
 
-export function resizeUpdateLogImageAtCursor(
-  markdown: string,
-  selectionStart: number,
-  size: UpdateLogImageSize,
-) {
+export function resizeUpdateLogImageAtCursor(markdown: string, selectionStart: number, size: UpdateLogImageSize) {
   const source = String(markdown || '');
   const line = currentLine(source, selectionStart);
   let nextLine = line.text;
@@ -73,10 +91,7 @@ export function resizeUpdateLogImageAtCursor(
     if (!markdownImage) {
       return { changed: false, markdown: source, selectionStart };
     }
-    nextLine = nextLine.replace(
-      markdownImage[0],
-      createUpdateLogImageHtml(markdownImage[2], markdownImage[1], size),
-    );
+    nextLine = nextLine.replace(markdownImage[0], createUpdateLogImageHtml(markdownImage[2], markdownImage[1], size));
   }
 
   return {

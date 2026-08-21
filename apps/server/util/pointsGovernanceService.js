@@ -1,4 +1,5 @@
 import pool from '../db/index.js';
+import { INTERNAL_ROLES } from './internalRoles.js';
 import { getActiveShopItems } from './points.js';
 import { getEconomyRuntime } from './pointsEconomyCatalog.js';
 import {
@@ -94,6 +95,22 @@ function rangeWhere(range, { policyVersion = null, alias = '' } = {}) {
     params.push(policyVersion);
   }
   return { sql: clauses.join(' AND '), params };
+}
+
+function hideInternalAccounts(input = {}) {
+  return input.hideInternal !== false;
+}
+
+function internalAccountWhere(userIdColumn, hideInternal) {
+  if (!hideInternal) return { sql: '', params: [] };
+  return {
+    sql: ` AND NOT EXISTS (
+      SELECT 1 FROM user internal_user
+       WHERE internal_user.id = ${userIdColumn}
+         AND internal_user.role IN (${placeholders(INTERNAL_ROLES)})
+    )`,
+    params: [...INTERNAL_ROLES],
+  };
 }
 
 function numeric(row, key) {
@@ -196,8 +213,14 @@ function userLogFilter(category) {
  */
 export async function getPointsGovernanceOverview(input = {}, { db = pool } = {}) {
   const range = resolveGovernanceRange(input);
+  const hideInternal = hideInternalAccounts(input);
   const policyVersion = normalizeVersion(input.policyVersion);
   const where = rangeWhere(range, { policyVersion });
+  const ledgerInternal = internalAccountWhere('user_id', hideInternal);
+  const balanceInternal = internalAccountWhere('ug.user_id', hideInternal);
+  const balanceTotalInternal = internalAccountWhere('ug_total.user_id', hideInternal);
+  const userRoleSql = hideInternal ? ` AND u.role NOT IN (${placeholders(INTERNAL_ROLES)})` : '';
+  const userRoleParams = hideInternal ? [...INTERNAL_ROLES] : [];
   const cases = categoryCase();
   const categoryParams = [
     ...STABLE_POINTS_REASONS,
@@ -219,7 +242,7 @@ export async function getPointsGovernanceOverview(input = {}, { db = pool } = {}
          COUNT(DISTINCT CASE WHEN delta > 0 THEN user_id END) AS earners,
          COUNT(DISTINCT CASE WHEN delta < 0 THEN user_id END) AS spenders,
          COUNT(DISTINCT CASE WHEN delta > 0 AND ${cases.stable} THEN user_id END) AS stableEarners
-       FROM points_log WHERE ${where.sql}`,
+       FROM points_log WHERE ${where.sql}${ledgerInternal.sql}`,
         [
           ...STABLE_POINTS_REASONS,
           ...ONE_TIME_POINTS_REASONS,
@@ -227,13 +250,16 @@ export async function getPointsGovernanceOverview(input = {}, { db = pool } = {}
           ...OPERATIONS_POINTS_REASONS,
           ...STABLE_POINTS_REASONS,
           ...where.params,
+          ...ledgerInternal.params,
         ],
       ),
       db.query(
         `SELECT COALESCE(SUM(points), 0) AS outstanding, COUNT(*) AS accounts,
               SUM(CASE WHEN points = 0 THEN 1 ELSE 0 END) AS zeroBalance,
               MAX(points) AS maximum
-         FROM user_growth`,
+         FROM user_growth ug
+        WHERE 1 = 1${balanceInternal.sql}`,
+        balanceInternal.params,
       ),
       db.query(
         `SELECT
@@ -244,12 +270,17 @@ export async function getPointsGovernanceOverview(input = {}, { db = pool } = {}
        FROM (
          SELECT ordered.points, (@points_rank := @points_rank + 1) AS rn, totals.total
            FROM (
-             SELECT CAST(points AS SIGNED) AS points FROM user_growth
+             SELECT CAST(ug.points AS SIGNED) AS points FROM user_growth ug
+              WHERE 1 = 1${balanceInternal.sql}
              ORDER BY points ASC LIMIT 18446744073709551615
            ) ordered
            CROSS JOIN (SELECT @points_rank := 0) vars
-           CROSS JOIN (SELECT COUNT(*) AS total FROM user_growth) totals
+           CROSS JOIN (
+             SELECT COUNT(*) AS total FROM user_growth ug_total
+              WHERE 1 = 1${balanceTotalInternal.sql}
+           ) totals
        ) ranked`,
+        [...balanceInternal.params, ...balanceTotalInternal.params],
       ),
       db.query(
         `SELECT COUNT(*) AS activeUsers,
@@ -258,8 +289,9 @@ export async function getPointsGovernanceOverview(input = {}, { db = pool } = {}
               SUM(CASE WHEN ug.points > 24000 THEN 1 ELSE 0 END) AS over24000
          FROM user u
          LEFT JOIN user_growth ug ON ug.user_id = u.id
-        WHERE u.del_flag = 0 AND COALESCE(u.role, 'user') = 'user'
+        WHERE u.del_flag = 0${userRoleSql}
           AND u.last_active_time >= DATE_SUB(NOW(), INTERVAL 30 DAY)`,
+        userRoleParams,
       ),
       db.query(
         `SELECT DATE(create_time) AS day,
@@ -269,18 +301,19 @@ export async function getPointsGovernanceOverview(input = {}, { db = pool } = {}
               COALESCE(SUM(CASE WHEN delta > 0 AND ${cases.operations} THEN delta ELSE 0 END), 0) AS operations,
               COALESCE(SUM(CASE WHEN delta < 0 THEN -delta ELSE 0 END), 0) AS spent,
               COALESCE(SUM(delta), 0) AS net
-         FROM points_log WHERE ${where.sql}
+         FROM points_log WHERE ${where.sql}${ledgerInternal.sql}
         GROUP BY DATE(create_time) ORDER BY day ASC`,
-        [...categoryParams, ...where.params],
+        [...categoryParams, ...where.params, ...ledgerInternal.params],
       ),
       db.query(
         `SELECT u.id AS userId, u.alias, u.email, u.last_active_time AS lastActiveTime,
               COALESCE(ug.points, 0) AS points, COALESCE(ug.level, 1) AS level
          FROM user_growth ug
          JOIN user u ON u.id = ug.user_id
-        WHERE ug.points > 0 AND u.del_flag = 0 AND COALESCE(u.role, 'user') = 'user'
+        WHERE ug.points > 0 AND u.del_flag = 0${userRoleSql}
         ORDER BY ug.points DESC, ug.user_id DESC
         LIMIT 20`,
+        userRoleParams,
       ),
     ]);
   const summary = summaryRows?.[0] || {};
@@ -307,7 +340,7 @@ export async function getPointsGovernanceOverview(input = {}, { db = pool } = {}
   return {
     enabled: true,
     range,
-    filters: { policyVersion },
+    filters: { policyVersion, hideInternal },
     metrics,
     warnings: healthWarnings(metrics),
     balanceDistribution: {
@@ -346,9 +379,13 @@ export async function getPointsGovernanceOverview(input = {}, { db = pool } = {}
 
 export async function getPointsGovernanceSources(input = {}, { db = pool } = {}) {
   const range = resolveGovernanceRange(input);
+  const hideInternal = hideInternalAccounts(input);
   const policyVersion = normalizeVersion(input.policyVersion);
   const economyVersion = normalizeVersion(input.economyVersion);
   const ledgerWhere = rangeWhere(range, { policyVersion });
+  const ledgerInternal = internalAccountWhere('user_id', hideInternal);
+  const operationInternal = internalAccountWhere('peo.user_id', hideInternal);
+  const productSampleInternal = internalAccountWhere('candidate.user_id', hideInternal);
   const operationClauses = ["peo.status = 'succeeded'", 'peo.create_time >= ?', 'peo.create_time < ?'];
   const operationParams = [range.startDate, range.endExclusive];
   if (economyVersion) {
@@ -374,10 +411,10 @@ export async function getPointsGovernanceSources(input = {}, { db = pool } = {})
               SUM(CASE WHEN delta > 0 THEN delta ELSE 0 END) AS issued,
               SUM(CASE WHEN delta < 0 THEN -delta ELSE 0 END) AS spent,
               COUNT(*) AS operations, COUNT(DISTINCT user_id) AS users
-         FROM points_log WHERE ${ledgerWhere.sql}
+         FROM points_log WHERE ${ledgerWhere.sql}${ledgerInternal.sql}
         GROUP BY reason, COALESCE(policy_version, 'legacy/unversioned')
         ORDER BY ABS(SUM(delta)) DESC LIMIT 100`,
-      ledgerWhere.params,
+      [...ledgerWhere.params, ...ledgerInternal.params],
     ),
     db.query(
       `SELECT peo.economy_version AS economyVersion, peo.operation_type AS operationType, peo.item_id AS itemId,
@@ -391,17 +428,17 @@ export async function getPointsGovernanceSources(input = {}, { db = pool } = {})
               COALESCE(SUM(peo.draw_count), 0) AS draws
          FROM points_economy_operations peo
          LEFT JOIN user_growth ug ON ug.user_id = peo.user_id
-        WHERE ${operationClauses.join(' AND ')}
+        WHERE ${operationClauses.join(' AND ')}${operationInternal.sql}
         GROUP BY peo.economy_version, peo.operation_type, peo.item_id
         ORDER BY spent DESC, operations DESC LIMIT 100`,
-      operationParams,
+      [...operationParams, ...operationInternal.params],
     ),
     db.query(
       `SELECT reason, ref, COUNT(*) AS operations, COUNT(DISTINCT user_id) AS users,
               COALESCE(SUM(-delta), 0) AS spent
-         FROM points_log WHERE ${ledgerWhere.sql} AND delta < 0
+         FROM points_log WHERE ${ledgerWhere.sql}${ledgerInternal.sql} AND delta < 0
         GROUP BY reason, ref ORDER BY spent DESC LIMIT 100`,
-      ledgerWhere.params,
+      [...ledgerWhere.params, ...ledgerInternal.params],
     ),
     db.query(
       `SELECT first.economy_version AS economyVersion, first.item_id AS itemId,
@@ -422,7 +459,7 @@ export async function getPointsGovernanceSources(input = {}, { db = pool } = {})
          FROM (
            SELECT MIN(candidate.id) AS firstId
              FROM points_economy_operations candidate
-            WHERE ${productSampleClauses.join(' AND ')}
+            WHERE ${productSampleClauses.join(' AND ')}${productSampleInternal.sql}
               AND NOT EXISTS(
                 SELECT 1 FROM points_economy_operations prior
                  WHERE prior.user_id = candidate.user_id
@@ -440,7 +477,7 @@ export async function getPointsGovernanceSources(input = {}, { db = pool } = {})
          ) sampled
          JOIN points_economy_operations first ON first.id = sampled.firstId
          JOIN user u ON u.id = first.user_id AND u.del_flag = 0`,
-      productSampleParams,
+      [...productSampleParams, ...productSampleInternal.params],
     ),
   ]);
   const productSamplesTruncated = rawProductSamples.length > PRODUCT_SAMPLE_LIMIT;
@@ -462,7 +499,7 @@ export async function getPointsGovernanceSources(input = {}, { db = pool } = {})
   return {
     enabled: true,
     range,
-    filters: { policyVersion, economyVersion },
+    filters: { policyVersion, economyVersion, hideInternal },
     sources: sources.map((row) => ({
       reason: row.reason,
       policyVersion: row.policyVersion,
@@ -493,40 +530,46 @@ export async function getPointsGovernanceSources(input = {}, { db = pool } = {})
 
 export async function getPointsGovernanceAnomalies(input = {}, { db = pool } = {}) {
   const range = resolveGovernanceRange(input);
+  const hideInternal = hideInternalAccounts(input);
   const limit = Math.min(100, Math.max(10, Math.trunc(Number(input.limit) || 50)));
   const where = rangeWhere(range);
+  const ledgerInternal = internalAccountWhere('user_id', hideInternal);
+  const campaignInternal = internalAccountWhere('pcr.user_id', hideInternal);
   const [[dailyOver], [duplicates], [adminOutliers], [campaignDuplicates]] = await Promise.all([
     db.query(
       `SELECT user_id AS userId, DATE(create_time) AS day, SUM(delta) AS amount
          FROM points_log
-        WHERE ${where.sql} AND policy_version IN (${C5_EARNING_RULE_POLICY_VERSIONS.map(() => '?').join(',')})
+        WHERE ${where.sql}${ledgerInternal.sql}
+          AND policy_version IN (${C5_EARNING_RULE_POLICY_VERSIONS.map(() => '?').join(',')})
           AND delta > 0 AND reason IN ('checkin', 'quest')
         GROUP BY user_id, DATE(create_time) HAVING SUM(delta) > 60
         ORDER BY amount DESC LIMIT ${limit}`,
-      [...where.params, ...C5_EARNING_RULE_POLICY_VERSIONS],
+      [...where.params, ...ledgerInternal.params, ...C5_EARNING_RULE_POLICY_VERSIONS],
     ),
     db.query(
       `SELECT user_id AS userId, reason, ref, COUNT(*) AS occurrences, MAX(create_time) AS latestAt
          FROM points_log
-        WHERE ${where.sql} AND ref IS NOT NULL AND reason IN ('checkin', 'quest', 'weekly', 'achievement')
+        WHERE ${where.sql}${ledgerInternal.sql}
+          AND ref IS NOT NULL AND reason IN ('checkin', 'quest', 'weekly', 'achievement')
         GROUP BY user_id, reason, ref HAVING COUNT(*) > 1
         ORDER BY latestAt DESC LIMIT ${limit}`,
-      where.params,
+      [...where.params, ...ledgerInternal.params],
     ),
     db.query(
       `SELECT id, user_id AS userId, delta, ref, create_time AS createTime
          FROM points_log
-        WHERE ${where.sql} AND reason IN ('admin', 'campaign', 'correction') AND ABS(delta) > 10000
+        WHERE ${where.sql}${ledgerInternal.sql}
+          AND reason IN ('admin', 'campaign', 'correction') AND ABS(delta) > 10000
         ORDER BY ABS(delta) DESC, id DESC LIMIT ${limit}`,
-      where.params,
+      [...where.params, ...ledgerInternal.params],
     ),
     db.query(
       `SELECT pcr.campaign_id AS campaignId, pcr.user_id AS userId, COUNT(*) AS occurrences
          FROM points_campaign_recipients pcr
          JOIN points_campaigns pc ON pc.id = pcr.campaign_id
-        WHERE pc.create_time >= ? AND pc.create_time < ?
+        WHERE pc.create_time >= ? AND pc.create_time < ?${campaignInternal.sql}
         GROUP BY pcr.campaign_id, pcr.user_id HAVING COUNT(*) > 1 LIMIT ${limit}`,
-      [range.startDate, range.endExclusive],
+      [range.startDate, range.endExclusive, ...campaignInternal.params],
     ),
   ]);
   const rows = [
@@ -555,7 +598,7 @@ export async function getPointsGovernanceAnomalies(input = {}, { db = pool } = {
       occurrences: numeric(row, 'occurrences'),
     })),
   ].slice(0, limit);
-  return { enabled: true, range, rows, count: rows.length, bounded: true };
+  return { enabled: true, range, filters: { hideInternal }, rows, count: rows.length, bounded: true };
 }
 
 function boundedInteger(value, fallback, { min = 0, max = 1_000_000_000 } = {}) {

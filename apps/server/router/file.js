@@ -45,6 +45,7 @@ import {
   confirmManagedCloudUpload,
   prepareManagedCloudUpload,
 } from '../util/services/managedCloudUploadService.js';
+import { softDeleteOwnedCloudFiles } from '../util/services/cloudFileDeletionService.js';
 const router = express.Router();
 const fileShareAccessLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -577,23 +578,12 @@ router.post('/deleteFileById', async (req, res) => {
 
     const userId = req.user.id;
     await connection.beginTransaction();
-    const placeholders = fileIds.map(() => '?').join(',');
-    const [result] = await connection.query(
-      `UPDATE files SET del_flag = 1, deleted_at = NOW() WHERE id IN (${placeholders}) AND create_by = ? AND del_flag = 0`,
-      [...fileIds, userId],
-    );
-    await removeInboxRelations(connection, {
+    const { fileIds: deletedIds, deletedFileCount } = await softDeleteOwnedCloudFiles(connection, {
       userId,
-      items: fileIds.map((fileId) => ({ resourceType: 'file', resourceId: String(fileId) })),
+      fileIds,
     });
-    await connection.query(
-      `UPDATE file_shares
-       SET status = 'revoked', revoked_at = COALESCE(revoked_at, NOW()), update_time = NOW()
-       WHERE file_id IN (${placeholders}) AND owner_user_id = ? AND status = 'active'`,
-      [...fileIds, userId],
-    );
     await connection.commit();
-    res.send(resultData({ deletedIds: fileIds, count: result.affectedRows }, 200, '删除成功'));
+    res.send(resultData({ deletedIds, count: deletedFileCount }, 200, '删除成功'));
   } catch (e) {
     await connection.rollback();
     return sendFileServerError(res, 'delete-file', e);
@@ -688,7 +678,9 @@ router.post('/addFolder', fileHandle.addFolder);
 router.post('/ensureFolder', fileHandle.ensureFolder);
 router.post('/associateFile', fileHandle.associateFile);
 router.post('/updateFolder', fileHandle.updateFolder);
+router.post('/moveFolder', fileHandle.moveFolder);
 router.post('/deleteFolder', fileHandle.deleteFolder);
+router.post('/clearFolderFiles', fileHandle.clearFolderFiles);
 router.post('/updateFolderSort', fileHandle.updateFolderSort);
 router.post('/getFileTags', fileHandle.getFileTags);
 router.post('/updateFileTags', fileHandle.updateFileTags);

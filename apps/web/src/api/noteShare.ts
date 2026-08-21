@@ -2,6 +2,7 @@ import { apiBasePost, type ApiResponse } from '@/http/request';
 import { copyTextToClipboard } from '@/utils/clipboard';
 
 const NOTE_SHARE_SESSION_KEY = 'light-note:note-share-reading-session';
+const NOTE_SHARE_OWNER_LINKS_KEY = 'light-note:note-share-owner-links';
 
 interface StoredNoteShareSession {
   tokenHint: string;
@@ -20,6 +21,61 @@ function sessionStorageOrNull() {
   } catch {
     return null;
   }
+}
+
+interface StoredOwnedNoteShareToken {
+  token: string;
+  tokenHint: string;
+}
+
+function readOwnedTokenMap(): Record<string, StoredOwnedNoteShareToken> {
+  const storage = sessionStorageOrNull();
+  if (!storage) return {};
+  try {
+    const value = JSON.parse(storage.getItem(NOTE_SHARE_OWNER_LINKS_KEY) || '{}');
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  } catch {
+    storage.removeItem(NOTE_SHARE_OWNER_LINKS_KEY);
+    return {};
+  }
+}
+
+export function rememberOwnedNoteShareToken(shareId: string, token: string) {
+  const storage = sessionStorageOrNull();
+  const id = String(shareId || '').trim();
+  const secret = String(token || '').trim();
+  if (!storage || !id || !secret) return;
+  try {
+    const entries = Object.entries(readOwnedTokenMap()).slice(-29);
+    storage.setItem(
+      NOTE_SHARE_OWNER_LINKS_KEY,
+      JSON.stringify({
+        ...Object.fromEntries(entries),
+        [id]: { token: secret, tokenHint: noteShareTokenHint(secret) },
+      }),
+    );
+  } catch {
+    // 隐私模式或禁用存储时仍可使用刚生成链接，只是不支持重新打开弹窗后复制。
+  }
+}
+
+export function readOwnedNoteShareToken(shareId: string, expectedHint = '') {
+  const id = String(shareId || '').trim();
+  if (!id) return '';
+  const value = readOwnedTokenMap()[id];
+  if (!value?.token || (expectedHint && value.tokenHint !== expectedHint)) return '';
+  return value.token;
+}
+
+export function forgetOwnedNoteShareToken(shareId: string) {
+  const storage = sessionStorageOrNull();
+  if (!storage) return;
+  const values = readOwnedTokenMap();
+  delete values[String(shareId || '')];
+  try {
+    if (Object.keys(values).length) storage.setItem(NOTE_SHARE_OWNER_LINKS_KEY, JSON.stringify(values));
+    else storage.removeItem(NOTE_SHARE_OWNER_LINKS_KEY);
+  } catch {}
 }
 
 export function readNoteShareSessionTicket(token: string) {

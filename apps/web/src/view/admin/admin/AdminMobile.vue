@@ -8,11 +8,7 @@
           <span>{{ t('adminMobile.subtitle') }}</span>
         </div>
         <BChip :tone="pendingTotal > 0 ? 'pending' : 'success'">
-          {{
-            pendingTotal > 0
-              ? t('adminMobile.pendingCount', { count: pendingTotal })
-              : t('adminMobile.noPending')
-          }}
+          {{ pendingTotal > 0 ? t('adminMobile.pendingCount', { count: pendingTotal }) : t('adminMobile.noPending') }}
         </BChip>
       </section>
 
@@ -92,6 +88,7 @@
         log: icon.userCenter.log,
         security: icon.navigation.permissions,
         tool: icon.userCenter.sql,
+        server: icon.infrastructure.server,
       },
       pendingOpinion: pendingOpinion.value,
       pendingSecurity: pendingSecurity.value,

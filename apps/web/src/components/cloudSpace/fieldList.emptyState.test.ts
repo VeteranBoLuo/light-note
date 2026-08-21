@@ -32,6 +32,15 @@ describe('cloud file empty state layout', () => {
     expect(source).toContain("label: $t('cloudSpace.aiUseFile')");
   });
 
+  it('移动端卡片隐藏直接下载，卡片本身仍可拖入文件夹', () => {
+    expect(source).toContain("v-if=\"!batchMode && !bookmark.isMobile\"");
+    expect(source).toContain(':draggable="canDragFile(item)"');
+    expect(source).toContain('@dragstart="onFileDragStart($event, item)"');
+    expect(source).toContain('@dragend="onFileDragEnd"');
+    expect(source).toContain('suppressCardClickUntil = Number.POSITIVE_INFINITY');
+    expect(source).toContain('suppressCardClickUntil = Date.now() + 250');
+  });
+
   it('批量下载先选择分别下载或 ZIP，单文件仍直接下载', () => {
     expect(source).toContain('v-model:visible="batchDownloadChoiceVisible"');
     expect(source).toContain(`startBatchDownload('individual')`);

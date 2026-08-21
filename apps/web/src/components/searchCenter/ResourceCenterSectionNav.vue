@@ -1,19 +1,15 @@
 <template>
   <div
     class="resource-center-section-bar"
-    :role="bookmark.isMobile ? 'tablist' : undefined"
-    :aria-label="bookmark.isMobile ? t('resourceCenter.title') : undefined"
+    role="tablist"
+    :aria-label="t('resourceCenter.title')"
   >
-    <div
-      class="resource-center-section-nav"
-      :role="bookmark.isMobile ? undefined : 'tablist'"
-      :aria-label="bookmark.isMobile ? undefined : t('resourceCenter.title')"
-    >
+    <div class="resource-center-section-nav">
       <BButton
         class="section-nav-item"
         :class="{ active: activeSection === 'resources' && !isKnowledgeMapView }"
         role="tab"
-        :aria-selected="activeSection === 'resources' && (!bookmark.isMobile || !isKnowledgeMapView)"
+        :aria-selected="activeSection === 'resources' && !isKnowledgeMapView"
         @click="goTo('resources')"
       >
         {{ t('resourceCenter.sections.resources') }}
@@ -33,9 +29,8 @@
       class="knowledge-map-view"
       :class="{ active: isKnowledgeMapView }"
       :aria-label="t('resourceCenter.knowledgeGraph')"
-      :role="bookmark.isMobile ? 'tab' : undefined"
-      :aria-selected="bookmark.isMobile ? isKnowledgeMapView : undefined"
-      :aria-pressed="bookmark.isMobile ? undefined : isKnowledgeMapView"
+      role="tab"
+      :aria-selected="isKnowledgeMapView"
       @click="toggleKnowledgeMap"
     >
       <SvgIcon :src="icon.noteTemplate.knowledge" size="16" aria-hidden="true" />
@@ -93,12 +88,11 @@
   }
 
   function toggleKnowledgeMap() {
-    const query = route.path === '/search' ? { ...route.query } : {};
-    if (isKnowledgeMapView.value) delete query.section;
-    else query.section = 'map';
+    if (isKnowledgeMapView.value) return;
+    const query = route.path === '/search' ? { ...route.query, section: 'map' } : { section: 'map' };
     recordOperation({
       module: '资源中心',
-      operation: isKnowledgeMapView.value ? '退出知识地图视图' : '切换知识地图视图',
+      operation: '切换知识地图视图',
     });
     router.replace({ path: '/search', query });
   }
@@ -110,18 +104,15 @@
     height: 38px;
     display: inline-flex;
     align-items: stretch;
-    gap: 8px;
+    gap: 0;
+    padding: 4px;
+    border-radius: 10px;
+    background: var(--hover-background);
     box-sizing: border-box;
   }
 
   .resource-center-section-nav {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px;
-    border-radius: 10px;
-    box-sizing: border-box;
-    background: var(--hover-background);
+    display: contents;
   }
 
   .section-nav-item {
@@ -159,27 +150,25 @@
   }
 
   .knowledge-map-view {
-    height: 38px;
-    padding: 0 12px;
+    height: 30px;
+    padding: 0 13px;
     gap: 6px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 10px;
-    background: var(--background-color);
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
     color: var(--desc-color);
     white-space: nowrap;
   }
 
   .knowledge-map-view:hover {
-    border-color: color-mix(in srgb, var(--primary-color) 30%, var(--surface-border-color));
     color: var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 6%, var(--background-color));
+    background: color-mix(in srgb, var(--primary-color) 9%, transparent);
   }
 
   .knowledge-map-view.active {
-    border-color: color-mix(in srgb, var(--primary-color) 35%, var(--surface-border-color));
-    background: color-mix(in srgb, var(--primary-color) 11%, var(--background-color));
+    background: var(--background-color);
     color: var(--primary-color);
-    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
   }
 
   .knowledge-map-view__label--short {

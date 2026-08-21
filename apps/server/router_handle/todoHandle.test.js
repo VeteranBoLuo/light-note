@@ -22,6 +22,7 @@ const batchDeleteTodos = vi.fn(async () => ({ affected: 1, ids: ['todo-1'] }));
 const batchRestoreTodos = vi.fn(async () => ({ affected: 1, ids: ['todo-1'] }));
 const reorderTodos = vi.fn(async () => ({ affected: 1 }));
 const snoozeTodoItem = vi.fn(async () => ({ id: 'todo-1' }));
+const completeGrowthTask = vi.hoisted(() => vi.fn(async () => ({})));
 
 vi.mock('../db/index.js', () => ({ default: { getConnection, query: poolQuery } }));
 vi.mock('../util/common.js', () => ({
@@ -29,7 +30,7 @@ vi.mock('../util/common.js', () => ({
   L: (_req, zh) => zh,
 }));
 vi.mock('../util/auth.js', () => ({ ensureNotVisitor }));
-vi.mock('../util/growthTaskCompletion.js', () => ({ completeGrowthTask: vi.fn(async () => ({})) }));
+vi.mock('../util/growthTaskCompletion.js', () => ({ completeGrowthTask }));
 vi.mock('../util/services/todoService.js', () => ({
   createTodo: createTodoItem,
   updateTodo: updateTodoItem,
@@ -79,6 +80,20 @@ describe('todoHandle', () => {
     expect(createTodoItem).toHaveBeenCalledWith(connection, 'u1', req.body, { suppressUserRewards: false });
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(connection.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('管理员代维护创建待办时同时抑制成长事实和提交后成长任务', async () => {
+    const req = {
+      user: { id: 'subject-1', role: 'user' },
+      body: { title: '代维护任务' },
+      adminContext: { mode: 'maintain' },
+      suppressUserRewards: true,
+    };
+
+    await createTodo(req, mockRes());
+
+    expect(createTodoItem).toHaveBeenCalledWith(connection, 'subject-1', req.body, { suppressUserRewards: true });
+    expect(completeGrowthTask).not.toHaveBeenCalled();
   });
 
   it('创建待办的内部数据库错误不会把敏感详情返回客户端', async () => {

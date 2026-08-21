@@ -1,12 +1,10 @@
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
-import { executeInfraAction, getInfraDashboard, type InfraActionPayload, type InfraAgentStatus } from '@/api/infraApi';
-import type { HostAgentAction, HostAgentDashboard, HostAgentServiceId } from '@lightnote/shared/host-agent-protocol';
+import { getInfraDashboard, type InfraAgentStatus } from '@/api/infraApi';
+import type { HostAgentDashboard } from '@lightnote/shared/host-agent-protocol';
 
 const DEFAULT_REFRESH_INTERVAL_MS = 3_000;
 const REFRESH_INTERVAL_VALUES = [0, 3_000, 10_000, 30_000, 60_000, 300_000] as const;
 const REFRESH_INTERVAL_STORAGE_KEY = 'lightnote:infra-refresh-interval-ms';
-const ACTION_KEY_STORAGE_PREFIX = 'lightnote:infra-action:';
-const ACTION_KEY_PATTERN = /^[a-zA-Z0-9-]{16,64}$/u;
 
 export type ServerRefreshIntervalMs = (typeof REFRESH_INTERVAL_VALUES)[number];
 
@@ -34,39 +32,9 @@ function storeRefreshInterval(value: ServerRefreshIntervalMs) {
   }
 }
 
-function createIdempotencyKey() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
-  return `infra-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`;
-}
-
 function errorMessage(error: unknown) {
   if (error && typeof error === 'object' && 'message' in error) return String(error.message || '');
   return '';
-}
-
-function readStoredActionKey(actionKey: string) {
-  try {
-    const value = window.sessionStorage.getItem(`${ACTION_KEY_STORAGE_PREFIX}${actionKey}`) || '';
-    return ACTION_KEY_PATTERN.test(value) ? value : '';
-  } catch {
-    return '';
-  }
-}
-
-function storeActionKey(actionKey: string, idempotencyKey: string) {
-  try {
-    window.sessionStorage.setItem(`${ACTION_KEY_STORAGE_PREFIX}${actionKey}`, idempotencyKey);
-  } catch {
-    // 隐私模式或存储被禁用时，仍由当前页面内存 Map 保护重试。
-  }
-}
-
-function clearStoredActionKey(actionKey: string) {
-  try {
-    window.sessionStorage.removeItem(`${ACTION_KEY_STORAGE_PREFIX}${actionKey}`);
-  } catch {
-    // 与写入失败保持同样的降级边界。
-  }
 }
 
 export function useServerManagement() {
@@ -80,7 +48,6 @@ export function useServerManagement() {
   const refreshIntervalMs = ref<ServerRefreshIntervalMs>(readStoredRefreshInterval());
   const nextRefreshAt = ref<number | null>(null);
   const now = ref(Date.now());
-  const actionKeys = new Map<string, string>();
   let refreshTask: Promise<void> | null = null;
   let refreshTimer: number | null = null;
   let clockTimer: number | null = null;
@@ -168,36 +135,6 @@ export function useServerManagement() {
     scheduleNextRefresh(interval - elapsed);
   }
 
-  async function runAction(
-    action: HostAgentAction,
-    targetId: HostAgentServiceId,
-    confirmation: Pick<InfraActionPayload, 'reason' | 'confirmed' | 'confirmText'>,
-  ) {
-    const actionKey = `${action}:${targetId}`;
-    const idempotencyKey = actionKeys.get(actionKey) || readStoredActionKey(actionKey) || createIdempotencyKey();
-    actionKeys.set(actionKey, idempotencyKey);
-    storeActionKey(actionKey, idempotencyKey);
-    try {
-      const response = await executeInfraAction({ action, targetId, idempotencyKey, ...confirmation });
-      actionKeys.delete(actionKey);
-      clearStoredActionKey(actionKey);
-      await refresh();
-      return response;
-    } catch (error) {
-      const receiptState =
-        error && typeof error === 'object' && 'data' in error
-          ? String((error.data as { receipt?: { state?: string } } | null)?.receipt?.state || '')
-          : '';
-      // 已收到权威失败终态时，下次由用户确认的尝试应创建新 job；
-      // 网络失败或 unknown 回执则必须保留原键，避免重复执行结果不确定的动作。
-      if (receiptState === 'failed') {
-        actionKeys.delete(actionKey);
-        clearStoredActionKey(actionKey);
-      }
-      throw error;
-    }
-  }
-
   onMounted(() => {
     mounted = true;
     now.value = Date.now();
@@ -234,7 +171,6 @@ export function useServerManagement() {
     isAutoRefreshPaused: computed(() => refreshIntervalMs.value === 0),
     refresh,
     setRefreshInterval,
-    runAction,
   };
 }
 
@@ -242,5 +178,4 @@ export const serverManagementRuntime = {
   DEFAULT_REFRESH_INTERVAL_MS,
   REFRESH_INTERVAL_VALUES,
   REFRESH_INTERVAL_STORAGE_KEY,
-  ACTION_KEY_STORAGE_PREFIX,
 };

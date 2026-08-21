@@ -38,7 +38,12 @@
             <div :id="modalTitleId" class="modal-title">
               <slot name="title">{{ title || t('common.defaultTitle') }}</slot>
             </div>
-            <BButton class="modal-close" :aria-label="t('common.close')" @click="handleClose">
+            <BButton
+              class="modal-close"
+              :disabled="props.closeDisabled"
+              :aria-label="t('common.close')"
+              @click="handleClose"
+            >
               <SvgIcon :src="icon.navigation.close" size="18" aria-hidden="true" />
             </BButton>
           </template>
@@ -92,6 +97,8 @@
       contentClass?: string;
       maskClass?: string;
       historyClosable?: boolean;
+      /** 异步危险操作期间禁用标题栏关闭按钮，并阻止程序化关闭。 */
+      closeDisabled?: boolean;
       /** 弹框打开后优先聚焦的元素选择器；找不到时回退到第一个可聚焦元素。 */
       initialFocus?: string;
       /** 仅在统一移动布局下铺满视口；桌面端仍按 width/height 渲染。 */
@@ -106,6 +113,7 @@
       width: 'auto',
       height: 'auto',
       historyClosable: true,
+      closeDisabled: false,
       initialFocus: '',
       fullscreenMobile: false,
     },
@@ -139,11 +147,13 @@
   }
 
   function closeFromMobileHistory() {
+    if (props.closeDisabled) return;
     historyHandle = null;
     performClose();
   }
 
   function handleClose() {
+    if (props.closeDisabled) return;
     if (historyHandle && requestMobileOverlayHistoryClose(historyHandle)) return;
     historyHandle = null;
     performClose();

@@ -10,14 +10,31 @@
     layout="scroll"
   >
     <template #actions>
+      <label class="points-internal-filter">
+        <BSwitch v-model:checked="hideInternal" :disabled="loading" @change="handleInternalFilterChange" />
+        {{ t('adminApiLog.filters.hideInternal') }}
+      </label>
       <BButton size="small" :loading="loading" @click="refreshActive">刷新</BButton>
     </template>
 
     <template v-if="governanceEnabled">
       <BTabs v-model:active-tab="activeTab" class="points-governance-tabs" variant="segment" :options="tabOptions" />
-      <PointsGovernanceOverview v-if="activeTab === 'health'" ref="activePanelRef" @select-user="openUser360" />
-      <PointsSourcesPanel v-else-if="activeTab === 'sources'" ref="activePanelRef" />
-      <PointsReconciliationPanel v-else-if="activeTab === 'reconciliation'" ref="activePanelRef" />
+      <PointsGovernanceOverview
+        v-if="activeTab === 'health'"
+        ref="activePanelRef"
+        :hide-internal="hideInternal"
+        @select-user="openUser360"
+      />
+      <PointsSourcesPanel
+        v-else-if="activeTab === 'sources'"
+        ref="activePanelRef"
+        :hide-internal="hideInternal"
+      />
+      <PointsReconciliationPanel
+        v-else-if="activeTab === 'reconciliation'"
+        ref="activePanelRef"
+        :hide-internal="hideInternal"
+      />
       <PointsCampaignPanel v-else-if="activeTab === 'campaigns'" ref="activePanelRef" />
       <PointsSimulatorPanel v-else-if="activeTab === 'simulator'" ref="activePanelRef" />
     </template>
@@ -294,7 +311,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted, ref } from 'vue';
+  import { computed, nextTick, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -302,6 +319,7 @@
   import AdminRiskActionModal from '@/components/admin/AdminRiskActionModal.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
@@ -366,6 +384,7 @@
     { label: '策略模拟器', key: 'simulator' },
   ];
   const loading = ref(false);
+  const hideInternal = ref(true);
   const detail = ref<any>(null);
   const querying = ref(false);
   const granting = ref(false);
@@ -425,7 +444,7 @@
   async function loadOverview() {
     loading.value = true;
     try {
-      const res = await growthApi.adminPointsOverview();
+      const res = await growthApi.adminPointsOverview(hideInternal.value);
       if (res.status === 200) ov.value = res.data;
     } finally {
       loading.value = false;
@@ -439,6 +458,12 @@
       return;
     }
     await activePanelRef.value?.reload?.();
+  }
+
+  async function handleInternalFilterChange() {
+    // 等待新筛选值下发到当前面板后再刷新，避免子组件仍按旧值请求。
+    await nextTick();
+    await refreshActive();
   }
 
   function selectUser(user: AdminUserSearchResult) {
@@ -597,6 +622,14 @@
   }
   .points-governance-tabs {
     margin-bottom: 4px;
+  }
+  .points-internal-filter {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--desc-color);
+    font-size: 12px;
+    white-space: nowrap;
   }
   @media (max-width: @admin-bp-mobile) {
     .pops-cols {

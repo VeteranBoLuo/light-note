@@ -1869,3 +1869,56 @@ WHERE NOT EXISTS (
     AND actual.table_name='api_logs'
     AND actual.index_name='idx_api_logs_retention'
 );
+
+-- 52) 云空间目录树必须具备父级列、查询索引和有效的同账号层级关系（期望 0 行）
+SELECT '[52] missing_cloud_folder_parent_column' AS check_name, 'folders.parent_id' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.columns actual
+  WHERE actual.table_schema=DATABASE()
+    AND actual.table_name='folders'
+    AND actual.column_name='parent_id'
+    AND LOWER(actual.column_type)='int(11)'
+    AND actual.is_nullable='YES'
+);
+
+SELECT '[52] invalid_cloud_folder_tree_index' AS check_name,
+  CONCAT('idx_folders_owner_parent_order 实际=', IFNULL(actual.cols, '缺失')) AS detail
+FROM (SELECT 1) expected
+LEFT JOIN (
+  SELECT GROUP_CONCAT(
+    CONCAT(column_name, IF(sub_part IS NULL, '', CONCAT('(', sub_part, ')')))
+    ORDER BY seq_in_index SEPARATOR ','
+  ) AS cols
+  FROM information_schema.statistics
+  WHERE table_schema=DATABASE()
+    AND table_name='folders'
+    AND index_name='idx_folders_owner_parent_order'
+) actual ON 1=1
+WHERE actual.cols IS NULL OR actual.cols <> 'create_by(64),parent_id,del_flag,sort,create_time,id';
+
+SELECT '[52] invalid_cloud_folder_parent' AS check_name,
+  CONCAT(child.id, '->', child.parent_id) AS detail
+FROM folders child
+LEFT JOIN folders parent ON parent.id=child.parent_id
+WHERE child.del_flag=0
+  AND child.parent_id IS NOT NULL
+  AND (
+    child.id=child.parent_id
+    OR parent.id IS NULL
+    OR parent.del_flag<>0
+    OR NOT (parent.create_by <=> child.create_by)
+  );
+
+-- 从当前节点连续追溯 8 个父级仍未到顶，说明深度至少为 9；循环关系也会被同一查询捕获。
+SELECT '[52] cloud_folder_depth_or_cycle_exceeded' AS check_name, CAST(f0.id AS CHAR) AS detail
+FROM folders f0
+JOIN folders f1 ON f1.id=f0.parent_id AND f1.create_by <=> f0.create_by AND f1.del_flag=0
+JOIN folders f2 ON f2.id=f1.parent_id AND f2.create_by <=> f0.create_by AND f2.del_flag=0
+JOIN folders f3 ON f3.id=f2.parent_id AND f3.create_by <=> f0.create_by AND f3.del_flag=0
+JOIN folders f4 ON f4.id=f3.parent_id AND f4.create_by <=> f0.create_by AND f4.del_flag=0
+JOIN folders f5 ON f5.id=f4.parent_id AND f5.create_by <=> f0.create_by AND f5.del_flag=0
+JOIN folders f6 ON f6.id=f5.parent_id AND f6.create_by <=> f0.create_by AND f6.del_flag=0
+JOIN folders f7 ON f7.id=f6.parent_id AND f7.create_by <=> f0.create_by AND f7.del_flag=0
+JOIN folders f8 ON f8.id=f7.parent_id AND f8.create_by <=> f0.create_by AND f8.del_flag=0
+WHERE f0.del_flag=0;

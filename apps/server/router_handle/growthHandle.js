@@ -680,7 +680,7 @@ export const getMyPointsLog = async (req, res) => {
 export const getPointsOverviewForAdmin = async (req, res) => {
   if (req.user?.role !== 'root') return res.send(resultData(null, 403, '仅站长可操作'));
   try {
-    const data = await getPointsOverview();
+    const data = await getPointsOverview({ hideInternal: req.body?.hideInternal !== false });
     data.features = {
       adminGovernanceV2: getPointsEarningRuntime().adminGovernanceEnabled,
       campaign: getPointsEarningRuntime().campaignEnabled,

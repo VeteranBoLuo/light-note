@@ -90,7 +90,7 @@
 
 <style scoped lang="less">
   .note-outline-list {
-    height: 100%;
+    height: calc(100% - 12px);
     display: grid;
     align-content: start;
     gap: 2px;

@@ -123,7 +123,8 @@ export const updatePointsGoal = (payload: { itemId?: string | null; enabled: boo
   apiBasePut('/api/growth/preferences/points-goal', payload);
 
 // —— root 积分运营 ——
-export const adminPointsOverview = () => apiBasePost('/api/growth/admin/pointsOverview');
+export const adminPointsOverview = (hideInternal = true) =>
+  apiBasePost('/api/growth/admin/pointsOverview', { hideInternal });
 export const adminUserPoints = (
   userId: string,
   options: {
@@ -159,6 +160,7 @@ export interface PointsGovernanceRange {
   endDate?: string;
   policyVersion?: string;
   economyVersion?: string;
+  hideInternal?: boolean;
 }
 
 export const adminPointsGovernanceOverview = (payload: PointsGovernanceRange = {}) =>
@@ -168,7 +170,7 @@ export const adminPointsGovernanceSources = (payload: PointsGovernanceRange = {}
 export const adminPointsAnomalies = (payload: PointsGovernanceRange & { limit?: number } = {}) =>
   apiBasePost('/api/growth/admin/pointsAnomalies', payload);
 export const adminPointsReconciliation = (
-  payload: { cursor?: string | null; limit?: number; onlyMismatch?: boolean } = {},
+  payload: { cursor?: string | null; limit?: number; onlyMismatch?: boolean; hideInternal?: boolean } = {},
 ) => apiBasePost('/api/growth/admin/pointsReconciliation', payload);
 export const adminPointsCorrection = (
   payload: {
