@@ -1,6 +1,7 @@
 import pool from '../../../db/index.js';
 import { INTERNAL_ROLES } from '../../internalRoles.js';
-import { isAllTimeExpression, parseRequiredTimeRange } from '../timeRange.js';
+import { isAllTimeExpression, resolveAgentTimeRange } from '../timeRange.js';
+import { withQueryResultMetadata } from '../toolResultMetadata.js';
 
 /**
  * 跨用户的平台资源清单。
@@ -99,8 +100,8 @@ function buildBranch(kind, time) {
   const params = [];
   let where = 't.del_flag = 0';
   if (time) {
-    where += ' AND t.create_time >= ? AND t.create_time <= ?';
-    params.push(time.start, time.end);
+    where += ' AND t.create_time >= ? AND t.create_time < ?';
+    params.push(time.start, time.endExclusive);
   }
   // 新注册引导塞给用户的示例资源不是用户自己创建的，ranking 同样把它们排除在外。
   where +=
@@ -175,9 +176,15 @@ export default {
     },
   },
   requireRoot: true,
-  async execute(args = {}) {
+  async execute(args = {}, ctx = {}) {
     const normalized = normalizeArgs(args);
-    const time = parseRequiredTimeRange(normalized.timeRange, { label: '资源新增时间', allowAll: true });
+    const time = resolveAgentTimeRange(args, 'timeRange', {
+      context: ctx,
+      defaultExpression: normalized.timeRange,
+      required: true,
+      allowAll: true,
+      label: '资源新增时间',
+    });
     const union = buildUnion(normalized.resourceType, time);
 
     const userFilters = ['u.del_flag = 0'];
@@ -187,11 +194,16 @@ export default {
       userParams.push(...INTERNAL_ROLES);
     }
     const registeredTime = normalized.registeredWithin
-      ? parseRequiredTimeRange(normalized.registeredWithin, { label: '用户注册时间' })
+      ? resolveAgentTimeRange(args, 'registeredWithin', {
+          context: ctx,
+          defaultExpression: normalized.registeredWithin,
+          required: true,
+          label: '用户注册时间',
+        })
       : null;
     if (registeredTime) {
-      userFilters.push('u.create_time >= ? AND u.create_time <= ?');
-      userParams.push(registeredTime.start, registeredTime.end);
+      userFilters.push('u.create_time >= ? AND u.create_time < ?');
+      userParams.push(registeredTime.start, registeredTime.endExclusive);
     }
 
     const from =
@@ -212,22 +224,44 @@ export default {
       pool.query(`SELECT COUNT(*) AS total ${from}`, [...union.params, ...userParams]),
     ]);
 
-    return {
-      timeRange: normalized.timeRange,
-      resourceType: normalized.resourceType,
-      includeInternal: normalized.includeInternal,
-      registeredWithin: normalized.registeredWithin || null,
-      total: Number(countRows[0]?.total || 0),
-      items: rows.map((row) => ({
-        resourceType: row.resource_type,
-        resourceId: String(row.resource_id),
-        title: row.title || '',
-        createTime: row.create_time,
-        userId: row.user_id,
-        alias: row.alias,
-        email: row.email,
-      })),
-    };
+    return withQueryResultMetadata(
+      {
+        timeRange: normalized.timeRange,
+        resourceType: normalized.resourceType,
+        includeInternal: normalized.includeInternal,
+        registeredWithin: normalized.registeredWithin || null,
+        total: Number(countRows[0]?.total || 0),
+        items: rows.map((row) => ({
+          resourceType: row.resource_type,
+          resourceId: String(row.resource_id),
+          title: row.title || '',
+          createTime: row.create_time,
+          userId: row.user_id,
+          alias: row.alias,
+          email: row.email,
+        })),
+      },
+      {
+        resolvedRanges: {
+          timeRange: { expression: normalized.timeRange, range: time, source: 'tool' },
+          ...(normalized.registeredWithin
+            ? {
+                registeredWithin: {
+                  expression: normalized.registeredWithin,
+                  range: registeredTime,
+                  source: 'tool',
+                },
+              }
+            : {}),
+        },
+      },
+    );
+  },
+  getDependencyRefs(raw) {
+    return (Array.isArray(raw?.items) ? raw.items : []).map((item) => ({
+      type: item.resourceType,
+      id: item.resourceId,
+    }));
   },
   transform(raw) {
     const items = raw?.items || [];

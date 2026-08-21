@@ -786,6 +786,7 @@ describe('agentChat 主链路', () => {
       }
       expect(options?.trace?.stage).toBe('final');
       expect(JSON.stringify(messages)).not.toContain('最近 7 天');
+      expect(JSON.stringify(messages)).toContain('【已核验查询口径】时间范围: 今天');
       return {
         content: '你今天新增了 2 篇笔记。',
         toolCalls: [],

@@ -25,7 +25,7 @@ export default {
   riskLevel: 'medium',
   confirmationPolicy: 'always',
   async preview(args, ctx) {
-    const { items, total } = await previewTrashRestore({ userId: ctx.userId, filters: args });
+    const { items, total } = await previewTrashRestore({ userId: ctx.userId, filters: args, context: ctx });
     return {
       title: '恢复回收站内容',
       target: items.map((item) => `${item.type} ${item.count} 项`).join('、'),
@@ -34,7 +34,7 @@ export default {
     };
   },
   async execute(args, ctx) {
-    return restoreTrashResources({ userId: ctx.userId, filters: args });
+    return restoreTrashResources({ userId: ctx.userId, filters: args, context: ctx });
   },
   transform(raw) {
     if (!raw?.length) return '没有找到可恢复的内容，或已恢复过了。';

@@ -1,6 +1,7 @@
 import pool from '../../../db/index.js';
 import { INTERNAL_ROLES } from '../../internalRoles.js';
-import { isAllTimeExpression, parseRequiredTimeRange } from '../timeRange.js';
+import { isAllTimeExpression, resolveAgentTimeRange } from '../timeRange.js';
+import { withQueryResultMetadata } from '../toolResultMetadata.js';
 
 const RESOURCE_TYPES = Object.freeze({
   all: { label: '资源', countColumn: 'total_count', unit: '项' },
@@ -99,22 +100,33 @@ export default {
     },
   },
   requireRoot: true,
-  async execute(args = {}) {
+  async execute(args = {}, ctx = {}) {
     const normalized = normalizeArgs(args);
-    const resourceTime = parseRequiredTimeRange(normalized.timeRange, { label: '资源新增时间', allowAll: true });
+    const resourceTime = resolveAgentTimeRange(args, 'timeRange', {
+      context: ctx,
+      defaultExpression: normalized.timeRange,
+      required: true,
+      allowAll: true,
+      label: '资源新增时间',
+    });
     const registeredTime = normalized.registeredWithin
-      ? parseRequiredTimeRange(normalized.registeredWithin, { label: '用户注册时间' })
+      ? resolveAgentTimeRange(args, 'registeredWithin', {
+          context: ctx,
+          defaultExpression: normalized.registeredWithin,
+          required: true,
+          label: '用户注册时间',
+        })
       : null;
 
-    const resourceTimeFilter = resourceTime ? 'AND create_time >= ? AND create_time <= ?' : '';
+    const resourceTimeFilter = resourceTime ? 'AND create_time >= ? AND create_time < ?' : '';
     const params = resourceTime
       ? [
           resourceTime.start,
-          resourceTime.end,
+          resourceTime.endExclusive,
           resourceTime.start,
-          resourceTime.end,
+          resourceTime.endExclusive,
           resourceTime.start,
-          resourceTime.end,
+          resourceTime.endExclusive,
         ]
       : [];
     const userFilters = ['u.del_flag = 0'];
@@ -125,13 +137,11 @@ export default {
       params.push(...INTERNAL_ROLES);
     }
     if (registeredTime) {
-      userFilters.push('u.create_time >= ? AND u.create_time <= ?');
-      params.push(registeredTime.start, registeredTime.end);
+      userFilters.push('u.create_time >= ? AND u.create_time < ?');
+      params.push(registeredTime.start, registeredTime.endExclusive);
     }
 
-    params.push(normalized.limit);
-    const [rows] = await pool.query(
-      `SELECT
+    const rankingSql = `SELECT
          u.id AS user_id,
          u.alias,
          u.email,
@@ -191,27 +201,52 @@ export default {
        INNER JOIN \`user\` u ON u.id = resource_counts.user_id
        WHERE ${userFilters.join(' AND ')}
        GROUP BY u.id, u.alias, u.email
-       HAVING ${ranking.countColumn} > 0
-       ORDER BY ${ranking.countColumn} DESC, total_count DESC, bookmark_count DESC, note_count DESC, file_count DESC, u.id ASC
-       LIMIT ?`,
-      params,
-    );
+       HAVING ${ranking.countColumn} > 0`;
+    const [[rows], [countRows]] = await Promise.all([
+      pool.query(
+        `${rankingSql}
+         ORDER BY ${ranking.countColumn} DESC, total_count DESC, bookmark_count DESC, note_count DESC, file_count DESC, u.id ASC
+         LIMIT ?`,
+        [...params, normalized.limit],
+      ),
+      pool.query(`SELECT COUNT(*) AS total FROM (${rankingSql}) ranked_users`, params),
+    ]);
 
-    return {
-      timeRange: normalized.timeRange,
-      registeredWithin: normalized.registeredWithin || null,
-      resourceType: normalized.resourceType,
-      includeInternal: normalized.includeInternal,
-      items: rows.map((row) => ({
-        userId: row.user_id,
-        alias: row.alias,
-        email: row.email,
-        bookmarkCount: Number(row.bookmark_count || 0),
-        noteCount: Number(row.note_count || 0),
-        fileCount: Number(row.file_count || 0),
-        totalCount: Number(row.total_count || 0),
-      })),
-    };
+    return withQueryResultMetadata(
+      {
+        timeRange: normalized.timeRange,
+        registeredWithin: normalized.registeredWithin || null,
+        resourceType: normalized.resourceType,
+        includeInternal: normalized.includeInternal,
+        total: Number(countRows[0]?.total || 0),
+        items: rows.map((row) => ({
+          userId: row.user_id,
+          alias: row.alias,
+          email: row.email,
+          bookmarkCount: Number(row.bookmark_count || 0),
+          noteCount: Number(row.note_count || 0),
+          fileCount: Number(row.file_count || 0),
+          totalCount: Number(row.total_count || 0),
+        })),
+      },
+      {
+        resolvedRanges: {
+          timeRange: { expression: normalized.timeRange, range: resourceTime, source: 'tool' },
+          ...(normalized.registeredWithin
+            ? {
+                registeredWithin: {
+                  expression: normalized.registeredWithin,
+                  range: registeredTime,
+                  source: 'tool',
+                },
+              }
+            : {}),
+        },
+      },
+    );
+  },
+  getDependencyRefs(raw) {
+    return (Array.isArray(raw?.items) ? raw.items : []).map((item) => ({ type: 'user', id: item.userId }));
   },
   transform(raw) {
     const items = raw?.items || [];

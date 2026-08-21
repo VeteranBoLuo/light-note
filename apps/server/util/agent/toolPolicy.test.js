@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AgentToolPolicyError, enforceToolPolicy, normalizeRegisteredTool } from './toolPolicy.js';
+import { projectAgentTemporalRanges } from './timeRange.js';
 
 function makeTool(overrides = {}) {
   return normalizeRegisteredTool({
@@ -165,6 +166,67 @@ describe('Agent Tool Policy', () => {
         phase: 'plan',
       }),
     ).rejects.toMatchObject({ code: 'TOOL_ARGUMENTS_ADDITIONAL_PROPERTY' });
+  });
+
+  it('管理工具只公开 scope_user，同时兼容旧 user alias', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const tool = makeTool({
+      requireRoot: true,
+      scopeUserMigration: true,
+      parameters: {
+        type: 'object',
+        properties: { scope_user: { type: 'string' } },
+      },
+    });
+    expect(tool.parameters.properties).toHaveProperty('scope_user');
+    expect(tool.parameters.properties).not.toHaveProperty('user');
+    expect(tool.argumentAliases).toContain('user');
+
+    await expect(
+      enforceToolPolicy({
+        registry: new Map([[tool.name, tool]]),
+        toolName: tool.name,
+        args: { user: 'target@example.test' },
+        context: context({ userRole: 'root', billingUserRole: 'root' }),
+        phase: 'plan',
+      }),
+    ).resolves.toMatchObject({ args: { scope_user: 'target@example.test' } });
+    warn.mockRestore();
+  });
+
+  it('时间参数由策略层按请求时区绑定为同一份半开区间', async () => {
+    const tool = makeTool({
+      name: 'query_notes',
+      parameters: {
+        type: 'object',
+        properties: { timeRange: { type: 'string' } },
+      },
+    });
+    const policy = await enforceToolPolicy({
+      registry: new Map([[tool.name, tool]]),
+      toolName: tool.name,
+      args: { timeRange: '今天' },
+      context: context({
+        temporalContext: {
+          currentInstant: '2026-03-08T16:00:00Z',
+          timeZone: 'America/New_York',
+          storageTimeZone: 'UTC',
+        },
+      }),
+      phase: 'plan',
+    });
+
+    expect(projectAgentTemporalRanges(policy.args)).toMatchObject({
+      timeRange: {
+        expression: '今天',
+        range: {
+          start: '2026-03-08 05:00:00',
+          endExclusive: '2026-03-08 16:00:01',
+          timeZone: 'America/New_York',
+          storageTimeZone: 'UTC',
+        },
+      },
+    });
   });
 
   it('缺少通用必填参数时返回可识别的澄清错误，而不是普通参数失败', async () => {

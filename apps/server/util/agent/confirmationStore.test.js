@@ -54,6 +54,17 @@ describe('agent confirmationStore', () => {
       sourceMessage: '根据材料生成笔记',
       contextRefs: [{ type: 'note', id: 'note-1' }],
       attachmentIds: ['source-1'],
+      agentTemporalRanges: {
+        timeRange: {
+          expression: '今天',
+          range: {
+            start: '2026-08-21 00:00:00',
+            endExclusive: '2026-08-21 12:00:01',
+            timeZone: 'Asia/Shanghai',
+          },
+          source: 'binder',
+        },
+      },
     };
     const result = await createToolConfirmation({
       ownerKey: 'user:u1',

@@ -1,5 +1,7 @@
 import { normalizeToolArguments, prepareToolArguments } from './toolArguments.js';
 import { getAgentCapabilityByToolName } from './capabilityRegistry.js';
+import { getAgentV3CapabilityByToolName } from './runtime/v3/capabilityManifest.js';
+import { bindAgentTemporalRanges } from './timeRange.js';
 
 const VALID_RISKS = new Set(['low', 'medium', 'high']);
 const VALID_CONFIRMATION_POLICIES = new Set(['none', 'default', 'always']);
@@ -43,6 +45,7 @@ export function normalizeRegisteredTool(tool) {
   }
   const isWrite = tool.isWrite === true;
   const capability = isWrite ? getAgentCapabilityByToolName(tool.name) : null;
+  const semanticCapability = getAgentV3CapabilityByToolName(tool.name);
   if (isWrite && !capability) {
     throw new Error(`Agent 写工具 ${tool.name} 未在能力注册表声明为 enabled`);
   }
@@ -54,8 +57,7 @@ export function normalizeRegisteredTool(tool) {
   }
   const riskLevel = capability?.riskLevel || tool.riskLevel || 'low';
   const confirmationPolicy = capability?.confirmationPolicy || tool.confirmationPolicy || 'none';
-  const sideEffectPolicy =
-    tool.sideEffectPolicy || (isWrite ? 'confirmation_required' : 'none');
+  const sideEffectPolicy = tool.sideEffectPolicy || (isWrite ? 'confirmation_required' : 'none');
   if (!VALID_RISKS.has(riskLevel)) throw new Error(`Agent 工具 ${tool.name} 缺少有效 riskLevel`);
   if (!VALID_CONFIRMATION_POLICIES.has(confirmationPolicy)) {
     throw new Error(`Agent 工具 ${tool.name} 缺少有效 confirmationPolicy`);
@@ -80,6 +82,13 @@ export function normalizeRegisteredTool(tool) {
   }
   if (tool.validatePlanArgs != null && typeof tool.validatePlanArgs !== 'function') {
     throw new Error(`Agent 工具 ${tool.name} 的 validatePlanArgs 必须是函数`);
+  }
+  if (
+    tool.scopeUserMigration === true &&
+    (!Object.hasOwn(tool.parameters?.properties || {}, 'scope_user') ||
+      Object.hasOwn(tool.parameters?.properties || {}, 'user'))
+  ) {
+    throw new Error(`Agent 工具 ${tool.name} 的管理账号参数必须以 scope_user 为公开契约`);
   }
   const rawDependencyBindings = tool.dependencyBindings == null ? [] : tool.dependencyBindings;
   if (!Array.isArray(rawDependencyBindings) || rawDependencyBindings.length > 8) {
@@ -119,7 +128,11 @@ export function normalizeRegisteredTool(tool) {
     const refTypes = [
       ...new Set(
         (hasRefTypes ? binding.refTypes : [binding?.refType])
-          .map((value) => String(value || '').trim().toLowerCase())
+          .map((value) =>
+            String(value || '')
+              .trim()
+              .toLowerCase(),
+          )
           .filter(Boolean),
       ),
     ];
@@ -162,8 +175,15 @@ export function normalizeRegisteredTool(tool) {
     allowedRoles,
     resultBudget: Number(tool.resultBudget || 6000),
     parameters: closeToolSchema(tool.parameters),
+    argumentAliases: Object.freeze([
+      ...new Set([
+        ...(Array.isArray(tool.argumentAliases) ? tool.argumentAliases : []),
+        ...(tool.scopeUserMigration ? ['user'] : []),
+      ]),
+    ]),
     dependencyBindings: Object.freeze(dependencyBindings),
     resourceBindings: Object.freeze(resourceBindings),
+    temporalSlots: Object.freeze([...(semanticCapability?.temporalSlots || [])]),
   };
 }
 
@@ -336,7 +356,8 @@ export async function enforceToolPolicy({
   if (requireDirectAction && !tool.isWrite) {
     fail('TOOL_DIRECT_ACTION_NOT_ALLOWED', '快捷确认仅支持需要确认的写操作。');
   }
-  if (args.user != null && String(args.user).trim()) {
+  const requestedScopeUser = args.scope_user ?? args.user;
+  if (requestedScopeUser != null && String(requestedScopeUser).trim()) {
     if (boundary.actorRole !== 'root' || boundary.adminMode) {
       fail('TOOL_TARGET_USER_FORBIDDEN', '当前上下文不能指定其他用户。', 403);
     }
@@ -367,6 +388,7 @@ export async function enforceToolPolicy({
     : trustedPreparedArgs
       ? args
       : normalized;
+  bindAgentTemporalRanges({ tool, args: preparedArgs, context });
 
   return {
     tool,

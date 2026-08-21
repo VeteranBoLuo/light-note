@@ -137,7 +137,9 @@ function parseCalendarDate(expression, temporalContext) {
 }
 
 function parseClock(expression) {
-  const match = expression.match(/(凌晨|早上|上午|中午|下午|傍晚|晚上)?(\d{1,2})(?:(?:点|时|:)(\d{1,2})?分?|:(\d{1,2}))/u);
+  const match = expression.match(
+    /(凌晨|早上|上午|中午|下午|傍晚|晚上)?(\d{1,2})(?:(?:点|时|:)(\d{1,2})?分?|:(\d{1,2}))/u,
+  );
   if (!match) return null;
   const period = String(match[1] || '');
   let hour = Number(match[2]);
@@ -148,12 +150,6 @@ function parseClock(expression) {
   if (period === '凌晨' && hour === 12) hour = 0;
   if (hour < 0 || hour > 23) return null;
   return { hour, minute };
-}
-
-function rangeNow(temporalContext) {
-  const value = String(temporalContext?.currentDateTime || '').trim();
-  const date = new Date(value.replace(' ', 'T'));
-  return Number.isFinite(date.getTime()) ? date : new Date();
 }
 
 function supportsPrecision(kind, precision) {
@@ -173,7 +169,11 @@ export function resolveTemporalExpressionV3(expressionInput, slot = {}, temporal
     return Object.freeze({ expression, precision, argumentValue: '全部', resolved: null });
   }
   if (kind === 'range') {
-    const resolved = parseTimeRange(expression, { now: rangeNow(temporalContext) });
+    const resolved = parseTimeRange(expression, {
+      now: temporalContext?.currentInstant || temporalContext?.currentDateTime,
+      timeZone: temporalContext?.timeZone,
+      storageTimeZone: temporalContext?.storageTimeZone,
+    });
     if (!resolved) return null;
     return Object.freeze({ expression, precision, argumentValue: expression, resolved: Object.freeze(resolved) });
   }
@@ -194,8 +194,12 @@ export function resolveTemporalExpressionV3(expressionInput, slot = {}, temporal
 
 function normalizeRawConstraint(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const goalId = String(value.goalId || '').trim().slice(0, 64);
-  const slot = String(value.slot || '').trim().slice(0, 64);
+  const goalId = String(value.goalId || '')
+    .trim()
+    .slice(0, 64);
+  const slot = String(value.slot || '')
+    .trim()
+    .slice(0, 64);
   const expression = normalizeTemporalExpressionV3(value.expression);
   return goalId && slot && expression ? { goalId, slot, expression } : null;
 }
@@ -205,7 +209,10 @@ function capabilityForGoal(goal, catalogById) {
 }
 
 function slotByName(capability, name) {
-  return (Array.isArray(capability?.temporalSlots) ? capability.temporalSlots : []).find((slot) => slot.name === name) || null;
+  return (
+    (Array.isArray(capability?.temporalSlots) ? capability.temporalSlots : []).find((slot) => slot.name === name) ||
+    null
+  );
 }
 
 function constraintKey(goalId, slot) {
@@ -320,11 +327,7 @@ export function collectMissingTemporalSlotsV3({ goals = [], catalog = [], constr
   for (const goal of Array.isArray(goals) ? goals : []) {
     const capability = capabilityForGoal(goal, catalogById);
     for (const slot of capability?.temporalSlots || []) {
-      if (
-        slot.required !== true ||
-        slot.defaultPolicy !== 'clarify' ||
-        bound.has(constraintKey(goal.id, slot.name))
-      ) {
+      if (slot.required !== true || slot.defaultPolicy !== 'clarify' || bound.has(constraintKey(goal.id, slot.name))) {
         continue;
       }
       const label = String(slot.label || slot.name || '时间范围');
@@ -348,6 +351,22 @@ export function authoritativeTemporalArgumentsForGoal(turnSpec, goalId) {
     args[constraint.slot] = constraint.argumentValue;
   }
   return Object.freeze(args);
+}
+
+/**
+ * 与公开工具参数分离的 Binder 权威范围。公开参数仍只携带表达式，SQL 边界通过
+ * request-local metadata 进入 Tool Policy，避免把内部字段暴露给 Planner schema。
+ */
+export function authoritativeTemporalRangesForGoal(turnSpec, goalId) {
+  const ranges = {};
+  for (const constraint of Array.isArray(turnSpec?.temporalConstraints) ? turnSpec.temporalConstraints : []) {
+    if (constraint.goalId !== goalId || !constraint.slot) continue;
+    ranges[constraint.slot] = Object.freeze({
+      expression: constraint.expression,
+      range: constraint.resolved,
+    });
+  }
+  return Object.freeze(ranges);
 }
 
 export function bindAuthoritativeTemporalArguments({ turnSpec, goalId, args } = {}) {

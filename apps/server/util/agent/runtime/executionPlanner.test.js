@@ -112,8 +112,10 @@ describe('Execution Planner / Validator V2', () => {
     const repairPayload = JSON.parse(request.mock.calls[1][0][1].content);
     expect(firstPayload.temporalContext).toEqual({
       timeZone: 'Asia/Shanghai',
+      storageTimeZone: 'Asia/Shanghai',
       currentDate: '2026-08-19',
       currentDateTime: '2026-08-19 20:34:56',
+      currentInstant: '2026-08-19T12:34:56.000Z',
     });
     expect(firstPayload.availableContext).toEqual({
       contextRefs: [{ type: 'note', id: 'note-1' }],
@@ -299,9 +301,7 @@ describe('Execution Planner / Validator V2', () => {
     const readUrlTool = {
       name: 'read_url',
       isWrite: false,
-      resourceBindings: [
-        { argument: 'url', refTypes: ['bookmark', 'web'], sourceField: 'url', allowLiteral: true },
-      ],
+      resourceBindings: [{ argument: 'url', refTypes: ['bookmark', 'web'], sourceField: 'url', allowLiteral: true }],
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -664,6 +664,11 @@ describe('Execution Planner / Validator V2', () => {
           kind: 'range',
           expression: '今天',
           argumentValue: '今天',
+          resolved: {
+            start: '2026-08-21 00:00:00',
+            endExclusive: '2026-08-21 12:00:01',
+            timeZone: 'Asia/Shanghai',
+          },
           implicit: true,
         },
       ],
@@ -714,6 +719,17 @@ describe('Execution Planner / Validator V2', () => {
     const validated = validateExecutionPlan({ turnSpec: temporalSpec, route: temporalRoute, parsed });
     expect(validated.valid).toBe(true);
     expect(JSON.parse(validated.toolCalls[0].function.arguments)).toEqual({ timeRange: '今天', limit: 50 });
+    expect(validated.temporalBindingsByCallId).toMatchObject({
+      'execution-plan-notes-step': {
+        timeRange: {
+          expression: '今天',
+          range: {
+            start: '2026-08-21 00:00:00',
+            endExclusive: '2026-08-21 12:00:01',
+          },
+        },
+      },
+    });
 
     parsed.plan.steps[0].expectedResultKind = 'bookmark_list';
     expect(validateExecutionPlan({ turnSpec: temporalSpec, route: temporalRoute, parsed }).issues).toContain(

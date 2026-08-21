@@ -1,6 +1,7 @@
 import pool from '../../../db/index.js';
 import { INTERNAL_ROLES } from '../../internalRoles.js';
-import { parseTimeRange } from '../timeRange.js';
+import { withQueryResultMetadata } from '../toolResultMetadata.js';
+import { projectAgentTemporalRanges, resolveAgentTimeRange } from '../timeRange.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RANKING_TYPES = Object.freeze({
@@ -20,11 +21,15 @@ function isAllTimeRange(value) {
   return !text || text === '全部' || text.toLowerCase() === 'all';
 }
 
-function parseOptionalTimeRange(value, fieldName) {
+function parseOptionalTimeRange(args, slotName, value, fieldName, context) {
   const expression = String(value || '').trim();
   if (isAllTimeRange(expression)) return { expression: '全部', range: null };
-  const range = parseTimeRange(expression);
-  if (!range) throw new Error(`${fieldName}无法识别`);
+  const rangeArgs = String(args?.[slotName] || '').trim() ? args : { ...args, [slotName]: expression };
+  const range = resolveAgentTimeRange(rangeArgs, slotName, {
+    context,
+    required: true,
+    label: fieldName,
+  });
   return { expression, range };
 }
 
@@ -45,15 +50,18 @@ function normalizeRankingType(value) {
   return rankingType;
 }
 
-function normalizeArgs(args = {}) {
+function normalizeArgs(args = {}, context = {}) {
   const rankingType = normalizeRankingType(args.rankingType || args.metric || args.type);
-  const timeRange = parseOptionalTimeRange(args.timeRange, '签到统计时间范围');
+  const timeRange = parseOptionalTimeRange(args, 'timeRange', args.timeRange, '签到统计时间', context);
   if (rankingType !== 'checkin_days' && timeRange.range) {
     throw new Error(`${RANKING_TYPES[rankingType].label}仅支持全量排行，不支持按时间范围筛选`);
   }
   const registeredWithin = parseOptionalTimeRange(
+    args,
+    'registeredWithin',
     args.registeredWithin || args.userRegisteredWithin,
-    '用户注册时间范围',
+    '用户注册时间',
+    context,
   );
   return {
     rankingType,
@@ -64,10 +72,10 @@ function normalizeArgs(args = {}) {
   };
 }
 
-function formatDayKey(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
+function formatUtcDayKey(date) {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
   return `${year}${month}${day}`;
 }
 
@@ -87,11 +95,24 @@ function timeRangeBoundaryDay(value) {
   return matched ? `${matched[1]}${matched[2]}${matched[3]}` : null;
 }
 
+function currentBusinessDay(context = {}) {
+  const currentDate = String(context?.temporalContext?.currentDate || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(currentDate)) return currentDate.replaceAll('-', '');
+  const todayRange = resolveAgentTimeRange({ timeRange: '今天' }, 'timeRange', {
+    context,
+    required: true,
+    label: '当前日期',
+  });
+  return timeRangeBoundaryDay(todayRange.localStart || todayRange.start);
+}
+
 function previousDayKey(today) {
   const info = dayInfo(today);
   if (!info) return today;
-  const date = new Date(Number(today.slice(0, 4)), Number(today.slice(4, 6)) - 1, Number(today.slice(6, 8)) - 1);
-  return formatDayKey(date);
+  const date = new Date(
+    Date.UTC(Number(today.slice(0, 4)), Number(today.slice(4, 6)) - 1, Number(today.slice(6, 8))) - DAY_MS,
+  );
+  return formatUtcDayKey(date);
 }
 
 function calculateCheckinStats(dayKinds, today) {
@@ -178,8 +199,8 @@ export default {
     },
   },
   requireRoot: true,
-  async execute(args = {}) {
-    const normalized = normalizeArgs(args);
+  async execute(args = {}, ctx = {}) {
+    const normalized = normalizeArgs(args, ctx);
     const userFilters = ['u.del_flag = 0'];
     const params = [];
     if (!normalized.includeInternal) {
@@ -187,8 +208,8 @@ export default {
       params.push(...INTERNAL_ROLES);
     }
     if (normalized.registeredWithin.range) {
-      userFilters.push('u.create_time >= ? AND u.create_time <= ?');
-      params.push(normalized.registeredWithin.range.start, normalized.registeredWithin.range.end);
+      userFilters.push('u.create_time >= ? AND u.create_time < ?');
+      params.push(normalized.registeredWithin.range.start, normalized.registeredWithin.range.endExclusive);
     }
 
     const [rows] = await pool.query(
@@ -221,9 +242,13 @@ export default {
       user.dayKinds.set(info.key, user.dayKinds.get(info.key) === true || Number(row.is_makeup) === 1);
     }
 
-    const today = formatDayKey(new Date());
-    const rangeStart = normalized.timeRange.range ? timeRangeBoundaryDay(normalized.timeRange.range.start) : null;
-    const rangeEnd = normalized.timeRange.range ? timeRangeBoundaryDay(normalized.timeRange.range.end) : null;
+    const today = currentBusinessDay(ctx);
+    const rangeStart = normalized.timeRange.range
+      ? timeRangeBoundaryDay(normalized.timeRange.range.localStart || normalized.timeRange.range.start)
+      : null;
+    const rangeEnd = normalized.timeRange.range
+      ? timeRangeBoundaryDay(normalized.timeRange.range.localEnd || normalized.timeRange.range.end)
+      : null;
     const allItems = [...users.values()].map((user) => {
       const stats = calculateCheckinStats(user.dayKinds, today);
       const periodDays =
@@ -258,17 +283,28 @@ export default {
           : ranked[index - 1].rank;
     }
 
-    return {
-      rankingType: normalized.rankingType,
-      timeRange: normalized.timeRange.expression,
-      registeredWithin: normalized.registeredWithin.range ? normalized.registeredWithin.expression : null,
-      includeInternal: normalized.includeInternal,
-      businessDay: today,
-      generatedAt: new Date().toISOString(),
-      eligibleUserCount: allItems.length,
-      rankedUserCount: ranked.length,
-      items: ranked.slice(0, normalized.limit).map(({ userId, ...item }) => item),
-    };
+    const items = ranked.slice(0, normalized.limit);
+    return withQueryResultMetadata(
+      {
+        rankingType: normalized.rankingType,
+        timeRange: normalized.timeRange.expression,
+        registeredWithin: normalized.registeredWithin.range ? normalized.registeredWithin.expression : null,
+        includeInternal: normalized.includeInternal,
+        businessDay: today,
+        generatedAt: new Date().toISOString(),
+        eligibleUserCount: allItems.length,
+        rankedUserCount: ranked.length,
+        total: ranked.length,
+        items,
+      },
+      {
+        resolvedRanges: projectAgentTemporalRanges(args),
+        truncationReason: items.length < ranked.length ? 'limit' : null,
+      },
+    );
+  },
+  getDependencyRefs(raw) {
+    return (raw?.items || []).map((item) => ({ type: 'user', id: item.userId }));
   },
   transform(raw) {
     const title = rankingTitle(raw);

@@ -1,8 +1,9 @@
 import pool from '../../../db/index.js';
-import { parseTimeRange } from '../timeRange.js';
+import { resolveAgentTimeRange } from '../timeRange.js';
 import { searchPersonalKnowledge } from '../../personalKnowledgeSearch.js';
 import { PERSONAL_SCOPE_USER_PARAM, personalScopeHint } from '../ownerScope.js';
 import { escapeLikePattern } from '../sqlPatterns.js';
+import { withQueryResultMetadata } from '../toolResultMetadata.js';
 
 function buildScopeConditions({ userId, tag, time }) {
   let where = '';
@@ -15,8 +16,8 @@ function buildScopeConditions({ userId, tag, time }) {
     params.push(tag, userId);
   }
   if (time) {
-    where += ` AND b.create_time >= ? AND b.create_time <= ?`;
-    params.push(time.start, time.end);
+    where += ` AND b.create_time >= ? AND b.create_time < ?`;
+    params.push(time.start, time.endExclusive);
   }
   return { where, params };
 }
@@ -80,9 +81,12 @@ export default {
   },
   resourceBindings: [{ argument: 'bookmarkId', refType: 'bookmark', sourceField: 'id' }],
   requireRoot: false,
-  async execute(args, ctx) {
+  async execute(args, ctx = {}) {
     const { bookmarkId, keyword, tag, timeRange, limit = 10 } = args;
-    const time = parseTimeRange(timeRange);
+    const time = resolveAgentTimeRange(args, 'timeRange', { context: ctx, label: '书签创建时间' });
+    const resolvedRanges = timeRange
+      ? { timeRange: { expression: String(timeRange).trim(), range: time, source: 'tool' } }
+      : {};
     const take = Math.min(Math.max(limit || 10, 1), 50);
 
     let where = 'b.user_id = ? AND b.del_flag = 0';
@@ -124,19 +128,25 @@ export default {
     ]);
 
     if (rows.length || !keyword) {
-      return { total: countRes[0].total, items: rows, matchMode: 'like' };
+      return withQueryResultMetadata(
+        { total: Number(countRes[0].total || 0), items: rows, matchMode: 'like' },
+        { resolvedRanges },
+      );
     }
 
     // LIKE 零结果 → 语义降级；降级自身失败 fail-open 回空结果，不升级成报错。
     try {
       const fallbackRows = await semanticFallback({ userId: ctx.userId, keyword, take, tag, time });
       if (fallbackRows.length) {
-        return { total: fallbackRows.length, items: fallbackRows, matchMode: 'semantic' };
+        return withQueryResultMetadata(
+          { total: fallbackRows.length, items: fallbackRows, matchMode: 'semantic' },
+          { exactTotal: false, coverage: 'partial', truncationReason: 'semantic_recall', resolvedRanges },
+        );
       }
     } catch (error) {
       console.warn('[query_bookmarks] semantic fallback failed code=%s', error?.code || error?.message);
     }
-    return { total: 0, items: [], matchMode: 'like' };
+    return withQueryResultMetadata({ total: 0, items: [], matchMode: 'like' }, { resolvedRanges });
   },
   getDependencyRefs(raw) {
     return (Array.isArray(raw?.items) ? raw.items : []).map((item) => ({ type: 'bookmark', id: item.id }));

@@ -14,6 +14,14 @@
 export const PERSONAL_SCOPE_USER_PARAM =
   '可选，仅管理员可用：指定要查哪一位用户的数据。优先传邮箱或用户 ID——昵称可能被多个账号共用，重名时本次查询会直接失败并要求改用邮箱。不传时只查当前登录用户自己的数据。';
 
+/** 管理域目标账号的新统一参数。旧 `user` 仅作为兼容 alias，不再暴露给 Planner。 */
+export const MANAGEMENT_SCOPE_USER_PARAM =
+  '可选，仅管理员可用：限定查询的目标用户（昵称、邮箱或用户 ID）。不传表示查询全平台；需要指定单个账号时优先使用邮箱或用户 ID。';
+
+export function scopedTargetUser(args = {}) {
+  return String(args?.scope_user ?? args?.user ?? '').trim();
+}
+
 /**
  * 拼出工具 description 里的作用域声明。
  * @param {string} label 资源名称，例如「笔记」「书签」「云空间文件」

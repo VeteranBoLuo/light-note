@@ -1,5 +1,6 @@
 import pool from '../../../db/index.js';
-import { parseTimeRange } from '../timeRange.js';
+import { resolveAgentTimeRange } from '../timeRange.js';
+import { withQueryResultMetadata } from '../toolResultMetadata.js';
 
 export default {
   name: 'get_active_users',
@@ -20,40 +21,64 @@ export default {
     },
   },
   requireRoot: true,
-  async execute(args) {
+  async execute(args, ctx = {}) {
     const { limit = 10 } = args;
     const take = Math.min(Math.max(limit || 10, 1), 50);
-    const time = parseTimeRange(args.timeRange || '最近7天');
+    const time = resolveAgentTimeRange(args, 'timeRange', {
+      context: ctx,
+      defaultExpression: '最近7天',
+      label: '用户活跃时间',
+    });
 
     let where = '1=1';
     const params = [];
 
     if (time) {
-      where += ' AND a.request_time >= ? AND a.request_time <= ?';
-      params.push(time.start, time.end);
+      where += ' AND a.request_time >= ? AND a.request_time < ?';
+      params.push(time.start, time.endExclusive);
     }
 
-    const [rows] = await pool.query(
-      `SELECT u.alias, u.email, COUNT(*) as request_count, MAX(a.request_time) as last_active
-       FROM api_logs a JOIN user u ON a.user_id = u.id
-       WHERE ${where} AND a.user_id IS NOT NULL AND a.user_id != ''
-       GROUP BY a.user_id, u.alias, u.email
-       ORDER BY request_count DESC LIMIT ?`,
-      [...params, take],
+    const activityFrom = `FROM api_logs a JOIN user u ON a.user_id = u.id
+       WHERE ${where} AND a.user_id IS NOT NULL AND a.user_id != ''`;
+    const [[rows], [countRows]] = await Promise.all([
+      pool.query(
+        `SELECT u.id AS user_id, u.alias, u.email, COUNT(*) as request_count, MAX(a.request_time) as last_active
+         ${activityFrom}
+         GROUP BY a.user_id, u.id, u.alias, u.email
+         ORDER BY request_count DESC LIMIT ?`,
+        [...params, take],
+      ),
+      pool.query(`SELECT COUNT(DISTINCT a.user_id) AS total ${activityFrom}`, params),
+    ]);
+    return withQueryResultMetadata(
+      { total: Number(countRows[0]?.total || 0), items: rows },
+      {
+        resolvedRanges: {
+          timeRange: {
+            expression: String(args.timeRange || '最近7天'),
+            range: time,
+            source: 'tool',
+          },
+        },
+      },
     );
-    return rows;
   },
-  transform(rows) {
+  getDependencyRefs(raw) {
+    return (raw?.items || []).map((item) => ({ type: 'user', id: item.user_id }));
+  },
+  transform(raw) {
+    const rows = raw?.items || [];
     if (!rows?.length) return '该时间段内没有用户活动记录';
     const lines = rows.map((r, i) => {
       const alias = r.alias || '未知';
       const lastTime = r.last_active ? new Date(r.last_active).toLocaleString('zh-CN') : '';
       return `${i + 1}. ${alias} (${r.email || '无邮箱'}) — ${r.request_count} 次请求，最后活跃: ${lastTime}`;
     });
-    return `活跃用户排行：\n${lines.join('\n')}`;
+    return `活跃用户排行（共 ${raw.total} 人）：\n${lines.join('\n')}`;
   },
-  summarize(rows) {
+  summarize(raw) {
+    const rows = raw?.items || [];
     if (!rows?.length) return '活跃用户：无';
-    return `活跃用户：${rows.length} 人，最高 ${rows[0]?.request_count || 0} 次请求`;
+    return `活跃用户：共 ${raw.total} 人，最高 ${rows[0]?.request_count || 0} 次请求`;
   },
 };

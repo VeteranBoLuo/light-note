@@ -186,6 +186,52 @@ function normalizeResultRefs(values, limit = 50) {
   return output;
 }
 
+function normalizeResultSetMetadata(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const count = (input) => {
+    const number = Number(input);
+    return Number.isFinite(number) && number >= 0 ? Math.trunc(number) : null;
+  };
+  const resolvedRanges = Object.fromEntries(
+    Object.entries(value.resolvedRanges || {})
+      .slice(0, 8)
+      .map(([name, record]) => [
+        String(name).slice(0, 80),
+        {
+          expression: String(record?.expression || '').slice(0, 120),
+          source: String(record?.source || '').slice(0, 40),
+          range:
+            record?.range && typeof record.range === 'object' && !Array.isArray(record.range)
+              ? Object.fromEntries(
+                  ['start', 'endExclusive', 'timeZone', 'storageTimeZone', 'localStart', 'localEndExclusive']
+                    .filter((key) => record.range[key] != null)
+                    .map((key) => [key, String(record.range[key]).slice(0, 100)]),
+                )
+              : null,
+        },
+      ]),
+  );
+  const completeness = ['complete', 'partial', 'unknown', 'empty'].includes(value.completeness)
+    ? value.completeness
+    : value.complete === true
+      ? 'complete'
+      : 'partial';
+  return {
+    version: String(value.version || '').slice(0, 20),
+    total: count(value.total),
+    returned: count(value.returned) ?? 0,
+    totalExact: value.totalExact === true,
+    completeness,
+    complete: completeness === 'complete' || completeness === 'empty',
+    partial: completeness === 'partial' || completeness === 'unknown',
+    truncated: value.truncated === true,
+    truncationReason: value.truncationReason ? String(value.truncationReason).slice(0, 80) : null,
+    resolvedRanges,
+    stableReferenceCount: count(value.stableReferenceCount) ?? 0,
+    stableIdCoverage: value.stableIdCoverage === 'complete' ? 'complete' : 'partial',
+  };
+}
+
 function normalizeSourceRefs(values, { scope = false, limit = 20 } = {}) {
   const output = [];
   const seen = new Set();
@@ -277,10 +323,12 @@ function focusRevision(snapshot) {
 }
 
 function newestFocusSnapshot(...values) {
-  return values
-    .filter(Boolean)
-    .map((value) => normalizeFocusSnapshot(value))
-    .sort((left, right) => focusRevision(right) - focusRevision(left))[0] || null;
+  return (
+    values
+      .filter(Boolean)
+      .map((value) => normalizeFocusSnapshot(value))
+      .sort((left, right) => focusRevision(right) - focusRevision(left))[0] || null
+  );
 }
 
 function applyFocusSnapshot(session, snapshot) {
@@ -591,10 +639,10 @@ export async function commitSessionTurnSpec(session, turnSpec) {
   });
 }
 
-/** 保存一次真实工具结果的稳定引用集合；不保存标题、URL、正文、摘要或模型输出。 */
+/** 保存一次真实工具结果的稳定引用与有界查询元数据；不保存标题、URL、正文、摘要或模型输出。 */
 export async function recordSessionResultSet(
   session,
-  { capabilityId = '', domains = [], refs = [], status = 'success', focusId = '' } = {},
+  { capabilityId = '', domains = [], refs = [], status = 'success', focusId = '', metadata = null } = {},
 ) {
   if (!session) return null;
   normalizeSession(session);
@@ -604,11 +652,13 @@ export async function recordSessionResultSet(
     return null;
   }
   const requestedFocusId = String(focusId || '');
+  const normalizedMetadata = normalizeResultSetMetadata(metadata);
   const resultSet = {
     id: crypto.randomUUID(),
     capabilityId: String(capabilityId || '').slice(0, 120),
     domains: [...new Set((Array.isArray(domains) ? domains : []).map(String).filter(Boolean))].slice(0, 8),
     refs: normalizeResultRefs(refs),
+    ...(normalizedMetadata ? { metadata: normalizedMetadata } : {}),
     status: normalizedStatus,
     topicEpoch: 0,
     createdAt: now(),
@@ -620,9 +670,7 @@ export async function recordSessionResultSet(
     const effectiveFocusId = requestedFocusId || String(pendingFocus?.id || '');
     const commitsPending = Boolean(pendingFocus && requestedFocusId && pendingFocus.id === requestedFocusId);
     const appendsCommitted =
-      Boolean(effectiveFocusId) &&
-      !pendingFocus &&
-      discourseState.activeReadRunId === effectiveFocusId;
+      Boolean(effectiveFocusId) && !pendingFocus && discourseState.activeReadRunId === effectiveFocusId;
     if ((pendingFocus || requestedFocusId) && !commitsPending && !appendsCommitted) return { value: null };
 
     const targetTopicEpoch =
@@ -680,9 +728,7 @@ export async function settleSessionResultFocus(session, { status = 'failed', foc
     const effectiveFocusId = requestedFocusId || String(pendingFocus?.id || '');
     const settlesPending = Boolean(pendingFocus && requestedFocusId && pendingFocus.id === requestedFocusId);
     const settlesCommitted =
-      Boolean(effectiveFocusId) &&
-      !pendingFocus &&
-      discourseState.activeReadRunId === effectiveFocusId;
+      Boolean(effectiveFocusId) && !pendingFocus && discourseState.activeReadRunId === effectiveFocusId;
     if ((pendingFocus || requestedFocusId) && !settlesPending && !settlesCommitted) return { value: false };
 
     if (normalizedStatus === 'success' && settlesPending) {
@@ -747,6 +793,7 @@ export function resolveSessionResultSet(session, { id = '', types = [], ordinal 
   const resultSet = candidates[0];
   if (!resultSet) return { state: 'missing', refs: [] };
   if (Number(resultSet.expiresAt) <= now()) return { state: 'expired', refs: [] };
+  const normalizedMetadata = normalizeResultSetMetadata(resultSet.metadata);
   let refs = normalizeResultRefs(resultSet.refs).filter((ref) => !typeSet.size || typeSet.has(ref.type));
   const position = Number(ordinal);
   if (Number.isSafeInteger(position) && position > 0) refs = refs.slice(position - 1, position);
@@ -757,6 +804,7 @@ export function resolveSessionResultSet(session, { id = '', types = [], ordinal 
       capabilityId: String(resultSet.capabilityId || ''),
       domains: [...new Set((resultSet.domains || []).map(String))],
       status: String(resultSet.status || ''),
+      ...(normalizedMetadata ? { metadata: normalizedMetadata } : {}),
     },
     refs,
   };
@@ -1126,8 +1174,7 @@ export async function settleSessionAction({ ownerKey, sessionId, confirmationId,
             discourseState: {
               ...snapshot.discourseState,
               revision:
-                snapshot.discourseState.revision +
-                (artifact.state !== previousState || clearsPendingArtifact ? 1 : 0),
+                snapshot.discourseState.revision + (artifact.state !== previousState || clearsPendingArtifact ? 1 : 0),
               pendingArtifactId: clearsPendingArtifact ? '' : snapshot.discourseState.pendingArtifactId,
             },
           },

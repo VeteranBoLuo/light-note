@@ -1,6 +1,7 @@
 import pool from '../../../db/index.js';
 import { escapeLikePattern } from '../sqlPatterns.js';
-import { parseTimeRange } from '../timeRange.js';
+import { resolveAgentTimeRange } from '../timeRange.js';
+import { withQueryResultMetadata } from '../toolResultMetadata.js';
 
 export default {
   name: 'get_security_events',
@@ -32,9 +33,9 @@ export default {
     },
   },
   requireRoot: true,
-  async execute(args) {
+  async execute(args, ctx = {}) {
     const { type, ip, status, limit = 20 } = args;
-    const time = parseTimeRange(args.timeRange);
+    const time = resolveAgentTimeRange(args, 'timeRange', { context: ctx, label: '安全事件时间' });
     const take = Math.min(Math.max(limit || 20, 1), 100);
 
     let where = '1=1';
@@ -53,27 +54,42 @@ export default {
       params.push(status);
     }
     if (time) {
-      where += ` AND se.created_at >= ? AND se.created_at <= ?`;
-      params.push(time.start, time.end);
+      where += ` AND se.created_at >= ? AND se.created_at < ?`;
+      params.push(time.start, time.endExclusive);
     }
 
-    const sql = `SELECT se.attack_type, se.source_ip, se.request_path, se.handled_status, se.threat_score, se.created_at FROM security_events se WHERE ${where} ORDER BY se.created_at DESC LIMIT ?`;
-    params.push(take);
-
-    const [rows] = await pool.query(sql, params);
-    return rows;
+    const [[rows], [countRows]] = await Promise.all([
+      pool.query(
+        `SELECT se.event_id, se.attack_type, se.source_ip, se.request_path, se.handled_status, se.threat_score, se.created_at FROM security_events se WHERE ${where} ORDER BY se.created_at DESC LIMIT ?`,
+        [...params, take],
+      ),
+      pool.query(`SELECT COUNT(*) AS total FROM security_events se WHERE ${where}`, params),
+    ]);
+    return withQueryResultMetadata(
+      { total: Number(countRows[0]?.total || 0), items: rows },
+      {
+        resolvedRanges: args.timeRange
+          ? { timeRange: { expression: args.timeRange, range: time, source: 'tool' } }
+          : {},
+      },
+    );
   },
-  transform(rows) {
+  getDependencyRefs(raw) {
+    return (raw?.items || []).map((item) => ({ type: 'security_event', id: item.event_id }));
+  },
+  transform(raw) {
+    const rows = raw?.items || [];
     if (!rows?.length) return '没有找到安全事件记录';
     const lines = rows.map((r, i) => {
       const time = r.created_at ? new Date(r.created_at).toLocaleString('zh-CN') : '';
       return `${i + 1}. [${r.attack_type}] ${r.source_ip} -> ${r.request_path} (风险分: ${r.threat_score}, 状态: ${r.handled_status}) - ${time}`;
     });
-    return `共 ${rows.length} 条安全事件：\n${lines.join('\n')}`;
+    return `共 ${raw.total} 条安全事件：\n${lines.join('\n')}`;
   },
-  summarize(rows) {
+  summarize(raw) {
+    const rows = raw?.items || [];
     if (!rows?.length) return '安全事件：无记录';
     const types = [...new Set(rows.map((r) => r.attack_type))];
-    return `安全事件：共 ${rows.length} 条，类型：${types.join('、')}`;
+    return `安全事件：共 ${raw.total} 条，类型：${types.join('、')}`;
   },
 };

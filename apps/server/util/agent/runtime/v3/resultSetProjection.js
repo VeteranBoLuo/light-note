@@ -25,6 +25,7 @@ export function projectAgentV3ResultSet({ capability, result } = {}) {
     domains: capability.domains,
     refs: Object.freeze(refs),
     status: refs.length ? 'success' : 'empty',
+    ...(result?.resultMetadata ? { metadata: Object.freeze({ ...result.resultMetadata }) } : {}),
   });
 }
 

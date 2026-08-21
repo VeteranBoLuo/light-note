@@ -1,9 +1,10 @@
 import pool from '../../../db/index.js';
-import { parseTimeRange } from '../timeRange.js';
+import { resolveAgentTimeRange } from '../timeRange.js';
 import { categoryCondition, FILE_CATEGORY_CASE, FILE_CATEGORY_LABEL, breakdownFromRows } from '../fileCategory.js';
 import { searchPersonalKnowledge } from '../../personalKnowledgeSearch.js';
 import { PERSONAL_SCOPE_USER_PARAM, personalScopeHint } from '../ownerScope.js';
 import { escapeLikePattern } from '../sqlPatterns.js';
+import { withQueryResultMetadata } from '../toolResultMetadata.js';
 
 /**
  * 文件名 LIKE 对口语化问法（"我上传过一个讲X的文档"）召回为零，且它只匹配文件名、
@@ -36,8 +37,8 @@ async function semanticFallback({ userId, keyword, take, resolvedFolderId, typeC
     params.push(resolvedFolderId);
   }
   if (time) {
-    where += ' AND f.create_time >= ? AND f.create_time <= ?';
-    params.push(time.start, time.end);
+    where += ' AND f.create_time >= ? AND f.create_time < ?';
+    params.push(time.start, time.endExclusive);
   }
   if (typeCond) where += ` AND ${typeCond}`;
   const [rows] = await pool.query(
@@ -105,10 +106,11 @@ export default {
   argumentAliases: ['folder_id', 'directoryId', 'directory_id', 'folder_name', 'folder'],
   normalizeArgs,
   requireRoot: false,
-  async execute(input, ctx) {
+  async execute(input, ctx = {}) {
     const args = normalizeArgs(input);
     const { keyword, folderId, folderName, type, timeRange, limit = 10 } = args;
-    const time = parseTimeRange(timeRange);
+    const time = resolveAgentTimeRange(args, 'timeRange', { context: ctx, label: '文件创建时间' });
+    const resolvedRanges = timeRange ? { timeRange: { expression: timeRange, range: time, source: 'tool' } } : {};
     const take = limit;
 
     let resolvedFolderId = folderId;
@@ -122,7 +124,7 @@ export default {
         [ctx.userId, folderName],
       );
       if (!folderRows.length) {
-        return { total: 0, items: [], typeBreakdown: {} };
+        return withQueryResultMetadata({ total: 0, items: [], typeBreakdown: {} }, { resolvedRanges });
       }
       if (folderRows.length > 1) {
         throw new Error(`FOLDER_AMBIGUOUS: 存在多个名为“${folderName}”的文件夹，请使用文件夹 ID 指定目标`);
@@ -142,8 +144,8 @@ export default {
       baseParams.push(resolvedFolderId);
     }
     if (time) {
-      baseWhere += ' AND f.create_time >= ? AND f.create_time <= ?';
-      baseParams.push(time.start, time.end);
+      baseWhere += ' AND f.create_time >= ? AND f.create_time < ?';
+      baseParams.push(time.start, time.endExclusive);
     }
 
     // 叠加类型筛选(用于 items/total)——按 MIME 归类,修复 pdf/压缩包/文本被漏的问题
@@ -199,12 +201,15 @@ export default {
       folderName: row.folder_name || null,
     });
     if (rows.length || !keyword) {
-      return {
-        total: Number(countRes[0]?.total || 0),
-        items: rows.map(mapRow),
-        typeBreakdown,
-        matchMode: 'like',
-      };
+      return withQueryResultMetadata(
+        {
+          total: Number(countRes[0]?.total || 0),
+          items: rows.map(mapRow),
+          typeBreakdown,
+          matchMode: 'like',
+        },
+        { resolvedRanges },
+      );
     }
 
     // LIKE 零结果 → 语义降级；降级自身失败 fail-open 回空结果，不升级成报错。
@@ -219,17 +224,23 @@ export default {
         time,
       });
       if (fallbackRows.length) {
-        return {
-          total: fallbackRows.length,
-          items: fallbackRows.map(mapRow),
-          typeBreakdown,
-          matchMode: 'semantic',
-        };
+        return withQueryResultMetadata(
+          {
+            total: fallbackRows.length,
+            items: fallbackRows.map(mapRow),
+            typeBreakdown,
+            matchMode: 'semantic',
+          },
+          { exactTotal: false, coverage: 'partial', truncationReason: 'semantic_recall', resolvedRanges },
+        );
       }
     } catch (error) {
       console.warn('[query_files] semantic fallback failed code=%s', error?.code || error?.message);
     }
-    return { total: 0, items: [], typeBreakdown, matchMode: 'like' };
+    return withQueryResultMetadata({ total: 0, items: [], typeBreakdown, matchMode: 'like' }, { resolvedRanges });
+  },
+  getDependencyRefs(raw) {
+    return (Array.isArray(raw?.items) ? raw.items : []).map((item) => ({ type: 'file', id: item.id }));
   },
   transform(raw, args = {}) {
     const { text: bdText } = breakdownFromRows(

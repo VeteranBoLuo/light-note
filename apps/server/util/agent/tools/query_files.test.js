@@ -75,7 +75,12 @@ describe('query_files 工具', () => {
 
     const raw = await tool.execute({ folderName: '不存在' }, { userId: 'user-1' });
 
-    expect(raw).toEqual({ total: 0, items: [], typeBreakdown: {} });
+    expect(raw).toMatchObject({
+      total: 0,
+      items: [],
+      typeBreakdown: {},
+      resultMetadata: { total: 0, returned: 0, completeness: 'complete' },
+    });
     expect(tool.transform(raw)).toBe('没有找到文件');
     expect(query).toHaveBeenCalledTimes(1);
     expect(query.mock.calls[0][1]).toEqual(['user-1', '不存在']);
@@ -92,8 +97,24 @@ describe('query_files 工具', () => {
       if (text.includes('f.id IN (?)')) {
         return [
           [
-            { id: 3, file_name: '方案.pdf', file_type: 'application/pdf', file_size: 100, create_time: null, folder_id: null, folder_name: null },
-            { id: 5, file_name: '纪要.docx', file_type: 'application/msword', file_size: 100, create_time: null, folder_id: null, folder_name: null },
+            {
+              id: 3,
+              file_name: '方案.pdf',
+              file_type: 'application/pdf',
+              file_size: 100,
+              create_time: null,
+              folder_id: null,
+              folder_name: null,
+            },
+            {
+              id: 5,
+              file_name: '纪要.docx',
+              file_type: 'application/msword',
+              file_size: 100,
+              create_time: null,
+              folder_id: null,
+              folder_name: null,
+            },
           ],
         ];
       }

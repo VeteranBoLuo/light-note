@@ -1,10 +1,11 @@
 import pool from '../../../db/index.js';
 import { drawingNoteAiProjection, renderDrawingNoteForAi } from '../../drawingNoteAi.js';
-import { describeResolvedTimeRange, parseTimeRange } from '../timeRange.js';
+import { describeResolvedTimeRange, resolveAgentTimeRange } from '../timeRange.js';
 import { parseNoteContent, renderNoteForAi } from '../../noteSemantic.js';
 import { searchPersonalKnowledge } from '../../personalKnowledgeSearch.js';
 import { PERSONAL_SCOPE_USER_PARAM, personalScopeHint } from '../ownerScope.js';
 import { escapeLikePattern } from '../sqlPatterns.js';
+import { withQueryResultMetadata } from '../toolResultMetadata.js';
 
 /**
  * 裸 LIKE 对口语化问法（"我记得有一篇讲X的笔记"）召回为零——整句不可能是任何正文的子串。
@@ -33,12 +34,12 @@ async function semanticFallback({ userId, keyword, take, time }) {
   let where = `n.id IN (?) AND n.create_by = ? AND n.del_flag = '0'`;
   const params = [orderedIds, userId];
   if (time) {
-    where += ` AND n.create_time >= ? AND n.create_time <= ?`;
-    params.push(time.start, time.end);
+    where += ` AND n.create_time >= ? AND n.create_time < ?`;
+    params.push(time.start, time.endExclusive);
   }
   const [rows] = await pool.query(
     `SELECT n.id, n.title, IF(n.type = 'drawing', '', LEFT(COALESCE(n.content, ''), 30000)) AS content,
-            ${drawingNoteAiProjection('n')}, n.type, n.create_time
+            ${drawingNoteAiProjection('n')}, n.type, n.create_time, n.update_time
        FROM note n WHERE ${where}`,
     params,
   );
@@ -69,9 +70,9 @@ export default {
     },
   },
   requireRoot: false,
-  async execute(args, ctx) {
+  async execute(args, ctx = {}) {
     const { keyword, timeRange, limit = 10 } = args;
-    const time = parseTimeRange(timeRange);
+    const time = resolveAgentTimeRange(args, 'timeRange', { context: ctx, label: '笔记创建时间' });
     const resolvedTimeRange = time
       ? {
           expression: String(timeRange || '').trim(),
@@ -79,6 +80,9 @@ export default {
         }
       : null;
     const timeRangeMetadata = resolvedTimeRange ? { resolvedTimeRange } : {};
+    const resolvedRanges = timeRange
+      ? { timeRange: { expression: String(timeRange).trim(), range: time, source: 'tool' } }
+      : {};
     const take = Math.min(Math.max(limit || 10, 1), 50);
 
     let where = "n.create_by = ? AND n.del_flag = '0'";
@@ -90,8 +94,8 @@ export default {
       baseParams.push(pattern, pattern);
     }
     if (time) {
-      where += ` AND n.create_time >= ? AND n.create_time <= ?`;
-      baseParams.push(time.start, time.end);
+      where += ` AND n.create_time >= ? AND n.create_time < ?`;
+      baseParams.push(time.start, time.endExclusive);
     }
 
     // 有关键词时按相关度排序（档位与全局搜索一致：标题精确 100 > 前缀 80 > 包含 60 > 仅正文 10），
@@ -109,7 +113,7 @@ export default {
     const [[rows], [countRes]] = await Promise.all([
       pool.query(
         `SELECT n.id, n.title, IF(n.type = 'drawing', '', LEFT(COALESCE(n.content, ''), 30000)) AS content,
-                ${drawingNoteAiProjection('n')}, n.type, n.create_time
+                ${drawingNoteAiProjection('n')}, n.type, n.create_time, n.update_time
            FROM note n WHERE ${where} ${order} LIMIT ?`,
         [...baseParams, ...orderParams, take],
       ),
@@ -117,7 +121,10 @@ export default {
     ]);
 
     if (rows.length || !keyword) {
-      return { total: countRes[0].total, items: rows, matchMode: 'like', ...timeRangeMetadata };
+      return withQueryResultMetadata(
+        { total: Number(countRes[0].total || 0), items: rows, matchMode: 'like', ...timeRangeMetadata },
+        { resolvedRanges },
+      );
     }
 
     // LIKE 零结果 → 语义降级。降级自身失败必须 fail-open 回到"空结果"，不能把正常的
@@ -125,12 +132,18 @@ export default {
     try {
       const fallbackRows = await semanticFallback({ userId: ctx.userId, keyword, take, time });
       if (fallbackRows.length) {
-        return { total: fallbackRows.length, items: fallbackRows, matchMode: 'semantic', ...timeRangeMetadata };
+        return withQueryResultMetadata(
+          { total: fallbackRows.length, items: fallbackRows, matchMode: 'semantic', ...timeRangeMetadata },
+          { exactTotal: false, coverage: 'partial', truncationReason: 'semantic_recall', resolvedRanges },
+        );
       }
     } catch (error) {
       console.warn('[query_notes] semantic fallback failed code=%s', error?.code || error?.message);
     }
-    return { total: 0, items: [], matchMode: 'like', ...timeRangeMetadata };
+    return withQueryResultMetadata(
+      { total: 0, items: [], matchMode: 'like', ...timeRangeMetadata },
+      { resolvedRanges },
+    );
   },
   getDependencyRefs(raw) {
     return (Array.isArray(raw?.items) ? raw.items : []).map((item) => ({ type: 'note', id: item.id }));

@@ -6,27 +6,19 @@ import {
   projectPlannerExecutionContext,
 } from './executionContext.js';
 import { authoritativeTemporalArgumentsForGoal } from './v3/temporalConstraints.js';
+import { DEFAULT_AGENT_STORAGE_TIME_ZONE, DEFAULT_AGENT_TIME_ZONE, normalizeAgentTimeZone } from '../timeRange.js';
 
 export const EXECUTION_PLAN_VERSION = '2.0';
 export const EXECUTION_PLAN_TOOL_NAME = 'submit_execution_plan';
-const DEFAULT_AGENT_TIME_ZONE = 'Asia/Shanghai';
 const MAX_PLANNER_ATTEMPTS = 3;
 const MAX_LATEST_MESSAGE_CHARS = 4_000;
 
-function validTimeZone(value) {
-  const timeZone = String(value || '').trim();
-  if (!timeZone || timeZone.length > 64) return '';
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone }).format(new Date(0));
-    return timeZone;
-  } catch {
-    return '';
-  }
-}
-
 export function buildPlannerTemporalContext({ timeZone, now = new Date() } = {}) {
-  const resolvedTimeZone =
-    validTimeZone(timeZone) || validTimeZone(process.env.AGENT_DEFAULT_TIME_ZONE) || DEFAULT_AGENT_TIME_ZONE;
+  const resolvedTimeZone = normalizeAgentTimeZone(
+    timeZone,
+    process.env.AGENT_DEFAULT_TIME_ZONE || DEFAULT_AGENT_TIME_ZONE,
+  );
+  const storageTimeZone = normalizeAgentTimeZone(process.env.AGENT_STORAGE_TIME_ZONE, DEFAULT_AGENT_STORAGE_TIME_ZONE);
   const instant = now instanceof Date && Number.isFinite(now.getTime()) ? now : new Date();
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat('en-CA', {
@@ -46,8 +38,10 @@ export function buildPlannerTemporalContext({ timeZone, now = new Date() } = {})
   const currentDate = `${parts.year}-${parts.month}-${parts.day}`;
   return Object.freeze({
     timeZone: resolvedTimeZone,
+    storageTimeZone,
     currentDate,
     currentDateTime: `${currentDate} ${parts.hour}:${parts.minute}:${parts.second}`,
+    currentInstant: instant.toISOString(),
   });
 }
 
@@ -82,9 +76,7 @@ function embeddedStepSchema(turnSpec, route, candidateTools, executionContext) {
       additionalProperties: false,
       properties: {
         id: { type: 'string', minLength: 1, maxLength: 64 },
-        goalId: goalId
-          ? { type: 'string', enum: [goalId] }
-          : { type: 'string', minLength: 1, maxLength: 40 },
+        goalId: goalId ? { type: 'string', enum: [goalId] } : { type: 'string', minLength: 1, maxLength: 40 },
         toolName: { type: 'string', enum: [tool.name] },
         arguments: plannerArgumentsSchema(tool, executionContext, authoritativeArguments),
         ...(argumentBindings ? { argumentBindings } : {}),

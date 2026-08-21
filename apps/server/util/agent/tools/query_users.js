@@ -1,6 +1,7 @@
 import pool from '../../../db/index.js';
 import { escapeLikePattern } from '../sqlPatterns.js';
-import { parseTimeRange } from '../timeRange.js';
+import { resolveAgentTimeRange } from '../timeRange.js';
+import { withQueryResultMetadata } from '../toolResultMetadata.js';
 
 export default {
   name: 'query_users',
@@ -29,7 +30,7 @@ export default {
     },
   },
   requireRoot: true,
-  async execute(args) {
+  async execute(args, ctx = {}) {
     const { keyword, registeredWithin, limit = 10 } = args;
     const take = Math.min(Math.max(limit || 10, 1), 50);
 
@@ -43,10 +44,13 @@ export default {
     }
 
     // 注册时间段:让"最近一周新增多少用户"可答;total 直接是该时段的新增数
-    const time = registeredWithin ? parseTimeRange(registeredWithin) : null;
+    const time = resolveAgentTimeRange(args, 'registeredWithin', {
+      context: ctx,
+      label: '用户注册时间',
+    });
     if (time) {
-      where += ' AND u.create_time >= ? AND u.create_time <= ?';
-      params.push(time.start, time.end);
+      where += ' AND u.create_time >= ? AND u.create_time < ?';
+      params.push(time.start, time.endExclusive);
     }
 
     const [[rows], [countRes]] = await Promise.all([
@@ -57,7 +61,17 @@ export default {
       pool.query(`SELECT COUNT(*) AS total FROM user u WHERE ${where}`, params),
     ]);
 
-    return { total: countRes[0].total, items: rows, registeredWithin: registeredWithin || null };
+    return withQueryResultMetadata(
+      { total: Number(countRes[0].total || 0), items: rows, registeredWithin: registeredWithin || null },
+      {
+        resolvedRanges: registeredWithin
+          ? { registeredWithin: { expression: registeredWithin, range: time, source: 'tool' } }
+          : {},
+      },
+    );
+  },
+  getDependencyRefs(raw) {
+    return (Array.isArray(raw?.items) ? raw.items : []).map((item) => ({ type: 'user', id: item.id }));
   },
   transform(raw) {
     const scope = raw?.registeredWithin ? `${raw.registeredWithin}新增` : '';

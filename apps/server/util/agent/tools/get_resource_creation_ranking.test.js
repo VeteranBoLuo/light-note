@@ -8,19 +8,23 @@ const { default: tool } = await import('./get_resource_creation_ranking.js');
 describe('get_resource_creation_ranking 工具', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.query.mockResolvedValue([
-      [
-        {
-          user_id: 'user-1',
-          alias: '甲',
-          email: 'a@example.test',
-          bookmark_count: '3',
-          note_count: '2',
-          file_count: '1',
-          total_count: '6',
-        },
-      ],
-    ]);
+    mocks.query.mockImplementation((sql) =>
+      String(sql).startsWith('SELECT COUNT(*) AS total FROM (')
+        ? Promise.resolve([[{ total: '1' }]])
+        : Promise.resolve([
+            [
+              {
+                user_id: 'user-1',
+                alias: '甲',
+                email: 'a@example.test',
+                bookmark_count: '3',
+                note_count: '2',
+                file_count: '1',
+                total_count: '6',
+              },
+            ],
+          ]),
+    );
   });
 
   it('统计昨天的三类有效资源，并排除内部账号和新手引导资源', async () => {
@@ -35,7 +39,7 @@ describe('get_resource_creation_ranking 工具', () => {
     expect(sql).toContain('u.role NOT IN (?, ?)');
     expect(sql).toContain('ORDER BY total_count DESC');
     expect(params[0]).toMatch(/^\d{4}-\d{2}-\d{2} 00:00:00$/);
-    expect(params[1]).toMatch(/^\d{4}-\d{2}-\d{2} 23:59:59$/);
+    expect(params[1]).toMatch(/^\d{4}-\d{2}-\d{2} 00:00:00$/);
     expect(params.slice(0, 6)).toEqual([params[0], params[1], params[0], params[1], params[0], params[1]]);
     expect(params.slice(-3)).toEqual(['root', 'test', 10]);
     expect(raw).toMatchObject({
@@ -64,7 +68,7 @@ describe('get_resource_creation_ranking 工具', () => {
     const [sql, params] = mocks.query.mock.calls[0];
 
     expect(sql).not.toContain('u.role NOT IN');
-    expect(sql).toContain('u.create_time >= ? AND u.create_time <= ?');
+    expect(sql).toContain('u.create_time >= ? AND u.create_time < ?');
     expect(params).toHaveLength(9);
     expect(params.at(-1)).toBe(50);
   });

@@ -54,6 +54,9 @@ import {
 } from '../util/agent/runtime/v3/resultSetProjection.js';
 import { canToolConsumeAgentV3ResultSet } from '../util/agent/runtime/v3/candidateAvailability.js';
 import { resolveAgentTargetUser } from '../util/agent/userLookup.js';
+import { scopedTargetUser } from '../util/agent/ownerScope.js';
+import { finalizeToolResultMetadata, formatToolResultMetadataDisclosure } from '../util/agent/toolResultMetadata.js';
+import { projectAgentTemporalRanges } from '../util/agent/timeRange.js';
 import { resolveAgentActionIntent } from '../util/agent/actionIntentPolicy.js';
 import {
   adjudicateSemanticPlan,
@@ -129,10 +132,7 @@ import {
   resolveToolSources,
 } from '../util/agent/sourceUtils.js';
 import { generateFinalReply, resolveFinalReplyTemperature } from '../util/agent/finalReply.js';
-import {
-  applyAgentAnswerRequirements,
-  normalizeAgentAnswerRequirements,
-} from '../util/agent/answerRequirements.js';
+import { applyAgentAnswerRequirements, normalizeAgentAnswerRequirements } from '../util/agent/answerRequirements.js';
 import { AgentToolPolicyError, enforceToolPolicy, normalizeRegisteredTool } from '../util/agent/toolPolicy.js';
 import { decideDirectAgentRoute } from '../util/agent/directRoute.js';
 import {
@@ -609,10 +609,11 @@ async function executeTool(name, args, ctx) {
     args = policy.args;
 
     // root 在普通会话中可通过 user 参数查询指定账号；管理员代管上下文由策略层固定 subject，禁止再次跳转。
-    if (args.user && String(args.user).trim()) {
-      const resolved = await resolveAgentTargetUser(args.user);
+    const targetUser = scopedTargetUser(args);
+    if (targetUser) {
+      const resolved = await resolveAgentTargetUser(targetUser);
       if (!resolved) {
-        return { status: 'error', summary: `未找到用户"${args.user}"`, error: 'USER_NOT_FOUND' };
+        return { status: 'error', summary: `未找到用户"${targetUser}"`, error: 'USER_NOT_FOUND' };
       }
       ctx = { ...ctx, userId: resolved.id, userAlias: resolved.alias };
     }
@@ -643,8 +644,13 @@ async function executeTool(name, args, ctx) {
       }
     }
     if (ctx.signal?.aborted) throw ctx.signal.reason || new DOMException('请求已取消', 'AbortError');
-    const rawSummary = tool.transform(raw, args);
-    const summary = String(rawSummary || '').slice(0, tool.resultBudget);
+    const rawSummary = String(tool.transform(raw, args) || '');
+    const summaryBudget = Math.max(0, Number(tool.resultBudget || 0));
+    const resultBudgetMarker = '\n[结果已按工具预算截断，完整性为 partial]';
+    const summary =
+      rawSummary.length > summaryBudget && summaryBudget > resultBudgetMarker.length
+        ? `${rawSummary.slice(0, summaryBudget - resultBudgetMarker.length)}${resultBudgetMarker}`
+        : rawSummary.slice(0, summaryBudget);
     if (raw && typeof raw === 'object' && raw.error) {
       return {
         status: 'error',
@@ -670,7 +676,11 @@ async function executeTool(name, args, ctx) {
         answerRequirements = normalizeAgentAnswerRequirements(tool.getAnswerRequirements(raw, args, ctx));
       } catch (requirementError) {
         // 防遗漏投影属于回答增强；异常不能把一次已经成功的只读查询改成失败。
-        console.error('[Agent] answer requirements failed name=%s code=%s', name, stableAgentErrorCode(requirementError));
+        console.error(
+          '[Agent] answer requirements failed name=%s code=%s',
+          name,
+          stableAgentErrorCode(requirementError),
+        );
       }
     }
     let dependencyRefs = [];
@@ -685,6 +695,13 @@ async function executeTool(name, args, ctx) {
         console.error('[Agent] dependency refs failed name=%s code=%s', name, stableAgentErrorCode(dependencyError));
       }
     }
+    const resultMetadata = finalizeToolResultMetadata({
+      raw,
+      args,
+      dependencyRefs,
+      summaryOriginalLength: rawSummary.length,
+      summaryReturnedLength: summary.length,
+    });
     return {
       status: 'success',
       summary,
@@ -696,6 +713,7 @@ async function executeTool(name, args, ctx) {
       ...(answerRequirements.length ? { answerRequirements } : {}),
       dependencyRefs,
       referenceProjectionComplete,
+      resultMetadata,
       ...(ctx.includeRawResult === true ? { raw } : {}),
     };
   } catch (err) {
@@ -802,6 +820,8 @@ function toolRuntimeContext(req, identity, extra = {}) {
     billingUserId: identity.billingUserId,
     billingUserRole: identity.billingUserRole,
     request: req,
+    temporalContext:
+      req.agentTemporalContext || buildPlannerTemporalContext({ timeZone: String(req.body?.timeZone || '') }),
     allowVisitorMaintenance: req.adminContext?.mode === 'maintain' && identity.resourceUserRole === 'visitor',
     ...extra,
   };
@@ -849,6 +869,14 @@ async function createPendingWriteConfirmation({
   });
   tool = policy.tool;
   args = policy.args;
+  const temporalRanges = projectAgentTemporalRanges(args);
+  const storedPrivateContext =
+    privateContext || Object.keys(temporalRanges).length
+      ? {
+          ...(privateContext || {}),
+          ...(Object.keys(temporalRanges).length ? { agentTemporalRanges: temporalRanges } : {}),
+        }
+      : null;
   const preview =
     typeof tool.preview === 'function'
       ? await tool.preview(args, {
@@ -875,7 +903,7 @@ async function createPendingWriteConfirmation({
     token,
     replaceToken,
     replaceConfirmationId,
-    privateContext,
+    privateContext: storedPrivateContext,
     originRequestId,
   });
   return publicToolConfirmation(pending.token, pending.confirmation, pending.expiresIn);
@@ -2186,6 +2214,8 @@ export async function agentChat(req, res) {
       continuationToken = '',
       materialClarificationToken = '',
     } = normalizedRequestBody;
+    const requestTemporalContext = buildPlannerTemporalContext({ timeZone });
+    req.agentTemporalContext = requestTemporalContext;
     let message = initialMessage;
     recordRequestedScope(trace.turnContract, turnEnvelope.grounding.mode);
     const canUseInteractions = supportsAgentInteractions(clientCapabilities);
@@ -2246,13 +2276,15 @@ export async function agentChat(req, res) {
     const authorizedCapabilityScope = normalizeCapabilityScope(turnEnvelope.capabilityScope, { actorRole: userRole });
     turnEnvelope = Object.freeze({ ...turnEnvelope, capabilityScope: authorizedCapabilityScope });
     if (authorizedCapabilityScope.mode === 'forbidden') {
-      return res.status(403).send(
-        resultData(
-          { code: 'AGENT_CAPABILITY_SCOPE_FORBIDDEN', reason: 'forbidden_scope' },
-          403,
-          '当前账号无权使用所请求的 AI 能力范围。',
-        ),
-      );
+      return res
+        .status(403)
+        .send(
+          resultData(
+            { code: 'AGENT_CAPABILITY_SCOPE_FORBIDDEN', reason: 'forbidden_scope' },
+            403,
+            '当前账号无权使用所请求的 AI 能力范围。',
+          ),
+        );
     }
     res.on('close', onClientClose);
     const session = await raceWithSignal(getOrCreateSession(identity.ownerKey, sessionId), agentAbortController.signal);
@@ -3252,7 +3284,7 @@ export async function agentChat(req, res) {
                     capabilityScope: turnEnvelope.capabilityScope,
                     authoritativeGroundingPolicy: groundingPolicyFromScopeMode(groundingScope.mode),
                     outputContract: precompiledOutputContract,
-                    temporalContext: buildPlannerTemporalContext({ timeZone }),
+                    temporalContext: requestTemporalContext,
                     actorRole: userRole,
                     signal: agentAbortController.signal,
                     traceId: requestId,
@@ -4250,7 +4282,7 @@ export async function agentChat(req, res) {
                 capabilityScope: turnEnvelope.capabilityScope,
                 authoritativeGroundingPolicy: groundingPolicyFromScopeMode(groundingScope.mode),
                 outputContract: precompiledOutputContract,
-                temporalContext: buildPlannerTemporalContext({ timeZone }),
+                temporalContext: requestTemporalContext,
                 actorRole: userRole,
                 signal: agentAbortController.signal,
                 traceId: requestId,
@@ -4413,6 +4445,7 @@ export async function agentChat(req, res) {
       emptyMaterialDependencyCallIds = new Set(),
       emptyMaterialDependencyMessagesByCallId = new Map(),
       noteDraftMaterialRefsByCallId = new Map(),
+      temporalBindingsByCallId = {},
     }) => {
       const toolCalls = (Array.isArray(rawToolCalls) ? rawToolCalls : []).slice(0, 8);
       if (!toolCalls.length) return [];
@@ -4573,7 +4606,11 @@ export async function agentChat(req, res) {
                 registry: toolRegistry,
                 toolName: tc.function.name,
                 args,
-                context: toolRuntimeContext(req, identity, { agentContentScope: contentScope, question: message }),
+                context: toolRuntimeContext(req, identity, {
+                  agentContentScope: contentScope,
+                  question: message,
+                  resolvedTemporalRanges: temporalBindingsByCallId?.[tc.id] || {},
+                }),
                 allowedToolNames,
                 phase: 'plan',
               });
@@ -4693,6 +4730,7 @@ export async function agentChat(req, res) {
                 suppressUserRewards: Boolean(req.suppressUserRewards || req.adminContext),
                 question: message,
                 agentContentScope: contentScope,
+                resolvedTemporalRanges: temporalBindingsByCallId?.[tc.id] || {},
               }),
             );
           }
@@ -4719,6 +4757,7 @@ export async function agentChat(req, res) {
             error: result.error,
             dataSummary: result.dataSummary,
             summary: result.summary,
+            resultMetadata: result.resultMetadata,
             round,
           });
           if (stream) {
@@ -4791,7 +4830,16 @@ export async function agentChat(req, res) {
       }
 
       for (const item of results) {
-        const summary = String(item.result.summary || '').slice(0, Math.max(0, remainingToolResultBudget));
+        const availableBudget = Math.max(0, remainingToolResultBudget);
+        const metadataDisclosure = formatToolResultMetadataDisclosure(item.result.resultMetadata, locale);
+        // 查询口径属于服务端已核验事实，必须优先于可能很长的业务摘要进入最终回答上下文。
+        // 这样 resultBudget/本轮上下文预算发生截断时，模型仍知道时间范围和结果是否完整。
+        const fullSummary = [metadataDisclosure, String(item.result.summary || '')].filter(Boolean).join('\n');
+        const contextBudgetMarker = '\n[结果已按本轮上下文预算截断，完整性为 partial]';
+        const summary =
+          fullSummary.length > availableBudget && availableBudget > contextBudgetMarker.length
+            ? `${fullSummary.slice(0, availableBudget - contextBudgetMarker.length)}${contextBudgetMarker}`
+            : fullSummary.slice(0, availableBudget);
         remainingToolResultBudget -= summary.length;
         const toolGroundingInspection = inspectGroundingSubset(item.result.sources, groundingScope);
         const groundingSafe =
@@ -5548,11 +5596,7 @@ export async function agentChat(req, res) {
       }
     }
 
-    if (
-      runtimeV3Enforced &&
-      runtimeV2Outcome?.turnSpec &&
-      runtimeV2Outcome.state === 'ready_for_tools'
-    ) {
+    if (runtimeV3Enforced && runtimeV2Outcome?.turnSpec && runtimeV2Outcome.state === 'ready_for_tools') {
       const focus = await commitSessionTurnSpec(session, runtimeV2Outcome.turnSpec);
       runtimeV3ReadFocusId = String(focus?.id || '');
     }
@@ -5606,6 +5650,7 @@ export async function agentChat(req, res) {
         allowedToolNames: selectedToolNames,
         round: 1,
         finishReason: plannerResponse.finishReason,
+        temporalBindingsByCallId: runtimeV2Outcome?.validation?.temporalBindingsByCallId || {},
       });
       const missingRequiredParameter = results.find(
         (item) => item.result?.status === 'error' && REQUIRED_INPUT_ERROR_CODES.has(String(item.result?.error || '')),
@@ -5744,6 +5789,7 @@ export async function agentChat(req, res) {
         let followUpPlannerResponse;
         let parsedFollowUp;
         let followUpDecision;
+        let followUpTemporalBindingsByCallId = {};
         if (runtimeContractEnforced) {
           const completedGoalIds = runtimeV2Outcome.turnSpec.goals
             .filter((goal) => {
@@ -5813,6 +5859,7 @@ export async function agentChat(req, res) {
               .filter((capability) => capability.effect === 'write')
               .flatMap((capability) => capability.toolNames || []),
           };
+          followUpTemporalBindingsByCallId = planned.validation?.temporalBindingsByCallId || {};
         } else {
           const followUpPromptBase = buildPlannerPrompt(followUpTools, userRole, {
             semanticCatalog: followUpCatalog,
@@ -6040,6 +6087,7 @@ export async function agentChat(req, res) {
           emptyMaterialDependencyCallIds,
           emptyMaterialDependencyMessagesByCallId,
           noteDraftMaterialRefsByCallId,
+          temporalBindingsByCallId: followUpTemporalBindingsByCallId,
         });
         recordSuccessfulCapabilityResults(previousRoundResults, followUpCatalog);
         const terminalDependencyFailure = dependencyRound
@@ -7334,11 +7382,12 @@ export async function confirmAgentTool(req, res) {
     // 参数和策略校验必须只发生在 ready 阶段；否则同一 token 的安全重放会拿空参数
     // 再次校验，并被必填字段误判为失败。owner/session/能力绑定已经在上方完成校验。
     assertAgentNoteTargetDirectoryFeature(req, confirmation.toolName, confirmation.args || {});
+    const confirmedTemporalRanges = confirmation.privateContext?.agentTemporalRanges || {};
     await enforceToolPolicy({
       registry: toolRegistry,
       toolName: confirmation.toolName,
       args: confirmation.args || {},
-      context: toolRuntimeContext(req, identity),
+      context: toolRuntimeContext(req, identity, { resolvedTemporalRanges: confirmedTemporalRanges }),
       phase: 'execute',
       confirmed: true,
       trustedPreparedArgs: true,
@@ -7358,6 +7407,7 @@ export async function confirmAgentTool(req, res) {
       confirmation.args || {},
       toolRuntimeContext(req, identity, {
         confirmed: true,
+        resolvedTemporalRanges: confirmedTemporalRanges,
         suppressUserRewards: Boolean(req.suppressUserRewards || req.adminContext),
         idempotencyKey: confirmation.idempotencyKey || null,
       }),

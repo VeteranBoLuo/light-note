@@ -1,12 +1,13 @@
 import { getGrowth } from '../../growth.js';
 import { getUserPointsDetail } from '../../points.js';
+import { MANAGEMENT_SCOPE_USER_PARAM } from '../ownerScope.js';
 
-// 【root】查指定用户的成长+积分详情(只读)。user 参数由执行器解析并把 ctx.userId 换成目标用户。
+// 【root】查指定用户的成长+积分详情；scope_user 由执行器解析并把 ctx.userId 换成目标用户。
 export default {
   name: 'get_user_detail',
   appliesToDomains: ['admin', 'growth', 'account'],
   description:
-    '【管理员】查询指定用户的成长与积分详情(等级、经验、积分余额、补签卡、最近积分流水)。必须用 user 参数指定用户(昵称/邮箱/ID)。回答"查一下用户X的积分/等级""某某的成长情况"。',
+    '【管理员】查询指定用户的成长与积分详情(等级、经验、积分余额、补签卡、最近积分流水)。必须用 scope_user 参数指定用户(昵称/邮箱/ID)。回答"查一下用户X的积分/等级""某某的成长情况"。',
   routing: {
     targetScope: 'platform',
     requireAny: [
@@ -17,9 +18,10 @@ export default {
   },
   parameters: {
     type: 'object',
-    properties: { user: { type: 'string', description: '目标用户:昵称 / 邮箱 / 用户ID(必填)' } },
-    required: ['user'],
+    properties: { scope_user: { type: 'string', description: MANAGEMENT_SCOPE_USER_PARAM } },
+    required: ['scope_user'],
   },
+  scopeUserMigration: true,
   requireRoot: true,
   async execute(args, ctx) {
     // ctx.userId 已被执行器替换为目标用户;不传 userRole,按目标真实经验算等级

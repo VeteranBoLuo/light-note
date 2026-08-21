@@ -41,7 +41,6 @@ vi.mock('../util/agent/deepseekClient.js', () => ({
   parseLeakedToolCalls: vi.fn(() => []),
 }));
 
-vi.mock('../util/agent/timeRange.js', () => ({ parseTimeRange: vi.fn() }));
 vi.mock('../util/agent/prompt.js', () => ({ buildPlannerPrompt: vi.fn() }));
 vi.mock('../util/agent/toolRouter.js', () => ({
   matchAgentWriteActionToolNames: vi.fn(() => []),
@@ -851,6 +850,50 @@ describe('confirmAgentTool', () => {
           }),
         }),
       }),
+    );
+  });
+
+  it('确认执行沿用签发时的权威时间范围，不按确认时刻重新解析', async () => {
+    const inspected = await mocks.inspectToolConfirmationExecution.mock.results[0]?.value;
+    const confirmation = inspected?.confirmation || {
+      id: 'confirm-image-1',
+      sessionId: 'session-image',
+      toolName: 'create_image_note',
+      args: { attachmentId: 'attachment-1', title: '测试图片' },
+      resourceUserId: 'user-1',
+      resourceUserRole: 'user',
+      actionLockKey: 'agent:action-lock:test',
+      idempotencyKey: 'agent-write-v1:confirm-image',
+    };
+    confirmation.privateContext = {
+      agentTemporalRanges: {
+        timeRange: {
+          expression: '今天',
+          range: {
+            start: '2026-08-21 00:00:00',
+            endExclusive: '2026-08-21 12:00:01',
+            timeZone: 'Asia/Shanghai',
+          },
+          source: 'binder',
+        },
+      },
+    };
+    mocks.inspectToolConfirmationExecution.mockResolvedValue({ state: 'ready', confirmation });
+    mocks.claimToolConfirmationExecution.mockResolvedValue({ state: 'claimed', confirmation });
+
+    await confirmAgentTool(
+      {
+        body: { confirmationToken: 'token-image', sessionId: 'session-image' },
+        user: { id: 'user-1', role: 'user', alias: '测试用户' },
+        headers: {},
+        ip: '127.0.0.1',
+      },
+      createResponse(),
+    );
+
+    expect(mocks.executeImageNote).toHaveBeenCalledWith(
+      confirmation.args,
+      expect.objectContaining({ resolvedTemporalRanges: confirmation.privateContext.agentTemporalRanges }),
     );
   });
 

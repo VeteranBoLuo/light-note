@@ -38,7 +38,7 @@ describe('query_new_user_resources 工具', () => {
     expect(sql).toContain('FROM bookmark t');
     expect(sql).toContain('FROM note t');
     expect(sql).toContain('FROM files t');
-    expect(sql).toContain('u.create_time >= ? AND u.create_time <= ?');
+    expect(sql).toContain('u.create_time >= ? AND u.create_time < ?');
     expect(raw.registeredWithin).toBe('今天');
     expect(tool.transform(raw)).toContain('今天注册用户中，今天平台新增的资源');
   });

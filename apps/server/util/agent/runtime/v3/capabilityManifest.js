@@ -34,7 +34,14 @@ const VALID_SCOPE_POLICIES = new Set([
 ]);
 
 function freezeStrings(values = []) {
-  return Object.freeze([...new Set(values.map(String).map((value) => value.trim()).filter(Boolean))]);
+  return Object.freeze([
+    ...new Set(
+      values
+        .map(String)
+        .map((value) => value.trim())
+        .filter(Boolean),
+    ),
+  ]);
 }
 
 function freezeTemporalSlots(values = []) {
@@ -611,7 +618,7 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     domains: ['admin', 'account', 'growth'],
     effect: 'read',
     operations: ['read'],
-    requiredSlots: ['user'],
+    requiredSlots: ['scope_user'],
     rolePolicy: ['root'],
     scopePolicy: 'root_context_bound',
     resultKind: 'user_detail',
@@ -837,7 +844,9 @@ export function buildAgentV3CapabilityCatalog(
   const toolList = Array.isArray(tools) ? tools : [...(tools?.values?.() || [])];
   const registeredByName = new Map(toolList.filter(Boolean).map((tool) => [tool.name, tool]));
   const available =
-    availableToolNames instanceof Set ? availableToolNames : new Set(toolList.map((tool) => tool?.name).filter(Boolean));
+    availableToolNames instanceof Set
+      ? availableToolNames
+      : new Set(toolList.map((tool) => tool?.name).filter(Boolean));
   const scope = normalizeCapabilityScope(capabilityScope, { actorRole });
   const catalog = [];
   for (const capability of AGENT_CAPABILITY_MANIFEST) {
@@ -908,7 +917,8 @@ export function validateAgentV3CapabilityManifest(tools) {
       }
     }
     if (!VALID_SCOPE_POLICIES.has(capability.scopePolicy)) errors.push(`能力 ${capability.id} 的 scopePolicy 无效`);
-    if (capability.rolePolicy.some((role) => !VALID_ROLES.has(role))) errors.push(`能力 ${capability.id} 的角色策略无效`);
+    if (capability.rolePolicy.some((role) => !VALID_ROLES.has(role)))
+      errors.push(`能力 ${capability.id} 的角色策略无效`);
     for (const dependency of capability.dependencies) {
       if (!CAPABILITY_BY_ID.has(dependency)) errors.push(`能力 ${capability.id} 的依赖不存在：${dependency}`);
     }
@@ -919,8 +929,7 @@ export function validateAgentV3CapabilityManifest(tools) {
       if (properties) {
         const registeredTool = toolList.find((tool) => tool?.name === capability.toolName);
         const toolSideEffectPolicy =
-          registeredTool?.sideEffectPolicy ||
-          (registeredTool?.isWrite === true ? 'confirmation_required' : 'none');
+          registeredTool?.sideEffectPolicy || (registeredTool?.isWrite === true ? 'confirmation_required' : 'none');
         if (capability.sideEffectPolicy !== toolSideEffectPolicy) {
           errors.push(`工具 ${capability.toolName} 的副作用策略与能力清单不一致`);
         }

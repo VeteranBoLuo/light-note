@@ -586,14 +586,7 @@ async function updateSiblingSort(connection, { userId, parentId, rows, skipId = 
  */
 export async function moveOwnedNoteNode(
   connection,
-  {
-    userId,
-    id,
-    parentId = undefined,
-    previousId = null,
-    nextId = null,
-    shareExposureAcknowledged = false,
-  } = {},
+  { userId, id, parentId = undefined, previousId = null, nextId = null, shareExposureAcknowledged = false } = {},
 ) {
   const db = queryDb(connection);
   const normalizedUserId = normalizeId(userId);
@@ -982,8 +975,8 @@ function buildDeletedSelectionWhere({ userId, ids = [], time = null, restoreAll 
     params.push(...ids);
   }
   if (!restoreAll && time) {
-    where += ' AND deleted_at >= ? AND deleted_at <= ?';
-    params.push(time.start, time.end);
+    where += ' AND deleted_at >= ? AND deleted_at < ?';
+    params.push(time.start, time.endExclusive);
   }
   return { where, params };
 }

@@ -25,6 +25,7 @@
 
 | 编号                                                                                           | 日期       | 模块                | 关键词                                             | 状态         |
 | ---------------------------------------------------------------------------------------------- | ---------- | ------------------- | -------------------------------------------------- | ------------ |
+| [LN-PIT-094](#ln-pit-094agent-时间范围和列表完整性不能由各工具或模型自行解释)                  | 2026-08-21 | Agent、工具协议     | IANA、半开区间、total、partial、参数兼容           | 已修复待合入 |
 | [LN-PIT-093](#ln-pit-093agent-不能在工具成功前提交新焦点也不能把空能力范围降级成自动模式)      | 2026-08-21 | Agent、Runtime V3   | scope、ResultSet、digest、时间默认、副作用         | 已修复待合入 |
 | [LN-PIT-092](#ln-pit-092协议版本不能只放在响应信封而遗漏数据快照)                              | 2026-08-21 | Host Agent、协议    | protocolVersion、响应信封、快照、线上验收          | 已修复已上线 |
 | [LN-PIT-091](#ln-pit-091固定深色日志面板必须覆盖全局-pre-code-主题色)                          | 2026-08-21 | 前端、服务器管理    | 日志、代码块、主题、对比度、移动端                 | 已修复已上线 |
@@ -2468,6 +2469,17 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **灰度约束：** `AI_AGENT_RUNTIME_MODE` 默认 `legacy`，且只表示目标模式；必须再与 `AI_AGENT_RUNTIME_V3_ROLLOUT` 的真实 actor 受众求交，缺失、非法或未命中均失败关闭到 legacy，不能让全局 shadow 意外增加所有用户的模型调用。Root 代管按 billing actor，不按资源 subject；排除项优先于角色、账号和百分比，百分比使用固定 salt 稳定分桶。只允许按 `legacy → Root/白名单 v3_shadow → Root/白名单 v3_enforce → 稳定百分比` 推进并保留即时回退。模块选择只是单轮候选能力限制，发送后恢复自动，不能成为长期会话状态或权限来源。V3 trace 中只要出现原始历史或 legacy 分类阶段，就必须阻止扩大灰度。
 - **验收：** 合成测试覆盖“7 天 → 今天 → 至少 2000 字 → 再扩到 2500 字”、笔记切换书签、选中书签分析、网页 ResultSet 省略 URL 续问、今天 16:00 待办、Root 今天新增用户、序数指代和待确认草稿替换；断言 Planner 看不到 Manifest 声明的时间/资源参数，服务端执行参数为权威值，类型兼容的 ResultSet 能在 Compiler 前开放所需候选，跨领域不继承旧 ResultSet，ArtifactState 结算后不可复活。Root 产物真实门禁必须通过正式 Note Service 创建带唯一前缀、可清理的“今天”正文夹具，不能依赖账号恰好已有当天笔记；否则跨零点或空账号会把正确的空材料失败关闭误报成 Agent 回归。门禁结束必须验证旧确认至少两次失效、最终确认幂等、正文落库一次且夹具全部清理。`pnpm --filter server smoke:ai-turn-v3` 默认必须报告模型调用 0、业务工具 0；真实 Compiler 冒烟只有显式点名用例才允许，单次最多 2 个。首次启用或扩大 V3 灰度前仍执行获授权的 root 真实矩阵，日常开发不得无边界重复消耗 Token。
 - **相关代码：** `apps/server/util/agent/runtime/v3/`、`apps/server/util/agent/runtime/conversationHistory.js`、`apps/server/util/agent/sessionStore.js`、`apps/server/util/agent/runtime/executionPlanner.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/server/evaluation/ai-assistant/turnSpecV3LiveSmokeRunner.js`、`apps/web/src/types/aiCapabilityScope.ts`。
+
+### LN-PIT-094：Agent 时间范围和列表完整性不能由各工具或模型自行解释
+
+- **现象：** 用户把“最近 7 天”改为“今天”后，后续轮仍可能沿用旧范围；同一个“今天”在不同进程时区下得到不同 SQL 边界。列表工具只返回当前 `LIMIT` 内的数据，模型却可能把“返回 1 条”说成“全部只有 1 条”；文本预算截断时也没有稳定披露。
+- **影响范围：** 笔记、书签、文件、回收站、Root 用户/日志/统计/安全事件查询，以及携带时间条件的写操作二次确认。
+- **误导线索：** 单看工具转换文案或 SQL 可能都“看起来正常”；真正偏差来自 Planner、Tool Policy、工具执行和确认回放多次重新解析，以及结果合同没有区分 `total` 与 `returned`。
+- **根因：** 时间表达式只有字符串，没有请求级 IANA 时区和一次绑定的 canonical range；旧 SQL 混用包含结束时刻和进程本地 `Date`。工具输出又主要是一段自然语言，缺少统一的总量、返回量、完整性、截断原因和稳定引用。管理域同时使用 `user` 表示账号范围，与普通业务参数发生语义冲突。
+- **修复：** 时间解析收口到基于 Temporal 的唯一解析器，Binder/Tool Policy 按请求级 `currentInstant + IANA timeZone + storageTimeZone` 只绑定一次，SQL 统一使用 `[start, endExclusive)`；确认令牌的服务端私有上下文保存签发时的权威范围。列表/计数工具统一投影 `total/returned/complete/partial/resolvedRanges/truncationReason`和稳定 ID，执行器优先把确定性查询口径送入回答上下文，再受文本预算限制。管理账号范围迁移为 `scope_user`，旧 `user` 别名仅在服务端兼容层归一化并记录不含账号值的弃用告警。
+- **防回归约束：** 新增时间工具必须在 Manifest 声明 `temporalSlots`，工具内只读权威绑定，不得再用 `new Date()` 解释用户日历语义；新列表工具必须返回结构化 metadata 和稳定业务 ID，不得用当前页长度冒充总量。任何截断都必须显式标记；签发后确认不得重新解析“今天”。新管理工具的公开 schema 只允许 `scope_user`，兼容别名必须通过统一参数层实现，禁止在单个工具复制转换逻辑。
+- **验证方法：** 在 `TZ=UTC` 进程下固定 `currentInstant`，验证上海、纽约及 DST 跨越日的 local/storage 边界；断言 SQL 为 `>= start AND < endExclusive`。对空、完整、超 `limit`、总量未知和 resultBudget 截断分别校验 metadata/披露；确认链路断言 execute 收到的范围与签发时完全一致。对 `scope_user`、旧 `user`、两者相同和两者冲突都保留 fixture；全部使用 mock/固定性测试，日常回归不调真实模型。
+- **相关代码：** `apps/server/util/agent/timeRange.js`、`apps/server/util/agent/toolResultMetadata.js`、`apps/server/util/agent/toolArguments.js`、`apps/server/util/agent/toolPolicy.js`、`apps/server/util/agent/sessionStore.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/server/util/agent/tools/`。
 
 ### LN-PIT-071：父组件不能用宽泛深度选择器改写头像框内部图片
 

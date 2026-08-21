@@ -1,256 +1,258 @@
+import { Temporal } from '@js-temporal/polyfill';
+
 /**
- * 时间表达式解析
+ * Agent 时间范围唯一解析器。
  *
- * 将中文时间表达转为精确的起止时间字符串（格式：YYYY-MM-DD HH:MM:SS）。
- * 不涉及时区转换，所有时间以服务器本地时间为准。
- *
- * 设计原则（参考 ai-assistant time-range.ts）：
- * - AI 做语义决策输出表达式字符串 → 后端精确计算时间戳
- * - 支持的表达式见 parseTimeRange 注释
+ * - 用户日历语义在 IANA `timeZone` 中计算；
+ * - SQL 边界统一转换到 `storageTimeZone`，匹配项目现有 DATETIME 存储口径；
+ * - 新查询统一使用半开区间 `[start, endExclusive)`；
+ * - `end` 仅保留给尚未迁移的旧调用方，值为 `endExclusive - 1 秒`。
  */
 
-/**
- * 补零
- * @param {number} n
- * @returns {string}
- */
-function pad(n) {
-  return String(n).padStart(2, '0');
+export const DEFAULT_AGENT_TIME_ZONE = 'Asia/Shanghai';
+export const DEFAULT_AGENT_STORAGE_TIME_ZONE = 'Asia/Shanghai';
+
+const MAX_TIME_ZONE_LENGTH = 64;
+
+function pad(value) {
+  return String(value).padStart(2, '0');
+}
+
+function formatZonedDateTime(value) {
+  return `${value.year}-${pad(value.month)}-${pad(value.day)} ${pad(value.hour)}:${pad(value.minute)}:${pad(value.second)}`;
+}
+
+export function normalizeAgentTimeZone(value, fallback = DEFAULT_AGENT_TIME_ZONE) {
+  const candidate = String(value || '')
+    .trim()
+    .slice(0, MAX_TIME_ZONE_LENGTH);
+  try {
+    if (candidate) Temporal.Now.zonedDateTimeISO(candidate);
+    if (candidate) return candidate;
+  } catch {
+    // 非法客户端输入统一走安全默认值，不能进入日期计算或 SQL。
+  }
+  const safeFallback = String(fallback || DEFAULT_AGENT_TIME_ZONE)
+    .trim()
+    .slice(0, MAX_TIME_ZONE_LENGTH);
+  try {
+    Temporal.Now.zonedDateTimeISO(safeFallback);
+    return safeFallback;
+  } catch {
+    return DEFAULT_AGENT_TIME_ZONE;
+  }
+}
+
+function instantFrom(value, timeZone) {
+  if (value instanceof Temporal.Instant) return value;
+  if (value instanceof Date) {
+    if (!Number.isFinite(value.getTime())) return null;
+    return Temporal.Instant.from(value.toISOString());
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return null;
+    return Temporal.Instant.fromEpochMilliseconds(value);
+  }
+  const text = String(value || '').trim();
+  if (!text) return Temporal.Now.instant();
+  try {
+    return Temporal.Instant.from(text);
+  } catch {
+    try {
+      return Temporal.PlainDateTime.from(text.replace(' ', 'T'))
+        .toZonedDateTime(timeZone, {
+          disambiguation: 'compatible',
+        })
+        .toInstant();
+    } catch {
+      return null;
+    }
+  }
+}
+
+function startOfDay(value, timeZone) {
+  return value.toPlainDate().toZonedDateTime(timeZone);
+}
+
+function startOfPlainDate(value, timeZone) {
+  return value.toZonedDateTime(timeZone);
+}
+
+function startOfMonth(year, month, timeZone) {
+  return Temporal.PlainDate.from({ year, month, day: 1 }).toZonedDateTime(timeZone);
+}
+
+function floorToSecond(value) {
+  return value.with({ millisecond: 0, microsecond: 0, nanosecond: 0 });
+}
+
+function canonicalRange(startValue, endExclusiveValue, { timeZone, storageTimeZone }) {
+  const start = floorToSecond(startValue);
+  const endExclusive = floorToSecond(endExclusiveValue);
+  if (Temporal.ZonedDateTime.compare(start, endExclusive) >= 0) return null;
+  const end = endExclusive.subtract({ seconds: 1 });
+  const storageStart = start.toInstant().toZonedDateTimeISO(storageTimeZone);
+  const storageEnd = end.toInstant().toZonedDateTimeISO(storageTimeZone);
+  const storageEndExclusive = endExclusive.toInstant().toZonedDateTimeISO(storageTimeZone);
+  return Object.freeze({
+    start: formatZonedDateTime(storageStart),
+    end: formatZonedDateTime(storageEnd),
+    endExclusive: formatZonedDateTime(storageEndExclusive),
+    timeZone,
+    storageTimeZone,
+    localStart: formatZonedDateTime(start),
+    localEnd: formatZonedDateTime(end),
+    localEndExclusive: formatZonedDateTime(endExclusive),
+  });
+}
+
+function throughNow(start, now, options) {
+  const current = floorToSecond(now);
+  return canonicalRange(start, current.add({ seconds: 1 }), options);
+}
+
+function completePeriod(start, endExclusive, options) {
+  return canonicalRange(start, endExclusive, options);
 }
 
 /**
- * 日期 → "YYYY-MM-DD HH:MM:SS"
- * @param {Date} d
- * @returns {string}
- */
-function fmt(d) {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
-/**
- * 日期 → "YYYY-MM-DD 00:00:00"
- * @param {Date} d
- * @returns {string}
- */
-function dayStart(d) {
-  d.setHours(0, 0, 0, 0);
-  return fmt(d);
-}
-
-/**
- * 日期 → "YYYY-MM-DD 23:59:59"
- * @param {Date} d
- * @returns {string}
- */
-function dayEnd(d) {
-  d.setHours(23, 59, 59, 999);
-  return fmt(d);
-}
-
-/**
- * 获取某月最后一天
- * @param {number} year
- * @param {number} month - 1-12
- * @returns {Date}
- */
-function lastDayOfMonth(year, month) {
-  return new Date(year, month, 0); // 下个月第 0 天 = 本月最后一天
-}
-
-// ---- 解析入口 ----
-
-/**
- * 解析时间表达式，返回 { start, end } 或 null（表示"全部"，不加时间过滤）。
- *
- * 支持的表达式：
- *   "最近N天" / "近N天"  →  含今天的最近 N 个自然日 00:00 → 现在
- *   "最近N小时" / "近N小时" → 精确向前滚动 N 小时 → 现在
- *   "最近N周" / "近N周"  →  N 周前周一 00:00 → 现在
- *   "最近N个月" / "近N个月" → N 个月前 1 日 00:00 → 现在
- *   "今天" / "今日"     →  今天 00:00 → 现在
- *   "昨天" / "昨日"     →  昨天 00:00 → 昨天 23:59
- *   "前天" / "明天" / "后天" → 对应自然日 00:00 → 23:59（今天截至现在）
- *   "本周" / "这周"    →  本周一 00:00 → 现在
- *   "上周"             →  上周一 00:00 → 上周日 23:59
- *   "本月" / "这个月"  →  本月 1 日 00:00 → 现在
- *   "上个月" / "上月"  →  上月 1 日 00:00 → 上月最后一天 23:59
- *   "今年" / "本年"    →  1 月 1 日 00:00 → 现在
- *   "去年"             →  去年 1 月 1 日 00:00 → 去年 12 月 31 日 23:59
- *   "全部" / "all" / "" / null / undefined → null
- *   "YYYY年"           →  该年 1 月 1 日 → 该年 12 月 31 日（如 "2025年"）
- *   "N月" / "N月份"    →  该月 1 日 → 该月最后一天（如 "5月"）
- *   "YYYY-MM-DD" / "YYYY年M月D日" → 指定自然日
+ * 将中文时间表达式解析成服务端权威范围。
  *
  * @param {string|null|undefined} expr
- * @param {{ now?: Date|string|number }} options 测试或调用方可注入基准时间
- * @returns {{ start: string, end: string } | null}
+ * @param {{ now?: Date|string|number|Temporal.Instant, timeZone?: string, storageTimeZone?: string }} options
+ * @returns {{ start: string, end: string, endExclusive: string, timeZone: string, storageTimeZone: string, localStart: string, localEnd: string, localEndExclusive: string } | null}
  */
-export function parseTimeRange(expr, { now: nowInput = new Date() } = {}) {
+export function parseTimeRange(
+  expr,
+  { now: nowInput = new Date(), timeZone: requestedTimeZone, storageTimeZone: requestedStorageTimeZone } = {},
+) {
   if (!expr || typeof expr !== 'string') return null;
+  const expression = expr.trim();
+  if (!expression || isAllTimeExpression(expression)) return null;
 
-  const s = expr.trim();
-  if (!s || s === '全部' || s.toLowerCase() === 'all') return null;
+  const timeZone = normalizeAgentTimeZone(
+    requestedTimeZone,
+    process.env.AGENT_DEFAULT_TIME_ZONE || DEFAULT_AGENT_TIME_ZONE,
+  );
+  const storageTimeZone = normalizeAgentTimeZone(
+    requestedStorageTimeZone,
+    process.env.AGENT_STORAGE_TIME_ZONE || DEFAULT_AGENT_STORAGE_TIME_ZONE,
+  );
+  const instant = instantFrom(nowInput, timeZone);
+  if (!instant) return null;
+  const now = instant.toZonedDateTimeISO(timeZone);
+  const options = { timeZone, storageTimeZone };
 
-  const now = new Date(nowInput);
-  if (!Number.isFinite(now.getTime())) return null;
-
-  // ---- 最近 N 小时（滚动窗口，不按自然日取整） ----
-  let m = s.match(/^(?:最近|近)\s*(\d+)\s*个?\s*小时$/);
-  if (m) {
-    const n = parseInt(m[1], 10);
-    if (n <= 0) return null;
-    const start = new Date(now.getTime() - n * 60 * 60 * 1000);
-    return { start: fmt(start), end: fmt(now) };
+  let match = expression.match(/^(?:最近|近)\s*(\d+)\s*个?\s*小时$/u);
+  if (match) {
+    const count = Number.parseInt(match[1], 10);
+    if (count <= 0) return null;
+    const current = floorToSecond(now);
+    return throughNow(current.subtract({ hours: count }), current, options);
   }
 
-  // ---- 最近 N 天 ----
-  m = s.match(/^(?:最近|近)\s*(\d+)\s*天$/);
-  if (m) {
-    const n = parseInt(m[1], 10);
-    if (n <= 0) return null;
-    const start = new Date(now);
-    start.setDate(start.getDate() - (n - 1));
-    return { start: dayStart(start), end: fmt(now) };
+  match = expression.match(/^(?:最近|近)\s*(\d+)\s*天$/u);
+  if (match) {
+    const count = Number.parseInt(match[1], 10);
+    if (count <= 0) return null;
+    return throughNow(startOfDay(now, timeZone).subtract({ days: count - 1 }), now, options);
   }
 
-  // ---- 最近 N 周 ----
-  m = s.match(/^(?:最近|近)\s*(\d+)\s*周$/);
-  if (m) {
-    const n = parseInt(m[1], 10);
-    const start = new Date(now);
-    start.setDate(start.getDate() - n * 7);
-    // 取到该周周一
-    const dayOfWeek = start.getDay(); // 0=周日
-    const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    start.setDate(start.getDate() - diffToMonday);
-    return { start: dayStart(start), end: fmt(now) };
+  match = expression.match(/^(?:最近|近)\s*(\d+)\s*周$/u);
+  if (match) {
+    const count = Number.parseInt(match[1], 10);
+    if (count <= 0) return null;
+    const anchor = now.toPlainDate().subtract({ weeks: count });
+    const monday = anchor.subtract({ days: anchor.dayOfWeek - 1 });
+    return throughNow(startOfPlainDate(monday, timeZone), now, options);
   }
 
-  // ---- 最近 N 个月 ----
-  m = s.match(/^(?:最近|近)\s*(\d+)\s*个?\s*月$/);
-  if (m) {
-    const n = parseInt(m[1], 10);
-    const start = new Date(now);
-    start.setMonth(start.getMonth() - n);
-    start.setDate(1);
-    return { start: dayStart(start), end: fmt(now) };
+  match = expression.match(/^(?:最近|近)\s*(\d+)\s*个?\s*月$/u);
+  if (match) {
+    const count = Number.parseInt(match[1], 10);
+    if (count <= 0) return null;
+    const month = now.toPlainDate().subtract({ months: count });
+    return throughNow(startOfMonth(month.year, month.month, timeZone), now, options);
   }
 
-  // ---- 今天 / 今日 ----
-  if (s === '今天' || s === '今日') {
-    const today = new Date(now);
-    return { start: dayStart(today), end: fmt(now) };
+  const relativeDays = new Map([
+    ['前天', -2],
+    ['昨天', -1],
+    ['昨日', -1],
+    ['今天', 0],
+    ['今日', 0],
+    ['明天', 1],
+    ['后天', 2],
+  ]);
+  if (relativeDays.has(expression)) {
+    const offset = relativeDays.get(expression);
+    const date = now.toPlainDate().add({ days: offset });
+    const start = startOfPlainDate(date, timeZone);
+    return offset === 0 ? throughNow(start, now, options) : completePeriod(start, start.add({ days: 1 }), options);
   }
 
-  // ---- 昨天 ----
-  if (s === '昨天' || s === '昨日') {
-    const d = new Date(now);
-    d.setDate(d.getDate() - 1);
-    const d2 = new Date(d);
-    return { start: dayStart(d), end: dayEnd(d2) };
+  if (expression === '本周' || expression === '这周') {
+    const today = now.toPlainDate();
+    const monday = today.subtract({ days: today.dayOfWeek - 1 });
+    return throughNow(startOfPlainDate(monday, timeZone), now, options);
   }
 
-  // ---- 前天 ----
-  if (s === '前天') {
-    const d = new Date(now);
-    d.setDate(d.getDate() - 2);
-    const d2 = new Date(d);
-    return { start: dayStart(d), end: dayEnd(d2) };
+  if (expression === '上周') {
+    const today = now.toPlainDate();
+    const thisMonday = today.subtract({ days: today.dayOfWeek - 1 });
+    const start = startOfPlainDate(thisMonday.subtract({ weeks: 1 }), timeZone);
+    return completePeriod(start, start.add({ weeks: 1 }), options);
   }
 
-  // ---- 明天 / 后天 ----
-  if (s === '明天' || s === '后天') {
-    const d = new Date(now);
-    d.setDate(d.getDate() + (s === '明天' ? 1 : 2));
-    const d2 = new Date(d);
-    return { start: dayStart(d), end: dayEnd(d2) };
+  if (expression === '本月' || expression === '这个月') {
+    return throughNow(startOfMonth(now.year, now.month, timeZone), now, options);
   }
 
-  // ---- 本周 ----
-  if (s === '本周' || s === '这周') {
-    const d = new Date(now);
-    const dayOfWeek = d.getDay(); // 0=周日
-    const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    d.setDate(d.getDate() - diffToMonday);
-    return { start: dayStart(d), end: fmt(now) };
+  if (expression === '上个月' || expression === '上月') {
+    const previous = now.toPlainDate().subtract({ months: 1 });
+    const start = startOfMonth(previous.year, previous.month, timeZone);
+    return completePeriod(start, start.add({ months: 1 }), options);
   }
 
-  // ---- 上周 ----
-  if (s === '上周') {
-    const end = new Date(now);
-    const dayOfWeek = end.getDay();
-    const diffToLastSunday = dayOfWeek === 0 ? 0 : dayOfWeek;
-    end.setDate(end.getDate() - diffToLastSunday); // 上周日
-
-    const start = new Date(end);
-    start.setDate(start.getDate() - 6); // 上周一
-    return { start: dayStart(start), end: dayEnd(end) };
+  if (expression === '今年' || expression === '本年') {
+    return throughNow(startOfMonth(now.year, 1, timeZone), now, options);
   }
 
-  // ---- 本月 ----
-  if (s === '本月' || s === '这个月') {
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    return { start: dayStart(start), end: fmt(now) };
+  if (expression === '去年') {
+    const start = startOfMonth(now.year - 1, 1, timeZone);
+    return completePeriod(start, start.add({ years: 1 }), options);
   }
 
-  // ---- 上个月 ----
-  if (s === '上个月' || s === '上月') {
-    const year = now.getFullYear();
-    const month = now.getMonth(); // 0-11
-    const prevMonth = month === 0 ? 11 : month - 1;
-    const prevYear = month === 0 ? year - 1 : year;
-    const start = new Date(prevYear, prevMonth, 1);
-    const end = lastDayOfMonth(prevYear, prevMonth + 1);
-    return { start: dayStart(start), end: dayEnd(end) };
+  match = expression.match(/^(\d{4})\s*年$/u);
+  if (match) {
+    const start = startOfMonth(Number.parseInt(match[1], 10), 1, timeZone);
+    return completePeriod(start, start.add({ years: 1 }), options);
   }
 
-  // ---- 今年 ----
-  if (s === '今年' || s === '本年') {
-    const start = new Date(now.getFullYear(), 0, 1);
-    return { start: dayStart(start), end: fmt(now) };
-  }
-
-  // ---- 去年 ----
-  if (s === '去年') {
-    const y = now.getFullYear() - 1;
-    const start = new Date(y, 0, 1);
-    const end = new Date(y, 11, 31);
-    return { start: dayStart(start), end: dayEnd(end) };
-  }
-
-  // ---- YYYY年 ----
-  m = s.match(/^(\d{4})\s*年$/);
-  if (m) {
-    const y = parseInt(m[1], 10);
-    const start = new Date(y, 0, 1);
-    const end = new Date(y, 11, 31);
-    return { start: dayStart(start), end: dayEnd(end) };
-  }
-
-  // ---- N月 / N月份 ----
-  m = s.match(/^(\d{1,2})\s*月(?:份)?$/);
-  if (m) {
-    const month = parseInt(m[1], 10);
+  match = expression.match(/^(\d{1,2})\s*月(?:份)?$/u);
+  if (match) {
+    const month = Number.parseInt(match[1], 10);
     if (month < 1 || month > 12) return null;
-    const y = now.getFullYear();
-    const start = new Date(y, month - 1, 1);
-    const end = lastDayOfMonth(y, month);
-    return { start: dayStart(start), end: dayEnd(end) };
-  }
-  // ---- YYYY-MM-DD / YYYY年M月D日 ----
-  m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
-  if (!m) m = s.match(/^(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]$/);
-  if (m) {
-    const y = parseInt(m[1], 10);
-    const month = parseInt(m[2], 10);
-    const day = parseInt(m[3], 10);
-    const start = new Date(y, month - 1, day);
-    if (start.getFullYear() !== y || start.getMonth() !== month - 1 || start.getDate() !== day) return null;
-    const end = new Date(start);
-    return { start: dayStart(start), end: dayEnd(end) };
+    const start = startOfMonth(now.year, month, timeZone);
+    return completePeriod(start, start.add({ months: 1 }), options);
   }
 
-  // 不认识的表达式 → 返回 null，视为"全部"
+  match = expression.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/u);
+  if (!match) match = expression.match(/^(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]$/u);
+  if (match) {
+    try {
+      const date = Temporal.PlainDate.from({
+        year: Number.parseInt(match[1], 10),
+        month: Number.parseInt(match[2], 10),
+        day: Number.parseInt(match[3], 10),
+      });
+      const start = startOfPlainDate(date, timeZone);
+      return completePeriod(start, start.add({ days: 1 }), options);
+    } catch {
+      return null;
+    }
+  }
+
   return null;
 }
 
@@ -259,48 +261,41 @@ function shortDateTime(value, { withTime = false } = {}) {
   return withTime ? text.slice(0, 16) : text.slice(0, 10);
 }
 
-/**
- * 将后端已经解析完成的时间范围转换成用户可核验的口径说明。
- * 这里只展示解析结果，不重新计算范围，避免界面文案与真实 SQL 边界漂移。
- */
+/** 展示 Binder 已解析完成的用户本地范围，不重新计算。 */
 export function describeResolvedTimeRange(expr, range, locale = 'zh-CN') {
-  if (!range?.start || !range?.end) return '';
+  const startValue = range?.localStart || range?.start;
+  const endValue = range?.localEnd || range?.end;
+  if (!startValue || !endValue) return '';
   const expression = String(expr || '').trim();
   const english = String(locale || '')
     .toLowerCase()
     .startsWith('en');
-  const startDate = shortDateTime(range.start);
-  const endDate = shortDateTime(range.end);
-  const endTime = String(range.end).slice(11, 16);
+  const startDate = shortDateTime(startValue);
+  const endDate = shortDateTime(endValue);
+  const endTime = String(endValue).slice(11, 16);
+  const zone = range?.timeZone ? ` · ${range.timeZone}` : '';
 
   if (expression === '今天' || expression === '今日') {
-    return english ? `today (${startDate}, through ${endTime})` : `今天（${startDate}，截至 ${endTime}）`;
+    return english ? `today (${startDate}, through ${endTime}${zone})` : `今天（${startDate}，截至 ${endTime}${zone}）`;
   }
   if (expression === '昨天' || expression === '昨日') {
-    return english ? `yesterday (${startDate})` : `昨天（${startDate}）`;
+    return english ? `yesterday (${startDate}${zone})` : `昨天（${startDate}${zone}）`;
   }
   if (/^(?:最近|近)\s*24\s*个?\s*小时$/u.test(expression)) {
-    const window = `${shortDateTime(range.start, { withTime: true })} 至 ${shortDateTime(range.end, { withTime: true })}`;
-    return english
-      ? `the last 24 hours (${shortDateTime(range.start, { withTime: true })} to ${shortDateTime(range.end, { withTime: true })})`
-      : `最近24小时（${window}）`;
+    const start = shortDateTime(startValue, { withTime: true });
+    const end = shortDateTime(endValue, { withTime: true });
+    return english ? `the last 24 hours (${start} to ${end}${zone})` : `最近24小时（${start} 至 ${end}${zone}）`;
   }
   if (startDate === endDate) {
     return english
-      ? `${expression || 'the requested range'} (${startDate})`
-      : `${expression || '所选范围'}（${startDate}）`;
+      ? `${expression || 'the requested range'} (${startDate}${zone})`
+      : `${expression || '所选范围'}（${startDate}${zone}）`;
   }
   return english
-    ? `${expression || 'the requested range'} (${startDate} to ${endDate})`
-    : `${expression || '所选范围'}（${startDate} 至 ${endDate}）`;
+    ? `${expression || 'the requested range'} (${startDate} to ${endDate}${zone})`
+    : `${expression || '所选范围'}（${startDate} 至 ${endDate}${zone}）`;
 }
 
-/**
- * 明确表示「不限时间」的说法。
- *
- * parseTimeRange 对「全部」和「压根看不懂的表达式」都返回 null，平台级统计不能容忍这种混同：
- * 前者是全量口径，后者必须让本轮失败并追问，否则会把无法识别的时间条件悄悄当成全量返回。
- */
 const ALL_TIME_EXPRESSIONS = new Set([
   '全部',
   '所有',
@@ -329,20 +324,113 @@ export function isAllTimeExpression(value) {
   );
 }
 
-/**
- * 解析「必须给出口径」的时间范围：识别不了就抛错，不静默降级成全量。
- *
- * 供跨用户的平台级统计/清单工具共用，让它们的时间口径始终一致——口径一旦漂移，
- * 同一个问题的计数和明细会互相矛盾。
- *
- * @param {string} value
- * @param {{ label?: string, allowAll?: boolean }} options allowAll=true 时「全部」返回 null（不加时间过滤）
- * @returns {{ start: string, end: string } | null}
- */
-export function parseRequiredTimeRange(value, { label = '时间', allowAll = false } = {}) {
+/** 解析必须给出合法口径的时间范围；不认识的表达式不能静默退化为全量。 */
+export function parseRequiredTimeRange(
+  value,
+  { label = '时间', allowAll = false, now, timeZone, storageTimeZone } = {},
+) {
   const expression = String(value || '').trim();
   if (allowAll && isAllTimeExpression(expression)) return null;
-  const time = parseTimeRange(expression);
+  const time = parseTimeRange(expression, { now, timeZone, storageTimeZone });
   if (!time) throw new Error(`${label}范围无法识别`);
   return time;
+}
+
+const BOUND_AGENT_TIME_RANGES = Symbol('boundAgentTimeRanges');
+
+function temporalContextOptions(context = {}) {
+  const temporal = context.temporalContext || {};
+  return {
+    now: temporal.currentInstant || temporal.currentDateTime || context.now,
+    timeZone: temporal.timeZone || context.timeZone,
+    storageTimeZone: temporal.storageTimeZone || context.storageTimeZone,
+  };
+}
+
+function temporalRangeError(label) {
+  const error = new Error(`${label || '时间'}范围无法识别`);
+  error.code = 'TOOL_TIME_RANGE_INVALID';
+  error.status = 400;
+  return error;
+}
+
+/**
+ * 在 Tool Policy 通过公开 schema 校验后，给参数对象绑定只在服务端可见的权威范围。
+ * V3 可直接传入 Binder 的 resolvedTemporalRanges；legacy 则在这里用同一个请求级
+ * temporalContext 解析一次。Symbol 不会进入确认令牌、日志或模型上下文。
+ */
+export function bindAgentTemporalRanges({ tool, args, context = {} } = {}) {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return args;
+  const slots = Array.isArray(tool?.temporalSlots) ? tool.temporalSlots : [];
+  if (!slots.length) return args;
+  const authoritative = context.resolvedTemporalRanges || {};
+  const bound = {};
+  for (const slot of slots) {
+    const name = String(slot?.name || '').trim();
+    if (!name) continue;
+    if (Object.hasOwn(authoritative, name)) {
+      const record = authoritative[name];
+      bound[name] = Object.freeze({
+        expression: String(record?.expression ?? args[name] ?? '').trim(),
+        range: record?.range ?? record?.resolved ?? null,
+        source: 'binder',
+      });
+      continue;
+    }
+    const expression = String(args[name] || '').trim();
+    if (!expression) continue;
+    if (slot.allowAll === true && isAllTimeExpression(expression)) {
+      bound[name] = Object.freeze({ expression, range: null, source: 'tool_policy' });
+      continue;
+    }
+    const range = parseTimeRange(expression, temporalContextOptions(context));
+    if (!range) throw temporalRangeError(slot.label || name);
+    bound[name] = Object.freeze({ expression, range, source: 'tool_policy' });
+  }
+  Object.defineProperty(args, BOUND_AGENT_TIME_RANGES, {
+    value: Object.freeze(bound),
+    configurable: true,
+    enumerable: false,
+  });
+  return args;
+}
+
+/**
+ * 工具读取统一时间绑定。直接单测工具时没有经过 Tool Policy，因此保留同一解析器的
+ * fallback；线上 V3/legacy 执行都优先消费已绑定范围，不会按进程时区重复计算。
+ */
+export function resolveAgentTimeRange(
+  args,
+  slotName,
+  { context = {}, defaultExpression = '', required = false, allowAll = false, label = '时间' } = {},
+) {
+  const bound = args?.[BOUND_AGENT_TIME_RANGES]?.[slotName];
+  if (bound) return bound.range;
+  const authoritative = context?.resolvedTemporalRanges?.[slotName];
+  if (authoritative && typeof authoritative === 'object') {
+    return authoritative.range ?? authoritative.resolved ?? null;
+  }
+  const expression = String(args?.[slotName] || defaultExpression || '').trim();
+  if (!expression) {
+    if (required) throw temporalRangeError(label);
+    return null;
+  }
+  if (allowAll && isAllTimeExpression(expression)) return null;
+  const range = parseTimeRange(expression, temporalContextOptions(context));
+  if (!range && required) throw temporalRangeError(label);
+  if (!range && expression) throw temporalRangeError(label);
+  return range;
+}
+
+/** 返回可进入结果契约的时间口径副本，不泄露 Symbol 或内部上下文。 */
+export function projectAgentTemporalRanges(args) {
+  const bound = args?.[BOUND_AGENT_TIME_RANGES] || {};
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(bound).map(([name, record]) => [
+        name,
+        Object.freeze({ expression: record.expression, range: record.range, source: record.source }),
+      ]),
+    ),
+  );
 }

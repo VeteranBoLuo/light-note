@@ -79,12 +79,21 @@ describe('query_bookmarks 工具', () => {
 
     const result = await tool.execute({ keyword: '任意词' }, ctx);
 
-    expect(result).toEqual({ total: 0, items: [], matchMode: 'like' });
+    expect(result).toMatchObject({
+      total: 0,
+      items: [],
+      matchMode: 'like',
+      resultMetadata: { total: 0, returned: 0, completeness: 'complete' },
+    });
   });
 
   it('降级结果的文案不冒充精确计数', () => {
     const semantic = tool.transform(
-      { matchMode: 'semantic', total: 1, items: [{ id: 'b1', name: '画图站', url: 'https://d.dev', create_time: null }] },
+      {
+        matchMode: 'semantic',
+        total: 1,
+        items: [{ id: 'b1', name: '画图站', url: 'https://d.dev', create_time: null }],
+      },
       { keyword: '画图的网站' },
     );
     expect(semantic).toContain('没有精确匹配');

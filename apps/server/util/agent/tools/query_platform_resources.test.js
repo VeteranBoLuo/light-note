@@ -92,7 +92,7 @@ describe('query_platform_resources 工具', () => {
     const raw = await tool.execute({ timeRange: '今天', registeredWithin: '今天' });
     const [sql, params] = mocks.query.mock.calls[0];
 
-    expect(sql).toContain('u.create_time >= ? AND u.create_time <= ?');
+    expect(sql).toContain('u.create_time >= ? AND u.create_time < ?');
     expect(params).toHaveLength(14);
     expect(raw.registeredWithin).toBe('今天');
   });

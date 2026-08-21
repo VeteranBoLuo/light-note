@@ -61,7 +61,7 @@ describe('query_notes 工具', () => {
       start: expect.stringMatching(/^\d{4}-\d{2}-\d{2} 00:00:00$/),
       end: expect.stringMatching(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/),
     });
-    expect(text).toMatch(/^今天（\d{4}-\d{2}-\d{2}，截至 \d{2}:\d{2}）没有找到笔记$/);
+    expect(text).toMatch(/^今天（\d{4}-\d{2}-\d{2}，截至 \d{2}:\d{2} · Asia\/Shanghai）没有找到笔记$/);
     expect(tool.summarize(result, { timeRange: '今天' })).toContain('今天（');
   });
 
@@ -146,7 +146,12 @@ describe('query_notes 工具', () => {
 
     const result = await tool.execute({ keyword: '任意词' }, ctx);
 
-    expect(result).toEqual({ total: 0, items: [], matchMode: 'like' });
+    expect(result).toMatchObject({
+      total: 0,
+      items: [],
+      matchMode: 'like',
+      resultMetadata: { total: 0, returned: 0, completeness: 'complete' },
+    });
   });
 
   it('降级结果的文案不冒充精确计数', () => {

@@ -1,6 +1,7 @@
 import pool from '../../../db/index.js';
-import { parseTimeRange } from '../timeRange.js';
+import { resolveAgentTimeRange } from '../timeRange.js';
 import { escapeLikePattern } from '../sqlPatterns.js';
+import { withQueryResultMetadata } from '../toolResultMetadata.js';
 
 const TABLE_CONFIG = {
   bookmark: { table: 'bookmark', userIdField: 'user_id', nameField: 'name' },
@@ -29,9 +30,9 @@ export default {
     },
   },
   requireRoot: false,
-  async execute(args, ctx) {
+  async execute(args, ctx = {}) {
     const { keyword, limit = 20 } = args;
-    const time = parseTimeRange(args.timeRange);
+    const time = resolveAgentTimeRange(args, 'timeRange', { context: ctx, label: '删除时间' });
     const take = Math.min(Math.max(limit || 20, 1), 50);
     const types = args.type ? [args.type] : ['bookmark', 'note', 'file'];
 
@@ -50,8 +51,8 @@ export default {
         params.push(`%${escapeLikePattern(keyword)}%`);
       }
       if (time) {
-        where += ' AND deleted_at >= ? AND deleted_at <= ?';
-        params.push(time.start, time.end);
+        where += ' AND deleted_at >= ? AND deleted_at < ?';
+        params.push(time.start, time.endExclusive);
       }
 
       queries.push(
@@ -79,7 +80,16 @@ export default {
       total += Number(rows[0]?.cnt || 0);
     }
 
-    return { total, items: allItems };
+    const resolvedRanges = args.timeRange
+      ? { timeRange: { expression: String(args.timeRange).trim(), range: time, source: 'tool' } }
+      : {};
+    return withQueryResultMetadata({ total, items: allItems }, { resolvedRanges });
+  },
+  getDependencyRefs(raw) {
+    return (Array.isArray(raw?.items) ? raw.items : []).map((item) => ({
+      type: String(item.resourceType || ''),
+      id: item.id,
+    }));
   },
   transform(raw) {
     const items = raw?.items || [];

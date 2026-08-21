@@ -189,6 +189,26 @@ describe('agent sessionStore', () => {
       capabilityId: 'bookmark.query',
       domains: ['bookmark'],
       refs: [{ type: 'bookmark', id: 'bookmark-1', title: '不得保存的标题', url: 'https://secret.test' }],
+      metadata: {
+        version: '0.1',
+        total: 8,
+        returned: 1,
+        totalExact: true,
+        completeness: 'partial',
+        truncated: true,
+        truncationReason: 'limit',
+        resolvedRanges: {
+          timeRange: {
+            expression: '今天',
+            source: 'binder',
+            range: {
+              start: '2026-08-21 00:00:00',
+              endExclusive: '2026-08-21 12:00:01',
+              timeZone: 'Asia/Shanghai',
+            },
+          },
+        },
+      },
       focusId: focus.id,
     });
     expect(getSessionDiscourseProjection(session)).toEqual({
@@ -214,6 +234,14 @@ describe('agent sessionStore', () => {
     expect(resolveSessionResultSet(session, { id: resultSet.id })).toMatchObject({
       state: 'ready',
       refs: [{ type: 'bookmark', id: 'bookmark-1' }],
+      resultSet: {
+        metadata: {
+          total: 8,
+          returned: 1,
+          completeness: 'partial',
+          truncationReason: 'limit',
+        },
+      },
     });
     expect(JSON.stringify(session.resultSets)).not.toContain('不得保存');
     expect(JSON.stringify(session.resultSets)).not.toContain('secret.test');
@@ -338,9 +366,9 @@ describe('agent sessionStore', () => {
         focusId: bookmarkFocus.id,
       }),
     ).resolves.toBeNull();
-    await expect(
-      settleSessionResultFocus(session, { status: 'failed', focusId: bookmarkFocus.id }),
-    ).resolves.toBe(false);
+    await expect(settleSessionResultFocus(session, { status: 'failed', focusId: bookmarkFocus.id })).resolves.toBe(
+      false,
+    );
 
     await expect(
       recordSessionResultSet(session, {
@@ -418,9 +446,7 @@ describe('agent sessionStore', () => {
       continuationMode: 'independent',
       goals: [{ kind: 'read', capabilityId: 'admin.stats.read', capabilityDomain: 'admin', implicit: false }],
     });
-    await expect(
-      settleSessionResultFocus(session, { status: 'success', focusId: statsFocus.id }),
-    ).resolves.toBe(true);
+    await expect(settleSessionResultFocus(session, { status: 'success', focusId: statsFocus.id })).resolves.toBe(true);
 
     expect(resolveSessionResultSet(session)).toEqual({ state: 'missing', refs: [] });
     expect(getSessionDiscourseProjection(session)).toMatchObject({

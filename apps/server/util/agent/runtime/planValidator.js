@@ -1,13 +1,17 @@
 import { validateToolArgumentsAgainstSchema } from '../toolPolicy.js';
 import { normalizeToolArguments } from '../toolArguments.js';
 import { bindAuthoritativeResourceArguments } from './executionContext.js';
-import { bindAuthoritativeTemporalArguments } from './v3/temporalConstraints.js';
+import { authoritativeTemporalRangesForGoal, bindAuthoritativeTemporalArguments } from './v3/temporalConstraints.js';
+
+function toolCallId(step, index) {
+  return `execution-plan-${String(step.id || index + 1)
+    .replace(/[^a-z0-9_-]+/giu, '-')
+    .slice(0, 64)}`;
+}
 
 function toolCall(step, index) {
   return {
-    id: `execution-plan-${String(step.id || index + 1)
-      .replace(/[^a-z0-9_-]+/giu, '-')
-      .slice(0, 64)}`,
+    id: toolCallId(step, index),
     type: 'function',
     function: { name: step.toolName, arguments: JSON.stringify(step.arguments) },
   };
@@ -33,6 +37,7 @@ export function validateExecutionPlan({ turnSpec, route, parsed, completedGoalId
   if (unsafeExtraWrite) issues.push('extra_tool_call_blocked');
 
   const acceptedSteps = [];
+  const temporalBindingsByStepId = new Map();
   const writeGoals = new Set();
   const seenStepIds = new Set();
   const implicitlyDeferred = new Set();
@@ -107,6 +112,7 @@ export function validateExecutionPlan({ turnSpec, route, parsed, completedGoalId
     }
     if (tool.isWrite === true) writeGoals.add(goal.id);
     acceptedSteps.push(acceptedStep);
+    temporalBindingsByStepId.set(stepId, authoritativeTemporalRangesForGoal(turnSpec, goal.id));
   }
 
   const deferred = new Set([...(parsed?.plan?.deferredGoalIds || []), ...implicitlyDeferred]);
@@ -127,6 +133,16 @@ export function validateExecutionPlan({ turnSpec, route, parsed, completedGoalId
     issues: uniqueIssues,
     repairFeedback,
     toolCalls: uniqueIssues.length ? [] : acceptedSteps.map(toolCall),
+    temporalBindingsByCallId: uniqueIssues.length
+      ? Object.freeze({})
+      : Object.freeze(
+          Object.fromEntries(
+            acceptedSteps.map((step, index) => [
+              toolCallId(step, index),
+              temporalBindingsByStepId.get(String(step.id || '')) || Object.freeze({}),
+            ]),
+          ),
+        ),
     ignoredExtraReadCount: (parsed?.extraCalls || []).filter(
       (call) => toolsByName.get(call?.function?.name)?.isWrite !== true && toolsByName.has(call?.function?.name),
     ).length,
