@@ -8,7 +8,7 @@ vi.mock('vue-i18n', () => ({
 }));
 
 vi.mock('@/components/base/BasicComponents/BMessage/BMessage', () => ({
-  default: { error: vi.fn(), warning: vi.fn(), success: vi.fn() },
+  default: { error: vi.fn(), info: vi.fn(), warning: vi.fn(), success: vi.fn() },
 }));
 
 vi.mock('@/components/base/BasicComponents/BModal/Alert.ts', () => ({
@@ -272,6 +272,190 @@ describe('DrawingNoteEditor 活动手势撤销', () => {
     textarea.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
     await nextTick();
 
+    app.unmount();
+    host.remove();
+  });
+
+  it('+、=、- 与上下键按 1px 调整当前工具尺寸，输入控件和无选区选择工具不拦截', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp(DrawingNoteEditor, {
+      content: JSON.stringify({ v: 2, page: { width: 1448, height: 1448 }, elements: [] }),
+    });
+    app.mount(host);
+    await nextTick();
+
+    const editorElement = host.querySelector('.drawing-editor') as HTMLElement;
+    const styleSize = () => host.querySelector('.drawing-style-size')?.textContent?.trim();
+    const press = (key: string, target: HTMLElement = editorElement) =>
+      target.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key }));
+
+    expect(styleSize()).toBe('4');
+    expect(press('+')).toBe(false);
+    await nextTick();
+    expect(styleSize()).toBe('5');
+    expect(press('=')).toBe(false);
+    await nextTick();
+    expect(styleSize()).toBe('6');
+    expect(press('ArrowUp')).toBe(false);
+    await nextTick();
+    expect(styleSize()).toBe('7');
+    expect(press('-')).toBe(false);
+    expect(press('ArrowDown')).toBe(false);
+    await nextTick();
+    expect(styleSize()).toBe('5');
+
+    for (let index = 0; index < 30; index += 1) press('+');
+    await nextTick();
+    expect(styleSize()).toBe('24');
+    for (let index = 0; index < 30; index += 1) press('-');
+    await nextTick();
+    expect(styleSize()).toBe('1');
+
+    const input = document.createElement('input');
+    editorElement.append(input);
+    expect(press('+', input)).toBe(true);
+    await nextTick();
+    expect(styleSize()).toBe('1');
+
+    const selectButton = host.querySelector('button[aria-label="note.drawingSelect"]') as HTMLButtonElement;
+    selectButton.click();
+    await nextTick();
+    expect(press('ArrowUp')).toBe(true);
+
+    const eraserButton = host.querySelector('button[aria-label="note.drawingEraser"]') as HTMLButtonElement;
+    eraserButton.click();
+    await nextTick();
+    expect(styleSize()).toBe('18');
+    expect(press('ArrowDown')).toBe(false);
+    await nextTick();
+    expect(styleSize()).toBe('17');
+
+    const helpButton = host.querySelector('button[aria-label="note.drawingHelp"]') as HTMLButtonElement;
+    helpButton.click();
+    await nextTick();
+    expect(document.querySelector('.drawing-help-panel')?.textContent).toContain('drawingShortcutResizeTool');
+
+    app.unmount();
+    host.remove();
+  });
+
+  it('S 快捷键切换颜色与尺寸，并在无样式工具下保留浏览器按键行为', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp(DrawingNoteEditor, {
+      content: JSON.stringify({ v: 2, page: { width: 1448, height: 1448 }, elements: [] }),
+    });
+    app.mount(host);
+    await nextTick();
+
+    const editorElement = host.querySelector('.drawing-editor') as HTMLElement;
+    const canvasElement = host.querySelector('canvas') as HTMLCanvasElement;
+    const styleButton = host.querySelector('button[aria-label="note.drawingStyle"]') as HTMLButtonElement;
+    const pressStyle = () =>
+      editorElement.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 's' }));
+
+    expect(styleButton.getAttribute('aria-keyshortcuts')).toBe('S');
+    expect(document.querySelector('.drawing-style-panel')).toBeNull();
+    Object.defineProperties(canvasElement, {
+      setPointerCapture: { value: vi.fn() },
+      releasePointerCapture: { value: vi.fn() },
+      getBoundingClientRect: {
+        value: () => ({ left: 0, top: 0, right: 1448, bottom: 1448, width: 1448, height: 1448 }),
+      },
+    });
+    const pointerDown = new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 100, clientY: 100 });
+    Object.defineProperty(pointerDown, 'pointerId', { value: 51 });
+    canvasElement.dispatchEvent(pointerDown);
+    expect(pressStyle()).toBe(true);
+    expect(document.querySelector('.drawing-style-panel')).toBeNull();
+    const pointerUp = new MouseEvent('pointerup', { bubbles: true, button: 0, clientX: 100, clientY: 100 });
+    Object.defineProperty(pointerUp, 'pointerId', { value: 51 });
+    canvasElement.dispatchEvent(pointerUp);
+
+    expect(pressStyle()).toBe(false);
+    await nextTick();
+    expect(document.querySelector('.drawing-style-panel')).not.toBeNull();
+    expect(pressStyle()).toBe(false);
+    await nextTick();
+    expect(
+      document
+        .querySelector('.drawing-style-panel')
+        ?.closest('.b-popover-panel')
+        ?.classList.contains('b-popover-fade-leave-active'),
+    ).toBe(true);
+
+    const handButton = host.querySelector('button[aria-label="note.drawingHand"]') as HTMLButtonElement;
+    handButton.click();
+    await nextTick();
+    expect(pressStyle()).toBe(true);
+
+    const helpButton = host.querySelector('button[aria-label="note.drawingHelp"]') as HTMLButtonElement;
+    helpButton.click();
+    await nextTick();
+    expect(document.querySelector('.drawing-help-panel')?.textContent).toContain('drawingShortcutStyle');
+
+    app.unmount();
+    host.remove();
+  });
+
+  it('Command 点击把闭合区域保存成单个可撤销填充元素', async () => {
+    const width = 1448;
+    const pixels = new Uint8ClampedArray(width * width * 4);
+    for (let index = 0; index < width * width; index += 1) pixels.set([255, 255, 255, 255], index * 4);
+    for (let coordinate = 100; coordinate <= 200; coordinate += 1) {
+      for (const [x, y] of [
+        [coordinate, 100],
+        [coordinate, 200],
+        [100, coordinate],
+        [200, coordinate],
+      ]) {
+        pixels.set([20, 20, 20, 255], (y * width + x) * 4);
+      }
+    }
+    const context = canvasContextStub() as CanvasRenderingContext2D & { getImageData: ReturnType<typeof vi.fn> };
+    context.getImageData = vi.fn(() => ({ data: pixels }));
+    vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(context);
+
+    const updates: string[] = [];
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp(DrawingNoteEditor, {
+      content: JSON.stringify({ v: 4, page: { width, height: width }, elements: [] }),
+      'onUpdate:content': (content: string) => updates.push(content),
+    });
+    app.mount(host);
+    await nextTick();
+    const canvasElement = host.querySelector('canvas') as HTMLCanvasElement;
+    const editorElement = host.querySelector('.drawing-editor') as HTMLElement;
+    Object.defineProperty(canvasElement, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, right: width, bottom: width, width, height: width }),
+    });
+    const event = new MouseEvent('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      clientX: 150,
+      clientY: 150,
+      metaKey: true,
+    });
+    Object.defineProperties(event, {
+      pointerId: { value: 71 },
+      pointerType: { value: 'mouse' },
+    });
+    expect(canvasElement.dispatchEvent(event)).toBe(false);
+    await nextTick();
+
+    expect(updates).toHaveLength(1);
+    expect(JSON.parse(updates[0])).toMatchObject({
+      v: 4,
+      elements: [{ kind: 'fill', color: '#1f2937', x: 0, y: 0 }],
+    });
+    expect(JSON.parse(updates[0]).elements[0].spans.length).toBeGreaterThan(0);
+
+    editorElement.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'z', metaKey: true }));
+    await nextTick();
+    expect(JSON.parse(updates.at(-1) || '{}').elements).toHaveLength(0);
     app.unmount();
     host.remove();
   });
@@ -712,7 +896,7 @@ describe('DrawingNoteEditor 活动手势撤销', () => {
     host.remove();
   });
 
-  it('橡皮点击粗笔画后提交 V3 笔画遮罩而不是拆分中心线', async () => {
+  it('橡皮点击粗笔画后提交当前版笔画遮罩而不是拆分中心线', async () => {
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1496);
     vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(1496);
     const updates: string[] = [];
@@ -749,7 +933,7 @@ describe('DrawingNoteEditor 活动手势撤销', () => {
 
     expect(updates).toHaveLength(1);
     const saved = JSON.parse(updates[0]);
-    expect(saved.v).toBe(3);
+    expect(saved.v).toBe(4);
     expect(saved.elements).toHaveLength(1);
     expect(saved.elements[0]).toMatchObject({
       id: 'thick',
@@ -760,7 +944,7 @@ describe('DrawingNoteEditor 活动手势撤销', () => {
     host.remove();
   });
 
-  it('橡皮点击形状轮廓后提交 V3 形状遮罩', async () => {
+  it('橡皮点击形状轮廓后提交当前版形状遮罩', async () => {
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1496);
     vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(1496);
     const updates: string[] = [];
@@ -809,7 +993,7 @@ describe('DrawingNoteEditor 活动手势撤销', () => {
 
     expect(updates).toHaveLength(1);
     expect(JSON.parse(updates[0])).toMatchObject({
-      v: 3,
+      v: 4,
       elements: [
         {
           id: 'rectangle',

@@ -70,7 +70,9 @@ function markSet(source: Set<string>, key: string, enabled: boolean) {
   return next;
 }
 
-export type NoteTreeMetadataPatch = Partial<Pick<NoteTreeItem, 'title' | 'type' | 'isTop' | 'sort' | 'updateTime'>>;
+export type NoteTreeMetadataPatch = Partial<
+  Pick<NoteTreeItem, 'title' | 'type' | 'hasContent' | 'isTop' | 'sort' | 'updateTime'>
+>;
 
 export type CreatedNoteTreeItem = Pick<NoteTreeItem, 'id' | 'parentId' | 'title' | 'type'>;
 
@@ -463,6 +465,9 @@ export default defineStore('noteWorkspace', () => {
     const normalizedPatch: NoteTreeMetadataPatch = {};
     if (typeof patch.title === 'string') normalizedPatch.title = patch.title;
     if (Object.prototype.hasOwnProperty.call(patch, 'type')) normalizedPatch.type = patch.type;
+    if (Object.prototype.hasOwnProperty.call(patch, 'hasContent')) {
+      normalizedPatch.hasContent = Boolean(patch.hasContent);
+    }
     if (Object.prototype.hasOwnProperty.call(patch, 'isTop')) normalizedPatch.isTop = Boolean(patch.isTop);
     if (Object.prototype.hasOwnProperty.call(patch, 'sort') && Number.isFinite(Number(patch.sort))) {
       normalizedPatch.sort = Number(patch.sort);
@@ -488,6 +493,21 @@ export default defineStore('noteWorkspace', () => {
       if (breadcrumbChanged) breadcrumbByNote.value = nextBreadcrumbByNote;
       currentBreadcrumb.value = patchBreadcrumbItems(currentBreadcrumb.value, id, title);
     }
+  }
+
+  function invalidateBreadcrumbBranch(noteId: string) {
+    const id = normalizedId(noteId);
+    if (!id) return;
+    let changed = false;
+    const nextBreadcrumbByNote = Object.fromEntries(
+      Object.entries(breadcrumbByNote.value).filter(([, items]) => {
+        const keep = !items.some((item) => item.id === id);
+        if (!keep) changed = true;
+        return keep;
+      }),
+    );
+    if (changed) breadcrumbByNote.value = nextBreadcrumbByNote;
+    if (currentBreadcrumb.value.some((item) => item.id === id)) currentBreadcrumb.value = [];
   }
 
   function insertCreatedNote(input: CreatedNoteTreeItem) {
@@ -591,6 +611,7 @@ export default defineStore('noteWorkspace', () => {
     loadChildren,
     revealBreadcrumb,
     insertCreatedNote,
+    invalidateBreadcrumbBranch,
     refreshTree,
     searchTree,
     seedBreadcrumb,

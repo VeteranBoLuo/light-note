@@ -57,8 +57,22 @@ export interface DrawingShapeElement {
   erasures?: DrawingErasureTrail[];
 }
 
+export interface DrawingFillElement {
+  id: string;
+  kind: "fill";
+  color: DrawingColor;
+  /** 区域整体平移量；扫描段仍保留首次填充时的画纸像素坐标。 */
+  x: number;
+  y: number;
+  /** 扁平化的 [y, xStart, xEndExclusive] 扫描段，按 y/x 严格升序。 */
+  spans: number[];
+  /** 只作用于当前填充区域的持久化像素擦除采样。 */
+  erasures?: DrawingErasureTrail[];
+}
+
 export type DrawingLegacyElement = DrawingStrokeElement | DrawingTextElement;
-export type DrawingElement = DrawingLegacyElement | DrawingShapeElement;
+export type DrawingElement =
+  DrawingLegacyElement | DrawingShapeElement | DrawingFillElement;
 
 export interface DrawingLegacyScene {
   v: 1;
@@ -67,7 +81,7 @@ export interface DrawingLegacyScene {
 }
 
 export interface DrawingCurrentScene {
-  v: 3;
+  v: 4;
   page: { width: 1448; height: 1448 };
   elements: DrawingElement[];
 }
@@ -75,16 +89,28 @@ export interface DrawingCurrentScene {
 export interface DrawingShapeScene {
   v: 2;
   page: { width: 1448; height: 1448 };
-  elements: DrawingElement[];
+  elements: Exclude<DrawingElement, DrawingFillElement>[];
+}
+
+export interface DrawingEraserScene {
+  v: 3;
+  page: { width: 1448; height: 1448 };
+  elements: Exclude<DrawingElement, DrawingFillElement>[];
 }
 
 export type DrawingScene =
-  DrawingLegacyScene | DrawingShapeScene | DrawingCurrentScene;
+  | DrawingLegacyScene
+  | DrawingShapeScene
+  | DrawingEraserScene
+  | DrawingCurrentScene;
 
 export declare const DRAWING_NOTE_TYPE: "drawing";
-export declare const DRAWING_SCENE_VERSION: 3;
+export declare const DRAWING_SCENE_VERSION: 4;
+/** 派生缩略图渲染算法版本；变化时使旧位图缓存自动失效。 */
+export declare const DRAWING_THUMBNAIL_RENDERER_VERSION: 2;
 export declare const DRAWING_LEGACY_SCENE_VERSION: 1;
 export declare const DRAWING_SHAPE_SCENE_VERSION: 2;
+export declare const DRAWING_ERASER_SCENE_VERSION: 3;
 export declare const DRAWING_SCENE_MAX_BYTES: 750000;
 export declare const DRAWING_SCENE_LIMITS: Readonly<{
   maxElements: 1000;
@@ -94,6 +120,8 @@ export declare const DRAWING_SCENE_LIMITS: Readonly<{
   maxErasurePointPairs: 50000;
   maxTexts: 200;
   maxShapes: 300;
+  maxFills: 100;
+  maxFillSpans: 20000;
   maxTextCharacters: 50000;
   maxTextElementCharacters: 4000;
 }>;

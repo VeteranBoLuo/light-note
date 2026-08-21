@@ -1,7 +1,48 @@
 import type { NoteTreeItem } from '@/types/noteTree';
+import { parseDrawingScene } from '@lightnote/shared/drawing-note';
+
+const NOTE_VISUAL_CONTENT_SELECTOR = 'audio, canvas, embed, hr, iframe, img, object, svg, table, video';
+const NOTE_IGNORED_CONTENT_SELECTOR = 'head, noscript, script, style, template, title';
+
+/** 用完整详情正文判断页面是否真的有用户内容；解析失败按有内容处理，避免误跳过正文。 */
+export function hasMeaningfulNoteContent(content: unknown, type: unknown) {
+  const source = String(content || '');
+  const normalizedType = String(type || 'html').toLowerCase();
+  if (normalizedType === 'drawing') {
+    try {
+      return parseDrawingScene(source).elements.length > 0;
+    } catch {
+      return Boolean(source.trim());
+    }
+  }
+  if (normalizedType === 'markdown' || normalizedType === 'md') return Boolean(source.trim());
+  if (!source) return false;
+  if (typeof DOMParser === 'undefined') return Boolean(source.trim());
+  try {
+    const documentRoot = new DOMParser().parseFromString(`<body>${source}</body>`, 'text/html');
+    documentRoot.querySelectorAll(NOTE_IGNORED_CONTENT_SELECTOR).forEach((element) => element.remove());
+    if (documentRoot.body.querySelector(NOTE_VISUAL_CONTENT_SELECTOR)) return true;
+    return Boolean(
+      String(documentRoot.body.textContent || '')
+        .replace(/\u00a0/gu, ' ')
+        .trim(),
+    );
+  } catch {
+    return Boolean(source.trim());
+  }
+}
 
 export interface FlatNoteTreeItem extends NoteTreeItem {
   depth: number;
+}
+
+/** 父页面的主点击只由显式偏好决定，不再把“正文是否为空”当作导航意图。 */
+export function shouldBrowseNoteChildrenOnOpen(
+  note: { childCount?: unknown } | null | undefined,
+  parentOpenMode: 'children' | 'preview' = 'children',
+  treeReadEnabled = true,
+) {
+  return Boolean(treeReadEnabled && parentOpenMode === 'children' && Math.max(0, Number(note?.childCount) || 0) > 0);
 }
 
 /**
@@ -32,10 +73,7 @@ export function getNoteParentPathText(note: {
  * 列表搜索/根目录视图会返回完整 path；最后一项是当前笔记，倒数第二项才是可打开的父页面。
  * 旧接口可能只有 parentId，因此保留兼容回退，但绝不根据标题反查，避免重名页面跳错。
  */
-export function getNoteParentTargetId(note: {
-  parentId?: unknown;
-  path?: Array<{ id?: unknown }> | null;
-}) {
+export function getNoteParentTargetId(note: { parentId?: unknown; path?: Array<{ id?: unknown }> | null }) {
   const pathParentId = Array.isArray(note.path) && note.path.length > 1 ? note.path.at(-2)?.id : null;
   return String(pathParentId || note.parentId || '').trim();
 }

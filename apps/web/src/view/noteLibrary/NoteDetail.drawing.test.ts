@@ -93,7 +93,7 @@ describe('手绘笔记详情边界', () => {
     const end = drawingSource.indexOf('function releasePointer', start);
     const pointerMoveSource = drawingSource.slice(start, end);
     const eraseStart = drawingSource.indexOf('function eraseAt(');
-    const eraseEnd = drawingSource.indexOf('function handlePointerDown', eraseStart);
+    const eraseEnd = drawingSource.indexOf('function fillClosedArea', eraseStart);
     const eraseSource = drawingSource.slice(eraseStart, eraseEnd);
 
     expect(drawingSource).toContain('frameId = requestAnimationFrame');

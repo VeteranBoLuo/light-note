@@ -35,6 +35,7 @@ const mobileNavigationDrawerSource = readFileSync(
 );
 const treeRowSource = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/tree/NoteTreeRow.vue'), 'utf8');
 const noteTreeComposableSource = readFileSync(resolve(process.cwd(), 'src/composables/useNoteTree.ts'), 'utf8');
+const noteTreeDragDropSource = readFileSync(resolve(process.cwd(), 'src/composables/useNoteTreeDragDrop.ts'), 'utf8');
 const workspaceShellSource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/workspace/NoteWorkspaceShell.vue'),
   'utf8',
@@ -100,6 +101,24 @@ describe('笔记库批量 AI 操作语义', () => {
 });
 
 describe('笔记库页面树交互接线', () => {
+  it('父页面主点击按账号偏好进入子页面或预览自身，显式打开正文入口不受影响', () => {
+    expect(source).toMatch(
+      /function openLibraryNote[\s\S]*getNoteParentOpenMode\(user\.preferences, bookmark\.isMobile\)[\s\S]*shouldBrowseNoteChildrenOnOpen\(source, parentOpenMode, noteTreeReadEnabled\.value\)[\s\S]*return selectDirectory\(noteId\)/,
+    );
+    expect(source).toMatch(
+      /parentOpenMode === 'preview'[\s\S]*setDesktopPreviewPage\(noteId, source\)[\s\S]*shouldOpenNoteDirectly/u,
+    );
+    expect(source).toContain('@click="openPageBody(currentParentId)"');
+  });
+
+  it('父页面主点击不再预取正文猜测导航意图', () => {
+    const openFunction =
+      source.match(/function openLibraryNote[\s\S]*?\n  \}\n\n  function closeDesktopPreview/u)?.[0] || '';
+    expect(openFunction).not.toContain("typeof source.hasContent !== 'boolean'");
+    expect(openFunction).not.toContain('hasMeaningfulNoteContent');
+    expect(openFunction).not.toContain('await prefetchNoteDetail');
+  });
+
   it('目录折叠入口位于工作区分隔线中部，笔记库和详情顶栏不再重复展示', () => {
     expect(workspaceShellSource).toContain('note-workspace-shell__sidebar-boundary-toggle--close');
     expect(workspaceShellSource).toContain('top: 50%');
@@ -278,35 +297,37 @@ describe('笔记库页面树交互接线', () => {
   it('目录树同时支持中央移入、前后插入和根层最前落点', () => {
     expect(source).toContain(':data-note-drop-parent="String(note.id)"');
     expect(source).toContain(':data-note-drop-parent="NOTE_TREE_ROOT_KEY"');
-    expect(source).toContain('const nestedTarget = dragDropTarget.value');
+    expect(source).toContain('const pointerDrop = takePointerDropSnapshot()');
     expect(source).toContain('@drag-start="onTreeDragStart"');
-    expect(source).toContain('setCompactTreeDragImage');
-    expect(source).toContain('event.dataTransfer.setDragImage(preview, 18, 16)');
-    expect(source).toContain("window.addEventListener('dragover', onTreeNativeDragOver, true)");
-    expect(source).toContain("'/api/note/moveNoteNode'");
-    expect(source).toContain('previousId: target.previousId');
-    expect(source).toContain('nextId: target.nextId');
-    expect(source).toContain('buildTreeNodeDropTarget');
-    expect(source).toContain('buildRootStartDropTarget');
-    expect(source).toContain("t('note.moveBeforeSuccess'");
-    expect(source).toContain("t('note.moveAfterSuccess'");
-    expect(source).toContain("t('note.moveRootStartSuccess'");
-    expect(source).toContain("t('note.moveIntoSuccess'");
-    expect(source).toMatch(/'\/api\/note\/moveNoteNode',[\s\S]{0,300}\{ silent: true \}/);
+    expect(noteTreeDragDropSource).toContain('setCompactTreeDragImage');
+    expect(noteTreeDragDropSource).toContain('event.dataTransfer.setDragImage(preview, 18, 16)');
+    expect(noteTreeDragDropSource).toContain("window.addEventListener('dragover', onTreeNativeDragOver, true)");
+    expect(noteTreeDragDropSource).toContain("'/api/note/moveNoteNode'");
+    expect(noteTreeDragDropSource).toContain('previousId: target.previousId');
+    expect(noteTreeDragDropSource).toContain('nextId: target.nextId');
+    expect(noteTreeDragDropSource).toContain('buildTreeNodeDropTarget');
+    expect(noteTreeDragDropSource).toContain('buildRootStartDropTarget');
+    expect(noteTreeDragDropSource).toContain("options.t('note.moveBeforeSuccess'");
+    expect(noteTreeDragDropSource).toContain("options.t('note.moveAfterSuccess'");
+    expect(noteTreeDragDropSource).toContain("options.t('note.moveRootStartSuccess'");
+    expect(noteTreeDragDropSource).toContain("options.t('note.moveIntoSuccess'");
+    expect(noteTreeDragDropSource).toMatch(/'\/api\/note\/moveNoteNode',[\s\S]{0,300}\{ silent: true \}/);
   });
 
   it('目录拖拽先乐观更新，接口失败回滚，成功后不清空整树重载', () => {
-    expect(source).toMatch(
+    expect(noteTreeDragDropSource).toMatch(
       /moveNoteTreeNodeOptimistically\(previousTree,[\s\S]*childrenByParent\.value = optimisticMove\.childrenByParent[\s\S]*await apiBasePost\([\s\S]*?'\/api\/note\/moveNoteNode'/,
     );
-    expect(source).toMatch(
+    expect(noteTreeDragDropSource).toMatch(
       /catch \(error\) \{[\s\S]{0,180}childrenByParent\.value = previousTree[\s\S]{0,80}throw error/,
     );
-    expect(source).toMatch(
-      /response\.status !== 200[\s\S]{0,180}childrenByParent\.value = previousTree[\s\S]{0,180}return false/,
+    expect(noteTreeDragDropSource).toMatch(
+      /response\.status !== 200[\s\S]{0,220}options\.childrenByParent\.value = previousTree[\s\S]{0,500}return false/,
     );
     const moveFunction =
-      source.match(/async function moveNoteIntoTarget[\s\S]*?\n  function onTreeNativeDrop/)?.[0] || '';
+      noteTreeDragDropSource.match(
+        /async function moveNoteIntoTarget[\s\S]*?\n  async function onTreeNativeDrop/,
+      )?.[0] || '';
     expect(moveFunction).not.toContain('refreshTree()');
   });
 
@@ -478,13 +499,16 @@ describe('笔记库页面树交互接线', () => {
     expect(mobilePageListSource).toContain("emit('share', item)");
     expect(mobilePageListSource).toContain("emit('delete', item)");
     expect(detailSource).toContain(':write-enabled="noteTreeWriteEnabled && !readonly"');
-    expect(detailSource).toContain(':drag-enabled="false"');
+    expect(detailSource).toContain(':drag-enabled="detailTreeDragEnabled && !treeMovePending"');
+    expect(detailSource).toContain('@drag-start="onTreeDragStart"');
+    expect(detailSource).toContain('<NoteTreeDropFeedback');
+    expect(detailSource).toContain('useNoteTreeDragDrop({');
   });
 
   it('移动端目录范围顶部始终提供当前页面正文卡片，空目录也能直接进入正文', () => {
     expect(source).toContain('class="note-mobile-current-page-card"');
     expect(source).toContain("$t('note.currentPageShort')");
-    expect(source).toContain('@click="openDirectoryPage(currentParentId)"');
+    expect(source).toContain('@click="openPageBody(currentParentId)"');
     expect(source).toMatch(/note-mobile-current-page-card[\s\S]{0,700}note\.openPageBody/);
   });
 

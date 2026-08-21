@@ -223,6 +223,26 @@
 
             <div v-if="!bookmark.isMobile" class="field">
               <div class="field-head">
+                <span class="field-label">{{ t('settings.noteParentOpenMode') }}</span>
+                <span class="field-desc">{{ t('settings.noteParentOpenModeDesc') }}</span>
+              </div>
+              <div class="seg">
+                <BButton
+                  v-for="o in noteParentOpenOpts"
+                  :key="o.v"
+                  class="seg-btn"
+                  :class="{ active: selectedNoteParentOpenMode === o.v }"
+                  :type="selectedNoteParentOpenMode === o.v ? 'primary' : undefined"
+                  :aria-pressed="selectedNoteParentOpenMode === o.v"
+                  @click="set('noteParentOpenMode', o.v)"
+                >
+                  {{ o.label }}
+                </BButton>
+              </div>
+            </div>
+
+            <div v-if="!bookmark.isMobile" class="field">
+              <div class="field-head">
                 <span class="field-label">{{ t('settings.resourceView') }}</span>
                 <span class="field-desc">{{ t('settings.resourceViewDesc') }}</span>
               </div>
@@ -774,7 +794,11 @@
     postAndroidOpenLegalDocument,
     type AndroidLegalDocument,
   } from '@/utils/androidBridge.ts';
-  import { getHomePagePreference, getMobileHomePreference } from '@/utils/preferences.ts';
+  import {
+    DEFAULT_NOTE_PARENT_OPEN_MODE,
+    getHomePagePreference,
+    getMobileHomePreference,
+  } from '@/utils/preferences.ts';
   import { APP_FILING_NUMBER, MIIT_QUERY_URL } from '@/config/androidRelease.ts';
   import SettingsMobileIndex, { type SettingsIndexRow } from './SettingsMobileIndex.vue';
   import {
@@ -925,6 +949,9 @@
   // 移动端按移动语义解析：偏好是 resourceCenter 等移动端不支持的值时，要落到实际生效的那一项
   const selectedHomePage = computed(() =>
     bookmark.isMobile ? getMobileHomePreference(user.preferences) : getHomePagePreference(user.preferences),
+  );
+  const selectedNoteParentOpenMode = computed(
+    () => user.preferences.noteParentOpenMode || DEFAULT_NOTE_PARENT_OPEN_MODE,
   );
 
   /*
@@ -1174,6 +1201,10 @@
   const viewOpts = computed(() => [
     { v: 'card', label: t('settings.cardView') },
     { v: 'list', label: t('settings.listView') },
+  ]);
+  const noteParentOpenOpts = computed(() => [
+    { v: 'children', label: t('settings.noteParentOpenChildren') },
+    { v: 'preview', label: t('settings.noteParentOpenPreview') },
   ]);
   const resourceViewOpts = computed(() => [
     { v: 'card', label: t('resourceCenter.view.card') },

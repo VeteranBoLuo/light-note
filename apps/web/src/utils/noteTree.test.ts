@@ -5,7 +5,10 @@ import {
   flattenNoteTree,
   getNoteParentPathText,
   getNoteParentTargetId,
+  hasMeaningfulNoteContent,
+  shouldBrowseNoteChildrenOnOpen,
 } from './noteTree';
+import { createEmptyDrawingScene, serializeDrawingScene } from '@lightnote/shared/drawing-note';
 
 const tree = [
   {
@@ -86,5 +89,23 @@ describe('noteTree 前端纯函数', () => {
     ).toBe('direct-parent');
     expect(getNoteParentTargetId({ parentId: 'legacy-parent' })).toBe('legacy-parent');
     expect(getNoteParentTargetId({ path: [{ id: 'current', title: '根页面' }] })).toBe('');
+  });
+
+  it('父页面是否浏览子页面只取决于显式偏好，不再依赖正文内容', () => {
+    expect(shouldBrowseNoteChildrenOnOpen({ childCount: 2 })).toBe(true);
+    expect(shouldBrowseNoteChildrenOnOpen({ childCount: 2 }, 'children')).toBe(true);
+    expect(shouldBrowseNoteChildrenOnOpen({ childCount: 2 }, 'preview')).toBe(false);
+    expect(shouldBrowseNoteChildrenOnOpen({ childCount: 0 }, 'children')).toBe(false);
+    expect(shouldBrowseNoteChildrenOnOpen({ childCount: 2 }, 'children', false)).toBe(false);
+  });
+
+  it('从完整详情中识别空手绘、空富文本和真实可视内容', () => {
+    expect(hasMeaningfulNoteContent(serializeDrawingScene(createEmptyDrawingScene()), 'drawing')).toBe(false);
+    expect(hasMeaningfulNoteContent('<p><br></p><p>&nbsp;</p>', 'html')).toBe(false);
+    expect(hasMeaningfulNoteContent('<script>metadata</script><style>.x{}</style>', 'html')).toBe(false);
+    expect(hasMeaningfulNoteContent('<svg viewBox="0 0 10 10"></svg>', 'html')).toBe(true);
+    expect(hasMeaningfulNoteContent('   \n\t', 'markdown')).toBe(false);
+    expect(hasMeaningfulNoteContent('## 标题', 'markdown')).toBe(true);
+    expect(hasMeaningfulNoteContent('{invalid drawing', 'drawing')).toBe(true);
   });
 });

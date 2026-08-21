@@ -6,6 +6,7 @@ import {
 } from '@lightnote/shared/drawing-note';
 import { drawingShapeBounds, paintDrawingShape } from './drawingShape';
 import { paintDrawingStroke } from './drawingStroke';
+import { drawingFillBounds, paintDrawingFill } from './drawingFill';
 
 interface DrawingBounds {
   minX: number;
@@ -15,6 +16,8 @@ interface DrawingBounds {
 }
 
 export const DRAWING_THUMBNAIL_MAX_PAGE_ZOOM = 3;
+export const DRAWING_THUMBNAIL_WIDTH = 480;
+export const DRAWING_THUMBNAIL_HEIGHT = 270;
 
 function includeBounds(target: DrawingBounds, minX: number, minY: number, maxX: number, maxY: number) {
   target.minX = Math.min(target.minX, minX);
@@ -45,6 +48,17 @@ function sceneContentBounds(scene: DrawingCurrentScene): DrawingBounds | null {
         shapeBounds.y,
         shapeBounds.x + shapeBounds.width,
         shapeBounds.y + shapeBounds.height,
+      );
+      return;
+    }
+    if (element.kind === 'fill') {
+      const fillBounds = drawingFillBounds(element);
+      includeBounds(
+        bounds,
+        fillBounds.x,
+        fillBounds.y,
+        fillBounds.x + fillBounds.width,
+        fillBounds.y + fillBounds.height,
       );
       return;
     }
@@ -97,6 +111,10 @@ function drawElement(context: CanvasRenderingContext2D, element: DrawingElement,
     paintDrawingShape(context, element, scale, { minimumDeviceWidth: 1 });
     return;
   }
+  if (element.kind === 'fill') {
+    paintDrawingFill(context, element, scale);
+    return;
+  }
   // 单击形成的点同样按整张画纸缩放，只保留 1 个输出像素的可辨识下限，禁止自动放大填满卡片。
   paintDrawingStroke(context, element, scale, { minimumDeviceWidth: 1 });
 }
@@ -137,5 +155,24 @@ export function renderDrawingThumbnail(
     return true;
   } catch {
     return false;
+  }
+}
+
+export function createDrawingThumbnailDataUrl(content: string) {
+  if (typeof document === 'undefined') return '';
+  const canvas = document.createElement('canvas');
+  canvas.width = DRAWING_THUMBNAIL_WIDTH;
+  canvas.height = DRAWING_THUMBNAIL_HEIGHT;
+  const context = canvas.getContext('2d');
+  if (!context || !renderDrawingThumbnail(context, content, DRAWING_THUMBNAIL_WIDTH, DRAWING_THUMBNAIL_HEIGHT)) {
+    return '';
+  }
+  try {
+    const dataUrl = canvas.toDataURL('image/webp', 0.82);
+    // 不支持 WebP 的旧 WebView 可能静默回退 PNG；服务端只接收固定协议的 WebP，
+    // 此时直接让卡片沿用矢量预览，不把格式差异伪装成成功。
+    return dataUrl.startsWith('data:image/webp;base64,') ? dataUrl : '';
+  } catch {
+    return '';
   }
 }

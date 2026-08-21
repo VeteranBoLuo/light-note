@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { DrawingShapeElement, DrawingStrokeElement, DrawingTextElement } from '@lightnote/shared/drawing-note';
+import type {
+  DrawingFillElement,
+  DrawingShapeElement,
+  DrawingStrokeElement,
+  DrawingTextElement,
+} from '@lightnote/shared/drawing-note';
 import {
   cloneDrawingElement,
   drawingRectsIntersect,
@@ -40,6 +45,16 @@ const shape: DrawingShapeElement = {
   height: 140,
   color: '#615ced',
   strokeWidth: 4,
+};
+
+const fill: DrawingFillElement = {
+  id: 'fill-1',
+  kind: 'fill',
+  color: '#00a884',
+  x: 0,
+  y: 0,
+  spans: [20, 10, 40],
+  erasures: [{ id: 'fill-erase', width: 8, points: [20, 20] }],
 };
 
 describe('drawingSelection', () => {
@@ -87,6 +102,17 @@ describe('drawingSelection', () => {
       x: 112,
       y: 112,
     });
+    expect(translateDrawingElement(fill, 12, -8, 'fill-copy')).toEqual({
+      ...fill,
+      id: 'fill-copy',
+      x: 12,
+      y: -8,
+      erasures: [{ id: 'fill-erase', width: 8, points: [32, 12] }],
+    });
+    const clonedFill = cloneDrawingElement(fill, 'fill-copy');
+    expect(clonedFill).toEqual({ ...fill, id: 'fill-copy' });
+    if (clonedFill.kind !== 'fill') throw new Error('expected fill');
+    expect(clonedFill.spans).not.toBe(fill.spans);
     expect(stroke.points).toEqual([10, 20, 30, 40]);
     expect(text).toMatchObject({ x: 50, y: 60 });
     expect(shape).toMatchObject({ x: 100, y: 120 });

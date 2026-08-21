@@ -25,12 +25,17 @@
 
 | 编号                                                                                           | 日期       | 模块                | 关键词                                             | 状态         |
 | ---------------------------------------------------------------------------------------------- | ---------- | ------------------- | -------------------------------------------------- | ------------ |
-| [LN-PIT-106](#ln-pit-106agent-会话能力边界不能只过滤工具或只隐藏前端入口)                      | 2026-08-21 | Agent、前后端策略   | chat-only、read-only、材料、确认、Manifest         | 已修复待合入 |
-| [LN-PIT-105](#ln-pit-105turnspec-升级和确定性工作流不能一刀切替换旧-planner)                   | 2026-08-21 | Agent、Runtime V3   | TurnSpec 3.1、handle、workflow、Planner 回退       | 已修复待合入 |
-| [LN-PIT-104](#ln-pit-104agent-精确事实和处理记录不能由模型文案或前端展示反推)                  | 2026-08-21 | Agent、结果协议     | FactBundle、ExecutionReceipt、ResponseEnvelope     | 已修复待合入 |
-| [LN-PIT-103](#ln-pit-103agent-确认产物材料和运行状态不能共用一个生命周期)                      | 2026-08-21 | Agent、持久化       | ArtifactVersion、SourceSet、Run、Dialogue Anchor   | 已修复待合入 |
-| [LN-PIT-102](#ln-pit-102agent-时间范围和列表完整性不能由各工具或模型自行解释)                  | 2026-08-21 | Agent、工具协议     | IANA、半开区间、total、partial、参数兼容           | 已修复待合入 |
-| [LN-PIT-101](#ln-pit-101agent-不能在工具成功前提交新焦点也不能把空能力范围降级成自动模式)      | 2026-08-21 | Agent、Runtime V3   | scope、ResultSet、digest、时间默认、副作用         | 已修复待合入 |
+| [LN-PIT-112](#ln-pit-112agent-会话能力边界不能只过滤工具或只隐藏前端入口)                      | 2026-08-21 | Agent、前后端策略   | chat-only、read-only、材料、确认、Manifest         | 已修复待合入 |
+| [LN-PIT-111](#ln-pit-111turnspec-升级和确定性工作流不能一刀切替换旧-planner)                   | 2026-08-21 | Agent、Runtime V3   | TurnSpec 3.1、handle、workflow、Planner 回退       | 已修复待合入 |
+| [LN-PIT-110](#ln-pit-110agent-精确事实和处理记录不能由模型文案或前端展示反推)                  | 2026-08-21 | Agent、结果协议     | FactBundle、ExecutionReceipt、ResponseEnvelope     | 已修复待合入 |
+| [LN-PIT-109](#ln-pit-109agent-确认产物材料和运行状态不能共用一个生命周期)                      | 2026-08-21 | Agent、持久化       | ArtifactVersion、SourceSet、Run、Dialogue Anchor   | 已修复待合入 |
+| [LN-PIT-108](#ln-pit-108agent-时间范围和列表完整性不能由各工具或模型自行解释)                  | 2026-08-21 | Agent、工具协议     | IANA、半开区间、total、partial、参数兼容           | 已修复待合入 |
+| [LN-PIT-107](#ln-pit-107agent-不能在工具成功前提交新焦点也不能把空能力范围降级成自动模式)      | 2026-08-21 | Agent、Runtime V3   | scope、ResultSet、digest、时间默认、副作用         | 已修复待合入 |
+| [LN-PIT-105](#ln-pit-105目录打开正文不能复用无条件编辑跳转也不能递归透传-from)                  | 2026-08-21 | 笔记目录、前端      | 正文分流、双页签、返回来源、递归 URL               | 已修复待上线 |
+| [LN-PIT-104](#ln-pit-104父页面主点击不能由正文状态推断)                                      | 2026-08-21 | 笔记目录、前端      | 父页面、点击偏好、子页面、预览                     | 已修复待上线 |
+| [LN-PIT-103](#ln-pit-103闭合区域填色不能只修改-canvas-像素或仅保存种子点)                      | 2026-08-21 | 手绘笔记、协议      | 洪水填充、扫描线、闭合区域、快捷键、旧图补齐       | 已修复待上线 |
+| [LN-PIT-102](#ln-pit-102密集手绘不能用删减-scene-重画卡片缩略图)                               | 2026-08-21 | 手绘笔记、缩略图    | 派生图、密集填色、revision、自动补齐、降级预览     | 已修复待上线 |
+| [LN-PIT-101](#ln-pit-101同一页面树不能只共享数据却在不同页面各自决定是否可拖拽)                | 2026-08-21 | 笔记目录、前端      | 详情页、拖拽、共享状态机、提示、面包屑缓存         | 已修复待上线 |
 | [LN-PIT-100](#ln-pit-100复合菜单项的对齐不能输给基础按钮默认样式)                              | 2026-08-21 | 前端、基础组件      | BDropdown、BActionMenu、BButton、左对齐            | 已修复并上线 |
 | [LN-PIT-099](#ln-pit-099事实型最终回答不能把模型有看到当成用户一定看到)                        | 2026-08-21 | Agent、事实回答     | 工具摘要、字段完整性、清单进度、真实链路           | 已修复并上线 |
 | [LN-PIT-098](#ln-pit-098异步图片上传不能把请求成功当成正文插入成功)                            | 2026-08-21 | 更新日志、前端      | 图片上传、粘贴、光标、异步插入、成功提示           | 已修复并上线 |
@@ -155,7 +160,7 @@
 
 ## 案例记录
 
-### LN-PIT-101：Agent 不能在工具成功前提交新焦点，也不能把空能力范围降级成自动模式
+### LN-PIT-107：Agent 不能在工具成功前提交新焦点，也不能把空能力范围降级成自动模式
 
 - **现象：** 非 Root 显式选择只有管理员可用的模块时，候选能力可能被过滤为空后又按“自动”继续；新一轮读查询刚完成语义编译就清空旧 ResultSet，随后工具失败会导致“刚才那些”既找不到本轮结果，也失去上轮可靠结果。Root 全量统计能力若从 Planner schema 删除时间参数但没有默认绑定，还会随机追问或带入旧时间范围。
 - **根因：** 权限过滤、语义计划和执行状态没有区分“请求为空”与“授权后为空”；会话把计划完成误当成执行完成；同一个 TurnSpec digest 同时承担语义和最终材料合同；时间默认、副作用性质和 shadow 对比又散落在工具或 Handler 中，没有由 Manifest 统一声明。
@@ -2219,7 +2224,7 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 
 - **现象：** 手绘笔记详情正常，笔记库卡片却把 `{"v":1,"page":...}` 场景 JSON 当成正文展示。
 - **根因：** 新类型已经有专用编辑器，但列表摘要仍优先信任服务端 `previewSummary`；前后端滚动发布或旧缓存返回场景字符串时，手绘类型没有在摘要入口提前分流。
-- **约束：** 协议型正文必须在服务端预览和客户端摘要两个入口按权威 `type` 分流，不能依赖内容字符猜测。手绘卡片只使用异步、近可视区才加载的低分辨率 Canvas 缩略图；完整 scene 不进入通用列表，接近视口的卡片通过专用接口最多 12 篇合并读取，并在服务端限制元素、轨迹点和文本总量。不得批量挂载完整编辑器、逐卡请求详情或离屏绘制；场景缺失、为空或无效时显示类型占位，任何情况都不得回显 JSON。详情、只读阅读和历史版本预览必须复用同一个按需加载的只读手绘渲染器，不能把元素统计摘要冒充内容预览。历史差异使用当前版与历史版两个同宽只读画板并共享外层滚动轴，再按稳定元素 ID 统计新增、删除与修改/移动；禁止做会被抗锯齿和字体渲染污染的像素差异图。
+- **约束：** 协议型正文必须在服务端预览和客户端摘要两个入口按权威 `type` 分流，不能依赖内容字符猜测。完整 scene 不进入通用列表；手绘卡片接近可视区后优先加载保存时生成的固定低分辨率 WebP，历史笔记或派生图缺失时才通过专用接口最多 12 篇合并读取受限 scene 并回退 Canvas。不得批量挂载完整编辑器、逐卡请求详情或离屏绘制；场景缺失、为空或无效时显示类型占位，任何情况都不得回显 JSON。详情、只读阅读和历史版本预览必须复用同一个按需加载的只读手绘渲染器，不能把元素统计摘要冒充内容预览。历史差异使用当前版与历史版两个同宽只读画板并共享外层滚动轴，再按稳定元素 ID 统计新增、删除与修改/移动；禁止做会被抗锯齿和字体渲染污染的像素差异图。
 - **验收：** 使用新服务端、旧服务端 JSON 摘要和本地旧缓存三种数据分别打开卡片/列表视图；卡片显示笔画与文字缩略图或手绘占位，列表只显示文本元素，源码 JSON 不可见；首屏多张手绘卡片合并为受限批次，滚动前的离屏卡片没有请求与绘制；普通 HTML/Markdown 卡片首图与摘要行为不变。打开多个手绘历史版本时，预览页展示对应版本的真实画布内容并可滚动到底；差异页桌面并排、移动端上下展示当前与历史画板，两个画板比例一致且一次滚动可到达相同页面位置，元素统计方向为“当前相对历史”；HTML/Markdown 历史面板不加载画布分包。
 
 ### LN-PIT-031：只读长画布不能同时拥有内外两层滚动容器，也不能保留编辑态手势声明
@@ -2344,8 +2349,8 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 
 - **现象：** 手绘笔记只能逐个点击移动元素，空白处拖动无法框选；选中元素后按 `Command/Ctrl+A` 反而触发浏览器网页全选，复制、剪切和粘贴也无法作用于画布内容。
 - **根因：** 第一版选择状态只有一个元素 ID，拖动预览和删除历史也都围绕单元素实现；编辑器虽可聚焦，却只拦截撤销和删除键，浏览器继续处理其余通用快捷键。
-- **约束：** 画布选择状态统一使用稳定元素 ID 集合；单击、修饰键增减选择、空白拖动框选、成组移动和批量删除共享同一状态。指针移动期间只更新非响应式框选/位移预览并通过单个 rAF 绘制，抬起后一次性提交 scene 和一条历史记录。编辑器聚焦且不在文本输入态时必须拦截 `Command/Ctrl+A/C/X/V`，复制内容使用深拷贝，粘贴生成新 ID 并做有界错位；文本输入态保留输入控件原生快捷键。`Command/Ctrl+A` 是全选动作，不得冒充选择工具快捷键；画笔与选择分别使用无修饰键 `P`、`V`，并与工具栏点击共享同一切换入口。单键工具快捷键在输入法组合、文本输入、活动笔画、擦除、拖动、缩放或框选期间不得切换工具，防止半成品手势和误输入。清空画布必须二次确认、一次提交且可撤销。画布操作打开的确认框关闭后必须恢复编辑器焦点；若操作会让原触发按钮进入 `disabled`，不能依赖浏览器把焦点还给按钮，必须显式聚焦可接收快捷键的编辑器根节点。
-- **验收：** 从四个方向拖出框选矩形均能选中相交元素；修饰键点击可增减选择，拖动任一已选元素会成组移动，删除与撤销各只需一次。`Command/Ctrl+A` 只选中画布全部元素且页面文字不被选中，`C/V/X` 分别可复制粘贴、剪切并用一次撤销恢复；连续粘贴产生新 ID 和逐次偏移且不越出画纸。画布聚焦且无活动手势时，`P`、`V` 分别切到画笔和选择工具；输入法组合、文本输入和按住指针未松开时按下这些单键均不改变工具。编辑文本时上述快捷键仍作用于文本框。点击一键清屏并确认后画布为空，确认框关闭后不点击任何位置直接按 `Command/Ctrl+Z` 即可完整恢复。
+- **约束：** 画布选择状态统一使用稳定元素 ID 集合；单击、修饰键增减选择、空白拖动框选、成组移动和批量删除共享同一状态。指针移动期间只更新非响应式框选/位移预览并通过单个 rAF 绘制，抬起后一次性提交 scene 和一条历史记录。编辑器聚焦且不在文本输入态时必须拦截 `Command/Ctrl+A/C/X/V`，复制内容使用深拷贝，粘贴生成新 ID 并做有界错位；文本输入态保留输入控件原生快捷键。`Command/Ctrl+A` 是全选动作，不得冒充选择工具快捷键；画笔与选择分别使用无修饰键 `P`、`V`，并与工具栏点击共享同一切换入口。`+`、`=`、`-`、`↑`、`↓` 调整当前工具或已选元素尺寸时必须复用样式面板的同一尺寸入口、范围和历史语义，不能另存快捷键专用状态；Mac 等键盘上加号与等号共用物理键，必须同时识别 `event.key` 的 `+` 和 `=`。手形工具、无选区选择工具、输入控件和活动手势不得抢占这些按键。单键工具快捷键在输入法组合、文本输入、活动笔画、擦除、拖动、缩放或框选期间不得切换工具，防止半成品手势和误输入。清空画布必须二次确认、一次提交且可撤销。画布操作打开的确认框关闭后必须恢复编辑器焦点；若操作会让原触发按钮进入 `disabled`，不能依赖浏览器把焦点还给按钮，必须显式聚焦可接收快捷键的编辑器根节点。
+- **验收：** 从四个方向拖出框选矩形均能选中相交元素；修饰键点击可增减选择，拖动任一已选元素会成组移动，删除与撤销各只需一次。`Command/Ctrl+A` 只选中画布全部元素且页面文字不被选中，`C/V/X` 分别可复制粘贴、剪切并用一次撤销恢复；连续粘贴产生新 ID 和逐次偏移且不越出画纸。画布聚焦且无活动手势时，`P`、`V` 分别切到画笔和选择工具；`+` / `=` / `↑` 每次增大 1px，`-` / `↓` 每次减小 1px，且画笔、形状、橡皮擦、文字和已选元素都遵守各自上下限。输入法组合、文本输入和按住指针未松开时按下这些单键均不改变工具或尺寸；手形工具和无选区选择工具不阻止方向键默认行为。点击一键清屏并确认后画布为空，确认框关闭后不点击任何位置直接按 `Command/Ctrl+Z` 即可完整恢复。
 
 ### LN-PIT-057：公开分享令牌不能放在 URL path/query，也不能让已分享目录静默接收私密页面
 
@@ -2504,7 +2509,7 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **验收：** 合成测试覆盖“7 天 → 今天 → 至少 2000 字 → 再扩到 2500 字”、笔记切换书签、选中书签分析、网页 ResultSet 省略 URL 续问、今天 16:00 待办、Root 今天新增用户、序数指代和待确认草稿替换；断言 Planner 看不到 Manifest 声明的时间/资源参数，服务端执行参数为权威值，类型兼容的 ResultSet 能在 Compiler 前开放所需候选，跨领域不继承旧 ResultSet，ArtifactState 结算后不可复活。Root 产物真实门禁必须通过正式 Note Service 创建带唯一前缀、可清理的“今天”正文夹具，不能依赖账号恰好已有当天笔记；否则跨零点或空账号会把正确的空材料失败关闭误报成 Agent 回归。门禁结束必须验证旧确认至少两次失效、最终确认幂等、正文落库一次且夹具全部清理。`pnpm --filter server smoke:ai-turn-v3` 默认必须报告模型调用 0、业务工具 0；真实 Compiler 冒烟只有显式点名用例才允许，单次最多 2 个。首次启用或扩大 V3 灰度前仍执行获授权的 root 真实矩阵，日常开发不得无边界重复消耗 Token。
 - **相关代码：** `apps/server/util/agent/runtime/v3/`、`apps/server/util/agent/runtime/conversationHistory.js`、`apps/server/util/agent/sessionStore.js`、`apps/server/util/agent/runtime/executionPlanner.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/server/evaluation/ai-assistant/turnSpecV3LiveSmokeRunner.js`、`apps/web/src/types/aiCapabilityScope.ts`。
 
-### LN-PIT-103：Agent 确认、产物、材料和运行状态不能共用一个生命周期
+### LN-PIT-109：Agent 确认、产物、材料和运行状态不能共用一个生命周期
 
 - **现象：** 确认卡过期后，即使用户仍能看到旧草稿和引用材料，也只能收到“原操作过期”；并发工具完成顺序偶尔会让确认卡乱序；会话状态只在 Redis 时，重启或 TTL 后无法继续修改草稿。另一方面，如果直接把近期对话都当材料保存，又会让普通问答历史串入新产物。
 - **影响范围：** 笔记生成与多轮改写、确认替换/过期、跨进程恢复、并发复合目标、对话整理成笔记，以及 Runtime V3 灰度发布。
@@ -2515,7 +2520,7 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **验证方法：** 使用内存仓储、Mock Provider 和固定时钟覆盖 disabled/shadow/enforce、Redis miss 恢复、revision 竞争、迟到旧轮、双 digest、逐目标 unknown、ArtifactVersion 链恢复、旧确认不可复活、SourceSet 缺失失败关闭、Dialogue Anchor 精确重读与 digest 不一致、并发工具乱序但卡片有序。开发阶段不得调用真实 Provider 或线上数据；首次灰度再按发布门禁做最小 Root 验证。
 - **相关代码：** `apps/server/migrations/20260821_agent_runtime_state.sql`、`apps/server/util/agent/persistence/`、`apps/server/util/agent/sessionStore.js`、`apps/server/util/agent/persistence/agentArtifactLifecycle.js`、`apps/server/util/agent/runtime/conversationHistory.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/web/src/store/aiAssistant.ts`。
 
-### LN-PIT-104：Agent 精确事实和处理记录不能由模型文案或前端展示反推
+### LN-PIT-110：Agent 精确事实和处理记录不能由模型文案或前端展示反推
 
 - **现象：** 工具明明返回了精确总量，最终回答仍可能少报、多报或漏掉截断；前端有时因为出现“参考来源/本轮检索”标签就认为工具执行过，有时真实执行完成却没有可核验的处理记录。SSE 断线恢复后，临时文本、来源和执行状态还可能互相不一致。
 - **影响范围：** 所有读工具的计数、时间口径与列表完整性，写操作风险披露，SSE 终态/恢复，会话消息持久化和前端处理记录。
@@ -2526,7 +2531,7 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **验证方法：** Mock 成功、空结果、部分结果、文本预算截断、工具失败和混合多工具；断言只有成功工具产生 FactBundle，exact facts 与公共披露稳定，receipt/envelope 在同步响应、`response.completed`、恢复 snapshot 和前端 normalize 后一致。全部为确定性测试，不调用真实模型。
 - **相关代码：** `apps/server/util/agent/runtime/v3/factBundle.js`、`executionReceipt.js`、`responseEnvelope.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/server/util/agent/sseLifecycle.js`、`apps/web/src/types/aiExecutionReceipt.ts`、`apps/web/src/utils/aiSse.ts`、`apps/web/src/utils/aiStreamRecovery.ts`、`apps/web/src/components/aiAssistant/ChatMessageItem.vue`。
 
-### LN-PIT-106：Agent 会话能力边界不能只过滤工具或只隐藏前端入口
+### LN-PIT-112：Agent 会话能力边界不能只过滤工具或只隐藏前端入口
 
 - **现象：** 用户切换“仅对话”后，界面虽然隐藏了材料入口，旧 SourceSet、附件或工作区范围仍可能在服务端材料解析阶段被读取；切换“只读锁”后，新问题不会生成写工具，但切换前已经签发的确认卡仍可能执行。若只把受限能力从 Compiler 目录删除，模型又会把明确写请求误判为闲聊或“工具不支持”。
 - **影响范围：** 自动/仅对话/只读会话策略、旧 Runtime 与 V3、材料解析、SourceSet、能力目录、工具候选、确认卡和历史消息恢复。
@@ -2537,7 +2542,7 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **验证方法：** Handler mock 断言仅对话模式下上下文、附件、SourceSet 在 Compiler/Resolver 前均为零且个人查询不执行；只读模式准确识别写 capability、无工具、无确认卡。旧/V3 目录均断言 `policy_blocked` 状态和产品知识例外。已有确认卡在两种锁下按钮禁用、服务端 409、令牌未 inspect/claim，取消可用；切回自动后在有效期内可继续。PC/移动、浅色/深色检查自动、仅对话、只读、带材料、空材料和待确认写入状态。
 - **相关代码：** `apps/server/util/agent/runtime/v3/capabilityPolicy.js`、`capabilityManifest.js`、`apps/server/util/agent/capabilityRegistry.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/web/src/types/aiCapabilityPolicy.ts`、`apps/web/src/view/aiAssistant/ChatContainer.vue`、`apps/web/src/components/aiAssistant/ChatInputSection.vue`、`AiToolConfirmationCard.vue`。
 
-### LN-PIT-105：TurnSpec 升级和确定性工作流不能一刀切替换旧 Planner
+### LN-PIT-111：TurnSpec 升级和确定性工作流不能一刀切替换旧 Planner
 
 - **现象：** 为减少模型漏选工具，若直接把 TurnSpec schema、所有能力参数和执行路径一次升级，原来能工作的工具可能因新字段缺失、旧会话 ID 不兼容或未迁移的参数来源而全部失败；反过来若长期让客户端 ID、展示标题和自然语言序数承担指代，又会继续出现“刚才那个”选错材料。
 - **影响范围：** Runtime V3 Compiler/Parser、跨轮 ResultSet 指代、Manifest 迁移、Execution Planner、灰度观测和所有读写能力。
@@ -2548,7 +2553,7 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **验证方法：** 固定夹具覆盖 3.0/3.1 等价语义、shadow/enforce 默认写版本及环境回退、合法/未知/跨组 handle、ordinal 越界、冲突 temporal claims、未声明 slot claims，以及 deterministic 成功、Slot Filler 补齐/越权字段拒绝、Validator 拒绝、自动 Planner 回退、fatal/goal/write 歧义与依赖传播。`eval:ai-runtime-v3-offline` 必须以零模型、零数据库、零业务工具证明高频声明式能力命中 fast-path，未知能力失败关闭；Agent Runtime 测试必须证明 3.1 受限补槽不暴露权威上下文、3.0 和非适用能力仍调用原 Planner。
 - **相关代码：** `apps/server/util/agent/runtime/v3/turnSpec.js`、`intentCompiler.js`、`workflowCompiler.js`、`slotFiller.js`、`ambiguityGate.js`、`agentRuntime.js`、`capabilityManifest.js`、`apps/server/util/agent/runtime/legacyRuntimeAdapter.js`、`apps/server/util/agent/sessionStore.js`、`apps/server/util/agent/turnContractTrace.js`。
 
-### LN-PIT-102：Agent 时间范围和列表完整性不能由各工具或模型自行解释
+### LN-PIT-108：Agent 时间范围和列表完整性不能由各工具或模型自行解释
 
 - **现象：** 用户把“最近 7 天”改为“今天”后，后续轮仍可能沿用旧范围；同一个“今天”在不同进程时区下得到不同 SQL 边界。列表工具只返回当前 `LIMIT` 内的数据，模型却可能把“返回 1 条”说成“全部只有 1 条”；文本预算截断时也没有稳定披露。
 - **影响范围：** 笔记、书签、文件、回收站、Root 用户/日志/统计/安全事件查询，以及携带时间条件的写操作二次确认。
@@ -2651,3 +2656,45 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **防回归约束：** `BDropdown`、`BActionMenu` 等基于 `BButton` 的文字操作菜单，必须在共享组件层用能够稳定压过按钮默认值的根容器＋菜单项＋`.b_btn` 选择器同时指定 `justify-content: flex-start` 和 `text-align: left`；业务页不得通过局部样式逐页补丁。缩短危险操作入口时，完整范围和后果继续留在二次确认中。
 - **验收：** 回归测试锁定共享选择器与两个对齐属性；浏览器在 PC/移动、浅色/深色下检查普通项、危险项、分隔线、hover/focus 和长文案，图标列与文字起点一致，不出现单页居中。
 - **相关代码：** `apps/web/src/components/base/BasicComponents/BButton.vue`、`apps/web/src/components/base/BasicComponents/BDropdown.vue`、`apps/web/src/components/base/BasicComponents/BActionMenu.vue`。
+
+### LN-PIT-101：同一页面树不能只共享数据，却在不同页面各自决定是否可拖拽
+
+- **现象：** 笔记库左侧页面树可以拖动，并显示“插到前面 / 后面 / 移到页面下”的落点和底部提示；直接进入已有笔记或新建笔记后，左侧展示的是同一棵页面树，但拖动没有反应，偶尔拖起文字时也没有任何应用内提示。
+- **误导线索：** 详情页与笔记库复用了 `useNoteTree` 和同一个 Pinia 工作区，容易把问题判断为首次加载、权限快照或树缓存时序。实际详情页把 `drag-enabled` 固定为 `false`，测试还把这个临时差异固化成了预期；浏览器原生文字拖拽则会制造“好像已经能拖”的假象。
+- **根因：** 页面树只统一了读取数据和行组件，没有统一拖拽状态机。目标解析、循环与原位校验、自动滚动、乐观更新、失败回滚、共享目录暴露确认和提示样式全部留在笔记库页面，详情页没有可复用入口。移动成功后，面包屑缓存也缺少按被移动分支失效的能力，当前页或后代页面可能继续显示旧路径。
+- **修复：** 抽出 `useNoteTreeDragDrop` 作为唯一拖拽控制器，笔记库与详情页只提供能力开关、树读模型、滚动容器和移动确认后的刷新策略；提示与拖拽预览样式由共享 `NoteTreeDropFeedback` 承载。详情页在完整桌面、目录页签、有写权限、非只读、非搜索时启用；新增草稿本身没有 ID，不能作为移动对象，但左侧已有页面仍可移动。移动分支后只失效包含该分支的面包屑缓存，并按当前页面需要重新读取路径。
+- **防回归约束：** 同一页面树的新增拖拽落点、校验、接口参数、分享暴露确认、成功文案和失败回滚必须修改共享控制器，禁止在 `NoteLibrary.vue` 或 `NoteDetail.vue` 复制第二套原生拖拽监听。页面可以决定是否启用及成功后的局部刷新，但不能再用字面量永久关闭某个桌面表面。搜索、只读、无写权限、移动中和移动端触摸目录继续禁用拖拽，并保留菜单或移动弹窗作为可发现的替代入口。
+- **验收：** 自动测试锁定两页都接入共享控制器和反馈组件，落点工具覆盖中央、前后、根层、置顶分组、循环与原位，Store 测试覆盖只失效被移动分支的面包屑。浏览器在 PC 浅色/深色分别从笔记库、已有笔记直达和 `/noteLibrary/add` 检查默认、hover、拖起、前/内/后候选、可放置、无效位置、成功及失败回滚；搜索和只读行不可拖。移动端保持底部目录与显式移动操作，不出现桌面拖拽提示。
+
+### LN-PIT-102：密集手绘不能用删减 scene 重画卡片缩略图
+
+- **现象：** 同一篇手绘笔记在详情画布中颜色完整，笔记库卡片却出现随机白缝、缺色或局部断笔，元素越密集越明显。
+- **误导线索：** 卡片与详情复用了相同 Canvas 笔画渲染函数，因此容易继续排查缩放、抗锯齿或主题色。实际差异发生在渲染之前：卡片接口为了限流均匀删除了元素和轨迹点，密集涂色本质上依赖大量相邻笔画覆盖，抽样后必然露出白底。
+- **根因：** 编辑级矢量 scene 与卡片派生图承担不同职责。对普通线稿，限制元素和点数看起来近似正确；对密集填色，任何几何抽样都会改变像素覆盖关系，无法作为准确缩略图事实源。即使改为完整 scene 派生 WebP，如果长期缓存键只有正文 revision，渲染算法修复后同一 revision 仍会被服务端旧文件和浏览器 `immutable` 缓存截住；重启后端不会清理这两层持久状态。
+- **防回归约束：** 手绘正文保存成功后，从完整 scene 在客户端生成固定 480 × 270 WebP，并按 `用户 + 笔记 + 正文 revision + DRAWING_THUMBNAIL_RENDERER_VERSION` 保存为派生文件；上传前后都校验 owner、类型与双版本，较慢的旧请求不得覆盖或清理更新版本。缩略图渲染算法或像素输出修复时必须递增共享渲染器版本，并让 URL 与服务端文件键同时变化，禁止靠后端重启、浏览器强刷或用户重存正文清缓存。成功位图可使用长期 `immutable`，但文件尚不存在时的 GET/HEAD 404 必须返回 `no-store`，否则“卡片先失败、详情后补齐”仍可能被同地址的负缓存截住。卡片接近可视区后必须始终挂载并优先读取带双版本的长期缓存位图；列表接口携带的受限 scene 只能在位图加载期间或文件不存在、读取失败时作为画布回退，禁止因为 `content` / `previewSummary` 非空就阻止 `<img>` 请求。完整详情页和笔记库桌面只读预览都会拿到完整 scene，两条入口都必须为本人旧笔记执行同一 HEAD 探测与 404 静默补齐；不能只接详情路由，否则用户在笔记库点卡片预览后仍无法修复派生图。补齐过程禁止修改正文或 revision，也不得要求用户再次保存。缩略图生成和上传失败不得改变正文“已保存”状态。API 日志只能记录派生图长度，禁止复制 data URL。
+- **验收：** 用超过预览元素/点数上限的多色密集涂画保存后，卡片与详情颜色覆盖一致且无抽样白缝；更新一笔后卡片 URL revision 变化，不显示上一版；只递增渲染器版本而保持正文 revision 不变时，URL 也必须变化，旧位图不能命中。构造旧笔记、缩略图 404、HEAD 命中、WebP 不支持、上传失败和新旧渲染器乱序上传，卡片分别自动补齐或稳定回退、正文保存不报错、旧请求不删除新文件；旧笔记只需打开详情再返回卡片即可看到准确缩略图，无需手动保存。PC/移动端及浅色/深色主题检查占位、加载、成功和失败回退，HTML/Markdown 卡片不发手绘缩略图请求。
+- **相关代码：** `apps/web/src/api/drawingThumbnail.ts`、`apps/web/src/components/noteLibrary/drawing/DrawingNoteThumbnail.vue`、`apps/web/src/utils/drawingThumbnail.ts`、`apps/web/src/view/noteLibrary/NoteDetail.vue`、`apps/server/router/noteLibrary.js`、`apps/server/util/drawingThumbnailImage.js`。
+
+### LN-PIT-103：闭合区域填色不能只修改 Canvas 像素或仅保存种子点
+
+- **现象：** 用户需要用当前颜色快速填满角色轮廓或背景中的闭合空白，且保存、撤销、移动、擦除、导出、详情与卡片都要保持同一结果。若只在当前 Canvas 上执行 flood fill，画面刷新或保存后填色立即消失；若只保存点击种子点，后续浏览器抗锯齿、缩放或元素顺序变化又会重新算出不同边界。
+- **根因：** Canvas 像素是 scene 的派生结果，不是持久化事实源；洪水填充又依赖点击当时的完整像素拓扑。把一次性位图操作放在编辑器局部，无法进入共享协议、历史和所有渲染消费者，也无法稳定限制数据与计算成本。
+- **修复与约束：** scene v4 新增正式 `fill` 元素，在 1448 × 1448 逻辑画纸上对点击时的完整场景执行四邻域扫描线填充，并把结果保存为按 y 升序、同行不重叠的 `[y, xStart, xEnd)` 区间；最多 100 个填色、2 万条扫描线，触达任一画纸边缘即视为未闭合并拒绝，同色区域不写历史。渲染时所有扫描线必须加入同一个 Canvas 路径后一次填充，禁止逐行 `fillRect`；后者在非整数缩放下会让每一行独立抗锯齿并产生横向白缝。填色复用元素擦除遮罩、选择、移动、复制、颜色修改、只读、缩略图、PNG 与服务端受限预览链路，禁止另存隐藏位图层。桌面快捷键为 `Command/Ctrl + 鼠标左键`，仅在画笔、橡皮、文字和形状工具下生效；选择工具的修饰键多选与手形工具导航不能被抢占。
+- **验收：** 在完整闭合轮廓内点击后，只填充连通空白，黑色轮廓、眼睛、嘴巴及被轮廓隔开的孔洞保持原色；有细小开口且连到画纸边缘时给出未闭合提示且 scene、revision 和撤销栈不变。填色后撤销/重做、选择移动、复制、改色和局部擦除均有效，保存刷新、只读/分享、历史冲突、PNG 与卡片结果一致。自动测试覆盖闭合、开口、同色、上限、v3 拒绝 fill、v4 规范化、边界/命中和各渲染器；浏览器在 PC 浅色/深色检查默认、帮助说明、成功、未闭合和撤销，移动浅色/深色确认已有 fill 的只读与编辑渲染不退化。
+- **相关代码：** `packages/shared/drawingNote.js`、`apps/web/src/utils/drawingFill.ts`、`apps/web/src/components/noteLibrary/drawing/DrawingNoteEditor.vue`、`apps/web/src/utils/drawingThumbnail.ts`、`apps/server/util/drawingPreview.js`。
+
+### LN-PIT-104：父页面主点击不能由正文状态推断
+
+- **现象：** 同一个父页面从根列表点击、从左侧树直接点击，或先做一次其他目录操作后再点击，可能分别进入正文和子页面目录；用户无法形成稳定预期。即使服务端返回权威 `hasContent`，空手绘、旧缓存和页面树按需加载仍会让导航行为受数据到达时机影响。
+- **根因：** “正文是否有内容”是数据状态，“点击父页面想看正文还是看子页面”是用户偏好，两者不是同一个事实。把导航意图绑定到 `hasContent`，必然要求每个入口先读取正文状态，也会让空/非空切换悄悄改变用户的点击习惯。
+- **防回归约束：** 父页面主点击只读取账号偏好 `preferences.noteParentOpenMode`：缺失和 `children` 都进入子页面目录，桌面端 `preview` 无论正文为空或非空都预览当前父页面。该偏好优先于叶子笔记的 `noteDirectEdit`；目录标题栏“打开正文”、预览内“编辑”等显式动作不读取它。移动端没有只读预览面板，固定进入子页面目录。禁止为主点击重新引入 `hasContent` 详情预取、摘要判断或入口级缓存分支。
+- **验收：** 单测覆盖偏好缺失、`children`、`preview`、移动端和目录能力关闭。浏览器在 PC 浅色/深色、卡片/列表及左树分别点击空父页和非空父页：默认都进入相同的直属子页面目录；切换为预览后都留在库内预览自身；叶子笔记仍按 `noteDirectEdit` 工作。移动端父页面始终进入子页面目录，设置保存失败时选中态回滚。
+- **相关代码：** `apps/web/src/utils/preferences.ts`、`apps/web/src/utils/noteTree.ts`、`apps/web/src/view/settings/Settings.vue`、`apps/web/src/view/noteLibrary/NoteLibrary.vue`。
+
+### LN-PIT-105：目录“打开正文”不能复用无条件编辑跳转，也不能递归透传 `from`
+
+- **现象：** 在具体父页面的子页面目录里点击“打开正文”，空正文和有正文都进入同一条编辑路由；返回后列表 URL 残留 `from`，再次进入目录或正文会把整段旧地址继续包进新的 `from`，最终出现多层 `?from=/noteLibrary?from=...`，甚至回到错误的根列表。目录页侧栏还会因为只在只读预览已打开时启用大纲，导致同一篇笔记在目录态和正文态的“页面 / 大纲”入口不一致。
+- **根因：** “显式编辑”“按正文状态打开”和“浏览子页面”是三个不同意图，却共用了同一个 `openDirectoryPage`；返回来源又直接取当前 `fullPath`，没有先从列表地址移除详情专属的 `from`。侧栏页签则错误依赖预览组件是否挂载，而不是当前是否处在某篇具体笔记的上下文。
+- **防回归约束：** 目录“打开正文”必须读取完整详情并复用统一正文判定：空正文进入编辑器，有正文在桌面进入只读预览；预览内“编辑”才走无条件编辑路由。根“笔记库”保持单一页面树，具体笔记目录和详情始终提供“页面 / 大纲”，无标题结构统一显示“此笔记无大纲”。详情来源只能是规范化后的可信笔记库/工作台地址；列表切换目录必须清除 `from`，生成下一条详情路由前也必须再次规范化，禁止把详情 URL 或带 `from` 的列表 URL原样嵌套。
+- **验收：** 在根笔记库确认不显示页签；进入空手绘父页目录后显示“页面 / 大纲”，大纲为空态文案正确，“打开正文”进入手绘编辑器；进入有正文父页目录后“打开正文”留在只读预览，预览内再点“编辑”才进入详情编辑器。连续执行目录、正文、返回至少三轮，地址栏始终只有一层 `from`，且返回到原 `parent/tag/view`。PC/移动端及浅色/深色分别检查默认、加载、空大纲、预览、编辑和接口失败回退。
+- **相关代码：** `apps/web/src/utils/noteDetailNavigation.ts`、`apps/web/src/composables/useNoteTree.ts`、`apps/web/src/view/noteLibrary/NoteLibrary.vue`、`apps/web/src/view/noteLibrary/NoteDetail.vue`。

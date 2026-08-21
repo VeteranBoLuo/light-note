@@ -141,6 +141,36 @@ describe('adminRoutePolicyMiddleware', () => {
     }
   });
 
+  it('手绘位图缩略图读取按只读接口放行，上传仍受内容写权限约束', () => {
+    for (const mode of ['readonly', 'maintain']) {
+      const next = vi.fn();
+      const res = createRes();
+      adminRoutePolicyMiddleware(createReq('/note/drawing-thumbnail/drawing-1/4.webp', 'GET', mode), res, next);
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(res.json).not.toHaveBeenCalled();
+    }
+
+    const headNext = vi.fn();
+    const headRes = createRes();
+    adminRoutePolicyMiddleware(
+      createReq('/note/drawing-thumbnail/drawing-1/4.webp', 'HEAD', 'maintain'),
+      headRes,
+      headNext,
+    );
+    expect(headNext).toHaveBeenCalledTimes(1);
+    expect(headRes.json).not.toHaveBeenCalled();
+
+    const readonlyNext = vi.fn();
+    const readonlyRes = createRes();
+    adminRoutePolicyMiddleware(
+      createReq('/note/uploadDrawingThumbnail', 'POST', 'readonly'),
+      readonlyRes,
+      readonlyNext,
+    );
+    expect(readonlyNext).not.toHaveBeenCalled();
+    expect(readonlyRes.json).toHaveBeenCalled();
+  });
+
   it('管理员预览时放行目标用户的通知查询', () => {
     for (const path of ['/notification/list', '/notification/unreadCount']) {
       const next = vi.fn();

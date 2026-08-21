@@ -6,10 +6,7 @@ export type HomePagePreference = 'landing' | 'workbench' | 'resourceCenter' | 'b
 export type ApplicationHomePreference = Exclude<HomePagePreference, 'landing'>;
 // 移动端「今日」已是底部一级入口，因此 workbench 也可以作为移动默认首页；
 // resourceCenter 仍不可以——它在移动端是二级页面。
-export type MobileHomePreference = Extract<
-  HomePagePreference,
-  'workbench' | 'bookmark' | 'noteLibrary' | 'cloudSpace'
->;
+export type MobileHomePreference = Extract<HomePagePreference, 'workbench' | 'bookmark' | 'noteLibrary' | 'cloudSpace'>;
 // '/manage/tagMg' 不作为可选默认首页,仅作为移动端「回到最近资料页签」的合法落点。
 export type AppHomePath = '/workbenches' | '/search' | '/home' | '/noteLibrary' | '/cloudSpace' | '/manage/tagMg';
 export type MobileHomePath = Extract<AppHomePath, '/workbenches' | '/home' | '/noteLibrary' | '/cloudSpace'>;
@@ -19,6 +16,7 @@ export interface UserPreferences {
   noteViewMode?: 'card' | 'list';
   noteSidebarMode?: 'directory' | 'tags';
   noteDirectEdit?: boolean;
+  noteParentOpenMode?: 'children' | 'preview';
   resourceView?: 'card' | 'list';
   todoView?: 'list' | 'agenda' | 'calendar' | 'matrix';
   tagView?: 'card' | 'graph';
@@ -42,6 +40,23 @@ export interface UserPreferences {
  * 与后端相反，导致「偏好里没有这个 key」的账号（老账号、游客）拿到列表视图。
  */
 export const DEFAULT_NOTE_VIEW_MODE: NonNullable<UserPreferences['noteViewMode']> = 'card';
+
+/**
+ * 父页面（有子页面的笔记）的默认点击行为。
+ * 缺失值必须回落到子页面目录，兼容老账号，并避免再用“正文是否为空”猜测导航意图。
+ */
+export const DEFAULT_NOTE_PARENT_OPEN_MODE: NonNullable<UserPreferences['noteParentOpenMode']> = 'children';
+
+/**
+ * 桌面端按账号偏好打开父页面；移动端没有独立只读预览面板，统一进入子页面目录。
+ */
+export function getNoteParentOpenMode(
+  preferences?: UserPreferences | null,
+  isMobile = false,
+): NonNullable<UserPreferences['noteParentOpenMode']> {
+  if (isMobile) return DEFAULT_NOTE_PARENT_OPEN_MODE;
+  return preferences?.noteParentOpenMode === 'preview' ? 'preview' : DEFAULT_NOTE_PARENT_OPEN_MODE;
+}
 
 /**
  * 已有笔记的默认打开方式：移动端始终进入编辑器；PC 仅在用户明确开启时跳过库内预览。
@@ -97,12 +112,7 @@ export function getDesktopHomePath(preferences?: UserPreferences | null): AppHom
  */
 export function getMobileHomePreference(preferences?: UserPreferences | null): MobileHomePreference {
   const homePage = preferences?.homePage;
-  if (
-    homePage === 'workbench' ||
-    homePage === 'bookmark' ||
-    homePage === 'noteLibrary' ||
-    homePage === 'cloudSpace'
-  ) {
+  if (homePage === 'workbench' || homePage === 'bookmark' || homePage === 'noteLibrary' || homePage === 'cloudSpace') {
     return homePage;
   }
   return DEFAULT_MOBILE_HOME_PAGE;

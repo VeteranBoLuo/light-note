@@ -167,7 +167,39 @@ describe('useNoteTree', () => {
     scope.stop();
   });
 
+  it('切换目录时清除详情返回参数，避免列表地址携带递归 from', async () => {
+    mocks.route.value = {
+      query: { parent: 'old', from: '/noteLibrary?parent=older', tag: 'tag-1' },
+      fullPath: '/noteLibrary?parent=old&from=%2FnoteLibrary%3Fparent%3Dolder&tag=tag-1',
+    } as any;
+    const scope = effectScope();
+    const tree = scope.run(() => useNoteTree());
+
+    await tree?.selectDirectory('project');
+    expect(mocks.push).toHaveBeenLastCalledWith({
+      path: '/noteLibrary',
+      query: { parent: 'project', tag: 'tag-1' },
+    });
+    scope.stop();
+  });
+
   it('打开正文时记录当前目录 URL，供详情页稳定返回', async () => {
+    const scope = effectScope();
+    const tree = scope.run(() => useNoteTree());
+
+    await tree?.openDirectoryPage('module');
+    expect(mocks.push).toHaveBeenCalledWith({
+      path: '/noteLibrary/module',
+      query: { from: '/noteLibrary?parent=module&tag=tag-1' },
+    });
+    scope.stop();
+  });
+
+  it('打开正文时规范化旧列表地址，只保留一层稳定来源', async () => {
+    mocks.route.value = {
+      query: { parent: 'module', from: '/noteLibrary?parent=project', tag: 'tag-1' },
+      fullPath: '/noteLibrary?parent=module&from=%2FnoteLibrary%3Fparent%3Dproject&tag=tag-1',
+    } as any;
     const scope = effectScope();
     const tree = scope.run(() => useNoteTree());
 

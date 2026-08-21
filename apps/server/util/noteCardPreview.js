@@ -40,6 +40,19 @@ const BLOCK_TAGS = new Set([
 ]);
 const IGNORED_TAGS = new Set(['code', 'pre', 'script', 'style', 'svg']);
 const SUMMARY_IGNORED_TAGS = new Set(['head', 'noscript', 'script', 'style', 'svg', 'template', 'title']);
+const CONTENT_IGNORED_TAGS = new Set(['head', 'noscript', 'script', 'style', 'template', 'title']);
+const VISUAL_CONTENT_TAGS = new Set([
+  'audio',
+  'canvas',
+  'embed',
+  'hr',
+  'iframe',
+  'img',
+  'object',
+  'svg',
+  'table',
+  'video',
+]);
 
 function cleanCandidateUrl(value) {
   const raw = String(value || '')
@@ -120,6 +133,7 @@ function inspectHtmlCardPreview(content) {
   let textLength = 0;
   let blocks = 0;
   let imageUrl = '';
+  let hasContent = false;
   let buffer = '';
   const beforeImage = [];
   const afterImage = [];
@@ -130,9 +144,10 @@ function inspectHtmlCardPreview(content) {
     buffer = '';
   };
 
-  const visit = (nodes, summaryIgnored = false, imageLocationIgnored = false) => {
+  const visit = (nodes, summaryIgnored = false, imageLocationIgnored = false, contentIgnored = false) => {
     for (const node of nodes || []) {
       if (node.type === 'text') {
+        if (!contentIgnored && normalizePreviewLine(node.data)) hasContent = true;
         if (!summaryIgnored) buffer += String(node.data || '');
         if (!imageUrl && !imageLocationIgnored) textLength += normalizePreviewLine(node.data).length;
         continue;
@@ -141,6 +156,8 @@ function inspectHtmlCardPreview(content) {
       const tagName = String(node.name || '').toLowerCase();
       const childSummaryIgnored = summaryIgnored || SUMMARY_IGNORED_TAGS.has(tagName) || isMermaidSourceNode(node);
       const childImageLocationIgnored = imageLocationIgnored || IGNORED_TAGS.has(tagName);
+      const childContentIgnored = contentIgnored || CONTENT_IGNORED_TAGS.has(tagName);
+      if (!childContentIgnored && VISUAL_CONTENT_TAGS.has(tagName)) hasContent = true;
       const isBlock = !childSummaryIgnored && BLOCK_TAGS.has(tagName);
       if (isBlock) {
         flush();
@@ -162,14 +179,14 @@ function inspectHtmlCardPreview(content) {
         }
       }
       if (tagName === 'br') flush();
-      visit(node.children, childSummaryIgnored, childImageLocationIgnored);
+      visit(node.children, childSummaryIgnored, childImageLocationIgnored, childContentIgnored);
       if (isBlock) flush();
     }
   };
 
   visit(document.children);
   flush();
-  return { beforeImage, afterImage, imageUrl };
+  return { beforeImage, afterImage, imageUrl, hasContent };
 }
 
 function previewHtmlFromContent(content, type) {
@@ -186,7 +203,7 @@ function previewHtmlFromContent(content, type) {
 export function buildNoteCardPreview(content, type, options = {}) {
   const source = String(content || '').slice(0, NOTE_CARD_PREVIEW_SOURCE_MAX_LENGTH);
   if (!source) {
-    return { summary: '', beforeImage: '', afterImage: '', imageUrl: '', imageLocated: false };
+    return { summary: '', beforeImage: '', afterImage: '', imageUrl: '', imageLocated: false, hasContent: false };
   }
   try {
     const maxLength = Math.max(0, Number(options.maxLength ?? NOTE_CARD_PREVIEW_SUMMARY_MAX_LENGTH) || 0);
@@ -194,6 +211,7 @@ export function buildNoteCardPreview(content, type, options = {}) {
       beforeImage: beforeLines,
       afterImage: afterLines,
       imageUrl,
+      hasContent,
     } = inspectHtmlCardPreview(previewHtmlFromContent(source, type));
     const separator = options.singleLine ? ' ' : '\n';
     const beforeText = beforeLines.join(separator);
@@ -201,12 +219,20 @@ export function buildNoteCardPreview(content, type, options = {}) {
     const betweenParts = beforeText && afterText ? separator : '';
     const summary = truncatePreviewText(`${beforeText}${betweenParts}${afterText}`, maxLength);
     if (!imageUrl) {
-      return { summary, beforeImage: summary, afterImage: '', imageUrl: '', imageLocated: false };
+      return { summary, beforeImage: summary, afterImage: '', imageUrl: '', imageLocated: false, hasContent };
     }
     const previewParts = truncatePreviewParts(beforeText, afterText, maxLength, betweenParts);
-    return { summary, ...previewParts, imageUrl, imageLocated: true };
+    return { summary, ...previewParts, imageUrl, imageLocated: true, hasContent };
   } catch {
-    return { summary: '', beforeImage: '', afterImage: '', imageUrl: '', imageLocated: false };
+    return {
+      summary: '',
+      beforeImage: '',
+      afterImage: '',
+      imageUrl: '',
+      imageLocated: false,
+      // 解析失败时宁可继续打开正文，也不能把已有内容误判为空而自动跳走。
+      hasContent: Boolean(source.trim()),
+    };
   }
 }
 

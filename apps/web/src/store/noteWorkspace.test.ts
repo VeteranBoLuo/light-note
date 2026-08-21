@@ -59,15 +59,21 @@ describe('noteWorkspace 目录元数据同步', () => {
     };
     workspace.currentBreadcrumb = workspace.breadcrumbByNote.descendant;
 
-    workspace.updateNoteMetadata('note-1', { title: 'markdown 编辑预览匹配优化', type: 'markdown' });
+    workspace.updateNoteMetadata('note-1', {
+      title: 'markdown 编辑预览匹配优化',
+      type: 'markdown',
+      hasContent: false,
+    });
 
     expect(workspace.childrenByParent[NOTE_TREE_ROOT_KEY][0]).toMatchObject({
       title: 'markdown 编辑预览匹配优化',
       type: 'markdown',
+      hasContent: false,
     });
     expect(workspace.treeSearchChildrenByParent[NOTE_TREE_ROOT_KEY][0].children?.[0]).toMatchObject({
       title: 'markdown 编辑预览匹配优化',
       type: 'markdown',
+      hasContent: false,
     });
     expect(workspace.breadcrumbByNote['note-1'][0].title).toBe('markdown 编辑预览匹配优化');
     expect(workspace.breadcrumbByNote.descendant[0].title).toBe('markdown 编辑预览匹配优化');
@@ -106,6 +112,26 @@ describe('noteWorkspace 目录元数据同步', () => {
     workspace.insertCreatedNote(created);
     expect(workspace.childrenByParent.parent).toHaveLength(1);
     expect(workspace.childrenByParent[NOTE_TREE_ROOT_KEY][0].childCount).toBe(1);
+  });
+
+  it('移动页面后只失效包含该分支的面包屑缓存', () => {
+    const workspace = useNoteWorkspaceStore();
+    workspace.breadcrumbByNote = {
+      moved: [{ id: 'moved', title: '移动页面' }],
+      descendant: [
+        { id: 'moved', title: '移动页面' },
+        { id: 'descendant', title: '后代页面' },
+      ],
+      unrelated: [{ id: 'unrelated', title: '无关页面' }],
+    };
+    workspace.currentBreadcrumb = workspace.breadcrumbByNote.descendant;
+
+    workspace.invalidateBreadcrumbBranch('moved');
+
+    expect(workspace.breadcrumbByNote).toEqual({
+      unrelated: [{ id: 'unrelated', title: '无关页面' }],
+    });
+    expect(workspace.currentBreadcrumb).toEqual([]);
   });
 
   it('目录缓存始终按置顶、手动顺序、更新时间和稳定 ID 排序', () => {

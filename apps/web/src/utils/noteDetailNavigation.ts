@@ -7,6 +7,14 @@ function firstQueryValue(value: unknown): string {
   return String(raw ?? '').trim();
 }
 
+function normalizeNoteLibraryPath(parsed: URL): string {
+  // `from` 只属于详情页，不能被带回列表后继续参与下一次详情跳转。
+  // 否则每次“目录 -> 正文 -> 返回”都会再包一层自身 URL，最终形成递归地址。
+  parsed.searchParams.delete('from');
+  const search = parsed.searchParams.toString();
+  return `${parsed.pathname}${search ? `?${search}` : ''}${parsed.hash}`;
+}
+
 /**
  * 从详情页历史遗留的嵌套 `from` 中提取最初的可信来源地址。
  *
@@ -28,7 +36,7 @@ function resolveNoteDetailSourcePath(value: unknown, includeWorkbench: boolean):
 
     if (parsed.origin !== NOTE_LIBRARY_ORIGIN) return '';
     if (parsed.pathname === '/noteLibrary') {
-      return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+      return normalizeNoteLibraryPath(parsed);
     }
     if (includeWorkbench && parsed.pathname === WORKBENCH_PATH) {
       return `${parsed.pathname}${parsed.search}${parsed.hash}`;

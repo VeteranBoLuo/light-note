@@ -1,6 +1,21 @@
 <template>
   <div ref="rootRef" class="drawing-note-thumbnail" role="img" :aria-label="t('note.drawingLabel')">
-    <canvas v-show="hasDrawing" ref="canvasRef" class="drawing-note-thumbnail__canvas" aria-hidden="true" />
+    <img
+      v-if="imageEnabled && thumbnailUrl && !imageFailed"
+      v-show="imageLoaded"
+      class="drawing-note-thumbnail__image"
+      :src="thumbnailUrl"
+      alt=""
+      aria-hidden="true"
+      @load="handleImageLoad"
+      @error="handleImageError"
+    />
+    <canvas
+      v-show="hasDrawing && !imageLoaded"
+      ref="canvasRef"
+      class="drawing-note-thumbnail__canvas"
+      aria-hidden="true"
+    />
     <div v-if="!hasDrawing" class="drawing-note-thumbnail__placeholder" aria-hidden="true">
       <SvgIcon :src="icon.resource.noteDrawing" size="24" />
       <span>{{ t('note.drawingLabel') }}</span>
@@ -9,10 +24,11 @@
 </template>
 
 <script setup lang="ts">
-  import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { loadDrawingPreview } from '@/api/drawingPreview';
+  import { drawingThumbnailUrl } from '@/api/drawingThumbnail';
   import icon from '@/config/icon';
   import { renderDrawingThumbnail } from '@/utils/drawingThumbnail';
 
@@ -25,6 +41,10 @@
   const rootRef = ref<HTMLElement | null>(null);
   const canvasRef = ref<HTMLCanvasElement | null>(null);
   const hasDrawing = ref(false);
+  const imageEnabled = ref(false);
+  const imageLoaded = ref(false);
+  const imageFailed = ref(false);
+  const thumbnailUrl = computed(() => drawingThumbnailUrl(props.noteId, props.revision));
   let visible = false;
   let renderVersion = 0;
   let renderFrame = 0;
@@ -48,6 +68,8 @@
       hasDrawing.value = true;
       return;
     }
+    // 新版笔记先等准确 WebP；只有文件不存在/读取失败时才请求历史的受限 scene 预览。
+    if (thumbnailUrl.value && !imageFailed.value) return;
     const content = await loadDrawingPreview(props.noteId, props.revision);
     if (version !== renderVersion || !visible) return;
     hasDrawing.value = paint(content);
@@ -58,11 +80,25 @@
     renderFrame = requestAnimationFrame(() => void render());
   }
 
+  function handleImageLoad() {
+    imageLoaded.value = true;
+    hasDrawing.value = true;
+  }
+
+  function handleImageError() {
+    imageLoaded.value = false;
+    imageFailed.value = true;
+    hasDrawing.value = false;
+    scheduleRender();
+  }
+
   watch(
     () => [props.noteId, props.revision, props.content],
     () => {
       renderVersion += 1;
       hasDrawing.value = false;
+      imageLoaded.value = false;
+      imageFailed.value = false;
       scheduleRender();
     },
   );
@@ -70,6 +106,7 @@
   onMounted(() => {
     if (typeof IntersectionObserver === 'undefined' || !rootRef.value) {
       visible = true;
+      imageEnabled.value = true;
       scheduleRender();
       return;
     }
@@ -77,6 +114,7 @@
       (entries) => {
         if (!entries.some((entry) => entry.isIntersecting)) return;
         visible = true;
+        imageEnabled.value = true;
         visibilityObserver?.disconnect();
         visibilityObserver = null;
         scheduleRender();
@@ -105,7 +143,8 @@
     background: #fff;
   }
 
-  .drawing-note-thumbnail__canvas {
+  .drawing-note-thumbnail__canvas,
+  .drawing-note-thumbnail__image {
     display: block;
     width: 100%;
     height: 100%;

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDrawingScenePreview,
   DRAWING_PREVIEW_MAX_ELEMENTS,
+  DRAWING_PREVIEW_MAX_FILL_SPANS,
   DRAWING_PREVIEW_MAX_POINT_PAIRS,
   DRAWING_PREVIEW_MAX_TEXT_CHARACTERS,
 } from './drawingPreview.js';
@@ -121,5 +122,32 @@ describe('drawingPreview', () => {
       id: 'shape',
       erasures: [{ id: 'erase', width: 4, points: [200, 120] }],
     });
+  });
+
+  it('有界保留 V4 填色扫描线，避免降级预览携带完整填色数据', () => {
+    const rows = Array.from({ length: DRAWING_PREVIEW_MAX_FILL_SPANS + 500 }, (_, index) => {
+      const segment = index % 2;
+      return [Math.floor(index / 2), 100 + segment * 400, 300 + segment * 400];
+    });
+    const spans = rows.flat();
+    const preview = buildDrawingScenePreview({
+      v: 4,
+      page: { width: 1448, height: 1448 },
+      elements: [
+        {
+          id: 'fill',
+          kind: 'fill',
+          color: '#ef4444',
+          x: 100,
+          y: 0,
+          spans,
+        },
+      ],
+    });
+
+    expect(preview.elements[0]).toMatchObject({ id: 'fill', kind: 'fill', color: '#ef4444' });
+    expect(preview.elements[0].spans).toHaveLength(DRAWING_PREVIEW_MAX_FILL_SPANS * 3);
+    expect(preview.elements[0].spans.slice(0, 3)).toEqual(rows[0]);
+    expect(preview.elements[0].spans.slice(-3)).toEqual(rows.at(-1));
   });
 });

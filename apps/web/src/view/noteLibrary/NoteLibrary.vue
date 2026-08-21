@@ -176,8 +176,9 @@
             :tree-error="sidebarTreeError"
             :search-value="treeSearchValue"
             :directory-enabled="!noteTreeFeaturesReady || noteTreeReadEnabled"
-            :outline-enabled="desktopPreviewOpen"
+            :outline-enabled="hasLibraryNoteContext"
             :write-enabled="noteTreeWriteEnabled"
+            :drag-enabled="treeDragEnabled && !treeMovePending"
             :search-active="treeSearchActive"
             :search-loading="treeSearchLoading"
             :search-match-count="treeSearchMatchCount"
@@ -273,7 +274,8 @@
               <BButton
                 v-if="currentParentId"
                 class="note-open-directory-page"
-                @click="openDirectoryPage(currentParentId)"
+                :loading="openingPageBodyId === currentParentId"
+                @click="openPageBody(currentParentId)"
               >
                 <SvgIcon :src="icon.noteTree.openPage" size="15" aria-hidden="true" />
                 {{ $t('note.openPageBody') }}
@@ -303,7 +305,8 @@
         <BButton
           v-if="bookmark.isMobile && currentParentId"
           class="note-mobile-current-page-card"
-          @click="openDirectoryPage(currentParentId)"
+          :loading="openingPageBodyId === currentParentId"
+          @click="openPageBody(currentParentId)"
         >
           <span class="note-mobile-current-page-icon">
             <SvgIcon :src="icon.resource.note" size="18" aria-hidden="true" />
@@ -487,13 +490,11 @@
             </BButton>
           </template>
         </div>
-        <div
-          v-if="!desktopPreviewOpen && noteDragging && dragDropTarget"
-          class="note-drop-hint"
-          :class="{ 'is-ready': dragDropTargetActive }"
-        >
-          {{ dragDropHint }}
-        </div>
+        <NoteTreeDropFeedback
+          :visible="!desktopPreviewOpen && noteDragging && Boolean(dragDropTarget)"
+          :ready="dragDropTargetActive"
+          :text="dragDropHint"
+        />
       </div>
     </NoteWorkspaceShell>
 
@@ -576,7 +577,7 @@
       :directory-enabled="noteTreeMobileEnabled"
       :write-enabled="noteTreeWriteEnabled"
       @select="selectDirectory"
-      @open-page="openDirectoryPage($event.id)"
+      @open-page="openPageBody($event.id)"
       @create="showNewChildPicker"
       @attach="openAttachPages"
       @toggle-top="toggleTreeNoteTop"
@@ -620,6 +621,7 @@
   import { VueDraggable } from 'vue-draggable-plus';
   import NoteWorkspaceShell from '@/components/noteLibrary/workspace/NoteWorkspaceShell.vue';
   import NoteWorkspaceSidebar from '@/components/noteLibrary/workspace/NoteWorkspaceSidebar.vue';
+  import NoteTreeDropFeedback from '@/components/noteLibrary/tree/NoteTreeDropFeedback.vue';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import NoteCard from '@/components/noteLibrary/library/NoteCard.vue';
@@ -634,7 +636,8 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import ViewModeToggle from '@/components/base/ViewModeToggle.vue';
-  import { DEFAULT_NOTE_VIEW_MODE, shouldOpenNoteDirectly } from '@/utils/preferences.ts';
+  import { DEFAULT_NOTE_VIEW_MODE, getNoteParentOpenMode, shouldOpenNoteDirectly } from '@/utils/preferences.ts';
+  import { hasMeaningfulNoteContent, shouldBrowseNoteChildrenOnOpen } from '@/utils/noteTree';
   import type { NoteWorkspaceLayoutState } from '@/utils/noteWorkspaceLayout';
   import { recordOperation } from '@/api/commonApi.ts';
   import {
@@ -662,6 +665,7 @@
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { NOTE_TREE_ROOT_KEY, useNoteTree } from '@/composables/useNoteTree';
+  import { useNoteTreeDragDrop } from '@/composables/useNoteTreeDragDrop';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import { deliverGeneratedFile } from '@/utils/fileDelivery';
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
@@ -676,19 +680,7 @@
     mergeResourcePage,
     mergeResourceRefreshedHead,
   } from '@/utils/resourcePagination';
-  import {
-    buildRootStartDropTarget,
-    buildTreeNodeDropTarget,
-    moveNoteTreeNodeOptimistically,
-    normalizePinnedAfterDropTarget,
-    type NoteTreeDropTarget,
-  } from '@/utils/noteTreeDrop';
-  import { resolveNoteTreeDragScrollStep } from '@/utils/noteTreeDragScroll';
-  import { getRootZoom } from '@/utils/zoom';
-  import {
-    confirmNoteCreateShareExposure,
-    requestNoteShareExposureConfirmation,
-  } from '@/utils/noteShareExposure';
+  import { confirmNoteCreateShareExposure } from '@/utils/noteShareExposure';
   import AsyncFeatureLoadingOverlay from '@/components/base/AsyncFeatureLoadingOverlay.vue';
   import {
     NOTE_LIBRARY_FEATURES_FRESH_MS,
@@ -861,14 +853,6 @@
   const noteTotal = ref(0);
   const notePage = ref(0);
   const noteHasMore = ref(false);
-  const noteDragging = ref(false);
-  const treeMovePending = ref(false);
-  const dragDropTarget = ref<NoteTreeDropTarget | null>(null);
-  const dragDropTargetActive = ref(false);
-  const draggingNoteId = ref('');
-  const draggingNoteIsTop = ref(false);
-  let dragDropTimer: number | null = null;
-  let treeDragImageElement: HTMLElement | null = null;
   const treeMotionExpansionIds = ref<Set<string>>(new Set());
   const treeMotionCleanupTimers = new Map<string, number>();
   const searchValue = ref('');
@@ -892,6 +876,43 @@
     return treeLoadingKeys.value;
   });
   const sidebarTreeError = computed(() => (treeSearchActive.value ? treeSearchError.value : treeError.value));
+  const treeDragEnabled = computed(() => !bookmark.isMobile && noteTreeWriteEnabled.value && !treeSearchActive.value);
+  const {
+    beginPointerDrag,
+    completePointerDrag,
+    dragDropHint,
+    dragDropTarget,
+    dragDropTargetActive,
+    moveNoteIntoTarget,
+    noteDragging,
+    onTreeDragEnd,
+    onTreeDragStart,
+    resolveDropTargetAtPoint,
+    scheduleDragDropTarget,
+    takePointerDropSnapshot,
+    treeMovePending,
+  } = useNoteTreeDragDrop({
+    enabled: treeDragEnabled,
+    childrenByParent,
+    visibleChildrenByParent: sidebarTreeChildrenByParent,
+    t,
+    getScrollElement: noteTreeScrollElement,
+    getSourceParentId(sourceId) {
+      const source = noteList.value.find((item) => String(item.id) === sourceId);
+      if (!source) return undefined;
+      return source.parentId ? String(source.parentId) : null;
+    },
+    canCommit: () => !blockGuestWrite('move-note'),
+    async onMoveConfirmed({ sourceId }) {
+      const shouldRefreshBreadcrumb = currentBreadcrumb.value.some((item) => item.id === sourceId);
+      if (shouldRefreshBreadcrumb) noteWorkspace.invalidateBreadcrumbBranch(sourceId);
+      await Promise.all([
+        reloadNotes(),
+        shouldRefreshBreadcrumb ? loadBreadcrumb(currentParentId.value) : Promise.resolve(),
+      ]);
+    },
+    logLabel: 'note-library',
+  });
   let noteRequestSeq = 0;
   const showTypePicker = ref(false);
   const createParentOverride = ref<string | null | undefined>(undefined);
@@ -931,13 +952,19 @@
   const previewOutline = ref<PreviewOutlineItem[]>([]);
   const previewActiveOutlineId = ref<string | null>(null);
   const previewOutlineTarget = ref<{ id: string; requestId: number } | null>(null);
+  const openingPageBodyId = ref('');
   let previewOutlineRequestId = 0;
   let previewPendingLocallyChanged = false;
   const desktopPreviewOpen = computed(() => !bookmark.isMobile && Boolean(previewNoteId.value));
+  const hasLibraryNoteContext = computed(() => desktopPreviewOpen.value || Boolean(currentParentId.value));
   const librarySidebarMode = computed<'directory' | 'outline'>({
-    get: () => (desktopPreviewOpen.value && detailTab.value === 'outline' ? 'outline' : 'directory'),
+    get: () => (hasLibraryNoteContext.value && detailTab.value === 'outline' ? 'outline' : 'directory'),
     set: (value) => {
-      if (desktopPreviewOpen.value) detailTab.value = value === 'outline' ? 'outline' : 'pages';
+      if (!hasLibraryNoteContext.value) return;
+      detailTab.value = value === 'outline' ? 'outline' : 'pages';
+      if (value === 'outline' && !desktopPreviewOpen.value && currentParentId.value) {
+        openCurrentDirectoryOutline(currentParentId.value);
+      }
     },
   });
   const previewActiveOutlineIndex = computed(() => {
@@ -1329,6 +1356,7 @@
   }
 
   async function selectDirectory(noteId: string | null) {
+    detailTab.value = 'pages';
     closeDesktopPreview(false);
     void recordNoteTreeProductEvent('note_tree_branch_selected', {
       surface: noteTreeSurface(),
@@ -1349,6 +1377,15 @@
     previewOutlineTarget.value = null;
     previewNoteSeed.value = { ...source, id: noteId };
     previewNoteId.value = noteId;
+  }
+
+  function openCurrentDirectoryOutline(noteId: string) {
+    const normalizedId = String(noteId || '').trim();
+    if (!normalizedId || bookmark.isMobile || desktopPreviewOpen.value) return;
+    const source = findNoteForWarmup(normalizedId) || { id: normalizedId };
+    prefetchNoteDetail(user, normalizedId);
+    captureDesktopPreviewScroll();
+    setDesktopPreviewPage(normalizedId, source);
   }
 
   function openPreviewBreadcrumbPage(page: PreviewBreadcrumbTarget) {
@@ -1395,12 +1432,65 @@
     }
   }
 
+  async function openPageBody(noteId: string) {
+    const normalizedId = String(noteId || '').trim();
+    if (!normalizedId || openingPageBodyId.value) return;
+    openingPageBodyId.value = normalizedId;
+    const source = findNoteForWarmup(normalizedId) || { id: normalizedId };
+    try {
+      const response = await prefetchNoteDetail(user, normalizedId);
+      if (response?.status !== 200 || !response.data) return openDirectoryPage(normalizedId);
+
+      const hasContent = hasMeaningfulNoteContent(response.data.content, response.data.type || source.type);
+      source.hasContent = hasContent;
+      noteWorkspace.updateNoteMetadata(normalizedId, {
+        title: String(response.data.title || source.title || ''),
+        type: String(response.data.type || source.type || 'html'),
+        hasContent,
+      });
+      if (!hasContent || bookmark.isMobile) return openDirectoryPage(normalizedId);
+
+      captureDesktopPreviewScroll();
+      setDesktopPreviewPage(normalizedId, {
+        ...source,
+        ...response.data,
+        childCount: Math.max(0, Number(source.childCount || 0)),
+        hasContent,
+      });
+      void recordNoteTreeProductEvent('note_tree_page_opened', {
+        surface: 'desktop',
+        ...noteTreeNodeMetrics(normalizedId),
+        result: 'success',
+      });
+    } catch {
+      return openDirectoryPage(normalizedId);
+    } finally {
+      openingPageBodyId.value = '';
+    }
+  }
+
   function openLibraryNote(noteOrId: any) {
     const noteId = String(typeof noteOrId === 'string' ? noteOrId : noteOrId?.id || '').trim();
     if (!noteId) return;
     const source = (typeof noteOrId === 'object' && noteOrId) ||
       noteList.value.find((item) => String(item.id) === noteId) ||
       findLoadedTreeNode(noteId) || { id: noteId };
+    const parentOpenMode = getNoteParentOpenMode(user.preferences, bookmark.isMobile);
+    if (shouldBrowseNoteChildrenOnOpen(source, parentOpenMode, noteTreeReadEnabled.value)) {
+      return selectDirectory(noteId);
+    }
+    // 父页面的显式“预览当前页面”偏好优先于“点击笔记直接编辑”，且不再依赖正文是否为空。
+    if (Math.max(0, Number(source.childCount) || 0) > 0 && parentOpenMode === 'preview') {
+      prefetchNoteDetail(user, noteId);
+      captureDesktopPreviewScroll();
+      setDesktopPreviewPage(noteId, source);
+      void recordNoteTreeProductEvent('note_tree_page_opened', {
+        surface: 'desktop',
+        ...noteTreeNodeMetrics(noteId),
+        result: 'success',
+      });
+      return;
+    }
     if (shouldOpenNoteDirectly(user.preferences, bookmark.isMobile)) {
       // 移动端的 openDirectoryPage 已经负责详情与当前编辑器预热；PC 直达编辑时在跳转前补齐同样的暖机。
       if (!bookmark.isMobile) {
@@ -2165,9 +2255,6 @@
     cancelMobileReturnScrollRestore();
     if (searchTimer.value) window.clearTimeout(searchTimer.value);
     if (treeSearchTimer.value) window.clearTimeout(treeSearchTimer.value);
-    window.removeEventListener('pointermove', onDragPointerMove, true);
-    cleanupTreeNativeDrag();
-    clearDragDropTarget();
     treeMotionCleanupTimers.forEach((timer) => window.clearTimeout(timer));
     treeMotionCleanupTimers.clear();
     desktopPreviewScrollSnapshot = null;
@@ -2703,165 +2790,8 @@
     router.push({ path: '/noteLibrary', query });
   };
 
-  function clearDragDropTarget() {
-    if (dragDropTimer !== null) window.clearTimeout(dragDropTimer);
-    dragDropTimer = null;
-    dragDropTarget.value = null;
-    dragDropTargetActive.value = false;
-  }
-
-  const dragDropHint = computed(() => {
-    const target = dragDropTarget.value;
-    if (!target) return '';
-    const pinning = !draggingNoteIsTop.value && target.isTop;
-    const unpinning = draggingNoteIsTop.value && !target.isTop;
-    if (target.position === 'before') {
-      if (pinning) return t('note.dropBeforePageAndPin', { title: target.title });
-      if (unpinning) return t('note.dropBeforePageAndUnpin', { title: target.title });
-      return t('note.dropBeforePage', { title: target.title });
-    }
-    if (target.position === 'after') {
-      if (pinning) return t('note.dropAfterPageAndPin', { title: target.title });
-      if (unpinning) return t('note.dropAfterPageAndUnpin', { title: target.title });
-      return t('note.dropAfterPage', { title: target.title });
-    }
-    if (target.position === 'root-start') {
-      return unpinning ? t('note.dropAtRootStartAndUnpin') : t('note.dropAtRootStart');
-    }
-    if (unpinning) return t('note.dropIntoPageAndUnpin', { title: target.title });
-    return t(dragDropTargetActive.value ? 'note.dropIntoReady' : 'note.dropIntoPage', { title: target.title });
-  });
-
-  function dragSourceParentId() {
-    const sourceId = draggingNoteId.value;
-    const source = noteList.value.find((note) => String(note.id) === sourceId);
-    const loadedSource = findLoadedTreeNode(sourceId);
-    const rawParentId = source?.parentId ?? loadedSource?.parentId;
-    return rawParentId ? String(rawParentId) : null;
-  }
-
-  function isNoopSiblingPlacement(target: NoteTreeDropTarget, sourceParentId: string | null) {
-    if (target.position !== 'before' && target.position !== 'after') return false;
-    if (sourceParentId !== target.parentId) return false;
-    const siblings = childrenByParent.value[target.parentId || NOTE_TREE_ROOT_KEY] || [];
-    const group = siblings.filter((item) => Boolean(item.isTop) === target.isTop);
-    const sourceIndex = group.findIndex((item) => item.id === draggingNoteId.value);
-    const targetIndex = group.findIndex((item) => item.id === target.key);
-    if (sourceIndex < 0 || targetIndex < 0) return false;
-    return target.position === 'before' ? sourceIndex === targetIndex - 1 : sourceIndex === targetIndex + 1;
-  }
-
-  function isInvalidDropTarget(target: NoteTreeDropTarget) {
-    const sourceId = draggingNoteId.value;
-    if (!sourceId || target.parentId === sourceId || target.previousId === sourceId || target.nextId === sourceId) {
-      return true;
-    }
-    const sourceParentId = dragSourceParentId();
-    if (target.position === 'inside' && sourceParentId === target.parentId) return true;
-    if (isNoopSiblingPlacement(target, sourceParentId)) return true;
-    let cursor = target.parentId;
-    const visited = new Set<string>();
-    while (cursor && !visited.has(cursor)) {
-      if (cursor === sourceId) return true;
-      visited.add(cursor);
-      cursor = findLoadedTreeNode(cursor)?.parentId || null;
-    }
-    return false;
-  }
-
-  function dropTargetIdentity(target: NoteTreeDropTarget | null) {
-    if (!target) return '';
-    return [
-      target.position,
-      target.key,
-      target.isTop ? '1' : '0',
-      target.parentId || '',
-      target.previousId || '',
-      target.nextId || '',
-    ].join(':');
-  }
-
-  function scheduleDragDropTarget(target: NoteTreeDropTarget | null, immediate = false) {
-    if (!target || isInvalidDropTarget(target)) {
-      clearDragDropTarget();
-      return;
-    }
-    if (dropTargetIdentity(dragDropTarget.value) === dropTargetIdentity(target)) return;
-    clearDragDropTarget();
-    dragDropTarget.value = target;
-    if (immediate) {
-      dragDropTargetActive.value = true;
-      return;
-    }
-    dragDropTimer = window.setTimeout(() => {
-      if (dragDropTarget.value?.key === target.key) dragDropTargetActive.value = true;
-      dragDropTimer = null;
-    }, 160);
-  }
-
-  function resolveDropTargetAtPoint(clientX: number, clientY: number) {
-    const element = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[data-note-drop-parent]');
-    if (!element) return null;
-    const key = String(element.dataset.noteDropParent || '').trim();
-    if (!key) return null;
-    const title = String(element.dataset.noteDropTitle || t('note.untitled'));
-    if (key === NOTE_TREE_ROOT_KEY) {
-      return buildRootStartDropTarget({
-        rootItems: childrenByParent.value[NOTE_TREE_ROOT_KEY] || [],
-        source: {
-          id: draggingNoteId.value,
-          isTop: draggingNoteIsTop.value,
-          parentId: dragSourceParentId(),
-        },
-        title,
-        rootKey: NOTE_TREE_ROOT_KEY,
-      });
-    }
-
-    const treeNodeId = String(element.dataset.noteTreeNodeId || '').trim();
-    if (treeNodeId) {
-      const rect = element.getBoundingClientRect();
-      const rawParentId = String(element.dataset.noteTreeParentId || '').trim();
-      const forcedPosition = element.dataset.noteTreeDropPosition;
-      const rawTarget = buildTreeNodeDropTarget({
-        node: {
-          id: treeNodeId,
-          parentId: rawParentId && rawParentId !== NOTE_TREE_ROOT_KEY ? rawParentId : null,
-          title,
-          isTop: element.dataset.noteTreePinned === '1',
-        },
-        source: { id: draggingNoteId.value, isTop: draggingNoteIsTop.value },
-        relativeY: forcedPosition === 'before' ? 0 : forcedPosition === 'after' ? 1 : clientY - rect.top,
-        height: forcedPosition === 'before' || forcedPosition === 'after' ? 1 : rect.height,
-      });
-      if (!rawTarget) return null;
-      const parentKey = rawTarget.parentId || NOTE_TREE_ROOT_KEY;
-      const siblings = childrenByParent.value[parentKey] || sidebarTreeChildrenByParent.value[parentKey] || [];
-      return normalizePinnedAfterDropTarget({
-        target: rawTarget,
-        source: { id: draggingNoteId.value, isTop: draggingNoteIsTop.value },
-        siblings,
-      });
-    }
-
-    if (element.hasAttribute('data-note-sort-id')) {
-      const rect = element.getBoundingClientRect();
-      const relativeY = clientY - rect.top;
-      if (relativeY < rect.height * 0.28 || relativeY > rect.height * 0.72) return null;
-    }
-    return {
-      key,
-      isTop: false,
-      parentId: key,
-      title,
-      previousId: null,
-      nextId: null,
-      position: 'inside',
-    } satisfies NoteTreeDropTarget;
-  }
-
-  function onDragPointerMove(event: PointerEvent) {
-    scheduleDragDropTarget(resolveDropTargetAtPoint(event.clientX, event.clientY));
+  function noteTreeScrollElement() {
+    return noteWorkspaceElement()?.querySelector<HTMLElement>('.note-tree-scroll') ?? null;
   }
 
   function onDragMove(_event: any, originalEvent?: PointerEvent) {
@@ -2874,237 +2804,13 @@
     return !browsingAllDirectoryNotes.value;
   }
 
-  let treeDragScrollFrame: number | null = null;
-  let treeDragScrollPointer: { clientX: number; clientY: number } | null = null;
-
-  function stopTreeDragAutoScroll() {
-    treeDragScrollPointer = null;
-    if (treeDragScrollFrame !== null) window.cancelAnimationFrame(treeDragScrollFrame);
-    treeDragScrollFrame = null;
-  }
-
-  function noteTreeScrollElement() {
-    return noteWorkspaceElement()?.querySelector<HTMLElement>('.note-tree-scroll') ?? null;
-  }
-
-  function runTreeDragAutoScroll() {
-    treeDragScrollFrame = null;
-    const pointer = treeDragScrollPointer;
-    const container = noteTreeScrollElement();
-    if (!pointer || !container) return stopTreeDragAutoScroll();
-
-    const step = resolveNoteTreeDragScrollStep({
-      ...pointer,
-      rect: container.getBoundingClientRect(),
-      rootZoom: getRootZoom(),
-    });
-    if (!step) return stopTreeDragAutoScroll();
-
-    const previousTop = container.scrollTop;
-    const maxTop = Math.max(0, container.scrollHeight - container.clientHeight);
-    container.scrollTop = Math.min(maxTop, Math.max(0, previousTop + step));
-    if (container.scrollTop === previousTop) return stopTreeDragAutoScroll();
-
-    scheduleDragDropTarget(resolveDropTargetAtPoint(pointer.clientX, pointer.clientY), true);
-    treeDragScrollFrame = window.requestAnimationFrame(runTreeDragAutoScroll);
-  }
-
-  function updateTreeDragAutoScroll(event: DragEvent) {
-    const container = noteTreeScrollElement();
-    if (!container) {
-      stopTreeDragAutoScroll();
-      return false;
-    }
-    const pointer = { clientX: event.clientX, clientY: event.clientY };
-    const step = resolveNoteTreeDragScrollStep({
-      ...pointer,
-      rect: container.getBoundingClientRect(),
-      rootZoom: getRootZoom(),
-    });
-    if (!step) {
-      stopTreeDragAutoScroll();
-      return false;
-    }
-    treeDragScrollPointer = pointer;
-    if (treeDragScrollFrame === null) treeDragScrollFrame = window.requestAnimationFrame(runTreeDragAutoScroll);
-    return true;
-  }
-
   function onStart(event?: { item?: HTMLElement; oldIndex?: number }) {
-    document.body.style.userSelect = 'none';
-    noteDragging.value = true;
     const indexedNote = Number.isInteger(Number(event?.oldIndex))
       ? visibleDragNoteList.value[Number(event?.oldIndex)]
       : null;
     const sourceId = String(event?.item?.getAttribute('data-note-sort-id') || indexedNote?.id || '').trim();
-    const sourceNote = noteList.value.find((note) => String(note.id) === sourceId) || indexedNote;
-    draggingNoteId.value = sourceId;
-    draggingNoteIsTop.value = Boolean(sourceNote?.isTop);
-    window.addEventListener('pointermove', onDragPointerMove, true);
-  }
-
-  function cleanupTreeNativeDrag() {
-    stopTreeDragAutoScroll();
-    window.removeEventListener('dragover', onTreeNativeDragOver, true);
-    window.removeEventListener('drop', onTreeNativeDrop, true);
-    treeDragImageElement?.remove();
-    treeDragImageElement = null;
-  }
-
-  function setCompactTreeDragImage(node: any, event: DragEvent) {
-    if (!event.dataTransfer) return;
-    const preview = document.createElement('div');
-    preview.className = 'note-tree-drag-image';
-    preview.textContent = String(node?.title || t('note.untitled')).trim();
-    document.body.appendChild(preview);
-    treeDragImageElement = preview;
-    event.dataTransfer.setDragImage(preview, 18, 16);
-    window.setTimeout(() => {
-      if (treeDragImageElement !== preview) return;
-      preview.remove();
-      treeDragImageElement = null;
-    }, 0);
-  }
-
-  function onTreeDragStart(node: any, event: DragEvent) {
-    const sourceId = String(node?.id || '').trim();
-    if (!noteTreeWriteEnabled.value || treeMovePending.value || !sourceId) {
-      event.preventDefault();
-      return;
-    }
-    document.body.style.userSelect = 'none';
-    noteDragging.value = true;
-    draggingNoteId.value = sourceId;
-    draggingNoteIsTop.value = Boolean(node?.isTop);
-    event.dataTransfer?.setData('text/plain', sourceId);
-    cleanupTreeNativeDrag();
-    if (event.dataTransfer) {
-      event.dataTransfer.effectAllowed = 'move';
-      setCompactTreeDragImage(node, event);
-    }
-    window.addEventListener('dragover', onTreeNativeDragOver, true);
-    window.addEventListener('drop', onTreeNativeDrop, true);
-  }
-
-  function onTreeNativeDragOver(event: DragEvent) {
-    if (!draggingNoteId.value) return;
-    const autoScrolling = updateTreeDragAutoScroll(event);
-    const target = resolveDropTargetAtPoint(event.clientX, event.clientY);
-    if (!target || isInvalidDropTarget(target)) {
-      clearDragDropTarget();
-      if (autoScrolling) event.preventDefault();
-      return;
-    }
-    event.preventDefault();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
-    scheduleDragDropTarget(target, true);
-  }
-
-  async function moveNoteIntoTarget(
-    sourceId: string,
-    sourceIsTop: boolean,
-    target: NoteTreeDropTarget,
-    shareExposureAcknowledged = false,
-  ) {
-    if (treeMovePending.value) return false;
-    treeMovePending.value = true;
-    const previousTree = childrenByParent.value;
-    const optimisticMove = moveNoteTreeNodeOptimistically(previousTree, sourceId, target, NOTE_TREE_ROOT_KEY);
-    if (optimisticMove.applied) childrenByParent.value = optimisticMove.childrenByParent;
-
-    try {
-      let response;
-      try {
-        response = await apiBasePost(
-          '/api/note/moveNoteNode',
-          {
-            id: sourceId,
-            parentId: target.parentId,
-            previousId: target.previousId,
-            nextId: target.nextId,
-            ...(shareExposureAcknowledged ? { shareExposureAcknowledged: true } : {}),
-          },
-          { silent: true },
-        );
-      } catch (error) {
-        if (optimisticMove.applied) childrenByParent.value = previousTree;
-        throw error;
-      }
-      if (response.status !== 200) {
-        if (optimisticMove.applied) childrenByParent.value = previousTree;
-        const retryMove = () => moveNoteIntoTarget(sourceId, sourceIsTop, target, true);
-        if (requestNoteShareExposureConfirmation(response, retryMove)) return false;
-        message.error(response.msg || t('note.moveFailed'));
-        return false;
-      }
-      const successMessage =
-        target.position === 'before'
-          ? target.isTop !== sourceIsTop
-            ? t(target.isTop ? 'note.moveBeforeAndPinSuccess' : 'note.moveBeforeAndUnpinSuccess', {
-                title: target.title,
-              })
-            : t('note.moveBeforeSuccess', { title: target.title })
-          : target.position === 'after'
-            ? target.isTop !== sourceIsTop
-              ? t(target.isTop ? 'note.moveAfterAndPinSuccess' : 'note.moveAfterAndUnpinSuccess', {
-                  title: target.title,
-                })
-              : t('note.moveAfterSuccess', { title: target.title })
-            : target.position === 'root-start'
-              ? sourceIsTop && !target.isTop
-                ? t('note.moveRootStartAndUnpinSuccess')
-                : t('note.moveRootStartSuccess')
-              : sourceIsTop
-                ? t('note.moveIntoAndUnpinSuccess', { title: target.title })
-                : t('note.moveIntoSuccess', { title: target.title });
-      message.success(successMessage);
-      try {
-        await Promise.all([
-          reloadNotes(),
-          currentBreadcrumb.value.some((item) => item.id === sourceId)
-            ? loadBreadcrumb(currentParentId.value)
-            : Promise.resolve(),
-        ]);
-      } catch (error) {
-        // 移动已由服务端确认，后续读模型同步失败不能回滚成虚假的旧位置。
-        console.error('[note-library] refresh after tree move failed', error);
-      }
-      return true;
-    } finally {
-      treeMovePending.value = false;
-    }
-  }
-
-  async function onTreeNativeDrop(event: DragEvent) {
-    if (!draggingNoteId.value) return;
-    // 以松手瞬间的实际坐标为准，避免快速跨过不同落点时沿用上一帧的高亮目标。
-    const target = resolveDropTargetAtPoint(event.clientX, event.clientY);
-    if (!target || isInvalidDropTarget(target)) return;
-    event.preventDefault();
-    const sourceId = draggingNoteId.value;
-    const sourceIsTop = draggingNoteIsTop.value;
-    cleanupTreeNativeDrag();
-    clearDragDropTarget();
-    draggingNoteId.value = '';
-    draggingNoteIsTop.value = false;
-    noteDragging.value = false;
-    document.body.style.userSelect = '';
-    if (blockGuestWrite('move-note')) return;
-    try {
-      await moveNoteIntoTarget(sourceId, sourceIsTop, target);
-    } catch (error) {
-      console.error('[note-library] tree drag move failed', error);
-      message.error(t('note.moveFailed'));
-    }
-  }
-
-  function onTreeDragEnd() {
-    cleanupTreeNativeDrag();
-    clearDragDropTarget();
-    draggingNoteId.value = '';
-    draggingNoteIsTop.value = false;
-    noteDragging.value = false;
-    document.body.style.userSelect = '';
+    const sourceNote = noteList.value.find((item) => String(item.id) === sourceId) || indexedNote;
+    beginPointerDrag({ id: sourceId, isTop: Boolean(sourceNote?.isTop) });
   }
 
   function moveVisibleNoteInAllNotes(
@@ -3149,15 +2855,11 @@
   }
 
   async function onEnd(event?: { oldIndex?: number; newIndex?: number }) {
-    document.body.style.userSelect = '';
-    window.removeEventListener('pointermove', onDragPointerMove, true);
     // 卡片中央已经是明确的“作为父页面”落点，不要求用户额外停留后才能生效。
-    const nestedTarget = dragDropTarget.value;
-    const nestedSourceId = draggingNoteId.value;
-    const nestedSourceIsTop = draggingNoteIsTop.value;
-    clearDragDropTarget();
-    draggingNoteId.value = '';
-    draggingNoteIsTop.value = false;
+    const pointerDrop = takePointerDropSnapshot();
+    const nestedTarget = pointerDrop.target;
+    const nestedSourceId = pointerDrop.sourceId;
+    const nestedSourceIsTop = pointerDrop.sourceIsTop;
     const sourceNotes = [...noteList.value];
     try {
       if (blockGuestWrite('reorder-note')) {
@@ -3214,7 +2916,7 @@
       visibleDragNoteList.value = [...viewNoteList.value];
       console.error('Error updating note sort:', error);
     } finally {
-      noteDragging.value = false;
+      completePointerDrag();
     }
   }
 </script>
@@ -3820,49 +3522,6 @@
     &:active {
       cursor: grabbing;
     }
-  }
-
-  .note-drop-hint {
-    position: absolute;
-    z-index: 12;
-    left: 50%;
-    bottom: 18px;
-    max-width: min(88%, 520px);
-    padding: 8px 13px;
-    transform: translateX(-50%);
-    border: 1px solid var(--resource-note-color, #00a884);
-    border-radius: 10px;
-    color: var(--resource-note-color, #00a884);
-    background: var(--menu-body-bg-color);
-    box-shadow: var(--resource-card-shadow);
-    font-size: 12px;
-    font-weight: 650;
-    pointer-events: none;
-
-    &.is-ready {
-      color: #fff;
-      background: var(--resource-note-color, #00a884);
-    }
-  }
-
-  :global(.note-tree-drag-image) {
-    position: fixed;
-    top: -1000px;
-    left: -1000px;
-    z-index: 800;
-    max-width: 190px;
-    padding: 7px 11px;
-    overflow: hidden;
-    border: 1px solid var(--resource-note-color, #00a884);
-    border-radius: 9px;
-    color: var(--resource-note-color, #00a884);
-    background: var(--menu-body-bg-color, #fff);
-    box-shadow: 0 8px 22px rgb(15 23 42 / 18%);
-    font-size: 12px;
-    font-weight: 650;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    pointer-events: none;
   }
 
   .note-directory-separator {

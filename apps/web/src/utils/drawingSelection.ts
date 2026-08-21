@@ -31,6 +31,14 @@ export function drawingRectsIntersect(first: DrawingRect, second: DrawingRect) {
 }
 
 export function cloneDrawingElement(element: DrawingElement, id = element.id): DrawingElement {
+  if (element.kind === 'fill') {
+    return {
+      ...element,
+      id,
+      spans: [...element.spans],
+      erasures: element.erasures?.map((trail) => ({ ...trail, points: [...trail.points] })),
+    };
+  }
   if (element.kind === 'stroke') {
     return {
       ...element,
@@ -55,6 +63,18 @@ export function translateDrawingElement(
   dy: number,
   id = element.id,
 ): DrawingElement {
+  if (element.kind === 'fill') {
+    return {
+      ...element,
+      id,
+      x: element.x + dx,
+      y: element.y + dy,
+      erasures: element.erasures?.map((trail) => ({
+        ...trail,
+        points: trail.points.map((value, index) => value + (index % 2 === 0 ? dx : dy)),
+      })),
+    };
+  }
   if (element.kind === 'stroke') {
     return {
       ...element,

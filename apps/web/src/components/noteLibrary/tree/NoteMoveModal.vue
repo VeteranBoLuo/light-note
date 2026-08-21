@@ -14,8 +14,31 @@
         <div class="note-move-target-meta">
           <span>{{ t('note.moveTarget') }}</span>
           <strong>{{ selectedTitle }}</strong>
-          <span>{{ t('note.moveTargetDepth', { depth: selectedDepth }) }}</span>
+          <span>{{ t('note.moveTargetDepth', { depth: selectedDestinationDepth }) }}</span>
         </div>
+
+        <div
+          v-if="!isBatchMove && selectedItem"
+          class="note-move-placement"
+          role="group"
+          :aria-label="t('note.movePlacement')"
+        >
+          <BButton
+            v-for="option in placementOptions"
+            :key="option.value"
+            size="small"
+            :class="{ 'is-selected': placement === option.value }"
+            :disabled="!option.enabled"
+            :aria-pressed="placement === option.value"
+            @click="placement = option.value"
+          >
+            {{ option.label }}
+          </BButton>
+        </div>
+        <p class="note-move-outcome" aria-live="polite">
+          {{ moveOutcomeHint }}
+          <span v-if="pinChangeHint">{{ pinChangeHint }}</span>
+        </p>
 
         <div v-auto-scrollbar class="note-move-list" role="listbox" :aria-label="t('note.moveTarget')">
           <BButton
@@ -23,7 +46,7 @@
             :class="{ 'is-selected': selectedParentId === null }"
             role="option"
             :aria-selected="selectedParentId === null"
-            @click="selectedParentId = null"
+            @click="selectTarget(null)"
           >
             <SvgIcon :src="icon.noteTree.root" size="17" aria-hidden="true" />
             <span class="note-move-title">{{ t('note.knowledgeRoot') }}</span>
@@ -40,17 +63,17 @@
             v-for="item in flatItems"
             :key="item.id"
             class="note-move-row"
-            :class="{ 'is-selected': selectedParentId === item.id, 'is-disabled-target': disabledIds.has(item.id) }"
+            :class="{ 'is-selected': selectedParentId === item.id, 'is-disabled-target': targetIsDisabled(item) }"
             :style="{ '--note-move-depth': String(item.depth) }"
-            :disabled="disabledIds.has(item.id)"
+            :disabled="targetIsDisabled(item)"
             role="option"
             :aria-selected="selectedParentId === item.id"
-            @click="selectedParentId = item.id"
+            @click="selectTarget(item.id)"
           >
             <SvgIcon :src="icon.resource.note" size="15" aria-hidden="true" />
             <span class="note-move-title">{{ item.title || t('note.untitled') }}</span>
             <span v-if="item.childCount" class="note-move-count">{{ item.childCount }}</span>
-            <span v-if="disabledIds.has(item.id)" class="note-move-disabled-label">
+            <span v-if="targetIsDisabled(item)" class="note-move-disabled-label">
               {{ disabledReason(item) }}
             </span>
             <SvgIcon
@@ -66,12 +89,20 @@
       </template>
 
       <div v-if="bookmark.isMobile" class="note-move-footer">
-        <BButton :disabled="saving || loading" type="primary" @click="confirmMove()">
+        <BButton :disabled="saving || loading || !canConfirmMove" type="primary" @click="confirmMove()">
           {{ saving ? t('common.loading') : t('note.confirmMove') }}
         </BButton>
         <BButton :disabled="saving" @click="close">{{ t('common.cancel') }}</BButton>
       </div>
     </div>
+    <template v-if="!bookmark.isMobile" #footer>
+      <div class="note-move-desktop-footer">
+        <BButton :disabled="saving" @click="close">{{ t('common.cancel') }}</BButton>
+        <BButton :disabled="saving || loading || !canConfirmMove" type="primary" @click="confirmMove()">
+          {{ saving ? t('common.loading') : t('note.confirmMove') }}
+        </BButton>
+      </div>
+    </template>
   </component>
 </template>
 
@@ -90,7 +121,12 @@
   import { bookmarkStore } from '@/store';
   import { requestNoteShareExposureConfirmation } from '@/utils/noteShareExposure';
   import type { NoteTreeItem, NoteTreeQueryResult } from '@/types/noteTree';
-  import { canMoveNoteSubtreeToDepth, collectNoteDescendantIds, flattenNoteTree } from '@/utils/noteTree';
+  import {
+    canMoveNoteSubtreeToDepth,
+    collectNoteDescendantIds,
+    flattenNoteTree,
+    type FlatNoteTreeItem,
+  } from '@/utils/noteTree';
 
   const props = withDefaults(defineProps<{ note?: any | null; notes?: any[] }>(), {
     note: null,
@@ -103,6 +139,8 @@
   const treeItems = ref<NoteTreeItem[]>([]);
   const maxDepth = ref<number | null>(null);
   const selectedParentId = ref<string | null>(null);
+  type MovePlacement = 'inside' | 'before' | 'after';
+  const placement = ref<MovePlacement>('inside');
   const loading = ref(false);
   const saving = ref(false);
   const loadError = ref('');
@@ -128,9 +166,7 @@
         },
   );
   const shellListeners = computed(() =>
-    bookmark.isMobile
-      ? { close }
-      : { ok: confirmMove, close, 'update:visible': syncVisible },
+    bookmark.isMobile ? { close } : { ok: confirmMove, close, 'update:visible': syncVisible },
   );
   const flatItems = computed(() => flattenNoteTree(treeItems.value));
   const isBatchMove = computed(() => props.notes.length > 0);
@@ -165,21 +201,74 @@
     }
     return maximum;
   });
-  const depthDisabledIds = computed(
-    () =>
-      new Set(
-        flatItems.value
-          .filter((item) => !canMoveNoteSubtreeToDepth(item.depth, subtreeRelativeDepth.value, maxDepth.value || 0))
-          .map((item) => item.id),
-      ),
-  );
-  const disabledIds = computed(
-    () => new Set([...selectedIds.value, ...descendantIds.value, ...depthDisabledIds.value].filter(Boolean)),
-  );
+  const structuralDisabledIds = computed(() => new Set([...selectedIds.value, ...descendantIds.value].filter(Boolean)));
   const subtreeCount = computed(() => descendantIds.value.size);
   const selectedItem = computed(() => flatItems.value.find((item) => item.id === selectedParentId.value) || null);
   const selectedTitle = computed(() => selectedItem.value?.title || t('note.knowledgeRoot'));
-  const selectedDepth = computed(() => Number(selectedItem.value?.depth || 0));
+  const selectedDestinationDepth = computed(() => {
+    if (!selectedItem.value) return 1;
+    return placement.value === 'inside' ? selectedItem.value.depth + 1 : selectedItem.value.depth;
+  });
+  const selectedDestinationParentId = computed(() => {
+    if (!selectedItem.value || placement.value === 'inside') return selectedParentId.value;
+    return selectedItem.value.parentId || null;
+  });
+  const placementOptions = computed(() => {
+    const item = selectedItem.value;
+    if (!item) return [];
+    return [
+      { value: 'inside' as const, label: t('note.moveInside'), enabled: placementAllowed(item, 'inside') },
+      { value: 'before' as const, label: t('note.moveBefore'), enabled: placementAllowed(item, 'before') },
+      { value: 'after' as const, label: t('note.moveAfter'), enabled: placementAllowed(item, 'after') },
+    ];
+  });
+  const movingItem = computed(() => flatItems.value.find((item) => selectedIds.value.has(item.id)) || null);
+  const expectedPinnedState = computed(() => {
+    if (!movingItem.value || isBatchMove.value) return null;
+    if (placement.value === 'before' || placement.value === 'after') return Boolean(selectedItem.value?.isTop);
+    return movingItem.value.parentId === selectedDestinationParentId.value ? Boolean(movingItem.value.isTop) : false;
+  });
+  const pinChangeHint = computed(() => {
+    if (expectedPinnedState.value === null || !movingItem.value) return '';
+    if (expectedPinnedState.value === Boolean(movingItem.value.isTop)) return '';
+    return t(expectedPinnedState.value ? 'note.moveWillPin' : 'note.moveWillUnpin');
+  });
+  const moveOutcomeHint = computed(() => {
+    if (isBatchMove.value) return t('note.moveBatchInsideHint', { title: selectedTitle.value });
+    if (!selectedItem.value) return t('note.moveRootInsideHint');
+    if (placement.value === 'before') return t('note.moveBeforeHint', { title: selectedTitle.value });
+    if (placement.value === 'after') return t('note.moveAfterHint', { title: selectedTitle.value });
+    return t('note.moveInsideHint', { title: selectedTitle.value });
+  });
+  const canConfirmMove = computed(() => {
+    if (!selectedIds.value.size) return false;
+    if (!selectedItem.value) return true;
+    return !targetIsDisabled(selectedItem.value) && placementAllowed(selectedItem.value, placement.value);
+  });
+
+  function placementAllowed(item: FlatNoteTreeItem, nextPlacement: MovePlacement) {
+    if (isBatchMove.value && nextPlacement !== 'inside') return false;
+    const parentDepth = nextPlacement === 'inside' ? item.depth : Math.max(0, item.depth - 1);
+    return canMoveNoteSubtreeToDepth(parentDepth, subtreeRelativeDepth.value, maxDepth.value || 0);
+  }
+
+  function targetIsDisabled(item: FlatNoteTreeItem) {
+    if (structuralDisabledIds.value.has(item.id)) return true;
+    if (isBatchMove.value) return !placementAllowed(item, 'inside');
+    return !placementAllowed(item, 'inside') && !placementAllowed(item, 'before');
+  }
+
+  function selectTarget(id: string | null) {
+    selectedParentId.value = id;
+    if (!id || isBatchMove.value) {
+      placement.value = 'inside';
+      return;
+    }
+    const item = flatItems.value.find((candidate) => candidate.id === id);
+    if (!item || !placementAllowed(item, placement.value)) {
+      placement.value = item && placementAllowed(item, 'inside') ? 'inside' : 'before';
+    }
+  }
 
   function disabledReason(item: NoteTreeItem) {
     if (selectedIds.value.has(item.id)) {
@@ -204,16 +293,11 @@
     loading.value = true;
     loadError.value = '';
     maxDepth.value = null;
-    const parentIds = new Set(
-      movingNotes.value.map((item) => (item?.parentId ? String(item.parentId) : null)),
-    );
+    const parentIds = new Set(movingNotes.value.map((item) => (item?.parentId ? String(item.parentId) : null)));
     selectedParentId.value = parentIds.size === 1 ? (parentIds.values().next().value ?? null) : null;
+    placement.value = 'inside';
     try {
-      const response = await apiBasePost(
-        '/api/note/queryNoteTree',
-        { parentId: null, depth: 'all' },
-        { silent: true },
-      );
+      const response = await apiBasePost('/api/note/queryNoteTree', { parentId: null, depth: 'all' }, { silent: true });
       if (seq !== requestSeq || !visible.value) return;
       if (response.status !== 200) {
         loadError.value = response.msg || t('note.treeLoadFailed');
@@ -229,7 +313,8 @@
       }
       maxDepth.value = serverMaxDepth;
       treeItems.value = Array.isArray(data.items) ? data.items : [];
-      if (disabledIds.value.has(String(selectedParentId.value || ''))) selectedParentId.value = null;
+      const initialTarget = flatItems.value.find((item) => item.id === selectedParentId.value);
+      if (initialTarget && targetIsDisabled(initialTarget)) selectTarget(null);
     } catch {
       if (seq === requestSeq) {
         treeItems.value = [];
@@ -242,18 +327,19 @@
   }
 
   async function confirmMove(shareExposureAcknowledged = false) {
-    if (
-      saving.value ||
-      loading.value ||
-      selectedIds.value.size === 0 ||
-      disabledIds.value.has(String(selectedParentId.value || ''))
-    )
-      return;
+    if (saving.value || loading.value || selectedIds.value.size === 0 || !canConfirmMove.value) return;
     const startedAt = Date.now();
     const telemetryBase = {
       surface: (bookmark.isMobile ? 'mobile' : 'desktop') as 'mobile' | 'desktop',
-      depth: selectedDepth.value,
-      childCount: Math.max(0, Number(selectedItem.value?.childCount || 0)),
+      depth: selectedDestinationDepth.value,
+      childCount: Math.max(
+        0,
+        Number(
+          placement.value === 'inside'
+            ? selectedItem.value?.childCount || 0
+            : flatItems.value.find((item) => item.id === selectedDestinationParentId.value)?.childCount || 0,
+        ),
+      ),
       subtreeSize: affectedIds.value.size,
     };
     saving.value = true;
@@ -263,7 +349,7 @@
             '/api/note/moveNoteNodes',
             {
               ids: [...selectedIds.value],
-              parentId: selectedParentId.value,
+              parentId: selectedDestinationParentId.value,
               ...(shareExposureAcknowledged ? { shareExposureAcknowledged: true } : {}),
             },
             { silent: true },
@@ -272,9 +358,9 @@
             '/api/note/moveNoteNode',
             {
               id: [...selectedIds.value][0],
-              parentId: selectedParentId.value,
-              previousId: null,
-              nextId: null,
+              parentId: selectedDestinationParentId.value,
+              previousId: placement.value === 'after' ? selectedParentId.value : null,
+              nextId: placement.value === 'before' ? selectedParentId.value : null,
               ...(shareExposureAcknowledged ? { shareExposureAcknowledged: true } : {}),
             },
             { silent: true },
@@ -285,9 +371,7 @@
           ...telemetryBase,
           durationMs: Date.now() - startedAt,
           result:
-            response.status === 409 || String(response.data?.code || '').includes('CONFLICT')
-              ? 'conflict'
-              : 'rejected',
+            response.status === 409 || String(response.data?.code || '').includes('CONFLICT') ? 'conflict' : 'rejected',
         });
         message.error(response.msg || t('note.moveFailed'));
         return;
@@ -295,7 +379,11 @@
       message.success(
         isBatchMove.value
           ? t('note.moveBatchSuccess', { count: Number(response.data?.affectedCount || affectedIds.value.size) })
-          : t('note.moveSuccess'),
+          : placement.value === 'before'
+            ? t('note.moveBeforeSuccess', { title: selectedTitle.value })
+            : placement.value === 'after'
+              ? t('note.moveAfterSuccess', { title: selectedTitle.value })
+              : t('note.moveSuccess'),
       );
       void recordNoteTreeProductEvent('note_tree_node_moved', {
         ...telemetryBase,
@@ -357,6 +445,39 @@
     color: var(--text-color);
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .note-move-placement {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+
+    > * {
+      width: 100%;
+      min-width: 0;
+      border: 1px solid var(--surface-border-color);
+    }
+
+    > .is-selected {
+      border-color: var(--resource-note-color, #00a884);
+      color: var(--resource-note-color, #00a884);
+      background: var(--resource-note-soft-bg, #e9f8f4);
+      font-weight: 650;
+    }
+  }
+
+  .note-move-outcome {
+    min-height: 18px;
+    margin: 0;
+    color: var(--desc-color);
+    font-size: 12px;
+    line-height: 18px;
+
+    span {
+      margin-left: 4px;
+      color: var(--resource-note-color, #00a884);
+      font-weight: 600;
+    }
   }
 
   .note-move-list {
@@ -437,6 +558,12 @@
     > * {
       flex: 1;
     }
+  }
+
+  .note-move-desktop-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
   }
 
   .note-move-shell.is-mobile .note-move-list {

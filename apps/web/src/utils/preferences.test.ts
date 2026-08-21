@@ -3,12 +3,14 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_NOTE_PARENT_OPEN_MODE,
   DEFAULT_NOTE_VIEW_MODE,
   getApplicationEntryPath,
   getAppHomePath,
   getDesktopHomePath,
   getHomePagePreference,
   getMobileHomePath,
+  getNoteParentOpenMode,
   isMobileHomeRoute,
   shouldOpenNoteDirectly,
   type HomePagePreference,
@@ -127,8 +129,31 @@ describe('笔记默认打开方式', () => {
       /<div v-if="!bookmark\.isMobile" class="field">[\s\S]*?t\('settings\.noteDirectEdit'\)[\s\S]*?set\('noteDirectEdit', \$event\)/u,
     );
     expect(settings).toContain(':checked="user.preferences.noteDirectEdit === true"');
-    expect(settings).toContain("@change=\"set('noteDirectEdit', $event)\"");
+    expect(settings).toContain('@change="set(\'noteDirectEdit\', $event)"');
     expect(noteLibrary).toContain('shouldOpenNoteDirectly(user.preferences, bookmark.isMobile)');
     expect(noteLibrary).toContain('return openDirectoryPage(noteId);');
+  });
+
+  it('父页面默认进入子页面，PC 可明确改为预览，移动端保持目录导航', () => {
+    expect(getNoteParentOpenMode()).toBe(DEFAULT_NOTE_PARENT_OPEN_MODE);
+    expect(getNoteParentOpenMode({ noteParentOpenMode: 'children' }, false)).toBe('children');
+    expect(getNoteParentOpenMode({ noteParentOpenMode: 'preview' }, false)).toBe('preview');
+    expect(getNoteParentOpenMode({ noteParentOpenMode: 'preview' }, true)).toBe('children');
+  });
+
+  it('父页面打开设置复用账号偏好保存链路，并在新账号默认值中显式写入 children', () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const settings = readFileSync(resolve(here, '../view/settings/Settings.vue'), 'utf8');
+    const noteLibrary = readFileSync(resolve(here, '../view/noteLibrary/NoteLibrary.vue'), 'utf8');
+    const backend = readFileSync(resolve(here, '../../../server/router_handle/userHandle.js'), 'utf8');
+
+    expect(settings).toMatch(/v-for="o in noteParentOpenOpts"[\s\S]*?set\('noteParentOpenMode', o\.v\)/u);
+    expect(settings).toContain('user.preferences.noteParentOpenMode || DEFAULT_NOTE_PARENT_OPEN_MODE');
+    expect(noteLibrary).toContain('getNoteParentOpenMode(user.preferences, bookmark.isMobile)');
+    expect(noteLibrary).toMatch(
+      /parentOpenMode === 'preview'[\s\S]*?setDesktopPreviewPage\(noteId, source\)[\s\S]*?shouldOpenNoteDirectly/u,
+    );
+    const defaults = [...backend.matchAll(/noteParentOpenMode:\s*'(\w+)'/g)].map((match) => match[1]);
+    expect(defaults).toEqual(['children', 'children']);
   });
 });
