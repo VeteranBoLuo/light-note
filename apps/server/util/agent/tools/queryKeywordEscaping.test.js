@@ -61,13 +61,24 @@ describe('Agent 模糊查询字面量边界', () => {
   });
 
   it('云空间文件夹名称查询也把用户通配符视为普通字符', async () => {
-    await queryCloudFolders.execute({ keyword: String.raw`100%_done\path` }, { userId: 'user-1' });
+    mocks.poolQuery.mockResolvedValueOnce([
+      [
+        {
+          id: 1,
+          name: String.raw`100%_done\path`,
+          parent_id: null,
+          sort: 0,
+          direct_file_count: 1,
+        },
+        { id: 2, name: '100X_done-path', parent_id: null, sort: 1, direct_file_count: 0 },
+      ],
+    ]);
+    const raw = await queryCloudFolders.execute({ keyword: String.raw`100%_done\path` }, { userId: 'user-1' });
 
-    expect(mocks.poolQuery).toHaveBeenCalledTimes(2);
+    expect(mocks.poolQuery).toHaveBeenCalledTimes(1);
     const [sql, params] = mocks.poolQuery.mock.calls[0];
-    expect(String(sql)).toContain("folders.name LIKE ? ESCAPE '\\\\'");
-    expect(params).toContain(String.raw`%100\%\_done\\path%`);
-    expect(String(mocks.poolQuery.mock.calls[1][0])).toContain('COUNT(*) AS total');
-    expect(mocks.poolQuery.mock.calls[1][1]).toContain(String.raw`%100\%\_done\\path%`);
+    expect(String(sql)).not.toContain('LIKE');
+    expect(params).toEqual(['user-1']);
+    expect(raw.items).toEqual([expect.objectContaining({ id: '1', fullPath: String.raw`100%_done\path` })]);
   });
 });
