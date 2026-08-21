@@ -1,4 +1,5 @@
 import { AGENT_ACTION_CAPABILITIES } from '../../capabilityRegistry.js';
+import { evaluateAgentCapabilityPolicy, normalizeAgentCapabilityPolicyProfile } from './capabilityPolicy.js';
 
 export const AGENT_CAPABILITY_MANIFEST_VERSION = '3.1';
 
@@ -435,6 +436,7 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
       { name: 'user', source: 'server_scope' },
     ],
     temporalSlots: [{ name: 'timeRange', kind: 'range', label: '文件创建时间', allowAll: true, autoBind: true }],
+    workflow: { kind: 'single_tool', deterministic: true },
   }),
   query_cloud_folders: defineToolCapability('query_cloud_folders', {
     id: 'file.folder.query',
@@ -670,6 +672,7 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     operations: ['read'],
     scopePolicy: 'owner_bound',
     resultKind: 'tag_list',
+    workflow: { kind: 'single_tool', deterministic: true },
   }),
   write_knowledge_base: defineToolCapability('write_knowledge_base', {
     id: 'knowledge.upsert',
@@ -1102,7 +1105,7 @@ export function capabilityMatchesScope(capability, scope) {
 
 export function buildAgentV3CapabilityCatalog(
   tools,
-  { availableToolNames, actorRole = 'user', capabilityScope = null } = {},
+  { availableToolNames, actorRole = 'user', capabilityScope = null, capabilityPolicyProfile = 'auto' } = {},
 ) {
   const toolList = Array.isArray(tools) ? tools : [...(tools?.values?.() || [])];
   const registeredByName = new Map(toolList.filter(Boolean).map((tool) => [tool.name, tool]));
@@ -1111,20 +1114,26 @@ export function buildAgentV3CapabilityCatalog(
       ? availableToolNames
       : new Set(toolList.map((tool) => tool?.name).filter(Boolean));
   const scope = normalizeCapabilityScope(capabilityScope, { actorRole });
+  const policyProfile = normalizeAgentCapabilityPolicyProfile(capabilityPolicyProfile);
   const catalog = [];
   for (const capability of AGENT_CAPABILITY_MANIFEST) {
     if (!capability.rolePolicy.includes(actorRole === 'root' ? 'root' : 'user')) continue;
     if (!capabilityMatchesScope(capability, scope)) continue;
+    const policy = evaluateAgentCapabilityPolicy(capability, policyProfile);
     const tool = capability.toolName ? registeredByName.get(capability.toolName) : null;
-    const status = capability.toolName
-      ? tool && available.has(capability.toolName)
-        ? 'enabled'
-        : 'unavailable'
-      : capability.status;
+    const status = !policy.allowed
+      ? 'policy_blocked'
+      : capability.toolName
+        ? tool && available.has(capability.toolName)
+          ? 'enabled'
+          : 'unavailable'
+        : capability.status;
     catalog.push(
       Object.freeze({
         ...capability,
         status,
+        policyProfile,
+        policyBlockReason: policy.allowed ? null : policy.reason,
         toolNames: Object.freeze(status === 'enabled' && capability.toolName ? [capability.toolName] : []),
         description: String(capability.compilerDescription || tool?.description || capability.label),
       }),

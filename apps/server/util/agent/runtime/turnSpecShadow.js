@@ -109,6 +109,7 @@ export function turnSpecTraceSummary(shadow, divergences = [], mode = 'shadow') 
     mode,
     state: shadow?.state === 'ready' ? 'ready' : 'invalid',
     requestKind: turnSpec?.requestKind || 'unknown',
+    version: turnSpec?.version || 'unknown',
     confidence: turnSpec?.confidence || 'unknown',
     continuationMode: turnSpec?.continuationMode || 'unknown',
     topicEpochAction: turnSpec?.topicEpochAction || 'unknown',

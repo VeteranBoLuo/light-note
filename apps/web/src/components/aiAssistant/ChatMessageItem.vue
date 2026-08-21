@@ -43,8 +43,8 @@
             @focusout="hideCitationTip"
             @keydown="onCitationKeydown"
           ></div>
-          <p v-if="message.role === 'user' && capabilityModuleText" class="user-capability-scope">
-            {{ capabilityModuleText }}
+          <p v-if="message.role === 'user' && userCapabilityBoundaryText" class="user-capability-scope">
+            {{ userCapabilityBoundaryText }}
           </p>
           <div v-if="message.role === 'user' && message.contexts?.length" class="user-contexts">
             <div class="user-contexts__title">{{ t('ai.attachedResources') }} · {{ message.contexts.length }}</div>
@@ -208,6 +208,11 @@
     normalizeAiCapabilityModule,
     type AiCapabilityModule,
   } from '@/types/aiCapabilityScope';
+  import {
+    aiCapabilityPolicyLabelKey,
+    normalizeAiCapabilityPolicyProfile,
+    type AiCapabilityPolicyProfile,
+  } from '@/types/aiCapabilityPolicy';
   import { resolveAiExecutionReceiptNoticeKey, type AiExecutionReceipt } from '@/types/aiExecutionReceipt';
 
   const { t } = useI18n();
@@ -229,6 +234,7 @@
     }>;
     attachmentRefs?: Array<{ id: string; fileName: string }>;
     capabilityModule?: AiCapabilityModule;
+    capabilityPolicyProfile?: AiCapabilityPolicyProfile;
     toolEvents?: AiToolStatusItem[];
     sources?: AiSource[];
     evidence?: AiEvidenceReference[];
@@ -271,6 +277,11 @@
     if (module === 'auto') return '';
     return t('ai.capabilityScope.applied', { module: t(aiCapabilityModuleLabelKey(module)) });
   });
+  const userCapabilityBoundaryText = computed(() => {
+    const profile = normalizeAiCapabilityPolicyProfile(props.message.capabilityPolicyProfile);
+    const profileText = profile === 'auto' ? '' : t(aiCapabilityPolicyLabelKey(profile));
+    return [profileText, capabilityModuleText.value].filter(Boolean).join(' · ');
+  });
   const evidenceModeText = computed(() => {
     const receipt = props.message.executionReceipt;
     if (receipt) {
@@ -296,6 +307,7 @@
       contexts: NonNullable<ChatMessage['contexts']>,
       scopes: NonNullable<ChatMessage['scopeRefs']>,
       capabilityModule: AiCapabilityModule,
+      capabilityPolicyProfile: AiCapabilityPolicyProfile,
     ): void;
     (e: 'regenerate'): void;
     (e: 'source-navigate'): void;
@@ -316,6 +328,7 @@
       props.message.contexts || [],
       props.message.scopeRefs || [],
       normalizeAiCapabilityModule(props.message.capabilityModule),
+      normalizeAiCapabilityPolicyProfile(props.message.capabilityPolicyProfile),
     );
   };
 

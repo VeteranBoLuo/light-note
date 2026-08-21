@@ -71,10 +71,19 @@ Planner 看不到这些可由服务端确定的自由参数，因此不能把旧
 
 因此普通用户仍可自然提问，遇到高频歧义时又能主动限定模块，而不是把产品退化成固定按钮集合。
 
+### 6. 会话能力边界是服务端策略，不是 Prompt 提示
+
+第一阶段保留默认“自动助手”，只增加两个有明确安全含义的会话控制：
+
+- `chat_only`（仅对话）：在解析材料、SourceSet 和附件之前清空个人数据范围，只保留 Manifest 声明为 `public_product` 的产品知识读取能力；不访问个人轻笺数据，也不允许写入。
+- `read_only`（只读锁）：保留工作区查询和材料分析，但从能力目录和真实工具候选中移除全部 `effect=write` 能力。
+
+受策略阻断的 capability 仍以 `policy_blocked` 留在 Compiler 目录中，使模型可以准确识别用户原意；它不会获得可执行 `toolName`，Router 和旧语义计划都返回统一策略披露。前端切换仅对话时立即移除待发送材料和单轮模块限制；切换仅对话或只读后，已有写入确认卡也会在 UI 和服务端双重阻断，取消仍然可用。策略只依据 Manifest 的 effect/scopePolicy，不按问法或工具名写特例。
+
 ## 三、当前实现链路
 
 ```text
-最新用户消息 + 服务端 recentDialogue + 当前显式资源 + 结构化状态 + 模块约束
+最新用户消息 + 服务端 recentDialogue + 当前显式资源 + 结构化状态 + 模块/策略约束
                          │
                          ▼
                 Intent Compiler V3
@@ -122,7 +131,7 @@ V3 复用现有工具实现、owner 校验、Tool Policy、确认令牌、幂等
 - Manifest 完整性：所有已注册工具都有明确状态，enabled 能力映射真实工具，角色和依赖合法。
 - Manifest 3.1：workflow、query budget、result contract、render/reconcile policy 经过启动校验；确定性 workflow 仍必须通过统一计划校验，条件不满足时回退 Planner。
 - Compiler/TurnSpec：复合目标、时间约束、当前资源、跨域切换、缺失槽和低置信澄清。
-- TurnSpec 迁移：3.0/3.1 双读、3.0 单写，服务端枚举 ResultSet handle、序数指代、冲突时间/slot claims 失败关闭。
+- TurnSpec 迁移：3.0/3.1 双读；`v3_shadow` 默认写 3.1，`v3_enforce` 默认仍写 3.0，二者可由独立环境开关回退或前移；服务端枚举 ResultSet handle、序数指代、冲突时间/slot claims 失败关闭。
 - Router/Validator：精确 capability 路由、模块收窄、部分不支持披露、额外工具和额外写入失败关闭。
 - 会话状态：同域引用、跨域隔离、歧义集合、topic epoch、草稿替换、确认完成/失效/结果未知。
 - 分层历史：云端权威优先、session 回退、重新生成版本折叠、各阶段预算和 Planner/Tool 零历史。
@@ -130,16 +139,18 @@ V3 复用现有工具实现、owner 校验、Tool Policy、确认令牌、幂等
 - 结果契约：`totalCount/returned/totalExact/completeness/nextCursor` 显式投影，数值型 `raw.total` 不再被执行器自动当成精确总量。
 - 运行产物：成功工具产生 FactBundle，失败工具不产生；ExecutionReceipt/ResponseEnvelope 在同步响应、SSE 终态、恢复快照、会话持久化与前端披露中保持一致，模型不得覆盖精确事实。
 - 能力范围：产物领域与可接受的材料领域分开声明，模块约束既不跨域泄漏，也不会误关闭“书签/笔记/文件 → 生成笔记”这类通用转换。
-- 前端：模块选择、发送后复位、历史消息展示和无材料时不显示多余来源标签。
+- 会话策略：仅对话在材料解析前切断个人数据，只读锁移除写能力，受限意图保留准确披露；已有确认卡在策略锁下不得执行且不能消费令牌。
+- 前端：模块选择、会话策略选择、发送后复位/恢复、历史消息展示、策略边界提示和无材料时不显示多余来源标签。
 - 全量 server 测试、web 测试、类型检查、生产构建和 `git diff --check`。
 
 低成本清单命令：
 
 ```bash
 pnpm --filter server smoke:ai-turn-v3
+pnpm --filter server eval:ai-runtime-v3-offline
 ```
 
-该命令默认只展示测试矩阵，模型调用数和业务工具执行数均为 0。只有首次启用/扩大 V3 灰度时，才在获得授权后显式运行最多两个 Compiler 用例：
+两条命令都不调用真实模型、数据库或业务工具。离线评测当前覆盖产品帮助、笔记、书签、待办、文件、标签和账号资料 7 类高频读取，要求全部命中 Manifest 声明的确定性 fast-path；未知能力必须失败关闭。只有首次启用/扩大 V3 灰度时，才在获得授权后显式运行最多两个 Compiler 用例：
 
 ```bash
 pnpm --filter server smoke:ai-turn-v3 -- --live --case <case-id>
@@ -174,6 +185,7 @@ pnpm --filter server smoke:ai-root-e2e -- --runtime v3 --live --suite full --exe
 - `ResultSet / DiscourseState / ArtifactState` 的窄状态投影、跨领域隔离和类型兼容继承；
 - 同领域待确认草稿的 refine / scope replacement / independent 语义，以及旧确认原子失效；
 - 模块级单轮能力约束、无真实材料时隐藏多余检索提示；
+- 自动助手 / 仅对话 / 只读锁会话策略；策略在材料解析、能力目录、工具候选和确认执行四层生效，旧运行链通过 Manifest 元数据适配而不是复制规则；
 - Root 真实门禁的 Runtime 证明、定点成本开关、正式 Service 夹具和自动清理；
 - Phase 0B 最低结果契约：关键查询工具显式返回总量、本页数量、完整性、游标和截断原因；
 - Phase 1 核心：服务端权威 `recentDialogue`、Compiler/Composer 分层预算、Grounded Composer 事实隔离和低基数 trace；
@@ -210,15 +222,27 @@ Phase 2 已完成五实体持久状态与产物连续性底座，但尚未应用
 - 每轮生成私有/公开分层的 `ExecutionReceipt` 与 `ResponseEnvelope`，同步响应、SSE 终态、恢复快照和前端消息复用同一协议；UI 的“处理记录”只展示真实收据，旧消息才使用兼容回退。
 - 精确数字和必需披露由服务端确定性渲染，Composer 只补充叙述，避免模型把“返回 1 条”改写成“全部只有 1 条”或漏掉截断说明。
 
-### Phase 4 已落地：TurnSpec 3.1、声明式工作流与目标级歧义门禁
+### Phase 4 编码与离线门禁已落地：TurnSpec 3.1、声明式工作流与目标级歧义门禁
 
-- Parser 已支持 TurnSpec 3.0/3.1 双读，当前 Compiler 仍只写 3.0，避免未完成灰度时直接改变真实模型协议。3.1 可表达 goal relation、slot/temporal claims、evidence/output contract 和 ambiguity。
+- Parser 已支持 TurnSpec 3.0/3.1 双读，`v3_shadow` 默认生成 3.1 供脱敏差异与离线统计，`v3_enforce` 默认仍生成 3.0，避免未完成灰度时直接改变真实执行协议；两个模式都有独立版本开关可立即回退。3.1 可表达 goal relation、slot/temporal claims、evidence/output contract 和 ambiguity。
 - ResultSet 续问增加服务端枚举的稳定 `handleId` 与 `itemOrdinal`；模型只能从当轮投影枚举选择，未知或跨会话 handle 失败关闭，旧 ID/ordinal 输入由服务端兼容归一化。
 - Manifest 为迁移能力声明参数来源，必填工具参数若没有唯一 slot source 会在启动校验失败；`workflowCompiler` 只消费声明过的 model slot，并始终通过统一 `validateExecutionPlan`，不能形成第二套参数或权限通道。
 - `Slot Filler` 是 TurnSpec 3.1 的单目标窄职责补槽器，只看到最新消息、目标说明和允许补齐的 model slot；看不到工具名、历史、资源 ID、时间和身份字段。3.0 仍走旧 Planner，避免新阶段提前改变既有调用次数与工具语义。
 - goal ambiguity 由服务端按 `fatal / blocks_goal / blocks_write` 逐目标求值，并沿显式依赖传播；无歧义目标可以继续，受阻目标进入 clarification，适配旧链时也会从可执行目标中剔除，避免“部分澄清”重新变成写操作。
-- trace 新增 `deterministic / slot_filler / planner / not_run` planning mode，可离线区分实际路径；本阶段不改变生产默认 Runtime，不应用 migration，不执行真实 Provider。
-- 尚未完成的是发布阶段而非 Phase 4 编码：Compiler 3.1 shadow 出数、离线阈值评测、Root/白名单灰度、生产指标观察和基于结果逐步扩大确定性 workflow。完成生产灰度前仍不得删除 3.0 或旧 Planner，也不得宣称整个统一重构已经在线完成。
+- trace 新增 `turnSpecVersion`、`capabilityPolicyProfile` 和 `deterministic / slot_filler / planner / not_run` planning mode，可离线区分实际路径；本阶段不改变生产默认 Runtime，不应用 migration，不执行真实 Provider。
+- 零 Token 离线门禁已验证 7/7 高频读取命中确定性 fast-path，Planner fallback 为 0；门禁只执行协议、路由和统一 Validator，不查询数据库、不运行真实工具。
+- 尚未完成的是发布阶段而非 Phase 4 编码：Root/白名单真实 3.1 shadow 样本、生产指标观察、Root enforce 灰度和基于结果逐步扩大确定性 workflow。完成生产灰度前仍不得删除 3.0 或旧 Planner，也不得宣称整个统一重构已经在线完成。
+
+### 本分支确定性验收记录（2026-08-21）
+
+- 服务端全量测试：359 个测试文件、3001 项测试全部通过。
+- 前端受影响测试：会话策略、移动端输入区、确认卡和附件 API 共 21 项全部通过；TypeScript 类型检查、生产构建、SPA 回退、预渲染和 SEO 产物校验通过。
+- 零调用 Agent 门禁：7 类高频读取全部命中声明式 fast-path，Planner fallback 为 0；Root V3 dry-run 覆盖 55/55 个工具、63 个计划轮次，模型、数据库和业务工具调用均为 0。
+- 本地 E2E：自动助手、仅对话、只读锁切换，材料隔离、写确认阻断、取消保留、`@` Enter、确认卡刷新恢复和书签生成笔记入口通过；未发起真实 AI 问答或业务写入。
+- 浏览器视觉矩阵：桌面浅色覆盖三种策略，桌面深色覆盖只读锁；390px 移动浅色覆盖自动助手/仅对话，移动深色覆盖只读锁；同时检查了确认卡默认、受限、可取消和不可执行状态。仅对话在移动端不再展示无意义的模块选择与材料区。
+- 前端全量测试另有 2 个既存画布用例仍断言旧 schema v3，而当前画布实现输出 v4；本分支从基线到当前未修改任何画布文件，因此不在本次 Agent 变更中顺带修复。其余 2674 项通过。
+
+以上验收只证明独立分支的本地确定性质量，不代表已合入 `main`、应用 migration、启用生产 V3 或完成线上灰度。
 
 ## 八、后续演进边界
 

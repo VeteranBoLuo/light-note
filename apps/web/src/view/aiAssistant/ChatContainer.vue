@@ -96,6 +96,7 @@
               v-for="confirmation in message.confirmations || []"
               :key="confirmation.id"
               :confirmation="confirmation"
+              :capability-policy-profile="capabilityPolicyProfile"
               @resolved="(resolution) => handleConfirmationResolved(index, resolution)"
               @replaced="(replacement) => handleConfirmationReplaced(index, replacement)"
               @edit="handleConfirmationEdit"
@@ -153,6 +154,8 @@
         :attachments="attachments"
         :capability-module="capabilityModule"
         :capability-module-options="capabilityModuleOptions"
+        :capability-policy-profile="capabilityPolicyProfile"
+        :capability-policy-options="capabilityPolicyOptions"
         :prepare-attachment-action-fn="prepareAttachmentAction"
         @update:enable-translation="enableTranslation = $event"
         @update:translation-config="translationConfig = $event"
@@ -160,6 +163,7 @@
         @update:scope-refs="scopeRefs = $event"
         @update:attachments="attachments = $event"
         @update:capability-module="capabilityModule = $event"
+        @update:capability-policy-profile="updateCapabilityPolicyProfile"
       />
     </div>
   </div>
@@ -190,6 +194,11 @@
     normalizeAiCapabilityModule,
     type AiCapabilityModule,
   } from '@/types/aiCapabilityScope';
+  import {
+    buildAiCapabilityPolicyOptions,
+    normalizeAiCapabilityPolicyProfile,
+    type AiCapabilityPolicyProfile,
+  } from '@/types/aiCapabilityPolicy';
   import { normalizeAiMaterialClarification, normalizeAiResolvedGrounding } from '@/types/aiGrounding';
   import {
     clearAiTemporaryAttachments,
@@ -329,6 +338,18 @@
   const capabilityModuleOptions = computed(() =>
     buildAiCapabilityModuleOptions((key) => t(key), { includeAdmin: user.role === 'root' }),
   );
+  const capabilityPolicyProfile = ref<AiCapabilityPolicyProfile>('auto');
+  const capabilityPolicyOptions = computed(() => buildAiCapabilityPolicyOptions((key) => t(key)));
+
+  function updateCapabilityPolicyProfile(value: AiCapabilityPolicyProfile) {
+    const next = normalizeAiCapabilityPolicyProfile(value);
+    if (next === capabilityPolicyProfile.value) return;
+    capabilityPolicyProfile.value = next;
+    if (next !== 'chat_only') return;
+    capabilityModule.value = 'auto';
+    aiAssistant.detachAllComposerMaterials();
+    message.info(t('ai.capabilityPolicy.materialsCleared'));
+  }
 
   function handleSourceNavigate(source: AiSource) {
     emit('source-navigate', source);
@@ -843,7 +864,8 @@
           chatMessage.executionReceipt ||
           chatMessage.responseEnvelope ||
           chatMessage.scopeRefs?.length ||
-          normalizeAiCapabilityModule(chatMessage.capabilityModule) !== 'auto'
+          normalizeAiCapabilityModule(chatMessage.capabilityModule) !== 'auto' ||
+          normalizeAiCapabilityPolicyProfile(chatMessage.capabilityPolicyProfile) !== 'auto'
             ? {
                 ...(chatMessage.recovered || chatMessage.terminal
                   ? {
@@ -864,6 +886,11 @@
                   : {}),
                 ...(normalizeAiCapabilityModule(chatMessage.capabilityModule) !== 'auto'
                   ? { capabilityModule: normalizeAiCapabilityModule(chatMessage.capabilityModule) }
+                  : {}),
+                ...(normalizeAiCapabilityPolicyProfile(chatMessage.capabilityPolicyProfile) !== 'auto'
+                  ? {
+                      capabilityPolicyProfile: normalizeAiCapabilityPolicyProfile(chatMessage.capabilityPolicyProfile),
+                    }
                   : {}),
               }
             : null,
@@ -927,6 +954,9 @@
     // 待发送材料随会话边界失效:会话 A 挂的引用不能跟进会话 B
     aiAssistant.detachAllComposerMaterials();
     capabilityModule.value = 'auto';
+    capabilityPolicyProfile.value = normalizeAiCapabilityPolicyProfile(
+      [...cloudMessages].reverse().find((item) => item.role === 'user')?.capabilityPolicyProfile,
+    );
     validatedCloudConversationId.value = cloudConversation.id;
     persistHistory();
     resetScrollState();
@@ -1149,6 +1179,7 @@
       contextRefs: contexts,
       scopeRefs: normalizeCloudScopeRefs(cloudMessage.modelMeta?.scopeRefs),
       capabilityModule: normalizeAiCapabilityModule(cloudMessage.modelMeta?.capabilityModule),
+      capabilityPolicyProfile: normalizeAiCapabilityPolicyProfile(cloudMessage.modelMeta?.capabilityPolicyProfile),
       attachmentRefs: (cloudMessage.attachmentRefs || [])
         .filter(
           (item) =>
@@ -1469,11 +1500,18 @@
         contextRefs: chatMessage.contextRefs || chatMessage.contexts || [],
         attachmentRefs: chatMessage.attachmentRefs || [],
         modelMeta:
-          chatMessage.scopeRefs?.length || normalizeAiCapabilityModule(chatMessage.capabilityModule) !== 'auto'
+          chatMessage.scopeRefs?.length ||
+          normalizeAiCapabilityModule(chatMessage.capabilityModule) !== 'auto' ||
+          normalizeAiCapabilityPolicyProfile(chatMessage.capabilityPolicyProfile) !== 'auto'
             ? {
                 ...(chatMessage.scopeRefs?.length ? { scopeRefs: chatMessage.scopeRefs.slice(0, 3) } : {}),
                 ...(normalizeAiCapabilityModule(chatMessage.capabilityModule) !== 'auto'
                   ? { capabilityModule: normalizeAiCapabilityModule(chatMessage.capabilityModule) }
+                  : {}),
+                ...(normalizeAiCapabilityPolicyProfile(chatMessage.capabilityPolicyProfile) !== 'auto'
+                  ? {
+                      capabilityPolicyProfile: normalizeAiCapabilityPolicyProfile(chatMessage.capabilityPolicyProfile),
+                    }
                   : {}),
               }
             : null,
@@ -1582,6 +1620,7 @@
     activeAnswerTypewriter = null;
     aiAssistant.clearCurrentConversation(t('ai.greeting'));
     capabilityModule.value = 'auto';
+    capabilityPolicyProfile.value = 'auto';
     resetScrollState();
     if (!user.id || user.role === 'visitor') return true;
     try {
@@ -1826,6 +1865,7 @@
       historySnapshot?: ChatMessage[];
       actionContinuation?: AiActionContinuation;
       capabilityModule?: AiCapabilityModule;
+      capabilityPolicyProfile?: AiCapabilityPolicyProfile;
     } = {},
   ) => {
     if (isLoading.value || cloudRecoveryPending.value || latestConversationChoicePending) return;
@@ -1872,6 +1912,9 @@
     const capabilityModuleSnapshot = actionContinuation
       ? 'auto'
       : normalizeAiCapabilityModule(options.capabilityModule ?? capabilityModule.value);
+    const capabilityPolicySnapshot = actionContinuation
+      ? 'auto'
+      : normalizeAiCapabilityPolicyProfile(options.capabilityPolicyProfile ?? capabilityPolicyProfile.value);
     if (attachmentSnapshot.some((item) => item.status === 'awaiting_upload')) return;
     const cloudPreparation = await prepareCloudConversationForSend(aiAssistant.runtimeIdentityKey);
     if (cloudPreparation === 'cancelled') return;
@@ -1907,6 +1950,7 @@
           scopeRefs: scopeSnapshot,
           attachmentRefs: attachmentSnapshot,
           capabilityModule: capabilityModuleSnapshot,
+          capabilityPolicyProfile: capabilityPolicySnapshot,
           parentMessageId: cloudPreparation === 'replaced' ? undefined : options.parentMessageId,
         };
     if (userMessage) messages.value.push(userMessage);
@@ -2276,6 +2320,7 @@
             externalWeb: false,
           },
           ...(!actionContinuation ? { capabilityScope: buildAiCapabilityScope(capabilityModuleSnapshot) } : {}),
+          ...(!actionContinuation ? { capabilityPolicyProfile: capabilityPolicySnapshot } : {}),
           // 长期记忆已关闭:不再请求 active(否则后端会读取/注入/推断并写入候选,而前端已无任何查看/停用/删除入口——
           // 属隐私控制面与运行面脱节)。临时会话本就不涉记忆,保持 temporary。
           memoryMode: temporarySession.value ? 'temporary' : 'off',
@@ -2566,11 +2611,18 @@
     attachedContexts: AiResourceContext[] = [],
     attachedScopes: AiScopeRef[] = [],
     attachedCapabilityModule: AiCapabilityModule = 'auto',
+    attachedCapabilityPolicyProfile: AiCapabilityPolicyProfile = 'auto',
   ) => {
     userInput.value = content;
     contexts.value = attachedContexts.map((item) => ({ ...item }));
     scopeRefs.value = attachedScopes.map((item) => ({ ...item }));
     capabilityModule.value = normalizeAiCapabilityModule(attachedCapabilityModule);
+    capabilityPolicyProfile.value = normalizeAiCapabilityPolicyProfile(attachedCapabilityPolicyProfile);
+    if (capabilityPolicyProfile.value === 'chat_only') {
+      contexts.value = [];
+      scopeRefs.value = [];
+      capabilityModule.value = 'auto';
+    }
     nextTick(() => {
       chatInputRef.value?.focus();
     });
@@ -2758,6 +2810,7 @@
         versionGroupId,
         historySnapshot: messages.value.slice(0, userIdx),
         capabilityModule: normalizeAiCapabilityModule(originalUserMessage.capabilityModule),
+        capabilityPolicyProfile: normalizeAiCapabilityPolicyProfile(originalUserMessage.capabilityPolicyProfile),
       });
     } finally {
       regenerationPreparing.value = false;

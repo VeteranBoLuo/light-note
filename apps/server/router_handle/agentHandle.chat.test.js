@@ -937,6 +937,134 @@ describe('agentChat 主链路', () => {
     });
   });
 
+  it('仅对话模式在解析材料前切断个人数据能力，并对明确查询给出策略披露', async () => {
+    vi.stubEnv('AI_AGENT_RUNTIME_MODE', 'v3_enforce');
+    vi.stubEnv('AI_AGENT_RUNTIME_V3_ROLLOUT', 'root');
+    mocks.selectAgentTools.mockImplementation((registry) => [registry.get('query_notes')].filter(Boolean));
+    let compilerPayload;
+    mocks.requestAi.mockImplementation(async (messages, options = {}) => {
+      compilerPayload = JSON.parse(messages[1].content);
+      return {
+        content: '',
+        toolCalls: [
+          turnSpecV3Call({
+            requestKind: 'answer',
+            confidence: 'high',
+            continuationMode: 'independent',
+            topicEpochAction: 'advance',
+            goals: [
+              {
+                id: 'query-private-notes',
+                capabilityId: 'note.query',
+                operation: 'read',
+                description: '查询个人笔记',
+                targetDescription: '当前账号笔记',
+                dependsOn: [],
+                referentSelectors: [],
+              },
+            ],
+            groundingPolicy: compilerPayload.authoritativeGroundingPolicy,
+            temporalConstraints: [],
+            missingSlots: [],
+            clarificationQuestion: '',
+          }),
+        ],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      };
+    });
+    const req = request({
+      message: '总结我的笔记',
+      stream: false,
+      capabilityPolicyProfile: 'chat_only',
+      contexts: [{ type: 'note', id: 'private-note-1' }],
+      attachmentIds: ['private-file-1'],
+      scope: { mode: 'workspace' },
+    });
+    req.user = { id: 'user-1', role: 'root', alias: 'Root' };
+    const res = response();
+
+    await agentChat(req, res);
+
+    expect(compilerPayload).toMatchObject({
+      authoritativeCapabilityPolicyProfile: 'chat_only',
+      authoritativeGroundingPolicy: 'general_knowledge',
+      currentContext: { selectedResourceCount: 0, attachmentCount: 0 },
+    });
+    expect(compilerPayload.capabilityCatalog.find((item) => item.id === 'note.query')).toMatchObject({
+      status: 'policy_blocked',
+      policyBlockReason: 'chat_only',
+    });
+    expect(mocks.requestAi.mock.calls.map(([, options]) => options?.trace?.stage)).toEqual(['intent_compiler_v3']);
+    expect(mocks.toolExecute).not.toHaveBeenCalled();
+    expect(mocks.findOwnedNoteForAi).not.toHaveBeenCalled();
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toContain('仅对话模式');
+    expect(JSON.parse(latestAgentLogRecord().turn_contract_trace)).toMatchObject({
+      capabilityPolicyProfile: 'chat_only',
+      resolvedScopeMode: 'none',
+      allowedSourceCount: 0,
+    });
+  });
+
+  it('只读锁保留准确写意图但不给执行工具，不生成确认卡', async () => {
+    vi.stubEnv('AI_AGENT_RUNTIME_MODE', 'v3_enforce');
+    vi.stubEnv('AI_AGENT_RUNTIME_V3_ROLLOUT', 'root');
+    mocks.selectAgentTools.mockImplementation((registry) => [registry.get('create_todo')].filter(Boolean));
+    mocks.requestAi.mockImplementation(async (messages, options = {}) => {
+      expect(options?.trace?.stage).toBe('intent_compiler_v3');
+      const payload = JSON.parse(messages[1].content);
+      expect(payload.capabilityCatalog.find((item) => item.id === 'todo.create')).toMatchObject({
+        status: 'policy_blocked',
+        policyBlockReason: 'read_only',
+      });
+      return {
+        content: '',
+        toolCalls: [
+          turnSpecV3Call({
+            requestKind: 'action',
+            confidence: 'high',
+            continuationMode: 'independent',
+            topicEpochAction: 'advance',
+            goals: [
+              {
+                id: 'create-todo',
+                capabilityId: 'todo.create',
+                operation: 'create',
+                description: '创建待办',
+                targetDescription: '明天提交周报',
+                dependsOn: [],
+                referentSelectors: [],
+              },
+            ],
+            groundingPolicy: payload.authoritativeGroundingPolicy,
+            temporalConstraints: [],
+            missingSlots: [],
+            clarificationQuestion: '',
+          }),
+        ],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      };
+    });
+    const req = request({
+      message: '创建待办：明天提交周报',
+      stream: false,
+      capabilityPolicyProfile: 'read_only',
+      contexts: [],
+      attachmentIds: [],
+    });
+    req.user = { id: 'user-1', role: 'root', alias: 'Root' };
+    const res = response();
+
+    await agentChat(req, res);
+
+    expect(mocks.createToolConfirmation).not.toHaveBeenCalled();
+    expect(mocks.toolExecute).not.toHaveBeenCalled();
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toContain('只读锁');
+  });
+
   it('Runtime V3 通过 ResultSet 的稳定 web 引用继续读取网页，不要求用户重复粘贴 URL', async () => {
     vi.stubEnv('AI_AGENT_RUNTIME_MODE', 'v3_enforce');
     vi.stubEnv('AI_AGENT_RUNTIME_V3_ROLLOUT', 'root');

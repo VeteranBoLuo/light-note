@@ -76,10 +76,17 @@ export function routeTurnSpecCapabilitiesV3({
   }
 
   const hasForbiddenGoal = goalRoutes.some((goalRoute) => goalRoute.status === 'forbidden');
+  const hasPolicyBlockedGoal = goalRoutes.some((goalRoute) => goalRoute.status === 'policy_blocked');
   const allUnsupported = unsupportedGoals.length === turnSpec.goals.length && turnSpec.goals.length > 0;
   return Object.freeze({
-    state: hasForbiddenGoal || allUnsupported ? 'unsupported' : 'ready',
-    reason: hasForbiddenGoal ? 'forbidden_goal' : unsupportedGoals.length ? 'partial_support' : 'ready',
+    state: hasForbiddenGoal || hasPolicyBlockedGoal || allUnsupported ? 'unsupported' : 'ready',
+    reason: hasForbiddenGoal
+      ? 'forbidden_goal'
+      : hasPolicyBlockedGoal
+        ? 'policy_blocked_goal'
+        : unsupportedGoals.length
+          ? 'partial_support'
+          : 'ready',
     candidates: Object.freeze(candidates),
     goalRoutes: Object.freeze(goalRoutes),
     candidateToolCount: candidates.length,

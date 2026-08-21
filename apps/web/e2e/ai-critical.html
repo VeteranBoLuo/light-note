@@ -4,6 +4,44 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI Critical E2E Harness</title>
+    <style>
+      html,
+      body,
+      #app {
+        min-height: 100%;
+      }
+
+      body {
+        margin: 0;
+        background: var(--background-color);
+        color: var(--text-color);
+      }
+
+      .ai-critical-harness {
+        box-sizing: border-box;
+        width: min(760px, 100%);
+        margin: 0 auto;
+        padding: 24px;
+      }
+
+      .ai-critical-harness > section + section {
+        margin-top: 20px;
+      }
+
+      .ai-critical-harness.is-mobile {
+        width: 100%;
+        padding: 12px 8px;
+      }
+
+      .ai-critical-harness output {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+      }
+    </style>
   </head>
   <body>
     <div id="app"></div>

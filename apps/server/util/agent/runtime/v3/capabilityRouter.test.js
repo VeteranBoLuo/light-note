@@ -83,4 +83,25 @@ describe('Capability Router V3', () => {
       }),
     ).toMatchObject({ state: 'ready', candidates: [imageTool] });
   });
+
+  it('profile 阻断是独立状态，不会误路由到相似的已启用能力', () => {
+    const profileCatalog = [
+      ...catalog,
+      {
+        id: 'note.create',
+        status: 'policy_blocked',
+        policyBlockReason: 'read_only',
+        toolName: 'create_note',
+        operations: ['create'],
+        effect: 'write',
+      },
+    ];
+    expect(
+      routeTurnSpecCapabilitiesV3({
+        turnSpec: spec('note.create', 'create'),
+        catalog: profileCatalog,
+        tools: [tool, { name: 'create_note' }],
+      }),
+    ).toMatchObject({ state: 'unsupported', reason: 'policy_blocked_goal', candidates: [] });
+  });
 });

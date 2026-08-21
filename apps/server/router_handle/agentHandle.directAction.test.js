@@ -871,6 +871,34 @@ describe('confirmAgentTool', () => {
     );
   });
 
+  it('只读锁在读取确认令牌前阻止旧确认卡执行，不消费一次性确认', async () => {
+    const res = createResponse();
+    await confirmAgentTool(
+      {
+        body: {
+          confirmationToken: 'token-image',
+          sessionId: 'session-image',
+          capabilityPolicyProfile: 'read_only',
+        },
+        user: { id: 'user-1', role: 'user', alias: '测试用户' },
+        headers: {},
+        ip: '127.0.0.1',
+      },
+      res,
+    );
+
+    expect(mocks.inspectToolConfirmationExecution).not.toHaveBeenCalled();
+    expect(mocks.claimToolConfirmationExecution).not.toHaveBeenCalled();
+    expect(mocks.executeImageNote).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { code: 'TOOL_CONFIRMATION_POLICY_BLOCKED' },
+        msg: expect.stringContaining('只读锁'),
+      }),
+    );
+  });
+
   it('确认执行沿用签发时的权威时间范围，不按确认时刻重新解析', async () => {
     const inspected = await mocks.inspectToolConfirmationExecution.mock.results[0]?.value;
     const confirmation = inspected?.confirmation || {

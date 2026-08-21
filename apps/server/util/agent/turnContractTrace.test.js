@@ -55,11 +55,13 @@ describe('Agent Turn Contract trace', () => {
       rawHistoryMessageCount: 0,
       recentDialogueMessageCount: 4,
       recentDialogueSource: 'cloud',
+      capabilityPolicyProfile: 'read_only',
       legacyStageCount: 0,
     });
     recordIntentCompiler(trace, {
       mode: 'v3_enforce',
       state: 'ready',
+      version: '3.1',
       requestKind: 'answer',
       confidence: 'high',
       continuationMode: 'refer_last_result',
@@ -101,9 +103,11 @@ describe('Agent Turn Contract trace', () => {
       rawHistoryMessageCount: 0,
       recentDialogueMessageCount: 4,
       recentDialogueSource: 'cloud',
+      capabilityPolicyProfile: 'read_only',
       legacyStageCount: 0,
       intentCompilerMode: 'v3_enforce',
       intentCompilerState: 'ready',
+      turnSpecVersion: '3.1',
       turnSpecRequestKind: 'answer',
       turnSpecContinuationMode: 'refer_last_result',
       turnSpecTopicEpochAction: 'keep',
@@ -138,6 +142,16 @@ describe('Agent Turn Contract trace', () => {
     expect(sanitizeTurnContractTrace(trace)).toMatchObject({
       intentCompilerMode: 'v3_shadow',
       turnSpecContinuationMode: 'action_continuation',
+    });
+  });
+
+  it('非法协议版本和能力策略只会降级为低基数默认值', () => {
+    const trace = createTurnContractTrace();
+    recordIntentCompiler(trace, { version: '4.0' });
+    recordRuntimeIsolation(trace, { capabilityPolicyProfile: 'admin_mode' });
+    expect(sanitizeTurnContractTrace(trace)).toMatchObject({
+      turnSpecVersion: 'unknown',
+      capabilityPolicyProfile: 'auto',
     });
   });
 

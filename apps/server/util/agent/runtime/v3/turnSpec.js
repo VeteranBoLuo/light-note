@@ -564,7 +564,146 @@ export function normalizeTurnSpecV3(
   return Object.freeze({ ...normalized, digest: semanticDigest, semanticDigest });
 }
 
-export function buildTurnSpecV3ToolDefinition({ catalog = [], groundingPolicy } = {}) {
+function modelSlotSchema(catalog = []) {
+  const definitions = new Map();
+  for (const capability of Array.isArray(catalog) ? catalog : []) {
+    for (const slot of Array.isArray(capability?.slots) ? capability.slots : []) {
+      if (!['model_text', 'model_enum'].includes(slot?.source) || !slot?.name) continue;
+      const name = String(slot.name);
+      const current = definitions.get(name) || { maxLength: 0, enum: new Set() };
+      if (slot.source === 'model_text') {
+        current.maxLength = Math.max(current.maxLength, Math.min(1_000, Number(slot.maxLength) || MAX_TEXT));
+      } else {
+        for (const value of slot.enum || []) current.enum.add(String(value));
+      }
+      definitions.set(name, current);
+    }
+  }
+  return Object.fromEntries(
+    [...definitions.entries()].map(([name, definition]) => {
+      const variants = [{ type: 'null' }];
+      if (definition.maxLength > 0) variants.push({ type: 'string', minLength: 1, maxLength: definition.maxLength });
+      if (definition.enum.size) variants.push({ type: 'string', enum: [...definition.enum] });
+      return [name, { anyOf: variants }];
+    }),
+  );
+}
+
+function referentSelectorSchema(version, resultSetHandleIds = []) {
+  const commonProperties = {
+    source: { type: 'string', enum: REFERENT_SOURCES_V3 },
+    types: { type: 'array', maxItems: 6, items: { type: 'string', maxLength: 32 } },
+  };
+  if (version === '3.1') {
+    const handles = uniqueStrings(resultSetHandleIds, 64);
+    return {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        ...commonProperties,
+        resultSetHandleId: handles.length
+          ? { anyOf: [{ type: 'string', enum: handles }, { type: 'null' }] }
+          : { type: 'null' },
+        itemOrdinal: { anyOf: [{ type: 'integer', minimum: 1, maximum: 50 }, { type: 'null' }] },
+      },
+      required: ['source', 'resultSetHandleId', 'types', 'itemOrdinal'],
+    };
+  }
+  return {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      ...commonProperties,
+      ordinal: { anyOf: [{ type: 'integer', minimum: 1, maximum: 50 }, { type: 'null' }] },
+    },
+    required: ['source', 'types', 'ordinal'],
+  };
+}
+
+function goalSchema({ catalog, capabilities, operations, version, resultSetHandleIds }) {
+  const properties = {
+    id: { type: 'string', minLength: 1, maxLength: 64 },
+    capabilityId: { type: 'string', enum: capabilities.length ? capabilities : ['none'] },
+    operation: { type: 'string', enum: operations.length ? operations : ['read'] },
+    description: { type: 'string', maxLength: MAX_TEXT },
+    targetDescription: { type: 'string', maxLength: MAX_TEXT },
+    dependsOn: { type: 'array', maxItems: MAX_RAW_GOALS, items: { type: 'string', maxLength: 64 } },
+    referentSelectors: {
+      type: 'array',
+      maxItems: 4,
+      items: referentSelectorSchema(version, resultSetHandleIds),
+    },
+  };
+  const required = [
+    'id',
+    'capabilityId',
+    'operation',
+    'description',
+    'targetDescription',
+    'dependsOn',
+    'referentSelectors',
+  ];
+  if (version === '3.1') {
+    Object.assign(properties, {
+      relation: { type: 'string', enum: GOAL_RELATIONS_V3 },
+      evidencePolicy: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          kind: { type: 'string', enum: EVIDENCE_POLICY_KINDS_V3 },
+          goalIds: { type: 'array', maxItems: MAX_RAW_GOALS, items: { type: 'string', maxLength: 64 } },
+        },
+        required: ['kind', 'goalIds'],
+      },
+      slotClaims: {
+        type: 'object',
+        additionalProperties: false,
+        properties: modelSlotSchema(catalog),
+      },
+      temporalClaims: {
+        type: 'array',
+        maxItems: 8,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            slot: { type: 'string', minLength: 1, maxLength: 64 },
+            expression: { type: 'string', minLength: 1, maxLength: 80 },
+          },
+          required: ['slot', 'expression'],
+        },
+      },
+      outputContract: { anyOf: [{ type: 'object' }, { type: 'null' }] },
+      ambiguities: {
+        type: 'array',
+        maxItems: 8,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            field: { type: 'string', minLength: 1, maxLength: 80 },
+            impact: { type: 'string', enum: AMBIGUITY_IMPACTS_V3 },
+            candidateKinds: { type: 'array', maxItems: 8, items: { type: 'string', maxLength: 64 } },
+            question: { type: 'string', minLength: 1, maxLength: MAX_CLARIFICATION },
+          },
+          required: ['field', 'impact', 'candidateKinds', 'question'],
+        },
+      },
+    });
+    required.push('relation', 'evidencePolicy', 'slotClaims', 'temporalClaims', 'outputContract', 'ambiguities');
+  }
+  return { type: 'object', additionalProperties: false, properties, required };
+}
+
+export function buildTurnSpecV3ToolDefinition({
+  catalog = [],
+  groundingPolicy,
+  version = TURN_SPEC_V3_VERSION,
+  resultSetHandleIds = [],
+} = {}) {
+  const outputVersion = TURN_SPEC_V3_ACCEPTED_VERSIONS.includes(String(version))
+    ? String(version)
+    : TURN_SPEC_V3_VERSION;
   const capabilities = (Array.isArray(catalog) ? catalog : []).map((entry) => entry.id);
   const operations = [...new Set((Array.isArray(catalog) ? catalog : []).flatMap((entry) => entry.operations || []))];
   return {
@@ -576,7 +715,7 @@ export function buildTurnSpecV3ToolDefinition({ catalog = [], groundingPolicy } 
         type: 'object',
         additionalProperties: false,
         properties: {
-          version: { type: 'string', enum: [TURN_SPEC_V3_VERSION] },
+          version: { type: 'string', enum: [outputVersion] },
           requestKind: { type: 'string', enum: TURN_REQUEST_KINDS_V3 },
           confidence: { type: 'string', enum: CONFIDENCE_LEVELS },
           continuationMode: { type: 'string', enum: TURN_CONTINUATION_MODES_V3 },
@@ -584,44 +723,7 @@ export function buildTurnSpecV3ToolDefinition({ catalog = [], groundingPolicy } 
           goals: {
             type: 'array',
             maxItems: MAX_RAW_GOALS,
-            items: {
-              type: 'object',
-              additionalProperties: false,
-              properties: {
-                id: { type: 'string', minLength: 1, maxLength: 64 },
-                capabilityId: { type: 'string', enum: capabilities.length ? capabilities : ['none'] },
-                operation: { type: 'string', enum: operations.length ? operations : ['read'] },
-                description: { type: 'string', maxLength: MAX_TEXT },
-                targetDescription: { type: 'string', maxLength: MAX_TEXT },
-                dependsOn: { type: 'array', maxItems: MAX_RAW_GOALS, items: { type: 'string', maxLength: 64 } },
-                referentSelectors: {
-                  type: 'array',
-                  maxItems: 4,
-                  items: {
-                    type: 'object',
-                    additionalProperties: false,
-                    properties: {
-                      source: {
-                        type: 'string',
-                        enum: REFERENT_SOURCES_V3,
-                      },
-                      types: { type: 'array', maxItems: 6, items: { type: 'string', maxLength: 32 } },
-                      ordinal: { anyOf: [{ type: 'integer', minimum: 1, maximum: 50 }, { type: 'null' }] },
-                    },
-                    required: ['source', 'types', 'ordinal'],
-                  },
-                },
-              },
-              required: [
-                'id',
-                'capabilityId',
-                'operation',
-                'description',
-                'targetDescription',
-                'dependsOn',
-                'referentSelectors',
-              ],
-            },
+            items: goalSchema({ catalog, capabilities, operations, version: outputVersion, resultSetHandleIds }),
           },
           groundingPolicy: {
             type: 'string',

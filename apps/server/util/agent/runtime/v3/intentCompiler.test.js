@@ -69,6 +69,99 @@ const validSpec = {
 };
 
 describe('Intent Compiler V3', () => {
+  it('策略阻断的精确能力仍可被编译，后续由确定性路由解释而不是协议失败', async () => {
+    const policyCatalog = buildAgentV3CapabilityCatalog(tools, {
+      availableToolNames: new Set(['query_notes']),
+      actorRole: 'user',
+      capabilityPolicyProfile: 'chat_only',
+    });
+    const policySpec = {
+      ...validSpec,
+      groundingPolicy: 'none',
+      goals: [
+        {
+          ...validSpec.goals[0],
+          description: '查询个人笔记',
+          targetDescription: '当前账号笔记',
+        },
+      ],
+    };
+    const request = vi.fn().mockResolvedValue(response(policySpec));
+    await expect(
+      compileAgentTurnSpecV3({
+        message: '总结我的笔记',
+        catalog: policyCatalog,
+        capabilityPolicyProfile: 'chat_only',
+        authoritativeGroundingPolicy: 'none',
+        request,
+      }),
+    ).resolves.toMatchObject({ turnSpec: { goals: [expect.objectContaining({ capabilityId: 'note.query' })] } });
+    expect(JSON.parse(request.mock.calls[0][0][1].content)).toMatchObject({
+      authoritativeCapabilityPolicyProfile: 'chat_only',
+    });
+  });
+
+  it('shadow 可写 3.1，并把服务端 handle 与 Manifest 模型槽投影进严格 schema', async () => {
+    const spec31 = {
+      version: '3.1',
+      requestKind: 'answer',
+      confidence: 'high',
+      continuationMode: 'refer_last_result',
+      topicEpochAction: 'keep',
+      goals: [
+        {
+          id: 'read-web',
+          capabilityId: 'web.read',
+          operation: 'read',
+          description: '总结上一组网页',
+          targetDescription: '上一组网页',
+          dependsOn: [],
+          referentSelectors: [
+            { source: 'last_result', resultSetHandleId: 'rs-web-1', types: ['web'], itemOrdinal: null },
+          ],
+          relation: 'refer_last_result',
+          evidencePolicy: { kind: 'workspace_query', goalIds: [] },
+          slotClaims: {},
+          temporalClaims: [],
+          outputContract: null,
+          ambiguities: [],
+        },
+      ],
+      groundingPolicy: 'workspace_query',
+      temporalConstraints: [],
+      missingSlots: [],
+      clarificationQuestion: '',
+    };
+    const request = vi.fn().mockResolvedValue(response(spec31));
+    const result = await compileAgentTurnSpecV3({
+      message: '总结刚才那些网页',
+      outputVersion: '3.1',
+      catalog: continuationCatalog,
+      discourseProjection: {
+        resultSetCandidates: [
+          { available: true, handleId: 'rs-web-1', domains: ['web'], refTypes: ['web'], refCount: 2 },
+        ],
+      },
+      authoritativeGroundingPolicy: 'workspace_query',
+      request,
+    });
+
+    expect(result.turnSpec).toMatchObject({ version: '3.1', continuationMode: 'refer_last_result' });
+    expect(result.turnSpec.goals[0].referentSelectors[0]).toMatchObject({
+      resultSetHandleId: 'rs-web-1',
+      itemOrdinal: null,
+    });
+    const toolSchema = request.mock.calls[0][1].tools[0].function.parameters;
+    expect(toolSchema.properties.version.enum).toEqual(['3.1']);
+    expect(
+      toolSchema.properties.goals.items.properties.referentSelectors.items.properties.resultSetHandleId.anyOf[0].enum,
+    ).toEqual(['rs-web-1']);
+    expect(toolSchema.properties.goals.items.required).toEqual(
+      expect.arrayContaining(['relation', 'evidencePolicy', 'slotClaims', 'temporalClaims', 'ambiguities']),
+    );
+    expect(request.mock.calls[0][0][0].content).toContain('TurnSpec 3.1');
+  });
+
   it('模型只把最新消息当动作与时间权威，recentDialogue 仅用于语义承接', async () => {
     const request = vi.fn().mockResolvedValue(response(validSpec));
     const result = await compileAgentTurnSpecV3({

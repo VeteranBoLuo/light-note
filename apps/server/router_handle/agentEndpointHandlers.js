@@ -202,6 +202,11 @@ import { runAgentRuntime } from '../util/agent/runtime/agentRuntime.js';
 import { runAgentRuntimeV3 } from '../util/agent/runtime/v3/agentRuntime.js';
 import { compileAgentTurnSpecV3 } from '../util/agent/runtime/v3/intentCompiler.js';
 import { attachTurnSpecV3OutputContract, resolveArtifactContinuationV3 } from '../util/agent/runtime/v3/turnSpec.js';
+import { resolveTurnSpecV3OutputVersion } from '../util/agent/runtime/v3/turnSpecVersion.js';
+import {
+  capabilityMatchesPolicyProfile,
+  normalizeAgentCapabilityPolicyProfile,
+} from '../util/agent/runtime/v3/capabilityPolicy.js';
 import { adaptRuntimeOutcomeToLegacy } from '../util/agent/runtime/legacyRuntimeAdapter.js';
 import { buildPlannerTemporalContext, planAgentExecution } from '../util/agent/runtime/executionPlanner.js';
 import { validateExecutionPlan } from '../util/agent/runtime/planValidator.js';
@@ -1754,6 +1759,7 @@ function selectSemanticAgentToolsForTurn({
   allowVisitorWrite,
   contentScope,
   capabilityScope,
+  capabilityPolicyProfile,
   discourseProjection,
 }) {
   const acceptsLastResult = (tool) => canToolConsumeAgentV3ResultSet(tool, discourseProjection);
@@ -1785,6 +1791,12 @@ function selectSemanticAgentToolsForTurn({
       const capability = getAgentV3CapabilityByToolName(tool.name);
       return capabilityMatchesScope(capability, capabilityScope);
     });
+  }
+  const policyProfile = normalizeAgentCapabilityPolicyProfile(capabilityPolicyProfile);
+  if (policyProfile !== 'auto') {
+    tools = tools.filter((tool) =>
+      capabilityMatchesPolicyProfile(getAgentV3CapabilityByToolName(tool.name), policyProfile),
+    );
   }
   return tools;
 }
@@ -2410,6 +2422,7 @@ export async function agentChat(req, res) {
     let precompiledOutputContract = null;
     let precompiledTurnSpecError = null;
     let turnEnvelope = adaptAgentTurnEnvelope(req.body);
+    const chatOnlyCapabilityProfile = turnEnvelope.capabilityPolicyProfile === 'chat_only';
     const normalizedRequestBody = {
       ...req.body,
       contexts: turnEnvelope.grounding.contextRefs,
@@ -2468,6 +2481,7 @@ export async function agentChat(req, res) {
       actorKey: identity.billingUserRole === 'visitor' ? identity.ownerKey : identity.billingUserId,
     });
     const runtimeMode = runtimeDecision.effectiveMode;
+    const turnSpecV3OutputVersion = resolveTurnSpecV3OutputVersion({ runtimeMode });
     const runtimeV3ModeEnforced = runtimeMode === 'v3_enforce';
     let runtimeRecentDialogueMessageCount = 0;
     let runtimeRecentDialogueSource = 'none';
@@ -2480,6 +2494,7 @@ export async function agentChat(req, res) {
         rawHistoryMessageCount,
         recentDialogueMessageCount: runtimeRecentDialogueMessageCount,
         recentDialogueSource: runtimeRecentDialogueSource,
+        capabilityPolicyProfile: turnEnvelope.capabilityPolicyProfile,
         legacyStageCount: runtimeMode === 'v3_enforce' ? 0 : 1,
       });
     recordIntentCompiler(trace.turnContract, {
@@ -3085,22 +3100,26 @@ export async function agentChat(req, res) {
 
     // 语义确认是改写待确认草稿后，客户端本轮续带的引用必须完全退出解析链；这样无效、
     // 过期或被篡改的客户端材料既不能替换原材料，也不会在恢复权威私有引用前阻断请求。
-    let effectiveRequestContexts = refinementRequested ? [] : requestContexts;
-    let effectiveRequestScopeRefs = refinementRequested
-      ? pendingNoteDraftPrivateContext?.scopeRefs || []
-      : requestScopeRefs;
-    let effectiveRequestAttachmentIds = refinementRequested ? [] : requestAttachmentIds;
+    let effectiveRequestContexts = refinementRequested || chatOnlyCapabilityProfile ? [] : requestContexts;
+    let effectiveRequestScopeRefs =
+      refinementRequested || chatOnlyCapabilityProfile
+        ? pendingNoteDraftPrivateContext?.scopeRefs || []
+        : requestScopeRefs;
+    if (chatOnlyCapabilityProfile) effectiveRequestScopeRefs = [];
+    let effectiveRequestAttachmentIds = refinementRequested || chatOnlyCapabilityProfile ? [] : requestAttachmentIds;
 
     // 客户端只续传服务端签发的 Source Set ID，不再用句式白名单猜测是否承接。该 ID 只是
     // 候选而非授权：服务端先做受约束语义分类，再按 owner/session 重新解析稳定引用；
     // 分类失败 fail-open 不继承，独立请求也不会被陈旧材料污染。
-    const requestedSourceSetIds = pendingDraftReplacementRequested
+    const requestedSourceSetIds = chatOnlyCapabilityProfile
       ? []
-      : clarificationSourceSetIds.length
-        ? clarificationSourceSetIds
-        : turnEnvelope.grounding.sourceSetId
-          ? [turnEnvelope.grounding.sourceSetId]
-          : [];
+      : pendingDraftReplacementRequested
+        ? []
+        : clarificationSourceSetIds.length
+          ? clarificationSourceSetIds
+          : turnEnvelope.grounding.sourceSetId
+            ? [turnEnvelope.grounding.sourceSetId]
+            : [];
     const sourceSetInspections = requestedSourceSetIds.map((sourceSetId) =>
       resolveSessionSourceSet(session, sourceSetId),
     );
@@ -3306,14 +3325,20 @@ export async function agentChat(req, res) {
         );
       }
     }
-    let responseSourceSet = enableTranslation
-      ? null
-      : await recordSessionSourceSet(session, {
-          refs: effectiveRequestContexts,
-          scopeRefs: effectiveRequestScopeRefs,
-          attachmentSourceIds: effectiveRequestAttachmentIds,
-        });
-    let contentScope = normalizeAgentContentScope(scope, resolvedContexts, message, resolvedScopes);
+    let responseSourceSet =
+      enableTranslation || chatOnlyCapabilityProfile
+        ? null
+        : await recordSessionSourceSet(session, {
+            refs: effectiveRequestContexts,
+            scopeRefs: effectiveRequestScopeRefs,
+            attachmentSourceIds: effectiveRequestAttachmentIds,
+          });
+    let contentScope = normalizeAgentContentScope(
+      chatOnlyCapabilityProfile ? { mode: 'selected' } : scope,
+      resolvedContexts,
+      message,
+      resolvedScopes,
+    );
     const sessionDiscourseProjection = runtimeMode.startsWith('v3_')
       ? getSessionDiscourseProjection(session)
       : Object.freeze({ pendingArtifact: null, lastResultSet: null, resultSetCandidates: [] });
@@ -3338,7 +3363,7 @@ export async function agentChat(req, res) {
           })
         : sessionDiscourseProjection;
     let groundingScope = resolveGroundingScope({
-      requestedMode: turnEnvelope.grounding.mode,
+      requestedMode: chatOnlyCapabilityProfile ? 'none' : turnEnvelope.grounding.mode,
       inheritedDecision: trace.materialFollowUpDecision,
       contentScope,
       resolvedContexts,
@@ -3347,8 +3372,9 @@ export async function agentChat(req, res) {
       sourceSetId: responseSourceSet?.id || (inheritedReadySourceSet ? sourceSetInspection?.sourceSet?.id || '' : ''),
     });
     const groundingV2Enabled = isGroundingScopeV2Enabled({ userId, userRole });
-    const resolvedScopeMode =
-      trace.turnContract.requestedScopeMode === 'explicit'
+    const resolvedScopeMode = chatOnlyCapabilityProfile
+      ? 'none'
+      : trace.turnContract.requestedScopeMode === 'explicit'
         ? 'current_explicit_only'
         : trace.materialFollowUpDecision === 'continue_with_materials'
           ? sourceSetInspection?.sourceSet
@@ -3619,6 +3645,7 @@ export async function agentChat(req, res) {
               allowVisitorWrite: req.adminContext?.mode === 'maintain',
               contentScope,
               capabilityScope: turnEnvelope.capabilityScope,
+              capabilityPolicyProfile: turnEnvelope.capabilityPolicyProfile,
               discourseProjection: structuredDiscourseProjection,
             });
             const compilerCatalog =
@@ -3627,9 +3654,12 @@ export async function agentChat(req, res) {
                     availableToolNames: new Set(compilerTools.map((tool) => tool.name)),
                     actorRole: userRole,
                     capabilityScope: turnEnvelope.capabilityScope,
+                    capabilityPolicyProfile: turnEnvelope.capabilityPolicyProfile,
                   })
                 : buildAgentSemanticCapabilityCatalog([...toolRegistry.values()], {
                     availableToolNames: new Set(compilerTools.map((tool) => tool.name)),
+                    capabilityPolicyProfile: turnEnvelope.capabilityPolicyProfile,
+                    resolveCapabilityMetadata: getAgentV3CapabilityByToolName,
                   });
             // V3 先只编译意图。确认它确实是笔记产物后，再由服务端从最新消息确定性附加
             // 字数/格式契约；普通问答不会被错误套上 note_markdown，也不需要第二次模型调用。
@@ -3665,10 +3695,12 @@ export async function agentChat(req, res) {
                     discourseProjection: structuredDiscourseProjection,
                     contextSummary: compilerContextSummary,
                     capabilityScope: turnEnvelope.capabilityScope,
+                    capabilityPolicyProfile: turnEnvelope.capabilityPolicyProfile,
                     authoritativeGroundingPolicy: groundingPolicyFromScopeMode(groundingScope.mode),
                     outputContract: precompiledOutputContract,
                     temporalContext: requestTemporalContext,
                     actorRole: userRole,
+                    outputVersion: turnSpecV3OutputVersion,
                     signal: agentAbortController.signal,
                     traceId: requestId,
                     onResponse: onCompilerResponse,
@@ -4610,6 +4642,7 @@ export async function agentChat(req, res) {
             allowVisitorWrite: req.adminContext?.mode === 'maintain',
             contentScope,
             capabilityScope: turnEnvelope.capabilityScope,
+            capabilityPolicyProfile: turnEnvelope.capabilityPolicyProfile,
             discourseProjection: structuredDiscourseProjection,
           });
     if (trace.noteDraftWorkspaceRetrievalNeeded === true) {
@@ -4627,6 +4660,8 @@ export async function agentChat(req, res) {
         ? []
         : buildAgentSemanticCapabilityCatalog([...toolRegistry.values()], {
             availableToolNames: new Set(selectedTools.map((tool) => tool.name)),
+            capabilityPolicyProfile: turnEnvelope.capabilityPolicyProfile,
+            resolveCapabilityMetadata: getAgentV3CapabilityByToolName,
           });
     if (trace.noteDraftWorkspaceRetrievalNeeded === true) {
       // 工具 schema 收窄后，语义能力目录也必须同步收窄。否则 Planner 仍能从 capabilityId
@@ -4647,6 +4682,7 @@ export async function agentChat(req, res) {
           availableToolNames: new Set(selectedTools.map((tool) => tool.name)),
           actorRole: userRole,
           capabilityScope: turnEnvelope.capabilityScope,
+          capabilityPolicyProfile: turnEnvelope.capabilityPolicyProfile,
         })
       : [];
     const activeCapabilityCatalog = runtimeMode.startsWith('v3_') ? runtimeV3Catalog : semanticCatalog;
@@ -4763,10 +4799,12 @@ export async function agentChat(req, res) {
                 discourseProjection: structuredDiscourseProjection,
                 contextSummary: runtimeContextSummary,
                 capabilityScope: turnEnvelope.capabilityScope,
+                capabilityPolicyProfile: turnEnvelope.capabilityPolicyProfile,
                 authoritativeGroundingPolicy: groundingPolicyFromScopeMode(groundingScope.mode),
                 outputContract: precompiledOutputContract,
                 temporalContext: requestTemporalContext,
                 actorRole: userRole,
+                outputVersion: turnSpecV3OutputVersion,
                 signal: agentAbortController.signal,
                 traceId: requestId,
                 onResponse: (response) => responses.push(response),
@@ -5384,8 +5422,10 @@ export async function agentChat(req, res) {
               discourseProjection: structuredDiscourseProjection,
               contextSummary: runtimeContextSummary,
               capabilityScope: turnEnvelope.capabilityScope,
+              capabilityPolicyProfile: turnEnvelope.capabilityPolicyProfile,
               groundingPolicy: groundingPolicyFromScopeMode(groundingScope.mode),
               outputContract: precompiledOutputContract,
+              compilerOutputVersion: turnSpecV3OutputVersion,
               compiledTurnSpecResult: precompiledTurnSpecResult,
               executionContext: runtimeExecutionContext,
               resolveExecutionContext: async ({ turnSpec, route, executionContext }) => {
@@ -6136,6 +6176,7 @@ export async function agentChat(req, res) {
           'unavailable',
           'planned',
           'forbidden',
+          'policy_blocked',
           'clarification',
         ].includes(goal.status)
           ? goal.status
@@ -7948,6 +7989,16 @@ export async function confirmAgentTool(req, res) {
   let settleArtifactLifecycle = async () => ({ state: 'skipped' });
   try {
     identity = getAgentIdentity(req);
+    const confirmationPolicyProfile = normalizeAgentCapabilityPolicyProfile(req.body?.capabilityPolicyProfile);
+    if (confirmationPolicyProfile !== 'auto') {
+      throw new ToolConfirmationError(
+        'TOOL_CONFIRMATION_POLICY_BLOCKED',
+        confirmationPolicyProfile === 'chat_only'
+          ? '当前会话启用了仅对话模式，请切换为自动助手后再确认执行。'
+          : '当前会话启用了只读锁，请关闭只读锁后再确认执行。',
+        409,
+      );
+    }
     let attempt = await inspectToolConfirmationExecution(
       req.body?.confirmationToken,
       identity.ownerKey,

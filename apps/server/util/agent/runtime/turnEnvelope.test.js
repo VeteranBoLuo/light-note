@@ -79,4 +79,14 @@ describe('TurnEnvelope V2 legacy adapter', () => {
       clientModeMismatch: false,
     });
   });
+
+  it('会话能力 profile 只接受固定策略枚举', () => {
+    expect(adaptAgentTurnEnvelope({ capabilityPolicyProfile: 'read_only' }).capabilityPolicyProfile).toBe('read_only');
+    expect(adaptAgentTurnEnvelope({ capabilityPolicyProfile: { profile: 'chat_only' } }).capabilityPolicyProfile).toBe(
+      'chat_only',
+    );
+    expect(adaptAgentTurnEnvelope({ capabilityPolicyProfile: 'execute_everything' }).capabilityPolicyProfile).toBe(
+      'auto',
+    );
+  });
 });

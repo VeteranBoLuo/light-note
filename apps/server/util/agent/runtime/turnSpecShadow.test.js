@@ -17,6 +17,7 @@ describe('TurnSpec shadow', () => {
 
   it('只输出不含正文和参数的安全分歧摘要', () => {
     const turnSpec = {
+      version: '3.1',
       requestKind: 'mixed',
       confidence: 'medium',
       continuationMode: 'refer_last_result',
@@ -41,6 +42,7 @@ describe('TurnSpec shadow', () => {
     expect(turnSpecTraceSummary({ state: 'ready', turnSpec, attempts: 1, durationMs: 9 }, divergences)).toEqual({
       mode: 'shadow',
       state: 'ready',
+      version: '3.1',
       requestKind: 'mixed',
       confidence: 'medium',
       continuationMode: 'refer_last_result',

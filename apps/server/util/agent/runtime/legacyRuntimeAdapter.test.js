@@ -118,4 +118,29 @@ describe('Runtime V2 legacy execution adapter', () => {
       capabilities: [{ id: 'data.permanent_delete' }],
     });
   });
+
+  it('会话 profile 的阻断原因确定性投影给现有回复层', () => {
+    const result = adaptRuntimeOutcomeToLegacy(
+      {
+        state: 'unsupported',
+        turnSpec: {
+          requestKind: 'action',
+          confidence: 'high',
+          goals: [{ id: 'write', kind: 'write', description: '创建笔记', targetDescription: '', dependsOn: [] }],
+        },
+        route: { goalRoutes: [{ goalId: 'write', capabilityIds: ['note.create'] }] },
+      },
+      [
+        {
+          id: 'note.create',
+          effect: 'write',
+          status: 'policy_blocked',
+          policyBlockReason: 'read_only',
+          toolNames: [],
+        },
+      ],
+    );
+    expect(result.semanticPolicy).toMatchObject({ resolution: 'profile_read_only' });
+    expect(result.writeToolNames).toEqual([]);
+  });
 });

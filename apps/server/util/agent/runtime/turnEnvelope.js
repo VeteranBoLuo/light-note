@@ -1,4 +1,5 @@
 import { normalizeCapabilityScope } from './v3/capabilityManifest.js';
+import { normalizeAgentCapabilityPolicyProfile } from './v3/capabilityPolicy.js';
 
 const REQUEST_SCOPE_MODES = new Set(['explicit', 'inherit_candidate', 'workspace', 'none']);
 
@@ -64,6 +65,7 @@ export function adaptAgentTurnEnvelope(body = {}) {
       recentTurns: Array.isArray(body.history) ? body.history : [],
     }),
     capabilityScope: normalizeCapabilityScope(body.capabilityScope),
+    capabilityPolicyProfile: normalizeAgentCapabilityPolicyProfile(body.capabilityPolicyProfile),
     clientCapabilities,
   });
 }

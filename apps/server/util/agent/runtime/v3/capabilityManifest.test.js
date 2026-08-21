@@ -117,6 +117,33 @@ describe('Agent V3 capability manifest', () => {
     ).toEqual([]);
   });
 
+  it('会话 profile 把被限制能力保留为不可执行目录项，不会泄露 toolName', () => {
+    const available = new Set(tools.map((tool) => tool.name));
+    const readOnly = buildAgentV3CapabilityCatalog(tools, {
+      availableToolNames: available,
+      actorRole: 'user',
+      capabilityPolicyProfile: 'read_only',
+    });
+    expect(readOnly.find((item) => item.id === 'note.query')).toMatchObject({ status: 'enabled' });
+    expect(readOnly.find((item) => item.id === 'note.create')).toMatchObject({
+      status: 'policy_blocked',
+      policyBlockReason: 'read_only',
+      toolNames: [],
+    });
+
+    const chatOnly = buildAgentV3CapabilityCatalog(tools, {
+      availableToolNames: available,
+      actorRole: 'user',
+      capabilityPolicyProfile: 'chat_only',
+    });
+    expect(chatOnly.find((item) => item.id === 'product_help.search')).toMatchObject({ status: 'enabled' });
+    expect(chatOnly.find((item) => item.id === 'note.query')).toMatchObject({
+      status: 'policy_blocked',
+      policyBlockReason: 'chat_only',
+      toolNames: [],
+    });
+  });
+
   it('必填 Root 时间槽与后台任务副作用策略由 Manifest 显式声明', () => {
     expect(getAgentV3CapabilityByToolName('get_resource_creation_ranking')?.temporalSlots).toEqual(
       expect.arrayContaining([

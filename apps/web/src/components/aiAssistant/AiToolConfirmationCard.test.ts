@@ -63,10 +63,16 @@ function mountCard(
   confirmation = createConfirmation(),
   onReplaced?: (replacement: unknown) => void,
   onResolved?: (resolution: unknown) => void,
+  capabilityPolicyProfile: 'auto' | 'chat_only' | 'read_only' = 'auto',
 ) {
   const host = document.createElement('div');
   document.body.append(host);
-  const app = createApp(AiToolConfirmationCard, { confirmation, onReplaced, onResolved });
+  const app = createApp(AiToolConfirmationCard, {
+    confirmation,
+    onReplaced,
+    onResolved,
+    capabilityPolicyProfile,
+  });
   app.use(
     createI18n({
       legacy: false,
@@ -176,6 +182,7 @@ describe('AiToolConfirmationCard note preview', () => {
       confirmationToken: 'token',
       sessionId: 'session-1',
       continuationToken: 'continuation-token',
+      capabilityPolicyProfile: 'auto',
       clientCapabilities: [...AI_AGENT_CLIENT_CAPABILITIES],
     });
     expect(onResolved).toHaveBeenCalledWith(expect.objectContaining({ continuation }));
@@ -192,6 +199,19 @@ describe('AiToolConfirmationCard note preview', () => {
 
     expect(host.querySelector('.confirmation-note-preview')).toBeNull();
     expect(host.textContent).toContain('"url": "https://openai.com"');
+  });
+
+  it('只读锁保留取消能力，但禁用目录修改和确认执行且不发出写请求', async () => {
+    const host = mountCard(createConfirmation(), undefined, undefined, 'read_only');
+    await flush();
+
+    expect(host.textContent).toContain('只读锁已阻止写入');
+    expect(findButton(host, '更换目标目录').disabled).toBe(true);
+    expect(findButton(host, '确认执行').disabled).toBe(true);
+    findButton(host, '确认执行').click();
+    await flush();
+    expect(api.post).not.toHaveBeenCalled();
+    expect(findButton(host, '取消').disabled).toBe(false);
   });
 
   it('新建笔记确认卡明确显示根目录目标', async () => {

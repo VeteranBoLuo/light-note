@@ -25,7 +25,7 @@
         v-if="isCreateNote && status === 'pending' && (noteTreeWriteEnabled || targetParentId)"
         class="note-target-directory-button"
         size="small"
-        :disabled="loading || changingDirectory"
+        :disabled="loading || changingDirectory || writeBlocked"
         @click="openTargetDirectoryEditor"
       >
         <SvgIcon :src="icon.noteTree.move" size="14" aria-hidden="true" />
@@ -65,6 +65,13 @@
         {{ t('ai.confirmationRemainingCompact', { seconds: remainingSeconds }) }}
       </small>
       <small v-if="retryNotice" class="confirmation-retry-notice" aria-live="polite">{{ retryNotice }}</small>
+      <small v-if="writeBlocked" class="confirmation-policy-notice" aria-live="polite">
+        {{
+          t(
+            `ai.capabilityPolicy.${capabilityPolicyProfile === 'chat_only' ? 'confirmationBlockedChat' : 'confirmationBlockedReadOnly'}`,
+          )
+        }}
+      </small>
     </div>
     <div v-if="status === 'pending'" class="tool-confirmation-actions">
       <BButton
@@ -97,10 +104,10 @@
         type="primary"
         size="small"
         :loading="loading"
-        :disabled="changingDirectory"
+        :disabled="changingDirectory || writeBlocked"
         role="button"
-        :tabindex="loading ? -1 : 0"
-        :aria-disabled="loading"
+        :tabindex="loading || writeBlocked ? -1 : 0"
+        :aria-disabled="loading || writeBlocked"
         @click="confirm"
         @keydown.enter.prevent="confirm"
         @keydown.space.prevent="confirm"
@@ -147,8 +154,12 @@
   import NoteDirectoryPicker from '@/components/noteLibrary/tree/NoteDirectoryPicker.vue';
   import { fetchNoteTreeFeatures } from '@/api/noteTree';
   import { AI_AGENT_CLIENT_CAPABILITIES } from '@/api/aiAttachmentApi';
+  import { normalizeAiCapabilityPolicyProfile, type AiCapabilityPolicyProfile } from '@/types/aiCapabilityPolicy';
 
-  const props = defineProps<{ confirmation: AiToolConfirmation }>();
+  const props = withDefaults(
+    defineProps<{ confirmation: AiToolConfirmation; capabilityPolicyProfile?: AiCapabilityPolicyProfile }>(),
+    { capabilityPolicyProfile: 'auto' },
+  );
   const emit = defineEmits<{
     resolved: [resolution: AiToolConfirmationResolution];
     replaced: [replacement: AiToolConfirmationReplacement];
@@ -231,6 +242,8 @@
   const targetParentId = computed(() => String(props.confirmation.args?.parentId || '').trim() || null);
   const riskLevel = computed(() => props.confirmation.riskLevel || 'low');
   const editable = computed(() => isEditableAttachmentTool(props.confirmation.toolName));
+  const capabilityPolicyProfile = computed(() => normalizeAiCapabilityPolicyProfile(props.capabilityPolicyProfile));
+  const writeBlocked = computed(() => capabilityPolicyProfile.value !== 'auto');
   const allowAlternativeActions = computed(() => canAlterPendingConfirmation(Boolean(retryNotice.value)));
   const attachmentPreviewLabels = computed<AttachmentConfirmationPreviewLabels>(() => ({
     rootFolder: t('ai.attachmentAction.rootFolder'),
@@ -290,7 +303,7 @@
   }
 
   function openTargetDirectoryEditor() {
-    if (loading.value || changingDirectory.value || status.value !== 'pending') return;
+    if (loading.value || changingDirectory.value || writeBlocked.value || status.value !== 'pending') return;
     if (noteTreeWriteEnabled.value) {
       targetPickerVisible.value = true;
       return;
@@ -338,12 +351,20 @@
   }
 
   async function confirm() {
-    if (loading.value || changingDirectory.value || status.value !== 'pending' || remainingSeconds.value <= 0) return;
+    if (
+      loading.value ||
+      changingDirectory.value ||
+      writeBlocked.value ||
+      status.value !== 'pending' ||
+      remainingSeconds.value <= 0
+    )
+      return;
     loading.value = true;
     try {
       const res = await apiBasePost('/api/chat/agent/confirm', {
         confirmationToken: props.confirmation.token,
         sessionId: props.confirmation.sessionId,
+        capabilityPolicyProfile: capabilityPolicyProfile.value,
         ...(props.confirmation.continuation?.token ? { continuationToken: props.confirmation.continuation.token } : {}),
         clientCapabilities: [...AI_AGENT_CLIENT_CAPABILITIES],
       });
@@ -561,6 +582,15 @@
   }
   .confirmation-retry-notice {
     color: #d97706;
+  }
+  .confirmation-policy-notice {
+    display: block;
+    padding: 8px 10px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 8px;
+    color: var(--text-color);
+    background: var(--card-background);
+    line-height: 1.45;
   }
   .tool-confirmation-actions {
     display: flex;

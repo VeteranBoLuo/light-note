@@ -25,6 +25,7 @@
 
 | 编号                                                                                           | 日期       | 模块                | 关键词                                             | 状态         |
 | ---------------------------------------------------------------------------------------------- | ---------- | ------------------- | -------------------------------------------------- | ------------ |
+| [LN-PIT-106](#ln-pit-106agent-会话能力边界不能只过滤工具或只隐藏前端入口)                      | 2026-08-21 | Agent、前后端策略   | chat-only、read-only、材料、确认、Manifest         | 已修复待合入 |
 | [LN-PIT-105](#ln-pit-105turnspec-升级和确定性工作流不能一刀切替换旧-planner)                   | 2026-08-21 | Agent、Runtime V3   | TurnSpec 3.1、handle、workflow、Planner 回退       | 已修复待合入 |
 | [LN-PIT-104](#ln-pit-104agent-精确事实和处理记录不能由模型文案或前端展示反推)                  | 2026-08-21 | Agent、结果协议     | FactBundle、ExecutionReceipt、ResponseEnvelope     | 已修复待合入 |
 | [LN-PIT-103](#ln-pit-103agent-确认产物材料和运行状态不能共用一个生命周期)                      | 2026-08-21 | Agent、持久化       | ArtifactVersion、SourceSet、Run、Dialogue Anchor   | 已修复待合入 |
@@ -2525,15 +2526,26 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **验证方法：** Mock 成功、空结果、部分结果、文本预算截断、工具失败和混合多工具；断言只有成功工具产生 FactBundle，exact facts 与公共披露稳定，receipt/envelope 在同步响应、`response.completed`、恢复 snapshot 和前端 normalize 后一致。全部为确定性测试，不调用真实模型。
 - **相关代码：** `apps/server/util/agent/runtime/v3/factBundle.js`、`executionReceipt.js`、`responseEnvelope.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/server/util/agent/sseLifecycle.js`、`apps/web/src/types/aiExecutionReceipt.ts`、`apps/web/src/utils/aiSse.ts`、`apps/web/src/utils/aiStreamRecovery.ts`、`apps/web/src/components/aiAssistant/ChatMessageItem.vue`。
 
+### LN-PIT-106：Agent 会话能力边界不能只过滤工具或只隐藏前端入口
+
+- **现象：** 用户切换“仅对话”后，界面虽然隐藏了材料入口，旧 SourceSet、附件或工作区范围仍可能在服务端材料解析阶段被读取；切换“只读锁”后，新问题不会生成写工具，但切换前已经签发的确认卡仍可能执行。若只把受限能力从 Compiler 目录删除，模型又会把明确写请求误判为闲聊或“工具不支持”。
+- **影响范围：** 自动/仅对话/只读会话策略、旧 Runtime 与 V3、材料解析、SourceSet、能力目录、工具候选、确认卡和历史消息恢复。
+- **误导线索：** 前端已经隐藏按钮、Planner 已经看不到写工具或 Tool Policy 最终还会校验，看起来任一层单独处理即可。实际上材料可能早于 Planner 读取，旧确认执行又是独立端点；只在一层过滤无法形成会话硬边界。
+- **根因：** 数据访问、能力识别、工具授权和确认执行属于不同阶段，原链路没有同一声明式策略贯穿；旧语义目录还会自行推断 scope，把产品知识误归为个人数据。若为每种模式复制工具名单，又会产生第三套能力事实源。
+- **修复：** `CapabilityPolicyProfile` 只根据 Manifest 的 `effect/scopePolicy` 计算。仅对话在任何材料/SourceSet/附件解析前清空个人范围；只读移除全部写能力。受限能力继续以 `policy_blocked` 出现在 Compiler/旧语义目录，但不获得可执行工具名，Router 返回稳定策略披露。旧目录通过通用元数据解析器读取同一 V3 Manifest，不复制工具名单。前端禁用已有确认卡的写入和目录修改，服务端确认端点在读取或认领令牌前再次拒绝受限 profile，取消仍可用且令牌不会被消费。
+- **防回归约束：** 会话策略不得依赖关键词、工具名白名单或 Prompt 自律；不能只做前端隐藏、只做 Planner 候选过滤或只做最终 Tool Policy。受限 capability 必须保留语义可见、执行不可见两个状态。任何新增个人数据能力和写能力只扩展 Manifest；旧链兼容必须消费 Manifest 元数据，禁止复制 scope 分类。确认执行、确认参数修改和将来新增的副作用入口都必须复用同一策略门禁。
+- **验证方法：** Handler mock 断言仅对话模式下上下文、附件、SourceSet 在 Compiler/Resolver 前均为零且个人查询不执行；只读模式准确识别写 capability、无工具、无确认卡。旧/V3 目录均断言 `policy_blocked` 状态和产品知识例外。已有确认卡在两种锁下按钮禁用、服务端 409、令牌未 inspect/claim，取消可用；切回自动后在有效期内可继续。PC/移动、浅色/深色检查自动、仅对话、只读、带材料、空材料和待确认写入状态。
+- **相关代码：** `apps/server/util/agent/runtime/v3/capabilityPolicy.js`、`capabilityManifest.js`、`apps/server/util/agent/capabilityRegistry.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/web/src/types/aiCapabilityPolicy.ts`、`apps/web/src/view/aiAssistant/ChatContainer.vue`、`apps/web/src/components/aiAssistant/ChatInputSection.vue`、`AiToolConfirmationCard.vue`。
+
 ### LN-PIT-105：TurnSpec 升级和确定性工作流不能一刀切替换旧 Planner
 
 - **现象：** 为减少模型漏选工具，若直接把 TurnSpec schema、所有能力参数和执行路径一次升级，原来能工作的工具可能因新字段缺失、旧会话 ID 不兼容或未迁移的参数来源而全部失败；反过来若长期让客户端 ID、展示标题和自然语言序数承担指代，又会继续出现“刚才那个”选错材料。
 - **影响范围：** Runtime V3 Compiler/Parser、跨轮 ResultSet 指代、Manifest 迁移、Execution Planner、灰度观测和所有读写能力。
 - **误导线索：** 简单读工具可以从固定 capability 直接推导 tool call，看起来应当一次性跳过 Planner；3.1 只是新增可选字段，看起来可以立刻要求真实模型全部输出。两者都会把协议兼容、Manifest 完整度和参数权威来源问题推到线上。
 - **根因：** 协议版本、能力声明和执行器迁移没有独立闸门；稳定资源指代仍使用数据库 ID 或模型自造值；确定性计划若绕过现有 Validator，会形成第二套工具参数和权限通道。
-- **修复：** TurnSpec 采用 3.0/3.1 双读、3.0 单写的迁移窗，parser 把旧字段归一为同一 canonical 语义，并严格拒绝冲突时间、未知 slot 和不在服务端枚举中的 ResultSet handle。公开投影生成不泄露数据库键的 `handleId`，具体项使用有界 `itemOrdinal`。Manifest 显式声明 workflow 与参数 slot source，Runtime 只在目标/工具唯一且 schema 通过时用 `workflowCompiler` 生成计划；3.1 单目标缺少普通文字/枚举槽时才交给看不到工具名、历史和权威字段的 Slot Filler。生成结果始终进入统一 `validateExecutionPlan`，任一条件不满足自动回到旧 Planner。goal ambiguity 按阻断范围与依赖图传播，部分无歧义目标可继续，兼容适配层同步过滤受阻目标。trace 记录实际 planning mode。
-- **防回归约束：** Handler 不得直接按工具名或问法拼调用；确定性能力和 slot source 必须逐项声明、逐项测试，不能由 effect/read 或参数为空自动推断。3.0 不得调用新 Slot Filler，以免提前改变旧 Planner 的调用次数和时间/参数语义。Compiler 3.1 单写只能在 shadow 样本和离线评测达到门槛后开启，且保留 3.0 回退。客户端 handle 不是权限凭据，每轮仍按 owner/conversation/ResultSet revision 解析；未知、过期和跨域 handle 失败关闭。旧 Planner 在确定性覆盖率和生产灰度完成前不得删除。
-- **验证方法：** 固定夹具覆盖 3.0/3.1 等价语义、合法/未知/跨组 handle、ordinal 越界、冲突 temporal claims、未声明 slot claims，以及 deterministic 成功、Slot Filler 补齐/越权字段拒绝、Validator 拒绝、自动 Planner 回退、fatal/goal/write 歧义与依赖传播。Agent Runtime 测试必须证明 3.1 受限补槽不暴露权威上下文、3.0 和非适用能力仍调用原 Planner；日常测试保持零 Provider。
+- **修复：** TurnSpec 采用 3.0/3.1 双读和按 Runtime 独立控制的写版本：shadow 默认写 3.1、enforce 默认仍写 3.0，parser 把旧字段归一为同一 canonical 语义，并严格拒绝冲突时间、未知 slot 和不在服务端枚举中的 ResultSet handle。公开投影生成不泄露数据库键的 `handleId`，具体项使用有界 `itemOrdinal`。Manifest 显式声明 workflow 与参数 slot source，Runtime 只在目标/工具唯一且 schema 通过时用 `workflowCompiler` 生成计划；3.1 单目标缺少普通文字/枚举槽时才交给看不到工具名、历史和权威字段的 Slot Filler。生成结果始终进入统一 `validateExecutionPlan`，任一条件不满足自动回到旧 Planner。goal ambiguity 按阻断范围与依赖图传播，部分无歧义目标可继续，兼容适配层同步过滤受阻目标。trace 记录协议版本和实际 planning mode。
+- **防回归约束：** Handler 不得直接按工具名或问法拼调用；确定性能力和 slot source 必须逐项声明、逐项测试，不能由 effect/read 或参数为空自动推断。Manifest 版本升级后必须同步验证 Compiler 的真实输出版本，禁止“Parser/Manifest 已是 3.1、Compiler 永远写 3.0”导致新路径实际上从未出数。3.0 不得调用新 Slot Filler，以免提前改变旧 Planner 的调用次数和时间/参数语义。3.1 先在 shadow 和离线评测达到门槛后才能进入 enforce，且必须保留 3.0 回退。客户端 handle 不是权限凭据，每轮仍按 owner/conversation/ResultSet revision 解析；未知、过期和跨域 handle 失败关闭。旧 Planner 在确定性覆盖率和生产灰度完成前不得删除。
+- **验证方法：** 固定夹具覆盖 3.0/3.1 等价语义、shadow/enforce 默认写版本及环境回退、合法/未知/跨组 handle、ordinal 越界、冲突 temporal claims、未声明 slot claims，以及 deterministic 成功、Slot Filler 补齐/越权字段拒绝、Validator 拒绝、自动 Planner 回退、fatal/goal/write 歧义与依赖传播。`eval:ai-runtime-v3-offline` 必须以零模型、零数据库、零业务工具证明高频声明式能力命中 fast-path，未知能力失败关闭；Agent Runtime 测试必须证明 3.1 受限补槽不暴露权威上下文、3.0 和非适用能力仍调用原 Planner。
 - **相关代码：** `apps/server/util/agent/runtime/v3/turnSpec.js`、`intentCompiler.js`、`workflowCompiler.js`、`slotFiller.js`、`ambiguityGate.js`、`agentRuntime.js`、`capabilityManifest.js`、`apps/server/util/agent/runtime/legacyRuntimeAdapter.js`、`apps/server/util/agent/sessionStore.js`、`apps/server/util/agent/turnContractTrace.js`。
 
 ### LN-PIT-102：Agent 时间范围和列表完整性不能由各工具或模型自行解释

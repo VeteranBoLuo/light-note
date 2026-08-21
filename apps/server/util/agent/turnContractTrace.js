@@ -39,6 +39,8 @@ const CONTINUATION_MODES = new Set([
 const TOPIC_EPOCH_ACTIONS = new Set(['unknown', 'keep', 'advance']);
 const RUNTIME_MODES = new Set(['legacy', 'v3_shadow', 'v3_enforce']);
 const RUNTIME_RECENT_DIALOGUE_SOURCES = new Set(['none', 'cloud', 'session']);
+const CAPABILITY_POLICY_PROFILES = new Set(['auto', 'chat_only', 'read_only']);
+const TURN_SPEC_VERSIONS = new Set(['unknown', '3.0', '3.1']);
 const RUNTIME_ROLLOUT_REASONS = new Set([
   'global_legacy',
   'policy_disabled',
@@ -136,6 +138,7 @@ export function createTurnContractTrace() {
     intentCompilerMode: 'off',
     intentCompilerState: 'not_run',
     turnSpecRequestKind: 'unknown',
+    turnSpecVersion: 'unknown',
     turnSpecConfidence: 'unknown',
     turnSpecContinuationMode: 'unknown',
     turnSpecTopicEpochAction: 'unknown',
@@ -159,6 +162,7 @@ export function createTurnContractTrace() {
     rawHistoryMessageCount: 0,
     recentDialogueMessageCount: 0,
     recentDialogueSource: 'none',
+    capabilityPolicyProfile: 'auto',
     legacyStageCount: 1,
   };
 }
@@ -248,6 +252,7 @@ export function recordIntentCompiler(trace, input = {}) {
       : nextMode;
   trace.intentCompilerState = safeEnum(input.state, INTENT_COMPILER_STATES, 'not_run');
   trace.turnSpecRequestKind = safeEnum(input.requestKind, TURN_REQUEST_KINDS, 'unknown');
+  trace.turnSpecVersion = safeEnum(input.version, TURN_SPEC_VERSIONS, 'unknown');
   trace.turnSpecConfidence = safeEnum(input.confidence, CONFIDENCE_LEVELS, 'unknown');
   trace.turnSpecContinuationMode = safeEnum(input.continuationMode, CONTINUATION_MODES, 'unknown');
   trace.turnSpecTopicEpochAction = safeEnum(input.topicEpochAction, TOPIC_EPOCH_ACTIONS, 'unknown');
@@ -292,6 +297,7 @@ export function recordRuntimeIsolation(trace, input = {}) {
   trace.rawHistoryMessageCount = safeCount(input.rawHistoryMessageCount);
   trace.recentDialogueMessageCount = safeCount(input.recentDialogueMessageCount);
   trace.recentDialogueSource = safeEnum(input.recentDialogueSource, RUNTIME_RECENT_DIALOGUE_SOURCES, 'none');
+  trace.capabilityPolicyProfile = safeEnum(input.capabilityPolicyProfile, CAPABILITY_POLICY_PROFILES, 'auto');
   trace.legacyStageCount = safeCount(input.legacyStageCount ?? (mode === 'v3_enforce' ? 0 : 1));
 }
 
@@ -319,6 +325,7 @@ export function sanitizeTurnContractTrace(value) {
     mode: value?.intentCompilerMode,
     state: value?.intentCompilerState,
     requestKind: value?.turnSpecRequestKind,
+    version: value?.turnSpecVersion,
     confidence: value?.turnSpecConfidence,
     continuationMode: value?.turnSpecContinuationMode,
     topicEpochAction: value?.turnSpecTopicEpochAction,
@@ -345,6 +352,7 @@ export function sanitizeTurnContractTrace(value) {
     rawHistoryMessageCount: value?.rawHistoryMessageCount,
     recentDialogueMessageCount: value?.recentDialogueMessageCount,
     recentDialogueSource: value?.recentDialogueSource,
+    capabilityPolicyProfile: value?.capabilityPolicyProfile,
     legacyStageCount: value?.legacyStageCount,
   });
   return trace;

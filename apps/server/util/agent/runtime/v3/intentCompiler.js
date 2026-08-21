@@ -1,5 +1,11 @@
 import { requestAi } from '../../aiGateway.js';
-import { buildTurnSpecV3ToolDefinition, parseTurnSpecV3Response, TURN_SPEC_V3_TOOL_NAME } from './turnSpec.js';
+import {
+  buildTurnSpecV3ToolDefinition,
+  parseTurnSpecV3Response,
+  TURN_SPEC_V3_ACCEPTED_VERSIONS,
+  TURN_SPEC_V3_TOOL_NAME,
+  TURN_SPEC_V3_VERSION,
+} from './turnSpec.js';
 import { extractTemporalMentionsV3 } from './temporalConstraints.js';
 
 const MAX_COMPILER_ATTEMPTS = 2;
@@ -28,6 +34,9 @@ function compactCatalog(catalog) {
     scopePolicy: entry.scopePolicy,
     artifactKind: entry.artifactKind,
     temporalSlots: entry.temporalSlots,
+    slots: entry.slots,
+    workflow: entry.workflow,
+    policyBlockReason: entry.policyBlockReason || null,
     description: String(entry.description || '').slice(0, 260),
   }));
 }
@@ -95,10 +104,22 @@ function compactRecentDialogue(messages = []) {
   );
 }
 
-function compilerPrompt(repairFeedback = '') {
+function compilerPrompt(repairFeedback = '', { outputVersion = TURN_SPEC_V3_VERSION } = {}) {
+  const version31Instructions =
+    outputVersion === '3.1'
+      ? [
+          '本轮必须输出 TurnSpec 3.1。每个 goal 都必须填写 relation、evidencePolicy、slotClaims、temporalClaims、outputContract 和 ambiguities。',
+          'slotClaims 只能填写 capabilityCatalog.slots 中 source=model_text/model_enum 的同名槽；没有明确值时填 null。服务端身份、范围、资源、时间、依赖结果和默认值绝不能由模型填写。',
+          'temporalClaims 只声明权威时间原话与 manifest temporal slot 的绑定；不得生成日期参数。goal 顶层 temporalClaims 与 temporalConstraints 必须表达同一组绑定。',
+          'last_result 指代必须使用 structuredDiscourse.resultSetCandidates 中服务端枚举的 handleId；同类型多组结果无法唯一确定时，在 ambiguities 中声明并请求澄清，不能取最后一组。',
+          'evidencePolicy.kind=goal_result 时 goalIds 必须都是本 goal 的 dependsOn；其他 evidence policy 的 goalIds 必须为空。',
+          'ambiguities 只描述会影响执行或回答真实性的结构化歧义；没有歧义时输出空数组。',
+        ]
+      : [];
   return [
     '你是轻笺 Agent V3 的唯一语义编译器。你只把“最新一条用户消息”编译成产品能力任务规格。',
     '只允许从 capabilityCatalog 选择 capabilityId；禁止输出工具名、工具参数、SQL 或执行结果。',
+    'authoritativeCapabilityPolicyProfile 是服务端会话策略。目录中 status=policy_blocked 的能力不可执行；如果它正是用户明确请求的目标，仍选择该精确 capabilityId，让服务端给出确定性的策略说明，不能改选相似能力、伪装成普通 conversation 或声称已执行。',
     'latestMessage 是本轮动作、对象、时间、参数和事实的唯一文字权威。recentDialogue 是服务端裁剪的最近语义对话，只能帮助理解普通连续问答和“这个、刚才那个、继续”等省略表达；不得从中复制旧时间、旧范围、旧 ID、旧工具参数或私有事实到本轮执行。structuredDiscourse 只含服务端结构化状态，用于解析真实结果集和待确认产物。',
     '用户本轮明确改变对象、领域、时间范围、动作或输出要求时，必须以最新消息为准，并把 topicEpochAction 设为 advance。真正承接上一结果/产物时才设为 keep。',
     'continuationMode=refer_last_result 只表示引用服务端上一结果集；refine_last_artifact 只表示修改仍可用的待确认产物。没有相应结构化状态时不得假装存在。',
@@ -113,6 +134,7 @@ function compilerPrompt(repairFeedback = '') {
     '一个写能力需要前置读取时可以只提交写目标；服务端会按 manifest.dependencies 确定性补齐依赖。需要查询工作区材料后生成笔记时，必须显式提交相应读取能力，并让 note.create 依赖它。',
     '普通总结、分析、回顾、列出和回答属于 answer/read；只有用户明确要求创建、保存、修改、删除、恢复或启动任务时才使用写能力。',
     'conversation 必须没有 goals；低置信或关键槽位缺失必须给出一个具体 clarificationQuestion。',
+    ...version31Instructions,
     repairFeedback ? `上一次结果需要修复或语义边界复核：${repairFeedback}` : '',
     `必须且只能调用 ${TURN_SPEC_V3_TOOL_NAME}，不要输出普通文本。`,
   ]
@@ -286,15 +308,20 @@ export async function compileAgentTurnSpecV3({
   discourseProjection = {},
   contextSummary = {},
   capabilityScope = null,
+  capabilityPolicyProfile = 'auto',
   authoritativeGroundingPolicy = 'none',
   outputContract = null,
   temporalContext = {},
   actorRole = 'user',
+  outputVersion = TURN_SPEC_V3_VERSION,
   signal,
   traceId = '',
   request = requestAi,
   onResponse,
 } = {}) {
+  const normalizedOutputVersion = TURN_SPEC_V3_ACCEPTED_VERSIONS.includes(String(outputVersion))
+    ? String(outputVersion)
+    : TURN_SPEC_V3_VERSION;
   const latestMessage = String(message || '')
     .trim()
     .slice(0, MAX_LATEST_MESSAGE_CHARS);
@@ -330,9 +357,14 @@ export async function compileAgentTurnSpecV3({
     authoritativeTemporalMentions: extractTemporalMentionsV3(latestMessage),
     authoritativeGroundingPolicy,
     authoritativeCapabilityScope: capabilityScope || null,
+    authoritativeCapabilityPolicyProfile: String(capabilityPolicyProfile || 'auto'),
     authoritativeOutputContract: outputContract ? structuredClone(outputContract) : null,
+    targetTurnSpecVersion: normalizedOutputVersion,
     capabilityCatalog: compactCatalog(compilerCatalog),
   });
+  const resultSetHandleIds = payload.structuredDiscourse.resultSetCandidates
+    .map((item) => item.handleId)
+    .filter(Boolean);
 
   let feedback = '';
   let independentReviewed = false;
@@ -340,12 +372,17 @@ export async function compileAgentTurnSpecV3({
   for (let attempt = 1; attempt <= MAX_COMPILER_ATTEMPTS; attempt += 1) {
     const response = await request(
       [
-        { role: 'system', content: compilerPrompt(feedback) },
+        { role: 'system', content: compilerPrompt(feedback, { outputVersion: normalizedOutputVersion }) },
         { role: 'user', content: JSON.stringify(payload) },
       ],
       {
         tools: [
-          buildTurnSpecV3ToolDefinition({ catalog: compilerCatalog, groundingPolicy: authoritativeGroundingPolicy }),
+          buildTurnSpecV3ToolDefinition({
+            catalog: compilerCatalog,
+            groundingPolicy: authoritativeGroundingPolicy,
+            version: normalizedOutputVersion,
+            resultSetHandleIds,
+          }),
         ],
         toolChoice: { type: 'function', function: { name: TURN_SPEC_V3_TOOL_NAME } },
         signal,
@@ -363,7 +400,7 @@ export async function compileAgentTurnSpecV3({
       actorRole,
       latestMessage,
       temporalContext,
-      resultSetHandleIds: payload.structuredDiscourse.resultSetCandidates.map((item) => item.handleId).filter(Boolean),
+      resultSetHandleIds,
     });
     if (turnSpec) {
       const consistency = discourseConsistency(turnSpec, payload, {

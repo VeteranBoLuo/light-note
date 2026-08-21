@@ -10,6 +10,7 @@ import { compareAiConversationRecency, type AiConversationRecency } from '@/util
 import type { AiResourceContext, AiScopeRef } from '@/types/aiScope';
 import { normalizeAiArtifacts, type AiArtifact } from '@/types/aiArtifact';
 import { normalizeAiCapabilityModule, type AiCapabilityModule } from '@/types/aiCapabilityScope';
+import type { AiCapabilityPolicyProfile } from '@/types/aiCapabilityPolicy';
 import { normalizeAiQueryScopes, type AiQueryScope } from '@/types/aiQueryScope';
 import {
   normalizeAiExecutionReceipt,
@@ -104,6 +105,8 @@ export interface AiAssistantMessage {
   attachmentRefs?: AiAttachment[];
   /** 用户发送时显式选择的本轮能力模块；auto 不限制工具领域。 */
   capabilityModule?: AiCapabilityModule;
+  /** 会话级能力边界；与单轮模块范围组合后由服务端最终裁决。 */
+  capabilityPolicyProfile?: AiCapabilityPolicyProfile;
   transient?: boolean;
   transientGroupId?: string;
   pendingConfirmationIds?: string[];

@@ -73,6 +73,24 @@ try {
   await page.goto(`${origin}/e2e/ai-critical.html`, { waitUntil: 'networkidle' });
   await page.waitForSelector('[data-testid="ai-critical-harness"]');
 
+  assert(
+    (await page.$eval('[data-testid="capability-policy"]', (node) => node.textContent)) === 'auto',
+    'AI 会话策略默认值不是 auto',
+  );
+  await page.click('[aria-label="会话能力边界"]');
+  await page.getByRole('option', { name: '仅对话', exact: true }).click();
+  assert(
+    (await page.$eval('[data-testid="capability-policy"]', (node) => node.textContent)) === 'chat_only',
+    'AI 会话策略未切换到 chat_only',
+  );
+  assert((await page.locator('button', { hasText: '@ 添加资源' }).count()) === 0, '仅对话仍展示材料入口');
+  assert(
+    !(await page.getByRole('button', { name: '确认执行', exact: true }).isEnabled()),
+    '仅对话仍允许执行已有写确认卡',
+  );
+  await page.click('[aria-label="会话能力边界"]');
+  await page.getByRole('option', { name: '自动助手', exact: true }).click();
+
   const textarea = await page.$('[data-testid="mention-flow"] textarea');
   assert(textarea, '未找到 AI 输入框');
   await textarea.type('@');
@@ -106,7 +124,7 @@ try {
     '书签入口未填入生成笔记提示语',
   );
 
-  process.stdout.write('AI 关键 UI E2E 通过：@ Enter、确认卡刷新恢复、书签生成笔记入口。\n');
+  process.stdout.write('AI 关键 UI E2E 通过：会话策略边界、@ Enter、确认卡刷新恢复、书签生成笔记入口。\n');
 } finally {
   await browser?.close();
   await server?.close();

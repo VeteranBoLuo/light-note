@@ -1,3 +1,5 @@
+import { evaluateAgentCapabilityPolicy, normalizeAgentCapabilityPolicyProfile } from './runtime/v3/capabilityPolicy.js';
+
 const VALID_CAPABILITY_STATUSES = new Set(['enabled', 'planned', 'forbidden']);
 const VALID_RISKS = new Set(['low', 'medium', 'high']);
 const VALID_CONFIRMATION_POLICIES = new Set(['default', 'always']);
@@ -548,9 +550,13 @@ export function getSemanticCapabilityIdForTool(tool) {
  * 也不直接执行工具。真正的角色、owner、readonly/maintain 与确认策略仍由
  * toolPolicy / confirmationStore 在服务端强制校验。
  */
-export function buildAgentSemanticCapabilityCatalog(tools, { availableToolNames } = {}) {
+export function buildAgentSemanticCapabilityCatalog(
+  tools,
+  { availableToolNames, capabilityPolicyProfile = 'auto', resolveCapabilityMetadata } = {},
+) {
   const list = Array.isArray(tools) ? tools : [...(tools?.values?.() || [])];
   const available = availableToolNames instanceof Set ? availableToolNames : new Set(list.map((tool) => tool?.name));
+  const policyProfile = normalizeAgentCapabilityPolicyProfile(capabilityPolicyProfile);
   const entries = [];
   const includedActionCapabilities = new Set();
 
@@ -576,11 +582,17 @@ export function buildAgentSemanticCapabilityCatalog(tools, { availableToolNames 
         ])
       : declaredReadDomains(tool, domain);
     const boundResourceDomains = actionCapability ? [] : resourceBindingDomains(tool);
+    const resolvedMetadata =
+      typeof resolveCapabilityMetadata === 'function' ? resolveCapabilityMetadata(tool.name) : null;
+    const scopePolicy = String(resolvedMetadata?.scopePolicy || capabilityScopePolicy(tool, domain, semanticEffect));
+    const policy = evaluateAgentCapabilityPolicy({ effect: semanticEffect, scopePolicy }, policyProfile);
+    const status = !policy.allowed ? 'policy_blocked' : available.has(tool.name) ? 'enabled' : 'unavailable';
     entries.push(
       Object.freeze({
         id: capabilityId,
         effect: semanticEffect,
-        status: available.has(tool.name) ? 'enabled' : 'unavailable',
+        status,
+        policyBlockReason: policy.allowed ? null : policy.reason,
         domain,
         appliesToDomains,
         resourceBindingDomains: Object.freeze(boundResourceDomains),
@@ -588,8 +600,8 @@ export function buildAgentSemanticCapabilityCatalog(tools, { availableToolNames 
         requiredSlots: Object.freeze(
           Array.isArray(tool?.parameters?.required) ? [...new Set(tool.parameters.required.map(String))] : [],
         ),
-        scopePolicy: capabilityScopePolicy(tool, domain, semanticEffect),
-        toolNames: Object.freeze(available.has(tool.name) ? [tool.name] : []),
+        scopePolicy,
+        toolNames: Object.freeze(status === 'enabled' ? [tool.name] : []),
         description: String(tool.description || actionCapability?.labels?.zh || tool.name).trim(),
         label: String(actionCapability?.labels?.zh || tool.description || tool.name).trim(),
         guidance: String(actionCapability?.guidance?.zh || '').trim(),
@@ -608,16 +620,19 @@ export function buildAgentSemanticCapabilityCatalog(tools, { availableToolNames 
 
   for (const capability of AGENT_ACTION_CAPABILITIES) {
     if (includedActionCapabilities.has(capability.id)) continue;
+    const scopePolicy = capability.status === 'forbidden' ? 'forbidden' : 'manual_only';
+    const policy = evaluateAgentCapabilityPolicy({ effect: 'write', scopePolicy }, policyProfile);
     entries.push(
       Object.freeze({
         id: capability.id,
         effect: 'write',
-        status: capability.status,
+        status: policy.allowed ? capability.status : 'policy_blocked',
+        policyBlockReason: policy.allowed ? null : policy.reason,
         domain: domainFromResources(capability.resources),
         appliesToDomains: capabilityDomainsFromResources(capability.resources),
         operations: Object.freeze([...capability.operations]),
         requiredSlots: Object.freeze([]),
-        scopePolicy: capability.status === 'forbidden' ? 'forbidden' : 'manual_only',
+        scopePolicy,
         toolNames: Object.freeze([]),
         description: String(capability.labels?.zh || capability.id).trim(),
         label: String(capability.labels?.zh || capability.id).trim(),
