@@ -1,8 +1,5 @@
 import { compileAgentTurnSpec } from './intentCompiler.js';
-import {
-  getAgentV3CapabilityById,
-  getAgentV3CapabilityByToolName,
-} from './v3/capabilityManifest.js';
+import { getAgentV3CapabilityById, getAgentV3CapabilityByToolName } from './v3/capabilityManifest.js';
 
 const LEGACY_REQUEST_KIND = Object.freeze({
   conversation: 'conversation',

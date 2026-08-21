@@ -43,7 +43,9 @@ describe('Capability Router V3', () => {
   });
 
   it('planned/forbidden/未知能力不会降级成另一个相似工具', () => {
-    expect(routeTurnSpecCapabilitiesV3({ turnSpec: spec('note.delete', 'delete'), catalog, tools: [tool] })).toMatchObject({
+    expect(
+      routeTurnSpecCapabilitiesV3({ turnSpec: spec('note.delete', 'delete'), catalog, tools: [tool] }),
+    ).toMatchObject({
       state: 'unsupported',
       reason: 'partial_support',
       candidates: [],

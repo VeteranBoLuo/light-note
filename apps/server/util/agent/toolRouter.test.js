@@ -98,9 +98,7 @@ describe('selectAgentTools', () => {
     );
 
     for (const candidates of candidateSets.slice(1)) expect(candidates).toEqual(candidateSets[0]);
-    expect(candidateSets[0]).toEqual(
-      [...candidateSets[0]].sort((left, right) => left.localeCompare(right)),
-    );
+    expect(candidateSets[0]).toEqual([...candidateSets[0]].sort((left, right) => left.localeCompare(right)));
     expect(candidateSets[0].some((name) => registry.get(name)?.requireRoot)).toBe(false);
   });
 

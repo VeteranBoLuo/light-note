@@ -75,9 +75,11 @@ describe('root 真实链路门禁', () => {
     expect(() => parseRootE2EArgs(['--runtime', 'v3', '--live', '--execute-writes'])).toThrow(
       'V3 真实全矩阵必须显式添加 --approve-full-matrix',
     );
-    expect(
-      parseRootE2EArgs(['--runtime', 'v3', '--live', '--execute-writes', '--approve-full-matrix']),
-    ).toMatchObject({ runtime: 'v3', live: true, approveFullMatrix: true });
+    expect(parseRootE2EArgs(['--runtime', 'v3', '--live', '--execute-writes', '--approve-full-matrix'])).toMatchObject({
+      runtime: 'v3',
+      live: true,
+      approveFullMatrix: true,
+    });
     expect(
       parseRootE2EArgs([
         '--runtime',

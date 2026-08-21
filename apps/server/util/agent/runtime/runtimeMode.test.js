@@ -48,12 +48,16 @@ describe('Agent Runtime V3 mode', () => {
       AI_AGENT_RUNTIME_MODE: 'v3_enforce',
       AI_AGENT_RUNTIME_V3_ROLLOUT: 'root',
     };
-    expect(
-      resolveAgentRuntimeDecision({ env, actorId: 'root-1', actorRole: 'root' }),
-    ).toMatchObject({ effectiveMode: 'v3_enforce', enrolled: true, reason: 'role_allowlist' });
-    expect(
-      resolveAgentRuntimeDecision({ env, actorId: 'user-1', actorRole: 'user' }),
-    ).toMatchObject({ effectiveMode: 'legacy', enrolled: false, reason: 'not_selected' });
+    expect(resolveAgentRuntimeDecision({ env, actorId: 'root-1', actorRole: 'root' })).toMatchObject({
+      effectiveMode: 'v3_enforce',
+      enrolled: true,
+      reason: 'role_allowlist',
+    });
+    expect(resolveAgentRuntimeDecision({ env, actorId: 'user-1', actorRole: 'user' })).toMatchObject({
+      effectiveMode: 'legacy',
+      enrolled: false,
+      reason: 'not_selected',
+    });
   });
 
   it('结构化策略支持账号白名单、角色、排除项和稳定百分比分桶', () => {
@@ -68,12 +72,14 @@ describe('Agent Runtime V3 mode', () => {
       AI_AGENT_RUNTIME_MODE: 'v3_shadow',
       AI_AGENT_RUNTIME_V3_ROLLOUT: policy,
     };
-    expect(
-      resolveAgentRuntimeDecision({ env, actorId: 'user-allow', actorRole: 'user' }),
-    ).toMatchObject({ effectiveMode: 'v3_shadow', reason: 'actor_allowlist' });
-    expect(
-      resolveAgentRuntimeDecision({ env, actorId: 'root-excluded', actorRole: 'root' }),
-    ).toMatchObject({ effectiveMode: 'legacy', reason: 'excluded' });
+    expect(resolveAgentRuntimeDecision({ env, actorId: 'user-allow', actorRole: 'user' })).toMatchObject({
+      effectiveMode: 'v3_shadow',
+      reason: 'actor_allowlist',
+    });
+    expect(resolveAgentRuntimeDecision({ env, actorId: 'root-excluded', actorRole: 'root' })).toMatchObject({
+      effectiveMode: 'legacy',
+      reason: 'excluded',
+    });
 
     const actorKeys = Array.from({ length: 200 }, (_, index) => `actor-${index}`);
     const selectedKey = actorKeys.find((key) => stableAgentRuntimeRolloutBucket(key, 'release-1') < 5000);

@@ -5,9 +5,7 @@ const capability = Object.freeze({ id: 'bookmark.query', domains: ['bookmark'], 
 
 describe('V3 ResultSet 投影', () => {
   it('只接受真实工具返回的稳定引用，不根据 resultKind 名称猜测集合', () => {
-    expect(
-      projectAgentV3ResultSet({ capability, result: { status: 'success', summary: '共 3 条结果' } }),
-    ).toBeNull();
+    expect(projectAgentV3ResultSet({ capability, result: { status: 'success', summary: '共 3 条结果' } })).toBeNull();
     expect(
       projectAgentV3ResultSet({
         capability,
@@ -27,17 +25,9 @@ describe('V3 ResultSet 投影', () => {
   });
 
   it('读取成功但没有稳定引用时仍结算为 success，而非 degraded', () => {
-    expect(
-      resolveAgentV3ReadFocusSettlement({ readAttempted: true, committed: false, failed: false }),
-    ).toBe('success');
-    expect(
-      resolveAgentV3ReadFocusSettlement({ readAttempted: true, committed: true, failed: false }),
-    ).toBeNull();
-    expect(
-      resolveAgentV3ReadFocusSettlement({ readAttempted: true, committed: true, failed: true }),
-    ).toBe('degraded');
-    expect(
-      resolveAgentV3ReadFocusSettlement({ readAttempted: true, committed: false, failed: true }),
-    ).toBe('failed');
+    expect(resolveAgentV3ReadFocusSettlement({ readAttempted: true, committed: false, failed: false })).toBe('success');
+    expect(resolveAgentV3ReadFocusSettlement({ readAttempted: true, committed: true, failed: false })).toBeNull();
+    expect(resolveAgentV3ReadFocusSettlement({ readAttempted: true, committed: true, failed: true })).toBe('degraded');
+    expect(resolveAgentV3ReadFocusSettlement({ readAttempted: true, committed: false, failed: true })).toBe('failed');
   });
 });

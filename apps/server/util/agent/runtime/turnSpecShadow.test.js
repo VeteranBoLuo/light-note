@@ -68,9 +68,7 @@ describe('TurnSpec shadow', () => {
       intents: [{ capabilityId: 'read.query_notes' }],
       needsClarification: false,
     };
-    const catalog = [
-      { id: 'read.query_notes', domain: 'note', toolNames: ['query_notes'] },
-    ];
+    const catalog = [{ id: 'read.query_notes', domain: 'note', toolNames: ['query_notes'] }];
     expect(compareTurnSpecWithLegacyPlan(turnSpec, legacyPlan, catalog)).toEqual([]);
 
     expect(

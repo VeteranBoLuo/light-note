@@ -86,9 +86,7 @@ export function routeTurnSpecCapabilitiesV3({
     candidateDomainCount: new Set(turnSpec.goals.map((goal) => goal.capabilityDomain)).size,
     unsupportedGoals: Object.freeze(unsupportedGoals),
     capabilityByTool: new Map(
-      (Array.isArray(catalog) ? catalog : [])
-        .filter((entry) => entry.toolName)
-        .map((entry) => [entry.toolName, entry]),
+      (Array.isArray(catalog) ? catalog : []).filter((entry) => entry.toolName).map((entry) => [entry.toolName, entry]),
     ),
   });
 }

@@ -41,10 +41,12 @@ describe('Temporal Constraints V3', () => {
     ];
     const goals = [{ id: 'resources', capabilityId: 'admin.new_user.resource.query' }];
     expect(
-      compileTemporalConstraintsV3(
-        [{ goalId: 'resources', slot: 'registeredWithin', expression: '昨天' }],
-        { goals, catalog, latestMessage: '昨天注册的用户今天创建了哪些资源', temporalContext: context },
-      ),
+      compileTemporalConstraintsV3([{ goalId: 'resources', slot: 'registeredWithin', expression: '昨天' }], {
+        goals,
+        catalog,
+        latestMessage: '昨天注册的用户今天创建了哪些资源',
+        temporalContext: context,
+      }),
     ).toBeNull();
 
     const compiled = compileTemporalConstraintsV3(
@@ -92,7 +94,12 @@ describe('Temporal Constraints V3', () => {
         ],
       },
     ];
-    const constraints = compileTemporalConstraintsV3([], { goals, catalog, latestMessage: '', temporalContext: context });
+    const constraints = compileTemporalConstraintsV3([], {
+      goals,
+      catalog,
+      latestMessage: '',
+      temporalContext: context,
+    });
     expect(constraints).toEqual([
       expect.objectContaining({
         goalId: 'ranking',

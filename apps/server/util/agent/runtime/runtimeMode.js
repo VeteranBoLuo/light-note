@@ -79,11 +79,7 @@ function parseStructuredRolloutPolicy(raw) {
   const excludeActorIds = normalizeActorIds(input.excludeActorIds);
   const percentage = normalizePercentage(input.percentage);
   const salt =
-    input.salt === undefined
-      ? DEFAULT_ROLLOUT_SALT
-      : typeof input.salt === 'string'
-        ? input.salt.trim()
-        : '';
+    input.salt === undefined ? DEFAULT_ROLLOUT_SALT : typeof input.salt === 'string' ? input.salt.trim() : '';
   if (!roles || !actorIds || !excludeActorIds || percentage === null || !salt || salt.length > 128) {
     return invalidPolicy();
   }
@@ -128,7 +124,10 @@ export function resolveAgentRuntimeRolloutPolicy(env = process.env) {
 export function stableAgentRuntimeRolloutBucket(actorKey, salt = DEFAULT_ROLLOUT_SALT) {
   const key = String(actorKey || '').trim();
   if (!key) return null;
-  const digest = crypto.createHash('sha256').update(`${String(salt)}\n${key}`).digest('hex');
+  const digest = crypto
+    .createHash('sha256')
+    .update(`${String(salt)}\n${key}`)
+    .digest('hex');
   return Number.parseInt(digest.slice(0, 8), 16) % 10_000;
 }
 
@@ -168,7 +167,9 @@ export function resolveAgentRuntimeDecision({
   const normalizedConfiguredMode = V3_MODES.has(configuredMode) ? configuredMode : 'legacy';
   const policy = resolveAgentRuntimeRolloutPolicy(env);
   const normalizedActorId = String(actorId || '').trim();
-  const normalizedActorRole = String(actorRole || '').trim().toLowerCase();
+  const normalizedActorRole = String(actorRole || '')
+    .trim()
+    .toLowerCase();
   const stableActorKey = String(actorKey || normalizedActorId).trim();
   const base = {
     configuredMode: normalizedConfiguredMode,

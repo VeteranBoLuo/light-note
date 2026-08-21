@@ -53,7 +53,17 @@ function resourceKey(ref) {
 
 function bindingRefTypes(binding) {
   const values = Array.isArray(binding?.refTypes) ? binding.refTypes : [binding?.refType];
-  return [...new Set(values.map((value) => String(value || '').trim().toLowerCase()).filter(Boolean))];
+  return [
+    ...new Set(
+      values
+        .map((value) =>
+          String(value || '')
+            .trim()
+            .toLowerCase(),
+        )
+        .filter(Boolean),
+    ),
+  ];
 }
 
 export function normalizeAuthoritativeExecutionContext(value = {}) {
@@ -158,9 +168,7 @@ export function plannerArgumentsSchema(tool, executionContext, authoritativeArgu
       // 非字面值资源字段始终属于服务端权威上下文，即使当前没有候选也不能重新
       // 暴露给模型猜测。只有显式声明 allowLiteral 且本轮没有权威候选时，模型才
       // 可以从最新消息填写 URL 等字面值；一旦有候选，仍由服务端绑定并覆盖。
-      .filter(
-        (binding) => binding.allowLiteral !== true || bindingCandidates(binding, executionContext).length > 0,
-      )
+      .filter((binding) => binding.allowLiteral !== true || bindingCandidates(binding, executionContext).length > 0)
       .map((binding) => binding.argument),
   );
   for (const argument of authoritativeArgumentNames(authoritativeArguments)) bindableArguments.add(argument);

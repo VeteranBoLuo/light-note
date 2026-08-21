@@ -63,8 +63,7 @@ export function parseRootE2EArgs(argv = []) {
       if (!value || value.startsWith('--')) throw new Error('--runtime 后必须提供 v2 或 v3');
       options.runtime = value;
       index += 1;
-    }
-    else if (arg === '--format') options.format = argv[++index] || 'text';
+    } else if (arg === '--format') options.format = argv[++index] || 'text';
     else if (arg === '--case') {
       options.caseIds.push(
         ...String(argv[++index] || '')
@@ -114,9 +113,7 @@ export function parseRootE2EArgs(argv = []) {
 function plannedRootE2ETurns(options, cases) {
   const caseTurns = cases.reduce((sum, item) => sum + 1 + (item.followUpMessage ? 1 : 0), 0);
   const groundingTurns = options.groundingScopeRegression ? 2 : 0;
-  const refinementRounds = Number.isInteger(options.artifactRefinementRounds)
-    ? options.artifactRefinementRounds
-    : 5;
+  const refinementRounds = Number.isInteger(options.artifactRefinementRounds) ? options.artifactRefinementRounds : 5;
   const artifactTurns = options.artifactRegression ? 2 + refinementRounds : 0;
   return caseTurns + groundingTurns + artifactTurns;
 }
@@ -126,7 +123,9 @@ function plannedRootE2ETurns(options, cases) {
  * V3 档只放行真实 Root actor；V2 档显式关闭 V3，确保报告名称与实际执行链一致。
  */
 export function applyRootE2ERuntimeProfile(options = {}, env = process.env) {
-  const runtime = String(options.runtime || 'v2').trim().toLowerCase();
+  const runtime = String(options.runtime || 'v2')
+    .trim()
+    .toLowerCase();
   if (!RUNTIMES.has(runtime)) throw new Error('--runtime 仅支持 v2 或 v3');
   env.AI_AGENT_RUNTIME_V2_MODE = 'enforce';
   if (runtime === 'v3') {
