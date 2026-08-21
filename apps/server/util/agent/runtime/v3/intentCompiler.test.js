@@ -153,7 +153,9 @@ describe('Intent Compiler V3', () => {
       turnSpec: {
         goals: [
           expect.objectContaining({
-            referentSelectors: [{ source: 'dialogue_anchor', types: ['dialogue'], ordinal: null }],
+            referentSelectors: [
+              expect.objectContaining({ source: 'dialogue_anchor', types: ['dialogue'], ordinal: null }),
+            ],
           }),
         ],
       },

@@ -63,6 +63,34 @@ describe('Runtime V2 legacy execution adapter', () => {
     });
   });
 
+  it('部分歧义时不把被阻断写目标重新投影回 legacy 执行层', () => {
+    const result = adaptRuntimeOutcomeToLegacy(
+      {
+        state: 'ready_for_tools',
+        blockedGoalIds: ['write'],
+        turnSpec: {
+          requestKind: 'mixed',
+          confidence: 'medium',
+          goals: [
+            { id: 'read', kind: 'read', description: '查询笔记', targetDescription: '今天', dependsOn: [] },
+            { id: 'write', kind: 'write', description: '创建总结', targetDescription: '', dependsOn: ['read'] },
+          ],
+        },
+        route: {
+          goalRoutes: [
+            { goalId: 'read', capabilityIds: ['note.query'] },
+            { goalId: 'write', capabilityIds: ['note.create'] },
+          ],
+        },
+      },
+      catalog,
+    );
+    expect(result.semanticPlan.intents).toEqual([
+      expect.objectContaining({ capabilityId: 'note.query', kind: 'read', dependsOn: [] }),
+    ]);
+    expect(result.writeToolNames).toEqual([]);
+  });
+
   it('不支持目标的说明只包含真正被阻断的能力，不把同轮正常读取误报为禁止', () => {
     const result = adaptRuntimeOutcomeToLegacy(
       {

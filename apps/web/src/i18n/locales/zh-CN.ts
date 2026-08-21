@@ -6109,6 +6109,13 @@ export default {
       none: '本轮未使用历史材料',
       itemCount: '{count} 项材料',
     },
+    executionReceipt: {
+      currentMaterials: '本轮使用当前选定材料',
+      inheritedResult: '本轮继续使用已确认的上轮结果',
+      knowledgeBase: '本轮已查询轻笺知识库',
+      workspaceQueried: '本轮已查询当前工作区',
+      toolFailed: '本轮查询未完成',
+    },
     sourceTypes: {
       note: '笔记',
       bookmark: '书签',

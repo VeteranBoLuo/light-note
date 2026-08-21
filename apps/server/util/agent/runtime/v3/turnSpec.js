@@ -5,8 +5,10 @@ import {
   normalizeCapabilityScope,
 } from './capabilityManifest.js';
 import { collectMissingTemporalSlotsV3, compileTemporalConstraintsV3 } from './temporalConstraints.js';
+import { evaluateTurnSpecAmbiguities } from './ambiguityGate.js';
 
 export const TURN_SPEC_V3_VERSION = '3.0';
+export const TURN_SPEC_V3_ACCEPTED_VERSIONS = Object.freeze(['3.0', '3.1']);
 export const TURN_SPEC_V3_TOOL_NAME = 'submit_turn_spec_v3';
 
 export const TURN_REQUEST_KINDS_V3 = Object.freeze([
@@ -41,6 +43,9 @@ const MAX_NORMALIZED_GOALS = 8;
 const MAX_TEXT = 300;
 const MAX_CLARIFICATION = 320;
 const REFERENT_SOURCES_V3 = Object.freeze(['current_explicit', 'last_result', 'pending_artifact', 'dialogue_anchor']);
+const GOAL_RELATIONS_V3 = Object.freeze(['new_topic', 'depends_on_goal', ...TURN_CONTINUATION_MODES_V3]);
+const EVIDENCE_POLICY_KINDS_V3 = Object.freeze([...GROUNDING_POLICIES_V3, 'goal_result']);
+const AMBIGUITY_IMPACTS_V3 = Object.freeze(['fatal', 'blocks_write', 'blocks_goal', 'safe_default', 'optional']);
 
 function text(value, max = MAX_TEXT) {
   return String(value || '')
@@ -60,13 +65,103 @@ function normalizeMissingSlot(value) {
   return name && reason && question ? Object.freeze({ name, reason, question }) : null;
 }
 
-function normalizeReferentSelector(value) {
+function normalizeReferentSelector(value, { version = TURN_SPEC_V3_VERSION, resultSetHandleIds = [] } = {}) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const source = REFERENT_SOURCES_V3.includes(value.source) ? value.source : '';
   if (!source) return null;
-  const ordinalValue = Number(value.ordinal);
-  const ordinal = Number.isSafeInteger(ordinalValue) && ordinalValue > 0 && ordinalValue <= 50 ? ordinalValue : null;
-  return Object.freeze({ source, types: Object.freeze(uniqueStrings(value.types, 32)), ordinal });
+  const ordinalValue = Number(value.itemOrdinal ?? value.ordinal);
+  const itemOrdinal =
+    Number.isSafeInteger(ordinalValue) && ordinalValue > 0 && ordinalValue <= 50 ? ordinalValue : null;
+  const resultSetHandleId = text(value.resultSetHandleId, 64);
+  const allowedHandles = new Set(uniqueStrings(resultSetHandleIds, 64));
+  if (resultSetHandleId && (version !== '3.1' || !allowedHandles.has(resultSetHandleId))) return null;
+  if (source !== 'last_result' && resultSetHandleId) return null;
+  return Object.freeze({
+    source,
+    resultSetHandleId,
+    types: Object.freeze(uniqueStrings(value.types, 32)),
+    itemOrdinal,
+    // 兼容旧消费方；canonical 语义只记录 itemOrdinal。
+    ordinal: itemOrdinal,
+  });
+}
+
+function defaultGoalRelation(continuationMode, dependsOn = []) {
+  if (dependsOn.length) return 'depends_on_goal';
+  return continuationMode === 'independent' ? 'new_topic' : continuationMode;
+}
+
+function normalizeEvidencePolicy(value, groundingPolicy, priorGoalIds) {
+  const candidate = value && typeof value === 'object' && !Array.isArray(value) ? value : { kind: groundingPolicy };
+  const kind = EVIDENCE_POLICY_KINDS_V3.includes(candidate.kind) ? candidate.kind : '';
+  if (!kind) return null;
+  const goalIds = uniqueStrings(candidate.goalIds, 64);
+  if (kind === 'goal_result' && (!goalIds.length || goalIds.some((id) => !priorGoalIds.has(id)))) return null;
+  if (kind !== 'goal_result' && goalIds.length) return null;
+  return Object.freeze({ kind, goalIds: Object.freeze(goalIds) });
+}
+
+function normalizeGoalOutputContract(value) {
+  if (value == null) return null;
+  if (typeof value !== 'object' || Array.isArray(value)) return null;
+  const serialized = JSON.stringify(value);
+  if (Buffer.byteLength(serialized, 'utf8') > 4_000) return null;
+  return Object.freeze(structuredClone(value));
+}
+
+function normalizeGoalAmbiguity(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const field = text(value.field, 80);
+  const impact = AMBIGUITY_IMPACTS_V3.includes(value.impact) ? value.impact : '';
+  const question = text(value.question, MAX_CLARIFICATION);
+  if (!field || !impact || !question) return null;
+  return Object.freeze({
+    field,
+    impact,
+    candidateKinds: Object.freeze(uniqueStrings(value.candidateKinds, 64)),
+    question,
+  });
+}
+
+function normalizeTemporalClaims(value, goalId) {
+  if (value == null) return Object.freeze([]);
+  if (!Array.isArray(value) || value.length > 8) return null;
+  const claims = value.map((claim) => {
+    if (!claim || typeof claim !== 'object' || Array.isArray(claim)) return null;
+    const slot = text(claim.slot, 64);
+    const expression = text(claim.expression, 80);
+    return slot && expression ? Object.freeze({ goalId, slot, expression }) : null;
+  });
+  return claims.some((claim) => !claim) ? null : Object.freeze(claims);
+}
+
+function normalizeSlotClaims(value, capability, version) {
+  if (value == null && version !== '3.1') return Object.freeze({});
+  const candidate = value == null ? {} : value;
+  if (version !== '3.1' || typeof candidate !== 'object' || Array.isArray(candidate)) return null;
+  const slotDefinitions = new Map(
+    (Array.isArray(capability?.slots) ? capability.slots : [])
+      .filter((slot) => ['model_text', 'model_enum'].includes(slot?.source))
+      .map((slot) => [String(slot.name || ''), slot]),
+  );
+  // 3.1 把所有模型槽都投影出来；null 表示本轮明确未提供，而不是交给后续阶段猜测。
+  const output = Object.fromEntries([...slotDefinitions.keys()].map((name) => [name, null]));
+  for (const [key, claim] of Object.entries(candidate)) {
+    const definition = slotDefinitions.get(key);
+    if (!definition) return null;
+    if (claim == null) {
+      output[key] = null;
+      continue;
+    }
+    if (definition.source === 'model_enum') {
+      if (!definition.enum?.includes(claim)) return null;
+      output[key] = String(claim);
+      continue;
+    }
+    if (typeof claim !== 'string' || !claim.trim()) return null;
+    output[key] = text(claim, Math.min(1_000, Number(definition.maxLength) || MAX_TEXT));
+  }
+  return Object.freeze(output);
 }
 
 function goalKind(capability, requestKind) {
@@ -107,6 +202,12 @@ function expandGoalDependencies(goals, catalogById) {
           targetDescription: goal.targetDescription,
           dependsOn: [],
           referentSelectors: goal.referentSelectors,
+          relation: 'new_topic',
+          evidencePolicy: goal.evidencePolicy,
+          slotClaims: Object.freeze({}),
+          temporalClaims: Object.freeze([]),
+          outputContract: null,
+          ambiguities: Object.freeze([]),
           implicit: true,
         };
         if (!append(dependencyGoal)) return false;
@@ -117,7 +218,10 @@ function expandGoalDependencies(goals, catalogById) {
     const normalized = Object.freeze({
       ...goal,
       dependsOn: Object.freeze([...new Set([...goal.dependsOn, ...dependencies])]),
+      relation: dependencies.length ? 'depends_on_goal' : goal.relation,
       referentSelectors: Object.freeze(goal.referentSelectors),
+      temporalClaims: Object.freeze(goal.temporalClaims || []),
+      ambiguities: Object.freeze(goal.ambiguities || []),
       order: expanded.length,
     });
     expanded.push(normalized);
@@ -142,7 +246,18 @@ function canonicalTurnSpec(value) {
       capabilityId: goal.capabilityId,
       operation: goal.operation,
       dependsOn: goal.dependsOn,
-      referentSelectors: goal.referentSelectors,
+      referentSelectors: goal.referentSelectors.map((selector) => ({
+        source: selector.source,
+        resultSetHandleId: selector.resultSetHandleId,
+        types: selector.types,
+        itemOrdinal: selector.itemOrdinal,
+      })),
+      relation: goal.relation,
+      evidencePolicy: goal.evidencePolicy,
+      slotClaims: goal.slotClaims,
+      temporalClaims: goal.temporalClaims,
+      outputContract: goal.outputContract,
+      ambiguities: goal.ambiguities,
       implicit: goal.implicit,
     })),
     groundingPolicy: value.groundingPolicy,
@@ -201,7 +316,7 @@ function canonicalExecutionContractV3({ turnSpec, route, executionContext } = {}
     .sort((left, right) => compareCanonicalText(left.goalId, right.goalId));
   return JSON.stringify(
     stableCanonicalValue({
-      version: TURN_SPEC_V3_VERSION,
+      version: String(turnSpec?.version || TURN_SPEC_V3_VERSION),
       manifestVersion: AGENT_CAPABILITY_MANIFEST_VERSION,
       semanticDigest: String(turnSpec?.semanticDigest || turnSpec?.digest || ''),
       groundingPolicy: String(turnSpec?.groundingPolicy || ''),
@@ -289,10 +404,12 @@ export function normalizeTurnSpecV3(
     actorRole = 'user',
     latestMessage = '',
     temporalContext = {},
+    resultSetHandleIds = [],
   } = {},
 ) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-  if (String(raw.version || '') !== TURN_SPEC_V3_VERSION) return null;
+  const version = String(raw.version || '');
+  if (!TURN_SPEC_V3_ACCEPTED_VERSIONS.includes(version)) return null;
   if (!TURN_REQUEST_KINDS_V3.includes(raw.requestKind) || !CONFIDENCE_LEVELS.includes(raw.confidence)) return null;
   if (!TURN_CONTINUATION_MODES_V3.includes(raw.continuationMode)) return null;
   if (!TURN_TOPIC_EPOCH_ACTIONS_V3.includes(raw.topicEpochAction)) return null;
@@ -312,8 +429,29 @@ export function normalizeTurnSpecV3(
     const dependsOn = uniqueStrings(value.dependsOn, 64);
     if (dependsOn.some((dependencyId) => !ids.has(dependencyId))) return null;
     if (!Array.isArray(value.referentSelectors)) return null;
-    const referentSelectors = value.referentSelectors.map(normalizeReferentSelector);
+    const referentSelectors = value.referentSelectors.map((selector) =>
+      normalizeReferentSelector(selector, { version, resultSetHandleIds }),
+    );
     if (referentSelectors.some((selector) => !selector)) return null;
+    const relation = value.relation
+      ? GOAL_RELATIONS_V3.includes(value.relation)
+        ? value.relation
+        : ''
+      : defaultGoalRelation(raw.continuationMode, dependsOn);
+    if (!relation) return null;
+    if ((relation === 'depends_on_goal') !== dependsOn.length > 0) return null;
+    const evidencePolicy = normalizeEvidencePolicy(value.evidencePolicy, raw.groundingPolicy, ids);
+    if (!evidencePolicy) return null;
+    if (evidencePolicy.kind === 'goal_result' && evidencePolicy.goalIds.some((goalId) => !dependsOn.includes(goalId))) {
+      return null;
+    }
+    const slotClaims = normalizeSlotClaims(value.slotClaims, capability, version);
+    const temporalClaims = normalizeTemporalClaims(value.temporalClaims, id);
+    const goalOutputContract = normalizeGoalOutputContract(value.outputContract);
+    if (!slotClaims || !temporalClaims || (value.outputContract != null && !goalOutputContract)) return null;
+    if (!Array.isArray(value.ambiguities || [])) return null;
+    const ambiguities = (value.ambiguities || []).map(normalizeGoalAmbiguity);
+    if (ambiguities.length > 8 || ambiguities.some((ambiguity) => !ambiguity)) return null;
     ids.add(id);
     rawGoals.push({
       id,
@@ -325,6 +463,12 @@ export function normalizeTurnSpecV3(
       targetDescription: text(value.targetDescription),
       dependsOn,
       referentSelectors,
+      relation,
+      evidencePolicy,
+      slotClaims,
+      temporalClaims,
+      outputContract: goalOutputContract,
+      ambiguities: Object.freeze(ambiguities),
       implicit: false,
     });
   }
@@ -340,20 +484,38 @@ export function normalizeTurnSpecV3(
   ) {
     return null;
   }
+  const ambiguityGate = evaluateTurnSpecAmbiguities({ goals });
 
   if (!Array.isArray(raw.missingSlots) || raw.missingSlots.length > 8) return null;
   const declaredMissingSlots = raw.missingSlots.map(normalizeMissingSlot);
   if (declaredMissingSlots.some((slot) => !slot)) return null;
   const declaredClarificationQuestion = text(raw.clarificationQuestion, MAX_CLARIFICATION);
-  if ((raw.confidence === 'low' || declaredMissingSlots.length) && !declaredClarificationQuestion) return null;
   if (!GROUNDING_POLICIES_V3.includes(raw.groundingPolicy)) return null;
   if (authoritativeGroundingPolicy && raw.groundingPolicy !== authoritativeGroundingPolicy) return null;
-  const temporalConstraints = compileTemporalConstraintsV3(raw.temporalConstraints, {
-    goals,
-    catalog,
-    latestMessage,
-    temporalContext,
-  });
+  if (!Array.isArray(raw.temporalConstraints)) return null;
+  const goalTemporalClaims = rawGoals.flatMap((goal) => goal.temporalClaims);
+  const declaredTemporalConstraints = raw.temporalConstraints.map((constraint) => ({
+    goalId: text(constraint?.goalId, 64),
+    slot: text(constraint?.slot, 64),
+    expression: text(constraint?.expression, 80),
+  }));
+  if (goalTemporalClaims.length && declaredTemporalConstraints.length) {
+    const canonicalClaims = (values) =>
+      values
+        .map((claim) => `${claim.goalId}\0${claim.slot}\0${claim.expression}`)
+        .sort()
+        .join('\n');
+    if (canonicalClaims(goalTemporalClaims) !== canonicalClaims(declaredTemporalConstraints)) return null;
+  }
+  const temporalConstraints = compileTemporalConstraintsV3(
+    goalTemporalClaims.length ? goalTemporalClaims : declaredTemporalConstraints,
+    {
+      goals,
+      catalog,
+      latestMessage,
+      temporalContext,
+    },
+  );
   if (!temporalConstraints) return null;
   const temporalMissingSlots = collectMissingTemporalSlotsV3({ goals, catalog, constraints: temporalConstraints });
   const normalizedTemporalMissingSlots = temporalMissingSlots.map(({ name, reason, question }) =>
@@ -366,14 +528,27 @@ export function normalizeTurnSpecV3(
   );
   const clarificationQuestion =
     declaredClarificationQuestion ||
+    ambiguityGate.question ||
     (temporalMissingSlots.length
       ? `请补充${[...new Set(temporalMissingSlots.map((slot) => slot.label))].join('和')}。`.slice(0, MAX_CLARIFICATION)
       : '');
+  const confidence =
+    version === '3.1'
+      ? ambiguityGate.state === 'clarification'
+        ? 'low'
+        : ambiguityGate.state === 'partial'
+          ? 'medium'
+          : raw.confidence
+      : raw.confidence;
+  if (version === '3.1' && raw.confidence === 'low' && ambiguityGate.state === 'ready' && !missingSlots.length) {
+    return null;
+  }
+  if ((confidence === 'low' || missingSlots.length) && !clarificationQuestion) return null;
 
   const normalized = {
-    version: TURN_SPEC_V3_VERSION,
+    version,
     requestKind: raw.requestKind,
-    confidence: raw.confidence,
+    confidence,
     continuationMode: raw.continuationMode,
     topicEpochAction: raw.topicEpochAction,
     capabilityScope: normalizeCapabilityScope(capabilityScope, { actorRole }),

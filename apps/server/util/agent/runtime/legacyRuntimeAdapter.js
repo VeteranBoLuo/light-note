@@ -27,8 +27,10 @@ export function adaptRuntimeOutcomeToLegacy(outcome, catalog = []) {
   }
   const catalogById = new Map((Array.isArray(catalog) ? catalog : []).map((entry) => [entry.id, entry]));
   const routesByGoal = new Map((outcome?.route?.goalRoutes || []).map((route) => [route.goalId, route]));
-  const goalIndex = new Map(turnSpec.goals.map((goal, index) => [goal.id, index]));
-  const intents = turnSpec.goals.map((goal) => {
+  const blockedGoalIds = new Set((outcome?.blockedGoalIds || []).map(String));
+  const executableGoals = turnSpec.goals.filter((goal) => !blockedGoalIds.has(goal.id));
+  const goalIndex = new Map(executableGoals.map((goal, index) => [goal.id, index]));
+  const intents = executableGoals.map((goal) => {
     const capabilityId = selectedCapabilityId(routesByGoal.get(goal.id), catalogById);
     const capability = catalogById.get(capabilityId);
     return Object.freeze({

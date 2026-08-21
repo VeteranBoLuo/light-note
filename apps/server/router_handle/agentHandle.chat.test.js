@@ -874,6 +874,10 @@ describe('agentChat 主链路', () => {
         semanticDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
         executionDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
         goalStates: [expect.objectContaining({ goalId: 'query-today-notes', status: 'completed' })],
+        executionReceipt: expect.objectContaining({
+          evidenceModes: expect.arrayContaining(['workspace_queried']),
+          factDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+        }),
       }),
     );
 
@@ -905,6 +909,20 @@ describe('agentChat 主链路', () => {
         resolvedRanges: [expect.objectContaining({ slot: 'timeRange', expression: '今天' })],
       }),
     ]);
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.executionReceipt).toEqual(
+      expect.objectContaining({
+        schemaVersion: 1,
+        evidenceModes: expect.arrayContaining(['workspace_queried']),
+        toolSummary: { attempted: 1, succeeded: 1, failed: 0 },
+        factDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+      }),
+    );
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.responseEnvelope).toEqual(
+      expect.objectContaining({
+        schemaVersion: 1,
+        blocks: expect.arrayContaining([expect.objectContaining({ type: 'prose' })]),
+      }),
+    );
     expect(JSON.parse(latestAgentLogRecord().turn_contract_trace)).toMatchObject({
       intentCompilerMode: 'v3_enforce',
       intentCompilerState: 'ready',

@@ -6347,6 +6347,13 @@ export default {
       none: 'No previous materials used for this turn',
       itemCount: '{count} item(s)',
     },
+    executionReceipt: {
+      currentMaterials: 'Used the materials selected for this turn',
+      inheritedResult: 'Continued from a verified previous result',
+      knowledgeBase: 'Queried the Light Note knowledge base',
+      workspaceQueried: 'Queried the current workspace',
+      toolFailed: 'The workspace query did not complete',
+    },
     sourceTypes: {
       note: 'Note',
       bookmark: 'Bookmark',

@@ -1,13 +1,34 @@
 import { AGENT_ACTION_CAPABILITIES } from '../../capabilityRegistry.js';
 
-export const AGENT_CAPABILITY_MANIFEST_VERSION = '3.0';
+export const AGENT_CAPABILITY_MANIFEST_VERSION = '3.1';
 
 const VALID_EFFECTS = new Set(['read', 'write']);
 const VALID_STATUSES = new Set(['enabled', 'planned', 'forbidden']);
 const VALID_ROLES = new Set(['user', 'root']);
 const VALID_TEMPORAL_KINDS = new Set(['range', 'date', 'datetime']);
 const VALID_TEMPORAL_DEFAULT_POLICIES = new Set(['all', 'clarify', 'server_default', 'none']);
+const VALID_SLOT_SOURCES = new Set([
+  'server_actor',
+  'server_scope',
+  'resource_binding',
+  'temporal',
+  'dependency_result',
+  'model_text',
+  'model_enum',
+  'client_explicit',
+  'server_default',
+]);
 const VALID_SIDE_EFFECT_POLICIES = new Set(['none', 'confirmation_required', 'idempotent_background_job']);
+const VALID_WORKFLOW_KINDS = new Set([
+  'single_tool',
+  'dependency_then_tool',
+  'query_then_unique_write',
+  'pagination_until_complete',
+  'artifact_generate',
+  'bounded_research',
+  'manual_only',
+]);
+const VALID_RESULT_CONTRACT_KINDS = new Set(['none', 'entity_list', 'record', 'document', 'artifact']);
 export const AGENT_CAPABILITY_DOMAINS = Object.freeze([
   'content',
   'note',
@@ -64,7 +85,115 @@ function freezeTemporalSlots(values = []) {
   );
 }
 
+function freezeSlots(values = [], { requiredSlots = [] } = {}) {
+  const required = new Set(freezeStrings(requiredSlots));
+  return Object.freeze(
+    (Array.isArray(values) ? values : []).map((value) => {
+      const source = String(value?.source || '').trim();
+      return Object.freeze({
+        name: String(value?.name || '').trim(),
+        source,
+        required: value?.required === true || required.has(String(value?.name || '').trim()),
+        defaultPolicy: VALID_TEMPORAL_DEFAULT_POLICIES.has(String(value?.defaultPolicy || ''))
+          ? String(value.defaultPolicy)
+          : 'none',
+        disclosure: String(value?.disclosure || '').trim(),
+        maxLength: source === 'model_text' ? Math.max(1, Math.min(1_000, Number(value?.maxLength) || 300)) : null,
+        enum: source === 'model_enum' ? freezeStrings(value?.enum) : Object.freeze([]),
+      });
+    }),
+  );
+}
+
+function defaultWorkflow(input = {}) {
+  if (input.workflow?.kind && VALID_WORKFLOW_KINDS.has(input.workflow.kind)) {
+    return Object.freeze({ kind: input.workflow.kind, deterministic: input.workflow.deterministic === true });
+  }
+  if (input.artifactKind && input.artifactKind !== 'none') {
+    return Object.freeze({ kind: 'artifact_generate', deterministic: false });
+  }
+  if (input.effect === 'write' && input.dependencies?.length) {
+    return Object.freeze({ kind: 'query_then_unique_write', deterministic: false });
+  }
+  if (input.dependencies?.length) return Object.freeze({ kind: 'dependency_then_tool', deterministic: false });
+  return Object.freeze({ kind: 'single_tool', deterministic: false });
+}
+
+function defaultQueryBudget(input = {}) {
+  if (input.effect !== 'read') return null;
+  const value = input.queryBudget || {};
+  return Object.freeze({
+    maxPages: Math.max(1, Math.min(20, Number(value.maxPages) || 1)),
+    maxItems: Math.max(1, Math.min(500, Number(value.maxItems) || 50)),
+    maxBytes: Math.max(1_024, Math.min(1_000_000, Number(value.maxBytes) || 120_000)),
+    deadlineMs: Math.max(500, Math.min(30_000, Number(value.deadlineMs) || 15_000)),
+    maxInlineRefs: Math.max(1, Math.min(500, Number(value.maxInlineRefs) || 50)),
+  });
+}
+
+function defaultResultContract(input = {}) {
+  const resultKind = String(input.resultKind || 'none');
+  if (resultKind === 'none') return Object.freeze({ kind: 'none' });
+  const kind =
+    input.resultContract?.kind ||
+    (/(?:_list|_results|_ranking)$/u.test(resultKind)
+      ? 'entity_list'
+      : /(?:document|analysis|insights|recap|report)$/u.test(resultKind)
+        ? 'document'
+        : input.artifactKind && input.artifactKind !== 'none'
+          ? 'artifact'
+          : 'record');
+  return Object.freeze({
+    kind,
+    entityType: String(input.resultContract?.entityType || input.domains?.[0] || 'content'),
+    idField: String(input.resultContract?.idField || 'id'),
+    totalField: String(input.resultContract?.totalField || 'total'),
+    itemsField: String(input.resultContract?.itemsField || 'items'),
+    cursorField: String(input.resultContract?.cursorField || 'nextCursor'),
+    defaultCompleteness: String(input.resultContract?.defaultCompleteness || 'unknown'),
+    ordering: freezeStrings(input.resultContract?.ordering),
+  });
+}
+
+function defaultRenderPolicy(input = {}, resultContract) {
+  const exactKinds =
+    input.renderPolicy?.exactKinds ||
+    (resultContract.kind === 'entity_list'
+      ? ['count', 'entity_list']
+      : resultContract.kind === 'record'
+        ? ['status', 'metric']
+        : []);
+  return Object.freeze({
+    exactKinds: freezeStrings(exactKinds),
+    composerAllowed: input.renderPolicy?.composerAllowed !== false,
+  });
+}
+
 function defineToolCapability(toolName, input) {
+  const resultContract = defaultResultContract(input);
+  const temporalSlots = freezeTemporalSlots(input.temporalSlots);
+  const requiredSlots = freezeStrings(input.requiredSlots);
+  const slots = freezeSlots(
+    [
+      ...temporalSlots.map((slot) => ({
+        name: slot.name,
+        source: 'temporal',
+        required: slot.required,
+        defaultPolicy: slot.defaultPolicy,
+        disclosure: slot.disclosure,
+      })),
+      ...(Array.isArray(input.resourceBindings) ? input.resourceBindings : []).map((binding) => ({
+        name: binding?.argument,
+        source: 'resource_binding',
+      })),
+      ...(Array.isArray(input.dependencyBindings) ? input.dependencyBindings : []).map((binding) => ({
+        name: binding?.argument,
+        source: 'dependency_result',
+      })),
+      ...(Array.isArray(input.slots) ? input.slots : []),
+    ],
+    { requiredSlots },
+  );
   return Object.freeze({
     status: 'enabled',
     toolName,
@@ -78,15 +207,27 @@ function defineToolCapability(toolName, input) {
     coverage: 'summary',
     artifactKind: 'none',
     temporalSlots: Object.freeze([]),
+    slots: Object.freeze([]),
+    workflow: defaultWorkflow(input),
+    queryBudget: defaultQueryBudget(input),
+    resultContract,
+    renderPolicy: defaultRenderPolicy(input, resultContract),
+    reconcilePolicy: input.reconcilePolicy || null,
     ...input,
     domains: freezeStrings(input.domains),
     acceptedSourceDomains: freezeStrings(input.acceptedSourceDomains),
     operations: freezeStrings(input.operations),
     acceptedInputKinds: freezeStrings(input.acceptedInputKinds || ['latest_message']),
-    requiredSlots: freezeStrings(input.requiredSlots),
+    requiredSlots,
     dependencies: freezeStrings(input.dependencies),
     rolePolicy: freezeStrings(input.rolePolicy || ['user', 'root']),
-    temporalSlots: freezeTemporalSlots(input.temporalSlots),
+    temporalSlots,
+    slots,
+    workflow: defaultWorkflow(input),
+    queryBudget: defaultQueryBudget(input),
+    resultContract,
+    renderPolicy: defaultRenderPolicy(input, resultContract),
+    reconcilePolicy: input.reconcilePolicy || null,
     compilerDescription: String(input.compilerDescription || '').trim(),
   });
 }
@@ -105,8 +246,10 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     effect: 'read',
     operations: ['read'],
     requiredSlots: ['query'],
+    slots: [{ name: 'query', source: 'model_text', maxLength: 200 }],
     scopePolicy: 'public_product',
     resultKind: 'product_help_results',
+    workflow: { kind: 'single_tool', deterministic: true },
   }),
   query_bookmarks: defineToolCapability('query_bookmarks', {
     id: 'bookmark.query',
@@ -117,7 +260,14 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     acceptedInputKinds: ['latest_message', 'workspace_query'],
     scopePolicy: 'owner_bound',
     resultKind: 'bookmark_list',
+    slots: [
+      { name: 'keyword', source: 'model_text', maxLength: 200 },
+      { name: 'tag', source: 'model_text', maxLength: 100 },
+      { name: 'limit', source: 'server_default', defaultPolicy: 'server_default' },
+      { name: 'user', source: 'server_scope' },
+    ],
     temporalSlots: [{ name: 'timeRange', kind: 'range', label: '书签创建时间', allowAll: true, autoBind: true }],
+    workflow: { kind: 'single_tool', deterministic: true },
   }),
   query_notes: defineToolCapability('query_notes', {
     id: 'note.query',
@@ -128,7 +278,13 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     acceptedInputKinds: ['latest_message', 'workspace_query'],
     scopePolicy: 'owner_bound',
     resultKind: 'note_list',
+    slots: [
+      { name: 'keyword', source: 'model_text', maxLength: 200 },
+      { name: 'limit', source: 'server_default', defaultPolicy: 'server_default' },
+      { name: 'user', source: 'server_scope' },
+    ],
     temporalSlots: [{ name: 'timeRange', kind: 'range', label: '笔记创建时间', allowAll: true, autoBind: true }],
+    workflow: { kind: 'single_tool', deterministic: true },
   }),
   query_todos: defineToolCapability('query_todos', {
     id: 'todo.query',
@@ -139,10 +295,18 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     acceptedInputKinds: ['latest_message', 'workspace_query', 'last_result_refs'],
     scopePolicy: 'owner_bound',
     resultKind: 'todo_list',
+    slots: [
+      { name: 'status', source: 'model_enum', enum: ['pending', 'completed', 'all'] },
+      { name: 'keyword', source: 'model_text', maxLength: 100 },
+      { name: 'sort', source: 'model_enum', enum: ['smart', 'due', 'newest', 'oldest'] },
+      { name: 'limit', source: 'server_default', defaultPolicy: 'server_default' },
+      { name: 'cursor', source: 'dependency_result' },
+    ],
     temporalSlots: [
       { name: 'planDate', kind: 'date', label: '待办计划日期', autoBind: true },
       { name: 'reminderAt', kind: 'datetime', label: '待办提醒时间', autoBind: true, coBind: ['planDate'] },
     ],
+    workflow: { kind: 'single_tool', deterministic: true },
   }),
   set_todo_status: defineToolCapability('set_todo_status', {
     id: 'todo.status.set',
@@ -151,6 +315,10 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     effect: 'write',
     operations: ['complete', 'reopen'],
     requiredSlots: ['status'],
+    slots: [
+      { name: 'status', source: 'model_enum', enum: ['pending', 'completed'] },
+      { name: 'keyword', source: 'model_text', maxLength: 100 },
+    ],
     dependencies: ['todo.query'],
     acceptedInputKinds: ['latest_message', 'last_result_refs'],
     scopePolicy: 'confirmation_owner_bound',
@@ -178,6 +346,12 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     effect: 'write',
     operations: ['create'],
     requiredSlots: ['title'],
+    slots: [
+      { name: 'title', source: 'model_text', maxLength: 120 },
+      { name: 'description', source: 'model_text', maxLength: 2_000 },
+      { name: 'priority', source: 'client_explicit' },
+      { name: 'dueAt', source: 'client_explicit' },
+    ],
     scopePolicy: 'confirmation_owner_bound',
     resultKind: 'todo',
   }),
@@ -188,6 +362,12 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     effect: 'read',
     operations: ['read'],
     requiredSlots: ['title', 'timing', 'plan', 'reminder'],
+    slots: [
+      { name: 'title', source: 'model_text', maxLength: 120 },
+      { name: 'timing', source: 'client_explicit' },
+      { name: 'plan', source: 'client_explicit' },
+      { name: 'reminder', source: 'client_explicit' },
+    ],
     scopePolicy: 'owner_bound',
     resultKind: 'todo_plan_preview',
   }),
@@ -198,6 +378,12 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     effect: 'write',
     operations: ['create'],
     requiredSlots: ['title', 'timing', 'plan', 'reminder'],
+    slots: [
+      { name: 'title', source: 'model_text', maxLength: 120 },
+      { name: 'timing', source: 'client_explicit' },
+      { name: 'plan', source: 'client_explicit' },
+      { name: 'reminder', source: 'client_explicit' },
+    ],
     dependencies: ['todo.plan.preview'],
     scopePolicy: 'confirmation_owner_bound',
     resultKind: 'todo_plan',
@@ -222,6 +408,10 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     effect: 'read',
     operations: ['read'],
     requiredSlots: ['resourceType', 'resourceId'],
+    slots: [
+      { name: 'resourceType', source: 'dependency_result' },
+      { name: 'resourceId', source: 'dependency_result' },
+    ],
     acceptedInputKinds: ['selected_resource', 'last_result_refs'],
     scopePolicy: 'explicit_resource_only',
     resultKind: 'image_analysis',
@@ -236,6 +426,14 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     acceptedInputKinds: ['latest_message', 'workspace_query'],
     scopePolicy: 'owner_bound',
     resultKind: 'file_list',
+    slots: [
+      { name: 'keyword', source: 'model_text', maxLength: 200 },
+      { name: 'folderId', source: 'resource_binding' },
+      { name: 'folderName', source: 'model_text', maxLength: 255 },
+      { name: 'type', source: 'model_enum', enum: ['image', 'document', 'video', 'audio', 'archive', 'other'] },
+      { name: 'limit', source: 'server_default', defaultPolicy: 'server_default' },
+      { name: 'user', source: 'server_scope' },
+    ],
     temporalSlots: [{ name: 'timeRange', kind: 'range', label: '文件创建时间', allowAll: true, autoBind: true }],
   }),
   query_cloud_folders: defineToolCapability('query_cloud_folders', {
@@ -263,6 +461,12 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     effect: 'read',
     operations: ['read'],
     requiredSlots: ['keyword'],
+    slots: [
+      { name: 'keyword', source: 'model_text', maxLength: 500 },
+      { name: 'limit', source: 'server_default', defaultPolicy: 'server_default' },
+      { name: 'resourceTypes', source: 'client_explicit' },
+      { name: 'resourceIds', source: 'resource_binding' },
+    ],
     acceptedInputKinds: ['latest_message', 'workspace_query', 'selected_scope'],
     scopePolicy: 'grounding_scope_bound',
     resultKind: 'content_search_results',
@@ -368,6 +572,11 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     effect: 'write',
     operations: ['create'],
     requiredSlots: ['title'],
+    slots: [
+      { name: 'title', source: 'model_text', maxLength: 255 },
+      { name: 'content', source: 'dependency_result' },
+      { name: 'parentId', source: 'resource_binding' },
+    ],
     acceptedInputKinds: [
       'latest_message',
       'selected_resource',
@@ -390,6 +599,11 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     effect: 'write',
     operations: ['create'],
     requiredSlots: ['attachmentId'],
+    slots: [
+      { name: 'attachmentId', source: 'resource_binding' },
+      { name: 'title', source: 'model_text', maxLength: 255 },
+      { name: 'description', source: 'model_text', maxLength: 2_000 },
+    ],
     acceptedInputKinds: ['selected_resource'],
     scopePolicy: 'confirmation_owner_bound',
     resultKind: 'image_note',
@@ -401,6 +615,13 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     effect: 'write',
     operations: ['save', 'upload'],
     requiredSlots: ['attachmentId'],
+    slots: [
+      { name: 'attachmentId', source: 'resource_binding' },
+      { name: 'fileName', source: 'model_text', maxLength: 255 },
+      { name: 'folderId', source: 'resource_binding' },
+      { name: 'folderName', source: 'model_text', maxLength: 255 },
+      { name: 'folderStrategy', source: 'model_enum', enum: ['existing', 'root', 'create_if_missing'] },
+    ],
     dependencies: ['file.folder.query'],
     acceptedInputKinds: ['selected_resource'],
     scopePolicy: 'confirmation_owner_bound',
@@ -437,6 +658,7 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     effect: 'write',
     operations: ['create'],
     requiredSlots: ['tagName'],
+    slots: [{ name: 'tagName', source: 'model_text', maxLength: 100 }],
     scopePolicy: 'confirmation_owner_bound',
     resultKind: 'tag',
   }),
@@ -456,6 +678,13 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     effect: 'write',
     operations: ['create', 'update'],
     requiredSlots: ['title'],
+    slots: [
+      { name: 'title', source: 'model_text', maxLength: 255 },
+      { name: 'content', source: 'model_text', maxLength: 1_000 },
+      { name: 'category', source: 'model_enum', enum: ['帮助中心', '内部知识', 'FAQ', '系统行为'] },
+      { name: 'status', source: 'model_enum', enum: ['public', 'internal'] },
+      { name: 'type', source: 'model_enum', enum: ['html', 'markdown'] },
+    ],
     rolePolicy: ['root'],
     scopePolicy: 'confirmation_owner_bound',
     resultKind: 'knowledge_entry',
@@ -470,6 +699,7 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     operations: ['read'],
     scopePolicy: 'owner_bound',
     resultKind: 'account_profile',
+    workflow: { kind: 'single_tool', deterministic: true },
   }),
   create_bookmark: defineToolCapability('create_bookmark', {
     id: 'bookmark.create',
@@ -478,6 +708,12 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     effect: 'write',
     operations: ['create'],
     requiredSlots: ['url'],
+    slots: [
+      { name: 'url', source: 'client_explicit' },
+      { name: 'name', source: 'model_text', maxLength: 255 },
+      { name: 'description', source: 'model_text', maxLength: 255 },
+      { name: 'tags', source: 'client_explicit' },
+    ],
     scopePolicy: 'confirmation_owner_bound',
     resultKind: 'bookmark',
   }),
@@ -488,6 +724,7 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     effect: 'read',
     operations: ['read'],
     requiredSlots: ['url'],
+    slots: [{ name: 'url', source: 'resource_binding' }],
     acceptedInputKinds: ['latest_message', 'selected_resource', 'last_result_refs'],
     scopePolicy: 'explicit_url_only',
     resultKind: 'web_document',
@@ -501,6 +738,7 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     operations: ['read'],
     scopePolicy: 'owner_bound',
     resultKind: 'growth_profile',
+    workflow: { kind: 'single_tool', deterministic: true },
   }),
   query_points_log: defineToolCapability('query_points_log', {
     id: 'growth.points_log.query',
@@ -519,6 +757,7 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     operations: ['read'],
     scopePolicy: 'owner_bound',
     resultKind: 'points_summary',
+    workflow: { kind: 'single_tool', deterministic: true },
   }),
   query_notifications: defineToolCapability('query_notifications', {
     id: 'account.notification.query',
@@ -584,6 +823,7 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     operations: ['read'],
     scopePolicy: 'owner_bound',
     resultKind: 'lottery_status',
+    workflow: { kind: 'single_tool', deterministic: true },
   }),
   query_my_devices: defineToolCapability('query_my_devices', {
     id: 'account.device.query',
@@ -602,6 +842,7 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     operations: ['read'],
     scopePolicy: 'owner_bound',
     resultKind: 'shop_status',
+    workflow: { kind: 'single_tool', deterministic: true },
   }),
   get_insights: defineToolCapability('get_insights', {
     id: 'content.insights.read',
@@ -629,6 +870,7 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     effect: 'read',
     operations: ['read'],
     requiredSlots: ['scope_user'],
+    slots: [{ name: 'scope_user', source: 'model_text', maxLength: 255 }],
     rolePolicy: ['root'],
     scopePolicy: 'root_context_bound',
     resultKind: 'user_detail',
@@ -786,6 +1028,12 @@ export const NON_EXECUTABLE_CAPABILITY_MANIFEST = Object.freeze(
       coverage: 'none',
       artifactKind: 'none',
       temporalSlots: Object.freeze([]),
+      slots: Object.freeze([]),
+      workflow: Object.freeze({ kind: 'manual_only', deterministic: false }),
+      queryBudget: null,
+      resultContract: Object.freeze({ kind: 'none' }),
+      renderPolicy: Object.freeze({ exactKinds: Object.freeze([]), composerAllowed: false }),
+      reconcilePolicy: null,
       guidance: Object.freeze({
         zh: String(capability.guidance?.zh || ''),
         en: String(capability.guidance?.en || ''),
@@ -906,6 +1154,43 @@ export function validateAgentV3CapabilityManifest(tools) {
     }
     if (!capability.operations.length) errors.push(`能力 ${capability.id} 缺少 operations`);
     if (!capability.resultKind) errors.push(`能力 ${capability.id} 缺少 resultKind`);
+    if (!VALID_WORKFLOW_KINDS.has(capability.workflow?.kind)) {
+      errors.push(`能力 ${capability.id} 的 workflow 无效`);
+    }
+    if (typeof capability.workflow?.deterministic !== 'boolean') {
+      errors.push(`能力 ${capability.id} 的 workflow deterministic 标记无效`);
+    }
+    if (!VALID_RESULT_CONTRACT_KINDS.has(capability.resultContract?.kind)) {
+      errors.push(`能力 ${capability.id} 的 resultContract 无效`);
+    }
+    if (capability.effect === 'read') {
+      const budget = capability.queryBudget;
+      if (
+        !budget ||
+        !Number.isSafeInteger(budget.maxPages) ||
+        !Number.isSafeInteger(budget.maxItems) ||
+        !Number.isSafeInteger(budget.maxBytes) ||
+        !Number.isSafeInteger(budget.deadlineMs) ||
+        !Number.isSafeInteger(budget.maxInlineRefs) ||
+        budget.maxPages < 1 ||
+        budget.maxPages > 20 ||
+        budget.maxItems < 1 ||
+        budget.maxItems > 500 ||
+        budget.maxBytes < 1_024 ||
+        budget.maxBytes > 1_000_000 ||
+        budget.deadlineMs < 500 ||
+        budget.deadlineMs > 30_000 ||
+        budget.maxInlineRefs < 1 ||
+        budget.maxInlineRefs > budget.maxItems
+      ) {
+        errors.push(`能力 ${capability.id} 的 queryBudget 无界或无效`);
+      }
+      if (capability.resultContract?.kind === 'none') {
+        errors.push(`读取能力 ${capability.id} 缺少结果契约`);
+      }
+    } else if (capability.queryBudget != null) {
+      errors.push(`写能力 ${capability.id} 不应声明查询预算`);
+    }
     if (!['none', 'note'].includes(capability.artifactKind)) errors.push(`能力 ${capability.id} 的 artifactKind 无效`);
     if (!VALID_SIDE_EFFECT_POLICIES.has(capability.sideEffectPolicy)) {
       errors.push(`能力 ${capability.id} 的 sideEffectPolicy 无效`);
@@ -932,6 +1217,24 @@ export function validateAgentV3CapabilityManifest(tools) {
       }
       if ((slot.coBind || []).some((name) => !(capability.temporalSlots || []).some((item) => item.name === name))) {
         errors.push(`能力 ${capability.id} 的时间槽 ${slot.name} 引用了不存在的联动槽`);
+      }
+    }
+    const slotNames = new Set();
+    for (const slot of capability.slots || []) {
+      if (!slot.name || slotNames.has(slot.name)) errors.push(`能力 ${capability.id} 的槽位重复或为空`);
+      slotNames.add(slot.name);
+      if (!VALID_SLOT_SOURCES.has(slot.source)) errors.push(`能力 ${capability.id} 的槽位 ${slot.name} 来源无效`);
+      if (slot.source === 'model_enum' && !slot.enum?.length) {
+        errors.push(`能力 ${capability.id} 的枚举槽 ${slot.name} 缺少候选值`);
+      }
+      if (slot.source !== 'model_enum' && slot.enum?.length) {
+        errors.push(`能力 ${capability.id} 的非枚举槽 ${slot.name} 不应声明候选值`);
+      }
+      if (slot.source === 'model_text' && (!Number.isSafeInteger(slot.maxLength) || slot.maxLength < 1)) {
+        errors.push(`能力 ${capability.id} 的文本槽 ${slot.name} 长度无效`);
+      }
+      if (slot.required !== capability.requiredSlots.includes(slot.name)) {
+        errors.push(`能力 ${capability.id} 的槽位 ${slot.name} required 与 requiredSlots 不一致`);
       }
     }
     if (!VALID_SCOPE_POLICIES.has(capability.scopePolicy)) errors.push(`能力 ${capability.id} 的 scopePolicy 无效`);
@@ -970,6 +1273,9 @@ export function validateAgentV3CapabilityManifest(tools) {
     const declaredRequired = new Set(capability.requiredSlots);
     for (const slot of required) {
       if (!declaredRequired.has(slot)) errors.push(`工具 ${tool.name} 的必填参数 ${slot} 未写入 V3 能力清单`);
+      if (!(capability.slots || []).some((item) => item.name === slot)) {
+        errors.push(`工具 ${tool.name} 的必填参数 ${slot} 缺少 V3 slot source 声明`);
+      }
     }
     const actionCapability = AGENT_ACTION_CAPABILITIES.find((item) => item.toolName === tool.name);
     if (tool.isWrite === true && !actionCapability) errors.push(`写工具 ${tool.name} 缺少动作能力策略`);
@@ -1009,4 +1315,4 @@ export function assertAgentV3CapabilityManifest(tools) {
   return true;
 }
 
-export const __testing = Object.freeze({ capabilityMatchesScope, defineToolCapability });
+export const __testing = Object.freeze({ capabilityMatchesScope, defineToolCapability, freezeSlots });

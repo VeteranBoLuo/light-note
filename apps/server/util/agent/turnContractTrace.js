@@ -15,6 +15,7 @@ const HISTORY_POLICIES = new Set(['legacy_conversation', 'discourse_projection_o
 const INTENT_COMPILER_MODES = new Set(['off', 'shadow', 'enforce', 'v3_shadow', 'v3_enforce']);
 const INTENT_COMPILER_STATES = new Set(['not_run', 'ready', 'invalid']);
 const EXECUTION_PLANNER_STATES = new Set(['not_run', 'ready', 'blocked', 'clarification', 'unsupported']);
+const EXECUTION_PLANNING_MODES = new Set(['not_run', 'deterministic', 'slot_filler', 'planner']);
 const TURN_REQUEST_KINDS = new Set([
   'unknown',
   'conversation',
@@ -146,6 +147,7 @@ export function createTurnContractTrace() {
     intentDivergenceCodes: [],
     intentCompilerErrorCode: null,
     executionPlannerState: 'not_run',
+    executionPlanningMode: 'not_run',
     executionPlannerAttempts: 0,
     executionPlannerIssues: [],
     semanticDigest: null,
@@ -261,6 +263,7 @@ export function recordIntentCompiler(trace, input = {}) {
 export function recordExecutionPlanner(trace, input = {}) {
   if (!trace || typeof trace !== 'object') return;
   trace.executionPlannerState = safeEnum(input.state, EXECUTION_PLANNER_STATES, 'not_run');
+  trace.executionPlanningMode = safeEnum(input.mode, EXECUTION_PLANNING_MODES, 'not_run');
   trace.executionPlannerAttempts = safeCount(input.attempts);
   trace.executionPlannerIssues = safeIssues(input.issues);
 }
@@ -329,6 +332,7 @@ export function sanitizeTurnContractTrace(value) {
   });
   recordExecutionPlanner(trace, {
     state: value?.executionPlannerState,
+    mode: value?.executionPlanningMode,
     attempts: value?.executionPlannerAttempts,
     issues: value?.executionPlannerIssues,
   });

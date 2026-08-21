@@ -1,6 +1,7 @@
 import { apiBasePost } from '@/http/request';
 import type { AiResolvedGrounding } from '@/types/aiGrounding';
 import type { AiQueryScope } from '@/types/aiQueryScope';
+import type { AiExecutionReceipt, AiResponseEnvelope } from '@/types/aiExecutionReceipt';
 
 export type AiConversationStatus = 'active' | 'archived';
 export type AiRetentionMode = 'standard' | 'temporary' | 'indefinite';
@@ -106,6 +107,8 @@ export interface AiAgentRecoverySnapshot {
   resolvedGrounding?: AiResolvedGrounding | null;
   materialClarification?: import('@/types/aiGrounding').AiMaterialClarification | null;
   queryScopes?: AiQueryScope[];
+  executionReceipt?: AiExecutionReceipt | null;
+  responseEnvelope?: AiResponseEnvelope | null;
   coverage: Record<string, unknown> | null;
   artifacts?: import('@/types/aiArtifact').AiArtifact[];
   activity: Array<Record<string, unknown> | string>;

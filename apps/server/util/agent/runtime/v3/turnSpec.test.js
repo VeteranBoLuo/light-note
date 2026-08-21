@@ -31,7 +31,7 @@ function rawGoal(capabilityId, operation = 'read', extra = {}) {
 
 function rawSpec(goals, extra = {}) {
   return {
-    version: '3.0',
+    version: extra.version || '3.0',
     requestKind: extra.requestKind || 'answer',
     confidence: extra.confidence || 'high',
     continuationMode: extra.continuationMode || 'independent',
@@ -45,6 +45,146 @@ function rawSpec(goals, extra = {}) {
 }
 
 describe('TurnSpec V3', () => {
+  it('先双读 3.0/3.1：3.1 句柄、时间声明和 goal 语义归一为唯一执行投影', () => {
+    const catalog = catalogFor(['query_notes']);
+    const raw = rawSpec(
+      [
+        {
+          ...rawGoal('note.query'),
+          relation: 'new_topic',
+          evidencePolicy: { kind: 'workspace_query' },
+          slotClaims: {},
+          temporalClaims: [{ slot: 'timeRange', expression: '今天' }],
+          outputContract: { kind: 'entity_list', requireComplete: true },
+          ambiguities: [],
+          referentSelectors: [
+            {
+              source: 'last_result',
+              resultSetHandleId: 'rsh-today-notes',
+              types: ['note'],
+              itemOrdinal: 2,
+            },
+          ],
+        },
+      ],
+      { version: '3.1', continuationMode: 'refer_last_result', temporalConstraints: [] },
+    );
+    const spec = normalizeTurnSpecV3(raw, {
+      catalog,
+      authoritativeGroundingPolicy: 'workspace_query',
+      latestMessage: '查看今天结果的第二篇笔记',
+      temporalContext: { timeZone: 'Asia/Shanghai', now: '2026-08-21T12:00:00+08:00' },
+      resultSetHandleIds: ['rsh-today-notes'],
+    });
+
+    expect(spec).toMatchObject({ version: '3.1', continuationMode: 'refer_last_result' });
+    expect(spec.goals[0]).toMatchObject({
+      relation: 'new_topic',
+      evidencePolicy: { kind: 'workspace_query', goalIds: [] },
+      slotClaims: {},
+      temporalClaims: [{ goalId: 'goal-1', slot: 'timeRange', expression: '今天' }],
+      outputContract: { kind: 'entity_list', requireComplete: true },
+      ambiguities: [],
+    });
+    expect(spec.goals[0].referentSelectors[0]).toMatchObject({
+      resultSetHandleId: 'rsh-today-notes',
+      itemOrdinal: 2,
+      ordinal: 2,
+    });
+    expect(spec.temporalConstraints).toEqual([
+      expect.objectContaining({ goalId: 'goal-1', slot: 'timeRange', expression: '今天' }),
+    ]);
+
+    expect(
+      normalizeTurnSpecV3(raw, {
+        catalog,
+        authoritativeGroundingPolicy: 'workspace_query',
+        latestMessage: '查看今天结果的第二篇笔记',
+        temporalContext: { timeZone: 'Asia/Shanghai', now: '2026-08-21T12:00:00+08:00' },
+        resultSetHandleIds: ['rsh-other'],
+      }),
+    ).toBeNull();
+  });
+
+  it('3.1 只接受 Manifest 声明的 model slot claim，并校验枚举与长度', () => {
+    const catalog = catalogFor(['query_todos']);
+    const make = (slotClaims) =>
+      rawSpec(
+        [
+          {
+            ...rawGoal('todo.query'),
+            relation: 'new_topic',
+            evidencePolicy: { kind: 'workspace_query' },
+            slotClaims,
+            temporalClaims: [],
+            ambiguities: [],
+          },
+        ],
+        { version: '3.1' },
+      );
+
+    expect(
+      normalizeTurnSpecV3(make({ keyword: '推广', status: 'pending' }), {
+        catalog,
+        authoritativeGroundingPolicy: 'workspace_query',
+      }),
+    ).toMatchObject({
+      goals: [
+        expect.objectContaining({
+          slotClaims: expect.objectContaining({ keyword: '推广', status: 'pending', sort: null }),
+        }),
+      ],
+    });
+    expect(
+      normalizeTurnSpecV3(make({ status: 'deleted' }), {
+        catalog,
+        authoritativeGroundingPolicy: 'workspace_query',
+      }),
+    ).toBeNull();
+    expect(
+      normalizeTurnSpecV3(make({ todoId: 'client-forged-id' }), {
+        catalog,
+        authoritativeGroundingPolicy: 'workspace_query',
+      }),
+    ).toBeNull();
+  });
+
+  it('3.1 从 goal ambiguity 派生兼容 confidence，并拒绝 relation/evidence 与依赖冲突', () => {
+    const catalog = catalogFor(['query_notes', 'create_note']);
+    const goals = [
+      {
+        ...rawGoal('note.query', 'read', { id: 'read' }),
+        relation: 'new_topic',
+        evidencePolicy: { kind: 'workspace_query' },
+        slotClaims: {},
+        temporalClaims: [],
+        ambiguities: [],
+      },
+      {
+        ...rawGoal('note.create', 'create', { id: 'write', dependsOn: ['read'] }),
+        relation: 'depends_on_goal',
+        evidencePolicy: { kind: 'goal_result', goalIds: ['read'] },
+        slotClaims: { title: '总结' },
+        temporalClaims: [],
+        ambiguities: [{ field: 'target', impact: 'blocks_write', candidateKinds: ['note'], question: '保存到哪里？' }],
+      },
+    ];
+    const spec = normalizeTurnSpecV3(rawSpec(goals, { version: '3.1', requestKind: 'create_artifact' }), {
+      catalog,
+      authoritativeGroundingPolicy: 'workspace_query',
+    });
+    expect(spec).toMatchObject({ confidence: 'medium', clarificationQuestion: '保存到哪里？' });
+
+    const conflict = structuredClone(goals);
+    conflict[1].relation = 'new_topic';
+    expect(
+      normalizeTurnSpecV3(rawSpec(conflict, { version: '3.1', requestKind: 'create_artifact' }), {
+        catalog,
+        authoritativeGroundingPolicy: 'workspace_query',
+      }),
+    ).toBeNull();
+  });
+
   it('写能力的声明式依赖由服务端确定性补齐，不要求模型再猜一次查询工具', () => {
     const catalog = catalogFor(['query_todos', 'set_todo_status']);
     const spec = normalizeTurnSpecV3(rawSpec([rawGoal('todo.status.set', 'complete')], { requestKind: 'action' }), {
@@ -52,7 +192,12 @@ describe('TurnSpec V3', () => {
       authoritativeGroundingPolicy: 'workspace_query',
     });
     expect(spec.goals).toHaveLength(2);
-    expect(spec.goals[0]).toMatchObject({ capabilityId: 'todo.query', kind: 'read', implicit: true });
+    expect(spec.goals[0]).toMatchObject({
+      capabilityId: 'todo.query',
+      kind: 'read',
+      relation: 'new_topic',
+      implicit: true,
+    });
     expect(spec.goals[1]).toMatchObject({ capabilityId: 'todo.status.set', kind: 'write', operation: 'complete' });
     expect(spec.goals[1].dependsOn).toEqual([spec.goals[0].id]);
   });
@@ -106,7 +251,13 @@ describe('TurnSpec V3', () => {
     );
 
     expect(spec.goals[0].referentSelectors).toEqual([
-      { source: 'dialogue_anchor', types: ['dialogue'], ordinal: null },
+      {
+        source: 'dialogue_anchor',
+        resultSetHandleId: '',
+        types: ['dialogue'],
+        itemOrdinal: null,
+        ordinal: null,
+      },
     ]);
   });
 

@@ -258,11 +258,16 @@ try {
 - V3 的目标模式使用 `AI_AGENT_RUNTIME_MODE=legacy|v3_shadow|v3_enforce`，默认 `legacy`；账号受众独立使用 `AI_AGENT_RUNTIME_V3_ROLLOUT`。受众缺失、`none` 或配置无效时，本请求一律回到 legacy，单独设置目标模式不会触发 V3 或增加 shadow 模型调用。受众可用 `root`、`all`，或严格 JSON：`{"roles":["root"],"actorIds":["<user-id>"],"excludeActorIds":[],"percentage":5,"salt":"release-v3"}`。角色、账号和百分比按 OR 命中，排除账号优先；百分比按认证后的真实 actor 做稳定 SHA-256 分桶，同一轮灰度期间不得修改 salt。任何启用比例调整必须保留 legacy 急停；尚未完成灰度和生产指标验收前，不得删除旧路径。
 - 五实体持久状态使用独立开关 `AI_AGENT_STATE_PERSISTENCE_MODE=disabled|shadow|enforce`，默认 `disabled`。禁止把 `AI_AGENT_RUNTIME_MODE=v3_enforce` 当成数据库表已经存在的证明，也禁止在 Runtime 开关里隐式推导 persistence 模式。`shadow` 只允许单调镜像且必须 fail-open；`enforce` 才允许 Redis miss 从 MySQL 恢复并把 revision 冲突作为请求失败。发布顺序固定为：应用 migration → 只读 schema assertions → 代码保持 persistence disabled → Root/白名单 shadow 观察 → enforce。
 - `runtime/v3/capabilityManifest.js` 是 V3 能力、工具、角色、时间槽、资源绑定和结果引用的单一声明源。新增或修改工具时必须同步 Manifest 并通过完整性校验；Router 只能按 TurnSpec 中的 capability ID 精确匹配，禁止新增关键词、正则、相似度或工具名特判作为正常 V3 路由。
+- Manifest 的确定性工作流必须显式声明，且只能通过统一 `workflowCompiler → validateExecutionPlan` 链生成；不能因为某个能力“看起来简单”就在 Handler 直接拼工具调用。未声明、缺槽、参数不合法、目标不唯一或依赖不满足时必须回到现有 Planner，迁移期不得一刀切删除 Planner。
+- Manifest 参数必须通过 `slots` 声明唯一权威来源；必填工具参数缺少 slot source 时启动校验失败。`model_text/model_enum` 才能由模型补齐，actor、scope、时间、资源绑定和依赖结果只能由对应服务端阶段注入。TurnSpec 3.1 的单目标缺槽才允许调用受限 Slot Filler，并且补槽结果必须重新通过原 Validator；3.0 保持旧 Planner，不得因为新补槽器上线而改变既有模型调用次数。
 - Intent Compiler 每轮只运行一次，只能看到最新用户消息、认证身份、服务端材料摘要和结构化 `DiscourseProjection`；`v3_enforce` 下 Compiler、Planner 与 Composer 的原始历史消息数必须为 0。旧助手正文、旧工具正文、展示标题和前端缓存不能成为本轮执行事实。
 - TurnSpec 是本轮不可变语义计划。时间范围、精确提醒时间、结构化指代和输出约束必须绑定到具体 goal/slot；后续阶段只能校验、补齐权威值或缩小范围，不得把“最近 7 天”带进用户已经改成“今天”的新轮，也不得把旧笔记 ResultSet 带入新的书签请求。
+- TurnSpec 协议升级必须双读、单写、可回退：当前 Compiler 在 3.1 灰度前继续只写 3.0，服务端 parser 可接受并严格归一化 3.0/3.1。3.1 的 ResultSet 指代只接受当前服务端投影枚举中的 `resultSetHandleId` 和有界 `itemOrdinal`；未知 handle、跨会话 handle、冲突时间声明和未在 Manifest 声明的 slot claim 一律失败关闭。
+- 3.1 ambiguity 必须按目标求值，不能看到任意低置信就停止整轮。`fatal` 阻断全轮，`blocks_goal` 阻断目标，`blocks_write` 只阻断写入/转换目标；阻断沿依赖边传播。部分可执行时，旧链适配层、计划器和最终目标状态必须使用同一份 blocked goal 集合，禁止受阻写目标从兼容路径重新出现。
 - `recentDialogue` 只承担普通连续问答的语言承接，不能直接成为私有事实或产物材料。用户明确要求整理指定对话时，Compiler 只能输出 `dialogue_anchor` selector；服务端必须从 owner 校验后的云消息生成有界 message IDs + topic epoch + digest SourceSet。每次生成/改写重新读取同一组 completed 消息并校验 digest；客户端 history、临时 session turns 和旧助手展示正文不得持久化为 Dialogue Anchor。
 - Manifest 声明为 temporal slot 或 `resourceBindings` 的参数必须从模型可见 schema 中移除。Planner 只规划仍需模型表达的普通参数；服务端从 TurnSpec、当前 ResultSet 或重新校验归属后的资源字段注入权威值。禁止让模型抄写资源 ID、URL、对象键、日期和提醒分钟，禁止为单个事故增加工具名或中文句式分支。
 - `ResultSet` 只记录工具显式返回的稳定类型化引用，未知或缺少引用投影的结果不得猜测为可继承材料；权威空结果可以记录为空集。`ArtifactState` 只由创建、替换、取消、过期、失败和成功等真实生命周期更新；`DiscourseState` 以 revision/topic epoch 管理跨轮指代，跨领域独立请求必须推进主题代际。
+- 工具结果不得直接以自然语言同时承担事实、审计和 UI 状态。成功工具先生成 `FactBundle`，运行链再生成私有/公开分层的 `ExecutionReceipt` 与 `ResponseEnvelope`；精确数字、完整性、时间口径、截断和风险披露由服务端确定性渲染。Composer 只能使用同一轮允许的 FactBundle，不得改写权威事实。SSE、恢复、消息持久化和前端“处理记录”必须复用同一收据，不能由是否出现来源标签或某句模型文案猜测工具执行状态。
 - 前端能力模块选择只作用于当前一轮，并在发送后恢复“自动判断”；服务端仍需按认证角色、代管模式和 Manifest 再次求交。模块选择只能收窄候选能力，不能授权新能力，也不能替代自然语言 TurnSpec。
 - V3 开发默认使用单测、Handler mock、dry-run 和确定性夹具，不调用真实模型。`pnpm --filter server smoke:ai-turn-v3` 必须保持零模型、零业务工具；真实模式必须显式 `--live`、点名 1～2 个 `--case`，重复最多 3 次，而且仍只验证 Compiler。只有实际准备启用或扩大 V3 灰度时，才按发布文档执行获授权的 root 真实业务矩阵。
 

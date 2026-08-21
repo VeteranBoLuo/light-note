@@ -86,9 +86,13 @@ Planner 看不到这些可由服务端确定的自由参数，因此不能把旧
        Execution Context（权限/资源/URL/时间绑定）
                          │
                          ▼
-        Planner → Validator → 现有 Runner/确认协议
+   确定性 Workflow（适用时）或 Planner → Validator
                          │
                          ▼
+                 现有 Runner/确认协议
+                         │
+                         ▼
+ FactBundle / ExecutionReceipt / ResponseEnvelope
           ResultSet / ArtifactState / 安全 Trace
 ```
 
@@ -116,12 +120,15 @@ V3 复用现有工具实现、owner 校验、Tool Policy、确认令牌、幂等
 开发主门禁全部使用确定性测试，不消费真实 AI Token：
 
 - Manifest 完整性：所有已注册工具都有明确状态，enabled 能力映射真实工具，角色和依赖合法。
+- Manifest 3.1：workflow、query budget、result contract、render/reconcile policy 经过启动校验；确定性 workflow 仍必须通过统一计划校验，条件不满足时回退 Planner。
 - Compiler/TurnSpec：复合目标、时间约束、当前资源、跨域切换、缺失槽和低置信澄清。
+- TurnSpec 迁移：3.0/3.1 双读、3.0 单写，服务端枚举 ResultSet handle、序数指代、冲突时间/slot claims 失败关闭。
 - Router/Validator：精确 capability 路由、模块收窄、部分不支持披露、额外工具和额外写入失败关闭。
 - 会话状态：同域引用、跨域隔离、歧义集合、topic epoch、草稿替换、确认完成/失效/结果未知。
 - 分层历史：云端权威优先、session 回退、重新生成版本折叠、各阶段预算和 Planner/Tool 零历史。
 - Handler：旧 7 天语义上下文不能覆盖本轮“今天”，权威时间进入查询，私有回答只使用本轮证据。
 - 结果契约：`totalCount/returned/totalExact/completeness/nextCursor` 显式投影，数值型 `raw.total` 不再被执行器自动当成精确总量。
+- 运行产物：成功工具产生 FactBundle，失败工具不产生；ExecutionReceipt/ResponseEnvelope 在同步响应、SSE 终态、恢复快照、会话持久化与前端披露中保持一致，模型不得覆盖精确事实。
 - 能力范围：产物领域与可接受的材料领域分开声明，模块约束既不跨域泄漏，也不会误关闭“书签/笔记/文件 → 生成笔记”这类通用转换。
 - 前端：模块选择、发送后复位、历史消息展示和无材料时不显示多余来源标签。
 - 全量 server 测试、web 测试、类型检查、生产构建和 `git diff --check`。
@@ -174,7 +181,7 @@ pnpm --filter server smoke:ai-root-e2e -- --runtime v3 --live --suite full --exe
 
 早期实验分支曾对历史失败链做过一次获授权的真实 DeepSeek + Root Handler 定点验证：`query_notes` 和“7 天草稿 → 改今天/2000 字 → 再扩到 2500 字 → 确认最新版”链路通过。当前 Phase 0B/1/2 的日常开发不再重复该真实调用，只使用确定性测试、Mock Provider 和 zero-token smoke；只有首次灰度或扩大受众时才在重新授权后运行最小真实门禁。
 
-### Phase 0A / 0B / 1 / 2 渐进分支
+### Phase 0A / 0B / 1 / 2 / 3 / 4 渐进分支
 
 最终统一重构决策按 Phase 0A → 0B → 1 → 2 在独立工作树渐进实施，不直接修改本地 `main`，也不在本阶段启用生产 V3、迁移数据库或删除旧链。已经处理的通用边界包括：
 
@@ -195,6 +202,23 @@ Phase 2 已完成五实体持久状态与产物连续性底座，但尚未应用
 - 并发工具回调不直接决定确认卡顺序，Runner 在有序 join 后统一发送；公开投影不包含 Dialogue Anchor 的消息 ID、正文或私有材料。
 
 该分支的日常验证只跑确定性测试、Mock Provider 和零调用 smoke；真实 Provider 与 Root 数据链仍留到获授权的最终灰度阶段。
+
+### Phase 3 已落地：结果合同与运行收据
+
+- Manifest 已升级到 3.1 合同形态，为每项能力提供有界 query budget、result contract、render/reconcile policy 和 workflow 默认值；缺失声明不会由 Handler 猜测补齐。
+- 成功工具结果统一归一化为 `FactBundle`，区分精确事实、结果完整性、稳定引用、时间口径和安全披露；失败或未执行工具不会生成伪事实。
+- 每轮生成私有/公开分层的 `ExecutionReceipt` 与 `ResponseEnvelope`，同步响应、SSE 终态、恢复快照和前端消息复用同一协议；UI 的“处理记录”只展示真实收据，旧消息才使用兼容回退。
+- 精确数字和必需披露由服务端确定性渲染，Composer 只补充叙述，避免模型把“返回 1 条”改写成“全部只有 1 条”或漏掉截断说明。
+
+### Phase 4 已落地：TurnSpec 3.1、声明式工作流与目标级歧义门禁
+
+- Parser 已支持 TurnSpec 3.0/3.1 双读，当前 Compiler 仍只写 3.0，避免未完成灰度时直接改变真实模型协议。3.1 可表达 goal relation、slot/temporal claims、evidence/output contract 和 ambiguity。
+- ResultSet 续问增加服务端枚举的稳定 `handleId` 与 `itemOrdinal`；模型只能从当轮投影枚举选择，未知或跨会话 handle 失败关闭，旧 ID/ordinal 输入由服务端兼容归一化。
+- Manifest 为迁移能力声明参数来源，必填工具参数若没有唯一 slot source 会在启动校验失败；`workflowCompiler` 只消费声明过的 model slot，并始终通过统一 `validateExecutionPlan`，不能形成第二套参数或权限通道。
+- `Slot Filler` 是 TurnSpec 3.1 的单目标窄职责补槽器，只看到最新消息、目标说明和允许补齐的 model slot；看不到工具名、历史、资源 ID、时间和身份字段。3.0 仍走旧 Planner，避免新阶段提前改变既有调用次数与工具语义。
+- goal ambiguity 由服务端按 `fatal / blocks_goal / blocks_write` 逐目标求值，并沿显式依赖传播；无歧义目标可以继续，受阻目标进入 clarification，适配旧链时也会从可执行目标中剔除，避免“部分澄清”重新变成写操作。
+- trace 新增 `deterministic / slot_filler / planner / not_run` planning mode，可离线区分实际路径；本阶段不改变生产默认 Runtime，不应用 migration，不执行真实 Provider。
+- 尚未完成的是发布阶段而非 Phase 4 编码：Compiler 3.1 shadow 出数、离线阈值评测、Root/白名单灰度、生产指标观察和基于结果逐步扩大确定性 workflow。完成生产灰度前仍不得删除 3.0 或旧 Planner，也不得宣称整个统一重构已经在线完成。
 
 ## 八、后续演进边界
 

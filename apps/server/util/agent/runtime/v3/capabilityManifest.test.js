@@ -23,6 +23,24 @@ describe('Agent V3 capability manifest', () => {
     expect(new Set(AGENT_CAPABILITY_MANIFEST.map((item) => item.id)).size).toBe(AGENT_CAPABILITY_MANIFEST.length);
   });
 
+  it('Manifest 3.1 为必填参数声明唯一 slot source，并只向模型开放 text/enum 槽', () => {
+    for (const capability of Object.values(TOOL_CAPABILITY_MANIFEST)) {
+      for (const required of capability.requiredSlots) {
+        expect(capability.slots.filter((slot) => slot.name === required)).toHaveLength(1);
+      }
+    }
+    expect(getAgentV3CapabilityByToolName('query_notes')?.slots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'keyword', source: 'model_text', maxLength: 200 }),
+        expect.objectContaining({ name: 'timeRange', source: 'temporal' }),
+        expect.objectContaining({ name: 'user', source: 'server_scope' }),
+      ]),
+    );
+    expect(getAgentV3CapabilityByToolName('read_url')?.slots).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: 'url', source: 'resource_binding', required: true })]),
+    );
+  });
+
   it('读网页能力稳定绑定到 read_url，不从工具名或中文描述推断', () => {
     expect(getAgentV3CapabilityByToolName('read_url')).toMatchObject({
       id: 'web.read',

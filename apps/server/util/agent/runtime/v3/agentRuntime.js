@@ -8,17 +8,26 @@ import { RESOURCE_BINDING_ERROR_CODES } from '../executionContext.js';
 import { compileAgentTurnSpecV3 } from './intentCompiler.js';
 import { digestExecutionContractV3 } from './turnSpec.js';
 import { routeTurnSpecCapabilitiesV3 } from './capabilityRouter.js';
+import { compileDeterministicAgentWorkflow } from './workflowCompiler.js';
+import { fillAgentGoalSlots } from './slotFiller.js';
+import { evaluateTurnSpecAmbiguities } from './ambiguityGate.js';
 
 const CLARIFICATION_VALIDATION_ISSUES = new Set(['TOOL_ARGUMENT_REQUIRED', ...RESOURCE_BINDING_ERROR_CODES]);
 
-function goalStates(turnSpec, route) {
+function goalStates(turnSpec, route, { blockedGoalIds = [] } = {}) {
   const routes = new Map((route?.goalRoutes || []).map((item) => [item.goalId, item]));
+  const blocked = new Set(blockedGoalIds);
   return (turnSpec?.goals || []).map((goal) => {
     const routed = routes.get(goal.id);
     return {
       goalId: goal.id,
-      status:
-        routed?.status === 'ready' ? (goal.dependsOn.length ? 'deferred' : 'pending') : routed?.status || 'unsupported',
+      status: blocked.has(goal.id)
+        ? 'clarification'
+        : routed?.status === 'ready'
+          ? goal.dependsOn.length
+            ? 'deferred'
+            : 'pending'
+          : routed?.status || 'unsupported',
     };
   });
 }
@@ -73,6 +82,8 @@ export async function runAgentRuntimeV3({
   compile = compileAgentTurnSpecV3,
   route = routeTurnSpecCapabilitiesV3,
   plan = planAgentExecution,
+  compileWorkflow = compileDeterministicAgentWorkflow,
+  fillSlots = fillAgentGoalSlots,
 } = {}) {
   const actorRole = String(contextSummary?.actorRole || 'user') === 'root' ? 'root' : 'user';
   const temporalContext = buildPlannerTemporalContext({ timeZone, now });
@@ -96,18 +107,26 @@ export async function runAgentRuntimeV3({
     }));
   const turnSpec = compiled.turnSpec;
   const semanticDigest = String(turnSpec?.semanticDigest || turnSpec?.digest || '');
-  if (turnSpec.confidence === 'low' || turnSpec.missingSlots.length > 0) {
+  const ambiguityGate = evaluateTurnSpecAmbiguities(turnSpec);
+  if (
+    turnSpec.missingSlots.length > 0 ||
+    (turnSpec.version !== '3.1' && turnSpec.confidence === 'low') ||
+    ambiguityGate.state === 'clarification'
+  ) {
     return {
       runner: 'clarification',
       state: 'clarification',
       turnSpec,
-      question: turnSpec.clarificationQuestion,
-      goalStates: goalStates(turnSpec, null),
+      question: ambiguityGate.question || turnSpec.clarificationQuestion,
+      goalStates: goalStates(turnSpec, null, { blockedGoalIds: ambiguityGate.blockedGoalIds }),
       toolCalls: [],
+      blockedGoalIds: ambiguityGate.blockedGoalIds,
+      ambiguityQuestions: ambiguityGate.questions,
       semanticDigest,
       executionDigest: null,
     };
   }
+  const planningCompletedGoalIds = [...new Set([...completedGoalIds.map(String), ...ambiguityGate.blockedGoalIds])];
 
   const routed = route({
     turnSpec,
@@ -122,7 +141,7 @@ export async function runAgentRuntimeV3({
       turnSpec,
       route: routed,
       question: '这个请求包含的独立任务较多，请先说明最希望优先完成哪一项。',
-      goalStates: goalStates(turnSpec, routed),
+      goalStates: goalStates(turnSpec, routed, { blockedGoalIds: ambiguityGate.blockedGoalIds }),
       toolCalls: [],
       semanticDigest,
       executionDigest: null,
@@ -134,7 +153,7 @@ export async function runAgentRuntimeV3({
       state: 'unsupported',
       turnSpec,
       route: routed,
-      goalStates: goalStates(turnSpec, routed),
+      goalStates: goalStates(turnSpec, routed, { blockedGoalIds: ambiguityGate.blockedGoalIds }),
       toolCalls: [],
       semanticDigest,
       executionDigest: null,
@@ -156,12 +175,55 @@ export async function runAgentRuntimeV3({
   const outcome = await runner({
     turnSpec,
     route: routed,
-    planExecution: () =>
-      plan({
+    planExecution: async () => {
+      const deterministic = compileWorkflow({
+        turnSpec,
+        route: routed,
+        completedGoalIds: planningCompletedGoalIds,
+        executionContext: effectiveExecutionContext,
+      });
+      if (deterministic.applicable) return deterministic;
+      // Slot Filler 属于 TurnSpec 3.1 的窄职责阶段。当前生产 Compiler 仍输出 3.0，
+      // 不能因为引入新能力而提前改变既有 Planner 的调用次数与语义。
+      if (turnSpec.version === '3.1' && deterministic.reason === 'workflow_model_slots_unresolved') {
+        const pendingGoals = turnSpec.goals.filter((goal) => !planningCompletedGoalIds.includes(goal.id));
+        if (pendingGoals.length === 1) {
+          const goal = pendingGoals[0];
+          const goalRoute = routed.goalRoutes.find((item) => item.goalId === goal.id);
+          const capability =
+            goalRoute?.toolNames?.length === 1 ? routed.capabilityByTool.get(goalRoute.toolNames[0]) : null;
+          const filled = await fillSlots({
+            message,
+            goal,
+            capability,
+            signal,
+            traceId,
+            request,
+            onResponse: onPlannerResponse,
+          });
+          if (filled.applicable) {
+            const compiled = compileWorkflow({
+              turnSpec,
+              route: routed,
+              completedGoalIds: planningCompletedGoalIds,
+              executionContext: effectiveExecutionContext,
+              slotValuesByGoal: new Map([[goal.id, filled.slotValues]]),
+            });
+            if (compiled.applicable) {
+              return {
+                ...compiled,
+                attempts: filled.attempts,
+                planningMode: 'slot_filler',
+              };
+            }
+          }
+        }
+      }
+      const planned = await plan({
         message,
         turnSpec,
         route: routed,
-        completedGoalIds,
+        completedGoalIds: planningCompletedGoalIds,
         dependencyResults,
         executionContext: effectiveExecutionContext,
         timeZone,
@@ -171,7 +233,9 @@ export async function runAgentRuntimeV3({
         request,
         validate: validateExecutionPlan,
         onResponse: onPlannerResponse,
-      }),
+      });
+      return { ...planned, planningMode: 'planner', deterministicFallbackReason: deterministic.reason };
+    },
   });
   if (
     outcome.state === 'blocked' &&
@@ -183,7 +247,7 @@ export async function runAgentRuntimeV3({
       state: 'clarification',
       question: '还缺少执行这项请求所需的关键信息，请补充明确的目标或参数。',
       toolCalls: [],
-      goalStates: goalStates(turnSpec, routed),
+      goalStates: goalStates(turnSpec, routed, { blockedGoalIds: ambiguityGate.blockedGoalIds }),
       compilerAttempts: compiled.attempts,
       semanticDigest,
       executionDigest,
@@ -191,7 +255,9 @@ export async function runAgentRuntimeV3({
   }
   return {
     ...outcome,
-    goalStates: goalStates(turnSpec, routed),
+    goalStates: goalStates(turnSpec, routed, { blockedGoalIds: ambiguityGate.blockedGoalIds }),
+    blockedGoalIds: ambiguityGate.blockedGoalIds,
+    ambiguityQuestions: ambiguityGate.questions,
     compilerAttempts: compiled.attempts,
     runtimeVersion: '3.0',
     semanticDigest,

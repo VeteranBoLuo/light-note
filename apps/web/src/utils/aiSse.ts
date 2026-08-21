@@ -2,6 +2,7 @@ import type { AiAgentInteraction, AiToolConfirmation } from '@/types/aiAgent';
 import type { AiEvidence } from '@/api/aiWorkspaceApi';
 import type { AiArtifact } from '@/types/aiArtifact';
 import type { AiQueryScope } from '@/types/aiQueryScope';
+import type { AiExecutionReceipt, AiResponseEnvelope } from '@/types/aiExecutionReceipt';
 
 export interface AiSseEvent {
   event?: string;
@@ -22,6 +23,8 @@ export interface AiSseEvent {
   evidence?: AiEvidence[];
   coverage?: Record<string, unknown>;
   queryScopes?: AiQueryScope[];
+  executionReceipt?: AiExecutionReceipt;
+  responseEnvelope?: AiResponseEnvelope;
   citationAudit?: {
     citedKeys: string[];
     invalidKeys: string[];

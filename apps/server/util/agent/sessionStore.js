@@ -914,9 +914,13 @@ export async function settleSessionResultFocus(session, { status = 'failed', foc
   });
 }
 
-export function resolveSessionResultSet(session, { id = '', types = [], ordinal = null } = {}) {
+export function resolveSessionResultSet(
+  session,
+  { id = '', handleId = '', types = [], itemOrdinal = null, ordinal = null } = {},
+) {
   normalizeSession(session);
   const requestedId = String(id || '');
+  const requestedHandleId = String(handleId || '');
   const activeIds = requestedId
     ? [requestedId]
     : session.discourseState.activeResultSetIds.length
@@ -926,6 +930,7 @@ export function resolveSessionResultSet(session, { id = '', types = [], ordinal 
   const candidates = activeIds
     .map((targetId) => session.resultSets.find((item) => item?.id === targetId))
     .filter((item) => item && Number(item.expiresAt) > now())
+    .filter((item) => !requestedHandleId || String(item.handleId || '') === requestedHandleId)
     .filter((item) => {
       if (!typeSet.size) return true;
       const refTypes = new Set(normalizeResultRefs(item.refs).map((ref) => ref.type));
@@ -937,12 +942,13 @@ export function resolveSessionResultSet(session, { id = '', types = [], ordinal 
   if (Number(resultSet.expiresAt) <= now()) return { state: 'expired', refs: [] };
   const normalizedMetadata = normalizeResultSetMetadata(resultSet.metadata);
   let refs = normalizeResultRefs(resultSet.refs).filter((ref) => !typeSet.size || typeSet.has(ref.type));
-  const position = Number(ordinal);
+  const position = Number(itemOrdinal ?? ordinal);
   if (Number.isSafeInteger(position) && position > 0) refs = refs.slice(position - 1, position);
   return {
     state: refs.length || resultSet.status === 'empty' ? 'ready' : 'empty',
     resultSet: {
       id: resultSet.id,
+      handleId: String(resultSet.handleId || ''),
       capabilityId: String(resultSet.capabilityId || ''),
       domains: [...new Set((resultSet.domains || []).map(String))],
       status: String(resultSet.status || ''),
@@ -1146,6 +1152,7 @@ export function getSessionDiscourseProjection(session) {
     .map((item) =>
       Object.freeze({
         available: true,
+        handleId: String(item.handleId || ''),
         domains: Object.freeze([...new Set((item.domains || []).map(String))]),
         refTypes: Object.freeze([...new Set(normalizeResultRefs(item.refs).map((ref) => ref.type))]),
         refCount: normalizeResultRefs(item.refs).length,
@@ -1166,6 +1173,7 @@ export function getSessionDiscourseProjection(session) {
       activeResultSets.length === 1 && result.state === 'ready'
         ? Object.freeze({
             available: true,
+            handleId: String(result.resultSet.handleId || ''),
             domains: Object.freeze([...result.resultSet.domains]),
             refTypes: Object.freeze([...new Set(result.refs.map((ref) => ref.type))]),
             refCount: result.refs.length,
@@ -1173,6 +1181,7 @@ export function getSessionDiscourseProjection(session) {
         : result.resultSet?.status === 'empty'
           ? Object.freeze({
               available: true,
+              handleId: String(result.resultSet.handleId || ''),
               domains: Object.freeze([...result.resultSet.domains]),
               refTypes: Object.freeze([]),
               refCount: 0,

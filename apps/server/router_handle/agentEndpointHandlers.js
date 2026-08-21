@@ -67,6 +67,16 @@ import {
   projectAgentV3ResultSet,
   resolveAgentV3ReadFocusSettlement,
 } from '../util/agent/runtime/v3/resultSetProjection.js';
+import {
+  buildAgentFactBundle,
+  factBundlePromptProjection,
+  mergeAgentFactBundles,
+} from '../util/agent/runtime/v3/factBundle.js';
+import {
+  buildAgentExecutionReceipt,
+  buildPublicAgentExecutionReceipt,
+} from '../util/agent/runtime/v3/executionReceipt.js';
+import { buildAgentResponseEnvelope, renderAgentResponseEnvelope } from '../util/agent/runtime/v3/responseEnvelope.js';
 import { canToolConsumeAgentV3ResultSet } from '../util/agent/runtime/v3/candidateAvailability.js';
 import { resolveAgentTargetUser } from '../util/agent/userLookup.js';
 import { scopedTargetUser } from '../util/agent/ownerScope.js';
@@ -727,18 +737,32 @@ async function executeTool(name, args, ctx) {
       summaryOriginalLength: rawSummary.length,
       summaryReturnedLength: summary.length,
     });
+    const sources = resolveToolSources(tool, raw, args, ctx);
+    const capability = getAgentV3CapabilityByToolName(name);
+    const toolRunId = String(ctx.toolRunId || crypto.randomUUID()).slice(0, 128);
+    const factBundle = buildAgentFactBundle({
+      capability,
+      toolRunId,
+      goalId: ctx.goalId,
+      result: { status: 'success', summary, sources, resultMetadata },
+    });
     return {
       status: 'success',
+      toolRunId,
+      capabilityId: capability?.id || '',
+      effect: capability?.effect || (tool.isWrite ? 'write' : 'read'),
+      scopePolicy: capability?.scopePolicy || '',
       summary,
       dataSummary,
       params: args,
-      sources: resolveToolSources(tool, raw, args, ctx),
+      sources,
       nextActions: Array.isArray(raw?.nextActions) ? raw.nextActions.slice(0, 4) : [],
       artifacts,
       ...(answerRequirements.length ? { answerRequirements } : {}),
       dependencyRefs,
       referenceProjectionComplete,
       resultMetadata,
+      ...(factBundle ? { factBundle } : {}),
       ...(ctx.includeRawResult === true ? { raw } : {}),
     };
   } catch (err) {
@@ -753,6 +777,25 @@ async function executeTool(name, args, ctx) {
       outcomeUnknown: Boolean(err?.commitOutcomeUnknown),
     };
   }
+}
+
+function agentToolAuditRecord(name, result = {}, { args = result.params, round = 1, toolRunId = '' } = {}) {
+  const capability = getAgentV3CapabilityByToolName(name);
+  return {
+    name,
+    toolRunId: String(result.toolRunId || toolRunId || crypto.randomUUID()).slice(0, 128),
+    capabilityId: String(result.capabilityId || capability?.id || ''),
+    effect: String(result.effect || capability?.effect || ''),
+    scopePolicy: String(result.scopePolicy || capability?.scopePolicy || ''),
+    status: result.status,
+    params: args,
+    error: result.error,
+    dataSummary: result.dataSummary,
+    summary: result.summary,
+    resultMetadata: result.resultMetadata,
+    factBundle: result.factBundle,
+    round,
+  };
 }
 
 function plainText(value) {
@@ -1654,15 +1697,7 @@ async function hydrateNoteDraftBookmarks({
                 .filter(Boolean)
                 .join('\n'),
             },
-        toolRecord: {
-          name: 'read_url',
-          status: readResult.status,
-          params: { url },
-          error: readResult.error,
-          dataSummary: readResult.dataSummary,
-          summary: readResult.summary,
-          round,
-        },
+        toolRecord: agentToolAuditRecord('read_url', readResult, { args: { url }, round }),
       };
     },
     signal,
@@ -2358,6 +2393,7 @@ export async function agentChat(req, res) {
   let persistentRunExecutionDigest = null;
   let persistentRunGoalStates = [];
   let persistentRunGoalOutcomes = Object.freeze({});
+  let persistentRunExecutionReceipt = null;
   const sendMemoryInfluence = () => {
     if (!sseLifecycle || memoryInfluenceSent) return;
     sseLifecycle.send('memory_context', memoryInfluence);
@@ -3908,15 +3944,7 @@ export async function agentChat(req, res) {
               }),
             );
             sseLifecycle?.send('tool_result', { tool: toolName, status: result.status, round: 1 });
-            usedTools.push({
-              name: toolName,
-              status: result.status,
-              params: result.params || args,
-              error: result.error,
-              dataSummary: result.dataSummary,
-              summary: result.summary,
-              round: 1,
-            });
+            usedTools.push(agentToolAuditRecord(toolName, result, { args: result.params || args, round: 1 }));
             return result;
           },
           agentAbortController.signal,
@@ -4367,6 +4395,39 @@ export async function agentChat(req, res) {
         sourcesUsed: draftSourcesUsed,
       });
       const queryScopes = buildPublicToolQueryScopes(usedTools, locale);
+      const routeFactBundle = mergeAgentFactBundles(usedTools.map((tool) => tool.factBundle).filter(Boolean));
+      const routeGoalStates = settleAgentRunGoalStates({
+        goalStates: persistentRunGoalStates,
+        goalOutcomes: persistentRunGoalOutcomes,
+        turnSpec: persistentRunTurnSpec,
+        runStatus: persistentRunStatus,
+      });
+      const routeTerminal = deriveAgentRunStatus(persistentRunStatus, routeGoalStates);
+      persistentRunExecutionReceipt = buildAgentExecutionReceipt({
+        runId: requestId,
+        semanticDigest: persistentRunSemanticDigest,
+        executionDigest: persistentRunExecutionDigest,
+        goalStates: routeGoalStates,
+        usedTools,
+        resolvedGrounding: draftResolvedGrounding,
+        sourceSetIds: responseSourceSet?.id ? [responseSourceSet.id] : [],
+        resultSetIds: runtimeV3ReadFocusId
+          ? (session.resultSets || [])
+              .filter((resultSet) => String(resultSet?.runId || '') === runtimeV3ReadFocusId)
+              .map((resultSet) => resultSet.id)
+          : [],
+        artifactVersionIds: confirmation
+          ? [String(session.discourseState?.pendingArtifactId || '')].filter(Boolean)
+          : [],
+        factBundle: routeFactBundle,
+        terminal: routeTerminal,
+      });
+      const routeExecutionReceipt = runtimeUsesV3Semantics
+        ? buildPublicAgentExecutionReceipt(persistentRunExecutionReceipt, routeFactBundle)
+        : null;
+      const routeResponseEnvelope = runtimeUsesV3Semantics
+        ? buildAgentResponseEnvelope({ factBundle: routeFactBundle, prose: routeResponse })
+        : null;
       if (stream) {
         if (replacedConfirmation && confirmation) {
           sseLifecycle?.send('tool_confirmation_replaced', {
@@ -4404,6 +4465,8 @@ export async function agentChat(req, res) {
           citationAudit: { citedKeys: [], invalidKeys: [], verifiedCitationCount: 0, evidenceCount: 0 },
           resolvedGrounding: draftResolvedGrounding,
           queryScopes,
+          ...(routeExecutionReceipt ? { executionReceipt: routeExecutionReceipt } : {}),
+          ...(routeResponseEnvelope ? { responseEnvelope: routeResponseEnvelope } : {}),
         });
       } else {
         res.send(
@@ -4422,6 +4485,8 @@ export async function agentChat(req, res) {
             memoryContext: memoryInfluence,
             resolvedGrounding: draftResolvedGrounding,
             queryScopes,
+            ...(routeExecutionReceipt ? { executionReceipt: routeExecutionReceipt } : {}),
+            ...(routeResponseEnvelope ? { responseEnvelope: routeResponseEnvelope } : {}),
           }),
         );
       }
@@ -5157,6 +5222,8 @@ export async function agentChat(req, res) {
               args,
               toolRuntimeContext(req, identity, {
                 signal: agentAbortController.signal,
+                toolRunId: tc.id,
+                goalId: goalIdsByCallId?.[tc.id] || '',
                 allowedToolNames,
                 suppressUserRewards: Boolean(req.suppressUserRewards || req.adminContext),
                 question: message,
@@ -5181,16 +5248,7 @@ export async function agentChat(req, res) {
           if (Array.isArray(result.answerRequirements)) {
             finalAnswerRequirements.push(...result.answerRequirements);
           }
-          usedTools.push({
-            name: tc.function.name,
-            status: result.status,
-            params: args,
-            error: result.error,
-            dataSummary: result.dataSummary,
-            summary: result.summary,
-            resultMetadata: result.resultMetadata,
-            round,
-          });
+          usedTools.push(agentToolAuditRecord(tc.function.name, result, { args, round, toolRunId: tc.id }));
           if (stream) {
             sseLifecycle?.send('tool_result', {
               tool: tc.function.name,
@@ -5334,13 +5392,16 @@ export async function agentChat(req, res) {
                 const selectors = turnSpec.goals
                   .flatMap((goal) => goal.referentSelectors || [])
                   .filter((selector) => selector.source === 'last_result');
-                const effectiveSelectors = selectors.length ? selectors : [{ types: [], ordinal: null }];
+                const effectiveSelectors = selectors.length
+                  ? selectors
+                  : [{ resultSetHandleId: '', types: [], itemOrdinal: null }];
                 const inheritedRefs = [];
                 const seen = new Set();
                 for (const selector of effectiveSelectors) {
                   const resolved = resolveSessionResultSet(session, {
+                    handleId: selector.resultSetHandleId,
                     types: selector.types,
-                    ordinal: selector.ordinal,
+                    itemOrdinal: selector.itemOrdinal ?? selector.ordinal,
                   });
                   if (resolved.state !== 'ready') continue;
                   for (const ref of resolved.refs) {
@@ -5487,6 +5548,7 @@ export async function agentChat(req, res) {
                 ? 'blocked'
                 : 'not_run',
         attempts: runtimeV2Outcome?.plannerAttempts,
+        mode: runtimeV2Outcome?.planningMode,
         issues: runtimeV2Outcome?.validation?.issues,
       });
       const runtimeHasMutationGoal = (runtimeV2Outcome?.turnSpec?.goals || []).some((goal) =>
@@ -6073,6 +6135,7 @@ export async function agentChat(req, res) {
           'unavailable',
           'planned',
           'forbidden',
+          'clarification',
         ].includes(goal.status)
           ? goal.status
           : 'unknown';
@@ -6082,12 +6145,29 @@ export async function agentChat(req, res) {
       const unsupportedGoalCount = (runtimeV2Outcome?.goalStates || []).filter((goal) =>
         ['unsupported', 'unavailable', 'planned', 'forbidden'].includes(goal.status),
       ).length;
-      if (unsupportedGoalCount > 0 && !semanticPolicy) {
+      const clarificationGoalCount = (runtimeV2Outcome?.goalStates || []).filter(
+        (goal) => goal.status === 'clarification',
+      ).length;
+      if ((unsupportedGoalCount > 0 || clarificationGoalCount > 0) && !semanticPolicy) {
+        const unsupportedPart = unsupportedGoalCount
+          ? String(locale || '')
+              .toLowerCase()
+              .startsWith('en')
+            ? `${unsupportedGoalCount} requested item(s) are not currently supported and were not executed.`
+            : `其中 ${unsupportedGoalCount} 项要求当前暂不支持，未执行。`
+          : '';
+        const clarificationPart = clarificationGoalCount
+          ? String(locale || '')
+              .toLowerCase()
+              .startsWith('en')
+            ? `${clarificationGoalCount} requested item(s) need clarification and were not executed.`
+            : `另有 ${clarificationGoalCount} 项需要补充信息，暂未执行。`
+          : '';
         runtimeV2UnhandledGoalNotice = String(locale || '')
           .toLowerCase()
           .startsWith('en')
-          ? `${unsupportedGoalCount} requested item(s) are not currently supported and were not executed; the remaining supported items were processed.`
-          : `其中 ${unsupportedGoalCount} 项要求当前暂不支持，未执行；其余可支持的部分已继续处理。`;
+          ? `${unsupportedPart} ${clarificationPart} The remaining supported items were processed.`.trim()
+          : `${unsupportedPart}${clarificationPart}其余可支持的部分已继续处理。`;
       }
     }
 
@@ -6635,6 +6715,8 @@ export async function agentChat(req, res) {
     const unverifiedWriteIntent = !pendingUserAction && writeIntentToolNames.size > 0;
     const verifyExecutionClaims =
       legacyIntentSuspicion.kind === 'action' || ['data_action', 'mixed'].includes(semanticPlan?.requestClass);
+    const requestFactBundle = mergeAgentFactBundles(usedTools.map((tool) => tool.factBundle).filter(Boolean));
+    const factPromptProjection = factBundlePromptProjection(requestFactBundle);
 
     if (semanticPolicy) {
       finalContent = semanticPolicy.message || buildSemanticPolicyMessage(semanticPolicy, locale);
@@ -6732,6 +6814,12 @@ export async function agentChat(req, res) {
             groundedFinalReply
               ? '本轮涉及轻笺事实或工具结果，事实只能来自最新消息中已校验的显式材料和本轮真实工具结果；最近对话中的私有事实只能作为语言线索，不能作为证据。'
               : '本轮没有事实工具时，可以依据最近对话继续普通公共知识问答，但不得把历史回答冒充为已核验的轻笺私有数据。'
+          }${
+            factPromptProjection
+              ? `\n\n【本轮权威 FactBundle】\n${JSON.stringify(
+                  factPromptProjection,
+                )}\nexact=true 的计数、状态、URL 和列表项只能引用对应 fact id，不得修改、补齐或重新估算；开放解释不得引入 FactBundle 之外的轻笺私有事实。`
+              : ''
           }`
         : isolatedGroundedAnswer
           ? `${finalPromptBase}\n\n---\n\n【对话状态投影；不含历史事实正文】\n${JSON.stringify(
@@ -6781,7 +6869,11 @@ export async function agentChat(req, res) {
             {
               role: 'user',
               content: usedTools.length
-                ? `请基于上述工具结果回答此前用户提出的原始问题，保持简洁，并严格使用原始问题要求的语言。${citationGuide}`
+                ? `请基于上述工具结果回答此前用户提出的原始问题，保持简洁，并严格使用原始问题要求的语言。${
+                    factPromptProjection
+                      ? '服务端会另行渲染 exact=true 的事实块；你的正文只写必要的总结、比较或分析，不要复述、改写或估算这些精确计数、状态、URL 和列表项。'
+                      : ''
+                  }${citationGuide}`
                 : `请直接回答此前用户提出的原始问题，严格使用原始问题要求的语言，不要提及内部规划过程。${citationGuide}`,
             },
           ];
@@ -6946,6 +7038,47 @@ export async function agentChat(req, res) {
       sourcesUsed: publicSources,
     });
     const queryScopes = buildPublicToolQueryScopes(usedTools, locale);
+    const receiptGoalStates = settleAgentRunGoalStates({
+      goalStates: persistentRunGoalStates,
+      goalOutcomes: persistentRunGoalOutcomes,
+      turnSpec: persistentRunTurnSpec,
+      runStatus: persistentRunStatus,
+    });
+    const receiptTerminal = deriveAgentRunStatus(persistentRunStatus, receiptGoalStates);
+    const currentSourceSetIds = responseSourceSet?.id ? [responseSourceSet.id] : [];
+    const currentResultSetIds = runtimeV3ReadFocusId
+      ? (session.resultSets || [])
+          .filter((resultSet) => String(resultSet?.runId || '') === runtimeV3ReadFocusId)
+          .map((resultSet) => resultSet.id)
+      : [];
+    const currentArtifactVersionIds = confirmations.length
+      ? [String(session.discourseState?.pendingArtifactId || '')].filter(Boolean)
+      : [];
+    persistentRunExecutionReceipt = buildAgentExecutionReceipt({
+      runId: requestId,
+      semanticDigest: persistentRunSemanticDigest,
+      executionDigest: persistentRunExecutionDigest,
+      goalStates: receiptGoalStates,
+      usedTools,
+      resolvedGrounding,
+      sourceSetIds: currentSourceSetIds,
+      resultSetIds: currentResultSetIds,
+      artifactVersionIds: currentArtifactVersionIds,
+      factBundle: requestFactBundle,
+      writeCommitted: false,
+      terminal: receiptTerminal,
+    });
+    const executionReceipt = runtimeUsesV3Semantics
+      ? buildPublicAgentExecutionReceipt(persistentRunExecutionReceipt, requestFactBundle)
+      : null;
+    const responseEnvelope = runtimeUsesV3Semantics
+      ? buildAgentResponseEnvelope({ factBundle: requestFactBundle, prose: finalContent })
+      : null;
+    if (responseEnvelope?.blocks?.some((block) => block.type === 'fact')) {
+      // 精确事实块由服务端渲染后再成为权威正文；模型只贡献 prose 槽，不能覆盖计数、
+      // 状态、URL 或列表项。SSE grounded 回答本就缓冲到终态，因此不会先泄漏未封装正文。
+      finalContent = renderAgentResponseEnvelope(responseEnvelope, locale);
+    }
     // 公开来源继续只展示真实引用项；跨轮锚点额外保留本轮成功工具返回的稳定实体 ID，
     // 避免模型漏写引用编号时“刚才第二个待办”失去目标。只返回安全 type/id/title，不返回工具原始数据。
     const scopedToolEntitySources = groundingV2Enabled
@@ -7009,6 +7142,8 @@ export async function agentChat(req, res) {
         artifacts,
         resolvedGrounding,
         queryScopes,
+        ...(executionReceipt ? { executionReceipt } : {}),
+        ...(responseEnvelope ? { responseEnvelope } : {}),
       });
       res.removeListener('close', onClientClose);
     } else {
@@ -7030,6 +7165,8 @@ export async function agentChat(req, res) {
           memoryContext: memoryInfluence,
           resolvedGrounding,
           queryScopes,
+          ...(executionReceipt ? { executionReceipt } : {}),
+          ...(responseEnvelope ? { responseEnvelope } : {}),
           ...(actionPolicy ? { actionPolicy } : {}),
         }),
       );
@@ -7184,6 +7321,16 @@ export async function agentChat(req, res) {
           semanticDigest: persistentRunSemanticDigest,
           executionDigest: persistentRunExecutionDigest,
           goalStates: terminalGoalStates,
+          executionReceipt:
+            persistentRunExecutionReceipt ||
+            buildAgentExecutionReceipt({
+              runId: requestId,
+              semanticDigest: persistentRunSemanticDigest,
+              executionDigest: persistentRunExecutionDigest,
+              goalStates: terminalGoalStates,
+              usedTools: usedToolsForLog,
+              terminal: terminalRunStatus,
+            }),
           errorCode: persistentRunErrorCode,
         });
       } catch (error) {

@@ -37,6 +37,7 @@ function compactDiscourseProjection(value = {}) {
     item
       ? Object.freeze({
           available: item.available === true,
+          handleId: String(item.handleId || '').slice(0, 64),
           domains: Object.freeze(
             [...new Set((Array.isArray(item.domains) ? item.domains : []).map(String))].slice(0, 8),
           ),
@@ -132,6 +133,9 @@ function availableResultSets(structuredDiscourse = {}) {
 }
 
 function selectorMatchesResultSet(selector, resultSet) {
+  if (selector?.resultSetHandleId && String(selector.resultSetHandleId) !== String(resultSet?.handleId || '')) {
+    return false;
+  }
   const types = Array.isArray(selector?.types) ? selector.types.map(String).filter(Boolean) : [];
   if (!types.length) return true;
   const refTypes = new Set((resultSet?.refTypes || []).map(String));
@@ -359,6 +363,7 @@ export async function compileAgentTurnSpecV3({
       actorRole,
       latestMessage,
       temporalContext,
+      resultSetHandleIds: payload.structuredDiscourse.resultSetCandidates.map((item) => item.handleId).filter(Boolean),
     });
     if (turnSpec) {
       const consistency = discourseConsistency(turnSpec, payload, {

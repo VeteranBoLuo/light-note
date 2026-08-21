@@ -103,8 +103,8 @@
         <ReplyLoading
           v-else-if="!message.toolEvents?.length && !message.confirmations?.length && !message.interactions?.length"
         />
-        <p v-if="message.role === 'assistant' && materialModeText" class="material-mode-notice">
-          {{ materialModeText }}
+        <p v-if="message.role === 'assistant' && evidenceModeText" class="material-mode-notice">
+          {{ evidenceModeText }}
         </p>
         <div
           v-if="message.role === 'assistant' && message.materialClarification?.options.length"
@@ -208,6 +208,7 @@
     normalizeAiCapabilityModule,
     type AiCapabilityModule,
   } from '@/types/aiCapabilityScope';
+  import { resolveAiExecutionReceiptNoticeKey, type AiExecutionReceipt } from '@/types/aiExecutionReceipt';
 
   const { t } = useI18n();
 
@@ -239,6 +240,7 @@
     };
     resolvedGrounding?: AiResolvedGrounding;
     materialClarification?: AiMaterialClarification;
+    executionReceipt?: AiExecutionReceipt;
     activity?: Array<Record<string, unknown> | string>;
     confirmations?: unknown[];
     interactions?: unknown[];
@@ -269,7 +271,12 @@
     if (module === 'auto') return '';
     return t('ai.capabilityScope.applied', { module: t(aiCapabilityModuleLabelKey(module)) });
   });
-  const materialModeText = computed(() => {
+  const evidenceModeText = computed(() => {
+    const receipt = props.message.executionReceipt;
+    if (receipt) {
+      const key = resolveAiExecutionReceiptNoticeKey(receipt);
+      return key ? t(`ai.executionReceipt.${key}`) : '';
+    }
     const grounding = props.message.resolvedGrounding;
     if (!shouldShowAiMaterialModeNotice(grounding)) return '';
     const count = grounding.allowedSourceCount;

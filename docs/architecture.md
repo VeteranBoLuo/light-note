@@ -458,11 +458,15 @@ Runtime V3 把每轮请求拆成四个边界清晰、可独立验证的阶段：
 最新用户消息 + 服务端结构化会话投影
   → Intent Compiler（唯一一次语义编译）
   → 不可变 TurnSpec（目标、时间、指代、输出约束）
-  → Capability Manifest 精确路由 + Execution Planner 参数规划
+  → Capability Manifest 精确路由
+  → 声明式确定性 Workflow（适用时）/ Execution Planner（兼容回退）
   → 服务端权威绑定 / Tool Runner / 确认生命周期 / Final Reply
 ```
 
 - `util/agent/runtime/v3/capabilityManifest.js` 是 V3 读取与写入能力的统一运行时目录。每项能力声明 ID、领域、effect、工具、角色、时间槽、资源绑定和结果引用，启动校验保证注册工具、能力注册表与 Manifest 没有漂移；正常 V3 路由只接受 TurnSpec 中的精确 capability ID，不使用关键词、正则或相似度猜工具。
+- Manifest 3.1 还声明 `workflow/queryBudget/resultContract/renderPolicy/reconcilePolicy`。只有 `workflow.deterministic=true`、目标与工具唯一精确匹配且所有参数通过统一 schema 门禁时，Runtime 才能由 `workflowCompiler` 生成计划并跳过模型 Planner；任一条件不满足均回到旧 Planner，不允许按问法、工具名或事故场景增加旁路。
+- Manifest 的 `slots` 为每个参数声明唯一来源：`server_actor/server_scope/resource_binding/temporal/dependency_result/model_text/model_enum/client_explicit/server_default`。确定性 Compiler 只消费声明过的 model slot，服务端权威字段不得交给模型补写；必填工具参数没有声明来源时启动校验直接失败。
+- TurnSpec 3.1 的单目标缺槽可进入受限 `Slot Filler`：该阶段只看到最新消息、目标说明与允许补齐的 model slot，不接收工具名、历史、时间、身份、资源 ID 或依赖结果；补齐后仍回到同一 `workflowCompiler → validateExecutionPlan`。当前 3.0 Compiler 保持原 Planner 路径，避免协议切换前改变既有工具调用语义。
 - Manifest 同时声明时间槽的 `required/defaultPolicy/disclosure` 和工具的 `sideEffectPolicy`。必填时间槽只能显式默认到“全部”、要求澄清或由服务端默认，不能在从 Planner schema 隐藏参数后留下未绑定值；非确认型操作只有声明为幂等后台任务时才允许执行，其他写入继续进入确认协议。
 - Intent Compiler 只接收当前用户消息、当前身份、服务端解析后的材料摘要和 `DiscourseProjection`，不接收原始历史消息、旧助手正文或工具正文。它每轮只生成一次不可变 TurnSpec；Planner 和依赖轮只能消费或缩小该计划，不能重新解释顶层目标。
 - 时间表达被编译为绑定到具体 goal/slot 的 `temporalConstraints`；资源指代被编译为类型化 `referentSelectors`。Manifest 声明的时间参数和权威资源参数会从模型工具 schema 中移除，再由服务端从 TurnSpec 或归属校验后的资源字段注入，模型不能复制、改写或臆造日期、资源 ID、URL 和对象键。
@@ -472,6 +476,9 @@ Runtime V3 把每轮请求拆成四个边界清晰、可独立验证的阶段：
 - 普通连续对话仍只使用有界 `recentDialogue`。只有 TurnSpec 明确选择 `dialogue_anchor` 且云端消息具备稳定服务端 ID 时，才把有界消息集合写成 SourceSet；生成或改写产物时再按 owner + conversation + message IDs 精确读取并校验 digest。临时 session 文本和客户端 history 不能升级为持久材料。
 - 新读轮采用两阶段焦点提交：编译成功只暂存带唯一运行令牌的 `pendingFocus`，工具结果必须携带同一令牌才能提交；同一会话并发请求由 Redis revision CAS 采用 latest-run-wins，迟到旧轮不能写入新轮焦点。真实读工具成功并产生稳定引用或明确空集后原子替换当前 `ResultSet`；统计/概览类读取成功但没有可投影引用时仍提交本轮语义并清空旧资源范围；失败或降级不让旧结果冒充刚失败的新查询。
 - TurnSpec 的 `semanticDigest` 只标识规范化语义；能力路由、最终材料引用和服务端绑定完成后再生成 `executionDigest`。续问、缓存和 trace 必须区分二者，不能用绑定前摘要证明绑定后的执行合同。
+- TurnSpec 3.0 与 3.1 在迁移期双读：3.0 Compiler 继续稳定出数，3.1 增加 goal 级 relation、slot claims、temporal claims、evidence/output contract、ambiguities，以及服务端枚举的 `resultSetHandleId + itemOrdinal`。客户端不能自造 handle，旧 `resultSetId + ordinal` 只作为兼容输入在服务端归一化；持久化和执行摘要均使用规范化后的语义。
+- 3.1 歧义不是整轮布尔值：服务端按 `fatal / blocks_goal / blocks_write` 计算每个目标的可执行性，并沿 `dependsOn` 依赖图传播阻断。整轮受阻时返回澄清；部分受阻时只执行无歧义目标，受阻目标进入 `clarification` 终态，旧 Runtime 适配层也必须过滤这些目标，不能让写操作从兼容路径重新出现。
+- 查询成功后，服务端把工具结果归一化为 `FactBundle`，再生成可审计的 `ExecutionReceipt` 与 `ResponseEnvelope`。精确计数、完整性、时间范围、截断和风险披露由服务端按 Manifest 契约渲染，模型 Composer 只负责非权威叙述；工具失败或未执行时不得伪造 FactBundle。SSE 完成事件、恢复快照、会话持久化和前端披露必须消费同一份收据/信封，不能从展示文案反推“是否调用过工具”。
 - Web 输入区的能力模块选择是单轮限制：默认“自动判断”，用户可显式收窄到笔记、书签、待办、文件等模块，消息发送后立即恢复自动；它只减少本轮候选能力，不改变长期会话状态，也不能扩大当前身份权限。
 - 显式模块范围会在解析真实身份后重新授权。若用户请求的范围全部不属于当前角色，接口在创建会话和调用模型前确定性返回 `forbidden_scope`；只有部分被拒绝时才保留合法子集，禁止把空目录退化为自动模式。
 - 生命周期和语义计划分离。写操作仍沿用已有 owner 校验、风险卡、一次性令牌、幂等和回执链；替换草稿、取消、过期和成功只更新 ArtifactState，不把旧卡或自然语言历史重新送给模型判断。

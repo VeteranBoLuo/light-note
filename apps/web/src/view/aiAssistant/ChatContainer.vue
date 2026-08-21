@@ -245,6 +245,7 @@
   } from '@/types/aiAgent';
   import { normalizeAiArtifacts, type AiArtifact } from '@/types/aiArtifact';
   import { normalizeAiQueryScopes } from '@/types/aiQueryScope';
+  import { normalizeAiExecutionReceipt, normalizeAiResponseEnvelope } from '@/types/aiExecutionReceipt';
   import { useI18n } from 'vue-i18n';
   import axios from 'axios';
   import { apiBasePost } from '@/http/request';
@@ -839,6 +840,8 @@
           chatMessage.recovered ||
           chatMessage.terminal ||
           chatMessage.queryScopes?.length ||
+          chatMessage.executionReceipt ||
+          chatMessage.responseEnvelope ||
           chatMessage.scopeRefs?.length ||
           normalizeAiCapabilityModule(chatMessage.capabilityModule) !== 'auto'
             ? {
@@ -852,6 +855,12 @@
                 ...(chatMessage.scopeRefs?.length ? { scopeRefs: chatMessage.scopeRefs.slice(0, 3) } : {}),
                 ...(chatMessage.queryScopes?.length
                   ? { queryScopes: normalizeAiQueryScopes(chatMessage.queryScopes) }
+                  : {}),
+                ...(chatMessage.executionReceipt
+                  ? { executionReceipt: normalizeAiExecutionReceipt(chatMessage.executionReceipt) }
+                  : {}),
+                ...(chatMessage.responseEnvelope
+                  ? { responseEnvelope: normalizeAiResponseEnvelope(chatMessage.responseEnvelope) }
                   : {}),
                 ...(normalizeAiCapabilityModule(chatMessage.capabilityModule) !== 'auto'
                   ? { capabilityModule: normalizeAiCapabilityModule(chatMessage.capabilityModule) }
@@ -1169,6 +1178,8 @@
       resolvedGrounding: normalizeAiResolvedGrounding(cloudMessage.modelMeta?.resolvedGrounding),
       materialClarification: normalizeAiMaterialClarification(cloudMessage.modelMeta?.materialClarification),
       queryScopes: normalizeAiQueryScopes(cloudMessage.modelMeta?.queryScopes),
+      executionReceipt: normalizeAiExecutionReceipt(cloudMessage.modelMeta?.executionReceipt),
+      responseEnvelope: normalizeAiResponseEnvelope(cloudMessage.modelMeta?.responseEnvelope),
       entityRefs: normalizeCloudEntityRefs(cloudMessage.modelMeta?.entityRefs),
       actionSettlements: normalizeCloudActionSettlements(cloudMessage.modelMeta?.actionSettlements),
       stage: typeof cloudMessage.modelMeta?.stage === 'string' ? cloudMessage.modelMeta.stage : undefined,
@@ -1500,6 +1511,12 @@
         ? { materialClarification: normalizeAiMaterialClarification(chatMessage.materialClarification) }
         : {}),
       ...(chatMessage.queryScopes?.length ? { queryScopes: normalizeAiQueryScopes(chatMessage.queryScopes) } : {}),
+      ...(chatMessage.executionReceipt
+        ? { executionReceipt: normalizeAiExecutionReceipt(chatMessage.executionReceipt) }
+        : {}),
+      ...(chatMessage.responseEnvelope
+        ? { responseEnvelope: normalizeAiResponseEnvelope(chatMessage.responseEnvelope) }
+        : {}),
     };
     try {
       const saved = await saveAiCloudMessage(cloudConversationId, {
@@ -2185,6 +2202,8 @@
             currentMsg.resolvedGrounding = normalizeAiResolvedGrounding(data.resolvedGrounding);
             currentMsg.materialClarification = normalizeAiMaterialClarification(data.materialClarification);
             currentMsg.queryScopes = normalizeAiQueryScopes(data.queryScopes);
+            currentMsg.executionReceipt = normalizeAiExecutionReceipt(data.executionReceipt);
+            currentMsg.responseEnvelope = normalizeAiResponseEnvelope(data.responseEnvelope);
             currentMsg.artifacts = normalizeAiArtifacts(data.artifacts);
             if (typeof data.answer === 'string') authoritativeAnswerSnapshot = data.answer;
           }

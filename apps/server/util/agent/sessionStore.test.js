@@ -301,10 +301,17 @@ describe('agent sessionStore', () => {
       activeDomain: 'bookmark',
       lastCapabilityIds: ['bookmark.query'],
       lastRunState: 'success',
-      lastResultSet: { available: true, domains: ['bookmark'], refTypes: ['bookmark'], refCount: 1 },
+      lastResultSet: {
+        available: true,
+        handleId: resultSet.handleId,
+        domains: ['bookmark'],
+        refTypes: ['bookmark'],
+        refCount: 1,
+      },
       resultSetCandidates: [
         {
           available: true,
+          handleId: resultSet.handleId,
           domains: ['bookmark'],
           refTypes: ['bookmark'],
           refCount: 1,
@@ -383,13 +390,13 @@ describe('agent sessionStore', () => {
         { kind: 'read', capabilityId: 'note.query', capabilityDomain: 'note', implicit: false },
       ],
     });
-    await recordSessionResultSet(session, {
+    const bookmarkResult = await recordSessionResultSet(session, {
       capabilityId: 'bookmark.query',
       domains: ['bookmark'],
       refs: [{ type: 'bookmark', id: 'bookmark-1' }],
       focusId: focus.id,
     });
-    await recordSessionResultSet(session, {
+    const noteResult = await recordSessionResultSet(session, {
       capabilityId: 'note.query',
       domains: ['note'],
       refs: [{ type: 'note', id: 'note-1' }],
@@ -400,6 +407,15 @@ describe('agent sessionStore', () => {
     expect(resolveSessionResultSet(session, { types: ['bookmark'] })).toMatchObject({
       state: 'ready',
       refs: [{ type: 'bookmark', id: 'bookmark-1' }],
+    });
+    expect(resolveSessionResultSet(session, { handleId: noteResult.handleId, itemOrdinal: 1 })).toMatchObject({
+      state: 'ready',
+      resultSet: { id: noteResult.id, handleId: noteResult.handleId },
+      refs: [{ type: 'note', id: 'note-1' }],
+    });
+    expect(resolveSessionResultSet(session, { handleId: bookmarkResult.handleId, itemOrdinal: 2 })).toMatchObject({
+      state: 'empty',
+      refs: [],
     });
     expect(getSessionDiscourseProjection(session)).toMatchObject({
       lastResultSet: null,

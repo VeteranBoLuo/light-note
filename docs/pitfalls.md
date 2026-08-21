@@ -25,6 +25,8 @@
 
 | 编号                                                                                           | 日期       | 模块                | 关键词                                             | 状态         |
 | ---------------------------------------------------------------------------------------------- | ---------- | ------------------- | -------------------------------------------------- | ------------ |
+| [LN-PIT-097](#ln-pit-097turnspec-升级和确定性工作流不能一刀切替换旧-planner)                   | 2026-08-21 | Agent、Runtime V3   | TurnSpec 3.1、handle、workflow、Planner 回退       | 已修复待合入 |
+| [LN-PIT-096](#ln-pit-096agent-精确事实和处理记录不能由模型文案或前端展示反推)                  | 2026-08-21 | Agent、结果协议     | FactBundle、ExecutionReceipt、ResponseEnvelope     | 已修复待合入 |
 | [LN-PIT-095](#ln-pit-095agent-确认产物材料和运行状态不能共用一个生命周期)                      | 2026-08-21 | Agent、持久化       | ArtifactVersion、SourceSet、Run、Dialogue Anchor   | 已修复待合入 |
 | [LN-PIT-094](#ln-pit-094agent-时间范围和列表完整性不能由各工具或模型自行解释)                  | 2026-08-21 | Agent、工具协议     | IANA、半开区间、total、partial、参数兼容           | 已修复待合入 |
 | [LN-PIT-093](#ln-pit-093agent-不能在工具成功前提交新焦点也不能把空能力范围降级成自动模式)      | 2026-08-21 | Agent、Runtime V3   | scope、ResultSet、digest、时间默认、副作用         | 已修复待合入 |
@@ -2481,6 +2483,28 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **防回归约束：** `AI_AGENT_STATE_PERSISTENCE_MODE=disabled|shadow|enforce` 必须独立于 `AI_AGENT_RUNTIME_MODE`，默认 disabled；migration 与 schema assertions 未通过前禁止开启 shadow/enforce。shadow 只能单调镜像且 fail-open，enforce 恢复或 CAS 冲突必须 fail-closed。公开 SourceSet/ArtifactVersion 投影不得暴露对话消息 ID、正文、私有资源参数或旧 token。SourceSet 缺失、digest 变化、归属不匹配必须拒绝恢复。普通 prepared-action 没有 ArtifactVersion 时仍只按确认 TTL 处理。Run 只有在真实执行或确认回执后才能提交焦点，不能由模型计划或卡片展示文案提前标成功；Planner 生成的每个 tool call 必须由服务端绑定到 TurnSpec goal，并用真实 `success/error/confirmation_required/interaction_required` 结果结算逐目标状态，`planned/unsupported/unavailable/forbidden` 终态不得被整轮成功覆盖。
 - **验证方法：** 使用内存仓储、Mock Provider 和固定时钟覆盖 disabled/shadow/enforce、Redis miss 恢复、revision 竞争、迟到旧轮、双 digest、逐目标 unknown、ArtifactVersion 链恢复、旧确认不可复活、SourceSet 缺失失败关闭、Dialogue Anchor 精确重读与 digest 不一致、并发工具乱序但卡片有序。开发阶段不得调用真实 Provider 或线上数据；首次灰度再按发布门禁做最小 Root 验证。
 - **相关代码：** `apps/server/migrations/20260821_agent_runtime_state.sql`、`apps/server/util/agent/persistence/`、`apps/server/util/agent/sessionStore.js`、`apps/server/util/agent/persistence/agentArtifactLifecycle.js`、`apps/server/util/agent/runtime/conversationHistory.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/web/src/store/aiAssistant.ts`。
+
+### LN-PIT-096：Agent 精确事实和处理记录不能由模型文案或前端展示反推
+
+- **现象：** 工具明明返回了精确总量，最终回答仍可能少报、多报或漏掉截断；前端有时因为出现“参考来源/本轮检索”标签就认为工具执行过，有时真实执行完成却没有可核验的处理记录。SSE 断线恢复后，临时文本、来源和执行状态还可能互相不一致。
+- **影响范围：** 所有读工具的计数、时间口径与列表完整性，写操作风险披露，SSE 终态/恢复，会话消息持久化和前端处理记录。
+- **误导线索：** Prompt 中已经要求模型“忠于工具结果”，或 UI 已能展示来源，看起来只需继续优化文案。实际上模型输出和来源标签都不是工具是否成功、哪些事实精确、是否截断的权威证明。
+- **根因：** 原始工具输出同时承担模型上下文、用户答案、审计状态和 UI 展示，没有稳定的中间事实合同；同步响应、SSE、恢复和前端各自从不同字段推断状态，失败工具也可能遗留旧材料或展示痕迹。
+- **修复：** 工具成功后先按 Manifest `resultContract/queryBudget` 归一化为 `FactBundle`，再生成私有/公开分层的 `ExecutionReceipt` 和 `ResponseEnvelope`。精确数字、完整性、时间范围、截断与风险披露由服务端确定性渲染，Composer 仅生成非权威叙述；失败或未执行工具不得生成 FactBundle。SSE 完成事件、恢复快照、会话持久化和前端 Store 统一传递同一收据与信封，处理记录只消费真实 receipt，旧消息才允许兼容回退。
+- **防回归约束：** 不得从回答文字、source/entityRef 数量、卡片存在或检索标签反推出工具状态；不得把私有工具参数、owner、原始异常或材料正文放进公开 receipt。权威 exact fact 必须由服务端渲染且不可被 Composer 覆盖。响应协议增加字段时同步更新 SSE normalizer、恢复链、消息类型和历史加载，任一链路丢字段都视为协议回归。
+- **验证方法：** Mock 成功、空结果、部分结果、文本预算截断、工具失败和混合多工具；断言只有成功工具产生 FactBundle，exact facts 与公共披露稳定，receipt/envelope 在同步响应、`response.completed`、恢复 snapshot 和前端 normalize 后一致。全部为确定性测试，不调用真实模型。
+- **相关代码：** `apps/server/util/agent/runtime/v3/factBundle.js`、`executionReceipt.js`、`responseEnvelope.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/server/util/agent/sseLifecycle.js`、`apps/web/src/types/aiExecutionReceipt.ts`、`apps/web/src/utils/aiSse.ts`、`apps/web/src/utils/aiStreamRecovery.ts`、`apps/web/src/components/aiAssistant/ChatMessageItem.vue`。
+
+### LN-PIT-097：TurnSpec 升级和确定性工作流不能一刀切替换旧 Planner
+
+- **现象：** 为减少模型漏选工具，若直接把 TurnSpec schema、所有能力参数和执行路径一次升级，原来能工作的工具可能因新字段缺失、旧会话 ID 不兼容或未迁移的参数来源而全部失败；反过来若长期让客户端 ID、展示标题和自然语言序数承担指代，又会继续出现“刚才那个”选错材料。
+- **影响范围：** Runtime V3 Compiler/Parser、跨轮 ResultSet 指代、Manifest 迁移、Execution Planner、灰度观测和所有读写能力。
+- **误导线索：** 简单读工具可以从固定 capability 直接推导 tool call，看起来应当一次性跳过 Planner；3.1 只是新增可选字段，看起来可以立刻要求真实模型全部输出。两者都会把协议兼容、Manifest 完整度和参数权威来源问题推到线上。
+- **根因：** 协议版本、能力声明和执行器迁移没有独立闸门；稳定资源指代仍使用数据库 ID 或模型自造值；确定性计划若绕过现有 Validator，会形成第二套工具参数和权限通道。
+- **修复：** TurnSpec 采用 3.0/3.1 双读、3.0 单写的迁移窗，parser 把旧字段归一为同一 canonical 语义，并严格拒绝冲突时间、未知 slot 和不在服务端枚举中的 ResultSet handle。公开投影生成不泄露数据库键的 `handleId`，具体项使用有界 `itemOrdinal`。Manifest 显式声明 workflow 与参数 slot source，Runtime 只在目标/工具唯一且 schema 通过时用 `workflowCompiler` 生成计划；3.1 单目标缺少普通文字/枚举槽时才交给看不到工具名、历史和权威字段的 Slot Filler。生成结果始终进入统一 `validateExecutionPlan`，任一条件不满足自动回到旧 Planner。goal ambiguity 按阻断范围与依赖图传播，部分无歧义目标可继续，兼容适配层同步过滤受阻目标。trace 记录实际 planning mode。
+- **防回归约束：** Handler 不得直接按工具名或问法拼调用；确定性能力和 slot source 必须逐项声明、逐项测试，不能由 effect/read 或参数为空自动推断。3.0 不得调用新 Slot Filler，以免提前改变旧 Planner 的调用次数和时间/参数语义。Compiler 3.1 单写只能在 shadow 样本和离线评测达到门槛后开启，且保留 3.0 回退。客户端 handle 不是权限凭据，每轮仍按 owner/conversation/ResultSet revision 解析；未知、过期和跨域 handle 失败关闭。旧 Planner 在确定性覆盖率和生产灰度完成前不得删除。
+- **验证方法：** 固定夹具覆盖 3.0/3.1 等价语义、合法/未知/跨组 handle、ordinal 越界、冲突 temporal claims、未声明 slot claims，以及 deterministic 成功、Slot Filler 补齐/越权字段拒绝、Validator 拒绝、自动 Planner 回退、fatal/goal/write 歧义与依赖传播。Agent Runtime 测试必须证明 3.1 受限补槽不暴露权威上下文、3.0 和非适用能力仍调用原 Planner；日常测试保持零 Provider。
+- **相关代码：** `apps/server/util/agent/runtime/v3/turnSpec.js`、`intentCompiler.js`、`workflowCompiler.js`、`slotFiller.js`、`ambiguityGate.js`、`agentRuntime.js`、`capabilityManifest.js`、`apps/server/util/agent/runtime/legacyRuntimeAdapter.js`、`apps/server/util/agent/sessionStore.js`、`apps/server/util/agent/turnContractTrace.js`。
 
 ### LN-PIT-094：Agent 时间范围和列表完整性不能由各工具或模型自行解释
 

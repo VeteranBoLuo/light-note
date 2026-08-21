@@ -12,6 +12,12 @@ import { normalizeAiArtifacts, type AiArtifact } from '@/types/aiArtifact';
 import { normalizeAiCapabilityModule, type AiCapabilityModule } from '@/types/aiCapabilityScope';
 import { normalizeAiQueryScopes, type AiQueryScope } from '@/types/aiQueryScope';
 import {
+  normalizeAiExecutionReceipt,
+  normalizeAiResponseEnvelope,
+  type AiExecutionReceipt,
+  type AiResponseEnvelope,
+} from '@/types/aiExecutionReceipt';
+import {
   normalizeAiMaterialClarification,
   normalizeAiResolvedGrounding,
   type AiMaterialClarification,
@@ -68,6 +74,10 @@ export interface AiAssistantMessage {
   materialClarification?: AiMaterialClarification;
   /** 服务端签发的安全查询口径；只用于持久化与核验，不参与下一轮材料或工具选择。 */
   queryScopes?: AiQueryScope[];
+  /** 由真实执行结果生成的公开回执；UI 披露不得再从请求意图或模型文案推断。 */
+  executionReceipt?: AiExecutionReceipt;
+  /** 事实块由服务端渲染，模型只拥有 prose 槽位。 */
+  responseEnvelope?: AiResponseEnvelope;
   activity?: Array<Record<string, unknown> | string>;
   cloudId?: string;
   requestId?: string;
@@ -663,6 +673,8 @@ function normalizePersistedMessage(value: unknown): AiAssistantMessage | null {
     resolvedGrounding: normalizeAiResolvedGrounding(raw.resolvedGrounding),
     materialClarification: normalizeAiMaterialClarification(raw.materialClarification),
     queryScopes: normalizeAiQueryScopes(raw.queryScopes),
+    executionReceipt: normalizeAiExecutionReceipt(raw.executionReceipt),
+    responseEnvelope: normalizeAiResponseEnvelope(raw.responseEnvelope),
     activity: sanitizeAiMessageActivity(raw.activity),
     cloudId: typeof raw.cloudId === 'string' ? raw.cloudId : undefined,
     requestId: typeof raw.requestId === 'string' ? raw.requestId : undefined,
@@ -727,6 +739,8 @@ function serializeMessage(message: AiAssistantMessage): Record<string, unknown> 
     resolvedGrounding: normalizeAiResolvedGrounding(message.resolvedGrounding),
     materialClarification: normalizeAiMaterialClarification(message.materialClarification),
     queryScopes: normalizeAiQueryScopes(message.queryScopes),
+    executionReceipt: normalizeAiExecutionReceipt(message.executionReceipt),
+    responseEnvelope: normalizeAiResponseEnvelope(message.responseEnvelope),
     activity: sanitizeAiMessageActivity(message.activity),
     cloudId: message.cloudId,
     requestId: message.requestId,
