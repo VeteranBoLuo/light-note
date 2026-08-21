@@ -84,8 +84,30 @@ describe('笔记库路由布局根节点', () => {
   it('标签作为独立筛选入口，预览侧栏在页面与大纲之间切换', () => {
     expect(templateSource).toContain('<TagFilterSelector :all-tags="visibleNoteTags"');
     expect(templateSource).toContain('v-model:mode="librarySidebarMode"');
-    expect(templateSource).toContain(':outline-enabled="desktopPreviewOpen"');
+    expect(templateSource).toContain(':outline-enabled="hasLibraryNoteContext"');
     expect(templateSource).toContain('<NoteOutlineList');
     expect(source).not.toContain('setNoteSidebarModeFromUser');
+  });
+
+  it('具体目录始终展示页面与大纲，根笔记库仍保持单页签', () => {
+    expect(source).toContain(
+      'const hasLibraryNoteContext = computed(() => desktopPreviewOpen.value || Boolean(currentParentId.value))',
+    );
+    const modeStart = source.indexOf("const librarySidebarMode = computed<'directory' | 'outline'>");
+    const modeEnd = source.indexOf('const previewActiveOutlineIndex', modeStart);
+    const modeSource = source.slice(modeStart, modeEnd);
+    expect(modeSource).toContain('if (!hasLibraryNoteContext.value) return;');
+    expect(modeSource).toContain('openCurrentDirectoryOutline(currentParentId.value)');
+  });
+
+  it('打开父页面正文时按真实内容分流：空正文进编辑器，有正文留在只读预览', () => {
+    const start = source.indexOf('async function openPageBody(noteId: string)');
+    const end = source.indexOf('async function openLibraryNote(noteOrId: any)', start);
+    const openBodySource = source.slice(start, end);
+
+    expect(openBodySource).toContain('await prefetchNoteDetail(user, normalizedId)');
+    expect(openBodySource).toContain('hasMeaningfulNoteContent(response.data.content');
+    expect(openBodySource).toContain('if (!hasContent || bookmark.isMobile) return openDirectoryPage(normalizedId)');
+    expect(openBodySource).toContain('setDesktopPreviewPage(normalizedId');
   });
 });

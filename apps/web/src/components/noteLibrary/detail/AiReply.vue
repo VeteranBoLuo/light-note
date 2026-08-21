@@ -207,8 +207,18 @@
             @enter="runFollowup"
           />
           <BButton
+            v-if="isLoading"
+            class="stop-btn ai-preview-followup__send ai-preview-followup__stop"
+            :title="t('ai.reply.stop')"
+            @click="stopGenerating"
+            v-click-log="{ module: '笔记-AI助手', operation: '停止生成' }"
+          >
+            <span class="stop-icon" aria-hidden="true"></span>
+            {{ t('ai.reply.stop') }}
+          </BButton>
+          <BButton
+            v-else
             class="ghost-btn ai-preview-followup__send"
-            :loading="isLoading"
             :disabled="!followupPrompt.trim() || !outputFull"
             @click="runFollowup"
             v-click-log="{ module: '笔记-AI助手', operation: '追问迭代' }"
@@ -1360,9 +1370,14 @@
   }
   .ai-preview-followup :deep(.b-input) {
     flex: 1;
+    min-width: 0;
   }
   .ai-preview-followup__send {
     flex: 0 0 auto;
+  }
+  .ai-preview-followup__stop {
+    width: auto;
+    min-width: 92px;
   }
   .ai-preview-title {
     display: flex;

@@ -86,6 +86,8 @@ router.post('/convertMode', noteLibraryHandle.convertNoteMode);
 router.post('/addNote', noteLibraryHandle.addNote);
 router.post('/queryNoteList', noteLibraryHandle.queryNoteList);
 router.post('/queryDrawingPreviews', noteLibraryHandle.queryDrawingPreviews);
+router.post('/uploadDrawingThumbnail', noteLibraryHandle.uploadDrawingThumbnail);
+router.get('/drawing-thumbnail/:noteId/:fileName', noteLibraryHandle.getDrawingThumbnail);
 router.get('/image-thumbnail/:fileName', noteLibraryHandle.getNoteImageThumbnail);
 router.post('/getNoteTreeFeatures', noteLibraryHandle.getNoteTreeFeatures);
 router.post('/previewNoteCreateTarget', noteLibraryHandle.previewNoteCreateTarget);

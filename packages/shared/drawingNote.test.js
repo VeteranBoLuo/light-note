@@ -4,6 +4,7 @@ import {
   DRAWING_SCENE_VERSION,
   DRAWING_SCENE_LIMITS,
   DRAWING_STROKE_WIDTHS,
+  DRAWING_THUMBNAIL_RENDERER_VERSION,
   DrawingSceneValidationError,
   createEmptyDrawingScene,
   parseDrawingScene,
@@ -12,13 +13,18 @@ import {
 } from "./drawingNote.js";
 
 describe("drawingNote scene protocol", () => {
+  it("缩略图渲染器版本与正文 scene 版本独立演进", () => {
+    expect(DRAWING_THUMBNAIL_RENDERER_VERSION).toBe(2);
+    expect(DRAWING_THUMBNAIL_RENDERER_VERSION).not.toBe(DRAWING_SCENE_VERSION);
+  });
+
   it("提供覆盖细线到粗线的五档快捷笔画宽度", () => {
     expect(DRAWING_STROKE_WIDTHS).toEqual([2, 4, 7, 12, 20]);
   });
 
   it("创建并稳定序列化空白场景", () => {
     const empty = createEmptyDrawingScene();
-    expect(empty).toEqual({ v: 3, page: DRAWING_PAGE, elements: [] });
+    expect(empty).toEqual({ v: 4, page: DRAWING_PAGE, elements: [] });
     expect(parseDrawingScene(serializeDrawingScene(empty))).toEqual(empty);
   });
 
@@ -215,7 +221,7 @@ describe("drawingNote scene protocol", () => {
       ],
     });
     expect(upgraded).toEqual({
-      v: 3,
+      v: DRAWING_SCENE_VERSION,
       page: DRAWING_PAGE,
       elements: [
         {
@@ -265,6 +271,52 @@ describe("drawingNote scene protocol", () => {
     expect(parsed.elements[0].erasures).toEqual([
       { id: "erase_shape", width: 4, points: [60.13, 20.13] },
     ]);
+  });
+
+  it("V4 保存有界、规范排序的闭合区域填充", () => {
+    const parsed = parseDrawingScene({
+      v: 4,
+      page: DRAWING_PAGE,
+      elements: [
+        {
+          id: "fill_1",
+          kind: "fill",
+          color: "#00A884",
+          x: 0,
+          y: 0,
+          spans: [10, 20, 40, 11, 18, 42],
+        },
+      ],
+    });
+    expect(parsed.elements[0]).toEqual({
+      id: "fill_1",
+      kind: "fill",
+      color: "#00a884",
+      x: 0,
+      y: 0,
+      spans: [10, 20, 40, 11, 18, 42],
+    });
+  });
+
+  it("旧版本拒绝填充元素，V4 拒绝重叠或越界扫描段", () => {
+    const fill = {
+      id: "fill",
+      kind: "fill",
+      color: "#00a884",
+      x: 0,
+      y: 0,
+      spans: [10, 20, 40],
+    };
+    expect(() =>
+      parseDrawingScene({ v: 3, page: DRAWING_PAGE, elements: [fill] }),
+    ).toThrow("手绘元素类型不受支持");
+    expect(() =>
+      parseDrawingScene({
+        v: 4,
+        page: DRAWING_PAGE,
+        elements: [{ ...fill, spans: [10, 20, 40, 10, 39, 50] }],
+      }),
+    ).toThrow("填充区域坐标无效");
   });
 
   it("V3 拒绝非法或超量的擦除轨迹", () => {

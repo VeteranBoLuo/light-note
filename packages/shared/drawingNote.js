@@ -1,7 +1,10 @@
 export const DRAWING_NOTE_TYPE = "drawing";
-export const DRAWING_SCENE_VERSION = 3;
+export const DRAWING_SCENE_VERSION = 4;
+// 派生缩略图渲染结果与正文 scene 独立演进。渲染算法变化时递增，避免同一 revision 继续命中旧位图。
+export const DRAWING_THUMBNAIL_RENDERER_VERSION = 2;
 export const DRAWING_LEGACY_SCENE_VERSION = 1;
 export const DRAWING_SHAPE_SCENE_VERSION = 2;
+export const DRAWING_ERASER_SCENE_VERSION = 3;
 export const DRAWING_SCENE_MAX_BYTES = 750_000;
 export const DRAWING_SCENE_LIMITS = Object.freeze({
   maxElements: 1_000,
@@ -11,6 +14,8 @@ export const DRAWING_SCENE_LIMITS = Object.freeze({
   maxErasurePointPairs: 50_000,
   maxTexts: 200,
   maxShapes: 300,
+  maxFills: 100,
+  maxFillSpans: 20_000,
   maxTextCharacters: 50_000,
   maxTextElementCharacters: 4_000,
 });
@@ -216,6 +221,53 @@ function normalizeShape(element, allowErasures) {
   return normalized;
 }
 
+function normalizeFill(element, allowErasures) {
+  if (
+    !Array.isArray(element.spans) ||
+    element.spans.length < 3 ||
+    element.spans.length % 3 !== 0
+  ) {
+    invalid("DRAWING_INVALID_FILL", "填充区域无效");
+  }
+  const spans = [];
+  let previousY = -1;
+  let previousEnd = -1;
+  for (let index = 0; index < element.spans.length; index += 3) {
+    const y = Number(element.spans[index]);
+    const start = Number(element.spans[index + 1]);
+    const end = Number(element.spans[index + 2]);
+    if (
+      !Number.isInteger(y) ||
+      !Number.isInteger(start) ||
+      !Number.isInteger(end) ||
+      y < 0 ||
+      y >= DRAWING_PAGE.height ||
+      start < 0 ||
+      start >= DRAWING_PAGE.width ||
+      end <= start ||
+      end > DRAWING_PAGE.width ||
+      y < previousY ||
+      (y === previousY && start <= previousEnd)
+    ) {
+      invalid("DRAWING_INVALID_FILL", "填充区域坐标无效");
+    }
+    spans.push(y, start, end);
+    previousY = y;
+    previousEnd = end;
+  }
+  const normalized = {
+    id: normalizeElementId(element.id),
+    kind: "fill",
+    color: normalizeColor(element.color),
+    x: finiteCoordinate(element.x ?? 0, "x"),
+    y: finiteCoordinate(element.y ?? 0, "y"),
+    spans,
+  };
+  const erasures = normalizeElementErasures(element, allowErasures);
+  if (erasures) normalized.erasures = erasures;
+  return normalized;
+}
+
 export function createEmptyDrawingScene() {
   return {
     v: DRAWING_SCENE_VERSION,
@@ -231,6 +283,7 @@ export function normalizeDrawingScene(input) {
   const version = Number(input.v);
   if (
     version !== DRAWING_SCENE_VERSION &&
+    version !== DRAWING_ERASER_SCENE_VERSION &&
     version !== DRAWING_SHAPE_SCENE_VERSION &&
     version !== DRAWING_LEGACY_SCENE_VERSION
   ) {
@@ -261,6 +314,8 @@ export function normalizeDrawingScene(input) {
   let erasurePointPairCount = 0;
   let textCount = 0;
   let shapeCount = 0;
+  let fillCount = 0;
+  let fillSpanCount = 0;
   let textCharacterCount = 0;
   const elements = input.elements.map((element) => {
     if (!element || typeof element !== "object" || Array.isArray(element)) {
@@ -268,7 +323,10 @@ export function normalizeDrawingScene(input) {
     }
     let normalized;
     if (element.kind === "stroke") {
-      normalized = normalizeStroke(element, version === DRAWING_SCENE_VERSION);
+      normalized = normalizeStroke(
+        element,
+        version >= DRAWING_ERASER_SCENE_VERSION,
+      );
       strokeCount += 1;
       pointPairCount += normalized.points.length / 2;
       erasureTrailCount += normalized.erasures?.length || 0;
@@ -285,8 +343,21 @@ export function normalizeDrawingScene(input) {
       element.kind === "shape" &&
       version !== DRAWING_LEGACY_SCENE_VERSION
     ) {
-      normalized = normalizeShape(element, version === DRAWING_SCENE_VERSION);
+      normalized = normalizeShape(
+        element,
+        version >= DRAWING_ERASER_SCENE_VERSION,
+      );
       shapeCount += 1;
+      erasureTrailCount += normalized.erasures?.length || 0;
+      erasurePointPairCount +=
+        normalized.erasures?.reduce(
+          (count, trail) => count + trail.points.length / 2,
+          0,
+        ) || 0;
+    } else if (element.kind === "fill" && version === DRAWING_SCENE_VERSION) {
+      normalized = normalizeFill(element, true);
+      fillCount += 1;
+      fillSpanCount += normalized.spans.length / 3;
       erasureTrailCount += normalized.erasures?.length || 0;
       erasurePointPairCount +=
         normalized.erasures?.reduce(
@@ -322,6 +393,12 @@ export function normalizeDrawingScene(input) {
   }
   if (shapeCount > DRAWING_SCENE_LIMITS.maxShapes) {
     invalid("DRAWING_TOO_MANY_SHAPES", "手绘形状数量超出限制");
+  }
+  if (
+    fillCount > DRAWING_SCENE_LIMITS.maxFills ||
+    fillSpanCount > DRAWING_SCENE_LIMITS.maxFillSpans
+  ) {
+    invalid("DRAWING_TOO_MANY_FILLS", "填充区域数量超出限制");
   }
 
   const scene = {

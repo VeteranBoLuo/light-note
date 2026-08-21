@@ -3,6 +3,7 @@ import { parseDrawingScene } from '@lightnote/shared/drawing-note';
 export const DRAWING_PREVIEW_MAX_ELEMENTS = 120;
 export const DRAWING_PREVIEW_MAX_POINT_PAIRS = 1_600;
 export const DRAWING_PREVIEW_MAX_TEXT_CHARACTERS = 4_000;
+export const DRAWING_PREVIEW_MAX_FILL_SPANS = 1_000;
 
 const evenlySample = (items, limit) => {
   if (items.length <= limit) return items;
@@ -25,6 +26,11 @@ const sampleStrokePoints = (points, maxPairs) => {
   return sampled;
 };
 
+const sampleFillSpans = (spans) => {
+  const rows = Array.from({ length: spans.length / 3 }, (_, index) => spans.slice(index * 3, index * 3 + 3));
+  return evenlySample(rows, DRAWING_PREVIEW_MAX_FILL_SPANS).flat();
+};
+
 // 卡片只需要辨认轮廓，不需要编辑级精度。先限制元素，再对每条轨迹等距抽样，
 // 保留首尾点与原始绘制顺序；这样大场景也不会通过预览接口放大响应和浏览器解析成本。
 export function buildDrawingScenePreview(content) {
@@ -44,6 +50,7 @@ export function buildDrawingScenePreview(content) {
         return [{ ...element, points: sampleStrokePoints(element.points, maxPairsPerStroke) }];
       }
       if (element.kind === 'shape') return [element];
+      if (element.kind === 'fill') return [{ ...element, spans: sampleFillSpans(element.spans) }];
       if (remainingTextCharacters <= 0) return [];
       const text = element.text.slice(0, Math.min(240, remainingTextCharacters));
       remainingTextCharacters -= text.length;

@@ -1,5 +1,6 @@
 import type { DrawingElement, DrawingStrokeElement } from '@lightnote/shared/drawing-note';
 import { drawingShapeTouchesCircle } from './drawingShape';
+import { drawingFillTouchesCircle } from './drawingFill';
 
 export interface DrawingPoint {
   x: number;
@@ -103,7 +104,9 @@ export function eraseDrawingElementsAt(
     const touches =
       element.kind === 'stroke'
         ? strokeTouchesEraser(element, center, eraserWidth / 2)
-        : drawingShapeTouchesCircle(element, center, eraserWidth / 2);
+        : element.kind === 'shape'
+          ? drawingShapeTouchesCircle(element, center, eraserWidth / 2)
+          : drawingFillTouchesCircle(element, center, eraserWidth / 2);
     if (!touches) return element;
     const erasures = element.erasures || [];
     const trailIndex = erasures.findIndex((trail) => trail.id === erasureId);

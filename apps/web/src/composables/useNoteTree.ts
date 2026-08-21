@@ -5,6 +5,7 @@ import useUserStore from '@/store/useUser';
 import useNoteWorkspaceStore, { NOTE_TREE_ROOT_KEY } from '@/store/noteWorkspace';
 import type { NoteTreeItem } from '@/types/noteTree';
 import { prefetchNoteDetail } from '@/api/noteDetailPrefetch';
+import { resolveNoteLibraryListPath } from '@/utils/noteDetailNavigation';
 
 export { NOTE_TREE_ROOT_KEY } from '@/store/noteWorkspace';
 
@@ -92,6 +93,7 @@ export function useNoteTree(
   async function selectDirectory(parentId: string | null) {
     const query = { ...router.currentRoute.value.query };
     delete query._rt;
+    delete query.from;
     // 目录决定浏览范围，标签只是范围内的筛选；切换目录时保留当前标签条件。
     if (parentId) query.parent = parentId;
     else delete query.parent;
@@ -102,9 +104,10 @@ export function useNoteTree(
     // 从卡片/目录点击的这一刻就请求正文。Vue Router 同时下载详情页与编辑器 chunk，
     // 弱网下不再先等几百 KB 的脚本到齐，才开始发正文请求。
     prefetchNoteDetail(user, noteId);
+    const sourcePath = resolveNoteLibraryListPath(router.currentRoute.value.fullPath) || '/noteLibrary';
     return router.push({
       path: `/noteLibrary/${encodeURIComponent(noteId)}`,
-      query: { from: router.currentRoute.value.fullPath },
+      query: { from: sourcePath },
     });
   }
 

@@ -86,6 +86,14 @@ describe('NoteReadonlyPreview', () => {
     expect(source).toMatch(/\.note-readonly-preview__drawing\s*\{[\s\S]*min-height:\s*0;[\s\S]*height:\s*auto;/u);
   });
 
+  it('桌面手绘预览拿到完整 scene 后会为本人旧笔记静默补齐准确缩略图', () => {
+    expect(source).toContain("import { ensureDrawingThumbnail } from '@/api/drawingThumbnail'");
+    expect(source).toContain("String(detailResult.data.createBy || '') === String(user.id || '')");
+    expect(source).toContain('void ensureDrawingThumbnail(');
+    expect(source).toContain('Math.max(1, Number(detailResult.data.revision || 1))');
+    expect(source).toContain("String(detailResult.data.content || '')");
+  });
+
   it('手绘画板适配完成后只在外层阅读区执行一次居中定位', () => {
     expect(source).toContain('@ready="centerDrawingPreview"');
     expect(source).toContain("root?.querySelector<HTMLElement>('.drawing-page')");

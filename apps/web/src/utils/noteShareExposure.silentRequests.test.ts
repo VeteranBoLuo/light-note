@@ -7,9 +7,9 @@ const read = (file: string) => readFileSync(resolve(process.cwd(), file), 'utf8'
 describe('公开分享目录写入确认', () => {
   it('创建与拖拽请求关闭全局错误条，只保留业务确认弹框', () => {
     const detail = read('src/view/noteLibrary/NoteDetail.vue');
-    const library = read('src/view/noteLibrary/NoteLibrary.vue');
+    const dragDrop = read('src/composables/useNoteTreeDragDrop.ts');
     expect(detail.match(/'\/api\/note\/addNote'[\s\S]{0,220}\{ silent: true \}/g)?.length).toBeGreaterThanOrEqual(2);
-    expect(library).toMatch(/'\/api\/note\/moveNoteNode',[\s\S]{0,320}\{ silent: true \}/);
+    expect(dragDrop).toMatch(/'\/api\/note\/moveNoteNode',[\s\S]*?\{ silent: true \},\s*\)/);
   });
 
   it('目录树和详情页在进入新建子页面前都执行分享状态预检', () => {
@@ -27,8 +27,8 @@ describe('公开分享目录写入确认', () => {
   it('移动与关联已有页面也只显示同一个分享暴露确认', () => {
     const move = read('src/components/noteLibrary/tree/NoteMoveModal.vue');
     const attach = read('src/components/noteLibrary/tree/NoteAttachPagesModal.vue');
-    expect(move).toMatch(/'\/api\/note\/moveNoteNodes',[\s\S]{0,320}\{ silent: true \}/);
-    expect(move).toMatch(/'\/api\/note\/moveNoteNode',[\s\S]{0,320}\{ silent: true \}/);
+    expect(move).toMatch(/'\/api\/note\/moveNoteNodes',[\s\S]*?\{ silent: true \},\s*\)/);
+    expect(move).toMatch(/'\/api\/note\/moveNoteNode',[\s\S]*?\{ silent: true \},\s*\)/);
     expect(attach).toContain('{ silent: true }');
   });
 });

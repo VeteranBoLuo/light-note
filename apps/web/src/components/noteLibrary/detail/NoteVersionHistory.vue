@@ -247,6 +247,7 @@
         count: elements.length,
         text: t('note.drawingConflictSummary', {
           strokes: elements.filter((element) => element?.kind === 'stroke').length,
+          fills: elements.filter((element) => element?.kind === 'fill').length,
           texts: elements.filter((element) => element?.kind === 'text').length,
           shapes: elements.filter((element) => element?.kind === 'shape').length,
         }),

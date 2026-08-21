@@ -2,6 +2,7 @@ import pool from '../db/index.js';
 import { normalizeMarkdownBlockquoteEntities, normalizeNoteType } from '@lightnote/shared';
 import {
   DRAWING_SCENE_VERSION,
+  DRAWING_THUMBNAIL_RENDERER_VERSION,
   DrawingSceneValidationError,
   serializeDrawingScene,
 } from '@lightnote/shared/drawing-note';
@@ -23,8 +24,15 @@ import {
 } from '../util/services/noteReferenceService.js';
 import { createTag } from '../util/services/tagService.js';
 import { cleanupOrphanNoteImages, extractNoteImageUrls, filterOwnedImageUrls } from '../util/noteImages.js';
-import { buildNoteCardPreview, extractNoteCardPreviewImage } from '../util/noteCardPreview.js';
+import { buildNoteCardPreview } from '../util/noteCardPreview.js';
 import { buildDrawingScenePreview } from '../util/drawingPreview.js';
+import {
+  cleanupOtherDrawingThumbnailRevisions,
+  decodeDrawingThumbnailDataUrl,
+  getExistingDrawingThumbnailPath,
+  removeDrawingThumbnailFile,
+  saveDrawingThumbnail,
+} from '../util/drawingThumbnailImage.js';
 import {
   ensureNoteImageThumbnail,
   getExistingNoteImageThumbnailPath,
@@ -1013,6 +1021,17 @@ export const queryNoteList = async (req, res) => {
         n.id,
         n.title,
         IF(n.type = 'drawing', '', LEFT(COALESCE(n.content, ''), ${NOTE_LIST_CONTENT_PREVIEW_LENGTH})) AS content,
+        ${
+          lightweightCardPreview
+            ? `CHAR_LENGTH(COALESCE(n.content, '')) AS content_length,
+        CASE
+          WHEN COALESCE(n.type, 'html') <> 'drawing' THEN NULL
+          WHEN COALESCE(n.content, '') = '' THEN 0
+          WHEN JSON_VALID(n.content) = 0 THEN 1
+          ELSE COALESCE(JSON_LENGTH(JSON_EXTRACT(n.content, '$.elements')), 0) > 0
+        END AS drawing_has_content,`
+            : ''
+        }
         n.create_by,
         n.update_by,
         n.del_flag,
@@ -1064,15 +1083,18 @@ export const queryNoteList = async (req, res) => {
     result.forEach((note) => {
       note.tags =
         note.tags && Array.isArray(note.tags) && note.tags.every((tag) => tag && tag.id !== null) ? note.tags : [];
+      const drawing = note.type === 'drawing';
+      const cardPreview = pagination.enabled && !drawing ? buildNoteCardPreview(note.content, note.type) : null;
+      if (lightweightCardPreview) {
+        note.hasContent = drawing
+          ? note.drawing_has_content == null || Number(note.drawing_has_content) > 0
+          : Number(note.content_length || 0) > NOTE_LIST_CONTENT_PREVIEW_LENGTH || Boolean(cardPreview?.hasContent);
+      }
+      delete note.content_length;
+      delete note.drawing_has_content;
       if (!pagination.enabled && note.type === 'drawing') note.content = '';
       if (pagination.enabled) {
-        const drawing = note.type === 'drawing';
-        const cardPreview = lightweightCardPreview && !drawing ? buildNoteCardPreview(note.content, note.type) : null;
-        const previewSource = drawing
-          ? ''
-          : cardPreview
-            ? cardPreview.imageUrl
-            : extractNoteCardPreviewImage(note.content, note.type);
+        const previewSource = drawing ? '' : cardPreview?.imageUrl || '';
         note.previewImageUrl = previewSource ? noteImageThumbnailPathname(previewSource) : '';
         if (drawing) {
           note.previewSummary = '';
@@ -1080,7 +1102,7 @@ export const queryNoteList = async (req, res) => {
           note.previewTextAfterImage = '';
           note.previewImageLocated = false;
         }
-        if (cardPreview) {
+        if (lightweightCardPreview && cardPreview) {
           note.previewSummary = cardPreview.summary;
           note.previewTextBeforeImage = cardPreview.beforeImage;
           note.previewTextAfterImage = cardPreview.afterImage;
@@ -1160,6 +1182,110 @@ export const queryDrawingPreviews = async (req, res) => {
     return res.send(resultData({ items }));
   } catch (error) {
     return sendNoteServerError(res, 'query-drawing-previews', error);
+  }
+};
+
+// 手绘正文保存成功后由客户端提交一张固定尺寸的派生 WebP。缩略图不是正文事实源：
+// 生成、上传或读取失败时卡片会回退到受限 scene 预览，绝不能反向影响笔记保存。
+export const uploadDrawingThumbnail = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  const noteId = String(req.body?.id || '').trim();
+  const revision = Number(req.body?.revision);
+  // 缺省 1 兼容滚动发布期间尚未携带 rendererVersion 的旧前端。
+  const rendererVersion = req.body?.rendererVersion == null ? 1 : Number(req.body.rendererVersion);
+  const image = decodeDrawingThumbnailDataUrl(req.body?.thumbnail);
+  if (!NOTE_ID_PATTERN.test(noteId)) {
+    return res.send(resultData(null, 400, L(req, '笔记 ID 无效', 'Invalid note ID')));
+  }
+  if (!Number.isSafeInteger(revision) || revision < 1) {
+    return res.send(resultData(null, 400, L(req, '笔记版本号无效', 'Invalid note revision')));
+  }
+  if (![1, DRAWING_THUMBNAIL_RENDERER_VERSION].includes(rendererVersion)) {
+    return res.send(resultData(null, 400, L(req, '缩略图渲染版本无效', 'Invalid thumbnail renderer version')));
+  }
+  if (!image) {
+    return res.send(resultData(null, 400, L(req, '手绘缩略图无效', 'Invalid drawing thumbnail')));
+  }
+
+  let filePath = '';
+  try {
+    const userId = req.user.id;
+    const [rows] = await pool.query(
+      "SELECT revision FROM note WHERE id=? AND create_by=? AND del_flag=0 AND type='drawing' LIMIT 1",
+      [noteId, userId],
+    );
+    if (!rows.length) return res.send(resultData(null, 404, L(req, '笔记不存在', 'Note not found')));
+    if (Math.max(1, Number(rows[0].revision || 1)) !== revision) {
+      return res.send(
+        resultData({ code: 'DRAWING_THUMBNAIL_REVISION_STALE' }, 409, L(req, '笔记版本已变化', 'Note changed')),
+      );
+    }
+    filePath = await saveDrawingThumbnail({ userId, noteId, revision, rendererVersion, image });
+
+    // 保存文件后再次确认版本，关闭“校验后另一笔正文先提交”的竞态；旧请求只删除自己的文件。
+    const [latestRows] = await pool.query(
+      "SELECT revision FROM note WHERE id=? AND create_by=? AND del_flag=0 AND type='drawing' LIMIT 1",
+      [noteId, userId],
+    );
+    if (!latestRows.length || Math.max(1, Number(latestRows[0].revision || 1)) !== revision) {
+      await removeDrawingThumbnailFile(filePath);
+      return res.send(
+        resultData({ code: 'DRAWING_THUMBNAIL_REVISION_STALE' }, 409, L(req, '笔记版本已变化', 'Note changed')),
+      );
+    }
+    await cleanupOtherDrawingThumbnailRevisions({
+      userId,
+      noteId,
+      keepRevision: revision,
+      keepRendererVersion: rendererVersion,
+    });
+    return res.send(resultData({ id: noteId, revision, rendererVersion }));
+  } catch (error) {
+    if (filePath) await removeDrawingThumbnailFile(filePath).catch(() => {});
+    console.warn('[drawing-thumbnail] upload failed code=%s', stableAgentErrorCode(error));
+    return res.send(resultData(null, 500, L(req, '缩略图暂时无法保存', 'Could not save thumbnail')));
+  }
+};
+
+function sendDrawingThumbnailNotFound(res) {
+  // 缺图稍后可能由详情页静默补齐，404 不能被浏览器或中间缓存固化。
+  res.set('Cache-Control', 'private, no-store');
+  return res.status(404).end();
+}
+
+export const getDrawingThumbnail = async (req, res) => {
+  const noteId = String(req.params?.noteId || '').trim();
+  const fileName = String(req.params?.fileName || '');
+  const versionedMatch = /^v(\d+)-(\d+)\.webp$/u.exec(fileName);
+  const legacyMatch = /^(\d+)\.webp$/u.exec(fileName);
+  const rendererVersion = versionedMatch ? Number(versionedMatch[1]) : legacyMatch ? 1 : 0;
+  const revision = Number(versionedMatch?.[2] || legacyMatch?.[1]);
+  if (
+    !NOTE_ID_PATTERN.test(noteId) ||
+    !Number.isSafeInteger(revision) ||
+    revision < 1 ||
+    ![1, DRAWING_THUMBNAIL_RENDERER_VERSION].includes(rendererVersion)
+  ) {
+    return sendDrawingThumbnailNotFound(res);
+  }
+  try {
+    const userId = req.user.id;
+    const [rows] = await pool.query(
+      "SELECT revision FROM note WHERE id=? AND create_by=? AND del_flag=0 AND type='drawing' LIMIT 1",
+      [noteId, userId],
+    );
+    if (!rows.length || Math.max(1, Number(rows[0].revision || 1)) !== revision) {
+      return sendDrawingThumbnailNotFound(res);
+    }
+    const filePath = await getExistingDrawingThumbnailPath({ userId, noteId, revision, rendererVersion });
+    if (!filePath) return sendDrawingThumbnailNotFound(res);
+    const image = await fsP.readFile(filePath);
+    res.set('Cache-Control', 'private, max-age=31536000, immutable');
+    res.set('X-Content-Type-Options', 'nosniff');
+    return res.type('image/webp').send(image);
+  } catch (error) {
+    console.warn('[drawing-thumbnail] read failed code=%s', stableAgentErrorCode(error));
+    return sendDrawingThumbnailNotFound(res);
   }
 };
 

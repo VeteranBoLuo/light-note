@@ -51,3 +51,6 @@ skills
 # 换机或新环境部署前,必须先从证据包(~/Library/Application Support/Light Note/Android Releases/)
 # 把对应版本 APK 拷回此目录,否则下载页按钮 404。哈希须与 src/config/androidRelease.ts 一致。
 apps/web/public/downloads/android/*.apk
+
+# 本地后端生成的可再生派生资源（如手绘卡片缩略图）。
+apps/server/.runtime/

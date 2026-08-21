@@ -98,6 +98,24 @@ describe('API 日志脱敏', () => {
     expect(JSON.stringify(payload)).not.toContain('private-tag');
   });
 
+  it('手绘缩略图上传日志只记录派生图长度', () => {
+    const payload = summarizeApiLogPayload('/api/note/uploadDrawingThumbnail', {
+      id: 'drawing-1',
+      revision: 4,
+      rendererVersion: 2,
+      thumbnail: 'data:image/webp;base64,private-bitmap',
+    });
+
+    expect(payload).toEqual({
+      payloadSummary: 'note_content_omitted',
+      id: 'drawing-1',
+      revision: 4,
+      rendererVersion: 2,
+      thumbnailLength: 'data:image/webp;base64,private-bitmap'.length,
+    });
+    expect(JSON.stringify(payload)).not.toContain('private-bitmap');
+  });
+
   it('非正文类路由继续交给通用脱敏逻辑', () => {
     const payload = { key: 'diagnostic-value' };
     expect(summarizeApiLogPayload('/api/bookmark/getBookmarkList', payload)).toBe(payload);

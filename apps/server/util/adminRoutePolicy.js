@@ -70,6 +70,8 @@ declare(ADMIN_POLICIES.CONTENT_DESTRUCTIVE, 'bookmark', [
 declare(ADMIN_POLICIES.READ, 'note', [
   ['POST', '/note/queryNoteList'],
   ['POST', '/note/queryDrawingPreviews'],
+  ['GET', '/note/drawing-thumbnail/:noteId/:fileName'],
+  ['HEAD', '/note/drawing-thumbnail/:noteId/:fileName'],
   ['GET', '/note/image-thumbnail/:fileName'],
   ['POST', '/note/getNoteTreeFeatures'],
   ['POST', '/note/previewNoteCreateTarget'],
@@ -98,6 +100,7 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'note', [
   ['POST', '/note/uploadImage'],
   ['POST', '/note/updateNote'],
   ['POST', '/note/updateDrawingNote'],
+  ['POST', '/note/uploadDrawingThumbnail'],
   ['POST', '/note/convertMode'],
   ['POST', '/note/addNote'],
   ['POST', '/note/moveNoteNode'],
@@ -649,6 +652,9 @@ function resolvePolicy(method, path) {
   }
   if (/^\/note\/image-thumbnail\/[^/]+$/.test(path)) {
     return routePolicies.get(`${method} /note/image-thumbnail/:fileName`);
+  }
+  if (/^\/note\/drawing-thumbnail\/[^/]+\/[^/]+$/.test(path)) {
+    return routePolicies.get(`${method} /note/drawing-thumbnail/:noteId/:fileName`);
   }
   if (/^\/support\/leaderboard\/avatar\/[^/]+$/.test(path)) {
     return routePolicies.get(`${method} /support/leaderboard/avatar/:publicId`);

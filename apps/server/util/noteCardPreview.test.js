@@ -14,6 +14,7 @@ describe('笔记卡片首图提取', () => {
       afterImage: '图片下方正文',
       imageUrl: 'https://boluo66.top/uploads/note-flow.png',
       imageLocated: true,
+      hasContent: true,
     });
   });
 
@@ -76,5 +77,16 @@ describe('笔记卡片首图提取', () => {
     expect(extractNoteCardPreviewImage('<svg><image href="/uploads/note-vector.png" /></svg>', 'html')).toBe('');
     expect(extractNoteCardPreviewImage('<code>&lt;img src="/uploads/note-code.png"&gt;</code>', 'html')).toBe('');
     expect(extractNoteCardPreviewImage('图片：https://boluo66.top/uploads/note-plain.png', 'markdown')).toBe('');
+  });
+
+  it('统一识别空富文本占位、代码正文与无文字视觉内容', () => {
+    expect(buildNoteCardPreview('<p><br></p><p>&nbsp;</p>', 'html').hasContent).toBe(false);
+    expect(buildNoteCardPreview('<script>仅元数据</script><style>.x{color:red}</style>', 'html').hasContent).toBe(
+      false,
+    );
+    expect(buildNoteCardPreview('<pre><code>const answer = 42;</code></pre>', 'html').hasContent).toBe(true);
+    expect(buildNoteCardPreview('<svg viewBox="0 0 10 10"></svg>', 'html').hasContent).toBe(true);
+    expect(buildNoteCardPreview('   \n\t', 'markdown').hasContent).toBe(false);
+    expect(buildNoteCardPreview('```js\nconst answer = 42;\n```', 'markdown').hasContent).toBe(true);
   });
 });

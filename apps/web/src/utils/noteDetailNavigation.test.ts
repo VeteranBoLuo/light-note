@@ -16,6 +16,14 @@ describe('resolveNoteLibraryListPath', () => {
     expect(resolveNoteLibraryListPath(child)).toBe(library);
   });
 
+  it('清除误带回列表的 from，避免下一次打开正文继续递归嵌套', () => {
+    expect(
+      resolveNoteLibraryListPath(
+        `/noteLibrary?parent=project&from=${encodeURIComponent('/noteLibrary?parent=old')}&view=list`,
+      ),
+    ).toBe('/noteLibrary?parent=project&view=list');
+  });
+
   it.each(['https://example.com/noteLibrary', '//example.com/noteLibrary', '/noteLibrary-copy', '/search'])(
     '拒绝非笔记库内部地址：%s',
     (path) => {

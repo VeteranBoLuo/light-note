@@ -146,6 +146,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { apiBasePost } from '@/http/request';
+  import { ensureDrawingThumbnail } from '@/api/drawingThumbnail';
   import { consumeNoteDetail } from '@/api/noteDetailPrefetch';
   import { resolveNoteResourceRefs, type ResolvedResourceReference } from '@/api/noteReferences';
   import { useUserStore } from '@/store';
@@ -537,7 +538,18 @@
         emit('pendingState', Boolean(detailResult.data.isPending));
       }
       breadcrumb.value = Array.isArray(breadcrumbResult?.data?.items) ? breadcrumbResult.data.items : [];
-      if (detailResult.data.type === 'drawing') return;
+      if (detailResult.data.type === 'drawing') {
+        if (String(detailResult.data.createBy || '') === String(user.id || '')) {
+          // 桌面卡片点击进入的是本组件而非 NoteDetail；这里同样用已经加载的完整 scene
+          // 静默补齐准确缩略图，避免旧笔记一直只能回退到会抽样的列表预览。
+          void ensureDrawingThumbnail(
+            String(detailResult.data.id || noteId),
+            Math.max(1, Number(detailResult.data.revision || 1)),
+            String(detailResult.data.content || ''),
+          ).catch(() => false);
+        }
+        return;
+      }
       const normalizedContent = normalizeNoteContentResourceUrls(String(detailResult.data.content || ''));
       const renderedHtml = await noteContentToHtml(normalizedContent, detailResult.data.type);
       if (seq !== requestSeq) return;

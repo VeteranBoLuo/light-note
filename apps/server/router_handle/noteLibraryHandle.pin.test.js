@@ -20,6 +20,7 @@ const { buildNoteCardPreview, extractNoteCardPreviewImage, noteImageThumbnailPat
     afterImage: String(content || '').includes('note-cover.png') ? '图片下方' : '',
     imageUrl: String(content || '').includes('note-cover.png') ? 'https://boluo66.top/uploads/note-cover.png' : '',
     imageLocated: String(content || '').includes('note-cover.png'),
+    hasContent: !/^\s*(?:<p>(?:<br\s*\/?>|&nbsp;|\s)*<\/p>)*\s*$/iu.test(String(content || '')),
   })),
   extractNoteCardPreviewImage: vi.fn((content) =>
     String(content || '').includes('note-cover.png') ? 'https://boluo66.top/uploads/note-cover.png' : '',
@@ -28,6 +29,13 @@ const { buildNoteCardPreview, extractNoteCardPreviewImage, noteImageThumbnailPat
     () =>
       '/api/note/image-thumbnail/26e586d299cb38d4ba6d01f174aeba00d28a8ec2fd612a1816cad20acbed227f.webp?source=https%3A%2F%2Fboluo66.top%2Fuploads%2Fnote-cover.png',
   ),
+}));
+const drawingThumbnailMocks = vi.hoisted(() => ({
+  cleanup: vi.fn(),
+  decode: vi.fn(() => Buffer.from('webp')),
+  existing: vi.fn(),
+  remove: vi.fn(),
+  save: vi.fn(async () => '/tmp/drawing-thumbnail.webp'),
 }));
 
 vi.mock('../db/index.js', () => ({ default: { getConnection, query: poolQuery } }));
@@ -62,6 +70,13 @@ vi.mock('../util/noteImageThumbnail.js', () => ({
   noteImageThumbnailPathname,
   resolveOwnedNoteThumbnailSource: vi.fn(),
 }));
+vi.mock('../util/drawingThumbnailImage.js', () => ({
+  cleanupOtherDrawingThumbnailRevisions: drawingThumbnailMocks.cleanup,
+  decodeDrawingThumbnailDataUrl: drawingThumbnailMocks.decode,
+  getExistingDrawingThumbnailPath: drawingThumbnailMocks.existing,
+  removeDrawingThumbnailFile: drawingThumbnailMocks.remove,
+  saveDrawingThumbnail: drawingThumbnailMocks.save,
+}));
 vi.mock('../util/noteImageUpload.js', () => ({ validateNoteImageUpload: vi.fn() }));
 vi.mock('../util/personalKnowledgeSearch.js', () => ({ invalidatePersonalKnowledgeCache }));
 
@@ -70,16 +85,25 @@ const {
   delNote,
   getNoteDetail,
   getNoteVersions,
+  getDrawingThumbnail,
   moveNoteNode,
   moveNoteNodes,
   queryDrawingPreviews,
   queryNoteList,
   toggleNoteTop,
+  uploadDrawingThumbnail,
   updateNoteSort,
 } = await import('./noteLibraryHandle.js');
 
 function mockRes() {
   return { send: vi.fn() };
+}
+
+function mockFileRes() {
+  const res = { set: vi.fn(), status: vi.fn(), end: vi.fn() };
+  res.status.mockReturnValue(res);
+  res.end.mockReturnValue(res);
+  return res;
 }
 
 const lastSent = (res) => res.send.mock.calls.at(-1)?.[0];
@@ -122,6 +146,61 @@ describe('笔记置顶 handler', () => {
     expect(poolQuery).not.toHaveBeenCalled();
   });
 
+  it('只在缩略图版本与当前手绘正文一致时保存派生 WebP', async () => {
+    poolQuery.mockResolvedValueOnce([[{ revision: 4 }]]).mockResolvedValueOnce([[{ revision: 4 }]]);
+    const res = mockRes();
+
+    await uploadDrawingThumbnail(
+      {
+        user: { id: 'u1' },
+        body: { id: 'drawing-1', revision: 4, rendererVersion: 2, thumbnail: 'data:image/webp;base64,AAAA' },
+      },
+      res,
+    );
+
+    expect(drawingThumbnailMocks.save).toHaveBeenCalledWith({
+      userId: 'u1',
+      noteId: 'drawing-1',
+      revision: 4,
+      rendererVersion: 2,
+      image: Buffer.from('webp'),
+    });
+    expect(drawingThumbnailMocks.cleanup).toHaveBeenCalledWith({
+      userId: 'u1',
+      noteId: 'drawing-1',
+      keepRevision: 4,
+      keepRendererVersion: 2,
+    });
+    expect(lastSent(res)).toMatchObject({
+      status: 200,
+      data: { id: 'drawing-1', revision: 4, rendererVersion: 2 },
+    });
+  });
+
+  it('拒绝过期版本的手绘缩略图且不写文件', async () => {
+    poolQuery.mockResolvedValueOnce([[{ revision: 5 }]]);
+    const res = mockRes();
+
+    await uploadDrawingThumbnail(
+      { user: { id: 'u1' }, body: { id: 'drawing-1', revision: 4, thumbnail: 'data:image/webp;base64,AAAA' } },
+      res,
+    );
+
+    expect(drawingThumbnailMocks.save).not.toHaveBeenCalled();
+    expect(lastSent(res)).toMatchObject({ status: 409, data: { code: 'DRAWING_THUMBNAIL_REVISION_STALE' } });
+  });
+
+  it('缺图响应禁止缓存，详情页后续补齐同一地址时可以立即生效', async () => {
+    const res = mockFileRes();
+
+    await getDrawingThumbnail({ user: { id: 'u1' }, params: { noteId: 'drawing-1', fileName: 'v999-4.webp' } }, res);
+
+    expect(res.set).toHaveBeenCalledWith('Cache-Control', 'private, no-store');
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.end).toHaveBeenCalledTimes(1);
+    expect(poolQuery).not.toHaveBeenCalled();
+  });
+
   it('笔记列表按置顶、自定义顺序和更新时间排序', async () => {
     poolQuery.mockResolvedValueOnce([[{ id: 'n1', is_top: 1, tags: null }]]);
     const res = mockRes();
@@ -132,6 +211,7 @@ describe('笔记置顶 handler', () => {
     const [sql, params] = poolQuery.mock.calls[0];
     expect(sql).not.toContain('SELECT n.*');
     expect(sql).toContain("IF(n.type = 'drawing', '', LEFT(COALESCE(n.content, ''), 4000)) AS content");
+    expect(sql).not.toContain('AS content_length');
     expect(sql).toContain('ORDER BY n.is_top DESC, n.sort, n.update_time DESC');
     expect(params).toEqual(['u1']);
     expect(attachPendingStatus).toHaveBeenCalled();
@@ -183,14 +263,53 @@ describe('笔记置顶 handler', () => {
 
     const item = lastSent(res).data.items[0];
     expect(item).toMatchObject({
+      hasContent: true,
       previewSummary: '图片上方\n图片下方',
       previewTextBeforeImage: '图片上方',
       previewTextAfterImage: '图片下方',
       previewImageLocated: true,
     });
     expect(item).not.toHaveProperty('content');
+    const [sql] = poolQuery.mock.calls[0];
+    expect(sql).toContain("CHAR_LENGTH(COALESCE(n.content, '')) AS content_length");
+    expect(sql).toContain("JSON_EXTRACT(n.content, '$.elements')");
     expect(buildNoteCardPreview).toHaveBeenCalledTimes(1);
     expect(extractNoteCardPreviewImage).not.toHaveBeenCalled();
+  });
+
+  it('列表显式返回空正文父页面与空手绘的内容状态', async () => {
+    poolQuery
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'empty-parent',
+            type: 'html',
+            content: '<p><br></p>',
+            content_length: 11,
+            child_count: 2,
+            tags: null,
+          },
+          {
+            id: 'empty-drawing',
+            type: 'drawing',
+            content: '',
+            drawing_has_content: 0,
+            child_count: 1,
+            tags: null,
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ total: 2 }]]);
+    const res = mockRes();
+
+    await queryNoteList({ user: { id: 'u1' }, body: { page: 1, pageSize: 48, previewVersion: 2 } }, res);
+
+    expect(lastSent(res).data.items).toEqual([
+      expect.objectContaining({ id: 'empty-parent', hasContent: false, child_count: 2 }),
+      expect.objectContaining({ id: 'empty-drawing', hasContent: false, child_count: 1 }),
+    ]);
+    expect(lastSent(res).data.items[0]).not.toHaveProperty('content_length');
+    expect(lastSent(res).data.items[1]).not.toHaveProperty('drawing_has_content');
   });
 
   it('手绘列表不解析、不回传 scene JSON，旧版非分页响应也保持轻量', async () => {

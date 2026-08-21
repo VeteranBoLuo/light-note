@@ -68,10 +68,14 @@
               :search-value="detailTreeSearchValue"
               :directory-enabled="noteTreeReadEnabled"
               :write-enabled="noteTreeWriteEnabled && !readonly"
-              :drag-enabled="false"
+              :drag-enabled="detailTreeDragEnabled && !treeMovePending"
               :search-active="treeSearchActive"
               :search-loading="treeSearchLoading"
               :search-match-count="treeSearchMatchCount"
+              :drop-target-key="dragDropTarget?.key || ''"
+              :drop-target-active="dragDropTargetActive"
+              :drop-target-position="dragDropTarget?.position || ''"
+              :menu-disabled="noteDragging"
               @toggle="toggleTreeNode"
               @open="openNoteDetailPage"
               @browse-children="browseSidebarChildren"
@@ -84,6 +88,8 @@
               @delete="deleteSidebarPage"
               @go-library="openBreadcrumbPage(null)"
               @search="detailTreeSearchValue = $event"
+              @drag-start="onTreeDragStart"
+              @drag-end="onTreeDragEnd"
             >
               <template #outline>
                 <Catalog
@@ -93,6 +99,7 @@
                   :note-type="note.type"
                   @markdown-heading-click="scrollToMarkdownHeading"
                 />
+                <NoteOutlineList v-else :headings="[]" />
               </template>
             </NoteWorkspaceSidebar>
             <Catalog
@@ -217,6 +224,11 @@
               @resource-refs-change="onEditorResourceRefsChange"
             />
           </div>
+          <NoteTreeDropFeedback
+            :visible="noteDragging && Boolean(dragDropTarget)"
+            :ready="dragDropTargetActive"
+            :text="dragDropHint"
+          />
         </div>
         <template v-if="!isDrawingNote" #ai>
           <div class="note-detail-ai-slot">
@@ -339,6 +351,8 @@
   import Editor from '@/components/noteLibrary/detail/Editor.vue';
   import NoteWorkspaceShell from '@/components/noteLibrary/workspace/NoteWorkspaceShell.vue';
   import NoteWorkspaceSidebar from '@/components/noteLibrary/workspace/NoteWorkspaceSidebar.vue';
+  import NoteOutlineList from '@/components/noteLibrary/detail/NoteOutlineList.vue';
+  import NoteTreeDropFeedback from '@/components/noteLibrary/tree/NoteTreeDropFeedback.vue';
   import NoteMobileNavigationDrawer from '@/components/noteLibrary/workspace/NoteMobileNavigationDrawer.vue';
   import NoteConflictModal from '@/components/noteLibrary/detail/NoteConflictModal.vue';
   import { renderNoteTemplate } from '@/utils/noteTemplate.ts';
@@ -347,6 +361,7 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import { recordOperation } from '@/api/commonApi.ts';
   import { invalidateDrawingPreview } from '@/api/drawingPreview';
+  import { ensureDrawingThumbnail, uploadDrawingThumbnail } from '@/api/drawingThumbnail';
   import { recordNoteTreeProductEvent } from '@/api/noteTreeTelemetry';
   import {
     DISABLED_NOTE_TREE_FEATURES,
@@ -365,9 +380,11 @@
   import { noteHtmlToMarkdown } from '@/utils/noteHtmlToMarkdown';
   import { buildNoteBreadcrumbDisplay } from '@/utils/noteBreadcrumb';
   import { resolveNoteDetailReturnPath } from '@/utils/noteDetailNavigation';
+  import { hasMeaningfulNoteContent } from '@/utils/noteTree';
   import { resolveNoteWorkspaceLayout, type NoteWorkspaceLayoutState } from '@/utils/noteWorkspaceLayout';
   import { markNoteDraftPromoted } from '@/utils/routeViewKey';
   import { NOTE_TREE_ROOT_KEY, useNoteTree } from '@/composables/useNoteTree';
+  import { useNoteTreeDragDrop } from '@/composables/useNoteTreeDragDrop';
   import type { NoteTreeItem } from '@/types/noteTree';
   import {
     buildNoteDetailRequestScope,
@@ -468,6 +485,7 @@
     return 'html';
   };
   const initialNoteType = resolveInitialNoteType();
+  const nodeType = ref<'edit' | 'add' | 'share'>('edit');
   const note = reactive({
     id: '',
     title: DEFAULT_NOTE_TITLE,
@@ -484,10 +502,15 @@
     parentId: null as string | null,
     isPending: false,
   });
+  const readonly = computed(() => {
+    if (user.role === 'root') return false;
+    if (nodeType.value === 'share') return true;
+    if (nodeType.value === 'add') return false;
+    return user.id !== note.createBy;
+  });
   const titleInputRef = ref<InstanceType<typeof BInput> | null>(null);
   let pendingNewNoteTitleFocus = false;
   const isDrawingNote = computed(() => note.type === 'drawing');
-  const nodeType = ref<'edit' | 'add' | 'share'>('edit');
   const noteWorkspace = useNoteWorkspaceStore();
   const noteLibraryCache = useNoteLibraryCacheStore();
   const noteCacheScope = computed(() => buildNoteDetailRequestScope(user));
@@ -594,6 +617,39 @@
         : treeLoadingKeys.value,
   );
   const sidebarTreeError = computed(() => (treeSearchActive.value ? treeSearchError.value : treeError.value));
+  const detailTreeDragEnabled = computed(
+    () =>
+      !bookmark.isMobile &&
+      canShowPrivateNavigation.value &&
+      noteTreeWriteEnabled.value &&
+      !readonly.value &&
+      !treeSearchActive.value &&
+      detailSidebarMode.value === 'directory',
+  );
+  const {
+    dragDropHint,
+    dragDropTarget,
+    dragDropTargetActive,
+    noteDragging,
+    onTreeDragEnd,
+    onTreeDragStart,
+    treeMovePending,
+  } = useNoteTreeDragDrop({
+    enabled: detailTreeDragEnabled,
+    childrenByParent,
+    visibleChildrenByParent: sidebarTreeChildrenByParent,
+    t,
+    getScrollElement: () => document.querySelector<HTMLElement>('.note-detail-sidebar-panel .note-tree-scroll'),
+    canCommit: () => guardWrite(undefined, 'move-note') && !readonly.value,
+    async onMoveConfirmed({ sourceId, target }) {
+      const affectsCurrentBreadcrumb = detailBreadcrumb.value.some((item) => item.id === sourceId);
+      noteWorkspace.invalidateBreadcrumbBranch(sourceId);
+      invalidateNoteReadCaches(sourceId);
+      if (sourceId === note.id) note.parentId = target.parentId;
+      if (affectsCurrentBreadcrumb && note.id) await loadDetailBreadcrumb(note.id);
+    },
+    logLabel: 'note-detail',
+  });
   let detailTreeSearchTimer = 0;
   interface NoteEditorHandle {
     focusToEnd?: () => void;
@@ -1036,17 +1092,6 @@
     const applied = await editorRef.value?.replaceContentWithUndo?.(normalizedContent, type);
     if (!applied) {
       note.content = normalizedContent;
-    }
-  });
-  const readonly = computed(() => {
-    if (user.role === 'root') {
-      return false;
-    } else if (nodeType.value === 'share') {
-      return true;
-    } else if (nodeType.value === 'add') {
-      return false;
-    } else {
-      return user.id !== note.createBy;
     }
   });
   const showInboxOrganizer = computed(() => !readonly.value && Boolean(note.id) && Boolean(note.isPending));
@@ -1570,11 +1615,7 @@
         throw Object.assign(new Error('NOTE_SHARE_EXPOSURE_CANCELLED'), { code: 'NOTE_SHARE_EXPOSURE_CANCELLED' });
       }
       if (exposureDecision === true) {
-        res = await apiBasePost(
-          '/api/note/addNote',
-          { ...params, shareExposureAcknowledged: true },
-          { silent: true },
-        );
+        res = await apiBasePost('/api/note/addNote', { ...params, shareExposureAcknowledged: true }, { silent: true });
       }
       if (res.status === 200 && res.data?.id) {
         note.id = res.data.id;
@@ -1700,13 +1741,29 @@
       if (ok) {
         // 只在服务端确认成功后才推进已保存标题，避免失败时把草稿误认为已落库。
         note.lastTitle = cloneDeep(titleAtSave);
-        if (note.id) noteWorkspace.updateNoteMetadata(note.id, { title: titleAtSave, type: note.type });
+        if (note.id) {
+          noteWorkspace.updateNoteMetadata(note.id, {
+            title: titleAtSave,
+            type: note.type,
+            hasContent: hasMeaningfulNoteContent(note.content, note.type),
+          });
+        }
         if (isMsg) {
           message.success(t('common.saveSuccess'));
         }
         setUpdateTime();
         saveStatus.value = 'saved';
-        if (isDrawingNote.value && note.id) invalidateDrawingPreview(note.id);
+        if (isDrawingNote.value && note.id) {
+          invalidateDrawingPreview(note.id);
+          const thumbnailNoteId = note.id;
+          const thumbnailRevision = note.revision;
+          const thumbnailContent = String(note.content || '');
+          // 缩略图是可丢失的派生数据：后台刷新失败时卡片自动回退 scene 预览，
+          // 不能让图片编码或上传状态反向污染正文的“已保存”状态。
+          void uploadDrawingThumbnail(thumbnailNoteId, thumbnailRevision, thumbnailContent).catch((error) => {
+            console.warn('刷新手绘缩略图失败:', error);
+          });
+        }
         invalidateNoteReadCaches(note.id);
       } else {
         saveStatus.value = 'error';
@@ -2193,9 +2250,17 @@
         }
         note.lastTitle = cloneDeep(note.title);
         latestRequestedTitle = note.title;
-        noteWorkspace.updateNoteMetadata(String(note.id), { title: note.title, type: note.type });
+        noteWorkspace.updateNoteMetadata(String(note.id), {
+          title: note.title,
+          type: note.type,
+          hasContent: hasMeaningfulNoteContent(note.content, note.type),
+        });
         updateTime.value = detailRecord.updateTime ?? detailRecord.createTime;
         nodeType.value = user.id === note.createBy ? 'edit' : 'share';
+        if (note.type === 'drawing' && nodeType.value === 'edit') {
+          // 历史笔记不要求用户制造一次正文 revision；完整 scene 到达后静默补齐当前版派生图。
+          void ensureDrawingThumbnail(note.id, note.revision, String(note.content || '')).catch(() => false);
+        }
         noteContentKey.value = `note-content:${note.id}`;
         contentApplied = true;
         isReady.value = true;
@@ -2524,6 +2589,7 @@
   .editor-panel {
     --note-editor-header-bg: var(--surface-panel-bg);
 
+    position: relative;
     flex: 1 1 auto;
     width: 100%;
     height: 100%;

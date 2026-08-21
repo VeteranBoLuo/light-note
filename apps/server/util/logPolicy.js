@@ -32,6 +32,7 @@ const NOTE_CONTENT_MUTATION_PATHS = new Set([
   '/note/addNote',
   '/note/updateNote',
   '/note/updateDrawingNote',
+  '/note/uploadDrawingThumbnail',
   '/note/convertMode',
   '/note/addNoteTemplate',
   '/note/updateNoteTemplate',
@@ -70,11 +71,11 @@ export function summarizeApiLogPayload(originalUrl, payload) {
   const summary = {
     payloadSummary: 'note_content_omitted',
   };
-  for (const key of ['id', 'noteId', 'type', 'targetType', 'revision', 'baseRevision', 'parentId']) {
+  for (const key of ['id', 'noteId', 'type', 'targetType', 'revision', 'rendererVersion', 'baseRevision', 'parentId']) {
     const value = optionalScalar(payload[key]);
     if (value !== undefined) summary[key] = value;
   }
-  for (const key of ['content', 'scene', 'convertedContent']) {
+  for (const key of ['content', 'scene', 'convertedContent', 'thumbnail']) {
     if (typeof payload[key] === 'string') summary[`${key}Length`] = textLength(payload[key]);
   }
   if (typeof payload.title === 'string') summary.titleLength = textLength(payload.title);

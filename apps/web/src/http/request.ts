@@ -368,6 +368,17 @@ export const apiBaseGet = async (url: string, params?: any, options?: RequestOpt
   return handleErrorResponse(res.data, options?.silent);
 };
 
+/** 用于图片等无 JSON 正文的派生资源探测；仍复用身份、管理员上下文与会话拦截器。 */
+export const apiBaseHead = async (url: string, params?: any, options?: RequestOptions): Promise<number> => {
+  const res = await request({
+    url,
+    method: 'head',
+    params,
+    ...options,
+  });
+  return res.status;
+};
+
 export const apiBasePut = async (url: string, data?: any, options?: RequestOptions): Promise<ApiResponse> => {
   const res = await request({
     url,

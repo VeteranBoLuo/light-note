@@ -410,6 +410,7 @@ export const registerUser = async (req, res) => {
       theme: 'day',
       noteViewMode: 'card',
       noteSidebarMode: 'directory',
+      noteParentOpenMode: 'children',
       homePage: 'bookmark',
       lang: detectLangFromReq(req),
     });
@@ -1573,6 +1574,7 @@ export const handleUserDatabaseOperation = async (githubUser, req, { duplicateRe
           theme: 'day',
           noteViewMode: 'card',
           noteSidebarMode: 'directory',
+          noteParentOpenMode: 'children',
           homePage: 'bookmark',
           lang: detectLangFromReq(req),
         });

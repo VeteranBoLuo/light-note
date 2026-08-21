@@ -102,8 +102,13 @@
           placement="bottom-left"
           overlay-class-name="drawing-style-popover"
         >
-          <BTooltip :title="t('note.drawingStyle')">
-            <BButton size="small" class="drawing-style-trigger" :aria-label="t('note.drawingStyle')">
+          <BTooltip :title="`${t('note.drawingStyle')} (S)`">
+            <BButton
+              size="small"
+              class="drawing-style-trigger"
+              :aria-label="t('note.drawingStyle')"
+              aria-keyshortcuts="S"
+            >
               <SvgIcon :src="icon.drawingNote.style" size="16" aria-hidden="true" />
               <span v-if="showColorControl" class="drawing-color-dot" :style="{ backgroundColor: displayedColor }" />
               <span v-if="showSizeControl" class="drawing-style-size">{{ activeSize }}</span>
@@ -152,12 +157,13 @@
       </BButton>
 
       <div class="drawing-toolbar-history">
-        <BTooltip v-if="isMobileLayout" :title="t('note.drawingStyle')">
+        <BTooltip v-if="isMobileLayout" :title="`${t('note.drawingStyle')} (S)`">
           <BButton
             size="small"
             class="drawing-style-trigger drawing-style-trigger-mobile"
             :disabled="mobileStyleUsesFallback"
             :aria-label="t('note.drawingStyle')"
+            aria-keyshortcuts="S"
             @click="styleDrawerOpen = true"
           >
             <span
@@ -256,6 +262,19 @@
                 <div
                   ><dt><kbd>⌫ / Delete</kbd></dt
                   ><dd>{{ t('note.drawingShortcutDelete') }}</dd></div
+                >
+                <div
+                  ><dt><kbd>S</kbd></dt
+                  ><dd>{{ t('note.drawingShortcutStyle') }}</dd></div
+                >
+                <div
+                  ><dt><kbd>+ / = / ↑ · − / ↓</kbd></dt
+                  ><dd>{{ t('note.drawingShortcutResizeTool') }}</dd></div
+                >
+                <div
+                  ><dt
+                    ><kbd>⌘/Ctrl + {{ t('note.drawingMouseClick') }}</kbd></dt
+                  ><dd>{{ t('note.drawingShortcutFill') }}</dd></div
                 >
                 <div
                   ><dt><kbd>Esc</kbd></dt
@@ -404,6 +423,7 @@
     upgradeDrawingScene,
     type DrawingColor,
     type DrawingElement,
+    type DrawingFillElement,
     type DrawingFontSize,
     type DrawingScene,
     type DrawingShapeElement,
@@ -422,10 +442,17 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import icon from '@/config/icon';
+  import { isEditableShortcutTarget } from '@/config/keyboardShortcuts';
   import { buildExportFileName, deliverGeneratedFile } from '@/utils/fileDelivery';
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { deliverExportViaAndroidBridge } from '@/utils/androidFileExport';
   import { eraseDrawingElementsAt, type DrawingPoint } from '@/utils/drawingEraser';
+  import {
+    buildDrawingFillSpans,
+    drawingFillBounds,
+    drawingFillContainsPoint,
+    paintDrawingFill,
+  } from '@/utils/drawingFill';
   import { getRootZoom } from '@/utils/zoom';
   import { useMobileLayout } from '@/composables/useMobileLayout';
   import {
@@ -592,7 +619,7 @@
       tool.value === 'eraser' ||
       tool.value === 'text' ||
       tool.value === 'shape' ||
-      (tool.value === 'select' && selectedIds.value.length > 0),
+      (tool.value === 'select' && selectedElements()[0]?.kind !== 'fill' && selectedIds.value.length > 0),
   );
   const showColorControl = computed(
     () => tool.value !== 'eraser' && tool.value !== 'hand' && (tool.value !== 'select' || selectedIds.value.length > 0),
@@ -881,11 +908,16 @@
     const normalized = Math.max(range.min, Math.min(range.max, Math.round(size)));
     if (tool.value === 'select' && selectedIds.value.length) {
       const firstKind = selectedElements()[0]?.kind;
+      if (firstKind === 'fill') return;
       beginMutation();
       scene.value = {
         ...scene.value,
         elements: scene.value.elements.map((element) => {
-          const sameSizeFamily = firstKind === 'text' ? element.kind === 'text' : element.kind !== 'text';
+          const sameSizeFamily =
+            firstKind === 'text'
+              ? element.kind === 'text'
+              : (firstKind === 'stroke' || firstKind === 'shape') &&
+                (element.kind === 'stroke' || element.kind === 'shape');
           if (!selectedIds.value.includes(element.id) || !sameSizeFamily) return element;
           if (element.kind === 'text') return { ...element, fontSize: normalized };
           if (element.kind === 'shape') return { ...element, strokeWidth: normalized };
@@ -1186,6 +1218,8 @@
       };
     } else if (element.kind === 'shape') {
       bounds = drawingShapeBounds(element);
+    } else if (element.kind === 'fill') {
+      bounds = drawingFillBounds(element);
     } else {
       let minX = Infinity;
       let minY = Infinity;
@@ -1216,6 +1250,10 @@
     }
     if (element.kind === 'shape') {
       paintDrawingShape(context, element, scale);
+      return;
+    }
+    if (element.kind === 'fill') {
+      paintDrawingFill(context, element, scale);
       return;
     }
     context.fillStyle = element.color;
@@ -1359,7 +1397,14 @@
     for (let index = scene.value.elements.length - 1; index >= 0; index -= 1) {
       const element = scene.value.elements[index];
       const bounds = elementBounds(context, element);
-      const boundsPadding = element.kind === 'text' ? 6 : element.kind === 'shape' ? 6 : Math.max(8, element.width + 5);
+      const boundsPadding =
+        element.kind === 'text'
+          ? 6
+          : element.kind === 'shape'
+            ? 6
+            : element.kind === 'fill'
+              ? 1
+              : Math.max(8, element.width + 5);
       if (
         point.x < bounds.x - boundsPadding ||
         point.x > bounds.x + bounds.width + boundsPadding ||
@@ -1397,6 +1442,10 @@
         } else if (pointInRect(point, bounds)) {
           return element;
         }
+        continue;
+      }
+      if (element.kind === 'fill') {
+        if (drawingFillContainsPoint(element, point)) return element;
         continue;
       }
       const threshold = Math.max(8, element.width + 5);
@@ -1482,6 +1531,70 @@
     selectedIds.value = [];
     eraserChanged = true;
     scheduleDraw();
+  }
+
+  function fillClosedArea(point: DrawingPoint) {
+    const fillCount = scene.value.elements.filter((element) => element.kind === 'fill').length;
+    const usedFillSpans = scene.value.elements.reduce(
+      (total, element) => total + (element.kind === 'fill' ? element.spans.length / 3 : 0),
+      0,
+    );
+    const remainingFillSpans = DRAWING_SCENE_LIMITS.maxFillSpans - usedFillSpans;
+    if (
+      scene.value.elements.length >= DRAWING_SCENE_LIMITS.maxElements ||
+      fillCount >= DRAWING_SCENE_LIMITS.maxFills ||
+      remainingFillSpans < 1
+    ) {
+      message.warning(t('note.drawingLimitReached'));
+      return;
+    }
+    const ownerDocument = canvasRef.value?.ownerDocument;
+    const output = ownerDocument?.createElement('canvas');
+    if (!output) {
+      message.warning(t('note.drawingFillUnavailable'));
+      return;
+    }
+    output.width = DRAWING_PAGE.width;
+    output.height = DRAWING_PAGE.height;
+    const context = output.getContext('2d', { willReadFrequently: true });
+    if (!context) {
+      message.warning(t('note.drawingFillUnavailable'));
+      return;
+    }
+    try {
+      paintScene(context, scene.value, 1, false);
+      const pixels = context.getImageData(0, 0, DRAWING_PAGE.width, DRAWING_PAGE.height).data;
+      const result = buildDrawingFillSpans(pixels, DRAWING_PAGE.width, DRAWING_PAGE.height, point, activeColor.value, {
+        maxSpans: remainingFillSpans,
+      });
+      if (result.status === 'open') {
+        message.warning(t('note.drawingFillOpen'));
+        return;
+      }
+      if (result.status === 'same-color') {
+        message.info(t('note.drawingFillSameColor'));
+        return;
+      }
+      if (result.status !== 'filled') {
+        message.warning(t(result.status === 'limit' ? 'note.drawingLimitReached' : 'note.drawingFillUnavailable'));
+        return;
+      }
+      beginMutation();
+      const fill: DrawingFillElement = {
+        id: createElementId(),
+        kind: 'fill',
+        color: activeColor.value,
+        x: 0,
+        y: 0,
+        spans: result.spans,
+      };
+      scene.value = { ...scene.value, elements: [...scene.value.elements, fill] };
+      selectedIds.value = [];
+      emitScene();
+      scheduleDraw();
+    } catch {
+      message.warning(t('note.drawingFillUnavailable'));
+    }
   }
 
   function handTouchPair() {
@@ -1584,6 +1697,18 @@
   function handlePointerDown(event: PointerEvent) {
     const isDirectPanButton = event.button === 1 || event.button === 2;
     if (props.readonly || textDraft.value) return;
+    const isFillShortcut =
+      event.button === 0 &&
+      event.pointerType !== 'touch' &&
+      (event.metaKey || event.ctrlKey) &&
+      tool.value !== 'select' &&
+      tool.value !== 'hand';
+    if (isFillShortcut) {
+      event.preventDefault();
+      rootRef.value?.focus({ preventScroll: true });
+      fillClosedArea(canvasPoint(event));
+      return;
+    }
     if (handleHandTouchPointerDown(event)) return;
     if (activePointerId !== null || (!isDirectPanButton && event.button !== 0)) return;
     rootRef.value?.focus({ preventScroll: true });
@@ -2121,8 +2246,44 @@
     });
   }
 
+  function changeActiveSizeByShortcut(event: KeyboardEvent) {
+    if (event.metaKey || event.ctrlKey || event.altKey || hasActiveGesture() || !showSizeControl.value) return false;
+    const direction =
+      event.key === '+' || event.key === '=' || event.key === 'ArrowUp'
+        ? 1
+        : event.key === '-' || event.key === 'ArrowDown'
+          ? -1
+          : 0;
+    if (!direction) return false;
+    event.preventDefault();
+    const range = activeSizeRange.value;
+    const nextSize = Math.max(range.min, Math.min(range.max, activeSize.value + direction));
+    if (nextSize !== activeSize.value) setActiveSize(nextSize);
+    return true;
+  }
+
+  function toggleStylePanelByShortcut() {
+    if (hasActiveGesture() || (!showColorControl.value && !showSizeControl.value)) return false;
+    const opening = isMobileLayout.value ? !styleDrawerOpen.value : !stylePopoverOpen.value;
+    if (opening) {
+      shapePopoverOpen.value = false;
+      helpPopoverOpen.value = false;
+    }
+    if (isMobileLayout.value) styleDrawerOpen.value = !styleDrawerOpen.value;
+    else stylePopoverOpen.value = !stylePopoverOpen.value;
+    return true;
+  }
+
   function handleKeydown(event: KeyboardEvent) {
-    if (props.readonly || textDraft.value || event.isComposing || event.keyCode === 229) return;
+    if (
+      props.readonly ||
+      textDraft.value ||
+      event.isComposing ||
+      event.keyCode === 229 ||
+      isEditableShortcutTarget(event.target)
+    ) {
+      return;
+    }
     const commandKey = event.metaKey || event.ctrlKey;
     const key = event.key.toLowerCase();
     if (commandKey && key === 'z') {
@@ -2158,11 +2319,17 @@
       pasteDrawingElements();
       return;
     }
+    if (!commandKey && !event.altKey && !event.shiftKey && key === 's') {
+      if (!toggleStylePanelByShortcut()) return;
+      event.preventDefault();
+      return;
+    }
     if (!commandKey && !event.altKey && !event.shiftKey && (key === 'p' || key === 'v')) {
       if (!switchDrawingTool(key === 'p' ? 'pen' : 'select')) return;
       event.preventDefault();
       return;
     }
+    if (changeActiveSizeByShortcut(event)) return;
     if (event.key === 'Escape') {
       event.preventDefault();
       if (cancelActiveGesture()) return;

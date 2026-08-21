@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DRAWING_THUMBNAIL_MAX_PAGE_ZOOM, renderDrawingThumbnail } from './drawingThumbnail';
+import {
+  createDrawingThumbnailDataUrl,
+  DRAWING_THUMBNAIL_MAX_PAGE_ZOOM,
+  renderDrawingThumbnail,
+} from './drawingThumbnail';
 
 function mockContext() {
   return {
@@ -113,6 +117,19 @@ describe('drawingThumbnail', () => {
     expect(context.stroke).toHaveBeenCalled();
   });
 
+  it('V4 填充区域参与智能取景并绘制全部扫描段', () => {
+    const context = mockContext();
+    const content = JSON.stringify({
+      v: 4,
+      page: { width: 1448, height: 1448 },
+      elements: [{ id: 'fill', kind: 'fill', color: '#00a884', x: 0, y: 0, spans: [500, 400, 600, 501, 410, 590] }],
+    });
+    expect(renderDrawingThumbnail(context, content, 480, 270)).toBe(true);
+    expect(context.rect).toHaveBeenCalledWith(400, 500, 200, 1);
+    expect(context.rect).toHaveBeenCalledWith(410, 501, 180, 1);
+    expect(context.fill).toHaveBeenCalled();
+  });
+
   it('旧竖版场景先升级并居中到方形画纸再生成缩略图', () => {
     const context = mockContext();
     const content = JSON.stringify({
@@ -136,5 +153,27 @@ describe('drawingThumbnail', () => {
       ),
     ).toBe(false);
     expect(renderDrawingThumbnail(context, '{"v":1', 480, 270)).toBe(false);
+  });
+
+  it('从完整 scene 生成固定 WebP，浏览器静默回退 PNG 时放弃上传', () => {
+    const context = mockContext();
+    const toDataURL = vi.fn(() => 'data:image/webp;base64,AAAA');
+    const createElement = vi.spyOn(document, 'createElement').mockReturnValue({
+      width: 0,
+      height: 0,
+      getContext: () => context,
+      toDataURL,
+    } as unknown as HTMLCanvasElement);
+    const content = JSON.stringify({
+      v: 2,
+      page: { width: 1448, height: 1448 },
+      elements: [{ id: 'stroke', kind: 'stroke', color: '#e55753', width: 24, points: [500, 500, 700, 700] }],
+    });
+
+    expect(createDrawingThumbnailDataUrl(content)).toBe('data:image/webp;base64,AAAA');
+    expect(toDataURL).toHaveBeenCalledWith('image/webp', 0.82);
+    toDataURL.mockReturnValue('data:image/png;base64,BBBB');
+    expect(createDrawingThumbnailDataUrl(content)).toBe('');
+    createElement.mockRestore();
   });
 });

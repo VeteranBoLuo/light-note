@@ -115,6 +115,23 @@ describe('drawingEraser', () => {
     expect(miss.elements).toBe(hit.elements);
   });
 
+  it('橡皮圆周碰到填充边缘时也写入填充自身的遮罩', () => {
+    const fill: DrawingElement = {
+      id: 'fill',
+      kind: 'fill',
+      color: '#00a884',
+      x: 0,
+      y: 0,
+      spans: [20, 20, 80, 21, 20, 80],
+    };
+    const result = eraseDrawingElementsAt([fill], { x: 15, y: 20 }, 12, 'erase-fill', limits);
+    expect(result.changed).toBe(true);
+    expect(result.elements[0]).toMatchObject({
+      kind: 'fill',
+      erasures: [{ id: 'erase-fill', width: 12, points: [15, 20] }],
+    });
+  });
+
   it('擦除轨迹超过协议上限时保留原内容', () => {
     const result = eraseDrawingElementsAt([stroke], { x: 50, y: 50 }, 8, 'erase-1', {
       maxErasureTrails: 0,
