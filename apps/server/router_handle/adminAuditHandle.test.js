@@ -83,4 +83,25 @@ describe('管理员操作审计查询', () => {
     expect(adminAuditHandleInternals.safeDate('2026-08-09', true)).toBe('2026-08-09 23:59:59');
     expect(adminAuditHandleInternals.safeDate('2026-08-09 OR 1=1')).toBeNull();
   });
+
+  it('服务器事件范围在数据库层筛选，避免被其他后台审计挤出分页', async () => {
+    query
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[{ total: 0 }]])
+      .mockResolvedValueOnce([[{ total: 0, succeeded: 0, failed: 0, denied: 0, job_retries: 0 }]]);
+    const res = response();
+
+    await getAdminOperationAudits(
+      {
+        user: { id: 'root-1', role: 'root' },
+        body: { actionScope: 'infra', action: 'all', currentPage: 1, pageSize: 100 },
+      },
+      res,
+    );
+
+    expect(res.body).toMatchObject({ status: 200, data: { total: 0, items: [] } });
+    const [listSql, listParams] = query.mock.calls[0];
+    expect(String(listSql)).toContain("a.action LIKE 'infra.%'");
+    expect(listParams).toEqual([100, 0]);
+  });
 });

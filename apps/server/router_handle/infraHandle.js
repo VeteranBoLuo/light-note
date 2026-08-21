@@ -12,6 +12,9 @@ import {
   executeHostAgentJob,
   getHostAgentDashboard,
   getHostAgentLogs,
+  getHostAgentSecurity,
+  getHostAgentServices,
+  getHostAgentStorage,
 } from '../util/hostAgentClient.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 
@@ -56,6 +59,141 @@ export async function getInfraDashboard(req, res) {
     }
     console.error('[infra] dashboard failed code=%s', stableAgentErrorCode(error));
     return res.send(resultData(offlinePayload(error)));
+  }
+}
+
+async function sendReadOnlySnapshot(req, res, loader, label) {
+  if (!ensureRootActor(req, res)) return;
+  if (req.query && Object.keys(req.query).length > 0) {
+    return res.send(resultData(null, 400, L(req, '查询参数无效', 'Invalid query parameters.')));
+  }
+  try {
+    return res.send(resultData(await loader()));
+  } catch (error) {
+    const status = error instanceof HostAgentClientError ? 503 : 500;
+    console.error('[infra] %s failed code=%s', label, stableAgentErrorCode(error));
+    return res.send(
+      resultData(
+        { code: String(error?.code || 'HOST_AGENT_REQUEST_FAILED') },
+        status,
+        L(req, '服务器快照暂时不可用', 'The server snapshot is temporarily unavailable.'),
+      ),
+    );
+  }
+}
+
+export function getInfraServices(req, res) {
+  return sendReadOnlySnapshot(req, res, getHostAgentServices, 'services');
+}
+
+export function getInfraStorage(req, res) {
+  return sendReadOnlySnapshot(req, res, getHostAgentStorage, 'storage');
+}
+
+function securityFinding(id, state, severity, evidence = {}) {
+  return { id, state, severity, evidence };
+}
+
+export function deriveSecurityFindings(snapshot) {
+  const findings = [];
+  const ssh = snapshot?.ssh || {};
+  findings.push(
+    securityFinding(
+      'ssh-root-login',
+      !ssh.available ? 'unknown' : ssh.permitRootLogin === 'no' ? 'pass' : 'fail',
+      'high',
+      { value: ssh.permitRootLogin || null },
+    ),
+    securityFinding(
+      'ssh-password-authentication',
+      !ssh.available || ssh.passwordAuthentication == null ? 'unknown' : ssh.passwordAuthentication ? 'fail' : 'pass',
+      'high',
+      { value: ssh.passwordAuthentication ?? null },
+    ),
+    securityFinding(
+      'ssh-public-key-authentication',
+      !ssh.available || ssh.publicKeyAuthentication == null ? 'unknown' : ssh.publicKeyAuthentication ? 'pass' : 'fail',
+      'high',
+      { value: ssh.publicKeyAuthentication ?? null },
+    ),
+  );
+  findings.push(
+    securityFinding(
+      'firewall',
+      !snapshot?.firewall?.available ? 'unknown' : snapshot.firewall.state === 'enabled' ? 'pass' : 'fail',
+      'high',
+      { provider: snapshot?.firewall?.provider || null, value: snapshot?.firewall?.state || 'unknown' },
+    ),
+    securityFinding(
+      'fail2ban',
+      !snapshot?.fail2ban?.available ? 'unknown' : snapshot.fail2ban.state === 'enabled' ? 'pass' : 'fail',
+      'medium',
+      { value: snapshot?.fail2ban?.state || 'unknown' },
+    ),
+  );
+  const securityUpdates = snapshot?.updates?.security;
+  findings.push(
+    securityFinding(
+      'security-updates',
+      !snapshot?.updates?.available || securityUpdates == null ? 'unknown' : securityUpdates > 0 ? 'fail' : 'pass',
+      'high',
+      { pending: snapshot?.updates?.pending ?? null, security: securityUpdates ?? null },
+    ),
+  );
+  const allowedPublicPorts = new Set([80, 443, Number(ssh.port || 22)]);
+  const unexpectedPublicPorts = (snapshot?.listeningPorts || []).filter(
+    (item) => item.exposure === 'public' && !allowedPublicPorts.has(Number(item.port)),
+  );
+  const internalPorts = new Set([3000, 3306, 6379, 9001]);
+  findings.push(
+    securityFinding(
+      'unexpected-public-ports',
+      unexpectedPublicPorts.length ? 'fail' : 'pass',
+      unexpectedPublicPorts.some((item) => internalPorts.has(Number(item.port))) ? 'high' : 'medium',
+      { ports: unexpectedPublicPorts.map((item) => `${item.protocol}/${item.port}`).slice(0, 20) },
+    ),
+  );
+  const failures24h = ssh.failures24h;
+  findings.push(
+    securityFinding(
+      'ssh-login-failures',
+      failures24h == null ? 'unknown' : failures24h >= 50 ? 'fail' : 'pass',
+      'medium',
+      { failures24h: failures24h ?? null, successes24h: ssh.successes24h ?? null },
+    ),
+  );
+  return findings;
+}
+
+export async function getInfraSecurity(req, res) {
+  if (!ensureRootActor(req, res)) return;
+  if (req.query && Object.keys(req.query).length > 0) {
+    return res.send(resultData(null, 400, L(req, '查询参数无效', 'Invalid query parameters.')));
+  }
+  try {
+    const snapshot = await getHostAgentSecurity();
+    const findings = deriveSecurityFindings(snapshot);
+    return res.send(
+      resultData({
+        ...snapshot,
+        findings,
+        summary: {
+          failed: findings.filter((item) => item.state === 'fail').length,
+          passed: findings.filter((item) => item.state === 'pass').length,
+          unknown: findings.filter((item) => item.state === 'unknown').length,
+        },
+      }),
+    );
+  } catch (error) {
+    const status = error instanceof HostAgentClientError ? 503 : 500;
+    console.error('[infra] security failed code=%s', stableAgentErrorCode(error));
+    return res.send(
+      resultData(
+        { code: String(error?.code || 'HOST_AGENT_SECURITY_FAILED') },
+        status,
+        L(req, '安全快照暂时不可用', 'The security snapshot is temporarily unavailable.'),
+      ),
+    );
   }
 }
 
@@ -193,4 +331,10 @@ export async function executeInfraAction(req, res) {
   }
 }
 
-export const infraHandleInternals = { ensureRootActor, jobIdFor, IDEMPOTENCY_KEY_PATTERN, ACTION_BODY_KEYS };
+export const infraHandleInternals = {
+  ensureRootActor,
+  jobIdFor,
+  deriveSecurityFindings,
+  IDEMPOTENCY_KEY_PATTERN,
+  ACTION_BODY_KEYS,
+};

@@ -13,13 +13,15 @@ import { loadHostAgentConfig } from "./config.js";
 import { PersistentJobStore } from "./jobStore.js";
 import { hostIdentity, MetricSampler } from "./metrics.js";
 import { stableErrorCode } from "./redaction.js";
+import { collectSecuritySnapshot } from "./security.js";
+import { SnapshotCache } from "./snapshotCache.js";
 import {
   collectServiceSnapshots,
   executeHostAction,
   readServiceLogs,
 } from "./services.js";
 
-const AGENT_VERSION = "1.0.0";
+const AGENT_VERSION = "1.1.1";
 
 function sendJson(res, statusCode, payload) {
   const body = JSON.stringify({
@@ -90,6 +92,14 @@ export async function createHostAgent({
   await jobStore.init();
   sampler.start();
   await sampler.sample();
+  const serviceCache = new SnapshotCache(
+    () => collectServiceSnapshots(config, commandRunner, helperRequester),
+    10_000,
+  );
+  const securityCache = new SnapshotCache(
+    () => collectSecuritySnapshot(config, helperRequester),
+    5 * 60_000,
+  );
 
   const handler = async (req, res) => {
     try {
@@ -115,7 +125,7 @@ export async function createHostAgent({
         assertAllowedQuery(url);
         const [metricState, serviceState] = await Promise.all([
           sampler.latest ? Promise.resolve(sampler.latest) : sampler.sample(),
-          collectServiceSnapshots(config, commandRunner, helperRequester),
+          serviceCache.get(),
         ]);
         const sampled = sampler.snapshot();
         return sendJson(res, 200, {
@@ -135,6 +145,53 @@ export async function createHostAgent({
               ...serviceState.errors,
             ],
           },
+        });
+      }
+      if (
+        req.method === "GET" &&
+        url.pathname === HOST_AGENT_ENDPOINTS.services
+      ) {
+        assertAllowedQuery(url);
+        const serviceState = await serviceCache.get();
+        return sendJson(res, 200, {
+          ok: true,
+          data: {
+            protocolVersion: HOST_AGENT_PROTOCOL_VERSION,
+            capturedAt: new Date().toISOString(),
+            services: serviceState.services,
+            capabilities: serviceState.capabilities,
+            collectionErrors: serviceState.errors,
+          },
+        });
+      }
+      if (
+        req.method === "GET" &&
+        url.pathname === HOST_AGENT_ENDPOINTS.storage
+      ) {
+        assertAllowedQuery(url);
+        const metricState = sampler.latest || (await sampler.sample());
+        return sendJson(res, 200, {
+          ok: true,
+          data: {
+            protocolVersion: HOST_AGENT_PROTOCOL_VERSION,
+            capturedAt: metricState.sampledAt,
+            mounts: metricState.disk ? [metricState.disk] : [],
+            io: metricState.diskIo,
+            history: sampler.snapshot().history,
+            collectionErrors: metricState.collectionErrors.filter((item) =>
+              item.source.startsWith("disk"),
+            ),
+          },
+        });
+      }
+      if (
+        req.method === "GET" &&
+        url.pathname === HOST_AGENT_ENDPOINTS.security
+      ) {
+        assertAllowedQuery(url);
+        return sendJson(res, 200, {
+          ok: true,
+          data: await securityCache.get(),
         });
       }
       if (
@@ -167,12 +224,7 @@ export async function createHostAgent({
         const data = await jobStore.execute(
           request.jobId,
           () =>
-            executeHostAction(
-              config,
-              request,
-              commandRunner,
-              helperRequester,
-            ),
+            executeHostAction(config, request, commandRunner, helperRequester),
           { action: request.action, targetId: request.targetId },
         );
         return sendJson(res, 200, { ok: true, data });

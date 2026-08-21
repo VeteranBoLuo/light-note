@@ -414,6 +414,8 @@ export default {
   user_exit:
     'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMTYgMTYiPgoJPHJlY3Qgd2lkdGg9IjE2IiBoZWlnaHQ9IjE2IiBmaWxsPSJub25lIiAvPgoJPHBhdGggZmlsbD0iY3VycmVudENvbG9yIiBkPSJNMy41IDhjLjMgMCAuNS4yLjUuNXYyYzAgLjMtLjIuNS0uNS41cy0uNS0uMi0uNS0uNXYtMmMwLS4zLjItLjUuNS0uNW0wLTFDMi43IDcgMiA3LjcgMiA4LjV2MmMwIC44LjcgMS41IDEuNSAxLjVTNSAxMS4zIDUgMTAuNXYtMkM1IDcuNyA0LjMgNyAzLjUgN004IDd2My41YzAgLjMtLjIuNS0uNS41cy0uNS0uMi0uNS0uNVY3SDZ2My41YzAgLjguNyAxLjUgMS41IDEuNVM5IDExLjMgOSAxMC41Vjd6bTUgMGgtM3YxaDF2NGgxVjhoMXoiIC8+Cgk8cGF0aCBmaWxsPSJjdXJyZW50Q29sb3IiIGQ9Ik0xNSA2VjVoLTIuNEw4LjkgMmMuMS0uMi4xLS4zLjEtLjVDOSAuNyA4LjMgMCA3LjUgMFM2IC43IDYgMS41YzAgLjIgMCAuMy4xLjVMMi40IDVIMHY5aDF2MWgxNVY2ek02LjcgMi44Yy4zLjEuNS4yLjguMnMuNS0uMS44LS4yTDExIDVINHpNMTQgMTNIMVY2aDEzeiIgLz4KPC9zdmc+',
   infrastructure: {
+    overview:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></g></svg>',
     server:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3.5" width="18" height="7" rx="2"/><rect x="3" y="13.5" width="18" height="7" rx="2"/><path d="M7 7h.01M7 17h.01M11 7h6M11 17h6"/></g></svg>',
     cpu: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2.5v3M15 2.5v3M9 18.5v3M15 18.5v3M2.5 9h3M2.5 15h3M18.5 9h3M18.5 15h3"/></g></svg>',
@@ -424,6 +426,12 @@ export default {
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8.5 3.5 12 7 15.5M17 8.5l3.5 3.5-3.5 3.5M4 12h7M20 12h-7M9 4l3-2 3 2M12 2v7M9 20l3 2 3-2M12 22v-7"/></g></svg>',
     service:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4.5 7v10L12 21l7.5-4V7z"/><path d="m4.5 7 7.5 4 7.5-4M12 11v10"/></g></svg>',
+    security:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.8 20 6v5.8c0 4.6-3.2 7.8-8 9.4-4.8-1.6-8-4.8-8-9.4V6z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></g></svg>',
+    storage:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12v7c0 1.7 3.6 3 8 3s8-1.3 8-3v-7"/></g></svg>',
+    events:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2M7 4.5 4.5 7"/></g></svg>',
     logs: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3.5h10l4 4v13H5z"/><path d="M15 3.5v4h4M8.5 12h7M8.5 16h7"/></g></svg>',
     refresh:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M18.4 9A7 7 0 0 0 6.2 6.8L4 9m16 6-2.2 2.2A7 7 0 0 1 5.6 15"/></g></svg>',

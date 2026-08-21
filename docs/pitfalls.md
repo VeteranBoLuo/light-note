@@ -25,6 +25,9 @@
 
 | 编号                                                                                           | 日期       | 模块                | 关键词                                             | 状态         |
 | ---------------------------------------------------------------------------------------------- | ---------- | ------------------- | -------------------------------------------------- | ------------ |
+| [LN-PIT-092](#ln-pit-092协议版本不能只放在响应信封而遗漏数据快照)                              | 2026-08-21 | Host Agent、协议    | protocolVersion、响应信封、快照、线上验收          | 已修复已上线 |
+| [LN-PIT-091](#ln-pit-091固定深色日志面板必须覆盖全局-pre-code-主题色)                          | 2026-08-21 | 前端、服务器管理    | 日志、代码块、主题、对比度、移动端                 | 已修复已上线 |
+| [LN-PIT-090](#ln-pit-090自动刷新不能隐藏调度状态也不能用瞬时失败清空旧数据)                    | 2026-08-21 | 前端、服务器管理    | 自动刷新、倒计时、可见性、旧数据、轮询             | 已修复已上线 |
 | [LN-PIT-089](#ln-pit-089图片用-transform-放大不会自动产生可滚动范围)                           | 2026-08-20 | 云空间、文件预览    | 长图、缩放、transform、overflow、移动端滚动        | 已修复待上线 |
 | [LN-PIT-086](#ln-pit-086周期策略锁已升级时缺失本地开关会安全暂停写入而不是回退旧策略)          | 2026-08-20 | 成长、配置、发布    | C6、周期锁、环境变量、earning_paused               | 已修复待上线 |
 | [LN-PIT-084](#ln-pit-084agent-待办摘要不能只返回提醒渠道也不能用当前页冒充全部结果)            | 2026-08-20 | Agent、待办、提醒   | 计划日期、提醒时间、分页、真实链路                 | 已修复待上线 |
@@ -137,6 +140,22 @@
 ```
 
 ## 案例记录
+
+### LN-PIT-092：协议版本不能只放在响应信封而遗漏数据快照
+
+- **现象：** Host Agent 的安全快照接口返回 HTTP 200，顶层响应也带 `protocolVersion: 1`，但 `data` 内没有共享 `HostAgentSecuritySnapshot` 类型要求的协议版本；前后端当前只校验顶层信封，因此单元测试与页面都没有暴露问题，直到发布后直接检查 Unix Socket 原始响应才发现。
+- **根因：** 通用 `sendJson()` 负责给响应信封添加版本，而服务、存储路由又各自在数据快照中显式添加版本；安全采集器直接作为 `data` 返回，却没有从共享协议唯一事实源补入同一字段。测试只断言安全数据包含监听端口，没有按共享类型同时验证信封和快照。
+- **防回归约束：** 共享协议声明为版本化快照的每个 `data` 对象都必须从 `@lightnote/shared/host-agent-protocol` 引用 `HOST_AGENT_PROTOCOL_VERSION`，不能依赖响应信封的同名字段代替；新增端点必须同时测试顶层信封版本和数据快照版本。发布后必须直连 Agent Unix Socket 验证原始响应，不能只看 Express 映射后的页面或 HTTP 状态。
+- **验收：** Host Agent 测试断言 `/v1/security` 的顶层与 `data` 均为协议版本 1；生产直连 `/v1/dashboard`、`/v1/services`、`/v1/storage`、`/v1/security`，所有版本化数据快照均返回版本 1，且采集错误为空。
+- **相关代码：** `apps/host-agent/src/security.js`、`apps/host-agent/src/server.test.js`、`packages/shared/hostAgentProtocol.d.ts`。
+
+### LN-PIT-091：固定深色日志面板必须覆盖全局 `pre code` 主题色
+
+- **现象：** 服务器日志弹窗的深色代码块背景正常，但桌面与 `?renderProfile=mobile` 下日志文字仍被渲染成接近黑色，实际几乎不可读。
+- **根因：** 全局 `:root pre` 与 `:root pre code` 使用带 `!important` 的主题变量控制代码块文字；业务容器只写普通 `color` 或让子级继承时，无法覆盖该规则。
+- **防回归约束：** 固定使用深色背景的业务日志面板必须在容器和内部 `code` 上以更高选择器优先级显式声明浅色前景；不能只依赖父级普通继承，也不能改变全局笔记代码块主题规则来迁就单一业务弹窗。
+- **验收：** 桌面浅色、桌面深色和移动渲染基线分别打开固定服务日志，正文均清晰可读；`ServerEvents.style.test.ts` 固定检查容器及子级的覆盖规则。
+- **相关代码：** `apps/web/src/view/serverManagement/ServerEvents.vue`、`apps/web/src/view/serverManagement/ServerEvents.style.test.ts`。
 
 ### LN-PIT-089：图片用 transform 放大不会自动产生可滚动范围
 
@@ -2475,3 +2494,11 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **根因：** 把 UI、权限控制、主机采集和特权执行混成一个边界，并把“未来可能多主机”提前当成当前需求；同时误以为命令名白名单足够，忽略参数、路径、进程环境、重复提交和终态审计仍然能扩大权限或造成二次执行。部署还有两个边界：仓库内无扩展名脚本会受邻近 `package.json` 的 `type: module` 影响，但复制到 `/usr/local/libexec` 后 Node 18 会按 CommonJS 解析；另外 `RestrictAddressFamilies`、`LockPersonality` 等 systemd 沙箱会让非 root Agent 的子进程实际携带 `no_new_privileges=1`，即使 `systemctl show` 的显式属性仍显示 `NoNewPrivileges=no`，unit 内的 sudo 也会在 helper 启动前失败。
 - **约束：** v1 浏览器只能请求现有 Express，Express 只经 Unix Socket 调本机独立 Agent；共享协议复用 `@lightnote/shared` 并封闭服务、动作和字段，未知输入失败关闭。Agent 不加载业务 `.env`、不保存 SSH/数据库等凭据、不开放 TCP、不使用 shell；Nginx 必须匹配受支持的 systemd 或固定面板路径拓扑并核验主进程身份，才经 root 所有固定 helper 校验后 reload，PM2 只重启三个精确 Worker 且不带 `--update-env`。非 root PM2 优先与 Agent 共用应用账户；遗留 root PM2 不得通过 root Agent、root 组、共享 `/root/.pm2` 或移除 systemd 沙箱兼容。应由 `0660 root:<agent-user>` 的独立 Unix Socket 接收固定 action/target，并让 systemd 每次连接短暂启动 root helper；systemd 隐藏 home 时由 helper 以固定 `nsenter --mount=/proc/1/ns/mnt` 进入宿主挂载命名空间。面板托管的 Nginx/Redis 状态只允许通过固定 PID 文件与 `/proc/<pid>/exe` 一致性判断。helper 状态输出必须剥离 PM2 环境字段，Socket 请求只允许 `action`/`targetId` 且未知字段失败关闭。ESM helper 安装到包目录外时必须保留 `.mjs`，配置、Socket service、部署复制和旧配置升级必须引用同一绝对路径，不能依赖源目录的 `package.json` 推断模块类型。所有写动作必须 Root 普通上下文、原因、显式确认、intent/terminal 审计与持久化幂等回执；幂等回执必须在命令前原子占位，进程崩溃后对「结果未知」动作失败关闭，禁止先执行再落盘。API/MySQL/Redis 只读。总发布必须按 Agent、后端、前端顺序执行，并让任一安装、运行时或 HTTP 健康检查以非零状态中止，禁止打印告警后继续发布并宣称成功。
 - **验收：** 协议测试拒绝未知字段、错配动作和非白名单服务；服务测试断言 root PM2 模式只经 helper Socket 发送固定 action/target，普通命令 runner 不被调用；helper 的 Socket 模式拒绝额外字段，PM2 状态响应不含 `env`、`pm_exec_path` 等字段，日志经过双层脱敏；把生产包中的 `.mjs` helper 放到没有 `package.json` 的临时目录并用生产 Node 直接运行 `capabilities`，必须返回合法 JSON。生产检查 helper Socket 为 `0660 root:<agent-user>`、Agent 子进程即使是 `no_new_privileges=1` 仍能取得四个 PM2 服务状态，旧 sudoers 已移除；面板托管的 Nginx/Redis 必须显示真实运行状态，只有已识别且配置测试通过的 Nginx 拓扑才暴露 reload 动作。同一 job ID 并发和重放只调用一次执行器，模拟命令结果不确定后新进程也不得重放；管理员代管上下文访问指标、日志和动作均返回 403；Agent 离线或协议不一致时页面显示明确阻断态而不出现操作按钮。仓库只包含 `.env.example`，真实 Agent/后端环境、SSH 私钥、Token 和回执目录均不进入 Git。分别让 Agent Socket、后端 `/api/user/me` 和前端首页健康检查返回失败，`deploy:all` 必须停在对应阶段且不输出全部完成。
+
+### LN-PIT-090：自动刷新不能隐藏调度状态，也不能用瞬时失败清空旧数据
+
+- **现象：** 服务器管理页原来每 10 秒轮询一次，但页面只显示“刷新”按钮，用户无法知道是否会自动刷新、多久刷新或暂停请求；已有正常监控数据时，一次短暂网络失败还会把 Agent 标成离线并清空整个仪表盘。若只把页面间隔改成 3 秒而 Agent 仍每 10 秒采样，连续请求又只会得到重复快照。
+- **根因：** 轮询间隔只是组合式函数内的隐藏常量，固定 `setInterval` 与页面状态没有统一事实源；错误处理又混淆了“首次连接没有任何数据”和“后台刷新已有数据失败”两个语义，任何异常都覆盖为离线空态。
+- **约束：** 自动刷新间隔、下一次调度时间、倒计时和页面状态必须来自同一组合式函数；默认 3 秒并提供受控的 10 秒、30 秒、1 分钟、5 分钟与暂停选项，用 `BSelect` 展示和保存在当前浏览器。页面默认间隔与 Host Agent 默认采样间隔必须同步，部署升级也要迁移服务器上的非敏感采样配置，禁止用更快轮询伪装实时数据。使用上一轮完成后再排程的单次定时器，禁止重叠请求和固定间隔漂移；页面隐藏时清除调度，返回前台仅在所选间隔已到期时刷新，暂停状态返回前台也不得自行请求。服务、存储和安全必须使用独立只读快照及与成本匹配的缓存周期，禁止让 3 秒概览轮询反复执行 PM2/systemd、SSH 日志、防火墙、APT 或目录扫描；同一分域快照并发请求必须合并为单个采集任务。所有被动快照不写通用 API 日志，真正的运维写动作仍进独立审计。首次连接失败进入阻断态；已有权威数据后的请求异常必须保留旧数据、明确标注刷新失败并继续重试，后端明确返回 Agent 离线或协议不兼容时仍切换为对应硬状态。
+- **验收：** 假时钟测试覆盖默认 3 秒倒计时、30 秒改选与本地保存、暂停后手动刷新、后台停止/前台到期刷新、旧数据上的瞬时失败与重试；Host Agent 配置测试断言默认 3 秒与 60 分钟容量，部署脚本断言现有配置升级为 3000ms，日志策略断言 `/infra/dashboard` 被排除。浏览器分别在 PC/移动、浅色/深色下检查默认、下拉展开与选中、刷新中、暂停、倒计时、上次更新时间、采样时间、错误提示和初始离线布局，确认窄屏不溢出且状态不只靠颜色表达。
+- **相关代码：** `apps/web/src/view/serverManagement/useServerManagement.ts`、`apps/web/src/view/serverManagement/useInfraSnapshot.ts`、`apps/web/src/view/serverManagement/ServerManagement.vue`、`apps/host-agent/src/snapshotCache.js`。

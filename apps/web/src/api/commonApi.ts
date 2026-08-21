@@ -92,6 +92,7 @@ export const dismissAdminAsyncJob = async function (params: {
 
 export const getAdminOperationAudits = async function (params: {
   action?: string;
+  actionScope?: 'all' | 'infra';
   outcome?: string;
   keyword?: string;
   startDate?: string;

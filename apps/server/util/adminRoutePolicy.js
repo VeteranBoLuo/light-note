@@ -605,6 +605,9 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
 // 本机服务器信息与动作只能在 Root 自己的普通管理上下文访问；管理员预览/代管一律失败关闭。
 declare(ADMIN_POLICIES.ADMIN_ONLY, 'infrastructure', [
   ['GET', '/infra/dashboard'],
+  ['GET', '/infra/services'],
+  ['GET', '/infra/storage'],
+  ['GET', '/infra/security'],
   ['GET', '/infra/logs/:serviceId'],
   ['POST', '/infra/actions'],
 ]);

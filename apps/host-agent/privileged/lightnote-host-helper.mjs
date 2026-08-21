@@ -1,40 +1,45 @@
 #!/usr/bin/node
-import { spawnSync } from 'node:child_process';
-import { accessSync, constants, readFileSync, realpathSync } from 'node:fs';
+import { spawnSync } from "node:child_process";
+import { accessSync, constants, readFileSync, realpathSync } from "node:fs";
 
-const PM2_BIN = '/usr/bin/pm2';
-const NSENTER_BIN = '/usr/bin/nsenter';
-const SYSTEMCTL_BIN = '/usr/bin/systemctl';
-const JOURNALCTL_BIN = '/usr/bin/journalctl';
-const NGINX_BIN = '/usr/sbin/nginx';
-const PANEL_NGINX_BIN = '/www/server/nginx/sbin/nginx';
-const PANEL_NGINX_CONFIG = '/www/server/nginx/conf/nginx.conf';
-const PANEL_NGINX_PID = '/www/server/nginx/logs/nginx.pid';
-const PANEL_REDIS_BIN = '/www/server/redis/src/redis-server';
-const PANEL_REDIS_PID = '/www/server/redis/redis.pid';
-const PM2_HOME = '/root/.pm2';
+const PM2_BIN = "/usr/bin/pm2";
+const NSENTER_BIN = "/usr/bin/nsenter";
+const SYSTEMCTL_BIN = "/usr/bin/systemctl";
+const JOURNALCTL_BIN = "/usr/bin/journalctl";
+const NGINX_BIN = "/usr/sbin/nginx";
+const SSHD_BIN = "/usr/sbin/sshd";
+const UFW_BIN = "/usr/sbin/ufw";
+const FIREWALL_CMD_BIN = "/usr/bin/firewall-cmd";
+const APT_BIN = "/usr/bin/apt";
+const PANEL_NGINX_BIN = "/www/server/nginx/sbin/nginx";
+const PANEL_NGINX_CONFIG = "/www/server/nginx/conf/nginx.conf";
+const PANEL_NGINX_PID = "/www/server/nginx/logs/nginx.pid";
+const PANEL_REDIS_BIN = "/www/server/redis/src/redis-server";
+const PANEL_REDIS_PID = "/www/server/redis/redis.pid";
+const PM2_HOME = "/root/.pm2";
 const MAX_SOCKET_REQUEST_BYTES = 1024;
 const PM2_SERVICES = Object.freeze({
-  'lightnote-api': 'app',
-  'lightnote-document-worker': 'light-note-document-worker',
-  'lightnote-bookmark-icon-worker': 'light-note-bookmark-icon-worker',
-  'lightnote-resource-governance-worker': 'light-note-resource-governance-worker',
+  "lightnote-api": "app",
+  "lightnote-document-worker": "light-note-document-worker",
+  "lightnote-bookmark-icon-worker": "light-note-bookmark-icon-worker",
+  "lightnote-resource-governance-worker":
+    "light-note-resource-governance-worker",
 });
 const RESTARTABLE_SERVICES = new Set([
-  'lightnote-document-worker',
-  'lightnote-bookmark-icon-worker',
-  'lightnote-resource-governance-worker',
+  "lightnote-document-worker",
+  "lightnote-bookmark-icon-worker",
+  "lightnote-resource-governance-worker",
 ]);
 const SYSTEMD_SERVICES = Object.freeze({
-  nginx: 'nginx.service',
-  mysql: 'mysql.service',
-  redis: 'redis-server.service',
+  nginx: "nginx.service",
+  mysql: "mysql.service",
+  redis: "redis-server.service",
 });
 
 const environment = {
-  PATH: '/usr/sbin:/usr/bin:/sbin:/bin',
-  LANG: 'C.UTF-8',
-  LC_ALL: 'C.UTF-8',
+  PATH: "/usr/sbin:/usr/bin:/sbin:/bin",
+  LANG: "C.UTF-8",
+  LC_ALL: "C.UTF-8",
 };
 const pm2Environment = { ...environment, PM2_HOME };
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu;
@@ -69,7 +74,7 @@ function readable(file) {
 function run(file, args, options = {}) {
   return spawnSync(file, args, {
     shell: false,
-    encoding: 'utf8',
+    encoding: "utf8",
     timeout: options.timeout || 15_000,
     maxBuffer: options.maxBuffer || 4 * 1024 * 1024,
     env: options.env || environment,
@@ -79,7 +84,7 @@ function run(file, args, options = {}) {
 function runPm2(args, options = {}) {
   // helper 是 systemd 按请求启动的 root 进程；固定进入宿主挂载命名空间访问 root PM2，
   // 非 root Agent 只持有 helper Socket 的连接权限，始终看不到 /root/.pm2。
-  return run(NSENTER_BIN, ['--mount=/proc/1/ns/mnt', '--', PM2_BIN, ...args], {
+  return run(NSENTER_BIN, ["--mount=/proc/1/ns/mnt", "--", PM2_BIN, ...args], {
     ...options,
     env: pm2Environment,
   });
@@ -89,38 +94,230 @@ function commandFailure(result, message) {
   if (result.status === 0) return null;
   return {
     exitCode: Number.isInteger(result.status) ? result.status : 1,
-    stdout: '',
+    stdout: "",
     stderr: `${message}\n`,
   };
 }
 
-function success(stdout = '') {
-  return { exitCode: 0, stdout, stderr: '' };
+function success(stdout = "") {
+  return { exitCode: 0, stdout, stderr: "" };
 }
 
 function denied() {
-  return { exitCode: 64, stdout: '', stderr: 'action denied\n' };
+  return { exitCode: 64, stdout: "", stderr: "action denied\n" };
 }
 
 function redact(value) {
-  return String(value || '')
-    .replace(CONTROL_CHARACTERS, '')
-    .replace(SECRET_ASSIGNMENT, '$1=[REDACTED]')
-    .replace(BEARER_TOKEN, 'Bearer [REDACTED]')
-    .replace(SENSITIVE_QUERY, '$1[REDACTED]')
-    .replace(URI_CREDENTIALS, '$1[REDACTED]@')
-    .replace(JWT_TOKEN, '[REDACTED_JWT]')
-    .replace(PRIVATE_KEY_BLOCK, '[REDACTED_PRIVATE_KEY]')
+  return String(value || "")
+    .replace(CONTROL_CHARACTERS, "")
+    .replace(SECRET_ASSIGNMENT, "$1=[REDACTED]")
+    .replace(BEARER_TOKEN, "Bearer [REDACTED]")
+    .replace(SENSITIVE_QUERY, "$1[REDACTED]")
+    .replace(URI_CREDENTIALS, "$1[REDACTED]@")
+    .replace(JWT_TOKEN, "[REDACTED_JWT]")
+    .replace(PRIVATE_KEY_BLOCK, "[REDACTED_PRIVATE_KEY]")
     .slice(-128 * 1024);
 }
 
 function serviceIsActive(unit) {
-  return run(SYSTEMCTL_BIN, ['is-active', '--quiet', unit]).status === 0;
+  return run(SYSTEMCTL_BIN, ["is-active", "--quiet", unit]).status === 0;
+}
+
+function parseBooleanSetting(value) {
+  if (value === "yes") return true;
+  if (value === "no") return false;
+  return null;
+}
+
+function readSshPosture() {
+  if (!executable(SSHD_BIN)) {
+    return {
+      available: false,
+      port: null,
+      permitRootLogin: null,
+      passwordAuthentication: null,
+      publicKeyAuthentication: null,
+    };
+  }
+  const result = run(SSHD_BIN, ["-T"], {
+    timeout: 10_000,
+    maxBuffer: 512 * 1024,
+  });
+  if (result.status !== 0) {
+    return {
+      available: false,
+      port: null,
+      permitRootLogin: null,
+      passwordAuthentication: null,
+      publicKeyAuthentication: null,
+    };
+  }
+  const settings = Object.fromEntries(
+    String(result.stdout || "")
+      .split("\n")
+      .map((line) => line.trim().split(/\s+/u))
+      .filter(([key, value]) => key && value)
+      .map(([key, ...rest]) => [key, rest.join(" ")]),
+  );
+  return {
+    available: true,
+    port: Number.isInteger(Number(settings.port))
+      ? Number(settings.port)
+      : null,
+    permitRootLogin: settings.permitrootlogin || null,
+    passwordAuthentication: parseBooleanSetting(
+      settings.passwordauthentication,
+    ),
+    publicKeyAuthentication: parseBooleanSetting(settings.pubkeyauthentication),
+  };
+}
+
+function readFirewallPosture() {
+  if (executable(UFW_BIN)) {
+    const result = run(UFW_BIN, ["status"], {
+      timeout: 10_000,
+      maxBuffer: 256 * 1024,
+    });
+    if (result.status === 0) {
+      const active = /^Status:\s+active\s*$/imu.test(
+        String(result.stdout || ""),
+      );
+      return {
+        available: true,
+        provider: "ufw",
+        state: active ? "enabled" : "disabled",
+      };
+    }
+  }
+  if (executable(FIREWALL_CMD_BIN)) {
+    const result = run(FIREWALL_CMD_BIN, ["--state"], {
+      timeout: 10_000,
+      maxBuffer: 64 * 1024,
+    });
+    return {
+      available: true,
+      provider: "firewalld",
+      state: result.status === 0 ? "enabled" : "disabled",
+    };
+  }
+  if (serviceIsActive("nftables.service"))
+    return { available: true, provider: "nftables", state: "enabled" };
+  return { available: false, provider: null, state: "unknown" };
+}
+
+function readFail2banPosture() {
+  const result = run(SYSTEMCTL_BIN, [
+    "show",
+    "fail2ban.service",
+    "--property=LoadState,ActiveState",
+    "--no-pager",
+  ]);
+  const text = String(result.stdout || "");
+  if (result.status !== 0 || /LoadState=not-found/u.test(text)) {
+    return { available: false, state: "unknown" };
+  }
+  return {
+    available: true,
+    state: /ActiveState=active/u.test(text) ? "enabled" : "disabled",
+  };
+}
+
+function readPendingUpdates() {
+  if (!executable(APT_BIN))
+    return { available: false, pending: null, security: null };
+  const result = run(APT_BIN, ["list", "--upgradable"], {
+    timeout: 20_000,
+    maxBuffer: 2 * 1024 * 1024,
+  });
+  if (result.status !== 0)
+    return { available: false, pending: null, security: null };
+  const lines = String(result.stdout || "")
+    .split("\n")
+    .filter((line) => line.includes("/") && !line.startsWith("Listing"));
+  return {
+    available: true,
+    pending: lines.length,
+    security: lines.filter((line) => /security/iu.test(line)).length,
+  };
+}
+
+function readSshActivity() {
+  if (!executable(JOURNALCTL_BIN))
+    return { successes24h: null, failures24h: null, recent: [] };
+  const result = run(
+    JOURNALCTL_BIN,
+    [
+      "--unit",
+      "ssh.service",
+      "--unit",
+      "sshd.service",
+      "--since=-24 hours",
+      "--no-pager",
+      "--output=short-iso",
+    ],
+    { timeout: 15_000, maxBuffer: 2 * 1024 * 1024 },
+  );
+  if (result.status !== 0)
+    return { successes24h: null, failures24h: null, recent: [] };
+  let successes24h = 0;
+  let failures24h = 0;
+  const recent = [];
+  for (const line of String(result.stdout || "").split("\n")) {
+    const accepted = line.match(
+      /^(\S+)\s+.*Accepted\s+(\S+)\s+for\s+(\S+)\s+from\s+([^\s]+)/u,
+    );
+    const failed = line.match(
+      /^(\S+)\s+.*Failed\s+(\S+)\s+for(?:\s+invalid user)?\s+(\S+)\s+from\s+([^\s]+)/u,
+    );
+    const invalid = line.match(
+      /^(\S+)\s+.*Invalid user\s+(\S+)\s+from\s+([^\s]+)/u,
+    );
+    if (accepted) {
+      successes24h += 1;
+      recent.push({
+        occurredAt: accepted[1],
+        outcome: "succeeded",
+        method: accepted[2],
+        user: accepted[3],
+        sourceAddress: accepted[4],
+      });
+    } else if (failed) {
+      failures24h += 1;
+      recent.push({
+        occurredAt: failed[1],
+        outcome: "failed",
+        method: failed[2],
+        user: failed[3],
+        sourceAddress: failed[4],
+      });
+    } else if (invalid) {
+      failures24h += 1;
+      recent.push({
+        occurredAt: invalid[1],
+        outcome: "failed",
+        method: null,
+        user: invalid[2],
+        sourceAddress: invalid[3],
+      });
+    }
+  }
+  return { successes24h, failures24h, recent: recent.slice(-20).reverse() };
+}
+
+function securitySnapshot() {
+  const ssh = { ...readSshPosture(), ...readSshActivity() };
+  return {
+    capturedAt: new Date().toISOString(),
+    ssh,
+    firewall: readFirewallPosture(),
+    fail2ban: readFail2banPosture(),
+    updates: readPendingUpdates(),
+  };
 }
 
 function verifiedProcessPid(pidFile, executablePath) {
   try {
-    const source = readFileSync(pidFile, 'utf8').trim();
+    const source = readFileSync(pidFile, "utf8").trim();
     if (!/^[1-9]\d{0,9}$/u.test(source)) return null;
     const pid = Number(source);
     return realpathSync(`/proc/${pid}/exe`) === executablePath ? pid : null;
@@ -131,9 +328,9 @@ function verifiedProcessPid(pidFile, executablePath) {
 
 function panelServiceStatus(serviceId) {
   const definition =
-    serviceId === 'nginx'
+    serviceId === "nginx"
       ? { binary: PANEL_NGINX_BIN, pidFile: PANEL_NGINX_PID }
-      : serviceId === 'redis'
+      : serviceId === "redis"
         ? { binary: PANEL_REDIS_BIN, pidFile: PANEL_REDIS_PID }
         : null;
   if (!definition) return null;
@@ -141,10 +338,14 @@ function panelServiceStatus(serviceId) {
     ? verifiedProcessPid(definition.pidFile, definition.binary)
     : null;
   return {
-    state: pid ? 'running' : 'stopped',
-    detail: pid ? 'active / panel-managed' : 'inactive / panel-managed',
+    state: pid ? "running" : "stopped",
+    detail: pid ? "active / panel-managed" : "inactive / panel-managed",
     pid,
     uptimeSeconds: null,
+    cpuPercent: null,
+    memoryBytes: null,
+    restartCount: null,
+    startedAt: null,
   };
 }
 
@@ -152,61 +353,73 @@ function systemdServiceStatus(serviceId) {
   const unit = SYSTEMD_SERVICES[serviceId];
   if (!unit) return null;
   const result = run(SYSTEMCTL_BIN, [
-    'show',
+    "show",
     unit,
-    '--property=ActiveState,SubState,MainPID',
-    '--no-pager',
+    "--property=ActiveState,SubState,MainPID,MemoryCurrent,NRestarts,ActiveEnterTimestamp",
+    "--no-pager",
   ]);
   if (result.status !== 0) return null;
   const fields = Object.fromEntries(
-    String(result.stdout || '')
-      .split('\n')
-      .map((line) => line.split('='))
+    String(result.stdout || "")
+      .split("\n")
+      .map((line) => line.split("="))
       .filter(([key]) => key)
-      .map(([key, ...rest]) => [key, rest.join('=')]),
+      .map(([key, ...rest]) => [key, rest.join("=")]),
   );
   const state =
-    fields.ActiveState === 'active'
-      ? 'running'
-      : fields.ActiveState === 'failed'
-        ? 'degraded'
-        : fields.ActiveState === 'inactive'
-          ? 'stopped'
-          : 'unknown';
+    fields.ActiveState === "active"
+      ? "running"
+      : fields.ActiveState === "failed"
+        ? "degraded"
+        : fields.ActiveState === "inactive"
+          ? "stopped"
+          : "unknown";
   const pid = Number(fields.MainPID || 0);
+  const memoryBytes = Number(fields.MemoryCurrent || 0);
+  const restartCount = Number(fields.NRestarts || 0);
+  const startedAtMs = Date.parse(fields.ActiveEnterTimestamp || "");
   return {
     state,
     detail:
-      [fields.ActiveState, fields.SubState].filter(Boolean).join(' / ') ||
-      'unknown',
+      [fields.ActiveState, fields.SubState].filter(Boolean).join(" / ") ||
+      "unknown",
     pid: pid > 0 ? pid : null,
     uptimeSeconds: null,
+    cpuPercent: null,
+    memoryBytes: memoryBytes > 0 ? memoryBytes : null,
+    restartCount:
+      Number.isSafeInteger(restartCount) && restartCount >= 0
+        ? restartCount
+        : null,
+    startedAt: Number.isFinite(startedAtMs)
+      ? new Date(startedAtMs).toISOString()
+      : null,
   };
 }
 
 function managedServiceStatus(serviceId) {
   const panelStatus = panelServiceStatus(serviceId);
-  return panelStatus?.state === 'running'
+  return panelStatus?.state === "running"
     ? panelStatus
     : systemdServiceStatus(serviceId) || panelStatus;
 }
 
 function nginxTopology() {
-  const panelStatus = panelServiceStatus('nginx');
-  if (panelStatus?.state === 'running' && readable(PANEL_NGINX_CONFIG)) {
-    return 'panel';
+  const panelStatus = panelServiceStatus("nginx");
+  if (panelStatus?.state === "running" && readable(PANEL_NGINX_CONFIG)) {
+    return "panel";
   }
-  return serviceIsActive('nginx.service') ? 'systemd' : null;
+  return serviceIsActive("nginx.service") ? "systemd" : null;
 }
 
 function executeAction(action, targetId) {
-  if (action === 'capabilities' && targetId === undefined) {
+  if (action === "capabilities" && targetId === undefined) {
     const topology = nginxTopology();
     return success(
       JSON.stringify({
         nginxReload:
-          (topology === 'panel' && executable(PANEL_NGINX_BIN)) ||
-          (topology === 'systemd' &&
+          (topology === "panel" && executable(PANEL_NGINX_BIN)) ||
+          (topology === "systemd" &&
             executable(SYSTEMCTL_BIN) &&
             executable(NGINX_BIN)),
         pm2Status: executable(PM2_BIN) && executable(NSENTER_BIN),
@@ -215,105 +428,115 @@ function executeAction(action, targetId) {
           executable(PM2_BIN) &&
           executable(NSENTER_BIN) &&
           executable(JOURNALCTL_BIN),
+        securitySnapshot: executable(JOURNALCTL_BIN),
       }),
     );
   }
 
+  if (action === "security-snapshot" && targetId === undefined) {
+    return success(JSON.stringify(securitySnapshot()));
+  }
+
   if (
-    action === 'service-status' &&
-    (targetId === 'nginx' || targetId === 'redis')
+    action === "service-status" &&
+    (targetId === "nginx" || targetId === "redis")
   ) {
     return success(JSON.stringify(managedServiceStatus(targetId)));
   }
 
-  if (action === 'nginx-reload' && targetId === undefined) {
+  if (action === "nginx-reload" && targetId === undefined) {
     const topology = nginxTopology();
     if (!topology) {
       return {
         exitCode: 1,
-        stdout: '',
-        stderr: 'nginx service is not active\n',
+        stdout: "",
+        stderr: "nginx service is not active\n",
       };
     }
-    const binary = topology === 'panel' ? PANEL_NGINX_BIN : NGINX_BIN;
+    const binary = topology === "panel" ? PANEL_NGINX_BIN : NGINX_BIN;
     const test = run(
       binary,
-      topology === 'panel' ? ['-t', '-c', PANEL_NGINX_CONFIG] : ['-t'],
+      topology === "panel" ? ["-t", "-c", PANEL_NGINX_CONFIG] : ["-t"],
     );
-    const testFailure = commandFailure(test, 'nginx configuration test failed');
+    const testFailure = commandFailure(test, "nginx configuration test failed");
     if (testFailure) return testFailure;
     const reload =
-      topology === 'panel'
-        ? run(binary, ['-s', 'reload', '-c', PANEL_NGINX_CONFIG])
-        : run(SYSTEMCTL_BIN, ['reload', 'nginx.service']);
+      topology === "panel"
+        ? run(binary, ["-s", "reload", "-c", PANEL_NGINX_CONFIG])
+        : run(SYSTEMCTL_BIN, ["reload", "nginx.service"]);
     return (
-      commandFailure(reload, 'nginx reload failed') ||
-      success('nginx configuration checked and reloaded\n')
+      commandFailure(reload, "nginx reload failed") ||
+      success("nginx configuration checked and reloaded\n")
     );
   }
 
-  if (action === 'pm2-status' && targetId === undefined) {
-    const result = runPm2(['jlist']);
-    const failure = commandFailure(result, 'pm2 status failed');
+  if (action === "pm2-status" && targetId === undefined) {
+    const result = runPm2(["jlist"]);
+    const failure = commandFailure(result, "pm2 status failed");
     if (failure) return failure;
     try {
-      const items = JSON.parse(result.stdout || '[]');
+      const items = JSON.parse(result.stdout || "[]");
       const allowedNames = new Set(Object.values(PM2_SERVICES));
       const safeItems = (Array.isArray(items) ? items : [])
-        .filter((item) => allowedNames.has(String(item?.name || '')))
+        .filter((item) => allowedNames.has(String(item?.name || "")))
         .map((item) => ({
           name: String(item.name),
           pid: Number(item.pid || 0) || null,
           pm2_env: {
-            status: String(item?.pm2_env?.status || 'unknown'),
+            status: String(item?.pm2_env?.status || "unknown"),
             pm_uptime: Number(item?.pm2_env?.pm_uptime || 0) || null,
+            restart_time: Number(item?.pm2_env?.restart_time || 0) || 0,
+          },
+          monit: {
+            cpu: Number(item?.monit?.cpu || 0) || 0,
+            memory: Number(item?.monit?.memory || 0) || 0,
           },
         }));
       return success(JSON.stringify(safeItems));
     } catch {
-      return { exitCode: 1, stdout: '', stderr: 'pm2 status invalid\n' };
+      return { exitCode: 1, stdout: "", stderr: "pm2 status invalid\n" };
     }
   }
 
-  if (action === 'pm2-restart' && RESTARTABLE_SERVICES.has(targetId)) {
-    const result = runPm2(['restart', PM2_SERVICES[targetId]], {
+  if (action === "pm2-restart" && RESTARTABLE_SERVICES.has(targetId)) {
+    const result = runPm2(["restart", PM2_SERVICES[targetId]], {
       timeout: 20_000,
     });
     return (
-      commandFailure(result, 'pm2 restart failed') ||
-      success('allowlisted worker restarted\n')
+      commandFailure(result, "pm2 restart failed") ||
+      success("allowlisted worker restarted\n")
     );
   }
 
-  if (action === 'pm2-logs' && Object.hasOwn(PM2_SERVICES, targetId)) {
+  if (action === "pm2-logs" && Object.hasOwn(PM2_SERVICES, targetId)) {
     const result = runPm2([
-      'logs',
+      "logs",
       PM2_SERVICES[targetId],
-      '--lines',
-      '300',
-      '--nostream',
-      '--raw',
+      "--lines",
+      "300",
+      "--nostream",
+      "--raw",
     ]);
-    const failure = commandFailure(result, 'pm2 logs failed');
+    const failure = commandFailure(result, "pm2 logs failed");
     if (failure) return failure;
     return success(
-      redact([result.stdout, result.stderr].filter(Boolean).join('\n')),
+      redact([result.stdout, result.stderr].filter(Boolean).join("\n")),
     );
   }
 
-  if (action === 'journal-logs' && Object.hasOwn(SYSTEMD_SERVICES, targetId)) {
+  if (action === "journal-logs" && Object.hasOwn(SYSTEMD_SERVICES, targetId)) {
     const result = run(JOURNALCTL_BIN, [
-      '--unit',
+      "--unit",
       SYSTEMD_SERVICES[targetId],
-      '--lines',
-      '300',
-      '--no-pager',
-      '--output=short-iso',
+      "--lines",
+      "300",
+      "--no-pager",
+      "--output=short-iso",
     ]);
-    const failure = commandFailure(result, 'service logs failed');
+    const failure = commandFailure(result, "service logs failed");
     if (failure) return failure;
     return success(
-      redact([result.stdout, result.stderr].filter(Boolean).join('\n')),
+      redact([result.stdout, result.stderr].filter(Boolean).join("\n")),
     );
   }
 
@@ -321,17 +544,17 @@ function executeAction(action, targetId) {
 }
 
 function validSocketRequest(payload) {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return false;
   }
   const keys = Object.keys(payload);
-  if (keys.some((key) => key !== 'action' && key !== 'targetId')) return false;
-  if (typeof payload.action !== 'string' || payload.action.length > 64) {
+  if (keys.some((key) => key !== "action" && key !== "targetId")) return false;
+  if (typeof payload.action !== "string" || payload.action.length > 64) {
     return false;
   }
   return (
     payload.targetId === undefined ||
-    (typeof payload.targetId === 'string' && payload.targetId.length <= 64)
+    (typeof payload.targetId === "string" && payload.targetId.length <= 64)
   );
 }
 
@@ -344,7 +567,7 @@ async function readSocketRequest() {
     chunks.push(chunk);
   }
   try {
-    const payload = JSON.parse(Buffer.concat(chunks).toString('utf8').trim());
+    const payload = JSON.parse(Buffer.concat(chunks).toString("utf8").trim());
     return validSocketRequest(payload) ? payload : null;
   } catch {
     return null;
@@ -353,7 +576,7 @@ async function readSocketRequest() {
 
 async function main() {
   const [action, targetId, extra] = process.argv.slice(2);
-  if (action === 'socket' && targetId === undefined) {
+  if (action === "socket" && targetId === undefined) {
     const request = await readSocketRequest();
     process.stdout.write(
       JSON.stringify(
@@ -364,9 +587,7 @@ async function main() {
   }
 
   const result =
-    !action || extra !== undefined
-      ? denied()
-      : executeAction(action, targetId);
+    !action || extra !== undefined ? denied() : executeAction(action, targetId);
   process.stdout.write(result.stdout);
   process.stderr.write(result.stderr);
   process.exitCode = result.exitCode;

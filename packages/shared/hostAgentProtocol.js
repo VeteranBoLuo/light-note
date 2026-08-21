@@ -10,6 +10,9 @@ export const HOST_AGENT_API_PREFIX = "/v1";
 export const HOST_AGENT_ENDPOINTS = Object.freeze({
   health: `${HOST_AGENT_API_PREFIX}/health`,
   dashboard: `${HOST_AGENT_API_PREFIX}/dashboard`,
+  services: `${HOST_AGENT_API_PREFIX}/services`,
+  storage: `${HOST_AGENT_API_PREFIX}/storage`,
+  security: `${HOST_AGENT_API_PREFIX}/security`,
   jobs: `${HOST_AGENT_API_PREFIX}/jobs`,
   logsPrefix: `${HOST_AGENT_API_PREFIX}/logs`,
 });

@@ -4,6 +4,9 @@ const mocks = vi.hoisted(() => ({
   begin: vi.fn(),
   finish: vi.fn(),
   dashboard: vi.fn(),
+  services: vi.fn(),
+  storage: vi.fn(),
+  security: vi.fn(),
   logs: vi.fn(),
   execute: vi.fn(),
 }));
@@ -22,13 +25,16 @@ vi.mock('../util/hostAgentClient.js', () => {
   return {
     HostAgentClientError,
     getHostAgentDashboard: mocks.dashboard,
+    getHostAgentServices: mocks.services,
+    getHostAgentStorage: mocks.storage,
+    getHostAgentSecurity: mocks.security,
     getHostAgentLogs: mocks.logs,
     executeHostAgentJob: mocks.execute,
   };
 });
 vi.mock('../util/agent/logSafety.js', () => ({ stableAgentErrorCode: (error) => String(error?.code || 'ERROR') }));
 
-const { executeInfraAction, getInfraDashboard } = await import('./infraHandle.js');
+const { executeInfraAction, getInfraDashboard, infraHandleInternals } = await import('./infraHandle.js');
 
 function response() {
   return { send: vi.fn() };
@@ -54,6 +60,34 @@ describe('infraHandle', () => {
     expect(allowed.send).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ agentStatus: 'online' }) }),
     );
+  });
+
+  it('安全风险由可验证事实派生，未知采集项不会被当作通过', () => {
+    const findings = infraHandleInternals.deriveSecurityFindings({
+      ssh: {
+        available: true,
+        port: 51846,
+        permitRootLogin: 'yes',
+        passwordAuthentication: true,
+        publicKeyAuthentication: true,
+        successes24h: 2,
+        failures24h: 60,
+      },
+      firewall: { available: false, provider: null, state: 'unknown' },
+      fail2ban: { available: true, state: 'disabled' },
+      updates: { available: true, pending: 3, security: 1 },
+      listeningPorts: [
+        { protocol: 'tcp', address: '0.0.0.0', port: 3306, exposure: 'public' },
+        { protocol: 'tcp', address: '0.0.0.0', port: 51846, exposure: 'public' },
+      ],
+    });
+    expect(findings.find((item) => item.id === 'ssh-root-login')).toMatchObject({ state: 'fail' });
+    expect(findings.find((item) => item.id === 'firewall')).toMatchObject({ state: 'unknown' });
+    expect(findings.find((item) => item.id === 'unexpected-public-ports')).toMatchObject({
+      state: 'fail',
+      severity: 'high',
+      evidence: { ports: ['tcp/3306'] },
+    });
   });
 
   it('相同幂等键生成稳定 jobId，并在成功后写入终态审计', async () => {

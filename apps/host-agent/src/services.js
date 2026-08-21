@@ -19,6 +19,9 @@ function parseSystemdShow(stdout) {
       .map(([key, ...rest]) => [key, rest.join("=")]),
   );
   const pid = Number(fields.MainPID || 0);
+  const memoryBytes = Number(fields.MemoryCurrent || 0);
+  const restartCount = Number(fields.NRestarts || 0);
+  const startedAtMs = Date.parse(fields.ActiveEnterTimestamp || "");
   return {
     state: serviceState(fields.ActiveState),
     detail:
@@ -26,6 +29,15 @@ function parseSystemdShow(stdout) {
       "unknown",
     pid: pid > 0 ? pid : null,
     uptimeSeconds: null,
+    cpuPercent: null,
+    memoryBytes: memoryBytes > 0 ? memoryBytes : null,
+    restartCount:
+      Number.isSafeInteger(restartCount) && restartCount >= 0
+        ? restartCount
+        : null,
+    startedAt: Number.isFinite(startedAtMs)
+      ? new Date(startedAtMs).toISOString()
+      : null,
   };
 }
 
@@ -40,6 +52,9 @@ function parsePm2Item(item) {
           ? "stopped"
           : "unknown";
   const startedAt = Number(item?.pm2_env?.pm_uptime || 0);
+  const cpuPercent = Number(item?.monit?.cpu);
+  const memoryBytes = Number(item?.monit?.memory);
+  const restartCount = Number(item?.pm2_env?.restart_time);
   return {
     state,
     detail: status,
@@ -48,11 +63,24 @@ function parsePm2Item(item) {
       startedAt > 0
         ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
         : null,
+    cpuPercent:
+      Number.isFinite(cpuPercent) && cpuPercent >= 0 ? cpuPercent : null,
+    memoryBytes:
+      Number.isFinite(memoryBytes) && memoryBytes >= 0 ? memoryBytes : null,
+    restartCount:
+      Number.isSafeInteger(restartCount) && restartCount >= 0
+        ? restartCount
+        : null,
+    startedAt: startedAt > 0 ? new Date(startedAt).toISOString() : null,
   };
 }
 
 function parseHelperServiceStatus(stdout) {
   const payload = JSON.parse(stdout || "{}");
+  const cpuPercent = payload?.cpuPercent ?? null;
+  const memoryBytes = payload?.memoryBytes ?? null;
+  const restartCount = payload?.restartCount ?? null;
+  const startedAt = payload?.startedAt ?? null;
   if (
     !payload ||
     !["running", "degraded", "stopped", "unknown"].includes(payload.state) ||
@@ -66,7 +94,20 @@ function parseHelperServiceStatus(stdout) {
       payload.uptimeSeconds === null ||
       (Number.isSafeInteger(payload.uptimeSeconds) &&
         payload.uptimeSeconds >= 0)
-    )
+    ) ||
+    !(
+      cpuPercent === null ||
+      (Number.isFinite(cpuPercent) && cpuPercent >= 0)
+    ) ||
+    !(
+      memoryBytes === null ||
+      (Number.isSafeInteger(memoryBytes) && memoryBytes >= 0)
+    ) ||
+    !(
+      restartCount === null ||
+      (Number.isSafeInteger(restartCount) && restartCount >= 0)
+    ) ||
+    !(startedAt === null || Number.isFinite(Date.parse(startedAt)))
   ) {
     throw Object.assign(new Error("helper service status is invalid"), {
       code: "HOST_HELPER_RESPONSE_INVALID",
@@ -77,6 +118,10 @@ function parseHelperServiceStatus(stdout) {
     detail: payload.detail,
     pid: payload.pid,
     uptimeSeconds: payload.uptimeSeconds,
+    cpuPercent,
+    memoryBytes,
+    restartCount,
+    startedAt,
   };
 }
 
@@ -178,7 +223,11 @@ export async function collectServiceSnapshots(
     errors.push({ source: "pm2", code: stableErrorCode(error) });
   }
 
-  const nginxReload = await canExecuteNginxReload(config, helperRequester);
+  const privilegedCapabilities = await readPrivilegedCapabilities(
+    config,
+    helperRequester,
+  );
+  const nginxReload = privilegedCapabilities?.nginxReload === true;
   const snapshots = await Promise.all(
     config.services.map(async (definition) => {
       const actions = [];
@@ -200,6 +249,10 @@ export async function collectServiceSnapshots(
                 detail: pm2Available ? "not found" : "unavailable",
                 pid: null,
                 uptimeSeconds: null,
+                cpuPercent: null,
+                memoryBytes: null,
+                restartCount: null,
+                startedAt: null,
               }),
           actions,
         };
@@ -239,7 +292,7 @@ export async function collectServiceSnapshots(
           [
             "show",
             definition.target,
-            "--property=ActiveState,SubState,MainPID",
+            "--property=ActiveState,SubState,MainPID,MemoryCurrent,NRestarts,ActiveEnterTimestamp",
             "--no-pager",
           ],
           { timeoutMs: 5000, env: safeCommandEnvironment() },
@@ -261,6 +314,10 @@ export async function collectServiceSnapshots(
           detail: "unavailable",
           pid: null,
           uptimeSeconds: null,
+          cpuPercent: null,
+          memoryBytes: null,
+          restartCount: null,
+          startedAt: null,
           actions,
         };
       }
@@ -269,7 +326,11 @@ export async function collectServiceSnapshots(
   return {
     services: snapshots,
     errors,
-    capabilities: { nginxReload, workerRestart: pm2Available },
+    capabilities: {
+      nginxReload,
+      workerRestart: pm2Available,
+      securitySnapshot: privilegedCapabilities?.securitySnapshot === true,
+    },
   };
 }
 

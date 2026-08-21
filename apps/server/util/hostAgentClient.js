@@ -108,6 +108,18 @@ export function getHostAgentDashboard(options) {
   return requestHostAgent(HOST_AGENT_ENDPOINTS.dashboard, { ...options, timeoutMs: 7000 });
 }
 
+export function getHostAgentServices(options) {
+  return requestHostAgent(HOST_AGENT_ENDPOINTS.services, { ...options, timeoutMs: 7000 });
+}
+
+export function getHostAgentStorage(options) {
+  return requestHostAgent(HOST_AGENT_ENDPOINTS.storage, { ...options, timeoutMs: 7000 });
+}
+
+export function getHostAgentSecurity(options) {
+  return requestHostAgent(HOST_AGENT_ENDPOINTS.security, { ...options, timeoutMs: 40_000 });
+}
+
 export function getHostAgentLogs(serviceId, limit, options) {
   return requestHostAgent(hostAgentLogsPath(serviceId, limit), { ...options, timeoutMs: 10_000 });
 }
