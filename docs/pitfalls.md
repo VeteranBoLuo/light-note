@@ -25,6 +25,7 @@
 
 | 编号                                                                                           | 日期       | 模块                | 关键词                                             | 状态         |
 | ---------------------------------------------------------------------------------------------- | ---------- | ------------------- | -------------------------------------------------- | ------------ |
+| [LN-PIT-115](#ln-pit-115权威增强信息不能挤掉用户直接询问的主事实)                              | 2026-08-23 | Agent、结果协议、前端 | 总数、类型分布、回答约束、恢复终态                 | 已修复待上线 |
 | [LN-PIT-114](#ln-pit-114工具参数归一化必须满足自身-schema)                                     | 2026-08-23 | Agent、工具协议     | normalizeArgs、Schema、TurnSpec、只读恢复          | 已修复并上线 |
 | [LN-PIT-113](#ln-pit-113受控分类统计不能降级为全文关键词检索或让模型从列表猜总量)              | 2026-08-22 | Agent、工具协议     | facet、笔记类型、精确分布、连续追问                | 已修复并上线 |
 | [LN-PIT-112](#ln-pit-112agent-会话能力边界不能只过滤工具或只隐藏前端入口)                      | 2026-08-21 | Agent、前后端策略   | chat-only、read-only、材料、确认、Manifest         | 已修复待合入 |
@@ -2565,6 +2566,17 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **验证方法：** 工具级测试断言 `query_notes` 空输入归一化为合法默认值且不含空 `type/keyword/timeRange/user`；注册表测试遍历所有无必填工具并执行“归一化后再验 Schema”。Handler 假模型测试让 TurnSpec 正确、Execution Planner 连续失败，同时初始工具集中包含无关读取能力，断言 legacy 恢复定义只含 Router 已选中的 `query_notes`，最终可以执行并返回真实总量。以上测试均不调用真实供应商或线上业务工具。
 - **相关代码：** `apps/server/util/agent/tools/query_notes.js`、`apps/server/util/agent/tools/index.test.js`、`apps/server/util/agent/tools/query_notes.test.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/server/router_handle/agentHandle.chat.test.js`。
 
+### LN-PIT-115：权威增强信息不能挤掉用户直接询问的主事实
+
+- **现象：** 用户问“我共有多少笔记”，数据库已精确查询到 85 条，最终回答却只显示“富文本 67 条、Markdown 2 条、手绘 16 条”；前两轮因时间参数失败、后一轮恢复成功时，页面仍可能在正确答案下方保留“笔记 / 未完成”。
+- **影响范围：** 所有同时包含主事实和增强统计的查询回答，以及同一工具跨恢复轮从失败变成功或从成功变失败的前端终态展示。
+- **误导线索：** 类型分布相加等于总量，且工具最终执行成功，看起来用户可以自己计算、旧错误也只是处理记录。实际上用户直接询问的是总数；模型选择性摘取增强信息后，主事实已经从用户可见答案中丢失。恢复成功后继续展示旧失败则会让同一轮回答自相矛盾。
+- **根因：** 工具转换结果把类型分布排在总数之前，确定性 `answerRequirements` 只声明了分布，没有把直接询问的精确总数列为独立权威要求；前端活动摘要又遍历同一工具的全部历史事件，而工具状态列表使用另一套“只看最新项”的重复逻辑。
+- **修复：** `query_notes` 的统计与列表结果统一先输出当前查询范围的精确总数，再输出类型分布；回答约束把总数和分布作为两个独立、可核验的权威事实，任一缺失都会由服务端确定性补回或替换。前端抽出共享的工具终态归并函数，按工具名和轮次只保留最新终态：旧失败被后续成功覆盖，最新失败仍正常展示。
+- **防回归约束：** 增加 facet、趋势、分组或解释等增强结果时，不得替换用户直接询问的主事实；权威回答要求必须逐项声明总量、口径和增强维度，不能依赖用户把分项相加或模型主动复述。工具状态的列表、活动摘要和将来新增回执入口必须复用同一终态归并函数，禁止各自遍历历史事件；相同轮次以事件流中较后的事件为准。
+- **验证方法：** 使用固定数据 `html=67 / markdown=2 / drawing=16 / total=85`，断言工具变换、模型漏答后的确定性修复和最终回答都同时包含“共 85 条笔记”与三类精确分布；模型给出错误总数时必须被权威结果替换。前端覆盖单次未恢复失败、失败后成功、成功后失败和同轮后发事件，分别断言失败卡可见、隐藏、可见和以最新事件为准。全套使用 mock 与离线夹具，不调用真实模型。
+- **相关代码：** `apps/server/util/agent/tools/query_notes.js`、`apps/server/util/agent/tools/query_notes.test.js`、`apps/web/src/types/aiToolStatus.ts`、`apps/web/src/components/aiAssistant/AiToolStatusList.vue`、`apps/web/src/components/aiAssistant/AiActivitySummary.vue`、`apps/web/src/components/aiAssistant/AiActivitySummary.test.ts`。
+
 ### LN-PIT-112：Agent 会话能力边界不能只过滤工具或只隐藏前端入口
 
 - **现象：** 用户切换“仅对话”后，界面虽然隐藏了材料入口，旧 SourceSet、附件或工作区范围仍可能在服务端材料解析阶段被读取；切换“只读锁”后，新问题不会生成写工具，但切换前已经签发的确认卡仍可能执行。若只把受限能力从 Compiler 目录删除，模型又会把明确写请求误判为闲聊或“工具不支持”。
@@ -2592,11 +2604,11 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **现象：** 用户把“最近 7 天”改为“今天”后，后续轮仍可能沿用旧范围；同一个“今天”在不同进程时区下得到不同 SQL 边界。列表工具只返回当前 `LIMIT` 内的数据，模型却可能把“返回 1 条”说成“全部只有 1 条”；文本预算截断时也没有稳定披露。
 - **影响范围：** 笔记、书签、文件、回收站、Root 用户/日志/统计/安全事件查询，以及携带时间条件的写操作二次确认。
 - **误导线索：** 单看工具转换文案或 SQL 可能都“看起来正常”；真正偏差来自 Planner、Tool Policy、工具执行和确认回放多次重新解析，以及结果合同没有区分 `total` 与 `returned`。
-- **根因：** 时间表达式只有字符串，没有请求级 IANA 时区和一次绑定的 canonical range；旧 SQL 混用包含结束时刻和进程本地 `Date`。工具输出又主要是一段自然语言，缺少统一的总量、返回量、完整性、截断原因和稳定引用。管理域同时使用 `user` 表示账号范围，与普通业务参数发生语义冲突。
-- **修复：** 时间解析收口到基于 Temporal 的唯一解析器，Binder/Tool Policy 按请求级 `currentInstant + IANA timeZone + storageTimeZone` 只绑定一次，SQL 统一使用 `[start, endExclusive)`；确认令牌的服务端私有上下文保存签发时的权威范围。列表/计数工具统一投影 `totalCount/returned/totalExact/completeness/nextCursor/resolvedRanges/truncationReason` 和稳定 ID，旧 `total` 只是兼容别名；执行器不得仅因 raw 中存在数值 `total` 就推断精确，只有工具显式给出 `resultMetadata.totalExact=true` 才可声称“全部/只有”。执行器优先把确定性查询口径送入回答上下文，再受文本预算限制。查询集合完整性与回答材料投影完整性分层记录，避免“数据已查全、文本被截断”仍被笼统标成完整结果；安全查询口径同时进入 SSE、普通响应和断流恢复快照，不再依赖最终模型主动复述。管理账号范围迁移为 `scope_user`，旧 `user` 别名仅在服务端兼容层归一化并记录不含账号值的弃用告警。
-- **防回归约束：** 新增时间工具必须在 Manifest 声明 `temporalSlots`，工具内只读权威绑定，不得再用 `new Date()` 解释用户日历语义；新列表工具必须返回结构化 metadata 和稳定业务 ID，不得用当前页长度冒充总量，也不得在 `transform/summarize` 中另设与公共 `resultBudget` 冲突的展示条数上限。查询集合和回答材料任一层发生截断都必须显式、分别标记；resolved range 必须通过安全公共投影进入权威终态响应和恢复快照，不能只放入模型提示。签发后确认不得重新解析“今天”。新管理工具的公开 schema 只允许 `scope_user`，兼容别名必须通过统一参数层实现，禁止在单个工具复制转换逻辑。
-- **验证方法：** 在 `TZ=UTC` 进程下固定 `currentInstant`，验证上海、纽约及 DST 跨越日的 local/storage 边界；断言 SQL 为 `>= start AND < endExclusive`。对空、完整、超 `limit`、总量未知和 resultBudget 截断分别校验 metadata/披露；确认链路断言 execute 收到的范围与签发时完全一致。对 `scope_user`、旧 `user`、两者相同和两者冲突都保留 fixture；全部使用 mock/固定性测试，日常回归不调真实模型。
-- **相关代码：** `apps/server/util/agent/timeRange.js`、`apps/server/util/agent/toolResultMetadata.js`、`apps/server/util/agent/toolArguments.js`、`apps/server/util/agent/toolPolicy.js`、`apps/server/util/agent/sessionStore.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/server/util/agent/tools/`、`apps/web/src/types/aiQueryScope.ts`、`apps/web/src/utils/aiStreamRecovery.ts`。
+- **根因：** 时间表达式只有字符串，没有请求级 IANA 时区和一次绑定的 canonical range；旧 SQL 混用包含结束时刻和进程本地 `Date`。V3 的时间槽虽由 Manifest 声明，执行计划仍可能把 Planner 猜测值与 TurnSpec 权威值合并；V2 又需要继续兼容 Planner 提取的合法时间表达式。模型输出“全部时间”一类无筛选别名时，严格工具解析会误把它当非法具体范围。工具输出又主要是一段自然语言，缺少统一的总量、返回量、完整性、截断原因和稳定引用。管理域同时使用 `user` 表示账号范围，与普通业务参数发生语义冲突。
+- **修复：** 时间解析收口到基于 Temporal 的唯一解析器，Binder/Tool Policy 按请求级 `currentInstant + IANA timeZone + storageTimeZone` 只绑定一次，SQL 统一使用 `[start, endExclusive)`；确认令牌的服务端私有上下文保存签发时的权威范围。V3 执行校验从 capability 或统一 Manifest 回退取得 `temporalSlots`，先剥离模型提供的全部时间槽，再覆盖 TurnSpec 权威绑定；V2 保留 Planner 提取的合法具体时间，但把 Manifest 允许的“全部时间”别名归一为无筛选。列表/计数工具统一投影 `totalCount/returned/totalExact/completeness/nextCursor/resolvedRanges/truncationReason` 和稳定 ID，旧 `total` 只是兼容别名；执行器不得仅因 raw 中存在数值 `total` 就推断精确，只有工具显式给出 `resultMetadata.totalExact=true` 才可声称“全部/只有”。执行器优先把确定性查询口径送入回答上下文，再受文本预算限制。查询集合完整性与回答材料投影完整性分层记录，避免“数据已查全、文本被截断”仍被笼统标成完整结果；安全查询口径同时进入 SSE、普通响应和断流恢复快照，不再依赖最终模型主动复述。管理账号范围迁移为 `scope_user`，旧 `user` 别名仅在服务端兼容层归一化并记录不含账号值的弃用告警。
+- **防回归约束：** 新增时间工具必须在 Manifest 声明 `temporalSlots`，工具内只读权威绑定，不得再用 `new Date()` 解释用户日历语义；V3 的时间槽必须由 TurnSpec 与 Binder 独占，Planner 值只能被删除、不能成为回退权威。V2 兼容必须保留合法具体时间表达式，但全量别名只能表示“不生成时间条件”，不得传入工具解析器。时间槽识别必须消费 capability/Manifest 元数据，禁止按工具名或用户问法写分支。新列表工具必须返回结构化 metadata 和稳定业务 ID，不得用当前页长度冒充总量，也不得在 `transform/summarize` 中另设与公共 `resultBudget` 冲突的展示条数上限。查询集合和回答材料任一层发生截断都必须显式、分别标记；resolved range 必须通过安全公共投影进入权威终态响应和恢复快照，不能只放入模型提示。签发后确认不得重新解析“今天”。新管理工具的公开 schema 只允许 `scope_user`，兼容别名必须通过统一参数层实现，禁止在单个工具复制转换逻辑。
+- **验证方法：** 在 `TZ=UTC` 进程下固定 `currentInstant`，验证上海、纽约及 DST 跨越日的 local/storage 边界；断言 SQL 为 `>= start AND < endExclusive`。构造 V3 Planner 猜测“全部时间”但 TurnSpec 无范围、V3 缺少必填权威范围、V2 Planner 传“今天”和 V2 Planner 传“全部时间”，分别断言模型时间被剥离、缺槽失败关闭、合法具体时间保留、全量别名转为无筛选。对空、完整、超 `limit`、总量未知和 resultBudget 截断分别校验 metadata/披露；确认链路断言 execute 收到的范围与签发时完全一致。对 `scope_user`、旧 `user`、两者相同和两者冲突都保留 fixture；全部使用 mock/固定性测试，日常回归不调真实模型。
+- **相关代码：** `apps/server/util/agent/timeRange.js`、`apps/server/util/agent/toolResultMetadata.js`、`apps/server/util/agent/toolArguments.js`、`apps/server/util/agent/toolPolicy.js`、`apps/server/util/agent/runtime/planValidator.js`、`apps/server/util/agent/runtime/v3/temporalConstraints.js`、`apps/server/util/agent/sessionStore.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/server/util/agent/tools/`、`apps/web/src/types/aiQueryScope.ts`、`apps/web/src/utils/aiStreamRecovery.ts`。
 
 ### LN-PIT-071：父组件不能用宽泛深度选择器改写头像框内部图片
 

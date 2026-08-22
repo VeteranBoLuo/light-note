@@ -24,12 +24,7 @@ import {
   type AiMaterialClarification,
   type AiResolvedGrounding,
 } from '@/types/aiGrounding';
-
-interface AiToolStatusItem {
-  name: string;
-  status: 'running' | 'success' | 'error' | 'confirmation_required' | 'interaction_required';
-  round?: number;
-}
+import type { AiToolStatusItem } from '@/types/aiToolStatus';
 
 export type AiAssistantAdminContextMode = 'self' | 'readonly' | 'maintain';
 export type AiAssistantScopeMode = 'selected' | 'workspace';

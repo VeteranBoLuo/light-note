@@ -1289,6 +1289,90 @@ describe('agentChat 主链路', () => {
     });
   });
 
+  it('Runtime V2 将 Planner 的全量时间别名归一为无筛选并执行全量笔记查询', async () => {
+    vi.stubEnv('AI_AGENT_RUNTIME_V2_MODE', 'enforce');
+    mocks.selectAgentTools.mockImplementation((registry) => [registry.get('query_notes')].filter(Boolean));
+    mocks.toolExecute.mockResolvedValueOnce({ value: '当前共有 85 篇笔记', dependencyRefs: [] });
+    mocks.requestAi.mockImplementation(async (messages, options = {}) => {
+      if (options?.trace?.stage === 'intent_compiler') {
+        const payload = JSON.parse(messages[1].content);
+        return {
+          content: '',
+          toolCalls: [
+            turnSpecCall({
+              requestKind: 'answer',
+              confidence: 'high',
+              goals: [
+                {
+                  id: 'count-notes',
+                  kind: 'read',
+                  capabilityDomain: 'note',
+                  description: '查询当前账号的笔记总数',
+                  targetDescription: '当前账号的全部笔记',
+                  dependsOn: [],
+                },
+              ],
+              groundingPolicy: payload.authoritativeGroundingPolicy,
+              missingSlots: [],
+              clarificationQuestion: '',
+            }),
+          ],
+          usage: usage(1),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      if (options?.trace?.stage === 'execution_planner') {
+        const payload = JSON.parse(messages[1].content);
+        return {
+          content: '',
+          toolCalls: [
+            executionPlanCall({
+              turnSpecDigest: payload.turnSpec.digest,
+              steps: [
+                {
+                  id: 'count-notes-step',
+                  goalId: 'count-notes',
+                  toolName: 'query_notes',
+                  // 模拟线上 Provider 用自然语言填写全量范围。它应等价于“不加时间筛选”。
+                  arguments: { timeRange: '全部时间', limit: 50 },
+                  dependsOn: [],
+                  expectedResultKind: 'note_refs',
+                },
+              ],
+              deferredGoalIds: [],
+              unsupportedGoalIds: [],
+            }),
+          ],
+          usage: usage(1),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      if (options?.trace?.stage === 'final') {
+        return {
+          content: '你当前共有 85 篇笔记。',
+          toolCalls: [],
+          usage: usage(1),
+          usageStatus: 'reported',
+          finishReason: 'stop',
+        };
+      }
+      throw new Error(`unexpected stage: ${options?.trace?.stage}`);
+    });
+    const res = response();
+
+    await agentChat(request({ message: '我共有多少笔记？', stream: false, scope: { mode: 'workspace' } }), res);
+
+    expect(mocks.requestAi.mock.calls.map(([, options]) => options?.trace?.stage)).toEqual([
+      'intent_compiler',
+      'execution_planner',
+      'final',
+    ]);
+    expect(mocks.toolExecute).toHaveBeenCalledWith({ limit: 50 }, expect.objectContaining({ userId: 'user-1' }));
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toBe('你当前共有 85 篇笔记。');
+  });
+
   it('Runtime V2 用本轮书签引用绑定权威 URL，不再要求用户重复粘贴地址', async () => {
     vi.stubEnv('AI_AGENT_RUNTIME_V2_MODE', 'enforce');
     mocks.selectAgentTools.mockImplementation((registry) => [registry.get('read_url')].filter(Boolean));

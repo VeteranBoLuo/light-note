@@ -186,7 +186,7 @@
   import AiResultActions from '@/components/aiAssistant/AiResultActions.vue';
   import AiSourceCards, { type AiSource } from '@/components/aiAssistant/AiSourceCards.vue';
   import type { AiCoverageReport, AiSourceCoverage } from '@/components/aiAssistant/aiSourceNavigation';
-  import type { AiToolStatusItem } from '@/components/aiAssistant/AiToolStatusList.vue';
+  import type { AiToolStatusItem } from '@/types/aiToolStatus';
   import type { AiResourceContext, AiScopeRef } from '@/types/aiScope';
   import {
     buildAiCapabilityModuleOptions,

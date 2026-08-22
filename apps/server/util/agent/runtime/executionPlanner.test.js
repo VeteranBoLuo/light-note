@@ -788,7 +788,9 @@ describe('Execution Planner / Validator V2', () => {
             id: 'notes-step',
             goalId: 'notes',
             toolName: 'query_notes',
-            arguments: { limit: 10 },
+            // 即使 Provider 绕过收窄 schema 猜出了一个时间值，Validator 也必须先
+            // 剥离，再因权威 TurnSpec 没有必填时间而失败关闭。
+            arguments: { timeRange: '全部时间', limit: 10 },
             dependsOn: [],
             expectedResultKind: 'note_list',
           },
@@ -800,5 +802,64 @@ describe('Execution Planner / Validator V2', () => {
     expect(validateExecutionPlan({ turnSpec: specWithoutTime, route: temporalRoute, parsed }).issues).toContain(
       'TOOL_ARGUMENT_REQUIRED',
     );
+  });
+
+  it('可选权威时间槽没有 TurnSpec 约束时丢弃 Planner 猜值并保留全量查询', () => {
+    const temporalTool = {
+      name: 'query_notes',
+      isWrite: false,
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { timeRange: { type: 'string' }, limit: { type: 'integer' } },
+      },
+    };
+    const specWithoutTime = {
+      ...turnSpec,
+      version: '3.0',
+      requestKind: 'answer',
+      goals: [{ id: 'notes', kind: 'read', capabilityDomain: 'note', dependsOn: [] }],
+      temporalConstraints: [],
+    };
+    const temporalRoute = {
+      state: 'ready',
+      candidates: [temporalTool],
+      goalRoutes: [{ goalId: 'notes', status: 'ready', toolNames: ['query_notes'] }],
+      capabilityByTool: new Map([
+        [
+          'query_notes',
+          {
+            resultKind: 'note_list',
+            temporalSlots: [{ name: 'timeRange', kind: 'range', allowAll: true, autoBind: true }],
+          },
+        ],
+      ]),
+    };
+    const parsed = {
+      invalid: false,
+      extraCalls: [],
+      plan: {
+        version: '2.0',
+        turnSpecDigest: 'digest-1',
+        steps: [
+          {
+            id: 'notes-step',
+            goalId: 'notes',
+            toolName: 'query_notes',
+            arguments: { timeRange: '全部时间', limit: 10 },
+            dependsOn: [],
+            expectedResultKind: 'note_list',
+          },
+        ],
+        deferredGoalIds: [],
+        unsupportedGoalIds: [],
+      },
+    };
+
+    const validated = validateExecutionPlan({ turnSpec: specWithoutTime, route: temporalRoute, parsed });
+
+    expect(validated.valid).toBe(true);
+    expect(JSON.parse(validated.toolCalls[0].function.arguments)).toEqual({ limit: 10 });
+    expect(validated.temporalBindingsByCallId).toEqual({ 'execution-plan-notes-step': {} });
   });
 });

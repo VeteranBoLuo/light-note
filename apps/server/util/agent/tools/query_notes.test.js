@@ -97,7 +97,7 @@ describe('query_notes 工具', () => {
       },
     });
     expect(tool.transform(result, { keyword: '富文本' })).toBe(
-      '笔记类型精确分布：富文本 67 条、Markdown 2 条、手绘 16 条。',
+      '富文本笔记共 67 条。\n笔记类型精确分布：富文本 67 条、Markdown 2 条、手绘 16 条。',
     );
   });
 
@@ -116,9 +116,14 @@ describe('query_notes 工具', () => {
     expect(result).toMatchObject({ total: 2, typeFilter: 'markdown', view: 'type_breakdown' });
     expect(poolQuery.mock.calls.find(([sql]) => sql.includes('SELECT COUNT(*)'))?.[1]).toEqual(['user-1', 'markdown']);
     expect(tool.transform(result, { noteType: 'MD 笔记', view: 'distribution' })).toBe(
-      '笔记类型精确分布：富文本 67 条、Markdown 2 条、手绘 16 条。',
+      'Markdown笔记共 2 条。\n笔记类型精确分布：富文本 67 条、Markdown 2 条、手绘 16 条。',
     );
     expect(tool.getAnswerRequirements(result)).toEqual([
+      expect.objectContaining({
+        id: 'note.type_count.markdown',
+        appendText: 'Markdown笔记共 2 条。',
+        onMissing: 'replace',
+      }),
       expect.objectContaining({
         id: 'note.type_breakdown',
         appendText: '笔记类型精确分布：富文本 67 条、Markdown 2 条、手绘 16 条。',
@@ -126,6 +131,33 @@ describe('query_notes 工具', () => {
       }),
     ]);
     expect(searchPersonalKnowledge).not.toHaveBeenCalled();
+  });
+
+  it('类型分布视图同时保留用户直接询问的总数主事实', async () => {
+    mockMainQuery({
+      rows: [],
+      total: 85,
+      breakdown: [
+        { note_type: 'html', c: 67 },
+        { note_type: 'markdown', c: 2 },
+        { note_type: 'drawing', c: 16 },
+      ],
+    });
+
+    const result = await tool.execute({ view: 'type_breakdown' }, ctx);
+
+    expect(tool.transform(result, { view: 'type_breakdown' })).toBe(
+      '当前查询范围内共 85 条笔记。\n笔记类型精确分布：富文本 67 条、Markdown 2 条、手绘 16 条。',
+    );
+    expect(tool.getAnswerRequirements(result)).toEqual([
+      expect.objectContaining({ id: 'note.total_count', appendText: '当前查询范围内共 85 条笔记。' }),
+      expect.objectContaining({ id: 'note.type_breakdown' }),
+    ]);
+    expect(
+      applyAgentAnswerRequirements('只提到了分布。', tool.getAnswerRequirements(result), {
+        allowAuthoritativeReplacement: true,
+      }).answer,
+    ).toBe('当前查询范围内共 85 条笔记。\n笔记类型精确分布：富文本 67 条、Markdown 2 条、手绘 16 条。');
   });
 
   it('假模型沿用错误列表数量时，最终层确定性补回数据库类型分布', async () => {
@@ -145,8 +177,8 @@ describe('query_notes 工具', () => {
     });
 
     expect(repaired).toEqual({
-      answer: '笔记类型精确分布：富文本 67 条、Markdown 2 条、手绘 16 条。',
-      addedCount: 1,
+      answer: '富文本笔记共 67 条。\n笔记类型精确分布：富文本 67 条、Markdown 2 条、手绘 16 条。',
+      addedCount: 2,
     });
   });
 
