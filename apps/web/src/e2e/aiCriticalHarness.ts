@@ -4,6 +4,7 @@ import { createI18n, useI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import '@/assets/css/index.less';
 import ChatInputSection from '@/components/aiAssistant/ChatInputSection.vue';
+import MainQuestionPrompt from '@/components/aiAssistant/MainQuestionPrompt.vue';
 import AiToolConfirmationCard from '@/components/aiAssistant/AiToolConfirmationCard.vue';
 import BButton from '@/components/base/BasicComponents/BButton.vue';
 import useAiAssistantStore, { type AiAssistantIdentity } from '@/store/aiAssistant';
@@ -14,7 +15,12 @@ import {
   type AiAssistantLaunchPayload,
 } from '@/utils/aiEntry';
 import zhCN from '@/i18n/locales/zh-CN';
-import { buildAiCapabilityModuleOptions, type AiCapabilityModule } from '@/types/aiCapabilityScope';
+import {
+  buildAiCapabilityModuleOptions,
+  normalizeAiCapabilityModule,
+  type AiCapabilityModule,
+} from '@/types/aiCapabilityScope';
+import type { AiAttachment, AiAttachmentStatus } from '@/api/aiAttachmentApi';
 import {
   buildAiCapabilityPolicyOptions,
   normalizeAiCapabilityPolicyProfile,
@@ -27,6 +33,8 @@ const harnessParams = new URLSearchParams(window.location.search);
 const harnessTheme = harnessParams.get('theme') === 'night' ? 'night' : 'day';
 const harnessMobile = harnessParams.get('mobile') === '1';
 const harnessInitialPolicy = normalizeAiCapabilityPolicyProfile(harnessParams.get('policy'));
+const harnessInitialModule = normalizeAiCapabilityModule(harnessParams.get('module'));
+const harnessAttachmentStatus = harnessParams.get('attachment') as AiAttachmentStatus | null;
 applyDocumentTheme(harnessTheme);
 document.documentElement.classList.toggle('light-note-mobile-rendering', harnessMobile);
 
@@ -50,8 +58,27 @@ const app = createApp({
     const store = useAiAssistantStore();
     store.switchConversation(identity, '你好');
     const input = ref('');
-    const contexts = ref<Array<{ type: 'bookmark'; id: string; title: string }>>([]);
-    const capabilityModule = ref<AiCapabilityModule>('auto');
+    const contexts = ref<Array<{ type: 'bookmark'; id: string; title: string }>>(
+      harnessParams.get('material') === '1'
+        ? [{ type: 'bookmark', id: 'synthetic-bookmark-1', title: '合成书签' }]
+        : [],
+    );
+    const attachments = ref<AiAttachment[]>(
+      harnessAttachmentStatus
+        ? [
+            {
+              id: 'synthetic-attachment-1',
+              sourceType: 'temporary',
+              fileName: '产品需求说明.pdf',
+              fileType: 'application/pdf',
+              fileSize: 128_000,
+              status: harnessAttachmentStatus,
+              errorMessage: harnessAttachmentStatus === 'failed' ? '文件解析失败，请重试' : undefined,
+            },
+          ]
+        : [],
+    );
+    const capabilityModule = ref<AiCapabilityModule>(harnessInitialModule);
     const capabilityPolicyProfile = ref<AiCapabilityPolicyProfile>(harnessInitialPolicy);
     const sendCount = ref(0);
     const launch = ref<AiAssistantLaunchPayload | null>(null);
@@ -141,7 +168,7 @@ const app = createApp({
             h(ChatInputSection, {
               modelValue: input.value,
               'onUpdate:modelValue': (value: string) => (input.value = value),
-              isLoading: false,
+              isLoading: harnessParams.get('loading') === '1',
               quota: null,
               showTranslation: false,
               enableTranslation: false,
@@ -151,7 +178,8 @@ const app = createApp({
               stopFn: () => undefined,
               contexts: contexts.value,
               'onUpdate:contexts': (value: typeof contexts.value) => (contexts.value = value),
-              attachments: [],
+              attachments: attachments.value,
+              'onUpdate:attachments': (value: AiAttachment[]) => (attachments.value = value),
               capabilityModule: capabilityModule.value,
               capabilityModuleOptions: capabilityModuleOptions.value,
               capabilityPolicyProfile: capabilityPolicyProfile.value,
@@ -163,6 +191,13 @@ const app = createApp({
             h('output', { 'data-testid': 'send-count' }, String(sendCount.value)),
             h('output', { 'data-testid': 'selected-context' }, contexts.value.map((item) => item.title).join(',')),
             h('output', { 'data-testid': 'capability-policy' }, capabilityPolicyProfile.value),
+          ]),
+          h('section', { 'data-testid': 'recommendation-flow' }, [
+            h(MainQuestionPrompt, {
+              round: 1,
+              usedQuestions: [],
+              items: ['总结我今天新增的笔记', '列出最近 7 天新增的书签', '哪些待办今天需要处理？'],
+            }),
           ]),
           h('section', { class: 'ai-critical-harness__confirmation', 'data-testid': 'policy-confirmation-flow' }, [
             h(AiToolConfirmationCard, {

@@ -23,6 +23,40 @@ describe('Agent 工具结果元数据', () => {
     });
   });
 
+  it('用统一受控 facet 协议携带精确分类分布，并过滤无效维度和值', () => {
+    const metadata = buildQueryResultMetadata({
+      total: 85,
+      returned: 10,
+      facets: {
+        noteType: {
+          exact: true,
+          values: { html: 67, markdown: 2, drawing: 16, 'bad value!': 99 },
+        },
+        'bad-dimension': { exact: true, values: { leaked: 1 } },
+      },
+    });
+
+    expect(metadata.facets).toEqual({
+      noteType: {
+        exact: true,
+        values: { html: 67, markdown: 2, drawing: 16 },
+      },
+    });
+    expect(formatToolResultMetadataDisclosure(metadata, 'zh-CN')).toContain(
+      'noteType: html=67, markdown=2, drawing=16',
+    );
+    expect(
+      buildPublicToolQueryScopes([{ name: 'query_notes', status: 'success', resultMetadata: metadata }])[0],
+    ).toMatchObject({
+      facets: {
+        noteType: {
+          exact: true,
+          values: { html: 67, markdown: 2, drawing: 16 },
+        },
+      },
+    });
+  });
+
   it('最终投影携带已绑定时间口径、稳定 ID 覆盖和文本预算截断', () => {
     const args = { timeRange: '今天' };
     bindAgentTemporalRanges({

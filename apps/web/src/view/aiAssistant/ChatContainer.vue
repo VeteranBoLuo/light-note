@@ -2994,30 +2994,39 @@
     scroll-behavior: auto;
   }
 
-  /* 固定 40px 单行 + overflow:hidden 会在追问占满宽度时把末尾那条硬裁在
-     「继续基于上轮来源」左边,看起来像被按钮压住。允许换行、高度自适应:
-     空间够时仍是一行按钮右对齐,不够时按钮整条落到下一行,不再裁掉追问。 */
+  /* 快捷提问和“继续基于上轮来源”保持在同一条可预测的工具带中；问题列表自己横向滚动，
+     不再因容器变窄换成第二行，把输入框持续向上顶。 */
   .recommendation-dock {
     display: flex;
     min-width: 0;
     min-height: 40px;
     flex: 0 0 auto;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
-    gap: 4px;
-    padding: 0 1.5rem 4px;
+    gap: 6px;
+    padding: 0 1rem 3px;
     box-sizing: border-box;
     overflow: hidden;
     background: var(--background-color);
   }
 
+  .recommendation-dock :deep(.recommendation-container) {
+    width: auto;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
   .recommendation-dock .continue-sources-btn {
     flex: 0 0 auto;
-    margin-left: auto;
-    border: 1px solid color-mix(in srgb, var(--primary-color) 22%, transparent);
+    max-width: min(180px, 36%);
+    margin-left: 0;
+    overflow: hidden;
+    border: 1px solid var(--surface-border-color);
+    border-color: color-mix(in srgb, var(--primary-color) 22%, var(--surface-border-color));
     background: color-mix(in srgb, var(--primary-color) 6%, transparent);
     color: var(--primary-color);
     font-size: 12px;
+    text-overflow: ellipsis;
   }
 
   .ai-recommendation-fade-enter-active,
@@ -3030,17 +3039,17 @@
     opacity: 0;
   }
 
-  /* 换行本身已是默认行为；窄屏只额外收紧留白，并让按钮换行后左对齐。 */
   .chat-wrapper.is-narrow-520 .recommendation-dock {
-    min-height: 0;
-    align-items: stretch;
-    padding: 0 10px 2px;
+    min-height: 38px;
+    padding: 0 8px 2px;
   }
 
   .chat-wrapper.is-narrow-520 .recommendation-dock .continue-sources-btn {
-    width: auto;
-    margin-left: 0;
-    flex: 0 0 auto;
+    max-width: 42%;
+    min-height: 34px;
+    height: 34px;
+    padding-inline: 8px;
+    font-size: 11px;
   }
 
   @keyframes fadeIn {

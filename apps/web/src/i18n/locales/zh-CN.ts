@@ -5589,6 +5589,12 @@ export default {
       confirmationBlockedChat: '仅对话模式下不能执行写入；切换为自动助手后可继续确认。',
       confirmationBlockedReadOnly: '只读锁已阻止写入；关闭只读锁后可继续确认。',
     },
+    capabilitySettings: {
+      auto: '自动',
+      open: '调整本轮 AI 能力',
+      title: '本轮能力',
+      description: '默认自动判断；只有需要限制访问或模块时再调整。',
+    },
     quotaToday: '今日额度',
     quotaUnlimited: '站长 · 不限额度',
     quotaTip: '每日 AI token 额度，随成长等级提升（满级 400 万/日）',

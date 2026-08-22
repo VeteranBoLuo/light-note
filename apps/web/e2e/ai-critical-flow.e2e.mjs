@@ -77,6 +77,7 @@ try {
     (await page.$eval('[data-testid="capability-policy"]', (node) => node.textContent)) === 'auto',
     'AI 会话策略默认值不是 auto',
   );
+  await page.getByRole('button', { name: '调整本轮 AI 能力', exact: true }).click();
   await page.click('[aria-label="会话能力边界"]');
   await page.getByRole('option', { name: '仅对话', exact: true }).click();
   assert(
@@ -90,6 +91,7 @@ try {
   );
   await page.click('[aria-label="会话能力边界"]');
   await page.getByRole('option', { name: '自动助手', exact: true }).click();
+  await page.getByRole('button', { name: '调整本轮 AI 能力', exact: true }).click();
 
   const textarea = await page.$('[data-testid="mention-flow"] textarea');
   assert(textarea, '未找到 AI 输入框');

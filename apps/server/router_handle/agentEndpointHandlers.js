@@ -6767,7 +6767,9 @@ export async function agentChat(req, res) {
         actionRelated: verifyExecutionClaims,
         locale,
       });
-      const requiredFacts = applyAgentAnswerRequirements(claimGuard.answer, finalAnswerRequirements);
+      const requiredFacts = applyAgentAnswerRequirements(claimGuard.answer, finalAnswerRequirements, {
+        allowAuthoritativeReplacement: usedTools.filter((tool) => tool?.status === 'success').length === 1,
+      });
       finalContent = requiredFacts.answer;
       if (claimGuard.guarded) {
         actionPolicy = {
@@ -6959,7 +6961,9 @@ export async function agentChat(req, res) {
           locale,
         },
       );
-      const requiredFacts = applyAgentAnswerRequirements(claimGuard.answer, finalAnswerRequirements);
+      const requiredFacts = applyAgentAnswerRequirements(claimGuard.answer, finalAnswerRequirements, {
+        allowAuthoritativeReplacement: usedTools.filter((tool) => tool?.status === 'success').length === 1,
+      });
       finalContent = requiredFacts.answer;
       if (claimGuard.guarded) {
         actionPolicy = {

@@ -163,6 +163,31 @@ export function buildAgentFactBundle({ capability, toolRunId, goalId, result } =
     });
   }
 
+  for (const [dimension, facet] of Object.entries(metadata.facets || {})) {
+    for (const [facetValue, count] of Object.entries(facet?.values || {})) {
+      const normalizedCount = finiteCount(count);
+      if (normalizedCount == null) continue;
+      const normalizedDimension = boundedText(dimension, 64);
+      const normalizedFacetValue = boundedText(facetValue, 64);
+      facts.push({
+        goalId: resolvedGoalId,
+        capabilityId: capability.id,
+        kind: 'facet_count',
+        key: `${capability.id}.facet.${normalizedDimension}.${normalizedFacetValue}`,
+        value: normalizedCount,
+        unit: entityType,
+        label: `${capability.label} · ${normalizedDimension}=${normalizedFacetValue}`,
+        exact: facet?.exact === true,
+        qualifiers: Object.freeze({
+          ...qualifiers,
+          dimension: normalizedDimension,
+          facetValue: normalizedFacetValue,
+        }),
+        evidenceRef,
+      });
+    }
+  }
+
   const inlineLimit = Math.min(
     MAX_INLINE_RESOURCES,
     Math.max(1, Number(capability.queryBudget?.maxInlineRefs) || MAX_INLINE_RESOURCES),

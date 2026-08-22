@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { applyAgentAnswerRequirements } from '../answerRequirements.js';
 
 const poolQuery = vi.fn();
 const searchPersonalKnowledge = vi.fn();
@@ -10,9 +11,13 @@ const { default: tool } = await import('./query_notes.js');
 
 const ctx = { userId: 'user-1', userRole: 'user' };
 
-function mockMainQuery({ rows = [], total = 0 } = {}) {
-  // execute 里 Promise.all 先行查询后计数
-  poolQuery.mockResolvedValueOnce([rows]).mockResolvedValueOnce([[{ total }]]);
+function mockMainQuery({ rows = [], total = 0, breakdown = [], fallbackRows = [] } = {}) {
+  poolQuery.mockImplementation(async (sql) => {
+    if (sql.includes('n.id IN (?)')) return [fallbackRows];
+    if (sql.includes('GROUP BY note_type')) return [breakdown];
+    if (sql.includes('SELECT COUNT(*) as total')) return [[{ total }]];
+    return [rows];
+  });
 }
 
 describe('query_notes 工具', () => {
@@ -50,6 +55,123 @@ describe('query_notes 工具', () => {
     expect(searchPersonalKnowledge).not.toHaveBeenCalled();
   });
 
+  it('把完整笔记格式别名提升为结构化类型筛选，而不是标题正文关键词', async () => {
+    mockMainQuery({
+      rows: [{ id: 'n1', title: '普通标题', content: '<p>正文</p>', type: 'html', create_time: null }],
+      total: 67,
+      breakdown: [
+        { note_type: 'html', c: 67 },
+        { note_type: 'markdown', c: 2 },
+        { note_type: 'drawing', c: 16 },
+      ],
+    });
+
+    const result = await tool.execute({ keyword: '富文本' }, ctx);
+    const listCall = poolQuery.mock.calls.find(([sql]) => sql.includes('n.id, n.title'));
+    const [breakdownSql, breakdownParams] = poolQuery.mock.calls.find(([sql]) => sql.includes('GROUP BY note_type'));
+
+    expect(listCall).toBeUndefined();
+    expect(breakdownSql).toContain('GROUP BY note_type');
+    expect(breakdownParams).toEqual(['user-1']);
+    expect(result).toMatchObject({
+      total: 67,
+      typeFilter: 'html',
+      view: 'type_breakdown',
+      typeBreakdown: { html: 67, markdown: 2, drawing: 16 },
+      resultMetadata: {
+        facets: {
+          noteType: {
+            exact: true,
+            values: { html: 67, markdown: 2, drawing: 16 },
+          },
+        },
+      },
+    });
+    expect(tool.transform(result, { keyword: '富文本' })).toBe(
+      '笔记类型精确分布：富文本 67 条、Markdown 2 条、手绘 16 条。',
+    );
+  });
+
+  it('显式支持 Markdown、手绘及统计视图，并保持同一口径的完整分布', async () => {
+    mockMainQuery({
+      rows: [],
+      total: 2,
+      breakdown: [
+        { note_type: 'html', c: 67 },
+        { note_type: 'markdown', c: 2 },
+        { note_type: 'drawing', c: 16 },
+      ],
+    });
+
+    const result = await tool.execute({ noteType: 'MD 笔记', view: 'distribution' }, ctx);
+    expect(result).toMatchObject({ total: 2, typeFilter: 'markdown', view: 'type_breakdown' });
+    expect(poolQuery.mock.calls.find(([sql]) => sql.includes('SELECT COUNT(*)'))?.[1]).toEqual(['user-1', 'markdown']);
+    expect(tool.transform(result, { noteType: 'MD 笔记', view: 'distribution' })).toBe(
+      '笔记类型精确分布：富文本 67 条、Markdown 2 条、手绘 16 条。',
+    );
+    expect(tool.getAnswerRequirements(result)).toEqual([
+      expect.objectContaining({
+        id: 'note.type_breakdown',
+        appendText: '笔记类型精确分布：富文本 67 条、Markdown 2 条、手绘 16 条。',
+        onMissing: 'replace',
+      }),
+    ]);
+    expect(searchPersonalKnowledge).not.toHaveBeenCalled();
+  });
+
+  it('假模型沿用错误列表数量时，最终层确定性补回数据库类型分布', async () => {
+    mockMainQuery({
+      rows: [{ id: 'n1', title: '测试富文本', content: '', type: 'html', create_time: null }],
+      total: 67,
+      breakdown: [
+        { note_type: 'html', c: 67 },
+        { note_type: 'markdown', c: 2 },
+        { note_type: 'drawing', c: 16 },
+      ],
+    });
+
+    const result = await tool.execute({ keyword: '富文本' }, ctx);
+    const repaired = applyAgentAnswerRequirements('富文本笔记只有 5 条。', tool.getAnswerRequirements(result), {
+      allowAuthoritativeReplacement: true,
+    });
+
+    expect(repaired).toEqual({
+      answer: '笔记类型精确分布：富文本 67 条、Markdown 2 条、手绘 16 条。',
+      addedCount: 1,
+    });
+  });
+
+  it('类型列表查询只补精确计数，不会用分布覆盖模型返回的笔记明细', async () => {
+    mockMainQuery({
+      rows: [{ id: 'n1', title: '项目计划', content: '正文', type: 'html', create_time: null }],
+      total: 3,
+      breakdown: [
+        { note_type: 'html', c: 3 },
+        { note_type: 'markdown', c: 2 },
+      ],
+    });
+
+    const result = await tool.execute({ type: 'html', keyword: '项目', view: 'list' }, ctx);
+    const repaired = applyAgentAnswerRequirements('找到《项目计划》。', tool.getAnswerRequirements(result), {
+      allowAuthoritativeReplacement: true,
+    });
+
+    expect(repaired.answer).toBe('找到《项目计划》。\n\n富文本笔记共 3 条。');
+    expect(repaired.answer).toContain('项目计划');
+  });
+
+  it('不会从长关键词中抽取格式词，避免把真实内容检索改成类型筛选', async () => {
+    mockMainQuery({ rows: [], total: 0 });
+    searchPersonalKnowledge.mockResolvedValue({ hits: [] });
+
+    await tool.execute({ keyword: '富文本编辑器优化' }, ctx);
+
+    const [sql, params] = poolQuery.mock.calls[0];
+    expect(sql).toContain('n.title LIKE ?');
+    expect(params).toContain('%富文本编辑器优化%');
+    expect(params).not.toContain('html');
+  });
+
   it('返回后端实际解析的时间范围，空结果文案明确自然日口径', async () => {
     mockMainQuery({ rows: [], total: 0 });
 
@@ -61,7 +183,9 @@ describe('query_notes 工具', () => {
       start: expect.stringMatching(/^\d{4}-\d{2}-\d{2} 00:00:00$/),
       end: expect.stringMatching(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/),
     });
-    expect(text).toMatch(/^今天（\d{4}-\d{2}-\d{2}，截至 \d{2}:\d{2} · Asia\/Shanghai）没有找到笔记$/);
+    expect(text).toMatch(
+      /^笔记类型精确分布：富文本 0 条、Markdown 0 条、手绘 0 条。\n今天（\d{4}-\d{2}-\d{2}，截至 \d{2}:\d{2} · Asia\/Shanghai）没有找到笔记$/,
+    );
     expect(tool.summarize(result, { timeRange: '今天' })).toContain('今天（');
   });
 
@@ -94,7 +218,15 @@ describe('query_notes 工具', () => {
   });
 
   it('LIKE 零结果时降级语义索引，按索引顺序返回并二次校验归属', async () => {
-    mockMainQuery({ rows: [], total: 0 });
+    mockMainQuery({
+      rows: [],
+      total: 0,
+      // 二次查行的数据库顺序故意与索引顺序相反。
+      fallbackRows: [
+        { id: 'n1', title: '甲', content: '', type: 'markdown', create_time: null },
+        { id: 'n2', title: '乙', content: '', type: 'markdown', create_time: null },
+      ],
+    });
     searchPersonalKnowledge.mockResolvedValue({
       hits: [
         { type: 'note', id: 'n2' },
@@ -103,20 +235,12 @@ describe('query_notes 工具', () => {
         { type: 'note', id: 'n2' }, // 重复 id 去重
       ],
     });
-    // 二次查行：数据库返回顺序故意与索引顺序相反
-    poolQuery.mockResolvedValueOnce([
-      [
-        { id: 'n1', title: '甲', content: '', type: 'markdown', create_time: null },
-        { id: 'n2', title: '乙', content: '', type: 'markdown', create_time: null },
-      ],
-    ]);
-
     const result = await tool.execute({ keyword: '我记得有一篇讲开发计划的笔记' }, ctx);
 
     expect(searchPersonalKnowledge).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'user-1', scope: { types: ['note'] } }),
     );
-    const [sql, params] = poolQuery.mock.calls[2];
+    const [sql, params] = poolQuery.mock.calls[3];
     expect(sql).toContain('n.id IN (?)');
     expect(sql).toContain('n.create_by = ?');
     expect(params[0]).toEqual(['n2', 'n1']);
@@ -128,13 +252,12 @@ describe('query_notes 工具', () => {
   });
 
   it('降级保留 timeRange 条件，索引命中但超出时间范围的行被过滤', async () => {
-    mockMainQuery({ rows: [], total: 0 });
+    mockMainQuery({ rows: [], total: 0, fallbackRows: [] });
     searchPersonalKnowledge.mockResolvedValue({ hits: [{ type: 'note', id: 'n1' }] });
-    poolQuery.mockResolvedValueOnce([[]]); // 时间条件过滤后无行
 
     const result = await tool.execute({ keyword: '开发计划相关的笔记', timeRange: '最近7天' }, ctx);
 
-    const [sql] = poolQuery.mock.calls[2];
+    const [sql] = poolQuery.mock.calls[3];
     expect(sql).toContain('n.create_time >= ?');
     expect(result.items).toEqual([]);
     expect(result.total).toBe(0);
@@ -166,6 +289,7 @@ describe('query_notes 工具', () => {
     expect(semantic).toContain('没有精确匹配');
     expect(semantic).toContain('语义相关');
     expect(semantic).not.toContain('共 1 条');
+    expect(semantic).not.toContain('笔记类型精确分布');
 
     const like = tool.transform(
       {

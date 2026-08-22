@@ -25,6 +25,7 @@
 
 | 编号                                                                                           | 日期       | 模块                | 关键词                                             | 状态         |
 | ---------------------------------------------------------------------------------------------- | ---------- | ------------------- | -------------------------------------------------- | ------------ |
+| [LN-PIT-113](#ln-pit-113受控分类统计不能降级为全文关键词检索或让模型从列表猜总量)              | 2026-08-22 | Agent、工具协议     | facet、笔记类型、精确分布、连续追问                | 已修复待合入 |
 | [LN-PIT-112](#ln-pit-112agent-会话能力边界不能只过滤工具或只隐藏前端入口)                      | 2026-08-21 | Agent、前后端策略   | chat-only、read-only、材料、确认、Manifest         | 已修复待合入 |
 | [LN-PIT-111](#ln-pit-111turnspec-升级和确定性工作流不能一刀切替换旧-planner)                   | 2026-08-21 | Agent、Runtime V3   | TurnSpec 3.1、handle、workflow、Planner 回退       | 已修复待合入 |
 | [LN-PIT-110](#ln-pit-110agent-精确事实和处理记录不能由模型文案或前端展示反推)                  | 2026-08-21 | Agent、结果协议     | FactBundle、ExecutionReceipt、ResponseEnvelope     | 已修复待合入 |
@@ -2541,6 +2542,17 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **防回归约束：** 不得从回答文字、source/entityRef 数量、卡片存在或检索标签反推出工具状态；不得把私有工具参数、owner、原始异常或材料正文放进公开 receipt。权威 exact fact 必须由服务端渲染且不可被 Composer 覆盖。响应协议增加字段时同步更新 SSE normalizer、恢复链、消息类型和历史加载，任一链路丢字段都视为协议回归。
 - **验证方法：** Mock 成功、空结果、部分结果、文本预算截断、工具失败和混合多工具；断言只有成功工具产生 FactBundle，exact facts 与公共披露稳定，receipt/envelope 在同步响应、`response.completed`、恢复 snapshot 和前端 normalize 后一致。全部为确定性测试，不调用真实模型。
 - **相关代码：** `apps/server/util/agent/runtime/v3/factBundle.js`、`executionReceipt.js`、`responseEnvelope.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/server/util/agent/sseLifecycle.js`、`apps/web/src/types/aiExecutionReceipt.ts`、`apps/web/src/utils/aiSse.ts`、`apps/web/src/utils/aiStreamRecovery.ts`、`apps/web/src/components/aiAssistant/ChatMessageItem.vue`。
+
+### LN-PIT-113：受控分类统计不能降级为全文关键词检索或让模型从列表猜总量
+
+- **现象：** 用户先问笔记总数，再问“其中富文本有多少”，工具只返回标题或正文包含“富文本”的少量笔记，模型却把当前返回列表当成富文本类型总量；后续“那 Markdown 呢”又会继承这条错误自然语言结论。账号里明明同时存在大量富文本、手绘和少量 Markdown，回答仍可能稳定地少报。
+- **影响范围：** 笔记格式、文件类别及以后新增的状态、来源、可见性等受控分类统计，尤其是总数后的分类追问、分类后的剩余项追问和跨轮统计。
+- **误导线索：** `query_notes` 已执行成功、返回项都确实是富文本笔记，且最终回答有引用来源，看起来只是模型算错。实际 SQL 根本没有按笔记 `type` 分组；模型把受控分类名放进 `keyword LIKE title/content` 后，拿到的是“提到富文本的笔记”，不是“类型为富文本的笔记”。来源真实不代表查询口径正确。
+- **根因：** 工具 schema 只声明自由文本关键词和时间范围，没有受控类型槽、统计视图及分类分布结果；工具转换层只输出当前列表和总量，事实协议又只能记录整个查询的 `total`，无法表达同一查询口径下各分类的精确数量。连续对话因此只能继承模型摘要，而不是继承结构化分类事实。
+- **修复：** 为受控分类建立唯一枚举归一化层和 SQL canonical expression。`query_notes` 显式支持 `type` 与 `view=type_breakdown`，并始终在同一 owner、关键词和时间口径下额外查询不叠加类型筛选的完整分布。完整格式别名若被模型误放进 `keyword`，只在“整个值恰好等于受控别名”时提升为类型槽；长关键词中的同名词仍按正文检索。通用查询元数据新增有界 `facets`，FactBundle 和公开查询口径按维度投影精确分类事实；单工具纯统计回答由安全 `answerRequirements` 直接收口成数据库事实，复合问题只补充而不覆盖其他工具回答，全程不读取 raw 正文或内部 ID。
+- **防回归约束：** 分类名不得仅靠 Prompt 约定，也不得在 Handler 用问题正则拼 SQL；受控枚举、别名、数据库兼容值和显示标签必须由领域 facet 模块统一维护。列表 `returned`、筛选后 `total` 与未叠加该分类筛选的 `facet values` 是三个不同事实，禁止相互代替。只有工具显式声明 `facet.exact=true` 时才能在事实包和用户答案中称为精确分布；语义召回不得把候选集分布冒充精确分类统计。完整别名兼容不得从长句抽词，避免把“富文本编辑器优化”错误改成 `type=html`。
+- **验证方法：** Mock 同一账号 `html=67 / markdown=2 / drawing=16`，分别验证模型传 `type=html`、把“富文本”误传 `keyword`、使用 `MD 笔记` 别名和请求统计视图时都生成相同精确 facet；断言“富文本编辑器优化”仍进入 LIKE。验证类型筛选只作用于列表与筛选总量、完整分布 SQL 不带类型条件，FactBundle 生成三条 exact `facet_count`，公开 query scope 保留有界 facets，最终回答漏掉分布时确定性补回。全套测试使用 mock 数据和假模型，不调用真实供应商。
+- **相关代码：** `apps/server/util/agent/noteTypeFacet.js`、`apps/server/util/agent/tools/query_notes.js`、`apps/server/util/agent/toolResultMetadata.js`、`apps/server/util/agent/runtime/v3/factBundle.js`、`apps/server/util/agent/runtime/v3/capabilityManifest.js`。
 
 ### LN-PIT-112：Agent 会话能力边界不能只过滤工具或只隐藏前端入口
 

@@ -73,6 +73,43 @@ describe('Agent V3 FactBundle', () => {
     );
   });
 
+  it('把通用 facet 元数据投影为可继承的精确结构化事实', () => {
+    const bundle = buildAgentFactBundle({
+      capability,
+      toolRunId: 'tool-run-note-types',
+      goalId: 'goal-note-types',
+      result: {
+        status: 'success',
+        summary: '笔记格式分布',
+        sources: [],
+        resultMetadata: {
+          totalExact: true,
+          totalCount: 85,
+          returned: 10,
+          complete: false,
+          partial: true,
+          facets: {
+            noteType: { exact: true, values: { html: 67, markdown: 2, drawing: 16 } },
+          },
+        },
+      },
+    });
+
+    expect(bundle.facts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'facet_count',
+          key: 'note.query.facet.noteType.html',
+          value: 67,
+          exact: true,
+          qualifiers: expect.objectContaining({ dimension: 'noteType', facetValue: 'html' }),
+        }),
+        expect.objectContaining({ kind: 'facet_count', key: 'note.query.facet.noteType.markdown', value: 2 }),
+        expect.objectContaining({ kind: 'facet_count', key: 'note.query.facet.noteType.drawing', value: 16 }),
+      ]),
+    );
+  });
+
   it('公开资源 URL 只接受无凭据的 http(s)，正文和危险协议不会进入事实包', () => {
     const bundle = buildAgentFactBundle({
       capability,
