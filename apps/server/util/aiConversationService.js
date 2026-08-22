@@ -345,8 +345,11 @@ export async function getAiConversation(identity, conversationId, options = {}, 
   const messageLimit = Math.max(0, Math.min(200, Number(options.messageLimit ?? 100)));
   if (!messageLimit) return { ...mapConversation(conversation), messages: [] };
   const [rows] = await database.query(
-    `SELECT * FROM ai_messages WHERE conversation_id = ?
-     ORDER BY create_time ASC, id ASC LIMIT ?`,
+    `SELECT * FROM (
+       SELECT * FROM ai_messages WHERE conversation_id = ?
+       ORDER BY create_time DESC, id DESC LIMIT ?
+     ) AS recent_messages
+     ORDER BY create_time ASC, id ASC`,
     [conversation.id, messageLimit],
   );
   const messageIds = rows.map((row) => row.id);
@@ -399,6 +402,90 @@ export async function getAiConversation(identity, conversationId, options = {}, 
       ),
     ),
   };
+}
+
+/**
+ * 为 Agent V3 提供服务端权威的轻量最近对话。这里只读取语义连续性所需字段，
+ * 不加载来源、证据和反馈；sourceMessageId 存在时只返回当前用户消息之前的时间线。
+ */
+export async function getAiConversationRecentDialogue(identity, conversationId, options = {}, database = pool) {
+  const conversation = await getOwnedConversationRow(database, identity, conversationId);
+  if (!conversation) throw serviceError('CONVERSATION_NOT_FOUND', '会话不存在或无权访问', 404);
+  const limit = Math.max(2, Math.min(40, Number(options.limit) || 24));
+  const sourceMessageId = asString(options.sourceMessageId, 36);
+  const fields = `m.id, m.role, m.content, m.status, m.version_group_id,
+    m.create_time, m.update_time`;
+  let rows;
+  if (sourceMessageId) {
+    [rows] = await database.query(
+      `SELECT ${fields}
+       FROM ai_messages AS m
+       INNER JOIN ai_messages AS anchor
+         ON anchor.id = ? AND anchor.conversation_id = m.conversation_id
+       WHERE m.conversation_id = ? AND m.role IN ('user', 'assistant') AND m.status = 'completed'
+         AND m.id <> anchor.id AND m.create_time <= anchor.create_time
+       ORDER BY m.create_time DESC, m.id DESC LIMIT ?`,
+      [sourceMessageId, conversation.id, limit],
+    );
+  } else {
+    [rows] = await database.query(
+      `SELECT ${fields}
+       FROM ai_messages AS m
+       WHERE m.conversation_id = ? AND m.role IN ('user', 'assistant') AND m.status = 'completed'
+       ORDER BY m.create_time DESC, m.id DESC LIMIT ?`,
+      [conversation.id, limit],
+    );
+  }
+  return rows.reverse().map((row) => ({
+    id: String(row.id),
+    role: row.role,
+    content: row.content || '',
+    status: row.status || 'completed',
+    versionGroupId: row.version_group_id || null,
+    createdAt: row.create_time,
+    updatedAt: row.update_time,
+  }));
+}
+
+/**
+ * 按服务端签发的 Dialogue Anchor 重新读取精确消息集合。
+ *
+ * 调用方只能提交已持久化 SourceSet 中的消息 ID；这里再次校验 conversation owner、
+ * 消息归属与 completed 状态，并要求整组仍完整可用。任何缺失都失败关闭，避免把残缺
+ * 对话悄悄当成完整材料继续生成产物。
+ */
+export async function getAiConversationDialogueByIds(identity, conversationId, messageIds, database = pool) {
+  const conversation = await getOwnedConversationRow(database, identity, conversationId);
+  if (!conversation) throw serviceError('CONVERSATION_NOT_FOUND', '会话不存在或无权访问', 404);
+  const ids = [
+    ...new Set((Array.isArray(messageIds) ? messageIds : []).map((value) => asString(value, 36)).filter(Boolean)),
+  ].slice(0, 40);
+  if (!ids.length) throw serviceError('DIALOGUE_ANCHOR_INVALID', '对话材料锚点无效', 400);
+  const placeholders = ids.map(() => '?').join(',');
+  const [rows] = await database.query(
+    `SELECT id, role, content, status, version_group_id, create_time, update_time
+       FROM ai_messages
+      WHERE conversation_id = ? AND id IN (${placeholders})
+        AND role IN ('user', 'assistant') AND status = 'completed'
+      ORDER BY create_time ASC, id ASC`,
+    [conversation.id, ...ids],
+  );
+  const byId = new Map(rows.map((row) => [String(row.id), row]));
+  if (ids.some((id) => !byId.has(id))) {
+    throw serviceError('DIALOGUE_ANCHOR_STALE', '对话材料已变化，请重新选择要整理的对话', 409);
+  }
+  return ids.map((id) => {
+    const row = byId.get(id);
+    return {
+      id,
+      role: row.role,
+      content: row.content || '',
+      status: row.status || 'completed',
+      versionGroupId: row.version_group_id || null,
+      createdAt: row.create_time,
+      updatedAt: row.update_time,
+    };
+  });
 }
 
 export async function listAiMessageVersions(identity, conversationId, messageId, database = pool) {

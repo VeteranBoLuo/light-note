@@ -81,7 +81,12 @@ describe('get_checkin_ranking 工具', () => {
         },
       ],
     });
-    expect(raw.items.some((item) => 'userId' in item)).toBe(false);
+    expect(tool.getDependencyRefs(raw)).toEqual([
+      { type: 'user', id: 'user-gamma' },
+      { type: 'user', id: 'user-alpha' },
+      { type: 'user', id: 'user-beta' },
+    ]);
+    expect(tool.transform(raw)).not.toContain('user-');
   });
 
   it('支持指定周期的签到天数排行和注册用户分群', async () => {
@@ -95,7 +100,7 @@ describe('get_checkin_ranking 工具', () => {
     const [sql, params] = mocks.query.mock.calls[0];
 
     expect(sql).not.toContain('u.role NOT IN');
-    expect(sql).toContain('u.create_time >= ? AND u.create_time <= ?');
+    expect(sql).toContain('u.create_time >= ? AND u.create_time < ?');
     expect(params).toHaveLength(2);
     expect(raw).toMatchObject({
       rankingType: 'checkin_days',

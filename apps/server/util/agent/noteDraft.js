@@ -65,6 +65,7 @@ const MATERIAL_TYPE_LABELS = Object.freeze({
   todo: '待办',
   tag: '标签',
   text: '用户粘贴文本',
+  dialogue: '选定的会话片段',
 });
 
 const DRAFT_TOOL = {
@@ -199,9 +200,17 @@ export function normalizeNoteDraftRefinement(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const confirmationId = String(value.confirmationId || '').trim();
   const confirmationToken = String(value.confirmationToken || value.token || '').trim();
-  if (!confirmationId || confirmationId.length > 128) return null;
-  if (!/^[A-Za-z0-9_-]{40,}$/.test(confirmationToken)) return null;
-  return { confirmationId, confirmationToken };
+  const artifactVersionId = String(value.artifactVersionId || '').trim();
+  const hasConfirmation =
+    Boolean(confirmationId) && confirmationId.length <= 128 && /^[A-Za-z0-9_-]{40,}$/.test(confirmationToken);
+  const hasArtifact = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    artifactVersionId,
+  );
+  if (!hasConfirmation && !hasArtifact) return null;
+  return {
+    ...(hasConfirmation ? { confirmationId, confirmationToken } : {}),
+    ...(hasArtifact ? { artifactVersionId } : {}),
+  };
 }
 
 function normalizeIntentHistory(values) {
@@ -615,7 +624,9 @@ export function createNoteDraftPrivateContext({
   contextRefs = [],
   scopeRefs = [],
   attachmentIds = [],
+  sourceSetId = '',
 } = {}) {
+  const normalizedSourceSetId = String(sourceSetId || '').trim();
   return {
     kind: NOTE_DRAFT_CONTEXT_KIND,
     version: NOTE_DRAFT_CONTEXT_VERSION,
@@ -629,6 +640,11 @@ export function createNoteDraftPrivateContext({
     ),
     scopeRefs: normalizeStableRefs(scopeRefs, new Set(['note_branch']), MAX_SCOPE_REFS),
     attachmentIds: normalizeAttachmentIds(attachmentIds),
+    sourceSetId: /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      normalizedSourceSetId,
+    )
+      ? normalizedSourceSetId
+      : '',
   };
 }
 
@@ -640,7 +656,8 @@ export function normalizeNoteDraftPrivateContext(value) {
     !normalized.sourceMessage &&
     !normalized.contextRefs.length &&
     !normalized.scopeRefs.length &&
-    !normalized.attachmentIds.length
+    !normalized.attachmentIds.length &&
+    !normalized.sourceSetId
   ) {
     return null;
   }

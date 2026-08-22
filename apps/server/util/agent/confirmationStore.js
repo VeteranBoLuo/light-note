@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import redisClient from '../redisClient.js';
 import { createAgentActionIdempotencyKey } from './actionIdempotency.js';
+import { normalizeAgentUuid } from './identifiers.js';
 import { stableAgentErrorCode } from './logSafety.js';
 
 const PREFIX = 'agent:confirm:';
@@ -191,6 +192,16 @@ function normalizePrivateContext(value) {
 }
 
 export function publicToolConfirmation(token, confirmation, expiresIn = TTL_SECONDS) {
+  const artifact = confirmation?.privateContext?.agentArtifactVersion;
+  const artifactId = normalizeAgentUuid(artifact?.id);
+  const artifactVersion = artifactId
+    ? {
+        id: artifactId,
+        artifactChainId: normalizeAgentUuid(artifact.artifactChainId),
+        version: Math.max(1, Math.trunc(Number(artifact.version) || 1)),
+        state: ['draft', 'ready'].includes(artifact.state) ? artifact.state : 'ready',
+      }
+    : null;
   return {
     token,
     id: confirmation.id,
@@ -200,6 +211,7 @@ export function publicToolConfirmation(token, confirmation, expiresIn = TTL_SECO
     args: confirmation.args,
     riskLevel: confirmation.riskLevel,
     preview: confirmation.preview,
+    ...(artifactVersion ? { artifactVersion } : {}),
     expiresIn,
     expiresAt:
       confirmation.expiresAt || new Date(Date.now() + Math.max(0, Number(expiresIn || 0)) * 1000).toISOString(),
@@ -522,5 +534,6 @@ export async function rejectToolConfirmation(token, ownerKey, expectedSessionId)
     id: confirmation.id,
     toolName: confirmation.toolName,
     originRequestId: confirmation.originRequestId || null,
+    privateContext: confirmation.privateContext || null,
   };
 }

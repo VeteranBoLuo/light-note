@@ -5,27 +5,20 @@ import {
   plannerArgumentsSchema,
   projectPlannerExecutionContext,
 } from './executionContext.js';
+import { authoritativeTemporalArgumentsForGoal } from './v3/temporalConstraints.js';
+import { DEFAULT_AGENT_STORAGE_TIME_ZONE, DEFAULT_AGENT_TIME_ZONE, normalizeAgentTimeZone } from '../timeRange.js';
 
 export const EXECUTION_PLAN_VERSION = '2.0';
 export const EXECUTION_PLAN_TOOL_NAME = 'submit_execution_plan';
-const DEFAULT_AGENT_TIME_ZONE = 'Asia/Shanghai';
 const MAX_PLANNER_ATTEMPTS = 3;
 const MAX_LATEST_MESSAGE_CHARS = 4_000;
 
-function validTimeZone(value) {
-  const timeZone = String(value || '').trim();
-  if (!timeZone || timeZone.length > 64) return '';
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone }).format(new Date(0));
-    return timeZone;
-  } catch {
-    return '';
-  }
-}
-
 export function buildPlannerTemporalContext({ timeZone, now = new Date() } = {}) {
-  const resolvedTimeZone =
-    validTimeZone(timeZone) || validTimeZone(process.env.AGENT_DEFAULT_TIME_ZONE) || DEFAULT_AGENT_TIME_ZONE;
+  const resolvedTimeZone = normalizeAgentTimeZone(
+    timeZone,
+    process.env.AGENT_DEFAULT_TIME_ZONE || DEFAULT_AGENT_TIME_ZONE,
+  );
+  const storageTimeZone = normalizeAgentTimeZone(process.env.AGENT_STORAGE_TIME_ZONE, DEFAULT_AGENT_STORAGE_TIME_ZONE);
   const instant = now instanceof Date && Number.isFinite(now.getTime()) ? now : new Date();
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat('en-CA', {
@@ -45,8 +38,10 @@ export function buildPlannerTemporalContext({ timeZone, now = new Date() } = {})
   const currentDate = `${parts.year}-${parts.month}-${parts.day}`;
   return Object.freeze({
     timeZone: resolvedTimeZone,
+    storageTimeZone,
     currentDate,
     currentDateTime: `${currentDate} ${parts.hour}:${parts.minute}:${parts.second}`,
+    currentInstant: instant.toISOString(),
   });
 }
 
@@ -54,9 +49,26 @@ export function normalizePlannerExecutionContext(value = {}) {
   return projectPlannerExecutionContext(value, []);
 }
 
-function embeddedStepSchema(candidateTools, executionContext) {
-  const variants = (Array.isArray(candidateTools) ? candidateTools : []).map((tool) => {
+function stepCandidates(route, candidateTools) {
+  const toolsByName = new Map((Array.isArray(candidateTools) ? candidateTools : []).map((tool) => [tool?.name, tool]));
+  const routed = (Array.isArray(route?.goalRoutes) ? route.goalRoutes : []).flatMap((goalRoute) =>
+    (goalRoute.status === 'ready' ? goalRoute.toolNames || [] : []).map((toolName) => ({
+      goalId: goalRoute.goalId,
+      tool: toolsByName.get(toolName),
+    })),
+  );
+  if (routed.some((entry) => entry.tool)) return routed.filter((entry) => entry.tool);
+  return (Array.isArray(candidateTools) ? candidateTools : []).map((tool) => ({ goalId: '', tool }));
+}
+
+function embeddedStepSchema(turnSpec, route, candidateTools, executionContext) {
+  const variants = stepCandidates(route, candidateTools).map(({ goalId, tool }) => {
     const argumentBindings = plannerArgumentBindingsSchema(tool, executionContext);
+    const capability = route?.capabilityByTool instanceof Map ? route.capabilityByTool.get(tool.name) : null;
+    const authoritativeArguments = new Set([
+      ...Object.keys(authoritativeTemporalArgumentsForGoal(turnSpec, goalId)),
+      ...(Array.isArray(capability?.temporalSlots) ? capability.temporalSlots.map((slot) => slot.name) : []),
+    ]);
     const required = ['id', 'goalId', 'toolName', 'arguments', 'dependsOn', 'expectedResultKind'];
     if (argumentBindings?.required?.length) required.push('argumentBindings');
     return {
@@ -64,12 +76,14 @@ function embeddedStepSchema(candidateTools, executionContext) {
       additionalProperties: false,
       properties: {
         id: { type: 'string', minLength: 1, maxLength: 64 },
-        goalId: { type: 'string', minLength: 1, maxLength: 40 },
+        goalId: goalId ? { type: 'string', enum: [goalId] } : { type: 'string', minLength: 1, maxLength: 40 },
         toolName: { type: 'string', enum: [tool.name] },
-        arguments: plannerArgumentsSchema(tool, executionContext),
+        arguments: plannerArgumentsSchema(tool, executionContext, authoritativeArguments),
         ...(argumentBindings ? { argumentBindings } : {}),
         dependsOn: { type: 'array', maxItems: 8, items: { type: 'string', minLength: 1, maxLength: 64 } },
-        expectedResultKind: { type: 'string', minLength: 1, maxLength: 80 },
+        expectedResultKind: capability?.resultKind
+          ? { type: 'string', enum: [capability.resultKind] }
+          : { type: 'string', minLength: 1, maxLength: 80 },
       },
       required,
     };
@@ -78,7 +92,7 @@ function embeddedStepSchema(candidateTools, executionContext) {
   return { oneOf: variants };
 }
 
-export function buildExecutionPlanToolDefinition({ turnSpec, candidateTools = [], executionContext = {} } = {}) {
+export function buildExecutionPlanToolDefinition({ turnSpec, route, candidateTools = [], executionContext = {} } = {}) {
   return {
     type: 'function',
     function: {
@@ -93,7 +107,12 @@ export function buildExecutionPlanToolDefinition({ turnSpec, candidateTools = []
           steps: {
             type: 'array',
             maxItems: 8,
-            items: embeddedStepSchema(candidateTools, normalizeAuthoritativeExecutionContext(executionContext)),
+            items: embeddedStepSchema(
+              turnSpec,
+              route,
+              candidateTools,
+              normalizeAuthoritativeExecutionContext(executionContext),
+            ),
           },
           deferredGoalIds: {
             type: 'array',
@@ -185,7 +204,7 @@ function plannerPrompt(repair = false) {
     '依赖未满足的目标写入 deferredGoalIds，不得猜测目标 ID 或提前调用。',
     '候选工具缺少会改变结果的必需参数时，不得猜值；不要为该目标生成 step。',
     'payload.availableContext 中的引用、附件 ID 与 resourceBindings 已由服务端完成归属校验。resourceBindings 声明的参数由服务端注入：唯一候选时省略该参数；多个候选时用 step.argumentBindings 选择其中的稳定引用。不得抄写、改写或编造资源字段。',
-    'payload.temporalContext 是服务端提供的权威当前日期、时间与用户时区。遇到“今天/明天/后天/下周”等相对时间，必须据此换算成工具 schema 要求的具体日期时间，禁止把相对说法直接填进工具参数。',
+    'Manifest 声明的 temporalSlots 属于服务端权威参数，已从参数 schema 中移除：不得填写、改写或猜测。服务端会依据 TurnSpec 和 payload.temporalContext 注入；缺失时应让计划校验失败并进入澄清。',
     repair ? '上一次执行计划未通过服务端校验；请严格按同一 TurnSpec 修复。' : '',
     `必须且只能调用 ${EXECUTION_PLAN_TOOL_NAME}，不要输出普通文本或额外工具调用。`,
   ]
@@ -223,6 +242,7 @@ export async function planAgentExecution({
       requestKind: turnSpec.requestKind,
       goals: turnSpec.goals,
       groundingPolicy: turnSpec.groundingPolicy,
+      temporalConstraints: turnSpec.temporalConstraints || [],
       outputContract: turnSpec.outputContract,
     },
     completedGoalIds: [...new Set(completedGoalIds.map(String))],
@@ -252,6 +272,7 @@ export async function planAgentExecution({
         tools: [
           buildExecutionPlanToolDefinition({
             turnSpec,
+            route,
             candidateTools,
             executionContext: authoritativeExecutionContext,
           }),

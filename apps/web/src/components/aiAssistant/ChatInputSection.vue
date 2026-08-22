@@ -2,7 +2,21 @@
   <footer class="input-section">
     <div class="input-container">
       <div v-if="!isMobile" class="context-actions">
+        <BSelect
+          v-model:value="capabilityPolicyValue"
+          class="capability-policy-select"
+          :options="capabilityPolicyOptions"
+          :aria-label="t('ai.capabilityPolicy.label')"
+        />
+        <BSelect
+          v-model:value="capabilityModuleValue"
+          class="capability-module-select"
+          :options="capabilityModuleOptions"
+          :aria-label="t('ai.capabilityScope.label')"
+          :disabled="capabilityPolicyProfile === 'chat_only'"
+        />
         <AiContextPicker
+          v-if="capabilityPolicyProfile !== 'chat_only'"
           :model-value="contexts"
           :scope-model-value="scopeRefs"
           @update:model-value="$emit('update:contexts', $event)"
@@ -10,6 +24,7 @@
           @file-selected="attachSelectedCloudFile"
         />
         <AiAttachmentPicker
+          v-if="capabilityPolicyProfile !== 'chat_only'"
           ref="attachmentPicker"
           :model-value="attachments"
           :prepare-action-fn="prepareAttachmentActionFn"
@@ -18,7 +33,25 @@
         />
       </div>
       <div v-else class="mobile-context-actions">
+        <BSelect
+          v-model:value="capabilityPolicyValue"
+          class="capability-policy-select capability-policy-select--mobile"
+          :options="capabilityPolicyOptions"
+          :aria-label="t('ai.capabilityPolicy.label')"
+        />
+        <BSelect
+          v-if="capabilityPolicyProfile !== 'chat_only'"
+          v-model:value="capabilityModuleValue"
+          class="capability-module-select capability-module-select--mobile"
+          :options="capabilityModuleOptions"
+          :aria-label="t('ai.capabilityScope.label')"
+          :disabled="capabilityPolicyProfile === 'chat_only'"
+        />
+        <span v-if="capabilityPolicyProfile === 'chat_only'" class="chat-only-boundary-hint">
+          {{ t('ai.capabilityPolicy.noDataAccess') }}
+        </span>
         <BButton
+          v-else
           class="mobile-context-toggle"
           :aria-label="t('ai.material.mobileTitle')"
           :title="t('ai.material.mobileTitle')"
@@ -209,6 +242,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import AiContextPicker from './AiContextPicker.vue';
   import AiAttachmentPicker from './AiAttachmentPicker.vue';
   import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
@@ -221,6 +255,9 @@
   import { mergePromptSuggestion, type AiAttachmentActionRequest } from './attachmentActions';
   import icon from '@/config/icon';
   import { MAX_AI_SCOPE_REFS, type AiResourceContext, type AiScopeRef } from '@/types/aiScope';
+  import type { BaseOptions } from '@/config/bookmarkCfg';
+  import type { AiCapabilityModule } from '@/types/aiCapabilityScope';
+  import type { AiCapabilityPolicyProfile } from '@/types/aiCapabilityPolicy';
 
   const { t } = useI18n();
 
@@ -248,9 +285,19 @@
       contexts: AiResourceContext[];
       scopeRefs?: AiScopeRef[];
       attachments: AiAttachment[];
+      capabilityModule?: AiCapabilityModule;
+      capabilityModuleOptions?: BaseOptions[];
+      capabilityPolicyProfile?: AiCapabilityPolicyProfile;
+      capabilityPolicyOptions?: BaseOptions[];
       prepareAttachmentActionFn: (request: AiAttachmentActionRequest) => Promise<void>;
     }>(),
-    { scopeRefs: () => [] },
+    {
+      scopeRefs: () => [],
+      capabilityModule: 'auto',
+      capabilityModuleOptions: () => [],
+      capabilityPolicyProfile: 'auto',
+      capabilityPolicyOptions: () => [],
+    },
   );
 
   const emit = defineEmits<{
@@ -260,6 +307,8 @@
     (e: 'update:contexts', value: AiResourceContext[]): void;
     (e: 'update:scopeRefs', value: AiScopeRef[]): void;
     (e: 'update:attachments', value: AiAttachment[]): void;
+    (e: 'update:capabilityModule', value: AiCapabilityModule): void;
+    (e: 'update:capabilityPolicyProfile', value: AiCapabilityPolicyProfile): void;
   }>();
 
   const mobileActionsOpen = ref(false);
@@ -278,6 +327,21 @@
       adjustTextareaHeight();
     },
   });
+  const capabilityModuleValue = computed({
+    get: () => props.capabilityModule || 'auto',
+    set: (value: unknown) => emit('update:capabilityModule', String(value || 'auto') as AiCapabilityModule),
+  });
+  const capabilityPolicyValue = computed({
+    get: () => props.capabilityPolicyProfile || 'auto',
+    set: (value: unknown) =>
+      emit('update:capabilityPolicyProfile', String(value || 'auto') as AiCapabilityPolicyProfile),
+  });
+  watch(
+    () => props.capabilityPolicyProfile,
+    (profile) => {
+      if (profile === 'chat_only') mobileActionsOpen.value = false;
+    },
+  );
   // 文件直传确认后原文件就已经可用；OCR/文字提取只影响总结问答，不再阻断发送、保存或插图。
   const attachmentBlocked = computed(() =>
     props.attachments.some((attachment) => attachment.status === 'awaiting_upload'),
@@ -536,6 +600,49 @@
     margin-bottom: 6px;
   }
 
+  .capability-module-select {
+    width: 128px;
+    flex: 0 0 128px;
+  }
+
+  .capability-policy-select {
+    width: 112px;
+    flex: 0 0 112px;
+  }
+
+  .capability-policy-select :deep(.select-trigger) {
+    min-height: 34px;
+    border-color: var(--surface-border-color);
+    background: var(--card-background);
+    color: var(--text-color);
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .chat-only-boundary-hint {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 0 8px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 9px;
+    color: var(--desc-color);
+    background: var(--card-background);
+    font-size: 0.75rem;
+    white-space: nowrap;
+  }
+
+  .capability-module-select :deep(.select-trigger) {
+    min-height: 34px;
+    border-color: var(--surface-border-color);
+    border-color: color-mix(in srgb, var(--primary-color) 22%, var(--surface-border-color));
+    background: var(--card-background);
+    background: color-mix(in srgb, var(--primary-color) 7%, var(--card-background));
+    color: var(--primary-color);
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
   /*
    * 材料区是「已选 chips + @添加资源 + 上传文件」一条连续的流。
    * AiContextPicker 自己也是 flex-wrap 容器，chips 多到需要换行时它会撑满整行，
@@ -747,10 +854,38 @@
     .mobile-context-actions {
       display: flex;
       align-items: center;
+      gap: 6px;
       width: 100%;
       min-width: 0;
       margin-bottom: 4px;
       overflow: hidden;
+    }
+
+    .capability-module-select--mobile {
+      width: auto;
+      min-width: 0;
+      flex: 1 1 112px;
+    }
+
+    .capability-policy-select--mobile {
+      width: auto;
+      min-width: 0;
+      flex: 1 1 112px;
+    }
+
+    .capability-policy-select--mobile :deep(.select-trigger) {
+      min-height: 40px;
+      border-color: var(--surface-border-color);
+    }
+
+    .chat-only-boundary-hint {
+      min-height: 40px;
+      flex: 0 0 auto;
+    }
+
+    .capability-module-select--mobile :deep(.select-trigger) {
+      min-height: 40px;
+      border-color: var(--primary-color);
     }
 
     .mobile-context-toggle {
@@ -758,7 +893,7 @@
       flex: 0 0 auto;
       gap: 6px;
       width: max-content;
-      max-width: 100%;
+      max-width: 48%;
       height: 40px !important;
       min-height: 40px;
       padding: 4px 8px 4px 5px !important;

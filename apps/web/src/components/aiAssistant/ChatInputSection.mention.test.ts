@@ -127,11 +127,13 @@ function mountComposer(initialValue = '') {
         'zh-CN': {
           placeholder: { input: '请输入' },
           ai: {
+            capabilityScope: { label: '限定本轮模块' },
             inputPlaceholder: '输入您的问题…',
             inputHint: 'Enter 发送',
             send: '发送',
             pause: '暂停',
           },
+          common: { noMatch: '无匹配项' },
         },
       },
     }),

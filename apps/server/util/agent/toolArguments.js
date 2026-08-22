@@ -32,8 +32,23 @@ export function parseToolCallArguments(toolCall) {
 
 /** 工具可按供应商常见别名归一参数；归一后的参数才进入确认令牌。 */
 export function normalizeToolArguments(tool, args) {
-  if (typeof tool?.normalizeArgs !== 'function') return args;
-  const normalized = tool.normalizeArgs(args);
+  let input = args;
+  if (tool?.scopeUserMigration === true) {
+    const current = String(args?.scope_user || '').trim();
+    const legacy = String(args?.user || '').trim();
+    if (current && legacy && current !== legacy) {
+      throw new Error('TOOL_ARGUMENTS_INVALID: scope_user 与旧 user 参数不能指向不同账号。');
+    }
+    input = { ...(args || {}) };
+    delete input.user;
+    if (current || legacy) input.scope_user = current || legacy;
+    if (legacy) {
+      // 只记录工具名，不记录账号值，避免弃用日志携带用户标识。
+      console.warn('[Agent] deprecated tool argument alias tool=%s alias=user canonical=scope_user', tool.name);
+    }
+  }
+  if (typeof tool?.normalizeArgs !== 'function') return input;
+  const normalized = tool.normalizeArgs(input);
   if (!normalized || typeof normalized !== 'object' || Array.isArray(normalized)) {
     throw new Error('TOOL_ARGUMENTS_INVALID: AI 生成的操作参数格式无效，请重新发起操作。');
   }

@@ -1,5 +1,6 @@
 import { buildNoteAiPayload, findOwnedNoteForAi } from '../../noteAiService.js';
 import { noteQuestionNeedsImageOcr } from '../../noteSemantic.js';
+import { buildQueryResultMetadata } from '../toolResultMetadata.js';
 
 const VALID_FOCUS = new Set(['all', 'tasks', 'images']);
 const VALID_TASK_STATUS = new Set(['all', 'pending', 'completed']);
@@ -41,6 +42,7 @@ export default {
   },
   argumentAliases: ['id', 'name', 'keyword', 'mode', 'status'],
   normalizeArgs,
+  resourceBindings: [{ argument: 'noteId', refType: 'note', sourceField: 'id' }],
   requireRoot: false,
   timeoutMs: 60_000,
   resultBudget: 12_000,
@@ -48,7 +50,13 @@ export default {
   async execute(input, ctx) {
     const args = normalizeArgs(input);
     const note = await findOwnedNoteForAi({ userId: ctx.userId, noteId: args.noteId, title: args.title });
-    if (!note) return { total: 0, items: [] };
+    if (!note) {
+      return {
+        total: 0,
+        items: [],
+        resultMetadata: buildQueryResultMetadata({ totalCount: 0, returned: 0 }),
+      };
+    }
     const { document, content } = await buildNoteAiPayload({
       note,
       question: ctx.question || '',
@@ -71,6 +79,7 @@ export default {
         : [],
       create_time: note.create_time,
       update_time: note.update_time,
+      resultMetadata: buildQueryResultMetadata({ totalCount: 1, returned: 1 }),
     };
   },
   getDependencyRefs(raw) {

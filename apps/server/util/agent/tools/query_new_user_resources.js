@@ -53,17 +53,27 @@ export default {
     },
   },
   requireRoot: true,
-  execute(args = {}) {
+  execute(args = {}, ctx = {}) {
     if (!String(args.registeredWithin || '').trim()) throw new Error('新用户资源联查需要明确用户注册时间');
     if (!String(args.resourceTimeRange || '').trim()) throw new Error('新用户资源联查需要明确资源创建时间');
-    return queryPlatformResources.execute({
-      timeRange: args.resourceTimeRange,
-      registeredWithin: args.registeredWithin,
-      resourceType: args.resourceType,
-      includeInternal: args.includeInternal,
-      limit: args.limit,
-    });
+    return queryPlatformResources.execute(
+      {
+        timeRange: args.resourceTimeRange,
+        registeredWithin: args.registeredWithin,
+        resourceType: args.resourceType,
+        includeInternal: args.includeInternal,
+        limit: args.limit,
+      },
+      {
+        ...ctx,
+        resolvedTemporalRanges: {
+          timeRange: ctx.resolvedTemporalRanges?.resourceTimeRange,
+          registeredWithin: ctx.resolvedTemporalRanges?.registeredWithin,
+        },
+      },
+    );
   },
+  getDependencyRefs: queryPlatformResources.getDependencyRefs,
   transform: queryPlatformResources.transform,
   summarize: queryPlatformResources.summarize,
 };

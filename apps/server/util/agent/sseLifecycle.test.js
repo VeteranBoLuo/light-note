@@ -135,6 +135,29 @@ describe('Agent SSE lifecycle', () => {
         sourcesUsedCount: 1,
         sourceSubsetValid: true,
       },
+      queryScopes: [
+        {
+          schemaVersion: 1,
+          tool: 'query_notes',
+          total: 2,
+          returned: 2,
+          resolvedRanges: [{ slot: 'timeRange', description: '今天（2026-08-21 · Asia/Shanghai）' }],
+        },
+      ],
+      executionReceipt: {
+        schemaVersion: 1,
+        runId: 'r4',
+        terminal: 'completed',
+        evidenceModes: ['workspace_queried'],
+        toolSummary: { attempted: 1, succeeded: 1, failed: 0 },
+        factDigest: 'a'.repeat(64),
+        factBlocks: [{ type: 'fact', factId: 'f1', kind: 'count', key: 'note.query.total', value: 2 }],
+        writeCommitted: false,
+      },
+      responseEnvelope: {
+        schemaVersion: 1,
+        blocks: [{ type: 'fact', factId: 'f1', kind: 'count', key: 'note.query.total', value: 2 }],
+      },
     });
 
     const snapshot = onTerminal.mock.calls[0][0].snapshot;
@@ -150,6 +173,21 @@ describe('Agent SSE lifecycle', () => {
         resolvedGrounding: expect.objectContaining({
           mode: 'current_explicit_only',
           sourceSubsetValid: true,
+        }),
+        queryScopes: [
+          expect.objectContaining({
+            tool: 'query_notes',
+            resolvedRanges: [expect.objectContaining({ slot: 'timeRange' })],
+          }),
+        ],
+        executionReceipt: expect.objectContaining({
+          runId: 'r4',
+          evidenceModes: ['workspace_queried'],
+          factDigest: 'a'.repeat(64),
+        }),
+        responseEnvelope: expect.objectContaining({
+          schemaVersion: 1,
+          blocks: [expect.objectContaining({ type: 'fact', kind: 'count', value: 2 })],
         }),
         artifacts: [expect.objectContaining({ id: 'bookmark-health:run-1', status: 'running' })],
         stage: 'completed',

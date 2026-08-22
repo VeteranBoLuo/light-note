@@ -113,6 +113,22 @@ export function resolveGroundingScope({
   });
 }
 
+/**
+ * V3 在语义编译确认 refer_last_result 后，把服务端 ResultSet 的稳定引用投影为本轮
+ * grounding 边界。调用方只能传入从 owner/session 绑定 ResultSet 重新解析出的引用，
+ * 不能传客户端原始 context；因此既支持连续追问，也不会恢复旧消息正文或扩大材料范围。
+ */
+export function resolveResultSetGroundingScope({ refs = [], webUrls = [] } = {}) {
+  return Object.freeze({
+    mode: GROUNDING_SCOPE_MODE.INHERITED_SOURCE_SET,
+    sourceSetId: null,
+    allowedRefs: Object.freeze(uniqueRefs(refs)),
+    allowExternalWeb: false,
+    allowedWebUrls: Object.freeze(safeWebUrls(webUrls)),
+    generalKnowledgeAllowed: false,
+  });
+}
+
 function sourceKey(source) {
   const ref = canonicalRef(source);
   return ref ? `${ref.type}:${ref.id}` : '';

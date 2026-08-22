@@ -1,8 +1,11 @@
 import { normalizeToolArguments, prepareToolArguments } from './toolArguments.js';
 import { getAgentCapabilityByToolName } from './capabilityRegistry.js';
+import { getAgentV3CapabilityByToolName } from './runtime/v3/capabilityManifest.js';
+import { bindAgentTemporalRanges } from './timeRange.js';
 
 const VALID_RISKS = new Set(['low', 'medium', 'high']);
 const VALID_CONFIRMATION_POLICIES = new Set(['none', 'default', 'always']);
+const VALID_SIDE_EFFECT_POLICIES = new Set(['none', 'confirmation_required', 'idempotent_background_job']);
 const KNOWN_ADMIN_MODES = new Set(['readonly', 'maintain']);
 const DEPENDENCY_REF_TYPE_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/;
 const RESOURCE_SOURCE_FIELD_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
@@ -42,6 +45,7 @@ export function normalizeRegisteredTool(tool) {
   }
   const isWrite = tool.isWrite === true;
   const capability = isWrite ? getAgentCapabilityByToolName(tool.name) : null;
+  const semanticCapability = getAgentV3CapabilityByToolName(tool.name);
   if (isWrite && !capability) {
     throw new Error(`Agent 写工具 ${tool.name} 未在能力注册表声明为 enabled`);
   }
@@ -53,6 +57,7 @@ export function normalizeRegisteredTool(tool) {
   }
   const riskLevel = capability?.riskLevel || tool.riskLevel || 'low';
   const confirmationPolicy = capability?.confirmationPolicy || tool.confirmationPolicy || 'none';
+  const sideEffectPolicy = tool.sideEffectPolicy || (isWrite ? 'confirmation_required' : 'none');
   if (!VALID_RISKS.has(riskLevel)) throw new Error(`Agent 工具 ${tool.name} 缺少有效 riskLevel`);
   if (!VALID_CONFIRMATION_POLICIES.has(confirmationPolicy)) {
     throw new Error(`Agent 工具 ${tool.name} 缺少有效 confirmationPolicy`);
@@ -60,17 +65,36 @@ export function normalizeRegisteredTool(tool) {
   if (isWrite && confirmationPolicy === 'none') {
     throw new Error(`Agent 写工具 ${tool.name} 禁止关闭确认`);
   }
+  if (!VALID_SIDE_EFFECT_POLICIES.has(sideEffectPolicy)) {
+    throw new Error(`Agent 工具 ${tool.name} 缺少有效 sideEffectPolicy`);
+  }
+  if (isWrite !== (sideEffectPolicy === 'confirmation_required')) {
+    throw new Error(`Agent 工具 ${tool.name} 的 isWrite 与 sideEffectPolicy 不一致`);
+  }
+  if (tool.semanticEffect === 'write' && !isWrite && sideEffectPolicy !== 'idempotent_background_job') {
+    throw new Error(`Agent 操作型工具 ${tool.name} 必须显式声明安全副作用策略`);
+  }
+  if (sideEffectPolicy === 'idempotent_background_job' && tool.semanticEffect !== 'write') {
+    throw new Error(`Agent 工具 ${tool.name} 的后台任务策略只能用于操作型能力`);
+  }
   if (tool.getDependencyRefs != null && typeof tool.getDependencyRefs !== 'function') {
     throw new Error(`Agent 工具 ${tool.name} 的 getDependencyRefs 必须是函数`);
   }
   if (tool.validatePlanArgs != null && typeof tool.validatePlanArgs !== 'function') {
     throw new Error(`Agent 工具 ${tool.name} 的 validatePlanArgs 必须是函数`);
   }
+  if (
+    tool.scopeUserMigration === true &&
+    (!Object.hasOwn(tool.parameters?.properties || {}, 'scope_user') ||
+      Object.hasOwn(tool.parameters?.properties || {}, 'user'))
+  ) {
+    throw new Error(`Agent 工具 ${tool.name} 的管理账号参数必须以 scope_user 为公开契约`);
+  }
   const rawDependencyBindings = tool.dependencyBindings == null ? [] : tool.dependencyBindings;
   if (!Array.isArray(rawDependencyBindings) || rawDependencyBindings.length > 8) {
     throw new Error(`Agent 工具 ${tool.name} 的 dependencyBindings 无效`);
   }
-  const dependencyArguments = new Set();
+  const dependencyArguments = new Map();
   const dependencyBindings = rawDependencyBindings.map((binding) => {
     const argument = String(binding?.argument || '').trim();
     const refType = String(binding?.refType || '')
@@ -85,12 +109,13 @@ export function normalizeRegisteredTool(tool) {
     ) {
       throw new Error(`Agent 工具 ${tool.name} 的依赖绑定 ${argument || 'unknown'} 无效`);
     }
-    dependencyArguments.add(argument);
-    return Object.freeze({
+    const normalizedBinding = Object.freeze({
       argument,
       refType,
       ...(binding?.requireUnique === true ? { requireUnique: true } : {}),
     });
+    dependencyArguments.set(argument, normalizedBinding);
+    return normalizedBinding;
   });
   const rawResourceBindings = tool.resourceBindings == null ? [] : tool.resourceBindings;
   if (!Array.isArray(rawResourceBindings) || rawResourceBindings.length > 8) {
@@ -99,25 +124,39 @@ export function normalizeRegisteredTool(tool) {
   const resourceArguments = new Set();
   const resourceBindings = rawResourceBindings.map((binding) => {
     const argument = String(binding?.argument || '').trim();
-    const refType = String(binding?.refType || '')
-      .trim()
-      .toLowerCase();
+    const hasRefTypes = Array.isArray(binding?.refTypes);
+    const refTypes = [
+      ...new Set(
+        (hasRefTypes ? binding.refTypes : [binding?.refType])
+          .map((value) =>
+            String(value || '')
+              .trim()
+              .toLowerCase(),
+          )
+          .filter(Boolean),
+      ),
+    ];
     const sourceField = String(binding?.sourceField || '').trim();
+    const dependencyBinding = dependencyArguments.get(argument);
     if (
       !argument ||
       !Object.hasOwn(tool.parameters?.properties || {}, argument) ||
-      !DEPENDENCY_REF_TYPE_PATTERN.test(refType) ||
+      !refTypes.length ||
+      refTypes.length > 8 ||
+      refTypes.some((refType) => !DEPENDENCY_REF_TYPE_PATTERN.test(refType)) ||
+      (hasRefTypes && binding?.refType != null) ||
       !RESOURCE_SOURCE_FIELD_PATTERN.test(sourceField) ||
       (binding?.allowLiteral != null && typeof binding.allowLiteral !== 'boolean') ||
       resourceArguments.has(argument) ||
-      dependencyArguments.has(argument)
+      (dependencyBinding &&
+        (refTypes.length !== 1 || dependencyBinding.refType !== refTypes[0] || sourceField !== 'id'))
     ) {
       throw new Error(`Agent 工具 ${tool.name} 的资源绑定 ${argument || 'unknown'} 无效`);
     }
     resourceArguments.add(argument);
     return Object.freeze({
       argument,
-      refType,
+      ...(hasRefTypes ? { refTypes: Object.freeze(refTypes) } : { refType: refTypes[0] }),
       sourceField,
       ...(binding?.allowLiteral === true ? { allowLiteral: true } : {}),
     });
@@ -131,12 +170,20 @@ export function normalizeRegisteredTool(tool) {
     category: tool.category || tool.name.split('_').slice(-1)[0] || 'general',
     riskLevel,
     confirmationPolicy,
+    sideEffectPolicy,
     timeoutMs: Number(tool.timeoutMs || (isWrite ? 10_000 : 8_000)),
     allowedRoles,
     resultBudget: Number(tool.resultBudget || 6000),
     parameters: closeToolSchema(tool.parameters),
+    argumentAliases: Object.freeze([
+      ...new Set([
+        ...(Array.isArray(tool.argumentAliases) ? tool.argumentAliases : []),
+        ...(tool.scopeUserMigration ? ['user'] : []),
+      ]),
+    ]),
     dependencyBindings: Object.freeze(dependencyBindings),
     resourceBindings: Object.freeze(resourceBindings),
+    temporalSlots: Object.freeze([...(semanticCapability?.temporalSlots || [])]),
   };
 }
 
@@ -309,7 +356,8 @@ export async function enforceToolPolicy({
   if (requireDirectAction && !tool.isWrite) {
     fail('TOOL_DIRECT_ACTION_NOT_ALLOWED', '快捷确认仅支持需要确认的写操作。');
   }
-  if (args.user != null && String(args.user).trim()) {
+  const requestedScopeUser = args.scope_user ?? args.user;
+  if (requestedScopeUser != null && String(requestedScopeUser).trim()) {
     if (boundary.actorRole !== 'root' || boundary.adminMode) {
       fail('TOOL_TARGET_USER_FORBIDDEN', '当前上下文不能指定其他用户。', 403);
     }
@@ -340,6 +388,7 @@ export async function enforceToolPolicy({
     : trustedPreparedArgs
       ? args
       : normalized;
+  bindAgentTemporalRanges({ tool, args: preparedArgs, context });
 
   return {
     tool,

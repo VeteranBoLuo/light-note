@@ -1,4 +1,5 @@
 import { getPointsLog } from '../../points.js';
+import { withQueryResultMetadata } from '../toolResultMetadata.js';
 
 const REASON_LABEL = {
   checkin: '签到',
@@ -48,7 +49,7 @@ export default {
   requireRoot: false,
   async execute(args, ctx) {
     const { rows, total } = await getPointsLog(ctx.userId, { limit: Math.min(Math.max(args.limit || 15, 1), 50) });
-    return { total, items: rows };
+    return withQueryResultMetadata({ total: Number(total || 0), items: rows });
   },
   transform(raw) {
     const items = raw?.items || [];

@@ -1,5 +1,7 @@
 import pool from '../../../db/index.js';
-import { parseTimeRange } from '../timeRange.js';
+import { MANAGEMENT_SCOPE_USER_PARAM } from '../ownerScope.js';
+import { resolveAgentTimeRange } from '../timeRange.js';
+import { buildQueryResultMetadata } from '../toolResultMetadata.js';
 
 export default {
   name: 'get_token_usage',
@@ -8,19 +10,28 @@ export default {
     type: 'object',
     properties: {
       timeRange: { type: 'string', description: '时间范围，如"今天"、"最近7天"、"本周"、"本月"，默认今天' },
-      user: { type: 'string', description: '可选，指定查询的用户（昵称/邮箱/ID），不填则查全部用户' },
+      scope_user: { type: 'string', description: MANAGEMENT_SCOPE_USER_PARAM },
     },
   },
+  scopeUserMigration: true,
   requireRoot: true,
-  async execute(args) {
-    const time = parseTimeRange(args.timeRange || '今天');
+  async execute(args, ctx = {}) {
+    const time = resolveAgentTimeRange(args, 'timeRange', {
+      context: ctx,
+      defaultExpression: '今天',
+      label: 'Token 统计时间',
+    });
 
     let where = '1=1';
     const params = [];
 
     if (time) {
-      where += ' AND created_at >= ? AND created_at <= ?';
-      params.push(time.start, time.end);
+      where += ' AND created_at >= ? AND created_at < ?';
+      params.push(time.start, time.endExclusive);
+    }
+    if (args.scope_user) {
+      where += ' AND user_id = ?';
+      params.push(ctx.userId);
     }
 
     const [rows] = await pool.query(
@@ -28,7 +39,20 @@ export default {
        FROM agent_logs WHERE ${where}`,
       params,
     );
-    return rows[0];
+    return {
+      ...rows[0],
+      resultMetadata: buildQueryResultMetadata({
+        total: 1,
+        returned: 1,
+        resolvedRanges: {
+          timeRange: {
+            expression: String(args.timeRange || '今天'),
+            range: time,
+            source: 'tool',
+          },
+        },
+      }),
+    };
   },
   transform(raw) {
     const count = Number(raw.request_count || 0);

@@ -27,8 +27,10 @@ export function adaptRuntimeOutcomeToLegacy(outcome, catalog = []) {
   }
   const catalogById = new Map((Array.isArray(catalog) ? catalog : []).map((entry) => [entry.id, entry]));
   const routesByGoal = new Map((outcome?.route?.goalRoutes || []).map((route) => [route.goalId, route]));
-  const goalIndex = new Map(turnSpec.goals.map((goal, index) => [goal.id, index]));
-  const intents = turnSpec.goals.map((goal) => {
+  const blockedGoalIds = new Set((outcome?.blockedGoalIds || []).map(String));
+  const executableGoals = turnSpec.goals.filter((goal) => !blockedGoalIds.has(goal.id));
+  const goalIndex = new Map(executableGoals.map((goal, index) => [goal.id, index]));
+  const intents = executableGoals.map((goal) => {
     const capabilityId = selectedCapabilityId(routesByGoal.get(goal.id), catalogById);
     const capability = catalogById.get(capabilityId);
     return Object.freeze({
@@ -63,9 +65,19 @@ export function adaptRuntimeOutcomeToLegacy(outcome, catalog = []) {
   } else if (outcome.state === 'unsupported') {
     const unsupportedCapabilities = selectedCapabilities.filter((capability) => capability.status !== 'enabled');
     const firstStatus = unsupportedCapabilities[0]?.status;
+    const policyBlockReason = unsupportedCapabilities.find(
+      (capability) => capability.policyBlockReason,
+    )?.policyBlockReason;
     semanticPolicy = {
       state: 'blocked',
-      resolution: firstStatus === 'planned' || firstStatus === 'forbidden' ? firstStatus : 'unknown_mutation',
+      resolution:
+        firstStatus === 'policy_blocked'
+          ? policyBlockReason === 'chat_only'
+            ? 'profile_chat_only'
+            : 'profile_read_only'
+          : firstStatus === 'planned' || firstStatus === 'forbidden'
+            ? firstStatus
+            : 'unknown_mutation',
       // 同一 TurnSpec 里可能既有正常读取，又有一个不支持的目标。失败说明只展示真正
       // 被阻断的能力，不能把已启用的 read_note 等工具误报成“出于安全原因被禁止”。
       capabilities: unsupportedCapabilities.length ? unsupportedCapabilities : selectedCapabilities,

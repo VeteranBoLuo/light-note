@@ -7,6 +7,9 @@ export async function runActionTurn({ turnSpec, route, planExecution }) {
     route,
     plan: planned.plan,
     validation: planned.validation,
+    plannerAttempts: planned.attempts,
+    planningMode: planned.planningMode || 'planner',
+    deterministicFallbackReason: planned.deterministicFallbackReason || null,
     toolCalls: planned.validation?.toolCalls || [],
   };
 }

@@ -5,9 +5,10 @@ export default {
   name: 'start_link_health_check',
   description:
     '立即启动当前账号全部书签的真实死链体检，并返回可持续刷新的进度任务卡。用户说“我有哪些失效链接”“帮我检查死链”“开始/重新体检”等希望得到当下真实结果的问法时优先调用本工具。只有用户明确说“上次/最近结果”“现在进度”“不要重新检查”时才使用 query_link_health。重复调用会复用正在执行的同一轮任务。',
-  // 这是会启动后台任务的操作型能力，但不会修改用户内容，也不需要写操作确认卡。
-  // semanticEffect 只影响 TurnSpec 路由；真正的执行/确认策略仍由 isWrite 决定。
+  // 这是会启动（或复用）幂等后台任务的操作型能力，但不会修改用户内容。
+  // Manifest / ToolPolicy 通过统一副作用协议允许它不生成内容写入确认卡。
   semanticEffect: 'write',
+  sideEffectPolicy: 'idempotent_background_job',
   semanticOperations: ['create'],
   routing: {
     targetScope: 'single_owner',

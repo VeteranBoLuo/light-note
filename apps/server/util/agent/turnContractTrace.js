@@ -12,8 +12,10 @@ const RESOLVED_SCOPE_MODES = new Set([
 const LENGTH_MODES = new Set(['unspecified', 'minimum', 'target_range', 'relative_growth', 'preserve_length']);
 const TRACE_VERSION = '2.0-shadow';
 const HISTORY_POLICIES = new Set(['legacy_conversation', 'discourse_projection_only']);
-const INTENT_COMPILER_MODES = new Set(['off', 'shadow', 'enforce']);
+const INTENT_COMPILER_MODES = new Set(['off', 'shadow', 'enforce', 'v3_shadow', 'v3_enforce']);
 const INTENT_COMPILER_STATES = new Set(['not_run', 'ready', 'invalid']);
+const EXECUTION_PLANNER_STATES = new Set(['not_run', 'ready', 'blocked', 'clarification', 'unsupported']);
+const EXECUTION_PLANNING_MODES = new Set(['not_run', 'deterministic', 'slot_filler', 'planner']);
 const TURN_REQUEST_KINDS = new Set([
   'unknown',
   'conversation',
@@ -25,6 +27,31 @@ const TURN_REQUEST_KINDS = new Set([
   'revise_artifact',
 ]);
 const CONFIDENCE_LEVELS = new Set(['unknown', 'high', 'medium', 'low']);
+const CONTINUATION_MODES = new Set([
+  'unknown',
+  'independent',
+  'refer_last_result',
+  'refine_last_artifact',
+  'scope_replacement',
+  'answer_clarification',
+  'action_continuation',
+]);
+const TOPIC_EPOCH_ACTIONS = new Set(['unknown', 'keep', 'advance']);
+const RUNTIME_MODES = new Set(['legacy', 'v3_shadow', 'v3_enforce']);
+const RUNTIME_RECENT_DIALOGUE_SOURCES = new Set(['none', 'cloud', 'session']);
+const CAPABILITY_POLICY_PROFILES = new Set(['auto', 'chat_only', 'read_only']);
+const TURN_SPEC_VERSIONS = new Set(['unknown', '3.0', '3.1']);
+const RUNTIME_ROLLOUT_REASONS = new Set([
+  'global_legacy',
+  'policy_disabled',
+  'invalid_policy',
+  'excluded',
+  'actor_allowlist',
+  'role_allowlist',
+  'percentage',
+  'not_selected',
+  'all',
+]);
 
 function safeEnum(value, allowed, fallback) {
   const normalized = String(value || '').trim();
@@ -45,6 +72,12 @@ function safeRatio(value) {
   const number = Number(value);
   if (!Number.isFinite(number) || number < 0) return null;
   return Number(number.toFixed(4));
+}
+
+function safePercentage(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0 || number > 100) return 0;
+  return Number(number.toFixed(2));
 }
 
 function canonicalRef(value) {
@@ -105,7 +138,10 @@ export function createTurnContractTrace() {
     intentCompilerMode: 'off',
     intentCompilerState: 'not_run',
     turnSpecRequestKind: 'unknown',
+    turnSpecVersion: 'unknown',
     turnSpecConfidence: 'unknown',
+    turnSpecContinuationMode: 'unknown',
+    turnSpecTopicEpochAction: 'unknown',
     turnSpecGoalCount: 0,
     turnSpecDomainCount: 0,
     turnSpecMissingSlotCount: 0,
@@ -113,6 +149,21 @@ export function createTurnContractTrace() {
     intentCompilerMs: 0,
     intentDivergenceCodes: [],
     intentCompilerErrorCode: null,
+    executionPlannerState: 'not_run',
+    executionPlanningMode: 'not_run',
+    executionPlannerAttempts: 0,
+    executionPlannerIssues: [],
+    semanticDigest: null,
+    executionDigest: null,
+    runtimeMode: 'legacy',
+    runtimeConfiguredMode: 'legacy',
+    runtimeRolloutReason: 'global_legacy',
+    runtimeRolloutPercentage: 0,
+    rawHistoryMessageCount: 0,
+    recentDialogueMessageCount: 0,
+    recentDialogueSource: 'none',
+    capabilityPolicyProfile: 'auto',
+    legacyStageCount: 1,
   };
 }
 
@@ -192,10 +243,19 @@ export function recordGroundingDecision(trace, input = {}) {
 
 export function recordIntentCompiler(trace, input = {}) {
   if (!trace || typeof trace !== 'object') return;
-  trace.intentCompilerMode = safeEnum(input.mode, INTENT_COMPILER_MODES, 'off');
+  const nextMode = safeEnum(input.mode, INTENT_COMPILER_MODES, 'off');
+  // V3 Runtime 决策是权威隔离边界。后续 legacy shadow/enforce 对照只能补充状态，
+  // 不能把已记录的 v3_shadow/v3_enforce 降级成同名 V2 模式。
+  trace.intentCompilerMode =
+    String(trace.intentCompilerMode || '').startsWith('v3_') && !nextMode.startsWith('v3_')
+      ? trace.intentCompilerMode
+      : nextMode;
   trace.intentCompilerState = safeEnum(input.state, INTENT_COMPILER_STATES, 'not_run');
   trace.turnSpecRequestKind = safeEnum(input.requestKind, TURN_REQUEST_KINDS, 'unknown');
+  trace.turnSpecVersion = safeEnum(input.version, TURN_SPEC_VERSIONS, 'unknown');
   trace.turnSpecConfidence = safeEnum(input.confidence, CONFIDENCE_LEVELS, 'unknown');
+  trace.turnSpecContinuationMode = safeEnum(input.continuationMode, CONTINUATION_MODES, 'unknown');
+  trace.turnSpecTopicEpochAction = safeEnum(input.topicEpochAction, TOPIC_EPOCH_ACTIONS, 'unknown');
   trace.turnSpecGoalCount = safeCount(input.goalCount);
   trace.turnSpecDomainCount = safeCount(input.domainCount);
   trace.turnSpecMissingSlotCount = safeCount(input.missingSlotCount);
@@ -203,6 +263,42 @@ export function recordIntentCompiler(trace, input = {}) {
   trace.intentCompilerMs = safeCount(input.durationMs);
   trace.intentDivergenceCodes = safeIssues(input.divergenceCodes);
   trace.intentCompilerErrorCode = input.errorCode ? safeIssues([input.errorCode])[0] || 'intent_compiler_failed' : null;
+}
+
+export function recordExecutionPlanner(trace, input = {}) {
+  if (!trace || typeof trace !== 'object') return;
+  trace.executionPlannerState = safeEnum(input.state, EXECUTION_PLANNER_STATES, 'not_run');
+  trace.executionPlanningMode = safeEnum(input.mode, EXECUTION_PLANNING_MODES, 'not_run');
+  trace.executionPlannerAttempts = safeCount(input.attempts);
+  trace.executionPlannerIssues = safeIssues(input.issues);
+}
+
+export function recordExecutionContract(trace, input = {}) {
+  if (!trace || typeof trace !== 'object') return;
+  trace.semanticDigest = /^[a-f0-9]{64}$/u.test(String(input.semanticDigest || ''))
+    ? String(input.semanticDigest)
+    : null;
+  trace.executionDigest = /^[a-f0-9]{64}$/u.test(String(input.executionDigest || ''))
+    ? String(input.executionDigest)
+    : null;
+}
+
+export function recordRuntimeIsolation(trace, input = {}) {
+  if (!trace || typeof trace !== 'object') return;
+  const mode = safeEnum(input.mode, RUNTIME_MODES, 'legacy');
+  trace.runtimeMode = mode;
+  trace.runtimeConfiguredMode = safeEnum(input.configuredMode, RUNTIME_MODES, mode);
+  trace.runtimeRolloutReason = safeEnum(
+    input.rolloutReason,
+    RUNTIME_ROLLOUT_REASONS,
+    mode === 'legacy' ? 'global_legacy' : 'all',
+  );
+  trace.runtimeRolloutPercentage = safePercentage(input.rolloutPercentage);
+  trace.rawHistoryMessageCount = safeCount(input.rawHistoryMessageCount);
+  trace.recentDialogueMessageCount = safeCount(input.recentDialogueMessageCount);
+  trace.recentDialogueSource = safeEnum(input.recentDialogueSource, RUNTIME_RECENT_DIALOGUE_SOURCES, 'none');
+  trace.capabilityPolicyProfile = safeEnum(input.capabilityPolicyProfile, CAPABILITY_POLICY_PROFILES, 'auto');
+  trace.legacyStageCount = safeCount(input.legacyStageCount ?? (mode === 'v3_enforce' ? 0 : 1));
 }
 
 /**
@@ -229,7 +325,10 @@ export function sanitizeTurnContractTrace(value) {
     mode: value?.intentCompilerMode,
     state: value?.intentCompilerState,
     requestKind: value?.turnSpecRequestKind,
+    version: value?.turnSpecVersion,
     confidence: value?.turnSpecConfidence,
+    continuationMode: value?.turnSpecContinuationMode,
+    topicEpochAction: value?.turnSpecTopicEpochAction,
     goalCount: value?.turnSpecGoalCount,
     domainCount: value?.turnSpecDomainCount,
     missingSlotCount: value?.turnSpecMissingSlotCount,
@@ -237,6 +336,24 @@ export function sanitizeTurnContractTrace(value) {
     durationMs: value?.intentCompilerMs,
     divergenceCodes: value?.intentDivergenceCodes,
     errorCode: value?.intentCompilerErrorCode,
+  });
+  recordExecutionPlanner(trace, {
+    state: value?.executionPlannerState,
+    mode: value?.executionPlanningMode,
+    attempts: value?.executionPlannerAttempts,
+    issues: value?.executionPlannerIssues,
+  });
+  recordExecutionContract(trace, value);
+  recordRuntimeIsolation(trace, {
+    mode: value?.runtimeMode,
+    configuredMode: value?.runtimeConfiguredMode,
+    rolloutReason: value?.runtimeRolloutReason,
+    rolloutPercentage: value?.runtimeRolloutPercentage,
+    rawHistoryMessageCount: value?.rawHistoryMessageCount,
+    recentDialogueMessageCount: value?.recentDialogueMessageCount,
+    recentDialogueSource: value?.recentDialogueSource,
+    capabilityPolicyProfile: value?.capabilityPolicyProfile,
+    legacyStageCount: value?.legacyStageCount,
   });
   return trace;
 }

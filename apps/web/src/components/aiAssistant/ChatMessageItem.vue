@@ -43,6 +43,9 @@
             @focusout="hideCitationTip"
             @keydown="onCitationKeydown"
           ></div>
+          <p v-if="message.role === 'user' && userCapabilityBoundaryText" class="user-capability-scope">
+            {{ userCapabilityBoundaryText }}
+          </p>
           <div v-if="message.role === 'user' && message.contexts?.length" class="user-contexts">
             <div class="user-contexts__title">{{ t('ai.attachedResources') }} · {{ message.contexts.length }}</div>
             <div class="user-contexts__list">
@@ -100,8 +103,8 @@
         <ReplyLoading
           v-else-if="!message.toolEvents?.length && !message.confirmations?.length && !message.interactions?.length"
         />
-        <p v-if="message.role === 'assistant' && materialModeText" class="material-mode-notice">
-          {{ materialModeText }}
+        <p v-if="message.role === 'assistant' && evidenceModeText" class="material-mode-notice">
+          {{ evidenceModeText }}
         </p>
         <div
           v-if="message.role === 'assistant' && message.materialClarification?.options.length"
@@ -200,6 +203,17 @@
     type AiMaterialClarification,
     type AiResolvedGrounding,
   } from '@/types/aiGrounding';
+  import {
+    aiCapabilityModuleLabelKey,
+    normalizeAiCapabilityModule,
+    type AiCapabilityModule,
+  } from '@/types/aiCapabilityScope';
+  import {
+    aiCapabilityPolicyLabelKey,
+    normalizeAiCapabilityPolicyProfile,
+    type AiCapabilityPolicyProfile,
+  } from '@/types/aiCapabilityPolicy';
+  import { resolveAiExecutionReceiptNoticeKey, type AiExecutionReceipt } from '@/types/aiExecutionReceipt';
 
   const { t } = useI18n();
 
@@ -219,6 +233,8 @@
       estimatedResourceCount?: number;
     }>;
     attachmentRefs?: Array<{ id: string; fileName: string }>;
+    capabilityModule?: AiCapabilityModule;
+    capabilityPolicyProfile?: AiCapabilityPolicyProfile;
     toolEvents?: AiToolStatusItem[];
     sources?: AiSource[];
     evidence?: AiEvidenceReference[];
@@ -230,6 +246,7 @@
     };
     resolvedGrounding?: AiResolvedGrounding;
     materialClarification?: AiMaterialClarification;
+    executionReceipt?: AiExecutionReceipt;
     activity?: Array<Record<string, unknown> | string>;
     confirmations?: unknown[];
     interactions?: unknown[];
@@ -255,7 +272,22 @@
       resolveLegacyAiSystemErrorCode(props.message.content),
   );
   const isFailedMessage = computed(() => Boolean(failedErrorCode.value));
-  const materialModeText = computed(() => {
+  const capabilityModuleText = computed(() => {
+    const module = normalizeAiCapabilityModule(props.message.capabilityModule);
+    if (module === 'auto') return '';
+    return t('ai.capabilityScope.applied', { module: t(aiCapabilityModuleLabelKey(module)) });
+  });
+  const userCapabilityBoundaryText = computed(() => {
+    const profile = normalizeAiCapabilityPolicyProfile(props.message.capabilityPolicyProfile);
+    const profileText = profile === 'auto' ? '' : t(aiCapabilityPolicyLabelKey(profile));
+    return [profileText, capabilityModuleText.value].filter(Boolean).join(' · ');
+  });
+  const evidenceModeText = computed(() => {
+    const receipt = props.message.executionReceipt;
+    if (receipt) {
+      const key = resolveAiExecutionReceiptNoticeKey(receipt);
+      return key ? t(`ai.executionReceipt.${key}`) : '';
+    }
     const grounding = props.message.resolvedGrounding;
     if (!shouldShowAiMaterialModeNotice(grounding)) return '';
     const count = grounding.allowedSourceCount;
@@ -274,6 +306,8 @@
       content: string,
       contexts: NonNullable<ChatMessage['contexts']>,
       scopes: NonNullable<ChatMessage['scopeRefs']>,
+      capabilityModule: AiCapabilityModule,
+      capabilityPolicyProfile: AiCapabilityPolicyProfile,
     ): void;
     (e: 'regenerate'): void;
     (e: 'source-navigate'): void;
@@ -288,7 +322,14 @@
 
   // 编辑：把内容回填到输入框（由 ChatContainer 处理并聚焦）
   const handleEdit = () => {
-    emit('edit', props.message.content, props.message.contexts || [], props.message.scopeRefs || []);
+    emit(
+      'edit',
+      props.message.content,
+      props.message.contexts || [],
+      props.message.scopeRefs || [],
+      normalizeAiCapabilityModule(props.message.capabilityModule),
+      normalizeAiCapabilityPolicyProfile(props.message.capabilityPolicyProfile),
+    );
   };
 
   // 重新生成：请求容器用上一条用户消息重发本轮（仅 AI 回答用）
@@ -459,6 +500,21 @@
 
   .user-text {
     white-space: pre-wrap;
+  }
+
+  .user-capability-scope {
+    width: max-content;
+    max-width: 100%;
+    margin: 7px 0 0 auto;
+    padding: 3px 7px;
+    border: 1px solid var(--primary-color);
+    border-radius: 999px;
+    background: var(--card-background);
+    background: color-mix(in srgb, var(--primary-color) 9%, var(--card-background));
+    color: var(--primary-color);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.35;
   }
 
   .citation-audit-notice {

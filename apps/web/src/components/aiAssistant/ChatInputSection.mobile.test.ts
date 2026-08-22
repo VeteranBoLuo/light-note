@@ -105,7 +105,7 @@ afterEach(() => {
   cleanup = undefined;
 });
 
-function mountInput(isMobile: boolean, withAttachment = false) {
+function mountInput(isMobile: boolean, withAttachment = false, capabilityPolicyProfile = 'auto') {
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp({
@@ -118,6 +118,13 @@ function mountInput(isMobile: boolean, withAttachment = false) {
         enableTranslation: false,
         translationConfig: { source: 'auto', target: 'zh-CN' },
         isMobile,
+        capabilityModuleOptions: [{ value: 'auto', label: '自动判断' }],
+        capabilityPolicyProfile,
+        capabilityPolicyOptions: [
+          { value: 'auto', label: '自动助手' },
+          { value: 'chat_only', label: '仅对话' },
+          { value: 'read_only', label: '只读锁' },
+        ],
         sendFn: vi.fn(),
         stopFn: vi.fn(),
         contexts: [{ type: 'note', id: 'note-1', title: '开发修复计划' }],
@@ -142,6 +149,11 @@ function mountInput(isMobile: boolean, withAttachment = false) {
       messages: {
         'zh-CN': {
           ai: {
+            capabilityScope: { label: '限定本轮模块' },
+            capabilityPolicy: {
+              label: '会话能力边界',
+              noDataAccess: '不访问个人数据',
+            },
             material: {
               mobileTitle: '添加与管理材料',
               mobileAdd: '添加材料',
@@ -158,6 +170,7 @@ function mountInput(isMobile: boolean, withAttachment = false) {
             send: '发送',
             pause: '暂停',
           },
+          common: { noMatch: '无匹配项' },
         },
       },
     }),
@@ -216,5 +229,19 @@ describe('ChatInputSection mobile material actions', () => {
 
     const drawer = host.querySelector<HTMLElement>('.mock-material-drawer');
     expect(drawer?.querySelectorAll('.mobile-material-action-card')).toHaveLength(1);
+  });
+
+  it('仅对话模式隐藏材料入口并明确显示不访问个人数据', () => {
+    const mobile = mountInput(true, false, 'chat_only');
+    expect(mobile.querySelector('.mobile-context-toggle')).toBeNull();
+    expect(mobile.querySelector('.capability-module-select--mobile')).toBeNull();
+    expect(mobile.querySelector('.chat-only-boundary-hint')?.textContent).toContain('不访问个人数据');
+    expect(mobile.querySelector('.mock-material-drawer')).toBeNull();
+
+    cleanup?.();
+    cleanup = undefined;
+    const desktop = mountInput(false, false, 'chat_only');
+    expect(desktop.querySelector('.mock-context-picker')).toBeNull();
+    expect(desktop.querySelector('.mock-attachment-picker')).toBeNull();
   });
 });

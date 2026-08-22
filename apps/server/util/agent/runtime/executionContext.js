@@ -51,6 +51,21 @@ function resourceKey(ref) {
   return `${ref.type}:${ref.id}`;
 }
 
+function bindingRefTypes(binding) {
+  const values = Array.isArray(binding?.refTypes) ? binding.refTypes : [binding?.refType];
+  return [
+    ...new Set(
+      values
+        .map((value) =>
+          String(value || '')
+            .trim()
+            .toLowerCase(),
+        )
+        .filter(Boolean),
+    ),
+  ];
+}
+
 export function normalizeAuthoritativeExecutionContext(value = {}) {
   const contextRefs = uniqueRefs(value?.contextRefs, MAX_CONTEXT_REFS);
   const attachmentIds = uniqueAttachmentIds(value?.attachmentIds);
@@ -91,9 +106,11 @@ export function buildAuthoritativeExecutionContext({ contextRefs, attachmentIds,
   const requestedFields = new Map();
   for (const tool of Array.isArray(candidateTools) ? candidateTools : []) {
     for (const binding of Array.isArray(tool?.resourceBindings) ? tool.resourceBindings : []) {
-      const fields = requestedFields.get(binding.refType) || new Set();
-      fields.add(binding.sourceField);
-      requestedFields.set(binding.refType, fields);
+      for (const refType of bindingRefTypes(binding)) {
+        const fields = requestedFields.get(refType) || new Set();
+        fields.add(binding.sourceField);
+        requestedFields.set(refType, fields);
+      }
     }
   }
   const resources = [];
@@ -117,8 +134,9 @@ function hasResourceBindingValue(resource, binding) {
 }
 
 function bindingCandidates(binding, executionContext) {
+  const refTypes = new Set(bindingRefTypes(binding));
   return executionContext.resources.filter(
-    (resource) => resource.type === binding.refType && hasResourceBindingValue(resource, binding),
+    (resource) => refTypes.has(resource.type) && hasResourceBindingValue(resource, binding),
   );
 }
 
@@ -138,16 +156,30 @@ export function projectPlannerExecutionContext(value = {}, candidateTools = []) 
   });
 }
 
-export function plannerArgumentsSchema(tool, executionContext) {
+function authoritativeArgumentNames(value) {
+  if (value instanceof Set || Array.isArray(value)) return new Set([...value].map(String).filter(Boolean));
+  return new Set(Object.keys(value && typeof value === 'object' ? value : {}));
+}
+
+export function plannerArgumentsSchema(tool, executionContext, authoritativeArguments = {}) {
   const schema = tool?.parameters || { type: 'object', additionalProperties: false };
   const bindableArguments = new Set(
     (Array.isArray(tool?.resourceBindings) ? tool.resourceBindings : [])
-      .filter((binding) => bindingCandidates(binding, executionContext).length > 0)
+      // 非字面值资源字段始终属于服务端权威上下文，即使当前没有候选也不能重新
+      // 暴露给模型猜测。只有显式声明 allowLiteral 且本轮没有权威候选时，模型才
+      // 可以从最新消息填写 URL 等字面值；一旦有候选，仍由服务端绑定并覆盖。
+      .filter((binding) => binding.allowLiteral !== true || bindingCandidates(binding, executionContext).length > 0)
       .map((binding) => binding.argument),
   );
+  for (const argument of authoritativeArgumentNames(authoritativeArguments)) bindableArguments.add(argument);
   if (!bindableArguments.size) return schema;
+  const properties = Object.fromEntries(
+    Object.entries(schema.properties || {}).filter(([argument]) => !bindableArguments.has(argument)),
+  );
   return {
     ...schema,
+    additionalProperties: false,
+    properties,
     required: (Array.isArray(schema.required) ? schema.required : []).filter(
       (argument) => !bindableArguments.has(String(argument)),
     ),
@@ -194,6 +226,9 @@ export function bindAuthoritativeResourceArguments({
   const executionContext = normalizeAuthoritativeExecutionContext(rawExecutionContext);
   const bindings = Array.isArray(tool?.resourceBindings) ? tool.resourceBindings : [];
   if (!bindings.length) return args;
+  const requiredArguments = new Set(
+    (Array.isArray(tool?.parameters?.required) ? tool.parameters.required : []).map(String),
+  );
   if (
     argumentBindings != null &&
     (!argumentBindings || typeof argumentBindings !== 'object' || Array.isArray(argumentBindings))
@@ -208,7 +243,8 @@ export function bindAuthoritativeResourceArguments({
 
   let boundArgs = { ...(args || {}) };
   for (const binding of bindings) {
-    const matchingResources = executionContext.resources.filter((resource) => resource.type === binding.refType);
+    const refTypes = new Set(bindingRefTypes(binding));
+    const matchingResources = executionContext.resources.filter((resource) => refTypes.has(resource.type));
     const candidates = bindingCandidates(binding, executionContext);
     const requestedRef = argumentBindings?.[binding.argument];
     let selected = null;
@@ -230,6 +266,13 @@ export function bindAuthoritativeResourceArguments({
     } else if (matchingResources.length > 0) {
       throw resourceBindingError('TOOL_RESOURCE_VALUE_UNAVAILABLE', '本轮资源缺少执行所需的可用字段。');
     } else if (binding.allowLiteral === true && boundArgs[binding.argument] != null) {
+      continue;
+    } else if (!requiredArguments.has(binding.argument)) {
+      // resourceBindings 表达“如果本轮有权威资源就由服务端绑定”，并不会把工具
+      // schema 中的可选精确 ID 变成必填。Provider 即使违反 Planner schema 臆填
+      // 该字段，也只能被丢弃，不能影响查询范围；其余时间、状态和关键词条件继续
+      // 由正常 schema 校验。必填绑定仍在下方失败关闭。
+      delete boundArgs[binding.argument];
       continue;
     } else {
       throw resourceBindingError('TOOL_RESOURCE_CONTEXT_REQUIRED', '本轮没有可用于该参数的已校验资源。');

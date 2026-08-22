@@ -323,7 +323,9 @@ export default {
     },
     required: ['url'],
   },
-  resourceBindings: [{ argument: 'url', refType: 'bookmark', sourceField: 'url', allowLiteral: true }],
+  // 同一 URL 既可能来自当前已选书签，也可能来自上一轮 read_url 产生的权威 web ResultSet。
+  // 通过声明式多类型绑定统一处理，不在会话文案或具体站点上写特判。
+  resourceBindings: [{ argument: 'url', refTypes: ['bookmark', 'web'], sourceField: 'url', allowLiteral: true }],
   requireRoot: false,
   isWrite: false,
   timeoutMs: 24_000,

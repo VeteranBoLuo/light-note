@@ -9,6 +9,15 @@ import { sanitizeAiMessageActivity } from '@/utils/aiMemoryInfluence';
 import { compareAiConversationRecency, type AiConversationRecency } from '@/utils/aiConversationContinuity';
 import type { AiResourceContext, AiScopeRef } from '@/types/aiScope';
 import { normalizeAiArtifacts, type AiArtifact } from '@/types/aiArtifact';
+import { normalizeAiCapabilityModule, type AiCapabilityModule } from '@/types/aiCapabilityScope';
+import type { AiCapabilityPolicyProfile } from '@/types/aiCapabilityPolicy';
+import { normalizeAiQueryScopes, type AiQueryScope } from '@/types/aiQueryScope';
+import {
+  normalizeAiExecutionReceipt,
+  normalizeAiResponseEnvelope,
+  type AiExecutionReceipt,
+  type AiResponseEnvelope,
+} from '@/types/aiExecutionReceipt';
 import {
   normalizeAiMaterialClarification,
   normalizeAiResolvedGrounding,
@@ -64,6 +73,12 @@ export interface AiAssistantMessage {
   /** 服务端裁决后的材料边界摘要；不含资源 ID、标题或正文。 */
   resolvedGrounding?: AiResolvedGrounding;
   materialClarification?: AiMaterialClarification;
+  /** 服务端签发的安全查询口径；只用于持久化与核验，不参与下一轮材料或工具选择。 */
+  queryScopes?: AiQueryScope[];
+  /** 由真实执行结果生成的公开回执；UI 披露不得再从请求意图或模型文案推断。 */
+  executionReceipt?: AiExecutionReceipt;
+  /** 事实块由服务端渲染，模型只拥有 prose 槽位。 */
+  responseEnvelope?: AiResponseEnvelope;
   activity?: Array<Record<string, unknown> | string>;
   cloudId?: string;
   requestId?: string;
@@ -88,6 +103,10 @@ export interface AiAssistantMessage {
   scopeRefs?: AiScopeRef[];
   /** 发送瞬间的不可变附件快照，重试/重新生成只能读取该字段。 */
   attachmentRefs?: AiAttachment[];
+  /** 用户发送时显式选择的本轮能力模块；auto 不限制工具领域。 */
+  capabilityModule?: AiCapabilityModule;
+  /** 会话级能力边界；与单轮模块范围组合后由服务端最终裁决。 */
+  capabilityPolicyProfile?: AiCapabilityPolicyProfile;
   transient?: boolean;
   transientGroupId?: string;
   pendingConfirmationIds?: string[];
@@ -331,8 +350,9 @@ export function createAiAssistantMaterialSnapshot(
 }
 
 export interface AiAssistantPendingNoteDraftReference {
-  confirmationId: string;
-  confirmationToken: string;
+  confirmationId?: string;
+  confirmationToken?: string;
+  artifactVersionId?: string;
 }
 
 /**
@@ -342,6 +362,11 @@ export interface AiAssistantPendingNoteDraftReference {
 export function resolveAiAssistantPendingNoteDraftReference(
   messages: AiAssistantMessage[],
 ): AiAssistantPendingNoteDraftReference | null {
+  const expiredSettlementIds = new Set<string>();
+  const normalizeArtifactId = (value: unknown) => {
+    const id = String(value || '');
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) ? id : '';
+  };
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (message?.role !== 'assistant') continue;
@@ -350,7 +375,9 @@ export function resolveAiAssistantPendingNoteDraftReference(
       // 取消、过期、已执行或已被替换的 create_note 是草稿生命周期边界。
       // 跨过这个边界去找更早的卡片，会把本轮续写绑到旧令牌；材料续用应由
       // entityRefs / sources 的稳定引用单独承担。
-      if ((message.actionSettlements || []).some((item) => item.toolName === 'create_note')) return null;
+      const noteSettlements = (message.actionSettlements || []).filter((item) => item.toolName === 'create_note');
+      if (noteSettlements.some((item) => item.status !== 'expired')) return null;
+      noteSettlements.forEach((item) => expiredSettlementIds.add(item.confirmationId));
       continue;
     }
     const pendingIds = new Set(message.pendingConfirmationIds);
@@ -359,17 +386,28 @@ export function resolveAiAssistantPendingNoteDraftReference(
     if (!confirmations.length) return null;
     const confirmation = confirmations.find(
       (item) =>
-        !item.expiresAt || (Number.isFinite(Date.parse(item.expiresAt)) && Date.parse(item.expiresAt) > Date.now()),
+        !expiredSettlementIds.has(item.id) &&
+        (!item.expiresAt || (Number.isFinite(Date.parse(item.expiresAt)) && Date.parse(item.expiresAt) > Date.now())),
     );
     // 此轮动作均已过期时继续寻找；更晚的有效动作不是笔记草稿时则不得越过。
     if (!confirmation) {
-      // 最新一轮确实是 create_note，但已过期时不得回退到更早草稿。
-      if (confirmations.some((item) => item.toolName === 'create_note')) return null;
+      // 确认令牌过期只终止“执行旧动作”，不销毁已持久化 ArtifactVersion。客户端只续带
+      // 公开的版本 ID；服务端仍会按 owner / subject / conversation 和版本链重新读取正文。
+      const expiredNote = confirmations.find((item) => item.toolName === 'create_note');
+      if (expiredNote) {
+        const artifactVersionId = normalizeArtifactId(expiredNote.artifactVersion?.id);
+        return artifactVersionId ? { artifactVersionId } : null;
+      }
       continue;
     }
     if (confirmation.toolName !== 'create_note') return null;
     if (!confirmation.id || !/^[A-Za-z0-9_-]{40,}$/.test(String(confirmation.token || ''))) return null;
-    return { confirmationId: confirmation.id, confirmationToken: confirmation.token };
+    const artifactVersionId = normalizeArtifactId(confirmation.artifactVersion?.id);
+    return {
+      confirmationId: confirmation.id,
+      confirmationToken: confirmation.token,
+      ...(artifactVersionId ? { artifactVersionId } : {}),
+    };
   }
   return null;
 }
@@ -637,6 +675,9 @@ function normalizePersistedMessage(value: unknown): AiAssistantMessage | null {
         : undefined,
     resolvedGrounding: normalizeAiResolvedGrounding(raw.resolvedGrounding),
     materialClarification: normalizeAiMaterialClarification(raw.materialClarification),
+    queryScopes: normalizeAiQueryScopes(raw.queryScopes),
+    executionReceipt: normalizeAiExecutionReceipt(raw.executionReceipt),
+    responseEnvelope: normalizeAiResponseEnvelope(raw.responseEnvelope),
     activity: sanitizeAiMessageActivity(raw.activity),
     cloudId: typeof raw.cloudId === 'string' ? raw.cloudId : undefined,
     requestId: typeof raw.requestId === 'string' ? raw.requestId : undefined,
@@ -656,6 +697,7 @@ function normalizePersistedMessage(value: unknown): AiAssistantMessage | null {
     scopeRefs: freezeSnapshotItems(scopeRefs),
     entityRefs: normalizeContextRefs(raw.entityRefs),
     attachmentRefs: freezeSnapshotItems(attachmentRefs),
+    capabilityModule: normalizeAiCapabilityModule(raw.capabilityModule),
     confirmations,
     transient: raw.transient === true,
     transientGroupId: typeof raw.transientGroupId === 'string' ? raw.transientGroupId : undefined,
@@ -699,6 +741,9 @@ function serializeMessage(message: AiAssistantMessage): Record<string, unknown> 
     citationAudit: message.citationAudit ? safeCloneArray([message.citationAudit])[0] : undefined,
     resolvedGrounding: normalizeAiResolvedGrounding(message.resolvedGrounding),
     materialClarification: normalizeAiMaterialClarification(message.materialClarification),
+    queryScopes: normalizeAiQueryScopes(message.queryScopes),
+    executionReceipt: normalizeAiExecutionReceipt(message.executionReceipt),
+    responseEnvelope: normalizeAiResponseEnvelope(message.responseEnvelope),
     activity: sanitizeAiMessageActivity(message.activity),
     cloudId: message.cloudId,
     requestId: message.requestId,
@@ -715,6 +760,7 @@ function serializeMessage(message: AiAssistantMessage): Record<string, unknown> 
     scopeRefs: normalizeScopeRefs(message.scopeRefs),
     entityRefs: normalizeContextRefs(message.entityRefs),
     attachmentRefs: normalizeAttachmentRefs(message.attachmentRefs),
+    capabilityModule: normalizeAiCapabilityModule(message.capabilityModule),
     confirmations: normalizePendingConfirmations(message.confirmations).filter((confirmation) =>
       pendingIdSet.has(confirmation.id),
     ),

@@ -438,6 +438,48 @@ describe('semanticPlanner', () => {
     );
   });
 
+  it('能力策略阻断使用稳定的双语披露，不伪装成工具不支持', () => {
+    expect(buildSemanticPolicyMessage({ resolution: 'profile_chat_only' }, 'zh-CN')).toBe(
+      '当前会话启用了仅对话模式，因此没有访问你的轻笺个人数据，也没有修改任何内容。',
+    );
+    expect(buildSemanticPolicyMessage({ resolution: 'profile_read_only' }, 'en-US')).toBe(
+      'This conversation is read-only, so no content was created, modified, or deleted.',
+    );
+  });
+
+  it('旧语义计划对 policy_blocked 能力返回同一策略裁决', () => {
+    const policyPlan = {
+      version: '1.0',
+      requestClass: 'data_action',
+      confidence: 'high',
+      needsClarification: false,
+      clarificationQuestion: '',
+      intents: [
+        {
+          kind: 'write',
+          capabilityId: 'todo.status.set',
+          goal: '完成待办',
+          targetDescription: '目标待办',
+          dependsOn: [],
+        },
+      ],
+    };
+    expect(
+      adjudicateSemanticPlan({
+        plan: policyPlan,
+        catalog: [
+          {
+            id: 'todo.status.set',
+            effect: 'write',
+            status: 'policy_blocked',
+            policyBlockReason: 'read_only',
+            toolNames: [],
+          },
+        ],
+      }),
+    ).toMatchObject({ state: 'blocked', resolution: 'profile_read_only' });
+  });
+
   it('语义能力和实际调用冲突时丢弃全部调用', () => {
     const parsed = parseSemanticPlannerResponse(
       {

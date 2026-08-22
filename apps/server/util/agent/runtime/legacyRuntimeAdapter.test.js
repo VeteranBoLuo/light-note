@@ -63,6 +63,34 @@ describe('Runtime V2 legacy execution adapter', () => {
     });
   });
 
+  it('部分歧义时不把被阻断写目标重新投影回 legacy 执行层', () => {
+    const result = adaptRuntimeOutcomeToLegacy(
+      {
+        state: 'ready_for_tools',
+        blockedGoalIds: ['write'],
+        turnSpec: {
+          requestKind: 'mixed',
+          confidence: 'medium',
+          goals: [
+            { id: 'read', kind: 'read', description: '查询笔记', targetDescription: '今天', dependsOn: [] },
+            { id: 'write', kind: 'write', description: '创建总结', targetDescription: '', dependsOn: ['read'] },
+          ],
+        },
+        route: {
+          goalRoutes: [
+            { goalId: 'read', capabilityIds: ['note.query'] },
+            { goalId: 'write', capabilityIds: ['note.create'] },
+          ],
+        },
+      },
+      catalog,
+    );
+    expect(result.semanticPlan.intents).toEqual([
+      expect.objectContaining({ capabilityId: 'note.query', kind: 'read', dependsOn: [] }),
+    ]);
+    expect(result.writeToolNames).toEqual([]);
+  });
+
   it('不支持目标的说明只包含真正被阻断的能力，不把同轮正常读取误报为禁止', () => {
     const result = adaptRuntimeOutcomeToLegacy(
       {
@@ -89,5 +117,30 @@ describe('Runtime V2 legacy execution adapter', () => {
       resolution: 'forbidden',
       capabilities: [{ id: 'data.permanent_delete' }],
     });
+  });
+
+  it('会话 profile 的阻断原因确定性投影给现有回复层', () => {
+    const result = adaptRuntimeOutcomeToLegacy(
+      {
+        state: 'unsupported',
+        turnSpec: {
+          requestKind: 'action',
+          confidence: 'high',
+          goals: [{ id: 'write', kind: 'write', description: '创建笔记', targetDescription: '', dependsOn: [] }],
+        },
+        route: { goalRoutes: [{ goalId: 'write', capabilityIds: ['note.create'] }] },
+      },
+      [
+        {
+          id: 'note.create',
+          effect: 'write',
+          status: 'policy_blocked',
+          policyBlockReason: 'read_only',
+          toolNames: [],
+        },
+      ],
+    );
+    expect(result.semanticPolicy).toMatchObject({ resolution: 'profile_read_only' });
+    expect(result.writeToolNames).toEqual([]);
   });
 });

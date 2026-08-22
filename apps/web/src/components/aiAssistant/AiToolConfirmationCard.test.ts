@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick } from 'vue';
 import { createI18n } from 'vue-i18n';
+import { AI_AGENT_CLIENT_CAPABILITIES } from '@/api/aiAttachmentApi';
 import zhCN from '@/i18n/locales/zh-CN';
 import type { AiToolConfirmation } from '@/types/aiAgent';
 
@@ -62,10 +63,16 @@ function mountCard(
   confirmation = createConfirmation(),
   onReplaced?: (replacement: unknown) => void,
   onResolved?: (resolution: unknown) => void,
+  capabilityPolicyProfile: 'auto' | 'chat_only' | 'read_only' = 'auto',
 ) {
   const host = document.createElement('div');
   document.body.append(host);
-  const app = createApp(AiToolConfirmationCard, { confirmation, onReplaced, onResolved });
+  const app = createApp(AiToolConfirmationCard, {
+    confirmation,
+    onReplaced,
+    onResolved,
+    capabilityPolicyProfile,
+  });
   app.use(
     createI18n({
       legacy: false,
@@ -175,7 +182,8 @@ describe('AiToolConfirmationCard note preview', () => {
       confirmationToken: 'token',
       sessionId: 'session-1',
       continuationToken: 'continuation-token',
-      clientCapabilities: ['agent_interaction_v1', 'agent_continuation_v1', 'grounding_scope_v2'],
+      capabilityPolicyProfile: 'auto',
+      clientCapabilities: [...AI_AGENT_CLIENT_CAPABILITIES],
     });
     expect(onResolved).toHaveBeenCalledWith(expect.objectContaining({ continuation }));
   });
@@ -191,6 +199,19 @@ describe('AiToolConfirmationCard note preview', () => {
 
     expect(host.querySelector('.confirmation-note-preview')).toBeNull();
     expect(host.textContent).toContain('"url": "https://openai.com"');
+  });
+
+  it('只读锁保留取消能力，但禁用目录修改和确认执行且不发出写请求', async () => {
+    const host = mountCard(createConfirmation(), undefined, undefined, 'read_only');
+    await flush();
+
+    expect(host.textContent).toContain('只读锁已阻止写入');
+    expect(findButton(host, '更换目标目录').disabled).toBe(true);
+    expect(findButton(host, '确认执行').disabled).toBe(true);
+    findButton(host, '确认执行').click();
+    await flush();
+    expect(api.post).not.toHaveBeenCalled();
+    expect(findButton(host, '取消').disabled).toBe(false);
   });
 
   it('新建笔记确认卡明确显示根目录目标', async () => {
@@ -238,7 +259,7 @@ describe('AiToolConfirmationCard note preview', () => {
       confirmationToken: 'token',
       sessionId: 'session-1',
       parentId: 'directory-2',
-      clientCapabilities: ['agent_interaction_v1', 'agent_continuation_v1', 'grounding_scope_v2'],
+      clientCapabilities: [...AI_AGENT_CLIENT_CAPABILITIES],
     });
     expect(onReplaced).toHaveBeenCalledWith({
       previousConfirmationId: 'confirmation-1',
@@ -271,7 +292,7 @@ describe('AiToolConfirmationCard note preview', () => {
       confirmationToken: 'token',
       sessionId: 'session-1',
       parentId: null,
-      clientCapabilities: ['agent_interaction_v1', 'agent_continuation_v1', 'grounding_scope_v2'],
+      clientCapabilities: [...AI_AGENT_CLIENT_CAPABILITIES],
     });
     expect(onReplaced).toHaveBeenCalledWith({
       previousConfirmationId: 'confirmation-1',

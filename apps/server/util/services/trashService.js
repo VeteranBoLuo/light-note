@@ -1,5 +1,5 @@
 import pool from '../../db/index.js';
-import { parseTimeRange } from '../agent/timeRange.js';
+import { resolveAgentTimeRange } from '../agent/timeRange.js';
 import { invalidatePersonalKnowledgeCache } from '../personalKnowledgeSearch.js';
 import { previewOwnedNoteTrashRestore, restoreOwnedNoteTrash } from './noteTreeService.js';
 
@@ -9,14 +9,14 @@ export const TRASH_TABLE_CONFIG = {
   file: { table: 'files', userIdField: 'create_by' },
 };
 
-export function normalizeRestoreFilters(args = {}) {
+export function normalizeRestoreFilters(args = {}, context = {}) {
   const restoreAll = args.all === true;
   const type = String(args.type || args.resourceType || '').trim();
   const id = String(args.id || '').trim();
   const ids = Array.isArray(args.ids)
     ? [...new Set(args.ids.map((value) => String(value || '').trim()).filter(Boolean))]
     : [];
-  const time = parseTimeRange(args.timeRange);
+  const time = resolveAgentTimeRange(args, 'timeRange', { context, label: '删除时间' });
   if (!restoreAll && !type && !id && !ids.length && !time) {
     throw new Error('FILTER_REQUIRED: 至少需要提供资源类型、资源 ID 或有效时间范围');
   }
@@ -37,15 +37,15 @@ function buildWhere(config, filters, userId) {
     params.push(...filters.ids);
   }
   if (filters.time) {
-    where += ' AND deleted_at >= ? AND deleted_at <= ?';
-    params.push(filters.time.start, filters.time.end);
+    where += ' AND deleted_at >= ? AND deleted_at < ?';
+    params.push(filters.time.start, filters.time.endExclusive);
   }
   return { where, params };
 }
 
-export async function previewTrashRestore({ userId, filters: rawFilters } = {}) {
+export async function previewTrashRestore({ userId, filters: rawFilters, context = {} } = {}) {
   if (!userId) throw new Error('USER_REQUIRED: 缺少用户');
-  const filters = normalizeRestoreFilters(rawFilters);
+  const filters = normalizeRestoreFilters(rawFilters, context);
   const items = [];
   for (const type of filters.types) {
     if (type === 'note') {
@@ -66,9 +66,9 @@ export async function previewTrashRestore({ userId, filters: rawFilters } = {}) 
   return { items, total: items.reduce((sum, item) => sum + item.count, 0) };
 }
 
-export async function restoreTrashResources({ userId, filters: rawFilters } = {}) {
+export async function restoreTrashResources({ userId, filters: rawFilters, context = {} } = {}) {
   if (!userId) throw new Error('USER_REQUIRED: 缺少用户');
-  const filters = normalizeRestoreFilters(rawFilters);
+  const filters = normalizeRestoreFilters(rawFilters, context);
   const connection = await pool.getConnection();
   const results = [];
   let noteRestored = false;

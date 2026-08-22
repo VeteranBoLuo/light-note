@@ -20,6 +20,8 @@ import {
   deleteAiConversation,
   exportAiConversations,
   getAiConversation,
+  getAiConversationDialogueByIds,
+  getAiConversationRecentDialogue,
   listAiConversations,
   listAiMessageVersions,
   prepareAiMessageVersionGroup,
@@ -206,7 +208,12 @@ describe('AI conversation isolation', () => {
         if (found) found.version_group_id = params[0];
         return [{ affectedRows: found ? 1 : 0 }];
       }
-      if (normalizedSql.startsWith('SELECT * FROM ai_messages WHERE conversation_id = ?')) return [recoveredMessages];
+      if (
+        normalizedSql.startsWith('SELECT * FROM ai_messages WHERE conversation_id = ?') ||
+        normalizedSql.startsWith('SELECT * FROM ( SELECT * FROM ai_messages WHERE conversation_id = ?')
+      ) {
+        return [recoveredMessages];
+      }
       if (normalizedSql.startsWith('SELECT * FROM ai_message_sources')) return [[]];
       if (normalizedSql.startsWith('SELECT * FROM ai_message_evidence')) return [[]];
       if (normalizedSql.startsWith('SELECT message_id, rating, reason, resolved')) return [[]];
@@ -424,8 +431,95 @@ describe('AI conversation isolation', () => {
       reason: 'unsupported',
       resolved: false,
     });
+    expect(query.mock.calls[1][0]).toContain('ORDER BY create_time DESC, id DESC LIMIT ?');
+    expect(query.mock.calls[1][0]).toContain('ORDER BY create_time ASC, id ASC');
     expect(query.mock.calls[4][0]).toContain('actor_user_id = ?');
     expect(query.mock.calls[4][1]).toEqual(['actor-1', 'conversation-1', 'message-1']);
+  });
+
+  it('recentDialogue 只读取 owner 会话中当前消息之前的轻量已完成对话', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce([[{ id: 'conversation-1', title: 'Conversation', status: 'active' }]])
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'answer-1',
+            role: 'assistant',
+            content: '上一轮回答',
+            status: 'completed',
+            version_group_id: 'answer-group-1',
+            create_time: '2026-08-21 10:01:00',
+          },
+          {
+            id: 'question-1',
+            role: 'user',
+            content: '上一轮问题',
+            status: 'completed',
+            create_time: '2026-08-21 10:00:00',
+          },
+        ],
+      ]);
+
+    const dialogue = await getAiConversationRecentDialogue(
+      normalIdentity,
+      'conversation-1',
+      { sourceMessageId: 'question-2', limit: 12 },
+      { query },
+    );
+
+    expect(dialogue).toEqual([
+      expect.objectContaining({ id: 'question-1', role: 'user', content: '上一轮问题' }),
+      expect.objectContaining({ id: 'answer-1', role: 'assistant', content: '上一轮回答' }),
+    ]);
+    expect(query.mock.calls[0][1]).toEqual(['conversation-1', 'user-1', 'user-1', 'normal', null]);
+    expect(query.mock.calls[1][0]).toContain('INNER JOIN ai_messages AS anchor');
+    expect(query.mock.calls[1][0]).toContain("m.status = 'completed'");
+    expect(query.mock.calls[1][1]).toEqual(['question-2', 'conversation-1', 12]);
+  });
+
+  it('Dialogue Anchor 只按 owner 会话中的服务端消息 ID 完整重取材料', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce([[{ id: 'conversation-1', title: 'Conversation', status: 'active' }]])
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'answer-1',
+            role: 'assistant',
+            content: '回答',
+            status: 'completed',
+            create_time: '2026-08-21 10:01:00',
+          },
+          {
+            id: 'question-1',
+            role: 'user',
+            content: '问题',
+            status: 'completed',
+            create_time: '2026-08-21 10:00:00',
+          },
+        ],
+      ]);
+
+    await expect(
+      getAiConversationDialogueByIds(normalIdentity, 'conversation-1', ['question-1', 'answer-1'], { query }),
+    ).resolves.toEqual([
+      expect.objectContaining({ id: 'question-1', role: 'user', content: '问题' }),
+      expect.objectContaining({ id: 'answer-1', role: 'assistant', content: '回答' }),
+    ]);
+    expect(query.mock.calls[1][0]).toContain("role IN ('user', 'assistant') AND status = 'completed'");
+    expect(query.mock.calls[1][1]).toEqual(['conversation-1', 'question-1', 'answer-1']);
+  });
+
+  it('Dialogue Anchor 任一消息缺失时失败关闭，不把残缺对话当完整材料', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce([[{ id: 'conversation-1', title: 'Conversation', status: 'active' }]])
+      .mockResolvedValueOnce([[{ id: 'question-1', role: 'user', content: '问题', status: 'completed' }]]);
+
+    await expect(
+      getAiConversationDialogueByIds(normalIdentity, 'conversation-1', ['question-1', 'answer-missing'], { query }),
+    ).rejects.toMatchObject({ code: 'DIALOGUE_ANCHOR_STALE', status: 409 });
   });
 
   it('soft deletes a conversation and restores it only inside the owner-scoped undo window', async () => {

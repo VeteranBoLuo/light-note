@@ -21,8 +21,10 @@
     "backfill:note-thumbnails": "node scripts/backfillNoteImageThumbnails.js",
     "backfill:community-chat-identities": "node scripts/backfillCommunityChatIdentities.js",
     "eval:ai-assistant": "node evaluation/ai-assistant/runner.js",
+    "eval:ai-runtime-v3-offline": "node evaluation/ai-assistant/turnSpecV3OfflineEvaluator.js",
     "smoke:ai-assistant": "node evaluation/ai-assistant/liveSmokeRunner.js",
     "smoke:ai-turn-v2": "node evaluation/ai-assistant/turnSpecLiveSmokeRunner.js",
+    "smoke:ai-turn-v3": "node evaluation/ai-assistant/turnSpecV3LiveSmokeRunner.js",
     "smoke:ai-root-e2e": "node evaluation/ai-assistant/rootE2ERunner.js",
     "test": "vitest run",
     "test:watch": "vitest"

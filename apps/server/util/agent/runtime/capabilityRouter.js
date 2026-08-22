@@ -120,9 +120,15 @@ function pickCapabilities(goal, catalog, turnSpec, message, contextTypes) {
     .map((entry) => ({ entry, score: routedSemanticScore(goal, entry, turnSpec, message, contextTypes) }))
     .sort((left, right) => right.score - left.score || left.entry.id.localeCompare(right.entry.id));
   if (!candidates.length) return [];
-  if (goalEffect(goal) === 'write') return [candidates[0].entry];
-  const bestScore = candidates[0].score;
-  return candidates
+  // “未选择/未开放”只描述本轮不可调用，不能凭描述相似度压掉同域内真正可执行的能力。
+  // 当至少存在 enabled/planned/forbidden 候选时，先排除 unavailable；若全部不可用则仍保留
+  // 最高分项，让调用方返回明确的 unavailable，而不是伪装成无能力。
+  const routableCandidates = candidates.some((candidate) => candidate.entry.status !== 'unavailable')
+    ? candidates.filter((candidate) => candidate.entry.status !== 'unavailable')
+    : candidates;
+  if (goalEffect(goal) === 'write') return [routableCandidates[0].entry];
+  const bestScore = routableCandidates[0].score;
+  return routableCandidates
     .filter((candidate, index) => index < 3 && (bestScore > 0 ? candidate.score === bestScore : true))
     .map((candidate) => candidate.entry);
 }

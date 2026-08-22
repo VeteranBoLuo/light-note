@@ -3,7 +3,11 @@ import {
   createTurnContractTrace,
   recordCandidateSet,
   recordGroundingDecision,
+  recordIntentCompiler,
+  recordExecutionContract,
+  recordExecutionPlanner,
   recordOutputContract,
+  recordRuntimeIsolation,
   recordRequestedScope,
   recordResolvedScope,
   recordSourcesUsed,
@@ -43,6 +47,36 @@ describe('Agent Turn Contract trace', () => {
       subsetValid: false,
       subsetViolationCount: 1,
     });
+    recordRuntimeIsolation(trace, {
+      mode: 'v3_enforce',
+      configuredMode: 'v3_enforce',
+      rolloutReason: 'role_allowlist',
+      rolloutPercentage: 5,
+      rawHistoryMessageCount: 0,
+      recentDialogueMessageCount: 4,
+      recentDialogueSource: 'cloud',
+      capabilityPolicyProfile: 'read_only',
+      legacyStageCount: 0,
+    });
+    recordIntentCompiler(trace, {
+      mode: 'v3_enforce',
+      state: 'ready',
+      version: '3.1',
+      requestKind: 'answer',
+      confidence: 'high',
+      continuationMode: 'refer_last_result',
+      topicEpochAction: 'keep',
+      goalCount: 1,
+    });
+    recordExecutionPlanner(trace, {
+      state: 'blocked',
+      attempts: 3,
+      issues: ['required_goal_step_missing', 'secret value must not survive'],
+    });
+    recordExecutionContract(trace, {
+      semanticDigest: 'a'.repeat(64),
+      executionDigest: 'b'.repeat(64),
+    });
 
     const safe = sanitizeTurnContractTrace(trace);
     const serialized = JSON.stringify(safe);
@@ -62,6 +96,26 @@ describe('Agent Turn Contract trace', () => {
       historyPolicy: 'discourse_projection_only',
       sourceSubsetValid: false,
       sourceSubsetViolationCount: 1,
+      runtimeMode: 'v3_enforce',
+      runtimeConfiguredMode: 'v3_enforce',
+      runtimeRolloutReason: 'role_allowlist',
+      runtimeRolloutPercentage: 5,
+      rawHistoryMessageCount: 0,
+      recentDialogueMessageCount: 4,
+      recentDialogueSource: 'cloud',
+      capabilityPolicyProfile: 'read_only',
+      legacyStageCount: 0,
+      intentCompilerMode: 'v3_enforce',
+      intentCompilerState: 'ready',
+      turnSpecVersion: '3.1',
+      turnSpecRequestKind: 'answer',
+      turnSpecContinuationMode: 'refer_last_result',
+      turnSpecTopicEpochAction: 'keep',
+      executionPlannerState: 'blocked',
+      executionPlannerAttempts: 3,
+      executionPlannerIssues: ['required_goal_step_missing', 'secret_value_must_not_survive'],
+      semanticDigest: 'a'.repeat(64),
+      executionDigest: 'b'.repeat(64),
     });
     expect(safe.allowedSourceDigest).toMatch(/^[a-f0-9]{64}$/u);
     expect(safe.sourcesUsedDigest).toMatch(/^[a-f0-9]{64}$/u);
@@ -69,6 +123,36 @@ describe('Agent Turn Contract trace', () => {
     expect(serialized).not.toContain('secret-file-id');
     expect(serialized).not.toContain('不应入库');
     expect(serialized).not.toContain('OLD_ONLY_FACT');
+  });
+
+  it('V3 trace 模式不会被 legacy 对照覆盖，续答枚举完整保留', () => {
+    const trace = createTurnContractTrace();
+    recordIntentCompiler(trace, {
+      mode: 'v3_shadow',
+      state: 'ready',
+      continuationMode: 'answer_clarification',
+    });
+    recordIntentCompiler(trace, {
+      mode: 'shadow',
+      state: 'ready',
+      continuationMode: 'action_continuation',
+    });
+    expect(trace.intentCompilerMode).toBe('v3_shadow');
+    expect(trace.turnSpecContinuationMode).toBe('action_continuation');
+    expect(sanitizeTurnContractTrace(trace)).toMatchObject({
+      intentCompilerMode: 'v3_shadow',
+      turnSpecContinuationMode: 'action_continuation',
+    });
+  });
+
+  it('非法协议版本和能力策略只会降级为低基数默认值', () => {
+    const trace = createTurnContractTrace();
+    recordIntentCompiler(trace, { version: '4.0' });
+    recordRuntimeIsolation(trace, { capabilityPolicyProfile: 'admin_mode' });
+    expect(sanitizeTurnContractTrace(trace)).toMatchObject({
+      turnSpecVersion: 'unknown',
+      capabilityPolicyProfile: 'auto',
+    });
   });
 
   it('本轮显式材料优先于继承候选，工作区和空范围保持可观察', () => {

@@ -1,4 +1,5 @@
 import pool from '../../../db/index.js';
+import { withQueryResultMetadata } from '../toolResultMetadata.js';
 import { decorateCloudFolderRows } from '../../services/cloudFolderTreeService.js';
 
 function normalizeArgs(args = {}) {
@@ -66,10 +67,10 @@ export default {
       fullPath: row.full_path || row.name || '未命名文件夹',
       fileCount: Number(row.direct_file_count || 0),
     }));
-    return {
+    return withQueryResultMetadata({
       total: matches.length,
       items,
-    };
+    });
   },
   transform(raw) {
     const items = raw?.items || [];

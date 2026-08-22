@@ -1,12 +1,9 @@
 import pool from '../../../db/index.js';
-import { parseTimeRange } from '../timeRange.js';
+import { resolveAgentTimeRange } from '../timeRange.js';
 import { searchPersonalKnowledge } from '../../personalKnowledgeSearch.js';
 import { PERSONAL_SCOPE_USER_PARAM, personalScopeHint } from '../ownerScope.js';
-
-// LIKE 通配符按字面处理：名称里的 % 和 _ 不能变成通配（与 query_notes/todoService 同规则）。
-function escapeLikePattern(keyword) {
-  return String(keyword).replace(/[\\%_]/g, '\\$&');
-}
+import { escapeLikePattern } from '../sqlPatterns.js';
+import { withQueryResultMetadata } from '../toolResultMetadata.js';
 
 function buildScopeConditions({ userId, tag, time }) {
   let where = '';
@@ -19,8 +16,8 @@ function buildScopeConditions({ userId, tag, time }) {
     params.push(tag, userId);
   }
   if (time) {
-    where += ` AND b.create_time >= ? AND b.create_time <= ?`;
-    params.push(time.start, time.end);
+    where += ` AND b.create_time >= ? AND b.create_time < ?`;
+    params.push(time.start, time.endExclusive);
   }
   return { where, params };
 }
@@ -70,6 +67,11 @@ export default {
   parameters: {
     type: 'object',
     properties: {
+      bookmarkId: {
+        type: 'string',
+        maxLength: 255,
+        description: '可选，服务端已校验上下文中的书签 ID；存在时精确定位该书签',
+      },
       keyword: { type: 'string', description: '搜索关键词或短词组，匹配书签名称和URL；不要传整句问题' },
       tag: { type: 'string', description: '标签名称，精确匹配' },
       timeRange: { type: 'string', description: '时间范围，如"最近7天"、"上个月"、"今年"、"全部"' },
@@ -77,17 +79,26 @@ export default {
       user: { type: 'string', description: PERSONAL_SCOPE_USER_PARAM },
     },
   },
+  resourceBindings: [{ argument: 'bookmarkId', refType: 'bookmark', sourceField: 'id' }],
   requireRoot: false,
-  async execute(args, ctx) {
-    const { keyword, tag, timeRange, limit = 10 } = args;
-    const time = parseTimeRange(timeRange);
+  async execute(args, ctx = {}) {
+    const { bookmarkId, keyword, tag, timeRange, limit = 10 } = args;
+    const time = resolveAgentTimeRange(args, 'timeRange', { context: ctx, label: '书签创建时间' });
+    const resolvedRanges = timeRange
+      ? { timeRange: { expression: String(timeRange).trim(), range: time, source: 'tool' } }
+      : {};
     const take = Math.min(Math.max(limit || 10, 1), 50);
 
     let where = 'b.user_id = ? AND b.del_flag = 0';
     const baseParams = [ctx.userId];
 
+    if (bookmarkId) {
+      where += ' AND b.id = ?';
+      baseParams.push(String(bookmarkId));
+    }
+
     if (keyword) {
-      where += ` AND (b.name LIKE ? OR b.url LIKE ?)`;
+      where += ` AND (b.name LIKE ? ESCAPE '\\\\' OR b.url LIKE ? ESCAPE '\\\\')`;
       const pattern = `%${escapeLikePattern(keyword)}%`;
       baseParams.push(pattern, pattern);
     }
@@ -100,8 +111,8 @@ export default {
     const order = keyword
       ? `ORDER BY CASE
            WHEN LOWER(b.name) = LOWER(?) THEN 100
-           WHEN LOWER(b.name) LIKE LOWER(?) THEN 80
-           WHEN LOWER(b.name) LIKE LOWER(?) THEN 60
+           WHEN LOWER(b.name) LIKE LOWER(?) ESCAPE '\\\\' THEN 80
+           WHEN LOWER(b.name) LIKE LOWER(?) ESCAPE '\\\\' THEN 60
            ELSE 40
          END DESC, b.create_time DESC`
       : 'ORDER BY b.create_time DESC';
@@ -117,19 +128,38 @@ export default {
     ]);
 
     if (rows.length || !keyword) {
-      return { total: countRes[0].total, items: rows, matchMode: 'like' };
+      return withQueryResultMetadata(
+        { total: Number(countRes[0].total || 0), items: rows, matchMode: 'like' },
+        { resolvedRanges },
+      );
     }
 
     // LIKE 零结果 → 语义降级；降级自身失败 fail-open 回空结果，不升级成报错。
     try {
       const fallbackRows = await semanticFallback({ userId: ctx.userId, keyword, take, tag, time });
       if (fallbackRows.length) {
-        return { total: fallbackRows.length, items: fallbackRows, matchMode: 'semantic' };
+        return withQueryResultMetadata(
+          { total: fallbackRows.length, items: fallbackRows, matchMode: 'semantic' },
+          { exactTotal: false, coverage: 'partial', truncationReason: 'semantic_recall', resolvedRanges },
+        );
       }
     } catch (error) {
       console.warn('[query_bookmarks] semantic fallback failed code=%s', error?.code || error?.message);
     }
-    return { total: 0, items: [], matchMode: 'like' };
+    return withQueryResultMetadata({ total: 0, items: [], matchMode: 'like' }, { resolvedRanges });
+  },
+  getDependencyRefs(raw) {
+    return (Array.isArray(raw?.items) ? raw.items : []).map((item) => ({ type: 'bookmark', id: item.id }));
+  },
+  toSources(raw) {
+    return (Array.isArray(raw?.items) ? raw.items : []).map((item) => ({
+      type: 'bookmark',
+      id: String(item.id || ''),
+      title: item.name || '未命名书签',
+      url: item.url || '',
+      target: item.url || 'bookmark-list',
+      excerpt: item.url || '',
+    }));
   },
   transform(raw, args) {
     const items = raw?.items || [];
@@ -137,7 +167,7 @@ export default {
       const tagHint = args.tag ? `（标签"${args.tag}"）` : '';
       return `没有找到书签${tagHint}`;
     }
-    const lines = items.slice(0, 10).map((r, i) => {
+    const lines = items.map((r, i) => {
       const name = r.name || '无标题';
       const url = r.url || '';
       const time = r.create_time ? new Date(r.create_time).toLocaleString('zh-CN') : '';
@@ -148,9 +178,7 @@ export default {
       raw?.matchMode === 'semantic'
         ? `关键词没有精确匹配，以下是语义相关的 ${items.length} 条书签：`
         : `共 ${raw.total} 条书签：`;
-    let result = `${head}\n${lines.join('\n')}`;
-    if (raw?.matchMode !== 'semantic' && raw.total > 10) result += `\n...（仅展示前 10 条，共 ${raw.total} 条）`;
-    return result;
+    return `${head}\n${lines.join('\n')}`;
   },
   summarize(raw, args) {
     if (!raw?.total) return `书签查询：无结果`;

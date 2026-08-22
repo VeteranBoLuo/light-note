@@ -33,6 +33,12 @@ export interface AiToolConfirmation {
   preview?: AiToolConfirmationPreview;
   expiresAt?: string;
   continuation?: AiActionContinuation;
+  artifactVersion?: {
+    id: string;
+    artifactChainId: string;
+    version: number;
+    state: 'draft' | 'ready';
+  };
 }
 
 export interface AiToolActionReceipt {

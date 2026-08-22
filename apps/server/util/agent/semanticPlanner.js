@@ -305,7 +305,7 @@ export function buildSemanticPlanToolDefinition(catalog, tools = [], { dependenc
             type: 'array',
             maxItems: MAX_TOOL_CALLS,
             description:
-              '本轮立即可执行的真实工具调用。无依赖的 enabled intent 必须给出对应工具和完整参数；dependsOn 尚未满足的 intent 本轮不得提前调用，服务端会在真实结果返回后重新规划。闲聊、澄清、planned、forbidden、unavailable、unknown 能力必须为空数组。',
+              '本轮立即可执行的真实工具调用。无依赖的 enabled intent 必须给出对应工具和完整参数；dependsOn 尚未满足的 intent 本轮不得提前调用，服务端会在真实结果返回后重新规划。闲聊、澄清、planned、forbidden、unavailable、policy_blocked、unknown 能力必须为空数组。',
             items: buildEmbeddedToolCallSchema(catalog, tools),
           },
         },
@@ -357,7 +357,10 @@ export function parseSemanticPlannerResponse(plannerResponse, catalog, options =
   // 只有 Provider 完全漏掉 meta call、但给出了可核验的只读调用时才兼容派生。
   // 显式但格式无效/重复的计划必须失败关闭；写工具绝不允许绕过 Intent Envelope。
   const derivedPlan = planCalls.length === 0 ? derivePlanFromToolCalls(toolCalls, catalog) : null;
-  const safeDerivedPlan = derivedPlan?.intents.some((intent) => intent.kind === 'write') ? null : derivedPlan;
+  const hasDerivedWriteIntent = Array.isArray(derivedPlan?.intents)
+    ? derivedPlan.intents.some((intent) => intent.kind === 'write')
+    : false;
+  const safeDerivedPlan = hasDerivedWriteIntent ? null : derivedPlan;
   const plan = validSemanticPlan || safeDerivedPlan;
   return {
     plan,
@@ -368,6 +371,7 @@ export function parseSemanticPlannerResponse(plannerResponse, catalog, options =
 }
 
 function policyPriority(status) {
+  if (status === 'policy_blocked') return 5;
   if (status === 'forbidden') return 4;
   if (status === 'unavailable') return 3;
   if (status === 'planned') return 2;
@@ -444,7 +448,14 @@ export function adjudicateSemanticPlan({ plan, toolCalls = [], catalog = [] } = 
   if (policyCapability && policyPriority(policyCapability.status) > 0) {
     return {
       state: 'blocked',
-      resolution: policyCapability.status === 'unavailable' ? 'forbidden_context' : policyCapability.status,
+      resolution:
+        policyCapability.status === 'policy_blocked'
+          ? policyCapability.policyBlockReason === 'chat_only'
+            ? 'profile_chat_only'
+            : 'profile_read_only'
+          : policyCapability.status === 'unavailable'
+            ? 'forbidden_context'
+            : policyCapability.status,
       plan,
       capabilities: [policyCapability],
       toolCalls: [],
@@ -613,6 +624,14 @@ export function buildSemanticPolicyMessage(outcome, locale = 'zh-CN') {
     (typeof capability?.guidance === 'string' ? capability.guidance : '');
   const guidance = String(rawGuidance || '').trim();
   switch (outcome?.resolution) {
+    case 'profile_chat_only':
+      return english
+        ? 'This conversation is in chat-only mode, so personal Light Note data was not accessed and nothing was changed.'
+        : '当前会话启用了仅对话模式，因此没有访问你的轻笺个人数据，也没有修改任何内容。';
+    case 'profile_read_only':
+      return english
+        ? 'This conversation is read-only, so no content was created, modified, or deleted.'
+        : '当前会话启用了只读锁，因此没有创建、修改或删除任何内容。';
     case 'planned':
       return english
         ? `AI does not currently support ${label || 'this operation'}, so nothing was executed.`

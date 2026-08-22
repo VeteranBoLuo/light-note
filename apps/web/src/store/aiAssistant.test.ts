@@ -387,6 +387,17 @@ describe('材料生命周期:默认一次性(P0-A/B)', () => {
       },
     ];
     expect(resolveAiAssistantPendingNoteDraftReference(expiredNewerDraft)).toBeNull();
+
+    const recoverableExpiredDraft = structuredClone(expiredNewerDraft);
+    recoverableExpiredDraft.at(-1)!.confirmations![0].artifactVersion = {
+      id: '10000000-0000-4000-8000-000000000001',
+      artifactChainId: '10000000-0000-4000-8000-000000000002',
+      version: 1,
+      state: 'ready',
+    };
+    expect(resolveAiAssistantPendingNoteDraftReference(recoverableExpiredDraft)).toEqual({
+      artifactVersionId: '10000000-0000-4000-8000-000000000001',
+    });
   });
 
   it('把服务端工具返回的待办来源转成稳定追问锚点', () => {
@@ -876,6 +887,22 @@ describe('aiAssistant store', () => {
         message: null,
         at: '2026-07-19T00:00:01.000Z',
       },
+      queryScopes: [
+        {
+          schemaVersion: 1,
+          tool: 'query_todos',
+          total: 4,
+          returned: 4,
+          totalExact: true,
+          completeness: 'complete',
+          truncated: false,
+          truncationReason: null,
+          stableReferenceCount: 4,
+          stableIdCoverage: 'complete',
+          projection: { completeness: 'complete', truncated: false, truncationReason: null },
+          resolvedRanges: [],
+        },
+      ],
     });
 
     store.switchConversation(subjectB, '你好');
@@ -885,6 +912,7 @@ describe('aiAssistant store', () => {
       recovered: true,
       stage: 'completed',
       terminal: { status: 'completed', eventId: 8 },
+      queryScopes: [expect.objectContaining({ tool: 'query_todos', total: 4 })],
     });
   });
 

@@ -1,4 +1,5 @@
 import pool from '../../../db/index.js';
+import { withQueryResultMetadata } from '../toolResultMetadata.js';
 
 // 我的意见反馈及处理状态(只读)。直接查 opinion 表。
 export default {
@@ -11,13 +12,16 @@ export default {
   },
   requireRoot: false,
   async execute(args, ctx) {
-    if (!ctx.userId || ctx.userRole === 'visitor') return { total: 0, items: [] };
+    if (!ctx.userId || ctx.userRole === 'visitor') return withQueryResultMetadata({ total: 0, items: [] });
     const take = Math.min(Math.max(args.limit || 10, 1), 30);
-    const [items] = await pool.query(
-      'SELECT type, content, status, reply_content, create_time FROM opinion WHERE user_id = ? AND del_flag = 0 ORDER BY create_time DESC LIMIT ?',
-      [ctx.userId, take],
-    );
-    return { total: items.length, items };
+    const [[items], [countRows]] = await Promise.all([
+      pool.query(
+        'SELECT type, content, status, reply_content, create_time FROM opinion WHERE user_id = ? AND del_flag = 0 ORDER BY create_time DESC LIMIT ?',
+        [ctx.userId, take],
+      ),
+      pool.query('SELECT COUNT(*) AS total FROM opinion WHERE user_id = ? AND del_flag = 0', [ctx.userId]),
+    ]);
+    return withQueryResultMetadata({ total: Number(countRows[0]?.total || 0), items });
   },
   transform(raw) {
     const items = raw?.items || [];
@@ -29,7 +33,7 @@ export default {
       if (o.reply_content) s += `\n   回复:${o.reply_content}`;
       return s;
     });
-    return `你的反馈(共 ${items.length} 条):\n${lines.join('\n')}`;
+    return `你的反馈(共 ${raw.total} 条，当前返回 ${items.length} 条):\n${lines.join('\n')}`;
   },
   summarize(raw) {
     return `反馈:${raw?.items?.length || 0} 条`;

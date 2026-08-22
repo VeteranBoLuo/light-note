@@ -1,6 +1,7 @@
 import pool from '../../../db/index.js';
 import { listTodoPage } from '../../services/todoService.js';
 import { searchPersonalKnowledge } from '../../personalKnowledgeSearch.js';
+import { withQueryResultMetadata } from '../toolResultMetadata.js';
 
 const PRIORITY_LABELS = Object.freeze({ 0: '低优先级', 1: '普通优先级', 2: '高优先级' });
 const REMINDER_LABELS = Object.freeze({ in_app: '站内提醒', email: '邮件提醒' });
@@ -54,6 +55,9 @@ function normalizeArgs(input = {}) {
     .replace('T', ' ')
     .slice(0, 16);
   return {
+    todoId: String(input.todoId ?? input.id ?? '')
+      .trim()
+      .slice(0, 255),
     status: String(input.status ?? input.todoStatus ?? input.todo_status ?? 'pending').toLowerCase(),
     keyword: String(input.keyword ?? input.query ?? '')
       .trim()
@@ -99,6 +103,11 @@ export default {
         description:
           '待办状态，默认 pending。定位“标记完成”的目标用 pending；定位“重新打开/恢复为待处理”的目标必须用 completed；定位“删除”的目标必须用 all',
       },
+      todoId: {
+        type: 'string',
+        maxLength: 255,
+        description: '可选，服务端已校验上下文中的待办 ID；存在时精确定位该待办',
+      },
       keyword: { type: 'string', maxLength: 100, description: '可选，按待办标题或说明搜索' },
       planDate: {
         type: 'string',
@@ -127,15 +136,23 @@ export default {
       cursor: { type: 'string', maxLength: 256, description: '上一页结果返回的下一页游标' },
     },
   },
-  argumentAliases: ['todoStatus', 'todo_status', 'query', 'scheduleDate'],
+  argumentAliases: ['id', 'todoStatus', 'todo_status', 'query', 'scheduleDate'],
   normalizeArgs,
+  resourceBindings: [{ argument: 'todoId', refType: 'todo', sourceField: 'id' }],
   requireRoot: false,
   async execute(input, ctx) {
     const args = normalizeArgs(input);
-    if (cannotReadTodos(ctx)) return { items: [], total: 0, nextCursor: null };
-    const page = await listTodoPage(pool, ctx.userId, { ...args, view: 'summary' });
+    if (cannotReadTodos(ctx)) return withQueryResultMetadata({ items: [], total: 0, nextCursor: null });
+    const page = await listTodoPage(pool, ctx.userId, {
+      ...args,
+      ...(args.todoId ? { ids: [args.todoId] } : {}),
+      view: 'summary',
+    });
     if (page.items.length || !args.keyword || args.cursor) {
-      return { ...page, matchMode: 'like' };
+      return withQueryResultMetadata(
+        { ...page, matchMode: 'like' },
+        { truncationReason: page.nextCursor ? 'cursor' : null },
+      );
     }
     // 首页 LIKE 零结果 → 语义降级；降级自身失败 fail-open 回空结果，不升级成报错。
     try {
@@ -148,12 +165,15 @@ export default {
         reminderAt: args.reminderAt,
       });
       if (fallbackItems.length) {
-        return { items: fallbackItems, total: fallbackItems.length, nextCursor: null, matchMode: 'semantic' };
+        return withQueryResultMetadata(
+          { items: fallbackItems, total: fallbackItems.length, nextCursor: null, matchMode: 'semantic' },
+          { exactTotal: false, coverage: 'partial', truncationReason: 'semantic_recall' },
+        );
       }
     } catch (error) {
       console.warn('[query_todos] semantic fallback failed code=%s', error?.code || error?.message);
     }
-    return { ...page, matchMode: 'like' };
+    return withQueryResultMetadata({ ...page, matchMode: 'like' });
   },
   getDependencyRefs(raw) {
     return (Array.isArray(raw?.items) ? raw.items : []).map((item) => ({ type: 'todo', id: item.id }));
@@ -203,5 +223,25 @@ export default {
     const keyword = args.keyword ? `（关键词“${args.keyword}”）` : '';
     const mode = raw?.matchMode === 'semantic' ? '（语义匹配）' : '';
     return `待办查询${keyword}${mode}：共 ${raw.total} 条，已返回 ${raw.items?.length || 0} 条安全摘要`;
+  },
+  getAnswerRequirements(raw) {
+    const items = Array.isArray(raw?.items) ? raw.items : [];
+    if (items.length !== 1) return [];
+    const checklist = items[0]?.checklistProgress || { completed: 0, total: 0 };
+    const completed = Math.max(0, Number(checklist.completed || 0));
+    const total = Math.max(0, Number(checklist.total || 0));
+    if (!Number.isFinite(completed) || !Number.isFinite(total) || total < 1) return [];
+    const remaining = Math.max(0, total - completed);
+    return [
+      {
+        id: 'todo.checklist_progress',
+        anyOf: [
+          `${completed}/${total}`,
+          `已完成${completed}项还差${remaining}项`,
+          `完成${completed}项剩余${remaining}项`,
+        ],
+        appendText: `清单进度：已完成 ${completed} 项，还差 ${remaining} 项（${completed}/${total}）。`,
+      },
+    ];
   },
 };

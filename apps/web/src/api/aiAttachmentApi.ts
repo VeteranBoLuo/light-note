@@ -12,6 +12,8 @@ export const AI_AGENT_CLIENT_CAPABILITIES = [
   'agent_interaction_v1',
   'agent_continuation_v1',
   'grounding_scope_v2',
+  'capability_scope_v3',
+  'capability_policy_profile_v1',
 ] as const;
 
 export type AiAttachmentStatus = 'awaiting_upload' | 'queued' | 'parsing' | 'ready' | 'no_text' | 'failed';

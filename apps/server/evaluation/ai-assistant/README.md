@@ -13,6 +13,7 @@
 - `agentReplayAdapter.js` / `agentReplayCases.js`：把声明式 Provider 回放计划接入真实 `agentChat` 主链，覆盖计划修复、能力纠错、确认和显式 URL 读取；测试全程使用合成输入和 mock Provider。
 - `liveSmokeCases.js` / `liveSmokeRunner.js`：提供 6 条快速集与 39 条完整集；完整集覆盖全部 34 个普通用户工具、关键 Root 只读能力、缺参澄清、依赖顺序和永久删除边界。规划模式校验 DeepSeek 语义计划与真实工具参数契约；完整回答模式还会把隔离的合成工具结果交给 DeepSeek，检查最终正文是否为空、退化、泄露内部 ID、返回通用失败提示或没有采用工具结果。两种模式都不会调用 `tool.execute`，不读写用户业务数据；CLI 默认 dry-run，只有显式 `--live` 才会消耗 Token。
 - `turnSpecLiveSmokeRunner.js`：对 TurnSpec V2 的 Compiler → Router → Planner 做 DeepSeek/Qwen A/B；默认 6 条关键集各重复 20 次，使用有界并发，报告严格正确率、协议失败、灾难性失败、候选工具、延迟、Token 和成本。它不会进入 tool executor，业务工具执行数恒为 0；CLI 默认 dry-run，只有显式 `--live` 才调用 Provider。
+- `rootE2ERunner.js`：最终发布用的真实 Root Handler/工具/确认链门禁。`--runtime v2|v3` 由 Runner 自己覆盖残留环境，确保报告与实际 Runtime 一致；默认 dry-run 不加载 `.env`、不连接数据库、不调用模型，只有获授权时显式 `--live`，包含夹具或写工具时还必须显式 `--execute-writes`。
 
 黄金集保留原 70 条 Ask / Organize 核心任务，并新增 200 条互不重复的产品生命周期场景。十个能力域分别为：Ask、Organize / Change Set、记忆、证据与引用、owner 四维隔离、配额、SSE 恢复、隐私与保留、结果复用、Gateway 与工具策略。每个能力域至少 20 条。
 
@@ -76,7 +77,18 @@ pnpm --filter server run eval:ai-assistant --format json
 ```bash
 pnpm --filter server run smoke:ai-assistant
 pnpm --filter server run smoke:ai-turn-v2
+pnpm --filter server run smoke:ai-root-e2e -- --runtime v3
 ```
+
+准备首次启用 V3 时，真实 Root 全链门禁必须显式选择 V3，不能靠外部环境变量暗示：
+
+```bash
+pnpm --filter server run smoke:ai-root-e2e -- --runtime v3 --live --suite full --execute-writes --provider deepseek --approve-full-matrix
+```
+
+该命令会连接 `.env` 指向的真实依赖、调用 Provider 并创建后清理测试夹具；没有当前环境的明确授权时不得执行。`--approve-full-matrix` 是 V3 全量真实调用的额外成本门禁，定点复测应使用 `--case` 选取受影响工具，不需要该开关。
+
+笔记产物回归会通过正式 Note Service 创建带本次唯一前缀的当天 Markdown 材料，并在 `finally` 清理。不要改回依赖 Root 账号“恰好今天有笔记”的隐式前提：空账号和跨零点运行会把正确的空材料保护误报为 Runtime 失败。报告只记录字符数、失效令牌数、幂等和清理状态，不记录笔记正文、资源 ID 或账号信息。
 
 受控排障时可显式选择快速集或完整集：
 

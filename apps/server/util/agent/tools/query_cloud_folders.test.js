@@ -21,7 +21,7 @@ describe('query_cloud_folders 工具', () => {
 
     expect(query.mock.calls[0][0]).toContain('folders.create_by = ? AND folders.del_flag = 0');
     expect(query.mock.calls[0][1]).toEqual(['user-1']);
-    expect(raw).toEqual({
+    expect(raw).toMatchObject({
       total: 1,
       items: [
         {
@@ -33,6 +33,7 @@ describe('query_cloud_folders 工具', () => {
           fileCount: 3,
         },
       ],
+      resultMetadata: { totalCount: 1, returned: 1, completeness: 'complete' },
     });
     expect(tool.transform(raw)).toContain('[folder:7] 工作 / 项目资料');
   });

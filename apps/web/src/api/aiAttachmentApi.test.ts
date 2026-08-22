@@ -24,6 +24,7 @@ describe('aiAttachmentApi', () => {
 
   it('声明新材料边界能力，禁止服务端按旧客户端协议接收公开引用回传', () => {
     expect(AI_AGENT_CLIENT_CAPABILITIES).toContain('grounding_scope_v2');
+    expect(AI_AGENT_CLIENT_CAPABILITIES).toContain('capability_policy_profile_v1');
   });
 
   it('云空间附件错误交给附件组件统一提示，避免请求层重复弹窗', async () => {

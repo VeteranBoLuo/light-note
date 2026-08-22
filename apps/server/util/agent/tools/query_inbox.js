@@ -1,5 +1,6 @@
 import pool from '../../../db/index.js';
 import { listInboxResources } from '../../resourceInbox.js';
+import { withQueryResultMetadata } from '../toolResultMetadata.js';
 
 const TYPE_LABELS = Object.freeze({ bookmark: '书签', note: '笔记', file: '文件' });
 const SOURCE_LABELS = Object.freeze({
@@ -75,15 +76,15 @@ export default {
   async execute(input, ctx) {
     const args = normalizeArgs(input);
     if (cannotReadInbox(ctx)) {
-      return {
+      return withQueryResultMetadata({
         items: [],
         total: 0,
         nextCursor: null,
         pendingTotal: 0,
         typeTotals: { bookmark: 0, note: 0, file: 0 },
-      };
+      });
     }
-    return listInboxResources(pool, {
+    const page = await listInboxResources(pool, {
       userId: ctx.userId,
       type: args.resourceType,
       keyword: args.keyword,
@@ -92,6 +93,7 @@ export default {
       cursor: args.cursor,
       view: 'summary',
     });
+    return withQueryResultMetadata(page, { truncationReason: page.nextCursor ? 'cursor' : null });
   },
   transform(raw, args = {}) {
     const items = raw?.items || [];

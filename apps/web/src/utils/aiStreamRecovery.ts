@@ -2,6 +2,13 @@ import type { AiEvidence, AiAgentRecoverySnapshot, AiAgentRecoveryTerminal } fro
 import type { AiSource } from '@/components/aiAssistant/aiSourceNavigation';
 import { sanitizeAiMessageActivity } from '@/utils/aiMemoryInfluence';
 import { normalizeAiArtifacts, type AiArtifact } from '@/types/aiArtifact';
+import { normalizeAiQueryScopes, type AiQueryScope } from '@/types/aiQueryScope';
+import {
+  normalizeAiExecutionReceipt,
+  normalizeAiResponseEnvelope,
+  type AiExecutionReceipt,
+  type AiResponseEnvelope,
+} from '@/types/aiExecutionReceipt';
 import {
   normalizeAiMaterialClarification,
   normalizeAiResolvedGrounding,
@@ -29,6 +36,9 @@ export interface AiRecoveryMessageTarget {
   artifacts?: AiArtifact[];
   resolvedGrounding?: AiResolvedGrounding;
   materialClarification?: AiMaterialClarification;
+  queryScopes?: AiQueryScope[];
+  executionReceipt?: AiExecutionReceipt;
+  responseEnvelope?: AiResponseEnvelope;
 }
 
 export interface AiStreamRecoveryDecision {
@@ -121,6 +131,9 @@ export function applyAiRecoverySnapshot(target: AiRecoveryMessageTarget, snapsho
   target.citationAudit = normalizeCitationAudit(snapshot.citationAudit);
   target.resolvedGrounding = normalizeAiResolvedGrounding(snapshot.resolvedGrounding);
   target.materialClarification = normalizeAiMaterialClarification(snapshot.materialClarification);
+  target.queryScopes = normalizeAiQueryScopes(snapshot.queryScopes);
+  target.executionReceipt = normalizeAiExecutionReceipt(snapshot.executionReceipt);
+  target.responseEnvelope = normalizeAiResponseEnvelope(snapshot.responseEnvelope);
   target.activity = sanitizeAiMessageActivity(snapshot.activity);
   target.recovered = true;
   target.stage = String(snapshot.stage || status);

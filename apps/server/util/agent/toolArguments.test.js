@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   getPlannerMaxTokens,
   normalizeToolArguments,
@@ -31,6 +31,29 @@ describe('Agent 工具参数处理', () => {
       title: '日报',
     });
     expect(() => normalizeToolArguments({ normalizeArgs: () => null }, {})).toThrow(/TOOL_ARGUMENTS_INVALID/);
+  });
+
+  it('管理域旧 user 参数迁移为 scope_user，并拒绝冲突值', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const tool = { name: 'query_api_logs', scopeUserMigration: true };
+
+    expect(normalizeToolArguments(tool, { user: 'user@example.test' })).toEqual({
+      scope_user: 'user@example.test',
+    });
+    expect(
+      normalizeToolArguments(tool, {
+        user: 'user@example.test',
+        scope_user: 'user@example.test',
+      }),
+    ).toEqual({ scope_user: 'user@example.test' });
+    expect(warn).toHaveBeenCalledWith(
+      '[Agent] deprecated tool argument alias tool=%s alias=user canonical=scope_user',
+      'query_api_logs',
+    );
+    expect(() => normalizeToolArguments(tool, { user: 'old@example.test', scope_user: 'new@example.test' })).toThrow(
+      /不能指向不同账号/,
+    );
+    warn.mockRestore();
   });
 
   it('工具可在归一化后异步解析账号内参数', async () => {

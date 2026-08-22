@@ -1,3 +1,6 @@
+import { normalizeCapabilityScope } from './v3/capabilityManifest.js';
+import { normalizeAgentCapabilityPolicyProfile } from './v3/capabilityPolicy.js';
+
 const REQUEST_SCOPE_MODES = new Set(['explicit', 'inherit_candidate', 'workspace', 'none']);
 
 function nonEmptyArray(value) {
@@ -61,6 +64,10 @@ export function adaptAgentTurnEnvelope(body = {}) {
     discourse: Object.freeze({
       recentTurns: Array.isArray(body.history) ? body.history : [],
     }),
+    capabilityScope: normalizeCapabilityScope(body.capabilityScope),
+    capabilityPolicyProfile: normalizeAgentCapabilityPolicyProfile(body.capabilityPolicyProfile),
     clientCapabilities,
   });
 }
+
+export const __testing = Object.freeze({ normalizeCapabilityScope });

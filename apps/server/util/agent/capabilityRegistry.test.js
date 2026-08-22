@@ -7,6 +7,7 @@ import {
   getAgentCapabilityByToolName,
   validateAgentCapabilityToolContract,
 } from './capabilityRegistry.js';
+import { getAgentV3CapabilityByToolName } from './runtime/v3/capabilityManifest.js';
 
 describe('Agent 动作能力注册表', () => {
   it('能力 id 唯一，且只有 enabled 能力可以绑定工具', () => {
@@ -91,7 +92,7 @@ describe('Agent 动作能力注册表', () => {
     expect(catalog.find((entry) => entry.id === 'read.read_url')).toMatchObject({
       domain: 'web',
       appliesToDomains: ['web', 'bookmark'],
-      resourceBindingDomains: ['bookmark'],
+      resourceBindingDomains: ['bookmark', 'web'],
     });
     expect(catalog.find((entry) => entry.id === 'read.get_resource_creation_ranking')).toMatchObject({
       effect: 'read',
@@ -118,5 +119,38 @@ describe('Agent 动作能力注册表', () => {
       toolNames: ['start_link_health_check'],
     });
     expect(new Set(catalog.map((entry) => entry.id)).size).toBe(catalog.length);
+  });
+
+  it('旧运行链也使用同一能力策略目录，保留精确意图但不暴露受限工具', () => {
+    const allToolNames = new Set(tools.map((tool) => tool.name));
+    const readOnlyCatalog = buildAgentSemanticCapabilityCatalog(tools, {
+      availableToolNames: allToolNames,
+      capabilityPolicyProfile: 'read_only',
+      resolveCapabilityMetadata: getAgentV3CapabilityByToolName,
+    });
+    expect(readOnlyCatalog.find((entry) => entry.id === 'todo.status.set')).toMatchObject({
+      status: 'policy_blocked',
+      policyBlockReason: 'read_only',
+      toolNames: [],
+    });
+    expect(readOnlyCatalog.find((entry) => entry.id === 'read.query_notes')).toMatchObject({
+      status: 'enabled',
+      toolNames: ['query_notes'],
+    });
+
+    const chatOnlyCatalog = buildAgentSemanticCapabilityCatalog(tools, {
+      availableToolNames: allToolNames,
+      capabilityPolicyProfile: 'chat_only',
+      resolveCapabilityMetadata: getAgentV3CapabilityByToolName,
+    });
+    expect(chatOnlyCatalog.find((entry) => entry.id === 'read.query_notes')).toMatchObject({
+      status: 'policy_blocked',
+      policyBlockReason: 'chat_only',
+      toolNames: [],
+    });
+    expect(chatOnlyCatalog.find((entry) => entry.id === 'read.search_knowledge_base')).toMatchObject({
+      status: 'enabled',
+      toolNames: ['search_knowledge_base'],
+    });
   });
 });

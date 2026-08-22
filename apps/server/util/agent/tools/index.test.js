@@ -52,7 +52,7 @@ describe('Agent 工具注册表', () => {
       ]);
     }
     expect(tools.find((tool) => tool.name === 'read_url')?.resourceBindings).toEqual([
-      { argument: 'url', refType: 'bookmark', sourceField: 'url', allowLiteral: true },
+      { argument: 'url', refTypes: ['bookmark', 'web'], sourceField: 'url', allowLiteral: true },
     ]);
   });
 
@@ -91,6 +91,7 @@ describe('Agent 工具注册表', () => {
     expect(start?.description).toContain('真实死链体检');
     expect(start?.description).toContain('我有哪些失效链接');
     expect(start?.isWrite).not.toBe(true);
+    expect(start?.sideEffectPolicy).toBe('idempotent_background_job');
     expect(start?.toArtifacts({ runId: 'run-1', running: true, total: 10, checked: 2 })[0]).toMatchObject({
       id: 'bookmark-health:run-1',
       status: 'running',

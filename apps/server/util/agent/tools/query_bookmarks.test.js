@@ -79,16 +79,39 @@ describe('query_bookmarks 工具', () => {
 
     const result = await tool.execute({ keyword: '任意词' }, ctx);
 
-    expect(result).toEqual({ total: 0, items: [], matchMode: 'like' });
+    expect(result).toMatchObject({
+      total: 0,
+      items: [],
+      matchMode: 'like',
+      resultMetadata: { total: 0, returned: 0, completeness: 'complete' },
+    });
   });
 
   it('降级结果的文案不冒充精确计数', () => {
     const semantic = tool.transform(
-      { matchMode: 'semantic', total: 1, items: [{ id: 'b1', name: '画图站', url: 'https://d.dev', create_time: null }] },
+      {
+        matchMode: 'semantic',
+        total: 1,
+        items: [{ id: 'b1', name: '画图站', url: 'https://d.dev', create_time: null }],
+      },
       { keyword: '画图的网站' },
     );
     expect(semantic).toContain('没有精确匹配');
     expect(semantic).not.toContain('共 1 条书签');
     expect(tool.summarize({ matchMode: 'semantic', total: 1 }, { keyword: 'x' })).toContain('语义匹配');
+  });
+
+  it('转换层不再写死只展示前 10 条，由公共结果预算统一决定截断', () => {
+    const items = Array.from({ length: 12 }, (_, index) => ({
+      id: `bookmark-${index + 1}`,
+      name: `书签 ${index + 1}`,
+      url: `https://example.test/${index + 1}`,
+      create_time: null,
+    }));
+
+    const text = tool.transform({ total: 12, items, matchMode: 'like' }, {});
+
+    expect(text).toContain('《书签 12》');
+    expect(text).not.toContain('仅展示前 10 条');
   });
 });

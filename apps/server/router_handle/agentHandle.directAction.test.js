@@ -20,6 +20,9 @@ const mocks = vi.hoisted(() => ({
   settleAgentInteractionResponse: vi.fn(),
   recordPendingActionBatch: vi.fn(),
   recordPendingActionBatchById: vi.fn(),
+  recordSessionArtifactStateById: vi.fn(),
+  recordSessionArtifactVersion: vi.fn(),
+  recordSessionArtifactVersionById: vi.fn(),
   resolveSessionActionRetry: vi.fn(() => ({ state: 'none' })),
   settleSessionAction: vi.fn(),
   rejectToolConfirmation: vi.fn(),
@@ -40,7 +43,6 @@ vi.mock('../util/agent/deepseekClient.js', () => ({
   parseLeakedToolCalls: vi.fn(() => []),
 }));
 
-vi.mock('../util/agent/timeRange.js', () => ({ parseTimeRange: vi.fn() }));
 vi.mock('../util/agent/prompt.js', () => ({ buildPlannerPrompt: vi.fn() }));
 vi.mock('../util/agent/toolRouter.js', () => ({
   matchAgentWriteActionToolNames: vi.fn(() => []),
@@ -67,6 +69,9 @@ vi.mock('../util/agent/sessionStore.js', () => ({
   getOrCreateSession: mocks.getOrCreateSession,
   recordPendingActionBatch: mocks.recordPendingActionBatch,
   recordPendingActionBatchById: mocks.recordPendingActionBatchById,
+  recordSessionArtifactStateById: mocks.recordSessionArtifactStateById,
+  recordSessionArtifactVersion: mocks.recordSessionArtifactVersion,
+  recordSessionArtifactVersionById: mocks.recordSessionArtifactVersionById,
   recordTurn: vi.fn(),
   resolveSessionActionRetry: mocks.resolveSessionActionRetry,
   settleSessionAction: mocks.settleSessionAction,
@@ -249,6 +254,11 @@ function agentLogInsert() {
   expect(columns.length).toBe(params.length);
   return Object.fromEntries(columns.map((column, index) => [column, params[index]]));
 }
+
+beforeEach(() => {
+  mocks.recordSessionArtifactVersion.mockImplementation(async (_session, artifact) => artifact);
+  mocks.recordSessionArtifactVersionById.mockImplementation(async ({ artifact }) => artifact);
+});
 
 describe('prepareAgentToolAction', () => {
   beforeEach(() => {
@@ -654,7 +664,16 @@ describe('replaceAgentNoteTargetDirectory', () => {
         args: { title: '可信标题', content: '可信正文', parentId: 'directory-new' },
         replaceToken: 'old-token',
         replaceConfirmationId: 'confirm-note-old',
-        privateContext: previousConfirmation.privateContext,
+        privateContext: expect.objectContaining({
+          ...previousConfirmation.privateContext,
+          agentArtifactVersion: expect.objectContaining({
+            capabilityId: 'note.create',
+            domain: 'note',
+            parentVersionId: null,
+            state: 'ready',
+            version: 1,
+          }),
+        }),
         originRequestId: 'request-original',
       }),
     );
@@ -849,6 +868,78 @@ describe('confirmAgentTool', () => {
           }),
         }),
       }),
+    );
+  });
+
+  it('只读锁在读取确认令牌前阻止旧确认卡执行，不消费一次性确认', async () => {
+    const res = createResponse();
+    await confirmAgentTool(
+      {
+        body: {
+          confirmationToken: 'token-image',
+          sessionId: 'session-image',
+          capabilityPolicyProfile: 'read_only',
+        },
+        user: { id: 'user-1', role: 'user', alias: '测试用户' },
+        headers: {},
+        ip: '127.0.0.1',
+      },
+      res,
+    );
+
+    expect(mocks.inspectToolConfirmationExecution).not.toHaveBeenCalled();
+    expect(mocks.claimToolConfirmationExecution).not.toHaveBeenCalled();
+    expect(mocks.executeImageNote).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { code: 'TOOL_CONFIRMATION_POLICY_BLOCKED' },
+        msg: expect.stringContaining('只读锁'),
+      }),
+    );
+  });
+
+  it('确认执行沿用签发时的权威时间范围，不按确认时刻重新解析', async () => {
+    const inspected = await mocks.inspectToolConfirmationExecution.mock.results[0]?.value;
+    const confirmation = inspected?.confirmation || {
+      id: 'confirm-image-1',
+      sessionId: 'session-image',
+      toolName: 'create_image_note',
+      args: { attachmentId: 'attachment-1', title: '测试图片' },
+      resourceUserId: 'user-1',
+      resourceUserRole: 'user',
+      actionLockKey: 'agent:action-lock:test',
+      idempotencyKey: 'agent-write-v1:confirm-image',
+    };
+    confirmation.privateContext = {
+      agentTemporalRanges: {
+        timeRange: {
+          expression: '今天',
+          range: {
+            start: '2026-08-21 00:00:00',
+            endExclusive: '2026-08-21 12:00:01',
+            timeZone: 'Asia/Shanghai',
+          },
+          source: 'binder',
+        },
+      },
+    };
+    mocks.inspectToolConfirmationExecution.mockResolvedValue({ state: 'ready', confirmation });
+    mocks.claimToolConfirmationExecution.mockResolvedValue({ state: 'claimed', confirmation });
+
+    await confirmAgentTool(
+      {
+        body: { confirmationToken: 'token-image', sessionId: 'session-image' },
+        user: { id: 'user-1', role: 'user', alias: '测试用户' },
+        headers: {},
+        ip: '127.0.0.1',
+      },
+      createResponse(),
+    );
+
+    expect(mocks.executeImageNote).toHaveBeenCalledWith(
+      confirmation.args,
+      expect.objectContaining({ resolvedTemporalRanges: confirmation.privateContext.agentTemporalRanges }),
     );
   });
 

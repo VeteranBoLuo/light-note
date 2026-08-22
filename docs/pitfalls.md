@@ -25,12 +25,19 @@
 
 | 编号                                                                                           | 日期       | 模块                | 关键词                                             | 状态         |
 | ---------------------------------------------------------------------------------------------- | ---------- | ------------------- | -------------------------------------------------- | ------------ |
+| [LN-PIT-112](#ln-pit-112agent-会话能力边界不能只过滤工具或只隐藏前端入口)                      | 2026-08-21 | Agent、前后端策略   | chat-only、read-only、材料、确认、Manifest         | 已修复待合入 |
+| [LN-PIT-111](#ln-pit-111turnspec-升级和确定性工作流不能一刀切替换旧-planner)                   | 2026-08-21 | Agent、Runtime V3   | TurnSpec 3.1、handle、workflow、Planner 回退       | 已修复待合入 |
+| [LN-PIT-110](#ln-pit-110agent-精确事实和处理记录不能由模型文案或前端展示反推)                  | 2026-08-21 | Agent、结果协议     | FactBundle、ExecutionReceipt、ResponseEnvelope     | 已修复待合入 |
+| [LN-PIT-109](#ln-pit-109agent-确认产物材料和运行状态不能共用一个生命周期)                      | 2026-08-21 | Agent、持久化       | ArtifactVersion、SourceSet、Run、Dialogue Anchor   | 已修复待合入 |
+| [LN-PIT-108](#ln-pit-108agent-时间范围和列表完整性不能由各工具或模型自行解释)                  | 2026-08-21 | Agent、工具协议     | IANA、半开区间、total、partial、参数兼容           | 已修复待合入 |
+| [LN-PIT-107](#ln-pit-107agent-不能在工具成功前提交新焦点也不能把空能力范围降级成自动模式)      | 2026-08-21 | Agent、Runtime V3   | scope、ResultSet、digest、时间默认、副作用         | 已修复待合入 |
 | [LN-PIT-106](#ln-pit-106运维诊断规则不能散落在前端也不能借诊断页复制写操作)                    | 2026-08-22 | 服务器管理、前后端  | 诊断阈值、部分失败、唯一事实源、处置闭环           | 已修复待上线 |
-| [LN-PIT-105](#ln-pit-105目录打开正文不能复用无条件编辑跳转也不能递归透传-from)                 | 2026-08-21 | 笔记目录、前端      | 正文分流、双页签、返回来源、递归 URL               | 已修复待上线 |
+| [LN-PIT-105](#ln-pit-105目录打开正文不能复用无条件编辑跳转也不能递归透传-from)                  | 2026-08-21 | 笔记目录、前端      | 正文分流、双页签、返回来源、递归 URL               | 已修复待上线 |
 | [LN-PIT-104](#ln-pit-104父页面主点击不能由正文状态推断)                                        | 2026-08-21 | 笔记目录、前端      | 父页面、点击偏好、子页面、预览                     | 已修复待上线 |
 | [LN-PIT-103](#ln-pit-103闭合区域填色不能只修改-canvas-像素或仅保存种子点)                      | 2026-08-21 | 手绘笔记、协议      | 洪水填充、扫描线、闭合区域、快捷键、旧图补齐       | 已修复待上线 |
 | [LN-PIT-102](#ln-pit-102密集手绘不能用删减-scene-重画卡片缩略图)                               | 2026-08-21 | 手绘笔记、缩略图    | 派生图、密集填色、revision、自动补齐、降级预览     | 已修复待上线 |
 | [LN-PIT-101](#ln-pit-101同一页面树不能只共享数据却在不同页面各自决定是否可拖拽)                | 2026-08-21 | 笔记目录、前端      | 详情页、拖拽、共享状态机、提示、面包屑缓存         | 已修复待上线 |
+| [LN-PIT-100](#ln-pit-100复合菜单项的对齐不能输给基础按钮默认样式)                              | 2026-08-21 | 前端、基础组件      | BDropdown、BActionMenu、BButton、左对齐            | 已修复并上线 |
 | [LN-PIT-099](#ln-pit-099事实型最终回答不能把模型有看到当成用户一定看到)                        | 2026-08-21 | Agent、事实回答     | 工具摘要、字段完整性、清单进度、真实链路           | 已修复并上线 |
 | [LN-PIT-098](#ln-pit-098异步图片上传不能把请求成功当成正文插入成功)                            | 2026-08-21 | 更新日志、前端      | 图片上传、粘贴、光标、异步插入、成功提示           | 已修复并上线 |
 | [LN-PIT-097](#ln-pit-097写入确认不能只挂在持久化请求上草稿路由必须先预检)                      | 2026-08-21 | 笔记、分享、前后端  | 分享暴露、草稿路由、权威预检、事务竞态             | 已修复并上线 |
@@ -163,6 +170,14 @@
 - **防回归约束：** 诊断策略必须由后端唯一事实源派生，前端只负责翻译、排序、导出和导航；任一域采集失败不得让整份报告失效，也不得把未知当成通过。诊断页禁止调用 `executeInfraAction`、`useInfraActions` 或挂载高风险确认弹窗，所有写动作仍只能从服务进程进入。新增检查只能返回脱敏、定长、结构化证据和固定目标，禁止返回异常消息、任意路径、命令或凭据。诊断、服务、存储和安全快照属于被动读取，不复制进通用 API 日志。
 - **验收：** 后端测试覆盖阈值边界、单域失败、目标服务精确跳转和原始错误不出响应；信息架构测试断言诊断页没有写操作依赖。浏览器在 PC/移动、浅色/深色下检查健康、异常、预警、未知、部分数据源失败、加载、硬失败、筛选空态和跳转；服务日志检查关键词、级别、3/10/30 秒自动刷新、页面隐藏停刷、复制/导出、空/错误状态，操作后检查回执、核验提示与审计跳转。
 - **相关代码：** `apps/server/router_handle/infraHandle.js`、`apps/web/src/view/serverManagement/ServerDiagnostics.vue`、`apps/web/src/view/serverManagement/ServerServices.vue`、`apps/web/src/view/serverManagement/ServerEvents.vue`、`apps/web/src/view/serverManagement/ServerInformationArchitecture.test.ts`。
+
+### LN-PIT-107：Agent 不能在工具成功前提交新焦点，也不能把空能力范围降级成自动模式
+
+- **现象：** 非 Root 显式选择只有管理员可用的模块时，候选能力可能被过滤为空后又按“自动”继续；新一轮读查询刚完成语义编译就清空旧 ResultSet，随后工具失败会导致“刚才那些”既找不到本轮结果，也失去上轮可靠结果。Root 全量统计能力若从 Planner schema 删除时间参数但没有默认绑定，还会随机追问或带入旧时间范围。
+- **根因：** 权限过滤、语义计划和执行状态没有区分“请求为空”与“授权后为空”；会话把计划完成误当成执行完成；同一个 TurnSpec digest 同时承担语义和最终材料合同；时间默认、副作用性质和 shadow 对比又散落在工具或 Handler 中，没有由 Manifest 统一声明。
+- **防回归约束：** 能力范围必须保留用户原始请求域并在真实身份解析后重新授权：全部拒绝返回 `forbidden_scope`，部分拒绝只保留合法子集，无显式请求才允许自动模式。读 TurnSpec 只能暂存带运行令牌的 `pendingFocus`，结果提交和终态结算必须校验同一令牌；焦点投影用 Redis revision CAS 保护并采用 latest-run-wins，禁止迟到旧轮借用另一请求的 pending 状态。成功/空 ResultSet 原子提交；成功但没有稳定资源引用的统计读取也必须提交新语义并清除旧资源焦点；失败或部分失败只结算 `failed/degraded`，旧 ResultSet 可以保留但不得冒充失败轮的新结果。语义摘要与最终路由、资源、URL/ID 绑定后的执行摘要必须分离。Manifest 必须为必填时间槽声明 `all/clarify/server_default`，并为 Compiler 提供与该策略一致的描述；操作工具声明 `confirmation_required/idempotent_background_job`，目录与实际工具在普通测试中恒做完整性校验。模糊查询统一通过共享函数转义 `\\/%/_` 并显式声明 SQL `ESCAPE`，禁止各工具复制实现。
+- **验收：** 普通账号请求纯 `admin` 范围在创建会话和模型调用前返回 403；混合范围只暴露合法模块。连续执行“成功查询 A → 查询 B 失败 → 指代刚才结果”时，状态显示失败且不会把 A 当作 B；并发提交 A、B 后，A 的迟到结果和结算都不能改写 B。统计/概览读取成功但不返回稳定 ID 时，焦点切到新领域且旧资源不再成为“刚才那些”。Root 未给时间的全量能力由服务端绑定“全部”，Compiler 目录不再同时出现“默认全部”和“必须追问”；`clarify` 策略生成缺失槽。同一 TurnSpec 换权威资源时 `semanticDigest` 不变而 `executionDigest` 改变。标签、笔记、书签、文件、云文件夹与回收站关键词含 `%/_/\\` 时只能按字面量匹配。所有验证使用 Mock Provider/零调用 smoke，不消耗真实模型 Token。
+- **相关代码：** `apps/server/util/agent/runtime/v3/capabilityManifest.js`、`apps/server/util/agent/runtime/v3/turnSpec.js`、`apps/server/util/agent/sessionStore.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/server/util/agent/toolPolicy.js`、`apps/server/util/agent/sqlPatterns.js`。
 
 ### LN-PIT-094：目录树不能复用平铺文件夹的删除和全量排序语义
 
@@ -2462,7 +2477,7 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 
 - **现象：** 页面明确显示“今天 16:00”提醒的同名周期待办及清单进度，Agent 却只能看到几十条同名待办、站内提醒和“未设置截止时间”，无法定位当前实例；提醒已经投递后更会声称查询结果没有具体提醒时间，并可能把当前返回的 10～20 条概括成全部 60 条。
 - **根因：** `query_todos` 的公开参数只有状态、关键词和排序，无法表达计划日期或提醒分钟；`todoService` 虽然已经读取 V2 提醒规则和实例日期，安全摘要却只投影渠道。Worker 投递完成后活动 Job 从 `nextAt` 消失，页面会从规则还原原定时间，Agent 没有复用这层语义。语义降级还曾自己查询 `todo_items`，形成第二套缺少提醒信息的 SQL。
-- **约束：** 页面和 Agent 必须复用 `todoService.listTodoPage()` 进行 owner、状态、计划日期和提醒时间筛选；语义索引只能提供候选 ID，候选必须回到同一 Service 二次核验。精确提醒筛选以持久的 V2/旧版提醒事实为准，包含已投递但未取消的记录；安全摘要通过 `@lightnote/shared/todo-reminder` 统一解析下一次提醒与规则配置时间，只返回时间、渠道、计划日期和清单进度，禁止返回邮箱或 Provider 数据。提醒、开始、截止和计划日期保持独立，不能用“未设置截止时间”推断没有提醒。`total > items.length` 时必须明确当前只是分页结果，模型不得据此使用“全部、都没有”等全量结论。
+- **约束：** 页面和 Agent 必须复用 `todoService.listTodoPage()` 进行 owner、状态、计划日期和提醒时间筛选；语义索引只能提供候选 ID，候选必须回到同一 Service 二次核验。精确提醒筛选以持久的 V2/旧版提醒事实为准，包含已投递但未取消的记录；安全摘要通过 `@lightnote/shared/todo-reminder` 统一解析下一次提醒与规则配置时间，只返回时间、渠道、计划日期和清单进度，禁止返回邮箱或 Provider 数据。提醒、开始、截止和计划日期保持独立，不能用“未设置截止时间”推断没有提醒。`total > items.length` 时必须明确当前只是分页结果，模型不得据此使用“全部、都没有”等全量结论。上一轮 ResultSet 已唯一指向某条待办时，查询能力通过 Manifest 的可选 `todoId` 绑定回正式 Service，禁止靠标题重搜或在 Handler 写“推广”等词语特判；工具返回的唯一清单进度属于可核验关键事实，Final 模型遗漏时只允许由通用 Answer Requirements 补回工具已生成的安全事实句，不得重试模型或猜新数据。
 - **验收：** 构造 60 条同名“推广”周期实例，其中今天实例的提醒 Job 为已投递、规则为 16:00、清单为 3/4；使用 `keyword=推广 + planDate=当天 + reminderAt=当天16:00` 必须只返回该实例，并展示计划日期、16:00 站内提醒和清单 3/4。另测提醒 Job 已投递后 `nextAt=null` 仍能从规则还原；无结构化筛选的分页结果必须包含“不能推断未返回结果”；语义降级必须保留相同计划日期与提醒时间条件。真实规划只跑问题工具：`pnpm --filter server smoke:ai-turn-v2 -- --live --suite full --provider both --repeat 1 --case query-todos`；root 真实返回：`pnpm --filter server smoke:ai-root-e2e -- --live --execute-writes --provider deepseek --case query-todos --no-artifact-regression`，后者用同名同日的 16:00/17:00 双夹具验证只引用 16:00 那条、清单为 3/4，并必须完成夹具清理。
 - **相关代码：** `packages/shared/todoReminder.js`、`apps/server/util/services/todoService.js`、`apps/server/util/agent/tools/query_todos.js`、`apps/web/src/utils/todoPlanning.ts`。
 
@@ -2494,7 +2509,71 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **PR8 修复：** Provider 选择改为分阶段配置，并增加 DeepSeek/Qwen 隔离 A/B。评测 CLI 必须有界并发且在写完报告后主动退出，不能被工具注册时建立的 Redis 连接挂住 CI。模型第一次输出语义组合无效时，修复轮接收服务端生成的最小约束提示（例如纯读取不能是 action、artifact 必须含 transform），但第二次仍不满足严格 schema 就失败关闭。
 - **PR9 生产化修复：** 能力目录不能按注册顺序截断同领域描述；相邻工具必须用声明式 `routing` 约束目标归属、必要语义、偏好语义和排除语义。用户明确“只预览/不要创建”时，Compiler 必须确定性约束为 `answer + read`；“生成回顾/摘要/分析”只有明确要求保存为笔记、文档或文件时才是持久化产物。Execution Planner 除不可变 TurnSpec 外还必须接收本轮用户原话，用原话无损填写日期、重复规则、标题等已授权参数，但不能据此增加目标。第一人称归属以用户原话为准，不能被模型改写出的“当前用户账号”等描述扩大为管理员查人能力。
 - **执行上下文约束：** TurnSpec 只保存语义，不承载稳定资源 ID。Planner 只能从服务端完成归属校验后的 `availableContext` 绑定引用和附件；唯一的必填附件可确定性补入，多候选时必须澄清。多轮测试和真实客户端一样使用服务端返回的 UUID 会话 ID，禁止用测试脚本自造的非 UUID 字符串掩盖会话协议错误。
-- **真实发布门禁：** Agent 运行时、能力目录、工具参数、确认协议或笔记产物链发生变化时，单元测试和 mock 不能代替 root 真实调用。发布前必须运行 `smoke:ai-root-e2e`：工具矩阵与注册表精确一一对应，真实 Provider 下每个读工具必须成功返回；每个写工具必须返回完整确认卡、确认后真实落库、相同令牌重放不重复写；笔记用例同时验证本轮范围、硬字数下限和基于原材料的续写；所有夹具最终清理。报告只能保存稳定错误码、计数和时长，不记录问题正文、回答、工具参数、资源 ID 或账号标识。任一项失败即阻止启用 V2 或上线，禁止用单项重跑通过替代完整矩阵通过。
+- **真实发布门禁：** Agent 运行时、能力目录、工具参数、确认协议或笔记产物链发生变化时，单元测试和 mock 不能代替 root 真实调用。发布前必须运行 `smoke:ai-root-e2e`：工具矩阵与注册表精确一一对应，真实 Provider 下每个读工具必须成功返回；每个写工具必须返回完整确认卡、确认后真实落库、相同令牌重放不重复写；笔记用例同时验证本轮范围、硬字数下限和基于原材料的续写；所有夹具最终清理。Runner 必须用 `--runtime v2|v3` 在加载 `.env` 后主动覆盖目标模式和 V3 受众，禁止继承 shell/pm2 的残留变量后用错误 Runtime 生成“通过”报告；V3 首次门禁必须显式使用 `--runtime v3`。全矩阵真实运行必须另加 `--approve-full-matrix`，定点修复应先用 `--case` 只跑受影响链路，但扩大到非 Root 受众前不得以定点通过替代一次全矩阵。报告只能保存稳定错误码、计数和时长，不记录问题正文、回答、工具参数、资源 ID 或账号标识。任一项失败即阻止启用 V2/V3 或扩大灰度。未获真实依赖和夹具写入授权时只能 dry-run，本地执行不等于离线执行。
+
+### LN-PIT-085：Agent 不能让原始会话历史和多个分类器共同决定当前轮执行
+
+- **现象：** 同一会话中先查最近 7 天笔记，再要求改成今天，仍可能沿用 7 天范围；先谈笔记再查书签会混入旧笔记材料；已选书签仍追问 URL；换一种“修改待办”说法又可能完全不调用工具。增加历史条数或逐句补关键词只能让问题随机转移。
+- **根因：** 原始消息历史同时承担语义、事实、指代和执行授权，材料分类、笔记草稿分类、动作传感器、能力路由与 Planner 又会在不同阶段重复解释同一句话。后执行的分类器可以覆盖前一阶段，旧助手正文和旧工具结果也能污染新轮。时间、资源 ID、URL 等权威参数仍暴露给模型复制时，模型一次遗漏就会表现为“工具不支持”。
+- **通用约束：** Runtime V3 每轮只允许 Intent Compiler 基于最新用户消息、服务端结构化 `DiscourseProjection` 和有界 `recentDialogue` 生成一次不可变 TurnSpec；正常路由必须由 Capability Manifest 按 capability ID 精确匹配，不得读取中文措辞、做正则/相似度回退或按工具名写事故分支。`recentDialogue` 必须由服务端从归属校验后的云端消息构建，云端不可用才回退 session turns，永不信任客户端 history。Compiler 最多 4 轮/1600 字符，普通 Composer 最多 10 轮/8000 字符，Grounded Composer 最多 4 轮/2400 字符；Planner 和 Tool 固定为 0。最新消息是动作、对象、时间、参数和文字事实的唯一权威，历史中的旧时间、旧工具参数和私有数字不得进入绑定或事实回答。跨轮私有对象只通过带 revision/topic epoch 的 ResultSet、SourceSet、ArtifactState 与 DiscourseState 重新读取。时间槽和资源绑定从模型 schema 删除，由服务端从 TurnSpec 或归属校验后的稳定引用注入。ResultSet 只接收工具显式投影的类型化引用，不能从标题、摘要、展示来源或 `_list` 字段猜测。Compiler 前的候选能力裁剪也必须复用 Manifest 的 `acceptedInputKinds`、`domains/acceptedSourceDomains` 与 ResultSet 的结构化 `domains/refTypes`：`domains` 表示能力产物或主领域，`acceptedSourceDomains` 声明哪些材料域可以驱动该转换，两者不得用问法特判替代。当前轮没有显式 URL，但上一轮稳定书签或网页结果能满足 `read_url` 时仍应开放；跨域、无类型或只靠标题猜测时必须关闭。禁止在候选阶段重新增加 URL、中文指代词或工具名特判。写操作确认、替换、取消、过期与回执生命周期必须独立于语义计划：Redis 中仍有效的确认令牌是“产物可继续处理”的权威状态，私有材料上下文只是重新生成所需输入，二者不能捆绑判无效；同领域待确认产物遇到新时间范围或新材料时必须编译为 `scope_replacement` 并原子废弃旧卡，只有明确另建互不相关产物才允许 `independent`。所有早返回分支都必须先记录真实 Runtime 隔离状态，不能因为绕过通用消息组装就被观测误标成 legacy。
+- **灰度约束：** `AI_AGENT_RUNTIME_MODE` 默认 `legacy`，且只表示目标模式；必须再与 `AI_AGENT_RUNTIME_V3_ROLLOUT` 的真实 actor 受众求交，缺失、非法或未命中均失败关闭到 legacy，不能让全局 shadow 意外增加所有用户的模型调用。Root 代管按 billing actor，不按资源 subject；排除项优先于角色、账号和百分比，百分比使用固定 salt 稳定分桶。只允许按 `legacy → Root/白名单 v3_shadow → Root/白名单 v3_enforce → 稳定百分比` 推进并保留即时回退。模块选择只是单轮候选能力限制，发送后恢复自动，不能成为长期会话状态或权限来源。V3 trace 中 Planner/Tool 只要出现原始历史或任一 legacy 分类阶段，就必须阻止扩大灰度；Compiler/Composer 的 `recentDialogueMessageCount` 和 `recentDialogueSource` 必须符合预算及服务端来源枚举。
+- **验收：** 合成测试覆盖“7 天 → 今天 → 至少 2000 字 → 再扩到 2500 字”、笔记切换书签、选中书签分析、网页 ResultSet 省略 URL 续问、今天 16:00 待办、Root 今天新增用户、序数指代和待确认草稿替换；断言 Planner 看不到 Manifest 声明的时间/资源参数，服务端执行参数为权威值，类型兼容的 ResultSet 能在 Compiler 前开放所需候选，跨领域不继承旧 ResultSet，ArtifactState 结算后不可复活。Root 产物真实门禁必须通过正式 Note Service 创建带唯一前缀、可清理的“今天”正文夹具，不能依赖账号恰好已有当天笔记；否则跨零点或空账号会把正确的空材料失败关闭误报成 Agent 回归。门禁结束必须验证旧确认至少两次失效、最终确认幂等、正文落库一次且夹具全部清理。`pnpm --filter server smoke:ai-turn-v3` 默认必须报告模型调用 0、业务工具 0；真实 Compiler 冒烟只有显式点名用例才允许，单次最多 2 个。首次启用或扩大 V3 灰度前仍执行获授权的 root 真实矩阵，日常开发不得无边界重复消耗 Token。
+- **相关代码：** `apps/server/util/agent/runtime/v3/`、`apps/server/util/agent/runtime/conversationHistory.js`、`apps/server/util/agent/sessionStore.js`、`apps/server/util/agent/runtime/executionPlanner.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/server/evaluation/ai-assistant/turnSpecV3LiveSmokeRunner.js`、`apps/web/src/types/aiCapabilityScope.ts`。
+
+### LN-PIT-109：Agent 确认、产物、材料和运行状态不能共用一个生命周期
+
+- **现象：** 确认卡过期后，即使用户仍能看到旧草稿和引用材料，也只能收到“原操作过期”；并发工具完成顺序偶尔会让确认卡乱序；会话状态只在 Redis 时，重启或 TTL 后无法继续修改草稿。另一方面，如果直接把近期对话都当材料保存，又会让普通问答历史串入新产物。
+- **影响范围：** 笔记生成与多轮改写、确认替换/过期、跨进程恢复、并发复合目标、对话整理成笔记，以及 Runtime V3 灰度发布。
+- **误导线索：** 确认卡里有预览正文，看起来可以依靠客户端重新提交；Redis 里也同时有草稿、来源和确认状态，看起来延长 TTL 就能解决。这样会把展示数据误当权威材料，并让执行授权、产物版本和材料可用性继续相互牵连。
+- **根因：** `Run / ConversationState / SourceSet / ResultSet / ArtifactVersion / confirmation` 的职责和生命周期没有拆开；Runtime 模式与数据库可用性也缺少独立闸门。普通 `recentDialogue` 与明确用于产物的对话材料没有类型边界。并发工具在各自回调里直接发卡，使用户可见顺序依赖完成时序而非计划顺序。
+- **修复：** 建立五个最小 MySQL 权威实体，Redis 继续作为热层和短期确认层。`Run` 保存双 digest、逐目标终态和 unknown，`ConversationState` 使用 revision CAS，`SourceSet` 保存不可变材料句柄，`ResultSet` 保存稳定查询引用，`ArtifactVersion` 保存产物链和验收结果。确认令牌过期只撤销旧执行授权；客户端仅保留公开 ArtifactVersion ID，服务端在相同 owner、subject、conversation 和版本链内恢复最新可编辑版本，按 SourceSet 重读材料并签发新版本，绝不复活旧 token 或信任客户端正文。普通连续问答仍只用有界 `recentDialogue`；只有 TurnSpec 明确选择 `dialogue_anchor` 时，才从归属校验后的云消息生成 message IDs + topic epoch + digest 的 SourceSet，并在每次生成时精确重读校验。并发确认在有序 join 后统一发送。
+- **防回归约束：** `AI_AGENT_STATE_PERSISTENCE_MODE=disabled|shadow|enforce` 必须独立于 `AI_AGENT_RUNTIME_MODE`，默认 disabled；migration 与 schema assertions 未通过前禁止开启 shadow/enforce。shadow 只能单调镜像且 fail-open，enforce 恢复或 CAS 冲突必须 fail-closed。公开 SourceSet/ArtifactVersion 投影不得暴露对话消息 ID、正文、私有资源参数或旧 token。SourceSet 缺失、digest 变化、归属不匹配必须拒绝恢复。普通 prepared-action 没有 ArtifactVersion 时仍只按确认 TTL 处理。Run 只有在真实执行或确认回执后才能提交焦点，不能由模型计划或卡片展示文案提前标成功；Planner 生成的每个 tool call 必须由服务端绑定到 TurnSpec goal，并用真实 `success/error/confirmation_required/interaction_required` 结果结算逐目标状态，`planned/unsupported/unavailable/forbidden` 终态不得被整轮成功覆盖。
+- **验证方法：** 使用内存仓储、Mock Provider 和固定时钟覆盖 disabled/shadow/enforce、Redis miss 恢复、revision 竞争、迟到旧轮、双 digest、逐目标 unknown、ArtifactVersion 链恢复、旧确认不可复活、SourceSet 缺失失败关闭、Dialogue Anchor 精确重读与 digest 不一致、并发工具乱序但卡片有序。开发阶段不得调用真实 Provider 或线上数据；首次灰度再按发布门禁做最小 Root 验证。
+- **相关代码：** `apps/server/migrations/20260821_agent_runtime_state.sql`、`apps/server/util/agent/persistence/`、`apps/server/util/agent/sessionStore.js`、`apps/server/util/agent/persistence/agentArtifactLifecycle.js`、`apps/server/util/agent/runtime/conversationHistory.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/web/src/store/aiAssistant.ts`。
+
+### LN-PIT-110：Agent 精确事实和处理记录不能由模型文案或前端展示反推
+
+- **现象：** 工具明明返回了精确总量，最终回答仍可能少报、多报或漏掉截断；前端有时因为出现“参考来源/本轮检索”标签就认为工具执行过，有时真实执行完成却没有可核验的处理记录。SSE 断线恢复后，临时文本、来源和执行状态还可能互相不一致。
+- **影响范围：** 所有读工具的计数、时间口径与列表完整性，写操作风险披露，SSE 终态/恢复，会话消息持久化和前端处理记录。
+- **误导线索：** Prompt 中已经要求模型“忠于工具结果”，或 UI 已能展示来源，看起来只需继续优化文案。实际上模型输出和来源标签都不是工具是否成功、哪些事实精确、是否截断的权威证明。
+- **根因：** 原始工具输出同时承担模型上下文、用户答案、审计状态和 UI 展示，没有稳定的中间事实合同；同步响应、SSE、恢复和前端各自从不同字段推断状态，失败工具也可能遗留旧材料或展示痕迹。
+- **修复：** 工具成功后先按 Manifest `resultContract/queryBudget` 归一化为 `FactBundle`，再生成私有/公开分层的 `ExecutionReceipt` 和 `ResponseEnvelope`。精确数字、完整性、时间范围、截断与风险披露由服务端确定性渲染，Composer 仅生成非权威叙述；失败或未执行工具不得生成 FactBundle。SSE 完成事件、恢复快照、会话持久化和前端 Store 统一传递同一收据与信封，处理记录只消费真实 receipt，旧消息才允许兼容回退。
+- **防回归约束：** 不得从回答文字、source/entityRef 数量、卡片存在或检索标签反推出工具状态；不得把私有工具参数、owner、原始异常或材料正文放进公开 receipt。权威 exact fact 必须由服务端渲染且不可被 Composer 覆盖。响应协议增加字段时同步更新 SSE normalizer、恢复链、消息类型和历史加载，任一链路丢字段都视为协议回归。
+- **验证方法：** Mock 成功、空结果、部分结果、文本预算截断、工具失败和混合多工具；断言只有成功工具产生 FactBundle，exact facts 与公共披露稳定，receipt/envelope 在同步响应、`response.completed`、恢复 snapshot 和前端 normalize 后一致。全部为确定性测试，不调用真实模型。
+- **相关代码：** `apps/server/util/agent/runtime/v3/factBundle.js`、`executionReceipt.js`、`responseEnvelope.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/server/util/agent/sseLifecycle.js`、`apps/web/src/types/aiExecutionReceipt.ts`、`apps/web/src/utils/aiSse.ts`、`apps/web/src/utils/aiStreamRecovery.ts`、`apps/web/src/components/aiAssistant/ChatMessageItem.vue`。
+
+### LN-PIT-112：Agent 会话能力边界不能只过滤工具或只隐藏前端入口
+
+- **现象：** 用户切换“仅对话”后，界面虽然隐藏了材料入口，旧 SourceSet、附件或工作区范围仍可能在服务端材料解析阶段被读取；切换“只读锁”后，新问题不会生成写工具，但切换前已经签发的确认卡仍可能执行。若只把受限能力从 Compiler 目录删除，模型又会把明确写请求误判为闲聊或“工具不支持”。
+- **影响范围：** 自动/仅对话/只读会话策略、旧 Runtime 与 V3、材料解析、SourceSet、能力目录、工具候选、确认卡和历史消息恢复。
+- **误导线索：** 前端已经隐藏按钮、Planner 已经看不到写工具或 Tool Policy 最终还会校验，看起来任一层单独处理即可。实际上材料可能早于 Planner 读取，旧确认执行又是独立端点；只在一层过滤无法形成会话硬边界。
+- **根因：** 数据访问、能力识别、工具授权和确认执行属于不同阶段，原链路没有同一声明式策略贯穿；旧语义目录还会自行推断 scope，把产品知识误归为个人数据。若为每种模式复制工具名单，又会产生第三套能力事实源。
+- **修复：** `CapabilityPolicyProfile` 只根据 Manifest 的 `effect/scopePolicy` 计算。仅对话在任何材料/SourceSet/附件解析前清空个人范围；只读移除全部写能力。受限能力继续以 `policy_blocked` 出现在 Compiler/旧语义目录，但不获得可执行工具名，Router 返回稳定策略披露。旧目录通过通用元数据解析器读取同一 V3 Manifest，不复制工具名单。前端禁用已有确认卡的写入和目录修改，服务端确认端点在读取或认领令牌前再次拒绝受限 profile，取消仍可用且令牌不会被消费。
+- **防回归约束：** 会话策略不得依赖关键词、工具名白名单或 Prompt 自律；不能只做前端隐藏、只做 Planner 候选过滤或只做最终 Tool Policy。受限 capability 必须保留语义可见、执行不可见两个状态。任何新增个人数据能力和写能力只扩展 Manifest；旧链兼容必须消费 Manifest 元数据，禁止复制 scope 分类。确认执行、确认参数修改和将来新增的副作用入口都必须复用同一策略门禁。
+- **验证方法：** Handler mock 断言仅对话模式下上下文、附件、SourceSet 在 Compiler/Resolver 前均为零且个人查询不执行；只读模式准确识别写 capability、无工具、无确认卡。旧/V3 目录均断言 `policy_blocked` 状态和产品知识例外。已有确认卡在两种锁下按钮禁用、服务端 409、令牌未 inspect/claim，取消可用；切回自动后在有效期内可继续。PC/移动、浅色/深色检查自动、仅对话、只读、带材料、空材料和待确认写入状态。
+- **相关代码：** `apps/server/util/agent/runtime/v3/capabilityPolicy.js`、`capabilityManifest.js`、`apps/server/util/agent/capabilityRegistry.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/web/src/types/aiCapabilityPolicy.ts`、`apps/web/src/view/aiAssistant/ChatContainer.vue`、`apps/web/src/components/aiAssistant/ChatInputSection.vue`、`AiToolConfirmationCard.vue`。
+
+### LN-PIT-111：TurnSpec 升级和确定性工作流不能一刀切替换旧 Planner
+
+- **现象：** 为减少模型漏选工具，若直接把 TurnSpec schema、所有能力参数和执行路径一次升级，原来能工作的工具可能因新字段缺失、旧会话 ID 不兼容或未迁移的参数来源而全部失败；反过来若长期让客户端 ID、展示标题和自然语言序数承担指代，又会继续出现“刚才那个”选错材料。
+- **影响范围：** Runtime V3 Compiler/Parser、跨轮 ResultSet 指代、Manifest 迁移、Execution Planner、灰度观测和所有读写能力。
+- **误导线索：** 简单读工具可以从固定 capability 直接推导 tool call，看起来应当一次性跳过 Planner；3.1 只是新增可选字段，看起来可以立刻要求真实模型全部输出。两者都会把协议兼容、Manifest 完整度和参数权威来源问题推到线上。
+- **根因：** 协议版本、能力声明和执行器迁移没有独立闸门；稳定资源指代仍使用数据库 ID 或模型自造值；确定性计划若绕过现有 Validator，会形成第二套工具参数和权限通道。
+- **修复：** TurnSpec 采用 3.0/3.1 双读和按 Runtime 独立控制的写版本：shadow 默认写 3.1、enforce 默认仍写 3.0，parser 把旧字段归一为同一 canonical 语义，并严格拒绝冲突时间、未知 slot 和不在服务端枚举中的 ResultSet handle。公开投影生成不泄露数据库键的 `handleId`，具体项使用有界 `itemOrdinal`。Manifest 显式声明 workflow 与参数 slot source，Runtime 只在目标/工具唯一且 schema 通过时用 `workflowCompiler` 生成计划；3.1 单目标缺少普通文字/枚举槽时才交给看不到工具名、历史和权威字段的 Slot Filler。生成结果始终进入统一 `validateExecutionPlan`，任一条件不满足自动回到旧 Planner。goal ambiguity 按阻断范围与依赖图传播，部分无歧义目标可继续，兼容适配层同步过滤受阻目标。trace 记录协议版本和实际 planning mode。
+- **防回归约束：** Handler 不得直接按工具名或问法拼调用；确定性能力和 slot source 必须逐项声明、逐项测试，不能由 effect/read 或参数为空自动推断。Manifest 版本升级后必须同步验证 Compiler 的真实输出版本，禁止“Parser/Manifest 已是 3.1、Compiler 永远写 3.0”导致新路径实际上从未出数。3.0 不得调用新 Slot Filler，以免提前改变旧 Planner 的调用次数和时间/参数语义。3.1 先在 shadow 和离线评测达到门槛后才能进入 enforce，且必须保留 3.0 回退。客户端 handle 不是权限凭据，每轮仍按 owner/conversation/ResultSet revision 解析；未知、过期和跨域 handle 失败关闭。旧 Planner 在确定性覆盖率和生产灰度完成前不得删除。
+- **验证方法：** 固定夹具覆盖 3.0/3.1 等价语义、shadow/enforce 默认写版本及环境回退、合法/未知/跨组 handle、ordinal 越界、冲突 temporal claims、未声明 slot claims，以及 deterministic 成功、Slot Filler 补齐/越权字段拒绝、Validator 拒绝、自动 Planner 回退、fatal/goal/write 歧义与依赖传播。`eval:ai-runtime-v3-offline` 必须以零模型、零数据库、零业务工具证明高频声明式能力命中 fast-path，未知能力失败关闭；Agent Runtime 测试必须证明 3.1 受限补槽不暴露权威上下文、3.0 和非适用能力仍调用原 Planner。
+- **相关代码：** `apps/server/util/agent/runtime/v3/turnSpec.js`、`intentCompiler.js`、`workflowCompiler.js`、`slotFiller.js`、`ambiguityGate.js`、`agentRuntime.js`、`capabilityManifest.js`、`apps/server/util/agent/runtime/legacyRuntimeAdapter.js`、`apps/server/util/agent/sessionStore.js`、`apps/server/util/agent/turnContractTrace.js`。
+
+### LN-PIT-108：Agent 时间范围和列表完整性不能由各工具或模型自行解释
+
+- **现象：** 用户把“最近 7 天”改为“今天”后，后续轮仍可能沿用旧范围；同一个“今天”在不同进程时区下得到不同 SQL 边界。列表工具只返回当前 `LIMIT` 内的数据，模型却可能把“返回 1 条”说成“全部只有 1 条”；文本预算截断时也没有稳定披露。
+- **影响范围：** 笔记、书签、文件、回收站、Root 用户/日志/统计/安全事件查询，以及携带时间条件的写操作二次确认。
+- **误导线索：** 单看工具转换文案或 SQL 可能都“看起来正常”；真正偏差来自 Planner、Tool Policy、工具执行和确认回放多次重新解析，以及结果合同没有区分 `total` 与 `returned`。
+- **根因：** 时间表达式只有字符串，没有请求级 IANA 时区和一次绑定的 canonical range；旧 SQL 混用包含结束时刻和进程本地 `Date`。工具输出又主要是一段自然语言，缺少统一的总量、返回量、完整性、截断原因和稳定引用。管理域同时使用 `user` 表示账号范围，与普通业务参数发生语义冲突。
+- **修复：** 时间解析收口到基于 Temporal 的唯一解析器，Binder/Tool Policy 按请求级 `currentInstant + IANA timeZone + storageTimeZone` 只绑定一次，SQL 统一使用 `[start, endExclusive)`；确认令牌的服务端私有上下文保存签发时的权威范围。列表/计数工具统一投影 `totalCount/returned/totalExact/completeness/nextCursor/resolvedRanges/truncationReason` 和稳定 ID，旧 `total` 只是兼容别名；执行器不得仅因 raw 中存在数值 `total` 就推断精确，只有工具显式给出 `resultMetadata.totalExact=true` 才可声称“全部/只有”。执行器优先把确定性查询口径送入回答上下文，再受文本预算限制。查询集合完整性与回答材料投影完整性分层记录，避免“数据已查全、文本被截断”仍被笼统标成完整结果；安全查询口径同时进入 SSE、普通响应和断流恢复快照，不再依赖最终模型主动复述。管理账号范围迁移为 `scope_user`，旧 `user` 别名仅在服务端兼容层归一化并记录不含账号值的弃用告警。
+- **防回归约束：** 新增时间工具必须在 Manifest 声明 `temporalSlots`，工具内只读权威绑定，不得再用 `new Date()` 解释用户日历语义；新列表工具必须返回结构化 metadata 和稳定业务 ID，不得用当前页长度冒充总量，也不得在 `transform/summarize` 中另设与公共 `resultBudget` 冲突的展示条数上限。查询集合和回答材料任一层发生截断都必须显式、分别标记；resolved range 必须通过安全公共投影进入权威终态响应和恢复快照，不能只放入模型提示。签发后确认不得重新解析“今天”。新管理工具的公开 schema 只允许 `scope_user`，兼容别名必须通过统一参数层实现，禁止在单个工具复制转换逻辑。
+- **验证方法：** 在 `TZ=UTC` 进程下固定 `currentInstant`，验证上海、纽约及 DST 跨越日的 local/storage 边界；断言 SQL 为 `>= start AND < endExclusive`。对空、完整、超 `limit`、总量未知和 resultBudget 截断分别校验 metadata/披露；确认链路断言 execute 收到的范围与签发时完全一致。对 `scope_user`、旧 `user`、两者相同和两者冲突都保留 fixture；全部使用 mock/固定性测试，日常回归不调真实模型。
+- **相关代码：** `apps/server/util/agent/timeRange.js`、`apps/server/util/agent/toolResultMetadata.js`、`apps/server/util/agent/toolArguments.js`、`apps/server/util/agent/toolPolicy.js`、`apps/server/util/agent/sessionStore.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/server/util/agent/tools/`、`apps/web/src/types/aiQueryScope.ts`、`apps/web/src/utils/aiStreamRecovery.ts`。
 
 ### LN-PIT-071：父组件不能用宽泛深度选择器改写头像框内部图片
 

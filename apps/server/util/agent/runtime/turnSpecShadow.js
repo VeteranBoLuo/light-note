@@ -1,4 +1,5 @@
 import { compileAgentTurnSpec } from './intentCompiler.js';
+import { getAgentV3CapabilityById, getAgentV3CapabilityByToolName } from './v3/capabilityManifest.js';
 
 const LEGACY_REQUEST_KIND = Object.freeze({
   conversation: 'conversation',
@@ -67,11 +68,28 @@ export function compareTurnSpecWithLegacyPlan(turnSpec, legacyPlan, catalog = []
   if (!compatibleKinds.has(turnSpec.requestKind)) divergences.push('request_kind');
   if (String(legacyPlan.confidence || '') !== turnSpec.confidence) divergences.push('confidence');
 
-  const domainByCapabilityId = new Map(
-    (Array.isArray(catalog) ? catalog : []).map((entry) => [entry.id, entry.domain]),
-  );
+  const catalogById = new Map((Array.isArray(catalog) ? catalog : []).map((entry) => [entry.id, entry]));
+  const legacyCapabilityIds = new Set();
+  for (const intent of legacyPlan.intents || []) {
+    const entry = catalogById.get(intent.capabilityId);
+    const direct = getAgentV3CapabilityById(intent.capabilityId);
+    if (direct) legacyCapabilityIds.add(direct.id);
+    for (const toolName of entry?.toolNames || []) {
+      const projected = getAgentV3CapabilityByToolName(toolName);
+      if (projected) legacyCapabilityIds.add(projected.id);
+    }
+  }
+  const v3CapabilityIds = new Set((turnSpec.goals || []).map((goal) => goal.capabilityId).filter(Boolean));
+  if (
+    legacyCapabilityIds.size !== v3CapabilityIds.size ||
+    [...legacyCapabilityIds].some((capabilityId) => !v3CapabilityIds.has(capabilityId))
+  ) {
+    divergences.push('capability_ids');
+  }
   const legacyDomains = new Set(
-    (legacyPlan.intents || []).map((intent) => domainByCapabilityId.get(intent.capabilityId)).filter(Boolean),
+    [...legacyCapabilityIds]
+      .map((capabilityId) => getAgentV3CapabilityById(capabilityId)?.domains?.[0])
+      .filter(Boolean),
   );
   const v2Domains = new Set(
     (turnSpec.goals || []).map((goal) => goal.capabilityDomain).filter((domain) => domain !== 'none'),
@@ -91,7 +109,10 @@ export function turnSpecTraceSummary(shadow, divergences = [], mode = 'shadow') 
     mode,
     state: shadow?.state === 'ready' ? 'ready' : 'invalid',
     requestKind: turnSpec?.requestKind || 'unknown',
+    version: turnSpec?.version || 'unknown',
     confidence: turnSpec?.confidence || 'unknown',
+    continuationMode: turnSpec?.continuationMode || 'unknown',
+    topicEpochAction: turnSpec?.topicEpochAction || 'unknown',
     goalCount: turnSpec?.goals?.length || 0,
     domainCount: new Set((turnSpec?.goals || []).map((goal) => goal.capabilityDomain)).size,
     missingSlotCount: turnSpec?.missingSlots?.length || 0,

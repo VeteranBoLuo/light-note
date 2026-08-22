@@ -5,6 +5,7 @@ import {
   inspectGroundingSubset,
   isGroundingScopeV2Enabled,
   resolveGroundingScope,
+  resolveResultSetGroundingScope,
   selectGroundedAnswerMessages,
 } from './groundingScope.js';
 
@@ -53,6 +54,25 @@ describe('GroundingScope V2', () => {
       { type: 'document', id: 'd1' },
       { type: 'note', id: 'n2' },
     ]);
+  });
+
+  it('V3 只把服务端结果集稳定引用投影为继承范围，不携带旧正文', () => {
+    const scope = resolveResultSetGroundingScope({
+      refs: [
+        { type: 'web', id: 'https://example.com/a' },
+        { type: 'web', id: 'https://example.com/a' },
+      ],
+      webUrls: ['https://example.com/a', 'javascript:alert(1)'],
+    });
+    expect(scope).toEqual({
+      mode: GROUNDING_SCOPE_MODE.INHERITED_SOURCE_SET,
+      sourceSetId: null,
+      allowedRefs: [{ type: 'web', id: 'https://example.com/a' }],
+      allowExternalWeb: false,
+      allowedWebUrls: ['https://example.com/a'],
+      generalKnowledgeAllowed: false,
+    });
+    expect(JSON.stringify(scope)).not.toContain('content');
   });
 
   it('公开来源必须是 allowedRefs 子集，显式书签派生网页只按 URL 白名单放行', () => {

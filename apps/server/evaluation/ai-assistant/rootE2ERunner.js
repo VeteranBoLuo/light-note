@@ -17,8 +17,10 @@ export const ROOT_E2E_CLIENT_CAPABILITIES = Object.freeze([
   'agent_interaction_v1',
   'agent_continuation_v1',
   'grounding_scope_v2',
+  'capability_scope_v3',
 ]);
 const PROVIDERS = new Set(['deepseek', 'qwen']);
+const RUNTIMES = new Set(['v2', 'v3']);
 const GENERIC_FAILURE_PATTERNS = Object.freeze([
   /AI\s*没有返回可核验的语义计划/iu,
   /本轮未执行查询或修改/iu,
@@ -36,6 +38,8 @@ export function parseRootE2EArgs(argv = []) {
     executeWrites: false,
     suite: 'full',
     provider: 'deepseek',
+    runtime: 'v2',
+    approveFullMatrix: false,
     format: 'text',
     artifactRegression: true,
     artifactRefinementRounds: 5,
@@ -47,13 +51,19 @@ export function parseRootE2EArgs(argv = []) {
     if (arg === '--') continue;
     if (arg === '--live') options.live = true;
     else if (arg === '--execute-writes') options.executeWrites = true;
+    else if (arg === '--approve-full-matrix') options.approveFullMatrix = true;
     else if (arg === '--no-artifact-regression') options.artifactRegression = false;
     else if (arg === '--grounding-scope-regression') options.groundingScopeRegression = true;
     else if (arg === '--artifact-refinement-rounds') {
       options.artifactRefinementRounds = Number(argv[++index]);
     } else if (arg === '--suite') options.suite = argv[++index] || 'full';
     else if (arg === '--provider') options.provider = argv[++index] || 'deepseek';
-    else if (arg === '--format') options.format = argv[++index] || 'text';
+    else if (arg === '--runtime') {
+      const value = argv[index + 1];
+      if (!value || value.startsWith('--')) throw new Error('--runtime 后必须提供 v2 或 v3');
+      options.runtime = value;
+      index += 1;
+    } else if (arg === '--format') options.format = argv[++index] || 'text';
     else if (arg === '--case') {
       options.caseIds.push(
         ...String(argv[++index] || '')
@@ -72,6 +82,7 @@ export function parseRootE2EArgs(argv = []) {
     (item) => !requestedCaseIds.size || requestedCaseIds.has(item.id),
   );
   if (!PROVIDERS.has(options.provider)) throw new Error('--provider 仅支持 deepseek 或 qwen');
+  if (!RUNTIMES.has(options.runtime)) throw new Error('--runtime 仅支持 v2 或 v3');
   if (!['text', 'json'].includes(options.format)) throw new Error('--format 仅支持 text 或 json');
   if (
     !Number.isInteger(options.artifactRefinementRounds) ||
@@ -87,7 +98,44 @@ export function parseRootE2EArgs(argv = []) {
   ) {
     throw new Error('所选真实链路包含写操作或笔记产物回归，必须显式添加 --execute-writes');
   }
+  if (
+    options.live &&
+    options.runtime === 'v3' &&
+    options.suite === 'full' &&
+    !options.caseIds.length &&
+    !options.approveFullMatrix
+  ) {
+    throw new Error('V3 真实全矩阵必须显式添加 --approve-full-matrix');
+  }
   return options;
+}
+
+function plannedRootE2ETurns(options, cases) {
+  const caseTurns = cases.reduce((sum, item) => sum + 1 + (item.followUpMessage ? 1 : 0), 0);
+  const groundingTurns = options.groundingScopeRegression ? 2 : 0;
+  const refinementRounds = Number.isInteger(options.artifactRefinementRounds) ? options.artifactRefinementRounds : 5;
+  const artifactTurns = options.artifactRegression ? 2 + refinementRounds : 0;
+  return caseTurns + groundingTurns + artifactTurns;
+}
+
+/**
+ * Root E2E 必须由 Runner 自己钉死被测 Runtime，不能继承终端、pm2 或 .env 中的残留值。
+ * V3 档只放行真实 Root actor；V2 档显式关闭 V3，确保报告名称与实际执行链一致。
+ */
+export function applyRootE2ERuntimeProfile(options = {}, env = process.env) {
+  const runtime = String(options.runtime || 'v2')
+    .trim()
+    .toLowerCase();
+  if (!RUNTIMES.has(runtime)) throw new Error('--runtime 仅支持 v2 或 v3');
+  env.AI_AGENT_RUNTIME_V2_MODE = 'enforce';
+  if (runtime === 'v3') {
+    env.AI_AGENT_RUNTIME_MODE = 'v3_enforce';
+    env.AI_AGENT_RUNTIME_V3_ROLLOUT = 'root';
+    return 'turn_contract_v3_enforce_root';
+  }
+  env.AI_AGENT_RUNTIME_MODE = 'legacy';
+  env.AI_AGENT_RUNTIME_V3_ROLLOUT = 'none';
+  return 'turn_contract_v2_enforce';
 }
 
 export function validateRootE2ECoverage(toolNames, cases = ROOT_E2E_TOOL_CASES) {
@@ -135,6 +183,37 @@ function parseJsonArray(value) {
   } catch {
     return [];
   }
+}
+
+function parseJsonObject(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(String(value || '{}'));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+export function assertRootE2ERuntimeTrace(traceValue, runtime = 'v2') {
+  const trace = parseJsonObject(traceValue);
+  const valid =
+    runtime === 'v3'
+      ? trace.runtimeMode === 'v3_enforce' &&
+        trace.runtimeConfiguredMode === 'v3_enforce' &&
+        trace.runtimeRolloutReason === 'role_allowlist' &&
+        Number(trace.rawHistoryMessageCount) === 0 &&
+        Number(trace.legacyStageCount) === 0
+      : runtime === 'v2' &&
+        trace.runtimeMode === 'legacy' &&
+        trace.runtimeConfiguredMode === 'legacy' &&
+        trace.intentCompilerMode === 'enforce';
+  if (!valid) {
+    const error = new Error('ROOT_E2E_RUNTIME_TRACE_MISMATCH');
+    error.code = 'ROOT_E2E_RUNTIME_TRACE_MISMATCH';
+    throw error;
+  }
+  return true;
 }
 
 class CapturedResponse extends EventEmitter {
@@ -199,15 +278,18 @@ async function invokeHandler(handler, request) {
   return response;
 }
 
-async function waitForAgentLog(pool, requestId, timeoutMs = 3000) {
+async function waitForAgentLog(pool, requestId, { timeoutMs = 3000, runtime } = {}) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const [rows] = await pool.query(
-      `SELECT selected_tools, tools_used, status, error_msg, outcome_kind, answer_chars
+      `SELECT selected_tools, tools_used, status, error_msg, outcome_kind, answer_chars, turn_contract_trace
          FROM agent_logs WHERE request_id = ? ORDER BY created_at DESC LIMIT 1`,
       [requestId],
     );
-    if (rows[0]) return rows[0];
+    if (rows[0]) {
+      if (runtime) assertRootE2ERuntimeTrace(rows[0].turn_contract_trace, runtime);
+      return rows[0];
+    }
     await delay(75);
   }
   const error = new Error('ROOT_E2E_AGENT_LOG_MISSING');
@@ -652,7 +734,16 @@ async function assertCaseAnswer(smokeCase, answer, state, pool, data) {
   throw new Error('ROOT_E2E_ASSERTION_UNKNOWN');
 }
 
-async function invokeCaseTurn({ handlers, state, pool, body, fingerprint, expectedToolName, phase = 'initial' }) {
+async function invokeCaseTurn({
+  handlers,
+  state,
+  pool,
+  body,
+  fingerprint,
+  expectedToolName,
+  runtime,
+  phase = 'initial',
+}) {
   const request = makeRequest({
     user: state.user,
     body,
@@ -665,7 +756,7 @@ async function invokeCaseTurn({ handlers, state, pool, body, fingerprint, expect
     error.code = data.code || 'ROOT_E2E_AGENT_HTTP_FAILED';
     throw error;
   }
-  const log = await waitForAgentLog(pool, data.requestId);
+  const log = await waitForAgentLog(pool, data.requestId, { runtime });
   const usedTools = parseJsonArray(log.tools_used);
   const actual = usedTools.find((item) => item?.name === expectedToolName);
   if (!actual) {
@@ -713,6 +804,7 @@ async function runToolCase({ smokeCase, state, pool, handlers, toolsByName, opti
       body,
       fingerprint: smokeCase.id,
       expectedToolName: smokeCase.toolName,
+      runtime: options.runtime,
     });
     const { data, usedTools, actual } = initialTurn;
     if (smokeCase.kind === 'read' && actual.status !== 'success') {
@@ -742,6 +834,7 @@ async function runToolCase({ smokeCase, state, pool, handlers, toolsByName, opti
           pool,
           fingerprint: `${smokeCase.id}-follow-up`,
           expectedToolName: smokeCase.toolName,
+          runtime: options.runtime,
           phase: 'follow_up',
           body: {
             message: followUpMessage,
@@ -821,7 +914,7 @@ async function runToolCase({ smokeCase, state, pool, handlers, toolsByName, opti
   }
 }
 
-async function runGroundingScopeRegression({ state, pool, handlers }) {
+async function runGroundingScopeRegression({ state, pool, handlers, runtime }) {
   const startedAt = Date.now();
   const firstMessage = '分别列出我最近 7 天新增的书签和笔记数量与标题。';
   const secondMessage = '查看最近 7 天书签的详细链接，并明确说明总数。';
@@ -849,7 +942,7 @@ async function runGroundingScopeRegression({ state, pool, handlers }) {
     ) {
       throw new Error(firstData.code || 'ROOT_E2E_GROUNDING_FIRST_TURN_FAILED');
     }
-    const firstLog = await waitForAgentLog(pool, firstData.requestId);
+    const firstLog = await waitForAgentLog(pool, firstData.requestId, { runtime });
     const firstTools = parseJsonArray(firstLog.tools_used);
     for (const toolName of ['query_bookmarks', 'query_notes']) {
       if (!firstTools.some((item) => item?.name === toolName && item?.status === 'success')) {
@@ -906,7 +999,7 @@ async function runGroundingScopeRegression({ state, pool, handlers }) {
     ) {
       throw new Error(secondData.code || 'ROOT_E2E_GROUNDING_SECOND_TURN_FAILED');
     }
-    const secondLog = await waitForAgentLog(pool, secondData.requestId);
+    const secondLog = await waitForAgentLog(pool, secondData.requestId, { runtime });
     const secondTools = parseJsonArray(secondLog.tools_used);
     if (!secondTools.some((item) => item?.name === 'query_bookmarks' && item?.status === 'success')) {
       throw new Error('ROOT_E2E_GROUNDING_BOOKMARK_QUERY_MISSING');
@@ -966,8 +1059,38 @@ async function callExpectedFailure({ handler, user, confirmation, runId, expecte
   if (response.statusCode !== expectedStatus || response.body?.data?.code !== expectedCode) {
     const error = new Error('ROOT_E2E_EXPECTED_FAILURE_MISMATCH');
     error.code = 'ROOT_E2E_EXPECTED_FAILURE_MISMATCH';
+    error.diagnostic = {
+      expectedStatus,
+      expectedCode,
+      actualStatus: Number(response.statusCode || 0),
+      actualCode: String(response.body?.data?.code || 'none').slice(0, 96),
+    };
     throw error;
   }
+}
+
+export async function ensureArtifactMaterialFixture(state, services) {
+  if (state.artifactMaterialNoteId) return;
+  const created = await services.createNote({
+    userId: state.user.id,
+    userRole: state.user.role,
+    note: {
+      title: `${state.prefix} 草稿材料`,
+      content: [
+        '# Agent 产物回归材料',
+        '',
+        '这是一篇只用于验证日期范围切换、材料继承、长文重生成和确认卡替换的临时笔记。',
+        '验收时应始终以本轮最新时间范围为准；旧草稿只能被原子替换，不能与新草稿同时可执行。',
+        '生成内容可以补充通用分析与建议，但不得把测试材料之外的具体事实写成已发生事件。',
+      ].join('\n'),
+      type: 'markdown',
+    },
+    addToInbox: false,
+    suppressUserRewards: true,
+    maxContentLength: 60_000,
+  });
+  state.artifactMaterialNoteId = String(created.id || '');
+  if (!state.artifactMaterialNoteId) throw new Error('ROOT_E2E_ARTIFACT_FIXTURE_CREATE_FAILED');
 }
 
 function clientLikeFollowUpGrounding(data) {
@@ -990,11 +1113,23 @@ function clientLikeFollowUpGrounding(data) {
   };
 }
 
-async function runNoteArtifactRegression({ state, pool, handlers, toolsByName, refinementRounds = 5 }) {
+async function runNoteArtifactRegression({
+  state,
+  pool,
+  handlers,
+  toolsByName,
+  services,
+  runtime,
+  refinementRounds = 5,
+}) {
   const startedAt = Date.now();
   const sevenDayPrefix = `${state.prefix} 7天总结`;
   const summaryPrefix = `${state.prefix} 今日总结`;
   try {
+    // 真实门禁不能依赖 Root 账号“恰好在今天已有笔记”。尤其跨零点运行时，上一轮仍有
+    // 当日材料，下一轮日期已切换便会正确返回空集合，造成与产品无关的随机失败。
+    // 通过正式 Note Service 写入可清理夹具，保证 7 天与今天两个范围始终至少有一份正文。
+    await ensureArtifactMaterialFixture(state, services);
     const createNoteTool = toolsByName.get('create_note');
     const sevenDayMessage =
       `总结我最近 7 天的全部笔记，生成一篇新笔记，标题必须以“${sevenDayPrefix}”开头，` +
@@ -1019,6 +1154,7 @@ async function runNoteArtifactRegression({ state, pool, handlers, toolsByName, r
     if (sevenDay.statusCode !== 200 || Number(sevenDay.body?.status) !== 200) {
       throw new Error('ROOT_E2E_ARTIFACT_HTTP_FAILED');
     }
+    await waitForAgentLog(pool, sevenDayData.requestId, { runtime });
     if (sevenDayData.confirmations?.length !== 1 || !nonEmptyCard(sevenDayCard, createNoteTool)) {
       throw new Error('ROOT_E2E_ARTIFACT_CARD_INVALID');
     }
@@ -1087,6 +1223,7 @@ async function runNoteArtifactRegression({ state, pool, handlers, toolsByName, r
     ) {
       throw new Error('ROOT_E2E_ARTIFACT_TODAY_CARD_INVALID');
     }
+    await waitForAgentLog(pool, todayData.requestId, { runtime });
     const todayTitle = String(todayCard.args?.title || '');
     const todayContent = String(todayCard.args?.content || '');
     if (!todayTitle.startsWith(summaryPrefix) || /最近\s*7\s*天|7\s*天/iu.test(todayTitle)) {
@@ -1140,6 +1277,7 @@ async function runNoteArtifactRegression({ state, pool, handlers, toolsByName, r
       ) {
         throw new Error('ROOT_E2E_ARTIFACT_REFINEMENT_CARD_INVALID');
       }
+      await waitForAgentLog(pool, refinedData.requestId, { runtime });
       const refinedTitle = String(refinedCard.args?.title || '');
       const refinedContent = String(refinedCard.args?.content || '');
       if (!refinedTitle.startsWith(summaryPrefix) || /最近\s*7\s*天|7\s*天/iu.test(refinedTitle)) {
@@ -1195,6 +1333,7 @@ async function runNoteArtifactRegression({ state, pool, handlers, toolsByName, r
       passed: false,
       outcome: 'failed',
       errorCode: stableCode(error),
+      ...(error?.diagnostic ? { diagnostic: error.diagnostic } : {}),
       durationMs: Date.now() - startedAt,
     };
   }
@@ -1464,6 +1603,7 @@ function buildState({ user, targetUserId }) {
     todoSeriesId: '',
     cloudFileId: '',
     bookmarkId: '',
+    artifactMaterialNoteId: '',
   };
 }
 
@@ -1474,13 +1614,13 @@ function formatProgress(item, index, total) {
 
 export function formatRootE2EText(report) {
   if (report.dryRun) {
-    return `Root 真实链路门禁 dry-run：注册 ${report.coverage.registered} 个工具，矩阵覆盖 ${report.coverage.covered} 个；未调用模型、工具或数据库。`;
+    return `Root ${report.runtime || 'turn_contract_v2_enforce'} 真实链路门禁 dry-run：注册 ${report.coverage.registered} 个工具，矩阵覆盖 ${report.coverage.covered} 个；本次选择 ${report.selectedCaseCount} 个工具用例、计划 ${report.plannedAgentTurns} 个 Agent 轮次；未调用模型、工具或数据库。`;
   }
   const formatRegression = (item) =>
     item?.outcome === 'skipped' ? '未运行' : item?.passed ? '通过' : `未通过(${item?.errorCode || '未知错误'})`;
   const lines = [
     `Root 真实链路门禁：${report.passed ? '通过' : '未通过'}`,
-    `Provider：${report.provider}；工具 ${report.summary.passedTools}/${report.summary.totalTools}；写操作 ${report.summary.executedWrites}/${report.summary.totalWrites}；幂等重放 ${report.summary.replayVerified}/${report.summary.totalWrites}`,
+    `Runtime：${report.runtime || 'unknown'}；Provider：${report.provider}；工具 ${report.summary.passedTools}/${report.summary.totalTools}；写操作 ${report.summary.executedWrites}/${report.summary.totalWrites}；幂等重放 ${report.summary.replayVerified}/${report.summary.totalWrites}`,
     `混合来源→仅查书签隔离：${formatRegression(report.groundingScope)}`,
     `笔记 7 天→今天/字数/连续续写：${formatRegression(report.artifact)}；夹具清理：${report.cleanup.passed ? '通过' : `未通过(${report.cleanup.errorCode})`}`,
     `脱敏报告：${report.reportPath}`,
@@ -1493,18 +1633,26 @@ export function formatRootE2EText(report) {
 export async function runRootE2E(options) {
   if (!options.live) {
     const coverage = validateRootE2ECoverage(rootE2EToolNames());
+    const requestedCaseIds = new Set(options.caseIds || []);
+    const selectedCases = selectRootE2ECases(options.suite).filter(
+      (item) => !requestedCaseIds.size || requestedCaseIds.has(item.id),
+    );
     return {
       passed: coverage.valid,
       dryRun: true,
       suite: options.suite,
       provider: options.provider,
+      runtime: options.runtime === 'v3' ? 'turn_contract_v3_enforce_root' : 'turn_contract_v2_enforce',
       coverage,
+      selectedCaseCount: selectedCases.length,
+      selectedCaseIds: selectedCases.map((item) => item.id),
+      plannedAgentTurns: plannedRootE2ETurns(options, selectedCases),
       businessToolsExecuted: 0,
     };
   }
 
   dotenv.config({ path: path.join(SERVER_ROOT, '.env'), quiet: true });
-  process.env.AI_AGENT_RUNTIME_V2_MODE = 'enforce';
+  const runtime = applyRootE2ERuntimeProfile(options);
   process.env.AGENT_LLM_PROVIDER = options.provider;
   const localImageDir = await fs.mkdtemp(path.join(os.tmpdir(), 'lightnote-root-e2e-images-'));
   process.env.LIGHT_NOTE_IMAGE_DIR = localImageDir;
@@ -1517,6 +1665,7 @@ export async function runRootE2E(options) {
     linkHealthServices,
     obsServices,
     noteImageServices,
+    noteServices,
   ] = await Promise.all([
     import('../../db/index.js'),
     import('../../router_handle/agentHandle.js'),
@@ -1525,6 +1674,7 @@ export async function runRootE2E(options) {
     import('../../util/linkHealth.js'),
     import('../../util/obsClient.js'),
     import('../../util/noteImages.js'),
+    import('../../util/services/noteService.js'),
   ]);
   const services = {
     createTemporaryDocumentSource: documentServices.createTemporaryDocumentSource,
@@ -1533,6 +1683,7 @@ export async function runRootE2E(options) {
     isChecking: linkHealthServices.isChecking,
     deleteObjectFromObs: obsServices.deleteObjectFromObs,
     cleanupOrphanNoteImages: noteImageServices.cleanupOrphanNoteImages,
+    createNote: noteServices.createNote,
   };
   const coverage = validateRootE2ECoverage(tools.map((tool) => tool.name));
   if (!coverage.valid) {
@@ -1580,7 +1731,7 @@ export async function runRootE2E(options) {
       process.stderr.write(formatProgress(item, results.length, selectedCases.length));
     }
     if (options.groundingScopeRegression) {
-      groundingScope = await runGroundingScopeRegression({ state, pool, handlers });
+      groundingScope = await runGroundingScopeRegression({ state, pool, handlers, runtime: options.runtime });
       process.stderr.write(formatProgress(groundingScope, selectedCases.length + 1, selectedCases.length + 1));
     }
     if (options.artifactRegression) {
@@ -1589,6 +1740,8 @@ export async function runRootE2E(options) {
         pool,
         handlers,
         toolsByName,
+        services,
+        runtime: options.runtime,
         refinementRounds: options.artifactRefinementRounds,
       });
       process.stderr.write(formatProgress(artifact, selectedCases.length + 1, selectedCases.length + 1));
@@ -1620,7 +1773,7 @@ export async function runRootE2E(options) {
     dryRun: false,
     suite: options.suite,
     provider: options.provider,
-    runtime: 'turn_contract_v2_enforce',
+    runtime,
     rootIdentityVerified: true,
     coverage,
     summary,
