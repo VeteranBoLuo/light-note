@@ -5601,7 +5601,14 @@ export async function agentChat(req, res) {
         !runtimeHasMutationGoal &&
         (!runtimeV2Outcome || ['blocked', 'unsupported'].includes(runtimeV2Outcome.state));
       if (canUseReadOnlyFallback) {
-        const fallbackTools = selectedTools.filter((tool) => tool?.isWrite !== true);
+        // TurnSpec 已经成功时，V2 Router 给出的 candidates 是本轮唯一经过结构化意图
+        // 收敛的能力边界。执行规划失败只能在这个边界内修复参数，不能重新把自动模式的
+        // 全部只读工具暴露给旧 Planner；否则一次 query_notes 参数错误会扩大成几十个工具
+        // 的二次猜测。只有 Intent Compiler 本身完全不可用时，才保留原来的只读降级面。
+        const routedReadTools = (runtimeV2Outcome?.route?.candidates || []).filter((tool) => tool?.isWrite !== true);
+        const fallbackTools = routedReadTools.length
+          ? routedReadTools
+          : selectedTools.filter((tool) => tool?.isWrite !== true);
         const fallbackToolNames = new Set(fallbackTools.map((tool) => tool.name));
         const fallbackCatalog = buildAgentSemanticCapabilityCatalog([...toolRegistry.values()], {
           availableToolNames: fallbackToolNames,

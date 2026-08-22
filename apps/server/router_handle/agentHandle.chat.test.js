@@ -1966,6 +1966,95 @@ describe('agentChat 主链路', () => {
     expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).not.toContain('没有返回可核验的语义计划');
   });
 
+  it('Runtime V2 执行规划失败时，旧式只读恢复保持 TurnSpec 已收敛的工具边界', async () => {
+    vi.stubEnv('AI_AGENT_RUNTIME_V2_MODE', 'enforce');
+    mocks.selectAgentTools.mockImplementation((registry) =>
+      [registry.get('query_notes'), registry.get('query_demo')].filter(Boolean),
+    );
+    mocks.toolExecute.mockResolvedValueOnce({ value: '当前共有 85 篇笔记', dependencyRefs: [] });
+    mocks.requestAi.mockImplementation(async (messages, options = {}) => {
+      if (options?.trace?.stage === 'intent_compiler') {
+        const payload = JSON.parse(messages[1].content);
+        return {
+          content: '',
+          toolCalls: [
+            turnSpecCall({
+              requestKind: 'answer',
+              confidence: 'high',
+              goals: [
+                {
+                  id: 'count-notes',
+                  kind: 'read',
+                  capabilityDomain: 'note',
+                  description: '查询当前账号的笔记总数',
+                  targetDescription: '当前账号的全部笔记',
+                  dependsOn: [],
+                },
+              ],
+              groundingPolicy: payload.authoritativeGroundingPolicy,
+              missingSlots: [],
+              clarificationQuestion: '',
+            }),
+          ],
+          usage: usage(1),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      if (['execution_planner', 'execution_planner_repair'].includes(options?.trace?.stage)) {
+        return {
+          content: '没有提交可验证的执行计划',
+          toolCalls: [],
+          usage: usage(1),
+          usageStatus: 'reported',
+          finishReason: 'stop',
+        };
+      }
+      if (options?.trace?.stage === 'planner_v2_read_fallback') {
+        const fallbackDefinition = JSON.stringify(options.tools?.[0] || {});
+        expect(fallbackDefinition).toContain('read.query_notes');
+        expect(fallbackDefinition).not.toContain('read.query_demo');
+        return {
+          content: '',
+          toolCalls: [
+            semanticPlanCall({
+              requestClass: 'data_query',
+              intents: [
+                {
+                  kind: 'read',
+                  capabilityId: 'read.query_notes',
+                  goal: '查询当前账号的笔记总数',
+                  targetDescription: '当前账号的全部笔记',
+                  dependsOn: [],
+                },
+              ],
+              toolCalls: [{ toolName: 'query_notes', arguments: {} }],
+            }),
+          ],
+          usage: usage(1),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      if (options?.trace?.stage === 'final') {
+        return {
+          content: '你当前共有 85 篇笔记。',
+          toolCalls: [],
+          usage: usage(1),
+          usageStatus: 'reported',
+          finishReason: 'stop',
+        };
+      }
+      throw new Error(`unexpected stage: ${options?.trace?.stage}`);
+    });
+    const res = response();
+
+    await agentChat(request({ message: '我共有多少笔记？', stream: false, scope: { mode: 'workspace' } }), res);
+
+    expect(mocks.toolExecute).toHaveBeenCalledWith({}, expect.objectContaining({ userId: 'user-1' }));
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toBe('你当前共有 85 篇笔记。');
+  });
+
   it('卡片续答允许空消息内部触发，只读取服务端成功回执且不重新开放 Planner 或工具', async () => {
     const continuation = {
       state: 'ready',

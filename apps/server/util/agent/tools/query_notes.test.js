@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyAgentAnswerRequirements } from '../answerRequirements.js';
+import { normalizeToolArguments } from '../toolArguments.js';
+import { validateToolArgumentsAgainstSchema } from '../toolPolicy.js';
 
 const poolQuery = vi.fn();
 const searchPersonalKnowledge = vi.fn();
@@ -22,6 +24,13 @@ function mockMainQuery({ rows = [], total = 0, breakdown = [], fallbackRows = []
 
 describe('query_notes 工具', () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it('未指定可选筛选条件时，归一化结果仍满足公开工具 Schema', () => {
+    const normalized = normalizeToolArguments(tool, {});
+
+    expect(normalized).toEqual({ view: 'list', limit: 10 });
+    expect(() => validateToolArgumentsAgainstSchema(tool.parameters, normalized)).not.toThrow();
+  });
 
   it('有关键词时按相关度排序，通配符按字面转义', async () => {
     mockMainQuery({

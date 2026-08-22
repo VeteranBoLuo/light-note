@@ -47,13 +47,21 @@ function normalizeArgs(input = {}) {
     .trim()
     .toLowerCase();
   const view = NOTE_VIEW_ALIASES.get(rawView || (promotedTypeAlias ? 'type_breakdown' : 'list')) || 'list';
+  const normalizedType = type === 'all' ? '' : type;
+  const timeRange = String(input.timeRange || '').trim();
+  const user = String(input.user || '').trim();
+
+  // 可选参数未提供时必须真正省略，不能用空字符串充当“未指定”。工具参数会在
+  // normalizeArgs 之后再次经过同一份 JSON Schema 校验；空字符串既不属于 type
+  // 枚举，也会把服务端默认值误写成模型显式选择，最终让最普通的全量查询在执行前
+  // 被 TOOL_ARGUMENTS_INVALID 拦住。
   return {
-    keyword,
-    type: type === 'all' ? '' : type,
+    ...(keyword ? { keyword } : {}),
+    ...(normalizedType ? { type: normalizedType } : {}),
     view,
-    timeRange: String(input.timeRange || '').trim(),
+    ...(timeRange ? { timeRange } : {}),
     limit: Number.isFinite(rawLimit) ? Math.min(Math.max(Math.trunc(rawLimit), 1), 50) : 10,
-    user: String(input.user || '').trim(),
+    ...(user ? { user } : {}),
   };
 }
 
