@@ -85,6 +85,35 @@ describe('AiActivitySummary', () => {
     expect(host.querySelector('.ai-activity')).toBeNull();
   });
 
+  it('同一工具的旧失败被后续成功恢复后不再显示未完成', () => {
+    const host = mountActivity([
+      { name: 'query_notes', status: 'error', round: 1 },
+      { name: 'query_notes', status: 'success', round: 2 },
+    ]);
+
+    expect(host.querySelector('.ai-activity')).toBeNull();
+    expect(host.textContent).not.toContain('未完成');
+  });
+
+  it('同一工具后续再次失败时仍展示最新真实终态', () => {
+    const host = mountActivity([
+      { name: 'query_notes', status: 'success', round: 1 },
+      { name: 'query_notes', status: 'error', round: 2 },
+    ]);
+
+    expect(host.querySelector('.ai-activity')).not.toBeNull();
+    expect(host.textContent).toContain('未完成');
+  });
+
+  it('同一轮存在多个事件时以事件流中较后的终态为准', () => {
+    const host = mountActivity([
+      { name: 'query_notes', status: 'error', round: 2 },
+      { name: 'query_notes', status: 'success', round: 2 },
+    ]);
+
+    expect(host.querySelector('.ai-activity')).toBeNull();
+  });
+
   it('流式回答期间不让失败终态卡先于解释正文出现', () => {
     const host = mountActivity([{ name: 'set_todo_status', status: 'error' }], true);
 

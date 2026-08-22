@@ -1,6 +1,7 @@
 import { validateToolArgumentsAgainstSchema } from '../toolPolicy.js';
 import { normalizeToolArguments } from '../toolArguments.js';
 import { bindAuthoritativeResourceArguments } from './executionContext.js';
+import { getAgentV3CapabilityByToolName } from './v3/capabilityManifest.js';
 import { authoritativeTemporalRangesForGoal, bindAuthoritativeTemporalArguments } from './v3/temporalConstraints.js';
 
 function toolCallId(step, index) {
@@ -88,10 +89,18 @@ export function validateExecutionPlan({ turnSpec, route, parsed, completedGoalId
         argumentBindings: step.argumentBindings,
         executionContext,
       });
+      const capability = capabilitiesByTool.get(tool.name);
+      const manifestCapability = getAgentV3CapabilityByToolName(tool.name);
       const normalizedArguments = bindAuthoritativeTemporalArguments({
         turnSpec,
         goalId: goal.id,
         args: resourceBoundArguments,
+        temporalSlots:
+          capability?.temporalSlots?.length > 0
+            ? capability.temporalSlots
+            : manifestCapability?.temporalSlots?.length > 0
+              ? manifestCapability.temporalSlots
+              : tool.temporalSlots || [],
       });
       validateToolArgumentsAgainstSchema(tool.parameters, normalizedArguments);
       if (typeof tool.validatePlanArgs === 'function') tool.validatePlanArgs(normalizedArguments);

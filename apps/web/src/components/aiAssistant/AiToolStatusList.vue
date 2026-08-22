@@ -9,12 +9,7 @@
   import { useI18n } from 'vue-i18n';
   import ReplyLoading from './ReplyLoading.vue';
   import { AI_WRITE_TOOL_NAMES } from '@/config/aiTools';
-
-  export interface AiToolStatusItem {
-    name: string;
-    status: 'running' | 'success' | 'error' | 'confirmation_required' | 'interaction_required';
-    round?: number;
-  }
+  import { latestAiToolStatusItems, type AiToolStatusItem } from '@/types/aiToolStatus';
 
   const props = defineProps<{
     items: AiToolStatusItem[];
@@ -24,13 +19,7 @@
 
   const { t, te } = useI18n();
 
-  const latestItems = computed(() => {
-    const latestByName = new Map<string, AiToolStatusItem>();
-    props.items.forEach((item) => {
-      latestByName.set(item.name, item);
-    });
-    return [...latestByName.values()];
-  });
+  const latestItems = computed(() => latestAiToolStatusItems(props.items));
 
   // 确认与选择状态有独立、可直接操作的卡片；不能再额外渲染“等待确认”的过程提示。
   // 否则用户会看到状态条、活动摘要与确认卡三次表达同一件事。

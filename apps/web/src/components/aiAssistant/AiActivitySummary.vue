@@ -34,12 +34,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
-
-  interface ToolEvent {
-    name: string;
-    status: 'running' | 'success' | 'error' | 'confirmation_required' | 'interaction_required';
-    round?: number;
-  }
+  import { latestAiToolStatusItems, type AiToolStatusItem } from '@/types/aiToolStatus';
 
   interface ActivityItem {
     key: string;
@@ -51,7 +46,7 @@
   const props = withDefaults(
     defineProps<{
       activity?: Array<Record<string, unknown> | string>;
-      toolEvents?: ToolEvent[];
+      toolEvents?: AiToolStatusItem[];
       streaming?: boolean;
     }>(),
     { activity: () => [], toolEvents: () => [], streaming: false },
@@ -100,7 +95,7 @@
               : 'success',
       });
     }
-    for (const tool of props.toolEvents) {
+    for (const tool of latestAiToolStatusItems(props.toolEvents)) {
       result.push({
         key: `tool:${tool.name}:${tool.round || 1}`,
         label: t(`ai.tools.${tool.name}`, tool.name),

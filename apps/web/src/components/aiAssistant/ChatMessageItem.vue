@@ -179,7 +179,8 @@
   import { bookmarkStore, useUserStore } from '@/store';
   import icon from '@/config/icon.ts';
   import ReplyLoading from '@/components/aiAssistant/ReplyLoading.vue';
-  import AiToolStatusList, { type AiToolStatusItem } from '@/components/aiAssistant/AiToolStatusList.vue';
+  import AiToolStatusList from '@/components/aiAssistant/AiToolStatusList.vue';
+  import type { AiToolStatusItem } from '@/types/aiToolStatus';
   import AiSystemErrorCard from '@/components/aiAssistant/AiSystemErrorCard.vue';
   import { resolveLegacyAiSystemErrorCode } from '@/components/aiAssistant/aiSystemError';
   import BButton from '@/components/base/BasicComponents/BButton.vue';

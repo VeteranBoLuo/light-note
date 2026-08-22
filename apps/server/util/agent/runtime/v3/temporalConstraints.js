@@ -369,8 +369,25 @@ export function authoritativeTemporalRangesForGoal(turnSpec, goalId) {
   return Object.freeze(ranges);
 }
 
-export function bindAuthoritativeTemporalArguments({ turnSpec, goalId, args } = {}) {
-  return { ...(args || {}), ...authoritativeTemporalArgumentsForGoal(turnSpec, goalId) };
+export function bindAuthoritativeTemporalArguments({ turnSpec, goalId, args, temporalSlots = [] } = {}) {
+  const sanitized = { ...(args || {}) };
+  const authoritative = authoritativeTemporalArgumentsForGoal(turnSpec, goalId);
+  const hasAuthoritativeTemporalContract = String(turnSpec?.version || '').startsWith('3.');
+  // V3 的 Manifest 时间槽由 Compiler + 服务端 Binder 独占。即使 Planner 绕过了
+  // 收窄 schema 重新塞入 timeRange，也必须剥离，不能让模型值反过来成为权威参数。
+  // V2 尚由 Planner 无损提取时间表达式，需要保留合法值；但“全部/所有时间”只代表
+  // 不加时间筛选，统一删除参数，避免它进入严格 Tool Policy 后变成非法时间范围。
+  for (const slot of Array.isArray(temporalSlots) ? temporalSlots : []) {
+    const name = String(slot?.name || '').trim();
+    if (!name) continue;
+    if (hasAuthoritativeTemporalContract) {
+      delete sanitized[name];
+      continue;
+    }
+    const expression = normalizeTemporalExpressionV3(sanitized[name]);
+    if (slot?.allowAll === true && isAllTimeExpression(expression)) delete sanitized[name];
+  }
+  return { ...sanitized, ...authoritative };
 }
 
 export const __testing = Object.freeze({ expressionPrecision, parseCalendarDate, parseClock, supportsPrecision });

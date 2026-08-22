@@ -275,7 +275,10 @@ export default {
         raw?.resolvedTimeRange?.expression || args.timeRange,
         raw?.resolvedTimeRange,
       );
-      return `${scope ? `${scope}` : ''}${distributionLine}`;
+      const typeLabel = args.type ? NOTE_TYPE_LABEL[args.type] : '';
+      const exactCount = Math.max(0, Math.trunc(Number(raw?.total) || 0));
+      const countLine = typeLabel ? `${typeLabel}笔记共 ${exactCount} 条。` : `当前查询范围内共 ${exactCount} 条笔记。`;
+      return [scope, countLine, distributionLine].filter(Boolean).join('\n');
     }
     const items = raw?.items || [];
     if (!items.length) {
@@ -306,7 +309,9 @@ export default {
         : typeLabel
           ? `${typeLabel}笔记共 ${raw.total} 条：`
           : `共 ${raw.total} 条笔记：`;
-    return [distributionLine, header, lines.join('\n\n')].filter(Boolean).join('\n');
+    // 用户通常先问总量，再决定是否查看分布或清单。权威主事实必须排在增强信息前，
+    // 不能让模型只截取第一行类型分布而漏掉“共 N 条”。
+    return [header, distributionLine, lines.join('\n\n')].filter(Boolean).join('\n');
   },
   summarize(raw, input = {}) {
     const args = normalizeArgs(input);
@@ -328,7 +333,18 @@ export default {
     if (raw?.matchMode !== 'like' || !raw?.typeBreakdown) return [];
     const distribution = formatNoteTypeBreakdown(raw.typeBreakdown);
     if (raw?.view === 'type_breakdown') {
+      const typeLabel = raw?.typeFilter ? NOTE_TYPE_LABEL[raw.typeFilter] || raw.typeFilter : '';
+      const exactCount = Math.max(0, Math.trunc(Number(raw?.total) || 0));
+      const countText = typeLabel ? `${typeLabel}笔记共 ${exactCount} 条。` : `当前查询范围内共 ${exactCount} 条笔记。`;
       return [
+        {
+          id: typeLabel ? `note.type_count.${raw.typeFilter}` : 'note.total_count',
+          anyOf: typeLabel
+            ? [`${typeLabel}笔记共 ${exactCount} 条`, `${typeLabel} ${exactCount} 条`]
+            : [`共 ${exactCount} 条笔记`, `共有 ${exactCount} 条笔记`, `总计 ${exactCount} 条笔记`],
+          appendText: countText,
+          onMissing: 'replace',
+        },
         {
           id: 'note.type_breakdown',
           anyOf: [distribution, distribution.replaceAll(' 条', '')],
@@ -337,7 +353,17 @@ export default {
         },
       ];
     }
-    if (!raw?.typeFilter) return [];
+    if (!raw?.typeFilter) {
+      const exactCount = Math.max(0, Math.trunc(Number(raw?.total) || 0));
+      return [
+        {
+          id: 'note.total_count',
+          anyOf: [`共 ${exactCount} 条笔记`, `共有 ${exactCount} 条笔记`, `总计 ${exactCount} 条笔记`],
+          appendText: `当前查询范围内共 ${exactCount} 条笔记。`,
+          onMissing: 'append',
+        },
+      ];
+    }
     const typeLabel = NOTE_TYPE_LABEL[raw.typeFilter] || raw.typeFilter;
     const parsedCount = Number(raw?.total);
     const exactCount = Number.isFinite(parsedCount) ? Math.max(0, Math.trunc(parsedCount)) : 0;
