@@ -97,6 +97,7 @@ describe('adminRoutePolicyMiddleware', () => {
   it('服务器指标、日志和动作在任何管理员代管上下文都失败关闭', () => {
     for (const [method, path] of [
       ['GET', '/infra/dashboard'],
+      ['GET', '/infra/diagnostics'],
       ['GET', '/infra/services'],
       ['GET', '/infra/storage'],
       ['GET', '/infra/security'],

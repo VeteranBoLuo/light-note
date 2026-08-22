@@ -21,6 +21,7 @@ const PASSIVE_API_PATHS = new Set([
   '/community-chat/access', // 公共聊天室权限快照：前台恢复/安全刷新会反复读取，无操作审计价值。
   '/community-chat/rooms', // 频道目录与未读快照：属于被动状态同步。
   '/infra/dashboard', // 服务器管理前台默认每 3 秒读取一次快照，由独立运维审计记录真正的写动作。
+  '/infra/diagnostics', // Root 主动诊断聚合被动快照，不保存证据副本到通用 API 日志。
   '/infra/services', // 固定服务状态为被动轮询快照，不复制到通用 API 日志。
   '/infra/storage', // 存储与 IO 为被动只读快照。
   '/infra/security', // 安全快照含登录来源等敏感运维信息，仅在页面内受限展示。

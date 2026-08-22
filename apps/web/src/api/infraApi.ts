@@ -47,6 +47,34 @@ export interface InfraActionResultPayload {
   code?: string;
 }
 
+export type InfraDiagnosticState = 'pass' | 'warning' | 'fail' | 'unknown';
+export type InfraDiagnosticDomain = 'overview' | 'services' | 'storage' | 'security';
+export interface InfraDiagnosticCheck {
+  id: string;
+  domain: InfraDiagnosticDomain;
+  state: InfraDiagnosticState;
+  severity: 'high' | 'medium' | 'low';
+  evidence: Record<string, unknown>;
+  target: {
+    module: InfraDiagnosticDomain;
+    serviceId?: HostAgentServiceId;
+    findingId?: string;
+  };
+}
+export interface InfraDiagnosticsPayload {
+  capturedAt: string | null;
+  status: 'healthy' | 'attention' | 'critical';
+  summary: { failed: number; warning: number; passed: number; unknown: number };
+  checks: InfraDiagnosticCheck[];
+  sources: Array<{
+    domain: InfraDiagnosticDomain;
+    state: 'available' | 'unavailable';
+    capturedAt: string | null;
+    collectionErrorCount: number;
+    code?: string;
+  }>;
+}
+
 export type InfraSecurityFindingState = 'pass' | 'fail' | 'unknown';
 export interface InfraSecurityFinding {
   id: string;
@@ -100,6 +128,10 @@ export function getInfraStorage(): Promise<ApiResponse & { data: HostAgentStorag
 
 export function getInfraSecurity(): Promise<ApiResponse & { data: InfraSecurityPayload }> {
   return getSnapshot('/api/infra/security');
+}
+
+export function getInfraDiagnostics(): Promise<ApiResponse & { data: InfraDiagnosticsPayload }> {
+  return getSnapshot('/api/infra/diagnostics');
 }
 
 export async function getInfraLogs(

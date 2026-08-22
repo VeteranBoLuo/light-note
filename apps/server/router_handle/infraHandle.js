@@ -94,6 +94,24 @@ function securityFinding(id, state, severity, evidence = {}) {
   return { id, state, severity, evidence };
 }
 
+function diagnosticCheck(id, domain, state, severity, evidence, target) {
+  return { id, domain, state, severity, evidence, target };
+}
+
+function thresholdState(value, warningAt, failedAt) {
+  if (!Number.isFinite(value)) return 'unknown';
+  if (value >= failedAt) return 'fail';
+  if (value >= warningAt) return 'warning';
+  return 'pass';
+}
+
+function diagnosticSourceErrorCode(error) {
+  const code = String(error?.code || '')
+    .trim()
+    .toUpperCase();
+  return /^HOST_AGENT_[A-Z0-9_]{1,52}$/u.test(code) ? code : 'HOST_AGENT_REQUEST_FAILED';
+}
+
 export function deriveSecurityFindings(snapshot) {
   const findings = [];
   const ssh = snapshot?.ssh || {};
@@ -195,6 +213,177 @@ export async function getInfraSecurity(req, res) {
       ),
     );
   }
+}
+
+export function deriveInfraDiagnostics({ dashboard, services, storage, security }, sources = []) {
+  const checks = [];
+  const metrics = dashboard?.metrics || {};
+  const rootMount = (storage?.mounts || []).find((item) => item?.mountPoint === '/') || storage?.mounts?.[0] || null;
+  const serviceItems = Array.isArray(services?.services) ? services.services : [];
+  const unavailableDomains = new Set(
+    sources.filter((item) => item.state !== 'available').map((item) => String(item.domain)),
+  );
+
+  checks.push(
+    diagnosticCheck(
+      'system.cpu',
+      'overview',
+      unavailableDomains.has('overview') ? 'unknown' : thresholdState(metrics?.cpu?.percent, 75, 90),
+      'high',
+      { percent: Number.isFinite(metrics?.cpu?.percent) ? metrics.cpu.percent : null },
+      { module: 'overview' },
+    ),
+    diagnosticCheck(
+      'system.memory',
+      'overview',
+      unavailableDomains.has('overview') ? 'unknown' : thresholdState(metrics?.memory?.percent, 80, 90),
+      'high',
+      {
+        percent: Number.isFinite(metrics?.memory?.percent) ? metrics.memory.percent : null,
+        usedBytes: Number.isFinite(metrics?.memory?.usedBytes) ? metrics.memory.usedBytes : null,
+        totalBytes: Number.isFinite(metrics?.memory?.totalBytes) ? metrics.memory.totalBytes : null,
+      },
+      { module: 'overview' },
+    ),
+    diagnosticCheck(
+      'storage.capacity',
+      'storage',
+      unavailableDomains.has('storage') ? 'unknown' : thresholdState(rootMount?.percent, 80, 90),
+      'high',
+      {
+        mountPoint: rootMount?.mountPoint || null,
+        percent: Number.isFinite(rootMount?.percent) ? rootMount.percent : null,
+        freeBytes: Number.isFinite(rootMount?.freeBytes) ? rootMount.freeBytes : null,
+      },
+      { module: 'storage' },
+    ),
+    diagnosticCheck(
+      'storage.inodes',
+      'storage',
+      unavailableDomains.has('storage') ? 'unknown' : thresholdState(rootMount?.inodePercent, 80, 90),
+      'medium',
+      {
+        mountPoint: rootMount?.mountPoint || null,
+        percent: Number.isFinite(rootMount?.inodePercent) ? rootMount.inodePercent : null,
+        freeInodes: Number.isFinite(rootMount?.freeInodes) ? rootMount.freeInodes : null,
+      },
+      { module: 'storage' },
+    ),
+    diagnosticCheck(
+      'storage.ioBusy',
+      'storage',
+      unavailableDomains.has('storage') ? 'unknown' : thresholdState(storage?.io?.busyPercent, 70, 90),
+      'medium',
+      { percent: Number.isFinite(storage?.io?.busyPercent) ? storage.io.busyPercent : null },
+      { module: 'storage' },
+    ),
+  );
+
+  const unhealthyServices = serviceItems.filter((item) => item?.state !== 'running').map((item) => item.id);
+  checks.push(
+    diagnosticCheck(
+      'services.health',
+      'services',
+      unavailableDomains.has('services') || !serviceItems.length
+        ? 'unknown'
+        : unhealthyServices.length
+          ? 'fail'
+          : 'pass',
+      'high',
+      { total: serviceItems.length, unhealthy: unhealthyServices.slice(0, 20) },
+      {
+        module: 'services',
+        ...(unhealthyServices.length === 1 ? { serviceId: unhealthyServices[0] } : {}),
+      },
+    ),
+  );
+
+  const securityFindings = security ? deriveSecurityFindings(security) : [];
+  for (const finding of securityFindings) {
+    checks.push(
+      diagnosticCheck(`security.${finding.id}`, 'security', finding.state, finding.severity, finding.evidence, {
+        module: 'security',
+        findingId: finding.id,
+      }),
+    );
+  }
+  if (unavailableDomains.has('security')) {
+    checks.push(diagnosticCheck('security.snapshot', 'security', 'unknown', 'high', {}, { module: 'security' }));
+  }
+
+  for (const source of sources) {
+    if (source.state !== 'available' || !Number(source.collectionErrorCount || 0)) continue;
+    checks.push(
+      diagnosticCheck(
+        `collection.${source.domain}`,
+        source.domain,
+        'unknown',
+        'medium',
+        { count: Number(source.collectionErrorCount) },
+        { module: source.domain },
+      ),
+    );
+  }
+
+  const summary = {
+    failed: checks.filter((item) => item.state === 'fail').length,
+    warning: checks.filter((item) => item.state === 'warning').length,
+    passed: checks.filter((item) => item.state === 'pass').length,
+    unknown: checks.filter((item) => item.state === 'unknown').length,
+  };
+  const status = summary.failed > 0 ? 'critical' : summary.warning > 0 || summary.unknown > 0 ? 'attention' : 'healthy';
+  const availableCapturedAt = sources
+    .filter((item) => item.state === 'available' && item.capturedAt)
+    .map((item) => new Date(item.capturedAt).getTime())
+    .filter(Number.isFinite);
+  return {
+    capturedAt: availableCapturedAt.length ? new Date(Math.max(...availableCapturedAt)).toISOString() : null,
+    status,
+    summary,
+    checks,
+    sources,
+  };
+}
+
+export async function getInfraDiagnostics(req, res) {
+  if (!ensureRootActor(req, res)) return;
+  if (req.query && Object.keys(req.query).length > 0) {
+    return res.send(resultData(null, 400, L(req, '查询参数无效', 'Invalid query parameters.')));
+  }
+  const definitions = [
+    ['overview', getHostAgentDashboard],
+    ['services', getHostAgentServices],
+    ['storage', getHostAgentStorage],
+    ['security', getHostAgentSecurity],
+  ];
+  const settled = await Promise.allSettled(definitions.map(([, loader]) => loader()));
+  const snapshots = {};
+  const sources = settled.map((result, index) => {
+    const domain = definitions[index][0];
+    if (result.status === 'fulfilled') {
+      snapshots[domain === 'overview' ? 'dashboard' : domain] = result.value;
+      return {
+        domain,
+        state: 'available',
+        capturedAt: result.value?.capturedAt || result.value?.sampledAt || null,
+        collectionErrorCount: Array.isArray(result.value?.collectionErrors)
+          ? result.value.collectionErrors.length
+          : Array.isArray(result.value?.metrics?.collectionErrors)
+            ? result.value.metrics.collectionErrors.length
+            : 0,
+      };
+    }
+    const code = diagnosticSourceErrorCode(result.reason);
+    console.error('[infra] diagnostics source failed domain=%s code=%s', domain, code);
+    return {
+      domain,
+      state: 'unavailable',
+      capturedAt: null,
+      collectionErrorCount: 0,
+      code,
+    };
+  });
+  return res.send(resultData(deriveInfraDiagnostics(snapshots, sources)));
 }
 
 export async function getInfraLogs(req, res) {
@@ -306,7 +495,7 @@ export async function executeInfraAction(req, res) {
       );
     }
     const audit = await finishAdminAction(context, { outcome: 'succeeded', metadata: terminalMetadata });
-    return res.send(resultData({ receipt, audit, retrySafe: true }));
+    return res.send(resultData({ receipt, audit, replayed: execution?.replayed === true, retrySafe: true }));
   } catch (error) {
     if (context) {
       try {
@@ -335,6 +524,9 @@ export const infraHandleInternals = {
   ensureRootActor,
   jobIdFor,
   deriveSecurityFindings,
+  deriveInfraDiagnostics,
+  thresholdState,
+  diagnosticSourceErrorCode,
   IDEMPOTENCY_KEY_PATTERN,
   ACTION_BODY_KEYS,
 };

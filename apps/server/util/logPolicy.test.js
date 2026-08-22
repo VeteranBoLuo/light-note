@@ -16,6 +16,7 @@ describe('API 日志跳过策略', () => {
     '/api/community-chat/access',
     '/api/community-chat/rooms',
     '/api/infra/dashboard',
+    '/api/infra/diagnostics',
     '/api/infra/services',
     '/api/infra/storage',
     '/api/infra/security',

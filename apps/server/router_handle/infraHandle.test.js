@@ -34,7 +34,8 @@ vi.mock('../util/hostAgentClient.js', () => {
 });
 vi.mock('../util/agent/logSafety.js', () => ({ stableAgentErrorCode: (error) => String(error?.code || 'ERROR') }));
 
-const { executeInfraAction, getInfraDashboard, infraHandleInternals } = await import('./infraHandle.js');
+const { executeInfraAction, getInfraDashboard, getInfraDiagnostics, infraHandleInternals } =
+  await import('./infraHandle.js');
 
 function response() {
   return { send: vi.fn() };
@@ -88,6 +89,99 @@ describe('infraHandle', () => {
       severity: 'high',
       evidence: { ports: ['tcp/3306'] },
     });
+  });
+
+  it('诊断阈值由后端唯一事实源派生，并返回精确处理入口', () => {
+    const report = infraHandleInternals.deriveInfraDiagnostics(
+      {
+        dashboard: { metrics: { cpu: { percent: 76 }, memory: { percent: 91, usedBytes: 91, totalBytes: 100 } } },
+        services: {
+          services: [
+            { id: 'lightnote-api', state: 'running' },
+            { id: 'lightnote-document-worker', state: 'degraded' },
+          ],
+        },
+        storage: {
+          mounts: [{ mountPoint: '/', percent: 89, inodePercent: 20, freeBytes: 1024, freeInodes: 20 }],
+          io: { busyPercent: 10 },
+        },
+        security: {
+          ssh: {
+            available: true,
+            port: 22,
+            permitRootLogin: 'no',
+            passwordAuthentication: false,
+            publicKeyAuthentication: true,
+            failures24h: 0,
+          },
+          firewall: { available: true, state: 'enabled' },
+          fail2ban: { available: true, state: 'enabled' },
+          updates: { available: true, pending: 0, security: 0 },
+          listeningPorts: [],
+        },
+      },
+      [
+        { domain: 'overview', state: 'available', capturedAt: '2026-08-20T00:00:00.000Z' },
+        { domain: 'services', state: 'available', capturedAt: '2026-08-20T00:00:00.000Z' },
+        { domain: 'storage', state: 'available', capturedAt: '2026-08-20T00:00:00.000Z' },
+        { domain: 'security', state: 'available', capturedAt: '2026-08-20T00:00:00.000Z' },
+      ],
+    );
+
+    expect(report.status).toBe('critical');
+    expect(report.checks.find((item) => item.id === 'system.cpu')).toMatchObject({ state: 'warning' });
+    expect(report.checks.find((item) => item.id === 'system.memory')).toMatchObject({ state: 'fail' });
+    expect(report.checks.find((item) => item.id === 'storage.capacity')).toMatchObject({ state: 'warning' });
+    expect(report.checks.find((item) => item.id === 'services.health')).toMatchObject({
+      state: 'fail',
+      target: { module: 'services', serviceId: 'lightnote-document-worker' },
+    });
+  });
+
+  it('可用数据源存在局部采集错误时不会把诊断伪装成全部通过', () => {
+    const report = infraHandleInternals.deriveInfraDiagnostics(
+      { dashboard: { metrics: {} }, services: { services: [] }, storage: { mounts: [], io: null } },
+      [
+        {
+          domain: 'overview',
+          state: 'available',
+          capturedAt: '2026-08-20T00:00:00.000Z',
+          collectionErrorCount: 2,
+        },
+        { domain: 'services', state: 'available', capturedAt: null, collectionErrorCount: 0 },
+        { domain: 'storage', state: 'available', capturedAt: null, collectionErrorCount: 0 },
+        { domain: 'security', state: 'unavailable', capturedAt: null, collectionErrorCount: 0 },
+      ],
+    );
+
+    expect(report.status).toBe('attention');
+    expect(report.checks.find((item) => item.id === 'collection.overview')).toMatchObject({
+      state: 'unknown',
+      evidence: { count: 2 },
+    });
+    expect(report.checks.find((item) => item.id === 'services.health')).toMatchObject({ state: 'unknown' });
+  });
+
+  it('诊断允许局部采集失败，失败域明确标为未知且不泄露原始错误', async () => {
+    mocks.dashboard.mockResolvedValue({ sampledAt: '2026-08-20T00:00:00.000Z', metrics: {} });
+    mocks.services.mockRejectedValue(Object.assign(new Error('secret socket path'), { code: 'HOST_AGENT_TIMEOUT' }));
+    mocks.storage.mockResolvedValue({ capturedAt: '2026-08-20T00:00:00.000Z', mounts: [], io: null });
+    mocks.security.mockRejectedValue(new Error('private details'));
+    const res = response();
+
+    await getInfraDiagnostics({ user: { id: '1', role: 'root' }, query: {} }, res);
+
+    const payload = res.send.mock.calls[0][0];
+    expect(payload.status).toBe(200);
+    expect(payload.data.sources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ domain: 'services', state: 'unavailable', code: 'HOST_AGENT_TIMEOUT' }),
+        expect.objectContaining({ domain: 'security', state: 'unavailable', code: 'HOST_AGENT_REQUEST_FAILED' }),
+      ]),
+    );
+    expect(payload.data.checks.find((item) => item.id === 'services.health')).toMatchObject({ state: 'unknown' });
+    expect(JSON.stringify(payload)).not.toContain('secret socket path');
+    expect(JSON.stringify(payload)).not.toContain('private details');
   });
 
   it('相同幂等键生成稳定 jobId，并在成功后写入终态审计', async () => {

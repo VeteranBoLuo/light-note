@@ -23,6 +23,11 @@ const adminRouter: RouteRecordRaw[] = [
         component: () => import('@/view/serverManagement/ServerManagement.vue'),
       },
       {
+        path: 'diagnostics',
+        meta: { infraModule: 'diagnostics' },
+        component: () => import('@/view/serverManagement/ServerDiagnostics.vue'),
+      },
+      {
         path: 'services',
         meta: { infraModule: 'services' },
         component: () => import('@/view/serverManagement/ServerServices.vue'),

@@ -46,12 +46,17 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
 
-  type ModuleKey = 'overview' | 'services' | 'security' | 'storage' | 'events';
+  type ModuleKey = 'overview' | 'diagnostics' | 'services' | 'security' | 'storage' | 'events';
   const route = useRoute();
   const router = useRouter();
   const { t } = useI18n();
   const navItems = computed(() => [
     { key: 'overview' as const, label: t('serverManagement.modules.overview'), icon: icon.infrastructure.overview },
+    {
+      key: 'diagnostics' as const,
+      label: t('serverManagement.modules.diagnostics'),
+      icon: icon.infrastructure.diagnostics,
+    },
     { key: 'services' as const, label: t('serverManagement.modules.services'), icon: icon.infrastructure.service },
     { key: 'security' as const, label: t('serverManagement.modules.security'), icon: icon.infrastructure.security },
     { key: 'storage' as const, label: t('serverManagement.modules.storage'), icon: icon.infrastructure.storage },

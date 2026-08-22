@@ -48,6 +48,7 @@
               class="security-filter"
               :value="filter"
               :options="filterOptions"
+              :aria-label="t('serverManagement.securityPage.filterLabel')"
               @change="filter = String($event)"
             />
           </template>
@@ -55,6 +56,7 @@
             <article
               v-for="finding in filteredFindings"
               :key="finding.id"
+              :id="`security-finding-${finding.id}`"
               class="security-check"
               :class="`is-${finding.state}`"
             >
@@ -66,7 +68,14 @@
               </div>
               <strong>{{ findingText(finding.id, 'title') }}</strong>
               <p>{{ evidenceText(finding) }}</p>
-              <small>{{ findingText(finding.id, 'recommendation') }}</small>
+              <div class="security-check__recommendation">
+                <small>{{ findingText(finding.id, 'recommendation') }}</small>
+                <BButton v-if="finding.state !== 'pass'" size="small" @click="copyRecommendation(finding)">
+                  <SvgIcon :src="icon.infrastructure.copy" size="13" />{{
+                    t('serverManagement.securityPage.copyRecommendation')
+                  }}
+                </BButton>
+              </div>
             </article>
             <div v-if="!filteredFindings.length" class="security-empty">{{
               t('serverManagement.securityPage.filterEmpty')
@@ -132,8 +141,9 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, ref } from 'vue';
+  import { computed, nextTick, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { useRoute } from 'vue-router';
   import { getInfraSecurity, type InfraSecurityFinding, type InfraSecurityFindingState } from '@/api/infraApi';
   import icon from '@/config/icon';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -144,8 +154,11 @@
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import InfraModuleHeader from './InfraModuleHeader.vue';
   import { useInfraSnapshot } from './useInfraSnapshot';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
+  import { copyTextToClipboard } from '@/utils/clipboard';
 
   const { t, locale } = useI18n();
+  const route = useRoute();
   const { data, initialLoading, refreshing, error, refresh } = useInfraSnapshot(getInfraSecurity);
   const filter = ref('all');
   const filterOptions = computed(() => [
@@ -202,10 +215,29 @@
     if (finding.id === 'firewall') return `${evidence.provider || '—'} · ${evidence.value || 'unknown'}`;
     return String(evidence.value ?? t('serverManagement.securityPage.notAvailable'));
   }
+  async function copyRecommendation(finding: InfraSecurityFinding) {
+    const copied = await copyTextToClipboard(
+      `${findingText(finding.id, 'title')}\n${evidenceText(finding)}\n${findingText(finding.id, 'recommendation')}`,
+    );
+    copied
+      ? message.success(t('serverManagement.securityPage.recommendationCopied'))
+      : message.error(t('serverManagement.securityPage.recommendationCopyFailed'));
+  }
   function formatTime(value: string) {
     const date = new Date(value);
     return Number.isFinite(date.getTime()) ? date.toLocaleString(locale.value, { hour12: false }) : value;
   }
+  watch(
+    [() => route.query.finding, () => data.value],
+    async ([findingId]) => {
+      const id = String(findingId || '');
+      if (!id || !data.value) return;
+      filter.value = 'all';
+      await nextTick();
+      document.getElementById(`security-finding-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    },
+    { immediate: true },
+  );
 </script>
 
 <style scoped lang="less">
@@ -320,9 +352,16 @@
     font-size: 12px;
     line-height: 1.55;
   }
-  .security-check small {
+  .security-check__recommendation {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
     padding-top: 7px;
     border-top: 1px solid var(--surface-divider-color);
+  }
+  .security-check__recommendation small {
+    flex: 1;
   }
   .security-detail-grid {
     display: grid;

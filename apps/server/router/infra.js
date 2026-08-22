@@ -3,6 +3,7 @@ import rateLimit from 'express-rate-limit';
 import {
   executeInfraAction,
   getInfraDashboard,
+  getInfraDiagnostics,
   getInfraLogs,
   getInfraSecurity,
   getInfraServices,
@@ -24,6 +25,7 @@ const actionLimiter = rateLimit({
 });
 
 router.get('/dashboard', getInfraDashboard);
+router.get('/diagnostics', getInfraDiagnostics);
 router.get('/services', getInfraServices);
 router.get('/storage', getInfraStorage);
 router.get('/security', getInfraSecurity);

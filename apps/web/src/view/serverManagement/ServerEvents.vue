@@ -22,15 +22,40 @@
         <div v-if="error" class="infra-stale-warning" role="status"
           ><SvgIcon :src="icon.message.warning" size="16" />{{ t('serverManagement.staleSnapshot') }}</div
         >
+        <section class="events-summary">
+          <BCard v-for="item in summaryCards" :key="item.key">
+            <span>{{ item.label }}</span
+            ><strong :class="`is-${item.key}`">{{ item.value }}</strong>
+          </BCard>
+        </section>
         <BCard :title="t('serverManagement.eventsPage.auditTitle')">
           <template #extra>
-            <BSelect
-              class="events-filter"
-              :value="outcome"
-              :options="outcomeOptions"
-              @change="outcome = String($event)"
-            />
+            <div class="events-toolbar">
+              <BInput
+                v-model:value="keyword"
+                clearable
+                :placeholder="t('serverManagement.eventsPage.searchPlaceholder')"
+              >
+                <template #prefix><SvgIcon :src="icon.navigation.search" size="15" /></template>
+              </BInput>
+              <BSelect
+                class="events-filter"
+                :value="outcome"
+                :options="outcomeOptions"
+                :aria-label="t('serverManagement.eventsPage.outcomeFilterLabel')"
+                @change="outcome = String($event)"
+              />
+              <BButton size="small" :disabled="!filteredItems.length" @click="exportItems">
+                <SvgIcon :src="icon.infrastructure.export" size="14" />{{ t('serverManagement.eventsPage.export') }}
+              </BButton>
+            </div>
           </template>
+          <p class="events-count">{{
+            t('serverManagement.eventsPage.visibleCount', {
+              visible: filteredItems.length,
+              total: data?.items.length || 0,
+            })
+          }}</p>
           <div v-if="!filteredItems.length" class="events-empty">{{ t('serverManagement.eventsPage.empty') }}</div>
           <ol v-else class="events-timeline">
             <li v-for="item in filteredItems" :key="item.id">
@@ -61,9 +86,13 @@
   import BCard from '@/components/base/BasicComponents/BCard.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import InfraModuleHeader from './InfraModuleHeader.vue';
   import { useInfraSnapshot } from './useInfraSnapshot';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
+  import { copyTextToClipboard } from '@/utils/clipboard';
+  import { buildExportFileName, deliverGeneratedFile } from '@/utils/fileDelivery';
 
   interface AuditItem {
     id: string;
@@ -93,15 +122,45 @@
   }
   const { data, initialLoading, refreshing, error, refresh } = useInfraSnapshot(loadAudits, 30_000);
   const outcome = ref('all');
+  const keyword = ref('');
   const outcomeOptions = computed(() => [
     { value: 'all', label: t('serverManagement.eventsPage.filters.all') },
     { value: 'succeeded', label: t('serverManagement.eventsPage.filters.succeeded') },
     { value: 'failed', label: t('serverManagement.eventsPage.filters.failed') },
     { value: 'intent', label: t('serverManagement.eventsPage.filters.intent') },
   ]);
-  const filteredItems = computed(() =>
-    (data.value?.items || []).filter((item) => outcome.value === 'all' || item.outcome === outcome.value),
-  );
+  const filteredItems = computed(() => {
+    const normalizedKeyword = keyword.value.trim().toLocaleLowerCase(locale.value);
+    return (data.value?.items || []).filter((item) => {
+      const matchesOutcome = outcome.value === 'all' || item.outcome === outcome.value;
+      const haystack =
+        `${actionLabel(item.action)} ${item.action} ${targetLabel(item)} ${item.reason || ''}`.toLocaleLowerCase(
+          locale.value,
+        );
+      return matchesOutcome && (!normalizedKeyword || haystack.includes(normalizedKeyword));
+    });
+  });
+  const summaryCards = computed(() => {
+    const items = data.value?.items || [];
+    return [
+      {
+        key: 'succeeded',
+        label: t('serverManagement.eventsPage.summary.succeeded'),
+        value: items.filter((item) => item.outcome === 'succeeded').length,
+      },
+      {
+        key: 'failed',
+        label: t('serverManagement.eventsPage.summary.failed'),
+        value: items.filter((item) => item.outcome === 'failed').length,
+      },
+      {
+        key: 'intent',
+        label: t('serverManagement.eventsPage.summary.intent'),
+        value: items.filter((item) => item.outcome === 'intent').length,
+      },
+      { key: 'total', label: t('serverManagement.eventsPage.summary.total'), value: items.length },
+    ];
+  });
   function actionLabel(action: string) {
     return action === 'infra.nginx_reload'
       ? t('serverManagement.reloadNginx')
@@ -129,6 +188,41 @@
   function formatTime(value: string) {
     const date = new Date(String(value).replace(' ', 'T'));
     return Number.isFinite(date.getTime()) ? date.toLocaleString(locale.value, { hour12: false }) : value;
+  }
+  function auditText() {
+    return [
+      [
+        t('serverManagement.eventsPage.exportHeaders.time'),
+        t('serverManagement.eventsPage.exportHeaders.outcome'),
+        t('serverManagement.eventsPage.exportHeaders.action'),
+        t('serverManagement.eventsPage.exportHeaders.target'),
+        t('serverManagement.eventsPage.exportHeaders.reason'),
+      ].join('\t'),
+      ...filteredItems.value.map(
+        (item) =>
+          `${formatTime(item.createTime)}\t${outcomeLabel(item.outcome)}\t${actionLabel(item.action)}\t${targetLabel(item)}\t${item.reason || t('serverManagement.eventsPage.noReason')}`,
+      ),
+    ].join('\n');
+  }
+  async function exportItems() {
+    try {
+      const result = await deliverGeneratedFile({
+        content: auditText(),
+        fileName: buildExportFileName('lightnote-server-operation-audit', 'lightnote-server-operation-audit', 'tsv'),
+        mimeType: 'text/tab-separated-values',
+        preferShare: true,
+      });
+      if (result === 'unavailable') {
+        const copied = await copyTextToClipboard(auditText());
+        copied
+          ? message.warning(t('serverManagement.eventsPage.exportUnavailable'))
+          : message.error(t('serverManagement.eventsPage.exportFailed'));
+      } else if (result !== 'cancelled') {
+        message.success(t('serverManagement.eventsPage.exported'));
+      }
+    } catch {
+      message.error(t('serverManagement.eventsPage.exportFailed'));
+    }
   }
 </script>
 
@@ -175,6 +269,38 @@
   }
   .events-filter {
     width: 130px;
+  }
+  .events-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .events-summary :deep(.b-card) {
+    display: grid;
+    gap: 8px;
+  }
+  .events-summary span,
+  .events-count {
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+  .events-summary strong {
+    font-size: 24px;
+  }
+  .events-summary strong.is-failed {
+    color: var(--error-color, #d14343);
+  }
+  .events-summary strong.is-succeeded {
+    color: var(--success-color, #27965b);
+  }
+  .events-toolbar {
+    display: grid;
+    grid-template-columns: minmax(180px, 280px) 130px auto;
+    gap: 8px;
+  }
+  .events-count {
+    margin: 0 0 12px;
+    text-align: right;
   }
   .events-timeline {
     display: grid;
@@ -246,6 +372,21 @@
       width: calc(100% - 24px);
       padding: 18px 0 32px;
       gap: 14px;
+    }
+    .events-summary {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .events-toolbar {
+      grid-template-columns: 1fr 1fr;
+    }
+    .events-toolbar > :first-child {
+      grid-column: 1 / 3;
+    }
+    .events-filter {
+      width: 100%;
+    }
+    .events-count {
+      text-align: left;
     }
   }
 </style>
