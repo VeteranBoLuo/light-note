@@ -40,6 +40,8 @@ vi.mock('@/components/base/BasicComponents/BInput.vue', () => ({
 vi.mock('@/components/base/BasicComponents/BPopover.vue', () => ({
   default: {
     name: 'BPopover',
+    props: { open: Boolean, trigger: String, placement: String, overlayClassName: String },
+    emits: ['update:open'],
     setup:
       (_: unknown, { slots }: { slots: Record<string, () => unknown> }) =>
       () =>
@@ -152,7 +154,14 @@ function mountInput(isMobile: boolean, withAttachment = false, capabilityPolicyP
             capabilityScope: { label: '限定本轮模块' },
             capabilityPolicy: {
               label: '会话能力边界',
+              auto: '自动助手',
               noDataAccess: '不访问个人数据',
+            },
+            capabilitySettings: {
+              auto: '自动',
+              open: '调整本轮 AI 能力',
+              title: '本轮能力',
+              description: '默认自动判断',
             },
             material: {
               mobileTitle: '添加与管理材料',
@@ -191,6 +200,8 @@ describe('ChatInputSection mobile material actions', () => {
     expect(host.querySelector('.mobile-context-panel')).toBeNull();
     expect(host.querySelector('.mock-material-drawer')).toBeNull();
     expect(host.querySelector('.mobile-material-summary')).toBeNull();
+    expect(host.querySelector('.capability-settings-trigger')?.textContent).toContain('自动');
+    expect(host.querySelectorAll('.capability-settings-trigger')).toHaveLength(1);
     expect(host.querySelector('.mobile-context-toggle__label')?.textContent).toContain('添加材料');
     expect(host.querySelector('.mobile-context-toggle__count')?.textContent).toContain('1');
 
@@ -215,8 +226,9 @@ describe('ChatInputSection mobile material actions', () => {
 
   it('桌面端继续使用原有内联材料区，不挂载移动抽屉', () => {
     const host = mountInput(false);
-    expect(host.querySelector('.context-actions')).not.toBeNull();
-    expect(host.querySelector('.mobile-context-actions')).toBeNull();
+    expect(host.querySelector('.composer-context-row')).not.toBeNull();
+    expect(host.querySelector('.desktop-material-actions')).not.toBeNull();
+    expect(host.querySelectorAll('.capability-settings-trigger')).toHaveLength(1);
     expect(host.querySelector('.mock-material-drawer')).toBeNull();
   });
 
@@ -234,13 +246,14 @@ describe('ChatInputSection mobile material actions', () => {
   it('仅对话模式隐藏材料入口并明确显示不访问个人数据', () => {
     const mobile = mountInput(true, false, 'chat_only');
     expect(mobile.querySelector('.mobile-context-toggle')).toBeNull();
-    expect(mobile.querySelector('.capability-module-select--mobile')).toBeNull();
+    expect(mobile.querySelector('.capability-settings-trigger')?.textContent).toContain('仅对话');
     expect(mobile.querySelector('.chat-only-boundary-hint')?.textContent).toContain('不访问个人数据');
     expect(mobile.querySelector('.mock-material-drawer')).toBeNull();
 
     cleanup?.();
     cleanup = undefined;
     const desktop = mountInput(false, false, 'chat_only');
+    expect(desktop.querySelector('.desktop-material-actions')).toBeNull();
     expect(desktop.querySelector('.mock-context-picker')).toBeNull();
     expect(desktop.querySelector('.mock-attachment-picker')).toBeNull();
   });

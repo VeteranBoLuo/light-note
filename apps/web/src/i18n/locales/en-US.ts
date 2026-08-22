@@ -5811,6 +5811,12 @@ export default {
       confirmationBlockedChat: 'Writes are blocked in chat-only mode. Switch to Automatic to confirm.',
       confirmationBlockedReadOnly: 'The read-only lock blocked this write. Turn it off to confirm.',
     },
+    capabilitySettings: {
+      auto: 'Auto',
+      open: 'Adjust AI capabilities for this turn',
+      title: 'Turn capabilities',
+      description: 'Automatic by default. Adjust only when you need to limit access or the active module.',
+    },
     quotaToday: 'Today',
     quotaUnlimited: 'Owner · Unlimited',
     quotaTip: 'Daily AI token quota, grows with your level (4M/day at max)',

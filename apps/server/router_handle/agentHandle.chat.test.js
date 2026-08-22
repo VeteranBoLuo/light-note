@@ -171,7 +171,16 @@ vi.mock('../util/agent/tools/index.js', () => ({
       getDependencyRefs: (raw) => raw.dependencyRefs || [],
       toArtifacts: (raw) => (raw.artifact ? [raw.artifact] : []),
       getAnswerRequirements: (raw) =>
-        raw.requiredFact ? [{ id: 'demo.required_fact', anyOf: [raw.requiredFact], appendText: raw.requiredFact }] : [],
+        raw.requiredFact
+          ? [
+              {
+                id: 'demo.required_fact',
+                anyOf: [raw.requiredFact],
+                appendText: raw.requiredFact,
+                onMissing: raw.requiredFactMode === 'replace' ? 'replace' : 'append',
+              },
+            ]
+          : [],
       transform: (raw) => `结果:${raw.value}`,
       summarize: (raw) => `结果:${raw.value}`,
     },
@@ -1252,13 +1261,17 @@ describe('agentChat 主链路', () => {
         finishReason: 'stop',
       };
     });
-    mocks.toolExecute.mockResolvedValue({ value: '今日数据', requiredFact: '关键事实：完成 3/4。' });
+    mocks.toolExecute.mockResolvedValue({
+      value: '今日数据',
+      requiredFact: '关键事实：完成 3/4。',
+      requiredFactMode: 'replace',
+    });
     const res = response();
 
     await agentChat(request({ message: '查询今天的演示数据', stream: false }), res);
 
     expect(mocks.toolExecute).toHaveBeenCalledOnce();
-    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toContain('关键事实：完成 3/4。');
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toBe('关键事实：完成 3/4。');
     expect(mocks.requestAi.mock.calls.map(([, options]) => options?.trace?.stage)).toEqual([
       'intent_compiler',
       'execution_planner',

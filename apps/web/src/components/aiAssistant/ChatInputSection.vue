@@ -1,57 +1,74 @@
 <template>
   <footer class="input-section">
     <div class="input-container">
-      <div v-if="!isMobile" class="context-actions">
-        <BSelect
-          v-model:value="capabilityPolicyValue"
-          class="capability-policy-select"
-          :options="capabilityPolicyOptions"
-          :aria-label="t('ai.capabilityPolicy.label')"
-        />
-        <BSelect
-          v-model:value="capabilityModuleValue"
-          class="capability-module-select"
-          :options="capabilityModuleOptions"
-          :aria-label="t('ai.capabilityScope.label')"
-          :disabled="capabilityPolicyProfile === 'chat_only'"
-        />
-        <AiContextPicker
-          v-if="capabilityPolicyProfile !== 'chat_only'"
-          :model-value="contexts"
-          :scope-model-value="scopeRefs"
-          @update:model-value="$emit('update:contexts', $event)"
-          @update:scope-model-value="$emit('update:scopeRefs', $event)"
-          @file-selected="attachSelectedCloudFile"
-        />
-        <AiAttachmentPicker
-          v-if="capabilityPolicyProfile !== 'chat_only'"
-          ref="attachmentPicker"
-          :model-value="attachments"
-          :prepare-action-fn="prepareAttachmentActionFn"
-          @update:model-value="$emit('update:attachments', $event)"
-          @prompt="applyAttachmentPrompt"
-        />
-      </div>
-      <div v-else class="mobile-context-actions">
-        <BSelect
-          v-model:value="capabilityPolicyValue"
-          class="capability-policy-select capability-policy-select--mobile"
-          :options="capabilityPolicyOptions"
-          :aria-label="t('ai.capabilityPolicy.label')"
-        />
-        <BSelect
-          v-if="capabilityPolicyProfile !== 'chat_only'"
-          v-model:value="capabilityModuleValue"
-          class="capability-module-select capability-module-select--mobile"
-          :options="capabilityModuleOptions"
-          :aria-label="t('ai.capabilityScope.label')"
-          :disabled="capabilityPolicyProfile === 'chat_only'"
-        />
+      <div class="composer-context-row">
+        <BPopover
+          v-model:open="capabilitySettingsOpen"
+          trigger="click"
+          placement="top-left"
+          overlay-class-name="ai-capability-settings-popover"
+        >
+          <BButton
+            class="capability-settings-trigger"
+            :class="{ 'is-active': hasCustomCapabilitySettings }"
+            :aria-label="t('ai.capabilitySettings.open')"
+            :title="t('ai.capabilitySettings.open')"
+            :aria-expanded="capabilitySettingsOpen"
+            aria-haspopup="dialog"
+          >
+            <SvgIcon :src="icon.settings.ai" size="15" aria-hidden="true" />
+            <span>{{ capabilitySettingsLabel }}</span>
+          </BButton>
+          <template #content>
+            <div class="capability-settings-panel" role="dialog" :aria-label="t('ai.capabilitySettings.title')">
+              <header>
+                <strong>{{ t('ai.capabilitySettings.title') }}</strong>
+                <span>{{ t('ai.capabilitySettings.description') }}</span>
+              </header>
+              <div class="capability-settings-field">
+                <span>{{ t('ai.capabilityPolicy.label') }}</span>
+                <BSelect
+                  v-model:value="capabilityPolicyValue"
+                  :options="capabilityPolicyOptions"
+                  :aria-label="t('ai.capabilityPolicy.label')"
+                />
+              </div>
+              <div class="capability-settings-field">
+                <span>{{ t('ai.capabilityScope.label') }}</span>
+                <BSelect
+                  v-model:value="capabilityModuleValue"
+                  :options="capabilityModuleOptions"
+                  :aria-label="t('ai.capabilityScope.label')"
+                  :disabled="capabilityPolicyProfile === 'chat_only'"
+                />
+              </div>
+              <p v-if="capabilityPolicyProfile === 'chat_only'" class="capability-settings-panel__boundary">
+                {{ t('ai.capabilityPolicy.noDataAccess') }}
+              </p>
+            </div>
+          </template>
+        </BPopover>
+        <div v-if="!isMobile && capabilityPolicyProfile !== 'chat_only'" class="desktop-material-actions">
+          <AiContextPicker
+            :model-value="contexts"
+            :scope-model-value="scopeRefs"
+            @update:model-value="$emit('update:contexts', $event)"
+            @update:scope-model-value="$emit('update:scopeRefs', $event)"
+            @file-selected="attachSelectedCloudFile"
+          />
+          <AiAttachmentPicker
+            ref="attachmentPicker"
+            :model-value="attachments"
+            :prepare-action-fn="prepareAttachmentActionFn"
+            @update:model-value="$emit('update:attachments', $event)"
+            @prompt="applyAttachmentPrompt"
+          />
+        </div>
         <span v-if="capabilityPolicyProfile === 'chat_only'" class="chat-only-boundary-hint">
           {{ t('ai.capabilityPolicy.noDataAccess') }}
         </span>
         <BButton
-          v-else
+          v-else-if="isMobile"
           class="mobile-context-toggle"
           :aria-label="t('ai.material.mobileTitle')"
           :title="t('ai.material.mobileTitle')"
@@ -312,6 +329,7 @@
   }>();
 
   const mobileActionsOpen = ref(false);
+  const capabilitySettingsOpen = ref(false);
 
   const textInput = ref<{ focus: () => void } | null>(null);
   const attachmentPicker = ref<{
@@ -335,6 +353,26 @@
     get: () => props.capabilityPolicyProfile || 'auto',
     set: (value: unknown) =>
       emit('update:capabilityPolicyProfile', String(value || 'auto') as AiCapabilityPolicyProfile),
+  });
+  const selectedCapabilityPolicyLabel = computed(
+    () =>
+      props.capabilityPolicyOptions.find((option) => option.value === props.capabilityPolicyProfile)?.label ||
+      t('ai.capabilityPolicy.auto'),
+  );
+  const selectedCapabilityModuleLabel = computed(
+    () =>
+      props.capabilityModuleOptions.find((option) => option.value === props.capabilityModule)?.label ||
+      t('ai.capabilityScope.auto'),
+  );
+  const hasCustomCapabilitySettings = computed(
+    () => props.capabilityPolicyProfile !== 'auto' || props.capabilityModule !== 'auto',
+  );
+  const capabilitySettingsLabel = computed(() => {
+    if (!hasCustomCapabilitySettings.value) return t('ai.capabilitySettings.auto');
+    if (props.capabilityPolicyProfile === 'chat_only') return selectedCapabilityPolicyLabel.value;
+    if (props.capabilityPolicyProfile === 'auto') return selectedCapabilityModuleLabel.value;
+    if (props.capabilityModule === 'auto') return selectedCapabilityPolicyLabel.value;
+    return `${selectedCapabilityPolicyLabel.value} · ${selectedCapabilityModuleLabel.value}`;
   });
   watch(
     () => props.capabilityPolicyProfile,
@@ -561,7 +599,7 @@
 <style scoped>
   .input-section {
     background: var(--background-color);
-    padding: 0.4rem 1.25rem 0.55rem;
+    padding: 0.35rem 1rem 0.5rem;
     flex-shrink: 0;
     min-width: 0;
     box-sizing: border-box;
@@ -570,16 +608,16 @@
   .input-container {
     position: relative;
     border: 0;
-    border-radius: 1rem;
+    border-radius: 0.875rem;
     background-color: var(--ai-composer-background-color, var(--card-background));
-    padding: 0.7rem 0.75rem 0.6rem;
+    padding: 0.55rem 0.65rem 0.5rem;
     min-height: 48px;
     min-width: 0;
     max-width: 100%;
     box-sizing: border-box;
     box-shadow:
       0 0 0 1px var(--surface-border-color, var(--card-border-color)),
-      0 8px 24px rgba(15, 23, 42, 0.06);
+      0 6px 20px rgba(15, 23, 42, 0.05);
     transition: box-shadow 0.2s ease;
   }
 
@@ -587,81 +625,78 @@
     background-color: var(--ai-composer-background-color, var(--card-background));
     box-shadow:
       0 0 0 1px var(--surface-border-color, var(--card-border-color)),
-      0 12px 30px rgba(97, 92, 237, 0.12);
+      0 8px 24px rgba(97, 92, 237, 0.11);
   }
 
-  .context-actions {
+  .composer-context-row {
     display: flex;
     align-items: flex-start;
-    flex-wrap: wrap;
     gap: 6px;
     width: 100%;
     min-width: 0;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
   }
 
-  .capability-module-select {
-    width: 128px;
-    flex: 0 0 128px;
-  }
-
-  .capability-policy-select {
-    width: 112px;
-    flex: 0 0 112px;
-  }
-
-  .capability-policy-select :deep(.select-trigger) {
-    min-height: 34px;
-    border-color: var(--surface-border-color);
+  .capability-settings-trigger {
+    display: inline-flex;
+    flex: 0 0 auto;
+    gap: 5px;
+    max-width: 176px;
+    height: 32px;
+    min-height: 32px;
+    padding: 0 9px;
+    overflow: hidden;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 9px;
     background: var(--card-background);
-    color: var(--text-color);
-    font-size: 0.82rem;
+    color: var(--desc-color);
+    font-size: 0.75rem;
     font-weight: 600;
+    line-height: 1;
+  }
+
+  .capability-settings-trigger > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .capability-settings-trigger.is-active {
+    border-color: var(--primary-color);
+    background: var(--card-background);
+    background: color-mix(in srgb, var(--primary-color) 7%, var(--card-background));
+    color: var(--primary-color);
+  }
+
+  .desktop-material-actions {
+    display: flex;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  /* 让资源 chips 与两个入口共用同一个紧凑流；附件详情仍在需要时独占一行。 */
+  .desktop-material-actions > :deep(.ai-context-picker) {
+    display: contents;
+  }
+
+  .desktop-material-actions :deep(.ai-context-chips) {
+    align-self: center;
   }
 
   .chat-only-boundary-hint {
     display: inline-flex;
+    min-width: 0;
+    min-height: 32px;
     align-items: center;
-    min-height: 34px;
-    padding: 0 8px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 9px;
+    overflow: hidden;
     color: var(--desc-color);
-    background: var(--card-background);
-    font-size: 0.75rem;
+    font-size: 0.72rem;
+    text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .capability-module-select :deep(.select-trigger) {
-    min-height: 34px;
-    border-color: var(--surface-border-color);
-    border-color: color-mix(in srgb, var(--primary-color) 22%, var(--surface-border-color));
-    background: var(--card-background);
-    background: color-mix(in srgb, var(--primary-color) 7%, var(--card-background));
-    color: var(--primary-color);
-    font-size: 0.82rem;
-    font-weight: 600;
-  }
-
-  /*
-   * 材料区是「已选 chips + @添加资源 + 上传文件」一条连续的流。
-   * AiContextPicker 自己也是 flex-wrap 容器，chips 多到需要换行时它会撑满整行，
-   * 把同级的「上传文件」一起挤到再下一行 —— 于是明明还有空位，两个入口按钮却分居两行。
-   * 摊平这层包装，让 chips 与两个触发按钮成为同一个 wrap 流的成员：
-   * chips 占满前面的行，两个按钮并排跟在最后一行。
-   * 只作用于桌面容器内，移动端的 AiContextPicker 在材料抽屉里，不受影响。
-   */
-  .context-actions > :deep(.ai-context-picker) {
-    display: contents;
-  }
-
-  /* 摊平后 chips 直接受 .context-actions 的 flex-start 约束，与同行按钮居中对齐 */
-  .context-actions :deep(.ai-context-chips) {
-    align-self: center;
-  }
-
-  .mobile-context-actions {
-    display: none;
   }
 
   /* 「@ 添加资源」「上传文件」是入口按钮:默认灰底在浅色下像原生 button、暗色下又与输入区同色。
@@ -669,24 +704,32 @@
   /* 附件卡片信息多（文件名 + 大小 + 解析状态 + 操作），与「@ 添加资源」「上传文件」
      同行会被压缩甚至横向裁切。有附件时让它独占一行铺满，入口按钮留在上一行。
      不挂断点：桌面 AI 抽屉宽度可变（480～720px），同样挤不下。 */
-  .context-actions :deep(.ai-attachment-picker.has-attachment) {
+  .desktop-material-actions :deep(.ai-attachment-picker.has-attachment) {
     width: 100%;
     min-width: 0;
     flex: 1 1 100%;
   }
 
-  .context-actions :deep(.b-popover-trigger > .b_btn),
-  .context-actions :deep(.b-upload-trigger .b_btn) {
-    border: 1px solid color-mix(in srgb, var(--primary-color) 20%, transparent);
+  .desktop-material-actions :deep(.b-popover-trigger > .b_btn),
+  .desktop-material-actions :deep(.b-upload-trigger .b_btn) {
+    height: 32px;
+    min-height: 32px;
+    border: 1px solid var(--surface-border-color);
+    border-color: color-mix(in srgb, var(--primary-color) 20%, var(--surface-border-color));
     background: color-mix(in srgb, var(--primary-color) 7%, transparent) !important;
     color: var(--primary-color);
+    font-size: 0.75rem;
     font-weight: 500;
   }
 
-  .context-actions :deep(.b-popover-trigger > .b_btn:hover),
-  .context-actions :deep(.b-upload-trigger .b_btn:hover) {
-    border-color: color-mix(in srgb, var(--primary-color) 34%, transparent);
-    background: color-mix(in srgb, var(--primary-color) 13%, transparent) !important;
+  @media (hover: hover) and (pointer: fine) {
+    .capability-settings-trigger:hover,
+    .desktop-material-actions :deep(.b-popover-trigger > .b_btn:hover),
+    .desktop-material-actions :deep(.b-upload-trigger .b_btn:hover) {
+      border-color: var(--primary-color);
+      background: color-mix(in srgb, var(--primary-color) 12%, var(--card-background)) !important;
+      color: var(--primary-color);
+    }
   }
 
   .text-input-wrap {
@@ -724,22 +767,22 @@
     max-width: 100%;
     min-width: 0;
     box-sizing: border-box;
-    border-radius: 0.875rem;
-    background: var(--ai-composer-input-background-color, var(--card-background));
-    box-shadow: inset 0 0 0 1px var(--surface-border-color, var(--card-border-color));
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
     transition: box-shadow 0.2s ease;
   }
 
   .text-input :deep(.input-container:focus-within) {
-    box-shadow: inset 0 0 0 1px var(--primary-color);
+    box-shadow: none;
   }
 
   .text-input :deep(.b-textarea) {
-    min-height: 50px;
-    max-height: 120px;
+    min-height: 44px;
+    max-height: 112px;
     resize: none;
     border: none;
-    padding: 0;
+    padding: 7px 2px 5px;
     background: transparent !important;
     font-size: 1rem;
     line-height: 1.5;
@@ -839,64 +882,43 @@
 
   @media (max-width: 767px) {
     .input-section {
-      padding: 0.2rem 0.625rem calc(0.35rem + env(safe-area-inset-bottom));
+      padding: 0.15rem 0.5rem calc(0.3rem + env(safe-area-inset-bottom));
     }
 
     .input-container {
-      padding: 0.38rem 0.5rem 0.34rem;
-      border-radius: 1rem;
+      padding: 0.35rem 0.45rem 0.32rem;
+      border-radius: 0.875rem;
     }
 
-    .context-actions {
-      display: none;
-    }
-
-    .mobile-context-actions {
-      display: flex;
+    .composer-context-row {
       align-items: center;
       gap: 6px;
-      width: 100%;
-      min-width: 0;
-      margin-bottom: 4px;
-      overflow: hidden;
+      margin-bottom: 2px;
     }
 
-    .capability-module-select--mobile {
-      width: auto;
+    .capability-settings-trigger {
+      flex: 1 1 0;
       min-width: 0;
-      flex: 1 1 112px;
-    }
-
-    .capability-policy-select--mobile {
-      width: auto;
-      min-width: 0;
-      flex: 1 1 112px;
-    }
-
-    .capability-policy-select--mobile :deep(.select-trigger) {
+      max-width: none;
+      height: 40px;
       min-height: 40px;
-      border-color: var(--surface-border-color);
+      justify-content: flex-start;
     }
 
     .chat-only-boundary-hint {
+      flex: 1 1 auto;
       min-height: 40px;
-      flex: 0 0 auto;
-    }
-
-    .capability-module-select--mobile :deep(.select-trigger) {
-      min-height: 40px;
-      border-color: var(--primary-color);
     }
 
     .mobile-context-toggle {
       display: inline-flex;
-      flex: 0 0 auto;
+      flex: 1 1 0;
       gap: 6px;
-      width: max-content;
-      max-width: 48%;
+      min-width: 0;
+      max-width: none;
       height: 40px !important;
       min-height: 40px;
-      padding: 4px 8px 4px 5px !important;
+      padding: 3px 9px 3px 5px !important;
       /* 先给不支持 color-mix 的移动 WebView 一个可见的主题边框，再用混色增强层次。 */
       border: 1px solid var(--card-border-color);
       border-color: var(--primary-color);
@@ -1139,13 +1161,15 @@
     }
 
     .text-input :deep(.b-textarea) {
-      min-height: 42px;
-      max-height: 88px;
+      min-height: 38px;
+      max-height: 82px;
+      padding-top: 6px;
+      padding-bottom: 3px;
     }
 
     .composer-toolbar {
-      min-height: var(--mobile-touch-size, 44px);
-      margin-top: 2px;
+      min-height: 40px;
+      margin-top: 0;
       justify-content: flex-end;
     }
     .composer-meta {
@@ -1162,9 +1186,81 @@
       min-width: 54px;
     }
   }
+
+  [data-theme='night'] .capability-settings-trigger.is-active,
+  [data-theme='night'] .mobile-context-toggle,
+  [data-theme='night'] .desktop-material-actions :deep(.b-popover-trigger > .b_btn),
+  [data-theme='night'] .desktop-material-actions :deep(.b-upload-trigger .b_btn) {
+    border-color: var(--focus-ring-color, var(--primary-color));
+    color: var(--focus-ring-color, var(--text-color));
+  }
 </style>
 
 <style>
+  .ai-capability-settings-popover {
+    width: min(292px, calc(100vw - 20px));
+    padding: 12px;
+  }
+
+  .capability-settings-panel {
+    display: grid;
+    gap: 11px;
+    color: var(--text-color);
+  }
+
+  .capability-settings-panel > header {
+    display: grid;
+    gap: 3px;
+  }
+
+  .capability-settings-panel > header strong {
+    font-size: 14px;
+    line-height: 20px;
+  }
+
+  .capability-settings-panel > header span,
+  .capability-settings-panel__boundary {
+    margin: 0;
+    color: var(--desc-color);
+    font-size: 11px;
+    line-height: 16px;
+  }
+
+  .capability-settings-field {
+    display: grid;
+    gap: 5px;
+  }
+
+  .capability-settings-field > span {
+    color: var(--desc-color);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .capability-settings-field > .b-select,
+  .capability-settings-field .select-trigger {
+    width: 100%;
+  }
+
+  .capability-settings-field .select-trigger {
+    min-height: 36px;
+    border-color: var(--surface-border-color);
+    background: var(--card-background);
+  }
+
+  .capability-settings-panel__boundary {
+    padding: 7px 9px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 8px;
+    background: var(--surface-panel-bg, var(--card-background));
+  }
+
+  html.light-note-mobile-rendering .ai-capability-settings-popover,
+  html.light-note-mobile-rendering .capability-settings-panel__boundary {
+    border-color: var(--card-border-color);
+    box-shadow: none;
+  }
+
   .ai-quota-popover {
     width: 250px;
     padding: 12px;

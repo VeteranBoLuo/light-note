@@ -190,9 +190,7 @@
     }
 
     .recommendation-title {
-      padding-left: 0;
-      font-size: 0.625rem;
-      color: color-mix(in srgb, var(--primary-color) 72%, var(--desc-color));
+      display: none;
     }
 
     .recommendation-list {
@@ -211,8 +209,9 @@
       min-height: 40px;
       max-width: min(216px, 68vw);
       padding: 0 10px;
-      border: 0;
-      border-radius: 8px;
+      border: 1px solid var(--surface-border-color);
+      border-radius: 999px;
+      background: var(--card-background);
       background: color-mix(in srgb, var(--primary-color) 6%, var(--background-color));
       color: var(--text-color);
       font-size: 0.6875rem;

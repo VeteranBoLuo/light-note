@@ -23,6 +23,25 @@ function freezeRanges(value = {}) {
   );
 }
 
+function freezeFacets(value = {}) {
+  const output = {};
+  for (const [dimension, facet] of Object.entries(value || {}).slice(0, 12)) {
+    if (!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(dimension) || !facet || typeof facet !== 'object') continue;
+    const values = {};
+    for (const [key, rawCount] of Object.entries(facet.values || {}).slice(0, 32)) {
+      if (!/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(key)) continue;
+      const count = finiteCount(rawCount);
+      if (count != null) values[key] = count;
+    }
+    if (!Object.keys(values).length) continue;
+    output[dimension] = Object.freeze({
+      exact: facet.exact === true,
+      values: Object.freeze(values),
+    });
+  }
+  return Object.freeze(output);
+}
+
 /**
  * 列表/计数工具的最低结果闭环。工具必须显式证明 totalCount 是否精确，并同时返回
  * 实际数量、分页游标、完整/部分与截断原因；执行器不会再猜测数字 total 的可信度。
@@ -36,6 +55,7 @@ export function buildQueryResultMetadata({
   truncationReason,
   nextCursor = null,
   resolvedRanges = {},
+  facets = {},
 } = {}) {
   const normalizedTotal = finiteCount(totalCount ?? total);
   const normalizedReturned = finiteCount(returned) ?? 0;
@@ -69,12 +89,13 @@ export function buildQueryResultMetadata({
       (normalizedNextCursor ? 'cursor' : truncated ? 'limit' : !complete ? 'unknown_coverage' : null),
     nextCursor: normalizedNextCursor,
     resolvedRanges: freezeRanges(resolvedRanges),
+    facets: freezeFacets(facets),
   });
 }
 
 export function withQueryResultMetadata(
   result,
-  { exactTotal = true, coverage, truncationReason, resolvedRanges = {} } = {},
+  { exactTotal = true, coverage, truncationReason, resolvedRanges = {}, facets = {} } = {},
 ) {
   const items = Array.isArray(result?.items) ? result.items : [];
   return {
@@ -87,6 +108,7 @@ export function withQueryResultMetadata(
       truncationReason,
       nextCursor: result?.nextCursor,
       resolvedRanges,
+      facets,
     }),
   };
 }
@@ -163,6 +185,12 @@ export function formatToolResultMetadataDisclosure(metadata, locale = 'zh-CN') {
         : `${english ? 'returned' : '已返回'} ${returned}/${total}${english ? ' items' : ' 条'}`,
     );
   }
+  for (const [dimension, facet] of Object.entries(metadata.facets || {})) {
+    const entries = Object.entries(facet?.values || {});
+    if (!entries.length) continue;
+    const distribution = entries.map(([key, count]) => `${key}=${count}`).join(', ');
+    facts.push(`${dimension}: ${distribution}${facet.exact === true ? '' : ` (${english ? 'not exact' : '非精确'})`}`);
+  }
   if (metadata.partial === true || metadata.truncated === true) {
     const reason = String(metadata.truncationReason || '').trim();
     const reasonText =
@@ -229,7 +257,7 @@ function publicRangeRecord(slot, record, locale) {
 /**
  * 将成功读取工具的结果契约投影成可公开响应字段。
  *
- * 只输出计数、完整性、本地时间口径和稳定引用覆盖，不输出工具 raw、SQL 存储时区或资源正文。
+ * 只输出计数、受控维度分布、完整性、本地时间口径和稳定引用覆盖，不输出工具 raw、SQL 存储时区或资源正文。
  * 这让 SSE、普通响应和断流恢复都能确定性携带查询口径，不再依赖最终模型主动复述。
  */
 export function buildPublicToolQueryScopes(toolResults = [], locale = 'zh-CN') {
@@ -240,10 +268,12 @@ export function buildPublicToolQueryScopes(toolResults = [], locale = 'zh-CN') {
     const returned = finiteCount(metadata.returned) ?? 0;
     const total = metadata.totalExact === true ? finiteCount(metadata.totalCount ?? metadata.total) : null;
     const totalExact = metadata.totalExact === true && total != null;
+    const facets = freezeFacets(metadata.facets);
     const resolvedRanges = Object.entries(metadata.resolvedRanges || {})
       .map(([slot, record]) => publicRangeRecord(slot, record, locale))
       .filter(Boolean);
-    const hasQueryFacts = totalExact || metadata.partial === true || resolvedRanges.length > 0;
+    const hasQueryFacts =
+      totalExact || metadata.partial === true || resolvedRanges.length > 0 || Object.keys(facets).length;
     if (!hasQueryFacts) continue;
     const summaryTruncated = metadata.summary?.truncated === true;
     scopes.push(
@@ -269,6 +299,7 @@ export function buildPublicToolQueryScopes(toolResults = [], locale = 'zh-CN') {
           truncated: summaryTruncated,
           truncationReason: summaryTruncated ? 'result_budget' : null,
         }),
+        facets,
         resolvedRanges: Object.freeze(resolvedRanges),
       }),
     );
@@ -276,4 +307,10 @@ export function buildPublicToolQueryScopes(toolResults = [], locale = 'zh-CN') {
   return Object.freeze(scopes);
 }
 
-export const __testing = Object.freeze({ finiteCount, freezeRanges, formatResolvedRangeRecord, publicRangeRecord });
+export const __testing = Object.freeze({
+  finiteCount,
+  freezeRanges,
+  freezeFacets,
+  formatResolvedRangeRecord,
+  publicRangeRecord,
+});

@@ -10,6 +10,8 @@ const pickerMocks = vi.hoisted(() => ({
 vi.mock('@/components/base/BasicComponents/BPopover.vue', () => ({
   default: {
     name: 'BPopover',
+    props: { open: Boolean, trigger: String, placement: String, overlayClassName: String },
+    emits: ['update:open'],
     setup:
       (_: unknown, { slots }: { slots: Record<string, () => unknown> }) =>
       () =>
@@ -127,7 +129,14 @@ function mountComposer(initialValue = '') {
         'zh-CN': {
           placeholder: { input: '请输入' },
           ai: {
-            capabilityScope: { label: '限定本轮模块' },
+            capabilityScope: { label: '限定本轮模块', auto: '自动判断' },
+            capabilityPolicy: { label: '会话能力边界', auto: '自动助手' },
+            capabilitySettings: {
+              auto: '自动',
+              open: '调整本轮 AI 能力',
+              title: '本轮能力',
+              description: '默认自动判断',
+            },
             inputPlaceholder: '输入您的问题…',
             inputHint: 'Enter 发送',
             send: '发送',

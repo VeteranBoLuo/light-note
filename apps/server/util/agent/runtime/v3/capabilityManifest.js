@@ -281,6 +281,8 @@ export const TOOL_CAPABILITY_MANIFEST = Object.freeze({
     resultKind: 'note_list',
     slots: [
       { name: 'keyword', source: 'model_text', maxLength: 200 },
+      { name: 'type', source: 'model_enum', enum: ['html', 'markdown', 'drawing', 'all'] },
+      { name: 'view', source: 'model_enum', enum: ['list', 'type_breakdown'] },
       { name: 'limit', source: 'server_default', defaultPolicy: 'server_default' },
       { name: 'user', source: 'server_scope' },
     ],

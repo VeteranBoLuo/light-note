@@ -32,6 +32,12 @@ describe('Agent V3 capability manifest', () => {
     expect(getAgentV3CapabilityByToolName('query_notes')?.slots).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: 'keyword', source: 'model_text', maxLength: 200 }),
+        expect.objectContaining({
+          name: 'type',
+          source: 'model_enum',
+          enum: ['html', 'markdown', 'drawing', 'all'],
+        }),
+        expect.objectContaining({ name: 'view', source: 'model_enum', enum: ['list', 'type_breakdown'] }),
         expect.objectContaining({ name: 'timeRange', source: 'temporal' }),
         expect.objectContaining({ name: 'user', source: 'server_scope' }),
       ]),
