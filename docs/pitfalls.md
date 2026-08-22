@@ -25,6 +25,7 @@
 
 | 编号                                                                                           | 日期       | 模块                | 关键词                                             | 状态         |
 | ---------------------------------------------------------------------------------------------- | ---------- | ------------------- | -------------------------------------------------- | ------------ |
+| [LN-PIT-114](#ln-pit-114工具参数归一化必须满足自身-schema)                                     | 2026-08-23 | Agent、工具协议     | normalizeArgs、Schema、TurnSpec、只读恢复          | 已修复待上线 |
 | [LN-PIT-113](#ln-pit-113受控分类统计不能降级为全文关键词检索或让模型从列表猜总量)              | 2026-08-22 | Agent、工具协议     | facet、笔记类型、精确分布、连续追问                | 已修复并上线 |
 | [LN-PIT-112](#ln-pit-112agent-会话能力边界不能只过滤工具或只隐藏前端入口)                      | 2026-08-21 | Agent、前后端策略   | chat-only、read-only、材料、确认、Manifest         | 已修复待合入 |
 | [LN-PIT-111](#ln-pit-111turnspec-升级和确定性工作流不能一刀切替换旧-planner)                   | 2026-08-21 | Agent、Runtime V3   | TurnSpec 3.1、handle、workflow、Planner 回退       | 已修复待合入 |
@@ -33,7 +34,7 @@
 | [LN-PIT-108](#ln-pit-108agent-时间范围和列表完整性不能由各工具或模型自行解释)                  | 2026-08-21 | Agent、工具协议     | IANA、半开区间、total、partial、参数兼容           | 已修复待合入 |
 | [LN-PIT-107](#ln-pit-107agent-不能在工具成功前提交新焦点也不能把空能力范围降级成自动模式)      | 2026-08-21 | Agent、Runtime V3   | scope、ResultSet、digest、时间默认、副作用         | 已修复待合入 |
 | [LN-PIT-106](#ln-pit-106运维诊断规则不能散落在前端也不能借诊断页复制写操作)                    | 2026-08-22 | 服务器管理、前后端  | 诊断阈值、部分失败、唯一事实源、处置闭环           | 已修复待上线 |
-| [LN-PIT-105](#ln-pit-105目录打开正文不能复用无条件编辑跳转也不能递归透传-from)                  | 2026-08-21 | 笔记目录、前端      | 正文分流、双页签、返回来源、递归 URL               | 已修复待上线 |
+| [LN-PIT-105](#ln-pit-105目录打开正文不能复用无条件编辑跳转也不能递归透传-from)                 | 2026-08-21 | 笔记目录、前端      | 正文分流、双页签、返回来源、递归 URL               | 已修复待上线 |
 | [LN-PIT-104](#ln-pit-104父页面主点击不能由正文状态推断)                                        | 2026-08-21 | 笔记目录、前端      | 父页面、点击偏好、子页面、预览                     | 已修复待上线 |
 | [LN-PIT-103](#ln-pit-103闭合区域填色不能只修改-canvas-像素或仅保存种子点)                      | 2026-08-21 | 手绘笔记、协议      | 洪水填充、扫描线、闭合区域、快捷键、旧图补齐       | 已修复待上线 |
 | [LN-PIT-102](#ln-pit-102密集手绘不能用删减-scene-重画卡片缩略图)                               | 2026-08-21 | 手绘笔记、缩略图    | 派生图、密集填色、revision、自动补齐、降级预览     | 已修复待上线 |
@@ -2553,6 +2554,16 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **防回归约束：** 分类名不得仅靠 Prompt 约定，也不得在 Handler 用问题正则拼 SQL；受控枚举、别名、数据库兼容值和显示标签必须由领域 facet 模块统一维护。列表 `returned`、筛选后 `total` 与未叠加该分类筛选的 `facet values` 是三个不同事实，禁止相互代替。只有工具显式声明 `facet.exact=true` 时才能在事实包和用户答案中称为精确分布；语义召回不得把候选集分布冒充精确分类统计。完整别名兼容不得从长句抽词，避免把“富文本编辑器优化”错误改成 `type=html`。
 - **验证方法：** Mock 同一账号 `html=67 / markdown=2 / drawing=16`，分别验证模型传 `type=html`、把“富文本”误传 `keyword`、使用 `MD 笔记` 别名和请求统计视图时都生成相同精确 facet；断言“富文本编辑器优化”仍进入 LIKE。验证类型筛选只作用于列表与筛选总量、完整分布 SQL 不带类型条件，FactBundle 生成三条 exact `facet_count`，公开 query scope 保留有界 facets，最终回答漏掉分布时确定性补回。全套测试使用 mock 数据和假模型，不调用真实供应商。
 - **相关代码：** `apps/server/util/agent/noteTypeFacet.js`、`apps/server/util/agent/tools/query_notes.js`、`apps/server/util/agent/toolResultMetadata.js`、`apps/server/util/agent/runtime/v3/factBundle.js`、`apps/server/util/agent/runtime/v3/capabilityManifest.js`。
+
+### LN-PIT-114：工具参数归一化必须满足自身 Schema
+
+- **现象：** 用户询问最基础的“我共有多少笔记”时，Intent Compiler 已成功识别为单一笔记读取目标，`query_notes` 也被正确选中，但页面仍显示“AI 没有返回可核验的语义计划”。线上追踪同时出现 `query_notes / TOOL_ARGUMENTS_INVALID`，随后旧式只读恢复把候选从单一笔记查询扩大到自动模式下的全部只读工具。
+- **影响范围：** 所有带 `normalizeArgs` 的 Agent 工具、Runtime V2 执行规划与 legacy 只读恢复；尤其是没有筛选条件、依赖工具默认值的总量/列表查询。
+- **误导线索：** 最终文案是“语义计划缺失”，容易继续修改 Prompt、模型供应商或 Intent Compiler。实际 TurnSpec 已就绪，错误发生在执行计划校验：`query_notes.normalizeArgs({})` 主动生成 `type: ''`，而公开 JSON Schema 的 `type` 枚举不允许空字符串。后续恢复又丢掉 TurnSpec Router 已收敛的候选边界，才把一个参数契约错误伪装成大范围语义失败。
+- **根因：** 工具把空字符串同时当成“未指定”和内部无筛选哨兵，但参数归一化结果还要再次经过同一公开 Schema；可选参数“缺失”与“显式空值”没有区分。Runtime V2 的失败恢复则从请求最初的全部 `selectedTools` 重建目录，没有优先复用 `runtimeV2Outcome.route.candidates`。
+- **修复与约束：** 可选参数未提供时必须从 canonical args 中省略；只有 Schema 明确允许 `null` 或空字符串时才能保留对应值。默认值可以由工具归一化生成，但生成值必须属于公开 Schema。所有无必填参数工具都必须通过统一门禁：`normalizeToolArguments(tool, {})` 的结果再次执行 `validateToolArgumentsAgainstSchema` 不得失败。TurnSpec 已成功且 Router 已产生候选时，执行规划失败后的只读恢复只能使用该候选集合；只有 Intent Compiler 完全没有可用结果时才允许退回请求初始只读面。禁止按具体问法在 Handler 直调工具，也禁止通过放宽枚举接受无语义空值。
+- **验证方法：** 工具级测试断言 `query_notes` 空输入归一化为合法默认值且不含空 `type/keyword/timeRange/user`；注册表测试遍历所有无必填工具并执行“归一化后再验 Schema”。Handler 假模型测试让 TurnSpec 正确、Execution Planner 连续失败，同时初始工具集中包含无关读取能力，断言 legacy 恢复定义只含 Router 已选中的 `query_notes`，最终可以执行并返回真实总量。以上测试均不调用真实供应商或线上业务工具。
+- **相关代码：** `apps/server/util/agent/tools/query_notes.js`、`apps/server/util/agent/tools/index.test.js`、`apps/server/util/agent/tools/query_notes.test.js`、`apps/server/router_handle/agentEndpointHandlers.js`、`apps/server/router_handle/agentHandle.chat.test.js`。
 
 ### LN-PIT-112：Agent 会话能力边界不能只过滤工具或只隐藏前端入口
 

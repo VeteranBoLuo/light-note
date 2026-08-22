@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import tools from './index.js';
 import { ROUTED_AGENT_WRITE_TOOL_NAMES } from '../toolRouter.js';
+import { normalizeToolArguments } from '../toolArguments.js';
+import { validateToolArgumentsAgainstSchema } from '../toolPolicy.js';
 
 describe('Agent 工具注册表', () => {
   it('可独立导入且工具名称唯一、schema 与执行器完整', () => {
@@ -11,6 +13,16 @@ describe('Agent 工具注册表', () => {
       expect(tool.parameters?.type).toBe('object');
       expect(typeof tool.execute).toBe('function');
       expect(typeof tool.transform).toBe('function');
+    }
+  });
+
+  it('所有无必填参数工具的空输入归一化后仍满足自身 Schema', () => {
+    for (const tool of tools.filter((item) => !(item.parameters?.required || []).length)) {
+      const normalized = normalizeToolArguments(tool, {});
+      expect(
+        () => validateToolArgumentsAgainstSchema(tool.parameters, normalized),
+        `${tool.name} 的 normalizeArgs({}) 不能制造 Schema 非法值`,
+      ).not.toThrow();
     }
   });
 
