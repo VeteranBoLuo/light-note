@@ -111,11 +111,13 @@
 
     <BUpload
       v-if="!modelValue.length"
+      ref="uploadRef"
       :multiple="false"
       raw-file
       accept=".txt,.md,.markdown,.csv,.pdf,.docx,.png,.jpg,.jpeg,.webp"
       :max-total-size="20 * 1024 * 1024"
       :disabled="busy"
+      :triggerless="!showUploadTrigger"
       @change="uploadLocal"
     >
       <slot name="trigger" :busy="busy">
@@ -154,17 +156,23 @@
     type AiAttachment,
   } from '@/api/aiAttachmentApi';
 
-  const props = defineProps<{
-    modelValue: AiAttachment[];
-    prepareActionFn: (request: AiAttachmentActionRequest) => Promise<void>;
-  }>();
+  const props = withDefaults(
+    defineProps<{
+      modelValue: AiAttachment[];
+      prepareActionFn: (request: AiAttachmentActionRequest) => Promise<void>;
+      showUploadTrigger?: boolean;
+    }>(),
+    { showUploadTrigger: true },
+  );
   defineSlots<{ trigger(props: { busy: boolean }): unknown }>();
   const emit = defineEmits<{
     'update:modelValue': [value: AiAttachment[]];
     prompt: [value: string];
+    busyChange: [value: boolean];
   }>();
   const { t } = useI18n();
   const busy = ref(false);
+  const uploadRef = ref<{ open: () => void } | null>(null);
   const activeAction = ref<AiAttachmentActionDraft | null>(null);
   let pollTimer: number | null = null;
   let pollAttempts = 0;
@@ -209,6 +217,8 @@
       if (activeAction.value && !activeActionAttachment.value) activeAction.value = null;
     },
   );
+
+  watch(busy, (value) => emit('busyChange', value), { immediate: true });
 
   function formatBytes(value: number) {
     const bytes = Number(value || 0);
@@ -268,6 +278,12 @@
     // 剪贴板图片默认都叫 image.png,重命名避免多次粘贴同名难以分辨。
     const named = new File([file], `pasted-${Date.now()}.${ext}`, { type: file.type });
     await uploadLocal([named]);
+    return true;
+  }
+
+  function openUpload() {
+    if (busy.value || props.modelValue.length) return false;
+    uploadRef.value?.open();
     return true;
   }
 
@@ -372,7 +388,7 @@
     stopPolling();
   });
 
-  defineExpose({ attachCloudFile, openAction, uploadPastedImage });
+  defineExpose({ attachCloudFile, openAction, openUpload, uploadPastedImage });
 </script>
 
 <style scoped lang="less">

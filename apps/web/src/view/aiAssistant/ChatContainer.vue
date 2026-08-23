@@ -164,6 +164,7 @@
         @update:attachments="attachments = $event"
         @update:capability-module="capabilityModule = $event"
         @update:capability-policy-profile="updateCapabilityPolicyProfile"
+        @clear-materials="aiAssistant.detachAllComposerMaterials()"
       />
     </div>
   </div>

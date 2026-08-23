@@ -40,6 +40,25 @@ vi.mock('./AiAttachmentPicker.vue', async () => {
     },
   };
 });
+vi.mock('./AiMaterialHub.vue', async () => {
+  const { h: render } = await import('vue');
+  return {
+    default: {
+      name: 'AiMaterialHub',
+      setup(_: unknown, { expose }: { expose: (value: Record<string, unknown>) => void }) {
+        expose({
+          attachCloudFile: vi.fn(async () => undefined),
+          openAction: vi.fn(() => false),
+          uploadPastedImage: vi.fn(async () => false),
+        });
+        return () => render('div', { class: 'mock-material-hub' });
+      },
+    },
+  };
+});
+vi.mock('./AiConversationSettings.vue', () => ({
+  default: { name: 'AiConversationSettings', setup: () => () => null },
+}));
 vi.mock('./TranslationToggle.vue', () => ({
   default: { name: 'TranslationToggle', setup: () => () => null },
 }));

@@ -6,6 +6,7 @@ const source = (relativePath: string) => readFileSync(resolve(process.cwd(), rel
 
 const chatContainerSource = source('src/view/aiAssistant/ChatContainer.vue');
 const chatInputSource = source('src/components/aiAssistant/ChatInputSection.vue');
+const materialHubSource = source('src/components/aiAssistant/AiMaterialHub.vue');
 const childSources = [
   source('src/components/aiAssistant/AiInteractionCard.vue'),
   source('src/components/aiAssistant/AiActivitySummary.vue'),
@@ -34,12 +35,13 @@ describe('ChatContainer narrow responsive styles', () => {
     );
   });
 
-  it('keeps the mobile material entry aligned with the compact send action', () => {
-    expect(chatInputSource).toMatch(
-      /\.mobile-context-toggle\s*\{[\s\S]*?height:\s*40px\s*!important;\s*min-height:\s*40px;/,
-    );
-    expect(chatInputSource).toMatch(
-      /\.mobile-context-toggle__icon\s*\{[\s\S]*?flex:\s*0 0 28px;\s*width:\s*28px;\s*height:\s*28px;/,
+  it('keeps selected materials and the fixed add action in independent grid columns', () => {
+    expect(materialHubSource).toContain('grid-template-columns: minmax(0, 1fr) auto');
+    expect(materialHubSource).toContain('.ai-material-hub__chips');
+    expect(materialHubSource).toContain('.ai-material-hub__trigger');
+    expect(materialHubSource).not.toContain('display: contents');
+    expect(materialHubSource).toMatch(
+      /@media \(max-width: 767px\)[\s\S]*?\.ai-material-hub__trigger\s*\{[\s\S]*?min-height:\s*34px;/,
     );
   });
 });

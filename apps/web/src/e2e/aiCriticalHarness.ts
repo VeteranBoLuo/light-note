@@ -35,6 +35,7 @@ const harnessMobile = harnessParams.get('mobile') === '1';
 const harnessInitialPolicy = normalizeAiCapabilityPolicyProfile(harnessParams.get('policy'));
 const harnessInitialModule = normalizeAiCapabilityModule(harnessParams.get('module'));
 const harnessAttachmentStatus = harnessParams.get('attachment') as AiAttachmentStatus | null;
+const harnessMaterialCount = Math.min(Math.max(Number(harnessParams.get('material')) || 0, 0), 2);
 applyDocumentTheme(harnessTheme);
 document.documentElement.classList.toggle('light-note-mobile-rendering', harnessMobile);
 
@@ -58,10 +59,11 @@ const app = createApp({
     const store = useAiAssistantStore();
     store.switchConversation(identity, '你好');
     const input = ref('');
-    const contexts = ref<Array<{ type: 'bookmark'; id: string; title: string }>>(
-      harnessParams.get('material') === '1'
-        ? [{ type: 'bookmark', id: 'synthetic-bookmark-1', title: '合成书签' }]
-        : [],
+    const contexts = ref<Array<{ type: 'bookmark' | 'note'; id: string; title: string }>>(
+      [
+        { type: 'bookmark', id: 'synthetic-bookmark-1', title: '合成书签' } as const,
+        { type: 'note', id: 'synthetic-note-1', title: '产品规划笔记' } as const,
+      ].slice(0, harnessMaterialCount),
     );
     const attachments = ref<AiAttachment[]>(
       harnessAttachmentStatus
@@ -180,6 +182,10 @@ const app = createApp({
               'onUpdate:contexts': (value: typeof contexts.value) => (contexts.value = value),
               attachments: attachments.value,
               'onUpdate:attachments': (value: AiAttachment[]) => (attachments.value = value),
+              onClearMaterials: () => {
+                contexts.value = [];
+                attachments.value = [];
+              },
               capabilityModule: capabilityModule.value,
               capabilityModuleOptions: capabilityModuleOptions.value,
               capabilityPolicyProfile: capabilityPolicyProfile.value,

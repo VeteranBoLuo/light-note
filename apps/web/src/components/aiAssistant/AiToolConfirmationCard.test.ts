@@ -201,11 +201,11 @@ describe('AiToolConfirmationCard note preview', () => {
     expect(host.textContent).toContain('"url": "https://openai.com"');
   });
 
-  it('只读锁保留取消能力，但禁用目录修改和确认执行且不发出写请求', async () => {
+  it('只查询模式保留取消能力，但禁用目录修改和确认执行且不发出写请求', async () => {
     const host = mountCard(createConfirmation(), undefined, undefined, 'read_only');
     await flush();
 
-    expect(host.textContent).toContain('只读锁已阻止写入');
+    expect(host.textContent).toContain('当前对话只允许查询；恢复自动使用后可继续确认写入。');
     expect(findButton(host, '更换目标目录').disabled).toBe(true);
     expect(findButton(host, '确认执行').disabled).toBe(true);
     findButton(host, '确认执行').click();

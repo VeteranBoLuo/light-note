@@ -2,161 +2,47 @@
   <footer class="input-section">
     <div class="input-container">
       <div class="composer-context-row">
-        <BPopover
-          v-model:open="capabilitySettingsOpen"
-          trigger="click"
-          placement="top-left"
-          overlay-class-name="ai-capability-settings-popover"
-        >
+        <div v-if="hasCustomCapabilitySettings" class="capability-status-list" role="status">
           <BButton
-            class="capability-settings-trigger"
-            :class="{ 'is-active': hasCustomCapabilitySettings }"
-            :aria-label="t('ai.capabilitySettings.open')"
-            :title="t('ai.capabilitySettings.open')"
-            :aria-expanded="capabilitySettingsOpen"
-            aria-haspopup="dialog"
+            v-if="capabilityPolicyProfile !== 'auto'"
+            size="small"
+            class="capability-status-pill"
+            :title="t('ai.capabilitySettings.restoreAutomatic')"
+            :aria-label="t('ai.capabilitySettings.restoreAutomatic')"
+            @click="$emit('update:capabilityPolicyProfile', 'auto')"
           >
-            <SvgIcon :src="icon.settings.ai" size="15" aria-hidden="true" />
-            <span>{{ capabilitySettingsLabel }}</span>
+            <SvgIcon :src="icon.settings.privacy" size="13" aria-hidden="true" />
+            <span>{{ selectedCapabilityPolicyLabel }}</span>
+            <SvgIcon :src="icon.common.close" size="10" aria-hidden="true" />
           </BButton>
-          <template #content>
-            <div class="capability-settings-panel" role="dialog" :aria-label="t('ai.capabilitySettings.title')">
-              <header>
-                <strong>{{ t('ai.capabilitySettings.title') }}</strong>
-                <span>{{ t('ai.capabilitySettings.description') }}</span>
-              </header>
-              <div class="capability-settings-field">
-                <span>{{ t('ai.capabilityPolicy.label') }}</span>
-                <BSelect
-                  v-model:value="capabilityPolicyValue"
-                  :options="capabilityPolicyOptions"
-                  :aria-label="t('ai.capabilityPolicy.label')"
-                />
-              </div>
-              <div class="capability-settings-field">
-                <span>{{ t('ai.capabilityScope.label') }}</span>
-                <BSelect
-                  v-model:value="capabilityModuleValue"
-                  :options="capabilityModuleOptions"
-                  :aria-label="t('ai.capabilityScope.label')"
-                  :disabled="capabilityPolicyProfile === 'chat_only'"
-                />
-              </div>
-              <p v-if="capabilityPolicyProfile === 'chat_only'" class="capability-settings-panel__boundary">
-                {{ t('ai.capabilityPolicy.noDataAccess') }}
-              </p>
-            </div>
-          </template>
-        </BPopover>
-        <div v-if="!isMobile && capabilityPolicyProfile !== 'chat_only'" class="desktop-material-actions">
-          <AiContextPicker
-            :model-value="contexts"
-            :scope-model-value="scopeRefs"
-            @update:model-value="$emit('update:contexts', $event)"
-            @update:scope-model-value="$emit('update:scopeRefs', $event)"
-            @file-selected="attachSelectedCloudFile"
-          />
-          <AiAttachmentPicker
-            ref="attachmentPicker"
-            :model-value="attachments"
-            :prepare-action-fn="prepareAttachmentActionFn"
-            @update:model-value="$emit('update:attachments', $event)"
-            @prompt="applyAttachmentPrompt"
-          />
+          <BButton
+            v-if="hasActiveTurnScope"
+            size="small"
+            class="capability-status-pill is-turn-scope"
+            :title="t('ai.capabilitySettings.clearTurnScope')"
+            :aria-label="t('ai.capabilitySettings.clearTurnScope')"
+            @click="$emit('update:capabilityModule', 'auto')"
+          >
+            <SvgIcon :src="icon.settings.general" size="13" aria-hidden="true" />
+            <span>{{ t('ai.capabilityScope.applied', { module: selectedCapabilityModuleLabel }) }}</span>
+            <SvgIcon :src="icon.common.close" size="10" aria-hidden="true" />
+          </BButton>
         </div>
-        <span v-if="capabilityPolicyProfile === 'chat_only'" class="chat-only-boundary-hint">
-          {{ t('ai.capabilityPolicy.noDataAccess') }}
-        </span>
-        <BButton
-          v-else-if="isMobile"
-          class="mobile-context-toggle"
-          :aria-label="t('ai.material.mobileTitle')"
-          :title="t('ai.material.mobileTitle')"
-          :aria-expanded="mobileActionsOpen"
-          aria-haspopup="dialog"
-          @click="mobileActionsOpen = true"
-        >
-          <span class="mobile-context-toggle__icon">
-            <SvgIcon :src="icon.common.plus" size="15" aria-hidden="true" />
-          </span>
-          <span class="mobile-context-toggle__label">{{ t('ai.material.mobileAdd') }}</span>
-          <span v-if="selectedMaterialCount" class="mobile-context-toggle__count" aria-hidden="true">
-            {{ selectedMaterialCount }}
-          </span>
-        </BButton>
+        <AiMaterialHub
+          v-if="capabilityPolicyProfile !== 'chat_only'"
+          ref="materialHub"
+          :model-value="contexts"
+          :scope-model-value="scopeRefs"
+          :attachments="attachments"
+          :is-mobile="isMobile"
+          :prepare-action-fn="prepareAttachmentActionFn"
+          @update:model-value="$emit('update:contexts', $event)"
+          @update:scope-model-value="$emit('update:scopeRefs', $event)"
+          @update:attachments="$emit('update:attachments', $event)"
+          @prompt="applyAttachmentPrompt"
+          @clear="$emit('clearMaterials')"
+        />
       </div>
-      <BDrawer
-        v-if="isMobile"
-        :open="mobileActionsOpen"
-        :title="t('ai.material.mobileTitle')"
-        placement="bottom"
-        height="auto"
-        body-padding="12px 16px max(18px, env(safe-area-inset-bottom))"
-        @close="mobileActionsOpen = false"
-      >
-        <div class="mobile-context-drawer">
-          <div class="mobile-context-drawer__intro">
-            <span>{{ t('ai.material.once') }}</span>
-            <p>{{ t('ai.material.onceTooltip') }}</p>
-          </div>
-          <div class="mobile-material-action-list">
-            <AiContextPicker
-              :model-value="contexts"
-              :scope-model-value="scopeRefs"
-              @update:model-value="$emit('update:contexts', $event)"
-              @update:scope-model-value="$emit('update:scopeRefs', $event)"
-              @file-selected="attachSelectedCloudFile"
-            >
-              <template #trigger>
-                <BButton class="mobile-material-action-card mobile-material-action-card--resource">
-                  <span class="mobile-material-action-card__icon">
-                    <SvgIcon :src="icon.ai.materials" size="21" aria-hidden="true" />
-                  </span>
-                  <span class="mobile-material-action-card__copy">
-                    <strong>{{ t('ai.addContext') }}</strong>
-                    <small>{{ t('ai.material.contextDescription') }}</small>
-                  </span>
-                  <SvgIcon
-                    class="mobile-material-action-card__arrow"
-                    :src="icon.arrow_right"
-                    size="15"
-                    aria-hidden="true"
-                  />
-                </BButton>
-              </template>
-            </AiContextPicker>
-            <AiAttachmentPicker
-              ref="attachmentPicker"
-              :model-value="attachments"
-              :prepare-action-fn="prepareAttachmentActionFn"
-              @update:model-value="$emit('update:attachments', $event)"
-              @prompt="applyAttachmentPrompt"
-            >
-              <template #trigger="{ busy }">
-                <BButton
-                  class="mobile-material-action-card mobile-material-action-card--file"
-                  :loading="busy"
-                  :title="t('ai.material.attachmentOnceHint')"
-                >
-                  <span class="mobile-material-action-card__icon">
-                    <SvgIcon :src="icon.file_upload" size="20" aria-hidden="true" />
-                  </span>
-                  <span class="mobile-material-action-card__copy">
-                    <strong>{{ t('ai.uploadFile') }}</strong>
-                    <small>{{ t('ai.material.fileDescription') }}</small>
-                  </span>
-                  <SvgIcon
-                    class="mobile-material-action-card__arrow"
-                    :src="icon.arrow_right"
-                    size="15"
-                    aria-hidden="true"
-                  />
-                </BButton>
-              </template>
-            </AiAttachmentPicker>
-          </div>
-        </div>
-      </BDrawer>
       <div class="text-input-wrap">
         <BInput
           v-model:value="inputValue"
@@ -188,6 +74,14 @@
       <div class="composer-toolbar">
         <div class="composer-meta">
           <span v-if="!isMobile" class="input-hint">{{ t('ai.inputHint') }}</span>
+          <AiConversationSettings
+            :capability-module="capabilityModule"
+            :capability-module-options="capabilityModuleOptions"
+            :capability-policy-profile="capabilityPolicyProfile"
+            :capability-policy-options="capabilityPolicyOptions"
+            @update:capability-module="$emit('update:capabilityModule', $event)"
+            @update:capability-policy-profile="$emit('update:capabilityPolicyProfile', $event)"
+          />
           <BPopover
             v-if="showQuota && quota"
             trigger="click"
@@ -258,10 +152,8 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
-  import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
-  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
-  import AiContextPicker from './AiContextPicker.vue';
-  import AiAttachmentPicker from './AiAttachmentPicker.vue';
+  import AiConversationSettings from './AiConversationSettings.vue';
+  import AiMaterialHub from './AiMaterialHub.vue';
   import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
   import { replaceMentionQuery, resolveMentionQuery, type MentionQuery } from '@/utils/resourceMentionTrigger';
   import { useDismissOnOutside } from '@/composables/useDismissOnOutside';
@@ -326,13 +218,11 @@
     (e: 'update:attachments', value: AiAttachment[]): void;
     (e: 'update:capabilityModule', value: AiCapabilityModule): void;
     (e: 'update:capabilityPolicyProfile', value: AiCapabilityPolicyProfile): void;
+    (e: 'clearMaterials'): void;
   }>();
 
-  const mobileActionsOpen = ref(false);
-  const capabilitySettingsOpen = ref(false);
-
   const textInput = ref<{ focus: () => void } | null>(null);
-  const attachmentPicker = ref<{
+  const materialHub = ref<{
     attachCloudFile: (fileId: string) => Promise<void>;
     openAction: (toolName: AiAttachmentDirectActionName, args?: Record<string, unknown>) => boolean;
     uploadPastedImage: (file: File) => Promise<boolean>;
@@ -345,15 +235,6 @@
       adjustTextareaHeight();
     },
   });
-  const capabilityModuleValue = computed({
-    get: () => props.capabilityModule || 'auto',
-    set: (value: unknown) => emit('update:capabilityModule', String(value || 'auto') as AiCapabilityModule),
-  });
-  const capabilityPolicyValue = computed({
-    get: () => props.capabilityPolicyProfile || 'auto',
-    set: (value: unknown) =>
-      emit('update:capabilityPolicyProfile', String(value || 'auto') as AiCapabilityPolicyProfile),
-  });
   const selectedCapabilityPolicyLabel = computed(
     () =>
       props.capabilityPolicyOptions.find((option) => option.value === props.capabilityPolicyProfile)?.label ||
@@ -364,28 +245,15 @@
       props.capabilityModuleOptions.find((option) => option.value === props.capabilityModule)?.label ||
       t('ai.capabilityScope.auto'),
   );
-  const hasCustomCapabilitySettings = computed(
-    () => props.capabilityPolicyProfile !== 'auto' || props.capabilityModule !== 'auto',
+  const hasActiveTurnScope = computed(
+    () => props.capabilityPolicyProfile !== 'chat_only' && props.capabilityModule !== 'auto',
   );
-  const capabilitySettingsLabel = computed(() => {
-    if (!hasCustomCapabilitySettings.value) return t('ai.capabilitySettings.auto');
-    if (props.capabilityPolicyProfile === 'chat_only') return selectedCapabilityPolicyLabel.value;
-    if (props.capabilityPolicyProfile === 'auto') return selectedCapabilityModuleLabel.value;
-    if (props.capabilityModule === 'auto') return selectedCapabilityPolicyLabel.value;
-    return `${selectedCapabilityPolicyLabel.value} · ${selectedCapabilityModuleLabel.value}`;
-  });
-  watch(
-    () => props.capabilityPolicyProfile,
-    (profile) => {
-      if (profile === 'chat_only') mobileActionsOpen.value = false;
-    },
+  const hasCustomCapabilitySettings = computed(
+    () => props.capabilityPolicyProfile !== 'auto' || hasActiveTurnScope.value,
   );
   // 文件直传确认后原文件就已经可用；OCR/文字提取只影响总结问答，不再阻断发送、保存或插图。
   const attachmentBlocked = computed(() =>
     props.attachments.some((attachment) => attachment.status === 'awaiting_upload'),
-  );
-  const selectedMaterialCount = computed(
-    () => props.contexts.length + props.scopeRefs.length + props.attachments.length,
   );
 
   // AI 额度:已用占比 + token 紧凑格式(12.3k / 800k)
@@ -529,7 +397,7 @@
     closeMention();
     if (item.type === 'file') {
       // 云文件必须走附件准备与解析,不能当成普通上下文
-      void attachmentPicker.value?.attachCloudFile(item.id);
+      void materialHub.value?.attachCloudFile(item.id);
       return;
     }
     const next = { type: item.type, id: String(item.id), title: item.title } as AiResourceContext;
@@ -556,15 +424,11 @@
     const image = files.find((file) => /^image\//i.test(file.type));
     if (!image) return;
     event.preventDefault();
-    void attachmentPicker.value?.uploadPastedImage(image);
+    void materialHub.value?.uploadPastedImage(image);
   }
 
   function openAttachmentAction(toolName: AiAttachmentDirectActionName, args: Record<string, unknown> = {}) {
-    return attachmentPicker.value?.openAction(toolName, args) || false;
-  }
-
-  function attachSelectedCloudFile(item: AiResourceContext) {
-    void attachmentPicker.value?.attachCloudFile(item.id);
+    return materialHub.value?.openAction(toolName, args) || false;
   }
 
   onMounted(() => {
@@ -575,13 +439,6 @@
     () => props.modelValue,
     () => {
       nextTick(adjustTextareaHeight);
-    },
-  );
-
-  watch(
-    () => props.isMobile,
-    (isMobile) => {
-      if (!isMobile) mobileActionsOpen.value = false;
     },
   );
 
@@ -629,107 +486,46 @@
   }
 
   .composer-context-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 6px;
+    display: grid;
+    gap: 5px;
     width: 100%;
     min-width: 0;
     margin-bottom: 4px;
   }
 
-  .capability-settings-trigger {
-    display: inline-flex;
-    flex: 0 0 auto;
+  .capability-status-list {
+    display: flex;
+    flex-wrap: wrap;
     gap: 5px;
-    max-width: 176px;
-    height: 32px;
-    min-height: 32px;
-    padding: 0 9px;
-    overflow: hidden;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 9px;
-    background: var(--card-background);
-    color: var(--desc-color);
-    font-size: 0.75rem;
-    font-weight: 600;
-    line-height: 1;
-  }
-
-  .capability-settings-trigger > span {
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
-  .capability-settings-trigger.is-active {
+  .capability-status-pill {
+    display: inline-flex;
+    gap: 5px;
+    width: auto;
+    max-width: 100%;
+    min-height: 26px;
+    padding: 2px 7px;
     border-color: var(--primary-color);
     background: var(--card-background);
     background: color-mix(in srgb, var(--primary-color) 7%, var(--card-background));
     color: var(--primary-color);
+    font-size: 11px;
+    font-weight: 600;
   }
 
-  .desktop-material-actions {
-    display: flex;
-    flex: 1 1 auto;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
+  .capability-status-pill > span {
     min-width: 0;
-  }
-
-  /* 让资源 chips 与两个入口共用同一个紧凑流；附件详情仍在需要时独占一行。 */
-  .desktop-material-actions > :deep(.ai-context-picker) {
-    display: contents;
-  }
-
-  .desktop-material-actions :deep(.ai-context-chips) {
-    align-self: center;
-  }
-
-  .chat-only-boundary-hint {
-    display: inline-flex;
-    min-width: 0;
-    min-height: 32px;
-    align-items: center;
     overflow: hidden;
-    color: var(--desc-color);
-    font-size: 0.72rem;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  /* 「@ 添加资源」「上传文件」是入口按钮:默认灰底在浅色下像原生 button、暗色下又与输入区同色。
-     改用主题色淡染 + 同色系描边,两个主题自适应,并与下方资料 chips 视觉同族。 */
-  /* 附件卡片信息多（文件名 + 大小 + 解析状态 + 操作），与「@ 添加资源」「上传文件」
-     同行会被压缩甚至横向裁切。有附件时让它独占一行铺满，入口按钮留在上一行。
-     不挂断点：桌面 AI 抽屉宽度可变（480～720px），同样挤不下。 */
-  .desktop-material-actions :deep(.ai-attachment-picker.has-attachment) {
-    width: 100%;
-    min-width: 0;
-    flex: 1 1 100%;
-  }
-
-  .desktop-material-actions :deep(.b-popover-trigger > .b_btn),
-  .desktop-material-actions :deep(.b-upload-trigger .b_btn) {
-    height: 32px;
-    min-height: 32px;
-    border: 1px solid var(--surface-border-color);
-    border-color: color-mix(in srgb, var(--primary-color) 20%, var(--surface-border-color));
-    background: color-mix(in srgb, var(--primary-color) 7%, transparent) !important;
-    color: var(--primary-color);
-    font-size: 0.75rem;
-    font-weight: 500;
-  }
-
-  @media (hover: hover) and (pointer: fine) {
-    .capability-settings-trigger:hover,
-    .desktop-material-actions :deep(.b-popover-trigger > .b_btn:hover),
-    .desktop-material-actions :deep(.b-upload-trigger .b_btn:hover) {
-      border-color: var(--primary-color);
-      background: color-mix(in srgb, var(--primary-color) 12%, var(--card-background)) !important;
-      color: var(--primary-color);
-    }
+  .capability-status-pill.is-turn-scope {
+    border-color: var(--surface-border-color);
+    background: var(--surface-panel-bg);
+    color: var(--text-color);
   }
 
   .text-input-wrap {
@@ -891,275 +687,17 @@
     }
 
     .composer-context-row {
-      align-items: center;
-      gap: 6px;
+      gap: 5px;
       margin-bottom: 2px;
     }
 
-    .capability-settings-trigger {
-      flex: 1 1 0;
-      min-width: 0;
-      max-width: none;
-      height: 40px;
-      min-height: 40px;
-      justify-content: flex-start;
-    }
-
-    .chat-only-boundary-hint {
-      flex: 1 1 auto;
-      min-height: 40px;
-    }
-
-    .mobile-context-toggle {
-      display: inline-flex;
-      flex: 1 1 0;
+    .capability-status-list {
       gap: 6px;
-      min-width: 0;
-      max-width: none;
-      height: 40px !important;
-      min-height: 40px;
-      padding: 3px 9px 3px 5px !important;
-      /* 先给不支持 color-mix 的移动 WebView 一个可见的主题边框，再用混色增强层次。 */
-      border: 1px solid var(--card-border-color);
-      border-color: var(--primary-color);
-      border-radius: 10px;
-      background: var(--card-background);
-      background: linear-gradient(
-        135deg,
-        color-mix(in srgb, var(--primary-color) 15%, var(--card-background)),
-        color-mix(in srgb, var(--primary-color) 6%, var(--card-background))
-      );
-      color: var(--primary-color);
-      box-shadow: none;
-      font-size: 12px;
-      font-weight: 650;
-      line-height: 1;
     }
 
-    .mobile-context-toggle__icon {
-      display: grid;
-      flex: 0 0 28px;
-      width: 28px;
-      height: 28px;
-      place-items: center;
-      border-radius: 8px;
-      background: var(--primary-color);
-      color: white;
-      box-shadow: 0 5px 12px -7px color-mix(in srgb, var(--primary-color) 86%, transparent);
+    .capability-status-pill {
+      min-height: 28px;
     }
-
-    .mobile-context-toggle__label {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .mobile-context-toggle__count {
-      display: grid;
-      flex: 0 0 auto;
-      min-width: 20px;
-      height: 20px;
-      padding: 0 5px;
-      place-items: center;
-      border-radius: 999px;
-      background: color-mix(in srgb, var(--primary-color) 14%, var(--card-background));
-      color: var(--primary-color);
-      font-size: 11px;
-      font-variant-numeric: tabular-nums;
-      font-weight: 700;
-    }
-
-    .mobile-context-drawer {
-      display: grid;
-      gap: 10px;
-      width: 100%;
-      min-width: 0;
-      overflow-x: hidden;
-    }
-
-    .mobile-context-drawer__intro {
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      min-width: 0;
-      padding: 8px 10px;
-      border: 1px solid var(--surface-divider-color);
-      border-radius: 12px;
-      background: color-mix(in srgb, var(--primary-color) 5%, var(--surface-panel-bg));
-    }
-
-    .mobile-context-drawer__intro > span {
-      flex: 0 0 auto;
-      padding: 3px 7px;
-      border-radius: 999px;
-      background: color-mix(in srgb, var(--primary-color) 14%, var(--card-background));
-      color: var(--primary-color);
-      font-size: 10px;
-      font-weight: 700;
-      line-height: 16px;
-    }
-
-    .mobile-context-drawer__intro p {
-      min-width: 0;
-      margin: 0;
-      color: var(--desc-color);
-      font-size: 12px;
-      line-height: 17px;
-    }
-
-    .mobile-material-action-list {
-      display: grid;
-      gap: 10px;
-      width: 100%;
-      min-width: 0;
-    }
-
-    .mobile-material-action-list :deep(.ai-context-picker),
-    .mobile-material-action-list :deep(.ai-attachment-picker),
-    .mobile-material-action-list :deep(.b-popover-trigger),
-    .mobile-material-action-list :deep(.b-upload-trigger) {
-      width: 100%;
-      max-width: 100%;
-      min-width: 0;
-    }
-
-    .mobile-material-action-list :deep(.ai-context-picker),
-    .mobile-material-action-list :deep(.ai-attachment-picker) {
-      display: grid;
-      gap: 10px;
-    }
-
-    .mobile-material-action-list :deep(.ai-context-chips) {
-      padding: 8px;
-      border: 1px solid color-mix(in srgb, var(--primary-color) 16%, var(--surface-border-color));
-      border-radius: 12px;
-      background: color-mix(in srgb, var(--primary-color) 5%, var(--surface-panel-bg));
-    }
-
-    .mobile-material-action-list :deep(.mobile-material-action-card) {
-      --material-accent: var(--primary-color);
-
-      position: relative;
-      display: grid;
-      grid-template-columns: 42px minmax(0, 1fr) 16px;
-      gap: 11px;
-      justify-content: stretch;
-      width: 100%;
-      max-width: 100%;
-      min-width: 0;
-      height: auto;
-      min-height: 76px;
-      padding: 10px 12px 10px 10px;
-      overflow: hidden;
-      border: 1px solid color-mix(in srgb, var(--material-accent) 22%, var(--surface-border-color));
-      border-radius: 14px;
-      background: linear-gradient(
-        135deg,
-        color-mix(in srgb, var(--material-accent) 9%, var(--card-background)),
-        var(--card-background) 72%
-      );
-      color: var(--text-color);
-      line-height: normal;
-      text-align: left;
-      white-space: normal;
-      box-shadow: 0 12px 24px -22px color-mix(in srgb, var(--material-accent) 72%, transparent);
-      transition:
-        transform 0.16s ease,
-        border-color 0.16s ease,
-        box-shadow 0.16s ease;
-    }
-
-    .mobile-material-action-list :deep(.mobile-material-action-card--file) {
-      --material-accent: var(--resource-file-color);
-    }
-
-    .mobile-material-action-card__icon {
-      display: grid;
-      width: 42px;
-      height: 42px;
-      place-items: center;
-      align-self: center;
-      border-radius: 12px;
-      background: color-mix(in srgb, var(--material-accent) 14%, var(--card-background));
-      color: var(--material-accent);
-      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--material-accent) 13%, transparent);
-    }
-
-    .mobile-material-action-card__copy {
-      display: grid;
-      min-width: 0;
-      align-content: center;
-      gap: 3px;
-    }
-
-    .mobile-material-action-card__copy strong,
-    .mobile-material-action-card__copy small {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .mobile-material-action-card__copy strong {
-      color: var(--text-color);
-      font-size: 14px;
-      font-weight: 650;
-      line-height: 19px;
-      white-space: nowrap;
-    }
-
-    .mobile-material-action-card__copy small {
-      display: -webkit-box;
-      color: var(--desc-color);
-      font-size: 11px;
-      line-height: 16px;
-      -webkit-box-orient: vertical;
-      -webkit-line-clamp: 2;
-    }
-
-    .mobile-material-action-card__arrow {
-      align-self: center;
-      color: color-mix(in srgb, var(--material-accent) 72%, var(--desc-color));
-      opacity: 0.7;
-    }
-
-    .mobile-material-action-list :deep(.mobile-material-action-card .btn-spinner) {
-      position: absolute;
-      z-index: 1;
-      left: 24px;
-      margin: 0;
-      color: var(--material-accent);
-      transform: translateX(-50%);
-    }
-
-    .mobile-material-action-list :deep(.mobile-material-action-card.loading) .mobile-material-action-card__icon {
-      opacity: 0;
-    }
-
-    .mobile-material-action-list :deep(.mobile-material-action-card:active) {
-      transform: scale(0.99);
-    }
-
-    @media (hover: hover) {
-      .mobile-context-toggle:hover {
-        border-color: var(--primary-color);
-        border-color: color-mix(in srgb, var(--primary-color) 48%, var(--card-border-color));
-        background: var(--card-background);
-        background: linear-gradient(
-          135deg,
-          color-mix(in srgb, var(--primary-color) 19%, var(--card-background)),
-          color-mix(in srgb, var(--primary-color) 9%, var(--card-background))
-        );
-      }
-
-      .mobile-material-action-list :deep(.mobile-material-action-card:hover) {
-        z-index: 1;
-        border-color: color-mix(in srgb, var(--material-accent) 42%, var(--surface-border-color));
-        box-shadow: 0 14px 28px -20px color-mix(in srgb, var(--material-accent) 55%, transparent);
-        transform: translateY(-1px);
-      }
-    }
-
     .text-input :deep(.b-textarea) {
       min-height: 38px;
       max-height: 82px;
@@ -1187,80 +725,9 @@
     }
   }
 
-  [data-theme='night'] .capability-settings-trigger.is-active,
-  [data-theme='night'] .mobile-context-toggle,
-  [data-theme='night'] .desktop-material-actions :deep(.b-popover-trigger > .b_btn),
-  [data-theme='night'] .desktop-material-actions :deep(.b-upload-trigger .b_btn) {
-    border-color: var(--focus-ring-color, var(--primary-color));
-    color: var(--focus-ring-color, var(--text-color));
-  }
 </style>
 
 <style>
-  .ai-capability-settings-popover {
-    width: min(292px, calc(100vw - 20px));
-    padding: 12px;
-  }
-
-  .capability-settings-panel {
-    display: grid;
-    gap: 11px;
-    color: var(--text-color);
-  }
-
-  .capability-settings-panel > header {
-    display: grid;
-    gap: 3px;
-  }
-
-  .capability-settings-panel > header strong {
-    font-size: 14px;
-    line-height: 20px;
-  }
-
-  .capability-settings-panel > header span,
-  .capability-settings-panel__boundary {
-    margin: 0;
-    color: var(--desc-color);
-    font-size: 11px;
-    line-height: 16px;
-  }
-
-  .capability-settings-field {
-    display: grid;
-    gap: 5px;
-  }
-
-  .capability-settings-field > span {
-    color: var(--desc-color);
-    font-size: 11px;
-    font-weight: 600;
-  }
-
-  .capability-settings-field > .b-select,
-  .capability-settings-field .select-trigger {
-    width: 100%;
-  }
-
-  .capability-settings-field .select-trigger {
-    min-height: 36px;
-    border-color: var(--surface-border-color);
-    background: var(--card-background);
-  }
-
-  .capability-settings-panel__boundary {
-    padding: 7px 9px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 8px;
-    background: var(--surface-panel-bg, var(--card-background));
-  }
-
-  html.light-note-mobile-rendering .ai-capability-settings-popover,
-  html.light-note-mobile-rendering .capability-settings-panel__boundary {
-    border-color: var(--card-border-color);
-    box-shadow: none;
-  }
-
   .ai-quota-popover {
     width: 250px;
     padding: 12px;
