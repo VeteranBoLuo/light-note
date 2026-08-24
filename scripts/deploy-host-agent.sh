@@ -2,8 +2,12 @@
 # Host Agent 部署：本地打包 → 远端快照 → 安装专用账户、Socket 激活的 root helper 与 Agent unit → 健康检查
 set -euo pipefail
 
+DEPLOY_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck source=scripts/lib/deploy-environment.sh
+source "$DEPLOY_SCRIPT_DIR/lib/deploy-environment.sh"
+
 HOST="${LIGHTNOTE_DEPLOY_HOST:?请设置 LIGHTNOTE_DEPLOY_HOST，例如 deploy-user@example.com}"
-KEY="${LIGHTNOTE_DEPLOY_SSH_KEY:?请设置 LIGHTNOTE_DEPLOY_SSH_KEY 为本机 SSH 私钥绝对路径}"
+KEY="$(resolve_deploy_ssh_key "${LIGHTNOTE_DEPLOY_SSH_KEY:?请设置 LIGHTNOTE_DEPLOY_SSH_KEY 为本机 SSH 私钥路径}")"
 [ -f "$KEY" ] || { echo "SSH 私钥不存在: $KEY" >&2; exit 1; }
 REMOTE="/opt/lightnote-host-agent"
 AGENT_USER="lightnote-agent"
