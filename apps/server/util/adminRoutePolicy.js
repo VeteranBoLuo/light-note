@@ -57,6 +57,7 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'bookmark', [
 
 declare(ADMIN_POLICIES.AI_USE, 'bookmark', [
   ['POST', '/bookmark/summarize'],
+  ['POST', '/bookmark/archive-summary'],
   ['POST', '/bookmark/ai/organize/quote'],
   ['POST', '/bookmark/ai/organize/run'],
 ]);
@@ -254,7 +255,10 @@ declare(ADMIN_POLICIES.READ, 'common', [
   ['GET', '/sitemap.xml'],
 ]);
 declare(ADMIN_POLICIES.READ, 'ai_skill', [['GET', '/ai/skills/config']]);
-declare(ADMIN_POLICIES.AI_USE, 'ai_skill', [['POST', '/ai/skills/execute']]);
+declare(ADMIN_POLICIES.AI_USE, 'ai_skill', [
+  ['POST', '/ai/skills/execute'],
+  ['POST', '/ai/skills/stream'],
+]);
 // 安装包永久地址：只做一次 302 到静态文件，不读用户数据，代管上下文下同样放行
 declare(ADMIN_POLICIES.READ, 'app', [['GET', '/app/android/latest.apk']]);
 declare(ADMIN_POLICIES.READ, 'update_log', [
@@ -402,16 +406,7 @@ declare(ADMIN_POLICIES.AI_USE, 'agent', [
 ]);
 
 declare(ADMIN_POLICIES.READ, 'agent', [
-  ['POST', '/chat/conversations/list'],
-  ['POST', '/chat/conversations/get'],
-  ['POST', '/chat/conversations/export'],
   ['POST', '/chat/aiQuota'],
-]);
-
-declare(ADMIN_POLICIES.AI_STATE_WRITE, 'agent', [
-  ['POST', '/chat/conversations/delete'],
-  ['POST', '/chat/conversations/clear'],
-  ['POST', '/chat/conversations/clear-all-data'],
 ]);
 
 declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
@@ -452,6 +447,7 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/common/getAiFeedback'],
   ['POST', '/common/updateAdminAiFeedbackTriage'],
   ['POST', '/common/getDeepSeekBalance'],
+  ['POST', '/common/getAdminOverviewSnapshot'],
   ['POST', '/common/getAdminOverview'],
   ['POST', '/common/getAdminOverviewRecent'],
   ['POST', '/todo/v2/admin/diagnostics'],

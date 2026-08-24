@@ -103,9 +103,12 @@ export const detectRequestBehavior = (context) => {
 export const detectResponseBehavior = (context, statusCode, responsePayload = '') => {
   const ip = context.sourceIp || 'unknown';
   const result = [];
-  if (Number(statusCode) === 404) {
+  // 已匹配业务路由的 404 是资源缺失、过期票据或派生缩略图未生成等业务事实，不能拿来
+  // 推高扫描器画像。未知路径只在滑窗首次越线时产一条证据，避免第 21、22、23…次
+  // 连续落事件和重复累积风险；敏感路径探测仍由独立签名逐次识别。
+  if (Number(statusCode) === 404 && context.routeMatched !== true) {
     const count404 = addWindowEvent(`404:${ip}`, { path: context.path }, 5 * 60 * 1000);
-    if (count404 > SECURITY_CONFIG.scanner404FiveMinutes) {
+    if (count404 === SECURITY_CONFIG.scanner404FiveMinutes + 1) {
       result.push(
         evidence({
           code: 'SCANNER_404_PATTERN',

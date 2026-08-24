@@ -18,8 +18,7 @@
         <span class="bookmark-item-copy">
           <span class="bookmark-item-name">{{ data.name }}</span>
           <span v-if="data.hasSnapshot || data.hasSummary" class="bm-badges">
-            <span v-if="data.hasSnapshot" class="bm-badge">{{ $t('bookmarkMg.badgeArchived') }}</span>
-            <span v-if="data.hasSummary" class="bm-badge">{{ $t('bookmarkMg.badgeSummary') }}</span>
+            <span class="bm-badge">{{ $t('bookmarkMg.badgeArchived') }}</span>
           </span>
         </span>
       </span>
@@ -38,10 +37,6 @@
     </template>
   </PhoneListMg>
   <MobileStickyActionBar v-if="batchMode">
-    <BButton :disabled="!selectedIds.length" @click="openSelectedBookmarksInAi">
-      <SvgIcon :src="icon.settings.ai" size="18" aria-hidden="true" />
-      {{ $t('bookmarkMg.aiUseSelected') }}
-    </BButton>
     <BButton type="danger" :disabled="!selectedIds.length" :loading="mutating" @click="handleBatchDelete">
       <SvgIcon :src="icon.table_delete" size="18" aria-hidden="true" />
       {{ $t('common.delete') }}
@@ -128,11 +123,8 @@
     if (!item) return [];
     return [
       { key: 'edit', label: t('common.edit'), icon: icon.table_edit },
-      ...(item.hasSnapshot
+      ...(item.hasSnapshot || item.hasSummary
         ? [{ key: 'snapshot', label: t('bookmarkMg.badgeArchived'), icon: icon.contextMenu.archive }]
-        : []),
-      ...(item.hasSummary
-        ? [{ key: 'summary', label: t('bookmarkMg.badgeSummary'), icon: icon.common.magicWand }]
         : []),
       { key: 'ai', label: t('bookmarkMg.aiUseBookmark'), icon: icon.settings.ai },
       {
@@ -194,15 +186,8 @@
   function openBookmarksInAi(items: BookmarkInterface[]) {
     const available = items.filter((item) => String(item?.id || '').trim());
     if (!available.length) return;
-    if (available.length > 10) message.info(t('bookmarkMg.aiMaterialLimit', { count: 10 }));
-    bookmarkAiItems.value = available.slice(0, 10);
+    bookmarkAiItems.value = available.slice(0, 1);
     bookmarkAiVisible.value = true;
-  }
-
-  function openSelectedBookmarksInAi() {
-    openBookmarksInAi(
-      tableData.value.filter((item) => selectedIds.value.includes(String(item.id))) as BookmarkInterface[],
-    );
   }
 
   function handleItemClick(item: Record<string, any>) {
@@ -265,7 +250,7 @@
     const item = activeBookmark.value;
     if (!item) return;
     if (action.key === 'edit') edit(String(item.id));
-    else if (action.key === 'snapshot' || action.key === 'summary') openSnap(String(item.id));
+    else if (action.key === 'snapshot') openSnap(String(item.id));
     else if (action.key === 'ai') openBookmarksInAi([item]);
     else if (action.key === 'delete') deleteBookmark(item);
   }

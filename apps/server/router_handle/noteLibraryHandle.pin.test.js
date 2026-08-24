@@ -13,6 +13,7 @@ const ensureNotVisitor = vi.fn(() => true);
 const attachPendingStatus = vi.fn();
 const removeInboxRelations = vi.fn();
 const invalidatePersonalKnowledgeCache = vi.fn();
+const createNoteMock = vi.hoisted(() => vi.fn());
 const { buildNoteCardPreview, extractNoteCardPreviewImage, noteImageThumbnailPathname } = vi.hoisted(() => ({
   buildNoteCardPreview: vi.fn((content) => ({
     summary: String(content || '').includes('note-cover.png') ? '图片上方\n图片下方' : '纯文本摘要',
@@ -56,7 +57,7 @@ vi.mock('../util/resourceInbox.js', () => ({
   attachPendingStatus,
   removeInboxRelations,
 }));
-vi.mock('../util/services/noteService.js', () => ({ createNote: vi.fn() }));
+vi.mock('../util/services/noteService.js', () => ({ createNote: createNoteMock }));
 vi.mock('../util/services/tagService.js', () => ({ createTag: vi.fn() }));
 vi.mock('../util/noteImages.js', () => ({
   cleanupOrphanNoteImages: vi.fn(),
@@ -81,6 +82,7 @@ vi.mock('../util/noteImageUpload.js', () => ({ validateNoteImageUpload: vi.fn() 
 vi.mock('../util/personalKnowledgeSearch.js', () => ({ invalidatePersonalKnowledgeCache }));
 
 const {
+  addNote,
   deleteNoteSubtree,
   delNote,
   getNoteDetail,
@@ -110,6 +112,40 @@ const lastSent = (res) => res.send.mock.calls.at(-1)?.[0];
 
 afterEach(() => {
   vi.unstubAllEnvs();
+});
+
+describe('新建笔记 handler', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    ensureNotVisitor.mockReturnValue(true);
+  });
+
+  it('将客户端幂等键从笔记业务字段中分离并交给权威创建服务', async () => {
+    createNoteMock.mockResolvedValue({ id: 'created-note', parentId: null, revision: 1, addedToInbox: false });
+    const res = mockRes();
+
+    await addNote(
+      {
+        user: { id: 'u1', role: 'user' },
+        body: {
+          title: 'AI 总结',
+          content: '# 正文',
+          type: 'markdown',
+          idempotencyKey: '  ai-skill-note:request-1  ',
+        },
+      },
+      res,
+    );
+
+    expect(createNoteMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'u1',
+        idempotencyKey: 'ai-skill-note:request-1',
+        note: { title: 'AI 总结', content: '# 正文', type: 'markdown' },
+      }),
+    );
+    expect(lastSent(res)).toMatchObject({ status: 200, data: { id: 'created-note', revision: 1 } });
+  });
 });
 
 describe('笔记置顶 handler', () => {
@@ -153,7 +189,7 @@ describe('笔记置顶 handler', () => {
     await uploadDrawingThumbnail(
       {
         user: { id: 'u1' },
-        body: { id: 'drawing-1', revision: 4, rendererVersion: 2, thumbnail: 'data:image/webp;base64,AAAA' },
+        body: { id: 'drawing-1', revision: 4, rendererVersion: 3, thumbnail: 'data:image/webp;base64,AAAA' },
       },
       res,
     );
@@ -162,18 +198,37 @@ describe('笔记置顶 handler', () => {
       userId: 'u1',
       noteId: 'drawing-1',
       revision: 4,
-      rendererVersion: 2,
+      rendererVersion: 3,
       image: Buffer.from('webp'),
     });
     expect(drawingThumbnailMocks.cleanup).toHaveBeenCalledWith({
       userId: 'u1',
       noteId: 'drawing-1',
       keepRevision: 4,
-      keepRendererVersion: 2,
+      keepRendererVersion: 3,
     });
     expect(lastSent(res)).toMatchObject({
       status: 200,
-      data: { id: 'drawing-1', revision: 4, rendererVersion: 2 },
+      data: { id: 'drawing-1', revision: 4, rendererVersion: 3 },
+    });
+  });
+
+  it('拒绝旧渲染器上传且不会用新算法污染旧缓存键', async () => {
+    const res = mockRes();
+
+    await uploadDrawingThumbnail(
+      {
+        user: { id: 'u1' },
+        body: { id: 'drawing-1', revision: 4, rendererVersion: 2, thumbnail: 'data:image/webp;base64,AAAA' },
+      },
+      res,
+    );
+
+    expect(poolQuery).not.toHaveBeenCalled();
+    expect(drawingThumbnailMocks.save).not.toHaveBeenCalled();
+    expect(lastSent(res)).toMatchObject({
+      status: 409,
+      data: { code: 'DRAWING_THUMBNAIL_RENDERER_STALE', rendererVersion: 3 },
     });
   });
 
@@ -182,7 +237,10 @@ describe('笔记置顶 handler', () => {
     const res = mockRes();
 
     await uploadDrawingThumbnail(
-      { user: { id: 'u1' }, body: { id: 'drawing-1', revision: 4, thumbnail: 'data:image/webp;base64,AAAA' } },
+      {
+        user: { id: 'u1' },
+        body: { id: 'drawing-1', revision: 4, rendererVersion: 3, thumbnail: 'data:image/webp;base64,AAAA' },
+      },
       res,
     );
 
@@ -190,14 +248,37 @@ describe('笔记置顶 handler', () => {
     expect(lastSent(res)).toMatchObject({ status: 409, data: { code: 'DRAWING_THUMBNAIL_REVISION_STALE' } });
   });
 
-  it('缺图响应禁止缓存，详情页后续补齐同一地址时可以立即生效', async () => {
+  it('旧渲染器地址只重定向到当前缓存键，不再读取或生成旧位图', async () => {
+    poolQuery.mockResolvedValueOnce([[{ revision: 4 }]]);
+    const res = mockFileRes();
+
+    await getDrawingThumbnail({ user: { id: 'u1' }, params: { noteId: 'drawing-1', fileName: 'v2-4.webp' } }, res);
+
+    expect(res.set).toHaveBeenCalledWith('Cache-Control', 'private, no-store');
+    expect(res.set).toHaveBeenCalledWith('Location', '/api/note/drawing-thumbnail/drawing-1/v3-4.webp');
+    expect(res.status).toHaveBeenCalledWith(307);
+    expect(res.end).toHaveBeenCalledTimes(1);
+    expect(drawingThumbnailMocks.existing).not.toHaveBeenCalled();
+  });
+
+  it('非法缩略图地址继续无缓存返回 404', async () => {
+    const res = mockFileRes();
+
+    await getDrawingThumbnail({ user: { id: 'u1' }, params: { noteId: 'drawing-1', fileName: 'vbad-4.webp' } }, res);
+
+    expect(res.set).toHaveBeenCalledWith('Cache-Control', 'private, no-store');
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.end).toHaveBeenCalledTimes(1);
+    expect(poolQuery).not.toHaveBeenCalled();
+  });
+
+  it('更高版本客户端不会被旧服务端静默降级', async () => {
     const res = mockFileRes();
 
     await getDrawingThumbnail({ user: { id: 'u1' }, params: { noteId: 'drawing-1', fileName: 'v999-4.webp' } }, res);
 
     expect(res.set).toHaveBeenCalledWith('Cache-Control', 'private, no-store');
     expect(res.status).toHaveBeenCalledWith(404);
-    expect(res.end).toHaveBeenCalledTimes(1);
     expect(poolQuery).not.toHaveBeenCalled();
   });
 

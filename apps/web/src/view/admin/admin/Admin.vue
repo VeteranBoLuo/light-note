@@ -66,7 +66,7 @@
   import { computed, onMounted, ref, watch } from 'vue';
   import { useRoute } from 'vue-router';
   import router from '@/router';
-  import { apiBasePost } from '@/http/request.ts';
+  import { getAdminOverviewSnapshot } from '@/api/adminOverview.ts';
   import { getCommunityChatAdminReports } from '@/api/communityChatApi.ts';
   import { useI18n } from 'vue-i18n';
   import { adminNavTarget, buildAdminNav, resolveActiveNavId, type AdminNavItem } from '@/view/admin/admin/adminNav.ts';
@@ -116,7 +116,7 @@
    */
   async function loadPending() {
     const [overviewResult, moderationResult] = await Promise.allSettled([
-      apiBasePost('/api/common/getAdminOverview', { hideInternal: true }),
+      getAdminOverviewSnapshot(true),
       getCommunityChatAdminReports({ status: 'pending', page: 1, pageSize: 1 }),
     ]);
     if (overviewResult.status === 'fulfilled') {

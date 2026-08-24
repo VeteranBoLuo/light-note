@@ -12,10 +12,10 @@
 import { load } from 'cheerio';
 import { marked } from 'marked';
 import { RESOURCE_REF_TYPES, buildResourceHref, normalizeNoteType, parseResourceHref } from '@lightnote/shared';
+import { NOTE_CONTENT_MAX_LENGTH } from '../contentLimits.js';
 
 // 与笔记正文写入上限一致;超限抛错交调用方在事务内回滚,禁止截断后再同步
 // (否则上限之后的真实链接会被解析漏掉,sync 会把它误判为"已从正文删除"而删除真实关系)。
-const MAX_CONTENT_LENGTH = 1_000_000;
 const TARGET_TYPES = new Set(RESOURCE_REF_TYPES);
 // 阅读态一次只需要解析当前笔记实际出现的去重集合。上限既防止请求被用作资源探测，
 // 也避免一篇异常正文触发过大的 IN 查询；前端会先去重后再调用。
@@ -112,8 +112,8 @@ export function extractOwnedResourceRefs({ content, type } = {}) {
   // 手绘正文是受控 scene JSON，不包含可点击的站内引用。显式短路避免把 JSON 交给 HTML 解析器，
   // 也让画布保存成本与笔画数量线性相关，而不是额外构建一棵无意义的 DOM。
   if (normalizeNoteType(type) === 'drawing') return [];
-  if (text.length > MAX_CONTENT_LENGTH) {
-    const err = new Error(`CONTENT_TOO_LONG: 笔记正文超过 ${MAX_CONTENT_LENGTH} 字符,拒绝解析引用`);
+  if (text.length > NOTE_CONTENT_MAX_LENGTH) {
+    const err = new Error(`CONTENT_TOO_LONG: 笔记正文超过 ${NOTE_CONTENT_MAX_LENGTH} 字符,拒绝解析引用`);
     err.code = 'CONTENT_TOO_LONG';
     err.status = 400;
     throw err;

@@ -137,6 +137,7 @@
         :title="t('help.aiTitle')"
         :description="t('help.aiDescription')"
         skill-id="help.answer"
+        :show-prompt="true"
         surface="help.center"
         presentation="sidebar"
         :prompt-rows="3"

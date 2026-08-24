@@ -6,6 +6,7 @@
     :show-footer="false"
     :mask-closable="!loading"
     :esc-closable="!loading"
+    :close-disabled="loading"
     fullscreen-mobile
   >
     <div class="admin-risk-action">
@@ -63,11 +64,14 @@
       impact: string;
       confirmPhrase?: string;
       confirmLabel?: string;
+      /** 可选的业务默认原因；弹窗每次打开时重新预填，用户仍可编辑。 */
+      defaultReason?: string;
       loading?: boolean;
     }>(),
     {
       confirmPhrase: '',
       confirmLabel: '',
+      defaultReason: '',
       loading: false,
     },
   );
@@ -87,12 +91,14 @@
       (!props.confirmPhrase || confirmText.value.trim() === props.confirmPhrase),
   );
 
-  watch(visible, (open) => {
-    if (!open) {
-      reason.value = '';
+  watch(
+    visible,
+    (open) => {
+      reason.value = open ? props.defaultReason.trim().slice(0, 500) : '';
       confirmText.value = '';
-    }
-  });
+    },
+    { immediate: true },
+  );
 
   function submit() {
     if (!canSubmit.value) return;

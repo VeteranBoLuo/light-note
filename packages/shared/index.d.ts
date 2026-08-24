@@ -64,6 +64,9 @@ export declare const FILE_PREVIEW_STRATEGY: {
 
 export declare const FILE_PREVIEW_FORMATS: readonly FilePreviewFormatDefinition[];
 export declare const FILE_PREVIEW_EXTRA_TEXT_EXTENSIONS: readonly string[];
+/** AI 文件解析能力的唯一扩展名清单。 */
+export declare const AI_DOCUMENT_SUPPORTED_EXTENSIONS: readonly string[];
+export declare function isAiDocumentFileNameSupported(fileName?: unknown): boolean;
 export declare function normalizeFilePreviewMimeType(value?: unknown): string;
 export declare function getFilePreviewExtension(fileName?: unknown, explicitExtension?: unknown): string;
 export declare function resolveFilePreviewFormat(input?: {
@@ -105,6 +108,8 @@ export declare const BOOKMARK_URL_CODE: {
   readonly URL_TOO_LONG: 'URL_TOO_LONG';
   readonly CANDIDATE_CONFIRMATION_REQUIRED: 'CANDIDATE_CONFIRMATION_REQUIRED';
 };
+
+export declare const MAX_BOOKMARK_INPUT_LENGTH: 4000;
 
 export declare function resolveBookmarkUrlInput(
   value: unknown,

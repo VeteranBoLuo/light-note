@@ -155,6 +155,7 @@
       :title="t('securityV2.review.batchConfirmTitle')"
       :impact="batchImpact"
       :confirm-label="dispositionLabel(pendingBatchDisposition)"
+      :default-reason="batchDefaultReason"
       :loading="Boolean(bulkAction)"
       @confirm="executeBatchDisposition"
     />
@@ -175,6 +176,7 @@
   import { normalizeAdminActionCenterReturnTo } from '@/utils/adminNavigation.ts';
   import EventDetailDrawer from './EventDetailDrawer.vue';
   import { securityCenterMessages } from './securityCenterI18n';
+  import { securityReviewDefaultReasonKey } from './securityShared';
 
   const emit = defineEmits<{ pendingCount: [count: number] }>();
   const { t } = useI18n({ useScope: 'local', messages: securityCenterMessages });
@@ -235,6 +237,10 @@
       disposition: dispositionLabel(pendingBatchDisposition.value),
     }),
   );
+  const batchDefaultReason = computed(() => {
+    const reasonKey = securityReviewDefaultReasonKey(pendingBatchDisposition.value);
+    return reasonKey ? t(reasonKey) : '';
+  });
 
   function countFor(value: string) {
     return number(counts.value.find((item) => item.disposition === value)?.total);

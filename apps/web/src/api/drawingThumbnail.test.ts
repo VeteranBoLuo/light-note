@@ -17,7 +17,7 @@ describe('drawingThumbnail api', () => {
   });
 
   it('缩略图地址包含正文 revision，卡片可使用长期不可变缓存', () => {
-    expect(drawingThumbnailUrl('drawing-1', 7)).toBe('/api/note/drawing-thumbnail/drawing-1/v2-7.webp');
+    expect(drawingThumbnailUrl('drawing-1', 7)).toBe('/api/note/drawing-thumbnail/drawing-1/v3-7.webp');
     expect(drawingThumbnailUrl('', 7)).toBe('');
   });
 
@@ -28,7 +28,7 @@ describe('drawingThumbnail api', () => {
     await expect(uploadDrawingThumbnail('drawing-1', 7, '{"v":2}')).resolves.toBe(true);
     expect(mocks.apiBasePost).toHaveBeenCalledWith(
       '/api/note/uploadDrawingThumbnail',
-      { id: 'drawing-1', revision: 7, rendererVersion: 2, thumbnail: 'data:image/webp;base64,AAAA' },
+      { id: 'drawing-1', revision: 7, rendererVersion: 3, thumbnail: 'data:image/webp;base64,AAAA' },
       { silent: true, feedback: false },
     );
   });
@@ -39,7 +39,7 @@ describe('drawingThumbnail api', () => {
     mocks.apiBasePost.mockResolvedValue({ status: 200 });
 
     await expect(ensureDrawingThumbnail('legacy-drawing', 3, '{"v":3}')).resolves.toBe(true);
-    expect(mocks.apiBaseHead).toHaveBeenCalledWith('/api/note/drawing-thumbnail/legacy-drawing/v2-3.webp', undefined, {
+    expect(mocks.apiBaseHead).toHaveBeenCalledWith('/api/note/drawing-thumbnail/legacy-drawing/v3-3.webp', undefined, {
       silent: true,
       feedback: false,
     });

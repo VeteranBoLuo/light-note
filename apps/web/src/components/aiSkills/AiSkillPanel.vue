@@ -15,15 +15,20 @@
     </div>
 
     <div v-if="skillAvailable && actions.length" class="ai-skill-panel__actions">
-      <BButton
+      <BTooltip
         v-for="action in actions"
         :key="action.id"
-        size="small"
-        :disabled="interactionDisabled"
-        @click="runAction(action)"
+        :title="action.reason || ''"
+        :disabled="!action.reason"
       >
-        {{ action.label }}
-      </BButton>
+        <BButton
+          size="small"
+          :disabled="interactionDisabled || action.disabled"
+          @click="runAction(action)"
+        >
+          {{ action.label }}
+        </BButton>
+      </BTooltip>
     </div>
 
     <div v-if="skillAvailable && showPrompt" class="ai-skill-panel__composer">
@@ -96,6 +101,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { formatAiSkillCoverageWarnings } from '@/utils/aiSkillPresentation';
@@ -123,6 +129,7 @@
       emptyText?: string;
       initialInput?: Record<string, unknown>;
       initialPrompt?: string;
+      autoRunActionId?: string;
       iconSrc?: string;
     }>(),
     {
@@ -130,7 +137,7 @@
       resourceRefs: () => [],
       scopeLabel: '',
       actions: () => [],
-      showPrompt: true,
+      showPrompt: false,
       promptKey: 'question',
       placeholder: '',
       submitLabel: '',
@@ -140,6 +147,7 @@
       emptyText: '',
       initialInput: () => ({}),
       initialPrompt: '',
+      autoRunActionId: '',
       iconSrc: '',
     },
   );
@@ -171,6 +179,23 @@
   const scopeKey = computed(() =>
     props.resourceRefs.map((item) => `${item.type}:${item.id}:${item.version || ''}`).join('|'),
   );
+  const initialInputKey = computed(() => JSON.stringify(props.initialInput));
+  const autoRunAction = computed(() =>
+    props.autoRunActionId ? props.actions.find((action) => action.id === props.autoRunActionId) || null : null,
+  );
+  const autoRunKey = computed(() => {
+    const action = autoRunAction.value;
+    if (!action) return '';
+    return JSON.stringify({
+      actionId: action.id,
+      skillId: action.skillId || props.skillId,
+      scope: scopeKey.value,
+      initialInput: props.initialInput,
+      actionInput: action.input || {},
+      promptKey: action.promptKey || '',
+      promptValue: action.promptValue || '',
+    });
+  });
   const skillAvailable = computed(() => feature.available.value);
   const interactionDisabled = computed(() => loading.value || feature.loading.value || !skillAvailable.value);
   const telemetryDimensions = computed(() => {
@@ -248,9 +273,10 @@
   }
 
   function runAction(action: AiSkillPanelAction) {
+    if (action.disabled || loading.value) return null;
     const input: Record<string, unknown> = { ...props.initialInput, ...(action.input || {}) };
     if (action.promptKey) input[action.promptKey] = action.promptValue ?? prompt.value.trim();
-    void execute(action.skillId || props.skillId, input);
+    return execute(action.skillId || props.skillId, input);
   }
 
   function runPrompt() {
@@ -264,12 +290,25 @@
     void recordAiProductEvent('ai_skill_applied', { ...telemetryDimensions.value, outcome: 'success' });
   }
 
-  watch([() => props.skillId, scopeKey, () => props.initialPrompt], () => {
+  watch([() => props.skillId, scopeKey, initialInputKey, () => props.initialPrompt], () => {
     cancel();
     response.value = null;
     error.value = null;
     prompt.value = props.initialPrompt;
   });
+
+  let handledAutoRunKey = '';
+  watch(
+    [() => feature.loading.value, skillAvailable, autoRunKey],
+    ([featureLoading, available, key]) => {
+      if (featureLoading || !available || !key || key === handledAutoRunKey) return;
+      const action = autoRunAction.value;
+      if (!action) return;
+      handledAutoRunKey = key;
+      void runAction(action);
+    },
+    { immediate: true },
+  );
 
   onMounted(() => void recordAiProductEvent('ai_skill_opened', telemetryDimensions.value));
   onBeforeUnmount(cancel);
@@ -291,6 +330,7 @@
 
   .ai-skill-panel__header {
     display: flex;
+    flex: 0 0 auto;
     align-items: flex-start;
     gap: 10px;
   }
@@ -368,6 +408,8 @@
 
   .ai-skill-panel__scope {
     max-width: 100%;
+    min-height: 27px;
+    flex: 0 0 auto;
     align-self: flex-start;
     padding: 4px 9px;
     box-sizing: border-box;
@@ -388,8 +430,13 @@
     gap: 7px;
   }
 
+  .ai-skill-panel__actions {
+    flex: 0 0 auto;
+  }
+
   .ai-skill-panel__composer {
     display: grid;
+    flex: 0 0 auto;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: end;
     gap: 8px;

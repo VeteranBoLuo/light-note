@@ -52,7 +52,7 @@
             </div>
           </div>
 
-          <AiQuotaSummary class="profile-card__ai-quota" density="comfortable" @open-details="goGrowth" />
+          <AiQuotaSummary class="profile-card__ai-quota" density="comfortable" @open-details="goAiQuotaDetails" />
 
           <BButton
             class="profile-card__growth"
@@ -299,6 +299,10 @@
 
   function goGrowth() {
     goToProfileModule('/growth');
+  }
+
+  function goAiQuotaDetails() {
+    router.push({ path: '/settings', query: { section: 'ai' } });
   }
 
   function formatCompactNumber(value: number | string | null | undefined) {

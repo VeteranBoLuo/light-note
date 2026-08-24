@@ -249,7 +249,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import icon from '@/config/icon';
-  import { createAiSkillRequest, executeAiSkill } from '@/api/aiSkillApi';
+  import { createAiSkillRequest, executeAiSkillStream } from '@/api/aiSkillApi';
   import { recordAiSkillApplied } from '@/api/aiTelemetry';
   import { noteDisplayText } from '@/utils/common.ts';
   import DOMPurify from 'dompurify';
@@ -529,7 +529,10 @@
       const requirement = mode === 'followup' ? followupReq : prompt.value.trim();
       const operation = mode === 'followup' ? 'rewrite' : skillOperation(action);
       const targetLanguage = operation === 'translate' ? (/\p{Script=Han}/u.test(sourceText) ? '英语' : '中文') : '';
-      const response = await executeAiSkill(
+      const marker = expectedFormat === 'title' ? '【标题】\n' : '【正文】\n';
+      outputFull.value = marker;
+      let receivedContent = '';
+      const response = await executeAiSkillStream(
         createAiSkillRequest({
           skillId: 'note.transform_text',
           input: {
@@ -540,7 +543,24 @@
           },
           surface: 'note.detail',
         }),
-        { signal: requestController.signal },
+        {
+          signal: requestController.signal,
+          onDelta(content) {
+            if (!content || requestController.signal.aborted) return;
+            if (!receivedContent) {
+              generationPhase.value = 'streaming';
+              clearGenerationTimer();
+            }
+            receivedContent += content;
+            outputFull.value = `${marker}${receivedContent}`;
+          },
+          onReset() {
+            receivedContent = '';
+            outputFull.value = marker;
+            generationPhase.value = 'waiting';
+            scheduleSlowGenerationHint();
+          },
+        },
       );
       if (requestController.signal.aborted) return;
       if (response.result?.kind !== 'grounded_markdown') throw new Error('AI Skill 返回了不兼容的结果');
@@ -548,7 +568,9 @@
       if (!content) throw new Error('AI Skill 没有返回可用内容');
       generationPhase.value = 'streaming';
       clearGenerationTimer();
-      outputFull.value = expectedFormat === 'title' ? `【标题】\n${content}` : `【正文】\n${content}`;
+      // 完成事件携带经过服务端最终校验的规范结果。以它覆盖增量缓冲，防止代理层
+      // 合并 chunk 时出现极小差异，同时保留首字到达即展示的真实流式体验。
+      outputFull.value = `${marker}${content}`;
       requestCompleted.value = true;
     } catch (error: any) {
       console.error('AI 回复生成失败:', error);

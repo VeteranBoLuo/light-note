@@ -14,7 +14,12 @@ import {
 import { promises as fs } from 'fs';
 import { ensureNotVisitor, ensureUserOrAdminPolicy } from '../util/auth.js';
 import { grantExp } from '../util/growth.js';
-import { archiveBookmark, getBookmarkSnapshot, summarizeBookmark } from '../util/snapshot.js';
+import {
+  archiveAndSummarizeBookmark,
+  archiveBookmark,
+  getBookmarkSnapshot,
+  summarizeBookmark,
+} from '../util/snapshot.js';
 import {
   checkBookmarkHealth,
   getHealthSummary,
@@ -597,6 +602,47 @@ export const doSummarizeBookmark = async (req, res) => {
     return res
       .status(failure.status)
       .send(resultData({ code: failure.code }, failure.status, failure.message));
+  }
+};
+
+// POST /bookmark/archive-summary —— 显式生成同一版本的网页正文存档与 AI 摘要
+export const doArchiveAndSummarizeBookmark = async (req, res) => {
+  if (!ensureUserOrAdminPolicy(req, res, ['ai_use'])) return;
+  try {
+    const { id } = req.body || {};
+    if (!id) return res.send(resultData(null, 400, '缺少书签 id'));
+    const persist = req.adminContext?.mode !== 'readonly';
+    const requestId = crypto.randomUUID();
+    const result = await runAiExecution(
+      {
+        requestId,
+        request: req,
+        identity: req.billingUser || req.user,
+        subjectIdentity: req.resourceUser || req.user,
+        billingPolicy: 'user',
+        taskType: 'bookmark_archive_summary',
+        skillId: 'bookmark.summarize_page',
+        skillVersion: 1,
+        surface: 'bookmark_detail',
+      },
+      () =>
+        archiveAndSummarizeBookmark(req.user.id, id, {
+          persist,
+          trace: {
+            traceId: requestId,
+            taskType: 'bookmark_archive_summary',
+            stage: 'bookmark_archive_summary',
+          },
+        }),
+    );
+    if (result?.reason === 'quota_exceeded') {
+      return res.status(429).send(resultData(result, 429, result.msg));
+    }
+    return res.send(resultData(result));
+  } catch (error) {
+    const failure = resolvePublicAiExecutionError(error, '网页存档暂时无法生成，请稍后重试');
+    if (failure.status >= 500) console.error('[bookmark] archive summary failed code=%s', failure.code);
+    return res.status(failure.status).send(resultData({ code: failure.code }, failure.status, failure.message));
   }
 };
 

@@ -92,12 +92,8 @@
 
 ---
 
-**🤖 AI アシスタント**  
-対話型 AI を内蔵。ツールを呼び出してブックマーク・ノート・タスク・成長データを照会でき、Web 検索・深い思考・ストリーミング応答に対応。
-
-<p align="center">
-  <img src="apps/web/public/screenshots/ai-chat.png" alt="AI アシスタント" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
-</p>
+**🤖 モジュール AI**
+ノート・ブックマーク・ファイル・タスク・リソースセンター・ヘルプセンター内で、明示的に選択したリソースを要約・生成・分解・整理します。
 
 ---
 

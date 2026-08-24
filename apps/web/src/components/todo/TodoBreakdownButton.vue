@@ -12,7 +12,7 @@
     :resource-refs="resourceRefs"
     :scope-label="scopeLabel"
     :actions="actions"
-    :placeholder="t('aiSkills.todo.breakdownPlaceholder')"
+    :show-prompt="false"
     @update:visible="visible = $event"
     @result-action="applyResult"
   />
@@ -46,9 +46,14 @@
   const scopeLabel = computed(() =>
     props.todoId ? t('aiSkills.todo.breakdownExistingScope') : t('aiSkills.todo.breakdownDraftScope'),
   );
-  const currentInstruction = computed(() => {
+  function currentInstruction(detailLevel: 'concise' | 'detailed') {
     const blocks = [
       t('aiSkills.todo.breakdownDefaultInstruction'),
+      t(
+        detailLevel === 'concise'
+          ? 'aiSkills.todo.breakdownConciseInstruction'
+          : 'aiSkills.todo.breakdownDetailedInstruction',
+      ),
       props.title.trim() ? `${t('aiSkills.todo.currentTitle')}：${props.title.trim()}` : '',
       props.description.trim() ? `${t('aiSkills.todo.currentDescription')}：${props.description.trim()}` : '',
       props.checklist.some((item) => item.text.trim())
@@ -59,14 +64,19 @@
         : '',
     ].filter(Boolean);
     return blocks.join('\n').slice(0, 1000);
-  });
+  }
   const actions = computed(() =>
     props.title.trim() || props.description.trim() || props.checklist.some((item) => item.text.trim())
       ? [
           {
-            id: 'breakdown-current',
-            label: t('aiSkills.todo.breakdownCurrent'),
-            input: { instruction: currentInstruction.value },
+            id: 'breakdown-concise',
+            label: t('aiSkills.todo.breakdownConcise'),
+            input: { instruction: currentInstruction('concise'), detailLevel: 'concise' },
+          },
+          {
+            id: 'breakdown-detailed',
+            label: t('aiSkills.todo.breakdownDetailed'),
+            input: { instruction: currentInstruction('detailed'), detailLevel: 'detailed' },
           },
         ]
       : [],

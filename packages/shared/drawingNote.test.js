@@ -14,7 +14,7 @@ import {
 
 describe("drawingNote scene protocol", () => {
   it("缩略图渲染器版本与正文 scene 版本独立演进", () => {
-    expect(DRAWING_THUMBNAIL_RENDERER_VERSION).toBe(2);
+    expect(DRAWING_THUMBNAIL_RENDERER_VERSION).toBe(3);
     expect(DRAWING_THUMBNAIL_RENDERER_VERSION).not.toBe(DRAWING_SCENE_VERSION);
   });
 

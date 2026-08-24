@@ -96,7 +96,7 @@ export const SIGNATURE_RULES = [
     severity: 'critical',
     baseScore: 88,
     confidence: 90,
-    regex: /(?:;|\|\||&&|\$\(|`)\s*(?:rm|cat|curl|wget|bash|sh|nc|python|perl|ls|id|whoami|echo|env|hostname|ifconfig|netstat|ps|kill|chmod|chown|sudo|passwd|base64|awk|sed|grep|find|dd|mkfs)\b|\b(?:rm\s+-rf|wget\s+https?:|curl\s+https?:|spawn\(|exec\()\b/i,
+    regex: /(?:;|\|\||&&|\$\(|`)\s*(?:rm|cat|curl|wget|bash|sh|nc|python|perl|ls|id|whoami|echo|env|hostname|ifconfig|netstat|ps|kill|chmod|chown|sudo|passwd|base64|awk|sed|grep|find|dd|mkfs)(?=\s|$|[;&|<>()$])|\b(?:rm\s+-rf|wget\s+https?:|curl\s+https?:|spawn\(|exec\()\b/i,
     includedContexts: ['numeric', 'identifier', 'filename', 'unknown'],
   },
   {

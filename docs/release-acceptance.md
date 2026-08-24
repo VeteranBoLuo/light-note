@@ -71,36 +71,17 @@ pnpm --filter server check:schema
 
 任何断言输出都表示基线表、关键列或索引尚未就绪；应先应用待执行 migration 并重新检查，禁止让依赖新结构的应用进程先启动。
 
-涉及 Agent 五实体持久层时，发布顺序固定为：先应用 `20260821_agent_runtime_state.sql`，再运行 `pnpm --filter server check:schema` 验证 `ConversationState / Run / SourceSet / ResultSet / ArtifactVersion` 的表、列和索引；随后部署代码但保持 `AI_AGENT_STATE_PERSISTENCE_MODE=disabled`，确认基础链路稳定后只对 Root/白名单开启 `shadow`，最后才进入 `enforce`。`AI_AGENT_RUNTIME_MODE` 与持久层开关彼此独立，启用 Runtime V3 不能被当作 Schema 已存在的证明。shadow 镜像失败必须 fail-open，但需记录低基数错误；enforce 的 revision 冲突或权威恢复失败必须 fail-closed。回退 persistence 只切回 `disabled`，不得删除五实体表或清空已经写入的版本链。
-
-涉及 Agent 运行时、语义能力目录、工具参数、确认协议或笔记生成链时，先以单元测试、Handler 集成测试、dry-run 和合成夹具作为开发主门禁；默认不得为了日常开发或每次措辞修复反复调用真实 Provider。Runtime V3 可先运行零模型、零业务工具的低成本清单：
+涉及模块化 AI Skills、材料解析、笔记生成或统一额度时，发布前以源码门禁、单元测试、Handler 集成测试和确定性夹具为主，不为日常发布调用真实 Provider：
 
 ```bash
-pnpm --filter server smoke:ai-turn-v3
+pnpm --filter server check:ai-model-access
+pnpm --filter server test
+pnpm --filter web test
 ```
 
-部署 V3 代码时先保持 `AI_AGENT_RUNTIME_MODE=legacy`。首次 shadow 必须同时设置 `AI_AGENT_RUNTIME_MODE=v3_shadow` 与受众 `AI_AGENT_RUNTIME_V3_ROLLOUT=root`，确保只有真实 Root 操作账号增加 Compiler 调用；单独设置目标模式、受众缺失或受众 JSON 无效都应从 trace 中显示为 effective legacy。需要指定账号或扩大稳定比例时使用严格 JSON 受众，先固定 salt，再按 Root/白名单 → 5% → 20% → 50% → 100% 扩大；禁止通过改 salt 重新洗牌现有灰度用户。任何异常先把目标模式切回 legacy。
+`check:ai-model-access` 必须证明所有模型调用都经过唯一 AI Gateway、没有新增裸 Provider 调用和万能助手入口。各 Skill 必须覆盖资源归属与能力兼容、空材料、解析中/解析失败、额度不足、Provider 失败、结构化输出校验以及写入幂等；前端必须覆盖成功、加载、空和错误状态。旧 Agent 五实体表和历史会话数据只为导出、删除、后台审计与兼容保留，不得重新接回用户入口或普通 Skills 上下文。
 
-只有准备首次启用 V3、扩大 V3 灰度、切换阶段模型，或尚无同一发布基线的真实报告时，发布前才执行 root 真实链路门禁。先用 dry-run 验证注册工具与测试矩阵精确覆盖，再用获授权环境的真实 root 账号、真实 Provider、真实 Handler 和数据库执行完整矩阵：
-
-```bash
-pnpm --filter server smoke:ai-root-e2e -- --runtime v3
-pnpm --filter server smoke:ai-root-e2e -- --runtime v3 --live --suite full --execute-writes --provider deepseek --approve-full-matrix
-```
-
-`--runtime v3` 由 Runner 在加载 `.env` 后显式锁定 `v3_enforce + root`；`--runtime v2` 则显式锁定 `legacy + V2 enforce`。禁止只依赖 shell 或 pm2 中的环境变量判断被测版本，否则残留配置可能让报告名称与实际链路不一致。V3 全矩阵真实运行还必须显式添加 `--approve-full-matrix`，避免定点复测误触全量模型调用。未获得线上依赖与夹具写入授权时只能执行 dry-run，不能添加 `--live` 或 `--execute-writes`。
-
-同一发布基线已经完成完整门禁、后续只修复单一工具链且发布负责人明确要求节省真实模型消耗时，可定点重跑受影响用例，并把长草稿改写轮数临时收窄到 1；该参数只控制本次定点复测，不改变完整门禁默认的 5 轮：
-
-```bash
-pnpm --filter server smoke:ai-root-e2e -- --runtime v3 --live --execute-writes --provider deepseek --case create-note --artifact-refinement-rounds 1
-```
-
-已有同一发布基线的 V2 全矩阵真实报告、且 V3 能力清单已离线精确覆盖全部工具时，Root 首轮灰度可先定点验证本次受影响链路以节省 Token；但在扩大到非 Root 账号或百分比灰度前，仍必须至少完成一次带 `--approve-full-matrix` 的 V3 全矩阵真实门禁。
-
-只需确认 V3 Compiler 与指定 Provider 的结构化协议兼容时，可使用 `smoke:ai-turn-v3 -- --live --case <id>`；执行函数和 CLI 都强制最多选择 2 个用例、重复最多 3 次，且不会连接或执行任何业务工具。该低成本检查不能代替首次启用/扩大灰度所需的 root 真实链路门禁。
-
-完整门禁必须同时满足：所有注册工具逐项通过；所有写工具返回正确确认卡并在确认后产生可核验结果；同一确认重放不重复写入；笔记材料范围、硬字数下限和续写保持通过；测试夹具清理成功。任一项失败都禁止首次启用 V2/V3 或扩大相应灰度，不能用孤立用例的偶然成功代替完整矩阵。真实报告必须脱敏，不保存问题、回答、工具参数、资源 ID 或账号标识。
+只有本次变更确实涉及 Provider 协议、模型切换或线上环境兼容，且用户明确授权真实调用时，才运行受影响 Skill 的最小真实用例；报告必须脱敏，不能保存问题、回答、资源 ID、账号标识或模型密钥。未获授权时不得以“上线门禁”为由消耗真实 AI 额度。
 
 涉及积分获取 C5 时，发布前还必须完成以下顺序：
 

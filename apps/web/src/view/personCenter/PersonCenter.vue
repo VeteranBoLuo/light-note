@@ -72,7 +72,7 @@
           </div>
         </div>
 
-        <AiQuotaSummary class="user-ai-quota" :active="menuVisible" @open-details="goGrowth" />
+        <AiQuotaSummary class="user-ai-quota" :active="menuVisible" @open-details="goAiQuotaDetails" />
 
         <div class="settings-grid">
           <b-dropdown
@@ -222,6 +222,11 @@
 
   function goGrowth() {
     navigateFromProfile('/growth');
+  }
+
+  function goAiQuotaDetails() {
+    dismissProfilePopover();
+    router.push({ path: '/settings', query: { section: 'ai' } });
   }
 
   function getSettingPopupContainer(trigger: HTMLElement) {

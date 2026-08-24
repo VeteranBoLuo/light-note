@@ -23,15 +23,19 @@ vi.mock('@/components/base/BasicComponents/BDrawer.vue', () => ({
 vi.mock('@/components/admin/AdminRiskActionModal.vue', () => ({
   default: {
     name: 'AdminRiskActionModalStub',
-    props: ['visible'],
+    props: ['visible', 'defaultReason'],
     emits: ['confirm', 'update:visible'],
-    setup(props: { visible: boolean }, { emit }: { emit: (event: string, payload: unknown) => void }) {
+    setup(
+      props: { visible: boolean; defaultReason: string },
+      { emit }: { emit: (event: string, payload: unknown) => void },
+    ) {
       return () =>
         props.visible
           ? h(
               'button',
               {
                 class: 'risk-confirm',
+                'data-default-reason': props.defaultReason,
                 onClick: () => emit('confirm', { reason: '已核对请求链路与命中证据', confirmed: true }),
               },
               '提交结论',
@@ -55,7 +59,7 @@ function findButton(host: HTMLElement, text: string) {
   );
 }
 
-function mountDrawer(props: Record<string, unknown>, onSaved = vi.fn()) {
+function mountDrawer(props: Record<string, unknown> = {}, onSaved = vi.fn()) {
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp({
@@ -120,6 +124,7 @@ describe('EventDetailDrawer 安全处置边界', () => {
 
     findButton(host, '确认攻击')!.click();
     await nextTick();
+    expect(host.querySelector<HTMLButtonElement>('.risk-confirm')?.dataset.defaultReason).toBe('确认为真实攻击');
     host.querySelector<HTMLButtonElement>('.risk-confirm')!.click();
     await flushPromises();
 
@@ -141,6 +146,27 @@ describe('EventDetailDrawer 安全处置边界', () => {
         disposition: 'confirmed_attack',
       }),
     );
+  });
+
+  it('四种事件结论都向统一风险弹窗传入各自的六字以上默认原因', async () => {
+    const cases = [
+      ['良性异常', '确认为良性异常'],
+      ['授权测试', '确认为授权测试'],
+      ['误报并创建调优建议', '确认属于误报'],
+      ['确认攻击', '确认为真实攻击'],
+    ] as const;
+
+    for (const [action, reason] of cases) {
+      const { host } = mountDrawer();
+      await flushPromises();
+
+      findButton(host, action)!.click();
+      await nextTick();
+
+      expect(host.querySelector<HTMLButtonElement>('.risk-confirm')?.dataset.defaultReason).toBe(reason);
+      cleanup?.();
+      cleanup = undefined;
+    }
   });
 
   it('移动端只展示证据，不渲染事件处置与来源限制动作', async () => {

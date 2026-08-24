@@ -94,12 +94,8 @@ Search bookmarks, notes, files, tags, and tasks across every module at once — 
 
 ---
 
-**🤖 AI assistant**  
-Built-in conversational AI that can call tools to look up your bookmarks, notes, tasks, and growth data — with web search, deep thinking, and streaming responses.
-
-<p align="center">
-  <img src="apps/web/public/screenshots/ai-chat.png" alt="AI assistant" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
-</p>
+**🤖 Modular AI**
+Scope-bound AI capabilities live inside notes, bookmarks, files, tasks, Resource Center, and Help Center for summarizing, generating, breaking down, and organizing the resources you explicitly select.
 
 ---
 

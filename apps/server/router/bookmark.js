@@ -54,6 +54,8 @@ router.post('/snapshot', bookmarkHandle.getSnapshot);
 
 router.post('/summarize', bookmarkHandle.doSummarizeBookmark);
 
+router.post('/archive-summary', bookmarkHandle.doArchiveAndSummarizeBookmark);
+
 router.post('/health/check', bookmarkHandle.doCheckHealth);
 
 router.post('/health/checkAll', bookmarkHandle.doCheckAllHealth);

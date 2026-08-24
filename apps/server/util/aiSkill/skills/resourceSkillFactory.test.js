@@ -18,6 +18,7 @@ describe('resource skill factory', () => {
       input: skill.validateInput({}),
       context: { identity: { subjectUserId: 'u1' }, resourceRefs: [{ type: 'note', id: 'n1', version: 'v1' }] },
       dependencies: {
+        prepareExplicitResourceEvidence: async () => [],
         loadExplicitResourceEvidence: async () => ({
           evidence: '',
           sources: [],
@@ -34,6 +35,7 @@ describe('resource skill factory', () => {
       input: skill.validateInput({ targetLength: 2000, detailLevel: 'detailed' }),
       context: { identity: { subjectUserId: 'u1' }, resourceRefs: [{ type: 'note', id: 'n1', version: 'v1' }] },
       dependencies: {
+        prepareExplicitResourceEvidence: async () => [],
         loadExplicitResourceEvidence: async () => ({
           evidence: '[1] 内容',
           sources: [{ id: 'note:n1' }],

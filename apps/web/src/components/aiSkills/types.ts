@@ -5,4 +5,6 @@ export interface AiSkillPanelAction {
   input?: Record<string, unknown>;
   promptKey?: string;
   promptValue?: string;
+  disabled?: boolean;
+  reason?: string;
 }

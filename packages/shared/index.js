@@ -148,6 +148,29 @@ export const FILE_PREVIEW_EXTRA_TEXT_EXTENSIONS = Object.freeze([
   'patch',
 ]);
 
+/** AI 文件解析能力的唯一扩展名清单，前端入口与服务端解析器必须共同使用。 */
+export const AI_DOCUMENT_SUPPORTED_EXTENSIONS = Object.freeze([
+  '.txt',
+  '.md',
+  '.markdown',
+  '.csv',
+  '.pdf',
+  '.docx',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.webp',
+]);
+
+export function isAiDocumentFileNameSupported(fileName) {
+  const normalized = String(fileName || '')
+    .trim()
+    .toLowerCase()
+    .split(/[\\/]/)
+    .pop();
+  return Boolean(normalized && AI_DOCUMENT_SUPPORTED_EXTENSIONS.some((extension) => normalized.endsWith(extension)));
+}
+
 const FILE_PREVIEW_EXTENSION_INDEX = new Map();
 const FILE_PREVIEW_MIME_INDEX = new Map();
 for (const format of FILE_PREVIEW_FORMATS) {
@@ -207,7 +230,7 @@ export const BOOKMARK_URL_CODE = Object.freeze({
 });
 
 const MAX_BOOKMARK_URL_LENGTH = 255;
-const MAX_BOOKMARK_INPUT_LENGTH = 4000;
+export const MAX_BOOKMARK_INPUT_LENGTH = 4000;
 const MAX_BOOKMARK_URL_CANDIDATES = 5;
 const TRAILING_PUNCTUATION = /[，。；！？、）》】」』〉,.;!?)\]}]+$/u;
 const FORBIDDEN_URL_CHARACTERS = /[\u0000-\u001f\u007f<>"'`]/u;

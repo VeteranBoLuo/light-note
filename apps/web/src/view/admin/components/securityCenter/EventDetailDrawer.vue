@@ -134,6 +134,7 @@
     :title="t('securityV2.review.dispositionConfirmTitle')"
     :impact="reviewImpact"
     :confirm-label="dispositionLabel(pendingDisposition)"
+    :default-reason="reviewDefaultReason"
     :loading="saving"
     @confirm="saveDisposition"
   />
@@ -151,6 +152,7 @@
   import AdminRiskActionModal from '@/components/admin/AdminRiskActionModal.vue';
   import { apiBaseGet, apiBasePost } from '@/http/request';
   import { securityCenterMessages } from './securityCenterI18n';
+  import { securityReviewDefaultReasonKey } from './securityShared';
 
   const props = withDefaults(defineProps<{ open: boolean; eventId: string; raw?: boolean; readOnly?: boolean }>(), {
     raw: false,
@@ -175,6 +177,10 @@
       disposition: dispositionLabel(pendingDisposition.value),
     }),
   );
+  const reviewDefaultReason = computed(() => {
+    const reasonKey = securityReviewDefaultReasonKey(pendingDisposition.value);
+    return reasonKey ? t(reasonKey) : '';
+  });
 
   function dispositionLabel(value: unknown) {
     const key =

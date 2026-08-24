@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS todo_items (
   KEY idx_todo_due (user_id, due_at, status, del_flag),
   KEY idx_todo_update (user_id, update_time),
   KEY idx_todo_custom_order (user_id, status, sort_order, id),
+  KEY idx_todo_admin_created (del_flag, create_time, user_id(64)),
   UNIQUE KEY uk_todo_series_instance (series_id, recurrence_instance_at),
   CONSTRAINT fk_todo_items_user FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 ROW_FORMAT=DYNAMIC COMMENT='待处理中的待办事项';

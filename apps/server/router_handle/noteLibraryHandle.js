@@ -80,6 +80,7 @@ import {
   noteTreeFeatureIdentity,
   resolveNoteTreeFeatures,
 } from '../util/noteTreeFeatureFlags.js';
+import { NOTE_CONTENT_MAX_LENGTH } from '../util/contentLimits.js';
 
 // multer 先落盘后进 handler:任何登记失败分支都必须丢弃已落盘文件,
 // 否则登录用户反复提交无效 noteId 即可持续向磁盘写入孤儿文件
@@ -243,7 +244,14 @@ export const addNote = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
     const userId = req.user.id;
-    const { addToInbox = false, inboxSource = 'quick_capture', ...noteBody } = req.body || {};
+    const {
+      addToInbox = false,
+      inboxSource = 'quick_capture',
+      idempotencyKey: rawIdempotencyKey = null,
+      ...noteBody
+    } = req.body || {};
+    const idempotencyKey =
+      typeof rawIdempotencyKey === 'string' ? rawIdempotencyKey.trim().slice(0, 512) || null : null;
     if (String(noteBody.parentId || '').trim()) assertNoteTreeFeature(req, NOTE_TREE_FEATURE.WRITE);
     const result = await createNote({
       userId,
@@ -254,6 +262,7 @@ export const addNote = async (req, res) => {
       request: req,
       suppressUserRewards: req.suppressUserRewards || req.isVisitorWorkspace,
       shareExposureAcknowledged: req.body?.shareExposureAcknowledged === true,
+      idempotencyKey,
     });
     return res.send(
       resultData({
@@ -409,7 +418,6 @@ const DRAWING_VERSION_MERGE_WINDOW_MS = 10 * 60 * 1000;
 const DRAWING_VERSION_KEEP = 10;
 const NOTE_UPDATE_TYPES = new Set(['html', 'markdown']);
 const NOTE_TITLE_MAX_LENGTH = 255;
-const NOTE_CONTENT_MAX_LENGTH = 1_000_000;
 
 // 历史版本字数改由前端按"渲染后展示文本"计算(html: DOM textContent; md: marked 渲染后取 textContent),
 // 后端只回传 content + type,不再在 SQL/JS 层估算(见前端 utils/common.ts 的 noteDisplayText)。
@@ -1191,8 +1199,7 @@ export const uploadDrawingThumbnail = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   const noteId = String(req.body?.id || '').trim();
   const revision = Number(req.body?.revision);
-  // 缺省 1 兼容滚动发布期间尚未携带 rendererVersion 的旧前端。
-  const rendererVersion = req.body?.rendererVersion == null ? 1 : Number(req.body.rendererVersion);
+  const rendererVersion = Number(req.body?.rendererVersion);
   const image = decodeDrawingThumbnailDataUrl(req.body?.thumbnail);
   if (!NOTE_ID_PATTERN.test(noteId)) {
     return res.send(resultData(null, 400, L(req, '笔记 ID 无效', 'Invalid note ID')));
@@ -1200,8 +1207,14 @@ export const uploadDrawingThumbnail = async (req, res) => {
   if (!Number.isSafeInteger(revision) || revision < 1) {
     return res.send(resultData(null, 400, L(req, '笔记版本号无效', 'Invalid note revision')));
   }
-  if (![1, DRAWING_THUMBNAIL_RENDERER_VERSION].includes(rendererVersion)) {
-    return res.send(resultData(null, 400, L(req, '缩略图渲染版本无效', 'Invalid thumbnail renderer version')));
+  if (rendererVersion !== DRAWING_THUMBNAIL_RENDERER_VERSION) {
+    return res.send(
+      resultData(
+        { code: 'DRAWING_THUMBNAIL_RENDERER_STALE', rendererVersion: DRAWING_THUMBNAIL_RENDERER_VERSION },
+        409,
+        L(req, '缩略图渲染器已更新，请刷新页面', 'Thumbnail renderer changed; refresh the page'),
+      ),
+    );
   }
   if (!image) {
     return res.send(resultData(null, 400, L(req, '手绘缩略图无效', 'Invalid drawing thumbnail')));
@@ -1253,6 +1266,16 @@ function sendDrawingThumbnailNotFound(res) {
   return res.status(404).end();
 }
 
+function redirectToCurrentDrawingThumbnail(res, noteId, revision) {
+  // 旧位图是可丢弃派生缓存。只把旧地址引向当前缓存键，绝不能用新算法继续写入旧版本 URL。
+  res.set('Cache-Control', 'private, no-store');
+  res.set(
+    'Location',
+    `/api/note/drawing-thumbnail/${encodeURIComponent(noteId)}/v${DRAWING_THUMBNAIL_RENDERER_VERSION}-${revision}.webp`,
+  );
+  return res.status(307).end();
+}
+
 export const getDrawingThumbnail = async (req, res) => {
   const noteId = String(req.params?.noteId || '').trim();
   const fileName = String(req.params?.fileName || '');
@@ -1264,7 +1287,8 @@ export const getDrawingThumbnail = async (req, res) => {
     !NOTE_ID_PATTERN.test(noteId) ||
     !Number.isSafeInteger(revision) ||
     revision < 1 ||
-    ![1, DRAWING_THUMBNAIL_RENDERER_VERSION].includes(rendererVersion)
+    rendererVersion < 1 ||
+    rendererVersion > DRAWING_THUMBNAIL_RENDERER_VERSION
   ) {
     return sendDrawingThumbnailNotFound(res);
   }
@@ -1276,6 +1300,9 @@ export const getDrawingThumbnail = async (req, res) => {
     );
     if (!rows.length || Math.max(1, Number(rows[0].revision || 1)) !== revision) {
       return sendDrawingThumbnailNotFound(res);
+    }
+    if (rendererVersion !== DRAWING_THUMBNAIL_RENDERER_VERSION) {
+      return redirectToCurrentDrawingThumbnail(res, noteId, revision);
     }
     const filePath = await getExistingDrawingThumbnailPath({ userId, noteId, revision, rendererVersion });
     if (!filePath) return sendDrawingThumbnailNotFound(res);
@@ -2085,7 +2112,7 @@ export const restoreNoteVersion = async (req, res) => {
 
 // —— 笔记模板(用户自存;内置模板由前端常量提供,不进库) ——
 const NOTE_TEMPLATE_LIMIT = 20; // 每人最多保存的模板数
-const NOTE_TEMPLATE_CONTENT_MAX = 1_000_000; // 与笔记正文同一上限
+const NOTE_TEMPLATE_CONTENT_MAX = NOTE_CONTENT_MAX_LENGTH; // 与笔记正文同一上限
 const NOTE_TEMPLATE_TYPES = new Set(['html', 'markdown']);
 
 function normalizeNoteTemplateInput(body, { expectedType = '', scene = 'write-note-template' } = {}) {

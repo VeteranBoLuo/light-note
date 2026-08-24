@@ -32,15 +32,6 @@
         <p v-if="plainSummary">{{ plainSummary }}</p>
         <span v-if="item.resourceType === 'bookmark'" class="inbox-item__detail">{{ item.detail }}</span>
       </div>
-      <div class="inbox-item__actions inbox-item__actions--desktop">
-        <BButton size="small" @click="emit('open')">{{ t('inbox.organize') }}</BButton>
-        <BButton size="small" type="primary" :loading="completing" :disabled="disabled" @click="emit('complete')">
-          {{ t('inbox.complete') }}
-        </BButton>
-        <BButton size="small" type="danger" :loading="deleting" :disabled="disabled" @click="emit('delete')">
-          {{ t('inbox.deleteResource') }}
-        </BButton>
-      </div>
       <div v-if="!selectionMode" class="inbox-item__actions inbox-item__actions--mobile" @click.stop>
         <BButton
           class="inbox-item__more"
@@ -173,7 +164,7 @@
     position: relative;
     overflow: hidden;
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
     gap: 14px;
     padding: 16px;
@@ -278,9 +269,6 @@
       grid-template-columns: auto minmax(0, 1fr);
       align-items: start;
       padding: 13px;
-    }
-    .inbox-item__actions--desktop {
-      display: none;
     }
     .inbox-item__actions--mobile {
       position: absolute;

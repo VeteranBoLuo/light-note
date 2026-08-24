@@ -63,6 +63,16 @@
     if (loading.value && !status.value) return t('personCenter.aiQuotaLoading');
     if (unavailable.value || !status.value) return t('personCenter.aiQuotaUnavailable');
     if (status.value.exempt) return t('personCenter.aiQuotaUnlimited');
+    if (
+      Number.isFinite(status.value.dailyRemaining) &&
+      Number.isFinite(status.value.dailyQuota) &&
+      Number.isFinite(status.value.bonusTokens)
+    ) {
+      return t('personCenter.aiQuotaBreakdown', {
+        daily: formatAiQuotaTokens(status.value.dailyRemaining, locale.value),
+        permanent: formatAiQuotaTokens(status.value.bonusTokens, locale.value),
+      });
+    }
     return t('personCenter.aiQuotaRemaining', {
       amount: formatAiQuotaTokens(status.value.remaining, locale.value),
     });
@@ -126,11 +136,10 @@
 
   .ai-quota-summary__copy strong {
     min-width: 0;
-    overflow: hidden;
     color: var(--text-color);
     font-size: 12px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    line-height: 1.35;
+    text-align: right;
   }
 
   .ai-quota-summary__arrow {

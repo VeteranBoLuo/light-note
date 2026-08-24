@@ -45,7 +45,7 @@ export const fileSkills = Object.freeze([
     defaultInstruction: '生成保留来源引用的结构化 Markdown 笔记草稿。',
     systemRole: '你是轻笺文件模块的文档转笔记 Skill。',
     effect: 'preview',
-    availableActions: [{ id: 'create_note_from_preview', label: '在笔记编辑器中继续', requiresConfirmation: true }],
+    availableActions: [{ id: 'create_note_from_preview', label: '确认生成笔记', requiresConfirmation: true }],
     mapResult: mapGroundedMarkdownToNotePreview,
     modelPolicy: { temperature: 0.3, maxTokens: 6000 },
   }),

@@ -5,6 +5,7 @@ import mammoth from 'mammoth';
 // 直接使用实际解析实现，避免导入时产生文件系统副作用。
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import { parse as parseCsv } from 'csv-parse/sync';
+import { AI_DOCUMENT_SUPPORTED_EXTENSIONS } from '@lightnote/shared';
 import { localOcrProvider } from './localOcr.js';
 
 export const AI_DOCUMENT_MAX_BYTES = 20 * 1024 * 1024;
@@ -24,6 +25,13 @@ const TYPE_BY_EXTENSION = Object.freeze({
   '.jpeg': 'image/jpeg',
   '.webp': 'image/webp',
 });
+
+if (
+  Object.keys(TYPE_BY_EXTENSION).length !== AI_DOCUMENT_SUPPORTED_EXTENSIONS.length ||
+  AI_DOCUMENT_SUPPORTED_EXTENSIONS.some((extension) => !TYPE_BY_EXTENSION[extension])
+) {
+  throw new Error('AI_DOCUMENT_CAPABILITY_REGISTRY_MISMATCH: 文件解析器与共享能力清单不一致');
+}
 
 const ALLOWED_MIME_BY_EXTENSION = Object.freeze({
   '.txt': new Set(['text/plain', 'application/octet-stream']),
@@ -556,5 +564,5 @@ export async function parseDocumentBuffer(
 }
 
 export function getSupportedDocumentAccept() {
-  return Object.keys(TYPE_BY_EXTENSION).join(',');
+  return AI_DOCUMENT_SUPPORTED_EXTENSIONS.join(',');
 }

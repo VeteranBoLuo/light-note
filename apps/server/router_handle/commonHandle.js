@@ -1512,6 +1512,7 @@ function buildAdminOverviewScope(hideInternal) {
       AND osr.resource_id = CAST(files.id AS CHAR)
   )`;
   return {
+    irSql,
     notIntRole,
     notIntUser,
     notIntCreateBy,
@@ -1522,42 +1523,317 @@ function buildAdminOverviewScope(hideInternal) {
   };
 }
 
-async function queryAdminOverviewTrend({ days, hideInternal, now = new Date() }) {
-  const { formatDate } = adminOverviewDateHelpers(now);
+function buildAdminApiLogPredicates(alias = 'api_log') {
+  const field = (name) => `${alias}.${name}`;
+  // 新日志由 logFunction 写入 routeMatched，能精确区分“业务路由返回 4xx”和“未知路径 404”。
+  // 历史日志没有该标记，按已注册的业务路由前缀兼容判断，避免上线当天统计口径断层。
+  const businessApiPrefixPattern =
+    '^/(user|notification|json|common|note|bookmark|opinion|file|chat|search|workbench|security|trash|knowledgeBase|growth|inbox|todo|tagIcon|featureRequest)(/|[?]|$)';
+  const legacyRouteUnclassified = `(COALESCE(${field('system')}, '') NOT LIKE '%"routeMatched":%')`;
+  const routeMatched = `(COALESCE(${field('system')}, '') LIKE '%"routeMatched":true%' OR (${legacyRouteUnclassified} AND ${field('url')} REGEXP '${businessApiPrefixPattern}'))`;
+  const routeUnmatched = `(COALESCE(${field('system')}, '') LIKE '%"routeMatched":false%' OR (${legacyRouteUnclassified} AND NOT (${field('url')} REGEXP '${businessApiPrefixPattern}')))`;
+  // 历史 404 无法知道 Express 是否命中路由；现有数据主要是扫描不存在的路径，因此归为无效访问。
+  const legacyUnknown404 = `(${field('status_code')} = '404' AND ${legacyRouteUnclassified})`;
+  const validRequest = `((${routeMatched} AND NOT ${legacyUnknown404}) OR ${field('status_code')} LIKE '5%')`;
+  return {
+    validRequest,
+    business4xx: `(${field('status_code')} LIKE '4%' AND ${routeMatched} AND NOT ${legacyUnknown404})`,
+    invalid4xx: `(${field('status_code')} LIKE '4%' AND (${routeUnmatched} OR ${legacyUnknown404}))`,
+    server5xx: `(${field('status_code')} LIKE '5%')`,
+  };
+}
+
+async function queryAdminOverviewSnapshot({ hideInternal, now = new Date() }) {
   const scope = buildAdminOverviewScope(hideInternal);
+  const { formatDate, formatDateTime } = adminOverviewDateHelpers(now);
+  const today = formatDate(now);
+  const weekAgo = formatDate(new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000));
+  const apiPredicates = buildAdminApiLogPredicates('api_log');
+  const activeApiInternalRole = hideInternal ? ` AND active_user.role NOT IN (${scope.irSql})` : '';
+
+  // 首屏只读取当前快照。每张事实表至多扫描一次，且所有查询在同一批次发出，不再让 AI 汇总形成第二段瀑布。
+  const [resourceRows, conversionAgg, opinionAgg, securityAgg, todoAgg, activitySystemAgg, aiAgg] =
+    await Promise.all([
+      pool.query(
+        `SELECT kind, total, today, storageMb, trashMb, trashCount
+         FROM (
+           SELECT 'user' AS kind,
+                  COUNT(*) AS total,
+                  COALESCE(SUM(create_time >= ?), 0) AS today,
+                  0 AS storageMb, 0 AS trashMb, 0 AS trashCount
+           FROM \`user\`
+           WHERE del_flag = 0 AND role <> 'visitor'${scope.notIntRole}
+           UNION ALL
+           SELECT 'bookmark' AS kind,
+                  COUNT(*) AS total,
+                  COALESCE(SUM(create_time >= ?), 0) AS today,
+                  0 AS storageMb, 0 AS trashMb, 0 AS trashCount
+           FROM bookmark
+           WHERE del_flag = 0${scope.activeBookmarkOwner}${scope.notIntUser}${scope.notOnboardingBookmark}
+           UNION ALL
+           SELECT 'note' AS kind,
+                  COUNT(*) AS total,
+                  COALESCE(SUM(create_time >= ?), 0) AS today,
+                  0 AS storageMb, 0 AS trashMb, 0 AS trashCount
+           FROM note
+           WHERE del_flag = 0${scope.notIntCreateBy}${scope.notOnboardingNote}
+           UNION ALL
+           SELECT 'file' AS kind,
+                  COALESCE(SUM(del_flag = 0), 0) AS total,
+                  COALESCE(SUM(del_flag = 0 AND create_time >= ?), 0) AS today,
+                  ROUND(COALESCE(SUM(CASE WHEN del_flag = 0 THEN file_size ELSE 0 END), 0) / 1048576, 2) AS storageMb,
+                  ROUND(COALESCE(SUM(CASE WHEN del_flag = 1 THEN file_size ELSE 0 END), 0) / 1048576, 2) AS trashMb,
+                  COALESCE(SUM(del_flag = 1), 0) AS trashCount
+           FROM files
+           WHERE del_flag IN (0, 1)${scope.notIntCreateBy}${scope.notOnboardingFile}
+         ) admin_overview_snapshot_resources`,
+        [today, today, today, today],
+      ),
+      pool.query(
+        `SELECT
+           COUNT(DISTINCT CASE WHEN event = 'page_view' THEN fingerprint END) AS visitors,
+           COUNT(DISTINCT CASE WHEN event = 'register' THEN fingerprint END) AS registers
+         FROM conversion_events`,
+      ),
+      pool.query('SELECT COUNT(*) AS pending FROM opinion WHERE del_flag = 0 AND status = ?' + scope.notIntUser, [
+        OPINION_STATUS.PENDING,
+      ]),
+      pool
+        .query(
+          "SELECT COUNT(*) AS unhandled FROM security_events WHERE handled_status = 'unhandled' AND severity IN ('high','critical')",
+        )
+        .catch(() => [[{ unhandled: 0 }]]),
+      pool
+        .query(
+          `SELECT
+             COUNT(*) AS total,
+             COALESCE(SUM(create_time >= ?), 0) AS createdToday,
+             COALESCE(SUM(status = 'pending'), 0) AS pending,
+             COALESCE(SUM(status = 'pending' AND due_at >= NOW() AND due_at < DATE_ADD(?, INTERVAL 1 DAY)), 0) AS dueToday,
+             COALESCE(SUM(status = 'pending' AND due_at < NOW()), 0) AS overdue,
+             COALESCE(SUM(status = 'completed' AND completed_at >= ? AND completed_at < DATE_ADD(?, INTERVAL 1 DAY)), 0) AS completedToday
+           FROM todo_items
+           WHERE del_flag = 0${scope.notIntUser}`,
+          [today, today, today, today],
+        )
+        .catch(() => [[{ total: 0, createdToday: 0, pending: 0, dueToday: 0, overdue: 0, completedToday: 0 }]]),
+      // 活跃用户和系统健康复用同一次 7 日有界日志扫描；活跃口径也必须应用“有效业务请求”判定。
+      pool
+        .query(
+          `SELECT
+             COUNT(DISTINCT CASE
+               WHEN api_log.request_time >= ? AND ${apiPredicates.validRequest}
+                AND active_user.id IS NOT NULL AND active_user.del_flag = 0
+                AND active_user.role <> 'visitor'${activeApiInternalRole}
+               THEN api_log.user_id END) AS activeToday,
+             COUNT(DISTINCT CASE
+               WHEN ${apiPredicates.validRequest}
+                AND active_user.id IS NOT NULL AND active_user.del_flag = 0
+                AND active_user.role <> 'visitor'${activeApiInternalRole}
+               THEN api_log.user_id END) AS active7d,
+             COALESCE(SUM(api_log.request_time >= ? AND ${apiPredicates.validRequest}), 0) AS total,
+             COALESCE(SUM(api_log.request_time >= ? AND ${apiPredicates.business4xx}), 0) AS businessErrors,
+             COALESCE(SUM(api_log.request_time >= ? AND ${apiPredicates.invalid4xx}), 0) AS invalidRequests,
+             COALESCE(SUM(api_log.request_time >= ? AND ${apiPredicates.server5xx}), 0) AS serverErrors
+           FROM api_logs api_log
+           LEFT JOIN \`user\` active_user ON active_user.id = api_log.user_id
+           WHERE api_log.del_flag = '0' AND api_log.request_time >= ?`,
+          [today, today, today, today, today, weekAgo],
+        )
+        .catch(() => [
+          [{ activeToday: 0, active7d: 0, total: 0, businessErrors: 0, invalidRequests: 0, serverErrors: 0 }],
+        ]),
+      pool
+        .query(
+          `SELECT
+             COUNT(*) AS totalCount,
+             COALESCE(SUM(total_tokens), 0) AS totalTokens,
+             COALESCE(SUM(created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY)), 0) AS todayCount,
+             COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY) THEN total_tokens ELSE 0 END), 0) AS todayTokens
+           FROM agent_logs
+           WHERE 1 = 1${scope.notIntUser}`,
+          [today, today, today, today],
+        )
+        .catch(() => [[{ todayCount: 0, todayTokens: 0, totalCount: 0, totalTokens: 0 }]]),
+    ]);
+
+  const resourceByKind = Object.fromEntries((resourceRows[0] || []).map((row) => [String(row.kind), row]));
+  const user = resourceByKind.user || {};
+  const bookmark = resourceByKind.bookmark || {};
+  const note = resourceByKind.note || {};
+  const file = resourceByKind.file || {};
+  const conversion = conversionAgg[0]?.[0] || {};
+  const opinion = opinionAgg[0]?.[0] || {};
+  const security = securityAgg[0]?.[0] || {};
+  const todo = todoAgg[0]?.[0] || {};
+  const activitySystem = activitySystemAgg[0]?.[0] || {};
+  const ai = aiAgg[0]?.[0] || {};
+
+  return {
+    users: { total: Number(user.total || 0), today: Number(user.today || 0) },
+    active: { today: Number(activitySystem.activeToday || 0), week: Number(activitySystem.active7d || 0) },
+    resources: {
+      bookmarkTotal: Number(bookmark.total || 0),
+      noteTotal: Number(note.total || 0),
+      fileTotal: Number(file.total || 0),
+      bookmarkToday: Number(bookmark.today || 0),
+      noteToday: Number(note.today || 0),
+      fileToday: Number(file.today || 0),
+      storageMb: Number(file.storageMb || 0),
+      trashMb: Number(file.trashMb || 0),
+      trashCount: Number(file.trashCount || 0),
+    },
+    ai: {
+      todayCount: Number(ai.todayCount || 0),
+      todayTokens: Number(ai.todayTokens || 0),
+      totalCount: Number(ai.totalCount || 0),
+      totalTokens: Number(ai.totalTokens || 0),
+    },
+    conversion: { visitors: Number(conversion.visitors || 0), registers: Number(conversion.registers || 0) },
+    system: {
+      apiToday: Number(activitySystem.total || 0),
+      apiErrorsToday: Number(activitySystem.businessErrors || 0) + Number(activitySystem.serverErrors || 0),
+      apiBusinessErrorsToday: Number(activitySystem.businessErrors || 0),
+      apiInvalidRequestsToday: Number(activitySystem.invalidRequests || 0),
+      apiServerErrorsToday: Number(activitySystem.serverErrors || 0),
+    },
+    pending: { opinion: Number(opinion.pending || 0), security: Number(security.unhandled || 0) },
+    todos: {
+      total: Number(todo.total || 0),
+      createdToday: Number(todo.createdToday || 0),
+      pending: Number(todo.pending || 0),
+      dueToday: Number(todo.dueToday || 0),
+      overdue: Number(todo.overdue || 0),
+      completedToday: Number(todo.completedToday || 0),
+    },
+    generatedAt: formatDateTime(now),
+  };
+}
+
+async function queryAdminOverviewTrend({ days, hideInternal, now = new Date() }) {
+  const { formatDate, formatTime } = adminOverviewDateHelpers(now);
+  const scope = buildAdminOverviewScope(hideInternal);
+  const apiPredicates = buildAdminApiLogPredicates('api_log');
+  const activeApiInternalRole = hideInternal ? ` AND active_user.role NOT IN (${scope.irSql})` : '';
   const dates = [];
   for (let offset = days - 1; offset >= 0; offset -= 1) {
     const date = new Date(now.getTime() - offset * 24 * 60 * 60 * 1000);
     dates.push(formatDate(date));
   }
   const startDate = dates[0];
-  const [userTrendRows, contentTrendRows, activeRows] = await Promise.all([
-    pool.query(
-      "SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM `user` WHERE del_flag = 0 AND role <> 'visitor' AND create_time >= ?" +
-        scope.notIntRole +
-        ' GROUP BY d',
-      [startDate],
-    ),
+  const today = formatDate(now);
+  const baselineDates = [];
+  for (let offset = ADMIN_TODAY_BASELINE_DAYS; offset >= 1; offset -= 1) {
+    baselineDates.push(formatDate(new Date(now.getTime() - offset * 24 * 60 * 60 * 1000)));
+  }
+  const baselineStart = baselineDates[0];
+  const baselineCutoffTime = formatTime(now);
+
+  const [trendRows, activeRows, sameTimeBaselineRows] = await Promise.all([
     pool.query(
       `SELECT d, kind, SUM(c) AS c FROM (
-       SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'bookmark' AS kind, COUNT(*) AS c FROM bookmark WHERE del_flag = 0 AND create_time >= ?${scope.activeBookmarkOwner}${scope.notIntUser}${scope.notOnboardingBookmark} GROUP BY d
-       UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'note' AS kind, COUNT(*) AS c FROM note WHERE del_flag = 0 AND create_time >= ?${scope.notIntCreateBy}${scope.notOnboardingNote} GROUP BY d
-       UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'file' AS kind, COUNT(*) AS c FROM files WHERE del_flag = 0 AND create_time >= ?${scope.notIntCreateBy}${scope.notOnboardingFile} GROUP BY d
-     ) t GROUP BY d, kind`,
-      [startDate, startDate, startDate],
+         SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'user' AS kind, COUNT(*) AS c
+         FROM \`user\`
+         WHERE del_flag = 0 AND role <> 'visitor' AND create_time >= ?${scope.notIntRole}
+         GROUP BY d
+         UNION ALL
+         SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'bookmark' AS kind, COUNT(*) AS c
+         FROM bookmark
+         WHERE del_flag = 0 AND create_time >= ?${scope.activeBookmarkOwner}${scope.notIntUser}${scope.notOnboardingBookmark}
+         GROUP BY d
+         UNION ALL
+         SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'note' AS kind, COUNT(*) AS c
+         FROM note
+         WHERE del_flag = 0 AND create_time >= ?${scope.notIntCreateBy}${scope.notOnboardingNote}
+         GROUP BY d
+         UNION ALL
+         SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'file' AS kind, COUNT(*) AS c
+         FROM files
+         WHERE del_flag = 0 AND create_time >= ?${scope.notIntCreateBy}${scope.notOnboardingFile}
+         GROUP BY d
+       ) admin_overview_trend
+       GROUP BY d, kind`,
+      [startDate, startDate, startDate, startDate],
     ),
     pool
       .query(
-        `SELECT COUNT(DISTINCT user_id) AS activeUsers
-         FROM user_sessions WHERE role != 'visitor' AND last_active_time >= ?${scope.notIntRole}`,
+        `SELECT COUNT(DISTINCT api_log.user_id) AS activeUsers
+         FROM api_logs api_log
+         INNER JOIN \`user\` active_user ON active_user.id = api_log.user_id
+         WHERE api_log.del_flag = '0'
+           AND api_log.request_time >= ?
+           AND ${apiPredicates.validRequest}
+           AND active_user.del_flag = 0
+           AND active_user.role <> 'visitor'${activeApiInternalRole}`,
         [startDate],
       )
       .catch(() => [[{ activeUsers: 0 }]]),
+    // 同期基线与趋势属于历史分析读模型；失败只让同期信息降级，不阻断趋势和核心快照。
+    pool
+      .query(
+        `SELECT d, kind, SUM(c) AS c FROM (
+           SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'users' AS kind, COUNT(*) AS c
+           FROM \`user\`
+           WHERE del_flag = 0 AND role <> 'visitor'
+             AND create_time >= ? AND create_time < ? AND TIME(create_time) <= ?${scope.notIntRole}
+           GROUP BY d
+           UNION ALL
+           SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'bookmarks' AS kind, COUNT(*) AS c
+           FROM bookmark
+           WHERE del_flag = 0
+             AND create_time >= ? AND create_time < ? AND TIME(create_time) <= ?${scope.activeBookmarkOwner}${scope.notIntUser}${scope.notOnboardingBookmark}
+           GROUP BY d
+           UNION ALL
+           SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'notes' AS kind, COUNT(*) AS c
+           FROM note
+           WHERE del_flag = 0
+             AND create_time >= ? AND create_time < ? AND TIME(create_time) <= ?${scope.notIntCreateBy}${scope.notOnboardingNote}
+           GROUP BY d
+           UNION ALL
+           SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'files' AS kind, COUNT(*) AS c
+           FROM files
+           WHERE del_flag = 0
+             AND create_time >= ? AND create_time < ? AND TIME(create_time) <= ?${scope.notIntCreateBy}${scope.notOnboardingFile}
+           GROUP BY d
+           UNION ALL
+           SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'todos' AS kind, COUNT(*) AS c
+           FROM todo_items
+           WHERE del_flag = 0
+             AND create_time >= ? AND create_time < ? AND TIME(create_time) <= ?${scope.notIntUser}
+           GROUP BY d
+           UNION ALL
+           SELECT DATE_FORMAT(api_log.request_time, '%Y-%m-%d') AS d, 'activeUsers' AS kind,
+                  COUNT(DISTINCT api_log.user_id) AS c
+           FROM api_logs api_log
+           INNER JOIN \`user\` active_user ON active_user.id = api_log.user_id
+           WHERE api_log.del_flag = '0'
+             AND api_log.request_time >= ? AND api_log.request_time < ? AND TIME(api_log.request_time) <= ?
+             AND ${apiPredicates.validRequest}
+             AND active_user.del_flag = 0
+             AND active_user.role <> 'visitor'${activeApiInternalRole}
+           GROUP BY d
+           UNION ALL
+           SELECT DATE_FORMAT(created_at, '%Y-%m-%d') AS d, 'aiCalls' AS kind, COUNT(*) AS c
+           FROM agent_logs
+           WHERE created_at >= ? AND created_at < ? AND TIME(created_at) <= ?${scope.notIntUser}
+           GROUP BY d
+         ) same_time_baseline
+         GROUP BY d, kind`,
+        Array.from({ length: 7 }, () => [baselineStart, today, baselineCutoffTime]).flat(),
+      )
+      .catch((error) => {
+        console.error('[AdminOverviewTrend] 同期基线统计失败(忽略) code=%s', stableAgentErrorCode(error));
+        return [null];
+      }),
   ]);
 
-  const userMap = Object.fromEntries((userTrendRows[0] || []).map((row) => [row.d, Number(row.c || 0)]));
+  const userMap = {};
   const contentMap = new Map();
-  (contentTrendRows[0] || []).forEach((row) => {
+  (trendRows[0] || []).forEach((row) => {
+    if (row.kind === 'user') {
+      userMap[row.d] = Number(row.c || 0);
+      return;
+    }
     const bucket = contentMap.get(row.d) || { bookmark: 0, note: 0, file: 0 };
     if (row.kind in bucket) bucket[row.kind] = Number(row.c || 0);
     contentMap.set(row.d, bucket);
@@ -1600,8 +1876,21 @@ async function queryAdminOverviewTrend({ days, hideInternal, now = new Date() })
     granularity,
     activeUsers: Number(activeRows[0]?.[0]?.activeUsers || 0),
     trend,
+    todayBaseline: buildAdminTodayBaseline(sameTimeBaselineRows?.[0], baselineDates, baselineCutoffTime),
   };
 }
+
+// POST /common/getAdminOverviewSnapshot —— 首屏核心快照（仅 root）
+export const getAdminOverviewSnapshot = async (req, res) => {
+  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '仅管理员可查看'));
+  try {
+    const snapshot = await queryAdminOverviewSnapshot({ hideInternal: req.body?.hideInternal !== false });
+    return res.send(resultData(snapshot));
+  } catch (error) {
+    console.error('[AdminOverviewSnapshot] 查询失败 code=%s', stableAgentErrorCode(error));
+    return res.send(resultData(null, 500, '获取后台总览快照失败'));
+  }
+};
 
 export const getAdminOverviewTrend = async (req, res) => {
   if (req.user?.role !== 'root') return res.send(resultData(null, 403, '仅管理员可查看'));
@@ -1738,353 +2027,28 @@ export const getAdminOverviewRecent = async (req, res) => {
   }
 };
 
-// POST /common/getAdminOverview —— 后台总览看板:用户/内容/存储/AI/活跃/系统/转化/待办 + 近7天趋势(仅 root)
-// 口径统一:累计量与今日增量成对返回,前端统一「累计为主 + 今日 +N」呈现;高风险表(security/user_sessions/api_logs/agent_logs)各自兜底,缺表不拖垮整体
+// POST /common/getAdminOverview —— 兼容旧客户端的完整总览（核心快照 + 7 日历史分析）
 export const getAdminOverview = async (req, res) => {
   if (req.user?.role !== 'root') return res.send(resultData(null, 403, '仅管理员可查看'));
   try {
-    // 隐藏内部账号(root/test):默认开。user/user_sessions 直接按 role;内容/AI/反馈按创建者 id 子查询排除。
-    // INTERNAL_ROLES 是代码常量(非用户输入),内联进 SQL 以免大量参数错位;游客转化/系统健康不受影响
     const hideInternal = req.body?.hideInternal !== false;
-    const irSql = INTERNAL_ROLES.map((r) => `'${r}'`).join(', ');
-    const notIntRole = hideInternal ? ` AND role NOT IN (${irSql})` : '';
-    const notIntUser = hideInternal ? ` AND user_id NOT IN (SELECT id FROM \`user\` WHERE role IN (${irSql}))` : '';
-    const notIntCreateBy = hideInternal
-      ? ` AND create_by NOT IN (SELECT id FROM \`user\` WHERE role IN (${irSql}))`
-      : '';
-    const activeApiInternalRole = hideInternal ? ` AND active_user.role NOT IN (${irSql})` : '';
-    // 用户逻辑删除后，历史书签仍会保留，以支持后续的数据清理；后台总览不应继续把它们算入有效内容。
-    const activeBookmarkOwner = ` AND EXISTS (
-      SELECT 1 FROM \`user\` bookmark_owner
-      WHERE bookmark_owner.id = bookmark.user_id AND bookmark_owner.del_flag = 0
-    )`;
-    const notOnboardingBookmark = ` AND NOT EXISTS (
-      SELECT 1 FROM onboarding_seed_resources osr
-      WHERE osr.user_id = bookmark.user_id
-        AND osr.resource_type = 'bookmark'
-        AND osr.resource_id = bookmark.id
-    )`;
-    const notOnboardingNote = ` AND NOT EXISTS (
-      SELECT 1 FROM onboarding_seed_resources osr
-      WHERE osr.user_id = note.create_by
-        AND osr.resource_type = 'note'
-        AND osr.resource_id = note.id
-    )`;
-    const notOnboardingFile = ` AND NOT EXISTS (
-      SELECT 1 FROM onboarding_seed_resources osr
-      WHERE osr.user_id = files.create_by
-        AND osr.resource_type = 'file'
-        AND osr.resource_id = CAST(files.id AS CHAR)
-    )`;
-
-    // 业务看板统一按 Asia/Shanghai 自然日切分，不依赖部署机器或 MySQL 会话时区。
     const now = new Date();
-    const { formatDate, formatDateTime, formatTime } = adminOverviewDateHelpers(now);
-    const today = formatDate(now);
-    const baselineDates = [];
-    for (let i = ADMIN_TODAY_BASELINE_DAYS; i >= 1; i--) {
-      baselineDates.push(formatDate(new Date(now.getTime() - i * 24 * 60 * 60 * 1000)));
-    }
-    const baselineStart = baselineDates[0];
-    const baselineCutoffTime = formatTime(now);
-    const days = [];
-    for (let i = 6; i >= 0; i--) {
-      days.push(formatDate(new Date(now.getTime() - i * 24 * 60 * 60 * 1000)));
-    }
-    const weekAgo = days[0];
-
-    // 新日志由 logFunction 写入 routeMatched，能精确区分“业务路由返回 4xx”和“未知路径 404”。
-    // 历史日志没有该标记，按已注册的业务路由前缀兼容判断，避免上线当天统计口径断层。
-    const businessApiPrefixPattern =
-      '^/(user|notification|json|common|note|bookmark|opinion|file|chat|search|workbench|security|trash|knowledgeBase|growth|inbox|todo|tagIcon|featureRequest)(/|[?]|$)';
-    const legacyRouteUnclassifiedSql = `(COALESCE(system, '') NOT LIKE '%"routeMatched":%')`;
-    const routeMatchedSql = `(COALESCE(system, '') LIKE '%"routeMatched":true%' OR (${legacyRouteUnclassifiedSql} AND url REGEXP '${businessApiPrefixPattern}'))`;
-    const routeUnmatchedSql = `(COALESCE(system, '') LIKE '%"routeMatched":false%' OR (${legacyRouteUnclassifiedSql} AND NOT (url REGEXP '${businessApiPrefixPattern}')))`;
-    // 历史 404 无法知道 Express 是否命中路由；现有数据主要是扫描不存在的路径，因此归为无效访问。
-    // 上线后有 routeMatched=true 的真实业务 404 仍会正确归入业务 4xx。
-    const legacyUnknown404Sql = `(status_code = '404' AND ${legacyRouteUnclassifiedSql})`;
-    const validApiRequestSql = `((${routeMatchedSql} AND NOT ${legacyUnknown404Sql}) OR status_code LIKE '5%')`;
-    const business4xxSql = `(status_code LIKE '4%' AND ${routeMatchedSql} AND NOT ${legacyUnknown404Sql})`;
-    const invalid4xxSql = `(status_code LIKE '4%' AND (${routeUnmatchedSql} OR ${legacyUnknown404Sql}))`;
-
-    const [
-      userAgg,
-      resAgg,
-      convAgg,
-      opinionAgg,
-      securityAgg,
-      todoAgg,
-      activeAgg,
-      sysAgg,
-      userTrendRows,
-      contentTrendRows,
-      sameTimeBaselineRows,
-    ] = await Promise.all([
-      pool.query(
-        "SELECT COUNT(*) AS total, COALESCE(SUM(create_time >= ?), 0) AS today FROM `user` WHERE del_flag = 0 AND role <> 'visitor'" +
-          notIntRole,
-        [today],
-      ),
-      pool.query(
-        `SELECT
-           (SELECT COUNT(*) FROM bookmark WHERE del_flag = 0${activeBookmarkOwner}${notIntUser}${notOnboardingBookmark}) AS bookmarkTotal,
-           (SELECT COUNT(*) FROM note WHERE del_flag = 0${notIntCreateBy}${notOnboardingNote}) AS noteTotal,
-           (SELECT COUNT(*) FROM files WHERE del_flag = 0${notIntCreateBy}${notOnboardingFile}) AS fileTotal,
-           COALESCE((SELECT ROUND(SUM(file_size) / 1048576, 2) FROM files WHERE del_flag = 0${notIntCreateBy}${notOnboardingFile}), 0) AS storageMb,
-           (SELECT COUNT(*) FROM bookmark WHERE del_flag = 0 AND create_time >= ?${activeBookmarkOwner}${notIntUser}${notOnboardingBookmark}) AS bookmarkToday,
-           (SELECT COUNT(*) FROM note WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy}${notOnboardingNote}) AS noteToday,
-           (SELECT COUNT(*) FROM files WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy}${notOnboardingFile}) AS fileToday,
-           COALESCE((SELECT ROUND(SUM(file_size) / 1048576, 2) FROM files WHERE del_flag = 1${notIntCreateBy}${notOnboardingFile}), 0) AS trashMb,
-           (SELECT COUNT(*) FROM files WHERE del_flag = 1${notIntCreateBy}${notOnboardingFile}) AS trashCount`,
-        [today, today, today],
-      ),
-      pool.query(
-        `SELECT
-           COUNT(DISTINCT CASE WHEN event = 'page_view' THEN fingerprint END) AS visitors,
-           COUNT(DISTINCT CASE WHEN event = 'register' THEN fingerprint END) AS registers
-         FROM conversion_events`,
-      ),
-      pool.query('SELECT COUNT(*) AS pending FROM opinion WHERE del_flag = 0 AND status = ?' + notIntUser, [
-        OPINION_STATUS.PENDING,
-      ]),
-      pool
-        .query(
-          "SELECT COUNT(*) AS unhandled FROM security_events WHERE handled_status = 'unhandled' AND severity IN ('high','critical')",
-        )
-        .catch(() => [[{ unhandled: 0 }]]),
-      pool
-        .query(
-          `SELECT
-               COUNT(*) AS total,
-               COALESCE(SUM(create_time >= ?), 0) AS createdToday,
-               COALESCE(SUM(status = 'pending'), 0) AS pending,
-               COALESCE(SUM(status = 'pending' AND due_at >= NOW() AND due_at < DATE_ADD(?, INTERVAL 1 DAY)), 0) AS dueToday,
-               COALESCE(SUM(status = 'pending' AND due_at < NOW()), 0) AS overdue,
-               COALESCE(SUM(status = 'completed' AND completed_at >= ? AND completed_at < DATE_ADD(?, INTERVAL 1 DAY)), 0) AS completedToday
-             FROM todo_items
-             WHERE del_flag = 0${notIntUser}`,
-          [today, today, today, today],
-        )
-        .catch(() => [[{ total: 0, createdToday: 0, pending: 0, dueToday: 0, overdue: 0, completedToday: 0 }]]),
-      // 活跃用户以有效业务 API 行为为事实源：日志不会因退出或会话过期消失，可稳定计算历史同期。
-      pool
-        .query(
-          `SELECT
-             COUNT(DISTINCT CASE WHEN api_log.request_time >= ? THEN api_log.user_id END) AS activeToday,
-             COUNT(DISTINCT api_log.user_id) AS active7d
-           FROM api_logs api_log
-           INNER JOIN \`user\` active_user ON active_user.id = api_log.user_id
-           WHERE api_log.del_flag = '0'
-             AND api_log.request_time >= ?
-             AND active_user.del_flag = 0
-             AND active_user.role <> 'visitor'${activeApiInternalRole}`,
-          [today, weekAgo],
-        )
-        .catch(() => [[{ activeToday: 0, active7d: 0 }]]),
-      // 系统健康：业务 4xx、未知路径 4xx 与服务端 5xx 分开，避免外部探测 404 被误解为功能故障。
-      pool
-        .query(
-          `SELECT
-             COALESCE(SUM(${validApiRequestSql}), 0) AS total,
-             COALESCE(SUM(${business4xxSql}), 0) AS businessErrors,
-             COALESCE(SUM(${invalid4xxSql}), 0) AS invalidRequests,
-             COALESCE(SUM(status_code LIKE '5%'), 0) AS serverErrors
-           FROM api_logs WHERE request_time >= ?`,
-          [today],
-        )
-        .catch(() => [[{ total: 0, businessErrors: 0, invalidRequests: 0, serverErrors: 0 }]]),
-      // 近7天新增用户按天
-      pool
-        .query(
-          "SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM `user` WHERE del_flag = 0 AND role <> 'visitor' AND create_time >= ?" +
-            notIntRole +
-            ' GROUP BY d',
-          [weekAgo],
-        )
-        .catch(() => [[]]),
-      // 近7天新增内容(书签+笔记+文件合并)按天
-      pool
-        .query(
-          // 保留 kind 维度:用户数与内容量量级差异大,前端需要分面板展示书签/笔记/文件构成
-          `SELECT d, kind, SUM(c) AS c FROM (
-             SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'bookmark' AS kind, COUNT(*) AS c FROM bookmark WHERE del_flag = 0 AND create_time >= ?${activeBookmarkOwner}${notIntUser}${notOnboardingBookmark} GROUP BY d
-             UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'note' AS kind, COUNT(*) AS c FROM note WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy}${notOnboardingNote} GROUP BY d
-             UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'file' AS kind, COUNT(*) AS c FROM files WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy}${notOnboardingFile} GROUP BY d
-           ) t GROUP BY d, kind`,
-          [weekAgo, weekAgo, weekAgo],
-        )
-        .catch(() => [[]]),
-      // 今日卡片只补“截至当前时刻”的同期基线；一次 UNION 聚合覆盖全部指标，避免每张卡重复查询。
-      // create_time 先走日期范围，再用 TIME 截取相同日内时刻，防止拿今日半天数据对比历史完整自然日。
-      pool
-        .query(
-          `SELECT d, kind, SUM(c) AS c FROM (
-             SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'users' AS kind, COUNT(*) AS c
-             FROM \`user\`
-             WHERE del_flag = 0 AND role <> 'visitor' AND create_time >= ? AND create_time < ? AND TIME(create_time) <= ?${notIntRole}
-             GROUP BY d
-             UNION ALL
-             SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'bookmarks' AS kind, COUNT(*) AS c
-             FROM bookmark
-             WHERE del_flag = 0 AND create_time >= ? AND create_time < ? AND TIME(create_time) <= ?${activeBookmarkOwner}${notIntUser}${notOnboardingBookmark}
-             GROUP BY d
-             UNION ALL
-             SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'notes' AS kind, COUNT(*) AS c
-             FROM note
-             WHERE del_flag = 0 AND create_time >= ? AND create_time < ? AND TIME(create_time) <= ?${notIntCreateBy}${notOnboardingNote}
-             GROUP BY d
-             UNION ALL
-             SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'files' AS kind, COUNT(*) AS c
-             FROM files
-             WHERE del_flag = 0 AND create_time >= ? AND create_time < ? AND TIME(create_time) <= ?${notIntCreateBy}${notOnboardingFile}
-             GROUP BY d
-             UNION ALL
-             SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'todos' AS kind, COUNT(*) AS c
-             FROM todo_items
-             WHERE del_flag = 0 AND create_time >= ? AND create_time < ? AND TIME(create_time) <= ?${notIntUser}
-             GROUP BY d
-             UNION ALL
-             SELECT DATE_FORMAT(api_log.request_time, '%Y-%m-%d') AS d, 'activeUsers' AS kind,
-                    COUNT(DISTINCT api_log.user_id) AS c
-             FROM api_logs api_log
-             INNER JOIN \`user\` active_user ON active_user.id = api_log.user_id
-             WHERE api_log.del_flag = '0'
-               AND api_log.request_time >= ? AND api_log.request_time < ? AND TIME(api_log.request_time) <= ?
-               AND active_user.del_flag = 0
-               AND active_user.role <> 'visitor'${activeApiInternalRole}
-             GROUP BY d
-             UNION ALL
-             SELECT DATE_FORMAT(created_at, '%Y-%m-%d') AS d, 'aiCalls' AS kind, COUNT(*) AS c
-             FROM agent_logs
-             WHERE created_at >= ? AND created_at < ? AND TIME(created_at) <= ?${notIntUser}
-             GROUP BY d
-           ) same_time_baseline
-           GROUP BY d, kind`,
-          [
-            baselineStart,
-            today,
-            baselineCutoffTime,
-            baselineStart,
-            today,
-            baselineCutoffTime,
-            baselineStart,
-            today,
-            baselineCutoffTime,
-            baselineStart,
-            today,
-            baselineCutoffTime,
-            baselineStart,
-            today,
-            baselineCutoffTime,
-            baselineStart,
-            today,
-            baselineCutoffTime,
-            baselineStart,
-            today,
-            baselineCutoffTime,
-          ],
-        )
-        .catch((error) => {
-          console.error('[AdminOverview] 同期基线统计失败(忽略) code=%s', stableAgentErrorCode(error));
-          return [null];
-        }),
+    const [snapshot, history] = await Promise.all([
+      queryAdminOverviewSnapshot({ hideInternal, now }),
+      queryAdminOverviewTrend({ days: 7, hideInternal, now }),
     ]);
-
-    // AI 用量单独兜底(agent_logs 若某环境未建表,不拖垮整个看板)。
-    // agent_logs 的 cost 是静态价表估算，不作为后台金额指标返回。
-    let ai = { todayCount: 0, todayTokens: 0, totalCount: 0, totalTokens: 0 };
-    try {
-      const [[aiToday], [aiTotal]] = await Promise.all([
-        pool.query(
-          'SELECT COUNT(*) AS count, COALESCE(SUM(total_tokens),0) AS tokens FROM agent_logs WHERE created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY)' +
-            notIntUser,
-          [today, today],
-        ),
-        pool.query(
-          'SELECT COUNT(*) AS count, COALESCE(SUM(total_tokens),0) AS tokens FROM agent_logs WHERE 1=1' + notIntUser,
-        ),
-      ]);
-      ai = {
-        todayCount: Number(aiToday[0].count),
-        todayTokens: Number(aiToday[0].tokens),
-        totalCount: Number(aiTotal[0].count),
-        totalTokens: Number(aiTotal[0].tokens),
-      };
-    } catch (aiErr) {
-      console.error('[AdminOverview] AI 统计失败(忽略) code=%s', stableAgentErrorCode(aiErr));
-    }
-
-    // 趋势按天补零成 7 天序列(展示 MM-DD)
-    const userMap = Object.fromEntries((userTrendRows[0] || []).map((x) => [x.d, Number(x.c)]));
-    const contentKindMap = new Map();
-    (contentTrendRows[0] || []).forEach((row) => {
-      const bucket = contentKindMap.get(row.d) || { bookmark: 0, note: 0, file: 0 };
-      if (row.kind in bucket) bucket[row.kind] = Number(row.c || 0);
-      contentKindMap.set(row.d, bucket);
-    });
-    const trend = days.map((day) => {
-      const kinds = contentKindMap.get(day) || { bookmark: 0, note: 0, file: 0 };
-      const contentTotal = kinds.bookmark + kinds.note + kinds.file;
-      return {
-        date: day,
-        label: day.slice(5),
-        users: userMap[day] || 0,
-        bookmarks: kinds.bookmark,
-        notes: kinds.note,
-        files: kinds.file,
-        contentTotal,
-        // 兼容旧前端一个版本,避免前后端部署错位时看板空白
-        d: day.slice(5),
-        content: contentTotal,
-      };
-    });
-
-    const u = userAgg[0][0],
-      r = resAgg[0][0],
-      c = convAgg[0][0],
-      o = opinionAgg[0][0],
-      s = securityAgg[0][0],
-      todo = todoAgg[0][0],
-      a = activeAgg[0][0],
-      sys = sysAgg[0][0];
-    res.send(
+    // 旧接口保留 d/content 字段一个兼容周期；新总览页面使用快照与趋势接口，不再等待完整响应。
+    const trend = history.trend.map((row) => ({
+      ...row,
+      d: row.label,
+      content: row.contentTotal,
+    }));
+    return res.send(
       resultData({
-        users: { total: Number(u.total || 0), today: Number(u.today || 0) },
-        active: { today: Number(a.activeToday || 0), week: Number(a.active7d || 0) },
-        resources: {
-          bookmarkTotal: Number(r.bookmarkTotal || 0),
-          noteTotal: Number(r.noteTotal || 0),
-          fileTotal: Number(r.fileTotal || 0),
-          bookmarkToday: Number(r.bookmarkToday || 0),
-          noteToday: Number(r.noteToday || 0),
-          fileToday: Number(r.fileToday || 0),
-          storageMb: Number(r.storageMb || 0),
-          trashMb: Number(r.trashMb || 0),
-          trashCount: Number(r.trashCount || 0),
-        },
-        ai,
-        conversion: { visitors: Number(c.visitors || 0), registers: Number(c.registers || 0) },
-        system: {
-          apiToday: Number(sys.total || 0),
-          // 保留 apiErrorsToday 兼容旧前端，但只统计真正需要关注的业务 4xx + 服务端 5xx。
-          apiErrorsToday: Number(sys.businessErrors || 0) + Number(sys.serverErrors || 0),
-          apiBusinessErrorsToday: Number(sys.businessErrors || 0),
-          apiInvalidRequestsToday: Number(sys.invalidRequests || 0),
-          apiServerErrorsToday: Number(sys.serverErrors || 0),
-        },
-        pending: { opinion: Number(o.pending || 0), security: Number(s.unhandled || 0) },
-        todos: {
-          total: Number(todo.total || 0),
-          createdToday: Number(todo.createdToday || 0),
-          pending: Number(todo.pending || 0),
-          dueToday: Number(todo.dueToday || 0),
-          overdue: Number(todo.overdue || 0),
-          completedToday: Number(todo.completedToday || 0),
-        },
+        ...snapshot,
         trend,
-        trendPeriod: { days: 7, granularity: 'day' },
-        todayBaseline: buildAdminTodayBaseline(sameTimeBaselineRows?.[0], baselineDates, baselineCutoffTime),
-        generatedAt: formatDateTime(now),
+        trendPeriod: { days: history.days, granularity: history.granularity },
+        todayBaseline: history.todayBaseline,
       }),
     );
   } catch (error) {

@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const recordAiProductEvent = vi.fn();
-const resolveAiConversationIdentity = vi.fn();
+const resolveAiIdentity = vi.fn();
 
 vi.mock('../util/aiProductTelemetry.js', () => ({ recordAiProductEvent }));
-vi.mock('../util/aiConversationService.js', () => ({ resolveAiConversationIdentity }));
+vi.mock('../util/aiIdentity.js', () => ({ resolveAiIdentity }));
 
 const { recordAiEvent } = await import('./aiTelemetryHandle.js');
 
@@ -22,7 +22,7 @@ function response() {
 describe('aiTelemetryHandle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    resolveAiConversationIdentity.mockReturnValue({ actorUserId: 'a', subjectUserId: 's' });
+    resolveAiIdentity.mockReturnValue({ actorUserId: 'a', subjectUserId: 's' });
   });
 
   it('records an event under the resolved AI identity', async () => {
@@ -45,7 +45,7 @@ describe('aiTelemetryHandle', () => {
       res,
     );
 
-    expect(resolveAiConversationIdentity).not.toHaveBeenCalled();
+    expect(resolveAiIdentity).not.toHaveBeenCalled();
     expect(recordAiProductEvent).not.toHaveBeenCalled();
     expect(res.status).not.toHaveBeenCalled();
     expect(res.send).toHaveBeenCalledWith(

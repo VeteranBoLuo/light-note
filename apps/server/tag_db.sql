@@ -287,6 +287,7 @@ CREATE TABLE `note` (
   KEY `idx_note_owner_top_sort` (`create_by`,`del_flag`,`is_top`,`sort`,`update_time`),
   KEY `idx_note_owner` (`create_by`,`del_flag`,`update_time`),
   KEY `idx_note_owner_parent_order` (`create_by`(64),`parent_id`(64),`del_flag`(8),`is_top`,`sort`,`update_time`,`id`(64)),
+  KEY `idx_note_admin_created` (`del_flag`(8),`create_time`,`create_by`(64)),
   KEY `idx_note_parent` (`parent_id`),
   KEY `idx_note_tree_delete_batch` (`create_by`(64),`tree_delete_batch_id`(64),`del_flag`(8))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;

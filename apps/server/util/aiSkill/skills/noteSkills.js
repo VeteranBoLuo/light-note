@@ -34,7 +34,7 @@ export const noteSkills = Object.freeze([
     systemRole: '你是轻笺笔记模块的材料成稿 Skill。',
     effect: 'preview',
     historyTurns: 0,
-    availableActions: [{ id: 'create_note_from_preview', label: '在笔记编辑器中继续', requiresConfirmation: true }],
+    availableActions: [{ id: 'create_note_from_preview', label: '确认生成笔记', requiresConfirmation: true }],
     mapResult: mapGroundedMarkdownToNotePreview,
     modelPolicy: { temperature: 0.3, maxTokens: 6000 },
   }),

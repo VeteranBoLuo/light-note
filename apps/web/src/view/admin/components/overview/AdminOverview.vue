@@ -2,13 +2,20 @@
   <AdminDataPage eyebrow="Admin / 总览" title="数据总览" :subtitle="pageSubtitle" layout="scroll">
     <template #actions>
       <label class="ov-hide-internal">
-        <BSwitch v-model:checked="hideInternal" :disabled="loading" @change="load" />隐藏内部账号（管理员/测试）
+        <BSwitch
+          v-model:checked="hideInternal"
+          :disabled="loading"
+          @change="changeOverviewScope"
+        />隐藏内部账号（管理员/测试）
       </label>
-      <BButton size="small" :loading="loading" @click="load">刷新</BButton>
+      <BButton size="small" :loading="loading" @click="refreshOverview">刷新</BButton>
     </template>
 
-    <!-- 加载态：此前 data 为 null 时全部显示「—」，分不清是在加载还是真的没有数据 -->
-    <p v-if="loading && !data" class="ov-loading">正在加载全站数据…</p>
+    <BLoading v-if="loading && !data" inline loading class="ov-loading" :title="t('adminOverview.loading')" />
+    <div v-if="loadError" class="ov-load-error" role="alert">
+      <span>{{ data ? t('adminOverview.refreshFailed') : t('adminOverview.loadFailed') }}</span>
+      <BButton size="small" @click="refreshOverview">{{ t('adminOverview.retry') }}</BButton>
+    </div>
 
     <section v-if="data" class="ov-today" aria-labelledby="ov-today-title">
       <header class="ov-today__header">
@@ -165,8 +172,10 @@
       </BButton>
     </div>
 
-    <p class="ov-section-title"> 运行与待办健康 <span class="ov-section-tip">系统运行、事项积压与完成情况</span> </p>
-    <ul class="admin-stats ov-health-stats">
+    <p v-if="data" class="ov-section-title">
+      运行与待办健康 <span class="ov-section-tip">系统运行、事项积压与完成情况</span>
+    </p>
+    <ul v-if="data" class="admin-stats ov-health-stats">
       <li class="admin-stat-card">
         <span class="admin-stat-label">活跃用户</span>
         <strong class="admin-stat-value">{{ n(data?.active.today) }}</strong>
@@ -215,10 +224,20 @@
       </li>
     </ul>
 
-    <div class="ov-trend-head">
+    <div v-if="data" class="ov-trend-head">
       <p class="ov-section-title">近 {{ trendDays }} 天新增趋势</p>
       <div class="ov-trend-control">
-        <span v-if="trendLoading" class="ov-trend-loading">正在更新…</span>
+        <BLoading
+          v-if="trendLoading"
+          inline
+          loading
+          class="ov-trend-loading"
+          :title="t('adminOverview.trendLoading')"
+        />
+        <span v-else-if="trendError" class="ov-trend-error" role="alert">
+          {{ t('adminOverview.trendLoadFailed') }}
+          <BButton size="small" @click="loadTrend">{{ t('adminOverview.retryTrend') }}</BButton>
+        </span>
         <BTabs v-model:active-tab="trendDays" :options="trendOptions" variant="segment" @change="loadTrend" />
       </div>
     </div>
@@ -228,7 +247,7 @@
       :period-days="Number(trendDays)"
       :granularity="data.trendPeriod?.granularity || 'day'"
     />
-    <div ref="recentAnchor" class="ov-recent-anchor">
+    <div v-if="data" ref="recentAnchor" class="ov-recent-anchor">
       <AdminRecentAdditions
         :data="recentData"
         :loading="recentLoading"
@@ -249,6 +268,7 @@
   import { ref, computed, nextTick, onMounted } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { apiBasePost } from '@/http/request.ts';
+  import { getAdminOverviewSnapshot } from '@/api/adminOverview.ts';
   import router from '@/router';
   import { bookmarkStore } from '@/store';
   import AdminGrowthTrendCard from './AdminGrowthTrendCard.vue';
@@ -262,6 +282,7 @@
   import type { AdminRecentData, AdminRecentFilter, AdminRecentFilterType } from './adminRecentTypes.ts';
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -273,7 +294,9 @@
   const data = ref<any>(null);
   const hideInternal = ref(true);
   const loading = ref(false);
+  const loadError = ref(false);
   const trendLoading = ref(false);
+  const trendError = ref(false);
   const recentData = ref<AdminRecentData | null>(null);
   const recentLoading = ref(false);
   const recentError = ref(false);
@@ -288,6 +311,7 @@
     { key: '90', label: '近 90 天' },
   ];
   const trendCache = new Map<string, any>();
+  let snapshotRequestSequence = 0;
   let trendRequestSequence = 0;
   let recentRequestSequence = 0;
   const todayResourceTotal = computed(() =>
@@ -407,26 +431,68 @@
     void drillDownTodayRecent(insight.focus ? insightRecentType[insight.focus] : 'resource');
   }
 
-  async function load() {
+  interface OverviewLoadOptions {
+    force?: boolean;
+    resetScope?: boolean;
+  }
+
+  async function load({ force = false, resetScope = false }: OverviewLoadOptions = {}) {
+    const hideInternalValue = hideInternal.value;
+    const previousHistory =
+      !resetScope && data.value
+        ? {
+            trend: data.value.trend || [],
+            trendPeriod: data.value.trendPeriod,
+            todayBaseline: data.value.todayBaseline,
+          }
+        : null;
+    const requestSequence = ++snapshotRequestSequence;
     trendRequestSequence += 1;
+    recentRequestSequence += 1;
     trendLoading.value = false;
-    loading.value = true;
-    void loadRecent();
-    try {
-      const res: any = await apiBasePost('/api/common/getAdminOverview', { hideInternal: hideInternal.value });
-      if (res.status === 200) {
-        data.value = res.data;
-        trendCache.clear();
-        trendCache.set(`${hideInternal.value}:7`, {
-          trend: res.data.trend,
-          days: 7,
-          granularity: 'day',
-        });
-        if (trendDays.value !== '7') await loadTrend();
-      }
-    } finally {
-      loading.value = false;
+    trendError.value = false;
+    recentLoading.value = false;
+    recentError.value = false;
+    if (resetScope) {
+      data.value = null;
+      recentData.value = null;
+      recentScope.value = null;
     }
+    loading.value = true;
+    loadError.value = false;
+    try {
+      const response: any = await getAdminOverviewSnapshot(hideInternalValue, { force });
+      if (requestSequence !== snapshotRequestSequence) return;
+      if (response.status !== 200) {
+        loadError.value = true;
+        return;
+      }
+      data.value = {
+        ...response.data,
+        trend: previousHistory?.trend || [],
+        trendPeriod: previousHistory?.trendPeriod || {
+          days: Number(trendDays.value),
+          granularity: trendDays.value === '90' ? 'week' : 'day',
+        },
+        todayBaseline: previousHistory?.todayBaseline || response.data.todayBaseline,
+      };
+      trendCache.clear();
+      // 核心快照先落屏；历史分析与最近新增随后并发，二者失败都不会清空核心数据。
+      void loadTrend();
+      void loadRecent();
+    } catch (_error) {
+      if (requestSequence === snapshotRequestSequence) loadError.value = true;
+    } finally {
+      if (requestSequence === snapshotRequestSequence) loading.value = false;
+    }
+  }
+
+  function refreshOverview() {
+    void load({ force: true });
+  }
+
+  function changeOverviewScope() {
+    void load({ force: true, resetScope: true });
   }
 
   async function loadRecent() {
@@ -478,21 +544,37 @@
     const cacheKey = `${hideInternal.value}:${days}`;
     const cached = trendCache.get(cacheKey);
     if (cached) {
-      data.value.trend = cached.trend;
-      data.value.trendPeriod = { days: cached.days, granularity: cached.granularity };
+      data.value = {
+        ...data.value,
+        trend: cached.trend,
+        trendPeriod: { days: cached.days, granularity: cached.granularity },
+        todayBaseline: cached.todayBaseline || data.value.todayBaseline,
+      };
+      trendError.value = false;
       return;
     }
     const requestSequence = ++trendRequestSequence;
     trendLoading.value = true;
+    trendError.value = false;
     try {
       const response: any = await apiBasePost('/api/common/getAdminOverviewTrend', {
         days,
         hideInternal: hideInternal.value,
       });
-      if (requestSequence !== trendRequestSequence || response.status !== 200) return;
+      if (requestSequence !== trendRequestSequence) return;
+      if (response.status !== 200) {
+        trendError.value = true;
+        return;
+      }
       trendCache.set(cacheKey, response.data);
-      data.value.trend = response.data.trend;
-      data.value.trendPeriod = { days: response.data.days, granularity: response.data.granularity };
+      data.value = {
+        ...data.value,
+        trend: response.data.trend,
+        trendPeriod: { days: response.data.days, granularity: response.data.granularity },
+        todayBaseline: response.data.todayBaseline || data.value.todayBaseline,
+      };
+    } catch (_error) {
+      if (requestSequence === trendRequestSequence) trendError.value = true;
     } finally {
       if (requestSequence === trendRequestSequence) trendLoading.value = false;
     }
@@ -619,6 +701,20 @@
     margin: 0;
     font-size: 13px;
     color: var(--desc-color);
+  }
+
+  .ov-load-error {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--danger-color);
+    border-radius: 10px;
+    background: var(--card-background);
+    color: var(--danger-color);
+    font-size: 12px;
+    font-weight: 600;
   }
 
   /* 内容较多:整面板纵向滚动、KPI 卡按自然高度排布(同 ConversionFunnel 的做法) */
@@ -782,6 +878,15 @@
     font-size: 12px;
   }
 
+  .ov-trend-error {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--danger-color);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
   .ov-recent-anchor {
     min-width: 0;
   }
@@ -820,6 +925,12 @@
     .ov-trend-control {
       width: 100%;
       justify-content: space-between;
+      flex-wrap: wrap;
+    }
+
+    .ov-load-error {
+      align-items: flex-start;
+      flex-direction: column;
     }
   }
 

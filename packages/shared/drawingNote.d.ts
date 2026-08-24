@@ -107,7 +107,7 @@ export type DrawingScene =
 export declare const DRAWING_NOTE_TYPE: "drawing";
 export declare const DRAWING_SCENE_VERSION: 4;
 /** 派生缩略图渲染算法版本；变化时使旧位图缓存自动失效。 */
-export declare const DRAWING_THUMBNAIL_RENDERER_VERSION: 2;
+export declare const DRAWING_THUMBNAIL_RENDERER_VERSION: 3;
 export declare const DRAWING_LEGACY_SCENE_VERSION: 1;
 export declare const DRAWING_SHAPE_SCENE_VERSION: 2;
 export declare const DRAWING_ERASER_SCENE_VERSION: 3;

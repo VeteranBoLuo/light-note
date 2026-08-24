@@ -1928,3 +1928,26 @@ JOIN folders f6 ON f6.id=f5.parent_id AND f6.create_by <=> f0.create_by AND f6.d
 JOIN folders f7 ON f7.id=f6.parent_id AND f7.create_by <=> f0.create_by AND f7.del_flag=0
 JOIN folders f8 ON f8.id=f7.parent_id AND f8.create_by <=> f0.create_by AND f8.del_flag=0
 WHERE f0.del_flag=0;
+
+-- 53) 后台总览趋势与最近新增必须按状态、创建时间命中复合索引（期望 0 行）
+SELECT '[53] invalid_admin_overview_index' AS check_name,
+  CONCAT(expected.tab, '.', expected.ix, ' 实际=', IFNULL(actual.cols, '缺失')) AS detail
+FROM (
+  SELECT 'note' tab, 'idx_note_admin_created' ix, 'del_flag(8),create_time,create_by(64)' expected_cols UNION ALL
+  SELECT 'todo_items', 'idx_todo_admin_created', 'del_flag,create_time,user_id(64)'
+) expected
+LEFT JOIN (
+  SELECT table_name, index_name,
+    GROUP_CONCAT(
+      CONCAT(column_name, IF(sub_part IS NULL, '', CONCAT('(', sub_part, ')')))
+      ORDER BY seq_in_index SEPARATOR ','
+    ) AS cols
+  FROM information_schema.statistics
+  WHERE table_schema=DATABASE()
+    AND (
+      (table_name='note' AND index_name='idx_note_admin_created') OR
+      (table_name='todo_items' AND index_name='idx_todo_admin_created')
+    )
+  GROUP BY table_name, index_name
+) actual ON actual.table_name=expected.tab AND actual.index_name=expected.ix
+WHERE actual.cols IS NULL OR actual.cols <> expected.expected_cols;

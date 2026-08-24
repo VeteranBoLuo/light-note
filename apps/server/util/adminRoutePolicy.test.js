@@ -308,32 +308,6 @@ describe('adminRoutePolicyMiddleware', () => {
     }
   });
 
-  it('readonly 仅放行旧会话归档读取，拒绝归档删除', () => {
-    for (const path of ['/chat/conversations/list', '/chat/conversations/get', '/chat/conversations/export']) {
-      const next = vi.fn();
-      adminRoutePolicyMiddleware(createReq(path), createRes(), next);
-      expect(next).toHaveBeenCalledTimes(1);
-    }
-    for (const path of ['/chat/conversations/delete', '/chat/conversations/clear', '/chat/conversations/clear-all-data']) {
-      const next = vi.fn();
-      const res = createRes();
-      adminRoutePolicyMiddleware(createReq(path), res, next);
-      expect(next).not.toHaveBeenCalled();
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_PREVIEW_READONLY' } }));
-    }
-  });
-
-  it('maintain 可管理当前上下文的旧会话归档', () => {
-    for (const path of ['/chat/conversations/delete', '/chat/conversations/clear']) {
-      const next = vi.fn();
-      const req = createReq(path, 'POST', 'maintain');
-      adminRoutePolicyMiddleware(req, createRes(), next);
-      expect(next).toHaveBeenCalledTimes(1);
-      expect(req.suppressUserRewards).toBe(true);
-      expect(req.suppressConversionTracking).toBe(true);
-    }
-  });
-
   it('maintain 模式放行可逆内容写入并抑制成长/转化副作用', () => {
     for (const path of ['/bookmark/updateBookmark', '/file/clearFolderFiles']) {
       const next = vi.fn();

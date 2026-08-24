@@ -134,6 +134,18 @@ export function createAiGateway({
       return { ...result, gatewayTrace };
     } catch (error) {
       caughtError = error;
+      // Provider 客户端抛出的普通 Error 往往没有 code。只在 Gateway 的 Provider 边界
+      // 补上稳定分类，HTTP 层才能返回“超时 / 网络 / 繁忙”等可操作原因，同时不暴露原始供应商文案。
+      if (error && (typeof error === 'object' || typeof error === 'function') && !error.code) {
+        try {
+          Object.defineProperty(error, 'code', {
+            value: stableAgentErrorCode(error),
+            configurable: true,
+          });
+        } catch {
+          /* 冻结的第三方 Error 保持原样，由外层安全兜底。 */
+        }
+      }
       const gatewayTrace = {
         traceId,
         spanId,

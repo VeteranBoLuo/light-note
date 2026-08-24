@@ -7,9 +7,10 @@
   "scripts": {
     "deploy": "bash deploy.sh",
     "dev": "vite",
-    "build": "tsc --noEmit --skipLibCheck && rimraf dist && vite build && node scripts/ensure-spa-route-fallbacks.mjs && node scripts/prerender.mjs && node scripts/verify-seo-artifacts.mjs",
+    "build": "pnpm run check:drawing-thumbnail-renderer && tsc --noEmit --skipLibCheck && rimraf dist && vite build && node scripts/ensure-spa-route-fallbacks.mjs && node scripts/prerender.mjs && node scripts/verify-seo-artifacts.mjs",
+    "check:drawing-thumbnail-renderer": "node scripts/drawing-thumbnail-renderer-contract.mjs",
     "preview": "vite preview",
-    "preview:build": "tsc --noEmit --skipLibCheck && rimraf dist && vite build && vite preview",
+    "preview:build": "pnpm run check:drawing-thumbnail-renderer && tsc --noEmit --skipLibCheck && rimraf dist && vite build && vite preview",
     "preview:local": "VITE_ENV=production PRERENDER_API_ORIGIN=http://127.0.0.1:9001 PRERENDER_API_STRIP_PREFIX=1 pnpm run build && VITE_ENV=local vite preview --host 127.0.0.1 --port 4173 --strictPort --open",
     "prettier:comment": "自动格式化当前目录下的所有文件",
     "prettier": "prettier --write",

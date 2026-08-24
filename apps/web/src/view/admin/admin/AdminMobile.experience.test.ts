@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 const source = (relativePath: string) => readFileSync(resolve(process.cwd(), relativePath), 'utf8');
 
 const adminMobileSource = source('src/view/admin/admin/AdminMobile.vue');
+const adminDesktopSource = source('src/view/admin/admin/Admin.vue');
 const userMobileSource = source('src/view/admin/components/userMg/UserMgMobile.vue');
 const adminPageSource = source('src/components/admin/AdminDataPage.vue');
 const adminRouterSource = source('src/router/modules/admin.ts');
@@ -16,6 +17,13 @@ const dateFilterSources = [
 ];
 
 describe('mobile admin experience', () => {
+  it('管理壳只复用轻量快照读取角标，不再触发完整总览聚合', () => {
+    for (const shellSource of [adminDesktopSource, adminMobileSource]) {
+      expect(shellSource).toContain('getAdminOverviewSnapshot(true)');
+      expect(shellSource).not.toContain("'/api/common/getAdminOverview'");
+    }
+  });
+
   it('uses equal-width quick entries and grouped cards instead of the legacy flat phone menu', () => {
     expect(adminMobileSource).toContain('grid-template-columns: repeat(3, minmax(0, 1fr))');
     expect(adminMobileSource).toMatch(/\.admin-mobile-quick-entry\.b_btn\s*\{[\s\S]*?width:\s*100%;/);

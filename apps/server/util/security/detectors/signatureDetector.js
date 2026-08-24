@@ -1,6 +1,7 @@
 import { getFieldContext } from '../fieldContext.js';
 import { MALICIOUS_FILE_EXTENSIONS, SENSITIVE_PATHS, SIGNATURE_RULES } from '../rules.js';
 import { flattenObject, safeJsonStringify, truncateText } from '../payloadSanitizer.js';
+import { resolveRequestFieldPolicy } from '../requestFieldPolicy.js';
 
 const createEvidence = ({ rule, field, value, message, scoreDelta, confidence }) => ({
   ruleCode: rule.code,
@@ -56,6 +57,12 @@ const isRuleApplicableToField = (rule, field) => {
   return rule.fieldPattern.test(String(field).split('.').pop() || field);
 };
 
+const shouldSkipRuleForTrustedField = (requestFieldPolicy, ruleCode) => {
+  if (!requestFieldPolicy?.trustedEnvelope) return false;
+  if (requestFieldPolicy.skipSignatureRules === '*') return true;
+  return requestFieldPolicy.skipSignatureRules.includes(ruleCode);
+};
+
 const detectPayloadSignatures = (context) => {
   const fields = [
     ...flattenObject(context.query, 'query'),
@@ -64,8 +71,12 @@ const detectPayloadSignatures = (context) => {
   ];
   const evidence = [];
   for (const item of fields) {
+    const requestFieldPolicy = resolveRequestFieldPolicy(context, item.field);
     const fieldContext = getFieldContext(item.field);
     for (const rule of SIGNATURE_RULES) {
+      if (shouldSkipRuleForTrustedField(requestFieldPolicy, rule.code)) {
+        continue;
+      }
       if (!isRuleApplicable(rule, fieldContext)) {
         continue;
       }
@@ -187,31 +198,46 @@ const detectFileUpload = (context) => {
 const detectParameterAnomaly = (context) => {
   const fields = [...flattenObject(context.query, 'query'), ...flattenObject(context.body, 'body')];
   const evidence = [];
-  // 检查超长参数（协议 fuzzing 特征，排除正文类字段）
-  const rawParams = { ...context.query, ...context.body };
-  for (const [key, value] of Object.entries(rawParams)) {
-    const fieldContext = getFieldContext(key);
-    if (fieldContext === 'freeText') continue; // 正文内容天然可能很长
-    const strVal = String(value || '');
-    if (strVal.length > 5000 || key.length > 500) {
-      const rule = {
-        code: 'PARAMETER_OVERFLOW',
-        name: '参数溢出',
-        attackType: 'PROTOCOL_ANOMALY',
-        severity: 'medium',
-        baseScore: 22,
-        confidence: 80,
-      };
-      evidence.push(
-        createEvidence({
-          rule,
-          field: key,
-          value: strVal.slice(0, 200),
-          message: `参数 ${key} 长度异常: key=${key.length} value=${strVal.length}`,
-        }),
-      );
-      break;
+  // 检查超长参数（协议 fuzzing 特征，排除正文类字段）。已登记业务语义的字段使用自己的
+  // 权威预算；只有载荷形态和预算同时满足时才跳过通用阈值，畸形或超限输入仍会留下证据。
+  const rawSources = [
+    ['query', context.query || {}],
+    ['body', context.body || {}],
+  ];
+  let overflowFound = false;
+  for (const [scope, values] of rawSources) {
+    for (const [key, value] of Object.entries(values)) {
+      const field = `${scope}.${key}`;
+      const requestFieldPolicy = resolveRequestFieldPolicy(context, field);
+      const fieldContext = getFieldContext(field);
+      if (!requestFieldPolicy && fieldContext === 'freeText') continue; // 正文内容天然可能很长
+      const strVal = String(value ?? '');
+      const exceedsGenericLimit = !requestFieldPolicy?.trustedEnvelope && strVal.length > 5000;
+      if (requestFieldPolicy?.overBudget || exceedsGenericLimit || key.length > 500) {
+        const message = requestFieldPolicy?.overBudget
+          ? `参数 ${field} 超出 ${requestFieldPolicy.semantic} 业务上限: value=${requestFieldPolicy.size} limit=${requestFieldPolicy.maxSize} unit=${requestFieldPolicy.sizeUnit}`
+          : `参数 ${field} 长度异常: key=${key.length} value=${strVal.length}`;
+        const rule = {
+          code: 'PARAMETER_OVERFLOW',
+          name: '参数溢出',
+          attackType: 'PROTOCOL_ANOMALY',
+          severity: 'medium',
+          baseScore: 22,
+          confidence: 80,
+        };
+        evidence.push(
+          createEvidence({
+            rule,
+            field,
+            value: strVal.slice(0, 200),
+            message,
+          }),
+        );
+        overflowFound = true;
+        break;
+      }
     }
+    if (overflowFound) break;
   }
   for (const item of fields) {
     const fieldContext = getFieldContext(item.field);

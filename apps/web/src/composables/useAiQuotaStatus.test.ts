@@ -69,6 +69,27 @@ describe('useAiQuotaStatus', () => {
     expect(quota.unavailable.value).toBe(true);
   });
 
+  it('把每日额度和永久余额分开保留，进度只按每日额度计算', async () => {
+    mocks.apiBasePost.mockResolvedValue({
+      status: 200,
+      data: {
+        used: 20,
+        quota: 1_100,
+        remaining: 1_080,
+        dailyQuota: 100,
+        dailyUsed: 20,
+        dailyRemaining: 80,
+        bonusTokens: 1_000,
+      },
+    });
+    const quota = useAiQuotaStatus({ autoLoad: false });
+
+    await quota.load();
+
+    expect(quota.status.value).toMatchObject({ dailyRemaining: 80, bonusTokens: 1_000, remaining: 1_080 });
+    expect(quota.remainingPercent.value).toBe(80);
+  });
+
   it('字段缺失或为空时不把异常响应伪装成零额度', async () => {
     mocks.apiBasePost.mockResolvedValue({ status: 200, data: { used: null, quota: 100, remaining: 100 } });
     const quota = useAiQuotaStatus({ autoLoad: false });

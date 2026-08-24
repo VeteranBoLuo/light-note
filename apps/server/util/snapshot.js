@@ -88,7 +88,8 @@ export async function archiveBookmark(userId, bookmarkId) {
   const u = String(url).slice(0, 2048);
   await pool.query(
     `INSERT INTO bookmark_snapshot (bookmark_id, user_id, url, title, content, char_count) VALUES (?, ?, ?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE url = ?, title = ?, content = ?, char_count = ?, update_time = CURRENT_TIMESTAMP`,
+     ON DUPLICATE KEY UPDATE url = ?, title = ?, content = ?, char_count = ?,
+       summary = NULL, summary_at = NULL, update_time = CURRENT_TIMESTAMP`,
     [bookmarkId, userId, u, title, content, content.length, u, title, content, content.length],
   );
   await invalidatePersonalKnowledgeCache(userId);
@@ -171,4 +172,43 @@ export async function summarizeBookmark(
     );
   }
   return { ok: true, summary, cached: false };
+}
+
+/**
+ * 显式“生成网页存档”操作：重新抓取权威正文，并基于同一版正文生成摘要。
+ * 被动收藏归档仍只抓正文，避免新增书签时静默消耗 AI 额度；readonly 代管只可读取既有存档生成临时摘要。
+ */
+export async function archiveAndSummarizeBookmark(
+  userId,
+  bookmarkId,
+  { trace, persist = true } = {},
+) {
+  let archiveResult = null;
+  if (persist) {
+    archiveResult = await archiveBookmark(userId, bookmarkId);
+    if (!archiveResult.ok) return { ...archiveResult, archiveOk: false };
+  }
+
+  const summaryResult = await summarizeBookmark(userId, bookmarkId, {
+    force: true,
+    trace,
+    persist,
+    archiveIfMissing: false,
+  });
+  if (!summaryResult.ok) {
+    return {
+      ...summaryResult,
+      archiveOk: Boolean(archiveResult?.ok),
+      ...(archiveResult?.charCount ? { charCount: archiveResult.charCount } : {}),
+      ...(archiveResult?.title ? { title: archiveResult.title } : {}),
+    };
+  }
+  return {
+    ok: true,
+    archiveOk: Boolean(archiveResult?.ok),
+    summary: summaryResult.summary,
+    cached: false,
+    ...(archiveResult?.charCount ? { charCount: archiveResult.charCount } : {}),
+    ...(archiveResult?.title ? { title: archiveResult.title } : {}),
+  };
 }

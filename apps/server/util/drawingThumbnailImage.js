@@ -4,11 +4,12 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DRAWING_THUMBNAIL_RENDERER_VERSION } from '@lightnote/shared/drawing-note';
+import { DRAWING_THUMBNAIL_MAX_BYTES } from './contentLimits.js';
 import { safeImageSize } from './safeImageSize.js';
 
 export const DRAWING_THUMBNAIL_WIDTH = 480;
 export const DRAWING_THUMBNAIL_HEIGHT = 270;
-export const DRAWING_THUMBNAIL_MAX_BYTES = 256 * 1024;
+export { DRAWING_THUMBNAIL_MAX_BYTES } from './contentLimits.js';
 const PRODUCTION_DRAWING_THUMBNAIL_DIR = '/www/wwwroot/drawing-note-thumbnails';
 const LOCAL_DRAWING_THUMBNAIL_DIR = fileURLToPath(new URL('../.runtime/drawing-note-thumbnails', import.meta.url));
 
@@ -83,6 +84,11 @@ export async function saveDrawingThumbnail(
   { userId, noteId, revision, rendererVersion = DRAWING_THUMBNAIL_RENDERER_VERSION, image },
   { root = resolveDefaultDrawingThumbnailDir() } = {},
 ) {
+  if (rendererVersion !== DRAWING_THUMBNAIL_RENDERER_VERSION) {
+    throw Object.assign(new Error('DRAWING_THUMBNAIL_RENDERER_STALE'), {
+      code: 'DRAWING_THUMBNAIL_RENDERER_STALE',
+    });
+  }
   const filePath = drawingThumbnailPath({ userId, noteId, revision, rendererVersion, root });
   if (!filePath || !Buffer.isBuffer(image) || !image.length || image.length > DRAWING_THUMBNAIL_MAX_BYTES) {
     throw Object.assign(new Error('DRAWING_THUMBNAIL_INVALID'), { code: 'DRAWING_THUMBNAIL_INVALID' });

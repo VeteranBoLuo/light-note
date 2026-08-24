@@ -13,9 +13,7 @@ describe('restrictionBlocksRequest', () => {
     expect(restrictionBlocksRequest(restriction('upload_lock'), { method: 'POST', path: '/file/upload' })).toBe(true);
     expect(restrictionBlocksRequest(restriction('upload_lock'), { method: 'POST', path: '/todo/save' })).toBe(false);
     expect(restrictionBlocksRequest(restriction('ai_lock'), { method: 'POST', path: '/ai/skills/execute' })).toBe(false);
-    expect(restrictionBlocksRequest(restriction('ai_lock'), { method: 'POST', path: '/chat/conversations/get' })).toBe(
-      false,
-    );
+    expect(restrictionBlocksRequest(restriction('ai_lock'), { method: 'POST', path: '/chat/aiQuota' })).toBe(false);
     expect(restrictionBlocksRequest(restriction('ai_lock'), { method: 'POST', path: '/note/save' })).toBe(false);
   });
 

@@ -9,6 +9,7 @@
     @close="emit('update:visible', false)"
   >
     <AiSkillPanel
+      v-if="visible"
       :title="title"
       :description="description"
       :skill-id="skillId"
@@ -21,6 +22,9 @@
       :placeholder="resolvedPlaceholder"
       :submit-label="resolvedSubmitLabel"
       :initial-input="initialInput"
+      :empty-text="emptyText"
+      :auto-run-action-id="autoRunActionId"
+      :icon-src="iconSrc"
       @result="emit('result', $event)"
       @error="emit('error', $event)"
       @result-action="forwardResultAction"
@@ -55,6 +59,9 @@
       placeholder?: string;
       submitLabel?: string;
       initialInput?: Record<string, unknown>;
+      emptyText?: string;
+      autoRunActionId?: string;
+      iconSrc?: string;
       width?: string;
     }>(),
     {
@@ -62,11 +69,14 @@
       resourceRefs: () => [],
       scopeLabel: '',
       actions: () => [],
-      showPrompt: true,
+      showPrompt: false,
       promptKey: 'question',
       placeholder: '',
       submitLabel: '',
       initialInput: () => ({}),
+      emptyText: '',
+      autoRunActionId: '',
+      iconSrc: '',
       width: 'min(720px, calc(100vw - 24px))',
     },
   );

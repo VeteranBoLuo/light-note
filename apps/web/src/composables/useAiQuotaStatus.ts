@@ -27,6 +27,10 @@ function normalizeQuotaNumber(value: unknown) {
   return Math.max(0, amount);
 }
 
+function normalizeOptionalQuotaNumber(value: unknown) {
+  return typeof value === 'undefined' ? undefined : normalizeQuotaNumber(value);
+}
+
 function normalizeQuotaStatus(payload: unknown): AiQuotaStatus {
   const status = payload as AiQuotaStatus | null;
   if (!status || status.unavailable) throw new Error('AI_QUOTA_UNAVAILABLE');
@@ -36,6 +40,10 @@ function normalizeQuotaStatus(payload: unknown): AiQuotaStatus {
     used: normalizeQuotaNumber(status.used),
     quota: normalizeQuotaNumber(status.quota),
     remaining: normalizeQuotaNumber(status.remaining),
+    dailyQuota: normalizeOptionalQuotaNumber(status.dailyQuota),
+    dailyUsed: normalizeOptionalQuotaNumber(status.dailyUsed),
+    dailyRemaining: normalizeOptionalQuotaNumber(status.dailyRemaining),
+    bonusTokens: normalizeOptionalQuotaNumber(status.bonusTokens),
   };
 }
 
@@ -113,8 +121,10 @@ export function useAiQuotaStatus(options: { autoLoad?: boolean } = {}) {
   if (options.autoLoad !== false) onMounted(() => void load());
 
   const remainingPercent = computed(() => {
-    const quota = Number(status.value?.quota || 0);
-    const remaining = Number(status.value?.remaining || 0);
+    // 登录用户的 quota/remaining 包含永久加油余额，进度条只表示每天会重置的等级额度。
+    // 游客和旧响应没有拆分字段时才回退到总额度，避免永久余额很大时进度条长期看似“满格”。
+    const quota = Number(status.value?.dailyQuota ?? status.value?.quota ?? 0);
+    const remaining = Number(status.value?.dailyRemaining ?? status.value?.remaining ?? 0);
     if (!Number.isFinite(quota) || quota <= 0) return 0;
     return Math.min(100, Math.max(0, Math.round((remaining / quota) * 100)));
   });

@@ -1,20 +1,10 @@
 import crypto from 'node:crypto';
 import { resolvePersonalKnowledgeResourceVersions } from '../personalKnowledgeSearch.js';
+import { resolveAiIdentity } from '../aiIdentity.js';
 import { aiSkillError } from './errors.js';
 
 export function resolveAiSkillIdentity(req) {
-  const actor = req?.billingUser || req?.user || {};
-  const subject = req?.resourceUser || req?.user || {};
-  const actorUserId = String(actor.id || 'visitor').trim() || 'visitor';
-  const actorRole = String(actor.role || 'visitor').trim() || 'visitor';
-  return Object.freeze({
-    actorUserId,
-    actorRole,
-    subjectUserId: String(subject.id || actorUserId).trim() || actorUserId,
-    subjectRole: String(subject.role || actorRole).trim() || actorRole,
-    adminContextId: req?.adminContext?.id || null,
-    adminContextMode: req?.adminContext?.mode || 'normal',
-  });
+  return resolveAiIdentity(req);
 }
 
 function scopeDigest({ skill, identity, refs }) {

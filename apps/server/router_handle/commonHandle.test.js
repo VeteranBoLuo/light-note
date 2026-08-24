@@ -58,6 +58,7 @@ const {
   clearImages,
   resolveHelpSources,
   getAdminOverview,
+  getAdminOverviewSnapshot,
   getAdminOverviewRecent,
   getAdminOverviewTrend,
   getAgentLogs,
@@ -248,70 +249,104 @@ describe('resolveHelpSources 旧来源安全补全', () => {
   });
 });
 
-describe('getAdminOverview 资源统计口径', () => {
+function mockAdminOverviewSnapshotStatement(sql) {
+  const statement = String(sql);
+  if (statement.includes('admin_overview_snapshot_resources')) {
+    return [
+      [
+        { kind: 'user', total: 206, today: 1 },
+        { kind: 'bookmark', total: 1069, today: 9 },
+        { kind: 'note', total: 399, today: 7 },
+        { kind: 'file', total: 195, today: 15, storageMb: 2120, trashMb: 862.58, trashCount: 82 },
+      ],
+    ];
+  }
+  if (statement.includes('FROM conversion_events')) return [[{ visitors: 10, registers: 2 }]];
+  if (statement.includes('FROM opinion')) return [[{ pending: 3 }]];
+  if (statement.includes('FROM security_events')) return [[{ unhandled: 4 }]];
+  if (statement.includes('FROM todo_items') && !statement.includes('same_time_baseline')) {
+    return [[{ total: 188, createdToday: 6, pending: 63, dueToday: 3, overdue: 17, completedToday: 9 }]];
+  }
+  if (statement.includes('AS activeToday')) {
+    return [[{ activeToday: 19, active7d: 31, total: 4359, businessErrors: 46, invalidRequests: 0, serverErrors: 0 }]];
+  }
+  if (statement.includes('AS totalCount') && statement.includes('FROM agent_logs')) {
+    return [[{ totalCount: 31, totalTokens: 39473, todayCount: 31, todayTokens: 39473 }]];
+  }
+  return null;
+}
+
+describe('getAdminOverviewSnapshot 首屏快照', () => {
   beforeEach(() => query.mockReset());
 
-  it('累计、今日、存储与近 7 天趋势都排除注册时的系统示例资源和已删除用户的书签', async () => {
+  it('只用一批七个查询返回核心指标，不等待趋势、同期或最近列表', async () => {
+    query.mockImplementation(async (sql) => mockAdminOverviewSnapshotStatement(sql) || [[]]);
+    const res = mockRes();
+
+    await getAdminOverviewSnapshot({ user: { role: 'root' }, body: { hideInternal: true } }, res);
+
+    expect(query).toHaveBeenCalledTimes(7);
+    const resourceSql = String(
+      query.mock.calls.find(([sql]) => String(sql).includes('admin_overview_snapshot_resources'))?.[0],
+    );
+    expect(resourceSql.match(/onboarding_seed_resources/g)).toHaveLength(3);
+    expect(resourceSql).toContain('bookmark_owner.del_flag = 0');
+    expect(resourceSql).toContain("role <> 'visitor'");
+    expect(resourceSql).toContain("role NOT IN ('root', 'test')");
+
+    const activitySql = String(query.mock.calls.find(([sql]) => String(sql).includes('AS activeToday'))?.[0]);
+    expect(activitySql).toContain('COUNT(DISTINCT CASE');
+    expect(activitySql).toContain('"routeMatched":true');
+    expect(activitySql).toContain('api_log.request_time >= ?');
+    expect(activitySql).not.toContain('user_sessions');
+
+    const aiCalls = query.mock.calls.filter(([sql]) => String(sql).includes('FROM agent_logs'));
+    expect(aiCalls).toHaveLength(1);
+    expect(String(aiCalls[0][0])).toContain('AS totalCount');
+    expect(String(aiCalls[0][0])).toContain('AS todayCount');
+    expect(query.mock.calls.some(([sql]) => String(sql).includes('admin_overview_trend'))).toBe(false);
+    expect(query.mock.calls.some(([sql]) => String(sql).includes('same_time_baseline'))).toBe(false);
+
+    const payload = res.send.mock.calls[0][0];
+    expect(payload.status).toBe(200);
+    expect(payload.data).toMatchObject({
+      users: { total: 206, today: 1 },
+      resources: { bookmarkTotal: 1069, noteTotal: 399, fileTotal: 195, trashCount: 82 },
+      active: { today: 19, week: 31 },
+      ai: { todayCount: 31, totalCount: 31 },
+      pending: { opinion: 3, security: 4 },
+    });
+    expect(payload.data).not.toHaveProperty('trend');
+    expect(payload.data).not.toHaveProperty('todayBaseline');
+  });
+
+  it('可选健康表失败时降级为零，不清空其余核心快照', async () => {
     query.mockImplementation(async (sql) => {
-      const statement = String(sql);
-      if (statement.includes('FROM `user` WHERE del_flag')) return [[{ total: 1, today: 1 }]];
-      if (statement.includes('AS bookmarkTotal')) {
-        return [
-          [
-            {
-              bookmarkTotal: 0,
-              noteTotal: 0,
-              fileTotal: 0,
-              bookmarkToday: 0,
-              noteToday: 0,
-              fileToday: 0,
-              storageMb: 0,
-              trashMb: 0,
-              trashCount: 0,
-            },
-          ],
-        ];
-      }
-      if (statement.includes('FROM conversion_events')) return [[{ visitors: 0, registers: 0 }]];
-      if (statement.includes('FROM opinion')) return [[{ pending: 0 }]];
-      if (statement.includes('FROM security_events')) return [[{ unhandled: 0 }]];
-      if (statement.includes('FROM todo_items')) {
-        return [[{ total: 0, createdToday: 0, pending: 0, dueToday: 0, overdue: 0, completedToday: 0 }]];
-      }
-      if (statement.includes('AS activeToday')) return [[{ activeToday: 0, active7d: 0 }]];
-      if (statement.includes('FROM api_logs')) {
-        return [[{ total: 0, businessErrors: 0, invalidRequests: 0, serverErrors: 0 }]];
-      }
-      if (statement.includes('GROUP BY d') && statement.includes('FROM `user`')) return [[]];
-      if (statement.includes('SELECT d, kind, SUM(c)')) return [[]];
-      if (statement.includes('FROM agent_logs')) return [[{ count: 0, tokens: 0, cost: 0 }]];
-      return [[]];
+      if (String(sql).includes('FROM security_events')) throw new Error('missing optional table');
+      return mockAdminOverviewSnapshotStatement(sql) || [[]];
     });
     const res = mockRes();
 
-    await getAdminOverview({ user: { role: 'root' }, body: { hideInternal: true } }, res);
+    await getAdminOverviewSnapshot({ user: { role: 'root' }, body: { hideInternal: true } }, res);
 
-    const resourceSql = query.mock.calls.find(([sql]) => String(sql).includes('AS bookmarkTotal'))?.[0];
-    const trendSql = query.mock.calls.find(([sql]) => String(sql).includes('SELECT d, kind, SUM(c)'))?.[0];
-    const userSql = query.mock.calls.find(
-      ([sql]) => String(sql).includes('AS total') && String(sql).includes('FROM `user`'),
-    )?.[0];
-    const userTrendSql = query.mock.calls.find(
-      ([sql]) => String(sql).includes('GROUP BY d') && String(sql).includes('FROM `user`'),
-    )?.[0];
-    expect(resourceSql).toContain('onboarding_seed_resources');
-    expect(resourceSql.match(/onboarding_seed_resources/g)).toHaveLength(9);
-    expect(resourceSql).toContain('bookmark_owner.del_flag = 0');
-    expect(trendSql.match(/onboarding_seed_resources/g)).toHaveLength(3);
-    expect(trendSql).toContain('bookmark_owner.del_flag = 0');
-    expect(userSql).toContain("role <> 'visitor'");
-    expect(userTrendSql).toContain("role <> 'visitor'");
     const payload = res.send.mock.calls[0][0];
-    expect(payload.data.ai).toEqual({ todayCount: 0, todayTokens: 0, totalCount: 0, totalTokens: 0 });
-    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+    expect(payload.status).toBe(200);
+    expect(payload.data.pending).toEqual({ opinion: 3, security: 0 });
+    expect(payload.data.users.total).toBe(206);
   });
 
-  it('用北京时间截至当前时刻计算昨日同期与前 7 日同期均值，并以一次聚合查询覆盖全部今日指标', async () => {
+  it('非 root 用户无权读取且不查询数据库', async () => {
+    const res = mockRes();
+    await getAdminOverviewSnapshot({ user: { role: 'user' }, body: {} }, res);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
+    expect(query).not.toHaveBeenCalled();
+  });
+});
+
+describe('getAdminOverviewTrend 历史分析', () => {
+  beforeEach(() => query.mockReset());
+
+  it('用北京时间截至当前时刻计算昨日同期与前 7 日同期均值', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-12T17:40:30+08:00'));
     const baselineRows = [];
@@ -332,58 +367,23 @@ describe('getAdminOverview 资源统计口径', () => {
       query.mockImplementation(async (sql) => {
         const statement = String(sql);
         if (statement.includes('same_time_baseline')) return [baselineRows];
-        if (statement.includes('COALESCE(SUM(create_time >= ?)') && statement.includes('FROM `user`')) {
-          return [[{ total: 100, today: 8 }]];
-        }
-        if (statement.includes('AS bookmarkTotal')) {
-          return [
-            [
-              {
-                bookmarkTotal: 30,
-                noteTotal: 20,
-                fileTotal: 10,
-                bookmarkToday: 6,
-                noteToday: 4,
-                fileToday: 2,
-                storageMb: 12,
-                trashMb: 0,
-                trashCount: 0,
-              },
-            ],
-          ];
-        }
-        if (statement.includes('FROM conversion_events')) return [[{ visitors: 0, registers: 0 }]];
-        if (statement.includes('FROM opinion')) return [[{ pending: 0 }]];
-        if (statement.includes('FROM security_events')) return [[{ unhandled: 0 }]];
-        if (statement.includes('FROM todo_items')) {
-          return [[{ total: 12, createdToday: 3, pending: 2, dueToday: 1, overdue: 0, completedToday: 1 }]];
-        }
-        if (statement.includes('AS activeToday')) return [[{ activeToday: 1, active7d: 2 }]];
-        if (statement.includes('FROM api_logs')) {
-          return [[{ total: 0, businessErrors: 0, invalidRequests: 0, serverErrors: 0 }]];
-        }
-        if (statement.includes('FROM agent_logs')) return [[{ count: 0, tokens: 0 }]];
+        if (statement.includes('admin_overview_trend')) return [[]];
+        if (statement.includes('AS activeUsers')) return [[{ activeUsers: 23 }]];
         return [[]];
       });
-
       const res = mockRes();
-      await getAdminOverview({ user: { role: 'root' }, body: { hideInternal: true } }, res);
 
+      await getAdminOverviewTrend({ user: { role: 'root' }, body: { days: 7, hideInternal: true } }, res);
+
+      expect(query).toHaveBeenCalledTimes(3);
       const baselineCall = query.mock.calls.find(([sql]) => String(sql).includes('same_time_baseline'));
       expect(baselineCall?.[0]).toContain('TIME(create_time) <= ?');
       expect(baselineCall?.[0]).toContain('COUNT(DISTINCT api_log.user_id)');
-      expect(baselineCall?.[0]).toContain("'activeUsers' AS kind");
-      expect(baselineCall?.[0]).toContain("'aiCalls' AS kind");
+      expect(baselineCall?.[0]).toContain('"routeMatched":true');
       expect(baselineCall?.[0]).toContain('onboarding_seed_resources');
-      expect(baselineCall?.[0]).toContain("role <> 'visitor'");
       expect(baselineCall?.[1]).toEqual(
         Array.from({ length: 7 }, () => ['2026-08-05', '2026-08-12', '17:40:30']).flat(),
       );
-
-      const activeCall = query.mock.calls.find(([sql]) => String(sql).includes('AS activeToday'));
-      expect(activeCall?.[0]).toContain("api_log.del_flag = '0'");
-      expect(activeCall?.[0]).toContain('api_log.request_time >= ?');
-      expect(activeCall?.[0]).not.toContain('user_sessions');
 
       const payload = res.send.mock.calls[0][0].data;
       expect(payload.todayBaseline).toEqual({
@@ -407,22 +407,23 @@ describe('getAdminOverview 资源统计口径', () => {
       vi.useRealTimers();
     }
   });
-});
 
-describe('getAdminOverviewTrend 趋势周期', () => {
-  beforeEach(() => query.mockReset());
-
-  it('90 天按周聚合，同时返回该周期活跃用户', async () => {
+  it('90 天按周聚合，活跃用户使用有效业务 API 日志而不是会话表', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-06T12:00:00+08:00'));
     try {
       query.mockImplementation(async (sql) => {
         const statement = String(sql);
-        if (statement.includes('FROM user_sessions')) return [[{ activeUsers: 23 }]];
-        if (statement.includes('SELECT d, kind, SUM(c)')) {
-          return [[{ d: '2026-08-06', kind: 'note', c: 3 }]];
+        if (statement.includes('same_time_baseline')) return [[]];
+        if (statement.includes('admin_overview_trend')) {
+          return [
+            [
+              { d: '2026-08-06', kind: 'user', c: 2 },
+              { d: '2026-08-06', kind: 'note', c: 3 },
+            ],
+          ];
         }
-        if (statement.includes('FROM `user`')) return [[{ d: '2026-08-06', c: 2 }]];
+        if (statement.includes('AS activeUsers')) return [[{ activeUsers: 23 }]];
         return [[]];
       });
       const res = mockRes();
@@ -430,11 +431,11 @@ describe('getAdminOverviewTrend 趋势周期', () => {
       await getAdminOverviewTrend({ user: { role: 'root' }, body: { days: 90, hideInternal: true } }, res);
 
       const payload = res.send.mock.calls[0][0];
-      const userTrendSql = query.mock.calls.find(
-        ([sql]) => String(sql).includes('GROUP BY d') && String(sql).includes('FROM `user`'),
-      )?.[0];
+      const activeSql = String(query.mock.calls.find(([sql]) => String(sql).includes('AS activeUsers'))?.[0]);
       expect(payload.status).toBe(200);
-      expect(userTrendSql).toContain("role <> 'visitor'");
+      expect(activeSql).toContain('FROM api_logs api_log');
+      expect(activeSql).toContain('"routeMatched":true');
+      expect(activeSql).not.toContain('user_sessions');
       expect(payload.data).toMatchObject({ days: 90, granularity: 'week', activeUsers: 23 });
       expect(payload.data.trend).toHaveLength(13);
       expect(payload.data.trend.at(-1)).toMatchObject({ users: 2, notes: 3, contentTotal: 3 });
@@ -448,6 +449,40 @@ describe('getAdminOverviewTrend 趋势周期', () => {
     await getAdminOverviewTrend({ user: { role: 'root' }, body: { days: 365 } }, res);
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
     expect(query).not.toHaveBeenCalled();
+  });
+});
+
+describe('getAdminOverview 兼容接口', () => {
+  beforeEach(() => query.mockReset());
+
+  it('并发组合快照与 7 日历史，并保留旧趋势字段', async () => {
+    query.mockImplementation(async (sql) => {
+      const snapshotResult = mockAdminOverviewSnapshotStatement(sql);
+      if (snapshotResult) return snapshotResult;
+      const statement = String(sql);
+      if (statement.includes('same_time_baseline')) return [[]];
+      if (statement.includes('admin_overview_trend')) {
+        return [[{ d: '2026-08-24', kind: 'note', c: 3 }]];
+      }
+      if (statement.includes('AS activeUsers')) return [[{ activeUsers: 5 }]];
+      return [[]];
+    });
+    const res = mockRes();
+
+    await getAdminOverview({ user: { role: 'root' }, body: { hideInternal: true } }, res);
+
+    expect(query).toHaveBeenCalledTimes(10);
+    const payload = res.send.mock.calls[0][0];
+    expect(payload.status).toBe(200);
+    expect(payload.data.trend.at(-1)).toMatchObject({
+      label: '08-24',
+      d: '08-24',
+      notes: 3,
+      contentTotal: 3,
+      content: 3,
+    });
+    expect(payload.data.trendPeriod).toEqual({ days: 7, granularity: 'day' });
+    expect(payload.data).toHaveProperty('todayBaseline');
   });
 });
 

@@ -9,6 +9,7 @@ import { actionIdempotencyUuid } from '../agent/actionIdempotency.js';
 import { extractOwnedResourceRefs, syncNoteResourceRefs } from './noteReferenceService.js';
 import { prepareOwnedNotePlacement } from './noteTreeService.js';
 import { sanitizePersistedNoteContent } from '../noteHtmlSanitizer.js';
+import { NOTE_CONTENT_MAX_LENGTH } from '../contentLimits.js';
 
 const CREATABLE_NOTE_TYPES = new Set(['html', 'markdown', 'drawing']);
 const AI_EDITABLE_NOTE_TYPES = new Set(['html', 'markdown']);
@@ -100,7 +101,7 @@ export async function createNote({
   inboxSource = 'quick_capture',
   request,
   suppressUserRewards = false,
-  maxContentLength = 1_000_000,
+  maxContentLength = NOTE_CONTENT_MAX_LENGTH,
   trustedImageUrls = [],
   idempotencyKey = null,
   shareExposureAcknowledged = false,
@@ -263,7 +264,15 @@ export async function createNote({
  */
 export async function applyOwnedNoteContentChange(
   connection,
-  { userId, actorUserId, noteId, before, after, maxContentLength = 1_000_000, snapshotReason = 'ai_change' } = {},
+  {
+    userId,
+    actorUserId,
+    noteId,
+    before,
+    after,
+    maxContentLength = NOTE_CONTENT_MAX_LENGTH,
+    snapshotReason = 'ai_change',
+  } = {},
 ) {
   if (!connection?.query) throw noteServiceError('CONNECTION_REQUIRED', '缺少事务连接', 500);
   if (!userId || !noteId) throw noteServiceError('NOTE_OWNER_REQUIRED', '缺少笔记归属信息');

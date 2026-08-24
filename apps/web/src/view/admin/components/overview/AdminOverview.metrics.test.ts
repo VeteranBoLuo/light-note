@@ -6,13 +6,23 @@ const source = readFileSync(resolve(process.cwd(), 'src/view/admin/components/ov
 const template = source.slice(0, source.indexOf('<script'));
 
 describe('后台运营总览指标去重', () => {
+  it('首屏只请求核心快照，核心落屏后再并发加载趋势与最近新增', () => {
+    expect(source).toContain('getAdminOverviewSnapshot(hideInternalValue, { force })');
+    expect(source).not.toContain("apiBasePost('/api/common/getAdminOverview',");
+    expect(source).toMatch(/data\.value = \{[\s\S]*?\.\.\.response\.data[\s\S]*?void loadTrend\(\);[\s\S]*?void loadRecent\(\);/u);
+    expect(template).toContain("t('adminOverview.loading')");
+    expect(template).toContain("t('adminOverview.loadFailed')");
+    expect(template).toContain("t('adminOverview.trendLoadFailed')");
+    expect(template).toContain('<BLoading');
+  });
+
   it('把系统运行和待办健康合并为一组有行动价值的指标', () => {
     expect(template).toContain('运行与待办健康');
     expect(template).not.toContain('>今日运行 ');
     expect(template).not.toContain('>待办运行 ');
 
     const healthSection = template.match(
-      /运行与待办健康[\s\S]*?<ul class="admin-stats ov-health-stats">([\s\S]*?)<\/ul>/u,
+      /运行与待办健康[\s\S]*?<ul[^>]*class="admin-stats ov-health-stats">([\s\S]*?)<\/ul>/u,
     )?.[1];
     expect(healthSection).toBeTruthy();
     expect(healthSection?.match(/class="admin-stat-card/g)).toHaveLength(6);

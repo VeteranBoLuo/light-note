@@ -21,7 +21,11 @@
         </BButton>
       </div>
       <div class="mobile-batch-actions">
-        <BButton class="ai-file-analysis-action" :disabled="!hasSelection" @click="openSelectedFilesInAi">
+        <BButton
+          class="ai-file-analysis-action"
+          :disabled="!hasAiAnalyzableSelection"
+          @click="openSelectedFilesInAi"
+        >
           <SvgIcon :src="icon.ai.organize" size="16" aria-hidden="true" />
           {{ $t('cloudSpace.aiUseSelected') }}
         </BButton>
@@ -58,7 +62,7 @@
           <BButton
             size="small"
             class="ai-file-analysis-action"
-            :disabled="!hasSelection"
+            :disabled="!hasAiAnalyzableSelection"
             @click="openSelectedFilesInAi"
           >
             <SvgIcon :src="icon.ai.organize" size="14" aria-hidden="true" />
@@ -176,11 +180,15 @@
                   icon: icon.manage_categoryBtn_tag,
                   function: () => openTagDialog(item),
                 },
-                {
-                  label: $t('cloudSpace.aiUseFile'),
-                  icon: icon.ai.organize,
-                  function: () => openFilesInAi([item]),
-                },
+                ...(isAiDocumentFileNameSupported(item.fileName)
+                  ? [
+                      {
+                        label: $t('cloudSpace.aiUseFile'),
+                        icon: icon.ai.organize,
+                        function: () => openFilesInAi([item]),
+                      },
+                    ]
+                  : []),
                 {
                   label: item.isPending ? $t('inbox.removeExisting') : $t('inbox.addExisting'),
                   icon: icon.contextMenu.inbox,
@@ -315,7 +323,7 @@
       <BButton
         size="small"
         class="ai-file-analysis-action"
-        :disabled="!hasSelection"
+        :disabled="!hasAiAnalyzableSelection"
         @click="openSelectedFilesInAi"
       >
         <SvgIcon :src="icon.ai.organize" size="14" aria-hidden="true" />
@@ -454,6 +462,15 @@
                         label: $t('cloudSpace.relateTags'),
                         icon: icon.manage_categoryBtn_tag,
                         function: () => openTagDialog(item),
+                      },
+                    ]
+                  : []),
+                ...(isAiDocumentFileNameSupported(item.fileName)
+                  ? [
+                      {
+                        label: $t('cloudSpace.aiUseFile'),
+                        icon: icon.ai.organize,
+                        function: () => openFilesInAi([item]),
                       },
                     ]
                   : []),
@@ -681,9 +698,9 @@
       :prompt-key="fileAiPromptKey"
       surface="cloud_space"
       :resource-refs="fileAiResourceRefs"
-      :scope-label="$t('cloudSpace.aiSkillScope', { count: fileAiResourceRefs.length })"
+      :scope-label="fileAiScopeLabel"
       :actions="fileAiActions"
-      :placeholder="$t('cloudSpace.aiSkillPlaceholder')"
+      :show-prompt="false"
       @result-action="handleFileAiResultAction"
     />
 
@@ -763,8 +780,9 @@
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
   import InboxPendingBadge from '@/components/inbox/InboxPendingBadge.vue';
   import AiSkillDialog from '@/components/aiSkills/AiSkillDialog.vue';
+  import { isAiDocumentFileNameSupported } from '@lightnote/shared';
   import type { AiSkillResourceRef, AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
-  import { createAiNoteDraftHandoff } from '@/utils/aiNoteDraft';
+  import { persistAiNotePreview } from '@/utils/aiNoteDraft';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { isNearResourceScrollEnd } from '@/utils/resourcePagination';
   import CloudTextCardPreview from '@/components/cloudSpace/CloudTextCardPreview.vue';
@@ -821,7 +839,9 @@
       { key: 'rename', label: t('common.reName'), icon: icon.cloudSpace.rename },
       { key: 'download', label: t('cloudSpace.download'), icon: icon.cloudSpace.download },
       { key: 'tags', label: t('cloudSpace.relateTags'), icon: icon.manage_categoryBtn_tag },
-      { key: 'ai', label: t('cloudSpace.aiUseFile'), icon: icon.ai.organize },
+      ...(isAiDocumentFileNameSupported(file.fileName)
+        ? [{ key: 'ai', label: t('cloudSpace.aiUseFile'), icon: icon.ai.organize }]
+        : []),
       { key: 'share', label: t('cloudSpace.share'), icon: icon.cloudSpace.share },
       { key: 'move', label: t('cloudSpace.moveFile'), icon: icon.cloudSpace.moveFile },
       {
@@ -913,6 +933,11 @@
   const videoDurationLabels = ref<Record<string, string>>({});
   const failedVideoPreviewIds = ref<Set<string>>(new Set());
   const hasSelection = computed(() => selectedRows.value.length > 0);
+  const hasAiAnalyzableSelection = computed(() =>
+    cloud.fileList.some(
+      (file) => selectedRows.value.includes(file.id) && isAiDocumentFileNameSupported(file.fileName),
+    ),
+  );
   const indeterminate = computed(
     () => selectedRows.value.length > 0 && selectedRows.value.length < cloud.fileList.length,
   );
@@ -966,8 +991,27 @@
   const fileAiResourceRefs = computed<AiSkillResourceRef[]>(() =>
     fileAiFiles.value.map((file) => ({ type: 'file', id: String(file.id) })),
   );
-  const fileAiSkillId = computed(() => (fileAiResourceRefs.value.length > 1 ? 'file.compare' : 'file.ask'));
-  const fileAiPromptKey = computed(() => (fileAiResourceRefs.value.length > 1 ? 'instruction' : 'question'));
+  const fileAiSkillId = computed(() => (fileAiResourceRefs.value.length > 1 ? 'file.compare' : 'file.summarize'));
+  const fileAiPromptKey = computed(() => 'instruction');
+  const fileAiSingleImage = computed(
+    () => fileAiFiles.value.length === 1 && getCloudFileCategory(fileAiFiles.value[0]) === 'image',
+  );
+  const fileAiScopeLabel = computed(() => {
+    if (fileAiFiles.value.length === 1) {
+      return t('cloudSpace.aiScopeSingle', {
+        name: fileAiFiles.value[0]?.fileName || t('cloudSpace.unnamedFile'),
+      });
+    }
+    const first = fileAiFiles.value
+      .slice(0, 2)
+      .map((file) => file.fileName)
+      .filter(Boolean)
+      .join('、');
+    return t(fileAiFiles.value.length > 2 ? 'cloudSpace.aiScopeMany' : 'cloudSpace.aiScopeMultiple', {
+      names: first,
+      count: fileAiFiles.value.length,
+    });
+  });
   const fileAiActions = computed(() => {
     const actions =
       fileAiResourceRefs.value.length > 1
@@ -982,38 +1026,59 @@
         : [
             {
               id: 'summarize',
-              label: t('cloudSpace.aiSummarizeFile'),
+              label: t(fileAiSingleImage.value ? 'cloudSpace.aiExtractAndSummarizeImage' : 'cloudSpace.aiSummarizeFile'),
               skillId: 'file.summarize',
-              input: { instruction: t('cloudSpace.aiSummarizeInstruction') },
+              input: {
+                instruction: t(
+                  fileAiSingleImage.value
+                    ? 'cloudSpace.aiExtractAndSummarizeImageInstruction'
+                    : 'cloudSpace.aiSummarizeInstruction',
+                ),
+              },
             },
           ];
-    actions.push(
-      {
-        id: 'create-note',
-        label: t('cloudSpace.aiCreateNote'),
-        skillId: 'file.create_note_preview',
-        input: { instruction: t('cloudSpace.aiCreateNoteInstruction') },
+    actions.push({
+      id: 'create-note',
+      label: t('cloudSpace.aiCreateNote'),
+      skillId: 'file.create_note_preview',
+      input: {
+        instruction: t('cloudSpace.aiCreateNoteInstruction'),
+        title:
+          fileAiFiles.value.length === 1
+            ? t('cloudSpace.aiGeneratedSingleNoteTitle', {
+                name: fileAiFiles.value[0]?.fileName || t('cloudSpace.aiGeneratedNoteTitle'),
+              })
+            : t('cloudSpace.aiGeneratedMultiNoteTitle', {
+                name: fileAiFiles.value[0]?.fileName || t('cloudSpace.aiGeneratedNoteTitle'),
+              }),
       },
-      {
-        id: 'extract-todos',
-        label: t('cloudSpace.aiExtractTodos'),
-        skillId: 'file.extract_todos',
-        input: { instruction: t('cloudSpace.aiExtractTodosInstruction') },
-      },
-    );
+    });
     return actions;
   });
 
-  function handleFileAiResultAction(action: Record<string, unknown>, response: AiSkillResponse) {
-    if (action.id !== 'create_note_from_preview') return;
-    const handoff = createAiNoteDraftHandoff(response, t('cloudSpace.aiGeneratedNoteTitle'));
-    if (!handoff) return;
-    fileAiVisible.value = false;
-    void router.push(handoff.route);
+  const creatingAiNote = ref(false);
+
+  async function handleFileAiResultAction(action: Record<string, unknown>, response: AiSkillResponse) {
+    if (action.id !== 'create_note_from_preview' || creatingAiNote.value) return;
+    creatingAiNote.value = true;
+    try {
+      const handoff = await persistAiNotePreview(response, t('cloudSpace.aiGeneratedNoteTitle'));
+      if (!handoff) return;
+      message.success(t('aiSkills.noteCreated'));
+      fileAiVisible.value = false;
+      await router.push(handoff.route);
+    } catch (error: any) {
+      message.error(String(error?.message || t('aiSkills.noteCreateFailed')));
+    } finally {
+      creatingAiNote.value = false;
+    }
   }
 
   function openFilesInAi(files: any[]) {
-    const available = files.filter((file) => String(file?.id || '').trim());
+    const identified = files.filter((file) => String(file?.id || '').trim());
+    const available = identified.filter((file) => isAiDocumentFileNameSupported(file?.fileName));
+    const skippedCount = identified.length - available.length;
+    if (skippedCount > 0) message.info(t('cloudSpace.aiUnsupportedFilesSkipped', { count: skippedCount }));
     if (!available.length) return;
     if (available.length > 5) message.info(t('cloudSpace.aiMaterialLimit', { count: 5 }));
     fileAiFiles.value = available.slice(0, 5);

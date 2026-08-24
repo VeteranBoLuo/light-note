@@ -44,9 +44,31 @@ describe('todo skills', () => {
     ).toMatchObject({ dueAt: '2026-08-26 16:00:00', overdue: false });
   });
 
-  it('待办拆解拒绝不足两个步骤的伪拆解', () => {
+  it('待办拆解按预设粒度限制步骤数量', () => {
     expect(() => todoSkillInternals.validateBreakdownArguments({ title: '任务', checklist: ['一步'] })).toThrowError(
       expect.objectContaining({ code: 'AI_SKILL_TODO_CHECKLIST_INVALID' }),
     );
+    expect(
+      todoSkillInternals.validateBreakdownArguments(
+        { title: '任务', checklist: ['一', '二', '三', '四', '五', '六'] },
+        { detailLevel: 'detailed' },
+      ),
+    ).toBeTruthy();
+  });
+
+  it('详细拆解会同时读取当前说明并要求 6～10 步', async () => {
+    const skill = todoSkills.find((item) => item.id === 'todo.breakdown');
+    const input = skill.validateInput({ instruction: '当前说明：在 CSDN 和掘金写推广文章', detailLevel: 'detailed' });
+    const prepared = await skill.prepare({
+      input,
+      context: { resourceRefs: [] },
+      request: { client: { timezone: 'Asia/Shanghai' } },
+      dependencies: {},
+    });
+    expect(prepared.messages[0].content).toContain('完整阅读标题、说明与现有清单');
+    expect(prepared.messages[0].content).toContain('6～10 步');
+    expect(() =>
+      prepared.validateArguments({ title: '推广轻笺', checklist: ['一', '二', '三', '四', '五'] }),
+    ).toThrowError(expect.objectContaining({ code: 'AI_SKILL_TODO_CHECKLIST_INVALID' }));
   });
 });

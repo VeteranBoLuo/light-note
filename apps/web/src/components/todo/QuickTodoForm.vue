@@ -89,11 +89,6 @@
     </div>
 
     <div class="quick-todo-form__actions">
-      <BTooltip class="quick-todo-form__ai-tooltip" :title="t('inbox.quickTodoAiOrganizeHint')">
-        <BButton :loading="aiParsing" :disabled="!canSubmit || saving" @click="parseWithAi">
-          {{ t('inbox.quickTodoAiOrganize') }}
-        </BButton>
-      </BTooltip>
       <BButton :disabled="saving" @click="openDetails">{{ t('inbox.quickTodoDetails') }}</BButton>
       <BButton type="primary" :loading="saving" :disabled="!canSubmit" @click="submit">
         {{ t('inbox.quickTodoCreate') }}
@@ -109,7 +104,6 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BTimePicker from '@/components/base/BasicComponents/BTimePicker.vue';
-  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import type { TodoCreateInitialValues, TodoPriority, TodoQuickReminderPreset } from '@/api/todoApi';
   import { dueForTodoDatePreset, todoNowInTimezone } from '@/utils/todoPlanning';
 
@@ -121,20 +115,17 @@
       resetKey?: number;
       mobile?: boolean;
       reminderPresetsEnabled?: boolean;
-      aiParsing?: boolean;
     }>(),
     {
       saving: false,
       resetKey: 0,
       mobile: false,
       reminderPresetsEnabled: true,
-      aiParsing: false,
     },
   );
   const emit = defineEmits<{
     submit: [payload: TodoCreateInitialValues & { title: string }];
     details: [payload: TodoCreateInitialValues & { title: string }];
-    ai: [payload: TodoCreateInitialValues & { title: string }];
   }>();
   const { t } = useI18n();
   const titleInput = ref<InstanceType<typeof BInput> | null>(null);
@@ -200,10 +191,6 @@
     emit('details', buildPayload());
   }
 
-  function parseWithAi() {
-    if (!canSubmit.value || props.aiParsing) return;
-    emit('ai', buildPayload());
-  }
 
   function onDailyReminderOpenChange(open: boolean) {
     if (open) reminderPreset.value = 'daily';
@@ -366,10 +353,6 @@
     padding-top: 2px;
   }
 
-  .quick-todo-form__ai-tooltip :deep(.b_btn) {
-    width: 100%;
-  }
-
   @media (max-width: 767px) {
     .quick-todo-form {
       gap: 14px;
@@ -403,10 +386,6 @@
       width: auto;
       height: 48px;
       min-height: 48px;
-    }
-
-    .quick-todo-form__ai-tooltip {
-      flex: 1 1 0;
     }
 
     .quick-todo-form__actions {

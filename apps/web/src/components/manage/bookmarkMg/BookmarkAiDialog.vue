@@ -7,22 +7,24 @@
     prompt-key="instruction"
     surface="bookmark_manage"
     :resource-refs="resourceRefs"
-    :scope-label="t('bookmarkMg.aiSkillScope', { count: resourceRefs.length })"
+    :scope-label="scopeLabel"
     :actions="actions"
-    :placeholder="t('bookmarkMg.aiSkillPlaceholder')"
+    :show-prompt="false"
+    :auto-run-action-id="props.mode === 'create_note' ? '' : 'summarize'"
     @update:visible="emit('update:visible', $event)"
     @result-action="handleResultAction"
   />
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { AiSkillResourceRef } from '@lightnote/shared/ai-skill-protocol';
   import AiSkillDialog from '@/components/aiSkills/AiSkillDialog.vue';
   import { useRouter } from 'vue-router';
   import type { AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
-  import { createAiNoteDraftHandoff } from '@/utils/aiNoteDraft';
+  import { persistAiNotePreview } from '@/utils/aiNoteDraft';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
 
   const props = defineProps<{
     visible: boolean;
@@ -32,17 +34,19 @@
   const emit = defineEmits<{ 'update:visible': [visible: boolean] }>();
   const { t } = useI18n();
   const router = useRouter();
+  const creatingNote = ref(false);
 
   const resourceRefs = computed<AiSkillResourceRef[]>(() =>
-    props.bookmarks.slice(0, 10).map((bookmark) => ({ type: 'bookmark', id: String(bookmark.id) })),
+    props.bookmarks.slice(0, 1).map((bookmark) => ({ type: 'bookmark', id: String(bookmark.id) })),
   );
-  const multiple = computed(() => resourceRefs.value.length > 1);
+  const activeBookmark = computed(() => props.bookmarks[0] || null);
+  const scopeLabel = computed(() =>
+    activeBookmark.value
+      ? `${t('bookmarkMg.resourceTypeBookmark')} · ${activeBookmark.value.name || activeBookmark.value.url || t('bookmarkMg.untitled')}`
+      : '',
+  );
   const skillId = computed(() =>
-    props.mode === 'create_note'
-      ? 'bookmark.create_note_preview'
-      : multiple.value
-        ? 'bookmark.compare_pages'
-        : 'bookmark.summarize_page',
+    props.mode === 'create_note' ? 'bookmark.create_note_preview' : 'bookmark.summarize_page',
   );
   const actions = computed(() => [
     props.mode === 'create_note'
@@ -52,26 +56,31 @@
           skillId: 'bookmark.create_note_preview',
           input: { instruction: t('bookmarkMg.aiCreateNoteInstruction') },
         }
-      : multiple.value
-      ? {
-          id: 'compare',
-          label: t('bookmarkMg.aiCompare'),
-          skillId: 'bookmark.compare_pages',
-          input: { instruction: t('bookmarkMg.aiCompareInstruction') },
-        }
       : {
           id: 'summarize',
           label: t('bookmarkMg.aiSummarize'),
           skillId: 'bookmark.summarize_page',
-          input: { instruction: t('bookmarkMg.aiSummarizeInstruction') },
+          input: {
+            instruction: t('bookmarkMg.aiSummarizeCurrentInstruction', {
+              name: activeBookmark.value?.name || activeBookmark.value?.url || t('bookmarkMg.untitled'),
+            }),
+          },
         },
   ]);
 
-  function handleResultAction(action: Record<string, unknown>, response: AiSkillResponse) {
-    if (action.id !== 'create_note_from_preview') return;
-    const handoff = createAiNoteDraftHandoff(response, t('bookmarkMg.aiGeneratedNoteTitle'));
-    if (!handoff) return;
-    emit('update:visible', false);
-    void router.push(handoff.route);
+  async function handleResultAction(action: Record<string, unknown>, response: AiSkillResponse) {
+    if (action.id !== 'create_note_from_preview' || creatingNote.value) return;
+    creatingNote.value = true;
+    try {
+      const handoff = await persistAiNotePreview(response, t('bookmarkMg.aiGeneratedNoteTitle'));
+      if (!handoff) return;
+      message.success(t('aiSkills.noteCreated'));
+      emit('update:visible', false);
+      await router.push(handoff.route);
+    } catch (error: any) {
+      message.error(String(error?.message || t('aiSkills.noteCreateFailed')));
+    } finally {
+      creatingNote.value = false;
+    }
   }
 </script>

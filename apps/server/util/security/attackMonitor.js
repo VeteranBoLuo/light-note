@@ -69,8 +69,12 @@ export const attackMonitor = async (req, res, next) => {
     if (loggedRequests.has(req)) {
       return;
     }
-    const responseEvidence = detectResponseBehavior(context, res.statusCode, responsePayload);
-    const responsePolicyResult = await applySecurityPolicies({ context, evidenceList: responseEvidence });
+    const responseContext = { ...context, routeMatched: Boolean(req.route) };
+    const responseEvidence = detectResponseBehavior(responseContext, res.statusCode, responsePayload);
+    const responsePolicyResult = await applySecurityPolicies({
+      context: responseContext,
+      evidenceList: responseEvidence,
+    });
     const allEvidence = [...evidenceList, ...responsePolicyResult.evidenceList];
     if (allEvidence.length === 0) {
       return;

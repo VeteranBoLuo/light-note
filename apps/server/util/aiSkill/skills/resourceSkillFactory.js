@@ -1,5 +1,5 @@
 import { createResourceTaskInputValidator } from '../inputValidators.js';
-import { loadExplicitResourceEvidence } from '../resourceEvidence.js';
+import { loadExplicitResourceEvidence, prepareExplicitResourceEvidence } from '../resourceEvidence.js';
 
 const DETAIL_HINT = Object.freeze({
   concise: '回答应简洁，只保留核心信息。',
@@ -68,7 +68,15 @@ export function createGroundedResourceSkill({
       questionRequired,
       instructionRequired,
     }),
-    async prepare({ input, context, dependencies = {} }) {
+    async prepare({ input, context, request, dependencies = {} }) {
+      const prepareEvidence = dependencies.prepareExplicitResourceEvidence || prepareExplicitResourceEvidence;
+      if (context.resourceRefs.some((ref) => ref.type === 'file')) {
+        await prepareEvidence({
+          userId: context.identity.subjectUserId,
+          resourceRefs: context.resourceRefs,
+          sessionId: request?.requestId || '',
+        });
+      }
       const loadEvidence = dependencies.loadExplicitResourceEvidence || loadExplicitResourceEvidence;
       const loaded = await loadEvidence({
         userId: context.identity.subjectUserId,
@@ -80,7 +88,7 @@ export function createGroundedResourceSkill({
           result: { kind: 'grounded_markdown', content: noReadableContent(loaded.coverage) },
           sources: loaded.sources,
           coverage: loaded.coverage,
-          availableActions,
+          availableActions: [],
           modelCalled: false,
         };
       }

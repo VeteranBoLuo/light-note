@@ -35,6 +35,12 @@ describe('cloud file empty state layout', () => {
     expect(source).not.toContain("router.push('/ai')");
   });
 
+  it('桌面卡片与列表的更多菜单都复用单文件分析能力，并按文件支持范围显示', () => {
+    expect(source.match(/label: \$t\('cloudSpace\.aiUseFile'\)/g)).toHaveLength(2);
+    expect(source.match(/function: \(\) => openFilesInAi\(\[item\]\)/g)).toHaveLength(2);
+    expect(source.match(/\.\.\.\(isAiDocumentFileNameSupported\(item\.fileName\)/g)).toHaveLength(2);
+  });
+
   it('桌面批量栏为选中数量保留固定宽度，数量变化不再推动后续按钮', () => {
     expect(source).toMatch(
       /@media \(min-width: 768px\)[\s\S]*?\.batch-actions \.selected-count\s*\{[\s\S]*?width:\s*148px;[\s\S]*?flex:\s*0 0 148px;/,

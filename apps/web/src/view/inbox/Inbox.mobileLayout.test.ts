@@ -49,12 +49,15 @@ describe('移动端待办页签布局', () => {
     expect(inboxSource).toContain('@click="openResource(inspectedInboxItem)"');
     expect(inboxSource).toContain('@click="completeOne(inspectedInboxItem)"');
     expect(inboxSource).toContain('@click="confirmDelete([inspectedInboxItem])"');
+    expect(inboxSource).toContain('@click="openInboxResourceAi(inspectedInboxItem)"');
+    expect(inboxSource).toContain('skill-id="search.summarize_selected"');
+    expect(inboxSource).toContain('auto-run-action-id="analyze"');
+    expect(inboxSource).not.toContain('class="inbox-item__actions inbox-item__actions--desktop"');
     expect(inboxSource).toMatch(
       /\.resource-inbox-inspector__actions\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/,
     );
-    expect(inboxSource).toMatch(
-      /\.resource-inbox-inspector__actions :deep\(\.b_btn:first-child\)[\s\S]*?grid-column:\s*1 \/ -1/,
-    );
+    expect(inboxSource).not.toContain('.resource-inbox-inspector__actions :deep(.b_btn:first-child)');
+    expect(inboxSource).not.toMatch(/resource-inbox-inspector__action--ai\s*\{[\s\S]*?color:/);
     expect(inboxSource).toContain('class="resource-inbox-inspector__summary"');
     expect(inboxSource).toContain("inspectedInboxItem.resourceType === 'note'");
     expect(inboxSource).toMatch(/\.resource-inbox-inspector\s*\{[\s\S]*?overflow:\s*hidden;/);
@@ -85,6 +88,8 @@ describe('移动端待办页签布局', () => {
     expect(inboxSource).toContain('@open="handleInboxItemOpen(action.item)"');
     expect(inboxSource).toMatch(/const inspectedInboxItem = computed\([\s\S]*?inbox\.items\[0\]/);
     expect(inboxSource).toMatch(/function handleInboxItemOpen[\s\S]*?bookmark\.isMobile[\s\S]*?openResource\(item\)/);
+    expect(inboxSource).toMatch(/function inspectInboxResource[\s\S]*?inboxAiResource\.value = null/);
+    expect(inboxSource).toMatch(/const aiKey = inboxAiResource\.value[\s\S]*?!keys\.has\(aiKey\)/);
   });
 
   it('切换议程或日历时仍保留状态页签，避免视图栏上移', () => {

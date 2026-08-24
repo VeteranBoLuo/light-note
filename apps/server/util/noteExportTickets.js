@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import redisClient from './redisClient.js';
+import { NOTE_EXPORT_MAX_BYTES } from './contentLimits.js';
 
 /**
  * 前端生成件的一次性下载票据（笔记导出、待办日历 .ics）。
@@ -29,7 +30,7 @@ const USER_POINTER_KEY_PREFIX = 'note:export:user:';
  * app.js 的 bodyParser 限 10MB,而 base64 会膨胀到 4/3,6MB 原始内容约 8MB 传输体积,
  * 留出的余量给 JSON 包装和其他字段。超限在 handler 层给明确文案,不能让用户吃 413 裸错。
  */
-export const MAX_EXPORT_BYTES = 6 * 1024 * 1024;
+export const MAX_EXPORT_BYTES = NOTE_EXPORT_MAX_BYTES;
 
 /** 导出格式 → 落盘用的 MIME。下载响应实际不用它(统一 octet-stream),仅作校验白名单。 */
 export const EXPORT_FORMATS = Object.freeze({

@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/http/request', () => ({ apiBaseGet: vi.fn(), apiBasePost: vi.fn() }));
-const { apiBaseGet, apiBasePost } = await import('@/http/request');
-const { AiSkillApiError, executeAiSkill, getAiSkillsConfig } = await import('./aiSkillApi');
+vi.mock('@/http/request', () => ({ default: vi.fn(), apiBaseGet: vi.fn(), apiBasePost: vi.fn() }));
+const { default: httpRequest, apiBaseGet, apiBasePost } = await import('@/http/request');
+const { AiSkillApiError, aiSkillApiInternals, executeAiSkill, executeAiSkillStream, getAiSkillsConfig } =
+  await import('./aiSkillApi');
 
 const request = {
   protocolVersion: 1,
@@ -98,5 +99,57 @@ describe('aiSkillApi', () => {
       message: '今日 AI 额度已用完，请明天再试',
       status: 429,
     });
+  });
+
+  it('SSE 帧解析支持事件名与 JSON 数据', () => {
+    expect(aiSkillApiInternals.parseSseFrame('event: delta\ndata: {"content":"片段"}')).toEqual({
+      event: 'delta',
+      data: { content: '片段' },
+    });
+  });
+
+  it('按网络分块逐段消费真实 SSE，并以 complete 事件作为最终结果', async () => {
+    const streamRequest = { ...request, skillId: 'note.transform_text' };
+    const streamResponse = {
+      ...response,
+      skillId: 'note.transform_text',
+      result: { kind: 'text', content: '第一段第二段' },
+    };
+    const payload = [
+      `event: start\ndata: ${JSON.stringify({ requestId: streamRequest.requestId })}\n\n`,
+      'event: delta\ndata: {"content":"第一段"}\n\n',
+      'event: reset\ndata: {}\n\n',
+      'event: delta\ndata: {"content":"第二段"}\n\n',
+      `event: complete\ndata: ${JSON.stringify(streamResponse)}\n\n`,
+    ].join('');
+    const encoder = new TextEncoder();
+    const chunks = [payload.slice(0, 39), payload.slice(39, 111), payload.slice(111)];
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        chunks.forEach((chunk) => controller.enqueue(encoder.encode(chunk)));
+        controller.close();
+      },
+    });
+    vi.mocked(httpRequest).mockResolvedValue({ data: stream } as any);
+    const events: string[] = [];
+
+    await expect(
+      executeAiSkillStream(streamRequest, {
+        onStart: () => events.push('start'),
+        onDelta: (content) => events.push(content),
+        onReset: () => events.push('reset'),
+      }),
+    ).resolves.toMatchObject({ status: 'completed', result: { content: '第一段第二段' } });
+
+    expect(events).toEqual(['start', '第一段', 'reset', '第二段']);
+    expect(httpRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: '/api/ai/skills/stream',
+        method: 'post',
+        data: streamRequest,
+        adapter: 'fetch',
+        responseType: 'stream',
+      }),
+    );
   });
 });

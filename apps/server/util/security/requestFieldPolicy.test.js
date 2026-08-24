@@ -1,0 +1,73 @@
+import { describe, expect, it } from 'vitest';
+import { DRAWING_SCENE_MAX_BYTES } from '@lightnote/shared/drawing-note';
+import { DRAWING_THUMBNAIL_MAX_BYTES } from '../contentLimits.js';
+import { resolveRequestFieldPolicy } from './requestFieldPolicy.js';
+
+describe('请求字段安全策略', () => {
+  it('按方法、规范化路由和完整字段路径匹配业务语义', () => {
+    const context = {
+      method: 'post',
+      path: '/api/note/updateDrawingNote/',
+      body: { scene: '{"v":4}' },
+    };
+    expect(resolveRequestFieldPolicy(context, 'body.scene')).toMatchObject({
+      semantic: 'drawing-scene',
+      maxSize: DRAWING_SCENE_MAX_BYTES,
+      trustedEnvelope: true,
+      overBudget: false,
+    });
+    expect(resolveRequestFieldPolicy(context, 'body.title')).toBeNull();
+    expect(resolveRequestFieldPolicy({ ...context, path: '/note/other' }, 'body.scene')).toBeNull();
+    expect(resolveRequestFieldPolicy({ ...context, method: 'PUT' }, 'body.scene')).toBeNull();
+  });
+
+  it('只有形态与业务预算同时满足的派生载荷才获得业务语义预算', () => {
+    const valid = resolveRequestFieldPolicy(
+      {
+        method: 'POST',
+        path: '/note/uploadDrawingThumbnail',
+        body: { thumbnail: 'data:image/webp;base64,AAAA' },
+      },
+      'body.thumbnail',
+    );
+    const malformed = resolveRequestFieldPolicy(
+      {
+        method: 'POST',
+        path: '/note/uploadDrawingThumbnail',
+        body: { thumbnail: '; curl https://attacker.invalid' },
+      },
+      'body.thumbnail',
+    );
+    expect(valid).toMatchObject({ semantic: 'webp-data-url', trustedEnvelope: true });
+    expect(malformed).toMatchObject({ semantic: 'webp-data-url', trustedEnvelope: false });
+  });
+
+  it('Base64 派生载荷按解码后的真实字节数使用业务上限', () => {
+    const result = resolveRequestFieldPolicy(
+      {
+        method: 'POST',
+        path: '/note/uploadDrawingThumbnail',
+        body: { thumbnail: `data:image/webp;base64,${Buffer.alloc(DRAWING_THUMBNAIL_MAX_BYTES + 1).toString('base64')}` },
+      },
+      'body.thumbnail',
+    );
+    expect(result).toMatchObject({
+      sizeUnit: 'decoded-bytes',
+      size: DRAWING_THUMBNAIL_MAX_BYTES + 1,
+      overBudget: true,
+      trustedEnvelope: false,
+    });
+  });
+
+  it('按 UTF-8 字节数判断手绘场景业务上限', () => {
+    const result = resolveRequestFieldPolicy(
+      {
+        method: 'POST',
+        path: '/note/updateDrawingNote',
+        body: { scene: '绘'.repeat(Math.ceil(DRAWING_SCENE_MAX_BYTES / 3) + 1) },
+      },
+      'body.scene',
+    );
+    expect(result).toMatchObject({ sizeUnit: 'utf8-bytes', overBudget: true, trustedEnvelope: false });
+  });
+});

@@ -7,6 +7,7 @@ import {
   cleanupOtherDrawingThumbnailRevisions,
   decodeDrawingThumbnailDataUrl,
   drawingThumbnailFileName,
+  drawingThumbnailPath,
   getExistingDrawingThumbnailPath,
   resolveDefaultDrawingThumbnailDir,
   saveDrawingThumbnail,
@@ -54,40 +55,36 @@ describe('drawingThumbnailImage', () => {
     expect(decodeDrawingThumbnailDataUrl('data:image/png;base64,AAAA')).toBeNull();
   });
 
-  it('按用户、笔记、正文版本和渲染器版本原子保存，并清理旧派生图', async () => {
+  it('只原子保存当前渲染器版本，并清理旧正文与旧渲染器派生图', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'drawing-thumbnail-test-'));
     temporaryRoots.push(root);
     const image = webp(480, 270);
-    await saveDrawingThumbnail({ userId: 'u1', noteId: 'n1', revision: 2, rendererVersion: 1, image }, { root });
-    await saveDrawingThumbnail({ userId: 'u1', noteId: 'n1', revision: 3, rendererVersion: 1, image }, { root });
-    await saveDrawingThumbnail({ userId: 'u1', noteId: 'n1', revision: 3, rendererVersion: 2, image }, { root });
+    await fs.writeFile(drawingThumbnailPath({ userId: 'u1', noteId: 'n1', revision: 2, rendererVersion: 2, root }), image);
+    await fs.writeFile(drawingThumbnailPath({ userId: 'u1', noteId: 'n1', revision: 3, rendererVersion: 2, root }), image);
+    await saveDrawingThumbnail({ userId: 'u1', noteId: 'n1', revision: 3, rendererVersion: 3, image }, { root });
     await cleanupOtherDrawingThumbnailRevisions(
-      { userId: 'u1', noteId: 'n1', keepRevision: 3, keepRendererVersion: 2 },
+      { userId: 'u1', noteId: 'n1', keepRevision: 3, keepRendererVersion: 3 },
       { root },
     );
 
     expect(
-      await getExistingDrawingThumbnailPath({ userId: 'u1', noteId: 'n1', revision: 2, rendererVersion: 1 }, { root }),
+      await getExistingDrawingThumbnailPath({ userId: 'u1', noteId: 'n1', revision: 2, rendererVersion: 2 }, { root }),
     ).toBeNull();
     expect(
-      await getExistingDrawingThumbnailPath({ userId: 'u1', noteId: 'n1', revision: 3, rendererVersion: 1 }, { root }),
+      await getExistingDrawingThumbnailPath({ userId: 'u1', noteId: 'n1', revision: 3, rendererVersion: 2 }, { root }),
     ).toBeNull();
     expect(await getExistingDrawingThumbnailPath({ userId: 'u1', noteId: 'n1', revision: 3 }, { root })).toBe(
       path.join(root, drawingThumbnailFileName({ userId: 'u1', noteId: 'n1', revision: 3 })),
     );
   });
 
-  it('旧客户端清理时不会删除同一正文的新渲染器文件', async () => {
+  it('持久化层拒绝旧渲染器版本', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'drawing-thumbnail-test-'));
     temporaryRoots.push(root);
     const image = webp(480, 270);
-    await saveDrawingThumbnail({ userId: 'u1', noteId: 'n1', revision: 3, rendererVersion: 2, image }, { root });
-    await saveDrawingThumbnail({ userId: 'u1', noteId: 'n1', revision: 3, rendererVersion: 1, image }, { root });
-    await cleanupOtherDrawingThumbnailRevisions(
-      { userId: 'u1', noteId: 'n1', keepRevision: 3, keepRendererVersion: 1 },
-      { root },
-    );
 
-    expect(await getExistingDrawingThumbnailPath({ userId: 'u1', noteId: 'n1', revision: 3 }, { root })).not.toBeNull();
+    await expect(
+      saveDrawingThumbnail({ userId: 'u1', noteId: 'n1', revision: 3, rendererVersion: 2, image }, { root }),
+    ).rejects.toMatchObject({ code: 'DRAWING_THUMBNAIL_RENDERER_STALE' });
   });
 });

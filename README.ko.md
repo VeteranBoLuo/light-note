@@ -92,12 +92,8 @@
 
 ---
 
-**🤖 AI 어시스턴트**  
-대화형 AI 내장. 도구를 호출해 북마크 · 노트 · 할 일 · 성장 데이터를 조회하고, 웹 검색 · 심층 사고 · 스트리밍 응답을 지원.
-
-<p align="center">
-  <img src="apps/web/public/screenshots/ai-chat.png" alt="AI 어시스턴트" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
-</p>
+**🤖 모듈형 AI**
+노트 · 북마크 · 파일 · 할 일 · 리소스 센터 · 도움말 센터에서 명시적으로 선택한 자료를 요약·생성·분해·정리합니다.
 
 ---
 

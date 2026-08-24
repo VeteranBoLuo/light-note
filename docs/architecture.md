@@ -52,7 +52,7 @@ apps/server/
 │   ├── file.js            # 云空间文件路由
 │   ├── inbox.js           # 快速添加与待整理路由
 │   ├── todo.js            # 待处理中的待办与提醒路由
-│   ├── chat.js            # AI Agent、写操作确认与额度路由
+│   ├── chat.js            # AI 统一额度读取路由
 │   ├── communityChat.js   # 社区访问、文本消息、举报屏蔽与 Root 治理
 │   ├── featureRequest.js  # 共建轻笺公开需求与 Root 管理路由
 │   ├── updateLog.js       # 更新日志公开读取、Root 编辑与 OBS 图片
@@ -69,7 +69,6 @@ apps/server/
 │   ├── securityHandle.js  # 安全事件
 │   ├── trashHandle.js     # 回收站
 │   ├── aiDocumentHandle.js # AI 文件上传、挂载与解析状态
-│   ├── aiConversationHandle.js # AI 持久会话、消息、反馈、导出与结果复用
 │   ├── aiChangeSetHandle.js # AI 可审阅变更集、执行与撤销
 │   ├── aiChangeSetProposalHandle.js # 模型整理建议到受限 Change Set 草稿
 │   ├── aiMemoryHandle.js   # AI 候选记忆与记忆账本
@@ -89,7 +88,6 @@ apps/server/
     ├── log.js             # API 请求日志中间件
     ├── agent/             # 轻笺智域 AI 代理
     ├── aiDocument/       # AI 文档解析、任务、检索与生命周期
-    ├── aiConversationService.js # 持久会话、消息、来源、证据、反馈与保留期
     ├── aiChangeSetService.js # 变更预览、乐观锁、回执与撤销
     ├── aiMemoryService.js # 候选记忆、确认、范围与过期控制
     ├── aiResponseRecoveryService.js # SSE 终态短期快照与恢复
@@ -280,9 +278,9 @@ src/
 | `ai_document_sources`                                  | AI 文档来源与解析状态                | UUID             |
 | `ai_document_chunks`                                   | AI 文档正文片段与定位                | 自增             |
 | `ai_document_jobs`                                     | AI 文档异步解析任务                  | 自增             |
-| `ai_conversations` / `ai_messages`                     | AI 持久会话与消息快照                | UUID             |
-| `ai_message_sources` / `ai_message_evidence`           | 消息来源与不可变证据片段             | 自增             |
-| `ai_feedback`                                          | AI 回答反馈与原因                    | UUID             |
+| `ai_conversations` / `ai_messages`                     | 退役助手历史数据（仅数据治理兼容）   | UUID             |
+| `ai_message_sources` / `ai_message_evidence`           | 退役历史的来源与证据数据             | 自增             |
+| `ai_feedback`                                          | 退役历史的回答反馈数据               | UUID             |
 | `ai_content_chunks`                                    | 个人知识统一词法索引元数据           | 自增             |
 | `ai_content_generations`                               | 个人知识索引的账号级失效代际         | 账号 ID          |
 | `ai_change_sets` / `ai_change_items`                   | 可审阅变更集、执行回执与撤销         | UUID             |
@@ -563,8 +561,8 @@ Runtime V3 把每轮请求拆成四个边界清晰、可独立验证的阶段：
 - 所有写能力只返回预览，用户确认后调用现有业务 Service。模型从不直接写笔记、书签、文件或待办；版本冲突、owner 不符、范围变化和非法输出均失败关闭。
 - 待办时间采用“模型摘录、服务端解析”两段式边界：模型工具只返回原话中的日期/时间片段，`todoTemporal` 用请求 IANA 时区产生绝对时间；待办拆解只产生可应用到当前表单的清单预览，最终保存仍走 Todo Service。
 - Skill 可用配置由前端中央缓存读取，配置接口异常不拖垮原业务页面，服务端仍是最终失败关闭门禁。Skill 生命周期与前端采用/取消行为复用低敏产品事件表，禁止把用户内容和资源标识写入埋点。
-- `/ai` 现在是旧会话只读档案，只保留列表、详情、导出、删除和清空数据权利；不存在创建、续聊、恢复、反馈、记忆或 Change Set 写链。移动底栏使用确定性的快速收集，不再提供全局 AI 一级入口。
-- 账号注销会删除 Skill thread/turn、Execution/Span、用户额度账本和旧 AI 数据；普通“清除 AI 数据”删除用户可控会话与 Skill 线程，但按安全/运营政策保留 Execution、额度和审计账本。数据导出包含新旧两类可移植记录并明确分域。
+- 旧全局助手及旧会话档案页面、HTTP API、Handler 和业务 Service 均已下线；`/ai` 不再是产品路由。历史表只为账号全量数据导出、账号注销和既有审计/数据治理兼容保留，不能重新接入 UI 或作为新 Skill 的上下文。
+- 账号注销会删除 Skill thread/turn、Execution/Span、用户额度账本和退役历史数据；账号全量导出继续包含依法可移植的历史记录并明确分域。额度、配置等只读能力不依赖旧会话 API。
 
 ### 旧 AI 工作区与持久对象（已退役历史设计）
 
@@ -712,6 +710,7 @@ AI 前端由 `useAiAssistantStore` 承担会话域、草稿、单个材料 `cont
 - 用户管理、API 日志、操作日志与 AI 调用监控采用“服务端稳定键游标 + 前端虚拟窗口”列表链路；时间字段与 UUID `id` 组成确定性排序键，筛选变化后重新建立游标，避免深 OFFSET 和实时插入导致的重复或跳项。
 - `user.last_active_time` 持久保存账号最近一次认证活跃时间，会话校验链路按 5 分钟窗口节流更新。后台用户列表直接按该字段进行全量后端排序，不依赖可能在退出时删除的 `user_sessions`，也不再按当前页面的 API/操作日志做前端排序。
 - 后台总览的“活跃用户”使用 `api_logs` 中产生有效业务请求的非游客账号按日去重；该口径可稳定回溯昨日同期和近 7 日同期，不受退出、设备会话替换或过期会话清理影响。总览的活跃用户和 AI 调用同期基线都只扫描最近 7 天时间索引范围，并复用同一聚合查询。
+- 后台总览使用分层读模型：`POST /common/getAdminOverviewSnapshot` 只返回用户、资源、存储、AI、活跃、系统健康、转化和待办的当前核心快照；`POST /common/getAdminOverviewTrend` 返回所选周期趋势及同期基线；`POST /common/getAdminOverviewRecent` 独立返回最近新增。旧 `POST /common/getAdminOverview` 由快照与 7 日历史并发组合，仅用于客户端兼容。Web 管理壳与总览子页通过共享 API 层合并同参数快照请求，核心落屏后才并发加载两类次级数据。
 - 通用 API 日志对笔记、手绘和模板写入只保存 ID、版本、类型与内容长度摘要，不复制正文；AI 遥测和聊天室目录等已有权威业务数据或高频被动刷新链路不重复写入通用日志。`api_logs` 的文本列使用 `utf8mb4`，并通过 `(request_time, id)` 支撑保留期批量清理。
 - 社区目录以 `/community-chat/rooms` 为单一权威响应，合并访问状态、发言开关、房间与未读信息；无权限时返回空目录。根布局在聊天室内暂停 REST 刷新，页面在实时正常时每 60 秒安全校准，断开时每 8 秒降级轮询。
 - 用户管理备注存于 `admin_user_remarks`，以 `(admin_user_id, target_user_id)` 为复合主键；列表查询只能用当前普通 Root 管理会话的 ID 关联自己的备注。备注不进入 `user` 资料、普通用户接口或管理员预览上下文，清空备注时直接删除关系行。

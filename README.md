@@ -96,12 +96,8 @@
 
 ---
 
-**🤖 AI 助手**  
-内置对话式 AI，可调用工具帮你查询书签、笔记、待办和成长数据，支持联网搜索、深度思考与流式响应。
-
-<p align="center">
-  <img src="apps/web/public/screenshots/ai-chat.png" alt="AI 助手" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
-</p>
+**🤖 模块 AI**
+在笔记、书签、文件、待办、资源中心和帮助中心内提供范围明确的 AI 能力，依据当前资源完成总结、生成、拆解和整理。
 
 ---
 

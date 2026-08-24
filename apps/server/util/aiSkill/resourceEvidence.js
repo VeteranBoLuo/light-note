@@ -1,9 +1,66 @@
 import crypto from 'node:crypto';
 import pool from '../../db/index.js';
 import { normalizePersonalKnowledgeText } from '../personalKnowledgeSearch.js';
+import { attachCloudDocumentSource, getDocumentSourceStatuses } from '../aiDocument/service.js';
+import { aiSkillError } from './errors.js';
 
 const DEFAULT_MAX_CHARS_PER_RESOURCE = 20_000;
 const DEFAULT_MAX_TOTAL_CHARS = 80_000;
+const DEFAULT_FILE_PREPARE_WAIT_MS = 12_000;
+const DEFAULT_FILE_PREPARE_POLL_MS = 500;
+
+const PUBLIC_FILE_PREPARATION_ERRORS = Object.freeze({
+  UNSUPPORTED_FILE_TYPE: '该文件格式暂不支持 AI 解析。当前支持 TXT、Markdown、CSV、PDF、DOCX、PNG、JPG 和 WebP。',
+  FILE_TOO_LARGE: '文件超过 20MB，暂时无法用于 AI 分析。',
+  FILE_SIZE_INVALID: '文件大小无效，暂时无法用于 AI 分析。',
+  FILE_TYPE_MISMATCH: '文件扩展名与实际类型不一致，无法安全解析。',
+  FILE_NOT_AVAILABLE: '文件尚未完成上传或已不可用，暂时无法解析。',
+  FILE_NOT_FOUND: '所选文件不存在或已删除。',
+});
+
+function wait(durationMs) {
+  return new Promise((resolve) => setTimeout(resolve, durationMs));
+}
+
+/**
+ * 把显式选择的云文件接入统一解析/OCR 生命周期。该步骤只生成可重建的派生正文，
+ * 不调用模型、不占 AI 额度；同一云对象会复用 ready/queued/parsing source。
+ */
+export async function prepareExplicitResourceEvidence({
+  userId,
+  resourceRefs = [],
+  sessionId = '',
+  attachSource = attachCloudDocumentSource,
+  getStatuses = getDocumentSourceStatuses,
+  waitMs = DEFAULT_FILE_PREPARE_WAIT_MS,
+  pollMs = DEFAULT_FILE_PREPARE_POLL_MS,
+}) {
+  const fileRefs = (Array.isArray(resourceRefs) ? resourceRefs : []).filter((ref) => ref.type === 'file');
+  if (!fileRefs.length) return [];
+  const sources = [];
+  for (const ref of fileRefs) {
+    try {
+      sources.push(await attachSource({ userId, fileId: ref.id, sessionId }));
+    } catch (error) {
+      const code = String(error?.code || 'FILE_PREPARATION_FAILED');
+      const safeMessage = PUBLIC_FILE_PREPARATION_ERRORS[code];
+      if (safeMessage) throw aiSkillError(code, safeMessage, Number(error?.status || 400));
+      throw error;
+    }
+  }
+  const sourceIds = sources.map((source) => String(source.id || '')).filter(Boolean);
+  const deadline = Date.now() + Math.max(0, Number(waitMs) || 0);
+  let statuses = sources;
+  while (
+    sourceIds.length &&
+    statuses.some((source) => ['queued', 'parsing'].includes(String(source.status || ''))) &&
+    Date.now() < deadline
+  ) {
+    await wait(Math.min(Math.max(100, Number(pollMs) || DEFAULT_FILE_PREPARE_POLL_MS), deadline - Date.now()));
+    statuses = await getStatuses({ userId, sourceIds });
+  }
+  return statuses;
+}
 
 function normalizeJson(value, fallback) {
   if (value == null || value === '') return fallback;
@@ -294,4 +351,5 @@ export const aiSkillResourceEvidenceInternals = Object.freeze({
   checklistText,
   fitContent,
   rawResource,
+  PUBLIC_FILE_PREPARATION_ERRORS,
 });

@@ -155,16 +155,6 @@
                   </BButton>
                 </div>
 
-                <BTooltip :title="t('ai.entry.askSearch')">
-                  <BButton
-                    class="search-header-icon-btn search-ai-entry"
-                    :disabled="!queryState.keyword.trim() && !selectedIds.length"
-                    :aria-label="t('ai.entry.askSearch')"
-                    @click="toggleSearchAi(selectedIds.length > 1 ? 'compare' : 'find')"
-                  >
-                    <svg-icon :src="icon.ai.organize" size="16" />
-                  </BButton>
-                </BTooltip>
                 <BTooltip :title="t('resourceCenter.refresh')">
                   <BButton
                     class="search-header-icon-btn refresh-btn"
@@ -227,16 +217,6 @@
                     <span v-if="mobileActiveFilterCount" class="mobile-filter-count">{{
                       mobileActiveFilterCount
                     }}</span>
-                  </BButton>
-                  <BButton
-                    class="mobile-toolbar-btn mobile-ai-btn"
-                    :disabled="!queryState.keyword.trim() && !selectedIds.length"
-                    :aria-label="t('ai.entry.askSearch')"
-                    :title="t('ai.entry.askSearch')"
-                    @click="toggleSearchAi(selectedIds.length > 1 ? 'compare' : 'find')"
-                  >
-                    <SvgIcon :src="icon.ai.organize" size="15" aria-hidden="true" />
-                    <span>AI</span>
                   </BButton>
                 </div>
                 <div v-else class="toolbar-actions">
@@ -363,7 +343,7 @@
                     {{ t('common.more') }}
                   </BButton>
                   <template v-else>
-                    <BButton :disabled="allMatchingActive || !selectedCount" @click="toggleSearchAi('organize')">
+                    <BButton :disabled="allMatchingActive || !selectedCount" @click="toggleSearchAi">
                       <SvgIcon :src="icon.ai.materials" size="15" />
                       {{ t('ai.entry.summarizeSelected') }}
                     </BButton>
@@ -380,14 +360,14 @@
                 class="search-ai-panel search-ai-panel--mobile"
                 :title="t('ai.entry.searchSkillTitle')"
                 :description="t('ai.entry.searchSkillDescription')"
-                skill-id="search.answer"
+                skill-id="search.summarize_selected"
                 surface="search"
                 :resource-refs="searchAiResourceRefs"
                 :scope-label="searchAiScopeLabel"
                 :initial-input="searchAiInitialInput"
-                :initial-prompt="searchAiInitialPrompt"
                 :actions="searchAiActions"
-                :placeholder="t('ai.entry.searchSkillPlaceholder')"
+                :show-prompt="false"
+                :auto-run-action-id="searchAiAutoRunActionId"
                 :icon-src="icon.ai.organize"
               />
 
@@ -514,14 +494,14 @@
                 class="search-ai-panel"
                 :title="t('ai.entry.searchSkillTitle')"
                 :description="t('ai.entry.searchSkillDescription')"
-                skill-id="search.answer"
+                skill-id="search.summarize_selected"
                 surface="search"
                 :resource-refs="searchAiResourceRefs"
                 :scope-label="searchAiScopeLabel"
                 :initial-input="searchAiInitialInput"
-                :initial-prompt="searchAiInitialPrompt"
                 :actions="searchAiActions"
-                :placeholder="t('ai.entry.searchSkillPlaceholder')"
+                :show-prompt="false"
+                :auto-run-action-id="searchAiAutoRunActionId"
                 :icon-src="icon.ai.organize"
                 presentation="sidebar"
               />
@@ -1064,17 +1044,12 @@
       .slice(0, 10)
       .map((item) => ({ type: item.type as AiSkillResourceRef['type'], id: String(item.id) })),
   );
-  const searchAiResourceRefs = computed<AiSkillResourceRef[]>(
-    () =>
-      explicitSearchAiResourceContext.value
-        ? [explicitSearchAiResourceContext.value.ref]
-        : selectedSearchAiResourceRefs.value,
+  const searchAiResourceRefs = computed<AiSkillResourceRef[]>(() =>
+    explicitSearchAiResourceContext.value
+      ? [explicitSearchAiResourceContext.value.ref]
+      : selectedSearchAiResourceRefs.value,
   );
-  const searchAiInitialInput = computed<Record<string, unknown>>(() => ({
-    resourceTypes: explicitSearchAiResourceContext.value
-      ? [explicitSearchAiResourceContext.value.type]
-      : selectedTypes.value.filter((type) => ['note', 'bookmark', 'file', 'todo'].includes(type)),
-  }));
+  const searchAiInitialInput = computed<Record<string, unknown>>(() => ({}));
   const searchAiScopeLabel = computed(() => {
     const resource = explicitSearchAiResourceContext.value;
     if (resource) {
@@ -1095,6 +1070,7 @@
       title: resource.title || t('inbox.untitled'),
     });
   });
+  const searchAiAutoRunActionId = computed(() => (explicitSearchAiResourceContext.value ? 'analyze' : ''));
   const searchAiActions = computed(() => {
     const actions: Array<{
       id: string;
@@ -1102,7 +1078,14 @@
       skillId: string;
       input: Record<string, unknown>;
     }> = [];
-    if (!explicitSearchAiResourceContext.value && searchAiResourceRefs.value.length) {
+    if (explicitSearchAiResourceContext.value) {
+      actions.push({
+        id: 'analyze',
+        label: t('ai.entry.analyzeAgain'),
+        skillId: 'search.summarize_selected',
+        input: { instruction: searchAiInitialPrompt.value },
+      });
+    } else if (searchAiResourceRefs.value.length) {
       actions.push({
         id: 'summarize',
         label: t('ai.entry.summarizeSelected'),
@@ -1526,6 +1509,7 @@
       return;
     }
     inspectResource(item);
+    closeSearchAi();
   }
 
   function setView(view: ResourceView) {
@@ -1630,7 +1614,7 @@
   }
 
   function handleMobileBatchAction(action: MobilePageActionItem) {
-    if (action.key === 'ai') toggleSearchAi('organize');
+    if (action.key === 'ai') toggleSearchAi();
     else if (action.key === 'inbox') void batchAddToInbox();
     else if (action.key === 'addTag') batchAddTag();
     else if (action.key === 'removeTag') batchRemoveTag();
@@ -1700,7 +1684,12 @@
     }
   }
 
-  function toggleSearchAi(intent: 'find' | 'compare' | 'organize') {
+  function closeSearchAi() {
+    searchAiVisible.value = false;
+    explicitSearchAiResourceContext.value = null;
+  }
+
+  function toggleSearchAi() {
     if (allMatchingActive.value) {
       message.warning(t('resourceCenter.batch.aiExplicitOnly'));
       return;
@@ -1708,17 +1697,17 @@
     const selected = mappedItems.value.filter((item) => selectedIds.value.includes(getItemSelectionKey(item)));
     if (selected.length > 10) message.info(t('ai.materialLimit', { count: 10 }));
     if (searchAiVisible.value) {
-      searchAiVisible.value = false;
-      explicitSearchAiResourceContext.value = null;
+      closeSearchAi();
       return;
     }
     explicitSearchAiResourceContext.value = null;
     searchAiVisible.value = true;
-    if (intent === 'organize' && bookmark.isMobile) mobileBatchActionsOpen.value = false;
+    if (bookmark.isMobile) mobileBatchActionsOpen.value = false;
   }
 
   function openResourceAi(item: DisplaySearchItem) {
     if (!['note', 'bookmark', 'file', 'todo'].includes(item.type)) return;
+    inspectResource(item);
     explicitSearchAiResourceContext.value = {
       ref: { type: item.type as AiSkillResourceRef['type'], id: String(item.id) },
       type: item.type as GlobalSearchType,
@@ -3084,19 +3073,10 @@
       border-radius: 12px;
     }
 
-    .search-ai-entry,
     .search-header-icon-btn {
       height: 42px;
       border-radius: 11px;
       font-weight: 600;
-    }
-
-    .search-ai-entry {
-      width: 42px;
-      min-width: 42px;
-      padding: 0;
-      color: #fff;
-      background: var(--primary-color);
     }
 
     .search-header-icon-btn {
@@ -3581,8 +3561,7 @@
       gap: 8px;
     }
 
-    .refresh-btn,
-    .search-ai-entry {
+    .refresh-btn {
       width: 100%;
       min-width: 0;
       height: 38px;

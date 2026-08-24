@@ -1,7 +1,7 @@
 export const DRAWING_NOTE_TYPE = "drawing";
 export const DRAWING_SCENE_VERSION = 4;
 // 派生缩略图渲染结果与正文 scene 独立演进。渲染算法变化时递增，避免同一 revision 继续命中旧位图。
-export const DRAWING_THUMBNAIL_RENDERER_VERSION = 2;
+export const DRAWING_THUMBNAIL_RENDERER_VERSION = 3;
 export const DRAWING_LEGACY_SCENE_VERSION = 1;
 export const DRAWING_SHAPE_SCENE_VERSION = 2;
 export const DRAWING_ERASER_SCENE_VERSION = 3;

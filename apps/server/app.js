@@ -28,7 +28,6 @@ import { ensureFeatureRequestTables } from './util/featureRequestSchema.js';
 import { ensureAiDocumentSchema } from './util/aiDocumentSchema.js';
 import { ensureFilePreviewSchema } from './util/filePreviewSchema.js';
 import { ensureNoteTreeSchema } from './util/noteTreeSchema.js';
-import { startAiConversationRetentionScheduler } from './util/aiConversationService.js';
 import { startAiProductEventRetentionScheduler } from './util/aiProductTelemetry.js';
 import { startAiResponseRecoveryCleanupScheduler } from './util/aiResponseRecoveryService.js';
 import { getAiArtifactRetentionConfig, startAiArtifactRetentionScheduler } from './util/aiArtifactRetention.js';
@@ -153,9 +152,6 @@ ensureCommunityChatSchema()
     );
   })
   .catch((err) => console.error('社区客厅基础数据表初始化失败 code=%s', stableAgentErrorCode(err)));
-startAiConversationRetentionScheduler().catch((err) =>
-  console.error('AI 临时会话清理调度启动失败 code=%s', stableAgentErrorCode(err)),
-);
 startAiProductEventRetentionScheduler().catch((err) =>
   console.error('AI 产品事件清理调度启动失败 code=%s', stableAgentErrorCode(err)),
 );

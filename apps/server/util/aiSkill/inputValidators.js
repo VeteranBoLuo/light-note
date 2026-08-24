@@ -101,6 +101,18 @@ export function validateTodoDraftInput(input) {
   return Object.freeze({ instruction });
 }
 
+export function validateTodoBreakdownInput(input) {
+  const value = plainObject(input);
+  knownKeys(value, ['instruction', 'detailLevel']);
+  const instruction = optionalText(value.instruction, { label: '待办描述', maxLength: 1000 });
+  if (!instruction) throw aiSkillError('AI_SKILL_INSTRUCTION_REQUIRED', '请输入要拆解的待办');
+  const detailLevel = String(value.detailLevel || 'concise').trim();
+  if (!['concise', 'detailed'].includes(detailLevel)) {
+    throw aiSkillError('AI_SKILL_TODO_DETAIL_LEVEL_INVALID', '不支持该待办拆解粒度');
+  }
+  return Object.freeze({ instruction, detailLevel });
+}
+
 const NOTE_TRANSFORM_OPERATIONS = new Set([
   'polish',
   'rewrite',

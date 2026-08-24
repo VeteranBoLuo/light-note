@@ -9,19 +9,20 @@
     :resource-refs="resourceRefs"
     :scope-label="t('note.aiSkillScope', { count: resourceRefs.length })"
     :actions="actions"
-    :placeholder="t('note.aiSkillPlaceholder')"
+    :show-prompt="false"
     @update:visible="emit('update:visible', $event)"
     @result-action="handleResultAction"
   />
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import type { AiSkillResourceRef, AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
   import AiSkillDialog from '@/components/aiSkills/AiSkillDialog.vue';
-  import { createAiNoteDraftHandoff } from '@/utils/aiNoteDraft';
+  import { persistAiNotePreview } from '@/utils/aiNoteDraft';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
 
   const props = defineProps<{
     visible: boolean;
@@ -30,6 +31,7 @@
   const emit = defineEmits<{ 'update:visible': [visible: boolean] }>();
   const { t } = useI18n();
   const router = useRouter();
+  const creatingNote = ref(false);
 
   const resourceRefs = computed<AiSkillResourceRef[]>(() =>
     props.notes.slice(0, 20).map((note) => ({ type: 'note', id: String(note.id) })),
@@ -51,28 +53,39 @@
         input: { instruction: t('note.aiCompareInstruction') },
       });
     }
-    items.push(
-      {
-        id: 'create-note',
-        label: t('note.aiCreateNote'),
-        skillId: 'note.create_from_sources',
-        input: { instruction: t('note.aiCreateNoteInstruction') },
+    items.push({
+      id: 'create-note',
+      label: t('note.aiCreateNote'),
+      skillId: 'note.create_from_sources',
+      input: {
+        instruction: t('note.aiCreateNoteInstruction'),
+        title:
+          props.notes.length === 1
+            ? t('note.aiGeneratedSingleNoteTitle', {
+                title: props.notes[0]?.title || t('note.aiGeneratedNoteTitle'),
+              })
+            : t('note.aiGeneratedMultiNoteTitle', {
+                title: props.notes[0]?.title || t('note.aiGeneratedNoteTitle'),
+                count: props.notes.length,
+              }),
       },
-      {
-        id: 'extract-todos',
-        label: t('note.aiExtractTodos'),
-        skillId: 'note.extract_todos',
-        input: { instruction: t('note.aiExtractTodosInstruction') },
-      },
-    );
+    });
     return items;
   });
 
-  function handleResultAction(action: Record<string, unknown>, response: AiSkillResponse) {
-    if (action.id !== 'create_note_from_preview') return;
-    const handoff = createAiNoteDraftHandoff(response, t('note.aiGeneratedNoteTitle'));
-    if (!handoff) return;
-    emit('update:visible', false);
-    void router.push(handoff.route);
+  async function handleResultAction(action: Record<string, unknown>, response: AiSkillResponse) {
+    if (action.id !== 'create_note_from_preview' || creatingNote.value) return;
+    creatingNote.value = true;
+    try {
+      const handoff = await persistAiNotePreview(response, t('note.aiGeneratedNoteTitle'));
+      if (!handoff) return;
+      message.success(t('aiSkills.noteCreated'));
+      emit('update:visible', false);
+      await router.push(handoff.route);
+    } catch (error: any) {
+      message.error(String(error?.message || t('aiSkills.noteCreateFailed')));
+    } finally {
+      creatingNote.value = false;
+    }
   }
 </script>

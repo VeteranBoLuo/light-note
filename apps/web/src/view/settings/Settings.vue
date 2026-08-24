@@ -564,7 +564,7 @@
           </div>
         </section>
 
-        <!-- AI 用量与旧会话：模块 Skill 不提供全局风格、开关或会话继承设置 -->
+        <!-- AI 用量：模块 Skill 不提供全局风格、开关或会话继承设置 -->
         <section v-if="sectionVisible('ai')" class="settings-card" id="set-ai">
           <div v-if="!isMobileSubPage" class="card-head">
             <span class="card-icon card-icon--appearance">
@@ -576,19 +576,19 @@
             </div>
           </div>
           <div class="fields">
-            <div class="field">
+            <div class="field field--ai-quota">
               <div class="field-head">
                 <span class="field-label">{{ t('settings.ai.quota') }}</span>
                 <span class="field-desc">{{ t('settings.ai.quotaDescription') }}</span>
               </div>
-              <span class="field-desc" style="color: var(--text-color)">{{ quotaText }}</span>
-            </div>
-            <div class="field">
-              <div class="field-head">
-                <span class="field-label">{{ t('settings.ai.archive') }}</span>
-                <span class="field-desc">{{ t('settings.ai.archiveDescription') }}</span>
+              <div v-if="aiQuotaMetrics.length" class="ai-quota-metrics">
+                <div v-for="metric in aiQuotaMetrics" :key="metric.key" class="ai-quota-metric">
+                  <span>{{ metric.label }}</span>
+                  <strong>{{ metric.value }}</strong>
+                  <small v-if="metric.hint">{{ metric.hint }}</small>
+                </div>
               </div>
-              <BButton @click="router.push('/ai')">{{ t('settings.ai.openArchive') }}</BButton>
+              <span v-else class="field-desc ai-quota-fallback">{{ quotaText }}</span>
             </div>
           </div>
         </section>
@@ -807,24 +807,79 @@
     return !bookmark.isMobile || mobileSection.value === id;
   }
 
-  function scrollToSection(id: string) {
+  function scrollToSection(id: string, behavior: ScrollBehavior = 'smooth') {
     const page = pageRef.value;
     const el = document.getElementById(id);
     if (!page || !el) return;
     // 固定框子路由里 scrollIntoView 定位不到 .settings-page;统一用 scrollIntoContainer(内部已换算界面缩放 zoom,见 utils/zoom.ts)
-    scrollIntoContainer(page, el, 16);
+    scrollIntoContainer(page, el, 16, behavior);
   }
 
   // scrollspy:高亮当前滚动到的区块。root 必须是滚动容器 .settings-page(子路由在固定框内滚动,非 window)。
   const activeAnchor = ref('set-appearance');
   const pageRef = ref<HTMLElement | null>(null);
   let anchorSpy: IntersectionObserver | null = null;
+  let deepLinkLayoutObserver: ResizeObserver | null = null;
+  let deepLinkStopTimer = 0;
+  let deepLinkTargetAnchor = '';
+  const deepLinkRetryTimers = new Set<number>();
+
+  function stopDeepLinkAlignment() {
+    deepLinkLayoutObserver?.disconnect();
+    deepLinkLayoutObserver = null;
+    window.clearTimeout(deepLinkStopTimer);
+    deepLinkStopTimer = 0;
+    deepLinkRetryTimers.forEach((timer) => window.clearTimeout(timer));
+    deepLinkRetryTimers.clear();
+    deepLinkTargetAnchor = '';
+  }
+
+  /**
+   * 深链接必须等异步设置项（例如设备列表）稳定后仍能落到目标区块。
+   * 这里以 section→anchor 映射为唯一事实源，并观察整张设置正文的尺寸变化，
+   * 因而适用于所有设置分类，不针对 AI 用量写死偏移量或延迟。
+   */
+  function alignDesktopDeepLink(rawSection: unknown) {
+    if (bookmark.isMobile) return;
+    const section = parseSettingsSection(rawSection, settingsEnv.value);
+    if (!section) return;
+    const anchor = SETTINGS_SECTION_ANCHOR[section];
+    stopDeepLinkAlignment();
+    deepLinkTargetAnchor = anchor;
+    activeAnchor.value = anchor;
+    nextTick(() => {
+      const align = () => {
+        activeAnchor.value = anchor;
+        scrollToSection(anchor, 'auto');
+      };
+      align();
+      const body = pageRef.value?.querySelector<HTMLElement>('.settings-body');
+      if (body && typeof ResizeObserver !== 'undefined') {
+        deepLinkLayoutObserver = new ResizeObserver(align);
+        deepLinkLayoutObserver.observe(body);
+      }
+      // ResizeObserver 覆盖布局变化；几个有界重试兼容旧 WebView 以及只改内容、不改尺寸的异步组件。
+      for (const delay of [160, 480, 960, 1600, 3000, 5000, 8000]) {
+        const timer = window.setTimeout(() => {
+          deepLinkRetryTimers.delete(timer);
+          align();
+        }, delay);
+        deepLinkRetryTimers.add(timer);
+      }
+      // 设备列表等设置项可能依赖慢网络；保持有界观察，用户开始操作时会立即取消。
+      deepLinkStopTimer = window.setTimeout(stopDeepLinkAlignment, 10_000);
+    });
+  }
   // 滚到容器底部时强制高亮最后一项:底部几个区块因判定带够不到,IntersectionObserver 永远轮不到(scrollspy 通病)。
   // 只在到底时改高亮、不碰滚动,故不会造成"点多次"(那是 zoom 定位偏移导致的,已修)。
   // scrollTop/clientHeight/scrollHeight 均为布局坐标、不受界面缩放 zoom 影响,此处无需换算。
   const onPageScroll = () => {
     const page = pageRef.value;
     if (!page) return;
+    if (deepLinkTargetAnchor) {
+      activeAnchor.value = deepLinkTargetAnchor;
+      return;
+    }
     if (page.scrollTop + page.clientHeight >= page.scrollHeight - 4) {
       activeAnchor.value = anchors.value[anchors.value.length - 1].id;
     }
@@ -835,6 +890,10 @@
     if (bookmark.isMobile) return;
     anchorSpy = new IntersectionObserver(
       (entries) => {
+        if (deepLinkTargetAnchor) {
+          activeAnchor.value = deepLinkTargetAnchor;
+          return;
+        }
         for (const e of entries) {
           if (e.isIntersecting) activeAnchor.value = (e.target as HTMLElement).id;
         }
@@ -846,13 +905,22 @@
       if (el) anchorSpy!.observe(el);
     });
     pageRef.value?.addEventListener('scroll', onPageScroll, { passive: true });
-    // 桌面端直接访问 ?section=ai 时不报错也不忽略:滚到对应区块,和点锚点等效
-    const deepLink = parseSettingsSection(route.query.section, settingsEnv.value);
-    if (deepLink) nextTick(() => scrollToSection(SETTINGS_SECTION_ANCHOR[deepLink]));
+    pageRef.value?.addEventListener('wheel', stopDeepLinkAlignment, { passive: true });
+    pageRef.value?.addEventListener('pointerdown', stopDeepLinkAlignment, { passive: true });
+    alignDesktopDeepLink(route.query.section);
   });
+  watch(
+    () => route.query.section,
+    (section, previous) => {
+      if (section !== previous) alignDesktopDeepLink(section);
+    },
+  );
   onBeforeUnmount(() => {
     anchorSpy?.disconnect();
+    stopDeepLinkAlignment();
     pageRef.value?.removeEventListener('scroll', onPageScroll);
+    pageRef.value?.removeEventListener('wheel', stopDeepLinkAlignment);
+    pageRef.value?.removeEventListener('pointerdown', stopDeepLinkAlignment);
   });
 
   /*
@@ -1233,6 +1301,45 @@
       quota: formatAiQuotaTokens(aiQuotaStatus.value.quota, locale.value),
     });
   });
+  const aiQuotaMetrics = computed(() => {
+    const status = aiQuotaStatus.value;
+    if (
+      !status ||
+      status.exempt ||
+      aiQuotaUnavailable.value ||
+      !Number.isFinite(status.dailyQuota) ||
+      !Number.isFinite(status.dailyUsed) ||
+      !Number.isFinite(status.dailyRemaining) ||
+      !Number.isFinite(status.bonusTokens)
+    ) {
+      return [];
+    }
+    return [
+      {
+        key: 'daily',
+        label: t('settings.ai.dailyQuota'),
+        value: t('settings.ai.remainingOf', {
+          remaining: formatAiQuotaTokens(status.dailyRemaining, locale.value),
+          total: formatAiQuotaTokens(status.dailyQuota, locale.value),
+        }),
+        hint: t('settings.ai.dailyUsed', {
+          used: formatAiQuotaTokens(status.dailyUsed, locale.value),
+        }),
+      },
+      {
+        key: 'permanent',
+        label: t('settings.ai.permanentBalance'),
+        value: formatAiQuotaTokens(status.bonusTokens, locale.value),
+        hint: t('settings.ai.permanentBalanceHint'),
+      },
+      {
+        key: 'available',
+        label: t('settings.ai.totalAvailable'),
+        value: formatAiQuotaTokens(status.remaining, locale.value),
+        hint: t('settings.ai.totalAvailableHint'),
+      },
+    ];
+  });
   // 额度只在真正会显示它的页面才请求:移动端目录页看不到额度,进 AI 子页时再拉。
   // 桌面长页一进来就渲染 AI 区块,仍按首屏加载。
   watch(
@@ -1541,6 +1648,41 @@
     font-size: 12px;
     line-height: 1.4;
     color: var(--desc-color);
+  }
+
+  .field--ai-quota {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .ai-quota-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .ai-quota-metric {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 11px 12px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 11px;
+    background: var(--workspace-panel-bg-color);
+  }
+  .ai-quota-metric > span,
+  .ai-quota-metric > small {
+    color: var(--desc-color);
+    font-size: 11px;
+    line-height: 1.35;
+  }
+  .ai-quota-metric > strong {
+    color: var(--text-color);
+    font-size: 14px;
+    line-height: 1.35;
+  }
+  .ai-quota-fallback {
+    color: var(--text-color);
   }
 
   .pwa-settings-actions {

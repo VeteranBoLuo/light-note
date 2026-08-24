@@ -10,7 +10,7 @@ export const bookmarkSkills = Object.freeze([
     taskLabel: '总结当前书签的网页内容',
     defaultInstruction: '概括网页主题、核心观点、重要信息和适用场景；若只有书签元数据，必须明确说明未读取到网页正文。',
     systemRole: '你是轻笺书签模块的网页总结 Skill。',
-    historyTurns: 2,
+    historyTurns: 0,
   }),
   createGroundedResourceSkill({
     id: 'bookmark.compare_pages',
@@ -33,7 +33,7 @@ export const bookmarkSkills = Object.freeze([
     defaultInstruction: '按主题组织材料，生成带来源引用的 Markdown 笔记草稿。',
     systemRole: '你是轻笺书签模块的网页转笔记 Skill。',
     effect: 'preview',
-    availableActions: [{ id: 'create_note_from_preview', label: '在笔记编辑器中继续', requiresConfirmation: true }],
+    availableActions: [{ id: 'create_note_from_preview', label: '确认生成笔记', requiresConfirmation: true }],
     mapResult: mapGroundedMarkdownToNotePreview,
     modelPolicy: { temperature: 0.3, maxTokens: 5000 },
   }),

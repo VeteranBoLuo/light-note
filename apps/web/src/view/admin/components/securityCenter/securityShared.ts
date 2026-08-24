@@ -12,6 +12,20 @@ export type SecurityTabKey = (typeof securityTabs)[number]['key'];
 
 export type SecurityHandledStatus = 'unhandled' | 'processed' | 'false_positive' | 'authorized_test';
 
+export type SecurityReviewDisposition = 'benign_anomaly' | 'authorized_test' | 'false_positive' | 'confirmed_attack';
+
+const securityReviewDefaultReasonKeys: Record<SecurityReviewDisposition, string> = {
+  benign_anomaly: 'securityV2.review.benignAnomalyReason',
+  authorized_test: 'securityV2.review.authorizedTestReason',
+  false_positive: 'securityV2.review.falsePositiveReason',
+  confirmed_attack: 'securityV2.review.confirmedAttackReason',
+};
+
+export function securityReviewDefaultReasonKey(disposition: unknown) {
+  if (typeof disposition !== 'string') return '';
+  return securityReviewDefaultReasonKeys[disposition as SecurityReviewDisposition] || '';
+}
+
 export const securityHandledStatusOptions: Array<{ value: SecurityHandledStatus; label: string }> = [
   { value: 'unhandled', label: '未处理' },
   { value: 'processed', label: '已处理' },

@@ -34,8 +34,6 @@ function mountQuickTodoForm() {
             quickTodoTomorrow: '明天',
             quickTodoThisWeek: '本周',
             quickTodoDetails: '完善详情',
-            quickTodoAiOrganize: 'AI 补全详情',
-            quickTodoAiOrganizeHint: '根据标题补全说明、日期、优先级和清单',
             quickTodoCreate: '立即创建',
             todoPriority: '优先级',
             todoPriority0: '低',
@@ -132,6 +130,8 @@ afterEach(() => {
 describe('QuickTodoForm', () => {
   it('空标题不能直接创建，但仍可进入完整编辑器', async () => {
     const { host, onSubmit, onDetails } = mountQuickTodoForm();
+
+    expect(host.textContent).not.toContain('AI 补全详情');
 
     clickButton(host, '立即创建');
     clickButton(host, '完善详情');

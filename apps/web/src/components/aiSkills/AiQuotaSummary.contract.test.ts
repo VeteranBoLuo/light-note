@@ -15,6 +15,10 @@ describe('AI 额度快捷展示契约', () => {
     expect(desktopProfileSource).toContain(':active="menuVisible"');
     expect(mobileProfileSource).toContain('<AiQuotaSummary');
     expect(mobileProfileSource).toContain('density="comfortable"');
+    expect(desktopProfileSource).toContain('@open-details="goAiQuotaDetails"');
+    expect(mobileProfileSource).toContain('@open-details="goAiQuotaDetails"');
+    expect(desktopProfileSource).toContain("query: { section: 'ai' }");
+    expect(mobileProfileSource).toContain("query: { section: 'ai' }");
   });
 
   it('桌面个人中心复用 BPopover 悬停状态机，跳转后不会被残留悬停标记重新打开', () => {
@@ -36,6 +40,7 @@ describe('AI 额度快捷展示契约', () => {
     expect(summarySource).toContain('<BProgress');
     expect(summarySource).toContain('icon.growth.ai');
     expect(summarySource).toContain("t('personCenter.aiQuotaUnavailable')");
+    expect(summarySource).toContain("t('personCenter.aiQuotaBreakdown'");
   });
 
   it('设置页复用统一额度状态，不再独立调用接口和格式化 tokens', () => {
@@ -43,5 +48,6 @@ describe('AI 额度快捷展示契约', () => {
     expect(settingsSource).toContain('formatAiQuotaTokens');
     expect(settingsSource).not.toContain("apiBasePost('/api/chat/aiQuota'");
     expect(settingsSource).not.toContain('function fmtTokens');
+    expect(settingsSource).toContain('aiQuotaMetrics');
   });
 });

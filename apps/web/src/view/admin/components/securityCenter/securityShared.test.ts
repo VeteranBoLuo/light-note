@@ -4,6 +4,7 @@ import {
   securityHandledStatusBatchRemark,
   securityHandledStatusConfirmText,
   securityHandledStatusOptions,
+  securityReviewDefaultReasonKey,
   statusPillClass,
   statusText,
 } from './securityShared';
@@ -29,5 +30,14 @@ describe('security handled status helpers', () => {
   it('builds batch remarks from the shared status label', () => {
     expect(securityHandledStatusBatchRemark('false_positive')).toBe('管理员批量标记为误报');
     expect(securityHandledStatusBatchRemark('authorized_test')).toBe('管理员批量标记为授权测试');
+  });
+
+  it('maps every review conclusion to its own default-reason translation', () => {
+    expect(securityReviewDefaultReasonKey('benign_anomaly')).toBe('securityV2.review.benignAnomalyReason');
+    expect(securityReviewDefaultReasonKey('authorized_test')).toBe('securityV2.review.authorizedTestReason');
+    expect(securityReviewDefaultReasonKey('false_positive')).toBe('securityV2.review.falsePositiveReason');
+    expect(securityReviewDefaultReasonKey('confirmed_attack')).toBe('securityV2.review.confirmedAttackReason');
+    expect(securityReviewDefaultReasonKey('unknown')).toBe('');
+    expect(securityReviewDefaultReasonKey(undefined)).toBe('');
   });
 });

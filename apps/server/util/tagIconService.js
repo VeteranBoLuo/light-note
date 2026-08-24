@@ -1,5 +1,6 @@
 import { requestAi } from './agent/aiGateway.js';
 import { safeAgentError } from './agent/logSafety.js';
+import { TAG_ICON_MAX_SVG_BYTES } from './contentLimits.js';
 
 const ICONIFY_API = 'https://api.iconify.design';
 const SEARCH_PREFIXES = ['simple-icons', 'material-symbols', 'material-symbols-light', 'lucide', 'tabler'];
@@ -7,7 +8,6 @@ const ALLOWED_PREFIXES = new Set(SEARCH_PREFIXES);
 const SEARCH_PAGE_SIZE = 24;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_CACHE_SIZE = 500;
-const MAX_SVG_BYTES = 32 * 1024;
 
 const searchCache = new Map();
 const keywordCache = new Map();
@@ -227,7 +227,7 @@ export function validateIconName(value) {
 export function sanitizeIconifySvg(value) {
   let svg = String(value || '').trim();
   if (!svg.startsWith('<svg') || !svg.endsWith('</svg>')) throw new Error('ICON_SVG_INVALID');
-  if (Buffer.byteLength(svg, 'utf8') > MAX_SVG_BYTES) throw new Error('ICON_SVG_TOO_LARGE');
+  if (Buffer.byteLength(svg, 'utf8') > TAG_ICON_MAX_SVG_BYTES) throw new Error('ICON_SVG_TOO_LARGE');
   if (
     /<(script|style|foreignObject|iframe|object|embed|image|use|a)\b/i.test(svg) ||
     /\son[a-z]+\s*=/i.test(svg) ||

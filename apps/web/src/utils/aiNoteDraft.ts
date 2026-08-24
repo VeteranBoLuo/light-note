@@ -1,4 +1,6 @@
 import type { AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
+import { apiBasePost } from '@/http/request';
+import { confirmNoteShareExposure } from '@/utils/noteShareExposure';
 
 const STORAGE_PREFIX = 'light-note:ai-note-draft:v1:';
 const DEFAULT_TTL_MS = 20 * 60 * 1000;
@@ -15,6 +17,11 @@ export interface AiNoteDraftHandoff {
     path: '/noteLibrary/add';
     query: { type: AiNoteDraft['type']; aiDraft: string };
   };
+}
+
+export interface PersistedAiNoteHandoff {
+  noteId: string;
+  route: { path: string };
 }
 
 interface StoredAiNoteDraft extends AiNoteDraft {
@@ -34,6 +41,18 @@ function normalizeDraft(value: Partial<AiNoteDraft>): AiNoteDraft {
   };
 }
 
+function notePreviewFromResponse(response: AiSkillResponse, fallbackTitle: string): AiNoteDraft | null {
+  const result = response.result;
+  if (result?.kind !== 'artifact_preview' || result.artifactType !== 'note') return null;
+  const content = String(result.content || '');
+  if (!content.trim()) return null;
+  return normalizeDraft({
+    title: String(result.title || fallbackTitle),
+    content,
+    type: result.contentType === 'html' ? 'html' : 'markdown',
+  });
+}
+
 export function stageAiNoteDraft(value: Partial<AiNoteDraft>, ttlMs = DEFAULT_TTL_MS) {
   const token = createDraftToken();
   const draft: StoredAiNoteDraft = {
@@ -48,19 +67,52 @@ export function createAiNoteDraftHandoff(
   response: AiSkillResponse,
   fallbackTitle = 'AI 生成笔记',
 ): AiNoteDraftHandoff | null {
-  const result = response.result;
-  if (result?.kind !== 'artifact_preview' || result.artifactType !== 'note') return null;
-  const content = String(result.content || '');
-  if (!content.trim()) return null;
-  const type: AiNoteDraft['type'] = result.contentType === 'html' ? 'html' : 'markdown';
-  const token = stageAiNoteDraft({
-    title: String(result.title || fallbackTitle),
-    content,
-    type,
-  });
+  const draft = notePreviewFromResponse(response, fallbackTitle);
+  if (!draft) return null;
+  const token = stageAiNoteDraft(draft);
   return {
     token,
-    route: { path: '/noteLibrary/add', query: { type, aiDraft: token } },
+    route: { path: '/noteLibrary/add', query: { type: draft.type, aiDraft: token } },
+  };
+}
+
+/**
+ * 确认 AI 笔记预览时直接复用笔记领域的权威创建接口。
+ * requestId 作为幂等键，避免重复点击或提交回包丢失时创建多份笔记。
+ */
+export async function persistAiNotePreview(
+  response: AiSkillResponse,
+  fallbackTitle = 'AI 生成笔记',
+): Promise<PersistedAiNoteHandoff | null> {
+  const draft = notePreviewFromResponse(response, fallbackTitle);
+  if (!draft) return null;
+  const requestId = String(response.requestId || '').trim();
+  if (!requestId) {
+    throw Object.assign(new Error('AI 结果缺少请求标识，请重新生成后再创建笔记'), {
+      code: 'AI_NOTE_REQUEST_ID_MISSING',
+      status: 422,
+    });
+  }
+  const payload = {
+    ...draft,
+    idempotencyKey: `ai-skill-note:${requestId}`.slice(0, 512),
+  };
+  let result = await apiBasePost('/api/note/addNote', payload, { silent: true });
+  const exposureDecision = await confirmNoteShareExposure(result);
+  if (exposureDecision === false) return null;
+  if (exposureDecision === true) {
+    result = await apiBasePost('/api/note/addNote', { ...payload, shareExposureAcknowledged: true }, { silent: true });
+  }
+  const noteId = String(result?.data?.id || '').trim();
+  if (Number(result?.status) !== 200 || !noteId) {
+    throw Object.assign(new Error(String(result?.msg || '笔记创建失败，请稍后重试')), {
+      code: String(result?.data?.code || 'AI_NOTE_CREATE_FAILED'),
+      status: Number(result?.status || 500),
+    });
+  }
+  return {
+    noteId,
+    route: { path: `/noteLibrary/${encodeURIComponent(noteId)}` },
   };
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { loadExplicitResourceEvidence } from './resourceEvidence.js';
+import { loadExplicitResourceEvidence, prepareExplicitResourceEvidence } from './resourceEvidence.js';
 
 function databaseFor({ notes = [], bookmarks = [], files = [], todos = [], chunks = [] } = {}) {
   return {
@@ -107,5 +107,41 @@ describe('loadExplicitResourceEvidence', () => {
     expect(result.sources[0].excerpt.length).toBe(20);
     expect(result.sources[0].excerpt.endsWith('…')).toBe(true);
     expect(result.coverage.warnings).toContain('resource_content_truncated:note:n1');
+  });
+});
+
+describe('prepareExplicitResourceEvidence', () => {
+  it('云文件复用解析服务并等待 ready，不调用模型', async () => {
+    const attachSource = vi.fn().mockResolvedValue({ id: 'source-1', status: 'queued' });
+    const getStatuses = vi
+      .fn()
+      .mockResolvedValueOnce([{ id: 'source-1', status: 'parsing' }])
+      .mockResolvedValueOnce([{ id: 'source-1', status: 'ready' }]);
+    const result = await prepareExplicitResourceEvidence({
+      userId: 'u1',
+      resourceRefs: [{ type: 'file', id: 'f1' }],
+      sessionId: 'request-1',
+      attachSource,
+      getStatuses,
+      waitMs: 200,
+      pollMs: 1,
+    });
+    expect(attachSource).toHaveBeenCalledWith({ userId: 'u1', fileId: 'f1', sessionId: 'request-1' });
+    expect(result[0].status).toBe('ready');
+  });
+
+  it('不支持的文件类型返回可直接展示的稳定原因', async () => {
+    await expect(
+      prepareExplicitResourceEvidence({
+        userId: 'u1',
+        resourceRefs: [{ type: 'file', id: 'f1' }],
+        attachSource: vi.fn().mockRejectedValue(Object.assign(new Error('internal'), { code: 'UNSUPPORTED_FILE_TYPE' })),
+        getStatuses: vi.fn(),
+      }),
+    ).rejects.toMatchObject({
+      code: 'UNSUPPORTED_FILE_TYPE',
+      status: 400,
+      message: expect.stringContaining('TXT'),
+    });
   });
 });

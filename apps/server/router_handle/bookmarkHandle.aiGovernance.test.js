@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   poolQuery: vi.fn(),
+  archiveAndSummarizeBookmark: vi.fn(),
   summarizeBookmark: vi.fn(),
   suggestTagsFromText: vi.fn(),
   suggestBookmarkMeta: vi.fn(),
@@ -30,6 +31,7 @@ vi.mock('../util/auth.js', () => ({
 }));
 vi.mock('../util/growth.js', () => ({ grantExp: vi.fn() }));
 vi.mock('../util/snapshot.js', () => ({
+  archiveAndSummarizeBookmark: mocks.archiveAndSummarizeBookmark,
   archiveBookmark: vi.fn(),
   getBookmarkSnapshot: vi.fn(),
   summarizeBookmark: mocks.summarizeBookmark,
@@ -62,7 +64,8 @@ vi.mock('../util/bookmarkUrl.js', () => ({
 vi.mock('../util/personalKnowledgeSearch.js', () => ({ invalidatePersonalKnowledgeCache: vi.fn() }));
 vi.mock('../util/aiExecution/service.js', () => ({ runAiExecution: mocks.runAiExecution }));
 
-const { doOrganizeQuote, doOrganizeRun, doSummarizeBookmark } = await import('./bookmarkHandle.js');
+const { doArchiveAndSummarizeBookmark, doOrganizeQuote, doOrganizeRun, doSummarizeBookmark } =
+  await import('./bookmarkHandle.js');
 
 function response() {
   return {
@@ -133,6 +136,30 @@ describe('bookmark AI entry governance', () => {
       trace: expect.objectContaining({ taskType: 'bookmark_summary' }),
     });
     expect(res.payload).toMatchObject({ status: 200, data: { summary: '只读摘要' } });
+  });
+
+  it('网页存档合并动作通过单一根执行，并在只读上下文禁止归档与缓存', async () => {
+    mocks.archiveAndSummarizeBookmark.mockResolvedValue({ ok: true, summary: '临时摘要', archiveOk: false });
+    const req = {
+      body: { id: 'bookmark-1' },
+      user: { id: 'subject-1', role: 'user' },
+      billingUser: { id: 'root-1', role: 'root' },
+      adminContext: { id: 'ctx-1', mode: 'readonly' },
+      adminCapability: { policy: 'ai_use', resourceType: 'bookmark' },
+    };
+    const res = response();
+
+    await doArchiveAndSummarizeBookmark(req, res);
+
+    expect(mocks.archiveAndSummarizeBookmark).toHaveBeenCalledWith('subject-1', 'bookmark-1', {
+      persist: false,
+      trace: expect.objectContaining({ taskType: 'bookmark_archive_summary' }),
+    });
+    expect(mocks.runAiExecution).toHaveBeenCalledWith(
+      expect.objectContaining({ taskType: 'bookmark_archive_summary', skillId: 'bookmark.summarize_page' }),
+      expect.any(Function),
+    );
+    expect(res.payload).toMatchObject({ status: 200, data: { summary: '临时摘要' } });
   });
 
   it.each([

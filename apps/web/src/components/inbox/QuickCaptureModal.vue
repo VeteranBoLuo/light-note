@@ -47,10 +47,8 @@
             :reset-key="todoFormKey"
             :mobile="bookmark.isMobile"
             :reminder-presets-enabled="quickReminderPresetsEnabled"
-            :ai-parsing="todoAiParsing"
             @submit="submitTodo"
             @details="openTodoDetails"
-            @ai="parseTodoWithAi"
           />
           <template v-else>
             <div class="capture-panel-intro">
@@ -196,8 +194,6 @@
   import icon from '@/config/icon';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import MobileNoticeStrip from '@/components/mobile/MobileNoticeStrip.vue';
-  import { useAiSkill } from '@/composables/useAiSkill';
-  import { recordAiSkillApplied } from '@/api/aiTelemetry';
 
   const MAX_FILE_TOTAL_SIZE = 200 * 1024 * 1024;
 
@@ -255,14 +251,6 @@
   const todoDetailsVisible = ref(false);
   const quickReminderPresetsEnabled = ref(true);
   const todoDraft = ref<TodoCreateInitialValues | undefined>();
-  const {
-    loading: todoAiParsing,
-    execute: executeTodoParse,
-    reset: resetTodoAi,
-  } = useAiSkill({
-    skillId: 'todo.parse_draft',
-    surface: 'quick_capture.todo',
-  });
   const capturedResource = ref<{ type: ActionCaptureType; id?: string; title?: string } | null>(null);
 
   const typeOptions = computed(() =>
@@ -572,37 +560,6 @@
     );
   }
 
-  async function parseTodoWithAi(payload: TodoCreateInitialValues & { title: string }) {
-    if (todoAiParsing.value || blockGuestWrite('todo-create', t('inbox.guestPrompt'))) return;
-    try {
-      const response = await executeTodoParse({ instruction: payload.title });
-      const result = response?.result;
-      if (!result || result.kind !== 'structured_draft' || result.draftType !== 'todo') {
-        throw new Error(t('inbox.quickTodoAiFailed'));
-      }
-      const priority = Number(result.priority);
-      const checklist = (Array.isArray(result.checklist) ? result.checklist : [])
-        .map((item) => String(item || '').trim())
-        .filter(Boolean)
-        .map((text) => ({ id: generateUUID(), text, done: false }));
-      await openTodoDetails({
-        title: String(result.title || '').trim(),
-        description: String(result.description || '').trim(),
-        priority: priority === 0 || priority === 2 ? priority : 1,
-        dueAt: result.dueAt ? String(result.dueAt).replace(' ', 'T') : null,
-        checklist,
-        quickReminderPreset: 'none',
-      });
-      void recordAiSkillApplied({
-        skillId: 'todo.parse_draft',
-        surface: 'quick_capture.todo',
-        resourceType: 'todo',
-      });
-    } catch (error: any) {
-      message.error(error?.message || t('inbox.quickTodoAiFailed'));
-    }
-  }
-
   async function afterDetailedTodoSaved(result: { id: string; title: string }) {
     capturedResource.value = { type: 'todo', id: result.id, title: result.title };
     recordOperation(OPERATION_LOG_MAP.inbox.captureTodo);
@@ -659,7 +616,6 @@
   }
 
   function reset() {
-    resetTodoAi();
     content.value = '';
     files.value = [];
     pastedFileKeys.clear();

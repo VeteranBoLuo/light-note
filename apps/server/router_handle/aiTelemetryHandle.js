@@ -1,5 +1,5 @@
 import { resultData } from '../util/common.js';
-import { resolveAiConversationIdentity } from '../util/aiConversationService.js';
+import { resolveAiIdentity } from '../util/aiIdentity.js';
 import { recordAiProductEvent } from '../util/aiProductTelemetry.js';
 
 export async function recordAiEvent(req, res) {
@@ -9,7 +9,7 @@ export async function recordAiEvent(req, res) {
     if (!req.user?.id || req.user.role === 'visitor') {
       return res.send(resultData({ accepted: false, reason: 'authentication_required' }));
     }
-    const identity = resolveAiConversationIdentity(req);
+    const identity = resolveAiIdentity(req);
     const result = await recordAiProductEvent(identity, req.body || {});
     return res.send(resultData(result));
   } catch (error) {

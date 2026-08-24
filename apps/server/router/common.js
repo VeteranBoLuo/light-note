@@ -60,6 +60,7 @@ router.post('/getAgentLogsSummary', commonHandle.getAgentLogsSummary);
 router.post('/getAiFeedback', commonHandle.getAiFeedback);
 router.post('/updateAdminAiFeedbackTriage', updateAdminAiFeedbackTriage);
 router.post('/getDeepSeekBalance', commonHandle.getDeepSeekBalance);
+router.post('/getAdminOverviewSnapshot', commonHandle.getAdminOverviewSnapshot);
 router.post('/getAdminOverview', commonHandle.getAdminOverview);
 router.post('/getAdminOverviewTrend', commonHandle.getAdminOverviewTrend);
 router.post('/getAdminOverviewRecent', commonHandle.getAdminOverviewRecent);

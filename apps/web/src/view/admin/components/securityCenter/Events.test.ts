@@ -16,15 +16,19 @@ vi.mock('@/components/base/BasicComponents/BMessage/BMessage', () => ({
 vi.mock('@/components/admin/AdminRiskActionModal.vue', () => ({
   default: {
     name: 'AdminRiskActionModalStub',
-    props: ['visible'],
+    props: ['visible', 'defaultReason'],
     emits: ['confirm', 'update:visible'],
-    setup(props: { visible: boolean }, { emit }: { emit: (event: string, payload: unknown) => void }) {
+    setup(
+      props: { visible: boolean; defaultReason: string },
+      { emit }: { emit: (event: string, payload: unknown) => void },
+    ) {
       return () =>
         props.visible
           ? h(
               'button',
               {
                 class: 'risk-confirm',
+                'data-default-reason': props.defaultReason,
                 onClick: () => emit('confirm', { reason: '已核对事件簇业务上下文', confirmed: true }),
               },
               '提交复核',
@@ -156,6 +160,7 @@ describe('安全中心事件复核筛选与批量操作', () => {
 
     findButton(host, '标记误报')!.click();
     await nextTick();
+    expect(host.querySelector<HTMLButtonElement>('.risk-confirm')?.dataset.defaultReason).toBe('确认属于误报');
     host.querySelector<HTMLButtonElement>('.risk-confirm')!.click();
     await flushPromises();
 
@@ -171,6 +176,29 @@ describe('安全中心事件复核筛选与批量操作', () => {
     expect(messageSuccess).toHaveBeenCalledWith('已复核 1 个事件簇，共处理 2 条事件');
     expect(host.textContent).toContain('处置回执');
     expect(host.textContent).toContain('审计 audit-1');
+  });
+
+  it('四种批量复核结论都预设各自的六字以上原因', async () => {
+    const cases = [
+      ['良性异常', '确认为良性异常'],
+      ['授权测试', '确认为授权测试'],
+      ['标记误报', '确认属于误报'],
+      ['确认攻击', '确认为真实攻击'],
+    ] as const;
+
+    for (const [action, reason] of cases) {
+      const host = mountEvents();
+      await flushPromises();
+      host.querySelector<HTMLElement>('.table-row .b-checkbox')!.click();
+      await nextTick();
+
+      findButton(host, action)!.click();
+      await nextTick();
+
+      expect(host.querySelector<HTMLButtonElement>('.risk-confirm')?.dataset.defaultReason).toBe(reason);
+      cleanup?.();
+      cleanup = undefined;
+    }
   });
 
   it('深链打开精确事件，并能返回保留筛选的待处理队列', async () => {

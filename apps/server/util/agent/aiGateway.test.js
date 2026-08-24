@@ -55,6 +55,7 @@ describe('Agent AI Gateway', () => {
     const error = new Error('Authorization: Bearer secret-token password=hunter2');
     const gateway = createAiGateway({ completeClient: vi.fn().mockRejectedValue(error), streamClient: vi.fn() });
     await expect(gateway.complete([], { trace: { traceId: 'trace-2' } })).rejects.toBe(error);
+    expect(error.code).toBe('AI_PROVIDER_AUTH_FAILED');
     expect(error.gatewayTrace.error).not.toContain('secret-token');
     expect(error.gatewayTrace.error).not.toContain('hunter2');
   });

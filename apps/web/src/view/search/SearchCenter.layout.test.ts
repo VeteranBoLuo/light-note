@@ -104,16 +104,23 @@ describe('资源中心工作区布局', () => {
     expect(source).toMatch(/function handleItemMenu[\s\S]*?action === 'ai'[\s\S]*?openResourceAi\(item\)/);
   });
 
-  it('资源分析复用同一面板，桌面弹性占满检查器并支持单项结构化引用', () => {
+  it('资源分析只处理明确选中的资源，单项自动执行且不再提供自由追问', () => {
     expect(source).toContain('presentation="sidebar"');
     expect(source).toContain(':icon-src="icon.ai.organize"');
-    expect(source).toContain(':initial-prompt="searchAiInitialPrompt"');
+    expect(source).toContain('skill-id="search.summarize_selected"');
+    expect(source).toContain(':show-prompt="false"');
+    expect(source).toContain(':auto-run-action-id="searchAiAutoRunActionId"');
+    expect(source).not.toContain('skill-id="search.answer"');
+    expect(source).not.toContain('class="search-header-icon-btn search-ai-entry"');
+    expect(source).not.toContain('class="mobile-toolbar-btn mobile-ai-btn"');
     expect(source).toMatch(/\.search-ai-panel\s*\{[\s\S]*?flex:\s*1 1 auto/);
     expect(source).toMatch(/function openResourceAi[\s\S]*?explicitSearchAiResourceContext\.value = \{/);
     expect(source).toMatch(/ref:\s*\{ type:\s*item\.type as AiSkillResourceRef\['type'\], id:\s*String\(item\.id\) \}/);
     expect(source).toMatch(/const searchAiScopeLabel = computed[\s\S]*?ai\.entry\.resourceScope/);
     expect(source).toMatch(/const searchAiInitialPrompt = computed[\s\S]*?ai\.entry\.analyzeResourcePrompt/);
-    expect(source).toMatch(/if \(!explicitSearchAiResourceContext\.value && searchAiResourceRefs\.value\.length\)/);
+    expect(source).toMatch(/id:\s*'analyze'[\s\S]*?skillId:\s*'search\.summarize_selected'/);
+    expect(source).toMatch(/input:\s*\{ instruction:\s*searchAiInitialPrompt\.value \}/);
+    expect(source).toMatch(/function handleResultOpen[\s\S]*?inspectResource\(item\);[\s\S]*?closeSearchAi\(\)/);
   });
 
   it('桌面资源范围使用单选切换，移动端类型抽屉继续支持多选', () => {

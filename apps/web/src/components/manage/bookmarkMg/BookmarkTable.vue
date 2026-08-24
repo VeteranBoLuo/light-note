@@ -6,10 +6,6 @@
     layout="workspace"
   >
     <template #actions>
-      <BButton v-if="selectedRows.length > 0" @click="openSelectedBookmarksInAi">
-        <SvgIcon :src="icon.ai.ask" color="currentColor" size="16" aria-hidden="true" />
-        {{ $t('bookmarkMg.aiUseSelected') }}
-      </BButton>
       <BButton v-if="selectedRows.length > 0" type="danger" @click="handleBatchDelete">
         {{ $t('bookmarkMg.batchDelete') }}
       </BButton>
@@ -323,20 +319,11 @@
                     </div>
                     <div v-if="bookmarkItem.hasSnapshot || bookmarkItem.hasSummary" class="bm-badges">
                       <BookmarkCapabilityBadge
-                        v-if="bookmarkItem.hasSnapshot"
                         type="snapshot"
                         :label="$t('bookmarkMg.badgeArchived')"
                         :tooltip="$t('bookmarkMg.badgeArchivedHint')"
                         @click.stop="openSnap(bookmarkItem.id)"
                         v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSnapshot"
-                      />
-                      <BookmarkCapabilityBadge
-                        v-if="bookmarkItem.hasSummary"
-                        type="summary"
-                        :label="$t('bookmarkMg.badgeSummary')"
-                        :tooltip="$t('bookmarkMg.badgeSummaryHint')"
-                        @click.stop="openSnap(bookmarkItem.id)"
-                        v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSummary"
                       />
                     </div>
                   </div>
@@ -410,22 +397,13 @@
                   />
                   <div class="text-hidden">{{ text }}</div>
                   <BookmarkCapabilityBadge
-                    v-if="(record as BookmarkInterface).hasSnapshot"
+                    v-if="(record as BookmarkInterface).hasSnapshot || (record as BookmarkInterface).hasSummary"
                     type="snapshot"
                     compact
                     :label="$t('bookmarkMg.badgeArchived')"
                     :tooltip="$t('bookmarkMg.badgeArchivedHint')"
                     @click="openSnap((record as BookmarkInterface).id)"
                     v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSnapshot"
-                  />
-                  <BookmarkCapabilityBadge
-                    v-if="(record as BookmarkInterface).hasSummary"
-                    type="summary"
-                    compact
-                    :label="$t('bookmarkMg.badgeSummary')"
-                    :tooltip="$t('bookmarkMg.badgeSummaryHint')"
-                    @click="openSnap((record as BookmarkInterface).id)"
-                    v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSummary"
                   />
                 </div>
               </template>
@@ -668,13 +646,8 @@
   function openBookmarksInAi(items: BookmarkInterface[]) {
     const available = items.filter((item) => String(item?.id || '').trim());
     if (!available.length) return;
-    if (available.length > 10) message.info(t('bookmarkMg.aiMaterialLimit', { count: 10 }));
-    bookmarkAiItems.value = available.slice(0, 10);
+    bookmarkAiItems.value = available.slice(0, 1);
     bookmarkAiVisible.value = true;
-  }
-
-  function openSelectedBookmarksInAi() {
-    openBookmarksInAi(filteredBookmarks.value.filter((item) => selectedRows.value.includes(item.id)));
   }
   const showImportExportModal = () => {
     if (isImporting.value) {

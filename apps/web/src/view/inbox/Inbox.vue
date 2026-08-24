@@ -513,7 +513,23 @@
     </section>
 
     <aside v-if="!isTodoFocused && !bookmark.isMobile" class="resource-inbox-inspector">
-      <template v-if="inspectedInboxItem">
+      <AiSkillPanel
+        v-if="inboxAiResource"
+        class="resource-inbox-ai-panel"
+        :title="t('ai.entry.searchSkillTitle')"
+        :description="t('ai.entry.searchSkillDescription')"
+        skill-id="search.summarize_selected"
+        surface="search"
+        :resource-refs="inboxAiResourceRefs"
+        :scope-label="inboxAiScopeLabel"
+        :initial-input="{}"
+        :actions="inboxAiActions"
+        :show-prompt="false"
+        auto-run-action-id="analyze"
+        :icon-src="icon.ai.organize"
+        presentation="sidebar"
+      />
+      <template v-else-if="inspectedInboxItem">
         <div class="resource-inbox-inspector__eyebrow">{{ t('inbox.currentPendingResource') }}</div>
         <span class="resource-inbox-inspector__type">{{ t(`inbox.${inspectedInboxItem.resourceType}`) }}</span>
         <h2>{{ inspectedInboxItem.title || t('inbox.untitled') }}</h2>
@@ -535,6 +551,16 @@
           </div>
         </dl>
         <div class="resource-inbox-inspector__actions">
+          <BButton
+            block
+            size="large"
+            type="function"
+            class="resource-inbox-inspector__action--ai"
+            @click="openInboxResourceAi(inspectedInboxItem)"
+          >
+            <SvgIcon :src="icon.ai.organize" size="17" aria-hidden="true" />
+            {{ t('resourceCenter.analyzeResource') }}
+          </BButton>
           <BButton block size="large" type="primary" @click="openResource(inspectedInboxItem)">
             {{ t('inbox.organize') }}
           </BButton>
@@ -616,6 +642,8 @@
   import { isMobileResourceInboxTab } from '@/config/mobileNavigation';
   import ResourceCenterSectionNav from '@/components/searchCenter/ResourceCenterSectionNav.vue';
   import ResourceCenterTopBar from '@/components/searchCenter/ResourceCenterTopBar.vue';
+  import AiSkillPanel from '@/components/aiSkills/AiSkillPanel.vue';
+  import type { AiSkillResourceRef } from '@lightnote/shared/ai-skill-protocol';
   import { getMobileResourceEntryPath } from '@/composables/useMobileNavigationState';
   import { batchDeleteSearchResources, clearGlobalSearchCache } from '@/api/search';
   import type {
@@ -690,6 +718,7 @@
   const showTopFade = ref(false);
   const showBottomFade = ref(false);
   const inspectedInboxKey = ref('');
+  const inboxAiResource = ref<InboxItemType | null>(null);
   let resizeObserver: ResizeObserver | null = null;
 
   const isMobileResourceInbox = computed(() => bookmark.isMobile && isMobileResourceInboxTab(route.query.tab));
@@ -720,6 +749,41 @@
       .replace(/\s+/g, ' ')
       .trim();
     return text || t('inbox.noSummary');
+  });
+  const inboxAiResourceRefs = computed<AiSkillResourceRef[]>(() =>
+    inboxAiResource.value
+      ? [
+          {
+            type: inboxAiResource.value.resourceType,
+            id: String(inboxAiResource.value.resourceId),
+          },
+        ]
+      : [],
+  );
+  const inboxAiScopeLabel = computed(() => {
+    const item = inboxAiResource.value;
+    if (!item) return '';
+    return t('ai.entry.resourceScope', {
+      type: t(`inbox.${item.resourceType}`),
+      title: item.title || t('inbox.untitled'),
+    });
+  });
+  const inboxAiActions = computed(() => {
+    const item = inboxAiResource.value;
+    if (!item) return [];
+    return [
+      {
+        id: 'analyze',
+        label: t('ai.entry.analyzeAgain'),
+        skillId: 'search.summarize_selected',
+        input: {
+          instruction: t('ai.entry.analyzeResourcePrompt', {
+            type: t(`inbox.${item.resourceType}`),
+            title: item.title || t('inbox.untitled'),
+          }),
+        },
+      },
+    ];
   });
   const allItemsSelected = computed(() => inbox.items.length > 0 && selectedItems.value.length === inbox.items.length);
   const someItemsSelected = computed(
@@ -915,6 +979,15 @@
     },
   );
   watch(
+    () => inbox.items.map((item) => inbox.resourceKey(item)).join('|'),
+    (resourceKeyList) => {
+      const keys = new Set(resourceKeyList ? resourceKeyList.split('|') : []);
+      const aiKey = inboxAiResource.value ? inbox.resourceKey(inboxAiResource.value) : '';
+      if (aiKey && !keys.has(aiKey)) inboxAiResource.value = null;
+      if (inspectedInboxKey.value && !keys.has(inspectedInboxKey.value)) inspectedInboxKey.value = '';
+    },
+  );
+  watch(
     () => todo.items,
     () => syncTodoGroups(),
   );
@@ -1031,6 +1104,12 @@
 
   function inspectInboxResource(item: InboxItemType) {
     inspectedInboxKey.value = inbox.resourceKey(item);
+    inboxAiResource.value = null;
+  }
+
+  function openInboxResourceAi(item: InboxItemType) {
+    inspectedInboxKey.value = inbox.resourceKey(item);
+    inboxAiResource.value = item;
   }
 
   function handleInboxItemOpen(item: InboxItemType) {
@@ -2130,6 +2209,12 @@
     background: var(--card-background);
   }
 
+  .resource-inbox-ai-panel {
+    margin: -18px;
+    border: 0;
+    border-radius: 0;
+  }
+
   .resource-inbox-scope {
     display: flex;
     flex-direction: column;
@@ -2299,10 +2384,7 @@
     min-width: 0;
     padding-inline: 12px;
     font-size: 14px;
-  }
-
-  .resource-inbox-inspector__actions :deep(.b_btn:first-child) {
-    grid-column: 1 / -1;
+    gap: 6px;
   }
 
   .resource-inbox-inspector__action--complete {
