@@ -1,6 +1,6 @@
 import express from 'express';
 import * as aiQuota from '../util/aiQuota.js';
-import { getUserAiUsage } from '../util/aiUsageService.js';
+import { getUserAiUsage, getUserAiUsageDetail } from '../util/aiUsageService.js';
 import { resultData } from '../util/common.js';
 import { aiUsageReadRateLimiter } from '../util/requestRateLimit.js';
 
@@ -33,6 +33,23 @@ router.post('/aiUsage', aiUsageReadRateLimiter, async (req, res) => {
     return res
       .status(status)
       .send(resultData({ code }, status, status === 401 ? error.message : 'AI 用量明细暂不可用'));
+  }
+});
+
+// 单次模型调用链详情仍只按实际付款者读取，不返回用户内容、资源标识或 Provider 原始错误。
+router.post('/aiUsageDetail', aiUsageReadRateLimiter, async (req, res) => {
+  const quotaUser = req.billingUser || req.user;
+  if (!quotaUser?.id || quotaUser.id === 'visitor' || quotaUser.role === 'visitor') {
+    return res.status(401).send(resultData({ code: 'AI_USAGE_AUTH_REQUIRED' }, 401, '登录后才能查看 AI 调用详情'));
+  }
+  try {
+    return res.send(resultData(await getUserAiUsageDetail(quotaUser.id, req.body?.executionId)));
+  } catch (error) {
+    const status = Number(error?.status || 503);
+    const code = String(error?.code || 'AI_USAGE_STORE_UNAVAILABLE');
+    if (status >= 500) console.error('[ai-usage-detail] query failed code=%s', code);
+    const message = status === 400 ? '调用记录参数无效' : status === 404 ? '调用记录不存在' : 'AI 调用详情暂不可用';
+    return res.status(status).send(resultData({ code }, status, message));
   }
 });
 

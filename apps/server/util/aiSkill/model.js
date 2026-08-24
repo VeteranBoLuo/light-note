@@ -55,6 +55,7 @@ export async function callGroundedSkillModel({
         ...requestOptions,
         temperature: 0,
         billingScope: 'platform',
+        repairReasonCode: error.code,
         trace: { ...trace, stage: `${trace.stage}_repair` },
       },
     );
@@ -123,6 +124,7 @@ export async function callGroundedSkillModelStream({
         ...requestOptions,
         temperature: 0,
         billingScope: 'platform',
+        repairReasonCode: error.code,
         trace: { ...trace, stage: `${trace.stage}_repair` },
       },
     );

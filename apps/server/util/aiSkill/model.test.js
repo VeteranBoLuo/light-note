@@ -26,6 +26,7 @@ describe('grounded skill model', () => {
     expect(requestAi).toHaveBeenCalledTimes(2);
     expect(requestAi.mock.calls[1][1].trace.stage).toBe('test_repair');
     expect(requestAi.mock.calls[1][1].billingScope).toBe('platform');
+    expect(requestAi.mock.calls[1][1].repairReasonCode).toBe('AI_SKILL_OUTPUT_TOO_SHORT');
   });
 
   it('修复后仍不合格时硬失败，禁止把短文冒充成功', async () => {
@@ -86,5 +87,6 @@ describe('grounded skill model', () => {
     expect(events).toEqual(['短 [1]', 'RESET', '这是修复后满足长度门禁的完整内容 [1]']);
     expect(result.content).toContain('修复后');
     expect(requestAiStream.mock.calls[1][1].billingScope).toBe('platform');
+    expect(requestAiStream.mock.calls[1][1].repairReasonCode).toBe('AI_SKILL_OUTPUT_TOO_SHORT');
   });
 });

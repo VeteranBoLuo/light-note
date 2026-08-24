@@ -352,6 +352,7 @@ export function beginAiProviderSpan({
   taskType,
   kind,
   billingScope,
+  triggerCode,
   estimatedTokens,
   waiveMissingUsageOnFailure = false,
 } = {}) {
@@ -365,6 +366,8 @@ export function beginAiProviderSpan({
     taskType: normalizeTaskType(taskType || execution.taskType),
     kind: normalizeIdentifier(kind, 'complete', 16),
     billingScope: billingScope === 'platform' ? 'platform' : 'user',
+    sequenceNo: Math.max(1, Math.floor(Number(execution.providerCallCount || 1))),
+    triggerCode: normalizeIdentifier(triggerCode, '', 64) || null,
     estimatedTokens: Math.max(1, Math.floor(Number(estimatedTokens || 1))),
     waiveMissingUsageOnFailure: waiveMissingUsageOnFailure === true,
     startedAt: Date.now(),

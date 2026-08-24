@@ -15,6 +15,15 @@ export const AI_USAGE_MODULES = Object.freeze([
   'other',
 ]);
 const ALLOWED_MODULES = new Set(AI_USAGE_MODULES);
+const EXECUTION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const REPAIR_REASON_BY_CODE = Object.freeze({
+  AI_SKILL_OUTPUT_SOURCE_REQUIRED: 'source_required',
+  AI_SKILL_OUTPUT_SOURCE_INVALID: 'source_invalid',
+  AI_SKILL_OUTPUT_COVERAGE_OVERCLAIM: 'coverage_overclaim',
+  AI_SKILL_OUTPUT_TOO_SHORT: 'too_short',
+  AI_SKILL_STRUCTURED_OUTPUT_MISSING: 'structured_output_missing',
+  AI_SKILL_STRUCTURED_OUTPUT_INVALID: 'structured_output_invalid',
+});
 
 function boundedInteger(value, fallback, min, max) {
   const parsed = Number(value);
@@ -94,6 +103,55 @@ function mapUsageItem(row) {
     usageComplete: row.usage_complete === true || Number(row.usage_complete) === 1,
     quotaSettlementStatus: String(row.quota_settlement_status || 'pending'),
     durationMs: safeNumber(row.duration_ms),
+  };
+}
+
+function publicSpanStage(stage) {
+  const normalized = String(stage || '').toLowerCase();
+  if (normalized === 'image_recognition' || normalized.startsWith('image_recognition_')) {
+    return 'image_recognition';
+  }
+  if (normalized.endsWith('_repair')) return 'output_repair';
+  return 'model_generation';
+}
+
+function publicSpanError(errorCode, status) {
+  const normalized = String(errorCode || '').toUpperCase();
+  if (!normalized) return null;
+  if (normalized.includes('TIMEOUT')) return 'timeout';
+  if (normalized.includes('ABORT') || status === 'aborted') return 'aborted';
+  if (normalized.includes('QUOTA')) return 'quota';
+  if (normalized.includes('NETWORK')) return 'network';
+  return 'provider_failed';
+}
+
+function mapProviderSpan(row, fallbackSequence) {
+  const stage = String(row.stage || '');
+  const stageType = publicSpanStage(stage);
+  const billingScope =
+    row.billing_scope === 'platform' || stage.toLowerCase().endsWith('_repair') ? 'platform' : 'user';
+  const triggerCode = String(row.trigger_code || '');
+  const mappedTriggerReason = Object.hasOwn(REPAIR_REASON_BY_CODE, triggerCode)
+    ? REPAIR_REASON_BY_CODE[triggerCode]
+    : null;
+  return {
+    sequenceNo: safeNumber(row.sequence_no) || fallbackSequence,
+    stageType,
+    provider: String(row.provider || '').slice(0, 32) || null,
+    model: String(row.model || '').slice(0, 96) || null,
+    status: String(row.status || 'failed'),
+    usageStatus: row.usage_status === 'reported' ? 'reported' : 'missing',
+    billingScope,
+    promptTokens: safeNumber(row.prompt_tokens),
+    completionTokens: safeNumber(row.completion_tokens),
+    totalTokens: safeNumber(row.total_tokens),
+    estimatedTokens: safeNumber(row.estimated_tokens),
+    durationMs: safeNumber(row.duration_ms),
+    createdAt: epochMs(row.created_at),
+    triggerReason:
+      mappedTriggerReason ||
+      (stageType === 'output_repair' ? (triggerCode ? 'other_protocol_check' : 'historical_unknown') : null),
+    errorCategory: publicSpanError(row.error_code, row.status),
   };
 }
 
@@ -242,8 +300,70 @@ export async function getUserAiUsage(userId, rawQuery = {}, database = pool) {
   }
 }
 
+/**
+ * 单次执行详情按付款者归属读取；只暴露低敏 Provider 治理元数据，不返回内部 stage/task type、
+ * Prompt、模型正文、资源标识或 Provider 原始错误。
+ */
+export async function getUserAiUsageDetail(userId, executionId, database = pool) {
+  const actorUserId = String(userId || '')
+    .trim()
+    .slice(0, 128);
+  if (!actorUserId || actorUserId === 'visitor') {
+    const error = new Error('登录后才能查看 AI 调用详情');
+    error.code = 'AI_USAGE_AUTH_REQUIRED';
+    error.status = 401;
+    throw error;
+  }
+  const normalizedExecutionId = String(executionId || '').trim();
+  if (!EXECUTION_ID_PATTERN.test(normalizedExecutionId)) {
+    const error = new Error('AI 执行标识无效');
+    error.code = 'AI_USAGE_EXECUTION_ID_INVALID';
+    error.status = 400;
+    throw error;
+  }
+  try {
+    const [executionRows] = await database.query(
+      `SELECT id, skill_id, task_type, status, model_called, provider_call_count,
+              provider_tokens, charged_tokens, usage_complete, quota_settlement_status,
+              duration_ms, created_at
+         FROM ai_executions
+        WHERE id = ? AND actor_user_id = ? AND billing_policy = 'user' AND model_called = 1
+        LIMIT 1`,
+      [normalizedExecutionId, actorUserId],
+    );
+    const executionRow = Array.isArray(executionRows) ? executionRows[0] : null;
+    if (!executionRow) {
+      const error = new Error('AI 调用记录不存在');
+      error.code = 'AI_USAGE_EXECUTION_NOT_FOUND';
+      error.status = 404;
+      throw error;
+    }
+    const [spanRows] = await database.query(
+      `SELECT stage, provider, model, status, trigger_code, usage_status, billing_scope,
+              sequence_no, estimated_tokens, prompt_tokens, completion_tokens, total_tokens,
+              duration_ms, error_code, created_at
+         FROM ai_provider_spans
+        WHERE execution_id = ?
+        ORDER BY CASE WHEN sequence_no > 0 THEN sequence_no ELSE 2147483647 END ASC,
+                 created_at ASC, id ASC`,
+      [normalizedExecutionId],
+    );
+    const rows = Array.isArray(spanRows) ? spanRows : [];
+    return {
+      execution: mapUsageItem(executionRow),
+      calls: rows.map((row, index) => mapProviderSpan(row, index + 1)),
+    };
+  } catch (error) {
+    if (['AI_USAGE_EXECUTION_NOT_FOUND', 'AI_USAGE_AUTH_REQUIRED'].includes(error?.code)) throw error;
+    throw usageStoreError();
+  }
+}
+
 export const aiUsageServiceInternals = Object.freeze({
   mapUsageItem,
+  mapProviderSpan,
+  publicSpanStage,
+  publicSpanError,
   publicAction,
   aggregateModules,
   buildModuleFilter,

@@ -37,5 +37,6 @@ describe('structured skill model', () => {
     expect(requestAi).toHaveBeenCalledTimes(2);
     expect(requestAi.mock.calls[0][1].toolChoice).toEqual({ type: 'function', function: { name: 'submit' } });
     expect(requestAi.mock.calls[1][1].billingScope).toBe('platform');
+    expect(requestAi.mock.calls[1][1].repairReasonCode).toBe('AI_SKILL_STRUCTURED_OUTPUT_MISSING');
   });
 });

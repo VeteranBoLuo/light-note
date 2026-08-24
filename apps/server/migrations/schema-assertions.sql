@@ -1964,3 +1964,18 @@ LEFT JOIN (
     AND index_name='idx_ai_execution_actor_created'
 ) actual ON 1=1
 WHERE actual.cols IS NULL OR actual.cols <> 'actor_user_id,created_at';
+
+-- 55) Provider Span 调用详情必须具备顺序、计费归属、修复触发码和保守预算（期望 0 行）
+SELECT '[55] missing_ai_provider_span_explainability_column' AS check_name,
+  CONCAT('ai_provider_spans.', expected.column_name, ' 缺失') AS detail
+FROM (
+  SELECT 'billing_scope' AS column_name UNION ALL
+  SELECT 'sequence_no' UNION ALL
+  SELECT 'trigger_code' UNION ALL
+  SELECT 'estimated_tokens'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='ai_provider_spans'
+ AND actual.column_name=expected.column_name
+WHERE actual.column_name IS NULL;

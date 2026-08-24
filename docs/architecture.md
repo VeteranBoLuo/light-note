@@ -561,8 +561,8 @@ Runtime V3 把每轮请求拆成四个边界清晰、可独立验证的阶段：
 - 当前 Registry 精确登记 20 个 Skill，并由契约测试锁定清单、版本、角色、资源类型/数量、历史窗口、模型策略、输出类型与“定义中不得出现直写函数”。任何新 Skill 必须先进入 Registry 和 Feature Config，再接页面入口，不能通过散落路由或 Prompt 隐式增加能力。
 - `ai_skill_threads` / `ai_skill_turns` 保存有界、范围绑定的 Skill 连续问答；thread 绑定 Skill 版本、actor、subject 与 `scope_digest`。事实内容不从旧回答继承，每轮由 Context Resolver 重新读取。单次转换和草稿不保存自然语言历史。
 - `util/aiBillingCatalog.js` 是计费能力唯一目录：20 个 Registry Skill 与智能整理、书签整理、AI 扩展图标搜索等业务动作共用动作 ID、模块、调用上限和预占策略。独立 AI 用量页的规则说明与用量映射都从目录生成，新增模型入口若未登记会在测试/运行时失败关闭。
-- `ai_executions` 是一次用户/系统动作的根账本，`ai_provider_spans` 保存该动作内所有真实模型调用。第一次用户主调用前才懒占位；缓存或确定性路径 settle 为 `not_used`。根执行分别累计 Provider 总 usage 与用户可计费 usage：用户主调用按实际 token 结算，输出协议修复由平台承担；Provider usage 缺失按请求前保守预算估算且钳在实际预占内，额度存储失败在 Provider 前失败关闭。
-- `/api/chat/aiUsage` 只按实际付款者 `actor_user_id` 查询登录账号的近 7/30/90 天账本，按服务端目录映射为用户动作和模块；响应不包含问题、正文、标题、URL、资源 ID、Provider 错误原文或内部 task type。`idx_ai_execution_actor_created` 支撑付款者时间线，管理员代管不会把 Root 触发的成本显示给被代管账号。
+- `ai_executions` 是一次用户/系统动作的根账本，`ai_provider_spans` 保存该动作内所有真实模型调用。Span 额外保存 `sequence_no / billing_scope / estimated_tokens / trigger_code`，用于解释调用顺序、用户或平台承担、usage 缺失预算和协议修复原因；这些字段只接受稳定治理元数据，不保存 Prompt、正文、图片或模型回答。第一次用户主调用前才懒占位；缓存或确定性路径 settle 为 `not_used`。根执行分别累计 Provider 总 usage 与用户可计费 usage：用户主调用按实际 token 结算，输出协议修复由平台承担；Provider usage 缺失按请求前保守预算估算且钳在实际预占内，额度存储失败在 Provider 前失败关闭。
+- `/api/chat/aiUsage` 只按实际付款者 `actor_user_id` 查询登录账号的近 7/30/90 天账本，按服务端目录映射为用户动作和模块；`/api/chat/aiUsageDetail` 再以 `execution_id + actor_user_id` 按需读取该动作的低敏 Span 调用链，服务端把内部 stage、修复码和错误码映射为封闭公开语义。两者都不返回问题、正文、标题、URL、图片、资源 ID、Provider 错误原文或内部 task type。`idx_ai_execution_actor_created` 支撑付款者时间线，管理员代管不会把 Root 触发的成本显示给被代管账号。
 - `/ai-usage` 是额度总览、最近消耗与免费/扣费规则的唯一详情路由。设置页只渲染紧凑入口且不请求用量数据，头像额度摘要和移动个人中心直接进入该路由；旧 `/settings?section=ai` 由路由层兼容重定向，不能重新恢复为设置页内嵌账本。
 - 免费能力与模型额度解耦但不等于无限：网页存档有请求限频及有界后台队列，本地文件预览/OCR 有大小、页数、像素、临时来源和任务频率限制，普通图标搜索有外部查询限频；这些限制失败只影响对应增强能力，不得让“额度不足”阻断笔记、书签、文件、待办的基础增删改查。
 - 业务不得直接访问模型。`aiGateway` 要求活动 Execution，`billingPolicy=none` 禁止 Provider；源码门禁阻止裸 Provider、未经登记的 Gateway 调用和新的 `openAiAssistant`。DeepSeek 主、千问备用策略仍由 Gateway 维护。

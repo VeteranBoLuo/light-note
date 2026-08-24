@@ -43,6 +43,13 @@ vi.mock('@/components/base/BasicComponents/BTabs.vue', () => ({
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
   default: { template: '<span class="icon-stub" />' },
 }));
+vi.mock('@/components/aiSkills/AiUsageDetailModal.vue', () => ({
+  default: {
+    props: ['visible', 'execution'],
+    emits: ['update:visible'],
+    template: '<div v-if="visible" class="detail-stub">{{ execution && execution.id }}</div>',
+  },
+}));
 
 const { default: AiUsageCenter } = await import('./AiUsageCenter.vue');
 
@@ -135,6 +142,10 @@ describe('AiUsageCenter', () => {
     expect(host.textContent).toContain('settings.ai.usage.status.partial');
     expect(host.textContent).toContain('settings.ai.usage.privacyHint');
     expect(host.textContent).not.toContain('用户正文');
+    const record = host.querySelector<HTMLButtonElement>('.usage-record');
+    expect(record?.getAttribute('aria-label')).toContain('settings.ai.usage.openDetail');
+    record?.click();
+    await vi.waitFor(() => expect(host.textContent).toContain('execution-1'));
 
     const rulesTab = [...host.querySelectorAll('button')].find((button) =>
       button.textContent?.includes('settings.ai.usage.rulesTab'),

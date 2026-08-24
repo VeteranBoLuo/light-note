@@ -253,6 +253,96 @@ function makeFixture(payload: Record<string, unknown>) {
   };
 }
 
+function makeDetailFixture(payload: Record<string, unknown>) {
+  const executionId = String(payload.executionId || '');
+  const execution = usageItems().find((item) => item.id === executionId) || usageItems()[1];
+  const now = Date.now();
+  const calls = [
+    {
+      sequenceNo: 1,
+      stageType: 'image_recognition',
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash-vision-exp',
+      status: 'success',
+      usageStatus: 'reported',
+      billingScope: 'user',
+      promptTokens: 1_199,
+      completionTokens: 211,
+      totalTokens: 1_410,
+      estimatedTokens: 3_000,
+      durationMs: 6_313,
+      createdAt: now - 16_000,
+      triggerReason: null,
+      errorCategory: null,
+    },
+    {
+      sequenceNo: 2,
+      stageType: 'model_generation',
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+      status: 'success',
+      usageStatus: 'reported',
+      billingScope: 'user',
+      promptTokens: 358,
+      completionTokens: 605,
+      totalTokens: 963,
+      estimatedTokens: 2_400,
+      durationMs: 12_386,
+      createdAt: now - 7_000,
+      triggerReason: null,
+      errorCategory: null,
+    },
+    {
+      sequenceNo: 3,
+      stageType: 'output_repair',
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+      status: 'success',
+      usageStatus: 'reported',
+      billingScope: 'platform',
+      promptTokens: 1_007,
+      completionTokens: 655,
+      totalTokens: 1_662,
+      estimatedTokens: 2_400,
+      durationMs: 3_414,
+      createdAt: now - 2_000,
+      triggerReason: 'source_required',
+      errorCategory: null,
+    },
+  ];
+  const detailCalls =
+    state === 'detail-empty'
+      ? []
+      : state === 'detail-edge'
+        ? calls.map((call) => {
+            if (call.sequenceNo === 1) {
+              return {
+                ...call,
+                status: 'failed',
+                usageStatus: 'missing',
+                promptTokens: 0,
+                completionTokens: 0,
+                totalTokens: 0,
+                errorCategory: 'timeout',
+              };
+            }
+            if (call.sequenceNo === 3) return { ...call, triggerReason: 'historical_unknown' };
+            return call;
+          })
+        : calls;
+  return {
+    execution: {
+      ...execution,
+      providerCallCount: 3,
+      providerTokens: 6_192,
+      chargedTokens: 4_530,
+      platformCoveredTokens: 1_662,
+      durationMs: 22_936,
+    },
+    calls: detailCalls,
+  };
+}
+
 request.defaults.adapter = async (config) => {
   if (config.url === '/api/user/me') {
     return {
@@ -299,6 +389,20 @@ request.defaults.adapter = async (config) => {
           enforcing: true,
         },
       },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config,
+      request: null,
+    };
+  }
+  if (config.url === '/api/chat/aiUsageDetail') {
+    if (state === 'detail-loading') await new Promise(() => {});
+    if (state === 'detail-error') {
+      throw Object.assign(new Error('Visual detail fixture failed'), { code: 'AI_USAGE_DETAIL_UNAVAILABLE' });
+    }
+    return {
+      data: { status: 200, msg: 'ok', data: makeDetailFixture(parsePayload(config.data)) },
       status: 200,
       statusText: 'OK',
       headers: {},

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getUserAiUsage, normalizeAiUsageQuery } from './aiUsageService.js';
+import { getUserAiUsage, getUserAiUsageDetail, normalizeAiUsageQuery } from './aiUsageService.js';
 
 describe('aiUsageService', () => {
   it('查询参数只接受稳定白名单', () => {
@@ -99,5 +99,138 @@ describe('aiUsageService', () => {
       status: 503,
       message: 'AI 用量明细暂不可用',
     });
+  });
+
+  it('按付款者读取单次调用链，并把内部阶段与修复码映射为低敏公开语义', async () => {
+    const database = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([
+          [
+            {
+              id: '7bc4f1a8-0d1e-4c60-a9d3-1974332a7c4d',
+              skill_id: 'file.summarize',
+              task_type: 'skill_file_summarize',
+              status: 'success',
+              model_called: 1,
+              provider_call_count: 2,
+              provider_tokens: 2157,
+              charged_tokens: 1376,
+              usage_complete: 1,
+              quota_settlement_status: 'reconciled',
+              duration_ms: 8057,
+              created_at: new Date('2026-08-24T15:50:35Z'),
+            },
+          ],
+        ])
+        .mockResolvedValueOnce([
+          [
+            {
+              stage: 'image_recognition',
+              provider: 'deepseek',
+              model: 'deepseek-v4-flash-vision-exp',
+              status: 'success',
+              trigger_code: null,
+              usage_status: 'reported',
+              billing_scope: 'user',
+              sequence_no: 1,
+              estimated_tokens: 3000,
+              prompt_tokens: 1199,
+              completion_tokens: 177,
+              total_tokens: 1376,
+              duration_ms: 2460,
+              error_code: null,
+              created_at: new Date('2026-08-24T15:50:39Z'),
+            },
+            {
+              stage: 'skill_file_summarize_repair',
+              provider: 'deepseek',
+              model: 'deepseek-v4-flash',
+              status: 'success',
+              trigger_code: 'AI_SKILL_OUTPUT_SOURCE_REQUIRED',
+              usage_status: 'reported',
+              billing_scope: 'platform',
+              sequence_no: 2,
+              estimated_tokens: 2200,
+              prompt_tokens: 311,
+              completion_tokens: 470,
+              total_tokens: 781,
+              duration_ms: 4179,
+              error_code: null,
+              created_at: new Date('2026-08-24T15:50:43Z'),
+            },
+            {
+              stage: 'skill_file_summarize_repair',
+              provider: 'deepseek',
+              model: 'deepseek-v4-flash',
+              status: 'failed',
+              trigger_code: null,
+              usage_status: 'missing',
+              billing_scope: 'platform',
+              sequence_no: 3,
+              estimated_tokens: 2200,
+              prompt_tokens: 0,
+              completion_tokens: 0,
+              total_tokens: 0,
+              duration_ms: 5000,
+              error_code: 'PROVIDER_TIMEOUT',
+              created_at: new Date('2026-08-24T15:50:48Z'),
+            },
+            {
+              stage: 'skill_file_summarize_repair',
+              provider: 'deepseek',
+              model: 'deepseek-v4-flash',
+              status: 'success',
+              trigger_code: 'AI_SKILL_OUTPUT_FUTURE_CHECK',
+              usage_status: 'reported',
+              billing_scope: 'platform',
+              sequence_no: 4,
+              estimated_tokens: 2200,
+              prompt_tokens: 300,
+              completion_tokens: 400,
+              total_tokens: 700,
+              duration_ms: 2100,
+              error_code: null,
+              created_at: new Date('2026-08-24T15:50:51Z'),
+            },
+          ],
+        ]),
+    };
+
+    const result = await getUserAiUsageDetail('payer-user', '7bc4f1a8-0d1e-4c60-a9d3-1974332a7c4d', database);
+
+    expect(database.query.mock.calls[0][1]).toEqual(['7bc4f1a8-0d1e-4c60-a9d3-1974332a7c4d', 'payer-user']);
+    expect(result.calls).toEqual([
+      expect.objectContaining({ sequenceNo: 1, stageType: 'image_recognition', billingScope: 'user' }),
+      expect.objectContaining({
+        sequenceNo: 2,
+        stageType: 'output_repair',
+        billingScope: 'platform',
+        triggerReason: 'source_required',
+      }),
+      expect.objectContaining({
+        sequenceNo: 3,
+        stageType: 'output_repair',
+        usageStatus: 'missing',
+        triggerReason: 'historical_unknown',
+        errorCategory: 'timeout',
+      }),
+      expect.objectContaining({
+        sequenceNo: 4,
+        stageType: 'output_repair',
+        triggerReason: 'other_protocol_check',
+      }),
+    ]);
+    expect(result.calls[1]).not.toHaveProperty('stage');
+    expect(result.calls[1]).not.toHaveProperty('triggerCode');
+    expect(result.calls[1]).not.toHaveProperty('errorCode');
+  });
+
+  it('调用详情拒绝越权或不存在的执行记录', async () => {
+    const database = { query: vi.fn().mockResolvedValue([[]]) };
+    await expect(
+      getUserAiUsageDetail('payer-user', '7bc4f1a8-0d1e-4c60-a9d3-1974332a7c4d', database),
+    ).rejects.toMatchObject({ code: 'AI_USAGE_EXECUTION_NOT_FOUND', status: 404 });
+    expect(database.query).toHaveBeenCalledTimes(1);
   });
 });

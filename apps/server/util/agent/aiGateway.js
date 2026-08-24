@@ -124,6 +124,7 @@ export function createAiGateway({
       timeoutMs: _timeoutMs,
       governance,
       billingScope: requestedBillingScope,
+      repairReasonCode,
       missingUsageOnFailure,
       ...clientOptions
     } = options;
@@ -204,6 +205,7 @@ export function createAiGateway({
       taskType,
       kind,
       billingScope,
+      triggerCode: repairReasonCode,
       estimatedTokens,
       waiveMissingUsageOnFailure: missingUsageOnFailure === 'waive' && stage.startsWith('image_recognition'),
     });

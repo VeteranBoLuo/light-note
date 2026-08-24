@@ -4975,6 +4975,7 @@ export default {
         recentRecords: 'Usage details',
         privacyHint: 'Only capability, time, status, and usage are shown; your content is not recorded.',
         providerCalls: '{n} model calls',
+        openDetail: 'View model call details for “{action}”',
         recordPlatformCovered: 'Platform covered an additional {n} tokens',
         settlementPending: 'Quota settlement is delayed; refresh again shortly',
         estimated: 'Estimated',
@@ -4997,6 +4998,61 @@ export default {
           'If a provider accepts a request but omits usage, a conservative pre-call estimate is used and never exceeds the actual reservation.',
         freeLimitRule:
           '“No AI quota” does not mean unlimited: web fetching and file parsing still have size, rate, and safety limits.',
+        detail: {
+          title: 'Model call details',
+          loading: 'Loading the call chain…',
+          errorTitle: 'Call details are temporarily unavailable',
+          errorDescription: 'The ledger may still be settling or the service may be unavailable. Try again shortly.',
+          staleWarning: 'Refresh failed. The last successfully loaded details are still shown.',
+          userCharged: 'Charged to you',
+          providerTotal: 'Actual model usage',
+          platformCovered: 'Platform covered',
+          callsTitle: 'Call chain · {n} calls',
+          callsHint: 'Shown in actual request order; non-model steps such as local OCR are not counted.',
+          inputTokens: 'Input',
+          outputTokens: 'Output',
+          totalTokens: 'Total',
+          duration: 'Duration',
+          repairReasonTitle: 'Why repair was triggered',
+          usageMissing:
+            'The provider omitted usage. The conservative pre-call budget was {n} tokens; final charging follows the execution total.',
+          noCalls: 'No model call records are available for this execution yet.',
+          privacy:
+            'Details retain only stage, model, status, and usage—not prompts, content, titles, URLs, images, or model responses.',
+          providerUnknown: 'Model information not recorded',
+          stages: {
+            image_recognition: 'Image text recognition',
+            model_generation: 'Content understanding and generation',
+            output_repair: 'Output protocol repair',
+          },
+          billing: {
+            user: 'Charged to your quota',
+            platform: 'Platform covered',
+          },
+          repairReasons: {
+            source_required: 'The first answer omitted source numbers, so the code validator required citations.',
+            source_invalid:
+              'The first answer cited a nonexistent source number, so the code validator required valid citations.',
+            coverage_overclaim:
+              'Coverage was incomplete but the first answer made an absolute claim, so the code validator required a bounded conclusion.',
+            too_short:
+              'The first answer missed the requested minimum length, so the code validator required more detail without invented facts.',
+            structured_output_missing:
+              'The first answer did not call the one required structured tool, so the code validator required protocol-compliant output.',
+            structured_output_invalid:
+              'The first structured arguments were not a valid object, so the code validator required protocol-compliant output.',
+            other_protocol_check:
+              'The first answer failed this output protocol check, so a repaired result was generated automatically.',
+            historical_unknown: 'This is a historical repair recorded before the specific trigger reason was retained.',
+          },
+          errors: {
+            timeout: 'The model call timed out.',
+            aborted: 'The model call was cancelled.',
+            quota: 'The pre-call quota gate did not pass.',
+            network: 'The model service had a network error.',
+            provider_failed: 'The model service could not complete this call.',
+          },
+        },
         modules: {
           all: 'All modules',
           note: 'Notes',

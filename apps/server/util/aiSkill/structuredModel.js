@@ -51,6 +51,7 @@ export async function callStructuredSkillModel({
         ...options,
         temperature: 0,
         billingScope: 'platform',
+        repairReasonCode: error.code,
         trace: { ...trace, stage: `${trace.stage}_repair` },
       },
     );

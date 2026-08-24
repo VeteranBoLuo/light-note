@@ -130,7 +130,14 @@
         </div>
 
         <div v-if="data?.items.length" class="usage-records">
-          <article v-for="item in data.items" :key="item.id" class="usage-record">
+          <BButton
+            v-for="item in data.items"
+            :key="item.id"
+            class="usage-record"
+            block
+            :aria-label="t('settings.ai.usage.openDetail', { action: actionLabel(item.labelKey) })"
+            @click="openDetail(item)"
+          >
             <span class="record-icon">
               <SvgIcon :src="icon.settings.ai" size="17" aria-hidden="true" />
             </span>
@@ -161,7 +168,10 @@
               <strong>{{ formatExactTokens(item.chargedTokens) }}</strong>
               <span>tokens</span>
             </div>
-          </article>
+            <span class="record-open" aria-hidden="true">
+              <SvgIcon :src="icon.arrow_right" size="15" />
+            </span>
+          </BButton>
         </div>
         <div v-else class="usage-empty">
           <SvgIcon :src="icon.settings.ai" size="24" aria-hidden="true" />
@@ -246,6 +256,8 @@
         >
       </div>
     </div>
+
+    <AiUsageDetailModal v-model:visible="detailVisible" :execution="selectedUsage" />
   </section>
 </template>
 
@@ -259,6 +271,7 @@
   import BPagination from '@/components/base/BasicComponents/BPagination.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
+  import AiUsageDetailModal from '@/components/aiSkills/AiUsageDetailModal.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
 
@@ -317,6 +330,8 @@
   const loading = ref(false);
   const errorCode = ref('');
   const data = ref<UsageResponse | null>(null);
+  const selectedUsage = ref<UsageItem | null>(null);
+  const detailVisible = ref(false);
   let requestSequence = 0;
 
   const moduleKeys = ['all', 'note', 'bookmark', 'file', 'todo', 'search', 'help', 'tag', 'other'];
@@ -408,6 +423,11 @@
   function changePageSize(value: number) {
     pageSize.value = value;
     page.value = 1;
+  }
+
+  function openDetail(item: UsageItem) {
+    selectedUsage.value = item;
+    detailVisible.value = true;
   }
 
   function formatTokens(value: unknown) {
@@ -740,13 +760,28 @@
 
   .usage-record {
     display: grid;
-    grid-template-columns: 34px minmax(0, 1fr) auto;
+    grid-template-columns: 34px minmax(0, 1fr) auto 16px;
     align-items: center;
     gap: 10px;
+    width: 100%;
+    height: auto;
     padding: 10px;
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     background: var(--workspace-panel-bg-color);
+    line-height: normal;
+    white-space: normal;
+    text-align: left;
+    transition:
+      border-color 0.15s ease,
+      background-color 0.15s ease;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .usage-record:hover {
+      border-color: var(--primary-color);
+      background: var(--primary-btn-bg-color);
+    }
   }
 
   .record-icon {
@@ -843,6 +878,13 @@
   .record-charge strong {
     color: var(--text-color);
     font-size: 13px;
+  }
+
+  .record-open {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--desc-color);
   }
 
   .rule-callout {
@@ -1033,8 +1075,9 @@
     }
 
     .usage-record {
-      grid-template-columns: 30px minmax(0, 1fr);
+      grid-template-columns: 30px minmax(0, 1fr) 16px;
       align-items: flex-start;
+      min-height: 64px;
     }
 
     .record-icon {
@@ -1046,6 +1089,12 @@
       grid-column: 2;
       align-items: flex-start;
       margin-top: -3px;
+    }
+
+    .record-open {
+      grid-column: 3;
+      grid-row: 1 / span 2;
+      align-self: center;
     }
 
     :deep(.bpagination__btn),

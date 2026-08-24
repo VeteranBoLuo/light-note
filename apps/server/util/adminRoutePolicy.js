@@ -408,6 +408,7 @@ declare(ADMIN_POLICIES.AI_USE, 'agent', [
 declare(ADMIN_POLICIES.READ, 'agent', [
   ['POST', '/chat/aiQuota'],
   ['POST', '/chat/aiUsage'],
+  ['POST', '/chat/aiUsageDetail'],
 ]);
 
 declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [

@@ -407,6 +407,7 @@ describe('aiExecution', () => {
         await gateway.complete([], {
           maxTokens: 100,
           billingScope: 'platform',
+          repairReasonCode: 'AI_SKILL_OUTPUT_SOURCE_REQUIRED',
           trace: { stage: 'file_summary_repair' },
         });
       },
@@ -422,6 +423,19 @@ describe('aiExecution', () => {
       billableUsage: { totalTokens: 100 },
       chargedTokens: 100,
     });
+    expect(persistence.insertAiProviderSpan).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ sequenceNo: 1, billingScope: 'user', triggerCode: null }),
+    );
+    expect(persistence.insertAiProviderSpan).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        sequenceNo: 2,
+        billingScope: 'platform',
+        triggerCode: 'AI_SKILL_OUTPUT_SOURCE_REQUIRED',
+      }),
+    );
+    expect(client.mock.calls[1][1]).not.toHaveProperty('repairReasonCode');
   });
 
   it('每个批量子调用在 Provider 前认领预算，下一项超过实际预占时停止且不超扣', async () => {

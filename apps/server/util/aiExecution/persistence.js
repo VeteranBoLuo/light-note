@@ -50,9 +50,10 @@ export async function updateAiExecutionReservation(execution, database = pool) {
 export async function insertAiProviderSpan(span, database = pool) {
   const [result] = await database.query(
     `INSERT INTO ai_provider_spans
-      (id, execution_id, trace_id, stage, task_type, kind, provider, model, status, usage_status,
+      (id, execution_id, trace_id, stage, task_type, kind, billing_scope, sequence_no,
+       provider, model, status, trigger_code, usage_status, estimated_tokens,
        prompt_tokens, completion_tokens, total_tokens, estimated_cost, duration_ms, error_code)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       span.id,
       span.executionId,
@@ -60,10 +61,14 @@ export async function insertAiProviderSpan(span, database = pool) {
       span.stage,
       span.taskType,
       span.kind,
+      span.billingScope,
+      span.sequenceNo,
       span.provider,
       span.model,
       span.status,
+      span.triggerCode,
       span.usageStatus,
+      span.estimatedTokens,
       span.usage.promptTokens,
       span.usage.completionTokens,
       span.usage.totalTokens,
