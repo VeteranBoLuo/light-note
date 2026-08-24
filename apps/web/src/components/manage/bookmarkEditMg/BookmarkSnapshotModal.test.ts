@@ -12,7 +12,7 @@ vi.mock('@/store', () => ({
 }));
 vi.mock('@/api/commonApi.ts', () => ({ recordOperation: vi.fn() }));
 vi.mock('@/components/base/BasicComponents/BMessage/BMessage.ts', () => ({
-  default: { success: vi.fn(), info: vi.fn() },
+  default: { success: vi.fn(), info: vi.fn(), warning: vi.fn() },
 }));
 vi.mock('@/components/base/BasicComponents/BModal/BModal.vue', () => ({
   default: {
@@ -68,7 +68,7 @@ afterEach(() => {
 });
 
 describe('BookmarkSnapshotModal 网页存档生命周期', () => {
-  it('缺少完整存档时只调用合并接口，并回读同一版正文和摘要', async () => {
+  it('打开缺少存档的弹窗不会自动消费 AI，用户可显式免费保存网页正文', async () => {
     let snapshotReads = 0;
     requestMocks.apiBasePost.mockImplementation(async (path: string) => {
       if (path === '/api/bookmark/snapshot') {
@@ -77,24 +77,27 @@ describe('BookmarkSnapshotModal 网页存档生命周期', () => {
           ? { status: 200, data: null }
           : {
               status: 200,
-              data: { title: '示例网页', content: '完整正文', summary: '正文摘要', update_time: '2026-08-24' },
+              data: { title: '示例网页', content: '完整正文', summary: null, update_time: '2026-08-24' },
             };
       }
-      if (path === '/api/bookmark/archive-summary') return { status: 200, data: { ok: true } };
+      if (path === '/api/bookmark/archive') return { status: 200, data: { ok: true } };
       throw new Error(`unexpected path: ${path}`);
     });
 
     const host = mountModal();
 
-    await vi.waitFor(() =>
-      expect(requestMocks.apiBasePost).toHaveBeenCalledWith('/api/bookmark/archive-summary', {
-        id: 'bookmark-1',
-      }),
+    await vi.waitFor(() => expect(requestMocks.apiBasePost).toHaveBeenCalledTimes(1));
+    expect(requestMocks.apiBasePost).toHaveBeenCalledWith('/api/bookmark/snapshot', { id: 'bookmark-1' });
+    expect(requestMocks.apiBasePost).not.toHaveBeenCalledWith('/api/bookmark/summarize', expect.anything());
+
+    const archiveButton = [...host.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('bookmarkMg.snapshotCreateArchive'),
     );
-    await vi.waitFor(() => expect(host.textContent).toContain('正文摘要'));
+    archiveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await vi.waitFor(() => expect(host.textContent).toContain('完整正文'));
     expect(requestMocks.apiBasePost.mock.calls.map((call) => call[0])).toEqual([
       '/api/bookmark/snapshot',
-      '/api/bookmark/archive-summary',
+      '/api/bookmark/archive',
       '/api/bookmark/snapshot',
     ]);
   });
@@ -110,5 +113,44 @@ describe('BookmarkSnapshotModal 网页存档生命周期', () => {
     await vi.waitFor(() => expect(host.textContent).toContain('正文摘要'));
     expect(requestMocks.apiBasePost).toHaveBeenCalledTimes(1);
     expect(requestMocks.apiBasePost).toHaveBeenCalledWith('/api/bookmark/snapshot', { id: 'bookmark-1' });
+  });
+
+  it('AI 摘要必须由用户显式触发，并明确调用计量接口', async () => {
+    let snapshotReads = 0;
+    requestMocks.apiBasePost.mockImplementation(async (path: string, body: any) => {
+      if (path === '/api/bookmark/snapshot') {
+        snapshotReads += 1;
+        return {
+          status: 200,
+          data: {
+            title: '示例网页',
+            content: '完整正文',
+            summary: snapshotReads > 1 ? '正文摘要' : null,
+            update_time: '2026-08-24',
+          },
+        };
+      }
+      if (path === '/api/bookmark/summarize') {
+        expect(body).toEqual({ id: 'bookmark-1', force: true });
+        return { status: 200, data: { ok: true, summary: '正文摘要' } };
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+
+    const host = mountModal();
+    await vi.waitFor(() => expect(host.textContent).toContain('完整正文'));
+    expect(requestMocks.apiBasePost).toHaveBeenCalledTimes(1);
+
+    const summaryButton = [...host.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('bookmarkMg.aiSummaryGenerate'),
+    );
+    summaryButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    await vi.waitFor(() => expect(host.textContent).toContain('正文摘要'));
+    expect(requestMocks.apiBasePost.mock.calls.map((call) => call[0])).toEqual([
+      '/api/bookmark/snapshot',
+      '/api/bookmark/summarize',
+      '/api/bookmark/snapshot',
+    ]);
   });
 });

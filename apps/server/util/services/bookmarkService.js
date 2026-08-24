@@ -162,7 +162,7 @@ export async function createBookmark({
     // 书签已经提交；成长、转化与知识缓存失效都属于旁路副作用，
     // 任何同步异常都不能把一次成功收藏伪装成 500，诱导用户重试并撞上重复书签。
   }
-  if (saveSnapshot) archiveBookmarkBackground(userId, data.id);
+  const snapshotScheduled = saveSnapshot ? archiveBookmarkBackground(userId, data.id) : false;
   return {
     id: data.id,
     name,
@@ -170,5 +170,6 @@ export async function createBookmark({
     tags: attachedTagNames,
     duplicate: false,
     addedToInbox: Boolean(addToInbox),
+    snapshotScheduled,
   };
 }

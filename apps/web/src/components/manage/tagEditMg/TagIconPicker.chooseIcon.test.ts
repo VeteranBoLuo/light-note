@@ -55,7 +55,8 @@ async function mountPicker() {
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp({
-    render: () => h(TagIconPicker, { tagName: '阅读', value: model.value, 'onUpdate:value': (v: string) => (model.value = v) }),
+    render: () =>
+      h(TagIconPicker, { tagName: '阅读', value: model.value, 'onUpdate:value': (v: string) => (model.value = v) }),
   });
   app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
   app.mount(host);
@@ -153,5 +154,21 @@ describe('TagIconPicker 选图后的停留行为', () => {
 
     expect(error).toHaveBeenCalled();
     expect([...host.querySelectorAll('.icon-option')].some((el) => el.classList.contains('selected'))).toBe(false);
+  });
+
+  it('AI 扩展失败时明确提示，并保留已经可用的免费搜索结果', async () => {
+    const host = await mountPicker();
+    await openPicker(host);
+    expect(host.querySelectorAll('.icon-option').length).toBe(2);
+    searchTagIcons.mockRejectedValueOnce({ status: 503, data: { code: 'AI_PROVIDER_ERROR' } });
+
+    host.querySelector<HTMLElement>('.ai-search-row button')?.click();
+    await nextTick();
+    await Promise.resolve();
+    await Promise.resolve();
+    await nextTick();
+
+    expect(error).toHaveBeenCalledWith(zhCN.tagManage.iconAiSearchFailed);
+    expect(host.querySelectorAll('.icon-option').length).toBe(2);
   });
 });

@@ -42,9 +42,23 @@ describe('tagIconHandle Gateway governance', () => {
     mocks.runAiExecution.mockImplementation(async (_config, operation) => operation());
   });
 
+  it('普通图标搜索直接走免费本地/Iconify 路径，不创建 AI Execution', async () => {
+    const req = {
+      body: { query: '数据库', page: 0, useAi: false },
+      user: { id: 'user-1', role: 'user' },
+    };
+    const res = response();
+
+    await search(req, res);
+
+    expect(mocks.runAiExecution).not.toHaveBeenCalled();
+    expect(mocks.searchTagIcons).toHaveBeenCalledWith({ query: '数据库', page: 0, useAi: false });
+    expect(res.payload).toMatchObject({ status: 200, data: { icons: ['lucide:tag'] } });
+  });
+
   it('用户触发的中文语义搜索把真实请求上下文交给 Gateway 配额治理', async () => {
     const req = {
-      body: { query: '数据库', page: 0 },
+      body: { query: '数据库', page: 0, useAi: true },
       user: { id: 'user-1', role: 'user' },
       billingUser: { id: 'user-1', role: 'user' },
     };
@@ -72,7 +86,7 @@ describe('tagIconHandle Gateway governance', () => {
   ])('统一映射根执行错误 %s', async (code, status) => {
     mocks.runAiExecution.mockRejectedValueOnce(Object.assign(new Error('internal'), { code }));
     const req = {
-      body: { query: '数据库', page: 0 },
+      body: { query: '数据库', page: 0, useAi: true },
       user: { id: 'user-1', role: 'user' },
       billingUser: { id: 'user-1', role: 'user' },
     };

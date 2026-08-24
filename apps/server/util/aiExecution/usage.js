@@ -22,9 +22,15 @@ export function addAiUsage(target, input) {
   return target;
 }
 
-export function calculateChargedTokens({ usage, missingUsageSpans = 0, reservedTokens = 0 } = {}) {
+export function calculateChargedTokens({ usage, missingUsageSpans = 0, missingUsageTokens, reservedTokens = 0 } = {}) {
   const normalized = normalizeAiUsage(usage);
   const missing = Math.max(0, Math.floor(Number(missingUsageSpans || 0)));
-  const conservativePerMissingSpan = Math.max(0, Math.floor(Number(reservedTokens || 0)));
-  return normalized.totalTokens + missing * conservativePerMissingSpan;
+  const reserved = Math.max(0, Math.floor(Number(reservedTokens || 0)));
+  const conservativeMissing = Number.isFinite(Number(missingUsageTokens))
+    ? Math.max(0, Math.floor(Number(missingUsageTokens)))
+    : missing * reserved;
+  const calculated = normalized.totalTokens + conservativeMissing;
+  // 真实 usage 异常大于请求前保守预算时，超出部分由平台承担。用户额度绝不能在事后
+  // 被扣成负数；下一次 Provider 调用会在请求前重新按可用余额门禁。
+  return reserved > 0 ? Math.min(calculated, reserved) : calculated;
 }

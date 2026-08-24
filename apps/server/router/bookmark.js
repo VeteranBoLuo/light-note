@@ -5,6 +5,7 @@ const router = express.Router();
 
 import * as bookmarkHandle from '../router_handle/bookmarkHandle.js';
 import * as tagGraphHandle from '../router_handle/tagGraphHandle.js';
+import { aiActionRateLimiter, expensiveFreeActionRateLimiter } from '../util/requestRateLimit.js';
 
 const upload = multer({ dest: '/tmp' }); // 临时目录用于上传文件
 
@@ -48,13 +49,13 @@ router.post('/importBookmarksHtml', upload.single('file'), bookmarkHandle.import
 
 router.post('/importBookmarksExcel', bookmarkHandle.importBookmarksExcel);
 
-router.post('/archive', bookmarkHandle.doArchiveBookmark);
+router.post('/archive', expensiveFreeActionRateLimiter, bookmarkHandle.doArchiveBookmark);
 
 router.post('/snapshot', bookmarkHandle.getSnapshot);
 
-router.post('/summarize', bookmarkHandle.doSummarizeBookmark);
+router.post('/summarize', aiActionRateLimiter, bookmarkHandle.doSummarizeBookmark);
 
-router.post('/archive-summary', bookmarkHandle.doArchiveAndSummarizeBookmark);
+router.post('/archive-summary', aiActionRateLimiter, bookmarkHandle.doArchiveAndSummarizeBookmark);
 
 router.post('/health/check', bookmarkHandle.doCheckHealth);
 
@@ -68,7 +69,7 @@ router.post('/health/ignore', bookmarkHandle.doIgnoreHealth);
 
 // AI 自动整理(批量打标签)
 router.post('/ai/organize/quote', bookmarkHandle.doOrganizeQuote);
-router.post('/ai/organize/run', bookmarkHandle.doOrganizeRun);
+router.post('/ai/organize/run', aiActionRateLimiter, bookmarkHandle.doOrganizeRun);
 router.post('/ai/organize/apply', bookmarkHandle.doOrganizeApply);
 
 // 书签图标批次进度与重试

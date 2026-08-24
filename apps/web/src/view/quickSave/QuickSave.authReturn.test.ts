@@ -23,3 +23,12 @@ describe('快速收藏认证回跳接线', () => {
     expect(source).toContain('clearQuickSaveAuthReturnPath()');
   });
 });
+
+describe('快速收藏 AI 计费边界', () => {
+  it('打开页面和加载标签不会自动请求 AI，只允许用户点击明确标注的入口', () => {
+    expect(quickSaveSource).not.toContain("runAi('auto')");
+    expect(quickSaveSource).toContain('@click="runAi"');
+    expect(quickSaveSource).toContain("$t('quickSave.aiSuggest')");
+    expect(quickSaveSource).toContain("skillId: 'bookmark.parse_url'");
+  });
+});

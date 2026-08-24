@@ -35,8 +35,14 @@
 
         <div class="qs-label-row">
           <label class="qs-label" style="margin: 0">{{ $t('quickSave.tags') }}</label>
-          <span v-if="aiRunning" class="qs-ai-hint">🤖 {{ $t('quickSave.aiRunning') }}</span>
-          <BButton v-else class="qs-ai-btn" @click="runAi('manual')">🤖 {{ $t('quickSave.aiRedo') }}</BButton>
+          <span v-if="aiRunning" class="qs-ai-hint">
+            <SvgIcon :src="icon.message.loading" size="13" aria-hidden="true" />
+            {{ $t('quickSave.aiRunning') }}
+          </span>
+          <BButton v-else class="qs-ai-btn" size="small" @click="runAi">
+            <SvgIcon :src="icon.common.magicWand" size="13" aria-hidden="true" />
+            {{ $t('quickSave.aiSuggest') }}
+          </BButton>
         </div>
         <BSelect
           mode="multiple"
@@ -84,6 +90,8 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi.ts';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
@@ -149,7 +157,7 @@
   }
 
   // AI 建议:抓网页 → 生成名称/描述 + 从已有标签匹配 + 建议新标签(复用现成接口)
-  async function runAi(source: 'auto' | 'manual' = 'manual') {
+  async function runAi() {
     const url = String(form.url || '').trim();
     if (!url || aiRunning.value) return;
     aiRunning.value = true;
@@ -191,12 +199,13 @@
         }
         recordOperation({
           ...OPERATION_LOG_MAP.quickSave.generateMeta,
-          operation: `${source === 'auto' ? '自动' : '重新'}智能识别书签信息成功【${getSafeBookmarkLabel(url)}】`,
+          operation: `智能识别书签信息成功【${getSafeBookmarkLabel(url)}】`,
         });
         if (skillResponse.result.metadataSource === 'inferred') message.warning(t('bookmarkMeta.inferredWarning'));
       }
-    } catch {
-      /* AI 失败静默,用户仍可手动填 */
+    } catch (error: any) {
+      if (error?.code === 'AI_QUOTA_EXCEEDED') message.warning(t('quickSave.aiQuotaExceeded'));
+      else message.info(t('quickSave.aiFailed'));
     } finally {
       aiRunning.value = false;
     }
@@ -286,7 +295,6 @@
     }
     if (isLoggedIn.value) {
       await loadTags();
-      runAi('auto');
     }
   });
 </script>
@@ -364,6 +372,9 @@
     margin-top: 4px;
   }
   .qs-ai-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     font-size: 12px;
     color: var(--primary-color);
   }
@@ -376,6 +387,7 @@
     padding: 0;
     height: auto;
     line-height: 1;
+    gap: 4px;
   }
   .qs-newtags {
     display: flex;

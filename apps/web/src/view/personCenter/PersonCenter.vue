@@ -226,7 +226,7 @@
 
   function goAiQuotaDetails() {
     dismissProfilePopover();
-    router.push({ path: '/settings', query: { section: 'ai' } });
+    router.push('/ai-usage');
   }
 
   function getSettingPopupContainer(trigger: HTMLElement) {

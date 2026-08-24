@@ -7,6 +7,7 @@ import { clearNoteImageOcrMemoryCache, recognizeNoteImages, resolveLocalNoteImag
 const tempDirs = [];
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   clearNoteImageOcrMemoryCache();
   await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
@@ -71,6 +72,30 @@ describe('笔记内图片 OCR', () => {
     expect(second).toEqual([expect.objectContaining({ status: 'success', content: '图片里的计划内容', cached: true })]);
     expect(ocrProvider.recognizeImage).toHaveBeenCalledTimes(1);
     expect(cache.setEx).toHaveBeenCalledTimes(1);
+  });
+
+  it('视觉模型切换后不复用旧模型缓存', async () => {
+    const fixture = await imageFixture();
+    const recognitionProvider = { recognizeImage: vi.fn().mockResolvedValue({ content: '识别文字' }) };
+    const cache = { get: vi.fn().mockResolvedValue(null), setEx: vi.fn().mockResolvedValue('OK') };
+
+    vi.stubEnv('DEEPSEEK_VISION_MODEL', 'vision-a');
+    await recognizeNoteImages([{ url: fixture.url }], {
+      imageRoot: fixture.dir,
+      allowedUrls: [fixture.url],
+      recognitionProvider,
+      cache,
+    });
+    vi.stubEnv('DEEPSEEK_VISION_MODEL', 'vision-b');
+    await recognizeNoteImages([{ url: fixture.url }], {
+      imageRoot: fixture.dir,
+      allowedUrls: [fixture.url],
+      recognitionProvider,
+      cache,
+    });
+
+    expect(recognitionProvider.recognizeImage).toHaveBeenCalledTimes(2);
+    expect(cache.setEx.mock.calls[0][0]).not.toBe(cache.setEx.mock.calls[1][0]);
   });
 
   it('单图失败不会阻断其他图片，且按顺序串行处理', async () => {

@@ -342,6 +342,29 @@ describe('AI quota abuse hardening', () => {
     expect(state.wallets.get('user-wallet')).toBe(30_000);
   });
 
+  it('按执行预算动态预占，并把接近上限时真正拿到的额度返回给 Provider 门禁', async () => {
+    const large = await aiQuota.reserve(visitorRequest(), {
+      userId: 'user-large-reservation',
+      userRole: 'user',
+      requestId: 'large-reservation',
+      reserveTokens: 20_000,
+    });
+    expect(large).toMatchObject({ blocked: false, reserved: 20_000 });
+    expect(usageByType('user')).toEqual([{ tokens: 20_000, calls: 1 }]);
+
+    const now = new Date();
+    const periodKey = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    state.usage.set(usageKey('user', 'user-near-limit', periodKey), { tokens: 97_000, calls: 4 });
+    const partial = await aiQuota.reserve(visitorRequest(), {
+      userId: 'user-near-limit',
+      userRole: 'user',
+      requestId: 'partial-reservation',
+      reserveTokens: 20_000,
+    });
+    expect(partial).toMatchObject({ blocked: false, reserved: 3_000 });
+    expect(partial.subjects[0]).toMatchObject({ dailyAvailable: 3_000, reservedTokens: 3_000 });
+  });
+
   it('每日额度耗尽后自动扣永久余额，真实用量较小时退回多占部分', async () => {
     state.wallets.set('user-wallet', 30_000);
     const now = new Date();
@@ -386,11 +409,11 @@ describe('AI quota abuse hardening', () => {
     expect(usageByType('visitor_network')).toEqual([{ tokens: 1000, calls: 1 }]);
   });
 
-  it('客户端中途断开时不退还未用占位，避免断开即免费', async () => {
+  it('客户端中途断开时按 Provider 已确认用量结算，不把整笔预占误扣给用户', async () => {
     const handle = await aiQuota.reserve(visitorRequest('aborted-device'), visitorContext('aborted-request'));
     await expect(aiQuota.reconcile(handle, 1000, { aborted: true })).resolves.toBe(true);
-    expect(usageByType('visitor_device')).toEqual([{ tokens: 5000, calls: 1 }]);
-    expect(usageByType('visitor_network')).toEqual([{ tokens: 5000, calls: 1 }]);
+    expect(usageByType('visitor_device')).toEqual([{ tokens: 1000, calls: 1 }]);
+    expect(usageByType('visitor_network')).toEqual([{ tokens: 1000, calls: 1 }]);
   });
 
   it('配额存储不可用时失败关闭，且日志不包含底层错误内容', async () => {

@@ -96,6 +96,58 @@ describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
     });
   });
 
+  it('同步接口原样支持视觉内容块与 JSON response_format', async () => {
+    delete process.env.AGENT_LLM_PROVIDER;
+    process.env.DEEPSEEK_API_KEY = 'test-key';
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: '{"text":"识别结果"}' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 390, completion_tokens: 20, total_tokens: 410 },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    const messages = [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: '识别' },
+          { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,dGVzdA==' } },
+        ],
+      },
+    ];
+
+    await requestDeepSeek(messages, {
+      modelOverride: 'deepseek-v4-flash-vision-exp',
+      responseFormat: { type: 'json_object' },
+    });
+
+    const body = JSON.parse(globalThis.fetch.mock.calls[0][1].body);
+    expect(body.messages).toEqual(messages);
+    expect(body).toMatchObject({
+      model: 'deepseek-v4-flash-vision-exp',
+      response_format: { type: 'json_object' },
+    });
+  });
+
+  it('供应商 HTTP 状态归一为稳定错误码，不依赖或暴露原始文案', async () => {
+    delete process.env.AGENT_LLM_PROVIDER;
+    process.env.DEEPSEEK_API_KEY = 'test-key';
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { message: 'private upstream detail' } }), {
+        status: 429,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await expect(requestDeepSeek([{ role: 'user', content: 'hi' }])).rejects.toMatchObject({
+      code: 'AI_RATE_LIMITED',
+      status: 429,
+      message: 'deepseek 请求失败',
+    });
+  });
+
   it('DeepSeek 同步 Planner 显式关闭思考模式，允许强制指定计划工具', async () => {
     delete process.env.AGENT_LLM_PROVIDER;
     process.env.DEEPSEEK_API_KEY = 'test-key';

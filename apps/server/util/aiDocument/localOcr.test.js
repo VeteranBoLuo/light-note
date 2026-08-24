@@ -2,7 +2,12 @@ import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { inspectOcrImage, recognizeImageWithLocalOcr, recognizePdfWithLocalOcr } from './localOcr.js';
+import {
+  inspectLocalOcrRuntime,
+  inspectOcrImage,
+  recognizeImageWithLocalOcr,
+  recognizePdfWithLocalOcr,
+} from './localOcr.js';
 
 const ONE_PIXEL_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
@@ -66,5 +71,45 @@ describe('本地 OCR', () => {
       expect.objectContaining({ timeout: expect.any(Number) }),
     );
     expect(await readdir(tempRoot)).toEqual([]);
+  });
+
+  it('运行时门禁同时检查 ImageMagick，避免预处理缺失却误报 OCR 已就绪', async () => {
+    const runner = vi.fn(async (command) => {
+      if (command === 'tesseract') return { stdout: 'List of available languages:\nchi_sim\neng\n', stderr: '' };
+      return { stdout: '', stderr: '' };
+    });
+    await expect(inspectLocalOcrRuntime({ runner })).resolves.toMatchObject({
+      ready: true,
+      preprocessEnabled: true,
+      preprocessReady: true,
+    });
+    expect(runner.mock.calls.map(([command]) => command)).toEqual(['tesseract', 'pdftoppm', 'convert']);
+
+    const unavailable = vi.fn(async (command) => {
+      if (command === 'convert') throw Object.assign(new Error('missing'), { code: 'OCR_ENGINE_UNAVAILABLE' });
+      return command === 'tesseract' ? { stdout: 'chi_sim\neng\n', stderr: '' } : { stdout: '', stderr: '' };
+    });
+    await expect(inspectLocalOcrRuntime({ runner: unavailable })).resolves.toMatchObject({
+      ready: false,
+      preprocessReady: false,
+      missingComponents: ['imagemagick'],
+      errorCode: 'OCR_ENGINE_UNAVAILABLE',
+    });
+  });
+
+  it('请求已取消时不再启动任何 OCR 子进程', async () => {
+    const controller = new AbortController();
+    const reason = Object.assign(new Error('cancelled'), { name: 'AbortError', code: 'AI_REQUEST_ABORTED' });
+    controller.abort(reason);
+    const runner = vi.fn();
+
+    await expect(
+      recognizeImageWithLocalOcr(ONE_PIXEL_PNG, {
+        extension: '.png',
+        runner,
+        signal: controller.signal,
+      }),
+    ).rejects.toBe(reason);
+    expect(runner).not.toHaveBeenCalled();
   });
 });

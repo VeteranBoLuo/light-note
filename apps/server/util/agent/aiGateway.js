@@ -3,11 +3,7 @@ import { requestDeepSeek, requestDeepSeekStream } from './deepseekClient.js';
 import { stableAgentErrorCode } from './logSafety.js';
 import { resolveAgentStageModelOptions } from './stageModelPolicy.js';
 import { getActiveAiExecution, isAiExecutionRuntimeRequired } from '../aiExecution/context.js';
-import {
-  beginAiProviderSpan,
-  ensureAiExecutionQuotaReservation,
-  finishAiProviderSpan,
-} from '../aiExecution/service.js';
+import { authorizeAiProviderCall, beginAiProviderSpan, finishAiProviderSpan } from '../aiExecution/service.js';
 
 const DEFAULT_COMPLETE_TIMEOUT_MS = 90_000;
 const MIN_TIMEOUT_MS = 1_000;
@@ -58,6 +54,57 @@ function createDeadlineSignal(parentSignal, timeoutMs) {
   };
 }
 
+function serializedByteLength(value) {
+  try {
+    return Buffer.byteLength(JSON.stringify(value) || '', 'utf8');
+  } catch {
+    return 0;
+  }
+}
+
+const MAX_VISION_INPUT_TOKENS_PER_IMAGE = 384;
+
+function estimateTextTokens(value) {
+  return Math.ceil(Buffer.byteLength(String(value || ''), 'utf8') / 3);
+}
+
+function estimateMessageTokens(messages) {
+  let estimate = 0;
+  for (const message of Array.isArray(messages) ? messages : []) {
+    estimate += 12 + estimateTextTokens(message?.role) + estimateTextTokens(message?.name);
+    const content = message?.content;
+    if (!Array.isArray(content)) {
+      estimate += estimateTextTokens(content);
+      continue;
+    }
+    for (const block of content) {
+      const type = String(block?.type || '');
+      if (['image_url', 'input_image', 'image', 'file'].includes(type)) {
+        // 图片的 base64/URL 是传输载荷，不是文本 prompt。DeepSeek 当前每张图片最高折算 384 tokens。
+        estimate += MAX_VISION_INPUT_TOKENS_PER_IMAGE;
+      } else if (['text', 'input_text'].includes(type)) {
+        estimate += estimateTextTokens(block?.text);
+      } else {
+        estimate += Math.ceil(serializedByteLength(block) / 3);
+      }
+    }
+  }
+  return estimate;
+}
+
+/**
+ * 请求前只需要一个保守上界而非 Provider 专属 tokenizer：中文 UTF-8 通常 3 bytes/字，
+ * 英文约 4 chars/token，按 3 bytes/token 再加固定协议余量可以覆盖两者的大多数情况。
+ */
+export function estimateAiProviderTokens(messages, options = {}) {
+  const promptEstimate =
+    estimateMessageTokens(messages) + Math.ceil(serializedByteLength(options.tools || []) / 3) + 256;
+  const outputEstimate = Number.isFinite(Number(options.maxTokens))
+    ? Math.max(1, Math.floor(Number(options.maxTokens)))
+    : 1_024;
+  return Math.min(500_000, Math.max(1, promptEstimate + outputEstimate));
+}
+
 export function createAiGateway({
   completeClient = requestDeepSeek,
   streamClient = requestDeepSeekStream,
@@ -72,7 +119,14 @@ export function createAiGateway({
     const onTrace = options.trace?.onTrace;
     const timeoutMs = normalizeTimeoutMs(options.timeoutMs, kind);
     const deadline = createDeadlineSignal(options.signal, timeoutMs);
-    const { trace: _trace, timeoutMs: _timeoutMs, governance, ...clientOptions } = options;
+    const {
+      trace: _trace,
+      timeoutMs: _timeoutMs,
+      governance,
+      billingScope: requestedBillingScope,
+      missingUsageOnFailure,
+      ...clientOptions
+    } = options;
     const stageModel = resolveAgentStageModelOptions(stage);
     if (!clientOptions.providerOverride) clientOptions.providerOverride = stageModel.providerOverride;
     if (!clientOptions.modelOverride && stageModel.modelOverride)
@@ -104,8 +158,55 @@ export function createAiGateway({
       deadline.dispose();
       throw error;
     }
-    if (activeExecution) await ensureAiExecutionQuotaReservation(activeExecution);
-    const executionSpan = beginAiProviderSpan({ id: spanId, traceId, stage, taskType, kind });
+    const billingScope = requestedBillingScope === 'platform' ? 'platform' : 'user';
+    if (requestedBillingScope && !['user', 'platform'].includes(requestedBillingScope)) {
+      const error = new Error('AI Gateway 收到无效计费范围');
+      error.code = 'AI_EXECUTION_BILLING_SCOPE_INVALID';
+      error.status = 500;
+      deadline.dispose();
+      throw error;
+    }
+    if (billingScope === 'platform' && (!activeExecution || !stage.endsWith('_repair'))) {
+      const error = new Error('平台承担的调用只允许用于根执行内的协议修复');
+      error.code = 'AI_EXECUTION_PLATFORM_REPAIR_INVALID';
+      error.status = 500;
+      deadline.dispose();
+      throw error;
+    }
+    const estimatedTokens = estimateAiProviderTokens(messages, clientOptions);
+    if (activeExecution) {
+      try {
+        await authorizeAiProviderCall({
+          execution: activeExecution,
+          estimatedTokens,
+          billingScope,
+          signal: deadline.signal,
+        });
+      } catch (error) {
+        traceEvent(onTrace, {
+          event: 'ai.span.failed',
+          traceId,
+          spanId,
+          stage,
+          taskType,
+          kind,
+          durationMs: Date.now() - startedAt,
+          error: stableAgentErrorCode(error),
+        });
+        deadline.dispose();
+        throw error;
+      }
+    }
+    const executionSpan = beginAiProviderSpan({
+      id: spanId,
+      traceId,
+      stage,
+      taskType,
+      kind,
+      billingScope,
+      estimatedTokens,
+      waiveMissingUsageOnFailure: missingUsageOnFailure === 'waive' && stage.startsWith('image_recognition'),
+    });
     let result = null;
     let caughtError = null;
     try {

@@ -17,7 +17,7 @@ describe('业务 AI 入口能力契约', () => {
     expect(source).not.toContain("id: 'extract-todos'");
   });
 
-  it('书签管理仅保留单卡分析，并把网页正文与摘要收敛为一个存档动作', () => {
+  it('书签管理仅保留单卡分析，并把免费网页存档与计费摘要拆成显式动作', () => {
     const desktopTable = read('components/manage/bookmarkMg/BookmarkTable.vue');
     const mobileTable = read('components/manage/bookmarkMg/BookmarkTableMobile.vue');
     const dialog = read('components/manage/bookmarkMg/BookmarkAiDialog.vue');
@@ -29,8 +29,11 @@ describe('业务 AI 入口能力契约', () => {
     expect(dialog).toContain(':show-prompt="false"');
     expect(dialog).toContain("'bookmark.summarize_page'");
     expect(dialog).not.toContain("'bookmark.compare_pages'");
-    expect(snapshot).toContain("'/api/bookmark/archive-summary'");
-    expect(snapshot).not.toContain("'/api/bookmark/summarize'");
-    expect(snapshot).not.toContain("'/api/bookmark/archive'");
+    expect(snapshot).toContain("'/api/bookmark/archive'");
+    expect(snapshot).toContain("'/api/bookmark/summarize'");
+    expect(snapshot).not.toContain("'/api/bookmark/archive-summary'");
+    expect(snapshot).toContain('await loadSnap();');
+    expect(snapshot).not.toContain('await generateArchive();');
+    expect(snapshot).not.toContain('await generateSummary();');
   });
 });

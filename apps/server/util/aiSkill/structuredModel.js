@@ -16,13 +16,21 @@ function parseToolArguments(response, toolName) {
   }
 }
 
-export async function callStructuredSkillModel({ messages, structuredTool, validateArguments, modelPolicy, trace }) {
+export async function callStructuredSkillModel({
+  messages,
+  structuredTool,
+  validateArguments,
+  modelPolicy,
+  trace,
+  signal,
+}) {
   const options = {
     tools: [{ type: 'function', function: structuredTool }],
     toolChoice: { type: 'function', function: { name: structuredTool.name } },
     maxTokens: modelPolicy.maxTokens,
     temperature: modelPolicy.temperature,
     trace,
+    signal,
   };
   let response = await requestAi(messages, options);
   try {
@@ -39,7 +47,12 @@ export async function callStructuredSkillModel({ messages, structuredTool, valid
           content: `上一版没有按协议返回。必须且只能调用 ${structuredTool.name} 一次，不要输出解释文本。`,
         },
       ],
-      { ...options, temperature: 0, trace: { ...trace, stage: `${trace.stage}_repair` } },
+      {
+        ...options,
+        temperature: 0,
+        billingScope: 'platform',
+        trace: { ...trace, stage: `${trace.stage}_repair` },
+      },
     );
     return validateArguments(parseToolArguments(response, structuredTool.name));
   }

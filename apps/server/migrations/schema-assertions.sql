@@ -1951,3 +1951,16 @@ LEFT JOIN (
   GROUP BY table_name, index_name
 ) actual ON actual.table_name=expected.tab AND actual.index_name=expected.ix
 WHERE actual.cols IS NULL OR actual.cols <> expected.expected_cols;
+
+-- 54) 用户 AI 用量明细必须按实际支付者与创建时间命中复合索引（期望 0 行）
+SELECT '[54] invalid_ai_execution_actor_index' AS check_name,
+  CONCAT('idx_ai_execution_actor_created 实际=', IFNULL(actual.cols, '缺失')) AS detail
+FROM (SELECT 1) expected
+LEFT JOIN (
+  SELECT GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') AS cols
+  FROM information_schema.statistics
+  WHERE table_schema=DATABASE()
+    AND table_name='ai_executions'
+    AND index_name='idx_ai_execution_actor_created'
+) actual ON 1=1
+WHERE actual.cols IS NULL OR actual.cols <> 'actor_user_id,created_at';

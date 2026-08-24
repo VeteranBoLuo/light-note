@@ -50,7 +50,8 @@ function throwIfAborted(signal) {
 }
 
 // 从纯文本(如笔记标题+正文)推荐标签:只匹配/建议标签,不生成名称描述。供「AI 整理笔记」用。
-export async function suggestTagsFromText({ text, userTags = [], trace }) {
+export async function suggestTagsFromText({ text, userTags = [], signal, trace }) {
+  throwIfAborted(signal);
   const tagNameList = userTags.map((t) => t.name);
   const userPrompt = [
     '请根据下面的内容,为它推荐关联标签。',
@@ -69,6 +70,7 @@ export async function suggestTagsFromText({ text, userTags = [], trace }) {
       { role: 'user', content: userPrompt },
     ],
     {
+      signal,
       toolChoice: 'none',
       maxTokens: 400,
       temperature: 0.1,
@@ -91,14 +93,7 @@ export async function suggestTagsFromText({ text, userTags = [], trace }) {
  * 书签表单 Skill 与批量整理共用的唯一模型组织实现。
  * @returns {{name,description,matchedTagIds,newTags}|null} 解析失败返回 null
  */
-export async function suggestBookmarkMeta({
-  url,
-  name = '',
-  description = '',
-  userTags = [],
-  signal,
-  trace,
-}) {
+export async function suggestBookmarkMeta({ url, name = '', description = '', userTags = [], signal, trace }) {
   throwIfAborted(signal);
   const curName = String(name || '').trim();
   const curDesc = String(description || '').trim();

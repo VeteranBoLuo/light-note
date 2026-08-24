@@ -4,47 +4,75 @@ import path from 'node:path';
 import redisClient from './redisClient.js';
 import { NOTE_IMAGE_DIR } from './noteImages.js';
 import { AI_DOCUMENT_MAX_BYTES } from './aiDocument/parser.js';
-import { localOcrProvider } from './aiDocument/localOcr.js';
+import {
+  getImageRecognitionPolicy,
+  imageRecognitionProvider,
+  IMAGE_RECOGNITION_POLICY_VERSION,
+} from './imageRecognition/service.js';
 
-const CACHE_PREFIX = 'note:image-ocr:v1:';
+const CACHE_PREFIX = 'note:image-recognition:v2:';
 const CACHE_TTL_SECONDS = 7 * 24 * 60 * 60;
+const FALLBACK_CACHE_TTL_SECONDS = 30 * 60;
 const MEMORY_CACHE_LIMIT = 100;
 const SUPPORTED_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
 const memoryCache = new Map();
 const inFlight = new Map();
 
-function cacheKey(hash) {
-  return `${CACHE_PREFIX}${hash}`;
+function cacheKey(scope, hash) {
+  const scopeDigest = crypto
+    .createHash('sha256')
+    .update(String(scope || 'note'))
+    .digest('hex')
+    .slice(0, 20);
+  return `${CACHE_PREFIX}${scopeDigest}:${hash}`;
 }
 
-function remember(hash, content) {
-  memoryCache.delete(hash);
-  memoryCache.set(hash, content);
+function remember(key, value, ttlSeconds = CACHE_TTL_SECONDS) {
+  memoryCache.delete(key);
+  memoryCache.set(key, {
+    value,
+    expiresAt: Date.now() + Math.max(1, Number(ttlSeconds) || CACHE_TTL_SECONDS) * 1000,
+  });
   while (memoryCache.size > MEMORY_CACHE_LIMIT) memoryCache.delete(memoryCache.keys().next().value);
 }
 
-async function getCached(hash, cache = redisClient) {
-  if (memoryCache.has(hash)) {
-    const content = memoryCache.get(hash);
-    remember(hash, content);
-    return content;
+async function getCached(key, cache = redisClient) {
+  if (memoryCache.has(key)) {
+    const entry = memoryCache.get(key);
+    if (Number(entry?.expiresAt || 0) > Date.now()) {
+      memoryCache.delete(key);
+      memoryCache.set(key, entry);
+      return entry.value;
+    }
+    memoryCache.delete(key);
   }
   try {
-    const content = await cache.get(cacheKey(hash));
-    if (content) {
-      remember(hash, content);
-      return content;
+    const raw = await cache.get(key);
+    if (raw) {
+      let value;
+      try {
+        value = JSON.parse(raw);
+      } catch {
+        value = { content: String(raw), metadata: {} };
+      }
+      if (Number(value?.metadata?.policyVersion || 0) !== IMAGE_RECOGNITION_POLICY_VERSION) {
+        return null;
+      }
+      remember(key, value, value?.metadata?.fallbackReason ? FALLBACK_CACHE_TTL_SECONDS : CACHE_TTL_SECONDS);
+      return value;
     }
   } catch {
     // Redis 不可用时仍可继续 OCR，内存缓存作为当前进程兜底。
   }
-  return '';
+  return null;
 }
 
-async function setCached(hash, content, cache = redisClient) {
-  remember(hash, content);
+async function setCached(key, value, cache = redisClient) {
+  const fallback = Boolean(value?.metadata?.fallbackReason);
+  const ttlSeconds = fallback ? FALLBACK_CACHE_TTL_SECONDS : CACHE_TTL_SECONDS;
+  remember(key, value, ttlSeconds);
   try {
-    await cache.setEx(cacheKey(hash), CACHE_TTL_SECONDS, content);
+    await cache.setEx(key, ttlSeconds, JSON.stringify(value));
   } catch {
     // OCR 已成功，缓存写入失败不能反向导致本轮回答失败。
   }
@@ -73,16 +101,16 @@ export function resolveLocalNoteImage(url, imageRoot = NOTE_IMAGE_DIR) {
   return { fileName, extension, filePath: path.join(imageRoot, fileName) };
 }
 
-async function recognizeOne(
-  image,
-  {
+async function recognizeOne(image, options = {}) {
+  const {
     signal,
     imageRoot = NOTE_IMAGE_DIR,
     readImage = readFile,
-    ocrProvider = localOcrProvider,
+    ocrProvider,
+    recognitionProvider = ocrProvider || imageRecognitionProvider,
     cache = redisClient,
-  } = {},
-) {
+    cacheScope = 'note-images',
+  } = options;
   const local = resolveLocalNoteImage(image.url, imageRoot);
   if (!local) return { ...image, status: 'unsupported', content: '' };
   try {
@@ -90,21 +118,36 @@ async function recognizeOne(
     if (!Buffer.isBuffer(buffer) || !buffer.length) throw new Error('EMPTY_IMAGE');
     if (buffer.length > AI_DOCUMENT_MAX_BYTES) throw new Error('IMAGE_TOO_LARGE');
     const hash = crypto.createHash('sha256').update(buffer).digest('hex');
-    const cached = await getCached(hash, cache);
-    if (cached) return { ...image, status: 'success', content: cached, cached: true };
+    const policy = getImageRecognitionPolicy();
+    const key = cacheKey(
+      `${cacheScope}:policy=${policy.version}:mode=${policy.mode}:model=${policy.visionModel}`,
+      hash,
+    );
+    const cached = await getCached(key, cache);
+    if (cached?.content) {
+      return { ...image, status: 'success', content: cached.content, metadata: cached.metadata || {}, cached: true };
+    }
 
-    let pending = inFlight.get(hash);
+    let pending = inFlight.get(key);
     if (!pending) {
       pending = (async () => {
-        const result = await ocrProvider.recognizeImage(buffer, { extension: local.extension, signal });
+        const result = await recognitionProvider.recognizeImage(buffer, { extension: local.extension, signal });
         const content = String(result?.content || '').trim();
         if (!content) throw new Error('EMPTY_OCR_RESULT');
-        await setCached(hash, content, cache);
-        return content;
-      })().finally(() => inFlight.delete(hash));
-      inFlight.set(hash, pending);
+        const value = {
+          content,
+          metadata: {
+            ...(result?.metadata || {}),
+            policyVersion: Number(result?.metadata?.policyVersion || IMAGE_RECOGNITION_POLICY_VERSION),
+          },
+        };
+        await setCached(key, value, cache);
+        return value;
+      })().finally(() => inFlight.delete(key));
+      inFlight.set(key, pending);
     }
-    return { ...image, status: 'success', content: await pending, cached: false };
+    const value = await pending;
+    return { ...image, status: 'success', content: value.content, metadata: value.metadata, cached: false };
   } catch (error) {
     if (error?.name === 'AbortError') throw error;
     return {
@@ -124,8 +167,10 @@ export async function recognizeNoteImages(
     allowedUrls,
     imageRoot = NOTE_IMAGE_DIR,
     readImage = readFile,
-    ocrProvider = localOcrProvider,
+    ocrProvider,
+    recognitionProvider = ocrProvider || imageRecognitionProvider,
     cache = redisClient,
+    cacheScope = 'note-images',
   } = {},
 ) {
   const allowed = allowedUrls instanceof Set ? allowedUrls : new Set(Array.isArray(allowedUrls) ? allowedUrls : []);
@@ -144,7 +189,16 @@ export async function recognizeNoteImages(
   // 服务器资源有限，按顺序识别，避免同一请求同时启动多个 Tesseract 进程。
   for (const image of candidates) {
     if (signal?.aborted) throw new DOMException('请求已取消', 'AbortError');
-    results.push(await recognizeOne(image, { signal, imageRoot, readImage, ocrProvider, cache }));
+    results.push(
+      await recognizeOne(image, {
+        signal,
+        imageRoot,
+        readImage,
+        recognitionProvider,
+        cache,
+        cacheScope,
+      }),
+    );
   }
   return results;
 }

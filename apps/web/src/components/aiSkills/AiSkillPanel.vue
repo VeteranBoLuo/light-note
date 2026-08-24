@@ -15,17 +15,8 @@
     </div>
 
     <div v-if="skillAvailable && actions.length" class="ai-skill-panel__actions">
-      <BTooltip
-        v-for="action in actions"
-        :key="action.id"
-        :title="action.reason || ''"
-        :disabled="!action.reason"
-      >
-        <BButton
-          size="small"
-          :disabled="interactionDisabled || action.disabled"
-          @click="runAction(action)"
-        >
+      <BTooltip v-for="action in actions" :key="action.id" :title="action.reason || ''" :disabled="!action.reason">
+        <BButton size="small" :disabled="interactionDisabled || action.disabled" @click="runAction(action)">
           {{ action.label }}
         </BButton>
       </BTooltip>
@@ -496,8 +487,14 @@
   .ai-skill-panel__coverage {
     display: flex;
     margin-top: 8px;
+    padding: 8px 10px;
     flex-direction: column;
     gap: 3px;
+    border: 1px solid var(--surface-border-color);
+    border-left: 3px solid var(--warning-color);
+    border-radius: 8px;
+    color: var(--warning-color);
+    background: var(--card-background);
   }
 
   html.light-note-mobile-rendering .ai-skill-panel__icon,

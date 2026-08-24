@@ -7,6 +7,7 @@ import { defaultAiExecutionPersistence } from './persistence.js';
 import { addAiUsage, calculateChargedTokens, normalizeAiUsage } from './usage.js';
 
 const VALID_BILLING_POLICIES = new Set(['user', 'system', 'none']);
+const VALID_RESULT_OUTCOME_STATUSES = new Set(['success', 'partial', 'failed', 'quota_blocked', 'aborted']);
 
 function normalizeIdentifier(value, fallback, maxLength = 128) {
   return String(value || fallback || '')
@@ -80,8 +81,17 @@ function createExecution(config, identity) {
     startedAt: Date.now(),
     status: 'running',
     usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    billableUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
     missingUsageSpans: 0,
+    missingBillableUsageSpans: 0,
+    missingBillableUsageTokens: 0,
     providerCallCount: 0,
+    userProviderCallCount: 0,
+    platformProviderCallCount: 0,
+    estimatedBillableTokensCommitted: 0,
+    reservationTokens: Math.max(1, Math.floor(Number(config.reservationTokens || 5_000))),
+    maxUserProviderCalls: Math.max(1, Math.floor(Number(config.maxUserProviderCalls || 32))),
+    maxPlatformProviderCalls: Math.max(0, Math.floor(Number(config.maxPlatformProviderCalls ?? 1))),
     chargedTokens: 0,
     durationMs: 0,
     errorCode: null,
@@ -147,7 +157,23 @@ export async function runAiExecution(config, operation, dependencies = {}) {
       assertAiExecutionAllowed(config);
       return operation();
     });
-    execution.status = 'success';
+    const resultOutcome =
+      typeof config?.resolveResultOutcome === 'function' ? config.resolveResultOutcome(result) : null;
+    if (resultOutcome) {
+      const outcomeStatus = String(resultOutcome.status || '');
+      if (!VALID_RESULT_OUTCOME_STATUSES.has(outcomeStatus)) {
+        const error = new Error('AI Execution 返回了无效的业务结果状态');
+        error.code = 'AI_EXECUTION_RESULT_OUTCOME_INVALID';
+        throw error;
+      }
+      execution.status = outcomeStatus;
+      execution.errorCode =
+        outcomeStatus === 'success'
+          ? null
+          : normalizeIdentifier(resultOutcome.errorCode, 'AI_EXECUTION_RESULT_FAILED', 64);
+    } else {
+      execution.status = 'success';
+    }
     return result;
   } catch (error) {
     caughtError = error;
@@ -158,8 +184,9 @@ export async function runAiExecution(config, operation, dependencies = {}) {
   } finally {
     execution.durationMs = Date.now() - execution.startedAt;
     execution.chargedTokens = calculateChargedTokens({
-      usage: execution.usage,
-      missingUsageSpans: execution.missingUsageSpans,
+      usage: execution.billableUsage,
+      missingUsageSpans: execution.missingBillableUsageSpans,
+      missingUsageTokens: execution.missingBillableUsageTokens,
       reservedTokens: execution.quotaHandle?.reserved || 0,
     });
     if (execution.quotaHandle) {
@@ -182,7 +209,7 @@ export async function runAiExecution(config, operation, dependencies = {}) {
  * 第一次真实 Provider 调用前懒占位。并发子调用共享同一个 Promise，保证一个用户动作只有一次占位。
  * 缓存命中、确定性解析和本地检索不会触发这里，因此既不扣额度，也不要求用户仍有可用模型额度。
  */
-export async function ensureAiExecutionQuotaReservation(execution = getActiveAiExecution()) {
+export async function ensureAiExecutionQuotaReservation(execution = getActiveAiExecution(), options = {}) {
   if (!execution) {
     const error = new Error('模型调用缺少 AI Execution 上下文');
     error.code = 'AI_EXECUTION_REQUIRED';
@@ -208,6 +235,10 @@ export async function ensureAiExecutionQuotaReservation(execution = getActiveAiE
         userId: execution.actorUserId,
         userRole: execution.userRole,
         requestId: execution.requestId,
+        reserveTokens: Math.max(
+          execution.reservationTokens,
+          Math.max(1, Math.floor(Number(options.estimatedTokens || 0))),
+        ),
       });
       await persistSafely(execution, 'updateAiExecutionReservation', execution);
       if (execution.quotaHandle?.blocked) {
@@ -223,6 +254,88 @@ export async function ensureAiExecutionQuotaReservation(execution = getActiveAiE
   return execution.quotaReservationPromise;
 }
 
+function quotaExceededError(message = '今日 AI 额度不足以开始下一次模型调用') {
+  const error = new Error(message);
+  error.code = 'AI_QUOTA_EXCEEDED';
+  error.status = 429;
+  return error;
+}
+
+function abortedRequestError(signal) {
+  const reason = signal?.reason;
+  if (reason?.name === 'TimeoutError' || reason?.code === 'AI_GATEWAY_TIMEOUT') return reason;
+  const error = new Error('AI 请求已取消');
+  error.name = 'AbortError';
+  error.code = 'AI_REQUEST_ABORTED';
+  return error;
+}
+
+/**
+ * Provider 请求前的同步预算认领。预占只做一次，但批量任务的每个子调用都必须在这里
+ * 消耗自己的保守预算；余额不足时在下一项发出前停止，已经完成的结果仍可由业务层返回。
+ */
+export async function authorizeAiProviderCall({
+  execution = getActiveAiExecution(),
+  estimatedTokens = 1,
+  billingScope = 'user',
+  signal,
+} = {}) {
+  if (!execution) {
+    const error = new Error('模型调用缺少 AI Execution 上下文');
+    error.code = 'AI_EXECUTION_REQUIRED';
+    error.status = 500;
+    throw error;
+  }
+  if (signal?.aborted) throw abortedRequestError(signal);
+  const estimate = Math.max(1, Math.floor(Number(estimatedTokens || 1)));
+  if (billingScope === 'platform') {
+    if (execution.userProviderCallCount < 1) {
+      const error = new Error('平台修复调用必须跟随已计量的用户主调用');
+      error.code = 'AI_EXECUTION_PLATFORM_REPAIR_INVALID';
+      error.status = 500;
+      throw error;
+    }
+    if (execution.platformProviderCallCount >= execution.maxPlatformProviderCalls) {
+      const error = new Error('AI 内部修复次数超过目录上限');
+      error.code = 'AI_EXECUTION_PROVIDER_CALL_LIMIT';
+      error.status = 500;
+      throw error;
+    }
+    execution.platformProviderCallCount += 1;
+    execution.providerCallCount += 1;
+    return { estimatedTokens: estimate, billingScope };
+  }
+  if (billingScope !== 'user') {
+    const error = new Error('AI Provider 调用缺少有效计费范围');
+    error.code = 'AI_EXECUTION_BILLING_SCOPE_INVALID';
+    error.status = 500;
+    throw error;
+  }
+  if (execution.userProviderCallCount >= execution.maxUserProviderCalls) {
+    const error = new Error('AI 主调用次数超过计费目录上限');
+    error.code = 'AI_EXECUTION_PROVIDER_CALL_LIMIT';
+    error.status = 500;
+    throw error;
+  }
+  const handle = await ensureAiExecutionQuotaReservation(execution, { estimatedTokens: estimate });
+  if (signal?.aborted) throw abortedRequestError(signal);
+  // 多个子调用可能同时等待第一次额度占位。await 返回后必须重新校验目录上限，
+  // 否则它们都可能在占位前读到相同的旧计数并一起越界。
+  if (execution.userProviderCallCount >= execution.maxUserProviderCalls) {
+    const error = new Error('AI 主调用次数超过计费目录上限');
+    error.code = 'AI_EXECUTION_PROVIDER_CALL_LIMIT';
+    error.status = 500;
+    throw error;
+  }
+  const nextCommitted = execution.estimatedBillableTokensCommitted + estimate;
+  if (nextCommitted > Math.max(0, Number(handle?.reserved || 0))) throw quotaExceededError();
+  // await 之后到递增之间没有异步切换；并发 Promise 也会串行完成这段认领，不能超卖预占。
+  execution.estimatedBillableTokensCommitted = nextCommitted;
+  execution.userProviderCallCount += 1;
+  execution.providerCallCount += 1;
+  return { estimatedTokens: estimate, billingScope };
+}
+
 /**
  * 成熟业务 Service 可同时被 HTTP、批处理和 Skill Adapter 复用。外层已有根执行时必须复用，
  * 独立调用时才创建根执行，确保批量动作只占位/结算一次且不会形成嵌套账本。
@@ -232,10 +345,18 @@ export async function runOrReuseAiExecution(config, operation, dependencies = {}
   return runAiExecution(config, operation, dependencies);
 }
 
-export function beginAiProviderSpan({ id, traceId, stage, taskType, kind } = {}) {
+export function beginAiProviderSpan({
+  id,
+  traceId,
+  stage,
+  taskType,
+  kind,
+  billingScope,
+  estimatedTokens,
+  waiveMissingUsageOnFailure = false,
+} = {}) {
   const execution = getActiveAiExecution();
   if (!execution) return null;
-  execution.providerCallCount += 1;
   return {
     id: normalizeIdentifier(id, crypto.randomUUID(), 64),
     executionId: execution.id,
@@ -243,6 +364,9 @@ export function beginAiProviderSpan({ id, traceId, stage, taskType, kind } = {})
     stage: normalizeTaskType(stage || kind || 'provider'),
     taskType: normalizeTaskType(taskType || execution.taskType),
     kind: normalizeIdentifier(kind, 'complete', 16),
+    billingScope: billingScope === 'platform' ? 'platform' : 'user',
+    estimatedTokens: Math.max(1, Math.floor(Number(estimatedTokens || 1))),
+    waiveMissingUsageOnFailure: waiveMissingUsageOnFailure === true,
     startedAt: Date.now(),
   };
 }
@@ -257,8 +381,23 @@ export async function finishAiProviderSpan(span, { result, error } = {}) {
   }
   const usage = normalizeAiUsage(result?.usage);
   addAiUsage(execution.usage, usage);
+  if (span.billingScope === 'user') addAiUsage(execution.billableUsage, usage);
   const usageStatus = result?.usageStatus === 'reported' ? 'reported' : 'missing';
   if (usageStatus === 'missing') execution.missingUsageSpans += 1;
+  const waivedMissingFailure = Boolean(
+    error && usageStatus === 'missing' && span.billingScope === 'user' && span.waiveMissingUsageOnFailure,
+  );
+  if (waivedMissingFailure) {
+    // 图片识别具有不访问 Provider 的本地降级。技术失败没有 usage 时释放请求前预算，
+    // 让同一根执行仍能使用本地文字继续总结，也避免按保守上界向用户结算失败调用。
+    execution.estimatedBillableTokensCommitted = Math.max(
+      0,
+      execution.estimatedBillableTokensCommitted - span.estimatedTokens,
+    );
+  } else if (usageStatus === 'missing' && span.billingScope === 'user') {
+    execution.missingBillableUsageSpans += 1;
+    execution.missingBillableUsageTokens += span.estimatedTokens;
+  }
   let providerInfo = { price: { input: 0, output: 0 } };
   try {
     providerInfo = getActiveProviderInfo(result?.provider, result?.model);

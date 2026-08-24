@@ -7,10 +7,11 @@ export interface TagIconSearchResult {
   page: number;
   hasMore: boolean;
   cached: boolean;
+  aiExpanded: boolean;
 }
 
-export async function searchTagIcons(query: string, page = 0) {
-  return apiBasePost('/api/tagIcon/search', { query, page }, { silent: true });
+export async function searchTagIcons(query: string, page = 0, useAi = false) {
+  return apiBasePost('/api/tagIcon/search', { query, page, useAi }, { silent: true });
 }
 
 export async function resolveTagIcon(icon: string) {

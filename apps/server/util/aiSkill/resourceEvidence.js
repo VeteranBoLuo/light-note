@@ -1,7 +1,11 @@
 import crypto from 'node:crypto';
 import pool from '../../db/index.js';
 import { normalizePersonalKnowledgeText } from '../personalKnowledgeSearch.js';
-import { attachCloudDocumentSource, getDocumentSourceStatuses } from '../aiDocument/service.js';
+import {
+  attachCloudDocumentSource,
+  getDocumentSourceStatuses,
+  recognizeCloudImageDocumentSource,
+} from '../aiDocument/service.js';
 import { aiSkillError } from './errors.js';
 
 const DEFAULT_MAX_CHARS_PER_RESOURCE = 20_000;
@@ -18,13 +22,39 @@ const PUBLIC_FILE_PREPARATION_ERRORS = Object.freeze({
   FILE_NOT_FOUND: '所选文件不存在或已删除。',
 });
 
-function wait(durationMs) {
-  return new Promise((resolve) => setTimeout(resolve, durationMs));
+function abortReason(signal) {
+  if (signal?.reason instanceof Error) return signal.reason;
+  const error = new Error('AI 请求已取消');
+  error.name = 'AbortError';
+  error.code = 'AI_REQUEST_ABORTED';
+  return error;
+}
+
+function throwIfAborted(signal) {
+  if (signal?.aborted) throw abortReason(signal);
+}
+
+function wait(durationMs, signal) {
+  throwIfAborted(signal);
+  return new Promise((resolve, reject) => {
+    let timer;
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener?.('abort', onAbort);
+      reject(abortReason(signal));
+    };
+    timer = setTimeout(() => {
+      signal?.removeEventListener?.('abort', onAbort);
+      resolve();
+    }, durationMs);
+    signal?.addEventListener?.('abort', onAbort, { once: true });
+  });
 }
 
 /**
- * 把显式选择的云文件接入统一解析/OCR 生命周期。该步骤只生成可重建的派生正文，
- * 不调用模型、不占 AI 额度；同一云对象会复用 ready/queued/parsing source。
+ * 把显式选择的云文件接入统一解析生命周期。文本/PDF 继续使用本地确定性解析；
+ * 普通图片在当前用户 AI Execution 内升级到 Vision，并把可重建的转录结果作为后续证据。
+ * 同一云对象会复用已达到当前识图策略版本的 ready source。
  */
 export async function prepareExplicitResourceEvidence({
   userId,
@@ -32,6 +62,8 @@ export async function prepareExplicitResourceEvidence({
   sessionId = '',
   attachSource = attachCloudDocumentSource,
   getStatuses = getDocumentSourceStatuses,
+  recognizeImageSource = recognizeCloudImageDocumentSource,
+  signal,
   waitMs = DEFAULT_FILE_PREPARE_WAIT_MS,
   pollMs = DEFAULT_FILE_PREPARE_POLL_MS,
 }) {
@@ -39,6 +71,7 @@ export async function prepareExplicitResourceEvidence({
   if (!fileRefs.length) return [];
   const sources = [];
   for (const ref of fileRefs) {
+    throwIfAborted(signal);
     try {
       sources.push(await attachSource({ userId, fileId: ref.id, sessionId }));
     } catch (error) {
@@ -48,6 +81,12 @@ export async function prepareExplicitResourceEvidence({
       throw error;
     }
   }
+  for (let index = 0; index < sources.length; index += 1) {
+    throwIfAborted(signal);
+    const source = sources[index];
+    if (!/\.(?:png|jpe?g|webp)$/iu.test(String(source?.fileName || ''))) continue;
+    sources[index] = await recognizeImageSource({ userId, sourceId: String(source.id), signal });
+  }
   const sourceIds = sources.map((source) => String(source.id || '')).filter(Boolean);
   const deadline = Date.now() + Math.max(0, Number(waitMs) || 0);
   let statuses = sources;
@@ -56,7 +95,7 @@ export async function prepareExplicitResourceEvidence({
     statuses.some((source) => ['queued', 'parsing'].includes(String(source.status || ''))) &&
     Date.now() < deadline
   ) {
-    await wait(Math.min(Math.max(100, Number(pollMs) || DEFAULT_FILE_PREPARE_POLL_MS), deadline - Date.now()));
+    await wait(Math.min(Math.max(100, Number(pollMs) || DEFAULT_FILE_PREPARE_POLL_MS), deadline - Date.now()), signal);
     statuses = await getStatuses({ userId, sourceIds });
   }
   return statuses;
@@ -242,6 +281,8 @@ function rawResource(ref, row, fileChunks) {
     };
   }
   const status = String(row.source_status || 'not_parsed');
+  const coverageMetadata = normalizeJson(row.coverage_metadata, null);
+  const recognition = coverageMetadata?.recognition;
   const chunks = fileChunks.get(String(row.source_id || '')) || [];
   const content = chunks
     .map((chunk) => {
@@ -258,13 +299,23 @@ function rawResource(ref, row, fileChunks) {
     failed: 'file_parsing_failed',
     ready: content ? null : 'file_no_readable_text',
   }[status];
+  const recognitionWarnings = [];
+  if (recognition?.engine === 'local_ocr' && recognition?.fallbackReason) {
+    recognitionWarnings.push('image_recognition_fallback');
+  }
+  if (
+    ['uncertain', 'degraded'].includes(String(recognition?.quality?.status || '')) ||
+    recognition?.uncertainSegments?.length
+  ) {
+    recognitionWarnings.push('image_recognition_uncertain');
+  }
   return {
     title: row.file_name || '文件',
     content,
     status: status === 'ready' && content ? 'ready' : status,
-    warnings: statusWarning ? [statusWarning] : [],
+    warnings: [...(statusWarning ? [statusWarning] : []), ...recognitionWarnings],
     locator: { type: 'file', value: chunks[0]?.locator_value || '解析正文' },
-    coverageMetadata: normalizeJson(row.coverage_metadata, null),
+    coverageMetadata,
   };
 }
 

@@ -6,6 +6,7 @@ import { listAiSkills } from '../util/aiSkill/registry.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { resolvePublicAiExecutionError } from '../util/aiExecution/publicError.js';
 import { recordAiProductEvent } from '../util/aiProductTelemetry.js';
+import { createRequestAbortContext } from '../util/requestAbort.js';
 
 export function getAiSkillsConfig(_req, res) {
   const state = getAiProductFeatureState();
@@ -18,12 +19,22 @@ export function getAiSkillsConfig(_req, res) {
 }
 
 export async function executeAiSkillRequest(req, res) {
+  const abortContext = createRequestAbortContext(req, res);
   try {
-    return res.send(resultData(await executeAiSkill(req.body || {}, req, { recordTelemetry: recordAiProductEvent })));
+    const result = await executeAiSkill(req.body || {}, req, {
+      recordTelemetry: recordAiProductEvent,
+      signal: abortContext.signal,
+    });
+    abortContext.complete();
+    return res.send(resultData(result));
   } catch (error) {
+    abortContext.complete();
+    if (res.destroyed || res.writableEnded) return;
     const failure = resolvePublicAiExecutionError(error);
     if (failure.status >= 500) console.error('[ai-skill] execute failed code=%s', stableAgentErrorCode(error));
     return res.status(failure.status).send(resultData({ code: failure.code }, failure.status, failure.message));
+  } finally {
+    abortContext.complete();
   }
 }
 
@@ -40,13 +51,7 @@ export async function executeAiSkillStreamRequest(req, res) {
   if (String(req.body?.skillId || '') !== 'note.transform_text') {
     return res.status(400).send(resultData({ code: 'AI_SKILL_STREAM_UNSUPPORTED' }, 400, '该 AI 能力暂不支持流式输出'));
   }
-  const controller = new AbortController();
-  let completed = false;
-  const abortOnClose = () => {
-    if (!completed) controller.abort(new Error('AI_STREAM_CLIENT_DISCONNECTED'));
-  };
-  req.once('aborted', abortOnClose);
-  res.once('close', abortOnClose);
+  const abortContext = createRequestAbortContext(req, res);
   res.status(200);
   res.set({
     'Content-Type': 'text/event-stream; charset=utf-8',
@@ -59,27 +64,26 @@ export async function executeAiSkillStreamRequest(req, res) {
   try {
     const response = await executeAiSkill(req.body || {}, req, {
       recordTelemetry: recordAiProductEvent,
+      signal: abortContext.signal,
       callModel: (options) =>
         callGroundedSkillModelStream({
           ...options,
-          signal: controller.signal,
+          signal: abortContext.signal,
           onDelta: (content) => writeSse(res, 'delta', { content }),
           onReset: () => writeSse(res, 'reset', {}),
         }),
     });
-    completed = true;
+    abortContext.complete();
     writeSse(res, 'complete', response);
   } catch (error) {
-    const disconnected = controller.signal.aborted || req.aborted || res.destroyed;
+    const disconnected = abortContext.signal.aborted || req.aborted || res.destroyed;
     if (!disconnected) {
       const failure = resolvePublicAiExecutionError(error);
       if (failure.status >= 500) console.error('[ai-skill] stream failed code=%s', stableAgentErrorCode(error));
       writeSse(res, 'error', failure);
     }
   } finally {
-    completed = true;
-    req.removeListener('aborted', abortOnClose);
-    res.removeListener('close', abortOnClose);
+    abortContext.complete();
     if (!res.writableEnded && !res.destroyed) res.end();
   }
 }

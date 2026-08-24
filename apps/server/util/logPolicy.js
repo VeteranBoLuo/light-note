@@ -8,6 +8,7 @@ const API_LOG_SKIP_SUBSTRINGS = Object.freeze([
   'getOpinionNotice',
   'noticeSummary',
   'aiQuota',
+  'aiUsage',
   'unreadCount', // 通知未读数：铃铛角标每 120s 轮询，高频且无操作审计价值。
 ]);
 

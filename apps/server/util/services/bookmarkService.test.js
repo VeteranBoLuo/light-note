@@ -14,6 +14,7 @@ const validateUserTags = vi.fn();
 const fetchWebMeta = vi.fn();
 const triggerResourceCreateEffects = vi.fn();
 const createIconBatch = vi.fn();
+const archiveBookmarkBackground = vi.fn();
 
 vi.mock('../../db/index.js', () => ({ default: pool }));
 vi.mock('./tagService.js', () => ({ ensureTag }));
@@ -23,7 +24,7 @@ vi.mock('../resourceTags.js', () => ({
   validateUserTags,
 }));
 vi.mock('../resourceInbox.js', () => ({ enqueueResources: vi.fn() }));
-vi.mock('../snapshot.js', () => ({ archiveBookmarkBackground: vi.fn() }));
+vi.mock('../snapshot.js', () => ({ archiveBookmarkBackground }));
 vi.mock('../bookmarkIconBatchService.js', () => ({ createIconBatch }));
 vi.mock('../fetchWebMeta.js', () => ({
   EXPLICIT_WEB_READ_MAX_BYTES: 4 * 1024 * 1024,
@@ -51,6 +52,7 @@ describe('bookmarkService.createBookmark', () => {
     fetchWebMeta.mockResolvedValue({ ok: false, reason: 'FETCH_FAILED' });
     triggerResourceCreateEffects.mockResolvedValue(undefined);
     createIconBatch.mockResolvedValue({ batchId: 'batch-1', total: 1, status: 'queued' });
+    archiveBookmarkBackground.mockReturnValue(true);
     connection.beginTransaction.mockResolvedValue();
     connection.commit.mockResolvedValue();
     connection.rollback.mockResolvedValue();
@@ -109,6 +111,20 @@ describe('bookmarkService.createBookmark', () => {
     });
 
     expect(createIconBatch).not.toHaveBeenCalled();
+  });
+
+  it('免费网页存档只在书签提交后进入有界后台队列', async () => {
+    const result = await createBookmark({
+      userId: 'user-1',
+      bookmark: { url: 'https://example.com/path', name: 'Example' },
+      saveSnapshot: true,
+    });
+
+    expect(archiveBookmarkBackground).toHaveBeenCalledWith('user-1', result.id);
+    expect(connection.commit.mock.invocationCallOrder[0]).toBeLessThan(
+      archiveBookmarkBackground.mock.invocationCallOrder[0],
+    );
+    expect(result.snapshotScheduled).toBe(true);
   });
 
   it('图标任务入队失败不把已提交的收藏伪装成失败', async () => {

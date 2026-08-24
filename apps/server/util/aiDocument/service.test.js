@@ -47,6 +47,7 @@ const {
   deleteTemporaryDocumentSources,
   getDocumentSourceStatuses,
   purgeDocumentSourcesForCloudFiles,
+  recognizeCloudImageDocumentSource,
   resolveDocumentAttachments,
   runSingleDocumentJob,
 } = await import('./service.js');
@@ -148,6 +149,86 @@ describe('AI 文档服务', () => {
       expect.objectContaining({ type: 'document', id: 'source-cloud', fileId: '9', url: undefined }),
     ]);
     expect(createDownloadSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it('显式图片动作使用独立 inline 租约持久化 Vision 结果', async () => {
+    const source = {
+      id: 'source-vision',
+      user_id: 'user-1',
+      source_type: 'cloud',
+      file_id: 12,
+      file_name: 'license.jpg',
+      file_type: 'image/jpeg',
+      file_size: 16,
+      object_key: 'files/user-1/license.jpg',
+      status: 'ready',
+      coverage_metadata: null,
+    };
+    const claimConnection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        if (String(sql).includes('FROM ai_document_jobs')) {
+          return [[{ id: 21, source_id: source.id, status: 'completed', attempts: 1 }]];
+        }
+        if (String(sql).includes('FROM ai_document_sources')) return [[source]];
+        return [{ affectedRows: 1 }];
+      }),
+    };
+    const persistConnection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        if (String(sql).includes('SELECT id FROM ai_document_jobs')) return [[{ id: 21 }]];
+        if (String(sql).includes('SELECT id FROM ai_document_sources')) return [[{ id: source.id }]];
+        return [{ affectedRows: 1 }];
+      }),
+    };
+    pool.getConnection.mockResolvedValueOnce(claimConnection).mockResolvedValueOnce(persistConnection);
+    getObjectMetadataFromObs.mockResolvedValue({ contentLength: source.file_size });
+    getObjectBufferFromObs.mockResolvedValue(Buffer.alloc(source.file_size, 1));
+    const parsed = {
+      extractedChars: 8,
+      chunks: [
+        {
+          chunkIndex: 0,
+          content: 'Vision 正文',
+          locatorType: 'page',
+          locatorValue: '图片',
+          contentHash: 'a'.repeat(64),
+        },
+      ],
+      coverage: coverageMetadata({ chars: 8 }),
+    };
+    const parseBuffer = vi.fn().mockResolvedValue(parsed);
+    pool.query.mockResolvedValueOnce([[{ ...source, status: 'ready', extracted_chars: 8, chunk_count: 1 }]]);
+
+    const result = await recognizeCloudImageDocumentSource({
+      userId: 'user-1',
+      sourceId: source.id,
+      parseBuffer,
+    });
+
+    expect(parseBuffer).toHaveBeenCalledWith(expect.any(Buffer), expect.objectContaining({ fileName: 'license.jpg' }), {
+      signal: undefined,
+    });
+    expect(claimConnection.query).toHaveBeenCalledWith(expect.stringContaining('locked_by = ?'), [
+      expect.stringMatching(/^inline-vision:/u),
+      21,
+    ]);
+    expect(persistConnection.query).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO ai_document_chunks'), [
+      source.id,
+      0,
+      'Vision 正文',
+      'page',
+      '图片',
+      'a'.repeat(64),
+    ]);
+    expect(result).toMatchObject({ id: source.id, status: 'ready', extractedChars: 8 });
   });
 
   it('临时来源预览签名失败时仍可继续总结文件', async () => {
@@ -293,16 +374,16 @@ describe('AI 文档服务', () => {
     await expect(
       attachCloudDocumentSource({ userId: 'visitor-shared', fileId: 9, sessionId: 'guest-session' }),
     ).resolves.toEqual(expect.objectContaining({ id: 'source-shared', sourceType: 'cloud', status: 'parsing' }));
-    expect(connection.query).toHaveBeenCalledWith(
-      'UPDATE ai_document_sources SET session_id = ? WHERE id = ?',
-      ['guest-session', 'source-shared'],
+    expect(connection.query).toHaveBeenCalledWith('UPDATE ai_document_sources SET session_id = ? WHERE id = ?', [
+      'guest-session',
+      'source-shared',
+    ]);
+    expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('DELETE FROM ai_document_chunks'))).toBe(
+      false,
     );
-    expect(
-      connection.query.mock.calls.some(([sql]) => String(sql).includes('DELETE FROM ai_document_chunks')),
-    ).toBe(false);
-    expect(
-      connection.query.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO ai_document_jobs')),
-    ).toBe(false);
+    expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO ai_document_jobs'))).toBe(
+      false,
+    );
   });
 
   it('临时附件另存云空间后再次挂载时安全转为云来源，并清理临时对象', async () => {
@@ -725,7 +806,10 @@ describe('AI 文档服务', () => {
       commit: vi.fn(),
       rollback: vi.fn(),
       release: vi.fn(),
-      query: vi.fn().mockResolvedValue([{ affectedRows: 1 }]),
+      query: vi.fn(async (sql) => {
+        if (String(sql).includes('SELECT id FROM ai_document_jobs')) return [[{ id: 7 }]];
+        return [{ affectedRows: 1 }];
+      }),
     };
     pool.getConnection.mockResolvedValueOnce(claimConnection).mockResolvedValueOnce(finishConnection);
     pool.query.mockResolvedValueOnce([
@@ -782,6 +866,7 @@ describe('AI 文档服务', () => {
       rollback: vi.fn(),
       release: vi.fn(),
       query: vi.fn(async (sql) => {
+        if (String(sql).includes('SELECT id FROM ai_document_jobs')) return [[{ id: 8 }]];
         if (String(sql).includes('SELECT id FROM ai_document_sources')) return [[{ id: 'source-ready' }]];
         return [{ affectedRows: 1 }];
       }),
@@ -815,6 +900,103 @@ describe('AI 文档服务', () => {
     expect(finishConnection.commit).toHaveBeenCalledOnce();
   });
 
+  it('Worker 租约已被在线 Vision 接管时丢弃迟到结果，不覆盖高精度识别', async () => {
+    const content = Buffer.from('迟到的本地 OCR');
+    const claimConnection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        if (String(sql).includes('SELECT * FROM ai_document_jobs')) {
+          return [[{ id: 11, source_id: 'source-stolen', attempts: 0 }]];
+        }
+        return [{ affectedRows: 1 }];
+      }),
+    };
+    const finishConnection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        if (String(sql).includes('SELECT id FROM ai_document_jobs')) return [[]];
+        throw new Error(`lease lost 后不应继续查询: ${sql}`);
+      }),
+    };
+    pool.getConnection.mockResolvedValueOnce(claimConnection).mockResolvedValueOnce(finishConnection);
+    pool.query.mockResolvedValueOnce([
+      [
+        {
+          id: 'source-stolen',
+          object_key: 'tmp/source-stolen',
+          file_name: 'stolen.txt',
+          file_type: 'text/plain',
+          file_size: content.length,
+          status: 'parsing',
+          expires_at: new Date(Date.now() + 60_000),
+        },
+      ],
+    ]);
+    getObjectMetadataFromObs.mockResolvedValue({ contentLength: content.length });
+    getObjectBufferFromObs.mockResolvedValue(content);
+
+    await expect(runSingleDocumentJob('worker-stale')).resolves.toBe(true);
+    expect(finishConnection.rollback).toHaveBeenCalledOnce();
+    expect(finishConnection.commit).not.toHaveBeenCalled();
+    expect(finishConnection.query).toHaveBeenCalledTimes(1);
+  });
+
+  it('Worker 解析失败但租约已被接管时也不回写失败状态', async () => {
+    const content = Buffer.alloc(128, 0);
+    const claimConnection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        if (String(sql).includes('SELECT * FROM ai_document_jobs')) {
+          return [[{ id: 12, source_id: 'source-stolen-failure', attempts: 0 }]];
+        }
+        return [{ affectedRows: 1 }];
+      }),
+    };
+    const failureConnection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        if (String(sql).includes('SELECT id FROM ai_document_jobs')) return [[]];
+        throw new Error(`lease lost 后不应写失败状态: ${sql}`);
+      }),
+    };
+    pool.getConnection.mockResolvedValueOnce(claimConnection).mockResolvedValueOnce(failureConnection);
+    pool.query.mockResolvedValueOnce([
+      [
+        {
+          id: 'source-stolen-failure',
+          object_key: 'tmp/source-stolen-failure',
+          file_name: 'stolen-failure.txt',
+          file_type: 'text/plain',
+          file_size: content.length,
+          status: 'parsing',
+          expires_at: new Date(Date.now() + 60_000),
+        },
+      ],
+    ]);
+    getObjectMetadataFromObs.mockResolvedValue({ contentLength: content.length });
+    getObjectBufferFromObs.mockResolvedValue(content);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(runSingleDocumentJob('worker-stale-failure')).resolves.toBe(true);
+    expect(failureConnection.rollback).toHaveBeenCalledOnce();
+    expect(failureConnection.commit).not.toHaveBeenCalled();
+    expect(failureConnection.query).toHaveBeenCalledTimes(1);
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
   it('解析失败时持久化失败范围和原因', async () => {
     const content = Buffer.alloc(128, 0);
     const claimConnection = {
@@ -834,7 +1016,10 @@ describe('AI 文档服务', () => {
       commit: vi.fn(),
       rollback: vi.fn(),
       release: vi.fn(),
-      query: vi.fn().mockResolvedValue([{ affectedRows: 1 }]),
+      query: vi.fn(async (sql) => {
+        if (String(sql).includes('SELECT id FROM ai_document_jobs')) return [[{ id: 9 }]];
+        return [{ affectedRows: 1 }];
+      }),
     };
     pool.getConnection.mockResolvedValueOnce(claimConnection).mockResolvedValueOnce(failureConnection);
     pool.query.mockResolvedValueOnce([
@@ -891,6 +1076,7 @@ describe('AI 文档服务', () => {
       rollback: vi.fn(),
       release: vi.fn(),
       query: vi.fn(async (sql) => {
+        if (String(sql).includes('SELECT id FROM ai_document_jobs')) return [[{ id: 10 }]];
         if (String(sql).includes('SELECT id FROM ai_document_sources')) return [[{ id: 'source-rolling' }]];
         if (String(sql).includes('coverage_metadata = ?')) throw missingColumnError;
         return [{ affectedRows: 1 }];

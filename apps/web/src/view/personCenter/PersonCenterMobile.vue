@@ -302,7 +302,7 @@
   }
 
   function goAiQuotaDetails() {
-    router.push({ path: '/settings', query: { section: 'ai' } });
+    router.push('/ai-usage');
   }
 
   function formatCompactNumber(value: number | string | null | undefined) {

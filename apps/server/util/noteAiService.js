@@ -47,9 +47,15 @@ export async function recognizeOwnedNoteImages({ note, document, signal, limit =
   const unsupported = candidates
     .filter((image) => !allowedUrls.has(image.url))
     .map((image) => ({ ...image, status: 'unsupported', content: '' }));
-  return [...(await recognizeNoteImages(supported, { signal, allowedUrls, limit })), ...unsupported].sort(
-    (left, right) => Number(left.order || 0) - Number(right.order || 0),
-  );
+  return [
+    ...(await recognizeNoteImages(supported, {
+      signal,
+      allowedUrls,
+      limit,
+      cacheScope: `note:${String(note.id)}`,
+    })),
+    ...unsupported,
+  ].sort((left, right) => Number(left.order || 0) - Number(right.order || 0));
 }
 
 export async function buildNoteAiPayload({

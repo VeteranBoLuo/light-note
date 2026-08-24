@@ -102,16 +102,30 @@ describe('bookmark AI entry governance', () => {
 
     await doSummarizeBookmark(req, res);
 
-    expect(mocks.summarizeBookmark).toHaveBeenCalledWith('user-1', 'bookmark-1', {
-      force: false,
-      persist: true,
-      archiveIfMissing: true,
-      trace: expect.objectContaining({ taskType: 'bookmark_summary' }),
-    });
+    expect(mocks.summarizeBookmark).toHaveBeenCalledWith(
+      'user-1',
+      'bookmark-1',
+      expect.objectContaining({
+        force: false,
+        persist: true,
+        archiveIfMissing: false,
+        signal: expect.any(AbortSignal),
+        trace: expect.objectContaining({ taskType: 'bookmark_summary' }),
+      }),
+    );
     expect(mocks.runAiExecution).toHaveBeenCalledWith(
       expect.objectContaining({ request: req, billingPolicy: 'user', skillId: 'bookmark.summarize_page' }),
       expect.any(Function),
     );
+    const executionConfig = mocks.runAiExecution.mock.calls[0][0];
+    expect(executionConfig.resolveResultOutcome({ ok: false, reason: 'quota_exceeded' })).toEqual({
+      status: 'quota_blocked',
+      errorCode: 'AI_QUOTA_EXCEEDED',
+    });
+    expect(executionConfig.resolveResultOutcome({ ok: false, reason: 'ai_error' })).toEqual({
+      status: 'failed',
+      errorCode: 'AI_PROVIDER_ERROR',
+    });
     expect(res.statusCode).toBe(429);
     expect(res.payload).toMatchObject({ status: 429, data: { reason: 'quota_exceeded' } });
   });
@@ -129,12 +143,17 @@ describe('bookmark AI entry governance', () => {
 
     await doSummarizeBookmark(req, res);
 
-    expect(mocks.summarizeBookmark).toHaveBeenCalledWith('subject-1', 'bookmark-1', {
-      force: true,
-      persist: false,
-      archiveIfMissing: false,
-      trace: expect.objectContaining({ taskType: 'bookmark_summary' }),
-    });
+    expect(mocks.summarizeBookmark).toHaveBeenCalledWith(
+      'subject-1',
+      'bookmark-1',
+      expect.objectContaining({
+        force: true,
+        persist: false,
+        archiveIfMissing: false,
+        signal: expect.any(AbortSignal),
+        trace: expect.objectContaining({ taskType: 'bookmark_summary' }),
+      }),
+    );
     expect(res.payload).toMatchObject({ status: 200, data: { summary: '只读摘要' } });
   });
 
@@ -151,10 +170,15 @@ describe('bookmark AI entry governance', () => {
 
     await doArchiveAndSummarizeBookmark(req, res);
 
-    expect(mocks.archiveAndSummarizeBookmark).toHaveBeenCalledWith('subject-1', 'bookmark-1', {
-      persist: false,
-      trace: expect.objectContaining({ taskType: 'bookmark_archive_summary' }),
-    });
+    expect(mocks.archiveAndSummarizeBookmark).toHaveBeenCalledWith(
+      'subject-1',
+      'bookmark-1',
+      expect.objectContaining({
+        persist: false,
+        signal: expect.any(AbortSignal),
+        trace: expect.objectContaining({ taskType: 'bookmark_archive_summary' }),
+      }),
+    );
     expect(mocks.runAiExecution).toHaveBeenCalledWith(
       expect.objectContaining({ taskType: 'bookmark_archive_summary', skillId: 'bookmark.summarize_page' }),
       expect.any(Function),
@@ -180,7 +204,7 @@ describe('bookmark AI entry governance', () => {
     expect(res.payload).toMatchObject({ status, data: { code } });
   });
 
-  it('批量整理只建立一个根执行，单条 Provider 失败时保留其余建议', async () => {
+  it('批量整理只建立一个根执行，额度不足时以 429 保留已经完成的建议', async () => {
     mocks.poolQuery.mockResolvedValueOnce([[{ id: 'tag-1', name: '已有标签' }]]).mockResolvedValueOnce([
       [
         { id: 'note-1', title: '笔记一', content: '正文一' },
@@ -205,17 +229,92 @@ describe('bookmark AI entry governance', () => {
       }),
     );
     expect(mocks.runAiExecution).toHaveBeenCalledTimes(1);
+    expect(
+      mocks.runAiExecution.mock.calls[0][0].resolveResultOutcome({
+        quotaLimited: true,
+        successfulItems: 1,
+        failedItems: 0,
+      }),
+    ).toEqual({ status: 'quota_blocked', errorCode: 'AI_QUOTA_EXCEEDED' });
+    expect(res.statusCode).toBe(429);
+    expect(res.payload).toMatchObject({
+      status: 429,
+      data: {
+        ok: false,
+        code: 'AI_QUOTA_EXCEEDED',
+        processed: 1,
+        suggestions: [expect.objectContaining({ id: 'note-1' })],
+      },
+    });
+  });
+
+  it('批量整理部分模型失败时保留可用建议，并把根账本分类为部分完成', async () => {
+    mocks.poolQuery.mockResolvedValueOnce([[{ id: 'tag-1', name: '已有标签' }]]).mockResolvedValueOnce([
+      [
+        { id: 'note-1', title: '笔记一', content: '正文一' },
+        { id: 'note-2', title: '笔记二', content: '正文二' },
+      ],
+    ]);
+    mocks.suggestTagsFromText
+      .mockResolvedValueOnce({ matchedTagIds: ['tag-1'], newTags: [] })
+      .mockRejectedValueOnce(new Error('provider failed'));
+    const req = {
+      body: { resourceType: 'note', ids: ['note-1', 'note-2'] },
+      user: { id: 'user-1', role: 'user' },
+      billingUser: { id: 'user-1', role: 'user' },
+    };
+    const res = response();
+
+    await doOrganizeRun(req, res);
+
+    const executionConfig = mocks.runAiExecution.mock.calls[0][0];
+    expect(executionConfig.resolveResultOutcome({ successfulItems: 1, failedItems: 1 })).toEqual({
+      status: 'partial',
+      errorCode: 'AI_ORGANIZE_PARTIAL',
+    });
     expect(res.statusCode).toBe(200);
     expect(res.payload).toMatchObject({
       status: 200,
-      data: { processed: 1, suggestions: [expect.objectContaining({ id: 'note-1' })] },
+      data: {
+        ok: true,
+        partial: true,
+        failedItems: 1,
+        processed: 1,
+        suggestions: [expect.objectContaining({ id: 'note-1' })],
+      },
+    });
+  });
+
+  it('批量整理全部模型失败时不谎报完成，并把根账本分类为失败', async () => {
+    mocks.poolQuery
+      .mockResolvedValueOnce([[{ id: 'tag-1', name: '已有标签' }]])
+      .mockResolvedValueOnce([[{ id: 'note-1', title: '笔记一', content: '正文一' }]]);
+    mocks.suggestTagsFromText.mockRejectedValueOnce(new Error('provider failed'));
+    const req = {
+      body: { resourceType: 'note', ids: ['note-1'] },
+      user: { id: 'user-1', role: 'user' },
+      billingUser: { id: 'user-1', role: 'user' },
+    };
+    const res = response();
+
+    await doOrganizeRun(req, res);
+
+    const executionConfig = mocks.runAiExecution.mock.calls[0][0];
+    expect(executionConfig.resolveResultOutcome({ successfulItems: 0, failedItems: 1 })).toEqual({
+      status: 'failed',
+      errorCode: 'AI_ORGANIZE_ALL_ITEMS_FAILED',
+    });
+    expect(res.statusCode).toBe(503);
+    expect(res.payload).toMatchObject({
+      status: 503,
+      data: { ok: false, code: 'AI_ORGANIZE_ALL_ITEMS_FAILED', processed: 0, suggestions: [] },
     });
   });
 
   it('根执行在访问 Provider 前发现额度耗尽时返回明确 429', async () => {
-    mocks.poolQuery.mockResolvedValueOnce([[{ id: 'tag-1', name: '已有标签' }]]).mockResolvedValueOnce([
-      [{ id: 'note-1', title: '笔记一', content: '正文一' }],
-    ]);
+    mocks.poolQuery
+      .mockResolvedValueOnce([[{ id: 'tag-1', name: '已有标签' }]])
+      .mockResolvedValueOnce([[{ id: 'note-1', title: '笔记一', content: '正文一' }]]);
     mocks.runAiExecution.mockRejectedValueOnce(Object.assign(new Error('quota'), { code: 'AI_QUOTA_EXCEEDED' }));
     const req = {
       body: { resourceType: 'note', ids: ['note-1'] },

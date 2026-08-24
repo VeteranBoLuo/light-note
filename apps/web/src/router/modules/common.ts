@@ -1,5 +1,5 @@
 import { RouteRecordRaw } from 'vue-router';
-import { ALL_ROLES } from '@/config/bookmarkCfg.ts';
+import { ALL_ROLES, RoleEnum } from '@/config/bookmarkCfg.ts';
 
 const commonRouter: RouteRecordRaw[] = [
   {
@@ -35,6 +35,21 @@ const commonRouter: RouteRecordRaw[] = [
     path: '/settings',
     name: 'settings',
     component: () => import('@/view/settings/Settings.vue'),
+    beforeEnter: (to) =>
+      (Array.isArray(to.query.section) ? to.query.section[0] : to.query.section) === 'ai'
+        ? { name: 'aiUsage', replace: true }
+        : true,
+  },
+  {
+    meta: {
+      title: 'AI 用量与计费',
+      keepAlive: true,
+      requireAuth: true,
+      roles: [RoleEnum.Root, RoleEnum.USER, RoleEnum.TEST],
+    },
+    path: '/ai-usage',
+    name: 'aiUsage',
+    component: () => import('@/view/aiUsage/AiUsagePage.vue'),
   },
   {
     meta: {

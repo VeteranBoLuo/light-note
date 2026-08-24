@@ -10,6 +10,7 @@ export const ALLOWED_GATEWAY_IMPORTERS = Object.freeze([
   'apps/server/util/aiOrganize.js',
   'apps/server/util/snapshot.js',
   'apps/server/util/tagIconService.js',
+  'apps/server/util/imageRecognition/deepseekVisionProvider.js',
   'apps/server/util/aiSkill/model.js',
   'apps/server/util/aiSkill/structuredModel.js',
 ]);

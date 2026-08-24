@@ -6,7 +6,7 @@ function request() {
   return {
     protocolVersion: 1,
     requestId: crypto.randomUUID(),
-    skillId: 'test.answer',
+    skillId: 'help.answer',
     skillVersion: 1,
     threadId: null,
     input: { question: '问题' },
@@ -36,7 +36,7 @@ describe('executeAiSkill', () => {
     let insideExecution = false;
     const callModel = vi.fn().mockResolvedValue({ kind: 'grounded_markdown', content: '答案 [1]' });
     const skill = {
-      id: 'test.answer',
+      id: 'help.answer',
       version: 1,
       domain: 'test',
       effect: 'read',
@@ -72,7 +72,14 @@ describe('executeAiSkill', () => {
       },
     );
 
-    expect(events).toEqual([['execution', 'test.answer']]);
+    expect(events).toEqual([['execution', 'help.answer']]);
+    const executionConfig = runExecution.mock.calls[0][0];
+    expect(
+      executionConfig.resolveResultOutcome({
+        coverage: { warnings: ['image_recognition_fallback:file:private-id'] },
+      }),
+    ).toEqual({ status: 'partial', errorCode: 'IMAGE_RECOGNITION_FALLBACK' });
+    expect(executionConfig.resolveResultOutcome({ coverage: { warnings: [] } })).toEqual({ status: 'success' });
     expect(skill.prepare).toHaveBeenCalledTimes(1);
     expect(callModel).toHaveBeenCalledTimes(1);
     expect(result).toMatchObject({ status: 'completed', result: { content: '答案 [1]' } });
@@ -86,7 +93,7 @@ describe('executeAiSkill', () => {
       return operation();
     });
     const skill = {
-      id: 'test.answer',
+      id: 'help.answer',
       version: 1,
       domain: 'test',
       effect: 'read',
@@ -115,7 +122,7 @@ describe('executeAiSkill', () => {
   it('Skill 可确定性返回结果而完全不调用模型', async () => {
     const callModel = vi.fn();
     const skill = {
-      id: 'test.answer',
+      id: 'help.answer',
       version: 1,
       domain: 'test',
       effect: 'read',
@@ -145,7 +152,7 @@ describe('executeAiSkill', () => {
   it('结构化 Skill 可以替换模型适配器并在根 execution 内返回预览', async () => {
     const structured = vi.fn().mockResolvedValue({ kind: 'structured_draft', title: '任务', writeCommitted: false });
     const skill = {
-      id: 'test.answer',
+      id: 'help.answer',
       version: 1,
       domain: 'test',
       effect: 'preview',
@@ -177,7 +184,7 @@ describe('executeAiSkill', () => {
   it('服务端记录真实 Skill 生命周期且范围拒绝不会被记成普通失败', async () => {
     const recordTelemetry = vi.fn().mockResolvedValue({ accepted: true });
     const skill = {
-      id: 'test.answer',
+      id: 'help.answer',
       version: 1,
       domain: 'test',
       effect: 'read',
@@ -201,7 +208,7 @@ describe('executeAiSkill', () => {
       'ai_skill_completed',
     ]);
     expect(recordTelemetry.mock.calls[1][1].dimensions).toMatchObject({
-      skillId: 'test.answer',
+      skillId: 'help.answer',
       outcome: 'success',
       resourceCountBucket: '0',
     });

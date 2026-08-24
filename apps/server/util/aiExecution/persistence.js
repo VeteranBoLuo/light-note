@@ -91,7 +91,9 @@ export async function settleAiExecution(execution, database = pool) {
       execution.usage.completionTokens,
       execution.usage.totalTokens,
       execution.chargedTokens,
-      execution.missingUsageSpans === 0 ? 1 : 0,
+      // 用量页的“估算”描述用户被扣额度是否使用了请求前预算。平台承担的修复即使缺失
+      // usage 也不能把用户主调用误标为估算；Provider 总量完整性仍保留在 Span 账本中。
+      execution.missingBillableUsageSpans === 0 ? 1 : 0,
       execution.quotaSettlementStatus,
       execution.errorCode,
       execution.durationMs,

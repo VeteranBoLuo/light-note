@@ -10,6 +10,7 @@ import {
 } from '../obsClient.js';
 import { AI_DOCUMENT_MAX_BYTES, parseDocumentBuffer, validateDocumentDescriptor } from './parser.js';
 import { stableAgentErrorCode } from '../agent/logSafety.js';
+import { getImageRecognitionPolicy } from '../imageRecognition/service.js';
 
 const TEMPORARY_RETENTION_HOURS = 24;
 const MAX_ACTIVE_TEMPORARY_SOURCES = 8;
@@ -31,6 +32,7 @@ const NON_RETRYABLE_PARSE_ERRORS = new Set([
   'OCR_ENGINE_UNAVAILABLE',
   'OCR_LANGUAGE_UNAVAILABLE',
 ]);
+const IMAGE_FILE_PATTERN = /\.(?:png|jpe?g|webp)$/iu;
 
 function serviceError(code, message, status = 400) {
   const error = new Error(`${code}: ${message}`);
@@ -73,6 +75,11 @@ function clampRatio(value) {
   return Math.max(0, Math.min(1, Number(number.toFixed(4))));
 }
 
+function nonNegativeInteger(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.trunc(number)) : 0;
+}
+
 function normalizeCoverageCounts(value = {}) {
   const count = (input) => {
     const number = Number(input);
@@ -82,6 +89,54 @@ function normalizeCoverageCounts(value = {}) {
     chars: count(value.chars),
     pages: count(value.pages),
     chunks: count(value.chunks),
+  };
+}
+
+function normalizeRecognitionMetadata(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const engine = String(value.engine || '').slice(0, 40);
+  if (!engine) return null;
+  const retryAfter = Date.parse(String(value.retryAfter || ''));
+  return {
+    engine,
+    provider: value.provider == null ? null : String(value.provider).slice(0, 40),
+    model: value.model == null ? null : String(value.model).slice(0, 120),
+    policyVersion: nonNegativeInteger(value.policyVersion),
+    preprocessVersion: nonNegativeInteger(value.preprocessVersion),
+    mode: String(value.mode || '').slice(0, 40),
+    fallbackReason: value.fallbackReason == null ? null : String(value.fallbackReason).slice(0, 80),
+    retryAfter: Number.isFinite(retryAfter) ? new Date(retryAfter).toISOString() : null,
+    documentType: String(value.documentType || 'unknown').slice(0, 80),
+    uncertainSegments: [
+      ...new Set(
+        (Array.isArray(value.uncertainSegments) ? value.uncertainSegments : [])
+          .map((item) =>
+            String(item || '')
+              .trim()
+              .slice(0, 120),
+          )
+          .filter(Boolean),
+      ),
+    ].slice(0, 20),
+    quality:
+      value.quality && typeof value.quality === 'object'
+        ? {
+            status: String(value.quality.status || 'unknown').slice(0, 32),
+            meaningfulRatio: clampRatio(value.quality.meaningfulRatio),
+            chars: nonNegativeInteger(value.quality.chars),
+          }
+        : null,
+    warnings: [
+      ...new Set(
+        (Array.isArray(value.warnings) ? value.warnings : [])
+          .map((item) =>
+            String(item || '')
+              .trim()
+              .slice(0, 64),
+          )
+          .filter(Boolean),
+      ),
+    ].slice(0, 20),
   };
 }
 
@@ -104,6 +159,7 @@ function parseCoverageMetadata(value) {
     const number = Number(input);
     return Number.isFinite(number) ? Math.max(0, Math.trunc(number)) : 0;
   };
+  const recognition = normalizeRecognitionMetadata(parsed.recognition);
   return {
     version: Number(parsed.version || COVERAGE_METADATA_VERSION),
     metadataAvailable,
@@ -124,6 +180,7 @@ function parseCoverageMetadata(value) {
       code: String(item?.code || 'DOCUMENT_COVERAGE_LIMITED').slice(0, 64),
       message: String(item?.message || '文档覆盖范围受限').slice(0, 300),
     })),
+    ...(recognition ? { recognition } : {}),
   };
 }
 
@@ -513,6 +570,207 @@ export async function attachCloudDocumentSource({ userId, fileId, sessionId = ''
   } finally {
     connection.release();
   }
+}
+
+function reusableImageRecognition(source, policy, currentTime = Date.now()) {
+  if (source?.status !== 'ready') return false;
+  const recognition = parseCoverageMetadata(source.coverage_metadata)?.recognition;
+  if (!recognition || Number(recognition.policyVersion || 0) !== Number(policy.version)) return false;
+  if (policy.mode === 'local_only') return recognition.engine === 'local_ocr';
+  if (recognition.engine === 'deepseek_vision' && recognition.model === policy.visionModel) return true;
+  const retryAfter = Date.parse(String(recognition.retryAfter || ''));
+  return recognition.engine === 'local_ocr' && Number.isFinite(retryAfter) && retryAfter > currentTime;
+}
+
+async function claimInlineImageRecognition({ userId, sourceId, leaseId, policy }) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [jobRows] = await connection.query('SELECT * FROM ai_document_jobs WHERE source_id = ? LIMIT 1 FOR UPDATE', [
+      sourceId,
+    ]);
+    const source = await selectOwnedSource(connection, userId, sourceId, true);
+    if (!source) throw serviceError('ATTACHMENT_NOT_FOUND', '待识别图片已不存在', 404);
+    if (!IMAGE_FILE_PATTERN.test(String(source.file_name || ''))) {
+      await connection.commit();
+      return { source, job: jobRows[0] || null, claimed: false };
+    }
+    if (reusableImageRecognition(source, policy)) {
+      await connection.commit();
+      return { source, job: jobRows[0] || null, claimed: false };
+    }
+    let job = jobRows[0];
+    const activeInlineLease =
+      job?.status === 'processing' &&
+      String(job.locked_by || '').startsWith('inline-vision:') &&
+      Date.now() - new Date(job.locked_at || 0).getTime() < 2 * 60_000;
+    if (activeInlineLease) {
+      await connection.commit();
+      return { source: { ...source, status: 'parsing' }, job, claimed: false };
+    }
+    if (!job) {
+      const [insertResult] = await connection.query(
+        `INSERT INTO ai_document_jobs
+          (source_id, status, attempts, available_at, locked_at, locked_by, error_message)
+         VALUES (?, 'processing', 0, NOW(), NOW(), ?, NULL)`,
+        [sourceId, leaseId],
+      );
+      job = { id: insertResult.insertId, source_id: sourceId, attempts: 0 };
+    } else {
+      await connection.query(
+        `UPDATE ai_document_jobs SET status = 'processing', locked_at = NOW(), locked_by = ?, error_message = NULL
+         WHERE id = ?`,
+        [leaseId, job.id],
+      );
+    }
+    await connection.query(
+      `UPDATE ai_document_sources SET status = 'parsing', error_code = NULL, error_message = NULL WHERE id = ?`,
+      [sourceId],
+    );
+    await connection.commit();
+    return { source, job, claimed: true };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+async function persistInlineImageRecognition({ source, job, leaseId, parsed }) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [leaseRows] = await connection.query(
+      `SELECT id FROM ai_document_jobs
+       WHERE id = ? AND status = 'processing' AND locked_by = ?
+       LIMIT 1 FOR UPDATE`,
+      [job.id, leaseId],
+    );
+    if (!leaseRows.length) {
+      await connection.rollback();
+      return false;
+    }
+    const [sourceRows] = await connection.query('SELECT id FROM ai_document_sources WHERE id = ? LIMIT 1 FOR UPDATE', [
+      source.id,
+    ]);
+    if (!sourceRows.length) {
+      await connection.rollback();
+      return false;
+    }
+    await connection.query('DELETE FROM ai_document_chunks WHERE source_id = ?', [source.id]);
+    for (const chunk of parsed.chunks) {
+      await connection.query(
+        `INSERT INTO ai_document_chunks
+          (source_id, chunk_index, content, locator_type, locator_value, content_hash)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [source.id, chunk.chunkIndex, chunk.content, chunk.locatorType, chunk.locatorValue, chunk.contentHash],
+      );
+    }
+    await connection.query(
+      `UPDATE ai_document_sources SET status = 'ready', error_code = NULL, error_message = NULL,
+         extracted_chars = ?, chunk_count = ? WHERE id = ?`,
+      [parsed.extractedChars, parsed.chunks.length, source.id],
+    );
+    await writeCoverageMetadata(connection, source.id, parsed.coverage);
+    await connection.query(
+      `UPDATE ai_document_jobs SET status = 'completed', locked_at = NULL, locked_by = NULL,
+         error_message = NULL WHERE id = ?`,
+      [job.id],
+    );
+    await connection.commit();
+    return true;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+async function releaseInlineImageRecognition({ source, job, leaseId }) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [leaseRows] = await connection.query(
+      `SELECT id FROM ai_document_jobs
+       WHERE id = ? AND status = 'processing' AND locked_by = ?
+       LIMIT 1 FOR UPDATE`,
+      [job.id, leaseId],
+    );
+    if (!leaseRows.length) {
+      await connection.rollback();
+      return false;
+    }
+    const restoreReady = source.status === 'ready';
+    await connection.query(
+      `UPDATE ai_document_jobs SET status = ?, available_at = NOW(), locked_at = NULL,
+         locked_by = NULL, error_message = ? WHERE id = ?`,
+      [restoreReady ? 'completed' : 'queued', restoreReady ? job.error_message || null : null, job.id],
+    );
+    await connection.query(
+      `UPDATE ai_document_sources SET status = ?, error_code = ?, error_message = ? WHERE id = ?`,
+      [
+        restoreReady ? 'ready' : 'queued',
+        restoreReady ? source.error_code || null : null,
+        restoreReady ? source.error_message || null : null,
+        source.id,
+      ],
+    );
+    await connection.commit();
+    return true;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+/**
+ * 云图片只在用户明确发起 AI Skill 后进入视觉模型。调用发生在当前 AI Execution 内，
+ * 成功结果覆盖后台本地解析；job 租约保证迟到 Worker 不会再把 Vision 结果覆盖回 OCR。
+ */
+export async function recognizeCloudImageDocumentSource({
+  userId,
+  sourceId,
+  signal,
+  parseBuffer = parseDocumentBuffer,
+}) {
+  const policy = getImageRecognitionPolicy();
+  const leaseId = `inline-vision:${crypto.randomUUID()}`;
+  const claimed = await claimInlineImageRecognition({ userId, sourceId, leaseId, policy });
+  if (!claimed.claimed) return formatSource(claimed.source);
+  const { source, job } = claimed;
+  try {
+    const metadata = await getObjectMetadataFromObs(source.object_key);
+    if (metadata.contentLength <= 0 || metadata.contentLength > AI_DOCUMENT_MAX_BYTES) {
+      throw serviceError('FILE_SIZE_INVALID', '文件大小无效或超过 20MB');
+    }
+    if (Number(source.file_size || 0) !== metadata.contentLength) {
+      throw serviceError('FILE_SIZE_MISMATCH', '文件大小与记录不一致');
+    }
+    const buffer = await getObjectBufferFromObs(source.object_key);
+    const parsed = await parseBuffer(
+      buffer,
+      { fileName: source.file_name, fileType: source.file_type, fileSize: source.file_size },
+      { signal },
+    );
+    await persistInlineImageRecognition({ source, job, leaseId, parsed });
+  } catch (error) {
+    if (signal?.aborted || error?.name === 'AbortError') {
+      await releaseInlineImageRecognition({ source, job, leaseId });
+      throw error;
+    }
+    const parsedError = parseError(error);
+    if (parsedError.code === 'EMPTY_DOCUMENT') await markJobNoText(job, error.coverage, leaseId);
+    else await markJobFailure(job, error, leaseId);
+  }
+  const [rows] = await pool.query('SELECT * FROM ai_document_sources WHERE id = ? AND user_id = ? LIMIT 1', [
+    source.id,
+    userId,
+  ]);
+  return rows[0] ? formatSource(rows[0]) : formatSource(source);
 }
 
 export async function getDocumentSourceStatuses({ userId, sourceIds }) {
@@ -1178,10 +1436,22 @@ function normalizeNoTextCoverage(coverage) {
   return { ...normalized, complete: false, coverageRatio: 0 };
 }
 
-async function markJobNoText(job, coverage) {
+async function markJobNoText(job, coverage, expectedLockedBy = '') {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
+    if (expectedLockedBy) {
+      const [leaseRows] = await connection.query(
+        `SELECT id FROM ai_document_jobs
+         WHERE id = ? AND status = 'processing' AND locked_by = ?
+         LIMIT 1 FOR UPDATE`,
+        [job.id, expectedLockedBy],
+      );
+      if (!leaseRows.length) {
+        await connection.rollback();
+        return false;
+      }
+    }
     await connection.query('DELETE FROM ai_document_chunks WHERE source_id = ?', [job.source_id]);
     await connection.query(
       `UPDATE ai_document_sources SET status = 'ready', error_code = ?, error_message = ?,
@@ -1195,6 +1465,7 @@ async function markJobNoText(job, coverage) {
       [job.id],
     );
     await connection.commit();
+    return true;
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -1248,12 +1519,24 @@ function parseError(error) {
   };
 }
 
-async function markJobFailure(job, error) {
+async function markJobFailure(job, error, expectedLockedBy = '') {
   const parsed = parseError(error);
   const finalFailure = NON_RETRYABLE_PARSE_ERRORS.has(parsed.code) || Number(job.attempts || 0) >= 3;
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
+    if (expectedLockedBy) {
+      const [leaseRows] = await connection.query(
+        `SELECT id FROM ai_document_jobs
+         WHERE id = ? AND status = 'processing' AND locked_by = ?
+         LIMIT 1 FOR UPDATE`,
+        [job.id, expectedLockedBy],
+      );
+      if (!leaseRows.length) {
+        await connection.rollback();
+        return false;
+      }
+    }
     await connection.query(
       `UPDATE ai_document_jobs SET status = ?, available_at = DATE_ADD(NOW(), INTERVAL ? SECOND),
          locked_at = NULL, locked_by = NULL, error_message = ? WHERE id = ?`,
@@ -1274,6 +1557,7 @@ async function markJobFailure(job, error) {
       parseCoverageMetadata(error?.coverage) || buildTerminalCoverage(parsed.code, parsed.message),
     );
     await connection.commit();
+    return true;
   } catch (dbError) {
     await connection.rollback();
     throw dbError;
@@ -1325,6 +1609,16 @@ export async function runSingleDocumentJob(workerId) {
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
+      const [leaseRows] = await connection.query(
+        `SELECT id FROM ai_document_jobs
+         WHERE id = ? AND status = 'processing' AND locked_by = ?
+         LIMIT 1 FOR UPDATE`,
+        [job.id, workerId],
+      );
+      if (!leaseRows.length) {
+        await connection.rollback();
+        return true;
+      }
       const [currentRows] = await connection.query(
         'SELECT id FROM ai_document_sources WHERE id = ? LIMIT 1 FOR UPDATE',
         [source.id],
@@ -1363,11 +1657,11 @@ export async function runSingleDocumentJob(workerId) {
   } catch (error) {
     const parsedError = parseError(error);
     if (parsedError.code === 'EMPTY_DOCUMENT') {
-      await markJobNoText(job, error.coverage);
-      console.info(`[AI 文档] 解析任务 ${job.id} 完成，未提取到文字`);
+      const persisted = await markJobNoText(job, error.coverage, workerId);
+      if (persisted) console.info(`[AI 文档] 解析任务 ${job.id} 完成，未提取到文字`);
     } else {
-      await markJobFailure(job, error);
-      console.error('[AI 文档] 解析任务 %s 失败 code=%s', job.id, stableAgentErrorCode(error));
+      const persisted = await markJobFailure(job, error, workerId);
+      if (persisted) console.error('[AI 文档] 解析任务 %s 失败 code=%s', job.id, stableAgentErrorCode(error));
     }
   }
   return true;

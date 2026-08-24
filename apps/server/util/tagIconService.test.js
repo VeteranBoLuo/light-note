@@ -55,6 +55,7 @@ describe('tagIconService', () => {
 
     const result = await searchTagIcons({
       query: '专用中文词条',
+      useAi: true,
       trace: { traceId: 'trace-icon-1' },
     });
 
@@ -73,23 +74,28 @@ describe('tagIconService', () => {
     expect(result.icons).toContain('lucide:database');
   });
 
-  it('Gateway 失败时以本地语义词降级，不把模型故障扩散到图标搜索', async () => {
+  it('显式 AI 扩展失败时不伪装成本地降级成功，且日志不泄漏 Provider 细节', async () => {
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
     mocks.requestAi.mockRejectedValueOnce(new Error('Authorization: Bearer hidden-provider-token'));
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ icons: ['lucide:database'] }),
-      }),
-    );
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
 
-    const result = await searchTagIcons({ query: '数据库专用降级词' });
+    await expect(searchTagIcons({ query: '数据库专用降级词', useAi: true })).rejects.toThrow();
 
-    expect(result.keywords).toEqual(expect.arrayContaining(['database', 'server']));
-    expect(result.icons).toContain('lucide:database');
+    expect(fetch).not.toHaveBeenCalled();
     expect(warning.mock.calls.flat().join(' ')).not.toContain('hidden-provider-token');
     warning.mockRestore();
+  });
+
+  it('显式 AI 扩展返回无效结构时失败，不把本地词误报为 AI 结果', async () => {
+    mocks.requestAi.mockResolvedValueOnce({ content: 'not json' });
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+
+    await expect(searchTagIcons({ query: '数据库结构异常', useAi: true })).rejects.toMatchObject({
+      code: 'AI_SKILL_STRUCTURED_OUTPUT_INVALID',
+    });
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('只接受白名单 Iconify 图标名称', () => {

@@ -11,6 +11,99 @@ const SNAPSHOT_LIMIT = 200_000; // 存档正文上限 ~200K 字符,够完整留�
 const MIN_SNAPSHOT_CHARS = 100; // 正文少于此视为没真正抓到(SPA 空壳/纯导航残渣),不存空快照骗人
 const SNAPSHOT_FETCH_TIMEOUT = 15000; // 快照是后台/手动任务、不阻塞用户,给更宽松超时(实时 AI 抓取仍用默认 8s)
 
+function boundedPositiveInteger(value, fallback, maximum) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(maximum, Math.floor(parsed));
+}
+
+/**
+ * 自动存档是免费旁路，不能因为用户批量收藏而无限创建外网连接。队列只约束后台抓取，
+ * 满载时返回 false 让书签主事务照常成功；手动“生成网页存档”另有 HTTP 级限频。
+ */
+export function createBackgroundArchiveScheduler({
+  run,
+  concurrency = 3,
+  maxOutstanding = 100,
+  maxOutstandingPerActor = 20,
+  onDrop,
+} = {}) {
+  const execute = typeof run === 'function' ? run : async () => undefined;
+  const queue = [];
+  const actorOutstanding = new Map();
+  let active = 0;
+
+  const totalOutstanding = () => active + queue.length;
+  const decrementActor = (actorId) => {
+    const next = Math.max(0, Number(actorOutstanding.get(actorId) || 0) - 1);
+    if (next) actorOutstanding.set(actorId, next);
+    else actorOutstanding.delete(actorId);
+  };
+  const pump = () => {
+    while (active < concurrency && queue.length) {
+      const job = queue.shift();
+      active += 1;
+      Promise.resolve()
+        .then(() => execute(job.actorId, job.resourceId))
+        .catch(() => undefined)
+        .finally(() => {
+          active -= 1;
+          decrementActor(job.actorId);
+          pump();
+        });
+    }
+  };
+
+  return Object.freeze({
+    schedule(actorId, resourceId) {
+      const normalizedActor = String(actorId || '').trim();
+      const normalizedResource = String(resourceId || '').trim();
+      if (!normalizedActor || !normalizedResource) return false;
+      const actorCount = Number(actorOutstanding.get(normalizedActor) || 0);
+      const reason =
+        totalOutstanding() >= maxOutstanding
+          ? 'global_limit'
+          : actorCount >= maxOutstandingPerActor
+            ? 'actor_limit'
+            : '';
+      if (reason) {
+        onDrop?.(reason);
+        return false;
+      }
+      actorOutstanding.set(normalizedActor, actorCount + 1);
+      queue.push({ actorId: normalizedActor, resourceId: normalizedResource });
+      pump();
+      return true;
+    },
+    status() {
+      return { active, queued: queue.length, total: totalOutstanding() };
+    },
+  });
+}
+
+function waitForSnapshotRetry(delayMs, signal) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => signal?.removeEventListener?.('abort', abort);
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
+    };
+    const timer = setTimeout(finish, delayMs);
+    const abort = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      cleanup();
+      reject(signal?.reason || Object.assign(new Error('请求已取消'), { name: 'AbortError' }));
+    };
+    if (signal?.aborted) abort();
+    else signal?.addEventListener('abort', abort, { once: true });
+  });
+}
+
 async function columnMissing(table, col) {
   const [rows] = await pool.query(
     `SELECT COUNT(*) AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
@@ -46,7 +139,7 @@ export async function ensureBookmarkSnapshotTable() {
 }
 
 // 归档指定书签的网页正文(抓取 + 落库,幂等覆盖)。校验书签归属当前用户。
-export async function archiveBookmark(userId, bookmarkId) {
+export async function archiveBookmark(userId, bookmarkId, { signal } = {}) {
   const [rows] = await pool.query('SELECT id, url, name FROM bookmark WHERE id = ? AND user_id = ? AND del_flag = 0', [
     bookmarkId,
     userId,
@@ -58,14 +151,16 @@ export async function archiveBookmark(userId, bookmarkId) {
     bodyLimit: SNAPSHOT_LIMIT,
     maxContentBytes: EXPLICIT_WEB_READ_MAX_BYTES,
     timeout: SNAPSHOT_FETCH_TIMEOUT,
+    signal,
   });
   // 抓取类失败(网络抖动/反爬/超时偶发)短暂重试一次:很多站"时好时坏",一次重试能明显提升成功率
   if (!meta.ok && meta.reason === 'FETCH_FAILED') {
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await waitForSnapshotRetry(1500, signal);
     meta = await fetchWebMeta(url, {
       bodyLimit: SNAPSHOT_LIMIT,
       maxContentBytes: EXPLICIT_WEB_READ_MAX_BYTES,
       timeout: SNAPSHOT_FETCH_TIMEOUT,
+      signal,
     });
   }
   if (!meta.ok) {
@@ -96,9 +191,7 @@ export async function archiveBookmark(userId, bookmarkId) {
   return { ok: true, charCount: content.length, title };
 }
 
-// 新增书签时的后台归档:失败(偶发网络/站点未热/反爬)自动隔几秒重试一次,仍失败记 warn 便于排查。
-// 整体吞掉异常、不阻塞新增流程——但不再像旧写法那样静默 .catch(() => {}) 丢掉所有失败信息。
-export async function archiveBookmarkBackground(userId, bookmarkId) {
+async function runBackgroundArchive(userId, bookmarkId) {
   try {
     // 抓取失败的重试已下沉到 archiveBookmark 内部,这里只负责吞异常 + 记 warn,不阻塞新增流程
     const r = await archiveBookmark(userId, bookmarkId);
@@ -110,6 +203,19 @@ export async function archiveBookmarkBackground(userId, bookmarkId) {
   }
 }
 
+const backgroundArchiveScheduler = createBackgroundArchiveScheduler({
+  run: runBackgroundArchive,
+  concurrency: boundedPositiveInteger(process.env.BOOKMARK_ARCHIVE_BACKGROUND_CONCURRENCY, 3, 10),
+  maxOutstanding: boundedPositiveInteger(process.env.BOOKMARK_ARCHIVE_BACKGROUND_MAX_OUTSTANDING, 100, 1_000),
+  maxOutstandingPerActor: boundedPositiveInteger(process.env.BOOKMARK_ARCHIVE_BACKGROUND_MAX_PER_ACCOUNT, 20, 200),
+  onDrop: (reason) => console.warn('[snapshot] 后台归档队列已保护性降级 reason=%s', reason),
+});
+
+// 新增书签时只进入有界后台队列。返回 false 仅表示本次自动存档未排队，书签保存不得因此失败。
+export function archiveBookmarkBackground(userId, bookmarkId) {
+  return backgroundArchiveScheduler.schedule(userId, bookmarkId);
+}
+
 export async function getBookmarkSnapshot(userId, bookmarkId) {
   const [rows] = await pool.query(
     'SELECT bookmark_id, url, title, content, char_count, summary, summary_at, update_time FROM bookmark_snapshot WHERE bookmark_id = ? AND user_id = ? LIMIT 1',
@@ -119,19 +225,19 @@ export async function getBookmarkSnapshot(userId, bookmarkId) {
 }
 
 // AI 一键摘要:基于已存快照正文经统一 AI Gateway 生成摘要,缓存到 summary 列。
-// 无快照先归档;已有摘要且非 force 直接返回缓存(省 token)。正文截断到 ~6000 字喂模型。
+// 调用方可明确选择无快照时是否先归档；已有摘要且非 force 直接返回缓存(省 token)。正文截断到 ~6000 字喂模型。
 const SUMMARY_INPUT_LIMIT = 6000;
 export async function summarizeBookmark(
   userId,
   bookmarkId,
-  { force = false, trace, persist = true, archiveIfMissing = persist } = {},
+  { force = false, trace, persist = true, archiveIfMissing = persist, signal } = {},
 ) {
   let snap = await getBookmarkSnapshot(userId, bookmarkId);
   if (!snap || !snap.content) {
     if (!archiveIfMissing) {
       return { ok: false, reason: 'no_snapshot', msg: '无可用正文' };
     }
-    const arc = await archiveBookmark(userId, bookmarkId); // 无快照先抓一次
+    const arc = await archiveBookmark(userId, bookmarkId, { signal }); // 无快照先抓一次
     if (!arc.ok) return { ok: false, reason: arc.reason || 'no_snapshot', msg: arc.msg || '无可用正文' };
     snap = await getBookmarkSnapshot(userId, bookmarkId);
   }
@@ -151,6 +257,7 @@ export async function summarizeBookmark(
   let summary = '';
   try {
     const resp = await requestAi(messages, {
+      signal,
       toolChoice: 'none',
       maxTokens: 800,
       temperature: 0.2,
@@ -158,6 +265,7 @@ export async function summarizeBookmark(
     });
     summary = (resp.content || '').trim();
   } catch (e) {
+    if (e?.name === 'AbortError') throw e;
     console.warn('[snapshot] AI 摘要调用失败:', safeAgentError(e));
     if (e?.code === 'AI_QUOTA_EXCEEDED') {
       return { ok: false, reason: 'quota_exceeded', msg: '今日 AI 额度已用完，请明天再试' };
@@ -178,14 +286,10 @@ export async function summarizeBookmark(
  * 显式“生成网页存档”操作：重新抓取权威正文，并基于同一版正文生成摘要。
  * 被动收藏归档仍只抓正文，避免新增书签时静默消耗 AI 额度；readonly 代管只可读取既有存档生成临时摘要。
  */
-export async function archiveAndSummarizeBookmark(
-  userId,
-  bookmarkId,
-  { trace, persist = true } = {},
-) {
+export async function archiveAndSummarizeBookmark(userId, bookmarkId, { trace, persist = true, signal } = {}) {
   let archiveResult = null;
   if (persist) {
-    archiveResult = await archiveBookmark(userId, bookmarkId);
+    archiveResult = await archiveBookmark(userId, bookmarkId, { signal });
     if (!archiveResult.ok) return { ...archiveResult, archiveOk: false };
   }
 
@@ -194,6 +298,7 @@ export async function archiveAndSummarizeBookmark(
     trace,
     persist,
     archiveIfMissing: false,
+    signal,
   });
   if (!summaryResult.ok) {
     return {

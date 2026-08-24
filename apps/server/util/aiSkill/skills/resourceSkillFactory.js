@@ -24,7 +24,9 @@ function taskInstruction(input, taskLabel) {
     input.question ? `用户问题：${input.question}` : '',
     input.instruction ? `具体要求：${input.instruction}` : '',
     DETAIL_HINT[input.detailLevel],
-    input.targetLength ? `目标篇幅约 ${input.targetLength} 个中文字符；无法在事实约束内达到时，宁可少于目标，也不得编造。` : '',
+    input.targetLength
+      ? `目标篇幅约 ${input.targetLength} 个中文字符；无法在事实约束内达到时，宁可少于目标，也不得编造。`
+      : '',
   ]
     .filter(Boolean)
     .join('\n');
@@ -75,6 +77,7 @@ export function createGroundedResourceSkill({
           userId: context.identity.subjectUserId,
           resourceRefs: context.resourceRefs,
           sessionId: request?.requestId || '',
+          signal: dependencies.signal,
         });
       }
       const loadEvidence = dependencies.loadExplicitResourceEvidence || loadExplicitResourceEvidence;

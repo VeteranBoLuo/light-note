@@ -19,7 +19,7 @@
 /**
  * @typedef {Object} DeepSeekMessage
  * @property {'system'|'user'|'assistant'|'tool'} role
- * @property {string|null} content
+ * @property {string|null|Array<Object>} content
  * @property {string} [name]
  * @property {string} [tool_call_id]
  * @property {DeepSeekToolCall[]} [tool_calls]
@@ -89,6 +89,24 @@ function getProviderFetch() {
     throw error;
   }
   return fetchImpl;
+}
+
+function providerHttpError(cfg, status, providerMessage = '') {
+  const numericStatus = Number(status || 0);
+  const normalizedMessage = String(providerMessage || '').toLowerCase();
+  let code = 'AI_PROVIDER_ERROR';
+  if (numericStatus === 401 || numericStatus === 403) code = 'AI_PROVIDER_AUTH_FAILED';
+  else if (numericStatus === 408 || numericStatus === 504) code = 'AI_TIMEOUT';
+  else if (numericStatus === 429) code = 'AI_RATE_LIMITED';
+  else if (numericStatus === 404 || /model.{0,40}(?:not found|unavailable|does not exist)/u.test(normalizedMessage)) {
+    code = 'AI_PROVIDER_MODEL_UNAVAILABLE';
+  } else if (numericStatus >= 400 && numericStatus < 500) code = 'AI_PROVIDER_REQUEST_INVALID';
+  const error = new Error(`${cfg.name} 请求失败`);
+  error.code = code;
+  error.status = numericStatus >= 400 && numericStatus <= 599 ? numericStatus : 503;
+  error.providerStatus = numericStatus || null;
+  error.retryable = numericStatus === 429 || numericStatus >= 500;
+  return error;
 }
 
 function getModel(cfg, modelOverride) {
@@ -188,6 +206,10 @@ export async function requestDeepSeek(messages, options = {}) {
     ...(Number.isFinite(options.temperature) ? { temperature: options.temperature } : {}),
   };
 
+  if (options.responseFormat && typeof options.responseFormat === 'object') {
+    body.response_format = options.responseFormat;
+  }
+
   if (options.tools?.length) {
     body.tools = options.tools;
     body.tool_choice = options.toolChoice ?? 'auto';
@@ -206,7 +228,7 @@ export async function requestDeepSeek(messages, options = {}) {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.error?.message || `${cfg.name} 请求失败：${res.status}`);
+    throw providerHttpError(cfg, res.status, data.error?.message);
   }
 
   const msg = data.choices?.[0]?.message;
@@ -281,7 +303,7 @@ export async function requestDeepSeekStream(messages, options = {}) {
 
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      throw new Error(data.error?.message || `${cfg.name} 流式请求失败：${res.status}`);
+      throw providerHttpError(cfg, res.status, data.error?.message);
     }
 
     const reader = res.body?.getReader();

@@ -492,6 +492,7 @@ Runtime V3 把每轮请求拆成四个边界清晰、可独立验证的阶段：
 - 主力供应商：DeepSeek（`DEEPSEEK_API_KEY`）
 - 备用供应商：千问 Qwen（`DASHSCOPE_API_KEY`）
 - 通过 `AGENT_LLM_PROVIDER` 环境变量切换
+- 文本模型和视觉模型分阶段配置：Intent、Planner、Composer 等文本阶段继续使用稳定文本模型与 DeepSeek/Qwen 备用策略；图片文字提取固定进入独立 `image_recognition` 阶段，默认使用 `DEEPSEEK_VISION_MODEL=deepseek-v4-flash-vision-exp`，不得因为视觉模型可用而把全部文本阶段一刀切到实验视觉模型
 - 配置集中在 `util/agent/deepseekClient.js` 的 `PROVIDERS` 表
 - DeepSeek V4 默认会进入思考模式；当前 Planner 为保证强制指定 `submit_agent_plan` 的结构化规划协议，必须显式使用非思考模式，Final Reply 也暂时保持非思考以控制首字延迟与成本。未来如引入复杂任务自适应思考，只能在完成工具执行后的回答阶段按请求开启，不得改变 Planner 的非思考安全默认值
 - 调用日志中的 `cost` 仅按供应商静态价表估算，用于内部诊断，不作为财务计量或后台金额主指标
@@ -528,13 +529,16 @@ Runtime V3 把每轮请求拆成四个边界清晰、可独立验证的阶段：
 - 云空间文件工具可按文件夹 ID 或精确名称查询；名称重复时不猜测目标。`query_files` 返回文件与所属文件夹，`query_cloud_folders` 提供当前账号的可选文件夹
 - Root 的资源新增排行由 `get_resource_creation_ranking` 直接按业务表创建时间汇总书签、笔记和云空间文件，不依赖操作日志；默认排除逻辑删除资源、新手引导资源以及 root/test 内部账号，并可用用户注册时间进一步限定统计人群
 - Root 的签到排行由 `get_checkin_ranking` 直接读取有效 `growth_events` 签到账本，支持累计/指定周期签到天数、历史最长连签和当前未断连签；默认排除逻辑删除与 root/test 内部账号，补签按产品规则计入，并返回最近签到日和补签审计摘要。当前连签不能直接按 `user_growth.streak` 快照排序，必须结合最近签到日判定是否已断签
-- PDF 优先读取原生文字层；没有文字层时由文档 Worker 使用本机 Poppler 逐页渲染，再调用本机 Tesseract（默认 `chi_sim+eng`）OCR。图片附件直接进入相同的本地 OCR 流程，不调用第三方 OCR API
+- PDF 优先读取原生文字层；没有文字层时由文档 Worker 使用本机 Poppler 逐页渲染，再调用本机 Tesseract（默认 `chi_sim+eng`）OCR。图片使用 `util/imageRecognition/` 统一识别服务：用户明确点击图片 AI 动作且已建立计费 Execution 时，DeepSeek Vision 为主；模型超时、限流、鉴权/模型异常、无字或输出质量不合格时自动降级到原有本地 OCR，原链路不得删除
+- 后台上传、预解析和 Worker 不得静默外发图片或消耗模型额度，始终先生成本地 OCR 派生结果；显式 AI 动作会在同一文档 source 上以短租约升级为视觉识别。Worker 持久化前必须复核自己的租约，迟到结果不得覆盖已经完成的 Vision 结果；识别缓存同时绑定内容哈希、策略版本和模型，不能把旧 OCR 结果永久冒充新策略结果
+- 图片进入视觉模型前由 ImageMagick 执行 EXIF 自动旋转、色彩/透明背景归一化和有界缩放；大图保留完整图并追加两个重叠细节分区，避免只硬裁证件边界而丢正文。预处理失败可使用原图继续 Vision，本地 OCR 则保留预处理告警并用两种版面模式做确定性质量择优
+- Vision 连续技术失败会按模型维度进入 Redis + 进程内熔断，熔断期间立即走本地 OCR；结果元数据保留 `engine/model/policyVersion/fallbackReason/retryAfter/quality/warnings`，前端对降级和不确定片段给出稳定提醒。上传不调用模型；显式识图的图片输入与输出 token 进入当前 AI Execution，用供应商实际 usage 结算，缺失 usage 的技术失败仅在 `image_recognition` 阶段释放该次视觉占位，随后本地 OCR 结果仍标记为降级而非伪装成 Vision 成功
 - OCR 默认最多处理 20 页图片型 PDF、单张图片最多 2400 万像素，并对渲染、单页识别和整份文档设置独立超时；所有临时文件使用随机私有目录并在成功或失败后清理
 - 文档正文与云文件派生预览由独立 `documentWorker.js` 从 OBS 拉取并处理，主 HTTP 进程只负责签名、鉴权、任务创建和状态/结果查询；Worker 在 AI 文档任务与文件预览任务之间公平轮转并保持单并发
 - 临时文件使用 `ai-temp/{userId}/{sourceId}/` 独立前缀并在 24 小时后清理；云文件永久删除、覆盖或重命名时同步使解析缓存失效
 - Agent 只接收服务端按问题检索出的受控片段，文件内容明确视为不可信资料；来源卡片由服务端生成真实定位
 - 笔记正文进入 Agent 前由 `util/noteSemantic.js` 统一解析 HTML/Markdown，保留标题、段落、普通列表、复选任务、表格、引用、代码、链接和图片引用；`[x]`/`[ ]` 状态直接以正文中的复选框为准，普通列表不计入任务统计
-- 单篇笔记细读使用 `read_note`，图片文字识别拆为通用只读工具 `analyze_resource_images`。前者只返回结构化正文和图片引用，后者按资源归属按需复用本地 OCR；本站笔记图片还必须命中 `note_images` 登记，单轮最多识别 3 张并使用内容哈希缓存
+- 单篇笔记细读使用 `read_note`，图片文字识别拆为通用只读工具 `analyze_resource_images`。前者只返回结构化正文和图片引用，后者按资源归属调用同一统一识别服务；本站笔记图片还必须命中 `note_images` 登记，单轮最多识别 3 张，并使用带识别策略与模型作用域的内容哈希缓存
 - 工具调用是结果驱动的有界多轮链路：上一轮失败、空结果或声明存在可选后续能力时，模型才能继续规划；后续仅允许已授权只读工具，默认最多 3 轮工具调用，最后再生成回答
 
 ### 模块化 AI Skills 与统一用量内核（现行）
@@ -556,7 +560,11 @@ Runtime V3 把每轮请求拆成四个边界清晰、可独立验证的阶段：
 - 共享协议位于 `packages/shared/aiSkillProtocol.*`，HTTP Handler、前端 API 和测试共用封闭世界校验。Feature Config 可按域关闭 note/bookmark/file/todo/search/help，关闭 AI 不影响页面基础能力。
 - 当前 Registry 精确登记 20 个 Skill，并由契约测试锁定清单、版本、角色、资源类型/数量、历史窗口、模型策略、输出类型与“定义中不得出现直写函数”。任何新 Skill 必须先进入 Registry 和 Feature Config，再接页面入口，不能通过散落路由或 Prompt 隐式增加能力。
 - `ai_skill_threads` / `ai_skill_turns` 保存有界、范围绑定的 Skill 连续问答；thread 绑定 Skill 版本、actor、subject 与 `scope_digest`。事实内容不从旧回答继承，每轮由 Context Resolver 重新读取。单次转换和草稿不保存自然语言历史。
-- `ai_executions` 是一次用户/系统动作的根账本，`ai_provider_spans` 保存该动作内所有真实模型调用。第一次访问 Provider 才懒占位；缓存或确定性路径 settle 为 `not_used`。Provider usage 缺失按保守规则结算，额度存储失败在 Provider 前失败关闭。
+- `util/aiBillingCatalog.js` 是计费能力唯一目录：20 个 Registry Skill 与智能整理、书签整理、AI 扩展图标搜索等业务动作共用动作 ID、模块、调用上限和预占策略。独立 AI 用量页的规则说明与用量映射都从目录生成，新增模型入口若未登记会在测试/运行时失败关闭。
+- `ai_executions` 是一次用户/系统动作的根账本，`ai_provider_spans` 保存该动作内所有真实模型调用。第一次用户主调用前才懒占位；缓存或确定性路径 settle 为 `not_used`。根执行分别累计 Provider 总 usage 与用户可计费 usage：用户主调用按实际 token 结算，输出协议修复由平台承担；Provider usage 缺失按请求前保守预算估算且钳在实际预占内，额度存储失败在 Provider 前失败关闭。
+- `/api/chat/aiUsage` 只按实际付款者 `actor_user_id` 查询登录账号的近 7/30/90 天账本，按服务端目录映射为用户动作和模块；响应不包含问题、正文、标题、URL、资源 ID、Provider 错误原文或内部 task type。`idx_ai_execution_actor_created` 支撑付款者时间线，管理员代管不会把 Root 触发的成本显示给被代管账号。
+- `/ai-usage` 是额度总览、最近消耗与免费/扣费规则的唯一详情路由。设置页只渲染紧凑入口且不请求用量数据，头像额度摘要和移动个人中心直接进入该路由；旧 `/settings?section=ai` 由路由层兼容重定向，不能重新恢复为设置页内嵌账本。
+- 免费能力与模型额度解耦但不等于无限：网页存档有请求限频及有界后台队列，本地文件预览/OCR 有大小、页数、像素、临时来源和任务频率限制，普通图标搜索有外部查询限频；这些限制失败只影响对应增强能力，不得让“额度不足”阻断笔记、书签、文件、待办的基础增删改查。
 - 业务不得直接访问模型。`aiGateway` 要求活动 Execution，`billingPolicy=none` 禁止 Provider；源码门禁阻止裸 Provider、未经登记的 Gateway 调用和新的 `openAiAssistant`。DeepSeek 主、千问备用策略仍由 Gateway 维护。
 - 所有写能力只返回预览，用户确认后调用现有业务 Service。模型从不直接写笔记、书签、文件或待办；版本冲突、owner 不符、范围变化和非法输出均失败关闭。
 - 待办时间采用“模型摘录、服务端解析”两段式边界：模型工具只返回原话中的日期/时间片段，`todoTemporal` 用请求 IANA 时区产生绝对时间；待办拆解只产生可应用到当前表单的清单预览，最终保存仍走 Todo Service。

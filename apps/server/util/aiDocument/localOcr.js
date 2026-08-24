@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { safeImageSize } from '../safeImageSize.js';
+import { chooseBetterRecognitionText, inspectRecognitionText } from '../imageRecognition/quality.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -37,6 +38,12 @@ function ocrError(code, message, cause) {
   const error = new Error(`${code}: ${message}`, cause ? { cause } : undefined);
   error.code = code;
   return error;
+}
+
+function throwIfAborted(signal) {
+  if (!signal?.aborted) return;
+  if (signal.reason) throw signal.reason;
+  throw new DOMException('请求已取消', 'AbortError');
 }
 
 function cleanOcrText(value) {
@@ -80,6 +87,7 @@ async function runCommand(command, args, { timeout, signal } = {}) {
       killSignal: 'SIGKILL',
     });
   } catch (error) {
+    if (signal?.aborted && signal.reason) throw signal.reason;
     mapCommandError(error, command);
   }
 }
@@ -125,7 +133,8 @@ async function detectOcrRotation(imagePath, { signal, runner = runCommand } = {}
     const confidence = Number(/Orientation confidence:\s*([\d.]+)/i.exec(text)?.[1] || 0);
     if ([90, 180, 270].includes(rotate) && confidence >= 1) return rotate;
     return 0;
-  } catch {
+  } catch (error) {
+    if (signal?.aborted) throw signal.reason || error;
     return 0;
   }
 }
@@ -141,7 +150,8 @@ async function preprocessOcrImage(inputPath, outputPath, { signal, runner = runC
     });
     const mean = parseFloat(stdout);
     isDark = Number.isFinite(mean) && mean < 0.5; // 灰度均值偏低 = 深色底(如代码编辑器暗色主题)
-  } catch {
+  } catch (error) {
+    if (signal?.aborted) throw signal.reason || error;
     // 测不到亮度就按非深色处理,不影响后续
   }
   const args = [inputPath, '-auto-orient', '-colorspace', 'Gray'];
@@ -158,6 +168,7 @@ export async function recognizePdfWithLocalOcr(
   buffer,
   { pageCount, signal, runner = runCommand, tempRoot = os.tmpdir() } = {},
 ) {
+  throwIfAborted(signal);
   const totalPages = Number(pageCount || 0);
   if (!Number.isInteger(totalPages) || totalPages <= 0) {
     throw ocrError('FILE_CONTENT_INVALID', '无法确认 PDF 页数');
@@ -183,6 +194,7 @@ export async function recognizePdfWithLocalOcr(
 
     const pages = [];
     for (const fileName of pageFiles) {
+      throwIfAborted(signal);
       const pagePath = path.join(tempDir, fileName);
       inspectOcrImage(await readFile(pagePath), '.png');
       const content = await recognizeImagePath(pagePath, { signal, runner });
@@ -199,6 +211,7 @@ export async function recognizeImageWithLocalOcr(
   buffer,
   { extension, signal, runner = runCommand, tempRoot = os.tmpdir() } = {},
 ) {
+  throwIfAborted(signal);
   inspectOcrImage(buffer, extension);
   const tempDir = await mkdtemp(path.join(tempRoot, 'light-note-ocr-'));
   try {
@@ -206,8 +219,9 @@ export async function recognizeImageWithLocalOcr(
     await writeFile(inputPath, buffer, { mode: 0o600 });
 
     // 预处理(灰度/深色反色/放大/归一)+ 方向校正,提升深色主题、旋转、小字截图的识别率;
-    // 预处理不可用(未装 ImageMagick)或失败时静默回退原图,保证 OCR 不因预处理挂掉。
+    // 预处理不可用(未装 ImageMagick)或失败时带告警回退原图,保证 OCR 不因增强步骤挂掉。
     let ocrPath = inputPath;
+    const warnings = [];
     if (OCR_PREPROCESS) {
       try {
         const processedPath = path.join(tempDir, 'processed.png');
@@ -223,44 +237,89 @@ export async function recognizeImageWithLocalOcr(
         } else {
           ocrPath = processedPath;
         }
-      } catch {
+      } catch (error) {
+        if (signal?.aborted) throw signal.reason || error;
+        warnings.push(String(error?.code || 'OCR_PREPROCESS_FAILED').slice(0, 64));
         ocrPath = inputPath;
       }
     }
 
-    // 截图/代码类用 --psm 6(整块统一文本)通常优于文档式的 --psm 3
-    const content = await recognizeImagePath(ocrPath, { signal, runner, psm: '6' });
+    // 截图/代码类优先 psm 6；短文本或疑似乱码再用自动版面 psm 3 复核，按确定性质量分择优。
+    // 这比固定一种版面模式稳，同时避免所有图片无条件启动两次 Tesseract。
+    const blockText = await recognizeImagePath(ocrPath, { signal, runner, psm: '6' });
+    const blockQuality = inspectRecognitionText(blockText);
+    let autoText = '';
+    if (blockQuality.suspicious || blockQuality.chars < 160) {
+      autoText = await recognizeImagePath(ocrPath, { signal, runner, psm: '3' });
+    }
+    const selected = chooseBetterRecognitionText(blockText, autoText);
+    const content = selected.text;
     if (!content) throw ocrError('EMPTY_DOCUMENT', 'OCR 未能从图片中识别出文字');
-    return { content };
+    return {
+      content,
+      ...(warnings.length || selected.suspicious
+        ? {
+            metadata: {
+              warnings: [...new Set(warnings)],
+              quality: {
+                status: selected.suspicious ? 'degraded' : 'accepted',
+                meaningfulRatio: selected.meaningfulRatio,
+                chars: selected.chars,
+              },
+            },
+          }
+        : {}),
+    };
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
 }
 
 export async function inspectLocalOcrRuntime({ runner = runCommand } = {}) {
-  try {
-    const [{ stdout: languageStdout = '', stderr: languageStderr = '' }] = await Promise.all([
-      runner(TESSERACT_BIN, ['--list-langs'], { timeout: 10_000 }),
-      runner(PDFTOPPM_BIN, ['-v'], { timeout: 10_000 }),
-    ]);
-    const languages = `${languageStdout}\n${languageStderr}`;
-    const requiredLanguages = OCR_LANGUAGES.split('+').filter(Boolean);
-    const missingLanguages = requiredLanguages.filter(
-      (language) => !new RegExp(`(^|\\s)${language}(?=\\s|$)`, 'm').test(languages),
-    );
-    return {
-      ready: missingLanguages.length === 0,
-      languages: requiredLanguages,
-      missingLanguages,
-    };
-  } catch (error) {
-    return {
-      ready: false,
-      languages: OCR_LANGUAGES.split('+').filter(Boolean),
-      missingLanguages: [],
-      errorCode: error?.code || 'OCR_ENGINE_UNAVAILABLE',
-    };
-  }
+  const componentChecks = [
+    { key: 'tesseract', command: TESSERACT_BIN, args: ['--list-langs'] },
+    { key: 'pdftoppm', command: PDFTOPPM_BIN, args: ['-v'] },
+    ...(OCR_PREPROCESS ? [{ key: 'imagemagick', command: MAGICK_BIN, args: ['-version'] }] : []),
+  ];
+  const settledChecks = await Promise.allSettled(
+    componentChecks.map(({ command, args }) =>
+      Promise.resolve().then(() => runner(command, args, { timeout: 10_000 })),
+    ),
+  );
+  const missingComponents = componentChecks
+    .filter((_, index) => settledChecks[index]?.status === 'rejected')
+    .map(({ key }) => key);
+  const tesseractResult = settledChecks[0];
+  const languageOutput =
+    tesseractResult?.status === 'fulfilled'
+      ? `${tesseractResult.value?.stdout || ''}\n${tesseractResult.value?.stderr || ''}`
+      : '';
+  const requiredLanguages = OCR_LANGUAGES.split('+').filter(Boolean);
+  const missingLanguages =
+    tesseractResult?.status === 'fulfilled'
+      ? requiredLanguages.filter((language) => !new RegExp(`(^|\\s)${language}(?=\\s|$)`, 'm').test(languageOutput))
+      : [];
+  const firstFailure = settledChecks.find((result) => result.status === 'rejected');
+  const preprocessReady =
+    !OCR_PREPROCESS ||
+    settledChecks[componentChecks.findIndex(({ key }) => key === 'imagemagick')]?.status === 'fulfilled';
+
+  return {
+    ready: missingComponents.length === 0 && missingLanguages.length === 0,
+    languages: requiredLanguages,
+    missingLanguages,
+    missingComponents,
+    preprocessEnabled: OCR_PREPROCESS,
+    preprocessReady,
+    ...(!missingComponents.length && !missingLanguages.length
+      ? {}
+      : {
+          errorCode:
+            firstFailure?.status === 'rejected'
+              ? firstFailure.reason?.code || 'OCR_ENGINE_UNAVAILABLE'
+              : 'OCR_LANGUAGE_UNAVAILABLE',
+        }),
+  };
 }
 
 export const localOcrProvider = Object.freeze({

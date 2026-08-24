@@ -25,9 +25,12 @@
 
 | 编号                                                                                           | 日期       | 模块                  | 关键词                                             | 状态         |
 | ---------------------------------------------------------------------------------------------- | ---------- | --------------------- | -------------------------------------------------- | ------------ |
+| [LN-PIT-140](#ln-pit-140图片识别不能把实验视觉模型与本地-ocr-做成互斥单选)                     | 2026-08-24 | AI、文件、图片、OCR   | Vision 主链、OCR 保底、显式计费、租约、预处理      | 已修复待上线 |
+| [LN-PIT-139](#ln-pit-139模块化-ai-不能把计费清单隐藏调用与免费资源保护分散在业务入口)       | 2026-08-24 | AI、额度、设置、资源  | 唯一目录、真实用量、隐藏调用、修复成本、免费防刷   | 已修复待上线 |
+| [LN-PIT-138](#ln-pit-138业务知识迁移不能只更新线上行而遗漏仍可重跑的种子脚本)                 | 2026-08-24 | 知识库、AI、迁移      | 公开帮助、种子脚本、幂等、旧文案、事务预演         | 已修复待上线 |
 | [LN-PIT-137](#ln-pit-137后台总览不能让次级数据和重复完整聚合阻塞核心快照)                     | 2026-08-24 | 后台总览、性能、指标  | 快照、瀑布请求、单飞、连接池、有效请求、索引       | 已修复待上线 |
 | [LN-PIT-136](#ln-pit-136正文变换不能用客户端打字机伪装流式草稿预览也不能冒充已创建)          | 2026-08-24 | AI、笔记、流式输出    | SSE、确认落库、幂等、公开错误                      | 已修复待上线 |
-| [LN-PIT-135](#ln-pit-135网页正文存档与摘要不能形成两个版本和两次操作)                         | 2026-08-24 | 书签、网页存档、AI    | 同版正文、摘要、单资源、额度                       | 已修复待上线 |
+| [LN-PIT-135](#ln-pit-135网页正文存档与摘要必须区分计费并绑定同一正文版本)                   | 2026-08-24 | 书签、网页存档、AI    | 同版正文、摘要、单资源、额度                       | 已修复待上线 |
 | [LN-PIT-134](#ln-pit-134确定性-ai-入口不能用自由提问掩盖能力边界)                             | 2026-08-24 | AI、文件、待办        | 预设动作、OCR、能力清单、失败关闭                  | 已修复待上线 |
 | [LN-PIT-133](#ln-pit-133不可变手绘缩略图必须由当前渲染器版本唯一生成)                         | 2026-08-24 | 手绘、缩略图、缓存    | rendererVersion、immutable、派生缓存、构建门禁     | 已修复待上线 |
 | [LN-PIT-132](#ln-pit-132通用攻击规则不能越过业务载荷语义与路由匹配事实)                      | 2026-08-24 | 安全检测、笔记、书签  | 业务载荷、Base64、参数溢出、404、误报              | 已修复待上线 |
@@ -2840,9 +2843,9 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 
 - **现象：** 设置页、成长页能查看 AI 额度，但用户在其他页面无法快速确认余额；如果在头像弹层、移动个人中心等入口各自复制请求和 token 格式化逻辑，同一账号会收到重复请求，不同页面还可能分别显示旧值、零值或不同单位。更隐蔽的问题是把“今日剩余 + 永久加油余额”显示成一个总剩余，例如一千多万，但跳转后的成长页只展示每日等级上限，用户无法核对这个总数由什么组成。
 - **根因：** 服务端已有统一额度接口，前端却没有身份隔离的共享读取能力和紧凑展示组件；页面把数据访问、缓存、错误降级、格式化与视觉样式揉在一起，无法安全复用。接口为兼容旧消费者同时返回总额与 `daily* / bonusTokens` 分桶字段，但展示层若只取总额，就会丢失“每日重置”和“永久有效”这两个关键资产语义。
-- **防回归约束：** AI 额度继续以服务端统一状态接口为唯一事实源；前端通过共享组合式函数按用户与管理员上下文身份键缓存并合并并发请求，身份变化立即清空当前展示，接口不可用必须显示“暂时无法获取”而不是伪装成零额度。头像弹层与移动个人中心复用同一摘要组件，正常登录账号必须明确显示“今日剩余”和“永久余额”，进度条只按每日额度计算；兼容游客或旧响应时才回退到总剩余。点击摘要统一进入“设置 → AI 用量”，详情同时列出今日等级额度、永久加油余额和两者构成的当前可用合计；禁止跳到只展示等级权益的成长卡，也禁止把额度再复制进用户 Store 或新增轮询。设置页深链接必须使用通用的 `section → anchor` 映射，在目标上方设备列表等异步区块继续展开时通过尺寸观察和有界重试保持对齐，用户开始滚动或点击后立即停止自动对齐；禁止为 AI 用量写死滚动距离或单个延时。
-- **验收：** 并发挂载两个摘要只产生一次请求；重新打开头像弹层可强制刷新；切换账号后旧值立即消失并读取新身份；覆盖每日有余量、每日耗尽但永久有余额、两桶均为零、旧响应、加载、接口失败和不限额度状态。断言永久余额不参与每日进度百分比，摘要跳转到 `settings?section=ai`，详情三项相加可核对；账号设备列表异步返回并撑高页面后，AI 用量仍保持在可视目标位置，用户主动操作后页面不再抢滚动。PC 头像弹层、移动个人中心和设置 AI 子页在浅色/深色下检查默认、hover/focus、加载、失败和长数字换行，不影响原有书签、笔记、存储与成长入口。
-- **相关代码：** `apps/web/src/composables/useAiQuotaStatus.ts`、`apps/web/src/components/aiSkills/AiQuotaSummary.vue`、`apps/web/src/view/personCenter/PersonCenter.vue`、`apps/web/src/view/personCenter/PersonCenterMobile.vue`、`apps/web/src/view/settings/Settings.vue`。
+- **防回归约束：** AI 额度继续以服务端统一状态接口为唯一事实源；前端通过共享组合式函数按用户与管理员上下文身份键缓存并合并并发请求，身份变化立即清空当前展示，接口不可用必须显示“暂时无法获取”而不是伪装成零额度。头像弹层与移动个人中心复用同一摘要组件，正常登录账号必须明确显示“今日剩余”和“永久余额”，进度条只按每日额度计算；兼容游客或旧响应时才回退到总剩余。点击摘要统一进入独立 `/ai-usage` 页面，详情同时列出今日等级额度、永久加油余额和两者构成的当前可用合计；禁止跳到只展示等级权益的成长卡，也禁止把额度再复制进用户 Store 或新增轮询。设置页只保留紧凑入口，不得请求或内嵌额度卡、趋势、账本与规则；旧 `settings?section=ai` 只能兼容重定向到唯一详情路由。
+- **验收：** 并发挂载两个摘要只产生一次请求；重新打开头像弹层可强制刷新；切换账号后旧值立即消失并读取新身份；覆盖每日有余量、每日耗尽但永久有余额、两桶均为零、旧响应、加载、接口失败和不限额度状态。断言永久余额不参与每日进度百分比，摘要与移动设置目录都直达 `/ai-usage`，旧链接完成替换重定向，详情三项相加可核对。PC 头像弹层、移动个人中心、设置紧凑入口与独立详情页在浅色/深色下检查默认、hover/focus、加载、失败和长数字换行；设置页不因用量明细增加高度，也不影响原有书签、笔记、存储与成长入口。
+- **相关代码：** `apps/web/src/composables/useAiQuotaStatus.ts`、`apps/web/src/components/aiSkills/AiQuotaSummary.vue`、`apps/web/src/view/personCenter/PersonCenter.vue`、`apps/web/src/view/personCenter/PersonCenterMobile.vue`、`apps/web/src/view/settings/Settings.vue`、`apps/web/src/view/aiUsage/AiUsagePage.vue`、`apps/web/src/router/modules/common.ts`。
 
 ### LN-PIT-128：受控悬停弹层不能同时保留第二套业务悬停状态
 
@@ -2903,12 +2906,12 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **验收：** 共享测试锁定 TXT、Markdown、CSV、PDF、DOCX、PNG、JPG、WebP 清单与服务端解析器一致；文件入口测试覆盖支持、不支持、混选、排队、解析成功、无文字和失败状态，断言无正文时 Provider=0。图片入口显示 OCR 语义动作并能在 Worker 完成后总结文字；不支持格式不出现 AI 动作。笔记、文件、书签和待办执行面不存在无边界自由输入，帮助中心等开放问答入口仍保留；快速待办不存在 AI 补全按钮，待办拆解提示与输出数量同时受服务端校验。
 - **相关代码：** `packages/shared/index.js`、`apps/server/util/aiDocument/parser.js`、`apps/server/util/aiSkill/resourceEvidence.js`、`apps/server/util/aiSkill/skills/resourceSkillFactory.js`、`apps/web/src/components/aiSkills/AiSkillPanel.vue`、`apps/web/src/components/cloudSpace/fieldList.vue`、`apps/web/src/components/todo/QuickTodoForm.vue`、`apps/web/src/components/todo/TodoBreakdownButton.vue`。
 
-### LN-PIT-135：网页正文存档与摘要不能形成两个版本和两次操作
+### LN-PIT-135：网页正文存档与摘要必须区分计费并绑定同一正文版本
 
 - **现象：** 书签卡片同时显示“正文存档”和“AI 摘要”两个近似徽标，用户先抓正文、再手动摘要；网页重新归档后旧摘要仍可能对应上一版正文。批量书签分析与单卡分析并存，又让来源重复、比较占位和自由追问继续暴露不稳定能力。
 - **根因：** 网页抓取和摘要生成分别拥有按钮、接口和缓存生命周期，但摘要没有绑定正文版本。被动收藏时的后台防死链抓取与用户显式发起的 AI 操作也没有区分，若直接合并会让保存书签静默消耗额度。
-- **防回归约束：** 用户显式“生成网页存档”必须先抓取权威正文、使旧摘要失效，再基于同一版正文生成新摘要；正文成功而 AI 失败时保留正文并返回可识别的部分成功状态。被动新增/更新书签继续只做无模型抓取，禁止静默消耗 AI 额度。卡片只展示一个“网页存档”能力徽标，弹层同时呈现摘要与完整正文；单卡分析只携带当前书签的结构化 ID，自动执行“请分析书签《名称》，概括核心内容和关键信息”，不提供比较或自由追问。批量工具栏不再提供网页分析，旧接口只为兼容保留，不作为新 UI 入口。
-- **验收：** 单测覆盖重新抓取会清空旧摘要、合并操作基于新正文持久化摘要、摘要额度不足时正文仍保存、readonly 不写入、已有同版正文与摘要时打开只读不重复调用。PC/移动卡片只出现一个存档徽标；单卡分析来源数恒为一个且切换资源后重新挂载状态；批量选择只保留确定性批量管理动作。自动测试使用 Gateway/API mock，不调用真实模型。
+- **防回归约束：** 被动新增/更新书签和用户显式“保存网页正文”都只做无模型抓取，禁止静默消耗 AI 额度；重新抓取必须使旧摘要失效。摘要只能在已有正文后由用户明确触发，并绑定当前正文版本；摘要失败或额度不足不得影响免费正文。卡片只展示一个“网页存档”能力徽标，弹层在同一资源内分别提供免费正文操作和明确标注消耗额度的摘要操作；单卡分析只携带当前书签的结构化 ID，不提供比较或自由追问。批量工具栏不再提供网页分析，旧合并接口只为兼容保留，不作为新 UI 入口。
+- **验收：** 单测覆盖重新抓取会清空旧摘要、免费归档 Provider=0、摘要只读取已有正文、额度不足时正文仍可查看、readonly 不写入、已有摘要时打开只读不重复调用。PC/移动卡片只出现一个存档徽标，弹层同时覆盖免费正文、显式摘要、加载、失败和额度不足状态；单卡分析来源数恒为一个且切换资源后重新挂载状态。自动测试使用 Gateway/API mock，不调用真实模型。
 - **相关代码：** `apps/server/util/snapshot.js`、`apps/server/router_handle/bookmarkHandle.js`、`apps/web/src/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue`、`apps/web/src/components/manage/bookmarkMg/BookmarkAiDialog.vue`、`apps/web/src/components/manage/bookmarkMg/BookmarkTable.vue`、`apps/web/src/components/manage/bookmarkMg/BookmarkTableMobile.vue`。
 
 ### LN-PIT-136：正文变换不能用客户端打字机伪装流式，草稿预览也不能冒充已创建
@@ -2926,3 +2929,27 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **防回归约束：** 后台总览必须把“当前核心快照”和“历史分析”定义为两个读模型：首屏与导航角标只读快照，核心成功落屏后再并发读取趋势/同期和最近新增；次级失败保留核心数据并提供局部重试。管理壳与子页同参数并发挂载必须通过共享 API 层合并为一个在途请求，只允许极短的挂载复用窗口，手动刷新跳过已完成缓存。旧完整接口可由两个读模型组合以兼容旧客户端，但新页面不得继续调用它。快照内同一事实表至多扫描一次、所有查询只发一个批次，不得通过扩大连接池或添加固定延时掩盖瀑布。总览活跃用户及同期必须以 `api_logs` 的有效业务请求为事实源，并先用时间范围命中索引；新增时间查询同步维护针对 `note`、`todo_items` 的状态与创建时间复合索引。
 - **验收：** 自动化测试断言快照只执行一批七个查询且不含趋势/同期，AI 今日与累计由同一聚合返回；趋势接口只从有效 `api_logs` 计算活跃用户并返回同期基线；旧接口仍含兼容趋势字段。前端测试证明管理壳和总览同时挂载只产生一个快照 HTTP 请求，页面源码在快照赋值后才启动趋势与最近新增，并覆盖首次加载、已有数据刷新、核心失败和趋势局部失败。浏览器冷启动检查 Network 时应只出现一个快照请求，快照完成后核心卡片立即可用，再渐进补齐趋势与最近列表；PC/移动、浅色/深色均不得出现占位与真实零值混淆、错误只靠阴影表达或横向溢出。
 - **相关代码：** `apps/server/router_handle/commonHandle.js`、`apps/server/router_handle/commonHandle.test.js`、`apps/server/migrations/20260824_admin_overview_performance.sql`、`apps/web/src/api/adminOverview.ts`、`apps/web/src/view/admin/admin/Admin.vue`、`apps/web/src/view/admin/admin/AdminMobile.vue`、`apps/web/src/view/admin/components/overview/AdminOverview.vue`。
+
+### LN-PIT-138：业务知识迁移不能只更新线上行而遗漏仍可重跑的种子脚本
+
+- **现象：** 模块化 AI 已替换全局助手，线上公开帮助也通过一次性 SQL 更新；但较早的幂等种子脚本仍写着“底部 AI / 轻笺智域”。脚本以后被重跑时，会把已经修正的文章重新覆盖成旧产品形态。
+- **根因：** 数据库迁移和可重复种子同时拥有同一篇文章的写权限，却没有共同的内容契约或回归门禁。只检查当前数据库结果无法发现未来仍可执行的旧写入源。
+- **防回归约束：** 更新业务知识时必须同时搜索 migration、seed、初始化服务和后台编辑脚本中的同标题或同功能词；线上写入使用固定文章 ID、显式事务和幂等条件，执行前把同一 SQL 在真实 Schema 上运行后回滚。仍需保留的种子必须同步到当前产品事实，退役文章改为可恢复归档而非删除。测试同时断言新能力文案、旧入口禁词和待归档稳定 ID，禁止只验证 SQL 文件存在。
+- **验收：** 在不调用真实模型的前提下运行迁移契约测试；事务预演成功后正式执行，再查询公开帮助确认旧全局助手关键词为 0、目标文章状态与正文标记正确、归档文章不再公开。重复执行迁移不得新增重复文章或改变业务数据。
+- **相关代码：** `apps/server/migrations/20260824_ai_skills_public_knowledge_refresh.sql`、`apps/server/scripts/seedMobileTodaySearchKnowledge.js`、`apps/server/util/aiSkillsPublicKnowledgeMigration.test.js`。
+
+### LN-PIT-139：模块化 AI 不能把计费清单、隐藏调用与免费资源保护分散在业务入口
+
+- **现象：** AI 已拆进笔记、书签、文件、待办、搜索、标签和帮助模块，但用户只能看总额度，不知道哪次操作扣了多少；快速收藏打开即自动识别、网页存档弹框打开即自动生成摘要、中文图标普通搜索隐式翻译等入口会在没有清楚确认时访问模型。批量整理又以固定小额占位包住最多二十次调用，既可能超额，也可能在额度不足后吞掉错误继续启动新项目。显式 AI 操作若在 Provider 失败后静默返回本地降级结果，根执行还会被误记为成功，用户既无法判断额度花在何处，也可能把免费结果误认成 AI 结果。
+- **根因：** “能力叫什么、是否访问模型、最多调用几次、谁承担修复成本、页面如何解释”分别散落在 Registry、路由、Prompt 和前端文案中，没有计费唯一事实源。免费被误等同为无限，网页抓取、本地 OCR、预览转换和外部图标查询也缺少各自的资源预算；取消信号没有贯穿非流式链路，断开前后只能粗暴按整笔占位处理。
+- **防回归约束：** 所有用户模型动作必须先登记 `aiBillingCatalog`，由目录同时生成 Execution 配置和独立 AI 用量页规则；Gateway 每次 Provider 前按调用范围、次数和保守 token 预算授权，用户主调用按实际 usage 结算，受限 `_repair` 协议修复只允许跟随主调用并由平台承担。缓存、无材料和确定性路径保持零扣费；断开前未发出 Provider 退还占位，发出后缺失 usage 按请求前预算估算且不超过预占。打开页面、弹框或普通搜索不得静默调用模型，必须拆成明确标注“消耗额度”的用户动作；显式 AI 失败不得伪装成本地降级成功，兼容返回混合结果时必须通过根执行的结果分类器准确标记为失败、部分完成或额度阻断。免费外网/CPU 能力保留尺寸、页数、像素、频率、并发和积压上限，保护性降级不得阻断基础 CRUD。
+- **验收：** 目录契约测试覆盖全部 Registry Skill 和散落业务动作，源码门禁证明只有 Gateway 可访问 Provider；并发、批量、额度不足、usage 缺失、修复、取消、缓存和账本异常全部使用 Mock Provider。独立 AI 用量页覆盖近 7/30/90 天、模块筛选、每日趋势、平台承担、分页、加载、空、错误、旧数据保留、估算和延迟结算，设置页只保留单一入口；PC/移动、浅色/深色及共享移动渲染基线均完成浏览器视觉验收。公开帮助同步说明免费/扣费边界，任何测试不得调用真实模型。
+- **相关代码：** `apps/server/util/aiBillingCatalog.js`、`apps/server/util/aiExecution/`、`apps/server/util/agent/aiGateway.js`、`apps/server/util/aiUsageService.js`、`apps/server/util/requestRateLimit.js`、`apps/server/util/snapshot.js`、`apps/web/src/components/aiSkills/AiUsageCenter.vue`、`apps/web/src/view/aiUsage/AiUsagePage.vue`、`apps/server/migrations/20260824_ai_usage_governance_knowledge.sql`。
+
+### LN-PIT-140：图片识别不能把实验视觉模型与本地 OCR 做成互斥单选
+
+- **现象：** 肉眼清晰且包含完整证件文字的照片，文件分析却返回零散乱码并宣称无法识别；直接查看原图时文字实际清楚。若把全部识图直接切到新视觉模型，又会在模型限流、下线或协议变化时完全不可用，并可能让用户仅上传图片就产生未说明的 token 消耗。
+- **根因：** 旧图片解析只调用 Tesseract，部署门禁没有验证 ImageMagick，导致 EXIF 自动旋转与图像预处理在缺少组件时静默跳过；原图方向、版面模式和细字密度共同放大了 OCR 误差。图片 Worker、笔记图片工具和文件 AI 入口又各自决定识别与缓存，没有统一策略、结果来源元数据或并发租约；“换供应商”因此容易被误做成删除保底链路或把实验视觉模型扩散到全部文本任务。
+- **防回归约束：** 图片文字提取必须复用唯一的 `imageRecognition` 服务，DeepSeek Vision 只作为显式用户 AI Execution 内的主链，本地 OCR 永久作为自动保底；上传、后台预解析和无 Execution 调用保持纯本地，不得静默消耗额度。PDF 图片页继续本地 OCR。视觉技术失败、无字或明显低质量时进入有界熔断并降级，结果必须携带引擎、模型、策略版本、降级原因、重试时间和质量告警；缓存键绑定内容、策略和模型。显式 Vision 与后台 Worker 竞争同一 source 时使用租约，迟到 Worker 不得覆盖新结果。预处理统一使用系统 ImageMagick 做自动旋转、归一化和重叠细节分区，发布门禁同时验证 Poppler、Tesseract、语言包与 ImageMagick；禁止因视觉实验模型上线而替换稳定文本模型或删除 Qwen 文本备用。
+- **验收：** Mock Provider 测试覆盖 Vision 成功、技术失败回退、输入错误不旁路、熔断跳过、无 Execution 零模型调用、策略缓存隔离、显式租约抢占和迟到 Worker 丢弃；网关测试证明图片 Base64 不按字符串长度计 token、视觉实际 usage 进入当前 Execution，只有该阶段的缺失 usage 技术失败可释放视觉占位。运行时门禁明确列出缺失组件；PNG/JPG/WebP 预处理覆盖 EXIF 旋转、完整图加重叠分区和无 ImageMagick 原图降级。用户界面覆盖 Vision 成功无提示、本地保底提示、不确定文字提示和识别失败状态。
+- **相关代码：** `apps/server/util/imageRecognition/`、`apps/server/util/aiDocument/localOcr.js`、`apps/server/util/aiDocument/parser.js`、`apps/server/util/aiDocument/service.js`、`apps/server/util/noteImageOcr.js`、`apps/server/util/agent/aiGateway.js`、`apps/server/util/aiExecution/service.js`、`apps/web/src/utils/aiSkillPresentation.ts`。

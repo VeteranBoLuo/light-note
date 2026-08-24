@@ -261,9 +261,14 @@
         const processed = Number(res.data?.processed || 0);
         recordOperation({
           module: resourceType.value === 'note' ? '笔记库' : '书签管理',
-          operation: `智能打标签生成建议成功【${processed}项】`,
+          operation: res.data?.partial
+            ? `智能打标签部分完成【建议${processed}项，失败${Number(res.data?.failedItems || 0)}项】`
+            : `智能打标签生成建议成功【${processed}项】`,
         });
         useSuggestions(res.data.suggestions);
+        if (res.data?.partial) {
+          message.warning(t('bookmarkMg.aiOrganizePartialFailure', { n: Number(res.data?.failedItems || 0) }));
+        }
       } else {
         message.info(res?.data?.msg || res?.msg || t('bookmarkMg.aiOrganizeRunFailed'));
         step.value = 'confirm';

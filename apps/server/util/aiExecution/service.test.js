@@ -79,6 +79,72 @@ describe('aiExecution', () => {
     });
   });
 
+  it('业务保留兼容失败返回时，结果分类器仍把账本记为失败而不是成功', async () => {
+    const persistence = createPersistence();
+    const quota = {
+      reserve: vi.fn().mockResolvedValue({ blocked: false, reserved: 5_000, reservationKey: 'outcome-r1' }),
+      reconcile: vi.fn().mockResolvedValue(true),
+    };
+    const gateway = createAiGateway({
+      completeClient: vi.fn().mockResolvedValue({
+        content: '',
+        usage: { promptTokens: 12, completionTokens: 1, totalTokens: 13 },
+        usageStatus: 'reported',
+      }),
+      streamClient: vi.fn(),
+    });
+
+    const output = await runAiExecution(
+      {
+        requestId: '36d68dd2-c1df-4acd-a8c1-b53b0e2db9f3',
+        request: { user: { id: 'u1', role: 'user' }, headers: {}, body: {} },
+        taskType: 'bookmark_summary',
+        surface: 'bookmark_detail',
+        persistence,
+        resolveResultOutcome: (result) =>
+          result?.ok === false ? { status: 'failed', errorCode: 'AI_SKILL_OUTPUT_EMPTY' } : null,
+      },
+      async () => {
+        await gateway.complete([], { trace: { stage: 'bookmark_summary' } });
+        return { ok: false, reason: 'empty', msg: '摘要生成失败' };
+      },
+      { quota },
+    );
+
+    expect(output).toEqual({ ok: false, reason: 'empty', msg: '摘要生成失败' });
+    expect(quota.reconcile).toHaveBeenCalledWith(expect.any(Object), 13, { aborted: false });
+    expect(persistence.settleAiExecution.mock.calls[0][0]).toMatchObject({
+      status: 'failed',
+      errorCode: 'AI_SKILL_OUTPUT_EMPTY',
+      chargedTokens: 13,
+    });
+  });
+
+  it('批量动作部分完成时保留结果，并在根账本使用独立 partial 状态', async () => {
+    const persistence = createPersistence();
+    const quota = { reserve: vi.fn(), reconcile: vi.fn() };
+
+    const output = await runAiExecution(
+      {
+        requestId: '32f55f4e-bb14-47da-af45-94af307b17a2',
+        request: { user: { id: 'u1', role: 'user' }, headers: {}, body: {} },
+        taskType: 'organize_note_tags',
+        surface: 'note_library',
+        persistence,
+        resolveResultOutcome: (result) =>
+          result?.failedItems ? { status: 'partial', errorCode: 'AI_ORGANIZE_PARTIAL' } : null,
+      },
+      async () => ({ successfulItems: 2, failedItems: 1, suggestions: ['kept'] }),
+      { quota },
+    );
+
+    expect(output.suggestions).toEqual(['kept']);
+    expect(persistence.settleAiExecution.mock.calls[0][0]).toMatchObject({
+      status: 'partial',
+      errorCode: 'AI_ORGANIZE_PARTIAL',
+    });
+  });
+
   it('一次用户动作只占位和结算一次，并累计所有 Provider Span', async () => {
     const persistence = createPersistence();
     const quota = {
@@ -164,7 +230,39 @@ describe('aiExecution', () => {
     });
   });
 
-  it('usage 缺失时按每个缺失 Span 保守结算', async () => {
+  it('并发子调用在首次占位返回后仍重新校验目录调用上限', async () => {
+    const persistence = createPersistence();
+    const quota = {
+      reserve: vi.fn().mockResolvedValue({ blocked: false, reserved: 5_000, reservationKey: 'limit-r1' }),
+      reconcile: vi.fn().mockResolvedValue(true),
+    };
+    const client = vi.fn().mockResolvedValue({
+      content: 'ok',
+      usage: { promptTokens: 4, completionTokens: 2, totalTokens: 6 },
+      usageStatus: 'reported',
+    });
+    const gateway = createAiGateway({ completeClient: client, streamClient: vi.fn() });
+
+    await expect(
+      runAiExecution(
+        {
+          requestId: '92ee9fc8-0e79-4dcc-a7a3-6982f93b81fa',
+          request: { user: { id: 'u1', role: 'user' }, headers: {}, body: {} },
+          taskType: 'skill_file_summarize',
+          maxUserProviderCalls: 1,
+          persistence,
+        },
+        () => Promise.all([gateway.complete([]), gateway.complete([])]),
+        { quota },
+      ),
+    ).rejects.toMatchObject({ code: 'AI_EXECUTION_PROVIDER_CALL_LIMIT', status: 500 });
+
+    expect(quota.reserve).toHaveBeenCalledOnce();
+    expect(client).toHaveBeenCalledOnce();
+    expect(persistence.insertAiProviderSpan).toHaveBeenCalledOnce();
+  });
+
+  it('usage 缺失时按每个 Span 的请求前预算保守结算且不超过实际预占', async () => {
     const persistence = createPersistence();
     const quota = {
       reserve: vi.fn().mockResolvedValue({ blocked: false, reserved: 5000, reservationKey: 'r2' }),
@@ -187,7 +285,57 @@ describe('aiExecution', () => {
       },
       { quota },
     );
-    expect(quota.reconcile).toHaveBeenCalledWith(expect.any(Object), 10_000, { aborted: false });
+    const charged = quota.reconcile.mock.calls[0][1];
+    expect(charged).toBeGreaterThan(0);
+    expect(charged).toBeLessThanOrEqual(5_000);
+  });
+
+  it('Vision 技术失败转本地保底时释放缺失 usage 预算，后续摘要只结算真实用量', async () => {
+    const persistence = createPersistence();
+    const quota = {
+      reserve: vi.fn().mockResolvedValue({ blocked: false, reserved: 5_000, reservationKey: 'vision-r1' }),
+      reconcile: vi.fn().mockResolvedValue(true),
+    };
+    const networkError = Object.assign(new Error('network failed'), { code: 'AI_NETWORK_ERROR' });
+    const client = vi
+      .fn()
+      .mockRejectedValueOnce(networkError)
+      .mockResolvedValueOnce({
+        content: '本地文字的摘要',
+        usage: { promptTokens: 8, completionTokens: 2, totalTokens: 10 },
+        usageStatus: 'reported',
+      });
+    const gateway = createAiGateway({ completeClient: client, streamClient: vi.fn() });
+
+    await runAiExecution(
+      {
+        requestId: 'a51bd530-42dd-4aa1-b538-a066a847ddfe',
+        request: { user: { id: 'u1', role: 'user' }, headers: {}, body: {} },
+        taskType: 'skill_file_summarize',
+        maxUserProviderCalls: 2,
+        reservationTokens: 5_000,
+        persistence,
+      },
+      async () => {
+        await gateway
+          .complete([], {
+            maxTokens: 1_200,
+            missingUsageOnFailure: 'waive',
+            trace: { stage: 'image_recognition' },
+          })
+          .catch(() => 'local-ocr');
+        await gateway.complete([], { maxTokens: 1_200, trace: { stage: 'file_summary' } });
+      },
+      { quota },
+    );
+
+    expect(client).toHaveBeenCalledTimes(2);
+    expect(quota.reconcile).toHaveBeenCalledWith(expect.any(Object), 10, { aborted: false });
+    expect(persistence.settleAiExecution.mock.calls.at(-1)[0]).toMatchObject({
+      providerCallCount: 2,
+      missingBillableUsageSpans: 0,
+      chargedTokens: 10,
+    });
   });
 
   it('声明不扣模型额度的执行不能访问 Provider，防止免费策略绕过统一额度', async () => {
@@ -221,6 +369,126 @@ describe('aiExecution', () => {
       chargedTokens: 0,
       status: 'failed',
       errorCode: 'AI_EXECUTION_PROVIDER_NOT_BILLABLE',
+    });
+  });
+
+  it('内部协议修复记录 Provider 总用量但由平台承担，不重复扣用户额度', async () => {
+    const persistence = createPersistence();
+    const quota = {
+      reserve: vi.fn().mockResolvedValue({ blocked: false, reserved: 5000, reservationKey: 'repair-r1' }),
+      reconcile: vi.fn().mockResolvedValue(true),
+    };
+    const client = vi
+      .fn()
+      .mockResolvedValueOnce({
+        content: '首版',
+        usage: { promptTokens: 70, completionTokens: 30, totalTokens: 100 },
+        usageStatus: 'reported',
+      })
+      .mockResolvedValueOnce({
+        content: '修复版',
+        usage: { promptTokens: 30, completionTokens: 20, totalTokens: 50 },
+        usageStatus: 'reported',
+      });
+    const gateway = createAiGateway({ completeClient: client, streamClient: vi.fn() });
+
+    await runAiExecution(
+      {
+        requestId: '33fc6783-f295-4ec3-bf36-c150690ef44a',
+        request: { user: { id: 'u1', role: 'user' }, headers: {}, body: {} },
+        taskType: 'skill_file_summarize',
+        skillId: 'file.summarize',
+        maxUserProviderCalls: 1,
+        maxPlatformProviderCalls: 1,
+        persistence,
+      },
+      async () => {
+        await gateway.complete([], { maxTokens: 100, trace: { stage: 'file_summary' } });
+        await gateway.complete([], {
+          maxTokens: 100,
+          billingScope: 'platform',
+          trace: { stage: 'file_summary_repair' },
+        });
+      },
+      { quota },
+    );
+
+    expect(quota.reconcile).toHaveBeenCalledWith(expect.any(Object), 100, { aborted: false });
+    expect(persistence.settleAiExecution.mock.calls[0][0]).toMatchObject({
+      providerCallCount: 2,
+      userProviderCallCount: 1,
+      platformProviderCallCount: 1,
+      usage: { totalTokens: 150 },
+      billableUsage: { totalTokens: 100 },
+      chargedTokens: 100,
+    });
+  });
+
+  it('每个批量子调用在 Provider 前认领预算，下一项超过实际预占时停止且不超扣', async () => {
+    const persistence = createPersistence();
+    const quota = {
+      reserve: vi.fn().mockResolvedValue({ blocked: false, reserved: 1_500, reservationKey: 'batch-r1' }),
+      reconcile: vi.fn().mockResolvedValue(true),
+    };
+    const client = vi.fn().mockResolvedValue({
+      content: 'ok',
+      usage: { promptTokens: 8, completionTokens: 2, totalTokens: 10 },
+      usageStatus: 'reported',
+    });
+    const gateway = createAiGateway({ completeClient: client, streamClient: vi.fn() });
+
+    await expect(
+      runAiExecution(
+        {
+          requestId: 'cd97beae-a6e5-40dd-9e33-f41e54678b3c',
+          request: { user: { id: 'u1', role: 'user' }, headers: {}, body: {} },
+          taskType: 'organize_note_tags',
+          skillId: 'note.organize_tags',
+          reservationTokens: 1_500,
+          maxUserProviderCalls: 20,
+          maxPlatformProviderCalls: 0,
+          persistence,
+        },
+        async () => {
+          await gateway.complete([], { maxTokens: 600, trace: { stage: 'organize_note_tags' } });
+          await gateway.complete([], { maxTokens: 600, trace: { stage: 'organize_note_tags' } });
+        },
+        { quota },
+      ),
+    ).rejects.toMatchObject({ code: 'AI_QUOTA_EXCEEDED', status: 429 });
+
+    expect(client).toHaveBeenCalledOnce();
+    expect(quota.reconcile).toHaveBeenCalledWith(expect.any(Object), 10, { aborted: false });
+  });
+
+  it('请求在首个 Provider 前已取消时不占位、不调用模型且记录 aborted', async () => {
+    const persistence = createPersistence();
+    const quota = { reserve: vi.fn(), reconcile: vi.fn() };
+    const client = vi.fn();
+    const gateway = createAiGateway({ completeClient: client, streamClient: vi.fn() });
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      runAiExecution(
+        {
+          requestId: 'b0519804-71c0-4b27-82ef-42b968cb6ec5',
+          request: { user: { id: 'u1', role: 'user' }, headers: {}, body: {} },
+          taskType: 'skill_note_transform_text',
+          persistence,
+        },
+        () => gateway.complete([], { signal: controller.signal, trace: { stage: 'note_transform' } }),
+        { quota },
+      ),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(quota.reserve).not.toHaveBeenCalled();
+    expect(client).not.toHaveBeenCalled();
+    expect(persistence.settleAiExecution.mock.calls[0][0]).toMatchObject({
+      status: 'aborted',
+      providerCallCount: 0,
+      chargedTokens: 0,
+      quotaSettlementStatus: 'not_used',
     });
   });
 });

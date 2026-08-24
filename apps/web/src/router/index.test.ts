@@ -49,6 +49,20 @@ describe('官网与应用入口路由', () => {
     expect(resolved.meta.mobileBottomNav).not.toBe(true);
   });
 
+  it('AI 用量使用独立登录页，且旧设置深链接会兼容迁移', () => {
+    const resolved = router.resolve('/ai-usage');
+    expect(resolved.name).toBe('aiUsage');
+    expect(resolved.meta.requireAuth).toBe(true);
+    expect(resolved.meta.roles).not.toContain('visitor');
+
+    const settingsRecord = router.getRoutes().find((record) => record.name === 'settings');
+    expect(typeof settingsRecord?.beforeEnter).toBe('function');
+    expect((settingsRecord?.beforeEnter as any)?.({ query: { section: 'ai' } })).toEqual({
+      name: 'aiUsage',
+      replace: true,
+    });
+  });
+
   it('笔记分享使用独立只读页面，并显式隔离登录探测、AI 与搜索引擎收录', () => {
     const resolved = router.resolve('/share/note?page=child#token=secret');
     expect(resolved.name).toBe('noteShare');

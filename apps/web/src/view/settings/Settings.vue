@@ -564,33 +564,18 @@
           </div>
         </section>
 
-        <!-- AI 用量：模块 Skill 不提供全局风格、开关或会话继承设置 -->
-        <section v-if="sectionVisible('ai')" class="settings-card" id="set-ai">
-          <div v-if="!isMobileSubPage" class="card-head">
-            <span class="card-icon card-icon--appearance">
-              <SvgIcon :src="icon.settings.ai" size="20" aria-hidden="true" />
+        <!-- AI 用量只有一个总入口；额度、明细和规则在独立页呈现，避免设置长页被账本撑高。 -->
+        <section v-if="sectionVisible('ai')" class="settings-card settings-card--ai-entry" id="set-ai">
+          <BButton class="ai-usage-entry" :aria-label="t('settings.ai.entryTitle')" @click="openAiUsage">
+            <span class="card-icon card-icon--appearance" aria-hidden="true">
+              <SvgIcon :src="icon.settings.ai" size="20" />
             </span>
-            <div class="card-head-text">
-              <h2 class="card-title">{{ t('settings.ai.title') }}</h2>
-              <p class="card-sub">{{ t('settings.ai.description') }}</p>
-            </div>
-          </div>
-          <div class="fields">
-            <div class="field field--ai-quota">
-              <div class="field-head">
-                <span class="field-label">{{ t('settings.ai.quota') }}</span>
-                <span class="field-desc">{{ t('settings.ai.quotaDescription') }}</span>
-              </div>
-              <div v-if="aiQuotaMetrics.length" class="ai-quota-metrics">
-                <div v-for="metric in aiQuotaMetrics" :key="metric.key" class="ai-quota-metric">
-                  <span>{{ metric.label }}</span>
-                  <strong>{{ metric.value }}</strong>
-                  <small v-if="metric.hint">{{ metric.hint }}</small>
-                </div>
-              </div>
-              <span v-else class="field-desc ai-quota-fallback">{{ quotaText }}</span>
-            </div>
-          </div>
+            <span class="ai-usage-entry__copy">
+              <strong>{{ t('settings.ai.entryTitle') }}</strong>
+              <span>{{ t('settings.ai.entryDescription') }}</span>
+            </span>
+            <SvgIcon class="ai-usage-entry__arrow" :src="icon.arrow_right" size="16" aria-hidden="true" />
+          </BButton>
         </section>
 
         <!-- 快速收藏(bookmarklet) -->
@@ -734,7 +719,6 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { getGlobalShortcutKeys, getGlobalShortcutLabel } from '@/config/keyboardShortcuts.ts';
   import { usePwaInstall } from '@/composables/usePwaInstall';
-  import { formatAiQuotaTokens, useAiQuotaStatus } from '@/composables/useAiQuotaStatus';
   import {
     isLightNoteAndroidApp,
     postAndroidOpenLegalDocument,
@@ -757,7 +741,7 @@
     type SettingsIndexSectionId,
   } from './settingsRegistry';
 
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const router = useRouter();
   const route = useRoute();
   const bookmark = bookmarkStore();
@@ -934,8 +918,16 @@
 
   function openSection(id: SettingsIndexSectionId) {
     indexScrollTop.value = pageRef.value?.scrollTop ?? 0;
+    if (id === 'ai') {
+      router.push('/ai-usage');
+      return;
+    }
     enteredFromIndex = true;
     router.push({ path: '/settings', query: { section: id } });
+  }
+
+  function openAiUsage() {
+    router.push('/ai-usage');
   }
 
   function backToIndex() {
@@ -1285,71 +1277,6 @@
     }
   }
 
-  // 用户触发的模块 Skill 统一从 AI Execution 结算到此额度；系统任务使用独立系统预算。
-  const {
-    status: aiQuotaStatus,
-    loading: aiQuotaLoading,
-    unavailable: aiQuotaUnavailable,
-    load: loadAiQuota,
-  } = useAiQuotaStatus({ autoLoad: false });
-  const quotaText = computed(() => {
-    if (aiQuotaLoading.value && !aiQuotaStatus.value) return t('settings.ai.quotaLoading');
-    if (aiQuotaUnavailable.value || !aiQuotaStatus.value) return '—';
-    if (aiQuotaStatus.value.exempt) return t('settings.ai.quotaUnlimited');
-    return t('settings.ai.quotaUsage', {
-      used: formatAiQuotaTokens(aiQuotaStatus.value.used, locale.value),
-      quota: formatAiQuotaTokens(aiQuotaStatus.value.quota, locale.value),
-    });
-  });
-  const aiQuotaMetrics = computed(() => {
-    const status = aiQuotaStatus.value;
-    if (
-      !status ||
-      status.exempt ||
-      aiQuotaUnavailable.value ||
-      !Number.isFinite(status.dailyQuota) ||
-      !Number.isFinite(status.dailyUsed) ||
-      !Number.isFinite(status.dailyRemaining) ||
-      !Number.isFinite(status.bonusTokens)
-    ) {
-      return [];
-    }
-    return [
-      {
-        key: 'daily',
-        label: t('settings.ai.dailyQuota'),
-        value: t('settings.ai.remainingOf', {
-          remaining: formatAiQuotaTokens(status.dailyRemaining, locale.value),
-          total: formatAiQuotaTokens(status.dailyQuota, locale.value),
-        }),
-        hint: t('settings.ai.dailyUsed', {
-          used: formatAiQuotaTokens(status.dailyUsed, locale.value),
-        }),
-      },
-      {
-        key: 'permanent',
-        label: t('settings.ai.permanentBalance'),
-        value: formatAiQuotaTokens(status.bonusTokens, locale.value),
-        hint: t('settings.ai.permanentBalanceHint'),
-      },
-      {
-        key: 'available',
-        label: t('settings.ai.totalAvailable'),
-        value: formatAiQuotaTokens(status.remaining, locale.value),
-        hint: t('settings.ai.totalAvailableHint'),
-      },
-    ];
-  });
-  // 额度只在真正会显示它的页面才请求:移动端目录页看不到额度,进 AI 子页时再拉。
-  // 桌面长页一进来就渲染 AI 区块,仍按首屏加载。
-  watch(
-    () => !isGuestUser() && (!bookmark.isMobile || mobileSection.value === 'ai'),
-    (needQuota) => {
-      if (needQuota) void loadAiQuota();
-    },
-    { immediate: true },
-  );
-
   function goBack() {
     // 移动端子页的返回终点是设置目录，不是个人中心
     if (isMobileSubPage.value) {
@@ -1650,39 +1577,56 @@
     color: var(--desc-color);
   }
 
-  .field--ai-quota {
-    align-items: stretch;
-    flex-direction: column;
+  .settings-card--ai-entry {
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .settings-card--ai-entry .ai-usage-entry {
+    width: 100%;
+    height: auto;
+    min-height: 76px;
+    justify-content: flex-start;
     gap: 12px;
+    padding: 14px 16px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--text-color);
+    text-align: left;
+    white-space: normal;
   }
-  .ai-quota-metrics {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+
+  .settings-card--ai-entry .ai-usage-entry:hover {
+    background: var(--primary-btn-bg-color);
   }
-  .ai-quota-metric {
+
+  .settings-card--ai-entry .ai-usage-entry:focus-visible {
+    outline-offset: -2px;
+  }
+
+  .ai-usage-entry__copy {
     min-width: 0;
+    flex: 1 1 auto;
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 11px 12px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 11px;
-    background: var(--workspace-panel-bg-color);
+    gap: 3px;
   }
-  .ai-quota-metric > span,
-  .ai-quota-metric > small {
-    color: var(--desc-color);
-    font-size: 11px;
-    line-height: 1.35;
-  }
-  .ai-quota-metric > strong {
-    color: var(--text-color);
+
+  .ai-usage-entry__copy strong {
     font-size: 14px;
-    line-height: 1.35;
+    font-weight: 600;
   }
-  .ai-quota-fallback {
-    color: var(--text-color);
+
+  .ai-usage-entry__copy > span {
+    color: var(--desc-color);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .ai-usage-entry__arrow {
+    flex: 0 0 auto;
+    color: var(--desc-color);
   }
 
   .pwa-settings-actions {

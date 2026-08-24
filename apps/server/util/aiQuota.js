@@ -17,6 +17,7 @@ import { getClientIp } from './security/requestContext.js';
 
 // 请求前占位（约等于真实 p90 用量）；结束后按真实用量校正。
 const RESERVE_TOKENS = 5000;
+const MAX_RESERVE_TOKENS = 500_000;
 const DAILY_QUOTA = {
   user: 100_000,
   visitor: 200_000,
@@ -276,7 +277,13 @@ function effectiveStatus(subjects, visitor) {
  * 同一事务中完成：请求幂等认领 → 所有额度行加锁 → 检查 → 双桶占位。
  * 全局按 type/key 排序加锁，避免相同网络下不同设备并发产生锁顺序死锁。
  */
-async function reserveSubjectsAtomic(subjects, pk, quotaReservationKey) {
+function normalizeReserveTokens(value) {
+  const parsed = Number(value || RESERVE_TOKENS);
+  if (!Number.isFinite(parsed)) return RESERVE_TOKENS;
+  return Math.min(MAX_RESERVE_TOKENS, Math.max(1, Math.floor(parsed)));
+}
+
+async function reserveSubjectsAtomic(subjects, pk, quotaReservationKey, requestedReserveTokens) {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
@@ -284,7 +291,7 @@ async function reserveSubjectsAtomic(subjects, pk, quotaReservationKey) {
       `INSERT IGNORE INTO ai_token_reservations
         (reservation_key, period_key, status, subjects_json, reserved_tokens)
        VALUES (?, ?, 'pending', '[]', ?)`,
-      [quotaReservationKey, pk, RESERVE_TOKENS],
+      [quotaReservationKey, pk, requestedReserveTokens],
     );
     const [reservationRows] = await connection.query(
       `SELECT status, subjects_json, reserved_tokens, actual_tokens
@@ -336,8 +343,8 @@ async function reserveSubjectsAtomic(subjects, pk, quotaReservationKey) {
       subject.walletBalance = Math.max(0, Number(walletRows[0]?.ai_bonus_tokens || 0));
     }
 
-    // 每日额度优先；当日额度为 0 后才允许永久余额兜底。只要还有任一 token 就允许最后一轮，
-    // Provider 超出预留的部分在结算时继续扣余额，余额不足则钳到 0 并让后续请求被拦截。
+    // 每日额度优先；当日额度为 0 后才允许永久余额兜底。真实 Provider 请求还会在
+    // AI Execution 中校验“本次保守预算 <= 实际预占”，因此不能借最后一个 token 超额调用。
     const blocked =
       ENFORCE &&
       lockedSubjects.some((item) => {
@@ -347,8 +354,8 @@ async function reserveSubjectsAtomic(subjects, pk, quotaReservationKey) {
     if (!blocked) {
       for (const subject of lockedSubjects) {
         const dailyAvailable = Math.max(0, subject.quota - subject.used);
-        const available = subject.type === 'user' ? dailyAvailable + subject.walletBalance : RESERVE_TOKENS;
-        const reservedTokens = ENFORCE ? Math.min(RESERVE_TOKENS, available) : RESERVE_TOKENS;
+        const available = subject.type === 'user' ? dailyAvailable + subject.walletBalance : dailyAvailable;
+        const reservedTokens = ENFORCE ? Math.min(requestedReserveTokens, available) : requestedReserveTokens;
         const dailyReserved = subject.type === 'user' ? Math.min(reservedTokens, dailyAvailable) : reservedTokens;
         const walletEnforced = ENFORCE && subject.type === 'user';
         const walletReserved = walletEnforced ? Math.max(0, reservedTokens - dailyReserved) : 0;
@@ -402,7 +409,7 @@ function normalizeActualTokens(value) {
   return Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.floor(parsed)));
 }
 
-async function reconcileReservation(handle, actualTokens, aborted) {
+async function reconcileReservation(handle, actualTokens) {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
@@ -429,8 +436,9 @@ async function reconcileReservation(handle, actualTokens, aborted) {
         0,
         Number(subject.reservedTokens || reservation.reserved_tokens || handle.reserved || 0),
       );
-      // 主动断开时不得退还占位，避免“断开即免费”；正常结束按 Provider 真实用量校正。
-      const settledActual = aborted ? Math.max(actual, reserved) : actual;
+      // Provider 已发出但没有返回 usage 时，AI Execution 会把该 Span 的请求前估算计入
+      // actual。若断开发生在 Provider 之前则 actual=0，可以安全退还，不再把整笔预占误扣给用户。
+      const settledActual = actual;
       const delta = settledActual - reserved;
       if (delta !== 0) {
         const [updateResult] = await connection.query(
@@ -493,7 +501,8 @@ export async function reserve(req, ctx = {}) {
     if (!visitor) subjects[0].quota = await userDailyQuota(ctx.userId, ctx.userRole);
     const pk = dayKey();
     const quotaReservationKey = reservationKey(ctx, subjects, pk);
-    const gate = await reserveSubjectsAtomic(subjects, pk, quotaReservationKey);
+    const requestedReserveTokens = normalizeReserveTokens(ctx.reserveTokens);
+    const gate = await reserveSubjectsAtomic(subjects, pk, quotaReservationKey, requestedReserveTokens);
     const status = effectiveStatus(gate.subjects, visitor);
     if (gate.duplicate) {
       if (gate.status === 'blocked') {
@@ -510,7 +519,10 @@ export async function reserve(req, ctx = {}) {
       type: quotaType,
       pk,
       reservationKey: quotaReservationKey,
-      reserved: RESERVE_TOKENS,
+      reserved: Math.max(
+        0,
+        Math.min(...gate.subjects.map((subject) => Math.max(0, Number(subject.reservedTokens || 0)))),
+      ),
       quota: status.quota,
       used: status.used,
       subjects: gate.subjects,
@@ -528,7 +540,7 @@ export async function reserve(req, ctx = {}) {
 export async function reconcile(handle, actualTokens, { aborted = false } = {}) {
   if (!handle || handle.exempt || handle.blocked || !handle.reservationKey) return true;
   try {
-    return await reconcileReservation(handle, actualTokens, aborted);
+    return await reconcileReservation(handle, actualTokens);
   } catch {
     logQuotaFailure('reconcile_deferred');
     return false;

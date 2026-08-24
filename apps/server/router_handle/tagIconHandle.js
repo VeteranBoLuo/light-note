@@ -3,8 +3,10 @@ import { ensureNotVisitor } from '../util/auth.js';
 import { resolveTagIcon, searchTagIcons } from '../util/tagIconService.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import crypto from 'node:crypto';
+import { createUserAiExecutionConfig } from '../util/aiBillingCatalog.js';
 import { runAiExecution } from '../util/aiExecution/service.js';
 import { resolvePublicAiExecutionError } from '../util/aiExecution/publicError.js';
+import { createRequestAbortContext } from '../util/requestAbort.js';
 
 function ensureIconAccess(req, res) {
   // 管理员上下文已由 adminRoutePolicy 的 AI_USE 策略校验；搜索与解析本身不写用户数据。
@@ -24,36 +26,51 @@ function friendlyError(req, error) {
 export async function search(req, res) {
   if (!ensureIconAccess(req, res)) return;
   try {
-    const requestId = crypto.randomUUID();
-    return res.send(
-      resultData(
-        await runAiExecution(
-          {
-            requestId,
-            request: req,
-            identity: req.billingUser || req.user,
-            subjectIdentity: req.resourceUser || req.user,
-            billingPolicy: 'user',
-            taskType: 'tag_icon_search',
-            skillId: 'tag.icon_keywords',
-            skillVersion: 1,
-            surface: 'tag_icon_picker',
-          },
-          () =>
-            searchTagIcons({
-              query: req.body?.query,
-              page: req.body?.page,
-              trace: { traceId: requestId, taskType: 'tag_icon_search', stage: 'tag_icon_keywords' },
-            }),
+    const useAi = req.body?.useAi === true;
+    if (!useAi) {
+      return res.send(
+        resultData(
+          await searchTagIcons({
+            query: req.body?.query,
+            page: req.body?.page,
+            useAi: false,
+          }),
         ),
-      ),
-    );
+      );
+    }
+    const abortContext = createRequestAbortContext(req, res);
+    const requestId = crypto.randomUUID();
+    try {
+      return res.send(
+        resultData(
+          await runAiExecution(
+            createUserAiExecutionConfig('tag.icon_keywords', {
+              requestId,
+              request: req,
+              identity: req.billingUser || req.user,
+              subjectIdentity: req.resourceUser || req.user,
+              taskType: 'tag_icon_search',
+              skillVersion: 1,
+              surface: 'tag_icon_picker',
+            }),
+            () =>
+              searchTagIcons({
+                query: req.body?.query,
+                page: req.body?.page,
+                useAi: true,
+                signal: abortContext.signal,
+                trace: { traceId: requestId, taskType: 'tag_icon_search', stage: 'tag_icon_keywords' },
+              }),
+          ),
+        ),
+      );
+    } finally {
+      abortContext.complete();
+    }
   } catch (error) {
     const failure = resolvePublicAiExecutionError(error, friendlyError(req, error));
     if (failure.status >= 500) console.error('[tag-icon] 搜索失败 code=%s', stableAgentErrorCode(error));
-    return res
-      .status(failure.status)
-      .send(resultData({ code: failure.code }, failure.status, failure.message));
+    return res.status(failure.status).send(resultData({ code: failure.code }, failure.status, failure.message));
   }
 }
 

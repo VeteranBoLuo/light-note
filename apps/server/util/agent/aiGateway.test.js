@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createAiGateway } from './aiGateway.js';
+import { createAiGateway, estimateAiProviderTokens } from './aiGateway.js';
 import { redactSensitiveText } from './logSafety.js';
 
 describe('Agent AI Gateway', () => {
@@ -75,6 +75,24 @@ describe('Agent AI Gateway', () => {
     expect(safe).not.toContain('a@example.com');
     expect(safe).not.toContain('eyJabcdefgh');
     expect(safe).not.toContain('token=abc');
+  });
+
+  it('图片 base64 按视觉 token 估算，不把传输字节误当成几十万文本 token', () => {
+    const base64 = 'a'.repeat(2 * 1024 * 1024);
+    const estimate = estimateAiProviderTokens(
+      [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: '逐字识别图片' },
+            { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64}` } },
+          ],
+        },
+      ],
+      { maxTokens: 1_200 },
+    );
+    expect(estimate).toBeGreaterThanOrEqual(1_200 + 384);
+    expect(estimate).toBeLessThan(2_500);
   });
 
   it('完整调用受 Gateway 硬超时约束，并返回稳定错误码', async () => {

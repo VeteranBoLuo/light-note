@@ -7,6 +7,7 @@ import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import { parse as parseCsv } from 'csv-parse/sync';
 import { AI_DOCUMENT_SUPPORTED_EXTENSIONS } from '@lightnote/shared';
 import { localOcrProvider } from './localOcr.js';
+import { imageRecognitionProvider } from '../imageRecognition/service.js';
 
 export const AI_DOCUMENT_MAX_BYTES = 20 * 1024 * 1024;
 export const AI_DOCUMENT_MAX_CHARS = 300_000;
@@ -360,11 +361,11 @@ function buildFailedCoverage({ code, message, totalChars = 0, totalPages = 0, to
   });
 }
 
-export async function parseDocumentBuffer(
-  buffer,
-  descriptor,
-  { ocrProvider = localOcrProvider, pdfParser = pdfParse, signal } = {},
-) {
+export async function parseDocumentBuffer(buffer, descriptor, options = {}) {
+  const { ocrProvider = localOcrProvider, pdfParser = pdfParse, signal } = options;
+  // 历史测试/调用方只注入 ocrProvider 时同时覆盖图片识别；生产默认让普通图片进入统一 Vision 路由，
+  // 扫描 PDF 仍保留逐页本地 OCR，避免一次把多页文件外发给视觉模型。
+  const imageProvider = options.imageProvider || options.ocrProvider || imageRecognitionProvider;
   if (!Buffer.isBuffer(buffer) || !buffer.length) {
     const message = '文件内容为空';
     throw documentError('EMPTY_DOCUMENT', message, buildFailedCoverage({ code: 'EMPTY_DOCUMENT', message }));
@@ -378,6 +379,7 @@ export async function parseDocumentBuffer(
   let totalPages = 1;
   let parsedPages = 1;
   let missingPageNumbers = [];
+  let recognitionMetadata = null;
 
   try {
     if (meta.extension === '.pdf') {
@@ -474,7 +476,8 @@ export async function parseDocumentBuffer(
       fullSegments = splitParagraphs(fullText);
       segments = splitParagraphs(text);
     } else if (meta.expectedType.startsWith('image/')) {
-      const result = await ocrProvider.recognizeImage(buffer, { extension: meta.extension, signal });
+      const result = await imageProvider.recognizeImage(buffer, { extension: meta.extension, signal });
+      recognitionMetadata = result?.metadata && typeof result.metadata === 'object' ? result.metadata : null;
       const prepared = prepareText(result.content);
       fullText = prepared.fullText;
       text = prepared.text;
@@ -552,7 +555,12 @@ export async function parseDocumentBuffer(
       reasons,
       truncated: text.length < fullText.length || finalized.chunks.length < finalized.candidateCount,
     });
-    return { text, chunks: finalized.chunks, extractedChars: processedChars, coverage };
+    return {
+      text,
+      chunks: finalized.chunks,
+      extractedChars: processedChars,
+      coverage: recognitionMetadata ? { ...coverage, recognition: recognitionMetadata } : coverage,
+    };
   } catch (error) {
     if (!error.coverage) {
       const code = error.code || 'DOCUMENT_PARSE_FAILED';

@@ -32,6 +32,7 @@ import { purgeDocumentSourcesForCloudFiles } from '../util/aiDocument/service.js
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { buildPagedResult, normalizeOptionalPagination } from '../util/pagination.js';
 import { buildFileListOrderBy } from '../util/fileListSort.js';
+import { localProcessingRateLimiter } from '../util/requestRateLimit.js';
 import {
   BYTES_PER_MB,
   getAccountedStorageBytes,
@@ -646,7 +647,7 @@ router.post('/queryTotalFileSize', async (req, res) => {
 router.post('/updateFile', fileHandle.updateFile);
 router.post('/getFileInfo', fileHandle.getFileInfo);
 router.post('/preview/resolve', filePreviewHandle.resolveOwnedFilePreview);
-router.post('/preview/prepare', (req, res) => {
+router.post('/preview/prepare', localProcessingRateLimiter, (req, res) => {
   if (!ensureUserOrAdminPolicy(req, res, ['content_write'])) return;
   return filePreviewHandle.prepareOwnedFilePreview(req, res);
 });

@@ -8,12 +8,21 @@ const REPAIRABLE_OUTPUT_ERRORS = new Set([
   'AI_SKILL_OUTPUT_TOO_SHORT',
 ]);
 
-export async function callGroundedSkillModel({ messages, sources, coverage, modelPolicy, outputPolicy = {}, trace }) {
+export async function callGroundedSkillModel({
+  messages,
+  sources,
+  coverage,
+  modelPolicy,
+  outputPolicy = {},
+  trace,
+  signal,
+}) {
   const requestOptions = {
     toolChoice: 'none',
     maxTokens: modelPolicy.maxTokens,
     temperature: modelPolicy.temperature,
     trace,
+    signal,
   };
   const response = await requestAi(messages, requestOptions);
   try {
@@ -42,7 +51,12 @@ export async function callGroundedSkillModel({ messages, sources, coverage, mode
             .join('\n'),
         },
       ],
-      { ...requestOptions, temperature: 0, trace: { ...trace, stage: `${trace.stage}_repair` } },
+      {
+        ...requestOptions,
+        temperature: 0,
+        billingScope: 'platform',
+        trace: { ...trace, stage: `${trace.stage}_repair` },
+      },
     );
     return validateGroundedMarkdownOutput({
       content: repaired.content,
@@ -108,6 +122,7 @@ export async function callGroundedSkillModelStream({
       {
         ...requestOptions,
         temperature: 0,
+        billingScope: 'platform',
         trace: { ...trace, stage: `${trace.stage}_repair` },
       },
     );

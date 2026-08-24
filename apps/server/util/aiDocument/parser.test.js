@@ -89,6 +89,33 @@ describe('AI 文档解析器', () => {
     expect(result.chunks[0]).toEqual(expect.objectContaining({ locatorType: 'page', locatorValue: '图片' }));
   });
 
+  it('统一识图来源与降级原因进入 coverage 元数据，供缓存和界面解释', async () => {
+    const buffer = Buffer.from('image-bytes');
+    const result = await parseDocumentBuffer(
+      buffer,
+      { fileName: 'notice.jpg', fileType: 'image/jpeg', fileSize: buffer.length },
+      {
+        imageProvider: {
+          recognizeImage: async () => ({
+            content: 'DeepSeek 识别出的正文',
+            metadata: {
+              engine: 'deepseek_vision',
+              model: 'vision-test',
+              policyVersion: 2,
+              quality: { status: 'accepted' },
+            },
+          }),
+        },
+      },
+    );
+
+    expect(result.coverage.recognition).toMatchObject({
+      engine: 'deepseek_vision',
+      model: 'vision-test',
+      policyVersion: 2,
+    });
+  });
+
   it('超过字符上限时显式记录未处理字符范围，而不是静默截断', async () => {
     const content = `前部结论\n\n${'后续内容'.repeat(80_000)}`;
     const buffer = Buffer.from(content);

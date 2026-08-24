@@ -10,6 +10,8 @@ const COVERAGE_WARNING_KEYS: Record<string, string> = Object.freeze({
   file_parsing_in_progress: 'aiSkills.coverage.fileParsingInProgress',
   file_parsing_failed: 'aiSkills.coverage.fileParsingFailed',
   file_no_readable_text: 'aiSkills.coverage.fileNoReadableText',
+  image_recognition_fallback: 'aiSkills.coverage.imageRecognitionFallback',
+  image_recognition_uncertain: 'aiSkills.coverage.imageRecognitionUncertain',
   resource_content_truncated: 'aiSkills.coverage.resourceContentTruncated',
 });
 

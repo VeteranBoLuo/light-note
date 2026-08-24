@@ -21,7 +21,7 @@ export default Object.freeze({
   modelPolicy: Object.freeze({ temperature: 0.1, maxTokens: 800 }),
   outputContract: Object.freeze({ kind: 'field_suggestions', requireSources: false }),
   validateInput: validateBookmarkParseInput,
-  async prepare({ input, context, request, dependencies = {} }) {
+  async prepare({ input, context, dependencies = {} }) {
     const resolution = requireBookmarkUrl(input.url, { allowTextExtraction: true });
     const database = dependencies.database || pool;
     const [tagRows] = await database.query('SELECT id, name FROM tag WHERE user_id = ? AND del_flag = 0', [
@@ -37,7 +37,7 @@ export default Object.freeze({
         const result = await suggest({
           url: resolution.canonicalUrl,
           userTags,
-          signal: request?.signal,
+          signal: dependencies.signal,
           trace,
         });
         if (!result) throw aiSkillError('AI_SKILL_BOOKMARK_PARSE_INVALID', 'AI 没有返回可用的书签信息', 502);

@@ -36,5 +36,6 @@ describe('structured skill model', () => {
     expect(result.title).toBe('任务');
     expect(requestAi).toHaveBeenCalledTimes(2);
     expect(requestAi.mock.calls[0][1].toolChoice).toEqual({ type: 'function', function: { name: 'submit' } });
+    expect(requestAi.mock.calls[1][1].billingScope).toBe('platform');
   });
 });

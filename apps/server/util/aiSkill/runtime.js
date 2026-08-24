@@ -3,6 +3,7 @@ import {
   validateAiSkillRequest,
   validateAiSkillResponse,
 } from '@lightnote/shared/ai-skill-protocol';
+import { createUserAiExecutionConfig } from '../aiBillingCatalog.js';
 import { runAiExecution } from '../aiExecution/service.js';
 import { assertAiSkillDomainEnabled } from '../aiProductFeature.js';
 import { resolveAiSkillContext, resolveAiSkillIdentity } from './contextResolver.js';
@@ -32,6 +33,21 @@ function messagesWithBoundedHistory(messages, history = []) {
 function resultText(result) {
   if (typeof result?.content === 'string') return result.content;
   return JSON.stringify(result || {});
+}
+
+function resolveAiSkillResultOutcome(response) {
+  const warningCodes = new Set(
+    (Array.isArray(response?.coverage?.warnings) ? response.coverage.warnings : []).map(
+      (warning) => String(warning || '').split(':', 1)[0],
+    ),
+  );
+  if (warningCodes.has('image_recognition_fallback')) {
+    return { status: 'partial', errorCode: 'IMAGE_RECOGNITION_FALLBACK' };
+  }
+  if (warningCodes.has('image_recognition_uncertain')) {
+    return { status: 'partial', errorCode: 'IMAGE_RECOGNITION_UNCERTAIN' };
+  }
+  return { status: 'success' };
 }
 
 export async function executeAiSkill(rawRequest, req, dependencies = {}) {
@@ -66,20 +82,19 @@ export async function executeAiSkill(rawRequest, req, dependencies = {}) {
   try {
     assertDomainEnabled(skill.domain);
     const result = await runExecution(
-      {
+      createUserAiExecutionConfig(skill.id, {
         requestId: request.requestId,
         request: req,
         identity: req?.billingUser || req?.user,
         subjectIdentity: req?.resourceUser || req?.user,
         // 是否真正调用模型只能在 Context/prepare 后确定。统一使用 user 策略并由
         // Gateway 第一次访问 Provider 时懒占位，确定性结果自然 settle 为 not_used。
-        billingPolicy: 'user',
         taskType: `skill_${skill.id.replace('.', '_')}`,
-        skillId: skill.id,
         skillVersion: skill.version,
         surface: request.client.surface,
         persistence: dependencies.persistence,
-      },
+        resolveResultOutcome: resolveAiSkillResultOutcome,
+      }),
       async () => {
         const input = skill.validateInput(request.input);
         const context = await resolveContext({ skill, request, req, database: dependencies.database });
@@ -93,7 +108,11 @@ export async function executeAiSkill(rawRequest, req, dependencies = {}) {
           input,
           context: scopedContext,
           request,
-          dependencies: { database: dependencies.database, ...(dependencies.skillDependencies || {}) },
+          dependencies: {
+            database: dependencies.database,
+            signal: dependencies.signal,
+            ...(dependencies.skillDependencies || {}),
+          },
         });
         const modelCalled = prepared.modelCalled !== false && !prepared.result;
         const sources = prepared.sources || [];
@@ -107,6 +126,7 @@ export async function executeAiSkill(rawRequest, req, dependencies = {}) {
               coverage,
               modelPolicy: skill.modelPolicy,
               outputPolicy: prepared.outputPolicy || {},
+              signal: dependencies.signal,
               structuredTool: prepared.structuredTool,
               validateArguments: prepared.validateArguments,
               trace: {
@@ -165,4 +185,8 @@ export async function executeAiSkill(rawRequest, req, dependencies = {}) {
   }
 }
 
-export const aiSkillRuntimeInternals = Object.freeze({ messagesWithBoundedHistory, resultText });
+export const aiSkillRuntimeInternals = Object.freeze({
+  messagesWithBoundedHistory,
+  resolveAiSkillResultOutcome,
+  resultText,
+});

@@ -102,7 +102,7 @@ export function parseKeywordResponse(content) {
   }
 }
 
-async function translateToIconKeywords(query, trace) {
+async function translateToIconKeywords(query, trace, signal) {
   const cacheKey = query.toLowerCase();
   const cached = getCached(keywordCache, cacheKey);
   if (cached) return cached;
@@ -119,6 +119,7 @@ async function translateToIconKeywords(query, trace) {
         { role: 'user', content: query },
       ],
       {
+        signal,
         toolChoice: 'none',
         maxTokens: 120,
         temperature: 0.1,
@@ -127,7 +128,17 @@ async function translateToIconKeywords(query, trace) {
     );
     aiKeywords = parseKeywordResponse(result.content);
   } catch (error) {
-    console.warn('[tag-icon] AI 关键词转换失败，使用本地关键词降级:', safeAgentError(error));
+    if (error?.name !== 'AbortError') {
+      console.warn('[tag-icon] AI 关键词转换失败:', safeAgentError(error));
+    }
+    // 这是用户显式点击并可能消耗额度的动作。普通免费搜索已经提供本地语义降级，
+    // 这里不能把 Provider 失败伪装成“AI 扩展成功”。保留页面现有免费结果并明确报错。
+    throw error;
+  }
+  if (!aiKeywords.length) {
+    const error = new Error('AI 图标关键词格式无效');
+    error.code = 'AI_SKILL_STRUCTURED_OUTPUT_INVALID';
+    throw error;
   }
   const asciiWords = query.match(/[a-z][a-z0-9.+#-]{1,}/gi) || [];
   const keywords = uniqueKeywords([...asciiWords, ...aiKeywords, ...localKeywords]);
@@ -182,20 +193,24 @@ function rankIcons(icons, keywords) {
     .map((item) => item.icon);
 }
 
-export async function searchTagIcons({ query, page = 0, trace } = {}) {
+export async function searchTagIcons({ query, page = 0, useAi = false, signal, trace } = {}) {
   const normalizedQuery = normalizeIconQuery(query);
   if (!normalizedQuery) throw new Error('ICON_QUERY_REQUIRED');
   const normalizedPage = Math.max(0, Math.min(20, Number(page) || 0));
-  const cacheKey = normalizedQuery.toLowerCase();
+  const aiExpanded = useAi === true && containsCjk(normalizedQuery);
+  const cacheKey = `${aiExpanded ? 'ai' : 'direct'}:${normalizedQuery.toLowerCase()}`;
   let result = getCached(searchCache, cacheKey);
   const cacheHit = !!result;
 
   if (!result) {
-    const keywords = containsCjk(normalizedQuery)
-      ? await translateToIconKeywords(normalizedQuery, trace)
-      : [normalizedQuery];
+    const keywords = aiExpanded
+      ? await translateToIconKeywords(normalizedQuery, trace, signal)
+      : uniqueKeywords([
+          ...(normalizedQuery.match(/[a-z][a-z0-9.+#-]{1,}/gi) || []),
+          ...getLocalKeywords(normalizedQuery),
+        ]);
     const asciiWords = normalizedQuery.match(/[a-z][a-z0-9.+#-]{1,}/gi) || [];
-    const searchTerms = uniqueKeywords([...asciiWords, ...keywords]).slice(0, 3);
+    const searchTerms = uniqueKeywords([...asciiWords, ...keywords, 'tag']).slice(0, 3);
     const settled = await Promise.allSettled(searchTerms.map(searchOneKeyword));
     const icons = settled.flatMap((item) => (item.status === 'fulfilled' ? item.value : []));
     if (!icons.length && settled.every((item) => item.status === 'rejected')) throw settled[0].reason;
@@ -212,6 +227,7 @@ export async function searchTagIcons({ query, page = 0, trace } = {}) {
     page: normalizedPage,
     hasMore: start + items.length < result.icons.length,
     cached: cacheHit,
+    aiExpanded,
   };
 }
 

@@ -92,6 +92,36 @@ describe('loadExplicitResourceEvidence', () => {
     expect(result.coverage.complete).toBe(false);
   });
 
+  it('本地 OCR 降级结果作为明确 coverage 警告，不冒充 DeepSeek 高精度识图', async () => {
+    const database = databaseFor({
+      files: [
+        {
+          id: 3,
+          file_name: 'license.jpg',
+          source_id: 's3',
+          source_status: 'ready',
+          coverage_metadata: JSON.stringify({
+            recognition: {
+              engine: 'local_ocr',
+              fallbackReason: 'AI_NETWORK_ERROR',
+              quality: { status: 'degraded' },
+            },
+          }),
+        },
+      ],
+      chunks: [{ source_id: 's3', chunk_index: 0, content: '本地识别文字', locator_value: '图片' }],
+    });
+    const result = await loadExplicitResourceEvidence({
+      userId: 'u1',
+      resourceRefs: [{ type: 'file', id: '3', version: 'v3' }],
+      database,
+    });
+
+    expect(result.coverage.warnings).toEqual(
+      expect.arrayContaining(['image_recognition_fallback:file:3', 'image_recognition_uncertain:file:3']),
+    );
+  });
+
   it('在统一字符预算内截断并把截断作为可见 coverage', async () => {
     const database = databaseFor({
       notes: [{ id: 'n1', title: '长笔记', type: 'markdown', content: '甲'.repeat(100) }],
@@ -135,7 +165,9 @@ describe('prepareExplicitResourceEvidence', () => {
       prepareExplicitResourceEvidence({
         userId: 'u1',
         resourceRefs: [{ type: 'file', id: 'f1' }],
-        attachSource: vi.fn().mockRejectedValue(Object.assign(new Error('internal'), { code: 'UNSUPPORTED_FILE_TYPE' })),
+        attachSource: vi
+          .fn()
+          .mockRejectedValue(Object.assign(new Error('internal'), { code: 'UNSUPPORTED_FILE_TYPE' })),
         getStatuses: vi.fn(),
       }),
     ).rejects.toMatchObject({
@@ -143,5 +175,55 @@ describe('prepareExplicitResourceEvidence', () => {
       status: 400,
       message: expect.stringContaining('TXT'),
     });
+  });
+
+  it('图片文件在当前用户动作内先升级到统一 Vision 识别，再进入状态等待', async () => {
+    const attachSource = vi.fn().mockResolvedValue({
+      id: 'source-image',
+      status: 'queued',
+      fileName: 'license.jpg',
+    });
+    const recognizeImageSource = vi.fn().mockResolvedValue({
+      id: 'source-image',
+      status: 'ready',
+      fileName: 'license.jpg',
+    });
+    const getStatuses = vi.fn();
+
+    const result = await prepareExplicitResourceEvidence({
+      userId: 'u1',
+      resourceRefs: [{ type: 'file', id: 'f-image' }],
+      sessionId: 'request-image',
+      attachSource,
+      recognizeImageSource,
+      getStatuses,
+    });
+
+    expect(recognizeImageSource).toHaveBeenCalledWith({
+      userId: 'u1',
+      sourceId: 'source-image',
+      signal: undefined,
+    });
+    expect(getStatuses).not.toHaveBeenCalled();
+    expect(result[0].status).toBe('ready');
+  });
+
+  it('等待后台状态时立即响应用户取消，不继续轮询', async () => {
+    const controller = new AbortController();
+    const reason = Object.assign(new Error('cancelled'), { name: 'AbortError', code: 'AI_REQUEST_ABORTED' });
+    const getStatuses = vi.fn();
+    const pending = prepareExplicitResourceEvidence({
+      userId: 'u1',
+      resourceRefs: [{ type: 'file', id: 'f1' }],
+      attachSource: vi.fn().mockResolvedValue({ id: 'source-1', status: 'queued', fileName: 'file.pdf' }),
+      getStatuses,
+      signal: controller.signal,
+      waitMs: 1_000,
+      pollMs: 500,
+    });
+
+    controller.abort(reason);
+    await expect(pending).rejects.toBe(reason);
+    expect(getStatuses).not.toHaveBeenCalled();
   });
 });
