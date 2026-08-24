@@ -1,0 +1,40 @@
+import { createGroundedResourceSkill, mapGroundedMarkdownToNotePreview } from './resourceSkillFactory.js';
+
+export const bookmarkSkills = Object.freeze([
+  createGroundedResourceSkill({
+    id: 'bookmark.summarize_page',
+    domain: 'bookmark',
+    resourceTypes: ['bookmark'],
+    minResources: 1,
+    maxResources: 1,
+    taskLabel: '总结当前书签的网页内容',
+    defaultInstruction: '概括网页主题、核心观点、重要信息和适用场景；若只有书签元数据，必须明确说明未读取到网页正文。',
+    systemRole: '你是轻笺书签模块的网页总结 Skill。',
+    historyTurns: 2,
+  }),
+  createGroundedResourceSkill({
+    id: 'bookmark.compare_pages',
+    domain: 'bookmark',
+    resourceTypes: ['bookmark'],
+    minResources: 2,
+    maxResources: 10,
+    taskLabel: '比较所选书签网页',
+    defaultInstruction: '对比主题、主要观点、差异、互补信息与可信度限制。',
+    systemRole: '你是轻笺书签模块的网页比较 Skill。',
+    historyTurns: 0,
+  }),
+  createGroundedResourceSkill({
+    id: 'bookmark.create_note_preview',
+    domain: 'bookmark',
+    resourceTypes: ['bookmark'],
+    minResources: 1,
+    maxResources: 10,
+    taskLabel: '把所选书签整理成笔记草稿',
+    defaultInstruction: '按主题组织材料，生成带来源引用的 Markdown 笔记草稿。',
+    systemRole: '你是轻笺书签模块的网页转笔记 Skill。',
+    effect: 'preview',
+    availableActions: [{ id: 'create_note_from_preview', label: '在笔记编辑器中继续', requiresConfirmation: true }],
+    mapResult: mapGroundedMarkdownToNotePreview,
+    modelPolicy: { temperature: 0.3, maxTokens: 5000 },
+  }),
+]);

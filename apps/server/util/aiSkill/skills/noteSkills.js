@@ -1,0 +1,41 @@
+import { createGroundedResourceSkill, mapGroundedMarkdownToNotePreview } from './resourceSkillFactory.js';
+
+export const noteSkills = Object.freeze([
+  createGroundedResourceSkill({
+    id: 'note.batch_summarize',
+    domain: 'note',
+    resourceTypes: ['note'],
+    minResources: 1,
+    maxResources: 20,
+    taskLabel: '总结所选笔记',
+    defaultInstruction: '提炼主题、关键事实、结论与下一步建议。',
+    systemRole: '你是轻笺笔记模块的批量总结 Skill。',
+    historyTurns: 0,
+  }),
+  createGroundedResourceSkill({
+    id: 'note.batch_compare',
+    domain: 'note',
+    resourceTypes: ['note'],
+    minResources: 2,
+    maxResources: 10,
+    taskLabel: '比较所选笔记',
+    defaultInstruction: '对比共同点、差异、冲突与可合并的信息，并逐项标注来源。',
+    systemRole: '你是轻笺笔记模块的多笔记比较 Skill。',
+    historyTurns: 0,
+  }),
+  createGroundedResourceSkill({
+    id: 'note.create_from_sources',
+    domain: 'note',
+    resourceTypes: ['note', 'bookmark', 'file'],
+    minResources: 1,
+    maxResources: 20,
+    taskLabel: '根据所选材料生成一篇新笔记草稿',
+    defaultInstruction: '生成结构清晰、保留来源引用的 Markdown 笔记草稿。',
+    systemRole: '你是轻笺笔记模块的材料成稿 Skill。',
+    effect: 'preview',
+    historyTurns: 0,
+    availableActions: [{ id: 'create_note_from_preview', label: '在笔记编辑器中继续', requiresConfirmation: true }],
+    mapResult: mapGroundedMarkdownToNotePreview,
+    modelPolicy: { temperature: 0.3, maxTokens: 6000 },
+  }),
+]);

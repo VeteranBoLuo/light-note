@@ -2811,3 +2811,11 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **防回归约束：** 门禁按 Provider 客户端模块、Gateway 模块和模型 HTTP 端点识别能力：Provider 客户端只允许精确文件导入，允许文件只接受登记过的精确绑定；别名、命名空间、动态导入和外部 `/chat/completions` 一律拒绝。非模型 Provider API 不能因域名相同被误杀。Gateway 调用方使用显式 allowlist，旧助手入口保持为 0。
 - **验收：** fixture 覆盖合法精确绑定、未知调用方、别名、命名空间、动态导入、Provider 端点旁路和同域非模型接口；生产源码门禁报告 Gateway 调用方数量与旧入口数量，并以非零状态阻断违规提交。
 - **相关代码：** `apps/server/scripts/checkAiModelAccess.js`、`apps/server/scripts/checkAiModelAccess.test.js`。
+
+### LN-PIT-125：宽泛 Git 忽略规则会让本地测试通过、干净检出后启动失败
+
+- **现象：** 本地 Registry、单元测试和构建都能读取新实现，提交合并后却在干净工作树启动时报 `ERR_MODULE_NOT_FOUND`；提交记录里只有引用方，没有被引用的实现目录。
+- **根因：** `.gitignore` 中未锚定的目录规则会匹配仓库任意层级。例如 `skills` 不仅忽略根目录工具资产，也会静默忽略 `apps/server/util/aiSkill/skills/`。本地文件仍存在，所以基于当前工作树的测试无法发现“文件没有进入 Git”的差异。
+- **防回归约束：** 只想忽略仓库根目录时必须使用 `/目录名`；新增目录完成后同时检查 `git status --short`、`git check-ignore -v <关键文件>` 和 `git ls-files <关键文件>`。含模块注册表、路由表或动态入口的改动，提交后必须从已跟踪文件集合核对所有实现，并至少执行一次真实进程启动；不能只依赖当前脏工作树中的测试。
+- **验收：** Registry 引用的每个 Skill 实现都能被 `git ls-files` 找到；提交后后端从主工作树启动成功，`/ai/skills/config` 可访问；不存在本地可见但 Git 未跟踪的运行时模块。
+- **相关代码：** `.gitignore`、`apps/server/util/aiSkill/registry.js`、`apps/server/util/aiSkill/skills/`。

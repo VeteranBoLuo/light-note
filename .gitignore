@@ -48,7 +48,7 @@ docs/plan/*
 !docs/plan/19-ai-skills-product-migration.md
 docs/done
 .hermes/desktop-attachments/
-skills
+/skills
 
 # 官网直发的 Android APK:1.7MB 二进制不进仓库,但要留在 public/ 里让 vite 构建带进 dist 随部署上传。
 # 换机或新环境部署前,必须先从证据包(~/Library/Application Support/Light Note/Android Releases/)
