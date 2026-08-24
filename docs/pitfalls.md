@@ -2984,3 +2984,11 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **防回归约束：** 可点击组件若沿用 `click` 语义，必须发出真实 `MouseEvent | KeyboardEvent`，并由组件内部负责原生冒泡与键盘交互；父组件只监听 `@click` 执行业务动作。若不打算暴露原生事件，则改用 `activate`、`select` 等语义事件，父组件禁止添加原生事件修饰符。桌面和移动端必须复用同一交互组件，不能一端可点击、另一端退化为静态标签。
 - **验收：** 组件测试断言鼠标与键盘激活都向监听器传递真实事件；桌面卡片、表格和移动列表点击存档角标均打开当前书签的快照弹框，不触发卡片主操作且控制台无异常。浅色/深色检查默认、hover/focus、active、弹框加载、正文、空和错误状态。
 - **相关代码：** `apps/web/src/components/manage/bookmarkMg/BookmarkCapabilityBadge.vue`、`apps/web/src/components/manage/bookmarkMg/BookmarkCapabilityBadge.test.ts`、`apps/web/src/components/manage/bookmarkMg/BookmarkTable.vue`、`apps/web/src/components/manage/bookmarkMg/BookmarkTableMobile.vue`。
+
+### LN-PIT-144：移动全屏 BModal 必须明确唯一滚动所有者
+
+- **现象：** 模型调用详情在桌面弹窗中可以查看完整调用链，切到移动端全屏后只能看到首屏内容，手指上滑页面没有反应，底部调用记录和隐私说明被截断。
+- **根因：** `BModal` 的移动全屏模式为了兼容图片查看器、左右分栏等自行管理滚动的复杂弹窗，会把通用 `.modal-content` 设为 `overflow: hidden`。模型调用详情启用了 `fullscreen-mobile`，却没有通过 `contentClass` 声明自己的滚动容器；页面外层又因遮罩锁定，最终没有任何元素承担纵向滚动。
+- **防回归约束：** 启用 `fullscreen-mobile` 的业务弹窗必须明确唯一滚动所有者：普通长内容通过 `contentClass` 让 `.modal-content` 接管 `overflow-y: auto`，复杂布局则由内部固定高度区域接管。禁止为了修复单个弹窗而把 `BModal` 的全屏默认值全局改成滚动，否则会破坏图片缩放、分栏和嵌套滚动；滚动容器同时提供横向裁剪、底部安全区、`touch-action: pan-y` 与惯性滚动回退。
+- **验收：** 自动化契约断言详情弹窗声明独立内容类和移动端纵向滚动规则；真实浏览器在窄屏长调用链中确认 `scrollHeight > clientHeight`，触摸/滚轮可从顶部滚到底部并看到隐私说明。覆盖加载、成功、空、错误，检查 PC/移动、浅色/深色和共享移动渲染基线，确认桌面滚动及其他全屏弹窗行为不变。
+- **相关代码：** `apps/web/src/components/base/BasicComponents/BModal/BModal.vue`、`apps/web/src/components/aiSkills/AiUsageDetailModal.vue`、`apps/web/src/components/aiSkills/AiUsageDetailModal.test.ts`、`apps/web/src/e2e/aiUsageCenterHarness.ts`。

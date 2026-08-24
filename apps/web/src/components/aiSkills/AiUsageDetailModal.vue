@@ -5,6 +5,7 @@
     :show-footer="false"
     width="min(720px, 94vw)"
     height="min(720px, 86vh)"
+    content-class="ai-usage-detail-modal__content"
     fullscreen-mobile
   >
     <div v-if="loading && !detail" class="detail-state" role="status" aria-live="polite">
@@ -688,7 +689,17 @@
     color: var(--primary-color);
   }
 
-  @media (max-width: 600px) {
+  @media (max-width: 767px) {
+    :global(.ai-usage-detail-modal__content) {
+      box-sizing: border-box;
+      padding: 12px 16px calc(16px + env(safe-area-inset-bottom)) !important;
+      overflow-x: hidden !important;
+      overflow-y: auto !important;
+      overscroll-behavior-y: contain;
+      touch-action: pan-y;
+      -webkit-overflow-scrolling: touch;
+    }
+
     .detail-state {
       min-height: 60vh;
     }

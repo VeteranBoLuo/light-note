@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from 'vue';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const requestMocks = vi.hoisted(() => ({ apiBasePost: vi.fn() }));
 
@@ -26,6 +28,7 @@ vi.mock('@/components/base/BasicComponents/BButton.vue', () => ({
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({ default: { template: '<span class="icon-stub" />' } }));
 
 const { default: AiUsageDetailModal } = await import('./AiUsageDetailModal.vue');
+const source = readFileSync(resolve(process.cwd(), 'src/components/aiSkills/AiUsageDetailModal.vue'), 'utf8');
 let cleanup: (() => void) | undefined;
 
 function execution() {
@@ -62,6 +65,15 @@ afterEach(() => {
 });
 
 describe('AiUsageDetailModal', () => {
+  it('移动全屏详情通过业务内容区接管纵向触摸滚动', () => {
+    expect(source).toContain('content-class="ai-usage-detail-modal__content"');
+    expect(source).toMatch(
+      /@media \(max-width: 767px\) \{[\s\S]*:global\(\.ai-usage-detail-modal__content\)[\s\S]*overflow-y: auto !important;/,
+    );
+    expect(source).toContain('touch-action: pan-y;');
+    expect(source).toContain('env(safe-area-inset-bottom)');
+  });
+
   it('按顺序解释视觉、生成和平台修复，并展示代码门禁触发原因', async () => {
     requestMocks.apiBasePost.mockResolvedValue({
       status: 200,
