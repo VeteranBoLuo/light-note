@@ -70,10 +70,6 @@ interface UserInfo {
     notificationsDndStart?: string; // 免打扰开始时间，HH:mm
     notificationsDndEnd?: string; // 免打扰结束时间，HH:mm
     notificationsTimezoneOffset?: number; // 保存免打扰设置时的客户端时区偏移（分钟）
-    aiEnabled?: boolean; // 是否显示 AI 助手入口
-    aiStyle?: 'strict' | 'balanced' | 'creative'; // AI 回答风格
-    aiCloudHistory?: boolean; // 是否把新 AI 对话同步到云端
-    aiDefaultFullscreen?: boolean; // 桌面端 AI 助手默认是否全屏打开
   };
 }
 
@@ -131,10 +127,6 @@ const createDefaultUserState = (): UserState => ({
     notificationsDndStart: '22:00',
     notificationsDndEnd: '08:00',
     notificationsTimezoneOffset: new Date().getTimezoneOffset(),
-    aiEnabled: true,
-    aiStyle: 'balanced',
-    aiCloudHistory: true,
-    aiDefaultFullscreen: false,
   },
 });
 

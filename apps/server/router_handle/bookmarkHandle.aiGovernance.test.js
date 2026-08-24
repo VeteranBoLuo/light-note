@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   summarizeBookmark: vi.fn(),
   suggestTagsFromText: vi.fn(),
   suggestBookmarkMeta: vi.fn(),
+  runAiExecution: vi.fn(),
 }));
 
 vi.mock('../db/index.js', () => ({ default: { query: mocks.poolQuery } }));
@@ -59,6 +60,7 @@ vi.mock('../util/bookmarkUrl.js', () => ({
   resolveBookmarkUrlForClient: vi.fn(),
 }));
 vi.mock('../util/personalKnowledgeSearch.js', () => ({ invalidatePersonalKnowledgeCache: vi.fn() }));
+vi.mock('../util/aiExecution/service.js', () => ({ runAiExecution: mocks.runAiExecution }));
 
 const { doOrganizeQuote, doOrganizeRun, doSummarizeBookmark } = await import('./bookmarkHandle.js');
 
@@ -79,6 +81,7 @@ function response() {
 describe('bookmark AI entry governance', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.runAiExecution.mockImplementation(async (_config, operation) => operation());
   });
 
   it('书签摘要把真实 req 交给 Gateway，并把额度耗尽映射为 429', async () => {
@@ -100,8 +103,12 @@ describe('bookmark AI entry governance', () => {
       force: false,
       persist: true,
       archiveIfMissing: true,
-      governance: { request: req, quotaPolicy: 'user', taskType: 'bookmark_summary' },
+      trace: expect.objectContaining({ taskType: 'bookmark_summary' }),
     });
+    expect(mocks.runAiExecution).toHaveBeenCalledWith(
+      expect.objectContaining({ request: req, billingPolicy: 'user', skillId: 'bookmark.summarize_page' }),
+      expect.any(Function),
+    );
     expect(res.statusCode).toBe(429);
     expect(res.payload).toMatchObject({ status: 429, data: { reason: 'quota_exceeded' } });
   });
@@ -123,12 +130,30 @@ describe('bookmark AI entry governance', () => {
       force: true,
       persist: false,
       archiveIfMissing: false,
-      governance: { request: req, quotaPolicy: 'user', taskType: 'bookmark_summary' },
+      trace: expect.objectContaining({ taskType: 'bookmark_summary' }),
     });
     expect(res.payload).toMatchObject({ status: 200, data: { summary: '只读摘要' } });
   });
 
-  it('批量整理在额度耗尽时保留已完成建议并返回明确 429', async () => {
+  it.each([
+    ['AI_QUOTA_EXCEEDED', 429],
+    ['AI_ACCESS_RESTRICTED', 403],
+  ])('书签摘要统一映射根执行错误 %s', async (code, status) => {
+    mocks.runAiExecution.mockRejectedValueOnce(Object.assign(new Error('internal'), { code }));
+    const req = {
+      body: { id: 'bookmark-1' },
+      user: { id: 'user-1', role: 'user' },
+      billingUser: { id: 'user-1', role: 'user' },
+    };
+    const res = response();
+
+    await doSummarizeBookmark(req, res);
+
+    expect(res.statusCode).toBe(status);
+    expect(res.payload).toMatchObject({ status, data: { code } });
+  });
+
+  it('批量整理只建立一个根执行，单条 Provider 失败时保留其余建议', async () => {
     mocks.poolQuery.mockResolvedValueOnce([[{ id: 'tag-1', name: '已有标签' }]]).mockResolvedValueOnce([
       [
         { id: 'note-1', title: '笔记一', content: '正文一' },
@@ -149,14 +174,34 @@ describe('bookmark AI entry governance', () => {
 
     expect(mocks.suggestTagsFromText).toHaveBeenCalledWith(
       expect.objectContaining({
-        governance: { request: req, quotaPolicy: 'user', taskType: 'organize_note_tags' },
+        trace: expect.objectContaining({ taskType: 'organize_note_tags' }),
       }),
     );
-    expect(res.statusCode).toBe(429);
+    expect(mocks.runAiExecution).toHaveBeenCalledTimes(1);
+    expect(res.statusCode).toBe(200);
     expect(res.payload).toMatchObject({
-      status: 429,
-      data: { code: 'AI_QUOTA_EXCEEDED', processed: 1, suggestions: [expect.objectContaining({ id: 'note-1' })] },
+      status: 200,
+      data: { processed: 1, suggestions: [expect.objectContaining({ id: 'note-1' })] },
     });
+  });
+
+  it('根执行在访问 Provider 前发现额度耗尽时返回明确 429', async () => {
+    mocks.poolQuery.mockResolvedValueOnce([[{ id: 'tag-1', name: '已有标签' }]]).mockResolvedValueOnce([
+      [{ id: 'note-1', title: '笔记一', content: '正文一' }],
+    ]);
+    mocks.runAiExecution.mockRejectedValueOnce(Object.assign(new Error('quota'), { code: 'AI_QUOTA_EXCEEDED' }));
+    const req = {
+      body: { resourceType: 'note', ids: ['note-1'] },
+      user: { id: 'user-1', role: 'user' },
+      billingUser: { id: 'user-1', role: 'user' },
+    };
+    const res = response();
+
+    await doOrganizeRun(req, res);
+
+    expect(mocks.suggestTagsFromText).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(429);
+    expect(res.payload).toMatchObject({ status: 429, data: { ok: false, code: 'AI_QUOTA_EXCEEDED' } });
   });
 
   it('所选笔记预估只查询当前用户并在进入 IN 前去重、清洗和限批', async () => {

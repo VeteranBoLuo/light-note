@@ -26,22 +26,19 @@ function keyboardEvent(overrides: Partial<ShortcutKeyboardEvent> = {}): Shortcut
 }
 
 describe('keyboardShortcuts', () => {
-  it('全局搜索同时支持主修饰键 F 与单斜杠，并区分 AI 快捷键', () => {
+  it('全局搜索同时支持主修饰键 F 与单斜杠', () => {
     expect(matchesGlobalShortcut(keyboardEvent(), 'globalSearch')).toBe(true);
     expect(matchesGlobalShortcut(keyboardEvent({ ctrlKey: true }), 'globalSearch')).toBe(false);
     expect(matchesGlobalShortcut(keyboardEvent({ key: 'f', keyCode: 70, ctrlKey: true }), 'globalSearch')).toBe(true);
     expect(matchesGlobalShortcut(keyboardEvent({ key: 'F', keyCode: 70, metaKey: true }), 'globalSearch')).toBe(true);
     expect(matchesGlobalShortcut(keyboardEvent({ key: 'f', keyCode: 70 }), 'globalSearch')).toBe(false);
-    expect(matchesGlobalShortcut(keyboardEvent({ ctrlKey: true }), 'aiAssistant')).toBe(true);
-    expect(matchesGlobalShortcut(keyboardEvent({ metaKey: true }), 'aiAssistant')).toBe(true);
-    expect(matchesGlobalShortcut(keyboardEvent(), 'aiAssistant')).toBe(false);
   });
 
   it('输入法、已消费事件与 Alt 组合不会触发', () => {
-    expect(matchesGlobalShortcut(keyboardEvent({ ctrlKey: true, isComposing: true }), 'aiAssistant')).toBe(false);
-    expect(matchesGlobalShortcut(keyboardEvent({ ctrlKey: true, keyCode: 229 }), 'aiAssistant')).toBe(false);
-    expect(matchesGlobalShortcut(keyboardEvent({ ctrlKey: true, defaultPrevented: true }), 'aiAssistant')).toBe(false);
-    expect(matchesGlobalShortcut(keyboardEvent({ ctrlKey: true, altKey: true }), 'aiAssistant')).toBe(false);
+    expect(matchesGlobalShortcut(keyboardEvent({ isComposing: true }), 'globalSearch')).toBe(false);
+    expect(matchesGlobalShortcut(keyboardEvent({ keyCode: 229 }), 'globalSearch')).toBe(false);
+    expect(matchesGlobalShortcut(keyboardEvent({ defaultPrevented: true }), 'globalSearch')).toBe(false);
+    expect(matchesGlobalShortcut(keyboardEvent({ altKey: true }), 'globalSearch')).toBe(false);
   });
 
   it('按当前平台生成设置页和提示所需的按键标签', () => {
@@ -49,9 +46,6 @@ describe('keyboardShortcuts', () => {
     expect(getGlobalShortcutKeys('globalSearch', 'other')).toEqual(['Ctrl', 'F']);
     expect(getGlobalShortcutLabel('globalSearch', 'mac')).toBe('⌘ + F');
     expect(getGlobalShortcutLabel('globalSearch', 'other')).toBe('Ctrl + F');
-    expect(getGlobalShortcutKeys('aiAssistant', 'mac')).toEqual(['⌘', '/']);
-    expect(getGlobalShortcutLabel('aiAssistant', 'mac')).toBe('⌘ + /');
-    expect(getGlobalShortcutLabel('aiAssistant', 'other')).toBe('Ctrl + /');
   });
 
   it('为“重复上一步”生成平台化标签，并识别 Mac Option 组合键', () => {

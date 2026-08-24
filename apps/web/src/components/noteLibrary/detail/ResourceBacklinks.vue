@@ -36,7 +36,7 @@
   import { useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { fetchResourceBacklinks, type ResourceBacklinkItem } from '@/api/noteReferences';
-  import { resolveAiSourceNavigation } from '@/components/aiAssistant/aiSourceNavigation';
+  import { resolveAiSourceNavigation } from '@/utils/aiSourceNavigation';
   import type { ResourceRefType } from '@/utils/noteResourceRefs';
 
   const props = withDefaults(

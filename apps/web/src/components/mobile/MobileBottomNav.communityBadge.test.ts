@@ -16,7 +16,6 @@ vi.mock('@/store', () => ({
     todoDueTodayTotal: 0,
     refreshCount: vi.fn(),
   }),
-  useAiAssistantStore: () => ({ edgeStatus: ref('idle') }),
   useUserStore: () => ({ id: 'user-1', role: 'user' }),
 }));
 vi.mock('@/composables/useMobileNavigationState', () => ({

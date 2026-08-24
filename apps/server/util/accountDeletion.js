@@ -389,6 +389,22 @@ async function deleteIfPresent(connection, tables, table, sql, params) {
 }
 
 async function purgeAiWorkspace(connection, tables, userId) {
+  if (tables.has('ai_skill_turns') && tables.has('ai_skill_threads')) {
+    await connection.query(
+      `DELETE t
+         FROM ai_skill_turns t
+         JOIN ai_skill_threads s ON s.id = t.thread_id
+        WHERE s.actor_user_id = ? OR s.subject_user_id = ?`,
+      [userId, userId],
+    );
+  }
+  await deleteIfPresent(
+    connection,
+    tables,
+    'ai_skill_threads',
+    'DELETE FROM ai_skill_threads WHERE actor_user_id = ? OR subject_user_id = ?',
+    [userId, userId],
+  );
   if (tables.has('ai_message_evidence') && tables.has('ai_messages') && tables.has('ai_conversations')) {
     await connection.query(
       `DELETE e
@@ -611,6 +627,23 @@ export async function purgeOwnedResources(connection, tables, userId) {
   for (const [table, field] of DIRECT_DELETE_TABLES) {
     await deleteIfPresent(connection, tables, table, `DELETE FROM ${table} WHERE ${field} = ?`, [userId]);
   }
+
+  // Provider Span 不直接保存用户标识，必须先通过根执行删除，避免账号注销后遗留孤儿账本。
+  if (tables.has('ai_provider_spans') && tables.has('ai_executions')) {
+    await connection.query(
+      `DELETE s FROM ai_provider_spans s
+        INNER JOIN ai_executions e ON e.id = s.execution_id
+       WHERE e.subject_user_id = ? OR e.actor_user_id = ?`,
+      [userId, userId],
+    );
+  }
+  await deleteIfPresent(
+    connection,
+    tables,
+    'ai_executions',
+    'DELETE FROM ai_executions WHERE subject_user_id = ? OR actor_user_id = ?',
+    [userId, userId],
+  );
 
   await deleteIfPresent(connection, tables, 'note', 'DELETE FROM note WHERE create_by = ?', [userId]);
   await deleteIfPresent(connection, tables, 'note_tags', 'DELETE FROM note_tags WHERE user_id = ?', [userId]);

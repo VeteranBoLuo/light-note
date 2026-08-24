@@ -112,9 +112,19 @@
             <span>{{ t('inbox.todoChecklist') }}</span>
             <small>{{ t('inbox.todoChecklistHint') }}</small>
           </div>
-          <BButton size="small" :disabled="checklistItems.length >= 50" @click="addChecklistItem()">
-            {{ t('inbox.todoAddChecklistItem') }}
-          </BButton>
+          <div class="todo-checklist-editor__actions">
+            <TodoBreakdownButton
+              :todo-id="item?.id"
+              :title="form.title"
+              :description="form.description"
+              :checklist="checklistItems"
+              :disabled="saving"
+              @apply="checklistItems = $event"
+            />
+            <BButton size="small" :disabled="checklistItems.length >= 50" @click="addChecklistItem()">
+              {{ t('inbox.todoAddChecklistItem') }}
+            </BButton>
+          </div>
         </div>
         <div class="todo-checklist-editor__list">
           <div v-for="(check, index) in checklistItems" :key="check.id" class="todo-checklist-editor__row">
@@ -316,6 +326,7 @@
   import { toTodoLocalInput } from '@/utils/todoPlanning';
   import TodoPlanScheduleEditor from '@/components/todo/TodoPlanScheduleEditor.vue';
   import TodoResourceLinks from '@/components/todo/TodoResourceLinks.vue';
+  import TodoBreakdownButton from '@/components/todo/TodoBreakdownButton.vue';
 
   const props = withDefaults(
     defineProps<{
@@ -982,6 +993,13 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
+  }
+
+  .todo-checklist-editor__actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
   }
   .todo-checklist-editor__header > div {
     display: flex;

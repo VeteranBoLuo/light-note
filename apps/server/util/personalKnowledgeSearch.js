@@ -27,6 +27,15 @@ function cleanText(value) {
     .trim();
 }
 
+/**
+ * 统一把富文本/网页正文转换为可供私有资料检索与 Skill 证据使用的纯文本。
+ * 显式资源读取与语义索引必须复用同一清洗口径，避免同一篇笔记在两个入口中
+ * 出现不同的可读正文判断。
+ */
+export function normalizePersonalKnowledgeText(value) {
+  return cleanText(value);
+}
+
 function tokenize(value) {
   return extractTokens(value).filter((term) => term.length > 1 || /^[a-z0-9]+$/iu.test(term));
 }
@@ -578,6 +587,37 @@ async function authoritativeResourceVersions(userId, resourceType, resourceIds, 
     // 权威归属/版本无法验证时失败关闭，不把缓存正文作为证据返回。
     return new Map();
   }
+}
+
+/**
+ * 按当前 owner 重读明确选择的资源版本。客户端资源 ID 只是候选；缺失、越权、已删除或版本无法验证
+ * 都不会出现在返回值中。Skill Context Resolver 复用这里，避免再维护一套资源归属 SQL。
+ */
+export async function resolvePersonalKnowledgeResourceVersions({ userId, resourceRefs = [], database = pool }) {
+  const refs = Array.isArray(resourceRefs) ? resourceRefs : [];
+  const idsByType = new Map();
+  for (const ref of refs) {
+    const type = String(ref?.type || '');
+    const id = String(ref?.id || '');
+    if (!id || !['note', 'bookmark', 'file', 'todo'].includes(type)) continue;
+    const ids = idsByType.get(type) || new Set();
+    ids.add(id);
+    idsByType.set(type, ids);
+  }
+  const versions = new Map(
+    await Promise.all(
+      [...idsByType.entries()].map(async ([type, ids]) => [
+        type,
+        await authoritativeResourceVersions(String(userId || ''), type, [...ids], database),
+      ]),
+    ),
+  );
+  return refs.flatMap((ref) => {
+    const type = String(ref?.type || '');
+    const id = String(ref?.id || '');
+    const version = versions.get(type)?.get(id);
+    return version ? [{ type, id, version }] : [];
+  });
 }
 
 async function validateAuthoritativeHits(userId, hits, database = pool) {

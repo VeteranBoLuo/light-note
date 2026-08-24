@@ -6,24 +6,17 @@
       class="mobile-bottom-nav__item"
       :class="{
         'mobile-bottom-nav__item--active': isItemActive(item.key) || pendingKey === item.key,
-        'mobile-bottom-nav__item--ai': item.key === 'ai',
+        'mobile-bottom-nav__item--capture': item.key === 'capture',
       }"
       :aria-current="isItemActive(item.key) ? 'page' : undefined"
-      :aria-label="item.key === 'ai' && aiStatusText ? aiAccessibleLabel : undefined"
-      :aria-busy="pendingKey === item.key || (item.key === 'ai' && aiEdgeStatus === 'generating') ? 'true' : undefined"
+      :aria-busy="pendingKey === item.key ? 'true' : undefined"
       @pointerdown="prefetchItem(item)"
       @focus="prefetchItem(item)"
       @click="activate(item)"
       v-click-log="{ module: '移动端导航', operation: `打开${t(item.labelKey)}` }"
     >
       <span class="mobile-bottom-nav__icon">
-        <SvgIcon :src="bottomIcons[item.key]" :size="item.key === 'ai' ? '21' : '20'" aria-hidden="true" />
-        <span
-          v-if="item.key === 'ai' && aiEdgeStatus !== 'idle'"
-          class="mobile-bottom-nav__ai-status"
-          :class="`is-${aiEdgeStatus}`"
-          aria-hidden="true"
-        ></span>
+        <SvgIcon :src="bottomIcons[item.key]" :size="item.key === 'capture' ? '21' : '20'" aria-hidden="true" />
         <!--
           与桌面顶栏同一口径：只提醒「逾期 + 今天到期」。原来用全部未完成待办，
           那个数字永不清零，挂成常驻角标会被用户学会忽略。两端必须一致，
@@ -67,16 +60,13 @@
   } from '@/config/mobileNavigation';
   import { getMobileResourceEntryPath, useMobileNavigationState } from '@/composables/useMobileNavigationState';
   import { useCommunityChatUnread } from '@/composables/useCommunityChatUnread';
-  import { inboxStore, useAiAssistantStore, useUserStore } from '@/store';
-  import { storeToRefs } from 'pinia';
+  import { inboxStore, useUserStore } from '@/store';
   import { prefetchResolvedRoute } from '@/utils/routePrefetch';
 
   const route = useRoute();
   const router = useRouter();
   const user = useUserStore();
   const inbox = inboxStore();
-  const aiAssistant = useAiAssistantStore();
-  const { edgeStatus: aiEdgeStatus } = storeToRefs(aiAssistant);
   const { t } = useI18n();
   const { saveResourceScroll, scrollCurrentResourceToTop } = useMobileNavigationState();
   const communityUnread = useCommunityChatUnread();
@@ -92,19 +82,11 @@
     }),
   );
   const communityUnreadLabel = computed(() => t('communityChat.unreadBadge', { count: communityUnreadTotal.value }));
-  const aiStatusText = computed(() => (aiEdgeStatus.value === 'idle' ? '' : t(`ai.edgeStatus.${aiEdgeStatus.value}`)));
-  const aiAccessibleLabel = computed(() =>
-    t('ai.edgeStatus.triggerLabel', {
-      title: t('mobileNavigation.ai'),
-      status: aiStatusText.value,
-    }),
-  );
-
   const bottomIcons = {
     today: icon.common.calendar,
     resources: icon.navigation.portal,
     todo: icon.noteDetail.toolbar.todo,
-    ai: icon.ai.ask,
+    capture: icon.common.plus,
     community: icon.ai.conversations,
   } as const;
 
@@ -117,6 +99,7 @@
   }
 
   function getItemTarget(item: MobileBottomNavigationItem) {
+    if (item.key === 'capture') return null;
     return item.key === 'resources'
       ? getMobileResourceEntryPath()
       : item.key === 'todo'
@@ -135,6 +118,10 @@
 
   async function activate(item: MobileBottomNavigationItem) {
     if (pendingKey.value === item.key) return;
+    if (item.key === 'capture') {
+      inbox.openQuickCapture();
+      return;
+    }
     if (item.key === 'resources' && route.meta.mobileShell === 'resources') {
       scrollCurrentResourceToTop();
       return;
@@ -207,7 +194,7 @@
     background: color-mix(in srgb, var(--primary-color) 8%, transparent) !important;
   }
 
-  .mobile-bottom-nav__item--ai .mobile-bottom-nav__icon {
+  .mobile-bottom-nav__item--capture .mobile-bottom-nav__icon {
     width: 30px;
     height: 25px;
     border-radius: 9px;
@@ -215,50 +202,10 @@
     background: linear-gradient(145deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 64%, #9b8cff));
   }
 
-  .mobile-bottom-nav__item--ai.mobile-bottom-nav__item--active .mobile-bottom-nav__icon {
+  .mobile-bottom-nav__item--capture:focus-visible .mobile-bottom-nav__icon,
+  .mobile-bottom-nav__item--capture:hover .mobile-bottom-nav__icon {
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 14%, transparent);
   }
-
-  .mobile-bottom-nav__ai-status {
-    position: absolute;
-    top: -2px;
-    right: -4px;
-    width: 9px;
-    height: 9px;
-    box-sizing: border-box;
-    border: 2px solid var(--surface-page-bg, var(--background-color));
-    border-radius: 50%;
-    background: var(--primary-color);
-  }
-
-  .mobile-bottom-nav__ai-status.is-generating {
-    animation: mobile-ai-status-pulse 1.2s ease-in-out infinite;
-  }
-
-  .mobile-bottom-nav__ai-status.is-completed {
-    background: var(--success-color);
-  }
-
-  .mobile-bottom-nav__ai-status.is-needs_attention {
-    background: var(--warning-color);
-  }
-
-  .mobile-bottom-nav__ai-status.is-failed {
-    background: var(--danger-color);
-  }
-
-  @keyframes mobile-ai-status-pulse {
-    0%,
-    100% {
-      transform: scale(0.82);
-      opacity: 0.72;
-    }
-    50% {
-      transform: scale(1);
-      opacity: 1;
-    }
-  }
-
   .mobile-bottom-nav__icon {
     position: relative;
     min-height: 25px;
@@ -304,8 +251,5 @@
       transition: none;
     }
 
-    .mobile-bottom-nav__ai-status.is-generating {
-      animation: none;
-    }
   }
 </style>

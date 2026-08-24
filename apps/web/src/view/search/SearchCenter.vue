@@ -160,7 +160,7 @@
                     class="search-header-icon-btn search-ai-entry"
                     :disabled="!queryState.keyword.trim() && !selectedIds.length"
                     :aria-label="t('ai.entry.askSearch')"
-                    @click="openSearchAi(selectedIds.length > 1 ? 'compare' : 'find')"
+                    @click="toggleSearchAi(selectedIds.length > 1 ? 'compare' : 'find')"
                   >
                     <svg-icon :src="icon.ai.ask" size="16" />
                   </BButton>
@@ -233,7 +233,7 @@
                     :disabled="!queryState.keyword.trim() && !selectedIds.length"
                     :aria-label="t('ai.entry.askSearch')"
                     :title="t('ai.entry.askSearch')"
-                    @click="openSearchAi(selectedIds.length > 1 ? 'compare' : 'find')"
+                    @click="toggleSearchAi(selectedIds.length > 1 ? 'compare' : 'find')"
                   >
                     <SvgIcon :src="icon.ai.ask" size="15" aria-hidden="true" />
                     <span>AI</span>
@@ -355,9 +355,9 @@
                     {{ t('common.more') }}
                   </BButton>
                   <template v-else>
-                    <BButton :disabled="allMatchingActive || !selectedCount" @click="openSearchAi('organize')">
+                    <BButton :disabled="allMatchingActive || !selectedCount" @click="toggleSearchAi('organize')">
                       <SvgIcon :src="icon.ai.materials" size="15" />
-                      {{ t('ai.entry.addSelectedToAssistant') }}
+                      {{ t('ai.entry.summarizeSelected') }}
                     </BButton>
                     <BButton @click="batchAddToInbox">{{ t('inbox.addExisting') }}</BButton>
                     <BButton type="primary" @click="batchAddTag">{{ t('resourceCenter.batch.addTag') }}</BButton>
@@ -366,6 +366,20 @@
                   </template>
                 </div>
               </section>
+
+              <AiSkillPanel
+                v-if="bookmark.isMobile && searchAiVisible"
+                class="search-ai-panel search-ai-panel--mobile"
+                :title="t('ai.entry.searchSkillTitle')"
+                :description="t('ai.entry.searchSkillDescription')"
+                skill-id="search.answer"
+                surface="search"
+                :resource-refs="searchAiResourceRefs"
+                :scope-label="searchAiScopeLabel"
+                :initial-input="searchAiInitialInput"
+                :actions="searchAiActions"
+                :placeholder="t('ai.entry.searchSkillPlaceholder')"
+              />
 
               <div
                 ref="resultScrollRef"
@@ -485,7 +499,20 @@
             </BCard>
 
             <aside v-if="!bookmark.isMobile" class="resource-inspector-pane">
-              <template v-if="inspectedResource">
+              <AiSkillPanel
+                v-if="searchAiVisible"
+                class="search-ai-panel"
+                :title="t('ai.entry.searchSkillTitle')"
+                :description="t('ai.entry.searchSkillDescription')"
+                skill-id="search.answer"
+                surface="search"
+                :resource-refs="searchAiResourceRefs"
+                :scope-label="searchAiScopeLabel"
+                :initial-input="searchAiInitialInput"
+                :actions="searchAiActions"
+                :placeholder="t('ai.entry.searchSkillPlaceholder')"
+              />
+              <template v-else-if="inspectedResource">
                 <div
                   class="resource-inspector-hero"
                   :class="[
@@ -742,7 +769,8 @@
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
-  import { openAiAssistant, type AiAssistantIntent } from '@/utils/aiEntry';
+  import AiSkillPanel from '@/components/aiSkills/AiSkillPanel.vue';
+  import type { AiSkillResourceRef } from '@lightnote/shared/ai-skill-protocol';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { SEARCH_PAGE_SIZE, mergeResourcePage } from '@/utils/resourcePagination';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
@@ -849,6 +877,7 @@
   });
 
   const selectedIds = ref<string[]>([]);
+  const searchAiVisible = ref(false);
   const allMatchingSummary = ref<BatchSelectionSummary | null>(null);
   const excludedSelectionIds = ref<string[]>([]);
   const selectionPreviewLoading = ref(false);
@@ -947,7 +976,7 @@
   const mobileBatchActions = computed<MobilePageActionItem[]>(() => [
     {
       key: 'ai',
-      label: t('ai.entry.addSelectedToAssistant'),
+      label: t('ai.entry.summarizeSelected'),
       icon: icon.ai.materials,
       disabled: allMatchingActive.value || selectedCount.value < 1,
     },
@@ -990,6 +1019,46 @@
   const selectedTypes = computed<GlobalSearchType[]>(() =>
     queryState.types.length ? queryState.types : [...SEARCH_CENTER_TYPE_LIST],
   );
+  const searchAiResourceRefs = computed<AiSkillResourceRef[]>(() =>
+    mappedItems.value
+      .filter((item) => selectedIds.value.includes(getItemSelectionKey(item)))
+      .filter((item) => ['note', 'bookmark', 'file', 'todo'].includes(item.type))
+      .slice(0, 10)
+      .map((item) => ({ type: item.type as AiSkillResourceRef['type'], id: String(item.id) })),
+  );
+  const searchAiInitialInput = computed<Record<string, unknown>>(() => ({
+    resourceTypes: selectedTypes.value.filter((type) => ['note', 'bookmark', 'file', 'todo'].includes(type)),
+  }));
+  const searchAiScopeLabel = computed(() =>
+    searchAiResourceRefs.value.length
+      ? t('ai.entry.selectedScope', { count: searchAiResourceRefs.value.length })
+      : '',
+  );
+  const searchAiActions = computed(() => {
+    const actions: Array<{
+      id: string;
+      label: string;
+      skillId: string;
+      input: Record<string, unknown>;
+    }> = [];
+    if (searchAiResourceRefs.value.length) {
+      actions.push({
+        id: 'summarize',
+        label: t('ai.entry.summarizeSelected'),
+        skillId: 'search.summarize_selected',
+        input: { instruction: t('ai.entry.summarizeSelectedInstruction') },
+      });
+    }
+    if (searchAiResourceRefs.value.length >= 2) {
+      actions.push({
+        id: 'compare',
+        label: t('ai.entry.compareSelected'),
+        skillId: 'search.compare_selected',
+        input: { instruction: t('ai.entry.compareSelectedInstruction') },
+      });
+    }
+    return actions;
+  });
   const hasActiveAdvancedFilters = computed(
     () =>
       queryState.tags.length > 0 ||
@@ -1499,7 +1568,7 @@
   }
 
   function handleMobileBatchAction(action: MobilePageActionItem) {
-    if (action.key === 'ai') openSearchAi('organize');
+    if (action.key === 'ai') toggleSearchAi('organize');
     else if (action.key === 'inbox') void batchAddToInbox();
     else if (action.key === 'addTag') batchAddTag();
     else if (action.key === 'removeTag') batchRemoveTag();
@@ -1569,19 +1638,15 @@
     }
   }
 
-  function openSearchAi(intent: AiAssistantIntent) {
+  function toggleSearchAi(intent: 'find' | 'compare' | 'organize') {
     if (allMatchingActive.value) {
       message.warning(t('resourceCenter.batch.aiExplicitOnly'));
       return;
     }
     const selected = mappedItems.value.filter((item) => selectedIds.value.includes(getItemSelectionKey(item)));
-    if (selected.length > 5) message.info(t('ai.materialLimit', { count: 5 }));
-    openAiAssistant({
-      surface: 'search',
-      suggestedIntent: intent,
-      query: queryState.keyword.trim() || undefined,
-      contextRefs: selected.slice(0, 5).map((item) => ({ type: item.type, id: String(item.id), title: item.title })),
-    });
+    if (selected.length > 10) message.info(t('ai.materialLimit', { count: 10 }));
+    searchAiVisible.value = !searchAiVisible.value;
+    if (intent === 'organize' && bookmark.isMobile) mobileBatchActionsOpen.value = false;
   }
 
   function getSelectedItemsByTypes(types: SearchType[]) {
@@ -2126,6 +2191,17 @@
     gap: 12px;
     padding: 14px;
     overflow: hidden auto;
+  }
+
+  .search-ai-panel {
+    width: 100%;
+    box-sizing: border-box;
+    border-color: var(--search-border-color);
+    background: var(--search-card-bg);
+  }
+
+  .search-ai-panel--mobile {
+    margin: 0 0 12px;
   }
 
   .resource-inspector-hero {

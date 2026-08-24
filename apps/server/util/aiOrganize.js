@@ -2,9 +2,7 @@ import { EXPLICIT_WEB_READ_MAX_BYTES, fetchWebMeta } from './fetchWebMeta.js';
 import { requestAi } from './agent/aiGateway.js';
 
 // AI 自动整理:批量给书签生成名称/描述 + 从「已有标签」匹配 + 建议新标签。
-// 与单条「智能生成」保持一致——【免费】,不扣积分、不设每日固定次数;仅用单次条数上限防跑量,
-// 可分批多次运行。真正的积分出口在商店(AI 加油包/扩容/称号/头像框)与抽奖,不在这个高频提效功能上设卡。
-// AI 用量统一进入 AI Gateway / aiQuota；配额默认强制执行，只有显式配置才进入观测模式。
+// 单次条数上限只控制响应时长；真实模型调用统一进入 AI Execution，按 Provider 用量结算。
 
 export const ORGANIZE_MAX_BATCH = 20; // 单次最多处理条数(控制单次时长;整完可继续下一批)
 
@@ -52,7 +50,7 @@ function throwIfAborted(signal) {
 }
 
 // 从纯文本(如笔记标题+正文)推荐标签:只匹配/建议标签,不生成名称描述。供「AI 整理笔记」用。
-export async function suggestTagsFromText({ text, userTags = [], trace, governance }) {
+export async function suggestTagsFromText({ text, userTags = [], trace }) {
   const tagNameList = userTags.map((t) => t.name);
   const userPrompt = [
     '请根据下面的内容,为它推荐关联标签。',
@@ -75,12 +73,6 @@ export async function suggestTagsFromText({ text, userTags = [], trace, governan
       maxTokens: 400,
       temperature: 0.1,
       trace: { ...trace, taskType: 'organize', stage: 'organize_note_tags' },
-      governance: {
-        quotaPolicy: 'system',
-        systemId: 'organize',
-        ...governance,
-        taskType: 'organize_note_tags',
-      },
     },
   );
   const parsed = parseAiJson(content);
@@ -96,7 +88,7 @@ export async function suggestTagsFromText({ text, userTags = [], trace, governan
 /**
  * 单个书签:AI 生成 name/description + 从已有标签匹配(matchedTagIds)+ 建议新标签(newTags)。
  * 已有 name+description 时【不再抓网页】(省时省钱),直接据已有信息打标签;缺失才抓正文。
- * 抽自 chatHandle.generateBookmarkMeta,供「单条智能生成」与「批量整理」共用。
+ * 书签表单 Skill 与批量整理共用的唯一模型组织实现。
  * @returns {{name,description,matchedTagIds,newTags}|null} 解析失败返回 null
  */
 export async function suggestBookmarkMeta({
@@ -106,7 +98,6 @@ export async function suggestBookmarkMeta({
   userTags = [],
   signal,
   trace,
-  governance,
 }) {
   throwIfAborted(signal);
   const curName = String(name || '').trim();
@@ -165,12 +156,6 @@ export async function suggestBookmarkMeta({
       maxTokens: 600,
       temperature: 0.1,
       trace: { ...trace, taskType: 'organize', stage: 'organize_bookmark_meta' },
-      governance: {
-        quotaPolicy: 'system',
-        systemId: 'organize',
-        ...governance,
-        taskType: 'organize_bookmark_meta',
-      },
     },
   );
   const parsed = parseAiJson(content);

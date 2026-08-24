@@ -5,11 +5,9 @@ const aiRouter: RouteRecordRaw = {
   path: '/ai',
   name: 'mobileAiWorkspace',
   meta: {
-    title: 'AI 助手',
+    title: '旧 AI 会话',
     requireAuth: true,
     roles: ALL_ROLES,
-    mobileShell: 'ai',
-    mobileBottomNav: true,
   },
   component: () => import('@/view/aiAssistant/MobileAiWorkspace.vue'),
 };

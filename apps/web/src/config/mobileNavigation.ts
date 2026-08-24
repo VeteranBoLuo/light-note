@@ -4,7 +4,7 @@
  * 「搜索」不再占底部位置——它已升级为覆盖全部模块的顶栏全局搜索；
  * 腾出的位置给「今日」，也就是每天打开轻笺的第一站。
  */
-export type MobileShellSection = 'today' | 'resources' | 'todo' | 'ai' | 'community' | 'profile';
+export type MobileShellSection = 'today' | 'resources' | 'capture' | 'todo' | 'community' | 'profile';
 export type MobileResourcePath = '/home' | '/noteLibrary' | '/cloudSpace' | '/manage/tagMg';
 export type MobileResourceInboxTab = 'all' | 'bookmark' | 'note' | 'file';
 
@@ -20,11 +20,11 @@ export interface MobileBottomNavigationItem {
   labelKey:
     | 'mobileNavigation.today'
     | 'mobileNavigation.resources'
+    | 'mobileNavigation.quickCapture'
     | 'mobileNavigation.todo'
-    | 'mobileNavigation.ai'
     | 'mobileNavigation.community'
     | 'mobileNavigation.profile';
-  path?: '/workbenches' | '/inbox' | '/ai' | '/community-chat' | '/personCenter';
+  path?: '/workbenches' | '/inbox' | '/community-chat' | '/personCenter';
 }
 
 export const MOBILE_RESOURCE_NAVIGATION: readonly MobileResourceNavigationItem[] = [
@@ -54,11 +54,11 @@ export const MOBILE_RESOURCE_NAVIGATION: readonly MobileResourceNavigationItem[]
   },
 ] as const;
 
-// AI 保持中间强调位；个人中心改由移动顶栏头像进入，腾出的第五位给独立聊天室
+// 中间强调位用于确定性的快速收集；模块 AI 只在对应业务页面出现，不再作为全局一级入口。
 export const MOBILE_BOTTOM_NAVIGATION: readonly MobileBottomNavigationItem[] = [
   { key: 'today', labelKey: 'mobileNavigation.today', path: '/workbenches' },
   { key: 'resources', labelKey: 'mobileNavigation.resources' },
-  { key: 'ai', labelKey: 'mobileNavigation.ai', path: '/ai' },
+  { key: 'capture', labelKey: 'mobileNavigation.quickCapture' },
   { key: 'todo', labelKey: 'mobileNavigation.todo', path: '/inbox' },
   { key: 'community', labelKey: 'mobileNavigation.community', path: '/community-chat' },
 ] as const;

@@ -2,7 +2,7 @@
 
 > 轻笺后端服务——为标签化知识管理提供 API 支撑。
 
-基于 Node.js + Express + MySQL 构建，为前端提供书签、笔记、云空间、AI 助手、标签图谱、后台管理等功能接口。
+基于 Node.js + Express + MySQL 构建，为前端提供书签、笔记、云空间、模块化 AI Skills、标签图谱、后台管理等功能接口。
 
 所属 monorepo：[VeteranBoLuo/light-note](https://github.com/VeteranBoLuo/light-note)
 
@@ -50,12 +50,16 @@
 - 存储配额管理（Lv.1 为 1GB，随等级增长至 20GB，并可永久扩容；正常文件与回收站共享容量）
 - 外部分享链接生成与下载
 
-### AI 助手
+### 模块化 AI Skills
 
-- AI 对话接口 · 流式响应
-- 翻译能力
-- 知识问答
-- 纯离线核心黄金评测集（80 条合成任务，见 [`evaluation/ai-assistant/README.md`](./evaluation/ai-assistant/README.md)）
+- 在笔记、书签、文件、待办、资源检索和帮助中心内提供范围明确的 AI 能力
+- 页面选择 Skill，服务端按 owner 重读资源，模型不再猜测业务模块和材料范围
+- 写操作只返回结构化预览，确认后复用既有业务 Service 写入
+- 所有真实 Provider 调用统一进入 AI Execution、Provider Span 和额度结算
+- 待办时间由模型摘录原话、服务端按 IANA 时区确定性解析；待办拆解只修改未保存表单预览
+- Skill 生命周期与采用行为使用低敏埋点，Feature Config 异常不会拖垮原业务页面
+- Registry 契约测试精确锁定 20 个 Skill，源码门禁阻止别名、动态导入和 Provider HTTP 旁路
+- 旧通用助手会话仅支持查看、导出和删除，不能继续发送
 
 #### AI 配额安全配置
 

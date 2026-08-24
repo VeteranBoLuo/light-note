@@ -52,11 +52,6 @@ describe('suggestBookmarkMeta cancellation', () => {
         toolChoice: 'none',
         maxTokens: 600,
         trace: expect.objectContaining({ taskType: 'organize', stage: 'organize_bookmark_meta' }),
-        governance: expect.objectContaining({
-          quotaPolicy: 'system',
-          systemId: 'organize',
-          taskType: 'organize_bookmark_meta',
-        }),
       }),
     );
   });
@@ -109,11 +104,6 @@ describe('suggestBookmarkMeta cancellation', () => {
           traceId: 'trace-note-tags',
           taskType: 'organize',
           stage: 'organize_note_tags',
-        }),
-        governance: expect.objectContaining({
-          quotaPolicy: 'system',
-          systemId: 'organize',
-          taskType: 'organize_note_tags',
         }),
       }),
     );

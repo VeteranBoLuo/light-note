@@ -241,7 +241,6 @@
 <script lang="ts" setup>
   import { computed, inject, nextTick, onBeforeUnmount, ref, watch, watchEffect } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import axios from 'axios';
   import TypewriterOutput from '@/components/base/TypewriterOutput.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -250,12 +249,12 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import icon from '@/config/icon';
-  import { apiBasePost } from '@/http/request';
+  import { createAiSkillRequest, executeAiSkill } from '@/api/aiSkillApi';
+  import { recordAiSkillApplied } from '@/api/aiTelemetry';
   import { noteDisplayText } from '@/utils/common.ts';
   import DOMPurify from 'dompurify';
   import { renderStreamingMarkdown } from '@/utils/aiMessageRender';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import { consumeAiSseChunk, flushAiSseBuffer, type AiSseEvent } from '@/utils/aiSse';
 
   const { t } = useI18n();
 
@@ -276,7 +275,6 @@
   const resultFormat = ref<ResultFormat>('both');
   const requestCompleted = ref(false);
   const previewVisible = ref(false);
-  const sessionId = ref('');
   const abortController = ref<AbortController | null>(null);
   type GenerationPhase = 'idle' | 'connecting' | 'waiting' | 'slow' | 'streaming';
   type GenerationFeedback = { type: 'error' | 'warning'; text: string; retryable: boolean };
@@ -441,54 +439,14 @@
     continueWrite: { format: 'body' },
     translate: { format: 'body' },
     outline: { format: 'body' },
-    custom: { format: 'both' },
+    custom: { format: 'body' },
   };
 
   // 部分动作需要给模型额外说明(泛化的"任务名"不足以表达期望)
   const ACTION_INSTRUCTION: Record<string, string> = {
-    continueWrite:
-      '请在完整保留原文的前提下,顺着语义自然地往下续写 1~3 段;【正文】必须输出「原文 + 续写」拼接后的完整内容。',
-    translate:
-      '请在中文与英文之间翻译(中文内容译成英文,英文内容译成中文,混合则以主要语言为准);【正文】输出翻译后的完整内容,保持段落结构。',
-    outline: '请为内容提炼一份层级清晰的大纲(用标题层级 + 有序/无序列表)。',
-  };
-
-  const buildFormatHint = (format: ResultFormat) => {
-    if (format === 'title') {
-      return '禁止输出引导语、解释或结尾说明，只能严格按以下结构输出；【标题】标记必须原样保留：\n【标题】\n<一行标题建议>';
-    }
-    const bodyRequirement = isMarkdownNote.value
-      ? '【正文】必须输出 Markdown 源文本，保留标题、列表、引用、强调和代码块语法，不要用 HTML，也不要用代码围栏包裹整篇正文。'
-      : '【正文】内容需使用 HTML 片段（适配 TinyMCE），允许标签：p,h1-h6,strong,em,ul,ol,li,blockquote。';
-    const bodyPlaceholder = isMarkdownNote.value ? '<Markdown 正文内容>' : '<HTML 正文内容>';
-    if (format === 'body') {
-      return `禁止输出引导语、解释或结尾说明，只能严格按以下结构输出；【正文】标记必须原样保留；${bodyRequirement}\n【正文】\n${bodyPlaceholder}`;
-    }
-    return `禁止输出引导语、解释或结尾说明，只能严格按以下结构输出；【标题】和【正文】标记必须原样保留；${bodyRequirement}\n【标题】\n<一行标题建议>\n【正文】\n${bodyPlaceholder}`;
-  };
-
-  const buildMessage = (actionOverride?: string, baseContent?: string, followupReq?: string) => {
-    // 追问迭代:后端单轮无状态,故把「上一版生成结果」作为原内容喂回 + 追问要求,基于它继续修改
-    if (baseContent !== undefined) {
-      return `任务：请根据补充要求修改下面这份内容，保持同样的【标题】/【正文】段落标记不变\n原内容：\n${baseContent}\n补充要求：${followupReq || '无'}\n\n${buildFormatHint(resultFormat.value || 'both')}`;
-    }
-    const title = note?.title || t('ai.reply.untitled');
-    const action = actionOverride || lastAction.value || 'custom';
-    const requirement = prompt.value ? prompt.value : '无';
-    const format = actionConfig[action]?.format || 'both';
-    const actionText =
-      {
-        polishFull: '润色全文',
-        optimizeTitle: '优化标题',
-        generateSummary: '生成摘要',
-        correctErrors: '纠错与语病',
-        continueWrite: '续写扩展',
-        translate: '翻译（中英互译）',
-        outline: '生成大纲',
-        custom: '自定义处理',
-      }[action] || '自定义处理';
-    const extra = ACTION_INSTRUCTION[action] ? `\n${ACTION_INSTRUCTION[action]}` : '';
-    return `任务：${actionText}${extra}\n标题：${title}\n内容：${note?.content}\n补充要求：${requirement}\n\n${buildFormatHint(format)}`;
+    continueWrite: '请在完整保留原文的前提下，顺着语义自然地往下续写 1～3 段，返回「原文 + 续写」拼接后的完整内容。',
+    translate: '请在中文与英文之间翻译（中文内容译成英文，英文内容译成中文，混合则以主要语言为准），保持段落结构。',
+    outline: '请为内容提炼一份层级清晰的大纲（用标题层级和有序/无序列表）。',
   };
 
   const runAction = (action: string) => {
@@ -512,6 +470,31 @@
   const retryGeneration = () => {
     if (isLoading.value) return;
     void generate(lastGenerationMode.value);
+  };
+
+  const skillOperation = (action: string) => {
+    return (
+      (
+        {
+          polishFull: 'polish',
+          optimizeTitle: 'title',
+          generateSummary: 'summarize',
+          correctErrors: 'proofread',
+          continueWrite: 'expand',
+          translate: 'translate',
+          outline: 'summarize',
+          custom: 'rewrite',
+        } as const
+      )[action as keyof typeof actionConfig] || 'rewrite'
+    );
+  };
+
+  const skillInstruction = (action: string, requirement: string) => {
+    const fixed = action === 'outline' ? '生成层级清晰的大纲，保留原文事实。' : ACTION_INSTRUCTION[action] || '';
+    const format = isMarkdownNote.value
+      ? '输出 Markdown 源文本并保留原有结构。'
+      : '输出适配富文本编辑器的 HTML 片段，只使用 p、h1-h6、strong、em、ul、ol、li、blockquote 标签。';
+    return [fixed, requirement, action === 'optimizeTitle' ? '' : format].filter(Boolean).join('\n');
   };
 
   const generate = async (mode: 'custom' | 'action' | 'followup' = 'action') => {
@@ -539,89 +522,37 @@
     scheduleSlowGenerationHint();
     const requestController = new AbortController();
     abortController.value = requestController;
-    let streamErrorMessage = '';
 
     try {
-      const actionOverride = mode === 'custom' ? '自定义处理' : mode === 'followup' ? '继续修改' : undefined;
-      let buffer = '';
-      let processedLength = 0;
-      let receivedDone = false;
-
-      const handleNewContent = (content: string) => {
-        if (!content) return;
-        generationPhase.value = 'streaming';
-        clearGenerationTimer();
-        outputFull.value += content;
-      };
-
-      const handleData = (data: AiSseEvent) => {
-        if (requestController.signal.aborted) return;
-        if (data.event === 'start') {
-          generationPhase.value = 'waiting';
-        }
-        if (data.event === 'heartbeat' && generationPhase.value === 'connecting') {
-          generationPhase.value = 'waiting';
-        }
-        if (data.event === 'error') {
-          streamErrorMessage = String(data.message || data.error || 'AI 流式响应异常');
-          return;
-        }
-        if (data.event === 'done') {
-          receivedDone = true;
-          outputTruncated.value = data.finishReason === 'length';
-        }
-        const content = data.output?.text || data.text || data.content || '';
-        if (content && typeof content === 'string') handleNewContent(content);
-        if (data.output?.session_id) sessionId.value = data.output.session_id;
-      };
-
-      const handleChunk = (chunk: string) => {
-        const parsed = consumeAiSseChunk(buffer, chunk);
-        buffer = parsed.buffer;
-        parsed.events.forEach(handleData);
-      };
-
-      await apiBasePost(
-        '/api/note/assist',
-        {
-          message: buildMessage(actionOverride, baseContent, followupReq),
-          stream: true,
-          sessionId: sessionId.value,
-          responseFormat: expectedFormat,
-          requestMetadata: {
-            operation: mode === 'followup' ? 'followup' : action,
-            scope: mode === 'followup' ? 'generated' : 'full',
-            instruction: mode === 'followup' ? followupReq : prompt.value.trim(),
-            contentChars: String(mode === 'followup' ? baseContent || '' : note?.content || '').length,
+      generationPhase.value = 'waiting';
+      const sourceText = mode === 'followup' ? baseContent || '' : String(note?.content || '');
+      const requirement = mode === 'followup' ? followupReq : prompt.value.trim();
+      const operation = mode === 'followup' ? 'rewrite' : skillOperation(action);
+      const targetLanguage = operation === 'translate' ? (/\p{Script=Han}/u.test(sourceText) ? '英语' : '中文') : '';
+      const response = await executeAiSkill(
+        createAiSkillRequest({
+          skillId: 'note.transform_text',
+          input: {
+            text: sourceText,
+            operation,
+            instruction: skillInstruction(action, requirement),
+            ...(targetLanguage ? { targetLanguage } : {}),
           },
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          responseType: 'text',
-          signal: requestController.signal,
-          onDownloadProgress: (progressEvent) => {
-            const event = (progressEvent as any).event ?? progressEvent;
-            const responseText = (event?.target as XMLHttpRequest | null)?.responseText ?? '';
-            if (!responseText) return;
-
-            const newText = responseText.slice(processedLength);
-            if (!newText) return;
-
-            processedLength = responseText.length;
-            handleChunk(newText);
-          },
-        },
+          surface: 'note.detail',
+        }),
+        { signal: requestController.signal },
       );
-
-      flushAiSseBuffer(buffer).forEach(handleData);
-      if (streamErrorMessage) throw new Error(streamErrorMessage);
-      if (!receivedDone) throw new Error('AI 流式响应未完整结束');
+      if (requestController.signal.aborted) return;
+      if (response.result?.kind !== 'grounded_markdown') throw new Error('AI Skill 返回了不兼容的结果');
+      const content = String(response.result.content || '').trim();
+      if (!content) throw new Error('AI Skill 没有返回可用内容');
+      generationPhase.value = 'streaming';
+      clearGenerationTimer();
+      outputFull.value = expectedFormat === 'title' ? `【标题】\n${content}` : `【正文】\n${content}`;
       requestCompleted.value = true;
     } catch (error: any) {
-      console.error('AI 回复生成失败:', error, axios.isCancel(error));
-      if (requestController.signal.aborted || axios.isCancel(error)) {
+      console.error('AI 回复生成失败:', error);
+      if (requestController.signal.aborted || error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError') {
         generationFeedback.value = {
           type: 'warning',
           text: t('ai.reply.generationStopped'),
@@ -630,7 +561,7 @@
       } else {
         generationFeedback.value = {
           type: 'error',
-          text: streamErrorMessage || t('ai.reply.generationFailed'),
+          text: String(error?.message || t('ai.reply.generationFailed')),
           retryable: true,
         };
       }
@@ -776,6 +707,12 @@
       }
       triggerSave?.();
       focusEditorToEnd?.();
+      void recordAiSkillApplied({
+        skillId: 'note.transform_text',
+        surface: 'note.detail',
+        resourceType: 'note',
+        resourceCount: 1,
+      });
       message.success(t('ai.reply.replacedBody'));
       return true;
     }
@@ -787,6 +724,12 @@
       note.title = suggestedTitle.value;
     }
     triggerSave?.();
+    void recordAiSkillApplied({
+      skillId: 'note.transform_text',
+      surface: 'note.detail',
+      resourceType: 'note',
+      resourceCount: 1,
+    });
     message.success(t('ai.reply.replacedTitle'));
     return true;
   };

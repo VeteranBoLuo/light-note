@@ -61,6 +61,27 @@ describe('AI product telemetry privacy contract', () => {
     );
   });
 
+  it('接受 Skill 生命周期的低敏聚合维度且不散列稳定 Skill 标识', () => {
+    expect(
+      normalizeAiProductEvent({
+        event: 'ai_skill_completed',
+        dimensions: {
+          skillId: 'todo.breakdown',
+          surface: 'todo_editor',
+          resourceType: 'todo',
+          resourceCountBucket: '1',
+          inputLengthBucket: '51_200',
+          outputLengthBucket: '201_500',
+          durationBucket: '1_3s',
+          outcome: 'success',
+        },
+      }),
+    ).toMatchObject({
+      eventName: 'ai_skill_completed',
+      dimensions: { skillId: 'todo.breakdown', resourceType: 'todo', resourceCountBucket: '1' },
+    });
+  });
+
   it('接受页面树无正文事件及其有界桶，但继续拒绝标题和路径', () => {
     expect(
       normalizeAiProductEvent({

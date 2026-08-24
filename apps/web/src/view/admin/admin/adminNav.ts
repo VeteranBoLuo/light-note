@@ -42,7 +42,6 @@ export type AdminNavInput = {
   adminAuditTitle: string;
   productInsightsTitle: string;
   adminGovernanceTitle: string;
-  aiEvaluationTitle: string;
   communityModerationTitle: string;
   supportManagementTitle: string;
 };
@@ -74,7 +73,6 @@ export function buildAdminNav({
   adminAuditTitle,
   productInsightsTitle,
   adminGovernanceTitle,
-  aiEvaluationTitle,
   communityModerationTitle,
   supportManagementTitle,
 }: AdminNavInput): AdminNavEntry[] {
@@ -129,7 +127,6 @@ export function buildAdminNav({
       items: [
         { id: 'agentLog', title: 'AI 监控' },
         { id: 'aiFeedback', title: 'AI 回答反馈' },
-        { id: 'aiEvaluation', title: aiEvaluationTitle },
         { id: 'knowledgeBase', title: 'AI 知识库', path: EXTERNAL_PATHS.knowledgeBase, external: true },
       ],
     },
@@ -225,7 +222,6 @@ const MOBILE_PATHS: Record<string, string> = {
   userOpinion: '/userOpinion',
   agentLog: '/agentLog',
   aiFeedback: '/aiFeedback',
-  aiEvaluation: '/aiEvaluation',
   productInsights: '/productInsights',
   conversion: '/conversion',
   supportManagement: '/supportManagement',

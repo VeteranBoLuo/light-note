@@ -30,9 +30,10 @@ describe('visibleSettingsSections', () => {
     expect(visibleSettingsSections(GUEST).map((s) => String(s.id))).not.toContain('install');
   });
 
-  it('游客不出现「账号与安全」，其他偏好照常可见', () => {
+  it('游客不出现账号和 AI 用量，其他偏好照常可见', () => {
     const ids = visibleSettingsSections(GUEST).map((s) => s.id);
     expect(ids).not.toContain('account');
+    expect(ids).not.toContain('ai');
     expect(ids).toContain('appearance');
     expect(ids).toContain('privacy');
   });
@@ -75,7 +76,7 @@ describe('groupSettingsSections', () => {
   });
 
   it('分组内所有项都不可见时整组不渲染', () => {
-    // 游客：「账号与设备」只剩账号一项且被隐藏（安装项已不在目录），不该留一个空标题
+    // 游客：账号和 AI 用量均隐藏，空分组不应残留。
     const grouped = groupSettingsSections(visibleSettingsSections(GUEST));
     expect(grouped.map((g) => g.group)).toEqual(['preferences', 'rules']);
   });

@@ -35,7 +35,7 @@
                 }}
               </li>
               <li>
-                {{ $t('bookmarkMg.aiOrganizeThisRunFree', { n: quote.batchCap }) }}
+                {{ $t('bookmarkMg.aiOrganizeThisRunQuota', { n: quote.batchCap }) }}
                 <span v-if="quote.candidateTotal > quote.batchCap || quote.requestTruncated" class="aio-muted">
                   ·
                   {{

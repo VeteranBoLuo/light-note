@@ -17,7 +17,7 @@ describe('cloud file empty state layout', () => {
     expect(source).toMatch(/\.mobile-file-more\.b_btn\s*\{[\s\S]*?width:\s*44px/);
   });
 
-  it('移动端文件操作抽屉不提供 AI 助手入口', () => {
+  it('移动端文件操作抽屉只提供当前文件的模块 AI，不进入全局助手', () => {
     const mobileActionsSource = source.match(
       /const mobileFileActions = computed<MobilePageActionItem\[\]>\(\(\) => \{([\s\S]*?)\n  \}\);/,
     )?.[1];
@@ -26,10 +26,13 @@ describe('cloud file empty state layout', () => {
     )?.[1];
 
     expect(mobileActionsSource).toBeDefined();
-    expect(mobileActionsSource).not.toContain("key: 'ai'");
+    expect(mobileActionsSource).toContain("key: 'ai'");
+    expect(mobileActionsSource).toContain("label: t('cloudSpace.aiUseFile')");
     expect(mobileHandlerSource).toBeDefined();
-    expect(mobileHandlerSource).not.toContain("action.key === 'ai'");
-    expect(source).toContain("label: $t('cloudSpace.aiUseFile')");
+    expect(mobileHandlerSource).toContain("action.key === 'ai'");
+    expect(mobileHandlerSource).toContain('openFilesInAi([file])');
+    expect(source).toContain('<AiSkillDialog');
+    expect(source).not.toContain("router.push('/ai')");
   });
 
   it('移动端卡片隐藏直接下载，卡片本身仍可拖入文件夹', () => {

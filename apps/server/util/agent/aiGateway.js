@@ -2,6 +2,12 @@ import crypto from 'node:crypto';
 import { requestDeepSeek, requestDeepSeekStream } from './deepseekClient.js';
 import { stableAgentErrorCode } from './logSafety.js';
 import { resolveAgentStageModelOptions } from './stageModelPolicy.js';
+import { getActiveAiExecution, isAiExecutionRuntimeRequired } from '../aiExecution/context.js';
+import {
+  beginAiProviderSpan,
+  ensureAiExecutionQuotaReservation,
+  finishAiProviderSpan,
+} from '../aiExecution/service.js';
 
 const DEFAULT_COMPLETE_TIMEOUT_MS = 90_000;
 const MIN_TIMEOUT_MS = 1_000;
@@ -77,6 +83,29 @@ export function createAiGateway({
     traceEvent(onTrace, { event: 'ai.span.started', traceId, spanId, stage, taskType, kind, startedAt });
     let activeGovernanceAdapter = governanceAdapter;
     let governanceState = null;
+    const activeExecution = getActiveAiExecution();
+    if (activeExecution && governance) {
+      const error = new Error('AI Execution 内禁止再次按 Provider 调用独立占位');
+      error.code = 'AI_EXECUTION_DOUBLE_GOVERNANCE';
+      deadline.dispose();
+      throw error;
+    }
+    if (!activeExecution && !governance && isAiExecutionRuntimeRequired()) {
+      const error = new Error('模型调用缺少 AI Execution 上下文');
+      error.code = 'AI_EXECUTION_REQUIRED';
+      error.status = 500;
+      deadline.dispose();
+      throw error;
+    }
+    if (activeExecution?.billingPolicy === 'none') {
+      const error = new Error('无模型额度执行禁止访问 Provider');
+      error.code = 'AI_EXECUTION_PROVIDER_NOT_BILLABLE';
+      error.status = 500;
+      deadline.dispose();
+      throw error;
+    }
+    if (activeExecution) await ensureAiExecutionQuotaReservation(activeExecution);
+    const executionSpan = beginAiProviderSpan({ id: spanId, traceId, stage, taskType, kind });
     let result = null;
     let caughtError = null;
     try {
@@ -136,6 +165,20 @@ export function createAiGateway({
           // 治理适配器自身必须 fail-open；最后一道防线避免日志/额度故障覆盖业务结果。
           traceEvent(onTrace, {
             event: 'ai.governance.failed',
+            traceId,
+            spanId,
+            stage,
+            taskType,
+            error: stableAgentErrorCode(error),
+          });
+        }
+      }
+      if (executionSpan) {
+        try {
+          await finishAiProviderSpan(executionSpan, { result, error: caughtError });
+        } catch (error) {
+          traceEvent(onTrace, {
+            event: 'ai.execution_span.failed',
             traceId,
             spanId,
             stage,

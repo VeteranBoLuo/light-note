@@ -279,11 +279,10 @@
   function openSuggest() {
     if (suggestVisible.value) return;
     suggestVisible.value = true;
-    window.dispatchEvent(new CustomEvent('light-note:close-ai')); // 与 AI 助手互斥:展开搜索下拉即收起 AI 面板
     ensureData(true);
   }
 
-  // 打开 AI 助手时收起本搜索下拉(双向互斥,避免两个大浮层重叠遮挡)
+  // 页面级浮层可通过统一事件收起搜索下拉。
   const handleCloseSearch = () => {
     suggestVisible.value = false;
     blurDesktopInput();

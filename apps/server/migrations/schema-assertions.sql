@@ -8,6 +8,8 @@ SELECT '[1] missing_table' AS check_name, expected.t AS detail FROM (
   UNION ALL SELECT 'ai_content_generations' UNION ALL SELECT 'ai_change_sets' UNION ALL SELECT 'ai_change_items'
   UNION ALL SELECT 'ai_memories' UNION ALL SELECT 'ai_response_events'
   UNION ALL SELECT 'ai_product_events' UNION ALL SELECT 'ai_token_reservations'
+  UNION ALL SELECT 'ai_executions' UNION ALL SELECT 'ai_provider_spans'
+  UNION ALL SELECT 'ai_skill_threads' UNION ALL SELECT 'ai_skill_turns'
   UNION ALL SELECT 'ai_evaluation_runs'
   UNION ALL SELECT 'ai_agent_conversation_state' UNION ALL SELECT 'ai_agent_run'
   UNION ALL SELECT 'ai_agent_source_set' UNION ALL SELECT 'ai_agent_result_set'
@@ -35,6 +37,8 @@ SELECT '[3] missing_column' AS check_name, t.n AS detail FROM (
   SELECT 'ai_change_sets','admin_context_scope','ai_change_sets.admin_context_scope' UNION ALL
   SELECT 'ai_response_events','admin_context_scope','ai_response_events.admin_context_scope' UNION ALL
   SELECT 'ai_content_generations','generation','ai_content_generations.generation' UNION ALL
+  SELECT 'ai_skill_threads','admin_context_mode','ai_skill_threads.admin_context_mode' UNION ALL
+  SELECT 'ai_skill_threads','admin_context_id','ai_skill_threads.admin_context_id' UNION ALL
   SELECT 'ai_agent_conversation_state','owner_key_hash','ai_agent_conversation_state.owner_key_hash' UNION ALL
   SELECT 'ai_agent_conversation_state','revision','ai_agent_conversation_state.revision' UNION ALL
   SELECT 'ai_agent_run','execution_receipt','ai_agent_run.execution_receipt' UNION ALL
@@ -72,7 +76,9 @@ WHERE table_schema=DATABASE() AND (
 SELECT '[7] missing_unique_index' AS check_name, CONCAT(x.tn,'.',x.ix) AS detail FROM (
   SELECT 'ai_change_sets' tn,'uk_ai_change_set_request_context' ix UNION ALL
   SELECT 'ai_response_events','uk_ai_response_event_context' UNION ALL
-  SELECT 'ai_token_reservations','uk_ai_token_reservation_key'
+  SELECT 'ai_token_reservations','uk_ai_token_reservation_key' UNION ALL
+  SELECT 'ai_executions','uk_ai_execution_request' UNION ALL
+  SELECT 'ai_skill_turns','uk_ai_skill_turn_request'
 ) x
 LEFT JOIN information_schema.statistics s
   ON s.table_schema=DATABASE() AND s.table_name=x.tn AND s.index_name=x.ix

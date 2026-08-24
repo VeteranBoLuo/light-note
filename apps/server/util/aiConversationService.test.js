@@ -1,567 +1,267 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../db/index.js', () => ({ default: {} }));
-// clearAiIdentityData 现在会清 AI 文档派生数据;mock 掉文档服务,避免它经 obsClient 在无 OBS 配置的测试环境导入即崩,
-// 同时可断言「subject 清除调用、owner_domain 排除」。用 vi.hoisted 让 mock fn 在被提升的 vi.mock 工厂里可用。
-const { deleteAllDocumentSources } = vi.hoisted(() => ({
-  deleteAllDocumentSources: vi
-    .fn()
-    .mockResolvedValue({ deleted: 0, failed: 0, retryScheduled: 0, retryUnavailable: 0 }),
+
+const { deleteAllDocumentSources, invalidatePersonalKnowledgeCache } = vi.hoisted(() => ({
+  deleteAllDocumentSources: vi.fn().mockResolvedValue({
+    deleted: 0,
+    failed: 0,
+    retryScheduled: 0,
+    retryUnavailable: 0,
+  }),
+  invalidatePersonalKnowledgeCache: vi.fn().mockResolvedValue(undefined),
 }));
+
 vi.mock('./aiDocument/service.js', () => ({ deleteAllDocumentSources }));
+vi.mock('./personalKnowledgeSearch.js', () => ({ invalidatePersonalKnowledgeCache }));
 
 import {
   __testing,
-  assertAiCloudHistoryEnabled,
-  cleanupExpiredAiConversations,
   cleanupDeletedAiConversations,
+  cleanupExpiredAiConversations,
   clearAiIdentityData,
-  createAiConversation,
   deleteAiConversation,
   exportAiConversations,
   getAiConversation,
-  getAiConversationDialogueByIds,
-  getAiConversationRecentDialogue,
   listAiConversations,
-  listAiMessageVersions,
-  prepareAiMessageVersionGroup,
   purgeDeletedAiConversation,
-  recoverAiConversationFromLocal,
   resolveAiConversationIdentity,
-  restoreDeletedAiConversation,
-  saveAiMessage,
 } from './aiConversationService.js';
 
-const identity = {
-  actorUserId: 'actor-1',
-  subjectUserId: 'subject-1',
-  actorRole: 'root',
-  subjectRole: 'user',
-  adminContextId: 'context-1',
-  adminContextMode: 'readonly',
-};
-
-const normalIdentity = {
+const normalIdentity = Object.freeze({
   actorUserId: 'user-1',
   subjectUserId: 'user-1',
   actorRole: 'user',
   subjectRole: 'user',
   adminContextId: null,
   adminContextMode: 'normal',
-};
+});
 
-describe('AI conversation isolation', () => {
-  beforeEach(() => vi.clearAllMocks());
+const adminIdentity = Object.freeze({
+  actorUserId: 'root-1',
+  subjectUserId: 'user-1',
+  actorRole: 'root',
+  subjectRole: 'user',
+  adminContextId: 'context-1',
+  adminContextMode: 'readonly',
+});
 
-  it('derives the owner from actor, subject and admin mode instead of req.user alone', () => {
-    expect(
-      resolveAiConversationIdentity({
-        user: { id: 'actor-1', role: 'root' },
-        billingUser: { id: 'actor-1', role: 'root' },
-        resourceUser: { id: 'subject-1', role: 'user' },
-        adminContext: { id: 'context-1', mode: 'readonly' },
-      }),
-    ).toEqual(identity);
+function transactionConnection(query = vi.fn().mockResolvedValue([{ affectedRows: 1 }])) {
+  return {
+    beginTransaction: vi.fn(),
+    commit: vi.fn(),
+    rollback: vi.fn(),
+    release: vi.fn(),
+    query,
+  };
+}
+
+describe('旧 AI 会话只读档案', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    deleteAllDocumentSources.mockResolvedValue({
+      deleted: 0,
+      failed: 0,
+      retryScheduled: 0,
+      retryUnavailable: 0,
+    });
   });
 
-  it('does not persist visitor history on the server', () => {
+  it('身份始终绑定真实操作者、数据主体和管理员上下文，访客不能读取云档案', () => {
+    expect(
+      resolveAiConversationIdentity({
+        user: { id: 'root-1', role: 'root' },
+        billingUser: { id: 'root-1', role: 'root' },
+        resourceUser: { id: 'user-1', role: 'user' },
+        adminContext: { id: 'context-1', mode: 'readonly' },
+      }),
+    ).toEqual(adminIdentity);
+
     expect(() => resolveAiConversationIdentity({ user: { id: 'visitor', role: 'visitor' } })).toThrow(
       /AI_HISTORY_REQUIRES_ACCOUNT/,
     );
   });
 
-  it('enforces the subject account cloud-history preference for automatic API persistence', async () => {
-    const enabledDb = { query: vi.fn().mockResolvedValue([[{ enabled: 'true' }]]) };
-    await expect(assertAiCloudHistoryEnabled(normalIdentity, enabledDb)).resolves.toBe(true);
-    expect(enabledDb.query).toHaveBeenCalledWith(expect.stringContaining('JSON_EXTRACT'), ['user-1']);
+  it('列表检索和删除都使用完整 owner 域，管理员只读预览不能删除', async () => {
+    const query = vi.fn().mockResolvedValue([[]]);
+    await listAiConversations(adminIdentity, { keyword: '100%_safe', limit: 10 }, { query });
+
+    expect(query.mock.calls[0][1].slice(0, 5)).toEqual([
+      'root-1',
+      'user-1',
+      'readonly',
+      'context-1',
+      'active',
+    ]);
+    expect(query.mock.calls[0][1]).toContain('%100\\%\\_safe%');
+    expect(query.mock.calls[0][0]).toContain('admin_context_id <=> ?');
 
     await expect(
-      assertAiCloudHistoryEnabled(normalIdentity, {
-        query: vi.fn().mockResolvedValue([[{ enabled: 'false' }]]),
-      }),
-    ).rejects.toMatchObject({ code: 'AI_CLOUD_HISTORY_DISABLED', status: 409 });
-    await expect(
-      assertAiCloudHistoryEnabled(normalIdentity, { query: vi.fn().mockResolvedValue([[]]) }),
-    ).rejects.toMatchObject({ code: 'AI_CLOUD_HISTORY_DISABLED', status: 409 });
+      deleteAiConversation(adminIdentity, 'conversation-1', { query: vi.fn() }),
+    ).rejects.toMatchObject({ code: 'ADMIN_PREVIEW_READONLY', status: 403 });
   });
 
-  it('readonly can read but every persistent mutation is rejected before touching storage', async () => {
-    const database = { query: vi.fn(), getConnection: vi.fn() };
-    await expect(createAiConversation(identity, {}, database)).rejects.toMatchObject({
-      code: 'ADMIN_PREVIEW_READONLY',
-      status: 403,
-    });
-    await expect(deleteAiConversation(identity, 'conversation-1', database)).rejects.toMatchObject({
-      code: 'ADMIN_PREVIEW_READONLY',
-      status: 403,
-    });
-    await expect(clearAiIdentityData(identity, database)).rejects.toMatchObject({
-      code: 'ADMIN_PREVIEW_READONLY',
-      status: 403,
-    });
-    await expect(
-      saveAiMessage(identity, 'conversation-1', { role: 'user', content: 'readonly must not persist' }, database),
-    ).rejects.toMatchObject({ code: 'ADMIN_PREVIEW_READONLY', status: 403 });
-    await expect(
-      recoverAiConversationFromLocal(
-        identity,
-        {
-          messages: [{ clientId: 'local-1', role: 'user', status: 'completed', content: 'readonly must not restore' }],
-        },
-        database,
-      ),
-    ).rejects.toMatchObject({ code: 'ADMIN_PREVIEW_READONLY', status: 403 });
-    expect(database.query).not.toHaveBeenCalled();
-    expect(database.getConnection).not.toHaveBeenCalled();
-  });
-
-  it('在一个事务中新建会话并恢复本机消息的父级和版本组关系', async () => {
-    const recoveredMessages = [];
-    const conversation = {
-      id: '',
-      actor_user_id: 'user-1',
-      subject_user_id: 'user-1',
-      admin_context_mode: 'normal',
-      admin_context_id: null,
-      title: '新会话',
-      summary: '',
-      scope_type: 'global',
-      scope_json: '{}',
-      status: 'active',
-      retention_mode: 'standard',
-      expire_at: null,
-      root_conversation_id: '',
-      parent_conversation_id: null,
-      branch_from_message_id: null,
-      last_message_at: '2026-07-23T00:00:00.000Z',
-      create_time: '2026-07-23T00:00:00.000Z',
-      update_time: '2026-07-23T00:00:00.000Z',
-    };
-    const query = vi.fn(async (sql, params = []) => {
-      const normalizedSql = String(sql).replace(/\s+/g, ' ').trim();
-      if (normalizedSql.includes('INSERT INTO ai_conversations')) {
-        conversation.id = params[0];
-        conversation.root_conversation_id = params[10];
-        return [{ affectedRows: 1 }];
-      }
-      if (normalizedSql.startsWith('SELECT * FROM ai_conversations')) return [[conversation]];
-      if (normalizedSql.includes('SELECT id FROM ai_messages WHERE id = ? AND conversation_id = ?')) {
-        const found = recoveredMessages.find(
-          (message) => message.id === params[0] && message.conversation_id === params[1],
-        );
-        return [found ? [{ id: found.id }] : []];
-      }
-      if (normalizedSql.includes('SELECT id FROM ai_messages WHERE conversation_id = ? AND request_id = ?'))
-        return [[]];
-      if (normalizedSql.includes('INSERT INTO ai_messages')) {
-        const [
-          id,
-          conversationId,
-          parentMessageId,
-          requestId,
-          traceId,
-          role,
-          content,
-          status,
-          contextRefs,
-          attachmentRefs,
-          activity,
-          coverage,
-          versionGroupId,
-          modelMeta,
-        ] = params;
-        recoveredMessages.push({
-          id,
-          conversation_id: conversationId,
-          parent_message_id: parentMessageId,
-          request_id: requestId,
-          trace_id: traceId,
-          role,
-          content,
-          status,
-          context_refs_json: contextRefs,
-          attachment_refs_json: attachmentRefs,
-          activity_json: activity,
-          coverage_json: coverage,
-          version_group_id: versionGroupId,
-          model_meta_json: modelMeta,
-          create_time: '2026-07-23T00:00:00.000Z',
-          update_time: '2026-07-23T00:00:00.000Z',
-        });
-        return [{ affectedRows: 1 }];
-      }
-      if (normalizedSql.startsWith('DELETE FROM ai_message_')) return [{ affectedRows: 0 }];
-      if (normalizedSql.includes('UPDATE ai_conversations')) {
-        conversation.title = params[0];
-        return [{ affectedRows: 1 }];
-      }
-      if (normalizedSql.startsWith('SELECT * FROM ai_messages WHERE id = ?')) {
-        const found = recoveredMessages.find(
-          (message) => message.id === params[0] && message.conversation_id === params[1],
-        );
-        return [found ? [found] : []];
-      }
-      if (normalizedSql.startsWith('UPDATE ai_messages SET version_group_id')) {
-        const found = recoveredMessages.find(
-          (message) => message.id === params[1] && message.conversation_id === params[2],
-        );
-        if (found) found.version_group_id = params[0];
-        return [{ affectedRows: found ? 1 : 0 }];
-      }
-      if (
-        normalizedSql.startsWith('SELECT * FROM ai_messages WHERE conversation_id = ?') ||
-        normalizedSql.startsWith('SELECT * FROM ( SELECT * FROM ai_messages WHERE conversation_id = ?')
-      ) {
-        return [recoveredMessages];
-      }
-      if (normalizedSql.startsWith('SELECT * FROM ai_message_sources')) return [[]];
-      if (normalizedSql.startsWith('SELECT * FROM ai_message_evidence')) return [[]];
-      if (normalizedSql.startsWith('SELECT message_id, rating, reason, resolved')) return [[]];
-      throw new Error(`unexpected query: ${normalizedSql}`);
-    });
-    const connection = {
-      beginTransaction: vi.fn(),
-      commit: vi.fn(),
-      rollback: vi.fn(),
-      release: vi.fn(),
-      query,
-    };
-
-    const result = await recoverAiConversationFromLocal(
-      normalIdentity,
-      {
-        messages: [
-          { clientId: 'local-user', role: 'user', status: 'completed', content: '保留本机提问' },
+  it('只读详情恢复历史消息、来源、证据和旧反馈，不提供任何续写能力', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce([
+        [
           {
-            clientId: 'local-answer',
-            parentClientId: 'local-user',
-            versionGroupClientId: 'local-answer',
-            role: 'assistant',
-            status: 'completed',
-            content: '保留本机回答',
+            id: 'conversation-1',
+            title: '旧会话',
+            summary: '',
+            status: 'active',
+            retention_mode: 'standard',
           },
         ],
-      },
-      { getConnection: vi.fn().mockResolvedValue(connection) },
-    );
-
-    expect(connection.beginTransaction).toHaveBeenCalledOnce();
-    expect(connection.commit).toHaveBeenCalledOnce();
-    expect(connection.rollback).not.toHaveBeenCalled();
-    expect(connection.release).toHaveBeenCalledOnce();
-    expect(result.restoredMessageCount).toBe(2);
-    expect(result.conversation.messages).toHaveLength(2);
-    expect(recoveredMessages[1].parent_message_id).toBe(recoveredMessages[0].id);
-    expect(recoveredMessages[1].version_group_id).toBe(recoveredMessages[1].id);
-  });
-
-  it('在单个事务中按 subject 清除普通账号的全部可控 AI 数据并保留安全账本', async () => {
-    const connection = {
-      beginTransaction: vi.fn(),
-      commit: vi.fn(),
-      rollback: vi.fn(),
-      release: vi.fn(),
-      query: vi.fn().mockResolvedValue([{ affectedRows: 2 }]),
-    };
-    // 文档清理(临时+cloud 的 AI 派生 + OBS 原文件)在主事务提交后执行:本例模拟删 3 个、1 个原文件清理失败
-    deleteAllDocumentSources.mockResolvedValueOnce({ deleted: 3, failed: 1, retryScheduled: 1, retryUnavailable: 0 });
-    const result = await clearAiIdentityData(normalIdentity, {
-      getConnection: vi.fn().mockResolvedValue(connection),
-    });
-
-    expect(connection.beginTransaction).toHaveBeenCalledTimes(1);
-    expect(connection.commit).toHaveBeenCalledTimes(1);
-    expect(connection.rollback).not.toHaveBeenCalled();
-    expect(connection.release).toHaveBeenCalledTimes(1);
-    // 10 条主删除(memories/changeSets/responseEvents/productEvents/conversations 各 2)+ contentChunks 2 + documents 3
-    expect(result.deleted).toBe(15);
-    expect(result.scope).toBe('subject_user');
-    expect(result.retained).toEqual(['agentLogs', 'quotaUsage', 'tokenReservations']);
-    expect(result.byType).toMatchObject({ conversations: 2, memories: 2, contentChunks: 2, documents: 3 });
-    // subject 清除会清文档,且如实上报失败数;无排除项
-    expect(deleteAllDocumentSources).toHaveBeenCalledWith({ userId: 'user-1' });
-    expect(result.documentsFailed).toBe(1);
-    expect(result.documentsRetryScheduled).toBe(1);
-    expect(result.documentsRetryUnavailable).toBe(0);
-    expect(result.excluded).toEqual([]);
-    const subjectDeletes = connection.query.mock.calls.filter(
-      ([sql]) => String(sql).includes('subject_user_id = ?') && !String(sql).includes('ai_content_chunks'),
-    );
-    expect(subjectDeletes).toHaveLength(5);
-    expect(subjectDeletes.every(([, params]) => params.join('|') === 'user-1')).toBe(true);
-    expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('admin_context_id <=> ?'))).toBe(false);
-    expect(connection.query.mock.calls.at(-2)).toEqual([
-      expect.stringContaining('INSERT INTO ai_content_generations'),
-      ['user-1'],
-    ]);
-    expect(connection.query.mock.calls.at(-2)[0]).toContain('generation = generation + 1');
-    expect(connection.query.mock.calls.at(-1)).toEqual([
-      'DELETE FROM ai_content_chunks WHERE subject_user_id = ?',
-      ['user-1'],
-    ]);
-    expect(connection.query.mock.invocationCallOrder.at(-1)).toBeLessThan(
-      connection.commit.mock.invocationCallOrder[0],
-    );
-  });
-
-  it('管理员代管清除仍严格限制在当前四维 owner 域', async () => {
-    const connection = {
-      beginTransaction: vi.fn(),
-      commit: vi.fn(),
-      rollback: vi.fn(),
-      release: vi.fn(),
-      query: vi.fn().mockResolvedValue([{ affectedRows: 1 }]),
-    };
-    const result = await clearAiIdentityData(
-      { ...identity, adminContextMode: 'maintain' },
-      { getConnection: vi.fn().mockResolvedValue(connection) },
-    );
-
-    expect(result.scope).toBe('owner_domain');
-    expect(result.deleted).toBe(5);
-    // owner_domain(管理员代管):文档表仅 user_id 归属,无法按 owner 域精确清理 → 明确排除,绝不调用文档清理
-    expect(deleteAllDocumentSources).not.toHaveBeenCalled();
-    expect(result.excluded).toEqual(['documents']);
-    expect(result.byType.documents).toBe(0);
-    expect(connection.query).toHaveBeenCalledTimes(5);
-    expect(
-      connection.query.mock.calls.every(
-        ([sql, params]) =>
-          String(sql).includes('admin_context_id <=> ?') && params.join('|') === 'actor-1|subject-1|maintain|context-1',
-      ),
-    ).toBe(true);
-  });
-
-  it('AI 数据清除失败时回滚且不吞掉真实数据库异常', async () => {
-    const failure = Object.assign(new Error('offline'), { code: 'ECONNRESET' });
-    const connection = {
-      beginTransaction: vi.fn(),
-      commit: vi.fn(),
-      rollback: vi.fn(),
-      release: vi.fn(),
-      query: vi.fn().mockRejectedValue(failure),
-    };
-    await expect(
-      clearAiIdentityData(normalIdentity, { getConnection: vi.fn().mockResolvedValue(connection) }),
-    ).rejects.toMatchObject({ code: 'ECONNRESET' });
-    expect(connection.commit).not.toHaveBeenCalled();
-    expect(connection.rollback).toHaveBeenCalledTimes(1);
-    expect(connection.release).toHaveBeenCalledTimes(1);
-  });
-
-  it('AI 数据结构缺失时清除操作失败关闭，不把未检查分域误报为空', async () => {
-    const missing = Object.assign(new Error('missing field'), { code: 'ER_BAD_FIELD_ERROR' });
-    const connection = {
-      beginTransaction: vi.fn(),
-      commit: vi.fn(),
-      rollback: vi.fn(),
-      release: vi.fn(),
-      query: vi.fn().mockRejectedValue(missing),
-    };
-    await expect(
-      clearAiIdentityData(normalIdentity, { getConnection: vi.fn().mockResolvedValue(connection) }),
-    ).rejects.toMatchObject({ code: 'AI_DATA_CLEAR_SCHEMA_UNAVAILABLE', status: 503 });
-    expect(connection.commit).not.toHaveBeenCalled();
-    expect(connection.rollback).toHaveBeenCalledOnce();
-  });
-
-  it('subject 总清除无法在同一事务推进检索代际时回滚全部删除', async () => {
-    const missing = Object.assign(new Error('generation table missing'), { code: 'ER_NO_SUCH_TABLE' });
-    const connection = {
-      beginTransaction: vi.fn(),
-      commit: vi.fn(),
-      rollback: vi.fn(),
-      release: vi.fn(),
-      query: vi
-        .fn()
-        // 5 次可控删除成功；推进检索代际(INSERT ai_content_generations)时缺表→整体回滚。
-        .mockResolvedValueOnce([{ affectedRows: 1 }])
-        .mockResolvedValueOnce([{ affectedRows: 1 }])
-        .mockResolvedValueOnce([{ affectedRows: 1 }])
-        .mockResolvedValueOnce([{ affectedRows: 1 }])
-        .mockResolvedValueOnce([{ affectedRows: 1 }])
-        .mockRejectedValueOnce(missing),
-    };
-    await expect(
-      clearAiIdentityData(normalIdentity, { getConnection: vi.fn().mockResolvedValue(connection) }),
-    ).rejects.toMatchObject({ code: 'AI_DATA_CLEAR_SCHEMA_UNAVAILABLE', status: 503 });
-    expect(connection.query.mock.calls.at(-1)[0]).toContain('INSERT INTO ai_content_generations');
-    expect(connection.commit).not.toHaveBeenCalled();
-    expect(connection.rollback).toHaveBeenCalledOnce();
-    expect(connection.release).toHaveBeenCalledOnce();
-  });
-
-  it('always applies actor, subject, mode and exact context id when listing and deleting', async () => {
-    const query = vi
-      .fn()
-      .mockResolvedValueOnce([[]])
-      .mockResolvedValueOnce([{ affectedRows: 1 }]);
-    const database = { query };
-    await listAiConversations(identity, { limit: 10 }, database);
-    await deleteAiConversation({ ...identity, adminContextMode: 'maintain' }, 'conversation-1', database);
-    expect(query.mock.calls[0][1].slice(0, 5)).toEqual(['actor-1', 'subject-1', 'readonly', 'context-1', 'active']);
-    expect(query.mock.calls[1][1]).toEqual(['conversation-1', 'actor-1', 'subject-1', 'maintain', 'context-1']);
-    expect(query.mock.calls[1][0]).toContain("status IN ('active', 'archived')");
-    expect(query.mock.calls[1][0]).not.toContain('DELETE FROM ai_conversations');
-  });
-
-  it('restores the current actor feedback together with cloud conversation messages', async () => {
-    const query = vi
-      .fn()
-      .mockResolvedValueOnce([[{ id: 'conversation-1', title: 'Conversation', status: 'active' }]])
+      ])
       .mockResolvedValueOnce([
         [
           {
             id: 'message-1',
             conversation_id: 'conversation-1',
             role: 'assistant',
-            content: 'Answer',
+            content: '旧回答 [1]',
             status: 'completed',
           },
         ],
       ])
-      .mockResolvedValueOnce([[]])
-      .mockResolvedValueOnce([[]])
-      .mockResolvedValueOnce([[{ message_id: 'message-1', rating: 'unhelpful', reason: 'unsupported', resolved: 0 }]]);
-
-    const conversation = await getAiConversation(identity, 'conversation-1', {}, { query });
-
-    expect(conversation.messages[0].feedback).toEqual({
-      rating: 'unhelpful',
-      reason: 'unsupported',
-      resolved: false,
-    });
-    expect(query.mock.calls[1][0]).toContain('ORDER BY create_time DESC, id DESC LIMIT ?');
-    expect(query.mock.calls[1][0]).toContain('ORDER BY create_time ASC, id ASC');
-    expect(query.mock.calls[4][0]).toContain('actor_user_id = ?');
-    expect(query.mock.calls[4][1]).toEqual(['actor-1', 'conversation-1', 'message-1']);
-  });
-
-  it('recentDialogue 只读取 owner 会话中当前消息之前的轻量已完成对话', async () => {
-    const query = vi
-      .fn()
-      .mockResolvedValueOnce([[{ id: 'conversation-1', title: 'Conversation', status: 'active' }]])
       .mockResolvedValueOnce([
         [
           {
-            id: 'answer-1',
-            role: 'assistant',
-            content: '上一轮回答',
-            status: 'completed',
-            version_group_id: 'answer-group-1',
-            create_time: '2026-08-21 10:01:00',
-          },
-          {
-            id: 'question-1',
-            role: 'user',
-            content: '上一轮问题',
-            status: 'completed',
-            create_time: '2026-08-21 10:00:00',
+            message_id: 'message-1',
+            source_id: 'source-1',
+            resource_type: 'note',
+            resource_id: 'note-1',
+            display_title: '旧笔记',
           },
         ],
+      ])
+      .mockResolvedValueOnce([
+        [
+          {
+            message_id: 'message-1',
+            evidence_ref: 'evidence-1',
+            source_id: 'source-1',
+            citation_key: '1',
+            excerpt: '历史证据',
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([
+        [{ message_id: 'message-1', rating: 'unhelpful', reason: 'incorrect', resolved: 0 }],
       ]);
 
-    const dialogue = await getAiConversationRecentDialogue(
-      normalIdentity,
-      'conversation-1',
-      { sourceMessageId: 'question-2', limit: 12 },
-      { query },
+    const result = await getAiConversation(adminIdentity, 'conversation-1', {}, { query });
+
+    expect(result.messages[0]).toMatchObject({
+      content: '旧回答 [1]',
+      sources: [{ sourceId: 'source-1', resourceId: 'note-1' }],
+      evidence: [{ evidenceRef: 'evidence-1', excerpt: '历史证据' }],
+      feedback: { rating: 'unhelpful', reason: 'incorrect', resolved: false },
+    });
+    expect(query.mock.calls[4][1]).toEqual(['root-1', 'conversation-1', 'message-1']);
+  });
+
+  it('删除只做 owner 约束的软删除，后台保留期任务再永久清理', async () => {
+    const query = vi.fn().mockResolvedValue([{ affectedRows: 1 }]);
+    const result = await deleteAiConversation(normalIdentity, 'conversation-1', { query });
+
+    expect(result.deleted).toBe(1);
+    expect(new Date(result.undoExpiresAt).getTime()).toBeGreaterThan(Date.now());
+    expect(query.mock.calls[0][0]).toContain("status IN ('active', 'archived')");
+    expect(query.mock.calls[0][1]).toEqual(['conversation-1', 'user-1', 'user-1', 'normal', null]);
+  });
+
+  it('普通账号清除 AI 数据时同时清除 Skill 短期历史，但保留额度和审计账本', async () => {
+    const connection = transactionConnection(vi.fn().mockResolvedValue([{ affectedRows: 2 }]));
+    deleteAllDocumentSources.mockResolvedValueOnce({
+      deleted: 3,
+      failed: 1,
+      retryScheduled: 1,
+      retryUnavailable: 0,
+    });
+
+    const result = await clearAiIdentityData(normalIdentity, {
+      getConnection: vi.fn().mockResolvedValue(connection),
+    });
+
+    expect(result).toMatchObject({
+      deleted: 17,
+      scope: 'subject_user',
+      retained: ['agentLogs', 'quotaUsage', 'tokenReservations'],
+      documentsFailed: 1,
+      documentsRetryScheduled: 1,
+      excluded: [],
+    });
+    expect(result.byType).toMatchObject({ skillThreads: 2, conversations: 2, contentChunks: 2, documents: 3 });
+    expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('DELETE FROM ai_skill_threads'))).toBe(
+      true,
+    );
+    expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('DELETE FROM ai_executions'))).toBe(
+      false,
+    );
+    expect(invalidatePersonalKnowledgeCache).toHaveBeenCalledWith('user-1', { persist: false });
+    expect(deleteAllDocumentSources).toHaveBeenCalledWith({ userId: 'user-1' });
+    expect(connection.commit).toHaveBeenCalledOnce();
+    expect(connection.rollback).not.toHaveBeenCalled();
+    expect(connection.release).toHaveBeenCalledOnce();
+  });
+
+  it('管理员维护上下文只清当前四维 owner 的 Skill 历史，不跨授权上下文删除文档', async () => {
+    const connection = transactionConnection();
+    const result = await clearAiIdentityData(
+      { ...adminIdentity, adminContextMode: 'maintain' },
+      { getConnection: vi.fn().mockResolvedValue(connection) },
     );
 
-    expect(dialogue).toEqual([
-      expect.objectContaining({ id: 'question-1', role: 'user', content: '上一轮问题' }),
-      expect.objectContaining({ id: 'answer-1', role: 'assistant', content: '上一轮回答' }),
-    ]);
-    expect(query.mock.calls[0][1]).toEqual(['conversation-1', 'user-1', 'user-1', 'normal', null]);
-    expect(query.mock.calls[1][0]).toContain('INNER JOIN ai_messages AS anchor');
-    expect(query.mock.calls[1][0]).toContain("m.status = 'completed'");
-    expect(query.mock.calls[1][1]).toEqual(['question-2', 'conversation-1', 12]);
+    expect(result).toMatchObject({ deleted: 6, scope: 'owner_domain', excluded: ['documents'] });
+    expect(deleteAllDocumentSources).not.toHaveBeenCalled();
+    const skillDelete = connection.query.mock.calls.find(([sql]) =>
+      String(sql).includes('DELETE FROM ai_skill_threads'),
+    );
+    expect(skillDelete[1]).toEqual(['root-1', 'user-1', 'maintain', 'context-1']);
+    const legacyDomainDeletes = connection.query.mock.calls.filter(([sql]) =>
+      String(sql).includes('admin_context_id <=> ?'),
+    );
+    expect(legacyDomainDeletes).toHaveLength(6);
+    expect(
+      legacyDomainDeletes.every(([, params]) =>
+        params.every((value, index) => value === ['root-1', 'user-1', 'maintain', 'context-1'][index]),
+      ),
+    ).toBe(true);
   });
 
-  it('Dialogue Anchor 只按 owner 会话中的服务端消息 ID 完整重取材料', async () => {
-    const query = vi
-      .fn()
-      .mockResolvedValueOnce([[{ id: 'conversation-1', title: 'Conversation', status: 'active' }]])
-      .mockResolvedValueOnce([
-        [
-          {
-            id: 'answer-1',
-            role: 'assistant',
-            content: '回答',
-            status: 'completed',
-            create_time: '2026-08-21 10:01:00',
-          },
-          {
-            id: 'question-1',
-            role: 'user',
-            content: '问题',
-            status: 'completed',
-            create_time: '2026-08-21 10:00:00',
-          },
-        ],
-      ]);
+  it('清除失败会回滚，Schema 缺失时失败关闭而不是误报成功', async () => {
+    const missing = Object.assign(new Error('missing'), { code: 'ER_NO_SUCH_TABLE' });
+    const connection = transactionConnection(vi.fn().mockRejectedValue(missing));
 
     await expect(
-      getAiConversationDialogueByIds(normalIdentity, 'conversation-1', ['question-1', 'answer-1'], { query }),
-    ).resolves.toEqual([
-      expect.objectContaining({ id: 'question-1', role: 'user', content: '问题' }),
-      expect.objectContaining({ id: 'answer-1', role: 'assistant', content: '回答' }),
-    ]);
-    expect(query.mock.calls[1][0]).toContain("role IN ('user', 'assistant') AND status = 'completed'");
-    expect(query.mock.calls[1][1]).toEqual(['conversation-1', 'question-1', 'answer-1']);
+      clearAiIdentityData(normalIdentity, { getConnection: vi.fn().mockResolvedValue(connection) }),
+    ).rejects.toMatchObject({ code: 'AI_DATA_CLEAR_SCHEMA_UNAVAILABLE', status: 503 });
+    expect(connection.commit).not.toHaveBeenCalled();
+    expect(connection.rollback).toHaveBeenCalledOnce();
+    expect(connection.release).toHaveBeenCalledOnce();
   });
 
-  it('Dialogue Anchor 任一消息缺失时失败关闭，不把残缺对话当完整材料', async () => {
-    const query = vi
-      .fn()
-      .mockResolvedValueOnce([[{ id: 'conversation-1', title: 'Conversation', status: 'active' }]])
-      .mockResolvedValueOnce([[{ id: 'question-1', role: 'user', content: '问题', status: 'completed' }]]);
-
-    await expect(
-      getAiConversationDialogueByIds(normalIdentity, 'conversation-1', ['question-1', 'answer-missing'], { query }),
-    ).rejects.toMatchObject({ code: 'DIALOGUE_ANCHOR_STALE', status: 409 });
-  });
-
-  it('soft deletes a conversation and restores it only inside the owner-scoped undo window', async () => {
-    const deleteQuery = vi.fn().mockResolvedValue([{ affectedRows: 1 }]);
-    const deleted = await deleteAiConversation(normalIdentity, 'conversation-undo', { query: deleteQuery });
-    expect(deleted.deleted).toBe(1);
-    expect(new Date(deleted.undoExpiresAt).getTime()).toBeGreaterThan(Date.now());
-    expect(deleteQuery.mock.calls[0][0]).toContain("THEN 'deleted_archived'");
-
-    const restoreQuery = vi.fn().mockResolvedValue([{ affectedRows: 1 }]);
-    await expect(
-      restoreDeletedAiConversation(normalIdentity, 'conversation-undo', { query: restoreQuery }),
-    ).resolves.toEqual({ restored: 1 });
-    expect(restoreQuery.mock.calls[0][0]).toContain("status IN ('deleted_active', 'deleted_archived')");
-    expect(restoreQuery.mock.calls[0][0]).toContain('DATE_SUB(CURRENT_TIMESTAMP');
-    expect(restoreQuery.mock.calls[0][1]).toEqual(['conversation-undo', 'user-1', 'user-1', 'normal', null]);
-
-    await expect(
-      restoreDeletedAiConversation(normalIdentity, 'conversation-undo', {
-        query: vi.fn().mockResolvedValue([{ affectedRows: 0 }]),
-      }),
-    ).rejects.toMatchObject({ code: 'CONVERSATION_DELETE_UNDO_EXPIRED', status: 409 });
-  });
-
-  it('exports only the current owner domain and keeps sources and evidence attached to their message', async () => {
+  it('导出仅覆盖当前 owner 域，并将来源与证据挂回对应历史消息', async () => {
     const database = {
       query: vi
         .fn()
-        .mockResolvedValueOnce([[{ id: 'conversation-1', title: 'Export', status: 'active' }]])
+        .mockResolvedValueOnce([[{ id: 'conversation-1', title: '导出', status: 'active' }]])
         .mockResolvedValueOnce([
           [
             {
               id: 'message-1',
               conversation_id: 'conversation-1',
               role: 'assistant',
-              content: 'Answer [1]',
+              content: '回答 [1]',
               status: 'completed',
             },
           ],
         ])
         .mockResolvedValueOnce([
-          [{ message_id: 'message-1', source_id: 'source-1', resource_type: 'note', display_title: 'Note' }],
+          [{ message_id: 'message-1', source_id: 'source-1', resource_type: 'note', display_title: '笔记' }],
         ])
         .mockResolvedValueOnce([
           [
@@ -570,364 +270,81 @@ describe('AI conversation isolation', () => {
               evidence_ref: 'evidence-1',
               source_id: 'source-1',
               citation_key: '1',
-              excerpt_hash: 'hash',
-              excerpt: 'Support',
+              excerpt: '证据',
             },
           ],
         ])
         .mockResolvedValueOnce([[]]),
     };
-    const exported = await exportAiConversations(identity, database);
-    expect(exported).toMatchObject({ conversationCount: 1, messageCount: 1 });
-    expect(exported.conversations[0].messages[0]).toMatchObject({
-      content: 'Answer [1]',
+
+    const result = await exportAiConversations(adminIdentity, database);
+
+    expect(result).toMatchObject({ conversationCount: 1, messageCount: 1 });
+    expect(result.conversations[0].messages[0]).toMatchObject({
       sources: [{ sourceId: 'source-1' }],
       evidence: [{ evidenceRef: 'evidence-1' }],
     });
-    for (const call of database.query.mock.calls.slice(0, 4)) {
-      expect(call[1]).toEqual(['actor-1', 'subject-1', 'readonly', 'context-1']);
+    for (const call of database.query.mock.calls) {
+      expect(call[1]).toEqual(['root-1', 'user-1', 'readonly', 'context-1']);
     }
   });
 
-  it('normal and two admin context ids are three disjoint owner domains', async () => {
-    const query = vi.fn().mockResolvedValue([[]]);
-    await listAiConversations(normalIdentity, {}, { query });
-    await listAiConversations({ ...identity, adminContextId: 'context-a' }, {}, { query });
-    await listAiConversations({ ...identity, adminContextId: 'context-b' }, {}, { query });
-    const listCalls = query.mock.calls.filter(([sql]) =>
-      String(sql).replace(/\s+/g, ' ').trim().startsWith('SELECT * FROM ai_conversations'),
-    );
-    expect(listCalls.map((call) => call[1].slice(0, 4))).toEqual([
-      ['user-1', 'user-1', 'normal', null],
-      ['actor-1', 'subject-1', 'readonly', 'context-a'],
-      ['actor-1', 'subject-1', 'readonly', 'context-b'],
-    ]);
-    expect(query.mock.calls.every(([sql]) => sql.includes('admin_context_id <=> ?'))).toBe(true);
-  });
-});
-
-describe('AI answer versions', () => {
-  it('版本列表只读取同会话同 versionGroupId，并兼容以首个回答 ID 作为组锚点', async () => {
-    const database = {
-      query: vi
-        .fn()
-        .mockResolvedValueOnce([[{ id: 'conversation-1', status: 'active', retention_mode: 'standard' }]])
-        .mockResolvedValueOnce([[{ id: 'answer-2', version_group_id: 'answer-1', status: 'completed' }]])
-        .mockResolvedValueOnce([
-          [
-            { id: 'answer-1', version_group_id: null, create_time: '2026-07-19 10:00:00' },
-            { id: 'answer-2', version_group_id: 'answer-1', create_time: '2026-07-19 10:01:00' },
-          ],
-        ]),
-    };
-    const result = await listAiMessageVersions(normalIdentity, 'conversation-1', 'answer-2', database);
-    expect(result.versionGroupId).toBe('answer-1');
-    expect(result.items.map((item) => item.messageId)).toEqual(['answer-1', 'answer-2']);
-    expect(database.query.mock.calls[2][0]).toContain('(version_group_id = ? OR id = ?)');
-    expect(database.query.mock.calls[2][1]).toEqual(['conversation-1', 'answer-1', 'answer-1']);
-  });
-
-  it('显式 prepare 只锁定 owner 会话内 completed assistant，并原子把首个旧答案纳入版本组', async () => {
-    const connection = {
-      beginTransaction: vi.fn(),
-      commit: vi.fn(),
-      rollback: vi.fn(),
-      release: vi.fn(),
-      query: vi
-        .fn()
-        .mockResolvedValueOnce([[{ id: 'conversation-1', status: 'active', retention_mode: 'standard' }]])
-        .mockResolvedValueOnce([[{ id: 'answer-1', version_group_id: null }]])
-        .mockResolvedValueOnce([{ affectedRows: 1 }]),
-    };
-    const result = await prepareAiMessageVersionGroup(normalIdentity, 'conversation-1', 'answer-1', {
-      getConnection: vi.fn().mockResolvedValue(connection),
-    });
-    expect(result).toEqual({ conversationId: 'conversation-1', messageId: 'answer-1', versionGroupId: 'answer-1' });
-    expect(connection.query.mock.calls[1][0]).toContain("role = 'assistant' AND status = 'completed'");
-    expect(connection.query.mock.calls[1][0]).toContain('FOR UPDATE');
-    expect(connection.query.mock.calls[1][1]).toEqual(['answer-1', 'conversation-1']);
-    expect(connection.query.mock.calls[2][1]).toEqual(['answer-1', 'answer-1', 'conversation-1']);
-    expect(connection.commit).toHaveBeenCalledOnce();
-    expect(connection.rollback).not.toHaveBeenCalled();
-  });
-});
-
-describe('AI temporary conversation retention', () => {
-  it('sets a bounded default expiry and rejects past or overlong temporary retention', async () => {
-    const createdRow = {
+  it('游标为封闭格式，非法值直接拒绝', () => {
+    const cursor = __testing.encodeCursor({
       id: 'conversation-1',
-      title: 'Temporary',
-      status: 'active',
-      retention_mode: 'temporary',
-      expire_at: new Date(Date.now() + 60_000),
-    };
-    const database = {
-      query: vi
-        .fn()
-        .mockResolvedValueOnce([{ affectedRows: 1 }])
-        .mockResolvedValueOnce([[createdRow]]),
-    };
-    const before = Date.now();
-    await createAiConversation(normalIdentity, { id: 'conversation-1', retentionMode: 'temporary' }, database);
-    const expireAt = database.query.mock.calls[0][1][9];
-    expect(expireAt).toBeInstanceOf(Date);
-    expect(expireAt.getTime() - before).toBeGreaterThanOrEqual(__testing.DEFAULT_TEMPORARY_RETENTION_MS - 1000);
-    await expect(
-      createAiConversation(
-        normalIdentity,
-        { retentionMode: 'temporary', expireAt: new Date(Date.now() - 1) },
-        { query: vi.fn() },
-      ),
-    ).rejects.toMatchObject({ code: 'RETENTION_EXPIRE_AT_INVALID' });
-    await expect(
-      createAiConversation(
-        normalIdentity,
-        { retentionMode: 'temporary', expireAt: new Date(Date.now() + __testing.MAX_TEMPORARY_RETENTION_MS + 60_000) },
-        { query: vi.fn() },
-      ),
-    ).rejects.toMatchObject({ code: 'RETENTION_EXPIRE_AT_TOO_LATE' });
-  });
-
-  it('expired conversations are excluded from every owned read', async () => {
-    const query = vi.fn().mockResolvedValue([[]]);
-    await expect(getAiConversation(normalIdentity, 'expired-conversation', {}, { query })).rejects.toMatchObject({
-      code: 'CONVERSATION_NOT_FOUND',
-      status: 404,
+      is_pinned: 1,
+      last_message_at: '2026-08-24T00:00:00.000Z',
     });
-    expect(query.mock.calls[0][0]).toContain("retention_mode <> 'temporary'");
-    expect(query.mock.calls[0][0]).toContain('expire_at > CURRENT_TIMESTAMP');
+    expect(__testing.decodeCursor(cursor)).toEqual({
+      id: 'conversation-1',
+      pinned: 1,
+      at: '2026-08-24T00:00:00.000Z',
+    });
+    expect(() => __testing.decodeCursor('broken')).toThrow(/INVALID_CURSOR/);
   });
+});
 
-  it('cleans expired conversations and linked AI objects in one bounded transaction', async () => {
-    const connection = {
-      beginTransaction: vi.fn(),
-      commit: vi.fn(),
-      rollback: vi.fn(),
-      release: vi.fn(),
-      query: vi.fn(async (sql, params = []) => {
-        if (sql.includes('SELECT id FROM ai_conversations')) return [[{ id: 'expired-1' }]];
-        if (sql.includes('DELETE FROM ai_conversations')) return [{ affectedRows: 1 }];
+describe('旧会话保留期清理', () => {
+  it('过期会话和其旧依赖在同一有界事务中删除', async () => {
+    const connection = transactionConnection(
+      vi.fn(async (sql) => {
+        if (String(sql).includes('SELECT id FROM ai_conversations')) return [[{ id: 'expired-1' }]];
+        if (String(sql).includes('DELETE FROM ai_conversations')) return [{ affectedRows: 1 }];
         return [{ affectedRows: 2 }];
       }),
-    };
+    );
+
     const result = await cleanupExpiredAiConversations(
       { getConnection: vi.fn().mockResolvedValue(connection) },
       { batchSize: 10, maxBatches: 1 },
     );
+
     expect(result).toMatchObject({ deleted: 1, dependentsDeleted: 4, skipped: false });
-    expect(connection.query.mock.calls.some(([sql]) => sql.includes('DELETE FROM ai_memories'))).toBe(true);
-    expect(connection.query.mock.calls.some(([sql]) => sql.includes('DELETE FROM ai_change_sets'))).toBe(true);
-    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(connection.commit).toHaveBeenCalledOnce();
     expect(connection.rollback).not.toHaveBeenCalled();
-    expect(connection.release).toHaveBeenCalledTimes(1);
   });
 
-  it('permanently purges an overdue soft-deleted conversation and its linked private AI objects', async () => {
-    const connection = {
-      beginTransaction: vi.fn(),
-      commit: vi.fn(),
-      rollback: vi.fn(),
-      release: vi.fn(),
-      query: vi.fn(async (sql) => {
-        if (sql.includes('SELECT id FROM ai_conversations')) return [[{ id: 'deleted-1' }]];
-        if (sql.includes('DELETE FROM ai_conversations')) return [{ affectedRows: 1 }];
-        return [{ affectedRows: 2 }];
+  it('软删除过期后可永久清理，缺失旧表时启动清理安全跳过', async () => {
+    const connection = transactionConnection(
+      vi.fn(async (sql) => {
+        if (String(sql).includes('SELECT id FROM ai_conversations')) return [[{ id: 'deleted-1' }]];
+        if (String(sql).includes('DELETE FROM ai_conversations')) return [{ affectedRows: 1 }];
+        return [{ affectedRows: 1 }];
       }),
-    };
+    );
     const database = { getConnection: vi.fn().mockResolvedValue(connection) };
-    const purged = await purgeDeletedAiConversation('deleted-1', database, new Date('2026-07-19T00:00:30Z'));
-    expect(purged).toMatchObject({ deleted: 1, dependentsDeleted: 4, skipped: false });
-    expect(connection.query.mock.calls[0][0]).toContain("status IN ('deleted_active', 'deleted_archived')");
-    expect(connection.commit).toHaveBeenCalledTimes(1);
 
-    connection.query.mockClear();
-    connection.commit.mockClear();
-    connection.query.mockImplementation(async (sql) => {
-      if (sql.includes('SELECT id FROM ai_conversations')) return [[{ id: 'deleted-2' }]];
-      if (sql.includes('DELETE FROM ai_conversations')) return [{ affectedRows: 1 }];
-      return [{ affectedRows: 1 }];
-    });
-    const cleaned = await cleanupDeletedAiConversations(database, { batchSize: 10, maxBatches: 1 });
-    expect(cleaned).toMatchObject({ deleted: 1, dependentsDeleted: 2, skipped: false });
-  });
-
-  it('missing workspace table skips cleanup without preventing startup', async () => {
-    const missing = Object.assign(new Error('table missing'), { code: 'ER_NO_SUCH_TABLE' });
-    const connection = {
-      beginTransaction: vi.fn(),
-      commit: vi.fn(),
-      rollback: vi.fn(),
-      release: vi.fn(),
-      query: vi.fn().mockRejectedValue(missing),
-    };
     await expect(
-      cleanupExpiredAiConversations({ getConnection: vi.fn().mockResolvedValue(connection) }),
+      purgeDeletedAiConversation('deleted-1', database, new Date('2026-08-24T00:01:00Z')),
+    ).resolves.toMatchObject({ deleted: 1, dependentsDeleted: 2, skipped: false });
+    await expect(
+      cleanupDeletedAiConversations(database, { batchSize: 10, maxBatches: 1 }),
+    ).resolves.toMatchObject({ deleted: 1, dependentsDeleted: 2, skipped: false });
+
+    const missing = Object.assign(new Error('missing'), { code: 'ER_NO_SUCH_TABLE' });
+    const missingConnection = transactionConnection(vi.fn().mockRejectedValue(missing));
+    await expect(
+      cleanupExpiredAiConversations({ getConnection: vi.fn().mockResolvedValue(missingConnection) }),
     ).resolves.toMatchObject({ deleted: 0, skipped: true });
-    expect(connection.rollback).toHaveBeenCalledTimes(1);
-    expect(connection.release).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('AI evidence persistence', () => {
-  it('normalizes Agent string targets into durable resource links', () => {
-    expect(
-      __testing.normalizeSources([
-        {
-          sourceId: 'note:note-1',
-          type: 'note',
-          id: 'note-1',
-          title: 'Note',
-          target: 'note-detail',
-        },
-      ])[0],
-    ).toMatchObject({
-      sourceId: 'note:note-1',
-      resourceType: 'note',
-      resourceId: 'note-1',
-      target: { type: 'note-detail', id: 'note-1', path: '/noteLibrary/note-1' },
-    });
-  });
-
-  it('rejects evidence references that were not returned as real sources', () => {
-    expect(() =>
-      __testing.normalizeEvidence(
-        [{ sourceId: 'invented', evidenceRef: 'ev-1', citationKey: '1', excerpt: 'text' }],
-        new Set(['real-source']),
-      ),
-    ).toThrow(/EVIDENCE_SOURCE_INVALID/);
-  });
-
-  it('persists immutable material snapshots and verified evidence in one transaction', async () => {
-    const savedRow = {
-      id: 'message-1',
-      conversation_id: 'conversation-1',
-      role: 'assistant',
-      content: 'Answer [1]',
-      status: 'completed',
-      context_refs_json: '[]',
-      attachment_refs_json: '[]',
-      activity_json: '[]',
-      coverage_json: null,
-      create_time: new Date(),
-      update_time: new Date(),
-    };
-    const connection = {
-      beginTransaction: vi.fn().mockResolvedValue(undefined),
-      commit: vi.fn().mockResolvedValue(undefined),
-      rollback: vi.fn().mockResolvedValue(undefined),
-      release: vi.fn(),
-      query: vi.fn(async (sql) => {
-        if (sql.includes('SELECT * FROM ai_conversations')) {
-          return [[{ id: 'conversation-1', title: 'New', status: 'active' }]];
-        }
-        if (sql.includes('SELECT id FROM ai_messages')) return [[]];
-        if (sql.includes('SELECT * FROM ai_messages')) return [[savedRow]];
-        return [{ affectedRows: 1 }];
-      }),
-    };
-    const database = {
-      getConnection: vi.fn().mockResolvedValue(connection),
-      query: vi.fn(),
-    };
-    const message = await saveAiMessage(
-      normalIdentity,
-      'conversation-1',
-      {
-        id: 'message-1',
-        requestId: 'request-1',
-        role: 'assistant',
-        content: 'Answer [1]',
-        contextRefs: [{ type: 'note', id: 'note-1', title: 'Frozen title' }],
-        attachmentRefs: [{ id: 'attachment-1', fileName: 'frozen.pdf', status: 'ready' }],
-        activity: [
-          {
-            event: 'memory_context',
-            status: 'used',
-            count: 2,
-            types: ['preference', 'workflow', 'system_instruction'],
-            scopes: ['global', 'conversation', 'foreign_owner'],
-            memoryId: 'memory-secret-id',
-            content: '记忆正文 secret',
-            rawError: 'provider-secret',
-          },
-        ],
-        sources: [{ sourceId: 'source-1', resourceType: 'note', resourceId: 'note-1', title: 'Note' }],
-        evidence: [
-          {
-            sourceId: 'source-1',
-            evidenceRef: 'evidence-1',
-            citationKey: '1',
-            locator: { type: 'paragraph', value: 'p3' },
-            excerpt: 'Supporting statement',
-          },
-        ],
-      },
-      database,
-    );
-    expect(message.sources).toHaveLength(1);
-    expect(message.evidence[0].excerptHash).toMatch(/^[a-f0-9]{64}$/);
-    expect(connection.commit).toHaveBeenCalledTimes(1);
-    expect(connection.release).toHaveBeenCalledTimes(1);
-    const insertMessage = connection.query.mock.calls.find(([sql]) => sql.includes('INSERT INTO ai_messages'));
-    expect(insertMessage[1][8]).toContain('note-1');
-    expect(insertMessage[1][9]).toContain('attachment-1');
-    expect(JSON.parse(insertMessage[1][10])).toEqual([
-      {
-        event: 'memory_context',
-        status: 'used',
-        count: 2,
-        types: ['preference', 'workflow'],
-        scopes: ['global', 'conversation'],
-      },
-    ]);
-    expect(insertMessage[1][10]).not.toContain('memory-secret-id');
-    expect(insertMessage[1][10]).not.toContain('记忆正文');
-    expect(insertMessage[1][10]).not.toContain('provider-secret');
-  });
-
-  it('ignores a client-controlled message id and never uses a primary-key conflict to update another conversation', async () => {
-    const connection = {
-      beginTransaction: vi.fn(),
-      commit: vi.fn(),
-      rollback: vi.fn(),
-      release: vi.fn(),
-      query: vi.fn(async (sql, params = []) => {
-        if (sql.includes('SELECT * FROM ai_conversations')) {
-          return [[{ id: 'conversation-1', title: 'New', status: 'active' }]];
-        }
-        if (sql.includes('SELECT * FROM ai_messages')) {
-          return [
-            [
-              {
-                id: params[0],
-                conversation_id: 'conversation-1',
-                role: 'assistant',
-                content: 'Safe answer',
-                status: 'completed',
-              },
-            ],
-          ];
-        }
-        return [{ affectedRows: 1 }];
-      }),
-    };
-    const database = {
-      getConnection: vi.fn().mockResolvedValue(connection),
-      query: vi.fn(),
-    };
-    await saveAiMessage(
-      normalIdentity,
-      'conversation-1',
-      { id: 'known-victim-message-id', role: 'assistant', content: 'Safe answer' },
-      database,
-    );
-    const insert = connection.query.mock.calls.find(([sql]) => sql.includes('INSERT INTO ai_messages'));
-    expect(insert[0]).not.toContain('ON DUPLICATE KEY UPDATE');
-    expect(insert[1][0]).not.toBe('known-victim-message-id');
-    expect(insert[1][1]).toBe('conversation-1');
-    const destructiveCalls = connection.query.mock.calls.filter(([sql]) => sql.includes('DELETE FROM ai_message_'));
-    expect(destructiveCalls).toHaveLength(2);
-    expect(destructiveCalls.every(([, params]) => params[0] === insert[1][0])).toBe(true);
-    expect(destructiveCalls.every(([, params]) => params[2] === 'conversation-1')).toBe(true);
   });
 });

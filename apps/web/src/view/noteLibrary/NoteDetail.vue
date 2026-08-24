@@ -383,6 +383,7 @@
   import { hasMeaningfulNoteContent } from '@/utils/noteTree';
   import { resolveNoteWorkspaceLayout, type NoteWorkspaceLayoutState } from '@/utils/noteWorkspaceLayout';
   import { markNoteDraftPromoted } from '@/utils/routeViewKey';
+  import { discardAiNoteDraft, readAiNoteDraft } from '@/utils/aiNoteDraft';
   import { NOTE_TREE_ROOT_KEY, useNoteTree } from '@/composables/useNoteTree';
   import { useNoteTreeDragDrop } from '@/composables/useNoteTreeDragDrop';
   import type { NoteTreeItem } from '@/types/noteTree';
@@ -433,7 +434,7 @@
     else void editor?.exportJson?.();
   }
   /*
-   * AI 助手面板按需加载,但 chunk 到达前若什么都不渲染,note-body 会先按「右边没有面板」
+   * 笔记 AI 面板按需加载,但 chunk 到达前若什么都不渲染,note-body 会先按「右边没有面板」
    * 分配一次宽度,等它挂上再重排一次 —— 表现为进笔记后正文和目录轻轻抖一下
    * (实测面板晚 330ms 挂载,正文宽度从 1150px 缩到 875px、左边界从 270 挪到 215)。
    *
@@ -1145,15 +1146,6 @@
   let latestRequestedTitle = note.title;
   let skipSaveOnLeave = false;
   let saveQueue: Promise<boolean> = Promise.resolve(true);
-  // 把当前笔记标题同步给 note store,供全局 AI 抽屉「@当前页面」显示真实笔记名
-  // (抽屉是全局组件、拿不到详情页的响应式 note;离开笔记页后该值不再被读到,无需清理)。
-  watch(
-    () => note.title,
-    (title) => {
-      nStore.currentTitle = title || '';
-    },
-    { immediate: true },
-  );
   async function syncHeaderTitle() {
     if (bookmark.isMobile) return;
     await nextTick();
@@ -1632,6 +1624,8 @@
         markNoteDraftPromoted(promotedDraftRouteId);
         const nextQuery = { ...router.currentRoute.value.query };
         delete nextQuery.shareExposureAcknowledged;
+        discardAiNoteDraft(nextQuery.aiDraft);
+        delete nextQuery.aiDraft;
         router.replace({ path: `/noteLibrary/${note.id}`, query: nextQuery }).then();
         recordOperation({
           module: '笔记',
@@ -2187,12 +2181,15 @@
     if (routeId === 'add') {
       appliedTemplateName = '';
       templateTitleApplied = false;
-      const nextType = resolveInitialNoteType(query);
+      const stagedAiDraft = readAiNoteDraft(query.aiDraft);
+      const nextType = stagedAiDraft?.type || resolveInitialNoteType(query);
       Object.assign(note, {
         id: '',
-        title: DEFAULT_NOTE_TITLE,
-        lastTitle: DEFAULT_NOTE_TITLE,
-        content: nextType === 'drawing' ? DEFAULT_DRAWING_CONTENT : nextType === 'markdown' ? '' : DEFAULT_NOTE_CONTENT,
+        title: stagedAiDraft?.title || DEFAULT_NOTE_TITLE,
+        lastTitle: stagedAiDraft?.title || DEFAULT_NOTE_TITLE,
+        content:
+          stagedAiDraft?.content ??
+          (nextType === 'drawing' ? DEFAULT_DRAWING_CONTENT : nextType === 'markdown' ? '' : DEFAULT_NOTE_CONTENT),
         createBy: '',
         type: nextType,
         revision: 1,
@@ -2202,7 +2199,11 @@
       updateTime.value = '';
       nodeType.value = 'add';
       pendingNewNoteTitleFocus = true;
-      await applyTemplateFromQuery(query, () => requestVersion === noteLoadVersion);
+      if (stagedAiDraft) {
+        templateTitleApplied = true;
+      } else {
+        await applyTemplateFromQuery(query, () => requestVersion === noteLoadVersion);
+      }
       if (requestVersion !== noteLoadVersion) return;
       latestRequestedTitle = note.title;
       noteContentKey.value = `note-content:add:${requestVersion}`;

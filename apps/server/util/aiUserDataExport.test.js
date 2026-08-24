@@ -25,7 +25,9 @@ describe('exportAiUserData', () => {
     expect(result.memories[0].scope_json).toEqual({ type: 'global' });
     expect(result.counts.conversations).toBe(1);
     expect(result.unavailable).toEqual([]);
-    expect(database.query).toHaveBeenCalledTimes(11);
+    expect(database.query).toHaveBeenCalledTimes(Object.keys(result.counts).length);
+    expect(result.executions).toEqual([]);
+    expect(result.providerSpans).toEqual([]);
   });
 
   it('迁移尚未执行时只标记对应数据集不可用，不阻断账号数据导出', async () => {

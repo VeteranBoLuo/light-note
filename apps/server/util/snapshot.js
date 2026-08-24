@@ -123,7 +123,7 @@ const SUMMARY_INPUT_LIMIT = 6000;
 export async function summarizeBookmark(
   userId,
   bookmarkId,
-  { force = false, trace, governance, persist = true, archiveIfMissing = persist } = {},
+  { force = false, trace, persist = true, archiveIfMissing = persist } = {},
 ) {
   let snap = await getBookmarkSnapshot(userId, bookmarkId);
   if (!snap || !snap.content) {
@@ -154,12 +154,6 @@ export async function summarizeBookmark(
       maxTokens: 800,
       temperature: 0.2,
       trace: { ...trace, taskType: 'bookmark_summary', stage: 'bookmark_summary' },
-      governance: {
-        quotaPolicy: 'system',
-        systemId: 'bookmark_summary',
-        ...governance,
-        taskType: 'bookmark_summary',
-      },
     });
     summary = (resp.content || '').trim();
   } catch (e) {

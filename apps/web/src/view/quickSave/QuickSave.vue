@@ -89,6 +89,8 @@
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { preflightBookmarkUrl } from '@/composables/useBookmarkUrlResolution';
   import { rememberQuickSaveAuthReturnPath } from '@/utils/quickSaveAuthReturn.ts';
+  import { createAiSkillRequest, executeAiSkill } from '@/api/aiSkillApi';
+  import { recordAiSkillApplied } from '@/api/aiTelemetry';
 
   const { t } = useI18n();
   const MAX_TAGS = 4; // 与后端 addBookmark 上限一致
@@ -155,21 +157,43 @@
       const urlResult = await preflightBookmarkUrl(url, { checkLiveness: false });
       if (!urlResult.ok || !urlResult.url) return;
       form.url = urlResult.url;
-      const res = await apiBasePost('/api/chat/generateBookmarkMeta', { url: form.url });
-      if (res?.status === 200 && res.data) {
-        if (!form.name && res.data.name) form.name = res.data.name;
-        if (!form.description && res.data.description) form.description = res.data.description;
+      const skillResponse = await executeAiSkill(
+        createAiSkillRequest({
+          skillId: 'bookmark.parse_url',
+          input: { url: form.url },
+          surface: 'bookmark.quick_save',
+        }),
+      );
+      if (skillResponse.result?.kind === 'field_suggestions') {
+        const generated = (skillResponse.result.fields || {}) as Record<string, any>;
+        let applied = false;
+        if (!form.name && generated.name) {
+          form.name = String(generated.name);
+          applied = true;
+        }
+        if (!form.description && generated.description) {
+          form.description = String(generated.description);
+          applied = true;
+        }
         const valid = new Set(tagOptions.value.map((o) => o.value));
-        const matched = (res.data.matchedTagIds || []).filter((id: string) => valid.has(id));
+        const matched = (generated.matchedTagIds || []).filter((id: string) => valid.has(id));
         if (matched.length) {
           form.relatedTags = Array.from(new Set([...form.relatedTags, ...matched])).slice(0, MAX_TAGS);
+          applied = true;
         }
-        aiNewTags.value = (res.data.newTags || []).slice(0, 3);
+        aiNewTags.value = (generated.newTags || []).slice(0, 3);
+        if (applied) {
+          void recordAiSkillApplied({
+            skillId: 'bookmark.parse_url',
+            surface: 'bookmark.quick_save',
+            resourceType: 'bookmark',
+          });
+        }
         recordOperation({
           ...OPERATION_LOG_MAP.quickSave.generateMeta,
           operation: `${source === 'auto' ? '自动' : '重新'}智能识别书签信息成功【${getSafeBookmarkLabel(url)}】`,
         });
-        if (res.data.metadataSource === 'inferred') message.warning(t('bookmarkMeta.inferredWarning'));
+        if (skillResponse.result.metadataSource === 'inferred') message.warning(t('bookmarkMeta.inferredWarning'));
       }
     } catch {
       /* AI 失败静默,用户仍可手动填 */

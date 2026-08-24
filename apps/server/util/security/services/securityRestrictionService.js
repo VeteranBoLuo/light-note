@@ -39,8 +39,7 @@ export const getActiveSecurityRestrictions = async (userId) => {
   }
 };
 
-const isUploadPath = (path) => /\/(?:file|chat\/agent\/files)(?:\/|$)/i.test(path);
-const isAiPath = (path) => /\/chat(?:\/|$)/i.test(path);
+const isUploadPath = (path) => /\/file(?:\/|$)/i.test(path);
 
 export const restrictionBlocksRequest = (restrictions, req) => {
   const path = String(req.path || req.originalUrl || '');
@@ -49,6 +48,7 @@ export const restrictionBlocksRequest = (restrictions, req) => {
   if (types.has('full_lock') || types.has('login_lock')) return true;
   if (types.has('write_lock') && !['GET', 'HEAD', 'OPTIONS'].includes(method)) return true;
   if (types.has('upload_lock') && isUploadPath(path)) return true;
-  if (types.has('ai_lock') && isAiPath(path)) return true;
+  // AI 已嵌入多个业务模块，无法由请求路径完整识别。ai_lock 在统一 AI Execution
+  // 根执行中按身份失败关闭；这里不能误拦只读的旧会话档案和额度查询。
   return false;
 };

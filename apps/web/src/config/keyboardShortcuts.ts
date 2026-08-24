@@ -1,4 +1,4 @@
-export const GLOBAL_SHORTCUT_IDS = ['globalSearch', 'aiAssistant'] as const;
+export const GLOBAL_SHORTCUT_IDS = ['globalSearch'] as const;
 
 export type GlobalShortcutId = (typeof GLOBAL_SHORTCUT_IDS)[number];
 export type ShortcutPlatform = 'mac' | 'other';
@@ -18,7 +18,6 @@ export interface ShortcutKeyboardEvent {
 
 const SHORTCUT_DEFINITIONS: Record<GlobalShortcutId, { key: string; primaryModifier: boolean }> = {
   globalSearch: { key: 'f', primaryModifier: true },
-  aiAssistant: { key: '/', primaryModifier: true },
 };
 
 const SHORTCUT_ALIASES: Partial<Record<GlobalShortcutId, Array<{ key: string; primaryModifier: boolean }>>> = {

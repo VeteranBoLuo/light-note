@@ -450,9 +450,11 @@ src/
 | 自增               | 直接用 `snakeCaseKeys()`                  |
 | 无 id 列（关系表） | 用 `snakeCaseKeys()`                      |
 
-## 轻笺智域（AI Agent）
+## 模块化 AI Skills
 
-### Agent Runtime V3
+### 旧 Agent Runtime V3（已退役历史设计）
+
+> 本节只用于理解历史迁移，不描述当前运行时。现行架构以“模块化 AI Skills 与统一用量内核”为准。
 
 Runtime V3 把每轮请求拆成四个边界清晰、可独立验证的阶段：
 
@@ -537,7 +539,36 @@ Runtime V3 把每轮请求拆成四个边界清晰、可独立验证的阶段：
 - 单篇笔记细读使用 `read_note`，图片文字识别拆为通用只读工具 `analyze_resource_images`。前者只返回结构化正文和图片引用，后者按资源归属按需复用本地 OCR；本站笔记图片还必须命中 `note_images` 登记，单轮最多识别 3 张并使用内容哈希缓存
 - 工具调用是结果驱动的有界多轮链路：上一轮失败、空结果或声明存在可选后续能力时，模型才能继续规划；后续仅允许已授权只读工具，默认最多 3 轮工具调用，最后再生成回答
 
-### AI 工作区与持久对象
+### 模块化 AI Skills 与统一用量内核（现行）
+
+轻笺 AI 不再是全局聊天工作区，而是嵌入业务页面的封闭 Skills：笔记负责当前笔记/选区/明确多选的总结、比较、生成和改写；书签负责当前页面解析、总结、比较与生成笔记；文件负责当前或明确多选文件的总结、问答、比较与生成笔记；待办负责自然语言草稿、拆解以及从笔记/文件提取待办；资源中心只读检索私有资料；帮助中心只读公开知识。
+
+```text
+业务页面
+  -> /api/ai/skills/config | /api/ai/skills/execute
+     -> Skill Registry（封闭任务、版本、角色、范围、历史、输出）
+     -> Context Resolver（actor/subject/owner、资源当前版本、scopeDigest）
+     -> AI Execution（动作与额度唯一根）
+        -> AI Gateway
+           -> Provider Span（同步、流式、修复、回退）
+     -> Output Validator / Evidence / Coverage
+     -> 只读结果或待确认预览
+```
+
+- 共享协议位于 `packages/shared/aiSkillProtocol.*`，HTTP Handler、前端 API 和测试共用封闭世界校验。Feature Config 可按域关闭 note/bookmark/file/todo/search/help，关闭 AI 不影响页面基础能力。
+- 当前 Registry 精确登记 20 个 Skill，并由契约测试锁定清单、版本、角色、资源类型/数量、历史窗口、模型策略、输出类型与“定义中不得出现直写函数”。任何新 Skill 必须先进入 Registry 和 Feature Config，再接页面入口，不能通过散落路由或 Prompt 隐式增加能力。
+- `ai_skill_threads` / `ai_skill_turns` 保存有界、范围绑定的 Skill 连续问答；thread 绑定 Skill 版本、actor、subject 与 `scope_digest`。事实内容不从旧回答继承，每轮由 Context Resolver 重新读取。单次转换和草稿不保存自然语言历史。
+- `ai_executions` 是一次用户/系统动作的根账本，`ai_provider_spans` 保存该动作内所有真实模型调用。第一次访问 Provider 才懒占位；缓存或确定性路径 settle 为 `not_used`。Provider usage 缺失按保守规则结算，额度存储失败在 Provider 前失败关闭。
+- 业务不得直接访问模型。`aiGateway` 要求活动 Execution，`billingPolicy=none` 禁止 Provider；源码门禁阻止裸 Provider、未经登记的 Gateway 调用和新的 `openAiAssistant`。DeepSeek 主、千问备用策略仍由 Gateway 维护。
+- 所有写能力只返回预览，用户确认后调用现有业务 Service。模型从不直接写笔记、书签、文件或待办；版本冲突、owner 不符、范围变化和非法输出均失败关闭。
+- 待办时间采用“模型摘录、服务端解析”两段式边界：模型工具只返回原话中的日期/时间片段，`todoTemporal` 用请求 IANA 时区产生绝对时间；待办拆解只产生可应用到当前表单的清单预览，最终保存仍走 Todo Service。
+- Skill 可用配置由前端中央缓存读取，配置接口异常不拖垮原业务页面，服务端仍是最终失败关闭门禁。Skill 生命周期与前端采用/取消行为复用低敏产品事件表，禁止把用户内容和资源标识写入埋点。
+- `/ai` 现在是旧会话只读档案，只保留列表、详情、导出、删除和清空数据权利；不存在创建、续聊、恢复、反馈、记忆或 Change Set 写链。移动底栏使用确定性的快速收集，不再提供全局 AI 一级入口。
+- 账号注销会删除 Skill thread/turn、Execution/Span、用户额度账本和旧 AI 数据；普通“清除 AI 数据”删除用户可控会话与 Skill 线程，但按安全/运营政策保留 Execution、额度和审计账本。数据导出包含新旧两类可移植记录并明确分域。
+
+### 旧 AI 工作区与持久对象（已退役历史设计）
+
+> 以下通用会话、Memory、Change Set、SSE、Turn Contract 和 Runtime V2/V3 说明只用于理解历史表与迁移，不再描述当前运行时，也不得作为新增功能依据。
 
 AI 前端由 `useAiAssistantStore` 承担会话域、草稿、单个材料 `contextRefs`、目录范围 `scopeRefs`、附件、滚动位置和活动请求租约，`AiWorkspaceShell` 承载问答产品界面。Store v3 的持久键与运行时 lease 都包含 actor、subject、mode、context ID 四维；切换同一 subject/mode 的管理员授权 context 也会中止旧请求并进入全新本地域。旧 v2 三维状态只允许普通 self 账号一次性安全迁移，管理员旧状态不复用。普通桌面问答使用无蒙层、可调宽且关闭不销毁的 `BDrawer`，移动端继续使用全屏容器；移动端侧边浮标只在笔记详情展示，其他页面仍可通过各自的显式 AI 入口打开工作区。笔记详情、笔记库、全局搜索、书签管理、云空间和标签详情通过统一的 `AiEntry` 事件传递受控引用、建议意图和查询：单个材料最多 5 个；笔记目录范围最多 3 个，客户端只提交 `note_branch` 根 ID，禁止提交后代 ID、正文或缓存树。服务端按 subject 重新解析当前子树并把 note IDs 作为 `personalKnowledgeSearch.scope.resourceIds` 强制 allowlist；普通目录问答只取 Top 8～20 证据并披露实际引用页数。明确要求整个目录分析时进入同步 Map/Reduce，逐页结构化摘要后合并主题、重复、冲突与待办，上限 30 页或 120,000 字符；超限或 Provider 部分失败时必须显示实际覆盖，不能声称完整读取。系统分享尚未接入统一入口。
 

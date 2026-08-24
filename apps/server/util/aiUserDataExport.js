@@ -66,6 +66,26 @@ const DATASETS = Object.freeze([
     key: 'quotaUsage',
     sql: "SELECT * FROM ai_token_usage WHERE subject_type = 'user' AND subject_key = ? ORDER BY period_key, id",
   },
+  {
+    key: 'executions',
+    sql: 'SELECT * FROM ai_executions WHERE subject_user_id = ? ORDER BY created_at, id',
+  },
+  {
+    key: 'providerSpans',
+    sql: `SELECT s.* FROM ai_provider_spans s
+          INNER JOIN ai_executions e ON e.id = s.execution_id
+          WHERE e.subject_user_id = ? ORDER BY s.created_at, s.id`,
+  },
+  {
+    key: 'skillThreads',
+    sql: 'SELECT * FROM ai_skill_threads WHERE subject_user_id = ? ORDER BY created_at, id',
+  },
+  {
+    key: 'skillTurns',
+    sql: `SELECT t.* FROM ai_skill_turns t
+          INNER JOIN ai_skill_threads s ON s.id = t.thread_id
+          WHERE s.subject_user_id = ? ORDER BY t.created_at, t.id`,
+  },
 ]);
 
 function parseJson(value) {

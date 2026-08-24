@@ -77,6 +77,9 @@
     </div>
 
     <div class="quick-todo-form__actions">
+      <BButton :loading="aiParsing" :disabled="!canSubmit || saving" @click="parseWithAi">
+        {{ t('inbox.quickTodoAiOrganize') }}
+      </BButton>
       <BButton :disabled="saving" @click="openDetails">{{ t('inbox.quickTodoDetails') }}</BButton>
       <BButton type="primary" :loading="saving" :disabled="!canSubmit" @click="submit">
         {{ t('inbox.quickTodoCreate') }}
@@ -102,17 +105,20 @@
       resetKey?: number;
       mobile?: boolean;
       reminderPresetsEnabled?: boolean;
+      aiParsing?: boolean;
     }>(),
     {
       saving: false,
       resetKey: 0,
       mobile: false,
       reminderPresetsEnabled: true,
+      aiParsing: false,
     },
   );
   const emit = defineEmits<{
     submit: [payload: TodoCreateInitialValues & { title: string }];
     details: [payload: TodoCreateInitialValues & { title: string }];
+    ai: [payload: TodoCreateInitialValues & { title: string }];
   }>();
   const { t } = useI18n();
   const titleInput = ref<InstanceType<typeof BInput> | null>(null);
@@ -166,6 +172,11 @@
 
   function openDetails() {
     emit('details', buildPayload());
+  }
+
+  function parseWithAi() {
+    if (!canSubmit.value || props.aiParsing) return;
+    emit('ai', buildPayload());
   }
 
   function reset() {

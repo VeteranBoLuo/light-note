@@ -251,6 +251,18 @@
 
     <!-- 文件预览 -->
     <FilePreview v-model:visible="filePreviewVisible" :fileInfo="previewFileInfo" @close="filePreviewVisible = false" />
+    <AiSkillDialog
+      v-model:visible="tagAiVisible"
+      :title="t('tagManage.aiSkillTitle')"
+      :description="t('tagManage.aiSkillDescription')"
+      skill-id="search.summarize_selected"
+      prompt-key="instruction"
+      surface="tag_detail"
+      :resource-refs="tagAiResourceRefs"
+      :scope-label="t('tagManage.aiSkillScope', { count: tagAiResourceRefs.length })"
+      :actions="tagAiActions"
+      :placeholder="t('tagManage.aiSkillPlaceholder')"
+    />
   </div>
 </template>
 
@@ -272,9 +284,10 @@
   import { fetchTagGraph, type GraphResourceType, type TagGraphNode, type TagGraphResponse } from '@/api/tagGraph.ts';
   import { useI18n } from 'vue-i18n';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import { openAiAssistant } from '@/utils/aiEntry';
   import { noteSummaryText } from '@/utils/noteSummary';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
+  import AiSkillDialog from '@/components/aiSkills/AiSkillDialog.vue';
+  import type { AiSkillResourceRef } from '@lightnote/shared/ai-skill-protocol';
 
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
   const TagGraphCanvas = defineAsyncComponent(() => import('@/components/tagGraph/TagGraphCanvas.vue'));
@@ -292,6 +305,22 @@
   const notes = ref<any[]>([]);
   const files = ref<any[]>([]);
   const loading = ref(false);
+  const tagAiVisible = ref(false);
+  const tagAiResourceRefs = computed<AiSkillResourceRef[]>(() =>
+    [
+      ...bookmarks.value.map((item) => ({ type: 'bookmark' as const, id: String(item.id) })),
+      ...notes.value.map((item) => ({ type: 'note' as const, id: String(item.id) })),
+      ...files.value.map((item) => ({ type: 'file' as const, id: String(item.id) })),
+    ].slice(0, 20),
+  );
+  const tagAiActions = computed(() => [
+    {
+      id: 'summarize',
+      label: t('tagManage.aiSummarize'),
+      skillId: 'search.summarize_selected',
+      input: { instruction: t('tagManage.aiSummarizeInstruction', { tag: String(tag.value?.name || '') }) },
+    },
+  ]);
 
   // 笔记摘要与笔记库共用 noteSummaryText(异步:Markdown 要按需加载 marked),
   // 卡片和图谱节点都读这份 map,两处口径一致
@@ -334,13 +363,13 @@
   });
 
   function openTagInAi() {
-    const id = String(tag.value?.id || route.params.id || '').trim();
-    if (!id) return;
-    openAiAssistant({
-      contextRefs: [{ type: 'tag', id, title: String(tag.value?.name || t('tagManage.unnamedTag')).slice(0, 255) }],
-      suggestedIntent: 'find_related',
-      surface: 'tag_detail',
-    });
+    if (!tagAiResourceRefs.value.length) {
+      message.info(t('tagManage.aiNoResources'));
+      return;
+    }
+    const total = bookmarks.value.length + notes.value.length + files.value.length;
+    if (total > 20) message.info(t('ai.materialLimit', { count: 20 }));
+    tagAiVisible.value = true;
   }
 
   const allGraphResources = computed<TagGraphNode[]>(() => [

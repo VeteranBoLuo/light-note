@@ -1,0 +1,111 @@
+import { describe, expect, it, vi } from 'vitest';
+import { loadExplicitResourceEvidence } from './resourceEvidence.js';
+
+function databaseFor({ notes = [], bookmarks = [], files = [], todos = [], chunks = [] } = {}) {
+  return {
+    query: vi.fn(async (sql, params) => {
+      const statement = String(sql);
+      if (statement.includes('FROM note')) return [notes];
+      if (statement.includes('FROM bookmark b')) return [bookmarks];
+      if (statement.includes('FROM files f')) return [files];
+      if (statement.includes('FROM todo_items')) return [todos];
+      if (statement.includes('FROM ai_document_chunks')) return [chunks];
+      throw new Error(`unexpected sql: ${statement}`);
+    }),
+  };
+}
+
+describe('loadExplicitResourceEvidence', () => {
+  it('按显式引用顺序读取 owner 范围内资源，并统一清洗富文本', async () => {
+    const database = databaseFor({
+      notes: [{ id: 'n1', title: '笔记', type: 'html', content: '<p>正文 &amp; 内容</p>' }],
+      bookmarks: [
+        {
+          id: 'b1',
+          name: '站点',
+          url: 'https://example.com',
+          description: '说明',
+          snapshot_content: '<article>网页正文</article>',
+        },
+      ],
+    });
+    const result = await loadExplicitResourceEvidence({
+      userId: 'u1',
+      resourceRefs: [
+        { type: 'bookmark', id: 'b1', version: 'v2' },
+        { type: 'note', id: 'n1', version: 'v1' },
+      ],
+      database,
+    });
+
+    expect(result.sources.map((source) => source.id)).toEqual(['bookmark:b1', 'note:n1']);
+    expect(result.evidence).toContain('[1]');
+    expect(result.evidence).toContain('网页正文');
+    expect(result.evidence).toContain('[2]');
+    expect(result.evidence).toContain('正文 & 内容');
+    expect(result.evidence).not.toContain('<article>');
+    expect(result.coverage.complete).toBe(true);
+    expect(database.query).toHaveBeenCalledWith(expect.stringContaining('b.user_id = ?'), ['u1', 'b1']);
+    expect(database.query).toHaveBeenCalledWith(expect.stringContaining('create_by = ?'), ['u1', 'n1']);
+  });
+
+  it('手绘笔记不把 scene JSON 当正文，并明确标记覆盖不足', async () => {
+    const database = databaseFor({
+      notes: [{ id: 'drawing', title: '草图', type: 'drawing', content: '{"elements":[{"text":"秘密"}]}' }],
+    });
+    const result = await loadExplicitResourceEvidence({
+      userId: 'u1',
+      resourceRefs: [{ type: 'note', id: 'drawing', version: 'v1' }],
+      database,
+    });
+
+    expect(result.sources).toEqual([]);
+    expect(result.coverage.resources[0].status).toBe('no_text');
+    expect(result.evidence).not.toContain('秘密');
+    expect(result.coverage.complete).toBe(false);
+    expect(result.coverage.warnings).toContain('note_drawing_no_text:note:drawing');
+  });
+
+  it('按云文件 ID 解析对应 source 与 chunks，解析中状态不会冒充空正文', async () => {
+    const database = databaseFor({
+      files: [
+        { id: 1, file_name: 'ready.pdf', source_id: 's1', source_status: 'ready', coverage_metadata: '{}' },
+        { id: 2, file_name: 'pending.pdf', source_id: 's2', source_status: 'parsing' },
+      ],
+      chunks: [{ source_id: 's1', chunk_index: 0, content: '第一页正文', locator_value: '第 1 页' }],
+    });
+    const result = await loadExplicitResourceEvidence({
+      userId: 'u1',
+      resourceRefs: [
+        { type: 'file', id: '1', version: 'v1' },
+        { type: 'file', id: '2', version: 'v2' },
+      ],
+      database,
+    });
+
+    expect(result.evidence).toContain('第一页正文');
+    expect(result.sources[0].target.sourceId).toBe('s1');
+    expect(result.sources).toHaveLength(1);
+    expect(result.coverage.resources[1].status).toBe('parsing');
+    expect(result.coverage.warnings).toContain('file_parsing_in_progress:file:2');
+    expect(result.coverage.readableResources).toBe(1);
+    expect(result.coverage.complete).toBe(false);
+  });
+
+  it('在统一字符预算内截断并把截断作为可见 coverage', async () => {
+    const database = databaseFor({
+      notes: [{ id: 'n1', title: '长笔记', type: 'markdown', content: '甲'.repeat(100) }],
+    });
+    const result = await loadExplicitResourceEvidence({
+      userId: 'u1',
+      resourceRefs: [{ type: 'note', id: 'n1', version: 'v1' }],
+      database,
+      maxCharsPerResource: 20,
+      maxTotalChars: 20,
+    });
+
+    expect(result.sources[0].excerpt.length).toBe(20);
+    expect(result.sources[0].excerpt.endsWith('…')).toBe(true);
+    expect(result.coverage.warnings).toContain('resource_content_truncated:note:n1');
+  });
+});

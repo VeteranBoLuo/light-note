@@ -43,6 +43,27 @@ function setup(tagOpts: any[] = []) {
   return { bookmarkData, tagOptions, refreshTags, ...api };
 }
 
+function mockSkillSuccess(fields: Record<string, unknown>, resultMeta: Record<string, unknown> = {}) {
+  apiBasePost.mockImplementation(async (_url, request) => ({
+    status: 200,
+    data: {
+      protocolVersion: 1,
+      requestId: request.requestId,
+      skillId: request.skillId,
+      skillVersion: request.skillVersion,
+      status: 'completed',
+      threadId: null,
+      scopeDigest: null,
+      result: { kind: 'field_suggestions', fields, ...resultMeta },
+      sources: [],
+      coverage: null,
+      availableActions: [],
+      receipt: null,
+      error: null,
+    },
+  }));
+}
+
 describe('useBookmarkMeta.generateBookmarkMeta', () => {
   beforeEach(() => {
     apiBasePost.mockReset();
@@ -56,10 +77,7 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
   });
 
   it('回填 name/description,只勾选候选内存在的推荐标签(白名单过滤)', async () => {
-    apiBasePost.mockResolvedValue({
-      status: 200,
-      data: { name: 'N', description: 'D', matchedTagIds: ['t1', 'ghost'], newTags: [] },
-    });
+    mockSkillSuccess({ name: 'N', description: 'D', matchedTagIds: ['t1', 'ghost'], newTags: [] });
     const t = setup([{ label: 'T1', value: 't1' }]);
     await t.generateBookmarkMeta();
     expect(t.bookmarkData.value.name).toBe('N');
@@ -69,10 +87,7 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
   });
 
   it('已有内容不被 AI 静默覆盖,用户可选择保留当前内容', async () => {
-    apiBasePost.mockResolvedValue({
-      status: 200,
-      data: { name: 'AI 名称', description: 'AI 描述', matchedTagIds: [], newTags: [] },
-    });
+    mockSkillSuccess({ name: 'AI 名称', description: 'AI 描述', matchedTagIds: [], newTags: [] });
     const t = setup([]);
     t.bookmarkData.value.name = '当前名称';
     t.bookmarkData.value.description = '当前描述';
@@ -92,10 +107,7 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
   });
 
   it('覆盖预览支持逐字段选择，只应用用户勾选的识别结果', async () => {
-    apiBasePost.mockResolvedValue({
-      status: 200,
-      data: { name: 'AI 名称', description: 'AI 描述', matchedTagIds: [], newTags: [] },
-    });
+    mockSkillSuccess({ name: 'AI 名称', description: 'AI 描述', matchedTagIds: [], newTags: [] });
     const t = setup([]);
     t.bookmarkData.value.name = '当前名称';
     t.bookmarkData.value.description = '当前描述';
@@ -108,20 +120,14 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
   });
 
   it('勾选标签遵守 ≤4 上限', async () => {
-    apiBasePost.mockResolvedValue({
-      status: 200,
-      data: { name: '', description: '', matchedTagIds: ['a', 'b', 'c', 'd', 'e'], newTags: [] },
-    });
+    mockSkillSuccess({ name: '', description: '', matchedTagIds: ['a', 'b', 'c', 'd', 'e'], newTags: [] });
     const t = setup(['a', 'b', 'c', 'd', 'e'].map((v) => ({ label: v, value: v })));
     await t.generateBookmarkMeta();
     expect(t.bookmarkData.value.relatedTags.length).toBe(4);
   });
 
   it('无匹配但有建议 → 弹确认新建,且只问第一个(单标签)', async () => {
-    apiBasePost.mockResolvedValue({
-      status: 200,
-      data: { name: '', description: '', matchedTagIds: [], newTags: ['前端', '工具'] },
-    });
+    mockSkillSuccess({ name: '', description: '', matchedTagIds: [], newTags: ['前端', '工具'] });
     const t = setup([]);
     await t.generateBookmarkMeta();
     expect(alertAlert).toHaveBeenCalledTimes(1);
@@ -138,22 +144,21 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
   });
 
   it('url 未带协议头时自动补 https:// 再请求(允许用户只填 keep.com)', async () => {
-    apiBasePost.mockResolvedValue({
-      status: 200,
-      data: { name: '', description: '', matchedTagIds: [], newTags: [] },
-    });
+    mockSkillSuccess({ name: '', description: '', matchedTagIds: [], newTags: [] });
     const t = setup([]);
     t.bookmarkData.value.url = 'keep.com';
     await t.generateBookmarkMeta();
     expect(t.bookmarkData.value.url).toBe('https://keep.com');
     expect(apiBasePost).toHaveBeenCalledWith(
-      '/api/chat/generateBookmarkMeta',
-      { url: 'https://keep.com' },
+      '/api/ai/skills/execute',
       expect.objectContaining({
-        signal: expect.any(AbortSignal),
-        silent: true,
-        timeout: BOOKMARK_META_GENERATION_TIMEOUT_MS + 5_000,
+        protocolVersion: 1,
+        skillId: 'bookmark.parse_url',
+        input: { url: 'https://keep.com' },
+        scope: { resourceRefs: [] },
+        client: expect.objectContaining({ surface: 'bookmark.form' }),
       }),
+      { signal: expect.any(AbortSignal), silent: true },
     );
   });
 
@@ -164,9 +169,12 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
       ok: true,
       url: 'https://xhslink.cn/o/7rNw5RKnE8e',
     });
-    apiBasePost.mockResolvedValue({
-      status: 200,
-      data: { name: '真实标题', description: '真实描述', matchedTagIds: [], newTags: [], resolvedUrl: finalUrl },
+    mockSkillSuccess({
+      url: finalUrl,
+      name: '真实标题',
+      description: '真实描述',
+      matchedTagIds: [],
+      newTags: [],
     });
     const t = setup([]);
     t.bookmarkData.value.url = 'http://xhslink.cn/o/7rNw5RKnE8e';
@@ -184,10 +192,7 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
           finishPreflight = resolve;
         }),
     );
-    apiBasePost.mockResolvedValue({
-      status: 200,
-      data: { name: '', description: '', matchedTagIds: [], newTags: [] },
-    });
+    mockSkillSuccess({ name: '', description: '', matchedTagIds: [], newTags: [] });
     const t = setup([]);
 
     const pending = t.generateBookmarkMeta();

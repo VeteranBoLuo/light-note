@@ -3,152 +3,54 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const apiBasePost = vi.fn();
 vi.mock('@/http/request', () => ({ apiBasePost }));
 
-const {
-  listAiResultReusableBlocks,
-  listAiMessageVersions,
-  prepareAiMessageVersionGroup,
-  prepareAiResultNoteReuse,
-  recoverAiAgentResponse,
-  recoverAiLocalConversation,
-  revalidateAiChangeSetRetry,
-  retryAiChangeSet,
-} = await import('./aiWorkspaceApi');
+const { deleteAiConversation, exportAiCloudConversations, getAiConversation, listAiConversations } = await import(
+  './aiWorkspaceApi'
+);
 
-describe('AI workspace recovery API', () => {
+describe('只读 AI 历史归档 API', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('提交 requestId、最后事件号和可取消信号，不携带对话正文', async () => {
-    const controller = new AbortController();
-    apiBasePost.mockResolvedValue({
-      status: 200,
-      data: { requestId: 'request-1', recovered: true, snapshot: { status: 'completed' } },
-    });
+  it('只提供列表、查看、删除和导出，不恢复旧助手执行态', async () => {
+    apiBasePost
+      .mockResolvedValueOnce({ status: 200, data: { items: [], nextCursor: null } })
+      .mockResolvedValueOnce({ status: 200, data: { id: 'conversation-1', messages: [] } })
+      .mockResolvedValueOnce({ status: 200, data: { deleted: 1, undoExpiresAt: null } })
+      .mockResolvedValueOnce({ status: 200, data: { schemaVersion: 1, conversations: [] } });
 
-    await recoverAiAgentResponse({ requestId: 'request-1', lastEventId: 7 }, { signal: controller.signal });
-
-    expect(apiBasePost).toHaveBeenCalledWith(
-      '/api/chat/agent/recover',
-      { requestId: 'request-1', lastEventId: 7 },
-      { silent: true, signal: controller.signal },
+    await listAiConversations({ status: 'archived', keyword: '复盘', limit: 20 });
+    expect(apiBasePost).toHaveBeenLastCalledWith(
+      '/api/chat/conversations/list',
+      { status: 'archived', keyword: '复盘', limit: 20 },
+      { silent: true },
     );
+
+    await getAiConversation('conversation-1', 50);
+    expect(apiBasePost).toHaveBeenLastCalledWith(
+      '/api/chat/conversations/get',
+      { conversationId: 'conversation-1', messageLimit: 50 },
+      { silent: true },
+    );
+
+    await deleteAiConversation('conversation-1');
+    expect(apiBasePost).toHaveBeenLastCalledWith(
+      '/api/chat/conversations/delete',
+      { conversationId: 'conversation-1' },
+      { silent: true },
+    );
+
+    await exportAiCloudConversations();
+    expect(apiBasePost).toHaveBeenLastCalledWith('/api/chat/conversations/export', {}, { silent: true });
+    expect(JSON.stringify(apiBasePost.mock.calls)).not.toContain('/api/chat/agent');
+    expect(JSON.stringify(apiBasePost.mock.calls)).not.toContain('change-sets');
   });
 
-  it('保留 404 过期错误的稳定 code/status，供聊天层维持原错误', async () => {
-    apiBasePost.mockResolvedValue({
+  it('保留服务端稳定错误码，供归档页显示明确失败原因', async () => {
+    apiBasePost.mockResolvedValue({ status: 404, data: { code: 'AI_CONVERSATION_NOT_FOUND' } });
+
+    await expect(getAiConversation('missing')).rejects.toMatchObject({
+      message: 'AI_CONVERSATION_NOT_FOUND',
+      code: 'AI_CONVERSATION_NOT_FOUND',
       status: 404,
-      msg: '恢复结果不存在或已过期',
-      data: { code: 'AI_RESPONSE_RECOVERY_NOT_FOUND' },
     });
-
-    await expect(recoverAiAgentResponse({ requestId: 'request-expired' })).rejects.toMatchObject({
-      message: 'AI_RESPONSE_RECOVERY_NOT_FOUND',
-      code: 'AI_RESPONSE_RECOVERY_NOT_FOUND',
-      status: 404,
-    });
-  });
-
-  it('本机历史恢复只上传用户明确选择的终态消息，不携带旧云端会话 ID', async () => {
-    apiBasePost.mockResolvedValue({
-      status: 200,
-      data: { conversation: { id: 'conversation-new', messages: [] }, restoredMessageCount: 1 },
-    });
-
-    await recoverAiLocalConversation({
-      messages: [
-        {
-          clientId: 'local-1',
-          role: 'user',
-          status: 'completed',
-          content: '仅在明确恢复时上传的本机历史',
-        },
-      ],
-    });
-
-    expect(apiBasePost).toHaveBeenLastCalledWith(
-      '/api/chat/conversations/recover-local',
-      {
-        messages: [
-          {
-            clientId: 'local-1',
-            role: 'user',
-            status: 'completed',
-            content: '仅在明确恢复时上传的本机历史',
-          },
-        ],
-      },
-      { silent: true },
-    );
-    expect(JSON.stringify(apiBasePost.mock.calls.at(-1))).not.toContain('conversation-old');
-  });
-
-  it('选段接口只提交归属标识与服务端块 ID，不上传回答正文', async () => {
-    apiBasePost.mockResolvedValue({ status: 200, data: { items: [], total: 0 } });
-    await listAiResultReusableBlocks({ conversationId: 'conversation-1', messageId: 'message-1' });
-    expect(apiBasePost).toHaveBeenLastCalledWith(
-      '/api/chat/conversations/reuse-note/blocks',
-      { conversationId: 'conversation-1', messageId: 'message-1' },
-      { silent: true },
-    );
-
-    apiBasePost.mockResolvedValue({ status: 200, data: { changeSetId: 'change-1', preview: {} } });
-    await prepareAiResultNoteReuse({
-      conversationId: 'conversation-1',
-      messageId: 'message-1',
-      mode: 'selection',
-      selectedBlockIds: ['block-0-0123456789abcdef'],
-      targetNoteId: 'note-1',
-      targetVersion: 'version-1',
-    });
-    expect(apiBasePost).toHaveBeenLastCalledWith(
-      '/api/chat/conversations/reuse-note/prepare',
-      {
-        conversationId: 'conversation-1',
-        messageId: 'message-1',
-        mode: 'selection',
-        selectedBlockIds: ['block-0-0123456789abcdef'],
-        targetNoteId: 'note-1',
-        targetVersion: 'version-1',
-      },
-      { silent: true },
-    );
-    expect(JSON.stringify(apiBasePost.mock.calls.at(-1))).not.toContain('回答正文');
-  });
-
-  it('回答版本接口只提交会话/消息标识，不上传标题或回答正文', async () => {
-    apiBasePost.mockResolvedValue({ status: 200, data: { items: [] } });
-    await listAiMessageVersions('conversation-1', 'message-1');
-    expect(apiBasePost).toHaveBeenLastCalledWith(
-      '/api/chat/conversations/messages/versions',
-      { conversationId: 'conversation-1', messageId: 'message-1' },
-      { silent: true },
-    );
-
-    apiBasePost.mockResolvedValue({ status: 200, data: { versionGroupId: 'message-1' } });
-    await prepareAiMessageVersionGroup('conversation-1', 'message-1');
-    expect(apiBasePost).toHaveBeenLastCalledWith(
-      '/api/chat/conversations/messages/version-group',
-      { conversationId: 'conversation-1', messageId: 'message-1' },
-      { silent: true },
-    );
-    expect(JSON.stringify(apiBasePost.mock.calls.slice(-3))).not.toContain('回答正文');
-  });
-
-  it('Change Set 重试只提交服务端冻结范围的预览修订号，不由客户端重传项目选择', async () => {
-    apiBasePost.mockResolvedValue({ status: 200, data: { id: 'change-1', status: 'draft' } });
-
-    await revalidateAiChangeSetRetry('change-1');
-    expect(apiBasePost).toHaveBeenLastCalledWith(
-      '/api/chat/change-sets/revalidate-retry',
-      { changeSetId: 'change-1' },
-      { silent: true },
-    );
-
-    await retryAiChangeSet('change-1', 7);
-    expect(apiBasePost).toHaveBeenLastCalledWith(
-      '/api/chat/change-sets/retry',
-      { changeSetId: 'change-1', previewRevision: 7 },
-      { silent: true },
-    );
-    expect(JSON.stringify(apiBasePost.mock.calls.at(-1))).not.toContain('selectedItemIds');
   });
 });

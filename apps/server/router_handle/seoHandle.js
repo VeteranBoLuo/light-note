@@ -8,7 +8,7 @@
  *   GET /sitemap.xml         动态 sitemap（官网首页/helpCenter + 全部公开文章，lastmod 取 updated_at）
  *
  * ⚠️ 路径踩坑记录：最初这三个路由挂在 /help，结果和项目里已有的
- * router/modules/common.ts 的 `path: '/help'`（HelpMg.vue，AI 助手/帮助文档入口，
+ * router/modules/common.ts 的 `path: '/help'`（HelpMg.vue，帮助文档入口，
  * requireAuth: true）撞了。App 内 `$router.push('/help')` 走客户端路由不受影响，
  * 但用户在 /help 页面硬刷新、或直接打开/收藏 /help 链接时，nginx 的精确匹配
  * location 会抢在 SPA 之前把请求转发到这里，导致原有功能被顶掉。改名 /helpCenter

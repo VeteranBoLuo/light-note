@@ -166,7 +166,7 @@
     resolveAiSourceNavigation,
     type AiSource,
     type AiSourceTarget,
-  } from '@/components/aiAssistant/aiSourceNavigation';
+  } from '@/utils/aiSourceNavigation';
 
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
   const DrawingNoteEditor = defineAsyncComponent(

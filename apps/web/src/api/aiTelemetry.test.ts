@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const apiBasePost = vi.fn().mockResolvedValue({});
 vi.mock('@/http/request.ts', () => ({ apiBasePost }));
 
-const { aiDurationBucket, aiLengthBucket, recordAiProductEvent } = await import('./aiTelemetry');
+const { aiDurationBucket, aiLengthBucket, recordAiProductEvent, recordAiSkillApplied } = await import('./aiTelemetry');
 
 describe('AI telemetry client', () => {
   beforeEach(() => apiBasePost.mockClear());
@@ -42,5 +42,28 @@ describe('AI telemetry client', () => {
     } finally {
       Object.defineProperty(globalThis, 'crypto', { configurable: true, value: originalCrypto });
     }
+  });
+
+  it('records Skill application with low-cardinality dimensions only', async () => {
+    await recordAiSkillApplied({
+      skillId: 'note.transform_text',
+      surface: 'note.editor.selection',
+      resourceType: 'note',
+      resourceCount: 1,
+    });
+    expect(apiBasePost).toHaveBeenCalledWith(
+      '/api/common/recordAiEvent',
+      expect.objectContaining({
+        event: 'ai_skill_applied',
+        dimensions: {
+          skillId: 'note.transform_text',
+          surface: 'note.editor.selection',
+          resourceType: 'note',
+          resourceCountBucket: '1',
+          outcome: 'success',
+        },
+      }),
+      { silent: true },
+    );
   });
 });

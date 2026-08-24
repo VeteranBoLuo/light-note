@@ -67,7 +67,7 @@ export type SettingsEnv = {
 };
 
 export function isSettingsSectionVisible(id: SettingsIndexSectionId, env: SettingsEnv): boolean {
-  if (id === 'account') return !env.isGuest;
+  if (id === 'account' || id === 'ai') return !env.isGuest;
   return true;
 }
 

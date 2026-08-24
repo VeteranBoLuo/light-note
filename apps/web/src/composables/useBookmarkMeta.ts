@@ -1,5 +1,7 @@
 import { computed, ref, type Ref } from 'vue';
 import { apiBasePost } from '@/http/request';
+import { createAiSkillRequest, executeAiSkill } from '@/api/aiSkillApi';
+import { recordAiSkillApplied } from '@/api/aiTelemetry';
 import message from '@/components/base/BasicComponents/BMessage/BMessage';
 import { recordOperation } from '@/api/commonApi';
 import Alert from '@/components/base/BasicComponents/BModal/Alert';
@@ -29,7 +31,6 @@ interface UseBookmarkMetaOptions {
 // 书签最多关联 4 个标签（后端 addBookmark / updateBookmark 强制上限，超出会回滚）
 const MAX_RELATED_TAGS = 4;
 export const BOOKMARK_META_GENERATION_TIMEOUT_MS = 50_000;
-const BOOKMARK_META_HTTP_TIMEOUT_MS = BOOKMARK_META_GENERATION_TIMEOUT_MS + 5_000;
 
 interface ActiveGeneration {
   controller: AbortController;
@@ -149,23 +150,22 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
         }, BOOKMARK_META_GENERATION_TIMEOUT_MS);
       }
 
-      const res = await apiBasePost(
-        '/api/chat/generateBookmarkMeta',
-        { url: bookmarkData.value.url },
-        {
-          signal: controller.signal,
-          timeout: BOOKMARK_META_HTTP_TIMEOUT_MS,
-          silent: true,
-        },
+      const skillResponse = await executeAiSkill(
+        createAiSkillRequest({
+          skillId: 'bookmark.parse_url',
+          input: { url: bookmarkData.value.url },
+          surface: 'bookmark.form',
+        }),
+        { signal: controller.signal },
       );
       if (controller.signal.aborted) return;
-      if (res.status !== 200) {
-        message.error(res.msg || i18n.global.t('bookmarkMeta.generateFailed'));
+      if (skillResponse.result?.kind !== 'field_suggestions') {
+        message.error(i18n.global.t('bookmarkMeta.generateFailed'));
         return;
       }
 
-      const generatedData = res.data || {};
-      const returnedUrl = resolveBookmarkUrlInput(generatedData.resolvedUrl, {
+      const generatedData = (skillResponse.result.fields || {}) as Record<string, any>;
+      const returnedUrl = resolveBookmarkUrlInput(generatedData.url, {
         allowTextExtraction: false,
       }).canonicalUrl;
       // 请求期间用户可能手动改过地址；只在输入仍是本次提交值时回写短链的真实落地地址。
@@ -199,11 +199,18 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
       if (matched.length) {
         selectTags(matched);
       }
+      if (selectedFields.length || matched.length) {
+        void recordAiSkillApplied({
+          skillId: 'bookmark.parse_url',
+          surface: 'bookmark.form',
+          resourceType: 'bookmark',
+        });
+      }
 
       recordOperation({ module: '书签详情', operation: `生成书签信息成功【${bookmarkData.value.url}】` });
 
       const newTags: string[] = generatedData.newTags || [];
-      const inferred = generatedData.metadataSource === 'inferred';
+      const inferred = skillResponse.result.metadataSource === 'inferred';
       if (inferred) {
         message.warning(i18n.global.t('bookmarkMeta.inferredWarning'));
       } else if (matched.length) {

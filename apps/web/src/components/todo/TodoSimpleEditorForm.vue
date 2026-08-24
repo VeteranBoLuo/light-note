@@ -79,9 +79,23 @@
               <strong>{{ t('inbox.todoChecklist') }}</strong>
               <small>{{ t('inbox.todoChecklistHint') }}</small>
             </div>
-            <BButton class="todo-simple-editor__checklist-toggle" size="small" @click="checklistOpen = !checklistOpen">
-              {{ checklistOpen ? t('common.collapse') : t('inbox.todoShowChecklist') }}
-            </BButton>
+            <div class="todo-simple-editor__optional-actions">
+              <TodoBreakdownButton
+                :todo-id="item?.id"
+                :title="draft.task.title"
+                :description="draft.task.description"
+                :checklist="draft.task.checklist"
+                :disabled="saving"
+                @apply="applyAiBreakdown"
+              />
+              <BButton
+                class="todo-simple-editor__checklist-toggle"
+                size="small"
+                @click="checklistOpen = !checklistOpen"
+              >
+                {{ checklistOpen ? t('common.collapse') : t('inbox.todoShowChecklist') }}
+              </BButton>
+            </div>
           </div>
           <div v-if="checklistOpen" class="todo-simple-editor__checklist">
             <div v-for="(item, index) in draft.task.checklist" :key="item.id">
@@ -211,6 +225,7 @@
   import TodoIndependentTaskPlanEditor from './TodoIndependentTaskPlanEditor.vue';
   import TodoPlanPreviewCard from './TodoPlanPreviewCard.vue';
   import TodoReminderEditor from './TodoReminderEditor.vue';
+  import TodoBreakdownButton from './TodoBreakdownButton.vue';
   import { normalizeTodoCreateDraft, suggestTodoPlanEndDate } from './todoDraftNormalizer';
   import { useTodoCreateDraft } from './useTodoCreateDraft';
   import {
@@ -385,6 +400,11 @@
   function removeChecklist(index: number) {
     draft.task.checklist.splice(index, 1);
     if (!draft.task.checklist.length) addChecklist();
+  }
+
+  function applyAiBreakdown(items: TodoItem['checklist']) {
+    draft.task.checklist = items;
+    checklistOpen.value = true;
   }
 
   function handleDescriptionKeydown(event: KeyboardEvent) {
@@ -671,6 +691,14 @@
     display: grid;
     min-width: 0;
     gap: 2px;
+  }
+
+  .todo-simple-editor__optional-actions {
+    display: flex !important;
+    min-width: auto !important;
+    grid-auto-flow: column;
+    align-items: center;
+    gap: 8px !important;
   }
 
   .todo-simple-editor__optional-head strong {

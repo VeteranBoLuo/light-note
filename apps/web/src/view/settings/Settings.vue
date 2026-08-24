@@ -564,7 +564,7 @@
           </div>
         </section>
 
-        <!-- AI 设置 -->
+        <!-- AI 用量与旧会话：模块 Skill 不提供全局风格、开关或会话继承设置 -->
         <section v-if="sectionVisible('ai')" class="settings-card" id="set-ai">
           <div v-if="!isMobileSubPage" class="card-head">
             <span class="card-icon card-icon--appearance">
@@ -578,73 +578,17 @@
           <div class="fields">
             <div class="field">
               <div class="field-head">
-                <span class="field-label">{{ t('settings.ai.style') }}</span>
-                <span class="field-desc">{{ t('settings.ai.styleDescription') }}</span>
-              </div>
-              <div class="seg" :class="{ 'seg--two-column': aiStyleOpts.length >= 4 }">
-                <BButton
-                  v-for="o in aiStyleOpts"
-                  :key="o.v"
-                  class="seg-btn"
-                  :class="{ active: ((user.preferences as any).aiStyle || 'balanced') === o.v }"
-                  :type="((user.preferences as any).aiStyle || 'balanced') === o.v ? 'primary' : undefined"
-                  :aria-pressed="((user.preferences as any).aiStyle || 'balanced') === o.v"
-                  @click="set('aiStyle', o.v)"
-                >
-                  {{ o.label }}
-                </BButton>
-              </div>
-            </div>
-            <div class="field">
-              <div class="field-head">
-                <span class="field-label">{{ t('settings.ai.enabled') }}</span>
-                <span class="field-desc">{{ t('settings.ai.enabledDescription') }}</span>
-              </div>
-              <BSwitch
-                :checked="user.preferences.aiEnabled !== false"
-                :aria-label="t('settings.ai.enabled')"
-                @change="set('aiEnabled', $event)"
-              />
-            </div>
-            <div v-if="!bookmark.isMobile" class="field">
-              <div class="field-head">
-                <span class="field-label">{{ t('settings.ai.defaultFullscreen') }}</span>
-                <span class="field-desc">{{ t('settings.ai.defaultFullscreenDescription') }}</span>
-              </div>
-              <BSwitch
-                :checked="user.preferences.aiDefaultFullscreen === true"
-                :aria-label="t('settings.ai.defaultFullscreen')"
-                @change="set('aiDefaultFullscreen', $event)"
-              />
-            </div>
-            <div v-if="!isGuestUser()" class="field">
-              <div class="field-head">
-                <span class="field-label">{{ t('settings.ai.cloudHistory') }}</span>
-                <span class="field-desc">{{ t('settings.ai.cloudHistoryDescription') }}</span>
-              </div>
-              <BSwitch
-                :checked="user.preferences.aiCloudHistory !== false"
-                :aria-label="t('settings.ai.cloudHistory')"
-                @change="set('aiCloudHistory', $event)"
-              />
-            </div>
-            <div v-if="!bookmark.isMobile" class="field">
-              <div class="field-head">
-                <span class="field-label">{{ t('settings.ai.rememberDrawerWidth') }}</span>
-                <span class="field-desc">{{ t('settings.ai.rememberDrawerWidthDescription') }}</span>
-              </div>
-              <BSwitch
-                :checked="rememberDrawerWidth"
-                :aria-label="t('settings.ai.rememberDrawerWidth')"
-                @change="setRememberDrawerWidth"
-              />
-            </div>
-            <div class="field">
-              <div class="field-head">
                 <span class="field-label">{{ t('settings.ai.quota') }}</span>
                 <span class="field-desc">{{ t('settings.ai.quotaDescription') }}</span>
               </div>
               <span class="field-desc" style="color: var(--text-color)">{{ quotaText }}</span>
+            </div>
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.ai.archive') }}</span>
+                <span class="field-desc">{{ t('settings.ai.archiveDescription') }}</span>
+              </div>
+              <BButton @click="router.push('/ai')">{{ t('settings.ai.openArchive') }}</BButton>
             </div>
           </div>
         </section>
@@ -804,6 +748,7 @@
   import {
     SETTINGS_SECTION_ANCHOR,
     countEnabledNotifications,
+    isSettingsSectionVisible,
     parseSettingsSection,
     visibleSettingsSections,
     type SettingsEnv,
@@ -826,7 +771,7 @@
     if (!bookmark.isMobile) list.push({ id: 'set-shortcuts', label: t('settings.shortcutsTitle') });
     list.push({ id: 'set-notification', label: t('settings.notification') });
     if (!isGuestUser()) list.push({ id: 'set-account', label: '账号与安全' });
-    list.push({ id: 'set-ai', label: 'AI 设置' });
+    if (!isGuestUser()) list.push({ id: 'set-ai', label: t('settings.ai.title') });
     if (!bookmark.isMobile) {
       list.push(
         { id: 'set-quicksave', label: t('settings.quickSaveTitle') },
@@ -856,6 +801,7 @@
   const showMobileIndex = computed(() => bookmark.isMobile && mobileSection.value === null);
   /** 桌面端渲染全部区块;移动端只渲染当前子页那一个 */
   function sectionVisible(id: SettingsIndexSectionId) {
+    if (!isSettingsSectionVisible(id, settingsEnv.value)) return false;
     return !bookmark.isMobile || mobileSection.value === id;
   }
 
@@ -971,11 +917,7 @@
     return prefs.notificationsDnd === true ? `${base} · ${t('settings.notificationSummaryDnd')}` : base;
   });
 
-  const aiSummary = computed(() => {
-    if (user.preferences.aiEnabled === false) return t('settings.ai.summaryOff');
-    const style = aiStyleOpts.value.find((o) => o.v === ((user.preferences as any).aiStyle || 'balanced'))?.label;
-    return style ? `${t('settings.ai.summaryOn')} · ${style}` : t('settings.ai.summaryOn');
-  });
+  const aiSummary = computed(() => t('settings.ai.summary'));
   const { canPrompt, installState, isStandalone, openGuide } = usePwaInstall();
 
   /*
@@ -1030,13 +972,6 @@
       description: t('settings.shortcutSearchDesc'),
       keys: getGlobalShortcutKeys('globalSearch'),
       label: getGlobalShortcutLabel('globalSearch'),
-    },
-    {
-      id: 'aiAssistant',
-      title: t('settings.shortcutAi'),
-      description: t('settings.shortcutAiDesc'),
-      keys: getGlobalShortcutKeys('aiAssistant'),
-      label: getGlobalShortcutLabel('aiAssistant'),
     },
   ]);
 
@@ -1280,28 +1215,7 @@
     }
   }
 
-  // 记住 AI 抽屉宽度:纯本地开关(抽屉宽度是设备相关偏好,不入账号 preferences、不跨设备同步)
-  const REMEMBER_DRAWER_FLAG = 'light-note:ai-remember-drawer-width';
-  const rememberDrawerWidth = ref(false);
-  try {
-    rememberDrawerWidth.value = localStorage.getItem(REMEMBER_DRAWER_FLAG) === 'true';
-  } catch {}
-  function setRememberDrawerWidth(value: boolean) {
-    rememberDrawerWidth.value = value;
-    try {
-      localStorage.setItem(REMEMBER_DRAWER_FLAG, String(value));
-      if (!value) localStorage.removeItem('light-note:ai-drawer-width');
-    } catch {}
-  }
-
-  // AI 回答风格(映射后端 temperature:严谨0.3/平衡1.0/发散1.5)
-  const aiStyleOpts = computed(() => [
-    { v: 'strict', label: t('settings.ai.styleStrict') },
-    { v: 'balanced', label: t('settings.ai.styleBalanced') },
-    { v: 'creative', label: t('settings.ai.styleCreative') },
-  ]);
-
-  // 今日 AI 额度
+  // 用户触发的模块 Skill 统一从 AI Execution 结算到此额度；系统任务使用独立系统预算。
   const quotaText = ref(t('settings.ai.quotaLoading'));
   function fmtTokens(n: number) {
     if (!Number.isFinite(n)) return '—';
@@ -1325,7 +1239,7 @@
     }
   }
   watch(
-    () => !bookmark.isMobile || mobileSection.value === 'ai',
+    () => !isGuestUser() && (!bookmark.isMobile || mobileSection.value === 'ai'),
     (needQuota) => {
       if (needQuota) loadAiQuota();
     },

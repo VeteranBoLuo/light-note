@@ -308,38 +308,13 @@ describe('adminRoutePolicyMiddleware', () => {
     }
   });
 
-  it('readonly 仅放行 Agent 问答和 AI 持久对象读取，拒绝所有状态写入', () => {
-    for (const path of [
-      '/chat/conversations/list',
-      '/chat/conversations/get',
-      '/chat/conversations/messages/versions',
-      '/chat/conversations/export',
-      '/chat/conversations/reuse-note/blocks',
-      '/chat/change-sets/list',
-      '/chat/change-sets/get',
-      '/chat/memories/list',
-    ]) {
+  it('readonly 仅放行旧会话归档读取，拒绝归档删除', () => {
+    for (const path of ['/chat/conversations/list', '/chat/conversations/get', '/chat/conversations/export']) {
       const next = vi.fn();
       adminRoutePolicyMiddleware(createReq(path), createRes(), next);
       expect(next).toHaveBeenCalledTimes(1);
     }
-    for (const path of [
-      '/chat/conversations/create',
-      '/chat/conversations/update',
-      '/chat/conversations/delete',
-      '/chat/conversations/restore',
-      '/chat/conversations/clear',
-      '/chat/conversations/clear-all-data',
-      '/chat/conversations/messages/save',
-      '/chat/conversations/messages/version-group',
-      '/chat/conversations/feedback',
-      '/chat/conversations/reuse-note/prepare',
-      '/chat/change-sets/create',
-      '/chat/change-sets/propose',
-      '/chat/change-sets/update',
-      '/chat/change-sets/revalidate-retry',
-      '/chat/change-sets/retry',
-    ]) {
+    for (const path of ['/chat/conversations/delete', '/chat/conversations/clear', '/chat/conversations/clear-all-data']) {
       const next = vi.fn();
       const res = createRes();
       adminRoutePolicyMiddleware(createReq(path), res, next);
@@ -348,8 +323,8 @@ describe('adminRoutePolicyMiddleware', () => {
     }
   });
 
-  it('maintain 可管理当前上下文 AI 状态', () => {
-    for (const path of ['/chat/conversations/create', '/chat/change-sets/propose']) {
+  it('maintain 可管理当前上下文的旧会话归档', () => {
+    for (const path of ['/chat/conversations/delete', '/chat/conversations/clear']) {
       const next = vi.fn();
       const req = createReq(path, 'POST', 'maintain');
       adminRoutePolicyMiddleware(req, createRes(), next);
@@ -360,12 +335,7 @@ describe('adminRoutePolicyMiddleware', () => {
   });
 
   it('maintain 模式放行可逆内容写入并抑制成长/转化副作用', () => {
-    for (const path of [
-      '/bookmark/updateBookmark',
-      '/chat/change-sets/revalidate-retry',
-      '/chat/change-sets/retry',
-      '/file/clearFolderFiles',
-    ]) {
+    for (const path of ['/bookmark/updateBookmark', '/file/clearFolderFiles']) {
       const next = vi.fn();
       const req = createReq(path, 'POST', 'maintain');
       adminRoutePolicyMiddleware(req, createRes(), next);

@@ -25,6 +25,10 @@
     "./host-agent-protocol": {
       "types": "./hostAgentProtocol.d.ts",
       "default": "./hostAgentProtocol.js"
+    },
+    "./ai-skill-protocol": {
+      "types": "./aiSkillProtocol.d.ts",
+      "default": "./aiSkillProtocol.js"
     }
   }
 }

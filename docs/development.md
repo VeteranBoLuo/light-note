@@ -222,7 +222,26 @@ try {
 - 投递记录只保存排障元数据，不保存验证码、完整正文或 SMTP 凭据；SMTP 成功只能称为“已受理”，不能宣称“已送达”。
 - SMTP 已受理后的日志回写失败不得反向让业务重试，以免重复发信；长时间停留在 `sending` 的记录按 `unknown` 展示，只允许人工核查。
 
-### AI 助手开发硬约束
+### 模块化 AI Skills 开发硬约束（现行）
+
+- 轻笺不再提供万能助手、普通闲聊、全局工具选择或跨模块自由规划。页面负责选择封闭 `skillId`，服务端 Registry 决定版本、角色、资源类型、数量上限、历史窗口、模型策略和输出契约；模型不得重新选择业务模块。
+- 前后端协议唯一来源是 `@lightnote/shared/ai-skill-protocol`。请求只允许 `protocolVersion/requestId/skillId/skillVersion/input/scope/threadId/client`，响应只允许协议声明的终态、结果、来源、覆盖、动作、收据和错误。未知字段、未知 Skill、版本不符、越权资源和非法终态均失败关闭。
+- 客户端资源 ID 只是候选。Context Resolver 必须从认证后的 actor/subject 解析 owner，按资源类型重新读取当前版本与内容，再生成 `scopeDigest`；标题、URL、正文、对象键和客户端缓存不得作为权威事实。Help 只能读取公开帮助，Search 只能只读检索当前 subject 的私有资料。
+- Skill thread 固定绑定 `skillId + skillVersion + actor + subject + scopeDigest`。不同 Skill、不同资源集合或不同 subject 永不共享自然语言历史；当前书签网页总结最多 2 轮、文件问答最多 5 轮、资源搜索最多 2 轮、帮助最多 4 轮，笔记处理、批量任务、比较、解析和草稿为零历史。历史只用于理解省略，每轮事实仍从权威资源重新读取。
+- 写 Skill 只能生成结构化草稿或预览，真实写入必须由用户确认并复用 `util/services/` 的权限、事务、版本、幂等和审计能力。模型文本、旧预览和成功语气都不是执行回执；对象版本变化时返回冲突，不得静默覆盖。
+- 所有真实模型调用必须经 `agent/aiGateway.js`，且处于唯一根 `AI Execution` 中。源码门禁 `pnpm --filter server check:ai-model-access` 禁止裸 Provider、未登记 Gateway 调用方和新的万能助手入口；`billingPolicy=none` 的执行禁止访问 Provider。
+- 用户动作在第一次真实 Provider 调用前懒占位一次，内部重试、结构修复和 Provider 回退累计到同一 Execution/Span 集合，终态只结算一次。缓存命中、确定性解析和纯本地处理不占模型额度，也不因用户额度耗尽而失败；一旦访问 Provider 就必须计量。系统/后台 AI 使用明确的 system budget，Root 也不能隐形免费。
+- `ai_lock` 属于能力限制而不是 URL 规则，统一在根 Execution 中按 `req.securityRestrictions` 失败关闭。新增模块路由不得再复制 AI 路径正则或局部绕过。
+- 输出必须先通过 Skill 的结构校验与长度契约，再形成可读正文、来源、Coverage 和可用动作。失败与空结果必须区分；Coverage 不完整、来源缺失或结构修复失败时不得声称“全部”“唯一”或伪造成功。
+- 日期、时间和时区属于服务端确定性事实。结构化 Skill 只允许模型逐字摘录用户原话中的时间表达式；服务端用请求携带且已校验的 IANA 时区解析相对日期、星期和时间，不允许模型计算或回传绝对时间。没有表达的字段保持为空，无法从原话核验或不支持的语法失败关闭；只给日期时统一使用该本地日期 `23:59`，并由测试锁定跨时区、跨日、星期和过期语义。
+- AI 产品埋点必须复用统一低敏事件入口。服务端记录真实 started/completed/failed/scope_rejected 生命周期，前端只记录 opened/cancelled/applied 等交互；只允许登记过的 Skill、surface、资源类型、桶化数量/长度/耗时、结果和错误族，禁止保存问题、正文、标题、URL、资源 ID 或 Provider 原文。非流式链路不得伪造 first-token 指标，埋点失败不得阻断主流程。
+- `/ai/skills/config` 由前端统一短时缓存并合并并发读取，不允许各组件轮询或各自维护开关。配置读取失败时前端保持业务页面可用并把服务端作为最终门禁；服务端 Skill/域/Kernel 禁用始终失败关闭。Registry 契约测试必须精确列出批准的 Skill，并统一校验版本、角色、资源范围、历史、模型策略、输出类型、未知输入字段和无直写函数。
+- 前端使用模块化 `AiSkillDialog/AiSkillResultContent` 及 B 系列组件。默认状态不暴露“自动助手、只读锁、本轮能力”等内部术语；模块入口只展示当前对象、任务和结果。旧 `/ai` 只读档案页只允许查看、导出、删除，禁止新增继续发送入口。
+- 默认验证使用协议夹具、Provider mock、Handler mock、源代码门禁、类型检查和构建。真实模型仅在明确获授权的发布验证中执行少量代表用例，不得把高费用全工具真实回放作为日常测试。
+
+### 旧 AI 助手开发约束（已退役，仅供历史迁移排查）
+
+> 以下直到“手绘笔记协议与性能边界”之前的通用 Agent、V2/V3、Memory、Change Set、SSE 和万能入口说明均已被上面的模块化 Skills 约束取代。禁止据此新增运行时代码；保留文字只用于理解历史表结构和迁移来源。
 
 **Owner 四维隔离：**
 

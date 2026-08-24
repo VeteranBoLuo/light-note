@@ -1,34 +1,52 @@
-import crypto from 'node:crypto';
 import pool from '../db/index.js';
 import { invalidatePersonalKnowledgeCache } from './personalKnowledgeSearch.js';
 import { stableAgentErrorCode } from './agent/logSafety.js';
-import { normalizeAiMemoryInfluenceMetadata } from './agent/memoryRuntime.js';
+
+/**
+ * 旧通用助手的会话只作为用户可控档案保留。
+ * 本服务只允许读取、导出、删除和保留期清理；禁止创建会话、续写消息、恢复本机历史或写入反馈。
+ */
 
 const CONVERSATION_STATUSES = new Set(['active', 'archived']);
-const MESSAGE_ROLES = new Set(['user', 'assistant', 'system']);
-const MESSAGE_STATUSES = new Set(['generating', 'completed', 'failed', 'stopped']);
-const RETENTION_MODES = new Set(['standard', 'temporary', 'indefinite']);
-const FEEDBACK_RATINGS = new Set(['helpful', 'unhelpful']);
-const FEEDBACK_REASONS = new Set([
-  'incorrect',
-  'unsupported',
-  'outdated',
-  'irrelevant',
-  'unsafe_action',
-  'hard_to_use',
-  'other',
+const LEGACY_MEMORY_TYPES = new Set(['preference', 'fact', 'topic', 'workflow', 'temporary_state']);
+const LEGACY_MEMORY_SCOPES = new Set(['global', 'conversation', 'resource']);
+const LEGACY_MEMORY_REASONS = new Set([
+  'temporary_session',
+  'disabled',
+  'translation',
+  'visitor',
+  'admin_context',
+  'no_match',
+  'unavailable',
 ]);
-const DEFAULT_TEMPORARY_RETENTION_MS = 24 * 60 * 60 * 1000;
-const MIN_TEMPORARY_RETENTION_MS = 60 * 1000;
-const MAX_TEMPORARY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+// 旧会话档案仍需安全读取已经持久化的 memory_context 活动，但新产品不再加载或写入用户记忆。
+function normalizeLegacyMemoryInfluence(value) {
+  const status = value?.status === 'used' ? 'used' : 'not_used';
+  if (status !== 'used') {
+    return {
+      status,
+      count: 0,
+      types: [],
+      scopes: [],
+      reason: LEGACY_MEMORY_REASONS.has(value?.reason) ? value.reason : 'unavailable',
+    };
+  }
+  const count = Math.max(1, Math.min(20, Number.isSafeInteger(value?.count) ? value.count : 1));
+  const types = Array.isArray(value?.types)
+    ? [...new Set(value.types.filter((item) => LEGACY_MEMORY_TYPES.has(item)))].slice(0, LEGACY_MEMORY_TYPES.size)
+    : [];
+  const scopes = Array.isArray(value?.scopes)
+    ? [...new Set(value.scopes.filter((item) => LEGACY_MEMORY_SCOPES.has(item)))].slice(0, LEGACY_MEMORY_SCOPES.size)
+    : [];
+  return { status, count, types, scopes };
+}
 const DEFAULT_RETENTION_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 const MIN_RETENTION_CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 const MAX_RETENTION_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_DELETE_UNDO_MS = 15 * 1000;
 const MIN_DELETE_UNDO_MS = 5 * 1000;
 const MAX_DELETE_UNDO_MS = 2 * 60 * 1000;
-const MAX_LOCAL_RECOVERY_MESSAGES = 200;
-const MAX_LOCAL_RECOVERY_CONTENT_CHARS = 2_000_000;
 const LIVE_RETENTION_SQL =
   "(retention_mode <> 'temporary' OR (expire_at IS NOT NULL AND expire_at > CURRENT_TIMESTAMP))";
 
@@ -57,27 +75,11 @@ function parseJson(value, fallback) {
   }
 }
 
-function jsonValue(value, fallback) {
-  const normalized = value == null ? fallback : value;
-  try {
-    return JSON.stringify(normalized);
-  } catch {
-    throw serviceError('INVALID_JSON', '提交的数据无法序列化');
-  }
-}
-
-function boundedArray(value, max, field) {
-  if (value == null) return [];
-  if (!Array.isArray(value)) throw serviceError('INVALID_ARGUMENT', `${field} 必须是数组`);
-  if (value.length > max) throw serviceError('TOO_MANY_ITEMS', `${field} 最多允许 ${max} 项`);
-  return value;
-}
-
 function normalizeMessageActivity(value) {
   if (!Array.isArray(value)) return [];
   return value.slice(0, 200).map((item) => {
     if (!item || typeof item !== 'object' || item.event !== 'memory_context') return item;
-    return { event: 'memory_context', ...normalizeAiMemoryInfluenceMetadata(item) };
+    return { event: 'memory_context', ...normalizeLegacyMemoryInfluence(item) };
   });
 }
 
@@ -113,22 +115,6 @@ export function assertAiConversationWritable(identity) {
     throw serviceError('ADMIN_PREVIEW_READONLY', '管理员当前处于只读预览模式，不能修改 AI 持久数据', 403);
   }
   return owner;
-}
-
-function normalizeTemporaryExpireAt(value, now = Date.now()) {
-  const candidate = value == null || value === '' ? new Date(now + DEFAULT_TEMPORARY_RETENTION_MS) : new Date(value);
-  const timestamp = candidate.getTime();
-  if (!Number.isFinite(timestamp)) {
-    throw serviceError('RETENTION_EXPIRE_AT_INVALID', '临时会话的过期时间无效');
-  }
-  const ttl = timestamp - now;
-  if (ttl < MIN_TEMPORARY_RETENTION_MS) {
-    throw serviceError('RETENTION_EXPIRE_AT_INVALID', '临时会话的过期时间必须至少晚于当前时间 1 分钟');
-  }
-  if (ttl > MAX_TEMPORARY_RETENTION_MS) {
-    throw serviceError('RETENTION_EXPIRE_AT_TOO_LATE', '临时会话最长只能保留 30 天');
-  }
-  return new Date(Math.floor(timestamp / 1000) * 1000);
 }
 
 export function resolveAiConversationIdentity(req) {
@@ -250,61 +236,6 @@ async function getOwnedConversationRow(db, identity, conversationId, { includeAr
   return rows[0] || null;
 }
 
-/**
- * 自动云会话创建/续写的服务端门禁。读取 subject 的账号偏好，默认开启；
- * 变更集等显式后台成果可继续直接调用 service，不会被客户端自动同步开关误伤。
- */
-export async function assertAiCloudHistoryEnabled(identity, database = pool) {
-  const subjectUserId = asString(identity?.subjectUserId, 36);
-  if (!subjectUserId) throw serviceError('AI_CLOUD_HISTORY_DISABLED', '云端会话历史已关闭', 409);
-  const [rows] = await database.query(
-    `SELECT COALESCE(JSON_UNQUOTE(JSON_EXTRACT(preferences, '$.aiCloudHistory')), 'true') AS enabled
-     FROM user WHERE id = ? LIMIT 1`,
-    [subjectUserId],
-  );
-  const enabled = String(rows[0]?.enabled ?? 'false')
-    .trim()
-    .toLowerCase();
-  if (enabled === 'false' || enabled === '0') {
-    throw serviceError('AI_CLOUD_HISTORY_DISABLED', '云端会话历史已关闭', 409);
-  }
-  return true;
-}
-
-export async function createAiConversation(identity, input = {}, database = pool) {
-  const owner = assertAiConversationWritable(identity);
-  const id = asString(input.id, 36) || crypto.randomUUID();
-  const title = asString(input.title, 255, '新会话');
-  const scopeType = asString(input.scopeType, 32, 'global');
-  const retentionMode = RETENTION_MODES.has(input.retentionMode) ? input.retentionMode : 'standard';
-  if (retentionMode !== 'temporary' && input.expireAt != null && input.expireAt !== '') {
-    throw serviceError('RETENTION_EXPIRE_AT_INVALID', '只有临时会话可以设置过期时间');
-  }
-  const expireAt = retentionMode === 'temporary' ? normalizeTemporaryExpireAt(input.expireAt) : null;
-  await database.query(
-    `INSERT INTO ai_conversations
-      (id, actor_user_id, subject_user_id, admin_context_id, admin_context_mode, title, scope_type, scope_json,
-       retention_mode, expire_at, root_conversation_id, parent_conversation_id, branch_from_message_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      id,
-      owner.actorUserId,
-      owner.subjectUserId,
-      owner.adminContextId,
-      owner.adminContextMode,
-      title,
-      scopeType,
-      jsonValue(input.scope, {}),
-      retentionMode,
-      expireAt,
-      id,
-      null,
-      null,
-    ],
-  );
-  return getAiConversation(identity, id, { messageLimit: 0 }, database);
-}
-
 export async function listAiConversations(identity, options = {}, database = pool) {
   const limit = Math.max(1, Math.min(50, Number(options.limit) || 20));
   const status = CONVERSATION_STATUSES.has(options.status) ? options.status : 'active';
@@ -404,485 +335,6 @@ export async function getAiConversation(identity, conversationId, options = {}, 
   };
 }
 
-/**
- * 为 Agent V3 提供服务端权威的轻量最近对话。这里只读取语义连续性所需字段，
- * 不加载来源、证据和反馈；sourceMessageId 存在时只返回当前用户消息之前的时间线。
- */
-export async function getAiConversationRecentDialogue(identity, conversationId, options = {}, database = pool) {
-  const conversation = await getOwnedConversationRow(database, identity, conversationId);
-  if (!conversation) throw serviceError('CONVERSATION_NOT_FOUND', '会话不存在或无权访问', 404);
-  const limit = Math.max(2, Math.min(40, Number(options.limit) || 24));
-  const sourceMessageId = asString(options.sourceMessageId, 36);
-  const fields = `m.id, m.role, m.content, m.status, m.version_group_id,
-    m.create_time, m.update_time`;
-  let rows;
-  if (sourceMessageId) {
-    [rows] = await database.query(
-      `SELECT ${fields}
-       FROM ai_messages AS m
-       INNER JOIN ai_messages AS anchor
-         ON anchor.id = ? AND anchor.conversation_id = m.conversation_id
-       WHERE m.conversation_id = ? AND m.role IN ('user', 'assistant') AND m.status = 'completed'
-         AND m.id <> anchor.id AND m.create_time <= anchor.create_time
-       ORDER BY m.create_time DESC, m.id DESC LIMIT ?`,
-      [sourceMessageId, conversation.id, limit],
-    );
-  } else {
-    [rows] = await database.query(
-      `SELECT ${fields}
-       FROM ai_messages AS m
-       WHERE m.conversation_id = ? AND m.role IN ('user', 'assistant') AND m.status = 'completed'
-       ORDER BY m.create_time DESC, m.id DESC LIMIT ?`,
-      [conversation.id, limit],
-    );
-  }
-  return rows.reverse().map((row) => ({
-    id: String(row.id),
-    role: row.role,
-    content: row.content || '',
-    status: row.status || 'completed',
-    versionGroupId: row.version_group_id || null,
-    createdAt: row.create_time,
-    updatedAt: row.update_time,
-  }));
-}
-
-/**
- * 按服务端签发的 Dialogue Anchor 重新读取精确消息集合。
- *
- * 调用方只能提交已持久化 SourceSet 中的消息 ID；这里再次校验 conversation owner、
- * 消息归属与 completed 状态，并要求整组仍完整可用。任何缺失都失败关闭，避免把残缺
- * 对话悄悄当成完整材料继续生成产物。
- */
-export async function getAiConversationDialogueByIds(identity, conversationId, messageIds, database = pool) {
-  const conversation = await getOwnedConversationRow(database, identity, conversationId);
-  if (!conversation) throw serviceError('CONVERSATION_NOT_FOUND', '会话不存在或无权访问', 404);
-  const ids = [
-    ...new Set((Array.isArray(messageIds) ? messageIds : []).map((value) => asString(value, 36)).filter(Boolean)),
-  ].slice(0, 40);
-  if (!ids.length) throw serviceError('DIALOGUE_ANCHOR_INVALID', '对话材料锚点无效', 400);
-  const placeholders = ids.map(() => '?').join(',');
-  const [rows] = await database.query(
-    `SELECT id, role, content, status, version_group_id, create_time, update_time
-       FROM ai_messages
-      WHERE conversation_id = ? AND id IN (${placeholders})
-        AND role IN ('user', 'assistant') AND status = 'completed'
-      ORDER BY create_time ASC, id ASC`,
-    [conversation.id, ...ids],
-  );
-  const byId = new Map(rows.map((row) => [String(row.id), row]));
-  if (ids.some((id) => !byId.has(id))) {
-    throw serviceError('DIALOGUE_ANCHOR_STALE', '对话材料已变化，请重新选择要整理的对话', 409);
-  }
-  return ids.map((id) => {
-    const row = byId.get(id);
-    return {
-      id,
-      role: row.role,
-      content: row.content || '',
-      status: row.status || 'completed',
-      versionGroupId: row.version_group_id || null,
-      createdAt: row.create_time,
-      updatedAt: row.update_time,
-    };
-  });
-}
-
-export async function listAiMessageVersions(identity, conversationId, messageId, database = pool) {
-  const conversation = await getOwnedConversationRow(database, identity, conversationId);
-  if (!conversation) throw serviceError('CONVERSATION_NOT_FOUND', '会话不存在或无权访问', 404);
-  const normalizedMessageId = asString(messageId, 36);
-  const [targetRows] = await database.query(
-    `SELECT id, version_group_id, status FROM ai_messages
-     WHERE id = ? AND conversation_id = ? AND role = 'assistant' LIMIT 1`,
-    [normalizedMessageId, conversation.id],
-  );
-  const target = targetRows[0];
-  if (!target) throw serviceError('MESSAGE_NOT_FOUND', '回答不存在或无权访问', 404);
-  if (target.status !== 'completed') {
-    throw serviceError('MESSAGE_VERSION_NOT_AVAILABLE', '只有已完成的回答可以查看版本', 409);
-  }
-  const versionGroupId = asString(target.version_group_id, 36) || String(target.id);
-  const [rows] = await database.query(
-    `SELECT id, request_id, version_group_id, create_time, update_time
-     FROM ai_messages
-     WHERE conversation_id = ? AND role = 'assistant' AND status = 'completed'
-       AND (version_group_id = ? OR id = ?)
-     ORDER BY create_time ASC, id ASC LIMIT 51`,
-    [conversation.id, versionGroupId, versionGroupId],
-  );
-  return {
-    conversationId: String(conversation.id),
-    currentMessageId: String(target.id),
-    versionGroupId,
-    items: rows.slice(0, 50).map((row) => ({
-      messageId: String(row.id),
-      requestId: row.request_id || null,
-      versionGroupId: row.version_group_id || versionGroupId,
-      createdAt: row.create_time,
-      updatedAt: row.update_time,
-    })),
-    truncated: rows.length > 50,
-  };
-}
-
-export async function prepareAiMessageVersionGroup(identity, conversationId, messageId, database = pool) {
-  assertAiConversationWritable(identity);
-  const ownsTransaction = typeof database?.getConnection === 'function';
-  const connection = ownsTransaction ? await database.getConnection() : database;
-  if (!connection || typeof connection.query !== 'function') {
-    throw serviceError('AI_DATABASE_UNAVAILABLE', 'AI 会话存储暂时不可用', 503);
-  }
-  try {
-    if (ownsTransaction) await connection.beginTransaction();
-    const conversation = await getOwnedConversationRow(connection, identity, conversationId);
-    if (!conversation) throw serviceError('CONVERSATION_NOT_FOUND', '会话不存在或无权访问', 404);
-    const normalizedMessageId = asString(messageId, 36);
-    const [rows] = await connection.query(
-      `SELECT id, version_group_id FROM ai_messages
-       WHERE id = ? AND conversation_id = ? AND role = 'assistant' AND status = 'completed'
-       LIMIT 1 FOR UPDATE`,
-      [normalizedMessageId, conversation.id],
-    );
-    if (!rows.length) {
-      throw serviceError('MESSAGE_VERSION_NOT_AVAILABLE', '只能为当前会话中已完成的回答创建版本组', 404);
-    }
-    const versionGroupId = asString(rows[0].version_group_id, 36) || String(rows[0].id);
-    const [updated] = await connection.query(
-      `UPDATE ai_messages SET version_group_id = ?, update_time = CURRENT_TIMESTAMP
-       WHERE id = ? AND conversation_id = ? AND role = 'assistant' AND status = 'completed'`,
-      [versionGroupId, normalizedMessageId, conversation.id],
-    );
-    if (Number(updated?.affectedRows || 0) !== 1) {
-      throw serviceError('MESSAGE_VERSION_CONFLICT', '回答版本状态已变化，请刷新后重试', 409);
-    }
-    if (ownsTransaction) await connection.commit();
-    return {
-      conversationId: String(conversation.id),
-      messageId: normalizedMessageId,
-      versionGroupId,
-    };
-  } catch (error) {
-    if (ownsTransaction) await connection.rollback();
-    throw error;
-  } finally {
-    if (ownsTransaction) connection.release();
-  }
-}
-
-function normalizeSources(rawSources) {
-  return boundedArray(rawSources, 50, 'sources').map((source, index) => {
-    const sourceId = asString(source?.sourceId || source?.id, 96);
-    if (!sourceId) throw serviceError('SOURCE_ID_REQUIRED', `第 ${index + 1} 个来源缺少 sourceId`);
-    const resourceId = asString(source.resourceId || source.id || source.target?.id, 128) || null;
-    let target = source.target || null;
-    if (typeof target === 'string') {
-      const type = target;
-      const path =
-        type === 'note-detail' && resourceId
-          ? `/noteLibrary/${resourceId}`
-          : type === 'bookmark-edit' && resourceId
-            ? `/manage/editBookmark/${resourceId}`
-            : type === 'bookmark-snapshot' && resourceId
-              ? `/manage/bookmarkMg?snapshot=${encodeURIComponent(resourceId)}`
-              : type === 'cloud-file' && resourceId
-                ? `/cloudSpace?fileId=${encodeURIComponent(source.fileId || resourceId)}`
-                : type === 'cloud-folder' && resourceId
-                  ? `/cloudSpace?folderId=${encodeURIComponent(resourceId)}`
-                  : type === 'tag-detail' && resourceId
-                    ? `/tag/${resourceId}`
-                    : null;
-      target = {
-        type,
-        id: resourceId,
-        ...(path ? { path } : {}),
-        ...(source.url ? { url: source.url } : {}),
-      };
-    }
-    return {
-      sourceId,
-      resourceType: asString(source.resourceType || source.type, 32, 'unknown'),
-      resourceId,
-      title: asString(source.title || source.name, 255),
-      resourceVersion: asString(source.resourceVersion || source.version, 96) || null,
-      target,
-      coverage: source.coverage || null,
-    };
-  });
-}
-
-function normalizeEvidence(rawEvidence, sourceIds) {
-  const seenRefs = new Set();
-  const seenKeys = new Set();
-  return boundedArray(rawEvidence, 100, 'evidence').map((item, index) => {
-    const sourceId = asString(item?.sourceId, 96);
-    const evidenceRef = asString(item?.evidenceRef, 96);
-    const citationKey = asString(item?.citationKey, 32);
-    if (!sourceIds.has(sourceId)) {
-      throw serviceError('EVIDENCE_SOURCE_INVALID', `第 ${index + 1} 条证据没有对应的实际来源`);
-    }
-    if (!evidenceRef || seenRefs.has(evidenceRef)) {
-      throw serviceError('EVIDENCE_REF_INVALID', `第 ${index + 1} 条 evidenceRef 缺失或重复`);
-    }
-    if (!/^[A-Za-z0-9_-]{1,32}$/.test(citationKey) || seenKeys.has(citationKey)) {
-      throw serviceError('CITATION_KEY_INVALID', `第 ${index + 1} 条 citationKey 无效或重复`);
-    }
-    seenRefs.add(evidenceRef);
-    seenKeys.add(citationKey);
-    const excerpt = String(item.excerpt || '')
-      .trim()
-      .slice(0, 800);
-    return {
-      sourceId,
-      evidenceRef,
-      citationKey,
-      locator: item.locator || null,
-      excerpt,
-      excerptHash: crypto.createHash('sha256').update(excerpt).digest('hex'),
-    };
-  });
-}
-
-export async function saveAiMessage(identity, conversationId, input = {}, database = pool) {
-  assertAiConversationWritable(identity);
-  const role = MESSAGE_ROLES.has(input.role) ? input.role : null;
-  const status = MESSAGE_STATUSES.has(input.status) ? input.status : 'completed';
-  if (!role) throw serviceError('MESSAGE_ROLE_INVALID', '消息角色无效');
-  const content = String(input.content ?? '');
-  if (content.length > 1_000_000) throw serviceError('MESSAGE_TOO_LONG', '消息正文不能超过 100 万字符');
-  const contextRefs = boundedArray(input.contextRefs, 50, 'contextRefs');
-  const attachmentRefs = boundedArray(input.attachmentRefs, 20, 'attachmentRefs');
-  const sources = normalizeSources(input.sources);
-  const evidence = normalizeEvidence(input.evidence, new Set(sources.map((source) => source.sourceId)));
-  const requestId = asString(input.requestId, 64) || null;
-  const ownsTransaction = typeof database?.getConnection === 'function';
-  const connection = ownsTransaction ? await database.getConnection() : database;
-  if (!connection || typeof connection.query !== 'function') {
-    throw serviceError('AI_DATABASE_UNAVAILABLE', 'AI 会话存储暂时不可用', 503);
-  }
-  try {
-    if (ownsTransaction) await connection.beginTransaction();
-    const conversation = await getOwnedConversationRow(connection, identity, conversationId);
-    if (!conversation) throw serviceError('CONVERSATION_NOT_FOUND', '会话不存在或无权访问', 404);
-    const parentMessageId = asString(input.parentMessageId, 36) || null;
-    if (parentMessageId) {
-      const [parents] = await connection.query(
-        'SELECT id FROM ai_messages WHERE id = ? AND conversation_id = ? LIMIT 1',
-        [parentMessageId, conversation.id],
-      );
-      if (!parents.length) throw serviceError('PARENT_MESSAGE_INVALID', '父消息不属于当前会话');
-    }
-    const traceId = asString(input.traceId, 64) || null;
-    const serializedContextRefs = jsonValue(contextRefs, []);
-    const serializedAttachmentRefs = jsonValue(attachmentRefs, []);
-    const serializedActivity = jsonValue(normalizeMessageActivity(boundedArray(input.activity, 200, 'activity')), []);
-    const serializedCoverage = input.coverage == null ? null : jsonValue(input.coverage, null);
-    const versionGroupId = asString(input.versionGroupId, 36) || null;
-    const serializedModelMeta = input.modelMeta == null ? null : jsonValue(input.modelMeta, null);
-    const updateOwnedMessage = async (id) => {
-      await connection.query(
-        `UPDATE ai_messages
-         SET parent_message_id = ?, trace_id = ?, content = ?, status = ?, context_refs_json = ?,
-             attachment_refs_json = ?, activity_json = ?, coverage_json = ?, version_group_id = ?,
-             model_meta_json = ?, update_time = CURRENT_TIMESTAMP
-         WHERE id = ? AND conversation_id = ?`,
-        [
-          parentMessageId,
-          traceId,
-          content,
-          status,
-          serializedContextRefs,
-          serializedAttachmentRefs,
-          serializedActivity,
-          serializedCoverage,
-          versionGroupId,
-          serializedModelMeta,
-          id,
-          conversation.id,
-        ],
-      );
-    };
-
-    let resolvedMessageId = null;
-    if (requestId) {
-      const [existingRows] = await connection.query(
-        'SELECT id FROM ai_messages WHERE conversation_id = ? AND request_id = ? AND role = ? LIMIT 1',
-        [conversation.id, requestId, role],
-      );
-      resolvedMessageId = existingRows[0]?.id || null;
-      if (resolvedMessageId) await updateOwnedMessage(resolvedMessageId);
-    }
-    for (let attempt = 0; !resolvedMessageId && attempt < 3; attempt += 1) {
-      const candidateId = crypto.randomUUID();
-      try {
-        await connection.query(
-          `INSERT INTO ai_messages
-            (id, conversation_id, parent_message_id, request_id, trace_id, role, content, status,
-             context_refs_json, attachment_refs_json, activity_json, coverage_json, version_group_id, model_meta_json)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            candidateId,
-            conversation.id,
-            parentMessageId,
-            requestId,
-            traceId,
-            role,
-            content,
-            status,
-            serializedContextRefs,
-            serializedAttachmentRefs,
-            serializedActivity,
-            serializedCoverage,
-            versionGroupId,
-            serializedModelMeta,
-          ],
-        );
-        resolvedMessageId = candidateId;
-      } catch (error) {
-        if (error?.code !== 'ER_DUP_ENTRY' && Number(error?.errno) !== 1062) throw error;
-        if (requestId) {
-          const [concurrentRows] = await connection.query(
-            'SELECT id FROM ai_messages WHERE conversation_id = ? AND request_id = ? AND role = ? LIMIT 1',
-            [conversation.id, requestId, role],
-          );
-          resolvedMessageId = concurrentRows[0]?.id || null;
-          if (resolvedMessageId) await updateOwnedMessage(resolvedMessageId);
-        }
-      }
-    }
-    if (!resolvedMessageId) throw serviceError('MESSAGE_ID_GENERATION_FAILED', '消息标识生成失败，请重试', 503);
-    await connection.query(
-      `DELETE FROM ai_message_evidence
-       WHERE message_id = ? AND EXISTS (
-         SELECT 1 FROM ai_messages WHERE id = ? AND conversation_id = ?
-       )`,
-      [resolvedMessageId, resolvedMessageId, conversation.id],
-    );
-    await connection.query(
-      `DELETE FROM ai_message_sources
-       WHERE message_id = ? AND EXISTS (
-         SELECT 1 FROM ai_messages WHERE id = ? AND conversation_id = ?
-       )`,
-      [resolvedMessageId, resolvedMessageId, conversation.id],
-    );
-    for (const source of sources) {
-      await connection.query(
-        `INSERT INTO ai_message_sources
-          (message_id, source_id, resource_type, resource_id, display_title, resource_version, target_json, coverage_json)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          resolvedMessageId,
-          source.sourceId,
-          source.resourceType,
-          source.resourceId,
-          source.title,
-          source.resourceVersion,
-          source.target == null ? null : jsonValue(source.target, null),
-          source.coverage == null ? null : jsonValue(source.coverage, null),
-        ],
-      );
-    }
-    for (const item of evidence) {
-      await connection.query(
-        `INSERT INTO ai_message_evidence
-          (message_id, source_id, evidence_ref, citation_key, locator_json, excerpt_hash, excerpt)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [
-          resolvedMessageId,
-          item.sourceId,
-          item.evidenceRef,
-          item.citationKey,
-          item.locator == null ? null : jsonValue(item.locator, null),
-          item.excerptHash,
-          item.excerpt || null,
-        ],
-      );
-    }
-    const nextTitle =
-      conversation.title === '新会话' && role === 'user' && content.trim()
-        ? content.trim().replace(/\s+/g, ' ').slice(0, 48)
-        : conversation.title;
-    const [conversationUpdate] = await connection.query(
-      `UPDATE ai_conversations
-       SET title = ?, last_message_at = CURRENT_TIMESTAMP, update_time = CURRENT_TIMESTAMP
-       WHERE id = ? AND actor_user_id = ? AND subject_user_id = ? AND admin_context_mode = ?
-         AND admin_context_id <=> ? AND ${LIVE_RETENTION_SQL}`,
-      [nextTitle, conversation.id, ...ownerParams(identity)],
-    );
-    if (Number(conversationUpdate?.affectedRows || 0) !== 1) {
-      throw serviceError('CONVERSATION_EXPIRED', '临时会话已过期，不能继续保存消息', 410);
-    }
-    const [savedRows] = await connection.query(
-      'SELECT * FROM ai_messages WHERE id = ? AND conversation_id = ? LIMIT 1',
-      [resolvedMessageId, conversation.id],
-    );
-    if (!savedRows.length) throw serviceError('MESSAGE_NOT_FOUND_AFTER_SAVE', '消息保存结果不可用', 500);
-    const saved = mapMessage(savedRows[0], sources, evidence);
-    if (ownsTransaction) await connection.commit();
-    return saved;
-  } catch (error) {
-    if (ownsTransaction) await connection.rollback();
-    throw error;
-  } finally {
-    if (ownsTransaction) connection.release();
-  }
-}
-
-export async function updateAiConversation(identity, conversationId, input = {}, database = pool) {
-  assertAiConversationWritable(identity);
-  const conversation = await getOwnedConversationRow(database, identity, conversationId);
-  if (!conversation) throw serviceError('CONVERSATION_NOT_FOUND', '会话不存在或无权访问', 404);
-  const fields = [];
-  const values = [];
-  if (input.title !== undefined) {
-    const title = asString(input.title, 255);
-    if (!title) throw serviceError('TITLE_REQUIRED', '会话标题不能为空');
-    fields.push('title = ?');
-    values.push(title);
-  }
-  if (input.summary !== undefined) {
-    fields.push('summary = ?');
-    values.push(String(input.summary || '').slice(0, 10_000) || null);
-  }
-  if (input.status !== undefined) {
-    if (!CONVERSATION_STATUSES.has(input.status)) throw serviceError('STATUS_INVALID', '会话状态无效');
-    fields.push('status = ?');
-    values.push(input.status);
-  }
-  if (input.isPinned !== undefined) {
-    fields.push('is_pinned = ?');
-    values.push(input.isPinned ? 1 : 0);
-  }
-  if (input.scopeType !== undefined || input.scope !== undefined) {
-    fields.push('scope_type = ?', 'scope_json = ?');
-    values.push(asString(input.scopeType, 32, conversation.scope_type || 'global'), jsonValue(input.scope, {}));
-  }
-  if (input.retentionMode !== undefined || Object.prototype.hasOwnProperty.call(input, 'expireAt')) {
-    const retentionMode = input.retentionMode === undefined ? conversation.retention_mode : input.retentionMode;
-    if (!RETENTION_MODES.has(retentionMode)) throw serviceError('RETENTION_INVALID', '保留策略无效');
-    if (retentionMode !== 'temporary' && input.expireAt != null && input.expireAt !== '') {
-      throw serviceError('RETENTION_EXPIRE_AT_INVALID', '只有临时会话可以设置过期时间');
-    }
-    const currentExpireAt = conversation.retention_mode === 'temporary' ? conversation.expire_at : null;
-    const expireAt =
-      retentionMode === 'temporary' ? normalizeTemporaryExpireAt(input.expireAt ?? currentExpireAt) : null;
-    fields.push('retention_mode = ?', 'expire_at = ?');
-    values.push(retentionMode, expireAt);
-  }
-  if (!fields.length) return mapConversation(conversation);
-  values.push(conversation.id, ...ownerParams(identity));
-  const [result] = await database.query(
-    `UPDATE ai_conversations SET ${fields.join(', ')}, update_time = CURRENT_TIMESTAMP
-     WHERE id = ? AND actor_user_id = ? AND subject_user_id = ? AND admin_context_mode = ?
-       AND admin_context_id <=> ? AND ${LIVE_RETENTION_SQL}`,
-    values,
-  );
-  if (Number(result?.affectedRows || 0) !== 1) {
-    throw serviceError('CONVERSATION_EXPIRED', '临时会话已过期，不能继续修改', 410);
-  }
-  return getAiConversation(identity, conversation.id, { messageLimit: 0 }, database);
-}
-
 export async function deleteAiConversation(identity, conversationId, database = pool) {
   assertAiConversationWritable(identity);
   const id = asString(conversationId, 36);
@@ -921,23 +373,6 @@ function conversationDeleteUndoMs() {
 
 function conversationDeleteUndoSeconds() {
   return Math.ceil(conversationDeleteUndoMs() / 1000);
-}
-
-export async function restoreDeletedAiConversation(identity, conversationId, database = pool) {
-  assertAiConversationWritable(identity);
-  const [result] = await database.query(
-    `UPDATE ai_conversations
-     SET status = CASE status WHEN 'deleted_archived' THEN 'archived' ELSE 'active' END,
-         update_time = CURRENT_TIMESTAMP
-     WHERE id = ? AND actor_user_id = ? AND subject_user_id = ? AND admin_context_mode = ?
-       AND admin_context_id <=> ? AND status IN ('deleted_active', 'deleted_archived')
-       AND update_time > DATE_SUB(CURRENT_TIMESTAMP, INTERVAL ${conversationDeleteUndoSeconds()} SECOND)`,
-    [asString(conversationId, 36), ...ownerParams(identity)],
-  );
-  if (Number(result?.affectedRows || 0) !== 1) {
-    throw serviceError('CONVERSATION_DELETE_UNDO_EXPIRED', '撤销删除时间已结束，或会话已被永久删除', 409);
-  }
-  return { restored: 1 };
 }
 
 export async function clearAiConversations(identity, database = pool) {
@@ -1022,6 +457,14 @@ export async function clearAiIdentityData(identity, database = pool) {
         connection,
         'productEvents',
         `DELETE FROM ai_product_events WHERE ${clearScope.sql}`,
+        clearScope.params,
+      ),
+    );
+    entries.push(
+      await deleteOptionalIdentityRows(
+        connection,
+        'skillThreads',
+        `DELETE FROM ai_skill_threads WHERE ${clearScope.sql}`,
         clearScope.params,
       ),
     );
@@ -1413,225 +856,9 @@ export async function exportAiConversations(identity, database = pool) {
   };
 }
 
-function normalizeLocalRecoveryReference(value, field, index) {
-  if (value == null || value === '') return null;
-  const normalized = String(value).trim();
-  if (!normalized || normalized.length > 96) {
-    throw serviceError('RECOVERY_MESSAGE_REFERENCE_INVALID', `第 ${index + 1} 条消息的 ${field} 无效`);
-  }
-  return normalized;
-}
-
-function normalizeLocalRecoveryMessages(rawMessages) {
-  const messages = boundedArray(rawMessages, MAX_LOCAL_RECOVERY_MESSAGES, 'messages');
-  if (!messages.length) throw serviceError('RECOVERY_MESSAGES_REQUIRED', '至少需要恢复一条本机历史消息');
-  const clientIds = new Set();
-  let totalContentLength = 0;
-  const normalized = messages.map((rawMessage, index) => {
-    if (!rawMessage || typeof rawMessage !== 'object' || Array.isArray(rawMessage)) {
-      throw serviceError('RECOVERY_MESSAGE_INVALID', `第 ${index + 1} 条消息格式无效`);
-    }
-    const clientId = normalizeLocalRecoveryReference(rawMessage.clientId, 'clientId', index);
-    if (!clientId || clientIds.has(clientId)) {
-      throw serviceError('RECOVERY_MESSAGE_CLIENT_ID_INVALID', `第 ${index + 1} 条消息 clientId 缺失或重复`);
-    }
-    clientIds.add(clientId);
-    if (rawMessage.role !== 'user' && rawMessage.role !== 'assistant') {
-      throw serviceError('RECOVERY_MESSAGE_ROLE_INVALID', `第 ${index + 1} 条消息角色无效`);
-    }
-    if (!['completed', 'failed', 'stopped'].includes(rawMessage.status)) {
-      throw serviceError('RECOVERY_MESSAGE_STATUS_INVALID', `第 ${index + 1} 条消息状态无效`);
-    }
-    if (typeof rawMessage.content !== 'string' || !rawMessage.content.trim()) {
-      throw serviceError('RECOVERY_MESSAGE_CONTENT_INVALID', `第 ${index + 1} 条消息正文不能为空`);
-    }
-    if (rawMessage.content.length > 1_000_000) {
-      throw serviceError('MESSAGE_TOO_LONG', `第 ${index + 1} 条消息正文不能超过 100 万字符`);
-    }
-    totalContentLength += rawMessage.content.length;
-    if (totalContentLength > MAX_LOCAL_RECOVERY_CONTENT_CHARS) {
-      throw serviceError('RECOVERY_MESSAGE_TOTAL_TOO_LARGE', '待恢复的本机历史正文总量不能超过 200 万字符');
-    }
-    return {
-      clientId,
-      parentClientId: normalizeLocalRecoveryReference(rawMessage.parentClientId, 'parentClientId', index),
-      versionGroupClientId: normalizeLocalRecoveryReference(
-        rawMessage.versionGroupClientId,
-        'versionGroupClientId',
-        index,
-      ),
-      role: rawMessage.role,
-      status: rawMessage.status,
-      content: rawMessage.content,
-      contextRefs: rawMessage.contextRefs,
-      attachmentRefs: rawMessage.attachmentRefs,
-      activity: rawMessage.activity,
-      coverage: rawMessage.coverage,
-      modelMeta: rawMessage.modelMeta,
-      sources: rawMessage.sources,
-      evidence: rawMessage.evidence,
-      traceId: asString(rawMessage.traceId, 64) || null,
-    };
-  });
-  // 本机缓存可能被旧版本或浏览器扩展改写。不存在的关联不应让一次用户明确发起的恢复整体失败，
-  // 但绝不把它映射到任意其他消息。
-  return normalized.map((message) => ({
-    ...message,
-    parentClientId: message.parentClientId && clientIds.has(message.parentClientId) ? message.parentClientId : null,
-    versionGroupClientId:
-      message.versionGroupClientId && clientIds.has(message.versionGroupClientId) ? message.versionGroupClientId : null,
-  }));
-}
-
-/**
- * 用户明确选择「恢复本机历史」时，以单一事务创建新云端会话并写入本机终态消息。
- * 不接受旧云端 ID，避免把已在其他设备删除的会话悄悄复活。
- */
-export async function recoverAiConversationFromLocal(identity, input = {}, database = pool) {
-  assertAiConversationWritable(identity);
-  const messages = normalizeLocalRecoveryMessages(input.messages);
-  const ownsTransaction = typeof database?.getConnection === 'function';
-  const connection = ownsTransaction ? await database.getConnection() : database;
-  if (!connection || typeof connection.query !== 'function') {
-    throw serviceError('AI_DATABASE_UNAVAILABLE', 'AI 会话存储暂时不可用', 503);
-  }
-  try {
-    if (ownsTransaction) await connection.beginTransaction();
-    const conversation = await createAiConversation(identity, { retentionMode: 'standard' }, connection);
-    const restoredMessageIds = new Map();
-    for (let index = 0; index < messages.length; index += 1) {
-      const message = messages[index];
-      const restored = await saveAiMessage(
-        identity,
-        conversation.id,
-        {
-          parentMessageId: message.parentClientId ? restoredMessageIds.get(message.parentClientId) || null : null,
-          requestId: `recovery:${conversation.id}:${index}`,
-          role: message.role,
-          content: message.content,
-          status: message.status,
-          contextRefs: message.contextRefs,
-          attachmentRefs: message.attachmentRefs,
-          activity: message.activity,
-          coverage: message.coverage,
-          modelMeta: message.modelMeta,
-          sources: message.sources,
-          evidence: message.evidence,
-          traceId: message.traceId,
-        },
-        connection,
-      );
-      restoredMessageIds.set(message.clientId, restored.id);
-    }
-    for (const message of messages) {
-      if (message.role !== 'assistant' || !message.versionGroupClientId) continue;
-      const messageId = restoredMessageIds.get(message.clientId);
-      const versionGroupId = restoredMessageIds.get(message.versionGroupClientId);
-      if (!messageId || !versionGroupId) continue;
-      await connection.query(
-        `UPDATE ai_messages SET version_group_id = ?, update_time = CURRENT_TIMESTAMP
-         WHERE id = ? AND conversation_id = ? AND role = 'assistant'`,
-        [versionGroupId, messageId, conversation.id],
-      );
-    }
-    const result = await getAiConversation(
-      identity,
-      conversation.id,
-      { messageLimit: MAX_LOCAL_RECOVERY_MESSAGES },
-      connection,
-    );
-    if (ownsTransaction) await connection.commit();
-    return { conversation: result, restoredMessageCount: messages.length };
-  } catch (error) {
-    if (ownsTransaction) await connection.rollback();
-    throw error;
-  } finally {
-    if (ownsTransaction) connection.release();
-  }
-}
-
-export async function saveAiFeedback(identity, input = {}, database = pool) {
-  assertAiConversationWritable(identity);
-  const conversationId = asString(input.conversationId, 36);
-  const messageId = asString(input.messageId, 36);
-  const rating = FEEDBACK_RATINGS.has(input.rating) ? input.rating : null;
-  const reason = input.reason == null || input.reason === '' ? null : input.reason;
-  if (!rating) throw serviceError('FEEDBACK_RATING_INVALID', '请选择有帮助或没帮助');
-  if (reason && !FEEDBACK_REASONS.has(reason)) throw serviceError('FEEDBACK_REASON_INVALID', '反馈原因无效');
-  const conversation = await getOwnedConversationRow(database, identity, conversationId);
-  if (!conversation) throw serviceError('CONVERSATION_NOT_FOUND', '会话不存在或无权访问', 404);
-  const [messages] = await database.query(
-    'SELECT id, request_id FROM ai_messages WHERE id = ? AND conversation_id = ? AND role = ? LIMIT 1',
-    [messageId, conversation.id, 'assistant'],
-  );
-  if (!messages.length) throw serviceError('MESSAGE_NOT_FOUND', '只能评价当前会话中的助手回答', 404);
-  const id = crypto.randomUUID();
-  await database.query(
-    `INSERT INTO ai_feedback
-      (id, actor_user_id, subject_user_id, conversation_id, message_id, request_id, rating, reason, resolved, comment)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE rating = VALUES(rating), reason = VALUES(reason), resolved = VALUES(resolved),
-       comment = VALUES(comment), request_id = VALUES(request_id), update_time = CURRENT_TIMESTAMP`,
-    [
-      id,
-      identity.actorUserId,
-      identity.subjectUserId,
-      conversation.id,
-      messageId,
-      messages[0].request_id || null,
-      rating,
-      reason,
-      input.resolved == null ? null : input.resolved ? 1 : 0,
-      asString(input.comment, 500) || null,
-    ],
-  );
-  const [rows] = await database.query(
-    `SELECT f.* FROM ai_feedback f
-     JOIN ai_conversations c ON c.id = f.conversation_id
-     WHERE f.actor_user_id = ? AND f.message_id = ?
-       AND c.actor_user_id = ? AND c.subject_user_id = ? AND c.admin_context_mode = ?
-       AND c.admin_context_id <=> ? AND ${LIVE_RETENTION_SQL} LIMIT 1`,
-    [identity.actorUserId, messageId, ...ownerParams(identity)],
-  );
-  const row = rows[0];
-  return {
-    id: row.id,
-    conversationId: row.conversation_id,
-    messageId: row.message_id,
-    rating: row.rating,
-    reason: row.reason,
-    resolved: row.resolved == null ? null : Boolean(row.resolved),
-    comment: row.comment || '',
-    updatedAt: row.update_time,
-  };
-}
-
-export async function getOwnedAiMessage(identity, conversationId, messageId, database = pool) {
-  const conversation = await getOwnedConversationRow(database, identity, conversationId);
-  if (!conversation) throw serviceError('CONVERSATION_NOT_FOUND', '会话不存在或无权访问', 404);
-  const [rows] = await database.query('SELECT * FROM ai_messages WHERE id = ? AND conversation_id = ? LIMIT 1', [
-    asString(messageId, 36),
-    conversation.id,
-  ]);
-  if (!rows.length) throw serviceError('MESSAGE_NOT_FOUND', '消息不存在或无权访问', 404);
-  const [[sourceRows], [evidenceRows]] = await Promise.all([
-    database.query('SELECT * FROM ai_message_sources WHERE message_id = ? ORDER BY id ASC', [messageId]),
-    database.query('SELECT * FROM ai_message_evidence WHERE message_id = ? ORDER BY id ASC', [messageId]),
-  ]);
-  return mapMessage(rows[0], sourceRows.map(mapSource), evidenceRows.map(mapEvidence));
-}
-
-export const __testing = {
-  DEFAULT_TEMPORARY_RETENTION_MS,
-  MAX_TEMPORARY_RETENTION_MS,
-  MAX_LOCAL_RECOVERY_CONTENT_CHARS,
-  MAX_LOCAL_RECOVERY_MESSAGES,
+export const __testing = Object.freeze({
   decodeCursor,
   encodeCursor,
-  normalizeTemporaryExpireAt,
   normalizedOwner,
-  normalizeEvidence,
-  normalizeLocalRecoveryMessages,
-  normalizeSources,
   serviceError,
-};
+});

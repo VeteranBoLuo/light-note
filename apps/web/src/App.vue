@@ -52,7 +52,6 @@
         </MobileAppShell>
         <Login v-if="bookmark.isShowLogin && !publicStandaloneRoute" />
         <BViewer v-if="bookmark.viewerKey && !publicStandaloneRoute" />
-        <FloatQuestion v-if="aiVisible" :hide-trigger="aiEdgeTriggerHidden" />
         <GuestNudge v-if="nudgeVisible && !publicStandaloneRoute" />
         <AndroidDownloadProgress v-if="isAndroidApp && !publicStandaloneRoute" />
         <DisplayScaleSuggestion v-if="!publicStandaloneRoute" />
@@ -67,8 +66,7 @@
   </div>
 </template>
 <script setup lang="ts">
-  import { bookmarkStore, inboxStore, useAiAssistantStore, useUserStore } from '@/store';
-  import { buildAiAssistantRuntimeIdentityKey, resolveAiAssistantIdentity } from '@/store/aiAssistant';
+  import { bookmarkStore, inboxStore, useUserStore } from '@/store';
   import { useGrowth } from '@/composables/useGrowth';
   import { onMounted, onBeforeUnmount, watch, computed, defineAsyncComponent, nextTick, provide, ref } from 'vue';
   import { apiBaseGet, apiBasePost } from '@/http/request';
@@ -97,7 +95,6 @@
     type LandingAuthStatus,
   } from '@/view/landing/landingAuth.ts';
   import { applyDocumentTheme } from '@/utils/theme.ts';
-  import { shouldHideAiEdgeTrigger } from '@/utils/aiEntry.ts';
   import AsyncFeatureLoadingOverlay from '@/components/base/AsyncFeatureLoadingOverlay.vue';
   import { isLightNoteAndroidApp, postAndroidAppReady, postAndroidMessage } from '@/utils/androidBridge';
   import { isDefinitiveAuthResultStatus, type ApplicationAuthStatus } from '@/utils/authBootstrap.ts';
@@ -118,7 +115,6 @@
     loadingComponent: AsyncFeatureLoadingOverlay,
     delay: 120,
   });
-  const FloatQuestion = defineAsyncComponent(() => import('./components/aiAssistant/FloatQuestion.vue'));
   const QuickCaptureModal = defineAsyncComponent(() => import('@/components/inbox/QuickCaptureModal.vue'));
   const GuestNudge = defineAsyncComponent(() => import('@/components/home/GuestNudge.vue'));
   const AndroidDownloadProgress = defineAsyncComponent(() => import('@/components/base/AndroidDownloadProgress.vue'));
@@ -131,7 +127,6 @@
 
   const router = useRouter();
   const user = useUserStore();
-  const aiAssistant = useAiAssistantStore();
   const bookmark = bookmarkStore();
   const inbox = inboxStore();
   const { guideVisible: pwaGuideVisible } = usePwaInstall();
@@ -148,16 +143,7 @@
     postAndroidMessage({ type: 'notifications.configure', enabled: false });
     postAndroidMessage({ type: 'notifications.clear' });
   }
-  const aiRuntimeIdentity = computed(() => resolveAiAssistantIdentity(user));
   const isOnline = ref(typeof navigator === 'undefined' ? true : navigator.onLine !== false);
-  const aiRuntimeIdentityKey = computed(() => buildAiAssistantRuntimeIdentityKey(aiRuntimeIdentity.value));
-  // AI 请求属于应用级运行时，而不是某个路由组件。根层持续守护 owner 四维身份：
-  // 普通导航不会触碰请求；登录、退出或管理员上下文变化则先中止旧域，再原子切换状态。
-  // 未使用过 AI 时保持懒加载，不在官网或普通业务首屏读取可能很大的本地会话。
-  watch(aiRuntimeIdentityKey, () => {
-    if (!aiAssistant.initialized) return;
-    aiAssistant.switchConversation(aiRuntimeIdentity.value, t('ai.greeting'));
-  });
   const NOTICE_POLLING_INTERVAL = 300 * 1000;
   const NOTICE_MIN_REFRESH_GAP = 10 * 1000;
   const scaleExcludedRouter = new Set([
@@ -217,21 +203,6 @@
     () => throttledGrowthRefresh(),
   );
 
-  const aiVisible = computed(() => {
-    // landing 落地页不挂 AI 悬浮球:FloatQuestion 挂载时会预热 ChatContainer chunk(gzip 300KB+),
-    // 预渲染会把它烘焙进 landing 首屏 modulepreload,拖累 TBT/未使用JS;落地页访客也用不到 AI 助手。
-    // AI 开关(设置里)关闭则不挂悬浮球;默认(未设置)视为开启
-    return (
-      !bookmark.isShowLogin &&
-      router.currentRoute.value.meta.hideAiAssistant !== true &&
-      router.currentRoute.value.name !== 'landing' &&
-      router.currentRoute.value.name !== 'mobileAiWorkspace' &&
-      (user.preferences as any).aiEnabled !== false
-    );
-  });
-  const aiEdgeTriggerHidden = computed(() =>
-    shouldHideAiEdgeTrigger(bookmark.isMobile, router.currentRoute.value.name),
-  );
   const mobileTopSwitcherActive = computed(
     () => bookmark.isMobile && router.currentRoute.value.meta.mobileTopSwitcher === true,
   );
@@ -297,7 +268,6 @@
     '/admin/apiLog': '/apiLog',
     '/admin/agentLog': '/agentLog',
     '/admin/aiFeedback': '/aiFeedback',
-    '/admin/aiEvaluation': '/aiEvaluation',
     '/admin/productInsights': '/productInsights',
     '/admin/conversion': '/conversion',
     '/admin/userMg': '/userMg',
@@ -328,7 +298,6 @@
     '/apiLog': '/admin/apiLog',
     '/agentLog': '/admin/agentLog',
     '/aiFeedback': '/admin/aiFeedback',
-    '/aiEvaluation': '/admin/aiEvaluation',
     '/productInsights': '/admin/productInsights',
     '/conversion': '/admin/conversion',
     '/userMg': '/admin/userMg',
@@ -1016,8 +985,6 @@
     appStartupReady.value = false;
     disposeNoteEditorStartupPreload?.();
     disposeNoteEditorStartupPreload = null;
-    aiAssistant.abortActiveRequest('app_shutdown');
-    aiAssistant.flushPersistence();
     stopOpinionNoticePolling();
     document.documentElement.classList.remove('has-mobile-bottom-nav');
     window.removeEventListener('resize', handleResize);

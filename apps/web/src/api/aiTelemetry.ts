@@ -27,6 +27,14 @@ export type AiProductEventName =
   | 'ai_error_recovered'
   | 'ai_memory_candidate_reviewed'
   | 'ai_memory_state_changed'
+  | 'ai_skill_opened'
+  | 'ai_skill_started'
+  | 'ai_skill_first_token'
+  | 'ai_skill_completed'
+  | 'ai_skill_failed'
+  | 'ai_skill_applied'
+  | 'ai_skill_cancelled'
+  | 'ai_skill_scope_rejected'
   | 'note_tree_opened'
   | 'note_tree_node_expanded'
   | 'note_tree_branch_selected'
@@ -54,7 +62,17 @@ export type AiProductEventDimensions = Partial<{
     | 'memory'
     | 'desktop'
     | 'mobile'
-    | 'ai';
+    | 'ai'
+    | 'detail'
+    | 'library'
+    | 'help.center'
+    | 'todo_editor'
+    | 'quick_capture.todo'
+    | 'bookmark.form'
+    | 'bookmark.quick_save'
+    | 'file.preview'
+    | 'note.detail'
+    | 'note.editor.selection';
   device: 'desktop' | 'tablet' | 'mobile' | 'unknown';
   mode: 'ask' | 'organize';
   intent: 'ask' | 'find' | 'summarize' | 'compare' | 'organize' | 'extract_todos' | 'find_related' | 'unknown';
@@ -63,7 +81,8 @@ export type AiProductEventDimensions = Partial<{
   lengthBucket: '0' | '1_50' | '51_200' | '201_500' | '501_plus';
   durationBucket: 'under_1s' | '1_3s' | '3_10s' | '10_30s' | '30_120s' | '120s_plus';
   issueType: 'unsupported' | 'outdated' | 'missing' | 'wrong_target' | 'other' | 'none';
-  outcome: 'success' | 'failed' | 'stopped' | 'cancelled' | 'conflict' | 'expired' | 'recovered';
+  outcome:
+    'success' | 'failed' | 'stopped' | 'cancelled' | 'conflict' | 'expired' | 'recovered' | 'rejected' | 'unavailable';
   stage: 'idle' | 'planning' | 'retrieving' | 'reading' | 'answering' | 'saving' | 'completed' | 'failed';
   actionType:
     | 'save_new'
@@ -105,7 +124,24 @@ export type AiProductEventDimensions = Partial<{
   restored: boolean;
   temporarySession: boolean;
   externalWeb: boolean;
+  skillId: string;
+  resourceType: 'note' | 'bookmark' | 'file' | 'todo' | 'tag' | 'help' | 'search' | 'mixed' | 'none';
+  resourceCountBucket: '0' | '1' | '2_5' | '6_10' | '11_20' | '21_plus';
+  inputLengthBucket: '0' | '1_50' | '51_200' | '201_500' | '501_plus';
+  outputLengthBucket: '0' | '1_50' | '51_200' | '201_500' | '501_plus';
 }>;
+
+export type AiSkillTelemetrySurface = NonNullable<AiProductEventDimensions['surface']>;
+export type AiSkillTelemetryResourceType = NonNullable<AiProductEventDimensions['resourceType']>;
+
+export function aiResourceCountBucket(count: number): AiProductEventDimensions['resourceCountBucket'] {
+  if (count <= 0) return '0';
+  if (count === 1) return '1';
+  if (count <= 5) return '2_5';
+  if (count <= 10) return '6_10';
+  if (count <= 20) return '11_20';
+  return '21_plus';
+}
 
 export function aiLengthBucket(length: number): AiProductEventDimensions['lengthBucket'] {
   if (length <= 0) return '0';
@@ -127,4 +163,24 @@ export function aiDurationBucket(durationMs: number): AiProductEventDimensions['
 export function recordAiProductEvent(event: AiProductEventName, dimensions: AiProductEventDimensions = {}) {
   const id = typeof globalThis.crypto?.randomUUID === 'function' ? globalThis.crypto.randomUUID() : undefined;
   return apiBasePost('/api/common/recordAiEvent', { id, event, dimensions }, { silent: true }).catch(() => undefined);
+}
+
+export function recordAiSkillApplied({
+  skillId,
+  surface,
+  resourceType = 'none',
+  resourceCount = 0,
+}: {
+  skillId: string;
+  surface: AiSkillTelemetrySurface;
+  resourceType?: AiSkillTelemetryResourceType;
+  resourceCount?: number;
+}) {
+  return recordAiProductEvent('ai_skill_applied', {
+    skillId,
+    surface,
+    resourceType,
+    resourceCountBucket: aiResourceCountBucket(resourceCount),
+    outcome: 'success',
+  });
 }

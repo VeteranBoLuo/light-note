@@ -28,6 +28,14 @@ export const AI_PRODUCT_EVENTS = Object.freeze([
   'ai_error_recovered',
   'ai_memory_candidate_reviewed',
   'ai_memory_state_changed',
+  'ai_skill_opened',
+  'ai_skill_started',
+  'ai_skill_first_token',
+  'ai_skill_completed',
+  'ai_skill_failed',
+  'ai_skill_applied',
+  'ai_skill_cancelled',
+  'ai_skill_scope_rejected',
   'note_tree_opened',
   'note_tree_node_expanded',
   'note_tree_branch_selected',
@@ -58,25 +66,36 @@ const ENUM_DIMENSIONS = Object.freeze({
     'desktop',
     'mobile',
     'ai',
+    'detail',
+    'library',
+    'help.center',
+    'todo_editor',
+    'quick_capture.todo',
+    'bookmark.form',
+    'bookmark.quick_save',
+    'file.preview',
+    'note.detail',
+    'note.editor.selection',
   ]),
   device: new Set(['desktop', 'tablet', 'mobile', 'unknown']),
   mode: new Set(['ask', 'organize']),
-  intent: new Set([
-    'ask',
-    'find',
-    'summarize',
-    'compare',
-    'organize',
-    'extract_todos',
-    'find_related',
-    'unknown',
-  ]),
+  intent: new Set(['ask', 'find', 'summarize', 'compare', 'organize', 'extract_todos', 'find_related', 'unknown']),
   materialType: new Set(['note', 'bookmark', 'file', 'tag', 'attachment', 'mixed', 'unknown']),
   scopeMode: new Set(['selected', 'collection', 'all_notes', 'all_resources', 'unknown']),
   lengthBucket: new Set(['0', '1_50', '51_200', '201_500', '501_plus']),
   durationBucket: new Set(['under_1s', '1_3s', '3_10s', '10_30s', '30_120s', '120s_plus']),
   issueType: new Set(['unsupported', 'outdated', 'missing', 'wrong_target', 'other', 'none']),
-  outcome: new Set(['success', 'failed', 'stopped', 'cancelled', 'conflict', 'expired', 'recovered']),
+  outcome: new Set([
+    'success',
+    'failed',
+    'stopped',
+    'cancelled',
+    'conflict',
+    'expired',
+    'recovered',
+    'rejected',
+    'unavailable',
+  ]),
   stage: new Set(['idle', 'planning', 'retrieving', 'reading', 'answering', 'saving', 'completed', 'failed']),
   actionType: new Set([
     'save_new',
@@ -100,7 +119,12 @@ const ENUM_DIMENSIONS = Object.freeze({
   childCountBucket: new Set(['0', '1_3', '4_10', '11_50', '51_plus']),
   subtreeSizeBucket: new Set(['0', '1', '2_10', '11_50', '51_200', '201_plus']),
   result: new Set(['success', 'failed', 'rejected', 'conflict', 'cancelled', 'unavailable']),
+  resourceType: new Set(['note', 'bookmark', 'file', 'todo', 'tag', 'help', 'search', 'mixed', 'none']),
+  resourceCountBucket: new Set(['0', '1', '2_5', '6_10', '11_20', '21_plus']),
+  inputLengthBucket: new Set(['0', '1_50', '51_200', '201_500', '501_plus']),
+  outputLengthBucket: new Set(['0', '1_50', '51_200', '201_500', '501_plus']),
 });
+const SKILL_ID_DIMENSIONS = new Set(['skillId']);
 const ID_DIMENSIONS = new Set([
   'conversationId',
   'requestId',
@@ -120,6 +144,7 @@ const ALLOWED_DIMENSIONS = new Set([
   ...ID_DIMENSIONS,
   ...NUMBER_DIMENSIONS,
   ...BOOLEAN_DIMENSIONS,
+  ...SKILL_ID_DIMENSIONS,
 ]);
 const SAFE_ID = /^[A-Za-z0-9._:@/-]+$/;
 const DEFAULT_RETENTION_DAYS = 180;
@@ -212,6 +237,14 @@ export function normalizeAiProductEvent(input = {}) {
         throw telemetryError('AI_EVENT_DIMENSION_INVALID', `事件维度 ${key} 的标识无效`);
       }
       dimensions[key] = key === 'errorCode' ? telemetryErrorFamily(normalized) : telemetryIdentifier(key, normalized);
+      continue;
+    }
+    if (SKILL_ID_DIMENSIONS.has(key)) {
+      const normalized = String(value).trim();
+      if (!/^[a-z][a-z0-9_]{1,31}\.[a-z][a-z0-9_]{1,63}$/u.test(normalized)) {
+        throw telemetryError('AI_EVENT_DIMENSION_INVALID', `事件维度 ${key} 的标识无效`);
+      }
+      dimensions[key] = normalized;
       continue;
     }
     if (NUMBER_DIMENSIONS.has(key)) {

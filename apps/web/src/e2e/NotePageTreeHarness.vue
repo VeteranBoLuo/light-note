@@ -78,7 +78,7 @@
           <strong>已选择 1 篇</strong>
           <span>内容引用与标签整理是两项不同操作</span>
           <div>
-            <BButton size="small">添加到 AI 助手</BButton>
+            <BButton size="small">分析所选笔记</BButton>
             <BButton size="small" type="primary">
               <SvgIcon :src="icon.common.magicWand" size="14" aria-hidden="true" />
               AI 智能整理
@@ -126,11 +126,6 @@
             </div>
           </section>
 
-          <aside v-if="!isMobile" class="harness-ai-panel" data-testid="ai-directory-coverage">
-            <h2>AI 目录范围</h2>
-            <p>普通问答按目录检索相关页面；完整分析会明确展示实际覆盖范围。</p>
-            <AiCoverageDisclosure :coverage="coverage" />
-          </aside>
         </div>
       </main>
     </div>
@@ -151,7 +146,6 @@
 
 <script lang="ts" setup>
   import { computed, onBeforeUnmount, reactive, ref } from 'vue';
-  import AiCoverageDisclosure from '@/components/aiAssistant/AiCoverageDisclosure.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import NoteCard from '@/components/noteLibrary/library/NoteCard.vue';
@@ -164,7 +158,6 @@
   import { usesMobileDeviceLayout } from '@/config/responsive';
   import { bookmarkStore } from '@/store';
   import type { NoteBreadcrumbItem, NoteTreeItem } from '@/types/noteTree';
-  import type { AiCoverageReport } from '@/components/aiAssistant/aiSourceNavigation';
 
   const params = new URLSearchParams(window.location.search);
   const theme = params.get('theme') === 'night' ? 'night' : 'day';
@@ -297,29 +290,6 @@
   ]);
 
   const visibleNotes = computed(() => notes);
-  const coverage: AiCoverageReport = {
-    documents: [],
-    overall: null,
-    noteBranches: [
-      {
-        mode: 'retrieval',
-        rootId: 'project',
-        title: '轻笺项目',
-        totalPages: 18,
-        matchedPages: 4,
-        completeAnalysis: false,
-      },
-      {
-        mode: 'analysis',
-        rootId: 'mobile',
-        title: '移动端设计',
-        totalPages: 8,
-        analyzedPages: 8,
-        unreadPages: 0,
-        completeAnalysis: true,
-      },
-    ],
-  };
 
   function toggleNode(item: NoteTreeItem) {
     const next = new Set(expandedIds.value);

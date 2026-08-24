@@ -1,8 +1,17 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAiGateway } from './aiGateway.js';
 import { redactSensitiveText } from './logSafety.js';
 
 describe('Agent AI Gateway', () => {
+  beforeEach(() => {
+    // 本文件验证 Gateway 本身；业务调用必须另由 AI Execution 测试覆盖。
+    vi.stubEnv('AI_GATEWAY_REQUIRE_EXECUTION', 'false');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('为供应商调用生成无正文的 trace span', async () => {
     const client = vi.fn().mockResolvedValue({
       content: 'ok',

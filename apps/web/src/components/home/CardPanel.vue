@@ -91,6 +91,11 @@
       <BLoading v-if="bookmark.bookmarkLoadingMore" inline loading :title="$t('common.loading')" />
       <BButton v-else size="small" @click="emit('load-more')">{{ $t('common.loadMore') }}</BButton>
     </div>
+    <BookmarkAiDialog
+      v-model:visible="bookmarkAiVisible"
+      :bookmarks="bookmarkAiItems"
+      mode="create_note"
+    />
   </div>
 </template>
 
@@ -116,7 +121,7 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { buildResourceSortMove, hasResourceOrderChanged } from '@/utils/resourcePagination';
-  import { openAiAssistant } from '@/utils/aiEntry';
+  import BookmarkAiDialog from '@/components/manage/bookmarkMg/BookmarkAiDialog.vue';
   const bookmark = bookmarkStore();
   const route = useRoute();
   const { t } = useI18n();
@@ -137,6 +142,8 @@
   }>();
   const loadMoreSentinel = ref<HTMLElement | null>(null);
   const isDragging = ref(false);
+  const bookmarkAiVisible = ref(false);
+  const bookmarkAiItems = ref<any[]>([]);
   let loadMoreObserver: IntersectionObserver | null = null;
 
   function requestNextPageIfVisible() {
@@ -244,11 +251,8 @@
       return;
     }
     if (action === 'generateNote') {
-      openAiAssistant({
-        contextRefs: [{ type: 'bookmark', id: String(item.id), title: String(item.name || item.url || '') }],
-        suggestedIntent: 'create_note',
-        surface: 'bookmark_manage',
-      });
+      bookmarkAiItems.value = [item];
+      bookmarkAiVisible.value = true;
       return;
     }
     if (action === 'toggleInbox') {

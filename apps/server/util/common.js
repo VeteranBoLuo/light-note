@@ -20,11 +20,11 @@ import todoRouter from '../router/todo.js';
 import tagIconRouter from '../router/tagIcon.js';
 import featureRequestRouter from '../router/featureRequest.js';
 import updateLogRouter from '../router/updateLog.js';
-import aiEvaluationRouter from '../router/aiEvaluation.js';
 import resourceGovernanceRouter from '../router/resourceGovernance.js';
 import communityChatRouter from '../router/communityChat.js';
 import supportRouter from '../router/support.js';
 import infraRouter from '../router/infra.js';
+import aiSkillsRouter from '../router/aiSkills.js';
 
 export { INTERNAL_ROLES } from './internalRoles.js';
 
@@ -183,6 +183,10 @@ export const insertData = function (params) {
 
 export const baseRouter = [
   {
+    path: '/ai/skills',
+    router: aiSkillsRouter,
+  },
+  {
     path: '/support',
     router: supportRouter,
   },
@@ -279,10 +283,6 @@ export const baseRouter = [
   {
     path: '/tagIcon',
     router: tagIconRouter,
-  },
-  {
-    path: '/aiEvaluation',
-    router: aiEvaluationRouter,
   },
   {
     path: '/resource-governance',

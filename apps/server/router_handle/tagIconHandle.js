@@ -2,6 +2,9 @@ import { L, resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { resolveTagIcon, searchTagIcons } from '../util/tagIconService.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+import crypto from 'node:crypto';
+import { runAiExecution } from '../util/aiExecution/service.js';
+import { resolvePublicAiExecutionError } from '../util/aiExecution/publicError.js';
 
 function ensureIconAccess(req, res) {
   // 管理员上下文已由 adminRoutePolicy 的 AI_USE 策略校验；搜索与解析本身不写用户数据。
@@ -21,25 +24,36 @@ function friendlyError(req, error) {
 export async function search(req, res) {
   if (!ensureIconAccess(req, res)) return;
   try {
+    const requestId = crypto.randomUUID();
     return res.send(
       resultData(
-        await searchTagIcons({
-          query: req.body?.query,
-          page: req.body?.page,
-          governance: {
+        await runAiExecution(
+          {
+            requestId,
             request: req,
-            quotaPolicy: 'user',
+            identity: req.billingUser || req.user,
+            subjectIdentity: req.resourceUser || req.user,
+            billingPolicy: 'user',
             taskType: 'tag_icon_search',
-            requestSummary: `标签选图：${String(req.body?.query || '')
-              .trim()
-              .slice(0, 80)}`,
+            skillId: 'tag.icon_keywords',
+            skillVersion: 1,
+            surface: 'tag_icon_picker',
           },
-        }),
+          () =>
+            searchTagIcons({
+              query: req.body?.query,
+              page: req.body?.page,
+              trace: { traceId: requestId, taskType: 'tag_icon_search', stage: 'tag_icon_keywords' },
+            }),
+        ),
       ),
     );
   } catch (error) {
-    console.error('[tag-icon] 搜索失败 code=%s', stableAgentErrorCode(error));
-    return res.status(500).send(resultData(null, 500, friendlyError(req, error)));
+    const failure = resolvePublicAiExecutionError(error, friendlyError(req, error));
+    if (failure.status >= 500) console.error('[tag-icon] 搜索失败 code=%s', stableAgentErrorCode(error));
+    return res
+      .status(failure.status)
+      .send(resultData({ code: failure.code }, failure.status, failure.message));
   }
 }
 

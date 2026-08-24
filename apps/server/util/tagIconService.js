@@ -102,7 +102,7 @@ export function parseKeywordResponse(content) {
   }
 }
 
-async function translateToIconKeywords(query, trace, governance) {
+async function translateToIconKeywords(query, trace) {
   const cacheKey = query.toLowerCase();
   const cached = getCached(keywordCache, cacheKey);
   if (cached) return cached;
@@ -123,12 +123,6 @@ async function translateToIconKeywords(query, trace, governance) {
         maxTokens: 120,
         temperature: 0.1,
         trace: { ...trace, taskType: 'tag_icon_search', stage: 'tag_icon_keywords' },
-        governance: {
-          quotaPolicy: 'system',
-          systemId: 'tag_icon_search',
-          ...governance,
-          taskType: 'tag_icon_search',
-        },
       },
     );
     aiKeywords = parseKeywordResponse(result.content);
@@ -188,7 +182,7 @@ function rankIcons(icons, keywords) {
     .map((item) => item.icon);
 }
 
-export async function searchTagIcons({ query, page = 0, trace, governance } = {}) {
+export async function searchTagIcons({ query, page = 0, trace } = {}) {
   const normalizedQuery = normalizeIconQuery(query);
   if (!normalizedQuery) throw new Error('ICON_QUERY_REQUIRED');
   const normalizedPage = Math.max(0, Math.min(20, Number(page) || 0));
@@ -198,7 +192,7 @@ export async function searchTagIcons({ query, page = 0, trace, governance } = {}
 
   if (!result) {
     const keywords = containsCjk(normalizedQuery)
-      ? await translateToIconKeywords(normalizedQuery, trace, governance)
+      ? await translateToIconKeywords(normalizedQuery, trace)
       : [normalizedQuery];
     const asciiWords = normalizedQuery.match(/[a-z][a-z0-9.+#-]{1,}/gi) || [];
     const searchTerms = uniqueKeywords([...asciiWords, ...keywords]).slice(0, 3);

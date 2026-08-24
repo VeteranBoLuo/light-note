@@ -68,11 +68,6 @@ describe('tagIconService', () => {
           taskType: 'tag_icon_search',
           stage: 'tag_icon_keywords',
         }),
-        governance: expect.objectContaining({
-          quotaPolicy: 'system',
-          systemId: 'tag_icon_search',
-          taskType: 'tag_icon_search',
-        }),
       }),
     );
     expect(result.icons).toContain('lucide:database');

@@ -57,22 +57,24 @@ describe('笔记库批量 AI 操作语义', () => {
     expect(source).toContain('v-if="!desktopPreviewOpen && !loading && !visibleDragNoteList.length"');
   });
 
-  it('桌面与移动端都区分“添加到 AI 助手”和“AI 智能整理”', () => {
-    expect(source).toContain("t('ai.entry.addSelectedToAssistant')");
+  it('桌面与移动端都区分“分析所选笔记”和确定性的“AI 智能整理”', () => {
+    expect(source).toContain("t('note.aiSummarizeSelected')");
     expect(source).toContain("$t('bookmarkMg.aiOrganizeBtn')");
-    expect(source).toContain("key: 'assistant'");
+    expect(source).toContain("key: 'analyze'");
     expect(source).toContain("key: 'smartOrganize'");
     expect(source).toContain('icon: icon.ai.materials');
     expect(source).toContain('icon: icon.ai.organize');
+    expect(source).toContain('<NoteAiDialog');
+    expect(source).not.toContain("key: 'assistant'");
   });
 
   it('桌面批量工具栏只保留高频动作，低频动作收进更多菜单', () => {
     expect(source).toContain(':menu-options="desktopBatchMoreOptions"');
-    expect(source).toMatch(/const desktopBatchMoreOptions = computed\(\(\) => \[[\s\S]*key: 'assistant'/);
+    expect(source).toMatch(/const desktopBatchMoreOptions = computed\(\(\) => \[[\s\S]*key: 'analyze'/);
     expect(source).toMatch(/const desktopBatchMoreOptions = computed\(\(\) => \[[\s\S]*key: 'addTags'/);
     expect(source).toMatch(/const desktopBatchMoreOptions = computed\(\(\) => \[[\s\S]*key: 'removeTags'/);
     expect(source).toMatch(/const desktopBatchMoreOptions = computed\(\(\) => \[[\s\S]*key: 'export'/);
-    expect(source).not.toContain('@click="openSelectedNotesAi(\'organize\')"');
+    expect(source).not.toContain('@click="openSelectedNotesAi"');
     expect(source).not.toContain('@click="openBatchTags(\'add\')"');
     expect(source).not.toContain('@click="openBatchTags(\'remove\')"');
     expect(source).not.toContain('@click="openBatchExportModal"');

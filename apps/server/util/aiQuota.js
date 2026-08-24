@@ -20,6 +20,10 @@ const RESERVE_TOKENS = 5000;
 const DAILY_QUOTA = {
   user: 100_000,
   visitor: 200_000,
+  system: (() => {
+    const value = Number(process.env.AI_SYSTEM_DAILY_QUOTA || 5_000_000);
+    return Number.isFinite(value) ? Math.max(5_000, Math.floor(value)) : 5_000_000;
+  })(),
 };
 
 const DISABLED_VALUES = new Set(['0', 'false', 'off', 'no']);
@@ -146,6 +150,9 @@ function hashVisitorBinding(kind, value) {
 }
 
 function resolveSubjects(req, { userId, userRole } = {}) {
+  if (userRole === 'system' || String(userId || '').startsWith('system:')) {
+    return [{ type: 'system', key: String(userId || 'system:unknown').slice(0, 128), quota: DAILY_QUOTA.system }];
+  }
   if (userRole === 'visitor' || !userId || userId === 'visitor') {
     return [
       {
@@ -165,6 +172,7 @@ function resolveSubjects(req, { userId, userRole } = {}) {
 
 // 注册用户按成长等级下发每日额度；永久加油余额单独核算，不能混进每日上限。
 async function userDailyQuota(userId, userRole) {
+  if (userRole === 'system') return DAILY_QUOTA.system;
   let base;
   if (userRole === 'root') {
     base = RANKS[RANKS.length - 1].aiTokenDaily;
@@ -481,6 +489,7 @@ export async function reserve(req, ctx = {}) {
   try {
     const subjects = resolveSubjects(req, ctx);
     const visitor = subjects.some((item) => item.type.startsWith('visitor_'));
+    const quotaType = visitor ? 'fingerprint' : subjects[0]?.type || 'user';
     if (!visitor) subjects[0].quota = await userDailyQuota(ctx.userId, ctx.userRole);
     const pk = dayKey();
     const quotaReservationKey = reservationKey(ctx, subjects, pk);
@@ -488,17 +497,17 @@ export async function reserve(req, ctx = {}) {
     const status = effectiveStatus(gate.subjects, visitor);
     if (gate.duplicate) {
       if (gate.status === 'blocked') {
-        return { blocked: true, type: visitor ? 'fingerprint' : 'user', ...status, reason: 'quota_exceeded' };
+        return { blocked: true, type: quotaType, ...status, reason: 'quota_exceeded' };
       }
       throw createQuotaError('AI_QUOTA_DUPLICATE_REQUEST', '重复的 AI 请求已被拦截', 409);
     }
     if (gate.blocked) {
-      return { blocked: true, type: visitor ? 'fingerprint' : 'user', ...status, reason: 'quota_exceeded' };
+      return { blocked: true, type: quotaType, ...status, reason: 'quota_exceeded' };
     }
     return {
       exempt: false,
       blocked: false,
-      type: visitor ? 'fingerprint' : 'user',
+      type: quotaType,
       pk,
       reservationKey: quotaReservationKey,
       reserved: RESERVE_TOKENS,
@@ -541,9 +550,10 @@ export async function getStatus(req, ctx = {}) {
   try {
     const subjects = resolveSubjects(req, ctx);
     const visitor = subjects.some((item) => item.type.startsWith('visitor_'));
+    const quotaType = visitor ? 'fingerprint' : subjects[0]?.type || 'user';
     if (!visitor) {
       subjects[0].quota = await userDailyQuota(ctx.userId, ctx.userRole);
-      subjects[0].walletBalance = await getUserBonusTokens(ctx.userId);
+      if (subjects[0].type === 'user') subjects[0].walletBalance = await getUserBonusTokens(ctx.userId);
     }
     const pk = dayKey();
     const resolved = await Promise.all(
@@ -552,7 +562,7 @@ export async function getStatus(req, ctx = {}) {
     const status = effectiveStatus(resolved, visitor);
     return {
       exempt: false,
-      type: visitor ? 'fingerprint' : 'user',
+      type: quotaType,
       ...status,
       enforcing: ENFORCE,
     };

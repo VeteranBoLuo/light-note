@@ -41,6 +41,9 @@ import { cleanupBookmarkIconFiles } from '../util/bookmarkIconService.js';
 import { buildPagedResult, normalizeOptionalPagination } from '../util/pagination.js';
 import { AnchoredSortError, moveOwnedResourceByAnchors } from '../util/anchoredSort.js';
 import { completeGrowthTask } from '../util/growthTaskCompletion.js';
+import crypto from 'node:crypto';
+import { runAiExecution } from '../util/aiExecution/service.js';
+import { resolvePublicAiExecutionError } from '../util/aiExecution/publicError.js';
 // ── 全局 ──────────────────────────────────────────────────
 const MAX_EXCEL_BOOKMARK_IMPORT_ITEMS = 1000;
 
@@ -563,19 +566,37 @@ export const doSummarizeBookmark = async (req, res) => {
     const { id, force } = req.body || {};
     if (!id) return res.send(resultData(null, 400, '缺少书签 id'));
     const persistSummary = req.adminContext?.mode !== 'readonly';
-    const result = await summarizeBookmark(req.user.id, id, {
-      force: force === true,
-      persist: persistSummary,
-      archiveIfMissing: persistSummary,
-      governance: { request: req, quotaPolicy: 'user', taskType: 'bookmark_summary' },
-    });
+    const requestId = crypto.randomUUID();
+    const result = await runAiExecution(
+      {
+        requestId,
+        request: req,
+        identity: req.billingUser || req.user,
+        subjectIdentity: req.resourceUser || req.user,
+        billingPolicy: 'user',
+        taskType: 'bookmark_summary',
+        skillId: 'bookmark.summarize_page',
+        skillVersion: 1,
+        surface: 'bookmark_detail',
+      },
+      () =>
+        summarizeBookmark(req.user.id, id, {
+          force: force === true,
+          persist: persistSummary,
+          archiveIfMissing: persistSummary,
+          trace: { traceId: requestId, taskType: 'bookmark_summary', stage: 'bookmark_summary' },
+        }),
+    );
     if (result?.reason === 'quota_exceeded') {
       return res.status(429).send(resultData(result, 429, result.msg));
     }
     res.send(resultData(result));
   } catch (error) {
-    console.error('AI 摘要失败:', error);
-    res.send(resultData(null, 500, 'AI 摘要失败: ' + error.message));
+    const failure = resolvePublicAiExecutionError(error, 'AI 摘要暂时不可用，请稍后重试');
+    if (failure.status >= 500) console.error('[bookmark] AI summary failed code=%s', failure.code);
+    return res
+      .status(failure.status)
+      .send(resultData({ code: failure.code }, failure.status, failure.message));
   }
 };
 
@@ -1086,7 +1107,7 @@ export const importBookmarksExcel = async (req, res) => {
 };
 
 // ============================================================================
-// AI 自动整理(批量打标签):免费额度随等级 + 超额扣积分。核心逻辑见 util/aiOrganize.js
+// AI 自动整理（批量打标签）：统一进入 AI Execution 并按 Provider 实际用量结算。
 // ============================================================================
 
 // 并发池(单核服务器友好):最多 n 个 worker 同时跑
@@ -1197,7 +1218,7 @@ export const doOrganizeQuote = async (req, res) => {
   }
 };
 
-// POST /bookmark/ai/organize/run —— 对指定 ids 跑 AI(并发 3,免费),返回建议供复审
+// POST /bookmark/ai/organize/run —— 对指定 ids 跑 AI，返回建议供复审
 export const doOrganizeRun = async (req, res) => {
   if (!ensureUserOrAdminPolicy(req, res, ['ai_use'])) return;
   try {
@@ -1208,7 +1229,18 @@ export const doOrganizeRun = async (req, res) => {
     const [tagRows] = await pool.query('SELECT id, name FROM tag WHERE user_id = ? AND del_flag = 0', [userId]);
     const toMatched = (ids) => tagRows.filter((t) => ids.includes(t.id)).map((t) => ({ id: t.id, name: t.name }));
     const suggestions = [];
-    let quotaBlocked = false;
+    const requestId = crypto.randomUUID();
+    const executionConfig = {
+      requestId,
+      request: req,
+      identity: req.billingUser || req.user,
+      subjectIdentity: req.resourceUser || req.user,
+      billingPolicy: 'user',
+      taskType: resourceType === 'note' ? 'organize_note_tags' : 'organize_bookmark_meta',
+      skillId: resourceType === 'note' ? 'note.organize_tags' : 'bookmark.organize',
+      skillVersion: 1,
+      surface: resourceType === 'note' ? 'note_library' : 'bookmark_library',
+    };
 
     if (resourceType === 'note') {
       const [rows] = await pool.query(
@@ -1217,30 +1249,31 @@ export const doOrganizeRun = async (req, res) => {
       );
       const targets = rows.slice(0, ORGANIZE_MAX_BATCH);
       if (!targets.length) return res.send(resultData({ ok: true, processed: 0, suggestions: [] }));
-      await organizePool(targets, 3, async (n) => {
-        try {
-          const text = `标题:${n.title || '(无)'}\n正文:${stripHtml(n.content).slice(0, 1200)}`;
-          const r = await suggestTagsFromText({
-            text,
-            userTags: tagRows,
-            governance: { request: req, quotaPolicy: 'user', taskType: 'organize_note_tags' },
-          });
-          if (!r || (!r.matchedTagIds.length && !r.newTags.length)) return;
-          suggestions.push({
-            id: n.id,
-            url: '',
-            currentName: n.title || '',
-            currentDesc: '',
-            suggestName: '',
-            suggestDesc: '',
-            matchedTags: toMatched(r.matchedTagIds),
-            newTags: r.newTags || [],
-          });
-        } catch (error) {
-          if (error?.code === 'AI_QUOTA_EXCEEDED') quotaBlocked = true;
-          /* 单条失败跳过 */
-        }
-      });
+      await runAiExecution(executionConfig, () =>
+        organizePool(targets, 3, async (n) => {
+          try {
+            const text = `标题:${n.title || '(无)'}\n正文:${stripHtml(n.content).slice(0, 1200)}`;
+            const r = await suggestTagsFromText({
+              text,
+              userTags: tagRows,
+              trace: { traceId: requestId, taskType: 'organize_note_tags', stage: 'organize_note_tags' },
+            });
+            if (!r || (!r.matchedTagIds.length && !r.newTags.length)) return;
+            suggestions.push({
+              id: n.id,
+              url: '',
+              currentName: n.title || '',
+              currentDesc: '',
+              suggestName: '',
+              suggestDesc: '',
+              matchedTags: toMatched(r.matchedTagIds),
+              newTags: r.newTags || [],
+            });
+          } catch {
+            /* 单条 Provider 失败保留其余安全建议，根执行仍汇总所有已产生用量。 */
+          }
+        }),
+      );
     } else {
       const [rows] = await pool.query(
         "SELECT id, name, url, description FROM bookmark WHERE user_id = ? AND del_flag = 0 AND url IS NOT NULL AND url <> '' AND id IN (?)",
@@ -1248,48 +1281,41 @@ export const doOrganizeRun = async (req, res) => {
       );
       const targets = rows.slice(0, ORGANIZE_MAX_BATCH);
       if (!targets.length) return res.send(resultData({ ok: true, processed: 0, suggestions: [] }));
-      await organizePool(targets, 3, async (b) => {
-        try {
-          const r = await suggestBookmarkMeta({
-            url: b.url,
-            name: b.name,
-            description: b.description,
-            userTags: tagRows,
-            governance: { request: req, quotaPolicy: 'user', taskType: 'organize_bookmark_meta' },
-          });
-          if (!r) return;
-          if (!r.matchedTagIds.length && !r.newTags.length && !r.name && !r.description) return;
-          suggestions.push({
-            id: b.id,
-            url: b.url,
-            currentName: b.name || '',
-            currentDesc: b.description || '',
-            suggestName: r.name || '',
-            suggestDesc: r.description || '',
-            matchedTags: toMatched(r.matchedTagIds),
-            newTags: r.newTags || [],
-          });
-        } catch (error) {
-          if (error?.code === 'AI_QUOTA_EXCEEDED') quotaBlocked = true;
-          /* 单条失败跳过 */
-        }
-      });
-    }
-    if (quotaBlocked) {
-      return res
-        .status(429)
-        .send(
-          resultData(
-            { ok: false, code: 'AI_QUOTA_EXCEEDED', processed: suggestions.length, suggestions },
-            429,
-            '今日 AI 额度已用完，已保留本轮完成的建议',
-          ),
-        );
+      await runAiExecution(executionConfig, () =>
+        organizePool(targets, 3, async (b) => {
+          try {
+            const r = await suggestBookmarkMeta({
+              url: b.url,
+              name: b.name,
+              description: b.description,
+              userTags: tagRows,
+              trace: { traceId: requestId, taskType: 'organize_bookmark_meta', stage: 'organize_bookmark_meta' },
+            });
+            if (!r) return;
+            if (!r.matchedTagIds.length && !r.newTags.length && !r.name && !r.description) return;
+            suggestions.push({
+              id: b.id,
+              url: b.url,
+              currentName: b.name || '',
+              currentDesc: b.description || '',
+              suggestName: r.name || '',
+              suggestDesc: r.description || '',
+              matchedTags: toMatched(r.matchedTagIds),
+              newTags: r.newTags || [],
+            });
+          } catch {
+            /* 单条 Provider 失败保留其余安全建议，根执行仍汇总所有已产生用量。 */
+          }
+        }),
+      );
     }
     res.send(resultData({ ok: true, processed: suggestions.length, suggestions }));
   } catch (e) {
-    console.error('[bookmark] AI 整理失败 code=%s', stableAgentErrorCode(e));
-    return res.send(resultData(null, 500, 'AI 整理失败，请稍后重试'));
+    const failure = resolvePublicAiExecutionError(e, 'AI 整理暂时不可用，请稍后重试');
+    if (failure.status >= 500) console.error('[bookmark] AI organize failed code=%s', stableAgentErrorCode(e));
+    return res
+      .status(failure.status)
+      .send(resultData({ ok: false, code: failure.code }, failure.status, failure.message));
   }
 };
 

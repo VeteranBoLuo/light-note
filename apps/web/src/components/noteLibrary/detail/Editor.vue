@@ -803,11 +803,7 @@
     normalizeReferencedFilePreviewInfo,
     type ReferencedFilePreviewInfo,
   } from '@/utils/noteResourceNavigation';
-  import {
-    resolveAiSourceNavigation,
-    type AiSource,
-    type AiSourceTarget,
-  } from '@/components/aiAssistant/aiSourceNavigation';
+  import { resolveAiSourceNavigation, type AiSource, type AiSourceTarget } from '@/utils/aiSourceNavigation';
   import {
     analyzeNoteFormatConversion,
     buildNoteFormatConversionAnalysisHash,
@@ -833,6 +829,8 @@
     type TextGradientAngle,
   } from '@/utils/richTextEffects';
   import type { CloudUploadResult } from '@/api/cloudFileUploadApi';
+  import { createAiSkillRequest, executeAiSkill } from '@/api/aiSkillApi';
+  import { recordAiSkillApplied } from '@/api/aiTelemetry';
 
   // 两套重型编辑引擎按笔记类型分包，Markdown 不再下载 TinyMCE，富文本也不下载 CodeMirror。
   const TinyMceEditor = defineAsyncComponent({
@@ -5547,56 +5545,17 @@
         const pendingMarker = createSelectionAiPendingMarker();
         editor.setProgressState(true);
         try {
-          // 该 AI 端点始终以 SSE 流返回(stream:false 会拿到未解析的原始 SSE),故用流式并自行收集,与 AiReply 一致
-          let full = '';
-          let buffer = '';
-          let processed = 0;
-          const parseLine = (line: string) => {
-            const l = line.trim();
-            if (!l.startsWith('data:')) return;
-            const ds = l.slice(5).trim();
-            if (!ds || ds === '[DONE]') return;
-            try {
-              const d = JSON.parse(ds);
-              const c = d.output?.text || d.text || d.content || '';
-              if (c && typeof c === 'string') full += c;
-            } catch {
-              /* 跳过不完整片段 */
-            }
-          };
-          await apiBasePost(
-            '/api/note/assist',
-            {
-              selectionAction: action,
-              selectionText: text,
-              stream: true,
-              sessionId: '',
-              responseFormat: 'plain',
-              requestMetadata: {
-                operation: `selection_${action}`,
-                scope: 'selection',
-                contentChars: text.length,
-              },
-            },
-            {
-              headers: { 'Content-Type': 'application/json' },
-              responseType: 'text',
-              onDownloadProgress: (progressEvent: any) => {
-                const ev = progressEvent?.event ?? progressEvent;
-                const rt = (ev?.target as XMLHttpRequest | null)?.responseText ?? '';
-                if (!rt) return;
-                const chunk = rt.slice(processed);
-                processed = rt.length;
-                if (!chunk) return;
-                buffer += chunk;
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-                lines.forEach(parseLine);
-              },
-            },
+          const operation = action === 'condense' ? 'summarize' : action;
+          const targetLanguage =
+            operation === 'translate' ? (String(currentLang.value).startsWith('zh') ? 'English' : '简体中文') : '';
+          const skillResponse = await executeAiSkill(
+            createAiSkillRequest({
+              skillId: 'note.transform_text',
+              input: { text, operation, targetLanguage },
+              surface: 'note.editor.selection',
+            }),
           );
-          if (buffer) buffer.split('\n').forEach(parseLine); // 收尾残余
-          const out = normalizeSelectionAiOutput(full);
+          const out = normalizeSelectionAiOutput(String(skillResponse.result?.content || ''));
           if (out) {
             removeSelectionAiPendingMarker(pendingMarker);
             editor.focus();
@@ -5609,6 +5568,12 @@
             editor.undoManager.transact(() => {
               // 文本编码后回填：结果不能注入 HTML，且整次替换作为一个撤销步骤。
               editor.selection.setContent(editor.dom.encode(out).replace(/\r?\n/g, '<br>'));
+            });
+            void recordAiSkillApplied({
+              skillId: 'note.transform_text',
+              surface: 'note.editor.selection',
+              resourceType: 'note',
+              resourceCount: 1,
             });
           } else {
             message.info(t('noteDetail.editor.aiEmpty'));

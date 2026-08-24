@@ -45,6 +45,7 @@ docs/plan/*
 !docs/plan/ai-agent-turn-contract-v2.md
 !docs/plan/ai-agent-runtime-v3.md
 !docs/plan/16-AI-Agent-现状-V3与多模式重构联合评审说明.md
+!docs/plan/19-ai-skills-product-migration.md
 docs/done
 .hermes/desktop-attachments/
 skills

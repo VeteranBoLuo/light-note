@@ -24,7 +24,6 @@ const MOBILE_ROUTES = new Set([
   '/communityChatModeration',
   '/agentLog',
   '/aiFeedback',
-  '/aiEvaluation',
   '/productInsights',
   '/conversion',
   '/supportManagement',
@@ -57,7 +56,6 @@ function nav(pendingOpinion = 0, pendingSecurity = 0, pendingModeration = 0) {
     adminAuditTitle: '管理员操作审计',
     productInsightsTitle: '产品运营分析',
     adminGovernanceTitle: '运行策略与权限',
-    aiEvaluationTitle: 'AI 问答测试',
     communityModerationTitle: '消息审核',
     supportManagementTitle: '赞助管理',
   });
@@ -80,7 +78,6 @@ describe('后台导航菜单', () => {
         'userOpinion',
         'agentLog',
         'aiFeedback',
-        'aiEvaluation',
         'productInsights',
         'conversion',
         'supportManagement',
@@ -99,8 +96,8 @@ describe('后台导航菜单', () => {
     expect(ids).toEqual(
       expect.arrayContaining(['knowledgeBase', 'notificationCenter', 'securityCenter', 'serverManagement']),
     );
-    expect(ids).toHaveLength(23);
-    expect(new Set(ids).size).toBe(23);
+    expect(ids).toHaveLength(22);
+    expect(new Set(ids).size).toBe(22);
     expect(ids.at(-1)).toBe('serverManagement');
   });
 
@@ -169,7 +166,6 @@ describe('后台导航菜单', () => {
       adminAuditTitle: '管理员操作审计',
       productInsightsTitle: '产品运营分析',
       adminGovernanceTitle: '运行策略与权限',
-      aiEvaluationTitle: 'AI 问答测试',
       communityModerationTitle: '消息审核',
       supportManagementTitle: '赞助管理',
     });
@@ -236,7 +232,6 @@ describe('resolveActiveNavId', () => {
     for (const path of [
       '/admin/overview',
       '/admin/actionCenter',
-      '/admin/aiEvaluation',
       '/admin/communityChatModeration',
       '/securityCenter/events',
       '/notificationCenter',
@@ -267,7 +262,6 @@ describe('手机后台菜单', () => {
       adminAuditTitle: '管理员操作审计',
       productInsightsTitle: '产品运营分析',
       adminGovernanceTitle: '运行策略与权限',
-      aiEvaluationTitle: 'AI 问答测试',
       communityModerationTitle: '消息审核',
       supportManagementTitle: '赞助管理',
     });

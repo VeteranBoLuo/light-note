@@ -61,6 +61,7 @@
   />
   <LinkHealthModal v-model:visible="healthVisible" />
   <BookmarkSnapshotModal v-model:visible="snapVisible" :bookmark-id="snapBookmarkId" />
+  <BookmarkAiDialog v-model:visible="bookmarkAiVisible" :bookmarks="bookmarkAiItems" />
 </template>
 
 <script lang="ts" setup>
@@ -84,9 +85,9 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
-  import { openAiAssistant, resolveBookmarkAiIntent } from '@/utils/aiEntry';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import { OPERATION_LOG_MAP } from '@/config/logMap';
+  import BookmarkAiDialog from '@/components/manage/bookmarkMg/BookmarkAiDialog.vue';
 
   const { t } = useI18n();
 
@@ -107,6 +108,8 @@
   const mobilePageActionsOpen = ref(false);
   const healthVisible = ref(false);
   const activeBookmark = ref<BookmarkInterface | null>(null);
+  const bookmarkAiVisible = ref(false);
+  const bookmarkAiItems = ref<BookmarkInterface[]>([]);
   const pageActions = computed<MobilePageActionItem[]>(() => [
     {
       key: 'health',
@@ -191,17 +194,9 @@
   function openBookmarksInAi(items: BookmarkInterface[]) {
     const available = items.filter((item) => String(item?.id || '').trim());
     if (!available.length) return;
-    if (available.length > 5) message.info(t('bookmarkMg.aiMaterialLimit', { count: 5 }));
-    const contextRefs = available.slice(0, 5).map((item) => ({
-      type: 'bookmark' as const,
-      id: String(item.id),
-      title: String(item.name || item.url || t('bookmarkMg.untitled')).slice(0, 255),
-    }));
-    openAiAssistant({
-      contextRefs,
-      suggestedIntent: resolveBookmarkAiIntent(contextRefs.length),
-      surface: 'bookmark_manage',
-    });
+    if (available.length > 10) message.info(t('bookmarkMg.aiMaterialLimit', { count: 10 }));
+    bookmarkAiItems.value = available.slice(0, 10);
+    bookmarkAiVisible.value = true;
   }
 
   function openSelectedBookmarksInAi() {

@@ -663,6 +663,20 @@
       @action="handleMobileFileAction"
     />
 
+    <AiSkillDialog
+      v-model:visible="fileAiVisible"
+      :title="$t('cloudSpace.aiSkillTitle')"
+      :description="$t('cloudSpace.aiSkillDescription')"
+      :skill-id="fileAiSkillId"
+      :prompt-key="fileAiPromptKey"
+      surface="cloud_space"
+      :resource-refs="fileAiResourceRefs"
+      :scope-label="$t('cloudSpace.aiSkillScope', { count: fileAiResourceRefs.length })"
+      :actions="fileAiActions"
+      :placeholder="$t('cloudSpace.aiSkillPlaceholder')"
+      @result-action="handleFileAiResultAction"
+    />
+
     <FileTagConfig
       v-if="tagModalVisible"
       v-model:visible="tagModalVisible"
@@ -738,8 +752,9 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
   import InboxPendingBadge from '@/components/inbox/InboxPendingBadge.vue';
-  import { openAiAssistant } from '@/utils/aiEntry';
-  import { attachAiCloudFile } from '@/api/aiAttachmentApi';
+  import AiSkillDialog from '@/components/aiSkills/AiSkillDialog.vue';
+  import type { AiSkillResourceRef, AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
+  import { createAiNoteDraftHandoff } from '@/utils/aiNoteDraft';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { isNearResourceScrollEnd } from '@/utils/resourcePagination';
   import CloudTextCardPreview from '@/components/cloudSpace/CloudTextCardPreview.vue';
@@ -796,6 +811,7 @@
       { key: 'rename', label: t('common.reName'), icon: icon.cloudSpace.rename },
       { key: 'download', label: t('cloudSpace.download'), icon: icon.cloudSpace.download },
       { key: 'tags', label: t('cloudSpace.relateTags'), icon: icon.manage_categoryBtn_tag },
+      { key: 'ai', label: t('cloudSpace.aiUseFile'), icon: icon.ai.ask },
       { key: 'share', label: t('cloudSpace.share'), icon: icon.cloudSpace.share },
       { key: 'move', label: t('cloudSpace.moveFile'), icon: icon.cloudSpace.moveFile },
       {
@@ -818,6 +834,7 @@
     if (action.key === 'rename') openRenameModal(file);
     else if (action.key === 'download') void handleDownloadFile(file);
     else if (action.key === 'tags') void openTagDialog(file);
+    else if (action.key === 'ai') openFilesInAi([file]);
     else if (action.key === 'share') void handleShareFile(file.id, file.fileName, file.fileType);
     else if (action.key === 'move') emit('moveField', [file]);
     else if (action.key === 'inbox') void toggleFileInbox(file);
@@ -934,37 +951,63 @@
     emit('previewFile', item);
   };
 
-  async function openFilesInAi(files: any[]) {
+  const fileAiVisible = ref(false);
+  const fileAiFiles = ref<any[]>([]);
+  const fileAiResourceRefs = computed<AiSkillResourceRef[]>(() =>
+    fileAiFiles.value.map((file) => ({ type: 'file', id: String(file.id) })),
+  );
+  const fileAiSkillId = computed(() => (fileAiResourceRefs.value.length > 1 ? 'file.compare' : 'file.ask'));
+  const fileAiPromptKey = computed(() => (fileAiResourceRefs.value.length > 1 ? 'instruction' : 'question'));
+  const fileAiActions = computed(() => {
+    const actions =
+      fileAiResourceRefs.value.length > 1
+        ? [
+            {
+              id: 'compare',
+              label: t('cloudSpace.aiCompareFiles'),
+              skillId: 'file.compare',
+              input: { instruction: t('cloudSpace.aiCompareInstruction') },
+            },
+          ]
+        : [
+            {
+              id: 'summarize',
+              label: t('cloudSpace.aiSummarizeFile'),
+              skillId: 'file.summarize',
+              input: { instruction: t('cloudSpace.aiSummarizeInstruction') },
+            },
+          ];
+    actions.push(
+      {
+        id: 'create-note',
+        label: t('cloudSpace.aiCreateNote'),
+        skillId: 'file.create_note_preview',
+        input: { instruction: t('cloudSpace.aiCreateNoteInstruction') },
+      },
+      {
+        id: 'extract-todos',
+        label: t('cloudSpace.aiExtractTodos'),
+        skillId: 'file.extract_todos',
+        input: { instruction: t('cloudSpace.aiExtractTodosInstruction') },
+      },
+    );
+    return actions;
+  });
+
+  function handleFileAiResultAction(action: Record<string, unknown>, response: AiSkillResponse) {
+    if (action.id !== 'create_note_from_preview') return;
+    const handoff = createAiNoteDraftHandoff(response, t('cloudSpace.aiGeneratedNoteTitle'));
+    if (!handoff) return;
+    fileAiVisible.value = false;
+    void router.push(handoff.route);
+  }
+
+  function openFilesInAi(files: any[]) {
     const available = files.filter((file) => String(file?.id || '').trim());
     if (!available.length) return;
     if (available.length > 5) message.info(t('cloudSpace.aiMaterialLimit', { count: 5 }));
-    const selected = available.slice(0, 5);
-    const closeLoading = message.loading(t('cloudSpace.aiPreparingFiles'), 0);
-    try {
-      const settled = await Promise.allSettled(selected.map((file) => attachAiCloudFile(String(file.id))));
-      const attachments = settled
-        .filter(
-          (item): item is PromiseFulfilledResult<Awaited<ReturnType<typeof attachAiCloudFile>>> =>
-            item.status === 'fulfilled',
-        )
-        .map((item) => item.value);
-      const failures = settled.filter((item) => item.status === 'rejected');
-      if (!attachments.length) {
-        const firstError = failures[0] as PromiseRejectedResult | undefined;
-        message.error(String(firstError?.reason?.message || t('ai.attachmentAttachFailed')));
-        return;
-      }
-      if (failures.length) {
-        message.warning(t('cloudSpace.aiFilesPartiallyPrepared', { count: failures.length }));
-      }
-      openAiAssistant({
-        attachmentRefs: attachments,
-        suggestedIntent: attachments.length > 1 ? 'compare' : 'summarize',
-        surface: 'cloud_space',
-      });
-    } finally {
-      closeLoading();
-    }
+    fileAiFiles.value = available.slice(0, 5);
+    fileAiVisible.value = true;
   }
 
   function openSelectedFilesInAi() {

@@ -9,10 +9,13 @@ describe('restrictionBlocksRequest', () => {
     expect(restrictionBlocksRequest(restriction('write_lock'), { method: 'GET', path: '/todo/list' })).toBe(false);
   });
 
-  it('上传与 AI 限制只命中对应业务路径', () => {
+  it('上传限制只命中真实文件路由，AI 限制交给统一 Execution 门禁', () => {
     expect(restrictionBlocksRequest(restriction('upload_lock'), { method: 'POST', path: '/file/upload' })).toBe(true);
     expect(restrictionBlocksRequest(restriction('upload_lock'), { method: 'POST', path: '/todo/save' })).toBe(false);
-    expect(restrictionBlocksRequest(restriction('ai_lock'), { method: 'POST', path: '/chat/send' })).toBe(true);
+    expect(restrictionBlocksRequest(restriction('ai_lock'), { method: 'POST', path: '/ai/skills/execute' })).toBe(false);
+    expect(restrictionBlocksRequest(restriction('ai_lock'), { method: 'POST', path: '/chat/conversations/get' })).toBe(
+      false,
+    );
     expect(restrictionBlocksRequest(restriction('ai_lock'), { method: 'POST', path: '/note/save' })).toBe(false);
   });
 

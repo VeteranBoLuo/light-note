@@ -98,7 +98,6 @@
       adminAuditTitle: t('adminAudit.title'),
       productInsightsTitle: t('adminProductInsights.title'),
       adminGovernanceTitle: t('adminGovernance.title'),
-      aiEvaluationTitle: t('aiEvaluationAdmin.title'),
       communityModerationTitle: t('communityChatModerationAdmin.navTitle'),
       supportManagementTitle: t('adminSupport.title'),
     }),

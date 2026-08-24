@@ -424,9 +424,11 @@ describe('编辑器 V2 交互回归', () => {
       '// 划词 AI 是一条独立的「选段改写」链路',
       'const syncCheckboxAttribute',
     );
-    expect(selectionAi).toContain('selectionAction: action');
-    expect(selectionAi).toContain('selectionText: text');
-    expect(selectionAi).toContain("responseFormat: 'plain'");
+    expect(selectionAi).toContain("skillId: 'note.transform_text'");
+    expect(selectionAi).toContain('input: { text, operation, targetLanguage }');
+    expect(selectionAi).toContain("surface: 'note.editor.selection'");
+    expect(selectionAi).not.toContain('selectionAction: action');
+    expect(selectionAi).not.toContain('selectionText: text');
     expect(selectionAi).toContain('getBookmark?.(2, true)');
     expect(selectionAi).toContain('moveToBookmark?.(bookmark)');
     expect(selectionAi).toContain('currentSelection !== text');
@@ -435,11 +437,13 @@ describe('编辑器 V2 交互回归', () => {
   });
 
   it('续写仍是右侧全文动作，读取完整笔记并要求保留原文后追加', () => {
-    const continuation = sourceBetween(aiReplySource, 'const ACTION_INSTRUCTION', 'const buildFormatHint');
+    const continuation = sourceBetween(aiReplySource, 'const ACTION_INSTRUCTION', 'const runAction');
     expect(continuation).toContain('continueWrite');
     expect(continuation).toContain('完整保留原文');
     expect(continuation).toContain('原文 + 续写');
-    expect(aiReplySource).toContain('内容：${note?.content}');
+    expect(aiReplySource).toContain("const sourceText = mode === 'followup' ? baseContent || '' : String(note?.content || '')");
+    expect(aiReplySource).toContain("skillId: 'note.transform_text'");
+    expect(aiReplySource).toContain('text: sourceText');
   });
 
   it('AI 放大预览在生成中原位提供停止按钮，结束后恢复追问', () => {

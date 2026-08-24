@@ -242,6 +242,19 @@ afterAll(() => {
 });
 
 describe('AI quota abuse hardening', () => {
+  it('后台模型调用使用独立 system 桶，不创建虚假的 user_growth 用户钱包', async () => {
+    const handle = await aiQuota.reserve(
+      { headers: {}, body: {}, ip: 'system' },
+      { userId: 'system:bookmark_archive', userRole: 'system', requestId: 'system-run-1' },
+    );
+
+    expect(handle).toMatchObject({ blocked: false, type: 'system' });
+    expect(usageByType('system')).toEqual([{ tokens: 5000, calls: 1 }]);
+    expect(state.wallets.size).toBe(0);
+    await expect(aiQuota.reconcile(handle, 1200)).resolves.toBe(true);
+    expect(usageByType('system')).toEqual([{ tokens: 1200, calls: 1 }]);
+  });
+
   it('默认强制执行，只有明确 false 才关闭', async () => {
     expect(aiQuota.isEnforcing()).toBe(true);
     const req = visitorRequest();

@@ -147,9 +147,4 @@ router.post('/updateNoteTemplate', noteLibraryHandle.updateNoteTemplate);
 router.post('/duplicateNoteTemplate', noteLibraryHandle.duplicateNoteTemplate);
 router.post('/delNoteTemplate', noteLibraryHandle.delNoteTemplate);
 
-import { assistNote } from '../router_handle/chatHandle.js';
-
-// 笔记组手 —— AI 辅助编辑
-router.post('/assist', assistNote);
-
 export default router;

@@ -79,11 +79,6 @@ describe('summarizeBookmark AI Gateway', () => {
           taskType: 'bookmark_summary',
           stage: 'bookmark_summary',
         }),
-        governance: expect.objectContaining({
-          quotaPolicy: 'system',
-          systemId: 'bookmark_summary',
-          taskType: 'bookmark_summary',
-        }),
       }),
     );
     expect(result).toEqual({ ok: true, summary: '一句话摘要\n- 要点', cached: false });

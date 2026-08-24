@@ -539,6 +539,7 @@
       :selected-ids="selectedAiOrganizeIds"
       @applied="init"
     />
+    <NoteAiDialog v-model:visible="noteAiVisible" :notes="noteAiItems" />
     <NoteTagConfig
       v-if="tagConfigVisible && activeTagNote"
       v-model:visible="tagConfigVisible"
@@ -659,7 +660,7 @@
   import RightMenu from '@/components/base/RightMenu.vue';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
-  import { openAiAssistant, type AiAssistantIntent } from '@/utils/aiEntry';
+  import NoteAiDialog from '@/components/noteLibrary/library/NoteAiDialog.vue';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { useMobileNavigationState } from '@/composables/useMobileNavigationState';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
@@ -2363,8 +2364,8 @@
   });
   const mobileBatchActions = computed<MobilePageActionItem[]>(() => [
     {
-      key: 'assistant',
-      label: t('ai.entry.addSelectedToAssistant'),
+      key: 'analyze',
+      label: t('note.aiSummarizeSelected'),
       icon: icon.ai.materials,
       disabled: selectedVisibleCount.value < 1,
     },
@@ -2412,10 +2413,10 @@
   ]);
   const desktopBatchMoreOptions = computed(() => [
     {
-      key: 'assistant',
-      label: t('ai.entry.addSelectedToAssistant'),
+      key: 'analyze',
+      label: t('note.aiSummarizeSelected'),
       icon: icon.ai.materials,
-      function: () => openSelectedNotesAi('organize'),
+      function: openSelectedNotesAi,
     },
     {
       key: 'addTags',
@@ -2437,21 +2438,16 @@
     },
   ]);
 
-  function openSelectedNotesAi(intent: AiAssistantIntent) {
+  const noteAiVisible = ref(false);
+  const noteAiItems = ref<any[]>([]);
+
+  function openSelectedNotesAi() {
     const checked = viewNoteList.value.filter((data: any) => data.isCheck === true);
     if (!checked.length) return;
-    if (checked.length > 5) message.info(t('ai.materialLimit', { count: 5 }));
-    const selected = checked.slice(0, 5);
+    if (checked.length > 20) message.info(t('ai.materialLimit', { count: 20 }));
     mobileBatchActionsOpen.value = false;
-    openAiAssistant({
-      surface: 'note_library',
-      suggestedIntent: intent,
-      contextRefs: selected.map((item: any) => ({
-        type: 'note',
-        id: String(item.id),
-        title: String(item.title || ''),
-      })),
-    });
+    noteAiItems.value = checked.slice(0, 20);
+    noteAiVisible.value = true;
   }
 
   function openGlobalAiOrganize() {
@@ -2553,7 +2549,7 @@
   }
 
   function handleMobileBatchAction(action: MobilePageActionItem) {
-    if (action.key === 'assistant') openSelectedNotesAi('organize');
+    if (action.key === 'analyze') openSelectedNotesAi();
     else if (action.key === 'smartOrganize') openSelectedAiOrganize();
     else if (action.key === 'addTags') openBatchTags('add');
     else if (action.key === 'removeTags') openBatchTags('remove');

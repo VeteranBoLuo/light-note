@@ -519,6 +519,7 @@
       <LinkHealthModal v-model:visible="healthVisible" />
       <BookmarkSnapshotModal v-model:visible="snapVisible" :bookmark-id="snapBookmarkId" />
       <AiOrganizeModal v-model:visible="aiOrgVisible" @applied="init" />
+      <BookmarkAiDialog v-model:visible="bookmarkAiVisible" :bookmarks="bookmarkAiItems" />
     </div>
   </ResourcePageShell>
 </template>
@@ -554,9 +555,9 @@
   import { exportExcelFile, readFirstExcelSheet } from '@/utils/excel';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { resolveBookmarkUrlInput } from '@lightnote/shared';
-  import { openAiAssistant, resolveBookmarkAiIntent } from '@/utils/aiEntry';
   import { buildNetscapeBookmarkHtml } from '@/utils/bookmarkHtml';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
+  import BookmarkAiDialog from '@/components/manage/bookmarkMg/BookmarkAiDialog.vue';
 
   const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
 
@@ -603,6 +604,8 @@
     iconBatchIsActive.value ? Math.max(3, iconBatchProgressPercent.value) : iconBatchProgressPercent.value,
   );
   const selectedRows = ref<string[]>([]);
+  const bookmarkAiVisible = ref(false);
+  const bookmarkAiItems = ref<BookmarkInterface[]>([]);
   const importExportModalVisible = ref(false);
   const healthVisible = ref(false);
   const aiOrgVisible = ref(false); // AI 智能整理弹框
@@ -665,17 +668,9 @@
   function openBookmarksInAi(items: BookmarkInterface[]) {
     const available = items.filter((item) => String(item?.id || '').trim());
     if (!available.length) return;
-    if (available.length > 5) message.info(t('bookmarkMg.aiMaterialLimit', { count: 5 }));
-    const contexts = available.slice(0, 5).map((item) => ({
-      type: 'bookmark' as const,
-      id: String(item.id),
-      title: String(item.name || item.url || t('bookmarkMg.untitled')).slice(0, 255),
-    }));
-    openAiAssistant({
-      contextRefs: contexts,
-      suggestedIntent: resolveBookmarkAiIntent(contexts.length),
-      surface: 'bookmark_manage',
-    });
+    if (available.length > 10) message.info(t('bookmarkMg.aiMaterialLimit', { count: 10 }));
+    bookmarkAiItems.value = available.slice(0, 10);
+    bookmarkAiVisible.value = true;
   }
 
   function openSelectedBookmarksInAi() {
