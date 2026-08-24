@@ -10,6 +10,9 @@ import type {
   TodoResourceRefInput,
   TodoSingleTaskReminderSchedule,
 } from '@/api/todoApi';
+import { todoTodayInTimezone } from '@/utils/todoPlanning';
+
+export { todoTodayInTimezone } from '@/utils/todoPlanning';
 
 export interface TodoCreateDraftV3 {
   task: {
@@ -44,23 +47,6 @@ function localDayDiff(start: string, end: string) {
   const [sy, sm, sd] = start.split('-').map(Number);
   const [ey, em, ed] = end.split('-').map(Number);
   return Math.max(0, Math.round((Date.UTC(ey, em - 1, ed) - Date.UTC(sy, sm - 1, sd)) / 86_400_000));
-}
-
-export function todoTodayInTimezone(timezone = 'Asia/Shanghai', now = new Date()) {
-  const pad = (value: number) => String(value).padStart(2, '0');
-  try {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(now);
-    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-    if (values.year && values.month && values.day) return `${values.year}-${values.month}-${values.day}`;
-  } catch {
-    // 非法时区最终仍会由服务端校验；这里回退到浏览器日期，保证表单可以继续编辑。
-  }
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
 export function suggestTodoPlanEndDate(anchorAt?: string | null) {
@@ -245,12 +231,14 @@ export function applyQuickPreset(draft: TodoCreateDraftV3, initial?: TodoCreateI
     };
     return;
   }
+  const requestedTime = String(initial.quickReminderTime || '').trim();
+  const reminderTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(requestedTime) ? requestedTime : '09:00';
   draft.reminder = {
     version: 1,
     mode: 'repeat',
     repeat: {
       kind: 'interval',
-      startAt: `${datePart(initial.dueAt) || todoTodayInTimezone()} 09:00`,
+      startAt: `${datePart(initial.dueAt) || todoTodayInTimezone()} ${reminderTime}`,
       intervalMinutes: 1440,
       stop: { type: initial.dueAt ? 'completion_or_due' : 'completion' },
     },

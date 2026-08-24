@@ -220,9 +220,8 @@
           <DailyQuests
             :quests="dailyGrowthQuests"
             :bonus="dailyGrowthBonus"
-            :claiming="claimingDailyGrowth || claimingRewards"
             :read-only="growthReadOnly"
-            @claim="claimDailyGrowth"
+            :show-claim-action="false"
           />
         </article>
 
@@ -416,7 +415,6 @@
   import WorkbenchGrowth from '@/components/workbenches/WorkbenchGrowth.vue';
   import DailyQuests from '@/components/growth/DailyQuests.vue';
   import GrowthTasks from '@/components/growth/GrowthTasks.vue';
-  import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import icon from '@/config/icon.ts';
   import { CLOUD_FILE_CATEGORY_LABEL_KEY } from '@/constants/cloudFileCategory.ts';
   import { formatStorageSize } from '@/utils/common.ts';
@@ -425,7 +423,6 @@
   import { blockGuestWrite } from '@/composables/useGuestGuard.ts';
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
-  import { dailyQuestClaimLogText, resolveDailyQuestClaimFeedback } from '@/utils/dailyQuestClaim';
   import type { ActionCaptureType } from '@/store/inbox.ts';
   import { openNotificationPanel } from '@/utils/notificationEntry';
 
@@ -448,50 +445,19 @@
   const user = useUserStore();
   const cloud = cloudSpaceStore();
   const inbox = inboxStore();
-  const {
-    growth,
-    dashboard,
-    dashboardLoading,
-    growthTasks,
-    growthTasksLoading,
-    claimingRewards,
-    loadDashboard,
-    loadGrowthTasks,
-    claimDailyBonus,
-  } = useGrowth();
+  const { growth, dashboard, dashboardLoading, growthTasks, growthTasksLoading, loadDashboard, loadGrowthTasks } =
+    useGrowth();
   const growthReadOnly = computed(() => Boolean(user.adminContext));
   const dailyGrowthQuests = computed(() => dashboard.value?.quests || []);
   const dailyGrowthBonus = computed(
     () => dashboard.value?.questBonus || { exp: 0, points: 0, claimed: false, claimable: false },
   );
-  // 工作台只承载今天仍需处理的任务：全部完成但未领奖时继续保留领取入口，领取后隐藏。
+  // 工作台只承载今天仍需处理的任务：领取统一由上方成长卡的一键领取处理，领取后隐藏任务卡。
   const showDailyGrowthTasks = computed(() => Boolean(dashboard.value && !dailyGrowthBonus.value.claimed));
-  const claimingDailyGrowth = ref(false);
   const showGrowthTasks = computed(() => Boolean(growthTasks.value?.tasks.some((task) => !task.claimed)));
   const growthSectionLoading = computed(
     () => (dashboardLoading.value && !dashboard.value) || (growthTasksLoading.value && !growthTasks.value),
   );
-
-  async function claimDailyGrowth() {
-    if (growthReadOnly.value || claimingDailyGrowth.value || claimingRewards.value) return;
-    claimingDailyGrowth.value = true;
-    try {
-      const res = await claimDailyBonus();
-      if (res?.status === 200 && res.data?.ok) {
-        const feedback = resolveDailyQuestClaimFeedback(res.data);
-        if (feedback.level === 'success') {
-          message.success(t(feedback.key, feedback.params));
-          recordOperation({ module: '工作台', operation: dailyQuestClaimLogText(res.data) });
-        } else {
-          message.info(t(feedback.key, feedback.params));
-        }
-      }
-    } catch (error) {
-      console.error('工作台领取每日奖励失败:', error);
-    } finally {
-      claimingDailyGrowth.value = false;
-    }
-  }
 
   const loadingWorkbench = ref(true);
   const loadingUpdateLogs = ref(true);

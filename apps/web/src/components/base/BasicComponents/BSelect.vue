@@ -35,7 +35,10 @@
           v-if="usesInlineInput"
           v-model="searchText"
           class="select-search-inline"
-          :class="{ 'has-editable-value': editable && Boolean(displayText) }"
+          :class="{
+            'has-editable-value': editable && Boolean(displayText),
+            'is-select-on-focus': selectOnFocus,
+          }"
           :placeholder="displayText || placeholderText"
           :inputmode="inputmode"
           :maxlength="maxlength || undefined"
@@ -49,9 +52,9 @@
           :aria-labelledby="ariaLabelledby || undefined"
           :aria-invalid="editable && !inlineInputValid ? 'true' : undefined"
           :disabled="disabled"
-          @click.stop
+          @click.stop="handleInlineClick"
           @input="handleSearchInput"
-          @focus="keepOpen"
+          @focus="handleInlineFocus"
           @blur="handleInlineBlur"
           @keydown.stop="handleTriggerKeydown"
         />
@@ -87,7 +90,7 @@
         :aria-multiselectable="isMultiple || undefined"
         :aria-busy="loading || undefined"
         :data-b-select-id="selectId"
-        :class="{ 'has-footer': $slots['dropdown-footer'] }"
+        :class="[dropdownClassName, { 'has-footer': $slots['dropdown-footer'] }]"
         v-show="isOpen"
         :style="dropdownStyle"
         @click.stop
@@ -162,6 +165,8 @@
       editable?: boolean;
       inputmode?: 'none' | 'text' | 'decimal' | 'numeric' | 'tel' | 'search' | 'email' | 'url';
       maxlength?: number;
+      dropdownClassName?: string;
+      selectOnFocus?: boolean;
     }>(),
     {
       options: () => [],
@@ -178,6 +183,8 @@
       editable: false,
       inputmode: 'text',
       maxlength: 0,
+      dropdownClassName: '',
+      selectOnFocus: false,
     },
   );
 
@@ -205,6 +212,7 @@
   const listboxId = `${selectId}-listbox`;
   const activeOptionIndex = ref(-1);
   const inlineInputValid = ref(true);
+  const selectingCurrentValue = ref(false);
   let placementAbove = false;
 
   // 当前选中值（标准化为数组）
@@ -255,6 +263,7 @@
 
   // 过滤后的选项
   const filteredOptions = computed(() => {
+    if (selectingCurrentValue.value) return props.options;
     if (!searchText.value) return props.options;
     const kw = searchText.value;
     if (props.filterOption) {
@@ -342,6 +351,7 @@
       event.stopPropagation();
       if (props.editable) {
         searchText.value = '';
+        selectingCurrentValue.value = false;
         setInlineInputValid(true);
       }
       isOpen.value = false;
@@ -389,6 +399,7 @@
       modelValue.value = item.value;
       emit('change', item.value);
       searchText.value = '';
+      selectingCurrentValue.value = false;
       setInlineInputValid(true);
       isOpen.value = false;
       activeOptionIndex.value = -1;
@@ -435,7 +446,28 @@
     if (!isOpen.value) isOpen.value = true;
   }
 
+  function selectInlineValue(event: FocusEvent | MouseEvent) {
+    if (!props.selectOnFocus) return;
+    const input = event.currentTarget as HTMLInputElement | null;
+    if (!input) return;
+    if (!searchText.value && displayText.value) {
+      searchText.value = displayText.value;
+      selectingCurrentValue.value = true;
+    }
+    requestAnimationFrame(() => input.select());
+  }
+
+  function handleInlineFocus(event: FocusEvent) {
+    keepOpen();
+    selectInlineValue(event);
+  }
+
+  function handleInlineClick(event: MouseEvent) {
+    selectInlineValue(event);
+  }
+
   function handleSearchInput() {
+    selectingCurrentValue.value = false;
     keepOpen();
     if (props.editable) {
       const raw = searchText.value.trim();
@@ -458,6 +490,7 @@
 
   function handleInlineBlur() {
     if (!props.editable) return;
+    selectingCurrentValue.value = false;
     const raw = searchText.value.trim();
     if (!raw) {
       setInlineInputValid(true);
@@ -705,6 +738,11 @@
     &.has-editable-value::placeholder {
       color: var(--text-color);
       opacity: 1;
+    }
+
+    &.is-select-on-focus::selection {
+      color: #fff;
+      background: var(--primary-color);
     }
   }
 

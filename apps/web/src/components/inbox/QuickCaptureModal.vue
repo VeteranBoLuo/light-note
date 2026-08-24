@@ -546,6 +546,7 @@
       dueAt: payload.dueAt,
       checklist: payload.checklist,
       quickReminderPreset: payload.quickReminderPreset,
+      quickReminderTime: payload.quickReminderTime,
     };
     // 移动端的完整新建统一进入轻量路由页，不再从快速添加抽屉
     // 叠加一个全屏待办抽屉。历史状态只传递当前草稿，不产生任何写入。

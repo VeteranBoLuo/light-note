@@ -466,16 +466,16 @@
                 <span class="field-desc">{{ t('settings.notificationsDndDesc') }}</span>
               </div>
               <div class="notification-dnd-controls">
-                <BInput
+                <BTimePicker
+                  class="notification-dnd-time"
                   :value="String(user.preferences.notificationsDndStart || '22:00')"
-                  type="time"
                   :aria-label="t('settings.notificationsDndStart')"
                   @change="setNotificationTime('notificationsDndStart', $event, '22:00')"
                 />
                 <span>—</span>
-                <BInput
+                <BTimePicker
+                  class="notification-dnd-time"
                   :value="String(user.preferences.notificationsDndEnd || '08:00')"
-                  type="time"
                   :aria-label="t('settings.notificationsDndEnd')"
                   @change="setNotificationTime('notificationsDndEnd', $event, '08:00')"
                 />
@@ -729,10 +729,12 @@
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BTimePicker from '@/components/base/BasicComponents/BTimePicker.vue';
   import BUpload from '@/components/base/BasicComponents/BUpload.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { getGlobalShortcutKeys, getGlobalShortcutLabel } from '@/config/keyboardShortcuts.ts';
   import { usePwaInstall } from '@/composables/usePwaInstall';
+  import { formatAiQuotaTokens, useAiQuotaStatus } from '@/composables/useAiQuotaStatus';
   import {
     isLightNoteAndroidApp,
     postAndroidOpenLegalDocument,
@@ -755,7 +757,7 @@
     type SettingsIndexSectionId,
   } from './settingsRegistry';
 
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const router = useRouter();
   const route = useRoute();
   const bookmark = bookmarkStore();
@@ -1216,32 +1218,27 @@
   }
 
   // 用户触发的模块 Skill 统一从 AI Execution 结算到此额度；系统任务使用独立系统预算。
-  const quotaText = ref(t('settings.ai.quotaLoading'));
-  function fmtTokens(n: number) {
-    if (!Number.isFinite(n)) return '—';
-    return n >= 10000 ? `${(n / 10000).toFixed(n % 10000 === 0 ? 0 : 1)}万` : String(n);
-  }
+  const {
+    status: aiQuotaStatus,
+    loading: aiQuotaLoading,
+    unavailable: aiQuotaUnavailable,
+    load: loadAiQuota,
+  } = useAiQuotaStatus({ autoLoad: false });
+  const quotaText = computed(() => {
+    if (aiQuotaLoading.value && !aiQuotaStatus.value) return t('settings.ai.quotaLoading');
+    if (aiQuotaUnavailable.value || !aiQuotaStatus.value) return '—';
+    if (aiQuotaStatus.value.exempt) return t('settings.ai.quotaUnlimited');
+    return t('settings.ai.quotaUsage', {
+      used: formatAiQuotaTokens(aiQuotaStatus.value.used, locale.value),
+      quota: formatAiQuotaTokens(aiQuotaStatus.value.quota, locale.value),
+    });
+  });
   // 额度只在真正会显示它的页面才请求:移动端目录页看不到额度,进 AI 子页时再拉。
   // 桌面长页一进来就渲染 AI 区块,仍按首屏加载。
-  let quotaLoaded = false;
-  async function loadAiQuota() {
-    if (quotaLoaded) return;
-    quotaLoaded = true;
-    try {
-      const res = await apiBasePost('/api/chat/aiQuota', {});
-      const d: any = res?.data;
-      if (d?.exempt) quotaText.value = t('settings.ai.quotaUnlimited');
-      else if (d && Number.isFinite(d.quota))
-        quotaText.value = t('settings.ai.quotaUsage', { used: fmtTokens(d.used), quota: fmtTokens(d.quota) });
-      else quotaText.value = '—';
-    } catch {
-      quotaText.value = '—';
-    }
-  }
   watch(
     () => !isGuestUser() && (!bookmark.isMobile || mobileSection.value === 'ai'),
     (needQuota) => {
-      if (needQuota) loadAiQuota();
+      if (needQuota) void loadAiQuota();
     },
     { immediate: true },
   );
@@ -1271,8 +1268,9 @@
     gap: 8px;
     min-width: min(100%, 330px);
   }
-  .notification-dnd-controls :deep(.b-input) {
+  .notification-dnd-time :deep(.b-time-trigger) {
     width: 112px;
+    min-width: 112px;
   }
   .community-chat-notification-field {
     display: block;

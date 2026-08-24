@@ -180,7 +180,7 @@
           </label>
           <label v-if="form.triggerType === 'fixed_time'">
             <span>{{ t('inbox.todoReminderFixedTime') }}</span>
-            <BInput v-model:value="form.fixedTime" placeholder="14:00" :maxlength="5" />
+            <BTimePicker v-model:value="form.fixedTime" block :aria-label="t('inbox.todoReminderFixedTime')" />
           </label>
           <label v-else-if="form.triggerType === 'before_due'">
             <span>{{ t('inbox.todoReminderBeforeDue') }}</span>
@@ -303,6 +303,7 @@
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BDateTimePicker from '@/components/base/BasicComponents/BDateTimePicker.vue';
+  import BTimePicker from '@/components/base/BasicComponents/BTimePicker.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import {

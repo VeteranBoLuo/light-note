@@ -70,16 +70,30 @@
         >
           {{ option.label }}
         </BButton>
+        <BTimePicker
+          v-model:value="dailyReminderTime"
+          class="quick-todo-form__daily-reminder"
+          :class="{ 'is-active': reminderPreset === 'daily' }"
+          :aria-label="t('inbox.quickTodoReminderTimeLabel')"
+          @open-change="onDailyReminderOpenChange"
+        >
+          <template #prefix>
+            <span>{{ t('inbox.quickTodoReminderDaily') }}</span>
+          </template>
+        </BTimePicker>
       </div>
       <small>{{
         duePreset === 'none' ? t('inbox.quickTodoReminderNeedsDue') : t('inbox.quickTodoReminderHint')
       }}</small>
+      <small v-if="quickReminderError" class="quick-todo-form__error" role="alert">{{ quickReminderError }}</small>
     </div>
 
     <div class="quick-todo-form__actions">
-      <BButton :loading="aiParsing" :disabled="!canSubmit || saving" @click="parseWithAi">
-        {{ t('inbox.quickTodoAiOrganize') }}
-      </BButton>
+      <BTooltip class="quick-todo-form__ai-tooltip" :title="t('inbox.quickTodoAiOrganizeHint')">
+        <BButton :loading="aiParsing" :disabled="!canSubmit || saving" @click="parseWithAi">
+          {{ t('inbox.quickTodoAiOrganize') }}
+        </BButton>
+      </BTooltip>
       <BButton :disabled="saving" @click="openDetails">{{ t('inbox.quickTodoDetails') }}</BButton>
       <BButton type="primary" :loading="saving" :disabled="!canSubmit" @click="submit">
         {{ t('inbox.quickTodoCreate') }}
@@ -94,8 +108,10 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import BTimePicker from '@/components/base/BasicComponents/BTimePicker.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import type { TodoCreateInitialValues, TodoPriority, TodoQuickReminderPreset } from '@/api/todoApi';
-  import { dueForTodoGroup } from '@/utils/todoPlanning';
+  import { dueForTodoDatePreset, todoNowInTimezone } from '@/utils/todoPlanning';
 
   type DuePreset = 'none' | 'today' | 'tomorrow' | 'week';
 
@@ -126,6 +142,8 @@
   const priority = ref<TodoPriority>(1);
   const duePreset = ref<DuePreset>('none');
   const reminderPreset = ref<TodoQuickReminderPreset>('none');
+  const dailyReminderTime = ref('09:00');
+  const validationClock = ref(Date.now());
 
   const dueOptions = computed<Array<{ value: DuePreset; label: string }>>(() => [
     { value: 'none', label: t('inbox.quickTodoNoDate') },
@@ -137,35 +155,43 @@
   const reminderOptions = computed<Array<{ value: TodoQuickReminderPreset; label: string }>>(() => [
     { value: 'none', label: t('inbox.todoReminderNone') },
     { value: 'before_due_1h', label: t('inbox.quickTodoReminderBeforeDue') },
-    { value: 'daily_0900', label: t('inbox.quickTodoReminderDaily') },
   ]);
-  const canSubmit = computed(() => Boolean(title.value.trim()) && !props.saving);
+  const dueAt = computed(() =>
+    duePreset.value === 'none' ? null : dueForTodoDatePreset(duePreset.value, { now: new Date(validationClock.value) }),
+  );
+  const quickReminderError = computed(() => {
+    if (reminderPreset.value !== 'daily' || duePreset.value !== 'today' || !dueAt.value) return '';
+    const reminderAt = `${dueAt.value.slice(0, 10)}T${dailyReminderTime.value}`;
+    return reminderAt <= todoNowInTimezone('Asia/Shanghai', new Date(validationClock.value))
+      ? t('inbox.quickTodoReminderPastToday')
+      : '';
+  });
+  const canSubmit = computed(() => Boolean(title.value.trim()) && !props.saving && !quickReminderError.value);
 
   watch(
     () => props.resetKey,
     () => reset(),
   );
   watch(duePreset, (value) => {
+    validationClock.value = Date.now();
     if (value === 'none' && reminderPreset.value === 'before_due_1h') reminderPreset.value = 'none';
+  });
+  watch([reminderPreset, dailyReminderTime], () => {
+    validationClock.value = Date.now();
   });
 
   function buildPayload(): TodoCreateInitialValues & { title: string } {
     return {
       title: title.value.trim(),
       priority: priority.value,
-      dueAt:
-        duePreset.value === 'today'
-          ? dueForTodoGroup('today')
-          : duePreset.value === 'tomorrow'
-            ? dueForTodoGroup('upcoming')
-            : duePreset.value === 'week'
-              ? endOfCurrentWeek()
-              : null,
+      dueAt: dueAt.value,
       quickReminderPreset: reminderPreset.value,
+      ...(reminderPreset.value === 'daily' ? { quickReminderTime: dailyReminderTime.value } : {}),
     };
   }
 
   function submit() {
+    validationClock.value = Date.now();
     if (!canSubmit.value) return;
     emit('submit', buildPayload());
   }
@@ -179,20 +205,17 @@
     emit('ai', buildPayload());
   }
 
+  function onDailyReminderOpenChange(open: boolean) {
+    if (open) reminderPreset.value = 'daily';
+  }
+
   function reset() {
     title.value = '';
     priority.value = 1;
     duePreset.value = 'none';
     reminderPreset.value = 'none';
+    dailyReminderTime.value = '09:00';
     void nextTick(() => titleInput.value?.focus());
-  }
-
-  function endOfCurrentWeek() {
-    const now = new Date();
-    const daysUntilSunday = (7 - now.getDay()) % 7;
-    const target = new Date(now.getFullYear(), now.getMonth(), now.getDate() + daysUntilSunday, 18, 0);
-    const pad = (value: number) => String(value).padStart(2, '0');
-    return `${target.getFullYear()}-${pad(target.getMonth() + 1)}-${pad(target.getDate())}T18:00`;
   }
 </script>
 
@@ -218,6 +241,11 @@
     color: var(--desc-color);
     font-size: 12px;
     line-height: 1.5;
+  }
+
+  .quick-todo-form__error {
+    color: var(--danger-color, #e5484d) !important;
+    font-weight: 600;
   }
 
   .quick-todo-form__title,
@@ -266,6 +294,19 @@
     gap: 7px;
   }
 
+  .quick-todo-form__daily-reminder :deep(.b-time-trigger) {
+    min-width: 154px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .quick-todo-form__daily-reminder.is-active :deep(.b-time-trigger) {
+    border-color: var(--primary-color);
+    background: var(--mobile-selected-bg, var(--workspace-panel-bg-color));
+    color: var(--primary-color);
+    font-weight: 700;
+  }
+
   .quick-todo-form__priority-options {
     display: flex;
     flex-wrap: wrap;
@@ -286,8 +327,16 @@
   }
 
   .quick-todo-form__reminder-options :deep(.b_btn) {
+    height: 36px;
+    min-height: 36px;
+    line-height: 36px;
     border: 1px solid var(--surface-border-color);
     border-radius: 9px;
+  }
+
+  .quick-todo-form__reminder-options :deep(.b-time-trigger) {
+    height: 36px;
+    min-height: 36px;
   }
 
   .quick-todo-form__reminder-options :deep(.b_btn.is-active) {
@@ -315,6 +364,10 @@
     justify-content: flex-end;
     gap: 8px;
     padding-top: 2px;
+  }
+
+  .quick-todo-form__ai-tooltip :deep(.b_btn) {
+    width: 100%;
   }
 
   @media (max-width: 767px) {
@@ -350,6 +403,10 @@
       width: auto;
       height: 48px;
       min-height: 48px;
+    }
+
+    .quick-todo-form__ai-tooltip {
+      flex: 1 1 0;
     }
 
     .quick-todo-form__actions {

@@ -3,6 +3,7 @@ import { resolveTodoConfiguredReminderAt, resolveTodoNextReminderAt } from '@lig
 
 export type TodoGroupKey = 'overdue' | 'today' | 'upcoming' | 'later' | 'noDate' | 'completed';
 export type TodoSnoozePreset = 'tenMinutes' | 'oneHour' | 'threeHours' | 'oneDay' | 'tomorrow' | 'nextWeek';
+export type TodoDateDuePreset = 'today' | 'tomorrow' | 'week';
 export type TodoDateFormatOptions = {
   relative?: boolean;
   includeYear?: boolean;
@@ -170,6 +171,63 @@ export function localTodoDateTime(date: Date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(
     date.getMinutes(),
   )}`;
+}
+
+const DEFAULT_TODO_TIMEZONE = 'Asia/Shanghai';
+
+/**
+ * 待办计划使用没有偏移量的墙上时间；快捷入口必须先在计划时区内确定“今天”，
+ * 不能直接借用浏览器或服务器所在时区。
+ */
+export function todoNowInTimezone(timezone = DEFAULT_TODO_TIMEZONE, now = new Date()) {
+  const fallback = () => localTodoDateTime(now);
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(now);
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    if (values.year && values.month && values.day && values.hour && values.minute) {
+      const hour = values.hour === '24' ? '00' : values.hour;
+      return `${values.year}-${values.month}-${values.day}T${hour}:${values.minute}`;
+    }
+  } catch {
+    // 非法时区最终仍会由服务端拒绝；表单使用浏览器墙上时间作为可编辑回退。
+  }
+  return fallback();
+}
+
+export function todoTodayInTimezone(timezone = DEFAULT_TODO_TIMEZONE, now = new Date()) {
+  return todoNowInTimezone(timezone, now).slice(0, 10);
+}
+
+function addTodoCalendarDays(dateValue: string, days: number) {
+  const [year, month, day] = dateValue.split('-').map(Number);
+  const result = new Date(Date.UTC(year, month - 1, day + days));
+  const pad = (part: number) => String(part).padStart(2, '0');
+  return `${result.getUTCFullYear()}-${pad(result.getUTCMonth() + 1)}-${pad(result.getUTCDate())}`;
+}
+
+/**
+ * “今天 / 明天 / 本周”只表达日历日，不代表用户选择了具体时刻。
+ * 在当前 DATETIME 协议下统一映射到该日 23:59，避免 00:00 让任务在当天开始时立即逾期。
+ */
+export function dueForTodoDatePreset(
+  preset: TodoDateDuePreset,
+  { timezone = DEFAULT_TODO_TIMEZONE, now = new Date() }: { timezone?: string; now?: Date } = {},
+) {
+  const today = todoTodayInTimezone(timezone, now);
+  let dayOffset = preset === 'tomorrow' ? 1 : 0;
+  if (preset === 'week') {
+    const [year, month, day] = today.split('-').map(Number);
+    dayOffset = (7 - new Date(Date.UTC(year, month - 1, day)).getUTCDay()) % 7;
+  }
+  return `${addTodoCalendarDays(today, dayOffset)}T23:59`;
 }
 
 export function toTodoLocalInput(value?: string | null) {

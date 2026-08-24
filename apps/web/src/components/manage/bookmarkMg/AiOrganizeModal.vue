@@ -261,7 +261,7 @@
         const processed = Number(res.data?.processed || 0);
         recordOperation({
           module: resourceType.value === 'note' ? '笔记库' : '书签管理',
-          operation: `AI 智能整理生成建议成功【${processed}项】`,
+          operation: `智能打标签生成建议成功【${processed}项】`,
         });
         useSuggestions(res.data.suggestions);
       } else {
@@ -304,7 +304,7 @@
         if (appliedCount.value > 0) {
           recordOperation({
             module: resourceType.value === 'note' ? '笔记库' : '书签管理',
-            operation: `应用 AI 智能整理结果成功【${appliedCount.value}项】`,
+            operation: `应用智能打标签结果成功【${appliedCount.value}项】`,
           });
         }
         consumeSelectedRequest();

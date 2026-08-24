@@ -162,7 +162,7 @@
                     :aria-label="t('ai.entry.askSearch')"
                     @click="toggleSearchAi(selectedIds.length > 1 ? 'compare' : 'find')"
                   >
-                    <svg-icon :src="icon.ai.ask" size="16" />
+                    <svg-icon :src="icon.ai.organize" size="16" />
                   </BButton>
                 </BTooltip>
                 <BTooltip :title="t('resourceCenter.refresh')">
@@ -235,7 +235,7 @@
                     :title="t('ai.entry.askSearch')"
                     @click="toggleSearchAi(selectedIds.length > 1 ? 'compare' : 'find')"
                   >
-                    <SvgIcon :src="icon.ai.ask" size="15" aria-hidden="true" />
+                    <SvgIcon :src="icon.ai.organize" size="15" aria-hidden="true" />
                     <span>AI</span>
                   </BButton>
                 </div>
@@ -278,24 +278,30 @@
                   <div class="tag-filter-main">
                     <div class="tag-filter-list">
                       <ResourceTagChip
-                        v-for="tag in tagOptions"
+                        v-for="tag in inlineTagOptions"
                         :key="tag"
                         :tag="{ name: tag }"
                         class="tag-chip"
                         size="medium"
                         interactive
                         :selected="queryState.tags.includes(tag)"
+                        show-selected-indicator
+                        max-width="108px"
                         @click="toggleTagFilter(tag)"
                       />
                     </div>
                     <BPopover
-                      v-if="tagOptions.length > 14"
+                      v-if="tagOptions.length > inlineTagOptions.length"
                       v-model:open="showAllTags"
                       trigger="click"
                       placement="bottom-right"
                     >
                       <BButton class="tag-toggle-btn">
-                        {{ showAllTags ? t('resourceCenter.tagCollapse') : `${t('common.more')} ${tagOptions.length}` }}
+                        {{
+                          showAllTags
+                            ? t('resourceCenter.tagCollapse')
+                            : t('resourceCenter.tagExpand', { count: tagOptions.length })
+                        }}
                       </BButton>
                       <template #content>
                         <div class="tag-filter-popover">
@@ -312,6 +318,8 @@
                             size="medium"
                             interactive
                             :selected="queryState.tags.includes(tag)"
+                            show-selected-indicator
+                            max-width="min(180px, 100%)"
                             @click="toggleTagFilter(tag)"
                           />
                         </div>
@@ -377,8 +385,10 @@
                 :resource-refs="searchAiResourceRefs"
                 :scope-label="searchAiScopeLabel"
                 :initial-input="searchAiInitialInput"
+                :initial-prompt="searchAiInitialPrompt"
                 :actions="searchAiActions"
                 :placeholder="t('ai.entry.searchSkillPlaceholder')"
+                :icon-src="icon.ai.organize"
               />
 
               <div
@@ -509,8 +519,11 @@
                 :resource-refs="searchAiResourceRefs"
                 :scope-label="searchAiScopeLabel"
                 :initial-input="searchAiInitialInput"
+                :initial-prompt="searchAiInitialPrompt"
                 :actions="searchAiActions"
                 :placeholder="t('ai.entry.searchSkillPlaceholder')"
+                :icon-src="icon.ai.organize"
+                presentation="sidebar"
               />
               <template v-else-if="inspectedResource">
                 <div
@@ -530,7 +543,7 @@
                     </div>
                   </div>
                   <h2>{{ inspectedResource.title || '-' }}</h2>
-                  <p class="resource-inspector-description">{{ inspectedResourcePreview }}</p>
+                  <p v-auto-scrollbar class="resource-inspector-description">{{ inspectedResourcePreview }}</p>
                 </div>
                 <dl class="resource-inspector-meta">
                   <div v-if="inspectedResource.type === 'note'">
@@ -562,7 +575,19 @@
                   />
                 </div>
                 <div class="resource-inspector-actions">
+                  <BButton
+                    v-if="inspectedResource.type !== 'tag'"
+                    block
+                    size="large"
+                    type="function"
+                    class="resource-inspector-action--ai"
+                    @click="openResourceAi(inspectedResource)"
+                  >
+                    <SvgIcon :src="icon.ai.organize" size="17" aria-hidden="true" />
+                    {{ t('resourceCenter.analyzeResource') }}
+                  </BButton>
                   <BButton block size="large" type="primary" @click="openItem(inspectedResource)">
+                    <SvgIcon :src="icon.noteTree.openPage" size="17" aria-hidden="true" />
                     {{ t('resourceCenter.openResource') }}
                   </BButton>
                   <BButton
@@ -692,6 +717,7 @@
               size="medium"
               interactive
               :selected="queryState.tags.includes(tag)"
+              show-selected-indicator
               @click="toggleTagFilter(tag)"
             />
           </div>
@@ -878,6 +904,11 @@
 
   const selectedIds = ref<string[]>([]);
   const searchAiVisible = ref(false);
+  const explicitSearchAiResourceContext = ref<{
+    ref: AiSkillResourceRef;
+    type: GlobalSearchType;
+    title: string;
+  } | null>(null);
   const allMatchingSummary = ref<BatchSelectionSummary | null>(null);
   const excludedSelectionIds = ref<string[]>([]);
   const selectionPreviewLoading = ref(false);
@@ -1012,6 +1043,13 @@
     // 从知识地图等入口携带标签筛选时，将已选项固定在折叠区最前面，确保过滤状态一眼可见。
     return [...queryState.tags, ...options.filter((tag) => !selected.has(tag))];
   });
+  const inlineTagLimit = computed(() => {
+    if (bookmark.screenWidth <= 980) return 3;
+    if (bookmark.isCompactLayout) return 4;
+    if (bookmark.screenWidth <= 1440) return 6;
+    return 7;
+  });
+  const inlineTagOptions = computed(() => tagOptions.value.slice(0, inlineTagLimit.value));
   const filteredTagOptions = computed(() => {
     const keyword = tagSearch.value.trim().toLocaleLowerCase();
     return keyword ? tagOptions.value.filter((tag) => tag.toLocaleLowerCase().includes(keyword)) : tagOptions.value;
@@ -1019,21 +1057,44 @@
   const selectedTypes = computed<GlobalSearchType[]>(() =>
     queryState.types.length ? queryState.types : [...SEARCH_CENTER_TYPE_LIST],
   );
-  const searchAiResourceRefs = computed<AiSkillResourceRef[]>(() =>
+  const selectedSearchAiResourceRefs = computed<AiSkillResourceRef[]>(() =>
     mappedItems.value
       .filter((item) => selectedIds.value.includes(getItemSelectionKey(item)))
       .filter((item) => ['note', 'bookmark', 'file', 'todo'].includes(item.type))
       .slice(0, 10)
       .map((item) => ({ type: item.type as AiSkillResourceRef['type'], id: String(item.id) })),
   );
-  const searchAiInitialInput = computed<Record<string, unknown>>(() => ({
-    resourceTypes: selectedTypes.value.filter((type) => ['note', 'bookmark', 'file', 'todo'].includes(type)),
-  }));
-  const searchAiScopeLabel = computed(() =>
-    searchAiResourceRefs.value.length
-      ? t('ai.entry.selectedScope', { count: searchAiResourceRefs.value.length })
-      : '',
+  const searchAiResourceRefs = computed<AiSkillResourceRef[]>(
+    () =>
+      explicitSearchAiResourceContext.value
+        ? [explicitSearchAiResourceContext.value.ref]
+        : selectedSearchAiResourceRefs.value,
   );
+  const searchAiInitialInput = computed<Record<string, unknown>>(() => ({
+    resourceTypes: explicitSearchAiResourceContext.value
+      ? [explicitSearchAiResourceContext.value.type]
+      : selectedTypes.value.filter((type) => ['note', 'bookmark', 'file', 'todo'].includes(type)),
+  }));
+  const searchAiScopeLabel = computed(() => {
+    const resource = explicitSearchAiResourceContext.value;
+    if (resource) {
+      return t('ai.entry.resourceScope', {
+        type: getSearchTypeLabel(t, resource.type),
+        title: resource.title || t('inbox.untitled'),
+      });
+    }
+    return searchAiResourceRefs.value.length
+      ? t('ai.entry.selectedScope', { count: searchAiResourceRefs.value.length })
+      : '';
+  });
+  const searchAiInitialPrompt = computed(() => {
+    const resource = explicitSearchAiResourceContext.value;
+    if (!resource) return '';
+    return t('ai.entry.analyzeResourcePrompt', {
+      type: getSearchTypeLabel(t, resource.type),
+      title: resource.title || t('inbox.untitled'),
+    });
+  });
   const searchAiActions = computed(() => {
     const actions: Array<{
       id: string;
@@ -1041,7 +1102,7 @@
       skillId: string;
       input: Record<string, unknown>;
     }> = [];
-    if (searchAiResourceRefs.value.length) {
+    if (!explicitSearchAiResourceContext.value && searchAiResourceRefs.value.length) {
       actions.push({
         id: 'summarize',
         label: t('ai.entry.summarizeSelected'),
@@ -1049,7 +1110,7 @@
         input: { instruction: t('ai.entry.summarizeSelectedInstruction') },
       });
     }
-    if (searchAiResourceRefs.value.length >= 2) {
+    if (!explicitSearchAiResourceContext.value && searchAiResourceRefs.value.length >= 2) {
       actions.push({
         id: 'compare',
         label: t('ai.entry.compareSelected'),
@@ -1134,6 +1195,7 @@
     return [
       openItem,
       { key: 'resource-open-divider', divider: true },
+      { key: 'ai', label: t('resourceCenter.analyzeResourceMenu'), icon: icon.ai.organize },
       { key: 'addInbox', label: t('inbox.addExisting'), icon: icon.contextMenu.inbox },
       { key: 'resource-actions-divider', divider: true },
       deleteItem,
@@ -1645,8 +1707,24 @@
     }
     const selected = mappedItems.value.filter((item) => selectedIds.value.includes(getItemSelectionKey(item)));
     if (selected.length > 10) message.info(t('ai.materialLimit', { count: 10 }));
-    searchAiVisible.value = !searchAiVisible.value;
+    if (searchAiVisible.value) {
+      searchAiVisible.value = false;
+      explicitSearchAiResourceContext.value = null;
+      return;
+    }
+    explicitSearchAiResourceContext.value = null;
+    searchAiVisible.value = true;
     if (intent === 'organize' && bookmark.isMobile) mobileBatchActionsOpen.value = false;
+  }
+
+  function openResourceAi(item: DisplaySearchItem) {
+    if (!['note', 'bookmark', 'file', 'todo'].includes(item.type)) return;
+    explicitSearchAiResourceContext.value = {
+      ref: { type: item.type as AiSkillResourceRef['type'], id: String(item.id) },
+      type: item.type as GlobalSearchType,
+      title: String(item.title || '').trim(),
+    };
+    searchAiVisible.value = true;
   }
 
   function getSelectedItemsByTypes(types: SearchType[]) {
@@ -1720,6 +1798,10 @@
     }
     if (action === 'addInbox' && item.type !== 'tag') {
       addItemsToInbox([item]);
+      return;
+    }
+    if (action === 'ai' && item.type !== 'tag') {
+      openResourceAi(item);
       return;
     }
     if (action !== 'delete') return;
@@ -2190,17 +2272,20 @@
     flex-direction: column;
     gap: 12px;
     padding: 14px;
-    overflow: hidden auto;
+    overflow: hidden;
   }
 
   .search-ai-panel {
     width: 100%;
+    min-height: 0;
+    flex: 1 1 auto;
     box-sizing: border-box;
     border-color: var(--search-border-color);
     background: var(--search-card-bg);
   }
 
   .search-ai-panel--mobile {
+    flex: 0 0 auto;
     margin: 0 0 12px;
   }
 
@@ -2226,8 +2311,9 @@
   }
 
   .resource-inspector-hero--expanded {
-    min-height: min(420px, 44vh);
-    flex: 1 1 280px;
+    min-height: 0;
+    flex: 1 1 0;
+    overflow: hidden;
   }
 
   .resource-inspector-hero.is-file {
@@ -2371,10 +2457,7 @@
     min-width: 0;
     padding-inline: 12px;
     font-size: 14px;
-  }
-
-  .resource-inspector-actions :deep(.b_btn:first-child) {
-    grid-column: 1 / -1;
+    gap: 6px;
   }
 
   .resource-inspector-action--inbox {
@@ -3228,6 +3311,7 @@
 
     .tag-filter-list .tag-chip {
       flex: 0 0 auto;
+      max-width: 100%;
     }
 
     .tag-chip {
@@ -3242,6 +3326,7 @@
       height: 22px;
       min-height: 22px;
       padding: 0 4px;
+      margin-top: 2px;
       background: transparent;
     }
 

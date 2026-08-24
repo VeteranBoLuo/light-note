@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   dueForTodoGroup,
+  dueForTodoDatePreset,
   formatTodoDateTime,
   normalizeTodoDateOnly,
   todoActionAt,
@@ -9,6 +10,7 @@ import {
   todoPastReminderAt,
   todoScheduleAt,
   todoSnoozeAt,
+  todoNowInTimezone,
   toTodoLocalInput,
 } from './todoPlanning';
 
@@ -30,6 +32,21 @@ describe('todoPlanning', () => {
   it('深夜拖到今天时仍尽量落在当天，不意外滚到明天', () => {
     const late = new Date(2026, 6, 30, 23, 30);
     expect(dueForTodoGroup('today', late)).toBe('2026-07-30T23:59');
+  });
+
+  it('日期型截止预设与分组移动语义分离，并在计划时区收敛到当日末尾', () => {
+    const nearBeijingMidnight = new Date('2026-08-05T16:30:00.000Z');
+    expect(todoNowInTimezone('Asia/Shanghai', nearBeijingMidnight)).toBe('2026-08-06T00:30');
+    expect(dueForTodoDatePreset('today', { timezone: 'Asia/Shanghai', now: nearBeijingMidnight })).toBe(
+      '2026-08-06T23:59',
+    );
+    expect(dueForTodoDatePreset('tomorrow', { timezone: 'Asia/Shanghai', now: nearBeijingMidnight })).toBe(
+      '2026-08-07T23:59',
+    );
+    expect(dueForTodoDatePreset('week', { timezone: 'Asia/Shanghai', now: nearBeijingMidnight })).toBe(
+      '2026-08-09T23:59',
+    );
+    expect(dueForTodoGroup('upcoming', nearBeijingMidnight)).toMatch(/T17:00$/);
   });
 
   it('稍后提醒使用稳定的本地时间', () => {

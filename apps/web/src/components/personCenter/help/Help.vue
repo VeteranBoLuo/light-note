@@ -1,15 +1,39 @@
 <template>
-  <div class="help-container">
+  <div class="help-container" :class="{ 'is-compact': isCompactHelpLayout }">
     <div v-if="isCompactHelpLayout" class="help-mobile-header">
-      <BButton
-        class="help-mobile-exit"
-        :aria-label="t('help.exitToProfile')"
-        @click="exitHelpCenter"
-      >
+      <BButton class="help-mobile-exit" :aria-label="t('help.exitToProfile')" @click="exitHelpCenter">
         <SvgIcon :src="icon.arrow_left" size="18" />
         <span>{{ t('help.exitToProfile') }}</span>
       </BButton>
       <span class="help-mobile-title">{{ t('help.title') }}</span>
+      <div class="help-mobile-actions">
+        <BTooltip :title="t('help.catalog')" :disabled="bookmark.isMobile">
+          <BButton
+            class="help-mobile-action"
+            :class="{ active: isCompactCatalogOpen }"
+            :aria-label="t('help.catalog')"
+            :aria-expanded="isCompactCatalogOpen"
+            :disabled="isSearching"
+            aria-controls="help-article-list"
+            @click="toggleCompactCatalog"
+          >
+            <SvgIcon :src="icon.catalogue" size="18" />
+          </BButton>
+        </BTooltip>
+        <BTooltip :title="t('help.outline')" :disabled="bookmark.isMobile">
+          <BButton
+            class="help-mobile-action"
+            :class="{ active: isCompactOutlineOpen }"
+            :aria-label="t('help.outline')"
+            :aria-expanded="isCompactOutlineOpen"
+            :disabled="isSearching || !helpOutline.length"
+            aria-controls="help-article-outline"
+            @click="toggleCompactOutline"
+          >
+            <SvgIcon :src="icon.navigation.list" size="18" />
+          </BButton>
+        </BTooltip>
+      </div>
     </div>
     <div
       class="help-body"
@@ -27,20 +51,19 @@
             <svg-icon color="#cccccc" :src="icon.navigation.search" size="16" />
           </template>
         </b-input>
-        <BButton
-          v-if="isCompactHelpLayout && !isSearching"
-          class="help-compact-catalog-trigger"
-          :aria-expanded="isCompactCatalogOpen"
-          aria-controls="help-article-list"
-          @click="toggleCompactCatalog"
+        <div
+          v-if="isCompactHelpLayout && !isSearching && isCompactOutlineOpen && helpOutline.length"
+          id="help-article-outline"
+          class="help-compact-outline"
         >
-          <SvgIcon :src="icon.catalogue" size="16" />
-          <span>{{ t('help.catalog') }}</span>
-          <span class="help-compact-trigger-state" aria-hidden="true">{{ isCompactCatalogOpen ? '−' : '+' }}</span>
-        </BButton>
-        <div v-if="isSearching && !isCompactHelpLayout" class="help-search-hint">
-          搜索中，请在右侧结果中选择
+          <HelpOutlineList
+            :title="t('help.outline')"
+            :items="helpOutline"
+            :active-id="activeOutlineId"
+            @select="scrollToHelpHeading"
+          />
         </div>
+        <div v-if="isSearching && !isCompactHelpLayout" class="help-search-hint"> 搜索中，请在右侧结果中选择 </div>
         <BList
           v-else-if="!isCompactHelpLayout || isCompactCatalogOpen"
           id="help-article-list"
@@ -56,90 +79,70 @@
         </BList>
       </div>
 
-      <!-- 搜索模式：展示搜索结果列表（未从结果中选具体文章时） -->
-      <div v-if="isSearching && !selectedFromSearch" class="help-editor search-results-panel">
-        <div class="search-results-header">
-          <span class="search-results-count">{{ t('help.searchResults', { count: searchResults.length }) }}</span>
-          <span class="search-results-hint" v-if="searchResults.length === 0">{{ t('help.searchEmpty') }}</span>
-        </div>
-        <div
-          v-for="result in searchResults"
-          :key="result.id"
-          class="search-result-card"
-          @click="selectSearchResult(result)"
-        >
-          <div class="search-result-icon">📄</div>
-          <div class="search-result-body">
-            <div class="search-result-title" v-html="highlightText(result.title, searchValue)"></div>
-            <div class="search-result-snippets">
-              <div
-                v-for="(snippet, si) in result.snippets"
-                :key="si"
-                class="search-result-snippet"
-                v-html="highlightText(snippet, searchValue)"
-              ></div>
+      <div class="help-content-workspace">
+        <!-- 搜索模式：展示搜索结果列表（未从结果中选具体文章时） -->
+        <div v-if="isSearching && !selectedFromSearch" class="help-editor search-results-panel">
+          <div class="search-results-header">
+            <span class="search-results-count">{{ t('help.searchResults', { count: searchResults.length }) }}</span>
+            <span class="search-results-hint" v-if="searchResults.length === 0">{{ t('help.searchEmpty') }}</span>
+          </div>
+          <div
+            v-for="result in searchResults"
+            :key="result.id"
+            class="search-result-card"
+            @click="selectSearchResult(result)"
+          >
+            <div class="search-result-icon">📄</div>
+            <div class="search-result-body">
+              <div class="search-result-title" v-html="highlightText(result.title, searchValue)"></div>
+              <div class="search-result-snippets">
+                <div
+                  v-for="(snippet, si) in result.snippets"
+                  :key="si"
+                  class="search-result-snippet"
+                  v-html="highlightText(snippet, searchValue)"
+                ></div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-      <!-- 正常文章浏览模式 -->
-      <div
-        v-else
-        id="view-body"
-        class="help-editor"
-        :class="{
-          'help-editor--with-outline': !isCompactHelpLayout && helpOutline.length && !selectedFromSearch,
-          'help-editor--search-active': selectedFromSearch,
-        }"
-        @scroll="!selectedFromSearch ? syncActiveOutline : undefined"
-      >
-        <div v-if="selectedFromSearch" class="search-back-bar" @click="backToSearchResults">
-          <span class="search-back-icon">←</span>
-          <span class="search-back-text">{{ t('help.backToResults') }}</span>
+        <!-- 正常文章浏览模式 -->
+        <div
+          v-else
+          id="view-body"
+          class="help-editor"
+          :class="{ 'help-editor--search-active': selectedFromSearch }"
+          @scroll="!selectedFromSearch ? syncActiveOutline : undefined"
+        >
+          <div v-if="selectedFromSearch" class="search-back-bar" @click="backToSearchResults">
+            <span class="search-back-icon">←</span>
+            <span class="search-back-text">{{ t('help.backToResults') }}</span>
+          </div>
+          <div v-if="selectedFromSearch" class="search-content-scroll">
+            <div class="help-article-content" v-html="renderedContent"></div>
+          </div>
+          <div v-else class="help-article-content" v-html="renderedContent"></div>
         </div>
-        <div v-if="selectedFromSearch" class="search-content-scroll">
-          <div class="help-article-content" v-html="renderedContent"></div>
-        </div>
-        <div v-else class="help-article-content" v-html="renderedContent"></div>
+        <aside v-if="!isSearching && !isCompactHelpLayout && helpOutline.length" class="help-outline">
+          <HelpOutlineList
+            :title="t('help.outline')"
+            :items="helpOutline"
+            :active-id="activeOutlineId"
+            @select="scrollToHelpHeading"
+          />
+        </aside>
       </div>
       <AiSkillPanel
         class="help-ai-panel"
-        title="问问轻笺助手"
-        description="只查询公开帮助内容，不读取你的笔记、书签、文件或待办。"
+        :title="t('help.aiTitle')"
+        :description="t('help.aiDescription')"
         skill-id="help.answer"
         surface="help.center"
-        placeholder="例如：移动端怎么导出笔记？"
-        submit-label="提问"
+        presentation="sidebar"
+        :prompt-rows="3"
+        :placeholder="t('help.aiPlaceholder')"
+        :submit-label="t('help.aiSubmit')"
       />
-      <BButton
-        v-if="!isSearching && isCompactHelpLayout && !isCompactCatalogOpen && helpOutline.length"
-        class="help-compact-outline-trigger"
-        :class="{ active: isCompactOutlineOpen }"
-        :aria-expanded="isCompactOutlineOpen"
-        aria-controls="help-article-outline"
-        @click="isCompactOutlineOpen = !isCompactOutlineOpen"
-      >
-        <SvgIcon :src="icon.catalogue" size="16" />
-        <span>{{ t('help.outline') }}</span>
-      </BButton>
-      <div
-        v-if="!isSearching && helpOutline.length && (!isCompactHelpLayout || isCompactOutlineOpen)"
-        id="help-article-outline"
-        :class="[isCompactHelpLayout ? 'help-compact-outline' : 'help-outline']"
-      >
-        <div class="help-outline-title">{{ t('help.outline') }}</div>
-        <BButton
-          v-for="heading in helpOutline"
-          :key="heading.id"
-          class="help-outline-item"
-          :class="{ active: activeOutlineId === heading.id }"
-          :style="{ paddingLeft: `${Math.max(heading.level - 1, 0) * 12 + 10}px` }"
-          @click="scrollToHelpHeading(heading.id)"
-        >
-          <span class="help-outline-marker"></span>
-          <span class="text-hidden">{{ heading.text }}</span>
-        </BButton>
-      </div>
     </div>
   </div>
 </template>
@@ -153,10 +156,12 @@
   import { bookmarkStore } from '@/store';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import { getHelpConfig } from '@/api/helpApi';
   import { useRoute, useRouter } from 'vue-router';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import AiSkillPanel from '@/components/aiSkills/AiSkillPanel.vue';
+  import HelpOutlineList from './HelpOutlineList.vue';
 
   import 'viewerjs/dist/viewer.css'; //样式文件不要忘了
 
@@ -383,6 +388,12 @@
     isCompactCatalogOpen.value = !isCompactCatalogOpen.value;
     if (isCompactCatalogOpen.value) {
       isCompactOutlineOpen.value = false;
+    }
+  }
+  function toggleCompactOutline() {
+    isCompactOutlineOpen.value = !isCompactOutlineOpen.value;
+    if (isCompactOutlineOpen.value) {
+      isCompactCatalogOpen.value = false;
     }
   }
   function scrollToHelpHeading(id: string) {
@@ -628,6 +639,29 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .help-mobile-actions {
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .help-mobile-action.b_btn {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    color: var(--desc-color);
+    background: transparent;
+  }
+  .help-mobile-action.b_btn.active {
+    border-color: var(--resource-bookmark-color);
+    color: var(--resource-bookmark-color);
+    background: var(--primary-btn-bg-color);
+  }
   .help-title {
     height: 30px;
     line-height: 1rem;
@@ -671,8 +705,16 @@
     max-width: 360px;
     margin: 12px;
     align-self: stretch;
-    overflow: auto;
+    overflow: hidden;
     box-sizing: border-box;
+  }
+  .help-content-workspace {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+    background: var(--card-background);
   }
   .help-search-input {
     width: 100% !important;
@@ -785,9 +827,6 @@
     margin: 6px 0;
     line-height: 1.85;
   }
-  .help-editor--with-outline {
-    flex-basis: calc(100% - 410px);
-  }
   .help-outline {
     width: 190px;
     min-width: 190px;
@@ -800,116 +839,21 @@
     border-left: 1px solid var(--surface-border-color);
     background: var(--workspace-panel-bg-color);
   }
-  .help-outline-title {
-    padding: 0 10px 8px;
-    color: var(--desc-color);
-    font-size: 12px;
-    font-weight: 700;
-  }
-  .help-outline .help-outline-item.b_btn,
-  .help-compact-outline .help-outline-item.b_btn {
-    width: 100%;
-    min-width: 0;
-    max-width: 100%;
-    height: auto;
-    min-height: 30px;
-    line-height: 20px;
-    border: 0;
-    background: transparent;
-    color: var(--catalog-color);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    padding: 5px 10px;
-    box-sizing: border-box;
-    text-align: left;
-    font: inherit;
-    font-size: 13px;
-    border-radius: 6px;
-    justify-content: flex-start;
-    overflow: hidden;
-  }
-  .help-outline .help-outline-item.b_btn:hover,
-  .help-compact-outline .help-outline-item.b_btn:hover {
-    background: var(--bl-input-noBorder-bg-color);
-  }
-  .help-outline .help-outline-item.b_btn.active,
-  .help-compact-outline .help-outline-item.b_btn.active {
-    color: var(--resource-bookmark-color);
-    font-weight: 700;
-  }
-  .help-outline-item .text-hidden {
-    display: block;
-    flex: 1 1 auto;
-    min-width: 0;
-    text-align: left;
-  }
-  .help-outline-marker {
-    width: 3px;
-    height: 14px;
-    border-radius: 2px;
-    background: transparent;
-    flex: 0 0 auto;
-  }
-  .help-outline-item.active .help-outline-marker {
-    background: var(--resource-bookmark-color);
-  }
-  .help-compact-catalog-trigger.b_btn {
-    width: 100%;
-    height: 36px;
-    padding: 0 12px;
-    justify-content: flex-start;
-    gap: 8px;
-    color: var(--text-color);
-    border: 1px solid var(--card-border-color);
-  }
-  .help-compact-trigger-state {
-    margin-left: auto;
-    color: var(--desc-color);
-    font-size: 18px;
-    line-height: 1;
-  }
-  .help-compact-outline-trigger.b_btn {
-    position: fixed;
-    right: 16px;
-    bottom: calc(18px + env(safe-area-inset-bottom));
-    z-index: 100;
-    min-width: 116px;
-    height: 36px;
-    gap: 7px;
-    color: var(--resource-bookmark-color);
-    border: 1px solid color-mix(in srgb, var(--resource-bookmark-color) 28%, var(--card-border-color));
-    box-shadow: 0 4px 14px color-mix(in srgb, var(--resource-bookmark-color) 16%, transparent);
-  }
-  .help-compact-outline-trigger.b_btn.active {
-    background: color-mix(in srgb, var(--resource-bookmark-color) 12%, var(--primary-btn-bg-color));
-  }
   .help-compact-outline {
-    position: fixed;
-    right: 16px;
-    bottom: calc(62px + env(safe-area-inset-bottom));
-    z-index: 100;
-    width: min(300px, calc(100vw - 32px));
-    max-height: min(46vh, 420px);
-    padding: 10px 0;
+    width: 100%;
+    max-height: min(38vh, 320px);
+    padding: 10px 4px;
+    box-sizing: border-box;
     overflow-y: auto;
     overflow-x: hidden;
     border-radius: 8px;
     border: 1px solid var(--card-border-color);
     background: var(--menu-container-bg-color);
-    box-shadow:
-      0 6px 16px 0 rgba(0, 0, 0, 0.08),
-      0 3px 6px -4px rgba(0, 0, 0, 0.12),
-      0 9px 28px 8px rgba(0, 0, 0, 0.05);
+    box-shadow: var(--surface-card-shadow);
   }
-  .help-compact-outline .help-outline-item {
-    padding-right: 12px;
-  }
-  @media (max-width: 1199px) {
-    .help-container {
-      padding: 12px;
-    }
+  .help-container.is-compact {
+    padding: 12px;
+
     .help-body {
       flex-direction: column;
       gap: 12px;
@@ -919,6 +863,7 @@
       background: transparent;
       box-shadow: none;
     }
+
     .help-sidebar {
       width: 100%;
       min-width: 0;
@@ -928,28 +873,45 @@
       border-right: 0;
       background: transparent;
     }
+
+    .help-content-workspace {
+      width: 100%;
+      min-height: 0;
+      flex: 1 1 auto;
+      overflow: visible;
+      border-radius: 10px;
+    }
+
     .help-ai-panel {
       width: auto;
       min-width: 0;
       max-width: none;
       margin: 0;
       flex: 0 0 auto;
+      height: auto;
+      overflow: hidden;
     }
+
     .help-menu-list {
       flex: 0 1 auto;
     }
+
     .help-body--catalog-open {
       overflow: hidden;
     }
+
     .help-body--catalog-open .help-sidebar {
       height: 100%;
       min-height: 0;
       flex: 1 1 auto;
       overflow: hidden;
     }
-    .help-body--catalog-open .help-editor {
+
+    .help-body--catalog-open .help-content-workspace,
+    .help-body--catalog-open .help-ai-panel {
       display: none;
     }
+
     .help-body--catalog-open #help-article-list.help-menu-list {
       // BList 根节点自身有更高优先级的 height: 100%，这里必须明确覆盖，
       // 目录打开时占满搜索区以下空间，正文暂时隐藏，目录自身负责完整滚动。
@@ -959,6 +921,7 @@
       flex: 1 1 auto;
       overflow: hidden;
     }
+
     .help-body--catalog-open #help-article-list.help-menu-list .category-body {
       // 此处没有使用 BList 内置搜索框，不应再预留 50px；完整高度交给目录自身滚动。
       height: 100% !important;
@@ -967,6 +930,7 @@
       overscroll-behavior: contain;
       touch-action: pan-y;
     }
+
     .help-editor {
       width: 100%;
       height: auto;
@@ -977,9 +941,7 @@
       border-radius: 10px;
       background: var(--menu-body-bg-color);
     }
-    .help-editor--with-outline {
-      flex-basis: auto;
-    }
+
     .help-editor--search-active {
       padding: 0;
     }

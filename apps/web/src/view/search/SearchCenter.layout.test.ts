@@ -30,6 +30,23 @@ describe('资源中心工作区布局', () => {
     expect(source).toMatch(/fetchGlobalSearch\([\s\S]*?tags:\s*queryState\.tags/);
   });
 
+  it('桌面标签只渲染有界快捷项并保持单行，全部标签留在可搜索浮层中', () => {
+    const desktopLayoutStart = source.indexOf('@media (min-width: 768px)');
+    const compactLayoutStart = source.indexOf('@media (min-width: 768px) and (max-width: 1180px)', desktopLayoutStart);
+    const desktopLayoutSource = source.slice(desktopLayoutStart, compactLayoutStart);
+
+    expect(source).toContain('v-for="tag in inlineTagOptions"');
+    expect(source).toContain('const inlineTagOptions = computed');
+    expect(source).toContain('if (bookmark.screenWidth <= 1440) return 6;');
+    expect(source).toContain('return 7;');
+    expect(source).toContain('max-width="108px"');
+    expect(source).toContain("t('resourceCenter.tagExpand', { count: tagOptions.length })");
+    expect(source).toContain('show-selected-indicator');
+    expect(desktopLayoutSource).toMatch(
+      /\.tag-filter-list\s*\{[\s\S]*?flex-wrap:\s*nowrap;[\s\S]*?overflow:\s*hidden;/,
+    );
+  });
+
   it('搜索和视图工具位于中栏首行，右侧操作采用原型的主次两行层级', () => {
     const layoutStart = source.indexOf('<section class="search-layout">');
     const headerStart = source.indexOf('class="search-header"', layoutStart);
@@ -49,8 +66,9 @@ describe('资源中心工作区布局', () => {
       /\.resource-inspector-actions\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/,
     );
     expect(source).toMatch(/\.resource-inspector-actions :deep\(\.b_btn\)[\s\S]*?width:\s*100%/);
-    expect(source).toMatch(/\.resource-inspector-actions :deep\(\.b_btn:first-child\)[\s\S]*?grid-column:\s*1 \/ -1/);
-    expect(source).toMatch(/<BButton block size="large" type="primary" @click="openItem\(inspectedResource\)">/);
+    expect(source).not.toMatch(/\.resource-inspector-actions :deep\(\.b_btn:first-child\)/);
+    expect(source).toContain('class="resource-inspector-action--ai"');
+    expect(source).toContain('@click="openResourceAi(inspectedResource)"');
   });
 
   it('详情检查器使用带资源语义图标的摘要卡，不再展示只有类型胶囊的大块占位区', () => {
@@ -82,6 +100,20 @@ describe('资源中心工作区布局', () => {
     expect(source).toContain(':src="icon.noteTree.chevron"');
     expect(source).toMatch(/function menuForSearchItem[\s\S]*?key:\s*'open'[\s\S]*?icon:\s*icon\.noteTree\.openPage/);
     expect(source).toMatch(/function handleItemMenu[\s\S]*?action === 'open'[\s\S]*?openItem\(item\)/);
+    expect(source).toMatch(/function menuForSearchItem[\s\S]*?key:\s*'ai'[\s\S]*?icon:\s*icon\.ai\.organize/);
+    expect(source).toMatch(/function handleItemMenu[\s\S]*?action === 'ai'[\s\S]*?openResourceAi\(item\)/);
+  });
+
+  it('资源分析复用同一面板，桌面弹性占满检查器并支持单项结构化引用', () => {
+    expect(source).toContain('presentation="sidebar"');
+    expect(source).toContain(':icon-src="icon.ai.organize"');
+    expect(source).toContain(':initial-prompt="searchAiInitialPrompt"');
+    expect(source).toMatch(/\.search-ai-panel\s*\{[\s\S]*?flex:\s*1 1 auto/);
+    expect(source).toMatch(/function openResourceAi[\s\S]*?explicitSearchAiResourceContext\.value = \{/);
+    expect(source).toMatch(/ref:\s*\{ type:\s*item\.type as AiSkillResourceRef\['type'\], id:\s*String\(item\.id\) \}/);
+    expect(source).toMatch(/const searchAiScopeLabel = computed[\s\S]*?ai\.entry\.resourceScope/);
+    expect(source).toMatch(/const searchAiInitialPrompt = computed[\s\S]*?ai\.entry\.analyzeResourcePrompt/);
+    expect(source).toMatch(/if \(!explicitSearchAiResourceContext\.value && searchAiResourceRefs\.value\.length\)/);
   });
 
   it('桌面资源范围使用单选切换，移动端类型抽屉继续支持多选', () => {
@@ -99,7 +131,16 @@ describe('资源中心工作区布局', () => {
     expect(source).toContain("inspectedResource.type === 'note'");
     expect(source).toContain('item.raw?.content');
     expect(source).toContain("t('resourceCenter.noteType')");
-    expect(source).toContain("t(inspectedResource.type === 'note' ? 'resourceCenter.location' : 'resourceCenter.source')");
-    expect(source).toMatch(/\.resource-inspector-hero--expanded[\s\S]*?min-height:\s*min\(420px, 44vh\)/);
+    expect(source).toContain(
+      "t(inspectedResource.type === 'note' ? 'resourceCenter.location' : 'resourceCenter.source')",
+    );
+    expect(source).toContain('<p v-auto-scrollbar class="resource-inspector-description">');
+    expect(source).toMatch(/\.resource-inspector-pane\s*\{[\s\S]*?overflow:\s*hidden;/);
+    expect(source).toMatch(
+      /\.resource-inspector-hero--expanded\s*\{[\s\S]*?min-height:\s*0;[\s\S]*?flex:\s*1 1 0;[\s\S]*?overflow:\s*hidden;/,
+    );
+    expect(source).toMatch(
+      /\.resource-inspector-hero--expanded \.resource-inspector-description\s*\{[\s\S]*?overflow:\s*hidden auto;/,
+    );
   });
 });

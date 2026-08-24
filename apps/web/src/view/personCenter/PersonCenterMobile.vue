@@ -52,6 +52,8 @@
             </div>
           </div>
 
+          <AiQuotaSummary class="profile-card__ai-quota" density="comfortable" @open-details="goGrowth" />
+
           <BButton
             class="profile-card__growth"
             @click="goGrowth"
@@ -231,6 +233,7 @@
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
+  import AiQuotaSummary from '@/components/aiSkills/AiQuotaSummary.vue';
   import BProgress from '@/components/base/BasicComponents/BProgress.vue';
   import MobileListSurface from '@/components/mobile/MobileListSurface.vue';
   import MobileListRow from '@/components/mobile/MobileListRow.vue';
@@ -482,6 +485,10 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
     border-top: 1px solid var(--surface-divider-color);
     border-bottom: 1px solid var(--surface-divider-color);
+  }
+
+  .profile-card__ai-quota {
+    margin-top: 12px;
   }
 
   .profile-card__stat {

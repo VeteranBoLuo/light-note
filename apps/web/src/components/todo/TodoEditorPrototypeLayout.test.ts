@@ -9,6 +9,7 @@ const simpleSource = readSource('TodoSimpleEditorForm.vue');
 const reminderSource = readSource('TodoReminderEditor.vue');
 const repeatReminderSource = readSource('TodoReminderRepeatEditor.vue');
 const independentSource = readSource('TodoIndependentTaskPlanEditor.vue');
+const legacyScheduleSource = readSource('TodoPlanScheduleEditor.vue');
 const independentTemplate = independentSource.split('<script setup')[0];
 const draftSource = readSource('useTodoCreateDraft.ts');
 const mobileCreateSource = readFileSync(resolve(process.cwd(), 'src/view/todo/TodoCreate.vue'), 'utf8');
@@ -93,6 +94,12 @@ describe('待办创建页原型布局', () => {
     expect(repeatReminderSource).not.toContain("<label>\n        <span>{{ t('inbox.todoReminderEvery') }}");
   });
 
+  it('按周和按月提醒将开始日期与提醒时刻分别交给日期模式和共享时间组件', () => {
+    expect(repeatReminderSource).toContain('v-model:value="startDate" :show-time="false"');
+    expect(repeatReminderSource).toContain('<BTimePicker v-model:value="localTime"');
+    expect(repeatReminderSource).not.toContain('v-model:value="localTime" placeholder="09:00"');
+  });
+
   it('过去日期必须用三个解释清楚的显式选项确认', () => {
     expect(independentSource).toContain("value: 'keep_overdue'");
     expect(independentSource).toContain("value: 'restart_today_keep_count'");
@@ -146,7 +153,7 @@ describe('待办创建页原型布局', () => {
   it('高级计划默认按日期结束，并完整配置固定时刻和长期运行语义', () => {
     expect(draftSource).toContain("end: { mode: 'until', untilDate: suggestTodoPlanEndDate() }");
     expect(suggestTodoPlanEndDate('2026-08-07 09:00')).toBe('2026-09-06');
-    expect(independentSource).toContain('v-model:value="fixedTime" type="time"');
+    expect(independentSource).toContain('<BTimePicker v-model:value="fixedTime" block');
     expect(independentSource).toContain("t('inbox.todoReminderFixedTimeHint')");
     expect(independentSource).toContain("t('inbox.todoPlanNoEndHint')");
     expect(independentSource).toContain("t('inbox.todoPlanEndByDateHint')");
@@ -157,6 +164,14 @@ describe('待办创建页原型布局', () => {
     expect(independentTemplate.indexOf("t('inbox.todoGuidedEndTitle')")).toBeLessThan(
       independentTemplate.indexOf("t('inbox.todoStartAt')"),
     );
+  });
+
+  it('所有待办固定时刻入口都复用共享时间组件，不再回退旧输入框', () => {
+    expect(independentSource).toContain('<BTimePicker v-model:value="fixedTime" block');
+    expect(legacyScheduleSource).toContain('v-model:value="form.fixedTime"');
+    expect(legacyScheduleSource).toContain('<BTimePicker');
+    expect(independentSource).not.toContain('type="time"');
+    expect(legacyScheduleSource).not.toMatch(/fixedTime[\s\S]{0,100}<BInput|<BInput[\s\S]{0,100}fixedTime/);
   });
 
   it('高级提醒默认每条一次，多次催办必须明确配置间隔、次数和停止条件', () => {

@@ -69,6 +69,14 @@ afterEach(() => {
 });
 
 describe('BSelect keyboard interaction', () => {
+  it('支持为 Teleport 下拉层附加业务样式类', async () => {
+    const { host } = mountSelect(false, {}, 'single', { dropdownClassName: 'time-select-dropdown' });
+    host.querySelector<HTMLElement>('.select-trigger')?.click();
+    await nextTick();
+
+    expect(document.body.querySelector('.select-dropdown.time-select-dropdown')).not.toBeNull();
+  });
+
   it('鼠标打开时不把第一项伪装成悬停态', async () => {
     const { host } = mountSelect();
     const trigger = host.querySelector<HTMLElement>('.select-trigger');
@@ -179,6 +187,32 @@ describe('BSelect keyboard interaction', () => {
     expect(input!.value).toBe('');
     expect(input!.getAttribute('aria-invalid')).toBeNull();
     expect(onValidityChange).toHaveBeenLastCalledWith(true);
+  });
+
+  it('按需在聚焦时把当前值写入输入框并完整选中，同时保留全部候选项', async () => {
+    const numericOptions = Array.from({ length: 24 }, (_, index) => {
+      const value = String(index).padStart(2, '0');
+      return { label: value, value };
+    });
+    const { host, value } = mountSelect(false, {}, 'single', {
+      options: numericOptions,
+      editable: true,
+      selectOnFocus: true,
+    });
+    value.value = '12';
+    await nextTick();
+
+    const input = host.querySelector<HTMLInputElement>('.select-search-inline');
+    input!.dispatchEvent(new FocusEvent('focus', { bubbles: true }));
+    input!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+    expect(input!.value).toBe('12');
+    expect(input!.selectionStart).toBe(0);
+    expect(input!.selectionEnd).toBe(2);
+    expect(document.body.querySelectorAll('.select-option')).toHaveLength(24);
+    expect(input!.classList.contains('is-select-on-focus')).toBe(true);
   });
 
   it('可输入单选按 Escape 放弃非法草稿并恢复当前选中值', async () => {

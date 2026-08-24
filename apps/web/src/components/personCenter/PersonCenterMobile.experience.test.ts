@@ -478,6 +478,22 @@ describe('mobile personal center experience', () => {
     expect(new Set([...dragonOrbitParticleSource.matchAll(/--dragon-orbit-size':\s*'([\d.]+)px'/g)].map(([, size]) => size)).size).toBe(4);
     expect(new Set([...dragonOrbitParticleSource.matchAll(/--dragon-orbit-delay':\s*'(-?[\d.]+)s'/g)].map(([, delay]) => delay)).size).toBe(4);
     expect(avatarFrameSource).toContain('v-for="particle in dragonOrbitParticles"');
+    const dragonArtLayerSource = avatarFrameSource.slice(
+      avatarFrameSource.indexOf('.avatar-frame__art {'),
+      avatarFrameSource.indexOf('// 只复制需要“素材本体局部运动”的主题区域'),
+    );
+    const dragonOrbitLayerSource = avatarFrameSource.slice(
+      avatarFrameSource.indexOf('.avatar-frame__dragon-orbit-particles {'),
+      avatarFrameSource.indexOf('.avatar-frame__dragon-orbit-particles i {'),
+    );
+    const dragonParticleLayerSource = avatarFrameSource.slice(
+      avatarFrameSource.indexOf('.avatar-frame__dragon-particles {'),
+      avatarFrameSource.indexOf('.avatar-frame__dragon-particles i {'),
+    );
+    expect(dragonArtLayerSource).toContain('z-index: 3');
+    expect(dragonOrbitLayerSource).toContain('z-index: 2');
+    expect(dragonParticleLayerSource).toContain('z-index: 2');
+    expect(avatarFrameSource).toContain('让龙头、龙身和金属环按原画 Alpha 自然遮挡');
     const dragonFocusSource = avatarFrameSource.slice(
       avatarFrameSource.indexOf('.avatar-frame--dragon .avatar-frame__art-detail'),
       avatarFrameSource.indexOf('// 三段高光层保持', avatarFrameSource.indexOf('.avatar-frame--dragon .avatar-frame__art-detail')),

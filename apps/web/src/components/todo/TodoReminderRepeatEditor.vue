@@ -48,11 +48,11 @@
       </label>
       <label>
         <span>{{ t('inbox.todoReminderStartDate') }}</span>
-        <BDateTimePicker v-model:value="startDateTime" />
+        <BDateTimePicker v-model:value="startDate" :show-time="false" />
       </label>
       <label>
         <span>{{ t('inbox.todoReminderLocalTime') }}</span>
-        <BInput v-model:value="localTime" placeholder="09:00" />
+        <BTimePicker v-model:value="localTime" :aria-label="t('inbox.todoReminderLocalTime')" />
       </label>
       <label v-if="repeatKind === 'monthly'">
         <span>{{ t('inbox.todoReminderShortMonth') }}</span>
@@ -84,6 +84,7 @@
   import BDateTimePicker from '@/components/base/BasicComponents/BDateTimePicker.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import BTimePicker from '@/components/base/BasicComponents/BTimePicker.vue';
   import type { TodoSingleRepeatKind, TodoSingleReminderStopType, TodoSingleTaskReminderSchedule } from '@/api/todoApi';
 
   const reminder = defineModel<TodoSingleTaskReminderSchedule>({ required: true });
@@ -168,11 +169,8 @@
       updateRepeat({ intervalMinutes: Math.round(count * intervalUnitFactors[intervalUnit.value]) });
     },
   });
-  const startDateTime = computed({
-    get: () => {
-      const startDate = reminder.value.repeat?.startDate || '';
-      return startDate ? `${startDate} ${reminder.value.repeat?.localTime || '09:00'}` : '';
-    },
+  const startDate = computed({
+    get: () => reminder.value.repeat?.startDate || '',
     set: (value) => updateRepeat({ startDate: String(value).slice(0, 10) }),
   });
   const localTime = computed({
@@ -286,6 +284,15 @@
     background: var(--mobile-selected-bg, var(--workspace-panel-bg-color));
     color: var(--primary-color);
     font-weight: 700;
+  }
+
+  .todo-reminder-repeat label :deep(.b-popover-trigger),
+  .todo-reminder-repeat label :deep(.b-time-trigger) {
+    width: 100%;
+  }
+
+  .todo-reminder-repeat label :deep(.b-time-trigger) {
+    min-height: 38px;
   }
 
   .todo-reminder-repeat__stop {

@@ -818,6 +818,116 @@ describe('todoPlanCalculator', () => {
     expect(preview.reminderMoments[0].moments[0].scheduledAtLocal).toBe('2026-08-06 09:00:00');
   });
 
+  it('重复提醒在截止窗口内没有任何可执行时刻时失败关闭', () => {
+    const base = {
+      taskMode: 'single',
+      title: '当天跟进',
+      timing: {
+        timezone: 'Asia/Shanghai',
+        anchorDate: '2026-08-06',
+        startTime: null,
+        dueTime: '17:00',
+      },
+      plan: { type: 'once' },
+      reminder: { mode: 'none' },
+    };
+
+    expect(() =>
+      calculateTodoPlan(
+        {
+          ...base,
+          singleTaskReminder: {
+            version: 1,
+            mode: 'repeat',
+            repeat: {
+              kind: 'interval',
+              startAt: '2026-08-06 20:00',
+              intervalMinutes: 1440,
+              stop: { type: 'completion_or_due' },
+            },
+            channels: ['in_app'],
+          },
+        },
+        { now: NOW },
+      ),
+    ).toThrow(/截止时间前没有可执行时刻/);
+
+    expect(() =>
+      calculateTodoPlan(
+        {
+          ...base,
+          singleTaskReminder: {
+            version: 1,
+            mode: 'repeat',
+            repeat: {
+              kind: 'weekly',
+              startDate: '2026-08-06',
+              weekdays: [5],
+              localTime: '18:00',
+              stop: { type: 'completion_or_due' },
+            },
+            channels: ['in_app'],
+          },
+        },
+        { now: NOW },
+      ),
+    ).toThrow(/截止时间前没有可执行时刻/);
+
+    expect(() =>
+      calculateTodoPlan(
+        {
+          ...base,
+          singleTaskReminder: {
+            version: 1,
+            mode: 'repeat',
+            repeat: {
+              kind: 'monthly',
+              startDate: '2026-08-06',
+              monthDays: [6],
+              localTime: '18:00',
+              stop: { type: 'completion_or_due' },
+            },
+            channels: ['in_app'],
+          },
+        },
+        { now: NOW },
+      ),
+    ).toThrow(/截止时间前没有可执行时刻/);
+  });
+
+  it('日期型截止落在 23:59 时保留当天较晚的重复提醒', () => {
+    const preview = calculateTodoPlan(
+      {
+        taskMode: 'single',
+        title: '晚间复盘',
+        timing: {
+          timezone: 'Asia/Shanghai',
+          anchorDate: '2026-08-06',
+          startTime: null,
+          dueTime: '23:59',
+        },
+        plan: { type: 'once' },
+        reminder: { mode: 'none' },
+        singleTaskReminder: {
+          version: 1,
+          mode: 'repeat',
+          repeat: {
+            kind: 'interval',
+            startAt: '2026-08-06 20:00',
+            intervalMinutes: 1440,
+            stop: { type: 'completion_or_due' },
+          },
+          channels: ['in_app'],
+        },
+      },
+      { now: NOW },
+    );
+
+    expect(preview.reminderMoments[0].moments).toEqual([
+      expect.objectContaining({ scheduledAtLocal: '2026-08-06 20:00:00' }),
+    ]);
+  });
+
   it('邮箱重复提醒必须有限且单任务 Job 总数不超过安全上限', () => {
     const base = {
       taskMode: 'single',

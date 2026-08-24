@@ -21,8 +21,8 @@
         </BButton>
       </div>
       <div class="mobile-batch-actions">
-        <BButton :disabled="!hasSelection" @click="openSelectedFilesInAi">
-          <SvgIcon :src="icon.ai.ask" size="16" aria-hidden="true" />
+        <BButton class="ai-file-analysis-action" :disabled="!hasSelection" @click="openSelectedFilesInAi">
+          <SvgIcon :src="icon.ai.organize" size="16" aria-hidden="true" />
           {{ $t('cloudSpace.aiUseSelected') }}
         </BButton>
         <BButton type="danger" :disabled="!hasSelection" @click="handleBatchDelete">
@@ -46,7 +46,7 @@
     </section>
     <div v-if="viewMode === 'card' && batchMode && !bookmark.isMobile" class="card-toolbar">
       <div class="batch-actions">
-        <BSpace :size="10">
+        <BSpace class="file-batch-actions-space" :size="10">
           <BCheckbox
             v-if="viewMode === 'card'"
             :indeterminate="indeterminate"
@@ -55,8 +55,13 @@
             class="batch-select-all"
           />
           <span class="selected-count">{{ $t('cloudSpace.selectedCount', { count: selectedRows.length }) }}</span>
-          <BButton size="small" :disabled="!hasSelection" @click="openSelectedFilesInAi">
-            <SvgIcon :src="icon.ai.ask" size="14" aria-hidden="true" />
+          <BButton
+            size="small"
+            class="ai-file-analysis-action"
+            :disabled="!hasSelection"
+            @click="openSelectedFilesInAi"
+          >
+            <SvgIcon :src="icon.ai.organize" size="14" aria-hidden="true" />
             {{ $t('cloudSpace.aiUseSelected') }}
           </BButton>
           <BButton size="small" type="danger" @click="handleBatchDelete">{{ $t('cloudSpace.batchDelete') }}</BButton>
@@ -173,7 +178,7 @@
                 },
                 {
                   label: $t('cloudSpace.aiUseFile'),
-                  icon: icon.ai.ask,
+                  icon: icon.ai.organize,
                   function: () => openFilesInAi([item]),
                 },
                 {
@@ -307,8 +312,13 @@
         @change="(checked: boolean) => onToggleSelectAll({ target: { checked } })"
       />
       <span class="selected-count">{{ $t('cloudSpace.selectedCount', { count: selectedRows.length }) }}</span>
-      <BButton size="small" :disabled="!hasSelection" @click="openSelectedFilesInAi">
-        <SvgIcon :src="icon.ai.ask" size="14" aria-hidden="true" />
+      <BButton
+        size="small"
+        class="ai-file-analysis-action"
+        :disabled="!hasSelection"
+        @click="openSelectedFilesInAi"
+      >
+        <SvgIcon :src="icon.ai.organize" size="14" aria-hidden="true" />
         {{ $t('cloudSpace.aiUseSelected') }}
       </BButton>
       <BButton size="small" type="danger" @click="handleBatchDelete">{{ $t('cloudSpace.batchDelete') }}</BButton>
@@ -811,7 +821,7 @@
       { key: 'rename', label: t('common.reName'), icon: icon.cloudSpace.rename },
       { key: 'download', label: t('cloudSpace.download'), icon: icon.cloudSpace.download },
       { key: 'tags', label: t('cloudSpace.relateTags'), icon: icon.manage_categoryBtn_tag },
-      { key: 'ai', label: t('cloudSpace.aiUseFile'), icon: icon.ai.ask },
+      { key: 'ai', label: t('cloudSpace.aiUseFile'), icon: icon.ai.organize },
       { key: 'share', label: t('cloudSpace.share'), icon: icon.cloudSpace.share },
       { key: 'move', label: t('cloudSpace.moveFile'), icon: icon.cloudSpace.moveFile },
       {
@@ -1947,6 +1957,24 @@
     .selected-count {
       color: var(--desc-color);
       font-size: 14px;
+      font-variant-numeric: tabular-nums;
+    }
+  }
+  .ai-file-analysis-action {
+    min-width: 128px;
+    border: 1px solid transparent;
+    font-weight: 600;
+  }
+  .ai-file-analysis-action:not(.disabled) {
+    border-color: color-mix(in srgb, var(--primary-color) 28%, var(--surface-border-color));
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--card-background));
+  }
+  @media (min-width: 768px) {
+    .batch-actions .selected-count {
+      width: 148px;
+      flex: 0 0 148px;
+      white-space: nowrap;
     }
   }
   .table-batch-actions {
@@ -1998,6 +2026,9 @@
     padding: 8px 10px;
     gap: 6px;
     line-height: 20px;
+  }
+  .mobile-batch-actions .ai-file-analysis-action {
+    min-width: 0;
   }
   .mobile-batch-move {
     color: #fff;

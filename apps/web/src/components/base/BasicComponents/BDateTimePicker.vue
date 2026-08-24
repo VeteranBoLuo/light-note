@@ -42,7 +42,7 @@
           </BButton>
         </div>
 
-        <div class="b-datetime-times" :class="{ 'is-range': mode === 'range' }">
+        <div v-if="showTime" class="b-datetime-times" :class="{ 'is-range': mode === 'range' }">
           <section>
             <span>{{ mode === 'range' ? t('common.startTime') : t('common.time') }}</span>
             <div>
@@ -50,6 +50,7 @@
                 v-model:value="draftStartHour"
                 :options="hourOptions"
                 editable
+                select-on-focus
                 inputmode="numeric"
                 :maxlength="2"
                 @validity-change="startHourValid = $event"
@@ -59,6 +60,7 @@
                 v-model:value="draftStartMinute"
                 :options="minuteOptions"
                 editable
+                select-on-focus
                 inputmode="numeric"
                 :maxlength="2"
                 @validity-change="startMinuteValid = $event"
@@ -72,6 +74,7 @@
                 v-model:value="draftEndHour"
                 :options="hourOptions"
                 editable
+                select-on-focus
                 inputmode="numeric"
                 :maxlength="2"
                 @validity-change="endHourValid = $event"
@@ -81,6 +84,7 @@
                 v-model:value="draftEndMinute"
                 :options="minuteOptions"
                 editable
+                select-on-focus
                 inputmode="numeric"
                 :maxlength="2"
                 @validity-change="endMinuteValid = $event"
@@ -118,11 +122,13 @@
       mode?: 'single' | 'range';
       placeholder?: string;
       disabled?: boolean;
+      showTime?: boolean;
     }>(),
     {
       mode: 'single',
       placeholder: '',
       disabled: false,
+      showTime: true,
     },
   );
   const value = defineModel<string>('value', { default: '' });
@@ -143,7 +149,10 @@
   const today = toDatePart(new Date());
 
   const mode = computed(() => props.mode);
-  const placeholder = computed(() => props.placeholder || t('common.selectDateTime'));
+  const showTime = computed(() => props.showTime);
+  const placeholder = computed(
+    () => props.placeholder || t(showTime.value ? 'common.selectDateTime' : 'common.selectDate'),
+  );
   const hourOptions = Array.from({ length: 24 }, (_, index) => {
     const value = String(index).padStart(2, '0');
     return { value, label: value };
@@ -180,8 +189,8 @@
     });
   });
   const canApply = computed(() => {
-    const startValid = startHourValid.value && startMinuteValid.value;
-    const endValid = endHourValid.value && endMinuteValid.value;
+    const startValid = !showTime.value || (startHourValid.value && startMinuteValid.value);
+    const endValid = !showTime.value || (endHourValid.value && endMinuteValid.value);
     return (
       Boolean(draftStartDate.value) &&
       startValid &&
@@ -197,11 +206,13 @@
   const rangeHint = computed(() => {
     if (!draftStartDate.value) return t('common.selectRangeStart');
     if (!draftEndDate.value) return t('common.selectRangeEnd');
-    return `${formatDraft(draftStartDate.value, draftStartHour.value, draftStartMinute.value)} — ${formatDraft(
-      draftEndDate.value,
-      draftEndHour.value,
-      draftEndMinute.value,
-    )}`;
+    const start = showTime.value
+      ? formatDraft(draftStartDate.value, draftStartHour.value, draftStartMinute.value)
+      : draftStartDate.value;
+    const end = showTime.value
+      ? formatDraft(draftEndDate.value, draftEndHour.value, draftEndMinute.value)
+      : draftEndDate.value;
+    return `${start} — ${end}`;
   });
 
   watch(open, (next) => {
@@ -275,9 +286,15 @@
 
   function applyValue() {
     if (!canApply.value) return;
-    value.value = formatDraft(draftStartDate.value, draftStartHour.value, draftStartMinute.value);
+    value.value = showTime.value
+      ? formatDraft(draftStartDate.value, draftStartHour.value, draftStartMinute.value)
+      : draftStartDate.value;
     endValue.value =
-      mode.value === 'range' ? formatDraft(draftEndDate.value, draftEndHour.value, draftEndMinute.value) : '';
+      mode.value === 'range'
+        ? showTime.value
+          ? formatDraft(draftEndDate.value, draftEndHour.value, draftEndMinute.value)
+          : draftEndDate.value
+        : '';
     open.value = false;
   }
 
@@ -329,6 +346,16 @@
   }
 
   function formatDisplay(raw: string) {
+    if (!showTime.value) {
+      const { date } = splitValue(raw);
+      const [year, month, day] = date.split('-').map(Number);
+      if (!year || !month || !day) return raw;
+      return new Intl.DateTimeFormat(locale.value, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      }).format(new Date(year, month - 1, day));
+    }
     const date = new Date(String(raw).replace(' ', 'T'));
     if (!Number.isFinite(date.getTime())) return raw;
     return new Intl.DateTimeFormat(locale.value, {

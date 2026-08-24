@@ -167,15 +167,23 @@
           </div>
           <div class="inbox-toolbar__right inbox-toolbar__right--todo">
             <BInput
+              class="todo-toolbar-control todo-toolbar-control--search"
               v-model:value="inbox.keyword"
               :placeholder="t('inbox.todoSearchPlaceholder')"
+              height="40px"
               clearable
               @enter="search"
             />
-            <BSelect v-if="showTodoSort" v-model:value="todo.sort" :options="sortOptions" @change="search" />
+            <BSelect
+              v-if="showTodoSort"
+              v-model:value="todo.sort"
+              class="todo-toolbar-control todo-toolbar-control--sort"
+              :options="sortOptions"
+              @change="search"
+            />
             <BButton
               v-if="todoView === 'list' && !todoSelectionMode && (todo.items.length || pageLoading)"
-              size="small"
+              class="todo-toolbar-control todo-toolbar-control--batch"
               @click="toggleTodoSelectionMode"
             >
               {{ t('inbox.todoBatchSelect') }}
@@ -509,7 +517,13 @@
         <div class="resource-inbox-inspector__eyebrow">{{ t('inbox.currentPendingResource') }}</div>
         <span class="resource-inbox-inspector__type">{{ t(`inbox.${inspectedInboxItem.resourceType}`) }}</span>
         <h2>{{ inspectedInboxItem.title || t('inbox.untitled') }}</h2>
-        <p>{{ inspectedInboxSummary }}</p>
+        <p
+          v-auto-scrollbar
+          class="resource-inbox-inspector__summary"
+          :class="{ 'is-scrollable': inspectedInboxItem.resourceType === 'note' }"
+        >
+          {{ inspectedInboxSummary }}
+        </p>
         <dl class="resource-inbox-inspector__meta">
           <div>
             <dt>{{ t('inbox.collectedAt') }}</dt>
@@ -1933,6 +1947,17 @@
   .inbox-toolbar__right--todo {
     grid-template-columns: minmax(160px, 230px) 120px auto;
   }
+  .todo-toolbar-control {
+    align-self: stretch;
+  }
+  .todo-toolbar-control--search :deep(.b-input),
+  .todo-toolbar-control--sort :deep(.select-trigger),
+  .todo-toolbar-control--batch.b_btn {
+    height: 40px;
+    min-height: 40px;
+    box-sizing: border-box;
+    border-radius: 10px;
+  }
   .inbox-toolbar__right--resources {
     width: 100%;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -2099,7 +2124,7 @@
     min-width: 0;
     min-height: 0;
     box-sizing: border-box;
-    overflow: hidden auto;
+    overflow: hidden;
     border: 1px solid var(--surface-border-color);
     border-radius: 16px;
     background: var(--card-background);
@@ -2110,6 +2135,7 @@
     flex-direction: column;
     gap: 4px;
     padding: 12px 10px;
+    overflow: hidden auto;
   }
 
   .resource-inbox-scope__title {
@@ -2210,7 +2236,23 @@
     line-height: 1.65;
   }
 
+  .resource-inbox-inspector__summary {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 6;
+  }
+
+  .resource-inbox-inspector__summary.is-scrollable {
+    min-height: 0;
+    display: block;
+    flex: 1 1 auto;
+    overflow: hidden auto;
+    -webkit-line-clamp: unset;
+  }
+
   .resource-inbox-inspector__meta {
+    flex: 0 0 auto;
     display: grid;
     gap: 10px;
     margin: 4px 0 0;
@@ -2243,6 +2285,7 @@
   }
 
   .resource-inbox-inspector__actions {
+    flex: 0 0 auto;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;

@@ -1912,8 +1912,9 @@
   }
 
   // 四枚大小不同的黄色龙气沿头像内圈匀速巡游，不承载任何实体轮廓。
+  // 粒子低于唯一固定结构层，让龙头、龙身和金属环按原画 Alpha 自然遮挡，避免光点穿过实体。
   .avatar-frame__dragon-orbit-particles {
-    z-index: 6;
+    z-index: 2;
     top: 50%;
     left: 50%;
     width: var(--frame-effect-size);
@@ -1944,8 +1945,9 @@
   }
 
   // 十八粒独立火星以不同尺寸向斜上、两侧与轻微下方逸散；结构图与高光栅格层仍保持固定矩阵。
+  // 火星同样从固定结构层后方逸出，只在主体 Alpha 透明处显现，保留自然的前后景关系。
   .avatar-frame__dragon-particles {
-    z-index: 7;
+    z-index: 2;
     top: 50%;
     left: 50%;
     width: var(--frame-effect-size);

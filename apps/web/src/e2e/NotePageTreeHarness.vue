@@ -81,7 +81,7 @@
             <BButton size="small">分析所选笔记</BButton>
             <BButton size="small" type="primary">
               <SvgIcon :src="icon.common.magicWand" size="14" aria-hidden="true" />
-              AI 智能整理
+              智能打标签
             </BButton>
             <BButton size="small" @click="batchMode = false">退出批量操作</BButton>
           </div>

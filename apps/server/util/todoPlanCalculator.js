@@ -760,6 +760,37 @@ function buildMonthlyMoments(reminder, timezone, nowInstant, boundary, warnings)
   return result;
 }
 
+function singleRepeatHasMomentWithinDue(occurrence, reminder, timezone) {
+  if (reminder?.mode !== 'repeat' || reminder.repeat?.stop?.type !== 'completion_or_due' || !occurrence?.dueAtUtc) {
+    return true;
+  }
+  const boundary = Temporal.Instant.from(`${occurrence.dueAtUtc.replace(' ', 'T')}Z`);
+  if (reminder.repeat.kind === 'interval') {
+    return Temporal.Instant.compare(instantFromLocalSql(reminder.repeat.startAt, timezone), boundary) <= 0;
+  }
+
+  const startDate = parsePlainDate(reminder.repeat.startDate, '提醒开始日期');
+  const beforeStart = startDate
+    .toPlainDateTime(new Temporal.PlainTime(0, 0))
+    .toZonedDateTime(timezone, { disambiguation: 'compatible' })
+    .toInstant()
+    .subtract({ seconds: 1 });
+  const validationWarnings = [];
+  const moments =
+    reminder.repeat.kind === 'weekly'
+      ? buildWeeklyMoments(reminder, timezone, beforeStart, boundary, validationWarnings)
+      : buildMonthlyMoments(reminder, timezone, beforeStart, boundary, validationWarnings);
+  return moments.length > 0;
+}
+
+function assertSingleRepeatWindow(occurrence, reminder, timezone) {
+  if (singleRepeatHasMomentWithinDue(occurrence, reminder, timezone)) return;
+  throw planError('TODO_REMINDER_WINDOW_EMPTY', '当前重复提醒在截止时间前没有可执行时刻，请调整提醒计划或截止时间', {
+    dueAt: occurrence.dueAt,
+    reminderKind: reminder.repeat.kind,
+  });
+}
+
 function buildSingleTaskReminderMoments(occurrence, reminder, timezone, warnings, nowInstant) {
   if (!reminder || reminder.mode === 'none' || occurrence.state === 'skipped') return [];
   if (reminder.mode === 'once') {
@@ -847,6 +878,9 @@ export function calculateTodoPlan(input = {}, options = {}) {
   const occurrences = occurrenceEntries.map(({ date, occurrenceNo }) =>
     buildOccurrence(date, normalizedTiming, timezone, warnings, occurrenceNo, nowInstant, effectivePastPolicy),
   );
+  if (inferredTaskMode === 'single' && input.singleTaskReminder && occurrences[0]) {
+    assertSingleRepeatWindow(occurrences[0], reminder, timezone);
+  }
   const hasPastOccurrence = occurrences.some((occurrence) => occurrence.missed);
   if (hasPastOccurrence) {
     warnings.push({

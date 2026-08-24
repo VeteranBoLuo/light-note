@@ -1,8 +1,8 @@
 <template>
-  <section class="ai-skill-panel" :aria-label="title">
+  <section class="ai-skill-panel" :class="`is-${presentation}`" :aria-label="title">
     <header class="ai-skill-panel__header">
       <span class="ai-skill-panel__icon" aria-hidden="true">
-        <SvgIcon :src="icon.common.magicWand" size="18" />
+        <SvgIcon :src="panelIcon" size="20" />
       </span>
       <span>
         <strong>{{ title }}</strong>
@@ -30,7 +30,7 @@
       <BInput
         v-model:value="prompt"
         type="textarea"
-        :rows="2"
+        :rows="promptRows"
         :maxlength="promptMaxLength"
         :disabled="interactionDisabled"
         :placeholder="placeholder"
@@ -118,8 +118,12 @@
       placeholder?: string;
       submitLabel?: string;
       promptMaxLength?: number;
+      promptRows?: number;
+      presentation?: 'default' | 'sidebar';
       emptyText?: string;
       initialInput?: Record<string, unknown>;
+      initialPrompt?: string;
+      iconSrc?: string;
     }>(),
     {
       description: '',
@@ -131,8 +135,12 @@
       placeholder: '',
       submitLabel: '',
       promptMaxLength: 500,
+      promptRows: 2,
+      presentation: 'default',
       emptyText: '',
       initialInput: () => ({}),
+      initialPrompt: '',
+      iconSrc: '',
     },
   );
 
@@ -142,7 +150,7 @@
     'result-action': [action: Record<string, unknown>, response: AiSkillResponse];
   }>();
   const { t } = useI18n();
-  const prompt = ref('');
+  const prompt = ref(props.initialPrompt);
   const loading = ref(false);
   const response = ref<AiSkillResponse | null>(null);
   const error = ref<{ code: string; message: string } | null>(null);
@@ -152,6 +160,7 @@
   let controller: AbortController | null = null;
 
   const placeholder = computed(() => props.placeholder || t('aiSkills.promptPlaceholder'));
+  const panelIcon = computed(() => props.iconSrc || icon.common.magicWand);
   const submitLabel = computed(() => props.submitLabel || t('aiSkills.send'));
   const coverageWarnings = computed(() =>
     formatAiSkillCoverageWarnings(response.value?.coverage?.warnings, (key) => t(key)),
@@ -255,11 +264,11 @@
     void recordAiProductEvent('ai_skill_applied', { ...telemetryDimensions.value, outcome: 'success' });
   }
 
-  watch([() => props.skillId, scopeKey], () => {
+  watch([() => props.skillId, scopeKey, () => props.initialPrompt], () => {
     cancel();
     response.value = null;
     error.value = null;
-    prompt.value = '';
+    prompt.value = props.initialPrompt;
   });
 
   onMounted(() => void recordAiProductEvent('ai_skill_opened', telemetryDimensions.value));
@@ -305,27 +314,71 @@
     line-height: 1.55;
   }
 
-  .ai-skill-panel__icon {
-    display: inline-flex;
-    width: 30px;
-    height: 30px;
-    flex: 0 0 30px;
+  .ai-skill-panel.is-sidebar {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .ai-skill-panel.is-sidebar .ai-skill-panel__composer {
+    order: 3;
+    margin-top: auto;
+    grid-template-columns: 1fr;
+  }
+
+  .ai-skill-panel.is-sidebar .ai-skill-panel__composer :deep(.b-textarea) {
+    min-height: 80px;
+    max-height: 160px;
+  }
+
+  .ai-skill-panel.is-sidebar .ai-skill-panel__composer :deep(.b_btn) {
+    width: 100%;
+  }
+
+  .ai-skill-panel.is-sidebar .ai-skill-panel__state,
+  .ai-skill-panel.is-sidebar .ai-skill-panel__result {
+    order: 2;
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow: auto;
+  }
+
+  .ai-skill-panel.is-sidebar .ai-skill-panel__state.is-empty {
+    display: flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid var(--primary-color);
-    border-radius: 9px;
-    color: var(--primary-color);
-    background: var(--workspace-panel-bg-color);
+    text-align: center;
+  }
+
+  .ai-skill-panel__icon {
+    display: inline-flex;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #8b84ff;
+    border-radius: 11px;
+    color: #fff;
+    background: linear-gradient(145deg, #8078ff 0%, #615ced 52%, #4d47cf 100%);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 28%),
+      0 5px 14px rgb(80 72 211 / 20%);
   }
 
   .ai-skill-panel__scope {
+    max-width: 100%;
     align-self: flex-start;
     padding: 4px 9px;
+    box-sizing: border-box;
+    overflow: hidden;
     border: 1px solid var(--surface-border-color);
     border-radius: 999px;
     color: var(--desc-color);
     font-size: 12px;
     background: var(--workspace-panel-bg-color);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .ai-skill-panel__actions,

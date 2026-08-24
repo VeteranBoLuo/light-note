@@ -1,6 +1,6 @@
 <template>
   <BPopover
-    trigger="manual"
+    trigger="hover"
     placement="bottom-right"
     overlay-class-name="user-center-popover"
     :get-popup-container="getPopupContainer"
@@ -11,8 +11,6 @@
         :key="popoverKey"
         class="user-card"
         :style="{ color: user.iconColor }"
-        @mouseenter="handleCardMouseEnter"
-        @mouseleave="handleCardMouseLeave"
       >
         <div class="user-top">
           <div
@@ -74,6 +72,8 @@
           </div>
         </div>
 
+        <AiQuotaSummary class="user-ai-quota" :active="menuVisible" @open-details="goGrowth" />
+
         <div class="settings-grid">
           <b-dropdown
             :trigger="['click']"
@@ -81,7 +81,6 @@
             overlay-class-name="user-setting-dropdown"
             :menu-options="themeMenuOptions"
             :get-popup-container="getSettingPopupContainer"
-            @open-change="handleSettingMenuChange"
           >
             <button class="setting-card">
               <span class="setting-left">
@@ -97,7 +96,6 @@
             overlay-class-name="user-setting-dropdown"
             :menu-options="langMenuOptions"
             :get-popup-container="getSettingPopupContainer"
-            @open-change="handleSettingMenuChange"
           >
             <button class="setting-card">
               <span class="setting-left">
@@ -142,8 +140,6 @@
       class="navigation-icon"
       :class="{ 'has-frame': equippedFrameId }"
       style="margin-left: 5px; position: relative"
-      @mouseenter="handleTriggerMouseEnter"
-      @mouseleave="handleTriggerMouseLeave"
     >
       <!-- 外层不裁剪提醒与头像框；普通头像由下方内层单独裁圆。 -->
       <AvatarFramePreview
@@ -167,6 +163,7 @@
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
+  import AiQuotaSummary from '@/components/aiSkills/AiQuotaSummary.vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { frameVariant } from '@/config/growthFrames';
@@ -188,11 +185,7 @@
     return document.getElementById('tag-container');
   };
   const menuVisible = ref(false);
-  const isSettingMenuOpen = ref(false);
   const popoverKey = ref(0);
-  const isHoveringTrigger = ref(false);
-  const isHoveringCard = ref(false);
-  let closeTimer: ReturnType<typeof setTimeout> | null = null;
   const userVisible = ref(false);
 
   const user = useUserStore();
@@ -215,74 +208,20 @@
       if (open) loadGrowth(true);
     },
   );
-  function goGrowth() {
-    closeSettingMenuAndSyncPopover();
+
+  // 个人中心的悬停开关统一交给 BPopover 管理。业务操作只负责关闭受控状态，
+  // 避免卡片卸载后 mouseleave 不触发、旧悬停标记又把弹层重新打开。
+  function dismissProfilePopover() {
     menuVisible.value = false;
-    router.push('/growth');
   }
 
-  function clearCloseTimer() {
-    if (closeTimer) {
-      clearTimeout(closeTimer);
-      closeTimer = null;
-    }
+  function navigateFromProfile(path: string) {
+    dismissProfilePopover();
+    router.push(path);
   }
 
-  function hasActivePopoverSource() {
-    return isHoveringTrigger.value || isHoveringCard.value;
-  }
-
-  function syncPopoverVisible() {
-    menuVisible.value = hasActivePopoverSource();
-  }
-
-  function delayClosePopover() {
-    clearCloseTimer();
-    closeTimer = setTimeout(() => {
-      syncPopoverVisible();
-    }, 120);
-  }
-
-  function handleTriggerMouseEnter() {
-    clearCloseTimer();
-    isHoveringTrigger.value = true;
-    menuVisible.value = true;
-  }
-
-  function handleTriggerMouseLeave() {
-    isHoveringTrigger.value = false;
-    delayClosePopover();
-  }
-
-  function handleCardMouseEnter() {
-    clearCloseTimer();
-    isHoveringCard.value = true;
-    menuVisible.value = true;
-  }
-
-  function handleCardMouseLeave() {
-    isHoveringCard.value = false;
-    delayClosePopover();
-  }
-
-  function handleSettingMenuChange(open: boolean) {
-    clearCloseTimer();
-    isSettingMenuOpen.value = open;
-    syncPopoverVisible();
-  }
-
-  function closeSettingMenuAndSyncPopover() {
-    isSettingMenuOpen.value = false;
-    delayClosePopover();
-  }
-
-  function handlePopoverOpenChange(open: boolean) {
-    if (open) {
-      clearCloseTimer();
-      menuVisible.value = true;
-      return;
-    }
-    delayClosePopover();
+  function goGrowth() {
+    navigateFromProfile('/growth');
   }
 
   function getSettingPopupContainer(trigger: HTMLElement) {
@@ -292,8 +231,6 @@
   watch(menuVisible, (val) => {
     if (val) {
       popoverKey.value++;
-    } else {
-      isSettingMenuOpen.value = false;
     }
   });
 
@@ -389,26 +326,26 @@
   ]);
 
   function menuItemClick(menuItem: menuItemInterface) {
-    menuVisible.value = false;
     if (menuItem.version) {
       const versionKey = menuItem.versionKey || `${menuItem.name}Version`;
       localStorage.setItem(versionKey, menuItem.version);
     }
     if (menuItem.path) {
-      router.push(menuItem.path);
+      navigateFromProfile(menuItem.path);
     } else {
       switch (menuItem.label) {
         case t('personCenter.feedback'):
-          router.push('/opinions');
+          navigateFromProfile('/opinions');
           break;
         default:
+          dismissProfilePopover();
           break;
       }
     }
   }
 
   function handleExitLogin() {
-    menuVisible.value = false;
+    dismissProfilePopover();
     if (user.role === 'visitor') {
       bookmark.isShowLogin = true;
     } else {
@@ -436,7 +373,6 @@
   const LanguageName = computed(() => (user.preferences.lang === 'en-US' ? 'English' : '中文'));
 
   function changeTheme(theme: string) {
-    closeSettingMenuAndSyncPopover();
     // 统一走 updatePreference(本地生效 + 游客只本地 + 登录同步后端并失败回滚)
     updatePreference({ theme }).catch((err) => {
       console.error('后台错误：' + err);
@@ -444,7 +380,6 @@
   }
 
   function changeLanguage(lang: 'zh-CN' | 'en-US') {
-    closeSettingMenuAndSyncPopover();
     // 统一走 updatePreference:语言即时切换(不刷新页面),与设置中心行为一致
     updatePreference({ lang }).catch((err) => {
       console.error('后台错误：' + err);
@@ -453,21 +388,20 @@
 
   function zoomImage() {
     bookmark.refreshViewer(user.headPicture || icon.navigation.user);
-    menuVisible.value = false;
+    dismissProfilePopover();
   }
 
   function editUser() {
     userVisible.value = true;
-    menuVisible.value = false;
+    dismissProfilePopover();
   }
 
   function openProfileFromGrowth() {
     userVisible.value = true;
-    menuVisible.value = false;
+    dismissProfilePopover();
   }
 
   onBeforeUnmount(() => {
-    clearCloseTimer();
     window.removeEventListener('light-note:open-profile', openProfileFromGrowth);
   });
 </script>
@@ -725,16 +659,22 @@
   .settings-grid {
     margin-top: 10px;
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
+  }
+
+  .user-ai-quota {
+    margin-top: 10px;
   }
 
   .setting-card {
     width: 100%;
+    min-width: 0;
+    min-height: 40px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 12px;
+    padding: 8px 10px;
     border-radius: 10px;
     border: 1px dashed var(--menu-item-h-bg-color);
     background: rgba(255, 255, 255, 0.04);
@@ -748,14 +688,20 @@
   }
 
   .setting-left {
+    min-width: 0;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     color: var(--text-color);
+    white-space: nowrap;
   }
 
   .setting-right {
+    flex: 0 0 auto;
+    margin-left: 6px;
     color: var(--text-secondary-color, #9aa0ad);
+    font-size: 11px;
+    white-space: nowrap;
   }
 
   :global(.user-setting-dropdown) {

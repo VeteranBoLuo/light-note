@@ -9,7 +9,7 @@ vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
 
 let cleanup: (() => void) | undefined;
 
-function mountPicker(initialValue: string) {
+function mountPicker(initialValue: string, props: { showTime?: boolean } = {}) {
   const value = ref(initialValue);
   const host = document.createElement('div');
   document.body.append(host);
@@ -17,6 +17,7 @@ function mountPicker(initialValue: string) {
     setup() {
       return () =>
         h(BDateTimePicker, {
+          ...props,
           value: value.value,
           'onUpdate:value': (nextValue: string) => {
             value.value = nextValue;
@@ -40,6 +41,7 @@ function mountPicker(initialValue: string) {
             cancel: '取消',
             confirm: '确定',
             selectDateTime: '选择日期时间',
+            selectDate: '选择日期',
             selectRangeStart: '选择开始时间',
             selectRangeEnd: '选择结束时间',
             noMatch: '无匹配项',
@@ -65,6 +67,45 @@ afterEach(() => {
 });
 
 describe('BDateTimePicker time input', () => {
+  it('日期模式只提交日历日，不渲染会被忽略的时间输入', async () => {
+    const { host, value } = mountPicker('2026-08-13', { showTime: false });
+    host.querySelector<HTMLElement>('.b-datetime-trigger')?.click();
+    await nextTick();
+
+    expect(document.body.querySelector('.b-datetime-times')).toBeNull();
+    const confirmButton = Array.from(
+      document.body.querySelectorAll<HTMLElement>('.b-datetime-panel__footer .b_btn'),
+    ).find((button) => button.textContent?.trim() === '确定');
+    confirmButton?.click();
+    await nextTick();
+
+    expect(value.value).toBe('2026-08-13');
+  });
+
+  it('复用通用聚焦全选能力，让日期时间组合中的时分都有明确选中底色', async () => {
+    const { host } = mountPicker('2026-08-13T16:17');
+    host.querySelector<HTMLElement>('.b-datetime-trigger')?.click();
+    await nextTick();
+
+    const inputs = Array.from(
+      document.body.querySelectorAll<HTMLInputElement>('.b-datetime-popover .select-search-inline'),
+    );
+    expect(inputs).toHaveLength(2);
+    expect(inputs.every((input) => input.classList.contains('is-select-on-focus'))).toBe(true);
+
+    inputs[1]!.dispatchEvent(new FocusEvent('focus', { bubbles: true }));
+    inputs[1]!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+    expect(inputs[1]!.value).toBe('17');
+    expect(inputs[1]!.selectionStart).toBe(0);
+    expect(inputs[1]!.selectionEnd).toBe(2);
+    const minuteDropdownId = inputs[1]!.getAttribute('aria-controls');
+    expect(minuteDropdownId).toBeTruthy();
+    expect(document.getElementById(minuteDropdownId!)?.querySelectorAll('.select-option')).toHaveLength(60);
+  });
+
   it('保留非五分钟档的原值，并允许直接输入任意合法时分', async () => {
     const { host, value } = mountPicker('2026-08-13T16:17');
     host.querySelector<HTMLElement>('.b-datetime-trigger')?.click();

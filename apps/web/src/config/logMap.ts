@@ -44,7 +44,7 @@ export const OPERATION_LOG_MAP = {
     exportToExcel: '导出书签',
     importExport: '打开书签导入导出',
     healthCheck: '打开死链体检',
-    aiOrganize: '打开 AI 智能整理',
+    aiOrganize: '打开智能打标签',
     viewSnapshot: '查看网页正文存档',
     viewSummary: '查看书签 AI 摘要',
   }),
@@ -64,7 +64,7 @@ export const OPERATION_LOG_MAP = {
     deleteNote: '删除笔记',
     filterNote: '筛选笔记',
     searchNote: '搜索笔记',
-    aiOrganize: '打开 AI 智能整理',
+    aiOrganize: '打开智能打标签',
   }),
   note: createModule('笔记', {
     updateTag: '更新标签',

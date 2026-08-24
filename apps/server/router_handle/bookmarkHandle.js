@@ -1213,8 +1213,8 @@ export const doOrganizeQuote = async (req, res) => {
     );
   } catch (e) {
     // 不把原始异常(可能含 SQL/模型/OBS 内部信息)返回客户端;只记服务端日志 + 稳定文案
-    console.error('[bookmark] AI 整理预估失败 code=%s', stableAgentErrorCode(e));
-    return res.send(resultData(null, 500, 'AI 整理预估失败，请稍后重试'));
+    console.error('[bookmark] 智能打标签预估失败 code=%s', stableAgentErrorCode(e));
+    return res.send(resultData(null, 500, '智能打标签预估失败，请稍后重试'));
   }
 };
 
@@ -1311,7 +1311,7 @@ export const doOrganizeRun = async (req, res) => {
     }
     res.send(resultData({ ok: true, processed: suggestions.length, suggestions }));
   } catch (e) {
-    const failure = resolvePublicAiExecutionError(e, 'AI 整理暂时不可用，请稍后重试');
+    const failure = resolvePublicAiExecutionError(e, '智能打标签暂时不可用，请稍后重试');
     if (failure.status >= 500) console.error('[bookmark] AI organize failed code=%s', stableAgentErrorCode(e));
     return res
       .status(failure.status)

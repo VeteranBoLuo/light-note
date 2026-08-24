@@ -3,7 +3,10 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const inboxSource = readFileSync(resolve(process.cwd(), 'src/view/inbox/Inbox.vue'), 'utf8');
-const resourcePageShellSource = readFileSync(resolve(process.cwd(), 'src/components/base/ResourcePageShell.vue'), 'utf8');
+const resourcePageShellSource = readFileSync(
+  resolve(process.cwd(), 'src/components/base/ResourcePageShell.vue'),
+  'utf8',
+);
 const themeSource = readFileSync(resolve(process.cwd(), 'src/assets/css/theme.less'), 'utf8');
 const dayThemeStart = themeSource.indexOf("\n[data-theme='day'] {") + 1;
 const nightThemeStart = themeSource.indexOf("\n[data-theme='night'] {") + 1;
@@ -35,9 +38,7 @@ describe('移动端待办页签布局', () => {
     expect(inboxSource).toMatch(
       /\.inbox-page--resource-workspace > \.inbox-hero\s*\{[\s\S]*?min-height:\s*54px;[\s\S]*?margin-bottom:\s*14px/,
     );
-    expect(inboxSource).toMatch(
-      /\.inbox-page--resource-workspace \.inbox-hero p\s*\{[\s\S]*?margin-top:\s*5px/,
-    );
+    expect(inboxSource).toMatch(/\.inbox-page--resource-workspace \.inbox-hero p\s*\{[\s\S]*?margin-top:\s*5px/);
   });
 
   it('待整理范围继续复用原类型、排序和资源操作', () => {
@@ -54,12 +55,27 @@ describe('移动端待办页签布局', () => {
     expect(inboxSource).toMatch(
       /\.resource-inbox-inspector__actions :deep\(\.b_btn:first-child\)[\s\S]*?grid-column:\s*1 \/ -1/,
     );
+    expect(inboxSource).toContain('class="resource-inbox-inspector__summary"');
+    expect(inboxSource).toContain("inspectedInboxItem.resourceType === 'note'");
+    expect(inboxSource).toMatch(/\.resource-inbox-inspector\s*\{[\s\S]*?overflow:\s*hidden;/);
+    expect(inboxSource).toMatch(
+      /\.resource-inbox-inspector__summary\.is-scrollable\s*\{[\s\S]*?flex:\s*1 1 auto;[\s\S]*?overflow:\s*hidden auto;/,
+    );
   });
 
   it('桌面待整理搜索框占满工具栏剩余宽度，快速添加固定在最右侧', () => {
     expect(inboxSource).toContain('class="inbox-toolbar__right inbox-toolbar__right--resources"');
     expect(inboxSource).toMatch(
       /\.inbox-toolbar__right--resources\s*\{[\s\S]*?width:\s*100%;[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) auto;[\s\S]*?flex:\s*1 1 auto;/,
+    );
+  });
+
+  it('桌面待办的搜索、排序与批量入口共享 40px 控件基线', () => {
+    expect(inboxSource).toContain('class="todo-toolbar-control todo-toolbar-control--search"');
+    expect(inboxSource).toContain('class="todo-toolbar-control todo-toolbar-control--sort"');
+    expect(inboxSource).toContain('class="todo-toolbar-control todo-toolbar-control--batch"');
+    expect(inboxSource).toMatch(
+      /\.todo-toolbar-control--search :deep\(\.b-input\),[\s\S]*?\.todo-toolbar-control--sort :deep\(\.select-trigger\),[\s\S]*?\.todo-toolbar-control--batch\.b_btn\s*\{[\s\S]*?height:\s*40px;[\s\S]*?min-height:\s*40px;/,
     );
   });
 

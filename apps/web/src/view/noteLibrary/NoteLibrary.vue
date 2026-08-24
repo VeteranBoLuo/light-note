@@ -531,7 +531,7 @@
       :note="$t('note.batchExportArchiveHint', { count: selectedVisibleCount })"
     />
 
-    <!-- AI 智能整理(笔记):自动为未打标签的笔记推荐标签 -->
+    <!-- 智能打标签(笔记):自动为未打标签的笔记推荐标签 -->
     <AiOrganizeModal
       v-if="aiOrgVisible"
       v-model:visible="aiOrgVisible"
@@ -917,7 +917,7 @@
   let noteRequestSeq = 0;
   const showTypePicker = ref(false);
   const createParentOverride = ref<string | null | undefined>(undefined);
-  const aiOrgVisible = ref(false); // AI 智能整理(笔记)弹框
+  const aiOrgVisible = ref(false); // 智能打标签(笔记)弹框
   const selectedAiOrganizeIds = ref<string[]>([]);
   const tagConfigVisible = ref(false);
   const activeTagNote = ref<any | null>(null);

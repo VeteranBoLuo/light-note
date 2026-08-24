@@ -50,6 +50,12 @@ describe('桌面工作台头部布局稳定性', () => {
     expect(desktopSource).toMatch(/\.today-continue\s*\{[\s\S]*?min-height:\s*var\(--today-work-area-height\)/);
   });
 
+  it('每日任务只展示进度，领取统一收口到上方我的成长卡', () => {
+    expect(desktopSource).toContain(':show-claim-action="false"');
+    expect(desktopSource).not.toContain('@claim="claimDailyGrowth"');
+    expect(desktopSource).not.toContain('function claimDailyGrowth');
+  });
+
   it('继续处理默认最多展示五条，满五条时均分面板剩余高度', () => {
     expect(desktopSource).toContain('const CONTINUE_ITEM_LIMIT = 5;');
     expect(desktopSource).toContain('slice(0, CONTINUE_ITEM_LIMIT)');

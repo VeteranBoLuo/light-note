@@ -115,10 +115,8 @@
       <DailyQuests
         :quests="dailyGrowthQuests"
         :bonus="dailyGrowthBonus"
-        :claiming="claimingDailyGrowth || claimingRewards"
         :read-only="growthReadOnly"
         :show-claim-action="false"
-        @claim="claimDailyGrowth"
       />
     </section>
 
@@ -147,7 +145,6 @@
   import WorkbenchGrowth from '@/components/workbenches/WorkbenchGrowth.vue';
   import DailyQuests from '@/components/growth/DailyQuests.vue';
   import GrowthTasks from '@/components/growth/GrowthTasks.vue';
-  import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import icon from '@/config/icon';
   import { apiBasePost } from '@/http/request';
   import { inboxStore, useUserStore } from '@/store';
@@ -156,10 +153,8 @@
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { useGrowth } from '@/composables/useGrowth.ts';
-  import { recordOperation } from '@/api/commonApi';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
-  import { dailyQuestClaimLogText, resolveDailyQuestClaimFeedback } from '@/utils/dailyQuestClaim';
 
   interface TodayInboxItem {
     resourceType: 'bookmark' | 'note' | 'file';
@@ -181,37 +176,15 @@
   const inbox = inboxStore();
   const user = useUserStore();
   const scrollRef = ref<HTMLElement | null>(null);
-  const { dashboard, growthTasks, claimingRewards, loadDashboard, loadGrowthTasks, loadClaimable, claimDailyBonus } =
-    useGrowth();
+  const { dashboard, growthTasks, loadDashboard, loadGrowthTasks, loadClaimable } = useGrowth();
   const growthReadOnly = computed(() => Boolean(user.adminContext));
   const dailyGrowthQuests = computed(() => dashboard.value?.quests || []);
   const dailyGrowthBonus = computed(
     () => dashboard.value?.questBonus || { exp: 0, points: 0, claimed: false, claimable: false },
   );
-  // 「今日」只展示当天尚未收口的任务：保留待领奖入口，奖励领取后不再占用首屏空间。
+  // 「今日」只展示当天尚未收口的任务：领取统一由上方成长卡的一键领取处理。
   const showDailyGrowthTasks = computed(() => Boolean(dashboard.value && !dailyGrowthBonus.value.claimed));
-  const claimingDailyGrowth = ref(false);
   const showGrowthTasks = computed(() => Boolean(growthTasks.value?.tasks.some((task) => !task.claimed)));
-  async function claimDailyGrowth() {
-    if (growthReadOnly.value || claimingDailyGrowth.value || claimingRewards.value) return;
-    claimingDailyGrowth.value = true;
-    try {
-      const res = await claimDailyBonus();
-      if (res?.status === 200 && res.data?.ok) {
-        const feedback = resolveDailyQuestClaimFeedback(res.data);
-        if (feedback.level === 'success') {
-          message.success(t(feedback.key, feedback.params));
-          recordOperation({ module: '工作台', operation: dailyQuestClaimLogText(res.data) });
-        } else {
-          message.info(t(feedback.key, feedback.params));
-        }
-      }
-    } catch (error) {
-      console.error('今日领取每日奖励失败:', error);
-    } finally {
-      claimingDailyGrowth.value = false;
-    }
-  }
 
   const loading = ref(false);
   const todaySettled = ref(false);

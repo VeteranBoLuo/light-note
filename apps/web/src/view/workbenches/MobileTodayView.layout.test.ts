@@ -64,6 +64,8 @@ describe('移动端今日加载布局', () => {
     expect(source).toContain("import WorkbenchGrowth from '@/components/workbenches/WorkbenchGrowth.vue'");
     expect(source).not.toContain('class="mobile-today__growth-claim"');
     expect(source).toContain(':show-claim-action="false"');
+    expect(source).not.toContain('@claim="claimDailyGrowth"');
+    expect(source).not.toContain('function claimDailyGrowth');
     expect(source).toMatch(/\.mobile-today__growth-card\s*\{[\s\S]*?margin:\s*14px 0/);
   });
 

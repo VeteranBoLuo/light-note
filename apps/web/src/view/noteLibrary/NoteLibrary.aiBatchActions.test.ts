@@ -57,7 +57,7 @@ describe('笔记库批量 AI 操作语义', () => {
     expect(source).toContain('v-if="!desktopPreviewOpen && !loading && !visibleDragNoteList.length"');
   });
 
-  it('桌面与移动端都区分“分析所选笔记”和确定性的“AI 智能整理”', () => {
+  it('桌面与移动端都区分“分析所选笔记”和确定性的“智能打标签”', () => {
     expect(source).toContain("t('note.aiSummarizeSelected')");
     expect(source).toContain("$t('bookmarkMg.aiOrganizeBtn')");
     expect(source).toContain("key: 'analyze'");
@@ -84,13 +84,13 @@ describe('笔记库批量 AI 操作语义', () => {
     expect(enLocaleSource).toContain("exitBatch: 'Exit Batch'");
   });
 
-  it('AI 智能整理把当前所选笔记 ID 交给自动打标签弹窗', () => {
+  it('智能打标签把当前所选笔记 ID 交给自动打标签弹窗', () => {
     expect(source).toContain(':selected-ids="selectedAiOrganizeIds"');
     expect(source).toMatch(/function openSelectedAiOrganize\(\)[\s\S]*selectedAiOrganizeIds\.value = selectedIds/);
     expect(source).toMatch(/action\.key === 'smartOrganize'[\s\S]*openSelectedAiOrganize\(\)/);
   });
 
-  it('普通态与批量态的 AI 智能整理共用系统主紫色强调样式', () => {
+  it('普通态与批量态的智能打标签共用系统主紫色强调样式', () => {
     expect(source).toMatch(/class="note-action-button note-ai-button"[\s\S]{0,180}@click="openSelectedAiOrganize"/);
     expect(source).toMatch(/class="note-action-button note-ai-button"[\s\S]{0,180}@click="openGlobalAiOrganize"/);
 

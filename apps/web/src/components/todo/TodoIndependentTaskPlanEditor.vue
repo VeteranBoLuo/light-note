@@ -156,7 +156,7 @@
         <div class="todo-independent-plan__fields">
           <label v-if="triggerType === 'fixed_time'">
             <span>{{ t('inbox.todoReminderFixedTime') }}</span>
-            <BInput v-model:value="fixedTime" type="time" />
+            <BTimePicker v-model:value="fixedTime" block :aria-label="t('inbox.todoReminderFixedTime')" />
             <small class="todo-independent-plan__field-hint">{{ t('inbox.todoReminderFixedTimeHint') }}</small>
           </label>
           <label v-else-if="triggerType === 'at_start'">
@@ -273,6 +273,7 @@
   import BDateTimePicker from '@/components/base/BasicComponents/BDateTimePicker.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import BTimePicker from '@/components/base/BasicComponents/BTimePicker.vue';
   import type {
     TodoPastPolicy,
     TodoPlanEndMode,

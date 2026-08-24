@@ -35,6 +35,17 @@ describe('cloud file empty state layout', () => {
     expect(source).not.toContain("router.push('/ai')");
   });
 
+  it('桌面批量栏为选中数量保留固定宽度，数量变化不再推动后续按钮', () => {
+    expect(source).toMatch(
+      /@media \(min-width: 768px\)[\s\S]*?\.batch-actions \.selected-count\s*\{[\s\S]*?width:\s*148px;[\s\S]*?flex:\s*0 0 148px;/,
+    );
+    expect(source).toContain('font-variant-numeric: tabular-nums;');
+    expect(source).toMatch(
+      /\.ai-file-analysis-action\s*\{[\s\S]*?min-width:\s*128px;[\s\S]*?border:\s*1px solid transparent;/,
+    );
+    expect(source).toMatch(/\.ai-file-analysis-action:not\(\.disabled\)\s*\{[\s\S]*?border-color:/);
+  });
+
   it('移动端卡片隐藏直接下载，卡片本身仍可拖入文件夹', () => {
     expect(source).toContain("v-if=\"!batchMode && !bookmark.isMobile\"");
     expect(source).toContain(':draggable="canDragFile(item)"');

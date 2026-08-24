@@ -233,12 +233,14 @@ export interface TodoPayload {
   resourceRefs?: TodoResourceRefInput[];
 }
 
-export type TodoQuickReminderPreset = 'none' | 'before_due_1h' | 'daily_0900';
+export type TodoQuickReminderPreset = 'none' | 'before_due_1h' | 'daily' | 'daily_0900';
 
 export interface TodoCreateInitialValues extends Partial<
   Pick<TodoPayload, 'title' | 'description' | 'priority' | 'dueAt' | 'checklist'>
 > {
   quickReminderPreset?: TodoQuickReminderPreset;
+  /** 快速创建的每日提醒时间；旧版 daily_0900 未传时仍回退 09:00。 */
+  quickReminderTime?: string;
 }
 
 export type TodoEditorSubmission =

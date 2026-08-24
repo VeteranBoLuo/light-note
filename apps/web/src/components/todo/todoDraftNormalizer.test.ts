@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { TodoItem } from '@/api/todoApi';
 import {
   normalizeCurrentTodoPlanDraft,
+  normalizeQuickTodoInitial,
   normalizeTodoCreateDraft,
   todoTodayInTimezone,
   type TodoCreateDraftV3,
@@ -32,6 +33,24 @@ function scheduledDraft(startAt: string, dueAt: string): TodoCreateDraftV3 {
 }
 
 describe('todoDraftNormalizer', () => {
+  it('快捷每日提醒使用用户选择的时间，并让旧版固定预设继续回退到 09:00', () => {
+    const customized = normalizeQuickTodoInitial({
+      title: '查看运营数据',
+      quickReminderPreset: 'daily',
+      quickReminderTime: '14:30',
+    });
+    const legacy = normalizeQuickTodoInitial({ title: '兼容旧草稿', quickReminderPreset: 'daily_0900' });
+
+    expect(customized.singleTaskReminder).toMatchObject({
+      mode: 'repeat',
+      repeat: { startAt: expect.stringMatching(/ 14:30$/), intervalMinutes: 1440 },
+    });
+    expect(legacy.singleTaskReminder).toMatchObject({
+      mode: 'repeat',
+      repeat: { startAt: expect.stringMatching(/ 09:00$/), intervalMinutes: 1440 },
+    });
+  });
+
   it('高级重复任务的两个时间都留空时只补计划时区当天，不补开始或截止时刻', () => {
     const draft = scheduledDraft('', '');
     draft.independentTasks.plan.end = { mode: 'count', count: 3 };

@@ -109,6 +109,15 @@
 
   .resource-tag-chip__selected-icon {
     flex: 0 0 auto;
+    margin-right: 2px;
+  }
+
+  .resource-tag-chip.b-chip--tag.b-chip--selected {
+    --b-chip-fg: var(--card-background, var(--background-color));
+    --b-chip-bg: var(--chip-tag-fg);
+    --b-chip-border: var(--chip-tag-fg);
+
+    border-width: 2px;
   }
 
   .tag-detail-chip {
@@ -143,6 +152,12 @@
   }
 
   @media (hover: hover) and (pointer: fine) {
+    .resource-tag-chip.b-chip--tag.b-chip--selected.b-chip--interactive:hover {
+      --b-chip-fg: var(--card-background, var(--background-color));
+      --b-chip-bg: var(--chip-tag-hover-fg);
+      --b-chip-border: var(--chip-tag-hover-fg);
+    }
+
     .tag-detail-chip:hover {
       --b-chip-fg: var(--chip-tag-hover-fg);
       --b-chip-bg: var(--chip-tag-hover-bg);

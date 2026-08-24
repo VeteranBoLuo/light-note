@@ -608,7 +608,7 @@
   const bookmarkAiItems = ref<BookmarkInterface[]>([]);
   const importExportModalVisible = ref(false);
   const healthVisible = ref(false);
-  const aiOrgVisible = ref(false); // AI 智能整理弹框
+  const aiOrgVisible = ref(false); // 智能打标签弹框
   // 列表角标点击 → 弹出网页正文存档 / AI 摘要(与编辑页快照同一弹框)
   const snapVisible = ref(false);
   const snapBookmarkId = ref('');
