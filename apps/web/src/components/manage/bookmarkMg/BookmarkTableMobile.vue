@@ -18,7 +18,13 @@
         <span class="bookmark-item-copy">
           <span class="bookmark-item-name">{{ data.name }}</span>
           <span v-if="data.hasSnapshot || data.hasSummary" class="bm-badges">
-            <span class="bm-badge">{{ $t('bookmarkMg.badgeArchived') }}</span>
+            <BookmarkCapabilityBadge
+              type="snapshot"
+              :label="$t('bookmarkMg.badgeArchived')"
+              :tooltip="$t('bookmarkMg.badgeArchivedHint')"
+              @click="openSnap(String(data.id))"
+              v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSnapshot"
+            />
           </span>
         </span>
       </span>
@@ -68,6 +74,7 @@
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import MobileStickyActionBar from '@/components/mobile/MobileStickyActionBar.vue';
   import BookmarkFavicon from '@/components/base/BookmarkFavicon.vue';
+  import BookmarkCapabilityBadge from '@/components/manage/bookmarkMg/BookmarkCapabilityBadge.vue';
   import PhoneListMg from '@/components/base/phoneComponents/PhoneListMg.vue';
   import LinkHealthModal from '@/components/manage/bookmarkMg/LinkHealthModal.vue';
   import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
@@ -354,15 +361,6 @@
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-  }
-  .bm-badge {
-    padding: 2px 7px;
-    border: 1px solid var(--primary-color);
-    border-radius: 999px;
-    color: var(--primary-color);
-    background: var(--mobile-selected-bg);
-    font-size: 10px;
-    line-height: 1.2;
   }
   .bookmark-item-tag {
     max-width: 120px;

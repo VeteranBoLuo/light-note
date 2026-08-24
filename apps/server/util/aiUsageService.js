@@ -125,11 +125,13 @@ function publicSpanError(errorCode, status) {
   return 'provider_failed';
 }
 
-function mapProviderSpan(row, fallbackSequence) {
+function mapProviderSpan(row, fallbackSequence, { waiveUserCharge = false } = {}) {
   const stage = String(row.stage || '');
   const stageType = publicSpanStage(stage);
   const billingScope =
-    row.billing_scope === 'platform' || stage.toLowerCase().endsWith('_repair') ? 'platform' : 'user';
+    waiveUserCharge || row.billing_scope === 'platform' || stage.toLowerCase().endsWith('_repair')
+      ? 'platform'
+      : 'user';
   const triggerCode = String(row.trigger_code || '');
   const mappedTriggerReason = Object.hasOwn(REPAIR_REASON_BY_CODE, triggerCode)
     ? REPAIR_REASON_BY_CODE[triggerCode]
@@ -349,9 +351,12 @@ export async function getUserAiUsageDetail(userId, executionId, database = pool)
       [normalizedExecutionId],
     );
     const rows = Array.isArray(spanRows) ? spanRows : [];
+    const execution = mapUsageItem(executionRow);
+    const waiveUserCharge = execution.status === 'failed' && execution.chargedTokens === 0;
     return {
-      execution: mapUsageItem(executionRow),
-      calls: rows.map((row, index) => mapProviderSpan(row, index + 1)),
+      execution,
+      // billing_scope 在内部账本表示调用发出时的预期归属；公开详情展示最终实际承担方。
+      calls: rows.map((row, index) => mapProviderSpan(row, index + 1, { waiveUserCharge })),
     };
   } catch (error) {
     if (['AI_USAGE_EXECUTION_NOT_FOUND', 'AI_USAGE_AUTH_REQUIRED'].includes(error?.code)) throw error;

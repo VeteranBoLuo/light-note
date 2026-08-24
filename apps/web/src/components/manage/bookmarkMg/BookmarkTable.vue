@@ -322,7 +322,7 @@
                         type="snapshot"
                         :label="$t('bookmarkMg.badgeArchived')"
                         :tooltip="$t('bookmarkMg.badgeArchivedHint')"
-                        @click.stop="openSnap(bookmarkItem.id)"
+                        @click="openSnap(bookmarkItem.id)"
                         v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSnapshot"
                       />
                     </div>

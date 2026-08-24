@@ -16,10 +16,11 @@ describe('笔记 AI 封闭能力与新笔记持久化契约', () => {
     expect(dialogSource).toContain(':show-prompt="false"');
     expect(dialogSource).toContain("skillId: 'note.batch_summarize'");
     expect(dialogSource).toContain('resourceRefs.value.length >= 2 && resourceRefs.value.length <= 10');
+    expect(dialogSource).toMatch(/if \(resourceRefs\.value\.length >= 2\)[\s\S]*skillId: 'note\.create_from_sources'/);
     expect(dialogSource).toContain("skillId: 'note.create_from_sources'");
     expect(dialogSource).not.toContain('extract-todos');
     expect(dialogSource).not.toContain('aiExtractTodos');
-    expect(zhLocaleSource).toContain("aiCreateNote: '根据所选笔记生成新笔记'");
+    expect(zhLocaleSource).toContain("aiCreateNote: '整理为一篇新笔记'");
   });
 
   it('新笔记先展示服务端确认动作，确认后立即持久化再打开已保存笔记', () => {

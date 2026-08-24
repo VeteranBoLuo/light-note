@@ -226,6 +226,57 @@ describe('aiUsageService', () => {
     expect(result.calls[1]).not.toHaveProperty('errorCode');
   });
 
+  it('最终失败免扣后，调用详情按实际承担方展示为平台承担', async () => {
+    const database = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([
+          [
+            {
+              id: '0fb6bbcd-a895-45fa-9c20-55903f997b29',
+              skill_id: 'file.summarize',
+              task_type: 'skill_file_summarize',
+              status: 'failed',
+              model_called: 1,
+              provider_call_count: 1,
+              provider_tokens: 604,
+              charged_tokens: 0,
+              usage_complete: 1,
+              quota_settlement_status: 'reconciled',
+              duration_ms: 2800,
+              created_at: new Date('2026-08-25T00:35:42Z'),
+            },
+          ],
+        ])
+        .mockResolvedValueOnce([
+          [
+            {
+              stage: 'skill_file_summarize',
+              provider: 'deepseek',
+              model: 'deepseek-v4-flash',
+              status: 'success',
+              trigger_code: null,
+              usage_status: 'reported',
+              billing_scope: 'user',
+              sequence_no: 1,
+              estimated_tokens: 5000,
+              prompt_tokens: 368,
+              completion_tokens: 236,
+              total_tokens: 604,
+              duration_ms: 2800,
+              error_code: null,
+              created_at: new Date('2026-08-25T00:35:42Z'),
+            },
+          ],
+        ]),
+    };
+
+    const result = await getUserAiUsageDetail('payer-user', '0fb6bbcd-a895-45fa-9c20-55903f997b29', database);
+
+    expect(result.execution).toMatchObject({ status: 'failed', chargedTokens: 0, platformCoveredTokens: 604 });
+    expect(result.calls[0]).toMatchObject({ billingScope: 'platform', totalTokens: 604 });
+  });
+
   it('调用详情拒绝越权或不存在的执行记录', async () => {
     const database = { query: vi.fn().mockResolvedValue([[]]) };
     await expect(

@@ -5,6 +5,7 @@
  * - 只有 billingMode=token 且真实访问 Provider 的用户主调用才会扣用户额度；
  * - 缓存命中、无材料、本地解析等没有 Provider Span 的执行始终为 0；
  * - 模型输出协议修复属于平台质量成本，不计入用户额度；
+ * - 用户计费执行最终没有可交付结果时退回本次额度，但 Provider 用量与频控记录保留；
  * - freeActions 只用于解释产品边界，禁止据此创建可访问 Provider 的免费执行。
  */
 
@@ -271,9 +272,10 @@ export function createUserAiExecutionConfig(actionId, overrides = {}) {
 /** 只返回用户可以理解的稳定字段，不泄露任务名、Provider 或内部预算。 */
 export function listPublicAiBillingCatalog() {
   return {
-    ruleVersion: 1,
+    ruleVersion: 2,
     chargingRule: 'provider_actual_tokens',
     repairBilling: 'platform',
+    failedExecutionBilling: 'platform',
     missingUsageBilling: 'request_estimate_capped',
     tokenActions: AI_BILLING_ACTIONS.map(({ id, module, labelKey, unit }) => ({
       id,

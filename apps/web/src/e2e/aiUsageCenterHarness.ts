@@ -64,7 +64,7 @@ const moduleRows = [
   { module: 'file', chargedTokens: 4_780, providerTokens: 5_018, actions: 3 },
   { module: 'search', chargedTokens: 2_492, providerTokens: 2_612, actions: 2 },
   { module: 'todo', chargedTokens: 1_200, providerTokens: 1_260, actions: 1 },
-  { module: 'tag', chargedTokens: 980, providerTokens: 980, actions: 1 },
+  { module: 'tag', chargedTokens: 0, providerTokens: 980, actions: 1 },
 ];
 
 function localDateKey(date: Date) {
@@ -145,8 +145,8 @@ function usageItems() {
       modelCalled: true,
       providerCallCount: 1,
       providerTokens: 980,
-      chargedTokens: 980,
-      platformCoveredTokens: 0,
+      chargedTokens: 0,
+      platformCoveredTokens: 980,
       usageComplete: true,
       quotaSettlementStatus: 'settled',
       durationMs: 3_180,
@@ -219,12 +219,12 @@ function makeFixture(payload: Record<string, unknown>) {
           zeroChargeModelActions: 0,
         }
       : {
-          chargedTokens: 31_482,
+          chargedTokens: 30_502,
           providerTokens: 33_100,
-          platformCoveredTokens: 1_618,
+          platformCoveredTokens: 2_598,
           todayChargedTokens: 10_302,
           modelActions: 18,
-          zeroChargeModelActions: 2,
+          zeroChargeModelActions: 3,
         },
     daily: isEmpty
       ? []
@@ -243,9 +243,10 @@ function makeFixture(payload: Record<string, unknown>) {
       totalPages: isEmpty ? 0 : module === 'all' ? Math.ceil(43 / pageSize) : 1,
     },
     catalog: {
-      ruleVersion: 1,
+      ruleVersion: 2,
       chargingRule: 'provider_actual_tokens',
       repairBilling: 'platform',
+      failedExecutionBilling: 'platform',
       missingUsageBilling: 'request_estimate_capped',
       tokenActions,
       freeActions,
@@ -310,8 +311,20 @@ function makeDetailFixture(payload: Record<string, unknown>) {
       errorCategory: null,
     },
   ];
-  const detailCalls =
-    state === 'detail-empty'
+  const failedWaived = execution.status === 'failed' && execution.chargedTokens === 0;
+  const detailCalls = failedWaived
+    ? [
+        {
+          ...calls[1],
+          sequenceNo: 1,
+          billingScope: 'platform',
+          promptTokens: 640,
+          completionTokens: 340,
+          totalTokens: 980,
+          errorCategory: null,
+        },
+      ]
+    : state === 'detail-empty'
       ? []
       : state === 'detail-edge'
         ? calls.map((call) => {
@@ -331,14 +344,16 @@ function makeDetailFixture(payload: Record<string, unknown>) {
           })
         : calls;
   return {
-    execution: {
-      ...execution,
-      providerCallCount: 3,
-      providerTokens: 6_192,
-      chargedTokens: 4_530,
-      platformCoveredTokens: 1_662,
-      durationMs: 22_936,
-    },
+    execution: failedWaived
+      ? execution
+      : {
+          ...execution,
+          providerCallCount: 3,
+          providerTokens: 6_192,
+          chargedTokens: 4_530,
+          platformCoveredTokens: 1_662,
+          durationMs: 22_936,
+        },
     calls: detailCalls,
   };
 }

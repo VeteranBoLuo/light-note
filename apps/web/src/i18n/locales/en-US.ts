@@ -3137,8 +3137,8 @@ export default {
     aiSummarizeInstruction: 'Extract themes, key facts, conclusions, and next steps from the selected notes.',
     aiCompare: 'Compare notes',
     aiCompareInstruction: 'Compare commonalities, differences, conflicts, and mergeable information with citations.',
-    aiCreateNote: 'Create a new note from selection',
-    aiCreateNoteInstruction: 'Create a clear new Markdown note from the selected notes with source citations.',
+    aiCreateNote: 'Organize into one new note',
+    aiCreateNoteInstruction: 'Organize the selected notes into one clear Markdown note with source citations.',
     aiGeneratedNoteTitle: 'AI-generated note',
     aiGeneratedSingleNoteTitle: '{title} · Summary',
     aiGeneratedMultiNoteTitle: '{title} and {count} notes · Summary',
@@ -4994,6 +4994,8 @@ export default {
           'A server cache hit, empty material, or deterministic result never reaches a model and uses no quota.',
         repairRule:
           'If a model answer fails format or citation checks, at most one internal repair is covered by the platform.',
+        failureRule:
+          'If an execution ultimately produces no usable result, your quota charge is returned to zero; model usage and rate-limit records are retained.',
         missingUsageRule:
           'If a provider accepts a request but omits usage, a conservative pre-call estimate is used and never exceeds the actual reservation.',
         freeLimitRule:
@@ -7494,10 +7496,8 @@ export default {
     snapshot: 'Web archive',
     saveSnapshotOpt: 'Save web archive',
     saveSnapshotOptDesc:
-      'Save the page text for free so it remains readable if the link dies. AI summaries are generated manually from the archive.',
+      'Save the page text so it remains readable if the link dies. AI summaries can be generated from the archive when needed.',
     snapshotTitle: 'Web archive',
-    snapshotHint:
-      'Saving or updating page text does not use AI quota. AI summaries are requested separately and use actual model tokens.',
     snapshotFullText: 'Full text',
     aiSummaryHint: 'gist',
     badgeArchived: 'Web archive',
@@ -7563,8 +7563,8 @@ export default {
     aiOrganizeDoneMsg: 'Applied to {n} bookmarks ✓',
     aiOrganizeDoneMsgNote: 'Applied to {n} notes ✓',
     aiOrganizeClose: 'Done',
-    snapshotEmpty: 'No page-text archive yet. Save the text for free, then request an AI summary if needed.',
-    snapshotCreateArchive: 'Save page text · Free',
+    snapshotEmpty: 'No page-text archive yet. Save the text, then request an AI summary if needed.',
+    snapshotCreateArchive: 'Save page text',
     snapshotArchive: 'Re-archive',
     snapshotArchiving: 'Archiving…',
     snapshotOk: 'Archived, {n} chars',
@@ -7573,8 +7573,8 @@ export default {
     snapshotUpdate: 'Update web archive',
     snapshotGenerating: 'Generating…',
     snapshotGenerated: 'Web archive generated',
-    aiSummaryGenerate: 'Generate AI summary · Uses quota',
-    aiSummaryRefresh: 'Regenerate with AI · Uses quota',
+    aiSummaryGenerate: 'Generate AI summary',
+    aiSummaryRefresh: 'Regenerate with AI',
     aiSummaryGenerating: 'Generating AI summary…',
     aiSummaryGenerated: 'AI summary generated',
     aiSummaryQuotaExceeded: 'Your AI quota is insufficient today. The saved page text remains available.',

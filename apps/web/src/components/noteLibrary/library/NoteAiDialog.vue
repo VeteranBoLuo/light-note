@@ -53,23 +53,20 @@
         input: { instruction: t('note.aiCompareInstruction') },
       });
     }
-    items.push({
-      id: 'create-note',
-      label: t('note.aiCreateNote'),
-      skillId: 'note.create_from_sources',
-      input: {
-        instruction: t('note.aiCreateNoteInstruction'),
-        title:
-          props.notes.length === 1
-            ? t('note.aiGeneratedSingleNoteTitle', {
-                title: props.notes[0]?.title || t('note.aiGeneratedNoteTitle'),
-              })
-            : t('note.aiGeneratedMultiNoteTitle', {
-                title: props.notes[0]?.title || t('note.aiGeneratedNoteTitle'),
-                count: props.notes.length,
-              }),
-      },
-    });
+    if (resourceRefs.value.length >= 2) {
+      items.push({
+        id: 'create-note',
+        label: t('note.aiCreateNote'),
+        skillId: 'note.create_from_sources',
+        input: {
+          instruction: t('note.aiCreateNoteInstruction'),
+          title: t('note.aiGeneratedMultiNoteTitle', {
+            title: props.notes[0]?.title || t('note.aiGeneratedNoteTitle'),
+            count: props.notes.length,
+          }),
+        },
+      });
+    }
     return items;
   });
 

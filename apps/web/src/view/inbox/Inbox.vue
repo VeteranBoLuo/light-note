@@ -518,15 +518,15 @@
         class="resource-inbox-ai-panel"
         :title="t('ai.entry.searchSkillTitle')"
         :description="t('ai.entry.searchSkillDescription')"
-        skill-id="search.summarize_selected"
-        surface="search"
+        :skill-id="inboxAiSkillId"
+        surface="inbox"
         :resource-refs="inboxAiResourceRefs"
         :scope-label="inboxAiScopeLabel"
         :initial-input="{}"
         :actions="inboxAiActions"
         :show-prompt="false"
         auto-run-action-id="analyze"
-        :icon-src="icon.ai.organize"
+        :icon-src="icon.ai.summary"
         presentation="sidebar"
       />
       <template v-else-if="inspectedInboxItem">
@@ -558,7 +558,7 @@
             class="resource-inbox-inspector__action--ai"
             @click="openInboxResourceAi(inspectedInboxItem)"
           >
-            <SvgIcon :src="icon.ai.organize" size="17" aria-hidden="true" />
+            <SvgIcon :src="icon.ai.summary" size="17" aria-hidden="true" />
             {{ t('resourceCenter.analyzeResource') }}
           </BButton>
           <BButton block size="large" type="primary" @click="openResource(inspectedInboxItem)">
@@ -644,6 +644,7 @@
   import ResourceCenterTopBar from '@/components/searchCenter/ResourceCenterTopBar.vue';
   import AiSkillPanel from '@/components/aiSkills/AiSkillPanel.vue';
   import type { AiSkillResourceRef } from '@lightnote/shared/ai-skill-protocol';
+  import { isAiDocumentFileNameSupported } from '@lightnote/shared';
   import { getMobileResourceEntryPath } from '@/composables/useMobileNavigationState';
   import { batchDeleteSearchResources, clearGlobalSearchCache } from '@/api/search';
   import type {
@@ -670,6 +671,7 @@
   import { updatePreference } from '@/utils/savePreference';
   import { generateUUID } from '@/utils/common';
   import icon from '@/config/icon';
+  import { resolveFileAiSummaryPresentation } from '@/utils/fileAiSummary';
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();
@@ -768,20 +770,35 @@
       title: item.title || t('inbox.untitled'),
     });
   });
+  const inboxAiSkillId = computed(() => {
+    const resourceType = inboxAiResource.value?.resourceType;
+    if (resourceType === 'file') return 'file.summarize';
+    if (resourceType === 'note') return 'note.batch_summarize';
+    if (resourceType === 'bookmark') return 'bookmark.summarize_page';
+    return 'file.summarize';
+  });
   const inboxAiActions = computed(() => {
     const item = inboxAiResource.value;
     if (!item) return [];
+    const filePresentation = resolveFileAiSummaryPresentation({ fileName: item.title });
+    const label =
+      item.resourceType === 'file'
+        ? t(filePresentation.labelKey)
+        : item.resourceType === 'note'
+          ? t('note.aiSummarize')
+          : t('bookmarkMg.aiSummarize');
+    const instruction =
+      item.resourceType === 'file'
+        ? t(filePresentation.instructionKey)
+        : item.resourceType === 'note'
+          ? t('note.aiSummarizeInstruction')
+          : t('bookmarkMg.aiSummarizeCurrentInstruction', { name: item.title || t('inbox.untitled') });
     return [
       {
         id: 'analyze',
-        label: t('ai.entry.analyzeAgain'),
-        skillId: 'search.summarize_selected',
-        input: {
-          instruction: t('ai.entry.analyzeResourcePrompt', {
-            type: t(`inbox.${item.resourceType}`),
-            title: item.title || t('inbox.untitled'),
-          }),
-        },
+        label,
+        skillId: inboxAiSkillId.value,
+        input: { instruction },
       },
     ];
   });
@@ -1108,6 +1125,10 @@
   }
 
   function openInboxResourceAi(item: InboxItemType) {
+    if (item.resourceType === 'file' && !isAiDocumentFileNameSupported(item.title)) {
+      message.warning(t('cloudSpace.aiUnsupportedFilesSkipped', { count: 1 }));
+      return;
+    }
     inspectedInboxKey.value = inbox.resourceKey(item);
     inboxAiResource.value = item;
   }

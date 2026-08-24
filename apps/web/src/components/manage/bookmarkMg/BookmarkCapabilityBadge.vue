@@ -6,9 +6,9 @@
       role="button"
       tabindex="0"
       :aria-label="tooltip"
-      @click.stop="emit('click')"
-      @keydown.enter.prevent.stop="emit('click')"
-      @keydown.space.prevent.stop="emit('click')"
+      @click.stop="emit('click', $event)"
+      @keydown.enter.prevent.stop="emit('click', $event)"
+      @keydown.space.prevent.stop="emit('click', $event)"
     >
       <span class="bookmark-capability__icon" aria-hidden="true">
         <SvgIcon
@@ -36,7 +36,7 @@
     { compact: false },
   );
 
-  const emit = defineEmits<{ click: [] }>();
+  const emit = defineEmits<{ click: [event: MouseEvent | KeyboardEvent] }>();
 </script>
 
 <style scoped lang="less">
@@ -117,5 +117,11 @@
 
   .bookmark-capability__label {
     letter-spacing: 0.01em;
+  }
+
+  html.light-note-mobile-rendering .bookmark-capability {
+    border-color: var(--badge-color);
+    background: var(--card-background);
+    box-shadow: none;
   }
 </style>

@@ -68,7 +68,7 @@ afterEach(() => {
 });
 
 describe('BookmarkSnapshotModal 网页存档生命周期', () => {
-  it('打开缺少存档的弹窗不会自动消费 AI，用户可显式免费保存网页正文', async () => {
+  it('打开缺少存档的弹窗不会自动调用 AI，用户可显式保存网页正文', async () => {
     let snapshotReads = 0;
     requestMocks.apiBasePost.mockImplementation(async (path: string) => {
       if (path === '/api/bookmark/snapshot') {

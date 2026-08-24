@@ -39,8 +39,10 @@ describe('aiBillingCatalog', () => {
     });
     const publicCatalog = listPublicAiBillingCatalog();
     expect(publicCatalog).toMatchObject({
+      ruleVersion: 2,
       chargingRule: 'provider_actual_tokens',
       repairBilling: 'platform',
+      failedExecutionBilling: 'platform',
     });
     expect(JSON.stringify(publicCatalog)).not.toContain('reservationTokens');
     expect(JSON.stringify(publicCatalog)).not.toContain('taskTypes');

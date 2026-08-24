@@ -120,6 +120,42 @@ describe('loadExplicitResourceEvidence', () => {
     expect(result.coverage.warnings).toEqual(
       expect.arrayContaining(['image_recognition_fallback:file:3', 'image_recognition_uncertain:file:3']),
     );
+    expect(result.coverage.complete).toBe(true);
+    expect(result.coverage.quality).toBe('degraded');
+    expect(result.sources[0].coverage.complete).toBe(true);
+    expect(result.sources[0].coverage.qualityWarnings).toEqual(
+      expect.arrayContaining(['image_recognition_fallback', 'image_recognition_uncertain']),
+    );
+  });
+
+  it('Vision 识别不确定只降低证据质量，不误报结构覆盖缺失', async () => {
+    const database = databaseFor({
+      files: [
+        {
+          id: 4,
+          file_name: 'screenshot.png',
+          source_id: 's4',
+          source_status: 'ready',
+          coverage_metadata: JSON.stringify({
+            recognition: {
+              engine: 'deepseek_vision',
+              quality: { status: 'uncertain' },
+              uncertainSegments: ['右下角文字模糊'],
+            },
+          }),
+        },
+      ],
+      chunks: [{ source_id: 's4', chunk_index: 0, content: '识别到的主要文字', locator_value: '图片' }],
+    });
+    const result = await loadExplicitResourceEvidence({
+      userId: 'u1',
+      resourceRefs: [{ type: 'file', id: '4', version: 'v4' }],
+      database,
+    });
+
+    expect(result.coverage.complete).toBe(true);
+    expect(result.coverage.qualityWarnings).toEqual(['image_recognition_uncertain:file:4']);
+    expect(result.coverage.structuralWarnings).toEqual([]);
   });
 
   it('在统一字符预算内截断并把截断作为可见 coverage', async () => {

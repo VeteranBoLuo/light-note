@@ -12,6 +12,7 @@ const DEFAULT_MAX_CHARS_PER_RESOURCE = 20_000;
 const DEFAULT_MAX_TOTAL_CHARS = 80_000;
 const DEFAULT_FILE_PREPARE_WAIT_MS = 12_000;
 const DEFAULT_FILE_PREPARE_POLL_MS = 500;
+const EVIDENCE_QUALITY_WARNING_CODES = new Set(['image_recognition_fallback', 'image_recognition_uncertain']);
 
 const PUBLIC_FILE_PREPARATION_ERRORS = Object.freeze({
   UNSUPPORTED_FILE_TYPE: '该文件格式暂不支持 AI 解析。当前支持 TXT、Markdown、CSV、PDF、DOCX、PNG、JPG 和 WebP。',
@@ -113,6 +114,20 @@ function normalizeJson(value, fallback) {
 
 function plainText(value) {
   return normalizePersonalKnowledgeText(value);
+}
+
+function evidenceWarningCode(warning) {
+  return String(warning || '').split(':', 1)[0];
+}
+
+function isEvidenceQualityWarning(warning) {
+  return EVIDENCE_QUALITY_WARNING_CODES.has(evidenceWarningCode(warning));
+}
+
+function splitEvidenceWarnings(warnings) {
+  const qualityWarnings = warnings.filter(isEvidenceQualityWarning);
+  const structuralWarnings = warnings.filter((warning) => !isEvidenceQualityWarning(warning));
+  return { qualityWarnings, structuralWarnings };
 }
 
 function noteText(row) {
@@ -349,6 +364,7 @@ export async function loadExplicitResourceEvidence({
     const fitted = fitContent(raw.content, maxTotalChars - usedChars, maxCharsPerResource);
     usedChars += fitted.text.length;
     const resourceWarnings = [...raw.warnings, ...(fitted.truncated ? ['resource_content_truncated'] : [])];
+    const resourceWarningGroups = splitEvidenceWarnings(resourceWarnings);
     warnings.push(...resourceWarnings.map((warning) => `${warning}:${ref.type}:${ref.id}`));
     resources.push({
       type: ref.type,
@@ -357,6 +373,8 @@ export async function loadExplicitResourceEvidence({
       status: raw.status,
       includedChars: fitted.text.length,
       warnings: resourceWarnings,
+      coverageComplete: resourceWarningGroups.structuralWarnings.length === 0,
+      quality: resourceWarningGroups.qualityWarnings.length ? 'degraded' : 'full',
     });
     if (!fitted.text) continue;
     const source = {
@@ -371,10 +389,13 @@ export async function loadExplicitResourceEvidence({
       locator: raw.locator,
       target: targetFor(ref.type, ref.id, row),
       coverage: {
-        complete: resourceWarnings.length === 0,
+        complete: resourceWarningGroups.structuralWarnings.length === 0,
         status: raw.status,
         includedChars: fitted.text.length,
         warnings: resourceWarnings,
+        structuralWarnings: resourceWarningGroups.structuralWarnings,
+        qualityWarnings: resourceWarningGroups.qualityWarnings,
+        quality: resourceWarningGroups.qualityWarnings.length ? 'degraded' : 'full',
         ...(raw.coverageMetadata ? { parser: raw.coverageMetadata } : {}),
       },
     };
@@ -383,12 +404,17 @@ export async function loadExplicitResourceEvidence({
       `[${source.citationKey}] evidenceRef=${source.evidenceRef}\n类型：${ref.type}\n标题：${source.title}\n状态：${raw.status}\n内容：\n${fitted.text}`,
     );
   }
+  const uniqueWarnings = [...new Set(warnings)];
+  const warningGroups = splitEvidenceWarnings(uniqueWarnings);
   return {
     evidence: blocks.join('\n\n'),
     sources,
     coverage: {
-      complete: warnings.length === 0 && sources.length === refs.length,
-      warnings: [...new Set(warnings)],
+      complete: warningGroups.structuralWarnings.length === 0 && sources.length === refs.length,
+      warnings: uniqueWarnings,
+      structuralWarnings: warningGroups.structuralWarnings,
+      qualityWarnings: warningGroups.qualityWarnings,
+      quality: warningGroups.qualityWarnings.length ? 'degraded' : 'full',
       resources,
       requestedResources: refs.length,
       representedResources: sources.length,
@@ -402,5 +428,8 @@ export const aiSkillResourceEvidenceInternals = Object.freeze({
   checklistText,
   fitContent,
   rawResource,
+  evidenceWarningCode,
+  isEvidenceQualityWarning,
+  splitEvidenceWarnings,
   PUBLIC_FILE_PREPARATION_ERRORS,
 });

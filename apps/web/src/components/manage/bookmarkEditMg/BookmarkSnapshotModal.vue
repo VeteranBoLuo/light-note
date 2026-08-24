@@ -1,7 +1,6 @@
 <template>
   <BModal v-model:visible="visible" :title="$t('bookmarkMg.snapshotTitle')" :show-footer="false" width="auto">
     <div class="bsnap">
-      <p class="bsnap-hint">{{ $t('bookmarkMg.snapshotHint') }}</p>
       <div class="bsnap-bar">
         <span v-if="snap?.update_time" class="bsnap-time">{{
           $t('bookmarkMg.snapshotUpdatedAt', { t: fmtTime(snap.update_time) })
@@ -201,12 +200,6 @@
     min-width: 0;
     max-width: 100%;
     box-sizing: border-box;
-  }
-  .bsnap-hint {
-    margin: 0;
-    font-size: 12px;
-    color: var(--desc-color);
-    line-height: 1.6;
   }
   .bsnap-bar {
     display: flex;

@@ -50,7 +50,10 @@ describe('移动端待办页签布局', () => {
     expect(inboxSource).toContain('@click="completeOne(inspectedInboxItem)"');
     expect(inboxSource).toContain('@click="confirmDelete([inspectedInboxItem])"');
     expect(inboxSource).toContain('@click="openInboxResourceAi(inspectedInboxItem)"');
-    expect(inboxSource).toContain('skill-id="search.summarize_selected"');
+    expect(inboxSource).toContain(':skill-id="inboxAiSkillId"');
+    expect(inboxSource).toContain("resourceType === 'file') return 'file.summarize'");
+    expect(inboxSource).toContain("resourceType === 'note') return 'note.batch_summarize'");
+    expect(inboxSource).toContain("resourceType === 'bookmark') return 'bookmark.summarize_page'");
     expect(inboxSource).toContain('auto-run-action-id="analyze"');
     expect(inboxSource).not.toContain('class="inbox-item__actions inbox-item__actions--desktop"');
     expect(inboxSource).toMatch(

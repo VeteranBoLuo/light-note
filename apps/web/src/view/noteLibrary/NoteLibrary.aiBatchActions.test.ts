@@ -68,6 +68,13 @@ describe('笔记库批量 AI 操作语义', () => {
     expect(source).not.toContain("key: 'assistant'");
   });
 
+  it('单篇笔记的桌面右键与移动菜单共用 AI 总结入口', () => {
+    expect(source).toMatch(/function menuForNote\(note: any\)[\s\S]*key: 'aiSummary'[\s\S]*icon: icon\.ai\.summary/);
+    expect(source).toMatch(/action === 'aiSummary'[\s\S]*openNoteAi\(note\)/);
+    expect(source).toMatch(/function openNoteAi\(note: any\)[\s\S]*openNotesAi\(\[note\]\)/);
+    expect(source).toMatch(/const mobileNoteActions = computed[\s\S]*menuForNote\(activeMobileNote\.value\)/);
+  });
+
   it('桌面批量工具栏只保留高频动作，低频动作收进更多菜单', () => {
     expect(source).toContain(':menu-options="desktopBatchMoreOptions"');
     expect(source).toMatch(/const desktopBatchMoreOptions = computed\(\(\) => \[[\s\S]*key: 'analyze'/);

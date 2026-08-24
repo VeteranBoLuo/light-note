@@ -101,9 +101,10 @@ function payload() {
     ],
     pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
     catalog: {
-      ruleVersion: 1,
+      ruleVersion: 2,
       chargingRule: 'provider_actual_tokens',
       repairBilling: 'platform',
+      failedExecutionBilling: 'platform',
       missingUsageBilling: 'request_estimate_capped',
       tokenActions: [{ id: 'note.transform_text', module: 'note', labelKey: 'noteTransformText', unit: 'request' }],
       freeActions: [

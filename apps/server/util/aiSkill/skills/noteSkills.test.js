@@ -6,11 +6,18 @@ const createNoteSkill = noteSkills.find((skill) => skill.id === 'note.create_fro
 function context() {
   return {
     identity: { subjectUserId: 'u1' },
-    resourceRefs: [{ type: 'note', id: 'n1', version: 'v1' }],
+    resourceRefs: [
+      { type: 'note', id: 'n1', version: 'v1' },
+      { type: 'note', id: 'n2', version: 'v1' },
+    ],
   };
 }
 
 describe('note.create_from_sources', () => {
+  it('至少需要两份明确材料，避免单篇笔记出现“生成新笔记”的重复语义', () => {
+    expect(createNoteSkill.contextPolicy.minResources).toBe(2);
+  });
+
   it('有可读笔记时只返回未写入预览，并显式提供二次确认动作', async () => {
     const prepared = await createNoteSkill.prepare({
       input: createNoteSkill.validateInput({ title: '今日总结' }),

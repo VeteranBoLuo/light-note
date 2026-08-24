@@ -1251,6 +1251,7 @@
         label: note.isPending ? t('inbox.removeExisting') : t('inbox.addExisting'),
         icon: icon.contextMenu.inbox,
       },
+      { key: 'aiSummary', label: t('note.aiSummarize'), icon: icon.ai.summary },
       ...(noteTreeWriteEnabled.value
         ? [
             { key: 'createChild', label: t('note.newChildPage'), icon: icon.common.add },
@@ -1781,6 +1782,7 @@
     if (action === 'toggleTop') toggleNoteTop(note);
     else if (action === 'relateTags') openNoteTagConfig(note);
     else if (action === 'toggleInbox') toggleNoteInbox(note);
+    else if (action === 'aiSummary') openNoteAi(note);
     else if (action === 'enterDirectory' && noteTreeReadEnabled.value) selectDirectory(String(note.id));
     else if (action === 'createChild') showNewChildPicker(note);
     else if (action === 'attach') openAttachPages(note);
@@ -1795,6 +1797,7 @@
       | 'toggleTop'
       | 'relateTags'
       | 'toggleInbox'
+      | 'aiSummary'
       | 'enterDirectory'
       | 'createChild'
       | 'attach'
@@ -2441,13 +2444,23 @@
   const noteAiVisible = ref(false);
   const noteAiItems = ref<any[]>([]);
 
+  function openNotesAi(notes: any[]) {
+    const available = notes.filter((note) => String(note?.id || '').trim());
+    if (!available.length) return;
+    if (available.length > 20) message.info(t('ai.materialLimit', { count: 20 }));
+    mobileNoteActionsOpen.value = false;
+    mobileBatchActionsOpen.value = false;
+    noteAiItems.value = available.slice(0, 20);
+    noteAiVisible.value = true;
+  }
+
+  function openNoteAi(note: any) {
+    openNotesAi([note]);
+  }
+
   function openSelectedNotesAi() {
     const checked = viewNoteList.value.filter((data: any) => data.isCheck === true);
-    if (!checked.length) return;
-    if (checked.length > 20) message.info(t('ai.materialLimit', { count: 20 }));
-    mobileBatchActionsOpen.value = false;
-    noteAiItems.value = checked.slice(0, 20);
-    noteAiVisible.value = true;
+    openNotesAi(checked);
   }
 
   function openGlobalAiOrganize() {

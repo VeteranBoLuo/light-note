@@ -27,7 +27,7 @@ export const noteSkills = Object.freeze([
     id: 'note.create_from_sources',
     domain: 'note',
     resourceTypes: ['note', 'bookmark', 'file'],
-    minResources: 1,
+    minResources: 2,
     maxResources: 20,
     taskLabel: '根据所选材料生成一篇新笔记草稿',
     defaultInstruction: '生成结构清晰、保留来源引用的 Markdown 笔记草稿。',

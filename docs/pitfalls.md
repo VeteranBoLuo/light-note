@@ -2904,16 +2904,16 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 
 - **现象：** 文件、笔记、书签和待办页面都展示自由输入框或固定三四个通用按钮，但换一种问法、换一种文件格式就提示“不支持”或走错 Skill；图片明明可 OCR，却因为解析任务尚未接入当前请求而被当作没有正文。快速待办还提供“AI 补全详情”，实际产物不可预测且与“快速创建”目标冲突。
 - **根因：** 页面把“模型可以理解自然语言”等同于“当前产品已经实现任意动作”，并在各入口各自硬编码按钮和文件扩展名。服务端又只读取已存在的派生正文，没有先把显式选择的云文件接入统一文档/OCR 生命周期；入口、解析器和执行器因此形成三套能力事实源。
-- **防回归约束：** 明确产物的业务入口默认只展示可核验的预设动作，自由输入只保留在真正支持开放问答的表面；预设必须携带结构化资源引用、固定 Skill 和受校验的输入，服务端仍按同一能力契约失败关闭。AI 可解析文件扩展名由共享能力清单唯一提供，前端据此隐藏或禁用不支持入口，服务端解析器启动时校验清单一致；图片使用同一文档 source 和 OCR Worker，不得在页面另写识图调用。执行前先附加或复用 source，并对 queued/parsing 做有界等待；仍无可读正文时不调用模型、不返回可执行动作。图片单项应使用“提取并总结图片文字”等真实能力文案，不能暗示通用视觉理解。快速创建只保留确定性字段，复杂拆解进入完整待办并明确读取标题、说明和现有清单；简洁与详细粒度分别限制为 3～5 和 6～10 步。
+- **防回归约束：** 明确产物的业务入口默认只展示可核验的预设动作，自由输入只保留在真正支持开放问答的表面；预设必须携带结构化资源引用、固定 Skill 和受校验的输入，服务端仍按同一能力契约失败关闭。AI 可解析文件扩展名由共享能力清单唯一提供，前端据此隐藏或禁用不支持入口，服务端解析器启动时校验清单一致；图片使用同一文档 source 和识别服务，不得在页面另写识图调用。云空间、待整理等不同入口必须复用同一文件类型展示规则，并把文件、笔记、书签分别路由到所属模块 Skill，禁止借用调用预算不同的搜索通用 Skill。执行前先附加或复用 source，并对 queued/parsing 做有界等待；仍无可读正文时不调用模型、不返回可执行动作。图片单项应使用“提取并总结图片文字”等真实能力文案，不能暗示通用视觉理解。快速创建只保留确定性字段，复杂拆解进入完整待办并明确读取标题、说明和现有清单；简洁与详细粒度分别限制为 3～5 和 6～10 步。
 - **验收：** 共享测试锁定 TXT、Markdown、CSV、PDF、DOCX、PNG、JPG、WebP 清单与服务端解析器一致；文件入口测试覆盖支持、不支持、混选、排队、解析成功、无文字和失败状态，断言无正文时 Provider=0。图片入口显示 OCR 语义动作并能在 Worker 完成后总结文字；不支持格式不出现 AI 动作。笔记、文件、书签和待办执行面不存在无边界自由输入，帮助中心等开放问答入口仍保留；快速待办不存在 AI 补全按钮，待办拆解提示与输出数量同时受服务端校验。
-- **相关代码：** `packages/shared/index.js`、`apps/server/util/aiDocument/parser.js`、`apps/server/util/aiSkill/resourceEvidence.js`、`apps/server/util/aiSkill/skills/resourceSkillFactory.js`、`apps/web/src/components/aiSkills/AiSkillPanel.vue`、`apps/web/src/components/cloudSpace/fieldList.vue`、`apps/web/src/components/todo/QuickTodoForm.vue`、`apps/web/src/components/todo/TodoBreakdownButton.vue`。
+- **相关代码：** `packages/shared/index.js`、`apps/server/util/aiDocument/parser.js`、`apps/server/util/aiSkill/resourceEvidence.js`、`apps/server/util/aiSkill/skills/resourceSkillFactory.js`、`apps/web/src/components/aiSkills/AiSkillPanel.vue`、`apps/web/src/utils/fileAiSummary.ts`、`apps/web/src/components/cloudSpace/fieldList.vue`、`apps/web/src/view/inbox/Inbox.vue`、`apps/web/src/components/todo/QuickTodoForm.vue`、`apps/web/src/components/todo/TodoBreakdownButton.vue`。
 
 ### LN-PIT-135：网页正文存档与摘要必须区分计费并绑定同一正文版本
 
 - **现象：** 书签卡片同时显示“正文存档”和“AI 摘要”两个近似徽标，用户先抓正文、再手动摘要；网页重新归档后旧摘要仍可能对应上一版正文。批量书签分析与单卡分析并存，又让来源重复、比较占位和自由追问继续暴露不稳定能力。
 - **根因：** 网页抓取和摘要生成分别拥有按钮、接口和缓存生命周期，但摘要没有绑定正文版本。被动收藏时的后台防死链抓取与用户显式发起的 AI 操作也没有区分，若直接合并会让保存书签静默消耗额度。
-- **防回归约束：** 被动新增/更新书签和用户显式“保存网页正文”都只做无模型抓取，禁止静默消耗 AI 额度；重新抓取必须使旧摘要失效。摘要只能在已有正文后由用户明确触发，并绑定当前正文版本；摘要失败或额度不足不得影响免费正文。卡片只展示一个“网页存档”能力徽标，弹层在同一资源内分别提供免费正文操作和明确标注消耗额度的摘要操作；单卡分析只携带当前书签的结构化 ID，不提供比较或自由追问。批量工具栏不再提供网页分析，旧合并接口只为兼容保留，不作为新 UI 入口。
-- **验收：** 单测覆盖重新抓取会清空旧摘要、免费归档 Provider=0、摘要只读取已有正文、额度不足时正文仍可查看、readonly 不写入、已有摘要时打开只读不重复调用。PC/移动卡片只出现一个存档徽标，弹层同时覆盖免费正文、显式摘要、加载、失败和额度不足状态；单卡分析来源数恒为一个且切换资源后重新挂载状态。自动测试使用 Gateway/API mock，不调用真实模型。
+- **防回归约束：** 被动新增/更新书签和用户显式“保存网页正文”都只做无模型抓取，禁止静默消耗 AI 额度；重新抓取必须使旧摘要失效。摘要只能在已有正文后由用户明确触发，并绑定当前正文版本；摘要失败或额度不足不得影响无模型正文。卡片只展示一个“网页存档”能力徽标，弹层在同一资源内分别提供正文保存和 AI 摘要动作；免费/扣额度规则在独立 AI 用量页统一说明，不在每个按钮重复附加标签。单卡分析只携带当前书签的结构化 ID，不提供比较或自由追问。批量工具栏不再提供网页分析，旧合并接口只为兼容保留，不作为新 UI 入口。
+- **验收：** 单测覆盖重新抓取会清空旧摘要、正文归档 Provider=0、摘要只读取已有正文、额度不足时正文仍可查看、readonly 不写入、已有摘要时打开只读不重复调用。PC/移动卡片只出现一个可点击存档徽标，弹层同时覆盖正文、显式摘要、加载、失败和额度不足状态，按钮不重复出现“免费/消耗额度”后缀；单卡分析来源数恒为一个且切换资源后重新挂载状态。自动测试使用 Gateway/API mock，不调用真实模型。
 - **相关代码：** `apps/server/util/snapshot.js`、`apps/server/router_handle/bookmarkHandle.js`、`apps/web/src/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue`、`apps/web/src/components/manage/bookmarkMg/BookmarkAiDialog.vue`、`apps/web/src/components/manage/bookmarkMg/BookmarkTable.vue`、`apps/web/src/components/manage/bookmarkMg/BookmarkTableMobile.vue`。
 
 ### LN-PIT-136：正文变换不能用客户端打字机伪装流式，草稿预览也不能冒充已创建
@@ -2944,7 +2944,7 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 
 - **现象：** AI 已拆进笔记、书签、文件、待办、搜索、标签和帮助模块，但用户只能看总额度，不知道哪次操作扣了多少；快速收藏打开即自动识别、网页存档弹框打开即自动生成摘要、中文图标普通搜索隐式翻译等入口会在没有清楚确认时访问模型。批量整理又以固定小额占位包住最多二十次调用，既可能超额，也可能在额度不足后吞掉错误继续启动新项目。显式 AI 操作若在 Provider 失败后静默返回本地降级结果，根执行还会被误记为成功，用户既无法判断额度花在何处，也可能把免费结果误认成 AI 结果。
 - **根因：** “能力叫什么、是否访问模型、最多调用几次、谁承担修复成本、页面如何解释”分别散落在 Registry、路由、Prompt 和前端文案中，没有计费唯一事实源。免费被误等同为无限，网页抓取、本地 OCR、预览转换和外部图标查询也缺少各自的资源预算；取消信号没有贯穿非流式链路，断开前后只能粗暴按整笔占位处理。
-- **防回归约束：** 所有用户模型动作必须先登记 `aiBillingCatalog`，由目录同时生成 Execution 配置和独立 AI 用量页规则；Gateway 每次 Provider 前按调用范围、次数和保守 token 预算授权，用户主调用按实际 usage 结算，受限 `_repair` 协议修复只允许跟随主调用并由平台承担。缓存、无材料和确定性路径保持零扣费；断开前未发出 Provider 退还占位，发出后缺失 usage 按请求前预算估算且不超过预占。打开页面、弹框或普通搜索不得静默调用模型，必须拆成明确标注“消耗额度”的用户动作；显式 AI 失败不得伪装成本地降级成功，兼容返回混合结果时必须通过根执行的结果分类器准确标记为失败、部分完成或额度阻断。免费外网/CPU 能力保留尺寸、页数、像素、频率、并发和积压上限，保护性降级不得阻断基础 CRUD。
+- **防回归约束：** 所有用户模型动作必须先登记 `aiBillingCatalog`，由目录同时生成 Execution 配置和独立 AI 用量页规则；Gateway 每次 Provider 前按调用范围、次数和保守 token 预算授权，用户主调用按实际 usage 结算，受限 `_repair` 协议修复只允许跟随主调用并由平台承担。用户计费根执行最终为 `failed` 时必须代表没有可交付结果，本次额度退回为 0；`partial`、`quota_blocked` 与 `aborted` 仍按已经发生的用户主调用结算。免扣只改变额度结算，不删除 Provider Span、失败状态、目录调用上限或全局频控记录。缓存、无材料和确定性路径保持零扣费；断开前未发出 Provider 退还占位，发出后缺失 usage 按请求前预算估算且不超过预占。打开页面、弹框或普通搜索不得静默调用模型，必须拆成明确的用户动作；按钮不必重复附加“消耗额度”后缀，计费边界与逐次明细以独立 AI 用量页为事实源。显式 AI 失败不得伪装成本地降级成功，兼容返回混合结果时必须通过根执行的结果分类器准确标记为失败、部分完成或额度阻断。无模型外网/CPU 能力保留尺寸、页数、像素、频率、并发和积压上限，保护性降级不得阻断基础 CRUD。
 - **验收：** 目录契约测试覆盖全部 Registry Skill 和散落业务动作，源码门禁证明只有 Gateway 可访问 Provider；并发、批量、额度不足、usage 缺失、修复、取消、缓存和账本异常全部使用 Mock Provider。独立 AI 用量页覆盖近 7/30/90 天、模块筛选、每日趋势、平台承担、分页、加载、空、错误、旧数据保留、估算和延迟结算，设置页只保留单一入口；PC/移动、浅色/深色及共享移动渲染基线均完成浏览器视觉验收。公开帮助同步说明免费/扣费边界，任何测试不得调用真实模型。
 - **相关代码：** `apps/server/util/aiBillingCatalog.js`、`apps/server/util/aiExecution/`、`apps/server/util/agent/aiGateway.js`、`apps/server/util/aiUsageService.js`、`apps/server/util/requestRateLimit.js`、`apps/server/util/snapshot.js`、`apps/web/src/components/aiSkills/AiUsageCenter.vue`、`apps/web/src/view/aiUsage/AiUsagePage.vue`、`apps/server/migrations/20260824_ai_usage_governance_knowledge.sql`。
 
@@ -2952,8 +2952,8 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 
 - **现象：** 肉眼清晰且包含完整证件文字的照片，文件分析却返回零散乱码并宣称无法识别；直接查看原图时文字实际清楚。若把全部识图直接切到新视觉模型，又会在模型限流、下线或协议变化时完全不可用，并可能让用户仅上传图片就产生未说明的 token 消耗。
 - **根因：** 旧图片解析只调用 Tesseract，部署门禁没有验证 ImageMagick，导致 EXIF 自动旋转与图像预处理在缺少组件时静默跳过；原图方向、版面模式和细字密度共同放大了 OCR 误差。图片 Worker、笔记图片工具和文件 AI 入口又各自决定识别与缓存，没有统一策略、结果来源元数据或并发租约；“换供应商”因此容易被误做成删除保底链路或把实验视觉模型扩散到全部文本任务。
-- **防回归约束：** 图片文字提取必须复用唯一的 `imageRecognition` 服务，DeepSeek Vision 只作为显式用户 AI Execution 内的主链，本地 OCR 永久作为自动保底；上传、后台预解析和无 Execution 调用保持纯本地，不得静默消耗额度。PDF 图片页继续本地 OCR。视觉技术失败、无字或明显低质量时进入有界熔断并降级，结果必须携带引擎、模型、策略版本、降级原因、重试时间和质量告警；缓存键绑定内容、策略和模型。显式 Vision 与后台 Worker 竞争同一 source 时使用租约，迟到 Worker 不得覆盖新结果。预处理统一使用系统 ImageMagick 做自动旋转、归一化和重叠细节分区，发布门禁同时验证 Poppler、Tesseract、语言包与 ImageMagick；禁止因视觉实验模型上线而替换稳定文本模型或删除 Qwen 文本备用。
-- **验收：** Mock Provider 测试覆盖 Vision 成功、技术失败回退、输入错误不旁路、熔断跳过、无 Execution 零模型调用、策略缓存隔离、显式租约抢占和迟到 Worker 丢弃；网关测试证明图片 Base64 不按字符串长度计 token、视觉实际 usage 进入当前 Execution，只有该阶段的缺失 usage 技术失败可释放视觉占位。运行时门禁明确列出缺失组件；PNG/JPG/WebP 预处理覆盖 EXIF 旋转、完整图加重叠分区和无 ImageMagick 原图降级。用户界面覆盖 Vision 成功无提示、本地保底提示、不确定文字提示和识别失败状态。
+- **防回归约束：** 图片文字提取必须复用唯一的 `imageRecognition` 服务，DeepSeek Vision 只作为显式用户 AI Execution 内的主链，本地 OCR 永久作为自动保底；上传、后台预解析和无 Execution 调用保持纯本地，不得静默消耗额度。PDF 图片页继续本地 OCR。视觉技术失败、无字或明显低质量时进入有界熔断并降级，结果必须携带引擎、模型、策略版本、降级原因、重试时间和质量告警；缓存键绑定内容、策略和模型。识别不确定或降级是证据质量告警，不等同于资源缺失、解析中或截断等结构覆盖不足；`coverage.complete` 只能由结构告警决定，同时保留独立 `qualityWarnings` 给界面和诊断展示，避免触发“完整/全部”等输出门禁误报。显式 Vision 与后台 Worker 竞争同一 source 时使用租约，迟到 Worker 不得覆盖新结果。预处理统一使用系统 ImageMagick 做自动旋转、归一化和重叠细节分区，发布门禁同时验证 Poppler、Tesseract、语言包与 ImageMagick；禁止因视觉实验模型上线而替换稳定文本模型或删除 Qwen 文本备用。
+- **验收：** Mock Provider 测试覆盖 Vision 成功、技术失败回退、输入错误不旁路、熔断跳过、无 Execution 零模型调用、策略缓存隔离、显式租约抢占和迟到 Worker 丢弃；网关测试证明图片 Base64 不按字符串长度计 token、视觉实际 usage 进入当前 Execution，只有该阶段的缺失 usage 技术失败可释放视觉占位。证据测试分别断言识别不确定/本地降级保持结构覆盖完整但质量下降，资源缺失/解析中/截断仍标记覆盖不足。运行时门禁明确列出缺失组件；PNG/JPG/WebP 预处理覆盖 EXIF 旋转、完整图加重叠分区和无 ImageMagick 原图降级。用户界面覆盖 Vision 成功无提示、本地保底提示、不确定文字提示和识别失败状态。
 - **相关代码：** `apps/server/util/imageRecognition/`、`apps/server/util/aiDocument/localOcr.js`、`apps/server/util/aiDocument/parser.js`、`apps/server/util/aiDocument/service.js`、`apps/server/util/noteImageOcr.js`、`apps/server/util/agent/aiGateway.js`、`apps/server/util/aiExecution/service.js`、`apps/web/src/utils/aiSkillPresentation.ts`。
 
 ### LN-PIT-141：AI 调用次数不能脱离阶段、计费归属和修复原因展示
@@ -2976,3 +2976,11 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **防回归约束：** 私钥路径规范化必须位于唯一共享解析器中，所有可独立运行的发布入口在文件校验前调用；禁止用 `eval`、命令拼接或宽泛变量替换展开配置值，也不得输出私钥内容。
 - **验收：** 自动测试覆盖 `~/`、绝对路径和 `~other/` 三种输入，并静态断言三个发布入口复用共享脚本；对四个 Shell 文件执行 `bash -n`。真实发布仍须在远端写入前通过本地 `-f` 预检。
 - **相关代码：** `scripts/lib/deploy-environment.sh`、`scripts/deploy-host-agent.sh`、`scripts/deploy-server.sh`、`scripts/deploy-web.sh`、`apps/server/scripts/deployEnvironment.test.js`。
+
+### LN-PIT-143：组件自定义 click 事件不能与原生事件修饰符形成隐式空参数契约
+
+- **现象：** 书签卡片的“网页存档”角标可以显示 Tooltip，但点击后弹框没有打开，控制台报读取 `undefined.stopPropagation`。
+- **根因：** 子组件用 `emit('click')` 发出无参数自定义事件，父组件却在组件监听器上使用 `@click.stop`。Vue 会对自定义事件参数执行原生事件修饰逻辑，但 `$event` 实际为 `undefined`，因此在业务回调运行前就抛错。
+- **防回归约束：** 可点击组件若沿用 `click` 语义，必须发出真实 `MouseEvent | KeyboardEvent`，并由组件内部负责原生冒泡与键盘交互；父组件只监听 `@click` 执行业务动作。若不打算暴露原生事件，则改用 `activate`、`select` 等语义事件，父组件禁止添加原生事件修饰符。桌面和移动端必须复用同一交互组件，不能一端可点击、另一端退化为静态标签。
+- **验收：** 组件测试断言鼠标与键盘激活都向监听器传递真实事件；桌面卡片、表格和移动列表点击存档角标均打开当前书签的快照弹框，不触发卡片主操作且控制台无异常。浅色/深色检查默认、hover/focus、active、弹框加载、正文、空和错误状态。
+- **相关代码：** `apps/web/src/components/manage/bookmarkMg/BookmarkCapabilityBadge.vue`、`apps/web/src/components/manage/bookmarkMg/BookmarkCapabilityBadge.test.ts`、`apps/web/src/components/manage/bookmarkMg/BookmarkTable.vue`、`apps/web/src/components/manage/bookmarkMg/BookmarkTableMobile.vue`。

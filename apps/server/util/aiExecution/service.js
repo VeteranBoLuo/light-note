@@ -9,6 +9,12 @@ import { addAiUsage, calculateChargedTokens, normalizeAiUsage } from './usage.js
 const VALID_BILLING_POLICIES = new Set(['user', 'system', 'none']);
 const VALID_RESULT_OUTCOME_STATUSES = new Set(['success', 'partial', 'failed', 'quota_blocked', 'aborted']);
 
+function shouldWaiveFailedExecutionCharge(execution) {
+  // 根执行的 failed 终态只用于“没有可交付结果”的失败。部分结果、额度中断和用户主动取消
+  // 分别使用 partial / quota_blocked / aborted，继续按已经发生的用户主调用结算。
+  return execution.billingPolicy === 'user' && execution.status === 'failed';
+}
+
 function normalizeIdentifier(value, fallback, maxLength = 128) {
   return String(value || fallback || '')
     .trim()
@@ -183,12 +189,15 @@ export async function runAiExecution(config, operation, dependencies = {}) {
     throw error;
   } finally {
     execution.durationMs = Date.now() - execution.startedAt;
-    execution.chargedTokens = calculateChargedTokens({
+    const calculatedChargedTokens = calculateChargedTokens({
       usage: execution.billableUsage,
       missingUsageSpans: execution.missingBillableUsageSpans,
       missingUsageTokens: execution.missingBillableUsageTokens,
       reservedTokens: execution.quotaHandle?.reserved || 0,
     });
+    // 用户已经发起了有效请求，但最终没有形成可交付结果时，不消耗用户额度。
+    // Provider 真实用量仍完整保留在 Execution/Span 账本，独立调用上限与全局频控也不会放宽。
+    execution.chargedTokens = shouldWaiveFailedExecutionCharge(execution) ? 0 : calculatedChargedTokens;
     if (execution.quotaHandle) {
       const reconciled = await quota.reconcile(execution.quotaHandle, execution.chargedTokens, {
         aborted: execution.status === 'aborted',
@@ -427,4 +436,9 @@ export async function finishAiProviderSpan(span, { result, error } = {}) {
   });
 }
 
-export const aiExecutionInternals = { resolveExecutionIdentity, createExecution, normalizeTaskType };
+export const aiExecutionInternals = {
+  resolveExecutionIdentity,
+  createExecution,
+  normalizeTaskType,
+  shouldWaiveFailedExecutionCharge,
+};

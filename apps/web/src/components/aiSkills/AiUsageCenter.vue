@@ -244,6 +244,7 @@
       <div class="boundary-notes">
         <p><SvgIcon :src="icon.message.info" size="14" aria-hidden="true" />{{ t('settings.ai.usage.cacheRule') }}</p>
         <p><SvgIcon :src="icon.message.info" size="14" aria-hidden="true" />{{ t('settings.ai.usage.repairRule') }}</p>
+        <p><SvgIcon :src="icon.message.info" size="14" aria-hidden="true" />{{ t('settings.ai.usage.failureRule') }}</p>
         <p
           ><SvgIcon :src="icon.message.info" size="14" aria-hidden="true" />{{
             t('settings.ai.usage.missingUsageRule')
@@ -306,6 +307,7 @@
     ruleVersion: number;
     chargingRule: string;
     repairBilling: string;
+    failedExecutionBilling?: string;
     missingUsageBilling: string;
     tokenActions: Array<{ id: string; module: string; labelKey: string; unit: 'request' | 'item' }>;
     freeActions: Array<{ id: string; module: string; labelKey: string; descriptionKey: string }>;

@@ -21,11 +21,7 @@
         </BButton>
       </div>
       <div class="mobile-batch-actions">
-        <BButton
-          class="ai-file-analysis-action"
-          :disabled="!hasAiAnalyzableSelection"
-          @click="openSelectedFilesInAi"
-        >
+        <BButton class="ai-file-analysis-action" :disabled="!hasAiAnalyzableSelection" @click="openSelectedFilesInAi">
           <SvgIcon :src="icon.ai.organize" size="16" aria-hidden="true" />
           {{ $t('cloudSpace.aiUseSelected') }}
         </BButton>
@@ -785,6 +781,7 @@
   import { persistAiNotePreview } from '@/utils/aiNoteDraft';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { isNearResourceScrollEnd } from '@/utils/resourcePagination';
+  import { resolveFileAiSummaryPresentation } from '@/utils/fileAiSummary';
   import CloudTextCardPreview from '@/components/cloudSpace/CloudTextCardPreview.vue';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
@@ -934,9 +931,7 @@
   const failedVideoPreviewIds = ref<Set<string>>(new Set());
   const hasSelection = computed(() => selectedRows.value.length > 0);
   const hasAiAnalyzableSelection = computed(() =>
-    cloud.fileList.some(
-      (file) => selectedRows.value.includes(file.id) && isAiDocumentFileNameSupported(file.fileName),
-    ),
+    cloud.fileList.some((file) => selectedRows.value.includes(file.id) && isAiDocumentFileNameSupported(file.fileName)),
   );
   const indeterminate = computed(
     () => selectedRows.value.length > 0 && selectedRows.value.length < cloud.fileList.length,
@@ -993,8 +988,8 @@
   );
   const fileAiSkillId = computed(() => (fileAiResourceRefs.value.length > 1 ? 'file.compare' : 'file.summarize'));
   const fileAiPromptKey = computed(() => 'instruction');
-  const fileAiSingleImage = computed(
-    () => fileAiFiles.value.length === 1 && getCloudFileCategory(fileAiFiles.value[0]) === 'image',
+  const fileAiSingleSummaryPresentation = computed(() =>
+    resolveFileAiSummaryPresentation(fileAiFiles.value.length === 1 ? fileAiFiles.value[0] : undefined),
   );
   const fileAiScopeLabel = computed(() => {
     if (fileAiFiles.value.length === 1) {
@@ -1026,14 +1021,10 @@
         : [
             {
               id: 'summarize',
-              label: t(fileAiSingleImage.value ? 'cloudSpace.aiExtractAndSummarizeImage' : 'cloudSpace.aiSummarizeFile'),
+              label: t(fileAiSingleSummaryPresentation.value.labelKey),
               skillId: 'file.summarize',
               input: {
-                instruction: t(
-                  fileAiSingleImage.value
-                    ? 'cloudSpace.aiExtractAndSummarizeImageInstruction'
-                    : 'cloudSpace.aiSummarizeInstruction',
-                ),
+                instruction: t(fileAiSingleSummaryPresentation.value.instructionKey),
               },
             },
           ];
