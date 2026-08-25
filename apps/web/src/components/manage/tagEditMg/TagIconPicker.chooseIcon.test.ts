@@ -68,14 +68,24 @@ async function mountPicker() {
   return host;
 }
 
-/** 打开选图弹框并等首屏搜索结果落地 */
+/** 打开选图弹框；打开本身不得触发模型搜索。 */
 async function openPicker(host: HTMLElement) {
   const smart = host.querySelector<HTMLElement>('.picker-smart');
   smart?.click();
   await nextTick();
+}
+
+/** 明确点击唯一的搜索按钮并等待结果落地。 */
+async function searchIcons(host: HTMLElement) {
+  host.querySelector<HTMLElement>('.search-row button')?.click();
   await Promise.resolve();
   await Promise.resolve();
   await nextTick();
+}
+
+async function openPickerAndSearch(host: HTMLElement) {
+  await openPicker(host);
+  await searchIcons(host);
 }
 
 /** 点第 index 个候选图并等图标解析完成 */
@@ -99,9 +109,25 @@ afterEach(() => {
 });
 
 describe('TagIconPicker 选图后的停留行为', () => {
-  it('点候选图后弹框保持打开，不弹「已选择」提示', async () => {
+  it('打开只预填标签名，唯一搜索动作由用户触发并直接启用语义搜索', async () => {
     const host = await mountPicker();
     await openPicker(host);
+
+    expect(searchTagIcons).not.toHaveBeenCalled();
+    expect(host.querySelector('.ai-search-row')).toBeNull();
+    expect(host.querySelector('.search-row button')?.textContent?.trim()).toBe(zhCN.tagManage.iconSearchButton);
+    expect(host.textContent).not.toContain('免费');
+    expect(host.textContent).not.toContain('消耗额度');
+
+    await searchIcons(host);
+
+    expect(searchTagIcons).toHaveBeenCalledWith('阅读', 0, true);
+    expect(host.querySelectorAll('.icon-option').length).toBe(2);
+  });
+
+  it('点候选图后弹框保持打开，不弹「已选择」提示', async () => {
+    const host = await mountPicker();
+    await openPickerAndSearch(host);
     expect(host.querySelectorAll('.icon-option').length).toBe(2);
 
     await clickIcon(host);
@@ -112,7 +138,7 @@ describe('TagIconPicker 选图后的停留行为', () => {
 
   it('选中的图有 selected 描边，靠它而不是 toast 反馈', async () => {
     const host = await mountPicker();
-    await openPicker(host);
+    await openPickerAndSearch(host);
     await clickIcon(host, 1);
 
     const options = [...host.querySelectorAll('.icon-option')];
@@ -122,7 +148,7 @@ describe('TagIconPicker 选图后的停留行为', () => {
 
   it('选图只更新待保存的值，颜色 marker 写入以便后续调色', async () => {
     const host = await mountPicker();
-    await openPicker(host);
+    await openPickerAndSearch(host);
     await clickIcon(host);
 
     expect(model.value).toContain('data-light-note-color');
@@ -132,7 +158,7 @@ describe('TagIconPicker 选图后的停留行为', () => {
 
   it('选完图还能继续调颜色，弹框依旧不关', async () => {
     const host = await mountPicker();
-    await openPicker(host);
+    await openPickerAndSearch(host);
     await clickIcon(host);
 
     // 点一个具体颜色（跳过「跟随默认」那一个）
@@ -147,7 +173,7 @@ describe('TagIconPicker 选图后的停留行为', () => {
 
   it('图标解析失败仍然报错，且不留下选中态', async () => {
     const host = await mountPicker();
-    await openPicker(host);
+    await openPickerAndSearch(host);
     resolveTagIcon.mockResolvedValue({ status: 500, msg: 'boom', data: {} });
 
     await clickIcon(host);
@@ -156,17 +182,13 @@ describe('TagIconPicker 选图后的停留行为', () => {
     expect([...host.querySelectorAll('.icon-option')].some((el) => el.classList.contains('selected'))).toBe(false);
   });
 
-  it('AI 扩展失败时明确提示，并保留已经可用的免费搜索结果', async () => {
+  it('再次搜索失败时明确提示，并保留上一批已展示的结果', async () => {
     const host = await mountPicker();
-    await openPicker(host);
+    await openPickerAndSearch(host);
     expect(host.querySelectorAll('.icon-option').length).toBe(2);
     searchTagIcons.mockRejectedValueOnce({ status: 503, data: { code: 'AI_PROVIDER_ERROR' } });
 
-    host.querySelector<HTMLElement>('.ai-search-row button')?.click();
-    await nextTick();
-    await Promise.resolve();
-    await Promise.resolve();
-    await nextTick();
+    await searchIcons(host);
 
     expect(error).toHaveBeenCalledWith(zhCN.tagManage.iconAiSearchFailed);
     expect(host.querySelectorAll('.icon-option').length).toBe(2);

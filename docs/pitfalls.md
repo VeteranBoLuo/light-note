@@ -1813,7 +1813,7 @@ MySQL InnoDB 默认 `REPEATABLE READ` 下，事务第一次普通 `SELECT` 建�
 
 - 日期：2026-08-13
 - 状态：已修复待上线
-- 影响范围：桌面端 Markdown 笔记编辑，尤其是默认“编辑 + 预览”分栏
+- 影响范围：Markdown 笔记编辑/预览，以及模块化 AI 的 Markdown 分析结果
 - 关键词：Markdown、CodeMirror、lineWrapping、软换行、分栏、横向滚动、源码换行
 
 #### 现象
@@ -1822,6 +1822,7 @@ MySQL InnoDB 默认 `REPEATABLE READ` 下，事务第一次普通 `SELECT` 建�
 - 默认分栏下，编辑文字会越过左侧编辑区的可见范围，看起来与右侧预览内容重叠。
 - 编辑区修复软换行后，预览区的普通长连续字符仍会撑宽内容并出现横向滚动条，两侧换行时机不一致。
 - 富文本表格在编辑器内有边框和单元格间距，但进入笔记只读预览后只剩文字，宽表还会被阅读列强行压缩。
+- AI 分析结果中的一级长标题继承全局 `h1 { font-size: 3.2em }`，标题、长 URL 或表格会越过灰色结果卡片边界。
 - 移动端和窄分栏更容易放大上述问题。
 
 #### 误导线索与排除项
@@ -1836,6 +1837,8 @@ CodeMirror 的 `EditorView.lineWrapping` 曾被条件化为只在 `props.mobile`
 
 编辑区启用软换行后，Markdown 预览根容器仍未声明长连续字符的断行规则。浏览器会把无空格英文、长 ID 或 URL 作为不可拆分的最小内容宽度，使普通段落撑出预览栏；`pre` 的默认 `white-space: pre` 又会阻止代码长行折行。预览容器允许 `overflow: auto`，最终表现为整栏横向滚动条。不能用全局隐藏溢出来掩盖问题，否则只会截断内容。
 
+模块化 AI 的 `grounded_markdown` 虽复用了统一解析器，但结果组件过去只给根节点声明 `overflow-wrap`，没有覆盖全局标题字号，也没有分别约束标题、链接、代码块、表格和媒体。父结果卡片又缺少 `min-width: 0` 与 `max-width: 100%`，因此任一不可收缩子项都可能把卡片撑宽。
+
 只读预览的另一个同源问题是表格结构样式只存在于编辑器 iframe 和个别页面中，公共 `.note-rich-content` 过去只覆盖图文组合。正文 HTML 与 `rowspan` / `colspan` 实际完整，但离开编辑器后没有边框、内边距和宽表溢出规则，于是视觉上像是表格格式丢失。直接把 `<table>` 改成 `display: block` 虽能承接横向滚动，却会让浏览器在块级外框里生成按内容收缩、默认靠左的匿名表格排版盒；外框即使居中且占满，用户实际看到的单元格网格仍会左右留白不对称。
 
 #### 修复方式
@@ -1845,6 +1848,7 @@ CodeMirror 的 `EditorView.lineWrapping` 曾被条件化为只在 `props.mobile`
 - 回归测试同时断言两端启用软换行，并确认编辑器取值仍与原始 Markdown 完全一致。
 - 编辑区与预览区共用 Markdown 字体、字号、行高和水平/顶部内边距变量，预览首个块级元素清除顶部外边距，保证首行正文从同一基线起排。
 - 预览普通正文、链接和表格单元格使用 `overflow-wrap: anywhere`，并保留 `word-break: break-word` 兼容回退；代码块使用 `white-space: pre-wrap` 保留源码换行和缩进，同时让长行按预览栏宽软换行。
+- AI Markdown 结果在共享 `AiSkillResultContent` 内收口标题字号与换行，统一约束链接、单元格、代码块和媒体；外层结果卡片显式允许 flex 子项收缩，禁止业务弹框各自补丁。
 - 富文本与 Markdown 的只读渲染统一由 `.note-rich-content` 提供表格边框、单元格内边距和最小列宽；只读预览运行时为表格增加独立的 `.ln-rich-table-scroll` 滚动容器，表格自身保留 `display: table` 并铺满容器，不修改持久化正文 HTML 或合并单元格结构。
 
 #### 防回归约束
@@ -1857,6 +1861,7 @@ CodeMirror 的 `EditorView.lineWrapping` 曾被条件化为只在 `props.mobile`
 6. 预览普通正文和代码块都不得因长行撑宽整栏；代码块必须保留源码换行与缩进，并按当前栏宽软换行。复杂图表等无法断行的结构化内容才由自身滚动容器承接。
 7. 所有渲染笔记正文 HTML 的入口必须使用 `.note-rich-content`；表格等结构基线写在公共样式中，禁止只补编辑器或某一个预览页面。
 8. 需要表格横向滚动时必须由独立容器承接，禁止把原生 `<table>` 直接改成 `display: block`；验收应比较首列左边界、末列右边界与预览画布中心，不能只检查外层元素的计算宽度。
+9. 所有 AI `grounded_markdown` / `artifact_preview` 必须经共享结果组件展示；一级标题不得直接继承页面全局字号，标题、长 URL、代码、表格和媒体均不得撑出结果卡片。
 
 #### 验证方法
 
@@ -1866,6 +1871,7 @@ CodeMirror 的 `EditorView.lineWrapping` 曾被条件化为只在 `props.mobile`
 - 在笔记库只读预览中检查普通表格、合并单元格和 8 列以上宽表：边框与间距清晰，首列到左侧的留白与末列到右侧的留白对称；宽表仅滚动独立容器，不把 IP 或英文内容挤成逐字断行。
 - 在分栏顶部对照普通段落的第一行，确认编辑与预览文字使用相同字体、字号、行高并位于同一纵向起点；首个元素为标题、列表、引用或代码块时不得被统一规则裁掉其必要内部样式。
 - 切换“仅编辑 / 编辑 + 预览 / 仅预览”后再次读取正文，确认没有新增非用户输入的换行。
+- 在笔记、书签和文件分析弹框分别检查超长中文标题、连续英文、长 URL、代码块、表格和图片，确认内容始终位于灰色结果卡片内，浅色/深色与 PC/移动均无整框横向滚动。
 
 #### 相关代码与提交
 
@@ -1874,6 +1880,8 @@ CodeMirror 的 `EditorView.lineWrapping` 曾被条件化为只在 `props.mobile`
 | `apps/web/src/components/noteLibrary/detail/MarkdownCodeMirror.vue`      | 所有端统一启用 CodeMirror 软换行 |
 | `apps/web/src/components/noteLibrary/detail/MarkdownCodeMirror.test.ts`  | 两端换行与源码不变回归           |
 | `apps/web/src/components/noteLibrary/detail/EditorV2.regression.test.ts` | 防止重新引入仅移动端换行条件     |
+| `apps/web/src/components/aiSkills/AiSkillResultContent.vue`              | AI Markdown 标题与复杂内容边界   |
+| `apps/web/src/components/aiSkills/AiSkillResultContent.test.ts`          | AI 长标题、长值和表格回归        |
 
 ### LN-PIT-006：待整理状态不能由入口参数代替数据库事实
 
@@ -2522,10 +2530,10 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 
 ### LN-PIT-048：资源选择入口不能复制搜索列表与卡片布局
 
-- **现象：** AI 的“添加资源”和输入框 `@` 使用不同列表，笔记项重复显示“仅引用这一篇笔记”，目录卡片的第三行贴底；空搜索列表也没有稳定地把最近编辑资源放在前面。
-- **根因：** AI 弹窗单独实现了一套搜索、防抖、结果整形和卡片样式，没有复用全站 `ResourcePickerPanel`；两套实现的排序参数、描述层级、选中禁用和垂直间距逐渐漂移。
-- **约束：** 所有资源引用入口复用 `ResourcePickerPanel` 与 `useResourcePickerSearch`。空关键词属于最近资源浏览，按更新时间倒序、无更新时间时由服务端回退创建时间；输入关键词后切回相关度。单篇笔记用标题和可选路径即可表达，不增加“仅引用这一篇笔记”；目录范围使用独立分组和描述。多行卡片必须以 flex 垂直居中，并显式提供上下 padding 与行间距，不能靠固定高度把末行顶到底部。
-- **验收：** 从“添加资源”和输入框 `@` 分别打开选择器，空搜索同类资源顺序均为最近更新优先，输入关键词后精确命中优先；笔记项不出现冗余说明，标题/路径垂直居中；三行目录项的图标、标题、路径和范围描述整体居中，上下留白一致。已选单篇资源保持禁用，但同一笔记的目录范围仍可独立选择。
+- **现象：** AI 的“添加资源”和输入框 `@` 使用不同列表，笔记项重复显示“仅引用这一篇笔记”，目录卡片的第三行贴底；待办新表单虽已复用组件，显式弹框仍保留浮层的 320px 窄宽，在右侧形成大块空白。
+- **根因：** AI 弹窗曾单独实现搜索、防抖和卡片样式；收口后又由笔记与旧待办调用方各自在局部样式中把面板铺满，组件本身仍把默认态定义成内联浮层宽度，新调用方因此再次漏配。
+- **约束：** 所有资源引用入口复用 `ResourcePickerPanel` 与 `useResourcePickerSearch`。显式“添加资源”使用 `showSearch=true`，组件自身铺满弹框；编辑器 `@` 后的文字已是受控查询，使用 `showSearch=false` 的紧凑浮层，禁止再叠一个输入框。宽度语义只能在共享组件维护，调用方不得复制铺满补丁。空关键词属于最近资源浏览，按更新时间倒序、无更新时间时由服务端回退创建时间；输入关键词后切回相关度。单篇笔记用标题和可选路径即可表达，不增加“仅引用这一篇笔记”；目录范围使用独立分组和描述。多行卡片必须以 flex 垂直居中，并显式提供上下 padding 与行间距，不能靠固定高度把末行顶到底部。
+- **验收：** 从笔记与待办的“添加资源”打开选择器，搜索框和分组列表铺满弹框内容区、左右留白对称；从编辑器输入 `@` 时不出现重复搜索框，紧凑浮层仍按输入内容过滤。空搜索同类资源顺序均为最近更新优先，输入关键词后精确命中优先；笔记项不出现冗余说明，标题/路径垂直居中；三行目录项整体居中。已选单篇资源保持禁用，但同一笔记的目录范围仍可独立选择。
 
 ### LN-PIT-049：引用定位页不能把目标消息变成无法继续向下浏览的终点
 
@@ -3106,9 +3114,9 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 
 - **现象：** AI 已拆进笔记、书签、文件、待办、搜索、标签和帮助模块，但用户只能看总额度，不知道哪次操作扣了多少；快速收藏打开即自动识别、网页存档弹框打开即自动生成摘要、中文图标普通搜索隐式翻译等入口会在没有清楚确认时访问模型。批量整理又以固定小额占位包住最多二十次调用，既可能超额，也可能在额度不足后吞掉错误继续启动新项目。显式 AI 操作若在 Provider 失败后静默返回本地降级结果，根执行还会被误记为成功，用户既无法判断额度花在何处，也可能把免费结果误认成 AI 结果。
 - **根因：** “能力叫什么、是否访问模型、最多调用几次、谁承担修复成本、页面如何解释”分别散落在 Registry、路由、Prompt 和前端文案中，没有计费唯一事实源。免费被误等同为无限，网页抓取、本地 OCR、预览转换和外部图标查询也缺少各自的资源预算；取消信号没有贯穿非流式链路，断开前后只能粗暴按整笔占位处理。
-- **防回归约束：** 所有用户模型动作必须先登记 `aiBillingCatalog`，由目录同时生成 Execution 配置和独立 AI 用量页规则；Gateway 每次 Provider 前按调用范围、次数和保守 token 预算授权，用户主调用按实际 usage 结算，受限 `_repair` 协议修复只允许跟随主调用并由平台承担。用户计费根执行最终为 `failed` 时必须代表没有可交付结果，本次额度退回为 0；`partial`、`quota_blocked` 与 `aborted` 仍按已经发生的用户主调用结算。免扣只改变额度结算，不删除 Provider Span、失败状态、目录调用上限或全局频控记录。缓存、无材料和确定性路径保持零扣费；断开前未发出 Provider 退还占位，发出后缺失 usage 按请求前预算估算且不超过预占。打开页面、弹框或普通搜索不得静默调用模型，必须拆成明确的用户动作；按钮不必重复附加“消耗额度”后缀，计费边界与逐次明细以独立 AI 用量页为事实源。显式 AI 失败不得伪装成本地降级成功，兼容返回混合结果时必须通过根执行的结果分类器准确标记为失败、部分完成或额度阻断。无模型外网/CPU 能力保留尺寸、页数、像素、频率、并发和积压上限，保护性降级不得阻断基础 CRUD。
-- **验收：** 目录契约测试覆盖全部 Registry Skill 和散落业务动作，源码门禁证明只有 Gateway 可访问 Provider；并发、批量、额度不足、usage 缺失、修复、取消、缓存和账本异常全部使用 Mock Provider。独立 AI 用量页覆盖近 7/30/90 天、模块筛选、每日趋势、平台承担、分页、加载、空、错误、旧数据保留、估算和延迟结算，设置页只保留单一入口；PC/移动、浅色/深色及共享移动渲染基线均完成浏览器视觉验收。公开帮助同步说明免费/扣费边界，任何测试不得调用真实模型。
-- **相关代码：** `apps/server/util/aiBillingCatalog.js`、`apps/server/util/aiExecution/`、`apps/server/util/agent/aiGateway.js`、`apps/server/util/aiUsageService.js`、`apps/server/util/requestRateLimit.js`、`apps/server/util/snapshot.js`、`apps/web/src/components/aiSkills/AiUsageCenter.vue`、`apps/web/src/view/aiUsage/AiUsagePage.vue`、`apps/server/migrations/20260824_ai_usage_governance_knowledge.sql`。
+- **防回归约束：** 所有用户模型动作必须先登记 `aiBillingCatalog`，由目录同时生成 Execution 配置和独立 AI 用量页规则；Gateway 每次 Provider 前按调用范围、次数和保守 token 预算授权，用户主调用按实际 usage 结算，受限 `_repair` 协议修复只允许跟随主调用并由平台承担。用户计费根执行最终为 `failed` 时必须代表没有可交付结果，本次额度退回为 0；`partial`、`quota_blocked` 与 `aborted` 仍按已经发生的用户主调用结算。免扣只改变额度结算，不删除 Provider Span、失败状态、目录调用上限或全局频控记录。缓存、无材料和确定性路径保持零扣费；断开前未发出 Provider 退还占位，发出后缺失 usage 按请求前预算估算且不超过预占。打开页面、弹框或普通搜索不得静默调用模型，必须拆成明确的用户动作；按钮不必重复附加“免费”或“消耗额度”后缀，计费边界与逐次明细以独立 AI 用量页为事实源。标签图标只保留一个用户显式触发的语义搜索入口：打开弹框仅预填标签名，中文由服务端 AI 转换关键词，英文可直接匹配，禁止先自动执行低质量普通搜索再要求用户二次扩展。显式 AI 失败不得伪装成本地降级成功，兼容返回混合结果时必须通过根执行的结果分类器准确标记为失败、部分完成或额度阻断。无模型外网/CPU 能力保留尺寸、页数、像素、频率、并发和积压上限，保护性降级不得阻断基础 CRUD。
+- **验收：** 目录契约测试覆盖全部 Registry Skill 和散落业务动作，源码门禁证明只有 Gateway 可访问 Provider；并发、批量、额度不足、usage 缺失、修复、取消、缓存和账本异常全部使用 Mock Provider。标签图标组件测试证明打开弹框不发请求、页面只有一个无计费后缀的搜索按钮，点击中文搜索时明确传递 AI 语义标记。独立 AI 用量页覆盖近 7/30/90 天、模块筛选、每日趋势、平台承担、分页、加载、空、错误、旧数据保留、估算和延迟结算，设置页只保留单一入口；PC/移动、浅色/深色及共享移动渲染基线均完成浏览器视觉验收。公开帮助同步说明免费/扣费边界，任何测试不得调用真实模型。
+- **相关代码：** `apps/server/util/aiBillingCatalog.js`、`apps/server/util/aiExecution/`、`apps/server/util/agent/aiGateway.js`、`apps/server/util/aiUsageService.js`、`apps/server/util/requestRateLimit.js`、`apps/server/util/snapshot.js`、`apps/web/src/components/aiSkills/AiUsageCenter.vue`、`apps/web/src/view/aiUsage/AiUsagePage.vue`、`apps/web/src/components/manage/tagEditMg/TagIconPicker.vue`、`apps/web/src/components/manage/tagEditMg/TagIconPicker.chooseIcon.test.ts`、`apps/server/migrations/20260824_ai_usage_governance_knowledge.sql`。
 
 ### LN-PIT-140：图片识别不能把实验视觉模型与本地 OCR 做成互斥单选
 

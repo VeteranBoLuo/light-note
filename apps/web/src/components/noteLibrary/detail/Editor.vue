@@ -313,7 +313,6 @@
       @close="closeMentionPicker"
     >
       <ResourcePickerPanel
-        class="note-resource-picker-modal"
         :allowed-types="['bookmark', 'note', 'file']"
         @select="handleMentionPickerSelect"
         @close="closeMentionPicker"
@@ -5768,13 +5767,6 @@
   .editor-slash-command-popover {
     padding: 0 !important;
     overflow: hidden;
-  }
-
-  /* 弹框内的资源选择面板铺满可用宽度,不保留浮层的固定窄宽 */
-  .note-resource-picker-modal {
-    width: 100%;
-    max-width: none;
-    padding: 0;
   }
 
   #editor-container.note-editor {

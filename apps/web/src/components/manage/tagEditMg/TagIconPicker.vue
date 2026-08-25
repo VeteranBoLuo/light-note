@@ -33,19 +33,11 @@
             :placeholder="t('tagManage.iconSearchPlaceholder')"
             :maxlength="80"
             clearable
-            @enter="runSearch(0, false)"
+            @enter="runSearch(0)"
           />
-          <BButton type="primary" :loading="searching" @click="runSearch(0, false)">{{
-            t('tagManage.iconSearchFreeButton')
+          <BButton type="primary" :loading="searching" @click="runSearch(0)">{{
+            t('tagManage.iconSearchButton')
           }}</BButton>
-        </div>
-
-        <div class="ai-search-row">
-          <span>{{ t('tagManage.iconAiExpandHint') }}</span>
-          <BButton size="small" :loading="searching" @click="runSearch(0, true)">
-            <SvgIcon :src="icon.common.magicWand" size="14" aria-hidden="true" />
-            {{ t('tagManage.iconAiExpandButton') }}
-          </BButton>
         </div>
 
         <div v-if="translatedQuery" class="translation-hint">
@@ -169,12 +161,10 @@
 
         <div class="picker-footer">
           <div class="page-actions">
-            <BButton v-if="page > 0" size="small" @click="runSearch(page - 1, lastSearchUsedAi)">{{
+            <BButton v-if="page > 0" size="small" @click="runSearch(page - 1)">{{
               t('tagManage.previousIcons')
             }}</BButton>
-            <BButton v-if="hasMore" size="small" @click="runSearch(page + 1, lastSearchUsedAi)">{{
-              t('tagManage.nextIcons')
-            }}</BButton>
+            <BButton v-if="hasMore" size="small" @click="runSearch(page + 1)">{{ t('tagManage.nextIcons') }}</BButton>
           </div>
           <a href="https://icon-sets.iconify.design/" target="_blank" rel="noopener noreferrer">
             {{ t('tagManage.openIconify') }}
@@ -224,7 +214,6 @@
   const page = ref(0);
   const hasMore = ref(false);
   const lastAutoQuery = ref('');
-  const lastSearchUsedAi = ref(false);
   const selectedColor = ref<string>(DEFAULT_TAG_ICON_COLOR);
   const colorOptions = [DEFAULT_TAG_ICON_COLOR, ...TAG_ICON_COLOR_OPTIONS];
   const customColorOpen = ref(false);
@@ -334,7 +323,7 @@
     return iconName.split(':')[1]?.replace(/-/g, ' ') || iconName;
   }
 
-  async function openPicker() {
+  function openPicker() {
     const tagName = String(props.tagName || '').trim();
     pickerVisible.value = true;
     selectedColor.value = getTagIconColor(value.value || '') || DEFAULT_TAG_ICON_COLOR;
@@ -348,10 +337,7 @@
       lastAutoQuery.value = '';
     }
 
-    if (String(searchQuery.value || '').trim()) {
-      await runSearch(0, false);
-      return;
-    }
+    // 打开弹框只预填标签名，不自动调用模型；搜索必须由用户明确点击或按回车触发。
     resultIcons.value = [];
     translatedQuery.value = '';
     searched.value = false;
@@ -359,29 +345,27 @@
     hasMore.value = false;
   }
 
-  async function runSearch(targetPage = 0, useAi = false) {
+  async function runSearch(targetPage = 0) {
     const query = String(searchQuery.value || '').trim();
     if (!query || searching.value) return;
     searching.value = true;
     try {
-      const res = await searchTagIcons(query, targetPage, useAi);
+      // 只保留统一语义搜索入口。服务端会让中文走 AI 关键词转换，英文仍直接匹配 Iconify。
+      const res = await searchTagIcons(query, targetPage, true);
       if (res.status !== 200) throw new Error(res.msg || 'search failed');
       const data = (res.data || {}) as TagIconSearchResult;
       resultIcons.value = data.icons || [];
       translatedQuery.value = data.translatedQuery || '';
       page.value = data.page || 0;
       hasMore.value = !!data.hasMore;
-      lastSearchUsedAi.value = data.aiExpanded === true;
       searched.value = true;
       recordOperation({ module: '标签详情', operation: `搜索标签图标【${query}】` });
     } catch (error: any) {
       console.error('search tag icons failed', error);
       if (error?.status === 429 || error?.data?.code === 'AI_QUOTA_EXCEEDED') {
         message.warning(t('tagManage.iconAiQuotaExceeded'));
-      } else if (useAi) {
-        message.error(t('tagManage.iconAiSearchFailed'));
       } else {
-        message.error(t('tagManage.iconSearchFailed'));
+        message.error(t('tagManage.iconAiSearchFailed'));
       }
     } finally {
       searching.value = false;
@@ -492,7 +476,6 @@
   }
 
   .search-row,
-  .ai-search-row,
   .picker-footer,
   .page-actions {
     display: flex;
@@ -563,23 +546,6 @@
 
   .search-row {
     gap: 10px;
-  }
-
-  .ai-search-row {
-    justify-content: space-between;
-    gap: 12px;
-    margin-top: 8px;
-    padding: 8px 10px;
-    border: 1px solid var(--surface-divider-color);
-    border-radius: 9px;
-    color: var(--desc-color);
-    font-size: 12px;
-    background: var(--surface-panel-bg);
-  }
-
-  .ai-search-row :deep(.b_btn) {
-    flex: 0 0 auto;
-    gap: 5px;
   }
 
   .translation-hint {
@@ -745,11 +711,6 @@
 
     .search-row {
       align-items: stretch;
-    }
-
-    .ai-search-row {
-      align-items: flex-start;
-      flex-direction: column;
     }
 
     .color-picker-row {

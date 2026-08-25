@@ -81,7 +81,6 @@
         :show-footer="false"
       >
         <ResourcePickerPanel
-          class="todo-resource-picker-modal"
           :allowed-types="['bookmark', 'note', 'file']"
           @select="applyMentionSelection"
           @close="resourcePickerVisible = false"
@@ -1243,13 +1242,6 @@
 
   .todo-description-field {
     position: relative;
-  }
-
-  /* 弹框内的选择面板铺满可用宽度,不保留浮层的固定窄宽 */
-  .todo-resource-picker-modal {
-    width: 100%;
-    max-width: none;
-    padding: 0;
   }
 
   /* 说明框位于弹框上部,向上弹会被 BModal 内容区裁掉,故改为向下展开 */

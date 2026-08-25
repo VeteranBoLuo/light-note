@@ -139,9 +139,69 @@
 
 <style scoped lang="less">
   .ai-skill-result__markdown {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
     overflow-wrap: anywhere;
+    word-break: break-word;
     font-size: 14px;
     line-height: 1.75;
+  }
+
+  .ai-skill-result__markdown :deep(h1),
+  .ai-skill-result__markdown :deep(h2),
+  .ai-skill-result__markdown :deep(h3),
+  .ai-skill-result__markdown :deep(h4),
+  .ai-skill-result__markdown :deep(h5),
+  .ai-skill-result__markdown :deep(h6),
+  .ai-skill-result__markdown :deep(p),
+  .ai-skill-result__markdown :deep(li),
+  .ai-skill-result__markdown :deep(blockquote),
+  .ai-skill-result__markdown :deep(a),
+  .ai-skill-result__markdown :deep(th),
+  .ai-skill-result__markdown :deep(td) {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
+  }
+
+  .ai-skill-result__markdown :deep(h1) {
+    font-size: clamp(24px, 4vw, 32px);
+    line-height: 1.25;
+  }
+
+  .ai-skill-result__markdown :deep(h2) {
+    font-size: clamp(20px, 3vw, 26px);
+    line-height: 1.3;
+  }
+
+  .ai-skill-result__markdown :deep(h3) {
+    font-size: 18px;
+    line-height: 1.4;
+  }
+
+  .ai-skill-result__markdown :deep(pre) {
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .ai-skill-result__markdown :deep(table) {
+    width: 100%;
+    max-width: 100%;
+    table-layout: fixed;
+  }
+
+  .ai-skill-result__markdown :deep(img),
+  .ai-skill-result__markdown :deep(video),
+  .ai-skill-result__markdown :deep(svg) {
+    max-width: 100%;
+    height: auto;
   }
 
   .ai-skill-result__markdown :deep(:first-child) {

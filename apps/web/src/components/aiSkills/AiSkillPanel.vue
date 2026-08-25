@@ -460,7 +460,10 @@
 
   .ai-skill-panel__state,
   .ai-skill-panel__result {
+    min-width: 0;
+    max-width: 100%;
     padding: 12px;
+    box-sizing: border-box;
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     background: var(--workspace-panel-bg-color);

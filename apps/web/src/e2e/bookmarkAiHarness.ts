@@ -48,7 +48,7 @@ function completedResponse(payload: Record<string, unknown>): AiSkillResponse {
     result: {
       kind: 'grounded_markdown',
       content: hasSource
-        ? '## 页面要点\n\n这份设计规范说明了组件复用、主题适配与移动端回退策略。[1]\n\n- 交互控件统一复用 B 系列组件\n- 关键状态同时使用实色描边或图标表达\n- PC 与移动端都要覆盖浅色和深色主题'
+        ? '# 轻笺书签图标加载策略演进：从直连接口到静态托管的三次关键升级\n\n## 页面要点\n\n这份设计规范说明了组件复用、主题适配与移动端回退策略。[1]\n\n- 交互控件统一复用 B 系列组件\n- 关键状态同时使用实色描边或图标表达\n- PC 与移动端都要覆盖浅色和深色主题\n\n长链接：https://example.com/design/this-is-a-very-long-continuous-path-without-natural-breakpoints-for-regression-check\n\n| 验收项 | 结果 |\n| --- | --- |\n| 长标题与连续内容 | 必须始终收敛在灰色结果卡片内，不得撑宽整个分析弹框 |'
         : '当前书签没有可用于总结的网页存档或可靠元数据，请先刷新书签存档后重试。',
     },
     sources: hasSource ? [{ sourceId: 'bookmark:visual-bookmark', title: 'Light Note AI 设计规范' }] : [],

@@ -111,8 +111,8 @@
 
   /**
    * 全站唯一的资源选择面板。
-   * - showSearch=false(默认由 @ 使用):无搜索框,关键词由外部受控传入。
-   * - showSearch=true:自带搜索框,供「添加资源」这类显式入口使用。
+   * - showSearch=false(默认由 @ 使用):无搜索框,关键词由外部受控传入,桌面保持紧凑浮层宽度。
+   * - showSearch=true:自带搜索框,供「添加资源」这类显式入口使用,铺满弹框内容区。
    * 结果按书签 / 笔记 / 文件分组展示,键盘导航跨组线性移动。
    */
   const props = withDefaults(
@@ -304,15 +304,18 @@
   .resource-picker-panel {
     display: flex;
     flex-direction: column;
-    width: 320px;
-    max-width: min(360px, calc(100vw - 24px));
+    width: 100%;
+    max-width: none;
+    max-height: min(340px, calc(100vh - 140px));
     max-height: min(340px, calc(100dvh - 140px));
-    padding: 10px;
+    padding: 0;
     box-sizing: border-box;
     overflow: hidden;
   }
 
   .resource-picker-panel.is-inline {
+    width: 320px;
+    max-width: min(360px, calc(100vw - 24px));
     padding: 6px;
   }
 

@@ -1,10 +1,16 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createApp, h } from 'vue';
 import { createI18n } from 'vue-i18n';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
 import AiSkillResultContent from './AiSkillResultContent.vue';
 
 type SkillResult = NonNullable<AiSkillResponse['result']>;
+const componentSource = readFileSync(
+  resolve(process.cwd(), 'src/components/aiSkills/AiSkillResultContent.vue'),
+  'utf8',
+);
 
 let cleanup: (() => void) | undefined;
 
@@ -57,6 +63,21 @@ afterEach(() => {
 });
 
 describe('AiSkillResultContent', () => {
+  it('长标题与复杂 Markdown 使用共享内容边界，不继承会撑出结果卡片的全局标题样式', () => {
+    const title = '轻笺书签图标加载策略演进：从直连接口到静态托管的三次关键升级'.repeat(3);
+    const host = mountResult({
+      kind: 'grounded_markdown',
+      content: `# ${title}\n\nhttps://example.com/${'very-long-segment'.repeat(12)}\n\n| 字段 | 内容 |\n| --- | --- |\n| 长值 | ${'unbroken'.repeat(20)} |`,
+    });
+
+    expect(host.querySelector('h1')?.textContent).toBe(title);
+    expect(host.querySelector('table')).not.toBeNull();
+    expect(componentSource).toMatch(/\.ai-skill-result__markdown\s*\{[\s\S]*?max-width:\s*100%/);
+    expect(componentSource).toMatch(/:deep\(h1\)[\s\S]*?font-size:\s*clamp\(/);
+    expect(componentSource).toMatch(/:deep\(pre\)[\s\S]*?white-space:\s*pre-wrap/);
+    expect(componentSource).toMatch(/:deep\(table\)[\s\S]*?table-layout:\s*fixed/);
+  });
+
   it('把单条待办结构化草稿呈现为可读预览，不暴露原始 JSON', () => {
     const host = mountResult({
       kind: 'structured_draft',

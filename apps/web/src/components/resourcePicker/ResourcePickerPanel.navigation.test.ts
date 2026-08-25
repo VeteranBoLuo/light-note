@@ -1,8 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import zhCN from '@/i18n/locales/zh-CN';
 import ResourcePickerPanel from './ResourcePickerPanel.vue';
+
+const componentSource = readFileSync(
+  resolve(process.cwd(), 'src/components/resourcePicker/ResourcePickerPanel.vue'),
+  'utf8',
+);
 
 vi.mock('@/api/search', () => ({
   fetchGlobalSearch: vi.fn().mockResolvedValue({ items: [] }),
@@ -17,6 +24,14 @@ afterEach(() => {
 });
 
 describe('ResourcePickerPanel 键盘导航', () => {
+  it('显式添加资源铺满弹框，只有输入 @ 的内联面板保留紧凑宽度', () => {
+    expect(componentSource).toContain('v-if="showSearch"');
+    expect(componentSource).toMatch(/\.resource-picker-panel\s*\{[\s\S]*?width:\s*100%[\s\S]*?max-width:\s*none/);
+    expect(componentSource).toMatch(
+      /\.resource-picker-panel\.is-inline\s*\{[\s\S]*?width:\s*320px[\s\S]*?max-width:\s*min\(360px/,
+    );
+  });
+
   it('从第一项向上循环到最后一项时，同步滚动结果容器显示高亮项', async () => {
     const panelRef = ref<{ moveActive: (offset: number) => Promise<void> } | null>(null);
     const host = document.createElement('div');
