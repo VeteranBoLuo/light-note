@@ -1,4 +1,5 @@
 import { normalizeTodoDraft } from '../../todoDraftNormalizer.js';
+import { AI_SKILL_AUTHENTICATED_ROLES } from '../accessPolicy.js';
 import { aiSkillError } from '../errors.js';
 import { createResourceTaskInputValidator } from '../inputValidators.js';
 import { loadExplicitResourceEvidence } from '../resourceEvidence.js';
@@ -64,7 +65,7 @@ function createTodoExtractionSkill({ id, domain, resourceTypes, maxResources }) 
     version: 1,
     domain,
     effect: 'preview',
-    allowedRoles: Object.freeze(['user', 'root']),
+    allowedRoles: AI_SKILL_AUTHENTICATED_ROLES,
     contextPolicy: Object.freeze({
       resourceTypes: Object.freeze(resourceTypes),
       minResources: 1,

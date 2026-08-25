@@ -1,4 +1,5 @@
 import { normalizeTodoDraft } from '../../todoDraftNormalizer.js';
+import { AI_SKILL_AUTHENTICATED_ROLES } from '../accessPolicy.js';
 import { aiSkillError } from '../errors.js';
 import { validateTodoBreakdownInput, validateTodoDraftInput } from '../inputValidators.js';
 import { loadExplicitResourceEvidence } from '../resourceEvidence.js';
@@ -99,11 +100,7 @@ function validateBreakdownArguments(args, { detailLevel = 'concise' } = {}) {
   if (!draft.title) throw aiSkillError('AI_SKILL_TODO_TITLE_REQUIRED', 'AI 草稿缺少待办标题', 502);
   const [minimum, maximum] = detailLevel === 'detailed' ? [6, 10] : [3, 5];
   if (draft.checklist.length < minimum || draft.checklist.length > maximum) {
-    throw aiSkillError(
-      'AI_SKILL_TODO_CHECKLIST_INVALID',
-      `当前拆解粒度需要 ${minimum}～${maximum} 个可执行步骤`,
-      502,
-    );
+    throw aiSkillError('AI_SKILL_TODO_CHECKLIST_INVALID', `当前拆解粒度需要 ${minimum}～${maximum} 个可执行步骤`, 502);
   }
   return Object.freeze({
     kind: 'structured_draft',
@@ -121,7 +118,7 @@ function baseDefinition({ id, maxResources, prepare, validateInput = validateTod
     version: 1,
     domain: 'todo',
     effect: 'preview',
-    allowedRoles: Object.freeze(['user', 'root']),
+    allowedRoles: AI_SKILL_AUTHENTICATED_ROLES,
     contextPolicy: Object.freeze({
       resourceTypes: Object.freeze(['todo']),
       minResources: 0,
@@ -150,7 +147,8 @@ export const todoSkills = Object.freeze([
         availableActions: [{ id: 'create_todo_from_preview', label: '确认创建待办', requiresConfirmation: true }],
         callModel: dependencies.callStructuredSkillModel || callStructuredSkillModel,
         structuredTool: TODO_DRAFT_TOOL,
-        validateArguments: (args) => validateTodoDraftArguments(args, { instruction: input.instruction, now, timezone }),
+        validateArguments: (args) =>
+          validateTodoDraftArguments(args, { instruction: input.instruction, now, timezone }),
         messages: [
           {
             role: 'system',
@@ -195,7 +193,9 @@ export const todoSkills = Object.freeze([
           },
           {
             role: 'user',
-            content: [`用户要求：${input.instruction}`, loaded.evidence ? `当前待办证据：\n${loaded.evidence}` : ''].filter(Boolean).join('\n\n'),
+            content: [`用户要求：${input.instruction}`, loaded.evidence ? `当前待办证据：\n${loaded.evidence}` : '']
+              .filter(Boolean)
+              .join('\n\n'),
           },
         ],
       };

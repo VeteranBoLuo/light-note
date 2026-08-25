@@ -24,12 +24,87 @@ afterEach(() => {
 });
 
 describe('ResourcePickerPanel 键盘导航', () => {
-  it('显式添加资源铺满弹框，只有输入 @ 的内联面板保留紧凑宽度', () => {
+  it('搜索框显示与内联宽度使用独立开关，不能从彼此反推', () => {
     expect(componentSource).toContain('v-if="showSearch"');
+    expect(componentSource).toContain("{ 'is-inline': inline, 'has-search': showSearch }");
     expect(componentSource).toMatch(/\.resource-picker-panel\s*\{[\s\S]*?width:\s*100%[\s\S]*?max-width:\s*none/);
     expect(componentSource).toMatch(
       /\.resource-picker-panel\.is-inline\s*\{[\s\S]*?width:\s*320px[\s\S]*?max-width:\s*min\(360px/,
     );
+  });
+
+  it('铺满弹框时可以不显示搜索框，内联模式也不会被搜索框状态隐式开启', async () => {
+    const showSearch = ref(false);
+    const inline = ref(false);
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      render: () =>
+        h(ResourcePickerPanel, {
+          showSearch: showSearch.value,
+          inline: inline.value,
+          pinnedItems: [{ type: 'bookmark', id: '1', title: '第一项' }],
+        }),
+    });
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.component('OriginalIcon', { setup: () => () => h('span') });
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+    await nextTick();
+
+    const panel = host.querySelector('.resource-picker-panel');
+    expect(host.querySelector('input')).toBeNull();
+    expect(panel?.classList.contains('is-inline')).toBe(false);
+    expect(panel?.classList.contains('has-search')).toBe(false);
+
+    inline.value = true;
+    await nextTick();
+    expect(panel?.classList.contains('is-inline')).toBe(true);
+    expect(host.querySelector('input')).toBeNull();
+
+    inline.value = false;
+    showSearch.value = true;
+    await nextTick();
+    expect(panel?.classList.contains('is-inline')).toBe(false);
+    expect(panel?.classList.contains('has-search')).toBe(true);
+    expect(host.querySelector('input')).not.toBeNull();
+  });
+
+  it('搜索框消费 Escape，只请求关闭当前资源层，不让事件抵达背景层', async () => {
+    const onClose = vi.fn();
+    const onDocumentKeydown = vi.fn();
+    const host = document.createElement('div');
+    document.body.append(host);
+    document.addEventListener('keydown', onDocumentKeydown);
+    const app = createApp({
+      render: () =>
+        h(ResourcePickerPanel, {
+          showSearch: true,
+          pinnedItems: [{ type: 'bookmark', id: '1', title: '第一项' }],
+          onClose,
+        }),
+    });
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.component('OriginalIcon', { setup: () => () => h('span') });
+    app.mount(host);
+    cleanup = () => {
+      document.removeEventListener('keydown', onDocumentKeydown);
+      app.unmount();
+      host.remove();
+    };
+    await nextTick();
+
+    const input = host.querySelector<HTMLInputElement>('input');
+    expect(input).not.toBeNull();
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    input?.dispatchEvent(escape);
+
+    expect(escape.defaultPrevented).toBe(true);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onDocumentKeydown).not.toHaveBeenCalled();
   });
 
   it('从第一项向上循环到最后一项时，同步滚动结果容器显示高亮项', async () => {

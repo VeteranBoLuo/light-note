@@ -1,3 +1,4 @@
+import { AI_SKILL_AUTHENTICATED_ROLES } from '../accessPolicy.js';
 import { createResourceTaskInputValidator } from '../inputValidators.js';
 import { AI_SKILL_MAX_CHARS_PER_RESOURCE, AI_SKILL_MAX_TOTAL_EVIDENCE_CHARS } from '../limits.js';
 import { loadExplicitResourceEvidence, prepareExplicitResourceEvidence } from '../resourceEvidence.js';
@@ -55,7 +56,7 @@ export function createGroundedResourceSkill({
     version: 1,
     domain,
     effect,
-    allowedRoles: Object.freeze(['user', 'root']),
+    allowedRoles: AI_SKILL_AUTHENTICATED_ROLES,
     contextPolicy: Object.freeze({
       resourceTypes: Object.freeze([...resourceTypes]),
       minResources,

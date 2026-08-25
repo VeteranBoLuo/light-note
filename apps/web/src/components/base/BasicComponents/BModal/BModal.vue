@@ -167,9 +167,18 @@
     }
   }
 
-  function clickEsc(e) {
-    if (props.escClosable && e.key === 'Escape' && isTopModalLayer(modalLayer)) {
+  function clickEsc(e: KeyboardEvent) {
+    if (
+      props.escClosable &&
+      e.key === 'Escape' &&
+      !e.defaultPrevented &&
+      !e.isComposing &&
+      e.keyCode !== 229 &&
+      !e.repeat &&
+      isTopModalLayer(modalLayer)
+    ) {
       e.preventDefault();
+      e.stopPropagation();
       handleClose();
     }
   }
@@ -187,6 +196,21 @@
   }
 
   function handleModalKeydown(event: KeyboardEvent) {
+    if (
+      event.key === 'Escape' &&
+      props.escClosable &&
+      !event.defaultPrevented &&
+      !event.isComposing &&
+      event.keyCode !== 229 &&
+      !event.repeat &&
+      isTopModalLayer(modalLayer)
+    ) {
+      // 在弹框 DOM 内先消费 Escape，避免事件抵达 document 后被背景 BDrawer 同时处理。
+      event.preventDefault();
+      event.stopPropagation();
+      handleClose();
+      return;
+    }
     if (event.key !== 'Tab' || !isTopModalLayer(modalLayer)) return;
     const focusable = [...(modalRef.value?.querySelectorAll<HTMLElement>(focusableSelector) || [])].filter(
       (element) => !element.hidden && element.getAttribute('aria-hidden') !== 'true',

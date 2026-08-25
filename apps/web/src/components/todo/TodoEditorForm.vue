@@ -28,28 +28,13 @@
       </label>
       <label>
         <span>{{ t('inbox.todoDescription') }}</span>
-        <div class="todo-description-field">
-          <BInput
-            v-model:value="form.description"
-            type="textarea"
-            :rows="3"
-            :maxlength="2000"
-            :placeholder="t('inbox.todoDescriptionPlaceholder')"
-            @keydown="handleMentionKeydown"
-          />
-          <!-- 说明保持纯文本:@ 唤起完整选择器(搜索框 + 分类列表),结果落成下方结构化 Chips -->
-          <div v-if="mentionQuery" v-show="mentionHasResults" class="todo-mention-layer" :style="mentionAnchorStyle">
-            <ResourcePickerPanel
-              ref="mentionPanel"
-              :allowed-types="['bookmark', 'note', 'file']"
-              :show-search="false"
-              :keyword="mentionQuery.keyword"
-              @select="applyMentionSelection"
-              @close="closeMention"
-              @results-count="mentionHasResults = $event > 0"
-            />
-          </div>
-        </div>
+        <TodoResourceMentionInput
+          v-model:value="form.description"
+          :rows="3"
+          :maxlength="2000"
+          :placeholder="t('inbox.todoDescriptionPlaceholder')"
+          @select="applyMentionSelection"
+        />
         <small class="todo-description-hint">{{ t('inbox.todoMentionHint') }}</small>
       </label>
 
@@ -318,14 +303,12 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
-  import { replaceMentionQuery, resolveMentionQuery, type MentionQuery } from '@/utils/resourceMentionTrigger';
-  import { useDismissOnOutside } from '@/composables/useDismissOnOutside';
-  import { getTextareaCaretRect, toAnchorOffset } from '@/utils/textareaCaret';
   import { generateUUID } from '@/utils/common';
   import { toTodoLocalInput } from '@/utils/todoPlanning';
   import TodoPlanScheduleEditor from '@/components/todo/TodoPlanScheduleEditor.vue';
   import TodoResourceLinks from '@/components/todo/TodoResourceLinks.vue';
   import TodoBreakdownButton from '@/components/todo/TodoBreakdownButton.vue';
+  import TodoResourceMentionInput from '@/components/todo/TodoResourceMentionInput.vue';
 
   const props = withDefaults(
     defineProps<{
@@ -368,76 +351,10 @@
 
   // ── 说明区 @ 关联参考资料 ──────────────────────────
   const resourceRefs = ref<TodoResourceRefView[]>([]);
-  const mentionQuery = ref<MentionQuery | null>(null);
-  const mentionPanel = ref<{ chooseActive: () => void; moveActive: (offset: number) => void } | null>(null);
-  // 搜不到结果就整块不显示;面板仍挂载继续搜,退回能匹配的词时自动重现
-  const mentionHasResults = ref(false);
   const MAX_RESOURCE_REFS = 10;
 
-  // 浮层锚定在触发它的 @ 上:只在打开时算一次,继续输入不会让它漂走
-  const mentionAnchor = ref<{ left: number } | null>(null);
-  const mentionAnchorStyle = computed(() =>
-    mentionAnchor.value ? { left: `${mentionAnchor.value.left}px` } : undefined,
-  );
-
-  function updateMentionAnchor(target: HTMLTextAreaElement | null, query: MentionQuery) {
-    const field = target?.closest('.todo-description-field') as HTMLElement | null;
-    if (!target || !field) return;
-    const caret = getTextareaCaretRect(target, query.start);
-    const offset = toAnchorOffset(caret, field);
-    // 垂直方向固定在说明框整体下方(不遮输入内容),水平对齐触发的 @
-    mentionAnchor.value = { left: Math.max(0, Math.min(offset.left, field.offsetWidth - 60)) };
-  }
-
-  function closeMention() {
-    mentionQuery.value = null;
-    mentionAnchor.value = null;
-    mentionHasResults.value = false;
-  }
-
-  // 点击外部 / Esc 关闭走统一实现
-  useDismissOnOutside({
-    isActive: () => Boolean(mentionQuery.value),
-    ignoreSelectors: ['.todo-mention-layer', '.todo-description-field'],
-    onDismiss: closeMention,
-  });
-
-  function handleMentionKeydown(event: KeyboardEvent) {
-    const target = event.target as HTMLTextAreaElement | null;
-    // 面板没有搜索框,焦点留在说明框,键盘导航由这里转发
-    if (mentionQuery.value && mentionHasResults.value) {
-      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        event.preventDefault();
-        mentionPanel.value?.moveActive(event.key === 'ArrowDown' ? 1 : -1);
-        return;
-      }
-      if (event.key === 'Enter' && !event.isComposing) {
-        event.preventDefault();
-        event.stopPropagation();
-        mentionPanel.value?.chooseActive();
-        return;
-      }
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        closeMention();
-        return;
-      }
-    }
-    window.setTimeout(() => {
-      if (!target || typeof target.selectionStart !== 'number') return closeMention();
-      const next = resolveMentionQuery(String(target.value ?? ''), target.selectionStart);
-      const isNewMention = !mentionQuery.value || mentionQuery.value.start !== next?.start;
-      mentionQuery.value = next;
-      if (!next) return closeMention();
-      if (isNewMention) void nextTick(() => updateMentionAnchor(target, next));
-    }, 0);
-  }
-
-  /** 选中后消费掉说明里的 @关键词,只保留结构化关系,不往正文塞链接文本。 */
+  /** 选中后只保留结构化关系；@关键词由 TodoResourceMentionInput 统一消费。 */
   function applyMentionSelection(item: { type: string; id: string; title: string }) {
-    const query = mentionQuery.value;
-    if (query) form.description = replaceMentionQuery(form.description, query);
-    closeMention();
     resourcePickerVisible.value = false;
     const key = `${item.type}:${item.id}`;
     if (resourceRefs.value.some((ref) => `${ref.type}:${ref.id}` === key)) return;
@@ -460,7 +377,6 @@
   const resourcePickerVisible = ref(false);
 
   function openResourcePicker() {
-    closeMention();
     resourcePickerVisible.value = true;
   }
 
@@ -619,7 +535,6 @@
     form.title = props.item?.title ?? initialValues?.title ?? '';
     form.description = props.item?.description ?? initialValues?.description ?? '';
     resourceRefs.value = [...(props.item?.resourceRefs || [])];
-    closeMention();
     form.priority = props.item?.priority ?? initialValues?.priority ?? 1;
     form.dueAt = toTodoLocalInput(props.item?.dueAt ?? initialValues?.dueAt);
     const reminder = legacyMode.value ? (props.item?.reminder as TodoReminderConfig | null | undefined) : null;
@@ -1238,26 +1153,6 @@
     .todo-reminder-editor__field-error {
       margin-left: auto;
     }
-  }
-
-  .todo-description-field {
-    position: relative;
-  }
-
-  /* 说明框位于弹框上部,向上弹会被 BModal 内容区裁掉,故改为向下展开 */
-  .todo-mention-layer {
-    position: absolute;
-    /* 垂直固定在说明框下方(不遮输入内容);水平 left 由内联样式对齐触发的 @ */
-    left: 0;
-    top: calc(100% + 6px);
-    width: max-content;
-    max-width: 100%;
-    z-index: 20;
-    border: 1px solid var(--card-border-color);
-    border-radius: 12px;
-    background: var(--menu-body-bg-color, var(--card-background));
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
-    overflow: hidden;
   }
 
   .todo-description-hint {

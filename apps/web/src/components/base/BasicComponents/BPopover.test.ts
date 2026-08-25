@@ -85,4 +85,41 @@ describe('BPopover 键盘关闭', () => {
     expect(document.querySelector('#first-content')).toBeTruthy();
     expect(document.activeElement).toBe(secondTrigger);
   });
+
+  it('触发器随抽屉动画移动时持续校正位置，后续新动画也会重新开始跟踪', async () => {
+    const host = mountPopover('moving');
+    const trigger = host.querySelector<HTMLElement>('.b-popover-trigger')!;
+    let left = 120;
+    vi.spyOn(trigger, 'getBoundingClientRect').mockImplementation(
+      () =>
+        ({
+          left,
+          right: left + 1,
+          top: 80,
+          bottom: 100,
+          width: 1,
+          height: 20,
+        }) as DOMRect,
+    );
+
+    (host.querySelector('#moving-trigger') as HTMLButtonElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    left = 240;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect((document.querySelector('#moving-content')?.parentElement as HTMLElement).style.left).toBe('240px');
+
+    // 初始稳定跟踪结束后，新的祖先 transition 仍会唤醒定位。
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    left = 360;
+    host.dispatchEvent(new Event('transitionstart', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect((document.querySelector('#moving-content')?.parentElement as HTMLElement).style.left).toBe('360px');
+
+    // 手动锚点（例如 textarea 内 @）会直接改触发器 style；没有 transition 也必须重新定位。
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    left = 420;
+    trigger.style.left = '12px';
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect((document.querySelector('#moving-content')?.parentElement as HTMLElement).style.left).toBe('420px');
+  });
 });

@@ -1,6 +1,6 @@
 import { computed, ref, type Ref } from 'vue';
 import { apiBasePost } from '@/http/request';
-import { createAiSkillRequest, executeAiSkill } from '@/api/aiSkillApi';
+import { createAiSkillRequest, executeAiSkill, getAiSkillPublicErrorMessage } from '@/api/aiSkillApi';
 import { recordAiSkillApplied } from '@/api/aiTelemetry';
 import message from '@/components/base/BasicComponents/BMessage/BMessage';
 import { recordOperation } from '@/api/commonApi';
@@ -224,13 +224,10 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
       if (!matched.length && newTags.length) confirmCreateTag(newTags[0]);
     } catch (error: any) {
       if (isRequestCancelled(error, controller)) return;
-      // HTTP 5xx 已由统一拦截器展示服务端友好提示，避免这里再弹一次。
-      if (String(error?.code || '').startsWith('HTTP_')) return;
-      message.error(
-        error?.code === 'NETWORK_ERROR' && error?.message
-          ? error.message
-          : i18n.global.t('bookmarkMeta.generateFailed'),
-      );
+      // Skill API 使用 silent 请求，页面必须展示其已经过服务端脱敏的公开错误；
+      // preflight 或其他未知异常仍使用本地兜底，避免把技术细节直接暴露给用户。
+      const publicMessage = getAiSkillPublicErrorMessage(error);
+      message.error(publicMessage || i18n.global.t('bookmarkMeta.generateFailed'));
     } finally {
       clearActiveGeneration(controller);
     }

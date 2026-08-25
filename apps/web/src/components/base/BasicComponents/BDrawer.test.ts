@@ -218,6 +218,41 @@ describe('BDrawer compositor cleanup', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('ignores held-key Escape repeats after a nested top layer has consumed the initial keydown', async () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+
+    const onClose = vi.fn();
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      setup() {
+        return () => h(BDrawer, { open: true, title: 'Editor drawer', onClose });
+      },
+    });
+    app.use(createPinia());
+    app.use(createI18n({ legacy: false, locale: 'en', messages: { en: { common: { close: 'Close' } } } }));
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    await nextTick();
+    await nextTick();
+    const panel = document.querySelector<HTMLElement>('.b-drawer-panel');
+    expect(panel).not.toBeNull();
+    panel?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', repeat: true, bubbles: true, cancelable: true }),
+    );
+    await nextTick();
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it('supports a non-modal resizable sidecar without stealing focus', async () => {
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       callback(0);

@@ -143,6 +143,44 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
     expect(apiBasePost).not.toHaveBeenCalled();
   });
 
+  it('展示 Skill API 已脱敏的业务错误，不把权限拒绝伪装成识别失败', async () => {
+    apiBasePost.mockRejectedValueOnce({
+      code: 'ERR_BAD_REQUEST',
+      response: {
+        status: 403,
+        data: {
+          status: 403,
+          msg: '当前账号不能使用该 AI 能力',
+          data: { code: 'AI_SKILL_ROLE_FORBIDDEN' },
+        },
+      },
+    });
+    const t = setup([]);
+
+    await t.generateBookmarkMeta();
+
+    expect(messageError).toHaveBeenCalledWith('当前账号不能使用该 AI 能力');
+  });
+
+  it('未知本地异常继续使用安全兜底，不展示技术错误内容', async () => {
+    preflightBookmarkUrl.mockRejectedValueOnce(new Error('internal implementation detail'));
+    const t = setup([]);
+
+    await t.generateBookmarkMeta();
+
+    expect(messageError).toHaveBeenCalledWith('智能识别失败，请稍后重试或手动填写');
+  });
+
+  it('AI 本地协议校验异常也使用安全兜底，不展示响应结构细节', async () => {
+    apiBasePost.mockResolvedValueOnce({ status: 200, data: { unexpected: true } });
+    const t = setup([]);
+
+    await t.generateBookmarkMeta();
+
+    expect(messageError).toHaveBeenCalledWith('智能识别失败，请稍后重试或手动填写');
+    expect(messageError).not.toHaveBeenCalledWith(expect.stringContaining('protocolVersion'));
+  });
+
   it('url 未带协议头时自动补 https:// 再请求(允许用户只填 keep.com)', async () => {
     mockSkillSuccess({ name: '', description: '', matchedTagIds: [], newTags: [] });
     const t = setup([]);

@@ -57,7 +57,12 @@
   const teleportTarget = ref<HTMLElement | string>('body');
   const panelStyle = reactive<Record<string, string>>({ position: 'fixed', top: '0px', left: '0px' });
   let closeTimer: number | null = null;
+  let positionFrame: number | null = null;
   let resizeObserver: ResizeObserver | null = null;
+  let triggerMutationObserver: MutationObserver | null = null;
+  let lastTriggerPosition = '';
+  let stablePositionFrames = 0;
+  const POSITION_STABLE_FRAMES = 8;
 
   const isHover = computed(() => props.trigger === 'hover');
   const isClick = computed(() => props.trigger === 'click');
@@ -124,6 +129,49 @@
     panelStyle.left = `${left}px`;
   }
 
+  function readTriggerPosition() {
+    const rect = triggerRef.value?.getBoundingClientRect();
+    if (!rect) return '';
+    return [rect.left, rect.top, rect.right, rect.bottom].map((value) => value.toFixed(2)).join(':');
+  }
+
+  function stopPositionTracking() {
+    if (positionFrame !== null) cancelAnimationFrame(positionFrame);
+    positionFrame = null;
+    lastTriggerPosition = '';
+    stablePositionFrames = 0;
+  }
+
+  function trackTriggerPosition() {
+    positionFrame = null;
+    if (!open.value) return;
+    const nextPosition = readTriggerPosition();
+    if (nextPosition !== lastTriggerPosition) {
+      lastTriggerPosition = nextPosition;
+      stablePositionFrames = 0;
+      computePosition();
+    } else {
+      stablePositionFrames += 1;
+    }
+    // 打开初期跟踪到锚点连续稳定，覆盖抽屉滑入等「祖先 transform 改变位置但不触发 ResizeObserver」的场景。
+    if (stablePositionFrames < POSITION_STABLE_FRAMES) {
+      positionFrame = requestAnimationFrame(trackTriggerPosition);
+    }
+  }
+
+  function startPositionTracking() {
+    if (!open.value) return;
+    if (positionFrame !== null) cancelAnimationFrame(positionFrame);
+    positionFrame = null;
+    lastTriggerPosition = '';
+    stablePositionFrames = 0;
+    positionFrame = requestAnimationFrame(trackTriggerPosition);
+  }
+
+  function onPageMotionStart() {
+    startPositionTracking();
+  }
+
   function clearCloseTimer() {
     if (closeTimer !== null) {
       clearTimeout(closeTimer);
@@ -151,22 +199,41 @@
       teleportTarget.value = props.getPopupContainer?.(triggerRef.value as HTMLElement) || 'body';
       nextTick(() => {
         computePosition();
+        startPositionTracking();
         resizeObserver?.disconnect();
         if (panelRef.value && typeof ResizeObserver !== 'undefined') {
           resizeObserver = new ResizeObserver(computePosition);
           resizeObserver.observe(panelRef.value);
+          if (triggerRef.value) resizeObserver.observe(triggerRef.value);
+        }
+        triggerMutationObserver?.disconnect();
+        if (triggerRef.value && typeof MutationObserver !== 'undefined') {
+          triggerMutationObserver = new MutationObserver(startPositionTracking);
+          triggerMutationObserver.observe(triggerRef.value, {
+            attributes: true,
+            attributeFilter: ['class', 'style'],
+          });
         }
       });
       window.addEventListener('scroll', computePosition, true);
       window.addEventListener('resize', computePosition);
       window.addEventListener('keydown', onWindowKeydown, true);
+      document.addEventListener('transitionrun', onPageMotionStart, true);
+      document.addEventListener('transitionstart', onPageMotionStart, true);
+      document.addEventListener('animationstart', onPageMotionStart, true);
       if (isClick.value) document.addEventListener('mousedown', onDocMouseDown, true);
     } else {
+      stopPositionTracking();
       resizeObserver?.disconnect();
       resizeObserver = null;
+      triggerMutationObserver?.disconnect();
+      triggerMutationObserver = null;
       window.removeEventListener('scroll', computePosition, true);
       window.removeEventListener('resize', computePosition);
       window.removeEventListener('keydown', onWindowKeydown, true);
+      document.removeEventListener('transitionrun', onPageMotionStart, true);
+      document.removeEventListener('transitionstart', onPageMotionStart, true);
+      document.removeEventListener('animationstart', onPageMotionStart, true);
       document.removeEventListener('mousedown', onDocMouseDown, true);
     }
   });
@@ -224,10 +291,15 @@
 
   onBeforeUnmount(() => {
     clearCloseTimer();
+    stopPositionTracking();
     resizeObserver?.disconnect();
+    triggerMutationObserver?.disconnect();
     window.removeEventListener('scroll', computePosition, true);
     window.removeEventListener('resize', computePosition);
     window.removeEventListener('keydown', onWindowKeydown, true);
+    document.removeEventListener('transitionrun', onPageMotionStart, true);
+    document.removeEventListener('transitionstart', onPageMotionStart, true);
+    document.removeEventListener('animationstart', onPageMotionStart, true);
     document.removeEventListener('mousedown', onDocMouseDown, true);
   });
 </script>

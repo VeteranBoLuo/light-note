@@ -1,5 +1,5 @@
 <template>
-  <div class="resource-picker-panel" :class="{ 'is-inline': !showSearch }">
+  <div class="resource-picker-panel" :class="{ 'is-inline': inline, 'has-search': showSearch }">
     <!-- @ 触发时不带搜索框:关键词直接来自输入框里 @ 后面的文字(与 Claude Code 的 @ 一致);
          显式按钮打开时才需要自己的搜索框 -->
     <BInput
@@ -12,7 +12,7 @@
       @enter="chooseActive"
       @keydown.down.prevent="moveActive(1)"
       @keydown.up.prevent="moveActive(-1)"
-      @keydown.esc="emit('close')"
+      @keydown.esc.prevent.stop="emit('close')"
     />
 
     <div
@@ -111,8 +111,10 @@
 
   /**
    * 全站唯一的资源选择面板。
-   * - showSearch=false(默认由 @ 使用):无搜索框,关键词由外部受控传入,桌面保持紧凑浮层宽度。
-   * - showSearch=true:自带搜索框,供「添加资源」这类显式入口使用,铺满弹框内容区。
+   * - showSearch 只决定是否显示独立搜索框。
+   * - inline 只决定是否使用跟随编辑器光标的紧凑浮层宽度。
+   * 二者不能互相推导：显式“添加资源”使用 showSearch=true + inline=false；
+   * 待办与笔记内联 @ 则同时使用 showSearch=false + inline=true。
    * 结果按书签 / 笔记 / 文件分组展示,键盘导航跨组线性移动。
    */
   const props = withDefaults(
@@ -121,6 +123,8 @@
       /** 受控关键词(showSearch=false 时生效) */
       keyword?: string;
       showSearch?: boolean;
+      /** 是否作为编辑器光标旁的紧凑内联浮层展示。 */
+      inline?: boolean;
       perType?: number;
       autoFocus?: boolean;
       placeholder?: string;
@@ -139,6 +143,7 @@
     {
       keyword: '',
       showSearch: true,
+      inline: false,
       autoFocus: true,
       includeNoteScopes: false,
       selectedResourceKeys: () => [],
@@ -331,7 +336,7 @@
     overscroll-behavior: contain;
   }
 
-  .resource-picker-panel:not(.is-inline) .resource-picker-panel__results {
+  .resource-picker-panel.has-search .resource-picker-panel__results {
     margin-top: 8px;
   }
 

@@ -26,17 +26,16 @@
           </label>
           <label>
             <span>{{ t('inbox.todoDescription') }}</span>
-            <BInput
+            <TodoResourceMentionInput
               v-model:value="draft.task.description"
-              type="textarea"
               :rows="mobile ? 3 : 4"
               :maxlength="2000"
               :placeholder="t('inbox.todoDescriptionPlaceholder')"
-              @keydown="handleDescriptionKeydown"
+              @select="applyResourceRef"
             />
             <span class="todo-simple-editor__resource-hint">
               <small>{{ t('inbox.todoMentionHint') }}</small>
-              <BButton size="small" @click="resourcePickerVisible = true">@ {{ t('inbox.todoAddResource') }}</BButton>
+              <BButton size="small" @click="resourcePickerVisible = true"> @ {{ t('inbox.todoAddResource') }} </BButton>
             </span>
           </label>
           <div v-if="resourceRefs.length" class="todo-simple-editor__resource-list">
@@ -226,6 +225,7 @@
   import TodoPlanPreviewCard from './TodoPlanPreviewCard.vue';
   import TodoReminderEditor from './TodoReminderEditor.vue';
   import TodoBreakdownButton from './TodoBreakdownButton.vue';
+  import TodoResourceMentionInput from './TodoResourceMentionInput.vue';
   import { normalizeTodoCreateDraft, suggestTodoPlanEndDate } from './todoDraftNormalizer';
   import { useTodoCreateDraft } from './useTodoCreateDraft';
   import {
@@ -405,14 +405,6 @@
   function applyAiBreakdown(items: TodoItem['checklist']) {
     draft.task.checklist = items;
     checklistOpen.value = true;
-  }
-
-  function handleDescriptionKeydown(event: KeyboardEvent) {
-    if (event.key !== '@') return;
-    window.setTimeout(() => {
-      draft.task.description = draft.task.description.replace(/@$/, '');
-      resourcePickerVisible.value = true;
-    }, 0);
   }
 
   function applyResourceRef(item: { type: string; id: string; title: string }) {

@@ -1,6 +1,7 @@
 import pool from '../../../db/index.js';
 import { suggestBookmarkMeta } from '../../aiOrganize.js';
 import { requireBookmarkUrl } from '../../bookmarkUrl.js';
+import { AI_SKILL_AUTHENTICATED_ROLES } from '../accessPolicy.js';
 import { aiSkillError } from '../errors.js';
 import { validateBookmarkParseInput } from '../inputValidators.js';
 
@@ -9,7 +10,7 @@ export default Object.freeze({
   version: 1,
   domain: 'bookmark',
   effect: 'preview',
-  allowedRoles: Object.freeze(['user', 'root']),
+  allowedRoles: AI_SKILL_AUTHENTICATED_ROLES,
   contextPolicy: Object.freeze({
     resourceTypes: Object.freeze([]),
     minResources: 0,

@@ -8,13 +8,22 @@ import {
 export class AiSkillApiError extends Error {
   code: string;
   status: number;
+  isPublicMessage: boolean;
 
-  constructor(code: string, message: string, status = 500) {
+  constructor(code: string, message: string, status = 500, isPublicMessage = false) {
     super(message);
     this.name = 'AiSkillApiError';
     this.code = code;
     this.status = status;
+    this.isPublicMessage = isPublicMessage;
   }
+}
+
+const PUBLIC_TRANSPORT_ERROR_CODES = new Set(['NETWORK_ERROR', 'OFFLINE', 'REQUEST_TIMEOUT']);
+
+export function getAiSkillPublicErrorMessage(cause: unknown) {
+  if (!(cause instanceof AiSkillApiError) || !cause.isPublicMessage) return '';
+  return String(cause.message || '').trim();
 }
 
 function normalizeAiSkillApiError(cause: unknown, fallbackCode = 'AI_SKILL_FAILED') {
@@ -24,7 +33,9 @@ function normalizeAiSkillApiError(cause: unknown, fallbackCode = 'AI_SKILL_FAILE
   const status = Number(envelope?.status || value?.status || value?.response?.status || 500);
   const code = String(envelope?.data?.code || value?.data?.code || value?.code || fallbackCode);
   const message = String(envelope?.msg || value?.message || 'AI 能力暂时不可用');
-  return new AiSkillApiError(code, message, Number.isFinite(status) ? status : 500);
+  const isPublicMessage =
+    typeof envelope?.msg === 'string' || /^HTTP_\d{3}$/u.test(code) || PUBLIC_TRANSPORT_ERROR_CODES.has(code);
+  return new AiSkillApiError(code, message, Number.isFinite(status) ? status : 500, isPublicMessage);
 }
 
 function assertSuccessEnvelope(response: any, fallbackCode: string) {
@@ -33,6 +44,7 @@ function assertSuccessEnvelope(response: any, fallbackCode: string) {
     String(response?.data?.code || fallbackCode),
     String(response?.msg || 'AI 能力暂时不可用'),
     Number(response?.status || 500),
+    true,
   );
 }
 
@@ -105,6 +117,7 @@ export async function executeAiSkill(
         String(result.error?.code || 'AI_SKILL_FAILED'),
         String(result.error?.message || 'AI 能力暂时不可用'),
         500,
+        true,
       );
     }
     return result;
@@ -169,6 +182,7 @@ export async function executeAiSkillStream(
           String(parsed.data?.code || 'AI_SKILL_FAILED'),
           String(parsed.data?.message || 'AI 能力暂时不可用'),
           Number(parsed.data?.status || 500),
+          true,
         );
       }
     };

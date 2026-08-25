@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
+import { AI_SKILL_AUTHENTICATED_ROLES } from './accessPolicy.js';
 import { resolveAiSkillContext } from './contextResolver.js';
 
 const skill = Object.freeze({
   id: 'file.ask',
   version: 1,
-  allowedRoles: ['user', 'root'],
+  allowedRoles: AI_SKILL_AUTHENTICATED_ROLES,
   contextPolicy: Object.freeze({
     resourceTypes: ['file'],
     minResources: 1,
@@ -115,5 +116,26 @@ describe('resolveAiSkillContext', () => {
     await expect(
       resolveAiSkillContext({ skill, request: request([]), req: authenticatedRequest() }),
     ).rejects.toMatchObject({ code: 'AI_SKILL_SCOPE_SIZE_INVALID' });
+  });
+
+  it('test 只作为内部统计账号隐藏，产品 AI 权限与 user 一致', async () => {
+    const resolveResourceVersions = vi.fn().mockResolvedValue([{ type: 'file', id: 'file-1', version: 'v1' }]);
+
+    await expect(
+      resolveAiSkillContext({
+        skill,
+        request: request([{ type: 'file', id: 'file-1' }]),
+        req: authenticatedRequest({
+          user: { id: 'test-1', role: 'test' },
+          billingUser: { id: 'test-1', role: 'test' },
+          resourceUser: { id: 'test-1', role: 'test' },
+          adminContext: null,
+        }),
+        resolveResourceVersions,
+      }),
+    ).resolves.toMatchObject({
+      identity: { actorUserId: 'test-1', actorRole: 'test', subjectUserId: 'test-1' },
+    });
+    expect(resolveResourceVersions).toHaveBeenCalledWith(expect.objectContaining({ userId: 'test-1' }));
   });
 });

@@ -6,6 +6,8 @@ import { suggestTodoPlanEndDate } from './todoDraftNormalizer';
 const readSource = (file: string) => readFileSync(resolve(process.cwd(), `src/components/todo/${file}`), 'utf8');
 const modalSource = readSource('TodoEditorModal.vue');
 const simpleSource = readSource('TodoSimpleEditorForm.vue');
+const editorSource = readSource('TodoEditorForm.vue');
+const mentionInputSource = readSource('TodoResourceMentionInput.vue');
 const reminderSource = readSource('TodoReminderEditor.vue');
 const repeatReminderSource = readSource('TodoReminderRepeatEditor.vue');
 const independentSource = readSource('TodoIndependentTaskPlanEditor.vue');
@@ -54,6 +56,18 @@ describe('待办创建页原型布局', () => {
     expect(simpleSource).toMatch(
       /\.todo-simple-editor__optional-head\s*\{[\s\S]*?border:\s*1px solid[\s\S]*?background:\s*var\(--workspace-panel-bg-color\)/,
     );
+  });
+
+  it('直接输入 @ 复用光标浮层，显式按钮才打开完整搜索弹框', () => {
+    expect(simpleSource).toContain('<TodoResourceMentionInput');
+    expect(editorSource).toContain('<TodoResourceMentionInput');
+    expect(mentionInputSource).toContain('<BPopover');
+    expect(mentionInputSource).toContain('getTextareaCaretRect');
+    expect(mentionInputSource).toContain('toAnchorOffset');
+    expect(mentionInputSource).toContain(':show-search="false"');
+    expect(mentionInputSource).toContain('inline');
+    expect(simpleSource).toContain('@click="resourcePickerVisible = true"');
+    expect(simpleSource).not.toContain('resourcePickerMode');
   });
 
   it('提醒方式与周期类型都是三等分整区可点击，移动端保留足够触控高度', () => {

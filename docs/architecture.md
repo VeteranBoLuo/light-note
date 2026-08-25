@@ -123,7 +123,7 @@ res.send(resultData(null, 500, "服务器内部错误")); // 服务端错误
 
 ### 权限模型
 
-- 角色：`visitor`（游客）、`user`（普通用户）、`root`（管理员）
+- 角色：`visitor`（游客）、`user`（普通用户）、`test`（内部测试账号）、`root`（管理员）。`test` 继承普通用户的产品能力，仅在运营统计、排行和默认后台列表中按内部账号口径隐藏；不得把“内部账号”误作产品能力禁用条件。
 - 普通权限检查仍通过 `req.user?.role` 判断；管理员预览使用短时 `X-Admin-Context`，鉴权层分离真实操作者 `billingUser` 与资源主体 `resourceUser`
 - 管理员上下文所有路由必须在 `adminRoutePolicy.js` 显式声明语义策略，遗漏时默认拒绝
 - `readonly` 只允许读取；`maintain` 仅允许可逆内容维护，抑制目标账号成长、转化和权益副作用，并写入 `admin_context_audit`

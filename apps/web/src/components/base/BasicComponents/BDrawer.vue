@@ -86,6 +86,7 @@
   import { getRootZoom } from '@/utils/zoom';
   import { resolveViewportUnitValue } from '@/utils/cssViewport';
   import { acquireModalLayer, isTopModalLayer, releaseModalLayer } from '@/utils/modalLayer';
+  import { shouldIgnoreBackgroundEscape } from '@/utils/topLayerEscape';
   import { useMobileLayout } from '@/composables/useMobileLayout';
   import {
     registerMobileOverlayHistory,
@@ -350,11 +351,14 @@
   ].join(',');
 
   function handleKeydown(event: KeyboardEvent) {
-    if (event.defaultPrevented) return;
-    if (event.key === 'Escape' && props.keyboard && (!props.modal || isTopModalLayer(drawerLayer))) {
-      event.preventDefault();
-      handleClose();
-      return;
+    if (event.key === 'Escape') {
+      if (shouldIgnoreBackgroundEscape(event)) return;
+      if (props.keyboard && (!props.modal || isTopModalLayer(drawerLayer))) {
+        event.preventDefault();
+        event.stopPropagation();
+        handleClose();
+        return;
+      }
     }
     if (!props.modal || event.key !== 'Tab' || !panelRef.value) return;
     const focusable = Array.from(panelRef.value.querySelectorAll<HTMLElement>(focusableSelector)).filter(
@@ -379,7 +383,8 @@
   // 下拉框、日期选择器等浮层会 Teleport 到 body，焦点可能暂时离开 drawer panel。
   // 在 document 兜底监听 Escape，确保抽屉仍可退出；若内层浮层已消费 Escape，则不重复关闭抽屉。
   function handleDocumentKeydown(event: KeyboardEvent) {
-    if (event.defaultPrevented || !props.open || !props.modal || event.key !== 'Escape' || !props.keyboard) return;
+    if (!props.open || !props.modal || event.key !== 'Escape' || !props.keyboard || shouldIgnoreBackgroundEscape(event))
+      return;
     if (!isTopModalLayer(drawerLayer)) return;
     event.preventDefault();
     handleClose();

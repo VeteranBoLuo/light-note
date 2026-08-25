@@ -1,4 +1,5 @@
 import { retrieve } from '../../knowledgeService.js';
+import { AI_SKILL_PUBLIC_ROLES } from '../accessPolicy.js';
 import { validateHelpAnswerInput } from '../inputValidators.js';
 
 export default Object.freeze({
@@ -6,7 +7,7 @@ export default Object.freeze({
   version: 1,
   domain: 'help',
   effect: 'read',
-  allowedRoles: Object.freeze(['visitor', 'user', 'root']),
+  allowedRoles: AI_SKILL_PUBLIC_ROLES,
   contextPolicy: Object.freeze({
     resourceTypes: Object.freeze([]),
     minResources: 0,

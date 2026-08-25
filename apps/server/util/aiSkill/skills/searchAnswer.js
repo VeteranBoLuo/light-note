@@ -1,4 +1,5 @@
 import { searchPersonalKnowledge } from '../../personalKnowledgeSearch.js';
+import { AI_SKILL_AUTHENTICATED_ROLES } from '../accessPolicy.js';
 import { validateSearchAnswerInput } from '../inputValidators.js';
 
 function coverageWarning(value) {
@@ -17,7 +18,7 @@ export default Object.freeze({
   version: 1,
   domain: 'search',
   effect: 'read',
-  allowedRoles: Object.freeze(['user', 'root']),
+  allowedRoles: AI_SKILL_AUTHENTICATED_ROLES,
   contextPolicy: Object.freeze({
     resourceTypes: Object.freeze(['note', 'bookmark', 'file', 'todo']),
     minResources: 0,

@@ -1,3 +1,5 @@
+import { getRootZoom } from './zoom';
+
 /**
  * 计算 textarea 内某个字符位置的屏幕坐标(镜像 div 法)。
  *
@@ -39,6 +41,7 @@ export interface CaretRect {
 export function getTextareaCaretRect(textarea: HTMLTextAreaElement, index?: number): CaretRect {
   const sourceRect = textarea.getBoundingClientRect();
   const style = getComputedStyle(textarea);
+  const zoom = getRootZoom();
   const caret = Number.isFinite(index) ? Number(index) : textarea.selectionStart;
 
   const mirror = document.createElement('div');
@@ -47,8 +50,9 @@ export function getTextareaCaretRect(textarea: HTMLTextAreaElement, index?: numb
   mirror.style.visibility = 'hidden';
   mirror.style.pointerEvents = 'none';
   mirror.style.overflow = 'hidden';
-  mirror.style.left = `${sourceRect.left}px`;
-  mirror.style.top = `${sourceRect.top}px`;
+  // fixed 样式使用布局像素，而 DOMRect / 最终 markerRect 使用已含根 zoom 的视觉像素。
+  mirror.style.left = `${sourceRect.left / zoom}px`;
+  mirror.style.top = `${sourceRect.top / zoom}px`;
   mirror.style.width = `${textarea.offsetWidth}px`;
   for (const key of COPIED_STYLES) mirror.style[key] = style[key];
   mirror.textContent = textarea.value.slice(0, Math.max(0, caret));
@@ -59,8 +63,8 @@ export function getTextareaCaretRect(textarea: HTMLTextAreaElement, index?: numb
   mirror.remove();
 
   return {
-    left: markerRect.left - textarea.scrollLeft,
-    top: markerRect.top - textarea.scrollTop,
+    left: markerRect.left - textarea.scrollLeft * zoom,
+    top: markerRect.top - textarea.scrollTop * zoom,
     height: markerRect.height || Number.parseFloat(style.lineHeight) || 20,
   };
 }
@@ -71,9 +75,11 @@ export function getTextareaCaretRect(textarea: HTMLTextAreaElement, index?: numb
  */
 export function toAnchorOffset(caret: CaretRect, container: HTMLElement) {
   const box = container.getBoundingClientRect();
+  const zoom = getRootZoom();
   return {
-    left: caret.left - box.left,
-    top: caret.top - box.top,
-    lineHeight: caret.height,
+    // getBoundingClientRect 返回视觉像素，absolute 样式使用布局像素；根节点 zoom 下必须统一换算。
+    left: (caret.left - box.left) / zoom,
+    top: (caret.top - box.top) / zoom,
+    lineHeight: caret.height / zoom,
   };
 }

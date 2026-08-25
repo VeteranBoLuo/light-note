@@ -297,6 +297,7 @@
           ref="inlineMentionSuggestionsRef"
           :allowed-types="['bookmark', 'note', 'file']"
           :show-search="false"
+          inline
           :keyword="inlineMentionQuery"
           @mousedown.prevent
           @select="insertInlineResourceMention"

@@ -1,5 +1,6 @@
 import { AI_SKILL_RESOURCE_TYPES, AI_SKILL_RESULT_KINDS } from '@lightnote/shared/ai-skill-protocol';
 import { describe, expect, it } from 'vitest';
+import { AI_SKILL_AUTHENTICATED_ROLES, AI_SKILL_PUBLIC_ROLES } from './accessPolicy.js';
 import { listAiSkills, resolveAiSkill } from './registry.js';
 
 const EXPECTED_SKILLS = Object.freeze([
@@ -25,7 +26,7 @@ const EXPECTED_SKILLS = Object.freeze([
   ['file.extract_todos', 'file', 'preview'],
 ]);
 
-const ALLOWED_ROLES = new Set(['visitor', 'user', 'root']);
+const ALLOWED_ROLES = new Set(AI_SKILL_PUBLIC_ROLES);
 const RESOURCE_TYPES = new Set(AI_SKILL_RESOURCE_TYPES);
 const RESULT_KINDS = new Set(AI_SKILL_RESULT_KINDS);
 
@@ -40,7 +41,7 @@ describe('AI Skill registry contract', () => {
 
     expect(definition).toMatchObject({ id, version: 1, domain, effect });
     expect(Object.isFrozen(definition)).toBe(true);
-    expect(definition.allowedRoles).toEqual(expect.arrayContaining(['user', 'root']));
+    expect(definition.allowedRoles).toEqual(expect.arrayContaining(AI_SKILL_AUTHENTICATED_ROLES));
     expect(definition.allowedRoles.every((role) => ALLOWED_ROLES.has(role))).toBe(true);
     expect(new Set(definition.allowedRoles).size).toBe(definition.allowedRoles.length);
 

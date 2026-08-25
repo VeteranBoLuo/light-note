@@ -1,3 +1,4 @@
+import { AI_SKILL_AUTHENTICATED_ROLES } from '../accessPolicy.js';
 import { validateNoteTransformInput } from '../inputValidators.js';
 
 const OPERATION_INSTRUCTIONS = Object.freeze({
@@ -15,7 +16,7 @@ export default Object.freeze({
   version: 1,
   domain: 'note',
   effect: 'preview',
-  allowedRoles: Object.freeze(['user', 'root']),
+  allowedRoles: AI_SKILL_AUTHENTICATED_ROLES,
   contextPolicy: Object.freeze({
     resourceTypes: Object.freeze([]),
     minResources: 0,
@@ -32,9 +33,7 @@ export default Object.freeze({
       OPERATION_INSTRUCTIONS[input.operation],
       input.targetLanguage ? `目标语言：${input.targetLanguage}` : '',
       input.instruction ? `补充要求：${input.instruction}` : '',
-      input.targetLength
-        ? `输出至少 ${input.targetLength} 个字符；只能通过充分表达原文已有信息扩展，不得编造。`
-        : '',
+      input.targetLength ? `输出至少 ${input.targetLength} 个字符；只能通过充分表达原文已有信息扩展，不得编造。` : '',
     ]
       .filter(Boolean)
       .join('\n');
