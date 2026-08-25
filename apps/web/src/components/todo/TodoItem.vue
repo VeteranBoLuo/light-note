@@ -212,8 +212,8 @@
   import { resolveResourceRoute } from '@/utils/resourceNavigation';
   import {
     formatTodoDateTime,
+    isTodoOverdue,
     normalizeTodoDateOnly,
-    parseTodoDate,
     todoPastReminderAt,
     type TodoSnoozePreset,
   } from '@/utils/todoPlanning';
@@ -259,12 +259,7 @@
     action();
   }
 
-  const overdue = computed(
-    () =>
-      props.item.status === 'pending' &&
-      Boolean(props.item.dueAt) &&
-      parseTodoDate(props.item.dueAt as string).getTime() < Date.now(),
-  );
+  const overdue = computed(() => isTodoOverdue(props.item));
   const priorityLabel = computed(() => t(`inbox.todoPriority${props.item.priority}`));
   const completedChecklistCount = computed(() => props.item.checklist.filter((check) => check.done).length);
   const dueLabel = computed(() => {

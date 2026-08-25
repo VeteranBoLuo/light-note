@@ -44,11 +44,18 @@ describe('爱发电赞助地址', () => {
   });
 
   it('固化轻笺的三个金额档与自选金额入口', () => {
-    expect(AFDIAN_SUPPORT_OPTIONS.map(({ key, amount, configured }) => ({ key, amount, configured }))).toEqual([
-      { key: 'coffee', amount: 6, configured: true },
-      { key: 'server', amount: 18, configured: true },
-      { key: 'companion', amount: 50, configured: true },
-      { key: 'custom', amount: null, configured: true },
+    expect(
+      AFDIAN_SUPPORT_OPTIONS.map(({ key, amount, rewardTokens, configured }) => ({
+        key,
+        amount,
+        rewardTokens,
+        configured,
+      })),
+    ).toEqual([
+      { key: 'coffee', amount: 6, rewardTokens: 600_000, configured: true },
+      { key: 'server', amount: 18, rewardTokens: 1_800_000, configured: true },
+      { key: 'companion', amount: 50, rewardTokens: 5_000_000, configured: true },
+      { key: 'custom', amount: null, rewardTokens: null, configured: true },
     ]);
   });
 

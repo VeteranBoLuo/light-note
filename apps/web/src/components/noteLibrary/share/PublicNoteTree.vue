@@ -15,7 +15,7 @@
       </BButton>
       <span v-else class="public-note-tree__toggle-placeholder" />
       <BButton class="public-note-tree__label" :title="node.title" @click="emit('open', node.id)">
-        <SvgIcon :src="noteIcon" size="15" aria-hidden="true" />
+        <SvgIcon :src="noteIcon" size="15" :style="{ color: noteColor }" aria-hidden="true" />
         <span>{{ node.title || t('note.untitled') }}</span>
       </BButton>
     </div>
@@ -41,8 +41,8 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import icon from '@/config/icon';
   import type { PublicNoteShareTreeItem } from '@/api/noteShare';
+  import { getNoteTreePageColor, getNoteTreePageIcon } from '@/utils/noteTreePresentation';
 
   const props = withDefaults(
     defineProps<{
@@ -60,11 +60,8 @@
   const loading = ref(false);
   const loaded = ref(false);
   const children = ref<PublicNoteShareTreeItem[]>([]);
-  const noteIcon = computed(() => {
-    if (props.node.type === 'drawing') return icon.resource.noteDrawing;
-    if (props.node.type === 'markdown') return icon.resource.noteMarkdown;
-    return icon.resource.noteHtml;
-  });
+  const noteIcon = computed(() => getNoteTreePageIcon(props.node.type));
+  const noteColor = computed(() => getNoteTreePageColor(props.node.type));
 
   async function loadChildren() {
     if (loaded.value) return;

@@ -10,11 +10,12 @@ describe('爱发电支持模块 Schema', () => {
       }),
     };
     await ensureAfdianSupportSchema({ db });
-    expect(db.query).toHaveBeenCalledTimes(9);
+    expect(db.query).toHaveBeenCalledTimes(10);
     expect(AFDIAN_SUPPORT_TABLE_SQL.join('\n')).toContain('UNIQUE KEY uk_support_order_provider (provider_order_no)');
     expect(AFDIAN_SUPPORT_TABLE_SQL.join('\n')).toContain('UNIQUE KEY uk_support_checkout_token (token_hash)');
     expect(AFDIAN_SUPPORT_TABLE_SQL.join('\n')).toContain('CREATE TABLE IF NOT EXISTS support_public_preferences');
     expect(AFDIAN_SUPPORT_TABLE_SQL.join('\n')).toContain('ranking_observed_at datetime DEFAULT NULL');
+    expect(AFDIAN_SUPPORT_TABLE_SQL.join('\n')).toContain('provider_created_at datetime DEFAULT NULL');
     expect(AFDIAN_SUPPORT_TABLE_SQL.join('\n')).not.toMatch(/client_secret|api_token/i);
   });
 
@@ -24,6 +25,7 @@ describe('爱发电支持模块 Schema', () => {
     const sql = db.query.mock.calls.map(([statement]) => String(statement)).join('\n');
     expect(sql).toContain('ADD COLUMN provider_name');
     expect(sql).toContain('ADD COLUMN ranking_observed_at');
+    expect(sql).toContain('ADD COLUMN provider_created_at');
     expect(sql).toContain('ADD KEY idx_support_order_ranking');
   });
 });

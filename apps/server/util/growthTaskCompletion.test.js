@@ -40,29 +40,39 @@ describe('growthTaskCompletion', () => {
     expect(pool.getConnection).not.toHaveBeenCalled();
   });
 
-  it('root 记录完成事实并自动收口为已领取，但不产生经验奖励', async () => {
+  it('root 与 user 共用任务达成与主动领取流程', async () => {
     connection.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
 
     await expect(completeGrowthTask('root-1', 'profile_avatar', { userRole: 'root' })).resolves.toEqual({
       completed: true,
       duplicated: false,
       taskKey: 'profile_avatar',
-      rewardExp: 0,
-      claimed: true,
+      rewardExp: 50,
+      claimed: false,
     });
 
-    expect(connection.query).toHaveBeenCalledWith(expect.stringContaining('ON DUPLICATE KEY UPDATE'), [
+    expect(connection.query).toHaveBeenCalledWith(expect.stringContaining('INSERT IGNORE INTO user_growth_tasks'), [
       'root-1',
       'profile_avatar',
       null,
-      null,
     ]);
-    expect(grantExp).not.toHaveBeenCalled();
-    await expect(claimGrowthTask('root-1', 'profile_avatar', { userRole: 'root' })).resolves.toEqual({
-      ok: false,
-      reason: 'read_only_actor',
+
+    connection.query.mockReset();
+    connection.query
+      .mockResolvedValueOnce([[{ status: 'completed', claimedAt: null }]])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]);
+    await expect(claimGrowthTask('root-1', 'profile_avatar', { userRole: 'root' })).resolves.toMatchObject({
+      ok: true,
+      taskKey: 'profile_avatar',
+      expGained: 50,
     });
-    expect(pool.getConnection).toHaveBeenCalledTimes(1);
+    expect(grantExp).toHaveBeenCalledWith(
+      'root-1',
+      'growth_task',
+      expect.objectContaining({ amount: 50, userRole: 'root' }),
+      connection,
+    );
+    expect(pool.getConnection).toHaveBeenCalledTimes(2);
   });
 
   it('首次达成只写任务状态，不自动发放经验', async () => {
@@ -126,11 +136,10 @@ describe('growthTaskCompletion', () => {
       expGained: 50,
       leveledUp: true,
     });
-    expect(connection.query).toHaveBeenNthCalledWith(
-      1,
-      expect.stringContaining('FOR UPDATE'),
-      ['user-1', 'profile_avatar'],
-    );
+    expect(connection.query).toHaveBeenNthCalledWith(1, expect.stringContaining('FOR UPDATE'), [
+      'user-1',
+      'profile_avatar',
+    ]);
     expect(grantExp).toHaveBeenCalledWith(
       'user-1',
       'growth_task',
@@ -146,10 +155,7 @@ describe('growthTaskCompletion', () => {
   });
 
   it('已领取任务幂等返回，不重复发经验', async () => {
-    connection.query.mockResolvedValueOnce([
-      [{ status: 'completed', claimedAt: '2026-08-01 12:00:00' }],
-      [],
-    ]);
+    connection.query.mockResolvedValueOnce([[{ status: 'completed', claimedAt: '2026-08-01 12:00:00' }], []]);
     await expect(claimGrowthTask('user-1', 'first_bookmark', { userRole: 'user' })).resolves.toEqual({
       ok: true,
       already: true,
@@ -162,9 +168,7 @@ describe('growthTaskCompletion', () => {
   it('经验发放失败时领取状态与账本一起回滚', async () => {
     connection.query.mockResolvedValueOnce([[{ status: 'completed', claimedAt: null }], []]);
     grantExp.mockRejectedValueOnce(new Error('ledger unavailable'));
-    await expect(claimGrowthTask('user-1', 'first_todo', { userRole: 'user' })).rejects.toThrow(
-      'ledger unavailable',
-    );
+    await expect(claimGrowthTask('user-1', 'first_todo', { userRole: 'user' })).rejects.toThrow('ledger unavailable');
     expect(connection.rollback).toHaveBeenCalledTimes(1);
     expect(connection.commit).not.toHaveBeenCalled();
   });

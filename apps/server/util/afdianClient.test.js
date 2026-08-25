@@ -5,6 +5,7 @@ import {
   buildAfdianWebhookSignText,
   exchangeAfdianAuthorizationCode,
   isAfdianDashboardWebhookTestPayload,
+  normalizeAfdianOrder,
   queryAfdianPublicProfile,
   queryAfdianOrders,
   verifyAfdianWebhookSignature,
@@ -184,5 +185,23 @@ describe('爱发电客户端协议', () => {
       .digest('hex');
     expect(body.sign).toBe(expected);
     expect(String(options.body)).not.toContain('test-api-token');
+  });
+
+  it('归一化订单时保留可信的服务商创建时间，并拒绝异常时间', () => {
+    const baseOrder = {
+      out_trade_no: 'order-12345678',
+      user_id: 'provider-user',
+      total_amount: '6.00',
+      status: 2,
+    };
+
+    expect(normalizeAfdianOrder({ ...baseOrder, create_time: 1_787_640_000 })).toMatchObject({
+      providerOrderNo: 'order-12345678',
+      providerCreatedAt: 1_787_640_000,
+    });
+    expect(normalizeAfdianOrder({ ...baseOrder, create_time: 1_787_640_000_000 })).toMatchObject({
+      providerCreatedAt: 1_787_640_000,
+    });
+    expect(() => normalizeAfdianOrder({ ...baseOrder, create_time: '1970-01-01' })).toThrow('订单创建时间不合法');
   });
 });

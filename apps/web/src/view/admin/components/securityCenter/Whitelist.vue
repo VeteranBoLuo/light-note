@@ -406,6 +406,7 @@
     justify-content: space-between;
     align-items: center;
     gap: 12px;
+    padding: 0 20px 16px;
     color: var(--desc-color);
     font-size: 13px;
   }
@@ -419,6 +420,12 @@
     .whitelist-modal-footer {
       align-items: flex-start;
       flex-direction: column;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .whitelist-modal-footer {
+      padding: 0 16px 12px;
     }
   }
 </style>

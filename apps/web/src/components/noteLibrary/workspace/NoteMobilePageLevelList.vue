@@ -37,13 +37,13 @@
         :key="item.id"
         class="note-mobile-page-level-list__row"
         :class="{ 'is-current': item.id === currentPageId, 'is-selected': item.id === selectedPageId }"
+        :style="{ '--note-page-format-color': getNoteTreePageColor(item.type) }"
       >
         <BButton class="note-mobile-page-level-list__title" @click="selectItem(item)">
           <SvgIcon
             :src="getNoteTreePageIcon(item.type)"
             size="18"
             class="note-mobile-page-level-list__format-icon"
-            :class="{ 'is-markdown': isMarkdownNoteTreePage(item.type) }"
             aria-hidden="true"
           />
           <span>{{ item.title || t('note.untitled') }}</span>
@@ -103,7 +103,7 @@
   import icon from '@/config/icon';
   import useNoteWorkspaceStore, { NOTE_TREE_ROOT_KEY } from '@/store/noteWorkspace';
   import type { NoteBreadcrumbItem, NoteTreeItem } from '@/types/noteTree';
-  import { getNoteTreePageIcon, isMarkdownNoteTreePage } from '@/utils/noteTreePresentation';
+  import { getNoteTreePageColor, getNoteTreePageIcon } from '@/utils/noteTreePresentation';
 
   const props = withDefaults(
     defineProps<{
@@ -358,14 +358,14 @@
     color: var(--text-color);
 
     &.is-current {
-      color: var(--resource-note-color, #00a884);
+      color: var(--note-page-format-color);
       font-weight: 680;
     }
 
     &.is-selected {
-      border: 1px solid var(--resource-note-color, #00a884);
+      border: 1px solid var(--note-page-format-color);
       border-radius: 10px;
-      background: color-mix(in srgb, var(--resource-note-color, #00a884) 9%, var(--menu-body-bg-color));
+      background: color-mix(in srgb, var(--note-page-format-color) 9%, var(--menu-body-bg-color));
     }
   }
 
@@ -389,11 +389,7 @@
 
   .note-mobile-page-level-list__format-icon {
     flex: 0 0 auto;
-    color: var(--resource-note-color, #00a884);
-
-    &.is-markdown {
-      color: var(--primary-color, #615ced);
-    }
+    color: var(--note-page-format-color);
   }
 
   .note-mobile-page-level-list__enter,
@@ -409,7 +405,7 @@
   .note-mobile-page-level-list__current {
     margin-left: auto;
     flex: 0 0 auto;
-    color: var(--resource-note-color, #00a884);
+    color: var(--note-page-format-color);
     font-size: 11px;
   }
 

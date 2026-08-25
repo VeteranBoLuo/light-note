@@ -136,6 +136,24 @@ describe('TodoMatrixView', () => {
     expect(host.querySelector('.todo-matrix-card__title')?.textContent).toBe('低优先无日期');
   });
 
+  it('跨日任务已经开始但尚未截止时仍显示未来截止，不显示已逾期', async () => {
+    const now = new Date();
+    const startedYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 15, 35);
+    const dueInThreeDays = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3, 15, 35);
+    const item = {
+      ...todo('cross-day', '跨日进行中的待办', 1, localDateTime(dueInThreeDays)),
+      startAt: localDateTime(startedYesterday),
+      occurrenceDate: localDateTime(startedYesterday).slice(0, 10),
+    };
+    const { host } = mountMatrix({ items: [item] });
+    await nextTick();
+
+    const due = host.querySelector('.todo-matrix-card__due');
+    expect(due?.textContent).toContain('截止');
+    expect(due?.textContent).not.toContain('已逾期');
+    expect(due?.classList.contains('is-overdue')).toBe(false);
+  });
+
   it('固定日程在四象限只显示下一项，系列胶囊可打开共享明细抽屉且不误触编辑', async () => {
     const now = new Date();
     const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 12);

@@ -38,6 +38,11 @@
         <strong class="admin-stat-value">{{ overview.linkedAccounts }}</strong>
         <span class="admin-stat-hint">{{ t('adminSupport.metrics.linksHint') }}</span>
       </li>
+      <li class="admin-stat-card">
+        <span class="admin-stat-label">{{ t('adminSupport.metrics.grantedTokens') }}</span>
+        <strong class="admin-stat-value">{{ formatAiQuotaTokens(overview.grantedTokens, locale) }}</strong>
+        <span class="admin-stat-hint">{{ t('adminSupport.metrics.grantedTokensHint') }}</span>
+      </li>
       <li class="admin-stat-card" :class="{ 'has-warning': exceptionCount > 0 }">
         <span class="admin-stat-label">{{ t('adminSupport.metrics.exceptions') }}</span>
         <strong class="admin-stat-value">{{ exceptionCount }}</strong>
@@ -62,7 +67,9 @@
         :options="orderStateOptions"
         @change="applySearch"
       />
-      <BButton v-if="activeTab !== 'overview'" :disabled="loading" @click="applySearch">{{ t('common.search') }}</BButton>
+      <BButton v-if="activeTab !== 'overview'" :disabled="loading" @click="applySearch">{{
+        t('common.search')
+      }}</BButton>
     </template>
 
     <div v-if="activeTab === 'overview'" class="support-admin__overview">
@@ -77,6 +84,10 @@
       <BCard padding="18px">
         <strong>{{ t('adminSupport.overview.safetyTitle') }}</strong>
         <p>{{ t('adminSupport.overview.safetyDescription') }}</p>
+      </BCard>
+      <BCard padding="18px">
+        <strong>{{ t('adminSupport.overview.rewardTitle') }}</strong>
+        <p>{{ t('adminSupport.overview.rewardDescription') }}</p>
       </BCard>
     </div>
 
@@ -103,7 +114,12 @@
           <small>{{ record.providerName || record.lightNoteUserId || '-' }}</small>
         </template>
         <template v-else-if="column.key === 'amount'">¥{{ record.totalAmount }}</template>
-        <template v-else-if="column.key === 'time'">{{ formatTime(record.lastSupportAt || record.rankingObservedAt || record.verifiedAt) }}</template>
+        <template v-else-if="column.key === 'reward'">
+          <BChip :tone="rewardTone(record)">{{ rewardLabel(record) }}</BChip>
+        </template>
+        <template v-else-if="column.key === 'time'">{{
+          formatTime(record.lastSupportAt || record.rankingObservedAt || record.verifiedAt)
+        }}</template>
         <template v-else-if="column.key === 'visibility'">
           <BChip :tone="visibilityTone(record as AdminSupporter)">{{
             visibilityLabel(record as AdminSupporter)
@@ -118,9 +134,17 @@
             {{ record.adminHidden ? t('adminSupport.restoreIdentity') : t('adminSupport.hideIdentity') }}
           </BButton>
           <BButton
-            v-else-if="record.verificationState === 'pending'"
+            v-else-if="record.grantStatus === 'manual_review' && record.reasonCode === 'large_amount'"
             size="small"
-            :loading="actingKey === record.providerOrderNo"
+            :loading="actingKey === `reward:${record.providerOrderNo}`"
+            @click.stop="confirmRewardApproval(record as AdminSupportOrder)"
+          >
+            {{ t('adminSupport.approveReward') }}
+          </BButton>
+          <BButton
+            v-else-if="needsReconcile(record as AdminSupportOrder)"
+            size="small"
+            :loading="actingKey === `reconcile:${record.providerOrderNo}`"
             @click.stop="retryOrder(record.providerOrderNo)"
           >
             {{ t('adminSupport.retry') }}
@@ -167,8 +191,10 @@
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import {
     forceAdminSupportSync,
+    approveAdminSupportReward,
     getAdminSupportOrders,
     getAdminSupportOverview,
     getAdminSupporters,
@@ -178,6 +204,7 @@
     type AdminSupportOverview,
     type AdminSupporter,
   } from '@/api/adminSupportApi';
+  import { formatAiQuotaTokens } from '@/composables/useAiQuotaStatus';
 
   type TabKey = 'overview' | 'orders' | 'supporters' | 'exceptions';
   type Row = (AdminSupportOrder | AdminSupporter) & { rowKey?: string };
@@ -191,6 +218,9 @@
     pendingOrders: 0,
     conflictOrders: 0,
     unlinkedOrders: 0,
+    grantedTokens: 0,
+    manualReviewRewards: 0,
+    reversalReviewRewards: 0,
   };
 
   const { t, locale } = useI18n();
@@ -211,7 +241,12 @@
   const visibilitySaving = ref(false);
 
   const exceptionCount = computed(
-    () => overview.value.pendingOrders + overview.value.conflictOrders + overview.value.unlinkedOrders,
+    () =>
+      overview.value.pendingOrders +
+      overview.value.conflictOrders +
+      overview.value.unlinkedOrders +
+      overview.value.manualReviewRewards +
+      overview.value.reversalReviewRewards,
   );
   const tabs = computed(() => [
     { key: 'overview', label: t('adminSupport.tabs.overview') },
@@ -225,6 +260,7 @@
     { value: 'pending', label: t('adminSupport.states.pending') },
     { value: 'conflict', label: t('adminSupport.states.conflict') },
     { value: 'unlinked', label: t('adminSupport.states.unlinked') },
+    { value: 'reward_review', label: t('adminSupport.states.rewardReview') },
   ]);
   const toolbarHint = computed(() =>
     activeTab.value === 'overview' ? t('adminSupport.overviewHint') : t('adminSupport.listHint'),
@@ -234,6 +270,7 @@
       ? [
           { title: t('adminSupport.columns.supporter'), key: 'identity' },
           { title: t('adminSupport.columns.amount'), key: 'amount', width: '110px' },
+          { title: t('adminSupport.columns.reward'), key: 'reward', width: '150px' },
           { title: t('adminSupport.columns.orders'), key: 'orderCount', width: '90px' },
           { title: t('adminSupport.columns.visibility'), key: 'visibility', width: '130px' },
           { title: t('adminSupport.columns.lastSupport'), key: 'time', width: '150px' },
@@ -244,8 +281,9 @@
           { title: t('adminSupport.columns.supporter'), key: 'identity' },
           { title: t('adminSupport.columns.amount'), key: 'amount', width: '110px' },
           { title: t('adminSupport.columns.status'), key: 'status', width: '110px' },
+          { title: t('adminSupport.columns.reward'), key: 'reward', width: '160px' },
           { title: t('adminSupport.columns.time'), key: 'time', width: '150px' },
-          { title: t('adminSupport.columns.operation'), key: 'actions', width: '100px' },
+          { title: t('adminSupport.columns.operation'), key: 'actions', width: '120px' },
         ],
   );
 
@@ -268,7 +306,8 @@
               page: page.value,
               pageSize: pageSize.value,
               search: search.value,
-              state: activeTab.value === 'exceptions' ? 'exceptions' : orderState.value === 'all' ? '' : orderState.value,
+              state:
+                activeTab.value === 'exceptions' ? 'exceptions' : orderState.value === 'all' ? '' : orderState.value,
             });
       rows.value = result.items.map((item: AdminSupportOrder | AdminSupporter) => ({
         ...item,
@@ -328,7 +367,7 @@
   }
 
   async function retryOrder(providerOrderNo: string) {
-    actingKey.value = providerOrderNo;
+    actingKey.value = `reconcile:${providerOrderNo}`;
     try {
       await reconcileAdminSupportOrder(providerOrderNo);
       message.success(t('adminSupport.retrySuccess'));
@@ -338,6 +377,34 @@
     } finally {
       actingKey.value = '';
     }
+  }
+
+  function confirmRewardApproval(record: AdminSupportOrder) {
+    Alert.alert({
+      title: t('adminSupport.rewardApprovalTitle'),
+      content: t('adminSupport.rewardApprovalDescription', {
+        amount: record.totalAmount,
+        tokens: formatAiQuotaTokens(record.calculatedTokens, locale.value),
+      }),
+      okText: t('adminSupport.approveReward'),
+      async onOk() {
+        actingKey.value = `reward:${record.providerOrderNo}`;
+        try {
+          if (!record.lightNoteUserId) throw new Error('ADMIN_SUPPORT_REWARD_OWNER_MISSING');
+          await approveAdminSupportReward({
+            providerOrderNo: record.providerOrderNo,
+            expectedTokens: record.calculatedTokens,
+            expectedUserId: record.lightNoteUserId,
+          });
+          message.success(t('adminSupport.rewardApprovalSuccess'));
+          await refresh();
+        } catch {
+          message.error(t('adminSupport.rewardApprovalFailed'));
+        } finally {
+          actingKey.value = '';
+        }
+      },
+    });
   }
 
   function openVisibility(record: AdminSupporter) {
@@ -379,9 +446,35 @@
   }
 
   function statusTone(record: AdminSupportOrder) {
-    return record.verificationState === 'api_verified' && record.lightNoteUserId && record.ownershipSource !== 'conflict'
+    return record.verificationState === 'api_verified' &&
+      record.lightNoteUserId &&
+      record.ownershipSource !== 'conflict'
       ? 'success'
-      : 'warning';
+      : 'pending';
+  }
+
+  function needsReconcile(record: AdminSupportOrder) {
+    return (
+      record.verificationState === 'pending' ||
+      ['manual_review', 'reversal_review'].includes(String(record.grantStatus || ''))
+    );
+  }
+
+  function rewardLabel(record: Row) {
+    if (!('providerOrderNo' in record)) {
+      return t('adminSupport.rewardGranted', { tokens: formatAiQuotaTokens(record.grantedTokens, locale.value) });
+    }
+    if (record.grantStatus === 'credited') {
+      return t('adminSupport.rewardGranted', { tokens: formatAiQuotaTokens(record.grantedTokens, locale.value) });
+    }
+    return t(`adminSupport.rewardStates.${record.grantStatus || 'syncing'}`);
+  }
+
+  function rewardTone(record: Row): 'success' | 'pending' | 'neutral' | 'danger' {
+    if (!('providerOrderNo' in record) || record.grantStatus === 'credited') return 'success';
+    if (record.grantStatus === 'reversal_review') return 'danger';
+    if (['manual_review', 'pending_link'].includes(record.grantStatus || '')) return 'pending';
+    return 'neutral';
   }
 
   function visibilityLabel(record: AdminSupporter) {

@@ -126,14 +126,76 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
     expect(t.bookmarkData.value.relatedTags.length).toBe(4);
   });
 
-  it('无匹配但有建议 → 弹确认新建,且只问第一个(单标签)', async () => {
+  it('强相关新标签统一弹一次确认，并完整列出本轮可创建项', async () => {
     mockSkillSuccess({ name: '', description: '', matchedTagIds: [], newTags: ['前端', '工具'] });
     const t = setup([]);
     await t.generateBookmarkMeta();
     expect(alertAlert).toHaveBeenCalledTimes(1);
     const arg = alertAlert.mock.calls[0][0];
     expect(arg.content).toContain('前端');
-    expect(arg.content).not.toContain('工具');
+    expect(arg.content).toContain('工具');
+  });
+
+  it('新标签在用户确认前不创建，确认后才创建并加入当前书签预选', async () => {
+    mockSkillSuccess({ name: '', description: '', matchedTagIds: [], newTags: ['前端', '搜索'] });
+    const t = setup([]);
+
+    await t.generateBookmarkMeta();
+
+    expect(apiBasePost.mock.calls.filter(([url]) => url === '/api/bookmark/addTag')).toHaveLength(0);
+    apiBasePost.mockResolvedValue({ status: 200 });
+    t.refreshTags.mockImplementation(async () => {
+      t.tagOptions.value = [
+        { label: '前端', value: 'tag-front-end' },
+        { label: '搜索', value: 'tag-search' },
+      ];
+      return t.tagOptions.value;
+    });
+    const confirmAction = alertAlert.mock.calls[0][0].footer.find((item: any) => item.type === 'primary');
+    await confirmAction.function();
+
+    expect(apiBasePost).toHaveBeenCalledWith('/api/bookmark/addTag', { name: '前端' });
+    expect(apiBasePost).toHaveBeenCalledWith('/api/bookmark/addTag', { name: '搜索' });
+    expect(t.bookmarkData.value.relatedTags).toEqual(['tag-front-end', 'tag-search']);
+  });
+
+  it('已有标签与新标签同时强相关时仍提示用户确认创建新标签', async () => {
+    mockSkillSuccess({ name: '', description: '', matchedTagIds: ['existing'], newTags: ['新主题'] });
+    const t = setup([{ label: '已有', value: 'existing' }]);
+    await t.generateBookmarkMeta();
+    expect(t.bookmarkData.value.relatedTags).toEqual(['existing']);
+    expect(alertAlert).toHaveBeenCalledTimes(1);
+    expect(alertAlert.mock.calls[0][0].content).toContain('新主题');
+  });
+
+  it('重复识别只替换上一次由 AI 加入的标签，保留用户手动标签', async () => {
+    const options = ['manual', 'a', 'b', 'c', 'd', 'e'].map((value) => ({ label: value, value }));
+    const t = setup(options);
+    t.bookmarkData.value.relatedTags = ['manual'];
+
+    mockSkillSuccess({ name: '', description: '', matchedTagIds: ['a', 'b', 'c'], newTags: [] });
+    await t.generateBookmarkMeta();
+    expect(t.bookmarkData.value.relatedTags).toEqual(['manual', 'a', 'b', 'c']);
+
+    t.bookmarkData.value.url = 'https://second.example';
+    mockSkillSuccess({ name: '', description: '', matchedTagIds: ['d', 'e'], newTags: [] });
+    await t.generateBookmarkMeta();
+    expect(t.bookmarkData.value.relatedTags).toEqual(['manual', 'd', 'e']);
+  });
+
+  it('新一轮没有强相关标签时清除旧 AI 预选，但不清除手动标签', async () => {
+    const t = setup([
+      { label: '手动', value: 'manual' },
+      { label: '旧推荐', value: 'old-ai' },
+    ]);
+    t.bookmarkData.value.relatedTags = ['manual'];
+    mockSkillSuccess({ name: '', description: '', matchedTagIds: ['old-ai'], newTags: [] });
+    await t.generateBookmarkMeta();
+    expect(t.bookmarkData.value.relatedTags).toEqual(['manual', 'old-ai']);
+
+    mockSkillSuccess({ name: '', description: '', matchedTagIds: [], newTags: [] });
+    await t.generateBookmarkMeta();
+    expect(t.bookmarkData.value.relatedTags).toEqual(['manual']);
   });
 
   it('url 为空时不发请求', async () => {

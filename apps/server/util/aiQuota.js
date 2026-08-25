@@ -14,6 +14,7 @@ import net from 'node:net';
 import pool from '../db/index.js';
 import { levelForExp, rankOf, RANKS } from './growth.js';
 import { getClientIp } from './security/requestContext.js';
+import { creditAiBonusTokens, debitAiBonusTokens, lockAiBonusWallet } from './aiBonusWallet.js';
 
 // 请求前占位（约等于真实 p90 用量）；结束后按真实用量校正。
 const RESERVE_TOKENS = 5000;
@@ -39,6 +40,7 @@ const GUEST_NETWORK_QUOTA_MULTIPLIER = (() => {
 })();
 const LOCAL_HASH_SECRET = 'light-note-ai-quota-local-development-only';
 const RESERVATION_STATUS = new Set(['pending', 'reserved', 'blocked', 'reconciled']);
+const AI_QUOTA_WALLET_POLICY_VERSION = 'ai-quota-v1';
 
 function createQuotaError(code, message, status = 503) {
   const error = new Error(message);
@@ -174,19 +176,13 @@ function resolveSubjects(req, { userId, userRole } = {}) {
 // 注册用户按成长等级下发每日额度；永久加油余额单独核算，不能混进每日上限。
 async function userDailyQuota(userId, userRole) {
   if (userRole === 'system') return DAILY_QUOTA.system;
-  let base;
-  if (userRole === 'root') {
-    base = RANKS[RANKS.length - 1].aiTokenDaily;
-  } else {
-    try {
-      const [rows] = await pool.query('SELECT exp FROM user_growth WHERE user_id = ?', [userId]);
-      base = rankOf(levelForExp(Number(rows[0]?.exp || 0))).aiTokenDaily;
-    } catch {
-      // 回落到最低等级是安全降级，不会意外扩大额度。
-      base = RANKS[0].aiTokenDaily;
-    }
+  try {
+    const [rows] = await pool.query('SELECT exp FROM user_growth WHERE user_id = ?', [userId]);
+    return rankOf(levelForExp(Number(rows[0]?.exp || 0))).aiTokenDaily;
+  } catch {
+    // 回落到最低等级是安全降级，不会意外扩大额度。
+    return RANKS[0].aiTokenDaily;
   }
-  return base;
 }
 
 async function getUserBonusTokens(userId) {
@@ -335,12 +331,7 @@ async function reserveSubjectsAtomic(subjects, pk, quotaReservationKey, requeste
     // 注册用户余额与当日计数必须在同一事务内加锁，保证并发请求不会重复消费永久余额。
     for (const subject of lockedSubjects) {
       if (subject.type !== 'user') continue;
-      await connection.query('INSERT IGNORE INTO user_growth (user_id) VALUES (?)', [subject.key]);
-      const [walletRows] = await connection.query(
-        'SELECT ai_bonus_tokens FROM user_growth WHERE user_id = ? FOR UPDATE',
-        [subject.key],
-      );
-      subject.walletBalance = Math.max(0, Number(walletRows[0]?.ai_bonus_tokens || 0));
+      subject.walletBalance = await lockAiBonusWallet(connection, subject.key);
     }
 
     // 每日额度优先；当日额度为 0 后才允许永久余额兜底。真实 Provider 请求还会在
@@ -370,13 +361,15 @@ async function reserveSubjectsAtomic(subjects, pk, quotaReservationKey, requeste
           throw createQuotaError('AI_QUOTA_COUNTER_UPDATE_FAILED', 'AI 配额服务暂不可用');
         }
         if (walletReserved > 0) {
-          const [walletUpdate] = await connection.query(
-            'UPDATE user_growth SET ai_bonus_tokens = ai_bonus_tokens - ? WHERE user_id = ? AND ai_bonus_tokens >= ?',
-            [walletReserved, subject.key, walletReserved],
-          );
-          if (Number(walletUpdate?.affectedRows || 0) !== 1) {
-            throw createQuotaError('AI_QUOTA_WALLET_UPDATE_FAILED', 'AI 配额服务暂不可用');
-          }
+          const debit = await debitAiBonusTokens(connection, {
+            userId: subject.key,
+            amountTokens: walletReserved,
+            sourceType: 'ai_usage',
+            sourceRef: quotaReservationKey,
+            idempotencyKey: `ai-quota:${quotaReservationKey}:reserve`,
+            policyVersion: AI_QUOTA_WALLET_POLICY_VERSION,
+          });
+          subject.walletBalance = debit.balanceAfter;
         }
       }
     }
@@ -457,15 +450,24 @@ async function reconcileReservation(handle, actualTokens, database = pool) {
         const walletActual = Math.max(0, settledActual - Math.max(0, Number(subject.dailyAvailable || 0)));
         const walletDelta = walletActual - Math.max(0, Number(subject.walletReserved || 0));
         if (walletDelta > 0) {
-          await connection.query(
-            'UPDATE user_growth SET ai_bonus_tokens = GREATEST(0, ai_bonus_tokens - ?) WHERE user_id = ?',
-            [walletDelta, subject.key],
-          );
+          await debitAiBonusTokens(connection, {
+            userId: subject.key,
+            amountTokens: walletDelta,
+            sourceType: 'ai_usage',
+            sourceRef: handle.reservationKey,
+            idempotencyKey: `ai-quota:${handle.reservationKey}:overrun`,
+            policyVersion: AI_QUOTA_WALLET_POLICY_VERSION,
+            allowPartial: true,
+          });
         } else if (walletDelta < 0) {
-          await connection.query('UPDATE user_growth SET ai_bonus_tokens = ai_bonus_tokens + ? WHERE user_id = ?', [
-            -walletDelta,
-            subject.key,
-          ]);
+          await creditAiBonusTokens(connection, {
+            userId: subject.key,
+            amountTokens: -walletDelta,
+            sourceType: 'ai_usage_refund',
+            sourceRef: handle.reservationKey,
+            idempotencyKey: `ai-quota:${handle.reservationKey}:settlement-refund`,
+            policyVersion: AI_QUOTA_WALLET_POLICY_VERSION,
+          });
         }
       }
     }
@@ -557,13 +559,14 @@ export async function correctReconciledReservation(handle, actualTokens, { datab
       const nextWalletActual = Math.max(0, nextActual - dailyAvailable);
       const walletDelta = nextWalletActual - previousWalletActual;
       if (walletDelta < 0) {
-        const [walletUpdate] = await connection.query(
-          'UPDATE user_growth SET ai_bonus_tokens = ai_bonus_tokens + ? WHERE user_id = ?',
-          [-walletDelta, subject.key],
-        );
-        if (Number(walletUpdate?.affectedRows || 0) !== 1) {
-          throw createQuotaError('AI_QUOTA_WALLET_UPDATE_FAILED', 'AI 配额修正暂不可用');
-        }
+        await creditAiBonusTokens(connection, {
+          userId: subject.key,
+          amountTokens: -walletDelta,
+          sourceType: 'ai_usage_refund',
+          sourceRef: handle.reservationKey,
+          idempotencyKey: `ai-quota:${handle.reservationKey}:correction:${previousActual}:${nextActual}`,
+          policyVersion: AI_QUOTA_WALLET_POLICY_VERSION,
+        });
       }
     }
     const [reservationUpdate] = await connection.query(

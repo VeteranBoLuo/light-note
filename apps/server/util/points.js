@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
 import { grantItem } from './items.js';
 import { finishAdminAction } from './adminActionExecution.js';
@@ -10,6 +11,7 @@ import {
 import { POINTS_SYSTEM_VERSION } from './pointsEarningPolicy.js';
 import { INTERNAL_ROLES } from './internalRoles.js';
 import { pointsOperationHash } from './pointsOperationHash.js';
+import { creditAiBonusTokens } from './aiBonusWallet.js';
 
 // 积分系统:经验(EXP)管段位、只增;积分(points)管消费、可赚可花。
 // 余额存 user_growth.points(权威),points_log 记流水(审计 + 按天幂等)。
@@ -711,15 +713,15 @@ export async function getPointsOverview({ hideInternal = true } = {}) {
     [[holders]],
     [top],
   ] = await Promise.all([
-    pool.query(`SELECT COALESCE(SUM(delta),0) AS s FROM points_log WHERE delta > 0${ledgerInternalSql}`, internalParams),
+    pool.query(
+      `SELECT COALESCE(SUM(delta),0) AS s FROM points_log WHERE delta > 0${ledgerInternalSql}`,
+      internalParams,
+    ),
     pool.query(
       `SELECT COALESCE(SUM(-delta),0) AS s FROM points_log WHERE delta < 0${ledgerInternalSql}`,
       internalParams,
     ),
-    pool.query(
-      `SELECT COALESCE(SUM(points),0) AS s FROM user_growth WHERE 1 = 1${balanceInternalSql}`,
-      internalParams,
-    ),
+    pool.query(`SELECT COALESCE(SUM(points),0) AS s FROM user_growth WHERE 1 = 1${balanceInternalSql}`, internalParams),
     pool.query(
       `SELECT reason, COALESCE(SUM(delta),0) AS delta, COUNT(*) AS cnt
          FROM points_log WHERE 1 = 1${ledgerInternalSql}
@@ -768,10 +770,7 @@ export async function getPointsOverview({ hideInternal = true } = {}) {
       `SELECT COALESCE(SUM(lottery_count),0) AS s FROM user_growth WHERE 1 = 1${balanceInternalSql}`,
       internalParams,
     ),
-    pool.query(
-      `SELECT COUNT(*) AS c FROM user_growth WHERE points > 0${balanceInternalSql}`,
-      internalParams,
-    ),
+    pool.query(`SELECT COUNT(*) AS c FROM user_growth WHERE points > 0${balanceInternalSql}`, internalParams),
     pool.query(
       `SELECT g.user_id, g.points, u.alias, u.email
          FROM user_growth g LEFT JOIN user u ON u.id = g.user_id
@@ -1104,9 +1103,7 @@ async function getClaimedAchievementFrameIds(userId, conn = pool) {
   const currentFrameIds = FRAME_CATALOG.filter(
     (item) => item.acquisition === 'achievement' && item.achievementKey && claimedKeys.has(item.achievementKey),
   ).map((item) => item.id);
-  const legacyFrameIds = [...claimedKeys]
-    .map((key) => LEGACY_ACHIEVEMENT_FRAME_ENTITLEMENTS[key])
-    .filter(Boolean);
+  const legacyFrameIds = [...claimedKeys].map((key) => LEGACY_ACHIEVEMENT_FRAME_ENTITLEMENTS[key]).filter(Boolean);
   return [...new Set([...currentFrameIds, ...legacyFrameIds])];
 }
 
@@ -1123,12 +1120,11 @@ export async function getEquippedTitle(userId) {
   return rows[0]?.equipped_title || null;
 }
 
-// 购买:事务内校验余额/等级/上限/是否已拥有 → 扣分 → 生效 → 记流水
-// userRole 用于 root 豁免等级门:root 不走 grantExp,其 level 列停在默认值(视为满级)
+// 购买:事务内校验余额/真实等级/上限/是否已拥有 → 扣分 → 生效 → 记流水
 export async function buyItem(
   userId,
   itemId,
-  { userRole = null, clientRequestId = null, economyVersion = null, expectedCost = null } = {},
+  { clientRequestId = null, economyVersion = null, expectedCost = null } = {},
 ) {
   const runtime = getEconomyRuntime();
   const item = getShopItem(itemId);
@@ -1172,7 +1168,7 @@ export async function buyItem(
       await conn.rollback();
       return { ok: false, reason: 'no_growth', msg: '成长数据未初始化,先签到试试' };
     }
-    if (item.minLevel && userRole !== 'root' && Number(g.level) < item.minLevel) {
+    if (item.minLevel && Number(g.level) < item.minLevel) {
       await conn.rollback();
       return { ok: false, reason: 'level', msg: `需达到 Lv.${item.minLevel} 才能兑换` };
     }
@@ -1211,10 +1207,15 @@ export async function buyItem(
       ]);
     } else if (item.effect === 'ai_pack') {
       // AI 加油包是永久余额：兑换即到账；AI 闸门始终先用等级每日额度，耗尽后才自动扣这里。
-      await conn.query('UPDATE user_growth SET ai_bonus_tokens = ai_bonus_tokens + ? WHERE user_id = ?', [
-        item.bonusTokens,
+      const mutationRef = String(operation.operationId || randomUUID());
+      await creditAiBonusTokens(conn, {
         userId,
-      ]);
+        amountTokens: item.bonusTokens,
+        sourceType: 'points_shop',
+        sourceRef: item.id,
+        idempotencyKey: `points-purchase:${mutationRef}:ai`,
+        policyVersion: runtime.economyVersion,
+      });
     } else if (item.type === 'title' || item.type === 'cosmetic') {
       await conn.query('INSERT IGNORE INTO user_cosmetics (user_id, cosmetic_id) VALUES (?, ?)', [userId, item.id]);
     }

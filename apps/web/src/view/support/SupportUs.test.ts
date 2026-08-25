@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
     linked: false,
     orderCount: 0,
     totalAmount: '0.00',
+    grantedTokens: 0,
   })),
   unlinkAfdianAccount: vi.fn(async () => undefined),
   getAfdianLeaderboard: vi.fn(async () => ({ scope: 'all_time', items: [], mine: null, totalParticipants: 0 })),
@@ -35,24 +36,28 @@ vi.mock('@/config/support', () => ({
     {
       key: 'coffee',
       amount: 6,
+      rewardTokens: 600_000,
       url: 'https://ifdian.net/order/create?plan_id=4415b194930c11f1ac7b5254001e7c00&product_type=0',
       configured: true,
     },
     {
       key: 'server',
       amount: 18,
+      rewardTokens: 1_800_000,
       url: 'https://ifdian.net/order/create?plan_id=a05f9730930c11f1aeb65254001e7c00&product_type=0',
       configured: true,
     },
     {
       key: 'companion',
       amount: 50,
+      rewardTokens: 5_000_000,
       url: 'https://ifdian.net/order/create?plan_id=9fc7a358930c11f1abee52540025c377&product_type=0',
       configured: true,
     },
     {
       key: 'custom',
       amount: null,
+      rewardTokens: null,
       url: 'https://ifdian.net/order/create?user_id=9a64b3ac930611f18e8052540025c377',
       configured: true,
     },
@@ -168,6 +173,9 @@ describe('支持轻笺页面', () => {
     expect(host.textContent).toContain('¥18');
     expect(host.textContent).toContain('¥50');
     expect(host.textContent).toContain('自选金额');
+    expect(host.textContent).toContain('赠送 60万 永久 AI 额度');
+    expect(host.textContent).toContain('每实付 ¥1 赠送 10 万永久 AI 额度');
+    expect(host.textContent).toContain('超过 ¥200 转人工复核');
 
     const tierActions = host.querySelectorAll<HTMLButtonElement>('.support-tier-card__action');
     expect(tierActions).toHaveLength(4);

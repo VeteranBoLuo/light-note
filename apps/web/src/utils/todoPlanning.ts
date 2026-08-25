@@ -256,11 +256,8 @@ export function todoGroupKey(
   now = new Date(),
 ): TodoGroupKey {
   if (item.status === 'completed') return 'completed';
-  const due = item.dueAt ? parseTodoDate(item.dueAt).getTime() : Number.NaN;
-  if (Number.isFinite(due) && due < now.getTime()) return 'overdue';
+  if (isTodoOverdue(item, now)) return 'overdue';
   const occurrenceDate = normalizeTodoDateOnly(item.occurrenceDate);
-  const todayDate = normalizeTodoDateOnly(now);
-  if (!item.dueAt && occurrenceDate && occurrenceDate < todayDate) return 'overdue';
   // 提醒时间已过只表示通知已经触发，不等于任务逾期。日期分组优先使用计划本身；
   // 只有没有开始/截止/实例日期时，才用仍在今天或未来的提醒作为分组依据。
   const scheduledAt = todoScheduleAt(item);
@@ -269,14 +266,34 @@ export function todoGroupKey(
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const actionAt = scheduledAt || (Number.isFinite(reminderTime) && reminderTime >= startOfToday ? reminderAt : '');
   if (!actionAt) return 'noDate';
-  const action = parseTodoDate(actionAt).getTime();
+  let action = parseTodoDate(actionAt).getTime();
   if (!Number.isFinite(action)) return 'noDate';
   const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
   const nextWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 8).getTime();
-  if (action < startOfToday) return 'overdue';
+  if (action < startOfToday) {
+    // 开始时间只表示任务已经可以执行，不能冒充截止时间。跨日任务已经开始但仍未到期时，
+    // 用未来截止时间决定日期桶；只有开始时间的任务则留在今天，表示当前仍可处理。
+    const due = item.dueAt ? parseTodoDate(item.dueAt).getTime() : Number.NaN;
+    if (Number.isFinite(due) && due >= now.getTime()) action = due;
+    else return 'today';
+  }
   if (action < tomorrow) return 'today';
   if (action < nextWeek) return 'upcoming';
   return 'later';
+}
+
+/**
+ * 待办逾期的唯一前端事实源：有截止时间只比较截止时间；没有截止时间的固定实例才比较实例日期。
+ * 开始时间和提醒时间分别表达“可以执行”和“应该通知”，都不能把未来截止的任务提前标成逾期。
+ */
+export function isTodoOverdue(item: Pick<TodoItem, 'status' | 'dueAt' | 'occurrenceDate'>, now = new Date()) {
+  if (item.status !== 'pending') return false;
+  if (item.dueAt) {
+    const due = parseTodoDate(item.dueAt).getTime();
+    return Number.isFinite(due) && due < now.getTime();
+  }
+  const occurrenceDate = normalizeTodoDateOnly(item.occurrenceDate);
+  return Boolean(occurrenceDate && occurrenceDate < normalizeTodoDateOnly(now));
 }
 
 export function dueForTodoGroup(key: TodoGroupKey, now = new Date()) {

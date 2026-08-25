@@ -66,7 +66,7 @@ import {
 } from '../util/pointsCampaignService.js';
 import { PointsGrantError } from '../util/pointsGrantOperations.js';
 
-// GET /growth/me —— 读当前用户成长快照(游客返回 Lv.1 默认展示,不发经验;root 展示满级)
+// GET /growth/me —— 读当前用户真实成长快照（游客返回 Lv.1 默认展示）。
 export const getMyGrowth = async (req, res) => {
   try {
     const userId = req.user?.id || 'visitor';

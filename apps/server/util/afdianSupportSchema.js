@@ -46,6 +46,7 @@ export const AFDIAN_SUPPORT_TABLE_SQL = Object.freeze([
     total_amount decimal(12,2) NOT NULL DEFAULT 0.00,
     show_amount decimal(12,2) NOT NULL DEFAULT 0.00,
     provider_status smallint NOT NULL DEFAULT 0,
+    provider_created_at datetime DEFAULT NULL,
     verification_state varchar(24) NOT NULL DEFAULT 'pending',
     webhook_signature_valid tinyint unsigned NOT NULL DEFAULT 0,
     webhook_received_at datetime DEFAULT NULL,
@@ -85,6 +86,7 @@ const AFDIAN_SUPPORT_COLUMN_PATCHES = Object.freeze([
   ['support_account_links', 'provider_avatar_url', 'varchar(1024) DEFAULT NULL AFTER provider_name'],
   ['support_account_links', 'identity_refreshed_at', 'datetime DEFAULT NULL AFTER provider_avatar_url'],
   ['support_orders', 'ranking_observed_at', 'datetime DEFAULT NULL AFTER verified_at'],
+  ['support_orders', 'provider_created_at', 'datetime DEFAULT NULL AFTER provider_status'],
 ]);
 
 async function ensureColumn(db, table, column, definition) {

@@ -15,8 +15,10 @@ describe('AI 额度快捷展示契约', () => {
   it('桌面头像弹层和移动个人中心复用同一个额度摘要组件', () => {
     expect(desktopProfileSource).toContain('<AiQuotaSummary');
     expect(desktopProfileSource).toContain(':active="menuVisible"');
+    expect(desktopProfileSource).toContain('entry-source="桌面个人中心"');
     expect(mobileProfileSource).toContain('<AiQuotaSummary');
     expect(mobileProfileSource).toContain('density="comfortable"');
+    expect(mobileProfileSource).toContain('entry-source="移动个人中心"');
     expect(desktopProfileSource).toContain('@open-details="goAiQuotaDetails"');
     expect(mobileProfileSource).toContain('@open-details="goAiQuotaDetails"');
     expect(desktopProfileSource).toContain("router.push('/ai-usage')");
@@ -43,10 +45,13 @@ describe('AI 额度快捷展示契约', () => {
     expect(summarySource).toContain('icon.growth.ai');
     expect(summarySource).toContain("t('personCenter.aiQuotaUnavailable')");
     expect(summarySource).toContain("t('personCenter.aiQuotaBreakdown'");
+    expect(summarySource).toContain("module: 'AI 用量与计费'");
+    expect(summarySource).toContain('`打开页面【${entrySource}】`');
   });
 
   it('详细额度只在独立页读取，设置页保留紧凑入口', () => {
     expect(settingsSource).toContain('class="ai-usage-entry"');
+    expect(settingsSource).toContain("operation: '打开页面【设置】'");
     expect(settingsSource).toContain("router.push('/ai-usage')");
     expect(settingsSource).not.toContain('useAiQuotaStatus');
     expect(settingsSource).not.toContain('<AiUsageCenter');

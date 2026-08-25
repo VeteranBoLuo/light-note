@@ -1,5 +1,5 @@
 import pool from '../../../db/index.js';
-import { suggestBookmarkMeta } from '../../aiOrganize.js';
+import { AI_TAG_SUGGESTION_CAP, suggestBookmarkMeta } from '../../aiOrganize.js';
 import { requireBookmarkUrl } from '../../bookmarkUrl.js';
 import { AI_SKILL_AUTHENTICATED_ROLES } from '../accessPolicy.js';
 import { aiSkillError } from '../errors.js';
@@ -42,14 +42,18 @@ export default Object.freeze({
           trace,
         });
         if (!result) throw aiSkillError('AI_SKILL_BOOKMARK_PARSE_INVALID', 'AI 没有返回可用的书签信息', 502);
+        const matchedTagIds = (result.matchedTagIds || []).map(String).slice(0, AI_TAG_SUGGESTION_CAP);
+        const newTags = (result.newTags || [])
+          .map(String)
+          .slice(0, Math.max(0, AI_TAG_SUGGESTION_CAP - matchedTagIds.length));
         return Object.freeze({
           kind: 'field_suggestions',
           fields: Object.freeze({
             url: String(result.resolvedUrl || resolution.canonicalUrl),
             name: String(result.name || '').slice(0, 255),
             description: String(result.description || '').slice(0, 255),
-            matchedTagIds: Object.freeze((result.matchedTagIds || []).map(String).slice(0, 3)),
-            newTags: Object.freeze((result.newTags || []).map(String).slice(0, 3)),
+            matchedTagIds: Object.freeze(matchedTagIds),
+            newTags: Object.freeze(newTags),
           }),
           metadataSource: result.metadataSource || 'unknown',
           fetchReason: result.fetchReason || '',

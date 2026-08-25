@@ -181,10 +181,7 @@
   const doneCount = computed(() => props.quests.filter((q) => q.done).length);
   const allDone = computed(() => props.quests.length > 0 && doneCount.value === props.quests.length);
 
-  /*
-   * 奖励文案。满级的 root 经验不入账(后端把 bonus.exp 置 0),说「可领 +0 经验」等于白说,
-   * 这时只报积分 —— 那 30 积分才是它真正能拿到的东西。
-   */
+  // 奖励文案同时兼容只有积分的策略版本，避免出现「可领 +0 经验」。
   const stages = computed(
     () =>
       props.bonus.stages || [

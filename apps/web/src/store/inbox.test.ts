@@ -39,7 +39,7 @@ describe('inbox store', () => {
     expect(store.items).toEqual([]);
     expect(store.selectedKeys).toEqual([]);
     expect(store.quickCaptureVisible).toBe(false);
-    expect(store.quickCaptureType).toBe('note');
+    expect(store.quickCaptureType).toBe('bookmark');
     expect(store.requestId).toBe(before + 1);
   });
 
@@ -47,6 +47,14 @@ describe('inbox store', () => {
     const store = useInboxStore();
     store.openQuickCapture('todo');
     expect(store.quickCaptureType).toBe('todo');
+    expect(store.quickCaptureVisible).toBe(true);
+  });
+
+  it('无上下文的快速添加默认打开第一个书签入口', () => {
+    const store = useInboxStore();
+    store.quickCaptureType = 'note';
+    store.openQuickCapture();
+    expect(store.quickCaptureType).toBe('bookmark');
     expect(store.quickCaptureVisible).toBe(true);
   });
 

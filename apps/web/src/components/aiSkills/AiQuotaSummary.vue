@@ -4,6 +4,10 @@
     :class="[`is-${density}`, { 'is-loading': loading, 'is-unavailable': unavailable }]"
     :aria-label="accessibleLabel"
     :title="accessibleLabel"
+    v-click-log="{
+      module: 'AI 用量与计费',
+      operation: `打开页面【${entrySource}】`,
+    }"
     @click="emit('open-details')"
   >
     <span class="ai-quota-summary__icon" aria-hidden="true">
@@ -38,6 +42,7 @@
     defineProps<{
       active?: boolean;
       density?: 'compact' | 'comfortable';
+      entrySource: '桌面个人中心' | '移动个人中心';
     }>(),
     {
       active: true,

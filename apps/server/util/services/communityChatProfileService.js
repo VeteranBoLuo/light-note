@@ -1,6 +1,6 @@
 import pool from '../../db/index.js';
 import { COMMUNITY_CHAT_PRIMARY_ROOM_SLUG } from '../communityChatFeature.js';
-import { ACHIEVEMENTS, MAX_LEVEL, levelForExp, rankOf } from '../growth.js';
+import { ACHIEVEMENTS, levelForExp, rankOf } from '../growth.js';
 import { getFrameItem, titleName } from '../points.js';
 import { verifyCommunityChatPresenceAvatarToken } from '../communityChat/presenceAvatarToken.js';
 import {
@@ -98,7 +98,7 @@ async function queryFirst(db, sql, params = []) {
 }
 
 function publicGrowthProfile(row) {
-  const level = row.authorAccountRole === 'root' ? MAX_LEVEL : levelForExp(Number(row.authorExp || 0));
+  const level = levelForExp(Number(row.authorExp || 0));
   return {
     level,
     levelName: rankOf(level).name,

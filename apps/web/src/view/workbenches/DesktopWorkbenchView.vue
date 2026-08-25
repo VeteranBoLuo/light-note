@@ -28,7 +28,7 @@
           </small>
         </div>
         <div class="header-actions">
-          <BButton type="primary" class="capture-button" @click="openQuickCapture('note')">
+          <BButton type="primary" class="capture-button" @click="openQuickCapture('bookmark')">
             <SvgIcon :src="icon.common.add" size="17" />
             <span>{{ t('workbench.header.quickCapture') }}</span>
           </BButton>

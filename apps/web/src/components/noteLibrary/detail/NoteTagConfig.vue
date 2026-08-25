@@ -375,10 +375,15 @@
 <style lang="less" scoped>
   .tag-config {
     width: min(74vw, 980px);
+    /*
+     * 桌面端由内容区统一决定弹框高度，标签数量和搜索结果只改变列表内部滚动。
+     * 与 FileTagConfig 使用同一高度模型：常规视口固定 460px，较矮视口按可用空间收缩。
+     */
+    height: min(460px, calc(100vh - 190px));
+    min-height: 360px;
     display: grid;
     grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
     gap: 18px;
-    min-height: 460px;
     color: var(--text-color);
 
     &.mobile {

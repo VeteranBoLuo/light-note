@@ -1,4 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
+import { creditAiBonusTokens } from './aiBonusWallet.js';
 
 // ============================================================================
 // 物品系统(背包)。统一"消耗品"的发放/持有/使用口径,是「我的成长」长期扩展的地基。
@@ -60,10 +62,9 @@ export async function grantItem(conn, userId, itemId, qty = 1) {
   if (def.backing === 'card_column') {
     // 返回实际到账量，调用方可对满仓溢出做显式补偿。事务调用时 FOR UPDATE 也会串行化抽奖/兑换。
     const stackMax = def.stackMax || 2;
-    const [[row]] = await db.query(
-      'SELECT streak_protect_cards AS qty FROM user_growth WHERE user_id = ? FOR UPDATE',
-      [userId],
-    );
+    const [[row]] = await db.query('SELECT streak_protect_cards AS qty FROM user_growth WHERE user_id = ? FOR UPDATE', [
+      userId,
+    ]);
     if (!row) return { ok: false, reason: 'growth_missing', itemId, qty: 0, overflowQty: n };
     const before = Number(row.qty || 0);
     const grantedQty = Math.max(0, Math.min(n, stackMax - before));
@@ -101,7 +102,10 @@ export async function useItem(userId, itemId) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [rows] = await conn.query('SELECT qty FROM user_item WHERE user_id = ? AND item_id = ? FOR UPDATE', [userId, itemId]);
+    const [rows] = await conn.query('SELECT qty FROM user_item WHERE user_id = ? AND item_id = ? FOR UPDATE', [
+      userId,
+      itemId,
+    ]);
     const qty = Number(rows[0]?.qty || 0);
     if (qty < 1) {
       await conn.rollback();
@@ -110,10 +114,15 @@ export async function useItem(userId, itemId) {
     await conn.query('UPDATE user_item SET qty = qty - 1 WHERE user_id = ? AND item_id = ?', [userId, itemId]);
     // 历史 AI 加油包兼容：从旧背包转入永久余额，不再写按天过期的 ai_daily_bonus。
     if (def.effect === 'ai_tokens') {
-      await conn.query('UPDATE user_growth SET ai_bonus_tokens = ai_bonus_tokens + ? WHERE user_id = ?', [
-        def.tokens,
+      const mutationId = randomUUID();
+      await creditAiBonusTokens(conn, {
         userId,
-      ]);
+        amountTokens: def.tokens,
+        sourceType: 'legacy_item',
+        sourceRef: itemId,
+        idempotencyKey: `legacy-item:${mutationId}:ai`,
+        policyVersion: 'legacy-item-v1',
+      });
     }
     await conn.commit();
     return { ok: true, itemId, remaining: qty - 1, effect: def.effect, amount: def.tokens || 0 };

@@ -18,8 +18,8 @@ describe('resolveDailyQuestClaimFeedback', () => {
     });
   });
 
-  it('经验没入账但拿到积分时只说积分（root 的情况）', () => {
-    // 关键回归:不能报「经验 +0、积分 +30」——那会让 root 以为白领了一次
+  it('经验没入账但拿到积分时只说积分', () => {
+    // 关键回归:不能报「经验 +0、积分 +30」，否则会让用户以为白领一次。
     expect(resolveDailyQuestClaimFeedback({ expGained: 0, pointsEarned: 30 })).toEqual({
       level: 'success',
       key: 'growth.questClaimOkPointsOnly',

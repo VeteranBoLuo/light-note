@@ -38,25 +38,39 @@ export const SITE_COMPLIANCE = Object.freeze({
  */
 export const AFDIAN_CREATOR_URL = 'https://afdian.com/a/lightnote';
 
+/**
+ * 爱发电永久 AI 额度赠送策略。版本只约束启用后的新订单；历史订单不会追溯赠送。
+ * 以 API 核验后的实付金额计算，每实付 1 元赠送 10 万 Token，超过自动入账阈值转人工复核。
+ */
+export const AFDIAN_AI_REWARD_POLICY = Object.freeze({
+  version: 'support-ai-v1',
+  tokensPerCny: 100_000,
+  autoCreditMaxAmount: 200,
+});
+
 export const AFDIAN_CHECKOUT_OPTIONS = Object.freeze([
   Object.freeze({
     key: 'coffee',
     amount: 6,
+    rewardTokens: 6 * AFDIAN_AI_REWARD_POLICY.tokensPerCny,
     planId: '4415b194930c11f1ac7b5254001e7c00',
   }),
   Object.freeze({
     key: 'server',
     amount: 18,
+    rewardTokens: 18 * AFDIAN_AI_REWARD_POLICY.tokensPerCny,
     planId: 'a05f9730930c11f1aeb65254001e7c00',
   }),
   Object.freeze({
     key: 'companion',
     amount: 50,
+    rewardTokens: 50 * AFDIAN_AI_REWARD_POLICY.tokensPerCny,
     planId: '9fc7a358930c11f1abee52540025c377',
   }),
   Object.freeze({
     key: 'custom',
     amount: null,
+    rewardTokens: null,
     creatorId: '9a64b3ac930611f18e8052540025c377',
   }),
 ]);

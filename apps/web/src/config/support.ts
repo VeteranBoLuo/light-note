@@ -26,6 +26,7 @@ export type AfdianSupportOptionKey = AfdianCheckoutOptionKey;
 export interface AfdianSupportOption {
   key: AfdianSupportOptionKey;
   amount: number | null;
+  rewardTokens: number | null;
   url: string;
   configured: boolean;
 }
@@ -93,10 +94,11 @@ function resolveCreatorUrl(value: unknown): string {
 function createSupportOption(
   key: AfdianSupportOptionKey,
   amount: number | null,
+  rewardTokens: number | null,
   sourceUrl: string,
 ): AfdianSupportOption {
   const url = normalizeAfdianSupportUrl(sourceUrl);
-  return Object.freeze({ key, amount, url, configured: Boolean(url) });
+  return Object.freeze({ key, amount, rewardTokens, url, configured: Boolean(url) });
 }
 
 export const AFDIAN_SUPPORT_URL = resolveCreatorUrl(import.meta.env.VITE_AFDIAN_SUPPORT_URL);
@@ -111,7 +113,7 @@ export const AFDIAN_SUPPORT_OPTIONS: readonly AfdianSupportOption[] = Object.fre
     } else if (option.creatorId) {
       url.searchParams.set('user_id', option.creatorId);
     }
-    return createSupportOption(option.key, option.amount, url.toString());
+    return createSupportOption(option.key, option.amount, option.rewardTokens, url.toString());
   }),
 ]);
 

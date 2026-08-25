@@ -30,6 +30,7 @@ import {
   setAfdianAdminIdentityHidden,
   updateAfdianPublicPreference,
 } from '../util/afdianSupportReadService.js';
+import { approveAfdianSupportReward } from '../util/afdianSupportRewardService.js';
 
 function sendError(req, res, error) {
   const status = Number(error?.status) || 500;
@@ -293,6 +294,35 @@ export async function adminReconcile(req, res) {
     return res.send(resultData(data));
   } catch (error) {
     await auditAdminSupportAction(req, 'support_order_reconcile', providerOrderNo, 'failed').catch(() => {});
+    return sendError(req, res, error);
+  }
+}
+
+export async function adminRewardApprove(req, res) {
+  if (!(await ensureRoot(req, res))) return;
+  const providerOrderNo = String(req.params.providerOrderNo || '');
+  if (!/^[A-Za-z0-9_-]{8,128}$/.test(providerOrderNo)) {
+    return res.status(400).send(resultData({ code: 'AFDIAN_ORDER_INVALID' }, 400, '订单号不合法'));
+  }
+  try {
+    const expectedTokens = Number(req.body?.expectedTokens);
+    const expectedUserId = String(req.body?.expectedUserId || '').trim();
+    if (!Number.isSafeInteger(expectedTokens) || expectedTokens <= 0 || !expectedUserId) {
+      return res
+        .status(400)
+        .send(resultData({ code: 'AFDIAN_REWARD_REVIEW_SNAPSHOT_REQUIRED' }, 400, '缺少赠送复核快照'));
+    }
+    await auditAdminSupportAction(req, 'support_reward_approve', providerOrderNo, 'intent');
+    const data = await approveAfdianSupportReward(providerOrderNo, {
+      actorUserId: req.user.id,
+      expectedTokens,
+      expectedUserId,
+      requestId: req.headers['x-request-id'],
+      ip: req.ip,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    await auditAdminSupportAction(req, 'support_reward_approve', providerOrderNo, 'failed').catch(() => {});
     return sendError(req, res, error);
   }
 }

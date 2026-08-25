@@ -26,7 +26,8 @@ describe('爱发电赞助读取与公开偏好', () => {
         [],
       ])
       .mockResolvedValueOnce([[{ linked_accounts: 1 }], []])
-      .mockResolvedValueOnce([[{ pending_orders: 0, conflict_orders: 0, unlinked_orders: 0 }], []]);
+      .mockResolvedValueOnce([[{ pending_orders: 0, conflict_orders: 0, unlinked_orders: 0 }], []])
+      .mockResolvedValueOnce([[{ granted_tokens: 600_000, manual_review_rewards: 1, reversal_review_rewards: 0 }], []]);
 
     await expect(getAfdianAdminOverview()).resolves.toEqual({
       verifiedOrders: 2,
@@ -37,8 +38,11 @@ describe('爱发电赞助读取与公开偏好', () => {
       pendingOrders: 0,
       conflictOrders: 0,
       unlinkedOrders: 0,
+      grantedTokens: 600_000,
+      manualReviewRewards: 1,
+      reversalReviewRewards: 0,
     });
-    expect(mocks.defaultQuery).toHaveBeenCalledTimes(3);
+    expect(mocks.defaultQuery).toHaveBeenCalledTimes(4);
   });
 
   it('没有偏好记录时默认参与榜单但保持匿名', async () => {
@@ -164,7 +168,10 @@ describe('爱发电赞助读取与公开偏好', () => {
   it('后台只能安全隐藏公开身份且必须写入同一事务审计，不能改写用户公开选择', async () => {
     const connection = {
       beginTransaction: vi.fn().mockResolvedValue(undefined),
-      query: vi.fn().mockResolvedValueOnce([[{ exists: 1 }], []]).mockResolvedValue([[], []]),
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[{ exists: 1 }], []])
+        .mockResolvedValue([[], []]),
       commit: vi.fn().mockResolvedValue(undefined),
       rollback: vi.fn().mockResolvedValue(undefined),
       release: vi.fn(),

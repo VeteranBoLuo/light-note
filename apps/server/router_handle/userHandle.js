@@ -1125,7 +1125,7 @@ export const saveUserInfo = async (req, res) => {
 
     // “完善个人形象”只认真实头像，不把昵称更新与成长任务重复计算。
     // 在响应前等待达成状态写入，确保关闭资料弹窗后立即刷新成长任务时不会读到旧状态；
-    // 普通用户达成后仍须在成长任务卡片主动领取经验；root 只收口状态，不进入经验账本。
+    // 登录用户达成后仍须在成长任务卡片主动领取经验。
     const headPicture = typeof finalBody.head_picture === 'string' ? finalBody.head_picture.trim() : '';
     if (headPicture) {
       try {

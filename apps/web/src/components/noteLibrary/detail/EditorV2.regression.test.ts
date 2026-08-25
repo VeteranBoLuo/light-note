@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import icon from '@/config/icon';
-import { getNoteTreePageIcon, isMarkdownNoteTreePage } from '@/utils/noteTreePresentation';
+import { getNoteTreePageColor, getNoteTreePageIcon, isMarkdownNoteTreePage } from '@/utils/noteTreePresentation';
 
 const editorSource = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/detail/Editor.vue'), 'utf8');
 const warmupPreviewSource = readFileSync(
@@ -155,6 +155,10 @@ describe('编辑器 V2 交互回归', () => {
     expect(getNoteTreePageIcon('html')).toContain('<rect');
     expect(getNoteTreePageIcon('markdown')).toContain('<rect');
     expect(getNoteTreePageIcon('drawing')).toContain('<path');
+    expect(getNoteTreePageIcon('drawing')).toContain('<circle');
+    expect(getNoteTreePageColor('html')).toContain('--note-format-html-color');
+    expect(getNoteTreePageColor('markdown')).toContain('--note-format-markdown-color');
+    expect(getNoteTreePageColor('drawing')).toContain('--note-format-drawing-color');
   });
 
   it('Markdown 不挂载行号和折叠 gutter，正文保持纯写作边界', () => {

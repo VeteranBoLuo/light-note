@@ -158,8 +158,8 @@
     align-items: center;
     justify-content: center;
     gap: 8px;
-    color: var(--resource-note-color, #00a884);
-    background: var(--resource-note-soft-bg, #e9f8f4);
+    color: var(--note-format-drawing-color, #c13a5d);
+    background: var(--note-format-drawing-soft-bg, #fff0f3);
     font-size: 13px;
     font-weight: 600;
   }

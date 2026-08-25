@@ -97,6 +97,14 @@
               <h3>{{ option.title }}</h3>
               <p>{{ option.description }}</p>
 
+              <div class="support-tier-card__reward">
+                <SvgIcon :src="icon.growth.ai" size="16" aria-hidden="true" />
+                <span v-if="option.rewardTokens !== null">
+                  {{ t('support.optionReward', { tokens: formatAiQuotaTokens(option.rewardTokens, locale) }) }}
+                </span>
+                <span v-else>{{ t('support.optionRewardCustom') }}</span>
+              </div>
+
               <BButton
                 class="support-tier-card__action"
                 type="primary"
@@ -239,8 +247,9 @@
   } from '@/api/supportApi';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
+  import { formatAiQuotaTokens } from '@/composables/useAiQuotaStatus';
 
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const router = useRouter();
   const bookmark = bookmarkStore();
   const supportConfigured = AFDIAN_SUPPORT_CONFIGURED;
@@ -251,6 +260,7 @@
     linked: false,
     orderCount: 0,
     totalAmount: '0.00',
+    grantedTokens: 0,
     publicPreference: { participateInRanking: true, showIdentity: false, adminHidden: false },
     recentOrders: [],
   };
@@ -794,11 +804,31 @@
   }
 
   .support-tier-card > p {
-    margin: 0 0 18px;
+    margin: 0 0 12px;
     flex: 1 1 auto;
     color: var(--desc-color);
     font-size: 13px;
     line-height: 1.65;
+  }
+
+  .support-tier-card__reward {
+    min-height: 38px;
+    margin-bottom: 14px;
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    border: 1px solid var(--primary-color);
+    border-radius: 10px;
+    color: var(--primary-color);
+    background: var(--card-background);
+  }
+
+  .support-tier-card__reward span {
+    color: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.45;
   }
 
   .support-tier-card__action {

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>移动端笔记 AI 建议视觉验收</title>
+    <style>
+      html,
+      body {
+        min-height: 100%;
+        margin: 0;
+        background: #25262b;
+      }
+
+      body {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+      }
+
+      iframe {
+        width: 390px;
+        height: min(844px, calc(100vh - 24px));
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 18px;
+        background: #ffffff;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.34);
+      }
+    </style>
+  </head>
+  <body>
+    <iframe id="mobile-frame" title="移动端笔记 AI 建议"></iframe>
+    <script type="module" src="/src/e2e/noteAiReplyMobileFrame.ts"></script>
+  </body>
+</html>

@@ -155,7 +155,9 @@ describe('手绘笔记详情边界', () => {
   });
 
   it('基础形状是正式 scene 元素，并覆盖创建、选择缩放与历史摘要', () => {
-    expect(drawingSource).toContain("type DrawingTool = 'pen' | 'eraser' | 'text' | 'shape' | 'select' | 'hand'");
+    expect(drawingSource).toContain(
+      "type DrawingTool = 'pen' | 'eraser' | 'text' | 'shape' | 'fill' | 'select' | 'hand'",
+    );
     expect(drawingSource).toContain("kind: 'shape'");
     expect(drawingSource).toContain('constrainDrawingShapeEnd');
     expect(drawingSource).toContain('hitShapeResizeHandle(point)');
@@ -309,7 +311,7 @@ describe('手绘笔记详情边界', () => {
     expect(noteHeaderSource).toContain("$emit('saveVersion')");
     expect(source).toContain('@save-version="saveManualVersion"');
     expect(source).toContain("apiBasePost('/api/note/createNoteVersion'");
-    expect(source).toContain('void saveManualVersion()');
+    expect(source).toContain('async function saveManualVersion()');
     expect(source).toContain('blank-only');
     expect(source).toContain("async function createChildPageWithType(type: 'html' | 'markdown' | 'drawing')");
     expect(source).toContain('await confirmNoteCreateShareExposure(parentId)');

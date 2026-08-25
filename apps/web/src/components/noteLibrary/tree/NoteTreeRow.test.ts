@@ -205,7 +205,7 @@ describe('NoteTreeRow 显式页面操作', () => {
     expect(host.querySelector<HTMLButtonElement>('.action-menu-option')?.disabled).toBe(true);
   });
 
-  it('富文本与 Markdown 页面使用不同的目录图标', async () => {
+  it('富文本、Markdown 与手绘页面使用独立的目录图标和格式色', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const commonProps = {
@@ -243,6 +243,19 @@ describe('NoteTreeRow 显式页面操作', () => {
               sort: 20,
             },
           }),
+          h(NoteTreeRow, {
+            ...commonProps,
+            node: {
+              id: 'drawing-note',
+              parentId: null,
+              title: '手绘页面',
+              type: 'drawing',
+              childCount: 0,
+              hasChildren: false,
+              isTop: false,
+              sort: 30,
+            },
+          }),
         ]),
     });
     app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
@@ -251,9 +264,14 @@ describe('NoteTreeRow 显式页面操作', () => {
     await nextTick();
 
     const icons = [...host.querySelectorAll<HTMLElement>('.note-tree-page-icon')];
-    expect(icons).toHaveLength(2);
+    expect(icons).toHaveLength(3);
     expect(icons[0].dataset.src).toBe(icon.resource.noteHtml);
     expect(icons[1].dataset.src).toBe(icon.resource.noteMarkdown);
+    expect(icons[2].dataset.src).toBe(icon.resource.noteDrawing);
+    const rows = [...host.querySelectorAll<HTMLElement>('.note-tree-row')];
+    expect(rows[0].style.getPropertyValue('--note-page-format-color')).toContain('--note-format-html-color');
+    expect(rows[1].style.getPropertyValue('--note-page-format-color')).toContain('--note-format-markdown-color');
+    expect(rows[2].style.getPropertyValue('--note-page-format-color')).toContain('--note-format-drawing-color');
   });
 
   it('展开子页面时使用独立过渡容器，保留父行并渐进显示子树', async () => {

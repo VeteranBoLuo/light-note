@@ -16,9 +16,6 @@ vi.mock('./items.js', () => ({
 vi.mock('./notification.js', () => ({
   createNotification: vi.fn(),
 }));
-const completeGrowthTask = vi.fn();
-vi.mock('./growthTaskCompletion.js', () => ({ completeGrowthTask }));
-
 import pool from '../db/index.js';
 import { grantItem } from './items.js';
 import { earnPoints, getAchievementFrameByKey } from './points.js';
@@ -40,7 +37,6 @@ import {
   claimAchievement,
   getGrowthDashboard,
   getActivityHeatmap,
-  awardCreate,
   hashRef,
   grantExp,
   getGrowth,
@@ -86,8 +82,8 @@ describe('growth 段位表', () => {
       1024, 1280, 1536, 1792, 2048, 2560, 3072, 4096, 5120, 6144, 8192, 10752, 13824, 16896, 20480,
     ]);
     expect(RANKS.map((rank) => rank.aiTokenDaily)).toEqual([
-      500_000, 600_000, 760_000, 900_000, 1_100_000, 1_300_000, 1_500_000, 1_760_000, 2_000_000, 2_300_000, 2_600_000,
-      3_000_000, 3_300_000, 3_600_000, 4_000_000,
+      300_000, 350_000, 400_000, 450_000, 500_000, 600_000, 700_000, 800_000, 900_000, 1_050_000, 1_200_000, 1_400_000,
+      1_600_000, 1_800_000, 2_000_000,
     ]);
     for (let i = 1; i < RANKS.length; i++) {
       expect(RANKS[i].spaceMb).toBeGreaterThanOrEqual(RANKS[i - 1].spaceMb);
@@ -209,6 +205,27 @@ describe('每日经验上限与一次性奖励隔离', () => {
 
     expect(result.granted).toBe(50);
     expect(connection.query.mock.calls.some(([sql]) => sql.includes('SUM(amount)'))).toBe(false);
+  });
+
+  it('root 与 user 共用经验账本，不再因角色跳过发放', async () => {
+    vi.clearAllMocks();
+    const connection = makeGrantConnection({ exp: 50_000, level: 15 });
+    pool.getConnection.mockResolvedValue(connection);
+
+    const result = await grantExp('root-1', 'note', {
+      refId: 'root-note-1',
+      amount: 15,
+      userRole: 'root',
+    });
+
+    expect(result).toMatchObject({ granted: 15, exp: 50_015, level: 15 });
+    expect(connection.query).toHaveBeenCalledWith(expect.stringContaining('INSERT IGNORE INTO growth_events'), [
+      'root-1',
+      'note',
+      'root-note-1',
+      null,
+      null,
+    ]);
   });
 
   it('页面今日经验与发放端使用同一份受限来源口径', async () => {
@@ -388,18 +405,48 @@ describe('成就头像框领取', () => {
   });
 });
 
-describe('root 成长任务事实', () => {
-  it('创建首条内容时记录任务完成态，但不进入经验账本', async () => {
-    vi.clearAllMocks();
-    completeGrowthTask.mockResolvedValueOnce({ completed: true, claimed: true, rewardExp: 0 });
-
-    await expect(awardCreate('root-1', 'note', 'note-1', { userRole: 'root' })).resolves.toEqual({
-      granted: 0,
-      skipped: true,
+describe('root 真实等级口径', () => {
+  function mockGrowthRow(exp, storedLevel = levelForExp(exp)) {
+    pool.query.mockReset();
+    pool.query.mockImplementation(async (sql) => {
+      if (sql.includes('SELECT exp, streak, last_checkin_date')) {
+        return [
+          [
+            {
+              exp,
+              streak: 0,
+              last_checkin_date: null,
+              last_notified_level: storedLevel,
+              streak_protect_cards: 0,
+              points: 0,
+              equipped_title: null,
+              equipped_frame: null,
+              storage_bonus_mb: 0,
+            },
+          ],
+        ];
+      }
+      if (sql.includes('SUM(amount)')) return [[{ used: 0 }]];
+      throw new Error(`未预期的查询: ${sql}`);
     });
+  }
 
-    expect(completeGrowthTask).toHaveBeenCalledWith('root-1', 'first_note', { userRole: 'root' });
-    expect(pool.query).not.toHaveBeenCalled();
+  it('已固化的历史 root 按真实 50000 EXP 返回 Lv.15 和 200 万 AI', async () => {
+    vi.clearAllMocks();
+    mockGrowthRow(50_000, 15);
+
+    const growth = await getGrowth('root-1', { userRole: 'root', calendar: accountCalendar('20260825') });
+
+    expect(growth).toMatchObject({ exp: 50_000, level: 15, aiTokenDaily: 2_000_000, spaceMb: 20_480 });
+  });
+
+  it('未经迁移的低经验 root 不再被展示层伪造成 Lv.15', async () => {
+    vi.clearAllMocks();
+    mockGrowthRow(0, 1);
+
+    const growth = await getGrowth('future-root', { userRole: 'root', calendar: accountCalendar('20260825') });
+
+    expect(growth).toMatchObject({ exp: 0, level: 1, aiTokenDaily: 300_000, spaceMb: 1024 });
   });
 });
 
@@ -681,144 +728,12 @@ describe('成长提醒', () => {
   });
 });
 
-describe('claimDailyQuestBonus 对满级/root 的处理', () => {
-  // root 的经验整体不入账，但每日任务仍是「签到 + 新增内容 + 稳定随机任务」三项；
-  // 「今天领过没」只能看积分流水。
-  const GROWTH_ROW = {
-    exp: 0,
-    streak: 1,
-    last_checkin_date: '20260806',
-    last_notified_level: 15,
-    streak_protect_cards: 0,
-    points: 0,
-    equipped_title: null,
-    equipped_frame: null,
-    storage_bonus_mb: 0,
-  };
-
-  function mockRootQueries({ createdToday = 1, completedTodo = 0, legacyClaimed = false } = {}) {
-    pool.query.mockImplementation(async (sql) => {
-      if (sql.includes('SELECT exp, streak, last_checkin_date')) return [[{ ...GROWTH_ROW }]];
-      if (sql.includes('AS bookmarks')) {
-        return [
-          [
-            {
-              bookmarks: createdToday,
-              notes: 0,
-              files: 0,
-              todosCreated: 0,
-              todosCompleted: completedTodo,
-              organized: 0,
-            },
-          ],
-        ];
-      }
-      if (sql.includes('COUNT(*) AS c FROM points_log')) return [[{ c: legacyClaimed ? 1 : 0 }]];
-      throw new Error(`未预期的 pool 查询: ${sql}`);
-    });
-  }
-
-  function useAugust6() {
-    vi.useFakeTimers();
-    // 用本地时间构造:dayKey 走本地时区,写成 UTC 字面量会在非 +08 机器上偏一天
-    vi.setSystemTime(new Date(2026, 7, 6, 10, 0, 0));
-  }
-
-  it('root 领取只发积分:不发经验、不误报撞上经验日顶', async () => {
-    vi.clearAllMocks();
-    useAugust6();
-    mockRootQueries();
-    earnPoints.mockResolvedValue(true);
-
-    const result = await claimDailyQuestBonus('root-1', {
-      userRole: 'root',
-      calendar: accountCalendar('20260806'),
-    });
-
-    // capped 必须为 false:root 本就不发经验,报「今日经验已达上限」是误导
-    expect(result).toMatchObject({ ok: true, expGained: 0, pointsEarned: 10, capped: false });
-    expect(earnPoints).toHaveBeenCalledWith(
-      'root-1',
-      10,
-      'quest',
-      '20260806:2',
-      pool,
-      expect.objectContaining({ policyVersion: 'points-earning-legacy' }),
-    );
-    const contentCountCall = pool.query.mock.calls.find(([sql]) => sql.includes('FROM todo_items td'));
-    expect(contentCountCall?.[0]).toContain("DATE_FORMAT(DATE_ADD(td.create_time, INTERVAL ? MINUTE), '%Y%m%d') = ?");
-    expect(contentCountCall?.[1]).toEqual(Array.from({ length: 6 }, () => ['root-1', 0, '20260806']).flat());
-    // 没走 grantExp,所以不该有 growth_events 的写入连接
-    expect(pool.getConnection).not.toHaveBeenCalled();
-  });
-
-  it('root 当天重复领取按积分流水判重,返回 already', async () => {
-    vi.clearAllMocks();
-    useAugust6();
-    mockRootQueries({ legacyClaimed: true });
-    earnPoints.mockResolvedValue(false);
-
-    const result = await claimDailyQuestBonus('root-1', {
-      userRole: 'root',
-      calendar: accountCalendar('20260806'),
-    });
-
-    expect(result).toMatchObject({ ok: true, already: true });
-    expect(result.pointsEarned).toBeUndefined();
-    expect(earnPoints).toHaveBeenCalledOnce();
-  });
-
-  it('root 完成随机任务后补领第二阶段，两个阶段合计 30 积分', async () => {
-    vi.clearAllMocks();
-    useAugust6();
-    // root-1 在 2026-08-06 的稳定随机任务是「完成待办」。
-    mockRootQueries({ completedTodo: 1 });
-    earnPoints.mockResolvedValue(true);
-
-    const result = await claimDailyQuestBonus('root-1', {
-      userRole: 'root',
-      calendar: accountCalendar('20260806'),
-    });
-
-    expect(result).toMatchObject({ ok: true, expGained: 0, pointsEarned: 30, capped: false });
-    expect(earnPoints).toHaveBeenNthCalledWith(
-      1,
-      'root-1',
-      10,
-      'quest',
-      '20260806:2',
-      pool,
-      expect.objectContaining({ policyVersion: 'points-earning-legacy' }),
-    );
-    expect(earnPoints).toHaveBeenNthCalledWith(
-      2,
-      'root-1',
-      20,
-      'quest',
-      '20260806:3',
-      pool,
-      expect.objectContaining({ policyVersion: 'points-earning-legacy' }),
-    );
-  });
-
-  it('root 未记录内容时仍算未完成,不发积分', async () => {
-    vi.clearAllMocks();
-    useAugust6();
-    mockRootQueries({ createdToday: 0 });
-
-    const result = await claimDailyQuestBonus('root-1', {
-      userRole: 'root',
-      calendar: accountCalendar('20260806'),
-    });
-
-    expect(result).toEqual({ ok: false, reason: 'incomplete' });
-    expect(earnPoints).not.toHaveBeenCalled();
-  });
-
-  it('游客照旧不发', async () => {
+describe('claimDailyQuestBonus 角色边界', () => {
+  it('游客不发经验或积分', async () => {
     vi.clearAllMocks();
     const result = await claimDailyQuestBonus('visitor', { userRole: 'visitor' });
     expect(result).toEqual({ ok: false, reason: 'visitor' });
     expect(earnPoints).not.toHaveBeenCalled();
+    expect(pool.getConnection).not.toHaveBeenCalled();
   });
 });

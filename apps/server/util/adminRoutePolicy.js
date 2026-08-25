@@ -329,6 +329,7 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'support', [
   ['GET', '/support/admin/supporters'],
   ['POST', '/support/admin/sync'],
   ['POST', '/support/admin/orders/:providerOrderNo/reconcile'],
+  ['POST', '/support/admin/orders/:providerOrderNo/reward-approve'],
   ['POST', '/support/admin/supporters/:userId/identity-visibility'],
 ]);
 

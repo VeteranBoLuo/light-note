@@ -153,7 +153,17 @@ describe('communityChatProfileService', () => {
       query: vi.fn(async (sql) => {
         const text = String(sql);
         if (text.includes('FROM user account')) {
-          return [[authorRow({ authorUserId: 'root-1', authorAccountRole: 'root', featuredAchievements: '[]' })], []];
+          return [
+            [
+              authorRow({
+                authorUserId: 'root-1',
+                authorAccountRole: 'root',
+                authorExp: 50_000,
+                featuredAchievements: '[]',
+              }),
+            ],
+            [],
+          ];
         }
         if (text.includes('FROM user_achievements')) return [[], []];
         if (text.includes('FROM points_log')) return [[{ ref: 'streak_7', latestId: 2 }], []];
@@ -183,7 +193,7 @@ describe('communityChatProfileService', () => {
         const text = String(sql);
         if (text.includes('SELECT revision')) return [[], []];
         if (text.includes('SELECT account.role AS authorAccountRole')) {
-          return [[{ authorAccountRole: 'root', authorExp: 0 }], []];
+          return [[{ authorAccountRole: 'root', authorExp: 50_000 }], []];
         }
         if (text.includes('FROM user_achievements')) return [[], []];
         if (text.includes('FROM points_log')) return [[{ ref: 'streak_7', latestId: 2 }], []];
@@ -201,6 +211,7 @@ describe('communityChatProfileService', () => {
               authorRow({
                 authorUserId: 'root-1',
                 authorAccountRole: 'root',
+                authorExp: 50_000,
                 featuredAchievements: '["streak_7"]',
                 bio: '公开简介',
                 profileRevision: 1,

@@ -1,4 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const rewardMocks = vi.hoisted(() => ({
+  syncOrder: vi.fn(async () => ({ status: 'credited', tokens: 600_000 })),
+  syncUser: vi.fn(async () => []),
+}));
+
+vi.mock('./afdianSupportRewardService.js', () => ({
+  syncAfdianRewardForOrder: rewardMocks.syncOrder,
+  syncAfdianRewardsForUser: rewardMocks.syncUser,
+}));
+
 import {
   applyVerifiedAfdianOrder,
   createAfdianCheckoutIntent,

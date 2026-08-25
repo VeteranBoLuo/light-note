@@ -5,6 +5,14 @@ import { describe, expect, it } from 'vitest';
 const source = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/detail/NoteTagConfig.vue'), 'utf8');
 
 describe('NoteTagConfig 移动端高度分配', () => {
+  it('桌面端固定内容高度，搜索结果变化只在标签列表内部滚动', () => {
+    expect(source).toMatch(
+      /\.tag-config\s*\{[\s\S]*?height:\s*min\(460px, calc\(100vh - 190px\)\);[\s\S]*?min-height:\s*360px;/,
+    );
+    expect(source).toMatch(/\.tag-list\s*\{[\s\S]*?overflow:\s*auto/);
+    expect(source).toMatch(/\.tag-config\s*\{[\s\S]*?&\.mobile\s*\{[\s\S]*?height:\s*auto;/);
+  });
+
   it('只让标签库列表纵向滚动，摘要与底部操作保持固定', () => {
     expect(source).toContain("height: 'min(92dvh, 760px)'");
     expect(source).toContain('v-auto-scrollbar class="tag-list"');

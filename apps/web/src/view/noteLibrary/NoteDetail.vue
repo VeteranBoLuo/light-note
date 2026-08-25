@@ -2017,7 +2017,9 @@
     // Windows/Linux 使用 Ctrl，macOS 使用 Command；两端统一拦截浏览器“保存网页”。
     if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 's') {
       event.preventDefault(); // 阻止默认的保存行为
-      void saveManualVersion();
+      // 快捷键只立即冲刷普通保存队列；手动历史版本仅由顶部“保存版本”按钮创建。
+      if (event.repeat || readonly.value) return;
+      void saveImmediately(true);
     }
   };
 

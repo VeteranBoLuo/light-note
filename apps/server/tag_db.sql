@@ -1245,6 +1245,63 @@ CREATE TABLE IF NOT EXISTS `resource_governance_audit` (
   KEY `idx_resource_governance_audit_target` (`target_type`,`target_id`,`create_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `ai_bonus_wallet_state` (
+  `policy_version` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `baseline_completed_at` datetime DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`policy_version`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ai_bonus_ledger` (
+  `id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `entry_type` varchar(12) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `amount_tokens` bigint unsigned NOT NULL,
+  `balance_after` bigint unsigned NOT NULL,
+  `source_type` varchar(48) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `source_ref` varchar(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `idempotency_key` varchar(255) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `idempotency_hash` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `policy_version` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_ai_bonus_ledger_idempotency` (`idempotency_hash`),
+  KEY `idx_ai_bonus_ledger_user_time` (`user_id`,`create_time`,`id`),
+  KEY `idx_ai_bonus_ledger_source` (`source_type`,`source_ref`,`create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ai_bonus_lots` (
+  `id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `credit_ledger_id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `source_type` varchar(48) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `source_ref` varchar(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `policy_version` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `original_tokens` bigint unsigned NOT NULL,
+  `remaining_tokens` bigint unsigned NOT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_ai_bonus_lot_credit` (`credit_ledger_id`),
+  KEY `idx_ai_bonus_lots_user_remaining` (`user_id`,`remaining_tokens`,`create_time`,`id`),
+  KEY `idx_ai_bonus_lots_source` (`source_type`,`source_ref`,`create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ai_bonus_lot_allocations` (
+  `id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `debit_ledger_id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `lot_id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `amount_tokens` bigint unsigned NOT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_ai_bonus_allocation_debit_lot` (`debit_ledger_id`,`lot_id`),
+  KEY `idx_ai_bonus_allocation_user_time` (`user_id`,`create_time`,`id`),
+  KEY `idx_ai_bonus_allocation_lot` (`lot_id`,`create_time`),
+  KEY `idx_ai_bonus_allocation_debit` (`debit_ledger_id`,`create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `support_checkout_intents` (
   `id` char(36) NOT NULL,
   `token_hash` char(64) NOT NULL,
@@ -1292,6 +1349,7 @@ CREATE TABLE IF NOT EXISTS `support_orders` (
   `total_amount` decimal(12,2) NOT NULL DEFAULT 0.00,
   `show_amount` decimal(12,2) NOT NULL DEFAULT 0.00,
   `provider_status` smallint NOT NULL DEFAULT 0,
+  `provider_created_at` datetime DEFAULT NULL,
   `verification_state` varchar(24) NOT NULL DEFAULT 'pending',
   `webhook_signature_valid` tinyint unsigned NOT NULL DEFAULT 0,
   `webhook_received_at` datetime DEFAULT NULL,
@@ -1308,6 +1366,39 @@ CREATE TABLE IF NOT EXISTS `support_orders` (
   KEY `idx_support_order_checkout` (`checkout_intent_id`),
   KEY `idx_support_order_retry` (`verification_state`,`next_retry_at`,`retry_count`),
   KEY `idx_support_order_ranking` (`verification_state`,`provider_status`,`ranking_observed_at`,`light_note_user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `support_reward_policy_state` (
+  `policy_version` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `tokens_per_cny` bigint unsigned NOT NULL,
+  `auto_credit_max_amount` decimal(12,2) unsigned NOT NULL,
+  `activated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`policy_version`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `support_reward_grants` (
+  `id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `support_order_id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
+  `policy_version` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `paid_amount` decimal(12,2) unsigned NOT NULL,
+  `calculated_tokens` bigint unsigned NOT NULL,
+  `granted_tokens` bigint unsigned NOT NULL DEFAULT 0,
+  `grant_status` varchar(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `reason_code` varchar(48) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  `ledger_entry_id` char(36) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  `reviewed_by` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
+  `reviewed_at` datetime DEFAULT NULL,
+  `credited_at` datetime DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_support_reward_order` (`support_order_id`),
+  UNIQUE KEY `uk_support_reward_ledger` (`ledger_entry_id`),
+  KEY `idx_support_reward_user_time` (`user_id`,`create_time`,`id`),
+  KEY `idx_support_reward_status_time` (`grant_status`,`update_time`,`id`),
+  KEY `idx_support_reward_policy` (`policy_version`,`create_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `support_public_preferences` (

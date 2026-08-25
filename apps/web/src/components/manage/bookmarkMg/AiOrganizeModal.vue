@@ -78,6 +78,9 @@
             {{ $t('bookmarkMg.aiOrganizeFillMeta') }}
           </BCheckbox>
         </div>
+        <p v-if="hasSelectedNewTags" class="aio-new-tag-hint">
+          {{ $t('bookmarkMg.aiOrganizeNewTagHint') }}
+        </p>
         <div class="aio-list">
           <div v-for="s in suggestions" :key="s.id" class="aio-item" :class="{ off: !s.include }">
             <BCheckbox v-model:checked="s.include" class="aio-item-head">
@@ -192,6 +195,9 @@
   const selectedQueue = ref<string[]>([]);
 
   const chosenCount = computed(() => suggestions.value.filter((s) => s.include).length);
+  const hasSelectedNewTags = computed(() =>
+    suggestions.value.some((suggestion) => suggestion.include && suggestion.pickNew.length > 0),
+  );
   const isSelectedScope = computed(() => selectedMode.value);
   const selectedRemainingAfterQuote = computed(() =>
     Math.max(0, Number(quote.value?.requestedTotal || 0) - Number(quote.value?.requestIds?.length || 0)),
@@ -471,6 +477,12 @@
     font-size: 12px;
     color: var(--desc-color);
     cursor: pointer;
+  }
+  .aio-new-tag-hint {
+    margin: 0 0 8px;
+    color: var(--desc-color);
+    font-size: 12px;
+    line-height: 1.5;
   }
   .aio-list {
     width: 100%;

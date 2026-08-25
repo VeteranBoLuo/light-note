@@ -17,7 +17,7 @@
       </BButton>
     </div>
 
-    <BTabs v-model:active-tab="activeTab" variant="line" :options="tabOptions" />
+    <BTabs v-model:active-tab="activeTab" variant="line" :options="tabOptions" @change="handleTabChange" />
 
     <div v-if="errorCode && data" class="usage-inline-warning" role="status">
       <SvgIcon :src="icon.message.warning" size="15" aria-hidden="true" />
@@ -266,6 +266,7 @@
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { apiBasePost } from '@/http/request';
+  import { recordOperation } from '@/api/commonApi';
   import { formatAiQuotaTokens } from '@/composables/useAiQuotaStatus';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -430,6 +431,28 @@
   function openDetail(item: UsageItem) {
     selectedUsage.value = item;
     detailVisible.value = true;
+    recordOperation({
+      module: 'AI 用量与计费',
+      operation: `查看调用详情【${operationModuleLabel(item.module)}】`,
+    });
+  }
+
+  function handleTabChange(value: string) {
+    if (value !== 'rules') return;
+    recordOperation({ module: 'AI 用量与计费', operation: '查看计费规则' });
+  }
+
+  function operationModuleLabel(module: string) {
+    const labels: Record<string, string> = {
+      note: '笔记',
+      bookmark: '书签',
+      file: '文件',
+      todo: '待办',
+      search: '搜索',
+      help: '帮助',
+      tag: '标签',
+    };
+    return labels[module] || '其他';
   }
 
   function formatTokens(value: unknown) {

@@ -2,7 +2,7 @@
  * 增长引擎(P0-B) —— 见《轻笺 next 总方案》一/二/八节。
  *
  * - 段位:15 级文人科举。权益(容量/AI token)由 level 派生,单一事实源 = RANKS(勿散落)。
- * - 统一发放入口 grantExp():幂等(账本唯一索引去重)+ 日 EXP 硬顶 + root 跳过 + 只追加。
+ * - 统一发放入口 grantExp():幂等(账本唯一索引去重)+ 日 EXP 硬顶 + 只追加。
  *   exp 用「增量」更新(exp = exp + n)防并发覆盖;level 以 levelForExp(exp) 为权威、快照 level 仅近似。
  * - 签到:被动(有写操作自动连)与主动共用同一把 (user_id, 'checkin', day) 唯一键;
  *   断签「回退 3 天、不清零」(评审:清零=损失厌恶焦虑,背离知识工具调性)。
@@ -42,25 +42,25 @@ import {
 // 15 级段位表:cumExp=升到该级的累计经验阈值;spaceMb/aiTokenDaily=该级权益。
 // 容量曲线(前期平滑、中期明显、后期加速):Lv1 1G → Lv10 6G → Lv15 20G。
 // Lv1-5 每级 +256MB，Lv6-10 逐步提至 +1GB，Lv11 起加速；全部按 256MB 整数倍设计。
-// AI 额度同步按等级递增:Lv.1 50 万 → Lv.15 400 万 token/日。
+// AI 额度按真实等级平滑递增:Lv.1 30 万 → Lv.15 200 万 token/日；角色不改变额度。
 // 数值 = 展示 GB×1024 取整;后端按 level 下发真实配额。
 export const RANKS = [
-  { level: 1, name: '蒙童', cumExp: 0, spaceMb: 1024, aiTokenDaily: 500_000, trashDays: 30 },
-  { level: 2, name: '书生', cumExp: 500, spaceMb: 1280, aiTokenDaily: 600_000, trashDays: 30 },
-  { level: 3, name: '秀才', cumExp: 1000, spaceMb: 1536, aiTokenDaily: 760_000, trashDays: 30 },
-  { level: 4, name: '举人', cumExp: 1700, spaceMb: 1792, aiTokenDaily: 900_000, trashDays: 30 },
-  { level: 5, name: '贡士', cumExp: 2700, spaceMb: 2048, aiTokenDaily: 1_100_000, trashDays: 60 },
-  { level: 6, name: '进士', cumExp: 4000, spaceMb: 2560, aiTokenDaily: 1_300_000, trashDays: 60 },
-  { level: 7, name: '探花', cumExp: 5800, spaceMb: 3072, aiTokenDaily: 1_500_000, trashDays: 60 },
-  { level: 8, name: '榜眼', cumExp: 8000, spaceMb: 4096, aiTokenDaily: 1_760_000, trashDays: 60 },
-  { level: 9, name: '状元', cumExp: 10800, spaceMb: 5120, aiTokenDaily: 2_000_000, trashDays: 60 },
-  { level: 10, name: '翰林', cumExp: 14500, spaceMb: 6144, aiTokenDaily: 2_300_000, trashDays: 180 },
-  { level: 11, name: '学士', cumExp: 19000, spaceMb: 8192, aiTokenDaily: 2_600_000, trashDays: 180 },
-  { level: 12, name: '大学士', cumExp: 25000, spaceMb: 10752, aiTokenDaily: 3_000_000, trashDays: 180 },
-  { level: 13, name: '文豪', cumExp: 32000, spaceMb: 13824, aiTokenDaily: 3_300_000, trashDays: 180 },
-  { level: 14, name: '文宗', cumExp: 40000, spaceMb: 16896, aiTokenDaily: 3_600_000, trashDays: 180 },
+  { level: 1, name: '蒙童', cumExp: 0, spaceMb: 1024, aiTokenDaily: 300_000, trashDays: 30 },
+  { level: 2, name: '书生', cumExp: 500, spaceMb: 1280, aiTokenDaily: 350_000, trashDays: 30 },
+  { level: 3, name: '秀才', cumExp: 1000, spaceMb: 1536, aiTokenDaily: 400_000, trashDays: 30 },
+  { level: 4, name: '举人', cumExp: 1700, spaceMb: 1792, aiTokenDaily: 450_000, trashDays: 30 },
+  { level: 5, name: '贡士', cumExp: 2700, spaceMb: 2048, aiTokenDaily: 500_000, trashDays: 60 },
+  { level: 6, name: '进士', cumExp: 4000, spaceMb: 2560, aiTokenDaily: 600_000, trashDays: 60 },
+  { level: 7, name: '探花', cumExp: 5800, spaceMb: 3072, aiTokenDaily: 700_000, trashDays: 60 },
+  { level: 8, name: '榜眼', cumExp: 8000, spaceMb: 4096, aiTokenDaily: 800_000, trashDays: 60 },
+  { level: 9, name: '状元', cumExp: 10800, spaceMb: 5120, aiTokenDaily: 900_000, trashDays: 60 },
+  { level: 10, name: '翰林', cumExp: 14500, spaceMb: 6144, aiTokenDaily: 1_050_000, trashDays: 180 },
+  { level: 11, name: '学士', cumExp: 19000, spaceMb: 8192, aiTokenDaily: 1_200_000, trashDays: 180 },
+  { level: 12, name: '大学士', cumExp: 25000, spaceMb: 10752, aiTokenDaily: 1_400_000, trashDays: 180 },
+  { level: 13, name: '文豪', cumExp: 32000, spaceMb: 13824, aiTokenDaily: 1_600_000, trashDays: 180 },
+  { level: 14, name: '文宗', cumExp: 40000, spaceMb: 16896, aiTokenDaily: 1_800_000, trashDays: 180 },
   // 满级 36500 天(100 年)≈ 永久:清理 SQL 用它算出的过期点在 100 年前,永不命中;前端 ≥3650 显示「永久」
-  { level: 15, name: '文圣', cumExp: 50000, spaceMb: 20480, aiTokenDaily: 4_000_000, trashDays: 36500 },
+  { level: 15, name: '文圣', cumExp: 50000, spaceMb: 20480, aiTokenDaily: 2_000_000, trashDays: 36500 },
 ];
 
 export const MAX_LEVEL = 15;
@@ -229,7 +229,6 @@ async function writeLevelUpNotification(conn, userId, level, { source = null } =
 export async function grantExp(userId, source, opts = {}, conn = null) {
   const { refId = null, day = null, amount = 0, meta = null, userRole = null, calendar = null } = opts;
   if (isVisitorGrowthActor(userId, userRole)) return { granted: 0, skipped: 'visitor' };
-  if (userRole === 'root') return { granted: 0, skipped: 'root' }; // 站长跳过发放(权益=满级另算)
   if (!(amount > 0)) return { granted: 0, skipped: 'noop' };
 
   const ownConn = !conn;
@@ -353,7 +352,7 @@ export function hashRef(str) {
 }
 
 /**
- * 创造类发经验:按用户当日该类已发条数决定衰减档位,再走 grantExp(幂等 + 日顶 + root 跳过)。
+ * 创造类发经验:按用户当日该类已发条数决定衰减档位,再走 grantExp(幂等 + 日顶)。
  * 必须 fire-and-forget 调用,且不要传创建资源用的事务连接(它 commit 后即释放)。
  * @param {string} kind 'bookmark' | 'note' | 'file'
  * @param {string} refId 判重键:书签传 url 的 hashRef,笔记/文件传各自主键
@@ -371,8 +370,6 @@ export async function awardCreate(userId, kind, refId, { userRole = null } = {})
       console.warn('[growth] 首次成长任务状态同步失败 code=%s', stableAgentErrorCode(error));
     }
   }
-  // root 不进入经验账本，但上面的成长任务完成事实仍需正常记录并自动收口。
-  if (userRole === 'root') return { granted: 0, skipped: true };
   const calendar = await getGrowthCalendarContext(userId);
   // 当日第 N 条衰减
   const [[row]] = await pool.query(
@@ -400,7 +397,7 @@ export async function awardCreate(userId, kind, refId, { userRole = null } = {})
 
 /**
  * 读取用户成长快照(用于 /growth/me 与前端徽章)。
- * level 以 levelForExp(exp) 为权威;root 直接按满级展示(权益=满级,不依赖账本)。
+ * level 以 levelForExp(exp) 为权威；账号角色不改写等级或权益。
  */
 export async function getGrowth(userId, { userRole = null, db = pool, calendar = null } = {}) {
   const isGuest = isVisitorGrowthActor(userId, userRole);
@@ -447,11 +444,7 @@ export async function getGrowth(userId, { userRole = null, db = pool, calendar =
       canUseProtectCard = makeupDays.length > 0;
     }
   }
-  let level = levelForExp(exp);
-  if (userRole === 'root') {
-    level = MAX_LEVEL;
-    exp = RANKS[MAX_LEVEL - 1].cumExp;
-  }
+  const level = levelForExp(exp);
   const rank = rankOf(level);
   const { nextExp, need } = nextLevelInfo(exp, level);
   const isMax = level >= MAX_LEVEL;
@@ -461,17 +454,17 @@ export async function getGrowth(userId, { userRole = null, db = pool, calendar =
     : span > 0
       ? Math.max(0, Math.min(100, Math.round(((exp - rank.cumExp) / span) * 100)))
       : 0;
-  const hasUnreadLevelUp = userRole !== 'root' && level > lastNotifiedLevel; // 升级通知未读(通知中心随 level_up)
+  const hasUnreadLevelUp = level > lastNotifiedLevel; // 升级通知未读(通知中心随 level_up)
   // 今日已获经验(仅计入受日顶约束的来源,口径与 grantExp 日顶一致),供前端展示"每日上限"进度
   let dailyExp = 0;
-  if (!isGuest && userRole !== 'root') {
+  if (!isGuest) {
     dailyExp = await getDailyLimitedExpTotal(db, userId, accountCalendar);
   }
   return {
     exp,
     level,
     name: rank.name,
-    spaceMb: rank.spaceMb + storageBonus, // 段位基础(root 已是满级 rank) + 积分永久扩容
+    spaceMb: rank.spaceMb + storageBonus, // 段位基础 + 积分永久扩容
     spaceBonusMb: storageBonus, // 其中积分兑换的扩容部分(前端可单独标注「已扩容 +X」)
     aiTokenDaily: rank.aiTokenDaily,
     trashDays: rank.trashDays,
@@ -972,7 +965,7 @@ export async function getActivityHeatmap(userId, { userRole = null, year = null,
 
 /**
  * 成长看板聚合:统计 + 成就(解锁/进度) + 今日任务 + 近期时间线。
- * 游客返回全零/全未解锁(仍可展示"待收集"引导)。root 统计真实、等级满级。
+ * 游客返回全零/全未解锁(仍可展示"待收集"引导)。登录账号均按真实成长账本统计。
  */
 export async function getGrowthDashboard(userId, { userRole = null, db = pool, calendar = null } = {}) {
   const isGuest = isVisitorGrowthActor(userId, userRole);
@@ -1089,7 +1082,7 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
       [userId],
     );
     const days = ckRows.map((r) => String(r.day)).filter((d) => d && d !== 'null');
-    // 累计签到与最长连签至少不小于当前连签(root 免账本、无 checkin 事件,靠 streak 保证口径自洽)
+    // 累计签到与最长连签至少不小于当前连签，兼容早期缺少事件的历史账号。
     stats.totalCheckins = Math.max(days.length, stats.currentStreak);
     stats.maxStreak = Math.max(longestConsecutiveRun(days), stats.currentStreak);
     stats.checkinDays = days; // 签到日期(YYYYMMDD)数组,供前端签到日历高亮
@@ -1103,7 +1096,7 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
     stats.weekExp = Number(wk.s || 0);
 
     // 成长足迹:从真实活动派生(书签/笔记/文件 + 升级里程碑),合并按时间倒序取 15。
-    // 不再只读 growth_events —— root/免账本用户没有账本记录,否则足迹恒空(用户反馈)。
+    // 不再只读 growth_events，兼容早期缺少经验账本的历史账号，避免足迹恒空。
     const [[bmRows], [ntRows], [flRows], [msRows]] = await Promise.all([
       db.query(
         `SELECT b.name, b.create_time FROM bookmark b
@@ -1153,7 +1146,7 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
       .map((x) => ({ source: x.source, name: x.name || null, amount: 0, meta: x.meta, time: x.time }));
   }
 
-  // 成就进度:统一用 stats + 当前等级派生(root 等级=满级,资源统计真实)
+  // 成就进度:统一用 stats + 当前真实等级派生。
   // 永久解锁模型(业界惯例):一旦达标即永久解锁,此后删内容让指标回落也【不退回未解锁、不重复置灰/高亮】。
   // 永久状态来自独立表；GET 只做读取与当前进度派生，不再在请求过程中补写账本。
   const achievementState = new Map();
@@ -1213,7 +1206,6 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
 
   // 每日任务由对应策略派生：legacy 为一个通用创建槽和一个稳定随机槽，C5 为两个
   // 通用知识行动槽，C6 为两个行为类型不同且无需前置库存的具体任务；所有版本同日跨端都保持稳定。
-  const expGranted = userRole !== 'root';
   const {
     quests,
     completedCount,
@@ -1250,7 +1242,7 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
     return {
       key: stage.key,
       required: stage.required,
-      exp: expGranted ? stage.exp : 0,
+      exp: stage.exp,
       points: stage.points,
       claimed,
       claimable: completedCount >= stage.required && !claimed,
@@ -1258,7 +1250,7 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
   });
   const questBonus = {
     policyVersion: dailyPolicyVersion,
-    exp: expGranted ? effectiveDailyStages.reduce((sum, stage) => sum + stage.exp, 0) : 0,
+    exp: effectiveDailyStages.reduce((sum, stage) => sum + stage.exp, 0),
     points: effectiveDailyStages.reduce((sum, stage) => sum + stage.points, 0),
     claimed: stages.every((stage) => stage.claimed),
     claimable: stages.some((stage) => stage.claimable),
@@ -1295,15 +1287,12 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
 /**
  * 领取今日任务的所有可领阶段奖励；每阶段独立幂等。
  * 后端二次核算任务完成状态,防前端伪造;游客不发。
- * 满级(含 root)照发积分；root 不写经验账本。
+ * 满级仍照常发放经验与积分，等级由 levelForExp() 钳制。
  */
 export async function claimDailyQuestBonus(userId, { userRole = null, calendar = null } = {}) {
   if (isVisitorGrowthActor(userId, userRole)) return { ok: false, reason: 'visitor' };
   const accountCalendar = calendar || (await getGrowthCalendarContext(userId));
   const g = await getGrowth(userId, { userRole, calendar: accountCalendar });
-  // 与 getGrowthDashboard 同一判定:root 的经验不入账,考核项和幂等来源都要跟着变
-  const expGranted = userRole !== 'root';
-
   const today = accountCalendar.dayKey;
   const policyVersion = await resolveDailyEarningPolicyVersion(today, { lock: true });
   if (!earningWritesEnabled(policyVersion)) return { ok: false, reason: 'earning_paused' };
@@ -1319,15 +1308,17 @@ export async function claimDailyQuestBonus(userId, { userRole = null, calendar =
   for (const stage of dailyStages.filter((item) => completedCount >= item.required)) {
     eligibleCount++;
     const ref = dailyClaimRef(today, stage.required, policyVersion);
-    const grant = expGranted
-      ? await grantExp(userId, stage.source, { day: today, amount: stage.exp, userRole, calendar: accountCalendar })
-      : { granted: 0, duplicated: false };
+    const grant = await grantExp(userId, stage.source, {
+      day: today,
+      amount: stage.exp,
+      userRole,
+      calendar: accountCalendar,
+    });
     const gotPoints = await earnPoints(userId, stage.points, 'quest', ref, pool, {
       policyVersion,
       meta: { stage: stage.key, required: stage.required },
     });
-    // root 不写经验账本，积分流水就是唯一的阶段幂等事实源。
-    if (!gotPoints && (!expGranted || grant.duplicated)) duplicateCount++;
+    if (!gotPoints && grant.duplicated) duplicateCount++;
     expGained += Number(grant.granted || 0);
     if (gotPoints) pointsEarned += stage.points;
     leveledUp ||= Boolean(grant.leveledUp);
@@ -1339,15 +1330,15 @@ export async function claimDailyQuestBonus(userId, { userRole = null, calendar =
     ok: true,
     expGained,
     pointsEarned,
-    // capped 专指「今日经验已达上限被截断」;root 本就不发经验,不能让前端误报成撞了日顶
-    capped: expGranted && expGained === 0,
+    // capped 专指「今日经验已达上限被截断」。
+    capped: expGained === 0,
     leveledUp,
     growth: await getGrowth(userId, { userRole, calendar: accountCalendar }),
   };
 }
 
 /**
- * 用户当前等级对应的云空间配额(MB)。root=满级;无成长账本(新用户)=Lv1。
+ * 用户当前真实等级对应的云空间配额(MB)；无成长账本(新用户)=Lv1。
  * 供文件上传配额校验按等级下发,替代原先"非 root 一律 500MB"。
  */
 // 领取单个成就奖励：已解锁且未领 → 在同一事务发积分与可选头像框。
@@ -1397,7 +1388,7 @@ export async function claimAchievement(userId, key, { userRole = null, dashboard
 }
 
 export async function getUserSpaceMb(userId, userRole = null) {
-  // root 视为满级;积分兑换的永久扩容对所有人(含 root)叠加
+  // 积分兑换的永久扩容在真实等级基础上叠加。
   let bonus = 0;
   let exp = 0;
   if (!isVisitorGrowthActor(userId, userRole)) {
@@ -1407,7 +1398,7 @@ export async function getUserSpaceMb(userId, userRole = null) {
       bonus = Number(rows[0].storage_bonus_mb || 0);
     }
   }
-  const base = userRole === 'root' ? RANKS[MAX_LEVEL - 1].spaceMb : rankOf(levelForExp(exp)).spaceMb;
+  const base = rankOf(levelForExp(exp)).spaceMb;
   return base + bonus;
 }
 
@@ -1462,7 +1453,7 @@ export async function markNoticesRead(userId) {
 
 /**
  * 签到(主动)。当日仅一次;连续加成 +min(streak,5);断签回退 3 天不清零。
- * root 也可签到(更新 streak 展示),但不发经验、权益仍满级。
+ * 所有登录账号共用同一签到、经验与权益口径。
  */
 export async function checkin(userId, { userRole = null, calendar = null } = {}) {
   if (isVisitorGrowthActor(userId, userRole)) return { ok: false, reason: 'visitor' };
@@ -1510,14 +1501,6 @@ export async function checkin(userId, { userRole = null, calendar = null } = {})
       { day: today, amount, meta: { streak }, userRole, calendar: accountCalendar },
       conn,
     );
-    // root 不经 grantExp 写入 events(第 94 行对 root return),手动记一条签到事件供日历/统计/成就使用
-    if (userRole === 'root' && grant.skipped === 'root') {
-      await conn.query(
-        `INSERT IGNORE INTO growth_events (user_id, source, ref_id, day, amount, status, meta)
-         VALUES (?, 'checkin', NULL, ?, 0, 'granted', ?)`,
-        [userId, today, JSON.stringify({ streak })],
-      );
-    }
     const checkinPoints = checkinPointsForStreak(streak, earningPolicyVersion);
     const gotCheckinPoints = await earnPoints(userId, checkinPoints, 'checkin', today, conn, {
       policyVersion: earningPolicyVersion,

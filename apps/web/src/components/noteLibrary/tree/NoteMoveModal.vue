@@ -564,6 +564,7 @@
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+    padding: 0 20px 16px;
   }
 
   .note-move-shell.is-mobile .note-move-list {

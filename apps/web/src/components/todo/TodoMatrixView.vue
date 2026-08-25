@@ -183,7 +183,12 @@
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import TodoSeriesDrawer from '@/components/todo/TodoSeriesDrawer.vue';
   import icon from '@/config/icon';
-  import { formatTodoDateTime, normalizeTodoDateOnly, todoGroupKey, type TodoSnoozePreset } from '@/utils/todoPlanning';
+  import {
+    formatTodoDateTime,
+    isTodoOverdue,
+    normalizeTodoDateOnly,
+    type TodoSnoozePreset,
+  } from '@/utils/todoPlanning';
   import { groupTodosByMatrix, TODO_MATRIX_QUADRANT_ORDER, type TodoMatrixQuadrantKey } from '@/utils/todoMatrix';
   import { buildTodoMatrixEntries } from '@/utils/todoSeriesGrouping';
 
@@ -276,7 +281,7 @@
   });
 
   function isOverdue(item: TodoItem) {
-    return todoGroupKey(item, matrixNow.value) === 'overdue';
+    return isTodoOverdue(item, matrixNow.value);
   }
 
   function dueLabel(item: TodoItem) {

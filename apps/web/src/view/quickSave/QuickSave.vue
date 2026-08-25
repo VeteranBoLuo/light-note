@@ -99,6 +99,7 @@
   import { rememberQuickSaveAuthReturnPath } from '@/utils/quickSaveAuthReturn.ts';
   import { createAiSkillRequest, executeAiSkill } from '@/api/aiSkillApi';
   import { recordAiSkillApplied } from '@/api/aiTelemetry';
+  import { appendSessionAiTagSelection, replaceSessionAiTagSelection } from '@/utils/aiTagSelection';
 
   const { t } = useI18n();
   const MAX_TAGS = 4; // 与后端 addBookmark 上限一致
@@ -112,6 +113,7 @@
   const creatingTag = ref('');
   const tagOptions = ref<{ label: string; value: string }[]>([]);
   const aiNewTags = ref<string[]>([]);
+  let aiSelectedTagIds: string[] = [];
 
   const form = reactive({
     name: '',
@@ -185,8 +187,15 @@
         }
         const valid = new Set(tagOptions.value.map((o) => o.value));
         const matched = (generated.matchedTagIds || []).filter((id: string) => valid.has(id));
-        if (matched.length) {
-          form.relatedTags = Array.from(new Set([...form.relatedTags, ...matched])).slice(0, MAX_TAGS);
+        const selection = replaceSessionAiTagSelection({
+          currentIds: form.relatedTags,
+          previousAiIds: aiSelectedTagIds,
+          incomingAiIds: matched,
+          cap: MAX_TAGS,
+        });
+        form.relatedTags = selection.selectedIds;
+        aiSelectedTagIds = selection.aiSelectedIds;
+        if (selection.changed) {
           applied = true;
         }
         aiNewTags.value = (generated.newTags || []).slice(0, 3);
@@ -225,7 +234,14 @@
         await loadTags();
         const created = tagOptions.value.find((o) => o.label === name);
         if (created && !form.relatedTags.includes(created.value)) {
-          form.relatedTags = [...form.relatedTags, created.value].slice(0, MAX_TAGS);
+          const selection = appendSessionAiTagSelection({
+            currentIds: form.relatedTags,
+            previousAiIds: aiSelectedTagIds,
+            incomingAiIds: [created.value],
+            cap: MAX_TAGS,
+          });
+          form.relatedTags = selection.selectedIds;
+          aiSelectedTagIds = selection.aiSelectedIds;
         }
         aiNewTags.value = aiNewTags.value.filter((t) => t !== name);
         recordOperation({

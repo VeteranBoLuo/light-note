@@ -93,9 +93,11 @@ export async function getAfdianUserOrders({ userId, page = 1, pageSize = 10, db 
     ),
     db.query(
       `SELECT o.id, o.total_amount, o.month, o.product_type, o.ownership_source,
-              o.verified_at, o.ranking_observed_at, i.option_key
+              o.verified_at, o.ranking_observed_at, i.option_key,
+              g.grant_status, g.reason_code, g.calculated_tokens, g.granted_tokens
          FROM support_orders o
          LEFT JOIN support_checkout_intents i ON i.id = o.checkout_intent_id
+         LEFT JOIN support_reward_grants g ON g.support_order_id = o.id
         WHERE o.light_note_user_id = ?
           AND o.verification_state = 'api_verified'
           AND o.provider_status = 2
@@ -113,6 +115,10 @@ export async function getAfdianUserOrders({ userId, page = 1, pageSize = 10, db 
       optionKey: row.option_key || null,
       ownershipSource: row.ownership_source,
       confirmedAt: row.ranking_observed_at || row.verified_at || null,
+      rewardStatus: row.grant_status || null,
+      rewardReasonCode: row.reason_code || null,
+      rewardTokens: Number(row.calculated_tokens || 0),
+      grantedTokens: Number(row.granted_tokens || 0),
     })),
     total: Number(countRows[0]?.total || 0),
     page: paging.page,
@@ -233,7 +239,7 @@ export async function getAfdianPublicAvatar({ publicId, db = pool }) {
 }
 
 export async function getAfdianAdminOverview({ db = pool } = {}) {
-  const [[verified], [links], [exceptions]] = await Promise.all([
+  const [[verified], [links], [exceptions], [rewards]] = await Promise.all([
     db.query(
       `SELECT COUNT(*) AS verified_orders,
               COUNT(DISTINCT light_note_user_id) AS assigned_supporters,
@@ -257,6 +263,12 @@ export async function getAfdianAdminOverview({ db = pool } = {}) {
            AS unlinked_orders
        FROM support_orders`,
     ),
+    db.query(
+      `SELECT COALESCE(SUM(granted_tokens), 0) AS granted_tokens,
+              SUM(CASE WHEN grant_status = 'manual_review' THEN 1 ELSE 0 END) AS manual_review_rewards,
+              SUM(CASE WHEN grant_status = 'reversal_review' THEN 1 ELSE 0 END) AS reversal_review_rewards
+         FROM support_reward_grants`,
+    ),
   ]);
   return {
     verifiedOrders: Number(verified[0]?.verified_orders || 0),
@@ -267,11 +279,16 @@ export async function getAfdianAdminOverview({ db = pool } = {}) {
     pendingOrders: Number(exceptions[0]?.pending_orders || 0),
     conflictOrders: Number(exceptions[0]?.conflict_orders || 0),
     unlinkedOrders: Number(exceptions[0]?.unlinked_orders || 0),
+    grantedTokens: Number(rewards[0]?.granted_tokens || 0),
+    manualReviewRewards: Number(rewards[0]?.manual_review_rewards || 0),
+    reversalReviewRewards: Number(rewards[0]?.reversal_review_rewards || 0),
   };
 }
 
 function adminSearch(raw) {
-  const value = String(raw || '').trim().slice(0, 100);
+  const value = String(raw || '')
+    .trim()
+    .slice(0, 100);
   return value ? `%${value.replace(/[\\%_]/g, '\\$&')}%` : '';
 }
 
@@ -285,9 +302,12 @@ export async function queryAfdianAdminOrders({ page, pageSize, state = '', searc
   if (state === 'unlinked') {
     conditions.push("o.verification_state = 'api_verified' AND o.provider_status = 2 AND o.light_note_user_id IS NULL");
   }
+  if (state === 'reward_review') {
+    conditions.push("g.grant_status IN ('manual_review', 'reversal_review')");
+  }
   if (state === 'exceptions') {
     conditions.push(
-      "(o.verification_state = 'pending' OR o.ownership_source = 'conflict' OR (o.verification_state = 'api_verified' AND o.provider_status = 2 AND o.light_note_user_id IS NULL))",
+      "(o.verification_state = 'pending' OR o.ownership_source = 'conflict' OR (o.verification_state = 'api_verified' AND o.provider_status = 2 AND o.light_note_user_id IS NULL) OR g.grant_status IN ('manual_review', 'reversal_review'))",
     );
   }
   const like = adminSearch(search);
@@ -297,13 +317,16 @@ export async function queryAfdianAdminOrders({ page, pageSize, state = '', searc
   }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const joins = `LEFT JOIN user u ON u.id = o.light_note_user_id
-                 LEFT JOIN support_account_links l ON l.user_id = o.light_note_user_id`;
+                 LEFT JOIN support_account_links l ON l.user_id = o.light_note_user_id
+                 LEFT JOIN support_reward_grants g ON g.support_order_id = o.id`;
   const [[countRows], [rows]] = await Promise.all([
     db.query(`SELECT COUNT(*) AS total FROM support_orders o ${joins} ${where}`, params),
     db.query(
       `SELECT o.provider_order_no, o.total_amount, o.provider_status, o.verification_state,
               o.ownership_source, o.light_note_user_id, o.retry_count, o.next_retry_at,
-              o.ranking_observed_at, o.verified_at, o.create_time, u.alias, l.provider_name
+              o.ranking_observed_at, o.verified_at, o.create_time, u.alias, l.provider_name,
+              g.grant_status, g.reason_code, g.calculated_tokens, g.granted_tokens,
+              g.reviewed_at, g.credited_at
          FROM support_orders o
          ${joins}
          ${where}
@@ -324,12 +347,14 @@ export async function queryAfdianAdminSupporters({ page, pageSize, search = '', 
                 INNER JOIN user u ON u.id = o.light_note_user_id
                 LEFT JOIN support_account_links l ON l.user_id = o.light_note_user_id
                 LEFT JOIN support_public_preferences p ON p.user_id = o.light_note_user_id
+                LEFT JOIN support_reward_grants g ON g.support_order_id = o.id
                WHERE o.verification_state = 'api_verified' AND o.provider_status = 2 ${searchSql}`;
   const [[countRows], [rows]] = await Promise.all([
     db.query(`SELECT COUNT(DISTINCT o.light_note_user_id) AS total ${base}`, searchParams),
     db.query(
       `SELECT o.light_note_user_id AS user_id, u.alias, l.provider_name, l.linked_at,
               COUNT(*) AS order_count, SUM(o.total_amount) AS total_amount,
+              SUM(COALESCE(g.granted_tokens, 0)) AS granted_tokens,
               MAX(COALESCE(o.ranking_observed_at, o.verified_at)) AS last_support_at,
               COALESCE(p.participate_in_ranking, 1) AS participate_in_ranking,
               COALESCE(p.show_identity, 0) AS show_identity,
@@ -355,7 +380,9 @@ export async function setAfdianAdminIdentityHidden({
   ip,
   db = pool,
 }) {
-  const normalizedReason = String(reason || '').trim().slice(0, 255);
+  const normalizedReason = String(reason || '')
+    .trim()
+    .slice(0, 255);
   const normalizedUserId = String(userId || '').trim();
   if (!normalizedUserId || normalizedUserId.length > 255) {
     throw afdianError('AFDIAN_ADMIN_USER_INVALID', '用户标识不合法', 400);

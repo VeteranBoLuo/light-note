@@ -2037,7 +2037,7 @@ describe('CommunityChatWorkspace', () => {
     expect(drawerText).toContain(zhCN.communityChat.delete.action);
   });
 
-  it('输入 @ 可按稳定用户公有 ID 选择成员，发送时不依赖历史消息 ID', async () => {
+  it('已有内容后输入 @ 可选择成员并保留前文，发送时不依赖历史消息 ID', async () => {
     vi.useFakeTimers();
     const userPublicId = '22222222-2222-4222-8222-222222222222';
     mocks.searchMembers.mockResolvedValue({
@@ -2066,7 +2066,14 @@ describe('CommunityChatWorkspace', () => {
     const textarea = host.querySelector<HTMLTextAreaElement>('.community-composer__input textarea');
     if (!textarea) throw new Error('missing community chat composer');
 
-    textarea.value = '@薄';
+    textarea.value = '123@';
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    await flushAsync();
+    await vi.advanceTimersByTimeAsync(230);
+    await flushAsync();
+    expect(mocks.searchMembers).toHaveBeenCalledWith({ roomSlug: 'general', q: '', limit: 10 });
+
+    textarea.value = '123@薄';
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
     await flushAsync();
     await vi.advanceTimersByTimeAsync(230);
@@ -2083,7 +2090,7 @@ describe('CommunityChatWorkspace', () => {
     await vi.advanceTimersByTimeAsync(200);
     await flushAsync();
     expect(document.body.querySelector('.chat-mention-suggestions')).toBeNull();
-    expect(textarea.value).toBe('');
+    expect(textarea.value).toBe('123');
 
     textarea.value = '你好';
     textarea.dispatchEvent(new Event('input', { bubbles: true }));

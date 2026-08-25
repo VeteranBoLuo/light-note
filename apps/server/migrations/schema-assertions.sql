@@ -2006,3 +2006,116 @@ LEFT JOIN (
     AND index_name='idx_ai_execution_lease'
 ) actual ON 1=1
 WHERE actual.cols IS NULL OR actual.cols <> 'status,lease_expires_at';
+
+-- 58) 永久 AI 额度必须具备可审计来源批次，爱发电赠送必须锁定策略版本与订单幂等（期望 0 行）
+SELECT '[58] missing_ai_bonus_or_support_reward_table' AS check_name, expected.t AS detail
+FROM (
+  SELECT 'ai_bonus_wallet_state' t UNION ALL
+  SELECT 'ai_bonus_ledger' UNION ALL
+  SELECT 'ai_bonus_lots' UNION ALL
+  SELECT 'ai_bonus_lot_allocations' UNION ALL
+  SELECT 'support_reward_policy_state' UNION ALL
+  SELECT 'support_reward_grants'
+) expected
+LEFT JOIN information_schema.tables actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.t AND actual.engine='InnoDB'
+WHERE actual.table_name IS NULL;
+
+SELECT '[58] missing_ai_bonus_or_support_reward_column' AS check_name, expected.n AS detail
+FROM (
+  SELECT 'ai_bonus_wallet_state' tab, 'baseline_completed_at' col, 'ai_bonus_wallet_state.baseline_completed_at' n UNION ALL
+  SELECT 'support_orders', 'provider_created_at', 'support_orders.provider_created_at' UNION ALL
+  SELECT 'ai_bonus_ledger', 'idempotency_hash', 'ai_bonus_ledger.idempotency_hash' UNION ALL
+  SELECT 'ai_bonus_ledger', 'balance_after', 'ai_bonus_ledger.balance_after' UNION ALL
+  SELECT 'ai_bonus_lots', 'remaining_tokens', 'ai_bonus_lots.remaining_tokens' UNION ALL
+  SELECT 'ai_bonus_lot_allocations', 'user_id', 'ai_bonus_lot_allocations.user_id' UNION ALL
+  SELECT 'support_reward_policy_state', 'activated_at', 'support_reward_policy_state.activated_at' UNION ALL
+  SELECT 'support_reward_grants', 'grant_status', 'support_reward_grants.grant_status' UNION ALL
+  SELECT 'support_reward_grants', 'ledger_entry_id', 'support_reward_grants.ledger_entry_id'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.tab AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[58] ai_bonus_baseline_not_completed' AS check_name, policy_version AS detail
+FROM ai_bonus_wallet_state
+WHERE policy_version='ai-bonus-wallet-v1' AND baseline_completed_at IS NULL
+UNION ALL
+SELECT '[58] missing_ai_bonus_wallet_state', 'ai-bonus-wallet-v1'
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM ai_bonus_wallet_state WHERE policy_version='ai-bonus-wallet-v1'
+);
+
+SELECT '[58] root_rank_materialization_not_completed' AS check_name, policy_version AS detail
+FROM ai_bonus_wallet_state
+WHERE policy_version='root-real-rank-v1' AND baseline_completed_at IS NULL
+UNION ALL
+SELECT '[58] missing_root_rank_materialization_state', 'root-real-rank-v1'
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM ai_bonus_wallet_state WHERE policy_version='root-real-rank-v1'
+);
+
+SELECT '[58] invalid_materialized_root_rank' AS check_name, marker.user_id AS detail
+FROM growth_events marker
+LEFT JOIN user_growth snapshot ON BINARY snapshot.user_id=BINARY marker.user_id
+WHERE marker.source='manual'
+  AND marker.ref_id='root-level-materialization-v1'
+  AND (snapshot.user_id IS NULL OR snapshot.exp < 50000 OR snapshot.level < 15);
+
+SELECT '[58] missing_ai_bonus_or_support_reward_index' AS check_name,
+  CONCAT(expected.tab, '.', expected.ix) AS detail
+FROM (
+  SELECT 'ai_bonus_ledger' tab, 'uk_ai_bonus_ledger_idempotency' ix UNION ALL
+  SELECT 'ai_bonus_lots', 'uk_ai_bonus_lot_credit' UNION ALL
+  SELECT 'ai_bonus_lot_allocations', 'uk_ai_bonus_allocation_debit_lot' UNION ALL
+  SELECT 'support_reward_grants', 'uk_support_reward_order' UNION ALL
+  SELECT 'support_reward_grants', 'uk_support_reward_ledger'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.tab AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;
+
+SELECT '[58] invalid_support_reward_policy' AS check_name, policy_version AS detail
+FROM support_reward_policy_state
+WHERE policy_version='support-ai-v1'
+  AND (tokens_per_cny<>100000 OR auto_credit_max_amount<>200.00)
+UNION ALL
+SELECT '[58] missing_support_reward_policy', 'support-ai-v1'
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM support_reward_policy_state WHERE policy_version='support-ai-v1'
+);
+
+SELECT '[58] ai_bonus_snapshot_ledger_mismatch' AS check_name, ug.user_id AS detail
+FROM user_growth ug
+LEFT JOIN (
+  SELECT user_id,
+         SUM(CASE WHEN entry_type='credit' THEN amount_tokens ELSE -amount_tokens END) AS ledger_balance
+    FROM ai_bonus_ledger
+   GROUP BY user_id
+) ledger ON ledger.user_id=ug.user_id
+WHERE ug.ai_bonus_tokens<>COALESCE(ledger.ledger_balance, 0);
+
+SELECT '[58] ai_bonus_snapshot_lot_mismatch' AS check_name, ug.user_id AS detail
+FROM user_growth ug
+LEFT JOIN (
+  SELECT user_id, SUM(remaining_tokens) AS lot_balance
+    FROM ai_bonus_lots
+   GROUP BY user_id
+) lots ON lots.user_id=ug.user_id
+WHERE ug.ai_bonus_tokens<>COALESCE(lots.lot_balance, 0);
+
+SELECT '[58] invalid_credited_support_reward_ledger' AS check_name, grant_row.id AS detail
+FROM support_reward_grants grant_row
+LEFT JOIN ai_bonus_ledger ledger ON ledger.id=grant_row.ledger_entry_id
+WHERE grant_row.granted_tokens>0
+  AND grant_row.user_id IS NOT NULL
+  AND (
+    ledger.id IS NULL
+    OR ledger.entry_type<>'credit'
+    OR ledger.source_type<>'support'
+    OR ledger.amount_tokens<>grant_row.granted_tokens
+    OR NOT (ledger.user_id <=> grant_row.user_id)
+  );

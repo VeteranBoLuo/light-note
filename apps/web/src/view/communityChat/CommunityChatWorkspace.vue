@@ -847,6 +847,7 @@
   import icon from '@/config/icon';
   import { frameVariant } from '@/config/growthFrames';
   import { bookmarkStore, useUserStore } from '@/store';
+  import { resolveCommunityChatMentionQuery } from '@/utils/communityChatMentionQuery';
   import {
     closeCurrentMobileOverlayThen,
     registerMobileOverlayHistory,
@@ -2678,14 +2679,12 @@
     const textarea = composerInput.value?.inputEl as HTMLTextAreaElement | null | undefined;
     if (!textarea) return;
     const caret = textarea.selectionStart ?? draft.value.length;
-    const prefix = String(draft.value || '').slice(0, caret);
-    const match = /(^|[\s([{（【，。！？])@([^\s@]{0,32})$/u.exec(prefix);
-    if (!match) {
+    const mentionQuery = resolveCommunityChatMentionQuery(draft.value, caret);
+    if (!mentionQuery) {
       closeMentionSuggestions();
       return;
     }
-    const query = match[2] || '';
-    const start = caret - Array.from(`@${query}`).join('').length;
+    const { keyword: query, start } = mentionQuery;
     const sameQuery = mentionSuggestionsOpen.value && mentionSearchQuery.value === query;
     mentionQueryRange.value = { start, end: caret };
     mentionSearchQuery.value = query;

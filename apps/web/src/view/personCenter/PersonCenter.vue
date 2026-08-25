@@ -72,7 +72,12 @@
           </div>
         </div>
 
-        <AiQuotaSummary class="user-ai-quota" :active="menuVisible" @open-details="goAiQuotaDetails" />
+        <AiQuotaSummary
+          class="user-ai-quota"
+          :active="menuVisible"
+          entry-source="桌面个人中心"
+          @open-details="goAiQuotaDetails"
+        />
 
         <div class="settings-grid">
           <b-dropdown

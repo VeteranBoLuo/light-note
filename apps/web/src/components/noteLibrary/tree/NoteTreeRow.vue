@@ -59,7 +59,6 @@
             :src="pageIcon"
             size="16"
             class="note-tree-page-icon"
-            :class="{ 'is-markdown': markdownPage }"
             aria-hidden="true"
           />
           <span class="note-tree-title-text">{{ node.title || t('note.untitled') }}</span>
@@ -131,7 +130,7 @@
   import { NOTE_TREE_ROOT_KEY } from '@/composables/useNoteTree';
   import type { NoteTreeItem } from '@/types/noteTree';
   import type { NoteTreeDropPosition } from '@/utils/noteTreeDrop';
-  import { getNoteTreePageIcon, isMarkdownNoteTreePage } from '@/utils/noteTreePresentation';
+  import { getNoteTreePageColor, getNoteTreePageIcon } from '@/utils/noteTreePresentation';
 
   const props = withDefaults(
     defineProps<{
@@ -181,14 +180,16 @@
   const { t } = useI18n();
   const active = computed(() => props.activePageId === props.node.id);
   const pageIcon = computed(() => getNoteTreePageIcon(props.node.type));
-  const markdownPage = computed(() => isMarkdownNoteTreePage(props.node.type));
   const browsing = computed(() => props.browseParentId === props.node.id && !active.value);
   const expanded = computed(() => props.expandedIds.has(props.node.id));
   const loading = computed(() => props.loadingKeys.has(props.node.id));
   // 未传集合时保持详情页等既有调用方的动画；笔记库传入集合后，只允许用户手动操作的节点过渡。
   const animateChildren = computed(() => !props.motionExpansionIds || props.motionExpansionIds.has(props.node.id));
   const children = computed(() => props.childrenByParent[props.node.id || NOTE_TREE_ROOT_KEY] || []);
-  const rowStyle = computed(() => ({ '--note-tree-depth': String(props.depth) }));
+  const rowStyle = computed(() => ({
+    '--note-tree-depth': String(props.depth),
+    '--note-page-format-color': getNoteTreePageColor(props.node.type),
+  }));
   const showDropBefore = computed(() => props.dropTargetKey === props.node.id && props.dropTargetPosition === 'before');
   const showDropAfter = computed(() => props.dropTargetKey === props.node.id && props.dropTargetPosition === 'after');
   const showEdgeDrop = computed(() => showDropBefore.value || showDropAfter.value);
@@ -379,14 +380,14 @@
     }
 
     &:hover {
-      color: var(--resource-note-color, #00a884);
-      background: color-mix(in srgb, var(--resource-note-color, #00a884) 7%, transparent);
+      color: var(--note-page-format-color);
+      background: color-mix(in srgb, var(--note-page-format-color) 7%, transparent);
     }
 
     &.is-active {
-      color: var(--resource-note-color, #00a884);
+      color: var(--note-page-format-color);
       border-color: transparent;
-      background: color-mix(in srgb, var(--resource-note-color, #00a884) 11%, var(--workspace-panel-bg-color));
+      background: color-mix(in srgb, var(--note-page-format-color) 11%, var(--workspace-panel-bg-color));
       font-weight: 650;
 
       &::before {
@@ -396,21 +397,21 @@
         left: 2px;
         width: 3px;
         border-radius: 999px;
-        background: var(--resource-note-color, #00a884);
+        background: var(--note-page-format-color);
         content: '';
       }
     }
 
     &.is-browse-scope {
-      color: var(--resource-note-color, #00a884);
-      border-color: var(--resource-note-color, #00a884);
+      color: var(--note-page-format-color);
+      border-color: var(--note-page-format-color);
       background: var(--workspace-panel-bg-color);
       font-weight: 600;
     }
 
     &.is-search-match:not(.is-active) {
-      border-inline-start-color: var(--resource-note-color, #00a884);
-      color: var(--resource-note-color, #00a884);
+      border-inline-start-color: var(--note-page-format-color);
+      color: var(--note-page-format-color);
       font-weight: 700;
     }
 
@@ -480,11 +481,7 @@
 
   .note-tree-page-icon {
     flex: 0 0 auto;
-    color: var(--resource-note-color, #00a884);
-
-    &.is-markdown {
-      color: var(--primary-color, #615ced);
-    }
+    color: var(--note-page-format-color);
   }
 
   .note-tree-title-text {

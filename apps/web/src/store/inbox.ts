@@ -48,7 +48,7 @@ export default defineStore('inbox', {
     sort: 'newest' as 'newest' | 'oldest',
     selectedKeys: [] as string[],
     quickCaptureVisible: false,
-    quickCaptureType: 'note' as ActionCaptureType,
+    quickCaptureType: 'bookmark' as ActionCaptureType,
     ownerId: '',
     requestId: 0,
   }),
@@ -71,11 +71,11 @@ export default defineStore('inbox', {
       this.total = 0;
       this.selectedKeys = [];
       this.quickCaptureVisible = false;
-      this.quickCaptureType = 'note';
+      this.quickCaptureType = 'bookmark';
       this.loadFailed = false;
       this.requestId += 1;
     },
-    openQuickCapture(type: ActionCaptureType = 'note') {
+    openQuickCapture(type: ActionCaptureType = 'bookmark') {
       this.quickCaptureType = type;
       this.quickCaptureVisible = true;
     },

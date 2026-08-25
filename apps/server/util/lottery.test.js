@@ -4,6 +4,11 @@ const mocks = vi.hoisted(() => ({
   getConnection: vi.fn(),
   poolQuery: vi.fn(),
   grantItem: vi.fn(),
+  creditAiBonusTokens: vi.fn(async (_connection, input) => ({
+    ledgerId: 'wallet-ledger',
+    amountTokens: input.amountTokens,
+    balanceAfter: input.amountTokens,
+  })),
   levelForExp: vi.fn(() => 10),
 }));
 
@@ -12,6 +17,7 @@ vi.mock('../db/index.js', () => ({
 }));
 vi.mock('./growth.js', () => ({ levelForExp: mocks.levelForExp }));
 vi.mock('./items.js', () => ({ grantItem: mocks.grantItem }));
+vi.mock('./aiBonusWallet.js', () => ({ creditAiBonusTokens: mocks.creditAiBonusTokens }));
 
 import { drawLottery, getLotteryStatus, pickWeighted } from './lottery.js';
 
@@ -149,6 +155,15 @@ describe('C4 免费与付费奖池隔离', () => {
           params?.includes(JSON.stringify({ assetType: 'ai_tokens', assetAmount: 200_000 })),
       ),
     ).toBe(true);
+    expect(mocks.creditAiBonusTokens).toHaveBeenCalledWith(
+      conn,
+      expect.objectContaining({
+        userId: 'u1',
+        amountTokens: 200_000,
+        sourceType: 'lottery_free',
+        policyVersion: 'points-economy-c4',
+      }),
+    );
   });
 
   it('付费第十抽只从稀有池取奖并把保底归零', async () => {

@@ -44,7 +44,9 @@ import { registerCommunityChatRealtimeHub } from './util/communityChat/realtimeH
 import { startCommunityChatImageCleanupScheduler } from './util/services/communityChatImageService.js';
 import { startCommunityChatCustomStickerCleanupScheduler } from './util/services/communityChatCustomStickerService.js';
 import { ensureAfdianSupportSchema } from './util/afdianSupportSchema.js';
+import { ensureAfdianSupportRewardSchema } from './util/afdianSupportRewardSchema.js';
 import { startAfdianReconciliationScheduler } from './util/afdianSupportService.js';
+import { ensureAiBonusWalletSchema } from './util/aiBonusWalletSchema.js';
 
 import dotenv from 'dotenv';
 import path from 'path';
@@ -113,6 +115,7 @@ await initLogExclude().catch((err) => console.error('日志白名单初始化失
 // 成长中心读取接口必须保持纯只读，因此相关 Schema 在监听 HTTP 前完成，而不是在 GET 内兜底建表。
 try {
   await ensurePointsSchema();
+  await ensureAiBonusWalletSchema();
   await assertPointsEconomyActivationReady();
   await ensureGrowthTaskSchema();
   await ensureGrowthCenterSchema();
@@ -127,6 +130,7 @@ try {
 }
 try {
   await ensureAfdianSupportSchema();
+  await ensureAfdianSupportRewardSchema();
 } catch (err) {
   console.error('爱发电支持模块 Schema 初始化失败 code=%s，终止启动', stableAgentErrorCode(err));
   process.exit(1);

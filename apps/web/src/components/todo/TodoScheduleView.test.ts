@@ -129,6 +129,29 @@ describe('TodoScheduleView mobile swipe delete', () => {
     expect(host.querySelector('.todo-agenda-item time')?.getAttribute('datetime')).toBe(startAt);
   });
 
+  it('跨日任务开始时间已过但截止时间仍在未来时保持未完成状态', async () => {
+    const startedYesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 15, 35);
+    const dueInThreeDays = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 3, 15, 35);
+    const local = (value: Date) =>
+      `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(
+        2,
+        '0',
+      )}T${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}:00`;
+    const item = {
+      ...todo,
+      id: 'todo-cross-day',
+      startAt: local(startedYesterday),
+      dueAt: local(dueInThreeDays),
+    };
+    const { host } = mountSchedule('agenda', item);
+    await nextTick();
+
+    const card = host.querySelector('.todo-agenda-card');
+    expect(card?.classList.contains('is-overdue')).toBe(false);
+    expect(card?.textContent).toContain('未完成');
+    expect(card?.textContent).not.toContain('已逾期');
+  });
+
   it('仅有计划日期的重复实例会作为全天待办出现在议程中', async () => {
     const occurrenceDate = `${dueAt.slice(0, 10)}T00:00:00.000Z`;
     const item: TodoItem = {

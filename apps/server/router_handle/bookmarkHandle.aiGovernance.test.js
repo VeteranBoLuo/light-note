@@ -2,6 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   poolQuery: vi.fn(),
+  poolGetConnection: vi.fn(),
+  connectionQuery: vi.fn(),
+  beginTransaction: vi.fn(),
+  commit: vi.fn(),
+  rollback: vi.fn(),
+  release: vi.fn(),
+  insertData: vi.fn(),
+  insertResourceTagRelations: vi.fn(),
   archiveAndSummarizeBookmark: vi.fn(),
   summarizeBookmark: vi.fn(),
   suggestTagsFromText: vi.fn(),
@@ -9,16 +17,18 @@ const mocks = vi.hoisted(() => ({
   runAiExecution: vi.fn(),
 }));
 
-vi.mock('../db/index.js', () => ({ default: { query: mocks.poolQuery } }));
+vi.mock('../db/index.js', () => ({
+  default: { query: mocks.poolQuery, getConnection: mocks.poolGetConnection },
+}));
 vi.mock('../util/common.js', () => ({
   resultData: (data, status = 200, message = '') => ({ data, status, message }),
   snakeCaseKeys: (value) => value,
   mergeExistingProperties: (value) => value,
-  insertData: vi.fn(),
+  insertData: mocks.insertData,
 }));
 vi.mock('../util/resourceTags.js', () => ({
   RESOURCE_TYPE: { NOTE: 'note', BOOKMARK: 'bookmark' },
-  insertResourceTagRelations: vi.fn(),
+  insertResourceTagRelations: mocks.insertResourceTagRelations,
   insertTagResourceRelations: vi.fn(),
   replaceResourceTagRelations: vi.fn(),
   replaceTagResourceRelations: vi.fn(),
@@ -64,7 +74,7 @@ vi.mock('../util/bookmarkUrl.js', () => ({
 vi.mock('../util/personalKnowledgeSearch.js', () => ({ invalidatePersonalKnowledgeCache: vi.fn() }));
 vi.mock('../util/aiExecution/service.js', () => ({ runAiExecution: mocks.runAiExecution }));
 
-const { doArchiveAndSummarizeBookmark, doOrganizeQuote, doOrganizeRun, doSummarizeBookmark } =
+const { doArchiveAndSummarizeBookmark, doOrganizeApply, doOrganizeQuote, doOrganizeRun, doSummarizeBookmark } =
   await import('./bookmarkHandle.js');
 
 function response() {
@@ -85,6 +95,59 @@ describe('bookmark AI entry governance', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.runAiExecution.mockImplementation(async (_config, operation) => operation());
+    mocks.poolGetConnection.mockResolvedValue({
+      query: mocks.connectionQuery,
+      beginTransaction: mocks.beginTransaction,
+      commit: mocks.commit,
+      rollback: mocks.rollback,
+      release: mocks.release,
+    });
+  });
+
+  it('应用笔记建议时最多补到三个标签，且不会创建超出关联名额的新标签', async () => {
+    mocks.connectionQuery.mockImplementation(async (sql) => {
+      if (sql.includes('SELECT id, name FROM tag')) {
+        return [
+          [
+            { id: 'tag-1', name: '标签一' },
+            { id: 'tag-2', name: '标签二' },
+          ],
+        ];
+      }
+      if (sql.includes('SELECT id FROM note')) return [[{ id: 'note-1' }]];
+      if (sql.includes('SELECT tag_id FROM resource_tag_relations')) {
+        return [[{ tag_id: 'current-1' }, { tag_id: 'current-2' }]];
+      }
+      throw new Error(`unexpected query: ${sql}`);
+    });
+    const req = {
+      body: {
+        resourceType: 'note',
+        items: [
+          {
+            id: 'note-1',
+            tagIds: ['tag-1', 'tag-2'],
+            newTagNames: ['不应创建'],
+          },
+        ],
+      },
+      user: { id: 'user-1', role: 'user' },
+    };
+    const res = response();
+
+    await doOrganizeApply(req, res);
+
+    expect(mocks.insertResourceTagRelations).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        tagIds: ['tag-1'],
+        resourceType: 'note',
+        resourceId: 'note-1',
+        source: 'ai',
+      }),
+    );
+    expect(mocks.connectionQuery.mock.calls.some(([sql]) => sql.includes('INSERT INTO tag'))).toBe(false);
+    expect(res.payload).toMatchObject({ status: 200, data: { applied: 1 } });
   });
 
   it('书签摘要把真实 req 交给 Gateway，并把额度耗尽映射为 429', async () => {
@@ -283,6 +346,35 @@ describe('bookmark AI entry governance', () => {
         suggestions: [expect.objectContaining({ id: 'note-1' })],
       },
     });
+  });
+
+  it('笔记打标签把标题、正文前段和正文中的标题提纲一起交给统一推荐器', async () => {
+    mocks.poolQuery.mockResolvedValueOnce([[]]).mockResolvedValueOnce([
+      [
+        {
+          id: 'note-outline',
+          title: '长笔记',
+          content: `<p>${'正文'.repeat(1300)}</p><h2>关键主题</h2><p>结论</p>`,
+        },
+      ],
+    ]);
+    mocks.suggestTagsFromText.mockResolvedValueOnce({ matchedTagIds: [], newTags: [] });
+    const req = {
+      body: { resourceType: 'note', ids: ['note-outline'] },
+      user: { id: 'user-1', role: 'user' },
+      billingUser: { id: 'user-1', role: 'user' },
+    };
+    const res = response();
+
+    await doOrganizeRun(req, res);
+
+    expect(mocks.suggestTagsFromText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining('内容提纲:关键主题'),
+      }),
+    );
+    expect(mocks.suggestTagsFromText.mock.calls[0][0].text).toContain('正文摘录:正文');
+    expect(res.payload).toMatchObject({ status: 200, data: { ok: true, suggestions: [] } });
   });
 
   it('批量整理全部模型失败时不谎报完成，并把根账本分类为失败', async () => {

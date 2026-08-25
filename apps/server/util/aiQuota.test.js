@@ -184,6 +184,30 @@ vi.mock('./growth.js', () => ({
   rankOf: vi.fn(() => ({ aiTokenDaily: 100_000 })),
   RANKS: [{ aiTokenDaily: 100_000 }, { aiTokenDaily: 800_000 }],
 }));
+vi.mock('./aiBonusWallet.js', () => ({
+  lockAiBonusWallet: vi.fn(async (_connection, userId) => {
+    if (!state.wallets.has(userId)) state.wallets.set(userId, 0);
+    return state.wallets.get(userId) || 0;
+  }),
+  debitAiBonusTokens: vi.fn(async (_connection, input) => {
+    const balance = state.wallets.get(input.userId) || 0;
+    const amount = input.allowPartial ? Math.min(balance, input.amountTokens) : input.amountTokens;
+    if (amount > balance) throw Object.assign(new Error('insufficient'), { code: 'AI_BONUS_INSUFFICIENT' });
+    state.wallets.set(input.userId, balance - amount);
+    return {
+      replay: false,
+      ledgerId: amount ? 'debit-ledger' : null,
+      amountTokens: amount,
+      balanceAfter: balance - amount,
+    };
+  }),
+  creditAiBonusTokens: vi.fn(async (_connection, input) => {
+    const balance = state.wallets.get(input.userId) || 0;
+    const balanceAfter = balance + input.amountTokens;
+    state.wallets.set(input.userId, balanceAfter);
+    return { replay: false, ledgerId: 'credit-ledger', amountTokens: input.amountTokens, balanceAfter };
+  }),
+}));
 
 const originalEnv = {
   nodeEnv: process.env.NODE_ENV,
@@ -341,6 +365,25 @@ describe('AI quota abuse hardening', () => {
     expect(usageByType('user')).toEqual([{ tokens: 5000, calls: 1 }]);
     expect(usageByType('visitor_device')).toEqual([]);
     expect(usageByType('visitor_network')).toEqual([]);
+  });
+
+  it('root 与 test 都按真实成长等级使用 AI，不再给 root 固定满级额度', async () => {
+    const rootHandle = await aiQuota.reserve(visitorRequest(), {
+      userId: 'root-user',
+      userRole: 'root',
+      requestId: 'root-real-rank',
+    });
+    const testHandle = await aiQuota.reserve(visitorRequest(), {
+      userId: 'test-user',
+      userRole: 'test',
+      requestId: 'test-real-rank',
+    });
+
+    expect(rootHandle).toMatchObject({ blocked: false, type: 'user', quota: 100_000 });
+    expect(testHandle).toMatchObject({ blocked: false, type: 'user', quota: 100_000 });
+    expect(
+      pool.query.mock.calls.filter(([sql]) => /SELECT exp FROM user_growth/i.test(sql)).map(([, params]) => params[0]),
+    ).toEqual(expect.arrayContaining(['root-user', 'test-user']));
   });
 
   it('登录用户先用每日额度，未越界时不扣永久加油余额', async () => {

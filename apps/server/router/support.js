@@ -38,6 +38,7 @@ router.get('/admin/orders', readLimiter, handle.adminOrders);
 router.get('/admin/supporters', readLimiter, handle.adminSupporters);
 router.post('/admin/sync', adminActionLimiter, handle.adminSync);
 router.post('/admin/orders/:providerOrderNo/reconcile', adminActionLimiter, handle.adminReconcile);
+router.post('/admin/orders/:providerOrderNo/reward-approve', adminActionLimiter, handle.adminRewardApprove);
 router.post('/admin/supporters/:userId/identity-visibility', adminActionLimiter, handle.adminIdentityVisibility);
 
 export default router;

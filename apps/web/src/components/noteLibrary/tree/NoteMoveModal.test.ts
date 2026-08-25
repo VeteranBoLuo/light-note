@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { createApp, defineComponent, h, nextTick, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -40,6 +42,8 @@ vi.mock('@/components/base/BasicComponents/BModal/BModal.vue', async () => {
 });
 
 import NoteMoveModal from './NoteMoveModal.vue';
+
+const noteMoveModalSource = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/tree/NoteMoveModal.vue'), 'utf8');
 
 async function flushUi() {
   await Promise.resolve();
@@ -87,6 +91,12 @@ describe('NoteMoveModal', () => {
     await flushUi();
     return { host, visible, moved };
   }
+
+  it('桌面自定义 footer 保留 BModal 默认安全间距', () => {
+    expect(noteMoveModalSource).toMatch(
+      /\.note-move-desktop-footer\s*\{[\s\S]*?padding:\s*0 20px 16px;/,
+    );
+  });
 
   it('可把单篇页面放到目标页面前面，并发送同级父目录与 nextId 锚点', async () => {
     mocks.apiBasePost.mockImplementation(async (url: string, body: any) => {

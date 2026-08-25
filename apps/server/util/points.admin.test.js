@@ -4,10 +4,16 @@ const mocks = vi.hoisted(() => ({
   query: vi.fn(),
   getConnection: vi.fn(),
   grantItem: vi.fn(),
+  creditAiBonusTokens: vi.fn(async (_connection, input) => ({
+    ledgerId: 'wallet-ledger',
+    amountTokens: input.amountTokens,
+    balanceAfter: input.amountTokens,
+  })),
 }));
 
 vi.mock('../db/index.js', () => ({ default: { query: mocks.query, getConnection: mocks.getConnection } }));
 vi.mock('./items.js', () => ({ grantItem: mocks.grantItem }));
+vi.mock('./aiBonusWallet.js', () => ({ creditAiBonusTokens: mocks.creditAiBonusTokens }));
 
 const { AdminPointsError, adminGrantPoints, buyItem, getPointsLog, getPointsOverview, searchAdminUsers } =
   await import('./points.js');
@@ -330,9 +336,15 @@ describe('AI 加油包兑换', () => {
       item: itemId,
     });
 
-    expect(connection.query).toHaveBeenCalledWith(
-      'UPDATE user_growth SET ai_bonus_tokens = ai_bonus_tokens + ? WHERE user_id = ?',
-      [tokens, 'user-1'],
+    expect(mocks.creditAiBonusTokens).toHaveBeenCalledWith(
+      connection,
+      expect.objectContaining({
+        userId: 'user-1',
+        amountTokens: tokens,
+        sourceType: 'points_shop',
+        sourceRef: itemId,
+        policyVersion: 'points-economy-c4',
+      }),
     );
     expect(mocks.grantItem).not.toHaveBeenCalled();
     expect(connection.commit).toHaveBeenCalledOnce();

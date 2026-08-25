@@ -2,10 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(
-  resolve(process.cwd(), 'src/components/manage/bookmarkMg/AiOrganizeModal.vue'),
-  'utf8',
-);
+const source = readFileSync(resolve(process.cwd(), 'src/components/manage/bookmarkMg/AiOrganizeModal.vue'), 'utf8');
 
 function styleBlock(selector: string) {
   const start = source.indexOf(`  ${selector} {`);
@@ -44,5 +41,10 @@ describe('AI 整理建议列表布局', () => {
     expect(source).toContain("scope: isSelectedScope.value ? 'selected' : 'untagged'");
     expect(source).toContain('requestIds');
     expect(source).toMatch(/selectedQueue\.value = selectedQueue\.value\.filter/);
+  });
+
+  it('明确提示带加号的建议会在应用时创建账号级新标签', () => {
+    expect(source).toContain('v-if="hasSelectedNewTags"');
+    expect(source).toContain("$t('bookmarkMg.aiOrganizeNewTagHint')");
   });
 });

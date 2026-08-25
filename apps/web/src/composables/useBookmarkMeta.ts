@@ -13,6 +13,7 @@ import {
   type BookmarkMetaOverwriteField,
   type BookmarkMetaOverwriteFieldId,
 } from '@/utils/bookmarkMetaOverwriteDecision';
+import { appendSessionAiTagSelection, replaceSessionAiTagSelection } from '@/utils/aiTagSelection';
 
 interface TagOption {
   label: string;
@@ -55,6 +56,9 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
   const generating = computed(() => phase.value === 'generating');
   let activeGeneration: ActiveGeneration | null = null;
   let activeOverwriteController: AbortController | null = null;
+  // 只记录本次编辑会话中由 AI 新增到选择区的标签。再次识别时替换这些标签，
+  // 已保存标签和用户手动选择的标签不做静默删除。
+  let aiSelectedTagIds: string[] = [];
 
   async function selectFieldsToApply(
     name: string,
@@ -111,10 +115,27 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
     if (stopped && notify) message.info(i18n.global.t('bookmarkMeta.generationStopped'));
   }
 
-  // 合并勾选标签并去重，遵守后端 4 个上限
-  function selectTags(ids: string[]) {
-    const cur: string[] = bookmarkData.value.relatedTags || [];
-    bookmarkData.value.relatedTags = Array.from(new Set([...cur, ...ids])).slice(0, MAX_RELATED_TAGS);
+  function replaceGeneratedTags(ids: string[]) {
+    const result = replaceSessionAiTagSelection({
+      currentIds: bookmarkData.value.relatedTags || [],
+      previousAiIds: aiSelectedTagIds,
+      incomingAiIds: ids,
+      cap: MAX_RELATED_TAGS,
+    });
+    bookmarkData.value.relatedTags = result.selectedIds;
+    aiSelectedTagIds = result.aiSelectedIds;
+    return result.changed;
+  }
+
+  function addGeneratedTags(ids: string[]) {
+    const result = appendSessionAiTagSelection({
+      currentIds: bookmarkData.value.relatedTags || [],
+      previousAiIds: aiSelectedTagIds,
+      incomingAiIds: ids,
+      cap: MAX_RELATED_TAGS,
+    });
+    bookmarkData.value.relatedTags = result.selectedIds;
+    aiSelectedTagIds = result.aiSelectedIds;
   }
 
   async function generateBookmarkMeta() {
@@ -196,10 +217,8 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
       // 只勾选确实存在于候选里的标签（后端已保证，这里再兜底一次，避免勾中不存在的 id 无法显示）
       const validIds = new Set(tagOptions.value.map((o) => o.value));
       const matched: string[] = (generatedData.matchedTagIds || []).filter((id: string) => validIds.has(id));
-      if (matched.length) {
-        selectTags(matched);
-      }
-      if (selectedFields.length || matched.length) {
+      const tagsChanged = replaceGeneratedTags(matched);
+      if (selectedFields.length || tagsChanged) {
         void recordAiSkillApplied({
           skillId: 'bookmark.parse_url',
           surface: 'bookmark.form',
@@ -220,8 +239,12 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
       } else {
         message.success(i18n.global.t('bookmarkMeta.genOnly'));
       }
-      // 已有标签都不合适：只建议第一个新标签，问用户是否新建
-      if (!matched.length && newTags.length) confirmCreateTag(newTags[0]);
+      const availableTagSlots = Math.max(0, MAX_RELATED_TAGS - bookmarkData.value.relatedTags.length);
+      const creatableTags = [...new Set(newTags.map((name) => String(name || '').trim()).filter(Boolean))].slice(
+        0,
+        availableTagSlots,
+      );
+      if (creatableTags.length) confirmCreateTags(creatableTags);
     } catch (error: any) {
       if (isRequestCancelled(error, controller)) return;
       // Skill API 使用 silent 请求，页面必须展示其已经过服务端脱敏的公开错误；
@@ -233,11 +256,15 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
     }
   }
 
-  // 已有标签都不合适时，确认是否新建 AI 建议的标签，创建成功后插入候选并勾选
-  function confirmCreateTag(name: string) {
+  // 新标签属于账号级持久对象，必须显式确认；允许它与强相关已有标签同时出现。
+  function confirmCreateTags(names: string[]) {
+    const displayNames = names.join('、');
     Alert.alert({
       title: i18n.global.t('bookmarkMeta.suggestTagTitle'),
-      content: i18n.global.t('bookmarkMeta.suggestTagContent', { name }),
+      content: i18n.global.t(
+        names.length > 1 ? 'bookmarkMeta.suggestTagsContent' : 'bookmarkMeta.suggestTagContent',
+        names.length > 1 ? { names: displayNames } : { name: names[0] },
+      ),
       footer: [
         { label: i18n.global.t('bookmarkMeta.notNow'), type: 'dashed', function: () => Alert.destroy() },
         {
@@ -245,23 +272,32 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
           type: 'primary',
           function: async () => {
             Alert.destroy();
-            const res = await apiBasePost('/api/bookmark/addTag', { name }).catch(() => null);
-            // 游客写拦截：request.ts 已统一弹注册引导，这里静默返回即可
-            if (res?.status === 'preview') {
-              return;
+            const createdNames: string[] = [];
+            for (const name of names) {
+              const res = await apiBasePost('/api/bookmark/addTag', { name }).catch(() => null);
+              // 游客写拦截：request.ts 已统一弹注册引导，这里静默返回即可
+              if (res?.status === 'preview') return;
+              if (res?.status === 200) {
+                createdNames.push(name);
+                recordOperation({ module: '标签详情', operation: `新增标签成功【${name}】` });
+              }
             }
-            if (!res || res.status !== 200) {
+            if (!createdNames.length) {
               message.error(i18n.global.t('bookmarkMeta.createTagFailed'));
               return;
             }
-            // 刷新候选，拿到后端生成的标签 id（时间戳 UUID）后再勾选
             await refreshTags();
-            const created = tagOptions.value.find((o) => o.label === name);
-            if (created) {
-              selectTags([created.value]);
-            }
-            recordOperation({ module: '标签详情', operation: `新增标签成功【${name}】` });
-            message.success(i18n.global.t('bookmarkMeta.tagCreatedSelected'));
+            const createdIds = tagOptions.value
+              .filter((option) => createdNames.includes(option.label))
+              .map((option) => option.value);
+            addGeneratedTags(createdIds);
+            if (createdNames.length < names.length) message.warning(i18n.global.t('bookmarkMeta.createTagFailed'));
+            message.success(
+              i18n.global.t(
+                createdNames.length > 1 ? 'bookmarkMeta.tagsCreatedSelected' : 'bookmarkMeta.tagCreatedSelected',
+                { count: createdNames.length },
+              ),
+            );
           },
         },
       ],

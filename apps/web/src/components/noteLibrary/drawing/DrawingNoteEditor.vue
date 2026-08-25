@@ -102,7 +102,7 @@
           placement="bottom-left"
           overlay-class-name="drawing-style-popover"
         >
-          <BTooltip :title="`${t('note.drawingStyle')} (S)`">
+          <BTooltip :title="t('note.drawingStyle')">
             <BButton
               size="small"
               class="drawing-style-trigger"
@@ -157,7 +157,7 @@
       </BButton>
 
       <div class="drawing-toolbar-history">
-        <BTooltip v-if="isMobileLayout" :title="`${t('note.drawingStyle')} (S)`">
+        <BTooltip v-if="isMobileLayout" :title="t('note.drawingStyle')">
           <BButton
             size="small"
             class="drawing-style-trigger drawing-style-trigger-mobile"
@@ -233,70 +233,89 @@
                   <dt>{{ t('note.drawingTouchZoomControl') }}</dt>
                   <dd>{{ t('note.drawingTouchZoomControlHint') }}</dd>
                 </div>
+                <div>
+                  <dt>{{ t('note.drawingTouchFill') }}</dt>
+                  <dd>{{ t('note.drawingTouchFillHint') }}</dd>
+                </div>
               </dl>
-              <dl v-else>
-                <div
-                  ><dt><kbd>P</kbd></dt
-                  ><dd>{{ t('note.drawingPen') }}</dd></div
-                >
-                <div
-                  ><dt><kbd>V</kbd></dt
-                  ><dd>{{ t('note.drawingSelect') }}</dd></div
-                >
-                <div
-                  ><dt><kbd>⌘/Ctrl Z</kbd></dt
-                  ><dd>{{ t('note.drawingUndo') }}</dd></div
-                >
-                <div
-                  ><dt><kbd>⌘/Ctrl ⇧ Z</kbd></dt
-                  ><dd>{{ t('note.drawingRedo') }}</dd></div
-                >
-                <div
-                  ><dt><kbd>⌘/Ctrl A</kbd></dt
-                  ><dd>{{ t('note.drawingShortcutSelectAll') }}</dd></div
-                >
-                <div
-                  ><dt><kbd>⌘/Ctrl C / V</kbd></dt
-                  ><dd>{{ t('note.drawingShortcutCopyPaste') }}</dd></div
-                >
-                <div
-                  ><dt><kbd>⌫ / Delete</kbd></dt
-                  ><dd>{{ t('note.drawingShortcutDelete') }}</dd></div
-                >
-                <div
-                  ><dt><kbd>S</kbd></dt
-                  ><dd>{{ t('note.drawingShortcutStyle') }}</dd></div
-                >
-                <div
-                  ><dt><kbd>+ / = / ↑ · − / ↓</kbd></dt
-                  ><dd>{{ t('note.drawingShortcutResizeTool') }}</dd></div
-                >
-                <div
-                  ><dt
-                    ><kbd>⌘/Ctrl + {{ t('note.drawingMouseClick') }}</kbd></dt
-                  ><dd>{{ t('note.drawingShortcutFill') }}</dd></div
-                >
-                <div
-                  ><dt><kbd>Esc</kbd></dt
-                  ><dd>{{ t('note.drawingShortcutCancel') }}</dd></div
-                >
-                <div
-                  ><dt>{{ t('note.drawingMouseWheel') }}</dt
-                  ><dd>{{ t('note.drawingShortcutZoom') }}</dd></div
-                >
-                <div
-                  ><dt>{{ t('note.drawingHorizontalWheel') }}</dt
-                  ><dd>{{ t('note.drawingShortcutHorizontalPan') }}</dd></div
-                >
-                <div
-                  ><dt>{{ t('note.drawingMiddleRightMouse') }}</dt
-                  ><dd>{{ t('note.drawingShortcutPan') }}</dd></div
-                >
-                <div
-                  ><dt><kbd>Shift</kbd></dt
-                  ><dd>{{ t('note.drawingShortcutConstrainShape') }}</dd></div
-                >
-              </dl>
+              <div v-else class="drawing-help-sections">
+                <section class="drawing-help-section">
+                  <h3>{{ t('note.drawingHelpTools') }}</h3>
+                  <dl>
+                    <div
+                      ><dt><kbd>P</kbd></dt
+                      ><dd>{{ t('note.drawingPen') }}</dd></div
+                    >
+                    <div
+                      ><dt><kbd>V</kbd></dt
+                      ><dd>{{ t('note.drawingSelect') }}</dd></div
+                    >
+                    <div
+                      ><dt><kbd>S</kbd></dt
+                      ><dd>{{ t('note.drawingShortcutStyle') }}</dd></div
+                    >
+                    <div
+                      ><dt><kbd>+ / = / ↑ · − / ↓</kbd></dt
+                      ><dd>{{ t('note.drawingShortcutResizeTool') }}</dd></div
+                    >
+                    <div
+                      ><dt><kbd>Shift</kbd></dt
+                      ><dd>{{ t('note.drawingShortcutConstrainShape') }}</dd></div
+                    >
+                  </dl>
+                </section>
+                <section class="drawing-help-section">
+                  <h3>{{ t('note.drawingHelpEditing') }}</h3>
+                  <dl>
+                    <div
+                      ><dt><kbd>⌘/Ctrl Z</kbd></dt
+                      ><dd>{{ t('note.drawingUndo') }}</dd></div
+                    >
+                    <div
+                      ><dt><kbd>⌘/Ctrl ⇧ Z</kbd></dt
+                      ><dd>{{ t('note.drawingRedo') }}</dd></div
+                    >
+                    <div
+                      ><dt><kbd>⌘/Ctrl A</kbd></dt
+                      ><dd>{{ t('note.drawingShortcutSelectAll') }}</dd></div
+                    >
+                    <div
+                      ><dt><kbd>⌘/Ctrl C / V</kbd></dt
+                      ><dd>{{ t('note.drawingShortcutCopyPaste') }}</dd></div
+                    >
+                    <div
+                      ><dt><kbd>⌫ / Delete</kbd></dt
+                      ><dd>{{ t('note.drawingShortcutDelete') }}</dd></div
+                    >
+                    <div
+                      ><dt><kbd>Esc</kbd></dt
+                      ><dd>{{ t('note.drawingShortcutCancel') }}</dd></div
+                    >
+                  </dl>
+                </section>
+                <section class="drawing-help-section drawing-help-section--canvas">
+                  <h3>{{ t('note.drawingHelpCanvas') }}</h3>
+                  <dl>
+                    <div
+                      ><dt
+                        ><kbd>⌘/Ctrl + {{ t('note.drawingMouseClick') }}</kbd></dt
+                      ><dd>{{ t('note.drawingShortcutFill') }}</dd></div
+                    >
+                    <div
+                      ><dt>{{ t('note.drawingMouseWheel') }}</dt
+                      ><dd>{{ t('note.drawingShortcutZoom') }}</dd></div
+                    >
+                    <div
+                      ><dt>{{ t('note.drawingHorizontalWheel') }}</dt
+                      ><dd>{{ t('note.drawingShortcutHorizontalPan') }}</dd></div
+                    >
+                    <div
+                      ><dt>{{ t('note.drawingMiddleRightMouse') }}</dt
+                      ><dd>{{ t('note.drawingShortcutPan') }}</dd></div
+                    >
+                  </dl>
+                </section>
+              </div>
               <BButton
                 type="danger"
                 size="small"
@@ -473,8 +492,9 @@
   } from '@/utils/drawingSelection';
   import { paintDrawingStroke } from '@/utils/drawingStroke';
 
-  type DrawingTool = 'pen' | 'eraser' | 'text' | 'shape' | 'select' | 'hand';
+  type DrawingTool = 'pen' | 'eraser' | 'text' | 'shape' | 'fill' | 'select' | 'hand';
   type ShapeResizeHandle = 'nw' | 'ne' | 'sw' | 'se' | 'start' | 'end';
+  const FILL_SHORTCUT_TOOLS = new Set<DrawingTool>(['pen', 'eraser', 'text', 'shape']);
 
   const props = withDefaults(
     defineProps<{
@@ -594,6 +614,7 @@
     { key: 'eraser' as const, label: t('note.drawingEraser'), icon: icon.drawingNote.eraser },
     { key: 'text' as const, label: t('note.drawingText'), icon: icon.drawingNote.text },
     { key: 'shape' as const, label: t('note.drawingShape'), icon: icon.drawingNote.shape },
+    { key: 'fill' as const, label: t('note.drawingFill'), icon: icon.drawingNote.fill },
     { key: 'select' as const, label: t('note.drawingSelect'), icon: icon.drawingNote.select },
     { key: 'hand' as const, label: t('note.drawingHand'), icon: icon.drawingNote.hand },
   ]);
@@ -1701,8 +1722,7 @@
       event.button === 0 &&
       event.pointerType !== 'touch' &&
       (event.metaKey || event.ctrlKey) &&
-      tool.value !== 'select' &&
-      tool.value !== 'hand';
+      FILL_SHORTCUT_TOOLS.has(tool.value);
     if (isFillShortcut) {
       event.preventDefault();
       rootRef.value?.focus({ preventScroll: true });
@@ -1712,6 +1732,11 @@
     if (handleHandTouchPointerDown(event)) return;
     if (activePointerId !== null || (!isDirectPanButton && event.button !== 0)) return;
     rootRef.value?.focus({ preventScroll: true });
+    if (tool.value === 'fill') {
+      event.preventDefault();
+      fillClosedArea(canvasPoint(event));
+      return;
+    }
     activePointerId = event.pointerId;
     canvasRef.value?.setPointerCapture(event.pointerId);
     activeCanvasRect = canvasRef.value?.getBoundingClientRect() || null;
@@ -2658,7 +2683,7 @@
 
   .drawing-help-panel {
     display: grid;
-    width: min(340px, calc(100vw - 24px));
+    width: min(620px, calc(100vw - 24px));
     max-height: min(70vh, 520px);
     padding: 14px;
     overflow: auto;
@@ -2672,6 +2697,37 @@
     display: grid;
     margin: 0;
     gap: 8px;
+  }
+
+  .drawing-help-sections {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 10px;
+  }
+
+  .drawing-help-section {
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid var(--surface-border-color, var(--card-border-color));
+    border-radius: 8px;
+    background: var(--surface-panel-bg, var(--card-background));
+  }
+
+  .drawing-help-section h3 {
+    margin: 0 0 8px;
+    color: var(--text-color);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .drawing-help-section--canvas {
+    grid-column: 1 / -1;
+  }
+
+  .drawing-help-section--canvas dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 16px;
   }
 
   .drawing-help-panel dl > div {
@@ -2779,7 +2835,8 @@
 
   .drawing-canvas.is-tool-pen,
   .drawing-canvas.is-tool-text,
-  .drawing-canvas.is-tool-shape {
+  .drawing-canvas.is-tool-shape,
+  .drawing-canvas.is-tool-fill {
     cursor: crosshair;
   }
 
@@ -2900,6 +2957,10 @@
     .drawing-help-panel dl > div {
       grid-template-columns: minmax(92px, auto) 1fr;
       gap: 10px;
+    }
+
+    .drawing-help-panel {
+      width: min(340px, calc(100vw - 24px));
     }
 
     .drawing-workspace {

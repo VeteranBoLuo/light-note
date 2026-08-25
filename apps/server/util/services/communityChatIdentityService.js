@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import pool from '../../db/index.js';
 import { COMMUNITY_CHAT_PRIMARY_ROOM_SLUG } from '../communityChatFeature.js';
-import { MAX_LEVEL, levelForExp, rankOf } from '../growth.js';
+import { levelForExp, rankOf } from '../growth.js';
 import {
   CommunityChatError,
   assertCommunityChatMessagingAccess,
@@ -154,7 +154,7 @@ export async function ensureCommunityChatIdentityForUser({ user, env = process.e
 }
 
 function publicMember(row) {
-  const level = row.accountRole === 'root' ? MAX_LEVEL : levelForExp(Number(row.exp || 0));
+  const level = levelForExp(Number(row.exp || 0));
   const userPublicId = String(row.userPublicId || '');
   return {
     userPublicId,

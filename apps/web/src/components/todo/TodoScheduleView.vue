@@ -144,7 +144,7 @@
   import icon from '@/config/icon';
   import { bookmarkStore } from '@/store';
   import type { TodoItem } from '@/api/todoApi';
-  import { normalizeTodoDateOnly, todoGroupKey, todoScheduleAt } from '@/utils/todoPlanning';
+  import { isTodoOverdue, normalizeTodoDateOnly, todoScheduleAt } from '@/utils/todoPlanning';
   import { buildTodoAgendaEntries } from '@/utils/todoSeriesGrouping';
 
   const props = defineProps<{
@@ -324,7 +324,7 @@
     return new Intl.DateTimeFormat(locale.value, { hour: '2-digit', minute: '2-digit' }).format(date);
   }
   function isOverdue(item: TodoItem) {
-    return todoGroupKey(item, scheduleNow.value) === 'overdue';
+    return isTodoOverdue(item, scheduleNow.value);
   }
   function isScheduledSeries(item: TodoItem) {
     return Boolean(item.seriesId && item.series?.repeatMode === 'scheduled');

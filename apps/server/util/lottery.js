@@ -1,4 +1,4 @@
-import { randomInt } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
 import { levelForExp } from './growth.js';
 import { grantItem } from './items.js';
@@ -13,6 +13,7 @@ import {
   completePointsEconomyOperation,
   PointsEconomyError,
 } from './pointsEconomyOperations.js';
+import { creditAiBonusTokens } from './aiBonusWallet.js';
 
 export const DRAW_COST = 170;
 export const TEN_DRAW_COST = 1600;
@@ -22,8 +23,8 @@ export function freeDrawsFor(level, version) {
   return freeDrawsForCatalog(level, version);
 }
 
-function levelOf(exp, userRole) {
-  return userRole === 'root' ? 15 : levelForExp(Number(exp) || 0);
+function levelOf(exp) {
+  return levelForExp(Number(exp) || 0);
 }
 
 function poolWeight(pool) {
@@ -61,7 +62,7 @@ function prizeRates(pool, pityPool = []) {
   }));
 }
 
-async function grantReward(conn, userId, prize, { mode, version, overflowPoints }) {
+async function grantReward(conn, userId, prize, { mode, version, overflowPoints, operationRef, drawIndex }) {
   const c4 = version !== LEGACY_POINTS_ECONOMY_VERSION;
   const reasonPrefix = mode === 'free' ? 'lottery_free' : 'lottery_paid';
   if (prize.kind === 'points') {
@@ -109,10 +110,14 @@ async function grantReward(conn, userId, prize, { mode, version, overflowPoints 
       };
     }
   } else if (prize.kind === 'ai_pack') {
-    await conn.query('UPDATE user_growth SET ai_bonus_tokens = ai_bonus_tokens + ? WHERE user_id = ?', [
-      prize.amount,
+    await creditAiBonusTokens(conn, {
       userId,
-    ]);
+      amountTokens: prize.amount,
+      sourceType: reasonPrefix,
+      sourceRef: `${operationRef}:${drawIndex}:${prize.id}`,
+      idempotencyKey: `lottery:${operationRef}:${drawIndex}:ai`,
+      policyVersion: version,
+    });
     if (c4) {
       await conn.query('INSERT INTO points_log (user_id, delta, reason, ref, meta) VALUES (?, 0, ?, ?, ?)', [
         userId,
@@ -205,7 +210,7 @@ export async function drawLottery(
       drawMode === 'free' ? calendar || (await getGrowthCalendarContext(userId, { db: conn })) : calendar;
     const today = accountCalendar?.dayKey || dayKeyAtOffset();
     if (drawMode === 'free') {
-      const allowance = freeDrawsFor(levelOf(growth.exp, userRole), runtime.economyVersion);
+      const allowance = freeDrawsFor(levelOf(growth.exp), runtime.economyVersion);
       const usedToday = growth.lottery_free_day === today ? Number(growth.lottery_free_used) || 0 : 0;
       if (usedToday >= allowance) {
         await conn.rollback();
@@ -245,6 +250,7 @@ export async function drawLottery(
     let pityProgress = paidBase ?? 0;
     const results = [];
     const pityHitIndexes = [];
+    const operationRef = String(operation.operationId || randomUUID());
     for (let index = 1; index <= n; index++) {
       let guaranteed = false;
       if (drawMode === 'paid' || (!c4 && policy.countsPaidPity)) {
@@ -257,6 +263,8 @@ export async function drawLottery(
         mode: drawMode,
         version: runtime.economyVersion,
         overflowPoints: runtime.catalog.paidPolicy.cardOverflowPoints,
+        operationRef,
+        drawIndex: index,
       });
       results.push({ index, ...reward, guaranteed });
       if (guaranteed) pityHitIndexes.push(index);
@@ -341,7 +349,7 @@ export async function getLotteryStatus(userId, { userRole = null, calendar = nul
   const accountCalendar =
     userId && userId !== 'visitor' ? calendar || (await getGrowthCalendarContext(userId)) : calendar;
   const today = accountCalendar?.dayKey || dayKeyAtOffset();
-  const level = levelOf(growth.exp, userRole);
+  const level = levelOf(growth.exp);
   const freeDaily = freeDrawsFor(level, runtime.economyVersion);
   const usedToday = growth.lottery_free_day === today ? Number(growth.lottery_free_used) || 0 : 0;
   const freeRemaining = Math.max(0, freeDaily - usedToday);

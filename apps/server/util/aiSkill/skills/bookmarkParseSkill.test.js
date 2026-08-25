@@ -24,4 +24,27 @@ describe('bookmark.parse_url', () => {
     expect(result).toMatchObject({ kind: 'field_suggestions', writeCommitted: false });
     expect(prepared.availableActions[0]).toMatchObject({ requiresConfirmation: true });
   });
+
+  it('已有与新标签合计最多返回三个，而不是分别最多三个', async () => {
+    const database = { query: vi.fn().mockResolvedValue([[]]) };
+    const suggestBookmarkMeta = vi.fn().mockResolvedValue({
+      resolvedUrl: 'https://example.com/',
+      name: '示例',
+      description: '示例描述',
+      matchedTagIds: ['tag-1', 'tag-2'],
+      newTags: ['新标签一', '新标签二', '新标签三'],
+      metadataSource: 'fetched',
+    });
+    const prepared = await bookmarkParseSkill.prepare({
+      input: bookmarkParseSkill.validateInput({ url: 'example.com' }),
+      context: { identity: { subjectUserId: 'u-1' } },
+      request: {},
+      dependencies: { database, suggestBookmarkMeta },
+    });
+
+    const result = await prepared.callModel({ trace: { traceId: 'trace-cap' } });
+
+    expect(result.fields.matchedTagIds).toEqual(['tag-1', 'tag-2']);
+    expect(result.fields.newTags).toEqual(['新标签一']);
+  });
 });

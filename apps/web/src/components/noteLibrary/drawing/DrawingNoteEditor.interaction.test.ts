@@ -334,7 +334,10 @@ describe('DrawingNoteEditor 活动手势撤销', () => {
     const helpButton = host.querySelector('button[aria-label="note.drawingHelp"]') as HTMLButtonElement;
     helpButton.click();
     await nextTick();
-    expect(document.querySelector('.drawing-help-panel')?.textContent).toContain('drawingShortcutResizeTool');
+    const helpPanel = document.querySelector('.drawing-help-panel') as HTMLElement;
+    expect(helpPanel.textContent).toContain('drawingShortcutResizeTool');
+    expect(helpPanel.querySelectorAll('.drawing-help-section')).toHaveLength(3);
+    expect(helpPanel.querySelector('.drawing-help-section--canvas')?.textContent).toContain('drawingShortcutFill');
 
     app.unmount();
     host.remove();
@@ -399,7 +402,7 @@ describe('DrawingNoteEditor 活动手势撤销', () => {
     host.remove();
   });
 
-  it('Command 点击把闭合区域保存成单个可撤销填充元素', async () => {
+  it('快捷键与独立填充工具都把闭合区域保存成可撤销元素', async () => {
     const width = 1448;
     const pixels = new Uint8ClampedArray(width * width * 4);
     for (let index = 0; index < width * width; index += 1) pixels.set([255, 255, 255, 255], index * 4);
@@ -456,6 +459,44 @@ describe('DrawingNoteEditor 活动手势撤销', () => {
     editorElement.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'z', metaKey: true }));
     await nextTick();
     expect(JSON.parse(updates.at(-1) || '{}').elements).toHaveLength(0);
+
+    const fillButton = host.querySelector('button[aria-label="note.drawingFill"]') as HTMLButtonElement;
+    fillButton.click();
+    await nextTick();
+    expect(fillButton.getAttribute('aria-pressed')).toBe('true');
+    expect(canvasElement.classList.contains('is-tool-fill')).toBe(true);
+
+    const directMouseFill = new MouseEvent('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      clientX: 150,
+      clientY: 150,
+    });
+    Object.defineProperties(directMouseFill, {
+      pointerId: { value: 72 },
+      pointerType: { value: 'mouse' },
+    });
+    expect(canvasElement.dispatchEvent(directMouseFill)).toBe(false);
+    await nextTick();
+    expect(JSON.parse(updates.at(-1) || '{}').elements).toMatchObject([{ kind: 'fill', color: '#1f2937' }]);
+
+    editorElement.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'z', metaKey: true }));
+    await nextTick();
+    const touchFill = new MouseEvent('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      clientX: 150,
+      clientY: 150,
+    });
+    Object.defineProperties(touchFill, {
+      pointerId: { value: 73 },
+      pointerType: { value: 'touch' },
+    });
+    expect(canvasElement.dispatchEvent(touchFill)).toBe(false);
+    await nextTick();
+    expect(JSON.parse(updates.at(-1) || '{}').elements).toMatchObject([{ kind: 'fill', color: '#1f2937' }]);
     app.unmount();
     host.remove();
   });
@@ -495,8 +536,12 @@ describe('DrawingNoteEditor 活动手势撤销', () => {
     const history = host.querySelector('.drawing-toolbar-history') as HTMLElement;
     const styleButton = history.querySelector('button[aria-label="note.drawingStyle"]') as HTMLButtonElement;
     const eraserButton = scroll.querySelector('button[aria-label="note.drawingEraser"]') as HTMLButtonElement;
+    const shapeButton = scroll.querySelector('button[aria-label^="note.drawingShape"]') as HTMLButtonElement;
+    const fillButton = scroll.querySelector('button[aria-label="note.drawingFill"]') as HTMLButtonElement;
     const selectButton = scroll.querySelector('button[aria-label="note.drawingSelect"]') as HTMLButtonElement;
     const handButton = scroll.querySelector('button[aria-label="note.drawingHand"]') as HTMLButtonElement;
+    expect(shapeButton.compareDocumentPosition(fillButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(fillButton.compareDocumentPosition(selectButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(selectButton.compareDocumentPosition(handButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(handButton.compareDocumentPosition(mobileZoom) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(scroll.querySelector('button[aria-label="note.drawingStyle"]')).toBeNull();

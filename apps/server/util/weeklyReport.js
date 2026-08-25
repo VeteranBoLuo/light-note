@@ -231,13 +231,11 @@ export async function buildWeeklyReport(userId, userRole = null, options = {}) {
   const [[row]] = previousResult;
   const days = fillWeeklyReportDays(period, dailyRows);
   const summary = summarizeWeeklyReportDays(days);
-  // 免账本用户(如 root)不写每日签到流水,从账本数出来的 checkinDays 会是 0;
-  // 用当前连签数兜底(至多 7 天,近似本周),避免「连签中却显示签到 0」。
+  // 兼容早期缺少签到流水的历史账号：用当前连签数兜底(至多 7 天)。
   let checkinDays = Number(summary.checkinDays || 0);
   if (checkinDays === 0 && Number(g.streak) > 0) checkinDays = Math.min(Number(g.streak), 7);
   const total = summary.bookmarks + summary.notes + summary.files + summary.todos + summary.organized;
-  const expStatus =
-    userRole === 'root' ? 'role_excluded' : summary.exp > 0 ? 'earned' : total > 0 ? 'no_grant' : 'none';
+  const expStatus = summary.exp > 0 ? 'earned' : total > 0 ? 'no_grant' : 'none';
   return {
     bookmarks: summary.bookmarks,
     notes: summary.notes,
@@ -311,7 +309,13 @@ export async function generateWeeklyReports() {
         const report = await buildWeeklyReport(userId, null, { endOffsetDays: 1 });
         // 无实质活动不发空周报
         if (
-          report.bookmarks + report.notes + report.files + report.todos + report.organized + report.exp + report.checkinDays ===
+          report.bookmarks +
+            report.notes +
+            report.files +
+            report.todos +
+            report.organized +
+            report.exp +
+            report.checkinDays ===
           0
         )
           continue;

@@ -52,7 +52,12 @@
             </div>
           </div>
 
-          <AiQuotaSummary class="profile-card__ai-quota" density="comfortable" @open-details="goAiQuotaDetails" />
+          <AiQuotaSummary
+            class="profile-card__ai-quota"
+            density="comfortable"
+            entry-source="移动个人中心"
+            @open-details="goAiQuotaDetails"
+          />
 
           <BButton
             class="profile-card__growth"

@@ -71,7 +71,7 @@
                 :src="getNoteTreePageIcon(item.type)"
                 size="18"
                 class="note-drawer-page-icon"
-                :class="{ 'is-markdown': isMarkdownNoteTreePage(item.type) }"
+                :style="{ color: getNoteTreePageColor(item.type) }"
                 aria-hidden="true"
               />
               <span class="note-drawer-row-title">{{ item.title || t('note.untitled') }}</span>
@@ -119,7 +119,7 @@
   import icon from '@/config/icon';
   import { apiBasePost } from '@/http/request';
   import type { NoteBreadcrumbItem, NoteTreeItem, NoteTreeQueryResult } from '@/types/noteTree';
-  import { getNoteTreePageIcon, isMarkdownNoteTreePage } from '@/utils/noteTreePresentation';
+  import { getNoteTreePageColor, getNoteTreePageIcon } from '@/utils/noteTreePresentation';
   import {
     closeCurrentMobileOverlayThen,
     registerMobileOverlayHistory,
@@ -511,11 +511,6 @@
 
   .note-drawer-page-icon {
     flex: 0 0 auto;
-    color: var(--resource-note-color, #00a884);
-
-    &.is-markdown {
-      color: var(--primary-color, #615ced);
-    }
   }
 
   .note-drawer-row-title {

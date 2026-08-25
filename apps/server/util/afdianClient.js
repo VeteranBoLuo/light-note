@@ -175,6 +175,24 @@ export function buildAfdianWebhookSignText(order) {
     .join('');
 }
 
+function normalizeOptionalProviderCreatedAt(value) {
+  if (value == null || value === '') return null;
+  const numeric = Number(value);
+  let epochSeconds = null;
+  if (Number.isFinite(numeric)) {
+    epochSeconds = numeric > 10_000_000_000 ? Math.floor(numeric / 1000) : Math.floor(numeric);
+  } else {
+    const parsed = Date.parse(String(value));
+    if (Number.isFinite(parsed)) epochSeconds = Math.floor(parsed / 1000);
+  }
+  const earliest = Date.UTC(2000, 0, 1) / 1000;
+  const latest = Date.UTC(2100, 0, 1) / 1000;
+  if (!Number.isSafeInteger(epochSeconds) || epochSeconds < earliest || epochSeconds >= latest) {
+    throw afdianError('AFDIAN_ORDER_INVALID', '订单创建时间不合法');
+  }
+  return epochSeconds;
+}
+
 export function normalizeAfdianOrder(order) {
   const providerOrderNo = String(order?.out_trade_no || '').trim();
   if (!/^[A-Za-z0-9_-]{8,128}$/.test(providerOrderNo)) {
@@ -203,6 +221,7 @@ export function normalizeAfdianOrder(order) {
     totalAmount: normalizeAmount(order?.total_amount, 'total_amount'),
     showAmount: normalizeAmount(order?.show_amount ?? order?.total_amount, 'show_amount'),
     providerStatus,
+    providerCreatedAt: normalizeOptionalProviderCreatedAt(order?.create_time),
   };
 }
 

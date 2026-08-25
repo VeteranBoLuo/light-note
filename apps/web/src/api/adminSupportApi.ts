@@ -9,6 +9,9 @@ export interface AdminSupportOverview {
   pendingOrders: number;
   conflictOrders: number;
   unlinkedOrders: number;
+  grantedTokens: number;
+  manualReviewRewards: number;
+  reversalReviewRewards: number;
 }
 
 export interface AdminSupportOrder {
@@ -25,6 +28,12 @@ export interface AdminSupportOrder {
   createTime: string;
   alias: string | null;
   providerName: string | null;
+  grantStatus: string | null;
+  reasonCode: string | null;
+  calculatedTokens: number;
+  grantedTokens: number;
+  reviewedAt: string | null;
+  creditedAt: string | null;
 }
 
 export interface AdminSupporter {
@@ -39,6 +48,7 @@ export interface AdminSupporter {
   showIdentity: number;
   adminHidden: number;
   adminHiddenReason: string | null;
+  grantedTokens: number;
 }
 
 export interface PageResult<T> {
@@ -79,10 +89,20 @@ export async function forceAdminSupportSync(): Promise<{ synced: number; truncat
 }
 
 export async function reconcileAdminSupportOrder(providerOrderNo: string): Promise<void> {
-  const response = await apiBasePost(
-    `/api/support/admin/orders/${encodeURIComponent(providerOrderNo)}/reconcile`,
-  );
+  const response = await apiBasePost(`/api/support/admin/orders/${encodeURIComponent(providerOrderNo)}/reconcile`);
   if (response.status !== 200) throw new Error('ADMIN_SUPPORT_RECONCILE_FAILED');
+}
+
+export async function approveAdminSupportReward(input: {
+  providerOrderNo: string;
+  expectedTokens: number;
+  expectedUserId: string;
+}): Promise<void> {
+  const response = await apiBasePost(
+    `/api/support/admin/orders/${encodeURIComponent(input.providerOrderNo)}/reward-approve`,
+    { expectedTokens: input.expectedTokens, expectedUserId: input.expectedUserId },
+  );
+  if (response.status !== 200) throw new Error('ADMIN_SUPPORT_REWARD_APPROVE_FAILED');
 }
 
 export async function setAdminSupportIdentityHidden(input: {

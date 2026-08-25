@@ -8,9 +8,9 @@
     @touchmove.passive="handleTouchMove"
   >
     <div v-if="!displayContent" class="empty">{{ emptyText }}</div>
-    <div v-else-if="markdown" class="typewriter-content" v-html="renderedMarkdown"></div>
-    <div v-else-if="renderAsText" class="typewriter-content" v-text="displayContent"></div>
-    <div v-else class="typewriter-content" v-html="safeDisplayContent"></div>
+    <div v-else-if="markdown" class="typewriter-content typewriter-content--markup" v-html="renderedMarkdown"></div>
+    <div v-else-if="renderAsText" class="typewriter-content typewriter-content--plain" v-text="displayContent"></div>
+    <div v-else class="typewriter-content typewriter-content--markup" v-html="safeDisplayContent"></div>
   </div>
 </template>
 
@@ -185,7 +185,24 @@
   const renderedMarkdown = computed(() => renderStreamingMarkdown(displayContent.value));
   const safeDisplayContent = computed(() =>
     DOMPurify.sanitize(displayContent.value, {
-      ALLOWED_TAGS: ['p', 'br', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'em', 'ul', 'ol', 'li', 'blockquote', 'code', 'pre'],
+      ALLOWED_TAGS: [
+        'p',
+        'br',
+        'h1',
+        'h2',
+        'h3',
+        'h4',
+        'h5',
+        'h6',
+        'strong',
+        'em',
+        'ul',
+        'ol',
+        'li',
+        'blockquote',
+        'code',
+        'pre',
+      ],
       ALLOWED_ATTR: [],
     }),
   );
@@ -204,6 +221,15 @@
 
   .typewriter-content {
     margin: 0;
+  }
+
+  /* 已渲染的 Markdown/HTML 必须折叠标签之间的源码换行，否则空行数量会直接放大块间距。 */
+  .typewriter-content--markup {
+    white-space: normal;
+  }
+
+  /* 只有纯文本模式保留用户输入里的换行和连续空白。 */
+  .typewriter-content--plain {
     white-space: pre-wrap;
   }
 

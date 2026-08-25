@@ -265,13 +265,14 @@
     const knownReasons = new Set([
       'autosave',
       'drawing_autosave',
+      'manual',
       'format_conversion',
       'ai_change',
       'ai_undo',
       'restore',
     ]);
     if (normalized === 'drawing_autosave') return t('noteDetail.history.reasons.autosave');
-    return t(`noteDetail.history.reasons.${knownReasons.has(normalized) ? normalized : 'autosave'}`);
+    return t(`noteDetail.history.reasons.${knownReasons.has(normalized) ? normalized : 'other'}`);
   }
 
   onMounted(fetchVersions);

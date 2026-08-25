@@ -522,6 +522,7 @@
     scheduleSlowGenerationHint();
     const requestController = new AbortController();
     abortController.value = requestController;
+    let receivedContent = '';
 
     try {
       generationPhase.value = 'waiting';
@@ -531,7 +532,6 @@
       const targetLanguage = operation === 'translate' ? (/\p{Script=Han}/u.test(sourceText) ? '英语' : '中文') : '';
       const marker = expectedFormat === 'title' ? '【标题】\n' : '【正文】\n';
       outputFull.value = marker;
-      let receivedContent = '';
       const response = await executeAiSkillStream(
         createAiSkillRequest({
           skillId: 'note.transform_text',
@@ -574,6 +574,8 @@
       requestCompleted.value = true;
     } catch (error: any) {
       console.error('AI 回复生成失败:', error);
+      // 首段正文尚未到达时不要把内部协议标记当成 AI 结果展示；已有部分正文则保留，方便用户读取。
+      if (!receivedContent) outputFull.value = '';
       if (requestController.signal.aborted || error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError') {
         generationFeedback.value = {
           type: 'warning',
@@ -696,7 +698,7 @@
     () => requestCompleted.value && Boolean(outputFull.value) && missingMarkers.value.length > 0,
   );
 
-  // 展示正文结果而非协议标记；Markdown 笔记交给 TypewriterOutput 以纯文本显示，避免被 v-html 当作富文本。
+  // 展示正文结果而非协议标记；Markdown 笔记交给 TypewriterOutput 做增量 Markdown 渲染。
   const displayOutput = computed(() => {
     if (!outputFull.value) return '';
     const body = extractSection(outputFull.value, '正文');
@@ -1167,23 +1169,57 @@
   }
   .output-body :deep(.typewriter-content) {
     margin: 0;
-    white-space: pre-wrap;
     font-size: 12px;
     line-height: 1.5;
     color: var(--text-color);
   }
-  .output-body :deep(p),
+  /* 默认侧栏宽度有限，采用紧凑阅读节奏；放大弹窗继续使用下方 .ai-preview-body 的舒展排版。 */
+  .output-body :deep(.typewriter-content--markup) {
+    white-space: normal;
+  }
+  .output-body :deep(.typewriter-content--plain) {
+    white-space: pre-wrap;
+  }
+  .output-body :deep(p) {
+    margin: 0 0 6px;
+  }
   .output-body :deep(h1),
   .output-body :deep(h2),
   .output-body :deep(h3),
   .output-body :deep(h4),
   .output-body :deep(h5),
-  .output-body :deep(h6),
+  .output-body :deep(h6) {
+    margin: 9px 0 4px;
+    line-height: 1.4;
+  }
   .output-body :deep(ul),
-  .output-body :deep(ol),
-  .output-body :deep(li),
+  .output-body :deep(ol) {
+    margin: 5px 0;
+    padding-left: 1.55em;
+  }
+  .output-body :deep(li) {
+    margin: 2px 0;
+  }
+  .output-body :deep(li > ul),
+  .output-body :deep(li > ol) {
+    margin: 2px 0;
+  }
   .output-body :deep(blockquote) {
-    margin: 8px 0 0 0;
+    margin: 6px 0;
+  }
+  .output-body :deep(.typewriter-content--markup > :first-child) {
+    margin-top: 0;
+  }
+  .output-body :deep(.typewriter-content--markup > :last-child) {
+    margin-bottom: 0;
+  }
+  /* 纯文本结果没有块级标签，保留原来的逐行阅读行为。 */
+  .output-body :deep(.typewriter-content--plain) {
+    line-height: 1.5;
+  }
+  /* 旧的统一 8px margin 会同时叠加在列表容器和每个 li 上，窄栏里显得松散。 */
+  .output-body :deep(pre) {
+    margin: 6px 0;
   }
   .output-body :deep(p:last-child),
   .output-body :deep(h1:last-child),
@@ -1310,7 +1346,9 @@
   /* 窄屏/移动端:单栏只保留「AI 生成」(原文可回编辑器看),避免两栏挤压 */
   @media (max-width: 768px) {
     .ai-preview--split {
-      width: min(680px, 86vw);
+      /* BModal 内容区已有左右 padding；使用视口宽度会把 padding 再叠加一次并产生横向滚动条。 */
+      width: 100%;
+      max-width: 100%;
     }
     .ai-preview-split {
       grid-template-columns: 1fr;

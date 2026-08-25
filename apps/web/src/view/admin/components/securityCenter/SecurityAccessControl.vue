@@ -153,4 +153,17 @@
 
 <style lang="less" scoped>
   @import './securityCenter.less';
+
+  .security-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 0 20px 16px;
+  }
+
+  @media (max-width: 767px) {
+    .security-modal-footer {
+      padding: 0 16px 12px;
+    }
+  }
 </style>

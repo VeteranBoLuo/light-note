@@ -9,16 +9,11 @@ function isUnavailableGrowthActor(userId, userRole) {
   return !userId || userId === 'visitor' || userRole === 'visitor';
 }
 
-function isRewardReadOnlyGrowthActor(userId, userRole) {
-  return isUnavailableGrowthActor(userId, userRole) || userRole === 'root';
-}
-
 /**
  * 幂等标记一次性成长任务已达成，不在这里发放经验。
  *
  * - user_growth_tasks 主键负责并发去重；
- * - 普通用户的达成与领取分离，经验只允许由 claimGrowthTask() 在用户主动领取时发放；
- * - root 只记录业务事实并自动标记已领取，不进入经验账本；
+ * - 所有登录账号的达成与领取分离，经验只允许由 claimGrowthTask() 在用户主动领取时发放；
  * - 传入 connection 时复用外部事务，否则自建事务。
  */
 export async function completeGrowthTask(
@@ -29,8 +24,6 @@ export async function completeGrowthTask(
   if (isUnavailableGrowthActor(userId, userRole)) return { completed: false, skipped: 'read_only_actor' };
   const task = TASK_BY_KEY.get(taskKey);
   if (!task || !task.enabled) return { completed: false, skipped: 'unknown_task' };
-  const autoClaimWithoutReward = userRole === 'root';
-
   // 应用启动会预热表结构；这里保留等待，避免首个写操作恰好早于异步初始化。
   await ensureGrowthTaskSchema();
 
@@ -39,23 +32,12 @@ export async function completeGrowthTask(
   try {
     if (ownConnection) await conn.beginTransaction();
 
-    const [insertResult] = autoClaimWithoutReward
-      ? await conn.query(
-          `INSERT INTO user_growth_tasks
-            (user_id, task_key, status, completed_at, claimed_at)
-           VALUES (?, ?, 'completed', COALESCE(?, NOW()), COALESCE(?, NOW()))
-           ON DUPLICATE KEY UPDATE
-             status = 'completed',
-             completed_at = COALESCE(completed_at, VALUES(completed_at)),
-             claimed_at = COALESCE(claimed_at, VALUES(claimed_at))`,
-          [String(userId), taskKey, completedAt, completedAt],
-        )
-      : await conn.query(
-          `INSERT IGNORE INTO user_growth_tasks
-            (user_id, task_key, status, completed_at)
-           VALUES (?, ?, 'completed', COALESCE(?, NOW()))`,
-          [String(userId), taskKey, completedAt],
-        );
+    const [insertResult] = await conn.query(
+      `INSERT IGNORE INTO user_growth_tasks
+        (user_id, task_key, status, completed_at)
+       VALUES (?, ?, 'completed', COALESCE(?, NOW()))`,
+      [String(userId), taskKey, completedAt],
+    );
     if (Number(insertResult?.affectedRows || 0) === 0) {
       if (ownConnection) await conn.commit();
       return {
@@ -63,7 +45,7 @@ export async function completeGrowthTask(
         duplicated: true,
         taskKey,
         rewardExp: 0,
-        claimed: autoClaimWithoutReward,
+        claimed: false,
       };
     }
 
@@ -72,8 +54,8 @@ export async function completeGrowthTask(
       completed: true,
       duplicated: false,
       taskKey,
-      rewardExp: autoClaimWithoutReward ? 0 : task.rewardExp,
-      claimed: autoClaimWithoutReward,
+      rewardExp: task.rewardExp,
+      claimed: false,
     };
   } catch (error) {
     if (ownConnection) {
@@ -96,7 +78,7 @@ export async function completeGrowthTask(
  * claimed_at 只在经验账本成功提交后写入，任何一步失败都会整体回滚。
  */
 export async function claimGrowthTask(userId, taskKey, { userRole = null } = {}) {
-  if (isRewardReadOnlyGrowthActor(userId, userRole)) return { ok: false, reason: 'read_only_actor' };
+  if (isUnavailableGrowthActor(userId, userRole)) return { ok: false, reason: 'read_only_actor' };
   const task = TASK_BY_KEY.get(taskKey);
   if (!task || !task.enabled) return { ok: false, reason: 'not_found' };
 

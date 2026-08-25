@@ -3,6 +3,7 @@ import {
   dueForTodoGroup,
   dueForTodoDatePreset,
   formatTodoDateTime,
+  isTodoOverdue,
   normalizeTodoDateOnly,
   todoActionAt,
   todoConfiguredReminderAt,
@@ -20,6 +21,50 @@ describe('todoPlanning', () => {
   it('同一天已经过期的时间归入逾期，而不是今天', () => {
     expect(todoGroupKey({ status: 'pending', dueAt: '2026-07-30 09:00:00' } as any, now)).toBe('overdue');
     expect(todoGroupKey({ status: 'pending', dueAt: '2026-07-30 18:00:00' } as any, now)).toBe('today');
+  });
+
+  it('跨日任务开始时间已过但截止时间仍在未来时不误判逾期', () => {
+    const current = new Date(2026, 7, 25, 16, 0);
+    const item = {
+      status: 'pending',
+      startAt: '2026-08-24 15:35:00',
+      dueAt: '2026-08-28 15:35:00',
+      occurrenceDate: '2026-08-24',
+    } as any;
+
+    expect(isTodoOverdue(item, current)).toBe(false);
+    expect(todoGroupKey(item, current)).toBe('upcoming');
+  });
+
+  it('逾期只由截止时间或无截止实例日期定义，开始与提醒时间不越权', () => {
+    const current = new Date(2026, 7, 25, 16, 0);
+
+    expect(
+      isTodoOverdue(
+        {
+          status: 'pending',
+          dueAt: '2026-08-28 15:35:00',
+          occurrenceDate: '2026-08-24',
+        } as any,
+        current,
+      ),
+    ).toBe(false);
+    expect(isTodoOverdue({ status: 'pending', dueAt: null, occurrenceDate: '2026-08-24' } as any, current)).toBe(true);
+    expect(
+      isTodoOverdue({ status: 'completed', dueAt: '2026-08-24 15:35:00', occurrenceDate: null } as any, current),
+    ).toBe(false);
+    expect(
+      todoGroupKey(
+        {
+          status: 'pending',
+          startAt: '2026-08-24 15:35:00',
+          dueAt: null,
+          occurrenceDate: null,
+          reminderAt: '2026-08-24 14:35:00',
+        } as any,
+        current,
+      ),
+    ).toBe('today');
   });
 
   it('按今天、即将到来、以后、无日期和完成状态准确分组', () => {

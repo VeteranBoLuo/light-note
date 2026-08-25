@@ -9,6 +9,7 @@ import {
   invalidateAfdianLeaderboardCache,
 } from './afdianSupportReadService.js';
 import { stableAgentErrorCode } from './agent/logSafety.js';
+import { syncAfdianRewardForOrder, syncAfdianRewardsForUser } from './afdianSupportRewardService.js';
 
 const CHECKOUT_TOKEN_TTL_DAYS = 30;
 const PENDING_BATCH_SIZE = 20;
@@ -107,6 +108,7 @@ export async function getAfdianSupportState({ userId = '', authenticated = false
       linked: false,
       orderCount: 0,
       totalAmount: '0.00',
+      grantedTokens: 0,
     };
   }
   const [[links], [totals], publicPreference, recentOrders] = await Promise.all([
@@ -118,12 +120,14 @@ export async function getAfdianSupportState({ userId = '', authenticated = false
       [userId],
     ),
     db.query(
-      `SELECT COUNT(*) AS order_count, COALESCE(SUM(total_amount), 0) AS total_amount,
-              MAX(COALESCE(ranking_observed_at, verified_at, create_time)) AS last_support_at
-         FROM support_orders
-        WHERE light_note_user_id = ?
-          AND verification_state = 'api_verified'
-          AND provider_status = 2`,
+      `SELECT COUNT(*) AS order_count, COALESCE(SUM(o.total_amount), 0) AS total_amount,
+              COALESCE(SUM(g.granted_tokens), 0) AS granted_tokens,
+              MAX(COALESCE(o.ranking_observed_at, o.verified_at, o.create_time)) AS last_support_at
+         FROM support_orders o
+         LEFT JOIN support_reward_grants g ON g.support_order_id = o.id
+        WHERE o.light_note_user_id = ?
+          AND o.verification_state = 'api_verified'
+          AND o.provider_status = 2`,
       [userId],
     ),
     getAfdianPublicPreference({ userId, db }),
@@ -151,6 +155,7 @@ export async function getAfdianSupportState({ userId = '', authenticated = false
     providerAccount,
     orderCount: Number(totals[0]?.order_count || 0),
     totalAmount: Number(totals[0]?.total_amount || 0).toFixed(2),
+    grantedTokens: Number(totals[0]?.granted_tokens || 0),
     lastSupportAt: totals[0]?.last_support_at || null,
     publicPreference,
     recentOrders: recentOrders.items,
@@ -245,9 +250,9 @@ export async function applyVerifiedAfdianOrder(input, { db = pool } = {}) {
       `INSERT INTO support_orders
         (id, provider_order_no, provider_user_id, provider_private_id, checkout_intent_id,
          light_note_user_id, ownership_source, plan_id, product_type, month, total_amount,
-         show_amount, provider_status, verification_state, verified_at, ranking_observed_at,
+         show_amount, provider_status, provider_created_at, verification_state, verified_at, ranking_observed_at,
          retry_count, next_retry_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'api_verified', NOW(), NOW(), 0, NULL)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FROM_UNIXTIME(?), 'api_verified', NOW(), NOW(), 0, NULL)
        ON DUPLICATE KEY UPDATE
          provider_user_id = VALUES(provider_user_id),
          provider_private_id = VALUES(provider_private_id),
@@ -260,6 +265,7 @@ export async function applyVerifiedAfdianOrder(input, { db = pool } = {}) {
          total_amount = VALUES(total_amount),
          show_amount = VALUES(show_amount),
          provider_status = VALUES(provider_status),
+         provider_created_at = COALESCE(VALUES(provider_created_at), provider_created_at),
          verification_state = 'api_verified',
          verified_at = COALESCE(verified_at, NOW()),
          retry_count = 0,
@@ -278,6 +284,7 @@ export async function applyVerifiedAfdianOrder(input, { db = pool } = {}) {
         order.totalAmount,
         order.showAmount,
         order.providerStatus,
+        order.providerCreatedAt || null,
       ],
     );
     if (intent) {
@@ -290,9 +297,10 @@ export async function applyVerifiedAfdianOrder(input, { db = pool } = {}) {
         [order.providerUserId, order.providerPrivateId, intent.id],
       );
     }
+    const reward = await syncAfdianRewardForOrder(connection, id);
     await connection.commit();
     invalidateAfdianLeaderboardCache();
-    return { providerOrderNo: order.providerOrderNo, ...ownership };
+    return { providerOrderNo: order.providerOrderNo, ...ownership, reward };
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -462,6 +470,7 @@ export async function linkAfdianAccount({
           AND (o.provider_user_id = ?${orderPrivateClause})`,
       [userId, userId, userId, userId, ...identityParams],
     );
+    await syncAfdianRewardsForUser(connection, userId);
     await connection.commit();
     invalidateAfdianLeaderboardCache();
   } catch (error) {

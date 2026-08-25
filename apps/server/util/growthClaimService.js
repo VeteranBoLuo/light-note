@@ -215,20 +215,17 @@ export async function claimGrowthRewards(userId, input = {}, { userRole = null }
         }
         const ref = dailyClaimRef(calendar.dayKey, stage.required, dashboard.questBonus.policyVersion);
         const dailyPolicyStages = resolveDailyQuestStages(dashboard.questBonus.policyVersion);
-        const grant =
-          userRole === 'root'
-            ? { granted: 0, duplicated: false, leveledUp: false }
-            : await grantExp(
-                userId,
-                dailyPolicyStages.find((item) => item.key === stage.key)?.source || `daily_quest_${stage.required}`,
-                { day: calendar.dayKey, amount: stage.exp, userRole, calendar },
-                conn,
-              );
+        const grant = await grantExp(
+          userId,
+          dailyPolicyStages.find((item) => item.key === stage.key)?.source || `daily_quest_${stage.required}`,
+          { day: calendar.dayKey, amount: stage.exp, userRole, calendar },
+          conn,
+        );
         const gotPoints = await earnPoints(userId, stage.points, 'quest', ref, conn, {
           policyVersion: dashboard.questBonus.policyVersion,
           meta: { stage: stage.key, required: stage.required },
         });
-        const duplicated = !gotPoints && (userRole === 'root' || grant.duplicated);
+        const duplicated = !gotPoints && grant.duplicated;
         addReceipt(receipts, summary, {
           type: 'daily',
           key: stage.key,

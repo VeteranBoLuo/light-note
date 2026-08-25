@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { resolveCommunityChatOfficialSticker } from '@lightnote/shared/community-chat-stickers';
 import pool from '../../db/index.js';
 import { COMMUNITY_CHAT_PRIMARY_ROOM_SLUG, getCommunityChatFeatureState } from '../communityChatFeature.js';
-import { MAX_LEVEL, levelForExp, rankOf } from '../growth.js';
+import { levelForExp, rankOf } from '../growth.js';
 import { titleName } from '../points.js';
 import {
   CommunityChatError,
@@ -320,7 +320,7 @@ const MESSAGE_SELECT = `
     LEFT JOIN user reply_account ON reply_account.id = reply.user_id`;
 
 function publicGrowthProfile(row) {
-  const level = row.authorAccountRole === 'root' ? MAX_LEVEL : levelForExp(Number(row.authorExp || 0));
+  const level = levelForExp(Number(row.authorExp || 0));
   return {
     level,
     levelName: rankOf(level).name,

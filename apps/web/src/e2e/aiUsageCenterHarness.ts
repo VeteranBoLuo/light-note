@@ -397,7 +397,7 @@ request.defaults.adapter = async (config) => {
           used: 103_000,
           quota: 15_042_000,
           remaining: 14_939_000,
-          dailyQuota: 4_000_000,
+          dailyQuota: 2_000_000,
           dailyUsed: 103_000,
           dailyRemaining: 3_897_000,
           bonusTokens: 11_042_000,

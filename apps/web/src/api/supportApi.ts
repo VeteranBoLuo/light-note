@@ -9,6 +9,7 @@ export interface AfdianSupportState {
   providerAccount?: { name: string | null; avatarUrl: string | null } | null;
   orderCount: number;
   totalAmount: string;
+  grantedTokens: number;
   lastSupportAt?: string | null;
   publicPreference: AfdianPublicPreference;
   recentOrders: AfdianSupportOrder[];
@@ -30,6 +31,10 @@ export interface AfdianSupportOrder {
   optionKey: string | null;
   ownershipSource: string;
   confirmedAt: string | null;
+  rewardStatus: string | null;
+  rewardReasonCode: string | null;
+  rewardTokens: number;
+  grantedTokens: number;
 }
 
 export interface AfdianLeaderboardItem {
@@ -55,6 +60,7 @@ const EMPTY_STATE: AfdianSupportState = {
   linked: false,
   orderCount: 0,
   totalAmount: '0.00',
+  grantedTokens: 0,
   publicPreference: { participateInRanking: true, showIdentity: false, adminHidden: false },
   recentOrders: [],
 };

@@ -2,8 +2,8 @@
  * 每日任务奖励领取结果 → 提示文案。
  *
  * 为什么单独抽出来:成长页、移动端今日、桌面工作台三处都有「领取每日奖励」入口,
- * 原先各自写了一遍同样的 already / capped / 经验+积分 分支。满级(含 root)开放领取后
- * 又多了「只发积分」这一支,三份拷贝各改一次迟早会走偏 —— 收口成纯函数,顺带能测。
+ * 原先各自写了一遍同样的 already / capped / 经验+积分 / 只发积分分支，
+ * 三份拷贝各改一次迟早会走偏 —— 收口成纯函数,顺带能测。
  */
 
 export interface DailyQuestClaimResult {
@@ -20,12 +20,14 @@ export interface DailyQuestClaimFeedback {
   params: Record<string, number>;
 }
 
-export function resolveDailyQuestClaimFeedback(result: DailyQuestClaimResult | null | undefined): DailyQuestClaimFeedback {
+export function resolveDailyQuestClaimFeedback(
+  result: DailyQuestClaimResult | null | undefined,
+): DailyQuestClaimFeedback {
   const exp = Number(result?.expGained || 0);
   const points = Number(result?.pointsEarned || 0);
   if (result?.already) return { level: 'info', key: 'growth.questClaimedAlready', params: {} };
   if (result?.capped) return { level: 'info', key: 'growth.questCapped', params: {} };
-  // root 的经验永远不入账,报「经验 +0」等于告诉用户白领了一次;这时只说积分。
+  // 兼容只有积分实际入账的策略/边界结果，避免报「经验 +0」。
   if (exp <= 0 && points > 0) return { level: 'success', key: 'growth.questClaimOkPointsOnly', params: { p: points } };
   if (points > 0) return { level: 'success', key: 'growth.questClaimOkPts', params: { n: exp, p: points } };
   return { level: 'success', key: 'growth.questClaimOk', params: { n: exp } };

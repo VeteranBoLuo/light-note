@@ -1264,6 +1264,29 @@ function stripHtml(html) {
     .trim();
 }
 
+function buildNoteTaggingText(note) {
+  const raw = String(note?.content || '');
+  const outline = [];
+  for (const match of raw.matchAll(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/gi)) {
+    const heading = stripHtml(match[1]);
+    if (heading && !outline.includes(heading)) outline.push(heading);
+    if (outline.length >= 12) break;
+  }
+  for (const line of raw.split(/\r?\n/)) {
+    const heading = line.match(/^\s*#{1,6}\s+(.+)$/)?.[1]?.trim();
+    if (heading && !outline.includes(heading)) outline.push(heading);
+    if (outline.length >= 12) break;
+  }
+  const body = stripHtml(raw).slice(0, 2200);
+  return [
+    `标题:${note?.title || '(无)'}`,
+    outline.length ? `内容提纲:${outline.join(' / ')}` : '',
+    body ? `正文摘录:${body}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
 // POST /bookmark/ai/organize/quote —— 预估本次可整理数(免费;不跑 AI)
 export const doOrganizeQuote = async (req, res) => {
   if (!ensureUserOrAdminPolicy(req, res, ['ai_use'])) return;
@@ -1339,7 +1362,7 @@ export const doOrganizeRun = async (req, res) => {
         await organizePool(targets, 3, async (n) => {
           attemptedItems += 1;
           try {
-            const text = `标题:${n.title || '(无)'}\n正文:${stripHtml(n.content).slice(0, 1200)}`;
+            const text = buildNoteTaggingText(n);
             const r = await suggestTagsFromText({
               text,
               userTags: tagRows,
@@ -1499,11 +1522,27 @@ export const doOrganizeApply = async (req, res) => {
             userId,
           ]);
       if (!own.length) continue;
+      const relationCap = isNote ? 3 : 4;
+      const [existingRelations] = await conn.query(
+        'SELECT tag_id FROM resource_tag_relations WHERE resource_type = ? AND resource_id = ? AND user_id = ?',
+        [relType, id, userId],
+      );
+      const existingRelationIds = new Set(existingRelations.map((row) => row.tag_id));
+      const room = Math.max(0, relationCap - existingRelationIds.size);
       const finalTagIds = [];
       for (const tid of Array.isArray(it.tagIds) ? it.tagIds : []) {
-        if (ownTagIds.has(tid)) finalTagIds.push(tid);
+        if (
+          finalTagIds.length < room &&
+          ownTagIds.has(tid) &&
+          !existingRelationIds.has(tid) &&
+          !finalTagIds.includes(tid)
+        ) {
+          finalTagIds.push(tid);
+        }
       }
       for (const rawName of Array.isArray(it.newTagNames) ? it.newTagNames : []) {
+        // 没有可关联名额时不能继续创建账号级标签，避免生成“已创建但未关联”的孤立标签。
+        if (finalTagIds.length >= room) break;
         const nm = String(rawName || '').trim();
         if (!nm) continue;
         const key = norm(nm);
@@ -1515,18 +1554,12 @@ export const doOrganizeApply = async (req, res) => {
           nameToId.set(key, tid);
           ownTagIds.add(tid);
         }
-        finalTagIds.push(tid);
+        if (!existingRelationIds.has(tid) && !finalTagIds.includes(tid)) finalTagIds.push(tid);
       }
-      // 4 标签上限:算上已有关联,只补到 4
-      const [[cnt]] = await conn.query(
-        'SELECT COUNT(*) AS c FROM resource_tag_relations WHERE resource_type = ? AND resource_id = ?',
-        [relType, id],
-      );
-      const room = Math.max(0, 4 - Number(cnt.c || 0));
-      const toAdd = [...new Set(finalTagIds)].slice(0, room);
-      if (toAdd.length) {
+      // 资源上限与各自编辑器保持一致：书签最多 4 个，笔记最多 3 个。
+      if (finalTagIds.length) {
         await insertResourceTagRelations(conn, {
-          tagIds: toAdd,
+          tagIds: finalTagIds,
           resourceType: relType,
           resourceId: id,
           userId,

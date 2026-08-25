@@ -116,7 +116,7 @@ const formatFileRecord = (file) => {
 };
 
 // ---- 云空间容量配额 ----
-// 按用户成长等级下发:容量随 level 提升,root=满级。曲线见 growth.js RANKS.spaceMb。
+// 按用户真实成长等级下发，容量随 level 提升。曲线见 growth.js RANKS.spaceMb。
 // 新用户(无成长账本)=Lv1 1024MB,满级 20480MB(20G)；正常区与回收站共享容量。
 async function storageQuotaMB(user) {
   return await getUserSpaceMb(user?.id, user?.role);

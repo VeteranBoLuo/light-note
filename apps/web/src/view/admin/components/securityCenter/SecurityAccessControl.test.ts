@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h } from 'vue';
 import { createI18n } from 'vue-i18n';
@@ -21,6 +23,14 @@ vi.mock('@/components/base/BasicComponents/BModal/BModal.vue', () => ({
 vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }) }));
 
 const { default: SecurityAccessControl } = await import('./SecurityAccessControl.vue');
+const accessControlSource = readFileSync(
+  resolve(process.cwd(), 'src/view/admin/components/securityCenter/SecurityAccessControl.vue'),
+  'utf8',
+);
+const whitelistSource = readFileSync(
+  resolve(process.cwd(), 'src/view/admin/components/securityCenter/Whitelist.vue'),
+  'utf8',
+);
 
 let cleanup: (() => void) | undefined;
 
@@ -58,6 +68,15 @@ describe('安全中心访问控制', () => {
   afterEach(() => {
     cleanup?.();
     cleanup = undefined;
+  });
+
+  it('自定义弹框 footer 在 PC 和移动端保留统一安全间距', () => {
+    for (const source of [accessControlSource, whitelistSource]) {
+      expect(source).toMatch(/modal-footer\s*\{[\s\S]*?padding:\s*0 20px 16px;/);
+      expect(source).toMatch(
+        /@media \(max-width:\s*767px\)[\s\S]*?modal-footer\s*\{[\s\S]*?padding:\s*0 16px 12px;/,
+      );
+    }
   });
 
   it('移除无效分段 Tab，保留各区域入口并展示完整来源 IP', async () => {

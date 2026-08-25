@@ -566,7 +566,12 @@
 
         <!-- AI 用量只有一个总入口；额度、明细和规则在独立页呈现，避免设置长页被账本撑高。 -->
         <section v-if="sectionVisible('ai')" class="settings-card settings-card--ai-entry" id="set-ai">
-          <BButton class="ai-usage-entry" :aria-label="t('settings.ai.entryTitle')" @click="openAiUsage">
+          <BButton
+            class="ai-usage-entry"
+            :aria-label="t('settings.ai.entryTitle')"
+            v-click-log="{ module: 'AI 用量与计费', operation: '打开页面【设置】' }"
+            @click="openAiUsage"
+          >
             <span class="card-icon card-icon--appearance" aria-hidden="true">
               <SvgIcon :src="icon.settings.ai" size="20" />
             </span>
@@ -919,6 +924,7 @@
   function openSection(id: SettingsIndexSectionId) {
     indexScrollTop.value = pageRef.value?.scrollTop ?? 0;
     if (id === 'ai') {
+      recordOperation({ module: 'AI 用量与计费', operation: '打开页面【设置】' });
       router.push('/ai-usage');
       return;
     }

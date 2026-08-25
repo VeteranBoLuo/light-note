@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
     linked: false,
     orderCount: 0,
     totalAmount: '0.00',
+    grantedTokens: 0,
   })),
   unlinkAfdianAccount: vi.fn(async () => undefined),
   recordOperation: vi.fn(() => Promise.resolve()),
@@ -23,10 +24,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/config/support', () => ({
   AFDIAN_SUPPORT_CONFIGURED: false,
   AFDIAN_SUPPORT_OPTIONS: [
-    { key: 'coffee', amount: 6, url: '', configured: false },
-    { key: 'server', amount: 18, url: '', configured: false },
-    { key: 'companion', amount: 50, url: '', configured: false },
-    { key: 'custom', amount: null, url: '', configured: false },
+    { key: 'coffee', amount: 6, rewardTokens: 600_000, url: '', configured: false },
+    { key: 'server', amount: 18, rewardTokens: 1_800_000, url: '', configured: false },
+    { key: 'companion', amount: 50, rewardTokens: 5_000_000, url: '', configured: false },
+    { key: 'custom', amount: null, rewardTokens: null, url: '', configured: false },
   ],
   openAfdianSupportPage: mocks.openAfdianSupportPage,
   openTrackedAfdianCheckout: mocks.openTrackedAfdianCheckout,

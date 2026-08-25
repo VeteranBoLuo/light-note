@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from 'vue';
 
 const requestMocks = vi.hoisted(() => ({ apiBasePost: vi.fn() }));
+const operationMocks = vi.hoisted(() => ({ recordOperation: vi.fn() }));
 
 vi.mock('@/http/request', () => requestMocks);
+vi.mock('@/api/commonApi', () => operationMocks);
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
     locale: { value: 'zh-CN' },
@@ -35,9 +37,9 @@ vi.mock('@/components/base/BasicComponents/BPagination.vue', () => ({
 vi.mock('@/components/base/BasicComponents/BTabs.vue', () => ({
   default: {
     props: ['activeTab', 'options'],
-    emits: ['update:activeTab'],
+    emits: ['update:activeTab', 'change'],
     template:
-      '<div><button v-for="item in options" :key="item.key" @click="$emit(\'update:activeTab\', item.key)">{{ item.label }}</button></div>',
+      '<div><button v-for="item in options" :key="item.key" @click="$emit(\'update:activeTab\', item.key); $emit(\'change\', item.key)">{{ item.label }}</button></div>',
   },
 }));
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
@@ -123,6 +125,7 @@ afterEach(() => {
   cleanup?.();
   cleanup = undefined;
   requestMocks.apiBasePost.mockReset();
+  operationMocks.recordOperation.mockReset();
 });
 
 describe('AiUsageCenter', () => {
@@ -145,14 +148,23 @@ describe('AiUsageCenter', () => {
     expect(host.textContent).not.toContain('用户正文');
     const record = host.querySelector<HTMLButtonElement>('.usage-record');
     expect(record?.getAttribute('aria-label')).toContain('settings.ai.usage.openDetail');
+    expect(operationMocks.recordOperation).not.toHaveBeenCalled();
     record?.click();
     await vi.waitFor(() => expect(host.textContent).toContain('execution-1'));
+    expect(operationMocks.recordOperation).toHaveBeenCalledWith({
+      module: 'AI 用量与计费',
+      operation: '查看调用详情【笔记】',
+    });
 
     const rulesTab = [...host.querySelectorAll('button')].find((button) =>
       button.textContent?.includes('settings.ai.usage.rulesTab'),
     );
     rulesTab?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await vi.waitFor(() => expect(host.textContent).toContain('settings.ai.usage.ruleTitle'));
+    expect(operationMocks.recordOperation).toHaveBeenCalledWith({
+      module: 'AI 用量与计费',
+      operation: '查看计费规则',
+    });
     expect(host.textContent).toContain('settings.ai.usage.freeActions.coreEditing.title');
   });
 

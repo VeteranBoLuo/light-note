@@ -36,12 +36,19 @@ export type AfdianCheckoutOptionKey = 'coffee' | 'server' | 'companion' | 'custo
 export interface AfdianCheckoutOptionDefinition {
   readonly key: AfdianCheckoutOptionKey;
   readonly amount: number | null;
+  readonly rewardTokens: number | null;
   readonly planId?: string;
   readonly creatorId?: string;
 }
 
 /** 公开的爱发电创作者主页，不包含任何服务端凭证。 */
 export declare const AFDIAN_CREATOR_URL: string;
+/** 爱发电永久 AI 额度赠送策略；仅对策略启用后的新订单生效。 */
+export declare const AFDIAN_AI_REWARD_POLICY: {
+  readonly version: 'support-ai-v1';
+  readonly tokensPerCny: 100000;
+  readonly autoCreditMaxAmount: 200;
+};
 /** 轻笺爱发电下单档位的前后端唯一事实源。 */
 export declare const AFDIAN_CHECKOUT_OPTIONS: readonly AfdianCheckoutOptionDefinition[];
 

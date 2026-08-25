@@ -26,6 +26,9 @@ const DIRECT_DELETE_TABLES = Object.freeze([
   ['user_achievements', 'user_id'],
   ['user_growth_preferences', 'user_id'],
   ['growth_recap_state', 'user_id'],
+  ['ai_bonus_lot_allocations', 'user_id'],
+  ['ai_bonus_lots', 'user_id'],
+  ['ai_bonus_ledger', 'user_id'],
   ['user_growth', 'user_id'],
   ['points_log', 'user_id'],
   ['user_cosmetics', 'user_id'],
@@ -657,6 +660,9 @@ export async function purgeOwnedResources(connection, tables, userId) {
 
 export async function purgeLogsAndSecurityLinks(connection, tables, userId) {
   // 赞助订单作为真实交易对账记录保留，但注销时解除与轻笺账号及跳转凭证的关联。
+  if (tables.has('support_reward_grants')) {
+    await connection.query('UPDATE support_reward_grants SET user_id = NULL WHERE user_id = ?', [userId]);
+  }
   if (tables.has('support_orders')) {
     if (tables.has('support_checkout_intents')) {
       await connection.query(

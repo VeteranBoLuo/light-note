@@ -1104,7 +1104,7 @@
   function openCapture() {
     if (blockGuestWrite('inbox-capture', t('inbox.guestPrompt'))) return;
     recordOperation(OPERATION_LOG_MAP.inbox.openCapture);
-    inbox.openQuickCapture(inbox.filterType === 'all' ? 'note' : inbox.filterType);
+    inbox.openQuickCapture(inbox.filterType === 'all' ? 'bookmark' : inbox.filterType);
   }
 
   async function changeInboxScope(filter: 'all' | InboxItemType['resourceType']) {
