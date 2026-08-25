@@ -1,22 +1,70 @@
 import { requestAi, requestAiStream } from '../agent/aiGateway.js';
+import {
+  createGroundedAnswerTool,
+  GROUNDED_OUTPUT_PROTOCOL_INSTRUCTION,
+  validateGroundedAnswerArguments,
+} from './groundedOutput.js';
 import { validateGroundedMarkdownOutput } from './outputValidator.js';
+import { callStructuredSkillModel } from './structuredModel.js';
 
-const REPAIRABLE_OUTPUT_ERRORS = new Set([
+const FREE_TEXT_REPAIRABLE_OUTPUT_ERRORS = new Set(['AI_SKILL_OUTPUT_EMPTY', 'AI_SKILL_OUTPUT_TOO_SHORT']);
+const GROUNDED_REPAIRABLE_OUTPUT_ERRORS = Object.freeze([
+  'AI_SKILL_STRUCTURED_OUTPUT_MISSING',
+  'AI_SKILL_STRUCTURED_OUTPUT_INVALID',
   'AI_SKILL_OUTPUT_SOURCE_REQUIRED',
   'AI_SKILL_OUTPUT_SOURCE_INVALID',
-  'AI_SKILL_OUTPUT_COVERAGE_OVERCLAIM',
-  'AI_SKILL_OUTPUT_TOO_SHORT',
+  'AI_SKILL_OUTPUT_EMPTY',
+  'AI_SKILL_OUTPUT_TOO_LONG',
 ]);
+
+function withGroundedProtocol(messages) {
+  const normalized = Array.isArray(messages) ? [...messages] : [];
+  if (normalized[0]?.role === 'system') {
+    normalized[0] = {
+      ...normalized[0],
+      content: `${String(normalized[0].content || '')}\n${GROUNDED_OUTPUT_PROTOCOL_INSTRUCTION}`,
+    };
+    return normalized;
+  }
+  return [{ role: 'system', content: GROUNDED_OUTPUT_PROTOCOL_INSTRUCTION }, ...normalized];
+}
+
+function freeTextRepairInstruction(outputPolicy = {}) {
+  return [
+    '修复上一版输出，直接返回完整正文，不要解释过程。',
+    outputPolicy.minimumChars
+      ? `正文必须至少 ${outputPolicy.minimumChars} 个字符；只能通过充分表达输入已有信息扩展，禁止编造。`
+      : '正文不能为空。',
+  ].join('\n');
+}
 
 export async function callGroundedSkillModel({
   messages,
-  sources,
+  sources = [],
   coverage,
   modelPolicy,
   outputPolicy = {},
   trace,
   signal,
 }) {
+  if (sources.length) {
+    const structuredTool = createGroundedAnswerTool(sources.length);
+    return callStructuredSkillModel({
+      messages: withGroundedProtocol(messages),
+      structuredTool,
+      validateArguments: (args) => validateGroundedAnswerArguments(args, sources, coverage),
+      modelPolicy,
+      trace,
+      signal,
+      repairableErrorCodes: GROUNDED_REPAIRABLE_OUTPUT_ERRORS,
+      buildRepairInstruction: ({ error, toolName }) =>
+        [
+          `上一版未通过引用协议（${error.code}）。`,
+          `必须且只能调用 ${toolName} 一次；每个 block 都要填写本轮真实 sourceIndexes；markdown 内不要手写 [数字] 引用；不要输出解释文本。`,
+        ].join('\n'),
+    });
+  }
+
   const requestOptions = {
     toolChoice: 'none',
     maxTokens: modelPolicy.maxTokens,
@@ -24,7 +72,7 @@ export async function callGroundedSkillModel({
     trace,
     signal,
   };
-  const response = await requestAi(messages, requestOptions);
+  let response = await requestAi(messages, requestOptions);
   try {
     return validateGroundedMarkdownOutput({
       content: response.content,
@@ -33,34 +81,23 @@ export async function callGroundedSkillModel({
       minimumChars: outputPolicy.minimumChars,
     });
   } catch (error) {
-    if (!REPAIRABLE_OUTPUT_ERRORS.has(error?.code)) throw error;
-    const repaired = await requestAi(
+    if (!FREE_TEXT_REPAIRABLE_OUTPUT_ERRORS.has(error?.code)) throw error;
+    response = await requestAi(
       [
         ...messages,
         { role: 'assistant', content: String(response.content || '') },
-        {
-          role: 'user',
-          content: [
-            '修复上一版输出：每个事实使用现有 [数字] 来源；不得引用不存在的编号；覆盖不完整时禁止声称全部、唯一或只有。',
-            outputPolicy.minimumChars
-              ? `正文必须至少 ${outputPolicy.minimumChars} 个中文字符；只能通过更充分的解释、结构化整理、分析和建议扩展，禁止编造材料中不存在的事实。`
-              : '',
-            '直接输出修复后的完整正文。',
-          ]
-            .filter(Boolean)
-            .join('\n'),
-        },
+        { role: 'user', content: freeTextRepairInstruction(outputPolicy) },
       ],
       {
         ...requestOptions,
         temperature: 0,
         billingScope: 'platform',
         repairReasonCode: error.code,
-        trace: { ...trace, stage: `${trace.stage}_repair` },
+        trace: { ...trace, stage: `${trace?.stage || 'skill_output'}_repair` },
       },
     );
     return validateGroundedMarkdownOutput({
-      content: repaired.content,
+      content: response.content,
       sources,
       coverage,
       minimumChars: outputPolicy.minimumChars,
@@ -69,13 +106,12 @@ export async function callGroundedSkillModel({
 }
 
 /**
- * 与同步模型调用共用同一份输出门禁，只把 Provider 的正文增量透传给调用方。
- * 若首版输出需要修复，先通知客户端清空上一版，再流式发送修复后的完整版本，
- * 避免界面把两版内容拼接在一起。
+ * 流式接口只服务无来源的纯文本变换。需要来源的 Skill 必须先完成结构化协议校验，
+ * 再一次性返回由服务端渲染的引用，不能把未经校验的中间正文透传给客户端。
  */
 export async function callGroundedSkillModelStream({
   messages,
-  sources,
+  sources = [],
   coverage,
   modelPolicy,
   outputPolicy = {},
@@ -84,6 +120,12 @@ export async function callGroundedSkillModelStream({
   onDelta,
   onReset,
 }) {
+  if (sources.length) {
+    const error = new Error('带来源的 AI Skill 必须使用结构化非流式输出');
+    error.code = 'AI_SKILL_STREAM_STRUCTURED_REQUIRED';
+    error.status = 500;
+    throw error;
+  }
   const requestOptions = {
     toolChoice: 'none',
     maxTokens: modelPolicy.maxTokens,
@@ -92,7 +134,7 @@ export async function callGroundedSkillModelStream({
     signal,
     onDelta,
   };
-  const response = await requestAiStream(messages, requestOptions);
+  let response = await requestAiStream(messages, requestOptions);
   try {
     return validateGroundedMarkdownOutput({
       content: response.content,
@@ -101,38 +143,34 @@ export async function callGroundedSkillModelStream({
       minimumChars: outputPolicy.minimumChars,
     });
   } catch (error) {
-    if (!REPAIRABLE_OUTPUT_ERRORS.has(error?.code)) throw error;
+    if (!FREE_TEXT_REPAIRABLE_OUTPUT_ERRORS.has(error?.code)) throw error;
     onReset?.();
-    const repaired = await requestAiStream(
+    response = await requestAiStream(
       [
         ...messages,
         { role: 'assistant', content: String(response.content || '') },
-        {
-          role: 'user',
-          content: [
-            '修复上一版输出：每个事实使用现有 [数字] 来源；不得引用不存在的编号；覆盖不完整时禁止声称全部、唯一或只有。',
-            outputPolicy.minimumChars
-              ? `正文必须至少 ${outputPolicy.minimumChars} 个中文字符；只能通过更充分的解释、结构化整理、分析和建议扩展，禁止编造材料中不存在的事实。`
-              : '',
-            '直接输出修复后的完整正文。',
-          ]
-            .filter(Boolean)
-            .join('\n'),
-        },
+        { role: 'user', content: freeTextRepairInstruction(outputPolicy) },
       ],
       {
         ...requestOptions,
         temperature: 0,
         billingScope: 'platform',
         repairReasonCode: error.code,
-        trace: { ...trace, stage: `${trace.stage}_repair` },
+        trace: { ...trace, stage: `${trace?.stage || 'skill_output'}_repair` },
       },
     );
     return validateGroundedMarkdownOutput({
-      content: repaired.content,
+      content: response.content,
       sources,
       coverage,
       minimumChars: outputPolicy.minimumChars,
     });
   }
 }
+
+export const aiSkillModelInternals = Object.freeze({
+  FREE_TEXT_REPAIRABLE_OUTPUT_ERRORS,
+  GROUNDED_REPAIRABLE_OUTPUT_ERRORS,
+  freeTextRepairInstruction,
+  withGroundedProtocol,
+});

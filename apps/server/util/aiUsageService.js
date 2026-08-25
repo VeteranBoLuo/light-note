@@ -1,4 +1,5 @@
 import pool from '../db/index.js';
+import { classifyAiProviderStage } from './aiExecution/providerPlan.js';
 import { AI_BILLING_ACTIONS, listPublicAiBillingCatalog, resolveAiBillingAction } from './aiBillingCatalog.js';
 
 const ALLOWED_DAYS = new Set([7, 30, 90]);
@@ -107,12 +108,7 @@ function mapUsageItem(row) {
 }
 
 function publicSpanStage(stage) {
-  const normalized = String(stage || '').toLowerCase();
-  if (normalized === 'image_recognition' || normalized.startsWith('image_recognition_')) {
-    return 'image_recognition';
-  }
-  if (normalized.endsWith('_repair')) return 'output_repair';
-  return 'model_generation';
+  return classifyAiProviderStage(stage);
 }
 
 function publicSpanError(errorCode, status) {

@@ -1070,7 +1070,10 @@
       title: resource.title || t('inbox.untitled'),
     });
   });
-  const searchAiAutoRunActionId = computed(() => (explicitSearchAiResourceContext.value ? 'analyze' : ''));
+  const searchAiAutoRunActionId = computed(() => {
+    if (explicitSearchAiResourceContext.value) return 'analyze';
+    return searchAiResourceRefs.value.length === 1 ? 'summarize' : '';
+  });
   const searchAiActions = computed(() => {
     const actions: Array<{
       id: string;

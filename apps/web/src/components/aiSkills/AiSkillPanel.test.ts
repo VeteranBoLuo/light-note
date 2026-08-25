@@ -96,6 +96,7 @@ describe('AiSkillPanel 自动执行预设动作', () => {
           'zh-CN': {
             aiSkills: {
               processing: '处理中',
+              retry: '重试',
               unavailableTitle: '暂不可用',
               unavailableDescription: '请稍后重试',
               errorTitle: '执行失败',
@@ -124,6 +125,7 @@ describe('AiSkillPanel 自动执行预设动作', () => {
       resourceRefs: [{ type: 'bookmark', id: '1' }],
     });
     expect(host.querySelector('textarea')).toBeNull();
+    expect(host.textContent).not.toContain('重新分析');
 
     resourceRefs.value = [{ type: 'bookmark', id: '2' }];
     actions.value = [
@@ -142,5 +144,67 @@ describe('AiSkillPanel 自动执行预设动作', () => {
       input: { instruction: '请分析书签《另一个书签》，概括核心内容和关键信息。' },
       resourceRefs: [{ type: 'bookmark', id: '2' }],
     });
+  });
+
+  it('自动动作失败后只显示重试，不恢复成任务选择按钮', async () => {
+    executeAiSkill.mockRejectedValueOnce(Object.assign(new Error('网页暂时无法读取'), { code: 'READ_FAILED' }));
+    executeAiSkill.mockResolvedValueOnce(completedResponse('bookmark.summarize_page'));
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      render: () =>
+        h(AiSkillPanel, {
+          title: '书签内容分析',
+          skillId: 'bookmark.summarize_page',
+          surface: 'bookmark_manage',
+          resourceRefs: [{ type: 'bookmark', id: '1' }],
+          actions: [
+            {
+              id: 'summarize',
+              label: '总结网页',
+              input: { instruction: '总结当前网页' },
+            },
+          ],
+          autoRunActionId: 'summarize',
+        }),
+    });
+    app.use(
+      createI18n({
+        legacy: false,
+        locale: 'zh-CN',
+        messages: {
+          'zh-CN': {
+            aiSkills: {
+              processing: '处理中',
+              retry: '重试',
+              unavailableTitle: '暂不可用',
+              unavailableDescription: '请稍后重试',
+              errorTitle: '执行失败',
+              quotaErrorTitle: '额度不足',
+              retryLater: '请稍后重试',
+              send: '发送',
+              promptPlaceholder: '请输入',
+              sources: '来源 {count}',
+              sourceFallback: '来源 {index}',
+            },
+          },
+        },
+      }),
+    );
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    await flushExecution();
+    expect(host.textContent).toContain('网页暂时无法读取');
+    expect(host.textContent).not.toContain('总结网页');
+    const retry = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('重试'));
+    expect(retry).toBeTruthy();
+    retry?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushExecution();
+    expect(executeAiSkill).toHaveBeenCalledTimes(2);
+    expect(host.textContent).toContain('分析完成');
   });
 });

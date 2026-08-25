@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { TagInterface } from '@/config/bookmarkCfg.ts';
-import Viewer from 'viewerjs';
+import type { GlobalImageViewerOptions } from '@/types/imageViewer';
 import { trackConversion } from '@/utils/conversion';
 import { apiQueryPost } from '@/http/request.ts';
 import { resolveViewportDeviceType, VIEWPORT_BREAKPOINTS } from '@/config/responsive.ts';
@@ -33,9 +33,8 @@ interface BookmarkState {
   bookmarkHasMore: boolean;
   bookmarkAllLoaded: boolean;
   viewer: {
-    container?: Viewer;
     src: string;
-    options: Viewer.Options;
+    options: GlobalImageViewerOptions;
   };
   browserId: string;
 }
@@ -181,7 +180,7 @@ export default defineStore('bookmark', {
     /**
      * 刷新查看器
      */
-    refreshViewer(src: string, options?: Viewer.Options): void {
+    refreshViewer(src: string, options?: GlobalImageViewerOptions): void {
       this.viewer.src = src;
       this.viewer.options = options || {};
       this.viewerKey = Math.random().toString(36).substr(2, 9); // 生成随机键

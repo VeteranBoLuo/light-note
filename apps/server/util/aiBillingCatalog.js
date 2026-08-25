@@ -8,8 +8,20 @@
  * - 用户计费执行最终没有可交付结果时退回本次额度，但 Provider 用量与频控记录保留；
  * - freeActions 只用于解释产品边界，禁止据此创建可访问 Provider 的免费执行。
  */
+import { AI_PROVIDER_STAGE_TYPES, createAiProviderPlan } from './aiExecution/providerPlan.js';
+import { AI_EXECUTION_BILLING_RULE_VERSION } from './aiExecution/policy.js';
+import {
+  AI_SKILL_IMPLICIT_EVIDENCE_RESERVATION_TOKENS,
+  AI_SKILL_MAX_CHARS_PER_RESOURCE,
+  AI_SKILL_MAX_INPUT_RESERVATION_TOKENS,
+  AI_SKILL_MAX_RESERVATION_TOKENS,
+  AI_SKILL_MAX_TOTAL_EVIDENCE_CHARS,
+  AI_SKILL_PROTOCOL_RESERVATION_TOKENS,
+  AI_SKILL_VISION_RESERVATION_TOKENS_PER_FILE,
+} from './aiSkill/limits.js';
 
 const DEFAULT_RESERVATION_TOKENS = 5_000;
+export const AI_BILLING_RULE_VERSION = AI_EXECUTION_BILLING_RULE_VERSION;
 
 function tokenAction({
   id,
@@ -65,32 +77,24 @@ export const AI_BILLING_ACTIONS = Object.freeze([
     module: 'file',
     labelKey: 'fileSummarize',
     taskTypes: ['skill_file_summarize'],
-    maxUserProviderCalls: 2,
-    reservationTokens: 8_000,
   }),
   tokenAction({
     id: 'file.ask',
     module: 'file',
     labelKey: 'fileAsk',
     taskTypes: ['skill_file_ask'],
-    maxUserProviderCalls: 2,
-    reservationTokens: 8_000,
   }),
   tokenAction({
     id: 'file.compare',
     module: 'file',
     labelKey: 'fileCompare',
     taskTypes: ['skill_file_compare'],
-    maxUserProviderCalls: 6,
-    reservationTokens: 18_000,
   }),
   tokenAction({
     id: 'file.create_note_preview',
     module: 'file',
     labelKey: 'fileCreateNotePreview',
     taskTypes: ['skill_file_create_note_preview'],
-    maxUserProviderCalls: 6,
-    reservationTokens: 18_000,
   }),
   tokenAction({
     id: 'note.batch_summarize',
@@ -121,7 +125,6 @@ export const AI_BILLING_ACTIONS = Object.freeze([
     module: 'bookmark',
     labelKey: 'bookmarkSummarizePage',
     taskTypes: ['skill_bookmark_summarize_page', 'bookmark_summary', 'bookmark_archive_summary'],
-    reservationTokens: 8_000,
   }),
   tokenAction({
     id: 'bookmark.compare_pages',
@@ -140,7 +143,6 @@ export const AI_BILLING_ACTIONS = Object.freeze([
     module: 'bookmark',
     labelKey: 'bookmarkParseUrl',
     taskTypes: ['skill_bookmark_parse_url'],
-    reservationTokens: 8_000,
   }),
   tokenAction({
     id: 'todo.parse_draft',
@@ -165,8 +167,6 @@ export const AI_BILLING_ACTIONS = Object.freeze([
     module: 'file',
     labelKey: 'fileExtractTodos',
     taskTypes: ['skill_file_extract_todos'],
-    maxUserProviderCalls: 2,
-    reservationTokens: 8_000,
   }),
   tokenAction({
     id: 'note.organize_tags',
@@ -269,10 +269,94 @@ export function createUserAiExecutionConfig(actionId, overrides = {}) {
   };
 }
 
+function normalizedResourceRefs(request) {
+  return Array.isArray(request?.scope?.resourceRefs) ? request.scope.resourceRefs : [];
+}
+
+function estimateInputReservationTokens(request) {
+  if (request?.input == null) return 0;
+  let serialized;
+  try {
+    serialized = JSON.stringify(request.input);
+  } catch {
+    return AI_SKILL_MAX_INPUT_RESERVATION_TOKENS;
+  }
+  if (!serialized) return 0;
+  // UTF-8 字节数 / 3 同时对中文保持约 1 字 1 token 的保守上界，
+  // 对英文也比常见的约 4 字符 1 token 更保守。真正额度仍只按 Provider 回报结算。
+  return Math.min(AI_SKILL_MAX_INPUT_RESERVATION_TOKENS, Math.ceil(Buffer.byteLength(serialized, 'utf8') / 3));
+}
+
+export function compileAiSkillProviderPlan(skill, request) {
+  const refs = normalizedResourceRefs(request);
+  const imageRecognitionCalls = skill?.providerPlanPolicy?.imageRecognition
+    ? refs.filter((ref) => ref?.type === 'file').length
+    : 0;
+  return createAiProviderPlan({
+    ...(imageRecognitionCalls
+      ? {
+          [AI_PROVIDER_STAGE_TYPES.IMAGE_RECOGNITION]: {
+            billingScope: 'user',
+            maxCalls: imageRecognitionCalls,
+          },
+        }
+      : {}),
+    [AI_PROVIDER_STAGE_TYPES.MODEL_GENERATION]: { billingScope: 'user', maxCalls: 1 },
+    [AI_PROVIDER_STAGE_TYPES.OUTPUT_REPAIR]: { billingScope: 'platform', maxCalls: 1 },
+  });
+}
+
+export function estimateAiSkillReservationTokens(skill, request, action = getAiBillingAction(skill?.id)) {
+  const refs = normalizedResourceRefs(request);
+  const policy = skill?.providerPlanPolicy || {};
+  const maxCharsPerResource = Math.max(
+    1,
+    Math.floor(Number(policy.maxCharsPerResource || AI_SKILL_MAX_CHARS_PER_RESOURCE)),
+  );
+  const maxTotalEvidenceChars = Math.max(
+    1,
+    Math.floor(Number(policy.maxTotalEvidenceChars || AI_SKILL_MAX_TOTAL_EVIDENCE_CHARS)),
+  );
+  const explicitEvidenceTokens = refs.length
+    ? Math.min(maxTotalEvidenceChars, refs.length * maxCharsPerResource)
+    : AI_SKILL_IMPLICIT_EVIDENCE_RESERVATION_TOKENS;
+  const imageFileCount = policy.imageRecognition ? refs.filter((ref) => ref?.type === 'file').length : 0;
+  const requested =
+    explicitEvidenceTokens +
+    estimateInputReservationTokens(request) +
+    imageFileCount * AI_SKILL_VISION_RESERVATION_TOKENS_PER_FILE +
+    Math.max(1, Math.floor(Number(skill?.modelPolicy?.maxTokens || 1_024))) +
+    AI_SKILL_PROTOCOL_RESERVATION_TOKENS;
+  return Math.min(
+    AI_SKILL_MAX_RESERVATION_TOKENS,
+    Math.max(action.reservationTokens, Math.max(1, Math.floor(requested))),
+  );
+}
+
+/**
+ * Skill 的调用阶段由“能力声明 + 本轮已校验材料”编译。计费目录只负责动作身份；
+ * 图片数、修复数和预占预算不再由每个 action 手工复制。
+ */
+export function createAiSkillExecutionConfig(skill, request, overrides = {}) {
+  const action = getAiBillingAction(skill?.id);
+  const providerPlan = compileAiSkillProviderPlan(skill, request);
+  return {
+    taskType: action.taskTypes[0] || action.id.replaceAll('.', '_'),
+    ...overrides,
+    billingPolicy: 'user',
+    skillId: action.id,
+    providerPlan,
+    reservationTokens: estimateAiSkillReservationTokens(skill, request, action),
+    maxUserProviderCalls: providerPlan.maxUserProviderCalls,
+    maxPlatformProviderCalls: providerPlan.maxPlatformProviderCalls,
+    billingRuleVersion: AI_BILLING_RULE_VERSION,
+  };
+}
+
 /** 只返回用户可以理解的稳定字段，不泄露任务名、Provider 或内部预算。 */
 export function listPublicAiBillingCatalog() {
   return {
-    ruleVersion: 2,
+    ruleVersion: AI_BILLING_RULE_VERSION,
     chargingRule: 'provider_actual_tokens',
     repairBilling: 'platform',
     failedExecutionBilling: 'platform',
@@ -292,4 +376,8 @@ export function listPublicAiBillingCatalog() {
   };
 }
 
-export const aiBillingCatalogInternals = Object.freeze({ DEFAULT_RESERVATION_TOKENS });
+export const aiBillingCatalogInternals = Object.freeze({
+  DEFAULT_RESERVATION_TOKENS,
+  estimateInputReservationTokens,
+  normalizedResourceRefs,
+});

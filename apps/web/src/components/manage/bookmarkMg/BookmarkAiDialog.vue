@@ -3,33 +3,43 @@
     :visible="visible"
     :title="t('bookmarkMg.aiSkillTitle')"
     :description="t('bookmarkMg.aiSkillDescription')"
-    :skill-id="skillId"
+    skill-id="bookmark.summarize_page"
     prompt-key="instruction"
     surface="bookmark_manage"
     :resource-refs="resourceRefs"
     :scope-label="scopeLabel"
     :actions="actions"
     :show-prompt="false"
-    :auto-run-action-id="props.mode === 'create_note' ? '' : 'summarize'"
+    auto-run-action-id="summarize"
     @update:visible="emit('update:visible', $event)"
-    @result-action="handleResultAction"
-  />
+  >
+    <template #result-actions="{ response, result }">
+      <BButton
+        v-if="result?.kind === 'grounded_markdown' && response.sources.length"
+        type="primary"
+        :loading="creatingNote"
+        :disabled="creatingNote"
+        @click="createNoteFromSummary(response)"
+      >
+        {{ t('bookmarkMg.aiCreateNote') }}
+      </BButton>
+    </template>
+  </AiSkillDialog>
 </template>
 
 <script setup lang="ts">
   import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import type { AiSkillResourceRef } from '@lightnote/shared/ai-skill-protocol';
+  import type { AiSkillResourceRef, AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
   import AiSkillDialog from '@/components/aiSkills/AiSkillDialog.vue';
   import { useRouter } from 'vue-router';
-  import type { AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
-  import { persistAiNotePreview } from '@/utils/aiNoteDraft';
+  import { persistAiMarkdownResultAsNote } from '@/utils/aiNoteDraft';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
 
   const props = defineProps<{
     visible: boolean;
     bookmarks: readonly { id: string | number; name?: string; url?: string }[];
-    mode?: 'analyze' | 'create_note';
   }>();
   const emit = defineEmits<{ 'update:visible': [visible: boolean] }>();
   const { t } = useI18n();
@@ -45,34 +55,24 @@
       ? `${t('bookmarkMg.resourceTypeBookmark')} · ${activeBookmark.value.name || activeBookmark.value.url || t('bookmarkMg.untitled')}`
       : '',
   );
-  const skillId = computed(() =>
-    props.mode === 'create_note' ? 'bookmark.create_note_preview' : 'bookmark.summarize_page',
-  );
   const actions = computed(() => [
-    props.mode === 'create_note'
-      ? {
-          id: 'create-note',
-          label: t('bookmarkMg.aiCreateNote'),
-          skillId: 'bookmark.create_note_preview',
-          input: { instruction: t('bookmarkMg.aiCreateNoteInstruction') },
-        }
-      : {
-          id: 'summarize',
-          label: t('bookmarkMg.aiSummarize'),
-          skillId: 'bookmark.summarize_page',
-          input: {
-            instruction: t('bookmarkMg.aiSummarizeCurrentInstruction', {
-              name: activeBookmark.value?.name || activeBookmark.value?.url || t('bookmarkMg.untitled'),
-            }),
-          },
-        },
+    {
+      id: 'summarize',
+      label: t('bookmarkMg.aiSummarize'),
+      skillId: 'bookmark.summarize_page',
+      input: {
+        instruction: t('bookmarkMg.aiSummarizeCurrentInstruction', {
+          name: activeBookmark.value?.name || activeBookmark.value?.url || t('bookmarkMg.untitled'),
+        }),
+      },
+    },
   ]);
 
-  async function handleResultAction(action: Record<string, unknown>, response: AiSkillResponse) {
-    if (action.id !== 'create_note_from_preview' || creatingNote.value) return;
+  async function createNoteFromSummary(response: AiSkillResponse) {
+    if (creatingNote.value) return;
     creatingNote.value = true;
     try {
-      const handoff = await persistAiNotePreview(response, t('bookmarkMg.aiGeneratedNoteTitle'));
+      const handoff = await persistAiMarkdownResultAsNote(response, t('bookmarkMg.aiGeneratedNoteTitle'));
       if (!handoff) return;
       message.success(t('aiSkills.noteCreated'));
       emit('update:visible', false);

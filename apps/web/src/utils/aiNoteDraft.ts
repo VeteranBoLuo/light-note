@@ -35,7 +35,10 @@ function createDraftToken() {
 
 function normalizeDraft(value: Partial<AiNoteDraft>): AiNoteDraft {
   return {
-    title: String(value.title || 'AI 生成笔记').trim().slice(0, 255) || 'AI 生成笔记',
+    title:
+      String(value.title || 'AI 生成笔记')
+        .trim()
+        .slice(0, 255) || 'AI 生成笔记',
     content: String(value.content || ''),
     type: value.type === 'html' ? 'html' : 'markdown',
   };
@@ -51,6 +54,14 @@ function notePreviewFromResponse(response: AiSkillResponse, fallbackTitle: strin
     content,
     type: result.contentType === 'html' ? 'html' : 'markdown',
   });
+}
+
+function markdownResultFromResponse(response: AiSkillResponse, fallbackTitle: string): AiNoteDraft | null {
+  const result = response.result;
+  if (result?.kind !== 'grounded_markdown' || !response.sources.length) return null;
+  const content = String(result.content || '');
+  if (!content.trim()) return null;
+  return normalizeDraft({ title: fallbackTitle, content, type: 'markdown' });
 }
 
 export function stageAiNoteDraft(value: Partial<AiNoteDraft>, ttlMs = DEFAULT_TTL_MS) {
@@ -80,11 +91,10 @@ export function createAiNoteDraftHandoff(
  * 确认 AI 笔记预览时直接复用笔记领域的权威创建接口。
  * requestId 作为幂等键，避免重复点击或提交回包丢失时创建多份笔记。
  */
-export async function persistAiNotePreview(
+async function persistAiNoteDraft(
   response: AiSkillResponse,
-  fallbackTitle = 'AI 生成笔记',
+  draft: AiNoteDraft | null,
 ): Promise<PersistedAiNoteHandoff | null> {
-  const draft = notePreviewFromResponse(response, fallbackTitle);
   if (!draft) return null;
   const requestId = String(response.requestId || '').trim();
   if (!requestId) {
@@ -114,6 +124,24 @@ export async function persistAiNotePreview(
     noteId,
     route: { path: `/noteLibrary/${encodeURIComponent(noteId)}` },
   };
+}
+
+export function persistAiNotePreview(
+  response: AiSkillResponse,
+  fallbackTitle = 'AI 生成笔记',
+): Promise<PersistedAiNoteHandoff | null> {
+  return persistAiNoteDraft(response, notePreviewFromResponse(response, fallbackTitle));
+}
+
+/**
+ * 用户已检查有来源的 Markdown 分析结果后，可把同一结果直接确认为新笔记。
+ * 复用原请求 ID 幂等落库，不再为同一材料重复调用模型。
+ */
+export function persistAiMarkdownResultAsNote(
+  response: AiSkillResponse,
+  fallbackTitle = 'AI 生成笔记',
+): Promise<PersistedAiNoteHandoff | null> {
+  return persistAiNoteDraft(response, markdownResultFromResponse(response, fallbackTitle));
 }
 
 export function readAiNoteDraft(token: unknown): AiNoteDraft | null {

@@ -18,17 +18,9 @@ describe('noteImagePreview', () => {
     refreshViewer.mockReset();
   });
 
-  it('使用全局查看器按视口打开笔记图片，不继承 200px 的默认限制', () => {
+  it('使用共享全局查看器按视口打开笔记图片并保留完整工具栏', () => {
     expect(openNoteContentImagePreview('/uploads/small.png')).toBe(true);
-    expect(refreshViewer).toHaveBeenCalledWith(
-      '/uploads/small.png',
-      expect.objectContaining({
-        navbar: false,
-        toolbar: true,
-        title: false,
-        viewed: expect.any(Function),
-      }),
-    );
+    expect(refreshViewer).toHaveBeenCalledWith('/uploads/small.png', { toolbar: true });
   });
 
   it('正文图片支持鼠标点击和键盘打开，并阻止图片外层链接继续跳转', () => {

@@ -32,6 +32,9 @@
       <template v-if="$slots.result" #result="slotProps">
         <slot name="result" v-bind="slotProps"></slot>
       </template>
+      <template v-if="$slots['result-actions']" #result-actions="slotProps">
+        <slot name="result-actions" v-bind="slotProps"></slot>
+      </template>
     </AiSkillPanel>
   </BModal>
 </template>

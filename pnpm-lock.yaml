@@ -230,9 +230,6 @@ importers:
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
-      viewerjs:
-        specifier: ^1.11.7
-        version: 1.11.7
       vue:
         specifier: ^3.4.15
         version: 3.5.39(typescript@5.9.3)
@@ -3476,9 +3473,6 @@ packages:
   vary@1.1.2:
     resolution: {integrity: sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==}
     engines: {node: '>= 0.8'}
-
-  viewerjs@1.11.7:
-    resolution: {integrity: sha512-0JuVqOmL5v1jmEAlG5EBDR3XquxY8DWFQbFMprOXgaBB0F7Q/X9xWdEaQc59D8xzwkdUgXEMSSknTpriq95igg==}
 
   vite-node@3.2.4:
     resolution: {integrity: sha512-EbKSKh+bh1E1IFxeO0pg1n4dvoOTt0UDiXMd/qn++r98+jPO1xtJilvXldeuQ8giIB5IkpjCgMleHMNEsGH6pg==}
@@ -7261,8 +7255,6 @@ snapshots:
   uuid@11.1.1: {}
 
   vary@1.1.2: {}
-
-  viewerjs@1.11.7: {}
 
   vite-node@3.2.4(@types/node@22.20.0)(less@4.9.0):
     dependencies:

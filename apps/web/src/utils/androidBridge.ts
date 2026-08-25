@@ -36,11 +36,19 @@ export interface AndroidApkInstallResult {
   reason?: 'unsupported' | 'need_permission' | 'not_found' | 'failed';
 }
 
+/** 原生 DownloadManager 是否真正完成 enqueue；`confirmed=false` 只可能来自不回执的旧版 App。 */
+export interface AndroidDownloadEnqueueResult {
+  ok: boolean;
+  confirmed: boolean;
+}
+
 declare global {
   interface Window {
     LightNoteAndroid?: LightNoteAndroidBridge;
     /** 原生 → 网页的下载进度回调，由 onAndroidDownloadProgress 装上 */
     __lightNoteAndroidDownloadProgress?: (raw: unknown) => void;
+    /** 原生 → 网页的 DownloadManager 入队结果回调 */
+    __lightNoteAndroidDownloadEnqueueResult?: (raw: unknown) => void;
     /** 原生 → 网页的图片保存结果回调，由 saveImageViaAndroid 装上 */
     __lightNoteAndroidImageSaveResult?: (raw: unknown) => void;
     /** 原生 → 网页的安装包安装结果回调，由 installApkViaAndroid 装上 */
@@ -141,6 +149,70 @@ export function postAndroidMessage(payload: Record<string, unknown>): boolean {
     console.warn('Android 原生通道不可用:', error);
     return false;
   }
+}
+
+/*
+ * DownloadManager 入队回执。
+ *
+ * postMessage 不抛异常只说明消息写进了 WebView 通道，不代表原生的 manager.enqueue 成功。
+ * 新版 App 会按 token 回传真实结果；旧版 App 已经会执行同一个 download 消息，但不会回传，
+ * 超时只能按「已提交、未确认」兼容收口，绝不能重发（重发会让旧版 App 下载两份）。
+ */
+const DOWNLOAD_ENQUEUE_RECEIPT_TIMEOUT_MS = 1500;
+const pendingDownloadEnqueueReceipts = new Map<string, (result: AndroidDownloadEnqueueResult) => void>();
+let downloadEnqueueReceiptHookInstalled = false;
+
+function ensureDownloadEnqueueReceiptHook() {
+  if (typeof window === 'undefined') return;
+  if (downloadEnqueueReceiptHookInstalled && typeof window.__lightNoteAndroidDownloadEnqueueResult === 'function') {
+    return;
+  }
+  downloadEnqueueReceiptHookInstalled = true;
+  window.__lightNoteAndroidDownloadEnqueueResult = (raw: unknown) => {
+    if (!raw || typeof raw !== 'object') return;
+    const source = raw as Record<string, unknown>;
+    const token = typeof source.token === 'string' ? source.token : '';
+    const settle = pendingDownloadEnqueueReceipts.get(token);
+    if (!settle) return;
+    pendingDownloadEnqueueReceipts.delete(token);
+    settle({ ok: source.ok === true, confirmed: true });
+  };
+}
+
+export function enqueueAndroidDownloadWithReceipt(
+  downloadUrl: string,
+  fileName?: string,
+): Promise<AndroidDownloadEnqueueResult> {
+  return new Promise((resolve) => {
+    if (!hasAndroidBridge()) {
+      resolve({ ok: false, confirmed: true });
+      return;
+    }
+
+    ensureDownloadEnqueueReceiptHook();
+    const token = `download-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    let settled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const settle = (result: AndroidDownloadEnqueueResult) => {
+      if (settled) return;
+      settled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+      pendingDownloadEnqueueReceipts.delete(token);
+      resolve(result);
+    };
+    pendingDownloadEnqueueReceipts.set(token, settle);
+    timeoutId = setTimeout(() => settle({ ok: true, confirmed: false }), DOWNLOAD_ENQUEUE_RECEIPT_TIMEOUT_MS);
+    if (
+      !postAndroidMessage({
+        type: 'download',
+        token,
+        url: downloadUrl,
+        fileName: fileName || '',
+      })
+    ) {
+      settle({ ok: false, confirmed: true });
+    }
+  });
 }
 
 const DOWNLOAD_STATUSES: AndroidDownloadStatus[] = ['pending', 'running', 'paused', 'success', 'failed'];

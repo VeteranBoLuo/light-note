@@ -23,6 +23,8 @@ export async function callStructuredSkillModel({
   modelPolicy,
   trace,
   signal,
+  repairableErrorCodes = ['AI_SKILL_STRUCTURED_OUTPUT_MISSING', 'AI_SKILL_STRUCTURED_OUTPUT_INVALID'],
+  buildRepairInstruction,
 }) {
   const options = {
     tools: [{ type: 'function', function: structuredTool }],
@@ -36,15 +38,19 @@ export async function callStructuredSkillModel({
   try {
     return validateArguments(parseToolArguments(response, structuredTool.name));
   } catch (error) {
-    if (!['AI_SKILL_STRUCTURED_OUTPUT_MISSING', 'AI_SKILL_STRUCTURED_OUTPUT_INVALID'].includes(error?.code))
-      throw error;
+    const repairable = new Set(repairableErrorCodes);
+    if (!repairable.has(error?.code)) throw error;
+    const repairInstruction =
+      typeof buildRepairInstruction === 'function'
+        ? buildRepairInstruction({ error, toolName: structuredTool.name })
+        : `上一版没有按协议返回。必须且只能调用 ${structuredTool.name} 一次，不要输出解释文本。`;
     response = await requestAi(
       [
         ...messages,
         { role: 'assistant', content: String(response?.content || '') },
         {
           role: 'user',
-          content: `上一版没有按协议返回。必须且只能调用 ${structuredTool.name} 一次，不要输出解释文本。`,
+          content: repairInstruction,
         },
       ],
       {
@@ -52,7 +58,7 @@ export async function callStructuredSkillModel({
         temperature: 0,
         billingScope: 'platform',
         repairReasonCode: error.code,
-        trace: { ...trace, stage: `${trace.stage}_repair` },
+        trace: { ...trace, stage: `${trace?.stage || 'structured_output'}_repair` },
       },
     );
     return validateArguments(parseToolArguments(response, structuredTool.name));

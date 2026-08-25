@@ -22,7 +22,7 @@ describe('submitAndroidBatchDownload', () => {
 
     const outcome = await submitAndroidBatchDownload({ files, resolveMeta, submit });
 
-    expect(outcome).toEqual({ succeeded: 3, failed: 0, cancelled: false });
+    expect(outcome).toEqual({ succeeded: 3, failed: 0, unconfirmed: 0, cancelled: false });
     expect(submit).toHaveBeenCalledTimes(3);
     expect(submit).toHaveBeenNthCalledWith(1, 'https://obs.example.com/a', 'a.pdf');
     expect(submit).toHaveBeenNthCalledWith(3, 'https://obs.example.com/c', 'c.pdf');
@@ -37,7 +37,7 @@ describe('submitAndroidBatchDownload', () => {
 
     const outcome = await submitAndroidBatchDownload({ files, resolveMeta: flaky, submit });
 
-    expect(outcome).toEqual({ succeeded: 2, failed: 1, cancelled: false });
+    expect(outcome).toEqual({ succeeded: 2, failed: 1, unconfirmed: 0, cancelled: false });
     expect(submit).toHaveBeenCalledTimes(2);
   });
 
@@ -46,7 +46,24 @@ describe('submitAndroidBatchDownload', () => {
 
     const outcome = await submitAndroidBatchDownload({ files, resolveMeta, submit });
 
-    expect(outcome).toEqual({ succeeded: 1, failed: 2, cancelled: false });
+    expect(outcome).toEqual({ succeeded: 1, failed: 2, unconfirmed: 0, cancelled: false });
+  });
+
+  it('异步原生回执会并行收口，并把 enqueue 失败如实计入 failed', async () => {
+    const submit = vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+
+    const outcome = await submitAndroidBatchDownload({ files, resolveMeta, submit });
+
+    expect(outcome).toEqual({ succeeded: 2, failed: 1, unconfirmed: 0, cancelled: false });
+    expect(submit).toHaveBeenCalledTimes(3);
+  });
+
+  it('旧版 App 超时回执单独计为 unconfirmed，不能冒充 DownloadManager 已入队', async () => {
+    const submit = vi.fn().mockResolvedValue({ ok: true, confirmed: false });
+
+    const outcome = await submitAndroidBatchDownload({ files, resolveMeta, submit });
+
+    expect(outcome).toEqual({ succeeded: 0, failed: 0, unconfirmed: 3, cancelled: false });
   });
 
   it('取消只停后续提交:已交出去的仍要如实计入 succeeded', async () => {
@@ -64,7 +81,7 @@ describe('submitAndroidBatchDownload', () => {
       },
     });
 
-    expect(outcome).toEqual({ succeeded: 1, failed: 0, cancelled: true });
+    expect(outcome).toEqual({ succeeded: 1, failed: 0, unconfirmed: 0, cancelled: true });
     expect(submit).toHaveBeenCalledTimes(1);
   });
 
@@ -78,7 +95,7 @@ describe('submitAndroidBatchDownload', () => {
       isCancelled: () => true,
     });
 
-    expect(outcome).toEqual({ succeeded: 0, failed: 0, cancelled: true });
+    expect(outcome).toEqual({ succeeded: 0, failed: 0, unconfirmed: 0, cancelled: true });
     expect(submit).not.toHaveBeenCalled();
   });
 
@@ -109,7 +126,7 @@ describe('submitAndroidBatchDownload', () => {
       submit,
     });
 
-    expect(outcome).toEqual({ succeeded: 1, failed: 0, cancelled: false });
+    expect(outcome).toEqual({ succeeded: 1, failed: 0, unconfirmed: 0, cancelled: false });
     expect(submit).toHaveBeenCalledWith(`${window.location.origin}/upload/legacy.pdf`, 'legacy.pdf');
   });
 
@@ -125,7 +142,7 @@ describe('submitAndroidBatchDownload', () => {
       submit,
     });
 
-    expect(outcome).toEqual({ succeeded: 0, failed: 2, cancelled: false });
+    expect(outcome).toEqual({ succeeded: 0, failed: 2, unconfirmed: 0, cancelled: false });
     expect(submit).not.toHaveBeenCalled();
   });
 
@@ -134,7 +151,7 @@ describe('submitAndroidBatchDownload', () => {
 
     const outcome = await submitAndroidBatchDownload({ files: [], resolveMeta, submit });
 
-    expect(outcome).toEqual({ succeeded: 0, failed: 0, cancelled: false });
+    expect(outcome).toEqual({ succeeded: 0, failed: 0, unconfirmed: 0, cancelled: false });
     expect(submit).not.toHaveBeenCalled();
   });
 });

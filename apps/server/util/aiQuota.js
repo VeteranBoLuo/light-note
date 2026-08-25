@@ -409,8 +409,8 @@ function normalizeActualTokens(value) {
   return Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.floor(parsed)));
 }
 
-async function reconcileReservation(handle, actualTokens) {
-  const connection = await pool.getConnection();
+async function reconcileReservation(handle, actualTokens, database = pool) {
+  const connection = await database.getConnection();
   try {
     await connection.beginTransaction();
     const [rows] = await connection.query(
@@ -424,7 +424,7 @@ async function reconcileReservation(handle, actualTokens) {
     if (!reservation) throw createQuotaError('AI_QUOTA_RESERVATION_MISSING', 'AI 配额结算暂不可用');
     if (reservation.status !== 'reserved') {
       await connection.commit();
-      return reservation.status === 'reconciled';
+      return ['reconciled', 'blocked'].includes(reservation.status);
     }
     const subjects = normalizeStoredSubjects(reservation.subjects_json);
     if (!subjects.length) throw createQuotaError('AI_QUOTA_RESERVATION_INVALID', 'AI 配额结算暂不可用');
@@ -492,6 +492,125 @@ async function reconcileReservation(handle, actualTokens) {
   }
 }
 
+/**
+ * 已结算 reservation 的规则版本修正。只调整原周期 token 用量与永久余额，不增加 call_count；
+ * 事务和行锁保证脚本中断后可安全重跑。调用方必须先完成可证明的历史账单重放。
+ */
+export async function correctReconciledReservation(handle, actualTokens, { database = pool } = {}) {
+  if (!handle?.reservationKey) {
+    throw createQuotaError('AI_QUOTA_RESERVATION_MISSING', 'AI 配额修正暂不可用');
+  }
+  const connection = await database.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query(
+      `SELECT status, period_key, subjects_json, reserved_tokens, actual_tokens
+         FROM ai_token_reservations
+        WHERE reservation_key = ?
+        FOR UPDATE`,
+      [handle.reservationKey],
+    );
+    const reservation = rows[0];
+    if (!reservation) throw createQuotaError('AI_QUOTA_RESERVATION_MISSING', 'AI 配额修正暂不可用');
+    if (reservation.status !== 'reconciled') {
+      throw createQuotaError('AI_QUOTA_RESERVATION_NOT_RECONCILED', 'AI 配额修正暂不可用');
+    }
+    const subjects = normalizeStoredSubjects(reservation.subjects_json);
+    const pk = String(reservation.period_key || '');
+    if (!subjects.length || !/^\d{8}$/.test(pk)) {
+      throw createQuotaError('AI_QUOTA_RESERVATION_INVALID', 'AI 配额修正暂不可用');
+    }
+    const previousActual = normalizeActualTokens(reservation.actual_tokens);
+    const nextActual = normalizeActualTokens(actualTokens);
+    if (previousActual === nextActual) {
+      await connection.commit();
+      return { corrected: false, previousActual, actualTokens: nextActual };
+    }
+    if (nextActual > previousActual) {
+      throw createQuotaError('AI_QUOTA_CORRECTION_WOULD_INCREASE', 'AI 配额修正禁止追扣用户');
+    }
+    const refundTokens = previousActual - nextActual;
+    for (const subject of sortedSubjects(subjects)) {
+      const [usageRows] = await connection.query(
+        `SELECT tokens_used
+           FROM ai_token_usage
+          WHERE subject_type = ? AND subject_key = ? AND period_type = 'day' AND period_key = ?
+          FOR UPDATE`,
+        [subject.type, subject.key, pk],
+      );
+      const storedTokens = Number(usageRows[0]?.tokens_used);
+      if (!Number.isFinite(storedTokens) || storedTokens < refundTokens) {
+        throw createQuotaError('AI_QUOTA_COUNTER_UPDATE_FAILED', 'AI 配额修正暂不可用');
+      }
+      const [usageUpdate] = await connection.query(
+        `UPDATE ai_token_usage
+            SET tokens_used = tokens_used - ?
+          WHERE subject_type = ? AND subject_key = ? AND period_type = 'day' AND period_key = ?`,
+        [refundTokens, subject.type, subject.key, pk],
+      );
+      if (Number(usageUpdate?.affectedRows || 0) !== 1) {
+        throw createQuotaError('AI_QUOTA_COUNTER_UPDATE_FAILED', 'AI 配额修正暂不可用');
+      }
+      if (subject.type !== 'user' || !subject.walletEnforced) continue;
+      const dailyAvailable = Math.max(0, Number(subject.dailyAvailable || 0));
+      const previousWalletActual = Math.max(0, previousActual - dailyAvailable);
+      const nextWalletActual = Math.max(0, nextActual - dailyAvailable);
+      const walletDelta = nextWalletActual - previousWalletActual;
+      if (walletDelta < 0) {
+        const [walletUpdate] = await connection.query(
+          'UPDATE user_growth SET ai_bonus_tokens = ai_bonus_tokens + ? WHERE user_id = ?',
+          [-walletDelta, subject.key],
+        );
+        if (Number(walletUpdate?.affectedRows || 0) !== 1) {
+          throw createQuotaError('AI_QUOTA_WALLET_UPDATE_FAILED', 'AI 配额修正暂不可用');
+        }
+      }
+    }
+    const [reservationUpdate] = await connection.query(
+      `UPDATE ai_token_reservations
+          SET actual_tokens = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE reservation_key = ? AND status = 'reconciled'`,
+      [nextActual, handle.reservationKey],
+    );
+    if (Number(reservationUpdate?.affectedRows || 0) !== 1) {
+      throw createQuotaError('AI_QUOTA_RESERVATION_UPDATE_FAILED', 'AI 配额修正暂不可用');
+    }
+    await connection.commit();
+    return { corrected: true, previousActual, actualTokens: nextActual };
+  } catch (error) {
+    try {
+      await connection.rollback();
+    } catch {
+      // 保留原异常。
+    }
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+/**
+ * 中断执行释放 reservation。reserved 会正常结算为 0；若进程曾在“额度已结算、Execution
+ * 尚未落终态”之间退出，则继续修正 reconciled 的 actual_tokens，保证真正退款。
+ */
+export async function releaseReservation(handle, { database = pool } = {}) {
+  if (!handle || !handle.reservationKey) return true;
+  try {
+    const settled = await reconcileReservation(handle, 0, database);
+    if (!settled) return false;
+    try {
+      await correctReconciledReservation(handle, 0, { database });
+    } catch (error) {
+      // blocked reservation 从未占用额度，不需要转换成 reconciled。
+      if (error?.code !== 'AI_QUOTA_RESERVATION_NOT_RECONCILED') throw error;
+    }
+    return true;
+  } catch {
+    logQuotaFailure('release_deferred');
+    return false;
+  }
+}
+
 /** 请求前检查并占位。配额基础设施异常时抛出稳定 503 错误，调用方不得继续访问 Provider。 */
 export async function reserve(req, ctx = {}) {
   try {
@@ -537,10 +656,10 @@ export async function reserve(req, ctx = {}) {
 /**
  * 请求结束后幂等结算。失败时保留原占位（失败安全），返回 false 供观测，不把原始错误写入日志。
  */
-export async function reconcile(handle, actualTokens, { aborted = false } = {}) {
+export async function reconcile(handle, actualTokens, { aborted = false, database = pool } = {}) {
   if (!handle || handle.exempt || handle.blocked || !handle.reservationKey) return true;
   try {
-    return await reconcileReservation(handle, actualTokens);
+    return await reconcileReservation(handle, actualTokens, database);
   } catch {
     logQuotaFailure('reconcile_deferred');
     return false;

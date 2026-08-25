@@ -233,10 +233,11 @@ try {
 - Skill thread 固定绑定 `skillId + skillVersion + actor + subject + scopeDigest`。不同 Skill、不同资源集合或不同 subject 永不共享自然语言历史；当前书签网页总结最多 2 轮、文件问答最多 5 轮、资源搜索最多 2 轮、帮助最多 4 轮，笔记处理、批量任务、比较、解析和草稿为零历史。历史只用于理解省略，每轮事实仍从权威资源重新读取。
 - 写 Skill 只能生成结构化草稿或预览，真实写入必须由用户确认并复用 `util/services/` 的权限、事务、版本、幂等和审计能力。模型文本、旧预览和成功语气都不是执行回执；对象版本变化时返回冲突，不得静默覆盖。
 - 所有真实模型调用必须经 `agent/aiGateway.js`，且处于唯一根 `AI Execution` 中。源码门禁 `pnpm --filter server check:ai-model-access` 禁止裸 Provider、未登记 Gateway 调用方和新的万能助手入口；`billingPolicy=none` 的执行禁止访问 Provider。
-- 用户动作在第一次真实 Provider 调用前懒占位一次，所有主调用、结构修复和 Provider 失败都累计到同一 Execution/Span 集合，终态只结算一次。用户额度只结算 `billingScope=user` 的主调用真实 usage；协议修复只能在主调用之后以 `_repair + billingScope=platform` 发生、受目录次数上限约束并由平台承担。缓存命中、确定性解析和纯本地处理不占模型额度，也不因用户额度耗尽而失败；一旦访问 Provider 就必须进入计量。usage 缺失按请求前保守预算估算且不超过实际预占，客户端断开前未发出 Provider 的请求退还占位，发出后缺失 usage 的调用不得变成免费。根账本的 `usage_complete` 只表示用户计费 usage 是否完整，平台修复缺失 usage 不得把用户扣费误标为估算；Provider 总量完整性保留在 Span。系统/后台 AI 使用明确的 system budget，Root 也不能隐形免费。
-- `util/aiBillingCatalog.js` 是 Skill、散落业务 AI 动作、调用次数/预占策略和设置页计费说明的唯一事实源。新增或改名模型入口必须先登记目录并补注册表覆盖测试；禁止在前端或路由另写一份“免费/扣费”清单。免费本地处理、外网抓取和只读用量查询不扣模型 token，但必须分别保留尺寸、并发、积压、频率和安全上限，不能借“免费”变成无限资源接口。
+- 用户动作在第一次真实 Provider 调用前懒占位一次，所有主调用、结构修复和 Provider 失败都累计到同一 Execution/Span 集合，终态只结算一次。用户额度只结算 `billingScope=user` 的主调用真实 usage；协议修复只能在正文生成之后以 `_repair + billingScope=platform` 发生并由平台承担。缓存命中、确定性解析和纯本地处理不占模型额度，也不因用户额度耗尽而失败；一旦访问 Provider 就必须进入计量。usage 缺失按请求前保守预算估算且不超过实际预占，客户端断开前未发出 Provider 的请求退还占位，发出后缺失 usage 的调用不得变成免费。根账本的 `usage_complete` 只表示用户计费 usage 是否完整，平台修复缺失 usage 不得把用户扣费误标为估算；Provider 总量完整性保留在 Span。系统/后台 AI 使用明确的 system budget，Root 也不能隐形免费。
+- `util/aiBillingCatalog.js` 是 Skill、散落业务 AI 动作和设置页计费说明的唯一动作目录；Skill 的 Provider 次数与预占不在 action 中手填，而由 Skill 能力声明和本轮已校验 `resourceRefs` 编译为 `image_recognition / model_generation / output_repair` 三阶段计划。图片缓存命中自然不产生 Span，未声明图片预处理的文件 Skill 也不得凭资源类型多放调用。证据字符上限、直接输入字节预算、Vision 保守预算和计划上限必须复用 `util/aiSkill/limits.js`，禁止在路由另写 `maxCalls=2/6` 一类补丁。新增或改名模型入口必须先登记目录并补注册表覆盖测试；免费本地处理、外网抓取和只读用量查询不扣模型 token，但仍须保留尺寸、并发、积压、频率和安全上限。
+- `ai_executions` 必须写入 `billing_rule_version / validation_rule_version / lease_expires_at`。长执行在租约窗口内续期，终态原子清空租约；reservation key 未与根账本成功关联前禁止访问 Provider。启动后的有界回收器原子认领已过期 `running`，聚合已有 Span、以平台失败终态归零用户扣费，并按账本金额幂等重试当前规则的正常终态 deferred reservation；旧规则不能被当前回收器盲目结算。历史规则修正默认 dry-run，只能从低敏 Span 账本重放且仅自动退款、禁止追扣；应用时必须显式限定用户或 `--all`。
 - `ai_lock` 属于能力限制而不是 URL 规则，统一在根 Execution 中按 `req.securityRestrictions` 失败关闭。新增模块路由不得再复制 AI 路径正则或局部绕过。
-- 输出必须先通过 Skill 的结构校验与长度契约，再形成可读正文、来源、Coverage 和可用动作。失败与空结果必须区分；Coverage 不完整、来源缺失或结构修复失败时不得声称“全部”“唯一”或伪造成功。
+- 有来源的正文必须通过 `submit_grounded_answer` 提交 `blocks[].markdown + sourceIndexes`，模型不得手写 `[数字]`；服务端逐段校验索引并统一渲染引用后，才形成 `grounded_markdown`。来源缺失、越界或结构协议失败最多进行一次平台修复。资源类 `targetLength` 只是事实约束下的软目标，不能因未凑足字数触发第二次调用；纯文本变换才可保留明确最低长度门禁。Coverage 是服务端证据装载事实并由现有结果 UI 展示，禁止再用“所有/全部/唯一”等关键词正则猜测语义，否则“无法覆盖所有细节”也会被误杀。
 - 日期、时间和时区属于服务端确定性事实。结构化 Skill 只允许模型逐字摘录用户原话中的时间表达式；服务端用请求携带且已校验的 IANA 时区解析相对日期、星期和时间，不允许模型计算或回传绝对时间。没有表达的字段保持为空，无法从原话核验或不支持的语法失败关闭；只给日期时统一使用该本地日期 `23:59`，并由测试锁定跨时区、跨日、星期和过期语义。
 - AI 产品埋点必须复用统一低敏事件入口。服务端记录真实 started/completed/failed/scope_rejected 生命周期，前端只记录 opened/cancelled/applied 等交互；只允许登记过的 Skill、surface、资源类型、桶化数量/长度/耗时、结果和错误族，禁止保存问题、正文、标题、URL、资源 ID 或 Provider 原文。非流式链路不得伪造 first-token 指标，埋点失败不得阻断主流程。
 - `/ai/skills/config` 由前端统一短时缓存并合并并发读取，不允许各组件轮询或各自维护开关。配置读取失败时前端保持业务页面可用并把服务端作为最终门禁；服务端 Skill/域/Kernel 禁用始终失败关闭。Registry 契约测试必须精确列出批准的 Skill，并统一校验版本、角色、资源范围、历史、模型策略、输出类型、未知输入字段和无直写函数。
@@ -389,7 +390,8 @@ try {
 | 文字提示 | `BTooltip`      | `a-tooltip`                 |
 
 - 存量 Ant Design（`a-*`）逐步替换为自研 B 组件，不新增；确无对应 B 组件才用原生，并注明原因。
-- 共享 `MobileAppShell` 负责移动文本输入时的键盘视口：文本输入获得焦点且 `visualViewport` 相对稳定基线开始收缩后即进入键盘态，按可见视口逐帧约束应用壳，并让底部一级导航保持挂载、随键盘抬升渐进收起；失焦后继续跟随收起动画，直到视口恢复再重置。聊天室等贴底业务只允许基于自身滚动锚点响应共享壳尺寸变化，禁止按 Android UA 单独补高度或复制键盘开合判断。
+- 业务图片大图预览统一复用 `components/base/Viewer/BImageViewer.vue`：业务层只映射图片序列和初始项，不得再各自维护缩放、旋转、拖拽、全屏和下载状态机。过渡动画只能负责观感，禁止用 `transitionend` / `animationend` 作为创建图片、绑定关闭事件或进入可交互态的前置条件；缩放后的可浏览范围必须由真实舞台尺寸与原生滚动承载，高频拖动直接更新滚动位置并按 `getRootZoom()` 换算。
+- 共享 `MobileAppShell` 负责移动文本输入时的键盘视口：文本输入获得焦点且 `visualViewport` 相对稳定基线开始收缩后即进入键盘态，按可见视口逐帧约束应用壳，并让底部一级导航保持挂载、随键盘抬升渐进收起；失焦后继续跟随收起动画，直到视口恢复再重置。壳体高度与底栏占位必须由同一次视口采样同步提交，禁止再给 `height` / `flex-basis` 叠加独立 CSS 过渡，否则父级 `100dvh` 先收缩时会把贴底输入区临时多挤一个底栏高度。聊天室等贴底业务只允许基于自身滚动锚点响应共享壳尺寸变化，禁止按 Android UA 单独补高度或复制键盘开合判断。
 
 **图标开发规范：**
 

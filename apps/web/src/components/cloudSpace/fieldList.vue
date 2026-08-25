@@ -589,6 +589,55 @@
       </div>
     </BModal>
 
+    <BModal
+      v-model:visible="preparedDownloadsVisible"
+      :title="$t('cloudSpace.preparedDownloadsTitle')"
+      width="620px"
+      :show-footer="false"
+    >
+      <div class="prepared-downloads">
+        <p class="prepared-downloads__hint">{{ $t('cloudSpace.preparedDownloadsHint') }}</p>
+        <div class="prepared-downloads__summary">
+          {{
+            $t('cloudSpace.preparedDownloadsSummary', {
+              submitted: preparedDownloadSummary.submitted,
+              total: preparedDownloadItems.length,
+              failed: preparedDownloadSummary.failed,
+            })
+          }}
+        </div>
+        <div class="prepared-downloads__list">
+          <div v-for="item in preparedDownloadItems" :key="item.key" class="prepared-downloads__item">
+            <span class="prepared-downloads__name" :title="item.fileName">{{ item.fileName }}</span>
+            <BChip :tone="preparedDownloadStatusTone(item.status)">
+              {{ preparedDownloadStatusLabel(item.status) }}
+            </BChip>
+            <BButton
+              v-if="item.status === 'failed'"
+              size="small"
+              :loading="item.retrying"
+              @click="retryPrepareBrowserDownload(item)"
+            >
+              {{ $t('cloudSpace.preparedDownloadRetry') }}
+            </BButton>
+            <BButton
+              v-else
+              size="small"
+              :type="item.status === 'ready' ? 'primary' : undefined"
+              :disabled="item.status === 'preparing' || !item.meta"
+              @click="submitPreparedBrowserDownload(item)"
+            >
+              {{
+                item.status === 'submitted'
+                  ? $t('cloudSpace.preparedDownloadAgain')
+                  : $t('cloudSpace.preparedDownloadOne')
+              }}
+            </BButton>
+          </div>
+        </div>
+      </div>
+    </BModal>
+
     <b-modal v-model:visible="shareDescVisible" :title="$t('cloudSpace.share')" width="450px" :show-footer="false">
       <div class="share-desc-body">
         <div class="share-desc-tip">{{ $t('cloudSpace.shareDescTip') }}</div>
@@ -747,6 +796,7 @@
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import { bookmarkStore, cloudSpaceStore } from '@/store';
   import { apiBasePost } from '@/http/request.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
@@ -757,7 +807,7 @@
     deleteField,
     downloadField,
     listFileShares,
-    requestAndroidDownload,
+    requestAndroidDownloadWithReceipt,
     revokeFileShare,
     rotateFileShare,
     shareField,
@@ -766,6 +816,14 @@
   } from '@/http/common.ts';
   import { hasAndroidBridge } from '@/utils/androidBridge.ts';
   import { submitAndroidBatchDownload } from '@/utils/androidBatchDownload.ts';
+  import {
+    canSaveBrowserBatchToDirectory,
+    chooseBrowserBatchDownloadDirectory,
+    saveBrowserBatchToDirectory,
+    triggerPreparedBrowserDownload,
+    type BrowserDownloadMeta,
+    type BrowserFileSystemDirectoryHandle,
+  } from '@/utils/browserBatchDownload.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { cloneDeep } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
@@ -1110,6 +1168,22 @@
   const batchDownloadLoading = ref(false);
   const batchDownloadChoiceVisible = ref(false);
   const batchDownloadChoiceFiles = ref<any[]>([]);
+  type PreparedDownloadStatus = 'preparing' | 'ready' | 'submitted' | 'failed';
+  interface PreparedDownloadItem {
+    key: string;
+    file: any;
+    index: number;
+    fileName: string;
+    status: PreparedDownloadStatus;
+    retrying: boolean;
+    meta?: BrowserDownloadMeta;
+  }
+  const preparedDownloadsVisible = ref(false);
+  const preparedDownloadItems = ref<PreparedDownloadItem[]>([]);
+  const preparedDownloadSummary = computed(() => ({
+    submitted: preparedDownloadItems.value.filter((item) => item.status === 'submitted').length,
+    failed: preparedDownloadItems.value.filter((item) => item.status === 'failed').length,
+  }));
   const batchDownloadZipUnavailable = computed(() => hasAndroidBridge());
   const batchDownloadAbortController = ref<AbortController | null>(null);
   const batchDownloadCancelled = ref(false);
@@ -1412,6 +1486,20 @@
     };
   };
 
+  const visualPreparationFailures = new Set<number>();
+  const getPreparedBrowserDownloadMeta = async (file: any, index: number) => {
+    if (
+      import.meta.env.DEV &&
+      new URLSearchParams(window.location.search).get('batchDownloadProfile') === 'manual-failure' &&
+      index === 1 &&
+      !visualPreparationFailures.has(index)
+    ) {
+      visualPreparationFailures.add(index);
+      throw new Error('DEV_BATCH_DOWNLOAD_PREPARE_FAILURE');
+    }
+    return getDownloadMeta(file, index);
+  };
+
   const isBatchDownloadCancelledError = (error: any) => {
     return (
       batchDownloadCancelled.value || error?.name === 'AbortError' || error?.message === 'BATCH_DOWNLOAD_CANCELLED'
@@ -1444,12 +1532,13 @@
 
     let succeeded = 0;
     let failed = 0;
+    let unconfirmed = 0;
     let cancelled = false;
     try {
-      ({ succeeded, failed, cancelled } = await submitAndroidBatchDownload({
+      ({ succeeded, failed, unconfirmed, cancelled } = await submitAndroidBatchDownload({
         files: selectedFiles,
         resolveMeta: getDownloadMeta,
-        submit: requestAndroidDownload,
+        submit: requestAndroidDownloadWithReceipt,
         isCancelled: () => batchDownloadCancelled.value,
         onSubmitted: (done, total) => {
           downloadProgress.value.current = done;
@@ -1463,14 +1552,27 @@
       }, 600);
     }
 
+    const submitted = succeeded + unconfirmed;
     if (cancelled) {
       message.info(
-        succeeded > 0
-          ? t('cloudSpace.batchDownloadCancelledPartial', { count: succeeded })
+        submitted > 0
+          ? t('cloudSpace.batchDownloadAndroidCancelledPartial', {
+              confirmed: succeeded,
+              unconfirmed,
+              failed,
+            })
           : t('cloudSpace.batchDownloadCancelled'),
       );
-    } else if (!succeeded) {
+    } else if (!succeeded && !unconfirmed) {
       message.error(t('cloudSpace.batchDownloadFailed'));
+    } else if (unconfirmed > 0) {
+      message.warning(
+        t('cloudSpace.batchDownloadAndroidUnconfirmed', {
+          confirmed: succeeded,
+          unconfirmed,
+          failed,
+        }),
+      );
     } else if (failed > 0) {
       message.warning(t('cloudSpace.batchDownloadPartial', { success: succeeded, failed }));
     } else {
@@ -1479,48 +1581,98 @@
       message.success(t('cloudSpace.batchDownloadHandedOff', { count: succeeded }));
     }
 
-    if (succeeded > 0) {
-      recordOperation({ module: '云空间', operation: `批量下载文件成功【${succeeded}个】` });
+    if (submitted > 0) {
+      recordOperation({ module: '云空间', operation: `批量提交下载文件【${submitted}个】` });
     }
   };
 
-  const runBrowserIndividualDownloads = async (selectedFiles: any[]) => {
+  const preparedDownloadStatusTone = (status: PreparedDownloadStatus): 'neutral' | 'success' | 'danger' => {
+    if (status === 'submitted') return 'success';
+    if (status === 'failed') return 'danger';
+    return 'neutral';
+  };
+
+  const preparedDownloadStatusLabel = (status: PreparedDownloadStatus) => {
+    return t(`cloudSpace.preparedDownloadStatus.${status}`);
+  };
+
+  const retryPrepareBrowserDownload = async (item: PreparedDownloadItem) => {
+    if (item.retrying) return;
+    item.retrying = true;
+    item.status = 'preparing';
+    try {
+      item.meta = await getPreparedBrowserDownloadMeta(item.file, item.index);
+      item.fileName = item.meta.fileName;
+      item.status = 'ready';
+    } catch (error) {
+      item.meta = undefined;
+      item.status = 'failed';
+      console.error('prepare individual file download failed:', error);
+    } finally {
+      item.retrying = false;
+    }
+  };
+
+  const submitPreparedBrowserDownload = (item: PreparedDownloadItem) => {
+    if (!item.meta || item.status === 'preparing') return;
+    const firstSubmission = item.status !== 'submitted';
+    try {
+      // 每次点击只提交当前这一项，保持浏览器可识别的明确用户手势，避免多文件自动下载被拦截。
+      triggerPreparedBrowserDownload(item.meta);
+      item.status = 'submitted';
+      if (firstSubmission) {
+        const submitted = preparedDownloadItems.value.filter((entry) => entry.status === 'submitted').length;
+        const pending = preparedDownloadItems.value.filter((entry) => entry.status === 'ready').length;
+        if (pending === 0) {
+          message.info(t('cloudSpace.preparedDownloadsSubmitted', { count: submitted }));
+          recordOperation({ module: '云空间', operation: `分别提交下载文件【${submitted}个】` });
+        }
+      }
+    } catch (error) {
+      item.status = 'failed';
+      console.error('submit prepared browser download failed:', error);
+      message.error(t('cloudSpace.downloadFailed'));
+    }
+  };
+
+  const prepareBrowserIndividualDownloads = async (selectedFiles: any[]) => {
     batchDownloadLoading.value = true;
     batchDownloadCancelled.value = false;
+    preparedDownloadsVisible.value = false;
+    preparedDownloadItems.value = selectedFiles.map((file, index) => ({
+      key: `${String(file.id ?? 'file')}-${index}`,
+      file,
+      index,
+      fileName: normalizeFileName(file.fileName, `file-${index + 1}`),
+      status: 'preparing',
+      retrying: false,
+    }));
     downloadProgress.value = {
       visible: true,
       percent: 0,
       current: 0,
       total: selectedFiles.length,
-      phaseText: t('cloudSpace.batchDownloadSubmitting'),
+      phaseText: t('cloudSpace.preparedDownloadsPreparing'),
     };
 
-    let succeeded = 0;
     let failed = 0;
     try {
       for (let i = 0; i < selectedFiles.length; i++) {
         if (batchDownloadCancelled.value) break;
+        const item = preparedDownloadItems.value[i];
         try {
-          const { downloadUrl, fileName } = await getDownloadMeta(selectedFiles[i], i);
+          item.meta = await getPreparedBrowserDownloadMeta(selectedFiles[i], i);
+          item.fileName = item.meta.fileName;
           if (batchDownloadCancelled.value) break;
-          const anchor = document.createElement('a');
-          anchor.href = downloadUrl;
-          anchor.download = fileName;
-          anchor.rel = 'noopener';
-          anchor.style.display = 'none';
-          document.body.appendChild(anchor);
-          anchor.click();
-          anchor.remove();
-          succeeded += 1;
+          item.status = 'ready';
         } catch (error) {
           if (isBatchDownloadCancelledError(error)) break;
+          item.status = 'failed';
           failed += 1;
-          console.error('individual file download failed:', error);
+          console.error('prepare individual file download failed:', error);
         }
         downloadProgress.value.current = i + 1;
         downloadProgress.value.percent = Math.round(((i + 1) / selectedFiles.length) * 100);
-        // 给浏览器留出消费连续下载事件的机会，降低后一项被合并或吞掉的概率。
-        await new Promise<void>((resolve) => window.setTimeout(resolve, 80));
       }
     } finally {
       batchDownloadLoading.value = false;
@@ -1530,21 +1682,76 @@
     }
 
     if (batchDownloadCancelled.value) {
+      preparedDownloadItems.value = [];
+      message.info(t('cloudSpace.batchDownloadCancelled'));
+      return;
+    }
+
+    preparedDownloadsVisible.value = true;
+    if (failed === selectedFiles.length) {
+      message.error(t('cloudSpace.preparedDownloadsAllFailed'));
+    } else if (failed > 0) {
+      message.warning(t('cloudSpace.preparedDownloadsPartial', { failed }));
+    }
+  };
+
+  const runBrowserDirectoryDownloads = async (selectedFiles: any[], directory: BrowserFileSystemDirectoryHandle) => {
+    batchDownloadLoading.value = true;
+    batchDownloadCancelled.value = false;
+    batchDownloadAbortController.value = new AbortController();
+    downloadProgress.value = {
+      visible: true,
+      percent: 0,
+      current: 0,
+      total: selectedFiles.length,
+      phaseText: t('cloudSpace.batchDownloadSaving'),
+    };
+
+    let succeeded = 0;
+    let failed = 0;
+    let cancelled = false;
+    try {
+      const outcome = await saveBrowserBatchToDirectory({
+        files: selectedFiles,
+        directory,
+        resolveMeta: getDownloadMeta,
+        signal: batchDownloadAbortController.value.signal,
+        isCancelled: () => batchDownloadCancelled.value,
+        onSettled: (done, total) => {
+          downloadProgress.value.current = done;
+          downloadProgress.value.percent = Math.round((done / total) * 100);
+        },
+      });
+      succeeded = outcome.succeeded;
+      failed = outcome.failed;
+      cancelled = outcome.cancelled;
+      outcome.failures.forEach(({ fileName, error }) => {
+        console.error(`save browser batch file failed: ${fileName}`, error);
+      });
+    } finally {
+      batchDownloadLoading.value = false;
+      batchDownloadAbortController.value = null;
+      window.setTimeout(() => {
+        downloadProgress.value.visible = false;
+      }, 600);
+    }
+
+    if (cancelled) {
       message.info(
         succeeded > 0
-          ? t('cloudSpace.batchDownloadCancelledPartial', { count: succeeded })
+          ? t('cloudSpace.batchDownloadSaveCancelledPartial', { count: succeeded })
           : t('cloudSpace.batchDownloadCancelled'),
       );
     } else if (!succeeded) {
       message.error(t('cloudSpace.batchDownloadFailed'));
     } else if (failed > 0) {
-      message.warning(t('cloudSpace.batchDownloadPartial', { success: succeeded, failed }));
+      message.warning(t('cloudSpace.batchDownloadSavePartial', { success: succeeded, failed }));
     } else {
-      message.success(t('cloudSpace.batchDownloadHandedOff', { count: succeeded }));
+      message.success(t('cloudSpace.batchDownloadSaved', { count: succeeded }));
     }
 
     if (succeeded > 0) {
-      recordOperation({ module: '云空间', operation: `分别下载文件成功【${succeeded}个】` });
+      recordOperation({ module: '云空间', operation: `分别保存文件成功【${succeeded}个】` });
     }
   };
 
@@ -1637,11 +1844,11 @@
 
   const startBatchDownload = async (mode: BatchDownloadMode) => {
     const selectedFiles = batchDownloadChoiceFiles.value.slice();
-    batchDownloadChoiceVisible.value = false;
-    batchDownloadChoiceFiles.value = [];
     if (selectedFiles.length < 2 || batchDownloadLoading.value) return;
 
     if (mode === 'zip') {
+      batchDownloadChoiceVisible.value = false;
+      batchDownloadChoiceFiles.value = [];
       if (hasAndroidBridge()) {
         message.info(t('cloudSpace.batchDownloadZipUnavailableInApp'));
         return;
@@ -1650,12 +1857,36 @@
       return;
     }
 
-    // 原生桥存在时逐个交给系统 DownloadManager；普通浏览器则连续触发标准文件下载。
+    // 原生桥存在时逐个交给系统 DownloadManager。
     if (hasAndroidBridge()) {
+      batchDownloadChoiceVisible.value = false;
+      batchDownloadChoiceFiles.value = [];
       await runAndroidBatchDownload(selectedFiles);
-    } else {
-      await runBrowserIndividualDownloads(selectedFiles);
+      return;
     }
+
+    if (canSaveBrowserBatchToDirectory()) {
+      try {
+        // 必须直接发生在“分别下载”这次点击里，否则浏览器会因丢失用户手势而拒绝目录选择器。
+        const directory = await chooseBrowserBatchDownloadDirectory();
+        batchDownloadChoiceVisible.value = false;
+        batchDownloadChoiceFiles.value = [];
+        await runBrowserDirectoryDownloads(selectedFiles, directory);
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          // 用户取消系统目录选择器时保留方式选择弹窗，仍可改选 ZIP。
+          message.info(t('cloudSpace.batchDownloadDirectoryPickerCancelled'));
+          return;
+        }
+        console.error('choose browser batch download directory failed:', error);
+        message.warning(t('cloudSpace.batchDownloadDirectoryPickerFailed'));
+      }
+    }
+
+    batchDownloadChoiceVisible.value = false;
+    batchDownloadChoiceFiles.value = [];
+    await prepareBrowserIndividualDownloads(selectedFiles);
   };
 
   const handleBatchDownload = async () => {
@@ -2184,6 +2415,54 @@
     font-size: 12px;
     line-height: 1.55;
   }
+  .prepared-downloads {
+    display: grid;
+    gap: 12px;
+  }
+  .prepared-downloads__hint {
+    margin: 0;
+    color: var(--desc-color);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .prepared-downloads__summary {
+    padding: 8px 10px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 8px;
+    color: var(--text-color);
+    background: var(--primary-btn-bg-color);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  .prepared-downloads__list {
+    max-height: min(52vh, 420px);
+    display: grid;
+    gap: 8px;
+    overflow-y: auto;
+  }
+  .prepared-downloads__item {
+    min-height: 44px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto 100px;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    box-sizing: border-box;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 8px;
+    background: var(--card-background);
+  }
+  .prepared-downloads__name {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-color);
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .prepared-downloads__item :deep(.b_btn) {
+    width: 100%;
+  }
   .file-container {
     min-height: 0;
     flex: 1;
@@ -2410,6 +2689,13 @@
     }
     .batch-download-choice__option.b_btn {
       min-height: 92px;
+    }
+    .prepared-downloads__item {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .prepared-downloads__item :deep(.b_btn) {
+      min-height: 36px;
+      grid-column: 1 / -1;
     }
     .file-label {
       // 右侧“更多”现在是完整 44px 触控按钮；额外留出 10px 呼吸位，

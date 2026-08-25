@@ -30,6 +30,7 @@ import { ensureFilePreviewSchema } from './util/filePreviewSchema.js';
 import { ensureNoteTreeSchema } from './util/noteTreeSchema.js';
 import { startAiProductEventRetentionScheduler } from './util/aiProductTelemetry.js';
 import { startAiResponseRecoveryCleanupScheduler } from './util/aiResponseRecoveryService.js';
+import { startAiExecutionRecoveryScheduler } from './util/aiExecution/recovery.js';
 import { getAiArtifactRetentionConfig, startAiArtifactRetentionScheduler } from './util/aiArtifactRetention.js';
 import { startAiBalanceSnapshotScheduler } from './util/agent/providerBalanceSnapshot.js';
 import { stableAgentErrorCode } from './util/agent/logSafety.js';
@@ -157,6 +158,9 @@ startAiProductEventRetentionScheduler().catch((err) =>
 );
 startAiResponseRecoveryCleanupScheduler().catch((err) =>
   console.error('AI 响应恢复清理调度启动失败 code=%s', stableAgentErrorCode(err)),
+);
+startAiExecutionRecoveryScheduler().catch((err) =>
+  console.error('AI Execution 租约回收调度启动失败 code=%s', stableAgentErrorCode(err)),
 );
 const aiArtifactRetentionConfig = getAiArtifactRetentionConfig();
 if (!aiArtifactRetentionConfig.enabledDomains.length && aiArtifactRetentionConfig.invalidDomains.length) {

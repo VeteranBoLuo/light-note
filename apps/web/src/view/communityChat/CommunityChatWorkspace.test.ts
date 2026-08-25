@@ -1212,7 +1212,7 @@ describe('CommunityChatWorkspace', () => {
     imageButtons[1]?.click();
     await flushAsync();
 
-    expect(document.body.querySelector<HTMLImageElement>('.chat-image-viewer__image')?.src).toContain(
+    expect(document.body.querySelector<HTMLImageElement>('.b-image-viewer__image')?.src).toContain(
       '/api/community-chat/images/image-latest',
     );
     expect(document.body.textContent).toContain('2 / 2');
@@ -2732,7 +2732,7 @@ describe('CommunityChatWorkspace', () => {
     host.querySelector<HTMLButtonElement>('.community-message__image')?.click();
     await flushAsync();
 
-    expect(document.body.querySelector('.chat-image-viewer-modal')).toBeNull();
+    expect(document.body.querySelector('.b-image-viewer-modal')).toBeNull();
     expect(document.body.querySelector('.mobile-page-actions')).not.toBeNull();
     expect(document.body.textContent).toContain(zhCN.communityChat.image.preview);
     expect(document.body.textContent).toContain(zhCN.communityChat.replyAction);
@@ -2745,8 +2745,8 @@ describe('CommunityChatWorkspace', () => {
     await vi.advanceTimersByTimeAsync(500);
     await flushAsync();
 
-    expect(document.body.querySelector('.chat-image-viewer-modal')).not.toBeNull();
-    expect(document.body.querySelector<HTMLImageElement>('.chat-image-viewer__image')?.src).toContain(
+    expect(document.body.querySelector('.b-image-viewer-modal')).not.toBeNull();
+    expect(document.body.querySelector<HTMLImageElement>('.b-image-viewer__image')?.src).toContain(
       '/api/community-chat/images/image-mobile-viewer-1',
     );
   });
@@ -2788,14 +2788,14 @@ describe('CommunityChatWorkspace', () => {
     host.querySelector<HTMLButtonElement>('.community-message__image')?.click();
     await flushAsync();
 
-    expect(document.body.querySelector('.chat-image-viewer-modal')).not.toBeNull();
-    expect(document.body.querySelector<HTMLImageElement>('.chat-image-viewer__image')?.src).toContain(
+    expect(document.body.querySelector('.b-image-viewer-modal')).not.toBeNull();
+    expect(document.body.querySelector<HTMLImageElement>('.b-image-viewer__image')?.src).toContain(
       '/api/community-chat/images/image-viewer-1',
     );
     expect(document.body.textContent).not.toContain('使用方向键切换图片');
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
     await nextTick();
-    expect(document.body.querySelector<HTMLImageElement>('.chat-image-viewer__image')?.src).toContain(
+    expect(document.body.querySelector<HTMLImageElement>('.b-image-viewer__image')?.src).toContain(
       '/api/community-chat/images/image-viewer-2',
     );
   });

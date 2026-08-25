@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  enqueueAndroidDownloadWithReceipt,
   getLightNoteAndroidVersion,
   hasAndroidBridge,
   hasLightNoteAndroidUserAgent,
@@ -13,6 +14,8 @@ import {
 
 afterEach(() => {
   delete window.LightNoteAndroid;
+  delete window.__lightNoteAndroidDownloadEnqueueResult;
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -85,5 +88,34 @@ describe('androidBridge', () => {
     };
 
     expect(postAndroidMessage({ type: 'download' })).toBe(false);
+  });
+
+  it('下载消息带 token，并以原生 DownloadManager 的真实入队回执为准', async () => {
+    const postMessage = vi.fn();
+    window.LightNoteAndroid = { postMessage };
+
+    const receipt = enqueueAndroidDownloadWithReceipt('https://files.example.com/a.pdf', 'a.pdf');
+    const payload = JSON.parse(postMessage.mock.calls[0][0]);
+    expect(payload).toMatchObject({
+      type: 'download',
+      url: 'https://files.example.com/a.pdf',
+      fileName: 'a.pdf',
+    });
+    expect(payload.token).toMatch(/^download-/);
+
+    window.__lightNoteAndroidDownloadEnqueueResult?.({ token: payload.token, ok: false });
+    await expect(receipt).resolves.toEqual({ ok: false, confirmed: true });
+  });
+
+  it('旧版 App 不回入队结果时只兼容计为未确认提交，且不会重发造成重复下载', async () => {
+    vi.useFakeTimers();
+    const postMessage = vi.fn();
+    window.LightNoteAndroid = { postMessage };
+
+    const receipt = enqueueAndroidDownloadWithReceipt('https://files.example.com/a.pdf', 'a.pdf');
+    await vi.advanceTimersByTimeAsync(1500);
+
+    await expect(receipt).resolves.toEqual({ ok: true, confirmed: false });
+    expect(postMessage).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createAiGateway } from '../agent/aiGateway.js';
 import { getActiveAiExecution } from './context.js';
+import { createAiProviderPlan } from './providerPlan.js';
 import { runAiExecution } from './service.js';
 
 function createPersistence() {
   return {
     insertAiExecution: vi.fn(),
     updateAiExecutionReservation: vi.fn(),
+    renewAiExecutionLease: vi.fn(),
     insertAiProviderSpan: vi.fn(),
     settleAiExecution: vi.fn(),
   };
@@ -287,6 +289,40 @@ describe('aiExecution', () => {
     });
   });
 
+  it('额度占位无法关联根账本时失败关闭，并在 Provider 前按 0 释放', async () => {
+    const persistence = createPersistence();
+    persistence.updateAiExecutionReservation.mockRejectedValueOnce(
+      Object.assign(new Error('temporary store failure'), { code: 'AI_EXECUTION_RESERVATION_NOT_PERSISTED' }),
+    );
+    const quota = {
+      reserve: vi.fn().mockResolvedValue({ blocked: false, reserved: 5_000, reservationKey: 'unlinked-r1' }),
+      reconcile: vi.fn().mockResolvedValue(true),
+    };
+    const client = vi.fn();
+    const gateway = createAiGateway({ completeClient: client, streamClient: vi.fn() });
+
+    await expect(
+      runAiExecution(
+        {
+          requestId: '924a8066-25ea-4fde-903c-7da824077acf',
+          request: { user: { id: 'u1', role: 'user' }, headers: {}, body: {} },
+          taskType: 'reservation_link_failure',
+          persistence,
+        },
+        () => gateway.complete([], { trace: { stage: 'reservation_link_failure' } }),
+        { quota },
+      ),
+    ).rejects.toMatchObject({ code: 'AI_EXECUTION_RESERVATION_LINK_FAILED', status: 503 });
+
+    expect(client).not.toHaveBeenCalled();
+    expect(quota.reconcile).toHaveBeenCalledWith(expect.any(Object), 0, { aborted: false });
+    expect(persistence.settleAiExecution.mock.calls[0][0]).toMatchObject({
+      status: 'failed',
+      chargedTokens: 0,
+      quotaSettlementStatus: 'reconciled',
+    });
+  });
+
   it('并发子调用在首次占位返回后仍重新校验目录调用上限', async () => {
     const persistence = createPersistence();
     const quota = {
@@ -392,6 +428,115 @@ describe('aiExecution', () => {
       providerCallCount: 2,
       missingBillableUsageSpans: 0,
       chargedTokens: 10,
+    });
+  });
+
+  it('阶段计划允许一次图片识别后继续正文生成，不再被动作级单次上限误拦截', async () => {
+    const persistence = createPersistence();
+    const quota = {
+      reserve: vi.fn().mockResolvedValue({ blocked: false, reserved: 20_000, reservationKey: 'plan-r1' }),
+      reconcile: vi.fn().mockResolvedValue(true),
+    };
+    const client = vi.fn().mockResolvedValue({
+      content: 'ok',
+      usage: { promptTokens: 5, completionTokens: 1, totalTokens: 6 },
+      usageStatus: 'reported',
+    });
+    const gateway = createAiGateway({ completeClient: client, streamClient: vi.fn() });
+    const providerPlan = createAiProviderPlan({
+      image_recognition: { billingScope: 'user', maxCalls: 1 },
+      model_generation: { billingScope: 'user', maxCalls: 1 },
+      output_repair: { billingScope: 'platform', maxCalls: 1 },
+    });
+
+    await runAiExecution(
+      {
+        requestId: '469f2f9d-e428-4f3c-ac39-f33e80eb6164',
+        request: { user: { id: 'u1', role: 'user' }, headers: {}, body: {} },
+        taskType: 'skill_file_summarize',
+        providerPlan,
+        reservationTokens: 20_000,
+        persistence,
+      },
+      async () => {
+        await gateway.complete([], { maxTokens: 1_200, trace: { stage: 'image_recognition' } });
+        await gateway.complete([], { maxTokens: 2_600, trace: { stage: 'skill_file_summarize' } });
+      },
+      { quota },
+    );
+
+    expect(client).toHaveBeenCalledTimes(2);
+    expect(persistence.settleAiExecution.mock.calls[0][0]).toMatchObject({
+      providerCallCount: 2,
+      userProviderCallCount: 2,
+      providerStageCallCounts: { image_recognition: 1, model_generation: 1 },
+    });
+  });
+
+  it('阶段计划拒绝图片识别后直接伪造平台修复', async () => {
+    const persistence = createPersistence();
+    const quota = {
+      reserve: vi.fn().mockResolvedValue({ blocked: false, reserved: 20_000, reservationKey: 'plan-r2' }),
+      reconcile: vi.fn().mockResolvedValue(true),
+    };
+    const client = vi.fn().mockResolvedValue({ content: 'ok', usageStatus: 'reported' });
+    const gateway = createAiGateway({ completeClient: client, streamClient: vi.fn() });
+    const providerPlan = createAiProviderPlan({
+      image_recognition: { billingScope: 'user', maxCalls: 1 },
+      model_generation: { billingScope: 'user', maxCalls: 1 },
+      output_repair: { billingScope: 'platform', maxCalls: 1 },
+    });
+
+    await expect(
+      runAiExecution(
+        {
+          requestId: '58c0ad65-063d-42a4-bbcc-e68e40d66338',
+          request: { user: { id: 'u1', role: 'user' }, headers: {}, body: {} },
+          taskType: 'skill_file_summarize',
+          providerPlan,
+          reservationTokens: 20_000,
+          persistence,
+        },
+        async () => {
+          await gateway.complete([], { trace: { stage: 'image_recognition' } });
+          await gateway.complete([], {
+            billingScope: 'platform',
+            repairReasonCode: 'AI_SKILL_STRUCTURED_OUTPUT_MISSING',
+            trace: { stage: 'skill_file_summarize_repair' },
+          });
+        },
+        { quota },
+      ),
+    ).rejects.toMatchObject({ code: 'AI_EXECUTION_PLATFORM_REPAIR_INVALID' });
+    expect(client).toHaveBeenCalledOnce();
+  });
+
+  it('长执行在租约窗口内先续期，再允许访问 Provider', async () => {
+    const persistence = createPersistence();
+    const quota = {
+      reserve: vi.fn().mockResolvedValue({ blocked: false, reserved: 5_000, reservationKey: 'lease-r1' }),
+      reconcile: vi.fn().mockResolvedValue(true),
+    };
+    const gateway = createAiGateway({
+      completeClient: vi.fn().mockResolvedValue({ content: 'ok', usageStatus: 'reported' }),
+      streamClient: vi.fn(),
+    });
+    await runAiExecution(
+      {
+        requestId: '89b111f5-84f9-4520-83c3-dd20d94cc605',
+        request: { user: { id: 'u1', role: 'user' }, headers: {}, body: {} },
+        taskType: 'lease_test',
+        leaseMs: 60_000,
+        persistence,
+      },
+      () => gateway.complete([], { trace: { stage: 'lease_test' } }),
+      { quota },
+    );
+    expect(persistence.renewAiExecutionLease).toHaveBeenCalledOnce();
+    expect(persistence.insertAiExecution.mock.calls[0][0]).toMatchObject({
+      billingRuleVersion: 3,
+      validationRuleVersion: 2,
+      leaseExpiresAt: expect.any(Date),
     });
   });
 

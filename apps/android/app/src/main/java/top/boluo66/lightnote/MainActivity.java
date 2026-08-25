@@ -876,6 +876,29 @@ public final class MainActivity extends Activity {
         return true;
     }
 
+    /** 告诉网页 DownloadManager 是否真正完成入队，不能把 postMessage 成功误当成下载已开始。 */
+    private void reportDownloadEnqueueResult(String token, long downloadId) {
+        if (token == null || token.isEmpty() || webView == null || isFinishing() || isDestroyed()) {
+            return;
+        }
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("token", token);
+            payload.put("ok", downloadId >= 0L);
+            if (downloadId >= 0L) {
+                payload.put("downloadId", String.valueOf(downloadId));
+            }
+        } catch (JSONException error) {
+            return;
+        }
+        webView.evaluateJavascript(
+            "window.__lightNoteAndroidDownloadEnqueueResult&&window.__lightNoteAndroidDownloadEnqueueResult("
+                + payload
+                + ");",
+            null
+        );
+    }
+
     private void configureTrustedWebMessages() {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
             return;
@@ -898,10 +921,11 @@ public final class MainActivity extends Activity {
             JSONObject payload = new JSONObject(message.getData());
             String messageType = payload.optString("type");
             if ("download".equals(messageType)) {
+                String token = payload.optString("token");
                 String url = payload.optString("url");
                 String fileName = payload.optString("fileName");
-                runOnUiThread(() ->
-                    WebViewSupport.download(
+                runOnUiThread(() -> {
+                    long downloadId = WebViewSupport.download(
                         MainActivity.this,
                         url,
                         sourceView.getSettings().getUserAgentString(),
@@ -909,8 +933,9 @@ public final class MainActivity extends Activity {
                         null,
                         fileName,
                         MainActivity.this::reportDownloadProgress
-                    )
-                );
+                    );
+                    reportDownloadEnqueueResult(token, downloadId);
+                });
             } else if ("image.save".equals(messageType)) {
                 // 头像等 data:base64 图片走不了 DownloadManager，交给原生写进相册
                 String token = payload.optString("token");

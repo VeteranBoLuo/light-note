@@ -1,0 +1,11 @@
+/**
+ * AI Skill 在证据装载、Provider 计划和额度预占之间共享的保守上界。
+ * 这些值必须只在这里声明，避免材料裁剪已经变化、计费目录仍保留旧预算。
+ */
+export const AI_SKILL_MAX_CHARS_PER_RESOURCE = 20_000;
+export const AI_SKILL_MAX_TOTAL_EVIDENCE_CHARS = 80_000;
+export const AI_SKILL_VISION_RESERVATION_TOKENS_PER_FILE = 4_000;
+export const AI_SKILL_PROTOCOL_RESERVATION_TOKENS = 8_000;
+export const AI_SKILL_IMPLICIT_EVIDENCE_RESERVATION_TOKENS = 8_000;
+export const AI_SKILL_MAX_INPUT_RESERVATION_TOKENS = 100_000;
+export const AI_SKILL_MAX_RESERVATION_TOKENS = 500_000;

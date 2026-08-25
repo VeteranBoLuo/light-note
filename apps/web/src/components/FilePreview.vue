@@ -364,6 +364,7 @@
   } from '@/utils/mobileOverlayHistory';
   import { configureMarkdownRenderer } from '@/utils/markdownRenderer';
   import { getFilePreviewPollDelay, hasFilePreviewPollingTimedOut } from '@/utils/filePreviewPolling';
+  import { resolveImageViewportLayout } from '@/utils/imageViewport';
   import { getRootZoom } from '@/utils/zoom';
 
   const VueOfficeDocx = defineAsyncComponent(() => import('@vue-office/docx/lib/v3/vue-office-docx.mjs'));
@@ -464,43 +465,17 @@
     t(legacyOfficeFile.value ? 'cloudSpace.previewPanel.legacyOfficeDesc' : 'cloudSpace.previewPanel.unsupportedDesc'),
   );
   const zoomPercent = computed(() => `${Math.round(scale.value * 100)}%`);
-  const imageLayout = computed(() => {
-    const naturalWidth = imageNaturalSize.value.width;
-    const naturalHeight = imageNaturalSize.value.height;
-    const viewportWidth = imageViewportSize.value.width;
-    const viewportHeight = imageViewportSize.value.height;
-    const padding = imageViewportPadding.value;
-    if (!naturalWidth || !naturalHeight || !viewportWidth || !viewportHeight) {
-      return {
-        imageWidth: 0,
-        imageHeight: 0,
-        boundsWidth: 0,
-        boundsHeight: 0,
-        stageWidth: viewportWidth,
-        stageHeight: viewportHeight,
-      };
-    }
-
-    const quarterTurn = Math.abs(Math.round(rotate.value / 90)) % 2 === 1;
-    const naturalBoundsWidth = quarterTurn ? naturalHeight : naturalWidth;
-    const naturalBoundsHeight = quarterTurn ? naturalWidth : naturalHeight;
-    const availableWidth = Math.max(1, viewportWidth - padding.x * 2);
-    const availableHeight = Math.max(1, viewportHeight - padding.top - padding.bottom);
-    const fitScale = Math.min(1, availableWidth / naturalBoundsWidth, availableHeight / naturalBoundsHeight);
-    const imageWidth = naturalWidth * fitScale * scale.value;
-    const imageHeight = naturalHeight * fitScale * scale.value;
-    const boundsWidth = quarterTurn ? imageHeight : imageWidth;
-    const boundsHeight = quarterTurn ? imageWidth : imageHeight;
-
-    return {
-      imageWidth,
-      imageHeight,
-      boundsWidth,
-      boundsHeight,
-      stageWidth: Math.max(viewportWidth, boundsWidth + padding.x * 2),
-      stageHeight: Math.max(viewportHeight, boundsHeight + padding.top + padding.bottom),
-    };
-  });
+  const imageLayout = computed(() =>
+    resolveImageViewportLayout({
+      naturalWidth: imageNaturalSize.value.width,
+      naturalHeight: imageNaturalSize.value.height,
+      viewportWidth: imageViewportSize.value.width,
+      viewportHeight: imageViewportSize.value.height,
+      padding: imageViewportPadding.value,
+      scale: scale.value,
+      rotation: rotate.value,
+    }),
+  );
   const imageStageStyle = computed<CSSProperties>(() => ({
     width: `${imageLayout.value.stageWidth}px`,
     height: `${imageLayout.value.stageHeight}px`,

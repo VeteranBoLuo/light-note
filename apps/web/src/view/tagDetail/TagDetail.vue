@@ -262,6 +262,7 @@
       :scope-label="t('tagManage.aiSkillScope', { count: tagAiResourceRefs.length })"
       :actions="tagAiActions"
       :placeholder="t('tagManage.aiSkillPlaceholder')"
+      :auto-run-action-id="tagAiResourceRefs.length ? 'summarize' : ''"
     />
   </div>
 </template>
@@ -835,7 +836,6 @@
         font-size: 13px;
         color: var(--desc-color);
       }
-
     }
   }
 

@@ -3,7 +3,7 @@ import {
   validateAiSkillRequest,
   validateAiSkillResponse,
 } from '@lightnote/shared/ai-skill-protocol';
-import { createUserAiExecutionConfig } from '../aiBillingCatalog.js';
+import { createAiSkillExecutionConfig } from '../aiBillingCatalog.js';
 import { runAiExecution } from '../aiExecution/service.js';
 import { assertAiSkillDomainEnabled } from '../aiProductFeature.js';
 import { resolveAiSkillContext, resolveAiSkillIdentity } from './contextResolver.js';
@@ -82,7 +82,7 @@ export async function executeAiSkill(rawRequest, req, dependencies = {}) {
   try {
     assertDomainEnabled(skill.domain);
     const result = await runExecution(
-      createUserAiExecutionConfig(skill.id, {
+      createAiSkillExecutionConfig(skill, request, {
         requestId: request.requestId,
         request: req,
         identity: req?.billingUser || req?.user,

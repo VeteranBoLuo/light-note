@@ -152,6 +152,14 @@
     });
   }
 
+  function handleViewportResize() {
+    // 键盘表面与 100dvh 可能先于下一帧完成收缩。这里先同步提交壳体与底栏几何，
+    // 再用 rAF 复核一次厂商 WebView 动画后的最终 visualViewport，避免输入区先被
+    // “已收缩的壳体 + 尚未收起的底栏”双重挤压，随后又回落一个底栏高度。
+    updateKeyboardState();
+    scheduleKeyboardStateUpdate();
+  }
+
   function resetKeyboardViewportState() {
     keyboardOpen.value = false;
     visibleViewportHeight.value = 0;
@@ -241,9 +249,9 @@
 
   onMounted(() => {
     updateKeyboardState();
-    window.visualViewport?.addEventListener('resize', scheduleKeyboardStateUpdate);
+    window.visualViewport?.addEventListener('resize', handleViewportResize);
     window.visualViewport?.addEventListener('scroll', scheduleKeyboardStateUpdate);
-    window.addEventListener('resize', scheduleKeyboardStateUpdate);
+    window.addEventListener('resize', handleViewportResize);
     document.addEventListener('focusin', scheduleKeyboardStateUpdate);
     document.addEventListener('focusout', scheduleKeyboardStateUpdate);
     nextTick(measureBottomNavHeight);
@@ -256,9 +264,9 @@
     clearRestoreTimers();
     removeBeforeGuard?.();
     if (focusFrame) window.cancelAnimationFrame(focusFrame);
-    window.visualViewport?.removeEventListener('resize', scheduleKeyboardStateUpdate);
+    window.visualViewport?.removeEventListener('resize', handleViewportResize);
     window.visualViewport?.removeEventListener('scroll', scheduleKeyboardStateUpdate);
-    window.removeEventListener('resize', scheduleKeyboardStateUpdate);
+    window.removeEventListener('resize', handleViewportResize);
     document.removeEventListener('focusin', scheduleKeyboardStateUpdate);
     document.removeEventListener('focusout', scheduleKeyboardStateUpdate);
     delete document.documentElement.dataset.lightNotePrimaryRoot;
@@ -281,13 +289,11 @@
     overflow: hidden;
     color: var(--text-color);
     background: var(--surface-page-bg, var(--background-color));
-    transition: height 48ms linear;
   }
 
   .mobile-app-shell.is-keyboard-open {
     height: var(--mobile-visible-viewport-height, 100%);
     max-height: 100%;
-    will-change: height;
   }
 
   .mobile-app-shell.is-top-bar-hidden {
@@ -330,11 +336,13 @@
     flex: 0 0 var(--mobile-bottom-nav-visible-height, var(--mobile-bottom-nav-height));
     overflow: hidden;
     opacity: var(--mobile-bottom-nav-opacity, 1);
-    transition:
-      height 48ms linear,
-      flex-basis 48ms linear,
-      opacity 48ms linear;
-    will-change: height, flex-basis, opacity;
+    /*
+     * 壳体可能被父级 100dvh / max-height 立即夹到键盘上沿，因此 height 与
+     * flex-basis 不能再单独过渡；它们必须和本轮 visualViewport 采样同步结算。
+     * 透明度只影响观感，不参与内容区几何，可以保留轻量淡出。
+     */
+    transition: opacity 48ms linear;
+    will-change: opacity;
   }
 
   .mobile-app-shell__bottom-nav.is-hidden {
@@ -343,7 +351,6 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .mobile-app-shell,
     .mobile-app-shell__bottom-nav {
       transition: none;
     }

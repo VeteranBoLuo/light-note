@@ -2,10 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const migrationUrl = new URL(
-  '../migrations/20260824_ai_skills_public_knowledge_refresh.sql',
-  import.meta.url,
-);
+const migrationUrl = new URL('../migrations/20260824_ai_skills_public_knowledge_refresh.sql', import.meta.url);
 const mobileSeedUrl = new URL('../scripts/seedMobileTodaySearchKnowledge.js', import.meta.url);
 
 describe('模块化 AI 公开帮助知识迁移', () => {
@@ -16,6 +13,7 @@ describe('模块化 AI 公开帮助知识迁移', () => {
     expect(source).toContain('生成新笔记”成功后会立即创建并打开一篇已保存的笔记');
     expect(source).toContain('智能打标签');
     expect(source).toContain('网页存档免费保存完整正文；AI 摘要需在已有正文后由用户另行明确生成');
+    expect(source).toContain('从书签首页或管理页打开“分析此书签”后会自动总结，结果底部可直接生成新笔记');
     expect(source).toContain('TXT、Markdown、CSV、PDF、DOCX、PNG、JPG/JPEG 和 WebP');
     expect(source).toContain('单张图片：提取并总结可识别文字');
     expect(source).toContain('简洁模式生成 3～5 步，详细模式生成 6～10 步');

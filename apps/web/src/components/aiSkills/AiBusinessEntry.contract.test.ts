@@ -19,9 +19,10 @@ describe('业务 AI 入口能力契约', () => {
     expect(source).not.toContain("id: 'extract-todos'");
   });
 
-  it('书签管理仅保留单卡分析，并把网页存档与 AI 摘要拆成显式动作', () => {
+  it('书签入口统一为单卡自动分析，并从分析结果直接生成笔记', () => {
     const desktopTable = read('components/manage/bookmarkMg/BookmarkTable.vue');
     const mobileTable = read('components/manage/bookmarkMg/BookmarkTableMobile.vue');
+    const homeCards = read('components/home/CardPanel.vue');
     const dialog = read('components/manage/bookmarkMg/BookmarkAiDialog.vue');
     const snapshot = read('components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue');
 
@@ -29,14 +30,36 @@ describe('业务 AI 入口能力契约', () => {
     expect(mobileTable).not.toContain('openSelectedBookmarksInAi');
     expect(dialog).toContain('props.bookmarks.slice(0, 1)');
     expect(dialog).toContain(':show-prompt="false"');
+    expect(dialog).toContain('auto-run-action-id="summarize"');
     expect(dialog).toContain("'bookmark.summarize_page'");
+    expect(dialog).toContain('persistAiMarkdownResultAsNote');
+    expect(dialog).toContain('#result-actions');
+    expect(dialog).not.toContain('bookmark.create_note_preview');
+    expect(dialog).not.toContain("mode?: 'analyze' | 'create_note'");
     expect(dialog).not.toContain("'bookmark.compare_pages'");
+    expect(homeCards).toContain("key: 'analyzeBookmark'");
+    expect(homeCards).not.toContain('mode="create_note"');
     expect(snapshot).toContain("'/api/bookmark/archive'");
     expect(snapshot).toContain("'/api/bookmark/summarize'");
     expect(snapshot).not.toContain("'/api/bookmark/archive-summary'");
     expect(snapshot).toContain('await loadSnap();');
     expect(snapshot).not.toContain('await generateArchive();');
     expect(snapshot).not.toContain('await generateSummary();');
+  });
+
+  it('只有一个固定分析动作的入口打开即执行，不再显示重复任务按钮', () => {
+    const panel = read('components/aiSkills/AiSkillPanel.vue');
+    const noteDialog = read('components/noteLibrary/library/NoteAiDialog.vue');
+    const tagDetail = read('view/tagDetail/TagDetail.vue');
+    const inbox = read('view/inbox/Inbox.vue');
+    const search = read('view/search/SearchCenter.vue');
+
+    expect(panel).toContain('visibleActions');
+    expect(panel).toContain('action.id !== autoRunId');
+    expect(noteDialog).toContain("resourceRefs.length === 1 ? 'summarize' : ''");
+    expect(tagDetail).toContain("tagAiResourceRefs.length ? 'summarize' : ''");
+    expect(inbox).toContain('auto-run-action-id="analyze"');
+    expect(search).toContain("searchAiResourceRefs.value.length === 1 ? 'summarize' : ''");
   });
 
   it('书签存档弹窗不在按钮上重复标记免费或额度信息', () => {

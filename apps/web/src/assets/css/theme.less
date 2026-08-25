@@ -23,6 +23,23 @@ html[data-theme='night'] {
   --info-color: #2a63d6; /* 最差表面 4.91:1 */
   /* 键盘焦点环。day 下 primary(#615ced) 对浅底 4.44~4.93:1，直接用即可。 */
   --focus-ring-color: var(--primary-color);
+  /* 图片大图预览使用独立的中性深色画布。亮色主题只减轻遮罩并提亮外壳层级，
+     避免白底截图与画布融在一起，也避免媒体色彩受到品牌色干扰。 */
+  --image-viewer-mask-bg: rgba(13, 14, 19, 0.76);
+  --image-viewer-shell-bg: #15161b;
+  --image-viewer-chrome-bg: #1b1c22;
+  --image-viewer-stage-bg: #0f1014;
+  --image-viewer-border-color: rgba(255, 255, 255, 0.18);
+  --image-viewer-divider-color: rgba(255, 255, 255, 0.13);
+  --image-viewer-text-color: #ffffff;
+  --image-viewer-muted-color: rgba(255, 255, 255, 0.68);
+  --image-viewer-control-bg: rgba(255, 255, 255, 0.06);
+  --image-viewer-control-hover-bg: rgba(255, 255, 255, 0.14);
+  --image-viewer-control-border-color: rgba(255, 255, 255, 0.22);
+  --image-viewer-nav-bg: rgba(31, 32, 40, 0.8);
+  --image-viewer-nav-hover-bg: rgba(49, 50, 60, 0.94);
+  --image-viewer-focus-ring-color: #9894ff;
+  --image-viewer-shadow: 0 24px 80px rgba(7, 8, 12, 0.42);
   /* 实色填充（角标、状态胶囊）专用。--danger-color / --warning-color 是**前景色**，
      深色主题下必须提亮；而填充底色配白字时需要足够暗，两个角色要求相反。
      此前 3 个角标组件直接把前景色当底色 + 白字，深色主题下只有 2.04~2.78:1。
@@ -292,6 +309,22 @@ html[data-theme='night'] {
      （最差是 --surface-border-color #3b4351），低于 WCAG 1.4.11 对焦点指示器的 3:1。
      混白 35% 后最差 3.76:1 达标；用 color-mix 而非硬编码，primary 调整时自动跟随。 */
   --focus-ring-color: color-mix(in srgb, var(--primary-color) 65%, #fff);
+  /* 暗色主题继续使用中性深色画布，并通过更深遮罩与更克制的描边融入页面。 */
+  --image-viewer-mask-bg: rgba(3, 4, 6, 0.9);
+  --image-viewer-shell-bg: #101116;
+  --image-viewer-chrome-bg: #15161b;
+  --image-viewer-stage-bg: #090a0d;
+  --image-viewer-border-color: rgba(255, 255, 255, 0.13);
+  --image-viewer-divider-color: rgba(255, 255, 255, 0.1);
+  --image-viewer-text-color: #ffffff;
+  --image-viewer-muted-color: rgba(255, 255, 255, 0.62);
+  --image-viewer-control-bg: rgba(255, 255, 255, 0.05);
+  --image-viewer-control-hover-bg: rgba(255, 255, 255, 0.11);
+  --image-viewer-control-border-color: rgba(255, 255, 255, 0.17);
+  --image-viewer-nav-bg: rgba(25, 26, 32, 0.82);
+  --image-viewer-nav-hover-bg: rgba(43, 44, 52, 0.94);
+  --image-viewer-focus-ring-color: #aaa6ff;
+  --image-viewer-shadow: 0 24px 80px rgba(0, 0, 0, 0.58);
   /* 深色主题的实色填充走「亮底 + 深字」：亮底在深色页面上够突出（6.00~8.16:1），
      深字保证数字读得清（6.03~7.06:1）。沿用 day 的白字只有 2.04~2.78:1。 */
   /* 深色主题使用单独校准的胶囊实色，不从亮色值混合推导。 */

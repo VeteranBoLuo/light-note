@@ -91,11 +91,7 @@
       <BLoading v-if="bookmark.bookmarkLoadingMore" inline loading :title="$t('common.loading')" />
       <BButton v-else size="small" @click="emit('load-more')">{{ $t('common.loadMore') }}</BButton>
     </div>
-    <BookmarkAiDialog
-      v-model:visible="bookmarkAiVisible"
-      :bookmarks="bookmarkAiItems"
-      mode="create_note"
-    />
+    <BookmarkAiDialog v-model:visible="bookmarkAiVisible" :bookmarks="bookmarkAiItems" />
   </div>
 </template>
 
@@ -222,7 +218,7 @@
       },
       { key: 'edit', label: t('common.edit'), icon: icon.table_edit },
       { key: 'copyLink', label: t('common.copyLink'), icon: icon.cloudSpace.preview.copy },
-      { key: 'generateNote', label: t('ai.generateNoteFromBookmark'), icon: icon.ai.ask },
+      { key: 'analyzeBookmark', label: t('bookmarkMg.aiUseBookmark'), icon: icon.ai.summary },
       {
         key: 'toggleInbox',
         label: item.isPending ? t('inbox.removeExisting') : t('inbox.addExisting'),
@@ -250,7 +246,7 @@
       message.success(t('common.linkCopied'));
       return;
     }
-    if (action === 'generateNote') {
+    if (action === 'analyzeBookmark') {
       bookmarkAiItems.value = [item];
       bookmarkAiVisible.value = true;
       return;

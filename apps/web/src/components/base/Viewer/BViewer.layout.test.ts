@@ -4,24 +4,18 @@ import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(resolve(process.cwd(), 'src/components/base/Viewer/BViewer.vue'), 'utf8');
 
-describe('BViewer 全局图片预览布局', () => {
-  it('开启 viewer.js 工具栏时把保存按钮上移，避免两组操作重叠', () => {
-    expect(source).toContain(':class="{ \'has-viewer-toolbar\': viewerToolbarVisible }"');
-    expect(source).toContain('viewerToolbarVisible.value = Boolean(options.toolbar)');
-    expect(source).toContain('.viewer-save-btn.has-viewer-toolbar');
-    expect(source).toContain('bottom: calc(64px + env(safe-area-inset-bottom, 0px));');
+describe('BViewer 全局图片预览适配层', () => {
+  it('把全局 store 请求交给共享 BImageViewer，不再直接创建第三方查看器', () => {
+    expect(source).toContain('<BImageViewer');
+    expect(source).toContain('bookmark.viewerKey');
+    expect(source).not.toContain('viewerjs');
+    expect(source).not.toContain('new Viewer');
   });
 
-  it('图片预览遵循全站覆盖层级，保存按钮只高一层', () => {
-    expect(source).toContain('zIndex: 900');
-    expect(source).toContain('z-index: 901');
-    expect(source).not.toContain('z-index: 2020');
-  });
-
-  it('等待当前图片完成展示后才显示保存按钮', () => {
-    expect(source).toContain('viewerVisible.value && imageReady.value && canSaveImage');
-    expect(source).toContain('viewed(e) {\n          imageReady.value = true;');
-    expect(source).toContain('hidden() {');
-    expect(source).toContain('imageReady.value = false;');
+  it('默认提供完整工具栏和保存能力，同时保留调用方显式关闭能力', () => {
+    expect(source).toContain('bookmark.viewer.options.toolbar !== false');
+    expect(source).toContain('bookmark.viewer.options.download !== false');
+    expect(source).toContain(':show-toolbar="showToolbar"');
+    expect(source).toContain(':allow-download="allowDownload"');
   });
 });

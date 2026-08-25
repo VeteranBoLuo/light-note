@@ -16,8 +16,9 @@ export async function insertAiExecution(execution, database = pool) {
     const [result] = await database.query(
       `INSERT INTO ai_executions
         (id, request_id, actor_user_id, subject_user_id, billing_policy, surface, task_type,
-         skill_id, skill_version, status, quota_reservation_key)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?)`,
+         skill_id, skill_version, billing_rule_version, validation_rule_version, status,
+         quota_reservation_key, lease_expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?)`,
       [
         execution.id,
         execution.requestId,
@@ -28,7 +29,10 @@ export async function insertAiExecution(execution, database = pool) {
         execution.taskType,
         execution.skillId,
         execution.skillVersion,
+        execution.billingRuleVersion,
+        execution.validationRuleVersion,
         execution.quotaHandle?.reservationKey || null,
+        execution.leaseExpiresAt,
       ],
     );
     if (!affectedExactlyOne(result)) throw persistenceError('AI_EXECUTION_START_NOT_PERSISTED');
@@ -37,6 +41,16 @@ export async function insertAiExecution(execution, database = pool) {
     if (error?.code?.startsWith?.('AI_EXECUTION_')) throw error;
     throw persistenceError('AI_EXECUTION_STORE_UNAVAILABLE');
   }
+}
+
+export async function renewAiExecutionLease(execution, database = pool) {
+  const [result] = await database.query(
+    `UPDATE ai_executions
+        SET lease_expires_at = ?
+      WHERE id = ? AND status = 'running'`,
+    [execution.leaseExpiresAt, execution.id],
+  );
+  if (!affectedExactlyOne(result)) throw persistenceError('AI_EXECUTION_LEASE_NOT_RENEWED');
 }
 
 export async function updateAiExecutionReservation(execution, database = pool) {
@@ -85,7 +99,8 @@ export async function settleAiExecution(execution, database = pool) {
     `UPDATE ai_executions
         SET status = ?, model_called = ?, provider_call_count = ?, prompt_tokens = ?, completion_tokens = ?,
             provider_tokens = ?, charged_tokens = ?, usage_complete = ?, quota_settlement_status = ?,
-            error_code = ?, duration_ms = ?,
+            quota_reservation_key = COALESCE(?, quota_reservation_key),
+            error_code = ?, duration_ms = ?, lease_expires_at = NULL,
             updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND status = 'running'`,
     [
@@ -100,6 +115,7 @@ export async function settleAiExecution(execution, database = pool) {
       // usage 也不能把用户主调用误标为估算；Provider 总量完整性仍保留在 Span 账本中。
       execution.missingBillableUsageSpans === 0 ? 1 : 0,
       execution.quotaSettlementStatus,
+      execution.quotaHandle?.reservationKey || null,
       execution.errorCode,
       execution.durationMs,
       execution.id,
@@ -111,6 +127,7 @@ export async function settleAiExecution(execution, database = pool) {
 export const defaultAiExecutionPersistence = Object.freeze({
   insertAiExecution,
   updateAiExecutionReservation,
+  renewAiExecutionLease,
   insertAiProviderSpan,
   settleAiExecution,
 });

@@ -78,6 +78,12 @@ const pool = vi.hoisted(() => ({
           }
           return [{ affectedRows: row ? 1 : 0 }, []];
         }
+        if (/UPDATE ai_token_reservations\s+SET actual_tokens = \?/i.test(sql)) {
+          const [actualTokens, key] = params;
+          const row = state.reservations.get(key);
+          if (row) state.reservations.set(key, { ...row, actual_tokens: Number(actualTokens || 0) });
+          return [{ affectedRows: row ? 1 : 0 }, []];
+        }
         if (/INSERT INTO ai_token_usage/i.test(sql)) {
           const [type, key, periodKey] = params;
           const mapKey = usageKey(type, key, periodKey);
@@ -94,6 +100,14 @@ const pool = vi.hoisted(() => ({
           const mapKey = usageKey(type, key, periodKey);
           const value = state.usage.get(mapKey) || { tokens: 0, calls: 0 };
           state.usage.set(mapKey, { tokens: value.tokens + Number(delta || 0), calls: value.calls + 1 });
+          return [{ affectedRows: 1 }, []];
+        }
+        if (/UPDATE ai_token_usage[\s\S]+SET tokens_used = tokens_used - \?/i.test(sql)) {
+          const [amount, type, key, periodKey] = params;
+          const mapKey = usageKey(type, key, periodKey);
+          const value = state.usage.get(mapKey);
+          if (!value) return [{ affectedRows: 0 }, []];
+          state.usage.set(mapKey, { tokens: value.tokens - Number(amount || 0), calls: value.calls });
           return [{ affectedRows: 1 }, []];
         }
         if (/UPDATE ai_token_usage[\s\S]+GREATEST\(0, tokens_used \+ \?\)/i.test(sql)) {
@@ -379,6 +393,8 @@ describe('AI quota abuse hardening', () => {
     expect(state.wallets.get('user-wallet')).toBe(25_000);
     await aiQuota.reconcile(handle, 1800);
     expect(state.wallets.get('user-wallet')).toBe(28_200);
+    await aiQuota.correctReconciledReservation(handle, 1000);
+    expect(state.wallets.get('user-wallet')).toBe(29_000);
   });
 
   it('并发 gate 在同一设备账本只允许一个请求占用最后额度', async () => {
@@ -407,6 +423,62 @@ describe('AI quota abuse hardening', () => {
     await expect(aiQuota.reconcile(handle, 1000)).resolves.toBe(true);
     expect(usageByType('visitor_device')).toEqual([{ tokens: 1000, calls: 1 }]);
     expect(usageByType('visitor_network')).toEqual([{ tokens: 1000, calls: 1 }]);
+  });
+
+  it('规则升级可幂等修正已结算用量且不重复增加调用次数', async () => {
+    const handle = await aiQuota.reserve(visitorRequest(), {
+      userId: 'user-history',
+      userRole: 'user',
+      requestId: 'historical-correction',
+    });
+    await aiQuota.reconcile(handle, 4_000);
+    expect(usageByType('user')).toEqual([{ tokens: 4_000, calls: 1 }]);
+
+    await expect(aiQuota.correctReconciledReservation(handle, 1_000)).resolves.toEqual({
+      corrected: true,
+      previousActual: 4_000,
+      actualTokens: 1_000,
+    });
+    await expect(aiQuota.correctReconciledReservation(handle, 1_000)).resolves.toEqual({
+      corrected: false,
+      previousActual: 1_000,
+      actualTokens: 1_000,
+    });
+    await expect(aiQuota.correctReconciledReservation(handle, 2_000)).rejects.toMatchObject({
+      code: 'AI_QUOTA_CORRECTION_WOULD_INCREASE',
+    });
+    expect(usageByType('user')).toEqual([{ tokens: 1_000, calls: 1 }]);
+  });
+
+  it('中断回收能释放已经先行 reconciled 的 reservation，而不只修改 Execution 展示金额', async () => {
+    const handle = await aiQuota.reserve(visitorRequest(), {
+      userId: 'user-interrupted',
+      userRole: 'user',
+      requestId: 'interrupted-after-reconcile',
+    });
+    await aiQuota.reconcile(handle, 4_000);
+    expect(usageByType('user')).toEqual([{ tokens: 4_000, calls: 1 }]);
+
+    await expect(aiQuota.releaseReservation(handle)).resolves.toBe(true);
+    await expect(aiQuota.releaseReservation(handle)).resolves.toBe(true);
+    expect(usageByType('user')).toEqual([{ tokens: 0, calls: 1 }]);
+  });
+
+  it('历史聚合桶不足以承受退款差额时回滚，不把 reservation 标成已修正', async () => {
+    const handle = await aiQuota.reserve(visitorRequest(), {
+      userId: 'user-inconsistent-history',
+      userRole: 'user',
+      requestId: 'inconsistent-history',
+    });
+    await aiQuota.reconcile(handle, 4_000);
+    const subject = handle.subjects[0];
+    state.usage.set(usageKey(subject.type, subject.key, handle.pk), { tokens: 500, calls: 1 });
+
+    await expect(aiQuota.correctReconciledReservation(handle, 1_000)).rejects.toMatchObject({
+      code: 'AI_QUOTA_COUNTER_UPDATE_FAILED',
+    });
+    expect(state.reservations.get(handle.reservationKey)?.actual_tokens).toBe(4_000);
+    expect(usageByType('user')).toEqual([{ tokens: 500, calls: 1 }]);
   });
 
   it('客户端中途断开时按 Provider 已确认用量结算，不把整笔预占误扣给用户', async () => {

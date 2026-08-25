@@ -53,7 +53,7 @@ describe('cloud file empty state layout', () => {
   });
 
   it('移动端卡片隐藏直接下载，卡片本身仍可拖入文件夹', () => {
-    expect(source).toContain("v-if=\"!batchMode && !bookmark.isMobile\"");
+    expect(source).toContain('v-if="!batchMode && !bookmark.isMobile"');
     expect(source).toContain(':draggable="canDragFile(item)"');
     expect(source).toContain('@dragstart="onFileDragStart($event, item)"');
     expect(source).toContain('@dragend="onFileDragEnd"');
@@ -61,11 +61,15 @@ describe('cloud file empty state layout', () => {
     expect(source).toContain('suppressCardClickUntil = Date.now() + 250');
   });
 
-  it('批量下载先选择分别下载或 ZIP，单文件仍直接下载', () => {
+  it('批量下载先选择分别下载或 ZIP，分别下载不再连续触发自动下载，单文件仍直接下载', () => {
     expect(source).toContain('v-model:visible="batchDownloadChoiceVisible"');
+    expect(source).toContain('v-model:visible="preparedDownloadsVisible"');
     expect(source).toContain(`startBatchDownload('individual')`);
     expect(source).toContain(`startBatchDownload('zip')`);
-    expect(source).toContain('const runBrowserIndividualDownloads = async');
+    expect(source).toContain('const runBrowserDirectoryDownloads = async');
+    expect(source).toContain('const prepareBrowserIndividualDownloads = async');
+    expect(source).toContain('triggerPreparedBrowserDownload(item.meta)');
+    expect(source).not.toContain('const runBrowserIndividualDownloads = async');
     expect(source).toContain('const runZipBatchDownload = async');
     expect(source).toMatch(
       /if \(selectedFiles\.length === 1\)[\s\S]*?downloadField\(selectedFiles\[0\]\.id\)[\s\S]*?batchDownloadChoiceVisible\.value = true/,

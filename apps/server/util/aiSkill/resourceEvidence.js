@@ -7,9 +7,8 @@ import {
   recognizeCloudImageDocumentSource,
 } from '../aiDocument/service.js';
 import { aiSkillError } from './errors.js';
+import { AI_SKILL_MAX_CHARS_PER_RESOURCE, AI_SKILL_MAX_TOTAL_EVIDENCE_CHARS } from './limits.js';
 
-const DEFAULT_MAX_CHARS_PER_RESOURCE = 20_000;
-const DEFAULT_MAX_TOTAL_CHARS = 80_000;
 const DEFAULT_FILE_PREPARE_WAIT_MS = 12_000;
 const DEFAULT_FILE_PREPARE_POLL_MS = 500;
 const EVIDENCE_QUALITY_WARNING_CODES = new Set(['image_recognition_fallback', 'image_recognition_uncertain']);
@@ -342,8 +341,8 @@ export async function loadExplicitResourceEvidence({
   userId,
   resourceRefs = [],
   database = pool,
-  maxCharsPerResource = DEFAULT_MAX_CHARS_PER_RESOURCE,
-  maxTotalChars = DEFAULT_MAX_TOTAL_CHARS,
+  maxCharsPerResource = AI_SKILL_MAX_CHARS_PER_RESOURCE,
+  maxTotalChars = AI_SKILL_MAX_TOTAL_EVIDENCE_CHARS,
 }) {
   const refs = Array.isArray(resourceRefs) ? resourceRefs : [];
   if (!refs.length) return { evidence: '', sources: [], coverage: { complete: true, warnings: [], resources: [] } };

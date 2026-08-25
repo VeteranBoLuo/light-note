@@ -14,8 +14,13 @@
       {{ scopeLabel }}
     </div>
 
-    <div v-if="skillAvailable && actions.length" class="ai-skill-panel__actions">
-      <BTooltip v-for="action in actions" :key="action.id" :title="action.reason || ''" :disabled="!action.reason">
+    <div v-if="skillAvailable && visibleActions.length" class="ai-skill-panel__actions">
+      <BTooltip
+        v-for="action in visibleActions"
+        :key="action.id"
+        :title="action.reason || ''"
+        :disabled="!action.reason"
+      >
         <BButton size="small" :disabled="interactionDisabled || action.disabled" @click="runAction(action)">
           {{ action.label }}
         </BButton>
@@ -49,6 +54,9 @@
     <div v-else-if="error" class="ai-skill-panel__state is-error" role="alert">
       <strong>{{ errorTitle }}</strong>
       <span>{{ error.message }}</span>
+      <BButton v-if="autoRunAction" size="small" class="ai-skill-panel__retry" @click="runAction(autoRunAction)">
+        {{ t('aiSkills.retry') }}
+      </BButton>
     </div>
     <div v-else-if="response?.result" class="ai-skill-panel__result" aria-live="polite">
       <slot name="result" :response="response" :result="response.result">
@@ -67,7 +75,13 @@
       <div v-if="coverageWarnings.length" class="ai-skill-panel__coverage" role="status">
         <span v-for="warning in coverageWarnings" :key="warning">{{ warning }}</span>
       </div>
-      <div v-if="response.availableActions.length" class="ai-skill-panel__result-actions">
+      <div v-if="response.availableActions.length || $slots['result-actions']" class="ai-skill-panel__result-actions">
+        <slot
+          name="result-actions"
+          :response="response"
+          :result="response.result"
+          :disabled="interactionDisabled"
+        ></slot>
         <BButton
           v-for="action in response.availableActions"
           :key="String(action.id)"
@@ -174,6 +188,10 @@
   const autoRunAction = computed(() =>
     props.autoRunActionId ? props.actions.find((action) => action.id === props.autoRunActionId) || null : null,
   );
+  const visibleActions = computed(() => {
+    const autoRunId = autoRunAction.value?.id;
+    return autoRunId ? props.actions.filter((action) => action.id !== autoRunId) : props.actions;
+  });
   const autoRunKey = computed(() => {
     const action = autoRunAction.value;
     if (!action) return '';
@@ -456,6 +474,11 @@
     color: var(--danger-color);
   }
 
+  .ai-skill-panel__retry {
+    align-self: flex-start;
+    margin-top: 4px;
+  }
+
   .ai-skill-panel__state.is-unavailable {
     display: grid;
     gap: 4px;
@@ -468,7 +491,12 @@
     margin-top: 12px;
   }
 
+  .ai-skill-panel__result-actions:empty {
+    display: none;
+  }
+
   .ai-skill-panel__sources {
+    align-items: center;
     margin-top: 12px;
     padding-top: 10px;
     border-top: 1px solid var(--surface-divider-color);

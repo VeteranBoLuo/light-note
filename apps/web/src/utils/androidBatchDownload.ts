@@ -21,8 +21,15 @@ export interface AndroidBatchDownloadOutcome {
   succeeded: number;
   /** 取地址失败或桥拒收的数量 */
   failed: number;
+  /** 已投递给不回执的旧版 App，不能确认是否真正入队的数量 */
+  unconfirmed: number;
   /** 是否因取消提前收尾 */
   cancelled: boolean;
+}
+
+export interface AndroidBatchDownloadReceipt {
+  ok: boolean;
+  confirmed: boolean;
 }
 
 /**
@@ -45,25 +52,59 @@ function toAbsoluteHttpUrl(value: string): string | null {
 export async function submitAndroidBatchDownload<T>(options: {
   files: T[];
   resolveMeta: (file: T, index: number) => Promise<AndroidBatchDownloadMeta>;
-  submit: (downloadUrl: string, fileName: string) => boolean;
+  submit: (
+    downloadUrl: string,
+    fileName: string,
+  ) => boolean | AndroidBatchDownloadReceipt | Promise<boolean | AndroidBatchDownloadReceipt>;
   isCancelled?: () => boolean;
   onSubmitted?: (done: number, total: number) => void;
 }): Promise<AndroidBatchDownloadOutcome> {
   const { files, resolveMeta, submit, isCancelled, onSubmitted } = options;
   let succeeded = 0;
   let failed = 0;
+  let unconfirmed = 0;
+  const pendingReceipts: Promise<void>[] = [];
+
+  const settlePendingReceipts = async () => {
+    await Promise.all(pendingReceipts);
+  };
+
+  const recordReceipt = (receipt: boolean | AndroidBatchDownloadReceipt) => {
+    if (typeof receipt === 'boolean') {
+      if (receipt) succeeded += 1;
+      else failed += 1;
+      return;
+    }
+    if (!receipt.ok) failed += 1;
+    else if (receipt.confirmed) succeeded += 1;
+    else unconfirmed += 1;
+  };
 
   for (let index = 0; index < files.length; index++) {
     // 已经交出去的下载归 DownloadManager 管、撤不回来，所以取消只能停在「不再提交新的」
     if (isCancelled?.()) {
-      return { succeeded, failed, cancelled: true };
+      await settlePendingReceipts();
+      return { succeeded, failed, unconfirmed, cancelled: true };
     }
 
     try {
       const { downloadUrl, fileName } = await resolveMeta(files[index], index);
       const absoluteUrl = toAbsoluteHttpUrl(downloadUrl);
-      if (absoluteUrl && submit(absoluteUrl, fileName)) {
-        succeeded += 1;
+      if (absoluteUrl) {
+        const receipt = submit(absoluteUrl, fileName);
+        if (typeof (receipt as Promise<unknown>)?.then === 'function') {
+          // 多个原生回执并行等待：旧版 App 不回执，超时也只等待一轮，不能按文件数串行叠加。
+          pendingReceipts.push(
+            Promise.resolve(receipt)
+              .then(recordReceipt)
+              .catch((error) => {
+                console.error('批量下载原生回执失败:', error);
+                failed += 1;
+              }),
+          );
+        } else {
+          recordReceipt(receipt as boolean | AndroidBatchDownloadReceipt);
+        }
       } else {
         failed += 1;
       }
@@ -76,5 +117,6 @@ export async function submitAndroidBatchDownload<T>(options: {
     onSubmitted?.(index + 1, files.length);
   }
 
-  return { succeeded, failed, cancelled: false };
+  await settlePendingReceipts();
+  return { succeeded, failed, unconfirmed, cancelled: false };
 }

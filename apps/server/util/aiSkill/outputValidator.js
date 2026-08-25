@@ -1,7 +1,5 @@
 import { aiSkillError } from './errors.js';
 
-const ABSOLUTE_CLAIMS = /(?:全部|所有|只有|唯一|完整覆盖|没有任何|均已|总共只有)/u;
-
 function citations(content) {
   return [...String(content || '').matchAll(/\[(\d{1,3})\]/gu)].map((match) => Number(match[1]));
 }
@@ -22,13 +20,10 @@ export function validateGroundedMarkdownOutput({ content, sources = [], coverage
   if (sources.length && !refs.length) {
     throw aiSkillError('AI_SKILL_OUTPUT_SOURCE_REQUIRED', 'AI 回答缺少来源引用', 502);
   }
-  if (refs.some((index) => index < 1 || index > sources.length)) {
+  if (sources.length && refs.some((index) => index < 1 || index > sources.length)) {
     throw aiSkillError('AI_SKILL_OUTPUT_SOURCE_INVALID', 'AI 回答引用了不存在的来源', 502);
-  }
-  if (coverage.complete === false && ABSOLUTE_CLAIMS.test(normalized)) {
-    throw aiSkillError('AI_SKILL_OUTPUT_COVERAGE_OVERCLAIM', 'AI 在覆盖不完整时使用了绝对结论', 502);
   }
   return Object.freeze({ kind: 'grounded_markdown', content: normalized });
 }
 
-export const aiSkillOutputInternals = { citations, ABSOLUTE_CLAIMS };
+export const aiSkillOutputInternals = { citations };

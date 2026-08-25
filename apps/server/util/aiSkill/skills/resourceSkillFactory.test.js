@@ -30,7 +30,7 @@ describe('resource skill factory', () => {
     expect(prepared.result.content).toContain('没有可供处理');
   });
 
-  it('把目标字数传给服务端输出门禁', async () => {
+  it('把资源类目标字数作为软偏好，不为凑字触发协议修复', async () => {
     const prepared = await skill.prepare({
       input: skill.validateInput({ targetLength: 2000, detailLevel: 'detailed' }),
       context: { identity: { subjectUserId: 'u1' }, resourceRefs: [{ type: 'note', id: 'n1', version: 'v1' }] },
@@ -43,7 +43,7 @@ describe('resource skill factory', () => {
         }),
       },
     });
-    expect(prepared.outputPolicy).toEqual({ minimumChars: 2000 });
+    expect(prepared.outputPolicy).toEqual({ targetChars: 2000 });
     expect(prepared.messages[1].content).toContain('约 2000');
   });
 

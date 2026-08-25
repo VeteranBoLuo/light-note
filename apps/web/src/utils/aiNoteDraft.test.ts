@@ -10,6 +10,7 @@ import {
   consumeAiNoteDraft,
   createAiNoteDraftHandoff,
   discardAiNoteDraft,
+  persistAiMarkdownResultAsNote,
   persistAiNotePreview,
   readAiNoteDraft,
   stageAiNoteDraft,
@@ -122,6 +123,61 @@ describe('aiNoteDraft', () => {
       { silent: true },
     );
     expect(sessionStorage.length).toBe(0);
+  });
+
+  it('把用户已检查的书签总结直接确认为新笔记，不重复生成正文', async () => {
+    apiBasePostMock.mockResolvedValue({ status: 200, data: { id: 'bookmark-summary-note' }, msg: '' });
+    const response = {
+      protocolVersion: 1 as const,
+      requestId: 'bookmark-summary-request',
+      skillId: 'bookmark.summarize_page',
+      skillVersion: 1,
+      status: 'completed' as const,
+      threadId: null,
+      scopeDigest: null,
+      result: { kind: 'grounded_markdown', content: '# 网页总结\n核心信息 [1]' },
+      sources: [{ sourceId: 'bookmark:1', title: '示例书签' }],
+      coverage: null,
+      availableActions: [],
+      receipt: null,
+      error: null,
+    };
+
+    await expect(persistAiMarkdownResultAsNote(response, '网页资料整理')).resolves.toEqual({
+      noteId: 'bookmark-summary-note',
+      route: { path: '/noteLibrary/bookmark-summary-note' },
+    });
+    expect(apiBasePostMock).toHaveBeenCalledWith(
+      '/api/note/addNote',
+      {
+        title: '网页资料整理',
+        content: '# 网页总结\n核心信息 [1]',
+        type: 'markdown',
+        idempotencyKey: 'ai-skill-note:bookmark-summary-request',
+      },
+      { silent: true },
+    );
+  });
+
+  it('没有可靠来源的 Markdown 结果不能直接创建笔记', async () => {
+    const response = {
+      protocolVersion: 1 as const,
+      requestId: 'bookmark-empty-request',
+      skillId: 'bookmark.summarize_page',
+      skillVersion: 1,
+      status: 'completed' as const,
+      threadId: null,
+      scopeDigest: null,
+      result: { kind: 'grounded_markdown', content: '没有可读取的网页正文' },
+      sources: [],
+      coverage: { complete: false, warnings: ['bookmark_content_unavailable'] },
+      availableActions: [],
+      receipt: null,
+      error: null,
+    };
+
+    await expect(persistAiMarkdownResultAsNote(response, '网页资料整理')).resolves.toBeNull();
+    expect(apiBasePostMock).not.toHaveBeenCalled();
   });
 
   it('创建接口失败时不得伪装成已保存', async () => {

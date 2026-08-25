@@ -59,7 +59,6 @@
     "turndown": "^7.2.0",
     "turndown-plugin-gfm": "1.0.2",
     "typescript": "^5.7.2",
-    "viewerjs": "^1.11.7",
     "vue": "^3.4.15",
     "vue-draggable-plus": "^0.6.0",
     "vue-i18n": "9",

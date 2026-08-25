@@ -492,15 +492,15 @@ final class WebViewSupport {
      * 地址一律静默 —— 网页层已经会如实提示(见 web/utils/fileDelivery.ts 的 'unavailable'),
      * 原生再弹一次就成了同一件事两个说法,而且一个说失败一个说成功。
      */
-    static void download(Context context, String url, String userAgent, String contentDisposition, String mimeType) {
+    static long download(Context context, String url, String userAgent, String contentDisposition, String mimeType) {
         if (!isHttpUrl(url)) {
             Toast.makeText(context, R.string.download_failed, Toast.LENGTH_SHORT).show();
-            return;
+            return -1L;
         }
-        download(context, url, userAgent, contentDisposition, mimeType, null, null);
+        return download(context, url, userAgent, contentDisposition, mimeType, null, null);
     }
 
-    static void download(
+    static long download(
         Context context,
         String url,
         String userAgent,
@@ -508,10 +508,10 @@ final class WebViewSupport {
         String mimeType,
         String suggestedFileName
     ) {
-        download(context, url, userAgent, contentDisposition, mimeType, suggestedFileName, null);
+        return download(context, url, userAgent, contentDisposition, mimeType, suggestedFileName, null);
     }
 
-    static void download(
+    static long download(
         Context context,
         String url,
         String userAgent,
@@ -530,7 +530,7 @@ final class WebViewSupport {
              * 只会和网页提示打架:用户同时看到「无法开始下载」和网页的说法,不知道信哪个。
              * enqueue 真失败(下面的 catch)仍然要弹 —— 那种失败网页无从得知。
              */
-            return;
+            return -1L;
         }
 
         try {
@@ -575,8 +575,10 @@ final class WebViewSupport {
             }
             // 「已开始下载」交给网页提示：这里再弹一次系统 Toast 就成了重复播报。
             // enqueue 本身失败（下面的 catch）仍要弹 —— 那种失败网页无从得知。
+            return downloadId;
         } catch (Exception error) {
             Toast.makeText(context, R.string.download_failed, Toast.LENGTH_SHORT).show();
+            return -1L;
         }
     }
 

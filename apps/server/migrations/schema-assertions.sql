@@ -1979,3 +1979,30 @@ LEFT JOIN information_schema.columns actual
  AND actual.table_name='ai_provider_spans'
  AND actual.column_name=expected.column_name
 WHERE actual.column_name IS NULL;
+
+-- 56) AI Execution 必须保存计费/校验规则版本和执行租约（期望 0 行）
+SELECT '[56] missing_ai_execution_policy_column' AS check_name,
+  CONCAT('ai_executions.', expected.column_name, ' 缺失') AS detail
+FROM (
+  SELECT 'billing_rule_version' AS column_name UNION ALL
+  SELECT 'validation_rule_version' UNION ALL
+  SELECT 'lease_expires_at'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='ai_executions'
+ AND actual.column_name=expected.column_name
+WHERE actual.column_name IS NULL;
+
+-- 57) 过期 running 执行必须可按 status/lease 有界扫描（期望 0 行）
+SELECT '[57] invalid_ai_execution_lease_index' AS check_name,
+  CONCAT('idx_ai_execution_lease 实际=', IFNULL(actual.cols, '缺失')) AS detail
+FROM (SELECT 1) expected
+LEFT JOIN (
+  SELECT GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') AS cols
+  FROM information_schema.statistics
+  WHERE table_schema=DATABASE()
+    AND table_name='ai_executions'
+    AND index_name='idx_ai_execution_lease'
+) actual ON 1=1
+WHERE actual.cols IS NULL OR actual.cols <> 'status,lease_expires_at';

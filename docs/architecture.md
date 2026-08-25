@@ -360,7 +360,7 @@ src/
 
 云空间文件预览统一由 `FilePreview.vue` 承载，桌面与移动端的上一个、下一个和下载操作固定使用同一套底部控制栏。视频默认暂停并由用户明确开始播放，音视频在进入播放器前通过 `canPlayType()` 做浏览器能力判断，真实解码失败仍回到可下载的稳定错误态；卡片视频使用完整比例缩略图、播放标识和可用时长。PDF 必须继续由前端主动拉取签名地址的字节数据并交给 `PdfPreview.vue` / PDF.js 渲染，禁止改回 `iframe`、`embed` 或直接导航到对象存储地址，避免浏览器把“查看”处理成下载。
 
-云空间批量下载在多选时必须先让用户选择“分别下载”或“打包为 ZIP”；单文件仍走普通下载。普通浏览器分别触发每个文件的下载，ZIP 模式继续用有进度、可取消的前端打包；Android App 因系统 `DownloadManager` 无法保存 WebView Blob，只提供逐个交接并在选择器中明确说明 ZIP 不可用，不能静默把所选文件改成另一种结果。
+云空间批量下载在多选时必须先让用户选择“分别下载”或“打包为 ZIP”；单文件仍走普通下载。普通浏览器的“分别下载”优先通过 File System Access 让用户选择目录，再逐个请求并写盘，以真实写入结果汇总成功、失败和取消；不支持目录写入的浏览器必须展示逐项下载列表，让每个文件由独立用户点击提交，禁止用连续 `a.click()` 冒充全部下载成功。ZIP 模式继续用有进度、可取消的前端打包；Android App 因系统 `DownloadManager` 无法保存 WebView Blob，只提供逐个交接并在选择器中明确说明 ZIP 不可用，不能静默把所选文件改成另一种结果；新版 App 还需按消息 token 回传 `DownloadManager.enqueue` 结果，网页不得仅凭桥调用未抛异常计为已入队，旧版无回执时只兼容为“已提交、未确认”且禁止重发造成重复下载。
 
 新增格式由 `@lightnote/shared` 的统一注册表同时驱动前后端分类：ZIP/RAR/RAR5/7Z/TAR 及 GZ/BZ2/XZ 系列压缩包只在服务端调用 7-Zip 生成受限目录清单，前端支持目录导航、搜索和分页，不解压或读取包内正文；`.doc/.xls/.ppt/.rtf/.odt/.ods/.odp` 由独立 Worker 调用 LibreOffice 分别按 Writer、Calc、Impress 过滤器转换为私有 PDF，再沿用 `PdfPreview.vue`；TSV、JSONL/NDJSON、SRT、VTT、ICS、VCF、DIFF、PATCH 直接走已有文本预览。派生结果以源对象 ETag、大小、格式和策略版本作为缓存指纹，源文件变化后重新排队。分享页首次准备预览仍执行分享密码、有效期和次数校验并计一次下载授权，后续轮询使用短时随机票据，不重复计数。
 
@@ -551,17 +551,19 @@ Runtime V3 把每轮请求拆成四个边界清晰、可独立验证的阶段：
      -> Skill Registry（封闭任务、版本、角色、范围、历史、输出）
      -> Context Resolver（actor/subject/owner、资源当前版本、scopeDigest）
      -> AI Execution（动作与额度唯一根）
+        -> Provider Plan Compiler（材料类型/数量、证据预算、三阶段上限）
         -> AI Gateway
            -> Provider Span（同步、流式、修复、回退）
-     -> Output Validator / Evidence / Coverage
+     -> Grounded Output Renderer / Evidence / Coverage
      -> 只读结果或待确认预览
 ```
 
 - 共享协议位于 `packages/shared/aiSkillProtocol.*`，HTTP Handler、前端 API 和测试共用封闭世界校验。Feature Config 可按域关闭 note/bookmark/file/todo/search/help，关闭 AI 不影响页面基础能力。
 - 当前 Registry 精确登记 20 个 Skill，并由契约测试锁定清单、版本、角色、资源类型/数量、历史窗口、模型策略、输出类型与“定义中不得出现直写函数”。任何新 Skill 必须先进入 Registry 和 Feature Config，再接页面入口，不能通过散落路由或 Prompt 隐式增加能力。
 - `ai_skill_threads` / `ai_skill_turns` 保存有界、范围绑定的 Skill 连续问答；thread 绑定 Skill 版本、actor、subject 与 `scope_digest`。事实内容不从旧回答继承，每轮由 Context Resolver 重新读取。单次转换和草稿不保存自然语言历史。
-- `util/aiBillingCatalog.js` 是计费能力唯一目录：20 个 Registry Skill 与智能整理、书签整理、AI 扩展图标搜索等业务动作共用动作 ID、模块、调用上限和预占策略。独立 AI 用量页的规则说明与用量映射都从目录生成，新增模型入口若未登记会在测试/运行时失败关闭。
-- `ai_executions` 是一次用户/系统动作的根账本，`ai_provider_spans` 保存该动作内所有真实模型调用。Span 额外保存 `sequence_no / billing_scope / estimated_tokens / trigger_code`，用于解释调用顺序、用户或平台承担、usage 缺失预算和协议修复原因；这些字段只接受稳定治理元数据，不保存 Prompt、正文、图片或模型回答。第一次用户主调用前才懒占位；缓存或确定性路径 settle 为 `not_used`。根执行分别累计 Provider 总 usage 与用户可计费 usage：用户主调用按实际 token 结算，输出协议修复由平台承担；Provider usage 缺失按请求前保守预算估算且钳在实际预占内，额度存储失败在 Provider 前失败关闭。
+- `util/aiBillingCatalog.js` 是计费能力唯一动作目录：20 个 Registry Skill 与智能整理、书签整理、AI 扩展图标搜索等业务动作共用动作 ID 和模块。独立 AI 用量页的规则说明与用量映射都从目录生成，新增模型入口若未登记会在测试/运行时失败关闭。Skill 执行配置由 `createAiSkillExecutionConfig()` 根据能力声明和本轮 `resourceRefs` 编译：图片材料最多产生对应数量的 `image_recognition`，正文只有一次 `model_generation`，协议修复只有一次平台 `output_repair`；缓存命中不产生实际调用。证据裁剪、直接输入和预占预算复用同一组上界，不再在 action 中复制图片次数与固定预算。
+- `ai_executions` 是一次用户/系统动作的根账本，`ai_provider_spans` 保存该动作内所有真实模型调用。Span 额外保存 `sequence_no / billing_scope / estimated_tokens / trigger_code`，用于解释调用顺序、用户或平台承担、usage 缺失预算和协议修复原因；这些字段只接受稳定治理元数据，不保存 Prompt、正文、图片或模型回答。根账本保存 `billing_rule_version / validation_rule_version / lease_expires_at`，终态清空租约；启动回收器原子认领过期 `running`、聚合已有 Span 并把无法交付的用户扣费归零，也会按当前规则重试正常终态的 deferred reservation。历史对账工具按版本和 Span 计费归属重放，同时核对 Execution 金额与 reservation 真实结算额，默认只读且只自动退款。第一次用户主调用前才懒占位；缓存或确定性路径 settle 为 `not_used`。根执行分别累计 Provider 总 usage 与用户可计费 usage：用户主调用按实际 token 结算，输出协议修复由平台承担；Provider usage 缺失按请求前保守预算估算且钳在实际预占内，额度存储或 reservation 关联失败都在 Provider 前失败关闭。
+- 有来源的 Skill 使用强制工具 `submit_grounded_answer` 返回语义块和来源索引，服务端验证每块至少一个本轮来源、拒绝越界/重复索引、把模型手写编号降为普通文本，再统一渲染权威 `[n]`，对外仍保持 `grounded_markdown` 协议。Coverage 由证据装载器计算并独立展示，不能用正文关键词推断完整性；资源篇幅为软目标，避免“凑字数”成为协议修复或编造来源。
 - `/api/chat/aiUsage` 只按实际付款者 `actor_user_id` 查询登录账号的近 7/30/90 天账本，按服务端目录映射为用户动作和模块；`/api/chat/aiUsageDetail` 再以 `execution_id + actor_user_id` 按需读取该动作的低敏 Span 调用链，服务端把内部 stage、修复码和错误码映射为封闭公开语义。两者都不返回问题、正文、标题、URL、图片、资源 ID、Provider 错误原文或内部 task type。`idx_ai_execution_actor_created` 支撑付款者时间线，管理员代管不会把 Root 触发的成本显示给被代管账号。
 - `/ai-usage` 是额度总览、最近消耗与免费/扣费规则的唯一详情路由。设置页只渲染紧凑入口且不请求用量数据，头像额度摘要和移动个人中心直接进入该路由；旧 `/settings?section=ai` 由路由层兼容重定向，不能重新恢复为设置页内嵌账本。
 - 免费能力与模型额度解耦但不等于无限：网页存档有请求限频及有界后台队列，本地文件预览/OCR 有大小、页数、像素、临时来源和任务频率限制，普通图标搜索有外部查询限频；这些限制失败只影响对应增强能力，不得让“额度不足”阻断笔记、书签、文件、待办的基础增删改查。

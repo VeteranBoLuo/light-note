@@ -2,7 +2,7 @@ import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 import i18n from '@/i18n';
 import cloudSpaceStore from '@/store/cloudSpace';
 import { apiBasePost } from '@/http/request.ts';
-import { postAndroidMessage } from '@/utils/androidBridge.ts';
+import { enqueueAndroidDownloadWithReceipt, postAndroidMessage } from '@/utils/androidBridge.ts';
 import { announceNativeDownloadStart } from '@/composables/useAndroidDownloadProgress';
 const cloud = cloudSpaceStore();
 
@@ -19,6 +19,11 @@ export function requestAndroidDownload(downloadUrl: string, fileName?: string): 
     url: downloadUrl,
     fileName: fileName || '',
   });
+}
+
+/** 批量下载专用：等待原生确认 DownloadManager 已入队；旧版 App 超时后返回“已提交、未确认”。 */
+export function requestAndroidDownloadWithReceipt(downloadUrl: string, fileName?: string) {
+  return enqueueAndroidDownloadWithReceipt(downloadUrl, fileName);
 }
 
 export async function downloadField(id: number | string) {

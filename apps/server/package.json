@@ -17,6 +17,7 @@
     "check:file-previews": "node scripts/checkFilePreviewRuntime.js",
     "check:schema": "node scripts/checkSchemaAssertions.js",
     "repair:bookmark-icons": "node scripts/requeueBrokenBookmarkIconJobs.js",
+    "repair:ai-execution-billing": "node scripts/reconcileHistoricalAiExecutionBilling.js",
     "check:ocr": "node scripts/checkOcrRuntime.js",
     "check:ai-model-access": "node scripts/checkAiModelAccess.js",
     "backfill:note-thumbnails": "node scripts/backfillNoteImageThumbnails.js",

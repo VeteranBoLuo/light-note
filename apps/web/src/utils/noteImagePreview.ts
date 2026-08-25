@@ -1,12 +1,7 @@
 import { bookmarkStore } from '@/store';
 
 const NOTE_IMAGE_VIEWER_OPTIONS = {
-  navbar: false,
   toolbar: true,
-  title: false,
-  // BViewer 的默认 viewed 会把图片限制到 200px，笔记正文需要交给 viewer.js
-  // 按视口适配，并保留工具栏继续缩放小图。
-  viewed: () => {},
 };
 
 export function resolveNoteContentImage(target: EventTarget | null): HTMLImageElement | null {
@@ -16,9 +11,7 @@ export function resolveNoteContentImage(target: EventTarget | null): HTMLImageEl
 
 export function openNoteContentImagePreview(source: string | HTMLImageElement): boolean {
   const src =
-    typeof source === 'string'
-      ? source.trim()
-      : String(source.currentSrc || source.getAttribute('src') || '').trim();
+    typeof source === 'string' ? source.trim() : String(source.currentSrc || source.getAttribute('src') || '').trim();
   if (!src) return false;
   bookmarkStore().refreshViewer(src, NOTE_IMAGE_VIEWER_OPTIONS);
   return true;

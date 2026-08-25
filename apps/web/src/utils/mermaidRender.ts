@@ -674,12 +674,7 @@ async function openMermaidViewer(svg: string) {
   try {
     const { bookmarkStore } = await import('@/store');
     bookmarkStore().refreshViewer(svgToDataUrl(svg), {
-      navbar: false,
       toolbar: true,
-      title: false,
-      // 传一个空 viewed 覆盖 BViewer 默认的 200px 限制(那是给头像/反馈截图设计的),
-      // 让查看器自己按视口适配 —— 图表要铺满才看得清
-      viewed: () => {},
     });
   } catch {
     /* 查看器不可用时保持静默：图本身已经在页面上，放大只是增强 */

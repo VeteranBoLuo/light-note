@@ -181,6 +181,7 @@ export function createAiGateway({
           execution: activeExecution,
           estimatedTokens,
           billingScope,
+          stage,
           signal: deadline.signal,
         });
       } catch (error) {

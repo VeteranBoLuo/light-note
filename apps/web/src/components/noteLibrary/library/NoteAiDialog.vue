@@ -10,6 +10,7 @@
     :scope-label="t('note.aiSkillScope', { count: resourceRefs.length })"
     :actions="actions"
     :show-prompt="false"
+    :auto-run-action-id="resourceRefs.length === 1 ? 'summarize' : ''"
     @update:visible="emit('update:visible', $event)"
     @result-action="handleResultAction"
   />

@@ -7,7 +7,7 @@ START TRANSACTION;
 -- 模块 AI 总览：以当前 Skill 注册表和页面入口为准。
 SET @module_ai_id = 'd16dabc0-7366-1173-ac9a-a7f89586e39b';
 SET @module_ai_title = '模块 AI：按页面使用、材料边界与额度';
-SET @module_ai_content = '<h1>模块 AI</h1><p>轻笺不再提供跨模块自由聊天和操作的全局助手。AI 能力放在笔记、书签、文件、待办、资源中心和帮助中心的对应页面中；当前页面和明确选择的资源决定本次任务，不会沿用其他模块或上一次材料。</p><h2>笔记</h2><ul><li>总结或比较当前明确选择的笔记。</li><li>根据所选笔记、书签或文件生成一篇新的 Markdown 笔记。</li><li>在编辑器中润色、改写、摘要、纠错、续写、翻译或生成大纲。</li></ul><p>“生成新笔记”成功后会立即创建并打开一篇已保存的笔记，直接退出编辑器也不会丢失。</p><h2>书签</h2><ul><li>智能识别网址信息和推荐标签。</li><li>网页存档免费保存完整正文；AI 摘要需在已有正文后由用户另行明确生成。</li><li>可分析当前书签，或根据当前书签生成新笔记。</li></ul><h2>文件</h2><p>支持 TXT、Markdown、CSV、PDF、DOCX、PNG、JPG/JPEG 和 WebP，单个文件不超过 20MB。文本文件可总结或生成笔记；多文件可比较；图片会先提取可识别文字再总结。尚在解析、解析失败、没有可靠正文或格式不支持时不会调用模型编造内容。</p><h2>待办</h2><p>“拆解待办”会完整读取当前标题、说明和已有清单，生成简洁或详细的可检查步骤草稿；只有明确应用后才写回当前待办。</p><h2>资源中心与帮助中心</h2><p>资源中心只分析当前明确选中的个人资料；帮助中心的“问问轻笺助手”只检索公开帮助文章，不读取个人笔记、书签、文件、待办或互联网内容。</p><h2>材料与额度</h2><p>不同模块、资源和账号之间不会共享材料。只有真实发出的用户主模型调用才计入 AI 额度；缓存、无材料、本地解析和平台承担的受限协议修复不重复扣用户额度。可从设置中的“AI 用量与计费规则”进入独立页面查看额度和最近消耗。</p>';
+SET @module_ai_content = '<h1>模块 AI</h1><p>轻笺不再提供跨模块自由聊天和操作的全局助手。AI 能力放在笔记、书签、文件、待办、资源中心和帮助中心的对应页面中；当前页面和明确选择的资源决定本次任务，不会沿用其他模块或上一次材料。</p><h2>笔记</h2><ul><li>总结或比较当前明确选择的笔记。</li><li>根据所选笔记、书签或文件生成一篇新的 Markdown 笔记。</li><li>在编辑器中润色、改写、摘要、纠错、续写、翻译或生成大纲。</li></ul><p>“生成新笔记”成功后会立即创建并打开一篇已保存的笔记，直接退出编辑器也不会丢失。</p><h2>书签</h2><ul><li>智能识别网址信息和推荐标签。</li><li>网页存档免费保存完整正文；AI 摘要需在已有正文后由用户另行明确生成。</li><li>从书签首页或管理页打开“分析此书签”后会自动总结，结果底部可直接生成新笔记。</li></ul><h2>文件</h2><p>支持 TXT、Markdown、CSV、PDF、DOCX、PNG、JPG/JPEG 和 WebP，单个文件不超过 20MB。文本文件可总结或生成笔记；多文件可比较；图片会先提取可识别文字再总结。尚在解析、解析失败、没有可靠正文或格式不支持时不会调用模型编造内容。</p><h2>待办</h2><p>“拆解待办”会完整读取当前标题、说明和已有清单，生成简洁或详细的可检查步骤草稿；只有明确应用后才写回当前待办。</p><h2>资源中心与帮助中心</h2><p>资源中心只分析当前明确选中的个人资料；帮助中心的“问问轻笺助手”只检索公开帮助文章，不读取个人笔记、书签、文件、待办或互联网内容。</p><h2>材料与额度</h2><p>不同模块、资源和账号之间不会共享材料。只有真实发出的用户主模型调用才计入 AI 额度；缓存、无材料、本地解析和平台承担的受限协议修复不重复扣用户额度。可从设置中的“AI 用量与计费规则”进入独立页面查看额度和最近消耗。</p>';
 
 UPDATE knowledge_base
 SET title = @module_ai_title,
@@ -131,7 +131,7 @@ UPDATE knowledge_base SET status = 'internal', admin_archived = 1, updated_by = 
 -- 书签模块：免费正文存档与显式 AI 摘要分开，分析入口以当前书签为主。
 SET @bookmark_management_id = 'ecd1f717-e114-4af2-8aa6-a65094861da8';
 SET @bookmark_management_title = '书签管理：搜索筛选、智能打标签、网页存档和链接体检';
-SET @bookmark_management_content = '<h2>书签管理入口</h2><p>书签首页为 <a href="https://boluo66.top/home">/home</a>，管理页为 <a href="https://boluo66.top/manage/bookmarkMg">/manage/bookmarkMg</a>。可按关键词和标签筛选。</p><ul><li><strong>智能打标签：</strong>根据书签名称、描述和可用网页内容推荐标签，复审后才应用。</li><li><strong>网页存档：</strong>免费抓取并保存完整正文；AI 摘要需要在存档中另行明确生成并消耗额度。</li><li><strong>AI 分析：</strong>从当前书签卡片分析该网页，或根据当前书签生成新笔记。</li><li><strong>链接体检：</strong>区分正常、疑似失效和无法判断；超时、反爬、需登录不会被武断判死链。</li><li>支持置顶排序、导入导出、批量标签和移入回收站。</li></ul>';
+SET @bookmark_management_content = '<h2>书签管理入口</h2><p>书签首页为 <a href="https://boluo66.top/home">/home</a>，管理页为 <a href="https://boluo66.top/manage/bookmarkMg">/manage/bookmarkMg</a>。可按关键词和标签筛选。</p><ul><li><strong>智能打标签：</strong>根据书签名称、描述和可用网页内容推荐标签，复审后才应用。</li><li><strong>网页存档：</strong>免费抓取并保存完整正文；AI 摘要需要在存档中另行明确生成并消耗额度。</li><li><strong>AI 分析：</strong>从当前书签卡片打开后会自动总结该网页；检查结果后可在底部直接生成一篇新笔记。</li><li><strong>链接体检：</strong>区分正常、疑似失效和无法判断；超时、反爬、需登录不会被武断判死链。</li><li>支持置顶排序、导入导出、批量标签和移入回收站。</li></ul>';
 UPDATE knowledge_base SET title = @bookmark_management_title, content = @bookmark_management_content, updated_by = NULL WHERE id = @bookmark_management_id;
 
 SET @bookmark_snapshot_id = '2308c270-7ed0-117e-80f0-dfa644922619';

@@ -4,6 +4,14 @@ import { getActiveProviderInfo } from '../agent/deepseekClient.js';
 import { stableAgentErrorCode } from '../agent/logSafety.js';
 import { getActiveAiExecution, runWithAiExecutionContext } from './context.js';
 import { defaultAiExecutionPersistence } from './persistence.js';
+import {
+  AI_EXECUTION_BILLING_RULE_VERSION,
+  AI_EXECUTION_LEASE_MS,
+  AI_EXECUTION_LEASE_RENEW_WINDOW_MS,
+  AI_EXECUTION_VALIDATION_RULE_VERSION,
+  aiExecutionLeaseExpiry,
+} from './policy.js';
+import { normalizeAiProviderPlan, resolveAiProviderPlanRule } from './providerPlan.js';
 import { addAiUsage, calculateChargedTokens, normalizeAiUsage } from './usage.js';
 
 const VALID_BILLING_POLICIES = new Set(['user', 'system', 'none']);
@@ -72,6 +80,8 @@ function createExecution(config, identity) {
     error.code = 'AI_EXECUTION_REQUEST_ID_INVALID';
     throw error;
   }
+  const providerPlan = normalizeAiProviderPlan(config.providerPlan);
+  const startedAt = Date.now();
   return {
     id: crypto.randomUUID(),
     requestId,
@@ -84,7 +94,14 @@ function createExecution(config, identity) {
     taskType: normalizeTaskType(config.taskType),
     skillId: normalizeIdentifier(config.skillId, '', 96) || null,
     skillVersion: config.skillVersion == null ? null : Math.max(1, Math.floor(Number(config.skillVersion) || 1)),
-    startedAt: Date.now(),
+    startedAt,
+    billingRuleVersion: Math.max(1, Math.floor(Number(config.billingRuleVersion || AI_EXECUTION_BILLING_RULE_VERSION))),
+    validationRuleVersion: Math.max(
+      1,
+      Math.floor(Number(config.validationRuleVersion || AI_EXECUTION_VALIDATION_RULE_VERSION)),
+    ),
+    leaseMs: Math.max(60_000, Math.floor(Number(config.leaseMs || AI_EXECUTION_LEASE_MS))),
+    leaseExpiresAt: aiExecutionLeaseExpiry(startedAt, config.leaseMs),
     status: 'running',
     usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
     billableUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
@@ -94,10 +111,16 @@ function createExecution(config, identity) {
     providerCallCount: 0,
     userProviderCallCount: 0,
     platformProviderCallCount: 0,
+    providerPlan,
+    providerStageCallCounts: Object.create(null),
     estimatedBillableTokensCommitted: 0,
     reservationTokens: Math.max(1, Math.floor(Number(config.reservationTokens || 5_000))),
-    maxUserProviderCalls: Math.max(1, Math.floor(Number(config.maxUserProviderCalls || 32))),
-    maxPlatformProviderCalls: Math.max(0, Math.floor(Number(config.maxPlatformProviderCalls ?? 1))),
+    maxUserProviderCalls: providerPlan
+      ? providerPlan.maxUserProviderCalls
+      : Math.max(1, Math.floor(Number(config.maxUserProviderCalls || 32))),
+    maxPlatformProviderCalls: providerPlan
+      ? providerPlan.maxPlatformProviderCalls
+      : Math.max(0, Math.floor(Number(config.maxPlatformProviderCalls ?? 1))),
     chargedTokens: 0,
     durationMs: 0,
     errorCode: null,
@@ -109,6 +132,17 @@ function createExecution(config, identity) {
     persistenceErrors: [],
     persistence: config.persistence || defaultAiExecutionPersistence,
   };
+}
+
+async function ensureAiExecutionLease(execution) {
+  if (execution.leaseExpiresAt.getTime() - Date.now() > AI_EXECUTION_LEASE_RENEW_WINDOW_MS) return;
+  execution.leaseExpiresAt = aiExecutionLeaseExpiry(Date.now(), execution.leaseMs);
+  const renewed = await persistSafely(execution, 'renewAiExecutionLease', execution);
+  if (renewed) return;
+  const error = new Error('AI Execution 租约续期失败');
+  error.code = 'AI_EXECUTION_LEASE_RENEW_FAILED';
+  error.status = 503;
+  throw error;
 }
 
 function assertAiExecutionAllowed(config) {
@@ -249,7 +283,15 @@ export async function ensureAiExecutionQuotaReservation(execution = getActiveAiE
           Math.max(1, Math.floor(Number(options.estimatedTokens || 0))),
         ),
       });
-      await persistSafely(execution, 'updateAiExecutionReservation', execution);
+      const reservationLinked = await persistSafely(execution, 'updateAiExecutionReservation', execution);
+      if (!reservationLinked && !execution.quotaHandle?.blocked) {
+        // reservation 与根账本没有建立关联时禁止访问 Provider。finally 会立即按 0 尝试释放，
+        // 终态写入也会再次携带 reservation key，供 deferred 回收器在瞬时故障恢复后接管。
+        const error = new Error('AI Execution 额度占位关联失败');
+        error.code = 'AI_EXECUTION_RESERVATION_LINK_FAILED';
+        error.status = 503;
+        throw error;
+      }
       if (execution.quotaHandle?.blocked) {
         execution.quotaSettlementStatus = 'blocked';
         const error = new Error('今日 AI 额度已用完');
@@ -287,6 +329,7 @@ export async function authorizeAiProviderCall({
   execution = getActiveAiExecution(),
   estimatedTokens = 1,
   billingScope = 'user',
+  stage,
   signal,
 } = {}) {
   if (!execution) {
@@ -296,9 +339,40 @@ export async function authorizeAiProviderCall({
     throw error;
   }
   if (signal?.aborted) throw abortedRequestError(signal);
+  await ensureAiExecutionLease(execution);
   const estimate = Math.max(1, Math.floor(Number(estimatedTokens || 1)));
+  const plannedStage = execution.providerPlan ? resolveAiProviderPlanRule(execution.providerPlan, stage) : null;
+  const assertPlannedStageAvailable = () => {
+    if (!plannedStage) return;
+    if (!plannedStage.rule) {
+      const error = new Error('当前 AI 能力不允许该 Provider 阶段');
+      error.code = 'AI_EXECUTION_PROVIDER_STAGE_NOT_ALLOWED';
+      error.status = 500;
+      throw error;
+    }
+    if (plannedStage.rule.billingScope !== billingScope) {
+      const error = new Error('AI Provider 阶段计费归属与执行计划不一致');
+      error.code = 'AI_EXECUTION_PROVIDER_STAGE_BILLING_INVALID';
+      error.status = 500;
+      throw error;
+    }
+    const used = Number(execution.providerStageCallCounts[plannedStage.stageType] || 0);
+    if (used >= plannedStage.rule.maxCalls) {
+      const error = new Error('AI Provider 阶段调用次数超过计划上限');
+      error.code = 'AI_EXECUTION_PROVIDER_CALL_LIMIT';
+      error.status = 500;
+      throw error;
+    }
+  };
+  const commitPlannedStage = () => {
+    if (!plannedStage) return;
+    execution.providerStageCallCounts[plannedStage.stageType] =
+      Number(execution.providerStageCallCounts[plannedStage.stageType] || 0) + 1;
+  };
+  assertPlannedStageAvailable();
   if (billingScope === 'platform') {
-    if (execution.userProviderCallCount < 1) {
+    const generationCalls = Number(execution.providerStageCallCounts.model_generation || 0);
+    if (execution.providerPlan ? generationCalls < 1 : execution.userProviderCallCount < 1) {
       const error = new Error('平台修复调用必须跟随已计量的用户主调用');
       error.code = 'AI_EXECUTION_PLATFORM_REPAIR_INVALID';
       error.status = 500;
@@ -310,6 +384,7 @@ export async function authorizeAiProviderCall({
       error.status = 500;
       throw error;
     }
+    commitPlannedStage();
     execution.platformProviderCallCount += 1;
     execution.providerCallCount += 1;
     return { estimatedTokens: estimate, billingScope };
@@ -336,10 +411,12 @@ export async function authorizeAiProviderCall({
     error.status = 500;
     throw error;
   }
+  assertPlannedStageAvailable();
   const nextCommitted = execution.estimatedBillableTokensCommitted + estimate;
   if (nextCommitted > Math.max(0, Number(handle?.reserved || 0))) throw quotaExceededError();
   // await 之后到递增之间没有异步切换；并发 Promise 也会串行完成这段认领，不能超卖预占。
   execution.estimatedBillableTokensCommitted = nextCommitted;
+  commitPlannedStage();
   execution.userProviderCallCount += 1;
   execution.providerCallCount += 1;
   return { estimatedTokens: estimate, billingScope };

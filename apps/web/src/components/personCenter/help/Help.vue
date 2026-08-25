@@ -164,7 +164,6 @@
   import AiSkillPanel from '@/components/aiSkills/AiSkillPanel.vue';
   import HelpOutlineList from './HelpOutlineList.vue';
 
-  import 'viewerjs/dist/viewer.css'; //样式文件不要忘了
 
   const { t, locale } = useI18n();
   const route = useRoute();

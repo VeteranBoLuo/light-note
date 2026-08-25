@@ -100,7 +100,7 @@ describe('MobileAppShell 软键盘可视高度', () => {
     expect(shellSource).toMatch(/restoreResourceScroll\(path\)[\s\S]*?window\.setTimeout/u);
   });
 
-  it('输入控件聚焦后从键盘抬升初段逐帧限制壳体，并平滑隐藏仍保持挂载的底栏', async () => {
+  it('输入控件聚焦后从键盘抬升初段逐帧限制壳体，并同步隐藏仍保持挂载的底栏', async () => {
     const { host } = mountShell();
     const textarea = host.querySelector<HTMLTextAreaElement>('.composer-stub');
     const shell = host.querySelector<HTMLElement>('.mobile-app-shell');
@@ -141,6 +141,25 @@ describe('MobileAppShell 软键盘可视高度', () => {
     expect(shell?.style.getPropertyValue('--mobile-visible-viewport-height')).toBe('');
     expect(host.querySelector('.bottom-nav-stub')).not.toBeNull();
     expect(host.querySelector('.mobile-app-shell__bottom-nav')?.classList.contains('is-hidden')).toBe(false);
+  });
+
+  it('可视视口收缩时同帧提交壳体与底栏几何，且不为两者叠加尺寸过渡', async () => {
+    const { host } = mountShell();
+    const textarea = host.querySelector<HTMLTextAreaElement>('.composer-stub');
+    const shell = host.querySelector<HTMLElement>('.mobile-app-shell');
+
+    textarea?.focus();
+    viewport.height = 480;
+    viewport.dispatchEvent(new Event('resize'));
+    await nextTick();
+
+    expect(shell?.classList.contains('is-keyboard-open')).toBe(true);
+    expect(shell?.style.getPropertyValue('--mobile-visible-viewport-height')).toBe('480px');
+    expect(shell?.style.getPropertyValue('--mobile-bottom-nav-visible-height')).toBe('0px');
+    expect(shellSource).not.toContain('transition: height 48ms linear');
+    expect(shellSource).not.toContain('height 48ms linear,');
+    expect(shellSource).not.toContain('flex-basis 48ms linear');
+    expect(shellSource).toContain('transition: opacity 48ms linear;');
   });
 
   it('路由卸下并重新启用壳体时清空上一页残留的键盘视口', async () => {
