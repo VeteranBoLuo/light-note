@@ -383,6 +383,23 @@ export default {
   },
 
   userCenter: {
+    // 个人中心导航统一采用 24px 线性图标。菜单项会共用固定图标槽位，
+    // 不能再混用实心图标、带 LOG 小字图标和不同画布占比的旧资源。
+    menu: {
+      growth:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M6 4.25h12v3.5a6 6 0 0 1-12 0v-3.5Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 6H3.75v1.75A3.75 3.75 0 0 0 7.5 11.5M18 6h2.25v1.75a3.75 3.75 0 0 1-3.75 3.75M12 13.75v4M8.5 20h7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      settings:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/><path d="M12 3.25v2M12 18.75v2M20.75 12h-2M5.25 12h-2M18.2 5.8l-1.42 1.42M7.22 16.78 5.8 18.2M18.2 18.2l-1.42-1.42M7.22 7.22 5.8 5.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="12" r="7" stroke="currentColor" stroke-width="1.7"/></svg>',
+      coBuild:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M8.25 15.2A6.25 6.25 0 1 1 15.75 15.2c-.95.7-1.5 1.55-1.5 2.55h-4.5c0-1-.55-1.85-1.5-2.55Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.75 20.25h4.5M12 2V.75M4.95 4.95 3.7 3.7M19.05 4.95 20.3 3.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+      feedback:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M5.5 4.25h13A2.25 2.25 0 0 1 20.75 6.5v8.25A2.25 2.25 0 0 1 18.5 17h-7l-4.75 3v-3H5.5a2.25 2.25 0 0 1-2.25-2.25V6.5A2.25 2.25 0 0 1 5.5 4.25Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 10.5h.01M12 10.5h.01M16 10.5h.01" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+      help: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.75" stroke="currentColor" stroke-width="1.7"/><path d="M9.6 9.25a2.55 2.55 0 0 1 4.9 1c0 1.85-2.5 2.15-2.5 4M12 17.5v.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+      trash:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M3.5 6.75h17M8.5 3.75h7l.75 3H7.75l.75-3ZM6.25 6.75l.8 13h9.9l.8-13M9.5 10.25v6M14.5 10.25v6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      logout:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M10.25 4H5.5A1.5 1.5 0 0 0 4 5.5v13A1.5 1.5 0 0 0 5.5 20h4.75M14.5 7.5 19 12l-4.5 4.5M8.5 12H19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    },
     growth:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M18 2H6v2H2v4a4 4 0 0 0 4 4h.29A6 6 0 0 0 11 17.9V20H7v2h10v-2h-4v-2.1a6 6 0 0 0 4.71-5.9H18a4 4 0 0 0 4-4V4h-4zM6 10a2 2 0 0 1-2-2V6h2zm14-2a2 2 0 0 1-2 2V6h2z"/></svg>',
     settingsGear:
