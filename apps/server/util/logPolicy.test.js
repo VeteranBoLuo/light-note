@@ -32,7 +32,8 @@ describe('API 日志跳过策略', () => {
     '/api/inbox/enqueue',
     '/api/bookmark/getBookmarkList',
     '/api/updateLog/save',
-    '/api/support/checkout?option=coffee',
+    '/api/support/donation/checkout?option=coffee',
+    '/api/support/checkout?skuId=ai-6&catalogVersion=support-packages-v2',
     '/api/community-chat/rooms/general/messages',
   ])('保留真实读取与写入接口日志：%s', (url) => {
     expect(shouldSkipApiLog(url)).toBe(false);

@@ -1307,16 +1307,35 @@ CREATE TABLE IF NOT EXISTS `support_checkout_intents` (
   `token_hash` char(64) NOT NULL,
   `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
   `option_key` varchar(32) NOT NULL,
+  `intent_type` varchar(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'legacy',
+  `intent_status` varchar(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'issued',
+  `sku_id` varchar(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  `catalog_version` varchar(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  `quoted_amount` decimal(12,2) unsigned DEFAULT NULL,
+  `base_ai_tokens` bigint unsigned NOT NULL DEFAULT 0,
+  `base_storage_mb` int unsigned NOT NULL DEFAULT 0,
+  `quoted_ai_tokens` bigint unsigned NOT NULL DEFAULT 0,
+  `quoted_storage_mb` int unsigned NOT NULL DEFAULT 0,
+  `first_purchase_candidate` tinyint unsigned NOT NULL DEFAULT 0,
+  `campaign_id` char(36) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  `campaign_sku_id` char(36) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  `campaign_version` int unsigned DEFAULT NULL,
+  `campaign_user_limit` smallint unsigned DEFAULT NULL,
+  `campaign_starts_at` datetime DEFAULT NULL,
+  `campaign_ends_at` datetime DEFAULT NULL,
   `provider_user_id` varchar(128) DEFAULT NULL,
   `provider_private_id` varchar(128) DEFAULT NULL,
   `expires_at` datetime NOT NULL,
   `first_used_at` datetime DEFAULT NULL,
+  `consumed_order_id` char(36) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_support_checkout_token` (`token_hash`),
   KEY `idx_support_checkout_user_time` (`user_id`,`create_time`,`id`),
-  KEY `idx_support_checkout_expiry` (`expires_at`,`first_used_at`)
+  KEY `idx_support_checkout_expiry` (`expires_at`,`first_used_at`),
+  KEY `idx_support_checkout_package` (`intent_type`,`sku_id`,`user_id`,`create_time`),
+  KEY `idx_support_checkout_consumed` (`consumed_order_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `support_account_links` (
@@ -1343,6 +1362,7 @@ CREATE TABLE IF NOT EXISTS `support_orders` (
   `checkout_intent_id` char(36) DEFAULT NULL,
   `light_note_user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
   `ownership_source` varchar(24) NOT NULL DEFAULT 'unlinked',
+  `order_purpose` varchar(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'unknown',
   `plan_id` varchar(128) DEFAULT NULL,
   `product_type` tinyint unsigned NOT NULL DEFAULT 0,
   `month` int unsigned NOT NULL DEFAULT 1,
@@ -1365,7 +1385,8 @@ CREATE TABLE IF NOT EXISTS `support_orders` (
   KEY `idx_support_order_provider_user` (`provider_user_id`,`provider_private_id`,`create_time`),
   KEY `idx_support_order_checkout` (`checkout_intent_id`),
   KEY `idx_support_order_retry` (`verification_state`,`next_retry_at`,`retry_count`),
-  KEY `idx_support_order_ranking` (`verification_state`,`provider_status`,`ranking_observed_at`,`light_note_user_id`)
+  KEY `idx_support_order_ranking` (`verification_state`,`provider_status`,`ranking_observed_at`,`light_note_user_id`),
+  KEY `idx_support_order_purpose_ranking` (`order_purpose`,`verification_state`,`provider_status`,`ranking_observed_at`,`light_note_user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `support_reward_policy_state` (
@@ -1399,6 +1420,108 @@ CREATE TABLE IF NOT EXISTS `support_reward_grants` (
   KEY `idx_support_reward_user_time` (`user_id`,`create_time`,`id`),
   KEY `idx_support_reward_status_time` (`grant_status`,`update_time`,`id`),
   KEY `idx_support_reward_policy` (`policy_version`,`create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `support_campaigns` (
+  `id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `campaign_key` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `version` int unsigned NOT NULL,
+  `title` varchar(120) NOT NULL,
+  `description` varchar(500) NOT NULL DEFAULT '',
+  `status` varchar(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'draft',
+  `starts_at` datetime NOT NULL,
+  `ends_at` datetime NOT NULL,
+  `cost_policy_version` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `created_by` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `published_by` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
+  `published_at` datetime DEFAULT NULL,
+  `suspended_by` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
+  `suspended_at` datetime DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_support_campaign_version` (`campaign_key`,`version`),
+  KEY `idx_support_campaign_public` (`status`,`starts_at`,`ends_at`,`version`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `support_campaign_skus` (
+  `id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `campaign_id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `sku_id` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `title` varchar(80) NOT NULL,
+  `category` varchar(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `amount` decimal(12,2) unsigned NOT NULL,
+  `ai_tokens` bigint unsigned NOT NULL DEFAULT 0,
+  `storage_mb` int unsigned NOT NULL DEFAULT 0,
+  `per_user_limit` smallint unsigned NOT NULL DEFAULT 1,
+  `margin_bps` int NOT NULL,
+  `sort_order` int NOT NULL DEFAULT 0,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_support_campaign_sku_version` (`campaign_id`,`sku_id`),
+  KEY `idx_support_campaign_sku_campaign` (`campaign_id`,`sort_order`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `support_campaign_user_limits` (
+  `campaign_sku_id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `completed_count` smallint unsigned NOT NULL DEFAULT 0,
+  `active_intent_id` char(36) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  `active_until` datetime DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`campaign_sku_id`,`user_id`),
+  UNIQUE KEY `uk_support_campaign_active_intent` (`active_intent_id`),
+  KEY `idx_support_campaign_limit_user` (`user_id`,`update_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `support_first_purchase_claims` (
+  `id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `provider_identity_hash` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `sku_id` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `support_order_id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_support_first_user_sku` (`user_id`,`sku_id`),
+  UNIQUE KEY `uk_support_first_identity_sku` (`provider_identity_hash`,`sku_id`),
+  UNIQUE KEY `uk_support_first_order` (`support_order_id`),
+  KEY `idx_support_first_sku_time` (`sku_id`,`create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `support_entitlement_grants` (
+  `id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `support_order_id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `checkout_intent_id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
+  `entitlement_type` varchar(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `sku_id` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `catalog_version` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `campaign_id` char(36) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  `campaign_sku_id` char(36) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  `campaign_version` int unsigned DEFAULT NULL,
+  `paid_amount` decimal(12,2) unsigned NOT NULL,
+  `calculated_ai_tokens` bigint unsigned NOT NULL DEFAULT 0,
+  `calculated_storage_mb` int unsigned NOT NULL DEFAULT 0,
+  `granted_ai_tokens` bigint unsigned NOT NULL DEFAULT 0,
+  `granted_storage_mb` int unsigned NOT NULL DEFAULT 0,
+  `first_purchase_applied` tinyint unsigned NOT NULL DEFAULT 0,
+  `grant_status` varchar(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `reason_code` varchar(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  `ai_ledger_entry_id` char(36) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  `storage_log_ref` varchar(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  `reviewed_by` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
+  `reviewed_at` datetime DEFAULT NULL,
+  `credited_at` datetime DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_support_entitlement_order` (`support_order_id`),
+  UNIQUE KEY `uk_support_entitlement_ai_ledger` (`ai_ledger_entry_id`),
+  KEY `idx_support_entitlement_intent` (`checkout_intent_id`,`create_time`),
+  KEY `idx_support_entitlement_user_time` (`user_id`,`create_time`,`id`),
+  KEY `idx_support_entitlement_status_time` (`grant_status`,`update_time`,`id`),
+  KEY `idx_support_entitlement_sku_time` (`entitlement_type`,`sku_id`,`create_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `support_public_preferences` (

@@ -48,7 +48,7 @@
 
       <div class="editor-toolbar-v2__group">
         <ToolbarMenu :action="listAction" :items="listActions" @run="emitAction" />
-        <ToolbarButton :action="todoAction" @run="emitAction" />
+        <ToolbarButton :action="imageAction" @run="emitAction" />
       </div>
 
       <span class="editor-toolbar-v2__divider" aria-hidden="true"></span>
@@ -129,7 +129,7 @@
     boldAction: EditorToolbarAction;
     italicAction: EditorToolbarAction;
     listAction: EditorToolbarAction;
-    todoAction: EditorToolbarAction;
+    imageAction: EditorToolbarAction;
     linkAction: EditorToolbarAction;
     insertAction: EditorToolbarAction;
     moreAction: EditorToolbarAction;
@@ -157,7 +157,7 @@
     props.undoAction,
     props.headingAction,
     props.boldAction,
-    props.todoAction,
+    props.imageAction,
     props.insertAction,
     props.moreAction,
   ]);

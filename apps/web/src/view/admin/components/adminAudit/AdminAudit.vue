@@ -467,7 +467,7 @@
     .admin-audit__range {
       width: 100%;
     }
-    .admin-audit__card :deep(.b-button) {
+    .admin-audit__card :deep(.b_btn) {
       min-height: 44px;
     }
     .admin-audit__detail {

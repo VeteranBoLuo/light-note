@@ -16,6 +16,7 @@ import {
   getActiveShopItems,
   getShopItem,
   getOwnedCosmetics,
+  getClaimedLimitedShopItemIds,
   buyItem,
   equipTitle,
   equipFrame,
@@ -314,6 +315,8 @@ export const getShop = async (req, res) => {
     let protectCards = 0;
     let equippedFrame = null;
     let owned = [];
+    const activeShopItems = getActiveShopItems();
+    let claimedLimitedItemIds = [];
     if (!isVisitor) {
       const g = await getGrowth(userId, { userRole });
       points = g.points || 0;
@@ -322,12 +325,19 @@ export const getShop = async (req, res) => {
       equippedFrame = g.equippedFrame || null;
       protectCards = g.protectCards || 0;
       owned = await getOwnedCosmetics(userId);
+      if (activeShopItems.some((item) => Number(item.purchaseLimit || 0) > 0)) {
+        claimedLimitedItemIds = await getClaimedLimitedShopItemIds(userId);
+      }
     }
+    const claimedLimitedItems = new Set(claimedLimitedItemIds);
     const ownable = (t) => t === 'title' || t === 'cosmetic';
-    const items = getActiveShopItems().map((it) => {
+    const items = activeShopItems.map((it) => {
       const isOwned = ownable(it.type) && owned.includes(it.id);
       const meetsLevel = !it.minLevel || level >= it.minLevel;
       const cardFull = it.effect === 'makeup_card' && protectCards >= 2;
+      const purchaseLimit = Number(it.purchaseLimit || 0) || null;
+      const purchaseCount = claimedLimitedItems.has(it.id) ? 1 : 0;
+      const limitReached = purchaseLimit !== null && purchaseCount >= purchaseLimit;
       return {
         id: it.id,
         type: it.type,
@@ -344,7 +354,10 @@ export const getShop = async (req, res) => {
         equipped:
           (it.type === 'title' && equippedTitle === it.id) || (it.type === 'cosmetic' && equippedFrame === it.id),
         // canBuy 仅供前端置灰按钮;真正校验在 buyItem 事务内(级别/余额/上限/已拥有)
-        repeatable: it.type === 'consumable',
+        repeatable: it.type === 'consumable' && purchaseLimit === null,
+        purchaseLimit,
+        purchaseCount,
+        limitReached,
         pointsShortfall: Math.max(0, Number(it.cost || 0) - points),
         levelShortfall: Math.max(0, Number(it.minLevel || 0) - level),
         unavailableReasons: [
@@ -353,9 +366,17 @@ export const getShop = async (req, res) => {
           ...(isOwned ? ['owned'] : []),
           ...(!meetsLevel ? ['level'] : []),
           ...(cardFull ? ['inventory_full'] : []),
+          ...(limitReached ? ['purchase_limit'] : []),
           ...(points < it.cost ? ['points'] : []),
         ],
-        canBuy: runtime.purchaseEnabled && !isVisitor && !isOwned && meetsLevel && !cardFull && points >= it.cost,
+        canBuy:
+          runtime.purchaseEnabled &&
+          !isVisitor &&
+          !isOwned &&
+          meetsLevel &&
+          !cardFull &&
+          !limitReached &&
+          points >= it.cost,
       };
     });
     const frames = getActiveFrameCatalog().map((frame) => {

@@ -7,6 +7,7 @@ import { NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH } from '@/utils/noteWorkspaceLayou
 export const NOTE_TREE_ROOT_KEY = '__light_note_root__';
 
 const EXPANDED_SESSION_KEY = 'light-note-note-tree-expanded-ids';
+const LIBRARY_PREVIEW_SESSION_KEY = 'light-note-note-library-preview';
 const LAYOUT_STORAGE_KEY = 'light-note-workspace-layout';
 
 export type NoteWorkspacePrimaryTab = 'pages' | 'outline';
@@ -15,6 +16,11 @@ interface NoteWorkspaceLayoutPreference {
   sidebarPreferredOpen: boolean;
   aiPreferredOpen: boolean;
   sidebarWidth: number;
+}
+
+interface LibraryPreviewSessionRecord {
+  ownerKey?: string;
+  noteId?: string;
 }
 
 function readJson<T>(storage: Storage | undefined, key: string, fallback: T): T {
@@ -61,6 +67,23 @@ function parentKey(parentId: string | null) {
 function normalizedId(value: unknown) {
   const id = String(value ?? '').trim();
   return id || null;
+}
+
+function normalizeBreadcrumbItems(items: NoteBreadcrumbItem[]) {
+  return (Array.isArray(items) ? items : [])
+    .map((item) => ({ id: String(item?.id || '').trim(), title: String(item?.title || '') }))
+    .filter((item) => item.id);
+}
+
+function readLibraryPreviewPageId(owner: string) {
+  const record = readJson<LibraryPreviewSessionRecord>(
+    typeof sessionStorage === 'undefined' ? undefined : sessionStorage,
+    LIBRARY_PREVIEW_SESSION_KEY,
+    {},
+  );
+  if (String(record.ownerKey || '') !== owner) return null;
+  const noteId = normalizedId(record.noteId);
+  return noteId && noteId.length <= 255 ? noteId : null;
 }
 
 function markSet(source: Set<string>, key: string, enabled: boolean) {
@@ -172,6 +195,7 @@ export default defineStore('noteWorkspace', () => {
   const ownerKey = ref('');
   const activePageId = ref<string | null>(null);
   const browseParentId = ref<string | null>(null);
+  const libraryPreviewPageId = ref<string | null>(null);
   const detailTab = ref<NoteWorkspacePrimaryTab>('pages');
   const detailTreeScrollTop = ref(0);
   const sidebarPreferredOpen = ref(layout.sidebarPreferredOpen);
@@ -230,7 +254,26 @@ export default defineStore('noteWorkspace', () => {
     ownerKey.value = normalized;
     activePageId.value = null;
     browseParentId.value = null;
+    libraryPreviewPageId.value = readLibraryPreviewPageId(normalized);
     resetTreeState();
+  }
+
+  function setLibraryPreviewPage(noteId: string | null) {
+    const id = normalizedId(noteId);
+    libraryPreviewPageId.value = id;
+    if (typeof sessionStorage === 'undefined' || !ownerKey.value) return;
+    try {
+      if (id) {
+        sessionStorage.setItem(LIBRARY_PREVIEW_SESSION_KEY, JSON.stringify({ ownerKey: ownerKey.value, noteId: id }));
+        return;
+      }
+      const record = readJson<LibraryPreviewSessionRecord>(sessionStorage, LIBRARY_PREVIEW_SESSION_KEY, {});
+      if (!record.ownerKey || record.ownerKey === ownerKey.value) {
+        sessionStorage.removeItem(LIBRARY_PREVIEW_SESSION_KEY);
+      }
+    } catch {
+      // 受限 WebView 禁止存储时仍保留当前内存状态。
+    }
   }
 
   function setNavigation(next: { activePageId?: string | null; browseParentId?: string | null }) {
@@ -247,13 +290,18 @@ export default defineStore('noteWorkspace', () => {
     detailTreeScrollTop.value = Number.isFinite(normalized) ? Math.max(0, normalized) : 0;
   }
 
+  function cacheBreadcrumb(noteId: string | null, items: NoteBreadcrumbItem[]) {
+    const id = normalizedId(noteId);
+    if (!id) return [];
+    const normalizedItems = normalizeBreadcrumbItems(items);
+    breadcrumbByNote.value = { ...breadcrumbByNote.value, [id]: normalizedItems };
+    return normalizedItems;
+  }
+
   function seedBreadcrumb(noteId: string | null, items: NoteBreadcrumbItem[]) {
     const id = normalizedId(noteId);
     if (!id) return [];
-    const normalizedItems = (Array.isArray(items) ? items : [])
-      .map((item) => ({ id: String(item?.id || '').trim(), title: String(item?.title || '') }))
-      .filter((item) => item.id);
-    breadcrumbByNote.value = { ...breadcrumbByNote.value, [id]: normalizedItems };
+    const normalizedItems = cacheBreadcrumb(id, items);
     breadcrumbTargetId = id;
     currentBreadcrumb.value = normalizedItems;
     return normalizedItems;
@@ -325,6 +373,46 @@ export default defineStore('noteWorkspace', () => {
     return request;
   }
 
+  function resolveBreadcrumb(noteId: string): Promise<NoteBreadcrumbItem[]> {
+    const cached = breadcrumbByNote.value[noteId];
+    if (cached) return Promise.resolve(cached);
+    const requestOwner = ownerKey.value;
+    const requestGeneration = breadcrumbRequestSeq;
+    let request = breadcrumbRequests.get(noteId);
+    if (!request) {
+      request = (async () => {
+        try {
+          const response = await apiBasePost('/api/note/queryNoteBreadcrumb', { noteId }, { silent: true });
+          if (requestOwner !== ownerKey.value || requestGeneration !== breadcrumbRequestSeq) return [];
+          if (response.status !== 200) {
+            treeError.value = String(response.msg || 'NOTE_TREE_BREADCRUMB_FAILED');
+            return [];
+          }
+          const items = Array.isArray(response.data?.items) ? response.data.items : [];
+          return cacheBreadcrumb(noteId, items);
+        } catch (error) {
+          if (requestOwner === ownerKey.value && requestGeneration === breadcrumbRequestSeq) {
+            treeError.value = error instanceof Error ? error.message : 'NOTE_TREE_BREADCRUMB_FAILED';
+          }
+          return [];
+        } finally {
+          if (breadcrumbRequests.get(noteId) === request) breadcrumbRequests.delete(noteId);
+        }
+      })();
+      breadcrumbRequests.set(noteId, request);
+    }
+    return request;
+  }
+
+  async function revealNotePath(noteId: string | null, breadcrumb?: NoteBreadcrumbItem[] | null) {
+    const id = normalizedId(noteId);
+    if (!id) return [];
+    const bundledItems = normalizeBreadcrumbItems(Array.isArray(breadcrumb) ? breadcrumb : []);
+    const items = bundledItems.length ? cacheBreadcrumb(id, bundledItems) : await resolveBreadcrumb(id);
+    await revealBreadcrumb(items);
+    return items;
+  }
+
   async function loadBreadcrumb(noteId: string | null, options: { reveal?: boolean } = {}) {
     const id = normalizedId(noteId);
     breadcrumbTargetId = id;
@@ -332,39 +420,7 @@ export default defineStore('noteWorkspace', () => {
       currentBreadcrumb.value = [];
       return [];
     }
-    const cached = breadcrumbByNote.value[id];
-    if (cached) {
-      currentBreadcrumb.value = cached;
-      if (options.reveal !== false) await revealBreadcrumb(cached);
-      return cached;
-    }
-    const requestOwner = ownerKey.value;
-    const requestGeneration = breadcrumbRequestSeq;
-    let request = breadcrumbRequests.get(id);
-    if (!request) {
-      request = (async () => {
-        try {
-          const response = await apiBasePost('/api/note/queryNoteBreadcrumb', { noteId: id }, { silent: true });
-          if (requestOwner !== ownerKey.value || requestGeneration !== breadcrumbRequestSeq) return [];
-          if (response.status !== 200) {
-            treeError.value = String(response.msg || 'NOTE_TREE_BREADCRUMB_FAILED');
-            return [];
-          }
-          const items = Array.isArray(response.data?.items) ? response.data.items : [];
-          breadcrumbByNote.value = { ...breadcrumbByNote.value, [id]: items };
-          return items;
-        } catch (error) {
-          if (requestOwner === ownerKey.value && requestGeneration === breadcrumbRequestSeq) {
-            treeError.value = error instanceof Error ? error.message : 'NOTE_TREE_BREADCRUMB_FAILED';
-          }
-          return [];
-        } finally {
-          if (breadcrumbRequests.get(id) === request) breadcrumbRequests.delete(id);
-        }
-      })();
-      breadcrumbRequests.set(id, request);
-    }
-    const items = await request;
+    const items = await resolveBreadcrumb(id);
     if (breadcrumbTargetId === id) currentBreadcrumb.value = items;
     if (options.reveal !== false) await revealBreadcrumb(items);
     return items;
@@ -593,6 +649,7 @@ export default defineStore('noteWorkspace', () => {
     detailTab,
     detailTreeScrollTop,
     expandedIds,
+    libraryPreviewPageId,
     loadedKeys,
     loadingKeys,
     ownerKey,
@@ -610,6 +667,7 @@ export default defineStore('noteWorkspace', () => {
     loadBreadcrumb,
     loadChildren,
     revealBreadcrumb,
+    revealNotePath,
     insertCreatedNote,
     invalidateBreadcrumbBranch,
     refreshTree,
@@ -617,6 +675,7 @@ export default defineStore('noteWorkspace', () => {
     seedBreadcrumb,
     setAiPreferredOpen,
     setDetailTreeScrollTop,
+    setLibraryPreviewPage,
     setNavigation,
     setSidebarPreferredOpen,
     setSidebarWidth,

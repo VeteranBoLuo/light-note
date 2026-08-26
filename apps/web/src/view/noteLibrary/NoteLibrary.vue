@@ -217,6 +217,7 @@
           v-if="desktopPreviewOpen && previewNoteId"
           :note-id="previewNoteId"
           :seed="previewNoteSeed"
+          :breadcrumb="previewBreadcrumb"
           :child-count="previewChildCount"
           :menu-options="previewMenuOptions"
           :outline-target="previewOutlineTarget"
@@ -224,6 +225,9 @@
           @open-page="openPreviewBreadcrumbPage"
           @edit="openDirectoryPage(previewNoteId)"
           @browse-children="selectDirectory(previewNoteId)"
+          @breadcrumb-resolved="handlePreviewBreadcrumbResolved"
+          @detail-resolved="handlePreviewDetailResolved"
+          @unavailable="handlePreviewUnavailable"
           @pending-state="syncPreviewNotePendingState"
           @outline-change="previewOutline = $event"
           @outline-active-change="previewActiveOutlineId = $event"
@@ -741,6 +745,7 @@
   const noteCacheScope = computed(() => buildNoteDetailRequestScope(user));
   const {
     detailTab,
+    libraryPreviewPageId: previewNoteId,
     sidebarPreferredOpen: noteSidebarExpanded,
     sidebarWidth: noteWorkspaceSidebarWidth,
   } = storeToRefs(noteWorkspace);
@@ -939,7 +944,6 @@
   // 首次打开仍然懒加载；之后保持实例挂载。抽屉关闭会先释放移动端 history 占位，
   // 若随 open=false 立即卸载，子组件稍后派发的目录 select 会被 Vue 丢弃。
   const mobileDirectoryMounted = ref(false);
-  const previewNoteId = ref<string | null>(null);
   const previewNoteSeed = ref<Record<string, any> | null>(null);
   interface PreviewOutlineItem {
     id?: string;
@@ -950,13 +954,26 @@
     id: string;
     title?: string;
   }
+  interface PreviewBreadcrumbResolution {
+    noteId: string;
+    items: PreviewBreadcrumbTarget[];
+  }
+  interface PreviewDetailResolution {
+    noteId: string;
+    detail: Record<string, any>;
+  }
   const previewOutline = ref<PreviewOutlineItem[]>([]);
   const previewActiveOutlineId = ref<string | null>(null);
   const previewOutlineTarget = ref<{ id: string; requestId: number } | null>(null);
   const openingPageBodyId = ref('');
   let previewOutlineRequestId = 0;
   let previewPendingLocallyChanged = false;
+  let previewSeedScope = '';
+  let pendingPreviewPathId = '';
   const desktopPreviewOpen = computed(() => !bookmark.isMobile && Boolean(previewNoteId.value));
+  const previewBreadcrumb = computed(() =>
+    previewNoteId.value ? noteWorkspace.breadcrumbByNote[previewNoteId.value] || [] : [],
+  );
   const hasLibraryNoteContext = computed(() => desktopPreviewOpen.value || Boolean(currentParentId.value));
   const librarySidebarMode = computed<'directory' | 'outline'>({
     get: () => (hasLibraryNoteContext.value && detailTab.value === 'outline' ? 'outline' : 'directory'),
@@ -980,7 +997,11 @@
     previewActiveOutlineId.value = headingId;
     previewOutlineTarget.value = { id: headingId, requestId: ++previewOutlineRequestId };
   }
-  const previewChildCount = computed(() => Math.max(0, Number(previewNoteSeed.value?.childCount || 0)));
+  const previewChildCount = computed(() => {
+    const noteId = String(previewNoteId.value || '').trim();
+    const loadedNode = noteId ? findLoadedTreeNode(noteId) : null;
+    return Math.max(0, Number(previewNoteSeed.value?.childCount || 0), Number(loadedNode?.childCount || 0));
+  });
   interface DesktopPreviewScrollSnapshot {
     top: number;
     left: number;
@@ -1372,13 +1393,60 @@
     return noteList.value.find((item) => String(item.id) === noteId) || findLoadedTreeNode(noteId);
   }
 
-  function setDesktopPreviewPage(noteId: string, source: Record<string, any>) {
+  function clearDesktopPreviewLocalState() {
+    previewPendingLocallyChanged = false;
+    previewOutline.value = [];
+    previewActiveOutlineId.value = null;
+    previewOutlineTarget.value = null;
+    previewNoteSeed.value = null;
+    previewSeedScope = '';
+    pendingPreviewPathId = '';
+  }
+
+  function applyDesktopPreviewLocalState(noteId: string, source: Record<string, any>) {
     previewPendingLocallyChanged = false;
     previewOutline.value = [];
     previewActiveOutlineId.value = null;
     previewOutlineTarget.value = null;
     previewNoteSeed.value = { ...source, id: noteId };
-    previewNoteId.value = noteId;
+    previewSeedScope = noteCacheScope.value;
+    pendingPreviewPathId = '';
+  }
+
+  function setDesktopPreviewPage(noteId: string, source: Record<string, any>) {
+    applyDesktopPreviewLocalState(noteId, source);
+    noteWorkspace.setLibraryPreviewPage(noteId);
+  }
+
+  function handlePreviewBreadcrumbResolved(payload: PreviewBreadcrumbResolution) {
+    const noteId = String(payload?.noteId || '').trim();
+    if (!noteId || noteId !== previewNoteId.value) return;
+    if (!payload.items.length && !noteTreeReadEnabled.value) {
+      pendingPreviewPathId = noteTreeFeaturesReady.value ? '' : noteId;
+      return;
+    }
+    pendingPreviewPathId = '';
+    void noteWorkspace.revealNotePath(noteId, payload.items);
+  }
+
+  function handlePreviewDetailResolved(payload: PreviewDetailResolution) {
+    const noteId = String(payload?.noteId || '').trim();
+    if (!noteId || noteId !== previewNoteId.value) return;
+    const previousPending = previewNoteSeed.value?.isPending;
+    const nextSeed = { ...(previewNoteSeed.value || {}), ...(payload.detail || {}), id: noteId };
+    if (previewPendingLocallyChanged && previousPending !== undefined) nextSeed.isPending = previousPending;
+    previewNoteSeed.value = nextSeed;
+    previewSeedScope = noteCacheScope.value;
+    noteWorkspace.updateNoteMetadata(noteId, {
+      title: String(payload.detail?.title || ''),
+      type: String(payload.detail?.type || 'html'),
+      hasContent: hasMeaningfulNoteContent(payload.detail?.content || '', payload.detail?.type),
+    });
+  }
+
+  function handlePreviewUnavailable(noteId: string) {
+    if (String(noteId || '').trim() !== previewNoteId.value) return;
+    closeDesktopPreview(false);
   }
 
   function openCurrentDirectoryOutline(noteId: string) {
@@ -1516,14 +1584,43 @@
   function closeDesktopPreview(restoreScroll = true) {
     const snapshot = restoreScroll ? desktopPreviewScrollSnapshot : null;
     desktopPreviewScrollSnapshot = null;
-    previewPendingLocallyChanged = false;
-    previewOutline.value = [];
-    previewActiveOutlineId.value = null;
-    previewOutlineTarget.value = null;
-    previewNoteId.value = null;
-    previewNoteSeed.value = null;
+    clearDesktopPreviewLocalState();
+    noteWorkspace.setLibraryPreviewPage(null);
     if (snapshot) void restoreDesktopPreviewScroll(snapshot);
   }
+
+  watch(
+    [previewNoteId, () => bookmark.isMobile, noteCacheScope],
+    ([noteId, isMobile, scope]) => {
+      const normalizedId = String(noteId || '').trim();
+      if (!normalizedId) {
+        if (previewNoteSeed.value) clearDesktopPreviewLocalState();
+        return;
+      }
+      if (isMobile) {
+        if (String(previewNoteSeed.value?.id || '') !== normalizedId || previewSeedScope !== scope) {
+          clearDesktopPreviewLocalState();
+        }
+        return;
+      }
+      if (String(previewNoteSeed.value?.id || '') === normalizedId && previewSeedScope === scope) return;
+      desktopPreviewScrollSnapshot = null;
+      const source = findNoteForWarmup(normalizedId) || { id: normalizedId };
+      prefetchNoteDetail(user, normalizedId);
+      applyDesktopPreviewLocalState(normalizedId, source);
+      const cachedBreadcrumb = noteWorkspace.breadcrumbByNote[normalizedId];
+      if (noteTreeReadEnabled.value && cachedBreadcrumb?.length) {
+        void noteWorkspace.revealNotePath(normalizedId, cachedBreadcrumb);
+      }
+    },
+    { immediate: true },
+  );
+
+  watch([noteTreeFeaturesReady, noteTreeReadEnabled, previewNoteId], ([featuresReady, treeEnabled, noteId]) => {
+    if (!featuresReady || !treeEnabled || !noteId || noteId !== pendingPreviewPathId || bookmark.isMobile) return;
+    pendingPreviewPathId = '';
+    void noteWorkspace.revealNotePath(noteId);
+  });
 
   async function toggleTreeNode(node: any) {
     const nodeId = String(node?.id || '');

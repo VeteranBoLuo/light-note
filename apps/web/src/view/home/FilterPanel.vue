@@ -664,7 +664,7 @@
         color: var(--text-secondary-color, #666);
       }
 
-      .b-button {
+      .b_btn {
         width: 100%;
       }
     }

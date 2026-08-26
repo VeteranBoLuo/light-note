@@ -19,6 +19,12 @@ const POLICY = {
   auto_credit_max_amount: '200.00',
   activated_epoch: 1_700_000_000,
 };
+const PURE_POLICY = {
+  policy_version: 'support-pure-v2',
+  tokens_per_cny: 0,
+  auto_credit_max_amount: '0.00',
+  activated_epoch: 1_800_000_000,
+};
 
 function order(overrides = {}) {
   return {
@@ -26,6 +32,7 @@ function order(overrides = {}) {
     provider_order_no: 'order-12345678',
     light_note_user_id: 'user-1',
     ownership_source: 'checkout',
+    order_purpose: 'legacy_support',
     product_type: 0,
     total_amount: '6.00',
     provider_status: 2,
@@ -39,16 +46,20 @@ function order(overrides = {}) {
 
 function connectionFor({ orderRow = order(), grantRow = null, applicablePolicy = POLICY } = {}) {
   return {
-    query: vi.fn(async (sql) => {
+    query: vi.fn(async (sql, params = []) => {
       const statement = String(sql);
       if (statement.includes('FROM support_orders') && statement.includes('WHERE o.id = ?')) return [[orderRow], []];
       if (statement.includes('FROM support_reward_grants') && statement.includes('FOR UPDATE')) {
         return [grantRow ? [grantRow] : [], []];
       }
+      if (statement.includes('FROM support_entitlement_grants') && statement.includes('FOR UPDATE')) return [[], []];
+      if (statement.includes('INSERT INTO support_entitlement_grants')) return [{ affectedRows: 1 }, []];
       if (statement.includes('activated_at <= FROM_UNIXTIME')) {
         return [applicablePolicy ? [applicablePolicy] : [], []];
       }
-      if (statement.includes('FROM support_reward_policy_state')) return [[POLICY], []];
+      if (statement.includes('FROM support_reward_policy_state')) {
+        return [[params[0] === 'support-pure-v2' ? PURE_POLICY : POLICY], []];
+      }
       if (statement.includes('INSERT INTO support_reward_grants')) return [{ affectedRows: 1 }, []];
       if (statement.includes('UPDATE support_reward_grants')) return [{ affectedRows: 1 }, []];
       throw new Error(`UNHANDLED_REWARD_TEST_SQL:${statement}`);
@@ -84,6 +95,80 @@ describe('爱发电永久 AI 额度赠送', () => {
       String(sql).includes('INSERT INTO support_reward_grants'),
     );
     expect(insert[1]).toEqual(expect.arrayContaining(['credited', 'wallet-ledger-1']));
+  });
+
+  it('带 v2 套餐意图的订单始终走通用权益账本，关闭发放时也不回退旧赠送', async () => {
+    const connection = connectionFor({
+      orderRow: order({
+        order_purpose: 'entitlement_purchase',
+        checkout_intent_id: 'checkout-intent-1',
+        intent_type: 'permanent',
+        intent_status: 'issued',
+        intent_user_id: 'user-1',
+        intent_provider_user_id: 'provider-user',
+        intent_provider_private_id: null,
+        provider_user_id: 'provider-user',
+        sku_id: 'ai-6',
+        catalog_version: 'support-packages-v2',
+        quoted_amount: '6.00',
+        base_ai_tokens: 600_000,
+        base_storage_mb: 0,
+        quoted_ai_tokens: 780_000,
+        quoted_storage_mb: 0,
+        first_purchase_candidate: 1,
+        intent_expires_epoch: 1_800_000_000,
+      }),
+    });
+    await expect(syncAfdianRewardForOrder(connection, 'order-id-1', { env: {} })).resolves.toMatchObject({
+      status: 'pending',
+      reasonCode: 'package_grant_disabled',
+    });
+    expect(walletMocks.credit).not.toHaveBeenCalled();
+    expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('support_reward_policy_state'))).toBe(
+      false,
+    );
+  });
+
+  it('新版纯赞助只登记零权益事实，不调用 AI 钱包', async () => {
+    const connection = connectionFor({ orderRow: order({ order_purpose: 'donation' }) });
+    await expect(syncAfdianRewardForOrder(connection, 'order-id-1')).resolves.toMatchObject({
+      status: AFDIAN_REWARD_STATUS.NO_ENTITLEMENT,
+      reasonCode: 'pure_support_no_entitlement',
+      tokens: 0,
+    });
+    expect(walletMocks.credit).not.toHaveBeenCalled();
+    const insert = connection.query.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT INTO support_reward_grants'),
+    );
+    expect(insert[1]).toEqual(expect.arrayContaining(['support-pure-v2', 0, 'no_entitlement']));
+  });
+
+  it('已冻结为纯支持的订单即使后来出现套餐意图也不能绕过用途误发权益', async () => {
+    const connection = connectionFor({
+      orderRow: order({
+        order_purpose: 'donation',
+        checkout_intent_id: 'late-package-intent',
+        intent_type: 'permanent',
+        sku_id: 'ai-6',
+      }),
+    });
+    await expect(syncAfdianRewardForOrder(connection, 'order-id-1')).resolves.toMatchObject({
+      status: AFDIAN_REWARD_STATUS.NO_ENTITLEMENT,
+      reasonCode: 'pure_support_no_entitlement',
+      tokens: 0,
+    });
+    expect(walletMocks.credit).not.toHaveBeenCalled();
+    expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('support_entitlement_grants'))).toBe(false);
+  });
+
+  it('未识别用途的自定义订单失败关闭并进入人工复核', async () => {
+    const connection = connectionFor({ orderRow: order({ order_purpose: 'unknown' }) });
+    await expect(syncAfdianRewardForOrder(connection, 'order-id-1')).resolves.toMatchObject({
+      status: AFDIAN_REWARD_STATUS.MANUAL_REVIEW,
+      reasonCode: 'order_purpose_unknown',
+      tokens: 0,
+    });
+    expect(walletMocks.credit).not.toHaveBeenCalled();
   });
 
   it('策略启用前的历史订单明确排除，不因后续全量同步补发', async () => {

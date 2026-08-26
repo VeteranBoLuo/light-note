@@ -8,6 +8,13 @@
     height="min(86dvh, 720px)"
     content-class="note-version-history__content"
   >
+    <template #title>
+      <div class="note-version-history-title" :class="{ mobile: bookmark.isMobile }">
+        <span class="note-version-history-title__text">{{ $t('noteDetail.history.title') }}</span>
+        <span class="note-version-history-title__hint">{{ $t('noteDetail.history.archiveHint') }}</span>
+      </div>
+    </template>
+
     <div class="note-history" :class="{ mobile: bookmark.isMobile }">
       <!-- 左:版本列表 -->
       <div class="version-list">
@@ -394,6 +401,37 @@
 </script>
 
 <style lang="less" scoped>
+  .note-version-history-title {
+    display: flex;
+    min-width: 0;
+    align-items: baseline;
+    gap: 10px;
+
+    &__text {
+      flex: 0 0 auto;
+    }
+
+    &__hint {
+      min-width: 0;
+      color: var(--desc-color);
+      font-size: 12px;
+      font-weight: 400;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+
+    &.mobile {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+
+      .note-version-history-title__hint {
+        font-size: 11px;
+        line-height: 1.45;
+      }
+    }
+  }
+
   .note-history {
     width: 100%;
     height: 100%;

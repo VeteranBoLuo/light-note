@@ -64,6 +64,7 @@
               :children-by-parent="sidebarTreeChildrenByParent"
               :expanded-ids="sidebarTreeExpandedIds"
               :loading-keys="sidebarTreeLoadingKeys"
+              :motion-expansion-ids="detailTreeMotionExpansionIds"
               :tree-error="sidebarTreeError"
               :search-value="detailTreeSearchValue"
               :directory-enabled="noteTreeReadEnabled"
@@ -86,7 +87,7 @@
               @rename="openRenamePage"
               @share="openNoteShare"
               @delete="deleteSidebarPage"
-              @go-library="openBreadcrumbPage(null)"
+              @go-library="openLibraryRoot"
               @search="detailTreeSearchValue = $event"
               @drag-start="onTreeDragStart"
               @drag-end="onTreeDragEnd"
@@ -127,7 +128,7 @@
               :aria-label="t('note.currentDirectory')"
               @click.self="openMobileNavigation()"
             >
-              <BButton size="small" class="note-detail-crumb" @click="openBreadcrumbPage(null)">
+              <BButton size="small" class="note-detail-crumb" @click="openLibraryRoot">
                 {{ t('note.knowledgeRoot') }}
               </BButton>
               <template v-for="item in detailBreadcrumbTailDisplay" :key="item.key">
@@ -338,7 +339,7 @@
   } from 'vue';
   import { storeToRefs } from 'pinia';
   import { useI18n } from 'vue-i18n';
-  import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
+  import { isNavigationFailure, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
   import router from '@/router';
   import { cloneDeep } from 'lodash-es';
   import { apiBasePost } from '@/http/request.ts';
@@ -473,6 +474,7 @@
     return from ? { from } : {};
   };
   const returnToSource = () => router.push(sourceReturnPath() || noteLibraryFallback());
+  let libraryRootEntryRequested = false;
   // 新建笔记时必须在 Editor 子组件挂载前就按 query(显式 type 或内置模板的 type)同步定好编辑器类型:
   // 子组件挂载早于父 onMounted,若此刻仍是默认富文本(html),随后灌入的 markdown 模板正文会经 TinyMCE,
   // 其中的 `>` 等被 HTML 转义成 &gt; 再回写存库。编辑已有笔记时该初值会被加载覆盖,不受影响。
@@ -603,6 +605,8 @@
     },
   });
   const detailTreeSearchValue = ref('');
+  const detailTreeMotionExpansionIds = ref<Set<string>>(new Set());
+  const detailTreeMotionCleanupTimers = new Map<string, number>();
   const treeSearchActive = computed(() => Boolean(treeSearchKeyword.value.trim()));
   const sidebarTreeChildrenByParent = computed(() =>
     treeSearchActive.value ? treeSearchChildrenByParent.value : childrenByParent.value,
@@ -1390,7 +1394,22 @@
   }
 
   async function toggleTreeNode(node: any) {
-    await toggleExpanded(node);
+    const nodeId = String(node?.id || '').trim();
+    if (!nodeId) return;
+    const previousTimer = detailTreeMotionCleanupTimers.get(nodeId);
+    if (previousTimer) window.clearTimeout(previousTimer);
+    detailTreeMotionExpansionIds.value = new Set([...detailTreeMotionExpansionIds.value, nodeId]);
+    try {
+      await toggleExpanded(node);
+    } finally {
+      const timer = window.setTimeout(() => {
+        const next = new Set(detailTreeMotionExpansionIds.value);
+        next.delete(nodeId);
+        detailTreeMotionExpansionIds.value = next;
+        detailTreeMotionCleanupTimers.delete(nodeId);
+      }, 260);
+      detailTreeMotionCleanupTimers.set(nodeId, timer);
+    }
   }
 
   async function browseSidebarChildren(id: string) {
@@ -1439,10 +1458,14 @@
     }
     if (requestVersion !== noteOpenRequestVersion) return;
     try {
-      await router.push({
+      const navigationFailure = await router.push({
         path: `/noteLibrary/${encodeURIComponent(normalizedId)}`,
         query: detailSourceQuery(),
       });
+      if (requestVersion !== noteOpenRequestVersion || isNavigationFailure(navigationFailure)) return;
+      // 编辑器内切换后的当前笔记才是返回笔记库时应恢复的预览页。
+      // 只在路由确认成功后落缓存，保存失败或导航被取消时仍保留原来的预览。
+      if (!bookmark.isMobile) noteWorkspace.setLibraryPreviewPage(normalizedId);
     } finally {
       if (requestVersion === noteOpenRequestVersion) {
         openingPageId.value = null;
@@ -1451,9 +1474,10 @@
     }
   }
 
-  function openBreadcrumbPage(pageId: string | null) {
-    if (!pageId) {
-      void router.push(
+  async function openLibraryRoot() {
+    libraryRootEntryRequested = true;
+    try {
+      await router.push(
         bookmark.isMobile
           ? {
               path: '/noteLibrary',
@@ -1461,8 +1485,12 @@
             }
           : '/noteLibrary',
       );
-      return;
+    } finally {
+      libraryRootEntryRequested = false;
     }
+  }
+
+  function openBreadcrumbPage(pageId: string) {
     void openNoteDetailPage(pageId);
   }
 
@@ -2087,9 +2115,17 @@
     returnToSource();
   }
 
-  onBeforeRouteLeave(async () => {
+  onBeforeRouteLeave(async (to) => {
     if (skipSaveOnLeave) return true;
-    return await persistBeforeLeave();
+    const saved = await persistBeforeLeave();
+    if (!saved) return false;
+    if (libraryRootEntryRequested && to.path === '/noteLibrary') {
+      detailTab.value = 'pages';
+      noteWorkspace.setLibraryPreviewPage(null);
+      noteWorkspace.setNavigation({ activePageId: null, browseParentId: null });
+      noteWorkspace.clearTreeSearch();
+    }
+    return true;
   });
 
   onBeforeRouteUpdate(async (to) => {
@@ -2361,6 +2397,8 @@
     markNoteDraftPromoted(null);
     noteLoadVersion += 1;
     window.clearTimeout(detailTreeSearchTimer);
+    detailTreeMotionCleanupTimers.forEach((timer) => window.clearTimeout(timer));
+    detailTreeMotionCleanupTimers.clear();
     document.removeEventListener('keydown', handleKeyDown);
     document.removeEventListener('visibilitychange', handleResourceRefVisibilityChange);
     window.removeEventListener('focus', refreshEditorResourceRefs);

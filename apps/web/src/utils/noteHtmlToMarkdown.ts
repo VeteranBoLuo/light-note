@@ -212,6 +212,24 @@ export function normalizeMarkdownTaskListHtml(html: string, editable = false) {
   return changed ? doc.body.innerHTML : html;
 }
 
+/**
+ * 笔记阅读态中的复选框只表达已保存状态，不提供会被误认为已保存的临时交互。
+ * 在预览 HTML 的统一出口补齐 disabled、键盘与无障碍语义，兼容富文本原生待办和 GFM 待办。
+ */
+export function makeNotePreviewCheckboxesReadonly(html: string) {
+  if (!html || typeof DOMParser === 'undefined') return html || '';
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+  const checkboxes = Array.from(doc.body.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
+  if (!checkboxes.length) return html;
+
+  checkboxes.forEach((checkbox) => {
+    checkbox.disabled = true;
+    checkbox.setAttribute('aria-disabled', 'true');
+    checkbox.setAttribute('tabindex', '-1');
+  });
+  return doc.body.innerHTML;
+}
+
 export function noteHtmlToMarkdown(html: string) {
   return createNoteTurndownService().turndown(html || '');
 }

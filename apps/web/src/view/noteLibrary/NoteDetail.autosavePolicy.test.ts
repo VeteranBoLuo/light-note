@@ -19,8 +19,10 @@ describe('NoteDetail autosave policy', () => {
   it('正文使用 1.5 秒合并窗口，但离开路由前仍强制落库', () => {
     expect(source).toContain('const TEXT_SAVE_DEBOUNCE_DELAY = 1_500');
     expect(source).toContain('timer.value = setTimeout(');
-    expect(source).toContain('onBeforeRouteLeave(async () =>');
-    expect(source).toContain('return await persistBeforeLeave()');
+    expect(source).toContain('onBeforeRouteLeave(async (to) =>');
+    expect(source).toContain('const saved = await persistBeforeLeave()');
+    expect(source).toContain('if (!saved) return false');
+    expect(source).toContain("libraryRootEntryRequested && to.path === '/noteLibrary'");
     expect(source).toContain('const saved = await flushPendingSave()');
   });
 
@@ -47,5 +49,15 @@ describe('NoteDetail autosave policy', () => {
     expect(zhLocaleSource).toContain("other: '其他版本'");
     expect(enLocaleSource).toContain("manual: 'Manual save'");
     expect(enLocaleSource).toContain("other: 'Other version'");
+  });
+
+  it('历史版本标题区解释普通保存与版本留档的边界，并在移动端纵向排布', () => {
+    expect(versionHistorySource).toContain('<template #title>');
+    expect(versionHistorySource).toContain("$t('noteDetail.history.archiveHint')");
+    expect(versionHistorySource).toContain('class="note-version-history-title"');
+    expect(versionHistorySource).toContain('&.mobile');
+    expect(versionHistorySource).toContain('flex-direction: column');
+    expect(zhLocaleSource).toContain('普通保存与 Command/Ctrl+S 不会每次生成历史版本');
+    expect(enLocaleSource).toContain('regular saves and Command/Ctrl+S do not create one every time');
   });
 });

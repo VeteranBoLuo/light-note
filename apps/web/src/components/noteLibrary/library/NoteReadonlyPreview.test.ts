@@ -53,8 +53,19 @@ describe('NoteReadonlyPreview', () => {
   it('标题区显示权威待整理状态，并把详情状态同步给笔记库', () => {
     expect(source).toContain('<InboxPendingBadge v-if="previewPending" />');
     expect(source).toContain('props.seed?.isPending ?? detail.value.isPending');
-    expect(source).toContain("hasOwnProperty.call(detailResult.data, 'isPending')");
-    expect(source).toContain("emit('pendingState', Boolean(detailResult.data.isPending))");
+    expect(source).toContain("hasOwnProperty.call(detailRecord, 'isPending')");
+    expect(source).toContain("emit('pendingState', Boolean(detailRecord.isPending))");
+  });
+
+  it('复用详情接口内嵌面包屑并上抛失效笔记，不再重复读取路径接口', () => {
+    expect(source).toContain('breadcrumb?: PreviewBreadcrumbItem[]');
+    expect(source).toContain('props.breadcrumb.filter');
+    expect(source).toContain('const { breadcrumb: bundledBreadcrumb, ...detailRecord } = detailResult.data');
+    expect(source).toContain("emit('detailResolved', { noteId, detail: detailRecord })");
+    expect(source).toContain("emit('breadcrumbResolved', {");
+    expect(source).toContain('invalidateNoteDetailPrefetch(user, noteId)');
+    expect(source).toContain("if (Number(detailResult.status) === 404) emit('unavailable', noteId)");
+    expect(source).not.toContain("apiBasePost('/api/note/queryNoteBreadcrumb'");
   });
 
   it('子页面数量是带方向提示的浏览按钮，并向父级上抛浏览事件', () => {
@@ -88,10 +99,10 @@ describe('NoteReadonlyPreview', () => {
 
   it('桌面手绘预览拿到完整 scene 后会为本人旧笔记静默补齐准确缩略图', () => {
     expect(source).toContain("import { ensureDrawingThumbnail } from '@/api/drawingThumbnail'");
-    expect(source).toContain("String(detailResult.data.createBy || '') === String(user.id || '')");
+    expect(source).toContain("String(detailRecord.createBy || '') === String(user.id || '')");
     expect(source).toContain('void ensureDrawingThumbnail(');
-    expect(source).toContain('Math.max(1, Number(detailResult.data.revision || 1))');
-    expect(source).toContain("String(detailResult.data.content || '')");
+    expect(source).toContain('Math.max(1, Number(detailRecord.revision || 1))');
+    expect(source).toContain("String(detailRecord.content || '')");
   });
 
   it('手绘画板适配完成后只在外层阅读区执行一次居中定位', () => {

@@ -15,6 +15,7 @@ dist-ssr
 .env
 .env.*
 !apps/web/.env.example
+!apps/server/.env.example
 components.d.ts
 auto-imports.d.ts
 

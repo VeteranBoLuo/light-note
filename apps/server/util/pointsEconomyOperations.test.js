@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  assertPointsEconomyActivationReady,
   beginPointsEconomyOperation,
   completePointsEconomyOperation,
   operationHash,
@@ -201,5 +202,29 @@ describe('积分消费幂等收据', () => {
       1,
       10,
     ]);
+  });
+});
+
+describe('积分经济激活门禁', () => {
+  it('C4 只要求既有保底迁移，C5 还必须完成空间限兑回填', async () => {
+    const c4Db = { query: vi.fn().mockResolvedValueOnce([[{ ready: 1 }]]) };
+    await expect(
+      assertPointsEconomyActivationReady({ db: c4Db, runtime: { economyVersion: 'points-economy-c4' } }),
+    ).resolves.toBe(true);
+    expect(c4Db.query).toHaveBeenCalledOnce();
+
+    const c5Missing = {
+      query: vi.fn().mockResolvedValueOnce([[{ ready: 1 }]]).mockResolvedValueOnce([[]]),
+    };
+    await expect(
+      assertPointsEconomyActivationReady({ db: c5Missing, runtime: { economyVersion: 'points-economy-c5' } }),
+    ).rejects.toMatchObject({ code: 'POINTS_ECONOMY_C5_MIGRATION_REQUIRED' });
+
+    const c5Ready = {
+      query: vi.fn().mockResolvedValueOnce([[{ ready: 1 }]]).mockResolvedValueOnce([[{ ready: 1 }]]),
+    };
+    await expect(
+      assertPointsEconomyActivationReady({ db: c5Ready, runtime: { economyVersion: 'points-economy-c5' } }),
+    ).resolves.toBe(true);
   });
 });

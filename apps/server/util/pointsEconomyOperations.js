@@ -1,8 +1,14 @@
 import { createHash } from 'node:crypto';
 import pool from '../db/index.js';
-import { getEconomyRuntime, POINTS_ECONOMY_VERSION } from './pointsEconomyCatalog.js';
+import {
+  C4_POINTS_ECONOMY_VERSION,
+  getEconomyRuntime,
+  LEGACY_POINTS_ECONOMY_VERSION,
+  POINTS_ECONOMY_VERSION,
+} from './pointsEconomyCatalog.js';
 
 export const C4_BACKFILL_MIGRATION_KEY = 'points-economy-c4-paid-pity-v1';
+export const C5_STORAGE_LIMIT_MIGRATION_KEY = 'points-economy-c5-storage-limits-v1';
 export const CLIENT_REQUEST_ID_PATTERN = /^[A-Za-z0-9:_-]{12,64}$/;
 
 function canonicalize(value) {
@@ -19,7 +25,9 @@ function canonicalize(value) {
 }
 
 export function operationHash(payload) {
-  return createHash('sha256').update(JSON.stringify(canonicalize(payload))).digest('hex');
+  return createHash('sha256')
+    .update(JSON.stringify(canonicalize(payload)))
+    .digest('hex');
 }
 
 export class PointsEconomyError extends Error {
@@ -67,7 +75,10 @@ export async function beginPointsEconomyOperation(
   const requestId = normalizeRequestId(clientRequestId);
   const normalizedVersion = String(economyVersion || '').trim() || null;
   const normalizedExpectedCost = expectedCost === undefined || expectedCost === null ? null : Number(expectedCost);
-  if (normalizedExpectedCost !== null && (!Number.isSafeInteger(normalizedExpectedCost) || normalizedExpectedCost < 0)) {
+  if (
+    normalizedExpectedCost !== null &&
+    (!Number.isSafeInteger(normalizedExpectedCost) || normalizedExpectedCost < 0)
+  ) {
     throw new PointsEconomyError('INVALID_EXPECTED_COST', '预期价格无效，请刷新后重试');
   }
 
@@ -227,14 +238,28 @@ export async function completePointsEconomyOperation(conn, context, result) {
 }
 
 export async function assertPointsEconomyActivationReady({ db = pool, runtime = getEconomyRuntime() } = {}) {
-  if (runtime.economyVersion !== POINTS_ECONOMY_VERSION) return true;
-  const [rows] = await db.query(
-    'SELECT 1 FROM points_economy_migration_state WHERE migration_key = ? LIMIT 1',
-    [C4_BACKFILL_MIGRATION_KEY],
-  );
+  if (runtime.economyVersion === LEGACY_POINTS_ECONOMY_VERSION) return true;
+  const [rows] = await db.query('SELECT 1 FROM points_economy_migration_state WHERE migration_key = ? LIMIT 1', [
+    C4_BACKFILL_MIGRATION_KEY,
+  ]);
   if (!rows.length) {
     const error = new Error('POINTS_ECONOMY_C4_MIGRATION_REQUIRED');
     error.code = 'POINTS_ECONOMY_C4_MIGRATION_REQUIRED';
+    throw error;
+  }
+  if (runtime.economyVersion === C4_POINTS_ECONOMY_VERSION) return true;
+  if (runtime.economyVersion !== POINTS_ECONOMY_VERSION) {
+    const error = new Error('POINTS_ECONOMY_VERSION_UNSUPPORTED');
+    error.code = 'POINTS_ECONOMY_VERSION_UNSUPPORTED';
+    throw error;
+  }
+  const [storageLimitRows] = await db.query(
+    'SELECT 1 FROM points_economy_migration_state WHERE migration_key = ? LIMIT 1',
+    [C5_STORAGE_LIMIT_MIGRATION_KEY],
+  );
+  if (!storageLimitRows.length) {
+    const error = new Error('POINTS_ECONOMY_C5_MIGRATION_REQUIRED');
+    error.code = 'POINTS_ECONOMY_C5_MIGRATION_REQUIRED';
     throw error;
   }
   return true;

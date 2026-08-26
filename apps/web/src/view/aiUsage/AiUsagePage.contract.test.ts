@@ -20,6 +20,11 @@ describe('独立 AI 用量页信息架构', () => {
     expect(source).not.toMatch(/<button\b|<input\b|<select\b/);
   });
 
+  it('永久 AI 额度卡提供积分兑换与权益商店的统一获取入口', () => {
+    expect(source).toContain("t('settings.ai.acquireQuota')");
+    expect(source).toContain('<EntitlementAcquireModal v-model:visible="acquireVisible" asset="ai" />');
+  });
+
   it('设置页只有单一入口，不再发额度或用量请求', () => {
     expect(settingsSource).toContain('settings-card--ai-entry');
     expect(settingsSource).toContain("router.push('/ai-usage')");

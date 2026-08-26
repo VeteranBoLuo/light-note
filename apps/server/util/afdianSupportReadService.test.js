@@ -4,6 +4,7 @@ import {
   getAfdianLeaderboard,
   getAfdianPublicAvatar,
   getAfdianPublicPreference,
+  getAfdianUserOrders,
   invalidateAfdianLeaderboardCache,
   setAfdianAdminIdentityHidden,
   updateAfdianPublicPreference,
@@ -22,27 +23,48 @@ describe('爱发电赞助读取与公开偏好', () => {
   it('后台概览允许 Handler 无参数调用并使用默认数据库连接', async () => {
     mocks.defaultQuery
       .mockResolvedValueOnce([
-        [{ verified_orders: 2, assigned_supporters: 1, total_amount: '30.00', month_amount: '10.00' }],
+        [
+          {
+            verified_orders: 2,
+            assigned_supporters: 1,
+            total_amount: '30.00',
+            support_orders: 1,
+            support_amount: '12.00',
+            purchase_orders: 1,
+            purchase_amount: '18.00',
+            month_amount: '10.00',
+          },
+        ],
         [],
       ])
       .mockResolvedValueOnce([[{ linked_accounts: 1 }], []])
       .mockResolvedValueOnce([[{ pending_orders: 0, conflict_orders: 0, unlinked_orders: 0 }], []])
-      .mockResolvedValueOnce([[{ granted_tokens: 600_000, manual_review_rewards: 1, reversal_review_rewards: 0 }], []]);
+      .mockResolvedValueOnce([[{ granted_tokens: 600_000, manual_review_rewards: 1, reversal_review_rewards: 0 }], []])
+      .mockResolvedValueOnce([
+        [{ granted_tokens: 780_000, granted_storage_mb: 160, manual_review_rewards: 0, reversal_review_rewards: 1 }],
+        [],
+      ]);
 
     await expect(getAfdianAdminOverview()).resolves.toEqual({
       verifiedOrders: 2,
       assignedSupporters: 1,
       totalAmount: '30.00',
+      supportOrders: 1,
+      supportAmount: '12.00',
+      purchaseOrders: 1,
+      purchaseAmount: '18.00',
       monthAmount: '10.00',
       linkedAccounts: 1,
       pendingOrders: 0,
       conflictOrders: 0,
       unlinkedOrders: 0,
-      grantedTokens: 600_000,
+      grantedTokens: 1_380_000,
+      grantedStorageMb: 160,
       manualReviewRewards: 1,
-      reversalReviewRewards: 0,
+      reversalReviewRewards: 1,
     });
-    expect(mocks.defaultQuery).toHaveBeenCalledTimes(4);
+    expect(mocks.defaultQuery).toHaveBeenCalledTimes(5);
+    expect(String(mocks.defaultQuery.mock.calls[0][0])).toContain("ownership_source <> 'conflict'");
   });
 
   it('没有偏好记录时默认参与榜单但保持匿名', async () => {
@@ -52,6 +74,76 @@ describe('爱发电赞助读取与公开偏好', () => {
       showIdentity: false,
       adminHidden: false,
     });
+  });
+
+  it('用户订单统一返回旧 AI、常驻套餐和活动套餐的 AI/空间到账事实', async () => {
+    const db = {
+      query: vi.fn(async (sql) => {
+        const statement = String(sql);
+        if (statement.includes('COUNT(*) AS total')) return [[{ total: 1 }], []];
+        return [
+          [
+            {
+              id: 'order-1',
+              total_amount: '10.00',
+              month: 1,
+              product_type: 0,
+              ownership_source: 'checkout',
+              order_purpose: 'entitlement_purchase',
+              verified_at: '2026-08-25 10:00:00',
+              ranking_observed_at: '2026-08-25 10:00:00',
+              option_key: 'package',
+              intent_type: 'permanent',
+              sku_id: 'combo-10',
+              grant_status: 'credited',
+              reason_code: null,
+              calculated_tokens: 780_000,
+              granted_tokens: 780_000,
+              calculated_storage_mb: 160,
+              granted_storage_mb: 160,
+              first_purchase_applied: 1,
+            },
+          ],
+          [],
+        ];
+      }),
+    };
+    await expect(getAfdianUserOrders({ userId: 'user-1', scope: 'purchase', db })).resolves.toMatchObject({
+      total: 1,
+      items: [
+        {
+          intentType: 'permanent',
+          orderPurpose: 'entitlement_purchase',
+          skuId: 'combo-10',
+          rewardStatus: 'credited',
+          rewardTokens: 780_000,
+          grantedTokens: 780_000,
+          rewardStorageMb: 160,
+          grantedStorageMb: 160,
+          firstPurchaseApplied: true,
+        },
+      ],
+    });
+    expect(db.query.mock.calls.every(([sql]) => String(sql).includes("o.order_purpose = 'entitlement_purchase'"))).toBe(
+      true,
+    );
+  });
+
+  it('支持记录与支持总额一样排除归属冲突，避免把待复核订单展示成已确认支持', async () => {
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[{ total: 0 }], []])
+        .mockResolvedValueOnce([[], []]),
+    };
+    await expect(getAfdianUserOrders({ userId: 'user-1', scope: 'support', db })).resolves.toMatchObject({
+      total: 0,
+      items: [],
+    });
+    for (const [sql] of db.query.mock.calls) {
+      expect(String(sql)).toContain("o.order_purpose IN ('legacy_support','donation')");
+      expect(String(sql)).toContain("o.ownership_source <> 'conflict'");
+    }
   });
 
   it('公开偏好只接受明确布尔值并在保存后失效榜单缓存', async () => {
@@ -150,6 +242,8 @@ describe('爱发电赞助读取与公开偏好', () => {
     expect(result.mine).toEqual(result.items[1]);
     expect(JSON.stringify(result)).not.toContain('private-user');
     expect(String(db.query.mock.calls[0][0])).toContain("NOT IN ('root', 'test', 'visitor')");
+    expect(String(db.query.mock.calls[0][0])).toContain("o.order_purpose IN ('legacy_support','donation')");
+    expect(String(db.query.mock.calls[0][0])).toContain("o.ownership_source <> 'conflict'");
   });
 
   it('公开头像仅在偏好仍公开时读取，并拒绝非 HTTPS 外链', async () => {
@@ -158,6 +252,7 @@ describe('爱发电赞助读取与公开偏好', () => {
       getAfdianPublicAvatar({ publicId: '11111111-1111-4111-8111-111111111111', db: httpsDb }),
     ).resolves.toEqual({ redirectUrl: 'https://img.example/avatar.png' });
     expect(String(httpsDb.query.mock.calls[0][0])).toContain('p.show_identity = 1');
+    expect(String(httpsDb.query.mock.calls[0][0])).toContain("o.order_purpose IN ('legacy_support','donation')");
 
     const httpDb = { query: vi.fn().mockResolvedValue([[{ source: 'http://img.example/avatar.png' }], []]) };
     await expect(

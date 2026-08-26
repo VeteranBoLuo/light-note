@@ -55,10 +55,6 @@
           <strong>{{ state.orderCount }}</strong>
         </div>
         <div>
-          <span>{{ t('support.accountGrantedTokens') }}</span>
-          <strong>{{ formatAiQuotaTokens(state.grantedTokens, locale) }}</strong>
-        </div>
-        <div>
           <span>{{ t('support.accountLastSupport') }}</span>
           <strong>{{ formatDate(state.lastSupportAt) }}</strong>
         </div>
@@ -97,7 +93,7 @@
           <div class="support-account-panel__order-main">
             <strong>¥{{ order.amount }}</strong>
             <span>{{ orderLabel(order) }}</span>
-            <BChip :tone="rewardTone(order)">{{ rewardLabel(order) }}</BChip>
+            <BChip tone="neutral">{{ orderPurposeLabel(order) }}</BChip>
           </div>
           <time>{{ formatDate(order.confirmedAt) }}</time>
         </div>
@@ -120,7 +116,6 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import type { AfdianSupportOrder, AfdianSupportState } from '@/api/supportApi';
-  import { formatAiQuotaTokens } from '@/composables/useAiQuotaStatus';
 
   const props = defineProps<{
     state: AfdianSupportState;
@@ -155,21 +150,8 @@
     return order.month > 1 ? t('support.orderMonths', { count: order.month }) : t('support.orderCustom');
   }
 
-  function rewardLabel(order: AfdianSupportOrder) {
-    if (order.rewardStatus === 'credited') {
-      return t('support.rewardStatus.credited', {
-        tokens: formatAiQuotaTokens(order.grantedTokens, locale.value),
-      });
-    }
-    const status = order.rewardStatus || 'syncing';
-    return t(`support.rewardStatus.${status}`);
-  }
-
-  function rewardTone(order: AfdianSupportOrder): 'success' | 'pending' | 'neutral' | 'danger' {
-    if (order.rewardStatus === 'credited') return 'success';
-    if (order.rewardStatus === 'reversal_review') return 'danger';
-    if (['manual_review', 'pending_link'].includes(String(order.rewardStatus || ''))) return 'pending';
-    return 'neutral';
+  function orderPurposeLabel(order: AfdianSupportOrder) {
+    return t(order.orderPurpose === 'legacy_support' ? 'support.orderLegacySupport' : 'support.orderPureSupport');
   }
 
   function toggleIdentity(showIdentity: boolean) {
@@ -303,7 +285,7 @@
   .support-account-panel__stats {
     margin-top: 14px;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 10px;
   }
 

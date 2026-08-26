@@ -24,6 +24,14 @@ describe('移动端通知入口', () => {
     expect(source).not.toContain('excludeCommunityChat: isMobileLayout');
   });
 
+  it('从通知完成待办后立即刷新导航与底栏共用的注意力角标', () => {
+    expect(source).toContain("import { inboxStore, useUserStore } from '@/store'");
+    expect(source).toContain('const inbox = inboxStore()');
+    expect(source).toMatch(
+      /if \(res\.status === 200\) \{[\s\S]*n\.todoState = 'completed';[\s\S]*await Promise\.all\(\[markNotificationRead\(n\), inbox\.refreshCount\(\)\]\)/,
+    );
+  });
+
   it('PC 铃铛默认无底色，只在悬停或面板展开时强调', () => {
     expect(source).toContain(`:class="{ 'is-open': open }"`);
     expect(source).toContain(':aria-expanded="open"');

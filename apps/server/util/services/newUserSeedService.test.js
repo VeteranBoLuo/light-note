@@ -35,6 +35,28 @@ function compactSql(sql) {
   return String(sql).replace(/\s+/g, ' ').trim();
 }
 
+function drawingContentCenter(scene) {
+  const xs = [];
+  const ys = [];
+  for (const element of scene.elements) {
+    if (element.kind === 'stroke') {
+      for (let index = 0; index < element.points.length; index += 2) {
+        xs.push(element.points[index]);
+        ys.push(element.points[index + 1]);
+      }
+    } else if (element.kind === 'fill') {
+      for (let index = 0; index < element.spans.length; index += 3) {
+        ys.push(element.y + element.spans[index]);
+        xs.push(element.x + element.spans[index + 1], element.x + element.spans[index + 2]);
+      }
+    }
+  }
+  return {
+    x: (Math.min(...xs) + Math.max(...xs)) / 2,
+    y: (Math.min(...ys) + Math.max(...ys)) / 2,
+  };
+}
+
 describe('newUserSeedService', () => {
   beforeEach(() => {
     poolQuery.mockReset();
@@ -78,10 +100,15 @@ describe('newUserSeedService', () => {
     expect(en.notes.some((note) => note.type === 'markdown')).toBe(true);
     for (const seed of [zh, en]) {
       const drawing = seed.notes.find((note) => note.key === 'drawing-demo');
-      expect(drawing).toMatchObject({ title: '手绘笔记示例', type: 'drawing', sort: 4 });
+      expect(drawing).toMatchObject({ title: '上色', type: 'drawing', sort: 4 });
       const scene = parseDrawingScene(drawing.content);
       expect(scene).toMatchObject({ v: DRAWING_SCENE_VERSION, page: DRAWING_PAGE });
-      expect(scene.elements.length).toBeGreaterThan(0);
+      expect(scene.elements).toHaveLength(39);
+      expect(scene.elements.filter((element) => element.kind === 'stroke')).toHaveLength(27);
+      expect(scene.elements.filter((element) => element.kind === 'fill')).toHaveLength(12);
+      const center = drawingContentCenter(scene);
+      expect(Math.abs(center.x - scene.page.width / 2)).toBeLessThan(4);
+      expect(Math.abs(center.y - scene.page.height / 2)).toBeLessThan(40);
     }
     for (const seed of [zh, en]) {
       const richText = seed.notes.find((note) => note.key === 'rich-text-demo');
@@ -183,10 +210,10 @@ describe('newUserSeedService', () => {
     expect(richTextNote.content).toContain('轻笺使用帮助');
     expect(richTextNote.content).toContain('欢迎使用轻笺');
     const drawingNote = noteInserts.map(([, [row]]) => row).find((row) => row.type === 'drawing');
-    expect(drawingNote).toMatchObject({ title: '手绘笔记示例', sort: 4 });
+    expect(drawingNote).toMatchObject({ title: '上色', sort: 4 });
     const drawingScene = parseDrawingScene(drawingNote.content);
     expect(drawingScene).toMatchObject({ v: DRAWING_SCENE_VERSION, page: DRAWING_PAGE });
-    expect(drawingScene.elements.length).toBeGreaterThan(0);
+    expect(drawingScene.elements).toHaveLength(39);
     // 五篇笔记 sort 递增，保证新用户笔记库顺序稳定（is_top DESC, sort, update_time DESC）
     expect(noteInserts.map(([, [row]]) => row.sort)).toEqual([0, 1, 2, 3, 4]);
     expect(relationInserts.flatMap(([, [values]]) => values).every((row) => row[4] === 'onboarding')).toBe(true);

@@ -17,7 +17,7 @@
       <BButton
         class="note-tree-root"
         :class="{
-          'is-browse-scope': surface === 'library' && browseParentId === null,
+          'is-browse-scope': surface === 'library' && activePageId === null && browseParentId === null,
           'is-drop-candidate': dropTargetKey === NOTE_TREE_ROOT_KEY && dropTargetPosition === 'root-start',
           'is-drop-target':
             dropTargetKey === NOTE_TREE_ROOT_KEY && dropTargetPosition === 'root-start' && dropTargetActive,
@@ -100,6 +100,7 @@
   import icon from '@/config/icon';
   import type { NoteTreeItem } from '@/types/noteTree';
   import type { NoteTreeDropPosition } from '@/utils/noteTreeDrop';
+  import { scrollNearestIntoContainer } from '@/utils/zoom';
 
   const props = withDefaults(
     defineProps<{
@@ -176,6 +177,9 @@
   ]);
   const rootItems = computed(() => props.childrenByParent[NOTE_TREE_ROOT_KEY] || []);
   const treeScrollRef = ref<HTMLElement | null>(null);
+  const pendingActiveRevealId = ref<string | null>(null);
+  let activeRevealAttemptId = 0;
+  let restoredTreeScrollElement: HTMLElement | null = null;
   const directorySearch = computed({
     get: () => props.searchValue,
     set: (value: string) => emit('search', value),
@@ -191,10 +195,78 @@
   );
   watch(
     treeScrollRef,
-    async (element) => {
-      if (!element || props.surface !== 'detail') return;
-      await nextTick();
-      element.scrollTop = Math.max(0, Number(props.treeScrollTop || 0));
+    (element) => {
+      activeRevealAttemptId += 1;
+      if (!element) {
+        restoredTreeScrollElement = null;
+        return;
+      }
+      // 路由切换时先恢复用户原来的树滚动位置，再由当前页定位做最终校正。
+      // 两段逻辑分开等待 nextTick 会形成竞态：后执行的旧位置恢复可能覆盖当前页定位。
+      if (props.surface === 'detail' && restoredTreeScrollElement !== element) {
+        restoredTreeScrollElement = element;
+        element.scrollTop = Math.max(0, Number(props.treeScrollTop || 0));
+      }
+      if (pendingActiveRevealId.value) void revealPendingActiveRow();
+    },
+    { flush: 'post' },
+  );
+
+  async function revealPendingActiveRow() {
+    const noteId = pendingActiveRevealId.value;
+    if (
+      !noteId ||
+      props.activePageId !== noteId ||
+      props.searchActive ||
+      activeTab.value !== 'directory' ||
+      props.loadingKeys.size > 0
+    ) {
+      return;
+    }
+    const attemptId = ++activeRevealAttemptId;
+    await nextTick();
+    if (
+      attemptId !== activeRevealAttemptId ||
+      pendingActiveRevealId.value !== noteId ||
+      props.activePageId !== noteId ||
+      props.searchActive ||
+      activeTab.value !== 'directory' ||
+      props.loadingKeys.size > 0
+    ) {
+      return;
+    }
+    const container = treeScrollRef.value;
+    if (!container) return;
+    const activeRow = [...container.querySelectorAll<HTMLElement>('.note-tree-row.is-active')].find(
+      (row) => row.dataset.noteTreeNodeId === noteId,
+    );
+    if (!activeRow) return;
+    scrollNearestIntoContainer(container, activeRow, 'auto');
+    if (pendingActiveRevealId.value === noteId) pendingActiveRevealId.value = null;
+  }
+
+  watch(
+    [() => props.activePageId, () => props.surface],
+    ([noteId, surface]) => {
+      activeRevealAttemptId += 1;
+      pendingActiveRevealId.value =
+        surface === 'library' || surface === 'detail' ? String(noteId || '').trim() || null : null;
+      if (pendingActiveRevealId.value) void revealPendingActiveRow();
+    },
+    { immediate: true, flush: 'post' },
+  );
+
+  watch(
+    [
+      treeScrollRef,
+      activeTab,
+      () => props.childrenByParent,
+      () => props.expandedIds,
+      () => props.loadingKeys,
+      () => props.searchActive,
+    ],
+    () => {
+      if (pendingActiveRevealId.value) void revealPendingActiveRow();
     },
     { flush: 'post' },
   );

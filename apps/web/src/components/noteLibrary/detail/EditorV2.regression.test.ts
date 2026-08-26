@@ -579,6 +579,16 @@ describe('编辑器 V2 交互回归', () => {
     expect(editorSource).not.toContain('.md-editor-label {');
   });
 
+  it('固定工具栏以图片替代待办快捷位，待办归入列表结构菜单', () => {
+    expect(toolbarSource).toContain('<ToolbarButton :action="imageAction"');
+    expect(toolbarSource).not.toContain('<ToolbarButton :action="todoAction"');
+    expect(toolbarSource).toContain('props.imageAction');
+    expect(editorSource).toMatch(
+      /const listActions = \[[\s\S]*action\('bulletList'[\s\S]*action\('orderedList'[\s\S]*action\('todo'/u,
+    );
+    expect(editorSource).toContain("imageAction: action('insertImage'");
+  });
+
   it('代码块通过主题变量分别提供浅色卡片和深色沉浸表面', () => {
     expect(commonStylesSource).toContain('color: var(--pre-text-color) !important');
     expect(commonStylesSource).toContain('border: 1px solid var(--pre-border-color)');

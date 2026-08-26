@@ -5,6 +5,31 @@ import { describe, expect, it } from 'vitest';
 const source = readFileSync(resolve(process.cwd(), 'src/view/noteLibrary/NoteLibrary.vue'), 'utf8');
 
 describe('笔记库桌面预览退出', () => {
+  it('桌面预览 ID 由账号工作区持久化，刷新恢复时只按 ID 重载权威详情', () => {
+    expect(source).toContain('libraryPreviewPageId: previewNoteId');
+    expect(source).not.toContain('const previewNoteId = ref<string | null>(null)');
+    expect(source).toMatch(
+      /function setDesktopPreviewPage[\s\S]*applyDesktopPreviewLocalState\(noteId, source\);[\s\S]*noteWorkspace\.setLibraryPreviewPage\(noteId\);/u,
+    );
+    expect(source).toMatch(
+      /watch\([\s\S]*previewNoteId,[\s\S]*bookmark\.isMobile,[\s\S]*noteCacheScope[\s\S]*prefetchNoteDetail\(user, normalizedId\);[\s\S]*applyDesktopPreviewLocalState\(normalizedId, source\);/u,
+    );
+    expect(source).toMatch(
+      /function closeDesktopPreview[\s\S]*clearDesktopPreviewLocalState\(\);[\s\S]*noteWorkspace\.setLibraryPreviewPage\(null\);/u,
+    );
+  });
+
+  it('预览详情路径由笔记库写入共享工作区，并在失效时清理恢复状态', () => {
+    expect(source).toContain(':breadcrumb="previewBreadcrumb"');
+    expect(source).toContain('@breadcrumb-resolved="handlePreviewBreadcrumbResolved"');
+    expect(source).toContain('@detail-resolved="handlePreviewDetailResolved"');
+    expect(source).toContain('@unavailable="handlePreviewUnavailable"');
+    expect(source).toMatch(
+      /function handlePreviewBreadcrumbResolved[\s\S]*noteWorkspace\.revealNotePath\(noteId, payload\.items\)/u,
+    );
+    expect(source).toMatch(/function handlePreviewUnavailable[\s\S]*closeDesktopPreview\(false\)/u);
+  });
+
   it('预览态点击笔记库只退出预览，普通态仍执行原有重置', () => {
     expect(source).toContain('@title-click="handleNoteLibraryTitleClick"');
     expect(source).toMatch(

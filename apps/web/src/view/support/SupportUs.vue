@@ -1,7 +1,6 @@
 <template>
   <div class="support-page">
     <MobileTopBar v-if="bookmark.isMobile" />
-
     <div v-auto-scrollbar class="support-page__scroll">
       <main class="support-shell">
         <header class="support-hero">
@@ -18,7 +17,6 @@
                 </span>
                 <span>{{ t('support.kicker') }}</span>
               </div>
-              <span class="support-badge">{{ t('support.freeBadge') }}</span>
               <h1>{{ t('support.heroTitle') }}</h1>
               <p>{{ t('support.heroDescription') }}</p>
             </div>
@@ -33,18 +31,14 @@
                 size="large"
                 :disabled="!supportConfigured || !supportStateReady"
                 @click="handleSupport"
-                v-click-log="{ module: '支持轻笺', operation: '前往爱发电' }"
+                v-click-log="{ module: '支持轻笺', operation: '前往爱发电赞助' }"
               >
                 <SvgIcon :src="icon.support.heart" size="18" aria-hidden="true" />
-                <span>{{ t('support.primaryAction') }}</span>
+                <span>{{ supportPrimaryActionLabel }}</span>
                 <SvgIcon :src="icon.noteTree.openPage" size="16" aria-hidden="true" />
               </BButton>
-              <span v-if="supportConfigured" class="support-action-card__caption">
-                {{ t('support.newPageHint') }}
-              </span>
-              <span v-else class="support-action-card__unavailable" role="status">
-                {{ t('support.unavailable') }}
-              </span>
+              <span v-if="supportConfigured" class="support-action-card__caption">{{ supportPrimaryActionHint }}</span>
+              <span v-else class="support-action-card__unavailable" role="status">{{ t('support.unavailable') }}</span>
             </BCard>
           </div>
         </header>
@@ -58,6 +52,20 @@
           @unlink="confirmUnlink"
           @preference-change="handlePreferenceChange"
         />
+
+        <BCard as="section" class="support-store-gateway" padding="20px" radius="18px">
+          <span class="support-store-gateway__icon" aria-hidden="true">
+            <SvgIcon :src="icon.support.store" size="23" />
+          </span>
+          <div class="support-store-gateway__copy">
+            <h2>{{ t('support.storeGatewayTitle') }}</h2>
+            <p>{{ t('support.storeGatewayDescription') }}</p>
+          </div>
+          <BButton type="default" size="large" @click="openStore">
+            <span>{{ t('support.storeGatewayAction') }}</span>
+            <SvgIcon :src="icon.arrow_right" size="16" aria-hidden="true" />
+          </BButton>
+        </BCard>
 
         <SupportLeaderboard :leaderboard="leaderboard" :loading="leaderboardLoading" />
 
@@ -84,42 +92,28 @@
                   {{ option.amount === null ? t('support.optionCustomLabel') : t('support.optionMonthlyLabel') }}
                 </span>
               </div>
-
               <div v-if="option.amount !== null" class="support-tier-card__amount">
-                <span class="support-tier-card__currency">¥</span>
-                <strong>{{ option.amount }}</strong>
-                <span>{{ t('support.optionPerMonth') }}</span>
+                <span>¥</span><strong>{{ option.amount }}</strong
+                ><span>{{ t('support.optionPerMonth') }}</span>
               </div>
               <div v-else class="support-tier-card__amount support-tier-card__amount--custom">
                 <strong>{{ t('support.optionCustomAmount') }}</strong>
               </div>
-
               <h3>{{ option.title }}</h3>
               <p>{{ option.description }}</p>
-
-              <div class="support-tier-card__reward">
-                <SvgIcon :src="icon.growth.ai" size="16" aria-hidden="true" />
-                <span v-if="option.rewardTokens !== null">
-                  {{ t('support.optionReward', { tokens: formatAiQuotaTokens(option.rewardTokens, locale) }) }}
-                </span>
-                <span v-else>{{ t('support.optionRewardCustom') }}</span>
-              </div>
-
               <BButton
                 class="support-tier-card__action"
                 type="primary"
                 :disabled="!option.configured || !supportStateReady"
                 @click="handleSupportOption(option)"
-                v-click-log="{ module: '支持轻笺', operation: option.logOperation }"
               >
                 <span>{{ option.action }}</span>
                 <SvgIcon :src="icon.noteTree.openPage" size="15" aria-hidden="true" />
               </BButton>
             </BCard>
           </div>
-
           <p class="support-options__hint">
-            <SvgIcon class="support-options__hint-icon" :src="icon.settings.privacy" size="16" aria-hidden="true" />
+            <SvgIcon :src="icon.settings.privacy" size="16" aria-hidden="true" />
             <span>{{ t('support.optionsHint') }}</span>
           </p>
         </section>
@@ -131,9 +125,7 @@
           </div>
           <div class="support-card-grid support-card-grid--promises">
             <BCard v-for="item in promiseCards" :key="item.key" as="article" class="support-info-card" padding="20px">
-              <span class="support-info-card__icon" aria-hidden="true">
-                <SvgIcon :src="item.icon" size="22" />
-              </span>
+              <span class="support-info-card__icon" aria-hidden="true"><SvgIcon :src="item.icon" size="22" /></span>
               <h3>{{ item.title }}</h3>
               <p>{{ item.description }}</p>
             </BCard>
@@ -146,21 +138,12 @@
             <p>{{ t('support.usageDescription') }}</p>
           </div>
           <div class="support-card-grid support-card-grid--usage">
-            <BCard
-              v-for="item in usageCards"
-              :key="item.key"
-              as="article"
-              class="support-usage-card"
-              variant="panel"
-              padding="18px"
-            >
-              <span class="support-usage-card__icon" aria-hidden="true">
-                <SvgIcon :src="item.icon" size="21" />
-              </span>
-              <div>
-                <h3>{{ item.title }}</h3>
-                <p>{{ item.description }}</p>
-              </div>
+            <BCard v-for="item in usageCards" :key="item.key" as="article" class="support-usage-card" padding="18px">
+              <span class="support-usage-card__icon" aria-hidden="true"><SvgIcon :src="item.icon" size="21" /></span>
+              <div
+                ><h3>{{ item.title }}</h3
+                ><p>{{ item.description }}</p></div
+              >
             </BCard>
           </div>
         </section>
@@ -183,31 +166,20 @@
           </ul>
         </BCard>
 
-        <BCard as="section" class="support-thanks" variant="panel" padding="22px" radius="18px">
-          <span class="support-thanks__icon" aria-hidden="true">
-            <SvgIcon :src="icon.userCenter.growth" size="24" />
-          </span>
-          <div>
-            <h2>{{ t('support.thanksTitle') }}</h2>
-            <p>{{ t('support.thanksDescription') }}</p>
-          </div>
-        </BCard>
-
         <BCard as="section" class="support-closing" variant="raised" padding="24px" radius="20px">
-          <div>
-            <h2>{{ t('support.closingTitle') }}</h2>
-            <p>{{ t('support.closingDescription') }}</p>
-          </div>
+          <div
+            ><h2>{{ t('support.closingTitle') }}</h2
+            ><p>{{ t('support.closingDescription') }}</p></div
+          >
           <BButton
             class="support-closing__action"
             type="primary"
             size="large"
             :disabled="!supportConfigured || !supportStateReady"
             @click="handleSupport"
-            v-click-log="{ module: '支持轻笺', operation: '底部前往爱发电' }"
           >
             <SvgIcon :src="icon.support.heart" size="18" aria-hidden="true" />
-            <span>{{ t('support.primaryAction') }}</span>
+            <span>{{ supportPrimaryActionLabel }}</span>
           </BButton>
         </BCard>
       </main>
@@ -222,11 +194,11 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
   import MobileTopBar from '@/components/mobile/MobileTopBar.vue';
-  import SupportAccountPanel from './SupportAccountPanel.vue';
-  import SupportLeaderboard from './SupportLeaderboard.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
+  import SupportAccountPanel from './SupportAccountPanel.vue';
+  import SupportLeaderboard from './SupportLeaderboard.vue';
   import icon from '@/config/icon';
   import {
     AFDIAN_SUPPORT_CONFIGURED,
@@ -247,9 +219,8 @@
   } from '@/api/supportApi';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
-  import { formatAiQuotaTokens } from '@/composables/useAiQuotaStatus';
 
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const router = useRouter();
   const bookmark = bookmarkStore();
   const supportConfigured = AFDIAN_SUPPORT_CONFIGURED;
@@ -260,7 +231,6 @@
     linked: false,
     orderCount: 0,
     totalAmount: '0.00',
-    grantedTokens: 0,
     publicPreference: { participateInRanking: true, showIdentity: false, adminHidden: false },
     recentOrders: [],
   };
@@ -271,6 +241,15 @@
   const leaderboard = ref<AfdianLeaderboard | null>(null);
   const leaderboardLoading = ref(true);
 
+  const canOpenTrackedSupport = computed(
+    () => supportStateReady.value && supportState.value.authenticated && supportState.value.orderSyncAvailable,
+  );
+  const supportPrimaryActionLabel = computed(() =>
+    t(canOpenTrackedSupport.value ? 'support.trackedPrimaryAction' : 'support.creatorPageAction'),
+  );
+  const supportPrimaryActionHint = computed(() =>
+    t(canOpenTrackedSupport.value ? 'support.trackedActionHint' : 'support.creatorPageHint'),
+  );
   const promiseCards = computed(() => [
     {
       key: 'free',
@@ -291,7 +270,6 @@
       description: t('support.promisePrivacyDescription'),
     },
   ]);
-
   const usageCards = computed(() => [
     {
       key: 'infrastructure',
@@ -312,7 +290,6 @@
       description: t('support.usageDevelopmentDescription'),
     },
   ]);
-
   const supportOptionContent = {
     coffee: {
       icon: icon.support.heart,
@@ -335,7 +312,6 @@
       descriptionKey: 'support.tierCustomDescription',
     },
   } as const;
-
   const supportOptions = computed(() =>
     AFDIAN_SUPPORT_OPTIONS.map((option) => {
       const content = supportOptionContent[option.key];
@@ -345,54 +321,41 @@
         title: t(content.titleKey),
         description: t(content.descriptionKey),
         action: t(option.amount === null ? 'support.optionCustomAction' : 'support.optionAction'),
-        logOperation: `选择爱发电赞助档位:${option.key}`,
+        logOperation: '选择爱发电赞助档位:' + option.key,
       };
     }),
   );
-
   const disclosureItems = computed(() => [
     t('support.disclosureExternal'),
     t('support.disclosurePayment'),
     t('support.disclosurePrivacy'),
-    t('support.disclosureRewards'),
+    t('support.disclosureOrderSeparation'),
   ]);
 
   function goBack() {
-    if (window.history.length > 1) {
-      router.back();
-      return;
-    }
+    if (window.history.length > 1) return router.back();
     void router.push(bookmark.isMobile ? '/personCenter' : '/home');
   }
 
-  useMobileTopBar(['support'], {
-    title: () => t('support.pageTitle'),
-    onBack: goBack,
-    showNotification: false,
-  });
+  useMobileTopBar(['support'], { title: () => t('support.pageTitle'), onBack: goBack, showNotification: false });
+
+  function openStore() {
+    void router.push('/store');
+    void recordOperation({ module: '资源商店', operation: '从支持页进入资源商店' });
+  }
 
   function handleSupport() {
-    const opened =
-      supportState.value.authenticated && supportState.value.orderSyncAvailable
-        ? openTrackedAfdianCheckout('custom')
-        : openAfdianSupportPage();
-    if (!opened) {
-      message.warning(t('support.unavailableMessage'));
-      return;
-    }
+    const opened = canOpenTrackedSupport.value ? openTrackedAfdianCheckout('custom') : openAfdianSupportPage();
+    if (!opened) return message.warning(t('support.unavailableMessage'));
     void recordOperation({ module: '支持轻笺', operation: '打开爱发电赞助入口' });
   }
 
   function handleSupportOption(option: (typeof supportOptions.value)[number]) {
-    const opened =
-      supportState.value.authenticated && supportState.value.orderSyncAvailable
-        ? openTrackedAfdianCheckout(option.key)
-        : openAfdianSupportPage(option.url);
-    if (!opened) {
-      message.warning(t('support.unavailableMessage'));
-      return;
-    }
-    void recordOperation({ module: '支持轻笺', operation: `打开爱发电赞助档位:${option.key}` });
+    const opened = canOpenTrackedSupport.value
+      ? openTrackedAfdianCheckout(option.key)
+      : openAfdianSupportPage(option.url);
+    if (!opened) return message.warning(t('support.unavailableMessage'));
+    void recordOperation({ module: '支持轻笺', operation: '打开爱发电赞助档位:' + option.key });
   }
 
   async function loadSupportState() {
@@ -404,8 +367,6 @@
         publicPreference: { ...emptySupportState.publicPreference, ...next.publicPreference },
         recentOrders: Array.isArray(next.recentOrders) ? next.recentOrders : [],
       };
-    } catch {
-      // 支持状态属于增强信息；读取失败时保留当前页面和已有状态，不阻断赞助入口。
     } finally {
       supportStateReady.value = true;
     }
@@ -415,15 +376,13 @@
     leaderboardLoading.value = true;
     try {
       leaderboard.value = await getAfdianLeaderboard();
-    } catch {
-      // 排行榜是增强信息，失败不阻断赞助入口与账号管理。
     } finally {
       leaderboardLoading.value = false;
     }
   }
 
   async function refreshSupport() {
-    await Promise.all([loadSupportState(), loadLeaderboard()]);
+    await Promise.allSettled([loadSupportState(), loadLeaderboard()]);
   }
 
   async function handlePreferenceChange(value: { participateInRanking: boolean; showIdentity: boolean }) {
@@ -440,31 +399,20 @@
   }
 
   function handleOAuthLink() {
-    if (!openAfdianOAuthPage()) {
-      message.warning(t('support.accountLinkUnavailable'));
-      return;
-    }
+    if (!openAfdianOAuthPage()) return message.warning(t('support.accountLinkUnavailable'));
     void recordOperation({ module: '支持轻笺', operation: '发起爱发电账号关联' });
   }
 
   function consumeOAuthResult() {
-    const currentRoute = router.currentRoute?.value;
-    const rawResult = currentRoute?.query?.afdian;
+    const currentRoute = router.currentRoute.value;
+    const rawResult = currentRoute.query.afdian;
     const result = Array.isArray(rawResult) ? rawResult[0] : rawResult;
-    if (!result || !['bound', 'failed', 'session_required'].includes(result)) return;
-
+    if (!result || !['bound', 'failed', 'session_required'].includes(String(result))) return;
     const query = { ...currentRoute.query };
     delete query.afdian;
     void router.replace({ query });
-
-    if (result === 'bound') {
-      message.success(t('support.accountLinkSuccess'));
-      return;
-    }
-    if (result === 'session_required') {
-      message.warning(t('support.accountLinkSessionRequired'));
-      return;
-    }
+    if (result === 'bound') return message.success(t('support.accountLinkSuccess'));
+    if (result === 'session_required') return message.warning(t('support.accountLinkSessionRequired'));
     message.error(t('support.accountLinkFailed'));
   }
 
@@ -490,7 +438,7 @@
 
   const { markLoaded } = useForegroundRefresh({
     refresh: refreshSupport,
-    staleMs: 1_000,
+    staleMs: 30_000,
     enabled: () => supportStateReady.value,
   });
 
@@ -513,34 +461,25 @@
     color: var(--text-color);
     background: var(--surface-page-bg, var(--background-color));
   }
-
   .support-page__scroll {
     min-height: 0;
     flex: 1 1 auto;
     overflow-y: auto;
     overscroll-behavior-y: contain;
   }
-
   .support-shell {
     width: min(1120px, calc(100% - 40px));
     margin: 0 auto;
     padding: 24px 0 40px;
     box-sizing: border-box;
   }
-
   .support-hero {
-    position: relative;
     padding: clamp(24px, 4vw, 46px);
-    overflow: hidden;
     border: 1px solid var(--surface-border-color);
     border-radius: 24px;
-    background:
-      radial-gradient(circle at 8% 12%, color-mix(in srgb, var(--primary-color) 18%, transparent), transparent 34%),
-      radial-gradient(circle at 94% 88%, color-mix(in srgb, var(--primary-color) 12%, transparent), transparent 34%),
-      var(--surface-raised-background);
+    background: var(--surface-raised-background);
     box-shadow: var(--surface-raised-shadow);
   }
-
   .support-back {
     height: 36px;
     margin-bottom: 22px;
@@ -550,526 +489,367 @@
     color: var(--text-color);
     background: var(--card-background) !important;
   }
-
   .support-hero__layout {
     display: grid;
     grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
     align-items: center;
     gap: clamp(28px, 5vw, 62px);
   }
-
+  .support-hero__copy {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
   .support-kicker {
     display: flex;
     align-items: center;
     gap: 10px;
+    margin-bottom: 14px;
     color: var(--primary-color);
     font-size: 14px;
     font-weight: 720;
   }
-
   .support-kicker__icon,
+  .support-tier-card__icon,
   .support-info-card__icon,
   .support-usage-card__icon,
-  .support-disclosure__icon,
-  .support-thanks__icon {
+  .support-store-gateway__icon,
+  .support-disclosure__icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     flex: 0 0 auto;
     color: var(--primary-color);
+    background: var(--primary-color-light);
+    border: 1px solid var(--primary-color);
   }
-
   .support-kicker__icon {
     width: 42px;
     height: 42px;
-    border: 1px solid var(--primary-color);
     border-radius: 14px;
-    background: color-mix(in srgb, var(--primary-color) 10%, var(--card-background));
   }
-
-  .support-badge {
-    display: inline-flex;
-    align-items: center;
-    min-height: 28px;
-    margin-top: 22px;
-    padding: 3px 10px;
-    box-sizing: border-box;
-    border: 1px solid var(--primary-color);
-    border-radius: 999px;
-    color: var(--primary-color);
-    background: var(--card-background);
-    font-size: 12px;
-    font-weight: 700;
-  }
-
   .support-hero h1 {
-    max-width: 760px;
-    margin: 15px 0 14px;
-    color: var(--text-color);
-    font-size: clamp(32px, 4.3vw, 54px);
-    font-weight: 800;
-    line-height: 1.12;
-    letter-spacing: -0.045em;
+    margin: 14px 0 10px;
+    font-size: clamp(34px, 5vw, 58px);
+    line-height: 1.08;
+    letter-spacing: -0.04em;
   }
-
   .support-hero__copy > p {
-    max-width: 720px;
+    max-width: 650px;
     margin: 0;
-    color: var(--desc-color);
-    font-size: 15px;
-    line-height: 1.8;
+    color: var(--text-color-secondary);
+    font-size: 16px;
+    line-height: 1.85;
   }
-
   .support-action-card {
-    --b-card-background: var(--card-background);
-    min-width: 0;
-    border-width: 1px;
-    border-color: var(--surface-border-color);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border: 1px solid var(--surface-border-color);
   }
-
   .support-action-card__label {
-    display: block;
-    margin-bottom: 6px;
-    color: var(--desc-color);
-    font-size: 12px;
-    font-weight: 650;
-  }
-
-  .support-action-card strong {
-    display: block;
-    color: var(--text-color);
-    font-size: 23px;
-    line-height: 1.3;
-  }
-
-  .support-action-card p {
-    margin: 8px 0 18px;
-    color: var(--desc-color);
+    color: var(--text-color-secondary);
     font-size: 13px;
+  }
+  .support-action-card strong {
+    font-size: 22px;
+  }
+  .support-action-card p {
+    margin: 0 0 6px;
+    color: var(--text-color-secondary);
     line-height: 1.65;
   }
-
-  .support-primary-action,
-  .support-closing__action {
-    min-height: 46px;
-    height: auto;
-    gap: 8px;
-    border-radius: 12px;
-    font-weight: 700;
-  }
-
   .support-primary-action {
     width: 100%;
+    gap: 8px;
   }
-
   .support-action-card__caption,
   .support-action-card__unavailable {
-    display: block;
-    margin-top: 10px;
     font-size: 12px;
-    line-height: 1.5;
+    line-height: 1.55;
+    color: var(--text-color-secondary);
   }
-
-  .support-action-card__caption {
-    color: var(--desc-color);
-    text-align: center;
-  }
-
   .support-action-card__unavailable {
-    padding-left: 10px;
-    border-left: 3px solid var(--warning-color);
-    color: var(--warning-color);
+    color: var(--error-color);
   }
-
-  .support-section {
-    margin-top: 34px;
+  .support-store-gateway {
+    margin-top: 22px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 16px;
+    border: 1px solid var(--surface-border-color);
   }
-
-  .support-section__heading {
-    max-width: 760px;
-    margin-bottom: 16px;
+  .support-store-gateway__icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 15px;
   }
-
-  .support-section h2,
-  .support-disclosure h2,
-  .support-thanks h2,
-  .support-closing h2 {
+  .support-store-gateway h2,
+  .support-store-gateway p {
     margin: 0;
-    color: var(--text-color);
-    font-size: clamp(21px, 2vw, 27px);
-    line-height: 1.3;
   }
-
-  .support-section__heading p,
-  .support-disclosure__heading p,
-  .support-thanks p,
-  .support-closing p {
+  .support-store-gateway h2 {
+    font-size: 18px;
+  }
+  .support-store-gateway p {
+    margin-top: 5px;
+    color: var(--text-color-secondary);
+    line-height: 1.6;
+  }
+  .support-section {
+    margin-top: 44px;
+  }
+  .support-section__heading {
+    margin-bottom: 18px;
+  }
+  .support-section__heading h2 {
+    margin: 0;
+    font-size: 26px;
+  }
+  .support-section__heading p {
     margin: 7px 0 0;
-    color: var(--desc-color);
-    font-size: 14px;
+    color: var(--text-color-secondary);
     line-height: 1.7;
   }
-
-  .support-card-grid {
-    display: grid;
-    gap: 14px;
-  }
-
   .support-tier-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 14px;
+    gap: 16px;
   }
-
   .support-tier-card {
-    --b-card-background: var(--card-background);
-    position: relative;
-    min-height: 278px;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
-    border-color: var(--surface-border-color);
+    min-height: 320px;
+    border: 1px solid var(--surface-border-color);
+    transition:
+      transform 0.18s ease,
+      border-color 0.18s ease;
   }
-
-  .support-tier-card::before {
-    position: absolute;
-    top: 0;
-    right: 0;
-    left: 0;
-    height: 4px;
-    background: var(--primary-color);
-    content: '';
+  .support-tier-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--primary-color);
   }
-
   .support-tier-card__header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
   }
-
-  .support-tier-card__icon {
-    width: 40px;
-    height: 40px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 auto;
-    border: 1px solid var(--primary-color);
-    border-radius: 12px;
-    color: var(--primary-color);
-    background: var(--card-background);
+  .support-tier-card__icon,
+  .support-info-card__icon,
+  .support-usage-card__icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 13px;
   }
-
   .support-tier-card__eyebrow {
     color: var(--primary-color);
     font-size: 12px;
     font-weight: 700;
   }
-
   .support-tier-card__amount {
-    min-height: 58px;
     display: flex;
     align-items: baseline;
     gap: 5px;
-    margin-top: 16px;
-    color: var(--text-color);
+    min-height: 62px;
+    margin: 20px 0 10px;
   }
-
   .support-tier-card__amount strong {
-    font-size: 40px;
-    font-weight: 800;
+    font-size: 42px;
     line-height: 1;
-    letter-spacing: -0.035em;
   }
-
-  .support-tier-card__amount > span:last-child,
-  .support-tier-card__currency {
-    color: var(--desc-color);
-    font-size: 13px;
-    font-weight: 650;
+  .support-tier-card__amount span {
+    color: var(--text-color-secondary);
   }
-
   .support-tier-card__amount--custom strong {
     color: var(--primary-color);
-    font-size: 27px;
-    letter-spacing: 0;
+    font-size: 28px;
   }
-
   .support-tier-card h3 {
-    margin: 8px 0 7px;
-    color: var(--text-color);
-    font-size: 16px;
-    line-height: 1.4;
+    margin: 12px 0 7px;
+    font-size: 18px;
   }
-
   .support-tier-card > p {
-    margin: 0 0 12px;
-    flex: 1 1 auto;
-    color: var(--desc-color);
-    font-size: 13px;
+    min-height: 70px;
+    margin: 0;
+    color: var(--text-color-secondary);
     line-height: 1.65;
   }
-
-  .support-tier-card__reward {
-    min-height: 38px;
-    margin-bottom: 14px;
-    padding: 8px 10px;
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    border: 1px solid var(--primary-color);
-    border-radius: 10px;
-    color: var(--primary-color);
-    background: var(--card-background);
-  }
-
-  .support-tier-card__reward span {
-    color: inherit;
-    font-size: 12px;
-    font-weight: 700;
-    line-height: 1.45;
-  }
-
   .support-tier-card__action {
     width: 100%;
-    min-height: 44px;
-    height: auto;
-    gap: 7px;
-    border-radius: 11px;
-    font-weight: 700;
+    gap: 6px;
+    margin-top: auto;
   }
-
   .support-options__hint {
     display: flex;
     align-items: flex-start;
     gap: 8px;
-    margin: 12px 2px 0;
-    color: var(--desc-color);
-    font-size: 12px;
+    margin: 14px 4px 0;
+    color: var(--text-color-secondary);
+    font-size: 13px;
     line-height: 1.6;
   }
-
-  .support-options__hint-icon {
-    margin-top: 2px;
+  .support-options__hint :deep(.svg-icon) {
     flex: 0 0 auto;
+    margin-top: 2px;
     color: var(--primary-color);
   }
-
+  .support-card-grid {
+    display: grid;
+    gap: 16px;
+  }
   .support-card-grid--promises,
   .support-card-grid--usage {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-
   .support-info-card,
   .support-usage-card {
-    height: 100%;
-  }
-
-  .support-info-card__icon,
-  .support-usage-card__icon {
-    width: 42px;
-    height: 42px;
     border: 1px solid var(--surface-border-color);
-    border-radius: 13px;
-    background: color-mix(in srgb, var(--primary-color) 9%, var(--card-background));
   }
-
   .support-info-card h3,
   .support-usage-card h3 {
     margin: 14px 0 7px;
-    color: var(--text-color);
-    font-size: 16px;
-    line-height: 1.4;
+    font-size: 17px;
   }
-
   .support-info-card p,
   .support-usage-card p {
     margin: 0;
-    color: var(--desc-color);
-    font-size: 13px;
-    line-height: 1.7;
+    color: var(--text-color-secondary);
+    line-height: 1.65;
   }
-
   .support-usage-card {
     display: flex;
     align-items: flex-start;
     gap: 14px;
-    border-color: var(--surface-border-color);
   }
-
   .support-usage-card h3 {
-    margin-top: 1px;
+    margin-top: 2px;
   }
-
-  .support-disclosure,
-  .support-thanks,
-  .support-closing {
-    margin-top: 34px;
-    border-color: var(--surface-border-color);
+  .support-disclosure {
+    margin-top: 44px;
+    border: 1px solid var(--surface-border-color);
   }
-
-  .support-disclosure__heading,
-  .support-thanks {
+  .support-disclosure__heading {
     display: flex;
-    align-items: flex-start;
-    gap: 15px;
+    gap: 14px;
   }
-
-  .support-disclosure__icon,
-  .support-thanks__icon {
-    width: 46px;
-    height: 46px;
-    border: 1px solid var(--primary-color);
-    border-radius: 14px;
-    background: color-mix(in srgb, var(--primary-color) 9%, var(--card-background));
+  .support-disclosure__icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 15px;
   }
-
+  .support-disclosure h2,
+  .support-disclosure p {
+    margin: 0;
+  }
+  .support-disclosure p {
+    margin-top: 6px;
+    color: var(--text-color-secondary);
+  }
   .support-disclosure ul {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px 18px;
+    gap: 10px 18px;
     margin: 20px 0 0;
-    padding: 18px 0 0;
-    border-top: 1px solid var(--surface-divider-color);
+    padding: 0;
     list-style: none;
   }
-
   .support-disclosure li {
     display: flex;
     align-items: flex-start;
-    gap: 9px;
-    color: var(--desc-color);
-    font-size: 13px;
-    line-height: 1.65;
+    gap: 8px;
+    color: var(--text-color-secondary);
+    line-height: 1.55;
   }
-
   .support-disclosure__check {
-    margin-top: 2px;
     flex: 0 0 auto;
+    margin-top: 2px;
     color: var(--success-color);
   }
-
-  .support-thanks {
-    --b-card-background: var(--surface-panel-bg);
-  }
-
   .support-closing {
-    --b-card-background: var(--surface-raised-background);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 22px;
+    gap: 24px;
+    margin-top: 24px;
+    border: 1px solid var(--primary-color);
   }
-
-  .support-closing > div {
-    max-width: 700px;
+  .support-closing h2,
+  .support-closing p {
+    margin: 0;
   }
-
+  .support-closing p {
+    margin-top: 6px;
+    color: var(--text-color-secondary);
+  }
   .support-closing__action {
     flex: 0 0 auto;
+    gap: 8px;
   }
 
-  @media (max-width: 860px) {
+  @media (max-width: 900px) {
     .support-hero__layout {
       grid-template-columns: 1fr;
     }
-
-    .support-action-card {
-      max-width: 520px;
-    }
-
     .support-tier-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-
-    .support-card-grid--promises,
-    .support-card-grid--usage {
-      grid-template-columns: 1fr;
-    }
-
-    .support-info-card {
-      display: grid;
-      grid-template-columns: 42px minmax(0, 1fr);
-      column-gap: 14px;
-    }
-
-    .support-info-card h3 {
-      margin: 2px 0 5px;
-    }
-
-    .support-info-card p {
-      grid-column: 2;
-    }
   }
-
-  @media (max-width: 767px) {
+  @media (max-width: 640px) {
     .support-shell {
-      width: 100%;
-      padding: 12px 12px max(28px, env(safe-area-inset-bottom));
+      width: calc(100% - 24px);
+      max-width: 1120px;
+      padding: 14px 0 28px;
     }
-
     .support-hero {
       padding: 22px 18px;
-      border-radius: 18px;
+      border-radius: 20px;
     }
-
-    .support-kicker__icon {
-      width: 38px;
-      height: 38px;
-      border-radius: 12px;
-    }
-
-    .support-badge {
-      margin-top: 18px;
-    }
-
     .support-hero h1 {
-      margin-top: 13px;
-      font-size: clamp(30px, 10vw, 42px);
+      font-size: 34px;
     }
-
-    .support-hero__copy > p {
-      font-size: 14px;
+    .support-store-gateway {
+      grid-template-columns: auto minmax(0, 1fr);
     }
-
-    .support-action-card {
-      max-width: none;
-      padding: 18px !important;
+    .support-store-gateway :deep(.b_btn) {
+      grid-column: 1 / -1;
+      width: 100%;
     }
-
-    .support-tier-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .support-tier-card {
-      min-height: 0;
-    }
-
-    .support-section,
-    .support-disclosure,
-    .support-thanks,
-    .support-closing {
-      margin-top: 24px;
-    }
-
+    .support-tier-grid,
+    .support-card-grid--promises,
+    .support-card-grid--usage,
     .support-disclosure ul {
       grid-template-columns: 1fr;
     }
-
+    .support-tier-card {
+      min-height: 0;
+    }
+    .support-tier-card > p {
+      min-height: 0;
+    }
+    .support-section {
+      margin-top: 34px;
+    }
     .support-closing {
       align-items: stretch;
       flex-direction: column;
     }
-
     .support-closing__action {
       width: 100%;
     }
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .support-page * {
-      scroll-behavior: auto !important;
+  html.light-note-mobile-rendering & {
+    .support-hero,
+    .support-tier-card,
+    .support-store-gateway,
+    .support-disclosure,
+    .support-closing {
+      box-shadow: none;
+    }
+    .support-tier-card:hover {
+      transform: none;
     }
   }
 </style>

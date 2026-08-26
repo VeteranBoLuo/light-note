@@ -55,6 +55,7 @@
           <AiQuotaSummary
             class="profile-card__ai-quota"
             density="comfortable"
+            surface="plain"
             entry-source="移动个人中心"
             @open-details="goAiQuotaDetails"
           />
@@ -62,7 +63,7 @@
           <BButton
             class="profile-card__growth"
             @click="goGrowth"
-            v-click-log="{ module: '个人中心', operation: '打开我的成长' }"
+            v-click-log="{ module: '个人中心', operation: '打开成长中心' }"
           >
             <span class="profile-card__growth-icon">
               <SvgIcon :src="icon.userCenter.growth" size="19" aria-hidden="true" />
@@ -90,13 +91,13 @@
         <section class="profile-section">
           <h2>{{ t('personCenter.quickAccess') }}</h2>
           <div class="profile-quick-grid">
-            <BButton class="profile-quick-item" @click="goToProfileModule('/myInfo')">
-              <span class="profile-entry-icon"><SvgIcon :src="icon.card_edit" size="20" /></span>
-              <span>{{ t('personCenter.personalProfile') }}</span>
-            </BButton>
             <BButton class="profile-quick-item" @click="goGrowth">
               <span class="profile-entry-icon"><SvgIcon :src="icon.userCenter.growth" size="20" /></span>
-              <span>{{ t('growth.entry') }}</span>
+              <span>{{ t('growth.pageTitle') }}</span>
+            </BButton>
+            <BButton class="profile-quick-item" @click="goToProfileModule('/store')">
+              <span class="profile-entry-icon"><SvgIcon :src="icon.support.store" size="20" /></span>
+              <span>{{ t('entitlementStore.entry') }}</span>
             </BButton>
             <BButton class="profile-quick-item" @click="goToProfileModule('/search')">
               <span class="profile-entry-icon"><SvgIcon :src="icon.navigation.search" size="20" /></span>

@@ -14,13 +14,20 @@ pnpm install
 
 # 后端开发
 cd apps/server
-# 确保 .env 已配置数据库连接
+# 从 .env.example 创建私有 .env，并确保连接本地数据库
 node app.js
 
 # 前端开发
 cd apps/web
 npx vite dev
 ```
+
+### 数据库环境隔离
+
+- 数据库适配器是所有 HTTP 进程、Worker 与脚本的共同入口。本地运行时只允许回环地址或 Unix Socket；`DB_HOST` 指向远程地址时默认以 `REMOTE_DATABASE_WRITE_BLOCKED` 失败关闭，避免开发、预览或测试把 Schema 初始化和业务写入落到生产库。
+- 本机 `.env` 必须设置 `LIGHTNOTE_RUNTIME_ENV=local`、`ALLOW_REMOTE_DATABASE_WRITES=false`，并使用本地 MySQL。生产环境必须显式设置 `LIGHTNOTE_RUNTIME_ENV=production`；漏配环境时即使运行在 Linux 也按本地失败关闭，不能通过操作系统猜测生产身份。
+- 只有经当前任务明确授权、已经确认目标与写入范围时，才可在一次性命令环境中设置 `ALLOW_REMOTE_DATABASE_WRITES=true`。不得长期写入 `.env`，也不得为了本地看页面而打开该开关。
+- 代码中的数据库主机兜底固定为 `127.0.0.1`，禁止提交公网 IP、生产账号或连接凭据。测试继续由 `NODE_ENV=test` 的禁用适配器失败关闭，不加载真实 `.env`。
 
 ## 项目脚本
 
@@ -127,6 +134,7 @@ view/search/
 - 移动端 `BModal`、`BDrawer` 和全屏预览必须统一接入 `utils/mobileOverlayHistory.ts`，禁止组件自行 `history.pushState()` 或注册互不识别的 `popstate` 占位。
 - 从移动端弹框、抽屉或全屏预览发起路由跳转、打开外链时，统一使用 `closeCurrentMobileOverlayThen(closeOverlay, next)`；禁止在同一事件轮中直接写 `visible = false` 后立刻 `router.push()`，否则关闭浮层触发的 `history.back()` 会与新路由竞争，出现首次无响应、二次闪回。
 - **浮层交给浮层或路由同样适用这条规则**：关闭一个占 history 的浮层、同时打开另一个浮层或路由（如快速添加抽屉里点「完善详情」进入待办新建页），必须走同一个 `closeCurrentMobileOverlayThen`，等上一层占位真正出栈后再导航。释放占位的 `history.back()` 是异步的、新页面压栈是同步的，写在同一轮里 back() 最终弹掉的是新页面刚压入的那一格，表现为首次点击无响应或刚打开就闪回。`releaseMobileOverlayHistory` 里「当前占位不是自己就不 back」的保护不能替代显式交接。
+- 浮层关闭会触发 `visible` watcher、组件卸载或 `reset()` 时，后续动作需要的标题、筛选、草稿等数据必须在调用 `closeCurrentMobileOverlayThen` 前复制为普通对象快照，`next` 回调只能读取该快照；禁止在等待 history 出栈后再读取会随关闭清空的 `ref`、局部表单或瞬时 Store。传入 `router.push({ state })` 的对象也必须是普通可序列化数据，不能直接传 Vue 响应式 Proxy。
 - 因此两个浮层的可见性不要互相推导（`const aVisible = computed(() => x && !bVisible.value)`）：这种写法把「关 A」和「开 B」绑成一次赋值，无法插入等待占位出栈的时机，且 watch 执行顺序由组件挂载顺序决定，正好落进上面那个陷阱。用独立状态分别控制。
 - `BPopover` / `BDropdown` 不占 history 占位，从它们切换到弹框不受此限制。
 - 新增“弹层内跳转”交互时必须覆盖移动端回归：首次点击即可进入目标页、系统返回只关闭最上层浮层、关闭后不会闪回原页；相关公共机制需补 `mobileOverlayHistory` 单元测试。
@@ -664,7 +672,7 @@ cd apps/android
 
 ### 积分获取策略变更协议
 
-- 获取规则的基础规范见 `docs/points-earning-c5.md`，现行每日任务扩展见 `docs/points-earning-c6.md`。策略版本、奖励和切换边界的运行时单一事实源为 `apps/server/util/pointsEarningPolicy.js`，C6 每日任务目录与稳定选择算法只允许定义在 `apps/server/util/dailyQuestPolicy.js`。`points-economy-c4` 只控制商品/抽奖，获取策略只控制签到、任务、每周挑战和成就；禁止为方便合并版本或在组件中复制任务池。
+- 获取规则的基础规范见 `docs/points-earning-c5.md`，现行每日任务扩展见 `docs/points-earning-c6.md`。策略版本、奖励和切换边界的运行时单一事实源为 `apps/server/util/pointsEarningPolicy.js`，C6 每日任务目录与稳定选择算法只允许定义在 `apps/server/util/dailyQuestPolicy.js`。`points-economy-c5` 只控制商品、限兑与抽奖，获取策略只控制签到、任务、每周挑战和成就；禁止为方便合并版本或在组件中复制任务池。
 - 签到公式、任务条件或奖励、每周目标/奖励、成就积分/资格、补签卡来源和来源分类发生任何变化，都必须升级获取策略版本并更新快照测试、Agent、知识库和文档。
 - 日规则只能在完整账号自然日边界切换，周规则只能在完整 ISO 自然周边界切换；周期版本写入 `points_earning_period_policy` 后不可回退。写闸关闭代表暂停发放，不代表重新暴露旧规则。
 - 有意义行为只能来自不可变、低敏感的 `growth_events` 事实。业务成功后旁路写事实，事实失败不能回滚用户资源；同一来源事实使用唯一业务键幂等，不得通过读取标题、正文、URL 或页面浏览推断任务完成。
@@ -771,7 +779,9 @@ AI 助手（轻笺智域）回答"怎么用 / 是什么 / 在哪设置"依赖 `k
 8. **本机服务器管理 Agent：** `apps/host-agent` 必须作为独立 systemd unit 部署，先按 `apps/host-agent/README.md` 完成专用账户、Unix Socket、PM2 访问模式与 Socket 激活的 root helper 预检。非 root PM2 使用同账户 `direct`；遗留 root PM2 只能使用 `helper` 的固定 action/target Socket 桥接，不得共享 `/root/.pm2`、加入 root 组、开放 `pm2 *` 或在 Agent unit 内使用 sudo。Agent unit 必须保留会隐式启用 `no_new_privileges` 的沙箱项，特权 helper 由独立 systemd socket 按请求短暂启动。它不得加载 `apps/server/.env`，不得开放 TCP 端口，不得把 Socket 放宽到 `0666`。发布顺序为共享协议 → Host Agent → Express → Web；协议不一致时页面必须失败关闭。发布后通过 `/v1/health` Socket 请求、helper Socket 能力检查、Agent unit 日志和 Root 服务器管理页共同验收。
 9. 根用户用 `pm2 restart app --update-env` 刷新环境变量；`scripts/deploy-server.sh` 会同步启动或重启 AI 文档/文件预览 Worker、书签图标 Worker 与资源治理 Worker。服务器管理页发起的 Worker 重启不携带 `--update-env`，只复用 PM2 现有进程配置。
 10. 爱发电接入发布前应用 `20260813_afdian_integration.sql` 与 `20260814_afdian_support_management.sql` 并执行 Schema 门禁；服务端配置 `AFDIAN_OAUTH_CLIENT_ID`、`AFDIAN_OAUTH_CLIENT_SECRET`、`AFDIAN_OAUTH_REDIRECT_URI`、`AFDIAN_CREATOR_USER_ID`、`AFDIAN_API_TOKEN`，禁止写入前端环境变量、仓库、日志或补丁。开发者后台 Webhook 指向 `/api/support/afdian/webhook`；Secret 或 API Token 一旦进入截图、聊天或日志，应先轮换再部署
-11. 永久 AI 余额账本和赞助赠送上线前显式应用 `20260825_ai_bonus_wallet_and_afdian_rewards.sql`，再运行只读 Schema 门禁。迁移后已有 root 必须在 `user_growth` 中真实保存至少 50000 EXP/Lv.15，并有唯一 `root-level-materialization-v1` 经验事件；这是将历史虚拟满级固化的一次性兼容动作，不得扩展成新 root 自动满级。`ai_bonus_wallet_state.baseline_completed_at` 必须已有值且只初始化一次；快照、账本净额和来源批次余额必须完全相等。随后执行 `20260825_ai_quota_and_support_rewards_knowledge.sql`。`support-ai-v1` 的首次插入时间就是赠送生效边界，禁止为补历史单修改该时间；调倍率或自动审批上限必须新建策略版本。发布后先用 Mock/测试订单验证未归属、历史排除、自动入账、大额复核和退款反转状态，禁止用生产真实赞助做破坏性试单
+11. 永久 AI 余额账本和历史赞助赠送上线前显式应用 `20260825_ai_bonus_wallet_and_afdian_rewards.sql`，再运行只读 Schema 门禁。迁移后已有 root 必须在 `user_growth` 中真实保存至少 50000 EXP/Lv.15，并有唯一 `root-level-materialization-v1` 经验事件；这是将历史虚拟满级固化的一次性兼容动作，不得扩展成新 root 自动满级。`ai_bonus_wallet_state.baseline_completed_at` 必须已有值且只初始化一次；快照、账本净额和来源批次余额必须完全相等。随后执行 `20260825_ai_quota_and_support_rewards_knowledge.sql`。`support-ai-v1` 的首次插入时间就是历史赠送生效边界，禁止为补历史单修改该时间；调倍率或自动审批上限必须新建策略版本。发布后先用 Mock/测试订单验证未归属、历史排除、自动入账、大额复核和退款反转状态，禁止用生产真实赞助做破坏性试单
+12. 资源商店上线前依次显式应用 `20260825_support_packages_v2.sql`、`20260825_support_donation_store_split.sql` 和 `20260825_support_donation_store_split_knowledge.sql` 并通过 Schema 门禁；`support-pure-v2` 的首次写入时间是纯支持零权益切换点，不得移动。首次发布保持 `SUPPORT_PACKAGES_CATALOG_ENABLED`、`SUPPORT_PACKAGES_CHECKOUT_ENABLED`、`SUPPORT_PACKAGES_GRANT_ENABLED`、`SUPPORT_CAMPAIGNS_ENABLED` 全部关闭。先启用发放处理器，再开放目录和结算，活动经 Root 成本预览与 40% 门禁发布后再开放。关闭新功能不得把已有 v2 付款降级成纯支持或 `support-ai-v1`；完整顺序与回滚边界见 `docs/support-packages.md`
+13. 积分经济 C5 上线前先关闭 `POINTS_SHOP_PURCHASE_ENABLED`，执行 `20260826_points_economy_c5_storage_limits.sql` 与 `20260826_points_economy_c5_knowledge.sql`，再通过只读 Schema 门禁；确认历史直接空间兑换已进入 `points_shop_item_claims`、抽奖空间未进入后，前后端同批发布并设置 `POINTS_ECONOMY_C5_ENABLED=true`。若回退到 C4，必须先再次关闭商店购买，不能在 C4 可重复空间规则下继续写入。生产进程同时显式配置 `LIGHTNOTE_RUNTIME_ENV=production`。
 
 资源治理的 finding 只是候选，不是删除授权：扫描必须只读；用户行只要存在（包括 `del_flag=1`）就不能判为 owner 缺失；本地图片至少经过两次跨 24 小时无引用检查；preview、建 Job 和 Worker 执行分别重新核验。API 只能接收 finding ID 或受 Root + session + 证据哈希绑定的短时 token，禁止接收表名、路径、对象 key 或任意待删除资源 ID；前端创建任务前还必须由 Root 手工输入服务端返回的确认短语，禁止代填。本地图片必须核验 `note_images`、笔记正文、笔记历史、笔记模板和书签图标引用，unlink 前再复核文件身份并执行第二轮引用查询；任一来源命中或状态变化都只能阻断。失效账号业务资源的手工清理必须按 owner 归并，并在创建/恢复清理请求与数据库物理删除两个事务阶段分别锁定 `user` 行；只有用户行不存在或 `del_flag=1` 才可继续，任何正常账号状态都必须失败关闭。软删除账号只清理其资源并保留用户行，只有正式注销且 `role=deleted` 的账号才会删除用户行。失败任务不会自动重试，只允许 Root 显式重试；待执行任务允许显式取消，两种操作都必须记录审计日志。
 

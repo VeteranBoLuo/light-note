@@ -418,7 +418,7 @@ export function buildNewUserSeedContent({ lang = 'zh-CN', siteUrl } = {}) {
     normalizeLang(lang) === 'en-US' ? buildEnglishSeed(normalizedSiteUrl) : buildChineseSeed(normalizedSiteUrl);
   content.notes.push({
     key: 'drawing-demo',
-    title: '手绘笔记示例',
+    title: '上色',
     type: 'drawing',
     sort: content.notes.length,
     content: upgradeDrawingScene(NEW_USER_DRAWING_NOTE_EXAMPLE_SCENE),

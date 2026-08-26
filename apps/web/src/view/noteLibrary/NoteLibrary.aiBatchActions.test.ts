@@ -406,12 +406,32 @@ describe('笔记库页面树交互接线', () => {
   });
 
   it('详情页父级面包屑直接打开父正文，根节点才返回笔记库列表', () => {
+    expect(detailSource).toContain('@go-library="openLibraryRoot"');
+    expect(detailSource).toContain('@click="openLibraryRoot"');
     expect(detailSource).toContain('@click="openBreadcrumbPage(item.id)"');
     expect(detailSource).toMatch(/function openBreadcrumbPage[\s\S]*openNoteDetailPage\(pageId\)/);
     expect(detailSource).toMatch(
       /function openNoteDetailPage[\s\S]*`\/noteLibrary\/\$\{encodeURIComponent\(normalizedId\)\}`/,
     );
     expect(detailSource).not.toContain('function openBreadcrumbDirectory');
+  });
+
+  it('显式点击笔记库根节点只在保存成功离开时清除预览恢复态', () => {
+    const rootFunction = detailSource.match(/async function openLibraryRoot\(\)[\s\S]*?\n  }/)?.[0] || '';
+    const leaveGuard = detailSource.match(/onBeforeRouteLeave\(async \(to\) => \{[\s\S]*?\n  \}\);/)?.[0] || '';
+    const backFunction = detailSource.match(/async function back\(\)[\s\S]*?\n  }/)?.[0] || '';
+
+    expect(rootFunction).toContain('libraryRootEntryRequested = true');
+    expect(rootFunction).toContain("path: '/noteLibrary'");
+    expect(rootFunction).toContain('libraryRootEntryRequested = false');
+    expect(leaveGuard.indexOf('if (!saved) return false;')).toBeLessThan(
+      leaveGuard.indexOf('noteWorkspace.setLibraryPreviewPage(null);'),
+    );
+    expect(leaveGuard).toContain("libraryRootEntryRequested && to.path === '/noteLibrary'");
+    expect(leaveGuard).toContain('noteWorkspace.setNavigation({ activePageId: null, browseParentId: null });');
+    expect(leaveGuard).toContain('noteWorkspace.clearTreeSearch();');
+    expect(backFunction).toContain('returnToSource();');
+    expect(backFunction).not.toContain('setLibraryPreviewPage');
   });
 
   it('预览页父级面包屑在当前预览区打开，且预览与编辑面包屑都不显示 hover 背景', () => {
@@ -437,6 +457,12 @@ describe('笔记库页面树交互接线', () => {
     expect(openFunction).toContain('const requestVersion = ++noteOpenRequestVersion');
     expect(openFunction).toContain('if (requestVersion !== noteOpenRequestVersion) return;');
     expect(openFunction).toContain('normalizedId === openingPageId.value');
+    expect(openFunction.indexOf('isNavigationFailure(navigationFailure)')).toBeGreaterThan(
+      openFunction.indexOf('await router.push'),
+    );
+    expect(openFunction.indexOf('noteWorkspace.setLibraryPreviewPage(normalizedId)')).toBeGreaterThan(
+      openFunction.indexOf('isNavigationFailure(navigationFailure)'),
+    );
     expect(detailSource).not.toContain(':opening-page-id="openingPageId"');
     expect(noteLibrarySidebarSource).not.toContain(':opening-page-id="openingPageId"');
     expect(treeRowSource).not.toContain(':loading="opening"');
@@ -448,8 +474,10 @@ describe('笔记库页面树交互接线', () => {
     expect(persistFunction).toContain('captureDetailTreeScroll();');
     expect(detailSource).toContain(':tree-scroll-top="detailTreeScrollTop"');
     expect(noteLibrarySidebarSource).toContain('ref="treeScrollRef"');
-    expect(noteLibrarySidebarSource).toContain("props.surface !== 'detail'");
+    expect(noteLibrarySidebarSource).toContain("props.surface === 'detail'");
     expect(noteLibrarySidebarSource).toContain('element.scrollTop = Math.max(0, Number(props.treeScrollTop || 0));');
+    expect(detailSource).toContain(':motion-expansion-ids="detailTreeMotionExpansionIds"');
+    expect(noteLibrarySidebarSource).toContain('props.loadingKeys.size > 0');
   });
 
   it('新建草稿首次保存后直接写入目录与面包屑，不强制刷新完整目录', () => {

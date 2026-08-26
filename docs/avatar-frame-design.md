@@ -94,7 +94,7 @@
 
 ## 5. 当前目录对应关系
 
-价格的权威来源仍是 [积分经济 C4 规范](./points-economy.md) 和 `apps/server/util/pointsEconomyCatalog.js`，成就条件的权威来源仍是 `apps/server/util/points.js` 与成长规则；下表只固化当前视觉排序与设计依据，方便设计时选择相邻参照。
+价格的权威来源仍是 [积分经济 C5 规范](./points-economy.md) 和 `apps/server/util/pointsEconomyCatalog.js`，成就条件的权威来源仍是 `apps/server/util/points.js` 与成长规则；下表只固化当前视觉排序与设计依据，方便设计时选择相邻参照。
 
 ### 5.1 积分兑换款
 

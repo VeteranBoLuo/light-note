@@ -927,6 +927,19 @@ WHERE actual.table_schema=DATABASE()
   )
   AND (actual.character_set_name <> 'utf8' OR actual.collation_name <> 'utf8_general_ci');
 
+SELECT '[48] missing_or_invalid_support_order_purpose' AS check_name,
+       CONCAT(IFNULL(actual.column_name, 'missing'), ' actual=', IFNULL(actual.character_set_name, ''), '/', IFNULL(actual.collation_name, '')) AS detail
+FROM (SELECT 1) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='support_orders'
+ AND actual.column_name='order_purpose'
+WHERE actual.column_name IS NULL
+   OR actual.is_nullable <> 'NO'
+   OR actual.column_default <> 'unknown'
+   OR actual.character_set_name <> 'ascii'
+   OR actual.collation_name <> 'ascii_bin';
+
 SELECT '[33] missing_community_chat_governance_index' AS check_name,
   CONCAT(expected.tn, '.', expected.ix) AS detail
 FROM (
@@ -1519,11 +1532,12 @@ LEFT JOIN information_schema.statistics actual
  AND actual.index_name=expected.ix
 WHERE actual.index_name IS NULL;
 
--- 47) 积分经济 C4 的幂等收据、迁移状态与付费保底字段必须存在（期望 0 行）
+-- 47) 积分经济 C4/C5 的幂等收据、有限次商品事实、迁移状态与付费保底字段必须存在（期望 0 行）
 SELECT '[47] missing_points_economy_table' AS check_name, expected.t AS detail
 FROM (
   SELECT 'points_economy_operations' t UNION ALL
-  SELECT 'points_economy_migration_state'
+  SELECT 'points_economy_migration_state' UNION ALL
+  SELECT 'points_shop_item_claims'
 ) expected
 LEFT JOIN information_schema.tables actual
   ON actual.table_schema = DATABASE() AND actual.table_name = expected.t AND actual.engine = 'InnoDB'
@@ -1547,6 +1561,12 @@ FROM (
   SELECT 'points_economy_operations', 'pity_hits', 'points_economy_operations.pity_hits' UNION ALL
   SELECT 'points_economy_operations', 'replay_count', 'points_economy_operations.replay_count' UNION ALL
   SELECT 'points_economy_operations', 'last_replayed_at', 'points_economy_operations.last_replayed_at' UNION ALL
+  SELECT 'points_shop_item_claims', 'user_id', 'points_shop_item_claims.user_id' UNION ALL
+  SELECT 'points_shop_item_claims', 'item_id', 'points_shop_item_claims.item_id' UNION ALL
+  SELECT 'points_shop_item_claims', 'source_economy_version', 'points_shop_item_claims.source_economy_version' UNION ALL
+  SELECT 'points_shop_item_claims', 'operation_id', 'points_shop_item_claims.operation_id' UNION ALL
+  SELECT 'points_shop_item_claims', 'claim_source', 'points_shop_item_claims.claim_source' UNION ALL
+  SELECT 'points_shop_item_claims', 'create_time', 'points_shop_item_claims.create_time' UNION ALL
   SELECT 'user_growth', 'lottery_paid_count', 'user_growth.lottery_paid_count' UNION ALL
   SELECT 'user_growth', 'lottery_paid_pity_progress', 'user_growth.lottery_paid_pity_progress'
 ) expected
@@ -1562,7 +1582,10 @@ FROM (
   SELECT 'points_economy_operations', 'idx_points_economy_version_time' UNION ALL
   SELECT 'points_economy_operations', 'idx_points_economy_status_time' UNION ALL
   SELECT 'points_economy_operations', 'idx_points_economy_metrics' UNION ALL
-  SELECT 'points_economy_operations', 'idx_points_economy_user_status_time'
+  SELECT 'points_economy_operations', 'idx_points_economy_user_status_time' UNION ALL
+  SELECT 'points_shop_item_claims', 'PRIMARY' UNION ALL
+  SELECT 'points_shop_item_claims', 'uk_points_shop_claim_operation' UNION ALL
+  SELECT 'points_shop_item_claims', 'idx_points_shop_claim_item_time'
 ) expected
 LEFT JOIN information_schema.statistics actual
   ON actual.table_schema = DATABASE()
@@ -1571,13 +1594,13 @@ LEFT JOIN information_schema.statistics actual
 WHERE actual.index_name IS NULL;
 
 SELECT '[47] missing_points_economy_migration_state' AS check_name,
-       'points-economy-c4-paid-pity-v1' AS detail
-FROM DUAL
-WHERE NOT EXISTS (
-  SELECT 1
-    FROM points_economy_migration_state
-   WHERE migration_key = 'points-economy-c4-paid-pity-v1'
-);
+       expected.migration_key AS detail
+FROM (
+  SELECT 'points-economy-c4-paid-pity-v1' migration_key UNION ALL
+  SELECT 'points-economy-c5-storage-limits-v1'
+) expected
+LEFT JOIN points_economy_migration_state actual ON actual.migration_key = expected.migration_key
+WHERE actual.migration_key IS NULL;
 
 -- 48) 社区公开身份、稳定提及与表情消息契约必须完整（期望 0 行）
 SELECT '[48] missing_community_chat_identity_table' AS check_name,
@@ -1741,6 +1764,7 @@ FROM (
   SELECT 'support_orders', 'idx_support_order_user_status' UNION ALL
   SELECT 'support_orders', 'idx_support_order_retry' UNION ALL
   SELECT 'support_orders', 'idx_support_order_ranking' UNION ALL
+  SELECT 'support_orders', 'idx_support_order_purpose_ranking' UNION ALL
   SELECT 'support_public_preferences', 'uk_support_public_id' UNION ALL
   SELECT 'support_public_preferences', 'idx_support_public_visibility'
 ) expected
@@ -2088,6 +2112,17 @@ WHERE NOT EXISTS (
   SELECT 1 FROM support_reward_policy_state WHERE policy_version='support-ai-v1'
 );
 
+SELECT '[58] invalid_pure_support_policy' AS check_name, policy_version AS detail
+FROM support_reward_policy_state
+WHERE policy_version='support-pure-v2'
+  AND (tokens_per_cny<>0 OR auto_credit_max_amount<>0.00)
+UNION ALL
+SELECT '[58] missing_pure_support_policy', 'support-pure-v2'
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM support_reward_policy_state WHERE policy_version='support-pure-v2'
+);
+
 SELECT '[58] ai_bonus_snapshot_ledger_mismatch' AS check_name, ug.user_id AS detail
 FROM user_growth ug
 LEFT JOIN (
@@ -2119,3 +2154,248 @@ WHERE grant_row.granted_tokens>0
     OR ledger.amount_tokens<>grant_row.granted_tokens
     OR NOT (ledger.user_id <=> grant_row.user_id)
   );
+
+-- 59) 爱发电 v2 套餐必须锁定不可变快照、双重首充唯一性与原子 AI/空间发放（期望 0 行）
+SELECT '[59] missing_support_package_table' AS check_name, expected.t AS detail
+FROM (
+  SELECT 'support_campaigns' t UNION ALL
+  SELECT 'support_campaign_skus' UNION ALL
+  SELECT 'support_campaign_user_limits' UNION ALL
+  SELECT 'support_first_purchase_claims' UNION ALL
+  SELECT 'support_entitlement_grants'
+) expected
+LEFT JOIN information_schema.tables actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.t AND actual.engine='InnoDB'
+WHERE actual.table_name IS NULL;
+
+SELECT '[59] missing_support_package_column' AS check_name, expected.n AS detail
+FROM (
+  SELECT 'support_checkout_intents' tab, 'intent_type' col, 'support_checkout_intents.intent_type' n UNION ALL
+  SELECT 'support_checkout_intents', 'intent_status', 'support_checkout_intents.intent_status' UNION ALL
+  SELECT 'support_checkout_intents', 'sku_id', 'support_checkout_intents.sku_id' UNION ALL
+  SELECT 'support_checkout_intents', 'catalog_version', 'support_checkout_intents.catalog_version' UNION ALL
+  SELECT 'support_checkout_intents', 'quoted_amount', 'support_checkout_intents.quoted_amount' UNION ALL
+  SELECT 'support_checkout_intents', 'base_ai_tokens', 'support_checkout_intents.base_ai_tokens' UNION ALL
+  SELECT 'support_checkout_intents', 'base_storage_mb', 'support_checkout_intents.base_storage_mb' UNION ALL
+  SELECT 'support_checkout_intents', 'quoted_ai_tokens', 'support_checkout_intents.quoted_ai_tokens' UNION ALL
+  SELECT 'support_checkout_intents', 'quoted_storage_mb', 'support_checkout_intents.quoted_storage_mb' UNION ALL
+  SELECT 'support_checkout_intents', 'first_purchase_candidate', 'support_checkout_intents.first_purchase_candidate' UNION ALL
+  SELECT 'support_checkout_intents', 'campaign_id', 'support_checkout_intents.campaign_id' UNION ALL
+  SELECT 'support_checkout_intents', 'campaign_sku_id', 'support_checkout_intents.campaign_sku_id' UNION ALL
+  SELECT 'support_checkout_intents', 'campaign_version', 'support_checkout_intents.campaign_version' UNION ALL
+  SELECT 'support_checkout_intents', 'campaign_user_limit', 'support_checkout_intents.campaign_user_limit' UNION ALL
+  SELECT 'support_checkout_intents', 'campaign_starts_at', 'support_checkout_intents.campaign_starts_at' UNION ALL
+  SELECT 'support_checkout_intents', 'campaign_ends_at', 'support_checkout_intents.campaign_ends_at' UNION ALL
+  SELECT 'support_checkout_intents', 'consumed_order_id', 'support_checkout_intents.consumed_order_id' UNION ALL
+  SELECT 'support_entitlement_grants', 'granted_storage_mb', 'support_entitlement_grants.granted_storage_mb' UNION ALL
+  SELECT 'support_entitlement_grants', 'first_purchase_applied', 'support_entitlement_grants.first_purchase_applied' UNION ALL
+  SELECT 'support_first_purchase_claims', 'provider_identity_hash', 'support_first_purchase_claims.provider_identity_hash'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.tab AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[59] missing_support_package_index' AS check_name,
+  CONCAT(expected.tab, '.', expected.ix) AS detail
+FROM (
+  SELECT 'support_checkout_intents' tab, 'idx_support_checkout_package' ix UNION ALL
+  SELECT 'support_checkout_intents', 'idx_support_checkout_consumed' UNION ALL
+  SELECT 'support_campaigns', 'uk_support_campaign_version' UNION ALL
+  SELECT 'support_campaign_skus', 'uk_support_campaign_sku_version' UNION ALL
+  SELECT 'support_campaign_user_limits', 'uk_support_campaign_active_intent' UNION ALL
+  SELECT 'support_first_purchase_claims', 'uk_support_first_user_sku' UNION ALL
+  SELECT 'support_first_purchase_claims', 'uk_support_first_identity_sku' UNION ALL
+  SELECT 'support_first_purchase_claims', 'uk_support_first_order' UNION ALL
+  SELECT 'support_entitlement_grants', 'uk_support_entitlement_order' UNION ALL
+  SELECT 'support_entitlement_grants', 'uk_support_entitlement_ai_ledger'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.tab AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;
+
+SELECT '[59] invalid_support_campaign_sku_index' AS check_name,
+  COALESCE(actual.columns_in_order, 'missing') AS detail
+FROM (
+  SELECT GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) AS columns_in_order,
+         MIN(NON_UNIQUE) AS non_unique
+  FROM information_schema.statistics
+  WHERE TABLE_SCHEMA=DATABASE()
+    AND TABLE_NAME='support_campaign_skus'
+    AND INDEX_NAME='uk_support_campaign_sku_version'
+) actual
+WHERE actual.columns_in_order IS NULL
+   OR actual.columns_in_order<>'campaign_id,sku_id'
+   OR actual.non_unique<>0;
+
+SELECT '[59] obsolete_support_campaign_sku_index' AS check_name,
+  INDEX_NAME AS detail
+FROM information_schema.statistics
+WHERE TABLE_SCHEMA=DATABASE()
+  AND TABLE_NAME='support_campaign_skus'
+  AND INDEX_NAME='uk_support_campaign_sku_public';
+
+SELECT '[59] invalid_support_campaign' AS check_name, id AS detail
+FROM support_campaigns
+WHERE status NOT IN ('draft','published','suspended') OR ends_at<=starts_at;
+
+SELECT '[59] invalid_support_order_purpose' AS check_name, id AS detail
+FROM support_orders
+WHERE order_purpose NOT IN ('unknown','legacy_support','donation','entitlement_purchase');
+
+SELECT '[59] package_intent_wrong_order_purpose' AS check_name, o.id AS detail
+FROM support_orders o
+INNER JOIN support_checkout_intents i ON i.id=o.checkout_intent_id
+WHERE i.intent_type IN ('permanent','campaign')
+  AND o.order_purpose<>'entitlement_purchase';
+
+SELECT '[59] donation_has_positive_reward' AS check_name, grant_row.id AS detail
+FROM support_reward_grants grant_row
+INNER JOIN support_orders o ON o.id=grant_row.support_order_id
+WHERE o.order_purpose='donation'
+  AND (grant_row.calculated_tokens<>0 OR grant_row.granted_tokens<>0);
+
+SELECT '[59] invalid_support_campaign_sku' AS check_name, sku.id AS detail
+FROM support_campaign_skus sku
+LEFT JOIN support_campaigns campaign ON campaign.id=sku.campaign_id
+WHERE campaign.id IS NULL
+   OR sku.amount<=0
+   OR (sku.ai_tokens=0 AND sku.storage_mb=0)
+   OR sku.per_user_limit=0
+   OR (campaign.status IN ('published','suspended') AND sku.margin_bps<4000);
+
+SELECT '[59] invalid_support_campaign_limit' AS check_name,
+  CONCAT(limits.campaign_sku_id, ':', limits.user_id) AS detail
+FROM support_campaign_user_limits limits
+LEFT JOIN support_campaign_skus sku ON sku.id=limits.campaign_sku_id
+WHERE sku.id IS NULL OR limits.completed_count>sku.per_user_limit;
+
+SELECT '[59] invalid_support_checkout_snapshot' AS check_name, intent.id AS detail
+FROM support_checkout_intents intent
+WHERE intent.intent_type IN ('permanent','campaign')
+  AND (
+    intent.intent_status NOT IN ('issued','consumed','expired','cancelled')
+    OR intent.sku_id IS NULL
+    OR intent.catalog_version IS NULL
+    OR intent.quoted_amount IS NULL
+    OR intent.quoted_amount<=0
+    OR intent.first_purchase_candidate NOT IN (0,1)
+    OR (intent.base_ai_tokens=0 AND intent.base_storage_mb=0)
+    OR (intent.quoted_ai_tokens=0 AND intent.quoted_storage_mb=0)
+    OR intent.quoted_ai_tokens<intent.base_ai_tokens
+    OR intent.quoted_storage_mb<intent.base_storage_mb
+    OR (
+      intent.intent_type='permanent'
+      AND intent.first_purchase_candidate=0
+      AND (
+        intent.quoted_ai_tokens<>intent.base_ai_tokens
+        OR intent.quoted_storage_mb<>intent.base_storage_mb
+      )
+    )
+    OR (
+      intent.intent_type='permanent'
+      AND (
+        intent.catalog_version NOT REGEXP '^support-packages-v[0-9]+$'
+        OR intent.campaign_id IS NOT NULL
+        OR intent.campaign_sku_id IS NOT NULL
+        OR intent.campaign_version IS NOT NULL
+        OR intent.campaign_user_limit IS NOT NULL
+        OR intent.campaign_starts_at IS NOT NULL
+        OR intent.campaign_ends_at IS NOT NULL
+      )
+    )
+    OR (
+      intent.intent_type='campaign'
+      AND (
+        intent.first_purchase_candidate<>0
+        OR intent.campaign_id IS NULL
+        OR intent.campaign_sku_id IS NULL
+        OR intent.campaign_version IS NULL
+        OR intent.campaign_user_limit IS NULL
+        OR intent.campaign_starts_at IS NULL
+        OR intent.campaign_ends_at IS NULL
+        OR intent.campaign_ends_at<=intent.campaign_starts_at
+        OR intent.catalog_version<>CONCAT('campaign:', intent.campaign_id, ':v', intent.campaign_version)
+        OR intent.quoted_ai_tokens<>intent.base_ai_tokens
+        OR intent.quoted_storage_mb<>intent.base_storage_mb
+      )
+    )
+  );
+
+SELECT '[59] invalid_support_first_purchase_claim' AS check_name, claim.id AS detail
+FROM support_first_purchase_claims claim
+LEFT JOIN support_entitlement_grants grant_row ON grant_row.support_order_id=claim.support_order_id
+WHERE grant_row.id IS NULL
+   OR (grant_row.user_id IS NOT NULL AND NOT (grant_row.user_id <=> claim.user_id))
+   OR (grant_row.user_id IS NULL AND claim.user_id NOT LIKE 'deleted:%')
+   OR NOT (grant_row.sku_id <=> claim.sku_id)
+   OR grant_row.entitlement_type<>'permanent'
+   OR grant_row.first_purchase_applied<>1;
+
+SELECT '[59] invalid_support_entitlement_snapshot' AS check_name, grant_row.id AS detail
+FROM support_entitlement_grants grant_row
+LEFT JOIN support_checkout_intents intent ON intent.id=grant_row.checkout_intent_id
+WHERE intent.id IS NULL
+   OR intent.intent_type NOT IN ('permanent','campaign')
+   OR NOT (grant_row.entitlement_type <=> intent.intent_type)
+   OR NOT (grant_row.sku_id <=> intent.sku_id)
+   OR NOT (grant_row.catalog_version <=> intent.catalog_version)
+   OR (
+     grant_row.grant_status IN ('credited','reversal_review')
+     AND NOT (grant_row.paid_amount <=> intent.quoted_amount)
+   )
+   OR grant_row.grant_status NOT IN ('pending','manual_review','credited','reversal_review','ineligible')
+   OR grant_row.first_purchase_applied NOT IN (0,1)
+   OR (
+     grant_row.first_purchase_applied=1
+     AND (intent.intent_type<>'permanent' OR intent.first_purchase_candidate<>1)
+   )
+   OR grant_row.granted_ai_tokens>grant_row.calculated_ai_tokens
+   OR grant_row.granted_storage_mb>grant_row.calculated_storage_mb
+   OR (
+     grant_row.grant_status='credited'
+     AND (
+       grant_row.granted_ai_tokens<>grant_row.calculated_ai_tokens
+       OR grant_row.granted_storage_mb<>grant_row.calculated_storage_mb
+     )
+   )
+   OR (
+     grant_row.grant_status NOT IN ('credited','reversal_review')
+     AND (grant_row.granted_ai_tokens<>0 OR grant_row.granted_storage_mb<>0)
+   )
+   OR (
+     grant_row.grant_status IN ('credited','reversal_review')
+     AND (
+       grant_row.calculated_ai_tokens<>
+         CASE WHEN intent.intent_type='permanent' AND grant_row.first_purchase_applied=0
+              THEN intent.base_ai_tokens ELSE intent.quoted_ai_tokens END
+       OR grant_row.calculated_storage_mb<>
+         CASE WHEN intent.intent_type='permanent' AND grant_row.first_purchase_applied=0
+              THEN intent.base_storage_mb ELSE intent.quoted_storage_mb END
+     )
+   );
+
+SELECT '[59] invalid_credited_support_entitlement_ai' AS check_name, grant_row.id AS detail
+FROM support_entitlement_grants grant_row
+LEFT JOIN ai_bonus_ledger ledger ON ledger.id=grant_row.ai_ledger_entry_id
+WHERE grant_row.grant_status='credited'
+  AND grant_row.granted_ai_tokens>0
+  AND grant_row.user_id IS NOT NULL
+  AND (
+    ledger.id IS NULL
+    OR ledger.entry_type<>'credit'
+    OR ledger.source_type NOT IN ('support_package','support_campaign')
+    OR ledger.amount_tokens<>grant_row.granted_ai_tokens
+    OR NOT (ledger.user_id <=> grant_row.user_id)
+  );
+
+SELECT '[59] invalid_credited_support_entitlement_storage' AS check_name, grant_row.id AS detail
+FROM support_entitlement_grants grant_row
+LEFT JOIN points_log storage_log
+  ON storage_log.user_id=grant_row.user_id
+ AND storage_log.ref=grant_row.storage_log_ref
+ AND storage_log.reason=CONCAT('storage:',
+   CASE WHEN grant_row.entitlement_type='campaign' THEN 'support_campaign' ELSE 'support_package' END)
+WHERE grant_row.grant_status='credited'
+  AND grant_row.granted_storage_mb>0
+  AND grant_row.user_id IS NOT NULL
+  AND (grant_row.storage_log_ref IS NULL OR storage_log.id IS NULL);

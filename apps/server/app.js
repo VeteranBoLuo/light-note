@@ -43,8 +43,9 @@ import { ensureCommunityChatSchema } from './util/communityChatSchema.js';
 import { registerCommunityChatRealtimeHub } from './util/communityChat/realtimeHub.js';
 import { startCommunityChatImageCleanupScheduler } from './util/services/communityChatImageService.js';
 import { startCommunityChatCustomStickerCleanupScheduler } from './util/services/communityChatCustomStickerService.js';
-import { ensureAfdianSupportSchema } from './util/afdianSupportSchema.js';
+import { ensureAfdianSupportOrderPurposeBackfill, ensureAfdianSupportSchema } from './util/afdianSupportSchema.js';
 import { ensureAfdianSupportRewardSchema } from './util/afdianSupportRewardSchema.js';
+import { ensureAfdianSupportPackageSchema } from './util/afdianSupportPackageSchema.js';
 import { startAfdianReconciliationScheduler } from './util/afdianSupportService.js';
 import { ensureAiBonusWalletSchema } from './util/aiBonusWalletSchema.js';
 
@@ -131,6 +132,8 @@ try {
 try {
   await ensureAfdianSupportSchema();
   await ensureAfdianSupportRewardSchema();
+  await ensureAfdianSupportPackageSchema();
+  await ensureAfdianSupportOrderPurposeBackfill();
 } catch (err) {
   console.error('爱发电支持模块 Schema 初始化失败 code=%s，终止启动', stableAgentErrorCode(err));
   process.exit(1);

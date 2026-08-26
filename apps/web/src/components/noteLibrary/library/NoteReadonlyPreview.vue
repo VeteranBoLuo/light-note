@@ -147,7 +147,7 @@
   import icon from '@/config/icon';
   import { apiBasePost } from '@/http/request';
   import { ensureDrawingThumbnail } from '@/api/drawingThumbnail';
-  import { consumeNoteDetail } from '@/api/noteDetailPrefetch';
+  import { consumeNoteDetail, invalidateNoteDetailPrefetch } from '@/api/noteDetailPrefetch';
   import { resolveNoteResourceRefs, type ResolvedResourceReference } from '@/api/noteReferences';
   import { useUserStore } from '@/store';
   import { normalizeNoteContentResourceUrls, noteContentToHtml } from '@/utils/common';
@@ -162,11 +162,7 @@
   import { normalizeReferencedFilePreviewInfo, type ReferencedFilePreviewInfo } from '@/utils/noteResourceNavigation';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import { scrollCenterIntoContainer, scrollIntoContainer } from '@/utils/zoom';
-  import {
-    resolveAiSourceNavigation,
-    type AiSource,
-    type AiSourceTarget,
-  } from '@/utils/aiSourceNavigation';
+  import { resolveAiSourceNavigation, type AiSource, type AiSourceTarget } from '@/utils/aiSourceNavigation';
 
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
   const DrawingNoteEditor = defineAsyncComponent(
@@ -202,12 +198,14 @@
     defineProps<{
       noteId: string;
       seed?: Record<string, any> | null;
+      breadcrumb?: PreviewBreadcrumbItem[];
       childCount?: number;
       menuOptions?: PreviewMenuOption[];
       outlineTarget?: PreviewOutlineTarget | null;
     }>(),
     {
       seed: null,
+      breadcrumb: () => [],
       childCount: 0,
       menuOptions: () => [],
       outlineTarget: null,
@@ -218,6 +216,9 @@
     openPage: [page: PreviewBreadcrumbItem];
     edit: [];
     browseChildren: [];
+    breadcrumbResolved: [payload: { noteId: string; items: PreviewBreadcrumbItem[] }];
+    detailResolved: [payload: { noteId: string; detail: Record<string, any> }];
+    unavailable: [noteId: string];
     pendingState: [pending: boolean];
     outlineChange: [headings: NoteOutlineItem[]];
     outlineActiveChange: [id: string | null];
@@ -226,7 +227,6 @@
   const router = useRouter();
   const user = useUserStore();
   const detail = ref<Record<string, any>>({});
-  const breadcrumb = ref<PreviewBreadcrumbItem[]>([]);
   const previewHtml = ref('');
   const previewSourceHtml = ref('');
   const previewContentRef = ref<HTMLElement | null>(null);
@@ -250,7 +250,7 @@
   const displayNote = computed(() => ({ ...(props.seed || {}), ...detail.value }));
   // 操作成功后父级会立即更新 seed；优先使用它，避免刚加载的详情副本把新状态覆盖回去。
   const previewPending = computed(() => Boolean(props.seed?.isPending ?? detail.value.isPending));
-  const parentBreadcrumb = computed(() => breadcrumb.value.filter((item) => item.id !== props.noteId));
+  const parentBreadcrumb = computed(() => props.breadcrumb.filter((item) => item.id !== props.noteId));
   const displayTime = computed(() => String(displayNote.value.updateTime || displayNote.value.createTime || '').trim());
 
   function resolvedResourceRef(ref: ResourceRef) {
@@ -515,7 +515,6 @@
     loading.value = true;
     error.value = false;
     detail.value = {};
-    breadcrumb.value = [];
     previewHtml.value = '';
     previewSourceHtml.value = '';
     resolvedResourceRefs.value = [];
@@ -524,34 +523,38 @@
     closeResourcePreview();
     closeReferencedFileInlinePreview();
     try {
-      const [detailResult, breadcrumbResult] = await Promise.all([
-        consumeNoteDetail(user, noteId),
-        apiBasePost('/api/note/queryNoteBreadcrumb', { noteId }, { silent: true }).catch(() => null),
-      ]);
+      const detailResult = await consumeNoteDetail(user, noteId);
       if (seq !== requestSeq) return;
       if (detailResult.status !== 200 || !detailResult.data) {
+        invalidateNoteDetailPrefetch(user, noteId);
         error.value = true;
+        if (Number(detailResult.status) === 404) emit('unavailable', noteId);
         return;
       }
-      detail.value = detailResult.data;
-      if (Object.prototype.hasOwnProperty.call(detailResult.data, 'isPending')) {
-        emit('pendingState', Boolean(detailResult.data.isPending));
+      const { breadcrumb: bundledBreadcrumb, ...detailRecord } = detailResult.data;
+      detail.value = detailRecord;
+      emit('detailResolved', { noteId, detail: detailRecord });
+      emit('breadcrumbResolved', {
+        noteId,
+        items: Array.isArray(bundledBreadcrumb) ? bundledBreadcrumb : [],
+      });
+      if (Object.prototype.hasOwnProperty.call(detailRecord, 'isPending')) {
+        emit('pendingState', Boolean(detailRecord.isPending));
       }
-      breadcrumb.value = Array.isArray(breadcrumbResult?.data?.items) ? breadcrumbResult.data.items : [];
-      if (detailResult.data.type === 'drawing') {
-        if (String(detailResult.data.createBy || '') === String(user.id || '')) {
+      if (detailRecord.type === 'drawing') {
+        if (String(detailRecord.createBy || '') === String(user.id || '')) {
           // 桌面卡片点击进入的是本组件而非 NoteDetail；这里同样用已经加载的完整 scene
           // 静默补齐准确缩略图，避免旧笔记一直只能回退到会抽样的列表预览。
           void ensureDrawingThumbnail(
-            String(detailResult.data.id || noteId),
-            Math.max(1, Number(detailResult.data.revision || 1)),
-            String(detailResult.data.content || ''),
+            String(detailRecord.id || noteId),
+            Math.max(1, Number(detailRecord.revision || 1)),
+            String(detailRecord.content || ''),
           ).catch(() => false);
         }
         return;
       }
-      const normalizedContent = normalizeNoteContentResourceUrls(String(detailResult.data.content || ''));
-      const renderedHtml = await noteContentToHtml(normalizedContent, detailResult.data.type);
+      const normalizedContent = normalizeNoteContentResourceUrls(String(detailRecord.content || ''));
+      const renderedHtml = await noteContentToHtml(normalizedContent, detailRecord.type);
       if (seq !== requestSeq) return;
       previewSourceHtml.value = renderedHtml;
       previewHtml.value = presentResourceReferenceChips(renderedHtml, [], {

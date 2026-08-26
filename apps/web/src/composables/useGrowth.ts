@@ -154,6 +154,9 @@ export interface ShopItem {
   equipped: boolean;
   canBuy: boolean;
   repeatable?: boolean;
+  purchaseLimit?: number | null;
+  purchaseCount?: number;
+  limitReached?: boolean;
   pointsShortfall?: number;
   levelShortfall?: number;
   unavailableReasons?: string[];
@@ -830,6 +833,9 @@ export function useGrowth() {
         if (res.data?.ok) {
           await Promise.all([loadShop(), load(true), loadInventory()]);
           syncPointsToViews();
+        } else if (res.data?.reason === 'purchase_limit') {
+          // 旧标签页或并发请求可能仍显示可兑换；以后端有限次领取事实刷新本地状态。
+          await loadShop();
         }
       } else if (res?.status === 409) {
         if (res.data?.code !== 'IDEMPOTENCY_RESULT_PENDING') {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  C4_POINTS_ECONOMY_VERSION,
   freeDrawsFor,
   getEconomyCatalogSnapshot,
   getEconomyRuntime,
@@ -7,17 +8,17 @@ import {
   POINTS_ECONOMY_VERSION,
 } from './pointsEconomyCatalog.js';
 
-describe('积分经济 C4 单一目录', () => {
+describe('积分经济 C5 单一目录', () => {
   const snapshot = getEconomyCatalogSnapshot();
 
   it('固定经济版本并完整覆盖 5 个实用商品和 13 个积分框', () => {
     expect(snapshot.version).toBe(POINTS_ECONOMY_VERSION);
-    expect(snapshot.utilityItems.map(({ id, cost }) => [id, cost])).toEqual([
-      ['ai_pack_small', 240],
-      ['ai_pack', 420],
-      ['storage_128', 500],
-      ['storage_512', 1600],
-      ['storage_2g', 5200],
+    expect(snapshot.utilityItems.map(({ id, cost, purchaseLimit }) => [id, cost, purchaseLimit])).toEqual([
+      ['ai_pack_small', 240, null],
+      ['ai_pack', 420, null],
+      ['storage_128', 500, 1],
+      ['storage_512', 1600, 1],
+      ['storage_2g', 5200, 1],
     ]);
     expect(snapshot.frameItems.map(({ id, cost, minLevel }) => [id, cost, minLevel])).toEqual([
       ['frame_mint', 220, 0],
@@ -37,6 +38,16 @@ describe('积分经济 C4 单一目录', () => {
     expect(snapshot.frameItems.reduce((sum, item) => sum + item.cost, 0)).toBe(55720);
   });
 
+  it('保留已发布 C4 快照，限兑规则只进入 C5', () => {
+    expect(getEconomyCatalogSnapshot(C4_POINTS_ECONOMY_VERSION).utilityItems.map((item) => item.purchaseLimit)).toEqual([
+      null,
+      null,
+      null,
+      null,
+      null,
+    ]);
+  });
+
   it('免费池仅发积分与 AI，付费池权重严格为 1000 且保底权重为 170', () => {
     expect(snapshot.freePolicy.pool.reduce((sum, item) => sum + item.weight, 0)).toBe(1000);
     expect(new Set(snapshot.freePolicy.pool.map((item) => item.kind))).toEqual(new Set(['points', 'ai_pack']));
@@ -54,15 +65,19 @@ describe('积分经济 C4 单一目录', () => {
     expect(parseRuntimeFlag('unexpected', true)).toBe(false);
   });
 
-  it('C4 免费次数只按 0/1/2/3 封顶，且写协议不能被环境变量降级', () => {
+  it('C4/C5 免费次数都按 0/1/2/3 封顶，且写协议不能被环境变量降级', () => {
     expect([1, 2, 3, 5, 6, 9, 10, 15].map((level) => freeDrawsFor(level, POINTS_ECONOMY_VERSION))).toEqual([
       0, 0, 1, 1, 2, 2, 3, 3,
     ]);
     expect(
       getEconomyRuntime({
         POINTS_ECONOMY_C4_ENABLED: 'true',
+        POINTS_ECONOMY_C5_ENABLED: 'true',
         POINTS_ECONOMY_REQUIRE_WRITE_VERSION: 'false',
       }).requireWriteVersion,
     ).toBe(true);
+    expect(
+      getEconomyRuntime({ POINTS_ECONOMY_C4_ENABLED: 'true', POINTS_ECONOMY_C5_ENABLED: 'false' }).economyVersion,
+    ).toBe(C4_POINTS_ECONOMY_VERSION);
   });
 });

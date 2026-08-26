@@ -14,8 +14,11 @@ const mocks = vi.hoisted(() => ({
     linked: false,
     orderCount: 0,
     totalAmount: '0.00',
-    grantedTokens: 0,
+    publicPreference: { participateInRanking: true, showIdentity: false, adminHidden: false },
+    recentOrders: [],
   })),
+  getAfdianLeaderboard: vi.fn(async () => ({ scope: 'all_time', items: [], mine: null, totalParticipants: 0 })),
+  updateAfdianPublicPreference: vi.fn(async (value) => ({ ...value, adminHidden: false })),
   unlinkAfdianAccount: vi.fn(async () => undefined),
   recordOperation: vi.fn(() => Promise.resolve()),
   messageWarning: vi.fn(),
@@ -24,10 +27,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/config/support', () => ({
   AFDIAN_SUPPORT_CONFIGURED: false,
   AFDIAN_SUPPORT_OPTIONS: [
-    { key: 'coffee', amount: 6, rewardTokens: 600_000, url: '', configured: false },
-    { key: 'server', amount: 18, rewardTokens: 1_800_000, url: '', configured: false },
-    { key: 'companion', amount: 50, rewardTokens: 5_000_000, url: '', configured: false },
-    { key: 'custom', amount: null, rewardTokens: null, url: '', configured: false },
+    { key: 'coffee', amount: 6, url: '', configured: false },
+    { key: 'server', amount: 18, url: '', configured: false },
+    { key: 'companion', amount: 50, url: '', configured: false },
+    { key: 'custom', amount: null, url: '', configured: false },
   ],
   openAfdianSupportPage: mocks.openAfdianSupportPage,
   openTrackedAfdianCheckout: mocks.openTrackedAfdianCheckout,
@@ -36,7 +39,10 @@ vi.mock('@/config/support', () => ({
 
 vi.mock('@/api/supportApi', () => ({
   getAfdianSupportState: mocks.getAfdianSupportState,
+  getAfdianLeaderboard: mocks.getAfdianLeaderboard,
+  updateAfdianPublicPreference: mocks.updateAfdianPublicPreference,
   unlinkAfdianAccount: mocks.unlinkAfdianAccount,
+  afdianLeaderboardAvatarUrl: (publicId: string) => `/api/support/leaderboard/avatar/${publicId}`,
 }));
 
 vi.mock('@/api/commonApi', () => ({
@@ -57,6 +63,7 @@ vi.mock('vue-router', async (importOriginal) => {
       replace: vi.fn(() => Promise.resolve()),
       currentRoute: { value: { query: {} } },
     }),
+    useRoute: () => ({ query: {} }),
   };
 });
 
@@ -104,15 +111,17 @@ describe('支持轻笺未配置状态', () => {
       host.remove();
     };
 
-    const actions = Array.from(host.querySelectorAll<HTMLButtonElement>('button'));
-    expect(actions).toHaveLength(7);
-    expect(actions[0]?.disabled).toBe(false);
-    const supportActions = actions.slice(1);
+    const supportActions = [
+      host.querySelector<HTMLButtonElement>('.support-primary-action'),
+      ...host.querySelectorAll<HTMLButtonElement>('.support-tier-card__action'),
+      host.querySelector<HTMLButtonElement>('.support-closing__action'),
+    ].filter(Boolean) as HTMLButtonElement[];
+    expect(supportActions).toHaveLength(6);
     expect(supportActions.every((action) => action.disabled)).toBe(true);
     expect(host.textContent).toContain('爱发电主页尚未配置');
     expect(host.querySelector('a[href]')).toBeNull();
 
-    supportActions[0]?.click();
+    supportActions[0].click();
     await nextTick();
     expect(mocks.openAfdianSupportPage).not.toHaveBeenCalled();
     expect(mocks.messageWarning).not.toHaveBeenCalled();

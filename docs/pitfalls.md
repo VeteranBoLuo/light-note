@@ -25,7 +25,11 @@
 
 | 编号                                                                                           | 日期       | 模块                  | 关键词                                             | 状态         |
 | ---------------------------------------------------------------------------------------------- | ---------- | --------------------- | -------------------------------------------------- | ------------ |
-| [LN-PIT-157](#ln-pit-157保存快捷键不能复用手动版本快照动作)                                   | 2026-08-25 | 笔记、历史版本、前端  | Command+S、普通保存、手动版本、reason、资源控制    | 已修复待上线 |
+| [LN-PIT-163](#ln-pit-163css-数学函数内的百分比减法必须显式包裹-calc)                           | 2026-08-26 | 前端、移动端、构建    | CSS、min、calc、百分比、窄栏、视觉验收             | 已修复待上线 |
+| [LN-PIT-160](#ln-pit-160同一支付渠道不能代替不可变的订单用途)                                  | 2026-08-25 | 赞助、商店、排行榜    | order purpose、爱发电、权益、榜单、历史兼容        | 已修复待上线 |
+| [LN-PIT-159](#ln-pit-159浮层关闭后的导航不能再读取会被重置的响应式草稿)                        | 2026-08-25 | 移动端、待办、浮层    | history、草稿快照、reset、路由 state、蒙层         | 已修复待上线 |
+| [LN-PIT-158](#ln-pit-158笔记库浏览范围当前预览与目录展开必须使用独立且可恢复的状态源)          | 2026-08-25 | 笔记目录、前端        | URL、sessionStorage、breadcrumb、当前页、展开      | 已修复待上线 |
+| [LN-PIT-157](#ln-pit-157保存快捷键不能复用手动版本快照动作)                                    | 2026-08-25 | 笔记、历史版本、前端  | Command+S、普通保存、手动版本、reason、资源控制    | 已修复待上线 |
 | [LN-PIT-152](#ln-pit-152已渲染富内容不能继续用-pre-wrap-解释源码空白)                          | 2026-08-25 | AI、笔记、排版        | 打字机、Markdown、HTML、响应式密度                 | 已修复待上线 |
 | [LN-PIT-151](#ln-pit-151内部账号过滤口径不能反向成为产品能力权限)                              | 2026-08-25 | AI、账号、权限、前端  | test、内部账号、角色白名单、公开错误、唯一事实源   | 已修复待上线 |
 | [LN-PIT-150](#ln-pit-150teleport-浮层不能假设触发器打开后保持静止)                             | 2026-08-25 | 基础组件、浮层、待办  | BPopover、Teleport、transform、抽屉动画、光标定位  | 已修复待上线 |
@@ -1146,7 +1150,7 @@ Word 目录链接是 `#书签` 形式。浏览器执行默认 hash 导航时会�
 
 #### 防回归约束
 
-1. 获取规则变更必须升级独立策略版本，不能修改 C4 消费版本或原地改写已激活快照。
+1. 获取规则变更必须升级独立策略版本，不能修改消费经济版本或原地改写已激活快照。
 2. 日规则只在完整账号自然日切换，周规则只在完整 ISO 周切换；已锁周期永不回落。
 3. 每日/每周/成就领取全部服务端重算并使用版本化唯一 ref，客户端进度只用于展示。
 4. 一个知识任务事件只对应一条不可变事实；每日随机槽必须使用不同的具体行为类型，不保留通用知识行动槽。同一事件不能完成两个任务，也不能同时从业务表和账本相加。
@@ -1186,7 +1190,7 @@ Word 目录链接是 `#书签` 形式。浏览器执行默认 hash 导航时会�
 
 - 日期：2026-08-13
 - 状态：已修复待上线
-- 影响范围：积分商店中的 AI/永久空间重复兑换、每日惊喜、积分抽奖、PWA 旧页面和弱网重试
+- 影响范围：积分商店中的 AI 与 C4 永久空间重复兑换、每日惊喜、积分抽奖、PWA 旧页面和弱网重试
 - 关键词：消费幂等、requestId、经济版本、expectedCost、响应丢失、免费抽、付费保底、一次性迁移
 
 #### 现象
@@ -1196,7 +1200,7 @@ Word 目录链接是 `#书签` 形式。浏览器执行默认 hash 导航时会�
 #### 误导线索与排除项
 
 - “按钮正在加载”只防同一组件内的快速连点，防不了超时、掉线、刷新、跨组件或跨版本重放。
-- 头像框有“已拥有”校验不等于商店具备幂等；AI、空间和抽奖都是合法的可重复消费。
+- 头像框有“已拥有”校验不等于商店具备幂等；C4 的 AI、空间和抽奖都曾是合法的可重复消费。C5 起空间改为有限次商品，除请求幂等外还必须满足账号级兑换上限，见 LN-PIT-161。
 - 只把免费奖池拆开但继续按历史总抽数算保底，仍会让免费抽改变用户下一次付费结果。
 - 在启动 `ensure*()` 中自动按旧流水回填，每次重启都有覆盖 C4 新进度的风险，不能当作方便的兼容逻辑。
 
@@ -3302,8 +3306,18 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **现象：** 赠送策略上线后首次全量同步会把历史赞助全部当成新订单发放；或者管理员打开 ¥250 待复核订单后，订单金额或归属已经变化，旧页面仍可只凭订单号把变化后的资产批给错误账号。退款若直接反向扣钱包，还可能把已消费余额扣成负数。
 - **根因：** 第三方订单时间并非稳定必返字段，`verified_at` 和首次同步时间只能证明轻笺何时看到订单，不能总是证明支付时间。人工审批若没有携带所见金额和归属快照，本质上缺少乐观并发条件；永久资产退款也不能假设赠送仍完整留在钱包。
 - **防回归约束：** 每个赠送策略版本首次写入的 `activated_at` 是不可移动边界；优先使用可信 `provider_created_at`，其次只接受策略启用后生成的轻笺下单凭证，策略前已观察订单明确排除，其他缺时订单转人工。订单、赠送行和钱包入账在同一事务内，一单一策略幂等。超过自动阈值的审批必须提交 `expectedTokens + expectedUserId` 并在锁内重验当前订单、赠送快照和策略；退款、状态反转、金额或归属变化只进入 `reversal_review`，不自动扣负数。
-- **验收：** 覆盖策略前历史单、策略后可信下单凭证、OAuth 缺时订单、未关联、归属冲突、¥200 边界、金额按分计算、旧审批快照、重复回调/同步、退款和注销后去标识化；公开帮助与所有可重跑旧知识脚本必须保留同一规则。
-- **相关代码：** `apps/server/util/afdianSupportRewardService.js`、`apps/server/util/afdianSupportRewardSchema.js`、`apps/server/router_handle/supportHandle.js`、`apps/web/src/view/admin/components/supportManagement/SupportManagement.vue`、`apps/server/migrations/20260825_ai_quota_and_support_rewards_knowledge.sql`。
+- **套餐扩展约束：** 带 `permanent` 或 `campaign` 结算意图的订单必须保存精确金额、目录版本、基础/预计 AI 与空间、首充候选和活动时窗快照；API 核验不一致只写人工复核，绝不能降级成纯支持或触发旧 `support-ai-v1`。首充最终资格必须在发放事务内依靠“轻笺账号 + SKU”和“爱发电身份哈希 + SKU”双唯一约束竞争，结算页的“首充可用”只能是候选提示。活动意图只在活动期内创建，但 24 小时有效快照不能因活动结束或暂停被重新解释；活动不得读写常驻首充。组合包 AI 与空间任一写入失败必须整体回滚，退款不恢复首充。订单已经入账后，供应商金额、归属或状态漂移只能更新复核状态，权益账本中的原实付金额与计算快照必须保持不可变，禁止为了记录反转后的订单字段而覆盖历史快照。账号注销时保留交易快照、匿名化首充身份并取消未消费意图；注销后晚到的付款只能进入 `account_deleted` 人工复核，禁止给墓碑 ID 创建 AI 钱包或空间资产。纯支持与套餐入口必须明确分开：绕过轻笺直接在爱发电付款且没有可信套餐意图时，始终只是零权益支持；关联同一身份只补支持记录和排行榜归属，绝不能补发 AI 或空间。开发环境遇到旧后端 404 或目录开关关闭时，只能从共享目录展示明确禁用结算的只读预览；不得为了看页面擅自重启连接非本地数据库的后端、打开支付开关，或在生产构建静默回退前端目录。
+- **注销补充约束：** `donation`、`permanent` 与 `campaign` 三类新版结算意图都承担交易快照职责。注销时，已消费意图改用不可逆墓碑用户标识，未消费意图同时取消并收短有效期，关联订单解除轻笺账号归属；只有没有交易快照职责的旧 `legacy` 意图可以直接删除。晚到的纯赞助不得重新归到已注销账号。
+- **验收：** 覆盖策略前历史单、策略后可信下单凭证、OAuth 缺时订单、未关联、归属冲突、¥200 边界、金额按分计算、旧审批快照、重复回调/同步、退款和注销后去标识化；套餐额外覆盖同账号、同爱发电身份跨账号、并发首充、少付/多付、活动开始/结束、24 小时意图、限购、组合事务回滚和关闭新功能后的待处理状态。公开帮助与所有可重跑旧知识脚本必须保留同一规则。
+- **相关代码：** `apps/server/util/afdianSupportRewardService.js`、`apps/server/util/afdianSupportEntitlementService.js`、`apps/server/util/afdianSupportPackageCatalog.js`、`apps/server/util/afdianSupportCampaignService.js`、`apps/server/router_handle/supportHandle.js`、`apps/web/src/view/admin/components/supportManagement/SupportManagement.vue`、`apps/server/migrations/20260825_ai_quota_and_support_rewards_knowledge.sql`、`apps/server/migrations/20260825_support_packages_v2.sql`。
+
+### LN-PIT-160：同一支付渠道不能代替不可变的订单用途
+
+- **现象：** 同样通过爱发电支付后，权益套餐金额被累计到支持者榜，或者用户直接进入爱发电主页的纯支持被金额档位误识别成 AI/空间购买；页面上“支持”和“购买”虽然分开，后端同步后又重新混在一起。
+- **根因：** 支付渠道、金额和爱发电档位只能说明如何付款，不能证明用户购买了什么。若每次读取时根据“是否有赠送”“金额是否匹配套餐”或“后来是否绑定账号”动态推断用途，同一订单会随配置、关联和目录版本漂移。
+- **防回归约束：** `support_orders.order_purpose` 是订单用途唯一事实，只能由既有冻结值或 API 核验后的可信 `custom_order_id` 意图确定；用途包含历史 `legacy_support`、新版零权益 `donation`、`entitlement_purchase` 和待复核 `unknown`。无自定义凭证的新订单默认为纯支持，携带未知凭证则失败关闭；用途一旦不是 `unknown`，Webhook 重推、全量同步、OAuth 关联和金额变化都不得改写。支持页、支持状态、支持者列表和排行榜只读取 `legacy_support|donation`；权益商店、购买历史与资产汇总只读取 `entitlement_purchase`。旧 `support-ai-v1` 只解释切换日前已承诺的历史支持，新纯支持固定使用零权益策略，既有已发资产不追回。新版纯赞助必须使用独立 `/api/support/donation/checkout`，旧 `/api/support/checkout?option=` 直接失败关闭；否则前后端滚动发布时，旧页面仍承诺赠送而新后端已按零权益处理，会在用户付款后形成不可补救的预期冲突。
+- **验收：** 覆盖轻笺内纯支持、直接爱发电支持、未关联后再关联、常驻购买、活动购买、未知/复用凭证、重复回调和迁移前历史单；逐项断言支持金额、购买金额、榜单、支持历史、购买历史和两类账本互斥。迁移需在套餐意图列存在或不存在时都能重复执行，Schema 门禁校验用途枚举、用途索引、纯支持零发放以及套餐意图与购买用途一致。
+- **相关代码：** `apps/server/util/afdianSupportService.js`、`apps/server/util/afdianSupportRewardService.js`、`apps/server/util/afdianSupportReadService.js`、`apps/server/util/afdianSupportSchema.js`、`apps/server/migrations/20260825_support_donation_store_split.sql`、`apps/web/src/view/support/SupportUs.vue`、`apps/web/src/view/entitlementStore/EntitlementStore.vue`。
 
 ### LN-PIT-156：角色硬编码的「虚拟满级」不能与真实经验额度并存
 
@@ -3323,3 +3337,47 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **防回归约束：** 保存快捷键不得调用、触发或间接复用强制版本接口；普通保存继续受内容去重、时间合并和每篇保留上限约束。只有用户点击明确写着“保存版本”的动作才创建 `reason = manual` 的版本。新增版本来源时必须同步前端封闭映射与中英文文案，禁止静默回退成“自动保存”。
 - **验证方法：** 静态交互回归锁定快捷键调用 `saveImmediately` 且不引用 `saveManualVersion`，顶部按钮仍绑定 `saveManualVersion/createNoteVersion`；来源映射测试覆盖 `manual`、`autosave`、`drawing_autosave`。浏览器分别在 PC/移动、浅色/深色检查自动/手动徽标、普通/悬停/选中、加载与空态，并通过 Mock/Network 证明快捷键只发送普通保存请求、顶部按钮才额外发送版本请求。
 - **相关代码：** `apps/web/src/view/noteLibrary/NoteDetail.vue`、`apps/web/src/components/noteLibrary/detail/NoteHeader.vue`、`apps/web/src/components/noteLibrary/detail/NoteVersionHistory.vue`、`apps/web/src/view/noteLibrary/NoteDetail.autosavePolicy.test.ts`。
+
+### LN-PIT-158：笔记库浏览范围、当前预览与目录展开必须使用独立且可恢复的状态源
+
+- **现象：** 有子页面的父笔记点击后写入 `parent` 查询参数，刷新仍保持选中；叶子笔记只写组件内存中的预览 ID，刷新后却回到之前浏览过的父目录。即使正文已经切到叶子笔记，左侧目录也可能因祖先未展开而看不到当前节点。
+- **根因：** “当前浏览哪个目录”“当前正在预览哪一页”“哪些树分支已展开”是三个可以同时存在的状态，却只让浏览目录和展开集合具备恢复能力；预览面板还单独重复请求面包屑，没有把权威详情路径交给目录树揭示当前页。补齐后若节点一挂载就立即清除待定位目标，异步恢复的其他展开分支及进入详情前记录的旧 `scrollTop` 仍可能随后改变布局、覆盖这次滚动。详情页之间切换若只沿用最初的 `from`，却不在成功导航后同步桌面预览 ID，返回列表也会重新打开进入编辑器前的旧笔记。
+- **防回归约束：** `parent` 继续只表达列表浏览范围；桌面预览 ID 使用按工作区 owner 隔离的 sessionStorage 状态，只缓存 ID，不缓存正文；展开集合继续独立保存。预览恢复必须重新读取权威详情，并优先复用详情响应内嵌的 breadcrumb 展开祖先和定位节点，缺失时才走独立路径接口。路径揭示只能增加展开项，不得覆盖浏览面包屑、URL、标签或搜索条件；显式关闭、切换目录、删除当前页及权威 404 必须清除预览恢复状态，瞬时网络错误不得清除。当前节点定位必须先恢复旧树滚动、等待全部异步分支加载完成并关闭自动恢复分支的高度动画，再以最新活动 ID 做最终校正；手动展开仍保留动画。编辑器内切换笔记只在保存与路由导航成功后同步桌面预览 ID，快速切换只允许最新目标落缓存；编辑页顶部返回仍按来源恢复预览，侧栏或正文面包屑的“笔记库”属于显式切换到根目录，只能在离开前保存成功后清除预览与当前选择，保存失败时不得提前破坏恢复状态。移动端继续以详情路由为当前页事实源。
+- **验收：** 分别从根列表、任意父目录和左侧树打开顶层叶子、嵌套叶子及“预览当前页面”模式的父笔记，刷新后正文、当前行高亮和祖先展开保持一致。预览存在时仅当前笔记显示选中样式，底层浏览范围继续保留在 URL/状态中但不显示浏览边框；关闭预览后浏览边框恢复。笔记库预览与桌面详情页在刷新恢复、点击切换或新建完成导致当前笔记 ID 变化时，都必须等待最新节点挂载及全部恢复请求稳定后滚动到侧栏可视区；旧树滚动位置不得反向覆盖定位。编辑器内从 A 切到 B 后，顶部返回必须恢复 B 的预览和目录高亮；保存失败、导航取消及 A→B→C 快速切换不得写入错误目标。显式点击“笔记库”仍进入无预览的根列表。自动测试覆盖 owner 隔离、关闭与 404 清理、内嵌路径无重复请求、浏览面包屑不被覆盖、两种工作区的节点延迟挂载、异步分支稳定、新建后定位及大纲/搜索后的延迟定位；PC 浅色/深色和常用缩放检查目录只滚动自身，移动端无嵌入预览回归。
+- **相关代码：** `apps/web/src/store/noteWorkspace.ts`、`apps/web/src/view/noteLibrary/NoteLibrary.vue`、`apps/web/src/components/noteLibrary/library/NoteReadonlyPreview.vue`、`apps/web/src/components/noteLibrary/tree/NoteLibrarySidebar.vue`。
+
+### LN-PIT-159：浮层关闭后的导航不能再读取会被重置的响应式草稿
+
+- **现象：** 移动端快速添加待办时已经填写标题、日期、优先级和提醒，点击“完善详情”进入 `/todo/new` 后所有初始值仍为空；快捷表单自身的 emit 测试和浮层 history 顺序测试却全部通过。快速添加还允许点击抽屉外蒙层直接关闭，软键盘打开时一次误触就会丢失尚未保存的捕获内容。
+- **影响范围：** 所有通过 `closeCurrentMobileOverlayThen` 从移动弹框、抽屉或全屏预览跳转路由、打开外链或交接下一层浮层，并在关闭时通过 watcher、卸载或 `reset()` 清理局部状态的前端流程。
+- **误导线索：** 快捷表单发出的 payload 完整，目标页也能正确消费 `history.state`，源码中还明确写着 `state: { todoInitialValues: todoDraft.value }`，看起来像输入绑定或目标编辑器初始化失败；真正丢失发生在两者之间的异步等待窗口。
+- **根因：** `closeCurrentMobileOverlayThen` 必须先关闭当前浮层并等待异步 `popstate`，快速添加的 `visible` watcher 在这段等待中执行 `reset()`，把 `todoDraft` 清为 `undefined`；导航回调随后才读取同一个 ref。响应式对象若未被清空，直接交给 `history.pushState` 还可能因为 Vue Proxy 不可序列化而失败。蒙层关闭规则只绑定 `submitting`，也没有把“捕获表单含未保存输入”作为稳定的容器语义。
+- **修复：** 在关闭抽屉前构造普通的 `todoInitialValues` 快照，桌面详情与移动路由复用同一份字段值；移动导航回调只闭包读取快照，不再读取会被 reset 的 ref。移动端快速添加固定 `maskClosable = false`，未填写、已填写、加载和错误状态均保持一致，只由明确关闭按钮或系统返回退出。
+- **防回归约束：** 任何“关闭浮层后再执行”的数据交接都必须先复制普通可序列化快照；`next` 回调不得读取关闭生命周期会清理的 `ref`、子组件表单或瞬时 Store，也不得把响应式 Proxy 直接写进路由 state。回归测试必须真实制造“close 已执行、reset 已发生、history 尚未释放”的顺序，再验证最终消费者收到完整数据，禁止只断言 emit payload 或源码字符串存在。带未保存捕获内容的同一抽屉不得依据脏状态动态切换蒙层是否可关闭；需要防误触时使用固定容器规则。
+- **验证方法：** 自动测试填入标题、说明、优先级、截止时间、清单和每日提醒，点击完善详情后先断言抽屉已关闭且路由尚未执行，等待一次模拟 history 释放后断言 `/todo/new` 的 `todoInitialValues` 字段完整；同一挂载断言移动 `BDrawer.maskClosable` 恒为 false。浏览器在 320、375、430 CSS 像素、浅色/深色及 `?renderProfile=mobile` 下检查未填写、已填写、配置加载、错误与提交状态，点击蒙层均不关闭，标题栏关闭和系统返回各只退出一层，完善详情首次点击即可进入且字段无丢失。
+- **相关代码：** `apps/web/src/components/inbox/QuickCaptureModal.vue`、`apps/web/src/components/inbox/QuickCaptureModal.details.test.ts`、`apps/web/src/utils/mobileOverlayHistory.ts`、`apps/web/src/view/todo/TodoCreate.vue`。
+
+### LN-PIT-161：永久空间定价合理不代表可以无限重复兑换
+
+- **现象：** 近三周高强度用户的积分中位数已经接近 1600，单次看 500 / 1600 / 5200 的三档空间价格并不便宜；但极端稳定赚分账号若长期重复购买同一永久扩容包，一年仍可累积约 10GB 以上，永久存储成本会随账号年限持续叠加。
+- **根因：** C4 只把 `consumable` 理解为可重复购买，并用请求收据解决“同一次操作不能重复执行”，没有区分“同一个请求幂等”和“同一个账号一生最多购买几次”这两类约束。前端置灰、积分不足或提高价格都不能成为永久资产上限。
+- **防回归约束：** 商品兑换上限属于经济合同，必须升级目录版本，禁止原地修改已发布快照。有限次商品使用独立 `points_shop_item_claims` 事实表和 `(user_id, item_id)` 唯一键；购买事务在账号行锁内先检查并竞争领取事实，再扣分、记流水和发空间，任一失败整体回滚。历史只回填 `operation_type=shop_buy` 或 `points_log.reason=buy` 的三档空间直接兑换；抽奖、运营赠送和人民币购买不占积分档位资格。三档空间每账号各一次，AI 包继续可重复。商店状态一次读取账号全部领取事实，禁止逐商品查询；旧标签页被服务端拒绝后必须刷新权威状态。
+- **验收：** 目录快照证明 C4 无上限、C5 同价但三档 `purchaseLimit=1`；覆盖历史已兑、三档互不影响、余额不足、两个不同请求并发、唯一键竞争、同请求回放、AI 重复兑换和账号注销清理。迁移重复执行不得新增资产或改变积分，Schema 门禁必须检查事实表主键、操作唯一键和 `points-economy-c5-storage-limits-v1` 标记。浏览器覆盖可兑换、积分不足、已兑换、加载、错误、只读，PC/移动及浅色/深色状态。
+- **相关代码：** `apps/server/util/pointsEconomyCatalog.js`、`apps/server/util/points.js`、`apps/server/migrations/20260826_points_economy_c5_storage_limits.sql`、`apps/web/src/components/growth/PointsShop.vue`、`docs/points-economy.md`。
+
+### LN-PIT-162：本地后端不能把生产数据库地址当作开发默认值
+
+- **现象：** 本地前端显示的积分目录与线上进程不同，进一步检查发现本机后端 `.env` 直接指向远程生产数据库；启动应用时多个 `ensure*()` 会自动建表或补列，普通页面交互、Worker 和测试脚本也可能产生真实写入。仅提醒开发者“不要点保存”无法覆盖这些隐式路径。
+- **根因：** 数据库适配器曾在代码中内置远程主机与账号兜底，也没有区分本地/生产运行时；保护若只加在 `app.js`，直接加载同一适配器的文档 Worker、图标 Worker和脚本仍可绕过。
+- **防回归约束：** 环境门禁放在数据库适配器入口，覆盖全部进程。本地运行时只允许回环地址或 Unix Socket，远程地址默认失败关闭；确需远程写入必须由当前任务授权并用一次性 `ALLOW_REMOTE_DATABASE_WRITES=true` 显式确认，不得长期保存在 `.env`。生产配置显式使用 `LIGHTNOTE_RUNTIME_ENV=production`；代码内主机兜底只能是 `127.0.0.1`，不得提交生产地址、账号或凭据。`NODE_ENV=test` 继续完全禁用真实数据库。
+- **验收：** 单测覆盖回环、Socket、远程主机、未知环境、显式风险确认、生产运行时和错误脱敏；静态检查数据库适配器不存在公网主机兜底。本机 `.env` 标记 local 且远程库时，任意导入数据库的进程都应在业务查询前报 `REMOTE_DATABASE_WRITE_BLOCKED`；本地 MySQL 与生产显式环境分别可正常启动。
+- **相关代码：** `apps/server/util/databaseConnectionSafety.js`、`apps/server/db/index.js`、`apps/server/.env.example`、`docs/development.md`。
+### LN-PIT-163：CSS 数学函数内的百分比减法必须显式包裹 `calc()`
+
+- **现象：** 移动端资源商店和支持页本应保留 12px 页边距，浏览器实际计算出的主体宽度却只有视口的 76%，形成明显窄栏；仅看源码中的 `100% - 24px` 很容易误以为结果应是视口宽度减去 24px。
+- **影响范围：** 经 Vite 样式处理链编译的 `.vue/.less/.css`；桌面窗口较窄、平板和移动端最明显，同类写法也可能让共享页面阅读区宽度异常。
+- **根因：** 在 `min()`、`max()` 或 `clamp()` 中直接写 `100% - 24px`，当前样式处理链会把它改写为 `76%`。该表达式虽然在部分现代 CSS 解析器中可接受，但没有形成项目构建链所需的明确嵌套数学边界。
+- **修复：** 写成 `min(calc(100% - 48px), 880px)`；移动断点也可拆成 `width: calc(100% - 24px)` 与 `max-width`。资源商店、支持页和分享阅读页已统一修正。
+- **防回归约束：** CSS 数学函数参数中凡出现百分比或视口单位减固定长度，减法必须显式包裹在 `calc()` 内；禁止直接写 `min(100% - 24px, ...)`。`renderingParityGate.test.ts` 扫描所有业务样式并阻止该模式重新进入代码。
+- **验证方法：** 自动门禁通过后，在 390px 视口读取主体 `getBoundingClientRect().width`，24px 总页边距场景应为 366px；同时检查 PC/移动、浅色/深色，确认页面没有窄栏、横向溢出或按钮未撑满。
+- **相关代码：** `apps/web/src/view/entitlementStore/EntitlementStore.vue`、`apps/web/src/view/support/SupportUs.vue`、`apps/web/src/view/share/NoteShareReader.vue`、`apps/web/src/config/renderingParityGate.test.ts`。

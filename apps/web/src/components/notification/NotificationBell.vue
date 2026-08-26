@@ -116,7 +116,7 @@
   import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
-  import { useUserStore } from '@/store';
+  import { inboxStore, useUserStore } from '@/store';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import { useNotification, type NotificationItem } from '@/composables/useNotification.ts';
@@ -139,6 +139,7 @@
   const { t, locale } = useI18n();
   const router = useRouter();
   const user = useUserStore();
+  const inbox = inboxStore();
   const isMobileLayout = useMobileLayout();
   const { unreadTotal, unreadByType, refreshUnread, fetchList, markRead, markAllRead, deleteNotifications } =
     useNotification();
@@ -328,7 +329,9 @@
       const res = await completeTodo(todoId, { silent: true });
       if (res.status === 200) {
         n.todoState = 'completed';
-        await markNotificationRead(n);
+        // 通知、顶部导航与移动底栏分别持有通知未读数和待办注意力计数。
+        // 完成成功后同步两份权威读模型，不能依赖进入待办页时顺带刷新角标。
+        await Promise.all([markNotificationRead(n), inbox.refreshCount()]);
         message.success(t('notification.todoCompleted'));
       } else if (res.status === 404) {
         n.todoState = 'unavailable';

@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { marked } from 'marked';
-import { normalizeMarkdownTaskListHtml, noteHtmlToMarkdown, promoteEmptyMarkdownTaskToken } from './noteHtmlToMarkdown';
+import {
+  makeNotePreviewCheckboxesReadonly,
+  normalizeMarkdownTaskListHtml,
+  noteHtmlToMarkdown,
+  promoteEmptyMarkdownTaskToken,
+} from './noteHtmlToMarkdown';
 
 describe('noteHtmlToMarkdown', () => {
   it('切换到 Markdown 时保留轻笺图片尺寸元数据', () => {
@@ -63,6 +68,21 @@ describe('noteHtmlToMarkdown', () => {
     expect(previewHtml).toContain('class="note-task-list-item"');
     expect(previewHtml).toContain('class="note-todo-checkbox"');
     expect(previewHtml).toContain('disabled');
+  });
+
+  it('HTML 与 Markdown 的阅读预览复选框都不可点击或聚焦', () => {
+    const previewHtml = makeNotePreviewCheckboxesReadonly(
+      '<p><input type="checkbox" class="note-todo-checkbox"> 未完成</p><p><input checked disabled type="checkbox"> 已完成</p>',
+    );
+    const root = document.createElement('div');
+    root.innerHTML = previewHtml;
+    const checkboxes = Array.from(root.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
+
+    expect(checkboxes).toHaveLength(2);
+    expect(checkboxes.every((checkbox) => checkbox.disabled)).toBe(true);
+    expect(checkboxes.every((checkbox) => checkbox.getAttribute('aria-disabled') === 'true')).toBe(true);
+    expect(checkboxes.every((checkbox) => checkbox.tabIndex === -1)).toBe(true);
+    expect(checkboxes[1].checked).toBe(true);
   });
 
   it('工具栏刚插入的空 Markdown 待办也渲染为复选框', () => {

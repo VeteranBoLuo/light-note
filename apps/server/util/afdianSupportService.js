@@ -1,5 +1,10 @@
 import crypto from 'node:crypto';
-import { AFDIAN_CHECKOUT_OPTIONS } from '@lightnote/shared';
+import {
+  AFDIAN_CHECKOUT_OPTIONS,
+  AFDIAN_ORDER_PURPOSE,
+  AFDIAN_PURE_SUPPORT_POLICY,
+  SUPPORT_PACKAGE_CATALOG_VERSION,
+} from '@lightnote/shared';
 import pool from '../db/index.js';
 import { afdianError, getAfdianApiConfig, getAfdianFeatureState } from './afdianConfig.js';
 import { normalizeAfdianOrder, queryAfdianOrders, queryAfdianPublicProfile } from './afdianClient.js';
@@ -10,8 +15,15 @@ import {
 } from './afdianSupportReadService.js';
 import { stableAgentErrorCode } from './agent/logSafety.js';
 import { syncAfdianRewardForOrder, syncAfdianRewardsForUser } from './afdianSupportRewardService.js';
+import {
+  getSupportPackage,
+  getSupportPackageFeatureState,
+  supportProviderIdentityHash,
+} from './afdianSupportPackageCatalog.js';
+import { lockCampaignSkuForCheckout } from './afdianSupportCampaignService.js';
 
 const CHECKOUT_TOKEN_TTL_DAYS = 30;
+const CAMPAIGN_CHECKOUT_TTL_HOURS = 24;
 const PENDING_BATCH_SIZE = 20;
 const RECONCILE_INTERVAL_MS = 5 * 60 * 1000;
 const FULL_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -32,6 +44,55 @@ function providerIdentityMatches(left, right) {
   return left.providerUserId === right.providerUserId;
 }
 
+const KNOWN_ORDER_PURPOSES = new Set([
+  AFDIAN_ORDER_PURPOSE.LEGACY_SUPPORT,
+  AFDIAN_ORDER_PURPOSE.DONATION,
+  AFDIAN_ORDER_PURPOSE.ENTITLEMENT_PURCHASE,
+]);
+
+/**
+ * 只使用数据库里已经冻结的旧用途或权威 custom_order_id 意图分类。
+ * 无意图的新增爱发电主页订单是纯支持；带未知凭证的订单保持 unknown 进入人工复核，
+ * 绝不能因金额相同而降级成支持或误发套餐。
+ */
+export function resolveAfdianOrderPurpose({
+  existingPurpose = '',
+  intent = null,
+  hasCustomOrderId = false,
+  providerCreatedAt = null,
+  pureSupportActivatedEpoch = 0,
+} = {}) {
+  const persisted = String(existingPurpose || '');
+  if (KNOWN_ORDER_PURPOSES.has(persisted)) return persisted;
+  const intentType = String(intent?.intent_type || '');
+  if (['permanent', 'campaign'].includes(intentType)) return AFDIAN_ORDER_PURPOSE.ENTITLEMENT_PURCHASE;
+  if (intentType === 'donation') return AFDIAN_ORDER_PURPOSE.DONATION;
+  if (intentType === 'legacy') return AFDIAN_ORDER_PURPOSE.LEGACY_SUPPORT;
+  if (hasCustomOrderId) return AFDIAN_ORDER_PURPOSE.UNKNOWN;
+  const activatedEpoch = Number(pureSupportActivatedEpoch || 0);
+  if (activatedEpoch > 0) {
+    const providerEpoch = Number(providerCreatedAt || 0);
+    if (!providerEpoch) return AFDIAN_ORDER_PURPOSE.UNKNOWN;
+    if (providerEpoch <= activatedEpoch) return AFDIAN_ORDER_PURPOSE.LEGACY_SUPPORT;
+  }
+  return AFDIAN_ORDER_PURPOSE.DONATION;
+}
+
+async function loadPureSupportActivatedEpoch(connection) {
+  const [rows] = await connection.query(
+    `SELECT UNIX_TIMESTAMP(activated_at) AS activated_epoch
+       FROM support_reward_policy_state
+      WHERE policy_version = ?
+      LIMIT 1`,
+    [AFDIAN_PURE_SUPPORT_POLICY.version],
+  );
+  const activatedEpoch = Number(rows[0]?.activated_epoch || 0);
+  if (!Number.isSafeInteger(activatedEpoch) || activatedEpoch <= 0) {
+    throw afdianError('AFDIAN_PURE_SUPPORT_POLICY_MISSING', '赞助规则切换边界尚未就绪', 503);
+  }
+  return activatedEpoch;
+}
+
 function buildCheckoutUrl(option, token) {
   const url = new URL('https://ifdian.net/order/create');
   if (option.planId) {
@@ -40,6 +101,14 @@ function buildCheckoutUrl(option, token) {
   } else {
     url.searchParams.set('user_id', option.creatorId);
   }
+  url.searchParams.set('custom_order_id', token);
+  return url.toString();
+}
+
+function buildPackageCheckoutUrl({ creatorId, amount }, token) {
+  const url = new URL('https://ifdian.net/order/create');
+  url.searchParams.set('user_id', creatorId);
+  url.searchParams.set('custom_price', Number(amount).toFixed(2));
   url.searchParams.set('custom_order_id', token);
   return url.toString();
 }
@@ -92,11 +161,173 @@ export async function createAfdianCheckoutIntent({ userId, optionKey, db = pool 
   const id = crypto.randomUUID();
   await db.query(
     `INSERT INTO support_checkout_intents
-      (id, token_hash, user_id, option_key, expires_at)
-     VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? DAY))`,
-    [id, sha256(token), userId, option.key, CHECKOUT_TOKEN_TTL_DAYS],
+      (id, token_hash, user_id, option_key, intent_type, catalog_version, quoted_amount, expires_at)
+     VALUES (?, ?, ?, ?, 'donation', ?, ?, DATE_ADD(NOW(), INTERVAL ? DAY))`,
+    [
+      id,
+      sha256(token),
+      userId,
+      option.key,
+      AFDIAN_PURE_SUPPORT_POLICY.version,
+      option.amount == null ? null : Number(option.amount).toFixed(2),
+      CHECKOUT_TOKEN_TTL_DAYS,
+    ],
   );
   return { url: buildCheckoutUrl(option, token), expiresIn: CHECKOUT_TOKEN_TTL_DAYS * 24 * 60 * 60 };
+}
+
+async function regularFirstPurchaseCandidate(connection, { userId, skuId }) {
+  const [userClaims] = await connection.query(
+    'SELECT 1 FROM support_first_purchase_claims WHERE user_id = ? AND sku_id = ? LIMIT 1',
+    [userId, skuId],
+  );
+  if (userClaims.length) return false;
+  const [links] = await connection.query(
+    'SELECT provider_user_id FROM support_account_links WHERE user_id = ? LIMIT 1',
+    [userId],
+  );
+  const identityHash = supportProviderIdentityHash(links[0]?.provider_user_id);
+  if (!identityHash) return true;
+  const [identityClaims] = await connection.query(
+    'SELECT 1 FROM support_first_purchase_claims WHERE provider_identity_hash = ? AND sku_id = ? LIMIT 1',
+    [identityHash, skuId],
+  );
+  return !identityClaims.length;
+}
+
+/** 生成金额固定、权益快照不可变的一次性套餐结算意图。 */
+export async function createAfdianPackageCheckoutIntent({
+  userId,
+  skuId,
+  catalogVersion,
+  db = pool,
+  env = process.env,
+  now = new Date(),
+}) {
+  const feature = getSupportPackageFeatureState(env);
+  if (!feature.checkoutEnabled) {
+    throw afdianError('SUPPORT_PACKAGE_CHECKOUT_DISABLED', '套餐结算暂未开放', 503);
+  }
+  const normalizedUserId = String(userId || '').trim();
+  if (!normalizedUserId) {
+    throw afdianError('SUPPORT_PACKAGE_AUTH_REQUIRED', '请先登录后再选择套餐', 401);
+  }
+  const apiConfig = getAfdianApiConfig();
+  const normalizedSkuId = String(skuId || '').trim();
+  const normalizedVersion = String(catalogVersion || '').trim();
+  const token = crypto.randomBytes(32).toString('base64url');
+  const id = crypto.randomUUID();
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    let amount;
+    let intentType;
+    let publicSkuId;
+    let baseAiTokens;
+    let baseStorageMb;
+    let quotedAiTokens;
+    let quotedStorageMb;
+    let firstPurchaseCandidate = false;
+    let campaignId = null;
+    let campaignSkuId = null;
+    let campaignVersion = null;
+    let campaignUserLimit = null;
+    let campaignStartsAt = null;
+    let campaignEndsAt = null;
+    let expiresIn;
+
+    if (normalizedVersion === SUPPORT_PACKAGE_CATALOG_VERSION) {
+      const definition = getSupportPackage(normalizedSkuId);
+      if (!definition) throw afdianError('SUPPORT_PACKAGE_SKU_INVALID', '请选择有效的套餐', 400);
+      firstPurchaseCandidate = await regularFirstPurchaseCandidate(connection, {
+        userId: normalizedUserId,
+        skuId: definition.skuId,
+      });
+      amount = definition.amount;
+      intentType = 'permanent';
+      publicSkuId = definition.skuId;
+      baseAiTokens = definition.base.aiTokens;
+      baseStorageMb = definition.base.storageMb;
+      quotedAiTokens = firstPurchaseCandidate ? definition.firstPurchase.aiTokens : definition.base.aiTokens;
+      quotedStorageMb = firstPurchaseCandidate ? definition.firstPurchase.storageMb : definition.base.storageMb;
+      expiresIn = CHECKOUT_TOKEN_TTL_DAYS * 24 * 60 * 60;
+    } else {
+      if (!feature.campaignsEnabled) {
+        throw afdianError('SUPPORT_CAMPAIGN_CHECKOUT_DISABLED', '限时套餐当前不可购买', 503);
+      }
+      const sku = await lockCampaignSkuForCheckout(connection, {
+        campaignSkuId: normalizedSkuId,
+        catalogVersion: normalizedVersion,
+        userId: normalizedUserId,
+        now,
+      });
+      amount = Number(sku.amount);
+      intentType = 'campaign';
+      publicSkuId = sku.sku_id;
+      baseAiTokens = Number(sku.ai_tokens);
+      baseStorageMb = Number(sku.storage_mb);
+      quotedAiTokens = baseAiTokens;
+      quotedStorageMb = baseStorageMb;
+      campaignId = sku.campaign_id;
+      campaignSkuId = sku.id;
+      campaignVersion = Number(sku.version);
+      campaignUserLimit = Number(sku.per_user_limit);
+      campaignStartsAt = sku.starts_at;
+      campaignEndsAt = sku.ends_at;
+      expiresIn = CAMPAIGN_CHECKOUT_TTL_HOURS * 60 * 60;
+    }
+
+    await connection.query(
+      `INSERT INTO support_checkout_intents
+        (id, token_hash, user_id, option_key, intent_type, intent_status, sku_id,
+         catalog_version, quoted_amount, base_ai_tokens, base_storage_mb,
+         quoted_ai_tokens, quoted_storage_mb, first_purchase_candidate,
+         campaign_id, campaign_sku_id, campaign_version, campaign_starts_at,
+         campaign_user_limit, campaign_ends_at, expires_at)
+       VALUES (?, ?, ?, 'package', ?, 'issued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+               DATE_ADD(NOW(), INTERVAL ? SECOND))`,
+      [
+        id,
+        sha256(token),
+        normalizedUserId,
+        intentType,
+        publicSkuId,
+        normalizedVersion,
+        Number(amount).toFixed(2),
+        baseAiTokens,
+        baseStorageMb,
+        quotedAiTokens,
+        quotedStorageMb,
+        firstPurchaseCandidate ? 1 : 0,
+        campaignId,
+        campaignSkuId,
+        campaignVersion,
+        campaignStartsAt,
+        campaignUserLimit,
+        campaignEndsAt,
+        expiresIn,
+      ],
+    );
+    if (intentType === 'campaign') {
+      await connection.query(
+        `UPDATE support_campaign_user_limits
+            SET active_intent_id = ?, active_until = DATE_ADD(NOW(), INTERVAL ? SECOND)
+          WHERE campaign_sku_id = ? AND user_id = ?`,
+        [id, expiresIn, campaignSkuId, normalizedUserId],
+      );
+    }
+    await connection.commit();
+    return {
+      url: buildPackageCheckoutUrl({ creatorId: apiConfig.creatorUserId, amount }, token),
+      expiresIn,
+      firstPurchaseCandidate,
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
 
 export async function getAfdianSupportState({ userId = '', authenticated = false, db = pool } = {}) {
@@ -108,7 +339,6 @@ export async function getAfdianSupportState({ userId = '', authenticated = false
       linked: false,
       orderCount: 0,
       totalAmount: '0.00',
-      grantedTokens: 0,
     };
   }
   const [[links], [totals], publicPreference, recentOrders] = await Promise.all([
@@ -121,17 +351,17 @@ export async function getAfdianSupportState({ userId = '', authenticated = false
     ),
     db.query(
       `SELECT COUNT(*) AS order_count, COALESCE(SUM(o.total_amount), 0) AS total_amount,
-              COALESCE(SUM(g.granted_tokens), 0) AS granted_tokens,
               MAX(COALESCE(o.ranking_observed_at, o.verified_at, o.create_time)) AS last_support_at
          FROM support_orders o
-         LEFT JOIN support_reward_grants g ON g.support_order_id = o.id
         WHERE o.light_note_user_id = ?
           AND o.verification_state = 'api_verified'
-          AND o.provider_status = 2`,
+          AND o.provider_status = 2
+          AND o.order_purpose IN ('legacy_support','donation')
+          AND o.ownership_source <> 'conflict'`,
       [userId],
     ),
     getAfdianPublicPreference({ userId, db }),
-    getAfdianUserOrders({ userId, page: 1, pageSize: 3, db }),
+    getAfdianUserOrders({ userId, page: 1, pageSize: 3, scope: 'support', db }),
   ]);
   const link = links[0] || null;
   let providerAccount = link ? { name: link.provider_name || null, avatarUrl: link.provider_avatar_url || null } : null;
@@ -155,9 +385,50 @@ export async function getAfdianSupportState({ userId = '', authenticated = false
     providerAccount,
     orderCount: Number(totals[0]?.order_count || 0),
     totalAmount: Number(totals[0]?.total_amount || 0).toFixed(2),
-    grantedTokens: Number(totals[0]?.granted_tokens || 0),
     lastSupportAt: totals[0]?.last_support_at || null,
     publicPreference,
+    recentOrders: recentOrders.items,
+  };
+}
+
+/** 用户权益商店订单摘要；与纯支持统计、榜单偏好和爱发电关联信息完全分离。 */
+export async function getAfdianEntitlementStoreState({ userId = '', authenticated = false, db = pool } = {}) {
+  const feature = getAfdianFeatureState();
+  if (!authenticated || !userId) {
+    return {
+      authenticated: false,
+      orderSyncAvailable: feature.orderSyncAvailable,
+      orderCount: 0,
+      totalAmount: '0.00',
+      grantedTokens: 0,
+      grantedStorageMb: 0,
+      recentOrders: [],
+    };
+  }
+  const [[totals], recentOrders] = await Promise.all([
+    db.query(
+      `SELECT COUNT(*) AS order_count, COALESCE(SUM(o.total_amount), 0) AS total_amount,
+              COALESCE(SUM(e.granted_ai_tokens), 0) AS granted_tokens,
+              COALESCE(SUM(e.granted_storage_mb), 0) AS granted_storage_mb,
+              MAX(COALESCE(o.verified_at, o.create_time)) AS last_purchase_at
+         FROM support_orders o
+         LEFT JOIN support_entitlement_grants e ON e.support_order_id = o.id
+        WHERE o.light_note_user_id = ?
+          AND o.verification_state = 'api_verified'
+          AND o.provider_status = 2
+          AND o.order_purpose = 'entitlement_purchase'`,
+      [userId],
+    ),
+    getAfdianUserOrders({ userId, page: 1, pageSize: 4, scope: 'purchase', db }),
+  ]);
+  return {
+    authenticated: true,
+    orderSyncAvailable: feature.orderSyncAvailable,
+    orderCount: Number(totals[0]?.order_count || 0),
+    totalAmount: Number(totals[0]?.total_amount || 0).toFixed(2),
+    grantedTokens: Number(totals[0]?.granted_tokens || 0),
+    grantedStorageMb: Number(totals[0]?.granted_storage_mb || 0),
+    lastPurchaseAt: totals[0]?.last_purchase_at || null,
     recentOrders: recentOrders.items,
   };
 }
@@ -184,16 +455,20 @@ export function resolveAfdianOwnership({ currentUserId, currentSource = '', link
 async function findMatchingIntent(connection, order) {
   if (!order.customOrderId) return null;
   const [rows] = await connection.query(
-    `SELECT id, user_id, provider_user_id, provider_private_id, expires_at, first_used_at
+    `SELECT id, user_id, provider_user_id, provider_private_id, expires_at, first_used_at,
+            intent_type, consumed_order_id
        FROM support_checkout_intents
       WHERE token_hash = ?
-        AND (first_used_at IS NOT NULL OR expires_at >= NOW())
       LIMIT 1
       FOR UPDATE`,
     [sha256(order.customOrderId)],
   );
   const intent = rows[0] || null;
   if (!intent) return null;
+  const intentType = String(intent.intent_type || 'legacy');
+  if (intentType === 'legacy' && !intent.first_used_at && new Date(intent.expires_at).getTime() < Date.now()) {
+    return null;
+  }
   if (
     intent.first_used_at &&
     !providerIdentityMatches(
@@ -201,7 +476,7 @@ async function findMatchingIntent(connection, order) {
       order,
     )
   ) {
-    return null;
+    return intentType === 'legacy' ? null : { ...intent, identity_conflict: true };
   }
   return intent;
 }
@@ -229,7 +504,7 @@ export async function applyVerifiedAfdianOrder(input, { db = pool } = {}) {
   try {
     await connection.beginTransaction();
     const [existingRows] = await connection.query(
-      `SELECT id, light_note_user_id, ownership_source
+      `SELECT id, checkout_intent_id, light_note_user_id, ownership_source, order_purpose
          FROM support_orders
         WHERE provider_order_no = ?
         LIMIT 1
@@ -238,27 +513,66 @@ export async function applyVerifiedAfdianOrder(input, { db = pool } = {}) {
     );
     const existing = existingRows[0] || null;
     const intent = await findMatchingIntent(connection, order);
+    const hasCustomOrderId = Boolean(order.customOrderId);
+    const persistedPurpose = String(existing?.order_purpose || '');
+    const pureSupportActivatedEpoch =
+      !intent && !hasCustomOrderId && !KNOWN_ORDER_PURPOSES.has(persistedPurpose)
+        ? await loadPureSupportActivatedEpoch(connection)
+        : 0;
+    const purposeEvidence = {
+      intent,
+      hasCustomOrderId,
+      providerCreatedAt: order.providerCreatedAt,
+      pureSupportActivatedEpoch,
+    };
+    const incomingPurpose = resolveAfdianOrderPurpose(purposeEvidence);
+    const orderPurpose = resolveAfdianOrderPurpose({
+      ...purposeEvidence,
+      existingPurpose: persistedPurpose,
+    });
+    const purposeConflict = Boolean(
+      existing &&
+      KNOWN_ORDER_PURPOSES.has(String(existing.order_purpose || '')) &&
+      hasCustomOrderId &&
+      incomingPurpose !== String(existing.order_purpose),
+    );
+    const identityConflict = Boolean(intent?.identity_conflict);
+    const ownershipIntent = purposeConflict ? null : intent;
     const linkUserIds = await findLinkedUsers(connection, order);
-    const ownership = resolveAfdianOwnership({
+    const resolvedOwnership = resolveAfdianOwnership({
       currentUserId: existing?.light_note_user_id ? String(existing.light_note_user_id) : null,
       currentSource: String(existing?.ownership_source || ''),
       linkUserIds,
-      intent,
+      intent: ownershipIntent,
     });
+    const ownership = purposeConflict || identityConflict
+      ? {
+          userId:
+            existing?.light_note_user_id || intent?.user_id || resolvedOwnership.userId || null,
+          source: 'conflict',
+        }
+      : resolvedOwnership;
+    const checkoutIntentId = purposeConflict
+      ? existing?.checkout_intent_id || null
+      : intent?.id || existing?.checkout_intent_id || null;
     const id = existing?.id || crypto.randomUUID();
     await connection.query(
       `INSERT INTO support_orders
         (id, provider_order_no, provider_user_id, provider_private_id, checkout_intent_id,
-         light_note_user_id, ownership_source, plan_id, product_type, month, total_amount,
+         light_note_user_id, ownership_source, order_purpose, plan_id, product_type, month, total_amount,
          show_amount, provider_status, provider_created_at, verification_state, verified_at, ranking_observed_at,
          retry_count, next_retry_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FROM_UNIXTIME(?), 'api_verified', NOW(), NOW(), 0, NULL)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FROM_UNIXTIME(?), 'api_verified', NOW(), NOW(), 0, NULL)
        ON DUPLICATE KEY UPDATE
          provider_user_id = VALUES(provider_user_id),
          provider_private_id = VALUES(provider_private_id),
          checkout_intent_id = VALUES(checkout_intent_id),
          light_note_user_id = VALUES(light_note_user_id),
          ownership_source = VALUES(ownership_source),
+         order_purpose = CASE
+           WHEN order_purpose = 'unknown' THEN VALUES(order_purpose)
+           ELSE order_purpose
+         END,
          plan_id = VALUES(plan_id),
          product_type = VALUES(product_type),
          month = VALUES(month),
@@ -275,9 +589,10 @@ export async function applyVerifiedAfdianOrder(input, { db = pool } = {}) {
         order.providerOrderNo,
         order.providerUserId,
         order.providerPrivateId,
-        intent?.id || null,
+        checkoutIntentId,
         ownership.userId,
         ownership.source,
+        orderPurpose,
         order.planId,
         order.productType,
         order.month,
@@ -588,6 +903,7 @@ export function startAfdianReconciliationScheduler({ db = pool } = {}) {
           `DELETE FROM support_checkout_intents
             WHERE first_used_at IS NULL
               AND expires_at < NOW()
+              AND intent_type = 'legacy'
             LIMIT 500`,
         )
         .catch(() => {});

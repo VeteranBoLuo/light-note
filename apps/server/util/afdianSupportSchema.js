@@ -40,6 +40,7 @@ export const AFDIAN_SUPPORT_TABLE_SQL = Object.freeze([
     checkout_intent_id char(36) DEFAULT NULL,
     light_note_user_id varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
     ownership_source varchar(24) NOT NULL DEFAULT 'unlinked',
+    order_purpose varchar(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'unknown',
     plan_id varchar(128) DEFAULT NULL,
     product_type tinyint unsigned NOT NULL DEFAULT 0,
     month int unsigned NOT NULL DEFAULT 1,
@@ -61,7 +62,9 @@ export const AFDIAN_SUPPORT_TABLE_SQL = Object.freeze([
     KEY idx_support_order_user_status (light_note_user_id, verification_state, provider_status, create_time),
     KEY idx_support_order_provider_user (provider_user_id, provider_private_id, create_time),
     KEY idx_support_order_checkout (checkout_intent_id),
-    KEY idx_support_order_retry (verification_state, next_retry_at, retry_count)
+    KEY idx_support_order_retry (verification_state, next_retry_at, retry_count),
+    KEY idx_support_order_purpose_ranking
+      (order_purpose, verification_state, provider_status, ranking_observed_at, light_note_user_id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
   `CREATE TABLE IF NOT EXISTS support_public_preferences (
     user_id varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
@@ -87,6 +90,11 @@ const AFDIAN_SUPPORT_COLUMN_PATCHES = Object.freeze([
   ['support_account_links', 'identity_refreshed_at', 'datetime DEFAULT NULL AFTER provider_avatar_url'],
   ['support_orders', 'ranking_observed_at', 'datetime DEFAULT NULL AFTER verified_at'],
   ['support_orders', 'provider_created_at', 'datetime DEFAULT NULL AFTER provider_status'],
+  [
+    'support_orders',
+    'order_purpose',
+    "varchar(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'unknown' AFTER ownership_source",
+  ],
 ]);
 
 async function ensureColumn(db, table, column, definition) {
@@ -130,6 +138,28 @@ async function ensureRankingIndex(db) {
   }
 }
 
+async function ensurePurposeRankingIndex(db) {
+  const [rows] = await db.query(
+    `SELECT 1
+       FROM information_schema.STATISTICS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'support_orders'
+        AND INDEX_NAME = 'idx_support_order_purpose_ranking'
+      LIMIT 1`,
+  );
+  if (!rows.length) {
+    try {
+      await db.query(
+        `ALTER TABLE support_orders
+           ADD KEY idx_support_order_purpose_ranking
+             (order_purpose, verification_state, provider_status, ranking_observed_at, light_note_user_id)`,
+      );
+    } catch (error) {
+      if (error?.code !== 'ER_DUP_KEYNAME') throw error;
+    }
+  }
+}
+
 let ensurePromise;
 
 /** 在开始接收订单前完成幂等建表，读取接口不在请求内执行 DDL。 */
@@ -141,6 +171,7 @@ export function ensureAfdianSupportSchema({ db = pool } = {}) {
         await ensureColumn(db, table, column, definition);
       }
       await ensureRankingIndex(db);
+      await ensurePurposeRankingIndex(db);
     })();
     if (db === pool)
       ensurePromise = promise.catch((error) => {
@@ -150,4 +181,34 @@ export function ensureAfdianSupportSchema({ db = pool } = {}) {
     else return promise;
   }
   return ensurePromise;
+}
+
+/**
+ * 在订单用途列、套餐意图列和策略边界都已就绪后执行。三段更新均可重复运行；
+ * 先识别权益购买，再识别新版纯赞助，最后才把切换点前的未知订单冻结为历史支持。
+ */
+export async function ensureAfdianSupportOrderPurposeBackfill({ db = pool } = {}) {
+  await db.query(
+    `UPDATE support_orders o
+      INNER JOIN support_checkout_intents i ON i.id = o.checkout_intent_id
+         SET o.order_purpose = 'entitlement_purchase'
+       WHERE o.order_purpose = 'unknown'
+         AND i.intent_type IN ('permanent', 'campaign')`,
+  );
+  await db.query(
+    `UPDATE support_orders o
+      INNER JOIN support_checkout_intents i ON i.id = o.checkout_intent_id
+         SET o.order_purpose = 'donation'
+       WHERE o.order_purpose = 'unknown'
+         AND i.intent_type = 'donation'`,
+  );
+  await db.query(
+    `UPDATE support_orders o
+      LEFT JOIN support_checkout_intents i ON i.id = o.checkout_intent_id
+      INNER JOIN support_reward_policy_state p ON p.policy_version = 'support-pure-v2'
+         SET o.order_purpose = 'legacy_support'
+       WHERE o.order_purpose = 'unknown'
+         AND COALESCE(o.provider_created_at, o.create_time) <= p.activated_at
+         AND COALESCE(i.intent_type, 'legacy') NOT IN ('permanent', 'campaign', 'donation')`,
+  );
 }

@@ -36,6 +36,13 @@ describe('mobile personal center experience', () => {
     expect(personCenterSource).not.toContain('profile-overview');
   });
 
+  it('uses the first quick entry for the growth center while profile editing remains in the identity card', () => {
+    expect(personCenterSource).toContain('<BButton class="profile-quick-item" @click="goGrowth">');
+    expect(personCenterSource).toContain(':src="icon.userCenter.growth"');
+    expect(personCenterSource).toContain("t('growth.pageTitle')");
+    expect(personCenterSource).toContain('class="profile-card__edit" @click="goToProfileModule(\'/myInfo\')"');
+  });
+
   it('shows only the account email in the profile summary and keeps role labels inside profile editing', () => {
     expect(personCenterSource).toContain('<span v-if="user.email">{{ user.email }}</span>');
     expect(personCenterSource).not.toContain('{{ roleName }}');

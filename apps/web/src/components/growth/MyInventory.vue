@@ -20,6 +20,7 @@
             <b class="asset-val">{{ (inv?.assets.points || 0).toLocaleString('en-US') }}</b>
             <span class="asset-label">{{ t('growth.assetPoints') }}</span>
           </div>
+          <BButton size="small" :disabled="readOnly" @click="goToExchange">{{ t('growth.assetExchange') }}</BButton>
         </div>
         <div class="asset">
           <span class="asset-ico"><SvgIcon :src="icon.growth.storage" size="21" /></span>
@@ -27,6 +28,7 @@
             <b class="asset-val">{{ fmtStorage(inv?.assets.storageBonusMb || 0) }}</b>
             <span class="asset-label">{{ t('growth.assetStorage') }}</span>
           </div>
+          <BButton size="small" :disabled="readOnly" @click="goToStore('storage')">{{ t('growth.assetBuy') }}</BButton>
         </div>
         <div class="asset">
           <span class="asset-ico"><SvgIcon :src="icon.growth.ai" size="21" /></span>
@@ -34,6 +36,7 @@
             <b class="asset-val">{{ fmtTokens(inv?.assets.aiBonusTokens || 0) }}</b>
             <span class="asset-label">{{ t('growth.assetAiBalance') }}</span>
           </div>
+          <BButton size="small" :disabled="readOnly" @click="goToStore('ai')">{{ t('growth.assetBuy') }}</BButton>
         </div>
       </div>
 
@@ -84,6 +87,7 @@
 <script setup lang="ts">
   import { computed, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { useRouter } from 'vue-router';
   import { useGrowth } from '@/composables/useGrowth.ts';
   import type { InventoryItem } from '@/composables/useGrowth.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
@@ -95,6 +99,7 @@
   import icon from '@/config/icon.ts';
 
   const { t, locale } = useI18n();
+  const router = useRouter();
   const props = withDefaults(defineProps<{ readOnly?: boolean }>(), { readOnly: false });
   const readOnly = computed(() => props.readOnly);
   const { inventory, inventoryLoading, inventoryError, growth, loadInventory, loadDashboard, useItem, useProtectCard } =
@@ -106,6 +111,16 @@
 
   const usingId = ref<string | null>(null);
   const makingUp = ref(false);
+
+  function goToExchange() {
+    if (readOnly.value) return;
+    void router.push({ path: '/growth', query: { section: 'rewards', reward: 'shop' } });
+  }
+
+  function goToStore(category: 'ai' | 'storage') {
+    if (readOnly.value) return;
+    void router.push({ path: '/store', query: { category } });
+  }
 
   function fmtStorage(mb: number) {
     if (mb >= 1024) return (mb / 1024).toFixed(mb % 1024 === 0 ? 0 : 1) + 'GB';
@@ -244,6 +259,7 @@
     color: var(--primary-color);
   }
   .asset-body {
+    flex: 1 1 auto;
     display: flex;
     flex-direction: column;
     gap: 2px;

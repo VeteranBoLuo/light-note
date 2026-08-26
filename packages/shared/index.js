@@ -28,7 +28,8 @@ export const SITE_COMPLIANCE = Object.freeze({
   websiteIcpNumber: '蜀ICP备2026017699号-1',
   miitQueryUrl: 'https://beian.miit.gov.cn/',
   publicSecurityFilingNumber: '川公网安备51200002001211号',
-  publicSecurityQueryUrl: 'https://beian.mps.gov.cn/#/query/webSearch?code=51200002001211',
+  publicSecurityQueryUrl:
+    'https://beian.mps.gov.cn/#/query/webSearch?code=51200002001211',
   publicSecurityBadgePath: '/public-security-filing-badge.png',
 });
 
@@ -39,8 +40,8 @@ export const SITE_COMPLIANCE = Object.freeze({
 export const AFDIAN_CREATOR_URL = 'https://afdian.com/a/lightnote';
 
 /**
- * 爱发电永久 AI 额度赠送策略。版本只约束启用后的新订单；历史订单不会追溯赠送。
- * 以 API 核验后的实付金额计算，每实付 1 元赠送 10 万 Token，超过自动入账阈值转人工复核。
+ * 已下线的爱发电支持赠送策略，仅用于解释切换日前已经承诺的历史支持订单。
+ * 新纯支持不得引用该策略；既有已发余额仍按此不可变版本保留。
  */
 export const AFDIAN_AI_REWARD_POLICY = Object.freeze({
   version: 'support-ai-v1',
@@ -48,30 +49,157 @@ export const AFDIAN_AI_REWARD_POLICY = Object.freeze({
   autoCreditMaxAmount: 200,
 });
 
+/**
+ * 纯支持策略。首次持久化时间是“赞助与权益购买分离”的不可移动生效边界；
+ * 生效后的纯支持不再附带 AI、空间或积分等经济权益。
+ */
+export const AFDIAN_PURE_SUPPORT_POLICY = Object.freeze({
+  version: 'support-pure-v2',
+  tokensPerCny: 0,
+  autoCreditMaxAmount: 0,
+});
+
+/** 爱发电订单在轻笺内部的不可变业务用途。 */
+export const AFDIAN_ORDER_PURPOSE = Object.freeze({
+  UNKNOWN: 'unknown',
+  LEGACY_SUPPORT: 'legacy_support',
+  DONATION: 'donation',
+  ENTITLEMENT_PURCHASE: 'entitlement_purchase',
+});
+
 export const AFDIAN_CHECKOUT_OPTIONS = Object.freeze([
   Object.freeze({
     key: 'coffee',
     amount: 6,
-    rewardTokens: 6 * AFDIAN_AI_REWARD_POLICY.tokensPerCny,
     planId: '4415b194930c11f1ac7b5254001e7c00',
   }),
   Object.freeze({
     key: 'server',
     amount: 18,
-    rewardTokens: 18 * AFDIAN_AI_REWARD_POLICY.tokensPerCny,
     planId: 'a05f9730930c11f1aeb65254001e7c00',
   }),
   Object.freeze({
     key: 'companion',
     amount: 50,
-    rewardTokens: 50 * AFDIAN_AI_REWARD_POLICY.tokensPerCny,
     planId: '9fc7a358930c11f1abee52540025c377',
   }),
   Object.freeze({
     key: 'custom',
     amount: null,
-    rewardTokens: null,
     creatorId: '9a64b3ac930611f18e8052540025c377',
+  }),
+]);
+
+/**
+ * 爱发电套餐目录 v2。套餐权益是永久资产，价格与到账值同时作为前端展示、
+ * 服务端结算快照和测试核验的唯一事实源；已发布版本不得原地改值。
+ */
+export const SUPPORT_PACKAGE_CATALOG_VERSION = 'support-packages-v2';
+
+function supportPackage(definition) {
+  return Object.freeze({
+    ...definition,
+    base: Object.freeze({ ...definition.base }),
+    firstPurchase: Object.freeze({ ...definition.firstPurchase }),
+  });
+}
+
+export const SUPPORT_PACKAGE_CATALOG = Object.freeze([
+  supportPackage({
+    skuId: 'ai-6',
+    category: 'ai',
+    amount: 6,
+    base: { aiTokens: 600_000, storageMb: 0 },
+    firstPurchase: { aiTokens: 780_000, storageMb: 0 },
+    comboSavings: 0,
+  }),
+  supportPackage({
+    skuId: 'ai-18',
+    category: 'ai',
+    amount: 18,
+    base: { aiTokens: 1_800_000, storageMb: 0 },
+    firstPurchase: { aiTokens: 2_340_000, storageMb: 0 },
+    comboSavings: 0,
+  }),
+  supportPackage({
+    skuId: 'ai-50',
+    category: 'ai',
+    amount: 50,
+    base: { aiTokens: 5_000_000, storageMb: 0 },
+    firstPurchase: { aiTokens: 6_500_000, storageMb: 0 },
+    comboSavings: 0,
+  }),
+  supportPackage({
+    skuId: 'ai-100',
+    category: 'ai',
+    amount: 100,
+    base: { aiTokens: 10_000_000, storageMb: 0 },
+    firstPurchase: { aiTokens: 13_000_000, storageMb: 0 },
+    comboSavings: 0,
+  }),
+  supportPackage({
+    skuId: 'storage-6',
+    category: 'storage',
+    amount: 6,
+    base: { aiTokens: 0, storageMb: 128 },
+    firstPurchase: { aiTokens: 0, storageMb: 160 },
+    comboSavings: 0,
+  }),
+  supportPackage({
+    skuId: 'storage-18',
+    category: 'storage',
+    amount: 18,
+    base: { aiTokens: 0, storageMb: 512 },
+    firstPurchase: { aiTokens: 0, storageMb: 640 },
+    comboSavings: 0,
+  }),
+  supportPackage({
+    skuId: 'storage-50',
+    category: 'storage',
+    amount: 50,
+    base: { aiTokens: 0, storageMb: 1_536 },
+    firstPurchase: { aiTokens: 0, storageMb: 2_048 },
+    comboSavings: 0,
+  }),
+  supportPackage({
+    skuId: 'storage-100',
+    category: 'storage',
+    amount: 100,
+    base: { aiTokens: 0, storageMb: 3_072 },
+    firstPurchase: { aiTokens: 0, storageMb: 4_096 },
+    comboSavings: 0,
+  }),
+  supportPackage({
+    skuId: 'combo-10',
+    category: 'combo',
+    amount: 10,
+    base: { aiTokens: 600_000, storageMb: 128 },
+    firstPurchase: { aiTokens: 780_000, storageMb: 160 },
+    comboSavings: 2,
+  }),
+  supportPackage({
+    skuId: 'combo-30',
+    category: 'combo',
+    amount: 30,
+    base: { aiTokens: 1_800_000, storageMb: 512 },
+    firstPurchase: { aiTokens: 2_340_000, storageMb: 640 },
+    comboSavings: 6,
+  }),
+  supportPackage({
+    skuId: 'combo-88',
+    category: 'combo',
+    amount: 88,
+    base: { aiTokens: 5_000_000, storageMb: 1_536 },
+    firstPurchase: { aiTokens: 6_500_000, storageMb: 2_048 },
+    comboSavings: 12,
+  }),
+  supportPackage({
+    skuId: 'combo-168',
+    category: 'combo',
+    amount: 168,
+    base: { aiTokens: 10_000_000, storageMb: 3_072 },
+    firstPurchase: { aiTokens: 13_000_000, storageMb: 4_096 },
+    comboSavings: 32,
   }),
 ]);
 
@@ -138,7 +266,10 @@ export const FILE_PREVIEW_FORMATS = Object.freeze([
     previewType: 'converted-pdf',
     strategy: FILE_PREVIEW_STRATEGY.CONVERTED_PDF,
     extensions: Object.freeze(['xls', 'ods']),
-    mimeTypes: Object.freeze(['application/vnd.ms-excel', 'application/vnd.oasis.opendocument.spreadsheet']),
+    mimeTypes: Object.freeze([
+      'application/vnd.ms-excel',
+      'application/vnd.oasis.opendocument.spreadsheet',
+    ]),
   }),
   Object.freeze({
     id: 'legacy-presentation',
@@ -146,7 +277,10 @@ export const FILE_PREVIEW_FORMATS = Object.freeze([
     previewType: 'converted-pdf',
     strategy: FILE_PREVIEW_STRATEGY.CONVERTED_PDF,
     extensions: Object.freeze(['ppt', 'odp']),
-    mimeTypes: Object.freeze(['application/vnd.ms-powerpoint', 'application/vnd.oasis.opendocument.presentation']),
+    mimeTypes: Object.freeze([
+      'application/vnd.ms-powerpoint',
+      'application/vnd.oasis.opendocument.presentation',
+    ]),
   }),
 ]);
 
@@ -182,17 +316,26 @@ export function isAiDocumentFileNameSupported(fileName) {
     .toLowerCase()
     .split(/[\\/]/)
     .pop();
-  return Boolean(normalized && AI_DOCUMENT_SUPPORTED_EXTENSIONS.some((extension) => normalized.endsWith(extension)));
+  return Boolean(
+    normalized &&
+    AI_DOCUMENT_SUPPORTED_EXTENSIONS.some((extension) =>
+      normalized.endsWith(extension),
+    ),
+  );
 }
 
 const FILE_PREVIEW_EXTENSION_INDEX = new Map();
 const FILE_PREVIEW_MIME_INDEX = new Map();
 for (const format of FILE_PREVIEW_FORMATS) {
-  for (const extension of format.extensions) FILE_PREVIEW_EXTENSION_INDEX.set(extension, format);
-  for (const mimeType of format.mimeTypes) FILE_PREVIEW_MIME_INDEX.set(mimeType, format);
+  for (const extension of format.extensions)
+    FILE_PREVIEW_EXTENSION_INDEX.set(extension, format);
+  for (const mimeType of format.mimeTypes)
+    FILE_PREVIEW_MIME_INDEX.set(mimeType, format);
 }
 
-const FILE_PREVIEW_COMPOUND_EXTENSIONS = [...FILE_PREVIEW_EXTENSION_INDEX.keys()]
+const FILE_PREVIEW_COMPOUND_EXTENSIONS = [
+  ...FILE_PREVIEW_EXTENSION_INDEX.keys(),
+]
   .filter((extension) => extension.includes('.'))
   .sort((left, right) => right.length - left.length);
 
@@ -216,13 +359,21 @@ export function getFilePreviewExtension(fileName = '', explicitExtension = '') {
     if (normalizedName.endsWith(`.${extension}`)) return extension;
   }
   const index = normalizedName.lastIndexOf('.');
-  return index > 0 && index < normalizedName.length - 1 ? normalizedName.slice(index + 1) : '';
+  return index > 0 && index < normalizedName.length - 1
+    ? normalizedName.slice(index + 1)
+    : '';
 }
 
-export function resolveFilePreviewFormat({ fileName = '', fileType = '', ext = '' } = {}) {
+export function resolveFilePreviewFormat({
+  fileName = '',
+  fileType = '',
+  ext = '',
+} = {}) {
   const extension = getFilePreviewExtension(fileName, ext);
   if (extension) return FILE_PREVIEW_EXTENSION_INDEX.get(extension) || null;
-  return FILE_PREVIEW_MIME_INDEX.get(normalizeFilePreviewMimeType(fileType)) || null;
+  return (
+    FILE_PREVIEW_MIME_INDEX.get(normalizeFilePreviewMimeType(fileType)) || null
+  );
 }
 
 export const BOOKMARK_URL_STATE = Object.freeze({
@@ -250,7 +401,12 @@ const TRAILING_PUNCTUATION = /[，。；！？、）》】」』〉,.;!?)\]}]+$/
 const FORBIDDEN_URL_CHARACTERS = /[\u0000-\u001f\u007f<>"'`]/u;
 // Android 正式版禁止 HTTP 明文流量。小红书分享短链同时提供 HTTPS，
 // 在进入保存和打开链路前统一升级，避免旧书签在 App 内触发 ERR_CLEARTEXT_NOT_PERMITTED。
-const HTTPS_UPGRADE_HOSTS = new Set(['xhslink.cn', 'www.xhslink.cn', 'xhslink.com', 'www.xhslink.com']);
+const HTTPS_UPGRADE_HOSTS = new Set([
+  'xhslink.cn',
+  'www.xhslink.cn',
+  'xhslink.com',
+  'www.xhslink.com',
+]);
 
 function cleanBookmarkUrlInput(value) {
   return String(value || '')
@@ -262,9 +418,13 @@ function stripTrailingPunctuation(value) {
   return String(value || '').replace(TRAILING_PUNCTUATION, '');
 }
 
-function parseHttpUrlCandidate(value, { allowEncodedSchemeWhitespaceRepair = false } = {}) {
+function parseHttpUrlCandidate(
+  value,
+  { allowEncodedSchemeWhitespaceRepair = false } = {},
+) {
   let input = stripTrailingPunctuation(cleanBookmarkUrlInput(value));
-  if (!input || /\s/u.test(input) || FORBIDDEN_URL_CHARACTERS.test(input)) return null;
+  if (!input || /\s/u.test(input) || FORBIDDEN_URL_CHARACTERS.test(input))
+    return null;
 
   if (allowEncodedSchemeWhitespaceRepair) {
     input = input.replace(/^(https?:\/\/)(?:(?:%20|%09|%0a|%0d)+)/iu, '$1');
@@ -282,15 +442,26 @@ function parseHttpUrlCandidate(value, { allowEncodedSchemeWhitespaceRepair = fal
   }
   if (!['http:', 'https:'].includes(parsed.protocol)) return null;
   if (!parsed.hostname || parsed.username || parsed.password) return null;
-  const hostname = parsed.hostname.replace(/^\[/u, '').replace(/\]$/u, '').toLowerCase();
+  const hostname = parsed.hostname
+    .replace(/^\[/u, '')
+    .replace(/\]$/u, '')
+    .toLowerCase();
   const isIpv4 = /^\d{1,3}(?:\.\d{1,3}){3}$/u.test(hostname);
   const isIpv6 = hostname.includes(':');
-  if (!hostname.includes('.') && hostname !== 'localhost' && !isIpv4 && !isIpv6) return null;
+  if (!hostname.includes('.') && hostname !== 'localhost' && !isIpv4 && !isIpv6)
+    return null;
   if (parsed.protocol === 'http:' && HTTPS_UPGRADE_HOSTS.has(hostname)) {
     parsed.protocol = 'https:';
   }
-  const canonicalUrl = parsed.pathname === '/' && !parsed.search && !parsed.hash ? parsed.origin : parsed.href;
-  if (FORBIDDEN_URL_CHARACTERS.test(canonicalUrl) || canonicalUrl.length > MAX_BOOKMARK_URL_LENGTH) return null;
+  const canonicalUrl =
+    parsed.pathname === '/' && !parsed.search && !parsed.hash
+      ? parsed.origin
+      : parsed.href;
+  if (
+    FORBIDDEN_URL_CHARACTERS.test(canonicalUrl) ||
+    canonicalUrl.length > MAX_BOOKMARK_URL_LENGTH
+  )
+    return null;
   return canonicalUrl;
 }
 
@@ -308,8 +479,11 @@ function extractBookmarkUrlCandidates(input) {
 
   const explicitPattern = /https?:\/\/[^\s<>"'`，。；！？、（）【】《》]+/giu;
   for (const match of prepared.matchAll(explicitPattern)) {
-    const added = addCandidate(candidates, match[0], 'explicit', { allowEncodedSchemeWhitespaceRepair: true });
-    if (added) consumedExplicitRanges.push([match.index, match.index + match[0].length]);
+    const added = addCandidate(candidates, match[0], 'explicit', {
+      allowEncodedSchemeWhitespaceRepair: true,
+    });
+    if (added)
+      consumedExplicitRanges.push([match.index, match.index + match[0].length]);
     if (candidates.length >= MAX_BOOKMARK_URL_CANDIDATES) return candidates;
   }
 
@@ -317,7 +491,8 @@ function extractBookmarkUrlCandidates(input) {
   for (const [start, end] of consumedExplicitRanges) {
     for (let index = start; index < end; index += 1) domainSource[index] = ' ';
   }
-  const domainPattern = /(^|[^\p{L}\p{N}@._-])((?:[\p{L}\p{N}](?:[\p{L}\p{N}-]{0,61}[\p{L}\p{N}])?\.)+(?:[\p{L}]{2,63})(?::\d{1,5})?(?:[/?#][^\s<>"'`，。；！？、（）【】《》]*)?)/giu;
+  const domainPattern =
+    /(^|[^\p{L}\p{N}@._-])((?:[\p{L}\p{N}](?:[\p{L}\p{N}-]{0,61}[\p{L}\p{N}])?\.)+(?:[\p{L}]{2,63})(?::\d{1,5})?(?:[/?#][^\s<>"'`，。；！？、（）【】《》]*)?)/giu;
   for (const match of domainSource.join('').matchAll(domainPattern)) {
     addCandidate(candidates, match[2], 'domain');
     if (candidates.length >= MAX_BOOKMARK_URL_CANDIDATES) return candidates;
@@ -344,11 +519,15 @@ function invalidBookmarkUrl(code, input = '') {
  */
 export function resolveBookmarkUrlInput(
   value,
-  { allowTextExtraction = true, maxInputLength = MAX_BOOKMARK_INPUT_LENGTH } = {},
+  {
+    allowTextExtraction = true,
+    maxInputLength = MAX_BOOKMARK_INPUT_LENGTH,
+  } = {},
 ) {
   const input = cleanBookmarkUrlInput(value);
   if (!input) return invalidBookmarkUrl(BOOKMARK_URL_CODE.EMPTY);
-  if (input.length > maxInputLength) return invalidBookmarkUrl(BOOKMARK_URL_CODE.TOO_LONG, input);
+  if (input.length > maxInputLength)
+    return invalidBookmarkUrl(BOOKMARK_URL_CODE.TOO_LONG, input);
 
   const protocol = input.match(/^([a-z][a-z\d+.-]*):/iu)?.[1]?.toLowerCase();
   if (protocol && !['http', 'https'].includes(protocol)) {
@@ -364,7 +543,10 @@ export function resolveBookmarkUrlInput(
   const exactUrl = parseHttpUrlCandidate(input);
   if (exactUrl) {
     return {
-      state: exactUrl === input ? BOOKMARK_URL_STATE.VALID : BOOKMARK_URL_STATE.NORMALIZED,
+      state:
+        exactUrl === input
+          ? BOOKMARK_URL_STATE.VALID
+          : BOOKMARK_URL_STATE.NORMALIZED,
       code: BOOKMARK_URL_CODE.OK,
       originalInput: input,
       canonicalUrl: exactUrl,
@@ -372,7 +554,8 @@ export function resolveBookmarkUrlInput(
     };
   }
 
-  if (!allowTextExtraction) return invalidBookmarkUrl(BOOKMARK_URL_CODE.INVALID_FORMAT, input);
+  if (!allowTextExtraction)
+    return invalidBookmarkUrl(BOOKMARK_URL_CODE.INVALID_FORMAT, input);
   const candidates = extractBookmarkUrlCandidates(input);
   if (candidates.length) {
     return {
@@ -414,7 +597,8 @@ export function normalizeNoteType(type) {
 // 只恢复 Markdown 语法中可确定识别的引用标记：行首（或列表标记后）的 `&gt;`，
 // 并跳过围栏代码块和四空格缩进代码，避免误改正文中的普通 HTML 实体。
 const MARKDOWN_FENCE_PATTERN = /^[ \t]{0,3}(`{3,}|~{3,})/u;
-const MARKDOWN_BLOCKQUOTE_ENTITY_PATTERN = /^([ \t]*)(?:(?:[-+*]|\d+[.)])([ \t]+))?((?:&gt;[ \t]*)+)/iu;
+const MARKDOWN_BLOCKQUOTE_ENTITY_PATTERN =
+  /^([ \t]*)(?:(?:[-+*]|\d+[.)])([ \t]+))?((?:&gt;[ \t]*)+)/iu;
 
 /**
  * 恢复被 HTML 序列化污染的 Markdown 行首引用标记。
@@ -432,7 +616,11 @@ export function normalizeMarkdownBlockquoteEntities(value) {
     const line = chunks[index];
     const fenceMatch = line.match(MARKDOWN_FENCE_PATTERN);
     if (fence) {
-      if (fenceMatch && fenceMatch[1][0] === fence.character && fenceMatch[1].length >= fence.length) {
+      if (
+        fenceMatch &&
+        fenceMatch[1][0] === fence.character &&
+        fenceMatch[1].length >= fence.length
+      ) {
         fence = null;
       }
       continue;
@@ -446,7 +634,8 @@ export function normalizeMarkdownBlockquoteEntities(value) {
     if (!match) continue;
     const [, leadingWhitespace, listSpacing, encodedMarkers] = match;
     // 四空格缩进且不在列表中是 Markdown 代码块，不把其中的实体当作引用语法修复。
-    if (!listSpacing && leadingWhitespace.replace(/\t/gu, '    ').length >= 4) continue;
+    if (!listSpacing && leadingWhitespace.replace(/\t/gu, '    ').length >= 4)
+      continue;
     const markerStart = match[0].length - encodedMarkers.length;
     chunks[index] =
       `${line.slice(0, markerStart)}${encodedMarkers.replace(/&gt;/giu, '>')}${line.slice(match[0].length)}`;
@@ -512,7 +701,11 @@ export function parseResourceHref(href) {
 /** 由 { type, id } 构造 canonical href;id 缺失/超长/含危险字符时返回 ''(与 parse 对称)。 */
 export function buildResourceHref(ref) {
   if (!ref || typeof ref.id !== 'string' || !ref.id) return '';
-  if (ref.id.length > MAX_RESOURCE_ID_LENGTH || UNSAFE_RESOURCE_ID_CHARS.test(ref.id)) return '';
+  if (
+    ref.id.length > MAX_RESOURCE_ID_LENGTH ||
+    UNSAFE_RESOURCE_ID_CHARS.test(ref.id)
+  )
+    return '';
   const id = encodeURIComponent(ref.id);
   switch (ref.type) {
     case 'note':
@@ -559,7 +752,10 @@ export const RESOURCE_REF_TEST_VECTORS = Object.freeze([
     href: '/noteLibrary/550e8400-e29b-41d4-a716-446655440000',
     ref: { type: 'note', id: '550e8400-e29b-41d4-a716-446655440000' },
   },
-  { href: '/noteLibrary/id%20with%20space', ref: { type: 'note', id: 'id with space' } },
+  {
+    href: '/noteLibrary/id%20with%20space',
+    ref: { type: 'note', id: 'id with space' },
+  },
   // 外链 / 协议 / 协议相对
   { href: 'https://example.com/noteLibrary/x', ref: null },
   { href: '//evil.com/noteLibrary/x', ref: null },
@@ -602,7 +798,8 @@ export const ANDROID_RELEASE = Object.freeze({
   releaseDate: '2026-08-11',
   fileSizeBytes: 1777869,
   sha256: '0a309f1ca1504491f89ba9fbe5a655ed3dc9fe476cfe9ca0df1d70de94c89ce3',
-  certificateSha256: '23:D3:65:AA:C9:33:A3:8D:71:07:0E:0C:2B:DD:C0:CD:B7:E1:7B:41:67:7F:FC:5E:45:2C:96:D8:9A:1C:77:B4',
+  certificateSha256:
+    '23:D3:65:AA:C9:33:A3:8D:71:07:0E:0C:2B:DD:C0:CD:B7:E1:7B:41:67:7F:FC:5E:45:2C:96:D8:9A:1C:77:B4',
   downloadPath: '/downloads/android/light-note-1.0.1.apk',
   minAndroidVersion: '8.0',
   permissions: Object.freeze([

@@ -1,4 +1,5 @@
-export type ApiStatus = 200 | 400 | 401 | 403 | 404 | 423 | 500 | 'preview' | 'visitor';
+export type ApiStatus =
+  200 | 400 | 401 | 403 | 404 | 423 | 500 | 'preview' | 'visitor';
 
 /** 轻笺统一响应信封:resultData(data, status, msg) 的形状。 */
 export interface ApiResponse<T = unknown> {
@@ -31,26 +32,62 @@ export declare const SITE_COMPLIANCE: {
   readonly publicSecurityBadgePath: '/public-security-filing-badge.png';
 };
 
-export type AfdianCheckoutOptionKey = 'coffee' | 'server' | 'companion' | 'custom';
+export type AfdianCheckoutOptionKey =
+  'coffee' | 'server' | 'companion' | 'custom';
 
 export interface AfdianCheckoutOptionDefinition {
   readonly key: AfdianCheckoutOptionKey;
   readonly amount: number | null;
-  readonly rewardTokens: number | null;
   readonly planId?: string;
   readonly creatorId?: string;
 }
 
 /** 公开的爱发电创作者主页，不包含任何服务端凭证。 */
 export declare const AFDIAN_CREATOR_URL: string;
-/** 爱发电永久 AI 额度赠送策略；仅对策略启用后的新订单生效。 */
+/** 已下线的爱发电支持赠送策略；仅用于解释切换日前的历史支持订单。 */
 export declare const AFDIAN_AI_REWARD_POLICY: {
   readonly version: 'support-ai-v1';
   readonly tokensPerCny: 100000;
   readonly autoCreditMaxAmount: 200;
 };
+/** 纯支持零权益策略；首次持久化时间是新旧规则边界。 */
+export declare const AFDIAN_PURE_SUPPORT_POLICY: {
+  readonly version: 'support-pure-v2';
+  readonly tokensPerCny: 0;
+  readonly autoCreditMaxAmount: 0;
+};
+
+export type AfdianOrderPurpose =
+  'unknown' | 'legacy_support' | 'donation' | 'entitlement_purchase';
+export declare const AFDIAN_ORDER_PURPOSE: {
+  readonly UNKNOWN: 'unknown';
+  readonly LEGACY_SUPPORT: 'legacy_support';
+  readonly DONATION: 'donation';
+  readonly ENTITLEMENT_PURCHASE: 'entitlement_purchase';
+};
 /** 轻笺爱发电下单档位的前后端唯一事实源。 */
 export declare const AFDIAN_CHECKOUT_OPTIONS: readonly AfdianCheckoutOptionDefinition[];
+
+export type SupportPackageCategory = 'ai' | 'storage' | 'combo';
+
+export interface SupportPackageEntitlement {
+  readonly aiTokens: number;
+  readonly storageMb: number;
+}
+
+export interface SupportPackageDefinition {
+  readonly skuId: string;
+  readonly category: SupportPackageCategory;
+  readonly amount: number;
+  readonly base: SupportPackageEntitlement;
+  readonly firstPurchase: SupportPackageEntitlement;
+  readonly comboSavings: number;
+}
+
+/** 已发布的爱发电常驻套餐目录版本。 */
+export declare const SUPPORT_PACKAGE_CATALOG_VERSION: 'support-packages-v2';
+/** 常驻套餐的价格、基础权益和每 SKU 首充权益唯一事实源。 */
+export declare const SUPPORT_PACKAGE_CATALOG: readonly SupportPackageDefinition[];
 
 export type FilePreviewStrategy = 'archive_manifest' | 'converted_pdf';
 export type DerivedFilePreviewType = 'archive' | 'converted-pdf';
@@ -73,16 +110,22 @@ export declare const FILE_PREVIEW_FORMATS: readonly FilePreviewFormatDefinition[
 export declare const FILE_PREVIEW_EXTRA_TEXT_EXTENSIONS: readonly string[];
 /** AI 文件解析能力的唯一扩展名清单。 */
 export declare const AI_DOCUMENT_SUPPORTED_EXTENSIONS: readonly string[];
-export declare function isAiDocumentFileNameSupported(fileName?: unknown): boolean;
+export declare function isAiDocumentFileNameSupported(
+  fileName?: unknown,
+): boolean;
 export declare function normalizeFilePreviewMimeType(value?: unknown): string;
-export declare function getFilePreviewExtension(fileName?: unknown, explicitExtension?: unknown): string;
+export declare function getFilePreviewExtension(
+  fileName?: unknown,
+  explicitExtension?: unknown,
+): string;
 export declare function resolveFilePreviewFormat(input?: {
   fileName?: unknown;
   fileType?: unknown;
   ext?: unknown;
 }): FilePreviewFormatDefinition | null;
 
-export type BookmarkUrlState = 'valid' | 'normalized' | 'needs_confirmation' | 'invalid';
+export type BookmarkUrlState =
+  'valid' | 'normalized' | 'needs_confirmation' | 'invalid';
 export type BookmarkUrlCandidateSource = 'explicit' | 'domain';
 
 export interface BookmarkUrlCandidate {
@@ -140,7 +183,9 @@ export declare function normalizeNoteType(type: unknown): string;
  * 仅恢复被 HTML 序列化污染的 Markdown 行首引用标记（`&gt;` → `>`）。
  * 普通正文、链接和代码块内的 HTML 实体保持不变。
  */
-export declare function normalizeMarkdownBlockquoteEntities(value: unknown): string;
+export declare function normalizeMarkdownBlockquoteEntities(
+  value: unknown,
+): string;
 
 /** 解析 canonical href 为 { type, id };非 exact 或 id 不安全返回 null。 */
 export declare function parseResourceHref(href: unknown): ResourceRef | null;
@@ -158,7 +203,10 @@ export declare function buildResourceAnchorAttrs(ref: ResourceRef): {
 export declare function dedupeResourceRefs(hrefs: string[]): ResourceRef[];
 
 /** 前后端共享的 canonical 协议测试向量。 */
-export declare const RESOURCE_REF_TEST_VECTORS: ReadonlyArray<{ href: string; ref: ResourceRef | null }>;
+export declare const RESOURCE_REF_TEST_VECTORS: ReadonlyArray<{
+  href: string;
+  ref: ResourceRef | null;
+}>;
 
 /** 轻笺 Android 正式发布记录（前后端共享的单一事实源）。 */
 export declare const ANDROID_RELEASE: {

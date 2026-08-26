@@ -70,6 +70,55 @@ describe('NoteTreeRow 显式页面操作', () => {
     document.body.innerHTML = '';
   });
 
+  it('预览其他笔记时隐藏旧浏览目录边框，关闭预览后恢复', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const activePageId = ref<string | null>(null);
+    const node = {
+      id: 'drawing',
+      parentId: null,
+      title: '绘画',
+      childCount: 1,
+      hasChildren: true,
+      isTop: true,
+      sort: 10,
+    };
+    const app = createApp({
+      render: () =>
+        h(NoteTreeRow, {
+          node,
+          depth: 0,
+          activePageId: activePageId.value,
+          browseParentId: 'drawing',
+          currentParentId: 'drawing',
+          childrenByParent: {},
+          expandedIds: new Set<string>(),
+          loadingKeys: new Set<string>(),
+        }),
+    });
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.mount(host);
+    cleanup = () => app.unmount();
+    await nextTick();
+
+    const rowClasses = () => host.querySelector('.note-tree-row')!.classList;
+    expect(rowClasses().contains('is-browse-scope')).toBe(true);
+
+    activePageId.value = 'pc';
+    await nextTick();
+    expect(rowClasses().contains('is-browse-scope')).toBe(false);
+    expect(rowClasses().contains('is-active')).toBe(false);
+
+    activePageId.value = 'drawing';
+    await nextTick();
+    expect(rowClasses().contains('is-browse-scope')).toBe(false);
+    expect(rowClasses().contains('is-active')).toBe(true);
+
+    activePageId.value = null;
+    await nextTick();
+    expect(rowClasses().contains('is-browse-scope')).toBe(true);
+  });
+
   it('单击标题只上抛页面选择，展开与管理操作保持独立', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

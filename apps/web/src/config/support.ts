@@ -19,6 +19,8 @@ const AFDIAN_ORDER_QUERY_KEYS = new Set([
   'fr',
   // 轻笺后端签发的一次性归属凭证。只允许 URL 安全字符，且不写入日志。
   'custom_order_id',
+  // 套餐结算由后端锁定金额，禁止与 plan_id 同时出现。
+  'custom_price',
 ]);
 
 export type AfdianSupportOptionKey = AfdianCheckoutOptionKey;
@@ -26,7 +28,6 @@ export type AfdianSupportOptionKey = AfdianCheckoutOptionKey;
 export interface AfdianSupportOption {
   key: AfdianSupportOptionKey;
   amount: number | null;
-  rewardTokens: number | null;
   url: string;
   configured: boolean;
 }
@@ -54,7 +55,7 @@ export function normalizeAfdianSupportUrl(value: unknown): string {
     const queryKeys = Array.from(url.searchParams.keys());
     if (queryKeys.some((key) => !AFDIAN_ORDER_QUERY_KEYS.has(key))) return '';
 
-    const coreKeys = ['plan_id', 'product_type', 'user_id', 'custom_order_id'];
+    const coreKeys = ['plan_id', 'product_type', 'user_id', 'custom_order_id', 'custom_price'];
     if (coreKeys.some((key) => url.searchParams.getAll(key).length > 1)) return '';
 
     const planId = url.searchParams.get('plan_id') || '';
@@ -65,12 +66,15 @@ export function normalizeAfdianSupportUrl(value: unknown): string {
     const hasUserId = url.searchParams.has('user_id');
     const customOrderId = url.searchParams.get('custom_order_id') || '';
     const hasCustomOrderId = url.searchParams.has('custom_order_id');
+    const customPrice = url.searchParams.get('custom_price') || '';
+    const hasCustomPrice = url.searchParams.has('custom_price');
     const normalizedUrl = new URL(`https://${hostname}${AFDIAN_ORDER_PATH}`);
 
     if (hasCustomOrderId && !/^[A-Za-z0-9_-]{32,128}$/.test(customOrderId)) return '';
 
     if (hasPlanId) {
-      if (!AFDIAN_ID_PATTERN.test(planId) || !hasProductType || productType !== '0' || hasUserId) return '';
+      if (!AFDIAN_ID_PATTERN.test(planId) || !hasProductType || productType !== '0' || hasUserId || hasCustomPrice)
+        return '';
       normalizedUrl.searchParams.set('plan_id', planId.toLowerCase());
       normalizedUrl.searchParams.set('product_type', '0');
       if (hasCustomOrderId) normalizedUrl.searchParams.set('custom_order_id', customOrderId);
@@ -78,7 +82,9 @@ export function normalizeAfdianSupportUrl(value: unknown): string {
     }
 
     if (!hasUserId || !AFDIAN_ID_PATTERN.test(userId) || hasProductType) return '';
+    if (hasCustomPrice && (!hasCustomOrderId || !/^(?:[1-9]\d{0,7})(?:\.\d{1,2})?$/.test(customPrice))) return '';
     normalizedUrl.searchParams.set('user_id', userId.toLowerCase());
+    if (hasCustomPrice) normalizedUrl.searchParams.set('custom_price', Number(customPrice).toFixed(2));
     if (hasCustomOrderId) normalizedUrl.searchParams.set('custom_order_id', customOrderId);
     return normalizedUrl.toString();
   } catch {
@@ -94,11 +100,10 @@ function resolveCreatorUrl(value: unknown): string {
 function createSupportOption(
   key: AfdianSupportOptionKey,
   amount: number | null,
-  rewardTokens: number | null,
   sourceUrl: string,
 ): AfdianSupportOption {
   const url = normalizeAfdianSupportUrl(sourceUrl);
-  return Object.freeze({ key, amount, rewardTokens, url, configured: Boolean(url) });
+  return Object.freeze({ key, amount, url, configured: Boolean(url) });
 }
 
 export const AFDIAN_SUPPORT_URL = resolveCreatorUrl(import.meta.env.VITE_AFDIAN_SUPPORT_URL);
@@ -113,7 +118,7 @@ export const AFDIAN_SUPPORT_OPTIONS: readonly AfdianSupportOption[] = Object.fre
     } else if (option.creatorId) {
       url.searchParams.set('user_id', option.creatorId);
     }
-    return createSupportOption(option.key, option.amount, option.rewardTokens, url.toString());
+    return createSupportOption(option.key, option.amount, url.toString());
   }),
 ]);
 
@@ -147,8 +152,23 @@ export function openTrackedAfdianCheckout(
   openWindow?: ExternalWindowOpener,
 ): boolean {
   if (!SHARED_AFDIAN_CHECKOUT_OPTIONS.some((option) => option.key === optionKey)) return false;
-  return openNewPage(`/api/support/checkout?option=${encodeURIComponent(optionKey)}`, openWindow);
+  return openNewPage(`/api/support/donation/checkout?option=${encodeURIComponent(optionKey)}`, openWindow);
 }
+
+export function openTrackedSupportPackageCheckout(
+  skuId: string,
+  catalogVersion: string,
+  openWindow?: ExternalWindowOpener,
+): boolean {
+  if (!/^[A-Za-z0-9_-]{3,64}$/.test(String(skuId || '')) || !/^[-A-Za-z0-9:]{3,64}$/.test(catalogVersion)) {
+    return false;
+  }
+  const query = new URLSearchParams({ skuId, catalogVersion });
+  return openNewPage(`/api/support/checkout?${query.toString()}`, openWindow);
+}
+
+/** 资源商店购买仍复用现有安全结算端点，名称与用户语义保持一致。 */
+export const openTrackedEntitlementCheckout = openTrackedSupportPackageCheckout;
 
 export function openAfdianOAuthPage(openWindow?: ExternalWindowOpener): boolean {
   return openNewPage('/api/support/afdian/oauth/start', openWindow);

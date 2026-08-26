@@ -226,7 +226,9 @@
           mobileFullScreen: false,
           mobileCenteredHeader: true,
           bodyPadding: '14px 14px 0',
-          maskClosable: !submitting.value,
+          // 快速添加包含尚未保存的文本、待办选项和文件。移动端统一只通过
+          // 明确关闭按钮或系统返回退出，避免同一抽屉随草稿状态改变关闭规则。
+          maskClosable: false,
         }
       : {
           visible: quickShellVisible.value,
@@ -527,15 +529,19 @@
   }
 
   async function openTodoDetails(payload: TodoCreateInitialValues & { title: string }) {
-    todoDraft.value = {
+    // 路由跳转必须持有关闭前的普通对象快照。移动抽屉关闭后 visible watch 会
+    // 立即 reset() 并清空 todoDraft，而 history 占位要异步出栈；若导航回调
+    // 再读取 ref，标题、日期、优先级和提醒都会在真正 push 前丢失。
+    const todoInitialValues: TodoCreateInitialValues = {
       title: payload.title,
       description: payload.description,
       priority: payload.priority,
       dueAt: payload.dueAt,
-      checklist: payload.checklist,
+      checklist: payload.checklist?.map((item) => ({ ...item })),
       quickReminderPreset: payload.quickReminderPreset,
       quickReminderTime: payload.quickReminderTime,
     };
+    todoDraft.value = todoInitialValues;
     // 移动端的完整新建统一进入轻量路由页，不再从快速添加抽屉
     // 叠加一个全屏待办抽屉。历史状态只传递当前草稿，不产生任何写入。
     if (bookmark.isMobile) {
@@ -544,7 +550,7 @@
           visible.value = false;
         },
         () => {
-          void router.push({ name: 'todoCreate', state: { todoInitialValues: todoDraft.value } });
+          void router.push({ name: 'todoCreate', state: { todoInitialValues } });
         },
       );
       return;

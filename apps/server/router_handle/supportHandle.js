@@ -13,6 +13,8 @@ import {
 import { createAfdianOAuthState, consumeAfdianOAuthState } from '../util/afdianOAuthState.js';
 import {
   createAfdianCheckoutIntent,
+  createAfdianPackageCheckoutIntent,
+  getAfdianEntitlementStoreState,
   getAfdianSupportState,
   ingestAfdianWebhookOrder,
   linkAfdianAccount,
@@ -20,6 +22,15 @@ import {
   syncAfdianOrderHistory,
   unlinkAfdianAccount,
 } from '../util/afdianSupportService.js';
+import { getSupportCatalog } from '../util/afdianSupportPackageCatalog.js';
+import {
+  createSupportCampaignDraft,
+  listSupportCampaignGrants,
+  listSupportCampaigns,
+  previewSupportCampaignCosts,
+  publishSupportCampaign,
+  suspendSupportCampaign,
+} from '../util/afdianSupportCampaignService.js';
 import {
   getAfdianAdminOverview,
   getAfdianLeaderboard,
@@ -100,12 +111,71 @@ export async function state(req, res) {
   }
 }
 
-export async function checkout(req, res) {
+export async function storeState(req, res) {
+  if (req.adminContext) {
+    return res.status(403).send(resultData({ code: 'ADMIN_MAINTENANCE_FORBIDDEN' }, 403, '代管上下文不能读取购买记录'));
+  }
+  try {
+    const authenticated = Boolean(req.user?.isAuthenticated && req.user?.id && req.user.role !== 'visitor');
+    const data = await getAfdianEntitlementStoreState({ userId: req.user?.id, authenticated });
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function catalog(req, res) {
+  try {
+    const authenticated = Boolean(
+      !req.adminContext && req.user?.isAuthenticated && req.user?.id && req.user.role !== 'visitor',
+    );
+    const data = await getSupportCatalog({
+      userId: authenticated ? req.user.id : '',
+      authenticated,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function donationCheckout(req, res) {
   if (!ensurePrivateSupportAccess(req, res)) return;
   try {
     const { url } = await createAfdianCheckoutIntent({
       userId: req.user.id,
       optionKey: req.query.option,
+    });
+    return res.redirect(302, url);
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function checkout(req, res) {
+  if (!ensurePrivateSupportAccess(req, res)) return;
+  // 旧版前端曾用 /checkout?option= 发起“赞助赠 AI”。拆分发布后必须失败关闭，
+  // 不能把旧页面承诺的赠送静默改成零权益赞助。新版纯支持使用独立 donation 端点。
+  if (!req.query.skuId) {
+    return res
+      .status(410)
+      .send(
+        resultData(
+          { code: 'SUPPORT_CHECKOUT_LEGACY_RETIRED' },
+          410,
+          L(
+            req,
+            '旧版赞助入口已停用，请刷新页面后重试',
+            'This legacy support checkout has retired. Refresh and try again.',
+          ),
+        ),
+      );
+  }
+  try {
+    const { url } = await createAfdianPackageCheckoutIntent({
+      userId: req.user.id,
+      skuId: req.query.skuId,
+      catalogVersion: req.query.catalogVersion,
     });
     return res.redirect(302, url);
   } catch (error) {
@@ -178,6 +248,7 @@ export async function orders(req, res) {
       userId: req.user.id,
       page: req.query.page,
       pageSize: req.query.pageSize,
+      scope: req.query.scope,
     });
     return res.send(resultData(data));
   } catch (error) {
@@ -266,6 +337,100 @@ async function auditAdminSupportAction(req, action, targetId, outcome, reason = 
     },
     { required: true },
   );
+}
+
+export async function adminCampaigns(req, res) {
+  if (!(await ensureRoot(req, res))) return;
+  try {
+    const data = await listSupportCampaigns();
+    await auditAdminSupportAction(req, 'support_campaign_list', 'all', 'succeeded', '', {
+      count: data.length,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function adminCampaignCostPreview(req, res) {
+  if (!(await ensureRoot(req, res))) return;
+  try {
+    const data = previewSupportCampaignCosts(req.body?.skus);
+    await auditAdminSupportAction(req, 'support_campaign_cost_preview', 'draft', 'succeeded', '', {
+      skuCount: data.items.length,
+      passes: data.passes,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    await auditAdminSupportAction(req, 'support_campaign_cost_preview', 'draft', 'failed').catch(() => {});
+    return sendError(req, res, error);
+  }
+}
+
+export async function adminCampaignCreate(req, res) {
+  if (!(await ensureRoot(req, res))) return;
+  try {
+    await auditAdminSupportAction(req, 'support_campaign_create', String(req.body?.campaignKey || 'draft'), 'intent');
+    const data = await createSupportCampaignDraft({ actorUserId: req.user.id, input: req.body });
+    await auditAdminSupportAction(req, 'support_campaign_create', data.id, 'succeeded', '', {
+      campaignKey: data.campaignKey,
+      version: data.version,
+      skuCount: data.skus.length,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    await auditAdminSupportAction(
+      req,
+      'support_campaign_create',
+      String(req.body?.campaignKey || 'draft'),
+      'failed',
+    ).catch(() => {});
+    return sendError(req, res, error);
+  }
+}
+
+export async function adminCampaignPublish(req, res) {
+  if (!(await ensureRoot(req, res))) return;
+  const campaignId = String(req.params.campaignId || '');
+  try {
+    await auditAdminSupportAction(req, 'support_campaign_publish', campaignId, 'intent');
+    const data = await publishSupportCampaign({ campaignId, actorUserId: req.user.id });
+    await auditAdminSupportAction(req, 'support_campaign_publish', campaignId, 'succeeded', '', {
+      version: data.version,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    await auditAdminSupportAction(req, 'support_campaign_publish', campaignId, 'failed').catch(() => {});
+    return sendError(req, res, error);
+  }
+}
+
+export async function adminCampaignSuspend(req, res) {
+  if (!(await ensureRoot(req, res))) return;
+  const campaignId = String(req.params.campaignId || '');
+  try {
+    await auditAdminSupportAction(req, 'support_campaign_suspend', campaignId, 'intent');
+    const data = await suspendSupportCampaign({ campaignId, actorUserId: req.user.id });
+    await auditAdminSupportAction(req, 'support_campaign_suspend', campaignId, 'succeeded');
+    return res.send(resultData(data));
+  } catch (error) {
+    await auditAdminSupportAction(req, 'support_campaign_suspend', campaignId, 'failed').catch(() => {});
+    return sendError(req, res, error);
+  }
+}
+
+export async function adminCampaignGrants(req, res) {
+  if (!(await ensureRoot(req, res))) return;
+  const campaignId = String(req.params.campaignId || '');
+  try {
+    const data = await listSupportCampaignGrants({ campaignId });
+    await auditAdminSupportAction(req, 'support_campaign_grants_view', campaignId, 'succeeded', '', {
+      count: data.length,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
 }
 
 export async function adminSync(req, res) {

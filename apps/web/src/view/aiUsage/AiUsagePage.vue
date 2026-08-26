@@ -54,6 +54,14 @@
             <span>{{ metric.label }}</span>
             <strong>{{ metric.value }}</strong>
             <small>{{ metric.hint }}</small>
+            <BButton
+              v-if="metric.key === 'permanent'"
+              class="ai-quota-metric__acquire"
+              size="small"
+              @click="acquireVisible = true"
+            >
+              {{ t('settings.ai.acquireQuota') }}
+            </BButton>
           </BCard>
         </div>
 
@@ -84,11 +92,12 @@
         <AiUsageCenter />
       </BCard>
     </main>
+    <EntitlementAcquireModal v-model:visible="acquireVisible" asset="ai" />
   </div>
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import AiUsageCenter from '@/components/aiSkills/AiUsageCenter.vue';
@@ -96,11 +105,13 @@
   import BCard from '@/components/base/BasicComponents/BCard.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import EntitlementAcquireModal from '@/components/support/EntitlementAcquireModal.vue';
   import { formatAiQuotaTokens, useAiQuotaStatus } from '@/composables/useAiQuotaStatus';
   import icon from '@/config/icon.ts';
 
   const { t, locale } = useI18n();
   const router = useRouter();
+  const acquireVisible = ref(false);
   const {
     status: aiQuotaStatus,
     loading: aiQuotaLoading,
@@ -292,6 +303,16 @@
     color: var(--text-color);
     font-size: 15px;
     line-height: 1.35;
+  }
+
+  .ai-quota-metric__acquire.b_btn {
+    align-self: flex-start;
+    min-height: 28px;
+    margin-top: 3px;
+    padding-inline: 10px;
+    border: 1px solid var(--primary-color);
+    color: var(--primary-color);
+    background: transparent;
   }
 
   .ai-quota-state {

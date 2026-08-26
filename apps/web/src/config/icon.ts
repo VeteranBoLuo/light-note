@@ -378,6 +378,8 @@ export default {
   support: {
     heart:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M12 20.25S4 15.7 4 9.5A4.25 4.25 0 0 1 12 7.55A4.25 4.25 0 0 1 20 9.5c0 6.2-8 10.75-8 10.75Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M17.5 3.75v3M16 5.25h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+    store:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M4 9.5V20h16V9.5M5 4h14l2 5.5a3 3 0 0 1-5 2.2a3 3 0 0 1-4 0a3 3 0 0 1-4 0a3 3 0 0 1-5-2.2L5 4Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 20v-5h6v5" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
   },
 
   userCenter: {

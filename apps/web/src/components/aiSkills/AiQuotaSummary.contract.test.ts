@@ -15,9 +15,11 @@ describe('AI 额度快捷展示契约', () => {
   it('桌面头像弹层和移动个人中心复用同一个额度摘要组件', () => {
     expect(desktopProfileSource).toContain('<AiQuotaSummary');
     expect(desktopProfileSource).toContain(':active="menuVisible"');
+    expect(desktopProfileSource).toContain('surface="plain"');
     expect(desktopProfileSource).toContain('entry-source="桌面个人中心"');
     expect(mobileProfileSource).toContain('<AiQuotaSummary');
     expect(mobileProfileSource).toContain('density="comfortable"');
+    expect(mobileProfileSource).toContain('surface="plain"');
     expect(mobileProfileSource).toContain('entry-source="移动个人中心"');
     expect(desktopProfileSource).toContain('@open-details="goAiQuotaDetails"');
     expect(mobileProfileSource).toContain('@open-details="goAiQuotaDetails"');
@@ -43,6 +45,8 @@ describe('AI 额度快捷展示契约', () => {
     expect(summarySource).toContain('<BButton');
     expect(summarySource).toContain('<BProgress');
     expect(summarySource).toContain('icon.growth.ai');
+    expect(summarySource).toContain("surface?: 'panel' | 'plain'");
+    expect(summarySource).toContain('.ai-quota-summary.is-plain.b_btn');
     expect(summarySource).toContain("t('personCenter.aiQuotaUnavailable')");
     expect(summarySource).toContain("t('personCenter.aiQuotaBreakdown'");
     expect(summarySource).toContain("module: 'AI 用量与计费'");

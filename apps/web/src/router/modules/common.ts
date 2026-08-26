@@ -53,7 +53,7 @@ const commonRouter: RouteRecordRaw[] = [
   },
   {
     meta: {
-      title: '我的成长',
+      title: '成长中心',
       keepAlive: true,
       requireAuth: true,
       roles: ALL_ROLES,
@@ -61,6 +61,17 @@ const commonRouter: RouteRecordRaw[] = [
     path: '/growth',
     name: 'growth',
     component: () => import('@/view/growth/GrowthPage.vue'),
+  },
+  {
+    meta: {
+      title: '资源商店',
+      keepAlive: true,
+      requireAuth: true,
+      roles: ALL_ROLES,
+    },
+    path: '/store',
+    name: 'entitlementStore',
+    component: () => import('@/view/entitlementStore/EntitlementStore.vue'),
   },
   {
     meta: {

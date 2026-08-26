@@ -1,4 +1,4 @@
-import { AFDIAN_AI_REWARD_POLICY } from '@lightnote/shared';
+import { AFDIAN_AI_REWARD_POLICY, AFDIAN_PURE_SUPPORT_POLICY } from '@lightnote/shared';
 import pool from '../db/index.js';
 
 export const AFDIAN_SUPPORT_REWARD_TABLE_SQL = Object.freeze([
@@ -36,6 +36,7 @@ export const AFDIAN_SUPPORT_REWARD_TABLE_SQL = Object.freeze([
 ]);
 
 let ensurePromise;
+const SUPPORT_REWARD_POLICIES = Object.freeze([AFDIAN_AI_REWARD_POLICY, AFDIAN_PURE_SUPPORT_POLICY]);
 
 /**
  * 策略版本首次写入时间就是该版本的生效边界。INSERT IGNORE 保证重启不会移动边界；
@@ -45,32 +46,30 @@ export function ensureAfdianSupportRewardSchema({ db = pool } = {}) {
   if (!ensurePromise || db !== pool) {
     const promise = (async () => {
       for (const sql of AFDIAN_SUPPORT_REWARD_TABLE_SQL) await db.query(sql);
-      await db.query(
-        `INSERT IGNORE INTO support_reward_policy_state
-          (policy_version, tokens_per_cny, auto_credit_max_amount)
-         VALUES (?, ?, ?)`,
-        [
-          AFDIAN_AI_REWARD_POLICY.version,
-          AFDIAN_AI_REWARD_POLICY.tokensPerCny,
-          AFDIAN_AI_REWARD_POLICY.autoCreditMaxAmount,
-        ],
-      );
-      const [rows] = await db.query(
-        `SELECT tokens_per_cny, auto_credit_max_amount
-           FROM support_reward_policy_state
-          WHERE policy_version = ?
-          LIMIT 1`,
-        [AFDIAN_AI_REWARD_POLICY.version],
-      );
-      const persisted = rows[0];
-      if (
-        !persisted ||
-        Number(persisted.tokens_per_cny) !== AFDIAN_AI_REWARD_POLICY.tokensPerCny ||
-        Number(persisted.auto_credit_max_amount) !== AFDIAN_AI_REWARD_POLICY.autoCreditMaxAmount
-      ) {
-        const error = new Error('爱发电赠送策略版本与数据库配置不一致');
-        error.code = 'AFDIAN_REWARD_POLICY_VERSION_CONFLICT';
-        throw error;
+      for (const policy of SUPPORT_REWARD_POLICIES) {
+        await db.query(
+          `INSERT IGNORE INTO support_reward_policy_state
+            (policy_version, tokens_per_cny, auto_credit_max_amount)
+           VALUES (?, ?, ?)`,
+          [policy.version, policy.tokensPerCny, policy.autoCreditMaxAmount],
+        );
+        const [rows] = await db.query(
+          `SELECT tokens_per_cny, auto_credit_max_amount
+             FROM support_reward_policy_state
+            WHERE policy_version = ?
+            LIMIT 1`,
+          [policy.version],
+        );
+        const persisted = rows[0];
+        if (
+          !persisted ||
+          Number(persisted.tokens_per_cny) !== policy.tokensPerCny ||
+          Number(persisted.auto_credit_max_amount) !== policy.autoCreditMaxAmount
+        ) {
+          const error = new Error('爱发电支持策略版本与数据库配置不一致');
+          error.code = 'AFDIAN_REWARD_POLICY_VERSION_CONFLICT';
+          throw error;
+        }
       }
     })();
     if (db === pool) {

@@ -311,8 +311,10 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'user', [
 // 赞助归属与第三方账号关联属于账号隐私，不允许管理员在代管上下文中读取或变更。
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'support', [
   ['GET', '/support/state'],
+  ['GET', '/support/store/state'],
   ['GET', '/support/orders'],
   ['POST', '/support/public-preference'],
+  ['GET', '/support/donation/checkout'],
   ['GET', '/support/checkout'],
   ['GET', '/support/afdian/oauth/start'],
   ['GET', '/support/afdian/oauth/callback'],
@@ -320,6 +322,7 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'support', [
   ['POST', '/support/afdian/webhook'],
 ]);
 declare(ADMIN_POLICIES.READ, 'support', [
+  ['GET', '/support/catalog'],
   ['GET', '/support/leaderboard'],
   ['GET', '/support/leaderboard/avatar/:publicId'],
 ]);
@@ -327,6 +330,12 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'support', [
   ['GET', '/support/admin/overview'],
   ['GET', '/support/admin/orders'],
   ['GET', '/support/admin/supporters'],
+  ['GET', '/support/admin/campaigns'],
+  ['GET', '/support/admin/campaigns/:campaignId/grants'],
+  ['POST', '/support/admin/campaigns/cost-preview'],
+  ['POST', '/support/admin/campaigns'],
+  ['POST', '/support/admin/campaigns/:campaignId/publish'],
+  ['POST', '/support/admin/campaigns/:campaignId/suspend'],
   ['POST', '/support/admin/sync'],
   ['POST', '/support/admin/orders/:providerOrderNo/reconcile'],
   ['POST', '/support/admin/orders/:providerOrderNo/reward-approve'],
@@ -604,11 +613,16 @@ function resolvePolicy(method, path) {
   if (/^\/support\/leaderboard\/avatar\/[^/]+$/.test(path)) {
     return routePolicies.get(`${method} /support/leaderboard/avatar/:publicId`);
   }
-  if (/^\/support\/admin\/orders\/[^/]+\/reconcile$/.test(path)) {
-    return routePolicies.get(`${method} /support/admin/orders/:providerOrderNo/reconcile`);
+  if (/^\/support\/admin\/orders\/[^/]+\/(?:reconcile|reward-approve)$/.test(path)) {
+    const action = path.endsWith('/reward-approve') ? 'reward-approve' : 'reconcile';
+    return routePolicies.get(`${method} /support/admin/orders/:providerOrderNo/${action}`);
   }
   if (/^\/support\/admin\/supporters\/[^/]+\/identity-visibility$/.test(path)) {
     return routePolicies.get(`${method} /support/admin/supporters/:userId/identity-visibility`);
+  }
+  if (/^\/support\/admin\/campaigns\/[^/]+\/(?:grants|publish|suspend)$/.test(path)) {
+    const action = path.split('/').pop();
+    return routePolicies.get(`${method} /support/admin/campaigns/:campaignId/${action}`);
   }
   if (/^\/resource-governance\/(?:scans|findings|jobs)\/[^/]+$/.test(path)) {
     const resource = path.split('/')[2];

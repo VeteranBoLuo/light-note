@@ -42,4 +42,9 @@ describe('CloudStorageBar compact layout', () => {
     expect(source).toContain("t('cloudSpace.storageTrashFiles')");
     expect(source).toMatch(/max-height:\s*calc\(100vh - 16px\)/);
   });
+
+  it('offers a unified permanent expansion entry for points and the benefit store', () => {
+    expect(source).toContain("t('cloudSpace.storageAcquireTitle')");
+    expect(source).toContain('<EntitlementAcquireModal v-model:visible="acquireVisible" asset="storage" />');
+  });
 });

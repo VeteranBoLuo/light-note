@@ -99,13 +99,13 @@
             <SvgIcon :src="icon.arrow_right" size="13" aria-hidden="true" />
           </BButton>
 
-          <BButton class="storage-option" @click="goToStorageShop">
+          <BButton class="storage-option" @click="openAcquire">
             <span class="storage-option-icon is-shop" aria-hidden="true">
               <SvgIcon :src="icon.growth.coin" size="17" />
             </span>
             <span class="storage-option-copy">
-              <strong>{{ t('cloudSpace.storageExchangeTitle') }}</strong>
-              <small>{{ t('cloudSpace.storageExchangeDescription') }}</small>
+              <strong>{{ t('cloudSpace.storageAcquireTitle') }}</strong>
+              <small>{{ t('cloudSpace.storageAcquireDescription') }}</small>
             </span>
             <SvgIcon :src="icon.arrow_right" size="13" aria-hidden="true" />
           </BButton>
@@ -118,6 +118,7 @@
       </section>
     </template>
   </BPopover>
+  <EntitlementAcquireModal v-model:visible="acquireVisible" asset="storage" />
 </template>
 
 <script setup lang="ts">
@@ -139,6 +140,7 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import EntitlementAcquireModal from '@/components/support/EntitlementAcquireModal.vue';
 
   withDefaults(
     defineProps<{
@@ -154,6 +156,7 @@
   const { t } = useI18n();
   const { growth, ranks, loading: growthLoading, load, loadRanks } = useGrowth();
   const detailsOpen = ref(false);
+  const acquireVisible = ref(false);
   const quotaShortfallMb = ref(0);
 
   const usageRatio = computed(() => getCloudStorageUsageRatio(cloud.usedSpace, cloud.maxSpace));
@@ -223,8 +226,9 @@
     closeAndNavigate({ path: '/growth', query: { section: 'tasks' } });
   }
 
-  function goToStorageShop() {
-    closeAndNavigate({ path: '/growth', query: { section: 'rewards', reward: 'shop' } });
+  function openAcquire() {
+    detailsOpen.value = false;
+    acquireVisible.value = true;
   }
 
   function goToTrash() {

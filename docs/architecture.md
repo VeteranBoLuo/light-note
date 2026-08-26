@@ -265,6 +265,10 @@ src/
 | `agent_logs`                                           | AI 请求、用量和阶段追踪              | UUID             |
 | `ai_token_usage` / `ai_token_reservations`             | AI 日额度账本与请求级原子占位        | 复合键 / 自增    |
 | `user_growth`                                          | 成长快照、积分及永久 AI 加油余额     | 用户 UUID        |
+| `support_campaigns` / `support_campaign_skus`          | 赞助活动版本、时窗与最终权益目录     | UUID             |
+| `support_campaign_user_limits`                         | 活动用户限购与有效结算占位           | 活动 SKU + 用户  |
+| `support_first_purchase_claims`                        | 常驻套餐账号/爱发电身份双重首充事实  | UUID             |
+| `support_entitlement_grants`                           | 商店套餐 AI/空间通用权益账本         | UUID             |
 | `growth_events` / `points_log`                         | 经验与积分不可变账本                 | 自增             |
 | `points_earning_period_policy`                         | 积分获取日/周策略版本锁              | 周期类型 + 键    |
 | `points_grant_operations`                              | 非消费积分发放幂等收据               | 自增 / 账号请求  |
@@ -646,25 +650,28 @@ AI 前端由 `useAiAssistantStore` 承担会话域、草稿、单个材料 `cont
 - 私密意见反馈继续使用原 `opinion` 流程，不会被共建轻笺公共接口读取或自动公开
 - 投票明细表以 `(request_id, user_id)` 唯一约束，并在事务中重新计数；提交者和支持者可接收进度通知，用户可在设置中关闭
 
-## 支持轻笺
+## 支持轻笺与资源商店
 
-- `/support` 是游客与登录用户共用的响应式支持说明页；桌面端从个人中心头像菜单进入，移动端从“我的”进入，同一路径不做双端重映射
+- `/support` 是游客与登录用户共用的自愿支持页，只记录赞助且不发 AI、空间、积分或功能权益；`/store` 是独立资源商店，统一承载 AI、永久空间、组合和限时套餐。两页互相说明边界，但统计、历史和入口不得混用
 - 爱发电创作者主页与 ¥6 / ¥18 / ¥50 / 自选金额档位定义在 `@lightnote/shared`，前后端共用；前端只接受 HTTPS、精确官方域名、固定下单路径、公开方案/创作者 ID，以及后端生成的 URL-safe `custom_order_id`。`VITE_AFDIAN_SUPPORT_URL` 只可覆盖公开主页，不存放凭据
-- 登录用户从轻笺选择档位时，`GET /support/checkout` 创建 30 天有效的随机下单凭证，仅保存 SHA-256 摘要，再 302 到爱发电。未 OAuth 关联也可按权威 API 返回的 `custom_order_id` 归属；游客或同步未配置时仍可走原官方下单页，但不能推断轻笺账号
+- 登录用户从支持页选择档位时，`GET /support/donation/checkout` 创建 `intent_type=donation` 的 30 天随机归属凭证；从商店购买时，`GET /support/checkout?skuId=...` 创建金额和权益都不可变的套餐意图。旧 `/support/checkout?option=...` 返回 410，避免前后端滚动发布时把旧页面承诺的赠送静默改成零权益。未 OAuth 关联也可按权威 API 返回的 `custom_order_id` 归属；游客只能浏览目录或打开普通爱发电主页，不能生成权益购买意图
 - OAuth2 仅用于把爱发电身份与轻笺账号建立可撤回关联，不是赞助前置条件。state 存 Redis、绑定轻笺 user/session 且单次消费，Secret 只由服务端换取身份。绑定后按 `user_private_id`（存在时）或 `user_id` 归并历史订单；解绑会解除纯 OAuth 归属，通过下单凭证确认的订单仍保留
 - `support_orders.provider_order_no` 是订单唯一事实，Webhook 重推、API 历史同步和 OAuth 后归并都只更新同一行。Webhook 必须 RSA 验签后先落 pending；由于官方签名不覆盖 `custom_order_id`，归属只能在 `query-order` 二次复核后写入。冲突证据保留原归属并标记 `conflict`，禁止静默转移
+- `support_orders.order_purpose` 是用途唯一事实：`donation` 和历史 `legacy_support` 可进入支持记录与榜单，`entitlement_purchase` 只进入商店统计，`unknown` 失败关闭并等待复核。无可信套餐意图的爱发电主页新订单一律是纯支持；账号关联只补归属，不得把纯支持升级成购买。用途一旦冻结，后续同步不得按金额、档位或链接状态重解释
 - 永久 AI 余额的权威快照仍为 `user_growth.ai_bonus_tokens`，但所有新增和扣减必须经过 `ai_bonus_ledger`；每笔入账生成 `ai_bonus_lots` 来源批次，AI 用量按 FIFO 写入 `ai_bonus_lot_allocations`。`ai_bonus_wallet_state` 只允许一次性登记上线前既有余额，重启和重跑迁移不得再次把当前快照解释为期初资产。每日成长额度始终先消耗，只有超出当日剩余的部分才扣永久余额
-- 爱发电赠送使用版本化 `support_reward_policy_state` 和一单一行的 `support_reward_grants`：`support-ai-v1` 按 API 核验后的实付每 ¥1 赠送 10 万 tokens，策略首次写入时间是不可移动的生效边界。固定 ¥6 / ¥18 / ¥50 分别为 60 万 / 180 万 / 500 万，自选金额同倍率；策略启用前的订单不追补。订单需 `api_verified + provider_status=2 + product_type=0` 且有可信归属；单笔超过 ¥200、时间缺失或归属冲突进入人工复核。已入账订单发生退款、金额或归属反转时只转 `reversal_review`，禁止自动扣成负数
-- 大额赠送审批必须同时提交管理员看到的 `expectedTokens + expectedUserId`，事务内与当前订单、赠送快照和策略版本重新比对；列表过期时返回冲突并要求刷新，不能凭订单号盲批。策略调价必须发布新版本，已有订单继续锁定首次登记的策略版本
+- 支持策略使用版本化 `support_reward_policy_state` 和一单一行的 `support_reward_grants`：`support-ai-v1` 仅解释切换日前的 `legacy_support`，已发额度不追回；切换后的 `donation` 使用零权益 `support-pure-v2`，无论金额、是否关联或是否直接从爱发电主页付款都不发资产。两种策略首次写入时间均是不可移动边界
+- `support-packages-v2` 在 `@lightnote/shared` 固化资源商店的 AI、空间和组合常驻目录；每个 SKU 首次购买的最终资格由 `support_first_purchase_claims` 的“用户 + SKU”和“爱发电身份哈希 + SKU”双唯一约束决定，结算页的候选状态只用于展示。限时活动使用独立版本和 `campaignSkuId`，不读取或消耗常驻首充；完整商业规则、成本口径、数据职责和发布开关见 `docs/support-packages.md`
+- v2 套餐通过 `support_checkout_intents` 保存精确金额与权益快照，API 核验后由 `support_entitlement_grants` 在订单事务中原子写入 AI 批次和共享空间流水。少付、多付、过期、身份/归属冲突只进入人工复核；有 v2 意图的订单永不回退 `support-ai-v1`。活动只在时窗内生成新意图，但已有意图保留 24 小时支付资格；已入账反转不自动回收资产或恢复首充
+- 历史赠送的大额审批必须同时提交管理员看到的 `expectedTokens + expectedUserId`，事务内与当前订单、赠送快照和策略版本重新比对；列表过期时返回冲突并要求刷新，不能凭订单号盲批。新版纯支持没有赠送审批；商店异常由通用权益账本独立复核
 - `support_checkout_intents`、`support_account_links`、`support_orders` 与 `support_public_preferences` 分别承担下单证据、可撤回关联、交易事实和公开偏好。OAuth basic 只返回爱发电用户 ID；关联表通过该 ID 从爱发电公开用户资料补全昵称与 HTTPS 头像供本人核对，失败时保留关联并按退避周期重试，资料不进入公开榜。通用日志跳过 Webhook 原始载荷，不保存留言、收货人、电话或地址。账号注销删除凭证、关联与公开偏好，并把订单与轻笺账号去关联，但保留去标识化交易对账事实
-- 累计榜只聚合已归属轻笺账号、`api_verified + provider_status=2` 且非 Root/test/visitor/注销账号的真实实付金额。默认参与但匿名；只有本人明确开启才公开轻笺昵称与受控短地址头像，也可退出榜单；Root 只能因安全原因审计隐藏，不能替用户开启公开。榜单缓存 60 秒且在订单、偏好、关联和注销变化时主动失效，不把 `head_picture` 长文本放进榜单 JSON
+- 累计榜只聚合已归属轻笺账号、`api_verified + provider_status=2`、用途为 `legacy_support|donation`，且非 Root/test/visitor/注销账号的真实支持金额；任何 `entitlement_purchase` 都不得进入。默认参与但匿名；只有本人明确开启才公开轻笺昵称与受控短地址头像，也可退出榜单；Root 只能因安全原因审计隐藏，不能替用户开启公开。榜单缓存 60 秒且在订单、偏好、关联和注销变化时主动失效，不把 `head_picture` 长文本放进榜单 JSON
 - 爱发电订单查询不保证提供逐单创建时间；返回合法 `create_time` 时保存为 `provider_created_at`，缺失时仍不得按 `verified_at` 冒充支付时间构造月榜。新订单首次可靠观察写入 `ranking_observed_at`，现阶段仅提供累计榜；管理端“本月可靠确认”明确按观察时间统计，完整月榜等待可靠时间覆盖完整周期后再开放
-- 订单状态每 5 分钟只重试到期 pending，小批量处理；全量历史最多每 6 小时同步一次且单进程合并，避免支持页轮询第三方。Root 管理页使用服务端分页，仅提供幂等同步、pending 复核、大额赠送审批和安全隐藏等审计动作；禁止手工改金额、造订单、改归属或强制公开。赞助是自愿支持，赠送永久额度不解锁专属核心功能
+- 订单状态每 5 分钟只重试到期 pending，小批量处理；全量历史最多每 6 小时同步一次且单进程合并，避免支持页轮询第三方。Root 管理页使用服务端分页，明确拆分支持金额与购买金额，仅提供幂等同步、pending/权益复核、历史赠送审批和安全隐藏等审计动作；禁止手工改金额、造订单、改归属、改用途或强制公开
 
 ## 快速添加与待整理
 
 - `resource_inbox` 是跨资源关系表，不复制书签、笔记或文件正文；资源本体仍是唯一事实源
-- 桌面端与移动端“快速添加”都支持 URL、Markdown 文本、文件和待办。资源创建与加入待整理在同一业务事务或确认链中完成。快速待办只填写标题、日期预设和优先级即可直接进入待办列表，“完善详情”再携带当前草稿打开完整编辑器；完整待办编辑器在桌面端使用右侧抽屉，移动端新建使用独立 `/todo/new` 页面（轻量顶栏 + 页面内容），避免全屏底部抽屉的长距离入场动画；编辑已有待办仍复用编辑容器
+- 桌面端与移动端“快速添加”都支持 URL、Markdown 文本、文件和待办。资源创建与加入待整理在同一业务事务或确认链中完成。快速待办只填写标题、日期预设和优先级即可直接进入待办列表，“完善详情”再携带当前草稿打开完整编辑器；完整待办编辑器在桌面端使用右侧抽屉，移动端新建使用独立 `/todo/new` 页面（轻量顶栏 + 页面内容），避免全屏底部抽屉的长距离入场动画；编辑已有待办仍复用编辑容器。移动端快速添加始终禁止点击抽屉外蒙层关闭，只保留标题栏关闭按钮与系统返回，避免关闭规则随是否填写内容而变化，也避免用户收起软键盘时误丢尚未保存的捕获内容
 - 加入操作以 `(user_id, resource_type, resource_id)` 幂等；完成整理只更新关系状态，不修改资源本体
 - 列表查询、批量完成与重新加入都必须校验当前资源主体归属；资源删除时清理对应关系
 - 资源中心及书签、笔记、云空间现有菜单统一复用 `useInboxEnqueue` 手动入队；接口失败显示可重试错误态，不伪装成空列表
@@ -682,7 +689,7 @@ AI 前端由 `useAiAssistantStore` 承担会话域、草稿、单个材料 `cont
 - 待办关联资料在列表、详情和两套编辑器中统一复用 `TodoResourceLinks`：胶囊显式覆盖 `BButton` 默认行高并保持 24px 紧凑外观，书签/笔记/文件继续通过 `resolveResourceRoute()` 进入 canonical 页面，失效资料禁用主按钮但编辑器仍可解除关联。浮层内打开资料或从预览转编辑必须先通过 `closeCurrentMobileOverlayThen()` 释放移动端 history 占位，再执行路由或打开下一层，禁止同一事件循环内“关抽屉 + 跳路由”
 - 逾期摘要与列表同时覆盖 `due_at < NOW()` 和“无截止但实例日期早于今天”的未完成固定日程；今日摘要同时覆盖今天尚未到期和实例日期为今天的任务。逾期与今天互斥，未来预生成实例不能计入今天。
 - 移动端待办列表、议程卡片和日历选中日期下方的当天议程列表支持向左拖动露出删除操作；日历月视图格子不承载滑动删除。一次只允许展开一项，点击该卡片之外的区域、纵向滚动、切换视图或进入批量选择都会收起；滑动只展示操作，点击删除后仍必须走统一确认与可撤销删除链路
-- 移动端“我的成长”的概览、任务、成就和资产四个内容 Tab 共用页面滚动容器，但每次切换都回到页面顶部；带成长任务、热力图或回顾锚点的入口继续精准定位目标内容。
+- 移动端“成长中心”的概览、任务、成就和资产四个内容 Tab 共用页面滚动容器，但每次切换都回到页面顶部；带成长任务、热力图或回顾锚点的入口继续精准定位目标内容。
 - `todo_items.plan_version` 决定双轨语义：v1 旧数据继续使用 `recurrence_rule + todo_reminders`，保持“完成后按旧截止日期平移”和旧周期提醒行为；v2 新数据由 `todo_series + todo_reminder_rules + todo_reminder_jobs` 驱动，禁止同一系列同时进入两套生成器
 - v2 的“任务计划”与“每项提醒”独立：`scheduled` 按本地日历预生成每日/每周/每月实例，前一项未完成不阻塞下一项；`after_completion` 才以实际完成时间为锚点生成下一项。每项提醒可为不提醒、提醒一次或多次催办，不得从任务重复规则推断提醒
 - 新版默认入口在 v2 契约上增加 `taskMode = single | independent`：`single` 始终只创建一条待办，可在 `todo_reminder_rules.schedule_json` 保存按间隔、按周或按月的提醒日程；`independent` 才复用 `todo_series` 生成多实例。两种模式继续共用 `todo_reminder_jobs` 和既有投递 Worker，禁止建立平行调度器
@@ -762,7 +769,7 @@ Android WebView 在账号密码、注册或 OAuth 登录成功后通过受信桥
 
 ### 新账号示例内容
 
-- 邮箱注册和 GitHub 首次建号会按注册语言初始化 4 个带 Base64 SVG 图标的标签、3 个书签、5 篇笔记（包含标题固定为“手绘笔记示例”的手绘样例）、1 个示例文件夹和 2 份云文件；已有账号登录、GitHub 绑定已有邮箱账号和历史用户都不会补发或重复生成。
+- 邮箱注册和 GitHub 首次建号会按注册语言初始化 4 个带 Base64 SVG 图标的标签、3 个书签、5 篇笔记（包含标题固定为“上色”的手绘样例，其内容是版本化静态快照，不在注册时读取模板账号）、1 个示例文件夹和 2 份云文件；已有账号登录、GitHub 绑定已有邮箱账号和历史用户都不会补发或重复生成。
 - 标签、书签、笔记和文件夹在独立短事务内同步创建；欢迎笔记使用账号级确定性 ID 作为幂等标记，整批失败会回滚，但不会反向让注册失败。
 - 示例云文件是真实 Markdown 文件：使用说明放在示例文件夹，待整理清单保留在云空间根目录，因此“全部文件”和示例文件夹会显示不同内容。文件先异步上传 OBS，成功后才写 `files` 和标签关系，避免产生无法预览或下载的假记录；OBS 失败只记录稳定错误码，不阻断注册。
 - 示例资源归用户本人所有，可正常编辑和删除，删除后不会自动恢复。Seed 直插不调用资源创建副作用，并通过 `onboarding_seed_resources` 保留系统来源，因此不计入首次创建成就、每日/每周任务、成长足迹、周报及后台运营资源总览。
@@ -792,10 +799,11 @@ page_view（打开站点）→ wall_hit（触发拦截）→ cta_click（点注�
 
 - **建表 schema 是双轨,两条并存,排查时都要看**：
   - **轨道 A — 手工 `migrations/*.sql`**（现约 57 个 dated 文件）：**没有自动迁移 runner**,靠人工/DBA 执行(如 `rename_admin_to_user`、`conversion_events_ip`),deploy 脚本不跑迁移;建表直接用 `CREATE TABLE IF NOT EXISTS`(MySQL 5.7 支持)。已有 `migrations/schema-assertions.sql` 做启动/发布期 schema 断言(约定"有输出=失败",目前主要覆盖 AI 工作区表)。
-  - **轨道 B — app 启动时 `ensure*()` 运行时建表/补列**：`app.js` 还会调用 `ensureSecurityTables` / `ensureNotificationTable`（`notification` + `batch_id`/`recalled` 列）/ `ensurePointsSchema`（建 `points_log` / `user_cosmetics` / `user_item` / 兼容表 `ai_daily_bonus` + `ALTER user_growth` 补 `points`/`equipped_title`/`equipped_frame`/`storage_bonus_mb`/`ai_bonus_tokens`/`lottery_*` 列）/ `ensureNoteTreeSchema`（补 `note.parent_id`、子树删除批次列及页面树索引）/ `ensureBookmarkSnapshotTable` / `ensureBookmarkHealthTable` / `ensureFeatureRequestTables` / `ensureGrowthTaskSchema` / `ensureGrowthCenterSchema`（成就状态、成长偏好、回顾状态及旧数据幂等回填）/ `ensureAiDocumentSchema` / `ensureFilePreviewSchema` / `ensureCommunityChatSchema`（社区访问预留、偏好、审计、单一主房间、文本消息与阅读位置）/ `ensureResourceGovernanceSchema`。`ai_bonus_tokens` 是永久 AI 加油余额；配额闸门在同一事务内先占等级每日额度，再自动占该余额。成长任务由 `growth_tasks` 与 `user_growth_tasks` 保存定义、达成状态和 `claimed_at` 手动领取事实；业务事件只能标记达成，领取接口才可写经验账本。资源治理 Schema 也由部署前 `check:resource-governance` 幂等初始化，保证 Schema 断言在应用重启前可通过。运行时**加列**因 MySQL 5.7 不支持 `ADD COLUMN IF NOT EXISTS`,才先查 `information_schema` 再条件 `ALTER`(这是加列的手法,不是 A 轨 CREATE TABLE 的)。
+  - **轨道 B — app 启动时 `ensure*()` 运行时建表/补列**：`app.js` 还会调用 `ensureSecurityTables` / `ensureNotificationTable`（`notification` + `batch_id`/`recalled` 列）/ `ensurePointsSchema`（建 `points_log` / `user_cosmetics` / `user_item` / `points_economy_operations` / `points_economy_migration_state` / `points_shop_item_claims` / 兼容表 `ai_daily_bonus` + `ALTER user_growth` 补 `points`/`equipped_title`/`equipped_frame`/`storage_bonus_mb`/`ai_bonus_tokens`/`lottery_*` 列）/ `ensureNoteTreeSchema`（补 `note.parent_id`、子树删除批次列及页面树索引）/ `ensureBookmarkSnapshotTable` / `ensureBookmarkHealthTable` / `ensureFeatureRequestTables` / `ensureGrowthTaskSchema` / `ensureGrowthCenterSchema`（成就状态、成长偏好、回顾状态及旧数据幂等回填）/ `ensureAiDocumentSchema` / `ensureFilePreviewSchema` / `ensureCommunityChatSchema`（社区访问预留、偏好、审计、单一主房间、文本消息与阅读位置）/ `ensureResourceGovernanceSchema`。`ai_bonus_tokens` 是永久 AI 加油余额；配额闸门在同一事务内先占等级每日额度，再自动占该余额。成长任务由 `growth_tasks` 与 `user_growth_tasks` 保存定义、达成状态和 `claimed_at` 手动领取事实；业务事件只能标记达成，领取接口才可写经验账本。资源治理 Schema 也由部署前 `check:resource-governance` 幂等初始化，保证 Schema 断言在应用重启前可通过。运行时**加列**因 MySQL 5.7 不支持 `ADD COLUMN IF NOT EXISTS`,才先查 `information_schema` 再条件 `ALTER`(这是加列的手法,不是 A 轨 CREATE TABLE 的)。
   - 同一张表可能被两轨分建:如 `growth_events` 主表在迁移 `20260708_growth.sql`,而 `user_growth` 的积分/装扮/抽奖列由 `ensurePointsSchema` 运行时补。**只读 `migrations/` 会漏掉 B 轨的表;只 grep 代码里的 `CREATE TABLE` 又会漏掉 A 轨迁移建的表——两边都要查,别信任何一侧的"未命中"。**
 - **Schema 基线门禁**：`note.revision`、`note_versions.source_revision/reason`、旧版兼容列 `files.share_token`、独立分享表和文件预览任务表已由 `20260807_note_editor_safety.sql`、`20260730_file_share_lifecycle.sql`、`20260808_file_preview_artifacts.sql` 和 `tag_db.sql` 补齐；发布前运行 `pnpm --filter server check:schema` 与 `pnpm --filter server check:file-previews`，关键表、索引或已启用的 7-Zip/LibreOffice 运行时缺失时禁止重启应用。旧 `share_token` 仅用于迁移兼容，新写入统一使用 `file_shares.token_hash`。
 - 基线 `tag_db.sql` 可能已过期，仍含 `note_tags` / `tag_bookmark_relations` 等旧表；现行代码走 `tag` + `resource_tag_relations` 统一多态关联。
+- `db/index.js` 是 HTTP、Worker 与脚本共用的数据库连接边界；它在创建连接池前调用 `databaseConnectionSafety.js`。本地运行时连接非回环数据库默认失败关闭，生产通过显式 `LIGHTNOTE_RUNTIME_ENV=production` 标识，测试完全禁用真实适配器；代码中不得再保留远程主机或生产账号兜底。
 
 ### 安全模块会自动封 IP —— 密集运维流量小心
 
@@ -810,11 +818,11 @@ page_view（打开站点）→ wall_hit（触发拦截）→ cta_click（点注�
 - 成长周报由 `util/weeklyReport.js` 聚合，不新建周报表：实时预览统计“含今天的最近 7 个自然日”，每周一通知固定统计上周一至周日，并把快照写入 `notification.meta.weeklyReport`。返回值除总量与上周对比外，还包含固定 7 天 `days`、`activeDays`、`bestDay`、自然周 `period`、等级进度和 `expStatus`；前端据此绘制真实趋势并解释最高等级/免经验账号的零经验，禁止把缺失日数据伪造成趋势。旧通知缺少新增字段时必须降级展示。导出周报卡只包含聚合指标，不包含资源标题或正文；除本地图片下载外，还可通过标准云文件预签名上传链路保存到账号的“周报”目录，目录不存在时由 owner 事务接口原子复用或创建，禁止客户端先查后建造成重复目录。
 - `GET /growth/claimable` 只读返回日常阶段、一次性任务、成就、周挑战和 `nextAction`；`POST /growth/claimAll` 在单事务、同一用户锁内重新核算选定范围，统一写入经验、积分、道具和头像框回执。重复请求必须幂等，任一项失败必须整体回滚；所有成长 GET 接口禁止顺带建表、回填解锁或修正领取状态。
 - 一次性成长任务采用“事件达成、用户领取”两阶段模型：`status = completed` 只表示业务条件已满足，`claimed_at` 才表示奖励已领取。头像等资料保存接口必须等待达成状态同步后再响应；经验发放只允许从领取事务进入，并用成长账本唯一来源键保证重复点击幂等。
-- 头像框完整目录仍由 `util/points.js` 用 `acquisition = shop | achievement` 统一组合；其中积分商品的价格、等级、AI/空间与免费/付费奖池来自版本化单一事实源 `util/pointsEconomyCatalog.js`，完整规范见 `docs/points-economy.md`。C4 的 13 款积分框为基础 `220 / 320 / 480`、进阶 `700 / 1000 / 1400`、炫彩 `2000 / 2800 / 3800`、传说 `6000 / 9000 / 12000 / 16000`；前三档无等级门槛，四款传说只要求 Lv.3～6。完整目录及所有入口仍按“基础 → 进阶 → 炫彩 → 传说”稳定递增，同档保留目录顺序；当前 29 款按 `7 / 7 / 7 / 8` 分布，积分框为 `3 / 3 / 3 / 4`，成就框为 `4 / 4 / 4 / 4`。书签、笔记与文件都按 200 炫彩、500 传说形成双阶梯；200 数量档同时要求 Lv.5，三类资源的 500 数量档同时要求 Lv.8。`bookmark_200` 对应新增 `frame_bookmark_corridor`，历史已领取该成就的用户由领取事实自动获得现行头像框权益，不回收既有装扮。视觉等级、结构 / 动效预算与新增款实施标准只遵循 `docs/avatar-frame-design.md`，经济版本不得另改几何或动效。所有商店预览、顶栏、个人中心、聊天室佩戴态和后台用户管理复用 `AvatarFramePreview` 的 64px 固定设计画布并整体等比缩放。后台用户分页接口随列表一次性左连接 `user_growth.equipped_frame`，禁止逐行请求；未知框 ID 回退普通头像。`GET /growth/shop` 返回当前 `economyVersion`、积分商品和完整 `frames`；购买接口只校验积分目录，佩戴接口校验完整目录与权益。Root 自己的普通管理会话保留全目录试戴能力，不扣积分、不写所有权，管理员预览上下文不继承。成就领取继续用不可重复的领取事实发放积分和头像框，历史领取兼容不能由只读入口产生写入。
-- C4 每日惊喜与积分抽奖使用独立奖池：每日惊喜按等级每日 `0 / 1 / 2 / 3 / 3` 次，只发积分或 AI 永久余额，不发永久空间/补签卡，也不推进付费保底；付费单抽 170、十连 1600，每第 10 次付费抽从稀有池命中。`lottery_count` 保留为历史总数，权威付费状态位于 `lottery_paid_count` 与 `lottery_paid_pity_progress`。
-- 商店购买和两类抽奖使用 `points_economy_operations` 保存账号级幂等请求、经济版本、规范负载哈希和可回放结果。服务端必须先回放成功旧请求，再校验新请求的版本与预期价格；扣分、资产、保底和操作结果在同一事务提交。`points_economy_migration_state` 标记显式的一次性旧保底继承，C4 激活但标记缺失时应用拒绝启动；`ensurePointsSchema()` 只补表/列，不执行历史回填。
-- 获取策略与 C4 消费目录独立，C5 基础规范见 `docs/points-earning-c5.md`，C6 每日任务扩展见 `docs/points-earning-c6.md`。签到、每日任务和每周挑战稳定理论周上限保持 670；C6 每天固定签到，并从“收藏书签/新建笔记/上传文件/创建待办”四个无需前置库存的任务中稳定选择两个不同任务，任务由不可变 `growth_events` 事实聚合。账号加自然日可唯一重算同一组合，连续 6 天组合不重复，GET 不写分配状态；事件只保存低敏感类型/判重键，不保存正文、标题、URL 或路径。账号自然日/ISO 周版本由 `points_earning_period_policy` 固化，领取事务重算并使用版本化 ref，避免同周期双领。
-- C5 用户积分中心按今日、本周和最多 28 天有界聚合，目标商品实时读取 C4 服务端目录，预计天数只使用稳定收入且支持低压力模式。Root 治理按最大 365 天范围聚合，提供健康、来源/去向、用户 360、只读模拟、异常和游标对账；期初差额由 `points_ledger_baselines` 固化，对账只报告，人工修正只补幂等 `correction` 流水，不自动覆盖余额。
+- 头像框完整目录仍由 `util/points.js` 用 `acquisition = shop | achievement` 统一组合；其中积分商品的价格、等级、AI/空间、兑换上限与免费/付费奖池来自版本化单一事实源 `util/pointsEconomyCatalog.js`，完整规范见 `docs/points-economy.md`。C5 的 13 款积分框为基础 `220 / 320 / 480`、进阶 `700 / 1000 / 1400`、炫彩 `2000 / 2800 / 3800`、传说 `6000 / 9000 / 12000 / 16000`；前三档无等级门槛，四款传说只要求 Lv.3～6。两款 AI 包可重复兑换，三档永久空间每账号各限一次。完整目录及所有入口仍按“基础 → 进阶 → 炫彩 → 传说”稳定递增，同档保留目录顺序；当前 29 款按 `7 / 7 / 7 / 8` 分布，积分框为 `3 / 3 / 3 / 4`，成就框为 `4 / 4 / 4 / 4`。书签、笔记与文件都按 200 炫彩、500 传说形成双阶梯；200 数量档同时要求 Lv.5，三类资源的 500 数量档同时要求 Lv.8。`bookmark_200` 对应新增 `frame_bookmark_corridor`，历史已领取该成就的用户由领取事实自动获得现行头像框权益，不回收既有装扮。视觉等级、结构 / 动效预算与新增款实施标准只遵循 `docs/avatar-frame-design.md`，经济版本不得另改几何或动效。所有商店预览、顶栏、个人中心、聊天室佩戴态和后台用户管理复用 `AvatarFramePreview` 的 64px 固定设计画布并整体等比缩放。后台用户分页接口随列表一次性左连接 `user_growth.equipped_frame`，禁止逐行请求；未知框 ID 回退普通头像。`GET /growth/shop` 返回当前 `economyVersion`、积分商品（含有限次领取状态）和完整 `frames`；购买接口只校验积分目录，佩戴接口校验完整目录与权益。Root 自己的普通管理会话保留全目录试戴能力，不扣积分、不写所有权，管理员预览上下文不继承。成就领取继续用不可重复的领取事实发放积分和头像框，历史领取兼容不能由只读入口产生写入。
+- C4/C5 每日惊喜与积分抽奖使用同一组独立奖池：每日惊喜按等级每日 `0 / 1 / 2 / 3 / 3` 次，只发积分或 AI 永久余额，不发永久空间/补签卡，也不推进付费保底；付费单抽 170、十连 1600，每第 10 次付费抽从稀有池命中。`lottery_count` 保留为历史总数，权威付费状态位于 `lottery_paid_count` 与 `lottery_paid_pity_progress`。
+- 商店购买和两类抽奖使用 `points_economy_operations` 保存账号级幂等请求、经济版本、规范负载哈希和可回放结果。服务端必须先回放成功旧请求，再校验新请求的版本与预期价格；扣分、资产、保底和操作结果在同一事务提交。`points_shop_item_claims` 以 `(user_id, item_id)` 唯一键保存有限次商品事实，C5 空间购买在同一事务先竞争该事实再扣分；历史 `reason=buy` 只由显式迁移回填，抽奖空间不占资格。`points_economy_migration_state` 同时标记 C4 旧保底继承与 C5 空间限兑回填，C5 激活但任一标记缺失时应用拒绝启动；`ensurePointsSchema()` 只补表/列，不执行历史回填。
+- 获取策略与 C5 消费目录独立，获取 C5 基础规范见 `docs/points-earning-c5.md`，C6 每日任务扩展见 `docs/points-earning-c6.md`。签到、每日任务和每周挑战稳定理论周上限保持 670；C6 每天固定签到，并从“收藏书签/新建笔记/上传文件/创建待办”四个无需前置库存的任务中稳定选择两个不同任务，任务由不可变 `growth_events` 事实聚合。账号加自然日可唯一重算同一组合，连续 6 天组合不重复，GET 不写分配状态；事件只保存低敏感类型/判重键，不保存正文、标题、URL 或路径。账号自然日/ISO 周版本由 `points_earning_period_policy` 固化，领取事务重算并使用版本化 ref，避免同周期双领。
+- C5 用户积分中心按今日、本周和最多 28 天有界聚合，目标商品实时读取当前服务端消费目录，预计天数只使用稳定收入且支持低压力模式。Root 治理按最大 365 天范围聚合，提供健康、来源/去向、用户 360、只读模拟、异常和游标对账；期初差额由 `points_ledger_baselines` 固化，对账只报告，人工修正只补幂等 `correction` 流水，不自动覆盖余额。
 - 正向活动积分通过 `points_campaigns` 状态机和冻结收件人表执行，结构化受众默认排除游客、删除/非普通/有效封禁账号；预览不写积分，名单冻结后按租约小批执行，每个收件人复用 `points_grant_operations` 请求号。Campaign 依赖治理开关与显式正数安全上限，禁止批量扣分。`20260814_points_earning_c5.sql` 显式固化旧成就快照、历史有意义行为和对账基线；应用启动只补结构。
 
 ### 分享链接安全 —— 明确未完成

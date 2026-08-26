@@ -3,6 +3,7 @@
 import { Ref } from 'vue';
 import { PWA_LAUNCH_QUERY_KEY, PWA_LAUNCH_QUERY_VALUE, PWA_RUNTIME_SESSION_KEY } from '@/config/appEntryBootstrap.ts';
 import { configureMarkdownRenderer } from '@/utils/markdownRenderer.ts';
+import { makeNotePreviewCheckboxesReadonly } from '@/utils/noteHtmlToMarkdown.ts';
 
 export const copyTextToClipboard = function (text) {
   // 检查浏览器是否支持Clipboard API
@@ -388,7 +389,7 @@ export async function noteContentToHtml(content: string = '', type?: string): Pr
   }
   try {
     const DOMPurify = await loadDompurify();
-    return DOMPurify.sanitize(html);
+    return makeNotePreviewCheckboxesReadonly(DOMPurify.sanitize(html));
   } catch {
     // v-html 的安全边界不能在消毒器加载失败时退化为原始 HTML。
     return '';

@@ -1,4 +1,5 @@
 import { createPinia, setActivePinia } from 'pinia';
+import { nextTick } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import useNoteWorkspaceStore, { NOTE_TREE_ROOT_KEY } from './noteWorkspace';
 import type { NoteTreeItem } from '@/types/noteTree';
@@ -37,6 +38,29 @@ describe('noteWorkspace 目录元数据同步', () => {
     workspace.setDetailTreeScrollTop(240);
     workspace.ensureOwner('user-b');
     expect(workspace.detailTreeScrollTop).toBe(0);
+  });
+
+  it('桌面预览只在同一账号的当前标签页恢复，显式关闭后清除', () => {
+    const workspace = useNoteWorkspaceStore();
+    workspace.ensureOwner('user-a');
+    workspace.setLibraryPreviewPage('leaf-note');
+
+    expect(workspace.libraryPreviewPageId).toBe('leaf-note');
+    expect(JSON.parse(sessionStorage.getItem('light-note-note-library-preview') || '{}')).toEqual({
+      ownerKey: 'user-a',
+      noteId: 'leaf-note',
+    });
+
+    setActivePinia(createPinia());
+    const restoredWorkspace = useNoteWorkspaceStore();
+    restoredWorkspace.ensureOwner('user-b');
+    expect(restoredWorkspace.libraryPreviewPageId).toBeNull();
+
+    restoredWorkspace.ensureOwner('user-a');
+    expect(restoredWorkspace.libraryPreviewPageId).toBe('leaf-note');
+    restoredWorkspace.setLibraryPreviewPage(null);
+    expect(restoredWorkspace.libraryPreviewPageId).toBeNull();
+    expect(sessionStorage.getItem('light-note-note-library-preview')).toBeNull();
   });
 
   it('保存标题与格式后同步普通树、搜索树和所有已缓存面包屑', () => {
@@ -199,6 +223,57 @@ describe('noteWorkspace 目录元数据同步', () => {
     await expect(Promise.all([first, second])).resolves.toEqual([items, items]);
     expect(workspace.currentBreadcrumb).toEqual(items);
     expect(mocks.apiBasePost).toHaveBeenCalledTimes(1);
+  });
+
+  it('预览复用详情内嵌路径展开祖先并写入展开缓存，不覆盖当前浏览面包屑', async () => {
+    const workspace = useNoteWorkspaceStore();
+    workspace.ensureOwner('user-a');
+    workspace.currentBreadcrumb = [{ id: 'browse-parent', title: '当前浏览目录' }];
+    const items = [
+      { id: 'root-parent', title: '根父页面' },
+      { id: 'nested-parent', title: '嵌套父页面' },
+      { id: 'leaf-note', title: '叶子页面' },
+    ];
+    mocks.apiBasePost.mockImplementation(async (url: string, payload: { parentId?: string | null }) => {
+      expect(url).toBe('/api/note/queryNoteTree');
+      if (payload.parentId === null) {
+        return {
+          status: 200,
+          data: {
+            items: [treeNode({ id: 'root-parent', childCount: 1, hasChildren: true })],
+          },
+        };
+      }
+      if (payload.parentId === 'root-parent') {
+        return {
+          status: 200,
+          data: {
+            items: [treeNode({ id: 'nested-parent', parentId: 'root-parent', childCount: 1, hasChildren: true })],
+          },
+        };
+      }
+      return {
+        status: 200,
+        data: { items: [treeNode({ id: 'leaf-note', parentId: 'nested-parent' })] },
+      };
+    });
+
+    await expect(workspace.revealNotePath('leaf-note', items)).resolves.toEqual(items);
+    await nextTick();
+
+    expect(workspace.breadcrumbByNote['leaf-note']).toEqual(items);
+    expect(workspace.currentBreadcrumb).toEqual([{ id: 'browse-parent', title: '当前浏览目录' }]);
+    expect(workspace.expandedIds).toEqual(new Set(['root-parent', 'nested-parent']));
+    expect(JSON.parse(sessionStorage.getItem('light-note-note-tree-expanded-ids') || '[]')).toEqual([
+      'root-parent',
+      'nested-parent',
+    ]);
+    expect(mocks.apiBasePost).toHaveBeenCalledTimes(3);
+    expect(mocks.apiBasePost).not.toHaveBeenCalledWith(
+      '/api/note/queryNoteBreadcrumb',
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it('详情接口随正文返回的面包屑会直接写入缓存，后续读取不再发起网络请求', async () => {

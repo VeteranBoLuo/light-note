@@ -1,9 +1,10 @@
 import crypto from 'node:crypto';
-import { AFDIAN_AI_REWARD_POLICY } from '@lightnote/shared';
+import { AFDIAN_AI_REWARD_POLICY, AFDIAN_ORDER_PURPOSE, AFDIAN_PURE_SUPPORT_POLICY } from '@lightnote/shared';
 import pool from '../db/index.js';
 import { recordAdminOperationAudit } from './adminOperationAudit.js';
 import { creditAiBonusTokens } from './aiBonusWallet.js';
 import { afdianError } from './afdianConfig.js';
+import { syncAfdianPackageEntitlementForOrder } from './afdianSupportEntitlementService.js';
 
 export const AFDIAN_REWARD_STATUS = Object.freeze({
   PENDING_LINK: 'pending_link',
@@ -12,6 +13,7 @@ export const AFDIAN_REWARD_STATUS = Object.freeze({
   LEGACY_EXCLUDED: 'legacy_excluded',
   REVERSAL_REVIEW: 'reversal_review',
   INELIGIBLE: 'ineligible',
+  NO_ENTITLEMENT: 'no_entitlement',
 });
 
 function moneyToCents(value, { allowZero = false } = {}) {
@@ -47,11 +49,20 @@ export function calculateAfdianRewardTokens(amount, tokensPerCny = AFDIAN_AI_REW
 
 async function loadOrder(connection, supportOrderId) {
   const [rows] = await connection.query(
-    `SELECT o.id, o.provider_order_no, o.light_note_user_id, o.ownership_source, o.product_type,
+    `SELECT o.id, o.provider_order_no, o.provider_user_id, o.provider_private_id,
+            o.checkout_intent_id, o.light_note_user_id, o.ownership_source, o.order_purpose, o.product_type,
             o.total_amount, o.provider_status, o.verification_state,
             UNIX_TIMESTAMP(o.provider_created_at) AS provider_created_epoch,
             UNIX_TIMESTAMP(i.create_time) AS checkout_created_epoch,
-            UNIX_TIMESTAMP(o.create_time) AS first_seen_epoch
+            UNIX_TIMESTAMP(o.create_time) AS first_seen_epoch,
+            i.user_id AS intent_user_id, i.provider_user_id AS intent_provider_user_id,
+            i.provider_private_id AS intent_provider_private_id,
+            COALESCE(i.intent_type, 'legacy') AS intent_type, i.intent_status,
+            i.sku_id, i.catalog_version, i.quoted_amount,
+            i.base_ai_tokens, i.base_storage_mb, i.quoted_ai_tokens, i.quoted_storage_mb,
+            i.first_purchase_candidate, i.campaign_id, i.campaign_sku_id,
+            i.campaign_version, i.campaign_user_limit, i.campaign_starts_at, i.campaign_ends_at,
+            i.consumed_order_id, UNIX_TIMESTAMP(i.expires_at) AS intent_expires_epoch
        FROM support_orders o
        LEFT JOIN support_checkout_intents i ON i.id = o.checkout_intent_id
       WHERE o.id = ?
@@ -92,22 +103,8 @@ async function loadPolicy(connection, policyVersion) {
 
 async function loadApplicablePolicy(connection, order, grant) {
   if (grant?.policy_version) return loadPolicy(connection, grant.policy_version);
-  const orderEpoch = Number(
-    order.provider_created_epoch || order.checkout_created_epoch || order.first_seen_epoch || 0,
-  );
-  if (orderEpoch > 0) {
-    const [rows] = await connection.query(
-      `SELECT policy_version, tokens_per_cny, auto_credit_max_amount,
-              UNIX_TIMESTAMP(activated_at) AS activated_epoch
-         FROM support_reward_policy_state
-        WHERE activated_at <= FROM_UNIXTIME(?)
-        ORDER BY activated_at DESC, policy_version DESC
-        LIMIT 1`,
-      [orderEpoch],
-    );
-    if (rows[0]) return rows[0];
-  }
-  // 比最早策略更旧的订单仍需用当前版本登记为“历史不补发”，但绝不进入入账分支。
+  // order_purpose 已经冻结新旧边界；旧支持始终按当时承诺的 v1 解释，
+  // 不能因为后来发布零权益策略而重新计算历史订单。
   return loadPolicy(connection, AFDIAN_AI_REWARD_POLICY.version);
 }
 
@@ -199,10 +196,50 @@ async function preserveOrFlagCreditedGrant(connection, { order, grant, tokens, p
 export async function syncAfdianRewardForOrder(
   connection,
   supportOrderId,
-  { manualApproval = false, actorUserId = null, approvalSnapshot = null } = {},
+  { manualApproval = false, actorUserId = null, approvalSnapshot = null, env = process.env } = {},
 ) {
   const order = await loadOrder(connection, supportOrderId);
+  const purpose = String(order.order_purpose || AFDIAN_ORDER_PURPOSE.UNKNOWN);
+  // 用途一旦冻结就是唯一事实源。即使第三方后来返回了不同 custom_order_id，
+  // 也不能让 intent_type 绕过 donation/unknown 重新解释并发放套餐权益。
+  if (purpose === AFDIAN_ORDER_PURPOSE.ENTITLEMENT_PURCHASE) {
+    return syncAfdianPackageEntitlementForOrder(connection, order, { env });
+  }
   const grant = await loadGrant(connection, supportOrderId);
+
+  if (purpose === AFDIAN_ORDER_PURPOSE.DONATION) {
+    if (Number(grant?.granted_tokens || 0) > 0) {
+      const historicalPolicy = await loadPolicy(connection, grant.policy_version);
+      return preserveOrFlagCreditedGrant(connection, {
+        order,
+        grant,
+        tokens: Number(grant.calculated_tokens || grant.granted_tokens || 0),
+        policyVersion: String(historicalPolicy.policy_version),
+      });
+    }
+    const purePolicy = await loadPolicy(connection, AFDIAN_PURE_SUPPORT_POLICY.version);
+    return saveGrant(connection, {
+      grant,
+      order,
+      policyVersion: String(purePolicy.policy_version),
+      tokens: 0,
+      status: AFDIAN_REWARD_STATUS.NO_ENTITLEMENT,
+      reasonCode: 'pure_support_no_entitlement',
+    });
+  }
+
+  if (purpose !== AFDIAN_ORDER_PURPOSE.LEGACY_SUPPORT) {
+    const purePolicy = await loadPolicy(connection, AFDIAN_PURE_SUPPORT_POLICY.version);
+    return saveGrant(connection, {
+      grant,
+      order,
+      policyVersion: String(purePolicy.policy_version),
+      tokens: 0,
+      status: AFDIAN_REWARD_STATUS.MANUAL_REVIEW,
+      reasonCode: 'order_purpose_unknown',
+    });
+  }
+
   const policy = await loadApplicablePolicy(connection, order, grant);
   const policyVersion = String(policy.policy_version);
   const amountCents = moneyToCents(order.total_amount, { allowZero: true });

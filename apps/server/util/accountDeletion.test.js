@@ -175,6 +175,11 @@ describe('账号注销后台清理', () => {
       'support_account_links',
       'support_orders',
       'support_public_preferences',
+      'support_entitlement_grants',
+      'support_first_purchase_claims',
+      'support_campaign_user_limits',
+      'points_shop_item_claims',
+      'points_economy_operations',
     ]);
 
     await purgeOwnedResources(connection, tables, 'user-1');
@@ -182,7 +187,10 @@ describe('账号注销后台清理', () => {
 
     expect(
       connection.query.mock.calls.some(
-        ([sql, params]) => sql.includes('DELETE FROM support_checkout_intents') && params[0] === 'user-1',
+        ([sql, params]) =>
+          sql.includes('DELETE FROM support_checkout_intents') &&
+          sql.includes("intent_type = 'legacy'") &&
+          params[0] === 'user-1',
       ),
     ).toBe(true);
     expect(
@@ -195,13 +203,54 @@ describe('账号注销后台清理', () => {
         ([sql, params]) => sql.includes('DELETE FROM support_public_preferences') && params[0] === 'user-1',
       ),
     ).toBe(true);
-    const orderUpdates = connection.query.mock.calls.filter(([sql]) => sql.includes('UPDATE support_orders'));
-    expect(orderUpdates[0]?.[0]).toContain('o.light_note_user_id = i.user_id');
-    expect(orderUpdates[0]?.[0]).toContain('i.user_id <> ?');
-    expect(orderUpdates[0]?.[1]).toEqual(['user-1', 'user-1']);
-    expect(orderUpdates[1]?.[0]).toContain('o.checkout_intent_id = NULL');
-    expect(orderUpdates[1]?.[0]).toContain("ELSE 'oauth'");
-    expect(orderUpdates[1]?.[1]).toEqual(['user-1']);
+    expect(
+      connection.query.mock.calls.some(
+        ([sql, params]) =>
+          sql.includes('UPDATE support_entitlement_grants SET user_id = NULL') && params[0] === 'user-1',
+      ),
+    ).toBe(true);
+    const firstClaimUpdate = connection.query.mock.calls.find(([sql]) =>
+      sql.includes('UPDATE support_first_purchase_claims SET user_id = ?'),
+    );
+    expect(firstClaimUpdate?.[1]?.[0]).toMatch(/^deleted:[0-9a-f]{64}$/);
+    expect(firstClaimUpdate?.[1]?.[1]).toBe('user-1');
+    expect(
+      connection.query.mock.calls.some(
+        ([sql, params]) => sql.includes('DELETE FROM support_campaign_user_limits') && params[0] === 'user-1',
+      ),
+    ).toBe(true);
+    const shopClaimDelete = connection.query.mock.calls.findIndex(([sql]) =>
+      sql.includes('DELETE FROM points_shop_item_claims'),
+    );
+    const economyOperationDelete = connection.query.mock.calls.findIndex(([sql]) =>
+      sql.includes('DELETE FROM points_economy_operations'),
+    );
+    expect(shopClaimDelete).toBeGreaterThanOrEqual(0);
+    expect(shopClaimDelete).toBeLessThan(economyOperationDelete);
+    const packageOrderUpdate = connection.query.mock.calls.find(
+      ([sql]) =>
+        sql.includes('UPDATE support_orders') && sql.includes("i.intent_type IN ('donation', 'permanent', 'campaign')"),
+    );
+    expect(packageOrderUpdate?.[0]).toContain('o.light_note_user_id = NULL');
+    expect(packageOrderUpdate?.[1]).toEqual(['user-1']);
+    const packageIntentUpdate = connection.query.mock.calls.find(
+      ([sql]) =>
+        sql.includes('UPDATE support_checkout_intents') &&
+        sql.includes("intent_type IN ('donation', 'permanent', 'campaign')"),
+    );
+    expect(packageIntentUpdate?.[1]?.[0]).toMatch(/^deleted:[0-9a-f]{64}$/);
+    expect(packageIntentUpdate?.[0]).toContain("WHEN consumed_order_id IS NULL THEN 'cancelled'");
+    expect(packageIntentUpdate?.[0]).toContain('WHEN consumed_order_id IS NULL AND expires_at > NOW() THEN NOW()');
+    const reassignmentUpdate = connection.query.mock.calls.find(
+      ([sql]) => sql.includes('UPDATE support_orders') && sql.includes('o.light_note_user_id = i.user_id'),
+    );
+    expect(reassignmentUpdate?.[0]).toContain('i.user_id <> ?');
+    expect(reassignmentUpdate?.[1]).toEqual(['user-1', 'user-1']);
+    const legacyIntentDetach = connection.query.mock.calls.find(
+      ([sql]) => sql.includes('UPDATE support_orders') && sql.includes('o.checkout_intent_id = NULL'),
+    );
+    expect(legacyIntentDetach?.[0]).toContain("ELSE 'oauth'");
+    expect(legacyIntentDetach?.[1]).toEqual(['user-1']);
     const firstSupportDelete = connection.query.mock.calls.findIndex(([sql]) =>
       sql.includes('DELETE FROM support_checkout_intents'),
     );

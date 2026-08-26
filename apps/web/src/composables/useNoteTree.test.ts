@@ -23,6 +23,8 @@ vi.mock('@/router', () => ({
 vi.mock('@/http/request', () => ({ apiBasePost: mocks.apiBasePost }));
 
 const { NOTE_TREE_ROOT_KEY, useNoteTree } = await import('./useNoteTree');
+const { default: useUserStore } = await import('@/store/useUser');
+const { default: useNoteWorkspaceStore } = await import('@/store/noteWorkspace');
 
 describe('useNoteTree', () => {
   beforeEach(() => {
@@ -164,6 +166,44 @@ describe('useNoteTree', () => {
       path: '/noteLibrary',
       query: { tag: 'tag-1' },
     });
+    scope.stop();
+  });
+
+  it('目录与预览 owner 同时隔离访客工作区和管理上下文实例', async () => {
+    mocks.route.value = {
+      query: {},
+      fullPath: '/noteLibrary',
+    };
+    const user = useUserStore();
+    user.setUserInfo({ id: 'shared-user', role: 'root', visitorWorkspace: false });
+    const scope = effectScope();
+    scope.run(() => useNoteTree({ enabled: ref(false) }));
+    const workspace = useNoteWorkspaceStore();
+    const ordinaryOwner = workspace.ownerKey;
+
+    user.visitorWorkspace = true;
+    await Promise.resolve();
+    const visitorOwner = workspace.ownerKey;
+
+    user.visitorWorkspace = false;
+    user.adminContext = {
+      id: 'context-a',
+      subjectUserId: 'target-user',
+      subjectRole: 'user',
+      subjectAlias: '目标用户',
+      mode: 'readonly',
+      issuedAt: '',
+      expiresAt: '',
+      capabilities: [],
+    };
+    await Promise.resolve();
+    const firstAdminOwner = workspace.ownerKey;
+    user.adminContext.id = 'context-b';
+    await Promise.resolve();
+
+    expect(visitorOwner).not.toBe(ordinaryOwner);
+    expect(firstAdminOwner).not.toBe(visitorOwner);
+    expect(workspace.ownerKey).not.toBe(firstAdminOwner);
     scope.stop();
   });
 

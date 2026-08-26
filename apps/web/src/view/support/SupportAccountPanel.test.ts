@@ -10,31 +10,25 @@ vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
 
 import SupportAccountPanel from './SupportAccountPanel.vue';
 
-const rewardStatuses = [
-  ['credited', 600_000],
-  ['pending_link', 0],
-  ['manual_review', 0],
-  ['legacy_excluded', 0],
-  ['reversal_review', 600_000],
-  ['ineligible', 0],
-] as const;
-
-function rewardOrder(
-  [rewardStatus, grantedTokens]: (typeof rewardStatuses)[number],
-  index: number,
-): AfdianSupportOrder {
+function supportOrder(id: string, purpose: 'legacy_support' | 'donation'): AfdianSupportOrder {
   return {
-    id: `order-${index}`,
+    id,
     amount: '6.00',
     month: 1,
     productType: 0,
     optionKey: 'coffee',
     ownershipSource: 'checkout',
+    orderPurpose: purpose,
     confirmedAt: '2026-08-25 12:00:00',
-    rewardStatus,
-    rewardReasonCode: null,
-    rewardTokens: 600_000,
-    grantedTokens,
+    rewardStatus: purpose === 'legacy_support' ? 'credited' : 'no_entitlement',
+    rewardReasonCode: purpose === 'legacy_support' ? null : 'pure_support_no_entitlement',
+    rewardTokens: purpose === 'legacy_support' ? 600_000 : 0,
+    grantedTokens: purpose === 'legacy_support' ? 600_000 : 0,
+    rewardStorageMb: 0,
+    grantedStorageMb: 0,
+    intentType: purpose === 'donation' ? 'donation' : 'legacy',
+    skuId: null,
+    firstPurchaseApplied: false,
   };
 }
 
@@ -48,8 +42,8 @@ afterEach(() => {
   host = null;
 });
 
-describe('赞助账号面板永久额度状态', () => {
-  it('分别展示已到账、待复核、历史排除和反转复核等状态', async () => {
+describe('纯赞助账号面板', () => {
+  it('只展示支持金额、笔数和用途标识，不把旧赠送或商店权益混入当前规则', async () => {
     const state: AfdianSupportState = {
       authenticated: true,
       oauthAvailable: true,
@@ -57,33 +51,26 @@ describe('赞助账号面板永久额度状态', () => {
       linked: true,
       linkedAt: '2026-08-25 10:00:00',
       providerAccount: { name: '测试支持者', avatarUrl: null },
-      orderCount: rewardStatuses.length,
-      totalAmount: '36.00',
-      grantedTokens: 1_200_000,
+      orderCount: 2,
+      totalAmount: '12.00',
       lastSupportAt: '2026-08-25 12:00:00',
       publicPreference: { participateInRanking: true, showIdentity: false, adminHidden: false },
-      recentOrders: rewardStatuses.map(rewardOrder),
+      recentOrders: [supportOrder('new-donation', 'donation'), supportOrder('legacy-support', 'legacy_support')],
     };
     host = document.createElement('div');
     document.body.append(host);
     app = createApp(SupportAccountPanel, { state, unlinking: false, preferenceSaving: false });
-    app.use(
-      createI18n({
-        legacy: false,
-        locale: 'zh-CN',
-        messages: { 'zh-CN': zhCN },
-      }),
-    );
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
     app.mount(host);
     await nextTick();
 
-    expect(host.textContent).toContain('120万');
-    expect(host.textContent).toContain('+60万 永久 AI');
-    expect(host.textContent).toContain('关联账号后赠送');
-    expect(host.textContent).toContain('额度待人工复核');
-    expect(host.textContent).toContain('历史订单不参与赠送');
-    expect(host.textContent).toContain('订单状态复核中');
-    expect(host.textContent).toContain('该订单不参与赠送');
-    expect(host.querySelectorAll('.support-account-panel__order')).toHaveLength(rewardStatuses.length);
+    expect(host.textContent).toContain('¥12.00');
+    expect(host.textContent).toContain('赞助已确认');
+    expect(host.textContent).toContain('历史支持 · 已按旧规则处理');
+    expect(host.textContent).toContain('当前以匿名支持者展示');
+    expect(host.textContent).not.toContain('永久 AI');
+    expect(host.textContent).not.toContain('永久空间');
+    expect(host.textContent).not.toContain('+60万');
+    expect(host.querySelectorAll('.support-account-panel__order')).toHaveLength(2);
   });
 });

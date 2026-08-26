@@ -694,7 +694,7 @@
   }
 
   .note-share-reader__article {
-    width: min(100% - 48px, 880px);
+    width: min(calc(100% - 48px), 880px);
     min-height: calc(100vh - 150px);
     margin: 34px auto 24px;
     padding: 54px 68px 70px;

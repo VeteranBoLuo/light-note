@@ -4,7 +4,7 @@ import router from '@/router';
 import useUserStore from '@/store/useUser';
 import useNoteWorkspaceStore, { NOTE_TREE_ROOT_KEY } from '@/store/noteWorkspace';
 import type { NoteTreeItem } from '@/types/noteTree';
-import { prefetchNoteDetail } from '@/api/noteDetailPrefetch';
+import { buildNoteDetailRequestScope, prefetchNoteDetail } from '@/api/noteDetailPrefetch';
 import { resolveNoteLibraryListPath } from '@/utils/noteDetailNavigation';
 
 export { NOTE_TREE_ROOT_KEY } from '@/store/noteWorkspace';
@@ -53,16 +53,8 @@ export function useNoteTree(
   } = storeToRefs(workspace);
 
   const currentParentId = computed(() => queryValue(router.currentRoute.value.query.parent));
-  const resourceOwnerKey = computed(
-    () =>
-      options.ownerKey?.value ||
-      [
-        user.id || 'anonymous',
-        user.role || '',
-        user.adminContext?.subjectUserId || '',
-        user.adminContext?.mode || '',
-      ].join('|'),
-  );
+  // 目录、详情预取与桌面预览必须使用同一身份边界，尤其要区分访客工作区和每次管理上下文。
+  const resourceOwnerKey = computed(() => options.ownerKey?.value || buildNoteDetailRequestScope(user));
 
   async function loadChildren(parentId: string | null = null, force = false) {
     if (!enabled.value) return [];

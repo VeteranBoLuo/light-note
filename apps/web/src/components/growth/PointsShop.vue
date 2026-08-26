@@ -1,5 +1,5 @@
 <template>
-  <div class="ps">
+  <div ref="shopRoot" class="ps">
     <div v-if="!shop && (shopLoading || !shopError)" class="ps-state"><BLoading size="small" /></div>
     <div v-else-if="shopError && !shop" class="ps-state ps-state--error">
       <span>{{ t('growth.shopLoadFailed') }}</span>
@@ -20,17 +20,28 @@
       </div>
 
       <div class="ps-earn"><SvgIcon :src="icon.message.info" size="15" /> {{ t('growth.shopEarnHint') }}</div>
+      <div class="ps-store-bridge">
+        <span class="ps-store-bridge__icon" aria-hidden="true"><SvgIcon :src="icon.support.store" size="19" /></span>
+        <div>
+          <strong>{{ t('growth.shopStoreTitle') }}</strong>
+          <span>{{ t('growth.shopStoreDescription') }}</span>
+        </div>
+        <BButton size="small" @click="goToStore">{{ t('growth.shopStoreAction') }}</BButton>
+      </div>
       <div v-if="shop?.isVisitor" class="ps-visitor">{{ t('growth.shopVisitorTip') }}</div>
       <div v-else-if="shop && !shop.purchaseEnabled" class="ps-visitor">{{ t('growth.shopMaintenance') }}</div>
 
       <!-- 实用道具 -->
       <div v-if="consumables.length" class="ps-section-title">{{ t('growth.shopSectionConsumable') }}</div>
       <div class="ps-grid">
-        <div v-for="it in consumables" :key="it.id" class="ps-item">
+        <div v-for="it in consumables" :key="it.id" class="ps-item" :class="{ 'is-focused': isFocused(it) }">
           <div class="ps-item-icon"><SvgIcon :src="itemIcon(it.id)" size="27" /></div>
           <div class="ps-item-body">
             <div class="ps-item-name">{{ itemName(it) }}</div>
             <div class="ps-item-desc">{{ itemDesc(it) }}</div>
+            <BChip v-if="hasPurchaseLimit(it)" :tone="isLimitReached(it) ? 'success' : 'neutral'" class="ps-item-limit">
+              {{ purchaseLimitLabel(it) }}
+            </BChip>
           </div>
           <div class="ps-item-foot">
             <span class="ps-purchase-meta">
@@ -156,20 +167,20 @@
 
       <!-- 兑换确认 -->
       <BModal v-model:visible="confirmVisible" :title="t('growth.shopBuy')" width="360px" @ok="confirmBuy">
-        <div class="ps-confirm">{{
-          pending ? t('growth.shopBuyConfirm', { n: pending.cost, name: itemName(pending) }) : ''
-        }}</div>
+        <div class="ps-confirm">{{ pending ? purchaseConfirmation(pending) : '' }}</div>
       </BModal>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted, ref } from 'vue';
+  import { computed, nextTick, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { useRouter } from 'vue-router';
   import { useGrowth, type ShopItem } from '@/composables/useGrowth.ts';
   import { useUserStore } from '@/store';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
@@ -181,16 +192,68 @@
   import { frameVariant, sortFramesByRarity } from '@/config/growthFrames';
 
   const { t, te } = useI18n();
-  const props = withDefaults(defineProps<{ readOnly?: boolean }>(), { readOnly: false });
+  const router = useRouter();
+  const props = withDefaults(defineProps<{ readOnly?: boolean; focus?: string }>(), {
+    readOnly: false,
+    focus: '',
+  });
   const readOnly = computed(() => props.readOnly);
   const { dashboard, shop, shopLoading, shopError, loadShop, buyItem, equipFrame, claimAchievement } = useGrowth();
   const user = useUserStore();
   const avatarSrc = computed(() => user.headPicture || icon.navigation.user);
+  const shopRoot = ref<HTMLElement | null>(null);
+
+  function goToStore() {
+    const category = ['ai', 'storage'].includes(props.focus) ? props.focus : 'ai';
+    void router.push({ path: '/store', query: { category } });
+  }
 
   function itemIcon(itemId: string) {
     if (itemId.startsWith('ai_pack')) return icon.growth.ai;
     if (itemId.startsWith('storage_')) return icon.growth.storage;
     return icon.growth.reward;
+  }
+
+  function itemAsset(it: ShopItem) {
+    if (it.id.startsWith('ai_pack')) return 'ai';
+    if (it.id.startsWith('storage_')) return 'storage';
+    return '';
+  }
+
+  function isFocused(it: ShopItem) {
+    return ['ai', 'storage'].includes(props.focus) && itemAsset(it) === props.focus;
+  }
+
+  function hasPurchaseLimit(it: ShopItem) {
+    return Number(it.purchaseLimit || 0) > 0;
+  }
+
+  function isLimitReached(it: ShopItem) {
+    return Boolean(
+      it.limitReached ||
+      it.unavailableReasons?.includes('purchase_limit') ||
+      (hasPurchaseLimit(it) && Number(it.purchaseCount || 0) >= Number(it.purchaseLimit || 0)),
+    );
+  }
+
+  function purchaseLimitLabel(it: ShopItem) {
+    return isLimitReached(it)
+      ? t('growth.shopLimitRedeemed')
+      : t('growth.shopPurchaseLimit', { n: Number(it.purchaseLimit || 1) });
+  }
+
+  function purchaseConfirmation(it: ShopItem) {
+    const params = { n: it.cost, name: itemName(it) };
+    return hasPurchaseLimit(it) ? t('growth.shopBuyConfirmLimited', params) : t('growth.shopBuyConfirm', params);
+  }
+
+  async function focusRequestedAsset() {
+    if (!['ai', 'storage'].includes(props.focus)) return;
+    await nextTick();
+    shopRoot.value?.querySelector<HTMLElement>('.ps-item.is-focused')?.scrollIntoView({
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      block: 'center',
+    });
   }
 
   // 名称/描述优先取 i18n(双语),缺失键则回退后端返回的中文名(单一经济事实源仍在后端)
@@ -283,6 +346,7 @@
     if (readOnly.value) return false;
     const s = shop.value;
     if (!s || !s.purchaseEnabled || s.isVisitor || canEquipFrame(it) || it.acquisition === 'achievement') return false;
+    if (isLimitReached(it)) return false;
     if (it.minLevel && (s.level || 0) < it.minLevel) return false;
     if (it.effect === 'makeup_card' && (s.protectCards || 0) >= 2) return false;
     return (s.points || 0) >= Number(it.cost || 0);
@@ -291,6 +355,7 @@
   function unavailableLabel(it: ShopItem) {
     const s = shop.value;
     if (!s || it.owned || it.acquisition === 'achievement') return '';
+    if (isLimitReached(it)) return '';
     if (!s.purchaseEnabled) return t('growth.shopMaintenance');
     if (s.isVisitor) return t('growth.shopLoginRequired');
     if (it.minLevel && (s.level || 0) < it.minLevel) return t('growth.shopLevelNeed', { n: it.minLevel });
@@ -301,6 +366,7 @@
 
   // 消耗品按钮文案:可买=兑换;否则按原因给出置灰提示
   function consumableBtn(it: ShopItem) {
+    if (isLimitReached(it)) return t('growth.shopRedeemed');
     if (canBuyNow(it)) return t('growth.shopBuy');
     if (shop.value && !shop.value.purchaseEnabled) return t('growth.shopMaintenanceShort');
     if (it.id === 'makeup_card' && (shop.value?.protectCards || 0) >= 2) return t('growth.shopCardMax');
@@ -339,6 +405,8 @@
       if (res?.status === 200 && res.data?.ok) {
         message.success(t('growth.shopBuyOk'));
         recordOperation({ module: '成长', operation: '兑换成长权益' });
+      } else if (res?.status === 200 && res.data?.reason === 'purchase_limit') {
+        message.warning(t('growth.shopLimitReached'));
       } else if (res?.status === 409 && res.data?.refresh) {
         message.warning(t('growth.economyCatalogChanged'));
       } else {
@@ -395,9 +463,15 @@
     }
   }
 
-  onMounted(() => {
-    void loadShop();
+  onMounted(async () => {
+    await loadShop();
+    await focusRequestedAsset();
   });
+
+  watch(
+    () => props.focus,
+    () => void focusRequestedAsset(),
+  );
 </script>
 
 <style scoped lang="less">
@@ -405,6 +479,16 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
+  }
+  .ps-item.is-focused {
+    border-color: var(--primary-color);
+    outline: 2px solid var(--focus-ring-color, var(--primary-color));
+    outline-offset: 2px;
+  }
+  html.light-note-mobile-rendering .ps-item.is-focused {
+    border-color: var(--primary-color);
+    outline-color: var(--primary-color);
+    box-shadow: none;
   }
   .ps-state {
     min-height: 180px;
@@ -461,6 +545,40 @@
     color: #d97706;
     font-variant-numeric: tabular-nums;
   }
+  .ps-store-bridge {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 12px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
+    background: var(--workspace-panel-bg-color);
+  }
+  .ps-store-bridge__icon {
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--primary-color);
+    border-radius: 11px;
+    color: var(--primary-color);
+    background: var(--primary-btn-bg-color);
+  }
+  .ps-store-bridge div {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .ps-store-bridge strong {
+    font-size: 13px;
+  }
+  .ps-store-bridge span {
+    color: var(--desc-color);
+    font-size: 11px;
+    line-height: 1.45;
+  }
   .ps-earn {
     display: flex;
     align-items: center;
@@ -503,6 +621,13 @@
     gap: 12px;
   }
   @media (max-width: 560px) {
+    .ps-store-bridge {
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+    .ps-store-bridge :deep(.b_btn) {
+      grid-column: 1 / -1;
+      width: 100%;
+    }
     .ps-grid {
       grid-template-columns: 1fr;
     }
@@ -787,6 +912,9 @@
     font-size: 12px;
     color: var(--desc-color);
     line-height: 1.5;
+  }
+  .ps-item-limit {
+    margin-top: 8px;
   }
   .ps-achievement-requirement {
     display: flex;

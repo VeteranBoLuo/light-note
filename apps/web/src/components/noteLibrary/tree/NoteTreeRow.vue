@@ -55,12 +55,7 @@
         </BButton>
 
         <BButton class="note-tree-title" @click="emit('open', node.id)">
-          <SvgIcon
-            :src="pageIcon"
-            size="16"
-            class="note-tree-page-icon"
-            aria-hidden="true"
-          />
+          <SvgIcon :src="pageIcon" size="16" class="note-tree-page-icon" aria-hidden="true" />
           <span class="note-tree-title-text">{{ node.title || t('note.untitled') }}</span>
           <span v-if="node.isTop" class="note-tree-pin" :aria-label="t('common.pinned')">
             <SvgIcon :src="icon.contextMenu.pin" size="12" aria-hidden="true" />
@@ -180,7 +175,7 @@
   const { t } = useI18n();
   const active = computed(() => props.activePageId === props.node.id);
   const pageIcon = computed(() => getNoteTreePageIcon(props.node.type));
-  const browsing = computed(() => props.browseParentId === props.node.id && !active.value);
+  const browsing = computed(() => !props.activePageId && props.browseParentId === props.node.id);
   const expanded = computed(() => props.expandedIds.has(props.node.id));
   const loading = computed(() => props.loadingKeys.has(props.node.id));
   // 未传集合时保持详情页等既有调用方的动画；笔记库传入集合后，只允许用户手动操作的节点过渡。

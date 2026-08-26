@@ -189,6 +189,17 @@ describe('移动浏览器与 App 渲染一致性门禁', () => {
     expect(violations).toEqual([]);
   });
 
+  it('CSS 数学函数内的减法必须显式使用 calc，避免构建后把像素差值改写成百分比', () => {
+    const unsafeFunctionSubtraction =
+      /(?:\b(?:min|max|clamp)\(|,)\s*(?:100%|100v[wh])\s*-\s*\d+(?:\.\d+)?(?:px|rem)\b/iu;
+    const violations = walk(sourceRoot)
+      .filter((path) => ['.vue', '.less', '.css'].includes(extname(path)))
+      .filter((path) => unsafeFunctionSubtraction.test(stripComments(readFileSync(path, 'utf8'))))
+      .map((path) => relative(sourceRoot, path));
+
+    expect(violations).toEqual([]);
+  });
+
   it('保留的容器查询有共享移动等价回退，新增容器查询必须先补门禁', () => {
     const containerQueryFiles = walk(sourceRoot)
       .filter((path) => ['.vue', '.less', '.css'].includes(extname(path)))

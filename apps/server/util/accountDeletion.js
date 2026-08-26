@@ -660,11 +660,48 @@ export async function purgeOwnedResources(connection, tables, userId) {
 
 export async function purgeLogsAndSecurityLinks(connection, tables, userId) {
   // 赞助订单作为真实交易对账记录保留，但注销时解除与轻笺账号及跳转凭证的关联。
+  const supportTombstoneUserId = `deleted:${crypto.createHash('sha256').update(String(userId)).digest('hex')}`;
   if (tables.has('support_reward_grants')) {
     await connection.query('UPDATE support_reward_grants SET user_id = NULL WHERE user_id = ?', [userId]);
   }
+  if (tables.has('support_entitlement_grants')) {
+    await connection.query('UPDATE support_entitlement_grants SET user_id = NULL WHERE user_id = ?', [userId]);
+  }
+  if (tables.has('support_first_purchase_claims')) {
+    await connection.query('UPDATE support_first_purchase_claims SET user_id = ? WHERE user_id = ?', [
+      supportTombstoneUserId,
+      userId,
+    ]);
+  }
+  if (tables.has('support_campaign_user_limits')) {
+    await connection.query('DELETE FROM support_campaign_user_limits WHERE user_id = ?', [userId]);
+  }
   if (tables.has('support_orders')) {
     if (tables.has('support_checkout_intents')) {
+      // 新版纯赞助与套餐意图都是交易快照的一部分，已付款后不能删除；
+      // 注销时解除账号归属、取消尚未消费的意图，并把用户标识去身份化。
+      await connection.query(
+        `UPDATE support_orders o
+         INNER JOIN support_checkout_intents i ON i.id = o.checkout_intent_id
+            SET o.light_note_user_id = NULL,
+                o.ownership_source = 'unlinked'
+          WHERE i.user_id = ? AND i.intent_type IN ('donation', 'permanent', 'campaign')`,
+        [userId],
+      );
+      await connection.query(
+        `UPDATE support_checkout_intents
+            SET user_id = ?,
+                intent_status = CASE
+                  WHEN consumed_order_id IS NULL THEN 'cancelled'
+                  ELSE intent_status
+                END,
+                expires_at = CASE
+                  WHEN consumed_order_id IS NULL AND expires_at > NOW() THEN NOW()
+                  ELSE expires_at
+                END
+          WHERE user_id = ? AND intent_type IN ('donation', 'permanent', 'campaign')`,
+        [supportTombstoneUserId, userId],
+      );
       await connection.query(
         `UPDATE support_orders o
          LEFT JOIN support_checkout_intents i
@@ -702,7 +739,7 @@ export async function purgeLogsAndSecurityLinks(connection, tables, userId) {
     connection,
     tables,
     'support_checkout_intents',
-    'DELETE FROM support_checkout_intents WHERE user_id = ?',
+    "DELETE FROM support_checkout_intents WHERE user_id = ? AND intent_type = 'legacy'",
     [userId],
   );
   await deleteIfPresent(
@@ -710,6 +747,13 @@ export async function purgeLogsAndSecurityLinks(connection, tables, userId) {
     tables,
     'support_account_links',
     'DELETE FROM support_account_links WHERE user_id = ?',
+    [userId],
+  );
+  await deleteIfPresent(
+    connection,
+    tables,
+    'points_shop_item_claims',
+    'DELETE FROM points_shop_item_claims WHERE user_id = ?',
     [userId],
   );
   await deleteIfPresent(

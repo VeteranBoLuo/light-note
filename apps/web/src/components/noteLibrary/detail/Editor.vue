@@ -3510,6 +3510,9 @@
       action('orderedList', t('noteDetail.editor.orderedList'), icon.noteDetail.toolbar.orderedList, {
         selected: !isMarkdown && state.orderedList,
       }),
+      action('todo', t('noteDetail.editor.todo'), icon.noteDetail.toolbar.todo, {
+        selected: !isMarkdown && state.todo,
+      }),
     ];
 
     const insertActions: EditorToolbarAction[] = [
@@ -3661,10 +3664,10 @@
         shortcut: 'Ctrl / ⌘ + I',
       }),
       listAction: action('listMenu', t('noteDetail.editor.list'), icon.noteDetail.toolbar.bulletList, {
-        selected: !isMarkdown && (state.bulletList || state.orderedList),
+        selected: !isMarkdown && (state.bulletList || state.orderedList || state.todo),
       }),
-      todoAction: action('todo', t('noteDetail.editor.todo'), icon.noteDetail.toolbar.todo, {
-        selected: !isMarkdown && state.todo,
+      imageAction: action('insertImage', t('noteDetail.editor.image'), icon.noteDetail.toolbar.image, {
+        disabled: disabled || (isMarkdown ? markdownImageUploading.value : richImageUploading.value),
       }),
       linkAction: action('link', t('noteDetail.editor.link'), icon.noteDetail.toolbar.link, {
         shortcut: 'Ctrl / ⌘ + K',

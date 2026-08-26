@@ -74,6 +74,7 @@
 
         <AiQuotaSummary
           class="user-ai-quota"
+          surface="plain"
           :active="menuVisible"
           entry-source="桌面个人中心"
           @open-details="goAiQuotaDetails"
@@ -268,6 +269,12 @@
       label: t('growth.entry'),
       path: '/growth',
       icon: icon.userCenter.growth,
+    },
+    {
+      name: 'entitlementStore',
+      label: t('entitlementStore.entry'),
+      path: '/store',
+      icon: icon.support.store,
     },
     {
       name: 'settings',

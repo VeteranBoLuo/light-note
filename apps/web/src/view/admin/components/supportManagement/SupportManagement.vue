@@ -14,14 +14,14 @@
 
     <template #metrics>
       <li class="admin-stat-card is-success">
-        <span class="admin-stat-label">{{ t('adminSupport.metrics.totalAmount') }}</span>
-        <strong class="admin-stat-value">¥{{ overview.totalAmount }}</strong>
-        <span class="admin-stat-hint">{{ t('adminSupport.metrics.totalAmountHint') }}</span>
+        <span class="admin-stat-label">{{ t('adminSupport.metrics.supportAmount') }}</span>
+        <strong class="admin-stat-value">¥{{ overview.supportAmount }}</strong>
+        <span class="admin-stat-hint">{{ t('adminSupport.metrics.supportAmountHint', { count: overview.supportOrders }) }}</span>
       </li>
       <li class="admin-stat-card">
-        <span class="admin-stat-label">{{ t('adminSupport.metrics.monthAmount') }}</span>
-        <strong class="admin-stat-value">¥{{ overview.monthAmount }}</strong>
-        <span class="admin-stat-hint">{{ t('adminSupport.metrics.monthAmountHint') }}</span>
+        <span class="admin-stat-label">{{ t('adminSupport.metrics.purchaseAmount') }}</span>
+        <strong class="admin-stat-value">¥{{ overview.purchaseAmount }}</strong>
+        <span class="admin-stat-hint">{{ t('adminSupport.metrics.purchaseAmountHint', { count: overview.purchaseOrders }) }}</span>
       </li>
       <li class="admin-stat-card">
         <span class="admin-stat-label">{{ t('adminSupport.metrics.orders') }}</span>
@@ -43,6 +43,11 @@
         <strong class="admin-stat-value">{{ formatAiQuotaTokens(overview.grantedTokens, locale) }}</strong>
         <span class="admin-stat-hint">{{ t('adminSupport.metrics.grantedTokensHint') }}</span>
       </li>
+      <li class="admin-stat-card">
+        <span class="admin-stat-label">{{ t('adminSupport.metrics.grantedStorage') }}</span>
+        <strong class="admin-stat-value">{{ formatStorageSize(overview.grantedStorageMb) }}</strong>
+        <span class="admin-stat-hint">{{ t('adminSupport.metrics.grantedStorageHint') }}</span>
+      </li>
       <li class="admin-stat-card" :class="{ 'has-warning': exceptionCount > 0 }">
         <span class="admin-stat-label">{{ t('adminSupport.metrics.exceptions') }}</span>
         <strong class="admin-stat-value">{{ exceptionCount }}</strong>
@@ -53,7 +58,7 @@
     <template #toolbar>
       <BTabs v-model:active-tab="activeTab" variant="segment" :options="tabs" @change="changeTab" />
       <BInput
-        v-if="activeTab !== 'overview'"
+        v-if="!['overview', 'campaigns'].includes(activeTab)"
         v-model:value="search"
         class="support-admin__search"
         clearable
@@ -67,7 +72,7 @@
         :options="orderStateOptions"
         @change="applySearch"
       />
-      <BButton v-if="activeTab !== 'overview'" :disabled="loading" @click="applySearch">{{
+      <BButton v-if="!['overview', 'campaigns'].includes(activeTab)" :disabled="loading" @click="applySearch">{{
         t('common.search')
       }}</BButton>
     </template>
@@ -90,6 +95,8 @@
         <p>{{ t('adminSupport.overview.rewardDescription') }}</p>
       </BCard>
     </div>
+
+    <SupportCampaignManagement v-else-if="activeTab === 'campaigns'" />
 
     <BTable
       v-else
@@ -114,6 +121,9 @@
           <small>{{ record.providerName || record.lightNoteUserId || '-' }}</small>
         </template>
         <template v-else-if="column.key === 'amount'">¥{{ record.totalAmount }}</template>
+        <template v-else-if="column.key === 'purpose'">
+          <BChip :tone="purposeTone(record as AdminSupportOrder)">{{ purposeLabel(record as AdminSupportOrder) }}</BChip>
+        </template>
         <template v-else-if="column.key === 'reward'">
           <BChip :tone="rewardTone(record)">{{ rewardLabel(record) }}</BChip>
         </template>
@@ -182,6 +192,7 @@
   import { computed, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
+  import SupportCampaignManagement from './SupportCampaignManagement.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
@@ -205,20 +216,26 @@
     type AdminSupporter,
   } from '@/api/adminSupportApi';
   import { formatAiQuotaTokens } from '@/composables/useAiQuotaStatus';
+  import { formatStorageSize } from '@/utils/common';
 
-  type TabKey = 'overview' | 'orders' | 'supporters' | 'exceptions';
+  type TabKey = 'overview' | 'orders' | 'supporters' | 'exceptions' | 'campaigns';
   type Row = (AdminSupportOrder | AdminSupporter) & { rowKey?: string };
 
   const EMPTY_OVERVIEW: AdminSupportOverview = {
     verifiedOrders: 0,
     assignedSupporters: 0,
     totalAmount: '0.00',
+    supportOrders: 0,
+    supportAmount: '0.00',
+    purchaseOrders: 0,
+    purchaseAmount: '0.00',
     monthAmount: '0.00',
     linkedAccounts: 0,
     pendingOrders: 0,
     conflictOrders: 0,
     unlinkedOrders: 0,
     grantedTokens: 0,
+    grantedStorageMb: 0,
     manualReviewRewards: 0,
     reversalReviewRewards: 0,
   };
@@ -252,6 +269,7 @@
     { key: 'overview', label: t('adminSupport.tabs.overview') },
     { key: 'orders', label: t('adminSupport.tabs.orders') },
     { key: 'supporters', label: t('adminSupport.tabs.supporters') },
+    { key: 'campaigns', label: t('adminSupport.tabs.campaigns') },
     { key: 'exceptions', label: t('adminSupport.tabs.exceptions'), badge: exceptionCount.value || undefined },
   ]);
   const orderStateOptions = computed(() => [
@@ -263,7 +281,11 @@
     { value: 'reward_review', label: t('adminSupport.states.rewardReview') },
   ]);
   const toolbarHint = computed(() =>
-    activeTab.value === 'overview' ? t('adminSupport.overviewHint') : t('adminSupport.listHint'),
+    activeTab.value === 'overview'
+      ? t('adminSupport.overviewHint')
+      : activeTab.value === 'campaigns'
+        ? t('adminSupport.campaigns.hint')
+        : t('adminSupport.listHint'),
   );
   const columns = computed(() =>
     activeTab.value === 'supporters'
@@ -280,6 +302,7 @@
           { title: t('adminSupport.columns.order'), key: 'providerOrderNo' },
           { title: t('adminSupport.columns.supporter'), key: 'identity' },
           { title: t('adminSupport.columns.amount'), key: 'amount', width: '110px' },
+          { title: t('adminSupport.columns.purpose'), key: 'purpose', width: '120px' },
           { title: t('adminSupport.columns.status'), key: 'status', width: '110px' },
           { title: t('adminSupport.columns.reward'), key: 'reward', width: '160px' },
           { title: t('adminSupport.columns.time'), key: 'time', width: '150px' },
@@ -292,7 +315,7 @@
   }
 
   async function loadRows() {
-    if (activeTab.value === 'overview') {
+    if (['overview', 'campaigns'].includes(activeTab.value)) {
       rows.value = [];
       total.value = 0;
       return;
@@ -453,6 +476,16 @@
       : 'pending';
   }
 
+  function purposeLabel(record: AdminSupportOrder) {
+    return t(`adminSupport.purposes.${record.orderPurpose || 'unknown'}`);
+  }
+
+  function purposeTone(record: AdminSupportOrder): 'success' | 'pending' | 'neutral' {
+    if (record.orderPurpose === 'donation' || record.orderPurpose === 'legacy_support') return 'success';
+    if (record.orderPurpose === 'entitlement_purchase') return 'neutral';
+    return 'pending';
+  }
+
   function needsReconcile(record: AdminSupportOrder) {
     return (
       record.verificationState === 'pending' ||
@@ -461,10 +494,19 @@
   }
 
   function rewardLabel(record: Row) {
-    if (!('providerOrderNo' in record)) {
-      return t('adminSupport.rewardGranted', { tokens: formatAiQuotaTokens(record.grantedTokens, locale.value) });
+    if ('providerOrderNo' in record && record.orderPurpose === 'donation') {
+      return t('adminSupport.rewardStates.no_entitlement');
     }
-    if (record.grantStatus === 'credited') {
+    if (!('providerOrderNo' in record) || record.grantStatus === 'credited') {
+      if (record.grantedTokens > 0 && record.grantedStorageMb > 0) {
+        return t('adminSupport.rewardGrantedCombo', {
+          tokens: formatAiQuotaTokens(record.grantedTokens, locale.value),
+          storage: formatStorageSize(record.grantedStorageMb),
+        });
+      }
+      if (record.grantedStorageMb > 0) {
+        return t('adminSupport.rewardGrantedStorage', { storage: formatStorageSize(record.grantedStorageMb) });
+      }
       return t('adminSupport.rewardGranted', { tokens: formatAiQuotaTokens(record.grantedTokens, locale.value) });
     }
     return t(`adminSupport.rewardStates.${record.grantStatus || 'syncing'}`);

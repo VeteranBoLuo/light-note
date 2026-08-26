@@ -305,7 +305,11 @@
             <section class="growth-panel">
               <PointsCenter v-if="activeRewardSection === 'center'" :read-only="isAdminContext" />
               <MyInventory v-else-if="activeRewardSection === 'inventory'" :read-only="isAdminContext" />
-              <PointsShop v-else-if="activeRewardSection === 'shop'" :read-only="isAdminContext" />
+              <PointsShop
+                v-else-if="activeRewardSection === 'shop'"
+                :read-only="isAdminContext"
+                :focus="String(route.query.focus || '')"
+              />
               <PointsLedger v-else-if="activeRewardSection === 'ledger'" />
               <LotteryDraw v-else :read-only="isAdminContext" @focus-header="scrollLotteryToPreferredPosition" />
             </section>

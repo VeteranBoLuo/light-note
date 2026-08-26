@@ -1,7 +1,11 @@
 <template>
   <BButton
     class="ai-quota-summary"
-    :class="[`is-${density}`, { 'is-loading': loading, 'is-unavailable': unavailable }]"
+    :class="[
+      `is-${density}`,
+      `is-${surface}`,
+      { 'is-loading': loading, 'is-unavailable': unavailable },
+    ]"
     :aria-label="accessibleLabel"
     :title="accessibleLabel"
     v-click-log="{
@@ -42,11 +46,13 @@
     defineProps<{
       active?: boolean;
       density?: 'compact' | 'comfortable';
+      surface?: 'panel' | 'plain';
       entrySource: '桌面个人中心' | '移动个人中心';
     }>(),
     {
       active: true,
       density: 'compact',
+      surface: 'panel',
     },
   );
 
@@ -107,6 +113,19 @@
     padding: 9px 11px;
   }
 
+  .ai-quota-summary.is-plain.b_btn {
+    padding-right: 2px;
+    padding-left: 2px;
+    border-color: transparent;
+    background: transparent;
+  }
+
+  .ai-quota-summary.is-comfortable.is-plain.b_btn {
+    min-height: 54px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
   .ai-quota-summary__icon {
     width: 28px;
     height: 28px;
@@ -116,6 +135,15 @@
     border-radius: 8px;
     color: var(--primary-color);
     background: var(--primary-btn-bg-color);
+  }
+
+  .ai-quota-summary.is-comfortable.is-plain .ai-quota-summary__icon {
+    width: 34px;
+    height: 34px;
+    flex-basis: 34px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 11px;
+    background: var(--surface-panel-bg);
   }
 
   .ai-quota-summary__body {
@@ -163,5 +191,15 @@
       border-color: var(--primary-color);
       background: var(--primary-btn-h-bg-color);
     }
+
+    .ai-quota-summary.is-plain.b_btn:hover {
+      border-color: transparent;
+      background: var(--menu-item-h-bg-color);
+    }
+  }
+
+  .ai-quota-summary.is-plain.b_btn:focus-visible {
+    border-color: var(--primary-color);
+    background: var(--menu-item-h-bg-color);
   }
 </style>
