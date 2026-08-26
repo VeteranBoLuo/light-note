@@ -22,7 +22,10 @@ vi.mock('@/api/supportApi', () => ({
   getEntitlementStoreState: mocks.getState,
 }));
 vi.mock('@/api/commonApi', () => ({ recordOperation: mocks.recordOperation }));
-vi.mock('@/store', () => ({ bookmarkStore: () => ({ isMobile: false }) }));
+vi.mock('@/store', () => ({
+  bookmarkStore: () => ({ isMobile: false }),
+  useUserStore: () => ({ id: 'light-note-user-1', alias: '菠萝', userName: 'root' }),
+}));
 vi.mock('vue-router', async (importOriginal) => {
   const original = await importOriginal<typeof import('vue-router')>();
   return {
@@ -147,34 +150,44 @@ describe('独立资源商店', () => {
     cleanup = undefined;
   });
 
-  it('用普通用户能理解的文案说明购买、首次优惠、活动套餐和购买历史', async () => {
+  it('用普通用户能理解的文案说明按需购买、账号预计到账和活动套餐', async () => {
     const host = await mountStore();
     await vi.waitFor(() => expect(host.textContent).toContain('周年组合包'));
     expect(host.querySelector('h1')?.textContent).toBe('资源商店');
-    expect(host.textContent).toContain('免费额度与容量通常已经够用');
-    expect(host.textContent).toContain('每日 AI 额度和云空间容量都会随等级提升');
-    expect(host.textContent).toContain('两者都会随等级提升');
+    expect(host.textContent).toContain('日常使用通常不需要购买');
+    expect(host.textContent).toContain('AI 日额度和云空间容量都会随等级提升');
     expect(host.textContent).toContain('超高强度使用');
-    expect(host.textContent).toContain('随等级提升的每日 AI 额度或云空间容量');
-    expect(host.textContent).toContain('额度不够时，可在资源商店购买');
-    expect(host.textContent).not.toContain('云空间也会随等级提升');
+    expect(host.textContent).toContain('付款前再次核验首购资格');
+    expect(host.textContent).toContain('先看基础到账，再看当前账号对这个套餐的预计到账');
+    expect(host.textContent).toContain('AI 与空间都偶尔不够');
     expect(host.textContent).not.toContain('额外扩展');
-    expect(host.textContent).toContain('购买记录单独展示');
     expect(host.textContent).not.toContain('不赠送');
-    expect(host.textContent).toContain('第一次购买约多得 30%');
+    expect(host.textContent).toContain('预计可享首购加量');
     expect(host.textContent).toContain('比同档分别购买节省 ¥2');
     expect(host.textContent).toContain('250万 AI 额度 + 640 MB 云空间');
     expect(host.textContent).toContain('还可购买 1 次');
     expect(host.textContent).toContain('最近购买');
     expect(host.textContent).toContain('650万 AI 额度 + 2 GB 云空间');
-    expect(host.querySelector('.package-card.is-campaign')?.textContent).not.toContain('第一次购买');
+    expect(host.querySelector('.package-card.is-campaign')?.textContent).not.toContain('首购');
     expect(host.textContent).not.toMatch(/SKU|权益账本|结算快照|幂等/);
 
     const actions = host.querySelectorAll<HTMLButtonElement>('.package-card__action');
     expect(actions).toHaveLength(2);
     actions[0]?.click();
+    await nextTick();
+    expect(mocks.openCheckout).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('确认购买');
+    expect(document.body.textContent).toContain('周年组合包');
+    expect(document.body.textContent).toContain('到账账号菠萝');
+    document.body.querySelector<HTMLButtonElement>('.checkout-modal__confirm')?.click();
+    expect(mocks.openCheckout).toHaveBeenNthCalledWith(1, campaign.campaignSkuId, campaign.catalogVersion);
+
     actions[1]?.click();
     await nextTick();
+    expect(document.body.textContent).toContain('AI + 云空间 · 轻量补充');
+    expect(document.body.textContent).toContain('本次预计到账78万 AI 额度 + 160 MB 云空间');
+    expect(document.body.textContent).toContain('当前预计到账包含本套餐的首购加量');
+    document.body.querySelector<HTMLButtonElement>('.checkout-modal__confirm')?.click();
     expect(mocks.openCheckout).toHaveBeenNthCalledWith(1, campaign.campaignSkuId, campaign.catalogVersion);
     expect(mocks.openCheckout).toHaveBeenNthCalledWith(2, 'combo-10', 'support-packages-v2');
   });
@@ -246,7 +259,19 @@ describe('独立资源商店', () => {
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(baseTime);
     try {
       const host = await mountStore();
-      await vi.waitFor(() => expect(host.textContent).toContain('前往爱发电购买'));
+      await vi.waitFor(() => expect(host.textContent).toContain('购买 ¥10'));
+      host.querySelectorAll<HTMLButtonElement>('.package-card__action')[1]?.click();
+      await nextTick();
+      expect(document.body.querySelector<HTMLButtonElement>('.checkout-modal__confirm')?.disabled).toBe(false);
+      mocks.getCatalog.mockResolvedValueOnce({
+        catalogVersion: 'support-packages-v2',
+        catalogEnabled: true,
+        checkoutEnabled: true,
+        grantEnabled: true,
+        campaignsEnabled: true,
+        packages: [{ ...comboPackage, firstPurchaseStatus: 'used' }],
+        campaigns: [campaign],
+      });
 
       let finishRefresh: ((value: typeof state) => void) | undefined;
       mocks.getState.mockImplementationOnce(
@@ -264,11 +289,36 @@ describe('独立资源商店', () => {
       expect(
         [...host.querySelectorAll<HTMLButtonElement>('.package-card__action')].every((button) => button.disabled),
       ).toBe(true);
+      expect(document.body.querySelector<HTMLButtonElement>('.checkout-modal__confirm')?.disabled).toBe(true);
+      document.body.querySelector<HTMLButtonElement>('.checkout-modal__confirm')?.click();
+      expect(mocks.openCheckout).not.toHaveBeenCalled();
 
       finishRefresh?.(state);
-      await vi.waitFor(() => expect(host.textContent).toContain('前往爱发电购买'));
+      await vi.waitFor(() => expect(host.textContent).toContain('购买 ¥10'));
+      expect(document.body.querySelector<HTMLButtonElement>('.checkout-modal__confirm')?.disabled).toBe(false);
+      expect(document.body.textContent).toContain('本次预计到账60万 AI 额度 + 128 MB 云空间');
+      expect(document.body.textContent).toContain('本套餐的首购加量已使用');
     } finally {
       nowSpy.mockRestore();
     }
+  });
+
+  it('首购加量已用时，确认弹窗只按基础权益给出预计到账', async () => {
+    mocks.getCatalog.mockResolvedValueOnce({
+      catalogVersion: 'support-packages-v2',
+      catalogEnabled: true,
+      checkoutEnabled: true,
+      grantEnabled: true,
+      campaignsEnabled: false,
+      packages: [{ ...comboPackage, firstPurchaseStatus: 'used' }],
+      campaigns: [],
+    });
+    const host = await mountStore();
+    await vi.waitFor(() => expect(host.textContent).toContain('首购加量已用'));
+    host.querySelector<HTMLButtonElement>('.package-card__action')?.click();
+    await nextTick();
+    expect(document.body.textContent).toContain('本次预计到账60万 AI 额度 + 128 MB 云空间');
+    expect(document.body.textContent).toContain('本套餐的首购加量已使用');
+    expect(document.body.textContent).not.toContain('本次预计到账78万 AI 额度 + 160 MB 云空间');
   });
 });
