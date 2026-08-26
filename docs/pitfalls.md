@@ -3393,6 +3393,14 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **验证方法：** 单测覆盖相同、不同和缺失会话 ID；合约测试锁定会话 ID 的生成、传递、写入和过期清除。真实扩展在页面 A 修改书签后返回入口再进入，确认内容仍在；关闭侧栏、切换到页面 B 后重新打开，确认使用 B 的 URL 与标题，且 A 的描述、标签与幂等状态均不存在。
 - **相关代码：** `apps/web/src/extension/ExtensionApp.vue`、`apps/web/src/extension/components/BookmarkCapture.vue`、`apps/web/src/extension/draftPersistence.ts`、`apps/web/src/extension/types.ts`。
 
+### LN-PIT-173：共享游客示例不经过新账号 Seed
+
+- **现象：** 新注册账号的手绘示例已经换成“上色”，共享游客账号仍显示旧版“手绘笔记示例”；继续修改注册 Seed、重启服务或重新构建前端都不会改变游客内容。
+- **根因：** 游客是长期复用的数据库账号，示例笔记也是既有固定数据，不会重新经过注册初始化；只改新用户 Seed 等于维护了两个互不相干的事实源。
+- **修复与防回归约束：** 新账号和游客手绘示例必须共用 `newUserDrawingNoteExample.js` 的版本化静态场景。游客同步以固定笔记 ID 定位，仍须同时校验有效游客归属、未删除和 `drawing` 类型；默认命令只能 dry-run，获得线上写入授权后才允许 `--apply`。写入必须在事务内锁行、先保存旧版本、按 revision 乐观更新，并保持幂等；禁止按标题模糊批量更新、在游客每次访问时写库或创建第二篇同类示例。
+- **验证方法：** 单测覆盖 dry-run 零写入、成功同步时旧版本快照与 revision 递增、内容一致时幂等跳过、固定 ID 归属改变时失败关闭；受授权写入前先执行 dry-run，确认只命中预期游客笔记。同步后以游客身份在 PC/移动、浅色/深色下打开笔记库与手绘详情，检查“上色”标题、画纸居中、默认/加载/错误及只读预览状态。
+- **相关代码：** `apps/server/util/services/newUserDrawingNoteExample.js`、`apps/server/util/services/visitorDrawingSampleService.js`、`apps/server/scripts/syncVisitorDrawingSample.js`。
+
 ### LN-PIT-172：固定 Side Panel 不能继续依赖一次性的 `activeTab` 授权
 
 - **现象：** 扩展从工具栏首次打开后可以读取网页，但侧栏固定、切换标签页或从浏览器的 Side Panel 入口重新显示后，书签“当前页信息”和笔记“一键带入”同时提示页面受保护；网址明明显示在地址栏，却也被当成 DOM 读取失败。
