@@ -1,4 +1,3 @@
-import { currentExtensionPanelTabId } from './panelContext';
 import type { CapturedPage } from './types';
 
 function readPageForLightNote() {
@@ -10,7 +9,9 @@ function readPageForLightNote() {
 }
 
 export async function captureTriggeredPage(): Promise<CapturedPage> {
-  const tabId = currentExtensionPanelTabId();
+  // 只在用户进入书签流程后查询当前标签页；入口、笔记和文件流程不会执行这里。
+  const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  const tabId = activeTab?.id;
   if (tabId == null) {
     const error = new Error('没有可读取的网页，请重新点击浏览器工具栏中的轻笺图标');
     error.name = 'CAPTURE_TAB_MISSING';

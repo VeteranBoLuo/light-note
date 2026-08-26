@@ -1,17 +1,4 @@
-import { buildExtensionPanelPath } from './panelContext';
-
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.sidePanel.setOptions({ enabled: true }).catch(() => undefined);
-});
-
-chrome.action.onClicked.addListener(async (tab) => {
-  if (tab.id == null) return;
-  // 标签页 ID 只进入这个标签页专属的侧栏路径；此处不读取 URL、标题或正文。
-  await chrome.sidePanel.setOptions({
-    tabId: tab.id,
-    path: buildExtensionPanelPath(tab.id),
-    enabled: true,
-  });
-  await chrome.sidePanel.open({ tabId: tab.id });
-  void chrome.runtime.sendMessage({ type: 'LIGHT_NOTE_EXTENSION_OPENED', tabId: tab.id }).catch(() => undefined);
-});
+// 交给浏览器原生 action 行为打开侧栏，避免异步调用丢失用户点击手势。
+void chrome.sidePanel
+  .setPanelBehavior({ openPanelOnActionClick: true })
+  .catch((error) => console.error('LIGHT_NOTE_SIDE_PANEL_SETUP_FAILED', error));

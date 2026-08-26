@@ -74,7 +74,6 @@
   import ExtensionLogin from './components/ExtensionLogin.vue';
   import ExtensionSuccessView from './components/ExtensionSuccessView.vue';
   import { logoutExtension, restoreExtensionSession } from './auth';
-  import { currentExtensionPanelTabId } from './panelContext';
   import { saveExtensionTheme } from './storage';
   import type { ExtensionResourceType, ExtensionSession, ExtensionSuccess } from './types';
 
@@ -87,7 +86,6 @@
   const success = ref<ExtensionSuccess | null>(null);
   const theme = ref<'day' | 'night'>(document.documentElement.getAttribute('data-theme') === 'night' ? 'night' : 'day');
   const extensionLogoUrl = chrome.runtime.getURL('icons/icon-32.png');
-  const panelTabId = currentExtensionPanelTabId();
 
   const authenticated = computed(() => Boolean(session.value?.sid && session.value?.user?.id));
   const sessionLabel = computed(() => {
@@ -148,20 +146,13 @@
     message.info(t('browserExtension.login.expired'));
   }
 
-  function handleToolbarOpen(message: unknown) {
-    const payload = message as { type?: string; tabId?: number } | null;
-    if (payload?.type === 'LIGHT_NOTE_EXTENSION_OPENED' && payload.tabId === panelTabId) goHome();
-  }
-
   onMounted(async () => {
     window.addEventListener('light-note-extension-auth-expired', handleAuthExpired);
-    chrome.runtime.onMessage.addListener(handleToolbarOpen);
     session.value = await restoreExtensionSession();
     sessionLoading.value = false;
   });
 
   onBeforeUnmount(() => {
     window.removeEventListener('light-note-extension-auth-expired', handleAuthExpired);
-    chrome.runtime.onMessage.removeListener(handleToolbarOpen);
   });
 </script>

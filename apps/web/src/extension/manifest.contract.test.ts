@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 const readSource = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
 const manifest = JSON.parse(readSource('extension/manifest.json'));
 const serviceWorkerSource = readSource('src/extension/service-worker.ts');
+const captureSource = readSource('src/extension/capture.ts');
 const appSource = readSource('src/extension/ExtensionApp.vue');
 const homeSource = readSource('src/extension/components/ExtensionHome.vue');
 const loginSource = readSource('src/extension/components/ExtensionLogin.vue');
@@ -45,16 +46,15 @@ describe('浏览器插件 Manifest 与隐私边界', () => {
     expect(extensionIdFromPublicKey(manifest.key)).toBe('nkdlhmfjnokoicodeepadkamopdblbnd');
   });
 
-  it('工具栏入口为触发标签页设置独立侧栏并打开，不读取页面内容', () => {
-    expect(serviceWorkerSource).toContain('chrome.action.onClicked.addListener');
-    expect(serviceWorkerSource).toContain('chrome.sidePanel.setOptions');
-    expect(serviceWorkerSource).toContain('buildExtensionPanelPath(tab.id)');
-    expect(serviceWorkerSource).toContain('chrome.sidePanel.open');
+  it('工具栏入口使用浏览器原生行为打开侧栏，不因异步调用丢失用户手势', () => {
+    expect(serviceWorkerSource).toContain('setPanelBehavior({ openPanelOnActionClick: true })');
+    expect(serviceWorkerSource).not.toContain('chrome.action.onClicked.addListener');
+    expect(serviceWorkerSource).not.toContain('chrome.sidePanel.open');
     expect(serviceWorkerSource).not.toContain("from './capture'");
     expect(serviceWorkerSource).not.toContain('chrome.scripting.executeScript');
-    expect(serviceWorkerSource).not.toContain('tab.url');
     expect(serviceWorkerSource).not.toContain('lightNoteTriggerTabId');
-    expect(appSource).toContain('payload.tabId === panelTabId');
+    expect(captureSource).toContain('chrome.tabs.query({ active: true, lastFocusedWindow: true })');
+    expect(captureSource).toContain('chrome.scripting.executeScript');
     expect(appSource).not.toContain('captureTriggeredPage');
   });
 

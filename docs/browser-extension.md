@@ -15,7 +15,7 @@ apps/web/
 │   ├── service-worker.ts
 │   ├── ExtensionApp.vue
 │   ├── auth.ts / api.ts / storage.ts
-│   ├── capture.ts / panelContext.ts / upload.ts
+│   ├── capture.ts / upload.ts
 │   └── components/
 ├── vite.extension.config.ts
 └── scripts/package-extension.mjs
@@ -42,7 +42,7 @@ pnpm --filter web package:extension
 | `storage` | 保存设备 SID、主题和书签/笔记草稿 | 对应状态变化时 |
 | `identity` | 打开网站/GitHub 登录中转并接收 `chromiumapp.org` 回调 | 用户主动选择网站登录 |
 
-Manifest 没有 `tabs`、`cookies`、常驻 `content_scripts` 或 `<all_urls>`。Host permissions 只覆盖轻笺 HTTPS Origin 与当前生产桶的精确 OBS 主机名，不使用覆盖同区域其他桶的通配符。工具栏点击只为触发标签页设置带 `tabId` 的专属 Side Panel 路径，不把“最近一次点击的标签页”写成跨窗口共享状态；扩展入口、笔记和文件流程不会读取当前网页。浏览器保护页读取失败时，书签表单保留手工填写能力。
+Manifest 没有 `tabs`、`cookies`、常驻 `content_scripts` 或 `<all_urls>`。Host permissions 只覆盖轻笺 HTTPS Origin 与当前生产桶的精确 OBS 主机名，不使用覆盖同区域其他桶的通配符。工具栏点击由 Chrome/Edge 原生 `openPanelOnActionClick` 行为打开 Side Panel，Service Worker 不读取或缓存标签页信息；只有进入书签流程后，页面才用无需额外 `tabs` 权限的基础 `tabs.query()` 取得当前活动标签页 ID，再凭 `activeTab + scripting` 读取顶层页面。扩展入口、笔记和文件流程不会查询或读取当前网页。浏览器保护页读取失败时，书签表单保留手工填写能力。
 
 ## 登录与授权协议
 

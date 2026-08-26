@@ -3393,6 +3393,14 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **验证方法：** 结构测试锁定文件选择、内层按钮、移除、重试和待整理开关五个全局 `uploading` 禁用点，并确认 `addFiles` / drop 处理仍有运行中失败关闭；真实多文件验收需在并发上传、单项失败和取消状态分别确认：队列运行中不能新增或移除文件，只能取消正在上传项，结束后失败项才可重试，已成功项不重复上传。
 - **相关代码：** `apps/web/src/extension/components/FileCapture.vue`、`apps/web/src/extension/uploadQueue.ts`、`apps/web/src/extension/manifest.contract.test.ts`。
 
+### LN-PIT-169：`sidePanel.open()` 前跨过异步边界会丢失工具栏点击手势
+
+- **现象：** Manifest V3 扩展能够正常加载，点击工具栏图标却没有任何可见反应；目标网页控制台可能同时存在翻译插件、页面自身 CSP 等无关噪声，容易被误判成 Side Panel 的加载错误。
+- **根因：** `chrome.sidePanel.open()` 只能直接响应用户操作。工具栏 handler 先 `await chrome.sidePanel.setOptions()`、网络请求或其他异步任务后再调用 `open()`，部分 Chrome 版本会认为用户手势已经结束并拒绝打开侧栏。
+- **修复与防回归约束：** 工具栏入口使用 Chrome/Edge 官方的 `chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })`，由浏览器原生 action 行为负责开关侧栏，不再手动调用 `sidePanel.open()`。Service Worker 不读取网页，也不保存“最近标签页”；只有用户进入书签流程后才以 `tabs.query({ active: true, lastFocusedWindow: true })` 取得当前标签页 ID，并通过 `activeTab + scripting` 读取顶层页面。基础 `tabs.query()` 不要求把高权限 `tabs` 加入 Manifest。
+- **验证方法：** Manifest 合约测试必须锁定 `openPanelOnActionClick: true`，并禁止 Service Worker 出现 `action.onClicked` 手动打开和 `sidePanel.open()`；捕获测试证明模块导入、入口、笔记和文件路径都不会查询标签页，只有显式进入书签后才查询并执行脚本。真实 unpacked 扩展需要在重新加载后直接点击工具栏图标，确认首击即可打开侧栏。
+- **相关代码：** `apps/web/src/extension/service-worker.ts`、`apps/web/src/extension/capture.ts`、`apps/web/src/extension/manifest.contract.test.ts`、`apps/web/extension/manifest.json`、`docs/browser-extension.md`。
+
 ### LN-PIT-166：浏览器插件的无工具栏富文本不应直接捆绑重型编辑器
 
 - **现象：** 复用主站 TinyMCE 看似省实现，但扩展首屏和 Markdown 正常时，切到富文本才可能暴露许可配置、皮肤资源、Vue DOM 接管或 MV3 运行期问题；即使全部修通，也会为了一个无工具栏输入框把约 2MB 的编辑器运行时装进插件。
@@ -3417,9 +3425,9 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **现象：** 快速收藏最直观的实现是在工具栏点击或 Side Panel 首次挂载时立刻读取当前页，随后再显示三类入口；这样即使用户最终只想写笔记或传文件，插件也已经取得 URL、标题和选中文本。网站 Cookie 看似可直接复用，但扩展跨域读取 Cookie 会迫使权限扩大，也把网站会话和扩展设备会话混在一起。
 - **影响范围：** Chrome/Edge MV3 扩展的权限披露、商店审核、用户信任、登录恢复和被盗授权码风险；入口页、Service Worker、网页授权页及所有扩展 API 请求均受影响。
 - **根因：** `activeTab` 是用户手势产生的临时访问能力，不代表用户已经选择了要采集网页；Side Panel 打开也不是采集意图。若把 `tabId` 存成扩展全局“最近一次点击”，多窗口或多标签页侧栏还会互相覆盖目标。扩展公开 ID 不是机密，安全边界必须建立在服务端精确白名单、PKCE、一次性消费和设备绑定上，不能把 ID 或网站 Cookie 当作凭据。
-- **防回归约束：** 工具栏 handler 只把 `tabId` 编入该标签页专属的 Side Panel 路径并打开侧栏，禁止把目标页写入跨窗口共享 storage，也禁止导入捕获模块、访问 `tab.url` 或执行脚本；只有用户选中“书签”后才从当前侧栏路径解析目标标签页，并对其顶层 frame 调用 `chrome.scripting.executeScript`。重新点击某个标签页只能重置同标签页侧栏，不能广播重置其他窗口。Manifest 禁止常驻内容脚本、`tabs`、`cookies` 和 `<all_urls>`。网站中转必须使用随机 state、S256 PKCE、精确 `https://<extension-id>.chromiumapp.org/light-note-auth`、服务端扩展 ID 白名单、设备摘要和 Redis `GETDEL` 一次性授权码；失败校验也必须消费授权码。密码不得持久化，扩展 SID 与设备 ID 只能写扩展私有存储。公开构建 key 只能用来稳定 ID，私钥不得进入仓库。
-- **验证方法：** Manifest 合约测试锁定权限集合、稳定扩展 ID 和标签页专属 `setOptions`；上下文单测拒绝缺失、负数、非十进制与非安全整数 ID；Service Worker 源码门禁确认没有页面读取或共享目标页 storage；捕获单测证明模块导入无副作用、缺少标签页上下文时失败关闭，且只有显式调用才执行脚本；鉴权测试覆盖白名单、回调、PKCE、设备不匹配、错误校验后的重放和过期；真实 Chrome/Edge 分别从两个标签页打开侧栏，入口、笔记和文件不得读取页面，选择书签时各自只能读取自己的触发页。浅色/深色及 320/400/600px 检查入口、登录、加载、受限页、错误和成功状态。
-- **相关代码：** `apps/web/src/extension/service-worker.ts`、`apps/web/src/extension/panelContext.ts`、`apps/web/src/extension/capture.ts`、`apps/web/extension/manifest.json`、`apps/web/src/extension/auth.ts`、`apps/server/util/extensionAuth.js`、`docs/browser-extension.md`。
+- **防回归约束：** 工具栏点击只触发浏览器原生 Side Panel 行为，Service Worker 禁止导入捕获模块、访问 `tab.url`、执行脚本或写共享目标页 storage；只有用户选中“书签”后才查询当前活动标签页 ID，并对其顶层 frame 调用 `chrome.scripting.executeScript`。Manifest 禁止常驻内容脚本、`tabs`、`cookies` 和 `<all_urls>`。网站中转必须使用随机 state、S256 PKCE、精确 `https://<extension-id>.chromiumapp.org/light-note-auth`、服务端扩展 ID 白名单、设备摘要和 Redis `GETDEL` 一次性授权码；失败校验也必须消费授权码。密码不得持久化，扩展 SID 与设备 ID 只能写扩展私有存储。公开构建 key 只能用来稳定 ID，私钥不得进入仓库。
+- **验证方法：** Manifest 合约测试锁定权限集合、稳定扩展 ID 和 `openPanelOnActionClick`；Service Worker 源码门禁确认没有页面读取或共享目标页 storage；捕获单测证明模块导入无副作用、没有活动标签页时失败关闭，且只有显式调用才查询当前标签页并执行脚本；鉴权测试覆盖白名单、回调、PKCE、设备不匹配、错误校验后的重放和过期；真实 Chrome/Edge 分别从两个标签页打开侧栏，入口、笔记和文件不得读取页面，选择书签时只能读取操作时所在的当前页。浅色/深色及 320/400/600px 检查入口、登录、加载、受限页、错误和成功状态。
+- **相关代码：** `apps/web/src/extension/service-worker.ts`、`apps/web/src/extension/capture.ts`、`apps/web/extension/manifest.json`、`apps/web/src/extension/auth.ts`、`apps/server/util/extensionAuth.js`、`docs/browser-extension.md`。
 
 ### LN-PIT-163：CSS 数学函数内的百分比减法必须显式包裹 `calc()`
 
