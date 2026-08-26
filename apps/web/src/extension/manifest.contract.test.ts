@@ -99,14 +99,18 @@ describe('浏览器插件三类流程接线', () => {
     expect(homeSource).toContain('<BButton v-else type="primary" @click="emit(\'login\')">');
   });
 
-  it('书签视图读取当前页并支持网址回填，同时保留 AI、正式保存与待整理三条路径', () => {
+  it('书签视图读取当前页并支持网址与名称一起回填，同时保留 AI、正式保存与待整理三条路径', () => {
     expect(bookmarkSource).toContain('await captureTriggeredPage()');
     expect(bookmarkSource).toContain('await captureCurrentTabAddress()');
-    expect(bookmarkSource).toContain('@click="fillCurrentPageUrl"');
+    expect(bookmarkSource).toContain('@click="fillCurrentPage"');
+    expect(bookmarkSource).toContain('ln-extension-current-page-fill');
+    expect(bookmarkSource).not.toContain('ln-extension-field__action-row');
     expect(bookmarkSource).toContain('draft.url = page.url');
+    expect(bookmarkSource).toContain('draft.name = page.title.slice(0, 255)');
     expect(bookmarkSource).toContain('generateWithAi');
     expect(bookmarkSource).toContain('browserExtension.bookmark.aiDescription');
-    expect(bookmarkSource).toContain('browserExtension.bookmark.modeInboxDescription');
+    expect(bookmarkSource).not.toContain('browserExtension.bookmark.modeInboxDescription');
+    expect(bookmarkSource).not.toContain('ln-extension-mode-note');
     expect(bookmarkSource).toContain('v-if="draft.mode === \'formal\'"');
     expect(bookmarkSource).toContain('saveSelectedMode');
     expect(bookmarkSource).toContain('saveFormal');
@@ -114,6 +118,9 @@ describe('浏览器插件三类流程接线', () => {
     expect(bookmarkSource).toContain("relatedTagNames: mode === 'formal'");
     expect(bookmarkSource).toContain('@update:value="updateSelectedTagIds"');
     expect(bookmarkSource).toContain('draft.selectedTagIds.length + draft.selectedNewTags.length > 4');
+    expect(stylesSource).toMatch(
+      /\.ln-extension-form-view > \.ln-extension-current-page-fill\.b_btn \{[\s\S]*min-height: 42px;[\s\S]*border-left-width: 3px;/u,
+    );
   });
 
   it('笔记支持两种格式、安全预览和非空正文切换确认', () => {

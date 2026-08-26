@@ -55,7 +55,7 @@ describe('浏览器插件按意图读取当前页', () => {
     });
   });
 
-  it('网址回填只读取当前标签页元数据，不执行网页脚本', async () => {
+  it('当前页信息回填只读取当前标签页元数据，不执行网页脚本', async () => {
     queryTabs.mockResolvedValue([{ id: 21, url: 'https://example.com/new', title: '新页面' }]);
 
     await expect(captureCurrentTabAddress()).resolves.toEqual({

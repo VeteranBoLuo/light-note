@@ -370,24 +370,50 @@ textarea {
   small { color: var(--desc-color); font-size: 10px; }
 }
 
-.ln-extension-field__action-row {
+.ln-extension-form-view > .ln-extension-current-page-fill.b_btn {
   min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: stretch;
-  gap: 8px;
+  min-height: 42px;
+  height: auto;
+  justify-content: flex-start;
+  gap: 9px;
+  padding: 6px 9px;
+  border: 1px solid var(--resource-bookmark-color);
+  border-left-width: 3px;
+  border-radius: 9px;
+  color: var(--text-color);
+  background: var(--surface-card-bg);
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
 
-  .input-container { min-width: 0; }
+  .ln-extension-current-page-fill__copy {
+    min-width: 0;
+    flex: 1;
+    display: grid;
+    gap: 1px;
+  }
 
-  > .b_btn {
-    min-width: 84px;
-    height: auto;
-    min-height: 38px;
-    padding-right: 10px;
-    padding-left: 10px;
-    border: 1px solid var(--primary-color);
-    color: var(--primary-color);
-    background: var(--surface-card-bg);
+  strong { font-size: 11.5px; }
+  small { color: var(--desc-color); font-size: 9.5px; }
+
+  .ln-extension-current-page-fill__action {
+    flex: none;
+    color: var(--resource-bookmark-color);
+    font-size: 11px;
+    font-weight: 650;
+    white-space: nowrap;
+  }
+
+  &:focus-visible {
+    border-color: var(--resource-bookmark-color);
+    box-shadow: inset 0 0 0 1px var(--resource-bookmark-color);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ln-extension-current-page-fill.b_btn:not(.disabled):not(.loading):hover {
+    border-color: var(--resource-bookmark-color);
+    background: var(--surface-panel-bg);
   }
 }
 
@@ -485,17 +511,6 @@ textarea {
   }
 
   .b_btn.is-active small { color: currentColor; }
-}
-
-.ln-extension-mode-note {
-  margin: -5px 2px 0;
-  padding: 6px 8px;
-  border-left: 3px solid var(--primary-color);
-  border-radius: 7px;
-  color: var(--desc-color);
-  background: var(--surface-panel-bg);
-  font-size: 10px;
-  line-height: 1.4;
 }
 
 .ln-extension-ai-assist {

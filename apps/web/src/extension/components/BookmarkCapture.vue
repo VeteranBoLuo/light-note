@@ -13,7 +13,7 @@
         block
         :class="{ 'is-active': draft.mode === 'inbox' }"
         :aria-pressed="draft.mode === 'inbox'"
-        :disabled="saving || aiLoading || capturing || refillingUrl"
+        :disabled="saving || aiLoading || capturing || refillingPage"
         @click="selectMode('inbox')"
       >
         <strong>{{ t('browserExtension.bookmark.modeInbox') }}</strong>
@@ -23,46 +23,41 @@
         block
         :class="{ 'is-active': draft.mode === 'formal' }"
         :aria-pressed="draft.mode === 'formal'"
-        :disabled="saving || aiLoading || capturing || refillingUrl"
+        :disabled="saving || aiLoading || capturing || refillingPage"
         @click="selectMode('formal')"
       >
         <strong>{{ t('browserExtension.bookmark.modeFormal') }}</strong>
         <small>{{ t('browserExtension.bookmark.modeFormalShort') }}</small>
       </BButton>
     </div>
-    <p class="ln-extension-mode-note">
-      {{
-        t(
-          draft.mode === 'inbox'
-            ? 'browserExtension.bookmark.modeInboxDescription'
-            : 'browserExtension.bookmark.modeFormalDescription',
-        )
-      }}
-    </p>
-
     <div v-if="capturing" class="ln-extension-inline-state">
       <BLoading :loading="true" inline :title="t('browserExtension.bookmark.readingPage')" />
     </div>
     <p v-else-if="captureWarning" class="ln-extension-notice is-warning" role="status">{{ captureWarning }}</p>
 
+    <BButton
+      block
+      class="ln-extension-current-page-fill"
+      :loading="refillingPage"
+      :disabled="capturing || refillingPage || saving || aiLoading"
+      :title="t('browserExtension.bookmark.fillCurrentPageHint')"
+      :aria-label="t('browserExtension.bookmark.fillCurrentPageHint')"
+      @click="fillCurrentPage"
+    >
+      <span class="ln-extension-current-page-fill__copy">
+        <strong>{{ t('browserExtension.bookmark.fillCurrentPageTitle') }}</strong>
+        <small>{{ t('browserExtension.bookmark.fillCurrentPageDescription') }}</small>
+      </span>
+      <span class="ln-extension-current-page-fill__action">{{ t('browserExtension.bookmark.fillCurrentPage') }}</span>
+    </BButton>
+
     <div class="ln-extension-field">
       <label for="extension-bookmark-url">{{ t('browserExtension.bookmark.url') }}</label>
-      <div class="ln-extension-field__action-row">
-        <BInput
-          id="extension-bookmark-url"
-          v-model:value="draft.url"
-          :placeholder="t('browserExtension.bookmark.urlPlaceholder')"
-        />
-        <BButton
-          :loading="refillingUrl"
-          :disabled="capturing || refillingUrl || saving || aiLoading"
-          :title="t('browserExtension.bookmark.fillCurrentPageHint')"
-          :aria-label="t('browserExtension.bookmark.fillCurrentPageHint')"
-          @click="fillCurrentPageUrl"
-        >
-          {{ t('browserExtension.bookmark.fillCurrentPage') }}
-        </BButton>
-      </div>
+      <BInput
+        id="extension-bookmark-url"
+        v-model:value="draft.url"
+        :placeholder="t('browserExtension.bookmark.urlPlaceholder')"
+      />
     </div>
     <div class="ln-extension-field">
       <label for="extension-bookmark-name">{{ t('browserExtension.bookmark.name') }}</label>
@@ -95,7 +90,7 @@
         <strong id="extension-bookmark-ai-title">{{ t('browserExtension.bookmark.aiTitle') }}</strong>
         <small>{{ t('browserExtension.bookmark.aiDescription') }}</small>
       </div>
-      <BButton block :loading="aiLoading" :disabled="saving || capturing || refillingUrl" @click="generateWithAi">
+      <BButton block :loading="aiLoading" :disabled="saving || capturing || refillingPage" @click="generateWithAi">
         {{ t(aiGenerated ? 'browserExtension.bookmark.aiRegenerate' : 'browserExtension.bookmark.aiGenerate') }}
       </BButton>
     </section>
@@ -139,7 +134,7 @@
       type="primary"
       block
       :loading="savingMode === draft.mode"
-      :disabled="aiLoading || saving || capturing || refillingUrl"
+      :disabled="aiLoading || saving || capturing || refillingPage"
       @click="saveSelectedMode"
     >
       {{ t(draft.mode === 'formal' ? 'browserExtension.bookmark.saveFormal' : 'browserExtension.bookmark.saveInbox') }}
@@ -179,7 +174,7 @@
     selectedNewTags: [],
   });
   const capturing = ref(true);
-  const refillingUrl = ref(false);
+  const refillingPage = ref(false);
   const captureWarning = ref('');
   const errorMessage = ref('');
   const tagsLoading = ref(false);
@@ -234,18 +229,19 @@
     }
   }
 
-  async function fillCurrentPageUrl() {
-    if (capturing.value || refillingUrl.value || saving.value || aiLoading.value) return;
-    refillingUrl.value = true;
+  async function fillCurrentPage() {
+    if (capturing.value || refillingPage.value || saving.value || aiLoading.value) return;
+    refillingPage.value = true;
     captureWarning.value = '';
     errorMessage.value = '';
     try {
       const page = await captureCurrentTabAddress();
       draft.url = page.url;
+      draft.name = page.title.slice(0, 255);
     } catch {
       captureWarning.value = t('browserExtension.bookmark.captureFailed');
     } finally {
-      refillingUrl.value = false;
+      refillingPage.value = false;
     }
   }
 

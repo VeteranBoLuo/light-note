@@ -3384,12 +3384,12 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 
 ### LN-PIT-172：固定 Side Panel 不能继续依赖一次性的 `activeTab` 授权
 
-- **现象：** 扩展从工具栏首次打开后可以读取网页，但侧栏固定、切换标签页或从浏览器的 Side Panel 入口重新显示后，书签“填入当前页”和笔记“一键带入”同时提示页面受保护；网址明明显示在地址栏，却也被当成 DOM 读取失败。
+- **现象：** 扩展从工具栏首次打开后可以读取网页，但侧栏固定、切换标签页或从浏览器的 Side Panel 入口重新显示后，书签“当前页信息”和笔记“一键带入”同时提示页面受保护；网址明明显示在地址栏，却也被当成 DOM 读取失败。
 - **影响范围：** Chrome/Edge 全局 Side Panel 的书签 URL/标题回填、选中文本和笔记正文提取；固定侧栏是推荐用法，因此不是少见受限页兜底。
 - **误导线索：** `scripting.executeScript()` 的无权限错误与 `chrome://`、应用商店等真正保护页都会进入同一 catch，页面自身 CSP 控制台也可能出现无关报错，容易误判成目标网站禁止读取。
 - **根因：** `activeTab` 只在执行扩展 action 等用户手势后临时授权，并在跨 Origin 导航后失效；已经保持打开的 Side Panel 不会因标签页切换自动重新获得它。旧实现又把 URL、标题、选区和正文全部绑定在一次脚本注入上，只要 DOM 注入失败，原本可由标签页元数据读取的地址也一起失败。
-- **修复与防回归约束：** URL/标题与 DOM 必须分层。书签使用 `tabs.query()` 只读当前活动标签页的敏感元数据，脚本注入只尽力补选区，失败不得清空或阻断基本字段；网址回填禁止执行脚本。`tabs` 只用于当前活动标签，不得枚举全部标签、调用 `chrome.history` 或把 URL 写入 storage。笔记可在进入视图时把当前 Origin 暂存在组件内存，按钮点击的同步调用栈内通过 `optional_host_permissions` 只申请该 Origin，再读取正文；授权期间标签页或 Origin 变化必须失败关闭。禁止为方便改成必需 `<all_urls>` 或常驻内容脚本。浏览器内部页、扩展页、本地文件与应用商店正文仍不可读取，错误必须与普通授权拒绝区分。
-- **验证方法：** 单测分别模拟脚本拒绝但 URL/标题成功、网址按钮零脚本调用、当前 Origin 精确授权、用户拒绝、授权期间切换标签和内部页；Manifest 合约锁定 `tabs`、可选 HTTP/HTTPS Host 权限及无内容脚本/必需全站权限。真实 unpacked 扩展先固定侧栏，连续切换两个普通网站：书签 URL/标题每次都应立即更新，笔记首次带入只出现当前网站授权且成功追加；再测 `chrome://extensions` 与 Chrome 应用商店，地址读取和正文受限提示必须各自准确。
+- **修复与防回归约束：** URL/标题与 DOM 必须分层。书签使用 `tabs.query()` 只读当前活动标签页的敏感元数据，脚本注入只尽力补选区，失败不得清空或阻断基本字段；“当前页信息”回填只用标签页元数据更新 URL 与标题，禁止执行脚本或覆盖描述、标签和保存模式。`tabs` 只用于当前活动标签，不得枚举全部标签、调用 `chrome.history` 或把 URL 写入 storage。笔记可在进入视图时把当前 Origin 暂存在组件内存，按钮点击的同步调用栈内通过 `optional_host_permissions` 只申请该 Origin，再读取正文；授权期间标签页或 Origin 变化必须失败关闭。禁止为方便改成必需 `<all_urls>` 或常驻内容脚本。浏览器内部页、扩展页、本地文件与应用商店正文仍不可读取，错误必须与普通授权拒绝区分。
+- **验证方法：** 单测分别模拟脚本拒绝但 URL/标题成功、“当前页信息”按钮零脚本调用、当前 Origin 精确授权、用户拒绝、授权期间切换标签和内部页；Manifest 合约锁定 `tabs`、可选 HTTP/HTTPS Host 权限及无内容脚本/必需全站权限。真实 unpacked 扩展先固定侧栏，连续切换两个普通网站：书签 URL/标题每次都应立即更新，笔记首次带入只出现当前网站授权且成功追加；再测 `chrome://extensions` 与 Chrome 应用商店，地址读取和正文受限提示必须各自准确。
 - **相关代码：** `apps/web/src/extension/capture.ts`、`apps/web/src/extension/components/BookmarkCapture.vue`、`apps/web/src/extension/components/NoteCapture.vue`、`apps/web/extension/manifest.json`、`docs/browser-extension.md`。
 
 ### LN-PIT-171：长表单的局部异步操作不能复用页底错误槽
@@ -3433,7 +3433,7 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **现象：** Manifest V3 扩展能够正常加载，点击工具栏图标却没有任何可见反应；目标网页控制台可能同时存在翻译插件、页面自身 CSP 等无关噪声，容易被误判成 Side Panel 的加载错误。
 - **根因：** `chrome.sidePanel.open()` 只能直接响应用户操作。工具栏 handler 先 `await chrome.sidePanel.setOptions()`、网络请求或其他异步任务后再调用 `open()`，部分 Chrome 版本会认为用户手势已经结束并拒绝打开侧栏。
 - **修复与防回归约束：** 工具栏入口使用 Chrome/Edge 官方的 `chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })`，由浏览器原生 action 行为负责开关侧栏，不再手动调用 `sidePanel.open()`。Service Worker 不读取网页，也不保存“最近标签页”；页面读取能力按 LN-PIT-172 分层，不能为了规避手势问题重新在 Service Worker 缓存目标页或手动开侧栏。
-- **验证方法：** Manifest 合约测试必须锁定 `openPanelOnActionClick: true`，并禁止 Service Worker 出现 `action.onClicked` 手动打开和 `sidePanel.open()`；捕获测试证明模块导入与入口都不会查询标签页，书签自动读取/网址回填和笔记带入分别只有在对应显式路径才查询并执行脚本，文件路径始终不读网页。真实 unpacked 扩展需要在重新加载后直接点击工具栏图标，确认首击即可打开侧栏。
+- **验证方法：** Manifest 合约测试必须锁定 `openPanelOnActionClick: true`，并禁止 Service Worker 出现 `action.onClicked` 手动打开和 `sidePanel.open()`；捕获测试证明模块导入与入口都不会查询标签页，书签自动读取/当前页信息回填和笔记带入分别只有在对应显式路径才查询并执行脚本，文件路径始终不读网页。真实 unpacked 扩展需要在重新加载后直接点击工具栏图标，确认首击即可打开侧栏。
 - **相关代码：** `apps/web/src/extension/service-worker.ts`、`apps/web/src/extension/capture.ts`、`apps/web/src/extension/manifest.contract.test.ts`、`apps/web/extension/manifest.json`、`docs/browser-extension.md`。
 
 ### LN-PIT-166：浏览器插件的无工具栏富文本不应直接捆绑重型编辑器
@@ -3460,7 +3460,7 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **现象：** 快速收藏最直观的实现是在工具栏点击或 Side Panel 首次挂载时立刻读取当前页，随后再显示三类入口；这样即使用户最终只想写笔记或传文件，插件也已经取得 URL、标题和选中文本。网站 Cookie 看似可直接复用，但扩展跨域读取 Cookie 会迫使权限扩大，也把网站会话和扩展设备会话混在一起。
 - **影响范围：** Chrome/Edge MV3 扩展的权限披露、商店审核、用户信任、登录恢复和被盗授权码风险；入口页、Service Worker、网页授权页及所有扩展 API 请求均受影响。
 - **根因：** `activeTab` 是用户手势产生的临时访问能力，不代表用户已经选择了要采集网页；Side Panel 打开也不是采集意图。若把 `tabId` 存成扩展全局“最近一次点击”，多窗口或多标签页侧栏还会互相覆盖目标。扩展公开 ID 不是机密，安全边界必须建立在服务端精确白名单、PKCE、一次性消费和设备绑定上，不能把 ID 或网站 Cookie 当作凭据。
-- **防回归约束：** 工具栏点击只触发浏览器原生 Side Panel 行为，Service Worker 禁止导入捕获模块、访问 `tab.url`、执行脚本或写共享目标页 storage；用户选中“书签”后才读取当前活动标签页的 URL、标题和尽力读取的选中文本，之后“填入当前页”只回填 URL；笔记进入视图只允许在组件内存准备当前 Origin，只有点击“带入当前网页文字”才按站点申请权限、读取最多 5 万字顶层可见文字并追加，文件流程不得读取网页。Manifest 禁止常驻内容脚本、`cookies` 和必需 `<all_urls>`；`tabs` 只能查询当前活动标签元数据，不得枚举或持久化，HTTP/HTTPS Host 必须保持可选且按精确 Origin 申请。网站中转必须使用随机 state、S256 PKCE、精确 `https://<extension-id>.chromiumapp.org/light-note-auth`、服务端扩展 ID 白名单、设备摘要和 Redis `GETDEL` 一次性授权码；失败校验也必须消费授权码。密码不得持久化，扩展 SID 与设备 ID 只能写扩展私有存储。公开构建 key 只能用来稳定 ID，私钥不得进入仓库。
+- **防回归约束：** 工具栏点击只触发浏览器原生 Side Panel 行为，Service Worker 禁止导入捕获模块、访问 `tab.url`、执行脚本或写共享目标页 storage；用户选中“书签”后才读取当前活动标签页的 URL、标题和尽力读取的选中文本，之后“当前页信息”只用标签页元数据更新 URL 与标题，不得覆盖描述、标签或保存模式；笔记进入视图只允许在组件内存准备当前 Origin，只有点击“带入当前网页文字”才按站点申请权限、读取最多 5 万字顶层可见文字并追加，文件流程不得读取网页。Manifest 禁止常驻内容脚本、`cookies` 和必需 `<all_urls>`；`tabs` 只能查询当前活动标签元数据，不得枚举或持久化，HTTP/HTTPS Host 必须保持可选且按精确 Origin 申请。网站中转必须使用随机 state、S256 PKCE、精确 `https://<extension-id>.chromiumapp.org/light-note-auth`、服务端扩展 ID 白名单、设备摘要和 Redis `GETDEL` 一次性授权码；失败校验也必须消费授权码。密码不得持久化，扩展 SID 与设备 ID 只能写扩展私有存储。公开构建 key 只能用来稳定 ID，私钥不得进入仓库。
 - **验证方法：** Manifest 合约测试锁定权限集合、稳定扩展 ID 和 `openPanelOnActionClick`；Service Worker 源码门禁确认没有页面读取或共享目标页 storage；捕获单测证明模块导入无副作用、没有活动标签页时失败关闭，且只有书签动作或笔记带入的显式调用才查询当前标签页并执行脚本；鉴权测试覆盖白名单、回调、PKCE、设备不匹配、错误校验后的重放和过期；真实 Chrome/Edge 分别从两个标签页打开侧栏，入口、未主动带入的笔记和文件不得读取页面，书签与笔记带入只能读取操作时所在的当前页。浅色/深色及 320/400/600px 检查入口、登录、加载、受限页、错误和成功状态。
 - **相关代码：** `apps/web/src/extension/service-worker.ts`、`apps/web/src/extension/capture.ts`、`apps/web/extension/manifest.json`、`apps/web/src/extension/auth.ts`、`apps/server/util/extensionAuth.js`、`docs/browser-extension.md`。
 
