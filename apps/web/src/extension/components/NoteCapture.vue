@@ -47,6 +47,8 @@
       <BButton
         :loading="importingPageText"
         :disabled="saving || importingPageText"
+        @pointerenter="refreshPageCaptureTarget"
+        @focus="refreshPageCaptureTarget"
         @click="importCurrentPageText"
       >
         {{ t('browserExtension.note.pageImportAction') }}
@@ -79,12 +81,7 @@
         :aria-label="t('browserExtension.note.richTextPlaceholder')"
       />
     </div>
-    <article
-      v-else
-      class="ln-extension-note-preview"
-      :class="{ 'is-empty': !hasBody }"
-      v-html="safePreview"
-    ></article>
+    <article v-else class="ln-extension-note-preview" :class="{ 'is-empty': !hasBody }" v-html="safePreview"></article>
 
     <div class="ln-extension-switch-row">
       <div>
@@ -115,12 +112,12 @@
   import icon from '@/config/icon.ts';
   import ExtensionRichTextEditor from './ExtensionRichTextEditor.vue';
   import { extensionPost, isExtensionAuthError } from '../api';
-  import { captureCurrentPageText } from '../capture';
+  import { captureCurrentPageText, prepareCurrentPageTextCapture } from '../capture';
   import { appendPageTextToHtml, appendPageTextToMarkdown } from '../pageTextImport';
   import { clearNoteDraft, getNoteDraft, saveNoteDraft } from '../storage';
   import { createExtensionDraftPersistence } from '../draftPersistence';
   import { resolveExtensionOperationReceipt } from '../operationIdempotency';
-  import type { ExtensionSuccess, NoteDraft } from '../types';
+  import type { ExtensionSuccess, NoteDraft, PreparedPageTextCapture } from '../types';
 
   const props = defineProps<{ authenticated: boolean }>();
   const emit = defineEmits<{ 'auth-required': []; success: [result: ExtensionSuccess] }>();
@@ -132,6 +129,8 @@
   const pageImportStatus = ref('');
   const pageImportError = ref('');
   const errorMessage = ref('');
+  const pageCaptureTarget = ref<PreparedPageTextCapture | null>(null);
+  let pageCaptureTargetRequest = 0;
   const draftPersistence = createExtensionDraftPersistence(saveNoteDraft, clearNoteDraft);
 
   function isUntouchedDraft() {
@@ -194,28 +193,66 @@
     draft.content = appendPageTextToHtml(draft.content, value, hasBody.value);
   }
 
-  async function importCurrentPageText() {
+  async function refreshPageCaptureTarget() {
+    const requestId = ++pageCaptureTargetRequest;
+    try {
+      const target = await prepareCurrentPageTextCapture();
+      if (requestId === pageCaptureTargetRequest) pageCaptureTarget.value = target;
+    } catch {
+      if (requestId === pageCaptureTargetRequest) pageCaptureTarget.value = null;
+    }
+  }
+
+  function pageImportErrorMessage(error: unknown): string {
+    const name = error instanceof Error ? error.name : '';
+    if (name === 'CAPTURE_PERMISSION_DENIED') return t('browserExtension.note.pageImportPermissionDenied');
+    if (name === 'CAPTURE_PAGE_CHANGED') return t('browserExtension.note.pageImportPageChanged');
+    if (name === 'CAPTURE_RESTRICTED_PAGE') return t('browserExtension.note.pageImportRestricted');
+    return t('browserExtension.note.pageImportFailed');
+  }
+
+  function importCurrentPageText() {
     if (saving.value || importingPageText.value) return;
+    const target = pageCaptureTarget.value;
+    if (!target) {
+      pageImportStatus.value = '';
+      pageImportError.value = t('browserExtension.note.pageImportPrepareFailed');
+      void refreshPageCaptureTarget();
+      return;
+    }
     importingPageText.value = true;
     pageImportStatus.value = '';
     pageImportError.value = '';
     errorMessage.value = '';
+    let capturePromise: ReturnType<typeof captureCurrentPageText>;
     try {
-      const page = await captureCurrentPageText();
-      if (!page.text) {
-        pageImportError.value = t('browserExtension.note.pageImportEmpty');
-        return;
-      }
-      if (!draft.title.trim() && page.title) draft.title = page.title.slice(0, 255);
-      appendImportedText(page.text);
-      pageImportStatus.value = t(page.truncated
-        ? 'browserExtension.note.pageImportTruncated'
-        : 'browserExtension.note.pageImportSuccess');
-    } catch {
-      pageImportError.value = t('browserExtension.note.pageImportFailed');
-    } finally {
+      // 保持在按钮点击的同步调用栈内发起当前域名权限请求。
+      capturePromise = captureCurrentPageText(target);
+    } catch (error: unknown) {
       importingPageText.value = false;
+      pageImportError.value = pageImportErrorMessage(error);
+      void refreshPageCaptureTarget();
+      return;
     }
+    void capturePromise
+      .then((page) => {
+        if (!page.text) {
+          pageImportError.value = t('browserExtension.note.pageImportEmpty');
+          return;
+        }
+        if (!draft.title.trim() && page.title) draft.title = page.title.slice(0, 255);
+        appendImportedText(page.text);
+        pageImportStatus.value = t(
+          page.truncated ? 'browserExtension.note.pageImportTruncated' : 'browserExtension.note.pageImportSuccess',
+        );
+      })
+      .catch((error: unknown) => {
+        pageImportError.value = pageImportErrorMessage(error);
+        void refreshPageCaptureTarget();
+      })
+      .finally(() => {
+        importingPageText.value = false;
+      });
   }
 
   async function saveNote() {
@@ -257,13 +294,10 @@
     }
   }
 
-  watch(
-    draft,
-    () => void draftPersistence.save(noteDraftSnapshot()),
-    { deep: true },
-  );
+  watch(draft, () => void draftPersistence.save(noteDraftSnapshot()), { deep: true });
 
   onMounted(async () => {
+    void refreshPageCaptureTarget();
     const stored = await getNoteDraft();
     if (stored && isUntouchedDraft()) Object.assign(draft, stored);
   });

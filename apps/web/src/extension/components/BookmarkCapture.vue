@@ -31,7 +31,13 @@
       </BButton>
     </div>
     <p class="ln-extension-mode-note">
-      {{ t(draft.mode === 'inbox' ? 'browserExtension.bookmark.modeInboxDescription' : 'browserExtension.bookmark.modeFormalDescription') }}
+      {{
+        t(
+          draft.mode === 'inbox'
+            ? 'browserExtension.bookmark.modeInboxDescription'
+            : 'browserExtension.bookmark.modeFormalDescription',
+        )
+      }}
     </p>
 
     <div v-if="capturing" class="ln-extension-inline-state">
@@ -42,7 +48,11 @@
     <div class="ln-extension-field">
       <label for="extension-bookmark-url">{{ t('browserExtension.bookmark.url') }}</label>
       <div class="ln-extension-field__action-row">
-        <BInput id="extension-bookmark-url" v-model:value="draft.url" :placeholder="t('browserExtension.bookmark.urlPlaceholder')" />
+        <BInput
+          id="extension-bookmark-url"
+          v-model:value="draft.url"
+          :placeholder="t('browserExtension.bookmark.urlPlaceholder')"
+        />
         <BButton
           :loading="refillingUrl"
           :disabled="capturing || refillingUrl || saving || aiLoading"
@@ -56,7 +66,11 @@
     </div>
     <div class="ln-extension-field">
       <label for="extension-bookmark-name">{{ t('browserExtension.bookmark.name') }}</label>
-      <BInput id="extension-bookmark-name" v-model:value="draft.name" :placeholder="t('browserExtension.bookmark.namePlaceholder')" />
+      <BInput
+        id="extension-bookmark-name"
+        v-model:value="draft.name"
+        :placeholder="t('browserExtension.bookmark.namePlaceholder')"
+      />
     </div>
     <div class="ln-extension-field">
       <label for="extension-bookmark-description">{{ t('browserExtension.bookmark.descriptionLabel') }}</label>
@@ -69,7 +83,11 @@
       />
     </div>
 
-    <section v-if="draft.mode === 'formal'" class="ln-extension-ai-assist" aria-labelledby="extension-bookmark-ai-title">
+    <section
+      v-if="draft.mode === 'formal'"
+      class="ln-extension-ai-assist"
+      aria-labelledby="extension-bookmark-ai-title"
+    >
       <span class="ln-extension-ai-assist__icon" aria-hidden="true">
         <SvgIcon :src="icon.common.magicWand" size="19" />
       </span>
@@ -97,7 +115,9 @@
         :loading="tagsLoading"
         :show-search="true"
         :aria-labelledby="'extension-bookmark-tags'"
-        :placeholder="authenticated ? t('browserExtension.bookmark.tagsPlaceholder') : t('browserExtension.bookmark.tagsAfterLogin')"
+        :placeholder="
+          authenticated ? t('browserExtension.bookmark.tagsPlaceholder') : t('browserExtension.bookmark.tagsAfterLogin')
+        "
         :disabled="!authenticated"
       />
       <div v-if="suggestedNewTags.length" class="ln-extension-suggested-tags">
@@ -140,7 +160,7 @@
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
-  import { captureTriggeredPage } from '../capture';
+  import { captureCurrentTabAddress, captureTriggeredPage } from '../capture';
   import { ExtensionApiError, extensionPost, isExtensionAuthError } from '../api';
   import { clearBookmarkDraft, getBookmarkDraft, saveBookmarkDraft } from '../storage';
   import { createExtensionDraftPersistence } from '../draftPersistence';
@@ -172,8 +192,14 @@
   const saving = computed(() => Boolean(savingMode.value));
 
   function isUntouchedDraft() {
-    return draft.mode === 'formal' && !draft.url && !draft.name && !draft.description
-      && draft.selectedTagIds.length === 0 && draft.selectedNewTags.length === 0;
+    return (
+      draft.mode === 'formal' &&
+      !draft.url &&
+      !draft.name &&
+      !draft.description &&
+      draft.selectedTagIds.length === 0 &&
+      draft.selectedNewTags.length === 0
+    );
   }
 
   function bookmarkDraftSnapshot(): BookmarkDraft {
@@ -214,10 +240,10 @@
     captureWarning.value = '';
     errorMessage.value = '';
     try {
-      const page = await captureTriggeredPage();
+      const page = await captureCurrentTabAddress();
       draft.url = page.url;
-    } catch (error: any) {
-      captureWarning.value = error?.message || t('browserExtension.bookmark.captureFailed');
+    } catch {
+      captureWarning.value = t('browserExtension.bookmark.captureFailed');
     } finally {
       refillingUrl.value = false;
     }
@@ -290,8 +316,12 @@
       if (fields.name) draft.name = String(fields.name);
       if (fields.description) draft.description = String(fields.description);
       const validIds = new Set(tagOptions.value.map((option) => option.value));
-      draft.selectedTagIds = [...new Set((fields.matchedTagIds || []).map(String).filter((id: string) => validIds.has(id)))].slice(0, 4);
-      suggestedNewTags.value = [...new Set((fields.newTags || []).map((tag: unknown) => String(tag || '').trim()).filter(Boolean))].slice(0, 4);
+      draft.selectedTagIds = [
+        ...new Set((fields.matchedTagIds || []).map(String).filter((id: string) => validIds.has(id))),
+      ].slice(0, 4);
+      suggestedNewTags.value = [
+        ...new Set((fields.newTags || []).map((tag: unknown) => String(tag || '').trim()).filter(Boolean)),
+      ].slice(0, 4);
       draft.selectedNewTags = draft.selectedNewTags.filter((tag) => suggestedNewTags.value.includes(tag));
       aiGenerated.value = true;
     } catch (error: any) {
@@ -313,9 +343,15 @@
       errorMessage.value = t('browserExtension.bookmark.invalidUrl');
       return;
     }
-    const name = draft.name.trim() || (() => {
-      try { return new URL(url).hostname; } catch { return url; }
-    })();
+    const name =
+      draft.name.trim() ||
+      (() => {
+        try {
+          return new URL(url).hostname;
+        } catch {
+          return url;
+        }
+      })();
     savingMode.value = mode;
     errorMessage.value = '';
     const payload = {
@@ -365,19 +401,29 @@
     }
   }
 
-  function saveFormal() { return save('formal'); }
-  function saveToInbox() { return save('inbox'); }
-  function saveSelectedMode() { return draft.mode === 'inbox' ? saveToInbox() : saveFormal(); }
+  function saveFormal() {
+    return save('formal');
+  }
+  function saveToInbox() {
+    return save('inbox');
+  }
+  function saveSelectedMode() {
+    return draft.mode === 'inbox' ? saveToInbox() : saveFormal();
+  }
 
+  watch(draft, () => void draftPersistence.save(bookmarkDraftSnapshot()), { deep: true });
   watch(
-    draft,
-    () => void draftPersistence.save(bookmarkDraftSnapshot()),
-    { deep: true },
+    () => draft.url,
+    () => {
+      aiGenerated.value = false;
+    },
   );
-  watch(() => draft.url, () => { aiGenerated.value = false; });
-  watch(() => props.authenticated, (value) => {
-    if (value && draft.mode === 'formal') void loadTags();
-  });
+  watch(
+    () => props.authenticated,
+    (value) => {
+      if (value && draft.mode === 'formal') void loadTags();
+    },
+  );
 
   onMounted(async () => {
     const stored = await getBookmarkDraft();
@@ -387,8 +433,8 @@
       if (!draft.url) draft.url = page.url;
       if (!draft.name) draft.name = page.title;
       if (!draft.description && page.selection) draft.description = page.selection;
-    } catch (error: any) {
-      captureWarning.value = error?.message || t('browserExtension.bookmark.captureFailed');
+    } catch {
+      captureWarning.value = t('browserExtension.bookmark.captureFailed');
     } finally {
       capturing.value = false;
     }

@@ -29,19 +29,19 @@ function extensionIdFromPublicKey(publicKey: string): string {
 }
 
 describe('浏览器插件 Manifest 与隐私边界', () => {
-  it('使用 MV3 原生 Side Panel 与最小权限，不注册常驻内容脚本或全站访问', () => {
+  it('使用 MV3 原生 Side Panel，并把网页正文访问声明为按站点可选权限', () => {
     expect(manifest.manifest_version).toBe(3);
-    expect(manifest.permissions).toEqual(['sidePanel', 'activeTab', 'scripting', 'storage', 'identity']);
+    expect(manifest.permissions).toEqual(['sidePanel', 'tabs', 'activeTab', 'scripting', 'storage', 'identity']);
     expect(manifest.side_panel.default_path).toBe('sidepanel.html');
     expect(manifest.background).toEqual({ service_worker: 'service-worker.js', type: 'module' });
     expect(manifest.content_scripts).toBeUndefined();
-    expect(manifest.permissions).not.toContain('tabs');
     expect(manifest.host_permissions).not.toContain('<all_urls>');
     expect(manifest.host_permissions).toEqual([
       'https://boluo66.top/*',
       'https://light-note-files.obs.cn-south-1.myhuaweicloud.com/*',
     ]);
     expect(manifest.host_permissions.some((permission: string) => permission.includes('*.obs.'))).toBe(false);
+    expect(manifest.optional_host_permissions).toEqual(['http://*/*', 'https://*/*']);
   });
 
   it('公开构建键产生稳定扩展 ID，供服务端精确白名单使用', () => {
@@ -57,6 +57,7 @@ describe('浏览器插件 Manifest 与隐私边界', () => {
     expect(serviceWorkerSource).not.toContain('lightNoteTriggerTabId');
     expect(captureSource).toContain('chrome.tabs.query({ active: true, lastFocusedWindow: true })');
     expect(captureSource).toContain('chrome.scripting.executeScript');
+    expect(captureSource).toContain('chrome.permissions.request({ origins: [target.originPattern] })');
     expect(appSource).not.toContain('captureTriggeredPage');
   });
 
@@ -85,7 +86,9 @@ describe('浏览器插件三类流程接线', () => {
     expect(appSource).toContain('mainRef.value.scrollTop = 0');
     expect(stylesSource).toMatch(/html,[\s\S]*#app \{[\s\S]*width: 100%;[\s\S]*overflow: hidden;/u);
     expect(stylesSource).toMatch(/body \{[\s\S]*display: block;/u);
-    expect(stylesSource).toMatch(/\.ln-extension-shell \{[\s\S]*grid-template-rows: auto minmax\(0, 1fr\);[\s\S]*overflow: hidden;/u);
+    expect(stylesSource).toMatch(
+      /\.ln-extension-shell \{[\s\S]*grid-template-rows: auto minmax\(0, 1fr\);[\s\S]*overflow: hidden;/u,
+    );
     expect(stylesSource).toMatch(/\.ln-extension-main \{[\s\S]*min-height: 0;[\s\S]*overflow-y: auto;/u);
   });
 
@@ -98,12 +101,13 @@ describe('浏览器插件三类流程接线', () => {
 
   it('书签视图读取当前页并支持网址回填，同时保留 AI、正式保存与待整理三条路径', () => {
     expect(bookmarkSource).toContain('await captureTriggeredPage()');
+    expect(bookmarkSource).toContain('await captureCurrentTabAddress()');
     expect(bookmarkSource).toContain('@click="fillCurrentPageUrl"');
     expect(bookmarkSource).toContain('draft.url = page.url');
     expect(bookmarkSource).toContain('generateWithAi');
     expect(bookmarkSource).toContain('browserExtension.bookmark.aiDescription');
     expect(bookmarkSource).toContain('browserExtension.bookmark.modeInboxDescription');
-    expect(bookmarkSource).toContain("v-if=\"draft.mode === 'formal'\"");
+    expect(bookmarkSource).toContain('v-if="draft.mode === \'formal\'"');
     expect(bookmarkSource).toContain('saveSelectedMode');
     expect(bookmarkSource).toContain('saveFormal');
     expect(bookmarkSource).toContain('saveToInbox');
@@ -115,7 +119,7 @@ describe('浏览器插件三类流程接线', () => {
   it('笔记支持两种格式、安全预览和非空正文切换确认', () => {
     expect(noteSource).toContain("draft.type === 'markdown'");
     expect(noteSource).toContain('v-if="draft.type === \'markdown\'"');
-    expect(noteSource).toContain('v-if="draft.type === \'html\' || editorMode === \'edit\'"');
+    expect(noteSource).toContain("v-if=\"draft.type === 'html' || editorMode === 'edit'\"");
     expect(noteSource).toContain('DOMPurify.sanitize');
     expect(richTextSource).toContain('contenteditable="true"');
     expect(richTextSource).toContain('DOMPurify.sanitize');
@@ -124,13 +128,14 @@ describe('浏览器插件三类流程接线', () => {
     expect(noteSource).toContain('if (!hasBody.value) return apply()');
     expect(noteSource).toContain('Alert.alert');
     expect(noteSource).toContain('@click="importCurrentPageText"');
-    expect(noteSource).toContain('await captureCurrentPageText()');
+    expect(noteSource).toContain('captureCurrentPageText(target)');
+    expect(noteSource).toContain('prepareCurrentPageTextCapture()');
     expect(noteSource).toContain('appendImportedText(page.text)');
     expect(noteSource).toContain('pageImportError.value = t');
     expect(noteSource).toContain('ln-extension-page-import-error');
     expect(pageTextImportSource).toContain('document.createTextNode(line)');
     expect(pageTextImportSource).toContain('DOMPurify.sanitize');
-    expect(noteSource).toContain("page.title.slice(0, 255)");
+    expect(noteSource).toContain('page.title.slice(0, 255)');
     expect(noteSource).toContain('isUntouchedDraft()');
     expect(draftPersistenceSource).toContain('await tail.catch');
     expect(draftPersistenceSource).toContain('await clear()');
@@ -139,7 +144,9 @@ describe('浏览器插件三类流程接线', () => {
     expect(operationIdempotencySource).toContain("crypto.subtle.digest('SHA-256'");
     expect(noteSource).toContain('ln-extension-note-title-field');
     expect(stylesSource).toContain('.ln-extension-note-title-field');
-    expect(stylesSource).toMatch(/\.ln-extension-note-editor \{[\s\S]*&:focus-within[\s\S]*\.b-textarea \{[\s\S]*border: 0 !important;/u);
+    expect(stylesSource).toMatch(
+      /\.ln-extension-note-editor \{[\s\S]*&:focus-within[\s\S]*\.b-textarea \{[\s\S]*border: 0 !important;/u,
+    );
     expect(richTextSource).not.toContain('&:focus-visible');
   });
 

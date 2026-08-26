@@ -14,17 +14,21 @@ export interface ExtensionSession {
   user: ExtensionUser;
 }
 
-export interface CapturedPage {
+export interface CapturedTab {
   tabId: number;
   url: string;
   title: string;
+}
+
+export interface CapturedPage extends CapturedTab {
   selection: string;
 }
 
-export interface CapturedPageText {
-  tabId: number;
-  url: string;
-  title: string;
+export interface PreparedPageTextCapture extends CapturedTab {
+  originPattern: string;
+}
+
+export interface CapturedPageText extends CapturedTab {
   text: string;
   truncated: boolean;
 }
