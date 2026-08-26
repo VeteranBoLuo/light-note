@@ -9465,6 +9465,21 @@ export default {
     },
   },
 
+  adminPointsGovernance: {
+    trendTitle: 'Daily issuance, spending, and net issuance',
+    trendHint: 'Bars show issuance and spending; the line shows net issuance',
+    trendAria:
+      'Combined daily points trend for issuance, spending, and net issuance. Issuance is above zero, spending is below zero, and the line is net issuance.',
+    issued: 'Issued',
+    spent: 'Spent',
+    net: 'Net issuance',
+    tooltip: '{day} · Issued +{issued} · Spent -{spent} · Net {net}',
+    empty: 'No points activity in this date range.',
+    loadFailed: 'Points health data is temporarily unavailable',
+    refreshFailed: 'Refresh failed. The last successful data is still shown.',
+    retry: 'Retry',
+  },
+
   // Android APK direct-distribution page. Wording is constrained by MIIT filing and sideloading
   // rules: never claim app-store availability, never promise the system won't warn, and never
   // describe the APK as a native HarmonyOS app.

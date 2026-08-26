@@ -9104,6 +9104,20 @@ export default {
     },
   },
 
+  adminPointsGovernance: {
+    trendTitle: '每日产出、消耗与净发行',
+    trendHint: '柱形表示产出与消耗，折线表示净发行',
+    trendAria: '每日积分产出、消耗与净发行组合趋势。零轴上方为产出，下方为消耗，折线为净发行。',
+    issued: '产出',
+    spent: '消耗',
+    net: '净发行',
+    tooltip: '{day} · 产出 +{issued} · 消耗 -{spent} · 净发行 {net}',
+    empty: '该时间窗暂无积分流水。',
+    loadFailed: '积分健康数据暂时无法加载',
+    refreshFailed: '刷新失败，当前仍显示上次成功数据。',
+    retry: '重试',
+  },
+
   // Android APK 官网直发落地页。措辞受工信部备案与侧载合规约束：不得声称已上架商店、
   // 不得承诺系统不提示风险、不得把 APK 说成鸿蒙原生应用。
   todoPlanDiagnosticsAdmin: {

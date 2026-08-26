@@ -20,6 +20,12 @@
       </div>
     </div>
 
+    <p v-if="loadError && data" class="points-health__refresh-error" role="alert">{{ loadError }}</p>
+    <div v-else-if="loadError && !data" class="points-health__error" role="alert">
+      <p>{{ loadError }}</p>
+      <BButton size="small" :loading="loading" @click="reload">{{ t('adminPointsGovernance.retry') }}</BButton>
+    </div>
+
     <div v-if="data" class="points-health__metrics">
       <article v-for="item in metricCards" :key="item.label" class="points-health__metric">
         <span>{{ item.label }}</span>
@@ -51,25 +57,105 @@
     </div>
 
     <article v-if="data" class="points-health__panel points-health__trend">
-      <header
-        ><h3>每日净发行趋势</h3><span>{{ data.range.startDate }} 至 {{ data.range.endDate }}</span></header
-      >
-      <div
-        v-if="trend.length"
-        class="points-health__bars"
-        role="img"
-        aria-label="每日净发行柱状趋势，移入柱形可查看精确数值"
-      >
-        <BTooltip v-for="item in trend" :key="item.day" class="points-health__bar-tooltip" :title="trendTooltip(item)">
-          <div class="points-health__bar-item" :aria-label="trendTooltip(item)">
-            <span class="points-health__bar-track">
-              <i :class="item.net >= 0 ? 'is-positive' : 'is-negative'" :style="{ height: `${item.height}%` }" />
-            </span>
-            <small>{{ item.label }}</small>
+      <header class="points-health__trend-header">
+        <div>
+          <h3>{{ t('adminPointsGovernance.trendTitle') }}</h3>
+          <span>{{ t('adminPointsGovernance.trendHint') }}</span>
+        </div>
+        <span>{{ data.range.startDate }} 至 {{ data.range.endDate }}</span>
+      </header>
+      <template v-if="trendChart.hasActivity">
+        <div class="points-health__trend-legend" aria-hidden="true">
+          <span><i class="is-issued" />+ {{ t('adminPointsGovernance.issued') }}</span>
+          <span><i class="is-spent" />− {{ t('adminPointsGovernance.spent') }}</span>
+          <span><i class="is-net" />{{ t('adminPointsGovernance.net') }}</span>
+        </div>
+        <div
+          v-auto-scrollbar
+          class="points-health__chart-scroll"
+          role="group"
+          :aria-label="t('adminPointsGovernance.trendAria')"
+        >
+          <div
+            class="points-health__chart"
+            :style="{
+              minWidth: trendMinWidth,
+              '--trend-count': trend.length,
+              '--trend-baseline': `${trendChart.baselineY}%`,
+            }"
+          >
+            <div class="points-health__chart-plot-layer" aria-hidden="true">
+              <span class="points-health__zero-line"><b>0</b></span>
+              <svg
+                v-if="trend.length > 1"
+                class="points-health__net-line"
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+              >
+                <polyline
+                  :points="trendChart.linePoints"
+                  fill="none"
+                  vector-effect="non-scaling-stroke"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </div>
+            <div class="points-health__chart-columns">
+              <BTooltip
+                v-for="item in trend"
+                :key="item.day"
+                class="points-health__bar-tooltip"
+                :title="trendTooltip(item)"
+              >
+                <div
+                  class="points-health__bar-item"
+                  :class="{ 'is-active': activeTrendDay === item.day }"
+                  role="button"
+                  tabindex="0"
+                  :aria-label="trendTooltip(item)"
+                  :aria-pressed="activeTrendDay === item.day"
+                  @click="selectTrendDay(item.day)"
+                  @focus="selectTrendDay(item.day)"
+                  @keydown.enter="selectTrendDay(item.day)"
+                  @keydown.space.prevent="selectTrendDay(item.day)"
+                >
+                  <span class="points-health__bar-plot" aria-hidden="true">
+                    <i
+                      v-if="item.issued > 0"
+                      class="points-health__bar is-issued"
+                      :style="{
+                        bottom: `${100 - trendChart.baselineY}%`,
+                        height: `${item.issuedHeight}%`,
+                      }"
+                    />
+                    <i
+                      v-if="item.spent > 0"
+                      class="points-health__bar is-spent"
+                      :style="{ top: `${trendChart.baselineY}%`, height: `${item.spentHeight}%` }"
+                    />
+                    <i class="points-health__net-dot" :style="{ top: `${item.netY}%` }" />
+                  </span>
+                  <small>{{ item.label }}</small>
+                </div>
+              </BTooltip>
+            </div>
           </div>
-        </BTooltip>
-      </div>
-      <p v-else class="points-health__empty">该时间窗暂无积分流水。</p>
+        </div>
+        <div v-if="activeTrend" class="points-health__trend-summary" role="status">
+          <strong>{{ activeTrend.day }}</strong>
+          <span class="is-issued"
+            >{{ t('adminPointsGovernance.issued') }} <b>+{{ format(activeTrend.issued) }}</b></span
+          >
+          <span class="is-spent"
+            >{{ t('adminPointsGovernance.spent') }} <b>-{{ format(activeTrend.spent) }}</b></span
+          >
+          <span class="is-net"
+            >{{ t('adminPointsGovernance.net') }} <b>{{ formatSigned(activeTrend.net) }}</b></span
+          >
+        </div>
+      </template>
+      <p v-else class="points-health__empty">{{ t('adminPointsGovernance.empty') }}</p>
     </article>
 
     <article v-if="data" class="points-health__panel points-health__leaderboard">
@@ -109,7 +195,8 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted, ref } from 'vue';
+  import { computed, onMounted, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import growthApi from '@/api/growthApi';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -121,6 +208,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { bookmarkStore } from '@/store';
+  import { buildPointsGovernanceTrend, type PointsGovernanceTrendPoint } from './pointsGovernanceTrend';
 
   interface BalanceLeaderboardUser {
     rank: number;
@@ -135,9 +223,12 @@
   const props = withDefaults(defineProps<{ hideInternal?: boolean }>(), { hideInternal: true });
   const emit = defineEmits<{ 'select-user': [user: BalanceLeaderboardUser] }>();
   const bookmark = bookmarkStore();
+  const { t } = useI18n();
 
   const loading = ref(false);
   const data = ref<any>(null);
+  const loadError = ref('');
+  const activeTrendDay = ref('');
   const rangeMode = ref<number | 'custom'>(28);
   const customStartDate = ref('');
   const customEndDate = ref('');
@@ -207,15 +298,10 @@
       { label: '> 24,000', value: `${value.over24000Ratio || 0}%` },
     ];
   });
-  const trend = computed(() => {
-    const rows = data.value?.trends || [];
-    const maximum = Math.max(1, ...rows.map((row: any) => Math.abs(Number(row.net || 0))));
-    return rows.map((row: any) => ({
-      ...row,
-      height: Math.max(4, Math.round((Math.abs(Number(row.net || 0)) / maximum) * 100)),
-      label: String(row.day || '').slice(5),
-    }));
-  });
+  const trendChart = computed(() => buildPointsGovernanceTrend(data.value?.trends || []));
+  const trend = computed(() => trendChart.value.points);
+  const trendMinWidth = computed(() => `${Math.max(280, trend.value.length * 34)}px`);
+  const activeTrend = computed(() => trend.value.find((item) => item.day === activeTrendDay.value) || null);
   const leaderboardRows = computed(() =>
     (data.value?.balanceLeaderboard || []).map((row: BalanceLeaderboardUser) => ({
       ...row,
@@ -240,10 +326,17 @@
         ],
   );
 
-  function trendTooltip(item: any) {
-    const issued =
-      Number(item.stable || 0) + Number(item.oneTime || 0) + Number(item.random || 0) + Number(item.operations || 0);
-    return `${item.day} · 净发行 ${formatSigned(item.net)} · 产出 +${format(issued)} · 消耗 -${format(item.spent)}`;
+  function trendTooltip(item: PointsGovernanceTrendPoint) {
+    return t('adminPointsGovernance.tooltip', {
+      day: item.day,
+      issued: format(item.issued),
+      spent: format(item.spent),
+      net: formatSigned(item.net),
+    });
+  }
+
+  function selectTrendDay(day: string) {
+    activeTrendDay.value = day;
   }
 
   function openUser(user: BalanceLeaderboardUser) {
@@ -261,10 +354,18 @@
       payload.endDate = customEndDate.value;
     } else payload.presetDays = rangeMode.value;
     loading.value = true;
+    loadError.value = '';
     try {
       const result = await growthApi.adminPointsGovernanceOverview(payload);
-      if (result.status === 200) data.value = result.data;
-      else message.error(result.msg || '健康总览加载失败');
+      if (result.status === 200) {
+        data.value = result.data;
+        return;
+      }
+      loadError.value = result.msg || t('adminPointsGovernance.loadFailed');
+      message.error(loadError.value);
+    } catch {
+      loadError.value = data.value ? t('adminPointsGovernance.refreshFailed') : t('adminPointsGovernance.loadFailed');
+      message.error(loadError.value);
     } finally {
       loading.value = false;
     }
@@ -273,6 +374,10 @@
   function handleRangeChange() {
     if (rangeMode.value !== 'custom') void reload();
   }
+
+  watch(trend, (rows) => {
+    if (activeTrendDay.value && !rows.some((row) => row.day === activeTrendDay.value)) activeTrendDay.value = '';
+  });
 
   defineExpose({ reload });
   onMounted(reload);
@@ -325,6 +430,24 @@
   }
   .points-health__filters :deep(.input-container) {
     width: 142px;
+  }
+  .points-health__error,
+  .points-health__refresh-error {
+    border: 1px solid var(--danger-color);
+    border-radius: 10px;
+    color: var(--danger-color);
+    background: var(--card-background);
+    font-size: 12px;
+  }
+  .points-health__error {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+  }
+  .points-health__refresh-error {
+    padding: 10px 12px;
   }
   .points-health__metrics {
     display: grid;
@@ -408,40 +531,201 @@
     border: 1px solid var(--success-color);
     background: var(--card-background);
   }
-  .points-health__bars {
+  .points-health__trend {
+    --trend-plot-height: 174px;
+    overflow: hidden;
+  }
+  .points-health__trend-header {
+    align-items: flex-start;
+  }
+  .points-health__trend-header > div {
+    display: grid;
+    gap: 3px;
+  }
+  .points-health__trend-legend {
     display: flex;
-    align-items: end;
-    gap: 4px;
-    min-height: 132px;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 14px;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+  .points-health__trend-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .points-health__trend-legend i {
+    display: inline-block;
+    width: 12px;
+    height: 7px;
+    border-radius: 3px;
+  }
+  .points-health__trend-legend i.is-issued {
+    background: var(--success-color);
+  }
+  .points-health__trend-legend i.is-spent {
+    background: var(--danger-color);
+  }
+  .points-health__trend-legend i.is-net {
+    width: 14px;
+    height: 0;
+    border-top: 2px solid var(--points-trend-net-color);
+    border-radius: 0;
+  }
+  .points-health__chart-scroll {
+    width: 100%;
     overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 4px;
+  }
+  .points-health__chart {
+    position: relative;
+    width: 100%;
+  }
+  .points-health__chart-columns {
+    position: relative;
+    z-index: 4;
+    display: grid;
+    grid-template-columns: repeat(var(--trend-count), minmax(30px, 1fr));
+    width: 100%;
+  }
+  .points-health__chart-plot-layer {
+    position: absolute;
+    z-index: 1;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: var(--trend-plot-height);
+    pointer-events: none;
+  }
+  .points-health__zero-line {
+    position: absolute;
+    z-index: 1;
+    top: var(--trend-baseline);
+    right: 0;
+    left: 0;
+    height: 0;
+    border-top: 1px solid var(--surface-border-color);
+    pointer-events: none;
+  }
+  .points-health__zero-line b {
+    position: absolute;
+    top: 0;
+    left: 0;
+    padding-right: 4px;
+    color: var(--desc-color);
+    background: var(--workbench-subcard-bg);
+    font-size: 10px;
+    font-weight: 400;
+    line-height: 16px;
+    transform: translateY(-50%);
+  }
+  .points-health__net-line {
+    position: absolute;
+    z-index: 2;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+  }
+  .points-health__net-line polyline {
+    stroke: var(--points-trend-net-color);
+    stroke-width: 1.6px;
   }
   .points-health__bar-tooltip {
-    min-width: 24px;
-    flex: 1 0 24px;
+    width: 100%;
+    min-width: 30px;
   }
   .points-health__bar-item {
     display: grid;
-    grid-template-rows: 104px auto;
+    grid-template-rows: var(--trend-plot-height) 20px;
     gap: 5px;
     width: 100%;
-    min-width: 24px;
+    min-width: 30px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    box-sizing: border-box;
+    cursor: pointer;
+    outline: none;
     text-align: center;
   }
-  .points-health__bar-track {
-    display: flex;
-    align-items: end;
-    justify-content: center;
-    border-bottom: 1px solid var(--card-border-color);
+  .points-health__bar-item:hover small,
+  .points-health__bar-item:focus small,
+  .points-health__bar-item.is-active small {
+    color: var(--points-trend-net-color);
   }
-  .points-health__bar-track i {
+  .points-health__bar-item:focus-visible {
+    outline: 2px solid var(--focus-ring-color);
+    outline-offset: -2px;
+  }
+  .points-health__bar-item.is-active {
+    border-color: var(--points-trend-net-color);
+  }
+  .points-health__bar-plot {
+    position: relative;
     display: block;
+    width: 100%;
+    height: var(--trend-plot-height);
+  }
+  .points-health__bar {
+    position: absolute;
+    left: 50%;
     width: 10px;
-    min-height: 4px;
-    border-radius: 4px 4px 0 0;
+    min-height: 3px;
+    transform: translateX(-50%);
+  }
+  .points-health__bar.is-issued {
+    border-radius: 5px 5px 2px 2px;
     background: var(--success-color);
   }
-  .points-health__bar-track i.is-negative {
+  .points-health__bar.is-spent {
+    border-radius: 2px 2px 5px 5px;
     background: var(--danger-color);
+  }
+  .points-health__net-dot {
+    position: absolute;
+    z-index: 2;
+    left: 50%;
+    display: block;
+    width: 8px;
+    height: 8px;
+    border: 2px solid var(--workbench-subcard-bg);
+    border-radius: 50%;
+    box-sizing: border-box;
+    background: var(--points-trend-net-color);
+    transform: translate(-50%, -50%);
+  }
+  .points-health__trend-summary {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    padding: 10px 12px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 8px;
+    color: var(--desc-color);
+    background: var(--card-background);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  .points-health__trend-summary > strong {
+    color: var(--text-color);
+  }
+  .points-health__trend-summary span {
+    display: inline-flex;
+    gap: 4px;
+  }
+  .points-health__trend-summary .is-issued b {
+    color: var(--success-color);
+  }
+  .points-health__trend-summary .is-spent b {
+    color: var(--danger-color);
+  }
+  .points-health__trend-summary .is-net b {
+    color: var(--points-trend-net-color);
   }
   .points-health__leaderboard header > div {
     display: grid;
@@ -512,6 +796,22 @@
     }
     .points-health__grid {
       grid-template-columns: 1fr;
+    }
+    .points-health__error,
+    .points-health__trend-header {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+    .points-health__trend {
+      --trend-plot-height: 158px;
+    }
+    .points-health__trend-legend {
+      gap: 10px 14px;
+    }
+    .points-health__trend-summary {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 6px;
     }
     .points-health__leaderboard header {
       align-items: flex-start;
