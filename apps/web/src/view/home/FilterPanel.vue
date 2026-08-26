@@ -67,17 +67,18 @@
           <div
             class="category-item"
             :class="{ 'is-current': String((bookmark.tagData as any)?.id || '') === String(item.id) }"
-            :title="item.name"
+            :title="tagDraggable ? t('home.dragTagHint') : undefined"
             :aria-current="String((bookmark.tagData as any)?.id || '') === String(item.id) ? 'true' : undefined"
-            :style="{
-              backgroundColor: (bookmark.tagData as any)?.id === item.id ? 'var(--category-item-ba-color)' : '',
-            }"
+            role="button"
+            tabindex="0"
             :key="item.id"
             v-click-log="{ module: '首页', operation: `查询标签【${item.name}】下的书签列表` }"
             @click="handleClickTag(<TagInterface>item)"
+            @keydown.enter.prevent="handleClickTag(<TagInterface>item)"
+            @keydown.space.prevent="handleClickTag(<TagInterface>item)"
           >
             <svg-icon
-              size="18"
+              :size="bookmark.isMobile ? 18 : 17"
               :src="item.iconUrl ? item.iconUrl : icon.manage_categoryBtn_tag"
               class="tag-item-icon"
             />
@@ -504,13 +505,67 @@
     flex: 1;
   }
 
+  .tag-item-icon {
+    flex: 0 0 auto;
+  }
+
   .bookmark-tag-action-menu {
     display: block;
     width: 100%;
   }
 
-  .bookmark-tag-action-menu.is-menu-open .category-item {
-    background-color: var(--category-item-ba-color);
+  // 书签标签由 BList 的 slot 渲染，不会继承 BList scoped 样式里的 14px，
+  // 此前实际回退成页面默认 16px。桌面端在这里与笔记、云空间侧栏统一为紧凑扫描密度；
+  // 移动抽屉继续由下方规则保留 54px 触控高度和更舒展的字号。
+  @media (min-width: 768px) {
+    .category-item {
+      position: relative;
+      height: 34px;
+      margin: 2px 0;
+      padding: 0 8px;
+      gap: 8px;
+      color: var(--desc-color);
+      font-size: 13px;
+      font-weight: 400;
+      line-height: 1.2;
+      transition:
+        color 160ms ease,
+        background 160ms ease;
+
+      &:hover {
+        color: var(--resource-bookmark-color, #615ced);
+        background: color-mix(in srgb, var(--resource-bookmark-color, #615ced) 7%, transparent);
+      }
+
+      &:focus-visible {
+        color: var(--resource-bookmark-color, #615ced);
+        background: color-mix(in srgb, var(--resource-bookmark-color, #615ced) 7%, transparent);
+        outline: 2px solid var(--resource-bookmark-color, #615ced);
+        outline-offset: -2px;
+      }
+
+      &.is-current {
+        color: var(--resource-bookmark-color, #615ced);
+        background: color-mix(in srgb, var(--resource-bookmark-color, #615ced) 10%, var(--workspace-panel-bg-color));
+        font-weight: 600;
+
+        &::before {
+          position: absolute;
+          top: 7px;
+          bottom: 7px;
+          left: 2px;
+          width: 3px;
+          border-radius: 999px;
+          background: var(--resource-bookmark-color, #615ced);
+          content: '';
+        }
+      }
+    }
+
+    .bookmark-tag-action-menu.is-menu-open .category-item:not(.is-current) {
+      color: var(--resource-bookmark-color, #615ced);
+      background: color-mix(in srgb, var(--resource-bookmark-color, #615ced) 7%, transparent);
+    }
   }
 
   .tag-skeleton-wrap {

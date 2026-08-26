@@ -2568,6 +2568,7 @@ export default {
     viewAll: 'View all',
     visibleBookmarks: '{count} shown',
     tagSearch: 'Enter tag name',
+    dragTagHint: 'Drag up or down to reorder tags',
     alreadyIncluded: 'Already included',
     guestNudgeText: 'Like this setup? Sign up and make LightNote your own.',
     freeRegister: 'Sign up free',

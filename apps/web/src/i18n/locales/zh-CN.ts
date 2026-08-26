@@ -2431,6 +2431,7 @@ export default {
     viewAll: '查看全部',
     visibleBookmarks: '当前展示 {count} 个',
     tagSearch: '请输入标签名',
+    dragTagHint: '上下拖拽可调整标签顺序',
     guestNudgeText: '喜欢这些整理？注册后即可拥有你自己的轻笺',
     freeRegister: '免费注册',
     toolbox: '开发者工具箱',
