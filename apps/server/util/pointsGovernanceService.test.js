@@ -22,6 +22,44 @@ describe('C5 积分治理时间窗与只读模拟器', () => {
     expect(() => resolveGovernanceRange({ presetDays: 30 })).toThrowError(
       expect.objectContaining({ code: 'INVALID_RANGE_PRESET' }),
     );
+    expect(() => resolveGovernanceRange({ startDate: '2026-02-30', endDate: '2026-03-01' })).toThrowError(
+      expect.objectContaining({ code: 'INVALID_DATE_RANGE' }),
+    );
+  });
+
+  it('治理自然日固定按北京时间解析，并补齐没有流水的日期', () => {
+    const range = resolveGovernanceRange({ presetDays: 7 }, new Date('2026-08-26T16:30:00.000Z'));
+    expect(range).toMatchObject({ startDate: '2026-08-21', endDate: '2026-08-27', endExclusive: '2026-08-28' });
+
+    const trends = pointsGovernanceInternals.buildDailyTrends(
+      resolveGovernanceRange({ startDate: '2026-08-01', endDate: '2026-08-03' }),
+      [
+        {
+          day: '2026-08-02',
+          issued: '120',
+          stable: '60',
+          oneTime: '10',
+          random: '20',
+          operations: '30',
+          spent: '45',
+          net: '75',
+        },
+      ],
+    );
+    expect(trends).toEqual([
+      { day: '2026-08-01', issued: 0, stable: 0, oneTime: 0, random: 0, operations: 0, spent: 0, net: 0 },
+      {
+        day: '2026-08-02',
+        issued: 120,
+        stable: 60,
+        oneTime: 10,
+        random: 20,
+        operations: 30,
+        spent: 45,
+        net: 75,
+      },
+      { day: '2026-08-03', issued: 0, stable: 0, oneTime: 0, random: 0, operations: 0, spent: 0, net: 0 },
+    ]);
   });
 
   it('默认 C5 稳定周产出保持 670，模拟器不接收数据库也没有写入入口', () => {
@@ -179,6 +217,10 @@ describe('C5 积分治理时间窗与只读模拟器', () => {
     expect(leaderboardSql).toContain('u.del_flag = 0');
     expect(leaderboardSql).toContain('ORDER BY ug.points DESC');
     expect(leaderboardSql).toContain('LIMIT 20');
+    const trendSql = String(query.mock.calls[4][0]);
+    expect(trendSql).toContain("DATE_FORMAT(create_time, '%Y-%m-%d') AS day");
+    expect(trendSql).toContain("GROUP BY DATE_FORMAT(create_time, '%Y-%m-%d')");
+    expect(trendSql).toContain('CASE WHEN delta > 0 THEN delta ELSE 0 END');
     expect(result.balanceLeaderboard).toEqual([
       expect.objectContaining({ rank: 1, userId: 'u2', alias: '菠萝', points: 50, level: 6 }),
     ]);
