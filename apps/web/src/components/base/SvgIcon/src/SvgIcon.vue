@@ -7,6 +7,7 @@
 
 <script lang="ts" setup>
   import { PropType } from 'vue';
+  import OriginalIcon from './OriginalIcon.vue';
 
   const props = defineProps({
     src: {

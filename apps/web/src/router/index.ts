@@ -113,6 +113,16 @@ export const routes: RouteRecordRaw[] = [
     component: () => import('@/view/quickSave/QuickSave.vue'),
   },
   {
+    meta: {
+      title: '授权轻笺浏览器插件',
+      seoIndexable: false,
+      hideAiAssistant: true,
+    },
+    path: '/extension/authorize',
+    name: 'extensionAuthorize',
+    component: () => import('@/view/extension/ExtensionAuthorize.vue'),
+  },
+  {
     // Android APK 官网直发落地页:公开可访问、无需登录,独立于应用壳(顶部导航要求登录态,
     // 而这个页面的读者通常还没有账号)。备案号与校验信息必须能被搜索引擎和普通访客直接看到。
     meta: {

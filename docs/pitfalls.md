@@ -25,6 +25,10 @@
 
 | 编号                                                                                           | 日期       | 模块                  | 关键词                                             | 状态         |
 | ---------------------------------------------------------------------------------------------- | ---------- | --------------------- | -------------------------------------------------- | ------------ |
+| [LN-PIT-167](#ln-pit-167异步草稿恢复与清除不能覆盖已开始编辑的表单)                           | 2026-08-26 | 浏览器插件、草稿、幂等 | storage、竞态、恢复、清除、幂等键                  | 已修复待上线 |
+| [LN-PIT-166](#ln-pit-166浏览器插件的无工具栏富文本不应直接捆绑重型编辑器)                     | 2026-08-26 | 浏览器插件、编辑器    | contenteditable、HTML 清洗、许可、包体积           | 已修复待上线 |
+| [LN-PIT-165](#ln-pit-165manifest-v3-构建不能保留运行时动态代码生成)                            | 2026-08-26 | 浏览器插件、构建、i18n | CSP、eval、new Function、Vue I18n、JIT             | 已修复待上线 |
+| [LN-PIT-164](#ln-pit-164浏览器插件的工具栏点击不能等同于授权读取网页)                         | 2026-08-26 | 浏览器插件、安全、认证 | activeTab、Side Panel、PKCE、白名单、延迟读取      | 已修复待上线 |
 | [LN-PIT-163](#ln-pit-163css-数学函数内的百分比减法必须显式包裹-calc)                           | 2026-08-26 | 前端、移动端、构建    | CSS、min、calc、百分比、窄栏、视觉验收             | 已修复待上线 |
 | [LN-PIT-160](#ln-pit-160同一支付渠道不能代替不可变的订单用途)                                  | 2026-08-25 | 赞助、商店、排行榜    | order purpose、爱发电、权益、榜单、历史兼容        | 已修复待上线 |
 | [LN-PIT-159](#ln-pit-159浮层关闭后的导航不能再读取会被重置的响应式草稿)                        | 2026-08-25 | 移动端、待办、浮层    | history、草稿快照、reset、路由 state、蒙层         | 已修复待上线 |
@@ -3372,6 +3376,51 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **防回归约束：** 环境门禁放在数据库适配器入口，覆盖全部进程。本地运行时只允许回环地址或 Unix Socket，远程地址默认失败关闭；确需远程写入必须由当前任务授权并用一次性 `ALLOW_REMOTE_DATABASE_WRITES=true` 显式确认，不得长期保存在 `.env`。生产配置显式使用 `LIGHTNOTE_RUNTIME_ENV=production`；代码内主机兜底只能是 `127.0.0.1`，不得提交生产地址、账号或凭据。`NODE_ENV=test` 继续完全禁用真实数据库。
 - **验收：** 单测覆盖回环、Socket、远程主机、未知环境、显式风险确认、生产运行时和错误脱敏；静态检查数据库适配器不存在公网主机兜底。本机 `.env` 标记 local 且远程库时，任意导入数据库的进程都应在业务查询前报 `REMOTE_DATABASE_WRITE_BLOCKED`；本地 MySQL 与生产显式环境分别可正常启动。
 - **相关代码：** `apps/server/util/databaseConnectionSafety.js`、`apps/server/db/index.js`、`apps/server/.env.example`、`docs/development.md`。
+### LN-PIT-167：异步草稿恢复与清除不能覆盖已开始编辑的表单
+
+- **现象：** 笔记保存请求因扩展会话过期被拒绝时，登录浮层刚出现时标题和 Markdown 正文都还在；等待后重新登录并以同一个幂等键重试，请求却变成了空正文富文本。单看“过期时 DOM 里还有草稿”会错误通过验收。
+- **影响范围：** 扩展 `chrome.storage.local` 草稿的首次恢复、连续编辑、保存成功清理、登录过期恢复与幂等重试；书签和笔记都有相同竞态。
+- **根因：** 组件挂载后异步读取旧草稿，同时表单已经允许编辑，晚返回的恢复结果可以覆盖新输入；深度 watch 又把每次变化作为互不等待的异步写入，成功后的 `clear()` 不能保证排在所有在途 `set()` 之后。同一幂等键因此可能对应不同载荷。
+- **修复与防回归约束：** 异步恢复只能覆盖仍处于完整初始值的表单；用户一旦修改任意字段，晚到旧草稿必须丢弃。草稿写入统一进入串行队列；成功丢弃先封住后续写入、等待在途队列，再执行清除。书签和笔记复用同一实现，禁止各自直接 fire-and-forget `storage.set()` 后立刻 `remove()`。请求发出前必须先把载荷 SHA-256 指纹与幂等键写入同一草稿，侧栏关闭重开后相同载荷复用原键；用户修改载荷后必须生成新键，禁止同一键对应不同正文。
+- **验证方法：** 单测用延迟 Promise 证明 `write -> clear` 顺序、丢弃后的保存被忽略且一次写失败不阻断下一次；幂等凭据测试验证对象字段顺序不影响指纹、相同载荷复用、改动载荷或 scope 后换键。真实扩展模拟保存返回 401，记录标题、正文、格式和幂等键，等待后重新登录重试，四项必须完全一致；再关闭并重开侧栏，未改草稿仍应使用原键。
+- **相关代码：** `apps/web/src/extension/draftPersistence.ts`、`apps/web/src/extension/operationIdempotency.ts`、`apps/web/src/extension/components/NoteCapture.vue`、`apps/web/src/extension/components/BookmarkCapture.vue`。
+
+### LN-PIT-168：并发上传期间不能移除或重复启动队列项
+
+- **现象：** 多文件上传开始后，尚未被 worker 领取的排队项仍显示“移除”；从响应式列表删掉它并不会从 `uploadAll()` 已捕获的队列快照中删除，稍后 worker 仍会上传这个界面上已经消失的文件。部分失败项若在其他 worker 未结束时立即重试，还会突破并发上限。
+- **根因：** 页面列表与并发执行队列是两个不同的数据结构，只约束按钮文案和单项状态，不能取消已经交给队列调度器的引用。
+- **防回归约束：** 全局队列运行时禁用文件选择与拖入、排队项的移除、失败项的重试以及“同时加入待整理”开关；正在上传项仍保留独立取消。全部 worker 收敛后再开放增删与重试，首版不在运行中的队列快照上做动态增删。
+- **验证方法：** 结构测试锁定文件选择、内层按钮、移除、重试和待整理开关五个全局 `uploading` 禁用点，并确认 `addFiles` / drop 处理仍有运行中失败关闭；真实多文件验收需在并发上传、单项失败和取消状态分别确认：队列运行中不能新增或移除文件，只能取消正在上传项，结束后失败项才可重试，已成功项不重复上传。
+- **相关代码：** `apps/web/src/extension/components/FileCapture.vue`、`apps/web/src/extension/uploadQueue.ts`、`apps/web/src/extension/manifest.contract.test.ts`。
+
+### LN-PIT-166：浏览器插件的无工具栏富文本不应直接捆绑重型编辑器
+
+- **现象：** 复用主站 TinyMCE 看似省实现，但扩展首屏和 Markdown 正常时，切到富文本才可能暴露许可配置、皮肤资源、Vue DOM 接管或 MV3 运行期问题；即使全部修通，也会为了一个无工具栏输入框把约 2MB 的编辑器运行时装进插件。
+- **影响范围：** 浏览器插件包体积、真实打开成功率、商店许可审查及富文本草稿安全。TinyMCE 8 官方说明自托管必须在 GPLv2+ 与商业许可之间明确选择，直接随 MIT 项目分发前还需要独立完成许可评估。
+- **根因：** 把主站复杂富文本编辑器当成唯一复用路径，忽略了插件首版只要求单一输入表面、富文本粘贴和浏览器常用格式快捷键；菜单、工具栏、插件系统、iframe 和编辑器皮肤都不是当前需求。
+- **修复与防回归约束：** 插件使用独立的轻量 `contenteditable` 编辑区，不导入 TinyMCE，也不修改主站编辑器。初始 HTML、外部属性更新、粘贴和拖入必须先经 DOMPurify；禁止脚本、事件属性、样式、iframe、object、embed 与 form，服务端持久化仍执行权威 HTML 清洗。富文本模式只显示编辑区，不显示 Markdown 的编辑/预览标签或任何操作工具栏。
+- **验证方法：** 组件测试覆盖恶意初始值、输入、富文本粘贴、纯文本换行和外部草稿恢复；扩展 JavaScript 产物不得包含 TinyMCE 运行时或独立 chunk（共享全局 CSS 中的存量选择器不视为运行时依赖）。真实 unpacked 扩展需验证输入、粘贴、加粗快捷键、浅深色 focus、保存 `type=html` 和重新打开草稿，控制台不得有 CSP 或 DOM 异常。
+- **相关代码：** `apps/web/src/extension/components/NoteCapture.vue`、`apps/web/src/extension/components/ExtensionRichTextEditor.vue`、`apps/web/src/extension/manifest.contract.test.ts`、`docs/browser-extension.md`。
+
+### LN-PIT-165：Manifest V3 构建不能保留运行时动态代码生成
+
+- **现象：** 扩展能够被 Chrome 正常加载，Service Worker 也已启动，但 Side Panel 只有空白页；页面控制台报错指出 `script-src 'self'` 禁止字符串形式的 JavaScript 求值。
+- **影响范围：** 所有 Manifest V3 扩展页面；本次由 Vue I18n 消息编译器触发，其他依赖若在产物中保留 `eval()` 或 `new Function()` 也会产生相同故障。普通 Web 开发服务器、单测和生产构建成功都无法证明扩展页面能运行。
+- **误导线索：** `manifest.json` 未显式写 `unsafe-eval`，构建也没有警告，容易误判为空白页样式问题或入口脚本未加载；事实上 MV3 默认 CSP 已在脚本执行早期中止应用。
+- **根因：** Web 构建允许依赖在运行时把翻译字符串编译为函数，而 Manifest V3 不允许通过 CSP 放宽为 `unsafe-eval`。复用同一套 Vue I18n 源码时，扩展构建必须选择不依赖动态代码生成的执行路径。
+- **修复与防回归约束：** 扩展构建显式启用 Vue I18n JIT、保留消息编译器的 CSP 安全解释路径，并在 Rollup 产物阶段扫描所有 JavaScript chunk；发现 `eval()` 或 `new Function()` 立即失败。禁止通过修改扩展 CSP、内联脚本或远程脚本绕过门禁。
+- **验证方法：** 扩展构建必须通过 CSP 产物门禁；随后用 unpacked 构建启动真实 Chromium，确认 Side Panel 首屏、切换语言及按需加载富文本编辑器均无 CSP/控制台错误。单独通过 Vitest、TypeScript 或普通网页预览不算完成。
+- **相关代码：** `apps/web/vite.extension.config.ts`、`apps/web/src/extension/manifest.contract.test.ts`、`apps/web/extension/manifest.json`、`docs/browser-extension.md`。
+
+### LN-PIT-164：浏览器插件的工具栏点击不能等同于授权读取网页
+
+- **现象：** 快速收藏最直观的实现是在工具栏点击或 Side Panel 首次挂载时立刻读取当前页，随后再显示三类入口；这样即使用户最终只想写笔记或传文件，插件也已经取得 URL、标题和选中文本。网站 Cookie 看似可直接复用，但扩展跨域读取 Cookie 会迫使权限扩大，也把网站会话和扩展设备会话混在一起。
+- **影响范围：** Chrome/Edge MV3 扩展的权限披露、商店审核、用户信任、登录恢复和被盗授权码风险；入口页、Service Worker、网页授权页及所有扩展 API 请求均受影响。
+- **根因：** `activeTab` 是用户手势产生的临时访问能力，不代表用户已经选择了要采集网页；Side Panel 打开也不是采集意图。若把 `tabId` 存成扩展全局“最近一次点击”，多窗口或多标签页侧栏还会互相覆盖目标。扩展公开 ID 不是机密，安全边界必须建立在服务端精确白名单、PKCE、一次性消费和设备绑定上，不能把 ID 或网站 Cookie 当作凭据。
+- **防回归约束：** 工具栏 handler 只把 `tabId` 编入该标签页专属的 Side Panel 路径并打开侧栏，禁止把目标页写入跨窗口共享 storage，也禁止导入捕获模块、访问 `tab.url` 或执行脚本；只有用户选中“书签”后才从当前侧栏路径解析目标标签页，并对其顶层 frame 调用 `chrome.scripting.executeScript`。重新点击某个标签页只能重置同标签页侧栏，不能广播重置其他窗口。Manifest 禁止常驻内容脚本、`tabs`、`cookies` 和 `<all_urls>`。网站中转必须使用随机 state、S256 PKCE、精确 `https://<extension-id>.chromiumapp.org/light-note-auth`、服务端扩展 ID 白名单、设备摘要和 Redis `GETDEL` 一次性授权码；失败校验也必须消费授权码。密码不得持久化，扩展 SID 与设备 ID 只能写扩展私有存储。公开构建 key 只能用来稳定 ID，私钥不得进入仓库。
+- **验证方法：** Manifest 合约测试锁定权限集合、稳定扩展 ID 和标签页专属 `setOptions`；上下文单测拒绝缺失、负数、非十进制与非安全整数 ID；Service Worker 源码门禁确认没有页面读取或共享目标页 storage；捕获单测证明模块导入无副作用、缺少标签页上下文时失败关闭，且只有显式调用才执行脚本；鉴权测试覆盖白名单、回调、PKCE、设备不匹配、错误校验后的重放和过期；真实 Chrome/Edge 分别从两个标签页打开侧栏，入口、笔记和文件不得读取页面，选择书签时各自只能读取自己的触发页。浅色/深色及 320/400/600px 检查入口、登录、加载、受限页、错误和成功状态。
+- **相关代码：** `apps/web/src/extension/service-worker.ts`、`apps/web/src/extension/panelContext.ts`、`apps/web/src/extension/capture.ts`、`apps/web/extension/manifest.json`、`apps/web/src/extension/auth.ts`、`apps/server/util/extensionAuth.js`、`docs/browser-extension.md`。
+
 ### LN-PIT-163：CSS 数学函数内的百分比减法必须显式包裹 `calc()`
 
 - **现象：** 移动端资源商店和支持页本应保留 12px 页边距，浏览器实际计算出的主体宽度却只有视口的 76%，形成明显窄栏；仅看源码中的 `100% - 24px` 很容易误以为结果应是视口宽度减去 24px。

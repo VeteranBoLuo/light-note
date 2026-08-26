@@ -1,0 +1,124 @@
+import crypto from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const readSource = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
+const manifest = JSON.parse(readSource('extension/manifest.json'));
+const serviceWorkerSource = readSource('src/extension/service-worker.ts');
+const appSource = readSource('src/extension/ExtensionApp.vue');
+const homeSource = readSource('src/extension/components/ExtensionHome.vue');
+const loginSource = readSource('src/extension/components/ExtensionLogin.vue');
+const bookmarkSource = readSource('src/extension/components/BookmarkCapture.vue');
+const noteSource = readSource('src/extension/components/NoteCapture.vue');
+const fileSource = readSource('src/extension/components/FileCapture.vue');
+const successSource = readSource('src/extension/components/ExtensionSuccessView.vue');
+const richTextSource = readSource('src/extension/components/ExtensionRichTextEditor.vue');
+const draftPersistenceSource = readSource('src/extension/draftPersistence.ts');
+const operationIdempotencySource = readSource('src/extension/operationIdempotency.ts');
+const viteConfigSource = readSource('vite.extension.config.ts');
+
+function extensionIdFromPublicKey(publicKey: string): string {
+  const digest = crypto.createHash('sha256').update(Buffer.from(publicKey, 'base64')).digest().subarray(0, 16);
+  return [...digest]
+    .map((byte) => `${String.fromCharCode(97 + (byte >> 4))}${String.fromCharCode(97 + (byte & 15))}`)
+    .join('');
+}
+
+describe('浏览器插件 Manifest 与隐私边界', () => {
+  it('使用 MV3 原生 Side Panel 与最小权限，不注册常驻内容脚本或全站访问', () => {
+    expect(manifest.manifest_version).toBe(3);
+    expect(manifest.permissions).toEqual(['sidePanel', 'activeTab', 'scripting', 'storage', 'identity']);
+    expect(manifest.side_panel.default_path).toBe('sidepanel.html');
+    expect(manifest.background).toEqual({ service_worker: 'service-worker.js', type: 'module' });
+    expect(manifest.content_scripts).toBeUndefined();
+    expect(manifest.permissions).not.toContain('tabs');
+    expect(manifest.host_permissions).not.toContain('<all_urls>');
+    expect(manifest.host_permissions).toEqual([
+      'https://boluo66.top/*',
+      'https://light-note-files.obs.cn-south-1.myhuaweicloud.com/*',
+    ]);
+    expect(manifest.host_permissions.some((permission: string) => permission.includes('*.obs.'))).toBe(false);
+  });
+
+  it('公开构建键产生稳定扩展 ID，供服务端精确白名单使用', () => {
+    expect(extensionIdFromPublicKey(manifest.key)).toBe('nkdlhmfjnokoicodeepadkamopdblbnd');
+  });
+
+  it('工具栏入口为触发标签页设置独立侧栏并打开，不读取页面内容', () => {
+    expect(serviceWorkerSource).toContain('chrome.action.onClicked.addListener');
+    expect(serviceWorkerSource).toContain('chrome.sidePanel.setOptions');
+    expect(serviceWorkerSource).toContain('buildExtensionPanelPath(tab.id)');
+    expect(serviceWorkerSource).toContain('chrome.sidePanel.open');
+    expect(serviceWorkerSource).not.toContain("from './capture'");
+    expect(serviceWorkerSource).not.toContain('chrome.scripting.executeScript');
+    expect(serviceWorkerSource).not.toContain('tab.url');
+    expect(serviceWorkerSource).not.toContain('lightNoteTriggerTabId');
+    expect(appSource).toContain('payload.tabId === panelTabId');
+    expect(appSource).not.toContain('captureTriggeredPage');
+  });
+
+  it('构建启用 Vue I18n JIT 并阻止 MV3 CSP 不允许的动态代码生成', () => {
+    expect(viteConfigSource).toContain('__INTLIFY_JIT_COMPILATION__: true');
+    expect(viteConfigSource).toContain('__INTLIFY_DROP_MESSAGE_COMPILER__: false');
+    expect(viteConfigSource).toContain('light-note-extension-csp-gate');
+    expect(viteConfigSource).toContain('Manifest V3 CSP forbids eval/new Function');
+  });
+});
+
+describe('浏览器插件三类流程接线', () => {
+  it('入口页明确让用户选择书签、笔记或文件', () => {
+    expect(homeSource).toContain("emit('select', 'bookmark')");
+    expect(homeSource).toContain("emit('select', 'note')");
+    expect(homeSource).toContain("emit('select', 'file')");
+    expect(homeSource).not.toContain('browserExtension.home.description');
+    expect(appSource).toContain(':src="icon.arrow_left"');
+    expect(appSource).not.toContain(':src="icon.back"');
+    expect(loginSource).toContain('@keydown.esc.stop.prevent="emit(\'close\')"');
+  });
+
+  it('仅书签视图挂载后读取网页，并保留 AI、正式保存与待整理三条路径', () => {
+    expect(bookmarkSource).toContain('await captureTriggeredPage()');
+    expect(bookmarkSource).toContain('generateWithAi');
+    expect(bookmarkSource).toContain('browserExtension.bookmark.aiDescription');
+    expect(bookmarkSource).toContain('browserExtension.bookmark.modeInboxDescription');
+    expect(bookmarkSource).toContain("v-if=\"draft.mode === 'formal'\"");
+    expect(bookmarkSource).toContain('saveSelectedMode');
+    expect(bookmarkSource).toContain('saveFormal');
+    expect(bookmarkSource).toContain('saveToInbox');
+    expect(bookmarkSource).toContain("relatedTagNames: mode === 'formal'");
+    expect(bookmarkSource).toContain('@update:value="updateSelectedTagIds"');
+    expect(bookmarkSource).toContain('draft.selectedTagIds.length + draft.selectedNewTags.length > 4');
+  });
+
+  it('笔记支持两种格式、安全预览和非空正文切换确认', () => {
+    expect(noteSource).toContain("draft.type === 'markdown'");
+    expect(noteSource).toContain('v-if="draft.type === \'markdown\'"');
+    expect(noteSource).toContain('v-if="draft.type === \'html\' || editorMode === \'edit\'"');
+    expect(noteSource).toContain('DOMPurify.sanitize');
+    expect(richTextSource).toContain('contenteditable="true"');
+    expect(richTextSource).toContain('DOMPurify.sanitize');
+    expect(richTextSource).toContain('@paste.prevent="insertClipboardContent"');
+    expect(richTextSource).not.toContain('tinymce');
+    expect(noteSource).toContain('if (!hasBody.value) return apply()');
+    expect(noteSource).toContain('Alert.alert');
+    expect(noteSource).toContain('isUntouchedDraft()');
+    expect(draftPersistenceSource).toContain('await tail.catch');
+    expect(draftPersistenceSource).toContain('await clear()');
+    expect(noteSource).toContain('await draftPersistence.save(noteDraftSnapshot())');
+    expect(bookmarkSource).toContain('await draftPersistence.save(bookmarkDraftSnapshot())');
+    expect(operationIdempotencySource).toContain("crypto.subtle.digest('SHA-256'");
+  });
+
+  it('文件支持 BUpload、拖拽、取消、重试与部分失败，成功页提供两个后续动作', () => {
+    expect(fileSource).toContain('<BUpload');
+    expect(fileSource).toContain('@drop.prevent="handleDrop"');
+    expect(fileSource).toContain('cancelTask(task)');
+    expect(fileSource).toContain('retryTask(task)');
+    expect(fileSource.match(/:disabled="uploading"/gu)).toHaveLength(5);
+    expect(fileSource).toContain('if (uploading.value) return;');
+    expect(fileSource).toContain('partialFailure');
+    expect(successSource).toContain("emit('continue')");
+    expect(successSource).toContain('openResource');
+  });
+});

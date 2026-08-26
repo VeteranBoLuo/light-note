@@ -3,7 +3,13 @@ import { decodeOffsetCursor, encodeOffsetCursor, normalizePageLimit } from './pa
 import { recordOrganizeCompletions } from './growthActivityHistory.js';
 
 export const RESOURCE_TYPES = Object.freeze(['bookmark', 'note', 'file']);
-export const INBOX_SOURCES = Object.freeze(['quick_capture', 'manual', 'duplicate_requeue', 'admin_demo']);
+export const INBOX_SOURCES = Object.freeze([
+  'quick_capture',
+  'browser_extension',
+  'manual',
+  'duplicate_requeue',
+  'admin_demo',
+]);
 
 const INBOX_PAGE_CURSOR_SCOPE = 'inbox';
 const INBOX_SORT_SQL = Object.freeze({

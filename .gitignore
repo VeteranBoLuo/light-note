@@ -10,6 +10,8 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+apps/web/dist-extension/
+apps/web/artifacts/
 *.local
 *.rar
 .env

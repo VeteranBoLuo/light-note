@@ -9,6 +9,7 @@ import {
   getObjectMetadataFromObs,
 } from '../obsClient.js';
 import { BYTES_PER_MB, getAccountedStorageBytes, storageBytesToMb } from '../storageUsage.js';
+import { enqueueResources } from '../resourceInbox.js';
 import { triggerResourceCreateEffects } from './resourceCreateEffects.js';
 
 const MANAGED_UPLOAD_PREFIX = 'uploads';
@@ -120,7 +121,18 @@ async function findFileByObjectKey(db, userId, objectKey) {
   return rows[0] || null;
 }
 
-function formatResult(file, alreadyConfirmed = false) {
+async function hasPendingFileInbox(db, userId, fileId) {
+  const [rows] = await db.query(
+    `SELECT 1
+       FROM resource_inbox
+      WHERE user_id = ? AND resource_type = 'file' AND resource_id = ? AND status = 'pending'
+      LIMIT 1`,
+    [userId, String(fileId)],
+  );
+  return rows.length > 0;
+}
+
+function formatResult(file, alreadyConfirmed = false, { addToInbox = false, inbox = null } = {}) {
   return {
     fileId: String(file.id),
     filename: file.file_name,
@@ -129,6 +141,8 @@ function formatResult(file, alreadyConfirmed = false) {
     folderId: file.folder_id == null ? null : String(file.folder_id),
     status: '已上传',
     alreadyConfirmed,
+    addedToInbox: Boolean(addToInbox),
+    ...(inbox ? { inbox } : {}),
   };
 }
 
@@ -197,7 +211,13 @@ export async function abortManagedCloudUpload({ userId, objectKey } = {}) {
   } finally {
     connection.release();
   }
-  if (existing) return { deleted: false, alreadyConfirmed: true };
+  if (existing) {
+    return {
+      deleted: false,
+      alreadyConfirmed: true,
+      ...formatResult(existing, true),
+    };
+  }
   await deleteObjectFromObs(ownedKey).catch(() => {});
   return { deleted: true, alreadyConfirmed: false };
 }
@@ -210,12 +230,14 @@ export async function confirmManagedCloudUpload({
   fileType,
   folderId,
   request,
+  addToInbox = false,
+  inboxSource = 'quick_capture',
 } = {}) {
   const ownedKey = assertOwnedManagedObjectKey(userId, objectKey);
   const normalizedName = normalizeFileName(fileName);
   const normalizedType = normalizeFileType(fileType);
   const alreadyConfirmed = await findFileByObjectKey(pool, userId, ownedKey);
-  if (alreadyConfirmed) return formatResult(alreadyConfirmed, true);
+  if (alreadyConfirmed && !addToInbox) return formatResult(alreadyConfirmed, true);
 
   const quotaMB = await getUserSpaceMb(userId, userRole);
   const connection = await pool.getConnection();
@@ -225,6 +247,7 @@ export async function confirmManagedCloudUpload({
   let alreadyConfirmedInTransaction = false;
   let transactionError = null;
   let verifiedSize = 0;
+  let inbox = null;
   try {
     await connection.beginTransaction();
     transactionStarted = true;
@@ -265,6 +288,13 @@ export async function confirmManagedCloudUpload({
         obs_key: ownedKey,
       };
     }
+    if (addToInbox) {
+      inbox = await enqueueResources(connection, {
+        userId,
+        items: [{ resourceType: 'file', resourceId: String(createdFile.id) }],
+        source: inboxSource,
+      });
+    }
     commitAttempted = true;
     await connection.commit();
   } catch (error) {
@@ -282,19 +312,28 @@ export async function confirmManagedCloudUpload({
 
   if (transactionError) {
     if (commitAttempted) {
+      let committed = null;
       try {
-        const committed = await findFileByObjectKey(pool, userId, ownedKey);
-        if (committed) return formatResult(committed, true);
+        committed = await findFileByObjectKey(pool, userId, ownedKey);
+        if (committed && !addToInbox) return formatResult(committed, true);
+        if (committed && (await hasPendingFileInbox(pool, userId, committed.id))) {
+          return formatResult(committed, true, { addToInbox: true });
+        }
       } catch {
         transactionError.commitOutcomeUnknown = true;
         throw transactionError;
       }
+      if (committed) {
+        // 文件已存在但待整理关系尚未确认，保留对象并允许客户端以同一 objectKey 安全重试。
+        transactionError.retrySafe = true;
+        throw transactionError;
+      }
     }
-    await deleteObjectFromObs(ownedKey).catch(() => {});
+    if (!alreadyConfirmed) await deleteObjectFromObs(ownedKey).catch(() => {});
     throw transactionError;
   }
 
-  if (alreadyConfirmedInTransaction) return formatResult(createdFile, true);
+  if (alreadyConfirmedInTransaction) return formatResult(createdFile, true, { addToInbox, inbox });
 
   await triggerResourceCreateEffects({
     request,
@@ -303,5 +342,5 @@ export async function confirmManagedCloudUpload({
     resourceType: 'file',
     resourceId: createdFile.id,
   });
-  return formatResult(createdFile, false);
+  return formatResult(createdFile, false, { addToInbox, inbox });
 }

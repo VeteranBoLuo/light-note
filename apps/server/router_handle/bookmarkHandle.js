@@ -770,23 +770,48 @@ export const addBookmark = async (req, res) => {
   try {
     const userId = req.user.id;
     // saveSnapshot 是前端表单开关,不是书签字段:先摘出去,避免混进 INSERT(表里无此列)
-    const { saveSnapshot = true, addToInbox = false, inboxSource = 'quick_capture', ...bmBody } = req.body || {};
+    const {
+      saveSnapshot = true,
+      addToInbox = false,
+      inboxSource = 'quick_capture',
+      relatedTags = [],
+      relatedTagNames = [],
+      tagSource: rawTagSource = 'manual',
+      idempotencyKey: rawIdempotencyKey = null,
+      ...bmBody
+    } = req.body || {};
+    const idempotencyKey =
+      typeof rawIdempotencyKey === 'string' ? rawIdempotencyKey.trim().slice(0, 512) || null : null;
+    const tagSource = rawTagSource === 'browser_extension' ? 'browser_extension' : 'manual';
     const result = await createBookmark({
       userId,
       userRole: req.user.role,
       bookmark: bmBody,
-      tagIds: req.body.relatedTags || [],
+      tagIds: relatedTags,
+      tagNames: relatedTagNames,
+      tagSource,
       addToInbox: addToInbox === true,
       inboxSource,
       duplicateToInbox: addToInbox === true,
       saveSnapshot: saveSnapshot !== false,
       request: req,
       suppressUserRewards: req.suppressUserRewards || req.isVisitorWorkspace,
+      idempotencyKey,
     });
     res.send(resultData(result));
   } catch (err) {
     if (err instanceof BookmarkUrlError) return sendBookmarkUrlError(res, err);
-    res.send(resultData(null, 500, String(err.message || err).replace(/^[A-Z_]+:\s*/, '')));
+    if (err?.code && Number.isInteger(err.httpStatus)) {
+      return res.send(
+        resultData(
+          { errorCode: err.code, ...(err.details || {}) },
+          err.httpStatus || 400,
+          String(err.message || err).replace(/^[A-Z_]+:\s*/, ''),
+        ),
+      );
+    }
+    console.error('[bookmark] add failed code=%s', stableAgentErrorCode(err));
+    return res.send(resultData(null, 500, '服务器内部错误'));
   }
 };
 

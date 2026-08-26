@@ -96,6 +96,7 @@
   import { setLocale } from '@/i18n';
   import { createGithubAuthorizationUrl, rememberGithubOAuthFlow } from '@/utils/githubOAuth';
   import { clearQuickSaveAuthReturnPath, resolveQuickSaveAuthReturnPath } from '@/utils/quickSaveAuthReturn.ts';
+  import { clearExtensionAuthReturnPath, resolveExtensionAuthReturnPath } from '@/utils/extensionAuthReturn.ts';
   import { persistAndroidAuthSession } from '@/utils/androidBridge.ts';
   import GithubOAuthConsentModal from './GithubOAuthConsentModal.vue';
 
@@ -174,8 +175,11 @@
       bookmark.isShowLogin = false;
       bookmark.type = 'all';
       bookmark.refreshTag();
+      const extensionReturnPath = resolveExtensionAuthReturnPath();
       const quickSaveReturnPath = resolveQuickSaveAuthReturnPath();
-      await router.replace(quickSaveReturnPath || getRuntimePostRegistrationPath(bookmark.isMobile));
+      const authReturnPath = extensionReturnPath || quickSaveReturnPath;
+      await router.replace(authReturnPath || getRuntimePostRegistrationPath(bookmark.isMobile));
+      if (extensionReturnPath) clearExtensionAuthReturnPath();
       if (quickSaveReturnPath) clearQuickSaveAuthReturnPath();
       message.success(t('auth.registerSuccess'));
       emit('update:success', { email: formData.email, password: formData.password });

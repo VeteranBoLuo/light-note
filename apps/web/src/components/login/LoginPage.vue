@@ -81,6 +81,7 @@
   import { markLoggedIn } from '@/utils/authStorage';
   import { createGithubAuthorizationUrl, rememberGithubOAuthFlow } from '@/utils/githubOAuth';
   import { clearQuickSaveAuthReturnPath, resolveQuickSaveAuthReturnPath } from '@/utils/quickSaveAuthReturn.ts';
+  import { clearExtensionAuthReturnPath, resolveExtensionAuthReturnPath } from '@/utils/extensionAuthReturn.ts';
   import { persistAndroidAuthSession } from '@/utils/androidBridge.ts';
   import { isValidEmail } from '@/utils/validator.ts';
   import GithubOAuthConsentModal from './GithubOAuthConsentModal.vue';
@@ -144,9 +145,12 @@
       user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || DEFAULT_NOTE_VIEW_MODE;
       user.preferences.homePage = getHomePagePreference(res.data?.preferences);
       localStorage.setItem('preferences', JSON.stringify(user.preferences));
+      const extensionReturnPath = resolveExtensionAuthReturnPath();
       const quickSaveReturnPath = resolveQuickSaveAuthReturnPath();
-      if (quickSaveReturnPath) {
-        await router.replace(quickSaveReturnPath);
+      const authReturnPath = extensionReturnPath || quickSaveReturnPath;
+      if (authReturnPath) {
+        await router.replace(authReturnPath);
+        if (extensionReturnPath) clearExtensionAuthReturnPath();
         clearQuickSaveAuthReturnPath();
       } else {
         await router.push(getRuntimeApplicationHomePath(user.preferences, bookmark.isMobile));

@@ -23,6 +23,8 @@ export type ManagedCloudUploadOptions = {
   folderId?: string | null;
   signal?: AbortSignal;
   onProgress?: (percent: number) => void;
+  addToInbox?: boolean;
+  inboxSource?: 'quick_capture' | 'browser_extension';
 };
 
 function apiError(response: { status?: number; msg?: string }, fallback: string) {
@@ -53,7 +55,8 @@ export async function fetchCloudFolders(): Promise<CloudFolderOption[]> {
 }
 
 async function abortManagedUpload(objectKey: string) {
-  await apiBasePost('/api/file/abortManagedUpload', { objectKey }, { silent: true });
+  const response = await apiBasePost('/api/file/abortManagedUpload', { objectKey }, { silent: true });
+  return response.status === 200 ? response.data : null;
 }
 
 /**
@@ -97,6 +100,8 @@ export async function uploadManagedCloudFile(
         fileName: metadata.fileName,
         fileType: uploadInfo.fileType || metadata.fileType,
         folderId: options.folderId ?? null,
+        addToInbox: options.addToInbox === true,
+        inboxSource: options.inboxSource || 'quick_capture',
       },
       { silent: true },
     );
@@ -111,7 +116,16 @@ export async function uploadManagedCloudFile(
       fileId: String(result.fileId),
     };
   } catch (error) {
-    if (!confirmed) await abortManagedUpload(String(uploadInfo.objectKey)).catch(() => {});
+    if (!confirmed) {
+      const recovery = await abortManagedUpload(String(uploadInfo.objectKey)).catch(() => null);
+      if (recovery?.alreadyConfirmed && recovery?.fileId) {
+        return {
+          filename: String(recovery.filename || metadata.fileName),
+          status: '已上传',
+          fileId: String(recovery.fileId),
+        };
+      }
+    }
     throw error;
   }
 }

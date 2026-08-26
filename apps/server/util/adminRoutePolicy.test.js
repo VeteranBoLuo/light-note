@@ -77,6 +77,19 @@ describe('adminRoutePolicyMiddleware', () => {
     }
   });
 
+  it('插件授权与授权码交换不能在管理员代管上下文中代表目标用户执行', () => {
+    for (const mode of ['readonly', 'maintain']) {
+      for (const path of ['/user/extension/authorize', '/user/extension/exchange']) {
+        const next = vi.fn();
+        const res = createRes();
+        adminRoutePolicyMiddleware(createReq(path, 'POST', mode), res, next);
+        expect(next).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }));
+      }
+    }
+  });
+
   it('资源治理查询、重试和取消在任何代管上下文都失败关闭', () => {
     for (const [method, path] of [
       ['POST', '/resource-governance/findings/query'],

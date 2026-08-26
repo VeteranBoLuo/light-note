@@ -8,7 +8,7 @@
 light-note/
 ├── apps/
 │   ├── android/      # Android WebView 原生壳
-│   ├── web/          # 前端（Vue 3 + Vite + Pinia）
+│   ├── web/          # 网站前端 + Chrome/Edge Manifest V3 扩展（Vue 3 + Vite）
 │   └── server/       # 后端（Express + MySQL + JWT）
 ├── packages/         # 共享包（预留）
 ├── scripts/          # 部署/工具脚本
@@ -678,6 +678,14 @@ AI 前端由 `useAiAssistantStore` 承担会话域、草稿、单个材料 `cont
 - “快速添加”是登录用户的全局操作；待整理不作为独立一级导航，而作为资源中心的状态视图保留，`/inbox` 路由继续兼容已有入口
 - 管理员维护游客工作区时，可维护归属于该游客的书签、笔记、云空间文件、文件夹、标签及待整理关系；仍按目标账号容量校验，并禁止账号权益写入与永久删除
 
+### Chrome / Edge 浏览器插件
+
+- 插件是 `apps/web` 内的独立 Vite 构建目标，源码位于 `src/extension/`，Manifest 与 Side Panel HTML 位于 `extension/`；`pnpm --filter web build:extension` 产出可解压安装目录，`package:extension` 额外生成商店 ZIP 与 SHA-256。
+- 工具栏点击只把当前 `tabId` 写入 `chrome.storage.session` 并打开原生 Side Panel。入口页先让用户选择书签、笔记或文件；只有进入书签视图后才凭 `activeTab + scripting` 读取顶层页面的 URL、标题和当前选中文本。没有常驻内容脚本、`tabs`、`cookies` 或 `<all_urls>`。
+- 插件登录态独立保存在 `chrome.storage.local`，以 `X-Session-Id + X-Device-Id` 复用服务端设备会话；密码只在当前登录表单内存中存在。网站登录中转使用 `/extension/authorize`、一次性 Redis 授权码、S256 PKCE、随机 state、设备摘要、精确 `chromiumapp.org` 回调与扩展 ID 白名单。
+- 书签正式保存、标签匹配/创建、笔记创建、文件确认和加入待整理都复用服务端现有业务 Service；新标签和资源关系、资源与待整理关系必须保持同事务。书签与笔记使用调用方幂等键，托管文件继续以随机对象键确认幂等，中止时只删除尚未确认的对象。
+- 完整协议、构建、安装和发布门禁见 `docs/browser-extension.md`。
+
 ## 待整理与待办
 
 - 桌面端和移动端均严格分域：资源中心包含“全部资源 / 待整理”，顶部“待办”包含“列表 / 议程 / 日历 / 四象限”；`/inbox` 只承载待办工作区，待整理继续通过资源中心状态视图进入
@@ -759,6 +767,8 @@ AI 前端由 `useAiAssistantStore` 承担会话域、草稿、单个材料 `cont
 Android WebView 在账号密码、注册或 OAuth 登录成功后通过受信桥请求原生立即 `CookieManager.flush()`，并在退后台及销毁前再次兜底落盘。应用业务路由在 `/me` 返回确定身份前由根组件显示恢复门禁；网络、5xx 或非鉴权业务错误只进入保留凭证的重试态，不得把 Pinia 默认值当成真实游客。原生 `app.ready` 在确定身份或错误门禁完成绘制后发送。“记住账号”仍是用户可见选项：默认勾选时保存备用 SID 并签发较长会话，未勾选时不保存备用 SID；原生 Cookie 持久化不改变该产品语义。
 
 登录设备页展示的是“设备组”而不是原始 session 行。浏览器请求会携带本地持久的随机设备标识；服务端只保存其 SHA-256 `user_sessions.device_key` 摘要，并在同一账号、同一浏览器再次登录时事务性轮换为一条会话，避免重复登录堆积为多台设备。该标识不参与认证、权限或设备信任判断。升级前没有设备摘要的历史会话不会根据 IP 或 UA 猜测归属，而是逐条独立展示和撤销，避免共享网络或浏览器升级造成远端会话误并入当前设备；“下线设备”会撤销该设备组包含的全部 session。
+
+浏览器插件不读取网站 Cookie。邮箱密码登录从响应体取得新 SID；网站中转登录由已登录网页签发 5 分钟一次性授权码，插件再携带 PKCE verifier、扩展 ID、精确回调和同一设备 ID 换取独立 SID。授权码在校验前通过 Redis `GETDEL` 原子消费，因此错误 verifier、错误设备或重放都会失败；服务端未配置 `LIGHTNOTE_EXTENSION_IDS` 时整个中转授权失败关闭。
 
 ### 账号自助注销
 
