@@ -123,6 +123,16 @@ describe('浏览器插件三类流程接线', () => {
     );
   });
 
+  it('书签草稿只在同一次侧栏实例内恢复，重新打开后从当前页开始', () => {
+    expect(appSource).toContain('const draftSessionId = crypto.randomUUID()');
+    expect(appSource).toContain(':draft-session-id="draftSessionId"');
+    expect(bookmarkSource).toContain('draftSessionId: string');
+    expect(bookmarkSource).toContain('sessionId: props.draftSessionId');
+    expect(bookmarkSource).toContain('belongsToExtensionDraftSession(stored.sessionId, props.draftSessionId)');
+    expect(bookmarkSource).toContain('await clearBookmarkDraft()');
+    expect(draftPersistenceSource).toContain('belongsToExtensionDraftSession');
+  });
+
   it('笔记支持两种格式、安全预览和非空正文切换确认', () => {
     expect(noteSource).toContain("draft.type === 'markdown'");
     expect(noteSource).toContain('v-if="draft.type === \'markdown\'"');

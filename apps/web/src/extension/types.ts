@@ -47,6 +47,7 @@ export interface ExtensionOperationReceipt {
 }
 
 export interface BookmarkDraft {
+  sessionId?: string;
   mode: 'formal' | 'inbox';
   url: string;
   name: string;

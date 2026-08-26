@@ -1,7 +1,12 @@
 <template>
   <div class="ln-extension-shell">
     <header class="ln-extension-header">
-      <BButton v-if="view !== 'home' && view !== 'success'" class="ln-icon-button" :title="t('browserExtension.back')" @click="goHome">
+      <BButton
+        v-if="view !== 'home' && view !== 'success'"
+        class="ln-icon-button"
+        :title="t('browserExtension.back')"
+        @click="goHome"
+      >
         <SvgIcon :src="icon.arrow_left" size="18" aria-hidden="true" />
       </BButton>
       <div v-else class="ln-extension-logo">
@@ -41,6 +46,7 @@
       <BookmarkCapture
         v-else-if="view === 'bookmark'"
         :authenticated="authenticated"
+        :draft-session-id="draftSessionId"
         @auth-required="openAuth"
         @success="showSuccess"
       />
@@ -59,11 +65,7 @@
       <ExtensionSuccessView v-else-if="view === 'success' && success" :result="success" @continue="goHome" />
     </main>
 
-    <ExtensionLogin
-      v-if="authVisible"
-      @close="authVisible = false"
-      @authenticated="handleAuthenticated"
-    />
+    <ExtensionLogin v-if="authVisible" @close="authVisible = false" @authenticated="handleAuthenticated" />
   </div>
 </template>
 
@@ -93,6 +95,7 @@
   const sessionLoading = ref(true);
   const authVisible = ref(false);
   const success = ref<ExtensionSuccess | null>(null);
+  const draftSessionId = crypto.randomUUID();
   const mainRef = ref<HTMLElement | null>(null);
   const theme = ref<'day' | 'night'>(document.documentElement.getAttribute('data-theme') === 'night' ? 'night' : 'day');
   const extensionLogoUrl = chrome.runtime.getURL('icons/icon-32.png');

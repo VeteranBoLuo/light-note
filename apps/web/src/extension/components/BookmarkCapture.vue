@@ -158,11 +158,11 @@
   import { captureCurrentTabAddress, captureTriggeredPage } from '../capture';
   import { ExtensionApiError, extensionPost, isExtensionAuthError } from '../api';
   import { clearBookmarkDraft, getBookmarkDraft, saveBookmarkDraft } from '../storage';
-  import { createExtensionDraftPersistence } from '../draftPersistence';
+  import { belongsToExtensionDraftSession, createExtensionDraftPersistence } from '../draftPersistence';
   import { resolveExtensionOperationReceipt } from '../operationIdempotency';
   import type { BookmarkDraft, ExtensionOperationReceipt, ExtensionSuccess } from '../types';
 
-  const props = defineProps<{ authenticated: boolean }>();
+  const props = defineProps<{ authenticated: boolean; draftSessionId: string }>();
   const emit = defineEmits<{ 'auth-required': []; success: [result: ExtensionSuccess] }>();
   const { t } = useI18n();
   const draft = reactive<BookmarkDraft>({
@@ -202,6 +202,7 @@
     if (draft.operations?.formal) operations.formal = { ...draft.operations.formal };
     if (draft.operations?.inbox) operations.inbox = { ...draft.operations.inbox };
     return {
+      sessionId: props.draftSessionId,
       mode: draft.mode,
       url: draft.url,
       name: draft.name,
@@ -423,7 +424,11 @@
 
   onMounted(async () => {
     const stored = await getBookmarkDraft();
-    if (stored && isUntouchedDraft()) Object.assign(draft, stored);
+    if (stored && belongsToExtensionDraftSession(stored.sessionId, props.draftSessionId) && isUntouchedDraft()) {
+      Object.assign(draft, stored);
+    } else if (stored) {
+      await clearBookmarkDraft();
+    }
     try {
       const page = await captureTriggeredPage();
       if (!draft.url) draft.url = page.url;

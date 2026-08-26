@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createExtensionDraftPersistence } from './draftPersistence';
+import { belongsToExtensionDraftSession, createExtensionDraftPersistence } from './draftPersistence';
 
 function deferred() {
   let resolve!: () => void;
-  const promise = new Promise<void>((done) => { resolve = done; });
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
   return { promise, resolve };
 }
 
@@ -21,7 +23,9 @@ describe('浏览器插件草稿持久化队列', () => {
         }
         calls.push(`write:${value}:end`);
       }),
-      vi.fn(async () => { calls.push('clear'); }),
+      vi.fn(async () => {
+        calls.push('clear');
+      }),
     );
 
     void persistence.save('first');
@@ -36,15 +40,24 @@ describe('浏览器插件草稿持久化队列', () => {
   });
 
   it('单次写入失败不会阻断后续草稿保存', async () => {
-    const write = vi.fn()
-      .mockRejectedValueOnce(new Error('storage unavailable'))
-      .mockResolvedValueOnce(undefined);
-    const persistence = createExtensionDraftPersistence(write, vi.fn(async () => undefined));
+    const write = vi.fn().mockRejectedValueOnce(new Error('storage unavailable')).mockResolvedValueOnce(undefined);
+    const persistence = createExtensionDraftPersistence(
+      write,
+      vi.fn(async () => undefined),
+    );
 
     await persistence.save('first').catch(() => undefined);
     await persistence.save('second');
 
     expect(write).toHaveBeenCalledTimes(2);
     expect(write).toHaveBeenLastCalledWith('second');
+  });
+});
+
+describe('浏览器插件草稿会话隔离', () => {
+  it('只恢复同一次侧栏实例写入的草稿', () => {
+    expect(belongsToExtensionDraftSession('panel-a', 'panel-a')).toBe(true);
+    expect(belongsToExtensionDraftSession('panel-a', 'panel-b')).toBe(false);
+    expect(belongsToExtensionDraftSession(undefined, 'panel-b')).toBe(false);
   });
 });

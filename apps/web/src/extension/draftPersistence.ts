@@ -1,7 +1,4 @@
-export function createExtensionDraftPersistence<T>(
-  write: (value: T) => Promise<void>,
-  clear: () => Promise<void>,
-) {
+export function createExtensionDraftPersistence<T>(write: (value: T) => Promise<void>, clear: () => Promise<void>) {
   let tail: Promise<void> = Promise.resolve();
   let discarded = false;
 
@@ -22,4 +19,8 @@ export function createExtensionDraftPersistence<T>(
   }
 
   return Object.freeze({ save, discard });
+}
+
+export function belongsToExtensionDraftSession(storedSessionId: unknown, currentSessionId: string): boolean {
+  return typeof storedSessionId === 'string' && storedSessionId === currentSessionId;
 }
