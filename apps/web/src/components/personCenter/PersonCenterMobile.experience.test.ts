@@ -7,6 +7,7 @@ const source = (relativePath: string) => readFileSync(resolve(process.cwd(), rel
 
 const personCenterSource = source('src/view/personCenter/PersonCenterMobile.vue');
 const desktopPersonCenterSource = source('src/view/personCenter/PersonCenter.vue');
+const personCenterEntriesSource = source('src/config/personCenterEntries.ts');
 const communityChatSource = source('src/view/communityChat/CommunityChatWorkspace.vue');
 const myInfoSource = source('src/components/personCenter/myInfo/MyInfoMobile.vue');
 const desktopMyInfoSource = source('src/components/personCenter/myInfo/MyInfo.vue');
@@ -37,9 +38,10 @@ describe('mobile personal center experience', () => {
   });
 
   it('uses the first quick entry for the growth center while profile editing remains in the identity card', () => {
-    expect(personCenterSource).toContain('<BButton class="profile-quick-item" @click="goGrowth">');
-    expect(personCenterSource).toContain(':src="icon.userCenter.growth"');
-    expect(personCenterSource).toContain("t('growth.pageTitle')");
+    expect(personCenterSource).toContain('v-for="entry in mobileQuickEntries"');
+    expect(personCenterSource).toContain('MOBILE_PERSON_CENTER_QUICK_ENTRIES');
+    expect(personCenterEntriesSource).toContain('PERSON_CENTER_ENTRIES.growth');
+    expect(personCenterEntriesSource).toContain("labelKey: 'growth.entry'");
     expect(personCenterSource).toContain('class="profile-card__edit" @click="goToProfileModule(\'/myInfo\')"');
   });
 
@@ -51,10 +53,11 @@ describe('mobile personal center experience', () => {
   });
 
   it('keeps co-build visible in both desktop and mobile personal centers for visitors', () => {
-    expect(personCenterSource).toContain("goToProfileModule('/co-build')");
-    expect(personCenterSource).toContain("t('personCenter.coBuildDesc')");
-    expect(desktopPersonCenterSource).toContain("path: '/co-build'");
-    expect(desktopPersonCenterSource).not.toMatch(/name:\s*'coBuild'[\s\S]{0,180}authOnly:\s*true/);
+    expect(personCenterSource).toContain('mobileCommunicationEntries');
+    expect(desktopPersonCenterSource).toContain('DESKTOP_PERSON_CENTER_PRIMARY_ENTRIES');
+    expect(personCenterEntriesSource).toContain("path: '/co-build'");
+    expect(personCenterEntriesSource).toContain("descriptionKey: 'personCenter.coBuildDesc'");
+    expect(personCenterEntriesSource).not.toMatch(/name:\s*'coBuild'[\s\S]{0,220}authOnly:\s*true/);
   });
 
   it('exposes the equipped frame and the frame picker from profile editing', () => {

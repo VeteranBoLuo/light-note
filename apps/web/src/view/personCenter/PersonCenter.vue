@@ -7,11 +7,7 @@
     v-model:open="menuVisible"
   >
     <template #content>
-      <div
-        :key="popoverKey"
-        class="user-card"
-        :style="{ color: user.iconColor }"
-      >
+      <div :key="popoverKey" class="user-card" :style="{ color: user.iconColor }">
         <div class="user-top">
           <div
             class="avatar-ring"
@@ -116,29 +112,58 @@
         <div class="menu-divider" />
 
         <div class="header_menu_ul">
-          <div
-            v-for="menuItem in menuOptions"
-            class="flex-center li"
-            :class="{ 'li--support': menuItem.name === 'support' }"
-            style="position: relative"
-            v-click-log="{ module: '个人中心', operation: menuItem.label }"
+          <BButton
+            v-for="menuItem in desktopPrimaryMenuOptions"
+            :key="menuItem.name"
+            block
+            class="menu-entry"
+            :class="`menu-entry--${menuItem.tone}`"
+            v-click-log="{ module: '个人中心', operation: t(menuItem.labelKey) }"
             @click="menuItemClick(menuItem)"
           >
-            <svg-icon size="14" :src="menuItem.icon" />
-            {{ menuItem.label }}
-            <div v-if="menuItem.name === 'growth' && growthInfo?.hasUnreadLevelUp" class="update-point" />
-          </div>
-          <div
-            class="flex-center li logout"
+            <span class="menu-entry__icon">
+              <svg-icon size="16" :src="menuItem.icon" aria-hidden="true" />
+            </span>
+            <span class="menu-entry__label">{{ t(menuItem.labelKey) }}</span>
+            <span v-if="menuItem.name === 'growth' && growthInfo?.hasUnreadLevelUp" class="update-point" />
+          </BButton>
+
+          <div class="menu-group-divider" aria-hidden="true" />
+
+          <BButton
+            v-for="menuItem in desktopSecondaryMenuOptions"
+            :key="menuItem.name"
+            block
+            class="menu-entry"
+            :class="`menu-entry--${menuItem.tone}`"
+            v-click-log="{ module: '个人中心', operation: t(menuItem.labelKey) }"
+            @click="menuItemClick(menuItem)"
+          >
+            <span class="menu-entry__icon">
+              <svg-icon size="16" :src="menuItem.icon" aria-hidden="true" />
+            </span>
+            <span class="menu-entry__label">{{ t(menuItem.labelKey) }}</span>
+          </BButton>
+          <BButton
+            block
+            class="menu-entry menu-entry--danger"
             v-click-log="{
               module: '个人中心',
               operation: user.role === 'visitor' ? '登录/注册' : t('personCenter.logout'),
             }"
             @click="handleExitLogin"
           >
-            <svg-icon size="14" :src="icon.user_exit" />
-            {{ user.role === 'visitor' ? t('personCenter.loginRegister') : t('personCenter.logout') }}
-          </div>
+            <span class="menu-entry__icon">
+              <svg-icon
+                size="16"
+                :src="user.role === 'visitor' ? icon.navigation.user : icon.userCenter.menu.logout"
+                aria-hidden="true"
+              />
+            </span>
+            <span class="menu-entry__label">
+              {{ user.role === 'visitor' ? t('personCenter.loginRegister') : t('personCenter.logout') }}
+            </span>
+          </BButton>
         </div>
       </div>
     </template>
@@ -181,6 +206,12 @@
   import userApi from '@/api/userApi.ts';
   import { updatePreference } from '@/utils/savePreference';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import {
+    DESKTOP_PERSON_CENTER_PRIMARY_ENTRIES,
+    DESKTOP_PERSON_CENTER_SECONDARY_ENTRIES,
+    type PersonCenterEntry,
+  } from '@/config/personCenterEntries';
   import { useI18n } from 'vue-i18n';
 
   const MyInfo = defineAsyncComponent(() => import('@/components/personCenter/myInfo/MyInfo.vue'));
@@ -255,74 +286,8 @@
     { label: 'English', function: () => changeLanguage('en-US') },
   ]);
 
-  interface menuItemInterface {
-    label: string;
-    path?: string;
-    role?: string;
-    icon: string;
-    [key: string]: any;
-  }
-
-  const options = ref<menuItemInterface[]>([
-    {
-      name: 'growth',
-      label: t('growth.entry'),
-      path: '/growth',
-      icon: icon.userCenter.growth,
-    },
-    {
-      name: 'entitlementStore',
-      label: t('entitlementStore.entry'),
-      path: '/store',
-      icon: icon.support.store,
-    },
-    {
-      name: 'settings',
-      label: t('settings.title'),
-      path: '/settings',
-      icon: icon.userCenter.settingsGear,
-    },
-    {
-      name: 'help',
-      label: t('personCenter.help'),
-      path: '/help',
-      icon: icon.help_document,
-    },
-    {
-      name: 'coBuild',
-      label: t('personCenter.coBuild'),
-      path: '/co-build',
-      icon: icon.coBuild.board,
-    },
-    {
-      name: 'trash',
-      label: t('trash.title'),
-      path: '/trash',
-      icon: icon.table_delete,
-    },
-    {
-      name: 'operationLog',
-      label: t('personCenter.feedback'),
-      icon: icon.userCenter.operationLog,
-    },
-    {
-      name: 'updateLogs',
-      label: t('personCenter.changelog'),
-      path: '/updateLogs',
-      icon: icon.userCenter.log,
-    },
-    {
-      name: 'support',
-      label: t('support.entry'),
-      path: '/support',
-      icon: icon.support.heart,
-    },
-  ]);
-  const menuOptions = computed(() => {
-    return options.value.filter(
-      (item) => (user.role === 'root' || item.role !== 'root') && (!item.authOnly || user.role !== 'visitor'),
-    );
-  });
+  const desktopPrimaryMenuOptions = DESKTOP_PERSON_CENTER_PRIMARY_ENTRIES;
+  const desktopSecondaryMenuOptions = DESKTOP_PERSON_CENTER_SECONDARY_ENTRIES;
 
   const userStats = computed(() => [
     {
@@ -342,23 +307,8 @@
     },
   ]);
 
-  function menuItemClick(menuItem: menuItemInterface) {
-    if (menuItem.version) {
-      const versionKey = menuItem.versionKey || `${menuItem.name}Version`;
-      localStorage.setItem(versionKey, menuItem.version);
-    }
-    if (menuItem.path) {
-      navigateFromProfile(menuItem.path);
-    } else {
-      switch (menuItem.label) {
-        case t('personCenter.feedback'):
-          navigateFromProfile('/opinions');
-          break;
-        default:
-          dismissProfilePopover();
-          break;
-      }
-    }
+  function menuItemClick(menuItem: PersonCenterEntry) {
+    navigateFromProfile(menuItem.path);
   }
 
   function handleExitLogin() {
@@ -455,7 +405,6 @@
   }
 
   .header_menu_ul {
-    list-style-type: none;
     margin-top: 8px;
     margin-bottom: 2px;
     box-sizing: border-box;
@@ -463,35 +412,82 @@
     grid-template-columns: repeat(2, 1fr);
     gap: 8px;
 
-    .li {
+    .menu-entry {
+      position: relative;
       box-sizing: border-box;
-      height: 32px;
-      cursor: pointer;
-      font-size: 12px;
+      width: 100%;
+      min-width: 0;
+      height: 36px;
+      justify-content: flex-start;
+      padding: 0 10px;
+      border: 1px solid transparent;
       border-radius: 10px;
       color: var(--text-color);
       gap: 8px;
-      background: var(--menu-item-h-bg-color);
-      transition: all 0.2s ease;
+      background: var(--primary-btn-bg-color);
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.2;
+      text-align: left;
+      transition:
+        border-color 160ms ease,
+        background 160ms ease;
 
       &:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+        border-color: var(--surface-border-color);
+        background: var(--primary-btn-h-bg-color);
       }
+    }
 
-      &.logout {
-        background: linear-gradient(120deg, rgba(249, 112, 102, 0.18), rgba(255, 158, 130, 0.12));
-      }
+    .menu-entry__icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      flex: 0 0 24px;
+      border-radius: 8px;
+      color: var(--person-center-menu-icon-fg);
+      background: var(--person-center-menu-icon-bg);
+    }
 
-      &.li--support {
-        border: 1px solid var(--support-entry-border-color);
-        color: var(--support-entry-text-color);
-        background: var(--support-entry-background);
+    .menu-entry__label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
 
-        &:hover {
-          background: var(--support-entry-hover-background);
-        }
-      }
+    .menu-entry--growth .menu-entry__icon {
+      color: var(--person-center-menu-growth-fg);
+      background: var(--person-center-menu-growth-bg);
+    }
+
+    .menu-entry--store .menu-entry__icon {
+      color: var(--person-center-menu-store-fg);
+      background: var(--person-center-menu-store-bg);
+    }
+
+    .menu-entry--community .menu-entry__icon {
+      color: var(--person-center-menu-community-fg);
+      background: var(--person-center-menu-community-bg);
+    }
+
+    .menu-entry--support .menu-entry__icon {
+      color: var(--support-entry-text-color);
+      background: var(--support-entry-background);
+    }
+
+    .menu-entry--danger .menu-entry__icon {
+      color: var(--chip-danger-fg);
+      background: var(--chip-danger-bg);
+    }
+
+    .menu-group-divider {
+      grid-column: 1 / -1;
+      height: 1px;
+      margin: 2px 0;
+      background: var(--surface-divider-color);
     }
   }
 
@@ -511,16 +507,17 @@
     cursor: pointer;
   }
   .update-point {
-    height: 5px;
-    width: 5px;
-    background-color: #ff4d4f;
-    border-radius: 50%;
     position: absolute;
-    right: 5px;
+    right: 8px;
+    width: 6px;
+    height: 6px;
+    border: 1px solid var(--user-body-bg-color);
+    border-radius: 50%;
+    background: var(--danger-fill-bg);
   }
 
   .user-card {
-    width: 320px;
+    width: 368px;
     max-width: calc(100vw - 28px);
     background: var(--user-body-bg-color);
     border-radius: 14px;
