@@ -3,7 +3,7 @@
   "name": "轻笺快速添加",
   "short_name": "轻笺",
   "description": "把书签、笔记和文件快速添加到轻笺。",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "minimum_chrome_version": "116",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtpsCh79aD2w+Dg5UmuMA9iMGJ0o0AAkDlk3yOyBlM6HXSQon7kv8mVqdUkIsZkpH+7dJSKlaslw3FnG+a++91epJgCi1yeuuW7GrGGICkhYJFqwhEIP1eGW9Zw/TORpif0jbJFoQe0JezccPk7uy8sky6pdpE3dT/a7vDdJZWYN4Iv6o8Hy9zXxxEgu+4SBeD3JLnWgYul/COeM7GxoRrZqJA6S7ZJ6oQhCdeIYuS1epeqg4QbF/MZaDR9BCRZ2yWv+OxRJU/czLwHRdZZSFVydiiU3MPsxng4DM6lXMMpFFGEITbKKnG7X5wntF5HgrEXTWv1nT/vxvk7Y+Clg9uwIDAQAB",
   "permissions": ["sidePanel", "tabs", "activeTab", "scripting", "storage", "identity"],
