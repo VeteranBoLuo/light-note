@@ -121,10 +121,14 @@
 
 <style scoped lang="less">
   .ln-extension-rich-editor {
-    min-height: 290px;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
     box-sizing: border-box;
-    padding: 14px;
+    padding: 12px 12px 18px;
+    overflow-y: auto;
     overflow-wrap: anywhere;
+    scrollbar-gutter: stable;
     color: var(--text-color);
     background: transparent;
     font-size: 14px;

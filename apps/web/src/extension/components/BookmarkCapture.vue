@@ -1,5 +1,5 @@
 <template>
-  <section class="ln-extension-view ln-extension-form-view">
+  <section class="ln-extension-view ln-extension-form-view ln-extension-bookmark-view">
     <div class="ln-extension-view-heading">
       <span class="is-bookmark"><SvgIcon :src="icon.resource.bookmark" size="22" aria-hidden="true" /></span>
       <div>
@@ -78,7 +78,7 @@
         id="extension-bookmark-description"
         v-model:value="draft.description"
         type="textarea"
-        :rows="4"
+        :rows="3"
         :placeholder="t('browserExtension.bookmark.descriptionPlaceholder')"
       />
     </div>

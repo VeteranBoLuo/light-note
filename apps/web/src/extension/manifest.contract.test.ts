@@ -150,6 +150,23 @@ describe('浏览器插件三类流程接线', () => {
     expect(richTextSource).not.toContain('&:focus-visible');
   });
 
+  it('书签与笔记使用紧凑表单密度，笔记编辑和预览区拥有稳定的可见高度与完整边框', () => {
+    expect(bookmarkSource).toContain('ln-extension-bookmark-view');
+    expect(bookmarkSource).toContain(':rows="3"');
+    expect(noteSource).toContain('ln-extension-note-view');
+    expect(noteSource).toContain('height="38px"');
+    expect(noteSource).toContain(':rows="18"');
+    expect(stylesSource).toMatch(/\.ln-extension-bookmark-view,[\s\S]*gap: 11px;[\s\S]*padding-top: 14px;/u);
+    expect(stylesSource).toMatch(/\.ln-extension-bookmark-mode \{[\s\S]*min-height: 48px;/u);
+    expect(stylesSource).toMatch(
+      /\.ln-extension-note-editor \{[\s\S]*height: clamp\(360px, 50vh, 520px\);[\s\S]*resize: none;/u,
+    );
+    expect(stylesSource).toMatch(
+      /\.ln-extension-note-preview \{[\s\S]*height: clamp\(360px, 50vh, 520px\);[\s\S]*overflow-y: auto;/u,
+    );
+    expect(richTextSource).toMatch(/height: 100%;[\s\S]*overflow-y: auto;[\s\S]*scrollbar-gutter: stable;/u);
+  });
+
   it('文件支持 BUpload、拖拽、取消、重试与部分失败，成功页提供两个后续动作', () => {
     expect(fileSource).toContain('<BUpload');
     expect(fileSource).toContain('@drop.prevent="handleDrop"');

@@ -1,5 +1,5 @@
 <template>
-  <section class="ln-extension-view ln-extension-form-view">
+  <section class="ln-extension-view ln-extension-form-view ln-extension-note-view">
     <div class="ln-extension-view-heading">
       <span class="is-note"><SvgIcon :src="icon.resource.note" size="22" aria-hidden="true" /></span>
       <div>
@@ -34,7 +34,7 @@
       <BInput
         id="extension-note-title"
         v-model:value="draft.title"
-        height="44px"
+        height="38px"
         :placeholder="t('browserExtension.note.titlePlaceholder')"
       />
     </div>
@@ -72,7 +72,7 @@
         v-if="draft.type === 'markdown'"
         v-model:value="draft.content"
         type="textarea"
-        :rows="14"
+        :rows="18"
         :placeholder="t('browserExtension.note.markdownPlaceholder')"
       />
       <ExtensionRichTextEditor
