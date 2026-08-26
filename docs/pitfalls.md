@@ -25,6 +25,10 @@
 
 | 编号                                                                                           | 日期       | 模块                  | 关键词                                             | 状态         |
 | ---------------------------------------------------------------------------------------------- | ---------- | --------------------- | -------------------------------------------------- | ------------ |
+| [LN-PIT-171](#ln-pit-171长表单的局部异步操作不能复用页底错误槽)                               | 2026-08-26 | 浏览器插件、交互      | 局部反馈、错误、长表单、草稿                       | 已修复待上线 |
+| [LN-PIT-170](#ln-pit-170扩展侧栏的滚动与复合输入焦点边框必须各有唯一归属)                     | 2026-08-26 | 浏览器插件、布局      | Side Panel、滚动容器、scrollTop、focus-within、边框 | 已修复待上线 |
+| [LN-PIT-169](#ln-pit-169sidepanelopen-前跨过异步边界会丢失工具栏点击手势)                     | 2026-08-26 | 浏览器插件、入口      | Side Panel、用户手势、Service Worker、工具栏       | 已修复待上线 |
+| [LN-PIT-168](#ln-pit-168并发上传期间不能移除或重复启动队列项)                                 | 2026-08-26 | 浏览器插件、上传      | 队列、并发、取消、重试、状态                       | 已修复待上线 |
 | [LN-PIT-167](#ln-pit-167异步草稿恢复与清除不能覆盖已开始编辑的表单)                           | 2026-08-26 | 浏览器插件、草稿、幂等 | storage、竞态、恢复、清除、幂等键                  | 已修复待上线 |
 | [LN-PIT-166](#ln-pit-166浏览器插件的无工具栏富文本不应直接捆绑重型编辑器)                     | 2026-08-26 | 浏览器插件、编辑器    | contenteditable、HTML 清洗、许可、包体积           | 已修复待上线 |
 | [LN-PIT-165](#ln-pit-165manifest-v3-构建不能保留运行时动态代码生成)                            | 2026-08-26 | 浏览器插件、构建、i18n | CSP、eval、new Function、Vue I18n、JIT             | 已修复待上线 |
@@ -3376,6 +3380,26 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **防回归约束：** 环境门禁放在数据库适配器入口，覆盖全部进程。本地运行时只允许回环地址或 Unix Socket，远程地址默认失败关闭；确需远程写入必须由当前任务授权并用一次性 `ALLOW_REMOTE_DATABASE_WRITES=true` 显式确认，不得长期保存在 `.env`。生产配置显式使用 `LIGHTNOTE_RUNTIME_ENV=production`；代码内主机兜底只能是 `127.0.0.1`，不得提交生产地址、账号或凭据。`NODE_ENV=test` 继续完全禁用真实数据库。
 - **验收：** 单测覆盖回环、Socket、远程主机、未知环境、显式风险确认、生产运行时和错误脱敏；静态检查数据库适配器不存在公网主机兜底。本机 `.env` 标记 local 且远程库时，任意导入数据库的进程都应在业务查询前报 `REMOTE_DATABASE_WRITE_BLOCKED`；本地 MySQL 与生产显式环境分别可正常启动。
 - **相关代码：** `apps/server/util/databaseConnectionSafety.js`、`apps/server/db/index.js`、`apps/server/.env.example`、`docs/development.md`。
+
+### LN-PIT-171：长表单的局部异步操作不能复用页底错误槽
+
+- **现象：** 用户在笔记上方点击“带入当前网页文字”，受限页面读取失败后画面看似没有任何反应；错误实际出现在长编辑器和待整理开关之后的保存区，必须滚到底才看得到。
+- **根因：** 页面用一个 `errorMessage` 同时承载网页带入与保存失败，但唯一错误槽按保存语义放在页底。局部操作虽然正确失败关闭并保留草稿，反馈位置却脱离了触发动作。
+- **防回归约束：** 长表单中的局部异步动作必须拥有紧邻触发器的成功/空/错误状态；页底错误槽只服务最终提交。失败不得清空或覆盖标题、正文和其他草稿，加载中要关闭会与结果竞争的格式切换与保存动作。
+- **验证方法：** 在 320px 侧栏和长 Markdown 编辑器中模拟受保护页，点击带入后不滚动即可看到错误，错误顶部紧接带入卡片，标题和正文保持不变；成功态显示在同一位置。合约测试锁定独立 `pageImportError` 与局部错误类。
+- **相关代码：** `apps/web/src/extension/components/NoteCapture.vue`、`apps/web/src/extension/styles.less`、`apps/web/src/extension/manifest.contract.test.ts`。
+
+### LN-PIT-170：扩展侧栏的滚动与复合输入焦点边框必须各有唯一归属
+
+- **现象：** 从入口切到书签或笔记后，表单会从中部开始显示且侧栏无法继续滚动；Markdown 文本域聚焦后，紫色边框在圆角处出现缺口，标题输入框又因为基础输入组件的无边框主题而几乎不可见。
+- **影响范围：** Chrome/Edge Side Panel 内所有长表单、视图切换、标题输入、Markdown 与轻量富文本的 hover/focus 状态。
+- **误导线索：** Header 使用 `sticky`、页面设置了 `min-height: 100vh`，看起来已经具备滚动条件；文本域自身也确实绘制了 focus 边框。实际滚动位置保存在外层文档，条件渲染后会沿用旧位置，而内层主区没有独立滚动范围；共享 Web 样式还会把 `body` 设成 flex，使 600px 侧栏中的插件根节点按内容收缩；复合编辑器同时由外壳和子输入绘制边框，圆角裁切后形成断线。
+- **根因：** 视口宽高、滚动和焦点边框的职责分散在多层 DOM：扩展没有覆盖共享 `body` 布局，`body` 与主内容又都可能滚动，视图切换没有复位唯一滚动节点；编辑器外壳与 `BInput`/`contenteditable` 各自响应 focus。
+- **修复：** 扩展根节点显式占满宽高并恢复块级 `body`，再改为固定高度的两行 Grid；外层禁止滚动，只有 `.ln-extension-main` 负责纵向滚动。监听视图切换，在 DOM 更新后把该节点 `scrollTop` 复位。标题与正文编辑器统一由外壳通过 `:focus-within` 绘制连续实色边框，子输入强制移除自身边框和阴影。
+- **防回归约束：** Side Panel 不得重新引入 `body` 与业务主区双滚动；新增入口或成功视图必须经同一 `view` 状态切换以自动回顶。复合输入表面只能有一个可见 focus 边框所有者，子编辑器可以保留光标与语义，但不得叠加第二圈边框或阴影。
+- **验证方法：** 合约测试锁定根层 100% 宽高、块级 `body`、`overflow: hidden`、两行 Grid、主区 `overflow-y: auto`、视图 watcher 和编辑器 `focus-within`。真实 unpacked 扩展在 320/400/600px、浅色/深色下先把入口滚到底再进入书签/笔记，确认都从标题开始且可滚到保存按钮；600px 下主内容实际宽度必须随侧栏增长而不是停在窄栏。分别聚焦标题、Markdown 和富文本，四角边框连续无缺口，Tab 焦点仍清晰。
+- **相关代码：** `apps/web/src/extension/ExtensionApp.vue`、`apps/web/src/extension/styles.less`、`apps/web/src/extension/components/NoteCapture.vue`、`apps/web/src/extension/components/ExtensionRichTextEditor.vue`、`apps/web/src/extension/manifest.contract.test.ts`。
+
 ### LN-PIT-167：异步草稿恢复与清除不能覆盖已开始编辑的表单
 
 - **现象：** 笔记保存请求因扩展会话过期被拒绝时，登录浮层刚出现时标题和 Markdown 正文都还在；等待后重新登录并以同一个幂等键重试，请求却变成了空正文富文本。单看“过期时 DOM 里还有草稿”会错误通过验收。
@@ -3397,8 +3421,8 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 
 - **现象：** Manifest V3 扩展能够正常加载，点击工具栏图标却没有任何可见反应；目标网页控制台可能同时存在翻译插件、页面自身 CSP 等无关噪声，容易被误判成 Side Panel 的加载错误。
 - **根因：** `chrome.sidePanel.open()` 只能直接响应用户操作。工具栏 handler 先 `await chrome.sidePanel.setOptions()`、网络请求或其他异步任务后再调用 `open()`，部分 Chrome 版本会认为用户手势已经结束并拒绝打开侧栏。
-- **修复与防回归约束：** 工具栏入口使用 Chrome/Edge 官方的 `chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })`，由浏览器原生 action 行为负责开关侧栏，不再手动调用 `sidePanel.open()`。Service Worker 不读取网页，也不保存“最近标签页”；只有用户进入书签流程后才以 `tabs.query({ active: true, lastFocusedWindow: true })` 取得当前标签页 ID，并通过 `activeTab + scripting` 读取顶层页面。基础 `tabs.query()` 不要求把高权限 `tabs` 加入 Manifest。
-- **验证方法：** Manifest 合约测试必须锁定 `openPanelOnActionClick: true`，并禁止 Service Worker 出现 `action.onClicked` 手动打开和 `sidePanel.open()`；捕获测试证明模块导入、入口、笔记和文件路径都不会查询标签页，只有显式进入书签后才查询并执行脚本。真实 unpacked 扩展需要在重新加载后直接点击工具栏图标，确认首击即可打开侧栏。
+- **修复与防回归约束：** 工具栏入口使用 Chrome/Edge 官方的 `chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })`，由浏览器原生 action 行为负责开关侧栏，不再手动调用 `sidePanel.open()`。Service Worker 不读取网页，也不保存“最近标签页”；只有用户进入书签流程、主动回填网址或点击笔记带入按钮后，才以 `tabs.query({ active: true, lastFocusedWindow: true })` 取得当前标签页 ID，并通过 `activeTab + scripting` 读取顶层页面。基础 `tabs.query()` 不要求把高权限 `tabs` 加入 Manifest。
+- **验证方法：** Manifest 合约测试必须锁定 `openPanelOnActionClick: true`，并禁止 Service Worker 出现 `action.onClicked` 手动打开和 `sidePanel.open()`；捕获测试证明模块导入与入口都不会查询标签页，书签自动读取/网址回填和笔记带入分别只有在对应显式路径才查询并执行脚本，文件路径始终不读网页。真实 unpacked 扩展需要在重新加载后直接点击工具栏图标，确认首击即可打开侧栏。
 - **相关代码：** `apps/web/src/extension/service-worker.ts`、`apps/web/src/extension/capture.ts`、`apps/web/src/extension/manifest.contract.test.ts`、`apps/web/extension/manifest.json`、`docs/browser-extension.md`。
 
 ### LN-PIT-166：浏览器插件的无工具栏富文本不应直接捆绑重型编辑器
@@ -3425,8 +3449,8 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **现象：** 快速收藏最直观的实现是在工具栏点击或 Side Panel 首次挂载时立刻读取当前页，随后再显示三类入口；这样即使用户最终只想写笔记或传文件，插件也已经取得 URL、标题和选中文本。网站 Cookie 看似可直接复用，但扩展跨域读取 Cookie 会迫使权限扩大，也把网站会话和扩展设备会话混在一起。
 - **影响范围：** Chrome/Edge MV3 扩展的权限披露、商店审核、用户信任、登录恢复和被盗授权码风险；入口页、Service Worker、网页授权页及所有扩展 API 请求均受影响。
 - **根因：** `activeTab` 是用户手势产生的临时访问能力，不代表用户已经选择了要采集网页；Side Panel 打开也不是采集意图。若把 `tabId` 存成扩展全局“最近一次点击”，多窗口或多标签页侧栏还会互相覆盖目标。扩展公开 ID 不是机密，安全边界必须建立在服务端精确白名单、PKCE、一次性消费和设备绑定上，不能把 ID 或网站 Cookie 当作凭据。
-- **防回归约束：** 工具栏点击只触发浏览器原生 Side Panel 行为，Service Worker 禁止导入捕获模块、访问 `tab.url`、执行脚本或写共享目标页 storage；只有用户选中“书签”后才查询当前活动标签页 ID，并对其顶层 frame 调用 `chrome.scripting.executeScript`。Manifest 禁止常驻内容脚本、`tabs`、`cookies` 和 `<all_urls>`。网站中转必须使用随机 state、S256 PKCE、精确 `https://<extension-id>.chromiumapp.org/light-note-auth`、服务端扩展 ID 白名单、设备摘要和 Redis `GETDEL` 一次性授权码；失败校验也必须消费授权码。密码不得持久化，扩展 SID 与设备 ID 只能写扩展私有存储。公开构建 key 只能用来稳定 ID，私钥不得进入仓库。
-- **验证方法：** Manifest 合约测试锁定权限集合、稳定扩展 ID 和 `openPanelOnActionClick`；Service Worker 源码门禁确认没有页面读取或共享目标页 storage；捕获单测证明模块导入无副作用、没有活动标签页时失败关闭，且只有显式调用才查询当前标签页并执行脚本；鉴权测试覆盖白名单、回调、PKCE、设备不匹配、错误校验后的重放和过期；真实 Chrome/Edge 分别从两个标签页打开侧栏，入口、笔记和文件不得读取页面，选择书签时只能读取操作时所在的当前页。浅色/深色及 320/400/600px 检查入口、登录、加载、受限页、错误和成功状态。
+- **防回归约束：** 工具栏点击只触发浏览器原生 Side Panel 行为，Service Worker 禁止导入捕获模块、访问 `tab.url`、执行脚本或写共享目标页 storage；用户选中“书签”后可读取当前活动标签页的 URL、标题和选中文本，之后“填入当前页”只回填 URL；笔记默认不读网页，只有点击“带入当前网页文字”才读取最多 5 万字顶层可见文字并追加，文件流程不得读取网页。Manifest 禁止常驻内容脚本、`tabs`、`cookies` 和 `<all_urls>`。网站中转必须使用随机 state、S256 PKCE、精确 `https://<extension-id>.chromiumapp.org/light-note-auth`、服务端扩展 ID 白名单、设备摘要和 Redis `GETDEL` 一次性授权码；失败校验也必须消费授权码。密码不得持久化，扩展 SID 与设备 ID 只能写扩展私有存储。公开构建 key 只能用来稳定 ID，私钥不得进入仓库。
+- **验证方法：** Manifest 合约测试锁定权限集合、稳定扩展 ID 和 `openPanelOnActionClick`；Service Worker 源码门禁确认没有页面读取或共享目标页 storage；捕获单测证明模块导入无副作用、没有活动标签页时失败关闭，且只有书签动作或笔记带入的显式调用才查询当前标签页并执行脚本；鉴权测试覆盖白名单、回调、PKCE、设备不匹配、错误校验后的重放和过期；真实 Chrome/Edge 分别从两个标签页打开侧栏，入口、未主动带入的笔记和文件不得读取页面，书签与笔记带入只能读取操作时所在的当前页。浅色/深色及 320/400/600px 检查入口、登录、加载、受限页、错误和成功状态。
 - **相关代码：** `apps/web/src/extension/service-worker.ts`、`apps/web/src/extension/capture.ts`、`apps/web/extension/manifest.json`、`apps/web/src/extension/auth.ts`、`apps/server/util/extensionAuth.js`、`docs/browser-extension.md`。
 
 ### LN-PIT-163：CSS 数学函数内的百分比减法必须显式包裹 `calc()`

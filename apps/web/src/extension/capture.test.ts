@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { captureTriggeredPage } from './capture';
+import { captureCurrentPageText, captureTriggeredPage } from './capture';
 
 const executeScript = vi.fn();
 const queryTabs = vi.fn();
@@ -37,6 +37,33 @@ describe('浏览器插件延迟读取当前页', () => {
     );
   });
 
+  it('只有用户点击笔记带入按钮后才读取当前页可见文字，并限制单次长度', async () => {
+    queryTabs.mockResolvedValue([{ id: 19 }]);
+    executeScript.mockResolvedValue([
+      {
+        result: {
+          url: 'https://example.com/long',
+          title: '长文章',
+          text: '正文内容',
+          truncated: true,
+        },
+      },
+    ]);
+
+    await expect(captureCurrentPageText()).resolves.toEqual({
+      tabId: 19,
+      url: 'https://example.com/long',
+      title: '长文章',
+      text: '正文内容',
+      truncated: true,
+    });
+    expect(queryTabs).toHaveBeenCalledTimes(1);
+    expect(executeScript).toHaveBeenCalledWith(expect.objectContaining({
+      target: { tabId: 19, frameIds: [0] },
+      args: [50_000],
+    }));
+  });
+
   it('没有活动标签页时拒绝读取', async () => {
     queryTabs.mockResolvedValue([]);
     await expect(captureTriggeredPage()).rejects.toMatchObject({
@@ -52,6 +79,16 @@ describe('浏览器插件延迟读取当前页', () => {
     await expect(captureTriggeredPage()).rejects.toMatchObject({
       name: 'CAPTURE_RESTRICTED_PAGE',
       message: expect.stringContaining('手动填写'),
+    });
+  });
+
+  it('笔记主动带入遇到受限页面时返回独立的非阻断错误', async () => {
+    queryTabs.mockResolvedValue([{ id: 20 }]);
+    executeScript.mockRejectedValue(new Error('Cannot access a chrome:// URL'));
+
+    await expect(captureCurrentPageText()).rejects.toMatchObject({
+      name: 'CAPTURE_RESTRICTED_PAGE',
+      message: expect.stringContaining('无法读取网页文字'),
     });
   });
 });

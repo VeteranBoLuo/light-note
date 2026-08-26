@@ -17,7 +17,9 @@ const successSource = readSource('src/extension/components/ExtensionSuccessView.
 const richTextSource = readSource('src/extension/components/ExtensionRichTextEditor.vue');
 const draftPersistenceSource = readSource('src/extension/draftPersistence.ts');
 const operationIdempotencySource = readSource('src/extension/operationIdempotency.ts');
+const pageTextImportSource = readSource('src/extension/pageTextImport.ts');
 const viteConfigSource = readSource('vite.extension.config.ts');
+const stylesSource = readSource('src/extension/styles.less');
 
 function extensionIdFromPublicKey(publicKey: string): string {
   const digest = crypto.createHash('sha256').update(Buffer.from(publicKey, 'base64')).digest().subarray(0, 16);
@@ -77,8 +79,27 @@ describe('浏览器插件三类流程接线', () => {
     expect(loginSource).toContain('@keydown.esc.stop.prevent="emit(\'close\')"');
   });
 
-  it('仅书签视图挂载后读取网页，并保留 AI、正式保存与待整理三条路径', () => {
+  it('侧栏只让主内容区滚动，并在三类视图切换后回到顶部', () => {
+    expect(appSource).toContain('ref="mainRef"');
+    expect(appSource).toContain('watch(view, async () =>');
+    expect(appSource).toContain('mainRef.value.scrollTop = 0');
+    expect(stylesSource).toMatch(/html,[\s\S]*#app \{[\s\S]*width: 100%;[\s\S]*overflow: hidden;/u);
+    expect(stylesSource).toMatch(/body \{[\s\S]*display: block;/u);
+    expect(stylesSource).toMatch(/\.ln-extension-shell \{[\s\S]*grid-template-rows: auto minmax\(0, 1fr\);[\s\S]*overflow: hidden;/u);
+    expect(stylesSource).toMatch(/\.ln-extension-main \{[\s\S]*min-height: 0;[\s\S]*overflow-y: auto;/u);
+  });
+
+  it('未登录状态同时提供可点击页头和明确主按钮', () => {
+    expect(appSource).toContain("t('browserExtension.login.headerAction')");
+    expect(appSource).toContain('@click="openAuth"');
+    expect(homeSource).toContain("'is-unauthenticated': !authenticated");
+    expect(homeSource).toContain('<BButton v-else type="primary" @click="emit(\'login\')">');
+  });
+
+  it('书签视图读取当前页并支持网址回填，同时保留 AI、正式保存与待整理三条路径', () => {
     expect(bookmarkSource).toContain('await captureTriggeredPage()');
+    expect(bookmarkSource).toContain('@click="fillCurrentPageUrl"');
+    expect(bookmarkSource).toContain('draft.url = page.url');
     expect(bookmarkSource).toContain('generateWithAi');
     expect(bookmarkSource).toContain('browserExtension.bookmark.aiDescription');
     expect(bookmarkSource).toContain('browserExtension.bookmark.modeInboxDescription');
@@ -102,12 +123,24 @@ describe('浏览器插件三类流程接线', () => {
     expect(richTextSource).not.toContain('tinymce');
     expect(noteSource).toContain('if (!hasBody.value) return apply()');
     expect(noteSource).toContain('Alert.alert');
+    expect(noteSource).toContain('@click="importCurrentPageText"');
+    expect(noteSource).toContain('await captureCurrentPageText()');
+    expect(noteSource).toContain('appendImportedText(page.text)');
+    expect(noteSource).toContain('pageImportError.value = t');
+    expect(noteSource).toContain('ln-extension-page-import-error');
+    expect(pageTextImportSource).toContain('document.createTextNode(line)');
+    expect(pageTextImportSource).toContain('DOMPurify.sanitize');
+    expect(noteSource).toContain("page.title.slice(0, 255)");
     expect(noteSource).toContain('isUntouchedDraft()');
     expect(draftPersistenceSource).toContain('await tail.catch');
     expect(draftPersistenceSource).toContain('await clear()');
     expect(noteSource).toContain('await draftPersistence.save(noteDraftSnapshot())');
     expect(bookmarkSource).toContain('await draftPersistence.save(bookmarkDraftSnapshot())');
     expect(operationIdempotencySource).toContain("crypto.subtle.digest('SHA-256'");
+    expect(noteSource).toContain('ln-extension-note-title-field');
+    expect(stylesSource).toContain('.ln-extension-note-title-field');
+    expect(stylesSource).toMatch(/\.ln-extension-note-editor \{[\s\S]*&:focus-within[\s\S]*\.b-textarea \{[\s\S]*border: 0 !important;/u);
+    expect(richTextSource).not.toContain('&:focus-visible');
   });
 
   it('文件支持 BUpload、拖拽、取消、重试与部分失败，成功页提供两个后续动作', () => {

@@ -7,7 +7,16 @@
       <div v-else class="ln-extension-logo">
         <img :src="extensionLogoUrl" :alt="t('browserExtension.logoAlt')" />
       </div>
-      <div class="ln-extension-header__title">
+      <BButton
+        v-if="!sessionLoading && !authenticated"
+        class="ln-extension-header__title is-login-entry"
+        :aria-label="t('browserExtension.login.headerAction')"
+        @click="openAuth"
+      >
+        <strong>{{ headerTitle }}</strong>
+        <span>{{ t('browserExtension.login.headerAction') }}</span>
+      </BButton>
+      <div v-else class="ln-extension-header__title">
         <strong>{{ headerTitle }}</strong>
         <span>{{ sessionLabel }}</span>
       </div>
@@ -16,7 +25,7 @@
       </BButton>
     </header>
 
-    <main class="ln-extension-main">
+    <main ref="mainRef" class="ln-extension-main">
       <section v-if="sessionLoading" class="ln-extension-centered">
         <BLoading :loading="true" inline :title="t('browserExtension.restoringSession')" />
       </section>
@@ -59,7 +68,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { applyDocumentTheme } from '@/utils/theme';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -84,6 +93,7 @@
   const sessionLoading = ref(true);
   const authVisible = ref(false);
   const success = ref<ExtensionSuccess | null>(null);
+  const mainRef = ref<HTMLElement | null>(null);
   const theme = ref<'day' | 'night'>(document.documentElement.getAttribute('data-theme') === 'night' ? 'night' : 'day');
   const extensionLogoUrl = chrome.runtime.getURL('icons/icon-32.png');
 
@@ -145,6 +155,11 @@
     authVisible.value = true;
     message.info(t('browserExtension.login.expired'));
   }
+
+  watch(view, async () => {
+    await nextTick();
+    if (mainRef.value) mainRef.value.scrollTop = 0;
+  });
 
   onMounted(async () => {
     window.addEventListener('light-note-extension-auth-expired', handleAuthExpired);

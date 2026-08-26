@@ -21,6 +21,14 @@ export interface CapturedPage {
   selection: string;
 }
 
+export interface CapturedPageText {
+  tabId: number;
+  url: string;
+  title: string;
+  text: string;
+  truncated: boolean;
+}
+
 export interface ExtensionSuccess {
   type: ExtensionResourceType;
   resourceId?: string;

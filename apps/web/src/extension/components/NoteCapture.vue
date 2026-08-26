@@ -9,20 +9,53 @@
     </div>
 
     <div class="ln-extension-format-switch" role="group" :aria-label="t('browserExtension.note.format')">
-      <BButton :class="{ 'is-active': draft.type === 'markdown' }" block @click="requestType('markdown')">
+      <BButton
+        :class="{ 'is-active': draft.type === 'markdown' }"
+        block
+        :disabled="saving || importingPageText"
+        @click="requestType('markdown')"
+      >
         <SvgIcon :src="icon.resource.noteMarkdown" size="17" aria-hidden="true" />
         Markdown
       </BButton>
-      <BButton :class="{ 'is-active': draft.type === 'html' }" block @click="requestType('html')">
+      <BButton
+        :class="{ 'is-active': draft.type === 'html' }"
+        block
+        :disabled="saving || importingPageText"
+        @click="requestType('html')"
+      >
         <SvgIcon :src="icon.resource.noteHtml" size="17" aria-hidden="true" />
         {{ t('browserExtension.note.richText') }}
       </BButton>
     </div>
 
-    <div class="ln-extension-field">
+    <div class="ln-extension-field ln-extension-note-title-field">
       <label for="extension-note-title">{{ t('browserExtension.note.noteTitle') }}</label>
-      <BInput id="extension-note-title" v-model:value="draft.title" :placeholder="t('browserExtension.note.titlePlaceholder')" />
+      <BInput
+        id="extension-note-title"
+        v-model:value="draft.title"
+        height="44px"
+        :placeholder="t('browserExtension.note.titlePlaceholder')"
+      />
     </div>
+
+    <section class="ln-extension-page-import" aria-labelledby="extension-note-page-import-title">
+      <div>
+        <strong id="extension-note-page-import-title">{{ t('browserExtension.note.pageImportTitle') }}</strong>
+        <small>{{ t('browserExtension.note.pageImportDescription') }}</small>
+      </div>
+      <BButton
+        :loading="importingPageText"
+        :disabled="saving || importingPageText"
+        @click="importCurrentPageText"
+      >
+        {{ t('browserExtension.note.pageImportAction') }}
+      </BButton>
+    </section>
+    <p v-if="pageImportError" class="ln-extension-inline-error ln-extension-page-import-error" role="alert">
+      {{ pageImportError }}
+    </p>
+    <p v-else-if="pageImportStatus" class="ln-extension-import-status" role="status">{{ pageImportStatus }}</p>
 
     <BTabs
       v-if="draft.type === 'markdown'"
@@ -62,7 +95,7 @@
     </div>
 
     <p v-if="errorMessage" class="ln-extension-inline-error" role="alert">{{ errorMessage }}</p>
-    <BButton type="primary" block :loading="saving" @click="saveNote">
+    <BButton type="primary" block :loading="saving" :disabled="importingPageText" @click="saveNote">
       {{ t('browserExtension.note.save') }}
     </BButton>
   </section>
@@ -82,6 +115,8 @@
   import icon from '@/config/icon.ts';
   import ExtensionRichTextEditor from './ExtensionRichTextEditor.vue';
   import { extensionPost, isExtensionAuthError } from '../api';
+  import { captureCurrentPageText } from '../capture';
+  import { appendPageTextToHtml, appendPageTextToMarkdown } from '../pageTextImport';
   import { clearNoteDraft, getNoteDraft, saveNoteDraft } from '../storage';
   import { createExtensionDraftPersistence } from '../draftPersistence';
   import { resolveExtensionOperationReceipt } from '../operationIdempotency';
@@ -93,6 +128,9 @@
   const draft = reactive<NoteDraft>({ title: '', content: '', type: 'markdown', addToInbox: true });
   const editorMode = ref<'edit' | 'preview'>('edit');
   const saving = ref(false);
+  const importingPageText = ref(false);
+  const pageImportStatus = ref('');
+  const pageImportError = ref('');
   const errorMessage = ref('');
   const draftPersistence = createExtensionDraftPersistence(saveNoteDraft, clearNoteDraft);
 
@@ -126,11 +164,14 @@
   });
 
   function requestType(type: 'markdown' | 'html') {
+    if (saving.value || importingPageText.value) return;
     if (draft.type === type) return;
     const apply = () => {
       draft.content = '';
       draft.type = type;
       editorMode.value = 'edit';
+      pageImportStatus.value = '';
+      pageImportError.value = '';
       errorMessage.value = '';
     };
     if (!hasBody.value) return apply();
@@ -142,6 +183,39 @@
       cancelText: t('common.cancel'),
       onOk: apply,
     });
+  }
+
+  function appendImportedText(value: string) {
+    if (draft.type === 'markdown') {
+      draft.content = appendPageTextToMarkdown(draft.content, value);
+      editorMode.value = 'edit';
+      return;
+    }
+    draft.content = appendPageTextToHtml(draft.content, value, hasBody.value);
+  }
+
+  async function importCurrentPageText() {
+    if (saving.value || importingPageText.value) return;
+    importingPageText.value = true;
+    pageImportStatus.value = '';
+    pageImportError.value = '';
+    errorMessage.value = '';
+    try {
+      const page = await captureCurrentPageText();
+      if (!page.text) {
+        pageImportError.value = t('browserExtension.note.pageImportEmpty');
+        return;
+      }
+      if (!draft.title.trim() && page.title) draft.title = page.title.slice(0, 255);
+      appendImportedText(page.text);
+      pageImportStatus.value = t(page.truncated
+        ? 'browserExtension.note.pageImportTruncated'
+        : 'browserExtension.note.pageImportSuccess');
+    } catch {
+      pageImportError.value = t('browserExtension.note.pageImportFailed');
+    } finally {
+      importingPageText.value = false;
+    }
   }
 
   async function saveNote() {

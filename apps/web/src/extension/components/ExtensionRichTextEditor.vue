@@ -131,10 +131,6 @@
     line-height: 1.65;
     outline: none;
 
-    &:focus-visible {
-      box-shadow: inset 0 0 0 2px var(--primary-color);
-    }
-
     &:empty::before {
       content: attr(data-placeholder);
       color: var(--desc-color);

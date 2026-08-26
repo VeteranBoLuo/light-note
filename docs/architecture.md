@@ -681,7 +681,7 @@ AI 前端由 `useAiAssistantStore` 承担会话域、草稿、单个材料 `cont
 ### Chrome / Edge 浏览器插件
 
 - 插件是 `apps/web` 内的独立 Vite 构建目标，源码位于 `src/extension/`，Manifest 与 Side Panel HTML 位于 `extension/`；`pnpm --filter web build:extension` 产出可解压安装目录，`package:extension` 额外生成商店 ZIP 与 SHA-256。
-- 工具栏点击只把当前 `tabId` 写入 `chrome.storage.session` 并打开原生 Side Panel。入口页先让用户选择书签、笔记或文件；只有进入书签视图后才凭 `activeTab + scripting` 读取顶层页面的 URL、标题和当前选中文本。没有常驻内容脚本、`tabs`、`cookies` 或 `<all_urls>`。
+- 工具栏点击只通过浏览器原生行为打开 Side Panel，不读取或保存标签页信息。入口页先让用户选择书签、笔记或文件：进入书签视图后才凭 `activeTab + scripting` 读取顶层页面的 URL、标题和当前选中文本，网址右侧按钮可再次主动回填操作时的当前页；笔记视图默认不读网页，只有点击“带入当前网页文字”才读取顶层页面最多 5 万字可见文字并追加到草稿。文件视图不读取网页。没有常驻内容脚本、`tabs`、`cookies` 或 `<all_urls>`。
 - 插件登录态独立保存在 `chrome.storage.local`，以 `X-Session-Id + X-Device-Id` 复用服务端设备会话；密码只在当前登录表单内存中存在。网站登录中转使用 `/extension/authorize`、一次性 Redis 授权码、S256 PKCE、随机 state、设备摘要、精确 `chromiumapp.org` 回调与扩展 ID 白名单。
 - 书签正式保存、标签匹配/创建、笔记创建、文件确认和加入待整理都复用服务端现有业务 Service；新标签和资源关系、资源与待整理关系必须保持同事务。书签与笔记使用调用方幂等键，托管文件继续以随机对象键确认幂等，中止时只删除尚未确认的对象。
 - 完整协议、构建、安装和发布门禁见 `docs/browser-extension.md`。
