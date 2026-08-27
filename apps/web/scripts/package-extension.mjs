@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
+import { serializeStoreManifest } from './package-extension-manifest.mjs';
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const webRoot = path.resolve(scriptDirectory, '..');
@@ -15,6 +16,7 @@ const zip = new JSZip();
 async function addDirectory(directory, prefix = '') {
   const entries = await fs.readdir(directory, { withFileTypes: true });
   for (const entry of entries) {
+    if (!prefix && entry.name === 'manifest.json') continue;
     const absolutePath = path.join(directory, entry.name);
     const archivePath = path.posix.join(prefix, entry.name);
     if (entry.isDirectory()) await addDirectory(absolutePath, archivePath);
@@ -23,6 +25,7 @@ async function addDirectory(directory, prefix = '') {
 }
 
 await addDirectory(sourceRoot);
+zip.file('manifest.json', serializeStoreManifest(manifest));
 await fs.mkdir(outputRoot, { recursive: true });
 const archive = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 9 } });
 await fs.writeFile(outputPath, archive);

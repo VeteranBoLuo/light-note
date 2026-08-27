@@ -93,4 +93,4 @@
 - 商店截图：`apps/web/store-assets/chrome/screenshots/`
 - 小型宣传图：`apps/web/store-assets/chrome/promo-small-440x280.png`
 
-首次上传前至少确认：Manifest V3、版本递增、ZIP 根目录存在 `manifest.json`、48/128 图标、无远程代码、CSP 门禁、权限最小化、专属隐私页已上线、截图与当前版本一致。
+首次上传前至少确认：Manifest V3、版本递增、ZIP 根目录存在 `manifest.json` 且不含商店禁止的根级 `key`、48/128 图标、无远程代码、CSP 门禁、权限最小化、专属隐私页已上线、截图与当前版本一致。开发者模式目录仍保留公开 build key，以固定本地测试 ID；只能由打包器在商店 ZIP 中移除。

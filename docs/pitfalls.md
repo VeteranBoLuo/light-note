@@ -3603,3 +3603,11 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **防回归约束：** 自动分页列表必须在游标未前进、空页却声明还有更多、筛选变化和组件关闭时失败关闭；不得把失败后的 `hasMore` 原样继续交给触底组件。游标必须绑定所有会改变结果集合或排序边界的条件，后端页大小必须有上限；虚拟渲染不能替代服务端分批读取，也不得另放“加载更多”按钮形成双入口。
 - **验证方法：** 后端测试覆盖默认 50/最多 100、日期边界、复合倒序、内部账号口径、私密字段脱敏、跨日期错误游标和续页 SQL；前端测试锁定 `virtual + hasMore + loadMore`、请求世代、游标前进检查和失败熔断。真实浏览器在 PC/移动、浅色/深色下检查首屏自动补齐、长列表触底、空、首次失败、续页失败保留旧结果、快速切日与关闭重开，并确认移动端只有表体 `scrollTop` 推进。
 - **相关代码：** `apps/server/util/pointsGovernanceService.js`、`apps/server/util/pointsGovernanceService.test.js`、`apps/web/src/view/admin/components/pointsOps/PointsGovernanceDailyDetailModal.vue`、`apps/web/src/view/admin/components/pointsOps/PointsGovernanceDailyDetailModal.test.ts`、`apps/web/src/components/base/BasicComponents/BTable/BTable.vue`、`apps/web/src/components/base/BasicComponents/BVirtualization.test.ts`。
+
+### LN-PIT-182：Chrome 商店包不得直接复用带公开 build key 的开发 Manifest
+
+- **现象：** 解压安装的扩展 ID 和网站授权都正常，但首次向 Chrome Web Store 上传 ZIP 时被拒绝，提示“清单文件中不得包含 key 字段”。直接从源码删除 `key` 后虽然可以上传，本地解压安装 ID 又会改变，生产扩展白名单和网站授权回调随即失效。
+- **根因：** Chrome 开发者模式与商店首次分发对同一个根级 Manifest 字段有相反约束：本地开发依赖公开 build key 稳定扩展 ID，而商店要求首次上传包不携带 `key`。原打包脚本逐文件复制 `dist-extension`，把开发身份元数据原样带进了商店包。
+- **防回归约束：** `apps/web/extension/manifest.json` 与 `dist-extension/manifest.json` 继续保留公开 build key，禁止把私钥写入仓库；只有 `package:extension` 在写入 ZIP 时生成无根级 `key` 的商店 Manifest。禁止维护第二份手写商店 Manifest，也禁止人工解压改包，避免权限、版本和 CSP 漂移。上传前必须同时断言解压目录仍能推导稳定开发 ID、ZIP 内 Manifest 不含 `key`，并重新校验 SHA-256。
+- **验证方法：** 纯函数测试锁定打包净化只移除根级 `key`、不修改源对象且保留版本、权限和 Host；执行 `package:extension` 后分别读取 `dist-extension/manifest.json` 与 ZIP 内 `manifest.json`，前者必须含公开 key，后者必须不含，并通过校验文件验证新 ZIP。Chrome Web Store 首次上传不再出现 key 字段错误。
+- **相关代码：** `apps/web/extension/manifest.json`、`apps/web/scripts/package-extension.mjs`、`apps/web/scripts/package-extension-manifest.mjs`、`apps/web/src/extension/storePackageManifest.test.ts`、`docs/browser-extension.md`。
