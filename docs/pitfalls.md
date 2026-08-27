@@ -25,6 +25,8 @@
 
 | 编号                                                                                           | 日期       | 模块                   | 关键词                                              | 状态         |
 | ---------------------------------------------------------------------------------------------- | ---------- | ---------------------- | --------------------------------------------------- | ------------ |
+| [LN-PIT-180](#ln-pit-180成长写操作后必须刷新所有受影响的独立读模型)                            | 2026-08-27 | 成长、前端、状态       | 签到、读模型、看板、响应式                          | 已修复待上线 |
+| [LN-PIT-179](#ln-pit-179markdown-下划线不能只加工具栏按钮必须守住格式往返与-raw-html-边界)     | 2026-08-27 | Markdown、编辑器       | 下划线、格式往返、raw HTML、快捷键                  | 已修复待上线 |
 | [LN-PIT-178](#ln-pit-178房间阅读位置不能代替逐消息回执且新增消息类型不能整体升级幂等指纹)      | 2026-08-26 | 聊天室、Schema、实时   | 已读回执、投票、幂等、滚动发布、UTC、广播           | 已修复待上线 |
 | [LN-PIT-177](#ln-pit-177聊天室滚动意图不能由输入框焦点或近底阈值推断)                          | 2026-08-26 | 聊天室、前端、交互     | focus、ResizeObserver、滚动意图、提及、视口锚点     | 已修复待上线 |
 | [LN-PIT-176](#ln-pit-176后台自然日趋势不能把-sql-date-当瞬时时间也不能用最小柱伪装零值)        | 2026-08-27 | 积分治理、前后端、图表 | 北京时间、DATE、连续日期、零值、正负柱              | 已修复待上线 |
@@ -3572,3 +3574,20 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **注销与异常时钟补充：** 截止字符串即使通过 JavaScript `Date` 解析，也可能超出 MySQL `DATETIME` 范围；数据库必须显式判断转换结果非 `NULL`，并用同一个 `UTC_TIMESTAMP(3)` 校验首次写入窗口，列表时钟也必须来自数据库。跨过截止点的立即详情刷新每条投票只触发一次，失败后由安全轮询恢复，不能跟随每秒 UI 时钟重试。账号注销在角色去标识化前同步移除本人投票/回执、清空其 Root 消息聚合并关闭采集位；投票/回执写入与 Root 消息创建必须先锁合法账号事实，后台物理清理仅作兜底。
 - **验证方法：** 服务端测试覆盖作者本人/游客/非 Root 消息/删除/屏蔽/重复/空批次/31 条、Root 与普通用户结果可见性、改票/截止/手动结束、投票定向事件和普通消息 v2 精确指纹；前端使用可控可见性计时验证不足 800ms 不写、窗口未聚焦不写、重复只写一次、弱网退避后重试、密集事件在在途请求后补刷一次，并用大幅错误的设备时钟验证仍以服务端截止时间为准。Schema 三轨和只读门禁检查回执主键、投票/消息双向一致、选项数量、Root 开关列和无孤儿数据，并在非 UTC 会话下预演截止判断。浏览器覆盖 PC/移动、浅色/深色、开放/已选/结束/零票/并列/长选项/错误和 0/正数已读状态；另在 390×667 下填满 10 个选项，确认内容区 `scrollTop` 可推进、截止时间可滚到粘性底栏上方且无横向溢出。
 - **相关代码：** `apps/server/util/services/communityChatMessageService.js`、`apps/server/util/services/communityChatPollService.js`、`apps/server/util/services/communityChatReadReceiptService.js`、`apps/server/migrations/20260826_community_chat_polls_read_receipts.sql`、`apps/web/src/view/communityChat/CommunityChatWorkspace.vue`。
+
+### LN-PIT-179：Markdown 下划线不能只加工具栏按钮，必须守住格式往返与 raw HTML 边界
+
+- **现象：** Markdown 编辑器插入 `<u>文字</u>` 后预览正常，但切换到富文本再切回来时下划线消失，转换预览还会把产品自己生成的标签误报为“原生 HTML 风险”；只绑定桌面按钮时，移动端更多面板、快捷键帮助和 `Ctrl/⌘ + U` 又会继续表现为不支持。
+- **影响范围：** Markdown 编辑/预览、PC/移动工具栏、快捷键、重复上一步、HTML/Markdown 格式转换、离线导出和 AI 快捷键知识条目。
+- **根因：** CommonMark/GFM 没有下划线语法，轻笺的 `marked + DOMPurify` 虽然原本就能安全渲染无属性 `<u>`，但 Turndown 默认只保留内部文字，转换风险分析也会把所有 raw HTML 一概计为潜在损失。把“当前能预览”误当成完整正文协议，便会留下静默丢格式路径。
+- **防回归约束：** Markdown 下划线唯一持久化语义是无属性 `<u>文字</u>`；禁止另增 `++文字++` 私有方言。工具栏、CodeMirror 快捷键、重复操作、HTML→Markdown Turndown 规则和 Markdown→HTML 风险分析必须同步接入。风险分析只豁免无属性 `u`，带 `style`、`class` 或其他属性的标签仍提示 raw HTML 风险，不能借下划线开放任意样式。
+- **验证方法：** 纯函数测试覆盖选区包裹、再次取消、空选区占位和首尾空白；转换测试覆盖 `<u><strong>…</strong></u>` 往返、无属性标签不误报及带属性标签仍告警；编辑器合约测试锁定 PC/移动工具栏、`Mod-u`、快捷键帮助与重复操作。真实浏览器在 PC/移动、浅色/深色下检查编辑/分栏/预览、默认/hover/focus、只读禁用、格式切换与导出结果。
+- **相关代码：** `apps/web/src/components/noteLibrary/detail/Editor.vue`、`apps/web/src/components/noteLibrary/detail/MarkdownCodeMirror.vue`、`apps/web/src/utils/noteHtmlToMarkdown.ts`、`apps/web/src/utils/noteFormatConversion.ts`、`apps/server/scripts/seedNoteEditorShortcutKnowledge.js`。
+
+### LN-PIT-180：成长写操作后必须刷新所有受影响的独立读模型
+
+- **现象：** 在今日页成长卡点击签到后，卡片立即显示“已签到”，但下方每日任务的“完成每日签到”仍未勾选；切换到其他模块再返回后才恢复。PC 与移动端共用该状态链路，均受影响。
+- **根因：** 成长卡签到后只强制回读 `/growth/me` 成长快照和 `/growth/claimable` 可领取项，而每日任务绑定的是独立 `/growth/dashboard` 读模型中的 `quests`。Vue 响应式只能传播已更新的状态，不会自动推断另一份服务端读模型已变更。
+- **防回归约束：** 成长写操作完成后，先列出受影响的共享读模型，再复用各自权威读取函数刷新；禁止只修改按钮所在卡片的局部布尔值，或根据文案在客户端伪造任务完成态。签到至少同步成长快照、每日任务看板和可领取项。写操作返回权威成长快照时必须作废此前在途的 `/growth/me`；同账号看板请求必须采用“最后发起者生效”的版本门禁，不能让写操作前的迟到响应覆盖写操作后的刷新结果。
+- **验证方法：** 回归测试锁定工作台签到成功分支同时调用 `load(true)`、`loadDashboard()` 和 `loadClaimable()`，并用可控延迟分别验证写前 `/growth/me` 与同账号旧看板请求后返回时都不会覆盖新快照。真实浏览器在 PC/移动、浅色/深色及共享移动渲染基线下从未签到状态操作，确认按钮、任务勾选、完成数和阶段奖励状态同屏一次更新；刷新失败时保留旧看板且签到结果仍可见。
+- **相关代码：** `apps/web/src/components/workbenches/WorkbenchGrowth.vue`、`apps/web/src/components/workbenches/WorkbenchGrowth.contract.test.ts`、`apps/web/src/composables/useGrowth.ts`。
