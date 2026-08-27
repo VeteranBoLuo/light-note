@@ -171,8 +171,11 @@ describe('独立资源商店', () => {
     expect(host.querySelector('.package-card.is-campaign')?.textContent).not.toContain('首购');
     expect(host.textContent).not.toMatch(/SKU|权益账本|结算快照|幂等/);
 
+    const actionWraps = host.querySelectorAll<HTMLElement>('.package-card__action-wrap');
     const actions = host.querySelectorAll<HTMLButtonElement>('.package-card__action');
+    expect(actionWraps).toHaveLength(2);
     expect(actions).toHaveLength(2);
+    expect([...actionWraps].every((wrapper) => wrapper.querySelector('.package-card__action'))).toBe(true);
     actions[0]?.click();
     await nextTick();
     expect(mocks.openCheckout).not.toHaveBeenCalled();

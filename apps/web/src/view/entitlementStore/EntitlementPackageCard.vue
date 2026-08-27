@@ -56,15 +56,17 @@
       </p>
     </template>
 
-    <BButton
-      class="package-card__action"
-      type="primary"
-      size="large"
-      :disabled="disabled"
-      @click="emit('select', item)"
-    >
-      {{ actionLabel }}
-    </BButton>
+    <div class="package-card__action-wrap">
+      <BButton
+        class="package-card__action"
+        type="primary"
+        size="large"
+        :disabled="disabled"
+        @click="emit('select', item)"
+      >
+        {{ actionLabel }}
+      </BButton>
+    </div>
   </BCard>
 </template>
 
@@ -275,9 +277,12 @@
     margin-top: 10px;
     color: var(--text-color-secondary);
   }
+  .package-card__action-wrap {
+    margin-top: auto;
+    padding-top: 14px;
+  }
   .package-card__action {
     width: 100%;
-    margin-top: auto;
   }
   @media (hover: hover) and (pointer: fine) {
     .package-card:hover {
@@ -293,9 +298,12 @@
     .package-card__scenario {
       min-height: 0;
     }
+    .package-card__action-wrap {
+      margin-top: 18px;
+      padding-top: 0;
+    }
     .package-card__action {
       min-height: 44px;
-      margin-top: 18px;
     }
   }
   html.light-note-mobile-rendering & {
