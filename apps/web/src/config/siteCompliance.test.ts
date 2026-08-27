@@ -29,7 +29,12 @@ describe('站点备案名称展示', () => {
     expect(hasPublicSecurityFiling).toBe(true);
   });
 
-  it.each(['about.html', 'legal/privacy-policy.html', 'legal/user-agreement.html'])(
+  it.each([
+    'about.html',
+    'legal/privacy-policy.html',
+    'legal/browser-extension-privacy.html',
+    'legal/user-agreement.html',
+  ])(
     '%s 建立备案全称与产品简称的公开对应关系',
     (path) => {
       const html = readPublicFile(path);
@@ -41,6 +46,17 @@ describe('站点备案名称展示', () => {
       expect(html).toContain(PUBLIC_SECURITY_BADGE_PATH);
     },
   );
+
+  it('浏览器扩展隐私说明覆盖商店披露、权限边界与有限用途承诺', () => {
+    const html = readPublicFile('legal/browser-extension-privacy.html');
+    expect(html).toContain('当前标签页网址、标题和选中文本');
+    expect(html).toContain('网页可见文字');
+    expect(html).toContain('不会遍历或保存浏览历史');
+    expect(html).toContain('不会出售用户数据');
+    expect(html).toContain('个性化广告');
+    expect(html).toContain('chrome.storage.local');
+    expect(html).toContain('optional_host_permissions');
+  });
 
   it('打包公安平台提供的官方备案徽标', () => {
     const badge = readFileSync(resolve(publicDirectory, PUBLIC_SECURITY_BADGE_PATH.replace(/^\//u, '')));

@@ -34,6 +34,18 @@ describe('浏览器插件 Manifest 与隐私边界', () => {
     expect(manifest.permissions).toEqual(['sidePanel', 'tabs', 'activeTab', 'scripting', 'storage', 'identity']);
     expect(manifest.side_panel.default_path).toBe('sidepanel.html');
     expect(manifest.background).toEqual({ service_worker: 'service-worker.js', type: 'module' });
+    expect(manifest.icons).toMatchObject({
+      16: 'icons/icon-16.png',
+      32: 'icons/icon-32.png',
+      48: 'icons/icon-48.png',
+      128: 'icons/icon-128.png',
+    });
+    expect(manifest.action.default_icon).toMatchObject({
+      16: 'icons/icon-16.png',
+      32: 'icons/icon-32.png',
+      48: 'icons/icon-48.png',
+      128: 'icons/icon-128.png',
+    });
     expect(manifest.content_scripts).toBeUndefined();
     expect(manifest.host_permissions).not.toContain('<all_urls>');
     expect(manifest.host_permissions).toEqual([

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="280" viewBox="0 0 440 280">
+  <defs>
+    <linearGradient id="promo-background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#11172a" />
+      <stop offset="0.58" stop-color="#403a91" />
+      <stop offset="1" stop-color="#6a5cf2" />
+    </linearGradient>
+  </defs>
+  <rect width="440" height="280" fill="url(#promo-background)" />
+  <circle cx="420" cy="8" r="112" fill="#ffffff" opacity="0.06" />
+  <circle cx="22" cy="278" r="105" fill="#0b1220" opacity="0.22" />
+  <g transform="translate(35 72) scale(.857142857)">
+    <path d="M14 0H52V38L38 52H0V14A14 14 0 0 1 14 0Z" fill="#b0a8ff" />
+    <path d="M60 0H98A14 14 0 0 1 112 14V52H74L60 38Z" fill="#978cf8" />
+    <path d="M0 60H38L52 74V112H14A14 14 0 0 1 0 98Z" fill="#ffffff" opacity=".9" />
+    <path d="M74 60H112V98A14 14 0 0 1 98 112H60V74Z" fill="#d9d5ff" />
+  </g>
+  <text x="158" y="102" fill="#c8c3ff" font-family="Arial, sans-serif" font-size="13" font-weight="700" letter-spacing="2">LIGHT NOTE</text>
+  <text x="158" y="142" fill="#ffffff" font-family="Hiragino Sans GB, sans-serif" font-size="27" font-weight="700">轻笺快速添加</text>
+  <text x="158" y="178" fill="#e7e5ff" font-family="Hiragino Sans GB, sans-serif" font-size="16">书签 · 笔记 · 文件</text>
+  <text x="35" y="232" fill="#ffffff" font-family="Hiragino Sans GB, sans-serif" font-size="16">打开侧栏，随手收进轻笺</text>
+</svg>

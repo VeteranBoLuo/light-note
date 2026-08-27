@@ -10,6 +10,8 @@ function extensionStaticAssets(): Plugin {
   const assets = [
     ['public/favicon-16x16.png', 'icons/icon-16.png'],
     ['public/favicon-32x32.png', 'icons/icon-32.png'],
+    ['extension/icons/icon-48.png', 'icons/icon-48.png'],
+    ['extension/icons/icon-128.png', 'icons/icon-128.png'],
     ['public/icon-192.png', 'icons/icon-192.png'],
     ['public/icon-512.png', 'icons/icon-512.png'],
   ] as const;

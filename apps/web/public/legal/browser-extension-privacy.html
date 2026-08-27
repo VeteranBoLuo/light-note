@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light" />
+    <title>轻笺浏览器扩展隐私说明</title>
+    <link rel="stylesheet" href="legal.css" />
+  </head>
+  <body>
+    <main class="legal-page">
+      <header class="legal-header">
+        <p class="legal-brand">LIGHT NOTE · 轻笺</p>
+        <h1>浏览器扩展隐私说明</h1>
+        <div class="legal-meta">
+          <span>适用产品：轻笺快速添加</span>
+          <span>文档版本：2026-08-27</span>
+          <span>生效日期：2026 年 8 月 27 日</span>
+        </div>
+      </header>
+
+      <section class="legal-section">
+        <h2>1. 适用范围与单一用途</h2>
+        <p>
+          本说明专门适用于“轻笺快速添加”Chrome / Edge 浏览器扩展。扩展的单一用途是：让用户在浏览网页时，
+          主动把当前页面书签、自己输入的笔记和自己选择的文件保存并同步到轻笺账号。
+        </p>
+        <p>
+          运营者：文俊邱。网站备案名称为“轻笺知识库”，产品名称及简称为“轻笺”。联系邮箱：
+          <a href="mailto:1902013368@qq.com">1902013368@qq.com</a>。
+        </p>
+        <div class="callout">
+          扩展不会在打开侧栏时自动收集当前页面，不会遍历或保存浏览历史，不读取 Cookie，不常驻网页，也不会把用户数据用于广告。
+          只有用户进入书签流程、点击“自动获取”“带入当前网页文字”、登录或保存内容等明确操作时，才处理相应数据。
+        </div>
+      </section>
+
+      <section class="legal-section">
+        <h2>2. 处理的数据、触发时机与用途</h2>
+        <div class="legal-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>场景</th>
+                <th>处理的数据</th>
+                <th>用途与边界</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>登录与会话</td>
+                <td>邮箱、用户主动输入的密码、账号昵称、会话标识、随机设备标识</td>
+                <td>
+                  用于核验身份、保持扩展登录和保护账号安全。密码仅在登录表单内存中短暂存在并通过 HTTPS 发送，成功后立即清空，
+                  不写入浏览器存储。
+                </td>
+              </tr>
+              <tr>
+                <td>收集书签</td>
+                <td>当前标签页网址、标题和选中文本，以及用户编辑的名称、描述与标签</td>
+                <td>
+                  仅在用户进入书签流程或点击“自动获取”时读取当前活动标签页；保存时同步到用户的轻笺账号。
+                  不枚举其他标签页，不形成浏览历史记录。
+                </td>
+              </tr>
+              <tr>
+                <td>AI 书签补全</td>
+                <td>用户当前填写的网址、名称、描述，以及用于匹配的账号标签</td>
+                <td>
+                  仅在用户点击“生成书签建议”后，通过轻笺服务端调用已披露的 AI 服务生成可编辑建议；不会自动保存。
+                  用户可以不使用此功能并直接手动保存。
+                </td>
+              </tr>
+              <tr>
+                <td>带入网页文字</td>
+                <td>当前页面最多 5 万字的网页可见文字和网页标题</td>
+                <td>
+                  仅在用户点击“带入当前网页文字”并批准当前网站权限后，在顶层页面读取并追加到本地笔记草稿；
+                  用户保存笔记后才同步到轻笺账号。权限按当前网站单独申请，不在安装时取得所有网站访问权。
+                </td>
+              </tr>
+              <tr>
+                <td>笔记与文件</td>
+                <td>用户输入的笔记标题和正文；用户主动选择的文件内容、文件名、类型与大小</td>
+                <td>
+                  用于把笔记保存到轻笺、把文件上传到轻笺云空间。扩展不会扫描本机目录，只处理用户拖入或通过系统文件选择器选择的文件。
+                </td>
+              </tr>
+              <tr>
+                <td>本地状态</td>
+                <td>主题、语言、会话标识、随机设备标识、未提交草稿、上传状态和幂等重试标识</td>
+                <td>
+                  保存于扩展私有的 <code>chrome.storage.local</code>，用于恢复界面、登录和未完成操作；不会写入网页存储或同步为浏览历史。
+                </td>
+              </tr>
+              <tr>
+                <td>安全与故障日志</td>
+                <td>IP 地址、浏览器与系统类型、请求时间、接口路径、状态码和安全风控信号</td>
+                <td>
+                  用于建立连接、防止滥用和排查故障。日志不会有意记录密码、会话密钥、笔记正文、文件正文或完整授权码。
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="legal-section">
+        <h2>3. 浏览器权限说明</h2>
+        <div class="legal-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>权限</th>
+                <th>用途</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>sidePanel</td><td>在 Chrome / Edge 原生侧栏中展示快速添加界面。</td></tr>
+              <tr>
+                <td>tabs</td>
+                <td>在用户主动收集时读取当前活动标签页的网址和标题；不枚举、不上传也不保存其他标签页列表。</td>
+              </tr>
+              <tr>
+                <td>activeTab 与 scripting</td>
+                <td>在用户主动操作后临时读取当前页选中文本，或在获得当前网站授权后读取可见文字。</td>
+              </tr>
+              <tr><td>storage</td><td>在扩展私有存储中保存会话、主题、草稿和重试状态。</td></tr>
+              <tr><td>identity</td><td>打开轻笺网站登录中转页并安全接收一次性登录回调；不读取 Google 账号资料。</td></tr>
+              <tr>
+                <td>boluo66.top 与轻笺对象存储域名</td>
+                <td>通过 HTTPS 调用轻笺 API，并上传用户主动选择的文件。</td>
+              </tr>
+              <tr>
+                <td>optional_host_permissions</td>
+                <td>仅在“带入当前网页文字”时按当前网站单独请求，用户拒绝后仍可手动输入笔记。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="legal-section">
+        <h2>4. 数据传输、共享与第三方服务</h2>
+        <ul>
+          <li>全部个人或敏感数据通过 HTTPS 加密传输。</li>
+          <li>
+            用户主动上传的文件由华为云对象存储在华南-广州区域保存；扩展使用轻笺服务端签发的短时上传地址，不向其他对象存储桶发送文件。
+          </li>
+          <li>
+            用户主动使用 AI 书签补全时，相应输入会经轻笺服务端发送至当前披露的 DeepSeek 主通道或阿里云百炼备用通道；两者不会自动并行发送。
+          </li>
+          <li>用户主动选择 GitHub 登录时，GitHub 仅处理完成身份验证所需的授权数据；也可以改用邮箱登录。</li>
+          <li>扩展不会把用户保存的书签、笔记、网页内容或文件交给 Google 用于广告。</li>
+        </ul>
+        <p>
+          上述服务商、保存期限和跨境处理的完整说明见
+          <a href="privacy-policy.html">《轻笺隐私政策》</a>。
+        </p>
+      </section>
+
+      <section class="legal-section">
+        <h2>5. Chrome Web Store 有限用途承诺</h2>
+        <div class="callout">
+          通过浏览器扩展取得的用户数据，只用于提供或改进“主动快速收集并同步到轻笺”这一单一用途及其用户可见功能。
+          我们不会出售用户数据，不会将其用于个性化广告、重定向广告或兴趣广告，不会用于信用评估，也不会允许人工阅读用户内容；
+          仅在用户明确请求处理具体内容、为保护安全、遵守法律，或对数据完成聚合匿名化后用于内部运营时存在必要例外。
+          除为提供扩展功能、履行法律义务、保护安全或完成业务主体变更所必需外，不会向第三方转移用户数据。
+        </div>
+      </section>
+
+      <section class="legal-section">
+        <h2>6. 保存、删除与用户控制</h2>
+        <ul>
+          <li>插件会话最长 7 天；退出登录、在账号会话管理中退出设备或注销账号会使会话提前失效。</li>
+          <li>书签草稿在侧栏真正关闭后清除；未提交笔记草稿保存在扩展本地，保存成功、清除浏览器扩展数据或卸载扩展时移除。</li>
+          <li>云端书签、笔记和文件通常保存至用户主动删除、注销账号或服务依法终止之时。</li>
+          <li>安全和接口日志最长保存 180 天，并按轻笺隐私政策执行分批清理和账号注销处理。</li>
+          <li>用户可以在轻笺中查阅、更正、导出或删除相应内容，也可以通过联系邮箱提出数据权利请求。</li>
+        </ul>
+      </section>
+
+      <section class="legal-section">
+        <h2>7. 安全、更新与联系</h2>
+        <p>
+          轻笺使用 HTTPS、短时签名上传、独立扩展会话、PKCE、一次性授权码、服务端扩展 ID 白名单、HTML 清洗、权限最小化和日志脱敏等措施保护数据。
+          如果扩展的数据处理方式发生变化，我们会更新本说明，并按 Chrome Web Store 规则在变更生效前向用户显著告知。
+        </p>
+        <p>隐私或数据权利问题请联系：<a href="mailto:1902013368@qq.com">1902013368@qq.com</a>。</p>
+      </section>
+
+      <footer class="legal-footer">
+        <nav>
+          <a href="/about.html">关于轻笺</a>
+          <a href="privacy-policy.html">完整隐私政策</a>
+          <a href="user-agreement.html">用户协议</a>
+        </nav>
+        <div>轻笺知识库（产品简称“轻笺”） · boluo66.top</div>
+        <div><a href="https://beian.miit.gov.cn/">蜀ICP备2026017699号-1</a></div>
+        <div>
+          <a
+            href="https://beian.mps.gov.cn/#/query/webSearch?code=51200002001211"
+            rel="noreferrer"
+            target="_blank"
+            style="display: inline-flex; align-items: center; gap: 4px"
+            ><img src="/public-security-filing-badge.png" alt="" width="20" height="20" />川公网安备51200002001211号</a
+          >
+        </div>
+      </footer>
+    </main>
+  </body>
+</html>

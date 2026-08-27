@@ -29,6 +29,8 @@ pnpm --filter web package:extension
 - 解压安装目录：`apps/web/dist-extension/`
 - 商店 ZIP：`apps/web/artifacts/light-note-browser-extension-<version>.zip`
 - 校验文件：同名 `.sha256`
+- Chrome 商店文案、权限说明与发布清单：`docs/browser-extension-store-listing.md`
+- 扩展专属隐私说明：`https://boluo66.top/legal/browser-extension-privacy.html`
 - 两个目录都是构建产物并已 Git 忽略。
 
 本地安装：打开 `chrome://extensions` 或 `edge://extensions`，开启开发者模式，选择“加载已解压的扩展程序”，指向 `apps/web/dist-extension`。Manifest 内的公开 build key 固定首版解压安装 ID 为 `nkdlhmfjnokoicodeepadkamopdblbnd`；它不是签名私钥。服务端生产配置必须把实际商店/企业分发 ID 加入 `LIGHTNOTE_EXTENSION_IDS`，多个 ID 用逗号分隔。

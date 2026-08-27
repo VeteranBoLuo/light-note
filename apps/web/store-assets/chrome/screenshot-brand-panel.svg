@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="520" height="800" viewBox="0 0 520 800">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1220" />
+      <stop offset="0.55" stop-color="#252349" />
+      <stop offset="1" stop-color="#5b50e6" />
+    </linearGradient>
+    <radialGradient id="glow" cx="0.2" cy="0.12" r="0.9">
+      <stop offset="0" stop-color="#a79cff" stop-opacity="0.55" />
+      <stop offset="1" stop-color="#a79cff" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="520" height="800" fill="url(#background)" />
+  <rect width="520" height="800" fill="url(#glow)" />
+  <circle cx="490" cy="55" r="150" fill="#ffffff" opacity="0.035" />
+  <circle cx="30" cy="765" r="190" fill="#0b1220" opacity="0.2" />
+  <g transform="translate(62 105)">
+    <path d="M14 0H52V38L38 52H0V14A14 14 0 0 1 14 0Z" fill="#9a91f4" />
+    <path d="M60 0H98A14 14 0 0 1 112 14V52H74L60 38Z" fill="#8175ef" />
+    <path d="M0 60H38L52 74V112H14A14 14 0 0 1 0 98Z" fill="#5547dc" />
+    <path d="M74 60H112V98A14 14 0 0 1 98 112H60V74Z" fill="#6254e7" />
+  </g>
+  <text x="62" y="276" fill="#ffffff" font-family="Hiragino Sans GB, sans-serif" font-size="38" font-weight="700">轻笺快速添加</text>
+  <text x="62" y="326" fill="#dcd9ff" font-family="Hiragino Sans GB, sans-serif" font-size="20">把想留下的内容，收进浏览器侧栏</text>
+  <g transform="translate(62 410)" font-family="Hiragino Sans GB, sans-serif" font-size="19" font-weight="600">
+    <rect width="118" height="52" rx="16" fill="#ffffff" opacity="0.12" />
+    <text x="59" y="34" text-anchor="middle" fill="#ffffff">网页书签</text>
+    <rect x="132" width="118" height="52" rx="16" fill="#ffffff" opacity="0.12" />
+    <text x="191" y="34" text-anchor="middle" fill="#ffffff">随手笔记</text>
+    <rect x="264" width="118" height="52" rx="16" fill="#ffffff" opacity="0.12" />
+    <text x="323" y="34" text-anchor="middle" fill="#ffffff">本地文件</text>
+  </g>
+  <text x="62" y="690" fill="#c5c0ff" font-family="Arial, sans-serif" font-size="15" letter-spacing="3">LIGHT NOTE COLLECTOR</text>
+  <text x="62" y="730" fill="#ffffff" font-family="Hiragino Sans GB, sans-serif" font-size="18">主动收集 · 安全同步 · 随时整理</text>
+</svg>
