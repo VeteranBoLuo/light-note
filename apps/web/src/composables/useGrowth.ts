@@ -429,6 +429,7 @@ let growthRequestOwnerId: string | null = null;
 let growthTasksRequest: Promise<GrowthTasksData | null> | null = null;
 let growthTasksRequestOwnerId: string | null = null;
 let growthRequestVersion = 0;
+let dashboardRequestVersion = 0;
 let ownerGeneration = 0;
 let claimRequestVersion = 0;
 
@@ -458,6 +459,7 @@ export function resetGrowth() {
   growthTasksRequest = null;
   growthTasksRequestOwnerId = null;
   growthRequestVersion += 1;
+  dashboardRequestVersion += 1;
   loading.value = false;
   growthError.value = false;
   growthTasksLoading.value = false;
@@ -491,6 +493,12 @@ function syncPointsToViews() {
 // `/growth/me` 才携带成长中心 Feature Flag；签到、补签和领奖返回的是纯成长快照。
 // 操作成功后必须保留当前账号已经确认的功能开关，否则页面会把 V2 区块误判为关闭并立即卸载。
 function applyGrowthMutationSnapshot(snapshot: Growth) {
+  // 写操作返回的是更新后的权威快照。作废写操作前仍在途的 `/growth/me`，否则旧读响应
+  // 可能在这里之后落地，把 checkedInToday、积分或等级重新覆盖成写前状态。
+  growthRequestVersion += 1;
+  growthRequest = null;
+  growthRequestOwnerId = null;
+  loading.value = false;
   const features = snapshot.features ?? growth.value?.features;
   growth.value = features ? { ...snapshot, features } : snapshot;
   loadedOnce = true;
@@ -516,6 +524,7 @@ function ensureGrowthOwner(uid: string) {
   growthRequest = null;
   growthRequestOwnerId = null;
   growthRequestVersion += 1;
+  dashboardRequestVersion += 1;
   growthTasksOwnerId = null;
   growthTasksRequest = null;
   growthTasksRequestOwnerId = null;
@@ -586,21 +595,22 @@ export function useGrowth() {
   async function loadDashboard() {
     ensureGrowthOwner(useUserStore().id || 'visitor');
     const generation = ownerGeneration;
+    const requestVersion = ++dashboardRequestVersion;
     dashboardLoading.value = true;
     dashboardError.value = false;
     try {
       const res = await growthApi.getDashboard();
-      if (generation !== ownerGeneration) return null;
+      if (generation !== ownerGeneration || requestVersion !== dashboardRequestVersion) return null;
       if (res?.status === 200 && res.data) {
         dashboard.value = res.data as GrowthDashboard;
       } else dashboardError.value = true;
     } catch (err) {
       console.warn('加载成长看板失败:', err);
-      if (generation === ownerGeneration) dashboardError.value = true;
+      if (generation === ownerGeneration && requestVersion === dashboardRequestVersion) dashboardError.value = true;
     } finally {
-      if (generation === ownerGeneration) dashboardLoading.value = false;
+      if (generation === ownerGeneration && requestVersion === dashboardRequestVersion) dashboardLoading.value = false;
     }
-    return generation === ownerGeneration ? dashboard.value : null;
+    return generation === ownerGeneration && requestVersion === dashboardRequestVersion ? dashboard.value : null;
   }
 
   // 成长任务定义与完成状态:成长页和“今日”摘要共享同一份短缓存/在途请求。

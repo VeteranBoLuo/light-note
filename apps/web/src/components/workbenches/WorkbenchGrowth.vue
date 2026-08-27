@@ -179,6 +179,7 @@
     claimable: claimableData,
     claimingRewards,
     load,
+    loadDashboard,
     loadClaimable,
     claimAllRewards,
     doCheckin,
@@ -265,9 +266,9 @@
             message.success(t('growth.leveledUp', { lv: res.data.growth.level, name: res.data.growth.name }));
           }
         }
-        // 成长卡可能与进入页面时的 /growth/me 并发；签到完成后强制回读服务端快照，
-        // 避免旧的首屏响应把 checkedInToday 又覆盖回 false。
-        await Promise.all([load(true), loadClaimable()]);
+        // 成长快照、每日任务看板和可领取项是三份独立读模型。签到成功后从服务端统一回读，
+        // 既避免旧的首屏 /growth/me 响应覆盖 checkedInToday，也让下方签到任务立即勾选。
+        await Promise.all([load(true), loadDashboard(), loadClaimable()]);
       } else if (String(res?.status || '') !== 'preview') {
         message.error(res?.msg || t('growth.checkinFailed'));
       }

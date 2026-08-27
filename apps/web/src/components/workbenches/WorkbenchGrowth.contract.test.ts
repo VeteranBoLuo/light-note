@@ -12,8 +12,9 @@ describe('工作台成长卡交互契约', () => {
     expect(source).toContain('@click="goGrowth"');
   });
 
-  it('签到完成后强制回读成长快照和可领取项，失败时不会静默结束', () => {
-    expect(source).toContain('await Promise.all([load(true), loadClaimable()])');
+  it('签到完成后强制回读成长快照、每日任务看板和可领取项', () => {
+    expect(source).toContain('loadDashboard,');
+    expect(source).toContain('await Promise.all([load(true), loadDashboard(), loadClaimable()])');
     expect(source).toContain("message.error(res?.msg || t('growth.checkinFailed'))");
     expect(source).toContain("message.error(t('growth.checkinFailed'))");
   });

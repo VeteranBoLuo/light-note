@@ -146,6 +146,24 @@ describe('useGrowth load', () => {
     expect(useGrowth().dashboardLoading.value).toBe(false);
   });
 
+  it('同一账号并发刷新看板时只接受最后发起的请求', async () => {
+    const oldDashboard = deferred<{ status: number; data: any }>();
+    const newDashboard = deferred<{ status: number; data: any }>();
+    mocks.getDashboard.mockReturnValueOnce(oldDashboard.promise).mockReturnValueOnce(newDashboard.promise);
+
+    const oldRequest = useGrowth().loadDashboard();
+    const newRequest = useGrowth().loadDashboard();
+    const newData = { stats: { noteCount: 8 }, achievements: [], quests: [], timeline: [] };
+
+    newDashboard.resolve({ status: 200, data: newData });
+    await expect(newRequest).resolves.toEqual(newData);
+    oldDashboard.resolve({ status: 200, data: { stats: { noteCount: 1 } } });
+    await expect(oldRequest).resolves.toBeNull();
+
+    expect(useGrowth().dashboard.value).toEqual(newData);
+    expect(useGrowth().dashboardLoading.value).toBe(false);
+  });
+
   it('账号切换后忽略旧账号统一领取的成长快照', async () => {
     const oldClaim = deferred<{ status: number; data: any }>();
     mocks.getMyGrowth.mockResolvedValueOnce({ status: 200, data: growth(2) }).mockResolvedValueOnce({
@@ -182,6 +200,23 @@ describe('useGrowth load', () => {
       checkedInToday: true,
       features: { growthCenterV2: true },
     });
+  });
+
+  it('写操作快照会作废更早发出的成长读取，避免迟到响应回滚签到状态', async () => {
+    const oldResponse = deferred<{ status: number; data: Growth }>();
+    mocks.getMyGrowth.mockReturnValueOnce(oldResponse.promise);
+    const oldRequest = useGrowth().load();
+    mocks.checkin.mockResolvedValueOnce({
+      status: 200,
+      data: { growth: { ...growth(4), checkedInToday: true } },
+    });
+
+    await useGrowth().doCheckin();
+    oldResponse.resolve({ status: 200, data: growth(3) });
+    await expect(oldRequest).resolves.toBeNull();
+
+    expect(useGrowth().growth.value).toMatchObject({ level: 4, checkedInToday: true });
+    expect(useGrowth().loading.value).toBe(false);
   });
 
   it('请求同步失败后清理在途状态并允许重试', async () => {
