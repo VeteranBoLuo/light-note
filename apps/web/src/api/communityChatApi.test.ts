@@ -28,6 +28,7 @@ const {
   getCommunityChatReadReceiptReaders,
   getCommunityChatNotificationSettings,
   getCommunityChatPinnedMessage,
+  getCommunityChatPollOptionVoters,
   getCommunityChatMessageAuthorProfile,
   getCommunityChatMessageAuthorAchievements,
   getCommunityChatOwnProfile,
@@ -126,6 +127,7 @@ describe('communityChatApi', () => {
     getCommunityChatMessage('message/1');
     getCommunityChatReadReceiptCounts('general', ['message-1', 'message-2']);
     getCommunityChatReadReceiptReaders('message/1', { page: 2, pageSize: 50 });
+    getCommunityChatPollOptionVoters('message/1', 'option/1', { page: 3, pageSize: 20 });
     voteCommunityChatPoll('message/1', ['option/legacy']);
     voteCommunityChatPoll('message/1', ['option/1', 'option/2'], 'multiple');
     closeCommunityChatPoll('message/1');
@@ -142,6 +144,11 @@ describe('communityChatApi', () => {
     expect(mocks.apiBaseGet).toHaveBeenCalledWith(
       '/api/community-chat/messages/message%2F1/readers',
       { page: 2, pageSize: 50 },
+      { silent: true },
+    );
+    expect(mocks.apiBaseGet).toHaveBeenCalledWith(
+      '/api/community-chat/messages/message%2F1/poll/options/option%2F1/voters',
+      { page: 3, pageSize: 20 },
       { silent: true },
     );
     expect(mocks.apiBasePut).toHaveBeenNthCalledWith(

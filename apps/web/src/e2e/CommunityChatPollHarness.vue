@@ -9,18 +9,26 @@
     <section v-if="view === 'cards'" class="community-chat-poll-harness__grid">
       <article>
         <div class="community-chat-poll-harness__label">
-          <strong>成员 · 多选进行中</strong>
-          <span>默认、hover/focus、已选与达到 2 项上限。</span>
+          <strong>成员 · 尚未投票</strong>
+          <span>进行中只显示选项，不提前泄露票数和参与人数。</span>
         </div>
         <ChatPollCard question="下一阶段可以同时推进哪些方向？" :poll="memberMultiplePoll" :now="now" />
       </article>
 
       <article>
         <div class="community-chat-poll-harness__label">
-          <strong>Root · 多选实时结果</strong>
-          <span>已保存选择、更新入口、实时票数与提前结束。</span>
+          <strong>成员 · 投票后结果</strong>
+          <span>只显示各选项人数与比例，不提供成员身份入口。</span>
         </div>
-        <ChatPollCard question="下一阶段可以同时推进哪些方向？" :poll="rootMultiplePoll" :now="now" />
+        <ChatPollCard question="下一阶段可以同时推进哪些方向？" :poll="memberVotedPoll" :now="now" />
+      </article>
+
+      <article>
+        <div class="community-chat-poll-harness__label">
+          <strong>Root · 多选实时结果</strong>
+          <span>已保存选择、实时票数、投票明细与提前结束。</span>
+        </div>
+        <ChatPollCard question="下一阶段可以同时推进哪些方向？" :poll="rootMultiplePoll" :now="now" can-view-voters />
       </article>
 
       <article>
@@ -56,13 +64,20 @@
     <section v-else-if="view === 'badge'" class="community-chat-poll-harness__badge">
       <strong>Root · 已读人数入口</strong>
       <span>徽标直接表达数量和点击能力，不再重复显示 Tooltip。</span>
-      <ChatReadReceiptBadge
-        can-manage
-        :enabled="readerState !== 'paused'"
-        :read-count="3"
-        @open="badgeOpenCount += 1"
-      />
+      <ChatReadReceiptBadge :enabled="readerState !== 'paused'" :read-count="3" @open="badgeOpenCount += 1" />
       <small>打开次数：{{ badgeOpenCount }}</small>
+    </section>
+
+    <section v-else-if="view === 'recall'" class="community-chat-poll-harness__recall">
+      <div class="community-chat-poll-harness__label">
+        <strong>撤回消息 · 紧凑系统行</strong>
+        <span>本人、他人和管理员代撤回不再占用头像与空白气泡空间。</span>
+      </div>
+      <article><ChatRecalledMessageLine label="你撤回了一条消息" :action-items="recallActions" /></article>
+      <article><ChatRecalledMessageLine label="“薄荷”撤回了一条消息" /></article>
+      <article>
+        <ChatRecalledMessageLine label="管理员撤回了“薄荷”的一条消息" can-view-original />
+      </article>
     </section>
 
     <ChatPollComposerModal
@@ -81,21 +96,40 @@
       :error="readerState === 'error'"
       :has-more="readerState === 'many'"
     />
+    <ChatPollVotersModal
+      v-if="view === 'voters'"
+      v-model:visible="votersVisible"
+      v-model:selected-option-public-id="selectedVoterOptionPublicId"
+      :poll="rootMultiplePoll"
+      :items="visibleVoters"
+      :total="voterTotal"
+      :loading="readerState === 'loading'"
+      :error="readerState === 'error'"
+      :has-more="readerState === 'many'"
+    />
     <pre v-if="submittedPayload" aria-label="最近一次投票提交参数">{{ submittedPayload }}</pre>
   </main>
 </template>
 
 <script setup lang="ts">
   import { computed, ref } from 'vue';
-  import type { CommunityChatPoll, CommunityChatReadReceiptReader } from '@/api/communityChatApi';
+  import type {
+    CommunityChatPoll,
+    CommunityChatPollVoter,
+    CommunityChatReadReceiptReader,
+  } from '@/api/communityChatApi';
+  import type { BActionMenuItem } from '@/components/base/BasicComponents/actionMenu';
   import ChatPollCard from '@/components/communityChat/ChatPollCard.vue';
   import ChatPollComposerModal from '@/components/communityChat/ChatPollComposerModal.vue';
+  import ChatPollVotersModal from '@/components/communityChat/ChatPollVotersModal.vue';
   import ChatReadReceiptBadge from '@/components/communityChat/ChatReadReceiptBadge.vue';
   import ChatReadReceiptReadersModal from '@/components/communityChat/ChatReadReceiptReadersModal.vue';
+  import ChatRecalledMessageLine from '@/components/communityChat/ChatRecalledMessageLine.vue';
+  import icon from '@/config/icon';
 
   const props = withDefaults(
     defineProps<{
-      view?: 'cards' | 'composer' | 'readers' | 'badge';
+      view?: 'cards' | 'composer' | 'readers' | 'voters' | 'badge' | 'recall';
       submitting?: boolean;
       readerState?: 'populated' | 'loading' | 'error' | 'empty' | 'paused' | 'many';
     }>(),
@@ -109,6 +143,8 @@
   const now = Date.parse('2026-08-27T10:00:00.000Z');
   const composerVisible = ref(true);
   const readersVisible = ref(true);
+  const votersVisible = ref(true);
+  const selectedVoterOptionPublicId = ref('option-a');
   const submittedPayload = ref<unknown>(null);
   const badgeOpenCount = ref(0);
 
@@ -129,6 +165,20 @@
     if (props.readerState === 'error') return 6;
     return props.readerState === 'many' ? 46 : visibleReaders.value.length;
   });
+
+  const voters: CommunityChatPollVoter[] = readers.map(({ firstSeenAt: _firstSeenAt, ...reader }) => reader);
+  const visibleVoters = computed(() => {
+    if (['loading', 'error', 'empty'].includes(props.readerState)) return [];
+    return props.readerState === 'many' ? voters : voters.slice(0, 5);
+  });
+  const voterTotal = computed(() => {
+    if (props.readerState === 'empty' || props.readerState === 'loading') return 0;
+    if (props.readerState === 'error') return 6;
+    return props.readerState === 'many' ? 46 : visibleVoters.value.length;
+  });
+  const recallActions: BActionMenuItem[] = [
+    { key: 'delete', label: '从我的会话删除', icon: icon.noteDetail.deleteLine, danger: true },
+  ];
 
   const options = [
     { publicId: 'option-a', label: '移动端体验', voteCount: 8 },
@@ -159,6 +209,11 @@
     totalVoterCount: 10,
     canClose: true,
     options,
+  };
+
+  const memberVotedPoll: CommunityChatPoll = {
+    ...rootMultiplePoll,
+    canClose: false,
   };
 
   const closedMultiplePoll: CommunityChatPoll = {
@@ -247,6 +302,29 @@
     border: 1px solid var(--surface-border-color);
     border-radius: 16px;
     background: var(--surface-card-bg);
+  }
+
+  .community-chat-poll-harness__recall {
+    max-width: 940px;
+    margin: 0 auto;
+    padding: 20px;
+    display: grid;
+    gap: 16px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 16px;
+    background: var(--surface-card-bg);
+  }
+
+  .community-chat-poll-harness__recall > article {
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-block-end: 1px solid var(--surface-border-color);
+  }
+
+  .community-chat-poll-harness__recall > article:last-child {
+    border-block-end: 0;
   }
 
   .community-chat-poll-harness__badge > span,

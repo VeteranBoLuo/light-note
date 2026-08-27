@@ -51,9 +51,16 @@ function poll(overrides: Partial<CommunityChatPoll> = {}): CommunityChatPoll {
   };
 }
 
-function mountPoll(props: { question: string; poll: CommunityChatPoll; now: number; participationPaused?: boolean }) {
+function mountPoll(props: {
+  question: string;
+  poll: CommunityChatPoll;
+  now: number;
+  participationPaused?: boolean;
+  canViewVoters?: boolean;
+}) {
   const votes: string[][] = [];
   let closeCount = 0;
+  let viewVotersCount = 0;
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp(ChatPollCard, {
@@ -61,6 +68,9 @@ function mountPoll(props: { question: string; poll: CommunityChatPoll; now: numb
     onVote: (optionPublicIds: string[]) => votes.push(optionPublicIds),
     onClose: () => {
       closeCount += 1;
+    },
+    onViewVoters: () => {
+      viewVotersCount += 1;
     },
   });
   app.mount(host);
@@ -74,27 +84,51 @@ function mountPoll(props: { question: string; poll: CommunityChatPoll; now: numb
     get closeCount() {
       return closeCount;
     },
+    get viewVotersCount() {
+      return viewVotersCount;
+    },
   };
 }
 
 describe('ChatPollCard', () => {
   beforeEach(() => vi.useRealTimers());
 
-  it('进行中对普通成员隐藏聚合票数，但保留自己的选择并允许改票', async () => {
+  it('进行中的未投票成员看不到聚合票数，并可提交首次选择', async () => {
     const mounted = mountPoll({
       question: '下一项优先做什么？',
-      poll: poll({ selectedOptionPublicIds: [], selectedOptionPublicId: 'option-a' }),
+      poll: poll(),
       now: Date.parse('2026-08-26T10:00:00.000Z'),
     });
 
     expect(mounted.host.textContent).toContain('下一项优先做什么？');
     expect(mounted.host.querySelectorAll('.chat-poll-card__count')).toHaveLength(0);
     const options = mounted.host.querySelectorAll<HTMLButtonElement>('.chat-poll-card__option');
-    expect(options[0]?.classList.contains('is-selected')).toBe(true);
-    expect(mounted.host.textContent).toContain('communityChat.poll.changeVoteHint');
+    expect(options[0]?.classList.contains('is-selected')).toBe(false);
+    expect(mounted.host.textContent).toContain('communityChat.poll.voteHint');
     options[1]?.click();
     await nextTick();
     expect(mounted.votes).toEqual([['option-b']]);
+  });
+
+  it('成员投票后展示各选项人数和比例，但不出现 Root 名单入口', () => {
+    const mounted = mountPoll({
+      question: '下一项优先做什么？',
+      poll: poll({
+        resultsVisible: true,
+        selectedOptionPublicIds: ['option-a'],
+        selectedOptionPublicId: 'option-a',
+        totalVoterCount: 3,
+        options: [
+          { publicId: 'option-a', label: '体验', voteCount: 2 },
+          { publicId: 'option-b', label: '性能', voteCount: 1 },
+        ],
+      }),
+      now: Date.parse('2026-08-26T10:00:00.000Z'),
+    });
+
+    expect(mounted.host.textContent).toContain('communityChat.poll.optionResult:67:2');
+    expect(mounted.host.textContent).toContain('communityChat.poll.optionResult:33:1');
+    expect(mounted.host.textContent).not.toContain('communityChat.poll.voters.action');
   });
 
   it('多选先在本地勾选，到达发布上限后禁用未选项，并一次提交完整选择集', async () => {
@@ -185,6 +219,7 @@ describe('ChatPollCard', () => {
       question: '是否发布？',
       poll: poll({ canClose: true, resultsVisible: true, totalVoterCount: 0 }),
       now: Date.parse('2026-08-26T10:00:00.000Z'),
+      canViewVoters: true,
     });
 
     const closeButton = Array.from(mounted.host.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
@@ -194,6 +229,12 @@ describe('ChatPollCard', () => {
     closeButton?.click();
     await nextTick();
     expect(mounted.closeCount).toBe(1);
+    const votersButton = Array.from(mounted.host.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
+      button.textContent?.includes('communityChat.poll.voters.action'),
+    );
+    votersButton?.click();
+    await nextTick();
+    expect(mounted.viewVotersCount).toBe(1);
   });
 
   it('紧急只读时明确暂停参与，但 Root 的结束入口仍然可用', async () => {

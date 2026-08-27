@@ -97,14 +97,19 @@
         <span v-if="poll.resultsVisible">
           {{ t('communityChat.poll.totalVotes', { count: poll.totalVoterCount || 0 }) }}
         </span>
-        <span v-else>{{ t('communityChat.poll.resultsAfterClose') }}</span>
+        <span v-else>{{ t('communityChat.poll.resultsAfterVote') }}</span>
         <span v-if="isMultiple && poll.resultsVisible">{{ t('communityChat.poll.multipleResultsHint') }}</span>
       </div>
-      <BTooltip v-if="poll.canClose && !effectiveClosed" :title="t('communityChat.poll.closeHint')" :delay="80">
-        <BButton size="small" :loading="closing" :disabled="voting" @click="emit('close')">
-          {{ t('communityChat.poll.closeAction') }}
+      <div v-if="canViewVoters || (poll.canClose && !effectiveClosed)" class="chat-poll-card__footer-actions">
+        <BButton v-if="canViewVoters" size="small" :disabled="voting || closing" @click="emit('viewVoters')">
+          {{ t('communityChat.poll.voters.action') }}
         </BButton>
-      </BTooltip>
+        <BTooltip v-if="poll.canClose && !effectiveClosed" :title="t('communityChat.poll.closeHint')" :delay="80">
+          <BButton size="small" :loading="closing" :disabled="voting" @click="emit('close')">
+            {{ t('communityChat.poll.closeAction') }}
+          </BButton>
+        </BTooltip>
+      </div>
     </footer>
   </section>
 </template>
@@ -126,17 +131,20 @@
       busyOptionPublicIds?: string[];
       closing?: boolean;
       participationPaused?: boolean;
+      canViewVoters?: boolean;
     }>(),
     {
       now: 0,
       busyOptionPublicIds: () => [],
       closing: false,
       participationPaused: false,
+      canViewVoters: false,
     },
   );
   const emit = defineEmits<{
     vote: [optionPublicIds: string[]];
     close: [];
+    viewVoters: [];
   }>();
   const { t, locale } = useI18n();
 
@@ -287,6 +295,12 @@
   .chat-poll-card__footer > div {
     display: flex;
     align-items: center;
+  }
+
+  .chat-poll-card__footer > .chat-poll-card__footer-actions {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    gap: 6px;
   }
 
   .chat-poll-card__header {
@@ -461,6 +475,15 @@
 
     .chat-poll-card__multiple-actions .b_btn {
       min-height: 40px;
+    }
+
+    .chat-poll-card__footer {
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .chat-poll-card__footer > .chat-poll-card__footer-actions {
+      margin-left: auto;
     }
   }
 

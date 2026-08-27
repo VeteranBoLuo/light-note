@@ -50,7 +50,7 @@ function mountBadge(props: Record<string, unknown>) {
 
 describe('ChatReadReceiptBadge', () => {
   it('Root 看到聚合数量并可打开已读成员明细', async () => {
-    const mounted = mountBadge({ canManage: true, enabled: true, readCount: 12 });
+    const mounted = mountBadge({ enabled: true, readCount: 12 });
     expect(mounted.host.textContent).toContain('communityChat.readReceipt.count:12');
     expect(mounted.host.querySelector('[role="tooltip"]')).toBeNull();
     mounted.host.querySelector<HTMLButtonElement>('button')?.click();
@@ -58,19 +58,14 @@ describe('ChatReadReceiptBadge', () => {
     expect(mounted.openCount).toBe(1);
   });
 
-  it('普通成员只看到采集状态且不能刷新或获知数量', async () => {
-    const mounted = mountBadge({ canManage: false, enabled: true, readCount: 12 });
-    expect(mounted.host.textContent).toContain('communityChat.readReceipt.enabled');
-    expect(mounted.host.textContent).not.toContain('12');
-    const button = mounted.host.querySelector<HTMLButtonElement>('button');
-    expect(button?.disabled).toBe(true);
-    button?.click();
-    await nextTick();
-    expect(mounted.openCount).toBe(0);
+  it('Root 尚无聚合快照时使用 0 人回退，不展示采集状态文案', () => {
+    const mounted = mountBadge({ enabled: true });
+    expect(mounted.host.textContent).toContain('communityChat.readReceipt.count:0');
+    expect(mounted.host.textContent).not.toContain('communityChat.readReceipt.enabled');
   });
 
   it('功能暂停时保留明确的历史统计状态', () => {
-    const root = mountBadge({ canManage: true, enabled: false, readCount: 7 });
+    const root = mountBadge({ enabled: false, readCount: 7 });
     expect(root.host.textContent).toContain('communityChat.readReceipt.countPaused:7');
     expect(root.host.querySelector('[role="tooltip"]')).toBeNull();
   });

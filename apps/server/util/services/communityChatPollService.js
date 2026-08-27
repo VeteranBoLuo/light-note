@@ -17,6 +17,8 @@ export const COMMUNITY_CHAT_POLL_MIN_DURATION_MS = 5 * 60 * 1000;
 export const COMMUNITY_CHAT_POLL_MAX_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 export const COMMUNITY_CHAT_POLL_SELECTION_MODE_SINGLE = 'single';
 export const COMMUNITY_CHAT_POLL_SELECTION_MODE_MULTIPLE = 'multiple';
+export const COMMUNITY_CHAT_POLL_VOTER_PAGE_SIZE = 50;
+export const COMMUNITY_CHAT_POLL_VOTER_PAGE_MAX = 100;
 
 const PUBLIC_ID_PATTERN = /^[A-Za-z0-9-]{1,36}$/;
 const chatError = (code, status, zhMessage, enMessage) => new CommunityChatError(code, status, zhMessage, enMessage);
@@ -27,6 +29,29 @@ function normalizePublicId(value, fieldName) {
     throw chatError('INVALID_INPUT', 400, `${fieldName}无效`, `Invalid ${fieldName}`);
   }
   return normalized;
+}
+
+function normalizePollVoterPagination(page, pageSize) {
+  const normalizedPage = Math.min(10_000, Math.max(1, Math.floor(Number(page) || 1)));
+  const normalizedPageSize = Math.min(
+    COMMUNITY_CHAT_POLL_VOTER_PAGE_MAX,
+    Math.max(1, Math.floor(Number(pageSize) || COMMUNITY_CHAT_POLL_VOTER_PAGE_SIZE)),
+  );
+  return {
+    page: normalizedPage,
+    pageSize: normalizedPageSize,
+    offset: (normalizedPage - 1) * normalizedPageSize,
+  };
+}
+
+function assertRootPollVoterAccess(user) {
+  if (user?.id && user.role === 'root') return;
+  throw chatError(
+    'COMMUNITY_CHAT_POLL_VOTERS_ROOT_REQUIRED',
+    403,
+    '只有 Root 可以查看投票成员',
+    'Only Root can view poll voters',
+  );
 }
 
 function normalizePollOption(value) {
@@ -368,11 +393,153 @@ export async function loadCommunityChatPolls(
   for (const poll of byMessageId.values()) {
     // 旧客户端只认识单值字段；多选返回第一项作为滚动兼容预览，新客户端始终使用完整数组。
     poll.selectedOptionPublicId = poll.selectedOptionPublicIds[0] || null;
+    // 进行中的投票只在成员完成自己的首次选择后公开聚合结果；身份名单始终由独立 Root 接口按需读取。
+    poll.resultsVisible = Boolean(poll.resultsVisible || poll.selectedOptionPublicIds.length);
     if (poll.resultsVisible) continue;
     delete poll.totalVoterCount;
     for (const option of poll.options) delete option.voteCount;
   }
   return byMessageId;
+}
+
+/**
+ * 投票成员身份不随消息或聚合结果下发，只允许 Root 在主动查看某个选项时分页读取。
+ * 单选与多选票表仍是唯一事实源，查询分支只能来自数据库中的权威 selection_mode。
+ */
+export async function listCommunityChatPollOptionVoters({
+  user,
+  messagePublicId,
+  optionPublicId,
+  page,
+  pageSize,
+  env = process.env,
+  db = pool,
+}) {
+  assertRootPollVoterAccess(user);
+  const normalizedMessagePublicId = normalizePublicId(messagePublicId, '消息标识');
+  const normalizedOptionPublicId = normalizePublicId(optionPublicId, '投票选项');
+  const pagination = normalizePollVoterPagination(page, pageSize);
+  await assertCommunityChatMessagingAccess({ user, env, db });
+
+  const [targetRows] = await db.query(
+    `SELECT message.id AS messageId,
+            poll.selection_mode AS selectionMode,
+            option_row.id AS optionId,
+            option_row.label,
+            CASE WHEN poll.selection_mode = 'multiple' THEN (
+              SELECT COUNT(*)
+                FROM community_chat_poll_multi_votes multi_vote
+               WHERE multi_vote.message_id = message.id
+                 AND multi_vote.option_id = option_row.id
+            ) ELSE (
+              SELECT COUNT(*)
+                FROM community_chat_poll_votes single_vote
+               WHERE single_vote.message_id = message.id
+                 AND single_vote.option_id = option_row.id
+            ) END AS voteCount
+       FROM community_chat_messages message
+       JOIN community_chat_rooms room ON room.id = message.room_id
+       JOIN community_chat_polls poll ON poll.message_id = message.id
+       JOIN community_chat_poll_options option_row
+         ON option_row.message_id = message.id AND option_row.public_id = ?
+      WHERE message.public_id = ?
+        AND message.message_kind = 'poll'
+        AND message.status IN ('active', 'recalled')
+        AND room.slug = ?
+        AND room.status = 'active'
+        AND NOT EXISTS (
+          SELECT 1 FROM community_chat_message_deletions deletion
+           WHERE deletion.user_id = ? AND deletion.message_id = message.id
+        )
+      LIMIT 1`,
+    [normalizedOptionPublicId, normalizedMessagePublicId, COMMUNITY_CHAT_PRIMARY_ROOM_SLUG, user.id],
+  );
+  const target = targetRows[0];
+  if (!target) {
+    throw chatError(
+      'COMMUNITY_CHAT_POLL_OPTION_NOT_FOUND',
+      404,
+      '这项投票选项不存在或已不可查看',
+      'This poll option is unavailable',
+    );
+  }
+
+  if (
+    target.selectionMode !== COMMUNITY_CHAT_POLL_SELECTION_MODE_SINGLE &&
+    target.selectionMode !== COMMUNITY_CHAT_POLL_SELECTION_MODE_MULTIPLE
+  ) {
+    throw chatError(
+      'COMMUNITY_CHAT_POLL_CONFIGURATION_INVALID',
+      409,
+      '投票配置异常，暂时无法查看成员',
+      'The poll configuration is invalid',
+    );
+  }
+
+  const voteTable =
+    target.selectionMode === COMMUNITY_CHAT_POLL_SELECTION_MODE_MULTIPLE
+      ? 'community_chat_poll_multi_votes'
+      : 'community_chat_poll_votes';
+  const [voterRows] = await db.query(
+    `SELECT identity.public_id AS userPublicId,
+            identity.community_id AS communityId,
+            COALESCE(NULLIF(voter.alias, ''), '轻笺用户') AS displayName,
+            growth.equipped_frame AS frameId,
+            CASE
+              WHEN COALESCE(membership.status, '') <> 'banned'
+               AND (
+                 voter.head_picture LIKE 'https://%'
+                 OR voter.head_picture LIKE 'http://%'
+                 OR (
+                   voter.head_picture LIKE 'data:image/%;base64,%'
+                   AND OCTET_LENGTH(voter.head_picture) <= 524288
+                 )
+               )
+              THEN 1 ELSE 0
+            END AS hasAvatar
+       FROM ${voteTable} vote
+       JOIN user voter ON voter.id = vote.user_id
+                      AND voter.del_flag = 0
+                      AND voter.role <> 'deleted'
+       LEFT JOIN community_chat_user_identities identity ON identity.user_id = voter.id
+       LEFT JOIN community_chat_members membership ON membership.user_id = voter.id
+       LEFT JOIN user_growth growth ON growth.user_id = voter.id
+      WHERE vote.message_id = ? AND vote.option_id = ?
+      ORDER BY vote.update_time ASC, vote.user_id ASC
+      LIMIT ? OFFSET ?`,
+    [target.messageId, target.optionId, pagination.pageSize, pagination.offset],
+  );
+  const items = voterRows.map((row) => {
+    const userPublicId = String(row.userPublicId || '');
+    return {
+      userPublicId,
+      communityId: String(row.communityId || ''),
+      displayName: String(row.displayName || ''),
+      avatar:
+        userPublicId && Number(row.hasAvatar || 0)
+          ? `/api/community-chat/members/${encodeURIComponent(userPublicId)}/avatar`
+          : '',
+      frameId: row.frameId || null,
+    };
+  });
+  const total = Math.max(0, Number(target.voteCount || 0));
+  return {
+    messagePublicId: normalizedMessagePublicId,
+    selectionMode:
+      target.selectionMode === COMMUNITY_CHAT_POLL_SELECTION_MODE_MULTIPLE
+        ? COMMUNITY_CHAT_POLL_SELECTION_MODE_MULTIPLE
+        : COMMUNITY_CHAT_POLL_SELECTION_MODE_SINGLE,
+    option: {
+      publicId: normalizedOptionPublicId,
+      label: String(target.label || ''),
+      voteCount: total,
+    },
+    items,
+    total,
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+    hasMore: items.length === pagination.pageSize && pagination.offset + items.length < total,
+  };
 }
 
 async function queryFirst(db, sql, params = []) {
@@ -562,4 +729,6 @@ export const __test__ = {
   normalizePollSelection,
   normalizeVoteOptionPublicIds,
   interactivePollSelection,
+  assertRootPollVoterAccess,
+  normalizePollVoterPagination,
 };

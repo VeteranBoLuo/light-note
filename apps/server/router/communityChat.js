@@ -123,6 +123,7 @@ router.post('/rooms/:slug/read-receipts', readReceiptLimiter, handle.recordReadR
 router.get('/rooms/:slug/read-receipt-counts', readReceiptLimiter, handle.readReceiptCounts);
 router.get('/messages/:publicId', handle.messageDetail);
 router.get('/messages/:publicId/readers', handle.readReceiptReaders);
+router.get('/messages/:publicId/poll/options/:optionPublicId/voters', handle.pollOptionVoters);
 router.get('/messages/:publicId/author-profile', handle.messageAuthorProfile);
 router.get('/messages/:publicId/author-profile/achievements', handle.messageAuthorAchievements);
 router.get('/messages/:publicId/author-avatar', handle.messageAuthorAvatar);

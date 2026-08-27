@@ -7,7 +7,10 @@ import CommunityChatPollHarness from './CommunityChatPollHarness.vue';
 
 const params = new URLSearchParams(window.location.search);
 const rawView = params.get('view');
-const view = rawView === 'composer' || rawView === 'readers' || rawView === 'badge' ? rawView : 'cards';
+const view =
+  rawView === 'composer' || rawView === 'readers' || rawView === 'voters' || rawView === 'badge' || rawView === 'recall'
+    ? rawView
+    : 'cards';
 const rawReaderState = params.get('state');
 const readerState = ['loading', 'error', 'empty', 'paused', 'many'].includes(String(rawReaderState))
   ? rawReaderState
@@ -20,7 +23,7 @@ document.documentElement.dataset.theme = theme;
 document.documentElement.lang = locale;
 document.documentElement.classList.toggle('light-note-mobile-rendering', window.innerWidth <= 767);
 document.body.dataset.visualState =
-  view === 'readers' ? `${view}-${readerState}` : `${view}-${submitting ? 'loading' : 'default'}`;
+  view === 'readers' || view === 'voters' ? `${view}-${readerState}` : `${view}-${submitting ? 'loading' : 'default'}`;
 
 createApp(CommunityChatPollHarness, { view, submitting, readerState })
   .use(

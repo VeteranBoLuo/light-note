@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   getMessage: vi.fn(),
   getReadReceiptCounts: vi.fn(),
   getReadReceiptReaders: vi.fn(),
+  getPollVoters: vi.fn(),
   getPinnedMessage: vi.fn(),
   getAuthorProfile: vi.fn(),
   uploadImage: vi.fn(),
@@ -69,6 +70,7 @@ vi.mock('@/api/communityChatApi', () => ({
   getCommunityChatMessage: mocks.getMessage,
   getCommunityChatReadReceiptCounts: mocks.getReadReceiptCounts,
   getCommunityChatReadReceiptReaders: mocks.getReadReceiptReaders,
+  getCommunityChatPollOptionVoters: mocks.getPollVoters,
   getCommunityChatPinnedMessage: mocks.getPinnedMessage,
   getCommunityChatMessageAuthorProfile: mocks.getAuthorProfile,
   uploadCommunityChatImage: mocks.uploadImage,
@@ -351,6 +353,19 @@ beforeEach(() => {
       hasMore: false,
     },
   });
+  mocks.getPollVoters.mockResolvedValue({
+    status: 200,
+    data: {
+      messagePublicId: 'message-1',
+      selectionMode: 'single',
+      option: { publicId: 'option-a', label: '体验', voteCount: 0 },
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 50,
+      hasMore: false,
+    },
+  });
   mocks.votePoll.mockResolvedValue({
     status: 200,
     data: {
@@ -360,16 +375,17 @@ beforeEach(() => {
         closedAt: null,
         closed: false,
         closeReason: null,
-        resultsVisible: false,
+        resultsVisible: true,
         selectionMode: 'single',
         maxSelections: 1,
         selectedOptionPublicIds: ['option-a'],
         selectedOptionPublicId: 'option-a',
+        totalVoterCount: 1,
         canVote: true,
         canClose: false,
         options: [
-          { publicId: 'option-a', label: '体验' },
-          { publicId: 'option-b', label: '性能' },
+          { publicId: 'option-a', label: '体验', voteCount: 1 },
+          { publicId: 'option-b', label: '性能', voteCount: 0 },
         ],
       },
     },
@@ -539,7 +555,7 @@ describe('CommunityChatWorkspace', () => {
     );
   });
 
-  it('普通成员可参与 Root 投票但看不到发起入口，投票响应只更新自己的选择', async () => {
+  it('普通成员投票前看不到汇总，投票响应立即展示各选项人数但不开放成员名单', async () => {
     const poll = {
       endsAt: '2026-08-27T10:00:00.000Z',
       closedAt: null,
@@ -570,13 +586,23 @@ describe('CommunityChatWorkspace', () => {
       status: 200,
       data: {
         messagePublicId: 'message-1',
-        poll: { ...poll, selectedOptionPublicIds: ['option-b'], selectedOptionPublicId: 'option-b' },
+        poll: {
+          ...poll,
+          resultsVisible: true,
+          selectedOptionPublicIds: ['option-b'],
+          selectedOptionPublicId: 'option-b',
+          totalVoterCount: 3,
+          options: [
+            { publicId: 'option-a', label: '体验', voteCount: 1 },
+            { publicId: 'option-b', label: '性能', voteCount: 2 },
+          ],
+        },
       },
     });
 
     const host = await mountWorkspace({ access: { ...access, pollsEnabled: true } });
     expect(host.textContent).toContain('下一项优先做什么？');
-    expect(host.textContent).toContain(zhCN.communityChat.poll.resultsAfterClose);
+    expect(host.textContent).toContain(zhCN.communityChat.poll.resultsAfterVote);
     expect(host.querySelectorAll('.chat-poll-card__count')).toHaveLength(0);
     expect(
       Array.from(host.querySelectorAll<HTMLButtonElement>('.community-composer__attach')).some(
@@ -589,6 +615,9 @@ describe('CommunityChatWorkspace', () => {
 
     expect(mocks.votePoll).toHaveBeenCalledWith('message-1', ['option-b'], 'single');
     expect(host.querySelectorAll('.chat-poll-card__option')[1]?.classList.contains('is-selected')).toBe(true);
+    expect(host.querySelectorAll('.chat-poll-card__count')).toHaveLength(2);
+    expect(host.textContent).toContain('67% · 2 票');
+    expect(host.textContent).not.toContain(zhCN.communityChat.poll.voters.action);
     expect(mocks.messageSuccess).toHaveBeenCalledWith(zhCN.communityChat.poll.voteSuccess);
   });
 
@@ -624,7 +653,18 @@ describe('CommunityChatWorkspace', () => {
       status: 200,
       data: {
         messagePublicId: 'message-1',
-        poll: { ...poll, selectedOptionPublicIds: ['option-a', 'option-b'] },
+        poll: {
+          ...poll,
+          resultsVisible: true,
+          selectedOptionPublicIds: ['option-a', 'option-b'],
+          selectedOptionPublicId: 'option-a',
+          totalVoterCount: 2,
+          options: [
+            { publicId: 'option-a', label: '体验', voteCount: 2 },
+            { publicId: 'option-b', label: '性能', voteCount: 1 },
+            { publicId: 'option-c', label: '可靠性', voteCount: 0 },
+          ],
+        },
       },
     });
 
@@ -642,6 +682,158 @@ describe('CommunityChatWorkspace', () => {
     expect(
       Array.from(host.querySelectorAll('.chat-poll-card__option.is-selected')).map((option) => option.textContent),
     ).toEqual(expect.arrayContaining([expect.stringContaining('体验'), expect.stringContaining('性能')]));
+    expect(host.textContent).toContain('100% · 2 票');
+  });
+
+  it('Root 从投票卡片按需打开选项成员名单，普通消息响应不携带名单', async () => {
+    mocks.user.id = 'root-1';
+    mocks.user.role = 'root';
+    const poll = {
+      endsAt: '2026-08-28T10:00:00.000Z',
+      closedAt: null,
+      closed: false,
+      closeReason: null,
+      resultsVisible: true,
+      selectionMode: 'single' as const,
+      maxSelections: 1,
+      selectedOptionPublicIds: [],
+      selectedOptionPublicId: null,
+      totalVoterCount: 2,
+      canVote: true,
+      canClose: true,
+      options: [
+        { publicId: 'option-a', label: '体验', voteCount: 2 },
+        { publicId: 'option-b', label: '性能', voteCount: 0 },
+      ],
+    };
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        roomSlug: 'general',
+        items: [chatMessage({ messageKind: 'poll', content: '下一项优先做什么？', poll, isOwn: true })],
+        hasMore: false,
+        nextBefore: null,
+        serverTime: '2026-08-27T10:00:00.000Z',
+      },
+    });
+    mocks.getPollVoters.mockResolvedValueOnce({
+      status: 200,
+      data: {
+        messagePublicId: 'message-1',
+        selectionMode: 'single',
+        option: { publicId: 'option-a', label: '体验', voteCount: 2 },
+        items: [
+          {
+            userPublicId: '11111111-1111-4111-8111-111111111111',
+            communityId: 'ln_8K2M7A',
+            displayName: '薄荷',
+            avatar: '',
+            frameId: null,
+          },
+        ],
+        total: 2,
+        page: 1,
+        pageSize: 50,
+        hasMore: true,
+      },
+    });
+
+    const host = await mountWorkspace({
+      access: { ...access, pollsEnabled: true, canManage: true, memberRole: 'admin' },
+    });
+    expect(mocks.getPollVoters).not.toHaveBeenCalled();
+    const detailsButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent?.trim() === zhCN.communityChat.poll.voters.action,
+    );
+    expect(detailsButton).toBeTruthy();
+    detailsButton?.click();
+    await flushAsync();
+
+    expect(mocks.getPollVoters).toHaveBeenCalledWith('message-1', 'option-a', { page: 1, pageSize: 50 });
+    expect(document.body.textContent).toContain(zhCN.communityChat.poll.voters.title);
+    expect(document.body.textContent).toContain('薄荷');
+    expect(document.body.textContent).toContain('@ln_8K2M7A');
+  });
+
+  it('Root 打开投票名单时合并在途实时刷新，并在请求结束后补读最新成员', async () => {
+    WorkspaceRealtimeSocket.instances = [];
+    vi.stubGlobal('WebSocket', WorkspaceRealtimeSocket);
+    mocks.user.id = 'root-1';
+    mocks.user.role = 'root';
+    const pollMessage = chatMessage({
+      messageKind: 'poll',
+      content: '下一项优先做什么？',
+      poll: {
+        endsAt: '2026-08-28T10:00:00.000Z',
+        closedAt: null,
+        closed: false,
+        closeReason: null,
+        resultsVisible: true,
+        selectionMode: 'single',
+        maxSelections: 1,
+        selectedOptionPublicIds: [],
+        selectedOptionPublicId: null,
+        totalVoterCount: 1,
+        canVote: true,
+        canClose: true,
+        options: [{ publicId: 'option-a', label: '体验', voteCount: 1 }],
+      },
+    });
+    mocks.getMessages.mockResolvedValue({
+      data: {
+        roomSlug: 'general',
+        items: [pollMessage],
+        hasMore: false,
+        nextBefore: null,
+        serverTime: '2026-08-27T10:00:00.000Z',
+      },
+    });
+    mocks.getMessage.mockResolvedValue({ status: 200, data: { message: pollMessage } });
+    const firstVoters = deferred<any>();
+    const voterPage = {
+      status: 200,
+      data: {
+        messagePublicId: 'message-1',
+        selectionMode: 'single',
+        option: { publicId: 'option-a', label: '体验', voteCount: 1 },
+        items: [],
+        total: 1,
+        page: 1,
+        pageSize: 50,
+        hasMore: false,
+      },
+    };
+    mocks.getPollVoters.mockReturnValueOnce(firstVoters.promise).mockResolvedValueOnce(voterPage);
+
+    const host = await mountWorkspace({
+      access: { ...access, pollsEnabled: true, realtimeEnabled: true, canManage: true, memberRole: 'admin' },
+    });
+    const detailsButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent?.trim() === zhCN.communityChat.poll.voters.action,
+    );
+    expect(detailsButton).toBeTruthy();
+    detailsButton?.click();
+    await flushAsync();
+    expect(mocks.getPollVoters).toHaveBeenCalledTimes(1);
+
+    const socket = WorkspaceRealtimeSocket.instances[0];
+    expect(socket).toBeTruthy();
+    socket.open();
+    socket.message('room.subscribed', { roomSlug: 'general' });
+    await flushAsync();
+
+    socket.message(
+      'message.updated',
+      { roomSlug: 'general', messagePublicId: 'message-1', reason: 'poll_vote' },
+      'poll-voter-list-event-1',
+    );
+    await flushAsync();
+    expect(mocks.getMessage).toHaveBeenCalledTimes(1);
+    expect(mocks.getPollVoters).toHaveBeenCalledTimes(1);
+
+    firstVoters.resolve(voterPage);
+    await flushAsync();
+    await flushAsync();
+    expect(mocks.getPollVoters).toHaveBeenCalledTimes(2);
   });
 
   it('Root 才显示投票入口和聚合已读数，点击后按需读取成员名单并同步最新数量', async () => {
@@ -848,6 +1040,7 @@ describe('CommunityChatWorkspace', () => {
       },
     });
     const host = await mountWorkspace({ access: { ...access, readReceiptsEnabled: true } });
+    expect(host.querySelector('.community-message__read-receipt')).toBeNull();
     const messageList = host.querySelector<HTMLElement>('.community-message-list')!;
     const article = host.querySelector<HTMLElement>('[data-message-public-id="message-1"]')!;
     const messageBubble = article.querySelector<HTMLElement>('.community-message__primary')!;
@@ -2768,7 +2961,7 @@ describe('CommunityChatWorkspace', () => {
     expect(mocks.messageSuccess).toHaveBeenCalledWith(zhCN.communityChat.delete.success);
   });
 
-  it('撤回消息对普通用户仅显示占位，管理员仍能看到保留原文', async () => {
+  it('撤回消息默认压缩成系统行，Root 只有主动展开后才看到审核原文', async () => {
     const recalled = chatMessage({
       status: 'recalled',
       content: '',
@@ -2789,8 +2982,12 @@ describe('CommunityChatWorkspace', () => {
       },
     });
     const memberHost = await mountWorkspace();
-    expect(memberHost.textContent).toContain(zhCN.communityChat.recall.placeholder);
-    expect(memberHost.querySelector('.community-message__recalled .svg-icon-stub')).toBeNull();
+    const memberArticle = memberHost.querySelector<HTMLElement>('[data-message-public-id="message-1"]')!;
+    expect(memberArticle.textContent).toContain(zhCN.communityChat.recall.memberPlaceholder.replace('{name}', '薄荷'));
+    expect(memberArticle.querySelector('.community-message__recall-line')).not.toBeNull();
+    expect(memberArticle.querySelector('.community-message__avatar')).toBeNull();
+    expect(memberArticle.querySelector('.community-message__meta')).toBeNull();
+    expect(memberArticle.querySelector('.community-message__recalled')).toBeNull();
     cleanup?.();
     cleanup = undefined;
 
@@ -2808,9 +3005,40 @@ describe('CommunityChatWorkspace', () => {
       },
     });
     const adminHost = await mountWorkspace({ access: { ...access, memberRole: 'admin', canManage: true } });
+    expect(adminHost.textContent).toContain(zhCN.communityChat.recall.viewOriginal);
+    expect(adminHost.textContent).not.toContain('管理员可见的原文');
+    adminHost.querySelector<HTMLButtonElement>('.community-message__recall-audit-action')?.click();
+    await flushAsync();
     expect(adminHost.textContent).toContain(zhCN.communityChat.recall.adminVisible);
     expect(adminHost.textContent).toContain('管理员可见的原文');
-    expect(adminHost.textContent).not.toContain('原内容仅管理员可见');
+    expect(adminHost.textContent).toContain(zhCN.communityChat.recall.hideOriginal);
+  });
+
+  it('移动端紧凑撤回行仍保留仅为自己删除的操作入口', async () => {
+    mocks.bookmark.isMobile = true;
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        roomSlug: 'general',
+        items: [
+          chatMessage({
+            status: 'recalled',
+            content: '',
+            recalledAt: '2026-08-10T10:00:00.000Z',
+            canViewRecalledContent: false,
+            canDelete: true,
+          }),
+        ],
+        hasMore: false,
+        nextBefore: null,
+        serverTime: new Date().toISOString(),
+      },
+    });
+    const host = await mountWorkspace();
+    host.querySelector<HTMLElement>('.community-message__recall-line')?.click();
+    await flushAsync();
+
+    expect(document.body.textContent).toContain(zhCN.communityChat.delete.action);
+    expect(document.body.textContent).toContain(zhCN.communityChat.delete.personalDescription);
   });
 
   it('移动端点击消息正文打开紧凑操作面板，提供点赞、回复和治理入口', async () => {

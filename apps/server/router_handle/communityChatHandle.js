@@ -26,7 +26,11 @@ import {
   toggleCommunityChatMessageLike,
   unpinCommunityChatMessage,
 } from '../util/services/communityChatMessageService.js';
-import { closeCommunityChatPoll, voteCommunityChatPoll } from '../util/services/communityChatPollService.js';
+import {
+  closeCommunityChatPoll,
+  listCommunityChatPollOptionVoters,
+  voteCommunityChatPoll,
+} from '../util/services/communityChatPollService.js';
 import {
   listCommunityChatReadReceiptCounts,
   listCommunityChatReadReceiptReaders,
@@ -329,6 +333,22 @@ export async function readReceiptCounts(req, res) {
       user: req.user,
       roomSlug: req.params?.slug,
       messagePublicIds,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function pollOptionVoters(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRoot(req, res)) return;
+  try {
+    const data = await listCommunityChatPollOptionVoters({
+      user: req.user,
+      messagePublicId: req.params?.publicId,
+      optionPublicId: req.params?.optionPublicId,
+      page: req.query?.page,
+      pageSize: req.query?.pageSize,
     });
     return res.send(resultData(data));
   } catch (error) {

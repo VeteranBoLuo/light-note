@@ -38,6 +38,7 @@ const {
   assertCommunityChatPollDeadlineRangeInDatabase,
   closeCommunityChatPoll,
   insertCommunityChatPoll,
+  listCommunityChatPollOptionVoters,
   loadCommunityChatPolls,
   normalizeCommunityChatPollDraft,
   voteCommunityChatPoll,
@@ -248,8 +249,8 @@ describe('communityChatPollService', () => {
     expect(eligibilityQuery?.[1]?.[0]).toBe('user-1');
     expect(upsert?.[0]).toContain('ON DUPLICATE KEY UPDATE option_id = VALUES(option_id)');
     expect(upsert?.[1]).toEqual([7, 'user-1', 9]);
-    expect(result.poll).toMatchObject({ selectedOptionPublicId: 'option-1', resultsVisible: false });
-    expect(result.poll.options[0]).not.toHaveProperty('voteCount');
+    expect(result.poll).toMatchObject({ selectedOptionPublicId: 'option-1', resultsVisible: true, totalVoterCount: 1 });
+    expect(result.poll.options[0]).toMatchObject({ voteCount: 1 });
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(mocks.publish).toHaveBeenCalledWith('message.updated', expect.objectContaining({ reason: 'poll_vote' }), {
       targetUserId: 'root-1',
@@ -346,9 +347,13 @@ describe('communityChatPollService', () => {
       maxSelections: 2,
       selectedOptionPublicIds: ['option-a', 'option-b'],
       selectedOptionPublicId: 'option-a',
-      resultsVisible: false,
+      resultsVisible: true,
     });
-    expect(result.poll).not.toHaveProperty('totalVoterCount');
+    expect(result.poll).toMatchObject({ totalVoterCount: 2 });
+    expect(result.poll.options).toEqual([
+      expect.objectContaining({ publicId: 'option-a', voteCount: 2 }),
+      expect.objectContaining({ publicId: 'option-b', voteCount: 1 }),
+    ]);
     expect(connection.commit).toHaveBeenCalledTimes(1);
   });
 
@@ -430,27 +435,30 @@ describe('communityChatPollService', () => {
     expect(connection.rollback).toHaveBeenCalledTimes(1);
   });
 
-  it('汇总结果在进行中只对 Root 下发，普通成员只看到自己的选择', async () => {
+  it('进行中的汇总只对 Root 和已经投票的成员下发，未投票成员看不到票数', async () => {
     const db = {
-      query: vi.fn().mockResolvedValue([
-        [
-          {
-            messageId: 7,
-            endsAt: '2026-08-27T10:00:00.000Z',
-            closedAt: null,
-            manuallyClosed: 0,
-            deadlinePassed: 0,
-            optionPublicId: 'option-1',
-            label: '甲',
-            voteCount: 3,
-            selectedByViewer: 1,
-          },
-        ],
-        [],
-      ]),
+      query: vi.fn().mockImplementation((_sql, params) =>
+        Promise.resolve([
+          [
+            {
+              messageId: 7,
+              endsAt: '2026-08-27T10:00:00.000Z',
+              closedAt: null,
+              manuallyClosed: 0,
+              deadlinePassed: 0,
+              optionPublicId: 'option-1',
+              label: '甲',
+              voteCount: 3,
+              selectedByViewer: params?.[0] === 'u1' ? 1 : 0,
+            },
+          ],
+          [],
+        ]),
+      ),
     };
     const rows = [{ internalId: 7, messageKind: 'poll', status: 'active' }];
     const memberPoll = (await loadCommunityChatPolls(db, rows, { viewerUserId: 'u1', pollsEnabled: true })).get(7);
+    const nonVoterPoll = (await loadCommunityChatPolls(db, rows, { viewerUserId: 'u2', pollsEnabled: true })).get(7);
     const rootPoll = (
       await loadCommunityChatPolls(db, rows, {
         viewerUserId: 'root-1',
@@ -458,12 +466,122 @@ describe('communityChatPollService', () => {
         pollsEnabled: true,
       })
     ).get(7);
-    expect(memberPoll).toMatchObject({ selectedOptionPublicId: 'option-1', resultsVisible: false });
-    expect(memberPoll).not.toHaveProperty('totalVoterCount');
+    expect(memberPoll).toMatchObject({ selectedOptionPublicId: 'option-1', resultsVisible: true, totalVoterCount: 3 });
+    expect(memberPoll.options[0]).toMatchObject({ voteCount: 3 });
+    expect(nonVoterPoll).toMatchObject({ selectedOptionPublicId: null, resultsVisible: false });
+    expect(nonVoterPoll).not.toHaveProperty('totalVoterCount');
+    expect(nonVoterPoll.options[0]).not.toHaveProperty('voteCount');
     expect(rootPoll).toMatchObject({ resultsVisible: true, totalVoterCount: 3 });
     expect(rootPoll.options[0]).toMatchObject({ voteCount: 3 });
     expect(String(db.query.mock.calls[0][0])).toContain('MICROSECOND(poll.ends_at_utc)');
     expect(String(db.query.mock.calls[0][0])).toContain('MICROSECOND(poll.closed_at_utc)');
+  });
+
+  it('投票成员名单只允许 Root 从权威票表按选项分页读取，并只返回社区公开身份', async () => {
+    const query = vi.fn(async (sql, params) => {
+      const source = String(sql);
+      if (source.includes('FROM community_chat_messages message')) {
+        return [
+          [
+            {
+              messageId: 8,
+              selectionMode: 'multiple',
+              optionId: 12,
+              label: '性能',
+              voteCount: 2,
+            },
+          ],
+          [],
+        ];
+      }
+      if (source.includes('FROM community_chat_poll_multi_votes vote')) {
+        expect(params).toEqual([8, 12, 1, 1]);
+        return [
+          [
+            {
+              userPublicId: '11111111-1111-4111-8111-111111111111',
+              communityId: 'ln_8K2M7A',
+              displayName: '薄荷',
+              frameId: 'frame-mint',
+              hasAvatar: 1,
+              userId: 'internal-user-must-not-leak',
+            },
+          ],
+          [],
+        ];
+      }
+      throw new Error(`unexpected query: ${source}`);
+    });
+    const db = { query };
+
+    await expect(
+      listCommunityChatPollOptionVoters({
+        user: { id: 'user-1', role: 'user' },
+        messagePublicId: 'message-2',
+        optionPublicId: 'option-b',
+        db,
+      }),
+    ).rejects.toMatchObject({ code: 'COMMUNITY_CHAT_POLL_VOTERS_ROOT_REQUIRED' });
+    expect(query).not.toHaveBeenCalled();
+
+    const result = await listCommunityChatPollOptionVoters({
+      user: { id: 'root-1', role: 'root' },
+      messagePublicId: 'message-2',
+      optionPublicId: 'option-b',
+      page: 2,
+      pageSize: 1,
+      db,
+    });
+
+    expect(mocks.assertMessaging).toHaveBeenCalledWith(
+      expect.objectContaining({ user: { id: 'root-1', role: 'root' }, db }),
+    );
+    expect(String(query.mock.calls[1][0])).toContain('FROM community_chat_poll_multi_votes vote');
+    expect(String(query.mock.calls[1][0])).not.toContain('community_chat_poll_votes vote');
+    expect(result).toMatchObject({
+      messagePublicId: 'message-2',
+      selectionMode: 'multiple',
+      option: { publicId: 'option-b', label: '性能', voteCount: 2 },
+      total: 2,
+      page: 2,
+      pageSize: 1,
+      hasMore: false,
+      items: [
+        {
+          userPublicId: '11111111-1111-4111-8111-111111111111',
+          communityId: 'ln_8K2M7A',
+          displayName: '薄荷',
+          avatar: '/api/community-chat/members/11111111-1111-4111-8111-111111111111/avatar',
+          frameId: 'frame-mint',
+        },
+      ],
+    });
+    expect(result.items[0]).not.toHaveProperty('userId');
+  });
+
+  it('投票成员名单遇到未知选择方式时失败关闭，不猜测票表', async () => {
+    const query = vi.fn().mockResolvedValueOnce([
+      [
+        {
+          messageId: 8,
+          selectionMode: 'legacy-unknown',
+          optionId: 12,
+          label: '性能',
+          voteCount: 2,
+        },
+      ],
+      [],
+    ]);
+
+    await expect(
+      listCommunityChatPollOptionVoters({
+        user: { id: 'root-1', role: 'root' },
+        messagePublicId: 'message-2',
+        optionPublicId: 'option-b',
+        db: { query },
+      }),
+    ).rejects.toMatchObject({ code: 'COMMUNITY_CHAT_POLL_CONFIGURATION_INVALID' });
+    expect(query).toHaveBeenCalledTimes(1);
   });
 
   it('结束投票严格要求 Root', async () => {

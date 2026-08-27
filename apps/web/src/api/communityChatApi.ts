@@ -232,12 +232,15 @@ export interface CommunityChatMessagePage {
   serverTime: string;
 }
 
-export interface CommunityChatReadReceiptReader {
+export interface CommunityChatPublicMemberIdentity {
   userPublicId: string;
   communityId: string;
   displayName: string;
   avatar: string;
   frameId: string | null;
+}
+
+export interface CommunityChatReadReceiptReader extends CommunityChatPublicMemberIdentity {
   firstSeenAt: string;
 }
 
@@ -256,6 +259,19 @@ export interface CommunityChatReadReceiptCountPage {
     messagePublicId: string;
     readCount: number;
   }>;
+}
+
+export type CommunityChatPollVoter = CommunityChatPublicMemberIdentity;
+
+export interface CommunityChatPollVoterPage {
+  messagePublicId: string;
+  selectionMode: CommunityChatPollSelectionMode;
+  option: CommunityChatPollOption & { voteCount: number };
+  items: CommunityChatPollVoter[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
 }
 
 export interface CommunityChatPinnedMessage {
@@ -372,6 +388,7 @@ export const updateCommunityChatNotificationSettings = (input: {
 }) => apiBasePut('/api/community-chat/settings/notifications', input, { silent: true });
 
 const roomPath = (roomSlug: string) => `/api/community-chat/rooms/${encodeURIComponent(roomSlug)}`;
+const messagePath = (messagePublicId: string) => `/api/community-chat/messages/${encodeURIComponent(messagePublicId)}`;
 
 export const getCommunityChatMessages = (
   roomSlug: string,
@@ -382,7 +399,7 @@ export const getCommunityChatPinnedMessage = (roomSlug: string) =>
   apiBaseGet(`${roomPath(roomSlug)}/pin`, undefined, { silent: true });
 
 export const getCommunityChatMessage = (messagePublicId: string) =>
-  apiBaseGet(`/api/community-chat/messages/${encodeURIComponent(messagePublicId)}`, undefined, { silent: true });
+  apiBaseGet(messagePath(messagePublicId), undefined, { silent: true });
 
 export const getCommunityChatReadReceiptReaders = (
   messagePublicId: string,
@@ -398,6 +415,15 @@ export const getCommunityChatReadReceiptCounts = (roomSlug: string, messagePubli
     { messagePublicIds: messagePublicIds.join(',') },
     { silent: true },
   );
+
+export const getCommunityChatPollOptionVoters = (
+  messagePublicId: string,
+  optionPublicId: string,
+  params: { page?: number; pageSize?: number } = {},
+) =>
+  apiBaseGet(`${messagePath(messagePublicId)}/poll/options/${encodeURIComponent(optionPublicId)}/voters`, params, {
+    silent: true,
+  });
 
 export const getCommunityChatMessageAuthorProfile = (messagePublicId: string) =>
   apiBaseGet(`/api/community-chat/messages/${encodeURIComponent(messagePublicId)}/author-profile`, undefined, {
@@ -454,8 +480,6 @@ export const markCommunityChatRoomRead = (roomSlug: string, lastMessagePublicId?
 
 export const recordCommunityChatReadReceipts = (roomSlug: string, messagePublicIds: string[]) =>
   apiBasePost(`${roomPath(roomSlug)}/read-receipts`, { messagePublicIds }, { silent: true });
-
-const messagePath = (messagePublicId: string) => `/api/community-chat/messages/${encodeURIComponent(messagePublicId)}`;
 
 export const saveCommunityChatMessageSticker = (messagePublicId: string) =>
   apiBasePost(`${messagePath(messagePublicId)}/save-sticker`, {}, { silent: true });

@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   toggleLike: vi.fn(),
   votePoll: vi.fn(),
   closePoll: vi.fn(),
+  listPollOptionVoters: vi.fn(),
   recordReadReceipts: vi.fn(),
   listReadReceiptCounts: vi.fn(),
   listReadReceiptReaders: vi.fn(),
@@ -83,6 +84,7 @@ vi.mock('../util/services/communityChatMessageService.js', () => ({
 vi.mock('../util/services/communityChatPollService.js', () => ({
   voteCommunityChatPoll: mocks.votePoll,
   closeCommunityChatPoll: mocks.closePoll,
+  listCommunityChatPollOptionVoters: mocks.listPollOptionVoters,
 }));
 vi.mock('../util/services/communityChatReadReceiptService.js', () => ({
   recordCommunityChatReadReceipts: mocks.recordReadReceipts,
@@ -144,6 +146,7 @@ const {
   toggleMessageLike,
   votePoll,
   closePoll,
+  pollOptionVoters,
   recordReadReceipts,
   readReceiptCounts,
   readReceiptReaders,
@@ -558,6 +561,52 @@ describe('communityChatHandle', () => {
     });
     expect(rootRes.send).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ messagePublicId: 'message-1', total: 0 }) }),
+    );
+  });
+
+  it('投票成员名单只允许 Root 按消息和选项公有 ID 分页读取', async () => {
+    const user = { id: 'user-1', role: 'user' };
+    const root = { id: 'root-1', role: 'root' };
+    mocks.listPollOptionVoters.mockResolvedValue({
+      messagePublicId: 'message-1',
+      option: { publicId: 'option-1', label: '体验', voteCount: 1 },
+      items: [],
+      total: 1,
+      page: 2,
+      pageSize: 20,
+      hasMore: false,
+    });
+
+    const deniedRes = mockRes();
+    await pollOptionVoters(
+      {
+        user,
+        params: { publicId: 'message-1', optionPublicId: 'option-1' },
+        query: { page: '2', pageSize: '20', userId: 'forged' },
+      },
+      deniedRes,
+    );
+    const rootRes = mockRes();
+    await pollOptionVoters(
+      {
+        user: root,
+        params: { publicId: 'message-1', optionPublicId: 'option-1' },
+        query: { page: '2', pageSize: '20', userId: 'forged' },
+      },
+      rootRes,
+    );
+
+    expect(deniedRes.status).toHaveBeenCalledWith(403);
+    expect(mocks.listPollOptionVoters).toHaveBeenCalledTimes(1);
+    expect(mocks.listPollOptionVoters).toHaveBeenCalledWith({
+      user: root,
+      messagePublicId: 'message-1',
+      optionPublicId: 'option-1',
+      page: '2',
+      pageSize: '20',
+    });
+    expect(rootRes.send).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ messagePublicId: 'message-1', total: 1 }) }),
     );
   });
 

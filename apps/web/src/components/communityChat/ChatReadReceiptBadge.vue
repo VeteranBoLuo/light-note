@@ -1,10 +1,5 @@
 <template>
-  <BButton
-    class="chat-read-receipt-badge community-message__read-receipt"
-    :disabled="!canManage"
-    :loading="loading"
-    @click="emit('open')"
-  >
+  <BButton class="chat-read-receipt-badge community-message__read-receipt" :loading="loading" @click="emit('open')">
     <SvgIcon :src="icon.communityChat.readReceipt" size="13" aria-hidden="true" />
     <span aria-live="polite">{{ label }}</span>
   </BButton>
@@ -19,7 +14,6 @@
 
   const props = withDefaults(
     defineProps<{
-      canManage: boolean;
       enabled: boolean;
       readCount?: number;
       loading?: boolean;
@@ -32,14 +26,14 @@
   const emit = defineEmits<{ open: [] }>();
   const { t } = useI18n();
 
-  const hasReadCount = computed(() => props.canManage && typeof props.readCount === 'number');
+  const hasReadCount = computed(() => typeof props.readCount === 'number');
   const label = computed(() => {
     if (hasReadCount.value) {
       return t(props.enabled ? 'communityChat.readReceipt.count' : 'communityChat.readReceipt.countPaused', {
         count: props.readCount,
       });
     }
-    return t(props.enabled ? 'communityChat.readReceipt.enabled' : 'communityChat.readReceipt.paused');
+    return t(props.enabled ? 'communityChat.readReceipt.count' : 'communityChat.readReceipt.countPaused', { count: 0 });
   });
 </script>
 
@@ -57,11 +51,6 @@
     background: var(--card-background) !important;
     font-size: 9px;
     line-height: 1;
-  }
-
-  .chat-read-receipt-badge:disabled {
-    opacity: 1;
-    cursor: default;
   }
 
   .chat-read-receipt-badge :deep(.btn-spinner) {

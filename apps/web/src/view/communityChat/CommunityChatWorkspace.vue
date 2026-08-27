@@ -153,11 +153,23 @@
                     chatMessage.publicId === focusedMessagePublicId ||
                     chatMessage.publicId === transientFocusedMessagePublicId,
                   'is-recalled': chatMessage.status === 'recalled',
+                  'is-recall-compact': chatMessage.status === 'recalled' && !isRecalledMessageExpanded(chatMessage),
                   'is-sending': chatMessage.deliveryState === 'sending',
                 }"
                 :data-message-public-id="chatMessage.publicId"
               >
+                <ChatRecalledMessageLine
+                  v-if="chatMessage.status === 'recalled' && !isRecalledMessageExpanded(chatMessage)"
+                  :label="recalledMessageLabel(chatMessage)"
+                  :can-view-original="chatMessage.canViewRecalledContent"
+                  :action-items="recalledMessageMenuItems(chatMessage)"
+                  :busy="messageActionBusyId === chatMessage.publicId"
+                  @surface-click="handleMessageTap($event, chatMessage)"
+                  @view-original="toggleRecalledMessageOriginal(chatMessage)"
+                  @action="(action) => handleMessageAction(action, chatMessage)"
+                />
                 <BButton
+                  v-else
                   class="community-message__avatar"
                   :aria-label="t('communityChat.profile.view', { name: authorName(chatMessage) })"
                   @pointerdown="beginAvatarLongPress($event, chatMessage)"
@@ -183,7 +195,10 @@
                     size="36"
                   />
                 </BButton>
-                <div class="community-message__body">
+                <div
+                  v-if="chatMessage.status !== 'recalled' || isRecalledMessageExpanded(chatMessage)"
+                  class="community-message__body"
+                >
                   <div class="community-message__meta">
                     <BButton
                       class="community-message__author-name"
@@ -207,9 +222,10 @@
                         class="community-message__recalled"
                         role="status"
                       >
-                        <span>
-                          {{ t('communityChat.recall.adminVisible') }}
-                        </span>
+                        <span>{{ t('communityChat.recall.adminVisible') }}</span>
+                        <BButton size="small" @click.stop="toggleRecalledMessageOriginal(chatMessage)">
+                          {{ t('communityChat.recall.hideOriginal') }}
+                        </BButton>
                       </div>
                       <template v-if="chatMessage.status === 'active' || chatMessage.canViewRecalledContent">
                         <BButton
@@ -246,8 +262,10 @@
                           "
                           :busy-option-public-ids="pollVoteBusyByMessageId.get(chatMessage.publicId) || []"
                           :closing="pollClosingMessageIds.has(chatMessage.publicId)"
+                          :can-view-voters="props.access.canManage"
                           @vote="votePoll(chatMessage, $event)"
                           @close="confirmClosePoll(chatMessage)"
+                          @view-voters="openPollVoters(chatMessage)"
                         />
                         <p v-else-if="messageHasText(chatMessage)" class="community-message__content">
                           <span
@@ -465,8 +483,7 @@
                     <span>{{ likeReactionSummary(chatMessage) }}</span>
                   </div>
                   <ChatReadReceiptBadge
-                    v-if="chatMessage.readReceiptEnabled && props.access.authenticated"
-                    :can-manage="props.access.canManage"
+                    v-if="chatMessage.status === 'active' && chatMessage.readReceiptEnabled && props.access.canManage"
                     :enabled="props.access.readReceiptsEnabled"
                     :read-count="chatMessage.readCount"
                     :loading="
@@ -765,6 +782,22 @@
     @refresh="loadReadReceiptReaders()"
     @load-more="loadReadReceiptReaders({ append: true })"
   />
+  <ChatPollVotersModal
+    v-if="props.access.canManage"
+    v-model:visible="pollVotersVisible"
+    v-model:selected-option-public-id="pollVotersSelectedOptionPublicId"
+    :poll="pollVotersTargetPoll"
+    :items="pollVoterItems"
+    :total="pollVoterTotal"
+    :loading="pollVotersLoading"
+    :refreshing="pollVotersRefreshing"
+    :loading-more="pollVotersLoadingMore"
+    :error="pollVotersError"
+    :has-more="pollVotersHasMore"
+    @retry="loadPollVoters()"
+    @refresh="loadPollVoters()"
+    @load-more="loadPollVoters({ append: true })"
+  />
   <ChatReportModal
     v-model:visible="reportVisible"
     :author-name="reportTarget ? authorName(reportTarget) : ''"
@@ -848,6 +881,7 @@
     getCommunityChatMessage,
     getCommunityChatMessages,
     getCommunityChatPinnedMessage,
+    getCommunityChatPollOptionVoters,
     getCommunityChatReadReceiptCounts,
     getCommunityChatReadReceiptReaders,
     markCommunityChatRoomRead,
@@ -871,7 +905,10 @@
     type CommunityChatMessagePage,
     type CommunityChatMessageReply,
     type CommunityChatPinnedMessage,
+    type CommunityChatPoll,
     type CommunityChatPollSelectionMode,
+    type CommunityChatPollVoter,
+    type CommunityChatPollVoterPage,
     type CommunityChatReadReceiptCountPage,
     type CommunityChatReadReceiptReader,
     type CommunityChatReadReceiptReaderPage,
@@ -902,7 +939,9 @@
   import ChatMentionSuggestions from '@/components/communityChat/ChatMentionSuggestions.vue';
   import ChatPollCard from '@/components/communityChat/ChatPollCard.vue';
   import ChatPollComposerModal from '@/components/communityChat/ChatPollComposerModal.vue';
+  import ChatPollVotersModal from '@/components/communityChat/ChatPollVotersModal.vue';
   import ChatReadReceiptBadge from '@/components/communityChat/ChatReadReceiptBadge.vue';
+  import ChatRecalledMessageLine from '@/components/communityChat/ChatRecalledMessageLine.vue';
   import ChatReadReceiptReadersModal from '@/components/communityChat/ChatReadReceiptReadersModal.vue';
   import { useGrowth } from '@/composables/useGrowth';
   import { useCommunityChatProfile, type CommunityChatProfileUpdateInput } from '@/composables/useCommunityChatProfile';
@@ -1040,6 +1079,19 @@
   const pollSubmitting = ref(false);
   const pollVoteBusyByMessageId = ref(new Map<string, string[]>());
   const pollClosingMessageIds = ref(new Set<string>());
+  const pollVotersVisible = ref(false);
+  const pollVotersTargetPublicId = ref('');
+  const pollVotersTargetPoll = ref<CommunityChatPoll | null>(null);
+  const pollVotersSelectedOptionPublicId = ref('');
+  const pollVoterItems = ref<CommunityChatPollVoter[]>([]);
+  const pollVoterTotal = ref(0);
+  const pollVoterPage = ref(1);
+  const pollVotersHasMore = ref(false);
+  const pollVotersLoading = ref(false);
+  const pollVotersRefreshing = ref(false);
+  const pollVotersLoadingMore = ref(false);
+  const pollVotersError = ref(false);
+  const pollVotersLoaded = ref(false);
   const pendingPollClientRequestIds = new Map<string, string>();
   const messageDetailBusyIds = ref(new Set<string>());
   const readReceiptReadersVisible = ref(false);
@@ -1085,6 +1137,7 @@
   const blockedUsers = ref<CommunityChatBlockItem[]>([]);
   const unblockingId = ref('');
   const messageActionBusyId = ref('');
+  const recalledExpandedMessageIds = ref(new Set<string>());
   const mobileMessageActionsVisible = ref(false);
   const mobileMessageActionTarget = ref<CommunityChatMessage | null>(null);
   const mobileMessageActionImageTarget = ref<CommunityChatImage | null>(null);
@@ -1120,6 +1173,8 @@
   let realtimeAuthorityRefreshPending = false;
   let readReceiptCountRefreshInFlight = false;
   let readReceiptReadersRequestGeneration = 0;
+  let pollVotersRequestGeneration = 0;
+  let pollVotersRefreshPending = false;
   let readReceiptForegroundActive = false;
   const submittedReadReceiptIds = new Set<string>();
   const pendingReadReceiptIds = new Set<string>();
@@ -1400,6 +1455,30 @@
     return chatMessage.author.name || t('communityChat.memberFallback');
   }
 
+  function recalledMessageLabel(chatMessage: CommunityChatMessage) {
+    if (chatMessage.isOwn) return t('communityChat.recall.ownPlaceholder');
+    return t(
+      chatMessage.recalledByAdmin ? 'communityChat.recall.adminPlaceholder' : 'communityChat.recall.memberPlaceholder',
+      { name: authorName(chatMessage) },
+    );
+  }
+
+  function isRecalledMessageExpanded(chatMessage: CommunityChatMessage) {
+    return (
+      chatMessage.status === 'recalled' &&
+      chatMessage.canViewRecalledContent &&
+      recalledExpandedMessageIds.value.has(chatMessage.publicId)
+    );
+  }
+
+  function toggleRecalledMessageOriginal(chatMessage: CommunityChatMessage) {
+    if (chatMessage.status !== 'recalled' || !chatMessage.canViewRecalledContent) return;
+    const next = new Set(recalledExpandedMessageIds.value);
+    if (next.has(chatMessage.publicId)) next.delete(chatMessage.publicId);
+    else next.add(chatMessage.publicId);
+    recalledExpandedMessageIds.value = next;
+  }
+
   function messageSummary(chatMessage: CommunityChatMessage) {
     const content = String(chatMessage.content || '')
       .replace(/\s+/g, ' ')
@@ -1632,6 +1711,18 @@
       }
     }
     return items;
+  }
+
+  function recalledMessageMenuItems(chatMessage: CommunityChatMessage): BActionMenuItem[] {
+    if (!canDeleteMessage(chatMessage)) return [];
+    return [
+      {
+        key: 'delete',
+        label: t('communityChat.delete.action'),
+        icon: icon.noteDetail.deleteLine,
+        danger: true,
+      },
+    ];
   }
 
   function messageHasActions(chatMessage: CommunityChatMessage) {
@@ -2593,6 +2684,13 @@
       const reason = String(event.payload.reason || '');
       if (reason === 'poll_vote' || reason === 'poll_closed') {
         await refreshMessageDetail(messagePublicId, { silent: true });
+        if (reason === 'poll_vote' && pollVotersVisible.value && pollVotersTargetPublicId.value === messagePublicId) {
+          if (pollVotersLoading.value || pollVotersRefreshing.value || pollVotersLoadingMore.value) {
+            pollVotersRefreshPending = true;
+          } else {
+            void loadPollVoters();
+          }
+        }
         return;
       }
       if (reason === 'pin' || reason === 'unpin') {
@@ -2868,6 +2966,116 @@
     }
   }
 
+  function resetPollVoterResults() {
+    pollVotersRequestGeneration += 1;
+    pollVotersRefreshPending = false;
+    pollVoterItems.value = [];
+    pollVoterTotal.value = 0;
+    pollVoterPage.value = 1;
+    pollVotersHasMore.value = false;
+    pollVotersLoading.value = false;
+    pollVotersRefreshing.value = false;
+    pollVotersLoadingMore.value = false;
+    pollVotersError.value = false;
+    pollVotersLoaded.value = false;
+  }
+
+  function resetPollVoters({ close = false } = {}) {
+    resetPollVoterResults();
+    if (close) pollVotersVisible.value = false;
+    pollVotersTargetPublicId.value = '';
+    pollVotersTargetPoll.value = null;
+    pollVotersSelectedOptionPublicId.value = '';
+  }
+
+  function openPollVoters(chatMessage: CommunityChatMessage) {
+    if (!props.access.canManage || !chatMessage.poll || chatMessage.deliveryState === 'sending') return;
+    const firstOptionPublicId = chatMessage.poll.options[0]?.publicId || '';
+    if (!firstOptionPublicId) return;
+    resetPollVoters();
+    pollVotersTargetPublicId.value = chatMessage.publicId;
+    pollVotersTargetPoll.value = chatMessage.poll;
+    pollVotersSelectedOptionPublicId.value = firstOptionPublicId;
+    pollVotersVisible.value = true;
+    void loadPollVoters();
+  }
+
+  async function loadPollVoters({ append = false }: { append?: boolean } = {}) {
+    const messagePublicId = pollVotersTargetPublicId.value;
+    const optionPublicId = pollVotersSelectedOptionPublicId.value;
+    if (
+      !props.access.canManage ||
+      !messagePublicId ||
+      !optionPublicId ||
+      pollVotersLoading.value ||
+      pollVotersRefreshing.value ||
+      pollVotersLoadingMore.value
+    ) {
+      return;
+    }
+    if (append && !pollVotersHasMore.value) return;
+
+    const page = append ? pollVoterPage.value + 1 : 1;
+    const generation = ++pollVotersRequestGeneration;
+    pollVotersError.value = false;
+    if (append) pollVotersLoadingMore.value = true;
+    else if (pollVotersLoaded.value) pollVotersRefreshing.value = true;
+    else pollVotersLoading.value = true;
+    try {
+      const response = await getCommunityChatPollOptionVoters(messagePublicId, optionPublicId, {
+        page,
+        pageSize: 50,
+      });
+      if (
+        generation !== pollVotersRequestGeneration ||
+        messagePublicId !== pollVotersTargetPublicId.value ||
+        optionPublicId !== pollVotersSelectedOptionPublicId.value
+      ) {
+        return;
+      }
+      const data = response.data as CommunityChatPollVoterPage;
+      const incoming = Array.isArray(data?.items) ? data.items : [];
+      if (append) {
+        const knownKeys = new Set(
+          pollVoterItems.value.map((item) => item.userPublicId || `${item.communityId}|${item.displayName}`),
+        );
+        pollVoterItems.value = [
+          ...pollVoterItems.value,
+          ...incoming.filter((item) => !knownKeys.has(item.userPublicId || `${item.communityId}|${item.displayName}`)),
+        ];
+      } else {
+        pollVoterItems.value = incoming;
+      }
+      pollVoterTotal.value = Math.max(0, Number(data?.total || 0));
+      pollVoterPage.value = Math.max(1, Number(data?.page || page));
+      pollVotersHasMore.value = Boolean(data?.hasMore);
+      pollVotersLoaded.value = true;
+    } catch (error: any) {
+      if (
+        generation !== pollVotersRequestGeneration ||
+        messagePublicId !== pollVotersTargetPublicId.value ||
+        optionPublicId !== pollVotersSelectedOptionPublicId.value
+      ) {
+        return;
+      }
+      if (pollVoterItems.value.length) {
+        message.error(error?.message || t('communityChat.poll.voters.loadFailed'));
+      } else {
+        pollVotersError.value = true;
+      }
+    } finally {
+      if (generation === pollVotersRequestGeneration) {
+        pollVotersLoading.value = false;
+        pollVotersRefreshing.value = false;
+        pollVotersLoadingMore.value = false;
+        if (pollVotersRefreshPending && pollVotersVisible.value) {
+          pollVotersRefreshPending = false;
+          void loadPollVoters();
+        }
+      }
+    }
+  }
+
   function updateMessageInteraction(publicId: string, patch: Partial<CommunityChatMessage>) {
     chatMessages.value = chatMessages.value.map((item) => (item.publicId === publicId ? { ...item, ...patch } : item));
     if (mobileMessageActionTarget.value?.publicId === publicId) {
@@ -2923,7 +3131,7 @@
       if (!response.data?.poll) throw new Error('COMMUNITY_CHAT_POLL_VOTE_INVALID');
       updateMessageInteraction(chatMessage.publicId, { poll: response.data.poll });
       // Root 同时接收其他成员的定向票数事件；自己的 HTTP 快照可能在极端乱序下晚到并覆盖更新结果。
-      // 复用详情请求的在途合并机制补一个尾随权威读取，普通成员只需保留自己的选择，不增加请求。
+      // 复用详情请求的在途合并机制补一个尾随权威读取；普通成员直接使用投票响应中的选择和汇总。
       if (props.access.canManage) void refreshMessageDetail(chatMessage.publicId, { silent: true });
       void recordOperation({ module: '公共聊天室', operation: '参与聊天室投票' });
       message.success(t('communityChat.poll.voteSuccess'));
@@ -3128,6 +3336,12 @@
       mobileMessageActionsVisible.value = false;
       if (replyTarget.value?.publicId === chatMessage.publicId) cancelReply();
       chatMessages.value = chatMessages.value.filter((item) => item.publicId !== chatMessage.publicId);
+      if (recalledExpandedMessageIds.value.has(chatMessage.publicId)) {
+        const nextExpandedIds = new Set(recalledExpandedMessageIds.value);
+        nextExpandedIds.delete(chatMessage.publicId);
+        recalledExpandedMessageIds.value = nextExpandedIds;
+      }
+      if (pollVotersTargetPublicId.value === chatMessage.publicId) resetPollVoters({ close: true });
       if (pinnedMessage.value?.publicId === chatMessage.publicId) await commitPinnedMessage(null);
       if (focusedMessagePublicId.value === chatMessage.publicId) {
         focusedMessagePublicId.value = '';
@@ -3704,6 +3918,10 @@
 
   function handleMessageAction(action: string, chatMessage: CommunityChatMessage) {
     if (!props.access.authenticated) return;
+    if (action === 'delete') {
+      confirmDelete(chatMessage);
+      return;
+    }
     if (action === 'pin') {
       confirmPinMessage(chatMessage);
       return;
@@ -4215,6 +4433,40 @@
     if (!visible && readReceiptReadersTargetPublicId.value) resetReadReceiptReaders();
   });
 
+  watch(pollVotersVisible, (visible) => {
+    if (!visible && pollVotersTargetPublicId.value) resetPollVoters();
+  });
+
+  watch(pollVotersSelectedOptionPublicId, (nextOptionPublicId, previousOptionPublicId) => {
+    if (
+      !pollVotersVisible.value ||
+      !nextOptionPublicId ||
+      !previousOptionPublicId ||
+      nextOptionPublicId === previousOptionPublicId
+    ) {
+      return;
+    }
+    resetPollVoterResults();
+    void loadPollVoters();
+  });
+
+  watch(
+    () => {
+      if (!pollVotersVisible.value || !pollVotersTargetPublicId.value) return null;
+      return chatMessages.value.find((item) => item.publicId === pollVotersTargetPublicId.value)?.poll || null;
+    },
+    (poll) => {
+      if (!poll) {
+        resetPollVoters({ close: true });
+        return;
+      }
+      pollVotersTargetPoll.value = poll;
+      if (!poll.options.some((option) => option.publicId === pollVotersSelectedOptionPublicId.value)) {
+        pollVotersSelectedOptionPublicId.value = poll.options[0]?.publicId || '';
+      }
+    },
+  );
+
   watch(
     () => {
       if (!readReceiptReadersVisible.value || !readReceiptReadersLoaded.value) return '';
@@ -4232,7 +4484,10 @@
   watch(
     () => props.access.canManage,
     (canManage) => {
-      if (!canManage) resetReadReceiptReaders({ close: true });
+      if (!canManage) {
+        resetReadReceiptReaders({ close: true });
+        resetPollVoters({ close: true });
+      }
     },
   );
 
@@ -4918,6 +5173,12 @@
     flex-direction: row-reverse;
   }
 
+  .community-message.is-recall-compact {
+    width: 100%;
+    margin: 1px auto 13px;
+    justify-content: center;
+  }
+
   .community-message__avatar {
     width: 40px;
     height: 40px;
@@ -5223,6 +5484,12 @@
   .community-message.is-focused .community-message__recalled {
     outline: 2px solid var(--primary-color);
     outline-offset: 3px;
+  }
+
+  .community-message.is-focused .community-message__recall-line {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 3px;
+    border-radius: 7px;
   }
 
   .community-message.is-focused :deep(.chat-poll-card) {
@@ -5869,6 +6136,11 @@
       width: 94%;
       margin-bottom: 14px;
       gap: 7px;
+    }
+
+    .community-message.is-recall-compact {
+      width: 100%;
+      margin-bottom: 10px;
     }
 
     .community-message__body {
