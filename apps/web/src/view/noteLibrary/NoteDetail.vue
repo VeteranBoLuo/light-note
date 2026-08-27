@@ -474,7 +474,6 @@
     return from ? { from } : {};
   };
   const returnToSource = () => router.push(sourceReturnPath() || noteLibraryFallback());
-  let libraryRootEntryRequested = false;
   // 新建笔记时必须在 Editor 子组件挂载前就按 query(显式 type 或内置模板的 type)同步定好编辑器类型:
   // 子组件挂载早于父 onMounted,若此刻仍是默认富文本(html),随后灌入的 markdown 模板正文会经 TinyMCE,
   // 其中的 `>` 等被 HTML 转义成 &gt; 再回写存库。编辑已有笔记时该初值会被加载覆盖,不受影响。
@@ -1475,7 +1474,7 @@
   }
 
   async function openLibraryRoot() {
-    libraryRootEntryRequested = true;
+    const requestToken = noteWorkspace.beginLibraryRootEntryRequest();
     try {
       await router.push(
         bookmark.isMobile
@@ -1486,7 +1485,7 @@
           : '/noteLibrary',
       );
     } finally {
-      libraryRootEntryRequested = false;
+      noteWorkspace.finishLibraryRootEntryRequest(requestToken);
     }
   }
 
@@ -2119,11 +2118,8 @@
     if (skipSaveOnLeave) return true;
     const saved = await persistBeforeLeave();
     if (!saved) return false;
-    if (libraryRootEntryRequested && to.path === '/noteLibrary') {
-      detailTab.value = 'pages';
-      noteWorkspace.setLibraryPreviewPage(null);
-      noteWorkspace.setNavigation({ activePageId: null, browseParentId: null });
-      noteWorkspace.clearTreeSearch();
+    if (noteWorkspace.libraryRootEntryRequestToken !== null && to.path === '/noteLibrary') {
+      noteWorkspace.resetLibraryRootState();
     }
     return true;
   });

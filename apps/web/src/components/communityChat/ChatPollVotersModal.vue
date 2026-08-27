@@ -12,6 +12,7 @@
           {{ t('communityChat.poll.voters.optionLabel') }}
         </label>
         <BSelect
+          class="chat-poll-voters-modal__select"
           v-model:value="selectedOptionPublicId"
           :options="optionChoices"
           :disabled="loading || refreshing || loadingMore"
@@ -147,6 +148,16 @@
   .chat-poll-voters-modal__summary {
     display: grid;
     gap: 5px;
+  }
+
+  .chat-poll-voters-modal__selector {
+    min-width: 0;
+  }
+
+  .chat-poll-voters-modal__select {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .chat-poll-voters-modal__selector label,

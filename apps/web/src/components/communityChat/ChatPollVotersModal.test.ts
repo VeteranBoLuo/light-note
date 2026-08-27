@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from 'vue';
 import type { CommunityChatPoll } from '@/api/communityChatApi';
+import modalSource from './ChatPollVotersModal.vue?raw';
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
@@ -113,5 +114,15 @@ describe('ChatPollVotersModal', () => {
 
     host = mountModal({ items: [], total: 0 });
     expect(host.textContent).toContain('communityChat.poll.voters.empty');
+  });
+
+  it('长选项把块级 BSelect 约束在弹窗内容宽度内', () => {
+    const host = mountModal({});
+
+    expect(host.querySelector('.chat-poll-voters-modal__select')).not.toBeNull();
+    expect(modalSource).toMatch(/\.chat-poll-voters-modal__selector\s*\{[\s\S]*?min-width:\s*0;/u);
+    expect(modalSource).toMatch(
+      /\.chat-poll-voters-modal__select\s*\{[\s\S]*?width:\s*100%;[\s\S]*?min-width:\s*0;[\s\S]*?max-width:\s*100%;/u,
+    );
   });
 });

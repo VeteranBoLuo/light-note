@@ -196,6 +196,8 @@ export default defineStore('noteWorkspace', () => {
   const activePageId = ref<string | null>(null);
   const browseParentId = ref<string | null>(null);
   const libraryPreviewPageId = ref<string | null>(null);
+  // 普通路由恢复与用户显式点击“笔记库”拥有相同 URL；瞬时令牌负责跨越全局导航、详情守卫和 keepAlive 根页传递后者。
+  const libraryRootEntryRequestToken = ref<number | null>(null);
   const detailTab = ref<NoteWorkspacePrimaryTab>('pages');
   const detailTreeScrollTop = ref(0);
   const sidebarPreferredOpen = ref(layout.sidebarPreferredOpen);
@@ -220,6 +222,7 @@ export default defineStore('noteWorkspace', () => {
   let breadcrumbRequestSeq = 0;
   let searchRequestSeq = 0;
   let treeRequestSeq = 0;
+  let libraryRootEntryRequestSeq = 0;
   let breadcrumbTargetId: string | null = null;
   const childrenRequests = new Map<string, Promise<NoteTreeItem[]>>();
   const breadcrumbRequests = new Map<string, Promise<NoteBreadcrumbItem[]>>();
@@ -273,6 +276,18 @@ export default defineStore('noteWorkspace', () => {
       }
     } catch {
       // 受限 WebView 禁止存储时仍保留当前内存状态。
+    }
+  }
+
+  function beginLibraryRootEntryRequest() {
+    libraryRootEntryRequestSeq += 1;
+    libraryRootEntryRequestToken.value = libraryRootEntryRequestSeq;
+    return libraryRootEntryRequestSeq;
+  }
+
+  function finishLibraryRootEntryRequest(token: number) {
+    if (libraryRootEntryRequestToken.value === token) {
+      libraryRootEntryRequestToken.value = null;
     }
   }
 
@@ -441,6 +456,13 @@ export default defineStore('noteWorkspace', () => {
     treeSearchMatchCount.value = 0;
     treeSearchLoading.value = false;
     treeSearchError.value = '';
+  }
+
+  function resetLibraryRootState() {
+    detailTab.value = 'pages';
+    setLibraryPreviewPage(null);
+    setNavigation({ activePageId: null, browseParentId: null });
+    clearTreeSearch();
   }
 
   function indexTreeSearchItems(items: NoteTreeItem[]) {
@@ -650,6 +672,7 @@ export default defineStore('noteWorkspace', () => {
     detailTreeScrollTop,
     expandedIds,
     libraryPreviewPageId,
+    libraryRootEntryRequestToken,
     loadedKeys,
     loadingKeys,
     ownerKey,
@@ -662,8 +685,10 @@ export default defineStore('noteWorkspace', () => {
     treeSearchKeyword,
     treeSearchLoading,
     treeSearchMatchCount,
+    beginLibraryRootEntryRequest,
     clearTreeSearch,
     ensureOwner,
+    finishLibraryRootEntryRequest,
     loadBreadcrumb,
     loadChildren,
     revealBreadcrumb,
@@ -671,6 +696,7 @@ export default defineStore('noteWorkspace', () => {
     insertCreatedNote,
     invalidateBreadcrumbBranch,
     refreshTree,
+    resetLibraryRootState,
     searchTree,
     seedBreadcrumb,
     setAiPreferredOpen,

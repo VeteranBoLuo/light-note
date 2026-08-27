@@ -4,7 +4,10 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const source = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'NoteDetail.vue'), 'utf8');
-const detailDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../components/noteLibrary/detail');
+const detailDirectory = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../components/noteLibrary/detail',
+);
 const versionHistorySource = fs.readFileSync(path.resolve(detailDirectory, 'NoteVersionHistory.vue'), 'utf8');
 const zhLocaleSource = fs.readFileSync(
   path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../i18n/locales/zh-CN.ts'),
@@ -22,7 +25,7 @@ describe('NoteDetail autosave policy', () => {
     expect(source).toContain('onBeforeRouteLeave(async (to) =>');
     expect(source).toContain('const saved = await persistBeforeLeave()');
     expect(source).toContain('if (!saved) return false');
-    expect(source).toContain("libraryRootEntryRequested && to.path === '/noteLibrary'");
+    expect(source).toContain("noteWorkspace.libraryRootEntryRequestToken !== null && to.path === '/noteLibrary'");
     expect(source).toContain('const saved = await flushPendingSave()');
   });
 

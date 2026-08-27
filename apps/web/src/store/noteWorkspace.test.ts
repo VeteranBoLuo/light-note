@@ -63,6 +63,48 @@ describe('noteWorkspace 目录元数据同步', () => {
     expect(sessionStorage.getItem('light-note-note-library-preview')).toBeNull();
   });
 
+  it('显式进入笔记库根页会生成独立请求令牌，旧请求结束不能覆盖较新的导航', () => {
+    const workspace = useNoteWorkspaceStore();
+
+    const firstToken = workspace.beginLibraryRootEntryRequest();
+    const secondToken = workspace.beginLibraryRootEntryRequest();
+
+    expect(secondToken).toBeGreaterThan(firstToken);
+    expect(workspace.libraryRootEntryRequestToken).toBe(secondToken);
+
+    workspace.finishLibraryRootEntryRequest(firstToken);
+    expect(workspace.libraryRootEntryRequestToken).toBe(secondToken);
+
+    workspace.finishLibraryRootEntryRequest(secondToken);
+    expect(workspace.libraryRootEntryRequestToken).toBeNull();
+  });
+
+  it('根页重置统一清除预览、浏览选择和目录搜索，但保留目录展开偏好', () => {
+    const workspace = useNoteWorkspaceStore();
+    workspace.ensureOwner('user-a');
+    workspace.setLibraryPreviewPage('leaf-note');
+    workspace.setNavigation({ activePageId: 'leaf-note', browseParentId: 'parent-note' });
+    workspace.detailTab = 'outline';
+    workspace.currentBreadcrumb = [{ id: 'parent-note', title: '父页面' }];
+    workspace.treeSearchKeyword = '关键词';
+    workspace.treeSearchMatchCount = 2;
+    workspace.treeSearchExpandedIds = new Set(['parent-note']);
+    workspace.expandedIds = new Set(['kept-parent']);
+
+    workspace.resetLibraryRootState();
+
+    expect(workspace.detailTab).toBe('pages');
+    expect(workspace.libraryPreviewPageId).toBeNull();
+    expect(workspace.activePageId).toBeNull();
+    expect(workspace.browseParentId).toBeNull();
+    expect(workspace.currentBreadcrumb).toEqual([]);
+    expect(workspace.treeSearchKeyword).toBe('');
+    expect(workspace.treeSearchMatchCount).toBe(0);
+    expect(workspace.treeSearchExpandedIds).toEqual(new Set());
+    expect(workspace.expandedIds).toEqual(new Set(['kept-parent']));
+    expect(sessionStorage.getItem('light-note-note-library-preview')).toBeNull();
+  });
+
   it('保存标题与格式后同步普通树、搜索树和所有已缓存面包屑', () => {
     const workspace = useNoteWorkspaceStore();
     workspace.childrenByParent = { [NOTE_TREE_ROOT_KEY]: [treeNode()] };

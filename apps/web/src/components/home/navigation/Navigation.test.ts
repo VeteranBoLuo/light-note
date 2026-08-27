@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   refreshBookmarks: vi.fn(),
   refreshInbox: vi.fn(() => Promise.resolve()),
   resetInbox: vi.fn(),
+  beginLibraryRootEntryRequest: vi.fn(() => 1),
+  finishLibraryRootEntryRequest: vi.fn(),
 }));
 
 const bookmark = {
@@ -43,11 +45,16 @@ const inbox = {
 };
 
 const user = { id: '', role: 'visitor' };
+const noteWorkspace = {
+  beginLibraryRootEntryRequest: mocks.beginLibraryRootEntryRequest,
+  finishLibraryRootEntryRequest: mocks.finishLibraryRootEntryRequest,
+};
 const communityUnreadTotal = ref(0);
 
 vi.mock('@/store', () => ({
   bookmarkStore: () => bookmark,
   inboxStore: () => inbox,
+  useNoteWorkspaceStore: () => noteWorkspace,
   useUserStore: () => user,
 }));
 
@@ -101,6 +108,8 @@ afterEach(() => {
   cleanup?.();
   cleanup = undefined;
   mocks.routerPush.mockClear();
+  mocks.beginLibraryRootEntryRequest.mockClear();
+  mocks.finishLibraryRootEntryRequest.mockClear();
   user.role = 'visitor';
   user.id = '';
   communityUnreadTotal.value = 0;
@@ -191,6 +200,8 @@ describe('Navigation', () => {
     host.querySelector<HTMLElement>('#nav-note-entry')?.click();
     await nextTick();
     expect(mocks.routerPush).toHaveBeenCalledWith('/noteLibrary');
+    expect(mocks.beginLibraryRootEntryRequest).toHaveBeenCalledOnce();
+    expect(mocks.finishLibraryRootEntryRequest).toHaveBeenCalledWith(1);
 
     host.querySelector<HTMLElement>('#nav-cloud-entry')?.click();
     await nextTick();
@@ -291,9 +302,12 @@ describe('Navigation', () => {
     });
 
     it('选中态只改变文字颜色，不绘制额外底边', () => {
-      const activeOnlyRule = navigationSource.match(/\.navigation-management-entry\.is-active\s*\{([^}]*)\}/u)?.[1] || '';
+      const activeOnlyRule =
+        navigationSource.match(/\.navigation-management-entry\.is-active\s*\{([^}]*)\}/u)?.[1] || '';
 
-      expect(navigationSource).toContain('.navigation-management-entry:hover,\n  .navigation-management-entry.is-active');
+      expect(navigationSource).toContain(
+        '.navigation-management-entry:hover,\n  .navigation-management-entry.is-active',
+      );
       expect(activeOnlyRule).not.toMatch(/box-shadow|border-bottom/u);
     });
   });

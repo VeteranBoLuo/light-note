@@ -619,7 +619,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import router from '@/router';
   import { apiBasePost } from '@/http/request.ts';
-  import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, nextTick, onActivated, onBeforeUnmount, ref, watch } from 'vue';
   import { storeToRefs } from 'pinia';
   import { useI18n } from 'vue-i18n';
   import { bookmarkStore, useNoteLibraryCacheStore, useNoteWorkspaceStore, useUserStore } from '@/store';
@@ -746,6 +746,7 @@
   const {
     detailTab,
     libraryPreviewPageId: previewNoteId,
+    libraryRootEntryRequestToken,
     sidebarPreferredOpen: noteSidebarExpanded,
     sidebarWidth: noteWorkspaceSidebarWidth,
   } = storeToRefs(noteWorkspace);
@@ -2330,19 +2331,47 @@
     addLabel: () => t(currentParentId.value && noteTreeWriteEnabled.value ? 'note.newChildPage' : 'note.newNote'),
   });
 
-  async function resetNoteLibrary() {
-    const alreadyReset =
-      !debouncedSearch.value && router.currentRoute.value.query.tag == null && currentParentId.value === null;
+  function clearNoteLibraryRootViewState() {
     if (searchTimer.value) window.clearTimeout(searchTimer.value);
+    if (treeSearchTimer.value) window.clearTimeout(treeSearchTimer.value);
     searchTimer.value = null;
+    treeSearchTimer.value = null;
     searchValue.value = '';
+    treeSearchValue.value = '';
     debouncedSearch.value = '';
     closeDesktopPreview(false);
     exitBatch();
+    noteWorkspace.resetLibraryRootState();
+  }
+
+  async function resetNoteLibrary() {
+    const alreadyReset =
+      !debouncedSearch.value && router.currentRoute.value.query.tag == null && currentParentId.value === null;
+    clearNoteLibraryRootViewState();
     await router.replace('/noteLibrary');
     if (alreadyReset) await reloadNotes();
     await getAllTags();
   }
+
+  let handledLibraryRootEntryRequestToken: number | null = null;
+  function applyPendingLibraryRootEntryRequest() {
+    const requestToken = libraryRootEntryRequestToken.value;
+    if (
+      requestToken === null ||
+      requestToken === handledLibraryRootEntryRequestToken ||
+      router.currentRoute.value.path !== '/noteLibrary'
+    ) {
+      return;
+    }
+    handledLibraryRootEntryRequestToken = requestToken;
+    clearNoteLibraryRootViewState();
+  }
+
+  watch([libraryRootEntryRequestToken, () => router.currentRoute.value.path], applyPendingLibraryRootEntryRequest, {
+    immediate: true,
+    flush: 'sync',
+  });
+  onActivated(applyPendingLibraryRootEntryRequest);
 
   async function handleNoteLibraryTitleClick() {
     if (desktopPreviewOpen.value) {

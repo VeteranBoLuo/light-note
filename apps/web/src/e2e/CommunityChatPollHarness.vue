@@ -181,7 +181,11 @@
   ];
 
   const options = [
-    { publicId: 'option-a', label: '移动端体验', voteCount: 8 },
+    {
+      publicId: 'option-a',
+      label: '标签空间：让标签直接成为内容聚合空间，更方便查看同一标签下的书签、笔记、文件和待办',
+      voteCount: 8,
+    },
     { publicId: 'option-b', label: '同步性能', voteCount: 6 },
     { publicId: 'option-c', label: '数据可靠性', voteCount: 3 },
   ];

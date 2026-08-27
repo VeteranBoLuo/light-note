@@ -43,7 +43,7 @@
             :style="{ color: route.path.includes('/noteLibrary') ? '#615ced' : '' }"
             style="font-size: 14px; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.navigation.note"
-            @click="router.push('/noteLibrary')"
+            @click="handleToNoteLibrary"
             >{{ $t('navigation.note') }}</div
           >
           <div
@@ -143,7 +143,7 @@
 <script lang="ts" setup>
   import { computed, onMounted, watch } from 'vue';
   import router from '@/router';
-  import { bookmarkStore, inboxStore, useUserStore } from '@/store';
+  import { bookmarkStore, inboxStore, useNoteWorkspaceStore, useUserStore } from '@/store';
   import { useRoute } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
@@ -156,6 +156,7 @@
   const route = useRoute();
   const user = useUserStore();
   const inbox = inboxStore();
+  const noteWorkspace = useNoteWorkspaceStore();
   const communityUnread = useCommunityChatUnread();
   const { totalUnread: communityUnreadTotal } = communityUnread;
 
@@ -198,6 +199,14 @@
     router.push('/home');
     bookmark.type = 'all';
     bookmark.refreshData();
+  }
+  async function handleToNoteLibrary() {
+    const requestToken = noteWorkspace.beginLibraryRootEntryRequest();
+    try {
+      await router.push('/noteLibrary');
+    } finally {
+      noteWorkspace.finishLibraryRootEntryRequest(requestToken);
+    }
   }
   function handleToCloudSpace() {
     router.push('/cloudSpace');

@@ -421,17 +421,16 @@ describe('笔记库页面树交互接线', () => {
     const leaveGuard = detailSource.match(/onBeforeRouteLeave\(async \(to\) => \{[\s\S]*?\n  \}\);/)?.[0] || '';
     const backFunction = detailSource.match(/async function back\(\)[\s\S]*?\n  }/)?.[0] || '';
 
-    expect(rootFunction).toContain('libraryRootEntryRequested = true');
+    expect(rootFunction).toContain('noteWorkspace.beginLibraryRootEntryRequest()');
     expect(rootFunction).toContain("path: '/noteLibrary'");
-    expect(rootFunction).toContain('libraryRootEntryRequested = false');
+    expect(rootFunction).toContain('noteWorkspace.finishLibraryRootEntryRequest(requestToken)');
     expect(leaveGuard.indexOf('if (!saved) return false;')).toBeLessThan(
-      leaveGuard.indexOf('noteWorkspace.setLibraryPreviewPage(null);'),
+      leaveGuard.indexOf('noteWorkspace.resetLibraryRootState();'),
     );
-    expect(leaveGuard).toContain("libraryRootEntryRequested && to.path === '/noteLibrary'");
-    expect(leaveGuard).toContain('noteWorkspace.setNavigation({ activePageId: null, browseParentId: null });');
-    expect(leaveGuard).toContain('noteWorkspace.clearTreeSearch();');
+    expect(leaveGuard).toContain("noteWorkspace.libraryRootEntryRequestToken !== null && to.path === '/noteLibrary'");
+    expect(leaveGuard).toContain('noteWorkspace.resetLibraryRootState();');
     expect(backFunction).toContain('returnToSource();');
-    expect(backFunction).not.toContain('setLibraryPreviewPage');
+    expect(backFunction).not.toContain('resetLibraryRootState');
   });
 
   it('预览页父级面包屑在当前预览区打开，且预览与编辑面包屑都不显示 hover 背景', () => {

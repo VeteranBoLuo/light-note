@@ -59,7 +59,26 @@ describe('笔记库桌面预览退出', () => {
     expect(discardCalls.length).toBeGreaterThanOrEqual(3);
     expect(source).toMatch(/async function selectDirectory[\s\S]*closeDesktopPreview\(false\);/);
     expect(source).toMatch(/function handleTagFilterSelect[\s\S]*closeDesktopPreview\(false\);/);
-    expect(source).toMatch(/async function resetNoteLibrary[\s\S]*closeDesktopPreview\(false\);/);
+    expect(source).toMatch(
+      /function clearNoteLibraryRootViewState[\s\S]*closeDesktopPreview\(false\);[\s\S]*noteWorkspace\.resetLibraryRootState\(\);/,
+    );
+    expect(source).toMatch(
+      /function clearNoteLibraryRootViewState[\s\S]*searchValue\.value = '';[\s\S]*treeSearchValue\.value = '';[\s\S]*debouncedSearch\.value = '';/,
+    );
+    expect(source).toMatch(/function clearNoteLibraryRootViewState[\s\S]*exitBatch\(\);/);
+    expect(source).toMatch(/async function resetNoteLibrary[\s\S]*clearNoteLibraryRootViewState\(\);/);
+  });
+
+  it('顶部笔记入口在路由成功落到根页时清除 keepAlive 内的预览和筛选现场', () => {
+    expect(source).toContain('libraryRootEntryRequestToken');
+    expect(source).toMatch(
+      /function applyPendingLibraryRootEntryRequest[\s\S]*router\.currentRoute\.value\.path !== '\/noteLibrary'[\s\S]*clearNoteLibraryRootViewState\(\);/,
+    );
+    expect(source).toContain(
+      'watch([libraryRootEntryRequestToken, () => router.currentRoute.value.path], applyPendingLibraryRootEntryRequest',
+    );
+    expect(source).toContain("flush: 'sync'");
+    expect(source).toContain('onActivated(applyPendingLibraryRootEntryRequest)');
   });
 
   it('预览详情和待整理操作会同步卡片、预览副本与列表缓存', () => {
