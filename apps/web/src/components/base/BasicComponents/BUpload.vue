@@ -13,12 +13,7 @@
   >
     <slot name="default">
       <div
-        style="width: 80px; height: 80px; color: #6c7074; border-radius: 8px"
-        :style="{
-          backgroundColor: user.currentTheme === 'day' ? '#F5F5F5' : '#333333',
-          border: user.currentTheme === 'day' ? '1px dashed #ccc' : '',
-        }"
-        class="flex-center dom-hover"
+        class="b-upload-default-card flex-center dom-hover"
       >
         <svg-icon size="30" :src="icon.file_upload" />
       </div>
@@ -47,7 +42,6 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import { useUserStore } from '@/store';
   import { useI18n } from 'vue-i18n';
   import { computed, ref, useSlots } from 'vue';
 
@@ -85,7 +79,6 @@
       triggerless: false,
     }, // 默认总大小限制为10MB
   );
-  const user = useUserStore();
   const nativeInput = ref<HTMLInputElement | null>(null);
   // accept="*" 不是合法的文件类型说明符。兼容存量调用，将它视为“不限制类型”。
   const normalizedAccept = computed(() => {
@@ -198,5 +191,14 @@
     overflow: hidden;
     opacity: 0;
     pointer-events: none;
+  }
+
+  .b-upload-default-card {
+    width: 80px;
+    height: 80px;
+    color: #6c7074;
+    border: 1px dashed var(--surface-border-color, #ccc);
+    border-radius: 8px;
+    background: var(--surface-panel-bg, #f5f5f5);
   }
 </style>

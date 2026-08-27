@@ -154,6 +154,7 @@
     'landing',
     'banned',
     'quickSave',
+    'extensionAuthorize',
     'noteShare',
   ]);
 
@@ -339,6 +340,7 @@
     'landing',
     'banned',
     'quickSave',
+    'extensionAuthorize',
     'noteShare',
   ];
   const applicationAuthStatus = ref<ApplicationAuthStatus>('pending');
@@ -817,6 +819,7 @@
     'not-role',
     'banned',
     'quickSave',
+    'extensionAuthorize',
     'noteShare',
   ]);
 

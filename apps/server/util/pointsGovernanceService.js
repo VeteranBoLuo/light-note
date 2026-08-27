@@ -15,6 +15,7 @@ import {
 const RANGE_PRESETS = new Set([7, 28, 90]);
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const VERSION_PATTERN = /^[A-Za-z0-9._-]{1,32}$/;
+const ADMIN_TIME_ZONE = 'Asia/Shanghai';
 
 export class PointsGovernanceError extends Error {
   constructor(code, message, status = 400) {
@@ -25,16 +26,36 @@ export class PointsGovernanceError extends Error {
   }
 }
 
-function utcDay(value) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
+function formatUtcDay(date) {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(
     date.getUTCDate(),
   ).padStart(2, '0')}`;
 }
 
-function addUtcDays(day, delta) {
-  return utcDay(new Date(`${day}T00:00:00.000Z`).getTime() + Number(delta) * 86_400_000);
+function dayInTimeZone(value, timeZone = ADMIN_TIME_ZONE) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function isValidDay(day) {
+  if (!DATE_PATTERN.test(day)) return false;
+  const [year, month, date] = day.split('-').map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, date));
+  return formatUtcDay(parsed) === day;
+}
+
+function addCalendarDays(day, delta) {
+  const date = new Date(`${day}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + Number(delta));
+  return formatUtcDay(date);
 }
 
 function normalizeVersion(value) {
@@ -46,23 +67,20 @@ function normalizeVersion(value) {
 
 export function resolveGovernanceRange(input = {}, now = new Date()) {
   const preset = Number(input.presetDays || input.days || 28);
-  const today = utcDay(now);
+  const today = dayInTimeZone(now);
   let startDate;
   let endDate;
   if (input.startDate || input.endDate) {
     startDate = String(input.startDate || '').trim();
     endDate = String(input.endDate || '').trim();
-    if (!DATE_PATTERN.test(startDate) || !DATE_PATTERN.test(endDate)) {
-      throw new PointsGovernanceError('INVALID_DATE_RANGE', '日期范围无效');
-    }
-    if (!utcDay(`${startDate}T00:00:00.000Z`) || !utcDay(`${endDate}T00:00:00.000Z`)) {
+    if (!isValidDay(startDate) || !isValidDay(endDate)) {
       throw new PointsGovernanceError('INVALID_DATE_RANGE', '日期范围无效');
     }
   } else {
     if (!RANGE_PRESETS.has(preset))
       throw new PointsGovernanceError('INVALID_RANGE_PRESET', '时间范围仅支持 7/28/90 天');
     endDate = today;
-    startDate = addUtcDays(today, -(preset - 1));
+    startDate = addCalendarDays(today, -(preset - 1));
   }
   const start = new Date(`${startDate}T00:00:00.000Z`);
   const end = new Date(`${endDate}T00:00:00.000Z`);
@@ -70,7 +88,7 @@ export function resolveGovernanceRange(input = {}, now = new Date()) {
   if (!Number.isInteger(days) || days < 1 || days > 365) {
     throw new PointsGovernanceError('DATE_RANGE_TOO_LARGE', '自定义时间范围必须在 1～365 天内');
   }
-  return { startDate, endDate, endExclusive: addUtcDays(endDate, 1), days };
+  return { startDate, endDate, endExclusive: addCalendarDays(endDate, 1), days };
 }
 
 function placeholders(values) {
@@ -119,6 +137,26 @@ function numeric(row, key) {
 
 function percent(numerator, denominator) {
   return denominator > 0 ? Number(((Number(numerator) / Number(denominator)) * 100).toFixed(1)) : 0;
+}
+
+function buildDailyTrends(range, rows = []) {
+  const byDay = new Map(
+    rows.map((row) => [String(row?.day || '').slice(0, 10), row]).filter(([day]) => isValidDay(day)),
+  );
+  return Array.from({ length: range.days }, (_, index) => {
+    const day = addCalendarDays(range.startDate, index);
+    const row = byDay.get(day);
+    return {
+      day,
+      issued: numeric(row, 'issued'),
+      stable: numeric(row, 'stable'),
+      oneTime: numeric(row, 'oneTime'),
+      random: numeric(row, 'random'),
+      operations: numeric(row, 'operations'),
+      spent: numeric(row, 'spent'),
+      net: numeric(row, 'net'),
+    };
+  });
 }
 
 function percentileFromValues(values, ratio = 0.5) {
@@ -294,7 +332,8 @@ export async function getPointsGovernanceOverview(input = {}, { db = pool } = {}
         userRoleParams,
       ),
       db.query(
-        `SELECT DATE(create_time) AS day,
+        `SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS day,
+              COALESCE(SUM(CASE WHEN delta > 0 THEN delta ELSE 0 END), 0) AS issued,
               COALESCE(SUM(CASE WHEN delta > 0 AND ${cases.stable} THEN delta ELSE 0 END), 0) AS stable,
               COALESCE(SUM(CASE WHEN delta > 0 AND ${cases.oneTime} THEN delta ELSE 0 END), 0) AS oneTime,
               COALESCE(SUM(CASE WHEN delta > 0 AND ${cases.random} THEN delta ELSE 0 END), 0) AS random,
@@ -302,7 +341,7 @@ export async function getPointsGovernanceOverview(input = {}, { db = pool } = {}
               COALESCE(SUM(CASE WHEN delta < 0 THEN -delta ELSE 0 END), 0) AS spent,
               COALESCE(SUM(delta), 0) AS net
          FROM points_log WHERE ${where.sql}${ledgerInternal.sql}
-        GROUP BY DATE(create_time) ORDER BY day ASC`,
+        GROUP BY DATE_FORMAT(create_time, '%Y-%m-%d') ORDER BY day ASC`,
         [...categoryParams, ...where.params, ...ledgerInternal.params],
       ),
       db.query(
@@ -356,15 +395,7 @@ export async function getPointsGovernanceOverview(input = {}, { db = pool } = {}
       over16000Ratio: percent(numeric(thresholds, 'over16000'), numeric(thresholds, 'activeUsers')),
       over24000Ratio: percent(numeric(thresholds, 'over24000'), numeric(thresholds, 'activeUsers')),
     },
-    trends: trends.map((row) => ({
-      day: utcDay(row.day),
-      stable: numeric(row, 'stable'),
-      oneTime: numeric(row, 'oneTime'),
-      random: numeric(row, 'random'),
-      operations: numeric(row, 'operations'),
-      spent: numeric(row, 'spent'),
-      net: numeric(row, 'net'),
-    })),
+    trends: buildDailyTrends(range, trends),
     balanceLeaderboard: balanceLeaderboard.map((row, index) => ({
       rank: index + 1,
       userId: row.userId,
@@ -831,6 +862,7 @@ export async function getPointsUser360(userId, input = {}, { db = pool } = {}) {
 }
 
 export const pointsGovernanceInternals = {
+  buildDailyTrends,
   buildProductPerformance,
   healthWarnings,
   normalizeVersion,

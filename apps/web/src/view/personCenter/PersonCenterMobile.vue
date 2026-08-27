@@ -91,21 +91,14 @@
         <section class="profile-section">
           <h2>{{ t('personCenter.quickAccess') }}</h2>
           <div class="profile-quick-grid">
-            <BButton class="profile-quick-item" @click="goGrowth">
-              <span class="profile-entry-icon"><SvgIcon :src="icon.userCenter.growth" size="20" /></span>
-              <span>{{ t('growth.pageTitle') }}</span>
-            </BButton>
-            <BButton class="profile-quick-item" @click="goToProfileModule('/store')">
-              <span class="profile-entry-icon"><SvgIcon :src="icon.support.store" size="20" /></span>
-              <span>{{ t('entitlementStore.entry') }}</span>
-            </BButton>
-            <BButton class="profile-quick-item" @click="goToProfileModule('/search')">
-              <span class="profile-entry-icon"><SvgIcon :src="icon.navigation.search" size="20" /></span>
-              <span>{{ t('personCenter.resourceCenter') }}</span>
-            </BButton>
-            <BButton class="profile-quick-item" @click="goToProfileModule('/ptrash')">
-              <span class="profile-entry-icon"><SvgIcon :src="icon.table_delete" size="20" /></span>
-              <span>{{ t('trash.title') }}</span>
+            <BButton
+              v-for="entry in mobileQuickEntries"
+              :key="entry.name"
+              class="profile-quick-item"
+              @click="goToProfileModule(entry.mobilePath || entry.path)"
+            >
+              <span class="profile-entry-icon"><SvgIcon :src="entry.icon" size="20" /></span>
+              <span>{{ t(entry.labelKey) }}</span>
             </BButton>
           </div>
         </section>
@@ -150,42 +143,17 @@
         <section class="profile-section">
           <h2>{{ t('personCenter.communicationAndSupport') }}</h2>
           <MobileListSurface>
-            <MobileListRow interactive @click="goToProfileModule('/co-build')">
+            <MobileListRow
+              v-for="entry in mobileCommunicationEntries"
+              :key="entry.name"
+              interactive
+              @click="goToProfileModule(entry.path)"
+            >
               <template #leading
-                ><span class="profile-entry-icon"><SvgIcon :src="icon.coBuild.board" size="20" /></span
+                ><span class="profile-entry-icon"><SvgIcon :src="entry.icon" size="20" /></span
               ></template>
-              <template #title>{{ t('personCenter.coBuild') }}</template>
-              <template #subtitle>{{ t('personCenter.coBuildDesc') }}</template>
-              <template #trailing><SvgIcon class="profile-row-arrow" :src="icon.arrow_right" size="17" /></template>
-            </MobileListRow>
-            <MobileListRow interactive @click="goToProfileModule('/opinions')">
-              <template #leading
-                ><span class="profile-entry-icon"><SvgIcon :src="icon.message.info" size="20" /></span
-              ></template>
-              <template #title>{{ t('personCenter.feedback') }}</template>
-              <template #subtitle>{{ t('personCenter.feedbackDesc') }}</template>
-              <template #trailing><SvgIcon class="profile-row-arrow" :src="icon.arrow_right" size="17" /></template>
-            </MobileListRow>
-            <MobileListRow interactive @click="goToProfileModule('/help')">
-              <template #leading
-                ><span class="profile-entry-icon"><SvgIcon :src="icon.help_document" size="20" /></span
-              ></template>
-              <template #title>{{ t('personCenter.help') }}</template>
-              <template #trailing><SvgIcon class="profile-row-arrow" :src="icon.arrow_right" size="17" /></template>
-            </MobileListRow>
-            <MobileListRow interactive @click="goToProfileModule('/updateLogs')">
-              <template #leading
-                ><span class="profile-entry-icon"><SvgIcon :src="icon.userCenter.log" size="20" /></span
-              ></template>
-              <template #title>{{ t('personCenter.changelog') }}</template>
-              <template #trailing><SvgIcon class="profile-row-arrow" :src="icon.arrow_right" size="17" /></template>
-            </MobileListRow>
-            <MobileListRow interactive @click="goToProfileModule('/support')">
-              <template #leading
-                ><span class="profile-entry-icon"><SvgIcon :src="icon.support.heart" size="20" /></span
-              ></template>
-              <template #title>{{ t('support.entry') }}</template>
-              <template #subtitle>{{ t('support.entryDescription') }}</template>
+              <template #title>{{ t(entry.labelKey) }}</template>
+              <template v-if="entry.descriptionKey" #subtitle>{{ t(entry.descriptionKey) }}</template>
               <template #trailing><SvgIcon class="profile-row-arrow" :src="icon.arrow_right" size="17" /></template>
             </MobileListRow>
           </MobileListSurface>
@@ -259,6 +227,10 @@
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { useAndroidAppUpdate } from '@/composables/useAndroidAppUpdate';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+  import {
+    MOBILE_PERSON_CENTER_COMMUNICATION_ENTRIES,
+    MOBILE_PERSON_CENTER_QUICK_ENTRIES,
+  } from '@/config/personCenterEntries';
 
   const MyInfo = defineAsyncComponent(() => import('@/components/personCenter/myInfo/MyInfo.vue'));
   const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
@@ -269,6 +241,8 @@
   const userVisible = ref(false);
 
   const user = useUserStore();
+  const mobileQuickEntries = MOBILE_PERSON_CENTER_QUICK_ENTRIES;
+  const mobileCommunicationEntries = MOBILE_PERSON_CENTER_COMMUNICATION_ENTRIES;
   const { growth: growthInfo, loading: growthLoading, load: loadGrowth } = useGrowth();
   const equippedFrameId = computed(() => {
     const id = growthInfo.value?.equippedFrame;

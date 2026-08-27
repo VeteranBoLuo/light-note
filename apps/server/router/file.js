@@ -244,6 +244,8 @@ router.post('/confirmManagedUpload', async (req, res) => {
       fileName: req.body?.fileName,
       fileType: req.body?.fileType,
       folderId: req.body?.folderId,
+      addToInbox: req.body?.addToInbox === true,
+      inboxSource: req.body?.inboxSource || 'quick_capture',
       request: req,
     });
     return res.send(resultData(data));

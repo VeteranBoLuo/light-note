@@ -7,10 +7,11 @@ const connection = {
   rollback: vi.fn(),
   release: vi.fn(),
 };
-const pool = { getConnection: vi.fn(() => connection) };
+const pool = { getConnection: vi.fn(() => connection), query: vi.fn() };
 const ensureTag = vi.fn();
 const insertResourceTagRelations = vi.fn();
 const validateUserTags = vi.fn();
+const enqueueResources = vi.fn();
 const fetchWebMeta = vi.fn();
 const triggerResourceCreateEffects = vi.fn();
 const createIconBatch = vi.fn();
@@ -23,7 +24,7 @@ vi.mock('../resourceTags.js', () => ({
   insertResourceTagRelations,
   validateUserTags,
 }));
-vi.mock('../resourceInbox.js', () => ({ enqueueResources: vi.fn() }));
+vi.mock('../resourceInbox.js', () => ({ enqueueResources }));
 vi.mock('../snapshot.js', () => ({ archiveBookmarkBackground }));
 vi.mock('../bookmarkIconBatchService.js', () => ({ createIconBatch }));
 vi.mock('../fetchWebMeta.js', () => ({
@@ -56,6 +57,8 @@ describe('bookmarkService.createBookmark', () => {
     connection.beginTransaction.mockResolvedValue();
     connection.commit.mockResolvedValue();
     connection.rollback.mockResolvedValue();
+    pool.query.mockResolvedValue([[]]);
+    enqueueResources.mockResolvedValue({ added: 1, reopened: 0, ignored: 0 });
     connection.query
       .mockResolvedValueOnce([[]])
       .mockResolvedValueOnce([[]])
@@ -85,6 +88,68 @@ describe('bookmarkService.createBookmark', () => {
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(connection.rollback).not.toHaveBeenCalled();
     expect(connection.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('浏览器插件可在同一事务匹配既有标签并创建用户确认的新标签', async () => {
+    validateUserTags.mockResolvedValueOnce(['tag-existing']);
+    const result = await createBookmark({
+      userId: 'user-1',
+      bookmark: { url: 'https://example.com/article', name: '文章' },
+      tagIds: ['tag-existing'],
+      tagNames: ['新标签', '新标签'],
+      tagSource: 'browser_extension',
+      addToInbox: true,
+      inboxSource: 'browser_extension',
+      saveSnapshot: false,
+    });
+
+    expect(insertResourceTagRelations).toHaveBeenCalledWith(
+      connection,
+      expect.objectContaining({ tagIds: ['tag-existing', 'tag-1'], source: 'browser_extension' }),
+    );
+    expect(enqueueResources).toHaveBeenCalledWith(connection, {
+      userId: 'user-1',
+      items: [{ resourceType: 'bookmark', resourceId: result.id }],
+      source: 'browser_extension',
+    });
+  });
+
+  it('重复网址返回可供插件打开已有资源的结构化结果', async () => {
+    connection.query.mockReset();
+    connection.query.mockResolvedValueOnce([[{ id: 'bookmark-1', name: '已有收藏' }]]);
+
+    await expect(
+      createBookmark({
+        userId: 'user-1',
+        bookmark: { url: 'https://example.com', name: '新名称' },
+        saveSnapshot: false,
+      }),
+    ).rejects.toMatchObject({
+      code: 'DUPLICATE_URL',
+      httpStatus: 409,
+      details: {
+        duplicate: { id: 'bookmark-1', name: '已有收藏', url: 'https://example.com' },
+      },
+    });
+  });
+
+  it('同一幂等键重试直接恢复固定书签，不重复触发图标、快照或成长副作用', async () => {
+    pool.query.mockResolvedValueOnce([
+      [{ id: '1b1ce0ca-0ac7-5d70-a03f-a3cf782253b8', name: '已保存', url: 'https://example.com/' }],
+    ]);
+
+    const result = await createBookmark({
+      userId: 'user-1',
+      bookmark: { url: 'https://example.com', name: '已保存' },
+      idempotencyKey: 'browser-extension:retry-1',
+      addToInbox: true,
+    });
+
+    expect(result).toMatchObject({ idempotentReplay: true, addedToInbox: true, snapshotScheduled: false });
+    expect(pool.getConnection).not.toHaveBeenCalled();
+    expect(createIconBatch).not.toHaveBeenCalled();
+    expect(archiveBookmarkBackground).not.toHaveBeenCalled();
+    expect(triggerResourceCreateEffects).not.toHaveBeenCalled();
   });
 
   it('无图标书签在主事务提交并释放连接后进入持久化补全队列', async () => {

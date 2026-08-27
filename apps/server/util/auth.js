@@ -95,6 +95,7 @@ const AUTH_EXPIRED_SILENT_PATHS = [
   '/user/login',
   '/user/github/authorize',
   '/user/github',
+  '/user/extension/exchange',
   '/user/registerUser',
   '/user/sendEmail',
   '/user/verifyCode',

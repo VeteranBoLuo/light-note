@@ -110,7 +110,13 @@ describe('cloudFileUploadApi', () => {
     const file = new File(['document'], '原始名称.pdf', { type: 'application/pdf' });
 
     await expect(
-      uploadManagedCloudFile(file, { fileName: '项目资料.pdf', folderId: '7', onProgress: progress }),
+      uploadManagedCloudFile(file, {
+        fileName: '项目资料.pdf',
+        folderId: '7',
+        onProgress: progress,
+        addToInbox: true,
+        inboxSource: 'browser_extension',
+      }),
     ).resolves.toEqual({ filename: '项目资料 (1).pdf', status: '已上传', fileId: '27' });
     expect(progress).toHaveBeenCalledWith(50);
     expect(progress).toHaveBeenLastCalledWith(100);
@@ -121,6 +127,8 @@ describe('cloudFileUploadApi', () => {
         fileName: '项目资料.pdf',
         fileType: 'application/pdf',
         folderId: '7',
+        addToInbox: true,
+        inboxSource: 'browser_extension',
       },
       { silent: true },
     );
@@ -146,5 +154,29 @@ describe('cloudFileUploadApi', () => {
       { objectKey: 'files/user-1/uploads/random.txt' },
       { silent: true },
     );
+  });
+
+  it('托管上传确认回包丢失但对象已落库时从中止核验恢复原文件', async () => {
+    postMock
+      .mockResolvedValueOnce({
+        status: 200,
+        data: {
+          fileType: 'text/plain',
+          objectKey: 'files/user-1/uploads/random.txt',
+          uploadUrl: 'https://obs.example/managed',
+        },
+      })
+      .mockRejectedValueOnce(new Error('response lost'))
+      .mockResolvedValueOnce({
+        status: 200,
+        data: { deleted: false, alreadyConfirmed: true, fileId: 32, filename: 'x.txt' },
+      });
+    putMock.mockResolvedValue({} as never);
+
+    await expect(uploadManagedCloudFile(new File(['x'], 'x.txt'), {})).resolves.toEqual({
+      filename: 'x.txt',
+      status: '已上传',
+      fileId: '32',
+    });
   });
 });

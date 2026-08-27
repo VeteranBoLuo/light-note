@@ -9,6 +9,7 @@ import { archiveBookmarkBackground } from '../snapshot.js';
 import { ensureTag } from './tagService.js';
 import { triggerResourceCreateEffects } from './resourceCreateEffects.js';
 import { inspectBookmarkUrl, requireBookmarkUrl } from '../bookmarkUrl.js';
+import { actionIdempotencyUuid } from '../agent/actionIdempotency.js';
 
 export function normalizeBookmarkUrl(value) {
   return requireBookmarkUrl(value).canonicalUrl;
@@ -28,12 +29,42 @@ export function shouldResetBookmarkIcon(existingUrl, nextUrl) {
   }
 }
 
-function cleanBookmarkFields(bookmark, { userId, url, name, description }) {
-  const fields = { name, url, description, userId };
+function cleanBookmarkFields(bookmark, { userId, url, name, description, id }) {
+  const fields = { ...(id ? { id } : {}), name, url, description, userId };
   if (bookmark?.iconUrl !== undefined) fields.iconUrl = bookmark.iconUrl;
   if (bookmark?.sort !== undefined && Number.isFinite(Number(bookmark.sort))) fields.sort = Number(bookmark.sort);
   if (bookmark?.isTop !== undefined) fields.isTop = Number(bookmark.isTop) === 1 ? 1 : 0;
   return insertData(fields);
+}
+
+function bookmarkServiceError(code, message, details = {}, httpStatus = 400) {
+  const error = new Error(message);
+  error.code = code;
+  error.httpStatus = httpStatus;
+  error.details = details;
+  return error;
+}
+
+async function findOwnedBookmarkById(db, { userId, bookmarkId }) {
+  const [rows] = await db.query(
+    'SELECT id, name, url FROM bookmark WHERE id = ? AND user_id = ? AND del_flag = 0 LIMIT 1',
+    [bookmarkId, userId],
+  );
+  return rows[0] || null;
+}
+
+function formatIdempotentReplay(bookmark, { addToInbox = false, inbox = null } = {}) {
+  return {
+    id: bookmark.id,
+    name: bookmark.name,
+    url: bookmark.url,
+    tags: [],
+    duplicate: false,
+    idempotentReplay: true,
+    addedToInbox: Boolean(addToInbox),
+    ...(inbox ? { inbox } : {}),
+    snapshotScheduled: false,
+  };
 }
 
 export async function createBookmark({
@@ -51,6 +82,7 @@ export async function createBookmark({
   signal,
   request,
   suppressUserRewards = false,
+  idempotencyKey = null,
 } = {}) {
   if (!userId) throw new Error('USER_REQUIRED: 缺少用户');
   const url = requireBookmarkUrl(bookmark.url).canonicalUrl;
@@ -66,15 +98,29 @@ export async function createBookmark({
   name = (name || url).slice(0, 255);
   if (url.length > 255) throw new Error('URL_TOO_LONG: 网址不能超过 255 个字符');
   description = description.slice(0, 255);
-  const normalizedTagIds = Array.isArray(tagIds) ? tagIds : [];
-  const normalizedTagNames = Array.isArray(tagNames) ? tagNames : [];
+  const normalizedTagIds = [...new Set((Array.isArray(tagIds) ? tagIds : []).map(String).filter(Boolean))];
+  const normalizedTagNames = [
+    ...new Map(
+      (Array.isArray(tagNames) ? tagNames : [])
+        .map((item) => String(item || '').trim())
+        .filter(Boolean)
+        .map((item) => [item.toLocaleLowerCase(), item]),
+    ).values(),
+  ];
   if (normalizedTagIds.length + normalizedTagNames.length > 4) {
-    throw new Error('TOO_MANY_TAGS: 最多选择 4 个标签');
+    throw bookmarkServiceError('TOO_MANY_TAGS', '最多选择 4 个标签');
+  }
+
+  const idempotentBookmarkId = actionIdempotencyUuid(idempotencyKey, 'bookmark');
+  if (idempotentBookmarkId) {
+    const existing = await findOwnedBookmarkById(pool, { userId, bookmarkId: idempotentBookmarkId });
+    if (existing) return formatIdempotentReplay(existing, { addToInbox });
   }
 
   const connection = await pool.getConnection();
   let data;
   let attachedTagNames = [];
+  let transactionError = null;
   try {
     await connection.beginTransaction();
     const [urlDuplicates] = await connection.query(
@@ -82,6 +128,21 @@ export async function createBookmark({
       [userId, url],
     );
     if (urlDuplicates.length) {
+      if (idempotentBookmarkId && String(urlDuplicates[0].id) === String(idempotentBookmarkId)) {
+        let inbox = null;
+        if (addToInbox) {
+          inbox = await enqueueResources(connection, {
+            userId,
+            items: [{ resourceType: 'bookmark', resourceId: String(urlDuplicates[0].id) }],
+            source: inboxSource,
+          });
+        }
+        await connection.commit();
+        return formatIdempotentReplay(
+          { ...urlDuplicates[0], url },
+          { addToInbox, inbox },
+        );
+      }
       if (addToInbox && duplicateToInbox) {
         const inbox = await enqueueResources(connection, {
           userId,
@@ -99,15 +160,33 @@ export async function createBookmark({
           tags: [],
         };
       }
-      throw new Error(`DUPLICATE_URL: 该网址已收藏为「${urlDuplicates[0].name}」`);
+      throw bookmarkServiceError(
+        'DUPLICATE_URL',
+        `该网址已收藏为「${urlDuplicates[0].name}」`,
+        { duplicate: { id: String(urlDuplicates[0].id), name: urlDuplicates[0].name, url } },
+        409,
+      );
     }
     const [nameDuplicates] = await connection.query(
       'SELECT id FROM bookmark WHERE user_id = ? AND name = ? AND del_flag = 0 LIMIT 1',
       [userId, name],
     );
-    if (nameDuplicates.length) throw new Error(`DUPLICATE_NAME: 书签「${name}」已存在`);
+    if (nameDuplicates.length) {
+      throw bookmarkServiceError(
+        'DUPLICATE_NAME',
+        `书签「${name}」已存在`,
+        { duplicate: { id: String(nameDuplicates[0].id), name } },
+        409,
+      );
+    }
 
-    data = cleanBookmarkFields(bookmark, { userId, url, name, description });
+    data = cleanBookmarkFields(bookmark, {
+      userId,
+      url,
+      name,
+      description,
+      id: idempotentBookmarkId,
+    });
     await connection.query('INSERT INTO bookmark SET ?', [data]);
 
     const validTagIds = await validateUserTags(connection, { tagIds: normalizedTagIds, userId });
@@ -134,10 +213,20 @@ export async function createBookmark({
     await connection.commit();
   } catch (error) {
     await connection.rollback();
-    throw error;
+    transactionError = error;
   } finally {
     connection.release();
   }
+
+  if (transactionError && idempotentBookmarkId) {
+    try {
+      const existing = await findOwnedBookmarkById(pool, { userId, bookmarkId: idempotentBookmarkId });
+      if (existing) return formatIdempotentReplay(existing, { addToInbox });
+    } catch {
+      // 保留原始事务异常；调用方使用同一幂等键重试时仍能安全恢复。
+    }
+  }
+  if (transactionError) throw transactionError;
 
   if (!data.icon_url) {
     try {

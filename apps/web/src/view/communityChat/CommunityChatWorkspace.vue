@@ -112,160 +112,298 @@
           @click="handleMessageListBlankClick"
           @scroll.passive="handleMessageListScroll"
         >
-          <div v-if="access.emergencyReadOnly" class="community-runtime-readonly" role="status">
-            <span class="community-runtime-readonly__icon" aria-hidden="true">
-              <SvgIcon :src="icon.message.info" size="17" />
-            </span>
-            <div>
-              <strong>{{ t('communityChat.emergencyReadOnlyTitle') }}</strong>
-              <span>{{ t('communityChat.emergencyReadOnlyDescription') }}</span>
+          <div ref="messageContentEl" class="community-message-list__content">
+            <div v-if="access.emergencyReadOnly" class="community-runtime-readonly" role="status">
+              <span class="community-runtime-readonly__icon" aria-hidden="true">
+                <SvgIcon :src="icon.message.info" size="17" />
+              </span>
+              <div>
+                <strong>{{ t('communityChat.emergencyReadOnlyTitle') }}</strong>
+                <span>{{ t('communityChat.emergencyReadOnlyDescription') }}</span>
+              </div>
             </div>
-          </div>
-          <div v-if="hasMore && !initialLoading" class="community-message-list__older">
-            <BButton size="small" :loading="olderLoading" @click="loadOlder">
-              {{ t('communityChat.loadOlder') }}
-            </BButton>
-          </div>
-
-          <div v-if="loadError && !chatMessages.length" class="community-message-state" role="status">
-            <strong>{{ t('communityChat.messagesLoadFailed') }}</strong>
-            <p>{{ t('communityChat.messagesLoadFailedDescription') }}</p>
-            <BButton size="small" @click="loadInitial">{{ t('communityChat.retryMessages') }}</BButton>
-          </div>
-
-          <div v-else-if="!chatMessages.length" class="community-message-state">
-            <span class="community-message-state__icon" aria-hidden="true">
-              <SvgIcon :src="icon.ai.conversations" size="24" />
-            </span>
-            <strong>{{ t('communityChat.emptyMessages') }}</strong>
-            <p>{{ t('communityChat.emptyMessagesDescription') }}</p>
-          </div>
-
-          <template v-else>
-            <article
-              v-for="chatMessage in chatMessages"
-              :key="chatMessage.publicId"
-              class="community-message"
-              :class="{
-                'is-own': chatMessage.isOwn,
-                'is-focused':
-                  chatMessage.publicId === focusedMessagePublicId ||
-                  chatMessage.publicId === transientFocusedMessagePublicId,
-                'is-recalled': chatMessage.status === 'recalled',
-                'is-sending': chatMessage.deliveryState === 'sending',
-              }"
-              :data-message-public-id="chatMessage.publicId"
-            >
-              <BButton
-                class="community-message__avatar"
-                :aria-label="t('communityChat.profile.view', { name: authorName(chatMessage) })"
-                @pointerdown="beginAvatarLongPress($event, chatMessage)"
-                @pointermove="handleAvatarLongPressMove"
-                @pointerup="finishAvatarLongPress"
-                @pointercancel="cancelAvatarLongPress"
-                @pointerleave="cancelAvatarLongPress"
-                @contextmenu="handleAvatarContextMenu($event, chatMessage)"
-                @click="handleAuthorAvatarClick($event, chatMessage)"
-              >
-                <AvatarFramePreview
-                  v-if="authorFrameId(chatMessage)"
-                  :frame-id="authorFrameId(chatMessage)"
-                  :src="authorAvatarSource(chatMessage)"
-                  :size="32"
-                  layout-mode="slot"
-                  pause-when-offscreen
-                />
-                <SvgIcon
-                  v-else
-                  class="community-message__avatar-image"
-                  :src="authorAvatarSource(chatMessage)"
-                  size="36"
-                />
+            <div v-if="hasMore && !initialLoading" class="community-message-list__older">
+              <BButton size="small" :loading="olderLoading" @click="loadOlder">
+                {{ t('communityChat.loadOlder') }}
               </BButton>
-              <div class="community-message__body">
-                <div class="community-message__meta">
-                  <BButton
-                    class="community-message__author-name"
-                    :aria-label="t('communityChat.profile.view', { name: authorName(chatMessage) })"
-                    @click.stop="openAuthorProfile(chatMessage)"
-                  >
-                    {{ authorName(chatMessage) }}
-                  </BButton>
-                  <span class="community-message__level">
-                    Lv.{{ chatMessage.author.level }} {{ chatMessage.author.levelName }}
-                  </span>
-                  <span v-if="chatMessage.author.role !== 'member'" class="community-message__role">
-                    {{ authorRoleLabel(chatMessage.author.role) }}
-                  </span>
-                  <time :datetime="chatMessage.createdAt">{{ formatMessageTime(chatMessage.createdAt) }}</time>
-                </div>
-                <div class="community-message__payload" @click="handleMessageTap($event, chatMessage)">
-                  <div class="community-message__surface">
-                    <div
-                      v-if="chatMessage.status === 'recalled' && chatMessage.canViewRecalledContent"
-                      class="community-message__recalled"
-                      role="status"
+            </div>
+
+            <div v-if="loadError && !chatMessages.length" class="community-message-state" role="status">
+              <strong>{{ t('communityChat.messagesLoadFailed') }}</strong>
+              <p>{{ t('communityChat.messagesLoadFailedDescription') }}</p>
+              <BButton size="small" @click="loadInitial">{{ t('communityChat.retryMessages') }}</BButton>
+            </div>
+
+            <div v-else-if="!chatMessages.length" class="community-message-state">
+              <span class="community-message-state__icon" aria-hidden="true">
+                <SvgIcon :src="icon.ai.conversations" size="24" />
+              </span>
+              <strong>{{ t('communityChat.emptyMessages') }}</strong>
+              <p>{{ t('communityChat.emptyMessagesDescription') }}</p>
+            </div>
+
+            <template v-else>
+              <article
+                v-for="chatMessage in chatMessages"
+                :key="chatMessage.publicId"
+                class="community-message"
+                :class="{
+                  'is-own': chatMessage.isOwn,
+                  'is-focused':
+                    chatMessage.publicId === focusedMessagePublicId ||
+                    chatMessage.publicId === transientFocusedMessagePublicId,
+                  'is-recalled': chatMessage.status === 'recalled',
+                  'is-sending': chatMessage.deliveryState === 'sending',
+                }"
+                :data-message-public-id="chatMessage.publicId"
+              >
+                <BButton
+                  class="community-message__avatar"
+                  :aria-label="t('communityChat.profile.view', { name: authorName(chatMessage) })"
+                  @pointerdown="beginAvatarLongPress($event, chatMessage)"
+                  @pointermove="handleAvatarLongPressMove"
+                  @pointerup="finishAvatarLongPress"
+                  @pointercancel="cancelAvatarLongPress"
+                  @pointerleave="cancelAvatarLongPress"
+                  @contextmenu="handleAvatarContextMenu($event, chatMessage)"
+                  @click="handleAuthorAvatarClick($event, chatMessage)"
+                >
+                  <AvatarFramePreview
+                    v-if="authorFrameId(chatMessage)"
+                    :frame-id="authorFrameId(chatMessage)"
+                    :src="authorAvatarSource(chatMessage)"
+                    :size="32"
+                    layout-mode="slot"
+                    pause-when-offscreen
+                  />
+                  <SvgIcon
+                    v-else
+                    class="community-message__avatar-image"
+                    :src="authorAvatarSource(chatMessage)"
+                    size="36"
+                  />
+                </BButton>
+                <div class="community-message__body">
+                  <div class="community-message__meta">
+                    <BButton
+                      class="community-message__author-name"
+                      :aria-label="t('communityChat.profile.view', { name: authorName(chatMessage) })"
+                      @click.stop="openAuthorProfile(chatMessage)"
                     >
-                      <span>
-                        {{ t('communityChat.recall.adminVisible') }}
-                      </span>
-                    </div>
-                    <template v-if="chatMessage.status === 'active' || chatMessage.canViewRecalledContent">
-                      <BButton
-                        v-if="chatMessage.reply"
-                        class="community-message__reply"
-                        :disabled="!canJumpToReply(chatMessage)"
-                        :aria-label="t('communityChat.replyJump', { name: replyAuthorName(chatMessage) })"
-                        @click.stop="jumpToMessage(chatMessage.reply.publicId)"
-                      >
-                        <strong>{{ t('communityChat.replyReference', { name: replyAuthorName(chatMessage) }) }}</strong>
-                        <span>{{ replySummary(chatMessage) }}</span>
-                      </BButton>
-                    </template>
-                    <div
-                      class="community-message__primary"
-                      :class="{ 'is-sticker-only': messageIsStickerOnly(chatMessage) }"
-                    >
+                      {{ authorName(chatMessage) }}
+                    </BButton>
+                    <span class="community-message__level">
+                      Lv.{{ chatMessage.author.level }} {{ chatMessage.author.levelName }}
+                    </span>
+                    <span v-if="chatMessage.author.role !== 'member'" class="community-message__role">
+                      {{ authorRoleLabel(chatMessage.author.role) }}
+                    </span>
+                    <time :datetime="chatMessage.createdAt">{{ formatMessageTime(chatMessage.createdAt) }}</time>
+                  </div>
+                  <div class="community-message__payload" @click="handleMessageTap($event, chatMessage)">
+                    <div class="community-message__surface">
                       <div
-                        v-if="chatMessage.status === 'recalled' && !chatMessage.canViewRecalledContent"
+                        v-if="chatMessage.status === 'recalled' && chatMessage.canViewRecalledContent"
                         class="community-message__recalled"
                         role="status"
                       >
-                        <span>{{ t('communityChat.recall.placeholder') }}</span>
-                      </div>
-                      <ChatPollCard
-                        v-else-if="chatMessage.messageKind === 'poll' && chatMessage.poll"
-                        :question="chatMessage.content"
-                        :poll="chatMessage.poll"
-                        :now="communityClock"
-                        :participation-paused="
-                          props.access.authenticated && (!props.access.pollsEnabled || !props.access.postingEnabled)
-                        "
-                        :busy-option-public-id="pollVoteBusyByMessageId.get(chatMessage.publicId) || ''"
-                        :closing="pollClosingMessageIds.has(chatMessage.publicId)"
-                        @vote="votePoll(chatMessage, $event)"
-                        @close="confirmClosePoll(chatMessage)"
-                      />
-                      <p v-else-if="messageHasText(chatMessage)" class="community-message__content">
-                        <span
-                          v-if="chatMessage.mentionEveryone || chatMessage.mentions?.length"
-                          class="community-message__mentions"
-                        >
-                          <span v-if="chatMessage.mentionEveryone" class="community-message__mention">
-                            @{{ t('communityChat.mentionSearch.everyone') }}
-                          </span>
-                          <span
-                            v-for="(name, index) in chatMessage.mentions"
-                            :key="`${chatMessage.publicId}:mention:${index}`"
-                            class="community-message__mention"
-                          >
-                            @{{ name }}
-                          </span>
+                        <span>
+                          {{ t('communityChat.recall.adminVisible') }}
                         </span>
-                        <span v-if="chatMessage.content">{{ chatMessage.content }}</span>
-                      </p>
+                      </div>
+                      <template v-if="chatMessage.status === 'active' || chatMessage.canViewRecalledContent">
+                        <BButton
+                          v-if="chatMessage.reply"
+                          class="community-message__reply"
+                          :disabled="!canJumpToReply(chatMessage)"
+                          :aria-label="t('communityChat.replyJump', { name: replyAuthorName(chatMessage) })"
+                          @click.stop="jumpToMessage(chatMessage.reply.publicId)"
+                        >
+                          <strong>{{
+                            t('communityChat.replyReference', { name: replyAuthorName(chatMessage) })
+                          }}</strong>
+                          <span>{{ replySummary(chatMessage) }}</span>
+                        </BButton>
+                      </template>
                       <div
-                        v-else-if="messageHasImages(chatMessage)"
+                        class="community-message__primary"
+                        :class="{ 'is-sticker-only': messageIsStickerOnly(chatMessage) }"
+                      >
+                        <div
+                          v-if="chatMessage.status === 'recalled' && !chatMessage.canViewRecalledContent"
+                          class="community-message__recalled"
+                          role="status"
+                        >
+                          <span>{{ t('communityChat.recall.placeholder') }}</span>
+                        </div>
+                        <ChatPollCard
+                          v-else-if="chatMessage.messageKind === 'poll' && chatMessage.poll"
+                          :question="chatMessage.content"
+                          :poll="chatMessage.poll"
+                          :now="communityClock"
+                          :participation-paused="
+                            props.access.authenticated && (!props.access.pollsEnabled || !props.access.postingEnabled)
+                          "
+                          :busy-option-public-id="pollVoteBusyByMessageId.get(chatMessage.publicId) || ''"
+                          :closing="pollClosingMessageIds.has(chatMessage.publicId)"
+                          @vote="votePoll(chatMessage, $event)"
+                          @close="confirmClosePoll(chatMessage)"
+                        />
+                        <p v-else-if="messageHasText(chatMessage)" class="community-message__content">
+                          <span
+                            v-if="chatMessage.mentionEveryone || chatMessage.mentions?.length"
+                            class="community-message__mentions"
+                          >
+                            <span v-if="chatMessage.mentionEveryone" class="community-message__mention">
+                              @{{ t('communityChat.mentionSearch.everyone') }}
+                            </span>
+                            <span
+                              v-for="(name, index) in chatMessage.mentions"
+                              :key="`${chatMessage.publicId}:mention:${index}`"
+                              class="community-message__mention"
+                            >
+                              @{{ name }}
+                            </span>
+                          </span>
+                          <span v-if="chatMessage.content">{{ chatMessage.content }}</span>
+                        </p>
+                        <div
+                          v-else-if="messageHasImages(chatMessage)"
+                          class="community-message__images"
+                          :class="`has-${Math.min(chatMessage.images.length, 4)}`"
+                        >
+                          <BButton
+                            v-for="imageItem in chatMessage.images"
+                            :key="imageItem.publicId"
+                            class="community-message__image"
+                            :class="{ 'is-ready': isMessageImageReady(imageItem.publicId) }"
+                            :style="messageImageLayoutStyle(imageItem)"
+                            :aria-label="t('communityChat.image.preview')"
+                            @click.stop="handleMessageImageClick(chatMessage, imageItem)"
+                          >
+                            <span class="community-message__image-sizer" aria-hidden="true"></span>
+                            <span
+                              v-if="!isMessageImageReady(imageItem.publicId)"
+                              class="community-message__image-placeholder"
+                              aria-hidden="true"
+                            >
+                              <SvgIcon :src="icon.noteDetail.toolbar.image" size="22" />
+                            </span>
+                            <img
+                              :src="imageItem.url"
+                              :alt="t('communityChat.image.messageAlt', { name: authorName(chatMessage) })"
+                              :width="positiveImageDimension(imageItem.width)"
+                              :height="positiveImageDimension(imageItem.height)"
+                              :loading="isMessageImagePriority(imageItem.publicId) ? 'eager' : 'lazy'"
+                              :fetchpriority="isMessageImagePriority(imageItem.publicId) ? 'high' : 'auto'"
+                              decoding="async"
+                              @load="handleMessageImageLoaded($event, imageItem)"
+                              @error="handleMessageImageError(imageItem)"
+                            />
+                          </BButton>
+                        </div>
+                        <div
+                          v-else-if="chatMessage.messageKind === 'sticker'"
+                          class="community-message__sticker"
+                          :class="{ 'has-image': Boolean(chatMessage.sticker?.url) }"
+                        >
+                          <img
+                            v-if="chatMessage.sticker?.url"
+                            :src="chatMessage.sticker.url"
+                            :alt="t('communityChat.sticker.messageAlt', { name: authorName(chatMessage) })"
+                            width="176"
+                            height="176"
+                            loading="lazy"
+                            decoding="async"
+                            @load="handleStickerImageSettled"
+                            @error="handleStickerImageSettled"
+                          />
+                          <span v-else>{{ t('communityChat.sticker.messageFallback') }}</span>
+                        </div>
+                        <div v-if="messageHasActions(chatMessage)" class="community-message__actions">
+                          <BTooltip
+                            v-if="canLikeMessage(chatMessage)"
+                            :title="likeActionLabel(chatMessage)"
+                            :delay="80"
+                          >
+                            <BButton
+                              size="small"
+                              class="community-message__action community-message__like"
+                              :class="{ 'is-selected': chatMessage.likedByMe }"
+                              :loading="messageActionBusyId === chatMessage.publicId"
+                              :aria-label="likeActionLabel(chatMessage)"
+                              @click.stop="toggleLike(chatMessage)"
+                            >
+                              <SvgIcon :src="icon.coBuild.vote" size="15" aria-hidden="true" />
+                              <span v-if="chatMessage.likeCount">{{ chatMessage.likeCount }}</span>
+                            </BButton>
+                          </BTooltip>
+                          <BTooltip
+                            v-if="canReplyToMessage(chatMessage)"
+                            :title="t('communityChat.replyAction')"
+                            :delay="80"
+                          >
+                            <BButton
+                              size="small"
+                              class="community-message__action"
+                              :aria-label="t('communityChat.replyAction')"
+                              @click.stop="startReply(chatMessage)"
+                            >
+                              <SvgIcon :src="icon.noteDetail.toolbar.quote" size="15" aria-hidden="true" />
+                            </BButton>
+                          </BTooltip>
+                          <BTooltip
+                            v-if="canRecallMessage(chatMessage)"
+                            :title="t('communityChat.recall.action')"
+                            :delay="80"
+                          >
+                            <BButton
+                              size="small"
+                              class="community-message__action is-danger"
+                              :aria-label="t('communityChat.recall.action')"
+                              @click.stop="confirmRecall(chatMessage)"
+                            >
+                              <SvgIcon :src="icon.noteDetail.toolbar.undo" size="15" aria-hidden="true" />
+                            </BButton>
+                          </BTooltip>
+                          <BTooltip
+                            v-if="canDeleteMessage(chatMessage)"
+                            :title="t('communityChat.delete.action')"
+                            :delay="80"
+                          >
+                            <BButton
+                              size="small"
+                              class="community-message__action is-danger"
+                              :aria-label="t('communityChat.delete.action')"
+                              @click.stop="confirmDelete(chatMessage)"
+                            >
+                              <SvgIcon :src="icon.noteDetail.deleteLine" size="15" aria-hidden="true" />
+                            </BButton>
+                          </BTooltip>
+                          <BActionMenu
+                            v-if="messageMenuItems(chatMessage).length"
+                            class="community-message__desktop-more"
+                            :items="messageMenuItems(chatMessage)"
+                            placement="bottom-left"
+                            :disabled="messageActionBusyId === chatMessage.publicId"
+                            :aria-label="t('communityChat.messageActions')"
+                            @select="(action) => handleMessageAction(action, chatMessage)"
+                          >
+                            <BTooltip :title="t('communityChat.moreActions')" :delay="80">
+                              <BButton
+                                size="small"
+                                class="community-message__more"
+                                :loading="messageActionBusyId === chatMessage.publicId"
+                                :aria-label="t('communityChat.moreActions')"
+                              >
+                                <SvgIcon :src="icon.common.more" size="16" aria-hidden="true" />
+                              </BButton>
+                            </BTooltip>
+                          </BActionMenu>
+                        </div>
+                      </div>
+                      <div
+                        v-if="messageHasText(chatMessage) && messageHasImages(chatMessage)"
                         class="community-message__images"
                         :class="`has-${Math.min(chatMessage.images.length, 4)}`"
                       >
@@ -300,7 +438,10 @@
                         </BButton>
                       </div>
                       <div
-                        v-else-if="chatMessage.messageKind === 'sticker'"
+                        v-if="
+                          (messageHasText(chatMessage) || messageHasImages(chatMessage)) &&
+                          chatMessage.messageKind === 'sticker'
+                        "
                         class="community-message__sticker"
                         :class="{ 'has-image': Boolean(chatMessage.sticker?.url) }"
                       >
@@ -317,157 +458,24 @@
                         />
                         <span v-else>{{ t('communityChat.sticker.messageFallback') }}</span>
                       </div>
-                      <div v-if="messageHasActions(chatMessage)" class="community-message__actions">
-                        <BTooltip v-if="canLikeMessage(chatMessage)" :title="likeActionLabel(chatMessage)" :delay="80">
-                          <BButton
-                            size="small"
-                            class="community-message__action community-message__like"
-                            :class="{ 'is-selected': chatMessage.likedByMe }"
-                            :loading="messageActionBusyId === chatMessage.publicId"
-                            :aria-label="likeActionLabel(chatMessage)"
-                            @click.stop="toggleLike(chatMessage)"
-                          >
-                            <SvgIcon :src="icon.coBuild.vote" size="15" aria-hidden="true" />
-                            <span v-if="chatMessage.likeCount">{{ chatMessage.likeCount }}</span>
-                          </BButton>
-                        </BTooltip>
-                        <BTooltip
-                          v-if="canReplyToMessage(chatMessage)"
-                          :title="t('communityChat.replyAction')"
-                          :delay="80"
-                        >
-                          <BButton
-                            size="small"
-                            class="community-message__action"
-                            :aria-label="t('communityChat.replyAction')"
-                            @click.stop="startReply(chatMessage)"
-                          >
-                            <SvgIcon :src="icon.noteDetail.toolbar.quote" size="15" aria-hidden="true" />
-                          </BButton>
-                        </BTooltip>
-                        <BTooltip
-                          v-if="canRecallMessage(chatMessage)"
-                          :title="t('communityChat.recall.action')"
-                          :delay="80"
-                        >
-                          <BButton
-                            size="small"
-                            class="community-message__action is-danger"
-                            :aria-label="t('communityChat.recall.action')"
-                            @click.stop="confirmRecall(chatMessage)"
-                          >
-                            <SvgIcon :src="icon.noteDetail.toolbar.undo" size="15" aria-hidden="true" />
-                          </BButton>
-                        </BTooltip>
-                        <BTooltip
-                          v-if="canDeleteMessage(chatMessage)"
-                          :title="t('communityChat.delete.action')"
-                          :delay="80"
-                        >
-                          <BButton
-                            size="small"
-                            class="community-message__action is-danger"
-                            :aria-label="t('communityChat.delete.action')"
-                            @click.stop="confirmDelete(chatMessage)"
-                          >
-                            <SvgIcon :src="icon.noteDetail.deleteLine" size="15" aria-hidden="true" />
-                          </BButton>
-                        </BTooltip>
-                        <BActionMenu
-                          v-if="messageMenuItems(chatMessage).length"
-                          class="community-message__desktop-more"
-                          :items="messageMenuItems(chatMessage)"
-                          placement="bottom-left"
-                          :disabled="messageActionBusyId === chatMessage.publicId"
-                          :aria-label="t('communityChat.messageActions')"
-                          @select="(action) => handleMessageAction(action, chatMessage)"
-                        >
-                          <BTooltip :title="t('communityChat.moreActions')" :delay="80">
-                            <BButton
-                              size="small"
-                              class="community-message__more"
-                              :loading="messageActionBusyId === chatMessage.publicId"
-                              :aria-label="t('communityChat.moreActions')"
-                            >
-                              <SvgIcon :src="icon.common.more" size="16" aria-hidden="true" />
-                            </BButton>
-                          </BTooltip>
-                        </BActionMenu>
-                      </div>
-                    </div>
-                    <div
-                      v-if="messageHasText(chatMessage) && messageHasImages(chatMessage)"
-                      class="community-message__images"
-                      :class="`has-${Math.min(chatMessage.images.length, 4)}`"
-                    >
-                      <BButton
-                        v-for="imageItem in chatMessage.images"
-                        :key="imageItem.publicId"
-                        class="community-message__image"
-                        :class="{ 'is-ready': isMessageImageReady(imageItem.publicId) }"
-                        :style="messageImageLayoutStyle(imageItem)"
-                        :aria-label="t('communityChat.image.preview')"
-                        @click.stop="handleMessageImageClick(chatMessage, imageItem)"
-                      >
-                        <span class="community-message__image-sizer" aria-hidden="true"></span>
-                        <span
-                          v-if="!isMessageImageReady(imageItem.publicId)"
-                          class="community-message__image-placeholder"
-                          aria-hidden="true"
-                        >
-                          <SvgIcon :src="icon.noteDetail.toolbar.image" size="22" />
-                        </span>
-                        <img
-                          :src="imageItem.url"
-                          :alt="t('communityChat.image.messageAlt', { name: authorName(chatMessage) })"
-                          :width="positiveImageDimension(imageItem.width)"
-                          :height="positiveImageDimension(imageItem.height)"
-                          :loading="isMessageImagePriority(imageItem.publicId) ? 'eager' : 'lazy'"
-                          :fetchpriority="isMessageImagePriority(imageItem.publicId) ? 'high' : 'auto'"
-                          decoding="async"
-                          @load="handleMessageImageLoaded($event, imageItem)"
-                          @error="handleMessageImageError(imageItem)"
-                        />
-                      </BButton>
-                    </div>
-                    <div
-                      v-if="
-                        (messageHasText(chatMessage) || messageHasImages(chatMessage)) &&
-                        chatMessage.messageKind === 'sticker'
-                      "
-                      class="community-message__sticker"
-                      :class="{ 'has-image': Boolean(chatMessage.sticker?.url) }"
-                    >
-                      <img
-                        v-if="chatMessage.sticker?.url"
-                        :src="chatMessage.sticker.url"
-                        :alt="t('communityChat.sticker.messageAlt', { name: authorName(chatMessage) })"
-                        width="176"
-                        height="176"
-                        loading="lazy"
-                        decoding="async"
-                        @load="handleStickerImageSettled"
-                        @error="handleStickerImageSettled"
-                      />
-                      <span v-else>{{ t('communityChat.sticker.messageFallback') }}</span>
                     </div>
                   </div>
+                  <div v-if="chatMessage.likeCount > 0" class="community-message__reactions" aria-live="polite">
+                    <SvgIcon :src="icon.coBuild.vote" size="14" aria-hidden="true" />
+                    <span>{{ likeReactionSummary(chatMessage) }}</span>
+                  </div>
+                  <ChatReadReceiptBadge
+                    v-if="chatMessage.readReceiptEnabled && props.access.authenticated"
+                    :can-manage="props.access.canManage"
+                    :enabled="props.access.readReceiptsEnabled"
+                    :read-count="chatMessage.readCount"
+                    :loading="messageDetailBusyIds.has(chatMessage.publicId)"
+                    @refresh="refreshMessageDetail(chatMessage.publicId)"
+                  />
                 </div>
-                <div v-if="chatMessage.likeCount > 0" class="community-message__reactions" aria-live="polite">
-                  <SvgIcon :src="icon.coBuild.vote" size="14" aria-hidden="true" />
-                  <span>{{ likeReactionSummary(chatMessage) }}</span>
-                </div>
-                <ChatReadReceiptBadge
-                  v-if="chatMessage.readReceiptEnabled && props.access.authenticated"
-                  :can-manage="props.access.canManage"
-                  :enabled="props.access.readReceiptsEnabled"
-                  :read-count="chatMessage.readCount"
-                  :loading="messageDetailBusyIds.has(chatMessage.publicId)"
-                  @refresh="refreshMessageDetail(chatMessage.publicId)"
-                />
-              </div>
-            </article>
-          </template>
+              </article>
+            </template>
+          </div>
         </div>
         <BButton
           v-if="focusedMessagePublicId && hasNewerThanFocus"
@@ -610,7 +618,6 @@
               @compositionstart="handleComposerCompositionStart"
               @compositionend="handleComposerCompositionEnd"
               @focus="handleComposerFocus"
-              @focusout="handleComposerFocusOut"
               @enter="sendMessage"
             />
             <template #content>
@@ -882,6 +889,7 @@
     type CommunityChatDraftMentionTarget,
   } from '@/composables/useCommunityChatDraftMemory';
   import { useCommunityChatEmojiRecent } from '@/composables/useCommunityChatEmojiRecent';
+  import { useCommunityChatViewportController } from '@/composables/useCommunityChatViewportController';
   import icon from '@/config/icon';
   import { frameVariant } from '@/config/growthFrames';
   import { bookmarkStore, useUserStore } from '@/store';
@@ -893,7 +901,7 @@
     requestMobileOverlayHistoryClose,
     type MobileOverlayHistoryHandle,
   } from '@/utils/mobileOverlayHistory';
-  import { scrollIntoContainer } from '@/utils/zoom';
+  import { getRootZoom, scrollIntoContainer } from '@/utils/zoom';
 
   const props = defineProps<{
     access: CommunityChatAccess;
@@ -944,6 +952,7 @@
   const nextBefore = ref<string | null>(null);
   const nextAfter = ref<string | null>(null);
   const messageListEl = ref<HTMLElement | null>(null);
+  const messageContentEl = ref<HTMLElement | null>(null);
   const composerInput = ref<InstanceType<typeof BInput> | null>(null);
   const composerDraftSession = shallowRef(createCommunityChatDraftSession());
   const draft = computed({
@@ -1056,15 +1065,10 @@
   let messageNavigationGeneration = 0;
   let programmaticMessageNavigationActive = false;
   let avatarMotionResumeTimer: number | undefined;
-  let messageListResizeObserver: ResizeObserver | null = null;
   let initialBottomAnchorTimer: number | undefined;
   let initialBottomAnchorCheckTimer: number | undefined;
   let initialBottomAnchorGeneration = 0;
   let initialBottomAnchorActive = false;
-  let keyboardAnchorFrame: number | undefined;
-  let keyboardAnchorCloseTimer: number | undefined;
-  let composerKeyboardAnchorActive = false;
-  let composerKeyboardAnchorAtBottom = false;
   let recallClockTimer: number | undefined;
   let lastMarkedReadMessageId = '';
   let clearingFocusRouteValue = '';
@@ -1072,7 +1076,6 @@
   let latestRefreshQueued = false;
   let latestRefreshQueuedForce = false;
   let lastAuthorityRefreshAt = 0;
-  let lastMessageScrollTop = 0;
   let realtimeAuthorityRefreshPending = false;
   let readReceiptForegroundActive = false;
   const submittedReadReceiptIds = new Set<string>();
@@ -1133,6 +1136,16 @@
   const showBackToBottom = computed(() => {
     const threshold = bookmark.isMobile ? BACK_TO_BOTTOM_MOBILE_THRESHOLD : BACK_TO_BOTTOM_DESKTOP_THRESHOLD;
     return !initialLoading.value && chatMessages.value.length > 0 && distanceFromBottom.value > threshold;
+  });
+  const isLatestMessageWindow = computed(() => !focusedMessagePublicId.value && !hasNewerThanFocus.value);
+  const messageViewport = useCommunityChatViewportController({
+    element: messageListEl,
+    contentElement: messageContentEl,
+    isLatestWindow: () => isLatestMessageWindow.value,
+    onMetrics: (metrics) => {
+      distanceFromBottom.value = metrics.distanceFromBottom;
+      scheduleVisibleReadReceipts();
+    },
   });
   const draftLength = computed(() => Array.from(String(draft.value || '')).length);
   const communityClock = computed(() => recallClock.value + serverClockOffsetMs.value);
@@ -1597,18 +1610,11 @@
   }
 
   function isNearBottom() {
-    const element = messageListEl.value;
-    if (!element) return true;
-    return element.scrollHeight - element.scrollTop - element.clientHeight < 96;
+    return messageViewport.isNearBottom();
   }
 
   async function scrollToBottom() {
-    await nextTick();
-    if (messageListEl.value) {
-      messageListEl.value.scrollTop = messageListEl.value.scrollHeight;
-      lastMessageScrollTop = messageListEl.value.scrollTop;
-      distanceFromBottom.value = 0;
-    }
+    await messageViewport.scrollToLatest();
   }
 
   function cancelInitialBottomAnchor() {
@@ -1636,19 +1642,16 @@
     // 是否真的离开底部；没有几何变化时不写 scrollTop，用户主动浏览后则立即整体取消。
     initialBottomAnchorCheckTimer = window.setInterval(() => {
       if (!initialBottomAnchorActive || generation !== initialBottomAnchorGeneration) return;
-      const element = messageListEl.value;
-      if (!element) return;
-      if (Math.abs(element.scrollTop - lastMessageScrollTop) > 1) {
+      if (!messageViewport.shouldFollowLatest()) {
         cancelInitialBottomAnchor();
         return;
       }
-      const distance = element.scrollHeight - element.scrollTop - element.clientHeight;
-      if (distance > 1) void restoreInitialBottomAnchor();
+      if (!messageViewport.isAtBottom(1)) void restoreInitialBottomAnchor();
     }, INITIAL_BOTTOM_ANCHOR_CHECK_MS);
   }
 
   async function restoreInitialBottomAnchor() {
-    if (!initialBottomAnchorActive || focusedMessagePublicId.value) return;
+    if (!initialBottomAnchorActive || !messageViewport.shouldFollowLatest()) return;
     const generation = initialBottomAnchorGeneration;
     await scrollToBottom();
     if (!initialBottomAnchorActive || generation !== initialBottomAnchorGeneration) return;
@@ -1788,12 +1791,8 @@
 
   function suspendAutomaticBottomAnchorsForMessageNavigation() {
     cancelInitialBottomAnchor();
-    // 置顶、引用和深链跳转都是用户明确发起的消息导航，优先级必须高于首屏贴底和键盘锚点。
-    // 只清除本次“保持底部”资格；输入框下次重新获得焦点时会按实时位置重新判断。
-    composerKeyboardAnchorAtBottom = false;
-    if (keyboardAnchorFrame === undefined) return;
-    window.cancelAnimationFrame(keyboardAnchorFrame);
-    keyboardAnchorFrame = undefined;
+    // 置顶、引用和深链跳转都是用户明确发起的消息导航，优先级必须高于所有自动贴底。
+    messageViewport.preservePosition();
   }
 
   async function scrollToFocusedMessage(publicId: string) {
@@ -1817,7 +1816,7 @@
         target = findTarget();
       }
       if (!target) {
-        await scrollToBottom();
+        messageViewport.applyScrollTop(container.scrollHeight, { intent: 'preserve-position' });
         return;
       }
 
@@ -1826,7 +1825,7 @@
         // 聊天消息定位属于导航而非浏览动画。长距离 smooth 在部分 Android WebView 中会被懒加载图片
         // 或滚动锚点中断，表现为需要连续点击；直接定位配合实色高亮能保证一次点击到位。
         scrollIntoContainer(container, element, centerOffset, 'auto');
-        lastMessageScrollTop = container.scrollTop;
+        messageViewport.syncPosition({ intent: 'preserve-position' });
       };
 
       locateTarget(target);
@@ -2020,13 +2019,13 @@
 
   function processMessageListScroll() {
     messageScrollFrame = undefined;
-    const element = messageListEl.value;
-    if (!element) return;
-    const { scrollTop, scrollHeight, clientHeight } = element;
-    distanceFromBottom.value = Math.max(0, scrollHeight - scrollTop - clientHeight);
-    const scrollingUp = scrollTop < lastMessageScrollTop;
-    const scrollingDown = scrollTop > lastMessageScrollTop;
-    lastMessageScrollTop = scrollTop;
+    if (!messageListEl.value) return;
+    const {
+      scrollTop,
+      distanceFromBottom: nextDistanceFromBottom,
+      scrollingUp,
+      scrollingDown,
+    } = messageViewport.handleScroll({ programmatic: programmaticMessageNavigationActive });
     if (
       !programmaticMessageNavigationActive &&
       scrollingUp &&
@@ -2039,7 +2038,7 @@
     if (
       !programmaticMessageNavigationActive &&
       scrollingDown &&
-      distanceFromBottom.value <= MESSAGE_PAGINATION_EDGE_PX &&
+      nextDistanceFromBottom <= MESSAGE_PAGINATION_EDGE_PX &&
       focusedMessagePublicId.value &&
       hasNewerThanFocus.value &&
       nextAfter.value &&
@@ -2048,7 +2047,7 @@
       void loadNewer();
     }
     scheduleVisibleReadReceipts();
-    if (distanceFromBottom.value >= 96) return;
+    if (nextDistanceFromBottom >= 96) return;
     pendingNewMessageCount.value = 0;
     // 定位历史消息的时间窗尚未接到最新页时，当前窗口底部并不等于聊天室最新消息，
     // 不能提前清角标或写入已读游标。
@@ -2078,8 +2077,7 @@
     cancelProgrammaticMessageNavigation();
     cancelInitialBottomAnchor();
     resetReadReceiptVisibilityTracking();
-    // 用户开始主动浏览历史后，键盘或容器后续的尺寸变化不得再把列表抢回底部。
-    composerKeyboardAnchorAtBottom = false;
+    messageViewport.handleUserScrollIntent();
     pauseAvatarMotionForScroll();
   }
 
@@ -2111,43 +2109,10 @@
     closeMobileExpressionPanel();
   }
 
-  function writeBottomAnchor() {
-    keyboardAnchorFrame = undefined;
-    if (!composerKeyboardAnchorActive || !composerKeyboardAnchorAtBottom || !messageListEl.value) return;
-    messageListEl.value.scrollTop = messageListEl.value.scrollHeight;
-    lastMessageScrollTop = messageListEl.value.scrollTop;
-    distanceFromBottom.value = 0;
-  }
-
-  function scheduleBottomAnchor() {
-    if (!composerKeyboardAnchorActive || !composerKeyboardAnchorAtBottom || keyboardAnchorFrame !== undefined) return;
-    keyboardAnchorFrame = window.requestAnimationFrame(writeBottomAnchor);
-  }
-
   function handleComposerFocus() {
     if (bookmark.isMobile) {
       expressionPanelOpen.value = false;
     }
-    if (keyboardAnchorCloseTimer !== undefined) {
-      window.clearTimeout(keyboardAnchorCloseTimer);
-      keyboardAnchorCloseTimer = undefined;
-    }
-    composerKeyboardAnchorAtBottom = isNearBottom();
-    composerKeyboardAnchorActive = true;
-    scheduleBottomAnchor();
-  }
-
-  function handleComposerFocusOut() {
-    // 失焦早于系统键盘的收起动画；短暂保留锚点，让关闭过程也不会在底部留下空白。
-    if (keyboardAnchorCloseTimer !== undefined) window.clearTimeout(keyboardAnchorCloseTimer);
-    keyboardAnchorCloseTimer = window.setTimeout(() => {
-      keyboardAnchorCloseTimer = undefined;
-      composerKeyboardAnchorActive = false;
-      composerKeyboardAnchorAtBottom = false;
-      if (keyboardAnchorFrame === undefined) return;
-      window.cancelAnimationFrame(keyboardAnchorFrame);
-      keyboardAnchorFrame = undefined;
-    }, 320);
   }
 
   function handleDocumentPointerDown(event: PointerEvent) {
@@ -2165,6 +2130,17 @@
     pendingNewMessageCount.value = 0;
     await scrollToBottom();
     await markLatestRead();
+  }
+
+  async function revealOutgoingMessage() {
+    if (isLatestMessageWindow.value) {
+      await scrollToBottom();
+      return;
+    }
+    // 历史深链窗口可能仍允许发送。保留既有“看到本地待发送气泡”的反馈，但不把历史窗口升级成跟随最新。
+    await nextTick();
+    const element = messageListEl.value;
+    if (element) messageViewport.applyScrollTop(element.scrollHeight, { intent: 'preserve-position' });
   }
 
   function retainUnchangedMessageReferences(items: CommunityChatMessage[]) {
@@ -2221,11 +2197,14 @@
     if (anchorElement) {
       const containerTop = element.getBoundingClientRect().top;
       const nextOffsetTop = anchorElement.getBoundingClientRect().top - containerTop;
-      element.scrollTop += nextOffsetTop - anchor.offsetTop;
+      messageViewport.adjustScrollTop((nextOffsetTop - anchor.offsetTop) / getRootZoom(), {
+        intent: 'preserve-position',
+      });
     } else {
-      element.scrollTop = anchor.scrollTop + (element.scrollHeight - anchor.scrollHeight);
+      messageViewport.applyScrollTop(anchor.scrollTop + (element.scrollHeight - anchor.scrollHeight), {
+        intent: 'preserve-position',
+      });
     }
-    lastMessageScrollTop = element.scrollTop;
   }
 
   function trimFocusedMessageWindow(direction: 'older' | 'newer') {
@@ -2323,11 +2302,10 @@
   }
 
   async function commitPinnedMessage(nextPinnedMessage: CommunityChatMessage | null) {
-    const keepBottomAnchored = !initialLoading.value && isNearBottom();
     pinnedMessage.value = nextPinnedMessage;
-    // 置顶栏位于滚动容器外，在线新增/取消时会改变 messageList 的可用高度。用户本就在底部时，
-    // 同一轮 DOM 更新后补写最终 scrollTop；浏览历史时保持 scrollTop，不抢走当前阅读位置。
-    if (keepBottomAnchored) await scrollToBottom();
+    await nextTick();
+    // 置顶栏位于滚动容器外，会同时改变消息区 top 与 height；统一由视口控制器决定贴底或补偿历史位置。
+    messageViewport.reconcileGeometry({ immediateFollow: true });
   }
 
   async function loadPinnedMessage() {
@@ -2345,6 +2323,7 @@
     const generation = ++loadGeneration;
     const pinnedGeneration = ++pinnedLoadGeneration;
     const requestedFocus = ignoreFocus ? '' : focusMessageFromRoute.value;
+    if (!requestedFocus) messageViewport.followLatest();
     initialLoading.value = true;
     cancelInitialBottomAnchor();
     loadError.value = false;
@@ -2364,6 +2343,7 @@
           focusedMessagePublicId.value = '';
           hasNewerThanFocus.value = false;
           nextAfter.value = null;
+          messageViewport.followLatest();
           await clearFocusMessageRoute();
           message.warning(t('communityChat.sourceMessageUnavailable'));
           return getCommunityChatMessages(roomSlug, { limit: INITIAL_MESSAGE_PAGE_SIZE });
@@ -2415,6 +2395,7 @@
     const before = nextBefore.value;
     const element = messageListEl.value;
     if (!roomSlug || !before || olderLoading.value) return;
+    messageViewport.preservePosition();
     olderLoading.value = true;
     const viewportAnchor = captureMessageViewportAnchor();
     const previousScrollHeight = element?.scrollHeight || 0;
@@ -2437,8 +2418,9 @@
         await nextTick();
       }
       if (!trimmed && element) {
-        element.scrollTop += element.scrollHeight - previousScrollHeight;
-        lastMessageScrollTop = element.scrollTop;
+        messageViewport.adjustScrollTop(element.scrollHeight - previousScrollHeight, {
+          intent: 'preserve-position',
+        });
       }
     } catch (error: any) {
       message.error(error?.message || t('communityChat.messagesLoadFailed'));
@@ -2453,6 +2435,7 @@
     if (!roomSlug || !after || !focusedMessagePublicId.value || !hasNewerThanFocus.value || newerLoading.value) {
       return;
     }
+    messageViewport.preservePosition();
     newerLoading.value = true;
     const viewportAnchor = captureMessageViewportAnchor();
     try {
@@ -2499,7 +2482,6 @@
     }
     latestRefreshInFlight = true;
     const messageNavigationGenerationAtStart = messageNavigationGeneration;
-    const stayAtBottom = isNearBottom();
     const existingIds = new Set(chatMessages.value.map((item) => item.publicId));
     try {
       const response = await getCommunityChatMessages(roomSlug, { limit: INITIAL_MESSAGE_PAGE_SIZE });
@@ -2514,9 +2496,9 @@
       if (focusedMessagePublicId.value && newMessageCount > 0) {
         hasNewerThanFocus.value = true;
       }
-      // 请求发出后用户可能点击了置顶、引用或深链消息。旧请求不得再用发出时记录的
-      // “位于底部”状态覆盖这次明确导航，否则会表现为先定位、随即闪回最新消息。
-      if (stayAtBottom && messageNavigationGenerationAtStart === messageNavigationGeneration) {
+      // 请求发出后用户可能浏览历史，或点击置顶、引用、深链消息。提交时重新读取当前视口意图，
+      // 禁止旧请求沿用发出时的几何快照把用户抢回最新消息。
+      if (messageViewport.shouldFollowLatest() && messageNavigationGenerationAtStart === messageNavigationGeneration) {
         pendingNewMessageCount.value = 0;
         await scrollToBottom();
         await markLatestRead();
@@ -2595,13 +2577,15 @@
 
   function selectRoom(roomSlug: string) {
     if (roomSlug === selectedRoomSlug.value) {
-      void scrollToBottom();
+      if (isLatestMessageWindow.value) void jumpToLatest();
+      else void returnToLatest();
       return;
     }
     selectedRoomSlug.value = roomSlug;
   }
 
   async function returnToLatest() {
+    messageViewport.followLatest();
     focusedMessagePublicId.value = '';
     hasNewerThanFocus.value = false;
     nextAfter.value = null;
@@ -3165,7 +3149,6 @@
       expressionPanelOpen.value = true;
       const textarea = composerInput.value?.inputEl as HTMLTextAreaElement | null | undefined;
       textarea?.blur();
-      void nextTick(scrollToBottom);
     } else {
       closeMobileExpressionPanel({ focusComposer: true });
     }
@@ -3720,7 +3703,7 @@
     draftSession.mentionEveryone = false;
     draftSession.pendingImages = [];
     touchCommunityChatDraftSession(draftSession);
-    await scrollToBottom();
+    await revealOutgoingMessage();
     try {
       const payload = {
         clientRequestId,
@@ -3737,8 +3720,10 @@
       chatMessages.value = chatMessages.value.filter((item) => item.publicId !== optimisticPublicId);
       if (roomSlug === selectedRoomSlug.value) mergeLatest([sentMessage]);
       draftSession.pendingClientRequestId = null;
-      await scrollToBottom();
-      void markLatestRead();
+      if (messageViewport.shouldFollowLatest()) {
+        await scrollToBottom();
+        void markLatestRead();
+      }
     } catch (error: any) {
       chatMessages.value = chatMessages.value.filter((item) => item.publicId !== optimisticPublicId);
       draftSession.text = draftSnapshot;
@@ -3780,7 +3765,7 @@
     touchCommunityChatDraftSession(draftSession);
     expressionPanelOpen.value = false;
     chatMessages.value = [...chatMessages.value, optimisticMessage];
-    await scrollToBottom();
+    await revealOutgoingMessage();
     try {
       const response = await sendCommunityChatMessage(roomSlug, {
         clientRequestId,
@@ -3794,8 +3779,10 @@
       if (!sentMessage) throw new Error('COMMUNITY_CHAT_SEND_RESPONSE_INVALID');
       chatMessages.value = chatMessages.value.filter((item) => item.publicId !== optimisticPublicId);
       if (roomSlug === selectedRoomSlug.value) mergeLatest([sentMessage]);
-      await scrollToBottom();
-      void markLatestRead();
+      if (messageViewport.shouldFollowLatest()) {
+        await scrollToBottom();
+        void markLatestRead();
+      }
     } catch (error: any) {
       chatMessages.value = chatMessages.value.filter((item) => item.publicId !== optimisticPublicId);
       draftSession.replyTarget = replySnapshot;
@@ -3906,8 +3893,8 @@
       deadlinePollRefreshRequestedIds.clear();
       lastMarkedReadMessageId = '';
       lastAuthorityRefreshAt = 0;
-      lastMessageScrollTop = 0;
       cancelInitialBottomAnchor();
+      messageViewport.reset('follow-latest');
       if (messageScrollFrame !== undefined) {
         window.cancelAnimationFrame(messageScrollFrame);
         messageScrollFrame = undefined;
@@ -4040,17 +4027,7 @@
     window.addEventListener('pagehide', handleReadReceiptWindowBlur);
     window.addEventListener('pageshow', handleReadReceiptWindowFocus);
     window.addEventListener('resize', syncComposerInputHeight);
-    window.addEventListener('resize', scheduleVisibleReadReceipts);
-    window.visualViewport?.addEventListener('resize', scheduleBottomAnchor);
-    window.visualViewport?.addEventListener('resize', scheduleVisibleReadReceipts);
-    const ResizeObserverConstructor = globalThis.ResizeObserver;
-    if (bookmark.isMobile && typeof ResizeObserverConstructor === 'function' && messageListEl.value) {
-      messageListResizeObserver = new ResizeObserverConstructor(() => {
-        scheduleBottomAnchor();
-        scheduleVisibleReadReceipts();
-      });
-      messageListResizeObserver.observe(messageListEl.value);
-    }
+    messageViewport.start();
     void nextTick(syncComposerInputHeight);
     void nextTick(scheduleVisibleReadReceipts);
   });
@@ -4074,10 +4051,9 @@
     if (markReadTimer !== undefined) window.clearTimeout(markReadTimer);
     resetReadReceiptVisibilityTracking();
     if (messageScrollFrame !== undefined) window.cancelAnimationFrame(messageScrollFrame);
-    if (keyboardAnchorFrame !== undefined) window.cancelAnimationFrame(keyboardAnchorFrame);
-    if (keyboardAnchorCloseTimer !== undefined) window.clearTimeout(keyboardAnchorCloseTimer);
     cancelInitialBottomAnchor();
     cancelProgrammaticMessageNavigation();
+    messageViewport.stop();
     if (avatarMotionResumeTimer !== undefined) window.clearTimeout(avatarMotionResumeTimer);
     if (transientFocusTimer !== undefined) window.clearTimeout(transientFocusTimer);
     messageListEl.value?.classList.remove('is-actively-scrolling');
@@ -4088,11 +4064,6 @@
     window.removeEventListener('pagehide', handleReadReceiptWindowBlur);
     window.removeEventListener('pageshow', handleReadReceiptWindowFocus);
     window.removeEventListener('resize', syncComposerInputHeight);
-    window.removeEventListener('resize', scheduleVisibleReadReceipts);
-    window.visualViewport?.removeEventListener('resize', scheduleBottomAnchor);
-    window.visualViewport?.removeEventListener('resize', scheduleVisibleReadReceipts);
-    messageListResizeObserver?.disconnect();
-    messageListResizeObserver = null;
     mobileMessageActionTarget.value = null;
     mobileMessageActionImageTarget.value = null;
     imageViewerVisible.value = false;
@@ -4507,6 +4478,10 @@
 
   .community-message-list:hover::-webkit-scrollbar-thumb {
     background: var(--scrollbar-color);
+  }
+
+  .community-message-list__content {
+    min-height: 100%;
   }
 
   .community-message-list__new {

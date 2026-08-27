@@ -78,6 +78,10 @@ import {
   GITHUB_OAUTH_NONCE_COOKIE,
   readGitHubOAuthNonce,
 } from '../util/githubOAuthState.js';
+import {
+  consumeExtensionAuthorizationCode,
+  createExtensionAuthorizationCode,
+} from '../util/extensionAuth.js';
 let redisClient;
 if (process.platform === 'linux') {
   redisClient = (await import('../util/redisClient.js')).default;
@@ -1183,6 +1187,87 @@ export const startGithubOAuth = async (req, res) => {
         status < 500 ? error.message : L(req, 'GitHub 登录暂不可用，请使用邮箱登录', 'GitHub sign-in is unavailable.'),
       ),
     );
+  }
+};
+
+function extensionAuthResponse(req, res, error, scene) {
+  const status = Number.isInteger(error?.status) ? error.status : 500;
+  if (status >= 500) {
+    console.error('[extension-auth] %s failed code=%s', scene, String(error?.code || 'EXTENSION_AUTH_FAILED'));
+  }
+  return res.send(
+    resultData(
+      { code: String(error?.code || 'EXTENSION_AUTH_FAILED') },
+      status,
+      status < 500
+        ? error.message
+        : L(req, '浏览器插件授权暂不可用，请稍后重试', 'Browser extension authorization is unavailable.'),
+    ),
+  );
+}
+
+export const authorizeExtension = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const authorization = await createExtensionAuthorizationCode({
+      userId: req.user.id,
+      request: req.body || {},
+    });
+    const redirect = new URL(authorization.redirectUri);
+    redirect.searchParams.set('code', authorization.code);
+    redirect.searchParams.set('state', authorization.state);
+    return res.send(
+      resultData({
+        redirectUrl: redirect.toString(),
+        expiresIn: authorization.expiresIn,
+      }),
+    );
+  } catch (error) {
+    return extensionAuthResponse(req, res, error, 'authorize');
+  }
+};
+
+export const exchangeExtensionAuthorization = async (req, res) => {
+  try {
+    const deviceId = String(req.headers['x-device-id'] || '').trim();
+    const authorization = await consumeExtensionAuthorizationCode({
+      code: req.body?.code,
+      codeVerifier: req.body?.codeVerifier,
+      clientId: req.body?.clientId,
+      redirectUri: req.body?.redirectUri,
+      deviceId,
+    });
+    const [rows] = await pool.query(
+      'SELECT id, alias, role, head_picture, del_flag FROM user WHERE id = ? LIMIT 1',
+      [authorization.userId],
+    );
+    const user = rows[0];
+    if (!user || user.role === 'visitor') {
+      const error = new Error(L(req, '授权账号已失效，请重新登录', 'The authorized account is no longer available.'));
+      error.code = 'EXTENSION_USER_INVALID';
+      error.status = 401;
+      throw error;
+    }
+    if (Number(user.del_flag || 0) === 1) {
+      const error = new Error(L(req, '账号当前不可用', 'This account is currently unavailable.'));
+      error.code = 'EXTENSION_USER_UNAVAILABLE';
+      error.status = 423;
+      throw error;
+    }
+    const sid = await issueLoginSession(req, res, user, true);
+    return res.send(
+      resultData({
+        sid,
+        user: {
+          id: user.id,
+          alias: user.alias,
+          role: user.role,
+          headPicture: user.head_picture,
+        },
+      }),
+    );
+  } catch (error) {
+    return extensionAuthResponse(req, res, error, 'exchange');
   }
 };
 

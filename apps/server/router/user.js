@@ -61,6 +61,18 @@ const githubOAuthCallbackLimiter = rateLimit({
   message: { data: null, status: 429, msg: 'GitHub 登录尝试过于频繁，请稍后再试' },
 });
 
+const extensionAuthorizeLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 20,
+  message: { data: null, status: 429, msg: '插件授权请求过于频繁，请稍后再试' },
+});
+
+const extensionExchangeLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 20,
+  message: { data: null, status: 429, msg: '插件登录尝试过于频繁，请稍后再试' },
+});
+
 router.post('/login', loginLimiter, userHandle.login);
 
 router.get('/getUserInfo', userHandle.getUserInfo);
@@ -94,6 +106,10 @@ router.get('/deleteUserById', userHandle.deleteUserById);
 router.post('/github/authorize', githubOAuthStartLimiter, userHandle.startGithubOAuth);
 
 router.post('/github', githubOAuthCallbackLimiter, userHandle.github);
+
+router.post('/extension/authorize', extensionAuthorizeLimiter, userHandle.authorizeExtension);
+
+router.post('/extension/exchange', extensionExchangeLimiter, userHandle.exchangeExtensionAuthorization);
 
 router.post('/logout', userHandle.logout);
 

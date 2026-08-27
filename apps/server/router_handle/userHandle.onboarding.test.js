@@ -18,6 +18,8 @@ const completeGrowthTask = vi.fn();
 const ensureCommunityChatIdentity = vi.fn();
 const verifyPassword = vi.fn();
 const hashPassword = vi.fn();
+const createExtensionAuthorizationCode = vi.fn();
+const consumeExtensionAuthorizationCode = vi.fn();
 
 vi.mock('../db/index.js', () => ({ default: { query, getConnection } }));
 vi.mock('../util/services/newUserSeedService.js', () => ({
@@ -49,10 +51,20 @@ vi.mock('../util/logExclude.js', () => ({
   addLogExclude: vi.fn(),
   removeLogExclude: vi.fn(),
 }));
+vi.mock('../util/extensionAuth.js', () => ({
+  createExtensionAuthorizationCode,
+  consumeExtensionAuthorizationCode,
+}));
 
 // common.js↔router↔handler 循环依赖：先加载 common.js，与现有 handler 测试保持一致。
 await import('../util/common.js');
-const { handleUserDatabaseOperation, registerUser, saveUserInfo } = await import('./userHandle.js');
+const {
+  authorizeExtension,
+  exchangeExtensionAuthorization,
+  handleUserDatabaseOperation,
+  registerUser,
+  saveUserInfo,
+} = await import('./userHandle.js');
 
 function mockRes() {
   const res = {};
@@ -64,6 +76,82 @@ function mockRes() {
 function compactSql(sql) {
   return String(sql).replace(/\s+/g, ' ').trim();
 }
+
+describe('浏览器插件授权 handler', () => {
+  beforeEach(() => {
+    query.mockReset();
+    issueLoginSession.mockReset();
+    createExtensionAuthorizationCode.mockReset();
+    consumeExtensionAuthorizationCode.mockReset();
+  });
+
+  it('登录账号确认后只返回一次性授权回调，不把网站会话直接交给插件', async () => {
+    createExtensionAuthorizationCode.mockResolvedValue({
+      redirectUri: 'https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/light-note-auth',
+      code: 'authorization-code',
+      state: 'state-token',
+      expiresIn: 300,
+    });
+    const req = { user: { id: 'user-1' }, body: { clientId: 'client-id' }, headers: {} };
+    const res = mockRes();
+
+    await authorizeExtension(req, res);
+
+    expect(createExtensionAuthorizationCode).toHaveBeenCalledWith({
+      userId: 'user-1',
+      request: req.body,
+    });
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({
+      status: 200,
+      data: {
+        redirectUrl: 'https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/light-note-auth?code=authorization-code&state=state-token',
+        expiresIn: 300,
+      },
+    }));
+  });
+
+  it('授权码交换绑定请求设备并签发独立记住登录 SID', async () => {
+    consumeExtensionAuthorizationCode.mockResolvedValue({ userId: 'user-1', clientId: 'client-id' });
+    query.mockResolvedValue([[{
+      id: 'user-1',
+      alias: '轻笺用户',
+      role: 'user',
+      head_picture: '/avatar.png',
+      del_flag: 0,
+    }]]);
+    issueLoginSession.mockResolvedValue('extension-sid');
+    const req = {
+      headers: { 'x-device-id': 'device-1' },
+      body: {
+        code: 'code',
+        codeVerifier: 'verifier',
+        clientId: 'client-id',
+        redirectUri: 'redirect-uri',
+      },
+    };
+    const res = mockRes();
+
+    await exchangeExtensionAuthorization(req, res);
+
+    expect(consumeExtensionAuthorizationCode).toHaveBeenCalledWith({
+      ...req.body,
+      deviceId: 'device-1',
+    });
+    expect(issueLoginSession).toHaveBeenCalledWith(
+      req,
+      res,
+      expect.objectContaining({ id: 'user-1', role: 'user' }),
+      true,
+    );
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({
+      status: 200,
+      data: expect.objectContaining({
+        sid: 'extension-sid',
+        user: expect.objectContaining({ id: 'user-1', headPicture: '/avatar.png' }),
+      }),
+    }));
+  });
+});
 
 describe('新用户示例数据接入注册流程', () => {
   beforeEach(() => {

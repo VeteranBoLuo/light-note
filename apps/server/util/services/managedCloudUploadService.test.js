@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   deleteObjectFromObs: vi.fn(),
   getObjectMetadataFromObs: vi.fn(),
   triggerResourceCreateEffects: vi.fn(),
+  enqueueResources: vi.fn(),
 }));
 
 vi.mock('../../db/index.js', () => ({ default: mocks.pool }));
@@ -24,6 +25,7 @@ vi.mock('../obsClient.js', () => ({
   getObjectMetadataFromObs: mocks.getObjectMetadataFromObs,
 }));
 vi.mock('./resourceCreateEffects.js', () => ({ triggerResourceCreateEffects: mocks.triggerResourceCreateEffects }));
+vi.mock('../resourceInbox.js', () => ({ enqueueResources: mocks.enqueueResources }));
 
 const { abortManagedCloudUpload, buildManagedCloudObjectKey, confirmManagedCloudUpload, prepareManagedCloudUpload } =
   await import('./managedCloudUploadService.js');
@@ -49,6 +51,7 @@ describe('managedCloudUploadService', () => {
     mocks.getObjectMetadataFromObs.mockResolvedValue({ contentLength: 2048, contentType: 'application/pdf' });
     mocks.deleteObjectFromObs.mockResolvedValue({});
     mocks.triggerResourceCreateEffects.mockResolvedValue(undefined);
+    mocks.enqueueResources.mockResolvedValue({ added: 1, reopened: 0, ignored: 0 });
     mocks.pool.query.mockResolvedValue([[]]);
   });
 
@@ -97,6 +100,68 @@ describe('managedCloudUploadService', () => {
     ]);
     expect(connection.query.mock.calls.some(([sql]) => String(sql).startsWith('DELETE FROM files'))).toBe(false);
     expect(result).toEqual(expect.objectContaining({ fileId: '19', filename: '季度报告 (1).pdf' }));
+  });
+
+  it('浏览器插件确认文件时在文件事务内同步加入待整理', async () => {
+    const connection = connectionWith(async (sql) => {
+      const text = String(sql);
+      if (text.includes('obs_key = ?')) return [[]];
+      if (text.includes('file_name = ?')) return [[]];
+      if (text === 'INSERT INTO files SET ?') return [{ insertId: 23 }];
+      return [[]];
+    });
+    mocks.pool.getConnection.mockResolvedValue(connection);
+
+    const result = await confirmManagedCloudUpload({
+      userId: 'user-1',
+      userRole: 'user',
+      objectKey,
+      fileName: '资料.pdf',
+      fileType: 'application/pdf',
+      addToInbox: true,
+      inboxSource: 'browser_extension',
+    });
+
+    expect(mocks.enqueueResources).toHaveBeenCalledWith(connection, {
+      userId: 'user-1',
+      items: [{ resourceType: 'file', resourceId: '23' }],
+      source: 'browser_extension',
+    });
+    expect(mocks.enqueueResources.mock.invocationCallOrder[0]).toBeLessThan(connection.commit.mock.invocationCallOrder[0]);
+    expect(result).toMatchObject({ fileId: '23', addedToInbox: true });
+  });
+
+  it('已确认文件补入待整理时仍进入事务，且不重复查询 OBS 或创建文件', async () => {
+    const existing = {
+      id: 24,
+      file_name: '资料.pdf',
+      file_type: 'application/pdf',
+      file_size: 2048,
+      folder_id: null,
+      obs_key: objectKey,
+    };
+    mocks.pool.query.mockResolvedValueOnce([[existing]]);
+    const connection = connectionWith(async (sql) => {
+      if (String(sql).includes('obs_key = ?')) return [[existing]];
+      return [[]];
+    });
+    mocks.pool.getConnection.mockResolvedValue(connection);
+
+    await expect(
+      confirmManagedCloudUpload({
+        userId: 'user-1',
+        userRole: 'user',
+        objectKey,
+        fileName: '资料.pdf',
+        fileType: 'application/pdf',
+        addToInbox: true,
+        inboxSource: 'browser_extension',
+      }),
+    ).resolves.toMatchObject({ fileId: '24', alreadyConfirmed: true, addedToInbox: true });
+
+    expect(mocks.enqueueResources).toHaveBeenCalledOnce();
+    expect(mocks.getObjectMetadataFromObs).not.toHaveBeenCalled();
+    expect(connection.query.mock.calls.some(([sql]) => sql === 'INSERT INTO files SET ?')).toBe(false);
   });
 
   it('拒绝不属于当前账号的文件夹并清理已上传随机对象', async () => {
@@ -162,9 +227,11 @@ describe('managedCloudUploadService', () => {
     });
     mocks.pool.getConnection.mockResolvedValue(connection);
 
-    await expect(abortManagedCloudUpload({ userId: 'user-1', objectKey })).resolves.toEqual({
+    await expect(abortManagedCloudUpload({ userId: 'user-1', objectKey })).resolves.toMatchObject({
       deleted: false,
       alreadyConfirmed: true,
+      fileId: '30',
+      filename: '资料.pdf',
     });
     expect(connection.query.mock.calls[0]).toEqual([
       'SELECT id FROM user WHERE id = ? LIMIT 1 FOR UPDATE',

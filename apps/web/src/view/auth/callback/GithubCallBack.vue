@@ -40,6 +40,7 @@
     rememberGithubOAuthFlow,
   } from '@/utils/githubOAuth.ts';
   import { clearQuickSaveAuthReturnPath, resolveQuickSaveAuthReturnPath } from '@/utils/quickSaveAuthReturn.ts';
+  import { clearExtensionAuthReturnPath, resolveExtensionAuthReturnPath } from '@/utils/extensionAuthReturn.ts';
   import { persistAndroidAuthSession } from '@/utils/androidBridge.ts';
   import { bookmarkStore, useUserStore } from '@/store';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -165,8 +166,11 @@
           // OAuth 已成功时，偏好恢复失败也不能把用户送回官网；应用页会再次恢复会话。
         }
         if (disposed) return;
+        const extensionReturnPath = resolveExtensionAuthReturnPath();
         const quickSaveReturnPath = resolveQuickSaveAuthReturnPath();
-        await router.replace(quickSaveReturnPath || getAuthenticatedEntryPath(finalPrefs));
+        const authReturnPath = extensionReturnPath || quickSaveReturnPath;
+        await router.replace(authReturnPath || getAuthenticatedEntryPath(finalPrefs));
+        if (extensionReturnPath) clearExtensionAuthReturnPath();
         if (quickSaveReturnPath) clearQuickSaveAuthReturnPath();
       } else {
         const failureMessage = cRes.msg || t('auth.githubCallbackFailed');

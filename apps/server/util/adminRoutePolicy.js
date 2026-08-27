@@ -292,6 +292,8 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'user', [
   ['POST', '/user/registerUser'],
   ['POST', '/user/github/authorize'],
   ['POST', '/user/github'],
+  ['POST', '/user/extension/authorize'],
+  ['POST', '/user/extension/exchange'],
   ['POST', '/user/saveUserInfo'],
   ['GET', '/user/deleteUserById'],
   ['POST', '/user/logout'],
