@@ -3644,3 +3644,11 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **防回归约束：** 对固定系统帮助条目的文案同步必须把完整目标内容作为唯一事实源，并按固定 ID 或标题幂等插入、覆盖；禁止依赖上一版正文的局部替换。发布时不能只看 SQL 退出码，必须在同一发布门禁中按固定 ID 校验新内容的稳定语义标记，失败时暂停重启和 Web 发布，先只读核对线上实际内容。
 - **验证方法：** 迁移合约测试锁定完整目标正文、固定 ID、缺失插入和存在覆盖，并禁止 `REPLACE` 与已废弃短语；分别以“条目缺失”“最初版正文”“上一版正文”“目标正文”执行两次迁移，结果都应收敛为同一正文且只保留一条记录。线上执行后查询固定 ID，目标标记必须唯一命中，旧标记必须为零，再重启后端刷新知识缓存。
 - **相关代码：** `apps/server/migrations/20260827_new_user_drawing_sample_title_correction_knowledge.sql`、`apps/server/util/newUserDrawingSampleKnowledgeMigration.test.js`。
+
+### LN-PIT-187：Schema 门禁不能把 MySQL 整数展示宽度当成字段类型
+
+- **现象：** 生产列已经是 `tinyint unsigned NOT NULL DEFAULT 1`，发布门禁仍报告字段形态错误，并在进程重启前终止部署；`information_schema.columns.column_type` 实际返回 `tinyint(3) unsigned`。
+- **根因：** MySQL 5.7 会在整数 `COLUMN_TYPE` 中携带历史展示宽度，建表 SQL 未显式写宽度也可能返回 `(3)`。断言精确比较 `column_type='tinyint unsigned'`，把无业务语义的展示形式当成了结构事实。
+- **防回归约束：** 整数列的只读 Schema 门禁必须分别校验 `data_type`、有无 `unsigned`、空值和默认值；禁止精确绑定 `tinyint(3)`、`int(10)` 等展示宽度。只有确实影响字符容量或精度的类型参数才允许做精确形态比较。
+- **验证方法：** 合约测试锁定 `data_type='tinyint'` 与 `column_type LIKE 'tinyint%unsigned'`，并禁止重新引入无宽度的精确字符串比较；生产门禁必须同时接受 MySQL 5.7 报告的 `tinyint(3) unsigned`，而对有符号、可空或默认值错误的列继续返回失败行。
+- **相关代码：** `apps/server/migrations/schema-assertions.sql`、`apps/server/util/communityChatSchema.test.js`。

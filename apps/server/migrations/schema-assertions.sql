@@ -2464,7 +2464,8 @@ WHERE actual.table_schema=DATABASE()
     (actual.column_name='max_selections' AND NOT (
       actual.is_nullable='NO'
       AND actual.column_default='1'
-      AND actual.column_type='tinyint unsigned'
+      AND actual.data_type='tinyint'
+      AND actual.column_type LIKE 'tinyint%unsigned'
     ))
   );
 

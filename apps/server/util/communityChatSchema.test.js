@@ -247,6 +247,9 @@ describe('ensureCommunityChatSchema', () => {
     expect(assertions).toContain('invalid_community_chat_poll_option_count');
     expect(assertions).toContain('invalid_community_chat_poll_selection');
     expect(assertions).toContain('invalid_community_chat_poll_selection_column');
+    expect(assertions).toContain("actual.data_type='tinyint'");
+    expect(assertions).toContain("actual.column_type LIKE 'tinyint%unsigned'");
+    expect(assertions).not.toContain("actual.column_type='tinyint unsigned'");
     expect(assertions).toContain('invalid_community_chat_poll_multi_vote_count');
     expect(assertions).toContain('invalid_community_chat_read_receipt_flag');
     expect(assertions).toContain('invalid_community_chat_poll_receipt_index');
