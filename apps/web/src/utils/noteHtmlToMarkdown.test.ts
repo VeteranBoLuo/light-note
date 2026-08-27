@@ -134,6 +134,13 @@ describe('noteHtmlToMarkdown', () => {
     expect(noteHtmlToMarkdown('<p><s>旧内容</s></p>')).toBe('~~旧内容~~');
   });
 
+  it('下划线转换为受控 u 标签，并保留嵌套的 Markdown 格式', () => {
+    const markdown = noteHtmlToMarkdown('<p><u><strong>重要</strong> 内容</u></p>');
+
+    expect(markdown).toBe('<u>**重要** 内容</u>');
+    expect(marked.parse(markdown)).toContain('<u><strong>重要</strong> 内容</u>');
+  });
+
   it('图文组合切到 Markdown 时保留一图一文的完整结构', () => {
     const markdown = noteHtmlToMarkdown(`
       <section class="ln-media-text" data-ln-media-position="right" data-ln-media-width="42">

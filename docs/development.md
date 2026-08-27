@@ -161,6 +161,7 @@ view/search/
 - 移动端编辑器不得用自定义长按、`contextmenu`、划词 AI 或选区工具条拦截系统复制、粘贴和全选；格式能力从固定六入口工具栏的底部操作面板进入。Markdown 编辑器扩展不得把解析后的语法树或 HTML 回写成正文，外部同步更新不得污染 CodeMirror 撤销历史。新增或调整编辑器快捷键时，必须同步更新统一快捷键弹窗、工具栏提示和回归测试；富文本与 Markdown 的重做都要兼容 `Ctrl/⌘ + Shift + Z` 与 `Ctrl + Y`。“重复上一步”必须使用独立状态与快捷键，仅记录可安全复用的格式功能及其参数（例如渐变配置），不得复用撤销/重做历史栈，也不得重复插入、删除、上传等副作用操作。
 - 富文本图文并排必须使用 `section.ln-media-text` 受控结构，一张图片对应一个 `figure` 和一个 `figcaption`；禁止用连续图片加 `float` 猜测文字归属。保存前须清理 TinyMCE 临时属性以及图片的浮动、固定宽高和 `data-ln-size`，HTML/Markdown 转换、服务端净化与离线导出必须保留 `data-ln-media-position/data-ln-media-width`。
 - 富文本渐变文字必须保存为 `.ln-text-gradient[data-ln-text-gradient="true"]`，只允许 `--ln-gradient-from`、`--ln-gradient-to` 两个十六进制颜色和枚举角度 `--ln-gradient-angle`；禁止为了渐变重新开放任意 `background`、`background-clip`、阴影或动画内联样式。HTML/Markdown 往返时保留这段受控 raw HTML，服务端净化、站内预览和离线导出必须使用同一协议。
+- Markdown 下划线统一保存为无属性的 `<u>文字</u>`，不新增 `++文字++` 等私有方言。编辑器工具栏、`Ctrl/⌘ + U`、重复上一步、HTML/Markdown 转换、转换风险分析、站内预览和离线导出必须共用这一语义；带属性的 `u` 仍按未知 raw HTML 提示风险，不能借下划线能力扩大 Markdown HTML 信任边界。
 
 #### 笔记公开分享
 

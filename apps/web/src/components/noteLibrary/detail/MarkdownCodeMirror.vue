@@ -135,6 +135,7 @@
   const markdownShortcutBindings: KeyBinding[] = [
     ['Mod-b', 'bold'],
     ['Mod-i', 'italic'],
+    ['Mod-u', 'underline'],
     ['Mod-k', 'link'],
     ['Mod-f', 'findReplace'],
     ['F4', 'repeatLastAction'],

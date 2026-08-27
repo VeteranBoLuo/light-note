@@ -1,7 +1,7 @@
 export type NoteFormat = 'html' | 'markdown';
 
 export type NoteConversionIssue =
-  'textColor' | 'backgroundColor' | 'alignment' | 'mergedCells' | 'underline' | 'fontStyling' | 'rawHtml';
+  'textColor' | 'backgroundColor' | 'alignment' | 'mergedCells' | 'fontStyling' | 'rawHtml';
 
 export interface NoteFormatConversionReport {
   sourceType: NoteFormat;
@@ -73,7 +73,6 @@ function analyzeHtml(source: string): NoteFormatConversionReport {
       ['TD', 'TH'].includes(element.tagName) &&
       (Number(element.getAttribute('colspan') || 1) > 1 || Number(element.getAttribute('rowspan') || 1) > 1),
   ).length;
-  const underline = doc.body.querySelectorAll('u').length;
   const fontStyling = all.filter(
     (element) =>
       element.tagName === 'FONT' ||
@@ -86,11 +85,10 @@ function analyzeHtml(source: string): NoteFormatConversionReport {
   addIssue(issues, 'backgroundColor', background);
   addIssue(issues, 'alignment', alignment);
   addIssue(issues, 'mergedCells', merged);
-  addIssue(issues, 'underline', underline);
   addIssue(issues, 'fontStyling', fontStyling);
 
   const preserved = doc.body.querySelectorAll(
-    'h1,h2,h3,h4,h5,h6,p,div,strong,b,em,i,s,del,blockquote,ul,ol,li,a,img,input[type="checkbox"],.ln-text-gradient',
+    'h1,h2,h3,h4,h5,h6,p,div,strong,b,em,i,u,s,del,blockquote,ul,ol,li,a,img,input[type="checkbox"],.ln-text-gradient',
   ).length;
   const standardized = doc.body.querySelectorAll('pre,code,table').length;
   return {
@@ -116,10 +114,6 @@ function analyzeMarkdown(source: string): NoteFormatConversionReport {
     /<section\b(?=[^>]*\bclass\s*=\s*(["'])[^"']*\bln-media-text\b[^"']*\1)[^>]*>[\s\S]*?<\/section\s*>/giu,
     '',
   );
-  const rawHtml = countMatches(
-    rawHtmlSample,
-    /<([a-z][\w-]*)(?:\s[^>]*)?>[\s\S]*?<\/\1\s*>|<[a-z][\w-]*(?:\s[^>]*)?\s*\/?>/giu,
-  );
   // 调整过尺寸的 Markdown 图片会保存为受控 img HTML；这是轻笺明确支持的结构，
   // 不应在格式切换预检中被误报为“可能丢失的原生 HTML”。
   const sizedImages = countMatches(
@@ -131,6 +125,16 @@ function analyzeMarkdown(source: string): NoteFormatConversionReport {
     rawHtmlSample,
     /<([a-z][\w-]*)\b(?=[^>]*\bclass\s*=\s*(["'])[^"']*\bln-text-gradient\b[^"']*\2)[^>]*>[\s\S]*?<\/\1\s*>/giu,
   );
+  // 下划线采用轻笺明确支持的最小 raw HTML 语义。只把无属性的 <u> 视为受控结构；
+  // 用户手写了属性或其他 HTML 时仍按原生 HTML 风险提示，不扩大信任边界。
+  const underlineSpans = countMatches(rawHtmlSample, /<u\s*>[\s\S]*?<\/u\s*>/giu);
+  // 只移除完整、无属性的 u 包装并保留内部内容，再统计未知 HTML。不能简单从标签总数里
+  // 减去下划线数量，否则 `<div><u>文字</u></div>` 会把未知 div 的风险错误抵消。
+  const rawHtmlRiskSample = rawHtmlSample.replace(/<u\s*>([\s\S]*?)<\/u\s*>/giu, '$1');
+  const rawHtml = countMatches(
+    rawHtmlRiskSample,
+    /<([a-z][\w-]*)(?:\s[^>]*)?>[\s\S]*?<\/\1\s*>|<[a-z][\w-]*(?:\s[^>]*)?\s*\/?>/giu,
+  );
   const riskyRawHtml = Math.max(0, rawHtml - sizedImages - gradientSpans);
   addIssue(issues, 'rawHtml', riskyRawHtml);
   const preserved =
@@ -140,7 +144,8 @@ function analyzeMarkdown(source: string): NoteFormatConversionReport {
     countMatches(rawHtmlSample, /(?:\*\*|__)[^\n]+?(?:\*\*|__)|(?:^|[^*])\*[^\n*]+\*/gu) +
     sizedImages +
     mediaTextBlocks +
-    gradientSpans;
+    gradientSpans +
+    underlineSpans;
   const standardized =
     countMatches(text, /```[\s\S]*?```/gu) +
     countMatches(text, /(?:^|\n)\s*[-+*]\s+\[[ xX]\]\s+/gu) +

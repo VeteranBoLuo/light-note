@@ -6,7 +6,7 @@ import {
 } from './noteFormatConversion';
 
 describe('analyzeNoteFormatConversion', () => {
-  it('HTML 转 Markdown 会识别颜色、对齐、合并单元格和下划线风险', () => {
+  it('HTML 转 Markdown 会识别颜色、对齐和合并单元格风险，并把下划线计为可保留结构', () => {
     const report = analyzeNoteFormatConversion(
       '<h2>标题</h2><p style="color:red;text-align:center"><u>正文</u></p><table><tr><td colspan="2">A</td></tr></table>',
       'html',
@@ -19,9 +19,9 @@ describe('analyzeNoteFormatConversion', () => {
         { key: 'textColor', count: 1 },
         { key: 'alignment', count: 1 },
         { key: 'mergedCells', count: 1 },
-        { key: 'underline', count: 1 },
       ]),
     );
+    expect(report.issues).not.toContainEqual(expect.objectContaining({ key: 'underline' }));
   });
 
   it('Markdown 的 GFM 结构可保留，并单独提示原生 HTML', () => {
@@ -66,6 +66,18 @@ describe('analyzeNoteFormatConversion', () => {
     expect(report.preserved).toBe(1);
     expect(report.potentialLoss).toBe(0);
     expect(report.issues).not.toContainEqual(expect.objectContaining({ key: 'rawHtml' }));
+  });
+
+  it('Markdown 中无属性的下划线标签属于受支持结构，带属性时仍提示原生 HTML 风险', () => {
+    const supported = analyzeNoteFormatConversion('<u>重点</u>', 'markdown');
+    const attributed = analyzeNoteFormatConversion('<u style="color:red">重点</u>', 'markdown');
+    const nestedUnknown = analyzeNoteFormatConversion('<div><u>重点</u></div>', 'markdown');
+
+    expect(supported.preserved).toBe(1);
+    expect(supported.potentialLoss).toBe(0);
+    expect(supported.issues).not.toContainEqual(expect.objectContaining({ key: 'rawHtml' }));
+    expect(attributed.issues).toContainEqual({ key: 'rawHtml', count: 1 });
+    expect(nestedUnknown.issues).toContainEqual({ key: 'rawHtml', count: 1 });
   });
 
   it('转换预览指纹稳定绑定目标格式、正文和 baseRevision', async () => {

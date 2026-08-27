@@ -18,4 +18,11 @@ describe('noteContentToHtml', () => {
     expect(checkbox?.tabIndex).toBe(-1);
     expect(checkbox?.checked).toBe(type === 'markdown');
   });
+
+  it('Markdown 阅读预览保留下划线并继续消毒主动脚本', async () => {
+    const html = await noteContentToHtml('普通 <u>重点</u><script>alert(1)</script>', 'markdown');
+
+    expect(html).toContain('<u>重点</u>');
+    expect(html).not.toContain('<script');
+  });
 });

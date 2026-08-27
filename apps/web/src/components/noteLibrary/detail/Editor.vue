@@ -3414,15 +3414,11 @@
         label: t('noteDetail.editor.italic'),
         keys: ['Ctrl / ⌘ + I'],
       },
-      ...(currentType.value === 'html'
-        ? [
-            {
-              key: 'underline',
-              label: t('noteDetail.editor.underline'),
-              keys: ['Ctrl / ⌘ + U'],
-            },
-          ]
-        : []),
+      {
+        key: 'underline',
+        label: t('noteDetail.editor.underline'),
+        keys: ['Ctrl / ⌘ + U'],
+      },
       {
         key: 'link',
         label: t('noteDetail.editor.link'),
@@ -3552,6 +3548,7 @@
     const formatMoreActions = isMarkdown
       ? [
           action('quote', t('noteDetail.editor.quote'), icon.noteDetail.toolbar.quote),
+          action('underline', t('noteDetail.editor.underline'), icon.noteDetail.toolbar.underline),
           action('strike', t('noteDetail.editor.strike'), icon.noteDetail.toolbar.strike),
           action('inlineCode', t('noteDetail.editor.inlineCode'), icon.noteDetail.toolbar.inlineCode),
           action('findReplace', t('noteDetail.editor.findReplace'), icon.noteDetail.toolbar.search, {
@@ -3588,6 +3585,7 @@
     const desktopFormatActions = isMarkdown
       ? [
           action('quote', t('noteDetail.editor.quote'), icon.noteDetail.toolbar.quote),
+          action('underline', t('noteDetail.editor.underline'), icon.noteDetail.toolbar.underline),
           action('strike', t('noteDetail.editor.strike'), icon.noteDetail.toolbar.strike),
           action('inlineCode', t('noteDetail.editor.inlineCode'), icon.noteDetail.toolbar.inlineCode),
         ]
@@ -3700,6 +3698,7 @@
   const markdownRepeatableActionKeys = new Set([
     'bold',
     'italic',
+    'underline',
     'todo',
     'bulletList',
     'orderedList',
@@ -3742,6 +3741,8 @@
       return void applyMarkdownEdit((input) => wrapSelection(input, '**', t('note.mdBoldPlaceholder')));
     if (key === 'italic')
       return void applyMarkdownEdit((input) => wrapSelection(input, '*', t('note.mdItalicPlaceholder')));
+    if (key === 'underline')
+      return void applyMarkdownEdit((input) => wrapSelection(input, '<u>', t('note.mdUnderlinePlaceholder'), '</u>'));
     if (key === 'todo') return void applyMarkdownEdit((input) => toggleLinePrefix(input, '- [ ] '));
     if (key === 'bulletList') return void applyMarkdownEdit((input) => toggleLinePrefix(input, '- '));
     if (key === 'orderedList') return void applyMarkdownEdit((input) => toggleLinePrefix(input, '1. '));

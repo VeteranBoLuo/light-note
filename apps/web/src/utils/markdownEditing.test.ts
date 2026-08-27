@@ -61,6 +61,18 @@ describe('wrapSelection', () => {
     expect(out.value).toBe('$公式$');
   });
 
+  it('下划线使用不同的 HTML 起止标签，并支持再次取消', () => {
+    const input = sel('这是重点内容', 2, 4);
+    const wrapped = applied(input, wrapSelection(input, '<u>', '下划线文字', '</u>'));
+    expect(wrapped.value).toBe('这是<u>重点</u>内容');
+    expect(wrapped.value.slice(wrapped.selectionStart, wrapped.selectionEnd)).toBe('重点');
+
+    const selectedInner = sel(wrapped.value, wrapped.selectionStart, wrapped.selectionEnd);
+    const unwrapped = applied(selectedInner, wrapSelection(selectedInner, '<u>', '下划线文字', '</u>'));
+    expect(unwrapped.value).toBe('这是重点内容');
+    expect(unwrapped.value.slice(unwrapped.selectionStart, unwrapped.selectionEnd)).toBe('重点');
+  });
+
   it('选区尾部带空格时只包裹正文并把空格留在标记外', () => {
     const input = sel('事： 学习正文', 0, 3);
     const out = applied(input, wrapSelection(input, '**'));

@@ -242,12 +242,15 @@ describe('编辑器 V2 交互回归', () => {
     expect(editorSource).toContain("event.shiftKey && event.key.toLowerCase() === 'z'");
     expect(codeMirrorSource).toContain("['F4', 'repeatLastAction']");
     expect(codeMirrorSource).toContain("['Mod-Alt-r', 'repeatLastAction']");
+    expect(codeMirrorSource).toContain("['Mod-u', 'underline']");
     expect(codeMirrorSource).toContain('`Mod-${index + 1}`');
     expect(editorSource).toContain('const level = matchHeadingShortcut(event)');
     expect(editorSource).toContain('runRichToolbarAction(`heading${level}`)');
     expect(editorSource).toContain('const action = matchEditorInlineFormatShortcut(event)');
     expect(editorSource).toContain('runRichToolbarAction(action)');
     expect(editorSource).toContain("if (key === 'italic') return editor.execCommand('Italic')");
+    expect(editorSource).toContain("wrapSelection(input, '<u>', t('note.mdUnderlinePlaceholder'), '</u>')");
+    expect(editorSource).toContain("action('underline', t('noteDetail.editor.underline')");
   });
 
   it('Markdown 与富文本共用图文组合入口，Markdown 上传后写入可预览的 HTML 块', () => {
@@ -445,7 +448,9 @@ describe('编辑器 V2 交互回归', () => {
     expect(continuation).toContain('continueWrite');
     expect(continuation).toContain('完整保留原文');
     expect(continuation).toContain('原文 + 续写');
-    expect(aiReplySource).toContain("const sourceText = mode === 'followup' ? baseContent || '' : String(note?.content || '')");
+    expect(aiReplySource).toContain(
+      "const sourceText = mode === 'followup' ? baseContent || '' : String(note?.content || '')",
+    );
     expect(aiReplySource).toContain("skillId: 'note.transform_text'");
     expect(aiReplySource).toContain('text: sourceText');
   });

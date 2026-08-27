@@ -112,6 +112,13 @@ export function createNoteTurndownService() {
     replacement: (content) => (content.trim() ? `~~${content}~~` : ''),
   });
 
+  // CommonMark/GFM 没有下划线语法。轻笺使用最小的原生 HTML 标签保存该语义，
+  // 与 Markdown 预览现有的 marked + DOMPurify 链路一致，也能无损切回富文本。
+  service.addRule('lightNoteUnderline', {
+    filter: ['u'],
+    replacement: (content) => (content.trim() ? `<u>${content}</u>` : ''),
+  });
+
   // 标准 Markdown 没有“一图一文并排”的语法。轻笺把整个受控结构保留为一段
   // raw HTML，避免 Turndown 把多个图片和说明重新打散成同一条文字流。
   service.addRule('lightNoteMediaText', {

@@ -84,6 +84,12 @@ describe('renderMarkdownForExport', () => {
     expect(html).not.toContain('<script');
   });
 
+  it('导出 HTML 保留 Markdown 下划线语义', async () => {
+    const html = await renderMarkdownForExport('普通 <u>重点</u> 正文');
+
+    expect(html).toContain('<u>重点</u>');
+  });
+
   it('保留 Markdown 图片尺寸元数据供离线样式使用', async () => {
     const html = await renderMarkdownForExport(
       '<img src="https://example.com/image.png" alt="截图" data-ln-size="large" />',
