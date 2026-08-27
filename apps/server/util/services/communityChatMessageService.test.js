@@ -871,7 +871,7 @@ describe('communityChatMessageService', () => {
     });
   });
 
-  it('Root 投票复用消息事务、幂等指纹和房间游标，并在发送时固化已读回执开关', async () => {
+  it('Root 多选投票复用消息事务、v4 幂等指纹和房间游标，并在发送时固化已读回执开关', async () => {
     const endsAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     const connection = createConnection(async (sql, params) => {
       const text = String(sql);
@@ -911,6 +911,8 @@ describe('communityChatMessageService', () => {
           [
             {
               messageId: 41,
+              selectionMode: 'multiple',
+              maxSelections: 2,
               endsAt,
               closedAt: null,
               manuallyClosed: 0,
@@ -919,10 +921,13 @@ describe('communityChatMessageService', () => {
               label: '体验',
               sortOrder: 0,
               voteCount: 0,
+              totalVoterCount: 0,
               selectedByViewer: 0,
             },
             {
               messageId: 41,
+              selectionMode: 'multiple',
+              maxSelections: 2,
               endsAt,
               closedAt: null,
               manuallyClosed: 0,
@@ -931,6 +936,7 @@ describe('communityChatMessageService', () => {
               label: '性能',
               sortOrder: 1,
               voteCount: 0,
+              totalVoterCount: 0,
               selectedByViewer: 0,
             },
           ],
@@ -948,7 +954,7 @@ describe('communityChatMessageService', () => {
       clientRequestId: 'request-poll-root',
       content: '下一项优先做什么？',
       messageKind: 'poll',
-      poll: { endsAt, options: ['体验', '性能'] },
+      poll: { endsAt, options: ['体验', '性能'], selectionMode: 'multiple', maxSelections: 2 },
       env: POLL_ENV,
       db,
     });
@@ -968,23 +974,6 @@ describe('communityChatMessageService', () => {
     expect(String(connection.query.mock.calls[deadlineCheckIndex]?.[0])).toContain('UTC_TIMESTAMP(3)');
     expect(deadlineCheckIndex).toBeLessThan(messageInsertIndex);
     expect(messageInsert?.[1]?.at(-2)).toBe(1);
-    const expectedV2PollFingerprint = createHash('sha256')
-      .update(
-        JSON.stringify({
-          version: 2,
-          roomSlug: 'general',
-          messageKind: 'poll',
-          stickerSource: null,
-          stickerKey: null,
-          content: '下一项优先做什么？',
-          replyToPublicId: null,
-          mentionUserPublicIds: [],
-          mentionMessagePublicIds: [],
-          imagePublicIds: [],
-          poll: { endsAt, options: ['体验', '性能'] },
-        }),
-      )
-      .digest('hex');
     const expectedV3PollFingerprint = createHash('sha256')
       .update(
         JSON.stringify({
@@ -1002,8 +991,34 @@ describe('communityChatMessageService', () => {
         }),
       )
       .digest('hex');
-    expect(messageInsert?.[1]?.[4]).not.toBe(expectedV2PollFingerprint);
-    expect(messageInsert?.[1]?.[4]).toBe(expectedV3PollFingerprint);
+    const expectedV4PollFingerprint = createHash('sha256')
+      .update(
+        JSON.stringify({
+          version: 4,
+          roomSlug: 'general',
+          messageKind: 'poll',
+          stickerSource: null,
+          stickerKey: null,
+          content: '下一项优先做什么？',
+          replyToPublicId: null,
+          mentionUserPublicIds: [],
+          mentionMessagePublicIds: [],
+          imagePublicIds: [],
+          poll: {
+            endsAt,
+            options: ['体验', '性能'],
+            selectionMode: 'multiple',
+            maxSelections: 2,
+          },
+        }),
+      )
+      .digest('hex');
+    expect(messageInsert?.[1]?.[4]).not.toBe(expectedV3PollFingerprint);
+    expect(messageInsert?.[1]?.[4]).toBe(expectedV4PollFingerprint);
+    const pollInsert = connection.query.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT INTO community_chat_polls'),
+    );
+    expect(pollInsert?.[1]?.slice(1, 3)).toEqual(['multiple', 2]);
     expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO community_chat_polls'))).toBe(
       true,
     );
@@ -1014,7 +1029,13 @@ describe('communityChatMessageService', () => {
       messageKind: 'poll',
       readReceiptEnabled: true,
       readCount: 0,
-      poll: { resultsVisible: true, canClose: true, options: [{ label: '体验' }, { label: '性能' }] },
+      poll: {
+        selectionMode: 'multiple',
+        maxSelections: 2,
+        resultsVisible: true,
+        canClose: true,
+        options: [{ label: '体验' }, { label: '性能' }],
+      },
     });
     expect(connection.commit).toHaveBeenCalledTimes(1);
   });

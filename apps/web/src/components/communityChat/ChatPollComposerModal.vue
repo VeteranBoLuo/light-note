@@ -12,7 +12,15 @@
     fullscreen-mobile
   >
     <div class="chat-poll-composer">
-      <p class="chat-poll-composer__description">{{ t('communityChat.poll.composerDescription') }}</p>
+      <p class="chat-poll-composer__description">
+        {{
+          t(
+            multipleChoiceEnabled
+              ? 'communityChat.poll.composerDescription'
+              : 'communityChat.poll.composerDescriptionSingle',
+          )
+        }}
+      </p>
 
       <section>
         <label for="community-chat-poll-question">{{ t('communityChat.poll.questionLabel') }}</label>
@@ -27,6 +35,30 @@
           :placeholder="t('communityChat.poll.questionPlaceholder')"
         />
         <small>{{ Array.from(question).length }}/200</small>
+      </section>
+
+      <section v-if="multipleChoiceEnabled" class="chat-poll-composer__selection">
+        <label id="community-chat-poll-selection-label">{{ t('communityChat.poll.selectionModeLabel') }}</label>
+        <BTabs
+          v-model:active-tab="selectionModeModel"
+          :class="{ 'is-disabled': submitting }"
+          variant="segment"
+          :options="selectionModeOptions"
+          :aria-label="t('communityChat.poll.selectionModeLabel')"
+          :aria-disabled="submitting || undefined"
+        />
+        <small>{{ t(`communityChat.poll.${selectionMode}ChoiceHint`, { count: maxSelections }) }}</small>
+        <div v-if="selectionMode === 'multiple'" class="chat-poll-composer__selection-limit">
+          <label id="community-chat-poll-max-selections-label">
+            {{ t('communityChat.poll.maxSelectionsLabel') }}
+          </label>
+          <BSelect
+            v-model:value="maxSelections"
+            :options="maxSelectionOptions"
+            :disabled="submitting"
+            aria-labelledby="community-chat-poll-max-selections-label"
+          />
+        </div>
       </section>
 
       <section>
@@ -97,26 +129,59 @@
   import BDateTimePicker from '@/components/base/BasicComponents/BDateTimePicker.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
+  import type { CommunityChatPollSelectionMode } from '@/api/communityChatApi';
 
   interface PollOptionDraft {
     key: number;
     label: string;
   }
 
-  const props = withDefaults(defineProps<{ submitting?: boolean }>(), { submitting: false });
+  const props = withDefaults(defineProps<{ submitting?: boolean; multipleChoiceEnabled?: boolean }>(), {
+    submitting: false,
+    multipleChoiceEnabled: true,
+  });
   const emit = defineEmits<{
-    submit: [payload: { question: string; options: string[]; endsAt: string }];
+    submit: [
+      payload: {
+        question: string;
+        options: string[];
+        endsAt: string;
+        selectionMode: CommunityChatPollSelectionMode;
+        maxSelections: number;
+      },
+    ];
   }>();
   const visible = defineModel<boolean>('visible', { default: false });
   const { t } = useI18n();
   const question = ref('');
   const deadlineLocal = ref('');
   const options = ref<PollOptionDraft[]>([]);
+  const selectionMode = ref<CommunityChatPollSelectionMode>('single');
+  const maxSelections = ref(2);
   const submitted = ref(false);
   const validationNow = ref(Date.now());
   let nextOptionKey = 0;
+
+  const selectionModeOptions = computed(() => [
+    { key: 'single', label: t('communityChat.poll.singleChoice') },
+    { key: 'multiple', label: t('communityChat.poll.multipleChoice') },
+  ]);
+  const maxSelectionOptions = computed(() =>
+    Array.from({ length: Math.max(0, options.value.length - 1) }, (_, index) => {
+      const value = index + 2;
+      return { value, label: t('communityChat.poll.maxSelectionsOption', { count: value }) };
+    }),
+  );
+  const selectionModeModel = computed<CommunityChatPollSelectionMode>({
+    get: () => selectionMode.value,
+    set: (value) => {
+      if (!props.submitting && ['single', 'multiple'].includes(value)) selectionMode.value = value;
+    },
+  });
 
   function createOption(): PollOptionDraft {
     nextOptionKey += 1;
@@ -166,6 +231,7 @@
   function removeOption(index: number) {
     if (options.value.length <= 2) return;
     options.value.splice(index, 1);
+    maxSelections.value = Math.min(maxSelections.value, options.value.length);
   }
 
   function submit() {
@@ -176,6 +242,8 @@
       question: question.value.trim(),
       options: options.value.map((option) => option.label.normalize('NFKC').trim()),
       endsAt: new Date(deadlineTimestamp()).toISOString(),
+      selectionMode: selectionMode.value,
+      maxSelections: selectionMode.value === 'multiple' ? maxSelections.value : 1,
     });
   }
 
@@ -185,11 +253,20 @@
       if (!nextVisible) return;
       question.value = '';
       options.value = [createOption(), createOption()];
+      selectionMode.value = 'single';
+      maxSelections.value = 2;
       deadlineLocal.value = defaultDeadlineLocal();
       validationNow.value = Date.now();
       submitted.value = false;
     },
     { immediate: true },
+  );
+
+  watch(
+    () => props.multipleChoiceEnabled,
+    (enabled) => {
+      if (!enabled) selectionMode.value = 'single';
+    },
   );
 </script>
 
@@ -241,6 +318,26 @@
     align-items: center;
     justify-content: space-between;
     gap: 10px;
+  }
+
+  .chat-poll-composer__selection :deep(.tab-container) {
+    width: fit-content;
+  }
+
+  .chat-poll-composer__selection :deep(.tab-container.is-disabled) {
+    pointer-events: none;
+    opacity: 0.58;
+  }
+
+  .chat-poll-composer__selection-limit {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(150px, 200px);
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 9px;
+    background: var(--workspace-panel-bg-color);
   }
 
   .chat-poll-composer__options {
@@ -316,6 +413,19 @@
     .chat-poll-composer footer .b_btn {
       min-height: 44px;
       flex: 1 1 0;
+    }
+
+    .chat-poll-composer__selection :deep(.tab-container) {
+      width: 100%;
+    }
+
+    .chat-poll-composer__selection :deep(.tab) {
+      flex: 1 1 0;
+      justify-content: center;
+    }
+
+    .chat-poll-composer__selection-limit {
+      grid-template-columns: 1fr;
     }
   }
 </style>

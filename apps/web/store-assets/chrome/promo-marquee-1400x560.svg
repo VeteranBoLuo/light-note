@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="560" viewBox="0 0 1400 560">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1220" />
+      <stop offset="0.55" stop-color="#292654" />
+      <stop offset="1" stop-color="#6458ed" />
+    </linearGradient>
+    <radialGradient id="glow" cx="0.16" cy="0.18" r="0.72">
+      <stop offset="0" stop-color="#9d92ff" stop-opacity="0.42" />
+      <stop offset="1" stop-color="#9d92ff" stop-opacity="0" />
+    </radialGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#080c18" flood-opacity="0.35" />
+    </filter>
+  </defs>
+  <rect width="1400" height="560" fill="url(#background)" />
+  <rect width="1400" height="560" fill="url(#glow)" />
+  <circle cx="1350" cy="28" r="190" fill="#ffffff" opacity="0.04" />
+  <circle cx="60" cy="570" r="210" fill="#080c18" opacity="0.24" />
+  <g transform="translate(86 104) scale(1.12)">
+    <path d="M14 0H52V38L38 52H0V14A14 14 0 0 1 14 0Z" fill="#b0a8ff" />
+    <path d="M60 0H98A14 14 0 0 1 112 14V52H74L60 38Z" fill="#9187f7" />
+    <path d="M0 60H38L52 74V112H14A14 14 0 0 1 0 98Z" fill="#5547dc" />
+    <path d="M74 60H112V98A14 14 0 0 1 98 112H60V74Z" fill="#6a5cf2" />
+  </g>
+  <text x="248" y="128" fill="#c8c3ff" font-family="Arial, sans-serif" font-size="17" font-weight="700" letter-spacing="3">LIGHT NOTE · QUICK CAPTURE</text>
+  <text x="248" y="207" fill="#ffffff" font-family="Hiragino Sans GB, Arial, sans-serif" font-size="54" font-weight="700">轻笺 · 随手收</text>
+  <text x="248" y="254" fill="#ebe9ff" font-family="Arial, sans-serif" font-size="23">Save pages, ideas, and files right from your browser.</text>
+  <text x="88" y="340" fill="#ffffff" font-family="Hiragino Sans GB, Arial, sans-serif" font-size="24" font-weight="600">随手收下，稍后在轻笺慢慢整理</text>
+  <g transform="translate(88 382)" font-family="Arial, sans-serif" font-size="17" font-weight="700" letter-spacing="1">
+    <rect width="146" height="54" rx="18" fill="#ffffff" opacity="0.12" />
+    <text x="73" y="34" text-anchor="middle" fill="#ffffff">BOOKMARK</text>
+    <rect x="160" width="126" height="54" rx="18" fill="#ffffff" opacity="0.12" />
+    <text x="223" y="34" text-anchor="middle" fill="#ffffff">NOTE</text>
+    <rect x="300" width="126" height="54" rx="18" fill="#ffffff" opacity="0.12" />
+    <text x="363" y="34" text-anchor="middle" fill="#ffffff">FILE</text>
+  </g>
+  <g transform="translate(850 66)" filter="url(#shadow)">
+    <rect width="466" height="428" rx="30" fill="#f8f8ff" />
+    <rect width="466" height="82" rx="30" fill="#ffffff" />
+    <rect y="52" width="466" height="30" fill="#ffffff" />
+    <g transform="translate(30 24) scale(.3)">
+      <path d="M14 0H52V38L38 52H0V14A14 14 0 0 1 14 0Z" fill="#a09bfc" />
+      <path d="M60 0H98A14 14 0 0 1 112 14V52H74L60 38Z" fill="#8079f8" />
+      <path d="M0 60H38L52 74V112H14A14 14 0 0 1 0 98Z" fill="#5047d5" />
+      <path d="M74 60H112V98A14 14 0 0 1 98 112H60V74Z" fill="#655eed" />
+    </g>
+    <text x="79" y="49" fill="#171927" font-family="Arial, sans-serif" font-size="20" font-weight="700">Quick Capture</text>
+    <text x="30" y="126" fill="#615ced" font-family="Arial, sans-serif" font-size="13" font-weight="700" letter-spacing="2">LIGHT NOTE COLLECTOR</text>
+    <text x="30" y="164" fill="#171927" font-family="Arial, sans-serif" font-size="28" font-weight="700">What are you saving?</text>
+    <g transform="translate(30 194)">
+      <rect width="406" height="58" rx="16" fill="#ffffff" stroke="#615ced" stroke-width="2" />
+      <circle cx="30" cy="29" r="16" fill="#f0efff" />
+      <text x="60" y="27" fill="#171927" font-family="Arial, sans-serif" font-size="17" font-weight="700">Bookmark</text>
+      <text x="60" y="45" fill="#747789" font-family="Arial, sans-serif" font-size="11">Save the current page or organize it with AI</text>
+      <path d="m382 23l7 6l-7 6" fill="none" stroke="#615ced" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+    </g>
+    <g transform="translate(30 268)">
+      <rect width="406" height="58" rx="16" fill="#ffffff" stroke="#00a884" stroke-width="2" />
+      <circle cx="30" cy="29" r="16" fill="#ebfaf6" />
+      <text x="60" y="27" fill="#171927" font-family="Arial, sans-serif" font-size="17" font-weight="700">Note</text>
+      <text x="60" y="45" fill="#747789" font-family="Arial, sans-serif" font-size="11">Markdown or toolbar-free rich text</text>
+      <path d="m382 23l7 6l-7 6" fill="none" stroke="#00a884" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+    </g>
+    <g transform="translate(30 342)">
+      <rect width="406" height="58" rx="16" fill="#ffffff" stroke="#ff8a00" stroke-width="2" />
+      <circle cx="30" cy="29" r="16" fill="#fff5e9" />
+      <text x="60" y="27" fill="#171927" font-family="Arial, sans-serif" font-size="17" font-weight="700">File</text>
+      <text x="60" y="45" fill="#747789" font-family="Arial, sans-serif" font-size="11">Drag or choose multiple files to upload</text>
+      <path d="m382 23l7 6l-7 6" fill="none" stroke="#ff8a00" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+    </g>
+  </g>
+</svg>

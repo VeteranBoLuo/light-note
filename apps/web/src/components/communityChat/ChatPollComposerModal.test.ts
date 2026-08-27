@@ -29,6 +29,22 @@ vi.mock('@/components/base/BasicComponents/BInput.vue', () => ({
       '<input v-else :value="value" :disabled="disabled" @input="$emit(\'update:value\', $event.target.value)" />',
   },
 }));
+vi.mock('@/components/base/BasicComponents/BTabs.vue', () => ({
+  default: {
+    props: ['activeTab', 'options'],
+    emits: ['update:activeTab'],
+    template:
+      '<div class="tabs-stub"><button v-for="option in options" :key="option.key" type="button" :data-key="option.key" @click="$emit(\'update:activeTab\', option.key)">{{ option.label }}</button></div>',
+  },
+}));
+vi.mock('@/components/base/BasicComponents/BSelect.vue', () => ({
+  default: {
+    props: ['value', 'options', 'disabled'],
+    emits: ['update:value'],
+    template:
+      '<div class="select-stub"><button v-for="option in options" :key="option.value" type="button" :disabled="disabled" :data-value="option.value" @click="$emit(\'update:value\', option.value)">{{ option.label }}</button></div>',
+  },
+}));
 vi.mock('@/components/base/BasicComponents/BButton.vue', () => ({
   default: {
     props: ['disabled', 'loading'],
@@ -55,9 +71,15 @@ function setInput(input: HTMLInputElement | HTMLTextAreaElement | null, value: s
   input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
-async function mountComposer() {
+async function mountComposer({ multipleChoiceEnabled = true } = {}) {
   const visible = ref(false);
-  const payloads: Array<{ question: string; options: string[]; endsAt: string }> = [];
+  const payloads: Array<{
+    question: string;
+    options: string[];
+    endsAt: string;
+    selectionMode: 'single' | 'multiple';
+    maxSelections: number;
+  }> = [];
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp({
@@ -65,10 +87,17 @@ async function mountComposer() {
       return () =>
         h(ChatPollComposerModal, {
           visible: visible.value,
+          multipleChoiceEnabled,
           'onUpdate:visible': (nextVisible: boolean) => {
             visible.value = nextVisible;
           },
-          onSubmit: (payload: { question: string; options: string[]; endsAt: string }) => payloads.push(payload),
+          onSubmit: (payload: {
+            question: string;
+            options: string[];
+            endsAt: string;
+            selectionMode: 'single' | 'multiple';
+            maxSelections: number;
+          }) => payloads.push(payload),
         });
     },
   });
@@ -83,6 +112,13 @@ async function mountComposer() {
 }
 
 describe('ChatPollComposerModal', () => {
+  it('连接缺少多选能力声明的旧服务端时只开放单选发布', async () => {
+    const { host } = await mountComposer({ multipleChoiceEnabled: false });
+
+    expect(host.querySelector('.tabs-stub')).toBeNull();
+    expect(host.textContent).toContain('communityChat.poll.composerDescriptionSingle');
+  });
+
   it('每次打开重置为两个选项和合法默认截止时间，并提交带时区的 ISO 时间', async () => {
     const { host, payloads } = await mountComposer();
     const options = host.querySelectorAll<HTMLInputElement>('.chat-poll-composer__options input');
@@ -96,7 +132,12 @@ describe('ChatPollComposerModal', () => {
     host.querySelectorAll<HTMLButtonElement>('footer button')[1]?.click();
     await nextTick();
 
-    expect(payloads[0]).toMatchObject({ question: '下一项优先做什么？', options: ['体验', '性能'] });
+    expect(payloads[0]).toMatchObject({
+      question: '下一项优先做什么？',
+      options: ['体验', '性能'],
+      selectionMode: 'single',
+      maxSelections: 1,
+    });
     expect(payloads[0]?.endsAt).toMatch(/Z$/);
   });
 
@@ -129,6 +170,30 @@ describe('ChatPollComposerModal', () => {
         (button) => button.disabled,
       ),
     ).toBe(true);
+  });
+
+  it('发布时可切换为多选并设置每人最多可选项数', async () => {
+    const { host, payloads } = await mountComposer();
+    host.querySelector<HTMLButtonElement>('.chat-poll-composer__add')?.click();
+    await nextTick();
+    host.querySelector<HTMLButtonElement>('.tabs-stub [data-key="multiple"]')?.click();
+    await nextTick();
+    host.querySelector<HTMLButtonElement>('.select-stub [data-value="3"]')?.click();
+    setInput(host.querySelector('textarea'), '可同时推进哪些方向？');
+    const options = host.querySelectorAll<HTMLInputElement>('.chat-poll-composer__options input');
+    setInput(options[0] || null, '体验');
+    setInput(options[1] || null, '性能');
+    setInput(options[2] || null, '可靠性');
+    await nextTick();
+    host.querySelectorAll<HTMLButtonElement>('footer button')[1]?.click();
+    await nextTick();
+
+    expect(payloads[0]).toMatchObject({
+      question: '可同时推进哪些方向？',
+      options: ['体验', '性能', '可靠性'],
+      selectionMode: 'multiple',
+      maxSelections: 3,
+    });
   });
 
   it('弹窗长时间停留后提交会按最新时刻重新校验截止时间', async () => {

@@ -244,7 +244,7 @@
                           :participation-paused="
                             props.access.authenticated && (!props.access.pollsEnabled || !props.access.postingEnabled)
                           "
-                          :busy-option-public-id="pollVoteBusyByMessageId.get(chatMessage.publicId) || ''"
+                          :busy-option-public-ids="pollVoteBusyByMessageId.get(chatMessage.publicId) || []"
                           :closing="pollClosingMessageIds.has(chatMessage.publicId)"
                           @vote="votePoll(chatMessage, $event)"
                           @close="confirmClosePoll(chatMessage)"
@@ -469,8 +469,11 @@
                     :can-manage="props.access.canManage"
                     :enabled="props.access.readReceiptsEnabled"
                     :read-count="chatMessage.readCount"
-                    :loading="messageDetailBusyIds.has(chatMessage.publicId)"
-                    @refresh="refreshMessageDetail(chatMessage.publicId)"
+                    :loading="
+                      readReceiptReadersTargetPublicId === chatMessage.publicId &&
+                      (readReceiptReadersLoading || readReceiptReadersRefreshing)
+                    "
+                    @open="openReadReceiptReaders(chatMessage)"
                   />
                 </div>
               </article>
@@ -741,7 +744,27 @@
     </div>
   </section>
 
-  <ChatPollComposerModal v-model:visible="pollComposerVisible" :submitting="pollSubmitting" @submit="submitPoll" />
+  <ChatPollComposerModal
+    v-model:visible="pollComposerVisible"
+    :submitting="pollSubmitting"
+    :multiple-choice-enabled="multipleChoicePollsSupported"
+    @submit="submitPoll"
+  />
+  <ChatReadReceiptReadersModal
+    v-if="props.access.canManage"
+    v-model:visible="readReceiptReadersVisible"
+    :items="readReceiptReaderItems"
+    :total="readReceiptReaderTotal"
+    :enabled="props.access.readReceiptsEnabled"
+    :loading="readReceiptReadersLoading"
+    :refreshing="readReceiptReadersRefreshing"
+    :loading-more="readReceiptReadersLoadingMore"
+    :error="readReceiptReadersError"
+    :has-more="readReceiptReadersHasMore"
+    @retry="loadReadReceiptReaders()"
+    @refresh="loadReadReceiptReaders()"
+    @load-more="loadReadReceiptReaders({ append: true })"
+  />
   <ChatReportModal
     v-model:visible="reportVisible"
     :author-name="reportTarget ? authorName(reportTarget) : ''"
@@ -825,6 +848,8 @@
     getCommunityChatMessage,
     getCommunityChatMessages,
     getCommunityChatPinnedMessage,
+    getCommunityChatReadReceiptCounts,
+    getCommunityChatReadReceiptReaders,
     markCommunityChatRoomRead,
     pinCommunityChatMessage,
     recallCommunityChatMessage,
@@ -846,6 +871,10 @@
     type CommunityChatMessagePage,
     type CommunityChatMessageReply,
     type CommunityChatPinnedMessage,
+    type CommunityChatPollSelectionMode,
+    type CommunityChatReadReceiptCountPage,
+    type CommunityChatReadReceiptReader,
+    type CommunityChatReadReceiptReaderPage,
     type CommunityChatReportReason,
     type CommunityChatRoom,
     type CommunityChatSticker,
@@ -874,6 +903,7 @@
   import ChatPollCard from '@/components/communityChat/ChatPollCard.vue';
   import ChatPollComposerModal from '@/components/communityChat/ChatPollComposerModal.vue';
   import ChatReadReceiptBadge from '@/components/communityChat/ChatReadReceiptBadge.vue';
+  import ChatReadReceiptReadersModal from '@/components/communityChat/ChatReadReceiptReadersModal.vue';
   import { useGrowth } from '@/composables/useGrowth';
   import { useCommunityChatProfile, type CommunityChatProfileUpdateInput } from '@/composables/useCommunityChatProfile';
   import {
@@ -1008,10 +1038,21 @@
   const reporting = ref(false);
   const pollComposerVisible = ref(false);
   const pollSubmitting = ref(false);
-  const pollVoteBusyByMessageId = ref(new Map<string, string>());
+  const pollVoteBusyByMessageId = ref(new Map<string, string[]>());
   const pollClosingMessageIds = ref(new Set<string>());
   const pendingPollClientRequestIds = new Map<string, string>();
   const messageDetailBusyIds = ref(new Set<string>());
+  const readReceiptReadersVisible = ref(false);
+  const readReceiptReadersTargetPublicId = ref('');
+  const readReceiptReaderItems = ref<CommunityChatReadReceiptReader[]>([]);
+  const readReceiptReaderTotal = ref(0);
+  const readReceiptReaderPage = ref(1);
+  const readReceiptReadersHasMore = ref(false);
+  const readReceiptReadersLoading = ref(false);
+  const readReceiptReadersRefreshing = ref(false);
+  const readReceiptReadersLoadingMore = ref(false);
+  const readReceiptReadersError = ref(false);
+  const readReceiptReadersLoaded = ref(false);
   const reportedMessageIds = ref(new Set<string>());
   const pendingImages = computed({
     get: () => composerDraftSession.value.pendingImages,
@@ -1077,6 +1118,8 @@
   let latestRefreshQueuedForce = false;
   let lastAuthorityRefreshAt = 0;
   let realtimeAuthorityRefreshPending = false;
+  let readReceiptCountRefreshInFlight = false;
+  let readReceiptReadersRequestGeneration = 0;
   let readReceiptForegroundActive = false;
   const submittedReadReceiptIds = new Set<string>();
   const pendingReadReceiptIds = new Set<string>();
@@ -1111,6 +1154,7 @@
   const INITIAL_BOTTOM_ANCHOR_CHECK_MS = 120;
   const READ_RECEIPT_VISIBLE_MS = 800;
   const READ_RECEIPT_RETRY_MS = 5000;
+  const READ_RECEIPT_COUNT_BATCH_MAX = 100;
   const BACK_TO_BOTTOM_DESKTOP_THRESHOLD = 128;
   const BACK_TO_BOTTOM_MOBILE_THRESHOLD = 320;
 
@@ -1181,6 +1225,9 @@
       canPostCurrentRoom.value &&
       !sending.value &&
       !pollSubmitting.value,
+  );
+  const multipleChoicePollsSupported = computed(
+    () => Array.isArray(props.access.pollSelectionModes) && props.access.pollSelectionModes.includes('multiple'),
   );
   const canManagePinnedMessage = computed(
     () => props.access.memberRole === 'admin' || props.access.memberRole === 'moderator',
@@ -2649,6 +2696,178 @@
     handleMessageAction(action.key, target);
   }
 
+  async function refreshReadReceiptCounts() {
+    const roomSlug = selectedRoomSlug.value;
+    if (
+      readReceiptCountRefreshInFlight ||
+      !props.access.authenticated ||
+      !props.access.canManage ||
+      !roomSlug ||
+      initialLoading.value ||
+      document.visibilityState !== 'visible' ||
+      !readReceiptForegroundActive
+    ) {
+      return;
+    }
+    const messagePublicIds = [
+      ...new Set(
+        chatMessages.value
+          .filter(
+            (item) =>
+              item.readReceiptEnabled &&
+              item.status === 'active' &&
+              item.deliveryState !== 'sending' &&
+              !item.publicId.startsWith('pending-'),
+          )
+          .map((item) => item.publicId),
+      ),
+    ];
+    if (!messagePublicIds.length) return;
+
+    const identityAtStart = realtimeIdentityKey.value;
+    readReceiptCountRefreshInFlight = true;
+    try {
+      const responses = await Promise.all(
+        Array.from({ length: Math.ceil(messagePublicIds.length / READ_RECEIPT_COUNT_BATCH_MAX) }, (_, index) =>
+          getCommunityChatReadReceiptCounts(
+            roomSlug,
+            messagePublicIds.slice(index * READ_RECEIPT_COUNT_BATCH_MAX, (index + 1) * READ_RECEIPT_COUNT_BATCH_MAX),
+          ),
+        ),
+      );
+      if (
+        isUnmounted ||
+        roomSlug !== selectedRoomSlug.value ||
+        identityAtStart !== realtimeIdentityKey.value ||
+        !props.access.canManage
+      ) {
+        return;
+      }
+      const counts = new Map<string, number>();
+      for (const response of responses) {
+        const page = response.data as CommunityChatReadReceiptCountPage;
+        if (page?.roomSlug !== roomSlug) continue;
+        for (const item of page.items || []) {
+          const publicId = String(item?.messagePublicId || '');
+          const readCount = Math.max(0, Number(item?.readCount || 0));
+          if (publicId && Number.isFinite(readCount)) counts.set(publicId, readCount);
+        }
+      }
+      if (!counts.size) return;
+
+      let changed = false;
+      const nextMessages = chatMessages.value.map((item) => {
+        const readCount = counts.get(item.publicId);
+        if (readCount === undefined || item.readCount === readCount) return item;
+        changed = true;
+        return { ...item, readCount };
+      });
+      if (changed) chatMessages.value = nextMessages;
+      const mobileTargetCount = mobileMessageActionTarget.value
+        ? counts.get(mobileMessageActionTarget.value.publicId)
+        : undefined;
+      if (mobileMessageActionTarget.value && mobileTargetCount !== undefined) {
+        mobileMessageActionTarget.value = { ...mobileMessageActionTarget.value, readCount: mobileTargetCount };
+      }
+      const pinnedCount = pinnedMessage.value ? counts.get(pinnedMessage.value.publicId) : undefined;
+      if (pinnedMessage.value && pinnedCount !== undefined) {
+        pinnedMessage.value = { ...pinnedMessage.value, readCount: pinnedCount };
+      }
+    } catch {
+      // 只读校准失败时保留旧数量；下一轮 8 秒调度和 30 秒整页安全刷新会继续兜底。
+    } finally {
+      readReceiptCountRefreshInFlight = false;
+    }
+  }
+
+  function resetReadReceiptReaders({ close = false } = {}) {
+    readReceiptReadersRequestGeneration += 1;
+    if (close) readReceiptReadersVisible.value = false;
+    readReceiptReadersTargetPublicId.value = '';
+    readReceiptReaderItems.value = [];
+    readReceiptReaderTotal.value = 0;
+    readReceiptReaderPage.value = 1;
+    readReceiptReadersHasMore.value = false;
+    readReceiptReadersLoading.value = false;
+    readReceiptReadersRefreshing.value = false;
+    readReceiptReadersLoadingMore.value = false;
+    readReceiptReadersError.value = false;
+    readReceiptReadersLoaded.value = false;
+  }
+
+  function openReadReceiptReaders(chatMessage: CommunityChatMessage) {
+    if (!props.access.canManage || !chatMessage.readReceiptEnabled || chatMessage.deliveryState === 'sending') return;
+    const publicId = chatMessage.publicId;
+    const isSameOpenTarget = readReceiptReadersVisible.value && readReceiptReadersTargetPublicId.value === publicId;
+    if (!isSameOpenTarget) {
+      resetReadReceiptReaders();
+      readReceiptReadersTargetPublicId.value = publicId;
+      readReceiptReaderTotal.value = Math.max(0, Number(chatMessage.readCount || 0));
+      readReceiptReadersVisible.value = true;
+    }
+    void loadReadReceiptReaders();
+  }
+
+  async function loadReadReceiptReaders({ append = false }: { append?: boolean } = {}) {
+    const publicId = readReceiptReadersTargetPublicId.value;
+    if (
+      !props.access.canManage ||
+      !publicId ||
+      readReceiptReadersLoading.value ||
+      readReceiptReadersRefreshing.value ||
+      readReceiptReadersLoadingMore.value
+    ) {
+      return;
+    }
+    if (append && !readReceiptReadersHasMore.value) return;
+
+    const page = append ? readReceiptReaderPage.value + 1 : 1;
+    const generation = ++readReceiptReadersRequestGeneration;
+    readReceiptReadersError.value = false;
+    if (append) readReceiptReadersLoadingMore.value = true;
+    else if (readReceiptReadersLoaded.value) readReceiptReadersRefreshing.value = true;
+    else readReceiptReadersLoading.value = true;
+    try {
+      const response = await getCommunityChatReadReceiptReaders(publicId, { page, pageSize: 50 });
+      if (generation !== readReceiptReadersRequestGeneration || publicId !== readReceiptReadersTargetPublicId.value) {
+        return;
+      }
+      const data = response.data as CommunityChatReadReceiptReaderPage;
+      const incoming = Array.isArray(data?.items) ? data.items : [];
+      if (append) {
+        const knownKeys = new Set(
+          readReceiptReaderItems.value.map((item) => item.userPublicId || `${item.communityId}|${item.firstSeenAt}`),
+        );
+        readReceiptReaderItems.value = [
+          ...readReceiptReaderItems.value,
+          ...incoming.filter((item) => !knownKeys.has(item.userPublicId || `${item.communityId}|${item.firstSeenAt}`)),
+        ];
+      } else {
+        readReceiptReaderItems.value = incoming;
+      }
+      readReceiptReaderTotal.value = Math.max(0, Number(data?.total || 0));
+      readReceiptReaderPage.value = Math.max(1, Number(data?.page || page));
+      readReceiptReadersHasMore.value = Boolean(data?.hasMore);
+      readReceiptReadersLoaded.value = true;
+      updateMessageInteraction(publicId, { readCount: readReceiptReaderTotal.value });
+    } catch (error: any) {
+      if (generation !== readReceiptReadersRequestGeneration || publicId !== readReceiptReadersTargetPublicId.value) {
+        return;
+      }
+      if (readReceiptReaderItems.value.length) {
+        message.error(error?.message || t('communityChat.readReceipt.readersLoadFailed'));
+      } else {
+        readReceiptReadersError.value = true;
+      }
+    } finally {
+      if (generation === readReceiptReadersRequestGeneration) {
+        readReceiptReadersLoading.value = false;
+        readReceiptReadersRefreshing.value = false;
+        readReceiptReadersLoadingMore.value = false;
+      }
+    }
+  }
+
   function updateMessageInteraction(publicId: string, patch: Partial<CommunityChatMessage>) {
     chatMessages.value = chatMessages.value.map((item) => (item.publicId === publicId ? { ...item, ...patch } : item));
     if (mobileMessageActionTarget.value?.publicId === publicId) {
@@ -2680,20 +2899,27 @@
     }
   }
 
-  async function votePoll(chatMessage: CommunityChatMessage, optionPublicId: string) {
+  async function votePoll(chatMessage: CommunityChatMessage, optionPublicIds: string[]) {
     if (
       !chatMessage.poll?.canVote ||
       !props.access.pollsEnabled ||
       !props.access.postingEnabled ||
       pollVoteBusyByMessageId.value.has(chatMessage.publicId) ||
       pollClosingMessageIds.value.has(chatMessage.publicId) ||
-      !optionPublicId
+      !Array.isArray(optionPublicIds) ||
+      !optionPublicIds.length
     ) {
       return;
     }
-    pollVoteBusyByMessageId.value = new Map(pollVoteBusyByMessageId.value).set(chatMessage.publicId, optionPublicId);
+    pollVoteBusyByMessageId.value = new Map(pollVoteBusyByMessageId.value).set(chatMessage.publicId, [
+      ...optionPublicIds,
+    ]);
     try {
-      const response = await voteCommunityChatPoll(chatMessage.publicId, optionPublicId);
+      const response = await voteCommunityChatPoll(
+        chatMessage.publicId,
+        optionPublicIds,
+        chatMessage.poll.selectionMode === 'multiple' ? 'multiple' : 'single',
+      );
       if (!response.data?.poll) throw new Error('COMMUNITY_CHAT_POLL_VOTE_INVALID');
       updateMessageInteraction(chatMessage.publicId, { poll: response.data.poll });
       // Root 同时接收其他成员的定向票数事件；自己的 HTTP 快照可能在极端乱序下晚到并覆盖更新结果。
@@ -2760,10 +2986,22 @@
     }
   }
 
-  async function submitPoll(payload: { question: string; options: string[]; endsAt: string }) {
+  async function submitPoll(payload: {
+    question: string;
+    options: string[];
+    endsAt: string;
+    selectionMode: CommunityChatPollSelectionMode;
+    maxSelections: number;
+  }) {
     const roomSlug = selectedRoomSlug.value;
     if (!roomSlug || !canCreatePoll.value || pollSubmitting.value) return;
-    const payloadKey = JSON.stringify([payload.question, payload.options, payload.endsAt]);
+    const payloadKey = JSON.stringify([
+      payload.question,
+      payload.options,
+      payload.endsAt,
+      payload.selectionMode,
+      payload.maxSelections,
+    ]);
     const clientRequestId = pendingPollClientRequestIds.get(payloadKey) || createCommunityChatClientRequestId();
     pendingPollClientRequestIds.set(payloadKey, clientRequestId);
     pollSubmitting.value = true;
@@ -2772,7 +3010,12 @@
         clientRequestId,
         content: payload.question,
         messageKind: 'poll',
-        poll: { endsAt: payload.endsAt, options: payload.options },
+        poll: {
+          endsAt: payload.endsAt,
+          options: payload.options,
+          selectionMode: payload.selectionMode,
+          maxSelections: payload.maxSelections,
+        },
       });
       const sentMessage = response.data?.message as CommunityChatMessage | undefined;
       if (!sentMessage) throw new Error('COMMUNITY_CHAT_POLL_CREATE_INVALID');
@@ -3846,6 +4089,7 @@
     pendingReadReceiptIds.clear();
     resetReadReceiptVisibilityTracking();
     queuedMessageDetailIds.clear();
+    resetReadReceiptReaders({ close: true });
     void nextTick(scheduleVisibleReadReceipts);
   });
 
@@ -3890,6 +4134,7 @@
       pendingReadReceiptIds.clear();
       resetReadReceiptVisibilityTracking();
       queuedMessageDetailIds.clear();
+      resetReadReceiptReaders({ close: true });
       deadlinePollRefreshRequestedIds.clear();
       lastMarkedReadMessageId = '';
       lastAuthorityRefreshAt = 0;
@@ -3966,6 +4211,31 @@
     void nextTick(scheduleVisibleReadReceipts);
   });
 
+  watch(readReceiptReadersVisible, (visible) => {
+    if (!visible && readReceiptReadersTargetPublicId.value) resetReadReceiptReaders();
+  });
+
+  watch(
+    () => {
+      if (!readReceiptReadersVisible.value || !readReceiptReadersLoaded.value) return '';
+      const publicId = readReceiptReadersTargetPublicId.value;
+      const target = chatMessages.value.find((item) => item.publicId === publicId);
+      return target && typeof target.readCount === 'number' ? `${publicId}:${target.readCount}` : '';
+    },
+    (signature) => {
+      if (!signature) return;
+      const nextCount = Number(signature.slice(signature.lastIndexOf(':') + 1));
+      if (Number.isFinite(nextCount) && nextCount !== readReceiptReaderTotal.value) void loadReadReceiptReaders();
+    },
+  );
+
+  watch(
+    () => props.access.canManage,
+    (canManage) => {
+      if (!canManage) resetReadReceiptReaders({ close: true });
+    },
+  );
+
   watch(communityClock, (now) => {
     const visibleMessageIds = new Set(chatMessages.value.map((item) => item.publicId));
     for (const publicId of deadlinePollRefreshRequestedIds) {
@@ -3997,7 +4267,10 @@
     }
     readReceiptForegroundActive = typeof document.hasFocus !== 'function' || document.hasFocus();
     void refreshLatest();
-    if (readReceiptForegroundActive) scheduleVisibleReadReceipts();
+    if (readReceiptForegroundActive) {
+      scheduleVisibleReadReceipts();
+      void refreshReadReceiptCounts();
+    }
   }
 
   function handleReadReceiptWindowBlur() {
@@ -4007,7 +4280,10 @@
 
   function handleReadReceiptWindowFocus() {
     readReceiptForegroundActive = document.visibilityState === 'visible';
-    if (readReceiptForegroundActive) scheduleVisibleReadReceipts();
+    if (readReceiptForegroundActive) {
+      scheduleVisibleReadReceipts();
+      void refreshReadReceiptCounts();
+    }
   }
 
   onMounted(() => {
@@ -4016,7 +4292,10 @@
     if (props.access.authenticated && props.access.canEnter) {
       void ensureCommunityChatIdentity().catch(() => undefined);
     }
-    pollTimer = window.setInterval(refreshLatest, 8000);
+    pollTimer = window.setInterval(() => {
+      void refreshLatest();
+      void refreshReadReceiptCounts();
+    }, 8000);
     recallClockTimer = window.setInterval(() => {
       recallClock.value = Date.now();
     }, 5000);

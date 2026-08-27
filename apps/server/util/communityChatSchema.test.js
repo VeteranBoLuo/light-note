@@ -9,6 +9,7 @@ const {
   COMMUNITY_CHAT_ROOM_PIN_COLUMNS,
   COMMUNITY_CHAT_MESSAGE_PAYLOAD_COLUMNS,
   COMMUNITY_CHAT_MENTION_SNAPSHOT_COLUMNS,
+  COMMUNITY_CHAT_POLL_SELECTION_COLUMNS,
   COMMUNITY_CHAT_RUNTIME_POLICY_SEED_SQL,
   COMMUNITY_CHAT_TABLE_SQL,
   ensureCommunityChatSchema,
@@ -23,10 +24,10 @@ describe('ensureCommunityChatSchema', () => {
   it('幂等创建社区身份、消息、投票、已读回执与治理表，并补齐增量字段和默认数据', async () => {
     await ensureCommunityChatSchema();
 
-    expect(COMMUNITY_CHAT_TABLE_SQL).toHaveLength(23);
-    expect(mocks.query).toHaveBeenCalledTimes(43);
+    expect(COMMUNITY_CHAT_TABLE_SQL).toHaveLength(24);
+    expect(mocks.query).toHaveBeenCalledTimes(47);
     expect(
-      mocks.query.mock.calls.slice(0, 23).every(([sql]) => String(sql).includes('CREATE TABLE IF NOT EXISTS')),
+      mocks.query.mock.calls.slice(0, 24).every(([sql]) => String(sql).includes('CREATE TABLE IF NOT EXISTS')),
     ).toBe(true);
     const sqlCalls = mocks.query.mock.calls.map(([sql]) => String(sql));
     for (const column of [
@@ -41,6 +42,8 @@ describe('ensureCommunityChatSchema', () => {
       'sticker_key',
       'mention_everyone',
       'read_receipt_enabled',
+      'selection_mode',
+      'max_selections',
       'sort_order',
       'display_name_snapshot',
       'community_id_snapshot',
@@ -83,6 +86,10 @@ describe('ensureCommunityChatSchema', () => {
       'display_name_snapshot',
       'community_id_snapshot',
     ]);
+    expect(COMMUNITY_CHAT_POLL_SELECTION_COLUMNS.map((column) => column.name)).toEqual([
+      'selection_mode',
+      'max_selections',
+    ]);
   });
 
   it('建表失败时不会继续写入频道种子', async () => {
@@ -107,6 +114,7 @@ describe('ensureCommunityChatSchema', () => {
       profileMigration,
       identityMentionStickerMigration,
       pollReceiptMigration,
+      multipleChoicePollMigration,
       baseline,
       assertions,
     ] = await Promise.all([
@@ -126,6 +134,7 @@ describe('ensureCommunityChatSchema', () => {
         'utf8',
       ),
       readFile(new URL('../migrations/20260826_community_chat_polls_read_receipts.sql', import.meta.url), 'utf8'),
+      readFile(new URL('../migrations/20260827_community_chat_multiple_choice_polls.sql', import.meta.url), 'utf8'),
       readFile(new URL('../tag_db.sql', import.meta.url), 'utf8'),
       readFile(new URL('../migrations/schema-assertions.sql', import.meta.url), 'utf8'),
     ]);
@@ -220,6 +229,7 @@ describe('ensureCommunityChatSchema', () => {
       'community_chat_polls',
       'community_chat_poll_options',
       'community_chat_poll_votes',
+      'community_chat_poll_multi_votes',
       'community_chat_message_read_receipts',
     ]) {
       expect(pollReceiptMigration).toContain(`CREATE TABLE IF NOT EXISTS \`${tableName}\``);
@@ -228,14 +238,21 @@ describe('ensureCommunityChatSchema', () => {
       expect(COMMUNITY_CHAT_TABLE_SQL.join('\n')).toContain(`CREATE TABLE IF NOT EXISTS ${tableName}`);
     }
     expect(pollReceiptMigration).toContain('`read_receipt_enabled` tinyint unsigned NOT NULL DEFAULT 0');
+    expect(multipleChoicePollMigration).toContain("COLUMN_NAME='selection_mode'");
+    expect(multipleChoicePollMigration).toContain("COLUMN_NAME='max_selections'");
+    expect(multipleChoicePollMigration).toContain('CREATE TABLE IF NOT EXISTS `community_chat_poll_multi_votes`');
     expect(baseline).toContain("`read_receipt_enabled` tinyint unsigned NOT NULL DEFAULT '0'");
     expect(assertions).toContain('invalid_community_chat_read_receipt');
     expect(assertions).toContain('invalid_community_chat_poll_message');
     expect(assertions).toContain('invalid_community_chat_poll_option_count');
+    expect(assertions).toContain('invalid_community_chat_poll_selection');
+    expect(assertions).toContain('invalid_community_chat_poll_selection_column');
+    expect(assertions).toContain('invalid_community_chat_poll_multi_vote_count');
     expect(assertions).toContain('invalid_community_chat_read_receipt_flag');
     expect(assertions).toContain('invalid_community_chat_poll_receipt_index');
     expect(assertions).toContain("'idx_community_chat_poll_option_message', 1, 'message_id,id'");
     expect(assertions).toContain("'idx_community_chat_poll_vote_user_time', 1, 'user_id,update_time,message_id'");
+    expect(assertions).toContain("'idx_community_chat_poll_multi_vote_user_time', 1, 'user_id,update_time,message_id'");
     expect(assertions).toContain("COALESCE(voter.del_flag, '1')<>'0'");
     expect(assertions).toContain("COALESCE(reader.del_flag, '1')<>'0'");
     expect(assertions).toContain("COALESCE(author.role, '')<>'root'");

@@ -58,7 +58,9 @@ export const detectRequestBehavior = (context) => {
     : SECURITY_CONFIG.pathEnumerationPerMinute;
   const result = [];
 
-  if (requestCount1m > SECURITY_CONFIG.highFrequencyPerMinute) {
+  // 同一个滑窗只在首次越线时产一条证据；阈值后的每个请求都落事件会把一次突发流量
+  // 放大成几十条待复核记录。计数仍持续保留，降回阈值后再次越线会形成新的证据。
+  if (requestCount1m === SECURITY_CONFIG.highFrequencyPerMinute + 1) {
     result.push(
       evidence({
         code: 'HIGH_FREQUENCY_REQUEST',

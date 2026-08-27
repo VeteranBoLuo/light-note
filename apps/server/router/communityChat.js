@@ -120,7 +120,9 @@ router.post(
 );
 router.put('/rooms/:slug/read', handle.markRoomRead);
 router.post('/rooms/:slug/read-receipts', readReceiptLimiter, handle.recordReadReceipts);
+router.get('/rooms/:slug/read-receipt-counts', readReceiptLimiter, handle.readReceiptCounts);
 router.get('/messages/:publicId', handle.messageDetail);
+router.get('/messages/:publicId/readers', handle.readReceiptReaders);
 router.get('/messages/:publicId/author-profile', handle.messageAuthorProfile);
 router.get('/messages/:publicId/author-profile/achievements', handle.messageAuthorAchievements);
 router.get('/messages/:publicId/author-avatar', handle.messageAuthorAvatar);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DRAWING_SCENE_MAX_BYTES } from '@lightnote/shared/drawing-note';
 import { DRAWING_THUMBNAIL_MAX_BYTES } from '../contentLimits.js';
+import { AI_SKILL_NOTE_TRANSFORM_MAX_TEXT_CHARS } from '../aiSkill/limits.js';
 import { resolveRequestFieldPolicy } from './requestFieldPolicy.js';
 
 describe('请求字段安全策略', () => {
@@ -47,7 +48,9 @@ describe('请求字段安全策略', () => {
       {
         method: 'POST',
         path: '/note/uploadDrawingThumbnail',
-        body: { thumbnail: `data:image/webp;base64,${Buffer.alloc(DRAWING_THUMBNAIL_MAX_BYTES + 1).toString('base64')}` },
+        body: {
+          thumbnail: `data:image/webp;base64,${Buffer.alloc(DRAWING_THUMBNAIL_MAX_BYTES + 1).toString('base64')}`,
+        },
       },
       'body.thumbnail',
     );
@@ -69,5 +72,35 @@ describe('请求字段安全策略', () => {
       'body.scene',
     );
     expect(result).toMatchObject({ sizeUnit: 'utf8-bytes', overBudget: true, trustedEnvelope: false });
+  });
+
+  it.each(['/ai/skills/execute', '/api/ai/skills/stream/'])('只信任精确 AI 技能的笔记原文字段：%s', (path) => {
+    const context = {
+      method: 'POST',
+      path,
+      body: {
+        skillId: 'note.transform_text',
+        input: { text: 'sudo apt update && sudo apt full-upgrade -y' },
+      },
+    };
+    expect(resolveRequestFieldPolicy(context, 'body.input.text')).toMatchObject({
+      semantic: 'ai-note-transform-text',
+      maxSize: AI_SKILL_NOTE_TRANSFORM_MAX_TEXT_CHARS,
+      trustedEnvelope: true,
+      overBudget: false,
+      skipSignatureRules: '*',
+    });
+    expect(
+      resolveRequestFieldPolicy({ ...context, body: { ...context.body, skillId: 'help.answer' } }, 'body.input.text'),
+    ).toMatchObject({ trustedEnvelope: false });
+    expect(
+      resolveRequestFieldPolicy(
+        {
+          ...context,
+          body: { ...context.body, input: { text: 'x'.repeat(AI_SKILL_NOTE_TRANSFORM_MAX_TEXT_CHARS + 1) } },
+        },
+        'body.input.text',
+      ),
+    ).toMatchObject({ trustedEnvelope: false, overBudget: true });
   });
 });

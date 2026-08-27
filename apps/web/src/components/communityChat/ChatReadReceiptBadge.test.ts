@@ -12,9 +12,6 @@ vi.mock('@/components/base/BasicComponents/BButton.vue', () => ({
     template: '<button type="button" :disabled="disabled"><slot /></button>',
   },
 }));
-vi.mock('@/components/base/BasicComponents/BTooltip.vue', () => ({
-  default: { props: ['title'], template: '<div :data-title="title"><slot /></div>' },
-}));
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
   default: { template: '<span class="svg-icon-stub" />' },
 }));
@@ -29,13 +26,13 @@ afterEach(() => {
 });
 
 function mountBadge(props: Record<string, unknown>) {
-  let refreshCount = 0;
+  let openCount = 0;
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp(ChatReadReceiptBadge, {
     ...props,
-    onRefresh: () => {
-      refreshCount += 1;
+    onOpen: () => {
+      openCount += 1;
     },
   });
   app.mount(host);
@@ -45,22 +42,20 @@ function mountBadge(props: Record<string, unknown>) {
   };
   return {
     host,
-    get refreshCount() {
-      return refreshCount;
+    get openCount() {
+      return openCount;
     },
   };
 }
 
 describe('ChatReadReceiptBadge', () => {
-  it('Root 看到聚合数量并可主动刷新详情', async () => {
+  it('Root 看到聚合数量并可打开已读成员明细', async () => {
     const mounted = mountBadge({ canManage: true, enabled: true, readCount: 12 });
     expect(mounted.host.textContent).toContain('communityChat.readReceipt.count:12');
-    expect(mounted.host.querySelector('[data-title]')?.getAttribute('data-title')).toContain(
-      'communityChat.readReceipt.rootHint:12',
-    );
+    expect(mounted.host.querySelector('[role="tooltip"]')).toBeNull();
     mounted.host.querySelector<HTMLButtonElement>('button')?.click();
     await nextTick();
-    expect(mounted.refreshCount).toBe(1);
+    expect(mounted.openCount).toBe(1);
   });
 
   it('普通成员只看到采集状态且不能刷新或获知数量', async () => {
@@ -71,14 +66,12 @@ describe('ChatReadReceiptBadge', () => {
     expect(button?.disabled).toBe(true);
     button?.click();
     await nextTick();
-    expect(mounted.refreshCount).toBe(0);
+    expect(mounted.openCount).toBe(0);
   });
 
   it('功能暂停时保留明确的历史统计状态', () => {
     const root = mountBadge({ canManage: true, enabled: false, readCount: 7 });
     expect(root.host.textContent).toContain('communityChat.readReceipt.countPaused:7');
-    expect(root.host.querySelector('[data-title]')?.getAttribute('data-title')).toContain(
-      'communityChat.readReceipt.rootPausedHint:7',
-    );
+    expect(root.host.querySelector('[role="tooltip"]')).toBeNull();
   });
 });

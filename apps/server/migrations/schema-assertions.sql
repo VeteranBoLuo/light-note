@@ -2406,6 +2406,7 @@ FROM (
   SELECT 'community_chat_polls' t UNION ALL
   SELECT 'community_chat_poll_options' UNION ALL
   SELECT 'community_chat_poll_votes' UNION ALL
+  SELECT 'community_chat_poll_multi_votes' UNION ALL
   SELECT 'community_chat_message_read_receipts'
 ) expected
 LEFT JOIN information_schema.tables actual
@@ -2417,6 +2418,8 @@ FROM (
   SELECT 'community_chat_messages' tab, 'read_receipt_enabled' col,
          'community_chat_messages.read_receipt_enabled' n UNION ALL
   SELECT 'community_chat_polls', 'message_id', 'community_chat_polls.message_id' UNION ALL
+  SELECT 'community_chat_polls', 'selection_mode', 'community_chat_polls.selection_mode' UNION ALL
+  SELECT 'community_chat_polls', 'max_selections', 'community_chat_polls.max_selections' UNION ALL
   SELECT 'community_chat_polls', 'ends_at_utc', 'community_chat_polls.ends_at_utc' UNION ALL
   SELECT 'community_chat_polls', 'closed_at_utc', 'community_chat_polls.closed_at_utc' UNION ALL
   SELECT 'community_chat_poll_options', 'public_id', 'community_chat_poll_options.public_id' UNION ALL
@@ -2425,6 +2428,12 @@ FROM (
   SELECT 'community_chat_poll_votes', 'message_id', 'community_chat_poll_votes.message_id' UNION ALL
   SELECT 'community_chat_poll_votes', 'user_id', 'community_chat_poll_votes.user_id' UNION ALL
   SELECT 'community_chat_poll_votes', 'option_id', 'community_chat_poll_votes.option_id' UNION ALL
+  SELECT 'community_chat_poll_multi_votes', 'message_id',
+         'community_chat_poll_multi_votes.message_id' UNION ALL
+  SELECT 'community_chat_poll_multi_votes', 'user_id',
+         'community_chat_poll_multi_votes.user_id' UNION ALL
+  SELECT 'community_chat_poll_multi_votes', 'option_id',
+         'community_chat_poll_multi_votes.option_id' UNION ALL
   SELECT 'community_chat_message_read_receipts', 'message_id',
          'community_chat_message_read_receipts.message_id' UNION ALL
   SELECT 'community_chat_message_read_receipts', 'user_id',
@@ -2435,6 +2444,29 @@ FROM (
 LEFT JOIN information_schema.columns actual
   ON actual.table_schema=DATABASE() AND actual.table_name=expected.tab AND actual.column_name=expected.col
 WHERE actual.column_name IS NULL;
+
+SELECT '[60] invalid_community_chat_poll_selection_column' AS check_name,
+  CONCAT(actual.table_name, '.', actual.column_name, ' actual=',
+         IFNULL(actual.column_type, 'NULL'), '/', IFNULL(actual.column_default, 'NULL'), '/',
+         IFNULL(actual.collation_name, 'NULL')) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name='community_chat_polls'
+  AND (
+    (actual.column_name='selection_mode' AND NOT (
+      actual.is_nullable='NO'
+      AND actual.column_default='single'
+      AND actual.column_type='varchar(16)'
+      AND actual.character_set_name='ascii'
+      AND actual.collation_name='ascii_bin'
+    ))
+    OR
+    (actual.column_name='max_selections' AND NOT (
+      actual.is_nullable='NO'
+      AND actual.column_default='1'
+      AND actual.column_type='tinyint unsigned'
+    ))
+  );
 
 SELECT '[60] missing_community_chat_poll_receipt_index' AS check_name,
   CONCAT(expected.tab, '.', expected.ix) AS detail
@@ -2448,6 +2480,9 @@ FROM (
   SELECT 'community_chat_poll_votes', 'PRIMARY' UNION ALL
   SELECT 'community_chat_poll_votes', 'idx_community_chat_poll_vote_option' UNION ALL
   SELECT 'community_chat_poll_votes', 'idx_community_chat_poll_vote_user_time' UNION ALL
+  SELECT 'community_chat_poll_multi_votes', 'PRIMARY' UNION ALL
+  SELECT 'community_chat_poll_multi_votes', 'idx_community_chat_poll_multi_vote_option' UNION ALL
+  SELECT 'community_chat_poll_multi_votes', 'idx_community_chat_poll_multi_vote_user_time' UNION ALL
   SELECT 'community_chat_message_read_receipts', 'PRIMARY' UNION ALL
   SELECT 'community_chat_message_read_receipts', 'idx_community_chat_receipt_user_time'
 ) expected
@@ -2470,6 +2505,9 @@ FROM (
   SELECT 'community_chat_poll_votes', 'PRIMARY', 0, 'message_id,user_id' UNION ALL
   SELECT 'community_chat_poll_votes', 'idx_community_chat_poll_vote_option', 1, 'message_id,option_id' UNION ALL
   SELECT 'community_chat_poll_votes', 'idx_community_chat_poll_vote_user_time', 1, 'user_id,update_time,message_id' UNION ALL
+  SELECT 'community_chat_poll_multi_votes', 'PRIMARY', 0, 'message_id,user_id,option_id' UNION ALL
+  SELECT 'community_chat_poll_multi_votes', 'idx_community_chat_poll_multi_vote_option', 1, 'message_id,option_id' UNION ALL
+  SELECT 'community_chat_poll_multi_votes', 'idx_community_chat_poll_multi_vote_user_time', 1, 'user_id,update_time,message_id' UNION ALL
   SELECT 'community_chat_message_read_receipts', 'PRIMARY', 0, 'message_id,user_id' UNION ALL
   SELECT 'community_chat_message_read_receipts', 'idx_community_chat_receipt_user_time', 1, 'user_id,first_seen_at,message_id'
 ) expected
@@ -2482,6 +2520,7 @@ LEFT JOIN (
       'community_chat_polls',
       'community_chat_poll_options',
       'community_chat_poll_votes',
+      'community_chat_poll_multi_votes',
       'community_chat_message_read_receipts'
     )
   GROUP BY table_name, index_name
@@ -2511,6 +2550,19 @@ LEFT JOIN community_chat_poll_options option_row ON option_row.message_id=poll.m
 GROUP BY poll.message_id
 HAVING COUNT(option_row.id)<2 OR COUNT(option_row.id)>10;
 
+SELECT '[60] invalid_community_chat_poll_selection' AS check_name, poll.message_id AS detail
+FROM community_chat_polls poll
+LEFT JOIN (
+  SELECT message_id, COUNT(*) AS option_count
+  FROM community_chat_poll_options
+  GROUP BY message_id
+) option_summary ON option_summary.message_id=poll.message_id
+WHERE poll.selection_mode NOT IN ('single','multiple')
+   OR (poll.selection_mode='single' AND poll.max_selections<>1)
+   OR (poll.selection_mode='multiple' AND (
+        poll.max_selections<2 OR poll.max_selections>COALESCE(option_summary.option_count, 0)
+      ));
+
 SELECT '[60] invalid_community_chat_poll_option' AS check_name, option_row.id AS detail
 FROM community_chat_poll_options option_row
 LEFT JOIN community_chat_polls poll ON poll.message_id=option_row.message_id
@@ -2520,12 +2572,36 @@ SELECT '[60] invalid_community_chat_poll_vote' AS check_name,
   CONCAT(vote.message_id, ':', vote.user_id) AS detail
 FROM community_chat_poll_votes vote
 LEFT JOIN community_chat_poll_options option_row ON option_row.id=vote.option_id
+LEFT JOIN community_chat_polls poll ON poll.message_id=vote.message_id
 LEFT JOIN user voter ON voter.id=vote.user_id
 WHERE option_row.id IS NULL
    OR option_row.message_id<>vote.message_id
+   OR poll.message_id IS NULL
+   OR poll.selection_mode<>'single'
    OR voter.id IS NULL
    OR COALESCE(voter.del_flag, '1')<>'0'
    OR COALESCE(voter.role, 'deleted')='deleted';
+
+SELECT '[60] invalid_community_chat_poll_multi_vote' AS check_name,
+  CONCAT(vote.message_id, ':', vote.user_id, ':', vote.option_id) AS detail
+FROM community_chat_poll_multi_votes vote
+LEFT JOIN community_chat_poll_options option_row ON option_row.id=vote.option_id
+LEFT JOIN community_chat_polls poll ON poll.message_id=vote.message_id
+LEFT JOIN user voter ON voter.id=vote.user_id
+WHERE option_row.id IS NULL
+   OR option_row.message_id<>vote.message_id
+   OR poll.message_id IS NULL
+   OR poll.selection_mode<>'multiple'
+   OR voter.id IS NULL
+   OR COALESCE(voter.del_flag, '1')<>'0'
+   OR COALESCE(voter.role, 'deleted')='deleted';
+
+SELECT '[60] invalid_community_chat_poll_multi_vote_count' AS check_name,
+  CONCAT(vote.message_id, ':', vote.user_id, ':', COUNT(*), '/', MAX(poll.max_selections)) AS detail
+FROM community_chat_poll_multi_votes vote
+JOIN community_chat_polls poll ON poll.message_id=vote.message_id
+GROUP BY vote.message_id, vote.user_id
+HAVING COUNT(*)>MAX(poll.max_selections);
 
 SELECT '[60] invalid_community_chat_read_receipt_flag' AS check_name, message.id AS detail
 FROM community_chat_messages message

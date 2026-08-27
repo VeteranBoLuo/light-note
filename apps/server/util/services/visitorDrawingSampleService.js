@@ -4,7 +4,7 @@ import { NEW_USER_DRAWING_NOTE_EXAMPLE_SCENE } from './newUserDrawingNoteExample
 import { snapshotOwnedNoteVersion } from './noteService.js';
 
 export const VISITOR_DRAWING_SAMPLE_NOTE_ID = '49a0a5b9-719c-8910-b7c3-4de02a9d0cae';
-export const VISITOR_DRAWING_SAMPLE_TITLE = '上色';
+export const VISITOR_DRAWING_SAMPLE_TITLE = '手绘笔记示例';
 
 function syncError(code, message) {
   const error = new Error(`${code}: ${message}`);

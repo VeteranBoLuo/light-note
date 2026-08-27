@@ -30,6 +30,10 @@ const PASSIVE_API_PATHS = new Set([
   '/me', // 身份恢复探针只同步会话状态；使用精确路径，避免误伤 /messages。
 ]);
 
+const PASSIVE_API_PATH_PATTERNS = Object.freeze([
+  /^\/community-chat\/rooms\/[^/]+\/read-receipt-counts$/, // Root 前台每 8 秒轻量校准聚合数。
+]);
+
 const NOTE_CONTENT_MUTATION_PATHS = new Set([
   '/note/addNote',
   '/note/updateNote',
@@ -96,5 +100,9 @@ export function shouldSkipApiLog(originalUrl) {
   const url = String(originalUrl || '');
   if (API_LOG_SKIP_SUBSTRINGS.some((key) => url.includes(key))) return true;
   const path = normalizeApiPath(url);
-  return PASSIVE_API_PATHS.has(path) || path.startsWith('/updateLog/image/');
+  return (
+    PASSIVE_API_PATHS.has(path) ||
+    PASSIVE_API_PATH_PATTERNS.some((pattern) => pattern.test(path)) ||
+    path.startsWith('/updateLog/image/')
+  );
 }

@@ -28,7 +28,9 @@ const enLocaleSource = readSource('src/i18n/locales/en-US.ts');
 const privacySource = readSource('public/legal/browser-extension-privacy.html');
 const storeListingSource = readSource('../../docs/browser-extension-store-listing.md');
 const storePromoSource = readSource('store-assets/chrome/promo-small-440x280.svg');
+const storeMarqueeSource = readSource('store-assets/chrome/promo-marquee-1400x560.svg');
 const storeScreenshotBrandSource = readSource('store-assets/chrome/screenshot-brand-panel.svg');
+const storeScreenshotBrandEnglishSource = readSource('store-assets/chrome/screenshot-brand-panel-en.svg');
 
 function extensionIdFromPublicKey(publicKey: string): string {
   const digest = crypto.createHash('sha256').update(Buffer.from(publicKey, 'base64')).digest().subarray(0, 16);
@@ -46,9 +48,7 @@ describe('浏览器插件 Manifest 与隐私边界', () => {
     expect(manifest.action.default_title).toBe('__MSG_extensionActionTitle__');
     expect(zhManifestMessages.extensionName.message).toBe('轻笺 · 随手收');
     expect(zhManifestMessages.extensionShortName.message).toBe('轻笺');
-    expect(zhManifestMessages.extensionDescription.message).toBe(
-      '随手收下网页、灵感和文件，稍后在轻笺慢慢整理。',
-    );
+    expect(zhManifestMessages.extensionDescription.message).toBe('随手收下网页、灵感和文件，稍后在轻笺慢慢整理。');
     expect(enManifestMessages.extensionName.message).toBe('Light Note · Quick Capture');
     expect(enManifestMessages.extensionShortName.message).toBe('Light Note');
     expect(sidepanelSource).toContain('<title>轻笺 · 随手收</title>');
@@ -58,7 +58,12 @@ describe('浏览器插件 Manifest 与隐私边界', () => {
     expect(storeListingSource).toContain('中文名：`轻笺 · 随手收`');
     expect(storeListingSource).toContain('英文名：`Light Note · Quick Capture`');
     expect(storePromoSource).toContain('轻笺 · 随手收');
+    expect(storePromoSource).toContain('Capture now · Organize later');
+    expect(storeMarqueeSource).toContain('轻笺 · 随手收');
+    expect(storeMarqueeSource).toContain('LIGHT NOTE · QUICK CAPTURE');
     expect(storeScreenshotBrandSource).toContain('轻笺 · 随手收');
+    expect(storeScreenshotBrandEnglishSource).toContain('Light Note ·');
+    expect(storeScreenshotBrandEnglishSource).toContain('Quick Capture');
     expect(viteConfigSource).toContain("'_locales/zh_CN/messages.json'");
     expect(viteConfigSource).toContain("'_locales/en/messages.json'");
   });

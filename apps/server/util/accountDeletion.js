@@ -48,6 +48,7 @@ const DIRECT_DELETE_TABLES = Object.freeze([
   ['community_chat_user_identities', 'user_id'],
   ['community_chat_custom_stickers', 'user_id'],
   ['community_chat_poll_votes', 'user_id'],
+  ['community_chat_poll_multi_votes', 'user_id'],
   ['community_chat_message_read_receipts', 'user_id'],
 ]);
 
@@ -357,6 +358,13 @@ export async function requestAccountDeletion({ userId, code, confirmation }) {
       tables,
       'community_chat_poll_votes',
       'DELETE FROM community_chat_poll_votes WHERE user_id = ?',
+      [userId],
+    );
+    await deleteIfPresent(
+      connection,
+      tables,
+      'community_chat_poll_multi_votes',
+      'DELETE FROM community_chat_poll_multi_votes WHERE user_id = ?',
       [userId],
     );
     await deleteIfPresent(

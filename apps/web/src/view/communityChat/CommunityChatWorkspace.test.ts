@@ -9,6 +9,8 @@ import { clearCommunityChatDraftMemory, getCommunityChatDraftSession } from '@/c
 const mocks = vi.hoisted(() => ({
   getMessages: vi.fn(),
   getMessage: vi.fn(),
+  getReadReceiptCounts: vi.fn(),
+  getReadReceiptReaders: vi.fn(),
   getPinnedMessage: vi.fn(),
   getAuthorProfile: vi.fn(),
   uploadImage: vi.fn(),
@@ -65,6 +67,8 @@ vi.mock('@/api/communityChatApi', () => ({
   createCommunityChatClientRequestId: mocks.createClientRequestId,
   getCommunityChatMessages: mocks.getMessages,
   getCommunityChatMessage: mocks.getMessage,
+  getCommunityChatReadReceiptCounts: mocks.getReadReceiptCounts,
+  getCommunityChatReadReceiptReaders: mocks.getReadReceiptReaders,
   getCommunityChatPinnedMessage: mocks.getPinnedMessage,
   getCommunityChatMessageAuthorProfile: mocks.getAuthorProfile,
   uploadCommunityChatImage: mocks.uploadImage,
@@ -332,6 +336,21 @@ beforeEach(() => {
     data: { publicId: 'message-1', likedByMe: true, likeCount: 1, likePreview: ['薄荷'] },
   });
   mocks.getMessage.mockResolvedValue({ status: 200, data: { message: chatMessage() } });
+  mocks.getReadReceiptCounts.mockResolvedValue({
+    status: 200,
+    data: { roomSlug: 'general', items: [] },
+  });
+  mocks.getReadReceiptReaders.mockResolvedValue({
+    status: 200,
+    data: {
+      messagePublicId: 'message-1',
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 50,
+      hasMore: false,
+    },
+  });
   mocks.votePoll.mockResolvedValue({
     status: 200,
     data: {
@@ -342,6 +361,9 @@ beforeEach(() => {
         closed: false,
         closeReason: null,
         resultsVisible: false,
+        selectionMode: 'single',
+        maxSelections: 1,
+        selectedOptionPublicIds: ['option-a'],
         selectedOptionPublicId: 'option-a',
         canVote: true,
         canClose: false,
@@ -524,6 +546,9 @@ describe('CommunityChatWorkspace', () => {
       closed: false,
       closeReason: null,
       resultsVisible: false,
+      selectionMode: 'single',
+      maxSelections: 1,
+      selectedOptionPublicIds: [],
       selectedOptionPublicId: null,
       canVote: true,
       canClose: false,
@@ -543,7 +568,10 @@ describe('CommunityChatWorkspace', () => {
     });
     mocks.votePoll.mockResolvedValueOnce({
       status: 200,
-      data: { messagePublicId: 'message-1', poll: { ...poll, selectedOptionPublicId: 'option-b' } },
+      data: {
+        messagePublicId: 'message-1',
+        poll: { ...poll, selectedOptionPublicIds: ['option-b'], selectedOptionPublicId: 'option-b' },
+      },
     });
 
     const host = await mountWorkspace({ access: { ...access, pollsEnabled: true } });
@@ -559,12 +587,64 @@ describe('CommunityChatWorkspace', () => {
     host.querySelectorAll<HTMLButtonElement>('.chat-poll-card__option')[1]?.click();
     await flushAsync();
 
-    expect(mocks.votePoll).toHaveBeenCalledWith('message-1', 'option-b');
+    expect(mocks.votePoll).toHaveBeenCalledWith('message-1', ['option-b'], 'single');
     expect(host.querySelectorAll('.chat-poll-card__option')[1]?.classList.contains('is-selected')).toBe(true);
     expect(mocks.messageSuccess).toHaveBeenCalledWith(zhCN.communityChat.poll.voteSuccess);
   });
 
-  it('Root 才显示投票入口和聚合已读数，并可按单条消息刷新权威计数', async () => {
+  it('普通成员为多选投票一次提交完整选择集，响应后保留全部已选项', async () => {
+    const poll = {
+      endsAt: '2026-08-27T10:00:00.000Z',
+      closedAt: null,
+      closed: false,
+      closeReason: null,
+      resultsVisible: false,
+      selectionMode: 'multiple' as const,
+      maxSelections: 2,
+      selectedOptionPublicIds: [],
+      selectedOptionPublicId: null,
+      canVote: true,
+      canClose: false,
+      options: [
+        { publicId: 'option-a', label: '体验' },
+        { publicId: 'option-b', label: '性能' },
+        { publicId: 'option-c', label: '可靠性' },
+      ],
+    };
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        roomSlug: 'general',
+        items: [chatMessage({ messageKind: 'poll', content: '可同时推进哪些方向？', poll })],
+        hasMore: false,
+        nextBefore: null,
+        serverTime: '2026-08-26T10:00:00.000Z',
+      },
+    });
+    mocks.votePoll.mockResolvedValueOnce({
+      status: 200,
+      data: {
+        messagePublicId: 'message-1',
+        poll: { ...poll, selectedOptionPublicIds: ['option-a', 'option-b'] },
+      },
+    });
+
+    const host = await mountWorkspace({ access: { ...access, pollsEnabled: true } });
+    const options = host.querySelectorAll<HTMLButtonElement>('.chat-poll-card__option');
+    options[0]?.click();
+    options[1]?.click();
+    await flushAsync();
+    expect(mocks.votePoll).not.toHaveBeenCalled();
+
+    host.querySelector<HTMLButtonElement>('.chat-poll-card__multiple-actions button')?.click();
+    await flushAsync();
+
+    expect(mocks.votePoll).toHaveBeenCalledWith('message-1', ['option-a', 'option-b'], 'multiple');
+    expect(
+      Array.from(host.querySelectorAll('.chat-poll-card__option.is-selected')).map((option) => option.textContent),
+    ).toEqual(expect.arrayContaining([expect.stringContaining('体验'), expect.stringContaining('性能')]));
+  });
+
+  it('Root 才显示投票入口和聚合已读数，点击后按需读取成员名单并同步最新数量', async () => {
     mocks.user.id = 'root-1';
     mocks.user.role = 'root';
     const rootMessage = chatMessage({
@@ -582,9 +662,25 @@ describe('CommunityChatWorkspace', () => {
         serverTime: '2026-08-26T10:00:00.000Z',
       },
     });
-    mocks.getMessage.mockResolvedValueOnce({
+    mocks.getReadReceiptReaders.mockResolvedValueOnce({
       status: 200,
-      data: { message: { ...rootMessage, readCount: 5 } },
+      data: {
+        messagePublicId: 'message-1',
+        items: [
+          {
+            userPublicId: '11111111-1111-4111-8111-111111111111',
+            communityId: 'ln_8K2M7A',
+            displayName: '薄荷',
+            avatar: '',
+            frameId: null,
+            firstSeenAt: '2026-08-27T10:01:02.000Z',
+          },
+        ],
+        total: 5,
+        page: 1,
+        pageSize: 50,
+        hasMore: false,
+      },
     });
 
     const host = await mountWorkspace({
@@ -607,8 +703,57 @@ describe('CommunityChatWorkspace', () => {
     receiptButton?.click();
     await flushAsync();
 
-    expect(mocks.getMessage).toHaveBeenCalledWith('message-1');
+    expect(mocks.getReadReceiptReaders).toHaveBeenCalledWith('message-1', { page: 1, pageSize: 50 });
     expect(host.querySelector('.community-message__read-receipt')?.textContent).toContain('已读 5');
+    expect(document.body.textContent).toContain('薄荷');
+    expect(document.body.textContent).toContain('@ln_8K2M7A');
+  });
+
+  it('Root 持续停留在前台时每 8 秒轻量校准已读数，不需要点击徽标', async () => {
+    vi.useFakeTimers();
+    mocks.user.id = 'root-1';
+    mocks.user.role = 'root';
+    const rootMessage = chatMessage({
+      isOwn: true,
+      author: { ...chatMessage().author, role: 'official', name: '轻笺 Root' },
+      readReceiptEnabled: true,
+      readCount: 1,
+    });
+    mocks.getMessages.mockResolvedValue({
+      data: {
+        roomSlug: 'general',
+        items: [rootMessage],
+        hasMore: false,
+        nextBefore: null,
+        focusPublicId: null,
+        hasNewer: false,
+        realtimeEnabled: false,
+        pollingAfterMs: 8000,
+        serverTime: '2026-08-27T10:00:00.000Z',
+      },
+    });
+    mocks.getReadReceiptCounts.mockResolvedValue({
+      status: 200,
+      data: {
+        roomSlug: 'general',
+        items: [{ messagePublicId: 'message-1', readCount: 2 }],
+      },
+    });
+
+    const host = await mountWorkspace({
+      access: { ...access, readReceiptsEnabled: true, canManage: true, memberRole: 'admin' },
+    });
+    expect(host.querySelector('.community-message__read-receipt')?.textContent).toContain('已读 1');
+    expect(mocks.getReadReceiptCounts).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(7999);
+    expect(mocks.getReadReceiptCounts).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await flushAsync();
+
+    expect(mocks.getReadReceiptCounts).toHaveBeenCalledWith('general', ['message-1']);
+    expect(mocks.getReadReceiptReaders).not.toHaveBeenCalled();
+    expect(host.querySelector('.community-message__read-receipt')?.textContent).toContain('已读 2');
   });
 
   it('投票响应丢失后原样重试复用同一 clientRequestId，避免重复创建', async () => {
@@ -627,6 +772,9 @@ describe('CommunityChatWorkspace', () => {
         closed: false,
         closeReason: null,
         resultsVisible: true,
+        selectionMode: 'single',
+        maxSelections: 1,
+        selectedOptionPublicIds: [],
         selectedOptionPublicId: null,
         totalVoterCount: 0,
         canVote: true,
@@ -673,6 +821,11 @@ describe('CommunityChatWorkspace', () => {
       'poll-request-stable-1',
       'poll-request-stable-1',
     ]);
+    expect(mocks.sendMessage.mock.calls[0]?.[1]?.poll).toMatchObject({
+      options: ['体验', '性能'],
+      selectionMode: 'single',
+      maxSelections: 1,
+    });
     expect(mocks.createClientRequestId).toHaveBeenCalledTimes(1);
     expect(host.querySelector('[data-message-public-id="poll-message-created"]')).not.toBeNull();
   });
@@ -921,6 +1074,9 @@ describe('CommunityChatWorkspace', () => {
       closed: false,
       closeReason: null,
       resultsVisible: false,
+      selectionMode: 'single',
+      maxSelections: 1,
+      selectedOptionPublicIds: [],
       selectedOptionPublicId: null,
       canVote: true,
       canClose: false,
@@ -979,6 +1135,9 @@ describe('CommunityChatWorkspace', () => {
         closed: false,
         closeReason: null,
         resultsVisible: false,
+        selectionMode: 'single',
+        maxSelections: 1,
+        selectedOptionPublicIds: [],
         selectedOptionPublicId: null,
         canVote: true,
         canClose: false,
@@ -1021,6 +1180,9 @@ describe('CommunityChatWorkspace', () => {
         closed: false,
         closeReason: null,
         resultsVisible: true,
+        selectionMode: 'single',
+        maxSelections: 1,
+        selectedOptionPublicIds: [],
         selectedOptionPublicId: null,
         totalVoterCount: 0,
         canVote: true,

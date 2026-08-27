@@ -100,7 +100,7 @@ describe('newUserSeedService', () => {
     expect(en.notes.some((note) => note.type === 'markdown')).toBe(true);
     for (const seed of [zh, en]) {
       const drawing = seed.notes.find((note) => note.key === 'drawing-demo');
-      expect(drawing).toMatchObject({ title: '上色', type: 'drawing', sort: 4 });
+      expect(drawing).toMatchObject({ title: '手绘笔记示例', type: 'drawing', sort: 4 });
       const scene = parseDrawingScene(drawing.content);
       expect(scene).toMatchObject({ v: DRAWING_SCENE_VERSION, page: DRAWING_PAGE });
       expect(scene.elements).toHaveLength(39);
@@ -210,7 +210,7 @@ describe('newUserSeedService', () => {
     expect(richTextNote.content).toContain('轻笺使用帮助');
     expect(richTextNote.content).toContain('欢迎使用轻笺');
     const drawingNote = noteInserts.map(([, [row]]) => row).find((row) => row.type === 'drawing');
-    expect(drawingNote).toMatchObject({ title: '上色', sort: 4 });
+    expect(drawingNote).toMatchObject({ title: '手绘笔记示例', sort: 4 });
     const drawingScene = parseDrawingScene(drawingNote.content);
     expect(drawingScene).toMatchObject({ v: DRAWING_SCENE_VERSION, page: DRAWING_PAGE });
     expect(drawingScene.elements).toHaveLength(39);

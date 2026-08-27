@@ -885,6 +885,8 @@ CREATE TABLE `community_chat_messages` (
 DROP TABLE IF EXISTS `community_chat_polls`;
 CREATE TABLE `community_chat_polls` (
   `message_id` bigint unsigned NOT NULL,
+  `selection_mode` varchar(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'single',
+  `max_selections` tinyint unsigned NOT NULL DEFAULT '1',
   `ends_at_utc` datetime(3) NOT NULL,
   `closed_at_utc` datetime(3) DEFAULT NULL,
   `closed_by` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
@@ -924,6 +926,21 @@ CREATE TABLE `community_chat_poll_votes` (
   PRIMARY KEY (`message_id`,`user_id`),
   KEY `idx_community_chat_poll_vote_option` (`message_id`,`option_id`),
   KEY `idx_community_chat_poll_vote_user_time` (`user_id`,`update_time`,`message_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
+-- Table structure for community_chat_poll_multi_votes
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_poll_multi_votes`;
+CREATE TABLE `community_chat_poll_multi_votes` (
+  `message_id` bigint unsigned NOT NULL,
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `option_id` bigint unsigned NOT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`message_id`,`user_id`,`option_id`),
+  KEY `idx_community_chat_poll_multi_vote_option` (`message_id`,`option_id`),
+  KEY `idx_community_chat_poll_multi_vote_user_time` (`user_id`,`update_time`,`message_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------

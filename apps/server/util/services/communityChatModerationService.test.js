@@ -124,8 +124,20 @@ describe('communityChatModerationService', () => {
       if (text.includes('FROM community_chat_polls poll')) {
         return [
           [
-            { endsAt: '2026-08-27T10:00:00.000Z', closedAt: null, label: '体验' },
-            { endsAt: '2026-08-27T10:00:00.000Z', closedAt: null, label: '性能' },
+            {
+              endsAt: '2026-08-27T10:00:00.000Z',
+              closedAt: null,
+              selectionMode: 'multiple',
+              maxSelections: 2,
+              label: '体验',
+            },
+            {
+              endsAt: '2026-08-27T10:00:00.000Z',
+              closedAt: null,
+              selectionMode: 'multiple',
+              maxSelections: 2,
+              label: '性能',
+            },
           ],
           [],
         ];
@@ -153,6 +165,8 @@ describe('communityChatModerationService', () => {
       poll: {
         endsAt: '2026-08-27T10:00:00.000Z',
         closedAt: null,
+        selectionMode: 'multiple',
+        maxSelections: 2,
         options: ['体验', '性能'],
       },
     });

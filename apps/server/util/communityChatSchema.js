@@ -136,6 +136,8 @@ export const COMMUNITY_CHAT_TABLE_SQL = [
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
   `CREATE TABLE IF NOT EXISTS community_chat_polls (
     message_id bigint unsigned NOT NULL,
+    selection_mode varchar(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'single',
+    max_selections tinyint unsigned NOT NULL DEFAULT 1,
     ends_at_utc datetime(3) NOT NULL,
     closed_at_utc datetime(3) DEFAULT NULL,
     closed_by varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
@@ -165,6 +167,16 @@ export const COMMUNITY_CHAT_TABLE_SQL = [
     PRIMARY KEY (message_id, user_id),
     KEY idx_community_chat_poll_vote_option (message_id, option_id),
     KEY idx_community_chat_poll_vote_user_time (user_id, update_time, message_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS community_chat_poll_multi_votes (
+    message_id bigint unsigned NOT NULL,
+    user_id varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+    option_id bigint unsigned NOT NULL,
+    create_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (message_id, user_id, option_id),
+    KEY idx_community_chat_poll_multi_vote_option (message_id, option_id),
+    KEY idx_community_chat_poll_multi_vote_user_time (user_id, update_time, message_id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
   `CREATE TABLE IF NOT EXISTS community_chat_message_read_receipts (
     message_id bigint unsigned NOT NULL,
@@ -363,6 +375,17 @@ export const COMMUNITY_CHAT_MESSAGE_PAYLOAD_COLUMNS = [
   },
 ];
 
+export const COMMUNITY_CHAT_POLL_SELECTION_COLUMNS = [
+  {
+    name: 'selection_mode',
+    ddl: "`selection_mode` varchar(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'single' AFTER `message_id`",
+  },
+  {
+    name: 'max_selections',
+    ddl: '`max_selections` tinyint unsigned NOT NULL DEFAULT 1 AFTER `selection_mode`',
+  },
+];
+
 export const COMMUNITY_CHAT_MENTION_SNAPSHOT_COLUMNS = [
   {
     name: 'sort_order',
@@ -433,6 +456,10 @@ async function ensureCommunityChatMessagePayloadColumns() {
   await ensureTableColumns('community_chat_messages', COMMUNITY_CHAT_MESSAGE_PAYLOAD_COLUMNS);
 }
 
+async function ensureCommunityChatPollSelectionColumns() {
+  await ensureTableColumns('community_chat_polls', COMMUNITY_CHAT_POLL_SELECTION_COLUMNS);
+}
+
 async function ensureCommunityChatMentionSnapshotColumns() {
   await ensureTableColumns('community_chat_message_mentions', COMMUNITY_CHAT_MENTION_SNAPSHOT_COLUMNS);
 }
@@ -470,6 +497,7 @@ export function ensureCommunityChatSchema() {
       await ensureCommunityChatMessageRecallColumns();
       await ensureCommunityChatRoomPinColumns();
       await ensureCommunityChatMessagePayloadColumns();
+      await ensureCommunityChatPollSelectionColumns();
       await ensureCommunityChatMentionSnapshotColumns();
       await pool.query(COMMUNITY_CHAT_RUNTIME_POLICY_SEED_SQL);
       await pool.query(COMMUNITY_CHAT_ROOM_SEED_SQL);

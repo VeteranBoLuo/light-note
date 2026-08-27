@@ -15,6 +15,8 @@ export const COMMUNITY_CHAT_POLL_QUESTION_MAX_LENGTH = 200;
 export const COMMUNITY_CHAT_POLL_OPTION_MAX_LENGTH = 80;
 export const COMMUNITY_CHAT_POLL_MIN_DURATION_MS = 5 * 60 * 1000;
 export const COMMUNITY_CHAT_POLL_MAX_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
+export const COMMUNITY_CHAT_POLL_SELECTION_MODE_SINGLE = 'single';
+export const COMMUNITY_CHAT_POLL_SELECTION_MODE_MULTIPLE = 'multiple';
 
 const PUBLIC_ID_PATTERN = /^[A-Za-z0-9-]{1,36}$/;
 const chatError = (code, status, zhMessage, enMessage) => new CommunityChatError(code, status, zhMessage, enMessage);
@@ -45,6 +47,88 @@ function normalizePollOption(value) {
     );
   }
   return label;
+}
+
+function normalizePollSelection(value, optionCount) {
+  const selectionMode = value.selectionMode ?? COMMUNITY_CHAT_POLL_SELECTION_MODE_SINGLE;
+  if (
+    selectionMode !== COMMUNITY_CHAT_POLL_SELECTION_MODE_SINGLE &&
+    selectionMode !== COMMUNITY_CHAT_POLL_SELECTION_MODE_MULTIPLE
+  ) {
+    throw chatError('INVALID_POLL_SELECTION_MODE', 400, '投票选择方式无效', 'Invalid poll selection mode');
+  }
+  if (selectionMode === COMMUNITY_CHAT_POLL_SELECTION_MODE_SINGLE) {
+    if (value.maxSelections !== undefined && value.maxSelections !== null && value.maxSelections !== 1) {
+      throw chatError(
+        'INVALID_POLL_MAX_SELECTIONS',
+        400,
+        '单选投票最多只能选择 1 项',
+        'Single-choice polls must allow exactly one selection',
+      );
+    }
+    return { selectionMode, maxSelections: 1 };
+  }
+  if (!Number.isInteger(value.maxSelections) || value.maxSelections < 2 || value.maxSelections > optionCount) {
+    throw chatError(
+      'INVALID_POLL_MAX_SELECTIONS',
+      400,
+      `多选投票最多可选项数需为 2-${optionCount}`,
+      `The multiple-choice limit must be between 2 and ${optionCount}`,
+    );
+  }
+  return { selectionMode, maxSelections: value.maxSelections };
+}
+
+function normalizeVoteOptionPublicIds({ optionPublicIds, optionPublicId }) {
+  if (optionPublicIds !== undefined && optionPublicId !== undefined) {
+    throw chatError(
+      'INVALID_POLL_SELECTION',
+      400,
+      '不能同时提交新旧两种投票参数',
+      'Do not mix the current and legacy vote payloads',
+    );
+  }
+  const source = optionPublicIds !== undefined ? optionPublicIds : [optionPublicId];
+  if (!Array.isArray(source) || !source.length || source.length > COMMUNITY_CHAT_POLL_MAX_OPTIONS) {
+    throw chatError('INVALID_POLL_SELECTION', 400, '请选择有效的投票选项', 'Choose valid poll options');
+  }
+  const normalized = source.map((value) => normalizePublicId(value, '投票选项'));
+  if (new Set(normalized).size !== normalized.length) {
+    throw chatError(
+      'DUPLICATE_POLL_SELECTION',
+      400,
+      '同一个投票选项不能重复选择',
+      'The same poll option cannot be selected more than once',
+    );
+  }
+  return normalized;
+}
+
+function interactivePollSelection(target) {
+  const optionCount = Number(target.optionCount);
+  const maxSelections = Number(target.maxSelections);
+  const validOptionCount =
+    Number.isInteger(optionCount) &&
+    optionCount >= COMMUNITY_CHAT_POLL_MIN_OPTIONS &&
+    optionCount <= COMMUNITY_CHAT_POLL_MAX_OPTIONS;
+  if (validOptionCount && target.selectionMode === COMMUNITY_CHAT_POLL_SELECTION_MODE_SINGLE && maxSelections === 1) {
+    return { selectionMode: COMMUNITY_CHAT_POLL_SELECTION_MODE_SINGLE, maxSelections: 1 };
+  }
+  if (
+    validOptionCount &&
+    target.selectionMode === COMMUNITY_CHAT_POLL_SELECTION_MODE_MULTIPLE &&
+    Number.isInteger(maxSelections) &&
+    maxSelections >= 2 &&
+    maxSelections <= optionCount
+  ) {
+    return { selectionMode: COMMUNITY_CHAT_POLL_SELECTION_MODE_MULTIPLE, maxSelections };
+  }
+  throw chatError(
+    'POLL_CONFIGURATION_INVALID',
+    409,
+    '这项投票的选择规则异常，暂时无法参与',
+    'This poll has an invalid selection configuration',
+  );
 }
 
 function assertPollDeadlineRange(timestamp, now = Date.now()) {
@@ -120,7 +204,11 @@ export function normalizeCommunityChatPollDraft(value, { question, now = Date.no
   if (new Set(optionKeys).size !== optionKeys.length) {
     throw chatError('DUPLICATE_POLL_OPTION', 400, '投票选项不能重复', 'Poll options must be unique');
   }
-  return { options, ...normalizePollDeadline(value.endsAt, now, { validateDuration }) };
+  return {
+    options,
+    ...normalizePollSelection(value, options.length),
+    ...normalizePollDeadline(value.endsAt, now, { validateDuration }),
+  };
 }
 
 export function assertCommunityChatPollDeadlineRange(poll, now = Date.now()) {
@@ -164,9 +252,9 @@ export async function assertCommunityChatPollDeadlineRangeInDatabase(db, poll) {
 
 export async function insertCommunityChatPoll(db, { messageId, poll }) {
   await db.query(
-    `INSERT INTO community_chat_polls (message_id, ends_at_utc)
-     VALUES (?, ?)`,
-    [messageId, poll.endsAtSql],
+    `INSERT INTO community_chat_polls (message_id, selection_mode, max_selections, ends_at_utc)
+     VALUES (?, ?, ?, ?)`,
+    [messageId, poll.selectionMode, poll.maxSelections, poll.endsAtSql],
   );
   const values = poll.options.map(() => '(?, ?, ?, ?)').join(',');
   await db.query(
@@ -198,6 +286,8 @@ export async function loadCommunityChatPolls(
   const placeholders = messageIds.map(() => '?').join(',');
   const [pollRows] = await db.query(
     `SELECT poll.message_id AS messageId,
+            poll.selection_mode AS selectionMode,
+            poll.max_selections AS maxSelections,
             CONCAT(
               DATE_FORMAT(poll.ends_at_utc, '%Y-%m-%dT%H:%i:%s.'),
               LPAD(FLOOR(MICROSECOND(poll.ends_at_utc) / 1000), 3, '0'),
@@ -211,14 +301,26 @@ export async function loadCommunityChatPolls(
             IF(poll.closed_at_utc IS NOT NULL, 1, 0) AS manuallyClosed,
             IF(poll.ends_at_utc <= UTC_TIMESTAMP(3), 1, 0) AS deadlinePassed,
             option_row.public_id AS optionPublicId, option_row.label, option_row.sort_order AS sortOrder,
-            COUNT(vote.user_id) AS voteCount,
-            MAX(CASE WHEN vote.user_id = ? THEN 1 ELSE 0 END) AS selectedByViewer
+            COUNT(COALESCE(multi_vote.user_id, single_vote.user_id)) AS voteCount,
+            MAX(CASE WHEN COALESCE(multi_vote.user_id, single_vote.user_id) = ? THEN 1 ELSE 0 END)
+              AS selectedByViewer,
+            CASE WHEN poll.selection_mode = 'multiple' THEN (
+              SELECT COUNT(DISTINCT multi_voter.user_id)
+                FROM community_chat_poll_multi_votes multi_voter
+               WHERE multi_voter.message_id = poll.message_id
+            ) ELSE NULL END AS totalVoterCount
        FROM community_chat_polls poll
        JOIN community_chat_poll_options option_row ON option_row.message_id = poll.message_id
-       LEFT JOIN community_chat_poll_votes vote
-              ON vote.message_id = poll.message_id AND vote.option_id = option_row.id
+       LEFT JOIN community_chat_poll_votes single_vote
+              ON poll.selection_mode = 'single'
+             AND single_vote.message_id = poll.message_id
+             AND single_vote.option_id = option_row.id
+       LEFT JOIN community_chat_poll_multi_votes multi_vote
+              ON poll.selection_mode = 'multiple'
+             AND multi_vote.message_id = poll.message_id
+             AND multi_vote.option_id = option_row.id
       WHERE poll.message_id IN (${placeholders})
-      GROUP BY poll.message_id, poll.ends_at_utc, poll.closed_at_utc,
+      GROUP BY poll.message_id, poll.selection_mode, poll.max_selections, poll.ends_at_utc, poll.closed_at_utc,
                option_row.id, option_row.public_id, option_row.label, option_row.sort_order
       ORDER BY poll.message_id ASC, option_row.sort_order ASC, option_row.id ASC`,
     [viewerUserId || '', ...messageIds],
@@ -228,6 +330,10 @@ export async function loadCommunityChatPolls(
     const messageId = Number(row.messageId);
     let poll = byMessageId.get(messageId);
     if (!poll) {
+      const selectionMode =
+        row.selectionMode === COMMUNITY_CHAT_POLL_SELECTION_MODE_MULTIPLE
+          ? COMMUNITY_CHAT_POLL_SELECTION_MODE_MULTIPLE
+          : COMMUNITY_CHAT_POLL_SELECTION_MODE_SINGLE;
       const manuallyClosed = Boolean(Number(row.manuallyClosed || 0));
       const deadlinePassed = Boolean(Number(row.deadlinePassed || 0));
       const closed = manuallyClosed || deadlinePassed;
@@ -237,8 +343,17 @@ export async function loadCommunityChatPolls(
         closed,
         closeReason: manuallyClosed ? 'manual' : deadlinePassed ? 'deadline' : null,
         resultsVisible: Boolean(viewerIsRoot || closed),
+        selectionMode,
+        maxSelections:
+          selectionMode === COMMUNITY_CHAT_POLL_SELECTION_MODE_MULTIPLE
+            ? Math.max(2, Number(row.maxSelections || 2))
+            : 1,
+        selectedOptionPublicIds: [],
         selectedOptionPublicId: null,
-        totalVoterCount: 0,
+        totalVoterCount:
+          selectionMode === COMMUNITY_CHAT_POLL_SELECTION_MODE_MULTIPLE
+            ? Math.max(0, Number(row.totalVoterCount || 0))
+            : 0,
         canVote: Boolean(viewerUserId && pollsEnabled && statusByMessageId.get(messageId) === 'active' && !closed),
         canClose: Boolean(viewerIsRoot && statusByMessageId.get(messageId) === 'active' && !closed),
         options: [],
@@ -246,11 +361,13 @@ export async function loadCommunityChatPolls(
       byMessageId.set(messageId, poll);
     }
     const voteCount = Number(row.voteCount || 0);
-    poll.totalVoterCount += voteCount;
-    if (Boolean(Number(row.selectedByViewer || 0))) poll.selectedOptionPublicId = row.optionPublicId;
+    if (poll.selectionMode === COMMUNITY_CHAT_POLL_SELECTION_MODE_SINGLE) poll.totalVoterCount += voteCount;
+    if (Boolean(Number(row.selectedByViewer || 0))) poll.selectedOptionPublicIds.push(row.optionPublicId);
     poll.options.push({ publicId: row.optionPublicId, label: row.label, voteCount });
   }
   for (const poll of byMessageId.values()) {
+    // 旧客户端只认识单值字段；多选返回第一项作为滚动兼容预览，新客户端始终使用完整数组。
+    poll.selectedOptionPublicId = poll.selectedOptionPublicIds[0] || null;
     if (poll.resultsVisible) continue;
     delete poll.totalVoterCount;
     for (const option of poll.options) delete option.voteCount;
@@ -268,6 +385,9 @@ async function loadInteractivePoll(db, messagePublicId, userId, { lock = false }
     db,
     `SELECT message.id AS internalId, message.public_id AS publicId, message.status,
             room.slug AS roomSlug, message.user_id AS authorUserId,
+            poll.selection_mode AS selectionMode, poll.max_selections AS maxSelections,
+            (SELECT COUNT(*) FROM community_chat_poll_options option_count
+              WHERE option_count.message_id = poll.message_id) AS optionCount,
             IF(poll.closed_at_utc IS NOT NULL OR poll.ends_at_utc <= UTC_TIMESTAMP(3), 1, 0) AS closed
        FROM community_chat_messages message
        JOIN community_chat_rooms room ON room.id = message.room_id
@@ -300,9 +420,16 @@ async function loadOnePoll(db, target, { userId, viewerIsRoot, pollsEnabled }) {
   return polls.get(Number(target.internalId)) || null;
 }
 
-export async function voteCommunityChatPoll({ user, messagePublicId, optionPublicId, env = process.env, db = pool }) {
+export async function voteCommunityChatPoll({
+  user,
+  messagePublicId,
+  optionPublicIds,
+  optionPublicId,
+  env = process.env,
+  db = pool,
+}) {
   const normalizedMessagePublicId = normalizePublicId(messagePublicId, '消息标识');
-  const normalizedOptionPublicId = normalizePublicId(optionPublicId, '投票选项');
+  const normalizedOptionPublicIds = normalizeVoteOptionPublicIds({ optionPublicIds, optionPublicId });
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
@@ -319,22 +446,46 @@ export async function voteCommunityChatPoll({ user, messagePublicId, optionPubli
     if (Boolean(Number(target.closed || 0))) {
       throw chatError('POLL_CLOSED', 409, '投票已经结束', 'This poll has ended');
     }
-    const option = await queryFirst(
-      connection,
-      `SELECT id FROM community_chat_poll_options
-        WHERE message_id = ? AND public_id = ?
-        LIMIT 1 FOR UPDATE`,
-      [target.internalId, normalizedOptionPublicId],
+    const { selectionMode, maxSelections } = interactivePollSelection(target);
+    if (normalizedOptionPublicIds.length > maxSelections) {
+      throw chatError(
+        'POLL_SELECTION_LIMIT_EXCEEDED',
+        400,
+        `这项投票最多可选择 ${maxSelections} 项`,
+        `This poll allows at most ${maxSelections} selections`,
+      );
+    }
+    const optionPlaceholders = normalizedOptionPublicIds.map(() => '?').join(',');
+    const [options] = await connection.query(
+      `SELECT id, public_id AS publicId FROM community_chat_poll_options
+        WHERE message_id = ? AND public_id IN (${optionPlaceholders})
+        ORDER BY sort_order ASC, id ASC
+        FOR UPDATE`,
+      [target.internalId, ...normalizedOptionPublicIds],
     );
-    if (!option) {
+    if (options.length !== normalizedOptionPublicIds.length) {
       throw chatError('POLL_OPTION_UNAVAILABLE', 409, '这个投票选项已不可用', 'This poll option is unavailable');
     }
-    await connection.query(
-      `INSERT INTO community_chat_poll_votes (message_id, user_id, option_id)
-       VALUES (?, ?, ?)
-       ON DUPLICATE KEY UPDATE option_id = VALUES(option_id), update_time = CURRENT_TIMESTAMP`,
-      [target.internalId, user.id, option.id],
-    );
+    if (selectionMode === COMMUNITY_CHAT_POLL_SELECTION_MODE_SINGLE) {
+      await connection.query(
+        `INSERT INTO community_chat_poll_votes (message_id, user_id, option_id)
+         VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE option_id = VALUES(option_id), update_time = CURRENT_TIMESTAMP`,
+        [target.internalId, user.id, options[0].id],
+      );
+    } else {
+      await connection.query(
+        `DELETE FROM community_chat_poll_multi_votes
+          WHERE message_id = ? AND user_id = ?`,
+        [target.internalId, user.id],
+      );
+      const values = options.map(() => '(?, ?, ?)').join(',');
+      await connection.query(
+        `INSERT INTO community_chat_poll_multi_votes (message_id, user_id, option_id)
+         VALUES ${values}`,
+        options.flatMap((option) => [target.internalId, user.id, option.id]),
+      );
+    }
     const poll = await loadOnePoll(connection, target, {
       userId: user.id,
       viewerIsRoot: user.role === 'root',
@@ -408,4 +559,7 @@ export const __test__ = {
   assertPollDeadlineRange,
   normalizePollDeadline,
   normalizePollOption,
+  normalizePollSelection,
+  normalizeVoteOptionPublicIds,
+  interactivePollSelection,
 };

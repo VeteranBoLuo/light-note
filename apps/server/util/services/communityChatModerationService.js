@@ -217,6 +217,8 @@ export async function reportCommunityChatMessage({
                   LPAD(FLOOR(MICROSECOND(poll.closed_at_utc) / 1000), 3, '0'),
                   'Z'
                 ) AS closedAt,
+                poll.selection_mode AS selectionMode,
+                poll.max_selections AS maxSelections,
                 option_row.label
            FROM community_chat_polls poll
            JOIN community_chat_poll_options option_row ON option_row.message_id = poll.message_id
@@ -228,6 +230,8 @@ export async function reportCommunityChatMessage({
         pollEvidence = {
           endsAt: pollRows[0].endsAt,
           closedAt: pollRows[0].closedAt || null,
+          selectionMode: pollRows[0].selectionMode === 'multiple' ? 'multiple' : 'single',
+          maxSelections: pollRows[0].selectionMode === 'multiple' ? Number(pollRows[0].maxSelections || 2) : 1,
           options: pollRows.map((row) => row.label),
         };
       }

@@ -6,6 +6,7 @@ import {
   NOTE_EXPORT_MAX_BYTES,
   TAG_ICON_MAX_SVG_BYTES,
 } from '../contentLimits.js';
+import { AI_SKILL_NOTE_TRANSFORM_MAX_TEXT_CHARS } from '../aiSkill/limits.js';
 
 const WEBP_DATA_URL_PREFIX = 'data:image/webp;base64,';
 const SVG_DATA_URL_PREFIX = 'data:image/svg+xml;base64,';
@@ -15,10 +16,7 @@ const NO_SIGNATURE_RULE_EXEMPTIONS = Object.freeze([]);
 const utf8Length = (value) => Buffer.byteLength(String(value ?? ''), 'utf8');
 
 const isBase64Payload = (value) =>
-  typeof value === 'string' &&
-  value.length > 0 &&
-  value.length % 4 !== 1 &&
-  BASE64_PAYLOAD_PATTERN.test(value);
+  typeof value === 'string' && value.length > 0 && value.length % 4 !== 1 && BASE64_PAYLOAD_PATTERN.test(value);
 
 const base64DecodedLength = (value) => {
   const payload = String(value || '');
@@ -109,6 +107,21 @@ const REQUEST_FIELD_POLICIES = new Map([
       ],
     ]),
   ],
+  ...['/ai/skills/execute', '/ai/skills/stream'].map((path) => [
+    `POST ${path}`,
+    new Map([
+      [
+        'body.input.text',
+        policy({
+          semantic: 'ai-note-transform-text',
+          maxSize: AI_SKILL_NOTE_TRANSFORM_MAX_TEXT_CHARS,
+          accepts: (_value, context) => String(context?.body?.skillId || '') === 'note.transform_text',
+          // 笔记原文只会作为模型输入和预览结果处理，不会进入命令、路径或模板执行器。
+          skipSignatureRules: '*',
+        }),
+      ],
+    ]),
+  ]),
   ...['/bookmark/addTag', '/bookmark/updateTag'].map((path) => [
     `POST ${path}`,
     new Map([
@@ -159,7 +172,7 @@ export const resolveRequestFieldPolicy = (context = {}, field = '') => {
     size,
     withinBudget,
     overBudget: typeof value === 'string' && size > definition.maxSize,
-    trustedEnvelope: withinBudget && definition.accepts(value),
+    trustedEnvelope: withinBudget && definition.accepts(value, context),
     skipSignatureRules: definition.skipSignatureRules,
   };
 };

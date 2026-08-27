@@ -8,6 +8,8 @@ export interface CommunityChatAccess {
   waitlistEnabled: boolean;
   messagingEnabled: boolean;
   pollsEnabled: boolean;
+  /** 旧服务端缺少该字段时，客户端只开放单选发布，避免把多选草稿降级落成单选。 */
+  pollSelectionModes?: CommunityChatPollSelectionMode[];
   readReceiptsEnabled: boolean;
   realtimeEnabled: boolean;
   postingEnabled: boolean;
@@ -142,12 +144,18 @@ export interface CommunityChatPollOption {
   voteCount?: number;
 }
 
+export type CommunityChatPollSelectionMode = 'single' | 'multiple';
+
 export interface CommunityChatPoll {
   endsAt: string;
   closedAt: string | null;
   closed: boolean;
   closeReason: 'manual' | 'deadline' | null;
   resultsVisible: boolean;
+  selectionMode: CommunityChatPollSelectionMode;
+  maxSelections: number;
+  selectedOptionPublicIds: string[];
+  /** 旧客户端滚动兼容字段；多选时仅代表完整选择数组中的第一项。 */
   selectedOptionPublicId: string | null;
   totalVoterCount?: number;
   canVote: boolean;
@@ -224,6 +232,32 @@ export interface CommunityChatMessagePage {
   serverTime: string;
 }
 
+export interface CommunityChatReadReceiptReader {
+  userPublicId: string;
+  communityId: string;
+  displayName: string;
+  avatar: string;
+  frameId: string | null;
+  firstSeenAt: string;
+}
+
+export interface CommunityChatReadReceiptReaderPage {
+  messagePublicId: string;
+  items: CommunityChatReadReceiptReader[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+}
+
+export interface CommunityChatReadReceiptCountPage {
+  roomSlug: string;
+  items: Array<{
+    messagePublicId: string;
+    readCount: number;
+  }>;
+}
+
 export interface CommunityChatPinnedMessage {
   roomSlug: string;
   message: CommunityChatMessage | null;
@@ -243,6 +277,8 @@ export interface SendCommunityChatMessageInput {
   poll?: {
     endsAt: string;
     options: string[];
+    selectionMode?: CommunityChatPollSelectionMode;
+    maxSelections?: number;
   };
 }
 
@@ -268,7 +304,13 @@ export interface CommunityChatReportEvidence {
   authorRole: 'member' | 'moderator' | 'official';
   content: string;
   messageKind?: 'text' | 'sticker' | 'poll';
-  poll?: { endsAt: string; closedAt: string | null; options: string[] };
+  poll?: {
+    endsAt: string;
+    closedAt: string | null;
+    selectionMode?: CommunityChatPollSelectionMode;
+    maxSelections?: number;
+    options: string[];
+  };
   messageCreatedAt: string;
   capturedAt: string;
 }
@@ -342,6 +384,21 @@ export const getCommunityChatPinnedMessage = (roomSlug: string) =>
 export const getCommunityChatMessage = (messagePublicId: string) =>
   apiBaseGet(`/api/community-chat/messages/${encodeURIComponent(messagePublicId)}`, undefined, { silent: true });
 
+export const getCommunityChatReadReceiptReaders = (
+  messagePublicId: string,
+  params: { page?: number; pageSize?: number } = {},
+) =>
+  apiBaseGet(`/api/community-chat/messages/${encodeURIComponent(messagePublicId)}/readers`, params, {
+    silent: true,
+  });
+
+export const getCommunityChatReadReceiptCounts = (roomSlug: string, messagePublicIds: string[]) =>
+  apiBaseGet(
+    `${roomPath(roomSlug)}/read-receipt-counts`,
+    { messagePublicIds: messagePublicIds.join(',') },
+    { silent: true },
+  );
+
 export const getCommunityChatMessageAuthorProfile = (messagePublicId: string) =>
   apiBaseGet(`/api/community-chat/messages/${encodeURIComponent(messagePublicId)}/author-profile`, undefined, {
     silent: true,
@@ -406,8 +463,16 @@ export const saveCommunityChatMessageSticker = (messagePublicId: string) =>
 export const toggleCommunityChatMessageLike = (messagePublicId: string) =>
   apiBasePut(`${messagePath(messagePublicId)}/like`, {}, { silent: true });
 
-export const voteCommunityChatPoll = (messagePublicId: string, optionPublicId: string) =>
-  apiBasePut(`${messagePath(messagePublicId)}/poll/vote`, { optionPublicId }, { silent: true });
+export const voteCommunityChatPoll = (
+  messagePublicId: string,
+  optionPublicIds: string[],
+  selectionMode: CommunityChatPollSelectionMode = 'single',
+) =>
+  apiBasePut(
+    `${messagePath(messagePublicId)}/poll/vote`,
+    selectionMode === 'multiple' ? { optionPublicIds } : { optionPublicId: optionPublicIds[0] },
+    { silent: true },
+  );
 
 export const closeCommunityChatPoll = (messagePublicId: string) =>
   apiBasePut(`${messagePath(messagePublicId)}/poll/close`, {}, { silent: true });

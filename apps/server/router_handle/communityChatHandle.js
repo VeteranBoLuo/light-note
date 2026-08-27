@@ -27,7 +27,11 @@ import {
   unpinCommunityChatMessage,
 } from '../util/services/communityChatMessageService.js';
 import { closeCommunityChatPoll, voteCommunityChatPoll } from '../util/services/communityChatPollService.js';
-import { recordCommunityChatReadReceipts } from '../util/services/communityChatReadReceiptService.js';
+import {
+  listCommunityChatReadReceiptCounts,
+  listCommunityChatReadReceiptReaders,
+  recordCommunityChatReadReceipts,
+} from '../util/services/communityChatReadReceiptService.js';
 import {
   getCommunityChatMessageAuthorAchievements,
   getCommunityChatMessageAuthorProfile,
@@ -298,13 +302,48 @@ export async function messageDetail(req, res) {
   }
 }
 
+export async function readReceiptReaders(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRoot(req, res)) return;
+  try {
+    const data = await listCommunityChatReadReceiptReaders({
+      user: req.user,
+      messagePublicId: req.params?.publicId,
+      page: req.query?.page,
+      pageSize: req.query?.pageSize,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function readReceiptCounts(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRoot(req, res)) return;
+  try {
+    const rawMessagePublicIds = req.query?.messagePublicIds;
+    const messagePublicIds = (Array.isArray(rawMessagePublicIds) ? rawMessagePublicIds : [rawMessagePublicIds])
+      .flatMap((value) => String(value || '').split(','))
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const data = await listCommunityChatReadReceiptCounts({
+      user: req.user,
+      roomSlug: req.params?.slug,
+      messagePublicIds,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
 export async function votePoll(req, res) {
   if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
   try {
     const data = await voteCommunityChatPoll({
       user: req.user,
       messagePublicId: req.params?.publicId,
-      optionPublicId: req.body?.optionPublicId,
+      ...(req.body?.optionPublicIds !== undefined ? { optionPublicIds: req.body.optionPublicIds } : {}),
+      ...(req.body?.optionPublicId !== undefined ? { optionPublicId: req.body.optionPublicId } : {}),
     });
     return res.send(resultData(data, 200, L(req, '投票已记录', 'Vote recorded')));
   } catch (error) {

@@ -589,55 +589,6 @@
       </div>
     </BModal>
 
-    <BModal
-      v-model:visible="preparedDownloadsVisible"
-      :title="$t('cloudSpace.preparedDownloadsTitle')"
-      width="620px"
-      :show-footer="false"
-    >
-      <div class="prepared-downloads">
-        <p class="prepared-downloads__hint">{{ $t('cloudSpace.preparedDownloadsHint') }}</p>
-        <div class="prepared-downloads__summary">
-          {{
-            $t('cloudSpace.preparedDownloadsSummary', {
-              submitted: preparedDownloadSummary.submitted,
-              total: preparedDownloadItems.length,
-              failed: preparedDownloadSummary.failed,
-            })
-          }}
-        </div>
-        <div class="prepared-downloads__list">
-          <div v-for="item in preparedDownloadItems" :key="item.key" class="prepared-downloads__item">
-            <span class="prepared-downloads__name" :title="item.fileName">{{ item.fileName }}</span>
-            <BChip :tone="preparedDownloadStatusTone(item.status)">
-              {{ preparedDownloadStatusLabel(item.status) }}
-            </BChip>
-            <BButton
-              v-if="item.status === 'failed'"
-              size="small"
-              :loading="item.retrying"
-              @click="retryPrepareBrowserDownload(item)"
-            >
-              {{ $t('cloudSpace.preparedDownloadRetry') }}
-            </BButton>
-            <BButton
-              v-else
-              size="small"
-              :type="item.status === 'ready' ? 'primary' : undefined"
-              :disabled="item.status === 'preparing' || !item.meta"
-              @click="submitPreparedBrowserDownload(item)"
-            >
-              {{
-                item.status === 'submitted'
-                  ? $t('cloudSpace.preparedDownloadAgain')
-                  : $t('cloudSpace.preparedDownloadOne')
-              }}
-            </BButton>
-          </div>
-        </div>
-      </div>
-    </BModal>
-
     <b-modal v-model:visible="shareDescVisible" :title="$t('cloudSpace.share')" width="450px" :show-footer="false">
       <div class="share-desc-body">
         <div class="share-desc-tip">{{ $t('cloudSpace.shareDescTip') }}</div>
@@ -796,7 +747,6 @@
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
-  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import { bookmarkStore, cloudSpaceStore } from '@/store';
   import { apiBasePost } from '@/http/request.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
@@ -816,14 +766,7 @@
   } from '@/http/common.ts';
   import { hasAndroidBridge } from '@/utils/androidBridge.ts';
   import { submitAndroidBatchDownload } from '@/utils/androidBatchDownload.ts';
-  import {
-    canSaveBrowserBatchToDirectory,
-    chooseBrowserBatchDownloadDirectory,
-    saveBrowserBatchToDirectory,
-    triggerPreparedBrowserDownload,
-    type BrowserDownloadMeta,
-    type BrowserFileSystemDirectoryHandle,
-  } from '@/utils/browserBatchDownload.ts';
+  import { submitBrowserBatchDownloads, triggerPreparedBrowserDownload } from '@/utils/browserBatchDownload.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { cloneDeep } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
@@ -1168,22 +1111,6 @@
   const batchDownloadLoading = ref(false);
   const batchDownloadChoiceVisible = ref(false);
   const batchDownloadChoiceFiles = ref<any[]>([]);
-  type PreparedDownloadStatus = 'preparing' | 'ready' | 'submitted' | 'failed';
-  interface PreparedDownloadItem {
-    key: string;
-    file: any;
-    index: number;
-    fileName: string;
-    status: PreparedDownloadStatus;
-    retrying: boolean;
-    meta?: BrowserDownloadMeta;
-  }
-  const preparedDownloadsVisible = ref(false);
-  const preparedDownloadItems = ref<PreparedDownloadItem[]>([]);
-  const preparedDownloadSummary = computed(() => ({
-    submitted: preparedDownloadItems.value.filter((item) => item.status === 'submitted').length,
-    failed: preparedDownloadItems.value.filter((item) => item.status === 'failed').length,
-  }));
   const batchDownloadZipUnavailable = computed(() => hasAndroidBridge());
   const batchDownloadAbortController = ref<AbortController | null>(null);
   const batchDownloadCancelled = ref(false);
@@ -1486,20 +1413,6 @@
     };
   };
 
-  const visualPreparationFailures = new Set<number>();
-  const getPreparedBrowserDownloadMeta = async (file: any, index: number) => {
-    if (
-      import.meta.env.DEV &&
-      new URLSearchParams(window.location.search).get('batchDownloadProfile') === 'manual-failure' &&
-      index === 1 &&
-      !visualPreparationFailures.has(index)
-    ) {
-      visualPreparationFailures.add(index);
-      throw new Error('DEV_BATCH_DOWNLOAD_PREPARE_FAILURE');
-    }
-    return getDownloadMeta(file, index);
-  };
-
   const isBatchDownloadCancelledError = (error: any) => {
     return (
       batchDownloadCancelled.value || error?.name === 'AbortError' || error?.message === 'BATCH_DOWNLOAD_CANCELLED'
@@ -1556,29 +1469,18 @@
     if (cancelled) {
       message.info(
         submitted > 0
-          ? t('cloudSpace.batchDownloadAndroidCancelledPartial', {
-              confirmed: succeeded,
-              unconfirmed,
-              failed,
-            })
+          ? t('cloudSpace.batchDownloadCancelledPartial', { count: submitted })
           : t('cloudSpace.batchDownloadCancelled'),
       );
-    } else if (!succeeded && !unconfirmed) {
+    } else if (!submitted) {
       message.error(t('cloudSpace.batchDownloadFailed'));
-    } else if (unconfirmed > 0) {
-      message.warning(
-        t('cloudSpace.batchDownloadAndroidUnconfirmed', {
-          confirmed: succeeded,
-          unconfirmed,
-          failed,
-        }),
-      );
     } else if (failed > 0) {
-      message.warning(t('cloudSpace.batchDownloadPartial', { success: succeeded, failed }));
+      message.warning(t('cloudSpace.batchDownloadPartial', { success: submitted, failed }));
     } else {
       // 进度卡片只画单个下载的进度，说不出「一共交了几个」，这条汇总不算重复播报；
-      // 而且正式版 1.0.0 根本不回传进度，没有它点完就完全没反馈
-      message.success(t('cloudSpace.batchDownloadHandedOff', { count: succeeded }));
+      // 旧版 App 不回传入队回执，但后续仍会回传下载进度。这里按「已开始」中性收口，
+      // 不再把兼容性超时显示成失败预警，也绝不能超时重发造成重复下载。
+      message.success(t('cloudSpace.batchDownloadHandedOff', { count: submitted }));
     }
 
     if (submitted > 0) {
@@ -1586,151 +1488,39 @@
     }
   };
 
-  const preparedDownloadStatusTone = (status: PreparedDownloadStatus): 'neutral' | 'success' | 'danger' => {
-    if (status === 'submitted') return 'success';
-    if (status === 'failed') return 'danger';
-    return 'neutral';
-  };
-
-  const preparedDownloadStatusLabel = (status: PreparedDownloadStatus) => {
-    return t(`cloudSpace.preparedDownloadStatus.${status}`);
-  };
-
-  const retryPrepareBrowserDownload = async (item: PreparedDownloadItem) => {
-    if (item.retrying) return;
-    item.retrying = true;
-    item.status = 'preparing';
-    try {
-      item.meta = await getPreparedBrowserDownloadMeta(item.file, item.index);
-      item.fileName = item.meta.fileName;
-      item.status = 'ready';
-    } catch (error) {
-      item.meta = undefined;
-      item.status = 'failed';
-      console.error('prepare individual file download failed:', error);
-    } finally {
-      item.retrying = false;
-    }
-  };
-
-  const submitPreparedBrowserDownload = (item: PreparedDownloadItem) => {
-    if (!item.meta || item.status === 'preparing') return;
-    const firstSubmission = item.status !== 'submitted';
-    try {
-      // 每次点击只提交当前这一项，保持浏览器可识别的明确用户手势，避免多文件自动下载被拦截。
-      triggerPreparedBrowserDownload(item.meta);
-      item.status = 'submitted';
-      if (firstSubmission) {
-        const submitted = preparedDownloadItems.value.filter((entry) => entry.status === 'submitted').length;
-        const pending = preparedDownloadItems.value.filter((entry) => entry.status === 'ready').length;
-        if (pending === 0) {
-          message.info(t('cloudSpace.preparedDownloadsSubmitted', { count: submitted }));
-          recordOperation({ module: '云空间', operation: `分别提交下载文件【${submitted}个】` });
-        }
-      }
-    } catch (error) {
-      item.status = 'failed';
-      console.error('submit prepared browser download failed:', error);
-      message.error(t('cloudSpace.downloadFailed'));
-    }
-  };
-
-  const prepareBrowserIndividualDownloads = async (selectedFiles: any[]) => {
+  const runBrowserDirectDownloads = async (selectedFiles: any[]) => {
     batchDownloadLoading.value = true;
     batchDownloadCancelled.value = false;
-    preparedDownloadsVisible.value = false;
-    preparedDownloadItems.value = selectedFiles.map((file, index) => ({
-      key: `${String(file.id ?? 'file')}-${index}`,
-      file,
-      index,
-      fileName: normalizeFileName(file.fileName, `file-${index + 1}`),
-      status: 'preparing',
-      retrying: false,
-    }));
     downloadProgress.value = {
       visible: true,
       percent: 0,
       current: 0,
       total: selectedFiles.length,
-      phaseText: t('cloudSpace.preparedDownloadsPreparing'),
+      phaseText: t('cloudSpace.batchDownloadSubmitting'),
     };
 
-    let failed = 0;
-    try {
-      for (let i = 0; i < selectedFiles.length; i++) {
-        if (batchDownloadCancelled.value) break;
-        const item = preparedDownloadItems.value[i];
-        try {
-          item.meta = await getPreparedBrowserDownloadMeta(selectedFiles[i], i);
-          item.fileName = item.meta.fileName;
-          if (batchDownloadCancelled.value) break;
-          item.status = 'ready';
-        } catch (error) {
-          if (isBatchDownloadCancelledError(error)) break;
-          item.status = 'failed';
-          failed += 1;
-          console.error('prepare individual file download failed:', error);
-        }
-        downloadProgress.value.current = i + 1;
-        downloadProgress.value.percent = Math.round(((i + 1) / selectedFiles.length) * 100);
-      }
-    } finally {
-      batchDownloadLoading.value = false;
-      window.setTimeout(() => {
-        downloadProgress.value.visible = false;
-      }, 600);
-    }
-
-    if (batchDownloadCancelled.value) {
-      preparedDownloadItems.value = [];
-      message.info(t('cloudSpace.batchDownloadCancelled'));
-      return;
-    }
-
-    preparedDownloadsVisible.value = true;
-    if (failed === selectedFiles.length) {
-      message.error(t('cloudSpace.preparedDownloadsAllFailed'));
-    } else if (failed > 0) {
-      message.warning(t('cloudSpace.preparedDownloadsPartial', { failed }));
-    }
-  };
-
-  const runBrowserDirectoryDownloads = async (selectedFiles: any[], directory: BrowserFileSystemDirectoryHandle) => {
-    batchDownloadLoading.value = true;
-    batchDownloadCancelled.value = false;
-    batchDownloadAbortController.value = new AbortController();
-    downloadProgress.value = {
-      visible: true,
-      percent: 0,
-      current: 0,
-      total: selectedFiles.length,
-      phaseText: t('cloudSpace.batchDownloadSaving'),
-    };
-
-    let succeeded = 0;
+    let submitted = 0;
     let failed = 0;
     let cancelled = false;
     try {
-      const outcome = await saveBrowserBatchToDirectory({
+      const outcome = await submitBrowserBatchDownloads({
         files: selectedFiles,
-        directory,
         resolveMeta: getDownloadMeta,
-        signal: batchDownloadAbortController.value.signal,
+        submit: triggerPreparedBrowserDownload,
         isCancelled: () => batchDownloadCancelled.value,
         onSettled: (done, total) => {
           downloadProgress.value.current = done;
           downloadProgress.value.percent = Math.round((done / total) * 100);
         },
       });
-      succeeded = outcome.succeeded;
+      submitted = outcome.submitted;
       failed = outcome.failed;
       cancelled = outcome.cancelled;
       outcome.failures.forEach(({ fileName, error }) => {
-        console.error(`save browser batch file failed: ${fileName}`, error);
+        console.error(`submit browser batch file failed: ${fileName}`, error);
       });
     } finally {
       batchDownloadLoading.value = false;
-      batchDownloadAbortController.value = null;
       window.setTimeout(() => {
         downloadProgress.value.visible = false;
       }, 600);
@@ -1738,20 +1528,20 @@
 
     if (cancelled) {
       message.info(
-        succeeded > 0
-          ? t('cloudSpace.batchDownloadSaveCancelledPartial', { count: succeeded })
+        submitted > 0
+          ? t('cloudSpace.batchDownloadBrowserCancelledPartial', { count: submitted })
           : t('cloudSpace.batchDownloadCancelled'),
       );
-    } else if (!succeeded) {
+    } else if (!submitted) {
       message.error(t('cloudSpace.batchDownloadFailed'));
     } else if (failed > 0) {
-      message.warning(t('cloudSpace.batchDownloadSavePartial', { success: succeeded, failed }));
+      message.warning(t('cloudSpace.batchDownloadBrowserPartial', { submitted, failed }));
     } else {
-      message.success(t('cloudSpace.batchDownloadSaved', { count: succeeded }));
+      message.success(t('cloudSpace.batchDownloadBrowserSubmitted', { count: submitted }));
     }
 
-    if (succeeded > 0) {
-      recordOperation({ module: '云空间', operation: `分别保存文件成功【${succeeded}个】` });
+    if (submitted > 0) {
+      recordOperation({ module: '云空间', operation: `分别提交下载文件【${submitted}个】` });
     }
   };
 
@@ -1865,28 +1655,9 @@
       return;
     }
 
-    if (canSaveBrowserBatchToDirectory()) {
-      try {
-        // 必须直接发生在“分别下载”这次点击里，否则浏览器会因丢失用户手势而拒绝目录选择器。
-        const directory = await chooseBrowserBatchDownloadDirectory();
-        batchDownloadChoiceVisible.value = false;
-        batchDownloadChoiceFiles.value = [];
-        await runBrowserDirectoryDownloads(selectedFiles, directory);
-        return;
-      } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') {
-          // 用户取消系统目录选择器时保留方式选择弹窗，仍可改选 ZIP。
-          message.info(t('cloudSpace.batchDownloadDirectoryPickerCancelled'));
-          return;
-        }
-        console.error('choose browser batch download directory failed:', error);
-        message.warning(t('cloudSpace.batchDownloadDirectoryPickerFailed'));
-      }
-    }
-
     batchDownloadChoiceVisible.value = false;
     batchDownloadChoiceFiles.value = [];
-    await prepareBrowserIndividualDownloads(selectedFiles);
+    await runBrowserDirectDownloads(selectedFiles);
   };
 
   const handleBatchDownload = async () => {
@@ -2415,54 +2186,6 @@
     font-size: 12px;
     line-height: 1.55;
   }
-  .prepared-downloads {
-    display: grid;
-    gap: 12px;
-  }
-  .prepared-downloads__hint {
-    margin: 0;
-    color: var(--desc-color);
-    font-size: 13px;
-    line-height: 1.6;
-  }
-  .prepared-downloads__summary {
-    padding: 8px 10px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 8px;
-    color: var(--text-color);
-    background: var(--primary-btn-bg-color);
-    font-size: 12px;
-    font-variant-numeric: tabular-nums;
-  }
-  .prepared-downloads__list {
-    max-height: min(52vh, 420px);
-    display: grid;
-    gap: 8px;
-    overflow-y: auto;
-  }
-  .prepared-downloads__item {
-    min-height: 44px;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto 100px;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 10px;
-    box-sizing: border-box;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 8px;
-    background: var(--card-background);
-  }
-  .prepared-downloads__name {
-    min-width: 0;
-    overflow: hidden;
-    color: var(--text-color);
-    font-size: 13px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .prepared-downloads__item :deep(.b_btn) {
-    width: 100%;
-  }
   .file-container {
     min-height: 0;
     flex: 1;
@@ -2689,13 +2412,6 @@
     }
     .batch-download-choice__option.b_btn {
       min-height: 92px;
-    }
-    .prepared-downloads__item {
-      grid-template-columns: minmax(0, 1fr) auto;
-    }
-    .prepared-downloads__item :deep(.b_btn) {
-      min-height: 36px;
-      grid-column: 1 / -1;
     }
     .file-label {
       // 右侧“更多”现在是完整 44px 触控按钮；额外留出 10px 呼吸位，

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   getConnection: vi.fn(),
   assertMessaging: vi.fn(),
+  assertReadAccess: vi.fn(),
 }));
 
 vi.mock('../../db/index.js', () => ({ default: { getConnection: mocks.getConnection } }));
@@ -19,11 +20,19 @@ vi.mock('./communityChatAccessService.js', () => {
   return {
     CommunityChatError,
     assertCommunityChatMessagingAccess: mocks.assertMessaging,
+    assertCommunityChatReadAccess: mocks.assertReadAccess,
   };
 });
 
-const { loadCommunityChatReadCounts, normalizeReadReceiptMessagePublicIds, recordCommunityChatReadReceipts } =
-  await import('./communityChatReadReceiptService.js');
+const {
+  __test__,
+  listCommunityChatReadReceiptCounts,
+  listCommunityChatReadReceiptReaders,
+  loadCommunityChatReadCounts,
+  normalizeReadReceiptCountMessagePublicIds,
+  normalizeReadReceiptMessagePublicIds,
+  recordCommunityChatReadReceipts,
+} = await import('./communityChatReadReceiptService.js');
 
 function connectionWithQuery(query) {
   return {
@@ -39,6 +48,7 @@ describe('communityChatReadReceiptService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.assertMessaging.mockResolvedValue({ feature: { readReceiptsEnabled: true } });
+    mocks.assertReadAccess.mockResolvedValue({ feature: { readReceiptsEnabled: true }, memberRole: 'admin' });
   });
 
   it('批量公有 ID 去重并限制为 30 条', () => {
@@ -68,6 +78,134 @@ describe('communityChatReadReceiptService', () => {
     expect(db.query).not.toHaveBeenCalled();
     expect(await loadCommunityChatReadCounts(db, rows, { viewerIsRoot: true })).toEqual(new Map([[7, 3]]));
     expect(db.query).toHaveBeenCalledTimes(1);
+  });
+
+  it('Root 前台批量校准当前消息已读数，不读取成员身份或消息正文', async () => {
+    expect(normalizeReadReceiptCountMessagePublicIds(['message-1', 'message-1', 'message-2'])).toEqual([
+      'message-1',
+      'message-2',
+    ]);
+    expect(() =>
+      normalizeReadReceiptCountMessagePublicIds(Array.from({ length: 101 }, (_, index) => `message-${index}`)),
+    ).toThrow(expect.objectContaining({ code: 'INVALID_READ_RECEIPT_COUNT_MESSAGES' }));
+
+    const query = vi.fn().mockResolvedValue([
+      [
+        { messagePublicId: 'message-1', readCount: 3 },
+        { messagePublicId: 'message-2', readCount: 0 },
+      ],
+      [],
+    ]);
+    const db = { query };
+    const result = await listCommunityChatReadReceiptCounts({
+      user: { id: 'root-1', role: 'root' },
+      roomSlug: 'general',
+      messagePublicIds: ['message-1', 'message-2'],
+      db,
+    });
+
+    expect(mocks.assertReadAccess).toHaveBeenCalledWith({
+      user: { id: 'root-1', role: 'root' },
+      env: process.env,
+      db,
+    });
+    expect(String(query.mock.calls[0][0])).toContain('COUNT(receipt.user_id) AS readCount');
+    expect(String(query.mock.calls[0][0])).not.toContain('first_seen_at');
+    expect(query.mock.calls[0][1]).toEqual(['general', 'message-1', 'message-2', 'root-1']);
+    expect(result).toEqual({
+      roomSlug: 'general',
+      items: [
+        { messagePublicId: 'message-1', readCount: 3 },
+        { messagePublicId: 'message-2', readCount: 0 },
+      ],
+    });
+
+    await expect(
+      listCommunityChatReadReceiptCounts({
+        user: { id: 'user-1', role: 'user' },
+        roomSlug: 'general',
+        messagePublicIds: ['message-1'],
+        db,
+      }),
+    ).rejects.toMatchObject({ code: 'COMMUNITY_CHAT_READ_RECEIPT_READERS_ROOT_REQUIRED' });
+  });
+
+  it('Root 按单条消息分页读取成员公开身份，不在普通消息载荷中批量附带名单', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce([[{ internalId: 7, readCount: 2 }], []])
+      .mockResolvedValueOnce([
+        [
+          {
+            userPublicId: '11111111-1111-4111-8111-111111111111',
+            communityId: 'ln_8K2M7A',
+            displayName: '薄荷',
+            firstSeenAt: '2026-08-27 10:01:02.000',
+            frameId: 'frame_mint',
+            hasAvatar: 1,
+          },
+        ],
+        [],
+      ]);
+    const db = { query };
+
+    const result = await listCommunityChatReadReceiptReaders({
+      user: { id: 'root-1', role: 'root' },
+      messagePublicId: 'message-1',
+      page: 1,
+      pageSize: 1,
+      db,
+    });
+
+    expect(mocks.assertReadAccess).toHaveBeenCalledWith({
+      user: { id: 'root-1', role: 'root' },
+      env: process.env,
+      db,
+    });
+    expect(String(query.mock.calls[0][0])).toContain("author.role = 'root'");
+    expect(String(query.mock.calls[0][0])).toContain('message.read_receipt_enabled = 1');
+    expect(query.mock.calls[0][1]).toEqual(['message-1', 'general', 'root-1']);
+    expect(String(query.mock.calls[1][0])).toContain('receipt.first_seen_at AS firstSeenAt');
+    expect(String(query.mock.calls[1][0])).not.toContain('reader.id AS');
+    expect(query.mock.calls[1][1]).toEqual([7, 1, 0]);
+    expect(result).toEqual({
+      messagePublicId: 'message-1',
+      items: [
+        {
+          userPublicId: '11111111-1111-4111-8111-111111111111',
+          communityId: 'ln_8K2M7A',
+          displayName: '薄荷',
+          avatar: '/api/community-chat/members/11111111-1111-4111-8111-111111111111/avatar',
+          frameId: 'frame_mint',
+          firstSeenAt: '2026-08-27 10:01:02.000',
+        },
+      ],
+      total: 2,
+      page: 1,
+      pageSize: 1,
+      hasMore: true,
+    });
+  });
+
+  it('名单权限在领域层再次失败关闭，并允许功能暂停后查看既有历史名单', async () => {
+    expect(() => __test__.assertRootReaderAccess({ id: 'user-1', role: 'user' })).toThrow(
+      expect.objectContaining({ code: 'COMMUNITY_CHAT_READ_RECEIPT_READERS_ROOT_REQUIRED' }),
+    );
+    mocks.assertReadAccess.mockResolvedValue({ feature: { readReceiptsEnabled: false }, memberRole: 'admin' });
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[{ internalId: 7, readCount: 0 }], []])
+        .mockResolvedValueOnce([[], []]),
+    };
+
+    await expect(
+      listCommunityChatReadReceiptReaders({
+        user: { id: 'root-1', role: 'root' },
+        messagePublicId: 'message-1',
+        db,
+      }),
+    ).resolves.toMatchObject({ total: 0, items: [], hasMore: false });
   });
 
   it('多设备重复上报依赖复合主键 INSERT IGNORE 去重，并允许紧急只读下继续记录阅读', async () => {

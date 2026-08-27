@@ -24,6 +24,8 @@ const {
   getCommunityChatAccess,
   getCommunityChatMessages,
   getCommunityChatMessage,
+  getCommunityChatReadReceiptCounts,
+  getCommunityChatReadReceiptReaders,
   getCommunityChatNotificationSettings,
   getCommunityChatPinnedMessage,
   getCommunityChatMessageAuthorProfile,
@@ -122,21 +124,40 @@ describe('communityChatApi', () => {
 
   it('投票、单条权威刷新和批量已读回执都只使用消息公有 ID', () => {
     getCommunityChatMessage('message/1');
-    voteCommunityChatPoll('message/1', 'option/1');
+    getCommunityChatReadReceiptCounts('general', ['message-1', 'message-2']);
+    getCommunityChatReadReceiptReaders('message/1', { page: 2, pageSize: 50 });
+    voteCommunityChatPoll('message/1', ['option/legacy']);
+    voteCommunityChatPoll('message/1', ['option/1', 'option/2'], 'multiple');
     closeCommunityChatPoll('message/1');
     recordCommunityChatReadReceipts('general', ['message/1', 'message/2']);
 
     expect(mocks.apiBaseGet).toHaveBeenCalledWith('/api/community-chat/messages/message%2F1', undefined, {
       silent: true,
     });
+    expect(mocks.apiBaseGet).toHaveBeenCalledWith(
+      '/api/community-chat/rooms/general/read-receipt-counts',
+      { messagePublicIds: 'message-1,message-2' },
+      { silent: true },
+    );
+    expect(mocks.apiBaseGet).toHaveBeenCalledWith(
+      '/api/community-chat/messages/message%2F1/readers',
+      { page: 2, pageSize: 50 },
+      { silent: true },
+    );
     expect(mocks.apiBasePut).toHaveBeenNthCalledWith(
       1,
       '/api/community-chat/messages/message%2F1/poll/vote',
-      { optionPublicId: 'option/1' },
+      { optionPublicId: 'option/legacy' },
       { silent: true },
     );
     expect(mocks.apiBasePut).toHaveBeenNthCalledWith(
       2,
+      '/api/community-chat/messages/message%2F1/poll/vote',
+      { optionPublicIds: ['option/1', 'option/2'] },
+      { silent: true },
+    );
+    expect(mocks.apiBasePut).toHaveBeenNthCalledWith(
+      3,
       '/api/community-chat/messages/message%2F1/poll/close',
       {},
       { silent: true },

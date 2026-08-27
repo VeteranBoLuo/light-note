@@ -1,5 +1,6 @@
 import { aiSkillError } from './errors.js';
 import { extractMinimumOutputCharacters } from '../aiOutputLength.js';
+import { AI_SKILL_NOTE_TRANSFORM_MAX_TEXT_CHARS } from './limits.js';
 
 function plainObject(value, label = 'input') {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -128,7 +129,9 @@ export function validateNoteTransformInput(input) {
   knownKeys(value, ['text', 'operation', 'instruction', 'targetLanguage', 'targetLength']);
   const text = String(value.text || '').trim();
   if (!text) throw aiSkillError('AI_SKILL_TEXT_REQUIRED', '请选择或输入要处理的文字');
-  if (text.length > 60_000) throw aiSkillError('AI_SKILL_TEXT_TOO_LONG', '单次最多处理 60000 个字符');
+  if (text.length > AI_SKILL_NOTE_TRANSFORM_MAX_TEXT_CHARS) {
+    throw aiSkillError('AI_SKILL_TEXT_TOO_LONG', `单次最多处理 ${AI_SKILL_NOTE_TRANSFORM_MAX_TEXT_CHARS} 个字符`);
+  }
   const operation = String(value.operation || '').trim();
   if (!NOTE_TRANSFORM_OPERATIONS.has(operation)) {
     throw aiSkillError('AI_SKILL_NOTE_OPERATION_INVALID', '不支持该笔记处理方式');

@@ -51,13 +51,18 @@ describe('visitorDrawingSampleService', () => {
 
     const result = await syncVisitorDrawingSample();
 
-    expect(result).toMatchObject({ applied: false, changed: true, currentTitle: '手绘笔记示例', targetTitle: '上色' });
+    expect(result).toMatchObject({
+      applied: false,
+      changed: true,
+      currentTitle: '手绘笔记示例',
+      targetTitle: '手绘笔记示例',
+    });
     expect(poolQuery).toHaveBeenCalledWith(expect.stringContaining('WHERE n.id = ?'), [VISITOR_DRAWING_SAMPLE_NOTE_ID]);
     expect(getConnection).not.toHaveBeenCalled();
     expect(snapshotOwnedNoteVersion).not.toHaveBeenCalled();
   });
 
-  it('apply 原位保存旧版本并更新标题、正文和 revision', async () => {
+  it('apply 原位保存旧版本并更新正文和 revision，标题保持不变', async () => {
     const row = currentRow();
     const connection = createConnection(async (sql) => {
       if (sql.includes('FOR UPDATE')) return [[row]];
@@ -76,13 +81,19 @@ describe('visitorDrawingSampleService', () => {
     });
     const target = buildVisitorDrawingSampleTarget();
     expect(connection.query).toHaveBeenCalledWith(expect.stringContaining('revision = revision + 1'), [
-      '上色',
+      '手绘笔记示例',
       target.content,
       VISITOR_DRAWING_SAMPLE_NOTE_ID,
       'visitor-user',
       3,
     ]);
-    expect(result).toMatchObject({ applied: true, changed: true, currentRevision: 4, previousTitle: '手绘笔记示例' });
+    expect(result).toMatchObject({
+      applied: true,
+      changed: true,
+      currentRevision: 4,
+      previousTitle: '手绘笔记示例',
+      targetTitle: '手绘笔记示例',
+    });
     expect(connection.commit).toHaveBeenCalledOnce();
     expect(connection.release).toHaveBeenCalledOnce();
   });

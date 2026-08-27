@@ -11,7 +11,7 @@
 - 默认语言：`中文（简体）`
 - 类别：`效率工具`
 - 官方网站：`https://boluo66.top`
-- 支持网址：`https://github.com/VeteranBoLuo/light-note/issues`
+- 支持网址：`https://boluo66.top/helpCenter`
 - 隐私政策：`https://boluo66.top/legal/browser-extension-privacy.html`
 
 ### 摘要
@@ -40,17 +40,17 @@
 
 ## 权限说明
 
-| 权限 | 审核说明 |
-| --- | --- |
-| `sidePanel` | 在 Chrome 原生侧栏中展示扩展的书签、笔记和文件快速添加界面。 |
-| `tabs` | 用户进入书签或点击“自动获取”时，只读取当前活动标签页的网址和标题。固定侧栏切换标签页后 `activeTab` 临时授权可能已失效，因此需要 `tabs`；不枚举、不保存其他标签页或浏览历史。 |
-| `activeTab` | 用户从工具栏主动打开扩展后，为当前标签页提供临时访问，用于书签流程中尽力读取选中文本。 |
-| `scripting` | 仅在用户主动收集书签或点击“带入当前网页文字”时执行受限脚本，读取选中文本或当前顶层页面可见文字。 |
-| `storage` | 在扩展私有存储中保存设备会话、主题、语言、未提交草稿和幂等重试状态。 |
-| `identity` | 使用 `launchWebAuthFlow` 打开轻笺网站登录中转并接收一次性 `chromiumapp.org` 回调；不读取 Google 账号资料。 |
-| `https://boluo66.top/*` | 通过 HTTPS 调用轻笺账号、书签、笔记和文件 API。 |
-| 轻笺 OBS 精确域名 | 通过服务端签发的短时地址，上传用户主动选择的文件。 |
-| `optional_host_permissions` | 仅在用户点击“带入当前网页文字”时，按当前 HTTP/HTTPS 网站精确 Origin 单独申请；拒绝后仍可手动输入。 |
+| 权限                        | 审核说明                                                                                                                                                                     |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sidePanel`                 | 在 Chrome 原生侧栏中展示扩展的书签、笔记和文件快速添加界面。                                                                                                                 |
+| `tabs`                      | 用户进入书签或点击“自动获取”时，只读取当前活动标签页的网址和标题。固定侧栏切换标签页后 `activeTab` 临时授权可能已失效，因此需要 `tabs`；不枚举、不保存其他标签页或浏览历史。 |
+| `activeTab`                 | 用户从工具栏主动打开扩展后，为当前标签页提供临时访问，用于书签流程中尽力读取选中文本。                                                                                       |
+| `scripting`                 | 仅在用户主动收集书签或点击“带入当前网页文字”时执行受限脚本，读取选中文本或当前顶层页面可见文字。                                                                             |
+| `storage`                   | 在扩展私有存储中保存设备会话、主题、语言、未提交草稿和幂等重试状态。                                                                                                         |
+| `identity`                  | 使用 `launchWebAuthFlow` 打开轻笺网站登录中转并接收一次性 `chromiumapp.org` 回调；不读取 Google 账号资料。                                                                   |
+| `https://boluo66.top/*`     | 通过 HTTPS 调用轻笺账号、书签、笔记和文件 API。                                                                                                                              |
+| 轻笺 OBS 精确域名           | 通过服务端签发的短时地址，上传用户主动选择的文件。                                                                                                                           |
+| `optional_host_permissions` | 仅在用户点击“带入当前网页文字”时，按当前 HTTP/HTTPS 网站精确 Origin 单独申请；拒绝后仍可手动输入。                                                                           |
 
 ## 远程代码
 
@@ -92,7 +92,9 @@
 
 - ZIP：`apps/web/artifacts/light-note-browser-extension-<version>.zip`
 - 校验：同名 `.sha256`
-- 商店截图：`apps/web/store-assets/chrome/screenshots/`
+- 当地语言截图：`apps/web/store-assets/chrome/screenshots/localized/`
+- 全球通用截图：`apps/web/store-assets/chrome/screenshots/global/`
 - 小型宣传图：`apps/web/store-assets/chrome/promo-small-440x280.png`
+- 顶部宣传图：`apps/web/store-assets/chrome/promo-marquee-1400x560.png`
 
 首次上传前至少确认：Manifest V3、版本递增、ZIP 根目录存在 `manifest.json` 且不含商店禁止的根级 `key`、48/128 图标、无远程代码、CSP 门禁、权限最小化、专属隐私页已上线、截图与当前版本一致。开发者模式目录仍保留公开 build key，以固定本地测试 ID；只能由打包器在商店 ZIP 中移除。

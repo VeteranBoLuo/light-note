@@ -68,7 +68,12 @@ describe('communityChatPollService', () => {
         { options: [' Ａ ', 'B'], endsAt: '2026-08-26T12:00:00+01:00' },
         { question: '下一项做什么？', now },
       ),
-    ).toMatchObject({ options: ['A', 'B'], endsAtUtc: '2026-08-26T11:00:00.000Z' });
+    ).toMatchObject({
+      options: ['A', 'B'],
+      selectionMode: 'single',
+      maxSelections: 1,
+      endsAtUtc: '2026-08-26T11:00:00.000Z',
+    });
     expect(() =>
       normalizeCommunityChatPollDraft(
         { options: ['A', 'ａ'], endsAt: '2026-08-26T11:00:00Z' },
@@ -95,6 +100,40 @@ describe('communityChatPollService', () => {
     expect(() => assertCommunityChatPollDeadlineRange(replayDraft, now)).toThrowError(
       expect.objectContaining({ code: 'POLL_DEADLINE_TOO_SOON' }),
     );
+
+    expect(
+      normalizeCommunityChatPollDraft(
+        {
+          options: ['甲', '乙', '丙'],
+          endsAt: '2026-08-26T11:00:00Z',
+          selectionMode: 'multiple',
+          maxSelections: 2,
+        },
+        { question: '多选', now },
+      ),
+    ).toMatchObject({ selectionMode: 'multiple', maxSelections: 2 });
+    expect(() =>
+      normalizeCommunityChatPollDraft(
+        {
+          options: ['甲', '乙'],
+          endsAt: '2026-08-26T11:00:00Z',
+          selectionMode: 'multiple',
+          maxSelections: 3,
+        },
+        { question: '越界', now },
+      ),
+    ).toThrowError(expect.objectContaining({ code: 'INVALID_POLL_MAX_SELECTIONS' }));
+    expect(() =>
+      normalizeCommunityChatPollDraft(
+        {
+          options: ['甲', '乙'],
+          endsAt: '2026-08-26T11:00:00Z',
+          selectionMode: 'ranked',
+          maxSelections: 1,
+        },
+        { question: '未知模式', now },
+      ),
+    ).toThrowError(expect.objectContaining({ code: 'INVALID_POLL_SELECTION_MODE' }));
   });
 
   it('投票结构与选项使用消息 ID 作为唯一聚合根并在同一连接写入', async () => {
@@ -103,12 +142,17 @@ describe('communityChatPollService', () => {
       { query },
       {
         messageId: 42,
-        poll: { endsAtSql: '2026-08-27 10:00:00.000', options: ['甲', '乙'] },
+        poll: {
+          endsAtSql: '2026-08-27 10:00:00.000',
+          options: ['甲', '乙'],
+          selectionMode: 'multiple',
+          maxSelections: 2,
+        },
       },
     );
     expect(query).toHaveBeenCalledTimes(2);
     expect(query.mock.calls[0][0]).toContain('community_chat_polls');
-    expect(query.mock.calls[0][1]).toEqual([42, '2026-08-27 10:00:00.000']);
+    expect(query.mock.calls[0][1]).toEqual([42, 'multiple', 2, '2026-08-27 10:00:00.000']);
     expect(query.mock.calls[1][0]).toContain('community_chat_poll_options');
     expect(query.mock.calls[1][1]).toHaveLength(8);
   });
@@ -151,6 +195,9 @@ describe('communityChatPollService', () => {
               status: 'active',
               roomSlug: 'general',
               authorUserId: 'root-1',
+              selectionMode: 'single',
+              maxSelections: 1,
+              optionCount: 2,
               closed: 0,
             },
           ],
@@ -207,6 +254,142 @@ describe('communityChatPollService', () => {
     expect(mocks.publish).toHaveBeenCalledWith('message.updated', expect.objectContaining({ reason: 'poll_vote' }), {
       targetUserId: 'root-1',
     });
+  });
+
+  it('多选投票在同一事务中原子替换完整选择集，并按参与人数而非选项票数计总人数', async () => {
+    const query = vi.fn(async (sql) => {
+      const source = String(sql);
+      if (source.includes('FROM community_chat_messages message')) {
+        return [
+          [
+            {
+              internalId: 8,
+              publicId: 'message-2',
+              status: 'active',
+              roomSlug: 'general',
+              authorUserId: 'root-1',
+              selectionMode: 'multiple',
+              maxSelections: 2,
+              optionCount: 2,
+              closed: 0,
+            },
+          ],
+          [],
+        ];
+      }
+      if (source.includes('FROM community_chat_poll_options') && source.includes('FOR UPDATE')) {
+        return [
+          [
+            { id: 11, publicId: 'option-a' },
+            { id: 12, publicId: 'option-b' },
+          ],
+          [],
+        ];
+      }
+      if (source.includes('DELETE FROM community_chat_poll_multi_votes')) return [{ affectedRows: 1 }, []];
+      if (source.includes('INSERT INTO community_chat_poll_multi_votes')) return [{ affectedRows: 2 }, []];
+      if (source.includes('FROM community_chat_polls poll')) {
+        return [
+          [
+            {
+              messageId: 8,
+              selectionMode: 'multiple',
+              maxSelections: 2,
+              endsAt: '2026-08-27T10:00:00.000Z',
+              closedAt: null,
+              manuallyClosed: 0,
+              deadlinePassed: 0,
+              optionPublicId: 'option-a',
+              label: '甲',
+              sortOrder: 0,
+              voteCount: 2,
+              totalVoterCount: 2,
+              selectedByViewer: 1,
+            },
+            {
+              messageId: 8,
+              selectionMode: 'multiple',
+              maxSelections: 2,
+              endsAt: '2026-08-27T10:00:00.000Z',
+              closedAt: null,
+              manuallyClosed: 0,
+              deadlinePassed: 0,
+              optionPublicId: 'option-b',
+              label: '乙',
+              sortOrder: 1,
+              voteCount: 1,
+              totalVoterCount: 2,
+              selectedByViewer: 1,
+            },
+          ],
+          [],
+        ];
+      }
+      throw new Error(`unexpected query: ${source}`);
+    });
+    const connection = connectionWithQuery(query);
+    mocks.getConnection.mockResolvedValue(connection);
+
+    const result = await voteCommunityChatPoll({
+      user: { id: 'user-1', role: 'user' },
+      messagePublicId: 'message-2',
+      optionPublicIds: ['option-b', 'option-a'],
+    });
+
+    const deleteIndex = query.mock.calls.findIndex(([sql]) => String(sql).includes('DELETE FROM community_chat'));
+    const insertIndex = query.mock.calls.findIndex(([sql]) => String(sql).includes('INSERT INTO community_chat'));
+    expect(deleteIndex).toBeGreaterThan(-1);
+    expect(insertIndex).toBeGreaterThan(deleteIndex);
+    expect(query.mock.calls[insertIndex]?.[1]).toEqual([8, 'user-1', 11, 8, 'user-1', 12]);
+    expect(result.poll).toMatchObject({
+      selectionMode: 'multiple',
+      maxSelections: 2,
+      selectedOptionPublicIds: ['option-a', 'option-b'],
+      selectedOptionPublicId: 'option-a',
+      resultsVisible: false,
+    });
+    expect(result.poll).not.toHaveProperty('totalVoterCount');
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('服务端拒绝重复选择和超过发布上限的完整选择集', async () => {
+    expect(() => __test__.normalizeVoteOptionPublicIds({ optionPublicIds: ['option-a', 'option-a'] })).toThrowError(
+      expect.objectContaining({ code: 'DUPLICATE_POLL_SELECTION' }),
+    );
+    expect(() =>
+      __test__.normalizeVoteOptionPublicIds({ optionPublicIds: ['option-a'], optionPublicId: 'option-b' }),
+    ).toThrowError(expect.objectContaining({ code: 'INVALID_POLL_SELECTION' }));
+
+    const query = vi.fn(async (sql) => {
+      if (String(sql).includes('FROM community_chat_messages message')) {
+        return [
+          [
+            {
+              internalId: 8,
+              publicId: 'message-2',
+              status: 'active',
+              roomSlug: 'general',
+              selectionMode: 'multiple',
+              maxSelections: 2,
+              optionCount: 3,
+              closed: 0,
+            },
+          ],
+          [],
+        ];
+      }
+      throw new Error('超过上限后不应查询或写入选项');
+    });
+    const connection = connectionWithQuery(query);
+    mocks.getConnection.mockResolvedValue(connection);
+    await expect(
+      voteCommunityChatPoll({
+        user: { id: 'user-1', role: 'user' },
+        messagePublicId: 'message-2',
+        optionPublicIds: ['option-a', 'option-b', 'option-c'],
+      }),
+    ).rejects.toMatchObject({ code: 'POLL_SELECTION_LIMIT_EXCEEDED' });
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
   });
 
   it('截止判断在锁内由 UTC_TIMESTAMP 完成，已结束时不会写入票行', async () => {

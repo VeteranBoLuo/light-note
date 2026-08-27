@@ -1011,6 +1011,9 @@ export default {
     poll: {
       cardLabel: 'Poll',
       singleChoice: 'Single-choice poll',
+      multipleChoice: 'Multiple-choice poll',
+      singleChoiceHint: 'Members choose one option and submit it immediately.',
+      multipleChoiceHint: 'Members may choose 1–{count} options and submit them together.',
       active: 'Open',
       paused: 'Paused',
       closed: 'Closed',
@@ -1020,6 +1023,13 @@ export default {
       resultsAfterClose: 'Aggregate results appear after the poll closes',
       voteHint: 'Choose one option',
       changeVoteHint: 'You can change your vote before closing',
+      multipleVoteHint: 'Choose up to {count} options, then submit',
+      changeMultipleVoteHint: 'You can revise and resubmit before closing',
+      multipleSelectionRequired: 'Choose 1–{count} options',
+      multipleSelectionCount: '{count}/{max} selected',
+      submitSelections: 'Submit choices',
+      updateSelections: 'Update choices',
+      multipleResultsHint: 'Multiple-choice percentages use participants as the denominator',
       participationPaused: 'Voting is temporarily paused',
       endsAt: 'Ends {time}',
       closedAt: {
@@ -1037,9 +1047,14 @@ export default {
       voteFailed: 'The vote failed. Check whether the poll has ended.',
       composerTitle: 'Create a poll',
       composerDescription:
+        'A poll is published as a regular message. Choose single or multiple selection; members may revise their choices before the deadline, and aggregate results appear after closing.',
+      composerDescriptionSingle:
         'A poll is published as a regular message. Members choose one option and may change it before the deadline; aggregate results appear after closing.',
       questionLabel: 'Question',
       questionPlaceholder: 'For example: Which feature should we improve next?',
+      selectionModeLabel: 'Selection mode',
+      maxSelectionsLabel: 'Maximum per member',
+      maxSelectionsOption: 'Up to {count}',
       optionCount: '{count}/{max} options',
       optionPlaceholder: 'Option {index}',
       removeOption: 'Remove option {index}',
@@ -1068,13 +1083,22 @@ export default {
       countPaused: '{count} read · paused',
       enabled: 'Read receipt on',
       paused: 'Receipt paused',
-      rootHint:
-        'The message bubble stayed visible in the foreground for {count} signed-in members. This does not prove comprehension. Click to refresh.',
-      rootPausedHint:
-        'New receipts are paused. The historical aggregate remains {count}; member identities are never listed.',
-      memberHint:
-        'This Root message records an aggregate read count visible only to Root. Member identities are never listed.',
-      memberPausedHint: 'This Root message keeps its historical receipt marker, but no new reads are being recorded.',
+      readersTitle: 'Read members',
+      readersSummary: '{count} members met the read condition',
+      readersRule:
+        'The message bubble must remain visible in the foreground for at least 0.8 seconds. Each member is recorded only once.',
+      readersPaused: 'New receipts are paused. Members recorded before the pause remain listed below.',
+      readersLoading: 'Loading read members',
+      readersLoadFailed: 'Read members are temporarily unavailable',
+      readersLoadFailedDescription: 'The existing count is preserved. You can reload this list later.',
+      readersEmpty: 'No member has met the read condition yet',
+      readersEmptyDescription:
+        'Entering the chat alone does not count. This bubble must remain in the visible message area.',
+      readersLoadMore: 'Load more members',
+      readersPrivacy:
+        'This list is available only to Root. A read means the bubble met the visibility condition; it does not prove understanding, agreement, or completion.',
+      readerIdentityUnavailable: 'Community ID unavailable',
+      firstSeenAt: 'First read {time}',
     },
     expression: {
       title: 'Expressions',
@@ -4231,8 +4255,7 @@ export default {
     batchDownloadChooseTitle: 'Choose download method',
     batchDownloadChooseHint: 'Download each file separately, or combine them into one ZIP archive.',
     batchDownloadIndividual: 'Download separately',
-    batchDownloadIndividualDesc:
-      'Saves directly to a chosen folder when supported; other browsers show a per-file download list.',
+    batchDownloadIndividualDesc: "Downloads each file to your browser's default Downloads folder.",
     batchDownloadZip: 'Package as ZIP',
     batchDownloadZipDesc: 'Downloads and compresses the files into one ZIP archive.',
     batchDownloadZipUnavailableInApp: 'ZIP packaging is unavailable in the app. Choose separate downloads instead.',
@@ -4291,33 +4314,10 @@ export default {
     batchDownloadHandedOff: '{count} files started downloading, check the Download folder when done',
     batchDownloadPartial: '{success} started downloading, {failed} failed',
     batchDownloadCancelledPartial: 'Cancelled. {count} files are already downloading',
-    batchDownloadSaving: 'Saving files',
-    batchDownloadSaved: '{count} files were saved to the selected folder',
-    batchDownloadSavePartial: '{success} files saved, {failed} failed',
-    batchDownloadSaveCancelledPartial: 'Cancelled. {count} files were saved',
-    batchDownloadDirectoryPickerCancelled: 'Folder selection was cancelled',
-    batchDownloadDirectoryPickerFailed: 'Could not write to that folder. Switched to per-file downloads.',
-    batchDownloadAndroidUnconfirmed:
-      '{confirmed} confirmed queued; {unconfirmed} submitted to an older app but unconfirmed; {failed} failed',
-    batchDownloadAndroidCancelledPartial:
-      'Further submissions cancelled: {confirmed} confirmed, {unconfirmed} unconfirmed, {failed} failed',
-    preparedDownloadsTitle: 'Download files one by one',
-    preparedDownloadsHint:
-      'Click each download separately. One file is submitted per click so the browser will not block later files. Green means submitted; confirm completion in your browser downloads.',
-    preparedDownloadsSummary: '{submitted}/{total} submitted, {failed} failed to prepare',
-    preparedDownloadsPreparing: 'Preparing download links',
-    preparedDownloadsPartial: '{failed} files could not be prepared. Retry them in the list.',
-    preparedDownloadsAllFailed: 'No files could be prepared. Retry each item.',
-    preparedDownloadsSubmitted: '{count} files submitted. Confirm them in your browser downloads.',
-    preparedDownloadOne: 'Download',
-    preparedDownloadAgain: 'Download again',
-    preparedDownloadRetry: 'Retry preparation',
-    preparedDownloadStatus: {
-      preparing: 'Preparing',
-      ready: 'Ready',
-      submitted: 'Submitted',
-      failed: 'Preparation failed',
-    },
+    batchDownloadBrowserSubmitted:
+      '{count} files were submitted. Your browser will download them to the Downloads folder one by one.',
+    batchDownloadBrowserPartial: '{submitted} files submitted; {failed} could not be submitted',
+    batchDownloadBrowserCancelledPartial: 'Further submissions cancelled; {count} files were sent to the browser',
     moveCompleted: 'Move completed',
     batchMoveSuccess: 'Batch move successful! Moved',
     moveSuccess: 'Move successful',

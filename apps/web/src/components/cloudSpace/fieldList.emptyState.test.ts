@@ -61,19 +61,25 @@ describe('cloud file empty state layout', () => {
     expect(source).toContain('suppressCardClickUntil = Date.now() + 250');
   });
 
-  it('批量下载先选择分别下载或 ZIP，分别下载不再连续触发自动下载，单文件仍直接下载', () => {
+  it('批量下载先选择分别下载或 ZIP，分别下载直接逐项交给浏览器且单文件仍直接下载', () => {
     expect(source).toContain('v-model:visible="batchDownloadChoiceVisible"');
-    expect(source).toContain('v-model:visible="preparedDownloadsVisible"');
     expect(source).toContain(`startBatchDownload('individual')`);
     expect(source).toContain(`startBatchDownload('zip')`);
-    expect(source).toContain('const runBrowserDirectoryDownloads = async');
-    expect(source).toContain('const prepareBrowserIndividualDownloads = async');
-    expect(source).toContain('triggerPreparedBrowserDownload(item.meta)');
-    expect(source).not.toContain('const runBrowserIndividualDownloads = async');
+    expect(source).toContain('const runBrowserDirectDownloads = async');
+    expect(source).toContain('submitBrowserBatchDownloads({');
+    expect(source).toContain('submit: triggerPreparedBrowserDownload');
+    expect(source).not.toContain('showDirectoryPicker');
+    expect(source).not.toContain('preparedDownloadsVisible');
     expect(source).toContain('const runZipBatchDownload = async');
     expect(source).toMatch(
       /if \(selectedFiles\.length === 1\)[\s\S]*?downloadField\(selectedFiles\[0\]\.id\)[\s\S]*?batchDownloadChoiceVisible\.value = true/,
     );
+  });
+
+  it('旧版 App 没有入队回执时按已开始下载收口，不再显示无法确认警告', () => {
+    expect(source).toContain('const submitted = succeeded + unconfirmed');
+    expect(source).toContain("message.success(t('cloudSpace.batchDownloadHandedOff', { count: submitted }))");
+    expect(source).not.toContain('batchDownloadAndroidUnconfirmed');
   });
 
   it('列表表头与普通行 hover 使用稳定主题色，不再动态混入资源橙色', () => {

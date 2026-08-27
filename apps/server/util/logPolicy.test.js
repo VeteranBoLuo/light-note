@@ -15,6 +15,7 @@ describe('API 日志跳过策略', () => {
     '/api/support/afdian/oauth/callback?code=temporary&state=temporary',
     '/api/community-chat/access',
     '/api/community-chat/rooms',
+    '/api/community-chat/rooms/general/read-receipt-counts?messagePublicIds=message-1',
     '/api/infra/dashboard',
     '/api/infra/diagnostics',
     '/api/infra/services',

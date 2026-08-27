@@ -26,6 +26,8 @@ const mocks = vi.hoisted(() => ({
   votePoll: vi.fn(),
   closePoll: vi.fn(),
   recordReadReceipts: vi.fn(),
+  listReadReceiptCounts: vi.fn(),
+  listReadReceiptReaders: vi.fn(),
   recallMessage: vi.fn(),
   pinMessage: vi.fn(),
   unpinMessage: vi.fn(),
@@ -84,6 +86,8 @@ vi.mock('../util/services/communityChatPollService.js', () => ({
 }));
 vi.mock('../util/services/communityChatReadReceiptService.js', () => ({
   recordCommunityChatReadReceipts: mocks.recordReadReceipts,
+  listCommunityChatReadReceiptCounts: mocks.listReadReceiptCounts,
+  listCommunityChatReadReceiptReaders: mocks.listReadReceiptReaders,
 }));
 vi.mock('../util/services/communityChatProfileService.js', () => ({
   getCommunityChatMessageAuthorProfile: mocks.getAuthorProfile,
@@ -141,6 +145,8 @@ const {
   votePoll,
   closePoll,
   recordReadReceipts,
+  readReceiptCounts,
+  readReceiptReaders,
   unpinMessage,
   updateRuntimePolicy,
   updateOwnProfile,
@@ -458,7 +464,10 @@ describe('communityChatHandle', () => {
     const user = { id: 'user-1', role: 'user' };
     const root = { id: 'root-1', role: 'root' };
     mocks.getMessage.mockResolvedValue({ message: { publicId: 'message-1' } });
-    mocks.votePoll.mockResolvedValue({ messagePublicId: 'message-1', poll: { selectedOptionPublicId: 'option-1' } });
+    mocks.votePoll.mockResolvedValue({
+      messagePublicId: 'message-1',
+      poll: { selectedOptionPublicIds: ['option-1', 'option-2'] },
+    });
     mocks.closePoll.mockResolvedValue({ messagePublicId: 'message-1', poll: { closed: true }, changed: true });
     mocks.recordReadReceipts.mockResolvedValue({
       roomSlug: 'general',
@@ -471,7 +480,15 @@ describe('communityChatHandle', () => {
       {
         user,
         params: { publicId: 'message-1' },
-        body: { optionPublicId: 'option-1', voteCount: 999, userId: 'forged-user' },
+        body: { optionPublicIds: ['option-1', 'option-2'], voteCount: 999, userId: 'forged-user' },
+      },
+      mockRes(),
+    );
+    await votePoll(
+      {
+        user,
+        params: { publicId: 'message-legacy' },
+        body: { optionPublicId: 'option-legacy' },
       },
       mockRes(),
     );
@@ -488,10 +505,15 @@ describe('communityChatHandle', () => {
     await closePoll({ user: root, params: { publicId: 'message-1' }, body: { force: true } }, mockRes());
 
     expect(mocks.getMessage).toHaveBeenCalledWith({ user, messagePublicId: 'message-1' });
-    expect(mocks.votePoll).toHaveBeenCalledWith({
+    expect(mocks.votePoll).toHaveBeenNthCalledWith(1, {
       user,
       messagePublicId: 'message-1',
-      optionPublicId: 'option-1',
+      optionPublicIds: ['option-1', 'option-2'],
+    });
+    expect(mocks.votePoll).toHaveBeenNthCalledWith(2, {
+      user,
+      messagePublicId: 'message-legacy',
+      optionPublicId: 'option-legacy',
     });
     expect(mocks.recordReadReceipts).toHaveBeenCalledWith({
       user,
@@ -501,6 +523,74 @@ describe('communityChatHandle', () => {
     expect(deniedCloseRes.status).toHaveBeenCalledWith(403);
     expect(mocks.closePoll).toHaveBeenCalledTimes(1);
     expect(mocks.closePoll).toHaveBeenCalledWith({ user: root, messagePublicId: 'message-1' });
+  });
+
+  it('已读成员名单只允许 Root 按公有消息 ID 分页读取', async () => {
+    const user = { id: 'user-1', role: 'user' };
+    const root = { id: 'root-1', role: 'root' };
+    mocks.listReadReceiptReaders.mockResolvedValue({
+      messagePublicId: 'message-1',
+      items: [],
+      total: 0,
+      page: 2,
+      pageSize: 20,
+      hasMore: false,
+    });
+
+    const deniedRes = mockRes();
+    await readReceiptReaders(
+      { user, params: { publicId: 'message-1' }, query: { page: '2', pageSize: '20', userId: 'forged' } },
+      deniedRes,
+    );
+    const rootRes = mockRes();
+    await readReceiptReaders(
+      { user: root, params: { publicId: 'message-1' }, query: { page: '2', pageSize: '20', userId: 'forged' } },
+      rootRes,
+    );
+
+    expect(deniedRes.status).toHaveBeenCalledWith(403);
+    expect(mocks.listReadReceiptReaders).toHaveBeenCalledTimes(1);
+    expect(mocks.listReadReceiptReaders).toHaveBeenCalledWith({
+      user: root,
+      messagePublicId: 'message-1',
+      page: '2',
+      pageSize: '20',
+    });
+    expect(rootRes.send).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ messagePublicId: 'message-1', total: 0 }) }),
+    );
+  });
+
+  it('前台自动校准已读数量只允许 Root，并规范化逗号与数组查询参数', async () => {
+    const user = { id: 'user-1', role: 'user' };
+    const root = { id: 'root-1', role: 'root' };
+    mocks.listReadReceiptCounts.mockResolvedValue({
+      roomSlug: 'general',
+      items: [{ messagePublicId: 'message-1', readCount: 3 }],
+    });
+
+    const deniedRes = mockRes();
+    await readReceiptCounts({ user, params: { slug: 'general' }, query: { messagePublicIds: 'message-1' } }, deniedRes);
+    const rootRes = mockRes();
+    await readReceiptCounts(
+      {
+        user: root,
+        params: { slug: 'general' },
+        query: { messagePublicIds: ['message-1,message-2', 'message-3'] },
+      },
+      rootRes,
+    );
+
+    expect(deniedRes.status).toHaveBeenCalledWith(403);
+    expect(mocks.listReadReceiptCounts).toHaveBeenCalledTimes(1);
+    expect(mocks.listReadReceiptCounts).toHaveBeenCalledWith({
+      user: root,
+      roomSlug: 'general',
+      messagePublicIds: ['message-1', 'message-2', 'message-3'],
+    });
+    expect(rootRes.send).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ roomSlug: 'general' }) }),
+    );
   });
 
   it('点赞、撤回与个人删除接口只使用认证用户和消息公有 ID', async () => {

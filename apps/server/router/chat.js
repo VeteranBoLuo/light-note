@@ -6,10 +6,14 @@ import { aiUsageReadRateLimiter } from '../util/requestRateLimit.js';
 
 const router = express.Router();
 
+// 额度与用量页面描述的是当前正在查看的账号；管理员预览时必须使用目标用户，
+// 不能复用仅供实际 AI 扣费使用的 billingUser。
+const resolveAiReadUser = (req) => req.resourceUser || req.user;
+
 // AI 今日额度状态供设置页展示；所有角色均受统一 Execution 额度约束。
 router.post('/aiQuota', async (req, res) => {
   try {
-    const quotaUser = req.billingUser || req.user;
+    const quotaUser = resolveAiReadUser(req);
     const context = { userId: quotaUser?.id || 'visitor', userRole: quotaUser?.role || 'visitor' };
     return res.send(resultData(await aiQuota.getStatus(req, context)));
   } catch {
@@ -18,9 +22,9 @@ router.post('/aiQuota', async (req, res) => {
   }
 });
 
-// AI 用量明细只按实际支付额度的登录账号查询，不返回问题、标题、URL、正文或错误原文。
+// AI 用量明细按当前查看账号查询，不返回问题、标题、URL、正文或错误原文。
 router.post('/aiUsage', aiUsageReadRateLimiter, async (req, res) => {
-  const quotaUser = req.billingUser || req.user;
+  const quotaUser = resolveAiReadUser(req);
   if (!quotaUser?.id || quotaUser.id === 'visitor' || quotaUser.role === 'visitor') {
     return res.status(401).send(resultData({ code: 'AI_USAGE_AUTH_REQUIRED' }, 401, '登录后才能查看 AI 用量明细'));
   }
@@ -36,9 +40,9 @@ router.post('/aiUsage', aiUsageReadRateLimiter, async (req, res) => {
   }
 });
 
-// 单次模型调用链详情仍只按实际付款者读取，不返回用户内容、资源标识或 Provider 原始错误。
+// 单次模型调用链详情按当前查看账号读取，不返回用户内容、资源标识或 Provider 原始错误。
 router.post('/aiUsageDetail', aiUsageReadRateLimiter, async (req, res) => {
-  const quotaUser = req.billingUser || req.user;
+  const quotaUser = resolveAiReadUser(req);
   if (!quotaUser?.id || quotaUser.id === 'visitor' || quotaUser.role === 'visitor') {
     return res.status(401).send(resultData({ code: 'AI_USAGE_AUTH_REQUIRED' }, 401, '登录后才能查看 AI 调用详情'));
   }

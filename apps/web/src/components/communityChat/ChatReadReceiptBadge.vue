@@ -1,22 +1,19 @@
 <template>
-  <BTooltip :title="tooltip" :delay="80">
-    <BButton
-      class="chat-read-receipt-badge community-message__read-receipt"
-      :disabled="!canManage"
-      :loading="loading"
-      @click="emit('refresh')"
-    >
-      <SvgIcon :src="icon.communityChat.readReceipt" size="13" aria-hidden="true" />
-      <span>{{ label }}</span>
-    </BButton>
-  </BTooltip>
+  <BButton
+    class="chat-read-receipt-badge community-message__read-receipt"
+    :disabled="!canManage"
+    :loading="loading"
+    @click="emit('open')"
+  >
+    <SvgIcon :src="icon.communityChat.readReceipt" size="13" aria-hidden="true" />
+    <span aria-live="polite">{{ label }}</span>
+  </BButton>
 </template>
 
 <script setup lang="ts">
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
 
@@ -32,7 +29,7 @@
       loading: false,
     },
   );
-  const emit = defineEmits<{ refresh: [] }>();
+  const emit = defineEmits<{ open: [] }>();
   const { t } = useI18n();
 
   const hasReadCount = computed(() => props.canManage && typeof props.readCount === 'number');
@@ -43,14 +40,6 @@
       });
     }
     return t(props.enabled ? 'communityChat.readReceipt.enabled' : 'communityChat.readReceipt.paused');
-  });
-  const tooltip = computed(() => {
-    if (props.canManage) {
-      return t(props.enabled ? 'communityChat.readReceipt.rootHint' : 'communityChat.readReceipt.rootPausedHint', {
-        count: props.readCount || 0,
-      });
-    }
-    return t(props.enabled ? 'communityChat.readReceipt.memberHint' : 'communityChat.readReceipt.memberPausedHint');
   });
 </script>
 

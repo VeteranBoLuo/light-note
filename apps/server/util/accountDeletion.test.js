@@ -144,6 +144,7 @@ describe('账号注销提交', () => {
             { tableName: 'email_delivery_logs' },
             { tableName: 'community_chat_messages' },
             { tableName: 'community_chat_poll_votes' },
+            { tableName: 'community_chat_poll_multi_votes' },
             { tableName: 'community_chat_message_read_receipts' },
             { tableName: 'user' },
           ],
@@ -153,6 +154,7 @@ describe('账号注销提交', () => {
       if (sql.includes('DELETE FROM email_delivery_logs')) return [{ affectedRows: 1 }];
       if (sql.includes('DELETE receipt')) return [{ affectedRows: 2 }];
       if (sql.includes('DELETE FROM community_chat_poll_votes')) return [{ affectedRows: 1 }];
+      if (sql.includes('DELETE FROM community_chat_poll_multi_votes')) return [{ affectedRows: 2 }];
       if (sql.includes('DELETE FROM community_chat_message_read_receipts')) return [{ affectedRows: 1 }];
       if (sql.includes('UPDATE community_chat_messages')) return [{ affectedRows: 1 }];
       if (sql.includes('UPDATE user')) return [{ affectedRows: 1 }];
@@ -180,7 +182,11 @@ describe('账号注销提交', () => {
     const anonymizeIndex = connection.query.mock.calls.findIndex(([sql]) => sql.includes("role = 'deleted'"));
     expect(disableIndex).toBeGreaterThan(-1);
     expect(disableIndex).toBeLessThan(anonymizeIndex);
-    for (const table of ['community_chat_poll_votes', 'community_chat_message_read_receipts']) {
+    for (const table of [
+      'community_chat_poll_votes',
+      'community_chat_poll_multi_votes',
+      'community_chat_message_read_receipts',
+    ]) {
       const deleteIndex = connection.query.mock.calls.findIndex(([sql]) => sql.includes(`DELETE FROM ${table}`));
       expect(deleteIndex).toBeGreaterThan(disableIndex);
       expect(deleteIndex).toBeLessThan(anonymizeIndex);
@@ -195,6 +201,7 @@ describe('账号注销后台清理', () => {
     const tables = new Set([
       'community_chat_messages',
       'community_chat_poll_votes',
+      'community_chat_poll_multi_votes',
       'community_chat_message_read_receipts',
     ]);
 
@@ -204,6 +211,7 @@ describe('账号注销后台清理', () => {
       [expect.stringContaining('DELETE receipt'), ['user-1']],
       [expect.stringContaining('UPDATE community_chat_messages'), ['user-1']],
       ['DELETE FROM community_chat_poll_votes WHERE user_id = ?', ['user-1']],
+      ['DELETE FROM community_chat_poll_multi_votes WHERE user_id = ?', ['user-1']],
       ['DELETE FROM community_chat_message_read_receipts WHERE user_id = ?', ['user-1']],
     ]);
   });

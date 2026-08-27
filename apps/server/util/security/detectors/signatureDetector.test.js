@@ -153,4 +153,24 @@ describe('业务载荷语义检测', () => {
       expect.objectContaining({ ruleCode: 'PARAMETER_OVERFLOW', matchedField: 'body.scene' }),
     );
   });
+
+  it.each(['/ai/skills/execute', '/api/ai/skills/stream/'])('AI 笔记原文中的 shell 命令不作为命令注入：%s', (path) => {
+    const body = {
+      skillId: 'note.transform_text',
+      input: { text: '先执行 sudo apt update && sudo apt full-upgrade -y，再安装面板。' },
+    };
+    expect(detectRequestSignatures(path, body)).not.toContainEqual(
+      expect.objectContaining({ ruleCode: 'COMMAND_INJECTION', matchedField: 'body.input.text' }),
+    );
+  });
+
+  it('AI 字段豁免不扩散到其他技能或未知路由', () => {
+    const input = { text: 'sudo apt update && sudo apt full-upgrade -y' };
+    expect(detectRequestSignatures('/ai/skills/stream', { skillId: 'help.answer', input })).toContainEqual(
+      expect.objectContaining({ ruleCode: 'COMMAND_INJECTION', matchedField: 'body.input.text' }),
+    );
+    expect(detectRequestSignatures('/other', { skillId: 'note.transform_text', input })).toContainEqual(
+      expect.objectContaining({ ruleCode: 'COMMAND_INJECTION', matchedField: 'body.input.text' }),
+    );
+  });
 });

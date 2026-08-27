@@ -37,6 +37,9 @@ function poll(overrides: Partial<CommunityChatPoll> = {}): CommunityChatPoll {
     closed: false,
     closeReason: null,
     resultsVisible: false,
+    selectionMode: 'single',
+    maxSelections: 1,
+    selectedOptionPublicIds: [],
     selectedOptionPublicId: null,
     canVote: true,
     canClose: false,
@@ -49,13 +52,13 @@ function poll(overrides: Partial<CommunityChatPoll> = {}): CommunityChatPoll {
 }
 
 function mountPoll(props: { question: string; poll: CommunityChatPoll; now: number; participationPaused?: boolean }) {
-  const votes: string[] = [];
+  const votes: string[][] = [];
   let closeCount = 0;
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp(ChatPollCard, {
     ...props,
-    onVote: (optionPublicId: string) => votes.push(optionPublicId),
+    onVote: (optionPublicIds: string[]) => votes.push(optionPublicIds),
     onClose: () => {
       closeCount += 1;
     },
@@ -80,7 +83,7 @@ describe('ChatPollCard', () => {
   it('进行中对普通成员隐藏聚合票数，但保留自己的选择并允许改票', async () => {
     const mounted = mountPoll({
       question: '下一项优先做什么？',
-      poll: poll({ selectedOptionPublicId: 'option-a' }),
+      poll: poll({ selectedOptionPublicIds: [], selectedOptionPublicId: 'option-a' }),
       now: Date.parse('2026-08-26T10:00:00.000Z'),
     });
 
@@ -91,7 +94,65 @@ describe('ChatPollCard', () => {
     expect(mounted.host.textContent).toContain('communityChat.poll.changeVoteHint');
     options[1]?.click();
     await nextTick();
-    expect(mounted.votes).toEqual(['option-b']);
+    expect(mounted.votes).toEqual([['option-b']]);
+  });
+
+  it('多选先在本地勾选，到达发布上限后禁用未选项，并一次提交完整选择集', async () => {
+    const mounted = mountPoll({
+      question: '可同时推进哪些方向？',
+      poll: poll({
+        selectionMode: 'multiple',
+        maxSelections: 2,
+        options: [
+          { publicId: 'option-a', label: '体验' },
+          { publicId: 'option-b', label: '性能' },
+          { publicId: 'option-c', label: '可靠性' },
+        ],
+      }),
+      now: Date.parse('2026-08-26T10:00:00.000Z'),
+    });
+
+    const options = mounted.host.querySelectorAll<HTMLButtonElement>('.chat-poll-card__option');
+    options[0]?.click();
+    options[1]?.click();
+    await nextTick();
+
+    expect(mounted.votes).toHaveLength(0);
+    expect(options[0]?.classList.contains('is-selected')).toBe(true);
+    expect(options[1]?.classList.contains('is-selected')).toBe(true);
+    expect(options[2]?.disabled).toBe(true);
+    expect(mounted.host.textContent).toContain('communityChat.poll.multipleSelectionCount:2:2');
+
+    const submitButton = Array.from(mounted.host.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
+      button.textContent?.includes('communityChat.poll.submitSelections'),
+    );
+    submitButton?.click();
+    await nextTick();
+    expect(mounted.votes).toEqual([['option-a', 'option-b']]);
+  });
+
+  it('多选结果以去重参与人数计算比例，选项比例允许合计超过 100%', () => {
+    const mounted = mountPoll({
+      question: '选择方向',
+      poll: poll({
+        selectionMode: 'multiple',
+        maxSelections: 2,
+        closed: true,
+        closeReason: 'deadline',
+        resultsVisible: true,
+        totalVoterCount: 2,
+        canVote: false,
+        options: [
+          { publicId: 'option-a', label: '甲', voteCount: 2 },
+          { publicId: 'option-b', label: '乙', voteCount: 1 },
+        ],
+      }),
+      now: Date.parse('2026-08-28T10:00:00.000Z'),
+    });
+
+    expect(mounted.host.textContent).toContain('communityChat.poll.optionResult:100:2');
+    expect(mounted.host.textContent).toContain('communityChat.poll.optionResult:50:1');
+    expect(mounted.host.textContent).toContain('communityChat.poll.multipleResultsHint');
   });
 
   it('结束后展示汇总、百分比和零票边界，并禁止继续选择', async () => {

@@ -1382,10 +1382,11 @@ export async function createCommunityChatMessage({
     );
   }
 
+  const multipleChoicePoll = normalizedPoll?.selectionMode === 'multiple';
   const payloadFingerprint = messagePayloadFingerprint({
     // 普通消息必须继续沿用 v2，保证新旧实例滚动发布期间的重试仍能命中同一幂等指纹；
-    // 只有新增了投票字段的载荷才进入 v3。
-    version: normalizedPoll ? 3 : 2,
+    // 旧单选投票继续沿用 v3；只有多选新增字段进入 v4，避免同一单选请求跨版本重试冲突。
+    version: multipleChoicePoll ? 4 : normalizedPoll ? 3 : 2,
     roomSlug: normalizedRoomSlug,
     messageKind: normalizedMessageKind,
     stickerSource: normalizedStickerSource,
@@ -1396,7 +1397,20 @@ export async function createCommunityChatMessage({
     mentionUserPublicIds: normalizedMentionUserPublicIds,
     mentionMessagePublicIds: normalizedMentionMessagePublicIds,
     imagePublicIds: normalizedImagePublicIds,
-    ...(normalizedPoll ? { poll: { endsAt: normalizedPoll.endsAtUtc, options: normalizedPoll.options } } : {}),
+    ...(normalizedPoll
+      ? {
+          poll: {
+            endsAt: normalizedPoll.endsAtUtc,
+            options: normalizedPoll.options,
+            ...(multipleChoicePoll
+              ? {
+                  selectionMode: normalizedPoll.selectionMode,
+                  maxSelections: normalizedPoll.maxSelections,
+                }
+              : {}),
+          },
+        }
+      : {}),
   });
 
   const requestedFeature = getCommunityChatFeatureState(env);

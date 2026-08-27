@@ -5,6 +5,7 @@ import {
   isPublicSeoReadRequest,
   normalizeBehaviorPath,
 } from './behaviorDetector.js';
+import { SECURITY_CONFIG } from '../rules.js';
 
 describe('公开 SEO 页面行为检测', () => {
   it('GET/HEAD 的 sitemap 与帮助中心页面不计入高频和路径枚举', () => {
@@ -54,6 +55,26 @@ describe('公开 SEO 页面行为检测', () => {
       });
     }
     expect(result.evidence.some((item) => item.ruleCode === 'API_ENUMERATION')).toBe(false);
+  });
+
+  it('高频请求只在一分钟窗口首次越线时产生一条证据', () => {
+    const sourceIp = 'high-frequency-threshold-test';
+    const evidence = [];
+    for (let index = 0; index < SECURITY_CONFIG.highFrequencyPerMinute + 20; index += 1) {
+      evidence.push(
+        ...detectRequestBehavior({
+          method: 'GET',
+          path: '/api/note/queryNoteTree',
+          sourceIp,
+          userId: 'root-test',
+        }).evidence,
+      );
+    }
+    expect(evidence.filter((item) => item.ruleCode === 'HIGH_FREQUENCY_REQUEST')).toEqual([
+      expect.objectContaining({
+        evidenceMessage: `同一 IP 1 分钟内请求 ${SECURITY_CONFIG.highFrequencyPerMinute + 1} 次`,
+      }),
+    ]);
   });
 });
 

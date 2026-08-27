@@ -134,6 +134,7 @@ describe('communityChatAccessService', () => {
       notificationsDefaultEnabled: true,
       notificationsEnabled: true,
       pollsEnabled: true,
+      pollSelectionModes: ['single', 'multiple'],
       readReceiptsEnabled: true,
     });
 
