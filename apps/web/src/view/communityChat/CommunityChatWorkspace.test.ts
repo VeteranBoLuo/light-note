@@ -916,6 +916,10 @@ describe('CommunityChatWorkspace', () => {
       clientHeight: { configurable: true, value: 400 },
       scrollTop: { configurable: true, writable: true, value: 120 },
     });
+    messageList.dispatchEvent(new WheelEvent('wheel'));
+    messageList.dispatchEvent(new Event('scroll'));
+    await vi.advanceTimersByTimeAsync(16);
+    await flushAsync();
     mocks.markRead.mockClear();
     mocks.getMessages.mockResolvedValueOnce({
       data: {
@@ -1067,6 +1071,81 @@ describe('CommunityChatWorkspace', () => {
     expect(mobileHost.querySelector('.community-message-list__new')?.textContent).toContain('回到底部');
   });
 
+  it('PC 添加提及导致输入区增高时跟随最新，失焦再聚焦本身不产生第二次滚动', async () => {
+    let resizeCallback: ResizeObserverCallback | null = null;
+    class ComposerResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallback = callback;
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', ComposerResizeObserver);
+    const host = await mountWorkspace();
+    const list = host.querySelector<HTMLElement>('.community-message-list');
+    const textarea = host.querySelector<HTMLTextAreaElement>('.community-composer__input textarea');
+    expect(list).not.toBeNull();
+    expect(textarea).not.toBeNull();
+    if (!list || !textarea || !resizeCallback) return;
+
+    let clientHeight = 400;
+    let scrollTop = 600;
+    const scrollWrites: number[] = [];
+    Object.defineProperties(list, {
+      scrollHeight: { configurable: true, value: 1000 },
+      clientHeight: { configurable: true, get: () => clientHeight },
+      scrollTop: {
+        configurable: true,
+        get: () => scrollTop,
+        set: (value: number) => {
+          scrollTop = value;
+          scrollWrites.push(value);
+        },
+      },
+    });
+    list.dispatchEvent(new Event('scroll'));
+    await flushAnimationFrame();
+    scrollWrites.length = 0;
+
+    const session = getCommunityChatDraftSession('user-1:user', 'general');
+    session.mentionTargets = [
+      {
+        key: 'user:mention-user-1',
+        name: '小树',
+        communityId: 'ln_TREE01',
+        userPublicId: 'mention-user-1',
+      },
+    ];
+    await flushAsync();
+    expect(host.querySelector('.community-composer__mentions')?.textContent).toContain('@小树');
+    clientHeight = 330;
+    resizeCallback([], {} as ResizeObserver);
+    await flushAnimationFrame();
+    expect(scrollTop).toBe(1000);
+    expect(scrollWrites).toEqual([1000]);
+
+    textarea.focus();
+    textarea.blur();
+    textarea.focus();
+    await flushAsync();
+    expect(scrollWrites).toEqual([1000]);
+
+    list.dispatchEvent(new WheelEvent('wheel'));
+    scrollTop = 260;
+    list.dispatchEvent(new Event('scroll'));
+    await flushAnimationFrame();
+    clientHeight = 400;
+    resizeCallback([], {} as ResizeObserver);
+    await flushAnimationFrame();
+    expect(scrollTop).toBe(260);
+
+    textarea.blur();
+    textarea.focus();
+    await flushAsync();
+    expect(scrollTop).toBe(260);
+  });
+
   it('移动端键盘改变消息区高度时只为正在浏览最新消息的用户保持底部锚定', async () => {
     let resizeCallback: ResizeObserverCallback | null = null;
     class KeyboardResizeObserver {
@@ -1100,6 +1179,8 @@ describe('CommunityChatWorkspace', () => {
 
     list.dispatchEvent(new Event('touchmove'));
     list.scrollTop = 500;
+    list.dispatchEvent(new Event('scroll'));
+    await flushAnimationFrame();
     resizeCallback([], {} as ResizeObserver);
     await flushAnimationFrame();
     expect(list.scrollTop).toBe(500);
@@ -1651,6 +1732,49 @@ describe('CommunityChatWorkspace', () => {
 
     expect(host.querySelector('.community-message.is-sending')).toBeNull();
     expect(host.querySelector('[data-message-public-id="message-sent"]')?.textContent).toContain('网络慢时也立即出现');
+  });
+
+  it('发送后主动浏览历史时，迟到的服务端回执只对账消息而不抢回底部', async () => {
+    const request = deferred<any>();
+    mocks.sendMessage.mockReturnValueOnce(request.promise);
+    const host = await mountWorkspace();
+    const list = host.querySelector<HTMLElement>('.community-message-list');
+    const textarea = host.querySelector<HTMLTextAreaElement>('textarea');
+    expect(list).not.toBeNull();
+    expect(textarea).not.toBeNull();
+    if (!list || !textarea) return;
+    Object.defineProperties(list, {
+      scrollHeight: { configurable: true, value: 1000 },
+      clientHeight: { configurable: true, value: 400 },
+      scrollTop: { configurable: true, writable: true, value: 600 },
+    });
+    list.dispatchEvent(new Event('scroll'));
+    await flushAnimationFrame();
+
+    textarea.value = '发完后先看上面的记录';
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    await nextTick();
+    host.querySelector<HTMLButtonElement>('.community-composer__send')?.click();
+    await flushAsync();
+    expect(list.scrollTop).toBe(1000);
+
+    list.dispatchEvent(new WheelEvent('wheel'));
+    list.scrollTop = 220;
+    list.dispatchEvent(new Event('scroll'));
+    await flushAnimationFrame();
+    request.resolve({
+      data: {
+        message: chatMessage({
+          publicId: 'message-late-ack',
+          content: '发完后先看上面的记录',
+          isOwn: true,
+        }),
+      },
+    });
+    await flushAsync();
+
+    expect(host.querySelector('[data-message-public-id="message-late-ack"]')).not.toBeNull();
+    expect(list.scrollTop).toBe(220);
   });
 
   it('普通成员进入公告频道时只有阅读能力，不渲染消息输入控件', async () => {
@@ -2703,9 +2827,11 @@ describe('CommunityChatWorkspace', () => {
       content: '',
       imagePublicIds: ['image-1'],
     });
-    expect(
-      host.querySelector('[data-message-public-id="message-image-1"] .community-message__image img'),
-    ).not.toBeNull();
+    await vi.waitFor(() =>
+      expect(
+        host.querySelector('[data-message-public-id="message-image-1"] .community-message__image img'),
+      ).not.toBeNull(),
+    );
   });
 
   it('移动端点击聊天图片先打开消息操作抽屉，再由查看大图进入统一查看器', async () => {
