@@ -862,6 +862,7 @@ CREATE TABLE `community_chat_messages` (
   `sticker_source` varchar(16) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
   `sticker_key` varchar(80) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
   `mention_everyone` tinyint unsigned NOT NULL DEFAULT '0',
+  `read_receipt_enabled` tinyint unsigned NOT NULL DEFAULT '0',
   `content` text NOT NULL,
   `status` varchar(16) NOT NULL DEFAULT 'active',
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -876,6 +877,65 @@ CREATE TABLE `community_chat_messages` (
   KEY `idx_community_chat_message_room_status_id` (`room_id`,`status`,`id`),
   KEY `idx_community_chat_message_reply` (`reply_to_id`),
   KEY `idx_community_chat_message_user_time` (`user_id`,`create_time`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
+-- Table structure for community_chat_polls
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_polls`;
+CREATE TABLE `community_chat_polls` (
+  `message_id` bigint unsigned NOT NULL,
+  `ends_at_utc` datetime(3) NOT NULL,
+  `closed_at_utc` datetime(3) DEFAULT NULL,
+  `closed_by` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`message_id`),
+  KEY `idx_community_chat_poll_deadline` (`ends_at_utc`,`message_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
+-- Table structure for community_chat_poll_options
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_poll_options`;
+CREATE TABLE `community_chat_poll_options` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `public_id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `message_id` bigint unsigned NOT NULL,
+  `label` varchar(80) NOT NULL,
+  `sort_order` tinyint unsigned NOT NULL DEFAULT '0',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_community_chat_poll_option_public` (`public_id`),
+  UNIQUE KEY `uk_community_chat_poll_option_order` (`message_id`,`sort_order`),
+  KEY `idx_community_chat_poll_option_message` (`message_id`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
+-- Table structure for community_chat_poll_votes
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_poll_votes`;
+CREATE TABLE `community_chat_poll_votes` (
+  `message_id` bigint unsigned NOT NULL,
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `option_id` bigint unsigned NOT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`message_id`,`user_id`),
+  KEY `idx_community_chat_poll_vote_option` (`message_id`,`option_id`),
+  KEY `idx_community_chat_poll_vote_user_time` (`user_id`,`update_time`,`message_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
+-- Table structure for community_chat_message_read_receipts
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_message_read_receipts`;
+CREATE TABLE `community_chat_message_read_receipts` (
+  `message_id` bigint unsigned NOT NULL,
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `first_seen_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`message_id`,`user_id`),
+  KEY `idx_community_chat_receipt_user_time` (`user_id`,`first_seen_at`,`message_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------

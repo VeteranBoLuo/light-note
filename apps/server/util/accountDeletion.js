@@ -47,6 +47,8 @@ const DIRECT_DELETE_TABLES = Object.freeze([
   ['community_chat_member_profiles', 'user_id'],
   ['community_chat_user_identities', 'user_id'],
   ['community_chat_custom_stickers', 'user_id'],
+  ['community_chat_poll_votes', 'user_id'],
+  ['community_chat_message_read_receipts', 'user_id'],
 ]);
 
 function accountDeletionError(code, message, status = 400) {
@@ -347,6 +349,24 @@ export async function requestAccountDeletion({ userId, code, confirmation }) {
       ]);
     }
 
+    // 用户角色去标识化前同步关闭其历史 Root 发言采集，避免异步物理清理前破坏聊天室 Schema 不变量。
+    await disableCommunityChatReadReceiptsForAuthor(connection, tables, userId);
+    // 本人作为参与者留下的投票和回执也必须在同一事务立即退出聚合；后台清理只作幂等兜底。
+    await deleteIfPresent(
+      connection,
+      tables,
+      'community_chat_poll_votes',
+      'DELETE FROM community_chat_poll_votes WHERE user_id = ?',
+      [userId],
+    );
+    await deleteIfPresent(
+      connection,
+      tables,
+      'community_chat_message_read_receipts',
+      'DELETE FROM community_chat_message_read_receipts WHERE user_id = ?',
+      [userId],
+    );
+
     const [updateResult] = await connection.query(
       `UPDATE user
           SET alias = '已注销用户',
@@ -389,6 +409,23 @@ async function deleteIfPresent(connection, tables, table, sql, params) {
   if (!tables.has(table)) return 0;
   const [result] = await connection.query(sql, params);
   return Number(result?.affectedRows || 0);
+}
+
+async function disableCommunityChatReadReceiptsForAuthor(connection, tables, userId) {
+  if (!tables.has('community_chat_messages') || !tables.has('community_chat_message_read_receipts')) return;
+  await connection.query(
+    `DELETE receipt
+       FROM community_chat_message_read_receipts receipt
+       JOIN community_chat_messages message ON message.id = receipt.message_id
+      WHERE message.user_id = ?`,
+    [userId],
+  );
+  await connection.query(
+    `UPDATE community_chat_messages
+        SET read_receipt_enabled = 0
+      WHERE user_id = ? AND read_receipt_enabled = 1`,
+    [userId],
+  );
 }
 
 async function purgeAiWorkspace(connection, tables, userId) {
@@ -626,6 +663,9 @@ export async function purgeOwnedResources(connection, tables, userId) {
       [userId, userId],
     );
   }
+
+  // Root 注销后不再是已读统计的合法作者；先清空其消息聚合事实，再关闭历史消息上的采集位。
+  await disableCommunityChatReadReceiptsForAuthor(connection, tables, userId);
 
   for (const [table, field] of DIRECT_DELETE_TABLES) {
     await deleteIfPresent(connection, tables, table, `DELETE FROM ${table} WHERE ${field} = ?`, [userId]);

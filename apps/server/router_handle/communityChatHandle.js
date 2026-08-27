@@ -16,6 +16,7 @@ import {
 import {
   createCommunityChatMessage,
   deleteCommunityChatMessage,
+  getCommunityChatMessage,
   getCommunityChatPinnedMessage,
   getCommunityChatMessageAuthorAvatar,
   listCommunityChatMessages,
@@ -25,6 +26,8 @@ import {
   toggleCommunityChatMessageLike,
   unpinCommunityChatMessage,
 } from '../util/services/communityChatMessageService.js';
+import { closeCommunityChatPoll, voteCommunityChatPoll } from '../util/services/communityChatPollService.js';
+import { recordCommunityChatReadReceipts } from '../util/services/communityChatReadReceiptService.js';
 import {
   getCommunityChatMessageAuthorAchievements,
   getCommunityChatMessageAuthorProfile,
@@ -274,8 +277,63 @@ export async function createMessage(req, res) {
       mentionUserPublicIds: req.body?.mentionUserPublicIds,
       mentionMessagePublicIds: req.body?.mentionMessagePublicIds,
       imagePublicIds: req.body?.imagePublicIds,
+      poll: req.body?.poll,
     });
     return res.send(resultData(data, 200, L(req, '消息已发送', 'Message sent')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function messageDetail(req, res) {
+  if (rejectAdminPreview(req, res)) return;
+  try {
+    const data = await getCommunityChatMessage({
+      user: req.user,
+      messagePublicId: req.params?.publicId,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function votePoll(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await voteCommunityChatPoll({
+      user: req.user,
+      messagePublicId: req.params?.publicId,
+      optionPublicId: req.body?.optionPublicId,
+    });
+    return res.send(resultData(data, 200, L(req, '投票已记录', 'Vote recorded')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function closePoll(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRoot(req, res)) return;
+  try {
+    const data = await closeCommunityChatPoll({
+      user: req.user,
+      messagePublicId: req.params?.publicId,
+    });
+    return res.send(resultData(data, 200, L(req, '投票已结束', 'Poll closed')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function recordReadReceipts(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await recordCommunityChatReadReceipts({
+      user: req.user,
+      roomSlug: req.params?.slug,
+      messagePublicIds: req.body?.messagePublicIds,
+    });
+    return res.send(resultData(data));
   } catch (error) {
     return sendError(req, res, error);
   }

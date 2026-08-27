@@ -15,6 +15,13 @@ import { publishCommunityChatRealtimeEvent } from '../communityChat/realtimeBrok
 import { deliverCommunityChatMessageNotifications } from './communityChatNotificationService.js';
 import { COMMUNITY_CHAT_IMAGE_MAX_COUNT } from './communityChatImageService.js';
 import { ensureCommunityChatIdentity, normalizeCommunityChatUserPublicIds } from './communityChatIdentityService.js';
+import {
+  assertCommunityChatPollDeadlineRangeInDatabase,
+  insertCommunityChatPoll,
+  loadCommunityChatPolls,
+  normalizeCommunityChatPollDraft,
+} from './communityChatPollService.js';
+import { loadCommunityChatReadCounts } from './communityChatReadReceiptService.js';
 
 export {
   getCommunityChatMessageAuthorAchievements,
@@ -28,7 +35,7 @@ const MAX_MENTION_TARGETS = 5;
 export const COMMUNITY_CHAT_RECALL_WINDOW_SECONDS = 120;
 const ROOM_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9:_-]{8,64}$/;
-const MESSAGE_KINDS = Object.freeze(['text', 'sticker']);
+const MESSAGE_KINDS = Object.freeze(['text', 'sticker', 'poll']);
 const STICKER_SOURCES = Object.freeze(['official', 'custom']);
 const CUSTOM_STICKER_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -120,7 +127,7 @@ function normalizeMessageKind(value) {
 
 function normalizeStickerSource(value, messageKind) {
   const source = String(value || '').trim();
-  if (messageKind === 'text') {
+  if (messageKind !== 'sticker') {
     if (source)
       throw chatError(
         'INVALID_STICKER_MESSAGE',
@@ -138,7 +145,7 @@ function normalizeStickerSource(value, messageKind) {
 
 function normalizeStickerKey(value, messageKind, stickerSource) {
   const stickerKey = String(value || '').trim();
-  if (messageKind === 'text') {
+  if (messageKind !== 'sticker') {
     if (stickerKey)
       throw chatError(
         'INVALID_STICKER_MESSAGE',
@@ -217,7 +224,13 @@ const MESSAGE_SELECT = `
          message.user_id AS userId, message.content, message.status,
          message.message_kind AS messageKind, message.sticker_source AS stickerSource,
          message.sticker_key AS stickerKey, message.mention_everyone AS mentionEveryone,
+         message.read_receipt_enabled AS readReceiptEnabled,
          custom_sticker.public_id AS availableStickerPublicId,
+         CONCAT(
+           DATE_FORMAT(UTC_TIMESTAMP(3), '%Y-%m-%dT%H:%i:%s.'),
+           LPAD(FLOOR(MICROSECOND(UTC_TIMESTAMP(3)) / 1000), 3, '0'),
+           'Z'
+         ) AS databaseNow,
          message.create_time AS createdAt, message.edited_at AS editedAt,
          message.recalled_at AS recalledAt, message.recalled_by AS recalledBy,
          account.role AS authorAccountRole,
@@ -462,7 +475,7 @@ function toPublicMessage(
   blockedUserIds = new Set(),
   images = [],
   likes = {},
-  { memberRole = 'visitor', now = Date.now(), authorAvatar = row.authorAvatar || '' } = {},
+  { memberRole = 'visitor', now = Date.now(), authorAvatar = row.authorAvatar || '', poll = null, readCount } = {},
 ) {
   const replyBlocked = Boolean(row.replyUserId && blockedUserIds.has(row.replyUserId));
   const growth = publicGrowthProfile(row);
@@ -482,6 +495,9 @@ function toPublicMessage(
   );
   const canRecall = row.status === 'active' && (canModerateMessages(memberRole) || isOwn);
   const canDelete = memberRole !== 'visitor' && ['active', 'recalled'].includes(row.status);
+  const readReceiptEnabled = Boolean(
+    row.status === 'active' && row.authorAccountRole === 'root' && Number(row.readReceiptEnabled || 0),
+  );
   const mentionItems = contentVisible ? publicMentionItems(row) : [];
   let sticker = null;
   if (contentVisible && row.messageKind === 'sticker' && row.stickerKey) {
@@ -509,6 +525,7 @@ function toPublicMessage(
     stickerSource: sticker?.source || null,
     stickerKey: sticker?.key || null,
     sticker,
+    poll: contentVisible && row.messageKind === 'poll' ? poll : null,
     status: row.status,
     createdAt: row.createdAt,
     editedAt: row.editedAt || null,
@@ -531,6 +548,8 @@ function toPublicMessage(
     likeCount: row.status === 'active' ? Number(likes.likeCount || 0) : 0,
     likedByMe: row.status === 'active' && Boolean(likes.likedByMe),
     likePreview: row.status === 'active' ? likes.likePreview || [] : [],
+    readReceiptEnabled,
+    ...(readReceiptEnabled && memberRole === 'admin' ? { readCount: Math.max(0, Number(readCount || 0)) } : {}),
     author: {
       name: row.authorName || '',
       userPublicId: row.authorUserPublicId || '',
@@ -548,6 +567,7 @@ function toPublicMessage(
           authorName: replyBlocked ? '' : row.replyAuthorName || '',
           hasImages: replyBlocked ? false : Boolean(Number(row.replyImageCount || 0)),
           hasSticker: replyBlocked ? false : row.replyMessageKind === 'sticker',
+          hasPoll: replyBlocked ? false : row.replyMessageKind === 'poll',
         }
       : null,
   };
@@ -603,18 +623,95 @@ export async function getCommunityChatMessageAuthorAvatar({ user, messagePublicI
   return { source: String(avatar.source) };
 }
 
-async function loadMessageByPublicId(db, publicId, viewerUserId, memberRole = 'member') {
+async function loadMessageByPublicId(
+  db,
+  publicId,
+  viewerUserId,
+  memberRole = 'member',
+  feature = getCommunityChatFeatureState(),
+  blockedUserIds = new Set(),
+) {
   const [rows] = await db.query(`${MESSAGE_SELECT} WHERE message.public_id = ? LIMIT 1`, [publicId]);
   if (!rows[0]) return null;
-  const [images, likes] = await Promise.all([loadMessageImages(db, rows), loadMessageLikes(db, rows, viewerUserId)]);
+  const viewerIsRoot = memberRole === 'admin';
+  const [images, likes, polls, readCounts] = await Promise.all([
+    loadMessageImages(db, rows),
+    loadMessageLikes(db, rows, viewerUserId),
+    loadCommunityChatPolls(db, rows, {
+      viewerUserId,
+      viewerIsRoot,
+      pollsEnabled: feature.pollsEnabled,
+    }),
+    loadCommunityChatReadCounts(db, rows, { viewerIsRoot }),
+  ]);
   const internalId = Number(rows[0].internalId);
   const authorAvatar = rows[0].authorHasAvatar
     ? `/api/community-chat/messages/${encodeURIComponent(rows[0].publicId)}/author-avatar`
     : '';
-  return toPublicMessage(rows[0], viewerUserId, new Set(), images.get(internalId) || [], likes.get(internalId) || {}, {
-    memberRole,
-    authorAvatar,
-  });
+  return toPublicMessage(
+    rows[0],
+    viewerUserId,
+    blockedUserIds,
+    images.get(internalId) || [],
+    likes.get(internalId) || {},
+    {
+      memberRole,
+      authorAvatar,
+      poll: polls.get(internalId) || null,
+      readCount: readCounts.get(internalId),
+    },
+  );
+}
+
+export async function getCommunityChatMessage({ user, messagePublicId, env = process.env, db = pool }) {
+  const normalizedPublicId = normalizePublicMessageId(messagePublicId);
+  const { feature, memberRole } = await assertCommunityChatReadAccess({ user, env, db });
+  const viewerUserId = user?.id && user?.role !== 'visitor' ? user.id : '';
+  const visibilityClause = viewerUserId
+    ? `AND NOT EXISTS (
+          SELECT 1 FROM community_chat_blocks blocked
+           WHERE blocked.user_id = ? AND blocked.blocked_user_id = message.user_id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM community_chat_message_deletions deletion
+           WHERE deletion.user_id = ? AND deletion.message_id = message.id
+        )`
+    : '';
+  const target = await queryFirst(
+    db,
+    `SELECT message.public_id AS publicId
+       FROM community_chat_messages message
+       JOIN community_chat_rooms room ON room.id = message.room_id
+      WHERE message.public_id = ?
+        AND message.status IN ('active', 'recalled')
+        AND room.slug = ?
+        AND room.status = 'active'
+        ${visibilityClause}
+      LIMIT 1`,
+    [normalizedPublicId, COMMUNITY_CHAT_PRIMARY_ROOM_SLUG, ...(viewerUserId ? [viewerUserId, viewerUserId] : [])],
+  );
+  if (!target) {
+    throw chatError(
+      'COMMUNITY_CHAT_MESSAGE_NOT_VISIBLE',
+      404,
+      '消息已不可用或当前不可见',
+      'The message is unavailable or no longer visible',
+    );
+  }
+  const blockedUserIds = viewerUserId ? await getCommunityChatBlockedUserIds({ userId: viewerUserId, db }) : new Set();
+  const message = await loadMessageByPublicId(db, target.publicId, viewerUserId, memberRole, feature, blockedUserIds);
+  if (!message) {
+    throw chatError('COMMUNITY_CHAT_MESSAGE_NOT_VISIBLE', 404, '消息已不可用', 'The message is unavailable');
+  }
+  if (!['active', 'recalled'].includes(message.status)) {
+    throw chatError(
+      'COMMUNITY_CHAT_MESSAGE_NOT_VISIBLE',
+      404,
+      '消息已不可用或当前不可见',
+      'The message is unavailable or no longer visible',
+    );
+  }
+  return { message };
 }
 
 export async function getCommunityChatPinnedMessage({ user, roomSlug, env = process.env, db = pool }) {
@@ -630,7 +727,7 @@ export async function getCommunityChatPinnedMessage({ user, roomSlug, env = proc
            WHERE deletion.user_id = ? AND deletion.message_id = pinned.id
         )`
     : '';
-  const [{ memberRole }, room] = await Promise.all([
+  const [{ feature, memberRole }, room] = await Promise.all([
     assertCommunityChatReadAccess({ user, env, db }),
     loadRoom(db, normalizedRoomSlug),
   ]);
@@ -646,7 +743,8 @@ export async function getCommunityChatPinnedMessage({ user, roomSlug, env = proc
     [room.pinnedMessageId, room.id, ...(viewerUserId ? [viewerUserId, viewerUserId] : [])],
   );
   if (!target) return { roomSlug: room.slug, message: null };
-  const message = await loadMessageByPublicId(db, target.publicId, viewerUserId, memberRole);
+  const blockedUserIds = viewerUserId ? await getCommunityChatBlockedUserIds({ userId: viewerUserId, db }) : new Set();
+  const message = await loadMessageByPublicId(db, target.publicId, viewerUserId, memberRole, feature, blockedUserIds);
   return { roomSlug: room.slug, message };
 }
 
@@ -655,7 +753,12 @@ export async function pinCommunityChatMessage({ user, messagePublicId, env = pro
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
-    const { memberRole } = await assertCommunityChatMessagingAccess({ user, env, db: connection, lock: true });
+    const { feature, memberRole } = await assertCommunityChatMessagingAccess({
+      user,
+      env,
+      db: connection,
+      lock: true,
+    });
     assertCanPinCommunityChatMessage(memberRole);
     const room = await loadRoom(connection, COMMUNITY_CHAT_PRIMARY_ROOM_SLUG, { lock: true });
     const target = await queryFirst(
@@ -696,7 +799,7 @@ export async function pinCommunityChatMessage({ user, messagePublicId, env = pro
         ],
       );
     }
-    const message = await loadMessageByPublicId(connection, target.publicId, user.id, memberRole);
+    const message = await loadMessageByPublicId(connection, target.publicId, user.id, memberRole, feature);
     await connection.commit();
     if (!alreadyPinned) {
       publishCommunityChatRealtimeEvent('message.updated', {
@@ -1154,7 +1257,17 @@ export async function listCommunityChatMessages({
       `/api/community-chat/messages/${encodeURIComponent(row.publicId)}/author-avatar`,
     );
   }
-  const [images, likes] = await Promise.all([loadMessageImages(db, rows), loadMessageLikes(db, rows, viewerUserId)]);
+  const viewerIsRoot = memberRole === 'admin';
+  const [images, likes, polls, readCounts] = await Promise.all([
+    loadMessageImages(db, rows),
+    loadMessageLikes(db, rows, viewerUserId),
+    loadCommunityChatPolls(db, rows, {
+      viewerUserId,
+      viewerIsRoot,
+      pollsEnabled: feature.pollsEnabled,
+    }),
+    loadCommunityChatReadCounts(db, rows, { viewerIsRoot }),
+  ]);
   const items = rows.map((row) =>
     toPublicMessage(
       row,
@@ -1162,7 +1275,12 @@ export async function listCommunityChatMessages({
       blockedUserIds,
       images.get(Number(row.internalId)) || [],
       likes.get(Number(row.internalId)) || {},
-      { memberRole, authorAvatar: authorAvatarByUserId.get(row.userId) || '' },
+      {
+        memberRole,
+        authorAvatar: authorAvatarByUserId.get(row.userId) || '',
+        poll: polls.get(Number(row.internalId)) || null,
+        readCount: readCounts.get(Number(row.internalId)),
+      },
     ),
   );
 
@@ -1176,7 +1294,9 @@ export async function listCommunityChatMessages({
     hasNewer,
     realtimeEnabled: feature.realtimeEnabled,
     pollingAfterMs: feature.realtimeEnabled ? null : 8000,
-    serverTime: new Date().toISOString(),
+    // 投票截止写入与状态查询以数据库 UTC 时钟为准，页面倒计时必须跟随同一事实源；
+    // 空房间没有截止状态可展示，才退回应用进程时钟。
+    serverTime: rows[0]?.databaseNow || new Date().toISOString(),
   };
 }
 
@@ -1193,6 +1313,7 @@ export async function createCommunityChatMessage({
   messageKind,
   stickerSource,
   stickerKey,
+  poll,
   env = process.env,
   db = pool,
 }) {
@@ -1205,11 +1326,25 @@ export async function createCommunityChatMessage({
   const normalizedContent = normalizeMessageContent(content, {
     allowEmpty: normalizedImagePublicIds.length > 0 || normalizedMessageKind === 'sticker',
   });
+  const normalizedPoll =
+    normalizedMessageKind === 'poll'
+      ? normalizeCommunityChatPollDraft(poll, { question: normalizedContent, validateDuration: false })
+      : null;
   const normalizedReplyPublicId = normalizePublicMessageId(replyToPublicId, { optional: true });
   const normalizedMentionEveryone = normalizeMentionEveryone(mentionEveryone);
   const normalizedMentionUserPublicIds = normalizeCommunityChatUserPublicIds(mentionUserPublicIds);
   const normalizedMentionMessagePublicIds = normalizeMentionMessagePublicIds(mentionMessagePublicIds);
   assertMentionTargetCount(normalizedMentionUserPublicIds);
+
+  if (normalizedMessageKind !== 'poll' && poll !== undefined && poll !== null) {
+    throw chatError('INVALID_POLL', 400, '非投票消息不能携带投票参数', 'Only poll messages can include poll data');
+  }
+  if (normalizedMessageKind === 'poll' && user?.role !== 'root') {
+    throw chatError('POLL_CREATE_ROOT_REQUIRED', 403, '只有 Root 可以发起投票', 'Only Root can create polls');
+  }
+  if (normalizedMessageKind === 'poll' && normalizedImagePublicIds.length) {
+    throw chatError('INVALID_POLL', 400, '投票消息不能混合图片', 'Poll messages cannot include images');
+  }
 
   if (normalizedMentionEveryone && user?.role !== 'root') {
     throw chatError(
@@ -1248,7 +1383,9 @@ export async function createCommunityChatMessage({
   }
 
   const payloadFingerprint = messagePayloadFingerprint({
-    version: 2,
+    // 普通消息必须继续沿用 v2，保证新旧实例滚动发布期间的重试仍能命中同一幂等指纹；
+    // 只有新增了投票字段的载荷才进入 v3。
+    version: normalizedPoll ? 3 : 2,
     roomSlug: normalizedRoomSlug,
     messageKind: normalizedMessageKind,
     stickerSource: normalizedStickerSource,
@@ -1259,9 +1396,11 @@ export async function createCommunityChatMessage({
     mentionUserPublicIds: normalizedMentionUserPublicIds,
     mentionMessagePublicIds: normalizedMentionMessagePublicIds,
     imagePublicIds: normalizedImagePublicIds,
+    ...(normalizedPoll ? { poll: { endsAt: normalizedPoll.endsAtUtc, options: normalizedPoll.options } } : {}),
   });
 
-  if (!getCommunityChatFeatureState(env).messagingEnabled) {
+  const requestedFeature = getCommunityChatFeatureState(env);
+  if (!requestedFeature.messagingEnabled) {
     throw chatError(
       'COMMUNITY_CHAT_MESSAGING_CLOSED',
       403,
@@ -1269,12 +1408,30 @@ export async function createCommunityChatMessage({
       'The community messaging pilot is currently closed',
     );
   }
-
   const connection = await db.getConnection();
   let expectedRoomId = null;
   let viewerMemberRole = 'member';
   try {
     await connection.beginTransaction();
+    if (user?.role === 'root' && (normalizedPoll || requestedFeature.readReceiptsEnabled)) {
+      // Root 投票和已读采集位都依赖当前账号角色。先锁定账号事实，再进入消息事务，
+      // 与账号注销的互斥锁建立顺序，避免注销过程中插入新的投票或 read_receipt_enabled=1 消息。
+      const activeRoot = await queryFirst(
+        connection,
+        `SELECT id FROM user
+          WHERE id = ? AND role = 'root' AND del_flag = 0
+          LIMIT 1 FOR UPDATE`,
+        [user.id],
+      );
+      if (!activeRoot) {
+        throw chatError(
+          'COMMUNITY_CHAT_ROOT_ACCOUNT_UNAVAILABLE',
+          403,
+          'Root 账号状态已变化，请重新登录后再试',
+          'The Root account state changed. Sign in again and retry',
+        );
+      }
+    }
     const { feature, memberRole } = await assertCommunityChatMessagingAccess({
       user,
       env,
@@ -1300,9 +1457,18 @@ export async function createCommunityChatMessage({
         normalizedImagePublicIds,
         payloadFingerprint,
       );
-      const message = await loadMessageByPublicId(connection, existing.publicId, user.id, memberRole);
+      const message = await loadMessageByPublicId(connection, existing.publicId, user.id, memberRole, feature);
       await connection.commit();
       return { message, idempotent: true };
+    }
+
+    // 幂等重放先返回已经落库的投票；只有首次创建才复核子开关和相对当前时间的截止窗口。
+    // 否则一次成功但响应丢失的请求，会因时间流逝或运维关开关从“可重放”变成失败。
+    if (normalizedPoll) {
+      if (!feature.pollsEnabled) {
+        throw chatError('COMMUNITY_CHAT_POLLS_DISABLED', 403, '投票功能当前未开放', 'Polls are currently disabled');
+      }
+      await assertCommunityChatPollDeadlineRangeInDatabase(connection, normalizedPoll);
     }
 
     if (room.type === 'announcement' && !['admin', 'moderator'].includes(memberRole)) {
@@ -1412,8 +1578,9 @@ export async function createCommunityChatMessage({
     const [insertResult] = await connection.query(
       `INSERT INTO community_chat_messages
          (public_id, room_id, user_id, client_request_id, payload_fingerprint,
-          reply_to_id, message_kind, sticker_source, sticker_key, mention_everyone, content, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
+          reply_to_id, message_kind, sticker_source, sticker_key, mention_everyone,
+          read_receipt_enabled, content, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
       [
         publicId,
         room.id,
@@ -1425,10 +1592,14 @@ export async function createCommunityChatMessage({
         normalizedStickerSource,
         normalizedStickerKey,
         normalizedMentionEveryone ? 1 : 0,
+        user.role === 'root' && feature.readReceiptsEnabled ? 1 : 0,
         normalizedContent,
       ],
     );
     const messageId = insertResult.insertId;
+    if (normalizedPoll) {
+      await insertCommunityChatPoll(connection, { messageId, poll: normalizedPoll });
+    }
     for (const [sortOrder, image] of pendingImages.entries()) {
       const [attached] = await connection.query(
         `UPDATE community_chat_message_images
@@ -1469,7 +1640,7 @@ export async function createCommunityChatMessage({
          update_time = CURRENT_TIMESTAMP`,
       [room.id, user.id, messageId],
     );
-    const message = await loadMessageByPublicId(connection, publicId, user.id, memberRole);
+    const message = await loadMessageByPublicId(connection, publicId, user.id, memberRole, feature);
     await connection.commit();
     publishCommunityChatRealtimeEvent('message.created', {
       roomSlug: normalizedRoomSlug,
@@ -1497,7 +1668,7 @@ export async function createCommunityChatMessage({
           normalizedImagePublicIds,
           payloadFingerprint,
         );
-        const message = await loadMessageByPublicId(db, existing.publicId, user.id, viewerMemberRole);
+        const message = await loadMessageByPublicId(db, existing.publicId, user.id, viewerMemberRole, requestedFeature);
         if (message) return { message, idempotent: true };
       }
     }

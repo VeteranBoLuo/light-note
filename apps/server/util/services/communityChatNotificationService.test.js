@@ -165,6 +165,8 @@ describe('communityChatNotificationService', () => {
     expect(text).toContain('JOIN user recipient ON recipient.id = recipient_identity.user_id');
     expect(text).toContain('recipient.id');
     expect(text).toContain("CASE WHEN reply.user_id = recipient.id THEN '有人回复了你' ELSE '有人提及了你' END");
+    expect(text).toContain("WHEN message.message_kind = 'poll'");
+    expect(text).toContain("CONCAT('[投票] '");
     expect(text).toContain("COALESCE(settings.default_room_level, 'mentions') = 'official'");
     expect(text).toContain("COALESCE(settings.default_room_level, 'mentions') = 'mentions_only'");
     expect(text).toContain("COALESCE(settings.default_room_level, 'mentions') IN ('mentions', 'all')");

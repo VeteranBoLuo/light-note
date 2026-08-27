@@ -2399,3 +2399,150 @@ WHERE grant_row.grant_status='credited'
   AND grant_row.granted_storage_mb>0
   AND grant_row.user_id IS NOT NULL
   AND (grant_row.storage_log_ref IS NULL OR storage_log.id IS NULL);
+
+-- 60) 社区投票与逐消息已读回执结构、归属及隐私边界必须完整（期望 0 行）
+SELECT '[60] missing_community_chat_poll_receipt_table' AS check_name, expected.t AS detail
+FROM (
+  SELECT 'community_chat_polls' t UNION ALL
+  SELECT 'community_chat_poll_options' UNION ALL
+  SELECT 'community_chat_poll_votes' UNION ALL
+  SELECT 'community_chat_message_read_receipts'
+) expected
+LEFT JOIN information_schema.tables actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.t AND actual.engine='InnoDB'
+WHERE actual.table_name IS NULL;
+
+SELECT '[60] missing_community_chat_poll_receipt_column' AS check_name, expected.n AS detail
+FROM (
+  SELECT 'community_chat_messages' tab, 'read_receipt_enabled' col,
+         'community_chat_messages.read_receipt_enabled' n UNION ALL
+  SELECT 'community_chat_polls', 'message_id', 'community_chat_polls.message_id' UNION ALL
+  SELECT 'community_chat_polls', 'ends_at_utc', 'community_chat_polls.ends_at_utc' UNION ALL
+  SELECT 'community_chat_polls', 'closed_at_utc', 'community_chat_polls.closed_at_utc' UNION ALL
+  SELECT 'community_chat_poll_options', 'public_id', 'community_chat_poll_options.public_id' UNION ALL
+  SELECT 'community_chat_poll_options', 'message_id', 'community_chat_poll_options.message_id' UNION ALL
+  SELECT 'community_chat_poll_options', 'sort_order', 'community_chat_poll_options.sort_order' UNION ALL
+  SELECT 'community_chat_poll_votes', 'message_id', 'community_chat_poll_votes.message_id' UNION ALL
+  SELECT 'community_chat_poll_votes', 'user_id', 'community_chat_poll_votes.user_id' UNION ALL
+  SELECT 'community_chat_poll_votes', 'option_id', 'community_chat_poll_votes.option_id' UNION ALL
+  SELECT 'community_chat_message_read_receipts', 'message_id',
+         'community_chat_message_read_receipts.message_id' UNION ALL
+  SELECT 'community_chat_message_read_receipts', 'user_id',
+         'community_chat_message_read_receipts.user_id' UNION ALL
+  SELECT 'community_chat_message_read_receipts', 'first_seen_at',
+         'community_chat_message_read_receipts.first_seen_at'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.tab AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[60] missing_community_chat_poll_receipt_index' AS check_name,
+  CONCAT(expected.tab, '.', expected.ix) AS detail
+FROM (
+  SELECT 'community_chat_polls' tab, 'PRIMARY' ix UNION ALL
+  SELECT 'community_chat_polls', 'idx_community_chat_poll_deadline' UNION ALL
+  SELECT 'community_chat_poll_options', 'PRIMARY' UNION ALL
+  SELECT 'community_chat_poll_options', 'uk_community_chat_poll_option_public' UNION ALL
+  SELECT 'community_chat_poll_options', 'uk_community_chat_poll_option_order' UNION ALL
+  SELECT 'community_chat_poll_options', 'idx_community_chat_poll_option_message' UNION ALL
+  SELECT 'community_chat_poll_votes', 'PRIMARY' UNION ALL
+  SELECT 'community_chat_poll_votes', 'idx_community_chat_poll_vote_option' UNION ALL
+  SELECT 'community_chat_poll_votes', 'idx_community_chat_poll_vote_user_time' UNION ALL
+  SELECT 'community_chat_message_read_receipts', 'PRIMARY' UNION ALL
+  SELECT 'community_chat_message_read_receipts', 'idx_community_chat_receipt_user_time'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.tab AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;
+
+SELECT '[60] invalid_community_chat_poll_receipt_index' AS check_name,
+  CONCAT(
+    expected.tab, '.', expected.ix,
+    ' 实际=', IFNULL(CONCAT(actual.non_unique, '/', actual.cols), '缺失')
+  ) AS detail
+FROM (
+  SELECT 'community_chat_polls' tab, 'PRIMARY' ix, 0 non_unique, 'message_id' cols UNION ALL
+  SELECT 'community_chat_polls', 'idx_community_chat_poll_deadline', 1, 'ends_at_utc,message_id' UNION ALL
+  SELECT 'community_chat_poll_options', 'PRIMARY', 0, 'id' UNION ALL
+  SELECT 'community_chat_poll_options', 'uk_community_chat_poll_option_public', 0, 'public_id' UNION ALL
+  SELECT 'community_chat_poll_options', 'uk_community_chat_poll_option_order', 0, 'message_id,sort_order' UNION ALL
+  SELECT 'community_chat_poll_options', 'idx_community_chat_poll_option_message', 1, 'message_id,id' UNION ALL
+  SELECT 'community_chat_poll_votes', 'PRIMARY', 0, 'message_id,user_id' UNION ALL
+  SELECT 'community_chat_poll_votes', 'idx_community_chat_poll_vote_option', 1, 'message_id,option_id' UNION ALL
+  SELECT 'community_chat_poll_votes', 'idx_community_chat_poll_vote_user_time', 1, 'user_id,update_time,message_id' UNION ALL
+  SELECT 'community_chat_message_read_receipts', 'PRIMARY', 0, 'message_id,user_id' UNION ALL
+  SELECT 'community_chat_message_read_receipts', 'idx_community_chat_receipt_user_time', 1, 'user_id,first_seen_at,message_id'
+) expected
+LEFT JOIN (
+  SELECT table_name, index_name, MIN(non_unique) AS non_unique,
+         GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') AS cols
+  FROM information_schema.statistics
+  WHERE table_schema=DATABASE()
+    AND table_name IN (
+      'community_chat_polls',
+      'community_chat_poll_options',
+      'community_chat_poll_votes',
+      'community_chat_message_read_receipts'
+    )
+  GROUP BY table_name, index_name
+) actual ON actual.table_name=expected.tab AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL
+   OR actual.non_unique<>expected.non_unique
+   OR actual.cols<>expected.cols;
+
+SELECT '[60] invalid_community_chat_poll' AS check_name, poll.message_id AS detail
+FROM community_chat_polls poll
+LEFT JOIN community_chat_messages message ON message.id=poll.message_id
+WHERE message.id IS NULL
+   OR message.message_kind<>'poll'
+   OR (poll.closed_at_utc IS NULL)<>(poll.closed_by IS NULL)
+   OR (poll.closed_at_utc IS NOT NULL AND poll.closed_at_utc>=poll.ends_at_utc);
+
+-- message.create_time 沿用数据库会话本地时间，不能与 *_utc 字段直接比较；只比较同为 UTC 的截止/关闭字段。
+SELECT '[60] invalid_community_chat_poll_message' AS check_name, message.id AS detail
+FROM community_chat_messages message
+LEFT JOIN community_chat_polls poll ON poll.message_id=message.id
+WHERE (message.message_kind='poll' AND poll.message_id IS NULL)
+   OR (message.message_kind<>'poll' AND poll.message_id IS NOT NULL);
+
+SELECT '[60] invalid_community_chat_poll_option_count' AS check_name, poll.message_id AS detail
+FROM community_chat_polls poll
+LEFT JOIN community_chat_poll_options option_row ON option_row.message_id=poll.message_id
+GROUP BY poll.message_id
+HAVING COUNT(option_row.id)<2 OR COUNT(option_row.id)>10;
+
+SELECT '[60] invalid_community_chat_poll_option' AS check_name, option_row.id AS detail
+FROM community_chat_poll_options option_row
+LEFT JOIN community_chat_polls poll ON poll.message_id=option_row.message_id
+WHERE poll.message_id IS NULL OR CHAR_LENGTH(TRIM(option_row.label))=0;
+
+SELECT '[60] invalid_community_chat_poll_vote' AS check_name,
+  CONCAT(vote.message_id, ':', vote.user_id) AS detail
+FROM community_chat_poll_votes vote
+LEFT JOIN community_chat_poll_options option_row ON option_row.id=vote.option_id
+LEFT JOIN user voter ON voter.id=vote.user_id
+WHERE option_row.id IS NULL
+   OR option_row.message_id<>vote.message_id
+   OR voter.id IS NULL
+   OR COALESCE(voter.del_flag, '1')<>'0'
+   OR COALESCE(voter.role, 'deleted')='deleted';
+
+SELECT '[60] invalid_community_chat_read_receipt_flag' AS check_name, message.id AS detail
+FROM community_chat_messages message
+LEFT JOIN user author ON author.id=message.user_id
+WHERE message.read_receipt_enabled NOT IN (0,1)
+   OR (message.read_receipt_enabled=1 AND COALESCE(author.role, '')<>'root');
+
+SELECT '[60] invalid_community_chat_read_receipt' AS check_name,
+  CONCAT(receipt.message_id, ':', receipt.user_id) AS detail
+FROM community_chat_message_read_receipts receipt
+LEFT JOIN community_chat_messages message ON message.id=receipt.message_id
+LEFT JOIN user author ON author.id=message.user_id
+LEFT JOIN user reader ON reader.id=receipt.user_id
+WHERE message.id IS NULL
+   OR message.read_receipt_enabled<>1
+   OR COALESCE(author.role, '')<>'root'
+   OR reader.id IS NULL
+   OR COALESCE(reader.del_flag, '1')<>'0'
+   OR COALESCE(reader.role, 'deleted')='deleted'
+   OR receipt.user_id=message.user_id;

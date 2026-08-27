@@ -113,6 +113,56 @@ describe('communityChatModerationService', () => {
     expect(connection.commit).toHaveBeenCalledTimes(1);
   });
 
+  it('投票举报快照保存问题、选项和 UTC 截止时间，但不保存投票人身份', async () => {
+    const connection = createConnection(async (sql) => {
+      const text = String(sql);
+      if (text.includes('FROM community_chat_members')) return [[MEMBER], []];
+      if (text.includes('FROM community_chat_messages message')) {
+        return [[moderationMessage({ messageKind: 'poll', content: '优先做什么？' })], []];
+      }
+      if (text.includes('FROM community_chat_reports')) return [[], []];
+      if (text.includes('FROM community_chat_polls poll')) {
+        return [
+          [
+            { endsAt: '2026-08-27T10:00:00.000Z', closedAt: null, label: '体验' },
+            { endsAt: '2026-08-27T10:00:00.000Z', closedAt: null, label: '性能' },
+          ],
+          [],
+        ];
+      }
+      if (text.includes('INSERT INTO community_chat_reports')) return [{ affectedRows: 1 }, []];
+      throw new Error(`unexpected query: ${sql}`);
+    });
+    const db = { getConnection: vi.fn(async () => connection) };
+
+    await reportCommunityChatMessage({
+      user: { id: 'user-1', role: 'user' },
+      messagePublicId: '00000000-0000-4000-8000-000000000012',
+      reasonCode: 'spam',
+      env: MESSAGE_ENV,
+      db,
+    });
+
+    const insert = connection.query.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT INTO community_chat_reports'),
+    );
+    const evidence = JSON.parse(insert?.[1]?.[5]);
+    expect(evidence).toMatchObject({
+      content: '优先做什么？',
+      messageKind: 'poll',
+      poll: {
+        endsAt: '2026-08-27T10:00:00.000Z',
+        closedAt: null,
+        options: ['体验', '性能'],
+      },
+    });
+    expect(JSON.stringify(evidence)).not.toContain('user-2');
+    expect(JSON.stringify(evidence)).not.toContain('vote');
+    const pollQuery = connection.query.mock.calls.find(([sql]) => String(sql).includes('FROM community_chat_polls'));
+    expect(String(pollQuery?.[0])).toContain('MICROSECOND(poll.ends_at_utc)');
+    expect(String(pollQuery?.[0])).toContain('MICROSECOND(poll.closed_at_utc)');
+  });
+
   it('屏蔽只通过消息解析作者，不向客户端暴露内部账号 ID', async () => {
     const connection = createConnection(async (sql) => {
       const text = String(sql);

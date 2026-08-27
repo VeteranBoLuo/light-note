@@ -154,6 +154,8 @@ export async function deliverCommunityChatMessageNotifications({ messagePublicId
               COALESCE(NULLIF(sender.alias, ''), '轻笺用户'),
               '：',
               CASE
+                WHEN message.message_kind = 'poll'
+                  THEN CONCAT('[投票] ', LEFT(REPLACE(REPLACE(message.content, CHAR(13), ' '), CHAR(10), ' '), 154))
                 WHEN CHAR_LENGTH(TRIM(message.content)) > 0
                   THEN LEFT(REPLACE(REPLACE(message.content, CHAR(13), ' '), CHAR(10), ' '), 160)
                 WHEN EXISTS (

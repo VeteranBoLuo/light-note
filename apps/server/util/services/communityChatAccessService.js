@@ -83,6 +83,8 @@ function baseAccess(feature, user, runtimePolicy) {
     accessMode: feature.accessMode,
     waitlistEnabled: feature.waitlistEnabled,
     messagingEnabled: feature.messagingEnabled,
+    pollsEnabled: feature.pollsEnabled,
+    readReceiptsEnabled: feature.readReceiptsEnabled,
     realtimeEnabled: feature.realtimeEnabled,
     postingEnabled: runtimePolicy.postingEnabled,
     emergencyReadOnly: runtimePolicy.emergencyReadOnly,

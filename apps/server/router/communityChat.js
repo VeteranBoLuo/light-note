@@ -37,6 +37,16 @@ const memberSearchLimiter = rateLimit({
     res.status(429).send({ data: { code: 'RATE_LIMITED' }, status: 429, msg: '搜索过于频繁，请稍后再试' }),
 });
 
+const readReceiptLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 120,
+  keyGenerator: (req) => `community-chat-read-receipt:${req.user?.id || ipKeyGenerator(req.ip || '')}`,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) =>
+    res.status(429).send({ data: { code: 'RATE_LIMITED' }, status: 429, msg: '已读同步过于频繁，请稍后再试' }),
+});
+
 const governanceWriteLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   limit: 20,
@@ -109,6 +119,8 @@ router.post(
   handle.uploadImage,
 );
 router.put('/rooms/:slug/read', handle.markRoomRead);
+router.post('/rooms/:slug/read-receipts', readReceiptLimiter, handle.recordReadReceipts);
+router.get('/messages/:publicId', handle.messageDetail);
 router.get('/messages/:publicId/author-profile', handle.messageAuthorProfile);
 router.get('/messages/:publicId/author-profile/achievements', handle.messageAuthorAchievements);
 router.get('/messages/:publicId/author-avatar', handle.messageAuthorAvatar);
@@ -119,6 +131,8 @@ router.put('/profile/me', profileWriteLimiter, handle.updateOwnProfile);
 router.patch('/profile/me', profileWriteLimiter, handle.updateOwnProfile);
 router.get('/profile/me/avatar', handle.ownProfileAvatar);
 router.put('/messages/:publicId/like', messageWriteLimiter, handle.toggleMessageLike);
+router.put('/messages/:publicId/poll/vote', messageWriteLimiter, handle.votePoll);
+router.put('/messages/:publicId/poll/close', governanceWriteLimiter, handle.closePoll);
 router.post('/messages/:publicId/pin', governanceWriteLimiter, handle.pinMessage);
 router.post('/messages/:publicId/unpin', governanceWriteLimiter, handle.unpinMessage);
 router.post('/messages/:publicId/recall', governanceWriteLimiter, handle.recallMessage);

@@ -7,6 +7,8 @@ describe('getCommunityChatFeatureState', () => {
       accessMode: 'closed',
       waitlistEnabled: false,
       messagingEnabled: false,
+      pollsEnabled: false,
+      readReceiptsEnabled: false,
       realtimeEnabled: false,
       emergencyReadOnly: false,
       rulesVersion: '2026-08-v1',
@@ -28,6 +30,8 @@ describe('getCommunityChatFeatureState', () => {
       accessMode: 'invite_only',
       waitlistEnabled: true,
       messagingEnabled: true,
+      pollsEnabled: false,
+      readReceiptsEnabled: false,
       realtimeEnabled: true,
       emergencyReadOnly: false,
       rulesVersion: '2026-08-pilot-v2',
@@ -73,5 +77,22 @@ describe('getCommunityChatFeatureState', () => {
         COMMUNITY_CHAT_REALTIME_ENABLED: '1',
       }),
     ).toMatchObject({ messagingEnabled: false, realtimeEnabled: false });
+  });
+
+  it('投票和已读回执必须分别显式开启，并且不会越过消息总开关', () => {
+    expect(
+      getCommunityChatFeatureState({
+        COMMUNITY_CHAT_ACCESS_MODE: 'public',
+        COMMUNITY_CHAT_MESSAGING_ENABLED: '1',
+        COMMUNITY_CHAT_POLLS_ENABLED: 'true',
+        COMMUNITY_CHAT_READ_RECEIPTS_ENABLED: 'yes',
+      }),
+    ).toMatchObject({ pollsEnabled: true, readReceiptsEnabled: true });
+    expect(
+      getCommunityChatFeatureState({
+        COMMUNITY_CHAT_POLLS_ENABLED: '1',
+        COMMUNITY_CHAT_READ_RECEIPTS_ENABLED: '1',
+      }),
+    ).toMatchObject({ pollsEnabled: false, readReceiptsEnabled: false });
   });
 });

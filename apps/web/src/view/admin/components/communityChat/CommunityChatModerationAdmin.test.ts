@@ -150,6 +150,40 @@ describe('CommunityChatModerationAdmin', () => {
     expect(mounted.host.textContent).not.toContain('账号 ID');
   });
 
+  it('投票举报把问题和选项一起展示给审核人，但不展示投票人名单', async () => {
+    const pollReport = {
+      ...pendingReport,
+      id: 'report-poll',
+      evidenceSnapshot: {
+        ...pendingReport.evidenceSnapshot,
+        messageKind: 'poll',
+        content: '下一项优先做什么？',
+        poll: {
+          endsAt: '2026-08-27T10:00:00.000Z',
+          closedAt: null,
+          options: ['体验', '性能'],
+        },
+      },
+    };
+    apiMocks.list.mockImplementation((params: { status: string }) =>
+      Promise.resolve({
+        status: 200,
+        data: {
+          items: params.status === 'pending' ? [pollReport] : [],
+          total: params.status === 'pending' ? 1 : 0,
+          page: 1,
+          pageSize: 20,
+          status: params.status,
+        },
+      }),
+    );
+    const mounted = mountPage();
+    cleanup = mounted.unmount;
+
+    await vi.waitFor(() => expect(mounted.host.textContent).toContain('下一项优先做什么？（选项：体验 / 性能）'));
+    expect(mounted.host.textContent).not.toContain('投票人');
+  });
+
   it('处置必须填写原因，默认动作只隐藏消息并写入审核说明', async () => {
     const mounted = mountPage();
     cleanup = mounted.unmount;

@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   getRuntimePolicy: vi.fn(),
   updateRuntimePolicy: vi.fn(),
   listMessages: vi.fn(),
+  getMessage: vi.fn(),
   getPinnedMessage: vi.fn(),
   getAuthorAvatar: vi.fn(),
   getAuthorProfile: vi.fn(),
@@ -22,6 +23,9 @@ const mocks = vi.hoisted(() => ({
   deleteMessage: vi.fn(),
   markRead: vi.fn(),
   toggleLike: vi.fn(),
+  votePoll: vi.fn(),
+  closePoll: vi.fn(),
+  recordReadReceipts: vi.fn(),
   recallMessage: vi.fn(),
   pinMessage: vi.fn(),
   unpinMessage: vi.fn(),
@@ -63,6 +67,7 @@ vi.mock('../util/services/communityChatAccessService.js', async (importOriginal)
 });
 vi.mock('../util/services/communityChatMessageService.js', () => ({
   listCommunityChatMessages: mocks.listMessages,
+  getCommunityChatMessage: mocks.getMessage,
   getCommunityChatPinnedMessage: mocks.getPinnedMessage,
   getCommunityChatMessageAuthorAvatar: mocks.getAuthorAvatar,
   createCommunityChatMessage: mocks.createMessage,
@@ -72,6 +77,13 @@ vi.mock('../util/services/communityChatMessageService.js', () => ({
   recallCommunityChatMessage: mocks.recallMessage,
   pinCommunityChatMessage: mocks.pinMessage,
   unpinCommunityChatMessage: mocks.unpinMessage,
+}));
+vi.mock('../util/services/communityChatPollService.js', () => ({
+  voteCommunityChatPoll: mocks.votePoll,
+  closeCommunityChatPoll: mocks.closePoll,
+}));
+vi.mock('../util/services/communityChatReadReceiptService.js', () => ({
+  recordCommunityChatReadReceipts: mocks.recordReadReceipts,
 }));
 vi.mock('../util/services/communityChatProfileService.js', () => ({
   getCommunityChatMessageAuthorProfile: mocks.getAuthorProfile,
@@ -107,6 +119,7 @@ const {
   listAccessRequests,
   listReports,
   markRoomRead,
+  messageDetail,
   messageAuthorAvatar,
   messageAuthorAchievements,
   messageAuthorProfile,
@@ -125,6 +138,9 @@ const {
   rooms,
   runtimePolicy,
   toggleMessageLike,
+  votePoll,
+  closePoll,
+  recordReadReceipts,
   unpinMessage,
   updateRuntimePolicy,
   updateOwnProfile,
@@ -438,6 +454,55 @@ describe('communityChatHandle', () => {
     );
   });
 
+  it('投票、单条详情和已读回执只透传公有 ID，结束投票额外要求 Root', async () => {
+    const user = { id: 'user-1', role: 'user' };
+    const root = { id: 'root-1', role: 'root' };
+    mocks.getMessage.mockResolvedValue({ message: { publicId: 'message-1' } });
+    mocks.votePoll.mockResolvedValue({ messagePublicId: 'message-1', poll: { selectedOptionPublicId: 'option-1' } });
+    mocks.closePoll.mockResolvedValue({ messagePublicId: 'message-1', poll: { closed: true }, changed: true });
+    mocks.recordReadReceipts.mockResolvedValue({
+      roomSlug: 'general',
+      acceptedMessagePublicIds: ['message-1'],
+      recorded: 1,
+    });
+
+    await messageDetail({ user, params: { publicId: 'message-1' }, query: { userId: 'forged-user' } }, mockRes());
+    await votePoll(
+      {
+        user,
+        params: { publicId: 'message-1' },
+        body: { optionPublicId: 'option-1', voteCount: 999, userId: 'forged-user' },
+      },
+      mockRes(),
+    );
+    await recordReadReceipts(
+      {
+        user,
+        params: { slug: 'general' },
+        body: { messagePublicIds: ['message-1'], readCount: 999, userId: 'forged-user' },
+      },
+      mockRes(),
+    );
+    const deniedCloseRes = mockRes();
+    await closePoll({ user, params: { publicId: 'message-1' }, body: { force: true } }, deniedCloseRes);
+    await closePoll({ user: root, params: { publicId: 'message-1' }, body: { force: true } }, mockRes());
+
+    expect(mocks.getMessage).toHaveBeenCalledWith({ user, messagePublicId: 'message-1' });
+    expect(mocks.votePoll).toHaveBeenCalledWith({
+      user,
+      messagePublicId: 'message-1',
+      optionPublicId: 'option-1',
+    });
+    expect(mocks.recordReadReceipts).toHaveBeenCalledWith({
+      user,
+      roomSlug: 'general',
+      messagePublicIds: ['message-1'],
+    });
+    expect(deniedCloseRes.status).toHaveBeenCalledWith(403);
+    expect(mocks.closePoll).toHaveBeenCalledTimes(1);
+    expect(mocks.closePoll).toHaveBeenCalledWith({ user: root, messagePublicId: 'message-1' });
+  });
+
   it('点赞、撤回与个人删除接口只使用认证用户和消息公有 ID', async () => {
     const user = { id: 'user-1', role: 'user' };
     mocks.toggleLike.mockResolvedValue({ publicId: 'message-1', likedByMe: true, likeCount: 1 });
@@ -493,13 +558,10 @@ describe('communityChatHandle', () => {
     );
 
     expect(mocks.updateNotificationSettings).toHaveBeenCalledWith({ user, enabled: true, level: 'mentions' });
-    expect(mocks.recordServerOperation).toHaveBeenCalledWith(
-      expect.objectContaining({ user }),
-      {
-        module: '公共聊天室',
-        operation: '保存聊天室提醒设置【开启；范围：管理员和提及】',
-      },
-    );
+    expect(mocks.recordServerOperation).toHaveBeenCalledWith(expect.objectContaining({ user }), {
+      module: '公共聊天室',
+      operation: '保存聊天室提醒设置【开启；范围：管理员和提及】',
+    });
     expect(updateRes.send).toHaveBeenCalledWith(
       expect.objectContaining({ data: { enabled: true, level: 'mentions' }, msg: '聊天室提醒设置已保存' }),
     );

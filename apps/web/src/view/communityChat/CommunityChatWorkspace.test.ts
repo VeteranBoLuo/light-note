@@ -8,6 +8,7 @@ import { clearCommunityChatDraftMemory, getCommunityChatDraftSession } from '@/c
 
 const mocks = vi.hoisted(() => ({
   getMessages: vi.fn(),
+  getMessage: vi.fn(),
   getPinnedMessage: vi.fn(),
   getAuthorProfile: vi.fn(),
   uploadImage: vi.fn(),
@@ -25,6 +26,10 @@ const mocks = vi.hoisted(() => ({
   prepareSticker: vi.fn(),
   reportMessage: vi.fn(),
   toggleLike: vi.fn(),
+  votePoll: vi.fn(),
+  closePoll: vi.fn(),
+  recordReadReceipts: vi.fn(),
+  createClientRequestId: vi.fn(),
   recallMessage: vi.fn(),
   pinMessage: vi.fn(),
   unpinMessage: vi.fn(),
@@ -57,8 +62,9 @@ const mocks = vi.hoisted(() => ({
 const sharedGrowth = ref<{ equippedFrame?: string | null } | null>(null);
 
 vi.mock('@/api/communityChatApi', () => ({
-  createCommunityChatClientRequestId: () => 'request-fixed-0001',
+  createCommunityChatClientRequestId: mocks.createClientRequestId,
   getCommunityChatMessages: mocks.getMessages,
+  getCommunityChatMessage: mocks.getMessage,
   getCommunityChatPinnedMessage: mocks.getPinnedMessage,
   getCommunityChatMessageAuthorProfile: mocks.getAuthorProfile,
   uploadCommunityChatImage: mocks.uploadImage,
@@ -74,6 +80,9 @@ vi.mock('@/api/communityChatApi', () => ({
   saveCommunityChatMessageSticker: mocks.saveMessageSticker,
   reportCommunityChatMessage: mocks.reportMessage,
   toggleCommunityChatMessageLike: mocks.toggleLike,
+  voteCommunityChatPoll: mocks.votePoll,
+  closeCommunityChatPoll: mocks.closePoll,
+  recordCommunityChatReadReceipts: mocks.recordReadReceipts,
   recallCommunityChatMessage: mocks.recallMessage,
   pinCommunityChatMessage: mocks.pinMessage,
   unpinCommunityChatMessage: mocks.unpinMessage,
@@ -121,6 +130,8 @@ const access = {
   accessMode: 'public',
   waitlistEnabled: false,
   messagingEnabled: true,
+  pollsEnabled: false,
+  readReceiptsEnabled: false,
   realtimeEnabled: false,
   postingEnabled: true,
   emergencyReadOnly: false,
@@ -288,6 +299,8 @@ async function mountWorkspace(options: { rooms?: any[]; access?: any } = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+  mocks.createClientRequestId.mockReturnValue('request-fixed-0001');
   clearCommunityChatDraftMemory();
   sharedGrowth.value = null;
   mocks.bookmark.authModalTab = '登录';
@@ -317,6 +330,32 @@ beforeEach(() => {
   mocks.toggleLike.mockResolvedValue({
     status: 200,
     data: { publicId: 'message-1', likedByMe: true, likeCount: 1, likePreview: ['薄荷'] },
+  });
+  mocks.getMessage.mockResolvedValue({ status: 200, data: { message: chatMessage() } });
+  mocks.votePoll.mockResolvedValue({
+    status: 200,
+    data: {
+      messagePublicId: 'message-1',
+      poll: {
+        endsAt: '2026-08-27T10:00:00.000Z',
+        closedAt: null,
+        closed: false,
+        closeReason: null,
+        resultsVisible: false,
+        selectedOptionPublicId: 'option-a',
+        canVote: true,
+        canClose: false,
+        options: [
+          { publicId: 'option-a', label: '体验' },
+          { publicId: 'option-b', label: '性能' },
+        ],
+      },
+    },
+  });
+  mocks.closePoll.mockResolvedValue({ status: 200, data: { messagePublicId: 'message-1', poll: null } });
+  mocks.recordReadReceipts.mockResolvedValue({
+    status: 200,
+    data: { roomSlug: 'general', acceptedMessagePublicIds: ['message-1'], recorded: 1 },
   });
   mocks.recallMessage.mockResolvedValue({ status: 200, data: { publicId: 'message-1', status: 'recalled' } });
   mocks.deleteMessage.mockResolvedValue({ status: 200, data: { publicId: 'message-1', status: 'deleted_for_me' } });
@@ -476,6 +515,556 @@ describe('CommunityChatWorkspace', () => {
     expect(host.querySelector('[data-message-public-id="message-1"] .community-message__like')?.textContent).toContain(
       '1',
     );
+  });
+
+  it('普通成员可参与 Root 投票但看不到发起入口，投票响应只更新自己的选择', async () => {
+    const poll = {
+      endsAt: '2026-08-27T10:00:00.000Z',
+      closedAt: null,
+      closed: false,
+      closeReason: null,
+      resultsVisible: false,
+      selectedOptionPublicId: null,
+      canVote: true,
+      canClose: false,
+      options: [
+        { publicId: 'option-a', label: '体验' },
+        { publicId: 'option-b', label: '性能' },
+      ],
+    };
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        roomSlug: 'general',
+        items: [chatMessage({ messageKind: 'poll', content: '下一项优先做什么？', poll })],
+        hasMore: false,
+        nextBefore: null,
+        serverTime: '2026-08-26T10:00:00.000Z',
+      },
+    });
+    mocks.votePoll.mockResolvedValueOnce({
+      status: 200,
+      data: { messagePublicId: 'message-1', poll: { ...poll, selectedOptionPublicId: 'option-b' } },
+    });
+
+    const host = await mountWorkspace({ access: { ...access, pollsEnabled: true } });
+    expect(host.textContent).toContain('下一项优先做什么？');
+    expect(host.textContent).toContain(zhCN.communityChat.poll.resultsAfterClose);
+    expect(host.querySelectorAll('.chat-poll-card__count')).toHaveLength(0);
+    expect(
+      Array.from(host.querySelectorAll<HTMLButtonElement>('.community-composer__attach')).some(
+        (button) => button.getAttribute('aria-label') === zhCN.communityChat.poll.createAction,
+      ),
+    ).toBe(false);
+
+    host.querySelectorAll<HTMLButtonElement>('.chat-poll-card__option')[1]?.click();
+    await flushAsync();
+
+    expect(mocks.votePoll).toHaveBeenCalledWith('message-1', 'option-b');
+    expect(host.querySelectorAll('.chat-poll-card__option')[1]?.classList.contains('is-selected')).toBe(true);
+    expect(mocks.messageSuccess).toHaveBeenCalledWith(zhCN.communityChat.poll.voteSuccess);
+  });
+
+  it('Root 才显示投票入口和聚合已读数，并可按单条消息刷新权威计数', async () => {
+    mocks.user.id = 'root-1';
+    mocks.user.role = 'root';
+    const rootMessage = chatMessage({
+      isOwn: true,
+      author: { ...chatMessage().author, role: 'official', name: '轻笺 Root' },
+      readReceiptEnabled: true,
+      readCount: 4,
+    });
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        roomSlug: 'general',
+        items: [rootMessage],
+        hasMore: false,
+        nextBefore: null,
+        serverTime: '2026-08-26T10:00:00.000Z',
+      },
+    });
+    mocks.getMessage.mockResolvedValueOnce({
+      status: 200,
+      data: { message: { ...rootMessage, readCount: 5 } },
+    });
+
+    const host = await mountWorkspace({
+      access: {
+        ...access,
+        pollsEnabled: true,
+        readReceiptsEnabled: true,
+        canManage: true,
+        memberRole: 'admin',
+      },
+    });
+    const createPollButton = Array.from(host.querySelectorAll<HTMLButtonElement>('.community-composer__attach')).find(
+      (button) => button.getAttribute('aria-label') === zhCN.communityChat.poll.createAction,
+    );
+    expect(createPollButton).toBeTruthy();
+    const receiptButton = host.querySelector<HTMLButtonElement>('.community-message__read-receipt');
+    expect(receiptButton?.textContent).toContain('已读 4');
+    expect(receiptButton?.disabled).toBe(false);
+
+    receiptButton?.click();
+    await flushAsync();
+
+    expect(mocks.getMessage).toHaveBeenCalledWith('message-1');
+    expect(host.querySelector('.community-message__read-receipt')?.textContent).toContain('已读 5');
+  });
+
+  it('投票响应丢失后原样重试复用同一 clientRequestId，避免重复创建', async () => {
+    mocks.user.id = 'root-1';
+    mocks.user.role = 'root';
+    mocks.createClientRequestId.mockReset();
+    mocks.createClientRequestId.mockReturnValueOnce('poll-request-stable-1').mockReturnValueOnce('poll-request-new-2');
+    const createdPollMessage = chatMessage({
+      publicId: 'poll-message-created',
+      isOwn: true,
+      messageKind: 'poll',
+      content: '下一项优先做什么？',
+      poll: {
+        endsAt: '2026-08-27T10:00:00.000Z',
+        closedAt: null,
+        closed: false,
+        closeReason: null,
+        resultsVisible: true,
+        selectedOptionPublicId: null,
+        totalVoterCount: 0,
+        canVote: true,
+        canClose: true,
+        options: [
+          { publicId: 'option-a', label: '体验', voteCount: 0 },
+          { publicId: 'option-b', label: '性能', voteCount: 0 },
+        ],
+      },
+    });
+    mocks.sendMessage
+      .mockRejectedValueOnce(new Error('network response lost'))
+      .mockResolvedValueOnce({ status: 200, data: { message: createdPollMessage, idempotent: true } });
+
+    const host = await mountWorkspace({
+      access: { ...access, pollsEnabled: true, readReceiptsEnabled: true, canManage: true, memberRole: 'admin' },
+    });
+    const createPollButton = Array.from(host.querySelectorAll<HTMLButtonElement>('.community-composer__attach')).find(
+      (button) => button.getAttribute('aria-label') === zhCN.communityChat.poll.createAction,
+    );
+    createPollButton?.click();
+    await flushAsync();
+
+    const composer = document.body.querySelector<HTMLElement>('.chat-poll-composer')!;
+    const setValue = (input: HTMLInputElement | HTMLTextAreaElement | null, value: string) => {
+      if (!input) throw new Error('投票测试输入框不存在');
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    setValue(composer.querySelector('textarea'), '下一项优先做什么？');
+    const optionInputs = composer.querySelectorAll<HTMLInputElement>('.chat-poll-composer__options input');
+    setValue(optionInputs[0] || null, '体验');
+    setValue(optionInputs[1] || null, '性能');
+    await flushAsync();
+    const submitButton = composer.querySelectorAll<HTMLButtonElement>('footer button')[1]!;
+
+    submitButton.click();
+    await flushAsync();
+    submitButton.click();
+    await flushAsync();
+
+    expect(mocks.sendMessage).toHaveBeenCalledTimes(2);
+    expect(mocks.sendMessage.mock.calls.map((call) => call[1].clientRequestId)).toEqual([
+      'poll-request-stable-1',
+      'poll-request-stable-1',
+    ]);
+    expect(mocks.createClientRequestId).toHaveBeenCalledTimes(1);
+    expect(host.querySelector('[data-message-public-id="poll-message-created"]')).not.toBeNull();
+  });
+
+  it('消息气泡在前台稳定可见 800ms 后批量上报一次已读，多次滚动由本地集合去重', async () => {
+    vi.useFakeTimers();
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        roomSlug: 'general',
+        items: [
+          chatMessage({
+            author: { ...chatMessage().author, role: 'official', name: '轻笺 Root' },
+            readReceiptEnabled: true,
+            isOwn: false,
+          }),
+        ],
+        hasMore: false,
+        nextBefore: null,
+        serverTime: '2026-08-26T10:00:00.000Z',
+      },
+    });
+    const host = await mountWorkspace({ access: { ...access, readReceiptsEnabled: true } });
+    const messageList = host.querySelector<HTMLElement>('.community-message-list')!;
+    const article = host.querySelector<HTMLElement>('[data-message-public-id="message-1"]')!;
+    const messageBubble = article.querySelector<HTMLElement>('.community-message__primary')!;
+    vi.spyOn(messageList, 'getBoundingClientRect').mockReturnValue({
+      top: 0,
+      bottom: 400,
+      left: 0,
+      right: 600,
+      width: 600,
+      height: 400,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    vi.spyOn(messageBubble, 'getBoundingClientRect').mockReturnValue({
+      top: 100,
+      bottom: 200,
+      left: 0,
+      right: 500,
+      width: 500,
+      height: 100,
+      x: 0,
+      y: 100,
+      toJSON: () => ({}),
+    });
+
+    messageList.dispatchEvent(new Event('scroll'));
+    await vi.advanceTimersByTimeAsync(900);
+    await flushAsync();
+    expect(mocks.recordReadReceipts).toHaveBeenCalledWith('general', ['message-1']);
+
+    messageList.dispatchEvent(new Event('scroll'));
+    await vi.advanceTimersByTimeAsync(900);
+    await flushAsync();
+    expect(mocks.recordReadReceipts).toHaveBeenCalledTimes(1);
+  });
+
+  it('滚动或切到后台会重置逐消息连续可见计时，不会把快速掠过累计成 800ms', async () => {
+    vi.useFakeTimers();
+    let visibilityState: DocumentVisibilityState = 'visible';
+    vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibilityState);
+    const receiptPage = {
+      data: {
+        roomSlug: 'general',
+        items: [
+          chatMessage({
+            author: { ...chatMessage().author, role: 'official', name: '轻笺 Root' },
+            readReceiptEnabled: true,
+            isOwn: false,
+          }),
+        ],
+        hasMore: false,
+        nextBefore: null,
+        serverTime: '2026-08-26T10:00:00.000Z',
+      },
+    };
+    mocks.getMessages.mockResolvedValue(receiptPage);
+    const host = await mountWorkspace({ access: { ...access, readReceiptsEnabled: true } });
+    const messageList = host.querySelector<HTMLElement>('.community-message-list')!;
+    const messageBubble = host.querySelector<HTMLElement>('.community-message__primary')!;
+    vi.spyOn(messageList, 'getBoundingClientRect').mockReturnValue({
+      top: 0,
+      bottom: 400,
+      left: 0,
+      right: 600,
+      width: 600,
+      height: 400,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    vi.spyOn(messageBubble, 'getBoundingClientRect').mockReturnValue({
+      top: 100,
+      bottom: 200,
+      left: 0,
+      right: 500,
+      width: 500,
+      height: 100,
+      x: 0,
+      y: 100,
+      toJSON: () => ({}),
+    });
+
+    messageList.dispatchEvent(new Event('scroll'));
+    await vi.advanceTimersByTimeAsync(500);
+    messageList.dispatchEvent(new Event('scroll'));
+    await vi.advanceTimersByTimeAsync(500);
+    expect(mocks.recordReadReceipts).not.toHaveBeenCalled();
+
+    visibilityState = 'hidden';
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(mocks.recordReadReceipts).not.toHaveBeenCalled();
+
+    visibilityState = 'visible';
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(799);
+    expect(mocks.recordReadReceipts).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await flushAsync();
+    expect(mocks.recordReadReceipts).toHaveBeenCalledWith('general', ['message-1']);
+  });
+
+  it('页面可见但浏览器尚未聚焦时不计已读，获得焦点后才重新开始连续可见计时', async () => {
+    vi.useFakeTimers();
+    vi.mocked(document.hasFocus).mockReturnValue(false);
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        roomSlug: 'general',
+        items: [
+          chatMessage({
+            author: { ...chatMessage().author, role: 'official', name: '轻笺 Root' },
+            readReceiptEnabled: true,
+            isOwn: false,
+          }),
+        ],
+        hasMore: false,
+        nextBefore: null,
+        serverTime: '2026-08-26T10:00:00.000Z',
+      },
+    });
+    const host = await mountWorkspace({ access: { ...access, readReceiptsEnabled: true } });
+    const messageList = host.querySelector<HTMLElement>('.community-message-list')!;
+    const messageBubble = host.querySelector<HTMLElement>('.community-message__primary')!;
+    vi.spyOn(messageList, 'getBoundingClientRect').mockReturnValue({
+      top: 0,
+      bottom: 400,
+      left: 0,
+      right: 600,
+      width: 600,
+      height: 400,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    vi.spyOn(messageBubble, 'getBoundingClientRect').mockReturnValue({
+      top: 100,
+      bottom: 200,
+      left: 0,
+      right: 500,
+      width: 500,
+      height: 100,
+      x: 0,
+      y: 100,
+      toJSON: () => ({}),
+    });
+
+    messageList.dispatchEvent(new Event('scroll'));
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(mocks.recordReadReceipts).not.toHaveBeenCalled();
+
+    vi.mocked(document.hasFocus).mockReturnValue(true);
+    window.dispatchEvent(new Event('focus'));
+    await vi.advanceTimersByTimeAsync(799);
+    expect(mocks.recordReadReceipts).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await flushAsync();
+    expect(mocks.recordReadReceipts).toHaveBeenCalledWith('general', ['message-1']);
+  });
+
+  it('已读回执弱网失败后保持静默，并在气泡仍持续可见时低频重试', async () => {
+    vi.useFakeTimers();
+    mocks.recordReadReceipts.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({
+      status: 200,
+      data: { roomSlug: 'general', acceptedMessagePublicIds: ['message-1'], recorded: 1 },
+    });
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        roomSlug: 'general',
+        items: [chatMessage({ readReceiptEnabled: true, isOwn: false })],
+        hasMore: false,
+        nextBefore: null,
+        serverTime: '2026-08-26T10:00:00.000Z',
+      },
+    });
+    const host = await mountWorkspace({ access: { ...access, readReceiptsEnabled: true } });
+    const messageList = host.querySelector<HTMLElement>('.community-message-list')!;
+    const messageBubble = host.querySelector<HTMLElement>('.community-message__primary')!;
+    vi.spyOn(messageList, 'getBoundingClientRect').mockReturnValue({
+      top: 0,
+      bottom: 400,
+      left: 0,
+      right: 600,
+      width: 600,
+      height: 400,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    vi.spyOn(messageBubble, 'getBoundingClientRect').mockReturnValue({
+      top: 100,
+      bottom: 200,
+      left: 0,
+      right: 500,
+      width: 500,
+      height: 100,
+      x: 0,
+      y: 100,
+      toJSON: () => ({}),
+    });
+
+    messageList.dispatchEvent(new Event('scroll'));
+    // 滚动几何检查先经过一帧 rAF，再开始 800ms 连续可见计时。
+    await vi.advanceTimersByTimeAsync(900);
+    await flushAsync();
+    expect(mocks.recordReadReceipts).toHaveBeenCalledTimes(1);
+
+    // 首次请求在 rAF + 800ms 边界触发；从当前时刻再推进 4 秒仍不应形成快速重试。
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(mocks.recordReadReceipts).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1000);
+    await flushAsync();
+    expect(mocks.recordReadReceipts).toHaveBeenCalledTimes(2);
+    expect(mocks.messageError).not.toHaveBeenCalled();
+  });
+
+  it('自动截止跨过服务端时钟后立即刷新投票详情，不等待 30 秒安全轮询', async () => {
+    vi.useFakeTimers();
+    // 模拟设备时钟错误六天；截止状态仍必须完全跟随服务端时钟，不能因偏差超过 24 小时退回本地时间。
+    vi.setSystemTime(new Date('2026-08-20T10:00:00.000Z'));
+    const openPoll = {
+      endsAt: '2026-08-26T10:00:03.000Z',
+      closedAt: null,
+      closed: false,
+      closeReason: null,
+      resultsVisible: false,
+      selectedOptionPublicId: null,
+      canVote: true,
+      canClose: false,
+      options: [
+        { publicId: 'option-a', label: '体验' },
+        { publicId: 'option-b', label: '性能' },
+      ],
+    };
+    const pollMessage = chatMessage({ messageKind: 'poll', content: '截止测试', poll: openPoll });
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        roomSlug: 'general',
+        items: [pollMessage],
+        hasMore: false,
+        nextBefore: null,
+        serverTime: '2026-08-26T10:00:00.000Z',
+      },
+    });
+    mocks.getMessage.mockResolvedValueOnce({
+      status: 200,
+      data: {
+        message: {
+          ...pollMessage,
+          poll: {
+            ...openPoll,
+            closed: true,
+            closeReason: 'deadline',
+            resultsVisible: true,
+            canVote: false,
+            totalVoterCount: 0,
+            options: openPoll.options.map((option) => ({ ...option, voteCount: 0 })),
+          },
+        },
+      },
+    });
+
+    const host = await mountWorkspace({ access: { ...access, pollsEnabled: true } });
+    expect(mocks.getMessage).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(5000);
+    await flushAsync();
+
+    expect(mocks.getMessage).toHaveBeenCalledWith('message-1');
+    expect(host.textContent).toContain(zhCN.communityChat.poll.closed);
+    expect(host.textContent).toContain('共 0 人参与');
+  });
+
+  it('自动截止详情失败后不随每秒时钟重复放大请求', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-20T10:00:00.000Z'));
+    const pollMessage = chatMessage({
+      messageKind: 'poll',
+      content: '截止失败重试测试',
+      poll: {
+        endsAt: '2026-08-26T10:00:03.000Z',
+        closedAt: null,
+        closed: false,
+        closeReason: null,
+        resultsVisible: false,
+        selectedOptionPublicId: null,
+        canVote: true,
+        canClose: false,
+        options: [
+          { publicId: 'option-a', label: '体验' },
+          { publicId: 'option-b', label: '性能' },
+        ],
+      },
+    });
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        roomSlug: 'general',
+        items: [pollMessage],
+        hasMore: false,
+        nextBefore: null,
+        serverTime: '2026-08-26T10:00:00.000Z',
+      },
+    });
+    mocks.getMessage.mockRejectedValue(new Error('offline'));
+
+    await mountWorkspace({ access: { ...access, pollsEnabled: true } });
+    await vi.advanceTimersByTimeAsync(7000);
+    await flushAsync();
+
+    expect(mocks.getMessage).toHaveBeenCalledTimes(1);
+    expect(mocks.messageError).not.toHaveBeenCalled();
+  });
+
+  it('密集投票实时事件在详情请求进行中合并为一次尾随刷新，避免旧响应乱序覆盖', async () => {
+    WorkspaceRealtimeSocket.instances = [];
+    vi.stubGlobal('WebSocket', WorkspaceRealtimeSocket);
+    mocks.user.id = 'root-1';
+    mocks.user.role = 'root';
+    const pollMessage = chatMessage({
+      messageKind: 'poll',
+      content: '并发投票',
+      poll: {
+        endsAt: '2026-08-27T10:00:00.000Z',
+        closedAt: null,
+        closed: false,
+        closeReason: null,
+        resultsVisible: true,
+        selectedOptionPublicId: null,
+        totalVoterCount: 0,
+        canVote: true,
+        canClose: true,
+        options: [{ publicId: 'option-a', label: '体验', voteCount: 0 }],
+      },
+    });
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        roomSlug: 'general',
+        items: [pollMessage],
+        hasMore: false,
+        nextBefore: null,
+        serverTime: '2026-08-26T10:00:00.000Z',
+      },
+    });
+    const firstDetail = deferred<any>();
+    mocks.getMessage.mockReturnValueOnce(firstDetail.promise).mockResolvedValueOnce({
+      status: 200,
+      data: { message: pollMessage },
+    });
+    await mountWorkspace({
+      access: { ...access, pollsEnabled: true, realtimeEnabled: true, canManage: true, memberRole: 'admin' },
+    });
+    const socket = WorkspaceRealtimeSocket.instances[0];
+    socket.open();
+    socket.message('room.subscribed', { roomSlug: 'general' });
+    socket.message(
+      'message.updated',
+      { roomSlug: 'general', messagePublicId: 'message-1', reason: 'poll_vote' },
+      'poll-event-0001',
+    );
+    socket.message(
+      'message.updated',
+      { roomSlug: 'general', messagePublicId: 'message-1', reason: 'poll_vote' },
+      'poll-event-0002',
+    );
+    await flushAsync();
+    expect(mocks.getMessage).toHaveBeenCalledTimes(1);
+
+    firstDetail.resolve({ status: 200, data: { message: pollMessage } });
+    await flushAsync();
+    await flushAsync();
+    expect(mocks.getMessage).toHaveBeenCalledTimes(2);
   });
 
   it('只有 Root 点击原在线人数文字后才按需读取成员名单', async () => {
@@ -1686,6 +2275,15 @@ describe('CommunityChatWorkspace', () => {
   });
 
   it('游客可读公开消息但没有写操作，输入区引导登录或注册', async () => {
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        roomSlug: 'general',
+        items: [chatMessage({ readReceiptEnabled: true })],
+        hasMore: false,
+        nextBefore: null,
+        serverTime: '2026-08-26T10:00:00.000Z',
+      },
+    });
     const host = await mountWorkspace({
       access: {
         ...access,
@@ -1699,6 +2297,7 @@ describe('CommunityChatWorkspace', () => {
     expect(host.textContent).toContain('正在以游客身份浏览');
     expect(host.querySelector('textarea')).toBeNull();
     expect(host.querySelector('.community-message__actions')).toBeNull();
+    expect(host.querySelector('.community-message__read-receipt')).toBeNull();
     expect(mocks.markRead).not.toHaveBeenCalled();
     const loginButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
       button.textContent?.includes('登录 / 注册后参与'),

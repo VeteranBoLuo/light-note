@@ -119,7 +119,8 @@ async function loadModerationMessage(db, publicId, { lock = false } = {}) {
   return queryFirst(
     db,
     `SELECT message.id, message.public_id AS publicId, message.user_id AS userId,
-            message.content, message.status, message.create_time AS createdAt,
+            message.content, message.status, message.message_kind AS messageKind,
+            message.create_time AS createdAt,
             room.slug AS roomSlug, room.name_zh AS roomNameZh, room.name_en AS roomNameEn,
             COALESCE(NULLIF(account.alias, ''), '') AS authorName,
             COALESCE(account.del_flag, '1') AS accountDeleted, account.role AS accountRole,
@@ -203,6 +204,35 @@ export async function reportCommunityChatMessage({
       return { id: existing.id, status: existing.status, alreadyReported: true };
     }
 
+    let pollEvidence = null;
+    if (target.messageKind === 'poll') {
+      const [pollRows] = await connection.query(
+        `SELECT CONCAT(
+                  DATE_FORMAT(poll.ends_at_utc, '%Y-%m-%dT%H:%i:%s.'),
+                  LPAD(FLOOR(MICROSECOND(poll.ends_at_utc) / 1000), 3, '0'),
+                  'Z'
+                ) AS endsAt,
+                CONCAT(
+                  DATE_FORMAT(poll.closed_at_utc, '%Y-%m-%dT%H:%i:%s.'),
+                  LPAD(FLOOR(MICROSECOND(poll.closed_at_utc) / 1000), 3, '0'),
+                  'Z'
+                ) AS closedAt,
+                option_row.label
+           FROM community_chat_polls poll
+           JOIN community_chat_poll_options option_row ON option_row.message_id = poll.message_id
+          WHERE poll.message_id = ?
+          ORDER BY option_row.sort_order ASC, option_row.id ASC`,
+        [target.id],
+      );
+      if (pollRows.length) {
+        pollEvidence = {
+          endsAt: pollRows[0].endsAt,
+          closedAt: pollRows[0].closedAt || null,
+          options: pollRows.map((row) => row.label),
+        };
+      }
+    }
+
     const reportId = generateUUID();
     const evidenceSnapshot = JSON.stringify({
       messagePublicId: target.publicId,
@@ -212,6 +242,8 @@ export async function reportCommunityChatMessage({
       authorName: authorName(target),
       authorRole: authorRole(target),
       content: target.content,
+      messageKind: target.messageKind || 'text',
+      ...(pollEvidence ? { poll: pollEvidence } : {}),
       messageCreatedAt: target.createdAt,
       capturedAt: new Date().toISOString(),
     });

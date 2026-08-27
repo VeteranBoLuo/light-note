@@ -1,0 +1,81 @@
+<template>
+  <BTooltip :title="tooltip" :delay="80">
+    <BButton
+      class="chat-read-receipt-badge community-message__read-receipt"
+      :disabled="!canManage"
+      :loading="loading"
+      @click="emit('refresh')"
+    >
+      <SvgIcon :src="icon.communityChat.readReceipt" size="13" aria-hidden="true" />
+      <span>{{ label }}</span>
+    </BButton>
+  </BTooltip>
+</template>
+
+<script setup lang="ts">
+  import { computed } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
+
+  const props = withDefaults(
+    defineProps<{
+      canManage: boolean;
+      enabled: boolean;
+      readCount?: number;
+      loading?: boolean;
+    }>(),
+    {
+      readCount: undefined,
+      loading: false,
+    },
+  );
+  const emit = defineEmits<{ refresh: [] }>();
+  const { t } = useI18n();
+
+  const hasReadCount = computed(() => props.canManage && typeof props.readCount === 'number');
+  const label = computed(() => {
+    if (hasReadCount.value) {
+      return t(props.enabled ? 'communityChat.readReceipt.count' : 'communityChat.readReceipt.countPaused', {
+        count: props.readCount,
+      });
+    }
+    return t(props.enabled ? 'communityChat.readReceipt.enabled' : 'communityChat.readReceipt.paused');
+  });
+  const tooltip = computed(() => {
+    if (props.canManage) {
+      return t(props.enabled ? 'communityChat.readReceipt.rootHint' : 'communityChat.readReceipt.rootPausedHint', {
+        count: props.readCount || 0,
+      });
+    }
+    return t(props.enabled ? 'communityChat.readReceipt.memberHint' : 'communityChat.readReceipt.memberPausedHint');
+  });
+</script>
+
+<style scoped lang="less">
+  .chat-read-receipt-badge {
+    width: fit-content;
+    min-width: 0;
+    min-height: 24px;
+    height: 24px;
+    padding: 2px 7px !important;
+    gap: 4px;
+    border: 1px solid var(--surface-border-color) !important;
+    border-radius: 999px;
+    color: var(--desc-color) !important;
+    background: var(--card-background) !important;
+    font-size: 9px;
+    line-height: 1;
+  }
+
+  .chat-read-receipt-badge:disabled {
+    opacity: 1;
+    cursor: default;
+  }
+
+  .chat-read-receipt-badge :deep(.btn-spinner) {
+    margin-right: 0;
+  }
+</style>

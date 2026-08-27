@@ -139,11 +139,22 @@ describe('账号注销提交', () => {
       }
       if (sql.includes('information_schema.TABLES')) {
         return [
-          [{ tableName: 'account_deletion_requests' }, { tableName: 'email_delivery_logs' }, { tableName: 'user' }],
+          [
+            { tableName: 'account_deletion_requests' },
+            { tableName: 'email_delivery_logs' },
+            { tableName: 'community_chat_messages' },
+            { tableName: 'community_chat_poll_votes' },
+            { tableName: 'community_chat_message_read_receipts' },
+            { tableName: 'user' },
+          ],
         ];
       }
       if (sql.includes('INSERT INTO account_deletion_requests')) return [{ affectedRows: 1 }];
       if (sql.includes('DELETE FROM email_delivery_logs')) return [{ affectedRows: 1 }];
+      if (sql.includes('DELETE receipt')) return [{ affectedRows: 2 }];
+      if (sql.includes('DELETE FROM community_chat_poll_votes')) return [{ affectedRows: 1 }];
+      if (sql.includes('DELETE FROM community_chat_message_read_receipts')) return [{ affectedRows: 1 }];
+      if (sql.includes('UPDATE community_chat_messages')) return [{ affectedRows: 1 }];
       if (sql.includes('UPDATE user')) return [{ affectedRows: 1 }];
       throw new Error(`未覆盖的测试 SQL: ${sql}`);
     });
@@ -163,11 +174,40 @@ describe('账号注销提交', () => {
     expect(connection.release).toHaveBeenCalledTimes(1);
     expect(connection.query.mock.calls.some(([sql]) => sql.includes("role = 'deleted'"))).toBe(true);
     expect(connection.query.mock.calls.some(([sql]) => sql.includes('email = NULL'))).toBe(true);
+    const disableIndex = connection.query.mock.calls.findIndex(([sql]) =>
+      sql.includes('UPDATE community_chat_messages'),
+    );
+    const anonymizeIndex = connection.query.mock.calls.findIndex(([sql]) => sql.includes("role = 'deleted'"));
+    expect(disableIndex).toBeGreaterThan(-1);
+    expect(disableIndex).toBeLessThan(anonymizeIndex);
+    for (const table of ['community_chat_poll_votes', 'community_chat_message_read_receipts']) {
+      const deleteIndex = connection.query.mock.calls.findIndex(([sql]) => sql.includes(`DELETE FROM ${table}`));
+      expect(deleteIndex).toBeGreaterThan(disableIndex);
+      expect(deleteIndex).toBeLessThan(anonymizeIndex);
+    }
     expect(redisValues.has('account:deletion:code:user-1')).toBe(false);
   });
 });
 
 describe('账号注销后台清理', () => {
+  it('删除用户的投票选择与逐消息已读回执，避免注销后继续参与聚合统计', async () => {
+    const connection = createConnection(async () => [{ affectedRows: 1 }]);
+    const tables = new Set([
+      'community_chat_messages',
+      'community_chat_poll_votes',
+      'community_chat_message_read_receipts',
+    ]);
+
+    await purgeOwnedResources(connection, tables, 'user-1');
+
+    expect(connection.query.mock.calls).toEqual([
+      [expect.stringContaining('DELETE receipt'), ['user-1']],
+      [expect.stringContaining('UPDATE community_chat_messages'), ['user-1']],
+      ['DELETE FROM community_chat_poll_votes WHERE user_id = ?', ['user-1']],
+      ['DELETE FROM community_chat_message_read_receipts WHERE user_id = ?', ['user-1']],
+    ]);
+  });
+
   it('删除爱发电关联和下单凭证，并把真实订单去轻笺账号关联后保留', async () => {
     const connection = createConnection(async () => [{ affectedRows: 1 }]);
     const tables = new Set([

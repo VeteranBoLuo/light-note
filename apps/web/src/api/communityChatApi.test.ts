@@ -15,6 +15,7 @@ vi.mock('@/http/request', () => ({
 const {
   acceptCommunityChatRules,
   blockCommunityChatMessageAuthor,
+  closeCommunityChatPoll,
   createCommunityChatClientRequestId,
   deleteCommunityChatMessage,
   discardCommunityChatImage,
@@ -22,6 +23,7 @@ const {
   getCommunityChatAdminReports,
   getCommunityChatAccess,
   getCommunityChatMessages,
+  getCommunityChatMessage,
   getCommunityChatNotificationSettings,
   getCommunityChatPinnedMessage,
   getCommunityChatMessageAuthorProfile,
@@ -30,6 +32,7 @@ const {
   getCommunityChatBlocks,
   getCommunityChatRooms,
   markCommunityChatRoomRead,
+  recordCommunityChatReadReceipts,
   pinCommunityChatMessage,
   requestCommunityChatAccess,
   recallCommunityChatMessage,
@@ -37,6 +40,7 @@ const {
   reviewCommunityChatAdminReport,
   sendCommunityChatMessage,
   toggleCommunityChatMessageLike,
+  voteCommunityChatPoll,
   unblockCommunityChatUser,
   unpinCommunityChatMessage,
   updateCommunityChatAdminRuntimePolicy,
@@ -112,6 +116,34 @@ describe('communityChatApi', () => {
     expect(mocks.apiBasePut).toHaveBeenCalledWith(
       '/api/community-chat/rooms/general/read',
       { lastMessagePublicId: 'message-1' },
+      { silent: true },
+    );
+  });
+
+  it('投票、单条权威刷新和批量已读回执都只使用消息公有 ID', () => {
+    getCommunityChatMessage('message/1');
+    voteCommunityChatPoll('message/1', 'option/1');
+    closeCommunityChatPoll('message/1');
+    recordCommunityChatReadReceipts('general', ['message/1', 'message/2']);
+
+    expect(mocks.apiBaseGet).toHaveBeenCalledWith('/api/community-chat/messages/message%2F1', undefined, {
+      silent: true,
+    });
+    expect(mocks.apiBasePut).toHaveBeenNthCalledWith(
+      1,
+      '/api/community-chat/messages/message%2F1/poll/vote',
+      { optionPublicId: 'option/1' },
+      { silent: true },
+    );
+    expect(mocks.apiBasePut).toHaveBeenNthCalledWith(
+      2,
+      '/api/community-chat/messages/message%2F1/poll/close',
+      {},
+      { silent: true },
+    );
+    expect(mocks.apiBasePost).toHaveBeenCalledWith(
+      '/api/community-chat/rooms/general/read-receipts',
+      { messagePublicIds: ['message/1', 'message/2'] },
       { silent: true },
     );
   });

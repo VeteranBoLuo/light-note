@@ -233,6 +233,19 @@
                       >
                         <span>{{ t('communityChat.recall.placeholder') }}</span>
                       </div>
+                      <ChatPollCard
+                        v-else-if="chatMessage.messageKind === 'poll' && chatMessage.poll"
+                        :question="chatMessage.content"
+                        :poll="chatMessage.poll"
+                        :now="communityClock"
+                        :participation-paused="
+                          props.access.authenticated && (!props.access.pollsEnabled || !props.access.postingEnabled)
+                        "
+                        :busy-option-public-id="pollVoteBusyByMessageId.get(chatMessage.publicId) || ''"
+                        :closing="pollClosingMessageIds.has(chatMessage.publicId)"
+                        @vote="votePoll(chatMessage, $event)"
+                        @close="confirmClosePoll(chatMessage)"
+                      />
                       <p v-else-if="messageHasText(chatMessage)" class="community-message__content">
                         <span
                           v-if="chatMessage.mentionEveryone || chatMessage.mentions?.length"
@@ -444,6 +457,14 @@
                   <SvgIcon :src="icon.coBuild.vote" size="14" aria-hidden="true" />
                   <span>{{ likeReactionSummary(chatMessage) }}</span>
                 </div>
+                <ChatReadReceiptBadge
+                  v-if="chatMessage.readReceiptEnabled && props.access.authenticated"
+                  :can-manage="props.access.canManage"
+                  :enabled="props.access.readReceiptsEnabled"
+                  :read-count="chatMessage.readCount"
+                  :loading="messageDetailBusyIds.has(chatMessage.publicId)"
+                  @refresh="refreshMessageDetail(chatMessage.publicId)"
+                />
               </div>
             </article>
           </template>
@@ -663,6 +684,15 @@
                   <SvgIcon :src="icon.noteDetail.toolbar.image" size="19" aria-hidden="true" />
                 </BButton>
               </BUpload>
+              <BButton
+                v-if="canCreatePoll"
+                class="community-composer__attach"
+                :aria-label="t('communityChat.poll.createAction')"
+                :title="t('communityChat.poll.createAction')"
+                @click="pollComposerVisible = true"
+              >
+                <SvgIcon :src="icon.communityChat.poll" size="19" aria-hidden="true" />
+              </BButton>
               <span class="community-composer__upload-hint">{{
                 t(bookmark.isMobile ? 'communityChat.image.inputHintMobile' : 'communityChat.image.inputHint')
               }}</span>
@@ -704,6 +734,7 @@
     </div>
   </section>
 
+  <ChatPollComposerModal v-model:visible="pollComposerVisible" :submitting="pollSubmitting" @submit="submitPoll" />
   <ChatReportModal
     v-model:visible="reportVisible"
     :author-name="reportTarget ? authorName(reportTarget) : ''"
@@ -778,21 +809,25 @@
   import { isEqual } from 'lodash-es';
   import {
     blockCommunityChatMessageAuthor,
+    closeCommunityChatPoll,
     createCommunityChatClientRequestId,
     deleteCommunityChatMessage,
     discardCommunityChatImage,
     ensureCommunityChatIdentity,
     getCommunityChatBlocks,
+    getCommunityChatMessage,
     getCommunityChatMessages,
     getCommunityChatPinnedMessage,
     markCommunityChatRoomRead,
     pinCommunityChatMessage,
     recallCommunityChatMessage,
     reportCommunityChatMessage,
+    recordCommunityChatReadReceipts,
     saveCommunityChatMessageSticker,
     searchCommunityChatMembers,
     sendCommunityChatMessage,
     toggleCommunityChatMessageLike,
+    voteCommunityChatPoll,
     unblockCommunityChatUser,
     unpinCommunityChatMessage,
     uploadCommunityChatImage,
@@ -829,6 +864,9 @@
   import ChatOnlineMembersModal from '@/components/communityChat/ChatOnlineMembersModal.vue';
   import ChatExpressionPanel from '@/components/communityChat/ChatExpressionPanel.vue';
   import ChatMentionSuggestions from '@/components/communityChat/ChatMentionSuggestions.vue';
+  import ChatPollCard from '@/components/communityChat/ChatPollCard.vue';
+  import ChatPollComposerModal from '@/components/communityChat/ChatPollComposerModal.vue';
+  import ChatReadReceiptBadge from '@/components/communityChat/ChatReadReceiptBadge.vue';
   import { useGrowth } from '@/composables/useGrowth';
   import { useCommunityChatProfile, type CommunityChatProfileUpdateInput } from '@/composables/useCommunityChatProfile';
   import {
@@ -959,6 +997,12 @@
   const reportVisible = ref(false);
   const reportTarget = ref<CommunityChatMessage | null>(null);
   const reporting = ref(false);
+  const pollComposerVisible = ref(false);
+  const pollSubmitting = ref(false);
+  const pollVoteBusyByMessageId = ref(new Map<string, string>());
+  const pollClosingMessageIds = ref(new Set<string>());
+  const pendingPollClientRequestIds = new Map<string, string>();
+  const messageDetailBusyIds = ref(new Set<string>());
   const reportedMessageIds = ref(new Set<string>());
   const pendingImages = computed({
     get: () => composerDraftSession.value.pendingImages,
@@ -995,6 +1039,7 @@
   const mobileMessageActionTarget = ref<CommunityChatMessage | null>(null);
   const mobileMessageActionImageTarget = ref<CommunityChatImage | null>(null);
   const recallClock = ref(Date.now());
+  const serverClockOffsetMs = ref(0);
   const pendingNewMessageCount = ref(0);
   const distanceFromBottom = ref(0);
   const focusedMessagePublicId = ref('');
@@ -1006,6 +1051,7 @@
   let pinnedLoadGeneration = 0;
   let pollTimer: number | undefined;
   let markReadTimer: number | undefined;
+  let readReceiptVisibilityTimer: number | undefined;
   let messageScrollFrame: number | undefined;
   let messageNavigationGeneration = 0;
   let programmaticMessageNavigationActive = false;
@@ -1028,6 +1074,12 @@
   let lastAuthorityRefreshAt = 0;
   let lastMessageScrollTop = 0;
   let realtimeAuthorityRefreshPending = false;
+  let readReceiptForegroundActive = false;
+  const submittedReadReceiptIds = new Set<string>();
+  const pendingReadReceiptIds = new Set<string>();
+  const readReceiptVisibleSince = new Map<string, number>();
+  const queuedMessageDetailIds = new Set<string>();
+  const deadlinePollRefreshRequestedIds = new Set<string>();
   let isUnmounted = false;
   let composerDragDepth = 0;
   let avatarLongPressState: {
@@ -1054,6 +1106,8 @@
   const INITIAL_IMAGE_PRIORITY_MAX = 4;
   const INITIAL_BOTTOM_ANCHOR_WINDOW_MS = 6000;
   const INITIAL_BOTTOM_ANCHOR_CHECK_MS = 120;
+  const READ_RECEIPT_VISIBLE_MS = 800;
+  const READ_RECEIPT_RETRY_MS = 5000;
   const BACK_TO_BOTTOM_DESKTOP_THRESHOLD = 128;
   const BACK_TO_BOTTOM_MOBILE_THRESHOLD = 320;
 
@@ -1081,6 +1135,7 @@
     return !initialLoading.value && chatMessages.value.length > 0 && distanceFromBottom.value > threshold;
   });
   const draftLength = computed(() => Array.from(String(draft.value || '')).length);
+  const communityClock = computed(() => recallClock.value + serverClockOffsetMs.value);
   const focusMessageFromRoute = computed(() => {
     const value = route.query.message;
     return typeof value === 'string' ? value.trim() : '';
@@ -1105,6 +1160,14 @@
       (currentRoom.value?.type !== 'announcement' ||
         props.access.memberRole === 'admin' ||
         props.access.memberRole === 'moderator'),
+  );
+  const canCreatePoll = computed(
+    () =>
+      props.access.canManage &&
+      props.access.pollsEnabled &&
+      canPostCurrentRoom.value &&
+      !sending.value &&
+      !pollSubmitting.value,
   );
   const canManagePinnedMessage = computed(
     () => props.access.memberRole === 'admin' || props.access.memberRole === 'moderator',
@@ -1281,6 +1344,9 @@
     const content = String(chatMessage.content || '')
       .replace(/\s+/g, ' ')
       .trim();
+    if (chatMessage.messageKind === 'poll') {
+      return t('communityChat.poll.summary', { question: content || t('communityChat.poll.cardLabel') });
+    }
     if (content) return content;
     if (chatMessage.messageKind === 'sticker' || chatMessage.sticker) return t('communityChat.sticker.messageFallback');
     if (chatMessage.images?.length) return t('communityChat.image.messageFallback');
@@ -1291,6 +1357,9 @@
     const content = String(reply.content || '')
       .replace(/\s+/g, ' ')
       .trim();
+    if (reply.hasPoll) {
+      return t('communityChat.poll.summary', { question: content || t('communityChat.poll.cardLabel') });
+    }
     if (content) return content;
     if (reply.hasSticker) return t('communityChat.sticker.messageFallback');
     if (reply.hasImages) return t('communityChat.image.messageFallback');
@@ -1305,10 +1374,14 @@
     const reply = chatMessage.reply;
     if (!reply) return '';
     if (reply.status === 'active') {
+      const content = String(reply.content || '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (reply.hasPoll) {
+        return t('communityChat.poll.summary', { question: content || t('communityChat.poll.cardLabel') });
+      }
       return (
-        String(reply.content || '')
-          .replace(/\s+/g, ' ')
-          .trim() ||
+        content ||
         (reply.hasSticker
           ? t('communityChat.sticker.messageFallback')
           : reply.hasImages
@@ -1812,6 +1885,139 @@
     }, 160);
   }
 
+  function resetReadReceiptVisibilityTracking() {
+    if (readReceiptVisibilityTimer !== undefined) window.clearTimeout(readReceiptVisibilityTimer);
+    readReceiptVisibilityTimer = undefined;
+    readReceiptVisibleSince.clear();
+  }
+
+  function meaningfullyVisibleReadReceiptIds() {
+    const container = messageListEl.value;
+    if (!container) return [];
+    const containerRect = container.getBoundingClientRect();
+    const byPublicId = new Map(chatMessages.value.map((item) => [item.publicId, item]));
+    const visiblePublicIds: string[] = [];
+    for (const element of container.querySelectorAll<HTMLElement>('[data-message-public-id]')) {
+      const publicId = String(element.dataset.messagePublicId || '');
+      const chatMessage = byPublicId.get(publicId);
+      if (
+        !chatMessage?.readReceiptEnabled ||
+        chatMessage.isOwn ||
+        chatMessage.status !== 'active' ||
+        chatMessage.deliveryState === 'sending' ||
+        submittedReadReceiptIds.has(publicId) ||
+        pendingReadReceiptIds.has(publicId)
+      ) {
+        continue;
+      }
+      // 只按正文/投票气泡计算可见性，头像或作者行露出不能代表发言本身已读。
+      const messageBubble = element.querySelector<HTMLElement>('.community-message__primary');
+      if (!messageBubble) continue;
+      const rect = messageBubble.getBoundingClientRect();
+      const visibleHeight = Math.max(
+        0,
+        Math.min(rect.bottom, containerRect.bottom) - Math.max(rect.top, containerRect.top),
+      );
+      const meaningfulHeight = Math.min(48, Math.max(24, rect.height * 0.5));
+      if (visibleHeight >= meaningfulHeight) visiblePublicIds.push(publicId);
+    }
+    return visiblePublicIds;
+  }
+
+  function armReadReceiptVisibilityTimer(delay = READ_RECEIPT_VISIBLE_MS) {
+    if (readReceiptVisibilityTimer !== undefined) window.clearTimeout(readReceiptVisibilityTimer);
+    readReceiptVisibilityTimer = window.setTimeout(
+      () => {
+        readReceiptVisibilityTimer = undefined;
+        void flushVisibleReadReceipts();
+      },
+      Math.max(0, delay),
+    );
+  }
+
+  function canTrackReadReceiptsInForeground() {
+    return (
+      readReceiptForegroundActive &&
+      document.visibilityState === 'visible' &&
+      (typeof document.hasFocus !== 'function' || document.hasFocus())
+    );
+  }
+
+  function scheduleVisibleReadReceipts() {
+    if (
+      !props.access.authenticated ||
+      !props.access.readReceiptsEnabled ||
+      !selectedRoomSlug.value ||
+      !canTrackReadReceiptsInForeground()
+    ) {
+      resetReadReceiptVisibilityTracking();
+      return;
+    }
+    const now = Date.now();
+    const visiblePublicIds = new Set(meaningfullyVisibleReadReceiptIds());
+    for (const publicId of readReceiptVisibleSince.keys()) {
+      if (!visiblePublicIds.has(publicId)) readReceiptVisibleSince.delete(publicId);
+    }
+    // 滚动、消息窗口变化或恢复前台都会重新开始稳定可见计时，避免把快速掠过计为已读。
+    for (const publicId of visiblePublicIds) readReceiptVisibleSince.set(publicId, now);
+    if (visiblePublicIds.size) armReadReceiptVisibilityTimer();
+    else resetReadReceiptVisibilityTracking();
+  }
+
+  async function flushVisibleReadReceipts() {
+    const roomSlug = selectedRoomSlug.value;
+    if (
+      !roomSlug ||
+      !props.access.authenticated ||
+      !props.access.readReceiptsEnabled ||
+      !canTrackReadReceiptsInForeground()
+    ) {
+      resetReadReceiptVisibilityTracking();
+      return;
+    }
+    const now = Date.now();
+    const visiblePublicIds = new Set(meaningfullyVisibleReadReceiptIds());
+    for (const publicId of readReceiptVisibleSince.keys()) {
+      if (!visiblePublicIds.has(publicId)) readReceiptVisibleSince.delete(publicId);
+    }
+    for (const publicId of visiblePublicIds) {
+      if (!readReceiptVisibleSince.has(publicId)) readReceiptVisibleSince.set(publicId, now);
+    }
+    const maturedPublicIds = [...visiblePublicIds]
+      .filter((publicId) => now - (readReceiptVisibleSince.get(publicId) || now) >= READ_RECEIPT_VISIBLE_MS)
+      .slice(0, 30);
+    if (!maturedPublicIds.length) {
+      const remaining = [...visiblePublicIds].map((publicId) =>
+        Math.max(0, READ_RECEIPT_VISIBLE_MS - (now - (readReceiptVisibleSince.get(publicId) || now))),
+      );
+      if (remaining.length) armReadReceiptVisibilityTimer(Math.min(...remaining));
+      return;
+    }
+    for (const publicId of maturedPublicIds) pendingReadReceiptIds.add(publicId);
+    let retryAfterFailure = false;
+    try {
+      await recordCommunityChatReadReceipts(roomSlug, maturedPublicIds);
+      // 服务端 200 已经权威处理本批次；不反复重试因并发删除、屏蔽等原因未被接受的旧 DOM 项。
+      for (const publicId of maturedPublicIds) {
+        submittedReadReceiptIds.add(publicId);
+        readReceiptVisibleSince.delete(publicId);
+      }
+    } catch {
+      // 回执是阅读体验的附加写入；失败不提示、不阻断滚动，并以低频退避避免一次弱网永久漏记。
+      retryAfterFailure = true;
+    } finally {
+      for (const publicId of maturedPublicIds) pendingReadReceiptIds.delete(publicId);
+    }
+    if (retryAfterFailure && canTrackReadReceiptsInForeground()) {
+      const retryStartedAt = Date.now();
+      for (const publicId of maturedPublicIds) readReceiptVisibleSince.set(publicId, retryStartedAt);
+      armReadReceiptVisibilityTimer(READ_RECEIPT_RETRY_MS);
+    } else if (canTrackReadReceiptsInForeground() && meaningfullyVisibleReadReceiptIds().length) {
+      // 极高视口或缩放场景可能同时露出超过单批 30 条；成功后立即排空下一批，不能等用户再滚动。
+      armReadReceiptVisibilityTimer(0);
+    }
+  }
+
   function processMessageListScroll() {
     messageScrollFrame = undefined;
     const element = messageListEl.value;
@@ -1841,6 +2047,7 @@
     ) {
       void loadNewer();
     }
+    scheduleVisibleReadReceipts();
     if (distanceFromBottom.value >= 96) return;
     pendingNewMessageCount.value = 0;
     // 定位历史消息的时间窗尚未接到最新页时，当前窗口底部并不等于聊天室最新消息，
@@ -1861,6 +2068,8 @@
 
   function handleMessageListScroll() {
     pauseAvatarMotionForScroll();
+    // 先同步取消旧计时，再把几何读取留在 rAF；避免 800ms 边界上的滚动晚于定时器执行而误记已读。
+    resetReadReceiptVisibilityTracking();
     if (messageScrollFrame !== undefined) return;
     messageScrollFrame = window.requestAnimationFrame(processMessageListScroll);
   }
@@ -1868,6 +2077,7 @@
   function handleMessageListUserScrollIntent() {
     cancelProgrammaticMessageNavigation();
     cancelInitialBottomAnchor();
+    resetReadReceiptVisibilityTracking();
     // 用户开始主动浏览历史后，键盘或容器后续的尺寸变化不得再把列表抢回底部。
     composerKeyboardAnchorAtBottom = false;
     pauseAvatarMotionForScroll();
@@ -2049,6 +2259,14 @@
     assignChatMessagesIfChanged(merged);
   }
 
+  function syncCommunityClock(serverTime: string | null | undefined) {
+    const timestamp = new Date(String(serverTime || '')).getTime();
+    if (!Number.isFinite(timestamp)) return;
+    // 截止判断既然选择服务端为唯一事实源，就不能在设备时钟偏差超过一天时悄悄退回本地时间。
+    // 错时区、长期关机或手动改时钟的设备都可能出现大偏差；有效的服务端 ISO 时间应完整接管。
+    serverClockOffsetMs.value = timestamp - Date.now();
+  }
+
   /**
    * 实时失效事件与安全刷新最终都读取服务端权威的“最新一页”。如果 Root 隐藏了消息或用户刚屏蔽作者，
    * 不能只做增量合并，否则已不可见的旧消息会一直留在当前页面。
@@ -2156,6 +2374,7 @@
       const [response, nextPinnedMessage] = await Promise.all([messagePagePromise, requestPinnedMessage(roomSlug)]);
       if (generation !== loadGeneration || roomSlug !== selectedRoomSlug.value) return;
       const page = response.data as CommunityChatMessagePage;
+      syncCommunityClock(page.serverTime);
       prewarmInitialViewportImages(page.items || [], page.focusPublicId || '');
       chatMessages.value = page.items || [];
       if (pinnedGeneration === pinnedLoadGeneration) pinnedMessage.value = nextPinnedMessage;
@@ -2203,6 +2422,7 @@
       const response = await getCommunityChatMessages(roomSlug, { before, limit: INITIAL_MESSAGE_PAGE_SIZE });
       if (roomSlug !== selectedRoomSlug.value) return;
       const page = response.data as CommunityChatMessagePage;
+      syncCommunityClock(page.serverTime);
       const knownIds = new Set(chatMessages.value.map((item) => item.publicId));
       chatMessages.value = [
         ...(page.items || []).filter((item) => !knownIds.has(item.publicId)),
@@ -2242,6 +2462,7 @@
       });
       if (roomSlug !== selectedRoomSlug.value || after !== nextAfter.value) return;
       const page = response.data as CommunityChatMessagePage;
+      syncCommunityClock(page.serverTime);
       const knownIds = new Set(chatMessages.value.map((item) => item.publicId));
       const incoming = (page.items || []).filter((item) => !knownIds.has(item.publicId));
       assignChatMessagesIfChanged([...chatMessages.value, ...retainUnchangedMessageReferences(incoming)]);
@@ -2284,6 +2505,7 @@
       const response = await getCommunityChatMessages(roomSlug, { limit: INITIAL_MESSAGE_PAGE_SIZE });
       if (roomSlug !== selectedRoomSlug.value) return;
       const page = response.data as CommunityChatMessagePage;
+      syncCommunityClock(page.serverTime);
       prewarmInitialViewportImages(page.items || [], page.focusPublicId || '');
       const newMessageCount = (page.items || []).filter((item) => !existingIds.has(item.publicId)).length;
       replaceLatestWindow(page);
@@ -2340,6 +2562,10 @@
     }
     if (event.type === 'message.updated') {
       const reason = String(event.payload.reason || '');
+      if (reason === 'poll_vote' || reason === 'poll_closed') {
+        await refreshMessageDetail(messagePublicId, { silent: true });
+        return;
+      }
       if (reason === 'pin' || reason === 'unpin') {
         await loadPinnedMessage();
         return;
@@ -2443,6 +2669,141 @@
     chatMessages.value = chatMessages.value.map((item) => (item.publicId === publicId ? { ...item, ...patch } : item));
     if (mobileMessageActionTarget.value?.publicId === publicId) {
       mobileMessageActionTarget.value = { ...mobileMessageActionTarget.value, ...patch };
+    }
+  }
+
+  async function refreshMessageDetail(publicId: string, { silent = false } = {}) {
+    if (!publicId || publicId.startsWith('pending-')) return;
+    if (messageDetailBusyIds.value.has(publicId)) {
+      // 连续投票事件在首个权威请求期间到达时合并成一次尾随刷新，避免并发响应乱序回写旧票数。
+      queuedMessageDetailIds.add(publicId);
+      return;
+    }
+    messageDetailBusyIds.value = new Set([...messageDetailBusyIds.value, publicId]);
+    try {
+      const response = await getCommunityChatMessage(publicId);
+      const refreshed = response.data?.message as CommunityChatMessage | undefined;
+      if (!refreshed) throw new Error('COMMUNITY_CHAT_MESSAGE_DETAIL_INVALID');
+      updateMessageInteraction(publicId, refreshed);
+      if (pinnedMessage.value?.publicId === publicId) pinnedMessage.value = refreshed;
+    } catch (error: any) {
+      if (!silent) message.error(error?.message || t('communityChat.messagesLoadFailed'));
+    } finally {
+      const next = new Set(messageDetailBusyIds.value);
+      next.delete(publicId);
+      messageDetailBusyIds.value = next;
+      if (queuedMessageDetailIds.delete(publicId)) void refreshMessageDetail(publicId, { silent: true });
+    }
+  }
+
+  async function votePoll(chatMessage: CommunityChatMessage, optionPublicId: string) {
+    if (
+      !chatMessage.poll?.canVote ||
+      !props.access.pollsEnabled ||
+      !props.access.postingEnabled ||
+      pollVoteBusyByMessageId.value.has(chatMessage.publicId) ||
+      pollClosingMessageIds.value.has(chatMessage.publicId) ||
+      !optionPublicId
+    ) {
+      return;
+    }
+    pollVoteBusyByMessageId.value = new Map(pollVoteBusyByMessageId.value).set(chatMessage.publicId, optionPublicId);
+    try {
+      const response = await voteCommunityChatPoll(chatMessage.publicId, optionPublicId);
+      if (!response.data?.poll) throw new Error('COMMUNITY_CHAT_POLL_VOTE_INVALID');
+      updateMessageInteraction(chatMessage.publicId, { poll: response.data.poll });
+      // Root 同时接收其他成员的定向票数事件；自己的 HTTP 快照可能在极端乱序下晚到并覆盖更新结果。
+      // 复用详情请求的在途合并机制补一个尾随权威读取，普通成员只需保留自己的选择，不增加请求。
+      if (props.access.canManage) void refreshMessageDetail(chatMessage.publicId, { silent: true });
+      void recordOperation({ module: '公共聊天室', operation: '参与聊天室投票' });
+      message.success(t('communityChat.poll.voteSuccess'));
+    } catch (error: any) {
+      message.error(error?.message || t('communityChat.poll.voteFailed'));
+      void refreshMessageDetail(chatMessage.publicId, { silent: true });
+    } finally {
+      const next = new Map(pollVoteBusyByMessageId.value);
+      next.delete(chatMessage.publicId);
+      pollVoteBusyByMessageId.value = next;
+    }
+  }
+
+  function confirmClosePoll(chatMessage: CommunityChatMessage) {
+    if (
+      !chatMessage.poll?.canClose ||
+      pollClosingMessageIds.value.has(chatMessage.publicId) ||
+      pollVoteBusyByMessageId.value.has(chatMessage.publicId)
+    ) {
+      return;
+    }
+    Alert.alert({
+      title: t('communityChat.poll.closeConfirmTitle'),
+      content: t('communityChat.poll.closeConfirmDescription'),
+      footer: [
+        { label: t('common.cancel'), type: 'dashed', function: () => Alert.destroy() },
+        {
+          label: t('communityChat.poll.closeAction'),
+          type: 'danger',
+          function: () => {
+            Alert.destroy();
+            void closePoll(chatMessage);
+          },
+        },
+      ],
+    });
+  }
+
+  async function closePoll(chatMessage: CommunityChatMessage) {
+    if (
+      pollClosingMessageIds.value.has(chatMessage.publicId) ||
+      pollVoteBusyByMessageId.value.has(chatMessage.publicId)
+    ) {
+      return;
+    }
+    pollClosingMessageIds.value = new Set(pollClosingMessageIds.value).add(chatMessage.publicId);
+    try {
+      const response = await closeCommunityChatPoll(chatMessage.publicId);
+      if (!response.data?.poll) throw new Error('COMMUNITY_CHAT_POLL_CLOSE_INVALID');
+      updateMessageInteraction(chatMessage.publicId, { poll: response.data.poll });
+      void recordOperation({ module: '公共聊天室', operation: 'Root 结束聊天室投票' });
+      message.success(t('communityChat.poll.closeSuccess'));
+    } catch (error: any) {
+      message.error(error?.message || t('communityChat.poll.closeFailed'));
+      void refreshMessageDetail(chatMessage.publicId, { silent: true });
+    } finally {
+      const next = new Set(pollClosingMessageIds.value);
+      next.delete(chatMessage.publicId);
+      pollClosingMessageIds.value = next;
+    }
+  }
+
+  async function submitPoll(payload: { question: string; options: string[]; endsAt: string }) {
+    const roomSlug = selectedRoomSlug.value;
+    if (!roomSlug || !canCreatePoll.value || pollSubmitting.value) return;
+    const payloadKey = JSON.stringify([payload.question, payload.options, payload.endsAt]);
+    const clientRequestId = pendingPollClientRequestIds.get(payloadKey) || createCommunityChatClientRequestId();
+    pendingPollClientRequestIds.set(payloadKey, clientRequestId);
+    pollSubmitting.value = true;
+    try {
+      const response = await sendCommunityChatMessage(roomSlug, {
+        clientRequestId,
+        content: payload.question,
+        messageKind: 'poll',
+        poll: { endsAt: payload.endsAt, options: payload.options },
+      });
+      const sentMessage = response.data?.message as CommunityChatMessage | undefined;
+      if (!sentMessage) throw new Error('COMMUNITY_CHAT_POLL_CREATE_INVALID');
+      if (roomSlug === selectedRoomSlug.value) mergeLatest([sentMessage]);
+      pendingPollClientRequestIds.clear();
+      pollComposerVisible.value = false;
+      await scrollToBottom();
+      void markLatestRead();
+      void recordOperation({ module: '公共聊天室', operation: 'Root 发起聊天室投票' });
+      message.success(t('communityChat.poll.createSuccess'));
+    } catch (error: any) {
+      emit('accessInvalidated');
+      message.error(error?.message || t('communityChat.poll.createFailed'));
+    } finally {
+      pollSubmitting.value = false;
     }
   }
 
@@ -2565,6 +2926,7 @@
       authorName: authorName(chatMessage),
       hasImages: chatMessage.images.length > 0,
       hasSticker: chatMessage.messageKind === 'sticker' || Boolean(chatMessage.sticker),
+      hasPoll: chatMessage.messageKind === 'poll' || Boolean(chatMessage.poll),
     };
     pendingClientRequestId.value = null;
     void nextTick(() => composerInput.value?.focus());
@@ -3493,6 +3855,11 @@
     expressionPanelOpen.value = false;
     closeMentionSuggestions();
     closeCommunityProfile({ reset: true, clearIdentityCache: true });
+    submittedReadReceiptIds.clear();
+    pendingReadReceiptIds.clear();
+    resetReadReceiptVisibilityTracking();
+    queuedMessageDetailIds.clear();
+    void nextTick(scheduleVisibleReadReceipts);
   });
 
   watch(
@@ -3528,6 +3895,15 @@
       pinnedLoadGeneration += 1;
       pinnedMessage.value = null;
       pinActionBusy.value = false;
+      pollComposerVisible.value = false;
+      pollVoteBusyByMessageId.value = new Map();
+      pollClosingMessageIds.value = new Set();
+      pendingPollClientRequestIds.clear();
+      submittedReadReceiptIds.clear();
+      pendingReadReceiptIds.clear();
+      resetReadReceiptVisibilityTracking();
+      queuedMessageDetailIds.clear();
+      deadlinePollRefreshRequestedIds.clear();
       lastMarkedReadMessageId = '';
       lastAuthorityRefreshAt = 0;
       lastMessageScrollTop = 0;
@@ -3586,11 +3962,70 @@
     if (nextValue !== previousValue && selectedRoomSlug.value) void loadInitial();
   });
 
+  watch(
+    () =>
+      chatMessages.value
+        .filter((item) => item.readReceiptEnabled && !item.isOwn && item.status === 'active')
+        .map((item) => item.publicId)
+        .join('|'),
+    () => void nextTick(scheduleVisibleReadReceipts),
+  );
+
+  watch([() => props.access.authenticated, () => props.access.readReceiptsEnabled], ([authenticated, enabled]) => {
+    if (!authenticated || !enabled) {
+      resetReadReceiptVisibilityTracking();
+      return;
+    }
+    void nextTick(scheduleVisibleReadReceipts);
+  });
+
+  watch(communityClock, (now) => {
+    const visibleMessageIds = new Set(chatMessages.value.map((item) => item.publicId));
+    for (const publicId of deadlinePollRefreshRequestedIds) {
+      if (!visibleMessageIds.has(publicId)) deadlinePollRefreshRequestedIds.delete(publicId);
+    }
+    for (const chatMessage of chatMessages.value) {
+      const endsAt = new Date(String(chatMessage.poll?.endsAt || '')).getTime();
+      if (
+        !chatMessage.poll ||
+        chatMessage.poll.closed ||
+        !Number.isFinite(endsAt) ||
+        endsAt > now ||
+        deadlinePollRefreshRequestedIds.has(chatMessage.publicId)
+      ) {
+        continue;
+      }
+      // 自动截止不会产生服务端广播；跨过截止点后立即拉一次权威详情，避免已结束但结果仍隐藏到安全轮询。
+      // 若本次详情失败，后续交给 8 秒安全轮询，不能让每秒时钟把同一故障放大成请求风暴。
+      deadlinePollRefreshRequestedIds.add(chatMessage.publicId);
+      void refreshMessageDetail(chatMessage.publicId, { silent: true });
+    }
+  });
+
   function handleVisibilityChange() {
-    if (document.visibilityState === 'visible') void refreshLatest();
+    if (document.visibilityState !== 'visible') {
+      readReceiptForegroundActive = false;
+      resetReadReceiptVisibilityTracking();
+      return;
+    }
+    readReceiptForegroundActive = typeof document.hasFocus !== 'function' || document.hasFocus();
+    void refreshLatest();
+    if (readReceiptForegroundActive) scheduleVisibleReadReceipts();
+  }
+
+  function handleReadReceiptWindowBlur() {
+    readReceiptForegroundActive = false;
+    resetReadReceiptVisibilityTracking();
+  }
+
+  function handleReadReceiptWindowFocus() {
+    readReceiptForegroundActive = document.visibilityState === 'visible';
+    if (readReceiptForegroundActive) scheduleVisibleReadReceipts();
   }
 
   onMounted(() => {
+    readReceiptForegroundActive =
+      document.visibilityState === 'visible' && (typeof document.hasFocus !== 'function' || document.hasFocus());
     if (props.access.authenticated && props.access.canEnter) {
       void ensureCommunityChatIdentity().catch(() => undefined);
     }
@@ -3600,14 +4035,24 @@
     }, 5000);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     document.addEventListener('pointerdown', handleDocumentPointerDown, true);
+    window.addEventListener('blur', handleReadReceiptWindowBlur);
+    window.addEventListener('focus', handleReadReceiptWindowFocus);
+    window.addEventListener('pagehide', handleReadReceiptWindowBlur);
+    window.addEventListener('pageshow', handleReadReceiptWindowFocus);
     window.addEventListener('resize', syncComposerInputHeight);
+    window.addEventListener('resize', scheduleVisibleReadReceipts);
     window.visualViewport?.addEventListener('resize', scheduleBottomAnchor);
+    window.visualViewport?.addEventListener('resize', scheduleVisibleReadReceipts);
     const ResizeObserverConstructor = globalThis.ResizeObserver;
     if (bookmark.isMobile && typeof ResizeObserverConstructor === 'function' && messageListEl.value) {
-      messageListResizeObserver = new ResizeObserverConstructor(scheduleBottomAnchor);
+      messageListResizeObserver = new ResizeObserverConstructor(() => {
+        scheduleBottomAnchor();
+        scheduleVisibleReadReceipts();
+      });
       messageListResizeObserver.observe(messageListEl.value);
     }
     void nextTick(syncComposerInputHeight);
+    void nextTick(scheduleVisibleReadReceipts);
   });
 
   onBeforeUnmount(() => {
@@ -3627,6 +4072,7 @@
     if (pollTimer !== undefined) window.clearInterval(pollTimer);
     if (recallClockTimer !== undefined) window.clearInterval(recallClockTimer);
     if (markReadTimer !== undefined) window.clearTimeout(markReadTimer);
+    resetReadReceiptVisibilityTracking();
     if (messageScrollFrame !== undefined) window.cancelAnimationFrame(messageScrollFrame);
     if (keyboardAnchorFrame !== undefined) window.cancelAnimationFrame(keyboardAnchorFrame);
     if (keyboardAnchorCloseTimer !== undefined) window.clearTimeout(keyboardAnchorCloseTimer);
@@ -3637,8 +4083,14 @@
     messageListEl.value?.classList.remove('is-actively-scrolling');
     document.removeEventListener('visibilitychange', handleVisibilityChange);
     document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
+    window.removeEventListener('blur', handleReadReceiptWindowBlur);
+    window.removeEventListener('focus', handleReadReceiptWindowFocus);
+    window.removeEventListener('pagehide', handleReadReceiptWindowBlur);
+    window.removeEventListener('pageshow', handleReadReceiptWindowFocus);
     window.removeEventListener('resize', syncComposerInputHeight);
+    window.removeEventListener('resize', scheduleVisibleReadReceipts);
     window.visualViewport?.removeEventListener('resize', scheduleBottomAnchor);
+    window.visualViewport?.removeEventListener('resize', scheduleVisibleReadReceipts);
     messageListResizeObserver?.disconnect();
     messageListResizeObserver = null;
     mobileMessageActionTarget.value = null;
@@ -4427,7 +4879,8 @@
 
   .community-message.is-recalled .community-message__content,
   .community-message.is-recalled .community-message__images,
-  .community-message.is-recalled .community-message__sticker {
+  .community-message.is-recalled .community-message__sticker,
+  .community-message.is-recalled :deep(.chat-poll-card) {
     opacity: 0.76;
   }
 
@@ -4514,6 +4967,11 @@
   }
 
   .community-message.is-focused .community-message__recalled {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 3px;
+  }
+
+  .community-message.is-focused :deep(.chat-poll-card) {
     outline: 2px solid var(--primary-color);
     outline-offset: 3px;
   }

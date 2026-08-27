@@ -409,7 +409,11 @@
   }
 
   function evidenceContent(item: CommunityChatReportItem) {
-    return item.evidenceSnapshot?.content || t('communityChatModerationAdmin.messageUnavailable');
+    const evidence = item.evidenceSnapshot;
+    const content = evidence?.content || t('communityChatModerationAdmin.messageUnavailable');
+    const options = evidence?.poll?.options?.filter(Boolean) || [];
+    if (!options.length) return content;
+    return t('communityChatModerationAdmin.pollEvidence', { question: content, options: options.join(' / ') });
   }
 
   function evidenceRoom(item: CommunityChatReportItem) {

@@ -20,11 +20,15 @@ export function getCommunityChatFeatureState(env = process.env) {
   const accessMode = ACCESS_MODES.has(requestedAccessMode) ? requestedAccessMode : 'closed';
   const rulesVersion = String(env.COMMUNITY_CHAT_RULES_VERSION || '2026-08-v1').trim() || '2026-08-v1';
   const messagingEnabled = accessMode !== 'closed' && enabledFlag(env.COMMUNITY_CHAT_MESSAGING_ENABLED);
+  const pollsEnabled = messagingEnabled && enabledFlag(env.COMMUNITY_CHAT_POLLS_ENABLED);
+  const readReceiptsEnabled = messagingEnabled && enabledFlag(env.COMMUNITY_CHAT_READ_RECEIPTS_ENABLED);
 
   return {
     accessMode,
     waitlistEnabled: enabledFlag(env.COMMUNITY_CHAT_WAITLIST_ENABLED),
     messagingEnabled,
+    pollsEnabled,
+    readReceiptsEnabled,
     realtimeEnabled: messagingEnabled && enabledFlag(env.COMMUNITY_CHAT_REALTIME_ENABLED),
     emergencyReadOnly: enabledFlag(env.COMMUNITY_CHAT_EMERGENCY_READ_ONLY),
     rulesVersion: rulesVersion.slice(0, 32),

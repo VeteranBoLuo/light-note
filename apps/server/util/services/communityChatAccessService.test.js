@@ -118,7 +118,11 @@ describe('communityChatAccessService', () => {
     };
     const active = await getCommunityChatAccess({
       user: { id: 'user-1', role: 'user' },
-      env: PUBLIC_ENV,
+      env: {
+        ...PUBLIC_ENV,
+        COMMUNITY_CHAT_POLLS_ENABLED: '1',
+        COMMUNITY_CHAT_READ_RECEIPTS_ENABLED: '1',
+      },
       db: activeDb,
     });
     expect(active).toMatchObject({
@@ -129,6 +133,8 @@ describe('communityChatAccessService', () => {
       memberRole: 'member',
       notificationsDefaultEnabled: true,
       notificationsEnabled: true,
+      pollsEnabled: true,
+      readReceiptsEnabled: true,
     });
 
     const bannedDb = {

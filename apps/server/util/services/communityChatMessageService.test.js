@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -40,6 +41,12 @@ const PUBLIC_ENV = {
   COMMUNITY_CHAT_ACCESS_MODE: 'public',
   COMMUNITY_CHAT_MESSAGING_ENABLED: '1',
   COMMUNITY_CHAT_RULES_VERSION: 'rules-v1',
+};
+
+const POLL_ENV = {
+  ...PUBLIC_ENV,
+  COMMUNITY_CHAT_POLLS_ENABLED: '1',
+  COMMUNITY_CHAT_READ_RECEIPTS_ENABLED: '1',
 };
 
 const MEMBER = { role: 'member', status: 'active', rulesVersion: 'rules-v1' };
@@ -167,6 +174,7 @@ describe('communityChatMessageService', () => {
                 publicId: 'message-2',
                 userId: 'user-1',
                 content: '第二条',
+                databaseNow: '2026-08-26T10:00:00.125Z',
                 mentionNamesHex: Buffer.from('薄荷').toString('hex'),
               }),
               messageRow({ internalId: 1, publicId: 'message-1', userId: 'user-2', content: '第一条' }),
@@ -188,7 +196,12 @@ describe('communityChatMessageService', () => {
       db,
     });
 
-    expect(result).toMatchObject({ hasMore: true, nextBefore: 'message-2', pollingAfterMs: 8000 });
+    expect(result).toMatchObject({
+      hasMore: true,
+      nextBefore: 'message-2',
+      pollingAfterMs: 8000,
+      serverTime: '2026-08-26T10:00:00.125Z',
+    });
     expect(result.items.map((item) => item.publicId)).toEqual(['message-2', 'message-3']);
     expect(result.items[0]).toMatchObject({
       isOwn: true,
@@ -206,6 +219,7 @@ describe('communityChatMessageService', () => {
     expect(result.items[0]).not.toHaveProperty('userId');
     expect(result.items[0].author).not.toHaveProperty('id');
     expect(db.query.mock.calls.some(([sql]) => String(sql).includes('LEFT JOIN user_growth growth'))).toBe(true);
+    expect(db.query.mock.calls.some(([sql]) => String(sql).includes('UTC_TIMESTAMP(3)'))).toBe(true);
     expect(db.query.mock.calls.some(([sql]) => String(sql).includes('community_chat_message_mentions'))).toBe(true);
   });
 
@@ -813,8 +827,26 @@ describe('communityChatMessageService', () => {
       null,
       null,
       0,
+      0,
       '这是我的第一条消息',
     ]);
+    const expectedV2Fingerprint = createHash('sha256')
+      .update(
+        JSON.stringify({
+          version: 2,
+          roomSlug: 'general',
+          messageKind: 'text',
+          stickerSource: null,
+          stickerKey: null,
+          content: '这是我的第一条消息',
+          replyToPublicId: null,
+          mentionUserPublicIds: [],
+          mentionMessagePublicIds: [],
+          imagePublicIds: [],
+        }),
+      )
+      .digest('hex');
+    expect(insertCall?.[1]?.[4]).toBe(expectedV2Fingerprint);
     const runtimeQuery = connection.query.mock.calls.find(([sql]) =>
       String(sql).includes('FROM community_chat_runtime_policy'),
     );
@@ -837,6 +869,270 @@ describe('communityChatMessageService', () => {
       env: MESSAGE_ENV,
       db,
     });
+  });
+
+  it('Root 投票复用消息事务、幂等指纹和房间游标，并在发送时固化已读回执开关', async () => {
+    const endsAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const connection = createConnection(async (sql, params) => {
+      const text = String(sql);
+      if (text.includes('SELECT id FROM user')) return [[{ id: 'root-1' }], []];
+      if (text.includes('FROM community_chat_runtime_policy')) return [[{ postingEnabled: 1 }], []];
+      if (text.includes('FROM community_chat_rooms')) {
+        return [[{ id: 2, slug: 'general', type: 'text', status: 'active', slowModeSeconds: 0 }], []];
+      }
+      if (text.includes('WHERE message.user_id = ?') && text.includes('client_request_id')) return [[], []];
+      if (text.includes('AS tooSoon')) return [[{ tooSoon: 0, tooLate: 0 }], []];
+      if (text.includes('INSERT INTO community_chat_messages')) return [{ insertId: 41 }, []];
+      if (text.includes('INSERT INTO community_chat_polls')) return [{ affectedRows: 1 }, []];
+      if (text.includes('INSERT INTO community_chat_poll_options')) return [{ affectedRows: 2 }, []];
+      if (text.includes('UPDATE community_chat_rooms')) return [{ affectedRows: 1 }, []];
+      if (text.includes('INSERT INTO community_chat_reads')) return [{ affectedRows: 1 }, []];
+      if (text.includes('WHERE message.public_id = ?')) {
+        return [
+          [
+            messageRow({
+              internalId: 41,
+              publicId: params[0],
+              userId: 'root-1',
+              content: '下一项优先做什么？',
+              messageKind: 'poll',
+              authorAccountRole: 'root',
+              authorRole: 'official',
+              readReceiptEnabled: 1,
+            }),
+          ],
+          [],
+        ];
+      }
+      if (text.includes('FROM community_chat_message_images')) return [[], []];
+      if (text.includes('FROM community_chat_message_likes')) return [[], []];
+      if (text.includes('FROM community_chat_polls poll')) {
+        return [
+          [
+            {
+              messageId: 41,
+              endsAt,
+              closedAt: null,
+              manuallyClosed: 0,
+              deadlinePassed: 0,
+              optionPublicId: 'option-a',
+              label: '体验',
+              sortOrder: 0,
+              voteCount: 0,
+              selectedByViewer: 0,
+            },
+            {
+              messageId: 41,
+              endsAt,
+              closedAt: null,
+              manuallyClosed: 0,
+              deadlinePassed: 0,
+              optionPublicId: 'option-b',
+              label: '性能',
+              sortOrder: 1,
+              voteCount: 0,
+              selectedByViewer: 0,
+            },
+          ],
+          [],
+        ];
+      }
+      if (text.includes('FROM community_chat_message_read_receipts')) return [[], []];
+      throw new Error(`unexpected query: ${sql}`);
+    });
+    const db = { getConnection: vi.fn(async () => connection) };
+
+    const result = await createCommunityChatMessage({
+      user: { id: 'root-1', role: 'root' },
+      roomSlug: 'general',
+      clientRequestId: 'request-poll-root',
+      content: '下一项优先做什么？',
+      messageKind: 'poll',
+      poll: { endsAt, options: ['体验', '性能'] },
+      env: POLL_ENV,
+      db,
+    });
+
+    const messageInsert = connection.query.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT INTO community_chat_messages'),
+    );
+    const rootAccountLockIndex = connection.query.mock.calls.findIndex(([sql]) =>
+      String(sql).includes('SELECT id FROM user'),
+    );
+    const messageInsertIndex = connection.query.mock.calls.findIndex(([sql]) =>
+      String(sql).includes('INSERT INTO community_chat_messages'),
+    );
+    expect(String(connection.query.mock.calls[rootAccountLockIndex]?.[0])).toContain('FOR UPDATE');
+    expect(rootAccountLockIndex).toBeLessThan(messageInsertIndex);
+    const deadlineCheckIndex = connection.query.mock.calls.findIndex(([sql]) => String(sql).includes('AS tooSoon'));
+    expect(String(connection.query.mock.calls[deadlineCheckIndex]?.[0])).toContain('UTC_TIMESTAMP(3)');
+    expect(deadlineCheckIndex).toBeLessThan(messageInsertIndex);
+    expect(messageInsert?.[1]?.at(-2)).toBe(1);
+    const expectedV2PollFingerprint = createHash('sha256')
+      .update(
+        JSON.stringify({
+          version: 2,
+          roomSlug: 'general',
+          messageKind: 'poll',
+          stickerSource: null,
+          stickerKey: null,
+          content: '下一项优先做什么？',
+          replyToPublicId: null,
+          mentionUserPublicIds: [],
+          mentionMessagePublicIds: [],
+          imagePublicIds: [],
+          poll: { endsAt, options: ['体验', '性能'] },
+        }),
+      )
+      .digest('hex');
+    const expectedV3PollFingerprint = createHash('sha256')
+      .update(
+        JSON.stringify({
+          version: 3,
+          roomSlug: 'general',
+          messageKind: 'poll',
+          stickerSource: null,
+          stickerKey: null,
+          content: '下一项优先做什么？',
+          replyToPublicId: null,
+          mentionUserPublicIds: [],
+          mentionMessagePublicIds: [],
+          imagePublicIds: [],
+          poll: { endsAt, options: ['体验', '性能'] },
+        }),
+      )
+      .digest('hex');
+    expect(messageInsert?.[1]?.[4]).not.toBe(expectedV2PollFingerprint);
+    expect(messageInsert?.[1]?.[4]).toBe(expectedV3PollFingerprint);
+    expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO community_chat_polls'))).toBe(
+      true,
+    );
+    expect(
+      connection.query.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO community_chat_poll_options')),
+    ).toBe(true);
+    expect(result.message).toMatchObject({
+      messageKind: 'poll',
+      readReceiptEnabled: true,
+      readCount: 0,
+      poll: { resultsVisible: true, canClose: true, options: [{ label: '体验' }, { label: '性能' }] },
+    });
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('已经成功的投票即使进入最短截止窗口或子开关关闭，原请求重放仍先命中幂等消息', async () => {
+    const endsAt = new Date(Date.now() + 60 * 1000).toISOString();
+    const payloadFingerprint = createHash('sha256')
+      .update(
+        JSON.stringify({
+          version: 3,
+          roomSlug: 'general',
+          messageKind: 'poll',
+          stickerSource: null,
+          stickerKey: null,
+          content: '网络响应丢失后的投票',
+          replyToPublicId: null,
+          mentionUserPublicIds: [],
+          mentionMessagePublicIds: [],
+          imagePublicIds: [],
+          poll: { endsAt, options: ['甲', '乙'] },
+        }),
+      )
+      .digest('hex');
+    const connection = createConnection(async (sql) => {
+      const text = String(sql);
+      if (text.includes('SELECT id FROM user')) return [[{ id: 'root-1' }], []];
+      if (text.includes('FROM community_chat_runtime_policy')) return [[{ postingEnabled: 1 }], []];
+      if (text.includes('FROM community_chat_rooms')) {
+        return [[{ id: 2, slug: 'general', type: 'text', status: 'active', slowModeSeconds: 0 }], []];
+      }
+      if (text.includes('client_request_id')) {
+        return [
+          [
+            {
+              internalId: 42,
+              publicId: 'poll-message-existing',
+              roomId: 2,
+              content: '网络响应丢失后的投票',
+              payloadFingerprint,
+              mentionEveryone: 0,
+              replyToId: null,
+              replyPublicId: null,
+            },
+          ],
+          [],
+        ];
+      }
+      if (text.includes('WHERE message.public_id = ?')) {
+        return [
+          [
+            messageRow({
+              internalId: 42,
+              publicId: 'poll-message-existing',
+              userId: 'root-1',
+              content: '网络响应丢失后的投票',
+              messageKind: 'poll',
+              authorAccountRole: 'root',
+              authorRole: 'official',
+              readReceiptEnabled: 1,
+            }),
+          ],
+          [],
+        ];
+      }
+      if (text.includes('FROM community_chat_message_images')) return [[], []];
+      if (text.includes('FROM community_chat_message_likes')) return [[], []];
+      if (text.includes('FROM community_chat_polls poll')) {
+        return [
+          [
+            {
+              messageId: 42,
+              endsAt,
+              closedAt: null,
+              manuallyClosed: 0,
+              deadlinePassed: 0,
+              optionPublicId: 'option-a',
+              label: '甲',
+              sortOrder: 0,
+              voteCount: 0,
+              selectedByViewer: 0,
+            },
+            {
+              messageId: 42,
+              endsAt,
+              closedAt: null,
+              manuallyClosed: 0,
+              deadlinePassed: 0,
+              optionPublicId: 'option-b',
+              label: '乙',
+              sortOrder: 1,
+              voteCount: 0,
+              selectedByViewer: 0,
+            },
+          ],
+          [],
+        ];
+      }
+      if (text.includes('FROM community_chat_message_read_receipts')) return [[], []];
+      throw new Error(`unexpected query: ${sql}`);
+    });
+    const db = { getConnection: vi.fn(async () => connection) };
+
+    const result = await createCommunityChatMessage({
+      user: { id: 'root-1', role: 'root' },
+      roomSlug: 'general',
+      clientRequestId: 'request-poll-replay',
+      content: '网络响应丢失后的投票',
+      messageKind: 'poll',
+      poll: { endsAt, options: ['甲', '乙'] },
+      env: { ...POLL_ENV, COMMUNITY_CHAT_POLLS_ENABLED: '0' },
+      db,
+    });
+
+    expect(result).toMatchObject({ idempotent: true, message: { publicId: 'poll-message-existing' } });
+    expect(
+      connection.query.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO community_chat_messages')),
+    ).toBe(false);
+    expect(connection.commit).toHaveBeenCalledTimes(1);
   });
 
   it('Root 提及所有人时写入独立标记并随消息对象返回', async () => {
@@ -884,7 +1180,7 @@ describe('communityChatMessageService', () => {
       String(sql).includes('INSERT INTO community_chat_messages'),
     );
     expect(insertCall?.[0]).toContain('mention_everyone');
-    expect(insertCall?.[1]?.at(-2)).toBe(1);
+    expect(insertCall?.[1]?.at(-3)).toBe(1);
     expect(result.message).toMatchObject({ content: '请大家查看', mentionEveryone: true });
     expect(connection.commit).toHaveBeenCalledTimes(1);
   });
@@ -1296,6 +1592,7 @@ describe('communityChatMessageService', () => {
       authorName: '',
       hasImages: false,
       hasSticker: false,
+      hasPoll: false,
     });
   });
 
@@ -1655,5 +1952,40 @@ describe('communityChatMessageService', () => {
     expect(() => __test__.normalizeMentionEveryone('true')).toThrowError(
       expect.objectContaining({ code: 'INVALID_MENTION_EVERYONE' }),
     );
+  });
+
+  it('Root 消息已读数量只在 Root 响应出现，普通成员仅收到透明启用标记', () => {
+    const row = messageRow({
+      userId: 'root-1',
+      authorAccountRole: 'root',
+      authorRole: 'official',
+      readReceiptEnabled: 1,
+    });
+    const memberMessage = __test__.toPublicMessage(
+      row,
+      'user-1',
+      new Set(),
+      [],
+      {},
+      {
+        memberRole: 'member',
+        readCount: 4,
+      },
+    );
+    const rootMessage = __test__.toPublicMessage(
+      row,
+      'root-1',
+      new Set(),
+      [],
+      {},
+      {
+        memberRole: 'admin',
+        readCount: 4,
+      },
+    );
+
+    expect(memberMessage).toMatchObject({ readReceiptEnabled: true });
+    expect(memberMessage).not.toHaveProperty('readCount');
+    expect(rootMessage).toMatchObject({ readReceiptEnabled: true, readCount: 4 });
   });
 });

@@ -7,6 +7,8 @@ export interface CommunityChatAccess {
   accessMode: 'closed' | 'invite_only' | 'public';
   waitlistEnabled: boolean;
   messagingEnabled: boolean;
+  pollsEnabled: boolean;
+  readReceiptsEnabled: boolean;
   realtimeEnabled: boolean;
   postingEnabled: boolean;
   emergencyReadOnly: boolean;
@@ -108,6 +110,7 @@ export interface CommunityChatMessageReply {
   authorName: string;
   hasImages: boolean;
   hasSticker?: boolean;
+  hasPoll?: boolean;
 }
 
 export interface CommunityChatImage {
@@ -131,6 +134,25 @@ export interface CommunityChatSticker {
   source: CommunityChatStickerSource;
   key: string;
   url: string;
+}
+
+export interface CommunityChatPollOption {
+  publicId: string;
+  label: string;
+  voteCount?: number;
+}
+
+export interface CommunityChatPoll {
+  endsAt: string;
+  closedAt: string | null;
+  closed: boolean;
+  closeReason: 'manual' | 'deadline' | null;
+  resultsVisible: boolean;
+  selectedOptionPublicId: string | null;
+  totalVoterCount?: number;
+  canVote: boolean;
+  canClose: boolean;
+  options: CommunityChatPollOption[];
 }
 
 export interface CommunityChatMemberSearchItem {
@@ -159,10 +181,11 @@ export interface CommunityChatCustomSticker {
 export interface CommunityChatMessage {
   publicId: string;
   content: string;
-  messageKind?: 'text' | 'sticker';
+  messageKind?: 'text' | 'sticker' | 'poll';
   stickerSource?: CommunityChatStickerSource | null;
   stickerKey?: string | null;
   sticker?: CommunityChatSticker | null;
+  poll?: CommunityChatPoll | null;
   status: 'active' | 'recalled';
   createdAt: string;
   editedAt: string | null;
@@ -181,6 +204,8 @@ export interface CommunityChatMessage {
   likeCount: number;
   likedByMe: boolean;
   likePreview: string[];
+  readReceiptEnabled?: boolean;
+  readCount?: number;
   deliveryState?: 'sending';
   author: CommunityChatMessageAuthor;
   reply: CommunityChatMessageReply | null;
@@ -207,7 +232,7 @@ export interface CommunityChatPinnedMessage {
 export interface SendCommunityChatMessageInput {
   clientRequestId: string;
   content: string;
-  messageKind?: 'text' | 'sticker';
+  messageKind?: 'text' | 'sticker' | 'poll';
   stickerSource?: CommunityChatStickerSource | null;
   stickerKey?: string | null;
   replyToPublicId?: string | null;
@@ -215,6 +240,10 @@ export interface SendCommunityChatMessageInput {
   mentionUserPublicIds?: string[];
   mentionMessagePublicIds?: string[];
   imagePublicIds?: string[];
+  poll?: {
+    endsAt: string;
+    options: string[];
+  };
 }
 
 export type CommunityChatReportReason =
@@ -238,6 +267,8 @@ export interface CommunityChatReportEvidence {
   authorName: string;
   authorRole: 'member' | 'moderator' | 'official';
   content: string;
+  messageKind?: 'text' | 'sticker' | 'poll';
+  poll?: { endsAt: string; closedAt: string | null; options: string[] };
   messageCreatedAt: string;
   capturedAt: string;
 }
@@ -308,6 +339,9 @@ export const getCommunityChatMessages = (
 export const getCommunityChatPinnedMessage = (roomSlug: string) =>
   apiBaseGet(`${roomPath(roomSlug)}/pin`, undefined, { silent: true });
 
+export const getCommunityChatMessage = (messagePublicId: string) =>
+  apiBaseGet(`/api/community-chat/messages/${encodeURIComponent(messagePublicId)}`, undefined, { silent: true });
+
 export const getCommunityChatMessageAuthorProfile = (messagePublicId: string) =>
   apiBaseGet(`/api/community-chat/messages/${encodeURIComponent(messagePublicId)}/author-profile`, undefined, {
     silent: true,
@@ -361,6 +395,9 @@ export const discardCommunityChatImage = (imagePublicId: string) =>
 export const markCommunityChatRoomRead = (roomSlug: string, lastMessagePublicId?: string | null) =>
   apiBasePut(`${roomPath(roomSlug)}/read`, { lastMessagePublicId: lastMessagePublicId || null }, { silent: true });
 
+export const recordCommunityChatReadReceipts = (roomSlug: string, messagePublicIds: string[]) =>
+  apiBasePost(`${roomPath(roomSlug)}/read-receipts`, { messagePublicIds }, { silent: true });
+
 const messagePath = (messagePublicId: string) => `/api/community-chat/messages/${encodeURIComponent(messagePublicId)}`;
 
 export const saveCommunityChatMessageSticker = (messagePublicId: string) =>
@@ -368,6 +405,12 @@ export const saveCommunityChatMessageSticker = (messagePublicId: string) =>
 
 export const toggleCommunityChatMessageLike = (messagePublicId: string) =>
   apiBasePut(`${messagePath(messagePublicId)}/like`, {}, { silent: true });
+
+export const voteCommunityChatPoll = (messagePublicId: string, optionPublicId: string) =>
+  apiBasePut(`${messagePath(messagePublicId)}/poll/vote`, { optionPublicId }, { silent: true });
+
+export const closeCommunityChatPoll = (messagePublicId: string) =>
+  apiBasePut(`${messagePath(messagePublicId)}/poll/close`, {}, { silent: true });
 
 export const pinCommunityChatMessage = (messagePublicId: string) =>
   apiBasePost(`${messagePath(messagePublicId)}/pin`, {}, { silent: true });
