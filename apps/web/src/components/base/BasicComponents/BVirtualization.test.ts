@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, ref } from 'vue';
 import BTable from './BTable/BTable.vue';
 import BVirtualList from './BVirtualList.vue';
@@ -93,5 +93,23 @@ describe('virtual list scroll layout', () => {
     await nextTick();
     expect(sizer.style.height).toBe('7992px');
     expect(scroller.style.paddingBottom).toBe('');
+  });
+
+  it('asks for the next BTable cursor page automatically when loaded rows do not fill the viewport', async () => {
+    const loadMore = vi.fn();
+    mount(BTable, {
+      data: [{ id: 1, name: 'row-1' }],
+      columns: [{ title: 'Name', key: 'name', ellipsis: false }],
+      fill: true,
+      virtual: true,
+      rowHeight: 40,
+      hasMore: true,
+      onLoadMore: loadMore,
+    });
+
+    await nextTick();
+    await nextTick();
+
+    expect(loadMore).toHaveBeenCalled();
   });
 });

@@ -113,12 +113,12 @@
                   :class="{ 'is-active': activeTrendDay === item.day }"
                   role="button"
                   tabindex="0"
-                  :aria-label="trendTooltip(item)"
+                  :aria-label="trendActionLabel(item)"
                   :aria-pressed="activeTrendDay === item.day"
-                  @click="selectTrendDay(item.day)"
+                  @click="openTrendDay(item.day)"
                   @focus="selectTrendDay(item.day)"
-                  @keydown.enter="selectTrendDay(item.day)"
-                  @keydown.space.prevent="selectTrendDay(item.day)"
+                  @keydown.enter="openTrendDay(item.day)"
+                  @keydown.space.prevent="openTrendDay(item.day)"
                 >
                   <span class="points-health__bar-plot" aria-hidden="true">
                     <i
@@ -191,13 +191,19 @@
       <p v-else class="points-health__empty">当前没有持有积分的普通账号。</p>
     </article>
     <BLoading v-if="loading" :loading="true" inline class="points-health__loading" title="正在加载积分健康数据" />
+    <PointsGovernanceDailyDetailModal
+      v-model:visible="dailyDetailVisible"
+      :summary="activeTrend"
+      :hide-internal="props.hideInternal"
+      @select-user="openUser"
+    />
   </section>
 </template>
 
 <script setup lang="ts">
   import { computed, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import growthApi from '@/api/growthApi';
+  import growthApi, { type PointsGovernanceDailyDetailUser } from '@/api/growthApi';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -209,8 +215,9 @@
   import icon from '@/config/icon';
   import { bookmarkStore } from '@/store';
   import { buildPointsGovernanceTrend, type PointsGovernanceTrendPoint } from './pointsGovernanceTrend';
+  import PointsGovernanceDailyDetailModal from './PointsGovernanceDailyDetailModal.vue';
 
-  interface BalanceLeaderboardUser {
+  interface BalanceLeaderboardUser extends PointsGovernanceDailyDetailUser {
     rank: number;
     userId: string;
     alias: string | null;
@@ -221,7 +228,7 @@
   }
 
   const props = withDefaults(defineProps<{ hideInternal?: boolean }>(), { hideInternal: true });
-  const emit = defineEmits<{ 'select-user': [user: BalanceLeaderboardUser] }>();
+  const emit = defineEmits<{ 'select-user': [user: PointsGovernanceDailyDetailUser] }>();
   const bookmark = bookmarkStore();
   const { t } = useI18n();
 
@@ -229,6 +236,7 @@
   const data = ref<any>(null);
   const loadError = ref('');
   const activeTrendDay = ref('');
+  const dailyDetailVisible = ref(false);
   const rangeMode = ref<number | 'custom'>(28);
   const customStartDate = ref('');
   const customEndDate = ref('');
@@ -335,15 +343,25 @@
     });
   }
 
+  function trendActionLabel(item: PointsGovernanceTrendPoint) {
+    return t('adminPointsGovernance.trendActionAria', { summary: trendTooltip(item) });
+  }
+
   function selectTrendDay(day: string) {
     activeTrendDay.value = day;
   }
 
-  function openUser(user: BalanceLeaderboardUser) {
+  function openTrendDay(day: string) {
+    selectTrendDay(day);
+    dailyDetailVisible.value = true;
+  }
+
+  function openUser(user: PointsGovernanceDailyDetailUser) {
     emit('select-user', user);
   }
 
   async function reload() {
+    dailyDetailVisible.value = false;
     const payload: Record<string, unknown> = { hideInternal: props.hideInternal };
     if (rangeMode.value === 'custom') {
       if (!customStartDate.value || !customEndDate.value) {
@@ -376,7 +394,10 @@
   }
 
   watch(trend, (rows) => {
-    if (activeTrendDay.value && !rows.some((row) => row.day === activeTrendDay.value)) activeTrendDay.value = '';
+    if (activeTrendDay.value && !rows.some((row) => row.day === activeTrendDay.value)) {
+      activeTrendDay.value = '';
+      dailyDetailVisible.value = false;
+    }
   });
 
   defineExpose({ reload });

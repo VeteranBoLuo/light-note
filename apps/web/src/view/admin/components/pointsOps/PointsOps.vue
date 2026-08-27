@@ -335,6 +335,9 @@
   import { isAmbiguousAdminWriteFailure } from './adminWriteRequest';
   import { generateUUID } from '@/utils/common';
 
+  type PointsOpsUser = Pick<AdminUserSearchResult, 'userId' | 'alias' | 'email'> &
+    Partial<Pick<AdminUserSearchResult, 'role'>>;
+
   const { t, te } = useI18n();
   function reasonLabel(reason: string) {
     return pointsReasonLabel(reason);
@@ -390,7 +393,7 @@
   const granting = ref(false);
   const grantVisible = ref(false);
   const pendingGrantRequest = ref<{ payloadKey: string; requestId: string } | null>(null);
-  const selectedUser = ref<AdminUserSearchResult | null>(null);
+  const selectedUser = ref<PointsOpsUser | null>(null);
   const userWindowDays = ref<7 | 28 | 90>(28);
   const userLogCategory = ref<'all' | 'stable' | 'oneTime' | 'random' | 'spent' | 'operations'>('all');
   const userWindowOptions = [
@@ -466,14 +469,14 @@
     await refreshActive();
   }
 
-  function selectUser(user: AdminUserSearchResult) {
+  function selectUser(user: PointsOpsUser) {
     selectedUser.value = user;
     form.value.userId = user.userId;
     detail.value = null;
     void queryUser();
   }
 
-  function openUser360(user: AdminUserSearchResult) {
+  function openUser360(user: PointsOpsUser) {
     activeTab.value = 'user360';
     selectUser(user);
   }

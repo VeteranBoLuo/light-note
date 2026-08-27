@@ -8,6 +8,7 @@ import '@/assets/css/index.less';
 import PointsGovernanceTrendHarness from './PointsGovernanceTrendHarness.vue';
 
 type FixtureState = 'mixed' | 'issued-only' | 'spent-only' | 'zero' | 'loading' | 'error' | 'refresh-error';
+type DetailFixtureState = 'normal' | 'empty' | 'loading' | 'error' | 'append-error';
 
 interface TrendFixture {
   day: string;
@@ -37,6 +38,10 @@ const state: FixtureState = [
   : 'mixed';
 const periodDays = params.get('days') === '28' ? 28 : 7;
 const mobileRendering = params.get('renderProfile') === 'mobile' || window.innerWidth <= 600;
+const rawDetailState = params.get('detail') || 'normal';
+const detailState: DetailFixtureState = ['normal', 'empty', 'loading', 'error', 'append-error'].includes(rawDetailState)
+  ? (rawDetailState as DetailFixtureState)
+  : 'normal';
 
 document.documentElement.dataset.theme = theme;
 document.documentElement.lang = locale;
@@ -134,6 +139,60 @@ if (state === 'loading') {
     >;
   };
 }
+
+const detailRows = Array.from({ length: 126 }, (_, index) => {
+  const positive = index % 3 !== 1;
+  const reason = index % 5 === 0 ? 'admin' : index % 4 === 0 ? 'campaign' : positive ? 'checkin' : 'buy';
+  const secondOfDay = 86_399 - index * 61;
+  const hour = Math.floor(secondOfDay / 3600);
+  const minute = Math.floor((secondOfDay % 3600) / 60);
+  const second = secondOfDay % 60;
+  return {
+    id: 500 - index,
+    user: {
+      userId: `fixture-user-${String(index + 1).padStart(3, '0')}`,
+      alias: index % 6 === 0 ? null : `测试用户 ${index + 1}`,
+      email: `fixture-${index + 1}@example.com`,
+    },
+    delta: positive ? 10 + (index % 9) * 5 : -(20 + (index % 7) * 10),
+    reason,
+    policyVersion: 'points-earning-c6',
+    createTime: `2026-08-26 ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(
+      second,
+    ).padStart(2, '0')}`,
+    sourceType: reason,
+    sourceKey: reason === 'checkin' ? '20260826' : reason === 'buy' ? 'ai_pack' : null,
+    sourceMeta: null,
+    sourceRef: reason === 'checkin' ? '20260826' : reason === 'buy' ? 'ai_pack' : null,
+    assetChange: null,
+  };
+});
+
+growthApi.adminPointsGovernanceDailyDetails = (async (payload: { day: string; cursor?: string | null }) => {
+  if (detailState === 'loading') return new Promise<never>(() => {});
+  if (detailState === 'error') throw new Error('VISUAL_FIXTURE_DAILY_DETAIL_LOAD_FAILED');
+  if (detailState === 'append-error' && payload.cursor) {
+    throw new Error('VISUAL_FIXTURE_DAILY_DETAIL_APPEND_FAILED');
+  }
+  const start = Number(String(payload.cursor || 'fixture-cursor-0').replace('fixture-cursor-', '')) || 0;
+  const availableRows = detailState === 'empty' ? [] : detailRows;
+  const rows = availableRows
+    .slice(start, start + 50)
+    .map((row) => ({ ...row, createTime: `${payload.day} ${row.createTime.slice(11)}` }));
+  const next = start + rows.length;
+  const hasMore = next < availableRows.length;
+  return {
+    status: 200,
+    data: {
+      day: payload.day,
+      filters: { hideInternal: true },
+      rows,
+      pageSize: 50,
+      hasMore,
+      nextCursor: hasMore ? `fixture-cursor-${next}` : null,
+    },
+  };
+}) as typeof growthApi.adminPointsGovernanceDailyDetails;
 
 const i18n = createI18n({
   legacy: false,

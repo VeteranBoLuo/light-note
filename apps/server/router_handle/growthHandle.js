@@ -47,6 +47,7 @@ import { getUserPointsSummary } from '../util/pointsEarningAnalytics.js';
 import { getPointsEarningRuntime } from '../util/pointsEarningPolicy.js';
 import {
   getPointsGovernanceAnomalies,
+  getPointsGovernanceDailyDetails,
   getPointsGovernanceOverview,
   getPointsGovernanceSources,
   getPointsUser360,
@@ -830,6 +831,9 @@ async function runGovernanceRead(req, res, action, fallback) {
 
 export const getPointsGovernanceOverviewForAdmin = (req, res) =>
   runGovernanceRead(req, res, () => getPointsGovernanceOverview(req.body || {}), '获取积分健康总览失败');
+
+export const getPointsGovernanceDailyDetailsForAdmin = (req, res) =>
+  runGovernanceRead(req, res, () => getPointsGovernanceDailyDetails(req.body || {}), '获取每日积分明细失败');
 
 export const getPointsGovernanceSourcesForAdmin = (req, res) =>
   runGovernanceRead(req, res, () => getPointsGovernanceSources(req.body || {}), '获取积分来源与去向失败');

@@ -1,6 +1,6 @@
 import pool from '../db/index.js';
 import { INTERNAL_ROLES } from './internalRoles.js';
-import { getActiveShopItems } from './points.js';
+import { enrichPointsLogRow, getActiveShopItems } from './points.js';
 import { getEconomyRuntime } from './pointsEconomyCatalog.js';
 import {
   C5_EARNING_RULE_POLICY_VERSIONS,
@@ -16,6 +16,9 @@ const RANGE_PRESETS = new Set([7, 28, 90]);
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const VERSION_PATTERN = /^[A-Za-z0-9._-]{1,32}$/;
 const ADMIN_TIME_ZONE = 'Asia/Shanghai';
+const DAILY_DETAIL_PAGE_SIZE = 50;
+const DAILY_DETAIL_MAX_PAGE_SIZE = 100;
+const DAILY_DETAIL_CURSOR_TIME_PATTERN = /^\d{4}-\d{2}-\d{2} (?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/;
 
 export class PointsGovernanceError extends Error {
   constructor(code, message, status = 400) {
@@ -56,6 +59,32 @@ function addCalendarDays(day, delta) {
   const date = new Date(`${day}T00:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + Number(delta));
   return formatUtcDay(date);
+}
+
+function encodeDailyDetailCursor({ day, createTime, id }) {
+  return Buffer.from(JSON.stringify({ version: 1, day, createTime, id: Number(id) }), 'utf8').toString('base64url');
+}
+
+function decodeDailyDetailCursor(cursor, day) {
+  if (!cursor) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(String(cursor), 'base64url').toString('utf8'));
+    const id = Number(parsed?.id);
+    const createTime = String(parsed?.createTime || '');
+    if (
+      parsed?.version !== 1 ||
+      parsed?.day !== day ||
+      !Number.isSafeInteger(id) ||
+      id < 1 ||
+      !DAILY_DETAIL_CURSOR_TIME_PATTERN.test(createTime) ||
+      !createTime.startsWith(`${day} `)
+    ) {
+      throw new Error('invalid cursor payload');
+    }
+    return { id, createTime };
+  } catch {
+    throw new PointsGovernanceError('INVALID_DAILY_DETAIL_CURSOR', '积分明细分页游标无效');
+  }
 }
 
 function normalizeVersion(value) {
@@ -405,6 +434,79 @@ export async function getPointsGovernanceOverview(input = {}, { db = pool } = {}
       level: numeric(row, 'level'),
       lastActiveTime: row.lastActiveTime || null,
     })),
+  };
+}
+
+/**
+ * Root 每日积分明细。按北京时间自然日和不可变流水顺序做游标分页；每页最多 100 条，
+ * 只返回用户可识别信息与既有脱敏来源字段，不暴露运营备注、工单或请求标识。
+ */
+export async function getPointsGovernanceDailyDetails(input = {}, { db = pool } = {}) {
+  const day = String(input.day || '').trim();
+  if (!isValidDay(day)) throw new PointsGovernanceError('INVALID_DAILY_DETAIL_DAY', '积分明细日期无效');
+  const range = resolveGovernanceRange({ startDate: day, endDate: day });
+  const hideInternal = hideInternalAccounts(input);
+  const limit = Math.min(
+    DAILY_DETAIL_MAX_PAGE_SIZE,
+    Math.max(1, Math.trunc(Number(input.limit) || DAILY_DETAIL_PAGE_SIZE)),
+  );
+  const cursor = decodeDailyDetailCursor(input.cursor, day);
+  const clauses = ['pl.create_time >= ?', 'pl.create_time < ?', "pl.reason <> 'ach_unlock'"];
+  const params = [range.startDate, range.endExclusive];
+  if (hideInternal) {
+    clauses.push(`NOT EXISTS (
+      SELECT 1 FROM user internal_user
+       WHERE internal_user.id = pl.user_id
+         AND internal_user.role IN (${placeholders(INTERNAL_ROLES)})
+    )`);
+    params.push(...INTERNAL_ROLES);
+  }
+  if (cursor) {
+    clauses.push('(pl.create_time < ? OR (pl.create_time = ? AND pl.id < ?))');
+    params.push(cursor.createTime, cursor.createTime, cursor.id);
+  }
+  const [rawRows] = await db.query(
+    `SELECT pl.id, pl.user_id AS userId, u.alias, u.email, pl.delta, pl.reason, pl.ref,
+            pl.policy_version AS policyVersion, pl.meta,
+            DATE_FORMAT(pl.create_time, '%Y-%m-%d %H:%i:%s') AS createTime
+       FROM points_log pl
+       LEFT JOIN user u ON u.id = pl.user_id
+      WHERE ${clauses.join(' AND ')}
+      ORDER BY pl.create_time DESC, pl.id DESC
+      LIMIT ${limit + 1}`,
+    params,
+  );
+  const hasMore = rawRows.length > limit;
+  const pageRows = rawRows.slice(0, limit);
+  const rows = pageRows.map((row) => {
+    const enriched = enrichPointsLogRow(row);
+    return {
+      id: Number(row.id),
+      user: {
+        userId: row.userId,
+        alias: row.alias || null,
+        email: row.email || null,
+      },
+      delta: Number(row.delta || 0),
+      reason: row.reason,
+      policyVersion: row.policyVersion || null,
+      createTime: row.createTime,
+      sourceType: enriched.sourceType,
+      sourceKey: enriched.sourceKey,
+      sourceMeta: enriched.sourceMeta,
+      sourceRef: enriched.sourceRef,
+      assetChange: enriched.assetChange,
+    };
+  });
+  const lastRow = pageRows.at(-1);
+  return {
+    day,
+    filters: { hideInternal },
+    rows,
+    pageSize: limit,
+    hasMore,
+    nextCursor:
+      hasMore && lastRow ? encodeDailyDetailCursor({ day, createTime: lastRow.createTime, id: lastRow.id }) : null,
   };
 }
 
@@ -865,6 +967,8 @@ export const pointsGovernanceInternals = {
   buildDailyTrends,
   buildProductPerformance,
   healthWarnings,
+  decodeDailyDetailCursor,
+  encodeDailyDetailCursor,
   normalizeVersion,
   percentileFromValues,
   rangeWhere,

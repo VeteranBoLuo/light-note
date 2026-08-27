@@ -163,8 +163,43 @@ export interface PointsGovernanceRange {
   hideInternal?: boolean;
 }
 
+export interface PointsGovernanceDailyDetailUser {
+  userId: string;
+  alias: string | null;
+  email: string | null;
+}
+
+export interface PointsGovernanceDailyDetailRow {
+  id: number;
+  user: PointsGovernanceDailyDetailUser;
+  delta: number;
+  reason: string;
+  policyVersion: string | null;
+  createTime: string;
+  sourceType: string;
+  sourceKey: string | null;
+  sourceMeta: string | null;
+  sourceRef: string | null;
+  assetChange: { type: 'ai' | 'storage'; amount: number } | null;
+}
+
+export interface PointsGovernanceDailyDetailsResponse {
+  day: string;
+  filters: { hideInternal: boolean };
+  rows: PointsGovernanceDailyDetailRow[];
+  pageSize: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+}
+
 export const adminPointsGovernanceOverview = (payload: PointsGovernanceRange = {}) =>
   apiBasePost('/api/growth/admin/pointsGovernanceOverview', payload);
+export const adminPointsGovernanceDailyDetails = (payload: {
+  day: string;
+  cursor?: string | null;
+  limit?: number;
+  hideInternal?: boolean;
+}) => apiBasePost('/api/growth/admin/pointsGovernanceDailyDetails', payload);
 export const adminPointsGovernanceSources = (payload: PointsGovernanceRange = {}) =>
   apiBasePost('/api/growth/admin/pointsGovernanceSources', payload);
 export const adminPointsAnomalies = (payload: PointsGovernanceRange & { limit?: number } = {}) =>
@@ -300,6 +335,7 @@ export default {
   adminSearchUsers,
   adminGrantPoints,
   adminPointsGovernanceOverview,
+  adminPointsGovernanceDailyDetails,
   adminPointsGovernanceSources,
   adminPointsAnomalies,
   adminPointsReconciliation,

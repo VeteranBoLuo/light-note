@@ -599,7 +599,7 @@ export async function getPointsLog(userId, { limit = 30, offset = 0, cursor = nu
   };
 }
 
-function enrichPointsLogRow(row) {
+export function enrichPointsLogRow(row) {
   const reason = String(row.reason || '');
   const ref = String(row.ref || '');
   const baseReason = reason.startsWith('storage:') ? 'storage' : reason;

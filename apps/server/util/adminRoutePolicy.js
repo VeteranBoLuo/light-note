@@ -528,6 +528,7 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/growth/admin/searchUsers'],
   ['POST', '/growth/admin/grantPoints'],
   ['POST', '/growth/admin/pointsGovernanceOverview'],
+  ['POST', '/growth/admin/pointsGovernanceDailyDetails'],
   ['POST', '/growth/admin/pointsGovernanceSources'],
   ['POST', '/growth/admin/pointsAnomalies'],
   ['POST', '/growth/admin/pointsReconciliation'],

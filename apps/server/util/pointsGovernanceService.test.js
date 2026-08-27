@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   getPointsGovernanceAnomalies,
+  getPointsGovernanceDailyDetails,
   getPointsGovernanceOverview,
   getPointsGovernanceSources,
   pointsGovernanceInternals,
@@ -262,5 +263,90 @@ describe('C5 积分治理时间窗与只读模拟器', () => {
     expect(result.filters.hideInternal).toBe(true);
     expect(query.mock.calls.every(([sql]) => String(sql).includes('internal_user.role IN (?,?)'))).toBe(true);
     expect(query.mock.calls.every(([, params]) => params.includes('root') && params.includes('test'))).toBe(true);
+  });
+
+  it('每日积分明细默认按北京时间倒序读取 50 条，并复用流水脱敏与内部账号口径', async () => {
+    const rawRows = Array.from({ length: 51 }, (_, index) => ({
+      id: 100 - index,
+      userId: `user-${index}`,
+      alias: index === 0 ? '示例用户' : null,
+      email: `user-${index}@example.com`,
+      delta: index === 0 ? 120 : -10,
+      reason: index === 0 ? 'admin' : 'buy',
+      ref: index === 0 ? 'private-ticket-and-note' : 'ai_pack',
+      policyVersion: 'points-earning-c6',
+      meta: index === 0 ? JSON.stringify({ note: 'private', ticketRef: 'T-001' }) : null,
+      createTime: `2026-08-26 12:00:${String(59 - index).padStart(2, '0')}`,
+    }));
+    const query = vi.fn().mockResolvedValue([rawRows]);
+
+    const result = await getPointsGovernanceDailyDetails({ day: '2026-08-26' }, { db: { query } });
+
+    expect(query).toHaveBeenCalledTimes(1);
+    const [sql, params] = query.mock.calls[0];
+    expect(sql).toContain("DATE_FORMAT(pl.create_time, '%Y-%m-%d %H:%i:%s') AS createTime");
+    expect(sql).toContain("pl.reason <> 'ach_unlock'");
+    expect(sql).toContain('internal_user.role IN (?,?)');
+    expect(sql).toContain('ORDER BY pl.create_time DESC, pl.id DESC');
+    expect(sql).toContain('LIMIT 51');
+    expect(params).toEqual(['2026-08-26', '2026-08-27', 'root', 'test']);
+    expect(result).toMatchObject({
+      day: '2026-08-26',
+      pageSize: 50,
+      hasMore: true,
+      filters: { hideInternal: true },
+    });
+    expect(result.rows).toHaveLength(50);
+    expect(result.rows[0]).toEqual(
+      expect.objectContaining({
+        id: 100,
+        user: { userId: 'user-0', alias: '示例用户', email: 'user-0@example.com' },
+        delta: 120,
+        sourceType: 'admin',
+        sourceKey: null,
+        sourceRef: null,
+      }),
+    );
+    expect(result.rows[0]).not.toHaveProperty('meta');
+    expect(result.rows[0]).not.toHaveProperty('ref');
+    expect(pointsGovernanceInternals.decodeDailyDetailCursor(result.nextCursor, '2026-08-26')).toEqual({
+      id: 51,
+      createTime: '2026-08-26 12:00:10',
+    });
+  });
+
+  it('每日明细游标绑定日期并稳定续查，错误游标失败关闭', async () => {
+    const cursor = pointsGovernanceInternals.encodeDailyDetailCursor({
+      day: '2026-08-26',
+      createTime: '2026-08-26 09:08:07',
+      id: 88,
+    });
+    const query = vi.fn().mockResolvedValue([[]]);
+
+    const result = await getPointsGovernanceDailyDetails(
+      { day: '2026-08-26', cursor, hideInternal: false, limit: 999 },
+      { db: { query } },
+    );
+
+    const [sql, params] = query.mock.calls[0];
+    expect(sql).toContain('(pl.create_time < ? OR (pl.create_time = ? AND pl.id < ?))');
+    expect(sql).toContain('LIMIT 101');
+    expect(sql).not.toContain('internal_user');
+    expect(params).toEqual(['2026-08-26', '2026-08-27', '2026-08-26 09:08:07', '2026-08-26 09:08:07', 88]);
+    expect(result).toMatchObject({ rows: [], pageSize: 100, hasMore: false, nextCursor: null });
+    expect(() => pointsGovernanceInternals.decodeDailyDetailCursor(cursor, '2026-08-27')).toThrowError(
+      expect.objectContaining({ code: 'INVALID_DAILY_DETAIL_CURSOR' }),
+    );
+    const outOfDayCursor = pointsGovernanceInternals.encodeDailyDetailCursor({
+      day: '2026-08-26',
+      createTime: '2026-08-27 00:00:00',
+      id: 87,
+    });
+    expect(() => pointsGovernanceInternals.decodeDailyDetailCursor(outOfDayCursor, '2026-08-26')).toThrowError(
+      expect.objectContaining({ code: 'INVALID_DAILY_DETAIL_CURSOR' }),
+    );
+    await expect(getPointsGovernanceDailyDetails({ day: '2026-02-30' }, { db: { query } })).rejects.toMatchObject({
+      code: 'INVALID_DAILY_DETAIL_DAY',
+    });
   });
 });

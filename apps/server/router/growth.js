@@ -40,6 +40,7 @@ router.post('/admin/userPoints', growthHandle.getUserPointsForAdmin);
 router.post('/admin/searchUsers', growthHandle.searchUsersForPointsAdmin);
 router.post('/admin/grantPoints', growthHandle.doAdminGrantPoints);
 router.post('/admin/pointsGovernanceOverview', growthHandle.getPointsGovernanceOverviewForAdmin);
+router.post('/admin/pointsGovernanceDailyDetails', growthHandle.getPointsGovernanceDailyDetailsForAdmin);
 router.post('/admin/pointsGovernanceSources', growthHandle.getPointsGovernanceSourcesForAdmin);
 router.post('/admin/pointsAnomalies', growthHandle.getPointsAnomaliesForAdmin);
 router.post('/admin/pointsReconciliation', growthHandle.getPointsReconciliationForAdmin);
