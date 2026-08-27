@@ -1,0 +1,14 @@
+{
+  "extensionName": {
+    "message": "Light Note · Quick Capture"
+  },
+  "extensionShortName": {
+    "message": "Light Note"
+  },
+  "extensionDescription": {
+    "message": "Capture webpages, ideas, and files as they appear, then organize them later in Light Note."
+  },
+  "extensionActionTitle": {
+    "message": "Open Light Note · Quick Capture"
+  }
+}

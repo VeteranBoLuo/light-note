@@ -20,8 +20,9 @@
     <path d="M0 60H38L52 74V112H14A14 14 0 0 1 0 98Z" fill="#5547dc" />
     <path d="M74 60H112V98A14 14 0 0 1 98 112H60V74Z" fill="#6254e7" />
   </g>
-  <text x="62" y="276" fill="#ffffff" font-family="Hiragino Sans GB, sans-serif" font-size="38" font-weight="700">轻笺快速添加</text>
-  <text x="62" y="326" fill="#dcd9ff" font-family="Hiragino Sans GB, sans-serif" font-size="20">把想留下的内容，收进浏览器侧栏</text>
+  <text x="62" y="276" fill="#ffffff" font-family="Hiragino Sans GB, sans-serif" font-size="36" font-weight="700">轻笺 · 随手收</text>
+  <text x="62" y="326" fill="#dcd9ff" font-family="Hiragino Sans GB, sans-serif" font-size="20">随手收下网页、灵感和文件</text>
+  <text x="62" y="356" fill="#dcd9ff" font-family="Hiragino Sans GB, sans-serif" font-size="20">稍后在轻笺慢慢整理</text>
   <g transform="translate(62 410)" font-family="Hiragino Sans GB, sans-serif" font-size="19" font-weight="600">
     <rect width="118" height="52" rx="16" fill="#ffffff" opacity="0.12" />
     <text x="59" y="34" text-anchor="middle" fill="#ffffff">网页书签</text>
@@ -30,6 +31,6 @@
     <rect x="264" width="118" height="52" rx="16" fill="#ffffff" opacity="0.12" />
     <text x="323" y="34" text-anchor="middle" fill="#ffffff">本地文件</text>
   </g>
-  <text x="62" y="690" fill="#c5c0ff" font-family="Arial, sans-serif" font-size="15" letter-spacing="3">LIGHT NOTE COLLECTOR</text>
-  <text x="62" y="730" fill="#ffffff" font-family="Hiragino Sans GB, sans-serif" font-size="18">主动收集 · 安全同步 · 随时整理</text>
+  <text x="62" y="690" fill="#c5c0ff" font-family="Arial, sans-serif" font-size="15" letter-spacing="2">LIGHT NOTE · QUICK CAPTURE</text>
+  <text x="62" y="730" fill="#ffffff" font-family="Hiragino Sans GB, sans-serif" font-size="18">随手收下 · 稍后慢慢整理</text>
 </svg>

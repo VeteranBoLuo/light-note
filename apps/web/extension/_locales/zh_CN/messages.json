@@ -1,0 +1,14 @@
+{
+  "extensionName": {
+    "message": "轻笺 · 随手收"
+  },
+  "extensionShortName": {
+    "message": "轻笺"
+  },
+  "extensionDescription": {
+    "message": "随手收下网页、灵感和文件，稍后在轻笺慢慢整理。"
+  },
+  "extensionActionTitle": {
+    "message": "打开轻笺 · 随手收"
+  }
+}

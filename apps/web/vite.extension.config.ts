@@ -12,6 +12,8 @@ function extensionStaticAssets(): Plugin {
     ['public/favicon-32x32.png', 'icons/icon-32.png'],
     ['extension/icons/icon-48.png', 'icons/icon-48.png'],
     ['extension/icons/icon-128.png', 'icons/icon-128.png'],
+    ['extension/_locales/zh_CN/messages.json', '_locales/zh_CN/messages.json'],
+    ['extension/_locales/en/messages.json', '_locales/en/messages.json'],
     ['public/icon-192.png', 'icons/icon-192.png'],
     ['public/icon-512.png', 'icons/icon-512.png'],
   ] as const;

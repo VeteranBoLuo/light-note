@@ -49,6 +49,7 @@ describe('站点备案名称展示', () => {
 
   it('浏览器扩展隐私说明覆盖商店披露、权限边界与有限用途承诺', () => {
     const html = readPublicFile('legal/browser-extension-privacy.html');
+    expect(html).toContain('适用产品：轻笺 · 随手收');
     expect(html).toContain('当前标签页网址、标题和选中文本');
     expect(html).toContain('网页可见文字');
     expect(html).toContain('不会遍历或保存浏览历史');

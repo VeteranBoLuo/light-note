@@ -16,6 +16,7 @@ describe('Chrome Web Store manifest packaging', () => {
     expect(sourceManifest.key).toBeTruthy();
     expect(storeManifest).not.toHaveProperty('key');
     expect(storeManifest.version).toBe(sourceManifest.version);
+    expect(storeManifest.default_locale).toBe(sourceManifest.default_locale);
     expect(storeManifest.permissions).toEqual(sourceManifest.permissions);
     expect(storeManifest.host_permissions).toEqual(sourceManifest.host_permissions);
   });

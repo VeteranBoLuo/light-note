@@ -3611,3 +3611,11 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 - **防回归约束：** `apps/web/extension/manifest.json` 与 `dist-extension/manifest.json` 继续保留公开 build key，禁止把私钥写入仓库；只有 `package:extension` 在写入 ZIP 时生成无根级 `key` 的商店 Manifest。禁止维护第二份手写商店 Manifest，也禁止人工解压改包，避免权限、版本和 CSP 漂移。上传前必须同时断言解压目录仍能推导稳定开发 ID、ZIP 内 Manifest 不含 `key`，并重新校验 SHA-256。
 - **验证方法：** 纯函数测试锁定打包净化只移除根级 `key`、不修改源对象且保留版本、权限和 Host；执行 `package:extension` 后分别读取 `dist-extension/manifest.json` 与 ZIP 内 `manifest.json`，前者必须含公开 key，后者必须不含，并通过校验文件验证新 ZIP。Chrome Web Store 首次上传不再出现 key 字段错误。
 - **相关代码：** `apps/web/extension/manifest.json`、`apps/web/scripts/package-extension.mjs`、`apps/web/scripts/package-extension-manifest.mjs`、`apps/web/src/extension/storePackageManifest.test.ts`、`docs/browser-extension.md`。
+
+### LN-PIT-183：扩展正式名称不能只在商店后台或单个文案中修改
+
+- **现象：** 产品已确定为“轻笺 · 随手收”，Chrome Web Store 上传后却仍从软件包显示旧名“轻笺快速添加”；即使在后台手工改商店标题，安装页、工具栏、侧栏、网站授权页、隐私说明和宣传图仍可能各用一套名称。
+- **根因：** Manifest、浏览器本地化消息、Vue i18n、静态 HTML、公开法律页、商店资料和图片源文件分别维护品牌文本，原先没有跨载体契约。商店会优先读取软件包 Manifest 的名称与摘要，后台文案不能覆盖包内事实。
+- **防回归约束：** 正式中文名固定为“轻笺 · 随手收”，短名为“轻笺”，英文名为“Light Note · Quick Capture”，中文宣传语为“随手收下网页、灵感和文件，稍后在轻笺慢慢整理。”Manifest 使用 `_locales` 消息并以 `zh_CN` 为默认语言；运行界面、网站授权页、隐私页、商店文案和宣传 SVG 必须由合约测试逐项校验。品牌变更时同时递增扩展版本、重新渲染 PNG/商店截图并重新上传包，禁止只改后台字段或直接编辑生成图片。
+- **验证方法：** Manifest 合约测试核对中英文消息、短名、宣传语、侧栏标题、授权 i18n、隐私页、商店资料、宣传图源和构建复制清单；执行 `package:extension` 后确认 ZIP 带 `_locales/zh_CN` 与 `_locales/en`、根 Manifest 无 `key` 且版本递增。视觉验收 440×280 宣传图与 1280×800 三张截图，确保新名称无截断、重叠或字体回退；Chrome Web Store 替换软件包后，“软件包中的标题”必须显示“轻笺 · 随手收”。
+- **相关代码：** `apps/web/extension/manifest.json`、`apps/web/extension/_locales/`、`apps/web/src/i18n/locales/`、`apps/web/public/legal/browser-extension-privacy.html`、`apps/web/store-assets/chrome/`、`apps/web/src/extension/manifest.contract.test.ts`。

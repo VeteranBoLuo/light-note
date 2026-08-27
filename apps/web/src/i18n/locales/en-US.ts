@@ -9756,7 +9756,7 @@ export default {
     collapseDirectory: 'Collapse directory',
   },
   browserExtension: {
-    title: 'Quick Add',
+    title: 'Quick Capture',
     logoAlt: 'LightNote',
     back: 'Back to start',
     toggleTheme: 'Toggle light or dark theme',
@@ -9764,7 +9764,7 @@ export default {
     notSignedIn: 'Not signed in',
     signedIn: 'Signed in to LightNote',
     home: {
-      eyebrow: 'LIGHT NOTE COLLECTOR',
+      eyebrow: 'LIGHT NOTE · QUICK CAPTURE',
       title: 'What are you saving?',
       sessionReady: 'Extension device session is ready',
       loginWhenSaving: 'Sign in to save and sync with LightNote',
@@ -9883,7 +9883,7 @@ export default {
     },
     login: {
       eyebrow: 'DEVICE SESSION',
-      title: 'Sign in to the extension',
+      title: 'Sign in to Light Note · Quick Capture',
       description:
         'Your draft stays in this side panel. The password is used only for this sign-in and is never stored by the extension.',
       action: 'Sign in',
@@ -9896,7 +9896,7 @@ export default {
         'Authorize immediately if the website is already signed in, or choose email, registration, or GitHub there.',
       required: 'Enter your email and password',
       failed: 'Sign-in failed. Try again.',
-      success: 'Extension signed in',
+      success: 'Quick Capture signed in',
       loggedOut: 'Extension device signed out',
       expired: 'Extension sign-in expired. Sign in again; your current draft is preserved.',
     },
@@ -9914,12 +9914,12 @@ export default {
   },
   extensionAuthorize: {
     logoAlt: 'LightNote',
-    title: 'Authorize browser extension',
+    title: 'Authorize Light Note · Quick Capture',
     loading: 'Checking your LightNote sign-in',
     invalidTitle: 'Invalid authorization request',
     invalidDescription:
       'Required security parameters are missing. Close this window and start sign-in again in the extension.',
-    requestTitle: 'Connect the LightNote extension?',
+    requestTitle: 'Connect Light Note · Quick Capture?',
     requestDescription:
       'Once authorized, the extension can create only the content you explicitly submit. It does not read browsing history.',
     permissionBookmark: 'Save pages you choose as bookmarks',
@@ -9928,7 +9928,7 @@ export default {
     signedInAs: 'Signed in as {name}',
     needLogin: 'Sign in to LightNote before authorizing',
     accountFallback: 'LightNote user',
-    authorize: 'Allow and return to extension',
+    authorize: 'Allow and return to Quick Capture',
     login: 'Sign in or register',
     cancel: 'Cancel',
     footnote:

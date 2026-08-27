@@ -5,6 +5,9 @@ import { describe, expect, it } from 'vitest';
 
 const readSource = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
 const manifest = JSON.parse(readSource('extension/manifest.json'));
+const zhManifestMessages = JSON.parse(readSource('extension/_locales/zh_CN/messages.json'));
+const enManifestMessages = JSON.parse(readSource('extension/_locales/en/messages.json'));
+const sidepanelSource = readSource('extension/sidepanel.html');
 const serviceWorkerSource = readSource('src/extension/service-worker.ts');
 const captureSource = readSource('src/extension/capture.ts');
 const appSource = readSource('src/extension/ExtensionApp.vue');
@@ -20,6 +23,12 @@ const operationIdempotencySource = readSource('src/extension/operationIdempotenc
 const pageTextImportSource = readSource('src/extension/pageTextImport.ts');
 const viteConfigSource = readSource('vite.extension.config.ts');
 const stylesSource = readSource('src/extension/styles.less');
+const zhLocaleSource = readSource('src/i18n/locales/zh-CN.ts');
+const enLocaleSource = readSource('src/i18n/locales/en-US.ts');
+const privacySource = readSource('public/legal/browser-extension-privacy.html');
+const storeListingSource = readSource('../../docs/browser-extension-store-listing.md');
+const storePromoSource = readSource('store-assets/chrome/promo-small-440x280.svg');
+const storeScreenshotBrandSource = readSource('store-assets/chrome/screenshot-brand-panel.svg');
 
 function extensionIdFromPublicKey(publicKey: string): string {
   const digest = crypto.createHash('sha256').update(Buffer.from(publicKey, 'base64')).digest().subarray(0, 16);
@@ -29,6 +38,31 @@ function extensionIdFromPublicKey(publicKey: string): string {
 }
 
 describe('浏览器插件 Manifest 与隐私边界', () => {
+  it('扩展包、运行界面、授权、隐私与商店素材统一使用正式中英文品牌', () => {
+    expect(manifest.name).toBe('__MSG_extensionName__');
+    expect(manifest.short_name).toBe('__MSG_extensionShortName__');
+    expect(manifest.description).toBe('__MSG_extensionDescription__');
+    expect(manifest.default_locale).toBe('zh_CN');
+    expect(manifest.action.default_title).toBe('__MSG_extensionActionTitle__');
+    expect(zhManifestMessages.extensionName.message).toBe('轻笺 · 随手收');
+    expect(zhManifestMessages.extensionShortName.message).toBe('轻笺');
+    expect(zhManifestMessages.extensionDescription.message).toBe(
+      '随手收下网页、灵感和文件，稍后在轻笺慢慢整理。',
+    );
+    expect(enManifestMessages.extensionName.message).toBe('Light Note · Quick Capture');
+    expect(enManifestMessages.extensionShortName.message).toBe('Light Note');
+    expect(sidepanelSource).toContain('<title>轻笺 · 随手收</title>');
+    expect(zhLocaleSource).toContain("title: '授权“轻笺 · 随手收”'");
+    expect(enLocaleSource).toContain("title: 'Authorize Light Note · Quick Capture'");
+    expect(privacySource).toContain('适用产品：轻笺 · 随手收');
+    expect(storeListingSource).toContain('中文名：`轻笺 · 随手收`');
+    expect(storeListingSource).toContain('英文名：`Light Note · Quick Capture`');
+    expect(storePromoSource).toContain('轻笺 · 随手收');
+    expect(storeScreenshotBrandSource).toContain('轻笺 · 随手收');
+    expect(viteConfigSource).toContain("'_locales/zh_CN/messages.json'");
+    expect(viteConfigSource).toContain("'_locales/en/messages.json'");
+  });
+
   it('使用 MV3 原生 Side Panel，并把网页正文访问声明为按站点可选权限', () => {
     expect(manifest.manifest_version).toBe(3);
     expect(manifest.permissions).toEqual(['sidePanel', 'tabs', 'activeTab', 'scripting', 'storage', 'identity']);
