@@ -3,10 +3,15 @@ import { getDerivedRelatedTags } from './tagRelationService.js';
 const DEFAULT_PAGE_SIZE = 24;
 const MAX_PAGE_SIZE = 50;
 const MAX_PAGE = 1_000_000;
-const TAG_SPACE_FILTERS = new Set(['all', 'bookmark', 'note', 'file']);
+const TAG_SPACE_FILTERS = new Set(['all', 'bookmark', 'note', 'file', 'empty']);
 const TAG_SPACE_SORTS = new Set(['default', 'recent', 'resourceDesc', 'nameAsc']);
 const TAG_SPACE_RESOURCE_TYPES = new Set(['all', 'bookmark', 'note', 'file']);
 const TAG_SPACE_RESOURCE_SORTS = new Set(['updated', 'added']);
+const TAG_SPACE_UNION_COLLATION = 'utf8mb4_unicode_ci';
+
+function normalizeUnionText(expression) {
+  return `CONVERT(${expression} USING utf8mb4) COLLATE ${TAG_SPACE_UNION_COLLATION}`;
+}
 
 const LIVE_RESOURCE_STATS_JOIN = `
   LEFT JOIN (
@@ -47,6 +52,7 @@ const LIVE_RESOURCE_STATS_JOIN = `
 const TAG_BASE_COLUMNS = `
   t.id,
   t.name,
+  t.description,
   t.icon_url,
   t.sort,
   t.create_time,
@@ -194,6 +200,7 @@ function normalizeSummaryRow(row) {
   return {
     id: String(row?.id || ''),
     name: String(row?.name || ''),
+    description: String(row?.description || ''),
     iconUrl: row?.icon_url || '',
     sort: Number(row?.sort || 0),
     createTime: row?.create_time || null,
@@ -214,14 +221,22 @@ function normalizeSummaryRow(row) {
 
 function buildKeywordCondition(keyword, params) {
   if (!keyword) return '';
-  params.push(`%${escapeLike(keyword)}%`);
-  return " AND t.name LIKE ? ESCAPE '!'";
+  const like = `%${escapeLike(keyword)}%`;
+  params.push(like, like);
+  return " AND (t.name LIKE ? ESCAPE '!' OR t.description LIKE ? ESCAPE '!')";
 }
 
 function filterCondition(filter) {
   if (filter === 'bookmark') return 'COALESCE(stats.bookmark_count, 0) > 0';
   if (filter === 'note') return 'COALESCE(stats.note_count, 0) > 0';
   if (filter === 'file') return 'COALESCE(stats.file_count, 0) > 0';
+  if (filter === 'empty') {
+    return `(
+      COALESCE(stats.bookmark_count, 0)
+      + COALESCE(stats.note_count, 0)
+      + COALESCE(stats.file_count, 0)
+    ) = 0`;
+  }
   return `(
     COALESCE(stats.bookmark_count, 0)
     + COALESCE(stats.note_count, 0)
@@ -320,12 +335,12 @@ function buildResourceBranch(type, { userId, tagId, keyword }) {
     if (keyword) params.push(like, like, like);
     return {
       sql: `SELECT
-        'bookmark' AS resource_type,
-        b.id,
-        b.name AS title,
-        COALESCE(NULLIF(b.description, ''), b.url) AS summary,
-        b.url,
-        b.icon_url,
+        ${normalizeUnionText("'bookmark'")} AS resource_type,
+        ${normalizeUnionText('b.id')} AS id,
+        ${normalizeUnionText('b.name')} AS title,
+        ${normalizeUnionText("COALESCE(NULLIF(b.description, ''), b.url)")} AS summary,
+        ${normalizeUnionText('b.url')} AS url,
+        ${normalizeUnionText('b.icon_url')} AS icon_url,
         NULL AS file_type,
         NULL AS file_size,
         NULL AS folder_name,
@@ -352,10 +367,10 @@ function buildResourceBranch(type, { userId, tagId, keyword }) {
     if (keyword) params.push(like, like);
     return {
       sql: `SELECT
-        'note' AS resource_type,
-        n.id,
-        n.title,
-        IF(COALESCE(n.type, 'html') = 'drawing', '', LEFT(n.content, 800)) AS summary,
+        ${normalizeUnionText("'note'")} AS resource_type,
+        ${normalizeUnionText('n.id')} AS id,
+        ${normalizeUnionText('n.title')} AS title,
+        ${normalizeUnionText("IF(COALESCE(n.type, 'html') = 'drawing', '', LEFT(n.content, 800))")} AS summary,
         NULL AS url,
         NULL AS icon_url,
         NULL AS file_type,
@@ -383,15 +398,15 @@ function buildResourceBranch(type, { userId, tagId, keyword }) {
   if (keyword) params.push(like, like, like);
   return {
     sql: `SELECT
-      'file' AS resource_type,
-      f.id,
-      f.file_name AS title,
-      folders.name AS summary,
+      ${normalizeUnionText("'file'")} AS resource_type,
+      ${normalizeUnionText('f.id')} AS id,
+      ${normalizeUnionText('f.file_name')} AS title,
+      ${normalizeUnionText('folders.name')} AS summary,
       NULL AS url,
       NULL AS icon_url,
-      f.file_type,
+      ${normalizeUnionText('f.file_type')} AS file_type,
       f.file_size,
-      folders.name AS folder_name,
+      ${normalizeUnionText('folders.name')} AS folder_name,
       f.create_time,
       f.create_time AS update_time,
       r.create_time AS added_time
@@ -604,6 +619,7 @@ export async function queryTagSpaceList(
       bookmark: scopedFacets.bookmark,
       note: scopedFacets.note,
       file: scopedFacets.file,
+      empty: scopedFacets.empty,
     },
     overview: {
       tagTotal: overallFacets.tagCount,

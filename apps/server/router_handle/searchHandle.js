@@ -583,8 +583,9 @@ function buildTagSearchFilter(userId, options) {
   const where = ['t.user_id = ?', 't.del_flag = 0'];
   const params = [userId];
   if (keyword) {
-    where.push('t.name LIKE ?');
-    params.push(buildLike(keyword));
+    where.push('(t.name LIKE ? OR t.description LIKE ?)');
+    const like = buildLike(keyword);
+    params.push(like, like);
   }
   if (tagNames.length) {
     where.push(`t.name IN (${tagNames.map(() => '?').join(', ')})`);
@@ -940,7 +941,7 @@ async function queryTags(userId, options, lang, includeItems, includeTotal = tru
       id: toText(item.id),
       type: 'tag',
       title: toText(item.name) || text.unnamedTag,
-      description: text.tagDescription,
+      description: toText(item.description) || text.tagDescription,
       extra: formatText(text.relatedBookmarks, { count: Number(item.resource_count || 0) }),
       route: `/tag/${item.id}`,
       iconUrl: item.icon_url,

@@ -8,6 +8,7 @@
       {
         'avatar-frame--dynamic': isDynamic,
         'avatar-frame--motion-paused': isMotionPaused,
+        'avatar-frame--profile-chat': props.motionProfile === 'chat',
         'avatar-frame--layout-slot': props.layoutMode === 'slot',
       },
     ]"
@@ -328,6 +329,7 @@
         :class="[
           'avatar-frame__flame-particle',
           'avatar-frame__flame-spark',
+          spark.id === 'left-tip' || spark.id === 'right-tip' ? 'avatar-frame__scroll-core' : '',
           spark.id.startsWith('outer-') ? 'avatar-frame__flame-spark--outer' : '',
         ]"
         :src="artwork?.particleSrcs?.[spark.sprite]"
@@ -464,6 +466,7 @@
       decorative?: boolean;
       animated?: boolean;
       pauseWhenOffscreen?: boolean;
+      motionProfile?: 'full' | 'chat';
     }>(),
     {
       frameId: null,
@@ -472,6 +475,7 @@
       decorative: true,
       animated: true,
       pauseWhenOffscreen: false,
+      motionProfile: 'full',
     },
   );
 
@@ -5389,6 +5393,31 @@
     }
   }
 
+  /*
+   * 聊天性能档默认暂停全部主题动画，再白名单放行少量低成本身份动效；这样新增主题层也不会
+   * 漏出滚动预算。暂停使用 play-state 保留当前帧，不在滚动边界切换 filter。滚动容器只通过
+   * 继承变量传入状态，避免页面依赖组件内部类名。
+   */
+  .avatar-frame--profile-chat *,
+  .avatar-frame--profile-chat *::before,
+  .avatar-frame--profile-chat *::after {
+    animation-play-state: var(--avatar-frame-scroll-secondary-play-state, running) !important;
+  }
+
+  .avatar-frame--profile-chat .avatar-frame__wing-layer,
+  .avatar-frame--profile-chat .avatar-frame__sunset-cloud,
+  .avatar-frame--profile-chat .avatar-frame__dragon-orbit-particles i,
+  .avatar-frame--profile-chat .avatar-frame__flame-particle.avatar-frame__scroll-core,
+  .avatar-frame--profile-chat .avatar-frame__motion::before,
+  .avatar-frame--profile-chat .avatar-frame__motion i:first-child {
+    animation-play-state: running !important;
+  }
+
+  // 天穹双翼在聊天室持续使用 transform 开合；固定滤镜避免关键帧里的滤镜插值进入滚动合成成本。
+  .avatar-frame--profile-chat.avatar-frame--celestial .avatar-frame__wing-layer {
+    filter: drop-shadow(0 1px 1px rgba(15, 23, 42, 0.14)) !important;
+  }
+
   .avatar-frame--motion-paused .avatar-frame__art,
   .avatar-frame--motion-paused .avatar-frame__art-detail,
   .avatar-frame--motion-paused .avatar-frame__wing-layer,
@@ -5398,6 +5427,8 @@
   .avatar-frame--motion-paused .avatar-frame__ocean-current,
   .avatar-frame--motion-paused .avatar-frame__aurora-flow,
   .avatar-frame--motion-paused .avatar-frame__aurora-crystal,
+  .avatar-frame--motion-paused .avatar-frame__flame-embers,
+  .avatar-frame--motion-paused .avatar-frame__flame-particle,
   .avatar-frame--motion-paused .avatar-frame__dragon-trail,
   .avatar-frame--motion-paused .avatar-frame__dragon-orbit-particles i,
   .avatar-frame--motion-paused .avatar-frame__dragon-particles i,
@@ -5427,6 +5458,8 @@
     .avatar-frame__ocean-current,
     .avatar-frame__aurora-flow,
     .avatar-frame__aurora-crystal,
+    .avatar-frame__flame-embers,
+    .avatar-frame__flame-particle,
     .avatar-frame__dragon-trail,
     .avatar-frame__dragon-orbit-particles i,
     .avatar-frame__dragon-particles i,

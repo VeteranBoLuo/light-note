@@ -18,7 +18,7 @@
       @compositionend="$emit('compositionend', $event)"
       :style="{
         paddingLeft: hasPrefixSlot ? '30px' : '11px',
-        paddingRight: hasSuffixSlot ? '30px' : '11px',
+        paddingRight: hasSuffixSlot || showClearBtn ? '30px' : '11px',
       }"
       :autocomplete="autocomplete"
       :placeholder="computedPlaceholder"
@@ -40,7 +40,7 @@
       @compositionend="$emit('compositionend', $event)"
       :style="{
         paddingLeft: hasPrefixSlot ? '35px' : '11px',
-        paddingRight: hasSuffixSlot ? '35px' : '11px',
+        paddingRight: hasSuffixSlot || showClearBtn ? '35px' : '11px',
       }"
       :autocomplete="autocomplete"
       :maxlength="maxlength"

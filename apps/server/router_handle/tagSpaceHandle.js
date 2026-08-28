@@ -2,10 +2,29 @@ import pool from '../db/index.js';
 import { L, resultData } from '../util/common.js';
 import { ensureUserOrAdminPolicy } from '../util/auth.js';
 import { ADMIN_POLICIES } from '../util/adminRoutePolicy.js';
+import { getTagEditorBootstrap } from '../util/services/tagEditorService.js';
 import { getTagSpaceOverview, queryTagSpaceList, queryTagSpaceResources } from '../util/services/tagSpaceService.js';
 
 function getResourceUserId(req) {
   return (req.resourceUser || req.user)?.id;
+}
+
+export async function getTagEditorData(req, res) {
+  if (!ensureUserOrAdminPolicy(req, res, [ADMIN_POLICIES.READ])) return;
+  try {
+    const data = await getTagEditorBootstrap(pool, {
+      userId: getResourceUserId(req),
+      tagId: req.body?.tagId,
+    });
+    if (!data) return res.send(resultData(null, 404, L(req, '标签不存在', 'Tag not found')));
+    return res.send(resultData(data));
+  } catch (error) {
+    console.error(
+      '[tag-editor] bootstrap failed code=%s',
+      String(error?.code || error?.message || 'TAG_EDITOR_BOOTSTRAP_FAILED'),
+    );
+    return res.send(resultData(null, 500, L(req, '标签编辑器加载失败，请稍后重试', 'Failed to load tag editor')));
+  }
 }
 
 export async function queryTagSpaces(req, res) {

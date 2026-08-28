@@ -701,6 +701,10 @@
     .b-drawer-panel {
       transform: translateX(0);
     }
+
+    .b-drawer-panel--bottom {
+      transform: translateY(0);
+    }
   }
 
   /* 滑入完成后移除恒驻 transform 合成层，避免长列表滚动时旧帧在部分 Chrome/GPU 上残影叠加。 */

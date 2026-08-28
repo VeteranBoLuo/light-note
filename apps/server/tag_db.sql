@@ -671,6 +671,7 @@ DROP TABLE IF EXISTS `tag`;
 CREATE TABLE `tag` (
   `id` varchar(255) NOT NULL,
   `name` varchar(255) DEFAULT NULL,
+  `description` varchar(500) DEFAULT NULL COMMENT '标签说明',
   `user_id` varchar(255) NOT NULL,
   `icon_url` longtext COMMENT '图标地址',
   `create_time` datetime DEFAULT CURRENT_TIMESTAMP,

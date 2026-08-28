@@ -697,8 +697,21 @@
       :scope-label="fileAiScopeLabel"
       :actions="fileAiActions"
       :show-prompt="false"
-      @result-action="handleFileAiResultAction"
-    />
+      :show-grounding="false"
+      :auto-run-action-id="fileAiAutoRunActionId"
+    >
+      <template #result-actions="{ response, result }">
+        <BButton
+          v-if="result?.kind === 'grounded_markdown' && response.sources.length"
+          type="primary"
+          :loading="creatingAiNote"
+          :disabled="creatingAiNote"
+          @click="createNoteFromFileAnalysis(response)"
+        >
+          {{ $t('aiSkills.saveAsNote') }}
+        </BButton>
+      </template>
+    </AiSkillDialog>
 
     <FileTagConfig
       v-if="tagModalVisible"
@@ -779,7 +792,7 @@
   import AiSkillDialog from '@/components/aiSkills/AiSkillDialog.vue';
   import { isAiDocumentFileNameSupported } from '@lightnote/shared';
   import type { AiSkillResourceRef, AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
-  import { persistAiNotePreview } from '@/utils/aiNoteDraft';
+  import { persistAiMarkdownResultAsNote } from '@/utils/aiNoteDraft';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { isNearResourceScrollEnd } from '@/utils/resourcePagination';
   import { resolveFileAiSummaryPresentation } from '@/utils/fileAiSummary';
@@ -989,6 +1002,7 @@
   );
   const fileAiSkillId = computed(() => (fileAiResourceRefs.value.length > 1 ? 'file.compare' : 'file.summarize'));
   const fileAiPromptKey = computed(() => 'instruction');
+  const fileAiAutoRunActionId = computed(() => (fileAiResourceRefs.value.length > 1 ? 'compare' : 'summarize'));
   const fileAiSingleSummaryPresentation = computed(() =>
     resolveFileAiSummaryPresentation(fileAiFiles.value.length === 1 ? fileAiFiles.value[0] : undefined),
   );
@@ -1009,52 +1023,44 @@
     });
   });
   const fileAiActions = computed(() => {
-    const actions =
-      fileAiResourceRefs.value.length > 1
-        ? [
-            {
-              id: 'compare',
-              label: t('cloudSpace.aiCompareFiles'),
-              skillId: 'file.compare',
-              input: { instruction: t('cloudSpace.aiCompareInstruction') },
-            },
-          ]
-        : [
-            {
-              id: 'summarize',
-              label: t(fileAiSingleSummaryPresentation.value.labelKey),
-              skillId: 'file.summarize',
-              input: {
-                instruction: t(fileAiSingleSummaryPresentation.value.instructionKey),
-              },
-            },
-          ];
-    actions.push({
-      id: 'create-note',
-      label: t('cloudSpace.aiCreateNote'),
-      skillId: 'file.create_note_preview',
-      input: {
-        instruction: t('cloudSpace.aiCreateNoteInstruction'),
-        title:
-          fileAiFiles.value.length === 1
-            ? t('cloudSpace.aiGeneratedSingleNoteTitle', {
-                name: fileAiFiles.value[0]?.fileName || t('cloudSpace.aiGeneratedNoteTitle'),
-              })
-            : t('cloudSpace.aiGeneratedMultiNoteTitle', {
-                name: fileAiFiles.value[0]?.fileName || t('cloudSpace.aiGeneratedNoteTitle'),
-              }),
+    if (fileAiResourceRefs.value.length > 1) {
+      return [
+        {
+          id: 'compare',
+          label: t('cloudSpace.aiCompareFiles'),
+          skillId: 'file.compare',
+          input: { instruction: t('cloudSpace.aiCompareInstruction') },
+        },
+      ];
+    }
+    return [
+      {
+        id: 'summarize',
+        label: t(fileAiSingleSummaryPresentation.value.labelKey),
+        skillId: 'file.summarize',
+        input: {
+          instruction: t(fileAiSingleSummaryPresentation.value.instructionKey),
+        },
       },
-    });
-    return actions;
+    ];
   });
+  const fileAiGeneratedNoteTitle = computed(() =>
+    fileAiFiles.value.length === 1
+      ? t('cloudSpace.aiGeneratedSingleNoteTitle', {
+          name: fileAiFiles.value[0]?.fileName || t('cloudSpace.aiGeneratedNoteTitle'),
+        })
+      : t('cloudSpace.aiGeneratedMultiNoteTitle', {
+          name: fileAiFiles.value[0]?.fileName || t('cloudSpace.aiGeneratedNoteTitle'),
+        }),
+  );
 
   const creatingAiNote = ref(false);
 
-  async function handleFileAiResultAction(action: Record<string, unknown>, response: AiSkillResponse) {
-    if (action.id !== 'create_note_from_preview' || creatingAiNote.value) return;
+  async function createNoteFromFileAnalysis(response: AiSkillResponse) {
+    if (creatingAiNote.value) return;
     creatingAiNote.value = true;
     try {
-      const handoff = await persistAiNotePreview(response, t('cloudSpace.aiGeneratedNoteTitle'));
+      const handoff = await persistAiMarkdownResultAsNote(response, fileAiGeneratedNoteTitle.value);
       if (!handoff) return;
       message.success(t('aiSkills.noteCreated'));
       fileAiVisible.value = false;

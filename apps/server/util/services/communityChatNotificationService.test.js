@@ -190,6 +190,20 @@ describe('communityChatNotificationService', () => {
     expect(params).toEqual(['11111111-1111-4111-8111-111111111111', 'rules-v1']);
   });
 
+  it('调用方提供的可读预览会替代内部令牌，通知正文不暴露存储协议', async () => {
+    const db = { query: vi.fn(async () => [{ affectedRows: 1 }, []]) };
+    await deliverCommunityChatMessageNotifications({
+      messagePublicId: '11111111-1111-4111-8111-111111111111',
+      messagePreview: '你好 [开心]',
+      env: PUBLIC_ENV,
+      db,
+    });
+
+    const [sql, params] = db.query.mock.calls[0];
+    expect(String(sql)).toContain('THEN LEFT(?, 160)');
+    expect(params).toEqual(['你好 [开心]', '你好 [开心]', '11111111-1111-4111-8111-111111111111']);
+  });
+
   it('旧值与未知值在只读展示时安全回退到推荐档', () => {
     expect(normalizeCommunityChatNotificationLevel('all')).toBe('all');
     expect(normalizeCommunityChatNotificationLevel('mentions_only')).toBe('mentions_only');

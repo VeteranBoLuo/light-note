@@ -341,6 +341,7 @@
           v-else-if="!desktopPreviewOpen && currentViewMode === 'card' && visibleDragNoteList.length"
           v-auto-scrollbar
           :disabled="!canDragNote"
+          :sort="false"
           :animation="200"
           v-model="visibleDragNoteList"
           class="note-library-body"
@@ -413,6 +414,7 @@
             v-else
             v-auto-scrollbar
             :disabled="!canDragNote"
+            :sort="false"
             :animation="200"
             ref="el"
             v-model="visibleDragNoteList"
@@ -652,6 +654,7 @@
     fetchNoteTreeFeatures,
     type NoteDeletePreview,
     type NoteTreeFeatures,
+    type NoteTreeMoveResult,
   } from '@/api/noteTree';
   import { recordNoteTreeProductEvent } from '@/api/noteTreeTelemetry';
   import {
@@ -679,8 +682,6 @@
   import type { NoteBatchExportMode } from '@/utils/noteBatchExport';
   import {
     RESOURCE_LIST_PAGE_SIZE,
-    buildResourceSortMove,
-    hasResourceOrderChanged,
     isNearResourceScrollEnd,
     mergeResourcePage,
     mergeResourceRefreshedHead,
@@ -910,7 +911,8 @@
       return source.parentId ? String(source.parentId) : null;
     },
     canCommit: () => !blockGuestWrite('move-note'),
-    async onMoveConfirmed({ sourceId }) {
+    async onMoveConfirmed({ sourceId, result }) {
+      noteLibraryCache.invalidateMovedNoteLists(noteCacheScope.value, result);
       const shouldRefreshBreadcrumb = currentBreadcrumb.value.some((item) => item.id === sourceId);
       if (shouldRefreshBreadcrumb) noteWorkspace.invalidateBreadcrumbBranch(sourceId);
       await Promise.all([
@@ -1301,8 +1303,6 @@
   });
 
   const togglingTopIds = new Set<string>();
-  const sortPinnedFirst = (notes: any[]) =>
-    [...notes].sort((a: any, b: any) => Number(Boolean(b.isTop)) - Number(Boolean(a.isTop)));
 
   async function toggleNoteTop(note: any) {
     if (blockGuestWrite('pin-note')) return;
@@ -1861,17 +1861,19 @@
     moveNoteVisible.value = true;
   }
 
-  async function handleNoteMoved() {
+  async function handleNoteMoved(result: NoteTreeMoveResult | null) {
     const wasBatchMove = activeMoveNotes.value.length > 0;
     moveNoteVisible.value = false;
     if (wasBatchMove) exitBatch();
+    noteLibraryCache.invalidateMovedNoteLists(noteCacheScope.value, result);
     await Promise.all([refreshTree(), reloadNotes()]);
     activeMoveNote.value = null;
     activeMoveNotes.value = [];
   }
 
-  async function handlePagesAttached() {
+  async function handlePagesAttached(result: NoteTreeMoveResult | null) {
     attachPagesVisible.value = false;
+    noteLibraryCache.invalidateMovedNoteLists(noteCacheScope.value, result);
     await Promise.all([refreshTree(), reloadNotes()]);
     activeAttachTarget.value = null;
   }
@@ -2240,8 +2242,6 @@
       visibleDragNoteList.value.length > (noteTreeReadEnabled.value ? 0 : 1) &&
       !noteList.value.some((note) => note.isCheck === true),
   );
-  const browsingAllDirectoryNotes = computed(() => noteTreeReadEnabled.value && currentParentId.value === null);
-
   watch(
     () => searchValue.value,
     (val) => {
@@ -2933,10 +2933,9 @@
     if (originalEvent && typeof originalEvent.clientX === 'number') {
       const target = resolveDropTargetAtPoint(originalEvent.clientX, originalEvent.clientY);
       scheduleDragDropTarget(target);
-      if (target) return false;
     }
-    // 根笔记库是跨目录的平铺结果，不存在可持久化的“全局同级顺序”；仍允许拖入页面或目录。
-    return !browsingAllDirectoryNotes.value;
+    // 右侧卡片/列表只承担“移入或移出目录”，同级前后排序统一留给左侧页面树。
+    return false;
   }
 
   function onStart(event?: { item?: HTMLElement; oldIndex?: number }) {
@@ -2948,108 +2947,27 @@
     beginPointerDrag({ id: sourceId, isTop: Boolean(sourceNote?.isTop) });
   }
 
-  function moveVisibleNoteInAllNotes(
-    allNotes: any[],
-    sortedVisibleNotes: any[],
-    event?: { oldIndex?: number; newIndex?: number },
-  ) {
-    const oldIndex = Number(event?.oldIndex);
-    const newIndex = Number(event?.newIndex);
-    if (!Number.isInteger(oldIndex) || !Number.isInteger(newIndex) || oldIndex === newIndex) {
-      return allNotes;
-    }
-
-    const movedNote = Number.isInteger(newIndex) ? sortedVisibleNotes[newIndex] : null;
-    if (!movedNote) {
-      return allNotes;
-    }
-
-    const movedId = String(movedNote.id);
-    const nextNotes = allNotes.filter((note: any) => String(note.id) !== movedId);
-    const prevVisibleNote = sortedVisibleNotes[newIndex - 1];
-    const nextVisibleNote = sortedVisibleNotes[newIndex + 1];
-
-    if (prevVisibleNote) {
-      const prevIndex = nextNotes.findIndex((note: any) => String(note.id) === String(prevVisibleNote.id));
-      if (prevIndex >= 0) {
-        nextNotes.splice(prevIndex + 1, 0, movedNote);
-        return nextNotes;
-      }
-    }
-
-    if (nextVisibleNote) {
-      const nextIndex = nextNotes.findIndex((note: any) => String(note.id) === String(nextVisibleNote.id));
-      if (nextIndex >= 0) {
-        nextNotes.splice(nextIndex, 0, movedNote);
-        return nextNotes;
-      }
-    }
-
-    nextNotes.push(movedNote);
-    return nextNotes;
-  }
-
-  async function onEnd(event?: { oldIndex?: number; newIndex?: number }) {
+  async function onEnd() {
     // 卡片中央已经是明确的“作为父页面”落点，不要求用户额外停留后才能生效。
     const pointerDrop = takePointerDropSnapshot();
     const nestedTarget = pointerDrop.target;
     const nestedSourceId = pointerDrop.sourceId;
     const nestedSourceIsTop = pointerDrop.sourceIsTop;
-    const sourceNotes = [...noteList.value];
     try {
-      if (blockGuestWrite('reorder-note')) {
+      if (!nestedTarget || !nestedSourceId) {
+        visibleDragNoteList.value = [...viewNoteList.value];
+        return;
+      }
+      if (blockGuestWrite('move-note')) {
         visibleDragNoteList.value = [...viewNoteList.value]; // 拖拽库已就地改了 DOM 顺序,游客态复位视觉
         return;
       }
-
-      if (nestedTarget && nestedSourceId) {
-        visibleDragNoteList.value = [...viewNoteList.value];
-        await moveNoteIntoTarget(nestedSourceId, nestedSourceIsTop, nestedTarget);
-        return;
-      }
-
-      const newIndex = Number(event?.newIndex);
-      const movedNote = Number.isInteger(newIndex) ? visibleDragNoteList.value[newIndex] : null;
-      const mergedNotes = moveVisibleNoteInAllNotes(sourceNotes, visibleDragNoteList.value, event);
-      if (mergedNotes === sourceNotes || !movedNote) {
-        visibleDragNoteList.value = [...viewNoteList.value];
-        return;
-      }
-      // 置顶组始终位于普通组之前；组内仍保留用户刚完成的拖拽顺序。
-      const groupedNotes = sortPinnedFirst(mergedNotes);
-      const sameGroup = (item: any) => Boolean(item.isTop) === Boolean(movedNote.isTop);
-      const beforeGroup = sortPinnedFirst(sourceNotes).filter(sameGroup);
-      const afterGroup = groupedNotes.filter(sameGroup);
-      if (!hasResourceOrderChanged(beforeGroup, afterGroup)) {
-        visibleDragNoteList.value = [...viewNoteList.value];
-        return;
-      }
-
-      const move = buildResourceSortMove(
-        groupedNotes,
-        String(movedNote.id),
-        (candidate: any, target: any) => Boolean(candidate.isTop) === Boolean(target.isTop),
-      );
-      if (!move) {
-        visibleDragNoteList.value = [...viewNoteList.value];
-        return;
-      }
-
-      const res = await apiBasePost('/api/note/updateNoteSort', {
-        move: { ...move, parentId: currentParentId.value },
-      });
-      if (res.status === 200) {
-        noteList.value = groupedNotes;
-        // 右侧手动排序已经落库后，左侧目录必须立即采用相同的同级顺序。
-        await refreshTree();
-        recordOperation({ module: '笔记库', operation: '调整笔记排序成功' });
-      } else {
-        visibleDragNoteList.value = [...viewNoteList.value];
-      }
-    } catch (error) {
-      noteList.value = sourceNotes;
       visibleDragNoteList.value = [...viewNoteList.value];
-      console.error('Error updating note sort:', error);
+      await moveNoteIntoTarget(nestedSourceId, nestedSourceIsTop, nestedTarget);
+    } catch (error) {
+      visibleDragNoteList.value = [...viewNoteList.value];
+      console.error('Error moving note:', error);
+      message.error(t('note.moveFailed'));
     } finally {
       completePointerDrag();
     }

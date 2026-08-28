@@ -18,6 +18,10 @@
       "types": "./communityChatStickers.d.ts",
       "default": "./communityChatStickers.js"
     },
+    "./community-chat-inline-emojis": {
+      "types": "./communityChatInlineEmojis.d.ts",
+      "default": "./communityChatInlineEmojis.js"
+    },
     "./todo-reminder": {
       "types": "./todoReminder.d.ts",
       "default": "./todoReminder.js"

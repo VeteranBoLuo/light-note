@@ -9,12 +9,19 @@ const { fetchTagSpace, fetchTagSpaceResources, fetchTagSpaces } = await import('
 describe('tagSpace api', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('首页只向摘要接口下发分页、筛选和排序条件', async () => {
+  it('首页只向摘要接口下发分页、筛选、排序和空标签包含条件', async () => {
     mocks.apiBasePost.mockResolvedValue({ status: 200, data: { items: [], total: 0 } });
-    await fetchTagSpaces({ keyword: '产品', filter: 'note', sort: 'recent', page: 2, pageSize: 24 });
+    await fetchTagSpaces({
+      keyword: '产品',
+      filter: 'note',
+      sort: 'recent',
+      includeEmpty: true,
+      page: 2,
+      pageSize: 24,
+    });
     expect(mocks.apiBasePost).toHaveBeenCalledWith(
       '/api/bookmark/queryTagSpaces',
-      { keyword: '产品', filter: 'note', sort: 'recent', page: 2, pageSize: 24 },
+      { keyword: '产品', filter: 'note', sort: 'recent', includeEmpty: true, page: 2, pageSize: 24 },
       { silent: true, feedback: false },
     );
   });

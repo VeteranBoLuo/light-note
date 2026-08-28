@@ -126,7 +126,12 @@ export async function updateCommunityChatNotificationSettings({ user, enabled, l
  * - 通知使用 message public id 作为稳定来源键；同一消息同时回复并 @ 同一成员也只投递一次。
  * - 浏览器与 Android 通知尚未开放，meta 明确标记为 in_app_only。
  */
-export async function deliverCommunityChatMessageNotifications({ messagePublicId, env = process.env, db = pool }) {
+export async function deliverCommunityChatMessageNotifications({
+  messagePublicId,
+  messagePreview,
+  env = process.env,
+  db = pool,
+}) {
   const normalizedPublicId = String(messagePublicId || '').trim();
   if (!normalizedPublicId) return { delivered: 0 };
 
@@ -144,6 +149,21 @@ export async function deliverCommunityChatMessageNotifications({ messagePublicId
          )`
       : `AND COALESCE(recipient_membership.status, '') <> 'banned'`;
   const accessParams = feature.accessMode === 'invite_only' ? [feature.rulesVersion] : [];
+  const normalizedMessagePreview =
+    messagePreview === undefined
+      ? null
+      : String(messagePreview || '')
+          .replace(/\s+/g, ' ')
+          .trim();
+  const pollPreviewSql =
+    normalizedMessagePreview === null
+      ? `LEFT(REPLACE(REPLACE(message.content, CHAR(13), ' '), CHAR(10), ' '), 154)`
+      : `LEFT(?, 154)`;
+  const textPreviewSql =
+    normalizedMessagePreview === null
+      ? `LEFT(REPLACE(REPLACE(message.content, CHAR(13), ' '), CHAR(10), ' '), 160)`
+      : `LEFT(?, 160)`;
+  const previewParams = normalizedMessagePreview === null ? [] : [normalizedMessagePreview, normalizedMessagePreview];
 
   const [result] = await db.query(
     `INSERT IGNORE INTO notification
@@ -155,9 +175,9 @@ export async function deliverCommunityChatMessageNotifications({ messagePublicId
               '：',
               CASE
                 WHEN message.message_kind = 'poll'
-                  THEN CONCAT('[投票] ', LEFT(REPLACE(REPLACE(message.content, CHAR(13), ' '), CHAR(10), ' '), 154))
+                  THEN CONCAT('[投票] ', ${pollPreviewSql})
                 WHEN CHAR_LENGTH(TRIM(message.content)) > 0
-                  THEN LEFT(REPLACE(REPLACE(message.content, CHAR(13), ' '), CHAR(10), ' '), 160)
+                  THEN ${textPreviewSql}
                 WHEN EXISTS (
                   SELECT 1 FROM community_chat_message_images notification_image
                    WHERE notification_image.message_id = message.id
@@ -231,7 +251,7 @@ export async function deliverCommunityChatMessageNotifications({ messagePublicId
           OR reply.user_id IS NOT NULL
           OR mention.mentioned_user_id IS NOT NULL
         )`,
-    [normalizedPublicId, ...accessParams],
+    [...previewParams, normalizedPublicId, ...accessParams],
   );
 
   return { delivered: Number(result?.affectedRows || 0) };

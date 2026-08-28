@@ -10,21 +10,41 @@
         :title="t(`communityChat.emoji.category.${category.key}`)"
         @click="activeCategory = category.key"
       >
-        {{ category.icon }}
+        <img
+          v-if="inlineEmoji(category.icon)"
+          class="chat-emoji-panel__category-image"
+          :src="inlineEmoji(category.icon)?.assetPath"
+          alt=""
+          width="30"
+          height="30"
+          aria-hidden="true"
+        />
+        <template v-else>{{ category.icon }}</template>
       </BButton>
     </nav>
     <div class="chat-emoji-panel__heading">
       <strong>{{ t(`communityChat.emoji.category.${activeCategory}`) }}</strong>
+      <small>{{ t('communityChat.emoji.count', { count: activeEmojis.length }) }}</small>
     </div>
     <div v-if="activeEmojis.length" class="chat-emoji-panel__grid">
       <BButton
         v-for="emoji in activeEmojis"
         :key="emoji"
-        :aria-label="emoji"
-        :title="emoji"
+        :aria-label="emojiLabel(emoji)"
+        :title="emojiLabel(emoji)"
         @click="emit('select', emoji)"
       >
-        {{ emoji }}
+        <img
+          v-if="inlineEmoji(emoji)"
+          class="chat-emoji-panel__inline-image"
+          :src="inlineEmoji(emoji)?.assetPath"
+          :alt="emojiLabel(emoji)"
+          width="36"
+          height="36"
+          loading="lazy"
+          decoding="async"
+        />
+        <template v-else>{{ emoji }}</template>
       </BButton>
     </div>
     <p v-else class="chat-emoji-panel__empty">{{ t('communityChat.emoji.recentEmpty') }}</p>
@@ -32,6 +52,10 @@
 </template>
 
 <script setup lang="ts">
+  import {
+    resolveCommunityChatInlineEmoji,
+    type CommunityChatInlineEmoji,
+  } from '@lightnote/shared/community-chat-inline-emojis';
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -43,7 +67,7 @@
   });
   const emit = defineEmits<{ select: [emoji: string] }>();
   const { t } = useI18n();
-  const activeCategory = ref<CommunityChatEmojiCategory['key']>(props.recent.length ? 'recent' : 'smileys');
+  const activeCategory = ref<CommunityChatEmojiCategory['key']>(props.recent.length ? 'recent' : 'jianTuan');
   const categories = computed<CommunityChatEmojiCategory[]>(() => [
     { key: 'recent', icon: '🕘', emojis: props.recent },
     ...COMMUNITY_CHAT_EMOJI_CATEGORIES,
@@ -52,10 +76,19 @@
     () => categories.value.find((category) => category.key === activeCategory.value)?.emojis || [],
   );
 
+  function inlineEmoji(value: string): CommunityChatInlineEmoji | null {
+    return resolveCommunityChatInlineEmoji(value);
+  }
+
+  function emojiLabel(value: string) {
+    const emoji = inlineEmoji(value);
+    return emoji ? t(`communityChat.emoji.jianTuanItems.${emoji.id}`) : value;
+  }
+
   watch(
     () => props.recent.length,
     (length) => {
-      if (!length && activeCategory.value === 'recent') activeCategory.value = 'smileys';
+      if (!length && activeCategory.value === 'recent') activeCategory.value = 'jianTuan';
     },
   );
 </script>
@@ -105,10 +138,27 @@
     background: var(--workspace-panel-bg-color);
   }
 
+  .chat-emoji-panel__category-image {
+    width: 30px;
+    height: 30px;
+    display: block;
+    flex: none;
+    object-fit: contain;
+    transform: translate(-5px, -3.5px);
+  }
+
   .chat-emoji-panel__heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
     padding: 8px 11px 3px;
     color: var(--desc-color);
     font-size: 11px;
+  }
+
+  .chat-emoji-panel__heading small {
+    font-size: 10px;
   }
 
   .chat-emoji-panel__grid {
@@ -143,6 +193,13 @@
     border-color: var(--primary-color);
     background: var(--hover-background);
     outline: none;
+  }
+
+  .chat-emoji-panel__inline-image {
+    width: 36px;
+    height: 36px;
+    max-width: 100%;
+    object-fit: contain;
   }
 
   .chat-emoji-panel__empty {

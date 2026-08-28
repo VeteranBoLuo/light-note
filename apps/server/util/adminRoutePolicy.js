@@ -26,6 +26,7 @@ declare(ADMIN_POLICIES.READ, 'bookmark', [
   ['POST', '/bookmark/getTagSpace'],
   ['POST', '/bookmark/queryTagSpaceResources'],
   ['POST', '/bookmark/getTagDetail'],
+  ['POST', '/bookmark/getTagEditorData'],
   ['POST', '/bookmark/getRelatedTag'],
   ['POST', '/bookmark/getTagGraph'],
   ['POST', '/bookmark/getGlobalGraph'],

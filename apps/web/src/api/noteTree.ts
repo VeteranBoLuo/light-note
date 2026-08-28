@@ -53,6 +53,27 @@ export interface NoteDeletePreview {
   totalCount: number;
 }
 
+export interface NoteTreeMoveItemResult {
+  id: string;
+  parentId: string | null;
+  previousParentId: string | null;
+  isTop?: boolean;
+  sort?: number;
+  moved?: boolean;
+}
+
+export interface NoteTreeBatchMoveResult {
+  items: NoteTreeMoveItemResult[];
+  parentId?: string | null;
+  requestedCount?: number;
+  rootCount?: number;
+  movedCount?: number;
+  affectedCount?: number;
+  updatedCount?: number;
+}
+
+export type NoteTreeMoveResult = NoteTreeMoveItemResult | NoteTreeBatchMoveResult;
+
 function collectTreeIds(items: NoteTreeItem[], visited = new Set<string>()) {
   for (const item of Array.isArray(items) ? items : []) {
     const id = String(item?.id || '').trim();

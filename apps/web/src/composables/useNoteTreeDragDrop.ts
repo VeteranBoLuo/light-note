@@ -13,6 +13,7 @@ import {
 import { resolveNoteTreeDragScrollStep } from '@/utils/noteTreeDragScroll';
 import { requestNoteShareExposureConfirmation } from '@/utils/noteShareExposure';
 import { getRootZoom } from '@/utils/zoom';
+import type { NoteTreeMoveItemResult } from '@/api/noteTree';
 
 type BoolRef = Readonly<Ref<boolean> | ComputedRef<boolean>>;
 type TreeIndexRef = Ref<Record<string, NoteTreeItem[]>>;
@@ -30,6 +31,7 @@ interface NoteTreeDragDropOptions {
     sourceId: string;
     sourceIsTop: boolean;
     target: NoteTreeDropTarget;
+    result: NoteTreeMoveItemResult;
   }) => void | Promise<void>;
   logLabel?: string;
 }
@@ -448,7 +450,12 @@ export function useNoteTreeDragDrop(options: NoteTreeDragDropOptions) {
                 : options.t('note.moveIntoSuccess', { title: target.title });
       message.success(successMessage);
       try {
-        await options.onMoveConfirmed?.({ sourceId, sourceIsTop, target });
+        await options.onMoveConfirmed?.({
+          sourceId,
+          sourceIsTop,
+          target,
+          result: response.data as NoteTreeMoveItemResult,
+        });
       } catch (error) {
         console.error(`[${options.logLabel || 'note-tree'}] refresh after tree move failed`, error);
       }

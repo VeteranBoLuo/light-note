@@ -63,13 +63,16 @@ describe('官网与应用入口路由', () => {
     });
   });
 
-  it('标签空间列表与详情都是私人资源路由', () => {
+  it('标签列表与详情都是私人资源路由', () => {
     const index = router.resolve('/manage/tagMg');
     const detail = router.resolve('/tag/tag-1');
     expect(index.name).toBe('tagMg');
     expect(detail.name).toBe('tagDetail');
     expect(index.meta.roles).not.toContain('visitor');
     expect(detail.meta.roles).not.toContain('visitor');
+    expect(detail.meta.mobileShell).toBe('resources');
+    expect(detail.meta.mobileTopSwitcher).toBe(true);
+    expect(detail.meta.mobileBottomNav).toBe(true);
   });
 
   it('笔记分享使用独立只读页面，并显式隔离登录探测、AI 与搜索引擎收录', () => {

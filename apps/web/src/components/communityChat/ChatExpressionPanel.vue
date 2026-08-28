@@ -104,23 +104,25 @@
   }
 
   .chat-expression-panel__tabs {
-    min-height: 52px;
+    height: 46px;
+    min-height: 46px;
+    box-sizing: border-box;
     display: flex;
     align-items: stretch;
     gap: 4px;
-    padding: 5px 8px;
+    padding: 3px 8px;
     border-top: 1px solid var(--surface-border-color);
     background: var(--card-background);
   }
 
   .chat-expression-panel__tab.b_btn {
-    min-width: 72px;
-    height: 42px;
+    min-width: 68px;
+    height: 39px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
-    padding: 0 10px;
+    padding: 0 8px;
     border: 1px solid transparent;
     color: var(--desc-color);
     background: transparent;

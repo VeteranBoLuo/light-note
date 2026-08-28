@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { createApp, h, nextTick, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createPinia } from 'pinia';
@@ -23,6 +25,13 @@ afterEach(() => {
 });
 
 describe('BDrawer compositor cleanup', () => {
+  it('keeps bottom drawers on the vertical enter path instead of inheriting the side-drawer transform', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/components/base/BasicComponents/BDrawer.vue'), 'utf8');
+    expect(source).toMatch(
+      /\.is-entered\s*\{[\s\S]*?\.b-drawer-panel--bottom\s*\{[\s\S]*?transform:\s*translateY\(0\)/u,
+    );
+  });
+
   it('can place the close control before a centered mobile title', async () => {
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       callback(0);

@@ -24,6 +24,7 @@ describe('tagSpaceService', () => {
             {
               id: 'tag-1',
               name: '产品 50%_!',
+              description: '产品资料与阶段结论',
               icon_url: '',
               sort: 2,
               bookmark_count: 2,
@@ -65,7 +66,17 @@ describe('tagSpaceService', () => {
     expect(listSql).toContain('COALESCE(stats.bookmark_count, 0) > 0');
     expect(listSql).toContain('ORDER BY stats.last_activity_time IS NULL ASC');
     expect(listSql).toContain('LIMIT ? OFFSET ?');
-    expect(listParams).toEqual(['user-1', 'user-1', 'user-1', 'user-1', 'user-1', '%50!%!_!!%', 10, 10]);
+    expect(listParams).toEqual([
+      'user-1',
+      'user-1',
+      'user-1',
+      'user-1',
+      'user-1',
+      '%50!%!_!!%',
+      '%50!%!_!!%',
+      10,
+      10,
+    ]);
     expect(result).toMatchObject({
       total: 2,
       page: 2,
@@ -80,6 +91,7 @@ describe('tagSpaceService', () => {
     });
     expect(result.items[0]).toMatchObject({
       id: 'tag-1',
+      description: '产品资料与阶段结论',
       counts: { bookmark: 2, note: 1, file: 1, total: 4 },
     });
     expect(result.items[0].previewResources).toHaveLength(3);
@@ -127,7 +139,28 @@ describe('tagSpaceService', () => {
     };
     const result = await queryTagSpaceList(db, { userId: 'user-1', includeEmpty: true });
     expect(db.query.mock.calls[0][0]).toContain('AND 1 = 1');
-    expect(result).toMatchObject({ total: 4, includeEmpty: true, facets: { all: 4 } });
+    expect(result).toMatchObject({ total: 4, includeEmpty: true, facets: { all: 4, empty: 2 } });
+  });
+
+  it('空标签使用服务端计数筛选，不需要回退旧全量标签管理接口', async () => {
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[]])
+        .mockResolvedValueOnce([[{ tag_count: 4, active_count: 2, bookmark_count: 1, note_count: 1, file_count: 0 }]])
+        .mockResolvedValueOnce([[{ bookmark_count: 1, note_count: 1, file_count: 0 }]]),
+    };
+    const result = await queryTagSpaceList(db, {
+      userId: 'user-1',
+      includeEmpty: true,
+      filter: 'empty',
+    });
+    expect(db.query.mock.calls[0][0]).toContain('COALESCE(stats.file_count, 0)\n    ) = 0');
+    expect(result).toMatchObject({
+      total: 2,
+      filter: 'empty',
+      facets: { all: 4, empty: 2 },
+    });
   });
 
   it('先合并三类资源再按加入标签时间统一分页，不按类型分段', async () => {
@@ -168,6 +201,12 @@ describe('tagSpaceService', () => {
     expect(countSql).toContain("r.resource_type = 'bookmark'");
     expect(countSql).toContain("r.resource_type = 'note'");
     expect(countSql).toContain("r.resource_type = 'file'");
+    expect(rowSql).toMatch(/CONVERT\(b\.id USING utf8mb4\) COLLATE utf8mb4_unicode_ci AS id/u);
+    expect(rowSql).toMatch(/CONVERT\(b\.name USING utf8mb4\) COLLATE utf8mb4_unicode_ci AS title/u);
+    expect(rowSql).toMatch(/CONVERT\(n\.id USING utf8mb4\) COLLATE utf8mb4_unicode_ci AS id/u);
+    expect(rowSql).toMatch(/CONVERT\(n\.title USING utf8mb4\) COLLATE utf8mb4_unicode_ci AS title/u);
+    expect(rowSql).toMatch(/CONVERT\(f\.id USING utf8mb4\) COLLATE utf8mb4_unicode_ci AS id/u);
+    expect(rowSql).toMatch(/CONVERT\(f\.file_name USING utf8mb4\) COLLATE utf8mb4_unicode_ci AS title/u);
     expect(rowSql).toContain('ORDER BY added_time DESC, resource_type ASC, id DESC');
     expect(rowSql).toContain('LIMIT ? OFFSET ?');
     expect(rowParams.slice(-2)).toEqual([50, 50]);

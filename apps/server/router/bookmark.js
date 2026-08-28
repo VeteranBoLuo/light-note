@@ -22,6 +22,8 @@ router.post('/updateTagSort', bookmarkHandle.updateTagSort);
 
 router.post('/getTagDetail', bookmarkHandle.getTagDetail);
 
+router.post('/getTagEditorData', tagSpaceHandle.getTagEditorData);
+
 router.post('/getRelatedTag', bookmarkHandle.getRelatedTag);
 
 router.post('/getTagGraph', tagGraphHandle.getTagGraph);

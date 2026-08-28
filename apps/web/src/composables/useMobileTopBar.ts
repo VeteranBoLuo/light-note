@@ -38,6 +38,8 @@ export interface MobileTopBarBinding {
   auxiliaryActionIcon?: () => string;
   onAdd?: () => void;
   addLabel?: () => string;
+  /** 只在当前页面允许新增时显示；用于只读管理上下文等动态状态。 */
+  showAdd?: () => boolean;
   /** 默认是加号图标；批量态可切为“全选”等文字动作。 */
   addActionMode?: () => 'icon' | 'text';
 }

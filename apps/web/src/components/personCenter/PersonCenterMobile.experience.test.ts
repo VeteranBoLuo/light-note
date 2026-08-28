@@ -770,10 +770,44 @@ describe('mobile personal center experience', () => {
       /\.avatar-frame--motion-paused \.avatar-frame__dragon-orbit-particles i[\s\S]*?animation:\s*none !important;/,
     );
     expect(avatarFrameSource).toMatch(
+      /\.avatar-frame--motion-paused \.avatar-frame__flame-particle[\s\S]*?animation:\s*none !important;/,
+    );
+    expect(avatarFrameSource).toMatch(
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.avatar-frame__dragon-trail[\s\S]*?animation:\s*none !important;/,
+    );
+    expect(avatarFrameSource).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.avatar-frame__flame-particle[\s\S]*?animation:\s*none !important;/,
     );
     expect(pointsShopSource).toContain('pause-when-offscreen');
     expect(framePickerSource).toContain('pause-when-offscreen');
+  });
+
+  it('keeps a low-cost chat identity motion while pausing expensive secondary channels without filter flashes', () => {
+    expect(avatarFrameSource).toContain("'avatar-frame--profile-chat': props.motionProfile === 'chat'");
+    expect(avatarFrameSource).toContain("motionProfile?: 'full' | 'chat'");
+    expect(avatarFrameSource).toContain("motionProfile: 'full'");
+    expect(avatarFrameSource).toContain("spark.id === 'left-tip' || spark.id === 'right-tip'");
+
+    const chatProfileSource = avatarFrameSource.slice(
+      avatarFrameSource.indexOf('聊天性能档默认暂停全部主题动画'),
+      avatarFrameSource.indexOf('.avatar-frame--motion-paused .avatar-frame__art'),
+    );
+    expect(chatProfileSource).toContain('.avatar-frame--profile-chat *,');
+    expect(chatProfileSource).toContain('.avatar-frame--profile-chat *::before,');
+    expect(chatProfileSource).toContain('.avatar-frame--profile-chat *::after');
+    expect(chatProfileSource).toContain(
+      'animation-play-state: var(--avatar-frame-scroll-secondary-play-state, running) !important;',
+    );
+    expect(chatProfileSource).toContain(
+      '.avatar-frame--profile-chat .avatar-frame__flame-particle.avatar-frame__scroll-core,',
+    );
+    expect(chatProfileSource).toContain('.avatar-frame--profile-chat .avatar-frame__wing-layer,');
+    expect(chatProfileSource).toContain(
+      '.avatar-frame--profile-chat .avatar-frame__dragon-orbit-particles i,',
+    );
+    expect(chatProfileSource).toContain('.avatar-frame--profile-chat .avatar-frame__motion::before,');
+    expect(chatProfileSource).toContain('animation-play-state: running !important;');
+    expect(chatProfileSource).not.toContain('filter: none');
   });
 
   it('closes avatar overlay history before navigating and stabilizes the initial frame tabs', () => {

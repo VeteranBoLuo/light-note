@@ -33,7 +33,7 @@ import { createBookmark, normalizeBookmarkUrl, shouldResetBookmarkIcon } from '.
 import { runBookmarkImportTransaction } from '../util/services/bookmarkImportService.js';
 import { createIconBatch } from '../util/bookmarkIconBatchService.js';
 import { getIconBatchStatus, retryIconBatchFailures } from '../util/bookmarkIconBatchService.js';
-import { createTag as createTagService } from '../util/services/tagService.js';
+import { createTag as createTagService, normalizeTagDescription } from '../util/services/tagService.js';
 import {
   BookmarkUrlError,
   bookmarkUrlErrorPayload,
@@ -299,6 +299,7 @@ export const addTag = async (req, res) => {
       const createdTag = await createTagService({
         userId,
         name: req.body?.name,
+        description: req.body?.description,
         iconUrl: req.body?.iconUrl,
         sort: req.body?.sort,
         connection,
@@ -388,6 +389,7 @@ export const updateTag = async (req, res) => {
     const paramsData = JSON.parse(JSON.stringify(req.body));
     const params = {
       name: paramsData.name,
+      description: normalizeTagDescription(paramsData.description),
       iconUrl: paramsData.iconUrl,
     };
     const userId = req.user.id;

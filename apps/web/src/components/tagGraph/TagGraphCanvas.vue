@@ -24,7 +24,7 @@
   import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { TagGraphEdge, TagGraphNode } from '@/api/tagGraph.ts';
-  import { getEdgeColor, getNodeLabel, GRAPH_NODE_COLOR, isNeighbor } from './shared.ts';
+  import { getEdgeColor, getNodeLabel, GRAPH_NODE_COLOR, isNeighbor, resolveGraphViewportSize } from './shared.ts';
 
   const props = defineProps<{
     nodes: TagGraphNode[];
@@ -81,10 +81,13 @@
   }
 
   function getManualPositions() {
-    const width = Math.max(containerRef.value?.clientWidth || 900, 520);
-    const height = Math.max(containerRef.value?.clientHeight || 420, compact.value ? 320 : 380);
-    const centerX = width * 0.5;
-    const centerY = height * 0.5;
+    // 容器的真实宽度是图谱唯一布局边界。移动端若强行钳到桌面最小宽度，
+    // 中心点会落到可视区域右侧，表现为整个图谱没有居中。
+    const { width, height, centerX, centerY, narrow } = resolveGraphViewportSize(
+      containerRef.value?.clientWidth || 0,
+      containerRef.value?.clientHeight || 0,
+      compact.value,
+    );
     const positionMap = new Map<string, { x: number; y: number }>();
     const centerNode = props.nodes.find((node) => node.meta?.isCenter) || props.nodes[0];
     const relatedTags = props.nodes
@@ -103,7 +106,7 @@
       relatedTags,
       centerX,
       centerY,
-      Math.min(width * 0.24, 260),
+      Math.min(width * (narrow ? 0.22 : 0.24), 260),
       Math.min(height * 0.24, 130),
       -Math.PI / 2,
     );
@@ -118,7 +121,7 @@
         ringNodes,
         centerX,
         centerY,
-        Math.min(width * 0.36, 340 + radiusStep),
+        Math.min(width * (narrow ? 0.3 : 0.36), 340 + radiusStep),
         Math.min(height * 0.34, 170 + radiusStep * 0.72),
         -Math.PI / 2 + ringIndex * 0.24,
         0.5,

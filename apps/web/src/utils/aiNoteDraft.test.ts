@@ -125,7 +125,7 @@ describe('aiNoteDraft', () => {
     expect(sessionStorage.length).toBe(0);
   });
 
-  it('把用户已检查的书签总结直接确认为新笔记，不重复生成正文', async () => {
+  it('把用户已检查的书签分析直接保存为新笔记，并移除展示型来源角标', async () => {
     apiBasePostMock.mockResolvedValue({ status: 200, data: { id: 'bookmark-summary-note' }, msg: '' });
     const response = {
       protocolVersion: 1 as const,
@@ -151,7 +151,7 @@ describe('aiNoteDraft', () => {
       '/api/note/addNote',
       {
         title: '网页资料整理',
-        content: '# 网页总结\n核心信息 [1]',
+        content: '# 网页总结\n核心信息',
         type: 'markdown',
         idempotencyKey: 'ai-skill-note:bookmark-summary-request',
       },

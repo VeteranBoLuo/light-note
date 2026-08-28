@@ -205,7 +205,7 @@ export function useBookmarkEditor() {
   }
 
   function goAddTag() {
-    router.push('/manage/editTag/add');
+    router.push({ name: 'tagMg', query: { create: '1' } });
   }
 
   function confirmDiscardChanges(): Promise<boolean> {

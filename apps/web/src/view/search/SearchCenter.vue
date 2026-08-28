@@ -367,6 +367,7 @@
                 :initial-input="searchAiInitialInput"
                 :actions="searchAiActions"
                 :show-prompt="false"
+                :show-grounding="false"
                 :auto-run-action-id="searchAiAutoRunActionId"
                 :icon-src="icon.ai.organize"
               />
@@ -501,6 +502,7 @@
                 :initial-input="searchAiInitialInput"
                 :actions="searchAiActions"
                 :show-prompt="false"
+                :show-grounding="false"
                 :auto-run-action-id="searchAiAutoRunActionId"
                 :icon-src="icon.ai.organize"
                 presentation="sidebar"

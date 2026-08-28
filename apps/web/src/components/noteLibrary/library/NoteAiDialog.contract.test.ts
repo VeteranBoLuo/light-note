@@ -11,24 +11,26 @@ const detailSource = readFileSync(resolve(process.cwd(), 'src/view/noteLibrary/N
 const replySource = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/detail/AiReply.vue'), 'utf8');
 const zhLocaleSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/zh-CN.ts'), 'utf8');
 
-describe('笔记 AI 封闭能力与新笔记持久化契约', () => {
-  it('笔记库只显示真实支持的预设能力，不再保留自由提问和提取待办', () => {
+describe('笔记分析与新笔记持久化契约', () => {
+  it('笔记分析打开即执行单一只读能力，不再要求用户先选总结、比较或生成', () => {
     expect(dialogSource).toContain(':show-prompt="false"');
+    expect(dialogSource).toContain(':show-grounding="false"');
+    expect(dialogSource).toContain(":auto-run-action-id=\"resourceRefs.length ? 'summarize' : ''\"");
     expect(dialogSource).toContain("skillId: 'note.batch_summarize'");
-    expect(dialogSource).toContain('resourceRefs.value.length >= 2 && resourceRefs.value.length <= 10');
-    expect(dialogSource).toMatch(/if \(resourceRefs\.value\.length >= 2\)[\s\S]*skillId: 'note\.create_from_sources'/);
-    expect(dialogSource).toContain("skillId: 'note.create_from_sources'");
+    expect(dialogSource).not.toContain("skillId: 'note.batch_compare'");
+    expect(dialogSource).not.toContain("skillId: 'note.create_from_sources'");
     expect(dialogSource).not.toContain('extract-todos');
     expect(dialogSource).not.toContain('aiExtractTodos');
-    expect(zhLocaleSource).toContain("aiCreateNote: '整理为一篇新笔记'");
+    expect(zhLocaleSource).toContain("aiSummarizeSelected: '分析所选笔记'");
   });
 
-  it('新笔记先展示服务端确认动作，确认后立即持久化再打开已保存笔记', () => {
+  it('分析结果底部由用户选择保存为笔记，复用同一结果且不再次调用模型', () => {
     expect(panelSource).toContain('response.availableActions.length');
-    expect(panelSource).toContain("emit('result-action', action, result)");
-    expect(dialogSource).toContain("action.id !== 'create_note_from_preview'");
-    expect(dialogSource).toContain('persistAiNotePreview(response');
+    expect(dialogSource).toContain('#result-actions');
+    expect(dialogSource).toContain("t('aiSkills.saveAsNote')");
+    expect(dialogSource).toContain('persistAiMarkdownResultAsNote(response');
     expect(dialogSource).toContain('await router.push(handoff.route)');
+    expect(dialogSource).not.toContain('persistAiNotePreview(response');
     expect(dialogSource).not.toContain('createAiNoteDraftHandoff(response');
     expect(detailSource).toContain('readAiNoteDraft(query.aiDraft)');
     expect(detailSource).toContain('discardAiNoteDraft(nextQuery.aiDraft)');

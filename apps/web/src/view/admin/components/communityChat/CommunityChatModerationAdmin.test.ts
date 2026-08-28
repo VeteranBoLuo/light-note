@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick } from 'vue';
 import { createI18n } from 'vue-i18n';
+import { COMMUNITY_CHAT_INLINE_EMOJIS } from '@lightnote/shared/community-chat-inline-emojis';
 import zhCN from '@/i18n/locales/zh-CN';
 
 const apiMocks = vi.hoisted(() => ({
@@ -182,6 +183,33 @@ describe('CommunityChatModerationAdmin', () => {
 
     await vi.waitFor(() => expect(mounted.host.textContent).toContain('下一项优先做什么？（选项：体验 / 性能）'));
     expect(mounted.host.textContent).not.toContain('投票人');
+  });
+
+  it('举报证据将笺团令牌展示为可读名称', async () => {
+    const inlineEmojiReport = {
+      ...pendingReport,
+      evidenceSnapshot: {
+        ...pendingReport.evidenceSnapshot,
+        content: `收到${COMMUNITY_CHAT_INLINE_EMOJIS[26].token}`,
+      },
+    };
+    apiMocks.list.mockImplementation((params: { status: string }) =>
+      Promise.resolve({
+        status: 200,
+        data: {
+          items: params.status === 'pending' ? [inlineEmojiReport] : [],
+          total: params.status === 'pending' ? 1 : 0,
+          page: 1,
+          pageSize: 20,
+          status: params.status,
+        },
+      }),
+    );
+    const mounted = mountPage();
+    cleanup = mounted.unmount;
+
+    await vi.waitFor(() => expect(mounted.host.textContent).toContain('收到[收到]'));
+    expect(mounted.host.textContent).not.toContain('[[ln-emoji:');
   });
 
   it('处置必须填写原因，默认动作只隐藏消息并写入审核说明', async () => {

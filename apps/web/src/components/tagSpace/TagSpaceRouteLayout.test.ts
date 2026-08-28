@@ -15,14 +15,11 @@ function rootElements(ast: ReturnType<typeof readTemplate>) {
   return (ast?.children || []).filter((node) => node.type === 1);
 }
 
-describe('标签空间路由布局', () => {
-  it('路由页与索引页都保持单一 DOM 根节点，确保 RouterView 定位样式可透传', () => {
-    const routeRoots = rootElements(readTemplate('view/manage/TagMg.vue'));
-    const indexRoots = rootElements(readTemplate('components/tagSpace/TagSpaceIndex.vue'));
+describe('标签路由布局', () => {
+  it('兼容入口保持单一 DOM 根节点，确保 RouterView 定位样式可透传', () => {
+    const routeRoots = rootElements(readTemplate('components/tagSpace/TagSpaceEntry.vue'));
 
     expect(routeRoots).toHaveLength(1);
-    expect(indexRoots).toHaveLength(1);
     expect(routeRoots[0]).toMatchObject({ tag: 'div' });
-    expect(indexRoots[0]).toMatchObject({ tag: 'div' });
   });
 });

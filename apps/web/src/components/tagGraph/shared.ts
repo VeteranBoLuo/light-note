@@ -21,6 +21,18 @@ export const GRAPH_RESOURCE_TYPE_OPTIONS: Array<{ value: Exclude<GraphNodeType, 
   { value: 'file', labelKey: 'tagGraph.nodeType.file' },
 ];
 
+export function resolveGraphViewportSize(measuredWidth: number, measuredHeight: number, compact = false) {
+  const width = Number.isFinite(measuredWidth) && measuredWidth > 0 ? measuredWidth : 900;
+  const height = Number.isFinite(measuredHeight) && measuredHeight > 0 ? measuredHeight : compact ? 320 : 420;
+  return {
+    width,
+    height,
+    centerX: width / 2,
+    centerY: height / 2,
+    narrow: width <= 480,
+  };
+}
+
 export function getEdgeColor(type: GraphEdgeType) {
   if (type === 'tag-tag') return 'rgba(236, 72, 153, 0.44)';
   if (type === 'tag-note') return 'rgba(0, 168, 132, 0.34)';

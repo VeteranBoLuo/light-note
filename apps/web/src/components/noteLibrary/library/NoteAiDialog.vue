@@ -10,10 +10,22 @@
     :scope-label="t('note.aiSkillScope', { count: resourceRefs.length })"
     :actions="actions"
     :show-prompt="false"
-    :auto-run-action-id="resourceRefs.length === 1 ? 'summarize' : ''"
+    :show-grounding="false"
+    :auto-run-action-id="resourceRefs.length ? 'summarize' : ''"
     @update:visible="emit('update:visible', $event)"
-    @result-action="handleResultAction"
-  />
+  >
+    <template #result-actions="{ response, result }">
+      <BButton
+        v-if="result?.kind === 'grounded_markdown' && response.sources.length"
+        type="primary"
+        :loading="creatingNote"
+        :disabled="creatingNote"
+        @click="createNoteFromAnalysis(response)"
+      >
+        {{ t('aiSkills.saveAsNote') }}
+      </BButton>
+    </template>
+  </AiSkillDialog>
 </template>
 
 <script setup lang="ts">
@@ -22,7 +34,8 @@
   import { useRouter } from 'vue-router';
   import type { AiSkillResourceRef, AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
   import AiSkillDialog from '@/components/aiSkills/AiSkillDialog.vue';
-  import { persistAiNotePreview } from '@/utils/aiNoteDraft';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import { persistAiMarkdownResultAsNote } from '@/utils/aiNoteDraft';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
 
   const props = defineProps<{
@@ -37,45 +50,30 @@
   const resourceRefs = computed<AiSkillResourceRef[]>(() =>
     props.notes.slice(0, 20).map((note) => ({ type: 'note', id: String(note.id) })),
   );
-  const actions = computed(() => {
-    const items = [
-      {
-        id: 'summarize',
-        label: t('note.aiSummarize'),
-        skillId: 'note.batch_summarize',
-        input: { instruction: t('note.aiSummarizeInstruction') },
-      },
-    ];
-    if (resourceRefs.value.length >= 2 && resourceRefs.value.length <= 10) {
-      items.push({
-        id: 'compare',
-        label: t('note.aiCompare'),
-        skillId: 'note.batch_compare',
-        input: { instruction: t('note.aiCompareInstruction') },
-      });
-    }
-    if (resourceRefs.value.length >= 2) {
-      items.push({
-        id: 'create-note',
-        label: t('note.aiCreateNote'),
-        skillId: 'note.create_from_sources',
-        input: {
-          instruction: t('note.aiCreateNoteInstruction'),
-          title: t('note.aiGeneratedMultiNoteTitle', {
-            title: props.notes[0]?.title || t('note.aiGeneratedNoteTitle'),
-            count: props.notes.length,
-          }),
-        },
-      });
-    }
-    return items;
-  });
+  const actions = computed(() => [
+    {
+      id: 'summarize',
+      label: t('note.aiSummarize'),
+      skillId: 'note.batch_summarize',
+      input: { instruction: t('note.aiSummarizeInstruction') },
+    },
+  ]);
+  const generatedNoteTitle = computed(() =>
+    resourceRefs.value.length === 1
+      ? t('note.aiGeneratedSingleNoteTitle', {
+          title: props.notes[0]?.title || t('note.aiGeneratedNoteTitle'),
+        })
+      : t('note.aiGeneratedMultiNoteTitle', {
+          title: props.notes[0]?.title || t('note.aiGeneratedNoteTitle'),
+          count: props.notes.length,
+        }),
+  );
 
-  async function handleResultAction(action: Record<string, unknown>, response: AiSkillResponse) {
-    if (action.id !== 'create_note_from_preview' || creatingNote.value) return;
+  async function createNoteFromAnalysis(response: AiSkillResponse) {
+    if (creatingNote.value) return;
     creatingNote.value = true;
     try {
-      const handoff = await persistAiNotePreview(response, t('note.aiGeneratedNoteTitle'));
+      const handoff = await persistAiMarkdownResultAsNote(response, generatedNoteTitle.value);
       if (!handoff) return;
       message.success(t('aiSkills.noteCreated'));
       emit('update:visible', false);

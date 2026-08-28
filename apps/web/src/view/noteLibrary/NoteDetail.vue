@@ -370,6 +370,7 @@
     fetchNoteTreeFeatures,
     normalizeNoteTreeFeatures,
     type NoteTreeFeatures,
+    type NoteTreeMoveResult,
   } from '@/api/noteTree';
   import { normalizeNoteContentResourceUrls } from '@/utils/common.ts';
   import { useGuestGuard } from '@/composables/useGuestGuard';
@@ -538,6 +539,10 @@
     invalidateNoteDetailPrefetch(user, noteId);
     noteLibraryCache.markListsStale(buildNoteDetailRequestScope(user));
   }
+  function invalidateMovedNoteReadCaches(result: NoteTreeMoveResult | null, noteId = '') {
+    if (noteId) invalidateNoteDetailPrefetch(user, noteId);
+    noteLibraryCache.invalidateMovedNoteLists(noteCacheScope.value, result);
+  }
   const {
     aiPreferredOpen,
     browseParentId,
@@ -645,10 +650,10 @@
     t,
     getScrollElement: () => document.querySelector<HTMLElement>('.note-detail-sidebar-panel .note-tree-scroll'),
     canCommit: () => guardWrite(undefined, 'move-note') && !readonly.value,
-    async onMoveConfirmed({ sourceId, target }) {
+    async onMoveConfirmed({ sourceId, target, result }) {
       const affectsCurrentBreadcrumb = detailBreadcrumb.value.some((item) => item.id === sourceId);
       noteWorkspace.invalidateBreadcrumbBranch(sourceId);
-      invalidateNoteReadCaches(sourceId);
+      invalidateMovedNoteReadCaches(result, sourceId);
       if (sourceId === note.id) note.parentId = target.parentId;
       if (affectsCurrentBreadcrumb && note.id) await loadDetailBreadcrumb(note.id);
     },
@@ -1292,8 +1297,9 @@
     attachPagesVisible.value = true;
   }
 
-  function handlePagesAttached() {
+  function handlePagesAttached(result: NoteTreeMoveResult | null) {
     attachPagesVisible.value = false;
+    invalidateMovedNoteReadCaches(result);
     activeAttachTarget.value = null;
     void refreshTree();
     void loadDetailBreadcrumb(note.id);
@@ -1305,12 +1311,18 @@
     moveSelfVisible.value = true;
   }
 
-  function handleSelfMoved(result: { parentId?: string | null } | null) {
+  function handleSelfMoved(result: NoteTreeMoveResult | null) {
     moveSelfVisible.value = false;
     const movedCurrentPage = !activeMoveTarget.value || activeMoveTarget.value.id === note.id;
-    if (movedCurrentPage && result && Object.prototype.hasOwnProperty.call(result, 'parentId')) {
+    if (
+      movedCurrentPage &&
+      result &&
+      !('items' in result) &&
+      Object.prototype.hasOwnProperty.call(result, 'parentId')
+    ) {
       note.parentId = result.parentId || null;
     }
+    invalidateMovedNoteReadCaches(result, activeMoveTarget.value?.id || note.id);
     activeMoveTarget.value = null;
     void refreshTree();
     void loadDetailBreadcrumb(note.id);

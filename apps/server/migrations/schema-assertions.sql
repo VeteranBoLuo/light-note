@@ -2623,3 +2623,15 @@ WHERE message.id IS NULL
    OR COALESCE(reader.del_flag, '1')<>'0'
    OR COALESCE(reader.role, 'deleted')='deleted'
    OR receipt.user_id=message.user_id;
+
+-- 61) 标签说明必须与标签元信息同表持久化（期望 0 行）
+SELECT '[61] missing_tag_description' AS check_name, 'tag.description' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA=DATABASE()
+    AND TABLE_NAME='tag'
+    AND COLUMN_NAME='description'
+    AND CHARACTER_MAXIMUM_LENGTH=500
+);

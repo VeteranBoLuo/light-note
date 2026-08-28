@@ -50,7 +50,7 @@ export const MOBILE_RESOURCE_NAVIGATION: readonly MobileResourceNavigationItem[]
     key: 'tag',
     path: '/manage/tagMg',
     labelKey: 'navigation.tag',
-    routeNames: ['tagMg'],
+    routeNames: ['tagMg', 'tagDetail'],
   },
 ] as const;
 

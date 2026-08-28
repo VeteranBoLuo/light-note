@@ -121,7 +121,7 @@
             <h3>{{ $t('home.noTags') }}</h3>
             <div>{{ $t('home.createFirstTag') }}</div>
             <br />
-            <b-button size="small" type="primary" @click="router.push('/manage/editTag/add')">{{
+            <b-button size="small" type="primary" @click="router.push({ name: 'tagMg', query: { create: '1' } })">{{
               $t('home.addTag')
             }}</b-button>
           </div>
@@ -210,7 +210,10 @@
         tag.isRename = true;
         newName.value = tag.name;
       },
-      edit: () => navigateFromMobileFilter(() => router.push(`/manage/editTag/${tag.id}`)),
+      edit: () =>
+        navigateFromMobileFilter(() =>
+          router.push({ name: 'tagDetail', params: { id: tag.id }, query: { edit: '1' } }),
+        ),
       delete: () => handleDeleteTag(tag),
       addBookmark: () => navigateFromMobileFilter(() => router.push(`/manage/editBookmark/add/${tag.id}`)),
     };

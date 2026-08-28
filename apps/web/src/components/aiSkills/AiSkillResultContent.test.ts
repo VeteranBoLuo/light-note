@@ -14,10 +14,10 @@ const componentSource = readFileSync(
 
 let cleanup: (() => void) | undefined;
 
-function mountResult(result: SkillResult) {
+function mountResult(result: SkillResult, showGrounding = true) {
   const host = document.createElement('div');
   document.body.append(host);
-  const app = createApp({ render: () => h(AiSkillResultContent, { result }) });
+  const app = createApp({ render: () => h(AiSkillResultContent, { result, showGrounding }) });
   app.use(
     createI18n({
       legacy: false,
@@ -76,6 +76,21 @@ describe('AiSkillResultContent', () => {
     expect(componentSource).toMatch(/:deep\(h1\)[\s\S]*?font-size:\s*clamp\(/);
     expect(componentSource).toMatch(/:deep\(pre\)[\s\S]*?white-space:\s*pre-wrap/);
     expect(componentSource).toMatch(/:deep\(table\)[\s\S]*?table-layout:\s*fixed/);
+  });
+
+  it('业务分析模式隐藏数字来源角标，同时保留代码下标', () => {
+    const host = mountResult(
+      {
+        kind: 'grounded_markdown',
+        content: '核心结论 [1]\n\n[2]\n\n示例数组 `items[1]`。',
+      },
+      false,
+    );
+
+    expect(host.textContent).toContain('核心结论');
+    expect(host.textContent).toContain('items[1]');
+    expect(host.textContent).not.toContain('[2]');
+    expect(host.textContent).not.toContain('结论 [1]');
   });
 
   it('把单条待办结构化草稿呈现为可读预览，不暴露原始 JSON', () => {

@@ -321,27 +321,6 @@
               </div>
             </div>
 
-            <!-- 移动端标签管理固定卡片视图,该偏好只对桌面生效,移动端不展示避免误导 -->
-            <div v-if="!bookmark.isMobile" class="field">
-              <div class="field-head">
-                <span class="field-label">{{ t('settings.tagManageView') }}</span>
-                <span class="field-desc">{{ t('settings.tagManageViewDesc') }}</span>
-              </div>
-              <div class="seg" :class="{ 'seg--two-column': tagManageViewOpts.length >= 4 }">
-                <BButton
-                  v-for="o in tagManageViewOpts"
-                  :key="o.v"
-                  class="seg-btn"
-                  :class="{ active: (user.preferences.tagManageView || 'card') === o.v }"
-                  :type="(user.preferences.tagManageView || 'card') === o.v ? 'primary' : undefined"
-                  :aria-pressed="(user.preferences.tagManageView || 'card') === o.v"
-                  @click="set('tagManageView', o.v)"
-                >
-                  {{ o.label }}
-                </BButton>
-              </div>
-            </div>
-
             <div class="field">
               <div class="field-head">
                 <span class="field-label">{{ t('settings.hideEmptyTags') }}</span>
@@ -1220,10 +1199,6 @@
   const cloudViewOpts = computed(() => [
     { v: 'card', label: t('settings.cardView') },
     { v: 'table', label: t('settings.tableView') },
-  ]);
-  const tagManageViewOpts = computed(() => [
-    { v: 'card', label: t('settings.cardView') },
-    { v: 'list', label: t('settings.listView') },
   ]);
   const resourceSortOpts = computed(() => [
     { v: 'relevance', label: t('resourceCenter.sort.relevance') },

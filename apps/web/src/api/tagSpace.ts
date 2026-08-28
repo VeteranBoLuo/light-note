@@ -1,6 +1,6 @@
 import { apiBasePost } from '@/http/request.ts';
 
-export type TagSpaceFilter = 'all' | 'bookmark' | 'note' | 'file';
+export type TagSpaceFilter = 'all' | 'bookmark' | 'note' | 'file' | 'empty';
 export type TagSpaceSort = 'default' | 'recent' | 'resourceDesc' | 'nameAsc';
 export type TagSpaceResourceType = 'bookmark' | 'note' | 'file';
 export type TagSpaceResourceFilter = 'all' | TagSpaceResourceType;
@@ -26,6 +26,7 @@ export interface TagSpacePreviewResource {
 export interface TagSpaceSummary {
   id: string;
   name: string;
+  description: string;
   iconUrl: string;
   sort: number;
   createTime: string | null;

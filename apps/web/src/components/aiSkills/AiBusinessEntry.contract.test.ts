@@ -16,10 +16,15 @@ describe('业务 AI 入口能力契约', () => {
     expect(presentation).toContain("'cloudSpace.aiExtractAndSummarizeImage'");
     expect(presentation).toContain("'cloudSpace.aiExtractAndSummarizeImageInstruction'");
     expect(source).toContain(':show-prompt="false"');
+    expect(source).toContain(':show-grounding="false"');
+    expect(source).toContain(':auto-run-action-id="fileAiAutoRunActionId"');
+    expect(source).toContain('persistAiMarkdownResultAsNote');
+    expect(source).toContain('#result-actions');
+    expect(source).not.toContain("skillId: 'file.create_note_preview'");
     expect(source).not.toContain("id: 'extract-todos'");
   });
 
-  it('书签入口统一为单卡自动分析，并从分析结果直接生成笔记', () => {
+  it('书签入口统一为单卡自动分析，并由用户把分析结果保存为笔记', () => {
     const desktopTable = read('components/manage/bookmarkMg/BookmarkTable.vue');
     const mobileTable = read('components/manage/bookmarkMg/BookmarkTableMobile.vue');
     const homeCards = read('components/home/CardPanel.vue');
@@ -30,10 +35,12 @@ describe('业务 AI 入口能力契约', () => {
     expect(mobileTable).not.toContain('openSelectedBookmarksInAi');
     expect(dialog).toContain('props.bookmarks.slice(0, 1)');
     expect(dialog).toContain(':show-prompt="false"');
+    expect(dialog).toContain(':show-grounding="false"');
     expect(dialog).toContain('auto-run-action-id="summarize"');
     expect(dialog).toContain("'bookmark.summarize_page'");
     expect(dialog).toContain('persistAiMarkdownResultAsNote');
     expect(dialog).toContain('#result-actions');
+    expect(dialog).toContain("t('aiSkills.saveAsNote')");
     expect(dialog).not.toContain('bookmark.create_note_preview');
     expect(dialog).not.toContain("mode?: 'analyze' | 'create_note'");
     expect(dialog).not.toContain("'bookmark.compare_pages'");
@@ -56,10 +63,13 @@ describe('业务 AI 入口能力契约', () => {
 
     expect(panel).toContain('visibleActions');
     expect(panel).toContain('action.id !== autoRunId');
-    expect(noteDialog).toContain("resourceRefs.length === 1 ? 'summarize' : ''");
+    expect(noteDialog).toContain("resourceRefs.length ? 'summarize' : ''");
     expect(tagDetail).toContain("tagAiResourceRefs.length ? 'summarize' : ''");
+    expect(noteDialog).toContain(':show-grounding="false"');
+    expect(tagDetail).toContain(':show-grounding="false"');
     expect(inbox).toContain('auto-run-action-id="analyze"');
     expect(search).toContain("searchAiResourceRefs.value.length === 1 ? 'summarize' : ''");
+    expect(search.match(/:show-grounding="false"/gu) || []).toHaveLength(2);
   });
 
   it('书签存档弹窗不在按钮上重复标记免费或额度信息', () => {

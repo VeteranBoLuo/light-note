@@ -9,13 +9,14 @@ import {
 import { getMobileTopBarBinding, registerMobileTopBarBinding } from '@/composables/useMobileTopBar';
 
 describe('移动端导航配置', () => {
-  it('只把资料列表路由归入顶部资料切换', () => {
+  it('把资料列表和标签详情归入顶部资料切换', () => {
     expect(getMobileResourcePath('home')).toBe('/home');
     expect(getMobileResourcePath('home:id')).toBe('/home');
     expect(getMobileResourcePath('home:search')).toBe('/home');
     expect(getMobileResourcePath('noteLibrary')).toBe('/noteLibrary');
     expect(getMobileResourcePath('cloudSpace')).toBe('/cloudSpace');
     expect(getMobileResourcePath('tagMg')).toBe('/manage/tagMg');
+    expect(getMobileResourcePath('tagDetail')).toBe('/manage/tagMg');
     expect(getMobileResourcePath('tagEditMg')).toBeNull();
     expect(getMobileResourcePath('noteDetail')).toBeNull();
     expect(getMobileResourcePath('personCenter')).toBeNull();
