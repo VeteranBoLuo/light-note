@@ -1,12 +1,12 @@
 import { RouteRecordRaw } from 'vue-router';
-import { ALL_ROLES } from '@/config/bookmarkCfg.ts';
+import { RoleEnum } from '@/config/bookmarkCfg.ts';
 
 const tagDetailRouter: RouteRecordRaw = {
   meta: {
-    title: '标签详情',
+    title: '标签空间',
     keepAlive: true,
     requireAuth: true,
-    roles: ALL_ROLES,
+    roles: [RoleEnum.Root, RoleEnum.USER, RoleEnum.TEST],
   },
   path: '/tag/:id',
   name: 'tagDetail',

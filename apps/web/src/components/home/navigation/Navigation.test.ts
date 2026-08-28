@@ -148,7 +148,7 @@ describe('Navigation', () => {
     expect(mocks.routerPush).toHaveBeenCalledWith('/community-chat');
   });
 
-  it('PC 顶栏按待办、标签、资源中心、聊天室的顺序提供一级入口', async () => {
+  it('PC 顶栏按待办、标签空间、资源中心、聊天室的顺序提供一级入口', async () => {
     const host = await mountNavigation();
     const navigationItems = Array.from(host.querySelector('.navigation-tab')?.children || []);
     const todoEntry = host.querySelector('#nav-todo-entry');
@@ -157,7 +157,7 @@ describe('Navigation', () => {
     const communityEntry = host.querySelector('#nav-community-entry');
 
     expect(todoEntry).not.toBeNull();
-    expect(tagEntry?.textContent?.trim()).toBe('标签');
+    expect(tagEntry?.textContent?.trim()).toBe('标签空间');
     expect(resourceCenterEntry?.textContent?.trim()).toBe('资源中心');
     expect(communityEntry).not.toBeNull();
     expect(navigationItems.indexOf(tagEntry as Element)).toBe(navigationItems.indexOf(todoEntry as Element) + 1);
@@ -184,13 +184,17 @@ describe('Navigation', () => {
     expect(rightAreaSource).not.toContain('function tagManageClick');
   });
 
+  it('标签空间详情也保持标签一级导航选中语义', () => {
+    expect(navigationSource).toContain("route.path.startsWith('/tag/')");
+  });
+
   it('PC 顶栏保留书签、笔记和云空间三个高频资料入口，可一键切换', async () => {
     const host = await mountNavigation();
 
     expect(host.querySelector('#nav-bookmark-entry')?.textContent?.trim()).toBe('书签');
     expect(host.querySelector('#nav-note-entry')?.textContent?.trim()).toBe('笔记');
     expect(host.querySelector('#nav-cloud-entry')?.textContent?.trim()).toBe('云空间');
-    expect(host.querySelector('#nav-tag-entry')?.textContent?.trim()).toBe('标签');
+    expect(host.querySelector('#nav-tag-entry')?.textContent?.trim()).toBe('标签空间');
     expect(host.querySelector('#nav-resource-center-entry')?.textContent?.trim()).toBe('资源中心');
 
     host.querySelector<HTMLElement>('#nav-bookmark-entry')?.click();

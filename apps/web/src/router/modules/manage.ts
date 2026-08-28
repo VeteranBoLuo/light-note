@@ -1,5 +1,5 @@
 import { RouteRecordRaw } from 'vue-router';
-import { ALL_ROLES } from '@/config/bookmarkCfg.ts';
+import { ALL_ROLES, RoleEnum } from '@/config/bookmarkCfg.ts';
 
 const manageRouter: RouteRecordRaw = {
   meta: {
@@ -17,6 +17,7 @@ const manageRouter: RouteRecordRaw = {
       component: () => import('@/view/manage/TagMg.vue'),
       // 移动端作为资料区第四个页签(书签/笔记/云空间/标签),走统一移动壳
       meta: {
+        roles: [RoleEnum.Root, RoleEnum.USER, RoleEnum.TEST],
         mobileShell: 'resources',
         mobileTopSwitcher: true,
         mobileBottomNav: true,

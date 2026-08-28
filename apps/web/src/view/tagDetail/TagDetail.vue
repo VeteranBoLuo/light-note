@@ -1,256 +1,285 @@
 <template>
-  <div class="tag-detail-container" :class="{ 'tag-detail-container--graph': viewMode === 'graph' }">
-    <!-- 标签头部信息 -->
-    <div class="tag-header">
-      <div class="tag-header-main">
-        <!-- 移动端从资料页签进入时无全局返回,提供页内返回 -->
-        <BButton
-          v-if="bookmark.isMobile"
-          class="tag-back-btn"
-          :aria-label="$t('common.back')"
-          :title="$t('common.back')"
-          @click="router.back()"
-        >
-          <SvgIcon :src="icon.arrow_left" size="18" aria-hidden="true" />
-        </BButton>
-        <img
-          v-if="tag.iconUrl && !tagIconLoadError"
-          :src="tag.iconUrl"
-          class="tag-icon"
-          alt=" "
-          @error="handleTagIconError"
-        />
-        <svg-icon v-else :src="icon.manage_categoryBtn_tag" size="28" />
-        <!-- 标题只做展示;编辑改为显式按钮,原「点标题进编辑」不可发现且易误触 -->
-        <span class="tag-name">{{ tag.name }}</span>
-        <div v-if="tag.id" class="tag-header-actions">
-          <BButton
-            class="tag-ai-entry"
-            :aria-label="$t('common.edit')"
-            :title="$t('common.edit')"
-            @click="goToEditTag"
-            v-click-log="{ module: '标签详情', operation: `编辑标签【${tag.name}】` }"
-          >
-            <SvgIcon :src="icon.table_edit" size="14" aria-hidden="true" />
-            {{ $t('common.edit') }}
-          </BButton>
-          <BButton
-            class="tag-ai-entry"
-            :aria-label="$t('tagManage.openInAi')"
-            :title="$t('tagManage.openInAi')"
-            @click="openTagInAi"
-          >
-            <SvgIcon :src="icon.ai.ask" size="15" aria-hidden="true" />
-            {{ $t('tagManage.askAi') }}
-          </BButton>
-        </div>
-      </div>
-      <div v-if="relatedTags.length" class="tag-related">
-        <span class="related-label">{{ $t('tagManage.relatedTag') }}:</span>
-        <ResourceTagChip
-          v-for="rt in relatedTags"
-          :key="rt.id"
-          :tag="rt"
-          size="medium"
-          interactive
-          max-width="160px"
-          @click="goToTag(rt.id)"
-          v-click-log="{ module: '标签详情', operation: `查看相关标签【${rt.name}】` }"
-        />
-      </div>
-    </div>
+  <ResourcePageShell
+    :title="tag?.name || t('tagSpace.detailTitle')"
+    :subtitle="detailSubtitle"
+    accent="tag"
+    layout="workspace"
+    show-back
+    @back="router.back()"
+  >
+    <template #meta>
+      <span v-if="tag" class="detail-tag-icon">
+        <img v-if="tag.iconUrl && !tagIconLoadError" :src="tag.iconUrl" alt="" @error="tagIconLoadError = true" />
+        <SvgIcon v-else :src="icon.manage_categoryBtn_tag" size="19" aria-hidden="true" />
+      </span>
+    </template>
+    <template #actions>
+      <BButton v-if="tag && !isReadOnly" @click="editTag">
+        <SvgIcon :src="icon.table_edit" size="14" aria-hidden="true" />
+        {{ t('common.edit') }}
+      </BButton>
+      <BButton v-if="tag" type="primary" :loading="aiLoading" @click="openTagInAi">
+        <SvgIcon :src="icon.ai.ask" size="15" aria-hidden="true" />
+        {{ t('tagSpace.askAi') }}
+      </BButton>
+    </template>
 
-    <!-- 内容区 -->
-    <div class="tag-content">
-      <div class="summary-grid">
-        <div class="summary-card" :style="{ '--summary-color': RESOURCE_COLOR_HEX.tag }">
-          <div class="summary-label">{{ $t('tagManage.relatedTag') }}</div>
-          <div class="summary-value">{{ relatedTagCount }}</div>
-        </div>
-        <div class="summary-card" :style="{ '--summary-color': RESOURCE_COLOR_HEX.bookmark }">
-          <div class="summary-label">{{ $t('tagManage.bookmark') }}</div>
-          <div class="summary-value">{{ bookmarks.length }}</div>
-        </div>
-        <div class="summary-card" :style="{ '--summary-color': RESOURCE_COLOR_HEX.note }">
-          <div class="summary-label">{{ $t('tagManage.note') }}</div>
-          <div class="summary-value">{{ notes.length }}</div>
-        </div>
-        <div class="summary-card" :style="{ '--summary-color': RESOURCE_COLOR_HEX.file }">
-          <div class="summary-label">{{ $t('tagManage.file') }}</div>
-          <div class="summary-value">{{ files.length }}</div>
+    <div v-auto-scrollbar class="tag-space-detail" :class="{ 'is-graph': viewMode === 'graph' }">
+      <div v-if="detailLoading" class="detail-loading" aria-busy="true" :aria-label="t('common.loading')">
+        <BCard variant="raised" class="detail-hero-skeleton">
+          <span class="skeleton-line skeleton-line--title"></span>
+          <span class="skeleton-line"></span>
+          <span class="skeleton-line skeleton-line--short"></span>
+        </BCard>
+        <div class="resource-list">
+          <BCard v-for="index in 6" :key="index" class="resource-skeleton">
+            <span class="skeleton-line skeleton-line--title"></span>
+            <span class="skeleton-line"></span>
+          </BCard>
         </div>
       </div>
 
-      <div class="view-switch" role="tablist" :aria-label="t('tagGraph.viewMode.label')">
-        <BButton
-          class="view-switch-btn"
-          :class="{ active: viewMode === 'card' }"
-          role="tab"
-          :aria-selected="viewMode === 'card'"
-          size="small"
-          @click="setViewMode('card')"
-        >
-          {{ t('tagGraph.viewMode.list') }}
-        </BButton>
-        <BButton
-          class="view-switch-btn"
-          :class="{ active: viewMode === 'graph' }"
-          role="tab"
-          :aria-selected="viewMode === 'graph'"
-          size="small"
-          @click="setViewMode('graph')"
-        >
-          {{ t('tagGraph.viewMode.map') }}
-        </BButton>
-      </div>
-
-      <section v-if="viewMode === 'graph'" class="tag-graph-section tag-graph-section--full">
-        <div class="tag-graph-layout">
-          <TagGraphCanvas
-            ref="tagGraphRef"
-            style="position: relative"
-            :nodes="displayGraphNodes"
-            :edges="displayGraphEdges"
-            :loading="graphLoading"
-            :compact="false"
-            :full-height="true"
-            :active-node-id="activeGraphNode?.id"
-            @node-click="handleGraphNodeClick"
-            @node-dblclick="handleGraphNodeDoubleClick"
-            @canvas-click="activeGraphNode = null"
-          >
-            <template #actions>
-              <BButton size="small" @click="toggleGraphResources">
-                {{ graphFilters.includeResources ? t('tagGraph.hideOverview') : t('tagGraph.showOverview') }}
-              </BButton>
-              <BButton size="small" type="primary" @click="resetGraphView">
-                {{ t('tagGraph.reset') }}
-              </BButton>
-            </template>
-          </TagGraphCanvas>
-          <TagGraphPanel
-            :node="activeGraphNode"
-            :connected-resources="graphConnectedResources"
-            @explore-tag="handlePanelExploreTag"
-            @open-resource="openGraphNode"
-          />
+      <BCard v-else-if="detailError || !tag" variant="raised" class="detail-state" role="alert">
+        <span class="state-symbol">!</span>
+        <strong>{{ t('tagSpace.detailLoadFailedTitle') }}</strong>
+        <p>{{ t('tagSpace.detailLoadFailedDesc') }}</p>
+        <div class="state-actions">
+          <BButton @click="router.push('/manage/tagMg')">{{ t('tagSpace.backToSpaces') }}</BButton>
+          <BButton type="primary" @click="loadDetail">{{ t('common.retry') }}</BButton>
         </div>
-      </section>
+      </BCard>
 
-      <div v-if="viewMode === 'card' && relatedTags.length" class="resource-section">
-        <div class="section-title" :style="{ color: RESOURCE_COLOR_HEX.tag }">
-          <span class="type-dot" :style="{ background: RESOURCE_COLOR_HEX.tag }" />
-          {{ $t('tagManage.coUsedTitle') }} ({{ relatedTags.length }})
-          <!-- 关系由共同资料自动推导,明确告知来源,避免用户以为需要手工维护 -->
-          <small class="section-title__hint">{{ $t('tagManage.coUsedHint') }}</small>
-        </div>
-        <div class="related-tag-grid">
-          <div
-            v-for="rt in relatedTags"
-            :key="rt.id"
-            class="related-tag-card dom-hover"
-            @click="goToTag(rt.id)"
-            v-click-log="{ module: '标签详情', operation: `查看相关标签【${rt.name}】` }"
-          >
-            <div class="related-tag-name">{{ rt.name }}</div>
-            <div v-if="rt.sharedCount" class="related-tag-shared">
-              {{ $t('tagManage.coUsedShared', { count: rt.sharedCount }) }}
-            </div>
+      <template v-else>
+        <BCard as="section" variant="raised" padding="16px 18px" class="detail-overview">
+          <div class="overview-copy">
+            <span class="overview-kicker">{{ t('tagSpace.spaceOverview') }}</span>
+            <strong>{{ t('tagSpace.resourceTotal', { count: tag.counts.total }) }}</strong>
+            <p>{{ t(tag.counts.total ? 'tagSpace.detailHint' : 'tagSpace.emptyDetailHint') }}</p>
           </div>
-        </div>
-      </div>
-
-      <!-- 书签区块 -->
-      <div v-if="viewMode === 'card' && bookmarks.length" class="resource-section">
-        <div class="section-title" :style="{ color: RESOURCE_COLOR_HEX.bookmark }">
-          <span class="type-dot" :style="{ background: RESOURCE_COLOR_HEX.bookmark }" />
-          {{ $t('tagManage.bookmark') }} ({{ bookmarks.length }})
-        </div>
-        <div class="bookmark-grid">
-          <div
-            v-for="bm in bookmarks"
-            :key="bm.id"
-            class="bookmark-card dom-hover"
-            @click="openBookmark(bm)"
-            v-click-log="{ module: '标签详情', operation: `打开书签【${bm.name}】` }"
-          >
-            <div class="bookmark-card-header">
-              <BookmarkFavicon :bookmark-id="bm.id" :src="bm.iconUrl" :size="22" :tile-size="32" />
-              <span class="bookmark-card-name text-hidden">{{ bm.name }}</span>
-            </div>
-            <div class="bookmark-card-desc text-hidden">{{ bm.description || bm.url }}</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 笔记区块 -->
-      <div v-if="viewMode === 'card' && notes.length" class="resource-section">
-        <div class="section-title" :style="{ color: RESOURCE_COLOR_HEX.note }">
-          <span class="type-dot" :style="{ background: RESOURCE_COLOR_HEX.note }" />
-          {{ $t('tagManage.note') }} ({{ notes.length }})
-        </div>
-        <div class="note-list">
-          <div
-            v-for="note in notes"
-            :key="note.id"
-            class="note-item dom-hover"
-            @click="router.push(`/noteLibrary/${note.id}`)"
-            v-click-log="{ module: '标签详情', operation: `打开笔记【${note.title || '未命名文档'}】` }"
-          >
-            <div class="note-item-title">{{ note.title || $t('noteDetail.unnamedDoc', '未命名文档') }}</div>
-            <!-- 摘要走纯文本插值:v-html 会把笔记里写的标签当真渲染 -->
-            <div class="note-item-desc">{{ getNoteDesc(note) }}</div>
-            <div v-if="note.tags?.length" class="note-item-tags">
-              <ResourceTagChip
-                v-for="noteTag in note.tags"
-                :key="noteTag.id"
-                :tag="noteTag"
-                size="medium"
-                interactive
-                max-width="140px"
-                @click.stop="goToTag(noteTag.id)"
-                v-click-log="{ module: '标签详情', operation: `查看笔记标签【${noteTag.name}】` }"
-              />
-            </div>
-            <div class="note-item-time">{{ note.updateTime || note.createTime }}</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 文件区块 -->
-      <div v-if="viewMode === 'card' && files.length" class="resource-section">
-        <div class="section-title" :style="{ color: RESOURCE_COLOR_HEX.file }">
-          <span class="type-dot" :style="{ background: RESOURCE_COLOR_HEX.file }" />
-          {{ $t('tagManage.file') }} ({{ files.length }})
-        </div>
-        <div class="file-list">
-          <div
-            v-for="file in files"
-            :key="file.id"
-            class="file-item dom-hover"
-            @click="previewFile(file)"
-            v-click-log="{ module: '标签详情', operation: `预览文件【${file.fileName}】` }"
-          >
-            <div class="file-item-left">
-              <svg-icon :src="getFileIcon(file)" size="28" />
-              <div class="file-item-info">
-                <div class="file-item-name text-hidden">{{ file.fileName }}</div>
-                <div class="file-item-meta">{{ formatFileSize(file.fileSize) }} · {{ file.category }}</div>
+          <div class="overview-counts">
+            <div v-for="metric in overviewMetrics" :key="metric.key" class="overview-count">
+              <span class="resource-icon" :class="`resource-icon--${metric.key}`">
+                <SvgIcon :src="resourceIcon(metric.key)" size="17" />
+              </span>
+              <div>
+                <strong>{{ metric.value }}</strong>
+                <span>{{ metric.label }}</span>
               </div>
             </div>
-            <div class="file-item-time">{{ file.uploadTime }}</div>
           </div>
-        </div>
-      </div>
+          <div v-if="relatedTags.length" class="related-strip">
+            <div class="related-heading">
+              <span class="related-label">{{ t('tagSpace.relatedTags') }}</span>
+              <small>{{ t('tagSpace.relatedTagsHint') }}</small>
+            </div>
+            <div class="related-tags no-scrollbar">
+              <BButton
+                v-for="related in relatedTags"
+                :key="related.id"
+                size="small"
+                class="related-tag"
+                @click="openRelatedTag(related.id)"
+              >
+                <span>#</span>
+                <span>{{ related.name }}</span>
+                <small>{{ t('tagSpace.sharedResources', { count: related.sharedCount || 0 }) }}</small>
+              </BButton>
+            </div>
+          </div>
+        </BCard>
 
-      <!-- 空状态 -->
-      <div v-if="viewMode === 'card' && !bookmarks.length && !notes.length && !files.length" class="empty-state">
-        <div class="empty-text">{{ $t('tagManage.listEmptyText') }}</div>
-      </div>
+        <div class="view-switch" role="tablist" :aria-label="t('tagSpace.viewMode')">
+          <BButton
+            size="small"
+            role="tab"
+            class="view-button"
+            :class="{ 'is-active': viewMode === 'resources' }"
+            :aria-selected="viewMode === 'resources'"
+            @click="setViewMode('resources')"
+          >
+            {{ t('tagSpace.resourceView') }}
+          </BButton>
+          <BButton
+            size="small"
+            role="tab"
+            class="view-button"
+            :class="{ 'is-active': viewMode === 'graph' }"
+            :aria-selected="viewMode === 'graph'"
+            @click="setViewMode('graph')"
+          >
+            {{ t('tagSpace.graphView') }}
+          </BButton>
+        </div>
+
+        <BCard
+          v-if="viewMode === 'resources'"
+          as="section"
+          variant="panel"
+          padding="14px 16px 16px"
+          class="resources-panel"
+        >
+          <div class="resource-toolbar">
+            <div class="resource-tabs no-scrollbar" :aria-label="t('tagSpace.resourceFilters')">
+              <BButton
+                v-for="typeOption in typeOptions"
+                :key="typeOption.value"
+                size="small"
+                class="resource-tab"
+                :class="[`resource-tab--${typeOption.value}`, { 'is-active': activeType === typeOption.value }]"
+                :aria-pressed="activeType === typeOption.value"
+                @click="activeType = typeOption.value"
+              >
+                <span class="resource-tab-dot"></span>
+                <span>{{ typeOption.label }}</span>
+                <strong>{{ typeOption.count }}</strong>
+              </BButton>
+            </div>
+            <BInput
+              v-if="!bookmark.isMobile"
+              v-model:value="resourceKeyword"
+              clearable
+              height="38px"
+              class="resource-search"
+              :placeholder="t('tagSpace.searchInSpace')"
+            >
+              <template #prefix><SvgIcon :src="icon.navigation.search" size="17" /></template>
+            </BInput>
+            <BSelect v-model:value="resourceSort" class="resource-sort" :options="resourceSortOptions" />
+          </div>
+
+          <BCard
+            v-if="resourceError && resourceItems.length"
+            variant="raised"
+            padding="10px 12px"
+            class="inline-error"
+            role="alert"
+          >
+            <span>{{ t('tagSpace.staleResourceError') }}</span>
+            <BButton size="small" @click="loadResources(true)">{{ t('common.retry') }}</BButton>
+          </BCard>
+
+          <div v-if="resourceLoading" class="resource-list" aria-busy="true">
+            <BCard v-for="index in 6" :key="index" class="resource-skeleton">
+              <span class="skeleton-line skeleton-line--title"></span>
+              <span class="skeleton-line"></span>
+            </BCard>
+          </div>
+
+          <BCard
+            v-else-if="resourceError && !resourceItems.length"
+            variant="raised"
+            class="resource-state"
+            role="alert"
+          >
+            <span class="state-symbol">!</span>
+            <strong>{{ t('tagSpace.resourcesLoadFailed') }}</strong>
+            <BButton type="primary" @click="loadResources(true)">{{ t('common.retry') }}</BButton>
+          </BCard>
+
+          <BCard v-else-if="!resourceItems.length" variant="raised" class="resource-state">
+            <span class="state-symbol">#</span>
+            <strong>{{ resourceKeyword.trim() ? t('tagSpace.noResourceMatch') : t('tagSpace.noResources') }}</strong>
+            <p>{{ resourceKeyword.trim() ? t('tagSpace.noResourceMatchHint') : t('tagSpace.noResourcesHint') }}</p>
+            <BButton v-if="resourceKeyword.trim()" @click="resourceKeyword = ''">{{
+              t('tagSpace.clearSearch')
+            }}</BButton>
+            <BButton v-else @click="router.push('/search')">{{ t('tagSpace.organizeResources') }}</BButton>
+          </BCard>
+
+          <div v-else class="resource-list">
+            <BCard
+              v-for="item in resourceItems"
+              :key="`${item.type}:${item.id}`"
+              as="article"
+              variant="card"
+              interactive
+              padding="0"
+              class="resource-row"
+              role="button"
+              tabindex="0"
+              :aria-label="
+                t('tagSpace.openResourceAria', {
+                  type: resourceTypeLabel(item.type),
+                  title: item.title || t('tagSpace.untitledResource'),
+                })
+              "
+              @click="openResource(item)"
+              @keydown.enter="openResource(item)"
+              @keydown.space.prevent="openResource(item)"
+            >
+              <span class="resource-icon" :class="`resource-icon--${item.type}`">
+                <BookmarkFavicon
+                  v-if="item.type === 'bookmark'"
+                  :bookmark-id="item.id"
+                  :src="item.iconUrl"
+                  :size="18"
+                  :tile-size="32"
+                />
+                <SvgIcon v-else :src="resourceIcon(item.type)" size="18" />
+              </span>
+              <div class="resource-copy">
+                <strong>{{ item.title || t('tagSpace.untitledResource') }}</strong>
+                <span>{{ item.description || resourceTypeLabel(item.type) }}</span>
+                <div v-if="visibleOtherTags(item).length" class="resource-tags">
+                  <span v-for="resourceTag in visibleOtherTags(item)" :key="resourceTag.id">
+                    #{{ resourceTag.name }}
+                  </span>
+                </div>
+              </div>
+              <div class="resource-meta">
+                <span>{{ resourceTypeLabel(item.type) }}</span>
+                <small>{{ resourceTimeLabel(item) }}</small>
+                <small v-if="item.folderName">{{ item.folderName }}</small>
+              </div>
+              <span class="resource-open" aria-hidden="true">→</span>
+            </BCard>
+          </div>
+
+          <div v-if="resourceItems.length && resourceHasMore" class="load-more-row">
+            <BButton :loading="resourceLoadingMore" @click="loadResources(false)">{{ t('tagSpace.loadMore') }}</BButton>
+          </div>
+        </BCard>
+
+        <BCard v-else as="section" variant="panel" padding="0" class="graph-panel">
+          <div v-if="graphError" class="graph-error" role="alert">
+            <span>{{ t('tagSpace.graphLoadFailed') }}</span>
+            <BButton size="small" @click="loadGraph">{{ t('common.retry') }}</BButton>
+          </div>
+          <div class="graph-layout">
+            <TagGraphCanvas
+              ref="graphCanvasRef"
+              :nodes="graphData?.nodes || []"
+              :edges="graphData?.edges || []"
+              :loading="graphLoading"
+              :compact="false"
+              :full-height="true"
+              :active-node-id="activeGraphNode?.id"
+              @node-click="activeGraphNode = $event"
+              @node-dblclick="openGraphNode"
+              @canvas-click="activeGraphNode = null"
+            >
+              <template #actions>
+                <BButton size="small" type="primary" @click="graphCanvasRef?.resetView()">
+                  {{ t('tagGraph.reset') }}
+                </BButton>
+              </template>
+            </TagGraphCanvas>
+            <TagGraphPanel
+              :node="activeGraphNode"
+              :connected-resources="graphConnectedResources"
+              @explore-tag="exploreGraphTag"
+              @open-resource="openGraphNode"
+            />
+          </div>
+        </BCard>
+      </template>
     </div>
 
-    <!-- 文件预览 -->
-    <FilePreview v-model:visible="filePreviewVisible" :fileInfo="previewFileInfo" @close="filePreviewVisible = false" />
+    <FilePreview
+      v-model:visible="filePreviewVisible"
+      :file-info="previewFileInfo"
+      @close="filePreviewVisible = false"
+    />
     <AiSkillDialog
       v-model:visible="tagAiVisible"
       :title="t('tagManage.aiSkillTitle')"
@@ -264,55 +293,104 @@
       :placeholder="t('tagManage.aiSkillPlaceholder')"
       :auto-run-action-id="tagAiResourceRefs.length ? 'summarize' : ''"
     />
-  </div>
+  </ResourcePageShell>
 </template>
 
-<script lang="ts" setup>
-  import { reactive, ref, computed, onMounted, watch } from 'vue';
+<script setup lang="ts">
+  import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
-  import { apiBasePost, apiQueryPost } from '@/http/request.ts';
-  import { openBookmarkUrl } from '@/utils/openBookmark.ts';
-  import { bookmarkStore, useUserStore } from '@/store';
-  import { updatePreference } from '@/utils/savePreference';
+  import { apiBasePost } from '@/http/request.ts';
+  import {
+    fetchTagSpace,
+    fetchTagSpaceResources,
+    type RelatedTagSummary,
+    type TagSpaceResourceFilter,
+    type TagSpaceResourceItem,
+    type TagSpaceResourceSort,
+    type TagSpaceSummary,
+  } from '@/api/tagSpace';
+  import { fetchTagGraph, type TagGraphNode, type TagGraphResponse } from '@/api/tagGraph';
+  import { openBookmarkUrl } from '@/utils/openBookmark';
+  import icon from '@/config/icon';
+  import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BookmarkFavicon from '@/components/base/BookmarkFavicon.vue';
-  import icon from '@/config/icon.ts';
-  import { RESOURCE_COLOR_HEX } from '@/config/resourceColor.ts';
-  import { defineAsyncComponent } from 'vue';
-  import { getCloudFileCategory } from '@/constants/cloudFileCategory.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BCard from '@/components/base/BasicComponents/BCard.vue';
+  import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import TagGraphPanel from '@/components/tagGraph/TagGraphPanel.vue';
-  import { fetchTagGraph, type GraphResourceType, type TagGraphNode, type TagGraphResponse } from '@/api/tagGraph.ts';
-  import { useI18n } from 'vue-i18n';
-  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import { noteSummaryText } from '@/utils/noteSummary';
-  import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
   import AiSkillDialog from '@/components/aiSkills/AiSkillDialog.vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import type { AiSkillResourceRef } from '@lightnote/shared/ai-skill-protocol';
+  import type { BaseOptions } from '@/config/bookmarkCfg.ts';
+  import { bookmarkStore, useUserStore } from '@/store';
 
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
   const TagGraphCanvas = defineAsyncComponent(() => import('@/components/tagGraph/TagGraphCanvas.vue'));
-
   const route = useRoute();
   const router = useRouter();
-  const user = useUserStore();
+  const { t, locale } = useI18n();
   const bookmark = bookmarkStore();
-  const { t } = useI18n();
+  const user = useUserStore();
 
-  const tag = ref<any>({});
+  const tag = ref<TagSpaceSummary | null>(null);
+  const relatedTags = ref<RelatedTagSummary[]>([]);
   const tagIconLoadError = ref(false);
-  const relatedTags = ref<any[]>([]);
-  const bookmarks = ref<any[]>([]);
-  const notes = ref<any[]>([]);
-  const files = ref<any[]>([]);
-  const loading = ref(false);
+  const detailLoading = ref(true);
+  const detailError = ref(false);
+  const viewMode = ref<'resources' | 'graph'>('resources');
+  const activeType = ref<TagSpaceResourceFilter>('all');
+  const resourceSort = ref<TagSpaceResourceSort>('updated');
+  const resourceKeyword = ref('');
+  const resourceItems = ref<TagSpaceResourceItem[]>([]);
+  const resourcePage = ref(1);
+  const resourceHasMore = ref(false);
+  const resourceLoading = ref(false);
+  const resourceLoadingMore = ref(false);
+  const resourceError = ref(false);
+  const filePreviewVisible = ref(false);
+  const previewFileInfo = ref<any>({});
   const tagAiVisible = ref(false);
+  const aiLoading = ref(false);
+  const aiResourceItems = ref<TagSpaceResourceItem[]>([]);
+  const graphLoading = ref(false);
+  const graphError = ref(false);
+  const graphData = ref<TagGraphResponse | null>(null);
+  const activeGraphNode = ref<TagGraphNode | null>(null);
+  const graphCanvasRef = ref<InstanceType<typeof TagGraphCanvas> | null>(null);
+  let detailSequence = 0;
+  let resourceSequence = 0;
+  let graphSequence = 0;
+  let resourceDebounce: ReturnType<typeof setTimeout> | null = null;
+
+  const detailSubtitle = computed(() =>
+    tag.value ? t('tagSpace.detailSubtitle', { count: tag.value.counts.total }) : t('tagSpace.detailLoading'),
+  );
+  const overviewMetrics = computed(() => [
+    { key: 'bookmark' as const, label: t('tagSpace.bookmark'), value: tag.value?.counts.bookmark || 0 },
+    { key: 'note' as const, label: t('tagSpace.note'), value: tag.value?.counts.note || 0 },
+    { key: 'file' as const, label: t('tagSpace.file'), value: tag.value?.counts.file || 0 },
+  ]);
+  const typeOptions = computed(() => [
+    { value: 'all' as const, label: t('tagSpace.filterAllResources'), count: tag.value?.counts.total || 0 },
+    ...overviewMetrics.value.map((metric) => ({
+      value: metric.key,
+      label: metric.label,
+      count: metric.value,
+    })),
+  ]);
+  const resourceSortOptions = computed<BaseOptions[]>(() => [
+    { value: 'updated', label: t('tagSpace.sortByUpdated') },
+    { value: 'added', label: t('tagSpace.sortByAdded') },
+  ]);
+  const isReadOnly = computed(() => user.adminContext?.mode === 'readonly');
   const tagAiResourceRefs = computed<AiSkillResourceRef[]>(() =>
-    [
-      ...bookmarks.value.map((item) => ({ type: 'bookmark' as const, id: String(item.id) })),
-      ...notes.value.map((item) => ({ type: 'note' as const, id: String(item.id) })),
-      ...files.value.map((item) => ({ type: 'file' as const, id: String(item.id) })),
-    ].slice(0, 20),
+    aiResourceItems.value.slice(0, 20).map((item) => ({
+      type: item.type,
+      id: String(item.id),
+    })),
   );
   const tagAiActions = computed(() => [
     {
@@ -322,366 +400,217 @@
       input: { instruction: t('tagManage.aiSummarizeInstruction', { tag: String(tag.value?.name || '') }) },
     },
   ]);
-
-  // 笔记摘要与笔记库共用 noteSummaryText(异步:Markdown 要按需加载 marked),
-  // 卡片和图谱节点都读这份 map,两处口径一致
-  const noteDescMap = ref<Record<string, string>>({});
-  let noteDescSeq = 0;
-  watch(
-    notes,
-    async (list) => {
-      const current = ++noteDescSeq;
-      const entries = await Promise.all(
-        (list || []).map(async (n: any) => [
-          String(n?.id ?? ''),
-          await noteSummaryText(n?.content || '', n?.type, { maxLength: 120, singleLine: true }),
-        ]),
-      );
-      if (current !== noteDescSeq) return;
-      noteDescMap.value = Object.fromEntries(entries);
-    },
-    { immediate: true },
-  );
-
-  const filePreviewVisible = ref(false);
-  const previewFileInfo = ref<any>({});
-  const graphLoading = ref(false);
-  const graphData = ref<TagGraphResponse | null>(null);
-  const activeGraphNode = ref<TagGraphNode | null>(null);
-  const tagGraphRef = ref<InstanceType<typeof TagGraphCanvas> | null>(null);
-  const TAG_DETAIL_VIEW_MODE_KEY = 'tag-detail-view-mode';
-  const viewMode = ref<'graph' | 'card'>('card');
-  let tagDetailRequestSeq = 0;
-  let tagGraphRequestSeq = 0;
-  const graphFilters = reactive({
-    includeResources: true,
-    resourceTypes: ['bookmark', 'note', 'file'] as GraphResourceType[],
+  const graphConnectedResources = computed(() => {
+    if (!activeGraphNode.value || !graphData.value) return [];
+    const linkedIds = new Set<string>();
+    graphData.value.edges.forEach((edge) => {
+      if (edge.source === activeGraphNode.value?.id) linkedIds.add(edge.target);
+      if (edge.target === activeGraphNode.value?.id) linkedIds.add(edge.source);
+    });
+    return graphData.value.nodes.filter((node) => linkedIds.has(node.id) && node.type !== 'tag');
   });
 
-  const relatedTagCount = computed(() => {
-    const graphCount = graphData.value?.nodes.filter((node) => node.type === 'tag' && !node.meta?.isCenter).length || 0;
-    return Math.max(relatedTags.value.length, graphCount);
-  });
+  function currentTagId() {
+    return String(route.params.id || '').trim();
+  }
 
-  function openTagInAi() {
-    if (!tagAiResourceRefs.value.length) {
+  function resourceIcon(type: string) {
+    if (type === 'note') return icon.resource.note;
+    if (type === 'file') return icon.resource.file;
+    return icon.resource.bookmark;
+  }
+
+  function resourceTypeLabel(type: string) {
+    if (type === 'note') return t('tagSpace.note');
+    if (type === 'file') return t('tagSpace.file');
+    return t('tagSpace.bookmark');
+  }
+
+  function visibleOtherTags(item: TagSpaceResourceItem) {
+    return (item.tags || []).filter((itemTag) => String(itemTag.id) !== currentTagId()).slice(0, 3);
+  }
+
+  async function loadDetail() {
+    const tagId = currentTagId();
+    if (!tagId) return;
+    const sequence = ++detailSequence;
+    detailLoading.value = true;
+    detailError.value = false;
+    tag.value = null;
+    relatedTags.value = [];
+    tagIconLoadError.value = false;
+    graphData.value = null;
+    activeGraphNode.value = null;
+    viewMode.value = 'resources';
+    activeType.value = 'all';
+    resourceSort.value = 'updated';
+    resourceKeyword.value = '';
+    aiResourceItems.value = [];
+    tagAiVisible.value = false;
+    filePreviewVisible.value = false;
+    void loadResources(true);
+    try {
+      const detail = await fetchTagSpace(tagId);
+      if (sequence !== detailSequence) return;
+      tag.value = detail.tag;
+      relatedTags.value = detail.relatedTags || [];
+    } catch (error) {
+      if (sequence !== detailSequence) return;
+      detailError.value = true;
+      console.warn('[tag-space] failed to load detail', error);
+    } finally {
+      if (sequence === detailSequence) detailLoading.value = false;
+    }
+  }
+
+  async function loadResources(reset: boolean) {
+    const tagId = currentTagId();
+    if (!tagId || (!reset && (!resourceHasMore.value || resourceLoadingMore.value))) return;
+    const sequence = reset ? ++resourceSequence : resourceSequence;
+    if (reset) {
+      resourceLoading.value = true;
+      resourceError.value = false;
+      resourceItems.value = [];
+      resourcePage.value = 1;
+    } else {
+      resourceLoadingMore.value = true;
+      resourceError.value = false;
+    }
+    try {
+      const result = await fetchTagSpaceResources({
+        id: tagId,
+        keyword: resourceKeyword.value.trim(),
+        type: activeType.value,
+        sort: resourceSort.value,
+        page: reset ? 1 : resourcePage.value + 1,
+        pageSize: 20,
+      });
+      if (sequence !== resourceSequence) return;
+      if (reset) resourceItems.value = result.items;
+      else {
+        const merged = new Map(resourceItems.value.map((item) => [`${item.type}:${item.id}`, item]));
+        result.items.forEach((item) => merged.set(`${item.type}:${item.id}`, item));
+        resourceItems.value = [...merged.values()];
+      }
+      resourcePage.value = result.page;
+      resourceHasMore.value = result.hasMore;
+    } catch (error) {
+      if (sequence === resourceSequence) resourceError.value = true;
+      console.warn('[tag-space] failed to load resources', error);
+    } finally {
+      if (sequence === resourceSequence) {
+        resourceLoading.value = false;
+        resourceLoadingMore.value = false;
+      }
+    }
+  }
+
+  async function openTagInAi() {
+    if (!tag.value?.counts.total) {
       message.info(t('tagManage.aiNoResources'));
       return;
     }
-    const total = bookmarks.value.length + notes.value.length + files.value.length;
-    if (total > 20) message.info(t('ai.materialLimit', { count: 20 }));
-    tagAiVisible.value = true;
-  }
-
-  const allGraphResources = computed<TagGraphNode[]>(() => [
-    ...bookmarks.value.map((bookmark) => ({
-      id: `bookmark:${bookmark.id}`,
-      rawId: bookmark.id,
-      type: 'bookmark' as const,
-      label: bookmark.name || t('tagGraph.unnamedBookmark'),
-      size: 22,
-      weight: 1,
-      iconUrl: bookmark.iconUrl,
-      meta: {
-        url: bookmark.url,
-        description: bookmark.description || bookmark.url,
-        updateTime: bookmark.updateTime || bookmark.createTime,
-      },
-    })),
-    ...notes.value.map((note) => ({
-      id: `note:${note.id}`,
-      rawId: note.id,
-      type: 'note' as const,
-      label: note.title || t('noteDetail.unnamedDoc', '未命名文档'),
-      size: 22,
-      weight: 1,
-      meta: {
-        description: getNoteDesc(note),
-        updateTime: note.updateTime || note.createTime,
-      },
-    })),
-    ...files.value.map((file) => ({
-      id: `file:${file.id}`,
-      rawId: file.id,
-      type: 'file' as const,
-      label: file.fileName || t('tagGraph.unnamedFile'),
-      size: 22,
-      weight: 1,
-      meta: {
-        fileType: file.fileType,
-        fileSize: file.fileSize,
-        category: file.category,
-        updateTime: file.updateTime || file.createTime || file.uploadTime,
-      },
-    })),
-  ]);
-
-  const displayGraphNodes = computed<TagGraphNode[]>(() => {
-    if (!graphData.value) return [];
-    const tagNodes = graphData.value.nodes.filter((node) => node.type === 'tag');
-    if (!graphFilters.includeResources) return tagNodes;
-    const centerTagId = String(graphData.value.centerTag.id);
-    const groupCounts: Record<GraphResourceType, number> = {
-      bookmark: bookmarks.value.length,
-      note: notes.value.length,
-      file: files.value.length,
-    };
-    const groupNodes = graphFilters.resourceTypes
-      .filter((type) => groupCounts[type] > 0)
-      .map((type) => ({
-        id: `aggregate:${type}`,
-        rawId: centerTagId,
-        type,
-        label: t('tagGraph.aggregateLabel', {
-          type: t(`tagGraph.nodeType.${type}`),
-          count: groupCounts[type],
-        }),
-        size: 38,
-        weight: groupCounts[type],
-        meta: {
-          isAggregate: true,
-          resourceCount: groupCounts[type],
-          description: t('tagGraph.aggregateHint', { type: t(`tagGraph.nodeType.${type}`) }),
-        },
-      }));
-    return [...tagNodes, ...groupNodes];
-  });
-
-  const displayGraphEdges = computed(() => {
-    if (!graphData.value) return [];
-    const tagEdges = graphData.value.edges.filter((edge) => edge.type === 'tag-tag');
-    if (!graphFilters.includeResources) return tagEdges;
-    const centerNode = graphData.value.nodes.find((node) => node.type === 'tag' && node.meta?.isCenter);
-    if (!centerNode) return tagEdges;
-    const aggregateEdges = displayGraphNodes.value
-      .filter((node) => node.meta?.isAggregate)
-      .map((node) => ({
-        id: `edge:${centerNode.id}:${node.id}`,
-        source: centerNode.id,
-        target: node.id,
-        type: `tag-${node.type}` as const,
-        weight: 2,
-      }));
-    return [...tagEdges, ...aggregateEdges];
-  });
-
-  const graphConnectedResources = computed(() => {
-    if (!activeGraphNode.value) return [];
-    if (activeGraphNode.value.meta?.isAggregate) {
-      return allGraphResources.value.filter((node) => node.type === activeGraphNode.value!.type);
-    }
-    if (activeGraphNode.value.type === 'tag' && activeGraphNode.value.meta?.isCenter) {
-      return allGraphResources.value;
-    }
-    if (!graphData.value) return [];
-    if (activeGraphNode.value.type === 'tag') {
-      const { nodes, edges } = graphData.value;
-      const connectedIds = new Set<string>();
-      edges.forEach((edge) => {
-        if (edge.source === activeGraphNode.value!.id) connectedIds.add(edge.target);
-        if (edge.target === activeGraphNode.value!.id) connectedIds.add(edge.source);
-      });
-      return nodes.filter((n) => connectedIds.has(n.id) && n.type !== 'tag');
-    }
-    return [];
-  });
-
-  async function loadTagDetail() {
-    const tagId = route.params.id as string;
-    if (!tagId) return;
-    const requestSeq = ++tagDetailRequestSeq;
-
-    loading.value = true;
+    aiLoading.value = true;
     try {
-      // 1. 获取标签详情
-      const tagRes = await apiQueryPost('/api/bookmark/getTagDetail', {
-        filters: { id: tagId },
+      const result = await fetchTagSpaceResources({
+        id: currentTagId(),
+        type: 'all',
+        sort: 'updated',
+        page: 1,
+        pageSize: 20,
       });
-      if (requestSeq !== tagDetailRequestSeq) return;
-      if (tagRes.status === 200) {
-        tag.value = tagRes.data || {};
-        tagIconLoadError.value = false;
+      aiResourceItems.value = result.items;
+      if (!aiResourceItems.value.length) {
+        message.info(t('tagManage.aiNoResources'));
+        return;
       }
-
-      // 2. 获取相关标签
-      const relatedRes = await apiQueryPost('/api/bookmark/getRelatedTag', {
-        filters: { userId: user.id, id: tagId },
-      });
-      if (requestSeq !== tagDetailRequestSeq) return;
-      if (relatedRes.status === 200) {
-        relatedTags.value = relatedRes.data || [];
-      }
-
-      // 3. 获取关联书签
-      const bmRes = await apiQueryPost('/api/bookmark/getBookmarkList', {
-        pageSize: -1,
-        filters: { userId: user.id, tagId, type: 'normal' },
-      });
-      if (requestSeq !== tagDetailRequestSeq) return;
-      if (bmRes.status === 200) {
-        bookmarks.value = bmRes.data.items || [];
-      }
-
-      // 4. 获取关联笔记
-      const noteRes = await apiBasePost('/api/note/queryNoteList', { pageSize: -1, tagId });
-      if (requestSeq !== tagDetailRequestSeq) return;
-      if (noteRes.status === 200) {
-        notes.value = (noteRes.data || []).map((n: any) => ({
-          ...n,
-          tags: n.tags && Array.isArray(n.tags) && n.tags.every((t: any) => t && t.id !== null) ? n.tags : [],
-        }));
-      }
-
-      // 5. 获取关联文件
-      const fileRes = await apiBasePost('/api/file/queryFiles', {
-        pageSize: -1,
-        filters: {
-          tagId,
-          category: ['image', 'video', 'audio', 'pdf', 'word', 'excel', 'ppt', 'text', 'compress', 'other'],
-        },
-      });
-      if (requestSeq !== tagDetailRequestSeq) return;
-      if (fileRes.status === 200) {
-        files.value = (fileRes.data || []).map((f: any) => ({
-          ...f,
-          tags: f.tags && Array.isArray(f.tags) && f.tags.every((t: any) => t && t.id !== null) ? f.tags : [],
-        }));
-      }
-
-      if (viewMode.value === 'graph') {
-        await loadTagGraph(tagId);
-      }
+      if (tag.value.counts.total > 20) message.info(t('ai.materialLimit', { count: 20 }));
+      tagAiVisible.value = true;
+    } catch {
+      message.error(t('tagSpace.aiLoadFailed'));
     } finally {
-      if (requestSeq === tagDetailRequestSeq) {
-        loading.value = false;
-      }
+      aiLoading.value = false;
     }
   }
 
-  async function loadTagGraph(tagId = String(route.params.id || '')) {
+  async function loadGraph() {
+    const tagId = currentTagId();
     if (!tagId) return;
-    const requestSeq = ++tagGraphRequestSeq;
-    const isFirstLoad = !graphData.value?.nodes?.length;
-    graphLoading.value = isFirstLoad;
+    const sequence = ++graphSequence;
+    graphLoading.value = true;
+    graphError.value = false;
     try {
-      const res = await fetchTagGraph({
+      const response = await fetchTagGraph({
         tagId,
         includeResources: true,
-        resourceTypes: graphFilters.resourceTypes,
+        resourceTypes: ['bookmark', 'note', 'file'],
         limitRelatedTags: 12,
-        limitPerResourceType: 50,
+        limitPerResourceType: 40,
       });
-      if (requestSeq !== tagGraphRequestSeq) return;
-      if (res.status === 200) {
-        const nextGraphData = enrichGraphData(res.data, tagId);
-        graphData.value = nextGraphData;
-        activeGraphNode.value =
-          nextGraphData.nodes.find((node) => node.type === 'tag' && node.rawId === tagId) ||
-          nextGraphData.nodes[0] ||
-          null;
-      }
+      if (sequence !== graphSequence) return;
+      if (response.status !== 200) throw new Error(response.msg || 'TAG_GRAPH_FAILED');
+      graphData.value = response.data;
+      activeGraphNode.value = response.data.nodes.find((node) => node.meta?.isCenter) || response.data.nodes[0] || null;
+    } catch (error) {
+      if (sequence === graphSequence) graphError.value = true;
+      console.warn('[tag-space] failed to load graph', error);
     } finally {
-      if (requestSeq === tagGraphRequestSeq) {
-        graphLoading.value = false;
-      }
+      if (sequence === graphSequence) graphLoading.value = false;
     }
   }
 
-  function toCount(value: unknown) {
-    const count = Number(value);
-    return Number.isFinite(count) ? count : 0;
-  }
-
-  function getCurrentTagResourceCount(data?: TagGraphResponse) {
-    const graphStatsCount =
-      toCount(data?.stats?.bookmarkCount) + toCount(data?.stats?.noteCount) + toCount(data?.stats?.fileCount);
-    const detailResourceCount = bookmarks.value.length + notes.value.length + files.value.length;
-    return Math.max(graphStatsCount, detailResourceCount);
-  }
-
-  function countGraphResourceNeighbors(data: TagGraphResponse, nodeId: string) {
-    const nodeTypeMap = new Map(data.nodes.map((node) => [node.id, node.type]));
-    const resourceIds = new Set<string>();
-    data.edges.forEach((edge) => {
-      const targetId = edge.source === nodeId ? edge.target : edge.target === nodeId ? edge.source : '';
-      if (!targetId) return;
-      const targetType = nodeTypeMap.get(targetId);
-      if (targetType && targetType !== 'tag') {
-        resourceIds.add(targetId);
-      }
-    });
-    return resourceIds.size;
-  }
-
-  function enrichGraphData(data: TagGraphResponse, tagId: string): TagGraphResponse {
-    const nodes = data.nodes.map((node) => {
-      if (node.type !== 'tag') return node;
-
-      const edgeResourceCount = countGraphResourceNeighbors(data, node.id);
-      const currentTagCount = String(node.rawId) === String(tagId) ? getCurrentTagResourceCount(data) : 0;
-      const relatedCount = Math.max(toCount(node.meta?.relatedCount), edgeResourceCount, currentTagCount);
-
-      return {
-        ...node,
-        meta: {
-          ...node.meta,
-          relatedCount,
-        },
-      };
-    });
-
-    return {
-      ...data,
-      nodes,
-    };
-  }
-
-  function resetGraphView() {
-    tagGraphRef.value?.resetView();
-  }
-
-  function setViewMode(mode: 'graph' | 'card') {
+  function setViewMode(mode: 'resources' | 'graph') {
     viewMode.value = mode;
-    localStorage.setItem(TAG_DETAIL_VIEW_MODE_KEY, mode);
-    updatePreference({ tagView: mode }).catch(() => {}); // 记忆到偏好:跨设备 + 设置页可改
-    if (mode === 'graph' && !graphData.value && !loading.value) {
-      loadTagGraph();
+    if (mode === 'graph' && !graphData.value && !graphLoading.value) loadGraph();
+  }
+
+  function editTag() {
+    if (!isReadOnly.value && tag.value?.id) router.push(`/manage/editTag/${tag.value.id}`);
+  }
+
+  function openRelatedTag(id: string) {
+    router.push(`/tag/${id}`);
+  }
+
+  async function openResource(item: TagSpaceResourceItem) {
+    if (item.type === 'bookmark' && item.url) {
+      openBookmarkUrl(item.url);
+      return;
+    }
+    if (item.type === 'note') {
+      router.push(`/noteLibrary/${item.id}`);
+      return;
+    }
+    if (item.type === 'file') {
+      await openFile(item.id);
     }
   }
 
-  function toggleGraphResources() {
-    graphFilters.includeResources = !graphFilters.includeResources;
-    if (!graphFilters.includeResources && activeGraphNode.value?.meta?.isAggregate) {
-      activeGraphNode.value = displayGraphNodes.value.find((node) => node.meta?.isCenter) || null;
+  function resourceTimeLabel(item: TagSpaceResourceItem) {
+    const raw = resourceSort.value === 'added' ? item.addedTime : item.updateTime;
+    if (!raw) return resourceSort.value === 'added' ? t('tagSpace.addedUnknown') : t('tagSpace.updatedUnknown');
+    const date = new Date(String(raw).replace(' ', 'T'));
+    if (Number.isNaN(date.getTime())) return String(raw);
+    return new Intl.DateTimeFormat(locale.value, { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
+  }
+
+  async function openFile(fileId: string | number) {
+    try {
+      const response = await apiBasePost('/api/file/getFileInfo', { id: fileId }, { silent: true });
+      if (response.status !== 200 || !response.data) throw new Error(response.msg || 'FILE_INFO_FAILED');
+      previewFile(response.data);
+    } catch {
+      message.error(t('tagSpace.fileOpenFailed'));
     }
   }
 
-  function handleGraphNodeClick(node: TagGraphNode) {
-    activeGraphNode.value = node;
-  }
-
-  function handleGraphNodeDoubleClick(node: TagGraphNode) {
+  async function openGraphNode(node: TagGraphNode) {
     if (node.type === 'tag') {
-      handlePanelExploreTag(node);
+      exploreGraphTag(node);
       return;
     }
-    openGraphNode(node);
-  }
-
-  function handlePanelExploreTag(node: TagGraphNode) {
-    if (node.type !== 'tag') return;
-    setViewMode('graph');
-    if (String(route.params.id || '') === String(node.rawId || '')) {
-      resetGraphView();
-      message.info(t('tagGraph.panel.openCurrent'));
-      return;
-    }
-    goToTag(node.rawId);
-  }
-
-  function openGraphNode(node: TagGraphNode) {
     if (node.type === 'bookmark' && node.meta?.url) {
-      openBookmark({ url: node.meta.url });
+      openBookmarkUrl(node.meta.url);
       return;
     }
     if (node.type === 'note') {
@@ -689,569 +618,530 @@
       return;
     }
     if (node.type === 'file') {
-      const targetFile = files.value.find((file) => file.id === node.rawId);
-      if (targetFile) {
-        previewFile(targetFile);
-      }
+      await openFile(node.rawId);
     }
   }
 
-  function goToTag(tagId: string) {
-    router.push(`/tag/${tagId}`);
-  }
-
-  function goToEditTag() {
-    if (!tag.value?.id) return;
-    router.push(`/manage/editTag/${tag.value.id}`);
-  }
-
-  function openBookmark(bm: any) {
-    openBookmarkUrl(bm.url || '');
-  }
-
-  function handleTagIconError() {
-    tagIconLoadError.value = true;
-  }
-
-  function getNoteDesc(note: any) {
-    return noteDescMap.value[String(note?.id ?? '')] || '';
-  }
-
-  function getFileIcon(file: any) {
-    return icon.cloudSpace.fileIcon[getCloudFileCategory(file)] || icon.file_other;
-  }
-
-  function formatFileSize(size?: number) {
-    if (!size) return '0 B';
-    if (size < 1024) return size + ' B';
-    if (size < 1024 * 1024) return (size / 1024).toFixed(1) + ' KB';
-    return (size / (1024 * 1024)).toFixed(2) + ' MB';
+  function exploreGraphTag(node: TagGraphNode) {
+    if (node.type !== 'tag') return;
+    if (String(node.rawId) === currentTagId()) {
+      graphCanvasRef.value?.resetView();
+      return;
+    }
+    router.push(`/tag/${node.rawId}`);
   }
 
   function previewFile(file: any) {
-    previewFileInfo.value = file;
+    previewFileInfo.value = {
+      ...file,
+      id: file.id,
+      fileName: file.fileName || file.file_name,
+      fileType: file.fileType || file.file_type,
+      fileSize: file.fileSize ?? file.file_size,
+      uploadTime: file.uploadTime || file.create_time,
+    };
     filePreviewVisible.value = true;
   }
 
+  watch([activeType, resourceSort, resourceKeyword], () => {
+    if (!tag.value) return;
+    if (resourceDebounce) clearTimeout(resourceDebounce);
+    resourceDebounce = setTimeout(() => loadResources(true), resourceKeyword.value.trim() ? 260 : 0);
+  });
   watch(
     () => route.params.id,
-    () => {
-      loadTagDetail();
-    },
+    () => loadDetail(),
   );
 
-  function restorePreferredViewMode() {
-    const saved = user.preferences.tagView || localStorage.getItem(TAG_DETAIL_VIEW_MODE_KEY);
-    viewMode.value = saved === 'graph' ? 'graph' : 'card';
-  }
-
-  watch(
-    () => bookmark.isMobile,
-    () => restorePreferredViewMode(),
-  );
-
-  onMounted(() => {
-    restorePreferredViewMode();
-    loadTagDetail();
+  onMounted(loadDetail);
+  onBeforeUnmount(() => {
+    detailSequence += 1;
+    resourceSequence += 1;
+    graphSequence += 1;
+    if (resourceDebounce) clearTimeout(resourceDebounce);
   });
 </script>
 
-<style lang="less" scoped>
-  .tag-detail-container {
+<style scoped lang="less">
+  .tag-space-detail {
+    height: 100%;
+    min-height: 0;
+    padding-bottom: 6px;
     display: flex;
     flex-direction: column;
-    width: 100%;
-    height: calc(100vh - 76px);
-    padding: 20px;
-    box-sizing: border-box;
-    overflow-y: auto;
-    min-height: 0;
+    gap: 12px;
+    overflow: auto;
+    scrollbar-gutter: stable;
   }
-
-  .tag-detail-container--graph {
+  .tag-space-detail.is-graph {
     overflow: hidden;
   }
-
-  .tag-header {
-    margin-bottom: 20px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid var(--card-border-color);
-
-    .tag-header-main {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 12px;
-    }
-
-    .tag-icon {
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      object-fit: cover;
-    }
-
-    .tag-name {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-size: 22px;
-      font-weight: 600;
-      color: var(--primary-color);
-    }
-
-    .tag-header-actions {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-left: auto;
-      flex: 0 0 auto;
-    }
-
-    .tag-back-btn {
-      width: 34px;
-      min-width: 34px;
-      height: 34px;
-      padding: 0;
-      flex: 0 0 auto;
-      border-radius: 10px;
-      color: var(--text-color);
-      background: transparent;
-    }
-
-    .tag-ai-entry {
-      min-height: 32px;
-      gap: 5px;
-      color: var(--primary-color);
-    }
-
-    .tag-related {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-
-      .related-label {
-        font-size: 13px;
-        color: var(--desc-color);
-      }
-    }
+  .detail-tag-icon {
+    width: 30px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--resource-tag-color, #ec4899);
+    border-radius: 9px;
+    color: var(--resource-tag-color, #ec4899);
+    background: var(--workspace-panel-bg-color);
+    overflow: hidden;
   }
-
-  .tag-content {
+  .detail-tag-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  :deep(.resource-page-actions .b_btn) {
+    gap: 6px;
+  }
+  .detail-loading {
+    display: grid;
+    gap: 12px;
+  }
+  .detail-hero-skeleton {
+    min-height: 156px;
+  }
+  .detail-state,
+  .resource-state {
+    min-height: 300px;
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    text-align: center;
   }
-
-  .tag-detail-container--graph .tag-content {
-    flex: 1;
-    min-height: 0;
+  .detail-state p,
+  .resource-state p,
+  .overview-copy p {
+    margin: 0;
+    color: var(--desc-color);
+    font-size: 13px;
+    line-height: 1.55;
   }
-
-  .summary-grid {
+  .state-actions {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 8px;
-    border: 1px solid var(--card-border-color);
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--background-color) 96%, var(--primary-color));
   }
-
-  .summary-card {
-    min-width: 0;
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 8px 12px;
-    border-radius: 8px;
-    background: var(--background-color);
-
-    &::before {
-      content: '';
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--summary-color);
-      flex-shrink: 0;
-    }
-  }
-
-  .summary-label {
-    min-width: 0;
-    flex: 1;
-    font-size: 13px;
-    color: var(--desc-color);
-  }
-
-  .summary-value {
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--text-color);
-  }
-
-  .view-switch {
+  .state-symbol {
+    width: 42px;
+    height: 42px;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    width: fit-content;
-    border: 1px solid var(--card-border-color);
-    border-radius: 999px;
-    padding: 4px;
-    background: color-mix(in srgb, var(--background-color) 96%, white);
+    justify-content: center;
+    border: 1px solid var(--resource-tag-color, #ec4899);
+    border-radius: 12px;
+    color: var(--resource-tag-color, #ec4899);
+    background: var(--workspace-panel-bg-color);
+    font-size: 21px;
+    font-weight: 750;
   }
-
-  .view-switch-btn {
-    border: 0 !important;
-    background: transparent !important;
-    color: var(--desc-color);
-    border-radius: 999px;
-    transition: all 0.2s ease;
+  .detail-overview {
+    display: grid;
+    grid-template-columns: minmax(210px, 1.1fr) minmax(360px, 1.4fr);
+    align-items: center;
+    gap: 18px 28px;
+    flex: 0 0 auto;
   }
-
-  .view-switch-btn.active {
-    color: var(--text-color);
-    background: color-mix(in srgb, var(--resource-tag-color) 14%, transparent) !important;
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--resource-tag-color) 32%, transparent);
-  }
-
-  .tag-graph-section {
-    overflow: hidden;
-    border: 1px solid var(--card-border-color);
-    border-radius: 8px;
-    background: var(--background-color);
-    box-shadow: var(--ant-table-boxShadow);
-  }
-
-  .tag-graph-section--full {
+  .overview-copy {
     display: flex;
     flex-direction: column;
-    flex: 1;
-    min-height: 0;
+    gap: 4px;
   }
-
-  .tag-graph-layout {
+  .overview-kicker {
+    color: var(--resource-tag-color, #ec4899);
+    font-size: 12px;
+    font-weight: 650;
+  }
+  .overview-copy > strong {
+    font-size: 20px;
+  }
+  .overview-counts {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 320px;
-    min-height: 460px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
   }
-
-  .tag-detail-container--graph .tag-graph-layout {
-    min-height: 0;
-    height: 100%;
-    flex: 1;
+  .overview-count {
+    min-width: 0;
+    padding: 9px 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 10px;
+    background: var(--workspace-panel-bg-color);
   }
-
-  .resource-section {
-    scroll-margin-top: 16px;
-
-    .section-title {
-      font-size: 14px;
-      font-weight: 600;
-      margin-bottom: 12px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .type-dot {
-      display: inline-block;
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-    }
+  .overview-count > div {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
   }
-
-  .bookmark-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 14px;
+  .overview-count strong {
+    font-size: 16px;
+    line-height: 1.25;
   }
-
-  .related-tag-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 12px;
+  .overview-count span:last-child {
+    color: var(--desc-color);
+    font-size: 11px;
   }
-
-  .related-tag-card {
-    border: 1px solid var(--card-border-color);
-    border-radius: 8px;
-    padding: 14px;
-    background: var(--background-color);
+  .resource-icon {
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    border: 1px solid currentColor;
+    border-radius: 9px;
+    color: var(--resource-bookmark-color, #615ced);
+    background: var(--workspace-panel-bg-color);
   }
-
-  .related-tag-name {
-    font-weight: 600;
+  .resource-icon--note {
+    color: var(--resource-note-color, #00a884);
   }
-
-  .related-tag-shared {
-    margin-top: 3px;
+  .resource-icon--file {
+    color: var(--resource-file-color, #ff8a00);
+  }
+  .related-strip {
+    grid-column: 1 / -1;
+    min-width: 0;
+    padding-top: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-top: 1px solid var(--surface-divider-color);
+  }
+  .related-label {
     color: var(--desc-color);
     font-size: 12px;
   }
-
-  .section-title__hint {
-    margin-left: 8px;
+  .related-heading {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .related-heading small {
+    max-width: 210px;
     color: var(--desc-color);
-    font-size: 12px;
-    font-weight: 400;
+    font-size: 10px;
+    line-height: 1.35;
   }
-
-  .bookmark-card {
-    border: 1px solid var(--card-border-color);
-    border-radius: 10px;
-    padding: 12px;
-    background: var(--background-color);
-    cursor: pointer;
-    transition: all 0.2s;
-
-    &:hover {
-      border-color: var(--primary-h-color);
-      box-shadow: var(--ant-table-boxShadow);
-      transform: translateY(-1px);
-    }
-
-    .bookmark-card-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 8px;
-    }
-
-    .bookmark-card-name {
-      font-size: 14px;
-      font-weight: 500;
-      color: var(--text-color);
-      flex: 1;
-    }
-
-    .bookmark-card-desc {
-      font-size: 12px;
-      color: var(--desc-color);
-    }
+  .related-tags {
+    min-width: 0;
+    display: flex;
+    gap: 7px;
+    overflow-x: auto;
   }
-
-  .note-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 14px;
+  .related-tag {
+    flex: 0 0 auto;
+    gap: 6px;
+    border: 1px solid var(--surface-border-color);
   }
-
-  .note-item {
-    border: 1px solid var(--card-border-color);
-    border-radius: 10px;
-    padding: 14px;
-    background: var(--background-color);
-    cursor: pointer;
-    transition: all 0.2s;
-
-    &:hover {
-      border-color: #8b88f2;
-      box-shadow: var(--ant-table-boxShadow);
-    }
-
-    .note-item-title {
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--text-color);
-      margin-bottom: 8px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .note-item-desc {
-      font-size: 12px;
-      color: var(--desc-color);
-      line-height: 1.5;
-      height: 54px;
-      overflow: hidden;
-      display: -webkit-box;
-      -webkit-line-clamp: 3;
-      line-clamp: 3;
-      -webkit-box-orient: vertical;
-      word-break: break-all;
-      margin-bottom: 8px;
-    }
-
-    .note-item-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-bottom: 10px;
-    }
-
-    .note-item-time {
-      font-size: 12px;
-      color: var(--desc-color);
-      opacity: 0.8;
-    }
+  .related-tag > span:first-child {
+    color: var(--resource-tag-color, #ec4899);
+    font-weight: 750;
   }
-
-  .file-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  .related-tag small {
+    color: var(--desc-color);
+    font-size: 10px;
+  }
+  .view-switch {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex: 0 0 auto;
+  }
+  .view-button {
+    border: 1px solid transparent;
+  }
+  .view-button.is-active {
+    border-color: var(--resource-tag-color, #ec4899);
+    color: var(--resource-tag-color, #ec4899);
+    background: var(--workspace-panel-bg-color) !important;
+  }
+  .resources-panel {
+    min-height: 0;
+    flex: 1 0 auto;
+  }
+  .resource-toolbar {
+    display: flex;
+    align-items: center;
     gap: 12px;
+    margin-bottom: 12px;
   }
-
-  .file-item {
+  .resource-tabs {
+    min-width: 0;
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+  }
+  .resource-tab {
+    flex: 0 0 auto;
+    gap: 6px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+  }
+  .resource-tab.is-active {
+    border-color: currentColor;
+    background: var(--workspace-panel-bg-color) !important;
+  }
+  .resource-tab--all {
+    color: var(--resource-tag-color, #ec4899);
+  }
+  .resource-tab--bookmark {
+    color: var(--resource-bookmark-color, #615ced);
+  }
+  .resource-tab--note {
+    color: var(--resource-note-color, #00a884);
+  }
+  .resource-tab--file {
+    color: var(--resource-file-color, #ff8a00);
+  }
+  .resource-tab-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: currentColor;
+  }
+  .resource-search {
+    width: min(330px, 32vw);
+    flex: 0 0 auto;
+  }
+  .resource-sort {
+    width: 142px;
+    flex: 0 0 auto;
+  }
+  .inline-error,
+  .graph-error {
+    padding: 10px 12px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 14px;
-    border: 1px solid var(--card-border-color);
-    border-radius: 8px;
-    background: var(--background-color);
-    cursor: pointer;
-    transition: all 0.2s;
-
-    &:hover {
-      border-color: var(--primary-h-color);
-    }
-
-    .file-item-left {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex: 1;
-      min-width: 0;
-    }
-
-    :deep(svg) {
-      min-width: 28px;
-    }
-
-    .file-item-info {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .file-item-name {
-      font-size: 14px;
-      color: var(--text-color);
-      margin-bottom: 2px;
-    }
-
-    .file-item-meta {
-      font-size: 12px;
-      color: var(--desc-color);
-      opacity: 0.8;
-    }
-
-    .file-item-time {
-      font-size: 12px;
-      color: var(--desc-color);
-      opacity: 0.7;
-      white-space: nowrap;
-      margin-left: 10px;
-    }
+    gap: 12px;
+    border: 1px solid var(--danger-color, #fe2c55);
+    border-radius: 9px;
+    color: var(--danger-color, #fe2c55);
+    background: var(--workspace-panel-bg-color);
   }
-
-  .empty-state {
-    display: flex;
+  .inline-error {
+    margin-bottom: 10px;
+  }
+  .resource-list {
+    display: grid;
+    gap: 8px;
+  }
+  .resource-row {
+    min-height: 74px;
+    padding: 11px 13px !important;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
     align-items: center;
+    gap: 11px;
+    cursor: pointer;
+  }
+  .resource-row:hover,
+  .resource-row:focus-visible {
+    border-color: var(--resource-tag-color, #ec4899);
+  }
+  .resource-copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .resource-copy > strong,
+  .resource-copy > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .resource-copy > strong {
+    font-size: 14px;
+  }
+  .resource-copy > span {
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+  .resource-tags {
+    display: flex;
+    gap: 5px;
+    overflow: hidden;
+  }
+  .resource-tags span {
+    color: var(--resource-tag-color, #ec4899);
+    font-size: 10px;
+    white-space: nowrap;
+  }
+  .resource-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+    color: var(--desc-color);
+    font-size: 11px;
+  }
+  .resource-meta small {
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .resource-open {
+    color: var(--desc-color);
+    font-size: 16px;
+  }
+  .load-more-row {
+    display: flex;
     justify-content: center;
-    height: 200px;
-
-    .empty-text {
-      font-size: 14px;
-      color: var(--desc-color);
-      opacity: 0.7;
+    padding: 16px 0 2px;
+  }
+  .graph-panel {
+    min-height: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+  .graph-error {
+    margin: 12px;
+  }
+  .graph-layout {
+    height: 100%;
+    min-height: 520px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+  .skeleton-line {
+    height: 12px;
+    margin: 10px 0;
+    display: block;
+    border-radius: 999px;
+    background: var(--skeleton-bg-color, var(--surface-divider-color));
+    animation: tag-space-detail-pulse 1.15s ease-in-out infinite alternate;
+  }
+  .skeleton-line--title {
+    width: 58%;
+    height: 16px;
+  }
+  .skeleton-line--short {
+    width: 38%;
+  }
+  .resource-skeleton {
+    min-height: 76px;
+  }
+  @keyframes tag-space-detail-pulse {
+    to {
+      opacity: 0.42;
     }
   }
-
+  @media (max-width: 900px) {
+    .detail-overview {
+      grid-template-columns: 1fr;
+    }
+    .related-strip {
+      grid-column: 1;
+    }
+    .graph-layout {
+      grid-template-columns: 1fr;
+    }
+    .graph-layout :deep(.tag-graph-panel) {
+      display: none;
+    }
+  }
   @media (max-width: 767px) {
-    .tag-detail-container {
-      min-width: 0;
-      max-width: 100%;
-      height: 100%;
-      padding: 12px;
+    .tag-space-detail {
+      gap: 9px;
       overflow-x: hidden;
+      scrollbar-gutter: auto;
     }
-
-    .tag-content,
-    .resource-section,
-    .summary-grid,
-    .related-tag-grid,
-    .bookmark-grid,
-    .note-list,
-    .file-list {
-      min-width: 0;
+    .detail-overview {
+      padding: 14px !important;
+      gap: 13px;
+    }
+    .overview-copy > strong {
+      font-size: 18px;
+    }
+    .overview-counts {
+      gap: 5px;
+    }
+    .overview-count {
+      padding: 7px;
+      gap: 6px;
+    }
+    .overview-count .resource-icon {
+      width: 29px;
+      height: 29px;
+    }
+    .related-strip {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .related-tags {
+      width: 100%;
+    }
+    .view-switch {
+      padding-inline: 2px;
+    }
+    .resources-panel {
+      padding: 12px 0 16px !important;
+      border-inline: 0;
+    }
+    .resource-toolbar {
+      align-items: stretch;
+      flex-direction: column;
+      gap: 9px;
+    }
+    .resource-tabs {
+      padding-inline: 12px;
+    }
+    .resource-search {
+      width: auto;
+      margin-inline: 12px;
+    }
+    .resource-sort {
+      width: auto;
+      margin-inline: 12px;
+    }
+    .inline-error {
+      margin: 0 12px 9px;
+    }
+    .resource-list {
+      padding-inline: 9px;
+    }
+    .resource-row {
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      min-height: 68px;
+      padding: 10px 11px !important;
+    }
+    .resource-meta {
+      display: none;
+    }
+    .resource-copy > span {
       max-width: 100%;
     }
-
-    .summary-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+    .resource-state {
+      min-height: 260px;
+      margin-inline: 9px;
     }
-
-    .tag-graph-layout {
-      grid-template-columns: minmax(0, 1fr);
-      min-height: 0;
-    }
-
-    .tag-detail-container--graph {
-      overflow-y: auto;
-    }
-
-    .tag-detail-container--graph .tag-content,
-    .tag-graph-section--full {
-      flex: none;
-    }
-
-    .tag-detail-container--graph .tag-graph-layout {
-      height: auto;
-    }
-
-    .tag-graph-section--full,
-    .tag-graph-layout :deep(.tag-graph-panel) {
-      overflow: visible;
-    }
-
-    .tag-header {
-      .tag-header-main {
-        flex-wrap: wrap;
-        row-gap: 8px;
-      }
-
-      .tag-name {
-        font-size: 18px;
-      }
-    }
-
-    .bookmark-grid {
-      grid-template-columns: minmax(0, 1fr);
-    }
-
-    .related-tag-grid,
-    .note-list,
-    .file-list {
-      grid-template-columns: minmax(0, 1fr);
-    }
-
-    .related-tag-card,
-    .bookmark-card,
-    .note-item,
-    .file-item {
-      min-width: 0;
-      max-width: 100%;
-      box-sizing: border-box;
-    }
-
-    .bookmark-card-header,
-    .bookmark-card-name {
-      min-width: 0;
+    .graph-layout {
+      min-height: 460px;
     }
   }
-
-  @media (min-width: 768px) and (max-width: 1200px) {
-    .tag-graph-layout {
-      grid-template-columns: minmax(0, 1fr) 300px;
+  html.light-note-mobile-rendering .view-button.is-active,
+  html.light-note-mobile-rendering .resource-tab.is-active,
+  html.light-note-mobile-rendering .resource-row:focus-visible {
+    border-color: currentColor;
+    box-shadow: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton-line {
+      animation: none;
+    }
+    .resource-row {
+      transition: none;
     }
   }
 </style>

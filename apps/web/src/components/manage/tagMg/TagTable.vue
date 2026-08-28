@@ -7,6 +7,9 @@
       layout="workspace"
     >
       <template #actions>
+        <BButton @click="router.push('/manage/tagMg')">
+          {{ t('tagSpace.backToSpaces') }}
+        </BButton>
         <BButton
           v-click-log="OPERATION_LOG_MAP.tagMg.addTag"
           type="primary"

@@ -22,6 +22,9 @@ function declare(policy, resourceType, routes) {
 
 declare(ADMIN_POLICIES.READ, 'bookmark', [
   ['POST', '/bookmark/queryTagList'],
+  ['POST', '/bookmark/queryTagSpaces'],
+  ['POST', '/bookmark/getTagSpace'],
+  ['POST', '/bookmark/queryTagSpaceResources'],
   ['POST', '/bookmark/getTagDetail'],
   ['POST', '/bookmark/getRelatedTag'],
   ['POST', '/bookmark/getTagGraph'],

@@ -203,15 +203,19 @@
   });
   const mobilePageActions = computed<MobilePageActionItem[]>(() => [
     {
+      key: 'spaces',
+      label: t('tagSpace.backToSpaces'),
+      description: t('tagSpace.backToSpacesHint'),
+      icon: icon.arrow_left,
+    },
+    {
       key: 'batch',
       label: t('tagManage.batchSelect'),
       icon: icon.filterPanel.check,
     },
   ]);
   const allVisibleSelected = computed(
-    () =>
-      visibleTags.value.length > 0 &&
-      visibleTags.value.every((tag) => selectedIds.value.includes(String(tag.id))),
+    () => visibleTags.value.length > 0 && visibleTags.value.every((tag) => selectedIds.value.includes(String(tag.id))),
   );
 
   // 顶栏搜索/新建接管原页内搜索框与页头按钮,与书签/笔记/云空间页签保持一致的操作位。
@@ -300,6 +304,10 @@
   }
 
   function handleMobilePageAction(action: MobilePageActionItem) {
+    if (action.key === 'spaces') {
+      router.push('/manage/tagMg');
+      return;
+    }
     if (action.key === 'batch') enterSelection();
   }
 

@@ -1,5 +1,7 @@
 import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
+import { ensureUserOrAdminPolicy } from '../util/auth.js';
+import { ADMIN_POLICIES } from '../util/adminRoutePolicy.js';
 import { getFileExtension, resolveFileCategory } from '../util/fileCategory.js';
 import { getDerivedRelatedTags } from '../util/services/tagRelationService.js';
 import { computeTagSimilarity } from '../util/tagRelationScore.js';
@@ -8,6 +10,33 @@ const DEFAULT_LIMIT_RELATED_TAGS = 12;
 const DEFAULT_LIMIT_PER_TYPE = 20;
 const MAX_LIMIT = 50;
 const ALLOWED_RESOURCE_TYPES = ['bookmark', 'note', 'file'];
+
+function activeResourceJoins(relationAlias, aliasPrefix) {
+  return `
+    LEFT JOIN bookmark ${aliasPrefix}_bookmark
+      ON ${relationAlias}.resource_type = 'bookmark'
+     AND ${aliasPrefix}_bookmark.id = ${relationAlias}.resource_id
+     AND ${aliasPrefix}_bookmark.user_id = ${relationAlias}.user_id
+     AND ${aliasPrefix}_bookmark.del_flag = 0
+    LEFT JOIN note ${aliasPrefix}_note
+      ON ${relationAlias}.resource_type = 'note'
+     AND ${aliasPrefix}_note.id = ${relationAlias}.resource_id
+     AND ${aliasPrefix}_note.create_by = ${relationAlias}.user_id
+     AND ${aliasPrefix}_note.del_flag = 0
+    LEFT JOIN files ${aliasPrefix}_file
+      ON ${relationAlias}.resource_type = 'file'
+     AND ${aliasPrefix}_file.id = ${relationAlias}.resource_id
+     AND ${aliasPrefix}_file.create_by = ${relationAlias}.user_id
+     AND ${aliasPrefix}_file.del_flag = 0`;
+}
+
+function activeResourceCondition(relationAlias, aliasPrefix) {
+  return `(
+    (${relationAlias}.resource_type = 'bookmark' AND ${aliasPrefix}_bookmark.id IS NOT NULL)
+    OR (${relationAlias}.resource_type = 'note' AND ${aliasPrefix}_note.id IS NOT NULL)
+    OR (${relationAlias}.resource_type = 'file' AND ${aliasPrefix}_file.id IS NOT NULL)
+  )`;
+}
 
 const toNodeId = (type, rawId) => `${type}:${rawId}`;
 
@@ -67,10 +96,10 @@ async function queryBookmarks(userId, tagId, limit) {
       b.create_time
      FROM resource_tag_relations r
      INNER JOIN bookmark b ON r.resource_id = b.id AND r.resource_type = 'bookmark'
-     WHERE r.tag_id = ? AND b.user_id = ? AND b.del_flag = 0
+     WHERE r.tag_id = ? AND r.user_id = ? AND b.user_id = ? AND b.del_flag = 0
      ORDER BY b.sort, b.create_time DESC
      LIMIT ?`,
-    [tagId, userId, limit],
+    [tagId, userId, userId, limit],
   );
   return rows;
 }
@@ -84,10 +113,10 @@ async function queryNotes(userId, tagId, limit) {
       COALESCE(n.update_time, n.create_time) AS update_time
      FROM resource_tag_relations r
      INNER JOIN note n ON r.resource_id = n.id AND r.resource_type = 'note'
-     WHERE r.tag_id = ? AND n.create_by = ? AND n.del_flag = 0
+     WHERE r.tag_id = ? AND r.user_id = ? AND n.create_by = ? AND n.del_flag = 0
      ORDER BY n.sort, COALESCE(n.update_time, n.create_time) DESC
      LIMIT ?`,
-    [tagId, userId, limit],
+    [tagId, userId, userId, limit],
   );
   return rows;
 }
@@ -102,10 +131,10 @@ async function queryFiles(userId, tagId, limit) {
       f.create_time
      FROM resource_tag_relations r
      INNER JOIN files f ON r.resource_id = f.id AND r.resource_type = 'file'
-     WHERE r.tag_id = ? AND f.create_by = ? AND f.del_flag = 0
+     WHERE r.tag_id = ? AND r.user_id = ? AND f.create_by = ? AND f.del_flag = 0
      ORDER BY f.create_time DESC
      LIMIT ?`,
-    [tagId, userId, limit],
+    [tagId, userId, userId, limit],
   );
   return rows;
 }
@@ -123,17 +152,11 @@ function pushEdge(edgeMap, edge) {
 }
 
 export const getTagGraph = async (req, res) => {
+  if (!ensureUserOrAdminPolicy(req, res, [ADMIN_POLICIES.READ])) return;
   try {
-    const userId = req.user?.id;
-    if (!userId) return res.send(resultData(null, 401, '请先登录'));
+    const userId = (req.resourceUser || req.user)?.id;
 
-    const {
-      tagId,
-      includeResources = true,
-      resourceTypes,
-      limitRelatedTags,
-      limitPerResourceType,
-    } = req.body || {};
+    const { tagId, includeResources = true, resourceTypes, limitRelatedTags, limitPerResourceType } = req.body || {};
 
     if (!tagId) return res.send(resultData(null, 400, '缺少标签ID'));
 
@@ -291,7 +314,8 @@ export const getTagGraph = async (req, res) => {
       }),
     );
   } catch (error) {
-    res.send(resultData(null, 500, '获取标签图谱失败: ' + error.message));
+    console.error('[tag-graph] detail failed code=%s', String(error?.code || 'TAG_GRAPH_DETAIL_FAILED'));
+    res.send(resultData(null, 500, '获取标签图谱失败，请稍后重试'));
   }
 };
 
@@ -333,8 +357,11 @@ async function queryKnowledgeMapStats(userId) {
        FROM tag t
        WHERE t.user_id = ? AND t.del_flag = 0
          AND NOT EXISTS (
-           SELECT 1 FROM resource_tag_relations r
+           SELECT 1
+           FROM resource_tag_relations r
+           ${activeResourceJoins('r', 'empty')}
            WHERE r.user_id = ? AND r.tag_id = t.id
+             AND ${activeResourceCondition('r', 'empty')}
          )`,
       [userId, userId],
     ),
@@ -343,8 +370,11 @@ async function queryKnowledgeMapStats(userId) {
        FROM tag t
        WHERE t.user_id = ? AND t.del_flag = 0
          AND EXISTS (
-           SELECT 1 FROM resource_tag_relations r
+           SELECT 1
+           FROM resource_tag_relations r
+           ${activeResourceJoins('r', 'isolated_exists')}
            WHERE r.user_id = ? AND r.tag_id = t.id
+             AND ${activeResourceCondition('r', 'isolated_exists')}
          )
          AND NOT EXISTS (
            SELECT 1
@@ -354,9 +384,15 @@ async function queryKnowledgeMapStats(userId) {
             AND a.resource_type = b.resource_type
             AND a.resource_id = b.resource_id
             AND a.tag_id <> b.tag_id
-           WHERE a.user_id = ? AND a.tag_id = t.id
+           INNER JOIN tag candidate_tag
+             ON candidate_tag.id = b.tag_id
+            AND candidate_tag.user_id = a.user_id
+            AND candidate_tag.del_flag = 0
+           ${activeResourceJoins('a', 'isolated_pair')}
+           WHERE a.user_id = ? AND b.user_id = ? AND a.tag_id = t.id
+             AND ${activeResourceCondition('a', 'isolated_pair')}
          )`,
-      [userId, userId, userId],
+      [userId, userId, userId, userId],
     ),
   ]);
 
@@ -375,29 +411,35 @@ async function queryKnowledgeMapStats(userId) {
 
 // 全局知识地图:默认只返回标签节点与标签共现关系;具体资源在用户聚焦某个标签后按需查询。
 export const getGlobalGraph = async (req, res) => {
+  if (!ensureUserOrAdminPolicy(req, res, [ADMIN_POLICIES.READ])) return;
   try {
-    const userId = req.user?.id;
-    if (!userId) return res.send(resultData(null, 401, '请先登录'));
+    const userId = (req.resourceUser || req.user)?.id;
     const minCo = Math.max(1, Math.min(Number(req.body?.minCoOccurrence) || 1, 10));
 
     // 三段查询互不依赖(统计 / 标签节点 / 共现边),并行执行缩短时延
     const [overviewStats, [tagRows], [coRows]] = await Promise.all([
       queryKnowledgeMapStats(userId),
       pool.query(
-        `SELECT t.id, t.name, t.icon_url,
-           (SELECT COUNT(*) FROM resource_tag_relations r WHERE r.tag_id = t.id AND r.user_id = ?) AS resource_count
+        `SELECT t.id, t.name, MAX(t.icon_url) AS icon_url,
+           SUM(CASE WHEN ${activeResourceCondition('r', 'global_tag')} THEN 1 ELSE 0 END) AS resource_count
          FROM tag t
+         LEFT JOIN resource_tag_relations r
+           ON r.tag_id = t.id AND r.user_id = t.user_id
+         ${activeResourceJoins('r', 'global_tag')}
          WHERE t.user_id = ? AND t.del_flag = 0
+         GROUP BY t.id, t.name, t.sort, t.create_time
          ORDER BY resource_count DESC, t.sort, t.create_time DESC
          LIMIT ?`,
-        [userId, userId, MAX_GLOBAL_TAGS],
+        [userId, MAX_GLOBAL_TAGS],
       ),
       pool.query(
         `SELECT a.tag_id AS t1, b.tag_id AS t2, COUNT(*) AS co
          FROM resource_tag_relations a
          INNER JOIN resource_tag_relations b
            ON a.resource_type = b.resource_type AND a.resource_id = b.resource_id AND a.tag_id < b.tag_id
+         ${activeResourceJoins('a', 'global_pair')}
          WHERE a.user_id = ? AND b.user_id = ?
+           AND ${activeResourceCondition('a', 'global_pair')}
          GROUP BY a.tag_id, b.tag_id
          HAVING co >= ?
          ORDER BY co DESC
@@ -468,6 +510,7 @@ export const getGlobalGraph = async (req, res) => {
       }),
     );
   } catch (error) {
-    res.send(resultData(null, 500, '获取全局图谱失败: ' + error.message));
+    console.error('[tag-graph] global failed code=%s', String(error?.code || 'TAG_GRAPH_GLOBAL_FAILED'));
+    res.send(resultData(null, 500, '获取全局图谱失败，请稍后重试'));
   }
 };

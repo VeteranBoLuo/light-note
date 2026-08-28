@@ -80,7 +80,7 @@
 
           <div
             id="nav-tag-entry"
-            :style="{ color: route.path.startsWith('/manage/tag') ? '#615ced' : '' }"
+            :style="{ color: isTagRoute ? '#615ced' : '' }"
             style="font-size: 14px; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.navigation.tag"
             @click="router.push('/manage/tagMg')"
@@ -172,6 +172,7 @@
       route.path.includes('/serverManagement'),
   );
   const isTodoRoute = computed(() => route.path === '/inbox' && String(route.query?.tab || '') === 'todo');
+  const isTagRoute = computed(() => route.path.startsWith('/manage/tag') || route.path.startsWith('/tag/'));
   const displayTodoAttention = computed(() =>
     inbox.todoAttentionTotal > 99 ? '99+' : String(inbox.todoAttentionTotal),
   );

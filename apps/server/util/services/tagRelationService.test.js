@@ -14,7 +14,7 @@ describe('tagRelationService', () => {
     expect(db.query).not.toHaveBeenCalled();
   });
 
-  it('共现查询按 user_id 隔离,并以类型+ID 作为同一资源的判定', async () => {
+  it('共现查询按 user_id 隔离，以类型+ID 判定资源，并排除回收站资源', async () => {
     db.query.mockResolvedValueOnce([[]]);
 
     await getDerivedRelatedTags(db, { userId: 'user-1', tagId: 'tag-1' });
@@ -24,6 +24,12 @@ describe('tagRelationService', () => {
     expect(sql).toContain('candidate.resource_type = center.resource_type');
     expect(sql).toContain('candidate.resource_id = center.resource_id');
     expect(sql).toContain('candidate.tag_id <> center.tag_id');
+    expect(sql).toContain("center.resource_type = 'bookmark' AND b.id IS NOT NULL");
+    expect(sql).toContain("center.resource_type = 'note' AND n.id IS NOT NULL");
+    expect(sql).toContain("center.resource_type = 'file' AND f.id IS NOT NULL");
+    expect(sql).toContain('b.del_flag = 0');
+    expect(sql).toContain('n.del_flag = 0');
+    expect(sql).toContain('f.del_flag = 0');
     expect(params.slice(0, 2)).toEqual(['user-1', 'tag-1']);
   });
 
@@ -55,6 +61,9 @@ describe('tagRelationService', () => {
     expect(db.query).toHaveBeenCalledTimes(2);
     const [countSql, countParams] = db.query.mock.calls[1];
     expect(countSql).toContain('FROM resource_tag_relations');
+    expect(countSql).toContain("r.resource_type = 'bookmark' AND b.id IS NOT NULL");
+    expect(countSql).toContain("r.resource_type = 'note' AND n.id IS NOT NULL");
+    expect(countSql).toContain("r.resource_type = 'file' AND f.id IS NOT NULL");
     expect(countParams).toEqual(['user-1', 'tag-1', 'tag-2', 'tag-3']);
     // 共现同为 3 次时,资源更少的紧密标签排在大标签之前
     expect(result.map((item) => item.id)).toEqual(['tag-2', 'tag-3']);
