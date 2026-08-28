@@ -114,6 +114,18 @@ export const routes: RouteRecordRaw[] = [
   },
   {
     meta: {
+      title: '轻笺 · 随手收 — 浏览器扩展',
+      publicStandalone: true,
+      hideAiAssistant: true,
+      seoIndexable: true,
+      canonicalPath: '/browser-extension',
+    },
+    path: '/browser-extension',
+    name: 'browserExtensionLanding',
+    component: () => import('@/view/browserExtension/BrowserExtensionLanding.vue'),
+  },
+  {
+    meta: {
       title: '授权轻笺浏览器插件',
       seoIndexable: false,
       hideAiAssistant: true,

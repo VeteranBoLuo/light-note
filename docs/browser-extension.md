@@ -31,9 +31,19 @@ pnpm --filter web package:extension
 - 校验文件：同名 `.sha256`
 - Chrome 商店文案、权限说明与发布清单：`docs/browser-extension-store-listing.md`
 - 扩展专属隐私说明：`https://boluo66.top/legal/browser-extension-privacy.html`
+- 官网产品页：`https://boluo66.top/browser-extension`
+- Chrome Web Store 长期地址：`https://chromewebstore.google.com/detail/hfdpgaiggloacopnkihfkloicjepldig`
 - 两个目录都是构建产物并已 Git 忽略。
 
 本地安装：打开 `chrome://extensions` 或 `edge://extensions`，开启开发者模式，选择“加载已解压的扩展程序”，指向 `apps/web/dist-extension`。Manifest 内的公开 build key 固定首版解压安装 ID 为 `nkdlhmfjnokoicodeepadkamopdblbnd`；它不是签名私钥。`package:extension` 生成商店 ZIP 时会自动移除根级 `key`，满足 Chrome Web Store 首次上传限制，同时不改变解压安装目录的开发 ID。服务端生产配置必须把实际商店/企业分发 ID 加入 `LIGHTNOTE_EXTENSION_IDS`，多个 ID 用逗号分隔。
+
+## 官网与设置入口
+
+- `src/config/browserExtension.ts` 是商店扩展 ID、长期商店地址、官网产品页、隐私页和支持页的唯一前端事实源；首页、独立产品页、设置页和测试统一引用，禁止复制带 `utm_source` 的分享链接或在组件内拼扩展 ID。
+- 根官网在核心产品模块之后展示“轻笺 · 随手收”，使用已经提交商店的真实中文/英文截图；桌面端直接进入 Chrome Web Store，移动端只提供产品详情与复制当前介绍页地址，并明确提示改用电脑安装。
+- `/browser-extension` 是公开、可索引的产品详情页，展示三类资源、真实侧栏图库、安装步骤、隐私承诺，以及浏览器扩展与书签栏收藏的能力差异。预渲染、SEO 产物门禁和 sitemap 必须同步覆盖该路径。
+- 设置页把原“快速收藏”升级为“浏览器收集”，并列“浏览器扩展（推荐）”与“书签栏收藏（轻量）”。扩展负责书签、笔记和文件；书签栏收藏不安装插件，只负责当前网页书签，必须继续用原生可拖拽 `javascript:` 链接实现，不能用普通 BButton 替代其拖拽语义。
+- 书签栏收藏复用扩展书签的模式语义：快速待整理不调用 AI、不创建标签或快照；正式保存才显示 AI、标签与快照。两端通过 `src/utils/bookmarkCapture.ts` 共用载荷构造和幂等收据，防止同名模式逐渐产生不同后端行为。
 
 ## 权限边界
 

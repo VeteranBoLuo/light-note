@@ -166,6 +166,7 @@ res.send(resultData(null, 500, "服务器内部错误")); // 服务端错误
 - 离开一段时间再回到前台由 `composables/useForegroundRefresh.ts` 补一次静默刷新（默认陈旧阈值 5 分钟，`visibilitychange` 为主、`focus` 兜底）。静默刷新不进入 loading、不闪骨架屏、不驱动全局顶部进度条，刷新期间继续展示旧数据，失败则原样保留。本项目没有启用 keep-alive，路由切换会重建页面，所以只有「页面一直在但用户离开了」这一种情况需要它；页面里残留的 `onActivated` 刷新分支实际不会执行，不要依赖。
 - Web 端通过受信消息通道或 `LightNoteAndroid/<version>` UA 识别轻笺原生环境；通用 Android `wv` 标记只用于旧 WebView 渲染兼容，不能作为轻笺 APK 身份或入口分流依据。原生 App 隐藏 PWA 安装入口，并停用 PWA 安装监听与 Service Worker 注册，避免已经安装的 APK 再次提示安装。
 - SEO 只以无本地访问记录的普通浏览器语义为准：根官网始终返回同一份预渲染 HTML，保留 `index, follow`、自引用 canonical、完整标题与正文；Googlebot Smartphone、百度等窄视口爬虫和普通手机首访获得同一份完整响应式官网，不强制伪装成 PC 视口。回访分流只发生在客户端本地记录存在时，不改变 HTTP 响应与索引产物；`/app` 与业务页面继续 `noindex`。不得按搜索引擎 UA 提供不同内容。
+- `/browser-extension` 是“轻笺 · 随手收”的公开产品页，与根官网一样使用独立预渲染产物、`index, follow` 和自引用 canonical，并进入 sitemap。它不参与根路径首访分流，也不依赖登录态；商店链接、扩展 ID、隐私页和支持页统一从 `src/config/browserExtension.ts` 读取，设置页与官网不得各自硬编码一份。
 - 隐私政策和用户协议在浏览器与 App 设置中都长期可访问；App 设置优先通过受信消息通道打开 APK 内置的离线同源文档，通道不可用时回退到网站公开文档。首次启动同意页仍由原生层负责，不能被设置入口替代。
 - Release 只允许 HTTPS、关闭 WebView 调试、拒绝 SSL 错误，不使用 JavaScript Interface；文件访问和内容访问默认关闭。
 - Android 源码、Gradle Wrapper 和资源进入 Git；`local.properties`、`.gradle`、`build`、APK/AAB、签名密钥及密码配置必须忽略。
@@ -208,6 +209,8 @@ src/
 └── config/
     └── resourceColor.ts   # 资源语义色
 ```
+
+浏览器收集对外由三类入口组成：根官网的扩展展区、公开 `/browser-extension` 产品页，以及登录后设置页的“浏览器收集”分组。设置分组同时提供完整浏览器扩展与轻量书签栏收藏；书签栏收藏仍进入 `/quick-save`，只覆盖书签，不伪装为支持笔记和文件的扩展替代品。
 
 ### 多端适配
 
