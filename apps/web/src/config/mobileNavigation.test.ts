@@ -24,7 +24,7 @@ describe('移动端导航配置', () => {
 
   it('保持资料切换与底部主导航的固定顺序', () => {
     expect(MOBILE_RESOURCE_NAVIGATION.map((item) => item.key)).toEqual(['bookmark', 'note', 'cloud', 'tag']);
-    // 今日在首位、确定性的快速收集居中；AI 只在对应业务模块出现，不占全局一级入口。
+    // 中间入口负责日常新建；知识工坊从一级目的地降级到新建面板。
     expect(MOBILE_BOTTOM_NAVIGATION.map((item) => item.key)).toEqual([
       'today',
       'resources',
@@ -35,6 +35,8 @@ describe('移动端导航配置', () => {
     expect(MOBILE_BOTTOM_NAVIGATION.map((item) => item.key)).not.toContain('ai');
     expect(MOBILE_BOTTOM_NAVIGATION.map((item) => item.key)).not.toContain('search');
     expect(MOBILE_BOTTOM_NAVIGATION.find((item) => item.key === 'today')?.path).toBe('/workbenches');
+    expect(MOBILE_BOTTOM_NAVIGATION.find((item) => item.key === 'capture')?.path).toBeUndefined();
+    expect(MOBILE_BOTTOM_NAVIGATION.map((item) => item.key)).not.toContain('toolbox');
     expect(MOBILE_BOTTOM_NAVIGATION.find((item) => item.key === 'community')?.path).toBe('/community-chat');
   });
 

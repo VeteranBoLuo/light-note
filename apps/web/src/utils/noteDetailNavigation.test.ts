@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { resolveNoteDetailReturnPath, resolveNoteLibraryListPath } from './noteDetailNavigation';
+import {
+  resolveDeletedNoteFallbackId,
+  resolveNoteDetailReturnPath,
+  resolveNoteLibraryListPath,
+} from './noteDetailNavigation';
 
 describe('resolveNoteLibraryListPath', () => {
   it('保留笔记库列表的目录、标签与视图查询参数', () => {
@@ -51,4 +55,24 @@ describe('resolveNoteDetailReturnPath', () => {
       expect(resolveNoteDetailReturnPath(path)).toBe('');
     },
   );
+});
+
+describe('resolveDeletedNoteFallbackId', () => {
+  const siblings = [{ id: 'before' }, { id: 'current' }, { id: 'after' }];
+
+  it('优先选择同级下一篇，没有下一篇时选择上一篇', () => {
+    expect(resolveDeletedNoteFallbackId({ currentId: 'current', parentId: 'parent', siblings })).toBe('after');
+    expect(resolveDeletedNoteFallbackId({ currentId: 'after', parentId: 'parent', siblings })).toBe('current');
+  });
+
+  it('没有其他同级页面时选择父页面，根页面则回笔记库', () => {
+    expect(
+      resolveDeletedNoteFallbackId({ currentId: 'current', parentId: 'parent', siblings: [{ id: 'current' }] }),
+    ).toBe('parent');
+    expect(resolveDeletedNoteFallbackId({ currentId: 'current', siblings: [{ id: 'current' }] })).toBe('');
+  });
+
+  it('目录缓存尚未包含当前页时，仍选择一个可见同级页面', () => {
+    expect(resolveDeletedNoteFallbackId({ currentId: 'missing', parentId: 'parent', siblings })).toBe('before');
+  });
 });

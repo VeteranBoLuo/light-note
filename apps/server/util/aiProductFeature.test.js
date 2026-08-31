@@ -1,8 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  assertAiSkillDomainEnabled,
-  getAiProductFeatureState,
-} from './aiProductFeature.js';
+import { assertAiSkillDomainEnabled, getAiProductFeatureState } from './aiProductFeature.js';
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -13,7 +10,7 @@ describe('aiProductFeature', () => {
     expect(getAiProductFeatureState()).toEqual({
       protocolVersion: 1,
       kernelEnabled: true,
-      skills: { note: true, bookmark: true, file: true, todo: true, search: true, help: true },
+      skills: { note: true, bookmark: true, file: true, todo: true, search: true, help: true, toolbox: true },
       archive: { readonly: true },
     });
     expect(assertAiSkillDomainEnabled('file').kernelEnabled).toBe(true);

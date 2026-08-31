@@ -99,6 +99,7 @@
   import { clearExtensionAuthReturnPath, resolveExtensionAuthReturnPath } from '@/utils/extensionAuthReturn.ts';
   import { persistAndroidAuthSession } from '@/utils/androidBridge.ts';
   import GithubOAuthConsentModal from './GithubOAuthConsentModal.vue';
+  import { clearAuthNavigationIntent, resolveAuthNavigationIntent } from '@/utils/authNavigationIntent.ts';
 
   type AuthMode = '登录' | '注册' | '重置';
 
@@ -177,10 +178,18 @@
       bookmark.refreshTag();
       const extensionReturnPath = resolveExtensionAuthReturnPath();
       const quickSaveReturnPath = resolveQuickSaveAuthReturnPath();
-      const authReturnPath = extensionReturnPath || quickSaveReturnPath;
-      await router.replace(authReturnPath || getRuntimePostRegistrationPath(bookmark.isMobile));
+      const protectedReturnPath = resolveAuthNavigationIntent();
+      const standaloneReturnPath = extensionReturnPath || quickSaveReturnPath;
+      if (standaloneReturnPath) {
+        await router.replace(standaloneReturnPath);
+      } else if (protectedReturnPath) {
+        await router.push(protectedReturnPath);
+      } else {
+        await router.replace(getRuntimePostRegistrationPath(bookmark.isMobile));
+      }
       if (extensionReturnPath) clearExtensionAuthReturnPath();
       if (quickSaveReturnPath) clearQuickSaveAuthReturnPath();
+      clearAuthNavigationIntent();
       message.success(t('auth.registerSuccess'));
       emit('update:success', { email: formData.email, password: formData.password });
     } finally {

@@ -222,6 +222,7 @@
             :bonus="dailyGrowthBonus"
             :read-only="growthReadOnly"
             :show-claim-action="false"
+            @go="handleDailyQuestAction"
           />
         </article>
 
@@ -425,6 +426,7 @@
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import type { ActionCaptureType } from '@/store/inbox.ts';
   import { openNotificationPanel } from '@/utils/notificationEntry';
+  import { resolveDailyQuestRoute } from '@/utils/growthNavigation';
 
   type ContinueTab = 'notes' | 'files' | 'bookmarks';
   type ContinueItemType = 'note' | 'file' | 'bookmark';
@@ -787,6 +789,15 @@
 
   function openGrowthTasks() {
     void router.push({ path: '/growth', hash: '#growth-tasks' });
+  }
+
+  function handleDailyQuestAction(key: string) {
+    const target = resolveDailyQuestRoute(key, false);
+    if (!target) {
+      openGrowthTasks();
+      return;
+    }
+    void router.push(target);
   }
 
   function openQuickCapture(type: ActionCaptureType) {

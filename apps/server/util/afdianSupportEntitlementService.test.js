@@ -37,12 +37,12 @@ function packageOrder(overrides = {}) {
     intent_type: 'permanent',
     intent_status: 'issued',
     sku_id: 'combo-10',
-    catalog_version: 'support-packages-v2',
+    catalog_version: 'support-packages-v3',
     quoted_amount: '10.00',
     base_ai_tokens: 600_000,
     base_storage_mb: 128,
-    quoted_ai_tokens: 780_000,
-    quoted_storage_mb: 160,
+    quoted_ai_tokens: 720_000,
+    quoted_storage_mb: 128,
     first_purchase_candidate: 1,
     campaign_id: null,
     campaign_sku_id: null,
@@ -56,6 +56,8 @@ function packageOrder(overrides = {}) {
 
 function connectionFor({
   grant = null,
+  existingUserFirstClaim = false,
+  existingIdentityFirstClaim = false,
   duplicateFirstClaim = false,
   campaignCount = 0,
   campaignUpdate = 1,
@@ -67,6 +69,12 @@ function connectionFor({
       const statement = String(sql);
       if (statement.includes('FROM support_entitlement_grants') && statement.includes('FOR UPDATE')) {
         return [grant ? [grant] : [], []];
+      }
+      if (statement.includes('FROM support_first_purchase_claims') && statement.includes('user_id = ?')) {
+        return [existingUserFirstClaim ? [{ id: 'existing-user-first-claim' }] : [], []];
+      }
+      if (statement.includes('FROM support_first_purchase_claims') && statement.includes('provider_identity_hash = ?')) {
+        return [existingIdentityFirstClaim ? [{ id: 'existing-identity-first-claim' }] : [], []];
       }
       if (statement.includes('INSERT INTO support_first_purchase_claims')) {
         if (duplicateFirstClaim) throw Object.assign(new Error('duplicate'), { code: 'ER_DUP_ENTRY' });
@@ -116,21 +124,21 @@ describe('爱发电 v2 通用权益原子发放', () => {
     expect(entitlementMocks.earnStorage).not.toHaveBeenCalled();
   });
 
-  it('常驻组合包首次购买在同一连接写入首充、AI 与空间最终权益', async () => {
+  it('常驻组合包首次购买在同一连接写入账号级 AI 首购、AI 与基础空间权益', async () => {
     const connection = connectionFor();
     await expect(
       syncAfdianPackageEntitlementForOrder(connection, packageOrder(), { env: ENABLED_ENV }),
     ).resolves.toMatchObject({
       status: SUPPORT_ENTITLEMENT_STATUS.CREDITED,
-      aiTokens: 780_000,
-      storageMb: 160,
+      aiTokens: 720_000,
+      storageMb: 128,
       firstPurchaseApplied: true,
     });
     expect(entitlementMocks.creditAi).toHaveBeenCalledWith(
       connection,
       expect.objectContaining({
         userId: 'user-1',
-        amountTokens: 780_000,
+        amountTokens: 720_000,
         sourceType: 'support_package',
         sourceRef: 'support-order-1',
         idempotencyKey: 'support-package:support-order-1',
@@ -138,12 +146,16 @@ describe('爱发电 v2 通用权益原子发放', () => {
     );
     expect(entitlementMocks.earnStorage).toHaveBeenCalledWith(
       'user-1',
-      160,
+      128,
       'support_package',
       'support-v2:support-order-1',
       connection,
     );
     expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('support_first_purchase_claims'))).toBe(true);
+    const firstClaim = connection.query.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT INTO support_first_purchase_claims'),
+    );
+    expect(firstClaim?.[1]).toEqual(expect.arrayContaining(['scope-ai-account-v3']));
   });
 
   it('轻笺账号或爱发电身份任一首充唯一约束冲突时只发基础权益', async () => {
@@ -167,6 +179,77 @@ describe('爱发电 v2 通用权益原子发放', () => {
       'support-v2:support-order-1',
       connection,
     );
+  });
+
+  it('发放前发现账号或实际付款身份已有历史 AI 首购时降级为基础权益', async () => {
+    const connection = connectionFor({ existingIdentityFirstClaim: true });
+    await expect(
+      syncAfdianPackageEntitlementForOrder(connection, packageOrder(), { env: ENABLED_ENV }),
+    ).resolves.toMatchObject({
+      status: SUPPORT_ENTITLEMENT_STATUS.CREDITED,
+      aiTokens: 600_000,
+      storageMb: 128,
+      firstPurchaseApplied: false,
+    });
+    const eligibilityQuery = connection.query.mock.calls.find(([sql]) =>
+      String(sql).includes('provider_identity_hash = ?'),
+    );
+    expect(eligibilityQuery?.[0]).toContain('provider_identity_hash = ?');
+    expect(eligibilityQuery?.[1]).toEqual(
+      expect.arrayContaining(['scope-ai-account-v3', 'ai-6', 'combo-10']),
+    );
+    expect(eligibilityQuery?.[1]?.at(-1)).toMatch(/^[0-9a-f]{64}$/);
+    expect(
+      connection.query.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO support_first_purchase_claims')),
+    ).toBe(false);
+  });
+
+  it('尚未结算的 v2 AI 组合意图保留冻结快照，但统一占用账号级首购范围', async () => {
+    const connection = connectionFor();
+    await expect(
+      syncAfdianPackageEntitlementForOrder(
+        connection,
+        packageOrder({
+          catalog_version: 'support-packages-v2',
+          quoted_ai_tokens: 780_000,
+          quoted_storage_mb: 160,
+        }),
+        { env: ENABLED_ENV },
+      ),
+    ).resolves.toMatchObject({
+      status: SUPPORT_ENTITLEMENT_STATUS.CREDITED,
+      aiTokens: 780_000,
+      storageMb: 160,
+      firstPurchaseApplied: true,
+    });
+    const firstClaim = connection.query.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT INTO support_first_purchase_claims'),
+    );
+    expect(firstClaim?.[1]).toEqual(expect.arrayContaining(['scope-ai-account-v3']));
+  });
+
+  it('纯空间套餐继续按 SKU 独立占用首购资格', async () => {
+    const connection = connectionFor();
+    await expect(
+      syncAfdianPackageEntitlementForOrder(
+        connection,
+        packageOrder({
+          sku_id: 'storage-6',
+          total_amount: '6.00',
+          quoted_amount: '6.00',
+          base_ai_tokens: 0,
+          quoted_ai_tokens: 0,
+          base_storage_mb: 128,
+          quoted_storage_mb: 160,
+        }),
+        { env: ENABLED_ENV },
+      ),
+    ).resolves.toMatchObject({ aiTokens: 0, storageMb: 160, firstPurchaseApplied: true });
+    const firstClaim = connection.query.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT INTO support_first_purchase_claims'),
+    );
+    expect(firstClaim?.[1]).toEqual(expect.arrayContaining(['storage-6']));
+    expect(firstClaim?.[1]).not.toEqual(expect.arrayContaining(['scope-ai-account-v3']));
   });
 
   it('活动套餐使用最终快照和独立限购，不读取或消耗常驻首充资格', async () => {

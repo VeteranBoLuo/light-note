@@ -13,6 +13,7 @@ export const AI_USAGE_MODULES = Object.freeze([
   'search',
   'help',
   'tag',
+  'toolbox',
   'other',
 ]);
 const ALLOWED_MODULES = new Set(AI_USAGE_MODULES);

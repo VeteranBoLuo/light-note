@@ -610,10 +610,10 @@ export default defineStore('noteWorkspace', () => {
       sort: maxNormalSort + 1,
       updateTime: new Date().toISOString(),
     };
-    const nextSiblings =
-      existingIndex >= 0
-        ? siblings.map((item, index) => (index === existingIndex ? { ...item, ...createdNode } : item))
-        : [...siblings, createdNode];
+    // 幂等回放只负责确认节点可见，不能用产物创建时的旧标题、排序和置顶状态
+    // 覆盖用户后来在笔记库里的修改。
+    if (existingIndex >= 0) return;
+    const nextSiblings = [...siblings, createdNode];
     const orderedSiblings = sortNoteTreeItems(nextSiblings);
     let nextChildrenByParent = { ...childrenByParent.value, [key]: orderedSiblings };
     if (existingIndex < 0 && parentId) {

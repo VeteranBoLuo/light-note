@@ -4,9 +4,11 @@
     :class="[
       `is-${density}`,
       `is-${surface}`,
+      `is-${layout}`,
       { 'is-loading': loading, 'is-unavailable': unavailable },
     ]"
     :aria-label="accessibleLabel"
+    :aria-busy="loading"
     :title="accessibleLabel"
     v-click-log="{
       module: 'AI 用量与计费',
@@ -20,7 +22,17 @@
     <span class="ai-quota-summary__body">
       <span class="ai-quota-summary__copy">
         <span>{{ t('personCenter.aiQuotaLabel') }}</span>
-        <strong>{{ statusText }}</strong>
+        <span v-if="quotaBreakdown" class="ai-quota-summary__values" aria-hidden="true">
+          <span class="ai-quota-summary__primary-value">
+            <small>{{ t('personCenter.aiQuotaTodayRemaining') }}</small>
+            <strong>{{ quotaBreakdown.daily }}</strong>
+          </span>
+          <span class="ai-quota-summary__secondary-value">
+            <small>{{ t('personCenter.aiQuotaPermanentShort') }}</small>
+            <strong>{{ quotaBreakdown.permanent }}</strong>
+          </span>
+        </span>
+        <strong v-else class="ai-quota-summary__status">{{ statusText }}</strong>
       </span>
       <BProgress
         v-if="status && !status.exempt && !unavailable"
@@ -47,12 +59,14 @@
       active?: boolean;
       density?: 'compact' | 'comfortable';
       surface?: 'panel' | 'plain';
+      layout?: 'row' | 'tile';
       entrySource: '桌面个人中心' | '移动个人中心';
     }>(),
     {
       active: true,
       density: 'compact',
       surface: 'panel',
+      layout: 'row',
     },
   );
 
@@ -70,20 +84,25 @@
     { immediate: true },
   );
 
-  const statusText = computed(() => {
-    if (loading.value && !status.value) return t('personCenter.aiQuotaLoading');
-    if (unavailable.value || !status.value) return t('personCenter.aiQuotaUnavailable');
-    if (status.value.exempt) return t('personCenter.aiQuotaUnlimited');
+  const quotaBreakdown = computed(() => {
+    if (!status.value || status.value.exempt || unavailable.value) return null;
     if (
       Number.isFinite(status.value.dailyRemaining) &&
       Number.isFinite(status.value.dailyQuota) &&
       Number.isFinite(status.value.bonusTokens)
     ) {
-      return t('personCenter.aiQuotaBreakdown', {
+      return {
         daily: formatAiQuotaTokens(status.value.dailyRemaining, locale.value),
         permanent: formatAiQuotaTokens(status.value.bonusTokens, locale.value),
-      });
+      };
     }
+    return null;
+  });
+  const statusText = computed(() => {
+    if (loading.value && !status.value) return t('personCenter.aiQuotaLoading');
+    if (unavailable.value || !status.value) return t('personCenter.aiQuotaUnavailable');
+    if (status.value.exempt) return t('personCenter.aiQuotaUnlimited');
+    if (quotaBreakdown.value) return t('personCenter.aiQuotaBreakdown', quotaBreakdown.value);
     return t('personCenter.aiQuotaRemaining', {
       amount: formatAiQuotaTokens(status.value.remaining, locale.value),
     });
@@ -106,6 +125,8 @@
     color: var(--text-color);
     background: var(--workspace-panel-bg-color);
     line-height: 1.25;
+    text-align: left;
+    white-space: normal;
   }
 
   .ai-quota-summary.is-comfortable.b_btn {
@@ -180,10 +201,99 @@
     color: var(--desc-color);
   }
 
+  .ai-quota-summary.is-tile.b_btn {
+    position: relative;
+    min-height: 68px;
+    padding: 8px;
+    border-color: var(--surface-border-color);
+    background: var(--workspace-panel-bg-color);
+  }
+
+  .ai-quota-summary.is-tile .ai-quota-summary__icon {
+    width: 28px;
+    height: 28px;
+    flex-basis: 28px;
+    border-radius: 8px;
+  }
+
+  .ai-quota-summary.is-tile .ai-quota-summary__body {
+    gap: 5px;
+  }
+
+  .ai-quota-summary.is-tile .ai-quota-summary__copy {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+    padding-right: 13px;
+  }
+
+  .ai-quota-summary.is-tile .ai-quota-summary__copy > span:first-child {
+    font-size: 10px;
+  }
+
+  .ai-quota-summary.is-tile .ai-quota-summary__status {
+    font-size: 12px;
+    text-align: left;
+  }
+
+  .ai-quota-summary__values {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .ai-quota-summary__primary-value,
+  .ai-quota-summary__secondary-value {
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    white-space: nowrap;
+  }
+
+  .ai-quota-summary__primary-value small,
+  .ai-quota-summary__secondary-value small {
+    color: var(--desc-color);
+    font-size: 9px;
+    line-height: 1.1;
+  }
+
+  .ai-quota-summary__primary-value strong {
+    color: var(--text-color);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+
+  .ai-quota-summary__secondary-value strong {
+    color: var(--desc-color);
+    font-size: 10px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ai-quota-summary.is-tile :deep(.b-progress__trail) {
+    height: 5px;
+  }
+
+  .ai-quota-summary.is-tile .ai-quota-summary__arrow {
+    position: absolute;
+    top: 8px;
+    right: 7px;
+  }
+
   .ai-quota-summary.is-loading .ai-quota-summary__copy strong,
   .ai-quota-summary.is-unavailable .ai-quota-summary__copy strong {
     color: var(--desc-color);
     font-weight: 500;
+  }
+
+  .ai-quota-summary.is-loading .ai-quota-summary__icon,
+  .ai-quota-summary.is-unavailable .ai-quota-summary__icon {
+    color: var(--desc-color);
+    background: var(--surface-divider-color);
   }
 
   @media (hover: hover) and (pointer: fine) {
@@ -196,10 +306,24 @@
       border-color: transparent;
       background: var(--menu-item-h-bg-color);
     }
+
+    .ai-quota-summary.is-tile.b_btn:hover {
+      border-color: var(--primary-color);
+      background: var(--menu-item-h-bg-color);
+    }
   }
 
   .ai-quota-summary.is-plain.b_btn:focus-visible {
     border-color: var(--primary-color);
     background: var(--menu-item-h-bg-color);
+  }
+
+  .ai-quota-summary.is-tile.b_btn:focus-visible {
+    border-color: var(--primary-color);
+    background: var(--menu-item-h-bg-color);
+  }
+
+  html.light-note-mobile-rendering .ai-quota-summary__icon {
+    box-shadow: none;
   }
 </style>

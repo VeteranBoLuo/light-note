@@ -1,5 +1,11 @@
 <template>
-  <span class="b-tooltip-wrap" @mouseenter="show" @mouseleave="hide" ref="wrapRef">
+  <span
+    ref="wrapRef"
+    class="b-tooltip-wrap"
+    @mouseenter="show"
+    @mouseleave="hide"
+    @click.capture="dismissAfterActivation"
+  >
     <slot />
     <Teleport to="body">
       <div v-show="visible" class="b-tooltip-popup" ref="popupRef" :style="resolvedPopupStyle">
@@ -27,11 +33,19 @@
   const popupStyle = reactive({ top: '0px', left: '0px' });
   const resolvedPopupStyle = computed(() => ({ ...popupStyle, zIndex: props.zIndex ?? 1100 }));
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let suppressedUntilPointerLeaves = false;
+
+  function clearTimer() {
+    if (!timer) return;
+    clearTimeout(timer);
+    timer = null;
+  }
 
   function show() {
-    if (props.disabled || (!props.always && window.innerWidth < 1024)) return;
-    if (timer) clearTimeout(timer);
+    if (suppressedUntilPointerLeaves || props.disabled || (!props.always && window.innerWidth < 1024)) return;
+    clearTimer();
     timer = setTimeout(() => {
+      timer = null;
       visible.value = true;
       // 等待 DOM 更新后计算位置
       requestAnimationFrame(() => {
@@ -59,24 +73,32 @@
     }, props.delay ?? 0);
   }
   function hide() {
-    if (timer) clearTimeout(timer);
+    suppressedUntilPointerLeaves = false;
+    clearTimer();
     timer = setTimeout(() => {
+      timer = null;
       visible.value = false;
     }, 150);
+  }
+
+  function dismissAfterActivation() {
+    suppressedUntilPointerLeaves = true;
+    clearTimer();
+    visible.value = false;
   }
 
   watch(
     () => props.disabled,
     (disabled) => {
       if (!disabled) return;
-      if (timer) clearTimeout(timer);
-      timer = null;
+      clearTimer();
+      suppressedUntilPointerLeaves = false;
       visible.value = false;
     },
   );
 
   onBeforeUnmount(() => {
-    if (timer) clearTimeout(timer);
+    clearTimer();
   });
 </script>
 

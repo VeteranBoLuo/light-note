@@ -52,13 +52,20 @@
             </div>
           </div>
 
-          <AiQuotaSummary
-            class="profile-card__ai-quota"
-            density="comfortable"
-            surface="plain"
-            entry-source="移动个人中心"
-            @open-details="goAiQuotaDetails"
-          />
+          <div class="profile-card__assets" :aria-label="t('personCenter.assetOverview')">
+            <PointsBalanceSummary
+              :points="growthInfo?.points"
+              :loading="growthLoading"
+              entry-source="移动个人中心"
+              @open-details="goPointsDetails"
+            />
+            <AiQuotaSummary
+              density="comfortable"
+              layout="tile"
+              entry-source="移动个人中心"
+              @open-details="goAiQuotaDetails"
+            />
+          </div>
 
           <BButton
             class="profile-card__growth"
@@ -72,10 +79,7 @@
               <span class="profile-card__growth-main">
                 <strong v-if="growthInfo">Lv.{{ growthInfo.level }} {{ growthInfo.name }}</strong>
                 <strong v-else>{{ growthLoading ? t('common.loading') : t('personCenter.growthUnavailable') }}</strong>
-                <span class="profile-card__points">
-                  <SvgIcon :src="icon.growth.coin" size="14" aria-hidden="true" />
-                  {{ (growthInfo?.points || 0).toLocaleString('en-US') }}
-                </span>
+                <span>{{ t('personCenter.growthProgress') }}</span>
               </span>
               <BProgress
                 v-if="growthInfo"
@@ -207,6 +211,7 @@
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
+  import PointsBalanceSummary from '@/components/growth/PointsBalanceSummary.vue';
   import AiQuotaSummary from '@/components/aiSkills/AiQuotaSummary.vue';
   import BProgress from '@/components/base/BasicComponents/BProgress.vue';
   import MobileListSurface from '@/components/mobile/MobileListSurface.vue';
@@ -283,6 +288,10 @@
 
   function goAiQuotaDetails() {
     router.push('/ai-usage');
+  }
+
+  function goPointsDetails() {
+    router.push('/points-usage');
   }
 
   function formatCompactNumber(value: number | string | null | undefined) {
@@ -471,8 +480,11 @@
     border-bottom: 1px solid var(--surface-divider-color);
   }
 
-  .profile-card__ai-quota {
+  .profile-card__assets {
     margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
   }
 
   .profile-card__stat {
@@ -551,8 +563,7 @@
     gap: 7px;
   }
 
-  .profile-card__growth-main,
-  .profile-card__points {
+  .profile-card__growth-main {
     display: flex;
     align-items: center;
   }
@@ -572,12 +583,10 @@
     white-space: nowrap;
   }
 
-  .profile-card__points {
-    flex: 0 0 auto;
-    gap: 4px;
-    color: #b45309;
-    font-size: 12px;
-    font-weight: 700;
+  .profile-card__growth-main > span {
+    color: var(--desc-color);
+    font-size: 11px;
+    white-space: nowrap;
   }
 
   .profile-section {

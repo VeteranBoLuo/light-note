@@ -322,6 +322,49 @@ describe('新用户示例数据接入注册流程', () => {
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
   });
 
+  it('保存普通偏好时在账号行锁内保留公告已读版本', async () => {
+    query
+      .mockResolvedValueOnce([
+        [
+          {
+            preferences: JSON.stringify({
+              theme: 'day',
+              featureAnnouncements: { 'knowledge-workshop': 'knowledge-workshop-v1' },
+            }),
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]);
+    const res = mockRes();
+
+    await saveUserInfo(
+      {
+        user: { id: 'user-1', role: 'user' },
+        body: { id: 'user-1', preferences: JSON.stringify({ theme: 'night' }) },
+      },
+      res,
+    );
+
+    expect(connection.beginTransaction).toHaveBeenCalledTimes(1);
+    expect(query).toHaveBeenNthCalledWith(
+      1,
+      'SELECT preferences FROM user WHERE id = ? AND del_flag = 0 LIMIT 1 FOR UPDATE',
+      ['user-1'],
+    );
+    expect(query).toHaveBeenNthCalledWith(2, 'update user set ? where id=?', [
+      {
+        preferences: JSON.stringify({
+          theme: 'night',
+          featureAnnouncements: { 'knowledge-workshop': 'knowledge-workshop-v1' },
+        }),
+      },
+      'user-1',
+    ]);
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(connection.release).toHaveBeenCalledTimes(1);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+  });
+
   it('GitHub 仅在首次建号时初始化示例数据', async () => {
     let createdUserId = '';
     query.mockImplementation(async (sql, params) => {

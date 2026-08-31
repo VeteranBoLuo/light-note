@@ -30,7 +30,7 @@ describe('grounded skill model', () => {
       messages: [{ role: 'user', content: '整理材料' }],
       sources: [{ id: 'note-1' }],
       coverage: { complete: false },
-      modelPolicy: { maxTokens: 1000, temperature: 0.1 },
+      modelPolicy: { maxTokens: 1000, temperature: 0.1, timeoutMs: 150000 },
       outputPolicy: { targetChars: 2000 },
       trace: { traceId: 'trace', taskType: 'test', stage: 'test' },
     });
@@ -40,6 +40,7 @@ describe('grounded skill model', () => {
       type: 'function',
       function: { name: 'submit_grounded_answer' },
     });
+    expect(requestAi.mock.calls[0][1].timeoutMs).toBe(150000);
   });
 
   it('引用协议缺失时在同一个 execution 内只修复一次', async () => {
@@ -74,6 +75,36 @@ describe('grounded skill model', () => {
       }),
     ).rejects.toMatchObject({ code: 'AI_SKILL_OUTPUT_SOURCE_INVALID' });
     expect(requestAi).toHaveBeenCalledTimes(2);
+  });
+
+  it('固定成果结构不合格时使用平台额度修复一次，不改变 Skill 或来源范围', async () => {
+    requestAi
+      .mockResolvedValueOnce(groundedToolResponse([{ markdown: '普通摘要。', sourceIndexes: [1] }]))
+      .mockResolvedValueOnce(groundedToolResponse([{ markdown: '# 研究简报\n结论与证据。', sourceIndexes: [1] }]));
+    const resultValidator = vi.fn((result) => {
+      if (!String(result?.content || '').includes('# 研究简报')) {
+        throw Object.assign(new Error('成果结构无效'), { code: 'AI_SKILL_OUTPUT_PROFILE_INVALID', status: 502 });
+      }
+      return result;
+    });
+    const result = await callGroundedSkillModel({
+      messages: [{ role: 'user', content: '生成研究简报' }],
+      sources: [{ id: 'note-1' }],
+      coverage: { complete: true },
+      modelPolicy: { maxTokens: 1000, temperature: 0.1 },
+      resultValidator,
+      resultRepairInstruction: '必须补齐结论、证据和待核验项。',
+      trace: { traceId: 'trace', taskType: 'skill_toolbox_research_brief', stage: 'toolbox_profile' },
+    });
+    expect(result.content).toContain('# 研究简报');
+    expect(resultValidator).toHaveBeenCalledTimes(2);
+    expect(requestAi).toHaveBeenCalledTimes(2);
+    expect(requestAi.mock.calls[1][1]).toMatchObject({
+      billingScope: 'platform',
+      repairReasonCode: 'AI_SKILL_OUTPUT_PROFILE_INVALID',
+      trace: { stage: 'toolbox_profile_repair' },
+    });
+    expect(requestAi.mock.calls[1][0].at(-1).content).toContain('必须补齐结论、证据和待核验项');
   });
 
   it('流式调用透传无来源文字变换的正文增量', async () => {

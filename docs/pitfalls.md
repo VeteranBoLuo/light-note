@@ -11,11 +11,11 @@
 
 ## 数据库、事务与 Schema
 
-### LN-PIT-192：多态 `UNION` 必须统一文本投影的字符集
+### LN-PIT-192：跨历史数据域比较必须统一文本字符集与排序规则
 
-**约束：** 书签、笔记、文件等历史异构表做 `UNION ALL` 时，每个分支的 ID、标题和摘要投影都必须显式转成同一 `utf8mb4` 字符集及 MySQL 5.7 可用的排序规则。转换只作用于结果投影，不为修一个读接口批量改线上表，也不退回“分表分页后内存拼接”。
+**约束：** 书签、笔记、文件和后建业务表跨域做 `UNION ALL`、`JOIN` 或列间比较时，必须显式转成同一 `utf8mb4` 字符集及 MySQL 5.7 可用的排序规则；新表同时显式声明项目统一排序规则。查询转换优先作用于投影或非索引一侧，不为修一个读接口批量改线上表，也不退回内存拼接。
 
-**验收：** 在真实异构 Schema 上验证全部类型、单类型、跨类型排序和翻页；遇到 `ER_CANT_AGGREGATE_NCOLLATIONS` 先查 `information_schema.COLUMNS`。
+**验收：** 在真实异构 Schema 上验证跨类型排序、翻页和跨域关联；至少覆盖 `utf8mb4_unicode_ci` 旧表关联 `utf8mb4_general_ci` 新表。遇到 `ER_CANT_AGGREGATE_NCOLLATIONS` 或 `ER_CANT_AGGREGATE_2COLLATIONS` 先查 `information_schema.COLUMNS`。
 
 ### 事务提交、唯一键竞争与旁路副作用
 

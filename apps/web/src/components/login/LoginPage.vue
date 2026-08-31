@@ -84,6 +84,7 @@
   import { clearExtensionAuthReturnPath, resolveExtensionAuthReturnPath } from '@/utils/extensionAuthReturn.ts';
   import { persistAndroidAuthSession } from '@/utils/androidBridge.ts';
   import { isValidEmail } from '@/utils/validator.ts';
+  import { clearAuthNavigationIntent, resolveAuthNavigationIntent } from '@/utils/authNavigationIntent.ts';
   import GithubOAuthConsentModal from './GithubOAuthConsentModal.vue';
 
   type AuthMode = '登录' | '注册' | '重置';
@@ -147,14 +148,18 @@
       localStorage.setItem('preferences', JSON.stringify(user.preferences));
       const extensionReturnPath = resolveExtensionAuthReturnPath();
       const quickSaveReturnPath = resolveQuickSaveAuthReturnPath();
-      const authReturnPath = extensionReturnPath || quickSaveReturnPath;
-      if (authReturnPath) {
-        await router.replace(authReturnPath);
+      const protectedReturnPath = resolveAuthNavigationIntent();
+      const standaloneReturnPath = extensionReturnPath || quickSaveReturnPath;
+      if (standaloneReturnPath) {
+        await router.replace(standaloneReturnPath);
         if (extensionReturnPath) clearExtensionAuthReturnPath();
         clearQuickSaveAuthReturnPath();
+      } else if (protectedReturnPath) {
+        await router.push(protectedReturnPath);
       } else {
         await router.push(getRuntimeApplicationHomePath(user.preferences, bookmark.isMobile));
       }
+      clearAuthNavigationIntent();
       message.success(t('auth.loginSuccess'));
       void setLocale(user.preferences.lang || 'zh-CN');
       bookmark.isShowLogin = false;

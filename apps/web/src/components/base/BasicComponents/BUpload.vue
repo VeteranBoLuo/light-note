@@ -12,9 +12,7 @@
     @keydown.space="onTriggerKeydown"
   >
     <slot name="default">
-      <div
-        class="b-upload-default-card flex-center dom-hover"
-      >
+      <div class="b-upload-default-card flex-center dom-hover">
         <svg-icon size="30" :src="icon.file_upload" />
       </div>
     </slot>
@@ -30,6 +28,7 @@
       type="file"
       :accept="normalizedAccept || undefined"
       :multiple="multiple"
+      :webkitdirectory="directory || undefined"
       tabindex="-1"
       aria-hidden="true"
       @change="handleFileChange"
@@ -67,6 +66,8 @@
       block?: boolean;
       // 业务通过组件 ref.open() 唤起文件选择器时，不渲染默认上传卡片。
       triggerless?: boolean;
+      // 目录批处理（如 Markdown 知识库检查）。仍由 BUpload 统一管理原生文件控件与移动端兼容。
+      directory?: boolean;
     }>(),
     {
       accept: '',
@@ -77,6 +78,7 @@
       ariaLabel: '',
       block: false,
       triggerless: false,
+      directory: false,
     }, // 默认总大小限制为10MB
   );
   const nativeInput = ref<HTMLInputElement | null>(null);

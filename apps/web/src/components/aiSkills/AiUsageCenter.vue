@@ -337,7 +337,7 @@
   const detailVisible = ref(false);
   let requestSequence = 0;
 
-  const moduleKeys = ['all', 'note', 'bookmark', 'file', 'todo', 'search', 'help', 'tag', 'other'];
+  const moduleKeys = ['all', 'note', 'bookmark', 'file', 'todo', 'search', 'help', 'tag', 'toolbox', 'other'];
   const tabOptions = computed(() => [
     { key: 'details', label: t('settings.ai.usage.detailsTab') },
     { key: 'rules', label: t('settings.ai.usage.rulesTab') },
@@ -451,6 +451,7 @@
       search: '搜索',
       help: '帮助',
       tag: '标签',
+      toolbox: '知识工坊',
     };
     return labels[module] || '其他';
   }

@@ -17,7 +17,8 @@ SET title = 'AI 额度、用量明细与加油包',
     sort = 96,
     admin_archived = 0,
     updated_by = NULL
-WHERE id = @ai_quota_id;
+WHERE id = @ai_quota_id
+  AND LOCATE('data-ln-policy:ai-quota-v', COALESCE(content, '')) = 0;
 
 COMMIT;
 

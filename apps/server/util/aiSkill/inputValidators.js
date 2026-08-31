@@ -52,13 +52,14 @@ export function createResourceTaskInputValidator({
   defaultInstruction,
   questionRequired = false,
   instructionRequired = false,
+  maxQuestionLength = 500,
   minTargetLength = 200,
   maxTargetLength = 10_000,
 } = {}) {
   return function validateResourceTaskInput(input) {
     const value = plainObject(input);
     knownKeys(value, ['question', 'instruction', 'title', 'detailLevel', 'targetLength']);
-    const normalizedQuestion = optionalText(value.question, { label: '问题', maxLength: 500 });
+    const normalizedQuestion = optionalText(value.question, { label: '问题', maxLength: maxQuestionLength });
     let instruction = optionalText(value.instruction, {
       label: '要求',
       maxLength: 1000,

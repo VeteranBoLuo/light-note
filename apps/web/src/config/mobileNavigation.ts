@@ -4,7 +4,8 @@
  * 「搜索」不再占底部位置——它已升级为覆盖全部模块的顶栏全局搜索；
  * 腾出的位置给「今日」，也就是每天打开轻笺的第一站。
  */
-export type MobileShellSection = 'today' | 'resources' | 'capture' | 'todo' | 'community' | 'profile';
+export type MobileShellSection = 'today' | 'resources' | 'toolbox' | 'todo' | 'community' | 'profile';
+export type MobileBottomNavigationKey = MobileShellSection | 'capture';
 export type MobileResourcePath = '/home' | '/noteLibrary' | '/cloudSpace' | '/manage/tagMg';
 export type MobileResourceInboxTab = 'all' | 'bookmark' | 'note' | 'file';
 
@@ -16,15 +17,16 @@ export interface MobileResourceNavigationItem {
 }
 
 export interface MobileBottomNavigationItem {
-  key: MobileShellSection;
+  key: MobileBottomNavigationKey;
   labelKey:
     | 'mobileNavigation.today'
     | 'mobileNavigation.resources'
+    | 'mobileNavigation.toolbox'
     | 'mobileNavigation.quickCapture'
     | 'mobileNavigation.todo'
     | 'mobileNavigation.community'
     | 'mobileNavigation.profile';
-  path?: '/workbenches' | '/inbox' | '/community-chat' | '/personCenter';
+  path?: '/workbenches' | '/toolbox' | '/inbox' | '/community-chat' | '/personCenter';
 }
 
 export const MOBILE_RESOURCE_NAVIGATION: readonly MobileResourceNavigationItem[] = [
@@ -54,7 +56,7 @@ export const MOBILE_RESOURCE_NAVIGATION: readonly MobileResourceNavigationItem[]
   },
 ] as const;
 
-// 中间强调位用于确定性的快速收集；模块 AI 只在对应业务页面出现，不再作为全局一级入口。
+// 中间位置承载最高频的“新建”动作；知识工坊降级到新建面板与更多入口，不再冒充一级目的地。
 export const MOBILE_BOTTOM_NAVIGATION: readonly MobileBottomNavigationItem[] = [
   { key: 'today', labelKey: 'mobileNavigation.today', path: '/workbenches' },
   { key: 'resources', labelKey: 'mobileNavigation.resources' },

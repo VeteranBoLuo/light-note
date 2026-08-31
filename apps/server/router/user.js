@@ -101,6 +101,8 @@ router.post('/registerUser', registerLimiter, userHandle.registerUser);
 
 router.post('/saveUserInfo', userHandle.saveUserInfo);
 
+router.post('/feature-announcements/seen', userHandle.markFeatureAnnouncementSeen);
+
 router.get('/deleteUserById', userHandle.deleteUserById);
 
 router.post('/github/authorize', githubOAuthStartLimiter, userHandle.startGithubOAuth);

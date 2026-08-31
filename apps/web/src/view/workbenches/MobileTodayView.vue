@@ -117,6 +117,7 @@
         :bonus="dailyGrowthBonus"
         :read-only="growthReadOnly"
         :show-claim-action="false"
+        @go="handleDailyQuestAction"
       />
     </section>
 
@@ -155,6 +156,7 @@
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
+  import { resolveDailyQuestRoute } from '@/utils/growthNavigation';
 
   interface TodayInboxItem {
     resourceType: 'bookmark' | 'note' | 'file';
@@ -279,11 +281,16 @@
     },
   ]);
 
-  // 今日顶栏：宽全局搜索 + 快速创建 + 通知（通知由共享顶栏按登录态决定）
+  // 今日顶栏的加号打开通用收集器；页面内四个动作才负责预选具体类型。
   useMobileTopBar(['workbenches'], {
-    onAdd: () => runCapture({ type: 'note' }),
+    onAdd: openGenericCapture,
     addLabel: () => t('inbox.quickCapture'),
   });
+
+  function openGenericCapture() {
+    if (blockGuestWrite('today-capture', t('inbox.guestPrompt'))) return;
+    inbox.openQuickCapture();
+  }
 
   function goToTodo(tab: 'todo' | 'all') {
     void router.push({ path: '/inbox', query: { tab } });
@@ -299,6 +306,15 @@
 
   function openGrowthTasks() {
     void router.push({ path: '/growth', hash: '#growth-tasks' });
+  }
+
+  function handleDailyQuestAction(key: string) {
+    const target = resolveDailyQuestRoute(key, true);
+    if (!target) {
+      openGrowthTasks();
+      return;
+    }
+    void router.push(target);
   }
 
   function continueMeta(item: TodayContinueItem) {

@@ -293,6 +293,17 @@ export function hasMermaidBlock(content: string): boolean {
   return /(^|\n)\s*```+\s*mermaid\b/i.test(content || '') || /language-mermaid/.test(content || '');
 }
 
+/** 工具箱等受控入口直接把一段 Mermaid 源码渲染成与笔记一致的安全主题 SVG。 */
+export async function renderMermaidSource(source: string): Promise<string> {
+  const code = String(source || '').trim();
+  if (!code) throw new Error('MERMAID_SOURCE_EMPTY');
+  if (code.length > 100_000) throw new Error('MERMAID_SOURCE_TOO_LARGE');
+  const mermaid = await loadMermaid();
+  renderSeq += 1;
+  const { svg } = await mermaid.render(`lightnote-toolbox-mermaid-${renderSeq}`, code);
+  return prepareSvg(String(svg || ''));
+}
+
 /** 找出还没被渲染过的 mermaid 代码块 */
 function collectPendingBlocks(root: ParentNode): { pre: HTMLElement; code: string }[] {
   const blocks: { pre: HTMLElement; code: string }[] = [];

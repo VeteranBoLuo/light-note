@@ -24,6 +24,7 @@ import inboxRouter from '@/router/modules/inbox.ts';
 import todoCreateRouter from '@/router/modules/todoCreate.ts';
 import coBuildRouter from '@/router/modules/coBuild.ts';
 import communityChatRouter from '@/router/modules/communityChat.ts';
+import toolboxRouter from '@/router/modules/toolbox.ts';
 import { getRuntimeApplicationEntryPath } from '@/utils/appEntry.ts';
 import { resolveLightNoteRuntime, shouldRedirectLandingToApplication } from '@/utils/appRuntime.ts';
 import { isMobileViewport } from '@/config/responsive.ts';
@@ -74,6 +75,7 @@ export const routes: RouteRecordRaw[] = [
       inboxRouter,
       todoCreateRouter,
       communityChatRouter,
+      ...toolboxRouter,
       ...coBuildRouter,
       ...securityCenterRouter,
       notificationsRouter,

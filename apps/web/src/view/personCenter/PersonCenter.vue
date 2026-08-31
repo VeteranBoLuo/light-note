@@ -68,13 +68,20 @@
           </div>
         </div>
 
-        <AiQuotaSummary
-          class="user-ai-quota"
-          surface="plain"
-          :active="menuVisible"
-          entry-source="桌面个人中心"
-          @open-details="goAiQuotaDetails"
-        />
+        <div class="profile-asset-grid" :aria-label="t('personCenter.assetOverview')">
+          <PointsBalanceSummary
+            :points="growthInfo?.points"
+            :loading="growthLoading"
+            entry-source="桌面个人中心"
+            @open-details="goPointsDetails"
+          />
+          <AiQuotaSummary
+            layout="tile"
+            :active="menuVisible"
+            entry-source="桌面个人中心"
+            @open-details="goAiQuotaDetails"
+          />
+        </div>
 
         <div class="settings-grid">
           <b-dropdown
@@ -167,11 +174,7 @@
         </div>
       </div>
     </template>
-    <div
-      class="navigation-icon"
-      :class="{ 'has-frame': equippedFrameId }"
-      style="margin-left: 5px; position: relative"
-    >
+    <div class="navigation-icon" :class="{ 'has-frame': equippedFrameId }" style="margin-left: 5px; position: relative">
       <!-- 外层不裁剪提醒与头像框；普通头像由下方内层单独裁圆。 -->
       <AvatarFramePreview
         v-if="equippedFrameId"
@@ -194,6 +197,7 @@
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
+  import PointsBalanceSummary from '@/components/growth/PointsBalanceSummary.vue';
   import AiQuotaSummary from '@/components/aiSkills/AiQuotaSummary.vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import { useGrowth } from '@/composables/useGrowth.ts';
@@ -228,7 +232,7 @@
   const user = useUserStore();
 
   // 成长徽章:登录用户在头像旁展示当前等级(纯展示,管理成长走「设置」菜单入口)
-  const { growth: growthInfo, load: loadGrowth } = useGrowth();
+  const { growth: growthInfo, loading: growthLoading, load: loadGrowth } = useGrowth();
   const equippedFrameId = computed(() => {
     const id = growthInfo.value?.equippedFrame;
     return frameVariant(id) ? id : null;
@@ -264,6 +268,11 @@
   function goAiQuotaDetails() {
     dismissProfilePopover();
     router.push('/ai-usage');
+  }
+
+  function goPointsDetails() {
+    dismissProfilePopover();
+    router.push('/points-usage');
   }
 
   function getSettingPopupContainer(trigger: HTMLElement) {
@@ -677,8 +686,11 @@
     gap: 8px;
   }
 
-  .user-ai-quota {
+  .profile-asset-grid {
     margin-top: 10px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
   }
 
   .setting-card {

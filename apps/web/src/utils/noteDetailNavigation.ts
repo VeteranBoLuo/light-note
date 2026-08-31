@@ -2,6 +2,12 @@ const NOTE_LIBRARY_ORIGIN = 'https://light-note.local';
 const MAX_RETURN_PATH_DEPTH = 8;
 const WORKBENCH_PATH = '/workbenches';
 
+interface NoteDeletionFallbackInput {
+  currentId: unknown;
+  parentId?: unknown;
+  siblings?: Array<{ id?: unknown }> | null;
+}
+
 function firstQueryValue(value: unknown): string {
   const raw = Array.isArray(value) ? value[0] : value;
   return String(raw ?? '').trim();
@@ -61,4 +67,28 @@ export function resolveNoteLibraryListPath(value: unknown): string {
  */
 export function resolveNoteDetailReturnPath(value: unknown): string {
   return resolveNoteDetailSourcePath(value, true);
+}
+
+/**
+ * 当前笔记被移入回收站后，选择仍然存在且最贴近用户阅读位置的页面。
+ *
+ * 顺序固定为“同级下一篇 -> 同级上一篇 -> 父页面 -> 笔记库”。这里不读取浏览器
+ * 历史，也不沿用工具/工作台来源，避免删除后重新落回已经不存在的详情地址。
+ */
+export function resolveDeletedNoteFallbackId({
+  currentId,
+  parentId,
+  siblings = [],
+}: NoteDeletionFallbackInput): string {
+  const normalizedCurrentId = firstQueryValue(currentId);
+  const normalizedParentId = firstQueryValue(parentId);
+  const normalizedSiblings = (Array.isArray(siblings) ? siblings : [])
+    .map((item) => firstQueryValue(item?.id))
+    .filter(Boolean);
+  const currentIndex = normalizedSiblings.indexOf(normalizedCurrentId);
+
+  if (currentIndex >= 0) {
+    return normalizedSiblings[currentIndex + 1] || normalizedSiblings[currentIndex - 1] || normalizedParentId;
+  }
+  return normalizedSiblings.find((id) => id !== normalizedCurrentId) || normalizedParentId;
 }
