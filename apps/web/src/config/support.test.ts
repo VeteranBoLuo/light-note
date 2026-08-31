@@ -131,7 +131,7 @@ describe('爱发电赞助地址', () => {
 
   it('套餐结算只接受受控 SKU 与版本并打开同源端点', () => {
     const opener = vi.fn();
-    expect(openTrackedSupportPackageCheckout('combo-10', 'support-packages-v2', opener)).toBe(true);
+    expect(openTrackedSupportPackageCheckout('combo-10', 'support-packages-v3', opener)).toBe(true);
     expect(
       openTrackedSupportPackageCheckout(
         '22222222-2222-4222-8222-222222222222',
@@ -141,17 +141,17 @@ describe('爱发电赞助地址', () => {
     ).toBe(true);
     expect(opener).toHaveBeenNthCalledWith(
       1,
-      '/api/support/checkout?skuId=combo-10&catalogVersion=support-packages-v2',
+      '/api/support/checkout?skuId=combo-10&catalogVersion=support-packages-v3',
       '_blank',
       'noopener,noreferrer',
     );
-    expect(openTrackedSupportPackageCheckout('../combo', 'support-packages-v2', opener)).toBe(false);
+    expect(openTrackedSupportPackageCheckout('../combo', 'support-packages-v3', opener)).toBe(false);
     expect(openTrackedSupportPackageCheckout('combo-10', 'https://evil.example', opener)).toBe(false);
 
     opener.mockClear();
-    expect(openTrackedEntitlementCheckout('ai-6', 'support-packages-v2', opener)).toBe(true);
+    expect(openTrackedEntitlementCheckout('ai-6', 'support-packages-v3', opener)).toBe(true);
     expect(opener).toHaveBeenCalledWith(
-      '/api/support/checkout?skuId=ai-6&catalogVersion=support-packages-v2',
+      '/api/support/checkout?skuId=ai-6&catalogVersion=support-packages-v3',
       '_blank',
       'noopener,noreferrer',
     );

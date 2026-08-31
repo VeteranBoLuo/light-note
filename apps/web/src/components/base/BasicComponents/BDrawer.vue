@@ -153,6 +153,7 @@
   const emit = defineEmits<{
     close: [];
     resize: [width: number];
+    afterClose: [];
   }>();
 
   const localVisible = ref(false);
@@ -224,6 +225,18 @@
   }
 
   // 关闭：先播放滑出动画，动画结束后销毁 DOM
+  function finishClose() {
+    if (!closing) return;
+    if (closeTimer !== null) {
+      clearTimeout(closeTimer);
+      closeTimer = null;
+    }
+    if (props.destroyOnClose) localVisible.value = false;
+    else dormant.value = true;
+    closing = false;
+    emit('afterClose');
+  }
+
   function doClose() {
     if (closing) return;
     closing = true;
@@ -239,12 +252,8 @@
       releaseModalLayer(drawerLayer);
       layerAcquired = false;
     }
-    closeTimer = window.setTimeout(() => {
-      closeTimer = null;
-      if (props.destroyOnClose) localVisible.value = false;
-      else dormant.value = true;
-      closing = false;
-    }, 220); // 略长于 CSS transition 时长
+    // transitionend 是正常完成路径；定时器处理系统减少动画、页面切换等不派发事件的情况。
+    closeTimer = window.setTimeout(finishClose, 220); // 略长于 CSS transition 时长
   }
 
   watch(
@@ -475,6 +484,10 @@
 
   function handlePanelTransitionEnd(event: TransitionEvent) {
     if (event.target !== event.currentTarget || event.propertyName !== 'transform') return;
+    if (closing) {
+      finishClose();
+      return;
+    }
     markSettled();
   }
 

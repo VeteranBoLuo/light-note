@@ -8,6 +8,7 @@ const EXACT_ERROR_KEYS: Readonly<Record<string, string>> = Object.freeze({
   TOOLBOX_QUOTE_EXPIRED: 'toolbox.error.quoteExpired',
   TOOLBOX_POINTS_INSUFFICIENT: 'toolbox.error.pointsInsufficient',
   POINTS_INSUFFICIENT: 'toolbox.error.pointsInsufficient',
+  AI_QUOTA_EXCEEDED: 'toolbox.error.aiQuotaInsufficient',
   AI_RATE_LIMITED: 'toolbox.error.temporarilyUnavailable',
   AI_PROVIDER_ERROR: 'toolbox.error.temporarilyUnavailable',
   AI_GATEWAY_TIMEOUT: 'toolbox.error.temporarilyUnavailable',

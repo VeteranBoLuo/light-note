@@ -102,4 +102,44 @@ describe('toolbox billing', () => {
     ).resolves.toEqual({ billingStatus: 'released', actualPoints: 0, refundedPoints: 20, replay: true });
     expect(connection.query).not.toHaveBeenCalled();
   });
+
+  it('settles an AI quota task without reading or writing the points ledger', async () => {
+    const connection = { query: vi.fn().mockResolvedValueOnce([{ affectedRows: 1 }]) };
+    await expect(
+      settleReservedToolboxBilling(
+        connection,
+        {
+          id: 'job-ai-1',
+          billing_medium: 'ai_quota',
+          billing_status: 'quoted',
+          quoted_points: 0,
+          actual_points: 0,
+        },
+        { outcome: 'succeeded' },
+      ),
+    ).resolves.toEqual({ billingStatus: 'settled', actualPoints: 0, refundedPoints: 0, replay: false });
+    expect(connection.query).toHaveBeenCalledOnce();
+    expect(connection.query.mock.calls[0]).toEqual([
+      expect.stringContaining('UPDATE toolbox_jobs'),
+      ['settled', 'job-ai-1'],
+    ]);
+  });
+
+  it('releases an AI quota task that produced no usable result', async () => {
+    const connection = { query: vi.fn().mockResolvedValueOnce([{ affectedRows: 1 }]) };
+    await expect(
+      settleReservedToolboxBilling(
+        connection,
+        {
+          id: 'job-ai-2',
+          billing_medium: 'ai_quota',
+          billing_status: 'quoted',
+          quoted_points: 0,
+          actual_points: 0,
+        },
+        { outcome: 'failed' },
+      ),
+    ).resolves.toEqual({ billingStatus: 'released', actualPoints: 0, refundedPoints: 0, replay: false });
+    expect(connection.query.mock.calls[0][1]).toEqual(['released', 'job-ai-2']);
+  });
 });

@@ -113,6 +113,16 @@ describe('toolbox worker contracts', () => {
     expect(toolboxWorkerInternals.toolboxAttemptRequestId({ id: 'job-1', attempts: 2 })).not.toBe(first);
   });
 
+  it('routes point runs to the platform budget and AI quota runs to the user budget', () => {
+    expect(toolboxWorkerInternals.toolboxAiExecutionOverrides({ billing_medium: 'points' })).toEqual({
+      executionConfigOverrides: { billingPolicy: 'system', systemId: 'toolbox_points' },
+    });
+    expect(toolboxWorkerInternals.toolboxAiExecutionOverrides({ billing_medium: 'ai_quota' })).toEqual({});
+    expect(toolboxWorkerInternals.toolboxAiExecutionOverrides({})).toEqual({
+      executionConfigOverrides: { billingPolicy: 'system', systemId: 'toolbox_points' },
+    });
+  });
+
   it('bounds material-to-note output by detail while allowing asynchronous generation more time', () => {
     expect(toolboxWorkerInternals.toolboxModelPolicy('material_to_note', { detailLevel: 'concise' })).toEqual({
       maxTokens: 2600,

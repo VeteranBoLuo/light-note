@@ -117,6 +117,7 @@
         :bonus="dailyGrowthBonus"
         :read-only="growthReadOnly"
         :show-claim-action="false"
+        @go="handleDailyQuestAction"
       />
     </section>
 
@@ -155,6 +156,7 @@
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
+  import { resolveDailyQuestRoute } from '@/utils/growthNavigation';
 
   interface TodayInboxItem {
     resourceType: 'bookmark' | 'note' | 'file';
@@ -304,6 +306,15 @@
 
   function openGrowthTasks() {
     void router.push({ path: '/growth', hash: '#growth-tasks' });
+  }
+
+  function handleDailyQuestAction(key: string) {
+    const target = resolveDailyQuestRoute(key, true);
+    if (!target) {
+      openGrowthTasks();
+      return;
+    }
+    void router.push(target);
   }
 
   function continueMeta(item: TodayContinueItem) {

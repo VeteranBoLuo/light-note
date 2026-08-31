@@ -50,6 +50,19 @@
           </template>
           <BLoading v-else inline loading :title="t('common.loading')" />
         </div>
+
+        <div class="points-usage-workshop">
+          <span class="points-usage-workshop__icon" aria-hidden="true">
+            <SvgIcon :src="icon.toolbox.home" size="21" />
+          </span>
+          <span class="points-usage-workshop__copy">
+            <strong>{{ t('growth.pointsUsageWorkshopTitle') }}</strong>
+            <small>{{ t('growth.pointsUsageWorkshopDescription') }}</small>
+          </span>
+          <BButton type="primary" size="small" @click="openWorkshop">
+            {{ t('growth.pointsUsageWorkshopAction') }}
+          </BButton>
+        </div>
       </BCard>
 
       <BCard as="section" class="points-ledger-panel" padding="18px 20px" radius="16px">
@@ -129,6 +142,10 @@
 
   function openRewards() {
     void router.push({ path: '/growth', query: { section: 'rewards', reward: 'shop' } });
+  }
+
+  function openWorkshop() {
+    void router.push('/toolbox');
   }
 
   function goBack() {
@@ -260,6 +277,47 @@
     font-variant-numeric: tabular-nums;
   }
 
+  .points-usage-workshop {
+    min-width: 0;
+    margin-top: 12px;
+    padding: 11px 12px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 11px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
+    background: var(--surface-subtle-bg, var(--hover-background));
+  }
+
+  .points-usage-workshop__icon {
+    width: 35px;
+    height: 35px;
+    display: grid;
+    place-items: center;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 28%, var(--surface-border-color));
+    border-radius: 10px;
+    color: var(--primary-color);
+    background: var(--card-background);
+  }
+
+  .points-usage-workshop__copy {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+  }
+
+  .points-usage-workshop__copy strong {
+    color: var(--text-color);
+    font-size: 13px;
+  }
+
+  .points-usage-workshop__copy small {
+    color: var(--desc-color);
+    font-size: 11px;
+    line-height: 1.45;
+  }
+
   .points-overview-state {
     min-height: 92px;
     display: flex;
@@ -315,6 +373,16 @@
     .points-overview-panel__head {
       align-items: center;
     }
+
+    .points-usage-workshop {
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .points-usage-workshop > :deep(.b_btn) {
+      grid-column: 1 / -1;
+      width: 100%;
+      min-height: 40px;
+    }
   }
 
   [data-theme='night'] .points-usage-heading__icon {
@@ -323,7 +391,8 @@
   }
 
   html.light-note-mobile-rendering .points-usage-heading__icon,
-  html.light-note-mobile-rendering .points-overview-state {
+  html.light-note-mobile-rendering .points-overview-state,
+  html.light-note-mobile-rendering .points-usage-workshop__icon {
     box-shadow: none;
   }
 </style>

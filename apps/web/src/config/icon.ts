@@ -377,15 +377,9 @@ export default {
       'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNHB4IiBoZWlnaHQ9IjI0cHgiIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iY3VycmVudENvbG9yIiBkPSJNNS4yIDE0TDkuNyAyaDEuMUw2LjMgMTR6bTUuOS0xaDEuMkwxNiA4bC0zLjctNUgxMWwzLjggNXptLTYuMiAwSDMuN0wwIDhsMy43LTVINUwxLjIgOHoiLz48L3N2Zz4=',
   },
 
-  // 知识工具箱：与外链开发者工具 `tool` 分域，避免两个“工具箱”在导航与业务页误用同一语义。
+  // 知识工坊：与外链开发者工具 `toolkit` 分域，避免产品能力与开发者资源误用同一语义。
   toolbox: {
     home: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M4 7.5h16v11.25A2.25 2.25 0 0 1 17.75 21H6.25A2.25 2.25 0 0 1 4 18.75V7.5Z" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/><path d="M3 4.5h18v3H3v-3ZM8 4.5V3h8v1.5M8.5 12h7M12 9v6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    documentStudio:
-      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M5 2.75h10l4 4v14.5H5V2.75Z" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/><path d="M15 2.75V7h4M8.25 10.25h7.5M8.25 13.75h7.5M8.25 17.25h4.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/><path d="M8 6.25h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
-    presentationStudio:
-      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="3" y="3.5" width="18" height="13" rx="2.25" stroke="currentColor" stroke-width="1.75"/><path d="M8 20.5l4-4l4 4M12 16.5v4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 7.5h5M7 10.5h3.25M15 7.25v5.5l3.5-2.75L15 7.25Z" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    workbookStudio:
-      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="2.75" y="3.25" width="18.5" height="17.5" rx="2.25" stroke="currentColor" stroke-width="1.75"/><path d="M2.75 8h18.5M8 3.25v17.5M14.5 8v12.75M8 14h13.25" stroke="currentColor" stroke-width="1.75"/><path d="M4.5 5.6h1.75" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
     materialNote:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M6 3.25h8l4 4V20.5H6V3.25Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M14 3.25V7.5h4M9 12h6M9 15.5h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="m19.2 12l.65 1.75L21.5 14.4l-1.65.65l-.65 1.75l-.65-1.75l-1.65-.65l1.65-.65l.65-1.75Z" fill="currentColor"/></svg>',
     research:

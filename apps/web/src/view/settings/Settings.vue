@@ -674,8 +674,20 @@
           </div>
         </section>
 
-        <!-- 这段脚注讲的是「右上角头像菜单」，只对桌面成立；移动端目录页有自己的脚注 -->
-        <p v-if="!bookmark.isMobile" class="settings-foot">{{ t('settings.footHint') }}</p>
+        <!-- 低频开发者资源放在设置页脚，不占普通用户的产品导航。 -->
+        <div v-if="!bookmark.isMobile" class="settings-foot">
+          <span>{{ t('settings.footHint') }}</span>
+          <span aria-hidden="true">·</span>
+          <BButton
+            class="settings-developer-link"
+            :aria-label="t('settings.developerToolboxDesc')"
+            @click="openDeveloperToolbox"
+          >
+            <SvgIcon :src="icon.toolkit" size="13" aria-hidden="true" />
+            <span>{{ t('settings.developerToolbox') }}</span>
+            <SvgIcon :src="icon.arrow_right" size="12" aria-hidden="true" />
+          </BButton>
+        </div>
       </div>
     </div>
   </div>
@@ -1025,6 +1037,11 @@
   function openLegalDocument(fileName: AndroidLegalDocument) {
     if (isAndroidApp && postAndroidOpenLegalDocument(fileName)) return;
     window.open(`/legal/${fileName}`, '_blank', 'noopener,noreferrer');
+  }
+
+  function openDeveloperToolbox() {
+    window.open('https://boluo66.top/toolkit/', '_blank', 'noopener,noreferrer');
+    recordOperation(OPERATION_LOG_MAP.navigation.toolkit);
   }
 
   // 快速收藏 bookmarklet:href 用当前站点 origin 动态生成,拖到书签栏后在任意网页点它即可
@@ -1812,9 +1829,33 @@
 
   .settings-foot {
     margin: 2px 0 0;
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
     font-size: 12px;
     color: var(--desc-color);
+  }
+  .settings-developer-link.b_btn {
+    width: auto;
+    height: auto;
+    min-height: 28px;
+    padding: 3px 7px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid transparent !important;
+    border-radius: 7px;
+    color: var(--desc-color);
+    background: transparent !important;
+    font-size: 12px;
+    line-height: 18px;
+  }
+  .settings-developer-link.b_btn:hover,
+  .settings-developer-link.b_btn:focus-visible {
+    border-color: var(--card-border-color) !important;
+    color: var(--primary-color);
+    background: var(--menu-item-h-bg-color) !important;
   }
 
   .qs-bookmarklet {

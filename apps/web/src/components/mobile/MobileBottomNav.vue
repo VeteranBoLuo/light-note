@@ -6,9 +6,12 @@
       class="mobile-bottom-nav__item"
       :class="{
         'mobile-bottom-nav__item--active': isItemActive(item.key) || pendingKey === item.key,
+        'mobile-bottom-nav__item--capture': item.key === 'capture',
       }"
       :aria-current="isItemActive(item.key) ? 'page' : undefined"
       :aria-busy="pendingKey === item.key ? 'true' : undefined"
+      :aria-haspopup="item.key === 'capture' ? 'dialog' : undefined"
+      :aria-expanded="item.key === 'capture' ? createHubOpen : undefined"
       @pointerdown="prefetchItem(item)"
       @focus="prefetchItem(item)"
       @click="activate(item)"
@@ -42,6 +45,12 @@
       <span class="mobile-bottom-nav__label">{{ t(item.labelKey) }}</span>
     </BButton>
   </nav>
+  <MobilePageActionsDrawer
+    v-model:open="createHubOpen"
+    :title="t('mobileNavigation.createHub.title')"
+    :actions="createActions"
+    @action="runCreateAction"
+  />
 </template>
 
 <script setup lang="ts">
@@ -50,13 +59,16 @@
   import { useRoute, useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import icon from '@/config/icon';
   import {
     isMobileResourceInboxTab,
     MOBILE_BOTTOM_NAVIGATION,
+    type MobileBottomNavigationKey,
     type MobileBottomNavigationItem,
     type MobileShellSection,
   } from '@/config/mobileNavigation';
+  import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { getMobileResourceEntryPath, useMobileNavigationState } from '@/composables/useMobileNavigationState';
   import { useCommunityChatUnread } from '@/composables/useCommunityChatUnread';
   import { inboxStore, useUserStore } from '@/store';
@@ -71,6 +83,7 @@
   const communityUnread = useCommunityChatUnread();
   const { totalUnread: communityUnreadTotal } = communityUnread;
   const pendingKey = ref<MobileShellSection | null>(null);
+  const createHubOpen = ref(false);
 
   // 屏幕阅读器听到的是完整语义，而不是一个孤立数字
   const todoAttentionLabel = computed(() =>
@@ -84,12 +97,47 @@
   const bottomIcons = {
     today: icon.common.calendar,
     resources: icon.navigation.portal,
-    toolbox: icon.toolbox.home,
+    capture: icon.common.plus,
     todo: icon.noteDetail.toolbar.todo,
     community: icon.ai.conversations,
   } as const;
 
-  function isItemActive(key: MobileShellSection) {
+  const createActions = computed<MobilePageActionItem[]>(() => [
+    {
+      key: 'note',
+      label: t('mobileNavigation.createHub.note'),
+      description: t('mobileNavigation.createHub.noteDescription'),
+      icon: icon.resource.note,
+    },
+    {
+      key: 'todo',
+      label: t('mobileNavigation.createHub.todo'),
+      description: t('mobileNavigation.createHub.todoDescription'),
+      icon: icon.noteDetail.toolbar.todo,
+    },
+    {
+      key: 'bookmark',
+      label: t('mobileNavigation.createHub.bookmark'),
+      description: t('mobileNavigation.createHub.bookmarkDescription'),
+      icon: icon.resource.bookmark,
+    },
+    {
+      key: 'file',
+      label: t('mobileNavigation.createHub.file'),
+      description: t('mobileNavigation.createHub.fileDescription'),
+      icon: icon.resource.file,
+    },
+    {
+      key: 'toolbox',
+      label: t('mobileNavigation.createHub.toolbox'),
+      description: t('mobileNavigation.createHub.toolboxDescription'),
+      icon: icon.toolbox.home,
+      dividerBefore: true,
+    },
+  ]);
+
+  function isItemActive(key: MobileBottomNavigationKey) {
+    if (key === 'capture') return false;
     if (route.name === 'inbox') {
       // 待整理是资料处理而不是待办：/inbox?tab=all|bookmark|note|file 归「资料」
       return key === (isMobileResourceInboxTab(route.query.tab) ? 'resources' : 'todo');
@@ -116,6 +164,10 @@
 
   async function activate(item: MobileBottomNavigationItem) {
     if (pendingKey.value === item.key) return;
+    if (item.key === 'capture') {
+      createHubOpen.value = true;
+      return;
+    }
     if (item.key === 'resources' && route.meta.mobileShell === 'resources') {
       scrollCurrentResourceToTop();
       return;
@@ -132,6 +184,17 @@
       // Router 会统一处理分包加载失败与刷新自愈；这里消费事件处理器 Promise，避免控制台出现未处理拒绝。
     } finally {
       if (pendingKey.value === item.key) pendingKey.value = null;
+    }
+  }
+
+  function runCreateAction(action: MobilePageActionItem) {
+    if (action.key === 'toolbox') {
+      void router.push('/toolbox');
+      return;
+    }
+    if (blockGuestWrite('inbox-capture', t('inbox.guestPrompt'))) return;
+    if (['note', 'todo', 'bookmark', 'file'].includes(action.key)) {
+      inbox.openQuickCapture(action.key as 'note' | 'todo' | 'bookmark' | 'file');
     }
   }
 
@@ -188,6 +251,26 @@
     background: color-mix(in srgb, var(--primary-color) 8%, transparent) !important;
   }
 
+  .mobile-bottom-nav__item--capture {
+    color: var(--primary-color);
+  }
+
+  .mobile-bottom-nav__item--capture .mobile-bottom-nav__icon {
+    width: 38px;
+    min-height: 38px;
+    margin-top: -8px;
+    border: 1px solid var(--primary-color);
+    border-radius: 13px;
+    color: #fff;
+    background: var(--primary-color);
+    box-shadow: 0 8px 20px -12px var(--primary-color);
+  }
+
+  .mobile-bottom-nav__item--capture .mobile-bottom-nav__label {
+    margin-top: -5px;
+    color: var(--primary-color);
+  }
+
   .mobile-bottom-nav__icon {
     position: relative;
     min-height: 25px;
@@ -232,5 +315,11 @@
     .mobile-bottom-nav__item {
       transition: none;
     }
+  }
+
+  :global(html.light-note-mobile-rendering .mobile-bottom-nav__item--capture .mobile-bottom-nav__icon) {
+    border-color: var(--primary-color);
+    background: var(--primary-color);
+    box-shadow: none;
   }
 </style>

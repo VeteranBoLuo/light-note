@@ -11,6 +11,8 @@ describe('积分资产入口与明细页契约', () => {
   const desktopProfileSource = readSource('src/view/personCenter/PersonCenter.vue');
   const mobileProfileSource = readSource('src/view/personCenter/PersonCenterMobile.vue');
   const usagePageSource = readSource('src/view/pointsUsage/PointsUsagePage.vue');
+  const zhLocaleSource = readSource('src/i18n/locales/zh-CN.ts');
+  const enLocaleSource = readSource('src/i18n/locales/en-US.ts');
 
   it('桌面和移动个人中心都把积分与 AI 额度并列为可进入的资产卡', () => {
     for (const profileSource of [desktopProfileSource, mobileProfileSource]) {
@@ -44,7 +46,7 @@ describe('积分资产入口与明细页契约', () => {
     expect(balanceSource).not.toContain('<button');
   });
 
-  it('独立页面同时提供余额概览、可筛选账本和预扣结算说明', () => {
+  it('独立页面同时提供余额概览、知识工坊入口、可筛选账本和预扣结算说明', () => {
     expect(usagePageSource).toContain('growthApi.getPointsSummary()');
     expect(usagePageSource).toContain('<PointsLedger');
     expect(usagePageSource).toContain('summary.value?.week?.spent');
@@ -53,8 +55,19 @@ describe('积分资产入口与明细页契约', () => {
     expect(usagePageSource).toContain(
       "router.push({ path: '/growth', query: { section: 'rewards', reward: 'shop' } })",
     );
+    expect(usagePageSource).toContain("router.push('/toolbox')");
+    expect(usagePageSource).toContain('icon.toolbox.home');
+    expect(usagePageSource).toContain("t('growth.pointsUsageWorkshopAction')");
     expect(usagePageSource).toContain('<BCard');
     expect(usagePageSource).toContain('<BLoading');
+  });
+
+  it('知识工坊入口明确纯 AI 工具每次只选择一种结算介质', () => {
+    expect(zhLocaleSource).toContain('纯 AI 工具可在执行前选择积分或 AI 额度');
+    expect(zhLocaleSource).toContain('选择积分时本次只扣积分');
+    expect(zhLocaleSource).not.toContain('前往知识工坊处理资料；每次执行只扣积分');
+    expect(enLocaleSource).toContain('AI tools let you choose points or AI quota before each run');
+    expect(enLocaleSource).not.toContain('Open Knowledge Workshop to process materials. Each run uses points only');
   });
 
   it('积分流水优先读取接口当前的 camelCase 时间字段，并兼容历史 snake_case', () => {

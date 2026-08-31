@@ -14,6 +14,7 @@ cd "$(dirname "$0")/.."
 
 echo "🏗  构建前端(增量)…"
 pnpm --filter web build
+PDF_WORKER_RELATIVE="$(node apps/web/scripts/verify-pdf-worker-artifact.mjs --print-path)"
 
 echo "📦  打包 dist…"
 # COPYFILE_DISABLE=1:阻止 macOS tar 往包里塞 ._* AppleDouble 元数据文件(服务器上是纯垃圾)
@@ -32,3 +33,12 @@ else
   echo "⚠️  前端健康检查 HTTP $code —— 已停止总发布流程，请核对 Nginx 与当前 dist"
   exit 1
 fi
+
+pdf_worker_url="https://boluo66.top/$PDF_WORKER_RELATIVE"
+pdf_worker_response="$(curl -sS -o /dev/null -w '%{http_code} %{content_type}' -m 20 "$pdf_worker_url" || true)"
+read -r pdf_worker_code pdf_worker_content_type <<< "$pdf_worker_response"
+if [[ "$pdf_worker_code" != "200" || ! "$pdf_worker_content_type" =~ ^(application|text)/javascript ]]; then
+  echo "❌  PDF Worker 响应异常：HTTP ${pdf_worker_code:-000}，Content-Type ${pdf_worker_content_type:-缺失}" >&2
+  exit 1
+fi
+echo "✅  PDF Worker 响应检查通过：$pdf_worker_content_type"

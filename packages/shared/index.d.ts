@@ -32,6 +32,28 @@ export declare const SITE_COMPLIANCE: {
   readonly publicSecurityBadgePath: '/public-security-filing-badge.png';
 };
 
+export interface FeatureAnnouncementDefinition {
+  readonly id: string;
+  readonly version: string;
+  readonly publishedAt: string;
+  readonly expiresAt: string;
+}
+
+/** 功能上新提示的版本与绝对展示窗口唯一事实源。 */
+export declare const FEATURE_ANNOUNCEMENTS: {
+  readonly KNOWLEDGE_WORKSHOP: {
+    readonly id: 'knowledge-workshop';
+    readonly version: 'knowledge-workshop-v1';
+    readonly publishedAt: '2026-08-31T00:00:00.000+08:00';
+    readonly expiresAt: '2026-09-15T00:00:00.000+08:00';
+  };
+};
+export declare function getFeatureAnnouncement(announcementId?: unknown): FeatureAnnouncementDefinition | null;
+export declare function isFeatureAnnouncementActive(
+  announcement: FeatureAnnouncementDefinition | null | undefined,
+  now?: number | Date,
+): boolean;
+
 export type AfdianCheckoutOptionKey =
   'coffee' | 'server' | 'companion' | 'custom';
 
@@ -69,6 +91,7 @@ export declare const AFDIAN_ORDER_PURPOSE: {
 export declare const AFDIAN_CHECKOUT_OPTIONS: readonly AfdianCheckoutOptionDefinition[];
 
 export type SupportPackageCategory = 'ai' | 'storage' | 'combo';
+export type SupportFirstPurchaseScope = 'ai_account' | 'sku';
 
 export interface SupportPackageEntitlement {
   readonly aiTokens: number;
@@ -78,6 +101,7 @@ export interface SupportPackageEntitlement {
 export interface SupportPackageDefinition {
   readonly skuId: string;
   readonly category: SupportPackageCategory;
+  readonly firstPurchaseScope: SupportFirstPurchaseScope;
   readonly amount: number;
   readonly base: SupportPackageEntitlement;
   readonly firstPurchase: SupportPackageEntitlement;
@@ -85,8 +109,8 @@ export interface SupportPackageDefinition {
 }
 
 /** 已发布的爱发电常驻套餐目录版本。 */
-export declare const SUPPORT_PACKAGE_CATALOG_VERSION: 'support-packages-v2';
-/** 常驻套餐的价格、基础权益和每 SKU 首充权益唯一事实源。 */
+export declare const SUPPORT_PACKAGE_CATALOG_VERSION: 'support-packages-v3';
+/** 常驻套餐的价格、基础权益和首购范围唯一事实源。 */
 export declare const SUPPORT_PACKAGE_CATALOG: readonly SupportPackageDefinition[];
 
 export type FilePreviewStrategy = 'archive_manifest' | 'converted_pdf';

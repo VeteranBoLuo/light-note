@@ -1,4 +1,5 @@
 import { safeDownloadBaseName } from '@/utils/toolboxLocal';
+import { loadPdfJsRuntime } from '@/utils/pdfJsRuntime';
 
 export const PDF_TO_IMAGES_MAX_FILES = 4;
 export const PDF_TO_IMAGES_MAX_BYTES = 80 * 1024 * 1024;
@@ -34,20 +35,7 @@ export class PdfToImagesError extends Error {
   }
 }
 
-let pdfRuntimePromise: Promise<typeof import('pdfjs-dist/legacy/build/pdf.mjs')> | null = null;
-
-export async function loadPdfRuntime() {
-  if (!pdfRuntimePromise) {
-    pdfRuntimePromise = Promise.all([
-      import('pdfjs-dist/legacy/build/pdf.mjs'),
-      import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'),
-    ]).then(([pdfjs, workerModule]) => {
-      pdfjs.GlobalWorkerOptions.workerSrc = workerModule.default;
-      return pdfjs;
-    });
-  }
-  return pdfRuntimePromise;
-}
+export const loadPdfRuntime = loadPdfJsRuntime;
 
 export function validatePdfToImageFiles(files: File[]) {
   if (

@@ -44,10 +44,6 @@
     "./toolbox-protocol": {
       "types": "./toolboxProtocol.d.ts",
       "default": "./toolboxProtocol.js"
-    },
-    "./production-project-protocol": {
-      "types": "./productionProjectProtocol.d.ts",
-      "default": "./productionProjectProtocol.js"
     }
   },
   "devDependencies": {

@@ -21,7 +21,7 @@ describe('权益商店开发环境只读目录', () => {
     const preview = createLocalSupportCatalogPreview();
 
     expect(preview).toMatchObject({
-      catalogVersion: 'support-packages-v2',
+      catalogVersion: 'support-packages-v3',
       catalogEnabled: true,
       checkoutEnabled: false,
       grantEnabled: false,
@@ -51,7 +51,7 @@ describe('权益商店开发环境只读目录', () => {
     mocks.apiBaseGet.mockResolvedValueOnce({
       status: 200,
       data: {
-        catalogVersion: 'support-packages-v2',
+        catalogVersion: 'support-packages-v3',
         catalogEnabled: false,
         checkoutEnabled: false,
         grantEnabled: false,
@@ -74,7 +74,7 @@ describe('权益商店开发环境只读目录', () => {
     mocks.apiBaseGet.mockResolvedValueOnce({
       status: 200,
       data: {
-        catalogVersion: 'support-packages-v2',
+        catalogVersion: 'support-packages-v3',
         catalogEnabled: false,
         checkoutEnabled: false,
         grantEnabled: false,

@@ -97,18 +97,6 @@
           >
 
           <BButton
-            id="nav-toolbox-entry"
-            class="navigation-pill-entry navigation-toolbox-entry"
-            :class="{ 'is-active': route.path.startsWith('/toolbox') }"
-            :aria-current="route.path.startsWith('/toolbox') ? 'page' : undefined"
-            v-click-log="{ module: '导航栏', operation: '打开知识工具箱' }"
-            @click="router.push('/toolbox')"
-          >
-            <SvgIcon class="navigation-pill-entry__icon" :src="icon.toolbox.home" size="16" aria-hidden="true" />
-            <span>{{ $t('navigation.toolbox') }}</span>
-          </BButton>
-
-          <BButton
             id="nav-community-entry"
             class="navigation-pill-entry navigation-community-entry"
             :class="{ 'is-active': route.path.includes('/community-chat') }"

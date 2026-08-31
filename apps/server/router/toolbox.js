@@ -7,18 +7,6 @@ const router = express.Router();
 router.get('/catalog', toolboxHandle.getCatalog);
 router.get('/home', localProcessingRateLimiter, toolboxHandle.getHome);
 router.get('/knowledge-overview', localProcessingRateLimiter, toolboxHandle.getKnowledgeOverview);
-router.get('/projects', localProcessingRateLimiter, toolboxHandle.listProjects);
-router.post('/projects', localProcessingRateLimiter, toolboxHandle.createProject);
-router.get('/projects/:projectId', localProcessingRateLimiter, toolboxHandle.getProject);
-router.patch('/projects/:projectId', localProcessingRateLimiter, toolboxHandle.updateProject);
-router.post('/projects/:projectId/open', localProcessingRateLimiter, toolboxHandle.openProject);
-router.get('/projects/:projectId/revisions', localProcessingRateLimiter, toolboxHandle.listProjectRevisions);
-router.post('/projects/:projectId/revisions', localProcessingRateLimiter, toolboxHandle.createProjectRevision);
-router.post(
-  '/projects/:projectId/revisions/:revisionNo/restore',
-  localProcessingRateLimiter,
-  toolboxHandle.restoreProjectRevision,
-);
 router.get('/workspaces', localProcessingRateLimiter, toolboxHandle.listWorkspaces);
 router.post('/workspaces', localProcessingRateLimiter, toolboxHandle.createWorkspace);
 router.get('/workspaces/:workspaceId', localProcessingRateLimiter, toolboxHandle.getWorkspace);

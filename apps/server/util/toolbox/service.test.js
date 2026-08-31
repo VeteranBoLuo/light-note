@@ -118,14 +118,20 @@ describe('toolbox service boundaries', () => {
       userId: 'user-1',
       toolId: 'research_brief',
       rawInput: { resourceRefs: [{ type: 'note', id: 'note-1' }] },
+      billingMedium: 'points',
       clientRequestId: 'quote-request-1234',
       database,
     };
 
     const quote = await createToolboxQuote(request);
-    expect(quote).toMatchObject({ toolId: 'research_brief', quotedPoints: 20, status: 'active' });
+    expect(quote).toMatchObject({
+      toolId: 'research_brief',
+      billingMedium: 'points',
+      quotedPoints: 20,
+      status: 'active',
+    });
     const inserted = database.query.mock.calls[1][1];
-    expect(JSON.parse(inserted[6])).toEqual({
+    expect(JSON.parse(inserted[7])).toEqual({
       resourceRefs: [authoritative],
       sourceIds: [],
       options: {},
@@ -138,9 +144,10 @@ describe('toolbox service boundaries', () => {
             id: quote.id,
             request_id: request.clientRequestId,
             tool_id: request.toolId,
-            pricing_version: 'toolbox-points-v1',
-            input_digest: inserted[5],
-            input_snapshot_json: inserted[6],
+            pricing_version: inserted[4],
+            billing_medium: inserted[5],
+            input_digest: inserted[6],
+            input_snapshot_json: inserted[7],
             quoted_points: 20,
             status: 'active',
             expires_at: quote.expiresAt,
@@ -171,12 +178,14 @@ describe('toolbox service boundaries', () => {
           detailLevel: 'detailed',
         },
       },
+      billingMedium: 'points',
       clientRequestId: 'prompt-quote-1234',
       database,
     });
 
     expect(quote).toMatchObject({
       toolId: 'idea_to_draft',
+      billingMedium: 'points',
       quotedPoints: 28,
       status: 'active',
       inputSummary: { itemCount: 0, resourceCount: 0, uploadCount: 0 },
@@ -185,7 +194,7 @@ describe('toolbox service boundaries', () => {
       expect.objectContaining({ userId: 'user-1', resourceRefs: [] }),
     );
     const inserted = database.query.mock.calls[1][1];
-    expect(JSON.parse(inserted[6])).toEqual({
+    expect(JSON.parse(inserted[7])).toEqual({
       resourceRefs: [],
       sourceIds: [],
       options: {
@@ -194,6 +203,65 @@ describe('toolbox service boundaries', () => {
         detailLevel: 'detailed',
       },
     });
+  });
+
+  it('quotes an AI skill with user AI quota without reserving points', async () => {
+    const authoritative = { type: 'note', id: 'note-1', version: 'version-1' };
+    mocks.resolvePersonalKnowledgeResourceVersions.mockResolvedValue([authoritative]);
+    const database = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[]])
+        .mockResolvedValueOnce([{ affectedRows: 1 }]),
+    };
+
+    const quote = await createToolboxQuote({
+      userId: 'user-1',
+      toolId: 'research_brief',
+      rawInput: { resourceRefs: [{ type: 'note', id: 'note-1' }] },
+      billingMedium: 'ai_quota',
+      clientRequestId: 'quota-quote-1234',
+      database,
+    });
+
+    expect(quote).toMatchObject({ billingMedium: 'ai_quota', quotedPoints: 0, status: 'active' });
+    expect(database.query.mock.calls[1][1][5]).toBe('ai_quota');
+    expect(database.query.mock.calls[1][1][8]).toBe(0);
+  });
+
+  it('does not let an idempotency key switch from points to AI quota', async () => {
+    const authoritative = { type: 'note', id: 'note-1', version: 'version-1' };
+    const snapshot = { resourceRefs: [authoritative], sourceIds: [], options: {} };
+    mocks.resolvePersonalKnowledgeResourceVersions.mockResolvedValue([authoritative]);
+    const database = {
+      query: vi.fn().mockResolvedValueOnce([
+        [
+          {
+            id: 'quote-existing',
+            request_id: 'medium-quote-1234',
+            tool_id: 'research_brief',
+            pricing_version: 'toolbox-billing-v2',
+            billing_medium: 'points',
+            input_digest: toolboxInputDigest({ toolId: 'research_brief', input: snapshot }),
+            input_snapshot_json: JSON.stringify(snapshot),
+            quoted_points: 20,
+            status: 'active',
+            expires_at: new Date(Date.now() + 60_000),
+          },
+        ],
+      ]),
+    };
+
+    await expect(
+      createToolboxQuote({
+        userId: 'user-1',
+        toolId: 'research_brief',
+        rawInput: { resourceRefs: [{ type: 'note', id: 'note-1' }] },
+        billingMedium: 'ai_quota',
+        clientRequestId: 'medium-quote-1234',
+        database,
+      }),
+    ).rejects.toMatchObject({ code: 'TOOLBOX_IDEMPOTENCY_KEY_REUSED', status: 409 });
   });
 
   it('creates the job, points reservation and immutable input rows in one transaction', async () => {
@@ -206,7 +274,8 @@ describe('toolbox service boundaries', () => {
       id: 'quote-1',
       user_id: 'user-1',
       tool_id: 'research_brief',
-      pricing_version: 'toolbox-points-v1',
+      pricing_version: 'toolbox-billing-v2',
+      billing_medium: 'points',
       input_digest: toolboxInputDigest({ toolId: 'research_brief', input: snapshot }),
       input_snapshot_json: JSON.stringify(snapshot),
       quoted_points: 20,
@@ -252,6 +321,58 @@ describe('toolbox service boundaries', () => {
     expect(connection.query.mock.calls[7][0]).toContain('INSERT INTO toolbox_jobs');
     expect(connection.query.mock.calls[8][0]).toContain('INSERT INTO toolbox_job_inputs');
     expect(connection.query.mock.calls[9][0]).toContain("status = 'consumed'");
+  });
+
+  it('creates an AI quota job without touching the points economy', async () => {
+    const snapshot = {
+      resourceRefs: [{ type: 'note', id: 'note-1', version: 'version-1' }],
+      sourceIds: [],
+      options: { detailLevel: 'balanced' },
+    };
+    const quote = {
+      id: 'quote-quota-1',
+      user_id: 'user-1',
+      tool_id: 'research_brief',
+      pricing_version: 'toolbox-billing-v2',
+      billing_medium: 'ai_quota',
+      input_digest: toolboxInputDigest({ toolId: 'research_brief', input: snapshot }),
+      input_snapshot_json: JSON.stringify(snapshot),
+      quoted_points: 0,
+      status: 'active',
+      expires_at: new Date(Date.now() + 60_000),
+    };
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[]])
+        .mockResolvedValueOnce([[quote]])
+        .mockResolvedValueOnce([{ affectedRows: 1 }])
+        .mockResolvedValueOnce([{ affectedRows: 1 }])
+        .mockResolvedValueOnce([{ affectedRows: 1 }]),
+    };
+    const database = { getConnection: vi.fn().mockResolvedValue(connection) };
+
+    await expect(
+      createToolboxJob({
+        userId: 'user-1',
+        quoteId: quote.id,
+        clientRequestId: 'quota-job-request-1234',
+        database,
+      }),
+    ).resolves.toMatchObject({
+      billing: { medium: 'ai_quota', status: 'quoted', quotedPoints: 0 },
+      status: 'queued',
+    });
+    const sql = connection.query.mock.calls.map(([statement]) => statement).join('\n');
+    expect(sql).not.toContain('user_growth');
+    expect(sql).not.toContain('points_economy_operations');
+    expect(connection.query.mock.calls[2][0]).toContain('INSERT INTO toolbox_jobs');
+    expect(connection.query.mock.calls[3][0]).toContain('INSERT INTO toolbox_job_inputs');
+    expect(connection.query.mock.calls[4][0]).toContain("status = 'consumed'");
   });
 
   it('hides expired artifacts from task summaries before the hourly cleanup runs', () => {
@@ -436,6 +557,18 @@ describe('toolbox service boundaries', () => {
       toolboxServiceInternals.formatJobError({
         status: 'failed',
         stage: 'failed',
+        billing_medium: 'ai_quota',
+        error_code: 'AI_QUOTA_EXCEEDED',
+        error_message: '工具任务处理失败',
+      }),
+    ).toEqual({
+      code: 'AI_QUOTA_EXCEEDED',
+      message: '多次尝试后仍未完成，未产生可用成果的 AI 额度已按规则释放；请稍后重新发起。',
+    });
+    expect(
+      toolboxServiceInternals.formatJobError({
+        status: 'failed',
+        stage: 'failed',
         error_code: 'AI_SKILL_SCOPE_STALE',
         error_message: '部分材料在报价后已更新，请重新发起任务',
       }),
@@ -486,7 +619,12 @@ describe('toolbox service boundaries', () => {
       },
     });
     expect(database.query.mock.calls[0][0]).toContain('LEFT JOIN note saved_note');
-    expect(database.query.mock.calls[0][0]).toContain('saved_note.create_by = artifact.user_id');
+    expect(database.query.mock.calls[0][0]).toContain(
+      'saved_note.id = CONVERT(receipt.target_id USING utf8mb4) COLLATE utf8mb4_unicode_ci',
+    );
+    expect(database.query.mock.calls[0][0]).toContain(
+      'saved_note.create_by = CONVERT(artifact.user_id USING utf8mb4) COLLATE utf8mb4_unicode_ci',
+    );
   });
 
   it('does not start a second note save while the same artifact save lease is active', async () => {

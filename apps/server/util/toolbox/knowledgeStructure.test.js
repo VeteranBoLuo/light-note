@@ -59,6 +59,8 @@ describe('toolbox knowledge structure', () => {
     });
     expect(result.nodes.find((node) => node.id === 'a')).toMatchObject({ depth: 2, path: '开发文档 / 部署' });
     expect(result.issues.some((item) => item.kind === 'invalid_parent' && item.noteId === 'orphan')).toBe(true);
+    expect(result.issues.some((item) => item.kind === 'unlinked')).toBe(false);
+    expect(result.recommendations.some((item) => item.code === 'build_links')).toBe(false);
     expect(result.recommendations.map((item) => item.code)).toContain('resolve_duplicates');
   });
 

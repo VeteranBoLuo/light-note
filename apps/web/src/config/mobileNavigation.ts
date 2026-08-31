@@ -5,6 +5,7 @@
  * 腾出的位置给「今日」，也就是每天打开轻笺的第一站。
  */
 export type MobileShellSection = 'today' | 'resources' | 'toolbox' | 'todo' | 'community' | 'profile';
+export type MobileBottomNavigationKey = MobileShellSection | 'capture';
 export type MobileResourcePath = '/home' | '/noteLibrary' | '/cloudSpace' | '/manage/tagMg';
 export type MobileResourceInboxTab = 'all' | 'bookmark' | 'note' | 'file';
 
@@ -16,11 +17,12 @@ export interface MobileResourceNavigationItem {
 }
 
 export interface MobileBottomNavigationItem {
-  key: MobileShellSection;
+  key: MobileBottomNavigationKey;
   labelKey:
     | 'mobileNavigation.today'
     | 'mobileNavigation.resources'
     | 'mobileNavigation.toolbox'
+    | 'mobileNavigation.quickCapture'
     | 'mobileNavigation.todo'
     | 'mobileNavigation.community'
     | 'mobileNavigation.profile';
@@ -54,11 +56,11 @@ export const MOBILE_RESOURCE_NAVIGATION: readonly MobileResourceNavigationItem[]
   },
 ] as const;
 
-// 今日顶栏已有通用快速收集，中间一级入口留给能持续生产知识的工具箱。
+// 中间位置承载最高频的“新建”动作；知识工坊降级到新建面板与更多入口，不再冒充一级目的地。
 export const MOBILE_BOTTOM_NAVIGATION: readonly MobileBottomNavigationItem[] = [
   { key: 'today', labelKey: 'mobileNavigation.today', path: '/workbenches' },
   { key: 'resources', labelKey: 'mobileNavigation.resources' },
-  { key: 'toolbox', labelKey: 'mobileNavigation.toolbox', path: '/toolbox' },
+  { key: 'capture', labelKey: 'mobileNavigation.quickCapture' },
   { key: 'todo', labelKey: 'mobileNavigation.todo', path: '/inbox' },
   { key: 'community', labelKey: 'mobileNavigation.community', path: '/community-chat' },
 ] as const;

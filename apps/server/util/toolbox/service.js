@@ -6,11 +6,12 @@ import { createTemporaryDocumentSource } from '../aiDocument/service.js';
 import { validateDocumentDescriptor } from '../aiDocument/parser.js';
 import { resolvePersonalKnowledgeResourceVersions } from '../personalKnowledgeSearch.js';
 import { createNote } from '../services/noteService.js';
-import { reserveToolboxPoints, settleReservedToolboxBilling } from './billing.js';
+import { reserveToolboxPoints, settleToolboxBilling } from './billing.js';
 import {
   getDisabledToolIds,
   getPublicToolboxCatalog,
   normalizeToolboxInput,
+  normalizeToolboxBillingMedium,
   normalizeToolboxRequestId,
   quoteToolboxPoints,
   TOOLBOX_QUOTE_TTL_MS,
@@ -61,7 +62,7 @@ function formatQuote(row) {
     id: row.id,
     toolId: row.tool_id,
     pricingVersion: row.pricing_version,
-    billingMedium: 'points',
+    billingMedium: String(row.billing_medium || 'points'),
     quotedPoints: Number(row.quoted_points || 0),
     status: row.status,
     expiresAt: row.expires_at,
@@ -87,7 +88,13 @@ function formatJobError(row) {
     row.status === 'failed' &&
     (!storedMessage || /工具任务(?:处理失败|遇到临时问题)|系统将自动重试/u.test(storedMessage))
   ) {
-    return { code, message: '多次尝试后仍未完成，预占积分已退回；请稍后重新发起。' };
+    return {
+      code,
+      message:
+        String(row.billing_medium || 'points') === 'ai_quota'
+          ? '多次尝试后仍未完成，未产生可用成果的 AI 额度已按规则释放；请稍后重新发起。'
+          : '多次尝试后仍未完成，预占积分已退回；请稍后重新发起。',
+    };
   }
   return { code, message: storedMessage || '任务处理失败' };
 }
@@ -117,7 +124,7 @@ function formatJob(row, { includeArtifactSummary = true } = {}) {
     status: row.status,
     stage: row.stage,
     billing: {
-      medium: 'points',
+      medium: String(row.billing_medium || 'points'),
       status: billingStatus,
       quotedPoints: Number(row.quoted_points || 0),
       actualPoints: Number(row.actual_points || 0),
@@ -252,14 +259,22 @@ export function getToolboxCatalog() {
   return getPublicToolboxCatalog({ disabledToolIds: getDisabledToolIds() });
 }
 
-export async function createToolboxQuote({ userId, toolId, rawInput, clientRequestId, database = pool }) {
+export async function createToolboxQuote({
+  userId,
+  toolId,
+  rawInput,
+  billingMedium,
+  clientRequestId,
+  database = pool,
+}) {
   const definition = assertToolAvailable(toolId);
-  if (definition.billingMedium !== 'points') {
+  if (definition.billingMedium === 'free') {
     throw toolboxError('TOOLBOX_QUOTE_NOT_REQUIRED', '该工具免费在浏览器本地运行，无需报价');
   }
+  const normalizedBillingMedium = normalizeToolboxBillingMedium(toolId, billingMedium);
   const requestId = normalizeToolboxRequestId(clientRequestId, '报价请求标识');
   const resolved = await resolveOwnedToolboxInput({ userId, toolId, rawInput, database });
-  const quotedPoints = quoteToolboxPoints(toolId, resolved);
+  const quotedPoints = normalizedBillingMedium === 'points' ? quoteToolboxPoints(toolId, resolved) : 0;
 
   const [existingRows] = await database.query(
     `SELECT * FROM toolbox_quotes WHERE user_id = ? AND request_id = ? LIMIT 1`,
@@ -267,7 +282,11 @@ export async function createToolboxQuote({ userId, toolId, rawInput, clientReque
   );
   if (existingRows.length) {
     const existing = existingRows[0];
-    if (existing.tool_id !== toolId || existing.input_digest !== resolved.inputDigest) {
+    if (
+      existing.tool_id !== toolId ||
+      existing.input_digest !== resolved.inputDigest ||
+      String(existing.billing_medium || 'points') !== normalizedBillingMedium
+    ) {
       throw toolboxError('TOOLBOX_IDEMPOTENCY_KEY_REUSED', '该报价标识已用于其他输入，请刷新后重试', 409);
     }
     return formatQuote(existing);
@@ -278,15 +297,16 @@ export async function createToolboxQuote({ userId, toolId, rawInput, clientReque
   try {
     await database.query(
       `INSERT INTO toolbox_quotes
-        (id, user_id, request_id, tool_id, pricing_version, input_digest, input_snapshot_json,
+        (id, user_id, request_id, tool_id, pricing_version, billing_medium, input_digest, input_snapshot_json,
          quoted_points, status, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`,
       [
         id,
         userId,
         requestId,
         toolId,
         TOOLBOX_PRICING_VERSION,
+        normalizedBillingMedium,
         resolved.inputDigest,
         JSON.stringify(resolved.snapshot),
         quotedPoints,
@@ -300,7 +320,12 @@ export async function createToolboxQuote({ userId, toolId, rawInput, clientReque
       [userId, requestId],
     );
     const raced = racedRows[0];
-    if (!raced || raced.tool_id !== toolId || raced.input_digest !== resolved.inputDigest) {
+    if (
+      !raced ||
+      raced.tool_id !== toolId ||
+      raced.input_digest !== resolved.inputDigest ||
+      String(raced.billing_medium || 'points') !== normalizedBillingMedium
+    ) {
       throw toolboxError('TOOLBOX_IDEMPOTENCY_KEY_REUSED', '该报价标识已用于其他输入，请刷新后重试', 409);
     }
     return formatQuote(raced);
@@ -309,6 +334,7 @@ export async function createToolboxQuote({ userId, toolId, rawInput, clientReque
     id,
     tool_id: toolId,
     pricing_version: TOOLBOX_PRICING_VERSION,
+    billing_medium: normalizedBillingMedium,
     input_digest: resolved.inputDigest,
     input_snapshot_json: resolved.snapshot,
     quoted_points: quotedPoints,
@@ -360,7 +386,7 @@ export async function createToolboxJob({ userId, quoteId, clientRequestId, datab
     if (!quote) throw toolboxError('TOOLBOX_QUOTE_NOT_FOUND', '报价不存在，请重新报价', 404);
     assertToolAvailable(quote.tool_id);
     if (quote.pricing_version !== TOOLBOX_PRICING_VERSION) {
-      throw toolboxError('TOOLBOX_PRICING_CHANGED', '积分价格已更新，请重新报价', 409, { refresh: true });
+      throw toolboxError('TOOLBOX_PRICING_CHANGED', '计费规则已更新，请重新确认', 409, { refresh: true });
     }
     if (quote.status === 'consumed' && quote.consumed_job_id) {
       const existing = await selectJobWithArtifact(connection, userId, quote.consumed_job_id, true);
@@ -381,29 +407,36 @@ export async function createToolboxJob({ userId, quoteId, clientRequestId, datab
       throw toolboxError('TOOLBOX_QUOTE_SNAPSHOT_INVALID', '报价快照校验失败，请重新报价', 500);
     }
 
+    const billingMedium = normalizeToolboxBillingMedium(quote.tool_id, quote.billing_medium || 'points');
     const jobId = crypto.randomUUID();
-    const reservation = await reserveToolboxPoints(connection, {
-      userId,
-      clientRequestId: requestId,
-      quote,
-      jobId,
-      toolId: quote.tool_id,
-      inputDigest: quote.input_digest,
-    });
+    const reservation =
+      billingMedium === 'points'
+        ? await reserveToolboxPoints(connection, {
+            userId,
+            clientRequestId: requestId,
+            quote,
+            jobId,
+            toolId: quote.tool_id,
+            inputDigest: quote.input_digest,
+          })
+        : { reservedPoints: 0, operationId: null };
+    const initialBillingStatus = billingMedium === 'points' ? 'reserved' : 'quoted';
     const expiresAt = new Date(Date.now() + JOB_RETENTION_DAYS * 24 * 60 * 60_000);
     await connection.query(
       `INSERT INTO toolbox_jobs
-        (id, user_id, client_request_id, tool_id, quote_id, input_digest, options_json,
+        (id, user_id, client_request_id, tool_id, quote_id, billing_medium, input_digest, options_json,
          status, billing_status, save_status, quoted_points, actual_points, points_operation_id, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', 'reserved', 'unsaved', ?, 0, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, 'unsaved', ?, 0, ?, ?)`,
       [
         jobId,
         userId,
         requestId,
         quote.tool_id,
         quote.id,
+        billingMedium,
         quote.input_digest,
         JSON.stringify(snapshot.options || {}),
+        initialBillingStatus,
         reservation.reservedPoints,
         reservation.operationId,
         expiresAt,
@@ -436,8 +469,9 @@ export async function createToolboxJob({ userId, quoteId, clientRequestId, datab
       user_id: userId,
       tool_id: quote.tool_id,
       quote_id: quote.id,
+      billing_medium: billingMedium,
       status: 'queued',
-      billing_status: 'reserved',
+      billing_status: initialBillingStatus,
       save_status: 'unsaved',
       progress: 0,
       stage: 'queued',
@@ -474,7 +508,7 @@ export async function listToolboxJobs({ userId, limit = 20, database = pool }) {
 export async function listToolboxHomeTasks({ userId, database = pool } = {}) {
   const ownerId = requiredUserId(userId);
   const [rows] = await database.query(
-    `SELECT job.id, job.tool_id, job.status, job.stage, job.billing_status, job.save_status,
+    `SELECT job.id, job.tool_id, job.status, job.stage, job.billing_medium, job.billing_status, job.save_status,
             job.quoted_points, job.actual_points, job.external_cost_committed,
             job.error_code, job.error_message, job.create_time, job.updated_at,
             job.started_at, job.completed_at, job.artifact_id,
@@ -537,7 +571,7 @@ export async function cancelToolboxJob({ userId, jobId, database = pool }) {
     if (job.status !== 'queued' || Number(job.external_cost_committed || 0)) {
       throw toolboxError('TOOLBOX_JOB_CANNOT_CANCEL', '任务已开始消耗处理资源，当前不能取消', 409);
     }
-    const settlement = await settleReservedToolboxBilling(connection, job, {
+    const settlement = await settleToolboxBilling(connection, job, {
       outcome: 'cancelled',
       reasonCode: 'USER_CANCELLED_BEFORE_PROCESSING',
     });
@@ -583,8 +617,8 @@ export async function getToolboxArtifact({ userId, artifactId, database = pool }
         AND receipt.artifact_version = artifact.artifact_version
         AND receipt.status = 'saved'
        LEFT JOIN note saved_note
-         ON saved_note.id = receipt.target_id
-        AND saved_note.create_by = artifact.user_id
+         ON saved_note.id = CONVERT(receipt.target_id USING utf8mb4) COLLATE utf8mb4_unicode_ci
+        AND saved_note.create_by = CONVERT(artifact.user_id USING utf8mb4) COLLATE utf8mb4_unicode_ci
       WHERE artifact.id = ? AND artifact.user_id = ? AND artifact.status = 'ready'
         AND artifact.expires_at > NOW()
       LIMIT 1`,

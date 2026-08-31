@@ -131,9 +131,6 @@ export function analyzeKnowledgeStructure(rows = [], { now = Date.now() } = {}) 
     if (node.depth >= DEEP_NOTE_DEPTH)
       issueItems.push(issue('deep', 'medium', node, `位于第 ${node.depth} 层，查找成本较高`));
     if (node.tagCount === 0) issueItems.push(issue('untagged', 'low', node, '尚未添加标签'));
-    if (node.outgoingReferenceCount + node.incomingReferenceCount === 0) {
-      issueItems.push(issue('unlinked', 'low', node, '没有站内引用连接'));
-    }
     if (updatedTime > 0 && updatedTime < staleThreshold)
       issueItems.push(issue('stale', 'low', node, '超过 180 天未更新'));
   }
@@ -152,7 +149,6 @@ export function analyzeKnowledgeStructure(rows = [], { now = Date.now() } = {}) 
     ratio(affected('untitled')) * 10 +
     ratio(affected('deep')) * 8 +
     ratio(affected('untagged')) * 8 +
-    ratio(affected('unlinked')) * 8 +
     ratio(affected('stale')) * 8;
   const healthScore = total ? Math.max(0, Math.min(100, Math.round(100 - penalty))) : 100;
   const recommendations = [
@@ -160,7 +156,6 @@ export function analyzeKnowledgeStructure(rows = [], { now = Date.now() } = {}) 
     affected('empty') ? recommendation('review_empty', affected('empty'), 'high') : null,
     affected('duplicate_title') ? recommendation('resolve_duplicates', affected('duplicate_title'), 'medium') : null,
     affected('untagged') ? recommendation('add_tags', affected('untagged'), 'low') : null,
-    affected('unlinked') ? recommendation('build_links', affected('unlinked'), 'low') : null,
     affected('stale') ? recommendation('review_stale', affected('stale'), 'low') : null,
   ].filter(Boolean);
 

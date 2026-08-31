@@ -45,6 +45,7 @@ export interface AfdianSupportOrder {
 
 export type SupportPackageCategory = 'ai' | 'storage' | 'combo';
 export type FirstPurchaseStatus = 'available' | 'used' | 'login_required';
+export type SupportFirstPurchaseScope = 'ai_account' | 'sku';
 
 export interface SupportBenefit {
   aiTokens: number;
@@ -54,6 +55,7 @@ export interface SupportBenefit {
 export interface SupportPackage {
   skuId: string;
   category: SupportPackageCategory;
+  firstPurchaseScope: SupportFirstPurchaseScope;
   amount: number;
   base: SupportBenefit;
   firstPurchase: SupportBenefit;
@@ -165,6 +167,7 @@ export function createLocalSupportCatalogPreview(): SupportCatalog {
     packages: SUPPORT_PACKAGE_CATALOG.map((item) => ({
       skuId: item.skuId,
       category: item.category,
+      firstPurchaseScope: item.firstPurchaseScope,
       amount: item.amount,
       base: { ...item.base },
       firstPurchase: { ...item.firstPurchase },

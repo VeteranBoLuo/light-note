@@ -18,7 +18,7 @@ vi.mock('pdfjs-dist/legacy/build/pdf.mjs', () => ({
   getDocument: pdfMocks.getDocument,
 }));
 
-vi.mock('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url', () => ({
+vi.mock('pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker&url', () => ({
   default: '/assets/pdf.worker.js',
 }));
 

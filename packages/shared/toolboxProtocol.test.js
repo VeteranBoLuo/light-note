@@ -61,6 +61,7 @@ describe("toolbox protocol", () => {
       expect(Object.isFrozen(item)).toBe(true);
       expect(Object.isFrozen(item.input)).toBe(true);
       expect(Object.isFrozen(item.availability)).toBe(true);
+      expect(Object.isFrozen(item.billingMedia)).toBe(true);
       if (item.input.accept)
         expect(Object.isFrozen(item.input.accept)).toBe(true);
       if (item.input.resourceTypes)
@@ -102,7 +103,7 @@ describe("toolbox protocol", () => {
   });
 
   it("does not treat browser-local utilities as paid jobs", () => {
-    expect(TOOLBOX_BILLING_MEDIA).toEqual(["free", "points"]);
+    expect(TOOLBOX_BILLING_MEDIA).toEqual(["free", "points", "ai_quota"]);
     const localTools = TOOLBOX_TOOL_CATALOG.filter(
       (item) => item.executionMode === "browser",
     );
@@ -121,6 +122,11 @@ describe("toolbox protocol", () => {
     expect(isToolboxPaidTool("knowledge_structure_audit")).toBe(false);
     expect(isToolboxPaidTool("research_brief")).toBe(true);
     expect(isToolboxPaidTool("idea_to_draft")).toBe(true);
+    expect(getToolboxTool("idea_to_draft")?.billingMedia).toEqual([
+      "points",
+      "ai_quota",
+    ]);
+    expect(getToolboxTool("ocr_to_text")?.billingMedia).toEqual(["points"]);
     expect(getToolboxTool("idea_to_draft")?.input).toMatchObject({
       kind: "prompt",
       minItems: 0,

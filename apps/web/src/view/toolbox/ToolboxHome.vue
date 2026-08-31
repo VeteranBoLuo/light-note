@@ -7,13 +7,9 @@
         </span>
         <h1 id="toolbox-title">{{ t('toolbox.title') }}</h1>
         <p>{{ t('toolbox.subtitle') }}</p>
-        <div class="toolbox-overview__legend" :aria-label="t('toolbox.billingLegend')">
-          <span>{{ t('toolbox.legendFree') }}</span>
-          <span><SvgIcon :src="icon.toolbox.coin" size="14" />{{ t('toolbox.legendPoints') }}</span>
-        </div>
       </div>
       <div v-if="!isGuest" class="toolbox-overview__assets" role="group" :aria-label="t('toolbox.capabilityOverview')">
-        <BButton class="toolbox-asset" @click="router.push({ name: 'pointsUsage' })">
+        <BButton class="toolbox-asset is-points" @click="router.push({ name: 'pointsUsage' })">
           <span class="toolbox-asset__icon" aria-hidden="true">
             <SvgIcon :src="icon.growth.coin" size="22" />
           </span>
@@ -21,7 +17,15 @@
             <small>{{ t('toolbox.pointsBalance') }}</small>
             <strong>{{ growth?.points == null ? '—' : Number(growth.points).toLocaleString() }}</strong>
           </span>
-          <SvgIcon :src="icon.toolbox.arrow" size="14" />
+        </BButton>
+        <BButton class="toolbox-asset is-ai" @click="router.push({ name: 'aiUsage' })">
+          <span class="toolbox-asset__icon" aria-hidden="true">
+            <SvgIcon :src="icon.settings.ai" size="22" />
+          </span>
+          <span class="toolbox-asset__copy">
+            <small>{{ t('toolbox.aiQuotaBalance') }}</small>
+            <strong>{{ aiQuotaBalanceLabel }}</strong>
+          </span>
         </BButton>
       </div>
     </section>
@@ -35,99 +39,9 @@
       <BButton type="primary" @click="router.push({ name: 'login' })">{{ t('toolbox.home.guestAction') }}</BButton>
     </section>
 
-    <section class="toolbox-section toolbox-start" aria-labelledby="toolbox-start-title">
-      <header class="toolbox-section__head">
-        <span>01</span>
-        <h2 id="toolbox-start-title">{{ t('toolbox.home.startTitle') }}</h2>
-        <p>{{ t('toolbox.home.startDescription') }}</p>
-      </header>
-      <div class="toolbox-start-content">
-        <div class="toolbox-production-block">
-          <div class="toolbox-production-block__head">
-            <div>
-              <strong>{{ t('toolbox.home.productionTitle') }}</strong>
-              <small>{{ t('toolbox.home.productionDescription') }}</small>
-            </div>
-          </div>
-          <div class="toolbox-production-grid">
-            <BButton
-              v-for="studio in productionStudios"
-              :key="`studio-${studio.id}`"
-              class="toolbox-production-card"
-              :class="`is-${studio.accent}`"
-              :aria-label="t(`toolbox.productionStudio.${studio.id}.accessibleLabel`)"
-              @click="openProductionStudio(studio)"
-            >
-              <span class="toolbox-production-card__icon">
-                <SvgIcon :src="studio.icon" size="25" />
-              </span>
-              <span class="toolbox-production-card__copy">
-                <small>{{ t(`toolbox.productionStudio.${studio.id}.eyebrow`) }}</small>
-                <strong>{{ t(`toolbox.productionStudio.${studio.id}.name`) }}</strong>
-                <span>{{ t(`toolbox.productionStudio.${studio.id}.description`) }}</span>
-              </span>
-              <span class="toolbox-production-card__action">
-                {{ t('toolbox.home.openStudioAction') }}
-                <SvgIcon :src="icon.toolbox.arrow" size="15" />
-              </span>
-            </BButton>
-          </div>
-        </div>
-        <div class="toolbox-start-divider">
-          <strong>{{ t('toolbox.home.quickStartTitle') }}</strong>
-          <small>{{ t('toolbox.home.quickStartDescription') }}</small>
-        </div>
-        <div v-if="catalogLoading" class="toolbox-home__state">
-          <BLoading inline loading :title="t('common.loading')" />
-        </div>
-        <div v-else-if="catalogFailed" class="toolbox-home__state is-error" role="alert">
-          <span class="toolbox-home__state-copy">
-            <strong>{{ t('toolbox.home.loadFailed') }}</strong>
-            <small>{{ t('toolbox.home.loadFailedHint') }}</small>
-          </span>
-          <BButton size="small" @click="loadCatalog">{{ t('common.retry') }}</BButton>
-        </div>
-        <div v-else class="toolbox-start-grid">
-          <BButton
-            v-for="tool in starterTools"
-            :key="'starter-' + tool.id"
-            class="toolbox-start-card"
-            :class="['is-' + presentation(tool.id).accent, { 'is-workspace': tool.executionMode === 'service' }]"
-            :aria-label="starterAccessibleLabel(tool)"
-            @click="openStarter(tool)"
-          >
-            <span class="toolbox-start-card__icon">
-              <SvgIcon :src="presentation(tool.id).icon" size="22" />
-            </span>
-            <span class="toolbox-start-card__copy">
-              <span class="toolbox-start-card__meta">
-                <BChip :tone="tool.executionMode === 'service' ? 'success' : 'pending'">
-                  {{
-                    tool.executionMode === 'service'
-                      ? t('toolbox.home.startPersistent')
-                      : t('toolbox.home.startNoMaterial')
-                  }}
-                </BChip>
-              </span>
-              <strong>{{ toolName(tool.id) }}</strong>
-              <small>{{ toolDescription(tool.id) }}</small>
-            </span>
-            <span class="toolbox-start-card__action">
-              {{
-                tool.executionMode === 'service'
-                  ? t('toolbox.home.startWorkspaceAction')
-                  : t('toolbox.home.startDraftAction')
-              }}
-              <SvgIcon :src="icon.toolbox.arrow" size="14" />
-            </span>
-          </BButton>
-        </div>
-      </div>
-    </section>
-
     <section v-if="!isGuest" class="toolbox-section toolbox-continue" aria-labelledby="toolbox-continue-title">
       <header class="toolbox-section__head">
-        <span>02</span>
+        <span>01</span>
         <h2 id="toolbox-continue-title">{{ t('toolbox.home.continueTitle') }}</h2>
         <p>{{ t('toolbox.home.continueDescription') }}</p>
       </header>
@@ -150,44 +64,6 @@
         </span>
       </div>
       <div v-else class="toolbox-activity-grid">
-        <BButton
-          v-for="project in continueProjects"
-          :key="`project-${project.id}`"
-          class="toolbox-activity-card is-project"
-          :class="`is-${productionStudioForProjectType(project.projectType).accent}`"
-          @click="openProductionProject(project)"
-        >
-          <span class="toolbox-activity-card__icon">
-            <SvgIcon :src="productionStudioForProjectType(project.projectType).icon" size="22" />
-          </span>
-          <span class="toolbox-activity-card__copy">
-            <span class="toolbox-activity-card__topline">
-              <BChip :tone="project.projectType === 'document' ? 'neutral' : 'success'">
-                {{
-                  t(
-                    project.projectType === 'document'
-                      ? 'toolbox.home.legacyDocumentProject'
-                      : 'toolbox.home.productionProject',
-                  )
-                }}
-              </BChip>
-              <small>{{
-                formatRelativeDate(project.lastOpenedAt || project.updatedAt || project.createdAt || '')
-              }}</small>
-            </span>
-            <strong>{{ project.title }}</strong>
-            <span>
-              {{
-                project.metadata.description || t(`toolbox.productionStudio.${project.projectType}.continueDescription`)
-              }}
-            </span>
-            <small>{{ t(`toolbox.productionStudio.${project.projectType}.name`) }}</small>
-          </span>
-          <span class="toolbox-activity-card__action">
-            {{ t('toolbox.home.continueEditingAction') }}
-            <SvgIcon :src="icon.toolbox.arrow" size="15" />
-          </span>
-        </BButton>
         <BButton
           v-for="workspace in continueWorkspaces"
           :key="`workspace-${workspace.id}`"
@@ -216,7 +92,6 @@
           </span>
           <span class="toolbox-activity-card__action">
             {{ workspace.nextStep ? t('toolbox.home.continueAction') : t('toolbox.home.addNextStepAction') }}
-            <SvgIcon :src="icon.toolbox.arrow" size="15" />
           </span>
         </BButton>
         <BButton
@@ -240,15 +115,60 @@
           </span>
           <span class="toolbox-activity-card__action">
             {{ isReadyTask(job) ? t('toolbox.home.viewResultAction') : t('toolbox.home.viewProgressAction') }}
-            <SvgIcon :src="icon.toolbox.arrow" size="15" />
           </span>
         </BButton>
       </div>
     </section>
 
+    <section class="toolbox-section toolbox-start toolbox-outcomes" aria-labelledby="toolbox-outcomes-title">
+      <header class="toolbox-section__head">
+        <span>{{ isGuest ? '01' : '02' }}</span>
+        <h2 id="toolbox-outcomes-title">{{ t('toolbox.home.outcomesTitle') }}</h2>
+        <p>{{ t('toolbox.home.outcomesDescription') }}</p>
+      </header>
+      <div class="toolbox-start-content">
+        <div v-if="catalogLoading" class="toolbox-home__state">
+          <BLoading inline loading :title="t('common.loading')" />
+        </div>
+        <div v-else-if="catalogFailed" class="toolbox-home__state is-error" role="alert">
+          <span class="toolbox-home__state-copy">
+            <strong>{{ t('toolbox.home.loadFailed') }}</strong>
+            <small>{{ t('toolbox.home.loadFailedHint') }}</small>
+          </span>
+          <BButton size="small" @click="loadCatalog">{{ t('common.retry') }}</BButton>
+        </div>
+        <div v-else class="toolbox-start-grid">
+          <BButton
+            v-for="tool in primaryOutcomeTools"
+            :key="'outcome-' + tool.id"
+            class="toolbox-start-card"
+            :class="'is-' + presentation(tool.id).accent"
+            :aria-label="toolAccessibleLabel(tool)"
+            @click="openTool(tool)"
+          >
+            <span class="toolbox-start-card__icon">
+              <SvgIcon :src="presentation(tool.id).icon" size="22" />
+            </span>
+            <span class="toolbox-start-card__copy">
+              <span class="toolbox-start-card__meta">
+                <BChip tone="neutral">
+                  {{ t('toolbox.tool.' + tool.id + '.output') }}
+                </BChip>
+              </span>
+              <strong>{{ toolName(tool.id) }}</strong>
+              <small>{{ toolDescription(tool.id) }}</small>
+            </span>
+            <span class="toolbox-start-card__action">
+              {{ t('toolbox.home.startOutcomeAction') }}
+            </span>
+          </BButton>
+        </div>
+      </div>
+    </section>
+
     <section class="toolbox-section toolbox-quick" aria-labelledby="toolbox-quick-title">
       <header class="toolbox-section__head">
-        <span>{{ hasContinue ? '03' : '02' }}</span>
+        <span>{{ isGuest ? '02' : '03' }}</span>
         <h2 id="toolbox-quick-title">{{ t('toolbox.home.quickTitle') }}</h2>
         <p>{{ t('toolbox.home.quickDescription') }}</p>
       </header>
@@ -283,7 +203,6 @@
             <strong>{{ toolName(tool.id) }}</strong>
             <small>{{ billingLabel(tool) }}</small>
           </span>
-          <SvgIcon :src="icon.toolbox.arrow" size="15" />
         </BButton>
       </div>
       <div v-else-if="quickView === 'common'" class="toolbox-home__state is-empty">
@@ -322,14 +241,13 @@
             <small>{{ entry.detail }}</small>
           </span>
           <small class="toolbox-recent-row__time">{{ formatRelativeDate(entry.usedAt) }}</small>
-          <SvgIcon class="toolbox-recent-row__arrow" :src="icon.toolbox.arrow" size="15" />
         </BButton>
       </div>
     </section>
 
     <section class="toolbox-section toolbox-catalog" aria-labelledby="toolbox-catalog-title">
       <header class="toolbox-section__head toolbox-catalog__head">
-        <span>{{ hasContinue ? '04' : '03' }}</span>
+        <span>{{ isGuest ? '03' : '04' }}</span>
         <h2 id="toolbox-catalog-title">{{ t('toolbox.home.allToolsTitle') }}</h2>
         <p>{{ t('toolbox.home.allToolsDescription') }}</p>
       </header>
@@ -373,6 +291,11 @@
             {{ category.label }}
           </BChip>
         </div>
+      </div>
+      <div v-if="catalogDegraded" class="toolbox-catalog__notice" role="status">
+        <SvgIcon :src="icon.toolbox.audit" size="16" />
+        <span>{{ t('toolbox.home.catalogFallback') }}</span>
+        <BButton size="small" @click="loadCatalog">{{ t('common.retry') }}</BButton>
       </div>
       <div v-if="catalogLoading" class="toolbox-home__state">
         <BLoading inline loading :title="t('common.loading')" />
@@ -418,7 +341,6 @@
                 </span>
                 <span class="toolbox-card__aside">
                   <BChip :tone="tool.billingMedium === 'free' ? 'success' : 'pending'">{{ billingLabel(tool) }}</BChip>
-                  <SvgIcon :src="icon.toolbox.arrow" size="17" />
                 </span>
               </BButton>
               <BTooltip
@@ -448,8 +370,7 @@
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
-  import type { ToolboxToolId } from '@lightnote/shared/toolbox-protocol';
-  import type { ProductionProjectDto } from '@lightnote/shared/production-project-protocol';
+  import { TOOLBOX_TOOL_CATALOG, type ToolboxToolId } from '@lightnote/shared/toolbox-protocol';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -466,19 +387,15 @@
     type ToolboxJob,
   } from '@/api/toolbox';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
+  import { formatAiQuotaTokens, useAiQuotaStatus } from '@/composables/useAiQuotaStatus';
   import { useGrowth } from '@/composables/useGrowth';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import icon from '@/config/icon';
   import {
-    PRIMARY_PRODUCTION_STUDIOS,
-    productionStudioForProjectType,
-    type ProductionStudioDefinition,
-  } from '@/config/productionStudios';
-  import {
     TOOLBOX_HOME_GROUPS,
     TOOLBOX_DEFAULT_QUICK_TOOL_IDS,
+    TOOLBOX_PRIMARY_OUTCOME_TOOL_IDS,
     TOOLBOX_PRESENTATION,
-    TOOLBOX_STARTER_TOOL_IDS,
     toolboxToolPath,
     toolboxWorkspaceToolId,
   } from '@/config/toolbox';
@@ -512,12 +429,14 @@
   const router = useRouter();
   const user = useUserStore();
   const { growth, load: loadGrowth } = useGrowth();
+  const { status: aiQuotaStatus, load: loadAiQuota } = useAiQuotaStatus({ autoLoad: false });
   const tools = ref<ToolboxCatalogItem[]>([]);
   const overview = ref<ToolboxHomeOverview | null>(null);
   const localRecentUses = ref<ToolboxRecentUse[]>([]);
   const pinnedToolIds = ref<string[]>([]);
   const catalogLoading = ref(true);
   const catalogFailed = ref(false);
+  const catalogDegraded = ref(false);
   const overviewLoading = ref(false);
   const overviewFailed = ref(false);
   const keyword = ref('');
@@ -532,6 +451,11 @@
 
   const isGuest = computed(() => !user.id || user.role === 'visitor');
   const identityKey = computed(() => toolboxRecentUseIdentityKey(user));
+  const aiQuotaBalanceLabel = computed(() =>
+    aiQuotaStatus.value?.exempt
+      ? t('settings.ai.quotaUnlimited')
+      : formatAiQuotaTokens(aiQuotaStatus.value?.remaining, locale.value),
+  );
   const categoryOptions = computed(() => [
     { value: 'all' as const, label: t('toolbox.allTools') },
     { value: 'free' as const, label: t('toolbox.freeTools') },
@@ -543,23 +467,19 @@
       label: t(`toolbox.homeGroup.${group.id}.title`),
     })),
   );
-  const productionStudios = PRIMARY_PRODUCTION_STUDIOS;
-  const continueProjects = computed(() => overview.value?.projects?.continue || []);
-  const continueWorkspaces = computed(() => overview.value?.workspaces.continue || []);
+  const continueWorkspaces = computed(() => overview.value?.workspaces?.continue || []);
   const continueJobs = computed(() => {
     const seen = new Set<string>();
-    return [...(overview.value?.tasks.active || []), ...(overview.value?.tasks.ready || [])].filter((job) => {
+    return [...(overview.value?.tasks?.active || []), ...(overview.value?.tasks?.ready || [])].filter((job) => {
       if (seen.has(job.id)) return false;
       seen.add(job.id);
       return true;
     });
   });
-  const hasContinue = computed(
-    () => continueProjects.value.length > 0 || continueWorkspaces.value.length > 0 || continueJobs.value.length > 0,
-  );
+  const hasContinue = computed(() => continueWorkspaces.value.length > 0 || continueJobs.value.length > 0);
   const enabledToolIds = computed(() => new Set(tools.value.map((tool) => tool.id)));
   const recentEntries = computed<RecentEntry[]>(() => {
-    const workspaceEntries = (overview.value?.workspaces.recent || []).map((workspace) => ({
+    const workspaceEntries = (overview.value?.workspaces?.recent || []).map((workspace) => ({
       key: `workspace-${workspace.id}`,
       dedupeKey: `tool-${toolboxWorkspaceToolId(workspace.kind)}`,
       toolId: toolboxWorkspaceToolId(workspace.kind),
@@ -600,10 +520,10 @@
       })
       .slice(0, TOOLBOX_PINNED_TOOL_LIMIT);
   });
-  const starterTools = computed(() => {
+  const primaryOutcomeTools = computed(() => {
     const byId = new Map(tools.value.map((tool) => [tool.id, tool]));
-    return TOOLBOX_STARTER_TOOL_IDS.map((toolId) => byId.get(toolId)).filter((tool): tool is ToolboxCatalogItem =>
-      Boolean(tool),
+    return TOOLBOX_PRIMARY_OUTCOME_TOOL_IDS.map((toolId) => byId.get(toolId)).filter(
+      (tool): tool is ToolboxCatalogItem => Boolean(tool),
     );
   });
   const visibleTools = computed(() => {
@@ -641,17 +561,17 @@
   const toolName = (toolId: string) => t('toolbox.tool.' + toolId + '.name');
   const toolDescription = (toolId: string) => t('toolbox.tool.' + toolId + '.description');
   function billingLabel(tool: ToolboxCatalogItem) {
-    if (tool.price.kind !== 'free') return t('toolbox.points', { min: tool.price.min, max: tool.price.max });
+    if (tool.price.kind !== 'free') {
+      if (tool.price.min <= 0) return t('toolbox.pointsTools');
+      if (tool.billingMedia.includes('ai_quota')) {
+        return t('toolbox.billingChoiceRange', { min: tool.price.min, max: tool.price.max });
+      }
+      return t('toolbox.points', { min: tool.price.min, max: tool.price.max });
+    }
     return tool.executionMode === 'service' ? t('toolbox.accountFreeLabel') : t('toolbox.localFreeLabel');
   }
   function toolAccessibleLabel(tool: ToolboxCatalogItem) {
     return `${toolName(tool.id)} · ${billingLabel(tool)}`;
-  }
-  function starterAccessibleLabel(tool: ToolboxCatalogItem) {
-    return t('toolbox.home.startAccessibleLabel', {
-      name: toolName(tool.id),
-      kind: tool.executionMode === 'service' ? t('toolbox.home.startPersistent') : t('toolbox.home.startNoMaterial'),
-    });
   }
   function jobTone(status: ToolboxJob['status']): 'neutral' | 'success' | 'pending' | 'danger' {
     if (status === 'succeeded') return 'success';
@@ -702,26 +622,6 @@
     rememberHomeScroll();
     void router.push(toolboxToolPath(tool.id));
   }
-  function openStarter(tool: ToolboxCatalogItem) {
-    if (tool.executionMode !== 'service') {
-      openTool(tool);
-      return;
-    }
-    if (isGuest.value && blockGuestWrite('toolbox-account')) return;
-    recordToolboxRecentUse(user, tool.id);
-    rememberHomeScroll();
-    void router.push({ path: toolboxToolPath(tool.id), query: { create: '1' } });
-  }
-  function openProductionStudio(studio: ProductionStudioDefinition) {
-    if (isGuest.value && blockGuestWrite('toolbox-account')) return;
-    rememberHomeScroll();
-    void router.push({ name: studio.listRouteName });
-  }
-  function openProductionProject(project: ProductionProjectDto) {
-    const studio = productionStudioForProjectType(project.projectType);
-    rememberHomeScroll();
-    void router.push({ name: studio.projectRouteName, params: { projectId: project.id } });
-  }
   function openWorkspace(workspace: ToolboxHomeWorkspaceSummary) {
     recordToolboxRecentUse(user, toolboxWorkspaceToolId(workspace.kind));
     rememberHomeScroll();
@@ -757,12 +657,22 @@
   async function loadCatalog() {
     catalogLoading.value = true;
     catalogFailed.value = false;
+    catalogDegraded.value = false;
     try {
       tools.value = (await fetchToolboxCatalog()).tools.filter((tool) => tool.availability.enabled);
       refreshLocalRecentUses();
       refreshPinnedTools();
     } catch {
-      catalogFailed.value = true;
+      tools.value = TOOLBOX_TOOL_CATALOG.filter(
+        (tool) => tool.availability.enabled && tool.executionMode === 'browser' && tool.billingMedium === 'free',
+      ).map((tool) => ({
+        ...tool,
+        price: { kind: 'free' as const, currency: null, min: 0, max: 0 },
+      }));
+      catalogDegraded.value = true;
+      catalogFailed.value = tools.value.length === 0;
+      refreshLocalRecentUses();
+      refreshPinnedTools();
     } finally {
       catalogLoading.value = false;
     }
@@ -797,7 +707,7 @@
       overviewLoading.value = false;
       overviewFailed.value = false;
     } else {
-      void Promise.all([loadOverview(), loadGrowth()]);
+      void Promise.all([loadOverview(), loadGrowth(), loadAiQuota()]);
     }
   });
   async function initializeHome() {
@@ -806,6 +716,7 @@
       loadCatalog(),
       isGuest.value ? Promise.resolve() : loadOverview(),
       isGuest.value ? Promise.resolve() : loadGrowth(),
+      isGuest.value ? Promise.resolve() : loadAiQuota(),
     ]);
     await nextTick();
     window.requestAnimationFrame(() => {
@@ -840,12 +751,12 @@
   }
   .toolbox-overview {
     position: relative;
-    min-height: 168px;
-    padding: 25px 28px;
+    min-height: 132px;
+    padding: 20px 24px;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(220px, 255px);
+    grid-template-columns: minmax(0, 1fr) minmax(390px, 440px);
     align-items: center;
-    gap: clamp(26px, 5vw, 64px);
+    gap: clamp(20px, 4vw, 48px);
     overflow: hidden;
     box-sizing: border-box;
     border: 1px solid color-mix(in srgb, var(--primary-color) 20%, var(--surface-border-color));
@@ -872,7 +783,7 @@
     min-width: 0;
     display: grid;
     justify-items: start;
-    gap: 8px;
+    gap: 6px;
   }
   .toolbox-overview__eyebrow,
   .toolbox-section__head > span:first-child {
@@ -886,7 +797,7 @@
   }
   .toolbox-overview h1 {
     margin: 0;
-    font-size: clamp(34px, 3vw, 43px);
+    font-size: clamp(31px, 2.7vw, 38px);
     font-weight: 780;
     letter-spacing: -0.052em;
     line-height: 1.08;
@@ -898,29 +809,11 @@
     font-size: 12.5px;
     line-height: 1.6;
   }
-  .toolbox-overview__legend {
-    margin-top: 4px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px 22px;
-    color: var(--desc-color);
-    font-size: 10.5px;
-  }
-  .toolbox-overview__legend span {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .toolbox-overview__legend span:first-child {
-    color: var(--success-color);
-  }
-  .toolbox-overview__legend span:last-child {
-    color: var(--warning-color);
-  }
   .toolbox-overview__assets {
     position: relative;
     z-index: 1;
     display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 9px;
   }
   .toolbox-asset.b_btn {
@@ -930,7 +823,7 @@
     height: auto;
     padding: 8px 10px;
     display: grid;
-    grid-template-columns: 34px minmax(0, 1fr) 14px;
+    grid-template-columns: 34px minmax(0, 1fr);
     align-items: center;
     gap: 8px;
     box-sizing: border-box;
@@ -950,6 +843,11 @@
     border-radius: 10px;
     color: #a34f00;
     background: #fff3dc;
+  }
+  .toolbox-asset.is-ai .toolbox-asset__icon {
+    border-color: color-mix(in srgb, var(--primary-color) 40%, var(--surface-border-color));
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 9%, var(--card-background));
   }
   .toolbox-asset__copy {
     min-width: 0;
@@ -1034,127 +932,6 @@
   .toolbox-start-content {
     display: grid;
     gap: 14px;
-  }
-  .toolbox-production-block {
-    width: 100%;
-    min-width: 0;
-    padding: 14px;
-    overflow: hidden;
-    box-sizing: border-box;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 18px;
-    background: color-mix(in srgb, var(--primary-color) 2.5%, var(--card-background));
-    box-shadow: var(--surface-card-shadow);
-  }
-  .toolbox-production-block__head {
-    margin-bottom: 11px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-  }
-  .toolbox-production-block__head > div {
-    min-width: 0;
-    display: grid;
-    gap: 2px;
-  }
-  .toolbox-production-block__head strong {
-    font-size: 14px;
-  }
-  .toolbox-production-block__head small {
-    color: var(--desc-color);
-    font-size: 10.5px;
-    line-height: 1.45;
-  }
-  .toolbox-production-grid {
-    width: 100%;
-    min-width: 0;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-  .toolbox-production-card.b_btn {
-    --studio-accent: var(--primary-color);
-    width: 100%;
-    min-width: 0;
-    min-height: 112px;
-    height: auto;
-    padding: 15px;
-    display: grid;
-    grid-template-columns: 44px minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) auto;
-    align-items: start;
-    gap: 11px 12px;
-    border: 1px solid color-mix(in srgb, var(--studio-accent) 24%, var(--surface-border-color));
-    border-radius: 15px;
-    color: var(--text-color);
-    background: var(--card-background);
-    text-align: left;
-    white-space: normal;
-  }
-  .toolbox-production-card.is-violet {
-    --studio-accent: #645cf2;
-  }
-  .toolbox-production-card.is-blue {
-    --studio-accent: #3175cc;
-  }
-  .toolbox-production-card.is-teal {
-    --studio-accent: #078564;
-  }
-  .toolbox-production-card__icon {
-    width: 44px;
-    height: 44px;
-    display: grid;
-    place-items: center;
-    border: 1px solid color-mix(in srgb, var(--studio-accent) 35%, var(--surface-border-color));
-    border-radius: 13px;
-    color: var(--studio-accent);
-    background: color-mix(in srgb, var(--studio-accent) 7%, var(--card-background));
-  }
-  .toolbox-production-card__copy {
-    min-width: 0;
-    display: grid;
-    gap: 4px;
-  }
-  .toolbox-production-card__copy small {
-    color: var(--studio-accent);
-    font-size: 9.5px;
-    font-weight: 700;
-  }
-  .toolbox-production-card__copy strong {
-    font-size: 15px;
-    line-height: 1.25;
-  }
-  .toolbox-production-card__copy span {
-    display: -webkit-box;
-    overflow: hidden;
-    color: var(--desc-color);
-    font-size: 10.5px;
-    line-height: 1.48;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-  }
-  .toolbox-production-card__action {
-    grid-column: 2;
-    display: inline-flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 5px;
-    color: var(--studio-accent);
-    font-size: 10.5px;
-    font-weight: 700;
-  }
-  .toolbox-start-divider {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-  }
-  .toolbox-start-divider strong {
-    font-size: 13px;
-  }
-  .toolbox-start-divider small {
-    color: var(--desc-color);
-    font-size: 10px;
   }
   .toolbox-start-grid {
     display: grid;
@@ -1290,7 +1067,7 @@
     height: auto;
     padding: 10px 12px;
     display: grid;
-    grid-template-columns: 38px minmax(0, 1fr) 15px;
+    grid-template-columns: 38px minmax(0, 1fr);
     align-items: center;
     gap: 10px;
     border: 1px solid var(--surface-border-color);
@@ -1342,9 +1119,6 @@
   .toolbox-quick-card__copy small {
     color: var(--desc-color);
     font-size: 9.5px;
-  }
-  .toolbox-quick-card > :last-child {
-    color: var(--tool-accent);
   }
   .toolbox-home__state {
     min-height: 94px;
@@ -1414,23 +1188,6 @@
     color: var(--primary-color);
     background: color-mix(in srgb, var(--primary-color) 7%, var(--card-background));
   }
-  .toolbox-activity-card.is-project {
-    --activity-accent: var(--primary-color);
-  }
-  .toolbox-activity-card.is-project.is-violet {
-    --activity-accent: #645cf2;
-  }
-  .toolbox-activity-card.is-project.is-blue {
-    --activity-accent: #3175cc;
-  }
-  .toolbox-activity-card.is-project.is-teal {
-    --activity-accent: #078564;
-  }
-  .toolbox-activity-card.is-project .toolbox-activity-card__icon {
-    border-color: color-mix(in srgb, var(--activity-accent) 35%, var(--surface-border-color));
-    color: var(--activity-accent);
-    background: color-mix(in srgb, var(--activity-accent) 7%, var(--card-background));
-  }
   .toolbox-activity-card.is-ready .toolbox-activity-card__icon {
     border-color: var(--chip-success-border);
     color: var(--success-color);
@@ -1497,7 +1254,7 @@
     height: auto;
     padding: 10px 12px;
     display: grid;
-    grid-template-columns: 34px minmax(0, 1fr) auto 16px;
+    grid-template-columns: 34px minmax(0, 1fr) auto;
     align-items: center;
     gap: 10px;
     border: 1px solid var(--surface-border-color);
@@ -1535,15 +1292,31 @@
     color: var(--desc-color);
     font-size: 10px;
   }
-  .toolbox-recent-row__arrow {
-    color: var(--desc-color);
-  }
   .toolbox-catalog__controls {
     margin-bottom: 16px;
     display: grid;
     grid-template-columns: minmax(260px, 500px) minmax(0, 1fr);
     align-items: center;
     gap: 12px 18px;
+  }
+  .toolbox-catalog__notice {
+    min-height: 42px;
+    margin: -4px 0 14px;
+    padding: 7px 10px;
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    box-sizing: border-box;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
+    color: var(--desc-color);
+    background: var(--surface-muted-bg, var(--active-background-color));
+    font-size: 10.5px;
+    line-height: 1.45;
+  }
+  .toolbox-catalog__notice > :first-child {
+    color: var(--warning-color);
   }
   .toolbox-catalog__search {
     position: relative;
@@ -1753,11 +1526,6 @@
     outline-offset: 2px;
   }
   @media (hover: hover) and (pointer: fine) {
-    .toolbox-production-card.b_btn:hover {
-      border-color: var(--studio-accent);
-      background: color-mix(in srgb, var(--studio-accent) 5%, var(--card-background));
-      transform: translateY(-1px);
-    }
     .toolbox-start-card.b_btn:hover {
       border-color: var(--tool-accent);
       background: color-mix(in srgb, var(--tool-accent) 7%, var(--card-background));
@@ -1781,7 +1549,6 @@
     }
   }
   .toolbox-asset.b_btn:focus-visible,
-  .toolbox-production-card.b_btn:focus-visible,
   .toolbox-start-card.b_btn:focus-visible,
   .toolbox-quick-card.b_btn:focus-visible,
   .toolbox-activity-card.b_btn:focus-visible,
@@ -1795,7 +1562,7 @@
 
   @media (max-width: 900px) {
     .toolbox-overview {
-      grid-template-columns: minmax(0, 1fr) minmax(200px, 225px);
+      grid-template-columns: minmax(0, 1fr);
       gap: 20px;
     }
     .toolbox-catalog__controls {
@@ -1809,9 +1576,6 @@
     }
     .toolbox-quick-grid {
       grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-    .toolbox-production-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .toolbox-activity-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1833,27 +1597,24 @@
     }
     .toolbox-overview {
       min-height: 0;
-      padding: 18px 16px 15px;
+      padding: 16px 15px 14px;
       grid-template-columns: 1fr;
       gap: 12px;
       border-radius: 18px;
     }
     .toolbox-overview h1 {
-      font-size: 30px;
+      font-size: 28px;
     }
     .toolbox-overview p {
       font-size: 11.5px;
     }
-    .toolbox-overview__legend {
-      gap: 8px 14px;
-    }
     .toolbox-overview__assets {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .toolbox-asset.b_btn {
       min-height: 45px;
       padding: 6px 8px;
-      grid-template-columns: 30px minmax(0, 1fr) 14px;
+      grid-template-columns: 30px minmax(0, 1fr);
     }
     .toolbox-asset__icon {
       width: 30px;
@@ -1879,65 +1640,20 @@
     .toolbox-section {
       margin-top: 21px;
     }
-    .toolbox-production-block {
-      margin-right: -12px;
-      margin-left: -12px;
-      padding: 13px 12px;
-      border-right: 0;
-      border-left: 0;
-      border-radius: 0;
-      box-shadow: none;
-    }
-    .toolbox-production-block__head {
-      align-items: flex-start;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .toolbox-production-block__head :deep(.b-chip) {
-      flex: 0 0 auto;
-    }
-    .toolbox-production-grid {
+    .toolbox-start-grid {
       grid-template-columns: 1fr;
       gap: 8px;
     }
-    .toolbox-production-card.b_btn {
+    .toolbox-start-card.b_btn {
       min-height: 96px;
       padding: 11px;
-      grid-template-columns: 40px minmax(0, 1fr);
-      gap: 8px;
-      border-radius: 14px;
-    }
-    .toolbox-production-card__icon {
-      width: 40px;
-      height: 40px;
-      border-radius: 11px;
-    }
-    .toolbox-production-card__copy strong {
-      font-size: 13px;
-    }
-    .toolbox-production-card__copy span {
-      font-size: 9.5px;
-      -webkit-line-clamp: 2;
-    }
-    .toolbox-start-divider {
-      align-items: flex-start;
-      flex-direction: column;
-      gap: 2px;
-    }
-    .toolbox-start-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
-    }
-    .toolbox-start-card.b_btn {
-      min-height: 108px;
-      padding: 11px;
-      grid-template-columns: 34px minmax(0, 1fr);
+      grid-template-columns: 38px minmax(0, 1fr);
       gap: 8px;
       border-radius: 14px;
     }
     .toolbox-start-card__icon {
-      width: 34px;
-      height: 34px;
+      width: 38px;
+      height: 38px;
       border-radius: 10px;
     }
     .toolbox-start-card__copy {
@@ -1969,7 +1685,7 @@
     .toolbox-quick-card.b_btn {
       min-height: 68px;
       padding: 8px 9px;
-      grid-template-columns: 34px minmax(0, 1fr) 13px;
+      grid-template-columns: 34px minmax(0, 1fr);
       gap: 7px;
     }
     .toolbox-quick-card:nth-child(n + 5) {
@@ -2014,7 +1730,7 @@
     .toolbox-recent-row.b_btn {
       min-height: 62px;
       padding: 8px 10px;
-      grid-template-columns: 34px minmax(0, 1fr) 15px;
+      grid-template-columns: 34px minmax(0, 1fr);
     }
     .toolbox-recent-list {
       grid-template-columns: 1fr;
@@ -2024,12 +1740,17 @@
       grid-column: 2;
       grid-row: 2;
     }
-    .toolbox-recent-row__arrow {
-      grid-column: 3;
-      grid-row: 1 / 3;
-    }
     .toolbox-catalog__controls {
       gap: 10px;
+    }
+    .toolbox-catalog__notice {
+      min-height: 48px;
+      grid-template-columns: 18px minmax(0, 1fr);
+    }
+    .toolbox-catalog__notice > .b_btn {
+      grid-column: 1 / -1;
+      width: 100%;
+      min-height: 40px;
     }
     .toolbox-catalog__search > span {
       display: none;
@@ -2101,8 +1822,6 @@
 
   :global(html.light-note-mobile-rendering .toolbox-overview),
   :global(html.light-note-mobile-rendering .toolbox-asset.b_btn),
-  :global(html.light-note-mobile-rendering .toolbox-production-block),
-  :global(html.light-note-mobile-rendering .toolbox-production-card.b_btn),
   :global(html.light-note-mobile-rendering .toolbox-start-card.b_btn),
   :global(html.light-note-mobile-rendering .toolbox-quick-card.b_btn),
   :global(html.light-note-mobile-rendering .toolbox-guest-guide),
@@ -2121,8 +1840,12 @@
     color: #f3b44f;
     background: rgba(180, 83, 9, 0.22);
   }
+  :global([data-theme='night'] .toolbox-asset.is-ai .toolbox-asset__icon) {
+    border-color: color-mix(in srgb, var(--primary-color) 58%, var(--surface-border-color));
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 18%, var(--card-background));
+  }
   :global(html.light-note-mobile-rendering .toolbox-activity-card__icon),
-  :global(html.light-note-mobile-rendering .toolbox-production-card__icon),
   :global(html.light-note-mobile-rendering .toolbox-start-card__icon),
   :global(html.light-note-mobile-rendering .toolbox-quick-card__icon),
   :global(html.light-note-mobile-rendering .toolbox-recent-row__icon),

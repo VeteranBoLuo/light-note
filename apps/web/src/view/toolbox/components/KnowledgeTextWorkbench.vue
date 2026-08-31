@@ -210,9 +210,9 @@
     </template>
 
     <template v-else>
-      <section class="knowledge-text-controls">
+      <section class="knowledge-text-controls" :class="{ 'is-text-batch': toolId === 'text_batch' }">
         <template v-if="toolId === 'text_batch'">
-          <div class="knowledge-checkbox-group">
+          <div class="knowledge-checkbox-group is-batch-options">
             <BCheckbox v-model="batchOptions.trimLines">{{ t('toolbox.knowledgeText.trimLines') }}</BCheckbox>
             <BCheckbox v-model="batchOptions.normalizeWhitespace">{{
               t('toolbox.knowledgeText.normalizeWhitespace')
@@ -825,6 +825,12 @@
     background: var(--card-background);
   }
 
+  .knowledge-text-controls.is-text-batch {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(112px, 1fr));
+    align-items: end;
+  }
+
   .knowledge-field {
     min-width: 130px;
     display: grid;
@@ -854,6 +860,38 @@
     padding: 5px 8px;
     border: 1px solid var(--surface-border-color);
     border-radius: 9px;
+  }
+
+  .knowledge-checkbox-group.is-batch-options {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(132px, 1fr));
+    gap: 8px;
+  }
+
+  .knowledge-checkbox-group.is-batch-options :deep(.b-checkbox) {
+    min-width: 0;
+    padding: 7px 10px;
+    justify-content: flex-start;
+    white-space: nowrap;
+    background: var(--workspace-panel-bg-color);
+    transition:
+      border-color 0.16s ease,
+      background 0.16s ease;
+  }
+
+  .knowledge-checkbox-group.is-batch-options :deep(.b-checkbox__label) {
+    white-space: nowrap;
+  }
+
+  .knowledge-checkbox-group.is-batch-options :deep(.b-checkbox.is-checked) {
+    border-color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 7%, var(--card-background));
+  }
+
+  .knowledge-checkbox-group.is-batch-options :deep(.b-checkbox:focus-visible) {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
   }
 
   .knowledge-checkbox-group.is-flags {
@@ -1214,6 +1252,10 @@
       flex-wrap: wrap;
     }
 
+    .knowledge-text-controls.is-text-batch {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
     .knowledge-file-studio {
       grid-template-columns: 1fr;
     }
@@ -1255,6 +1297,10 @@
       min-width: 0;
     }
 
+    .knowledge-checkbox-group.is-batch-options {
+      grid-template-columns: 1fr;
+    }
+
     .knowledge-editor-card :deep(textarea) {
       min-height: 280px;
     }
@@ -1276,5 +1322,10 @@
   html.light-note-mobile-rendering .knowledge-file-main,
   html.light-note-mobile-rendering .knowledge-editor-card {
     box-shadow: none;
+  }
+
+  :global(html.light-note-mobile-rendering .knowledge-checkbox-group.is-batch-options .b-checkbox.is-checked) {
+    border: 2px solid var(--primary-color);
+    background: var(--card-background);
   }
 </style>

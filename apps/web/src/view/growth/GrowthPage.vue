@@ -361,6 +361,7 @@
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { resolveDailyQuestClaimFeedback } from '@/utils/dailyQuestClaim';
   import { resolvePendingResourcesRoute } from '@/utils/resourceNavigation';
+  import { resolveDailyQuestRoute } from '@/utils/growthNavigation';
   import { scrollIntoContainer } from '@/utils/zoom';
 
   type GrowthSection = 'overview' | 'tasks' | 'achievements' | 'rewards';
@@ -624,18 +625,13 @@
   }
 
   function handleQuestAction(key: string) {
-    const actionByQuest: Record<string, string> = {
-      create: 'create_note',
-      daily_note: 'create_note',
-      daily_bookmark: 'create_bookmark',
-      daily_file: 'upload_file',
-      daily_todo_create: 'create_todo',
-      daily_todo: 'open_todos',
-      daily_organize: 'open_inbox',
-      knowledge_action_1: 'create_note',
-      knowledge_action_2: 'create_note',
-    };
-    handleGrowthAction(actionByQuest[key] || 'open_growth_tasks');
+    const target = resolveDailyQuestRoute(key, bookmark.isMobile);
+    if (target) {
+      void router.push(target);
+      return;
+    }
+    if (key === 'checkin') activeSection.value = 'overview';
+    else activeSection.value = 'tasks';
   }
 
   function handleGrowthAction(action: string) {

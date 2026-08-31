@@ -107,19 +107,39 @@ export function resolveToolboxActualPoints({ quotedPoints, outcome, requestedAct
   return 0;
 }
 
-export async function settleReservedToolboxBilling(
+export async function settleToolboxBilling(
   connection,
   job,
   { outcome, requestedActualPoints = null, reasonCode = '' } = {},
 ) {
   const currentStatus = String(job.billing_status || '');
+  const billingMedium = String(job.billing_medium || 'points');
   if (BILLING_TERMINAL_STATUSES.has(currentStatus)) {
     return {
       billingStatus: currentStatus,
       actualPoints: Math.max(0, Number(job.actual_points || 0)),
-      refundedPoints: Math.max(0, Number(job.quoted_points || 0) - Number(job.actual_points || 0)),
+      refundedPoints:
+        billingMedium === 'points'
+          ? Math.max(0, Number(job.quoted_points || 0) - Number(job.actual_points || 0))
+          : 0,
       replay: true,
     };
+  }
+  if (billingMedium === 'ai_quota') {
+    if (currentStatus !== 'quoted') {
+      throw toolboxError('TOOLBOX_BILLING_STATE_INVALID', '任务计费状态异常，已停止自动结算', 500);
+    }
+    const billingStatus = ['succeeded', 'partial_succeeded'].includes(String(outcome)) ? 'settled' : 'released';
+    await connection.query(
+      `UPDATE toolbox_jobs
+          SET billing_status = ?, actual_points = 0, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`,
+      [billingStatus, job.id],
+    );
+    return { billingStatus, actualPoints: 0, refundedPoints: 0, replay: false };
+  }
+  if (billingMedium !== 'points') {
+    throw toolboxError('TOOLBOX_BILLING_MEDIUM_INVALID', '任务计费方式无效，已停止自动结算', 500);
   }
   if (currentStatus !== 'reserved') {
     throw toolboxError('TOOLBOX_BILLING_STATE_INVALID', '任务计费状态异常，已停止自动结算', 500);
@@ -188,5 +208,8 @@ export async function settleReservedToolboxBilling(
   );
   return { billingStatus, actualPoints, refundedPoints, replay: false };
 }
+
+// 保留旧导出名，避免尚未完成热更新的 Worker 在滚动重启期间丢失结算入口。
+export const settleReservedToolboxBilling = settleToolboxBilling;
 
 export const toolboxBillingInternals = Object.freeze({ BILLING_TERMINAL_STATUSES, operationRequestId });

@@ -51,6 +51,16 @@ export function normalizeToolboxRequestId(value, label = '请求标识') {
   return normalized;
 }
 
+export function normalizeToolboxBillingMedium(toolId, value) {
+  const definition = getToolboxTool(toolId);
+  if (!definition) throw toolboxError('TOOLBOX_TOOL_NOT_FOUND', '不支持该工具', 404);
+  const medium = String(value || definition.billingMedium || '').trim();
+  if (medium === 'free' || !definition.billingMedia.includes(medium)) {
+    throw toolboxError('TOOLBOX_BILLING_MEDIUM_INVALID', '该工具不支持所选计费方式');
+  }
+  return medium;
+}
+
 function normalizeResourceRefs(value) {
   if (value == null) return [];
   if (!Array.isArray(value)) throw toolboxError('TOOLBOX_INPUT_INVALID', 'resourceRefs 必须是数组');

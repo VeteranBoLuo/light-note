@@ -84,9 +84,6 @@ describe('adminRoutePolicyMiddleware', () => {
       '/toolbox/jobs/job-1',
       '/toolbox/artifacts/artifact-1',
       '/toolbox/workspaces/workspace-1',
-      '/toolbox/projects',
-      '/toolbox/projects/project-1',
-      '/toolbox/projects/project-1/revisions',
     ]) {
       const next = vi.fn();
       adminRoutePolicyMiddleware(createReq(path, 'GET', 'readonly'), createRes(), next);
@@ -102,10 +99,6 @@ describe('adminRoutePolicyMiddleware', () => {
       '/toolbox/jobs',
       '/toolbox/jobs/job-1/cancel',
       '/toolbox/artifacts/artifact-1/save',
-      '/toolbox/projects',
-      '/toolbox/projects/project-1/open',
-      '/toolbox/projects/project-1/revisions',
-      '/toolbox/projects/project-1/revisions/2/restore',
     ]) {
       const next = vi.fn();
       const res = createRes();
@@ -113,13 +106,6 @@ describe('adminRoutePolicyMiddleware', () => {
       expect(next).not.toHaveBeenCalled();
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }));
     }
-    const patchNext = vi.fn();
-    const patchResponse = createRes();
-    adminRoutePolicyMiddleware(createReq('/toolbox/projects/project-1', 'PATCH', 'maintain'), patchResponse, patchNext);
-    expect(patchNext).not.toHaveBeenCalled();
-    expect(patchResponse.json).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }),
-    );
   });
 
   it('插件授权与授权码交换不能在管理员代管上下文中代表目标用户执行', () => {
@@ -134,6 +120,19 @@ describe('adminRoutePolicyMiddleware', () => {
           expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }),
         );
       }
+    }
+  });
+
+  it('功能公告已读只能写入真实登录账号，管理员代管上下文不能代点', () => {
+    for (const mode of ['readonly', 'maintain']) {
+      const next = vi.fn();
+      const res = createRes();
+      adminRoutePolicyMiddleware(createReq('/user/feature-announcements/seen', 'POST', mode), res, next);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }),
+      );
     }
   });
 

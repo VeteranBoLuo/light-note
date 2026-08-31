@@ -52,6 +52,8 @@ describe('桌面工作台头部布局稳定性', () => {
 
   it('每日任务只展示进度，领取统一收口到上方我的成长卡', () => {
     expect(desktopSource).toContain(':show-claim-action="false"');
+    expect(desktopSource).toContain('@go="handleDailyQuestAction"');
+    expect(desktopSource).toContain('resolveDailyQuestRoute(key, false)');
     expect(desktopSource).not.toContain('@claim="claimDailyGrowth"');
     expect(desktopSource).not.toContain('function claimDailyGrowth');
   });

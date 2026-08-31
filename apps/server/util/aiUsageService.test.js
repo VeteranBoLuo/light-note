@@ -15,6 +15,7 @@ describe('aiUsageService', () => {
       pageSize: 20,
       module: 'all',
     });
+    expect(normalizeAiUsageQuery({ module: 'TOOLBOX' }).module).toBe('toolbox');
   });
 
   it('只返回用量治理字段，并按目录把内部 task type 映射为用户可理解的动作', async () => {

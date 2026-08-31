@@ -1,12 +1,12 @@
 /**
- * 轻笺知识工具箱前后端共享协议。
+ * 轻笺知识工坊前后端共享协议。
  *
  * 工具目录只声明稳定能力边界，不包含易漂移的中文文案和动态价格。价格由服务端报价器
  * 按 pricingVersion 计算；免费 browser/service 工具不会创建 quote/job，其中浏览器工具不上传原文件，
  * 知识库服务只读写当前账号的必要结构、引用与推进状态，不复制资料正文。
  */
 export const TOOLBOX_PROTOCOL_VERSION = 1;
-export const TOOLBOX_PRICING_VERSION = "toolbox-points-v1";
+export const TOOLBOX_PRICING_VERSION = "toolbox-billing-v2";
 export const TOOLBOX_PROCESSING_REQUIREMENT_MAX_CHARS = 1_000;
 
 export const TOOLBOX_EXECUTION_MODES = Object.freeze([
@@ -15,7 +15,7 @@ export const TOOLBOX_EXECUTION_MODES = Object.freeze([
   "worker",
   "ai_skill",
 ]);
-export const TOOLBOX_BILLING_MEDIA = Object.freeze(["free", "points"]);
+export const TOOLBOX_BILLING_MEDIA = Object.freeze(["free", "points", "ai_quota"]);
 export const TOOLBOX_JOB_STATUSES = Object.freeze([
   "queued",
   "processing",
@@ -77,6 +77,7 @@ function tool(definition) {
   };
   return Object.freeze({
     ...definition,
+    billingMedia: Object.freeze([...(definition.billingMedia || [definition.billingMedium])]),
     input: Object.freeze(input),
     output: Object.freeze({ ...definition.output }),
     availability: Object.freeze({ ...definition.availability }),
@@ -132,6 +133,7 @@ export const TOOLBOX_TOOL_CATALOG = Object.freeze([
     phase: "launch",
     executionMode: "ai_skill",
     billingMedium: "points",
+    billingMedia: ["points", "ai_quota"],
     input: { kind: "prompt", minItems: 0, maxItems: 0 },
     output: {
       artifactType: "note_draft",
@@ -145,6 +147,7 @@ export const TOOLBOX_TOOL_CATALOG = Object.freeze([
     phase: "launch",
     executionMode: "ai_skill",
     billingMedium: "points",
+    billingMedia: ["points", "ai_quota"],
     input: {
       kind: "resources",
       minItems: 2,
@@ -163,6 +166,7 @@ export const TOOLBOX_TOOL_CATALOG = Object.freeze([
     phase: "launch",
     executionMode: "ai_skill",
     billingMedium: "points",
+    billingMedia: ["points", "ai_quota"],
     input: {
       kind: "resources",
       minItems: 1,
@@ -181,6 +185,7 @@ export const TOOLBOX_TOOL_CATALOG = Object.freeze([
     phase: "launch",
     executionMode: "ai_skill",
     billingMedium: "points",
+    billingMedia: ["points", "ai_quota"],
     input: {
       kind: "resources",
       minItems: 1,
@@ -199,6 +204,7 @@ export const TOOLBOX_TOOL_CATALOG = Object.freeze([
     phase: "launch",
     executionMode: "ai_skill",
     billingMedium: "points",
+    billingMedia: ["points", "ai_quota"],
     input: {
       kind: "resources",
       minItems: 1,
@@ -217,6 +223,7 @@ export const TOOLBOX_TOOL_CATALOG = Object.freeze([
     phase: "launch",
     executionMode: "ai_skill",
     billingMedium: "points",
+    billingMedia: ["points", "ai_quota"],
     input: {
       kind: "resources",
       minItems: 1,
@@ -235,6 +242,7 @@ export const TOOLBOX_TOOL_CATALOG = Object.freeze([
     phase: "next",
     executionMode: "ai_skill",
     billingMedium: "points",
+    billingMedia: ["points", "ai_quota"],
     input: {
       kind: "resources",
       minItems: 2,
@@ -253,6 +261,7 @@ export const TOOLBOX_TOOL_CATALOG = Object.freeze([
     phase: "launch",
     executionMode: "ai_skill",
     billingMedium: "points",
+    billingMedia: ["points", "ai_quota"],
     input: {
       kind: "resources",
       minItems: 2,

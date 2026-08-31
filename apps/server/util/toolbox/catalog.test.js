@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { getPublicToolboxCatalog, normalizeToolboxInput, quoteToolboxPoints, toolboxInputDigest } from './catalog.js';
+import {
+  getPublicToolboxCatalog,
+  normalizeToolboxBillingMedium,
+  normalizeToolboxInput,
+  quoteToolboxPoints,
+  toolboxInputDigest,
+} from './catalog.js';
 
 describe('toolbox catalog', () => {
   it('quotes the documented bounded price ranges', () => {
@@ -70,12 +76,17 @@ describe('toolbox catalog', () => {
     ).toThrowError(expect.objectContaining({ code: 'TOOLBOX_INTENT_INVALID' }));
   });
 
-  it('uses a canonical digest and exposes exactly one billing medium', () => {
+  it('uses a canonical digest and exposes only the billing media each tool supports', () => {
     expect(toolboxInputDigest({ b: 2, a: 1 })).toBe(toolboxInputDigest({ a: 1, b: 2 }));
     const catalog = getPublicToolboxCatalog({ disabledToolIds: ['ocr_to_text'] });
     expect(catalog).not.toHaveProperty('aiFollowupBilling');
     expect(catalog.tools.find((item) => item.id === 'ocr_to_text')?.availability.enabled).toBe(false);
     expect(catalog.tools.find((item) => item.id === 'image_optimizer')?.billingMedium).toBe('free');
+    expect(catalog.tools.find((item) => item.id === 'research_brief')?.billingMedia).toEqual([
+      'points',
+      'ai_quota',
+    ]);
+    expect(catalog.tools.find((item) => item.id === 'ocr_to_text')?.billingMedia).toEqual(['points']);
     expect(catalog.tools).toHaveLength(41);
     expect(getPublicToolboxCatalog().tools.filter((item) => item.availability.enabled)).toHaveLength(20);
     expect(catalog.tools.filter((item) => item.availability.enabled)).toHaveLength(19);
@@ -92,6 +103,11 @@ describe('toolbox catalog', () => {
       expect(tool.price.min).toBeGreaterThan(0);
       expect(tool.price.max).toBeGreaterThanOrEqual(tool.price.min);
     }
+    expect(normalizeToolboxBillingMedium('research_brief', 'ai_quota')).toBe('ai_quota');
+    expect(normalizeToolboxBillingMedium('research_brief', 'points')).toBe('points');
+    expect(() => normalizeToolboxBillingMedium('ocr_to_text', 'ai_quota')).toThrowError(
+      expect.objectContaining({ code: 'TOOLBOX_BILLING_MEDIUM_INVALID' }),
+    );
   });
 
   it('fails closed on unknown fields, duplicate resources and out-of-range input counts', () => {

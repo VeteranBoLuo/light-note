@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS toolbox_quotes (
   request_id VARCHAR(64) NOT NULL,
   tool_id VARCHAR(48) NOT NULL,
   pricing_version VARCHAR(32) NOT NULL,
+  billing_medium VARCHAR(16) NOT NULL DEFAULT 'points',
   input_digest CHAR(64) NOT NULL,
   input_snapshot_json JSON NOT NULL,
   quoted_points INT UNSIGNED NOT NULL,
@@ -22,7 +23,7 @@ CREATE TABLE IF NOT EXISTS toolbox_quotes (
   UNIQUE KEY uk_toolbox_quote_request (user_id, request_id),
   KEY idx_toolbox_quote_expiry (status, expires_at),
   KEY idx_toolbox_quote_user_time (user_id, create_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工具箱服务端报价快照';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='工具箱服务端报价快照';
 
 CREATE TABLE IF NOT EXISTS toolbox_jobs (
   id CHAR(36) NOT NULL,
@@ -30,6 +31,7 @@ CREATE TABLE IF NOT EXISTS toolbox_jobs (
   client_request_id VARCHAR(64) NOT NULL,
   tool_id VARCHAR(48) NOT NULL,
   quote_id CHAR(36) DEFAULT NULL,
+  billing_medium VARCHAR(16) NOT NULL DEFAULT 'points',
   input_digest CHAR(64) NOT NULL,
   options_json JSON DEFAULT NULL,
   status VARCHAR(24) NOT NULL DEFAULT 'queued',
@@ -61,7 +63,7 @@ CREATE TABLE IF NOT EXISTS toolbox_jobs (
   KEY idx_toolbox_job_claim (status, available_at, locked_at),
   KEY idx_toolbox_job_user_time (user_id, create_time),
   KEY idx_toolbox_job_billing (billing_status, updated_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工具箱异步任务与三状态机快照';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='工具箱异步任务与三状态机快照';
 
 CREATE TABLE IF NOT EXISTS toolbox_job_inputs (
   id BIGINT NOT NULL AUTO_INCREMENT,
@@ -77,7 +79,7 @@ CREATE TABLE IF NOT EXISTS toolbox_job_inputs (
   UNIQUE KEY uk_toolbox_job_input_order (job_id, input_index),
   KEY idx_toolbox_job_input_resource (resource_type, resource_id),
   KEY idx_toolbox_job_input_source (document_source_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工具箱任务输入引用，不保存材料正文';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='工具箱任务输入引用，不保存材料正文';
 
 CREATE TABLE IF NOT EXISTS toolbox_artifacts (
   id CHAR(36) NOT NULL,
@@ -100,7 +102,7 @@ CREATE TABLE IF NOT EXISTS toolbox_artifacts (
   UNIQUE KEY uk_toolbox_artifact_job (job_id),
   KEY idx_toolbox_artifact_user_time (user_id, create_time),
   KEY idx_toolbox_artifact_expiry (status, expires_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工具箱结构化可保存产物';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='工具箱结构化可保存产物';
 
 CREATE TABLE IF NOT EXISTS toolbox_save_receipts (
   id CHAR(36) NOT NULL,
@@ -122,4 +124,4 @@ CREATE TABLE IF NOT EXISTS toolbox_save_receipts (
   UNIQUE KEY uk_toolbox_save_receipt (receipt_key),
   UNIQUE KEY uk_toolbox_save_request (user_id, idempotency_key),
   KEY idx_toolbox_save_artifact (artifact_id, artifact_version)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工具箱同版本产物保存幂等收据';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='工具箱同版本产物保存幂等收据';

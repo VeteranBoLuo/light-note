@@ -27,17 +27,6 @@ import {
   updateToolboxWorkspace,
   updateToolboxWorkspaceItem,
 } from '../util/toolbox/workspace.js';
-import {
-  createToolboxProject,
-  createToolboxProjectRevision,
-  getToolboxProject,
-  listToolboxHomeProjects,
-  listToolboxProjectRevisions,
-  listToolboxProjects,
-  openToolboxProject,
-  restoreToolboxProjectRevision,
-  updateToolboxProject,
-} from '../util/toolbox/project.js';
 
 function sendError(res, error) {
   const parsed = parseToolboxError(error);
@@ -74,116 +63,11 @@ export async function getHome(req, res) {
   if (!requireRead(req, res)) return;
   try {
     const userId = readUserId(req);
-    const [workspaces, tasks, projects] = await Promise.all([
+    const [workspaces, tasks] = await Promise.all([
       listToolboxHomeWorkspaces({ userId }),
       listToolboxHomeTasks({ userId }),
-      listToolboxHomeProjects({ userId }),
     ]);
-    return res.send(resultData({ schemaVersion: 2, workspaces, tasks, projects }));
-  } catch (error) {
-    return sendError(res, error);
-  }
-}
-
-export async function listProjects(req, res) {
-  if (!requireRead(req, res)) return;
-  try {
-    const page = await listToolboxProjects({
-      userId: readUserId(req),
-      type: req.query?.type,
-      status: req.query?.status,
-      limit: req.query?.limit,
-      cursor: req.query?.cursor,
-    });
-    return res.send(resultData(page));
-  } catch (error) {
-    return sendError(res, error);
-  }
-}
-
-export async function createProject(req, res) {
-  if (!requireWrite(req, res)) return;
-  try {
-    const project = await createToolboxProject({ userId: req.user.id, input: req.body });
-    return res.status(201).send(resultData(project));
-  } catch (error) {
-    return sendError(res, error);
-  }
-}
-
-export async function getProject(req, res) {
-  if (!requireRead(req, res)) return;
-  try {
-    const project = await getToolboxProject({ userId: readUserId(req), projectId: req.params.projectId });
-    return res.send(resultData(project));
-  } catch (error) {
-    return sendError(res, error);
-  }
-}
-
-export async function updateProject(req, res) {
-  if (!requireWrite(req, res)) return;
-  try {
-    const project = await updateToolboxProject({
-      userId: req.user.id,
-      projectId: req.params.projectId,
-      input: req.body,
-    });
-    return res.send(resultData(project));
-  } catch (error) {
-    return sendError(res, error);
-  }
-}
-
-export async function openProject(req, res) {
-  if (!requireWrite(req, res)) return;
-  try {
-    const project = await openToolboxProject({ userId: req.user.id, projectId: req.params.projectId });
-    return res.send(resultData(project));
-  } catch (error) {
-    return sendError(res, error);
-  }
-}
-
-export async function listProjectRevisions(req, res) {
-  if (!requireRead(req, res)) return;
-  try {
-    const page = await listToolboxProjectRevisions({
-      userId: readUserId(req),
-      projectId: req.params.projectId,
-      limit: req.query?.limit,
-      cursor: req.query?.cursor,
-    });
-    return res.send(resultData(page));
-  } catch (error) {
-    return sendError(res, error);
-  }
-}
-
-export async function createProjectRevision(req, res) {
-  if (!requireWrite(req, res)) return;
-  try {
-    const project = await createToolboxProjectRevision({
-      userId: req.user.id,
-      projectId: req.params.projectId,
-      input: req.body,
-    });
-    return res.status(201).send(resultData(project));
-  } catch (error) {
-    return sendError(res, error);
-  }
-}
-
-export async function restoreProjectRevision(req, res) {
-  if (!requireWrite(req, res)) return;
-  try {
-    const project = await restoreToolboxProjectRevision({
-      userId: req.user.id,
-      projectId: req.params.projectId,
-      revisionNo: req.params.revisionNo,
-      input: req.body,
-    });
-    return res.status(201).send(resultData(project));
+    return res.send(resultData({ schemaVersion: 2, workspaces, tasks }));
   } catch (error) {
     return sendError(res, error);
   }
@@ -331,6 +215,7 @@ export async function createQuote(req, res) {
       userId: req.user.id,
       toolId: req.body?.toolId,
       rawInput: req.body?.input,
+      billingMedium: req.body?.billingMedium,
       clientRequestId: req.body?.clientRequestId,
     });
     return res.send(resultData(quote));

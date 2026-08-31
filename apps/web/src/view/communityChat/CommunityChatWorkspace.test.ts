@@ -3507,7 +3507,7 @@ describe('CommunityChatWorkspace', () => {
     expect(host.querySelector('.chat-expression-panel')).toBeNull();
   });
 
-  it('从 Emoji 内的笺团分类选择小表情后以内联图片写入输入框并自动关闭面板', async () => {
+  it('从 Emoji 内的笺团分类选择小表情后写入统一编辑事务，并支持撤销重做', async () => {
     mocks.bookmark.isMobile = true;
     const host = await mountWorkspace();
     host
@@ -3527,6 +3527,29 @@ describe('CommunityChatWorkspace', () => {
       COMMUNITY_CHAT_INLINE_EMOJIS[0].token,
     );
     expect(host.querySelector('.chat-expression-panel')).toBeNull();
+
+    host
+      .querySelector<HTMLElement>('.chat-composer-input__rich')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', metaKey: true, bubbles: true, cancelable: true }));
+    await flushAsync();
+    expect(host.querySelector<HTMLTextAreaElement>('.community-composer__input textarea')?.value).toBe('');
+
+    host
+      .querySelector<HTMLTextAreaElement>('.community-composer__input textarea')
+      ?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'z', metaKey: true, shiftKey: true, bubbles: true, cancelable: true }),
+      );
+    await flushAsync();
+    expect(host.querySelector<HTMLImageElement>('.chat-composer-input__rich img')?.dataset.inlineEmojiToken).toBe(
+      COMMUNITY_CHAT_INLINE_EMOJIS[0].token,
+    );
+  });
+
+  it('输入区底部留白比原布局增加，但保持低于 Lark 的大间距', () => {
+    expect(workspaceSource).toMatch(/\.community-composer\s*\{[\s\S]*?padding:\s*7px 14px 12px;/u);
+    expect(workspaceSource).toMatch(
+      /@media[\s\S]*?\.community-composer\s*\{[\s\S]*?padding:\s*5px 8px calc\(8px \+ env\(safe-area-inset-bottom\)\);/u,
+    );
   });
 
   it('个人表情面板可上传用户自己的图片，并立即加入账号表情库', async () => {

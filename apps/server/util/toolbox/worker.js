@@ -8,7 +8,7 @@ import {
 } from '../aiDocument/service.js';
 import { getActiveSecurityRestrictions } from '../security/services/securityRestrictionService.js';
 import { resolvePersonalKnowledgeResourceVersions } from '../personalKnowledgeSearch.js';
-import { settleReservedToolboxBilling } from './billing.js';
+import { settleToolboxBilling } from './billing.js';
 import { parseToolboxError, toolboxError } from './errors.js';
 import { toolboxServiceInternals } from './service.js';
 
@@ -114,6 +114,7 @@ const AI_TOOL_INTENT_INSTRUCTIONS = Object.freeze({
 });
 const NON_RETRYABLE_CODES = new Set([
   'AI_ACCESS_RESTRICTED',
+  'AI_QUOTA_EXCEEDED',
   'AI_SKILL_ROLE_FORBIDDEN',
   'AI_SKILL_SCOPE_RESOURCE_UNAVAILABLE',
   'AI_SKILL_SCOPE_STALE',
@@ -206,7 +207,7 @@ async function terminalizeExhaustedToolboxLease(connection) {
   );
   const job = rows[0];
   if (!job) return null;
-  const settlement = await settleReservedToolboxBilling(connection, job, {
+  const settlement = await settleToolboxBilling(connection, job, {
     outcome: 'failed',
     reasonCode: 'TOOLBOX_JOB_LEASE_EXHAUSTED',
   });
@@ -475,6 +476,12 @@ function coverageIsPartial(coverage) {
   );
 }
 
+function toolboxAiExecutionOverrides(job) {
+  return String(job?.billing_medium || 'points') === 'points'
+    ? { executionConfigOverrides: { billingPolicy: 'system', systemId: 'toolbox_points' } }
+    : {};
+}
+
 async function executeAiTool(job, inputs, identity) {
   const strategy = AI_TOOL_STRATEGIES[job.tool_id];
   if (!strategy) throw toolboxError('TOOLBOX_TOOL_EXECUTOR_MISSING', '工具执行器尚未配置', 500);
@@ -511,7 +518,7 @@ async function executeAiTool(job, inputs, identity) {
     {
       database: pool,
       internalCaller: 'toolbox_worker',
-      executionConfigOverrides: { billingPolicy: 'system', systemId: 'toolbox_points' },
+      ...toolboxAiExecutionOverrides(job),
       modelPolicyOverrides: toolboxModelPolicy(job.tool_id, options),
     },
   );
@@ -519,7 +526,9 @@ async function executeAiTool(job, inputs, identity) {
   if (!content || response?.receipt?.modelCalled === false) {
     throw toolboxError(
       'TOOLBOX_NO_READABLE_CONTENT',
-      job.tool_id === 'idea_to_draft' ? '本次没有生成可用初稿，未扣除积分' : '所选材料没有足够的可读内容，未扣除积分',
+      job.tool_id === 'idea_to_draft'
+        ? '本次没有生成可用初稿，未保留本次计费'
+        : '所选材料没有足够的可读内容，未保留本次计费',
       400,
     );
   }
@@ -644,7 +653,7 @@ async function completeToolboxJob(job, workerId, artifact, database = pool) {
         expiresAt,
       ],
     );
-    const settlement = await settleReservedToolboxBilling(connection, current, {
+    const settlement = await settleToolboxBilling(connection, current, {
       outcome: artifact.outcome,
       reasonCode: artifact.outcome === 'partial_succeeded' ? 'PARTIAL_COVERAGE' : 'DELIVERED',
     });
@@ -711,7 +720,7 @@ async function failOrRetryToolboxJob(job, workerId, error, database = pool) {
       await connection.commit();
       return true;
     }
-    const settlement = await settleReservedToolboxBilling(connection, current, {
+    const settlement = await settleToolboxBilling(connection, current, {
       outcome: 'failed',
       reasonCode: parsed.code,
     });
@@ -802,7 +811,7 @@ export async function cleanupExpiredToolboxData(database = pool) {
         await connection.rollback();
         continue;
       }
-      const settlement = await settleReservedToolboxBilling(connection, job, {
+      const settlement = await settleToolboxBilling(connection, job, {
         outcome: 'expired',
         reasonCode: 'JOB_RETENTION_EXPIRED',
       });
@@ -844,6 +853,7 @@ export const toolboxWorkerInternals = Object.freeze({
   shouldRetryJob,
   terminalizeExhaustedToolboxLease,
   toolboxIntentInstruction,
+  toolboxAiExecutionOverrides,
   toolboxLeaseOwner,
   toolboxAttemptRequestId,
   toolboxModelPolicy,

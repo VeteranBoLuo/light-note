@@ -84,9 +84,10 @@ const state = {
 const comboPackage = {
   skuId: 'combo-10',
   category: 'combo',
+  firstPurchaseScope: 'ai_account',
   amount: 10,
   base: { aiTokens: 600_000, storageMb: 128 },
-  firstPurchase: { aiTokens: 780_000, storageMb: 160 },
+  firstPurchase: { aiTokens: 720_000, storageMb: 128 },
   comboSavings: 2,
   firstPurchaseStatus: 'available',
 };
@@ -136,7 +137,7 @@ describe('独立资源商店', () => {
     routeState.query = { category: 'combo' };
     mocks.getState.mockResolvedValue(state);
     mocks.getCatalog.mockResolvedValue({
-      catalogVersion: 'support-packages-v2',
+      catalogVersion: 'support-packages-v3',
       catalogEnabled: true,
       checkoutEnabled: true,
       grantEnabled: true,
@@ -188,17 +189,17 @@ describe('独立资源商店', () => {
     actions[1]?.click();
     await nextTick();
     expect(document.body.textContent).toContain('AI + 云空间 · 轻量补充');
-    expect(document.body.textContent).toContain('本次预计到账78万 AI 额度 + 160 MB 云空间');
-    expect(document.body.textContent).toContain('当前预计到账包含本套餐的首购加量');
+    expect(document.body.textContent).toContain('本次预计到账72万 AI 额度 + 128 MB 云空间');
+    expect(document.body.textContent).toContain('当前预计到账包含本账号可享的首购加量');
     document.body.querySelector<HTMLButtonElement>('.checkout-modal__confirm')?.click();
     expect(mocks.openCheckout).toHaveBeenNthCalledWith(1, campaign.campaignSkuId, campaign.catalogVersion);
-    expect(mocks.openCheckout).toHaveBeenNthCalledWith(2, 'combo-10', 'support-packages-v2');
+    expect(mocks.openCheckout).toHaveBeenNthCalledWith(2, 'combo-10', 'support-packages-v3');
   });
 
   it('本地只读目录完整显示云空间套餐并保持结算关闭', async () => {
     routeState.query = { category: 'storage' };
     mocks.getCatalog.mockResolvedValueOnce({
-      catalogVersion: 'support-packages-v2',
+      catalogVersion: 'support-packages-v3',
       catalogEnabled: true,
       checkoutEnabled: false,
       grantEnabled: false,
@@ -267,7 +268,7 @@ describe('独立资源商店', () => {
       await nextTick();
       expect(document.body.querySelector<HTMLButtonElement>('.checkout-modal__confirm')?.disabled).toBe(false);
       mocks.getCatalog.mockResolvedValueOnce({
-        catalogVersion: 'support-packages-v2',
+        catalogVersion: 'support-packages-v3',
         catalogEnabled: true,
         checkoutEnabled: true,
         grantEnabled: true,
@@ -300,7 +301,7 @@ describe('独立资源商店', () => {
       await vi.waitFor(() => expect(host.textContent).toContain('购买 ¥10'));
       expect(document.body.querySelector<HTMLButtonElement>('.checkout-modal__confirm')?.disabled).toBe(false);
       expect(document.body.textContent).toContain('本次预计到账60万 AI 额度 + 128 MB 云空间');
-      expect(document.body.textContent).toContain('本套餐的首购加量已使用');
+      expect(document.body.textContent).toContain('本账号对应的首购加量已使用');
     } finally {
       nowSpy.mockRestore();
     }
@@ -308,7 +309,7 @@ describe('独立资源商店', () => {
 
   it('首购加量已用时，确认弹窗只按基础权益给出预计到账', async () => {
     mocks.getCatalog.mockResolvedValueOnce({
-      catalogVersion: 'support-packages-v2',
+      catalogVersion: 'support-packages-v3',
       catalogEnabled: true,
       checkoutEnabled: true,
       grantEnabled: true,
@@ -321,7 +322,7 @@ describe('独立资源商店', () => {
     host.querySelector<HTMLButtonElement>('.package-card__action')?.click();
     await nextTick();
     expect(document.body.textContent).toContain('本次预计到账60万 AI 额度 + 128 MB 云空间');
-    expect(document.body.textContent).toContain('本套餐的首购加量已使用');
-    expect(document.body.textContent).not.toContain('本次预计到账78万 AI 额度 + 160 MB 云空间');
+    expect(document.body.textContent).toContain('本账号对应的首购加量已使用');
+    expect(document.body.textContent).not.toContain('本次预计到账72万 AI 额度 + 128 MB 云空间');
   });
 });

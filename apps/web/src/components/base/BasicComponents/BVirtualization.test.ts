@@ -21,6 +21,7 @@ function mount(
       return () => h(component, props, slots);
     },
   });
+  app.directive('auto-scrollbar', {});
   app.mount(host);
   cleanups.push(() => {
     app.unmount();
@@ -95,6 +96,41 @@ describe('virtual list scroll layout', () => {
     expect(scroller.style.paddingBottom).toBe('');
   });
 
+  it('reserves the known cursor total before later pages arrive', async () => {
+    const items = ref(Array.from({ length: 20 }, (_, id) => ({ id })));
+    const loadMore = vi.fn();
+    const host = mount(
+      BVirtualList,
+      {
+        get items() {
+          return items.value;
+        },
+        totalCount: 100,
+        itemHeight: 40,
+        gap: 0,
+        overscan: 2,
+        hasMore: true,
+        onLoadMore: loadMore,
+      },
+      { default: ({ item }: any) => `item-${item.id}` } as any,
+    );
+    await nextTick();
+
+    const scroller = host.querySelector<HTMLElement>('.b-virtual-list')!;
+    const sizer = host.querySelector<HTMLElement>('.b-virtual-list__sizer')!;
+    Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 120 });
+    expect(sizer.style.height).toBe('4000px');
+
+    scroller.scrollTop = 720;
+    scroller.dispatchEvent(new Event('scroll'));
+    await nextTick();
+    expect(loadMore).toHaveBeenCalled();
+
+    items.value = Array.from({ length: 40 }, (_, id) => ({ id }));
+    await nextTick();
+    expect(sizer.style.height).toBe('4000px');
+  });
+
   it('asks for the next BTable cursor page automatically when loaded rows do not fill the viewport', async () => {
     const loadMore = vi.fn();
     mount(BTable, {
@@ -144,6 +180,43 @@ describe('virtual list scroll layout', () => {
     expect(scroller.scrollTop).toBe(320);
     expect(host.textContent).toContain('item-8');
     expect(host.querySelectorAll('.b-virtual-list__item').length).toBeLessThan(100);
+  });
+
+  it('captures a semantic row anchor and restores the same row after reorder', async () => {
+    const listRef = ref<InstanceType<typeof BVirtualList> | null>(null);
+    const items = ref([{ id: 'a' }, { id: 'b' }, { id: 'c' }]);
+    const positions: Array<{ top: number; viewportHeight: number }> = [];
+    const Wrapper = {
+      setup() {
+        return () =>
+          h(
+            BVirtualList,
+            {
+              ref: listRef,
+              items: items.value,
+              itemHeight: 40,
+              overscan: 2,
+              onScrollPosition: (position: { top: number; viewportHeight: number }) => positions.push(position),
+            },
+            { default: ({ item }: any) => `item-${item.id}` },
+          );
+      },
+    };
+    const host = mount(Wrapper, {});
+    await nextTick();
+
+    const scroller = host.querySelector<HTMLElement>('.b-virtual-list')!;
+    Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 120 });
+    scroller.scrollTop = 85;
+    scroller.dispatchEvent(new Event('scroll'));
+    const anchor = listRef.value?.captureScrollAnchor();
+    expect(anchor).toEqual({ key: 'c', index: 2, offset: 5 });
+
+    items.value = [{ id: 'c' }, { id: 'a' }, { id: 'b' }];
+    await nextTick();
+    expect(listRef.value?.restoreScrollAnchor(anchor!)).toBe(true);
+    expect(scroller.scrollTop).toBe(5);
+    expect(positions.at(-1)).toEqual({ top: 5, viewportHeight: 120 });
   });
 
   it('can virtualize against the nearest page scroller without taking over the mouse wheel', async () => {

@@ -1,5 +1,3 @@
-import crypto from 'node:crypto';
-
 const API_LOG_SKIP_SUBSTRINGS = Object.freeze([
   'Logs',
   'getUserInfo',
@@ -46,22 +44,9 @@ const NOTE_CONTENT_MUTATION_PATHS = new Set([
   '/note/updateNoteTemplate',
 ]);
 
-const TOOLBOX_PROJECT_PATH_PATTERN =
-  /^\/toolbox\/projects(?:\/[^/]+(?:\/open|\/revisions(?:\/[^/]+\/restore)?)?)?\/?$/u;
-const TOOLBOX_PROJECT_TYPES = new Set(['document', 'presentation', 'workbook']);
-const TOOLBOX_PROJECT_CHANGE_KINDS = new Set(['create', 'autosave', 'named', 'ai_apply', 'import', 'restore']);
-
 function normalizeApiPath(originalUrl) {
   const pathname = String(originalUrl || '').split(/[?#]/, 1)[0];
   return pathname.startsWith('/api/') ? pathname.slice(4) : pathname;
-}
-
-export function isToolboxProjectApiPath(originalUrl) {
-  return TOOLBOX_PROJECT_PATH_PATTERN.test(normalizeApiPath(originalUrl));
-}
-
-export function templateApiLogPath(pathname) {
-  return String(pathname || '').replace(/^((?:\/api)?\/toolbox\/projects)\/[^/]+(?=\/|$)/u, '$1/:projectId');
 }
 
 function textLength(value) {
@@ -74,53 +59,12 @@ function optionalScalar(value, maxLength = 255) {
   return String(value).slice(0, maxLength);
 }
 
-function toolboxProjectContentSummary(content) {
-  if (content == null || typeof content !== 'object' || Array.isArray(content)) return {};
-  let serialized = '';
-  try {
-    serialized = JSON.stringify(content);
-  } catch {
-    return {};
-  }
-  const summary = {
-    contentBytes: Buffer.byteLength(serialized, 'utf8'),
-    contentHash: crypto.createHash('sha256').update(serialized).digest('hex'),
-  };
-  if (content.type === 'document') summary.pageCount = 1;
-  if (content.type === 'presentation' && Array.isArray(content.slides)) summary.pageCount = content.slides.length;
-  if (content.type === 'workbook' && Array.isArray(content.sheets)) {
-    summary.sheetCount = content.sheets.length;
-    summary.cellCount = content.sheets.reduce((total, sheet) => {
-      if (sheet == null || typeof sheet !== 'object' || Array.isArray(sheet)) return total;
-      const cells = sheet.cells;
-      return total + (cells && typeof cells === 'object' && !Array.isArray(cells) ? Object.keys(cells).length : 0);
-    }, 0);
-  }
-  return summary;
-}
-
-function summarizeToolboxProjectPayload(payload) {
-  const summary = { payloadSummary: 'toolbox_project_content_omitted' };
-  if (payload == null || typeof payload !== 'object' || Array.isArray(payload)) return summary;
-  const projectType = String(payload.projectType ?? payload.type ?? payload.content?.type ?? '');
-  if (TOOLBOX_PROJECT_TYPES.has(projectType)) summary.projectType = projectType;
-  for (const key of ['expectedVersion', 'expectedRevision']) {
-    const value = Number(payload[key]);
-    if (Number.isSafeInteger(value) && value >= 1) summary[key] = value;
-  }
-  const changeKind = String(payload.changeKind || '');
-  if (TOOLBOX_PROJECT_CHANGE_KINDS.has(changeKind)) summary.changeKind = changeKind;
-  Object.assign(summary, toolboxProjectContentSummary(payload.content));
-  return summary;
-}
-
 /**
  * 通用 API 日志只保留排障所需的请求轮廓。笔记正文/手绘 scene 是用户内容，
  * 又会在自动保存中反复出现；这些路由只记 ID、版本、类型和长度，不复制原文。
  */
 export function summarizeApiLogPayload(originalUrl, payload) {
   const path = normalizeApiPath(originalUrl);
-  if (isToolboxProjectApiPath(path)) return summarizeToolboxProjectPayload(payload);
   if (
     !NOTE_CONTENT_MUTATION_PATHS.has(path) ||
     payload == null ||

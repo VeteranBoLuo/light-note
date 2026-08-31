@@ -1,6 +1,6 @@
 export type ToolboxExecutionMode =
   "browser" | "service" | "worker" | "ai_skill";
-export type ToolboxBillingMedium = "free" | "points";
+export type ToolboxBillingMedium = "free" | "points" | "ai_quota";
 export type ToolboxJobStatus =
   | "queued"
   | "processing"
@@ -75,6 +75,7 @@ export interface ToolboxToolDefinition {
   phase: "launch" | "next";
   executionMode: ToolboxExecutionMode;
   billingMedium: ToolboxBillingMedium;
+  billingMedia: readonly ToolboxBillingMedium[];
   input: Readonly<{
     kind:
       | "resources"
@@ -108,7 +109,7 @@ export interface ToolboxToolDefinition {
 }
 
 export const TOOLBOX_PROTOCOL_VERSION: 1;
-export const TOOLBOX_PRICING_VERSION: "toolbox-points-v1";
+export const TOOLBOX_PRICING_VERSION: "toolbox-billing-v2";
 export const TOOLBOX_PROCESSING_REQUIREMENT_MAX_CHARS: 1000;
 export const TOOLBOX_EXECUTION_MODES: readonly ToolboxExecutionMode[];
 export const TOOLBOX_BILLING_MEDIA: readonly ToolboxBillingMedium[];

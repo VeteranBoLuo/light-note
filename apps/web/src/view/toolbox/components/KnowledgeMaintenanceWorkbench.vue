@@ -90,7 +90,7 @@
             </article>
           </section>
 
-          <section v-if="overview.recommendations.length" class="audit-recommendations">
+          <section v-if="actionableRecommendations.length" class="audit-recommendations">
             <header>
               <span class="maintenance-index">01</span>
               <div
@@ -100,7 +100,7 @@
             </header>
             <div>
               <article
-                v-for="(item, index) in overview.recommendations"
+                v-for="(item, index) in actionableRecommendations"
                 :key="item.code"
                 :class="`is-${item.priority}`"
               >
@@ -326,8 +326,12 @@
     const score = overview.value?.summary.healthScore || 0;
     return t(`toolbox.maintenance.audit.health.${score >= 80 ? 'good' : score >= 60 ? 'attention' : 'risk'}`);
   });
+  const actionableIssues = computed(() => (overview.value?.issues || []).filter((item) => item.kind !== 'unlinked'));
+  const actionableRecommendations = computed(() =>
+    (overview.value?.recommendations || []).filter((item) => item.code !== 'build_links'),
+  );
   const highPriorityCount = computed(
-    () => overview.value?.issues.filter((item) => item.severity === 'high').length || 0,
+    () => actionableIssues.value.filter((item) => item.severity === 'high').length,
   );
   const auditFacts = computed(() => {
     if (!overview.value) return [];
@@ -354,13 +358,6 @@
         value: `${summary.tagged}/${summary.total}`,
         description: t('toolbox.maintenance.audit.fact.taggedHint'),
       },
-      {
-        key: 'links',
-        icon: icon.toolbox.comparison,
-        label: t('toolbox.maintenance.audit.fact.linked'),
-        value: `${summary.linked}/${summary.total}`,
-        description: t('toolbox.maintenance.audit.fact.linkedHint'),
-      },
     ];
   });
   const issueKindOrder = [
@@ -370,13 +367,12 @@
     'untitled',
     'deep',
     'untagged',
-    'unlinked',
     'stale',
   ];
   const issueFilters = computed(() => {
     if (!overview.value) return [];
     return [
-      { value: 'all', label: t('toolbox.maintenance.issue.all'), count: overview.value.issueTotal },
+      { value: 'all', label: t('toolbox.maintenance.issue.all'), count: actionableIssues.value.length },
       ...issueKindOrder
         .filter((kind) => Number(overview.value?.issueCounts[kind] || 0) > 0)
         .map((kind) => ({
@@ -387,9 +383,7 @@
     ];
   });
   const filteredIssues = computed(() =>
-    (overview.value?.issues || []).filter(
-      (item) => activeIssueKind.value === 'all' || item.kind === activeIssueKind.value,
-    ),
+    actionableIssues.value.filter((item) => activeIssueKind.value === 'all' || item.kind === activeIssueKind.value),
   );
   const visibleIssues = computed(() => filteredIssues.value.slice(0, issueLimit.value));
   const directoryScopeOptions = computed(() => {
@@ -689,7 +683,7 @@
 
   .audit-facts {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 9px;
   }
 

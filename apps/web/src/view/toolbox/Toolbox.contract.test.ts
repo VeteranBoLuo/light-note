@@ -4,7 +4,9 @@ import { describe, expect, it } from 'vitest';
 import { TOOLBOX_TOOL_CATALOG } from '@lightnote/shared/toolbox-protocol';
 import {
   canonicalToolboxToolId,
+  TOOLBOX_DEFAULT_QUICK_TOOL_IDS,
   TOOLBOX_HOME_GROUPS,
+  TOOLBOX_PRIMARY_OUTCOME_TOOL_IDS,
   TOOLBOX_STARTER_TOOL_IDS,
   TOOLBOX_WORKFLOW_PRESENTATION,
   toolboxToolPath,
@@ -22,6 +24,19 @@ function localeKeys(value: unknown, prefix = ''): string[] {
 }
 
 describe('知识工具箱前端边界', () => {
+  it('未上线的 Office 仿制项目已从路由、首页与 API 边界直接删除', () => {
+    const routes = source('src/router/modules/toolbox.ts');
+    const home = source('src/view/toolbox/ToolboxHome.vue');
+    const api = source('src/api/toolbox.ts');
+
+    expect(routes).not.toContain('/toolbox/project');
+    expect(routes).not.toContain('ProjectEditor');
+    expect(home).not.toContain('ProductionProject');
+    expect(home).not.toContain('continueProjects');
+    expect(api).not.toContain('ToolboxProductionProject');
+    expect(api).not.toContain('projects:');
+  });
+
   it('浏览器本地工具不引用 HTTP、上传或工具箱任务 API', () => {
     for (const path of [
       'src/view/toolbox/components/PdfOrganizer.vue',
@@ -127,6 +142,19 @@ describe('知识工具箱前端边界', () => {
     expect(imageOptimizer).toContain('maxDimension: null');
     expect(imageOptimizer).not.toContain("t('toolbox.local.maxDimension')");
     expect(imageOptimizer).not.toContain("BInput from '@/components/base/BasicComponents/BInput.vue'");
+
+    const workbench = source('src/view/toolbox/ToolboxWorkbench.vue');
+    expect(workbench).toContain("'is-resource-workspace': resourceWorkspaceActive");
+    expect(workbench).toContain('<aside v-auto-scrollbar class="toolbox-workflow-rail">');
+    expect(workbench).toContain('.toolbox-workbench.is-resource-workspace');
+    expect(workbench).toContain('overflow-y: hidden');
+    expect(workbench).toContain('@media (max-width: 1199px)');
+    expect(workbench).toContain("'is-compact-sources': !isPromptTool && compactWorkflowStep === 'sources'");
+    expect(workbench).toContain("'is-compact-design': !isPromptTool && compactWorkflowStep === 'design'");
+    expect(workbench).toContain("selectCompactWorkflowStep('design')");
+    expect(workbench).toContain('page.scrollTo({ top: Math.max(0, paidPanel.offsetTop - 10)');
+    expect(workbench).not.toContain('canUseStickyPanel');
+    expect(workbench).not.toContain('workflowRailNeedsOwnScroll');
   });
 
   it('滚动快照只在进入下一级页面前保存，不在卸载钩子中污染新历史条目', () => {
@@ -157,7 +185,7 @@ describe('知识工具箱前端边界', () => {
     );
   });
 
-  it('首页先从零开始，再续接已有工作，并完整展示常用/最近与全部分类目录', () => {
+  it('首页先续接现场，再提供高价值产出入口，并完整展示常用/最近与全部分类目录', () => {
     const home = source('src/view/toolbox/ToolboxHome.vue');
     const homeTemplate = home.slice(0, home.indexOf('<script setup'));
     const activeToolIds = TOOLBOX_TOOL_CATALOG.filter((tool) => tool.availability.enabled)
@@ -182,42 +210,62 @@ describe('知识工具箱前端边界', () => {
     ]);
     expect(home).toContain('class="toolbox-overview"');
     expect(homeTemplate).toContain('class="toolbox-asset__icon"');
+    expect(homeTemplate).toContain('class="toolbox-asset is-ai"');
+    expect(homeTemplate).toContain("router.push({ name: 'aiUsage' })");
     expect(home).toContain('color: #a34f00;');
     expect(home).toContain(":global([data-theme='night'] .toolbox-asset__icon)");
     expect(home).not.toContain('.toolbox-asset > :first-child');
-    expect(homeTemplate).toContain('class="toolbox-section toolbox-start"');
+    expect(homeTemplate).toContain('class="toolbox-section toolbox-start toolbox-outcomes"');
     expect(homeTemplate).toContain('class="toolbox-section toolbox-quick"');
     expect(homeTemplate).toContain('class="toolbox-section toolbox-continue"');
     expect(homeTemplate).not.toContain('class="toolbox-section toolbox-recent"');
     expect(homeTemplate).toContain('class="toolbox-section toolbox-catalog"');
-    expect(homeTemplate.indexOf('toolbox-start')).toBeLessThan(homeTemplate.indexOf('toolbox-continue'));
-    expect(homeTemplate.indexOf('toolbox-continue')).toBeLessThan(homeTemplate.indexOf('toolbox-quick'));
+    expect(homeTemplate.indexOf('toolbox-continue')).toBeLessThan(homeTemplate.indexOf('toolbox-outcomes'));
+    expect(homeTemplate.indexOf('toolbox-outcomes')).toBeLessThan(homeTemplate.indexOf('toolbox-quick'));
     expect(homeTemplate.indexOf('toolbox-quick')).toBeLessThan(homeTemplate.indexOf('toolbox-catalog'));
     expect(homeTemplate).toContain('class="toolbox-quick__switch"');
     expect(homeTemplate).toContain("quickView === 'recent'");
-    expect(homeTemplate).toContain("hasContinue ? '03' : '02'");
-    expect(homeTemplate).toContain("hasContinue ? '04' : '03'");
+    expect(homeTemplate).toContain("isGuest ? '02' : '03'");
+    expect(homeTemplate).toContain("isGuest ? '03' : '04'");
     expect(homeTemplate).toContain('class="toolbox-group-filter"');
     expect(home).toContain('class="toolbox-catalog__search"');
     expect(home).not.toContain('class="toolbox-overview__search"');
     expect(homeTemplate).toContain('class="toolbox-home-groups"');
     expect(homeTemplate).toContain('class="toolbox-home-group"');
     expect(home).toContain('fetchToolboxHome');
+    expect(home).toContain('overview.value?.workspaces?.continue');
+    expect(home).toContain('overview.value?.tasks?.active');
     expect(home).toContain('overviewLoading');
     expect(home).toContain('overviewFailed');
     expect(home).toContain('v-if="isGuest" class="toolbox-guest-guide"');
     expect(home).toContain('readToolboxRecentUses');
     expect(home).toContain('readToolboxPinnedTools');
     expect(home).toContain('TOOLBOX_DEFAULT_QUICK_TOOL_IDS');
-    expect(home).toContain('TOOLBOX_STARTER_TOOL_IDS');
-    expect(home).toContain('PRIMARY_PRODUCTION_STUDIOS');
-    expect(homeTemplate).toContain('class="toolbox-production-grid"');
-    expect(homeTemplate).toContain('v-for="project in continueProjects"');
-    expect(home).toContain('productionStudioForProjectType(project.projectType)');
-    expect(home).toContain('continueProjects.value.length > 0');
-    expect(home).toContain("query: { create: '1' }");
+    expect(TOOLBOX_DEFAULT_QUICK_TOOL_IDS[0]).toBe('knowledge_structure_audit');
+    expect(homeTemplate).not.toContain('icon.toolbox.arrow');
+    expect(zhCN.toolbox.maintenance.issue).not.toHaveProperty('unlinked');
+    expect(zhCN.toolbox.maintenance.recommendation).not.toHaveProperty('build_links');
+    expect(enUS.toolbox.maintenance.issue).not.toHaveProperty('unlinked');
+    expect(enUS.toolbox.maintenance.recommendation).not.toHaveProperty('build_links');
+    expect(home).toContain('TOOLBOX_PRIMARY_OUTCOME_TOOL_IDS');
+    expect(TOOLBOX_PRIMARY_OUTCOME_TOOL_IDS).toEqual([
+      'material_to_note',
+      'research_brief',
+      'source_comparison',
+      'data_workbench',
+    ]);
+    expect(home).not.toContain('PRIMARY_PRODUCTION_STUDIOS');
+    expect(homeTemplate).not.toContain('class="toolbox-production-grid"');
+    expect(homeTemplate).not.toContain('continueProjects');
+    expect(home).not.toContain('productionStudioForProjectType');
+    expect(home).not.toContain('ProductionProject');
+    expect(home).toContain('TOOLBOX_TOOL_CATALOG.filter');
+    expect(home).toContain("tool.executionMode === 'browser'");
+    expect(home).toContain("tool.billingMedium === 'free'");
+    expect(homeTemplate).toContain('v-if="catalogDegraded" class="toolbox-catalog__notice"');
     expect(home).not.toContain('fetchToolboxJobs');
-    expect(home).not.toContain('useAiQuotaStatus');
+    expect(home).toContain('useAiQuotaStatus');
+    expect(home).toContain('formatAiQuotaTokens');
     expect(home).not.toContain('<BProgress');
     expect(home).toContain("value: 'free' as const");
     expect(home).toContain("value: 'points' as const");
@@ -272,7 +320,7 @@ describe('知识工具箱前端边界', () => {
     });
   });
 
-  it('移动端从零创建只连接真实能力，并与已有工作续接明确分区', () => {
+  it('移动端新建只突出真实产出能力，长期工作区保留兼容路由但退出首页主入口', () => {
     const home = source('src/view/toolbox/ToolboxHome.vue');
     const homeTemplate = home.slice(0, home.indexOf('<script setup'));
     const serviceRegistry = source('src/view/toolbox/serviceToolRegistry.ts');
@@ -296,12 +344,13 @@ describe('知识工具箱前端边界', () => {
       input: { kind: 'prompt', minItems: 0 },
     });
 
-    expect(homeTemplate).toContain('class="toolbox-section toolbox-start"');
-    expect(homeTemplate.indexOf('toolbox-start')).toBeLessThan(homeTemplate.indexOf('toolbox-quick'));
-    expect(homeTemplate.indexOf('toolbox-start')).toBeLessThan(homeTemplate.indexOf('toolbox-continue'));
-    expect(home).toContain("query: { create: '1' }");
-    expect(home).toContain('starterAccessibleLabel(tool)');
-    expect(home).toContain('min-height: 108px');
+    expect(homeTemplate).toContain('class="toolbox-section toolbox-start toolbox-outcomes"');
+    expect(homeTemplate.indexOf('toolbox-continue')).toBeLessThan(homeTemplate.indexOf('toolbox-outcomes'));
+    expect(homeTemplate.indexOf('toolbox-outcomes')).toBeLessThan(homeTemplate.indexOf('toolbox-quick'));
+    expect(homeTemplate).toContain('v-for="tool in primaryOutcomeTools"');
+    expect(home).not.toContain("query: { create: '1' }");
+    expect(home).not.toContain('starterAccessibleLabel(tool)');
+    expect(home).toContain('min-height: 96px');
     expect(home).toContain('.toolbox-category-filter :deep(.b-chip--interactive)');
     expect(home).toContain('min-height: 44px');
     expect(home).toContain('html.light-note-mobile-rendering .toolbox-start-card.b_btn');
@@ -316,12 +365,19 @@ describe('知识工具箱前端边界', () => {
     expect(maintenance).toContain('class="maintenance-mode-switch"');
     expect(maintenance).toContain('generateKnowledgeDirectoryIndex');
     expect(maintenance).toContain("const ALL_NOTES_SCOPE = '__all_notes__'");
+    expect(maintenance).not.toContain("    'unlinked',");
+    expect(maintenance).toContain("item.kind !== 'unlinked'");
+    expect(maintenance).toContain("item.code !== 'build_links'");
+    expect(maintenance).not.toContain("key: 'links'");
+    expect(maintenance).toContain('grid-template-columns: repeat(3, minmax(0, 1fr))');
     expect(dataset).toContain("activeToolId.value === 'data_quality_report'");
     expect(dataset).toContain('v-if="!isQualityTool" class="dataset-control-card"');
     expect(dataset).toContain('if (isQualityTool.value) await runTool()');
     expect(dataset).toContain('class="dataset-stagebar is-quality"');
     expect(dataset).toContain('class="dataset-operation-rail"');
     expect(dataset).toContain('class="dataset-mode-select"');
+    expect(dataset).toContain('class="dataset-empty__actions"');
+    expect(dataset).toContain('.dataset-operation:focus-visible');
     expect(dataset).toContain("path: '/toolbox/data_workbench'");
     expect(dataset).toContain('TOOLBOX_DATASET_MAX_TOTAL_BYTES');
     expect(dataset).toContain('watch(activeToolId');
@@ -364,12 +420,16 @@ describe('知识工具箱前端边界', () => {
     expect(content).not.toMatch(/<svg\b/u);
   });
 
-  it('工具箱只呈现本次积分执行，长文成果统一进入笔记库，不借用笔记助手追问计费', () => {
+  it('纯 AI 工具每次只选积分或 AI 额度，长文成果统一进入笔记库', () => {
     const workbench = source('src/view/toolbox/ToolboxWorkbench.vue');
     const task = source('src/view/toolbox/ToolboxTask.vue');
     const home = source('src/view/toolbox/ToolboxHome.vue');
     expect(workbench).toContain("'toolbox.pointsRule'");
     expect(workbench).toContain("'toolbox.promptPointsRule'");
+    expect(workbench).toContain("selectedBillingMedium.value = loaded.billingMedia.includes('ai_quota')");
+    expect(workbench).toContain('billingMedium: selectedBillingMedium.value');
+    expect(workbench).toContain("result.billingMedium === 'ai_quota'");
+    expect(workbench).toContain("selectedBillingMedium.value === 'ai_quota'");
     expect(workbench).toContain("'toolbox.workbench.promptIntentDescription'");
     expect(workbench).toContain("'toolbox.workbench.promptDetailDescription'");
     expect(workbench).toContain('question: String(question.value');
@@ -380,8 +440,15 @@ describe('知识工具箱前端边界', () => {
     expect(task).toContain('type="primary"');
     expect(task).not.toContain('continueWithAi');
     expect(task).not.toContain('setAiPreferredOpen');
-    expect(home).not.toContain('aiQuota');
+    expect(task).toContain("job.value?.billing.medium === 'ai_quota'");
+    expect(task).toContain("router.push('/ai-usage')");
+    expect(task).toContain("t('toolbox.task.aiQuotaBillingDescription')");
+    expect(home).toContain('aiQuotaBalanceLabel');
+    expect(home).toContain("tool.billingMedia.includes('ai_quota')");
+    expect(home).toContain("t('toolbox.billingChoiceRange'");
     expect(task).toContain("job.artifactState === 'expired'");
+    expect(task).toContain('v-if="artifactLoading"');
+    expect(task).toContain('@click="retryArtifact"');
     expect(task).toContain('watch(jobId');
   });
 
@@ -398,8 +465,12 @@ describe('知识工具箱前端边界', () => {
     expect(selector).toContain('selectionGroup');
     expect(selectorTemplate).toContain('class="toolbox-resource-selector__selected"');
     expect(selectorTemplate).toContain(':class="{ \'is-empty\': !selectedGroups.length }"');
+    expect(selector).toContain('height: clamp(84px, 10vh, 116px)');
+    expect(selector).toContain('.toolbox-resource-selector:not(.is-page-scroll)');
     expect(selector).toContain('height: 54px');
-    expect(selector).toContain('overflow-x: auto');
+    expect(selector).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
+    expect(selector).not.toContain('overflow-x: auto');
+    expect(selectorTemplate).toContain('v-auto-scrollbar');
     expect(selector).toContain('class="toolbox-resource-selector__clear"');
     expect(selector).toContain('white-space: nowrap');
     expect(selector).toContain(':limit="8"');
@@ -412,12 +483,51 @@ describe('知识工具箱前端边界', () => {
     expect(picker).toContain('<BVirtualList');
     expect(picker).toContain('virtualizedMode');
     expect(picker).toContain(":scroll-mode=\"pageScroll ? 'ancestor' : 'self'\"");
+    expect(picker).toContain(':total-count="virtualTotalCount"');
+    expect(selector).toContain('@click="selectType(option.value)"');
+    expect(selector).toContain('resourcePickerRef.value?.beginPageScrollTransition()');
+    expect(selector).toContain('resourcePickerRef.value?.captureScrollAnchor?.()');
+    expect(selector).toContain('resourcePickerRef.value?.prepareScrollAnchor?.(');
+    expect(selector).toContain('shouldShowResourceListBackToTop');
+    expect(selectorTemplate).toContain('class="toolbox-resource-selector__back-top"');
+    expect(workbench).toContain(':page-scroll="false"');
+    expect(workbench).toContain('width: min(1500px, 100%)');
+    expect(workbench).toContain('grid-template-rows: auto minmax(0, 1fr)');
+    expect(workbench).toContain('.toolbox-workbench.is-resource-workspace .toolbox-outcomes');
+    expect(workbench).toContain('.toolbox-workbench.is-resource-workspace .toolbox-run-summary');
+    expect(workbench).toContain("'has-billing-choice': supportsAiQuota");
     expect(pickerSearch).toContain("paginationMode: 'ordered'");
     expect(workbench).toContain('align-items: start');
     expect(workbench).toContain('resourceRefs: selectedResources.value.map');
     const workspace = source('src/view/toolbox/components/KnowledgeWorkspace.vue');
     expect(workspace).toContain(':page-scroll="!isMobileLayout"');
-    expect(workspace).toContain('grid-template-rows: minmax(0, 1fr) auto');
+    expect(workspace).toContain('<template #footer>');
+    expect(workspace).toContain('class="workspace-resource-modal__footer"');
+    expect(workspace).toContain('grid-template-rows: minmax(0, 1fr)');
+  });
+
+  it('材料弹窗、文本清理选项与 PDF 编排保持可发现、无断行且有明确拖拽反馈', () => {
+    const workspace = source('src/view/toolbox/components/KnowledgeWorkspace.vue');
+    const textWorkbench = source('src/view/toolbox/components/KnowledgeTextWorkbench.vue');
+    const pdfOrganizer = source('src/view/toolbox/components/PdfOrganizer.vue');
+
+    expect(workspace).toContain(':show-footer="true"');
+    expect(workspace).toContain('class="workspace-resource-modal__footer"');
+    expect(workspace).toContain("import BDateTimePicker from '@/components/base/BasicComponents/BDateTimePicker.vue'");
+    expect(workspace).toContain('<BDateTimePicker v-model:value="createForm.targetDate" :show-time="false" />');
+    expect(workspace).toContain('<BDateTimePicker v-model:value="itemForm.dueOn" :show-time="false" />');
+    expect(workspace).not.toMatch(/<BInput[^>]+type="date"/su);
+    expect(textWorkbench).toContain("'is-text-batch': toolId === 'text_batch'");
+    expect(textWorkbench).toContain('class="knowledge-checkbox-group is-batch-options"');
+    expect(textWorkbench).toContain('white-space: nowrap');
+    expect(pdfOrganizer).toContain("import { VueDraggable } from 'vue-draggable-plus'");
+    expect(pdfOrganizer).toContain('handle=".pdf-page-card__drag"');
+    expect(pdfOrganizer).toContain('ghost-class="pdf-page-card--ghost"');
+    expect(pdfOrganizer).toContain('chosen-class="pdf-page-card--chosen"');
+    expect(pdfOrganizer).toContain('fallback-class="pdf-page-card--fallback"');
+    expect(pdfOrganizer).not.toMatch(/:delay(?:-on-touch-only)?=/u);
+    expect(pdfOrganizer).toContain(':src="icon.todo.drag"');
+    expect(pdfOrganizer).not.toContain('>•••</span>');
   });
 
   it('知识工具使用配置驱动的差异化工作流，成果页不直出内部对象与伪连续进度', () => {
@@ -468,12 +578,15 @@ describe('知识工具箱前端边界', () => {
     expect(home).not.toContain("tool.phase === 'next'");
   });
 
-  it('工具箱与聊天室复用同一组顶栏胶囊状态样式', () => {
+  it('工具箱降为更多菜单入口，聊天室保留一级胶囊状态样式', () => {
     const navigation = source('src/components/home/navigation/Navigation.vue');
-    expect(navigation).toContain('class="navigation-pill-entry navigation-toolbox-entry"');
+    const rightArea = source('src/components/home/navigation/RightArea.vue');
+    expect(navigation).not.toContain('class="navigation-pill-entry navigation-toolbox-entry"');
     expect(navigation).toContain('class="navigation-pill-entry navigation-community-entry"');
     expect(navigation).toContain('.navigation-pill-entry:hover');
     expect(navigation).toContain('.navigation-pill-entry.is-active');
+    expect(rightArea).toContain("label: t('navigation.toolbox')");
+    expect(rightArea).toContain('function knowledgeWorkshopClick()');
   });
 
   it('工具箱中英文文案键保持完全一致', () => {

@@ -79,6 +79,7 @@ vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
 const { default: Navigation } = await import('./Navigation.vue');
 const navigationSource = readFileSync(resolve(process.cwd(), 'src/components/home/navigation/Navigation.vue'), 'utf8');
 const rightAreaSource = readFileSync(resolve(process.cwd(), 'src/components/home/navigation/RightArea.vue'), 'utf8');
+const settingsSource = readFileSync(resolve(process.cwd(), 'src/view/settings/Settings.vue'), 'utf8');
 const themeSource = readFileSync(resolve(process.cwd(), 'src/assets/css/theme.less'), 'utf8');
 
 let cleanup: (() => void) | undefined;
@@ -120,9 +121,11 @@ afterEach(() => {
 });
 
 describe('Navigation', () => {
-  it('工具箱与聊天室复用同一套轻量胶囊 hover / 选中态', () => {
-    expect(navigationSource).toContain('class="navigation-pill-entry navigation-toolbox-entry"');
+  it('聊天室保留一级胶囊状态，知识工坊降级到更多入口', () => {
+    expect(navigationSource).not.toContain('id="nav-toolbox-entry"');
     expect(navigationSource).toContain('class="navigation-pill-entry navigation-community-entry"');
+    expect(rightAreaSource).toContain("label: t('navigation.toolbox')");
+    expect(rightAreaSource).toContain('function knowledgeWorkshopClick()');
     expect(navigationSource).toContain('background: var(--navigation-pill-bg) !important');
     expect(navigationSource).toContain('color: var(--navigation-pill-hover-fg)');
     expect(navigationSource).toContain('background: var(--navigation-pill-hover-bg) !important');
@@ -150,29 +153,25 @@ describe('Navigation', () => {
     expect(mocks.routerPush).toHaveBeenCalledWith('/community-chat');
   });
 
-  it('PC 顶栏按待办、标签、资源中心、工具箱、聊天室的顺序提供一级入口', async () => {
+  it('PC 顶栏按待办、标签、资源中心、聊天室的顺序保留一级入口', async () => {
     const host = await mountNavigation();
     const navigationItems = Array.from(host.querySelector('.navigation-tab')?.children || []);
     const todoEntry = host.querySelector('#nav-todo-entry');
     const tagEntry = host.querySelector('#nav-tag-entry');
     const resourceCenterEntry = host.querySelector('#nav-resource-center-entry');
-    const toolboxEntry = host.querySelector('#nav-toolbox-entry');
     const communityEntry = host.querySelector('#nav-community-entry');
 
     expect(todoEntry).not.toBeNull();
     expect(tagEntry?.textContent?.trim()).toBe('标签');
     expect(resourceCenterEntry?.textContent?.trim()).toBe('资源中心');
-    expect(toolboxEntry?.textContent?.trim()).toBe('工具箱');
+    expect(host.querySelector('#nav-toolbox-entry')).toBeNull();
     expect(communityEntry).not.toBeNull();
     expect(navigationItems.indexOf(tagEntry as Element)).toBe(navigationItems.indexOf(todoEntry as Element) + 1);
     expect(navigationItems.indexOf(resourceCenterEntry as Element)).toBe(
       navigationItems.indexOf(tagEntry as Element) + 1,
     );
-    expect(navigationItems.indexOf(toolboxEntry as Element)).toBe(
-      navigationItems.indexOf(resourceCenterEntry as Element) + 1,
-    );
     expect(navigationItems.indexOf(communityEntry as Element)).toBe(
-      navigationItems.indexOf(toolboxEntry as Element) + 1,
+      navigationItems.indexOf(resourceCenterEntry as Element) + 1,
     );
 
     tagEntry?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -182,10 +181,6 @@ describe('Navigation', () => {
     resourceCenterEntry?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await nextTick();
     expect(mocks.routerPush).toHaveBeenCalledWith('/search');
-
-    toolboxEntry?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await nextTick();
-    expect(mocks.routerPush).toHaveBeenCalledWith('/toolbox');
   });
 
   it('标签和资源中心提升为一级入口后不再重复出现在更多菜单', () => {
@@ -193,6 +188,23 @@ describe('Navigation', () => {
     expect(rightAreaSource).not.toContain("label: t('navigation.tag')");
     expect(rightAreaSource).not.toContain('function resourceCenterClick');
     expect(rightAreaSource).not.toContain('function tagManageClick');
+  });
+
+  it('更多菜单只保留普通用户目的地，开发者工具箱降级到设置页脚', () => {
+    expect(zhCN.home.officialSite).toBe('官网');
+    expect(rightAreaSource).toContain("label: t('home.officialSite')");
+    expect(rightAreaSource).not.toContain("t('home.toolbox')");
+    expect(rightAreaSource).not.toContain('https://boluo66.top/toolkit/');
+    expect(settingsSource).toContain("t('settings.developerToolbox')");
+    expect(settingsSource).toContain('https://boluo66.top/toolkit/');
+  });
+
+  it('知识工坊上新提示只在点击该入口后消除', () => {
+    expect(rightAreaSource).toContain('class="more-menu-trigger__unread-dot"');
+    expect(rightAreaSource).toContain('unread: knowledgeWorkshopUnread.value');
+    expect(rightAreaSource).toContain('markLocalFeatureAnnouncementSeen(KNOWLEDGE_WORKSHOP_ANNOUNCEMENT_ID,');
+    expect(rightAreaSource).toContain('.markFeatureAnnouncementSeen({');
+    expect(rightAreaSource).not.toMatch(/function officialSiteClick\(\)[\s\S]*?markLocalFeatureAnnouncementSeen/u);
   });
 
   it('标签详情也保持标签一级导航选中语义', () => {

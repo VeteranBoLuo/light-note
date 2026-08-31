@@ -76,6 +76,7 @@
   import RegisterPage from '@/components/login/RegisterPage.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
+  import { clearAuthNavigationIntent } from '@/utils/authNavigationIntent.ts';
 
   type AuthMode = '登录' | '注册' | '重置';
 
@@ -128,6 +129,7 @@
 
   function closeModal() {
     bookmark.isShowLogin = false;
+    clearAuthNavigationIntent();
   }
 
   function focusFirstField() {
@@ -699,5 +701,4 @@
       font-size: 27px;
     }
   }
-
 </style>

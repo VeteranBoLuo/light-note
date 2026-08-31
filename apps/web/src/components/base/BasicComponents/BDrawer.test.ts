@@ -150,6 +150,7 @@ describe('BDrawer compositor cleanup', () => {
     document.body.append(opener);
     opener.focus();
     const open = ref(true);
+    const onAfterClose = vi.fn();
     const onClose = vi.fn(() => {
       open.value = false;
     });
@@ -160,7 +161,7 @@ describe('BDrawer compositor cleanup', () => {
         return () =>
           h(
             BDrawer,
-            { open: open.value, title: 'Accessible drawer', destroyOnClose: false, onClose },
+            { open: open.value, title: 'Accessible drawer', destroyOnClose: false, onClose, onAfterClose },
             { default: () => h('button', { class: 'drawer-action' }, 'Action') },
           );
       },
@@ -191,6 +192,7 @@ describe('BDrawer compositor cleanup', () => {
     expect(wrapper).not.toBeNull();
     expect(wrapper?.classList.contains('is-hidden')).toBe(true);
     expect(document.activeElement).toBe(document.body);
+    expect(onAfterClose).toHaveBeenCalledOnce();
   });
 
   it('closes with Escape when focus is inside a teleported child outside the drawer panel', async () => {

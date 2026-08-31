@@ -82,6 +82,11 @@ import {
   consumeExtensionAuthorizationCode,
   createExtensionAuthorizationCode,
 } from '../util/extensionAuth.js';
+import {
+  FeatureAnnouncementError,
+  markFeatureAnnouncementSeen as persistFeatureAnnouncementSeen,
+  preserveFeatureAnnouncementReads,
+} from '../util/services/featureAnnouncementService.js';
 let redisClient;
 if (process.platform === 'linux') {
   redisClient = (await import('../util/redisClient.js')).default;
@@ -1125,7 +1130,33 @@ export const saveUserInfo = async (req, res) => {
     if (typeof finalBody.email === 'string') {
       finalBody.email = normalizeEmail(finalBody.email);
     }
-    const [result] = await pool.query('update user set ? where id=?', [finalBody, id]);
+    let result;
+    if (finalBody.preferences !== undefined) {
+      // 偏好仍是用户表上的统一 JSON；公告已读是其中的单调服务端事实。锁住账号行后再合并，
+      // 避免另一个标签页保存旧偏好时与“已读”接口并发，导致刚写入的版本被整对象覆盖。
+      const connection = await pool.getConnection();
+      try {
+        await connection.beginTransaction();
+        const [[persistedUser]] = await connection.query(
+          'SELECT preferences FROM user WHERE id = ? AND del_flag = 0 LIMIT 1 FOR UPDATE',
+          [id],
+        );
+        if (!persistedUser) {
+          await connection.rollback();
+          return res.send(resultData(null, 404, L(req, '用户不存在', 'User not found')));
+        }
+        finalBody.preferences = preserveFeatureAnnouncementReads(finalBody.preferences, persistedUser.preferences);
+        [result] = await connection.query('update user set ? where id=?', [finalBody, id]);
+        await connection.commit();
+      } catch (error) {
+        await connection.rollback();
+        throw error;
+      } finally {
+        connection.release();
+      }
+    } else {
+      [result] = await pool.query('update user set ? where id=?', [finalBody, id]);
+    }
 
     // “完善个人形象”只认真实头像，不把昵称更新与成长任务重复计算。
     // 在响应前等待达成状态写入，确保关闭资料弹窗后立即刷新成长任务时不会读到旧状态；
@@ -1143,6 +1174,36 @@ export const saveUserInfo = async (req, res) => {
   } catch (e) {
     console.error('[user] 保存个人信息失败 code=%s', String(e?.code || 'SAVE_USER_INFO_FAILED'));
     return res.send(resultData(null, 500, L(req, '保存个人信息失败，请稍后重试', 'Failed to save profile')));
+  }
+};
+
+export const markFeatureAnnouncementSeen = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const result = await persistFeatureAnnouncementSeen({
+      userId: req.user?.id,
+      announcementId: req.body?.announcementId,
+      version: req.body?.version,
+    });
+    return res.send(resultData(result));
+  } catch (error) {
+    if (error instanceof FeatureAnnouncementError) {
+      return res.send(
+        resultData(
+          { code: error.code },
+          error.status,
+          L(req, '上新提示状态无效', 'Invalid announcement state'),
+        ),
+      );
+    }
+    console.error('[feature-announcement] persist failed code=%s', String(error?.code || 'UNKNOWN'));
+    return res.send(
+      resultData(
+        { code: 'FEATURE_ANNOUNCEMENT_PERSIST_FAILED' },
+        500,
+        L(req, '上新提示状态暂时无法保存', 'Unable to save announcement state'),
+      ),
+    );
   }
 };
 

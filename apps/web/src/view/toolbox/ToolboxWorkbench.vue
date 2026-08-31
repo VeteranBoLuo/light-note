@@ -1,5 +1,10 @@
 <template>
-  <main ref="pageRef" class="toolbox-workbench" data-mobile-resource-scroll>
+  <main
+    ref="pageRef"
+    class="toolbox-workbench"
+    :class="{ 'is-resource-workspace': resourceWorkspaceActive }"
+    data-mobile-resource-scroll
+  >
     <div class="toolbox-workbench__inner">
       <BButton class="toolbox-workbench__back" @click="returnToToolboxParent">
         <SvgIcon :src="icon.toolbox.back" size="16" />{{ t('toolbox.back') }}
@@ -30,11 +35,7 @@
           </div>
           <span class="toolbox-workbench__price" :class="{ 'is-free': tool.price.kind === 'free' }">
             <small>{{ t('toolbox.workbench.runCost') }}</small>
-            <strong>{{
-              tool.price.kind === 'free'
-                ? t('toolbox.free')
-                : t('toolbox.points', { min: tool.price.min, max: tool.price.max })
-            }}</strong>
+            <strong>{{ workbenchCostLabel }}</strong>
           </span>
         </header>
 
@@ -57,12 +58,38 @@
           <BButton size="small" @click="returnToToolboxParent">{{ t('toolbox.back') }}</BButton>
         </section>
 
-        <section v-else class="toolbox-workbench__paid">
+        <section v-else ref="paidPanelRef" class="toolbox-workbench__paid">
           <div class="toolbox-paid-panel">
             <template v-if="!quote">
+              <nav
+                v-if="!isPromptTool"
+                ref="workflowSwitchRef"
+                class="toolbox-workflow-switch"
+                :aria-label="t('toolbox.workbench.stepInput')"
+              >
+                <BButton
+                  :class="{ 'is-selected': compactWorkflowStep === 'sources' }"
+                  :aria-pressed="compactWorkflowStep === 'sources'"
+                  @click="selectCompactWorkflowStep('sources')"
+                >
+                  {{ t('toolbox.workbench.sourceStep') }}
+                </BButton>
+                <BButton
+                  :class="{ 'is-selected': compactWorkflowStep === 'design' }"
+                  :aria-pressed="compactWorkflowStep === 'design'"
+                  @click="selectCompactWorkflowStep('design')"
+                >
+                  {{ t('toolbox.workbench.designStep') }}
+                </BButton>
+              </nav>
               <div
                 class="toolbox-workflow-grid"
-                :class="{ 'is-ocr': tool.id === 'ocr_to_text', 'is-prompt': isPromptTool }"
+                :class="{
+                  'is-ocr': tool.id === 'ocr_to_text',
+                  'is-prompt': isPromptTool,
+                  'is-compact-sources': !isPromptTool && compactWorkflowStep === 'sources',
+                  'is-compact-design': !isPromptTool && compactWorkflowStep === 'design',
+                }"
               >
                 <section v-if="!isPromptTool" class="toolbox-workflow-card is-sources">
                   <div class="toolbox-workflow-card__head">
@@ -85,6 +112,7 @@
                     :max="tool.input.maxItems"
                     :external-count="uploadFiles.length"
                     :disabled="quoting || uploading"
+                    :page-scroll="false"
                   />
 
                   <div v-if="tool.id === 'ocr_to_text'" class="toolbox-upload-panel">
@@ -129,7 +157,7 @@
                   </div>
                 </section>
 
-                <aside class="toolbox-workflow-rail">
+                <aside v-auto-scrollbar class="toolbox-workflow-rail">
                   <section v-if="workflow" class="toolbox-workflow-card is-design">
                     <div class="toolbox-workflow-card__head">
                       <span>{{
@@ -179,7 +207,7 @@
                           v-model:value="question"
                           type="textarea"
                           :maxlength="TOOLBOX_PROCESSING_REQUIREMENT_MAX_CHARS"
-                          :rows="isPromptTool ? 7 : 4"
+                          :rows="isPromptTool ? 7 : 3"
                           :disabled="quoting || uploading"
                           :placeholder="requestPlaceholder"
                         />
@@ -238,7 +266,7 @@
                     </ol>
                   </section>
 
-                  <section class="toolbox-paid-panel__footer">
+                  <section class="toolbox-paid-panel__footer" :class="{ 'has-billing-choice': supportsAiQuota }">
                     <strong class="toolbox-run-summary__title">{{ t('toolbox.workbench.runSummaryTitle') }}</strong>
                     <dl class="toolbox-run-summary">
                       <div>
@@ -264,19 +292,34 @@
                       </div>
                       <div>
                         <dt>{{ t('toolbox.workbench.runSummaryBilling') }}</dt>
-                        <dd>{{
-                          t(
-                            isPromptTool
-                              ? 'toolbox.workbench.runSummaryPromptBillingValue'
-                              : 'toolbox.workbench.runSummaryBillingValue',
-                          )
-                        }}</dd>
+                        <dd>{{ selectedBillingSummary }}</dd>
                       </div>
                     </dl>
+                    <div
+                      v-if="supportsAiQuota"
+                      class="toolbox-billing-choice"
+                      role="radiogroup"
+                      :aria-label="t('toolbox.workbench.billingChoiceTitle')"
+                    >
+                      <BButton
+                        v-for="medium in billingChoices"
+                        :key="medium.value"
+                        class="toolbox-billing-choice__item"
+                        :class="{ 'is-selected': selectedBillingMedium === medium.value }"
+                        :aria-checked="selectedBillingMedium === medium.value"
+                        role="radio"
+                        :disabled="quoting || uploading"
+                        @click="selectedBillingMedium = medium.value"
+                      >
+                        <SvgIcon :src="medium.icon" size="17" />
+                        <span
+                          ><strong>{{ medium.label }}</strong
+                          ><small>{{ medium.hint }}</small></span
+                        >
+                      </BButton>
+                    </div>
                     <div class="toolbox-billing-note"
-                      ><SvgIcon :src="icon.toolbox.coin" size="16" /><span>{{
-                        t(isPromptTool ? 'toolbox.promptPointsRule' : 'toolbox.pointsRule')
-                      }}</span></div
+                      ><SvgIcon :src="selectedBillingIcon" size="16" /><span>{{ selectedBillingRule }}</span></div
                     >
                     <BButton type="primary" :loading="quoting || uploading" :disabled="!canQuote" @click="requestQuote">
                       {{ quoting ? t('toolbox.workbench.quoting') : t('toolbox.workbench.getQuote') }}
@@ -295,37 +338,43 @@
                 </div>
 
                 <div class="toolbox-quote">
-                  <span class="toolbox-quote__icon"><SvgIcon :src="icon.toolbox.coin" size="27" /></span>
+                  <span class="toolbox-quote__icon" :class="`is-${quote.billingMedium}`"
+                    ><SvgIcon :src="quoteBillingIcon" size="27"
+                  /></span>
                   <div class="toolbox-quote__copy">
                     <span>{{ t('toolbox.workbench.runCost') }}</span>
-                    <strong>{{ t('toolbox.pointsExact', { points: quote.quotedPoints }) }}</strong>
+                    <strong>{{ quoteCostLabel }}</strong>
                     <small>{{
                       t('toolbox.workbench.quoteExpires', { time: formatQuoteExpiry(quote.expiresAt) })
                     }}</small>
                   </div>
                   <div class="toolbox-quote__balance">
-                    <span>{{ t('growth.points') }}</span>
-                    <strong>{{ growth?.points == null ? '—' : Number(growth.points).toLocaleString() }}</strong>
+                    <span>{{
+                      t(quote.billingMedium === 'points' ? 'growth.points' : 'toolbox.workbench.aiQuotaAvailable')
+                    }}</span>
+                    <strong>{{ quoteBalanceLabel }}</strong>
                   </div>
                 </div>
                 <div class="toolbox-quote__rules">
                   <p
                     ><SvgIcon :src="icon.message.info" size="16" />{{
-                      t('toolbox.workbench.balanceAfter', { points: quote.quotedPoints })
+                      quote.billingMedium === 'points'
+                        ? t('toolbox.workbench.balanceAfter', { points: quote.quotedPoints })
+                        : t('toolbox.workbench.aiQuotaAfter')
                     }}</p
                   >
-                  <p
-                    ><SvgIcon :src="icon.toolbox.local" size="16" />{{
-                      t(isPromptTool ? 'toolbox.promptPointsRule' : 'toolbox.pointsRule')
-                    }}</p
-                  >
+                  <p><SvgIcon :src="icon.toolbox.local" size="16" />{{ quoteBillingRule }}</p>
                 </div>
-                <div v-if="insufficientPoints" class="toolbox-quote__insufficient" role="alert">{{
-                  t('toolbox.workbench.insufficientPoints')
+                <div v-if="insufficientBilling" class="toolbox-quote__insufficient" role="alert">{{
+                  t(
+                    quote.billingMedium === 'points'
+                      ? 'toolbox.workbench.insufficientPoints'
+                      : 'toolbox.workbench.insufficientAiQuota',
+                  )
                 }}</div>
                 <div class="toolbox-quote__actions">
                   <BButton @click="quote = null">{{ t('toolbox.workbench.changeInput') }}</BButton>
-                  <BButton type="primary" :loading="starting" :disabled="insufficientPoints" @click="startJob">
+                  <BButton type="primary" :loading="starting" :disabled="insufficientBilling" @click="startJob">
                     {{ starting ? t('toolbox.workbench.starting') : t('toolbox.workbench.start') }}
                     <SvgIcon :src="icon.toolbox.arrow" size="15" />
                   </BButton>
@@ -361,6 +410,7 @@
     type ToolboxQuote,
   } from '@/api/toolbox';
   import type { ResourcePickerType } from '@/composables/useResourcePickerSearch';
+  import { formatAiQuotaTokens, useAiQuotaStatus } from '@/composables/useAiQuotaStatus';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { useGrowth } from '@/composables/useGrowth';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
@@ -392,24 +442,30 @@
     status: UploadStatus;
     sourceId?: string;
   }
+  type PaidBillingMedium = 'points' | 'ai_quota';
 
   const { t, locale } = useI18n();
   const route = useRoute();
   const router = useRouter();
   const user = useUserStore();
   const { growth, load: loadGrowth } = useGrowth();
+  const { status: aiQuotaStatus, load: loadAiQuota } = useAiQuotaStatus({ autoLoad: false });
   const tool = ref<ToolboxCatalogItem | null>(null);
   const pageRef = ref<HTMLElement | null>(null);
+  const paidPanelRef = ref<HTMLElement | null>(null);
+  const workflowSwitchRef = ref<HTMLElement | null>(null);
   const loading = ref(true);
   const selectedResources = ref<ToolboxSelectedResource[]>([]);
   const uploadFiles = ref<UploadEntry[]>([]);
   const question = ref('');
   const detailLevel = ref<'concise' | 'balanced' | 'detailed'>('balanced');
+  const selectedBillingMedium = ref<PaidBillingMedium>('points');
   const quote = ref<ToolboxQuote | null>(null);
   const quoting = ref(false);
   const uploading = ref(false);
   const uploadProgress = ref(0);
   const starting = ref(false);
+  const compactWorkflowStep = ref<'sources' | 'design'>('sources');
   let stateVersion = 0;
   const routeToolId = computed(() => String(route.params.toolId || '') as ToolboxToolId);
   const toolId = computed(() => canonicalToolboxToolId(routeToolId.value));
@@ -426,6 +482,15 @@
   );
   const selectedCount = computed(() => selectedResources.value.length + uploadFiles.value.length);
   const isPromptTool = computed(() => tool.value?.input.kind === 'prompt');
+  const resourceWorkspaceActive = computed(
+    () =>
+      Boolean(tool.value) &&
+      !quote.value &&
+      !isPromptTool.value &&
+      tool.value?.executionMode !== 'browser' &&
+      tool.value?.executionMode !== 'service',
+  );
+  const supportsAiQuota = computed(() => Boolean(tool.value?.billingMedia.includes('ai_quota')));
   const canQuote = computed(() =>
     Boolean(
       tool.value &&
@@ -435,26 +500,97 @@
       !uploading.value,
     ),
   );
-  const insufficientPoints = computed(
-    () => growth.value?.points != null && quote.value != null && Number(growth.value.points) < quote.value.quotedPoints,
+  const insufficientBilling = computed(() => {
+    if (!quote.value) return false;
+    if (quote.value.billingMedium === 'points') {
+      return growth.value?.points != null && Number(growth.value.points) < quote.value.quotedPoints;
+    }
+    return aiQuotaStatus.value?.exempt !== true && Number(aiQuotaStatus.value?.remaining) <= 0;
+  });
+  const aiQuotaBalanceLabel = computed(() =>
+    aiQuotaStatus.value?.exempt
+      ? t('settings.ai.quotaUnlimited')
+      : formatAiQuotaTokens(aiQuotaStatus.value?.remaining, locale.value),
+  );
+  const workbenchCostLabel = computed(() => {
+    if (!tool.value || tool.value.price.kind === 'free') return t('toolbox.free');
+    if (supportsAiQuota.value) return t('toolbox.billingChoiceLabel');
+    return t('toolbox.points', { min: tool.value.price.min, max: tool.value.price.max });
+  });
+  const selectedBillingIcon = computed(() =>
+    selectedBillingMedium.value === 'ai_quota' ? icon.settings.ai : icon.toolbox.coin,
+  );
+  const selectedBillingSummary = computed(() =>
+    t(
+      selectedBillingMedium.value === 'ai_quota'
+        ? 'toolbox.workbench.runSummaryAiQuotaBillingValue'
+        : 'toolbox.workbench.runSummaryPointsBillingValue',
+    ),
+  );
+  const selectedBillingRule = computed(() =>
+    t(
+      selectedBillingMedium.value === 'ai_quota'
+        ? 'toolbox.aiQuotaRule'
+        : isPromptTool.value
+          ? 'toolbox.promptPointsRule'
+          : 'toolbox.pointsRule',
+    ),
+  );
+  const billingChoices = computed(() => [
+    {
+      value: 'ai_quota' as const,
+      icon: icon.settings.ai,
+      label: t('toolbox.workbench.aiQuotaBilling'),
+      hint: t('toolbox.workbench.aiQuotaBillingHint', { balance: aiQuotaBalanceLabel.value }),
+    },
+    {
+      value: 'points' as const,
+      icon: icon.toolbox.coin,
+      label: t('toolbox.workbench.pointsBilling'),
+      hint: tool.value
+        ? t('toolbox.workbench.pointsBillingHint', { min: tool.value.price.min, max: tool.value.price.max })
+        : '',
+    },
+  ]);
+  const quoteBillingIcon = computed(() =>
+    quote.value?.billingMedium === 'ai_quota' ? icon.settings.ai : icon.toolbox.coin,
+  );
+  const quoteCostLabel = computed(() =>
+    quote.value?.billingMedium === 'ai_quota'
+      ? t('toolbox.workbench.aiQuotaActualUsage')
+      : t('toolbox.pointsExact', { points: quote.value?.quotedPoints || 0 }),
+  );
+  const quoteBalanceLabel = computed(() =>
+    quote.value?.billingMedium === 'ai_quota'
+      ? aiQuotaBalanceLabel.value
+      : growth.value?.points == null
+        ? '—'
+        : Number(growth.value.points).toLocaleString(),
+  );
+  const quoteBillingRule = computed(() =>
+    quote.value?.billingMedium === 'ai_quota'
+      ? t('toolbox.aiQuotaRule')
+      : t(isPromptTool.value ? 'toolbox.promptPointsRule' : 'toolbox.pointsRule'),
   );
   const executionTitle = computed(() => {
     if (tool.value?.executionMode === 'browser') return t('toolbox.workbench.localExecutionTitle');
     if (tool.value?.executionMode === 'service') return t('toolbox.workbench.serviceExecutionTitle');
     if (tool.value?.executionMode === 'worker') return t('toolbox.workbench.workerExecutionTitle');
+    if (supportsAiQuota.value) return t('toolbox.workbench.flexibleBillingExecutionTitle');
     return t('toolbox.workbench.pointsExecutionTitle');
   });
   const executionDescription = computed(() => {
     if (tool.value?.executionMode === 'browser') return t('toolbox.workbench.localExecutionDescription');
     if (tool.value?.executionMode === 'service') return t('toolbox.workbench.serviceExecutionDescription');
     if (tool.value?.executionMode === 'worker') return t('toolbox.workbench.workerExecutionDescription');
+    if (supportsAiQuota.value) return t('toolbox.workbench.flexibleBillingExecutionDescription');
     if (isPromptTool.value) return t('toolbox.workbench.promptPointsExecutionDescription');
     return t('toolbox.workbench.pointsExecutionDescription');
   });
   const executionIcon = computed(() => {
     if (tool.value?.executionMode === 'browser') return icon.toolbox.local;
     if (tool.value?.executionMode === 'service') return icon.toolbox.audit;
-    return icon.toolbox.coin;
+    return supportsAiQuota.value ? icon.settings.ai : icon.toolbox.coin;
   });
   const detailOptions = computed<Array<{ value: 'concise' | 'balanced' | 'detailed'; label: string }>>(() => [
     { value: 'concise', label: t('toolbox.workbench.detailConcise') },
@@ -470,6 +606,18 @@
 
   function returnToToolboxParent() {
     returnFromToolboxPage(router, 'workbench');
+  }
+
+  async function selectCompactWorkflowStep(step: 'sources' | 'design') {
+    compactWorkflowStep.value = step;
+    if (!window.matchMedia('(max-width: 767px)').matches) return;
+    await nextTick();
+    // 移动端的资料步骤可能很长。切换后把持久可见的步骤导航恢复到
+    // 内容起点，避免沿用旧列表的深滚动位置而直接落在设计面板中段。
+    const page = pageRef.value;
+    const paidPanel = paidPanelRef.value;
+    if (!page || !paidPanel || !workflowSwitchRef.value) return;
+    page.scrollTo({ top: Math.max(0, paidPanel.offsetTop - 10), left: 0, behavior: 'auto' });
   }
 
   function rememberWorkbenchScroll() {
@@ -493,11 +641,13 @@
     uploadFiles.value = [];
     question.value = '';
     detailLevel.value = 'balanced';
+    selectedBillingMedium.value = 'points';
     selectedIntent.value = workflow.value?.defaultIntent || '';
     quote.value = null;
     quoting.value = false;
     uploading.value = false;
     starting.value = false;
+    compactWorkflowStep.value = 'sources';
   }
   function workflowText(path: string) {
     return t(`toolbox.workbench.workflow.${toolId.value}.${path}`);
@@ -519,7 +669,11 @@
         null;
       if (version === stateVersion) {
         tool.value = loaded;
-        if (loaded) recordToolboxRecentUse(user, loaded.id);
+        if (loaded) {
+          selectedBillingMedium.value = loaded.billingMedia.includes('ai_quota') ? 'ai_quota' : 'points';
+          if (loaded.billingMedia.includes('ai_quota')) void loadAiQuota();
+          recordToolboxRecentUse(user, loaded.id);
+        }
       }
     } catch {
       if (version === stateVersion) tool.value = null;
@@ -589,6 +743,7 @@
       if (version !== stateVersion) return;
       const result = await createToolboxQuote({
         toolId: activeTool.id,
+        billingMedium: selectedBillingMedium.value,
         clientRequestId: createToolboxClientRequestId('quote'),
         input: {
           resourceRefs: selectedResources.value.map((item) => ({ type: item.type, id: item.id })),
@@ -602,7 +757,10 @@
       });
       if (version !== stateVersion) return;
       quote.value = result;
-      await loadGrowth(true);
+      await Promise.all([
+        loadGrowth(true),
+        result.billingMedium === 'ai_quota' ? loadAiQuota({ force: true }) : Promise.resolve(),
+      ]);
     } catch (error: any) {
       if (version === stateVersion) {
         message.error(
@@ -632,6 +790,7 @@
       });
       if (version !== stateVersion) return;
       await loadGrowth(true);
+      if (activeQuote.billingMedium === 'ai_quota') await loadAiQuota({ force: true });
       rememberWorkbenchScroll();
       await router.push(`/toolbox/task/${job.id}`);
     } catch (error: any) {
@@ -658,7 +817,7 @@
     void loadTool();
   });
   watch(
-    [selectedResources, question, detailLevel, selectedIntent],
+    [selectedResources, question, detailLevel, selectedIntent, selectedBillingMedium],
     () => {
       quote.value = null;
     },
@@ -979,6 +1138,66 @@
     font-size: 12px;
     line-height: 1.55;
   }
+  .toolbox-billing-choice {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+  }
+  .toolbox-billing-choice__item.b_btn {
+    width: 100%;
+    height: auto;
+    min-height: 54px;
+    padding: 9px 10px;
+    justify-content: flex-start;
+    gap: 9px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 11px;
+    color: var(--text-color);
+    background: var(--surface-subtle-bg, var(--hover-background));
+    text-align: left;
+    white-space: normal;
+  }
+  .toolbox-billing-choice__item > :deep(svg) {
+    flex: 0 0 auto;
+    color: var(--desc-color);
+  }
+  .toolbox-billing-choice__item > span {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+  }
+  .toolbox-billing-choice__item strong,
+  .toolbox-billing-choice__item small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .toolbox-billing-choice__item strong {
+    font-size: 11px;
+  }
+  .toolbox-billing-choice__item small {
+    color: var(--desc-color);
+    font-size: 9.5px;
+  }
+  .toolbox-billing-choice__item.is-selected {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    background: var(--card-background);
+    box-shadow: inset 0 0 0 1px var(--primary-color);
+  }
+  .toolbox-billing-choice__item.is-selected > :deep(svg) {
+    color: var(--primary-color);
+  }
+  .toolbox-billing-choice__item:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .toolbox-billing-choice__item:not(.is-selected):hover {
+      border-color: var(--primary-color);
+      background: var(--hover-background);
+    }
+  }
   .toolbox-billing-note :deep(svg) {
     flex: 0 0 auto;
     color: #ad6b0d;
@@ -1001,6 +1220,9 @@
     border-radius: 15px;
     color: #ad6b0d;
     background: var(--card-background);
+  }
+  .toolbox-quote__icon.is-ai_quota {
+    color: var(--primary-color);
   }
   .toolbox-quote__copy,
   .toolbox-quote__balance {
@@ -1242,9 +1464,12 @@
   .toolbox-paid-panel {
     gap: 14px;
   }
+  .toolbox-workflow-switch {
+    display: none;
+  }
   .toolbox-workflow-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.28fr) minmax(340px, 0.72fr);
+    grid-template-columns: minmax(0, 1.12fr) minmax(390px, 0.88fr);
     align-items: start;
     gap: 14px;
   }
@@ -1254,12 +1479,14 @@
     margin: 0 auto;
   }
   .toolbox-workflow-rail {
-    position: sticky;
-    top: 12px;
+    position: static;
     min-width: 0;
+    min-height: 0;
     align-self: start;
     display: grid;
+    align-content: start;
     gap: 12px;
+    overscroll-behavior: contain;
   }
   .toolbox-workflow-grid.is-prompt .toolbox-workflow-rail {
     position: static;
@@ -1281,7 +1508,8 @@
   }
   .toolbox-workflow-card.is-sources {
     min-height: 0;
-    grid-template-rows: auto auto auto;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    overflow: hidden;
   }
   .toolbox-workflow-card__head {
     display: grid;
@@ -1367,7 +1595,7 @@
     width: 100%;
     height: auto;
     min-height: 70px;
-    padding: 11px 10px 10px;
+    padding: 11px 27px 10px 10px;
     display: grid;
     align-content: center;
     justify-items: start;
@@ -1382,14 +1610,16 @@
     white-space: normal;
   }
   .toolbox-intent strong {
+    min-width: 0;
     font-size: 11.5px;
   }
   .toolbox-intent span {
+    min-width: 0;
     color: var(--desc-color);
     font-size: 10px;
+    overflow-wrap: anywhere;
   }
   .toolbox-intent.is-selected {
-    padding-right: 27px;
     border-color: var(--primary-color);
     background: color-mix(in srgb, var(--primary-color) 6%, var(--card-background));
     box-shadow: inset 0 0 0 1px var(--primary-color);
@@ -1560,6 +1790,253 @@
     margin: 0 auto;
     padding: 23px;
   }
+  @media (min-width: 768px) {
+    .toolbox-workbench.is-resource-workspace {
+      padding: 12px clamp(14px, 2vw, 28px) 14px;
+      overflow-y: hidden;
+      overscroll-behavior: none;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workbench__inner {
+      position: relative;
+      width: min(1500px, 100%);
+      height: 100%;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workbench__back {
+      position: absolute;
+      z-index: 9;
+      top: 20px;
+      left: 12px;
+      width: 32px;
+      height: 32px;
+      margin: 0;
+      padding: 0;
+      justify-content: center;
+      gap: 0;
+      overflow: hidden;
+      border-color: transparent;
+      color: var(--desc-color);
+      background: transparent;
+      box-shadow: none;
+      font-size: 0;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workbench__hero {
+      min-height: 72px;
+      padding: 10px 14px 10px 56px;
+      grid-template-columns: 42px minmax(0, 1fr) auto;
+      gap: 12px;
+      border-radius: 17px;
+      box-shadow: var(--surface-card-shadow);
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workbench__hero::before {
+      width: 3px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workbench__icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      box-shadow: none;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workbench__category {
+      font-size: 9px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workbench__hero h1 {
+      margin: 2px 0 0;
+      font-size: 20px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workbench__hero-copy > p,
+    .toolbox-workbench.is-resource-workspace .toolbox-workbench__execution {
+      display: none;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workbench__price {
+      min-width: 0;
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      border-radius: 12px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workbench__price small {
+      display: none;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workbench__price strong {
+      font-size: 13px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workbench__paid,
+    .toolbox-workbench.is-resource-workspace .toolbox-paid-panel,
+    .toolbox-workbench.is-resource-workspace .toolbox-workflow-grid {
+      height: 100%;
+      min-height: 0;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workbench__paid {
+      margin-top: 10px;
+      overflow: hidden;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-paid-panel {
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workflow-grid {
+      align-items: stretch;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workflow-card.is-sources,
+    .toolbox-workbench.is-resource-workspace .toolbox-workflow-rail {
+      height: 100%;
+      min-height: 0;
+      align-self: stretch;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workflow-card.is-sources {
+      padding: 12px;
+      gap: 8px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workflow-card.is-sources > .toolbox-workflow-card__head {
+      display: flex;
+      align-items: baseline;
+      gap: 7px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workflow-card.is-sources > .toolbox-workflow-card__head h2 {
+      font-size: 16px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workflow-card.is-sources > .toolbox-workflow-card__head p {
+      display: none;
+    }
+    .toolbox-workbench.is-resource-workspace
+      .toolbox-workflow-card.is-sources
+      :deep(.toolbox-resource-selector__picker) {
+      min-height: 0;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workflow-rail {
+      overflow-x: hidden;
+      overflow-y: auto;
+      gap: 9px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workflow-card.is-design {
+      padding: 13px;
+      gap: 10px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workflow-card.is-design > .toolbox-workflow-card__head {
+      display: flex;
+      align-items: baseline;
+      gap: 7px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workflow-card.is-design > .toolbox-workflow-card__head h2 {
+      font-size: 16px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workflow-card.is-design > .toolbox-workflow-card__head p,
+    .toolbox-workbench.is-resource-workspace .toolbox-intents__head > span,
+    .toolbox-workbench.is-resource-workspace .toolbox-field__hint,
+    .toolbox-workbench.is-resource-workspace .toolbox-outcomes,
+    .toolbox-workbench.is-resource-workspace .toolbox-run-summary__title,
+    .toolbox-workbench.is-resource-workspace .toolbox-run-summary,
+    .toolbox-workbench.is-resource-workspace .toolbox-billing-note {
+      display: none;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-intents {
+      gap: 6px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-intents__grid {
+      gap: 6px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-intent.b_btn {
+      min-height: 56px;
+      padding-top: 8px;
+      padding-bottom: 8px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-options {
+      gap: 8px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-field {
+      gap: 5px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-detail-options :deep(.b_btn) {
+      min-height: 29px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-paid-panel__footer {
+      padding: 10px;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 8px;
+      border-radius: 14px;
+      box-shadow: none;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-paid-panel__footer.has-billing-choice {
+      grid-template-columns: minmax(0, 1fr) minmax(128px, 0.3fr);
+      align-items: stretch;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-billing-choice__item.b_btn {
+      min-height: 46px;
+      padding: 7px 9px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-paid-panel__footer > :deep(.b_btn) {
+      min-height: 36px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-paid-panel__footer.has-billing-choice > :deep(.b_btn) {
+      height: 100%;
+    }
+  }
+  @media (min-width: 1200px) {
+    .toolbox-workbench.is-resource-workspace .toolbox-workflow-grid {
+      grid-template-columns: minmax(0, 1.08fr) minmax(440px, 0.92fr);
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-paid-panel {
+      grid-template-rows: minmax(0, 1fr);
+    }
+  }
+  @media (min-width: 768px) and (max-height: 820px) {
+    .toolbox-workbench.is-resource-workspace {
+      padding-top: 8px;
+      padding-bottom: 10px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workbench__hero {
+      min-height: 64px;
+      padding-top: 8px;
+      padding-bottom: 8px;
+      grid-template-columns: 38px minmax(0, 1fr) auto;
+      gap: 10px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workbench__back {
+      top: 16px;
+      left: 10px;
+      width: 30px;
+      height: 30px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workbench__icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 11px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workbench__hero h1 {
+      font-size: 18px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workbench__price {
+      padding: 7px 9px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workflow-card.is-sources {
+      padding: 10px;
+      gap: 7px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workflow-card.is-sources :deep(.toolbox-resource-selector) {
+      gap: 7px;
+    }
+    .toolbox-workbench.is-resource-workspace
+      .toolbox-workflow-card.is-sources
+      :deep(.toolbox-resource-selector__picker) {
+      padding: 7px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workflow-card.is-design {
+      padding: 10px;
+      gap: 8px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-intent.b_btn {
+      min-height: 50px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-paid-panel__footer {
+      padding: 8px;
+      gap: 7px;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-billing-choice__item.b_btn {
+      min-height: 42px;
+    }
+  }
   @keyframes toolbox-pulse {
     50% {
       opacity: 0.35;
@@ -1571,12 +2048,42 @@
       background: color-mix(in srgb, var(--primary-color) 3%, var(--card-background));
     }
   }
-  @media (max-width: 1040px) {
-    .toolbox-workflow-grid {
+  @media (max-width: 1199px) {
+    .toolbox-workflow-switch {
+      position: sticky;
+      z-index: 7;
+      top: 0;
+      padding: 3px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 3px;
+      border: 1px solid var(--surface-border-color);
+      border-radius: 12px;
+      background: var(--surface-subtle-bg, var(--hover-background));
+    }
+    .toolbox-workflow-switch :deep(.b_btn) {
+      width: 100%;
+      min-height: 38px;
+      border-color: transparent;
+      color: var(--desc-color);
+      background: transparent;
+    }
+    .toolbox-workflow-switch :deep(.b_btn.is-selected) {
+      border-color: var(--primary-color);
+      color: var(--primary-color);
+      background: var(--card-background);
+      box-shadow: none;
+    }
+    .toolbox-workflow-grid:not(.is-prompt) {
       grid-template-columns: 1fr;
     }
-    .toolbox-workflow-rail {
-      position: static;
+    .toolbox-workflow-grid.is-compact-sources:not(.is-prompt) .toolbox-workflow-rail,
+    .toolbox-workflow-grid.is-compact-design:not(.is-prompt) .toolbox-workflow-card.is-sources {
+      display: none;
+    }
+    .toolbox-workflow-grid.is-compact-sources:not(.is-prompt) .toolbox-workflow-card.is-sources,
+    .toolbox-workflow-grid.is-compact-design:not(.is-prompt) .toolbox-workflow-rail {
+      display: grid;
     }
     .toolbox-workflow-grid.is-prompt .toolbox-workflow-rail {
       grid-template-columns: 1fr;
@@ -1633,6 +2140,9 @@
     .toolbox-paid-panel__footer {
       padding: 13px;
     }
+    .toolbox-billing-choice {
+      grid-template-columns: 1fr;
+    }
     .toolbox-run-summary > div {
       grid-template-columns: 82px minmax(0, 1fr);
     }
@@ -1643,6 +2153,9 @@
     background: var(--card-background);
   }
   html.light-note-mobile-rendering .toolbox-intent.is-selected {
+    box-shadow: none;
+  }
+  html.light-note-mobile-rendering .toolbox-billing-choice__item.is-selected {
     border-width: 2px;
     box-shadow: none;
   }

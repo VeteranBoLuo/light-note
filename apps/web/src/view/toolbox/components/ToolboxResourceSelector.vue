@@ -21,7 +21,12 @@
       </BButton>
     </div>
 
-    <div class="toolbox-resource-selector__selected" :class="{ 'is-empty': !selectedGroups.length }" aria-live="polite">
+    <div
+      v-auto-scrollbar
+      class="toolbox-resource-selector__selected"
+      :class="{ 'is-empty': !selectedGroups.length }"
+      aria-live="polite"
+    >
       <span v-if="!selectedGroups.length" class="toolbox-resource-selector__empty-selection">
         <SvgIcon :src="icon.toolbox.locate" size="16" aria-hidden="true" />
         {{ t('toolbox.workbench.selectHint') }}
@@ -61,7 +66,7 @@
         :class="{ 'is-selected': activeType === option.value }"
         :aria-pressed="activeType === option.value"
         :disabled="disabled || branchLoading"
-        @click="activeType = option.value"
+        @click="selectType(option.value)"
       >
         {{ option.label }}
       </BButton>
@@ -76,6 +81,7 @@
         :title="t('toolbox.workbench.branchLoading')"
       />
       <ResourcePickerPanel
+        ref="resourcePickerRef"
         :allowed-types="pickerAllowedTypes"
         :selected-resource-keys="pickerSelectedKeys"
         :selected-scope-keys="selectedScopeKeys"
@@ -96,7 +102,18 @@
         @select-many="addMany"
         @select-scope="addNoteBranch"
         @deselect-scope="removeBranch"
+        @scroll-position="handleResourceScroll"
       />
+      <BButton
+        v-if="showBackToTop"
+        class="toolbox-resource-selector__back-top"
+        size="small"
+        :aria-label="t('toolbox.workbench.backToResourceTop')"
+        @click="backToResourceTop"
+      >
+        <SvgIcon :src="icon.ai.scrollDown" size="15" aria-hidden="true" />
+        {{ t('toolbox.workbench.backToResourceTop') }}
+      </BButton>
     </div>
   </section>
 </template>
@@ -123,6 +140,12 @@
     type ToolboxResourceSelectionGroup,
     type ToolboxSelectedResource,
   } from '@/utils/toolboxResourceSelection';
+  import {
+    resourceListBackToTopBehavior,
+    shouldShowResourceListBackToTop,
+    type ResourceListScrollAnchor,
+    type ResourceListScrollPosition,
+  } from '@/utils/resourceListScroll';
 
   type ResourceTypeFilter = 'all' | ResourcePickerType;
   interface SelectedDisplayGroup {
@@ -155,7 +178,10 @@
   const emit = defineEmits<{ 'update:modelValue': [value: ToolboxSelectedResource[]] }>();
   const { t } = useI18n();
   const activeType = ref<ResourceTypeFilter>('all');
+  const resourcePickerRef = ref<InstanceType<typeof ResourcePickerPanel> | null>(null);
   const branchLoading = ref(false);
+  const scrollAnchors = new Map<ResourceTypeFilter, ResourceListScrollAnchor | null>();
+  const listScrollPosition = ref<ResourceListScrollPosition>({ top: 0, viewportHeight: 0 });
   const selectedKeys = computed(() => props.modelValue.map(resourceItemKey));
   const pickerSelectedKeys = computed(() => [...new Set([...props.existingResourceKeys, ...selectedKeys.value])]);
   const selectedScopeKeys = computed(() => [
@@ -210,11 +236,37 @@
     }
     return groups;
   });
+  const showBackToTop = computed(() => !props.pageScroll && shouldShowResourceListBackToTop(listScrollPosition.value));
 
   function resourceIcon(type: ResourcePickerType) {
     if (type === 'bookmark') return icon.resource.bookmark;
     if (type === 'file') return icon.resource.file;
     return icon.resource.note;
+  }
+
+  function selectType(type: ResourceTypeFilter) {
+    if (type === activeType.value) return;
+    // 必须在更新 allowedTypes 之前捕获外层滚动位置。等子组件 watcher 再捕获时，
+    // 旧列表可能已经卸载，浏览器会先把 scrollTop 夹到临时短页面的底部。
+    if (props.pageScroll) resourcePickerRef.value?.beginPageScrollTransition();
+    else {
+      scrollAnchors.set(activeType.value, resourcePickerRef.value?.captureScrollAnchor?.() || null);
+      resourcePickerRef.value?.prepareScrollAnchor?.(scrollAnchors.get(type) || null);
+      listScrollPosition.value = { top: 0, viewportHeight: listScrollPosition.value.viewportHeight };
+    }
+    activeType.value = type;
+  }
+
+  function handleResourceScroll(position: ResourceListScrollPosition) {
+    listScrollPosition.value = position;
+  }
+
+  function backToResourceTop() {
+    const reducedMotion =
+      typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    resourcePickerRef.value?.scrollToTop(
+      resourceListBackToTopBehavior({ position: listScrollPosition.value, reducedMotion }),
+    );
   }
 
   function add(item: ResourcePickerItem) {
@@ -296,7 +348,7 @@
   watch(
     () => props.allowedTypes.join(','),
     () => {
-      if (activeType.value !== 'all' && !props.allowedTypes.includes(activeType.value)) activeType.value = 'all';
+      if (activeType.value !== 'all' && !props.allowedTypes.includes(activeType.value)) selectType('all');
     },
   );
 </script>
@@ -306,12 +358,12 @@
     height: 100%;
     min-height: 0;
     display: grid;
-    grid-template-rows: auto 54px auto minmax(0, 1fr);
+    grid-template-rows: auto auto auto minmax(0, 1fr);
     gap: 12px;
   }
   .toolbox-resource-selector.is-page-scroll {
     height: auto;
-    grid-template-rows: auto 54px auto auto;
+    grid-template-rows: auto auto auto auto;
   }
   .toolbox-resource-selector__header {
     display: flex;
@@ -338,19 +390,25 @@
     white-space: nowrap;
   }
   .toolbox-resource-selector__selected {
-    height: 54px;
+    width: 100%;
+    height: clamp(84px, 10vh, 116px);
     box-sizing: border-box;
     min-width: 0;
-    display: flex;
+    padding-right: 3px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: 54px;
+    align-content: start;
     gap: 8px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    overscroll-behavior-x: contain;
-    scrollbar-width: thin;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
   .toolbox-resource-selector__selected.is-empty {
     padding: 0 12px;
+    grid-template-columns: minmax(0, 1fr);
     align-items: center;
+    align-content: center;
     border: 1px dashed var(--surface-border-color);
     border-radius: 11px;
     color: var(--desc-color);
@@ -369,10 +427,10 @@
     color: var(--primary-color);
   }
   .toolbox-resource-selector__selected-item {
-    width: min(320px, 78vw);
+    width: 100%;
+    min-width: 0;
     height: 54px;
     box-sizing: border-box;
-    flex: 0 0 min(320px, 78vw);
     padding: 8px 8px 8px 10px;
     display: flex;
     align-items: center;
@@ -451,6 +509,23 @@
     border-radius: 14px;
     background: var(--card-background);
   }
+  .toolbox-resource-selector__back-top.b_btn {
+    position: absolute;
+    z-index: 4;
+    right: 16px;
+    bottom: 16px;
+    min-height: 34px;
+    padding: 0 11px;
+    gap: 6px;
+    border: 1px solid var(--primary-color);
+    border-radius: 999px;
+    color: var(--primary-color);
+    background: var(--card-background);
+    box-shadow: 0 8px 22px rgba(20, 24, 40, 0.14);
+  }
+  .toolbox-resource-selector__back-top :deep(svg) {
+    transform: rotate(180deg);
+  }
   .toolbox-resource-selector__picker > :deep(.resource-picker-panel) {
     min-height: 0;
     flex: 1;
@@ -473,12 +548,64 @@
     .toolbox-resource-selector__clear {
       min-height: 44px;
     }
-    .toolbox-resource-selector__selected-item {
-      width: calc(100% - 8px);
-      flex-basis: calc(100% - 8px);
-    }
     .toolbox-resource-selector__picker {
       min-height: 250px;
+    }
+    .toolbox-resource-selector__selected {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  @media (min-width: 768px) {
+    .toolbox-resource-selector:not(.is-page-scroll) {
+      gap: 8px;
+    }
+    .toolbox-resource-selector:not(.is-page-scroll) .toolbox-resource-selector__selection-meta {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .toolbox-resource-selector:not(.is-page-scroll) .toolbox-resource-selector__header strong {
+      font-size: 13px;
+    }
+    .toolbox-resource-selector:not(.is-page-scroll) .toolbox-resource-selector__header span {
+      font-size: 11px;
+    }
+    .toolbox-resource-selector:not(.is-page-scroll) .toolbox-resource-selector__selected {
+      height: 54px;
+      grid-auto-rows: 46px;
+      gap: 6px;
+    }
+    .toolbox-resource-selector:not(.is-page-scroll) .toolbox-resource-selector__selected.is-empty {
+      height: 54px;
+    }
+    .toolbox-resource-selector:not(.is-page-scroll) .toolbox-resource-selector__selected-item {
+      height: 46px;
+      padding: 6px 7px 6px 8px;
+      gap: 7px;
+    }
+    .toolbox-resource-selector:not(.is-page-scroll) .toolbox-resource-selector__type {
+      width: 26px;
+      height: 26px;
+      flex-basis: 26px;
+      border-radius: 8px;
+    }
+    .toolbox-resource-selector:not(.is-page-scroll) .toolbox-resource-selector__selected-copy strong {
+      font-size: 12px;
+    }
+    .toolbox-resource-selector:not(.is-page-scroll) .toolbox-resource-selector__selected-copy small {
+      font-size: 10px;
+    }
+    .toolbox-resource-selector:not(.is-page-scroll) .toolbox-resource-selector__filters {
+      gap: 4px;
+    }
+    .toolbox-resource-selector:not(.is-page-scroll) .toolbox-resource-selector__filters :deep(.b_btn) {
+      min-height: 26px;
+      padding: 0 9px;
+    }
+    .toolbox-resource-selector:not(.is-page-scroll) .toolbox-resource-selector__picker {
+      min-height: 0;
+      padding: 8px;
+      border-radius: 12px;
     }
   }
   html.light-note-mobile-rendering .toolbox-resource-selector__type {

@@ -104,7 +104,7 @@ export async function executeAiSkill(rawRequest, req, dependencies = {}) {
     const allowedInternalCallers = Array.isArray(skill.allowedInternalCallers) ? skill.allowedInternalCallers : [];
     if (
       skill.internalOnly &&
-      (internalExecutionOverrides.billingPolicy !== 'system' || !allowedInternalCallers.includes(internalCaller))
+      !allowedInternalCallers.includes(internalCaller)
     ) {
       throw aiSkillError('AI_SKILL_INTERNAL_ONLY', '该 AI 能力只能由对应的产品流程调用', 403);
     }

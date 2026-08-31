@@ -35,7 +35,8 @@ SET content = @ai_quota_content,
     sort = 96,
     admin_archived = 0,
     updated_by = NULL
-WHERE id = @ai_quota_id;
+WHERE id = @ai_quota_id
+  AND LOCATE('data-ln-policy:ai-quota-v', COALESCE(content, '')) = 0;
 
 -- 移动端一级导航已经用“快速添加”替代旧全局 AI 入口。
 SET @mobile_nav_id = 'f7264b03-6c3c-47b2-a52c-e9e136ccadb4';

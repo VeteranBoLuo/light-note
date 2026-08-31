@@ -29,7 +29,9 @@
             v-model:value="draft"
             :rows="1"
             :maxlength="2000"
-            :placeholder="t('communityChat.messagePlaceholder')"
+            :placeholder="
+              t(isMobileLayout ? 'communityChat.messagePlaceholderMobile' : 'communityChat.messagePlaceholder')
+            "
           />
           <small>{{ logicalLength }}/2000</small>
         </div>
@@ -43,13 +45,15 @@
     COMMUNITY_CHAT_INLINE_EMOJIS,
     communityChatInlineEmojiLogicalLength,
   } from '@lightnote/shared/community-chat-inline-emojis';
-  import { computed, nextTick, ref } from 'vue';
+  import { computed, nextTick, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import ChatComposerInput from '@/components/communityChat/ChatComposerInput.vue';
   import ChatExpressionPanel from '@/components/communityChat/ChatExpressionPanel.vue';
   import ChatInlineEmojiText from '@/components/communityChat/ChatInlineEmojiText.vue';
+  import { useMobileLayout } from '@/composables/useMobileLayout';
 
   const { t } = useI18n();
+  const isMobileLayout = useMobileLayout();
   const emojis = COMMUNITY_CHAT_INLINE_EMOJIS;
   const recentEmojis = ['😀', emojis[0].token];
   const tab = ref<'emoji' | 'official' | 'custom'>('emoji');
@@ -59,16 +63,18 @@
   const ownMessage = `好呀，等我一下${emojis[44].token}`;
   const logicalLength = computed(() => communityChatInlineEmojiLogicalLength(draft.value));
 
+  watch(
+    draft,
+    () => {
+      void nextTick(() => composerInput.value?.syncHeight(42, 96));
+    },
+    { immediate: true },
+  );
+
   function insertEmoji(token: string) {
-    const selection = composerInput.value?.getSelectionRange() || {
-      start: draft.value.length,
-      end: draft.value.length,
-    };
-    draft.value = `${draft.value.slice(0, selection.start)}${token}${draft.value.slice(selection.end)}`;
-    const caret = selection.start + token.length;
+    if (!composerInput.value?.replaceSelection(token)) return;
     void nextTick(() => {
       composerInput.value?.focus();
-      composerInput.value?.setSelectionRange(caret, caret);
     });
   }
 </script>

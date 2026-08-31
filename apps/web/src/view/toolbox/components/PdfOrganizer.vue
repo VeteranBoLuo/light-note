@@ -77,11 +77,21 @@
       <VueDraggable
         v-model="pages"
         class="pdf-page-grid"
-        :animation="180"
-        :delay="80"
-        :force-fallback="true"
+        :class="{ 'is-sorting': sorting }"
+        :animation="220"
+        :fallback-tolerance="4"
+        :fallback-on-body="true"
+        :swap-threshold="0.62"
+        :scroll-sensitivity="90"
+        :scroll-speed="14"
         :disabled="Boolean(exporting)"
         handle=".pdf-page-card__drag"
+        ghost-class="pdf-page-card--ghost"
+        chosen-class="pdf-page-card--chosen"
+        drag-class="pdf-page-card--dragging"
+        fallback-class="pdf-page-card--fallback"
+        @start="startSorting"
+        @end="stopSorting"
       >
         <article
           v-for="(page, index) in pages"
@@ -96,7 +106,11 @@
               :aria-label="`${index + 1}`"
               @update:checked="page.selected = $event"
             />
-            <span class="pdf-page-card__drag" aria-hidden="true">•••</span>
+            <BTooltip :title="t('toolbox.local.reorderPage')">
+              <span class="pdf-page-card__drag" aria-hidden="true">
+                <SvgIcon :src="icon.todo.drag" size="16" aria-hidden="true" />
+              </span>
+            </BTooltip>
           </div>
           <div class="pdf-page-card__preview" :style="{ transform: `rotate(${page.rotation}deg)` }">
             <PdfPageThumbnail
@@ -185,6 +199,7 @@
   const preparing = ref(false);
   const exporting = ref<'all' | 'selected' | null>(null);
   const dragging = ref(false);
+  const sorting = ref(false);
   let dragDepth = 0;
   const selectedPages = computed(() => pages.value.filter((page) => page.selected));
   const allSelected = computed(() => pages.value.length > 0 && selectedPages.value.length === pages.value.length);
@@ -251,6 +266,14 @@
   function toggleSelectAll() {
     const next = !allSelected.value;
     pages.value.forEach((page) => (page.selected = next));
+  }
+
+  function startSorting() {
+    sorting.value = true;
+  }
+
+  function stopSorting() {
+    sorting.value = false;
   }
 
   function rotate(page: PdfOrganizerPage, angle: number) {
@@ -414,6 +437,7 @@
       transform 0.18s ease,
       border-color 0.18s ease,
       box-shadow 0.18s ease;
+    will-change: transform;
   }
   .pdf-page-card.is-selected {
     border-color: var(--primary-color);
@@ -430,7 +454,7 @@
     pointer-events: none;
   }
   .pdf-page-card__top :deep(.b-checkbox),
-  .pdf-page-card__drag {
+  .pdf-page-card__top :deep(.pdf-page-card__drag) {
     pointer-events: auto;
   }
   .pdf-page-card__top :deep(.b-checkbox) {
@@ -438,14 +462,50 @@
     border-radius: 7px;
     background: var(--card-background);
   }
-  .pdf-page-card__drag {
-    padding: 2px 6px;
+  .pdf-page-card__top :deep(.pdf-page-card__drag) {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
     border: 1px solid var(--surface-border-color);
-    border-radius: 7px;
+    border-radius: 9px;
     color: var(--desc-color);
     background: var(--card-background);
     cursor: grab;
-    letter-spacing: 2px;
+    touch-action: none;
+  }
+  .pdf-page-card__top :deep(.pdf-page-card__drag:active) {
+    cursor: grabbing;
+  }
+  .pdf-page-grid.is-sorting {
+    cursor: grabbing;
+    user-select: none;
+  }
+  .pdf-page-card--chosen {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px var(--primary-color);
+  }
+  .pdf-page-card--ghost {
+    opacity: 0.32;
+    border: 2px dashed var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--card-background));
+    box-shadow: none;
+  }
+  .pdf-page-card--ghost > * {
+    visibility: hidden;
+  }
+  .pdf-page-card--dragging,
+  .pdf-page-card--fallback {
+    z-index: 50;
+    opacity: 0.98 !important;
+    transform: rotate(0.8deg) scale(1.025) !important;
+    border-color: var(--primary-color);
+    box-shadow: 0 18px 42px rgba(31, 34, 66, 0.2) !important;
+    cursor: grabbing;
+    pointer-events: none;
+    transition: none !important;
   }
   .pdf-page-card__preview {
     margin: 0 auto;
@@ -493,7 +553,7 @@
     transform: rotate(180deg);
   }
   @media (hover: hover) and (pointer: fine) {
-    .pdf-page-card:hover {
+    .pdf-page-grid:not(.is-sorting) .pdf-page-card:hover {
       transform: translateY(-2px);
       border-color: color-mix(in srgb, var(--primary-color) 35%, var(--surface-border-color));
       box-shadow: 0 12px 28px rgba(31, 34, 66, 0.08);
@@ -533,6 +593,10 @@
   }
   html.light-note-mobile-rendering .local-tool__drop-zone,
   html.light-note-mobile-rendering .pdf-page-card__meta strong {
+    background: var(--card-background);
+  }
+  html.light-note-mobile-rendering .pdf-page-card--ghost {
+    border: 2px dashed var(--primary-color);
     background: var(--card-background);
   }
 </style>

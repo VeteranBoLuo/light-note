@@ -1,5 +1,6 @@
 <template>
   <div
+    ref="panelRef"
     class="resource-picker-panel"
     :class="{
       'is-inline': inline,
@@ -8,6 +9,7 @@
       'is-virtualized': virtualizedMode,
       'is-page-scroll': pageScroll,
     }"
+    :style="pageScrollHoldStyle"
   >
     <!-- @ 触发时不带搜索框:关键词直接来自输入框里 @ 后面的文字(与 Claude Code 的 @ 一致);
          显式按钮打开时才需要自己的搜索框 -->
@@ -44,10 +46,11 @@
     <BVirtualList
       v-else-if="virtualizedMode && virtualOptions.length"
       ref="virtualListRef"
-      class="resource-picker-panel__virtual-list auto-hide-scrollbar"
+      class="resource-picker-panel__virtual-list"
       role="listbox"
       :items="virtualOptions"
       item-key="key"
+      :total-count="virtualTotalCount"
       :item-height="52"
       :gap="2"
       :overscan="7"
@@ -56,6 +59,7 @@
       :has-more="hasMore && !loadMoreFailed"
       :scroll-mode="pageScroll ? 'ancestor' : 'self'"
       @load-more="loadMore"
+      @scroll-position="forwardScrollPosition"
     >
       <template #default="{ item: entry }">
         <BButton
@@ -115,10 +119,10 @@
     <div
       v-else
       ref="resultsRef"
-      class="resource-picker-panel__results auto-hide-scrollbar"
-      :class="{ 'is-scrolling': scrolling }"
+      v-auto-scrollbar
+      class="resource-picker-panel__results"
       role="listbox"
-      @scroll="onScroll"
+      @scroll.passive="handleResultsScroll"
     >
       <BButton
         v-for="(item, index) in pinned"
@@ -130,6 +134,7 @@
           'is-multi': multiSelect,
         }"
         :disabled="resourceDisabled(item)"
+        :data-scroll-anchor="`resource:${resourceItemKey(item)}`"
         :aria-selected="resourceSelected(item)"
         :aria-current="index === activeIndex ? 'true' : undefined"
         @mousemove="activateFromPointer(index)"
@@ -155,6 +160,7 @@
             'is-multi': multiSelect,
           }"
           :disabled="resourceDisabled(entry.item)"
+          :data-scroll-anchor="`resource:${resourceItemKey(entry.item)}`"
           :aria-selected="resourceSelected(entry.item)"
           :aria-current="entry.index === activeIndex ? 'true' : undefined"
           @mousemove="activateFromPointer(entry.index)"
@@ -184,6 +190,7 @@
             'is-multi': multiSelect,
           }"
           :disabled="scopeDisabled(entry.scope)"
+          :data-scroll-anchor="`scope:${entry.scope.id}`"
           :aria-selected="scopeSelected(entry.scope)"
           :aria-current="entry.index === activeIndex ? 'true' : undefined"
           @mousemove="activateFromPointer(entry.index)"
@@ -233,8 +240,9 @@
     type ResourcePickerItem,
     type ResourcePickerType,
   } from '@/composables/useResourcePickerSearch';
-  import { useAutoHideScrollbar } from '@/composables/useAutoHideScrollbar';
   import type { AiScopeRef } from '@/types/aiScope';
+  import type { ResourceListScrollAnchor, ResourceListScrollPosition } from '@/utils/resourceListScroll';
+  import { findScrollContainer, restoreScrollTop } from '@/utils/scrollContainer';
   import { scrollNearestIntoContainer } from '@/utils/zoom';
 
   /**
@@ -304,14 +312,31 @@
     'deselect-scope': [value: AiScopeRef];
     close: [];
     'results-count': [value: number];
+    'scroll-position': [position: ResourceListScrollPosition];
   }>();
 
   const { t } = useI18n();
-  const { scrolling, onScroll } = useAutoHideScrollbar();
   const innerKeyword = ref('');
+  const panelRef = ref<HTMLElement | null>(null);
   const keywordInputRef = ref<{ focus?: () => void } | null>(null);
   const resultsRef = ref<HTMLElement | null>(null);
   const virtualListRef = ref<InstanceType<typeof BVirtualList> | null>(null);
+  const pageScrollHoldHeight = ref(0);
+  const pageScrollHoldStyle = computed(() =>
+    pageScrollHoldHeight.value > 0 ? { minHeight: `${pageScrollHoldHeight.value}px` } : undefined,
+  );
+  let pageScrollTransitionId = 0;
+  let pendingPageScroll:
+    | {
+        id: number;
+        container: HTMLElement;
+        scrollTop: number;
+      }
+    | undefined;
+  let pendingPreparedScrollAnchor: ResourceListScrollAnchor | null | undefined;
+  let preparedAnchorAwaitingFilterChange = false;
+  let filterTransitionVersion = 0;
+  let activeFilterTransition = 0;
   const {
     results,
     loading,
@@ -334,6 +359,122 @@
     singleTypePageSize: props.singleTypePageSize,
   });
   const virtualizedMode = computed(() => props.exhaustiveSingleType && (props.allowedTypes || []).length === 1);
+
+  function beginPageScrollTransition() {
+    const panel = panelRef.value;
+    // 调用方会在改变 allowedTypes 之前先触发一次；子组件的属性 watcher 随后
+    // 再进入这里时必须沿用最早的快照，不能把已经被浏览器夹紧的位置覆盖掉。
+    if (!props.pageScroll || !panel || pendingPageScroll) return;
+    const container = findScrollContainer(panel);
+    const id = ++pageScrollTransitionId;
+    pageScrollHoldHeight.value = Math.max(pageScrollHoldHeight.value, Math.ceil(panel.getBoundingClientRect().height));
+    pendingPageScroll = { id, container, scrollTop: container.scrollTop };
+  }
+
+  async function finishPageScrollTransition() {
+    const snapshot = pendingPageScroll;
+    if (!snapshot) return;
+    await nextTick();
+    if (pendingPageScroll?.id !== snapshot.id) return;
+    restoreScrollTop(snapshot.container, snapshot.scrollTop);
+    pageScrollHoldHeight.value = 0;
+    await nextTick();
+    if (pendingPageScroll?.id !== snapshot.id) return;
+    restoreScrollTop(snapshot.container, snapshot.scrollTop);
+    pendingPageScroll = undefined;
+  }
+
+  function forwardScrollPosition(position: ResourceListScrollPosition) {
+    emit('scroll-position', position);
+  }
+
+  function handleResultsScroll() {
+    const results = resultsRef.value;
+    if (!results) return;
+    forwardScrollPosition({ top: results.scrollTop, viewportHeight: results.clientHeight });
+  }
+
+  function regularAnchorElements() {
+    return [...(resultsRef.value?.querySelectorAll<HTMLElement>('[data-scroll-anchor]') || [])];
+  }
+
+  function captureRegularScrollAnchor(): ResourceListScrollAnchor | null {
+    const results = resultsRef.value;
+    const entries = regularAnchorElements();
+    if (!results || !entries.length) return null;
+    const top = Math.max(0, results.scrollTop);
+    let index = 0;
+    for (let current = 1; current < entries.length; current += 1) {
+      if ((entries[current]?.offsetTop || 0) > top) break;
+      index = current;
+    }
+    const entry = entries[index];
+    return {
+      key: String(entry?.dataset.scrollAnchor || ''),
+      index,
+      offset: Math.max(0, top - (entry?.offsetTop || 0)),
+    };
+  }
+
+  function captureScrollAnchor(): ResourceListScrollAnchor | null {
+    if (props.pageScroll) return null;
+    return virtualizedMode.value ? virtualListRef.value?.captureScrollAnchor?.() || null : captureRegularScrollAnchor();
+  }
+
+  function prepareScrollAnchor(anchor: ResourceListScrollAnchor | null) {
+    if (props.pageScroll) return;
+    pendingPreparedScrollAnchor = anchor;
+    // 父级会先准备目标筛选的锚点，再修改 allowedTypes。两者之间 flatOptions
+    // 可能先触发一次 watcher；此时不能提前消费锚点，否则真正的筛选归零会覆盖恢复值。
+    preparedAnchorAwaitingFilterChange = true;
+  }
+
+  function restoreRegularScrollAnchor(anchor: ResourceListScrollAnchor) {
+    const results = resultsRef.value;
+    const entries = regularAnchorElements();
+    if (!results || !entries.length) return false;
+    const keyedIndex = anchor.key ? entries.findIndex((entry) => entry.dataset.scrollAnchor === anchor.key) : -1;
+    const index = keyedIndex >= 0 ? keyedIndex : Math.min(entries.length - 1, Math.max(0, anchor.index));
+    const entry = entries[index];
+    results.scrollTop = Math.max(0, (entry?.offsetTop || 0) + Math.max(0, anchor.offset));
+    handleResultsScroll();
+    return keyedIndex >= 0;
+  }
+
+  async function restorePreparedScrollAnchor() {
+    if (
+      props.pageScroll ||
+      preparedAnchorAwaitingFilterChange ||
+      activeFilterTransition ||
+      pendingPreparedScrollAnchor === undefined
+    )
+      return;
+    await nextTick();
+    const anchor = pendingPreparedScrollAnchor;
+    if (anchor === null) {
+      scrollToTop('auto');
+      pendingPreparedScrollAnchor = undefined;
+      return;
+    }
+    const matched = virtualizedMode.value
+      ? virtualListRef.value?.restoreScrollAnchor?.(anchor) === true
+      : restoreRegularScrollAnchor(anchor);
+    if (matched || !virtualizedMode.value || !hasMore.value) pendingPreparedScrollAnchor = undefined;
+  }
+
+  function scrollToTop(behavior: ScrollBehavior = 'auto') {
+    if (props.pageScroll) return;
+    if (virtualizedMode.value) {
+      virtualListRef.value?.scrollToTop(behavior);
+      return;
+    }
+    const results = resultsRef.value;
+    if (!results) return;
+    if (behavior === 'smooth' && typeof results.scrollTo === 'function') {
+      results.scrollTo({ top: 0, left: 0, behavior });
+    } else results.scrollTop = 0;
+    forwardScrollPosition({ top: 0, viewportHeight: results.clientHeight });
+  }
 
   async function moveActive(offset: number) {
     const optionCount = flatOptions.value.length;
@@ -499,6 +640,11 @@
     }
     return entries;
   });
+  const virtualTotalCount = computed(() =>
+    hasMore.value && !loadMoreFailed.value
+      ? Math.max(resultTotal.value, virtualOptions.value.length)
+      : virtualOptions.value.length,
+  );
 
   const flatOptions = computed(() =>
     virtualizedMode.value
@@ -530,14 +676,45 @@
     return props.showSearch ? innerKeyword.value : props.keyword || '';
   }
 
-  async function resetResultScroll() {
+  async function resetResultScroll(preservePreparedAnchor = false) {
+    if (!preservePreparedAnchor) {
+      pendingPreparedScrollAnchor = undefined;
+      preparedAnchorAwaitingFilterChange = false;
+    }
     activeIndex.value = 0;
     await nextTick();
+    // 页面滚动模式的唯一滚动所有者是外层工作台。类型切换时如果调用
+    // BVirtualList.scrollToTop(),会把整页强制拉回资源列表起点；异步分页随后扩高左栏，
+    // 用户在右栏继续滚动时就会感知为二次回弹。这里只重置键盘高亮，保留页面位置。
+    if (props.pageScroll) return;
     if (virtualizedMode.value) virtualListRef.value?.scrollToTop();
-    else resultsRef.value?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    else if (resultsRef.value) {
+      resultsRef.value.scrollTop = 0;
+      forwardScrollPosition({ top: 0, viewportHeight: resultsRef.value.clientHeight });
+    }
+  }
+
+  async function handleAllowedTypesChange() {
+    const version = ++filterTransitionVersion;
+    preparedAnchorAwaitingFilterChange = false;
+    activeFilterTransition = version;
+    beginPageScrollTransition();
+    reset();
+    try {
+      // 必须先等新筛选对应的容器完成归零，再发起搜索并恢复语义锚点。
+      // 否则 loading/flatOptions watcher 可能提前恢复，随后又被异步归零覆盖，
+      // 形成用户看到的“先回原位、再跳到顶部”。
+      await resetResultScroll(true);
+      await searchNow(currentKeyword());
+    } finally {
+      if (activeFilterTransition !== version) return;
+      activeFilterTransition = 0;
+      await restorePreparedScrollAnchor();
+    }
   }
 
   async function retryInitialSearch() {
+    beginPageScrollTransition();
     await resetResultScroll();
     await searchNow(currentKeyword());
   }
@@ -554,6 +731,7 @@
 
   watch(innerKeyword, (value) => {
     if (!props.showSearch) return;
+    beginPageScrollTransition();
     void resetResultScroll();
     search(String(value || ''));
   });
@@ -561,17 +739,26 @@
     () => props.keyword,
     (value) => {
       if (props.showSearch) return;
+      beginPageScrollTransition();
       void resetResultScroll();
       search(String(value || ''));
     },
   );
   watch(
     () => (props.allowedTypes || []).join(','),
-    () => {
-      reset();
-      void resetResultScroll();
-      void searchNow(currentKeyword());
-    },
+    () => void handleAllowedTypesChange(),
+  );
+
+  watch(loading, (value, previous) => {
+    if (previous && !value) {
+      void finishPageScrollTransition();
+      void restorePreparedScrollAnchor();
+    }
+  });
+
+  watch(
+    () => flatOptions.value.length,
+    () => void restorePreparedScrollAnchor(),
   );
 
   watch(
@@ -580,9 +767,24 @@
     { immediate: true },
   );
 
-  onBeforeUnmount(reset);
+  onBeforeUnmount(() => {
+    filterTransitionVersion += 1;
+    activeFilterTransition = 0;
+    preparedAnchorAwaitingFilterChange = false;
+    pendingPageScroll = undefined;
+    pendingPreparedScrollAnchor = undefined;
+    pageScrollHoldHeight.value = 0;
+    reset();
+  });
 
-  defineExpose({ chooseActive, moveActive });
+  defineExpose({
+    beginPageScrollTransition,
+    captureScrollAnchor,
+    chooseActive,
+    moveActive,
+    prepareScrollAnchor,
+    scrollToTop,
+  });
 </script>
 
 <style scoped lang="less">
@@ -613,6 +815,7 @@
     height: auto;
     max-height: none;
     overflow: visible;
+    overflow-anchor: none;
   }
 
   .resource-picker-panel__results {
@@ -668,36 +871,6 @@
 
   .resource-picker-panel__batch :deep(.b_btn) {
     min-height: 27px;
-  }
-
-  /* 滚动条默认隐形,hover 或滚动中才显现,停止后淡出 */
-  .auto-hide-scrollbar {
-    scrollbar-width: thin;
-    scrollbar-color: transparent transparent;
-    transition: scrollbar-color 0.25s ease;
-  }
-
-  .auto-hide-scrollbar::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-
-  .auto-hide-scrollbar::-webkit-scrollbar-thumb {
-    border: 2px solid transparent;
-    border-radius: 999px;
-    background-clip: content-box;
-    background-color: transparent;
-    transition: background-color 0.25s ease;
-  }
-
-  .auto-hide-scrollbar:hover,
-  .auto-hide-scrollbar.is-scrolling {
-    scrollbar-color: color-mix(in srgb, var(--text-color) 26%, transparent) transparent;
-  }
-
-  .auto-hide-scrollbar:hover::-webkit-scrollbar-thumb,
-  .auto-hide-scrollbar.is-scrolling::-webkit-scrollbar-thumb {
-    background-color: color-mix(in srgb, var(--text-color) 26%, transparent);
   }
 
   .resource-picker-panel__group {

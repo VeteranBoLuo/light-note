@@ -267,9 +267,6 @@ declare(ADMIN_POLICIES.READ, 'toolbox', [
   ['GET', '/toolbox/catalog'],
   ['GET', '/toolbox/home'],
   ['GET', '/toolbox/knowledge-overview'],
-  ['GET', '/toolbox/projects'],
-  ['GET', '/toolbox/projects/:projectId'],
-  ['GET', '/toolbox/projects/:projectId/revisions'],
   ['GET', '/toolbox/workspaces'],
   ['GET', '/toolbox/workspaces/:workspaceId'],
   ['GET', '/toolbox/tasks'],
@@ -281,11 +278,6 @@ declare(ADMIN_POLICIES.READ, 'toolbox', [
 // 代管上下文中替数据主体执行，哪怕当前模式是 maintain。
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'toolbox', [
   ['POST', '/toolbox/quotes'],
-  ['POST', '/toolbox/projects'],
-  ['PATCH', '/toolbox/projects/:projectId'],
-  ['POST', '/toolbox/projects/:projectId/open'],
-  ['POST', '/toolbox/projects/:projectId/revisions'],
-  ['POST', '/toolbox/projects/:projectId/revisions/:revisionNo/restore'],
   ['POST', '/toolbox/workspaces'],
   ['PATCH', '/toolbox/workspaces/:workspaceId'],
   ['POST', '/toolbox/workspaces/:workspaceId/open'],
@@ -335,6 +327,7 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'user', [
   ['POST', '/user/extension/authorize'],
   ['POST', '/user/extension/exchange'],
   ['POST', '/user/saveUserInfo'],
+  ['POST', '/user/feature-announcements/seen'],
   ['GET', '/user/deleteUserById'],
   ['POST', '/user/logout'],
   ['POST', '/user/configPassword'],
@@ -680,18 +673,6 @@ function resolvePolicy(method, path) {
   }
   if (/^\/toolbox\/jobs\/[^/]+$/.test(path)) {
     return routePolicies.get(`${method} /toolbox/jobs/:jobId`);
-  }
-  if (/^\/toolbox\/projects\/[^/]+\/revisions\/[^/]+\/restore$/.test(path)) {
-    return routePolicies.get(`${method} /toolbox/projects/:projectId/revisions/:revisionNo/restore`);
-  }
-  if (/^\/toolbox\/projects\/[^/]+\/revisions$/.test(path)) {
-    return routePolicies.get(`${method} /toolbox/projects/:projectId/revisions`);
-  }
-  if (/^\/toolbox\/projects\/[^/]+\/open$/.test(path)) {
-    return routePolicies.get(`${method} /toolbox/projects/:projectId/open`);
-  }
-  if (/^\/toolbox\/projects\/[^/]+$/.test(path)) {
-    return routePolicies.get(`${method} /toolbox/projects/:projectId`);
   }
   if (/^\/toolbox\/workspaces\/[^/]+$/.test(path)) {
     return routePolicies.get(`${method} /toolbox/workspaces/:workspaceId`);

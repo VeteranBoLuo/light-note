@@ -6,11 +6,13 @@ const apiQueryPost = vi.fn();
 vi.mock('@/http/request.ts', () => ({ apiQueryPost }));
 
 const { default: useBookmarkStore } = await import('./bookmark');
+const { clearAuthNavigationIntent, resolveAuthNavigationIntent } = await import('@/utils/authNavigationIntent.ts');
 
 describe('bookmark store 标签加载', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setActivePinia(createPinia());
+    clearAuthNavigationIntent();
   });
 
   it('登录后的新请求会阻止较早的游客空响应覆盖标签', async () => {
@@ -47,5 +49,22 @@ describe('bookmark store 标签加载', () => {
 
     expect(store.tagList).toEqual([]);
     expect(store.tagLoading).toBe(false);
+  });
+
+  it('打开受保护入口的登录弹窗时统一保存安全回跳目标', () => {
+    const store = useBookmarkStore();
+    store.openAuthModal('登录', 'preview_guide', '/points-usage');
+
+    expect(store.isShowLogin).toBe(true);
+    expect(store.authModalTab).toBe('登录');
+    expect(resolveAuthNavigationIntent()).toBe('/points-usage');
+  });
+
+  it('拒绝外域回跳时不打开认证弹窗', () => {
+    const store = useBookmarkStore();
+    store.openAuthModal('登录', 'preview_guide', 'https://attacker.example/path');
+
+    expect(store.isShowLogin).toBe(false);
+    expect(resolveAuthNavigationIntent()).toBeNull();
   });
 });

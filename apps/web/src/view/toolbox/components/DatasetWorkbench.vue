@@ -95,20 +95,21 @@
           <h2>{{ emptyTitle }}</h2>
           <p>{{ emptyDescription }}</p>
         </div>
-        <BUpload
-          raw-file
-          :multiple="maxFiles > 1"
-          :accept="datasetAccept"
-          :max-total-size="null"
-          :disabled="loading"
-          block
-          @change="loadFiles"
-        >
-          <BButton type="primary" size="large" :loading="loading">
-            <SvgIcon :src="icon.toolbox.upload" size="17" />{{ chooseFileLabel }}
-          </BButton>
-        </BUpload>
-        <BButton :disabled="loading" @click="loadSample">{{ t('toolbox.local.loadSample') }}</BButton>
+        <div class="dataset-empty__actions">
+          <BUpload
+            raw-file
+            :multiple="maxFiles > 1"
+            :accept="datasetAccept"
+            :max-total-size="null"
+            :disabled="loading"
+            @change="loadFiles"
+          >
+            <BButton type="primary" size="large" :loading="loading">
+              <SvgIcon :src="icon.toolbox.upload" size="17" />{{ chooseFileLabel }}
+            </BButton>
+          </BUpload>
+          <BButton :disabled="loading" @click="loadSample">{{ t('toolbox.local.loadSample') }}</BButton>
+        </div>
         <small>{{ t('toolbox.dataset.fileHint', { count: maxFiles }) }}</small>
       </section>
 
@@ -1115,7 +1116,7 @@
 <style scoped lang="less">
   .dataset-workbench {
     display: grid;
-    grid-template-columns: minmax(190px, 220px) minmax(0, 1fr);
+    grid-template-columns: minmax(224px, 248px) minmax(0, 1fr);
     align-items: start;
     gap: 18px;
   }
@@ -1170,11 +1171,12 @@
     width: 100%;
     max-width: 100%;
     min-width: 0;
-    min-height: 62px;
-    padding: 7px 8px;
+    min-height: 70px;
+    padding: 10px 11px;
     overflow: hidden;
     box-sizing: border-box;
     justify-content: flex-start;
+    gap: 10px;
     border: 1px solid transparent;
     border-radius: 12px;
     color: var(--desc-color);
@@ -1183,8 +1185,8 @@
   }
 
   .dataset-operation > span:first-child {
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     display: grid;
     flex: 0 0 auto;
     place-items: center;
@@ -1195,8 +1197,10 @@
 
   .dataset-operation > span:last-child {
     min-width: 0;
+    padding-right: 2px;
+    flex: 1;
     display: grid;
-    gap: 1px;
+    gap: 3px;
   }
 
   .dataset-operation strong,
@@ -1208,7 +1212,7 @@
 
   .dataset-operation strong {
     color: var(--text-color);
-    font-size: 12px;
+    font-size: 12.5px;
   }
 
   .dataset-operation small {
@@ -1216,8 +1220,8 @@
     overflow: hidden;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
-    font-size: 9px;
-    line-height: 1.35;
+    font-size: 10px;
+    line-height: 1.45;
     white-space: normal;
   }
 
@@ -1234,6 +1238,11 @@
   .dataset-operation.is-selected > span:first-child {
     color: #fff;
     background: var(--primary-color);
+  }
+
+  .dataset-operation:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
   }
 
   .dataset-mode-select {
@@ -1351,6 +1360,21 @@
     display: grid;
     justify-items: center;
     gap: 8px;
+  }
+
+  .dataset-empty > .dataset-empty__actions {
+    width: 100%;
+    max-width: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .dataset-empty__actions :deep(.b-upload-trigger) {
+    width: auto;
+    display: inline-flex;
   }
 
   .dataset-empty h2,
@@ -1933,7 +1957,7 @@
 
   @media (max-width: 1100px) {
     .dataset-workbench {
-      grid-template-columns: 180px minmax(0, 1fr);
+      grid-template-columns: 210px minmax(0, 1fr);
     }
 
     .dataset-studio {
@@ -1984,6 +2008,19 @@
     .dataset-empty {
       min-height: 300px;
       padding: 32px 16px;
+    }
+
+    .dataset-empty > .dataset-empty__actions {
+      max-width: 320px;
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .dataset-empty__actions :deep(.b-upload-trigger),
+    .dataset-empty__actions > :deep(.b_btn),
+    .dataset-empty__actions :deep(.b-upload-trigger .b_btn) {
+      width: 100%;
+      min-height: 44px;
     }
 
     .dataset-sourcebar,

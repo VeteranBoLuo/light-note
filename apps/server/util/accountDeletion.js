@@ -440,30 +440,6 @@ export async function purgeToolboxWorkspace(connection, tables, userId) {
   await deleteIfPresent(
     connection,
     tables,
-    'toolbox_project_revision_requests',
-    'DELETE FROM toolbox_project_revision_requests WHERE user_id = ?',
-    [userId],
-  );
-  await deleteIfPresent(
-    connection,
-    tables,
-    'toolbox_project_resources',
-    'DELETE FROM toolbox_project_resources WHERE user_id = ?',
-    [userId],
-  );
-  await deleteIfPresent(
-    connection,
-    tables,
-    'toolbox_project_revisions',
-    'DELETE FROM toolbox_project_revisions WHERE user_id = ?',
-    [userId],
-  );
-  await deleteIfPresent(connection, tables, 'toolbox_projects', 'DELETE FROM toolbox_projects WHERE user_id = ?', [
-    userId,
-  ]);
-  await deleteIfPresent(
-    connection,
-    tables,
     'toolbox_workspace_sessions',
     'DELETE FROM toolbox_workspace_sessions WHERE user_id = ?',
     [userId],

@@ -1,4 +1,5 @@
 import { createLocalId, safeDownloadBaseName } from '@/utils/toolboxLocal';
+import { loadPdfJsRuntime } from '@/utils/pdfJsRuntime';
 
 export const PDF_ORGANIZER_MAX_FILES = 8;
 export const PDF_ORGANIZER_MAX_BYTES = 80 * 1024 * 1024;
@@ -109,7 +110,6 @@ export async function exportPdfPages(
   };
 }
 
-let pdfRuntimePromise: Promise<typeof import('pdfjs-dist/legacy/build/pdf.mjs')> | null = null;
 type PdfJsRuntime = typeof import('pdfjs-dist/legacy/build/pdf.mjs');
 type PdfLoadingTask = ReturnType<PdfJsRuntime['getDocument']>;
 type PdfDocumentProxy = Awaited<PdfLoadingTask['promise']>;
@@ -118,19 +118,6 @@ const thumbnailDocuments = new Map<string, Promise<PdfDocumentProxy>>();
 const thumbnailQueue: Array<() => void> = [];
 const MAX_CONCURRENT_THUMBNAILS = 3;
 let activeThumbnailRenders = 0;
-
-async function loadPdfRuntime() {
-  if (!pdfRuntimePromise) {
-    pdfRuntimePromise = Promise.all([
-      import('pdfjs-dist/legacy/build/pdf.mjs'),
-      import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'),
-    ]).then(([pdfjs, workerModule]) => {
-      pdfjs.GlobalWorkerOptions.workerSrc = workerModule.default;
-      return pdfjs;
-    });
-  }
-  return pdfRuntimePromise;
-}
 
 async function acquireThumbnailSlot() {
   if (activeThumbnailRenders >= MAX_CONCURRENT_THUMBNAILS) {
@@ -149,7 +136,7 @@ async function acquireThumbnailSlot() {
 async function getThumbnailDocument(source: PdfOrganizerSource) {
   const cached = thumbnailDocuments.get(source.id);
   if (cached) return cached;
-  const promise = loadPdfRuntime()
+  const promise = loadPdfJsRuntime()
     .then((pdfjs) => pdfjs.getDocument({ data: source.bytes.slice() }).promise)
     .catch((error) => {
       thumbnailDocuments.delete(source.id);

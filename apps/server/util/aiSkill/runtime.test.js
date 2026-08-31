@@ -156,7 +156,7 @@ describe('executeAiSkill', () => {
     expect(executionConfig).toMatchObject({ billingPolicy: 'system', systemId: 'toolbox_points' });
   });
 
-  it('内部 Skill 在进入根 Execution 前拒绝公共调用，只信任进程内系统策略', async () => {
+  it('内部 Skill 拒绝公共调用，但可信 Worker 可按任务选择用户或系统计费', async () => {
     const runExecution = vi.fn(async (_config, operation) => operation());
     const skill = {
       id: 'help.answer',
@@ -206,6 +206,25 @@ describe('executeAiSkill', () => {
       ),
     ).resolves.toMatchObject({ result: { content: '内部产物' } });
     expect(runExecution).toHaveBeenCalledOnce();
+
+    let userBillingConfig;
+    await expect(
+      executeAiSkill(
+        request(),
+        { user: { id: 'u-1', role: 'user' } },
+        {
+          resolveSkill: () => skill,
+          assertDomainEnabled: () => {},
+          resolveContext: async () => resolvedContext('f'.repeat(64)),
+          runExecution: async (config, operation) => {
+            userBillingConfig = config;
+            return operation();
+          },
+          internalCaller: 'toolbox_worker',
+        },
+      ),
+    ).resolves.toMatchObject({ result: { content: '内部产物' } });
+    expect(userBillingConfig).toMatchObject({ billingPolicy: 'user', skillId: 'help.answer' });
   });
 
   it('Skill 可确定性返回结果而完全不调用模型', async () => {

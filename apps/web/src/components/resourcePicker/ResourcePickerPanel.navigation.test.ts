@@ -20,6 +20,12 @@ const fetchGlobalSearchMock = vi.mocked(fetchGlobalSearch);
 
 let cleanup: (() => void) | undefined;
 
+function installTestApp(app: ReturnType<typeof createApp>) {
+  app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+  app.directive('auto-scrollbar', {});
+  app.component('svg-icon', { setup: () => () => h('span') });
+}
+
 beforeEach(() => {
   fetchGlobalSearchMock.mockReset();
   fetchGlobalSearchMock.mockResolvedValue({ items: [], groups: [], total: 0, hasMore: false } as any);
@@ -42,10 +48,69 @@ describe('ResourcePickerPanel 键盘导航', () => {
     );
   });
 
-  it('搜索或类型切换会把虚拟结果恢复到顶部', () => {
-    expect(componentSource).toContain('function resetResultScroll()');
+  it('关键词搜索重置面板滚动，类型切换可恢复语义锚点并稳定页面滚动调用方', () => {
+    expect(componentSource).toContain('function resetResultScroll(');
+    expect(componentSource).toContain('if (props.pageScroll) return;');
+    expect(componentSource).toContain('function beginPageScrollTransition()');
+    expect(componentSource).toContain('function finishPageScrollTransition()');
+    expect(componentSource).toContain('pageScrollHoldHeight');
+    expect(componentSource).toContain('overflow-anchor: none');
+    expect(componentSource).toContain('restoreScrollTop(snapshot.container, snapshot.scrollTop)');
+    expect(componentSource).toContain('function captureScrollAnchor()');
+    expect(componentSource).toContain('function prepareScrollAnchor(');
+    expect(componentSource).toContain('function restorePreparedScrollAnchor()');
+    expect(componentSource).toContain('data-scroll-anchor');
+    expect(componentSource).toContain('v-auto-scrollbar');
     expect(componentSource).toContain('virtualListRef.value?.scrollToTop()');
-    expect(componentSource).toContain("resultsRef.value?.scrollTo({ top: 0, left: 0, behavior: 'auto' })");
+    expect(componentSource).toContain('resultsRef.value.scrollTop = 0');
+  });
+
+  it('筛选切换后优先回到同一资料，而不是只恢复脆弱的像素位置', async () => {
+    const allowedTypes = ref<Array<'bookmark' | 'note'>>(['bookmark', 'note']);
+    const panelRef = ref<{
+      captureScrollAnchor: () => { key: string; index: number; offset: number } | null;
+      prepareScrollAnchor: (anchor: { key: string; index: number; offset: number }) => void;
+    } | null>(null);
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      render: () =>
+        h(ResourcePickerPanel, {
+          ref: panelRef,
+          showSearch: false,
+          allowedTypes: allowedTypes.value,
+          pinnedItems: [
+            { type: 'bookmark', id: '1', title: '第一项' },
+            { type: 'bookmark', id: '2', title: '第二项' },
+            { type: 'bookmark', id: '3', title: '第三项' },
+          ],
+        }),
+    });
+    installTestApp(app);
+    app.component('OriginalIcon', { setup: () => () => h('span') });
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+    await nextTick();
+
+    const results = host.querySelector<HTMLElement>('.resource-picker-panel__results')!;
+    const entries = host.querySelectorAll<HTMLElement>('[data-scroll-anchor]');
+    Object.defineProperty(results, 'clientHeight', { configurable: true, value: 120 });
+    entries.forEach((entry, index) => {
+      Object.defineProperty(entry, 'offsetTop', { configurable: true, value: index * 40 });
+    });
+    results.scrollTop = 85;
+    const anchor = panelRef.value?.captureScrollAnchor();
+    expect(anchor).toEqual({ key: 'resource:bookmark:3', index: 2, offset: 5 });
+
+    results.scrollTop = 0;
+    panelRef.value?.prepareScrollAnchor(anchor!);
+    allowedTypes.value = ['bookmark'];
+    await nextTick();
+    await nextTick();
+    await vi.waitFor(() => expect(results.scrollTop).toBe(85));
   });
 
   it('铺满弹框时可以不显示搜索框，内联模式也不会被搜索框状态隐式开启', async () => {
@@ -61,7 +126,7 @@ describe('ResourcePickerPanel 键盘导航', () => {
           pinnedItems: [{ type: 'bookmark', id: '1', title: '第一项' }],
         }),
     });
-    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    installTestApp(app);
     app.component('OriginalIcon', { setup: () => () => h('span') });
     app.mount(host);
     cleanup = () => {
@@ -102,7 +167,7 @@ describe('ResourcePickerPanel 键盘导航', () => {
           onClose,
         }),
     });
-    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    installTestApp(app);
     app.component('OriginalIcon', { setup: () => () => h('span') });
     app.mount(host);
     cleanup = () => {
@@ -138,7 +203,7 @@ describe('ResourcePickerPanel 键盘导航', () => {
           ],
         }),
     });
-    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    installTestApp(app);
     app.component('OriginalIcon', { setup: () => () => h('span') });
     app.mount(host);
     cleanup = () => {
@@ -189,7 +254,7 @@ describe('ResourcePickerPanel 键盘导航', () => {
           pinnedItems: [{ type: 'note', id: 'note-1', title: 'pc', path: '开发文档', descendantCount: 2 }],
         }),
     });
-    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    installTestApp(app);
     app.component('OriginalIcon', { setup: () => () => h('span') });
     app.mount(host);
     cleanup = () => {
@@ -228,7 +293,7 @@ describe('ResourcePickerPanel 键盘导航', () => {
           onSelectMany,
         }),
     });
-    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    installTestApp(app);
     app.component('OriginalIcon', { setup: () => () => h('span') });
     app.mount(host);
     cleanup = () => {
@@ -252,7 +317,7 @@ describe('ResourcePickerPanel 键盘导航', () => {
     const host = document.createElement('div');
     document.body.append(host);
     const app = createApp({ render: () => h(ResourcePickerPanel, { showSearch: true }) });
-    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    installTestApp(app);
     app.component('OriginalIcon', { setup: () => () => h('span') });
     app.mount(host);
     cleanup = () => {
@@ -294,7 +359,7 @@ describe('ResourcePickerPanel 键盘导航', () => {
           pageScroll: true,
         }),
     });
-    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    installTestApp(app);
     app.component('OriginalIcon', { setup: () => () => h('span') });
     app.mount(host);
     cleanup = () => {

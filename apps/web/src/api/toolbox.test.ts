@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createToolboxArtifactSaveRequestId, createToolboxClientRequestId, inferToolboxDocumentMime } from './toolbox';
+import {
+  createToolboxArtifactSaveRequestId,
+  createToolboxClientRequestId,
+  inferToolboxDocumentMime,
+  parseToolboxHomeOverview,
+} from './toolbox';
 
 describe('工具箱客户端协议辅助', () => {
   it('为无 MIME 的系统文件选择结果按扩展名补全受控类型', () => {
@@ -22,5 +27,22 @@ describe('工具箱客户端协议辅助', () => {
     expect(first).toBe(second);
     expect(first).toMatch(/^save:[A-Za-z0-9_-]+:v2$/u);
     expect(first.length).toBeLessThanOrEqual(64);
+  });
+
+  it('首页只接受当前工作区与任务协议，旧作品项目响应直接失败关闭', () => {
+    const current = {
+      schemaVersion: 2,
+      workspaces: { continue: [], recent: [] },
+      tasks: { active: [], ready: [], recent: [] },
+    };
+
+    expect(parseToolboxHomeOverview(current)).toBe(current);
+    expect(() =>
+      parseToolboxHomeOverview({
+        schemaVersion: 1,
+        projects: { continue: [], recent: [] },
+        tasks: { active: [], ready: [], recent: [] },
+      }),
+    ).toThrow('TOOLBOX_HOME_INVALID_RESPONSE');
   });
 });

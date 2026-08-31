@@ -41,7 +41,7 @@ describe('官网与应用入口路由', () => {
     expect(resolved.meta.roles).toContain('visitor');
   });
 
-  it('知识工具箱仅首页显示移动底栏，工作台与任务页保留工具箱壳语义', () => {
+  it('知识工坊仅首页显示移动底栏，工作台与任务页保留工坊壳语义', () => {
     const home = router.resolve('/toolbox');
     const workbench = router.resolve('/toolbox/material_to_note');
     const task = router.resolve('/toolbox/task/job-1');

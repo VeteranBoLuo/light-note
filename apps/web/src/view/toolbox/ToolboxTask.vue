@@ -201,7 +201,7 @@
               <div v-else class="toolbox-result__empty">{{ t('toolbox.task.noSources') }}</div>
             </div>
 
-            <div v-else class="toolbox-result__billing">
+            <div v-else-if="!usesAiQuota" class="toolbox-result__billing">
               <div
                 ><span>{{ t('toolbox.task.quoted') }}</span
                 ><strong>{{ job.billing.quotedPoints }}</strong></div
@@ -220,16 +220,42 @@
                 }}</p
               >
             </div>
+            <div v-else class="toolbox-result__quota-billing">
+              <span class="toolbox-result__quota-icon"><SvgIcon :src="icon.settings.ai" size="22" /></span>
+              <span class="toolbox-result__quota-copy">
+                <strong>{{ t('toolbox.task.aiQuotaBillingTitle') }}</strong>
+                <small>{{ t('toolbox.task.aiQuotaBillingDescription') }}</small>
+              </span>
+              <BButton size="small" @click="openAiUsage">{{ t('toolbox.task.viewAiUsage') }}</BButton>
+            </div>
           </section>
         </template>
 
-        <div v-else-if="isTerminal" class="toolbox-task__state">{{
-          artifactLoadFailed
-            ? t('toolbox.task.artifactLoadFailed')
-            : job.artifactState === 'expired'
-              ? t('toolbox.task.artifactExpired')
-              : t('toolbox.task.noArtifact')
-        }}</div>
+        <div
+          v-else-if="isTerminal"
+          class="toolbox-task__state"
+          :class="{ 'is-error': artifactLoadFailed }"
+          :role="artifactLoadFailed ? 'alert' : 'status'"
+        >
+          <BLoading v-if="artifactLoading" inline loading :title="t('toolbox.task.artifactLoading')" />
+          <template v-else>
+            <span>{{
+              artifactLoadFailed
+                ? t('toolbox.task.artifactLoadFailed')
+                : job.artifactState === 'expired'
+                  ? t('toolbox.task.artifactExpired')
+                  : t('toolbox.task.noArtifact')
+            }}</span>
+            <BButton
+              v-if="artifactLoadFailed && job.artifact?.id"
+              size="small"
+              :loading="artifactLoading"
+              @click="retryArtifact"
+            >
+              {{ t('toolbox.task.retry') }}
+            </BButton>
+          </template>
+        </div>
       </template>
     </div>
   </main>
@@ -295,6 +321,7 @@
   const loadFailed = ref(false);
   const refreshFailed = ref(false);
   const artifactLoadFailed = ref(false);
+  const artifactLoading = ref(false);
   const cancelling = ref(false);
   const saving = ref(false);
   const openingSavedNote = ref(false);
@@ -315,6 +342,7 @@
     ),
   );
   const isRetrying = computed(() => job.value?.status === 'queued' && job.value?.stage === 'retrying');
+  const usesAiQuota = computed(() => job.value?.billing.medium === 'ai_quota');
   const visibleErrorMessage = computed(() => {
     const key = toolboxErrorMessageKey(job.value?.error, 'toolbox.task.processingFailed');
     if (key !== 'toolbox.task.processingFailed') return t(key);
@@ -441,6 +469,10 @@
     returnFromToolboxPage(router, 'task');
   }
 
+  function openAiUsage() {
+    void router.push('/ai-usage');
+  }
+
   function rememberTaskScroll() {
     saveToolboxScrollSnapshot({
       routeFullPath: route.fullPath,
@@ -503,6 +535,10 @@
     }
   }
   async function loadArtifact(artifactId: string, version = requestVersion) {
+    if (version === requestVersion) {
+      artifactLoadFailed.value = false;
+      artifactLoading.value = true;
+    }
     try {
       const value = await fetchToolboxArtifact(artifactId);
       if (version !== requestVersion) return;
@@ -515,9 +551,15 @@
     } catch {
       if (version === requestVersion) {
         artifactLoadFailed.value = true;
-        message.error(t('toolbox.task.artifactLoadFailed'));
       }
+    } finally {
+      if (version === requestVersion) artifactLoading.value = false;
     }
+  }
+  function retryArtifact() {
+    const artifactId = job.value?.artifact?.id;
+    if (!artifactId || artifactLoading.value) return;
+    void loadArtifact(artifactId);
   }
   function confirmCancel() {
     Alert.alert({
@@ -666,6 +708,7 @@
     job.value = null;
     artifact.value = null;
     artifactLoadFailed.value = false;
+    artifactLoading.value = false;
     savedNoteId.value = '';
     activeTab.value = 'output';
     loadFailed.value = false;
@@ -738,6 +781,23 @@
     justify-content: center;
     gap: 12px;
     color: var(--desc-color);
+  }
+  .toolbox-task__state.is-error {
+    min-height: 210px;
+    margin-top: 12px;
+    padding: 28px;
+    flex-direction: column;
+    box-sizing: border-box;
+    border: 1px solid var(--danger-color, #dc3e4d);
+    border-radius: 16px;
+    color: var(--danger-color, #dc3e4d);
+    text-align: center;
+    background: var(--card-background);
+  }
+  .toolbox-task__state.is-error > span {
+    max-width: 420px;
+    color: var(--text-color);
+    line-height: 1.6;
   }
   .toolbox-task__header {
     min-width: 0;
@@ -1037,6 +1097,40 @@
     font-size: 12px;
     line-height: 1.55;
   }
+  .toolbox-result__quota-billing {
+    min-height: 88px;
+    padding: 15px 16px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 14px;
+    background: var(--card-background);
+  }
+  .toolbox-result__quota-icon {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--primary-color);
+    border-radius: 12px;
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 8%, transparent);
+  }
+  .toolbox-result__quota-copy {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+  }
+  .toolbox-result__quota-copy strong {
+    font-size: 14px;
+  }
+  .toolbox-result__quota-copy small {
+    color: var(--desc-color);
+    font-size: 12px;
+    line-height: 1.55;
+  }
   @media (max-width: 767px) {
     .toolbox-task {
       padding: 10px 12px calc(24px + env(safe-area-inset-bottom));
@@ -1083,6 +1177,13 @@
     }
     .toolbox-result__billing p {
       grid-column: auto;
+    }
+    .toolbox-result__quota-billing {
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+    .toolbox-result__quota-billing > :deep(.b_btn) {
+      grid-column: 1 / -1;
+      width: 100%;
     }
   }
   html.light-note-mobile-rendering .toolbox-task__tool-icon,

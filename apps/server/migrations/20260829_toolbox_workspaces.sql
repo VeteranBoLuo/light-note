@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS toolbox_workspaces (
   PRIMARY KEY (id),
   KEY idx_toolbox_workspace_user_kind (user_id, kind, status, updated_at),
   KEY idx_toolbox_workspace_user_opened (user_id, last_opened_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工具箱持续工作区';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='工具箱持续工作区';
 
 CREATE TABLE IF NOT EXISTS toolbox_workspace_resources (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS toolbox_workspace_resources (
   PRIMARY KEY (id),
   UNIQUE KEY uk_toolbox_workspace_resource (workspace_id, resource_type, resource_id),
   KEY idx_toolbox_workspace_resource_user (user_id, resource_type, resource_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='持续工作区资料引用，不保存资料正文';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='持续工作区资料引用，不保存资料正文';
 
 CREATE TABLE IF NOT EXISTS toolbox_workspace_items (
   id CHAR(36) NOT NULL,
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS toolbox_workspace_items (
   PRIMARY KEY (id),
   KEY idx_toolbox_workspace_item_lane (workspace_id, lane, status, position),
   KEY idx_toolbox_workspace_item_user (user_id, updated_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='持续工作区三段式推进事项';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='持续工作区三段式推进事项';
 
 CREATE TABLE IF NOT EXISTS toolbox_workspace_sessions (
   id CHAR(36) NOT NULL,
@@ -63,4 +63,4 @@ CREATE TABLE IF NOT EXISTS toolbox_workspace_sessions (
   PRIMARY KEY (id),
   KEY idx_toolbox_workspace_session_time (workspace_id, create_time),
   KEY idx_toolbox_workspace_session_user (user_id, create_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='持续工作区推进记录与连续活跃依据';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='持续工作区推进记录与连续活跃依据';

@@ -390,7 +390,7 @@
         <div class="workspace-modal-form__row">
           <label>
             <span>{{ t('toolbox.workspace.targetDateLabel') }}</span>
-            <BInput v-model:value="createForm.targetDate" type="date" height="42px" />
+            <BDateTimePicker v-model:value="createForm.targetDate" :show-time="false" />
           </label>
           <label>
             <span>{{ t('toolbox.workspace.firstStepLabel') }}</span>
@@ -415,7 +415,7 @@
       v-model:visible="resourceModalVisible"
       :title="t('toolbox.workspace.addResources')"
       width="880px"
-      :show-footer="false"
+      :show-footer="true"
       fullscreen-mobile
     >
       <div class="workspace-resource-modal">
@@ -427,13 +427,15 @@
           :disabled="mutating"
           :page-scroll="!isMobileLayout"
         />
-        <div class="workspace-modal-actions">
+      </div>
+      <template #footer>
+        <div class="workspace-resource-modal__footer">
           <BButton @click="resourceModalVisible = false">{{ t('common.cancel') }}</BButton>
           <BButton type="primary" :loading="mutating" :disabled="!pendingResources.length" @click="saveResources">
             {{ t('toolbox.workspace.addSelectedResources', { count: pendingResources.length }) }}
           </BButton>
         </div>
-      </div>
+      </template>
     </BModal>
 
     <BModal
@@ -467,7 +469,7 @@
         </label>
         <label>
           <span>{{ t('toolbox.workspace.itemDueLabel') }}</span>
-          <BInput v-model:value="itemForm.dueOn" type="date" height="42px" />
+          <BDateTimePicker v-model:value="itemForm.dueOn" :show-time="false" />
         </label>
         <div class="workspace-modal-actions">
           <BButton @click="itemModalVisible = false">{{ t('common.cancel') }}</BButton>
@@ -487,6 +489,7 @@
   import type { ToolboxToolId } from '@lightnote/shared/toolbox-protocol';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
+  import BDateTimePicker from '@/components/base/BasicComponents/BDateTimePicker.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
@@ -1245,6 +1248,9 @@
   .workspace-progress-form :deep(.select-trigger) {
     min-height: 42px;
   }
+  .workspace-modal-form :deep(.b-datetime-trigger) {
+    min-height: 42px;
+  }
   .workspace-resource-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1498,6 +1504,20 @@
   .workspace-resource-modal {
     min-height: 0;
   }
+  .workspace-resource-modal__footer {
+    flex: 0 0 auto;
+    padding: 12px 20px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 9px;
+    border-top: 1px solid var(--surface-border-color);
+    background: var(--card-background);
+    box-shadow: 0 -10px 24px rgba(31, 34, 66, 0.04);
+  }
+  .workspace-resource-modal__footer :deep(.b_btn) {
+    min-width: 92px;
+  }
   @media (hover: hover) and (pointer: fine) {
     .workspace-card-grid :deep(.workspace-card:hover) {
       border-color: var(--workspace-accent);
@@ -1539,10 +1559,18 @@
   @media (max-width: 767px) {
     .workspace-resource-modal {
       height: 100%;
-      padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
+      padding: 12px 16px;
       box-sizing: border-box;
-      grid-template-rows: minmax(0, 1fr) auto;
-      gap: 12px;
+      grid-template-rows: minmax(0, 1fr);
+      gap: 0;
+    }
+    .workspace-resource-modal__footer {
+      padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    }
+    .workspace-resource-modal__footer :deep(.b_btn) {
+      flex: 1;
+      width: auto;
+      min-height: 44px;
     }
     .knowledge-workspace {
       gap: 14px;

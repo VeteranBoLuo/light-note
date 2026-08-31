@@ -3,13 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   ensureNotVisitor: vi.fn(),
   ensureUserOrAdminPolicy: vi.fn(),
+  createToolboxQuote: vi.fn(),
   listToolboxHomeTasks: vi.fn(),
   listToolboxHomeWorkspaces: vi.fn(),
-  listToolboxHomeProjects: vi.fn(),
-  listToolboxProjectRevisions: vi.fn(),
-  listToolboxProjects: vi.fn(),
-  getToolboxProject: vi.fn(),
-  createToolboxProjectRevision: vi.fn(),
   markToolboxWorkspaceOpened: vi.fn(),
   saveToolboxArtifactToNote: vi.fn(),
 }));
@@ -28,7 +24,7 @@ vi.mock('../util/toolbox/knowledgeStructure.js', () => ({ getToolboxKnowledgeOve
 vi.mock('../util/toolbox/service.js', () => ({
   cancelToolboxJob: vi.fn(),
   createToolboxJob: vi.fn(),
-  createToolboxQuote: vi.fn(),
+  createToolboxQuote: mocks.createToolboxQuote,
   getToolboxArtifact: vi.fn(),
   getToolboxCatalog: vi.fn(),
   getToolboxJob: vi.fn(),
@@ -50,20 +46,7 @@ vi.mock('../util/toolbox/workspace.js', () => ({
   updateToolboxWorkspace: vi.fn(),
   updateToolboxWorkspaceItem: vi.fn(),
 }));
-vi.mock('../util/toolbox/project.js', () => ({
-  createToolboxProject: vi.fn(),
-  createToolboxProjectRevision: mocks.createToolboxProjectRevision,
-  getToolboxProject: mocks.getToolboxProject,
-  listToolboxHomeProjects: mocks.listToolboxHomeProjects,
-  listToolboxProjectRevisions: mocks.listToolboxProjectRevisions,
-  listToolboxProjects: mocks.listToolboxProjects,
-  openToolboxProject: vi.fn(),
-  restoreToolboxProjectRevision: vi.fn(),
-  updateToolboxProject: vi.fn(),
-}));
-
-const { createProjectRevision, getHome, getProject, listProjectRevisions, listProjects, openWorkspace, saveArtifact } =
-  await import('./toolboxHandle.js');
+const { createQuote, getHome, openWorkspace, saveArtifact } = await import('./toolboxHandle.js');
 
 function createResponse() {
   const response = {};
@@ -82,10 +65,8 @@ describe('toolbox home handlers', () => {
   it('首页只读取当前资源所有者，并返回固定版本的聚合读模型', async () => {
     const workspaces = { continue: [{ id: 'workspace-1' }], recent: [] };
     const tasks = { active: [], ready: [{ id: 'job-1' }], recent: [] };
-    const projects = { continue: [{ id: 'project-1' }], recent: [] };
     mocks.listToolboxHomeWorkspaces.mockResolvedValueOnce(workspaces);
     mocks.listToolboxHomeTasks.mockResolvedValueOnce(tasks);
-    mocks.listToolboxHomeProjects.mockResolvedValueOnce(projects);
     const response = createResponse();
 
     await getHome(
@@ -99,84 +80,37 @@ describe('toolbox home handlers', () => {
     expect(mocks.ensureUserOrAdminPolicy).toHaveBeenCalledWith(expect.anything(), response, ['read']);
     expect(mocks.listToolboxHomeWorkspaces).toHaveBeenCalledWith({ userId: 'owner-1' });
     expect(mocks.listToolboxHomeTasks).toHaveBeenCalledWith({ userId: 'owner-1' });
-    expect(mocks.listToolboxHomeProjects).toHaveBeenCalledWith({ userId: 'owner-1' });
     expect(response.send).toHaveBeenCalledWith({
-      data: { schemaVersion: 2, workspaces, tasks, projects },
+      data: { schemaVersion: 2, workspaces, tasks },
       status: 200,
       msg: 'success',
     });
   });
 
-  it('读取项目使用管理员代管的数据主体，修订写入只使用登录用户', async () => {
-    const detail = { project: { id: 'project-1' }, revision: { revision: 1 } };
-    mocks.getToolboxProject.mockResolvedValueOnce(detail);
-    mocks.createToolboxProjectRevision.mockResolvedValueOnce(detail);
-    const readResponse = createResponse();
-    const writeResponse = createResponse();
-
-    await getProject(
-      { user: { id: 'admin-1' }, resourceUser: { id: 'owner-1' }, params: { projectId: 'project-1' } },
-      readResponse,
-    );
-    await createProjectRevision(
-      {
-        user: { id: 'writer-1' },
-        resourceUser: { id: 'owner-1' },
-        params: { projectId: 'project-1' },
-        body: { clientRequestId: 'revision-request-1' },
+  it('报价接口透传用户选择的单一计费方式', async () => {
+    const quote = { id: 'quote-1', billingMedium: 'ai_quota', quotedPoints: 0 };
+    mocks.createToolboxQuote.mockResolvedValueOnce(quote);
+    const response = createResponse();
+    const request = {
+      user: { id: 'user-1' },
+      body: {
+        toolId: 'research_brief',
+        input: { resourceRefs: [{ type: 'note', id: 'note-1' }] },
+        billingMedium: 'ai_quota',
+        clientRequestId: 'quote-request-1234',
       },
-      writeResponse,
-    );
+    };
 
-    expect(mocks.getToolboxProject).toHaveBeenCalledWith({ userId: 'owner-1', projectId: 'project-1' });
-    expect(mocks.createToolboxProjectRevision).toHaveBeenCalledWith({
-      userId: 'writer-1',
-      projectId: 'project-1',
-      input: { clientRequestId: 'revision-request-1' },
+    await createQuote(request, response);
+
+    expect(mocks.createToolboxQuote).toHaveBeenCalledWith({
+      userId: 'user-1',
+      toolId: 'research_brief',
+      rawInput: request.body.input,
+      billingMedium: 'ai_quota',
+      clientRequestId: 'quote-request-1234',
     });
-  });
-
-  it('项目与修订列表透传游标并返回稳定分页 DTO', async () => {
-    const projectsPage = { items: [{ id: 'project-2' }], nextCursor: 'project-cursor' };
-    const revisionsPage = { items: [{ id: 'revision-2' }], nextCursor: 'revision-cursor' };
-    mocks.listToolboxProjects.mockResolvedValueOnce(projectsPage);
-    mocks.listToolboxProjectRevisions.mockResolvedValueOnce(revisionsPage);
-    const projectsResponse = createResponse();
-    const revisionsResponse = createResponse();
-
-    await listProjects(
-      {
-        user: { id: 'admin-1' },
-        resourceUser: { id: 'owner-1' },
-        query: { type: 'document', status: 'active', limit: '24', cursor: 'project-cursor-in' },
-      },
-      projectsResponse,
-    );
-    await listProjectRevisions(
-      {
-        user: { id: 'admin-1' },
-        resourceUser: { id: 'owner-1' },
-        params: { projectId: 'project-1' },
-        query: { limit: '30', cursor: 'revision-cursor-in' },
-      },
-      revisionsResponse,
-    );
-
-    expect(mocks.listToolboxProjects).toHaveBeenCalledWith({
-      userId: 'owner-1',
-      type: 'document',
-      status: 'active',
-      limit: '24',
-      cursor: 'project-cursor-in',
-    });
-    expect(mocks.listToolboxProjectRevisions).toHaveBeenCalledWith({
-      userId: 'owner-1',
-      projectId: 'project-1',
-      limit: '30',
-      cursor: 'revision-cursor-in',
-    });
-    expect(projectsResponse.send).toHaveBeenCalledWith({ data: projectsPage, status: 200, msg: 'success' });
-    expect(revisionsResponse.send).toHaveBeenCalledWith({ data: revisionsPage, status: 200, msg: 'success' });
+    expect(response.send).toHaveBeenCalledWith({ data: quote, status: 200, msg: 'success' });
   });
 
   it('打开工作区必须通过写权限并始终使用登录用户作为所有者', async () => {

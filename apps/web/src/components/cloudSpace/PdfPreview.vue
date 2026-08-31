@@ -204,6 +204,7 @@
   import PdfPageNavigator, { type PdfOutlineItem } from './PdfPageNavigator.vue';
   import icon from '@/config/icon';
   import { useMobileLayout } from '@/composables/useMobileLayout';
+  import { loadPdfJsRuntime } from '@/utils/pdfJsRuntime';
 
   type PdfViewMode = 'single' | 'spread';
   type FitMode = 'width' | 'page';
@@ -275,8 +276,6 @@
   const pinchPreviewScale = ref(1);
   const pinchOrigin = ref('50% 50%');
 
-  let pdfRuntimePromise: Promise<typeof import('pdfjs-dist/legacy/build/pdf.mjs')> | null = null;
-
   const zoomPercent = computed(() => Math.round(zoomScale.value * 100));
   const spreadViewAvailable = computed(() => !isMobileLayout.value || viewportWidth.value > viewportHeight.value);
   const displayedPageNumbers = computed(() => Array.from({ length: pageCount.value }, (_, index) => index + 1));
@@ -288,19 +287,6 @@
           transformOrigin: pinchOrigin.value,
         },
   );
-
-  async function loadPdfRuntime() {
-    if (!pdfRuntimePromise) {
-      pdfRuntimePromise = Promise.all([
-        import('pdfjs-dist/legacy/build/pdf.mjs'),
-        import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'),
-      ]).then(([pdfjs, workerModule]) => {
-        pdfjs.GlobalWorkerOptions.workerSrc = workerModule.default;
-        return pdfjs;
-      });
-    }
-    return pdfRuntimePromise;
-  }
 
   function normalizeElement<T extends Element>(element: Element | ComponentPublicInstance | null): T | null {
     return element instanceof Element ? (element as T) : null;
@@ -768,7 +754,7 @@
     fetchController = new AbortController();
     try {
       const [pdfjs, response] = await Promise.all([
-        loadPdfRuntime(),
+        loadPdfJsRuntime(),
         fetch(src, { mode: 'cors', signal: fetchController.signal }),
       ]);
       if (!response.ok) throw new Error(`PDF request failed with status ${response.status}`);

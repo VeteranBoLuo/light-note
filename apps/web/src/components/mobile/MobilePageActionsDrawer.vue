@@ -6,6 +6,7 @@
     height="auto"
     body-padding="10px 16px max(18px, env(safe-area-inset-bottom))"
     @close="emit('update:open', false)"
+    @after-close="handleAfterClose"
   >
     <div class="mobile-page-actions" :class="{ 'is-compact': compact }" role="menu" :aria-label="sheetTitle">
       <BButton
@@ -51,7 +52,7 @@
 </script>
 
 <script setup lang="ts">
-  import { computed, ref } from 'vue';
+  import { computed, onBeforeUnmount, ref } from 'vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -74,22 +75,40 @@
     action: [action: MobilePageActionItem];
   }>();
   const actionHandoffPending = ref(false);
+  let resolveVisualClose: (() => void) | null = null;
+
+  function waitForVisualClose() {
+    return new Promise<void>((resolve) => {
+      resolveVisualClose = resolve;
+    });
+  }
+
+  function handleAfterClose() {
+    resolveVisualClose?.();
+    resolveVisualClose = null;
+  }
 
   async function runAction(action: MobilePageActionItem) {
     if (action.disabled || action.loading || actionHandoffPending.value) return;
     actionHandoffPending.value = true;
+    const visuallyClosed = waitForVisualClose();
     try {
       // 抽屉与下一层弹框都使用移动端 history 占位。若同一轮先关抽屉再开弹框，
       // 抽屉异步触发的 history.back() 可能把刚注册的弹框一起弹掉，表现为弹框偶发闪退。
-      // 所有移动操作抽屉统一先等当前占位真正出栈，再派发业务动作。
+      // 路由切换还必须等抽屉 Teleport 子树完成退场，否则 Vue 会在切页卸载时与退场渲染竞争。
       await closeCurrentMobileOverlayThen(
         () => emit('update:open', false),
-        () => emit('action', action),
+        async () => {
+          await visuallyClosed;
+          emit('action', action);
+        },
       );
     } finally {
       actionHandoffPending.value = false;
     }
   }
+
+  onBeforeUnmount(handleAfterClose);
 </script>
 
 <style scoped lang="less">

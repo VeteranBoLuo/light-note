@@ -1,8 +1,6 @@
 import type { ToolboxToolDefinition } from '@lightnote/shared/toolbox-protocol';
-import { toProductionProjectDto } from '@lightnote/shared/production-project-protocol';
 import { apiBaseGet, apiBasePatch, apiBasePost } from '@/http/request';
 import type { ResourcePickerItem } from '@/composables/useResourcePickerSearch';
-import type { ToolboxProjectSummary } from './toolboxProjects';
 
 export type ToolboxResourceRef = Pick<ResourcePickerItem, 'type' | 'id'> & { version?: string };
 export type ToolboxInput = {
@@ -159,7 +157,7 @@ export type ToolboxQuote = {
   id: string;
   toolId: string;
   pricingVersion: string;
-  billingMedium: 'points';
+  billingMedium: 'points' | 'ai_quota';
   quotedPoints: number;
   status: 'active' | 'consumed' | 'expired';
   expiresAt: string;
@@ -172,7 +170,7 @@ export type ToolboxJob = {
   status: 'queued' | 'processing' | 'succeeded' | 'partial_succeeded' | 'failed' | 'cancelled' | 'expired';
   stage: string;
   billing: {
-    medium: 'points';
+    medium: 'points' | 'ai_quota';
     status: string;
     quotedPoints: number;
     actualPoints: number;
@@ -196,10 +194,6 @@ export type ToolboxJob = {
 
 export type ToolboxHomeOverview = {
   schemaVersion: number;
-  projects?: {
-    continue: ToolboxProjectSummary[];
-    recent: ToolboxProjectSummary[];
-  };
   workspaces: {
     continue: ToolboxHomeWorkspaceSummary[];
     recent: ToolboxHomeWorkspaceSummary[];
@@ -210,6 +204,31 @@ export type ToolboxHomeOverview = {
     recent: ToolboxJob[];
   };
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+/**
+ * 首页读模型会同时被 HTTP 页面与本地开发热更新读取，不能用类型断言掩盖服务端版本漂移。
+ * 旧的作品项目响应缺少 workspaces；这里明确拒绝旧协议，让页面进入可重试错误态，而不是
+ * 把已删除项目兼容回来，或在 computed 中抛错后永久停在“加载中”。
+ */
+export function parseToolboxHomeOverview(value: unknown): ToolboxHomeOverview {
+  if (!isRecord(value) || value.schemaVersion !== 2 || !isRecord(value.workspaces) || !isRecord(value.tasks)) {
+    throw new Error('TOOLBOX_HOME_INVALID_RESPONSE');
+  }
+  if (
+    !Array.isArray(value.workspaces.continue) ||
+    !Array.isArray(value.workspaces.recent) ||
+    !Array.isArray(value.tasks.active) ||
+    !Array.isArray(value.tasks.ready) ||
+    !Array.isArray(value.tasks.recent)
+  ) {
+    throw new Error('TOOLBOX_HOME_INVALID_RESPONSE');
+  }
+  return value as ToolboxHomeOverview;
+}
 
 export type ToolboxArtifact = {
   id: string;
@@ -250,15 +269,7 @@ export async function fetchToolboxCatalog(): Promise<ToolboxCatalog> {
 export async function fetchToolboxHome(): Promise<ToolboxHomeOverview> {
   const response = await apiBaseGet('/api/toolbox/home', undefined, { silent: true });
   if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_HOME_FAILED');
-  const data = response.data as ToolboxHomeOverview;
-  if (!data.projects) return data;
-  return {
-    ...data,
-    projects: {
-      continue: (data.projects.continue || []).map((project) => toProductionProjectDto(project)),
-      recent: (data.projects.recent || []).map((project) => toProductionProjectDto(project)),
-    },
-  };
+  return parseToolboxHomeOverview(response.data);
 }
 
 export async function fetchToolboxKnowledgeOverview(): Promise<ToolboxKnowledgeOverview> {
@@ -387,6 +398,7 @@ export async function createToolboxWorkspaceSession(
 export async function createToolboxQuote(input: {
   toolId: string;
   input: ToolboxInput;
+  billingMedium: 'points' | 'ai_quota';
   clientRequestId: string;
 }): Promise<ToolboxQuote> {
   const response = await apiBasePost('/api/toolbox/quotes', input, { silent: true });

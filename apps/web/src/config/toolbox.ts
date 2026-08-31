@@ -27,6 +27,7 @@ export type ToolboxHomeGroup = {
 };
 
 export const TOOLBOX_DEFAULT_QUICK_TOOL_IDS = [
+  'knowledge_structure_audit',
   'image_optimizer',
   'pdf_organizer',
   'ocr_to_text',
@@ -42,6 +43,17 @@ export const TOOLBOX_STARTER_TOOL_IDS = [
   'learning_workspace',
   'research_workspace',
   'idea_to_draft',
+] as const satisfies readonly ToolboxToolId[];
+
+/**
+ * 首页首屏只突出能快速形成明确交付物的能力。
+ * 长期工作区留在目录和“继续工作”中；未上线的 Office 仿制编辑器不进入产品边界。
+ */
+export const TOOLBOX_PRIMARY_OUTCOME_TOOL_IDS = [
+  'material_to_note',
+  'research_brief',
+  'source_comparison',
+  'data_workbench',
 ] as const satisfies readonly ToolboxToolId[];
 
 export const TOOLBOX_PRESENTATION: Record<

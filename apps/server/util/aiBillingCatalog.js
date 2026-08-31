@@ -215,8 +215,8 @@ export const AI_BILLING_ACTIONS = Object.freeze([
       labelKey,
       taskTypes: [`skill_toolbox_${profileId}`],
       reservationTokens: 12_000,
-      publicCatalog: false,
-      allowedBillingPolicies: ['system'],
+      publicCatalog: true,
+      allowedBillingPolicies: ['user', 'system'],
     }),
   ),
 ]);
