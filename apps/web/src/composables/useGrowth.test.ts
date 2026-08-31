@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   getDashboard: vi.fn(),
   getClaimable: vi.fn(),
   claimAll: vi.fn(),
+  getRecap: vi.fn(),
+  updateRecapState: vi.fn(),
 }));
 
 vi.mock('@/store', () => ({
@@ -26,6 +28,8 @@ vi.mock('@/api/growthApi.ts', () => ({
     getDashboard: mocks.getDashboard,
     getClaimable: mocks.getClaimable,
     claimAll: mocks.claimAll,
+    getRecap: mocks.getRecap,
+    updateRecapState: mocks.updateRecapState,
   },
 }));
 
@@ -68,6 +72,8 @@ describe('useGrowth load', () => {
     mocks.getDashboard.mockReset();
     mocks.getClaimable.mockReset();
     mocks.claimAll.mockReset();
+    mocks.getRecap.mockReset();
+    mocks.updateRecapState.mockReset();
     mocks.getInventory.mockResolvedValue({ status: 200, data: { items: [] } });
     mocks.getClaimable.mockResolvedValue({
       status: 200,
@@ -321,5 +327,91 @@ describe('useGrowth load', () => {
     expect(mocks.getGrowthTasks).toHaveBeenCalledTimes(1);
     expect(useGrowth().growth.value).toEqual(claimedGrowth);
     expect(useGrowth().growthTasks.value?.activeCount).toBe(0);
+  });
+
+  it('合并工作台与成长页同时发起的每日回顾请求', async () => {
+    const response = deferred<{ status: number; data: any }>();
+    mocks.getRecap.mockReturnValue(response.promise);
+
+    const first = useGrowth().loadRecap();
+    const second = useGrowth().loadRecap();
+    await Promise.resolve();
+
+    expect(mocks.getRecap).toHaveBeenCalledTimes(1);
+
+    const data = {
+      weekly: [{ type: 'note', id: 'note-1', title: '第一条笔记', url: null, time: '2026-08-28 09:00:00' }],
+      onThisDay: [],
+      buried: [],
+      stableDate: '2026-08-28',
+    };
+    response.resolve({ status: 200, data });
+
+    await expect(first).resolves.toEqual(data);
+    await expect(second).resolves.toEqual(data);
+    expect(useGrowth().recap.value).toEqual(data);
+    expect(useGrowth().recapLoading.value).toBe(false);
+  });
+
+  it('切换账号后忽略旧账号迟到的每日回顾响应', async () => {
+    const oldResponse = deferred<{ status: number; data: any }>();
+    const newResponse = deferred<{ status: number; data: any }>();
+    mocks.getRecap.mockReturnValueOnce(oldResponse.promise).mockReturnValueOnce(newResponse.promise);
+
+    const oldRequest = useGrowth().loadRecap();
+    mocks.user.id = 'user-b';
+    const newRequest = useGrowth().loadRecap();
+    const newData = {
+      weekly: [],
+      onThisDay: [{ type: 'note', id: 'new-note', title: '新账号', url: null, time: '2026-08-28 10:00:00' }],
+      buried: [],
+    };
+    newResponse.resolve({ status: 200, data: newData });
+    await expect(newRequest).resolves.toEqual(newData);
+
+    oldResponse.resolve({
+      status: 200,
+      data: {
+        weekly: [{ type: 'note', id: 'old-note', title: '旧账号', url: null, time: '2026-08-28 08:00:00' }],
+        onThisDay: [],
+        buried: [],
+      },
+    });
+    await expect(oldRequest).resolves.toBeNull();
+
+    expect(useGrowth().recap.value).toEqual(newData);
+    expect(useGrowth().recapLoading.value).toBe(false);
+  });
+
+  it('回顾偏好写入会作废写入前的旧读取，并以强制回读为准', async () => {
+    const item = { type: 'note' as const, id: 'note-1', title: '待隐藏', url: null, time: '2026-08-20 09:00:00' };
+    mocks.getRecap.mockResolvedValueOnce({
+      status: 200,
+      data: { weekly: [item], onThisDay: [], buried: [] },
+    });
+    await useGrowth().loadRecap();
+
+    const staleResponse = deferred<{ status: number; data: any }>();
+    const refreshedResponse = deferred<{ status: number; data: any }>();
+    mocks.getRecap.mockReturnValueOnce(staleResponse.promise).mockReturnValueOnce(refreshedResponse.promise);
+    mocks.updateRecapState.mockResolvedValueOnce({ status: 200, data: { ok: true } });
+
+    const staleRequest = useGrowth().loadRecap();
+    const mutation = useGrowth().setRecapState(item, 'dismiss');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(mocks.updateRecapState).toHaveBeenCalledWith({ type: 'note', id: 'note-1', action: 'dismiss' });
+    expect(mocks.getRecap).toHaveBeenCalledTimes(3);
+
+    const refreshedData = { weekly: [], onThisDay: [], buried: [], stableDate: '2026-08-28' };
+    refreshedResponse.resolve({ status: 200, data: refreshedData });
+    await expect(mutation).resolves.toMatchObject({ status: 200 });
+
+    staleResponse.resolve({ status: 200, data: { weekly: [item], onThisDay: [], buried: [] } });
+    await expect(staleRequest).resolves.toBeNull();
+
+    expect(useGrowth().recap.value).toEqual(refreshedData);
+    expect(useGrowth().recapLoading.value).toBe(false);
   });
 });

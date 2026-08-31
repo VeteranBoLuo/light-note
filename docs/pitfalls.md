@@ -3593,9 +3593,9 @@ Markdown 从普通文本框迁移到 CodeMirror 后，仍沿用父组件 `@keydo
 
 - **现象：** 在今日页成长卡点击签到后，卡片立即显示“已签到”，但下方每日任务的“完成每日签到”仍未勾选；切换到其他模块再返回后才恢复。PC 与移动端共用该状态链路，均受影响。
 - **根因：** 成长卡签到后只强制回读 `/growth/me` 成长快照和 `/growth/claimable` 可领取项，而每日任务绑定的是独立 `/growth/dashboard` 读模型中的 `quests`。Vue 响应式只能传播已更新的状态，不会自动推断另一份服务端读模型已变更。
-- **防回归约束：** 成长写操作完成后，先列出受影响的共享读模型，再复用各自权威读取函数刷新；禁止只修改按钮所在卡片的局部布尔值，或根据文案在客户端伪造任务完成态。签到至少同步成长快照、每日任务看板和可领取项。写操作返回权威成长快照时必须作废此前在途的 `/growth/me`；同账号看板请求必须采用“最后发起者生效”的版本门禁，不能让写操作前的迟到响应覆盖写操作后的刷新结果。
-- **验证方法：** 回归测试锁定工作台签到成功分支同时调用 `load(true)`、`loadDashboard()` 和 `loadClaimable()`，并用可控延迟分别验证写前 `/growth/me` 与同账号旧看板请求后返回时都不会覆盖新快照。真实浏览器在 PC/移动、浅色/深色及共享移动渲染基线下从未签到状态操作，确认按钮、任务勾选、完成数和阶段奖励状态同屏一次更新；刷新失败时保留旧看板且签到结果仍可见。
-- **相关代码：** `apps/web/src/components/workbenches/WorkbenchGrowth.vue`、`apps/web/src/components/workbenches/WorkbenchGrowth.contract.test.ts`、`apps/web/src/composables/useGrowth.ts`。
+- **防回归约束：** 成长写操作完成后，先列出受影响的共享读模型，再复用各自权威读取函数刷新；禁止只修改按钮所在卡片的局部布尔值，或根据文案在客户端伪造任务完成态。签到至少同步成长快照、每日任务看板和可领取项。写操作返回权威成长快照时必须作废此前在途的 `/growth/me`；同账号看板请求必须采用“最后发起者生效”的版本门禁，不能让写操作前的迟到响应覆盖写操作后的刷新结果。工作台、移动「今日」和成长页共享的回顾读取也必须合并同账号在途请求；`snooze_7d` / `dismiss` 成功后先从共享回顾模型移除目标，再强制发起新一代权威回读，禁止复用写入前的在途快照把条目重新放回界面。
+- **验证方法：** 回归测试锁定工作台签到成功分支同时调用 `load(true)`、`loadDashboard()` 和 `loadClaimable()`，并用可控延迟分别验证写前 `/growth/me` 与同账号旧看板请求后返回时都不会覆盖新快照；回顾测试同时覆盖多入口请求合并、账号切换丢弃旧响应，以及偏好写入后的强制回读优先于写前迟到响应。真实浏览器在 PC/移动、浅色/深色及共享移动渲染基线下从未签到状态操作，确认按钮、任务勾选、完成数和阶段奖励状态同屏一次更新；再检查每日回顾打开、换一条、稍后提醒、永久隐藏、空、首次失败和保留旧数据失败，刷新失败时保留旧看板且已成功隐藏的回顾不会回跳。
+- **相关代码：** `apps/web/src/components/workbenches/WorkbenchGrowth.vue`、`apps/web/src/components/workbenches/WorkbenchGrowth.contract.test.ts`、`apps/web/src/components/workbenches/DailyReviewCard.vue`、`apps/web/src/composables/useGrowth.ts`。
 
 ### LN-PIT-181：虚拟明细自动分页必须同时约束游标、请求世代和失败重试
 

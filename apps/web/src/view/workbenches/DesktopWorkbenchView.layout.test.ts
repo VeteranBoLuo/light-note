@@ -56,6 +56,20 @@ describe('桌面工作台头部布局稳定性', () => {
     expect(desktopSource).not.toContain('function claimDailyGrowth');
   });
 
+  it('首屏主次分栏后展示共享每日回顾，并让初始化与前台刷新共用回顾读模型', () => {
+    const firstFoldIndex = desktopSource.indexOf('<section class="workbench-first-fold">');
+    const reviewIndex = desktopSource.indexOf('<DailyReviewCard class="workbench-daily-review"');
+    const growthTasksIndex = desktopSource.indexOf(
+      '<section v-if="growthSectionLoading" class="growth-task-grid growth-task-grid--loading"',
+    );
+
+    expect(desktopSource).toContain("import DailyReviewCard from '@/components/workbenches/DailyReviewCard.vue'");
+    expect(reviewIndex).toBeGreaterThan(firstFoldIndex);
+    expect(reviewIndex).toBeLessThan(growthTasksIndex);
+    expect(desktopSource).toContain(':read-only="growthReadOnly"');
+    expect(desktopSource.match(/loadRecap\(\)/g)).toHaveLength(2);
+  });
+
   it('继续处理默认最多展示五条，满五条时均分面板剩余高度', () => {
     expect(desktopSource).toContain('const CONTINUE_ITEM_LIMIT = 5;');
     expect(desktopSource).toContain('slice(0, CONTINUE_ITEM_LIMIT)');

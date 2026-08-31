@@ -188,6 +188,8 @@
         </aside>
       </section>
 
+      <DailyReviewCard class="workbench-daily-review" :read-only="growthReadOnly" />
+
       <section v-if="growthSectionLoading" class="growth-task-grid growth-task-grid--loading" aria-hidden="true">
         <article v-for="panel in 2" :key="`growth-panel-skeleton-${panel}`" class="panel-card growth-panel-skeleton">
           <div class="growth-panel-skeleton__header">
@@ -411,6 +413,7 @@
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import TodayActionSection from '@/components/workbenches/TodayActionSection.vue';
+  import DailyReviewCard from '@/components/workbenches/DailyReviewCard.vue';
   import WorkbenchCharts from '@/components/workbenches/WorkbenchCharts.vue';
   import WorkbenchGrowth from '@/components/workbenches/WorkbenchGrowth.vue';
   import DailyQuests from '@/components/growth/DailyQuests.vue';
@@ -445,8 +448,16 @@
   const user = useUserStore();
   const cloud = cloudSpaceStore();
   const inbox = inboxStore();
-  const { growth, dashboard, dashboardLoading, growthTasks, growthTasksLoading, loadDashboard, loadGrowthTasks } =
-    useGrowth();
+  const {
+    growth,
+    dashboard,
+    dashboardLoading,
+    growthTasks,
+    growthTasksLoading,
+    loadDashboard,
+    loadGrowthTasks,
+    loadRecap,
+  } = useGrowth();
   const growthReadOnly = computed(() => Boolean(user.adminContext));
   const dailyGrowthQuests = computed(() => dashboard.value?.quests || []);
   const dailyGrowthBonus = computed(
@@ -945,7 +956,13 @@
       inbox.resetForOwner(user.id || 'visitor');
     }
     try {
-      await Promise.allSettled([fetchWorkbenchSummary(), fetchUpdateLogs(), loadDashboard(), loadGrowthTasks(true)]);
+      await Promise.allSettled([
+        fetchWorkbenchSummary(),
+        fetchUpdateLogs(),
+        loadDashboard(),
+        loadGrowthTasks(true),
+        loadRecap(),
+      ]);
       if (user.id && user.role !== 'visitor') {
         // 待处理数量以导航角标共用的计数接口为最终口径，避免工作台与快速添加显示不一致。
         await inbox.refreshCount();
@@ -979,7 +996,7 @@
    */
   useForegroundRefresh({
     refresh: async () => {
-      await Promise.all([fetchWorkbenchSummary({ silent: true }), loadDashboard(), loadGrowthTasks(true)]);
+      await Promise.all([fetchWorkbenchSummary({ silent: true }), loadDashboard(), loadGrowthTasks(true), loadRecap()]);
       // 与 init 同口径：角标计数最终以 /inbox/count 为准，否则静默刷新会把工作台自己的口径留给角标。
       if (user.id && user.role !== 'visitor') await inbox.refreshCount();
     },
