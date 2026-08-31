@@ -66,10 +66,12 @@ describe('桌面工作台头部布局稳定性', () => {
     );
 
     expect(desktopSource).toContain("import DailyReviewCard from '@/components/workbenches/DailyReviewCard.vue'");
+    expect(desktopSource).toContain("import { useDailyReview } from '@/composables/useDailyReview.ts'");
     expect(reviewIndex).toBeGreaterThan(firstFoldIndex);
     expect(reviewIndex).toBeLessThan(growthTasksIndex);
     expect(desktopSource).toContain(':read-only="growthReadOnly"');
-    expect(desktopSource.match(/loadRecap\(\)/g)).toHaveLength(2);
+    expect(desktopSource.match(/refreshDailyReview\(\)/g)).toHaveLength(3);
+    expect(desktopSource).not.toContain('loadRecap');
   });
 
   it('继续处理默认最多展示五条，满五条时均分面板剩余高度', () => {

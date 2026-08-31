@@ -1619,4 +1619,45 @@ CREATE TABLE IF NOT EXISTS `support_public_preferences` (
   KEY `idx_support_public_visibility` (`participate_in_ranking`,`admin_hidden`,`show_identity`,`update_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `daily_review_sessions` (
+  `id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `user_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `review_date` date NOT NULL,
+  `timezone` varchar(64) NOT NULL,
+  `status` varchar(16) NOT NULL DEFAULT 'active',
+  `item_count` tinyint unsigned NOT NULL DEFAULT 0,
+  `completed_at` datetime DEFAULT NULL,
+  `skipped_at` datetime DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_daily_review_session_user_date` (`user_id`,`review_date`),
+  KEY `idx_daily_review_session_user_status` (`user_id`,`status`,`review_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC
+  COMMENT='账号时区下的每日回顾固定会话';
+
+CREATE TABLE IF NOT EXISTS `daily_review_items` (
+  `id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `session_id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `user_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `slot` tinyint unsigned NOT NULL,
+  `resource_type` varchar(16) NOT NULL,
+  `resource_id` varchar(255) NOT NULL,
+  `resource_date` date DEFAULT NULL,
+  `reason_code` varchar(24) NOT NULL,
+  `reason_tag_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
+  `action` varchar(24) NOT NULL DEFAULT 'pending',
+  `acted_at` datetime DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_daily_review_item_session_slot` (`session_id`,`slot`),
+  UNIQUE KEY `uk_daily_review_item_session_resource` (`session_id`,`resource_type`,`resource_id`),
+  KEY `idx_daily_review_item_user_resource` (`user_id`,`resource_type`,`resource_id`(128),`create_time`),
+  KEY `idx_daily_review_item_session_action` (`session_id`,`action`,`slot`),
+  CONSTRAINT `fk_daily_review_item_session`
+    FOREIGN KEY (`session_id`) REFERENCES `daily_review_sessions` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC
+  COMMENT='每日回顾会话中的稳定资源条目';
+
 SET FOREIGN_KEY_CHECKS = 1;

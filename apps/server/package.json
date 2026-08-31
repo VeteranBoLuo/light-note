@@ -17,6 +17,7 @@
     "check:file-previews": "node scripts/checkFilePreviewRuntime.js",
     "check:schema": "node scripts/checkSchemaAssertions.js",
     "migrate:toolbox-schema": "node scripts/ensureToolboxSchema.js",
+    "migrate:daily-review-schema": "node scripts/ensureDailyReviewSchema.js",
     "repair:bookmark-icons": "node scripts/requeueBrokenBookmarkIconJobs.js",
     "repair:ai-execution-billing": "node scripts/reconcileHistoricalAiExecutionBilling.js",
     "sync:visitor-drawing-sample": "node scripts/syncVisitorDrawingSample.js",

@@ -130,4 +130,13 @@ describe('GrowthPage 宽屏桌面导航布局', () => {
     expect(source).toContain('@loaded="handleWeeklyLoaded"');
     expect(source).toMatch(/function handleWeeklyLoaded[\s\S]*?route\.hash === '#growth-weekly'[\s\S]*?scrollToHash/);
   });
+
+  it('成长页只保留成长足迹时间线，不再展示或自动加载旧内容回顾卡', () => {
+    expect(source).not.toContain('RecapCard');
+    expect(source).not.toContain('loadRecap');
+    expect(source).not.toContain('recapLoading');
+    expect(source).not.toContain('recapError');
+    expect(source).toContain('<GrowthTimeline v-if="timeline.length" :items="timeline" />');
+    expect(source).toContain('<div v-else class="growth-state">{{ t(\'growth.footprintEmpty\') }}</div>');
+  });
 });

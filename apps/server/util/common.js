@@ -26,6 +26,7 @@ import supportRouter from '../router/support.js';
 import infraRouter from '../router/infra.js';
 import aiSkillsRouter from '../router/aiSkills.js';
 import toolboxRouter from '../router/toolbox.js';
+import dailyReviewRouter from '../router/dailyReview.js';
 
 export { INTERNAL_ROLES } from './internalRoles.js';
 
@@ -183,6 +184,10 @@ export const insertData = function (params) {
 };
 
 export const baseRouter = [
+  {
+    path: '/daily-review',
+    router: dailyReviewRouter,
+  },
   {
     path: '/toolbox',
     router: toolboxRouter,

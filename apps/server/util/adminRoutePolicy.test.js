@@ -32,6 +32,7 @@ describe('adminRoutePolicyMiddleware', () => {
       'bookmark.js': '/bookmark',
       'chat.js': '/chat',
       'common.js': '/common',
+      'dailyReview.js': '/daily-review',
       'file.js': '/file',
       'featureRequest.js': '/featureRequest',
       'growth.js': '/growth',
@@ -130,9 +131,7 @@ describe('adminRoutePolicyMiddleware', () => {
       adminRoutePolicyMiddleware(createReq('/user/feature-announcements/seen', 'POST', mode), res, next);
       expect(next).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(403);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }),
-      );
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }));
     }
   });
 
@@ -364,6 +363,26 @@ describe('adminRoutePolicyMiddleware', () => {
       adminRoutePolicyMiddleware(createReq('/growth/preferences', 'PUT', mode), preferencesRes, preferencesNext);
       expect(preferencesNext).not.toHaveBeenCalled();
       expect(preferencesRes.status).toHaveBeenCalledWith(403);
+    }
+  });
+
+  it('管理员可只读检查已有每日回顾，但不能替目标账号生成、处理或跳过', () => {
+    for (const mode of ['readonly', 'maintain']) {
+      const readNext = vi.fn();
+      adminRoutePolicyMiddleware(createReq('/daily-review/today', 'GET', mode), createRes(), readNext);
+      expect(readNext).toHaveBeenCalledTimes(1);
+
+      for (const path of [
+        '/daily-review/today/ensure',
+        '/daily-review/today/action',
+        '/daily-review/items/3412f2d3-22a2-49b5-9485-5653c5eb8e62/action',
+      ]) {
+        const next = vi.fn();
+        const res = createRes();
+        adminRoutePolicyMiddleware(createReq(path, 'POST', mode), res, next);
+        expect(next).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(403);
+      }
     }
   });
 

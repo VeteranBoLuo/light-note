@@ -159,15 +159,7 @@
                 </div>
               </header>
               <GrowthTimeline v-if="timeline.length" :items="timeline" />
-              <div v-if="recapLoading && !recap" class="growth-state"><BLoading size="small" /></div>
-              <div v-else-if="recapError && !recap" class="growth-state growth-state--error">
-                <span>{{ t('growth.recapLoadFailed') }}</span>
-                <BButton size="small" @click="loadRecap">{{ t('common.retry') }}</BButton>
-              </div>
-              <RecapCard v-if="showRecap" :read-only="isAdminContext" />
-              <div v-if="!recapLoading && !recapError && !timeline.length && !showRecap" class="growth-state">{{
-                t('growth.footprintEmpty')
-              }}</div>
+              <div v-else class="growth-state">{{ t('growth.footprintEmpty') }}</div>
             </section>
 
             <section v-if="growthV2Enabled" class="growth-panel">
@@ -274,10 +266,7 @@
                 <MilestoneLadder :milestones="streakMilestones" :current-streak="currentStreak" />
               </section>
               <template v-if="!growthV2Enabled">
-                <section class="growth-panel"><GrowthTimeline :items="timeline" /></section>
-                <section v-if="showRecap" id="growth-recap" class="growth-panel">
-                  <RecapCard :read-only="isAdminContext" />
-                </section>
+                <section id="growth-recap" class="growth-panel"><GrowthTimeline :items="timeline" /></section>
               </template>
             </template>
           </template>
@@ -340,7 +329,6 @@
   import PointsLedger from '@/components/growth/PointsLedger.vue';
   import PointsCenter from '@/components/growth/PointsCenter.vue';
   import WeeklyChallenge from '@/components/growth/WeeklyChallenge.vue';
-  import RecapCard from '@/components/growth/RecapCard.vue';
   import TodayGrowthCard from '@/components/growth/TodayGrowthCard.vue';
   import GrowthPreferencesCard from '@/components/growth/GrowthPreferencesCard.vue';
   import AchievementHighlights from '@/components/growth/AchievementHighlights.vue';
@@ -423,7 +411,6 @@
   const {
     growth,
     dashboard,
-    recap,
     growthTasks,
     lottery,
     claimable,
@@ -438,13 +425,10 @@
     claimableError,
     preferencesLoading,
     preferencesError,
-    recapLoading,
-    recapError,
     claimingRewards,
     load,
     loadDashboard,
     loadGrowthTasks,
-    loadRecap,
     loadLottery,
     loadClaimable,
     claimAllRewards,
@@ -455,12 +439,6 @@
   } = useGrowth();
   const growthV2Enabled = computed(() => growth.value?.features?.growthCenterV2 ?? import.meta.env.DEV);
   const pointsCenterEnabled = computed(() => growth.value?.features?.pointsCenter ?? import.meta.env.DEV);
-  const hasRecap = computed(
-    () =>
-      !!recap.value &&
-      ((recap.value.weekly?.length || 0) > 0 || recap.value.onThisDay.length > 0 || recap.value.buried.length > 0),
-  );
-  const showRecap = computed(() => hasRecap.value);
   const claimableCount = computed(() => Number(claimable.value?.count || 0));
   const { achievementClaimableCount, claimAllTooltip, snapshotClaimableBreakdown, claimSuccessMessage } =
     useGrowthClaimFeedback(claimable);
@@ -715,7 +693,7 @@
 
   onMounted(() => {
     void load(); // 任务分区也需要今日经验与每日上限；共享请求会与概览卡片自动合并。
-    void Promise.all([loadDashboard(), loadClaimable(), loadPreferences(), loadRecap()]);
+    void Promise.all([loadDashboard(), loadClaimable(), loadPreferences()]);
     if (activeSection.value === 'tasks') void loadGrowthTasks(true);
     if (activeSection.value === 'rewards') void loadLottery();
     scrollToHash();
@@ -733,11 +711,6 @@
     refresh: () => {
       const requests: Array<Promise<unknown>> = [loadDashboard(), load(true), loadClaimable()];
       if (activeSection.value === 'tasks') requests.push(loadGrowthTasks(true));
-      if (
-        (growthV2Enabled.value && activeSection.value === 'overview') ||
-        (!growthV2Enabled.value && activeSection.value === 'achievements')
-      )
-        requests.push(loadRecap());
       if (activeSection.value === 'rewards') requests.push(loadLottery());
       return Promise.all(requests);
     },
@@ -782,8 +755,6 @@
     rewardsExpanded.value = section === 'rewards';
     void router.replace({ query: { ...route.query, section } });
     if (section === 'tasks') void loadGrowthTasks();
-    if (section === 'overview' && growthV2Enabled.value) void loadRecap();
-    if (section === 'achievements' && !growthV2Enabled.value) void loadRecap();
     if (section === 'rewards') void loadLottery();
   });
 

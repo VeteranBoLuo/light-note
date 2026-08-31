@@ -12,6 +12,8 @@ const WEBP_DATA_URL_PREFIX = 'data:image/webp;base64,';
 const SVG_DATA_URL_PREFIX = 'data:image/svg+xml;base64,';
 const BASE64_PAYLOAD_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/u;
 const NO_SIGNATURE_RULE_EXEMPTIONS = Object.freeze([]);
+const DAILY_REVIEW_ITEM_ACTIONS = new Set(['open', 'open_tag_space', 'snooze_7d', 'dismiss']);
+const DAILY_REVIEW_SESSION_ACTIONS = new Set(['skip_today', 'resume_today']);
 
 const utf8Length = (value) => Buffer.byteLength(String(value ?? ''), 'utf8');
 
@@ -35,11 +37,42 @@ const policy = ({
   accepts = (value) => typeof value === 'string',
   measure = (value) => String(value ?? '').length,
   skipSignatureRules = NO_SIGNATURE_RULE_EXEMPTIONS,
-}) => Object.freeze({ semantic, maxSize, sizeUnit, accepts, measure, skipSignatureRules });
+  fallbackContext = null,
+}) => Object.freeze({ semantic, maxSize, sizeUnit, accepts, measure, skipSignatureRules, fallbackContext });
 
 // 这里只声明“通用安全检测如何理解字段”，不取代业务 handler 的权威内容校验。
 // 路由、字段、语义和容量预算必须一起命中；形态不符或超限时仍回到通用签名/异常检测。
 const REQUEST_FIELD_POLICIES = new Map([
+  [
+    'POST /daily-review/items/:id/action',
+    new Map([
+      [
+        'body.action',
+        policy({
+          semantic: 'daily-review-item-action',
+          maxSize: 32,
+          accepts: (value) => DAILY_REVIEW_ITEM_ACTIONS.has(String(value || '')),
+          skipSignatureRules: '*',
+          fallbackContext: 'identifier',
+        }),
+      ],
+    ]),
+  ],
+  [
+    'POST /daily-review/today/action',
+    new Map([
+      [
+        'body.action',
+        policy({
+          semantic: 'daily-review-session-action',
+          maxSize: 32,
+          accepts: (value) => DAILY_REVIEW_SESSION_ACTIONS.has(String(value || '')),
+          skipSignatureRules: '*',
+          fallbackContext: 'identifier',
+        }),
+      ],
+    ]),
+  ],
   [
     'POST /note/uploadDrawingThumbnail',
     new Map([
@@ -159,7 +192,12 @@ const requestFieldValue = (context, field) => {
 };
 
 export const resolveRequestFieldPolicy = (context = {}, field = '') => {
-  const routeKey = `${String(context.method || 'GET').toUpperCase()} ${normalizeSecurityRoutePath(context.path)}`;
+  const method = String(context.method || 'GET').toUpperCase();
+  const normalizedPath = normalizeSecurityRoutePath(context.path);
+  const policyPath = /^\/daily-review\/items\/[^/]+\/action$/u.test(normalizedPath)
+    ? '/daily-review/items/:id/action'
+    : normalizedPath;
+  const routeKey = `${method} ${policyPath}`;
   const definition = REQUEST_FIELD_POLICIES.get(routeKey)?.get(String(field));
   if (!definition) return null;
   const value = requestFieldValue(context, field);
@@ -174,5 +212,6 @@ export const resolveRequestFieldPolicy = (context = {}, field = '') => {
     overBudget: typeof value === 'string' && size > definition.maxSize,
     trustedEnvelope: withinBudget && definition.accepts(value, context),
     skipSignatureRules: definition.skipSignatureRules,
+    fallbackContext: definition.fallbackContext,
   };
 };

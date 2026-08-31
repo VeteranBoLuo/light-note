@@ -425,10 +425,16 @@ declare(ADMIN_POLICIES.READ, 'growth', [
   ['GET', '/growth/points/summary'],
   ['GET', '/growth/heatmap'],
 ]);
+declare(ADMIN_POLICIES.READ, 'daily_review', [['GET', '/daily-review/today']]);
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'growth_preferences', [
   ['PUT', '/growth/preferences'],
   ['PUT', '/growth/preferences/points-goal'],
   ['POST', '/growth/recap/state'],
+]);
+declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'daily_review', [
+  ['POST', '/daily-review/today/ensure'],
+  ['POST', '/daily-review/today/action'],
+  ['POST', '/daily-review/items/:id/action'],
 ]);
 declare(ADMIN_POLICIES.ENTITLEMENT_WRITE, 'growth', [
   ['POST', '/growth/checkin'],
@@ -703,6 +709,9 @@ function resolvePolicy(method, path) {
   }
   if (/^\/toolbox\/artifacts\/[^/]+\/save$/.test(path)) {
     return routePolicies.get(`${method} /toolbox/artifacts/:artifactId/save`);
+  }
+  if (/^\/daily-review\/items\/[^/]+\/action$/.test(path)) {
+    return routePolicies.get(`${method} /daily-review/items/:id/action`);
   }
   return null;
 }

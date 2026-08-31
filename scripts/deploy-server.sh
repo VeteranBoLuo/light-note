@@ -49,6 +49,9 @@ ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkResourceGovernanceRunti
 echo "🧰  幂等初始化知识工具箱 Schema…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/ensureToolboxSchema.js"
 
+echo "🔁  幂等初始化每日回顾 Schema…"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/ensureDailyReviewSchema.js"
+
 echo "🔎  执行只读 Schema 发布门禁…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkSchemaAssertions.js"
 

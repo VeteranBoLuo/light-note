@@ -77,10 +77,12 @@ describe('移动端今日加载布局', () => {
     const growthIndex = source.indexOf('<WorkbenchGrowth v-if="todaySettled"');
 
     expect(source).toContain("import DailyReviewCard from '@/components/workbenches/DailyReviewCard.vue'");
+    expect(source).toContain("import { useDailyReview } from '@/composables/useDailyReview.ts'");
     expect(reviewIndex).toBeGreaterThan(continueIndex);
     expect(reviewIndex).toBeLessThan(growthIndex);
     expect(source).toContain(':read-only="growthReadOnly"');
-    expect(source.match(/loadRecap\(\)/g)).toHaveLength(5);
+    expect(source.match(/refreshDailyReview\(\)/g)).toHaveLength(6);
+    expect(source).not.toContain('loadRecap');
     expect(source).toMatch(/\.mobile-today__daily-review\s*\{[\s\S]*?margin:\s*14px 0/);
   });
 

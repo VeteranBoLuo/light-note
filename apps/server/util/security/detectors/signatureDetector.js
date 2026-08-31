@@ -77,7 +77,10 @@ const detectPayloadSignatures = (context) => {
   const evidence = [];
   for (const item of fields) {
     const requestFieldPolicy = resolveRequestFieldPolicy(context, item.field);
-    const fieldContext = getFieldContext(item.field);
+    const fieldContext =
+      !requestFieldPolicy?.trustedEnvelope && requestFieldPolicy?.fallbackContext
+        ? requestFieldPolicy.fallbackContext
+        : getFieldContext(item.field);
     for (const rule of SIGNATURE_RULES) {
       if (shouldSkipRuleForTrustedField(requestFieldPolicy, rule.code)) {
         continue;

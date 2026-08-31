@@ -351,6 +351,21 @@ describe('账号注销后台清理', () => {
     expect(versionSql).toContain('CONVERT(note_id USING utf8mb4) COLLATE utf8mb4_unicode_ci');
   });
 
+  it('先删除每日回顾条目再删除会话，且随后清理共享回顾抑制状态', async () => {
+    const connection = createConnection(async () => [{ affectedRows: 1 }]);
+    const tables = new Set(['daily_review_items', 'daily_review_sessions', 'growth_recap_state']);
+
+    await purgeOwnedResources(connection, tables, 'user-1');
+
+    const statements = connection.query.mock.calls.map(([sql]) => String(sql));
+    expect(statements).toEqual([
+      'DELETE FROM daily_review_items WHERE user_id = ?',
+      'DELETE FROM daily_review_sessions WHERE user_id = ?',
+      'DELETE FROM growth_recap_state WHERE user_id = ?',
+    ]);
+    expect(connection.query.mock.calls.every(([, params]) => params[0] === 'user-1')).toBe(true);
+  });
+
   it('已完成的清理任务记录只保留 180 天并分批删除', async () => {
     poolQuery.mockResolvedValueOnce([{ affectedRows: 12 }]);
 

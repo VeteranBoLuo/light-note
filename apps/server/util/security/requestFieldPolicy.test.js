@@ -103,4 +103,38 @@ describe('请求字段安全策略', () => {
       ),
     ).toMatchObject({ trustedEnvelope: false, overBudget: true });
   });
+
+  it.each([
+    ['/api/daily-review/items/item-1/action', 'open', 'daily-review-item-action'],
+    ['/daily-review/items/item-1/action', 'open_tag_space', 'daily-review-item-action'],
+    ['/daily-review/items/item-1/action', 'snooze_7d', 'daily-review-item-action'],
+    ['/daily-review/items/item-1/action', 'dismiss', 'daily-review-item-action'],
+    ['/daily-review/today/action', 'skip_today', 'daily-review-session-action'],
+    ['/api/daily-review/today/action/', 'resume_today', 'daily-review-session-action'],
+  ])('每日回顾 action 只按精确方法、路由、字段和值获得枚举语义：%s %s', (path, action, semantic) => {
+    expect(resolveRequestFieldPolicy({ method: 'POST', path, body: { action } }, 'body.action')).toMatchObject({
+      semantic,
+      trustedEnvelope: true,
+      overBudget: false,
+    });
+  });
+
+  it('每日回顾非法 action 不获得安全豁免', () => {
+    expect(
+      resolveRequestFieldPolicy(
+        { method: 'POST', path: '/daily-review/items/item-1/action', body: { action: '; rm -rf /tmp/x' } },
+        'body.action',
+      ),
+    ).toMatchObject({
+      semantic: 'daily-review-item-action',
+      trustedEnvelope: false,
+      fallbackContext: 'identifier',
+    });
+    expect(
+      resolveRequestFieldPolicy(
+        { method: 'PUT', path: '/daily-review/items/item-1/action', body: { action: 'open' } },
+        'body.action',
+      ),
+    ).toBeNull();
+  });
 });
