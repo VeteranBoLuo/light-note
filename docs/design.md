@@ -203,5 +203,5 @@
 ## 专题设计
 
 - 头像框等级、画布、动效与新增流程见 [头像框设计规范](./avatar-frame-design.md)。
-- 浏览器扩展 Side Panel 状态与验收见 [浏览器扩展](./browser-extension.md)。
+- 浏览器扩展 Side Panel、官网产品页与设置入口的状态和验收见 [浏览器扩展](./browser-extension.md)。
 - 积分消费、获取和资源商店的数值/产品边界由各专题规范管理，本文件只约束其共用视觉系统。

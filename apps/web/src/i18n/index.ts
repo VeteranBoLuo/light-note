@@ -37,9 +37,16 @@ const i18n = createI18n({
 
 let englishLocaleRequest: Promise<void> | null = null;
 
+function syncDocumentLocale(lang: AppLocale): void {
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = lang;
+  }
+}
+
 function applyLocale(lang: AppLocale): void {
   // createI18n 会依据首批 messages 把 locale 窄化为 zh-CN；运行时仍允许按需注册后的 en-US。
   (i18n.global.locale.value as string) = lang;
+  syncDocumentLocale(lang);
 }
 
 function ensureLocaleMessages(lang: AppLocale): Promise<void> {
@@ -65,6 +72,7 @@ function ensureLocaleMessages(lang: AppLocale): Promise<void> {
 export async function prepareInitialLocale(): Promise<void> {
   try {
     await ensureLocaleMessages(initialLocale);
+    applyLocale(initialLocale);
   } catch {
     applyLocale('zh-CN');
   }

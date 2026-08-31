@@ -155,6 +155,7 @@
     'landing',
     'banned',
     'quickSave',
+    'browserExtensionLanding',
     'extensionAuthorize',
     'noteShare',
   ]);
@@ -341,6 +342,7 @@
     'landing',
     'banned',
     'quickSave',
+    'browserExtensionLanding',
     'extensionAuthorize',
     'noteShare',
   ];
@@ -429,11 +431,13 @@
         const pvPage =
           location.pathname === '/' || location.pathname === '/landing'
             ? 'landing'
-            : location.pathname.startsWith('/share')
-              ? 'share'
-              : location.pathname === '/home'
-                ? 'home'
-                : 'app';
+            : location.pathname === '/browser-extension'
+              ? 'browser_extension'
+              : location.pathname.startsWith('/share')
+                ? 'share'
+                : location.pathname === '/home'
+                  ? 'home'
+                  : 'app';
         apiBasePost(
           '/api/common/recordConversion',
           { event: 'page_view', source: pvPage },
@@ -820,6 +824,7 @@
     'not-role',
     'banned',
     'quickSave',
+    'browserExtensionLanding',
     'extensionAuthorize',
     'noteShare',
   ]);

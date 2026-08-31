@@ -14,6 +14,7 @@ const appSource = readSource('src/extension/ExtensionApp.vue');
 const homeSource = readSource('src/extension/components/ExtensionHome.vue');
 const loginSource = readSource('src/extension/components/ExtensionLogin.vue');
 const bookmarkSource = readSource('src/extension/components/BookmarkCapture.vue');
+const bookmarkCaptureSource = readSource('src/utils/bookmarkCapture.ts');
 const noteSource = readSource('src/extension/components/NoteCapture.vue');
 const fileSource = readSource('src/extension/components/FileCapture.vue');
 const successSource = readSource('src/extension/components/ExtensionSuccessView.vue');
@@ -166,7 +167,11 @@ describe('浏览器插件三类流程接线', () => {
     expect(bookmarkSource).toContain('saveSelectedMode');
     expect(bookmarkSource).toContain('saveFormal');
     expect(bookmarkSource).toContain('saveToInbox');
-    expect(bookmarkSource).toContain("relatedTagNames: mode === 'formal'");
+    expect(bookmarkSource).toContain('buildBookmarkCapturePayload({');
+    expect(bookmarkSource).toContain("source: 'browser_extension'");
+    expect(bookmarkCaptureSource).toContain('relatedTagNames: formal ?');
+    expect(bookmarkCaptureSource).toContain('addToInbox: !formal');
+    expect(bookmarkCaptureSource).toContain('saveSnapshot: formal');
     expect(bookmarkSource).toContain('@update:value="updateSelectedTagIds"');
     expect(bookmarkSource).toContain('draft.selectedTagIds.length + draft.selectedNewTags.length > 4');
     expect(stylesSource).toMatch(

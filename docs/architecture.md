@@ -87,7 +87,7 @@ API 使用 `resultData(data, status, msg)` 信封，snake_case 响应键统一�
 
 - PWA Service Worker 只处理页面导航与离线页，不缓存私有 API 数据； `start_url` 为 `/app?source=pwa`。
 - Android App 内不注册 PWA 安装能力。
-- 浏览器扩展使用 Manifest V3 Side Panel，完整权限、认证和资源流程见 [浏览器扩展](./browser-extension.md)。
+- 浏览器扩展使用 Manifest V3 Side Panel；官网展区、公开产品页与设置入口共享同一商店配置，完整权限、认证、入口和资源流程见 [浏览器扩展](./browser-extension.md)。
 
 ## 核心领域
 

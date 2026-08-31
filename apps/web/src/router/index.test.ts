@@ -17,6 +17,15 @@ describe('官网与应用入口路由', () => {
     expect(legacyLanding?.redirect).toBe('/');
   });
 
+  it('浏览器扩展介绍页允许公开访问并使用独立 canonical', () => {
+    const resolved = router.resolve('/browser-extension');
+    expect(resolved.name).toBe('browserExtensionLanding');
+    expect(resolved.meta.publicStandalone).toBe(true);
+    expect(resolved.meta.hideAiAssistant).toBe(true);
+    expect(resolved.meta.seoIndexable).toBe(true);
+    expect(resolved.meta.canonicalPath).toBe('/browser-extension');
+  });
+
   it('用户通知使用独立页面路由，且不挂移动端主导航壳', () => {
     const resolved = router.resolve('/notifications');
     expect(resolved.name).toBe('notifications');
