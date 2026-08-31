@@ -125,7 +125,6 @@
               />
             </div>
           </section>
-
         </div>
       </main>
     </div>
@@ -244,6 +243,7 @@
   const notes = reactive([
     {
       id: 'positioning',
+      parentId: 'project',
       title: '产品定位',
       content: '轻笺是一套以个人资源、行动与 AI 为中心的知识管理平台。',
       type: 'markdown',
@@ -258,6 +258,7 @@
     },
     {
       id: 'mobile',
+      parentId: 'project',
       title: '移动端设计',
       content: '今日、资料、AI、待办与我的五个一级入口，以及 APK 专属交互规范。',
       type: 'markdown',
@@ -275,6 +276,7 @@
     },
     {
       id: 'agent',
+      parentId: 'project',
       title: 'AI Agent 重构',
       content: '确定性工作流、工具调用、个人知识检索与 Provider 容错。',
       type: 'markdown',

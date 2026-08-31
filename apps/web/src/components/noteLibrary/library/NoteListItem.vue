@@ -35,17 +35,12 @@
         摘要被压到 35px 完全读不出内容,而手机一屏只有 8 条,行高不齐不影响观感。
       -->
       <div class="note-meta-row">
-        <BButton
+        <NoteParentLink
           v-if="parentPathText && parentTargetId"
           class="note-parent-path"
-          :title="parentPathText"
-          @click.stop="emit('openParent', parentTargetId)"
-        >
-          <SvgIcon class="note-parent-path__icon" :src="icon.resource.note" size="12" aria-hidden="true" />
-          <span class="note-parent-path__label">{{ $t('note.parentPage') }}</span>
-          <span class="note-parent-path__separator" aria-hidden="true">·</span>
-          <span class="note-parent-path__text">{{ parentPathText }}</span>
-        </BButton>
+          :path-text="parentPathText"
+          @activate="emit('openParent', parentTargetId)"
+        />
         <div class="note-description" v-if="!bookmark.isMobile || description">{{ description }}</div>
         <!--
           手机上这一块承担整个底行：徽章 + 标签 + 时间凑一行(需要时换行)。
@@ -119,6 +114,7 @@
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import PinBadge from '@/components/base/PinBadge.vue';
   import NoteFormatBadge from '@/components/noteLibrary/library/NoteFormatBadge.vue';
+  import NoteParentLink from '@/components/noteLibrary/library/NoteParentLink.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { useNoteSummary } from '@/composables/useNoteSummary';
@@ -368,51 +364,10 @@
       }
       .note-parent-path {
         order: -2;
-        flex: 0 1 auto;
+        // 长摘要只压缩末尾路径文字；父级入口的图标与标签始终完整保留。
+        flex: 0 0 auto;
         min-width: 0;
         max-width: 46%;
-        height: 22px;
-        padding: 0 7px;
-        box-sizing: border-box;
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        overflow: hidden;
-        color: var(--chip-neutral-fg, var(--desc-color));
-        background: var(--chip-neutral-bg);
-        border: 1px solid var(--chip-neutral-border);
-        border-radius: 6px;
-        font-size: 11px;
-        line-height: 20px;
-        white-space: nowrap;
-        cursor: pointer;
-        text-align: left;
-
-        &:hover {
-          color: var(--text-color);
-          border-color: var(--resource-note-color, #00a884);
-        }
-
-        &__icon {
-          flex: 0 0 auto;
-          color: var(--resource-note-color, #00a884);
-        }
-
-        &__label {
-          flex: 0 0 auto;
-          font-weight: 600;
-        }
-
-        &__separator {
-          flex: 0 0 auto;
-          opacity: 0.55;
-        }
-
-        &__text {
-          min-width: 0;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
       }
       .note-description {
         flex: 1 1 auto;

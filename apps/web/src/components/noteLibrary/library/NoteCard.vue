@@ -17,17 +17,12 @@
       <!-- 格式标识排在状态徽章之后：置顶/待整理是「要不要现在处理」，格式只是「打开后长什么样」 -->
       <NoteFormatBadge :type="note.type" />
     </div>
-    <BButton
+    <NoteParentLink
       v-if="parentPathText && parentTargetId"
       class="note-parent-path"
-      :title="parentPathText"
-      @click.stop="emit('openParent', parentTargetId)"
-    >
-      <SvgIcon class="note-parent-path__icon" :src="icon.resource.note" size="12" aria-hidden="true" />
-      <span class="note-parent-path__label">{{ $t('note.parentPage') }}</span>
-      <span class="note-parent-path__separator" aria-hidden="true">·</span>
-      <span class="note-parent-path__text">{{ parentPathText }}</span>
-    </BButton>
+      :path-text="parentPathText"
+      @activate="emit('openParent', parentTargetId)"
+    />
     <div class="note-preview-body" :class="{ 'has-image': hasPreviewImage }">
       <!-- 正文仍只做纯文本插值；压缩首图按正文原顺序插入，绝不恢复 v-html。 -->
       <DrawingNoteThumbnail
@@ -119,6 +114,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import NoteFormatBadge from '@/components/noteLibrary/library/NoteFormatBadge.vue';
+  import NoteParentLink from '@/components/noteLibrary/library/NoteParentLink.vue';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
   import { useNoteCardPreview } from '@/composables/useNoteSummary';
   import { notePreviewOriginalImageUrl } from '@/utils/noteSummary';
@@ -393,48 +389,6 @@
     margin-top: 8px;
     width: fit-content;
     max-width: 100%;
-    height: 22px;
-    padding: 0 7px;
-    box-sizing: border-box;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    overflow: hidden;
-    color: var(--chip-neutral-fg, var(--desc-color));
-    background: var(--chip-neutral-bg);
-    border: 1px solid var(--chip-neutral-border);
-    border-radius: 6px;
-    font-size: 11px;
-    line-height: 20px;
-    white-space: nowrap;
-    cursor: pointer;
-    text-align: left;
-
-    &:hover {
-      color: var(--text-color);
-      border-color: var(--resource-note-color, #00a884);
-    }
-
-    &__icon {
-      flex: 0 0 auto;
-      color: var(--resource-note-color, #00a884);
-    }
-
-    &__label {
-      flex: 0 0 auto;
-      font-weight: 600;
-    }
-
-    &__separator {
-      flex: 0 0 auto;
-      opacity: 0.55;
-    }
-
-    &__text {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
   }
 
   .note-footer {

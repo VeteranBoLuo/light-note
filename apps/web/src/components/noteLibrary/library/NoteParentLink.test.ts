@@ -45,7 +45,7 @@ describe.each([
     document.body.innerHTML = '';
   });
 
-  it('点击父级胶囊只打开直接父页面，不触发当前笔记打开', async () => {
+  it('点击父级入口只打开直接父页面，不触发当前笔记打开', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const open = vi.fn();
@@ -77,6 +77,31 @@ describe.each([
 
     host.querySelector<HTMLElement>(rootSelector)!.click();
     expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it('没有父级时不渲染层级入口', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp({
+      render: () =>
+        h(Component, {
+          note: {
+            id: 'root-note',
+            parentId: null,
+            title: '根页面',
+            type: 'markdown',
+            tags: [],
+            path: [{ id: 'root-note', title: '根页面' }],
+          },
+        }),
+    });
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.directive('click-log', {});
+    app.mount(host);
+    cleanup = () => app.unmount();
+    await nextTick();
+
+    expect(host.querySelector('.note-parent-path')).toBeNull();
   });
 });
 
