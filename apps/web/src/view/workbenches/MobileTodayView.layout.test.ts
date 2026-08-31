@@ -71,6 +71,19 @@ describe('移动端今日加载布局', () => {
     expect(source).toMatch(/\.mobile-today__growth-card\s*\{[\s\S]*?margin:\s*14px 0/);
   });
 
+  it('首屏稳定后在继续处理与成长卡之间渐进展示共享每日回顾，并纳入所有刷新入口', () => {
+    const reviewIndex = source.indexOf('<DailyReviewCard v-if="todaySettled"');
+    const continueIndex = source.indexOf('class="mobile-today__continue"');
+    const growthIndex = source.indexOf('<WorkbenchGrowth v-if="todaySettled"');
+
+    expect(source).toContain("import DailyReviewCard from '@/components/workbenches/DailyReviewCard.vue'");
+    expect(reviewIndex).toBeGreaterThan(continueIndex);
+    expect(reviewIndex).toBeLessThan(growthIndex);
+    expect(source).toContain(':read-only="growthReadOnly"');
+    expect(source.match(/loadRecap\(\)/g)).toHaveLength(5);
+    expect(source).toMatch(/\.mobile-today__daily-review\s*\{[\s\S]*?margin:\s*14px 0/);
+  });
+
   it('骨架分组与真实待处理列表一样不显示内层外框', () => {
     expect(source).toMatch(
       /\.mobile-today__pending-details :deep\(\.today-actions__skeleton-group\)[\s\S]*?border:\s*0[\s\S]*?border-radius:\s*0[\s\S]*?background:\s*transparent/,

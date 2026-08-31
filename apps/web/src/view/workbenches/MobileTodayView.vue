@@ -109,6 +109,8 @@
       </div>
     </section>
 
+    <DailyReviewCard v-if="todaySettled" class="mobile-today__daily-review" :read-only="growthReadOnly" />
+
     <WorkbenchGrowth v-if="todaySettled" class="mobile-today__growth-card" compact-today />
 
     <section v-if="todaySettled && showDailyGrowthTasks" class="mobile-today__growth">
@@ -143,6 +145,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import TodayActionSection from '@/components/workbenches/TodayActionSection.vue';
+  import DailyReviewCard from '@/components/workbenches/DailyReviewCard.vue';
   import WorkbenchGrowth from '@/components/workbenches/WorkbenchGrowth.vue';
   import DailyQuests from '@/components/growth/DailyQuests.vue';
   import GrowthTasks from '@/components/growth/GrowthTasks.vue';
@@ -178,7 +181,7 @@
   const inbox = inboxStore();
   const user = useUserStore();
   const scrollRef = ref<HTMLElement | null>(null);
-  const { dashboard, growthTasks, loadDashboard, loadGrowthTasks, loadClaimable } = useGrowth();
+  const { dashboard, growthTasks, loadDashboard, loadGrowthTasks, loadClaimable, loadRecap } = useGrowth();
   const growthReadOnly = computed(() => Boolean(user.adminContext));
   const dailyGrowthQuests = computed(() => dashboard.value?.quests || []);
   const dailyGrowthBonus = computed(
@@ -399,7 +402,7 @@
     enabled: true,
     externalBusy: initialTodayLoading,
     getScrollContainer: () => scrollRef.value,
-    onRefresh: () => Promise.all([loadToday(), loadDashboard(), loadGrowthTasks(true), loadClaimable()]),
+    onRefresh: () => Promise.all([loadToday(), loadDashboard(), loadGrowthTasks(true), loadClaimable(), loadRecap()]),
   });
   /*
    * 从后台切回来时补一次数据。今日页最需要这个:日期、待办和签到状态都跟"今天"绑定,
@@ -410,7 +413,7 @@
     refresh: () => {
       // 先让日期/问候语跟上真实时间,再取数据,避免出现"今天的数据 + 昨天的标题"。
       clockTick.value += 1;
-      return Promise.all([loadToday(), loadDashboard(), loadGrowthTasks(true), loadClaimable()]);
+      return Promise.all([loadToday(), loadDashboard(), loadGrowthTasks(true), loadClaimable(), loadRecap()]);
     },
     canRefresh: () => !initialTodayLoading.value,
   });
@@ -428,7 +431,8 @@
       inboxItems.value = [];
       continueItems.value = [];
       counts.value = { overdue: 0, dueToday: 0, inbox: 0, todoPending: 0, unreadNotification: 0 };
-      if (user.id) void Promise.all([loadToday(), loadDashboard(), loadGrowthTasks(true), loadClaimable()]);
+      if (user.id)
+        void Promise.all([loadToday(), loadDashboard(), loadGrowthTasks(true), loadClaimable(), loadRecap()]);
     },
   );
 
@@ -439,6 +443,7 @@
     void loadDashboard();
     void loadGrowthTasks();
     void loadClaimable();
+    void loadRecap();
   });
 
   /*
@@ -450,6 +455,7 @@
     if (dashboard.value) void loadDashboard();
     if (growthTasks.value) void loadGrowthTasks(true);
     void loadClaimable();
+    void loadRecap();
   });
 </script>
 
@@ -481,6 +487,10 @@
   }
 
   .mobile-today__growth-card {
+    margin: 14px 0;
+  }
+
+  .mobile-today__daily-review {
     margin: 14px 0;
   }
 

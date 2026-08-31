@@ -152,6 +152,7 @@ API 使用 `resultData(data, status, msg)` 信封，snake_case 响应键统一�
 
 - `user_growth.exp` 是所有角色的等级事实源；Root 身份不等于满级。
 - EXP、积分、AI 永久余额、空间和道具使用各自可审计账本，展示快照不能替代流水。
+- 桌面工作台与移动「今日」复用轻量 `DailyReviewCard`，从 `/growth/recap` 读取账号时区、稳定日选择、最近沉淀、那年今日和尘封内容，并通过 `growth_recap_state` 共享延后与永久隐藏状态；成长页保留完整回顾列表。工作台独立渐进加载，回顾失败不阻断今日核心内容。
 - 积分获取与消费使用不同版本：获取规则见 [C5 基线](./points-earning-c5.md) 与 [C6 每日任务](./points-earning-c6.md)，消费见 [积分经济](./points-economy.md)。
 - 资源商店与纯支持共享支付渠道但使用不可变订单用途分域。套餐、首购和权益发放见 [资源商店套餐](./support-packages.md)。
 - 头像框视觉等级与动效不由经济目录定义，唯一设计规范见 [头像框设计](./avatar-frame-design.md)。
