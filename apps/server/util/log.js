@@ -1,7 +1,7 @@
 import pool from '../db/index.js';
 import { resultData, formatDateTime, insertData } from './common.js';
 import { isSelfTraffic } from './logExclude.js';
-import { shouldSkipApiLog, summarizeApiLogPayload } from './logPolicy.js';
+import { isToolboxProjectApiPath, shouldSkipApiLog, summarizeApiLogPayload, templateApiLogPath } from './logPolicy.js';
 import { redactSensitiveText, stableAgentErrorCode } from './agent/logSafety.js';
 import { buildApiLogSystem } from './apiLogSystem.js';
 
@@ -77,6 +77,8 @@ export function sanitizeLogUrl(value) {
     for (const [key] of url.searchParams) {
       if (isSensitivePayloadKey(key)) url.searchParams.set(key, '[REDACTED]');
     }
+    if (isToolboxProjectApiPath(raw)) url.searchParams.delete('cursor');
+    url.pathname = templateApiLogPath(url.pathname);
     const sanitized = isAbsolute ? url.toString() : `${url.pathname}${url.search}${url.hash}`;
     return redactSensitiveText(sanitized, MAX_LOG_TEXT_LENGTH);
   } catch {

@@ -112,4 +112,90 @@ describe('virtual list scroll layout', () => {
 
     expect(loadMore).toHaveBeenCalled();
   });
+
+  it('can reveal a keyboard-active row without mounting the full list', async () => {
+    const listRef = ref<InstanceType<typeof BVirtualList> | null>(null);
+    const items = Array.from({ length: 100 }, (_, id) => ({ id }));
+    const Wrapper = {
+      setup() {
+        return () =>
+          h(
+            BVirtualList,
+            {
+              ref: listRef,
+              items,
+              itemHeight: 40,
+              overscan: 2,
+            },
+            { default: ({ item }: any) => `item-${item.id}` },
+          );
+      },
+    };
+    const host = mount(Wrapper, {});
+    await nextTick();
+
+    const scroller = host.querySelector<HTMLElement>('.b-virtual-list')!;
+    Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 120 });
+    scroller.scrollTop = 0;
+
+    listRef.value?.scrollToIndex(10);
+    await nextTick();
+
+    expect(scroller.scrollTop).toBe(320);
+    expect(host.textContent).toContain('item-8');
+    expect(host.querySelectorAll('.b-virtual-list__item').length).toBeLessThan(100);
+  });
+
+  it('can virtualize against the nearest page scroller without taking over the mouse wheel', async () => {
+    const items = Array.from({ length: 100 }, (_, id) => ({ id }));
+    const Wrapper = {
+      setup() {
+        return () =>
+          h(
+            'div',
+            { class: 'page-scroller', style: 'height:120px;overflow-y:auto' },
+            h(
+              BVirtualList,
+              {
+                items,
+                itemHeight: 40,
+                overscan: 2,
+                scrollMode: 'ancestor',
+              },
+              { default: ({ item }: any) => `item-${item.id}` },
+            ),
+          );
+      },
+    };
+    const host = mount(Wrapper, {});
+    await nextTick();
+
+    const pageScroller = host.querySelector<HTMLElement>('.page-scroller')!;
+    const list = host.querySelector<HTMLElement>('.b-virtual-list')!;
+    Object.defineProperty(pageScroller, 'clientHeight', { configurable: true, value: 120 });
+    Object.defineProperty(pageScroller, 'scrollHeight', { configurable: true, value: 4_000 });
+    pageScroller.getBoundingClientRect = () =>
+      ({ top: 0, right: 320, bottom: 120, left: 0, width: 320, height: 120, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    list.getBoundingClientRect = () =>
+      ({
+        top: -pageScroller.scrollTop,
+        right: 320,
+        bottom: 4_000 - pageScroller.scrollTop,
+        left: 0,
+        width: 320,
+        height: 4_000,
+        x: 0,
+        y: -pageScroller.scrollTop,
+        toJSON() {},
+      }) as DOMRect;
+
+    pageScroller.scrollTop = 800;
+    pageScroller.dispatchEvent(new Event('scroll'));
+    await nextTick();
+
+    expect(list.classList.contains('is-ancestor-scroll')).toBe(true);
+    expect(list.scrollTop).toBe(0);
+    expect(host.textContent).toContain('item-18');
+    expect(host.querySelectorAll('.b-virtual-list__item').length).toBeLessThan(100);
+  });
 });

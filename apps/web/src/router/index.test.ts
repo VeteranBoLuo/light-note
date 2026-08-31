@@ -41,6 +41,22 @@ describe('官网与应用入口路由', () => {
     expect(resolved.meta.roles).toContain('visitor');
   });
 
+  it('知识工具箱仅首页显示移动底栏，工作台与任务页保留工具箱壳语义', () => {
+    const home = router.resolve('/toolbox');
+    const workbench = router.resolve('/toolbox/material_to_note');
+    const task = router.resolve('/toolbox/task/job-1');
+    expect(home.name).toBe('toolboxHome');
+    expect(workbench.name).toBe('toolboxWorkbench');
+    expect(task.name).toBe('toolboxTask');
+    for (const resolved of [home, workbench, task]) {
+      expect(resolved.meta.requireAuth).toBe(true);
+      expect(resolved.meta.mobileShell).toBe('toolbox');
+    }
+    expect(home.meta.mobileBottomNav).toBe(true);
+    expect(workbench.meta.mobileBottomNav).toBe(false);
+    expect(task.meta.mobileBottomNav).toBe(false);
+  });
+
   it('支持轻笺页面允许游客直达，且使用统一的双端路径', () => {
     const resolved = router.resolve('/support');
     expect(resolved.name).toBe('support');
@@ -61,6 +77,13 @@ describe('官网与应用入口路由', () => {
       name: 'aiUsage',
       replace: true,
     });
+  });
+
+  it('积分明细使用独立登录页，并与 AI 用量保持同级资产入口', () => {
+    const resolved = router.resolve('/points-usage');
+    expect(resolved.name).toBe('pointsUsage');
+    expect(resolved.meta.requireAuth).toBe(true);
+    expect(resolved.meta.roles).not.toContain('visitor');
   });
 
   it('标签列表与详情都是私人资源路由', () => {

@@ -46,11 +46,17 @@ ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkBookmarkIconRuntime.js"
 echo "🔎  幂等初始化并检查资源治理 Schema、目录与清理开关…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkResourceGovernanceRuntime.js"
 
+echo "🧰  幂等初始化知识工具箱 Schema…"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/ensureToolboxSchema.js"
+
 echo "🔎  执行只读 Schema 发布门禁…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkSchemaAssertions.js"
 
 echo "🔎  检查文件预览 Schema、7-Zip 与 LibreOffice 运行时…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkFilePreviewRuntime.js"
+
+echo "🔎  检查 OCR 运行时与语言包…"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkOcrRuntime.js"
 
 echo "♻️  pm2 restart ${PM2}…"
 ssh -i "$KEY" "$HOST" "pm2 restart $PM2 --update-env && \

@@ -6,7 +6,6 @@
       class="mobile-bottom-nav__item"
       :class="{
         'mobile-bottom-nav__item--active': isItemActive(item.key) || pendingKey === item.key,
-        'mobile-bottom-nav__item--capture': item.key === 'capture',
       }"
       :aria-current="isItemActive(item.key) ? 'page' : undefined"
       :aria-busy="pendingKey === item.key ? 'true' : undefined"
@@ -16,7 +15,7 @@
       v-click-log="{ module: '移动端导航', operation: `打开${t(item.labelKey)}` }"
     >
       <span class="mobile-bottom-nav__icon">
-        <SvgIcon :src="bottomIcons[item.key]" :size="item.key === 'capture' ? '21' : '20'" aria-hidden="true" />
+        <SvgIcon :src="bottomIcons[item.key]" size="20" aria-hidden="true" />
         <!--
           与桌面顶栏同一口径：只提醒「逾期 + 今天到期」。原来用全部未完成待办，
           那个数字永不清零，挂成常驻角标会被用户学会忽略。两端必须一致，
@@ -85,8 +84,8 @@
   const bottomIcons = {
     today: icon.common.calendar,
     resources: icon.navigation.portal,
+    toolbox: icon.toolbox.home,
     todo: icon.noteDetail.toolbar.todo,
-    capture: icon.common.plus,
     community: icon.ai.conversations,
   } as const;
 
@@ -99,7 +98,6 @@
   }
 
   function getItemTarget(item: MobileBottomNavigationItem) {
-    if (item.key === 'capture') return null;
     return item.key === 'resources'
       ? getMobileResourceEntryPath()
       : item.key === 'todo'
@@ -118,10 +116,6 @@
 
   async function activate(item: MobileBottomNavigationItem) {
     if (pendingKey.value === item.key) return;
-    if (item.key === 'capture') {
-      inbox.openQuickCapture();
-      return;
-    }
     if (item.key === 'resources' && route.meta.mobileShell === 'resources') {
       scrollCurrentResourceToTop();
       return;
@@ -194,18 +188,6 @@
     background: color-mix(in srgb, var(--primary-color) 8%, transparent) !important;
   }
 
-  .mobile-bottom-nav__item--capture .mobile-bottom-nav__icon {
-    width: 30px;
-    height: 25px;
-    border-radius: 9px;
-    color: #fff;
-    background: linear-gradient(145deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 64%, #9b8cff));
-  }
-
-  .mobile-bottom-nav__item--capture:focus-visible .mobile-bottom-nav__icon,
-  .mobile-bottom-nav__item--capture:hover .mobile-bottom-nav__icon {
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 14%, transparent);
-  }
   .mobile-bottom-nav__icon {
     position: relative;
     min-height: 25px;
@@ -250,6 +232,5 @@
     .mobile-bottom-nav__item {
       transition: none;
     }
-
   }
 </style>

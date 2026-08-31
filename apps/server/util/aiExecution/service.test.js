@@ -789,4 +789,27 @@ describe('aiExecution', () => {
       chargedTokens: 13,
     });
   });
+
+  it('系统额度分桶与实际数据主体分别记账', async () => {
+    const persistence = createPersistence();
+    const quota = { reserve: vi.fn(), reconcile: vi.fn() };
+    await runAiExecution(
+      {
+        requestId: '50e68bdb-8f29-4d9a-8a25-e2f5d93a80ea',
+        billingPolicy: 'system',
+        systemId: 'toolbox_points',
+        taskType: 'toolbox_research',
+        request: { user: { id: 'u-real', role: 'user' }, headers: {}, body: {} },
+        subjectIdentity: { id: 'u-real', role: 'user' },
+        persistence,
+      },
+      async () => ({ ok: true }),
+      { quota },
+    );
+    expect(persistence.insertAiExecution.mock.calls[0][0]).toMatchObject({
+      actorUserId: 'system:toolbox_points',
+      subjectUserId: 'u-real',
+      billingPolicy: 'system',
+    });
+  });
 });

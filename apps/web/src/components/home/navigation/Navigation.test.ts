@@ -120,16 +120,18 @@ afterEach(() => {
 });
 
 describe('Navigation', () => {
-  it('聊天室入口默认弱化为普通导航，hover 轻量反馈且仅选中态保留完整 tonal 胶囊', () => {
-    expect(navigationSource).toContain('background: var(--navigation-community-bg) !important');
-    expect(navigationSource).toContain('color: var(--navigation-community-hover-fg)');
-    expect(navigationSource).toContain('background: var(--navigation-community-hover-bg) !important');
-    expect(navigationSource).toContain('color: var(--navigation-community-active-fg)');
-    expect(navigationSource).toContain('background: var(--navigation-community-active-bg) !important');
+  it('工具箱与聊天室复用同一套轻量胶囊 hover / 选中态', () => {
+    expect(navigationSource).toContain('class="navigation-pill-entry navigation-toolbox-entry"');
+    expect(navigationSource).toContain('class="navigation-pill-entry navigation-community-entry"');
+    expect(navigationSource).toContain('background: var(--navigation-pill-bg) !important');
+    expect(navigationSource).toContain('color: var(--navigation-pill-hover-fg)');
+    expect(navigationSource).toContain('background: var(--navigation-pill-hover-bg) !important');
+    expect(navigationSource).toContain('color: var(--navigation-pill-active-fg)');
+    expect(navigationSource).toContain('background: var(--navigation-pill-active-bg) !important');
     expect(navigationSource).not.toContain('transform: translateY(-1px)');
-    expect(navigationSource).not.toMatch(/navigation-community-entry\.is-active\s*\{[^}]*color:\s*#fff/su);
-    expect(themeSource.match(/--navigation-community-bg:\s*transparent/gu)).toHaveLength(2);
-    expect(themeSource.match(/--navigation-community-active-bg:/gu)).toHaveLength(2);
+    expect(navigationSource).not.toMatch(/navigation-pill-entry\.is-active\s*\{[^}]*color:\s*#fff/su);
+    expect(themeSource.match(/--navigation-pill-bg:\s*transparent/gu)).toHaveLength(2);
+    expect(themeSource.match(/--navigation-pill-active-bg:/gu)).toHaveLength(2);
   });
 
   it('PC 顶栏用带文字的聊天室入口直达公共空间，并显示未读角标', async () => {
@@ -148,24 +150,29 @@ describe('Navigation', () => {
     expect(mocks.routerPush).toHaveBeenCalledWith('/community-chat');
   });
 
-  it('PC 顶栏按待办、标签、资源中心、聊天室的顺序提供一级入口', async () => {
+  it('PC 顶栏按待办、标签、资源中心、工具箱、聊天室的顺序提供一级入口', async () => {
     const host = await mountNavigation();
     const navigationItems = Array.from(host.querySelector('.navigation-tab')?.children || []);
     const todoEntry = host.querySelector('#nav-todo-entry');
     const tagEntry = host.querySelector('#nav-tag-entry');
     const resourceCenterEntry = host.querySelector('#nav-resource-center-entry');
+    const toolboxEntry = host.querySelector('#nav-toolbox-entry');
     const communityEntry = host.querySelector('#nav-community-entry');
 
     expect(todoEntry).not.toBeNull();
     expect(tagEntry?.textContent?.trim()).toBe('标签');
     expect(resourceCenterEntry?.textContent?.trim()).toBe('资源中心');
+    expect(toolboxEntry?.textContent?.trim()).toBe('工具箱');
     expect(communityEntry).not.toBeNull();
     expect(navigationItems.indexOf(tagEntry as Element)).toBe(navigationItems.indexOf(todoEntry as Element) + 1);
     expect(navigationItems.indexOf(resourceCenterEntry as Element)).toBe(
       navigationItems.indexOf(tagEntry as Element) + 1,
     );
-    expect(navigationItems.indexOf(communityEntry as Element)).toBe(
+    expect(navigationItems.indexOf(toolboxEntry as Element)).toBe(
       navigationItems.indexOf(resourceCenterEntry as Element) + 1,
+    );
+    expect(navigationItems.indexOf(communityEntry as Element)).toBe(
+      navigationItems.indexOf(toolboxEntry as Element) + 1,
     );
 
     tagEntry?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -175,6 +182,10 @@ describe('Navigation', () => {
     resourceCenterEntry?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await nextTick();
     expect(mocks.routerPush).toHaveBeenCalledWith('/search');
+
+    toolboxEntry?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+    expect(mocks.routerPush).toHaveBeenCalledWith('/toolbox');
   });
 
   it('标签和资源中心提升为一级入口后不再重复出现在更多菜单', () => {

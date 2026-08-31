@@ -18,6 +18,7 @@ const SKILL_FLAGS = Object.freeze({
   todo: 'AI_SKILL_TODO_ENABLED',
   search: 'AI_SKILL_SEARCH_ENABLED',
   help: 'AI_SKILL_HELP_ENABLED',
+  toolbox: 'AI_SKILL_TOOLBOX_ENABLED',
 });
 
 export function getAiProductFeatureState() {

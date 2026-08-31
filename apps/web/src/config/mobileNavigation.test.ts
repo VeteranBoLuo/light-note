@@ -24,17 +24,18 @@ describe('移动端导航配置', () => {
 
   it('保持资料切换与底部主导航的固定顺序', () => {
     expect(MOBILE_RESOURCE_NAVIGATION.map((item) => item.key)).toEqual(['bookmark', 'note', 'cloud', 'tag']);
-    // 今日在首位、确定性的快速收集居中；AI 只在对应业务模块出现，不占全局一级入口。
+    // 今日顶栏负责快速收集；工具箱占据底栏中间的长期使用入口。
     expect(MOBILE_BOTTOM_NAVIGATION.map((item) => item.key)).toEqual([
       'today',
       'resources',
-      'capture',
+      'toolbox',
       'todo',
       'community',
     ]);
     expect(MOBILE_BOTTOM_NAVIGATION.map((item) => item.key)).not.toContain('ai');
     expect(MOBILE_BOTTOM_NAVIGATION.map((item) => item.key)).not.toContain('search');
     expect(MOBILE_BOTTOM_NAVIGATION.find((item) => item.key === 'today')?.path).toBe('/workbenches');
+    expect(MOBILE_BOTTOM_NAVIGATION.find((item) => item.key === 'toolbox')?.path).toBe('/toolbox');
     expect(MOBILE_BOTTOM_NAVIGATION.find((item) => item.key === 'community')?.path).toBe('/community-chat');
   });
 

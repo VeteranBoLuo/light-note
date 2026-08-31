@@ -139,7 +139,7 @@
   .navigation-right-area {
     display: flex;
     align-items: center;
-    min-width: 140px;
+    min-width: 220px;
     justify-content: flex-end;
     position: absolute;
     right: 40px;
@@ -255,16 +255,6 @@
   @media (min-width: 768px) and (max-width: 1199px) {
     .navigation-right-area {
       right: 16px;
-    }
-
-    .navigation-right-area :deep(.global-search) {
-      width: 200px;
-    }
-  }
-
-  @media (min-width: 768px) and (max-width: 1023px) {
-    .navigation-right-area :deep(.global-search) {
-      display: none;
     }
   }
 </style>

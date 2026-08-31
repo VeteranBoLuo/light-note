@@ -37,11 +37,11 @@
   }
 
   .chat-inline-emoji-text__image {
-    width: 1.62em;
-    height: 1.62em;
+    width: 2em;
+    height: 2em;
     margin-inline: 0.04em;
     display: inline-block;
-    vertical-align: -0.27em;
+    vertical-align: -0.65em;
     object-fit: contain;
     user-select: none;
   }

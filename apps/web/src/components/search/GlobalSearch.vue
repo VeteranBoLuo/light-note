@@ -1,173 +1,132 @@
 <template>
-  <div v-if="isSearchAvailable" class="global-search" :class="{ 'global-search--mobile': bookmark.isMobile }">
-    <div
-      v-if="!bookmark.isMobile"
-      class="global-search-box"
-      :class="{ 'global-search-box--open': suggestVisible }"
-      ref="searchBoxRef"
-      @mousedown="handleSearchBoxMouseDown"
-      @keydown="onKeydown"
-    >
-      <b-input
-        id="global-search-input"
-        v-model:value="keyword"
-        :class="{ 'global-search-input--shortcut': !keyword }"
-        :placeholder="placeholder"
-        height="36px"
-        @focus="openSuggest"
-        @input="handleInput"
-        @enter="onEnter"
+  <div v-if="isSearchAvailable" ref="rootRef" class="global-search">
+    <BTooltip :title="`${t('resourceCenter.searchPlaceholder')} · ${searchShortcutLabel}`">
+      <BButton
+        class="global-search__trigger"
+        :aria-label="t('resourceCenter.searchPlaceholder')"
+        :aria-expanded="visible"
+        aria-haspopup="dialog"
+        @click="open"
+        v-click-log="{ module: '全局搜索', operation: '打开全局搜索' }"
       >
-        <template #prefix>
-          <svg-icon :src="icon.navigation.search" size="16" />
-        </template>
-        <template #suffix>
-          <button v-if="keyword" class="clear-btn" :title="t('resourceCenter.clear')" @mousedown.prevent="clearKeyword"
-            >×</button
-          >
-          <kbd v-else class="shortcut">{{ searchShortcutLabel }}</kbd>
-        </template>
-      </b-input>
+        <SvgIcon :src="icon.navigation.search" size="20" />
+      </BButton>
+    </BTooltip>
 
-      <div v-if="suggestVisible" class="suggest-panel">
-        <div class="suggest-head">
-          <div>
-            <div class="suggest-title">{{ t('resourceCenter.title') }}</div>
-            <div class="suggest-subtitle">{{ t('resourceCenter.suggestSubtitle') }}</div>
-          </div>
-        </div>
-
-        <div v-if="loading" class="suggest-loading">
-          <div v-for="n in 4" :key="n" class="sk-line"></div>
-        </div>
-
-        <template v-else-if="suggestGroups.length">
-          <div v-for="group in suggestGroups" :key="group.type" class="suggest-group">
-            <div class="group-label">{{ getGroupLabel(group.type) }}</div>
-            <button
-              v-for="item in group.items"
-              :key="`${item.type}-${item.id}`"
-              class="suggest-item"
-              :class="{ 'suggest-item--active': isActiveItem(item) }"
-              @mousedown.prevent="openItem(item)"
-              v-click-log="{ module: '全局搜索', operation: `打开搜索建议【${item.type}:${item.title}】` }"
-            >
-              <span class="type-dot" :class="`type-dot--${item.type}`"></span>
-              <span class="item-main">
-                <span class="item-title-row">
-                  <span class="item-title" v-html="highlightText(item.title, keyword)"></span>
-                  <span v-if="item.tags && item.tags.length" class="item-tags">
-                    <ResourceTagChip
-                      v-for="tg in item.tags"
-                      :key="tg.id"
-                      :tag="tg"
-                      :selected="isTagHit(tg.name)"
-                      show-hash
-                      max-width="100px"
-                    />
-                  </span>
-                </span>
-                <span class="item-desc" v-html="highlightText(item.description || item.extra, keyword)"></span>
-              </span>
-              <span class="item-extra">
-                <span
-                  v-if="item.type === 'bookmark'"
-                  class="locate-btn"
-                  :title="t('resourceCenter.locate')"
-                  @mousedown.prevent.stop="locateItem(item)"
-                >
-                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="7" /><path d="M12 1.5v3.5M12 19v3.5M1.5 12h3.5M19 12h3.5" /></svg>
-                </span>
-                {{ item.extra }}
-              </span>
-            </button>
-          </div>
-          <button class="view-all" @mousedown.prevent="goSearch">{{ t('resourceCenter.viewAll') }}</button>
-        </template>
-
-        <div v-else class="suggest-empty">
-          <div class="empty-title">{{
-            searchError ? t('resourceCenter.searchError') : keyword ? t('resourceCenter.noMatch') : t('resourceCenter.startSearch')
-          }}</div>
-          <div class="empty-desc">{{ t('resourceCenter.emptyDesc') }}</div>
-        </div>
-      </div>
-    </div>
-
-    <button
-      v-else
-      class="mobile-search-trigger"
-      @click="openMobileSearch"
-      v-click-log="{ module: '全局搜索', operation: '打开移动端搜索' }"
-    >
-      <svg-icon class="mobile-search-icon" size="20" :src="icon.navigation.search" />
-      <span class="mobile-search-placeholder">{{ t('resourceCenter.mobileTrigger') }}</span>
-    </button>
-
-    <Teleport v-if="bookmark.isMobile" to="body">
-      <div v-if="mobileVisible" class="mobile-search-layer">
-        <div class="mobile-search-header">
-          <b-input
-            id="global-mobile-search-input"
-            v-model:value="keyword"
-            :placeholder="t('resourceCenter.searchPlaceholder')"
-            height="40px"
-            @input="handleInput"
-            @enter="goSearch"
-          >
-            <template #prefix>
-              <svg-icon :src="icon.navigation.search" size="16" />
-            </template>
-          </b-input>
-          <button class="mobile-cancel" @click="mobileVisible = false">{{ t('resourceCenter.cancel') }}</button>
-        </div>
-
-        <div class="mobile-search-body">
-          <div v-if="loading" class="suggest-loading">
-            <div v-for="n in 5" :key="n" class="sk-line"></div>
-          </div>
-          <template v-else-if="suggestGroups.length">
-            <div v-for="group in suggestGroups" :key="group.type" class="suggest-group">
-              <div class="group-label">{{ getGroupLabel(group.type) }}</div>
-              <button
-                v-for="item in group.items"
-                :key="`${item.type}-${item.id}`"
-                class="suggest-item"
-                @click="openItem(item)"
-                v-click-log="{ module: '全局搜索', operation: `打开搜索建议【${item.type}:${item.title}】` }"
-              >
-                <span class="type-dot" :class="`type-dot--${item.type}`"></span>
-                <span class="item-main">
-                  <span class="item-title-row">
-                    <span class="item-title" v-html="highlightText(item.title, keyword)"></span>
-                    <span v-if="item.tags && item.tags.length" class="item-tags">
-                      <ResourceTagChip
-                        v-for="tg in item.tags"
-                        :key="tg.id"
-                        :tag="tg"
-                        :selected="isTagHit(tg.name)"
-                        show-hash
-                        max-width="100px"
-                      />
-                    </span>
-                  </span>
-                  <span class="item-desc" v-html="highlightText(item.description || item.extra, keyword)"></span>
-                </span>
-              </button>
+    <Teleport to="body">
+      <div v-if="visible" class="global-search-layer" @mousedown.self="close()">
+        <section
+          ref="dialogRef"
+          class="global-search-dialog"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="t('resourceCenter.title')"
+          @keydown="handleDialogKeydown"
+        >
+          <header class="global-search-dialog__header">
+            <div class="global-search-dialog__heading">
+              <div>
+                <strong>{{ t('resourceCenter.title') }}</strong>
+                <span>{{ t('resourceCenter.suggestSubtitle') }}</span>
+              </div>
+              <BButton :aria-label="t('resourceCenter.cancel')" @click="close()">
+                <SvgIcon :src="icon.navigation.close" size="18" />
+              </BButton>
             </div>
-            <button class="view-all" @click="goSearch">{{ t('resourceCenter.viewAll') }}</button>
-          </template>
-          <div v-else class="suggest-empty">
-            <div class="empty-title">{{
-              searchError
-                ? t('resourceCenter.searchError')
-                : keyword
-                  ? t('resourceCenter.noMatch')
-                  : t('resourceCenter.mobileEmptyTitle')
-            }}</div>
-            <div class="empty-desc">{{ t('resourceCenter.mobileEmptyDesc') }}</div>
+            <div class="global-search-dialog__input">
+              <BInput
+                id="global-search-input"
+                ref="inputRef"
+                v-model:value="keyword"
+                clearable
+                :placeholder="placeholder"
+                height="48px"
+                @input="handleInput"
+                @enter="onEnter"
+                @keydown="onResultKeydown"
+              >
+                <template #prefix><SvgIcon :src="icon.navigation.search" size="19" /></template>
+              </BInput>
+              <kbd>{{ searchShortcutLabel }}</kbd>
+            </div>
+          </header>
+
+          <div class="global-search-dialog__body">
+            <div v-if="loading" class="global-search__loading" aria-live="polite">
+              <div v-for="n in 6" :key="n" class="global-search__skeleton"></div>
+            </div>
+
+            <template v-else-if="suggestGroups.length">
+              <section v-for="group in suggestGroups" :key="group.type" class="global-search-group">
+                <h3>{{ getGroupLabel(group.type) }}</h3>
+                <div
+                  v-for="item in group.items"
+                  :key="`${item.type}-${item.id}`"
+                  class="global-search-result"
+                  :class="{ 'is-active': isActiveItem(item) }"
+                  @mousemove="activateItem(item)"
+                >
+                  <BButton
+                    class="global-search-result__open"
+                    @click="openItem(item)"
+                    v-click-log="{ module: '全局搜索', operation: `打开搜索建议【${item.type}:${item.title}】` }"
+                  >
+                    <span class="global-search-result__dot" :class="`is-${item.type}`"></span>
+                    <span class="global-search-result__main">
+                      <span class="global-search-result__title-row">
+                        <span class="global-search-result__title" v-html="highlightText(item.title, keyword)"></span>
+                        <span v-if="item.tags?.length" class="global-search-result__tags">
+                          <ResourceTagChip
+                            v-for="tag in item.tags"
+                            :key="tag.id"
+                            :tag="tag"
+                            :selected="isTagHit(tag.name)"
+                            show-hash
+                            max-width="100px"
+                          />
+                        </span>
+                      </span>
+                      <span
+                        class="global-search-result__description"
+                        v-html="highlightText(item.description || item.extra, keyword)"
+                      ></span>
+                    </span>
+                  </BButton>
+                  <span class="global-search-result__extra">
+                    <BTooltip v-if="item.type === 'bookmark'" :title="t('resourceCenter.locate')">
+                      <BButton :aria-label="t('resourceCenter.locate')" @click="locateItem(item)">
+                        <SvgIcon :src="icon.toolbox.locate" size="14" />
+                      </BButton>
+                    </BTooltip>
+                    <span>{{ item.extra }}</span>
+                  </span>
+                </div>
+              </section>
+            </template>
+
+            <div v-else class="global-search__empty">
+              <span class="global-search__empty-icon"><SvgIcon :src="icon.navigation.search" size="26" /></span>
+              <strong>
+                {{
+                  searchError
+                    ? t('resourceCenter.searchError')
+                    : keyword
+                      ? t('resourceCenter.noMatch')
+                      : t('resourceCenter.startSearch')
+                }}
+              </strong>
+              <span>{{ t('resourceCenter.emptyDesc') }}</span>
+            </div>
           </div>
-        </div>
+
+          <footer class="global-search-dialog__footer">
+            <span><kbd>↑</kbd><kbd>↓</kbd> {{ t('resourceCenter.keyboardSelect') }}</span>
+            <span><kbd>Enter</kbd> {{ t('resourceCenter.keyboardOpen') }}</span>
+            <BButton size="small" @click="goSearch">
+              {{ t('resourceCenter.viewAll') }}<SvgIcon :src="icon.toolbox.arrow" size="14" />
+            </BButton>
+          </footer>
+        </section>
       </div>
     </Teleport>
   </div>
@@ -175,607 +134,576 @@
 
 <script setup lang="ts">
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-  import { useRoute, useRouter } from 'vue-router';
-  import { openBookmarkUrl } from '@/utils/openBookmark.ts';
-  import BInput from '@/components/base/BasicComponents/BInput.vue';
-  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import icon from '@/config/icon.ts';
-  import { bookmarkStore } from '@/store';
-  import { fetchGlobalSearch, SearchGroup, SearchResultItem, SearchType } from '@/api/search.ts';
-  import { getSearchTypeLabel } from '@/components/searchCenter/searchMeta.ts';
-  import { rankByRelevance } from '@/components/searchCenter/searchUtils.ts';
   import { useI18n } from 'vue-i18n';
-  import { GLOBAL_SEARCH_HIDDEN_ROUTE_NAMES } from '@/config/navigation.ts';
-  import { recordOperation } from '@/api/commonApi.ts';
-  import {
-    getGlobalShortcutKeys,
-    isEditableShortcutTarget,
-    matchesGlobalShortcut,
-  } from '@/config/keyboardShortcuts.ts';
+  import { useRoute, useRouter } from 'vue-router';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import { fetchGlobalSearch, type SearchGroup, type SearchResultItem, type SearchType } from '@/api/search';
+  import { recordOperation } from '@/api/commonApi';
+  import { getSearchTypeLabel } from '@/components/searchCenter/searchMeta';
+  import { rankByRelevance } from '@/components/searchCenter/searchUtils';
+  import { GLOBAL_SEARCH_HIDDEN_ROUTE_NAMES } from '@/config/navigation';
+  import { getGlobalShortcutKeys, isEditableShortcutTarget, matchesGlobalShortcut } from '@/config/keyboardShortcuts';
+  import icon from '@/config/icon';
+  import { openBookmarkUrl } from '@/utils/openBookmark';
 
   const router = useRouter();
   const route = useRoute();
-
-  // 命中词高亮:先转义防 XSS,再把命中词包 <mark>
-  function escapeHtml(input: string): string {
-    return String(input ?? '').replace(
-      /[&<>"']/g,
-      (c) => (({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }) as Record<string, string>)[c],
-    );
-  }
-  function highlightText(text: string, kw: string): string {
-    const safe = escapeHtml(text);
-    const k = String(kw || '').trim();
-    if (!k) return safe;
-    const escaped = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return safe.replace(new RegExp(`(${escaped})`, 'gi'), '<mark class="gs-hl">$1</mark>');
-  }
-  function isTagHit(name: string): boolean {
-    const k = String(keyword.value || '')
-      .trim()
-      .toLowerCase();
-    return !!k && String(name || '').toLowerCase().includes(k);
-  }
-  const bookmark = bookmarkStore();
   const { t } = useI18n();
+  const rootRef = ref<HTMLElement | null>(null);
+  const dialogRef = ref<HTMLElement | null>(null);
+  const inputRef = ref<{ focus?: () => void } | null>(null);
   const keyword = ref('');
+  const visible = ref(false);
   const loading = ref(false);
-  const suggestVisible = ref(false);
-  const mobileVisible = ref(false);
-  const searchBoxRef = ref<HTMLElement | null>(null);
+  const searchError = ref(false);
   const suggestGroups = ref<SearchGroup[]>([]);
-  const searchTimer = ref<number | null>(null);
+  const activeIndex = ref(-1);
+  let searchTimer = 0;
   let requestSeq = 0;
-
+  let previousBodyOverflow = '';
+  const searchShortcutLabel = getGlobalShortcutKeys('globalSearch').join('+');
   const routeName = computed(() => String(route.name || ''));
   const isSearchAvailable = computed(() => !GLOBAL_SEARCH_HIDDEN_ROUTE_NAMES.includes(routeName.value));
   const placeholder = computed(() =>
     route.path.includes('/search') ? t('resourceCenter.continueSearch') : t('resourceCenter.searchPlaceholder'),
   );
-  const searchShortcutLabel = getGlobalShortcutKeys('globalSearch').join('+');
+  const flatItems = computed(() => suggestGroups.value.flatMap((group) => group.items));
 
+  function escapeHtml(input: string) {
+    return String(input ?? '').replace(
+      /[&<>"']/g,
+      (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character] as string,
+    );
+  }
+  function highlightText(text: string, query: string) {
+    const safe = escapeHtml(text);
+    const normalized = String(query || '').trim();
+    if (!normalized) return safe;
+    const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return safe.replace(new RegExp(`(${escaped})`, 'giu'), '<mark class="gs-hl">$1</mark>');
+  }
+  function isTagHit(name: string) {
+    const query = String(keyword.value || '')
+      .trim()
+      .toLowerCase();
+    return (
+      Boolean(query) &&
+      String(name || '')
+        .toLowerCase()
+        .includes(query)
+    );
+  }
   function getGroupLabel(type: string) {
-    if (['bookmark', 'note', 'file', 'tag'].includes(type)) {
-      return getSearchTypeLabel(t, type as SearchType);
-    }
-    return getSearchTypeLabel(t, 'all');
+    return getSearchTypeLabel(t, ['bookmark', 'note', 'file', 'tag'].includes(type) ? (type as SearchType) : 'all');
+  }
+  function isActiveItem(item: SearchResultItem) {
+    return activeIndex.value >= 0 && flatItems.value[activeIndex.value] === item;
+  }
+  function activateItem(item: SearchResultItem) {
+    const index = flatItems.value.indexOf(item);
+    if (index >= 0) activeIndex.value = index;
   }
 
-  const searchError = ref(false);
   async function ensureData(force = false) {
     const seq = ++requestSeq;
     loading.value = true;
     try {
-      // 每类多取 10 条,前端按匹配度重排后切前 3——精确/前缀匹配才能稳定进前排
-      // (后端按 sort/时间排,只取 3 条会把精确匹配挤掉)
-      const res = await fetchGlobalSearch(keyword.value, 10, force);
-      if (seq === requestSeq) {
-        searchError.value = false;
-        suggestGroups.value = res.groups.map((group) => ({
-          ...group,
-          items: rankByRelevance(group.items, keyword.value).slice(0, 3),
-        }));
-      }
+      const result = await fetchGlobalSearch(keyword.value, 10, force);
+      if (seq !== requestSeq) return;
+      searchError.value = false;
+      suggestGroups.value = result.groups.map((group) => ({
+        ...group,
+        items: rankByRelevance(group.items, keyword.value).slice(0, 3),
+      }));
     } catch (error) {
-      // 此前无 catch:网络失败会显示「没有匹配结果」,误导用户以为资源里真没有
       if (seq === requestSeq) {
         searchError.value = true;
         suggestGroups.value = [];
       }
       console.warn('全局搜索失败:', error);
     } finally {
-      if (seq === requestSeq) {
-        loading.value = false;
-      }
+      if (seq === requestSeq) loading.value = false;
     }
   }
-
   function scheduleSearch() {
-    if (searchTimer.value) clearTimeout(searchTimer.value);
-    searchTimer.value = window.setTimeout(() => ensureData(), 220);
+    window.clearTimeout(searchTimer);
+    searchTimer = window.setTimeout(() => void ensureData(), 220);
   }
-
-  function openSuggest() {
-    if (suggestVisible.value) return;
-    suggestVisible.value = true;
-    ensureData(true);
-  }
-
-  // 页面级浮层可通过统一事件收起搜索下拉。
-  const handleCloseSearch = () => {
-    suggestVisible.value = false;
-    blurDesktopInput();
-  };
-
-  function blurDesktopInput() {
-    (document.getElementById('global-search-input') as HTMLInputElement | null)?.blur();
-  }
-
-  function closeDesktopSuggest() {
-    suggestVisible.value = false;
-    blurDesktopInput();
-  }
-
-  function handleSearchBoxMouseDown(event: MouseEvent) {
-    const target = event.target as HTMLElement;
-    if (target.closest('.suggest-panel')) return;
-    if (!suggestVisible.value) openSuggest();
-  }
-
-  function openMobileSearch() {
-    mobileVisible.value = true;
-    ensureData(true);
-    nextTick(() => document.getElementById('global-mobile-search-input')?.focus());
-  }
-
   function handleInput() {
-    if (!suggestVisible.value) suggestVisible.value = true;
     scheduleSearch();
   }
-
-  function clearKeyword() {
-    keyword.value = '';
-    nextTick(() => document.getElementById('global-search-input')?.focus());
+  function syncNavigationLayer(opened: boolean) {
+    document.querySelector('.navigation')?.classList.toggle('navigation--search-open', opened);
   }
-
+  async function open() {
+    if (visible.value) return;
+    visible.value = true;
+    activeIndex.value = -1;
+    previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    syncNavigationLayer(true);
+    void ensureData(true);
+    await nextTick();
+    inputRef.value?.focus?.();
+  }
+  function triggerElement() {
+    return rootRef.value?.querySelector<HTMLButtonElement>('.global-search__trigger') || null;
+  }
+  function close({ restoreFocus = true } = {}) {
+    if (!visible.value) return;
+    visible.value = false;
+    activeIndex.value = -1;
+    document.body.style.overflow = previousBodyOverflow;
+    syncNavigationLayer(false);
+    if (restoreFocus) nextTick(() => triggerElement()?.focus());
+  }
+  const handleCloseSearch = () => close();
+  function moveActive(offset: number) {
+    const length = flatItems.value.length;
+    if (length) activeIndex.value = (activeIndex.value + offset + length) % length;
+  }
+  function onResultKeydown(event: KeyboardEvent) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      moveActive(1);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      moveActive(-1);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      close();
+    }
+  }
+  function onEnter() {
+    const item = flatItems.value[activeIndex.value];
+    if (item) openItem(item);
+    else goSearch();
+  }
+  function handleDialogKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      close();
+      return;
+    }
+    if (event.key !== 'Tab' || !dialogRef.value) return;
+    const focusable = [
+      ...dialogRef.value.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    ];
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
   function goSearch() {
-    const q = keyword.value.trim();
-    recordOperation({ module: '全局搜索', operation: q ? `进入资源中心搜索【${q}】` : '进入资源中心' });
-    closeDesktopSuggest();
-    mobileVisible.value = false;
-    router.push({ path: '/search', query: q ? { q } : {} });
+    const query = String(keyword.value || '').trim();
+    recordOperation({ module: '全局搜索', operation: query ? `进入资源中心搜索【${query}】` : '进入资源中心' });
+    close({ restoreFocus: false });
+    void router.push({ path: '/search', query: query ? { q: query } : {} });
   }
-
   function openItem(item: SearchResultItem) {
-    closeDesktopSuggest();
-    mobileVisible.value = false;
+    close({ restoreFocus: false });
     if (item.type === 'bookmark' && item.url) {
       openBookmarkUrl(item.url);
       return;
     }
     if (item.type === 'file') {
-      router.push({ path: '/cloudSpace', query: { fileName: item.title } });
+      void router.push({ path: '/cloudSpace', query: { fileName: item.title } });
       return;
     }
-    if (item.route) router.push(item.route);
+    if (item.route) void router.push(item.route);
   }
-
-  // 定位:不打开资源本身,而是跳到对应模块并高亮出来(书签模块本无搜索,借此补上"找到它在哪")
   function locateItem(item: SearchResultItem) {
-    closeDesktopSuggest();
-    mobileVisible.value = false;
-    if (item.type === 'bookmark') {
-      recordOperation({ module: '全局搜索', operation: `定位书签【${item.title}】` });
-      router.push({ path: '/home', query: { locate: item.id } });
-    }
+    close({ restoreFocus: false });
+    if (item.type !== 'bookmark') return;
+    recordOperation({ module: '全局搜索', operation: `定位书签【${item.title}】` });
+    void router.push({ path: '/home', query: { locate: item.id } });
+  }
+  function handleShortcut(event: KeyboardEvent) {
+    if (
+      !matchesGlobalShortcut(event, 'globalSearch') ||
+      isEditableShortcutTarget(event.target) ||
+      !isSearchAvailable.value
+    )
+      return;
+    event.preventDefault();
+    recordOperation({ module: '全局搜索', operation: '使用快捷键唤起搜索' });
+    void open();
   }
 
-  // ── 下拉键盘操作:↑↓ 选中候选、回车打开选中项(未选中则进资源中心)、Esc 收起 ──
-  const activeIndex = ref(-1);
-  const flatItems = computed(() => suggestGroups.value.flatMap((g) => g.items));
-  function isActiveItem(item: SearchResultItem) {
-    return activeIndex.value >= 0 && flatItems.value[activeIndex.value] === item;
-  }
-  function moveActive(delta: number) {
-    const len = flatItems.value.length;
-    if (!len) return;
-    activeIndex.value = (activeIndex.value + delta + len) % len;
-  }
-  function onKeydown(e: KeyboardEvent) {
-    if (!suggestVisible.value) return;
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      moveActive(1);
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      moveActive(-1);
-    } else if (e.key === 'Escape') {
-      closeDesktopSuggest();
-    }
-  }
-  function onEnter() {
-    const list = flatItems.value;
-    if (activeIndex.value >= 0 && list[activeIndex.value]) openItem(list[activeIndex.value]);
-    else goSearch();
-  }
-  // 结果刷新即重置高亮,避免指向错位
   watch(suggestGroups, () => {
     activeIndex.value = -1;
   });
-
-  function handleDocumentMouseDown(event: MouseEvent) {
-    if (!searchBoxRef.value) return;
-    if (!searchBoxRef.value.contains(event.target as Node)) {
-      suggestVisible.value = false;
-    }
-  }
-
-  function handleShortcut(event: KeyboardEvent) {
-    if (bookmark.isMobile || !matchesGlobalShortcut(event, 'globalSearch')) return;
-    if (isEditableShortcutTarget(event.target)) return;
-    if (!isSearchAvailable.value) return;
-    event.preventDefault();
-    recordOperation({ module: '全局搜索', operation: '使用快捷键唤起搜索' });
-    document.getElementById('global-search-input')?.focus();
-    openSuggest();
-  }
-
-  function syncNavigationLayer(visible: boolean) {
-    document.querySelector('.navigation')?.classList.toggle('navigation--search-open', visible);
-  }
-
   watch(
     () => route.query.q,
-    (val) => {
+    (value) => {
       if (route.path.includes('/search')) {
-        keyword.value = Array.isArray(val) ? String(val[0] || '') : String(val || '');
+        keyword.value = Array.isArray(value) ? String(value[0] || '') : String(value || '');
       }
     },
     { immediate: true },
   );
-
   watch(
-    () => suggestVisible.value || mobileVisible.value,
-    (visible) => {
-      syncNavigationLayer(visible);
+    () => route.fullPath,
+    () => {
+      if (visible.value) close({ restoreFocus: false });
     },
   );
-
   onMounted(() => {
-    document.addEventListener('mousedown', handleDocumentMouseDown);
     document.addEventListener('keydown', handleShortcut);
     window.addEventListener('light-note:close-search', handleCloseSearch);
   });
-
   onBeforeUnmount(() => {
-    document.removeEventListener('mousedown', handleDocumentMouseDown);
     document.removeEventListener('keydown', handleShortcut);
     window.removeEventListener('light-note:close-search', handleCloseSearch);
+    window.clearTimeout(searchTimer);
+    if (visible.value) document.body.style.overflow = previousBodyOverflow;
     syncNavigationLayer(false);
-    if (searchTimer.value) clearTimeout(searchTimer.value);
   });
 </script>
 
 <style scoped lang="less">
   .global-search {
-    width: 360px;
+    width: 38px;
+    flex: 0 0 38px;
   }
-
-  .global-search--mobile {
-    width: auto;
-    display: flex;
-    align-items: center;
-  }
-
-  .global-search-box {
-    position: relative;
-    z-index: 1;
-  }
-
-  .global-search-box--open {
-    z-index: 1000;
-  }
-
-  :deep(.b-input) {
-    border-radius: 18px;
+  .global-search__trigger {
+    width: 36px;
     height: 36px;
+    padding: 0;
+    border-radius: 10px;
+    color: var(--text-color);
+    background: transparent;
   }
+  .global-search__trigger[aria-expanded='true'] {
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 10%, var(--background-color));
+  }
+</style>
 
-  .shortcut {
-    padding: 2px 5px;
-    border: 1px solid var(--card-border-color);
-    border-radius: 5px;
-    background: var(--card-background);
+<style lang="less">
+  .global-search-layer {
+    position: fixed;
+    z-index: 1000;
+    inset: 0;
+    padding: 76px 20px 24px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    box-sizing: border-box;
+    background: rgba(22, 23, 38, 0.18);
+    backdrop-filter: blur(7px);
+    animation: global-search-fade 0.14s ease-out;
+  }
+  .global-search-dialog {
+    width: min(720px, calc(100vw - 40px));
+    max-height: min(760px, calc(100vh - 100px));
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 22px;
+    color: var(--text-color);
+    background: var(--menu-body-bg-color, var(--card-background));
+    box-shadow: 0 30px 90px rgba(18, 20, 45, 0.24);
+    animation: global-search-rise 0.18s ease-out;
+  }
+  .global-search-dialog__header {
+    padding: 18px 18px 14px;
+    border-bottom: 1px solid var(--surface-divider-color);
+  }
+  .global-search-dialog__heading {
+    margin-bottom: 13px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+  }
+  .global-search-dialog__heading > div {
+    display: grid;
+    gap: 3px;
+  }
+  .global-search-dialog__heading strong {
+    font-size: 18px;
+  }
+  .global-search-dialog__heading span {
     color: var(--desc-color);
+    font-size: 12px;
+  }
+  .global-search-dialog__heading > .b_btn {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    color: var(--desc-color);
+    background: transparent;
+  }
+  .global-search-dialog__input {
+    position: relative;
+  }
+  .global-search-dialog__input .b-input {
+    padding-right: 72px !important;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 22%, var(--surface-border-color)) !important;
+    border-radius: 14px !important;
+    background: var(--surface-subtle-bg, var(--hover-background));
+    font-size: 15px;
+  }
+  .global-search-dialog__input > kbd {
+    position: absolute;
+    top: 50%;
+    right: 12px;
+    transform: translateY(-50%);
+    padding: 3px 6px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 6px;
+    color: var(--desc-color);
+    background: var(--card-background);
     font-family: inherit;
     font-size: 10px;
-    line-height: 1.2;
-    white-space: nowrap;
   }
-
-  .global-search-input--shortcut :deep(.b-input) {
-    padding-right: 64px !important;
+  .global-search-dialog__body {
+    min-height: 240px;
+    padding: 6px 12px 12px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
-
-  .clear-btn,
-  .view-all,
-  .mobile-search-trigger,
-  .mobile-cancel,
-  .suggest-item {
-    border: 0;
-    background: transparent;
-    cursor: pointer;
-    color: inherit;
-    font: inherit;
+  .global-search-group {
+    margin-top: 10px;
   }
-
-  .clear-btn {
-    width: 18px;
-    height: 18px;
-    display: grid;
-    place-items: center;
-    padding: 0;
-    border-radius: 50%;
+  .global-search-group h3 {
+    margin: 0 8px 5px;
     color: var(--desc-color);
-    font-size: 14px;
-    line-height: 1;
-    font-weight: 500;
-    background: color-mix(in srgb, var(--text-color) 8%, transparent);
-  }
-
-  .clear-btn:hover {
-    color: var(--text-color);
-    background: color-mix(in srgb, var(--text-color) 14%, transparent);
-  }
-
-  .suggest-panel {
-    position: absolute;
-    right: 0;
-    top: 46px;
-    width: min(560px, calc(100vw - 80px));
-    max-height: 70vh;
-    overflow: auto;
-    padding: 14px;
-    border-radius: 18px;
-    background: var(--menu-body-bg-color);
-    box-shadow: 0 20px 60px rgba(20, 20, 43, 0.22);
-    border: 1px solid var(--card-border-color);
-    z-index: 1000;
-  }
-
-  .suggest-head {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 4px 4px 12px;
-    border-bottom: 1px solid var(--card-border-color);
-  }
-
-  .suggest-title {
-    font-size: 16px;
+    font-size: 11px;
     font-weight: 700;
-    color: var(--text-color);
+    letter-spacing: 0.04em;
   }
-
-  .suggest-subtitle,
-  .empty-desc,
-  .item-desc,
-  .item-extra {
-    color: var(--desc-color);
-    font-size: 12px;
-  }
-
-  .suggest-group {
-    margin-top: 12px;
-  }
-
-  .group-label {
-    margin: 0 4px 6px;
-    color: var(--desc-color);
-    font-size: 12px;
-    font-weight: 700;
-  }
-
-  .suggest-item {
+  .global-search-result {
     width: 100%;
+    min-height: 58px;
     display: grid;
-    grid-template-columns: 10px minmax(0, 1fr) max-content;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    align-items: center;
+    border-radius: 12px;
+    background: transparent;
+    transition:
+      background 0.15s ease,
+      transform 0.15s ease;
+  }
+  .global-search-result__open.b_btn {
+    width: 100%;
+    height: auto;
+    min-height: 58px;
+    padding: 8px 7px 8px 9px;
+    display: grid;
+    grid-template-columns: 9px minmax(0, 1fr);
     align-items: center;
     gap: 10px;
-    padding: 10px;
     border-radius: 12px;
     text-align: left;
-    transition:
-      background-color 0.2s,
-      transform 0.2s;
+    white-space: normal;
+    background: transparent;
   }
-
-  .suggest-item--active {
-    background: rgba(97, 92, 237, 0.12);
+  .global-search-result.is-active {
+    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
   }
-  .suggest-item:hover {
-    background: var(--bl-input-noBorder-bg-color);
-    transform: translateY(-1px);
-  }
-
-  .type-dot {
+  .global-search-result__dot {
     width: 8px;
     height: 8px;
     border-radius: 50%;
+    background: var(--desc-color);
   }
-
-  .type-dot--bookmark {
+  .global-search-result__dot.is-bookmark {
     background: var(--resource-bookmark-color);
   }
-  .type-dot--note {
+  .global-search-result__dot.is-note {
     background: var(--resource-note-color);
   }
-  .type-dot--file {
+  .global-search-result__dot.is-file {
     background: var(--resource-file-color);
   }
-  .type-dot--tag {
+  .global-search-result__dot.is-tag {
     background: var(--resource-tag-color);
   }
-
-  .item-main {
+  .global-search-result__main {
     min-width: 0;
-    display: flex;
-    flex-direction: column;
+    display: grid;
     gap: 3px;
   }
-
-  .item-title,
-  .item-desc {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .item-title {
-    color: var(--text-color);
-    font-size: 13px;
-    font-weight: 650;
-  }
-
-  .item-title-row {
+  .global-search-result__title-row {
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: 6px;
-    min-width: 0;
   }
-  .item-title-row .item-title {
-    flex: 0 1 auto;
-    min-width: 0;
-  }
-  .item-tags {
-    display: flex;
-    gap: 4px;
-    flex: 1 1 auto;
+  .global-search-result__title {
     min-width: 0;
     overflow: hidden;
-    flex-wrap: nowrap;
-  }
-  /* 描述改 2 行,配合"命中处摘要"能露出命中词而不被一行省略号切掉 */
-  .item-desc {
-    white-space: normal;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-  mark.gs-hl {
-    background: color-mix(in srgb, #615ced 26%, transparent);
-    color: inherit;
-    border-radius: 3px;
-    padding: 0 1px;
-  }
-
-  .locate-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 3px;
-    margin-right: 4px;
-    border-radius: 6px;
-    color: var(--desc-color);
-    cursor: pointer;
-    vertical-align: middle;
-  }
-  .locate-btn:hover {
-    color: var(--resource-bookmark-color);
-    background: color-mix(in srgb, var(--resource-bookmark-color) 14%, transparent);
-  }
-
-  .view-all {
-    width: 100%;
-    margin-top: 12px;
-    padding: 10px;
-    border-radius: 12px;
-    color: var(--resource-bookmark-color);
-    background: color-mix(in srgb, var(--resource-bookmark-color) 8%, transparent);
-    font-weight: 700;
-  }
-
-  .suggest-empty {
-    padding: 28px 12px;
-    text-align: center;
-  }
-
-  .empty-title {
     color: var(--text-color);
-    font-weight: 700;
-    margin-bottom: 6px;
-  }
-
-  .suggest-loading {
-    padding: 16px 6px;
-  }
-
-  .sk-line {
-    height: 34px;
-    border-radius: 10px;
-    margin-bottom: 10px;
-    background: linear-gradient(
-      90deg,
-      var(--bl-input-noBorder-bg-color),
-      var(--background-color),
-      var(--bl-input-noBorder-bg-color)
-    );
-    background-size: 200% 100%;
-    animation: shimmer 1.4s infinite;
-  }
-
-  .mobile-search-trigger {
-    display: flex;
-    align-items: center;
-    width: 100%;
-    height: 34px;
-    gap: 8px;
-    padding: 0 12px;
-    border-radius: 17px;
-    background: var(--bl-input-noBorder-bg-color);
-    color: var(--desc-color);
-    text-align: left;
-    box-sizing: border-box;
-    min-width: 0;
-    overflow: hidden;
-  }
-
-  .mobile-search-icon {
-    width: 20px !important;
-    height: 20px !important;
-    min-width: 20px;
-    flex: 0 0 20px;
-  }
-
-  .mobile-search-placeholder {
-    min-width: 0;
-    overflow: hidden;
+    font-size: 13px;
+    font-weight: 680;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 13px;
   }
-
-  .mobile-search-layer {
-    position: fixed;
-    inset: 0;
-    z-index: 1000;
-    background: var(--background-color);
-    padding: 14px;
-    box-sizing: border-box;
+  .global-search-result__tags {
+    min-width: 0;
+    display: flex;
+    gap: 4px;
+    overflow: hidden;
   }
-
-  .mobile-search-header {
-    display: grid;
-    grid-template-columns: 1fr 48px;
+  .global-search-result__description {
+    overflow: hidden;
+    color: var(--desc-color);
+    font-size: 11px;
+    line-height: 1.45;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .global-search-result__extra {
+    max-width: 170px;
+    padding-right: 9px;
+    display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 5px;
+    overflow: hidden;
+    color: var(--desc-color);
+    font-size: 11px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
-
-  .mobile-cancel {
-    color: #ff9800;
+  .global-search-result__extra > span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-
-  .mobile-search-body {
-    height: calc(100vh - 78px);
-    overflow: auto;
-    padding-top: 16px;
+  .global-search-result__extra .b_btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    color: var(--desc-color);
+    background: transparent;
   }
-
-  @keyframes shimmer {
-    0% {
+  .global-search-dialog mark.gs-hl {
+    padding: 0 1px;
+    border-radius: 3px;
+    color: inherit;
+    background: color-mix(in srgb, var(--primary-color) 25%, transparent);
+  }
+  .global-search__loading {
+    padding: 14px 3px;
+  }
+  .global-search__skeleton {
+    height: 46px;
+    margin-bottom: 8px;
+    border-radius: 11px;
+    background: linear-gradient(90deg, var(--hover-background), var(--background-color), var(--hover-background));
+    background-size: 200% 100%;
+    animation: global-search-shimmer 1.4s infinite;
+  }
+  .global-search__empty {
+    min-height: 260px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--desc-color);
+    text-align: center;
+  }
+  .global-search__empty-icon {
+    width: 54px;
+    height: 54px;
+    margin-bottom: 12px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 17px;
+    color: var(--primary-color);
+    background: var(--surface-subtle-bg, var(--hover-background));
+  }
+  .global-search__empty strong {
+    color: var(--text-color);
+  }
+  .global-search__empty > span:last-child {
+    margin-top: 5px;
+    font-size: 12px;
+  }
+  .global-search-dialog__footer {
+    min-height: 49px;
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    border-top: 1px solid var(--surface-divider-color);
+    color: var(--desc-color);
+    font-size: 10px;
+  }
+  .global-search-dialog__footer span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .global-search-dialog__footer kbd {
+    padding: 2px 5px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 5px;
+    background: var(--card-background);
+    font-family: inherit;
+  }
+  .global-search-dialog__footer > .b_btn {
+    margin-left: auto;
+    gap: 5px;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .global-search-result:hover {
+      transform: translateY(-1px);
+      background: var(--hover-background);
+    }
+  }
+  @media (max-width: 820px) {
+    .global-search-layer {
+      padding: 68px 12px 14px;
+    }
+    .global-search-dialog {
+      width: calc(100vw - 24px);
+      max-height: calc(100vh - 82px);
+      border-radius: 18px;
+    }
+    .global-search-result__extra > span:last-child {
+      display: none;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .global-search-layer,
+    .global-search-dialog,
+    .global-search__skeleton {
+      animation: none;
+    }
+  }
+  @keyframes global-search-fade {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes global-search-rise {
+    from {
+      opacity: 0;
+      transform: translateY(-8px) scale(0.99);
+    }
+  }
+  @keyframes global-search-shimmer {
+    from {
       background-position: 200% 0;
     }
-    100% {
+    to {
       background-position: -200% 0;
-    }
-  }
-
-  @media (max-width: 1200px) {
-    .global-search {
-      width: 300px;
     }
   }
 </style>

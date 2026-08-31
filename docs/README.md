@@ -4,22 +4,23 @@
 
 ## 正式文档
 
-| 文档 | 唯一职责 | 何时更新 |
-| --- | --- | --- |
-| [architecture.md](./architecture.md) | 系统边界、分层、核心数据域和关键运行链路 | 架构、协议、数据归属或模块职责变化 |
-| [development.md](./development.md) | 通用编码规则、开发流程、验证与文档治理 | 全项目通用开发约束变化 |
-| [design.md](./design.md) | 品牌、主题、组件、布局、交互状态和视觉验收 | 全局设计系统或跨页面模式变化 |
-| [pitfalls.md](./pitfalls.md) | 重要、反直觉且会复发的问题约束 | 确认跨层根因且通用规范不足以防止复发 |
-| [release-acceptance.md](./release-acceptance.md) | 本地预览、发布门禁与上线流程 | 发布工具、门禁或回滚边界变化 |
-| [ai-skills.md](./ai-skills.md) | 模块化 AI Skills、统一执行与计费边界 | AI 协议、能力注册、执行或计费模型变化 |
-| [browser-extension.md](./browser-extension.md) | 浏览器扩展的权限、认证、资源流程与验收 | 扩展能力或权限变化 |
-| [browser-extension-store-listing.md](./browser-extension-store-listing.md) | Chrome 商店提交文案与披露 | 商店展示、权限或数据使用变化 |
-| [avatar-frame-design.md](./avatar-frame-design.md) | 头像框视觉等级、画布、动效和验收 | 头像框设计系统变化 |
-| [points-economy.md](./points-economy.md) | 积分消费目录、抽奖与消费幂等 | 消费经济版本变化 |
-| [points-earning-c5.md](./points-earning-c5.md) | 积分获取、治理、对账与活动发放基线 | 获取或治理协议变化 |
-| [points-earning-c6.md](./points-earning-c6.md) | 现行每日任务增量规则 | 每日任务策略版本变化 |
-| [support-packages.md](./support-packages.md) | 爱发电资源商店套餐、订单与权益 | 套餐或结算协议变化 |
-| [android/p4-compliance-audit.md](./android/p4-compliance-audit.md) | Android 合规证据与复核结论 | 权限、SDK、隐私流程或合规证据变化 |
+| 文档                                                                       | 唯一职责                                                             | 何时更新                              |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------- |
+| [architecture.md](./architecture.md)                                       | 系统边界、分层、核心数据域和关键运行链路                             | 架构、协议、数据归属或模块职责变化    |
+| [development.md](./development.md)                                         | 通用编码规则、开发流程、验证与文档治理                               | 全项目通用开发约束变化                |
+| [design.md](./design.md)                                                   | 品牌、主题、组件、布局、交互状态和视觉验收                           | 全局设计系统或跨页面模式变化          |
+| [pitfalls.md](./pitfalls.md)                                               | 重要、反直觉且会复发的问题约束                                       | 确认跨层根因且通用规范不足以防止复发  |
+| [release-acceptance.md](./release-acceptance.md)                           | 本地预览、发布门禁与上线流程                                         | 发布工具、门禁或回滚边界变化          |
+| [ai-skills.md](./ai-skills.md)                                             | 模块化 AI Skills、统一执行与计费边界                                 | AI 协议、能力注册、执行或计费模型变化 |
+| [toolbox.md](./toolbox.md)                                                 | 知识工具箱、生产工作室与项目、执行模式、积分结算、成果及本地隐私边界 | 工具箱协议、任务、计费或产品规则变化  |
+| [browser-extension.md](./browser-extension.md)                             | 浏览器扩展的权限、认证、资源流程与验收                               | 扩展能力或权限变化                    |
+| [browser-extension-store-listing.md](./browser-extension-store-listing.md) | Chrome 商店提交文案与披露                                            | 商店展示、权限或数据使用变化          |
+| [avatar-frame-design.md](./avatar-frame-design.md)                         | 头像框视觉等级、画布、动效和验收                                     | 头像框设计系统变化                    |
+| [points-economy.md](./points-economy.md)                                   | 积分消费目录、抽奖与消费幂等                                         | 消费经济版本变化                      |
+| [points-earning-c5.md](./points-earning-c5.md)                             | 积分获取、治理、对账与活动发放基线                                   | 获取或治理协议变化                    |
+| [points-earning-c6.md](./points-earning-c6.md)                             | 现行每日任务增量规则                                                 | 每日任务策略版本变化                  |
+| [support-packages.md](./support-packages.md)                               | 爱发电资源商店套餐、订单与权益                                       | 套餐或结算协议变化                    |
+| [android/p4-compliance-audit.md](./android/p4-compliance-audit.md)         | Android 合规证据与复核结论                                           | 权限、SDK、隐私流程或合规证据变化     |
 
 `assets/` 只保存正式文档引用的素材。
 

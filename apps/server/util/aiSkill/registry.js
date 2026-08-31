@@ -8,6 +8,7 @@ import noteTransformSkill from './skills/noteTransformSkill.js';
 import { searchSelectedSkills } from './skills/searchSelectedSkills.js';
 import { todoSkills } from './skills/todoSkills.js';
 import { todoExtractionSkills } from './skills/todoExtractionSkills.js';
+import { toolboxSkills } from './skills/toolboxSkills.js';
 import { aiSkillError } from './errors.js';
 
 const definitions = Object.freeze([
@@ -21,6 +22,7 @@ const definitions = Object.freeze([
   bookmarkParseSkill,
   ...todoSkills,
   ...todoExtractionSkills,
+  ...toolboxSkills,
 ]);
 const registry = new Map(definitions.map((definition) => [`${definition.id}@${definition.version}`, definition]));
 
@@ -30,11 +32,13 @@ export function resolveAiSkill(skillId, version) {
   return definition;
 }
 
-export function listAiSkills() {
-  return definitions.map((definition) => ({
-    id: definition.id,
-    version: definition.version,
-    domain: definition.domain,
-    effect: definition.effect,
-  }));
+export function listAiSkills({ includeInternal = true } = {}) {
+  return definitions
+    .filter((definition) => includeInternal || definition.internalOnly !== true)
+    .map((definition) => ({
+      id: definition.id,
+      version: definition.version,
+      domain: definition.domain,
+      effect: definition.effect,
+    }));
 }

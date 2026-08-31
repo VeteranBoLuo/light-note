@@ -39,6 +39,7 @@ const {
   processAccountDeletionRequest,
   purgeLogsAndSecurityLinks,
   purgeOwnedResources,
+  purgeToolboxWorkspace,
   requestAccountDeletion,
   sendAccountDeletionCode,
 } = await import('./accountDeletion.js');
@@ -196,6 +197,45 @@ describe('账号注销提交', () => {
 });
 
 describe('账号注销后台清理', () => {
+  it('按引用顺序清理工具箱任务、产物与报价', async () => {
+    const connection = createConnection(async () => [{ affectedRows: 1 }]);
+    const tables = new Set([
+      'toolbox_projects',
+      'toolbox_project_revisions',
+      'toolbox_project_resources',
+      'toolbox_project_revision_requests',
+      'toolbox_workspaces',
+      'toolbox_workspace_resources',
+      'toolbox_workspace_items',
+      'toolbox_workspace_sessions',
+      'toolbox_quotes',
+      'toolbox_jobs',
+      'toolbox_job_inputs',
+      'toolbox_artifacts',
+      'toolbox_save_receipts',
+    ]);
+
+    await purgeToolboxWorkspace(connection, tables, 'user-1');
+
+    const statements = connection.query.mock.calls.map(([sql]) => String(sql));
+    expect(statements).toHaveLength(13);
+    expect(statements[0]).toContain('DELETE FROM toolbox_project_revision_requests');
+    expect(statements[1]).toContain('DELETE FROM toolbox_project_resources');
+    expect(statements[2]).toContain('DELETE FROM toolbox_project_revisions');
+    expect(statements[3]).toContain('DELETE FROM toolbox_projects');
+    expect(statements[4]).toContain('DELETE FROM toolbox_workspace_sessions');
+    expect(statements[5]).toContain('DELETE FROM toolbox_workspace_items');
+    expect(statements[6]).toContain('DELETE FROM toolbox_workspace_resources');
+    expect(statements[7]).toContain('DELETE FROM toolbox_workspaces');
+    expect(statements[8]).toContain('DELETE FROM toolbox_save_receipts');
+    expect(statements[9]).toContain('DELETE FROM toolbox_artifacts');
+    expect(statements[10]).toContain('DELETE input');
+    expect(statements[10]).toContain('JOIN toolbox_jobs');
+    expect(statements[11]).toContain('DELETE FROM toolbox_jobs');
+    expect(statements[12]).toContain('DELETE FROM toolbox_quotes');
+    expect(connection.query.mock.calls.every(([, params]) => params[0] === 'user-1')).toBe(true);
+  });
+
   it('删除用户的投票选择与逐消息已读回执，避免注销后继续参与聚合统计', async () => {
     const connection = createConnection(async () => [{ affectedRows: 1 }]);
     const tables = new Set([

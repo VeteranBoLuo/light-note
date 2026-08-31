@@ -30,12 +30,13 @@ describe('structured skill model', () => {
       messages: [{ role: 'user', content: '创建任务' }],
       structuredTool: tool,
       validateArguments: (args) => ({ kind: 'structured_draft', ...args }),
-      modelPolicy: { maxTokens: 500, temperature: 0.1 },
+      modelPolicy: { maxTokens: 500, temperature: 0.1, timeoutMs: 150000 },
       trace: { stage: 'todo_parse', taskType: 'todo_parse', traceId: 'trace' },
     });
     expect(result.title).toBe('任务');
     expect(requestAi).toHaveBeenCalledTimes(2);
     expect(requestAi.mock.calls[0][1].toolChoice).toEqual({ type: 'function', function: { name: 'submit' } });
+    expect(requestAi.mock.calls[0][1].timeoutMs).toBe(150000);
     expect(requestAi.mock.calls[1][1].billingScope).toBe('platform');
     expect(requestAi.mock.calls[1][1].repairReasonCode).toBe('AI_SKILL_STRUCTURED_OUTPUT_MISSING');
   });

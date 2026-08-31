@@ -5,6 +5,9 @@
   "type": "module",
   "main": "index.js",
   "types": "index.d.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
   "exports": {
     ".": {
       "types": "./index.d.ts",
@@ -33,6 +36,21 @@
     "./ai-skill-protocol": {
       "types": "./aiSkillProtocol.d.ts",
       "default": "./aiSkillProtocol.js"
+    },
+    "./ai-citation-presentation": {
+      "types": "./aiCitationPresentation.d.ts",
+      "default": "./aiCitationPresentation.js"
+    },
+    "./toolbox-protocol": {
+      "types": "./toolboxProtocol.d.ts",
+      "default": "./toolboxProtocol.js"
+    },
+    "./production-project-protocol": {
+      "types": "./productionProjectProtocol.d.ts",
+      "default": "./productionProjectProtocol.js"
     }
+  },
+  "devDependencies": {
+    "vitest": "^3.2.6"
   }
 }

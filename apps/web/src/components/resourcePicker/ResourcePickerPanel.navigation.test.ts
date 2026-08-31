@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import zhCN from '@/i18n/locales/zh-CN';
+import { fetchGlobalSearch } from '@/api/search';
 import ResourcePickerPanel from './ResourcePickerPanel.vue';
 
 const componentSource = readFileSync(
@@ -15,7 +16,14 @@ vi.mock('@/api/search', () => ({
   fetchGlobalSearch: vi.fn().mockResolvedValue({ items: [] }),
 }));
 
+const fetchGlobalSearchMock = vi.mocked(fetchGlobalSearch);
+
 let cleanup: (() => void) | undefined;
+
+beforeEach(() => {
+  fetchGlobalSearchMock.mockReset();
+  fetchGlobalSearchMock.mockResolvedValue({ items: [], groups: [], total: 0, hasMore: false } as any);
+});
 
 afterEach(() => {
   cleanup?.();
@@ -26,11 +34,18 @@ afterEach(() => {
 describe('ResourcePickerPanel 键盘导航', () => {
   it('搜索框显示与内联宽度使用独立开关，不能从彼此反推', () => {
     expect(componentSource).toContain('v-if="showSearch"');
-    expect(componentSource).toContain("{ 'is-inline': inline, 'has-search': showSearch }");
+    expect(componentSource).toContain("'is-inline': inline");
+    expect(componentSource).toContain("'has-search': showSearch");
     expect(componentSource).toMatch(/\.resource-picker-panel\s*\{[\s\S]*?width:\s*100%[\s\S]*?max-width:\s*none/);
     expect(componentSource).toMatch(
       /\.resource-picker-panel\.is-inline\s*\{[\s\S]*?width:\s*320px[\s\S]*?max-width:\s*min\(360px/,
     );
+  });
+
+  it('搜索或类型切换会把虚拟结果恢复到顶部', () => {
+    expect(componentSource).toContain('function resetResultScroll()');
+    expect(componentSource).toContain('virtualListRef.value?.scrollToTop()');
+    expect(componentSource).toContain("resultsRef.value?.scrollTo({ top: 0, left: 0, behavior: 'auto' })");
   });
 
   it('铺满弹框时可以不显示搜索框，内联模式也不会被搜索框状态隐式开启', async () => {
@@ -161,7 +176,7 @@ describe('ResourcePickerPanel 键盘导航', () => {
     expect(items[1]?.classList.contains('is-active')).toBe(true);
   });
 
-  it('单篇笔记不再显示冗余说明，且单篇与目录范围保持独立禁用状态', async () => {
+  it('单篇笔记与包含子页面的目录范围保持独立禁用状态', async () => {
     const host = document.createElement('div');
     document.body.append(host);
     const app = createApp({
@@ -171,7 +186,7 @@ describe('ResourcePickerPanel 键盘导航', () => {
           includeNoteScopes: true,
           selectedResourceKeys: ['note:note-1'],
           selectedScopeKeys: [],
-          pinnedItems: [{ type: 'note', id: 'note-1', title: 'pc', path: '开发文档', descendantCount: 0 }],
+          pinnedItems: [{ type: 'note', id: 'note-1', title: 'pc', path: '开发文档', descendantCount: 2 }],
         }),
     });
     app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
@@ -191,6 +206,115 @@ describe('ResourcePickerPanel 键盘导航', () => {
     expect(resource?.disabled).toBe(true);
     expect(scope?.disabled).toBe(false);
     expect(host.textContent).not.toContain('仅引用这一篇笔记');
-    expect(scope?.textContent).toContain('当前页面及其 0 个子页面');
+    expect(scope?.textContent).toContain('当前页面及其 2 个子页面');
+  });
+
+  it('多选模式允许再次点击已选项取消，并可一次加入当前未选结果', async () => {
+    const onDeselect = vi.fn();
+    const onSelectMany = vi.fn();
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      render: () =>
+        h(ResourcePickerPanel, {
+          showSearch: false,
+          multiSelect: true,
+          selectedResourceKeys: ['bookmark:1'],
+          pinnedItems: [
+            { type: 'bookmark', id: '1', title: '已选资料' },
+            { type: 'bookmark', id: '2', title: '待选资料' },
+          ],
+          onDeselect,
+          onSelectMany,
+        }),
+    });
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.component('OriginalIcon', { setup: () => () => h('span') });
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+    await nextTick();
+
+    const items = host.querySelectorAll<HTMLButtonElement>('.resource-picker-panel__item');
+    items[0]?.click();
+    expect(onDeselect).toHaveBeenCalledWith(expect.objectContaining({ id: '1' }));
+
+    host.querySelector<HTMLButtonElement>('.resource-picker-panel__batch button')?.click();
+    expect(onSelectMany).toHaveBeenCalledWith([expect.objectContaining({ id: '2' })]);
+  });
+
+  it('首次搜索失败显示独立错误态和就地重试，不伪装成空结果', async () => {
+    fetchGlobalSearchMock
+      .mockRejectedValueOnce(new Error('network unavailable'))
+      .mockResolvedValueOnce({ items: [], groups: [], total: 0, hasMore: false } as any);
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({ render: () => h(ResourcePickerPanel, { showSearch: true }) });
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.component('OriginalIcon', { setup: () => () => h('span') });
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+    await vi.waitFor(() => expect(host.textContent).toContain('资料暂时无法读取，请重试。'));
+    expect(host.textContent).not.toContain('没有找到可添加的资源');
+    host.querySelector<HTMLButtonElement>('.resource-picker-panel__load-error button')?.click();
+    await vi.waitFor(() => {
+      expect(fetchGlobalSearchMock).toHaveBeenCalledTimes(2);
+      expect(host.textContent).not.toContain('资料暂时无法读取，请重试。');
+    });
+  });
+
+  it('单类型完整浏览使用 BVirtualList，不一次挂载全部结果', async () => {
+    fetchGlobalSearchMock.mockResolvedValueOnce({
+      keyword: '',
+      items: Array.from({ length: 50 }, (_, index) => ({
+        type: 'note',
+        id: `note-${index}`,
+        title: `笔记 ${index}`,
+      })),
+      groups: [],
+      total: 50,
+      typeTotals: { note: 50 },
+      hasMore: false,
+      nextCursor: null,
+    } as any);
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      render: () =>
+        h(ResourcePickerPanel, {
+          showSearch: false,
+          allowedTypes: ['note'],
+          exhaustiveSingleType: true,
+          multiSelect: true,
+          pageScroll: true,
+        }),
+    });
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.component('OriginalIcon', { setup: () => () => h('span') });
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+    await Promise.resolve();
+    await nextTick();
+    await nextTick();
+
+    expect(fetchGlobalSearchMock).toHaveBeenCalledWith(
+      '',
+      40,
+      true,
+      expect.objectContaining({ paginationMode: 'ordered', types: ['note'] }),
+    );
+    expect(host.querySelector('.b-virtual-list')).not.toBeNull();
+    expect(host.querySelector('.resource-picker-panel')?.classList.contains('is-page-scroll')).toBe(true);
+    expect(host.querySelector('.b-virtual-list')?.classList.contains('is-ancestor-scroll')).toBe(true);
+    expect(host.querySelectorAll('.resource-picker-panel__item').length).toBeLessThan(50);
+    expect(host.textContent).toContain('已加载 50/50 项');
   });
 });

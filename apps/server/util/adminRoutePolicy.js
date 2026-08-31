@@ -263,6 +263,42 @@ declare(ADMIN_POLICIES.AI_USE, 'ai_skill', [
   ['POST', '/ai/skills/execute'],
   ['POST', '/ai/skills/stream'],
 ]);
+declare(ADMIN_POLICIES.READ, 'toolbox', [
+  ['GET', '/toolbox/catalog'],
+  ['GET', '/toolbox/home'],
+  ['GET', '/toolbox/knowledge-overview'],
+  ['GET', '/toolbox/projects'],
+  ['GET', '/toolbox/projects/:projectId'],
+  ['GET', '/toolbox/projects/:projectId/revisions'],
+  ['GET', '/toolbox/workspaces'],
+  ['GET', '/toolbox/workspaces/:workspaceId'],
+  ['GET', '/toolbox/tasks'],
+  ['GET', '/toolbox/jobs'],
+  ['GET', '/toolbox/jobs/:jobId'],
+  ['GET', '/toolbox/artifacts/:artifactId'],
+]);
+// 报价会持久化快照，任务会预占操作者积分，保存会创建真实笔记；这些都不能在管理员
+// 代管上下文中替数据主体执行，哪怕当前模式是 maintain。
+declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'toolbox', [
+  ['POST', '/toolbox/quotes'],
+  ['POST', '/toolbox/projects'],
+  ['PATCH', '/toolbox/projects/:projectId'],
+  ['POST', '/toolbox/projects/:projectId/open'],
+  ['POST', '/toolbox/projects/:projectId/revisions'],
+  ['POST', '/toolbox/projects/:projectId/revisions/:revisionNo/restore'],
+  ['POST', '/toolbox/workspaces'],
+  ['PATCH', '/toolbox/workspaces/:workspaceId'],
+  ['POST', '/toolbox/workspaces/:workspaceId/open'],
+  ['POST', '/toolbox/workspaces/:workspaceId/resources'],
+  ['POST', '/toolbox/workspaces/:workspaceId/resources/remove'],
+  ['POST', '/toolbox/workspaces/:workspaceId/items'],
+  ['PATCH', '/toolbox/workspaces/:workspaceId/items/:itemId'],
+  ['POST', '/toolbox/workspaces/:workspaceId/sessions'],
+  ['POST', '/toolbox/uploads'],
+  ['POST', '/toolbox/jobs'],
+  ['POST', '/toolbox/jobs/:jobId/cancel'],
+  ['POST', '/toolbox/artifacts/:artifactId/save'],
+]);
 // 安装包永久地址：只做一次 302 到静态文件，不读用户数据，代管上下文下同样放行
 declare(ADMIN_POLICIES.READ, 'app', [['GET', '/app/android/latest.apk']]);
 declare(ADMIN_POLICIES.READ, 'update_log', [
@@ -641,6 +677,51 @@ function resolvePolicy(method, path) {
   }
   if (/^\/infra\/logs\/[^/]+$/.test(path)) {
     return routePolicies.get(`${method} /infra/logs/:serviceId`);
+  }
+  if (/^\/toolbox\/jobs\/[^/]+$/.test(path)) {
+    return routePolicies.get(`${method} /toolbox/jobs/:jobId`);
+  }
+  if (/^\/toolbox\/projects\/[^/]+\/revisions\/[^/]+\/restore$/.test(path)) {
+    return routePolicies.get(`${method} /toolbox/projects/:projectId/revisions/:revisionNo/restore`);
+  }
+  if (/^\/toolbox\/projects\/[^/]+\/revisions$/.test(path)) {
+    return routePolicies.get(`${method} /toolbox/projects/:projectId/revisions`);
+  }
+  if (/^\/toolbox\/projects\/[^/]+\/open$/.test(path)) {
+    return routePolicies.get(`${method} /toolbox/projects/:projectId/open`);
+  }
+  if (/^\/toolbox\/projects\/[^/]+$/.test(path)) {
+    return routePolicies.get(`${method} /toolbox/projects/:projectId`);
+  }
+  if (/^\/toolbox\/workspaces\/[^/]+$/.test(path)) {
+    return routePolicies.get(`${method} /toolbox/workspaces/:workspaceId`);
+  }
+  if (/^\/toolbox\/workspaces\/[^/]+\/resources$/.test(path)) {
+    return routePolicies.get(`${method} /toolbox/workspaces/:workspaceId/resources`);
+  }
+  if (/^\/toolbox\/workspaces\/[^/]+\/resources\/remove$/.test(path)) {
+    return routePolicies.get(`${method} /toolbox/workspaces/:workspaceId/resources/remove`);
+  }
+  if (/^\/toolbox\/workspaces\/[^/]+\/items$/.test(path)) {
+    return routePolicies.get(`${method} /toolbox/workspaces/:workspaceId/items`);
+  }
+  if (/^\/toolbox\/workspaces\/[^/]+\/items\/[^/]+$/.test(path)) {
+    return routePolicies.get(`${method} /toolbox/workspaces/:workspaceId/items/:itemId`);
+  }
+  if (/^\/toolbox\/workspaces\/[^/]+\/sessions$/.test(path)) {
+    return routePolicies.get(`${method} /toolbox/workspaces/:workspaceId/sessions`);
+  }
+  if (/^\/toolbox\/workspaces\/[^/]+\/open$/.test(path)) {
+    return routePolicies.get(`${method} /toolbox/workspaces/:workspaceId/open`);
+  }
+  if (/^\/toolbox\/jobs\/[^/]+\/cancel$/.test(path)) {
+    return routePolicies.get(`${method} /toolbox/jobs/:jobId/cancel`);
+  }
+  if (/^\/toolbox\/artifacts\/[^/]+$/.test(path)) {
+    return routePolicies.get(`${method} /toolbox/artifacts/:artifactId`);
+  }
+  if (/^\/toolbox\/artifacts\/[^/]+\/save$/.test(path)) {
+    return routePolicies.get(`${method} /toolbox/artifacts/:artifactId/save`);
   }
   return null;
 }

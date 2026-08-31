@@ -335,11 +335,11 @@
   }
 
   .chat-composer-input__rich :deep(.chat-composer-input__emoji) {
-    width: 1.7em;
-    height: 1.7em;
+    width: 2em;
+    height: 2em;
     margin-inline: 0.04em;
     display: inline-block;
-    vertical-align: -0.3em;
+    vertical-align: -0.65em;
     object-fit: contain;
     user-select: none;
   }

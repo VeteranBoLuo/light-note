@@ -54,10 +54,13 @@ function resolveExecutionIdentity(config) {
   if (billingPolicy === 'system') {
     const systemId = normalizeTaskType(config.systemId || config.taskType);
     const userId = `system:${systemId}`.slice(0, 128);
+    const subject = config.subjectIdentity || request?.resourceUser || request?.user || {};
     return {
       billingPolicy,
       actorUserId: userId,
-      subjectUserId: userId,
+      // 平台额度的承担方是 system，但审计仍保留任务实际处理的数据主体；这不会改变
+      // system 配额分桶，也不会让产物内容或用户 ID进入 Provider 日志。
+      subjectUserId: normalizeIdentifier(subject.id, userId),
       userRole: 'system',
       quotaRequest: request || { headers: { fingerprint: userId }, body: {}, ip: 'ai-execution-system' },
     };

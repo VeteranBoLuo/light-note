@@ -13,7 +13,7 @@ export function getAiSkillsConfig(_req, res) {
   return res.send(
     resultData({
       ...state,
-      availableSkills: listAiSkills().filter((skill) => state.skills[skill.domain] === true),
+      availableSkills: listAiSkills({ includeInternal: false }).filter((skill) => state.skills[skill.domain] === true),
     }),
   );
 }

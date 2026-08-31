@@ -97,20 +97,27 @@
           >
 
           <BButton
+            id="nav-toolbox-entry"
+            class="navigation-pill-entry navigation-toolbox-entry"
+            :class="{ 'is-active': route.path.startsWith('/toolbox') }"
+            :aria-current="route.path.startsWith('/toolbox') ? 'page' : undefined"
+            v-click-log="{ module: '导航栏', operation: '打开知识工具箱' }"
+            @click="router.push('/toolbox')"
+          >
+            <SvgIcon class="navigation-pill-entry__icon" :src="icon.toolbox.home" size="16" aria-hidden="true" />
+            <span>{{ $t('navigation.toolbox') }}</span>
+          </BButton>
+
+          <BButton
             id="nav-community-entry"
-            class="navigation-community-entry"
+            class="navigation-pill-entry navigation-community-entry"
             :class="{ 'is-active': route.path.includes('/community-chat') }"
             :aria-current="route.path.includes('/community-chat') ? 'page' : undefined"
             :aria-label="communityEntryLabel"
             v-click-log="{ module: '导航栏', operation: '打开公共聊天室' }"
             @click="router.push('/community-chat')"
           >
-            <SvgIcon
-              class="navigation-community-entry__icon"
-              :src="icon.ai.conversations"
-              size="16"
-              aria-hidden="true"
-            />
+            <SvgIcon class="navigation-pill-entry__icon" :src="icon.ai.conversations" size="16" aria-hidden="true" />
             <span>{{ $t('navigation.communityChat') }}</span>
             <span
               v-if="communityUnreadTotal > 0"
@@ -254,15 +261,15 @@
   .navigation-todo-entry {
     position: relative;
   }
-  .navigation-community-entry {
+  .navigation-pill-entry {
     position: relative;
     min-height: 34px;
     padding: 5px 11px;
     gap: 6px;
-    border: 1px solid var(--navigation-community-border) !important;
+    border: 1px solid var(--navigation-pill-border) !important;
     border-radius: 999px;
-    color: var(--navigation-community-fg);
-    background: var(--navigation-community-bg) !important;
+    color: var(--navigation-pill-fg);
+    background: var(--navigation-pill-bg) !important;
     font-size: 13px;
     font-weight: 650;
     white-space: nowrap;
@@ -271,8 +278,8 @@
       background-color 220ms cubic-bezier(0.2, 0.65, 0.3, 1),
       border-color 220ms cubic-bezier(0.2, 0.65, 0.3, 1);
   }
-  .navigation-community-entry__icon {
-    color: var(--navigation-community-icon-fg);
+  .navigation-pill-entry__icon {
+    color: var(--navigation-pill-icon-fg);
   }
   .navigation-management-entry {
     gap: 4px;
@@ -287,15 +294,15 @@
   .navigation-management-entry.is-active {
     color: var(--primary-color, #615ced);
   }
-  .navigation-community-entry:hover {
-    color: var(--navigation-community-hover-fg);
-    border-color: var(--navigation-community-hover-border) !important;
-    background: var(--navigation-community-hover-bg) !important;
+  .navigation-pill-entry:hover {
+    color: var(--navigation-pill-hover-fg);
+    border-color: var(--navigation-pill-hover-border) !important;
+    background: var(--navigation-pill-hover-bg) !important;
   }
-  .navigation-community-entry.is-active {
-    color: var(--navigation-community-active-fg);
-    border-color: var(--navigation-community-active-border) !important;
-    background: var(--navigation-community-active-bg) !important;
+  .navigation-pill-entry.is-active {
+    color: var(--navigation-pill-active-fg);
+    border-color: var(--navigation-pill-active-border) !important;
+    background: var(--navigation-pill-active-bg) !important;
   }
   .navigation-community-entry__badge {
     position: absolute;
@@ -397,7 +404,7 @@
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    .navigation-community-entry {
+    .navigation-pill-entry {
       transition: none;
     }
   }
@@ -408,6 +415,20 @@
 
     .navigation-tab {
       gap: 20px !important;
+    }
+  }
+  @media (min-width: 768px) and (max-width: 1199px) {
+    .navigation-title {
+      width: 108px;
+    }
+
+    .navigation-tab {
+      gap: 13px !important;
+    }
+
+    .navigation-pill-entry {
+      padding-right: 8px;
+      padding-left: 8px;
     }
   }
   .navigation-manage {

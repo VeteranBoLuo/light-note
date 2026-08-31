@@ -774,7 +774,7 @@ export async function recognizeCloudImageDocumentSource({
 }
 
 export async function getDocumentSourceStatuses({ userId, sourceIds }) {
-  const ids = [...new Set((Array.isArray(sourceIds) ? sourceIds : []).map(String).filter(Boolean))].slice(0, 10);
+  const ids = [...new Set((Array.isArray(sourceIds) ? sourceIds : []).map(String).filter(Boolean))].slice(0, 20);
   if (!ids.length) return [];
   const placeholders = ids.map(() => '?').join(',');
   const [rows] = await pool.query(`SELECT * FROM ai_document_sources WHERE user_id = ? AND id IN (${placeholders})`, [

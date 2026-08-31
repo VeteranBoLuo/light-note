@@ -8,7 +8,7 @@
 
     <section class="inline-emoji-harness__layout">
       <article class="inline-emoji-harness__panel">
-        <ChatExpressionPanel v-model:tab="tab" @select-emoji="insertEmoji" />
+        <ChatExpressionPanel v-model:tab="tab" :recent="recentEmojis" @select-emoji="insertEmoji" />
       </article>
 
       <article class="inline-emoji-harness__conversation">
@@ -51,6 +51,7 @@
 
   const { t } = useI18n();
   const emojis = COMMUNITY_CHAT_INLINE_EMOJIS;
+  const recentEmojis = ['😀', emojis[0].token];
   const tab = ref<'emoji' | 'official' | 'custom'>('emoji');
   const composerInput = ref<InstanceType<typeof ChatComposerInput> | null>(null);
   const draft = ref(`${emojis[0].token}12123112331😀`);
