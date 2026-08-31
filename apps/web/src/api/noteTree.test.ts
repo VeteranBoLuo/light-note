@@ -10,6 +10,7 @@ vi.mock('@/http/request', () => ({
 
 import {
   collapseNoteDeletePreviews,
+  fetchNoteBranchItems,
   fetchNoteDeletePreview,
   fetchNoteTreeFeatures,
   normalizeNoteTreeFeatures,
@@ -140,6 +141,69 @@ describe('noteTree delete preview', () => {
     });
 
     await expect(fetchNoteDeletePreview('missing')).rejects.toThrow('NOTE_TREE_NODE_NOT_FOUND');
+  });
+});
+
+describe('noteTree branch picker', () => {
+  beforeEach(() => {
+    apiBasePostMock.mockReset();
+  });
+
+  it('把完整多级子树按视觉顺序展开为可提交的普通笔记项', async () => {
+    apiBasePostMock.mockResolvedValue({
+      status: 200,
+      data: {
+        parentId: 'parent',
+        maxDepth: 8,
+        items: [
+          {
+            id: 'child-a',
+            parentId: 'parent',
+            title: '子页面 A',
+            childCount: 1,
+            hasChildren: true,
+            isTop: false,
+            sort: 1,
+            children: [
+              {
+                id: 'grandchild-a',
+                parentId: 'child-a',
+                title: '孙页面 A',
+                childCount: 0,
+                hasChildren: false,
+                isTop: false,
+                sort: 1,
+                children: [],
+              },
+            ],
+          },
+          {
+            id: 'child-b',
+            parentId: 'parent',
+            title: '子页面 B',
+            childCount: 0,
+            hasChildren: false,
+            isTop: false,
+            sort: 2,
+            children: [],
+          },
+        ],
+      },
+    });
+
+    const items = await fetchNoteBranchItems('parent');
+    expect(items.map((item) => item.id)).toEqual(['child-a', 'grandchild-a', 'child-b']);
+    expect(items.every((item) => !('depth' in item))).toBe(true);
+    expect(apiBasePostMock).toHaveBeenCalledWith(
+      '/api/note/queryNoteTree',
+      { parentId: 'parent', depth: 'all' },
+      { silent: true },
+    );
+  });
+
+  it('目录读取失败时不把它误当作空目录', async () => {
+    apiBasePostMock.mockResolvedValue({ status: 403, data: { code: 'NOTE_TREE_FORBIDDEN' } });
+    await expect(fetchNoteBranchItems('parent')).rejects.toThrow('NOTE_TREE_FORBIDDEN');
   });
 });
 

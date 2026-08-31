@@ -32,6 +32,8 @@ function tokenAction({
   maxUserProviderCalls = 1,
   maxPlatformProviderCalls = 1,
   reservationTokens = DEFAULT_RESERVATION_TOKENS,
+  publicCatalog = true,
+  allowedBillingPolicies = ['user', 'system'],
 }) {
   return Object.freeze({
     id,
@@ -44,6 +46,8 @@ function tokenAction({
     maxUserProviderCalls,
     maxPlatformProviderCalls,
     reservationTokens,
+    publicCatalog,
+    allowedBillingPolicies: Object.freeze([...allowedBillingPolicies]),
   });
 }
 
@@ -195,6 +199,26 @@ export const AI_BILLING_ACTIONS = Object.freeze([
     taskTypes: ['tag_icon_search'],
     maxPlatformProviderCalls: 0,
   }),
+  ...[
+    ['idea_to_draft', 'toolboxIdeaToDraft'],
+    ['material_to_note', 'toolboxMaterialToNote'],
+    ['research_brief', 'toolboxResearchBrief'],
+    ['study_kit', 'toolboxStudyKit'],
+    ['concept_map', 'toolboxConceptMap'],
+    ['action_plan', 'toolboxActionPlan'],
+    ['source_comparison', 'toolboxSourceComparison'],
+    ['knowledge_audit', 'toolboxKnowledgeAudit'],
+  ].map(([profileId, labelKey]) =>
+    tokenAction({
+      id: `toolbox.${profileId}`,
+      module: 'toolbox',
+      labelKey,
+      taskTypes: [`skill_toolbox_${profileId}`],
+      reservationTokens: 12_000,
+      publicCatalog: true,
+      allowedBillingPolicies: ['user', 'system'],
+    }),
+  ),
 ]);
 
 export const AI_FREE_ACTION_GROUPS = Object.freeze([
@@ -258,6 +282,12 @@ export function resolveAiBillingAction({ skillId, taskType } = {}) {
 
 export function createUserAiExecutionConfig(actionId, overrides = {}) {
   const action = getAiBillingAction(actionId);
+  if (!action.allowedBillingPolicies.includes('user')) {
+    const error = new Error('该 AI 能力不使用用户 AI 额度');
+    error.code = 'AI_BILLING_POLICY_NOT_ALLOWED';
+    error.status = 500;
+    throw error;
+  }
   return {
     billingPolicy: 'user',
     taskType: action.taskTypes[0] || action.id.replaceAll('.', '_'),
@@ -340,10 +370,25 @@ export function estimateAiSkillReservationTokens(skill, request, action = getAiB
 export function createAiSkillExecutionConfig(skill, request, overrides = {}) {
   const action = getAiBillingAction(skill?.id);
   const providerPlan = compileAiSkillProviderPlan(skill, request);
+  const billingPolicy = String(overrides.billingPolicy || 'user');
+  if (!['user', 'system'].includes(billingPolicy)) {
+    const error = new Error('AI Skill 额度策略无效');
+    error.code = 'AI_SKILL_BILLING_POLICY_INVALID';
+    error.status = 500;
+    throw error;
+  }
+  if (!action.allowedBillingPolicies.includes(billingPolicy)) {
+    const error = new Error('当前 AI 能力不允许使用该额度策略');
+    error.code = 'AI_BILLING_POLICY_NOT_ALLOWED';
+    error.status = 500;
+    throw error;
+  }
   return {
     taskType: action.taskTypes[0] || action.id.replaceAll('.', '_'),
     ...overrides,
-    billingPolicy: 'user',
+    // 只有服务端内部调用方能传 overrides；公开 Skill HTTP 协议没有该字段。工具箱积分任务
+    // 使用 system 额度承担固定产物的模型成本，避免同一次执行同时扣积分和用户 AI 额度。
+    billingPolicy,
     skillId: action.id,
     providerPlan,
     reservationTokens: estimateAiSkillReservationTokens(skill, request, action),
@@ -361,7 +406,7 @@ export function listPublicAiBillingCatalog() {
     repairBilling: 'platform',
     failedExecutionBilling: 'platform',
     missingUsageBilling: 'request_estimate_capped',
-    tokenActions: AI_BILLING_ACTIONS.map(({ id, module, labelKey, unit }) => ({
+    tokenActions: AI_BILLING_ACTIONS.filter((action) => action.publicCatalog).map(({ id, module, labelKey, unit }) => ({
       id,
       module,
       labelKey,

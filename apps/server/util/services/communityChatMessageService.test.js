@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { COMMUNITY_CHAT_INLINE_EMOJIS } from '@lightnote/shared/community-chat-inline-emojis';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -866,6 +867,7 @@ describe('communityChatMessageService', () => {
     });
     expect(mocks.deliverNotifications).toHaveBeenCalledWith({
       messagePublicId: result.message.publicId,
+      messagePreview: '这是我的第一条消息',
       env: MESSAGE_ENV,
       db,
     });
@@ -1972,6 +1974,26 @@ describe('communityChatMessageService', () => {
     expect(__test__.normalizeMentionEveryone(true)).toBe(true);
     expect(() => __test__.normalizeMentionEveryone('true')).toThrowError(
       expect.objectContaining({ code: 'INVALID_MENTION_EVERYONE' }),
+    );
+  });
+
+  it('内联小表情使用共享令牌、按一个字符计数并限制未知项与数量', () => {
+    const token = COMMUNITY_CHAT_INLINE_EMOJIS[0].token;
+    expect(__test__.normalizeMessageContent(`你好${token}`)).toBe(`你好${token}`);
+    expect(__test__.normalizeMessageContent(`${token.repeat(100)}${'好'.repeat(1900)}`)).toHaveLength(
+      token.length * 100 + 1900,
+    );
+    expect(() => __test__.normalizeMessageContent(`${token.repeat(100)}${'好'.repeat(1901)}`)).toThrowError(
+      expect.objectContaining({ code: 'MESSAGE_TOO_LONG' }),
+    );
+    expect(() => __test__.normalizeMessageContent(token.repeat(101))).toThrowError(
+      expect.objectContaining({ code: 'TOO_MANY_INLINE_EMOJIS' }),
+    );
+    expect(() => __test__.normalizeMessageContent('[[ln-emoji:jian-tuan-v1:not-found]]')).toThrowError(
+      expect.objectContaining({ code: 'INLINE_EMOJI_NOT_FOUND' }),
+    );
+    expect(() => __test__.normalizeMessageContent(token, { allowInlineEmoji: false })).toThrowError(
+      expect.objectContaining({ code: 'INLINE_EMOJI_NOT_ALLOWED' }),
     );
   });
 

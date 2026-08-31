@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createApp, h, nextTick } from 'vue';
+import { createApp, h, nextTick, ref, watch } from 'vue';
 import BButton from '@/components/base/BasicComponents/BButton.vue';
 import MobileListRow from './MobileListRow.vue';
 import MobileListSurface from './MobileListSurface.vue';
@@ -9,8 +9,19 @@ vi.mock('@/components/base/BasicComponents/BDrawer.vue', () => ({
   default: {
     name: 'BDrawerStub',
     props: ['open', 'title'],
-    emits: ['close'],
-    setup(props: { open: boolean; title: string }, { slots }: { slots: Record<string, () => unknown> }) {
+    emits: ['close', 'afterClose'],
+    setup(
+      props: { open: boolean; title: string },
+      { emit, slots }: { emit: (event: 'afterClose') => void; slots: Record<string, () => unknown> },
+    ) {
+      watch(
+        () => props.open,
+        async (open, wasOpen) => {
+          if (open || !wasOpen) return;
+          await nextTick();
+          emit('afterClose');
+        },
+      );
       return () =>
         props.open ? h('section', { class: 'drawer-stub', 'data-title': props.title }, slots.default?.()) : null;
     },
@@ -117,6 +128,7 @@ describe('mobile interaction primitives', () => {
   it('uses the object title and emits only enabled action selections', async () => {
     const onAction = vi.fn();
     const onOpenChange = vi.fn();
+    const open = ref(true);
     const actions: MobilePageActionItem[] = [
       { key: 'edit', label: '编辑', description: '修改当前待办' },
       { key: 'selected', label: '普通', selected: true },
@@ -125,11 +137,14 @@ describe('mobile interaction primitives', () => {
     ];
     const host = mount(() =>
       h(MobilePageActionsDrawer, {
-        open: true,
+        open: open.value,
         title: '更多操作',
         objectTitle: '笔记新增知识库',
         actions,
-        'onUpdate:open': onOpenChange,
+        'onUpdate:open': (value: boolean) => {
+          open.value = value;
+          onOpenChange(value);
+        },
         onAction,
       }),
     );

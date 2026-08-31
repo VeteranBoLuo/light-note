@@ -20,7 +20,8 @@ UPDATE knowledge_base
 SET content = @ai_quota_content,
     category = '帮助中心', status = 'public', type = 'html', sort = 96,
     admin_archived = 0, updated_by = NULL
-WHERE id = @ai_quota_id OR title = @ai_quota_title;
+WHERE (id = @ai_quota_id OR title = @ai_quota_title)
+  AND LOCATE('data-ln-policy:ai-quota-v', COALESCE(content, '')) = 0;
 
 SET @points_id = '11a21140-7ecf-117e-8c23-96d5e1f6a052';
 SET @points_title = '积分商店与积分抽奖';
@@ -93,7 +94,8 @@ UPDATE knowledge_base
 SET content = @store_content,
     category = '帮助中心', status = 'public', type = 'html', sort = 95,
     admin_archived = 0, updated_by = NULL
-WHERE id = @store_id OR title = @store_title;
+WHERE (id = @store_id OR title = @store_title)
+  AND LOCATE('data-ln-policy:support-packages-v', COALESCE(content, '')) = 0;
 
 COMMIT;
 

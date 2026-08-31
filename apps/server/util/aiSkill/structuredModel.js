@@ -31,6 +31,7 @@ export async function callStructuredSkillModel({
     toolChoice: { type: 'function', function: { name: structuredTool.name } },
     maxTokens: modelPolicy.maxTokens,
     temperature: modelPolicy.temperature,
+    timeoutMs: modelPolicy.timeoutMs,
     trace,
     signal,
   };

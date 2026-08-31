@@ -34,6 +34,41 @@ export const SITE_COMPLIANCE = Object.freeze({
 });
 
 /**
+ * 功能上新提示目录。ID 表示稳定功能，version 表示本轮提示版本；发布时间与失效时间
+ * 使用绝对时刻，避免“新注册后再显示 15 天”把一次上新提醒变成永久打扰。
+ */
+export const FEATURE_ANNOUNCEMENTS = Object.freeze({
+  KNOWLEDGE_WORKSHOP: Object.freeze({
+    id: 'knowledge-workshop',
+    version: 'knowledge-workshop-v1',
+    publishedAt: '2026-08-31T00:00:00.000+08:00',
+    expiresAt: '2026-09-15T00:00:00.000+08:00',
+  }),
+});
+
+const FEATURE_ANNOUNCEMENT_BY_ID = new Map(
+  Object.values(FEATURE_ANNOUNCEMENTS).map((announcement) => [announcement.id, announcement]),
+);
+
+export function getFeatureAnnouncement(announcementId) {
+  return FEATURE_ANNOUNCEMENT_BY_ID.get(String(announcementId || '').trim()) || null;
+}
+
+export function isFeatureAnnouncementActive(announcement, now = Date.now()) {
+  if (!announcement) return false;
+  const timestamp = now instanceof Date ? now.getTime() : Number(now);
+  const publishedAt = Date.parse(announcement.publishedAt);
+  const expiresAt = Date.parse(announcement.expiresAt);
+  return (
+    Number.isFinite(timestamp) &&
+    Number.isFinite(publishedAt) &&
+    Number.isFinite(expiresAt) &&
+    timestamp >= publishedAt &&
+    timestamp < expiresAt
+  );
+}
+
+/**
  * 爱发电公开下单配置。前端展示与后端签发带归属凭证的下单地址共用这一份事实源，
  * 避免档位或方案 ID 分别维护后发生错配。这里不包含 OAuth Secret 或 API Token。
  */
@@ -91,10 +126,10 @@ export const AFDIAN_CHECKOUT_OPTIONS = Object.freeze([
 ]);
 
 /**
- * 爱发电套餐目录 v2。套餐权益是永久资产，价格与到账值同时作为前端展示、
+ * 爱发电套餐目录 v3。套餐权益是永久资产，价格与到账值同时作为前端展示、
  * 服务端结算快照和测试核验的唯一事实源；已发布版本不得原地改值。
  */
-export const SUPPORT_PACKAGE_CATALOG_VERSION = 'support-packages-v2';
+export const SUPPORT_PACKAGE_CATALOG_VERSION = 'support-packages-v3';
 
 function supportPackage(definition) {
   return Object.freeze({
@@ -108,38 +143,43 @@ export const SUPPORT_PACKAGE_CATALOG = Object.freeze([
   supportPackage({
     skuId: 'ai-6',
     category: 'ai',
+    firstPurchaseScope: 'ai_account',
     amount: 6,
     base: { aiTokens: 600_000, storageMb: 0 },
-    firstPurchase: { aiTokens: 780_000, storageMb: 0 },
+    firstPurchase: { aiTokens: 720_000, storageMb: 0 },
     comboSavings: 0,
   }),
   supportPackage({
     skuId: 'ai-18',
     category: 'ai',
+    firstPurchaseScope: 'ai_account',
     amount: 18,
     base: { aiTokens: 1_800_000, storageMb: 0 },
-    firstPurchase: { aiTokens: 2_340_000, storageMb: 0 },
+    firstPurchase: { aiTokens: 2_160_000, storageMb: 0 },
     comboSavings: 0,
   }),
   supportPackage({
     skuId: 'ai-50',
     category: 'ai',
+    firstPurchaseScope: 'ai_account',
     amount: 50,
     base: { aiTokens: 5_000_000, storageMb: 0 },
-    firstPurchase: { aiTokens: 6_500_000, storageMb: 0 },
+    firstPurchase: { aiTokens: 6_000_000, storageMb: 0 },
     comboSavings: 0,
   }),
   supportPackage({
     skuId: 'ai-100',
     category: 'ai',
+    firstPurchaseScope: 'ai_account',
     amount: 100,
     base: { aiTokens: 10_000_000, storageMb: 0 },
-    firstPurchase: { aiTokens: 13_000_000, storageMb: 0 },
+    firstPurchase: { aiTokens: 12_000_000, storageMb: 0 },
     comboSavings: 0,
   }),
   supportPackage({
     skuId: 'storage-6',
     category: 'storage',
+    firstPurchaseScope: 'sku',
     amount: 6,
     base: { aiTokens: 0, storageMb: 128 },
     firstPurchase: { aiTokens: 0, storageMb: 160 },
@@ -148,6 +188,7 @@ export const SUPPORT_PACKAGE_CATALOG = Object.freeze([
   supportPackage({
     skuId: 'storage-18',
     category: 'storage',
+    firstPurchaseScope: 'sku',
     amount: 18,
     base: { aiTokens: 0, storageMb: 512 },
     firstPurchase: { aiTokens: 0, storageMb: 640 },
@@ -156,6 +197,7 @@ export const SUPPORT_PACKAGE_CATALOG = Object.freeze([
   supportPackage({
     skuId: 'storage-50',
     category: 'storage',
+    firstPurchaseScope: 'sku',
     amount: 50,
     base: { aiTokens: 0, storageMb: 1_536 },
     firstPurchase: { aiTokens: 0, storageMb: 2_048 },
@@ -164,6 +206,7 @@ export const SUPPORT_PACKAGE_CATALOG = Object.freeze([
   supportPackage({
     skuId: 'storage-100',
     category: 'storage',
+    firstPurchaseScope: 'sku',
     amount: 100,
     base: { aiTokens: 0, storageMb: 3_072 },
     firstPurchase: { aiTokens: 0, storageMb: 4_096 },
@@ -172,33 +215,37 @@ export const SUPPORT_PACKAGE_CATALOG = Object.freeze([
   supportPackage({
     skuId: 'combo-10',
     category: 'combo',
+    firstPurchaseScope: 'ai_account',
     amount: 10,
     base: { aiTokens: 600_000, storageMb: 128 },
-    firstPurchase: { aiTokens: 780_000, storageMb: 160 },
+    firstPurchase: { aiTokens: 720_000, storageMb: 128 },
     comboSavings: 2,
   }),
   supportPackage({
     skuId: 'combo-30',
     category: 'combo',
+    firstPurchaseScope: 'ai_account',
     amount: 30,
     base: { aiTokens: 1_800_000, storageMb: 512 },
-    firstPurchase: { aiTokens: 2_340_000, storageMb: 640 },
+    firstPurchase: { aiTokens: 2_160_000, storageMb: 512 },
     comboSavings: 6,
   }),
   supportPackage({
     skuId: 'combo-88',
     category: 'combo',
+    firstPurchaseScope: 'ai_account',
     amount: 88,
     base: { aiTokens: 5_000_000, storageMb: 1_536 },
-    firstPurchase: { aiTokens: 6_500_000, storageMb: 2_048 },
+    firstPurchase: { aiTokens: 6_000_000, storageMb: 1_536 },
     comboSavings: 12,
   }),
   supportPackage({
     skuId: 'combo-168',
     category: 'combo',
+    firstPurchaseScope: 'ai_account',
     amount: 168,
     base: { aiTokens: 10_000_000, storageMb: 3_072 },
-    firstPurchase: { aiTokens: 13_000_000, storageMb: 4_096 },
+    firstPurchase: { aiTokens: 12_000_000, storageMb: 3_072 },
     comboSavings: 32,
   }),
 ]);

@@ -25,6 +25,7 @@
       :empty-text="emptyText"
       :auto-run-action-id="autoRunActionId"
       :icon-src="iconSrc"
+      :show-grounding="showGrounding"
       @result="emit('result', $event)"
       @error="emit('error', $event)"
       @result-action="forwardResultAction"
@@ -65,6 +66,7 @@
       emptyText?: string;
       autoRunActionId?: string;
       iconSrc?: string;
+      showGrounding?: boolean;
       width?: string;
     }>(),
     {
@@ -80,6 +82,7 @@
       emptyText: '',
       autoRunActionId: '',
       iconSrc: '',
+      showGrounding: true,
       width: 'min(720px, calc(100vw - 24px))',
     },
   );

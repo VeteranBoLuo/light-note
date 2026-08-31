@@ -321,27 +321,6 @@
               </div>
             </div>
 
-            <!-- 移动端标签管理固定卡片视图,该偏好只对桌面生效,移动端不展示避免误导 -->
-            <div v-if="!bookmark.isMobile" class="field">
-              <div class="field-head">
-                <span class="field-label">{{ t('settings.tagManageView') }}</span>
-                <span class="field-desc">{{ t('settings.tagManageViewDesc') }}</span>
-              </div>
-              <div class="seg" :class="{ 'seg--two-column': tagManageViewOpts.length >= 4 }">
-                <BButton
-                  v-for="o in tagManageViewOpts"
-                  :key="o.v"
-                  class="seg-btn"
-                  :class="{ active: (user.preferences.tagManageView || 'card') === o.v }"
-                  :type="(user.preferences.tagManageView || 'card') === o.v ? 'primary' : undefined"
-                  :aria-pressed="(user.preferences.tagManageView || 'card') === o.v"
-                  @click="set('tagManageView', o.v)"
-                >
-                  {{ o.label }}
-                </BButton>
-              </div>
-            </div>
-
             <div class="field">
               <div class="field-head">
                 <span class="field-label">{{ t('settings.hideEmptyTags') }}</span>
@@ -583,22 +562,70 @@
           </BButton>
         </section>
 
-        <!-- 快速收藏(bookmarklet) -->
+        <!-- 浏览器收集：完整扩展与轻量书签栏入口并列，避免把能力不同的两种方式混成一个按钮。 -->
         <section v-if="!bookmark.isMobile" class="settings-card" id="set-quicksave">
           <div class="card-head">
-            <span class="card-icon card-icon--appearance">🔖</span>
+            <span class="card-icon card-icon--appearance">
+              <SvgIcon :src="icon.settings.shortcuts" size="20" aria-hidden="true" />
+            </span>
             <div class="card-head-text">
-              <h2 class="card-title">{{ t('settings.quickSaveTitle') }}</h2>
-              <p class="card-sub">{{ t('settings.quickSaveDesc') }}</p>
+              <h2 class="card-title">{{ t('settings.browserCaptureTitle') }}</h2>
+              <p class="card-sub">{{ t('settings.browserCaptureDesc') }}</p>
             </div>
           </div>
-          <div class="fields">
-            <div class="field">
-              <div class="field-head">
-                <span class="field-label">{{ t('settings.quickSaveDrag') }}</span>
-                <span class="field-desc">{{ t('settings.quickSaveHint') }}</span>
+          <div class="browser-capture-grid">
+            <BCard class="browser-capture-card browser-capture-card--extension" variant="raised" padding="18px">
+              <div class="browser-capture-card__head">
+                <span class="browser-capture-card__logo">
+                  <img src="/favicon.svg?v=7" alt="" />
+                </span>
+                <div class="browser-capture-card__title">
+                  <h3>{{ t('settings.browserCaptureExtensionTitle') }}</h3>
+                  <span>{{ t('settings.browserCaptureExtensionDesktop') }}</span>
+                </div>
+                <BChip tone="pin" size="medium">{{ t('settings.browserCaptureExtensionBadge') }}</BChip>
               </div>
-              <!-- javascript: 书签的图标由浏览器固定为通用图标；这里不放文字图标，避免它被写进书签名称。 -->
+              <p class="browser-capture-card__desc">{{ t('settings.browserCaptureExtensionDesc') }}</p>
+              <div class="browser-capture-card__features">
+                <BChip tone="bookmark" size="medium">
+                  <SvgIcon :src="icon.resource.bookmark" size="13" aria-hidden="true" />
+                  {{ t('settings.browserCaptureExtensionBookmark') }}
+                </BChip>
+                <BChip tone="note" size="medium">
+                  <SvgIcon :src="icon.resource.note" size="13" aria-hidden="true" />
+                  {{ t('settings.browserCaptureExtensionNote') }}
+                </BChip>
+                <BChip tone="file" size="medium">
+                  <SvgIcon :src="icon.resource.file" size="13" aria-hidden="true" />
+                  {{ t('settings.browserCaptureExtensionFile') }}
+                </BChip>
+              </div>
+              <div class="browser-capture-card__actions">
+                <BButton type="primary" @click="openBrowserExtensionStore">
+                  <SvgIcon :src="icon.support.store" size="15" aria-hidden="true" />
+                  {{ t('settings.browserCaptureExtensionInstall') }}
+                </BButton>
+                <BButton @click="openBrowserExtensionDetails">
+                  {{ t('settings.browserCaptureExtensionDetails') }}
+                  <SvgIcon :src="icon.arrow_right" size="14" aria-hidden="true" />
+                </BButton>
+              </div>
+            </BCard>
+
+            <BCard class="browser-capture-card browser-capture-card--bookmarklet" variant="card" padding="18px">
+              <div class="browser-capture-card__head">
+                <span class="browser-capture-card__icon browser-capture-card__icon--bookmark">
+                  <SvgIcon :src="icon.resource.bookmark" size="21" aria-hidden="true" />
+                </span>
+                <div class="browser-capture-card__title">
+                  <h3>{{ t('settings.browserCaptureBookmarkletTitle') }}</h3>
+                  <span>{{ t('settings.quickSaveDrag') }}</span>
+                </div>
+                <BChip tone="neutral" size="medium">{{ t('settings.browserCaptureBookmarkletBadge') }}</BChip>
+              </div>
+              <p class="browser-capture-card__desc">{{ t('settings.browserCaptureBookmarkletDesc') }}</p>
+              <p class="browser-capture-card__hint">{{ t('settings.quickSaveHint') }}</p>
+              <!-- javascript: 书签必须使用原生可拖拽链接；BButton 无法写入浏览器书签栏。 -->
               <a
                 ref="bmRef"
                 class="qs-bookmarklet"
@@ -606,8 +633,12 @@
                 @click.prevent="onBmClick"
                 v-text="t('settings.quickSaveBtn')"
               ></a>
-            </div>
+            </BCard>
           </div>
+          <p class="browser-capture-privacy">
+            <SvgIcon :src="icon.settings.privacy" size="15" aria-hidden="true" />
+            {{ t('settings.browserCapturePrivacy') }}
+          </p>
         </section>
 
         <!-- 数据导出 / 备份 -->
@@ -695,8 +726,20 @@
           </div>
         </section>
 
-        <!-- 这段脚注讲的是「右上角头像菜单」，只对桌面成立；移动端目录页有自己的脚注 -->
-        <p v-if="!bookmark.isMobile" class="settings-foot">{{ t('settings.footHint') }}</p>
+        <!-- 低频开发者资源放在设置页脚，不占普通用户的产品导航。 -->
+        <div v-if="!bookmark.isMobile" class="settings-foot">
+          <span>{{ t('settings.footHint') }}</span>
+          <span aria-hidden="true">·</span>
+          <BButton
+            class="settings-developer-link"
+            :aria-label="t('settings.developerToolboxDesc')"
+            @click="openDeveloperToolbox"
+          >
+            <SvgIcon :src="icon.toolkit" size="13" aria-hidden="true" />
+            <span>{{ t('settings.developerToolbox') }}</span>
+            <SvgIcon :src="icon.arrow_right" size="12" aria-hidden="true" />
+          </BButton>
+        </div>
       </div>
     </div>
   </div>
@@ -719,6 +762,8 @@
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BCard from '@/components/base/BasicComponents/BCard.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BTimePicker from '@/components/base/BasicComponents/BTimePicker.vue';
   import BUpload from '@/components/base/BasicComponents/BUpload.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
@@ -735,6 +780,7 @@
     getMobileHomePreference,
   } from '@/utils/preferences.ts';
   import { APP_FILING_NUMBER, MIIT_QUERY_URL } from '@/config/androidRelease.ts';
+  import { BROWSER_EXTENSION_LANDING_PATH, openChromeWebStore } from '@/config/browserExtension.ts';
   import SettingsMobileIndex, { type SettingsIndexRow } from './SettingsMobileIndex.vue';
   import {
     SETTINGS_SECTION_ANCHOR,
@@ -765,7 +811,7 @@
     if (!isGuestUser()) list.push({ id: 'set-ai', label: t('settings.ai.title') });
     if (!bookmark.isMobile) {
       list.push(
-        { id: 'set-quicksave', label: t('settings.quickSaveTitle') },
+        { id: 'set-quicksave', label: t('settings.browserCaptureTitle') },
         { id: 'set-export', label: t('settings.exportTitle') },
       );
     }
@@ -1048,6 +1094,21 @@
     window.open(`/legal/${fileName}`, '_blank', 'noopener,noreferrer');
   }
 
+  function openDeveloperToolbox() {
+    window.open('https://boluo66.top/toolkit/', '_blank', 'noopener,noreferrer');
+    recordOperation(OPERATION_LOG_MAP.navigation.toolkit);
+  }
+
+  function openBrowserExtensionStore() {
+    if (!openChromeWebStore()) return;
+    void recordOperation({ module: '浏览器收集', operation: '从设置打开 Chrome 扩展商店' });
+  }
+
+  function openBrowserExtensionDetails() {
+    void router.push(BROWSER_EXTENSION_LANDING_PATH);
+    void recordOperation({ module: '浏览器收集', operation: '从设置查看浏览器扩展介绍' });
+  }
+
   // 快速收藏 bookmarklet:href 用当前站点 origin 动态生成,拖到书签栏后在任意网页点它即可
   const bmRef = ref<HTMLAnchorElement | null>(null);
   function onBmClick() {
@@ -1220,10 +1281,6 @@
   const cloudViewOpts = computed(() => [
     { v: 'card', label: t('settings.cardView') },
     { v: 'table', label: t('settings.tableView') },
-  ]);
-  const tagManageViewOpts = computed(() => [
-    { v: 'card', label: t('settings.cardView') },
-    { v: 'list', label: t('settings.listView') },
   ]);
   const resourceSortOpts = computed(() => [
     { v: 'relevance', label: t('resourceCenter.sort.relevance') },
@@ -1837,9 +1894,33 @@
 
   .settings-foot {
     margin: 2px 0 0;
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
     font-size: 12px;
     color: var(--desc-color);
+  }
+  .settings-developer-link.b_btn {
+    width: auto;
+    height: auto;
+    min-height: 28px;
+    padding: 3px 7px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid transparent !important;
+    border-radius: 7px;
+    color: var(--desc-color);
+    background: transparent !important;
+    font-size: 12px;
+    line-height: 18px;
+  }
+  .settings-developer-link.b_btn:hover,
+  .settings-developer-link.b_btn:focus-visible {
+    border-color: var(--card-border-color) !important;
+    color: var(--primary-color);
+    background: var(--menu-item-h-bg-color) !important;
   }
 
   .qs-bookmarklet {
@@ -1860,6 +1941,107 @@
   }
   .qs-bookmarklet:active {
     cursor: grabbing;
+  }
+  .qs-bookmarklet:focus-visible {
+    outline: 2px solid var(--focus-ring-color, var(--primary-color));
+    outline-offset: 3px;
+  }
+
+  .browser-capture-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.85fr);
+    gap: 14px;
+  }
+  .browser-capture-card {
+    min-width: 0;
+  }
+  .browser-capture-card--extension {
+    --b-card-border-color: color-mix(in srgb, var(--primary-color) 48%, var(--surface-border-color));
+    --b-card-shadow: 0 12px 28px color-mix(in srgb, var(--primary-color) 10%, transparent);
+  }
+  .browser-capture-card__head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .browser-capture-card__logo,
+  .browser-capture-card__icon {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+  }
+  .browser-capture-card__logo {
+    border: 1px solid color-mix(in srgb, var(--primary-color) 24%, var(--surface-border-color));
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--surface-card-bg));
+  }
+  .browser-capture-card__logo img {
+    width: 28px;
+    height: 28px;
+  }
+  .browser-capture-card__icon--bookmark {
+    color: var(--resource-bookmark-color);
+    background: color-mix(in srgb, var(--resource-bookmark-color) 10%, var(--surface-card-bg));
+    border: 1px solid color-mix(in srgb, var(--resource-bookmark-color) 28%, var(--surface-border-color));
+  }
+  .browser-capture-card__title {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .browser-capture-card__title h3 {
+    margin: 0;
+    color: var(--text-color);
+    font-size: 15px;
+    line-height: 1.45;
+  }
+  .browser-capture-card__title span {
+    display: block;
+    margin-top: 1px;
+    color: var(--desc-color);
+    font-size: 11px;
+    line-height: 1.45;
+  }
+  .browser-capture-card__desc {
+    min-height: 42px;
+    margin: 13px 0 12px;
+    color: var(--desc-color);
+    font-size: 12px;
+    line-height: 1.7;
+  }
+  .browser-capture-card__features {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .browser-capture-card__features :deep(.b-chip__content) {
+    gap: 4px;
+  }
+  .browser-capture-card__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .browser-capture-card__actions :deep(.b_btn) {
+    gap: 6px;
+  }
+  .browser-capture-card__hint {
+    margin: 0 0 14px;
+    color: var(--desc-color);
+    font-size: 11px;
+    line-height: 1.55;
+  }
+  .browser-capture-privacy {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 12px 2px 0;
+    color: var(--desc-color);
+    font-size: 11px;
+    line-height: 1.55;
   }
 
   .export-btn {

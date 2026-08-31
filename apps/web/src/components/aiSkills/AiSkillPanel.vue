@@ -60,9 +60,9 @@
     </div>
     <div v-else-if="response?.result" class="ai-skill-panel__result" aria-live="polite">
       <slot name="result" :response="response" :result="response.result">
-        <AiSkillResultContent :result="response.result" />
+        <AiSkillResultContent :result="response.result" :show-grounding="showGrounding" />
       </slot>
-      <div v-if="response.sources.length" class="ai-skill-panel__sources">
+      <div v-if="showGrounding && response.sources.length" class="ai-skill-panel__sources">
         <span>{{ t('aiSkills.sources', { count: response.sources.length }) }}</span>
         <span
           v-for="(source, index) in response.sources"
@@ -136,6 +136,7 @@
       initialPrompt?: string;
       autoRunActionId?: string;
       iconSrc?: string;
+      showGrounding?: boolean;
     }>(),
     {
       description: '',
@@ -154,6 +155,7 @@
       initialPrompt: '',
       autoRunActionId: '',
       iconSrc: '',
+      showGrounding: true,
     },
   );
 

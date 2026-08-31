@@ -323,6 +323,35 @@ describe('笔记库页面树交互接线', () => {
     expect(noteTreeDragDropSource).toMatch(/'\/api\/note\/moveNoteNode',[\s\S]{0,300}\{ silent: true \}/);
   });
 
+  it('右侧卡片和列表只允许移入移出目录，不再交换同级顺序', () => {
+    expect(source.match(/:sort="false"/g)).toHaveLength(2);
+    const dragMoveFunction = source.match(/function onDragMove[\s\S]*?\n  function onStart/)?.[0] || '';
+    const dragEndFunction = source.match(/async function onEnd[\s\S]*?\n  }\n<\/script>/)?.[0] || '';
+
+    expect(dragMoveFunction).toContain('scheduleDragDropTarget(target)');
+    expect(dragMoveFunction).toContain('return false;');
+    expect(dragEndFunction).toContain('moveNoteIntoTarget');
+    expect(dragEndFunction).not.toContain('updateNoteSort');
+    expect(dragEndFunction.indexOf('!nestedTarget || !nestedSourceId')).toBeLessThan(
+      dragEndFunction.indexOf("blockGuestWrite('move-note')"),
+    );
+    expect(source).not.toContain("'/api/note/updateNoteSort'");
+  });
+
+  it('所有页面移动入口都用接口返回的原父级和新父级失效目录列表', () => {
+    expect(source).toMatch(
+      /onMoveConfirmed\(\{ sourceId, result \}\)[\s\S]*invalidateMovedNoteLists\(noteCacheScope\.value, result\)/,
+    );
+    expect(source).toMatch(
+      /handleNoteMoved\(result:[\s\S]*invalidateMovedNoteLists\(noteCacheScope\.value, result\)[\s\S]*refreshTree\(\), reloadNotes\(\)/,
+    );
+    expect(source).toMatch(
+      /handlePagesAttached\(result:[\s\S]*invalidateMovedNoteLists\(noteCacheScope\.value, result\)[\s\S]*refreshTree\(\), reloadNotes\(\)/,
+    );
+    expect(detailSource).toContain('invalidateMovedNoteReadCaches(result, sourceId)');
+    expect(detailSource).toContain('invalidateMovedNoteReadCaches(result, activeMoveTarget.value?.id || note.id)');
+  });
+
   it('目录拖拽先乐观更新，接口失败回滚，成功后不清空整树重载', () => {
     expect(noteTreeDragDropSource).toMatch(
       /moveNoteTreeNodeOptimistically\(previousTree,[\s\S]*childrenByParent\.value = optimisticMove\.childrenByParent[\s\S]*await apiBasePost\([\s\S]*?'\/api\/note\/moveNoteNode'/,
@@ -388,7 +417,7 @@ describe('笔记库页面树交互接线', () => {
     expect(source).toMatch(
       /noteWorkspace\.updateNoteMetadata\(noteId, \{ isTop: note\.isTop \}\)[\s\S]*Promise\.all\(\[reloadNotes\(\), refreshTree\(\)\]\)/,
     );
-    expect(source).toMatch(/noteList\.value = groupedNotes;[\s\S]{0,180}await refreshTree\(\)/);
+    expect(source).not.toContain("'/api/note/updateNoteSort'");
     expect(cardSource).toMatch(/class="note-footer-chips"[\s\S]*class="note-tags"[\s\S]*class="note-child-count"/);
     expect(listItemSource).toMatch(/\.note-tags\s*\{[\s\S]{0,120}order: -1/);
     expect(listItemSource).toMatch(/&\.is-mobile[\s\S]*\.note-tags\s*\{[\s\S]{0,80}order: 0/);

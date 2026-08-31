@@ -1,5 +1,6 @@
 import type { AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
 import { apiBasePost } from '@/http/request';
+import { stripAiAnalysisCitations } from '@/utils/aiAnalysisContent';
 import { confirmNoteShareExposure } from '@/utils/noteShareExposure';
 
 const STORAGE_PREFIX = 'light-note:ai-note-draft:v1:';
@@ -47,7 +48,7 @@ function normalizeDraft(value: Partial<AiNoteDraft>): AiNoteDraft {
 function notePreviewFromResponse(response: AiSkillResponse, fallbackTitle: string): AiNoteDraft | null {
   const result = response.result;
   if (result?.kind !== 'artifact_preview' || result.artifactType !== 'note') return null;
-  const content = String(result.content || '');
+  const content = stripAiAnalysisCitations(result.content);
   if (!content.trim()) return null;
   return normalizeDraft({
     title: String(result.title || fallbackTitle),
@@ -59,7 +60,7 @@ function notePreviewFromResponse(response: AiSkillResponse, fallbackTitle: strin
 function markdownResultFromResponse(response: AiSkillResponse, fallbackTitle: string): AiNoteDraft | null {
   const result = response.result;
   if (result?.kind !== 'grounded_markdown' || !response.sources.length) return null;
-  const content = String(result.content || '');
+  const content = stripAiAnalysisCitations(result.content);
   if (!content.trim()) return null;
   return normalizeDraft({ title: fallbackTitle, content, type: 'markdown' });
 }
@@ -134,7 +135,7 @@ export function persistAiNotePreview(
 }
 
 /**
- * 用户已检查有来源的 Markdown 分析结果后，可把同一结果直接确认为新笔记。
+ * 用户检查 Markdown 分析结果后，可把移除界面引用角标的同一结果直接保存为新笔记。
  * 复用原请求 ID 幂等落库，不再为同一材料重复调用模型。
  */
 export function persistAiMarkdownResultAsNote(

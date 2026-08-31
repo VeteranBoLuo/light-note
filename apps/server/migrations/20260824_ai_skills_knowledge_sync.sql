@@ -57,7 +57,8 @@ SET content = @ai_quota_guide_content,
     sort = 96,
     admin_archived = 0,
     updated_by = NULL
-WHERE id = @ai_quota_guide_id OR title = @ai_quota_guide_title;
+WHERE (id = @ai_quota_guide_id OR title = @ai_quota_guide_title)
+  AND LOCATE('data-ln-policy:ai-quota-v', COALESCE(content, '')) = 0;
 
 -- 旧万能助手、全局材料继承、附件会话、自由工具规划和续聊说明已与新产品冲突。
 -- 采用可恢复的管理归档，不物理删除历史知识。

@@ -82,7 +82,7 @@
         <span v-else>{{ activeBinding.auxiliaryActionLabel() }}</span>
       </BButton>
       <BButton
-        v-if="activeBinding?.onAdd"
+        v-if="activeBinding?.onAdd && showAdd"
         class="mobile-top-bar__action"
         :class="{ 'mobile-top-bar__action--text': addActionMode === 'text' }"
         :aria-label="addLabel"
@@ -137,11 +137,12 @@
   const leadingActionLabel = computed(() => activeBinding.value?.leadingActionLabel?.() || '');
   const showSearch = computed(() => !isSecondary.value && activeBinding.value?.searchMode !== 'icon');
   const showNotification = computed(() => activeBinding.value?.showNotification !== false);
+  const showAdd = computed(() => activeBinding.value?.showAdd?.() !== false);
   const showActions = computed(() =>
     Boolean(
       !showSearch.value ||
       activeBinding.value?.onAuxiliaryAction ||
-      activeBinding.value?.onAdd ||
+      (activeBinding.value?.onAdd && showAdd.value) ||
       showNotification.value,
     ),
   );

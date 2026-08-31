@@ -53,6 +53,17 @@ const commonRouter: RouteRecordRaw[] = [
   },
   {
     meta: {
+      title: '积分明细',
+      keepAlive: true,
+      requireAuth: true,
+      roles: [RoleEnum.Root, RoleEnum.USER, RoleEnum.TEST],
+    },
+    path: '/points-usage',
+    name: 'pointsUsage',
+    component: () => import('@/view/pointsUsage/PointsUsagePage.vue'),
+  },
+  {
+    meta: {
       title: '成长中心',
       keepAlive: true,
       requireAuth: true,

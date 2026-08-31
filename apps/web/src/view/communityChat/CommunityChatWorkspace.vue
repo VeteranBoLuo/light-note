@@ -186,6 +186,7 @@
                     :src="authorAvatarSource(chatMessage)"
                     :size="32"
                     layout-mode="slot"
+                    motion-profile="chat"
                     pause-when-offscreen
                   />
                   <SvgIcon
@@ -283,7 +284,7 @@
                               @{{ name }}
                             </span>
                           </span>
-                          <span v-if="chatMessage.content">{{ chatMessage.content }}</span>
+                          <ChatInlineEmojiText v-if="chatMessage.content" :content="chatMessage.content" />
                         </p>
                         <div
                           v-else-if="messageHasImages(chatMessage)"
@@ -620,11 +621,10 @@
             placement="top-left"
             overlay-class-name="community-composer__mention-popover"
           >
-            <BInput
+            <ChatComposerInput
               ref="composerInput"
               v-model:value="draft"
               class="community-composer__input"
-              type="textarea"
               :rows="1"
               :maxlength="2000"
               :submit-on-enter="true"
@@ -865,6 +865,14 @@
 </template>
 
 <script setup lang="ts">
+  import {
+    COMMUNITY_CHAT_INLINE_EMOJI_MAX_PER_MESSAGE,
+    COMMUNITY_CHAT_INLINE_EMOJI_MAX_RAW_LENGTH,
+    communityChatInlineEmojiLogicalLength,
+    communityChatInlineEmojiToPlainText,
+    countCommunityChatInlineEmojis,
+    resolveCommunityChatInlineEmoji,
+  } from '@lightnote/shared/community-chat-inline-emojis';
   import { resolveCommunityChatOfficialSticker } from '@lightnote/shared/community-chat-stickers';
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
@@ -920,7 +928,6 @@
   import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
   import type { BActionMenuItem } from '@/components/base/BasicComponents/actionMenu';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
@@ -936,6 +943,8 @@
   import ChatUserProfileModal from '@/components/communityChat/ChatUserProfileModal.vue';
   import ChatOnlineMembersModal from '@/components/communityChat/ChatOnlineMembersModal.vue';
   import ChatExpressionPanel from '@/components/communityChat/ChatExpressionPanel.vue';
+  import ChatComposerInput from '@/components/communityChat/ChatComposerInput.vue';
+  import ChatInlineEmojiText from '@/components/communityChat/ChatInlineEmojiText.vue';
   import ChatMentionSuggestions from '@/components/communityChat/ChatMentionSuggestions.vue';
   import ChatPollCard from '@/components/communityChat/ChatPollCard.vue';
   import ChatPollComposerModal from '@/components/communityChat/ChatPollComposerModal.vue';
@@ -1022,7 +1031,7 @@
   const nextAfter = ref<string | null>(null);
   const messageListEl = ref<HTMLElement | null>(null);
   const messageContentEl = ref<HTMLElement | null>(null);
-  const composerInput = ref<InstanceType<typeof BInput> | null>(null);
+  const composerInput = ref<InstanceType<typeof ChatComposerInput> | null>(null);
   const composerDraftSession = shallowRef(createCommunityChatDraftSession());
   const draft = computed({
     get: () => composerDraftSession.value.text,
@@ -1246,7 +1255,8 @@
       scheduleVisibleReadReceipts();
     },
   });
-  const draftLength = computed(() => Array.from(String(draft.value || '')).length);
+  const draftLength = computed(() => communityChatInlineEmojiLogicalLength(draft.value));
+  const draftInlineEmojiCount = computed(() => countCommunityChatInlineEmojis(draft.value));
   const communityClock = computed(() => recallClock.value + serverClockOffsetMs.value);
   const focusMessageFromRoute = computed(() => {
     const value = route.query.message;
@@ -1254,7 +1264,14 @@
   });
   const canSend = computed(() => {
     const hasPayload = Boolean(String(draft.value || '').trim()) || pendingImages.value.length > 0;
-    return hasPayload && draftLength.value <= 2000 && !sending.value && imageUploadsInFlight.value === 0;
+    return (
+      hasPayload &&
+      draftLength.value <= 2000 &&
+      Array.from(String(draft.value || '')).length <= COMMUNITY_CHAT_INLINE_EMOJI_MAX_RAW_LENGTH &&
+      draftInlineEmojiCount.value <= COMMUNITY_CHAT_INLINE_EMOJI_MAX_PER_MESSAGE &&
+      !sending.value &&
+      imageUploadsInFlight.value === 0
+    );
   });
   const canMentionEveryone = computed(() => currentUser.role === 'root');
   const canViewOnlinePresence = computed(() => currentUser.role === 'root');
@@ -1479,10 +1496,14 @@
     recalledExpandedMessageIds.value = next;
   }
 
+  function inlineEmojiPlainText(value: string | null | undefined) {
+    return communityChatInlineEmojiToPlainText(value, (emoji) =>
+      t('communityChat.emoji.summary', { name: t(`communityChat.emoji.jianTuanItems.${emoji.id}`) }),
+    );
+  }
+
   function messageSummary(chatMessage: CommunityChatMessage) {
-    const content = String(chatMessage.content || '')
-      .replace(/\s+/g, ' ')
-      .trim();
+    const content = inlineEmojiPlainText(chatMessage.content).replace(/\s+/g, ' ').trim();
     if (chatMessage.messageKind === 'poll') {
       return t('communityChat.poll.summary', { question: content || t('communityChat.poll.cardLabel') });
     }
@@ -1493,9 +1514,7 @@
   }
 
   function composerReplySummary(reply: CommunityChatMessageReply) {
-    const content = String(reply.content || '')
-      .replace(/\s+/g, ' ')
-      .trim();
+    const content = inlineEmojiPlainText(reply.content).replace(/\s+/g, ' ').trim();
     if (reply.hasPoll) {
       return t('communityChat.poll.summary', { question: content || t('communityChat.poll.cardLabel') });
     }
@@ -1513,9 +1532,7 @@
     const reply = chatMessage.reply;
     if (!reply) return '';
     if (reply.status === 'active') {
-      const content = String(reply.content || '')
-        .replace(/\s+/g, ' ')
-        .trim();
+      const content = inlineEmojiPlainText(reply.content).replace(/\s+/g, ' ').trim();
       if (reply.hasPoll) {
         return t('communityChat.poll.summary', { question: content || t('communityChat.poll.cardLabel') });
       }
@@ -3479,9 +3496,8 @@
       closeMentionSuggestions();
       return;
     }
-    const textarea = composerInput.value?.inputEl as HTMLTextAreaElement | null | undefined;
-    if (!textarea) return;
-    const caret = textarea.selectionStart ?? draft.value.length;
+    if (!composerInput.value) return;
+    const caret = composerInput.value.getSelectionRange().start;
     const mentionQuery = resolveCommunityChatMentionQuery(draft.value, caret);
     if (!mentionQuery) {
       closeMentionSuggestions();
@@ -3559,9 +3575,8 @@
     pendingClientRequestId.value = null;
     closeMentionSuggestions();
     void nextTick(() => {
-      const textarea = composerInput.value?.inputEl as HTMLTextAreaElement | null | undefined;
       composerInput.value?.focus();
-      textarea?.setSelectionRange(range.start, range.start);
+      composerInput.value?.setSelectionRange(range.start, range.start);
     });
   }
 
@@ -3588,9 +3603,8 @@
     pendingClientRequestId.value = null;
     closeMentionSuggestions();
     void nextTick(() => {
-      const textarea = composerInput.value?.inputEl as HTMLTextAreaElement | null | undefined;
       composerInput.value?.focus();
-      textarea?.setSelectionRange(range.start, range.start);
+      composerInput.value?.setSelectionRange(range.start, range.start);
     });
   }
 
@@ -3604,26 +3618,30 @@
     closeMentionSuggestions();
     if (willOpen) {
       expressionPanelOpen.value = true;
-      const textarea = composerInput.value?.inputEl as HTMLTextAreaElement | null | undefined;
-      textarea?.blur();
+      composerInput.value?.blur();
     } else {
       closeMobileExpressionPanel({ focusComposer: true });
     }
   }
 
   function insertEmoji(emoji: string) {
-    const textarea = composerInput.value?.inputEl as HTMLTextAreaElement | null | undefined;
-    const start = textarea?.selectionStart ?? draft.value.length;
-    const end = textarea?.selectionEnd ?? start;
-    draft.value = `${draft.value.slice(0, start)}${emoji}${draft.value.slice(end)}`;
+    if (
+      resolveCommunityChatInlineEmoji(emoji) &&
+      draftInlineEmojiCount.value >= COMMUNITY_CHAT_INLINE_EMOJI_MAX_PER_MESSAGE
+    ) {
+      message.warning(
+        t('communityChat.emoji.limit', {
+          count: COMMUNITY_CHAT_INLINE_EMOJI_MAX_PER_MESSAGE,
+        }),
+      );
+      return;
+    }
+    if (!composerInput.value?.replaceSelection(emoji)) return;
     rememberEmoji(emoji);
     pendingClientRequestId.value = null;
     expressionPanelOpen.value = false;
     closeMentionSuggestions();
     void nextTick(() => {
-      const nextCaret = start + emoji.length;
-      const nextTextarea = composerInput.value?.inputEl as HTMLTextAreaElement | null | undefined;
-      nextTextarea?.setSelectionRange(nextCaret, nextCaret);
       composerInput.value?.focus();
     });
   }
@@ -3644,13 +3662,7 @@
   }
 
   function syncComposerInputHeight() {
-    const textarea = composerInput.value?.inputEl as HTMLTextAreaElement | null | undefined;
-    if (!textarea) return;
-    textarea.style.height = 'auto';
-    const contentHeight = textarea.scrollHeight;
-    const nextHeight = Math.min(Math.max(contentHeight, COMPOSER_INPUT_MIN_HEIGHT), COMPOSER_INPUT_MAX_HEIGHT);
-    textarea.style.height = `${nextHeight}px`;
-    textarea.style.overflowY = contentHeight > COMPOSER_INPUT_MAX_HEIGHT ? 'auto' : 'hidden';
+    composerInput.value?.syncHeight(COMPOSER_INPUT_MIN_HEIGHT, COMPOSER_INPUT_MAX_HEIGHT);
   }
 
   function transferHasFiles(dataTransfer: DataTransfer | null | undefined) {
@@ -4963,6 +4975,7 @@
     box-sizing: border-box;
     scrollbar-width: thin;
     scrollbar-color: transparent transparent;
+    --avatar-frame-scroll-secondary-play-state: running;
   }
 
   .community-message-list:hover {
@@ -4983,31 +4996,9 @@
     background: transparent;
   }
 
-  /* 滚动时保留框体本身的低成本 transform，暂停光晕、素材高光和粒子，并强制关闭动态滤镜。 */
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame__ambient),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame__art-detail),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame__wing-layer),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame__celestial-dust i),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame__eternal-motes i),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame__book-layer),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame__bookmark-current),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame__bookmark-booklight),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame__bookmark-event i),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame__constellation-ink),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame__constellation-star-route i),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame__constellation-pen::before),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame__constellation-pen::after),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame__cloudvault-current),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame__cloudvault-event i),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame__motion::before),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame__motion::after),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame__motion i) {
-    animation-play-state: paused !important;
-    filter: none !important;
-  }
-
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--dynamic .avatar-frame__art) {
-    filter: none !important;
+  /* 组件自行划分核心与次级通道；列表只提供可继承状态，滚动边界不再硬切框体滤镜。 */
+  .community-message-list.is-actively-scrolling {
+    --avatar-frame-scroll-secondary-play-state: paused;
   }
 
   .community-message-list:hover::-webkit-scrollbar-thumb {
@@ -5649,7 +5640,7 @@
   }
 
   .community-composer {
-    padding: 7px 14px 6px;
+    padding: 7px 14px 12px;
     border-top: 1px solid var(--surface-divider-color);
     background: var(--card-background);
   }
@@ -5876,6 +5867,7 @@
     transform: none;
   }
 
+  .community-composer__input.chat-composer-input__rich,
   .community-composer__input :deep(.b-textarea) {
     min-height: 42px;
     max-height: 112px;
@@ -5887,6 +5879,10 @@
     box-shadow: none !important;
     background: transparent !important;
     line-height: 1.45;
+  }
+
+  .community-composer__input.chat-composer-input__rich:focus {
+    outline: 0;
   }
 
   .community-composer__toolbar,
@@ -6186,7 +6182,7 @@
     }
 
     .community-composer {
-      padding: 5px 8px calc(5px + env(safe-area-inset-bottom));
+      padding: 5px 8px calc(8px + env(safe-area-inset-bottom));
     }
 
     .community-composer__surface {
@@ -6207,6 +6203,7 @@
       height: 52px;
     }
 
+    .community-composer__input.chat-composer-input__rich,
     .community-composer__input :deep(.b-textarea) {
       min-height: 42px;
       max-height: 96px;

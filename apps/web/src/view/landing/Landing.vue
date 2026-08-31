@@ -201,8 +201,68 @@
         </div>
       </section>
 
-      <!-- ==================== Slide 3: 功能展示 ==================== -->
-      <section class="slide s-features" data-index="2">
+      <!-- ==================== Slide 3: 浏览器扩展 ==================== -->
+      <section class="slide s-extension" data-index="2">
+        <div class="slide-bg">
+          <div class="orb o-extension-1"></div>
+          <div class="orb o-extension-2"></div>
+        </div>
+        <div class="slide-inner extension-layout" :class="{ visible: visible[2] }">
+          <div class="extension-copy">
+            <div class="section-badge">QUICK CAPTURE</div>
+            <h2>{{ t('landing.extensionTitle') }}</h2>
+            <p class="section-sub">{{ t('landing.extensionSub') }}</p>
+            <div class="extension-capabilities">
+              <div>
+                <span class="extension-capability-icon extension-capability-icon--bookmark">
+                  <SvgIcon :src="icon.resource.bookmark" size="20" aria-hidden="true" />
+                </span>
+                <span>{{ t('landing.extensionBookmark') }}</span>
+              </div>
+              <div>
+                <span class="extension-capability-icon extension-capability-icon--note">
+                  <SvgIcon :src="icon.resource.note" size="20" aria-hidden="true" />
+                </span>
+                <span>{{ t('landing.extensionNote') }}</span>
+              </div>
+              <div>
+                <span class="extension-capability-icon extension-capability-icon--file">
+                  <SvgIcon :src="icon.resource.file" size="20" aria-hidden="true" />
+                </span>
+                <span>{{ t('landing.extensionFile') }}</span>
+              </div>
+            </div>
+            <div class="extension-actions">
+              <a
+                v-if="!bookmark.isMobile"
+                class="landing-extension-store-link"
+                :href="CHROME_WEB_STORE_URL"
+                target="_blank"
+                rel="noopener noreferrer"
+                @click="trackExtensionStoreOpen"
+              >
+                <SvgIcon :src="icon.support.store" size="17" aria-hidden="true" />
+                {{ t('landing.extensionInstall') }}
+              </a>
+              <BButton class="btn-ghost extension-detail-button" @click="openExtensionDetails">
+                {{ t(bookmark.isMobile ? 'landing.extensionMobileCta' : 'landing.extensionLearnMore') }}
+                <SvgIcon :src="icon.arrow_right" size="15" aria-hidden="true" />
+              </BButton>
+            </div>
+            <p v-if="bookmark.isMobile" class="extension-mobile-hint">{{ t('landing.extensionMobileHint') }}</p>
+            <p class="extension-privacy-note">
+              <SvgIcon :src="icon.settings.privacy" size="15" aria-hidden="true" />
+              {{ t('landing.extensionPrivacy') }}
+            </p>
+          </div>
+          <div class="extension-preview">
+            <img :src="extensionScreenshot" :alt="t('landing.extensionScreenshotAlt')" loading="lazy" />
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== Slide 4: 功能展示 ==================== -->
+      <section class="slide s-features" data-index="3">
         <div class="slide-bg">
           <div class="orb o6"></div>
         </div>
@@ -211,7 +271,7 @@
           <h2>{{ t('landing.featuresTitle') }}</h2>
           <p class="section-sub">{{ t('landing.featuresSub') }}</p>
           <div class="features-grid">
-            <div v-for="(f, i) in features" :key="i" class="feat-card" :class="{ visible: visible[2] }">
+            <div v-for="(f, i) in features" :key="i" class="feat-card" :class="{ visible: visible[3] }">
               <div class="feat-icon">{{ f.icon }}</div>
               <div class="feat-info">
                 <div class="feat-title">{{ f.title }}</div>
@@ -222,8 +282,8 @@
         </div>
       </section>
 
-      <!-- ==================== Slide 4: 为什么选 ==================== -->
-      <section class="slide s-why" data-index="3">
+      <!-- ==================== Slide 5: 为什么选 ==================== -->
+      <section class="slide s-why" data-index="4">
         <div class="slide-bg">
           <div class="orb o7"></div>
           <div class="orb o8"></div>
@@ -236,7 +296,7 @@
               v-for="(r, i) in reasons"
               :key="i"
               class="reason-card"
-              :class="{ visible: visible[3] }"
+              :class="{ visible: visible[4] }"
               :style="{ transitionDelay: `${i * 0.1}s` }"
             >
               <div class="reason-icon" :style="{ background: r.bg }">{{ r.icon }}</div>
@@ -260,8 +320,8 @@
         </div>
       </section>
 
-      <!-- ==================== Slide 5: CTA ==================== -->
-      <section class="slide s-cta" data-index="4">
+      <!-- ==================== Slide 6: CTA ==================== -->
+      <section class="slide s-cta" data-index="5">
         <div class="slide-bg">
           <div class="orb o9"></div>
           <div class="orb o10"></div>
@@ -335,12 +395,7 @@
             <a :href="MIIT_QUERY_URL" target="_blank" rel="noopener noreferrer">{{ WEBSITE_ICP_NUMBER }}</a>
             <template v-if="hasPublicSecurityFiling">
               <span class="footer-sep">|</span>
-              <a
-                class="public-security-filing-link"
-                :href="PUBLIC_SECURITY_QUERY_URL"
-                target="_blank"
-                rel="noreferrer"
-              >
+              <a class="public-security-filing-link" :href="PUBLIC_SECURITY_QUERY_URL" target="_blank" rel="noreferrer">
                 <img
                   class="public-security-filing-badge"
                   :src="PUBLIC_SECURITY_BADGE_PATH"
@@ -358,6 +413,8 @@
                  注意:路径是 /helpCenter 不是 /help —— /help 是 App 内已有的
                  AI 助手/帮助文档路由(router/modules/common.ts),不能撞 -->
             <a href="/helpCenter">{{ t('landing.helpCenter') }}</a>
+            <span class="footer-sep">|</span>
+            <a :href="BROWSER_EXTENSION_LANDING_PATH">{{ t('landing.browserExtension') }}</a>
             <span class="footer-sep">|</span>
             <a href="/legal/privacy-policy.html">{{ t('landing.privacyPolicy') }}</a>
             <span class="footer-sep">|</span>
@@ -383,7 +440,7 @@
     <!-- Nav -->
     <div class="nav-dots">
       <BButton
-        v-for="(_, i) in 5"
+        v-for="(_, i) in navLabels"
         :key="i"
         :class="['nav-dot', { active: current === i }]"
         :aria-label="navLabels[i]"
@@ -460,8 +517,11 @@
     WEBSITE_ICP_NUMBER,
     hasPublicSecurityFiling,
   } from '@/config/siteCompliance.ts';
+  import { BROWSER_EXTENSION_LANDING_PATH, CHROME_WEB_STORE_URL } from '@/config/browserExtension.ts';
+  import extensionScreenshotZh from '../../../store-assets/chrome/screenshots/localized/01-home.png';
+  import extensionScreenshotEn from '../../../store-assets/chrome/screenshots/global/01-home.png';
 
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const router = useRouter();
   const user = useUserStore();
   const bookmark = bookmarkStore();
@@ -487,7 +547,7 @@
   const current = ref(0);
   // 手机首访默认先展示真实移动界面，桌面端仍以书签工作台开场。
   const previewIndex = ref(bookmark.isMobile ? 3 : 0);
-  const visible = ref({ 1: false, 2: false, 3: false });
+  const visible = ref({ 1: false, 2: false, 3: false, 4: false });
   const animating = ref(false);
   const showContactModal = ref(false);
   const feedbackContent = ref('');
@@ -533,9 +593,17 @@
   ]);
 
   const currentPreviewAspect = computed(() => previewItems.value[previewIndex.value]?.aspect || MOBILE_STAGE_ASPECT);
+  const extensionScreenshot = computed(() =>
+    String(locale.value || '')
+      .toLowerCase()
+      .startsWith('zh')
+      ? extensionScreenshotZh
+      : extensionScreenshotEn,
+  );
   const navLabels = computed(() => [
     t('landing.navCover'),
     t('landing.navCore'),
+    t('landing.navExtension'),
     t('landing.navFeatures'),
     t('landing.navWhy'),
     t('landing.navStart'),
@@ -548,6 +616,13 @@
     // 次 CTA「先体验示例」:进入游客共享示例空间,记 demo_enter
     trackConversion('demo_enter', 'landing_demo');
     router.push('/home');
+  }
+  function openExtensionDetails() {
+    void router.push(BROWSER_EXTENSION_LANDING_PATH);
+    void recordOperation({ module: '官网首页', operation: '查看浏览器扩展完整介绍' });
+  }
+  function trackExtensionStoreOpen() {
+    void recordOperation({ module: '官网首页', operation: '打开 Chrome 扩展商店' });
   }
   // 主 CTA「免费注册，开始使用」:打开注册弹窗(openAuthModal 内部记 signup_open,source 区分主/末屏)
   function goRegister(source: string) {
@@ -728,7 +803,7 @@
     const idx = Math.round(s.scrollTop / s.clientHeight);
     current.value = idx;
     // Toggle visibility for each section
-    visible.value = { 1: idx >= 1, 2: idx >= 2, 3: idx >= 3 } as any;
+    visible.value = { 1: idx >= 1, 2: idx >= 2, 3: idx >= 3, 4: idx >= 4 };
   }
 
   onMounted(() => {
@@ -943,6 +1018,22 @@
     right: -60px;
     background: #8a85ff;
     animation-delay: -4s;
+  }
+  .o-extension-1 {
+    width: 420px;
+    height: 420px;
+    top: -100px;
+    right: -100px;
+    background: #615ced;
+    animation-delay: -2s;
+  }
+  .o-extension-2 {
+    width: 320px;
+    height: 320px;
+    bottom: -80px;
+    left: -80px;
+    background: #00a884;
+    animation-delay: -6s;
   }
   .o6 {
     width: 350px;
@@ -1602,6 +1693,153 @@
     border: 1px solid rgba(255, 255, 255, 0.05);
   }
 
+  /* ============ Browser extension ============ */
+  .extension-layout {
+    max-width: max(1120px, min(58vw, 1480px));
+    display: grid;
+    grid-template-columns: minmax(360px, 0.82fr) minmax(520px, 1.18fr);
+    align-items: center;
+    gap: 52px;
+    text-align: left;
+    opacity: 0;
+    transform: translateY(28px);
+    transition:
+      opacity 0.6s ease,
+      transform 0.6s ease;
+  }
+  .extension-layout.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .extension-copy h2 {
+    margin: 0 0 10px;
+    color: #f4f3ff;
+    font-size: clamp(30px, 3.5vw, 48px);
+    line-height: 1.18;
+  }
+  .extension-copy .section-sub {
+    margin: 0 0 22px;
+    color: #9593a3;
+    font-size: 15px;
+    line-height: 1.7;
+  }
+  .extension-capabilities {
+    display: grid;
+    gap: 9px;
+  }
+  .extension-capabilities > div {
+    min-height: 48px;
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 12px;
+    color: #d7d6df;
+    background: rgba(255, 255, 255, 0.025);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .extension-capability-icon {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid currentColor;
+    border-radius: 10px;
+  }
+  .extension-capability-icon--bookmark {
+    color: #aaa6ff;
+    background: rgba(97, 92, 237, 0.14);
+  }
+  .extension-capability-icon--note {
+    color: #3ddcbd;
+    background: rgba(0, 168, 132, 0.13);
+  }
+  .extension-capability-icon--file {
+    color: #ffad48;
+    background: rgba(255, 138, 0, 0.13);
+  }
+  .extension-actions {
+    margin-top: 20px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    flex-wrap: wrap;
+  }
+  .landing-extension-store-link {
+    min-height: 44px;
+    padding: 0 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    border: 1px solid #7771ff;
+    border-radius: 999px;
+    color: #fff;
+    background: #615ced;
+    font-size: 14px;
+    font-weight: 650;
+    text-decoration: none;
+    transition:
+      transform 0.2s ease,
+      background-color 0.2s ease,
+      box-shadow 0.2s ease;
+  }
+  .landing-extension-store-link:hover {
+    background: #7771ff;
+    transform: translateY(-2px);
+    box-shadow: 0 12px 28px rgba(97, 92, 237, 0.32);
+  }
+  .landing-extension-store-link:focus-visible {
+    outline: 2px solid #aaa6ff;
+    outline-offset: 3px;
+  }
+  .extension-detail-button.b_btn {
+    min-height: 44px;
+    padding: 10px 20px;
+    gap: 6px;
+    font-size: 14px;
+  }
+  .extension-mobile-hint,
+  .extension-privacy-note {
+    color: #777683;
+    font-size: 11px;
+    line-height: 1.55;
+  }
+  .extension-mobile-hint {
+    margin: 10px 0 0;
+  }
+  .extension-privacy-note {
+    margin: 14px 0 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .extension-privacy-note :deep(svg) {
+    flex: 0 0 auto;
+    color: #aaa6ff;
+  }
+  .extension-preview {
+    overflow: hidden;
+    border: 1px solid rgba(145, 140, 255, 0.22);
+    border-radius: 22px;
+    background: #1d1f28;
+    box-shadow:
+      0 28px 74px rgba(0, 0, 0, 0.45),
+      0 0 0 1px rgba(255, 255, 255, 0.025) inset;
+    transform: perspective(1200px) rotateY(-3deg) rotateX(1deg);
+  }
+  .extension-preview img {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1280 / 800;
+    object-fit: cover;
+  }
+
   /* ============ Features ============ */
   .features-grid {
     display: grid;
@@ -2249,6 +2487,45 @@
       grid-template-columns: 1fr;
       width: 100%;
       gap: 10px;
+    }
+    .extension-layout {
+      max-width: 430px;
+      grid-template-columns: 1fr;
+      gap: 22px;
+      text-align: center;
+      opacity: 1;
+      transform: none;
+    }
+    .extension-copy .section-sub {
+      margin: 6px auto 18px;
+      font-size: 13px;
+    }
+    .extension-capabilities {
+      text-align: left;
+    }
+    .extension-capabilities > div {
+      min-height: 46px;
+      font-size: 12px;
+    }
+    .extension-actions {
+      justify-content: center;
+    }
+    .extension-detail-button.b_btn {
+      width: min(100%, 320px);
+      min-height: 46px;
+    }
+    .extension-mobile-hint {
+      text-align: center;
+    }
+    .extension-privacy-note {
+      max-width: 31em;
+      margin-right: auto;
+      margin-left: auto;
+      text-align: left;
+    }
+    .extension-preview {
+      border-radius: 15px;
+      transform: none;
     }
     .core-card,
     .feat-card,

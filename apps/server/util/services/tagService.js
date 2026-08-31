@@ -8,7 +8,22 @@ function normalizeName(value) {
   return name;
 }
 
-export async function createTag({ userId, name, iconUrl, sort, connection = pool, existingIsSuccess = false } = {}) {
+export function normalizeTagDescription(value) {
+  if (value === undefined) return undefined;
+  const description = String(value || '').trim();
+  if (description.length > 500) throw new Error('TAG_DESCRIPTION_TOO_LONG: 标签说明不能超过 500 个字符');
+  return description;
+}
+
+export async function createTag({
+  userId,
+  name,
+  description,
+  iconUrl,
+  sort,
+  connection = pool,
+  existingIsSuccess = false,
+} = {}) {
   if (!userId) throw new Error('USER_REQUIRED: 缺少用户');
   const normalizedName = normalizeName(name);
   const [existing] = await connection.query(
@@ -20,6 +35,8 @@ export async function createTag({ userId, name, iconUrl, sort, connection = pool
     throw new Error('TAG_DUPLICATE: 标签已存在');
   }
   const fields = { name: normalizedName, userId };
+  const normalizedDescription = normalizeTagDescription(description);
+  if (normalizedDescription !== undefined) fields.description = normalizedDescription;
   if (iconUrl !== undefined) fields.iconUrl = String(iconUrl || '');
   if (sort !== undefined && Number.isFinite(Number(sort))) fields.sort = Number(sort);
   const data = insertData(fields);

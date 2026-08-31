@@ -254,6 +254,7 @@
 </template>
 
 <script setup lang="ts">
+  import { communityChatInlineEmojiToPlainText } from '@lightnote/shared/community-chat-inline-emojis';
   import { computed, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import {
@@ -410,7 +411,13 @@
 
   function evidenceContent(item: CommunityChatReportItem) {
     const evidence = item.evidenceSnapshot;
-    const content = evidence?.content || t('communityChatModerationAdmin.messageUnavailable');
+    const content = evidence?.content
+      ? communityChatInlineEmojiToPlainText(evidence.content, (emoji) =>
+          t('communityChat.emoji.summary', {
+            name: t(`communityChat.emoji.jianTuanItems.${emoji.id}`),
+          }),
+        )
+      : t('communityChatModerationAdmin.messageUnavailable');
     const options = evidence?.poll?.options?.filter(Boolean) || [];
     if (!options.length) return content;
     return t('communityChatModerationAdmin.pollEvidence', { question: content, options: options.join(' / ') });

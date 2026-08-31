@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { COMMUNITY_CHAT_INLINE_EMOJIS } from '@lightnote/shared/community-chat-inline-emojis';
 import { createApp, nextTick, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
@@ -3082,20 +3083,12 @@ describe('CommunityChatWorkspace', () => {
     expect(workspaceSource).toContain('messageScrollFrame = window.requestAnimationFrame(processMessageListScroll)');
     expect(workspaceSource).toContain('current && isEqual(current, item) ? current : item');
     expect(workspaceSource).toContain('pause-when-offscreen');
+    expect(workspaceSource).toContain('motion-profile="chat"');
     expect(workspaceSource).toContain("element.classList.add('is-actively-scrolling')");
-    expect(workspaceSource).toContain('animation-play-state: paused !important;');
-    expect(workspaceSource).toContain(':deep(.avatar-frame__ambient),');
-    expect(workspaceSource).toContain(':deep(.avatar-frame__art-detail),');
-    expect(workspaceSource).toContain(':deep(.avatar-frame__wing-layer),');
-    expect(workspaceSource).toContain(':deep(.avatar-frame__book-layer),');
-    expect(workspaceSource).toContain(':deep(.avatar-frame__motion::before),');
-    expect(workspaceSource).toContain(':deep(.avatar-frame__motion::after),');
-    expect(workspaceSource).toContain(':deep(.avatar-frame__motion i)');
-    expect(workspaceSource).toContain(':deep(.avatar-frame--dynamic .avatar-frame__art)');
-    expect(workspaceSource).toContain('filter: none !important;');
-    expect(workspaceSource).not.toContain('.avatar-frame__ring');
-    expect(workspaceSource).not.toContain('.avatar-frame__motif');
-    expect(workspaceSource).not.toContain('.avatar-frame__signature');
+    expect(workspaceSource).toContain('--avatar-frame-scroll-secondary-play-state: running;');
+    expect(workspaceSource).toContain('--avatar-frame-scroll-secondary-play-state: paused;');
+    expect(workspaceSource).not.toContain(':deep(.avatar-frame__');
+    expect(workspaceSource).not.toContain('filter: none !important;');
     expect(workspaceSource).not.toContain('content-visibility: auto;');
     expect(workspaceSource).not.toContain('contain: layout style;');
     expect(workspaceSource).toMatch(/\.community-message__avatar\s*\{[\s\S]*?overflow:\s*visible\s*!important;/u);
@@ -3514,7 +3507,7 @@ describe('CommunityChatWorkspace', () => {
     expect(host.querySelector('.chat-expression-panel')).toBeNull();
   });
 
-  it('从统一表情面板选择 Emoji 后写入输入框并自动关闭面板', async () => {
+  it('从 Emoji 内的笺团分类选择小表情后写入统一编辑事务，并支持撤销重做', async () => {
     mocks.bookmark.isMobile = true;
     const host = await mountWorkspace();
     host
@@ -3525,13 +3518,38 @@ describe('CommunityChatWorkspace', () => {
     await flushAsync();
 
     const emojiButton = host.querySelector<HTMLButtonElement>('.chat-emoji-panel__grid .b_btn');
-    const selectedEmoji = emojiButton?.textContent?.trim() || '';
-    expect(selectedEmoji).not.toBe('');
+    expect(emojiButton?.querySelector('img')?.getAttribute('src')).toBe(COMMUNITY_CHAT_INLINE_EMOJIS[0].assetPath);
     emojiButton?.click();
     await flushAsync();
 
-    expect(host.querySelector<HTMLTextAreaElement>('.community-composer__input textarea')?.value).toBe(selectedEmoji);
+    expect(host.querySelector<HTMLTextAreaElement>('.community-composer__input textarea')).toBeNull();
+    expect(host.querySelector<HTMLImageElement>('.chat-composer-input__rich img')?.dataset.inlineEmojiToken).toBe(
+      COMMUNITY_CHAT_INLINE_EMOJIS[0].token,
+    );
     expect(host.querySelector('.chat-expression-panel')).toBeNull();
+
+    host
+      .querySelector<HTMLElement>('.chat-composer-input__rich')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', metaKey: true, bubbles: true, cancelable: true }));
+    await flushAsync();
+    expect(host.querySelector<HTMLTextAreaElement>('.community-composer__input textarea')?.value).toBe('');
+
+    host
+      .querySelector<HTMLTextAreaElement>('.community-composer__input textarea')
+      ?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'z', metaKey: true, shiftKey: true, bubbles: true, cancelable: true }),
+      );
+    await flushAsync();
+    expect(host.querySelector<HTMLImageElement>('.chat-composer-input__rich img')?.dataset.inlineEmojiToken).toBe(
+      COMMUNITY_CHAT_INLINE_EMOJIS[0].token,
+    );
+  });
+
+  it('输入区底部留白比原布局增加，但保持低于 Lark 的大间距', () => {
+    expect(workspaceSource).toMatch(/\.community-composer\s*\{[\s\S]*?padding:\s*7px 14px 12px;/u);
+    expect(workspaceSource).toMatch(
+      /@media[\s\S]*?\.community-composer\s*\{[\s\S]*?padding:\s*5px 8px calc\(8px \+ env\(safe-area-inset-bottom\)\);/u,
+    );
   });
 
   it('个人表情面板可上传用户自己的图片，并立即加入账号表情库', async () => {

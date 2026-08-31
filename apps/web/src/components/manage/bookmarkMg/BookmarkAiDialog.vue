@@ -10,6 +10,7 @@
     :scope-label="scopeLabel"
     :actions="actions"
     :show-prompt="false"
+    :show-grounding="false"
     auto-run-action-id="summarize"
     @update:visible="emit('update:visible', $event)"
   >
@@ -21,7 +22,7 @@
         :disabled="creatingNote"
         @click="createNoteFromSummary(response)"
       >
-        {{ t('bookmarkMg.aiCreateNote') }}
+        {{ t('aiSkills.saveAsNote') }}
       </BButton>
     </template>
   </AiSkillDialog>

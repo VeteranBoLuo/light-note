@@ -229,6 +229,22 @@ describe('Landing CTA', () => {
     expect(mocks.routerPush).toHaveBeenCalledWith('/support');
   });
 
+  it('展示浏览器扩展独立展区、长期商店链接与六段导航', async () => {
+    const host = await mountLanding();
+    const storeLink = host.querySelector<HTMLAnchorElement>('.landing-extension-store-link');
+    const detailButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
+      button.textContent?.includes('landing.extensionLearnMore'),
+    );
+
+    expect(storeLink?.href).toBe('https://chromewebstore.google.com/detail/hfdpgaiggloacopnkihfkloicjepldig');
+    expect(host.querySelectorAll('.nav-dots .nav-dot')).toHaveLength(6);
+    expect(host.querySelector('.landing-footer a[href="/browser-extension"]')).not.toBeNull();
+
+    detailButton?.click();
+    await nextTick();
+    expect(mocks.routerPush).toHaveBeenCalledWith('/browser-extension');
+  });
+
   it('在官网页脚公开网站 ICP 与公安备案信息', async () => {
     const host = await mountLanding();
     const footer = host.querySelector<HTMLElement>('.landing-footer');
@@ -240,9 +256,7 @@ describe('Landing CTA', () => {
     expect(footer?.textContent).toContain('轻笺知识库');
     expect(footer?.textContent).toContain('蜀ICP备2026017699号-1');
     expect(footer?.textContent).toContain('川公网安备51200002001211号');
-    expect(publicSecurityLink?.querySelector('img')?.getAttribute('src')).toBe(
-      '/public-security-filing-badge.png',
-    );
+    expect(publicSecurityLink?.querySelector('img')?.getAttribute('src')).toBe('/public-security-filing-badge.png');
     expect(aboutLink).not.toBeNull();
   });
 });

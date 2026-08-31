@@ -75,14 +75,20 @@
   import { useI18n } from 'vue-i18n';
   import type { AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
   import { renderStreamingMarkdown } from '@/utils/aiMessageRender';
+  import { stripAiAnalysisCitations } from '@/utils/aiAnalysisContent';
 
   type SkillResult = NonNullable<AiSkillResponse['result']>;
   type UnknownRecord = Record<string, unknown>;
 
-  const props = defineProps<{ result: SkillResult }>();
+  const props = withDefaults(defineProps<{ result: SkillResult; showGrounding?: boolean }>(), {
+    showGrounding: true,
+  });
   const { t } = useI18n();
 
-  const renderedContent = computed(() => renderStreamingMarkdown(textValue(props.result.content)));
+  const renderedContent = computed(() => {
+    const content = textValue(props.result.content);
+    return renderStreamingMarkdown(props.showGrounding ? content : stripAiAnalysisCitations(content));
+  });
   const isTodoDraft = computed(
     () =>
       props.result.kind === 'structured_draft' &&

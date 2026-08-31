@@ -79,7 +79,14 @@ describe('useNoteTreeDragDrop', () => {
   });
 
   it('接口确认前乐观移动，成功后保留结果并通知页面刷新自己的读模型', async () => {
-    const harness = mountDragDrop({ status: 200, data: {} });
+    const moveResult = {
+      id: 'a',
+      parentId: null,
+      previousParentId: null,
+      isTop: false,
+      moved: true,
+    };
+    const harness = mountDragDrop({ status: 200, data: moveResult });
 
     await expect(harness.dragDrop.moveNoteIntoTarget('a', false, afterTarget)).resolves.toBe(true);
 
@@ -93,6 +100,7 @@ describe('useNoteTreeDragDrop', () => {
       sourceId: 'a',
       sourceIsTop: false,
       target: afterTarget,
+      result: moveResult,
     });
     harness.app.unmount();
   });

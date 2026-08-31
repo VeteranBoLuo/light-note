@@ -11,6 +11,7 @@
  *
  * 预渲染页面清单见 PAGES：
  *   - /            官网首页（critical：失败则整个构建失败，绝不上线空壳门面）
+ *   - /browser-extension  浏览器扩展公开介绍页（critical：商店与官网长期入口不能发布空壳）
  *   - /updateLogs  更新日志（数据来自后端 API，默认通过 /api 代理到生产后端取真实数据；
  *                  本地验收可由 PRERENDER_API_ORIGIN 指向本机后端；
  *                  非 critical：失败只警告，页面退回 SPA 空壳，不阻塞部署）
@@ -55,6 +56,16 @@ const PAGES = [
     waitSelector: '.hero-title',
     critical: true,
     head: {},
+  },
+  {
+    route: '/browser-extension',
+    waitSelector: '.browser-extension-hero__title',
+    critical: true,
+    head: {
+      title: '轻笺 · 随手收 - 快速收集网页、笔记与文件 | 轻笺',
+      description:
+        '轻笺官方浏览器扩展：在 Chrome 或 Edge 侧栏中快速收集网页书签、Markdown 或富文本笔记和本地文件，支持待整理与 AI 补全后的正式保存。',
+    },
   },
   {
     route: '/updateLogs',

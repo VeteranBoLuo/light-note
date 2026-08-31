@@ -44,6 +44,7 @@
   import { persistAndroidAuthSession } from '@/utils/androidBridge.ts';
   import { bookmarkStore, useUserStore } from '@/store';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import { clearAuthNavigationIntent, resolveAuthNavigationIntent } from '@/utils/authNavigationIntent.ts';
 
   const router = useRouter();
   const { t } = useI18n();
@@ -168,10 +169,12 @@
         if (disposed) return;
         const extensionReturnPath = resolveExtensionAuthReturnPath();
         const quickSaveReturnPath = resolveQuickSaveAuthReturnPath();
-        const authReturnPath = extensionReturnPath || quickSaveReturnPath;
+        const protectedReturnPath = resolveAuthNavigationIntent();
+        const authReturnPath = extensionReturnPath || quickSaveReturnPath || protectedReturnPath;
         await router.replace(authReturnPath || getAuthenticatedEntryPath(finalPrefs));
         if (extensionReturnPath) clearExtensionAuthReturnPath();
         if (quickSaveReturnPath) clearQuickSaveAuthReturnPath();
+        clearAuthNavigationIntent();
       } else {
         const failureMessage = cRes.msg || t('auth.githubCallbackFailed');
         message.error(failureMessage);

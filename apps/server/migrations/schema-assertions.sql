@@ -2327,7 +2327,13 @@ LEFT JOIN support_entitlement_grants grant_row ON grant_row.support_order_id=cla
 WHERE grant_row.id IS NULL
    OR (grant_row.user_id IS NOT NULL AND NOT (grant_row.user_id <=> claim.user_id))
    OR (grant_row.user_id IS NULL AND claim.user_id NOT LIKE 'deleted:%')
-   OR NOT (grant_row.sku_id <=> claim.sku_id)
+   OR NOT (
+     grant_row.sku_id <=> claim.sku_id
+     OR (
+       claim.sku_id='scope-ai-account-v3'
+       AND grant_row.calculated_ai_tokens>0
+     )
+   )
    OR grant_row.entitlement_type<>'permanent'
    OR grant_row.first_purchase_applied<>1;
 
@@ -2623,3 +2629,181 @@ WHERE message.id IS NULL
    OR COALESCE(reader.del_flag, '1')<>'0'
    OR COALESCE(reader.role, 'deleted')='deleted'
    OR receipt.user_id=message.user_id;
+
+-- 61) 标签说明必须与标签元信息同表持久化（期望 0 行）
+SELECT '[61] missing_tag_description' AS check_name, 'tag.description' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA=DATABASE()
+    AND TABLE_NAME='tag'
+    AND COLUMN_NAME='description'
+    AND CHARACTER_MAXIMUM_LENGTH=500
+);
+
+-- 62) 知识工具箱的任务链路与持续工作区必须完整（期望 0 行）
+SELECT '[62] missing_toolbox_table' AS check_name, expected.t AS detail
+FROM (
+  SELECT 'toolbox_quotes' t UNION ALL
+  SELECT 'toolbox_jobs' UNION ALL
+  SELECT 'toolbox_job_inputs' UNION ALL
+  SELECT 'toolbox_artifacts' UNION ALL
+  SELECT 'toolbox_save_receipts' UNION ALL
+  SELECT 'toolbox_workspaces' UNION ALL
+  SELECT 'toolbox_workspace_resources' UNION ALL
+  SELECT 'toolbox_workspace_items' UNION ALL
+  SELECT 'toolbox_workspace_sessions'
+) expected
+LEFT JOIN information_schema.tables actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.t AND actual.engine='InnoDB'
+WHERE actual.table_name IS NULL;
+
+SELECT '[62] missing_toolbox_column' AS check_name, CONCAT(expected.tab, '.', expected.col) AS detail
+FROM (
+  SELECT 'toolbox_quotes' tab, 'input_digest' col UNION ALL
+  SELECT 'toolbox_quotes', 'billing_medium' UNION ALL
+  SELECT 'toolbox_quotes', 'input_snapshot_json' UNION ALL
+  SELECT 'toolbox_quotes', 'quoted_points' UNION ALL
+  SELECT 'toolbox_quotes', 'expires_at' UNION ALL
+  SELECT 'toolbox_jobs', 'client_request_id' UNION ALL
+  SELECT 'toolbox_jobs', 'billing_medium' UNION ALL
+  SELECT 'toolbox_jobs', 'input_digest' UNION ALL
+  SELECT 'toolbox_jobs', 'status' UNION ALL
+  SELECT 'toolbox_jobs', 'billing_status' UNION ALL
+  SELECT 'toolbox_jobs', 'save_status' UNION ALL
+  SELECT 'toolbox_jobs', 'points_operation_id' UNION ALL
+  SELECT 'toolbox_jobs', 'external_cost_committed' UNION ALL
+  SELECT 'toolbox_job_inputs', 'input_type' UNION ALL
+  SELECT 'toolbox_job_inputs', 'resource_id' UNION ALL
+  SELECT 'toolbox_job_inputs', 'document_source_id' UNION ALL
+  SELECT 'toolbox_artifacts', 'artifact_version' UNION ALL
+  SELECT 'toolbox_artifacts', 'content' UNION ALL
+  SELECT 'toolbox_artifacts', 'coverage_json' UNION ALL
+  SELECT 'toolbox_save_receipts', 'receipt_key' UNION ALL
+  SELECT 'toolbox_save_receipts', 'idempotency_key' UNION ALL
+  SELECT 'toolbox_save_receipts', 'status' UNION ALL
+  SELECT 'toolbox_save_receipts', 'lease_token' UNION ALL
+  SELECT 'toolbox_save_receipts', 'save_generation' UNION ALL
+  SELECT 'toolbox_workspaces', 'kind' UNION ALL
+  SELECT 'toolbox_workspaces', 'status' UNION ALL
+  SELECT 'toolbox_workspaces', 'next_step' UNION ALL
+  SELECT 'toolbox_workspace_resources', 'resource_version' UNION ALL
+  SELECT 'toolbox_workspace_resources', 'resource_title' UNION ALL
+  SELECT 'toolbox_workspace_items', 'lane' UNION ALL
+  SELECT 'toolbox_workspace_items', 'status' UNION ALL
+  SELECT 'toolbox_workspace_sessions', 'summary' UNION ALL
+  SELECT 'toolbox_workspace_sessions', 'next_step'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.tab AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[62] invalid_toolbox_column_shape' AS check_name,
+  CONCAT(expected.tab, '.', expected.col, '=', COALESCE(actual.column_type, 'missing')) AS detail
+FROM (
+  SELECT 'toolbox_quotes' tab, 'input_digest' col, 'char' data_type, 64 char_len, 'NO' nullable_flag UNION ALL
+  SELECT 'toolbox_quotes', 'billing_medium', 'varchar', 16, 'NO' UNION ALL
+  SELECT 'toolbox_quotes', 'input_snapshot_json', 'json', NULL, 'NO' UNION ALL
+  SELECT 'toolbox_jobs', 'client_request_id', 'varchar', 64, 'NO' UNION ALL
+  SELECT 'toolbox_jobs', 'billing_medium', 'varchar', 16, 'NO' UNION ALL
+  SELECT 'toolbox_jobs', 'status', 'varchar', 24, 'NO' UNION ALL
+  SELECT 'toolbox_jobs', 'billing_status', 'varchar', 24, 'NO' UNION ALL
+  SELECT 'toolbox_jobs', 'save_status', 'varchar', 16, 'NO' UNION ALL
+  SELECT 'toolbox_jobs', 'locked_by', 'varchar', 128, 'YES' UNION ALL
+  SELECT 'toolbox_job_inputs', 'resource_id', 'varchar', 128, 'YES' UNION ALL
+  SELECT 'toolbox_artifacts', 'content', 'mediumtext', NULL, 'NO' UNION ALL
+  SELECT 'toolbox_artifacts', 'coverage_json', 'json', NULL, 'YES' UNION ALL
+  SELECT 'toolbox_save_receipts', 'receipt_key', 'char', 64, 'NO' UNION ALL
+  SELECT 'toolbox_save_receipts', 'idempotency_key', 'varchar', 128, 'NO' UNION ALL
+  SELECT 'toolbox_save_receipts', 'status', 'varchar', 16, 'NO' UNION ALL
+  SELECT 'toolbox_save_receipts', 'lease_token', 'char', 36, 'YES' UNION ALL
+  SELECT 'toolbox_save_receipts', 'save_generation', 'int', NULL, 'NO' UNION ALL
+  SELECT 'toolbox_workspaces', 'title', 'varchar', 120, 'NO' UNION ALL
+  SELECT 'toolbox_workspaces', 'status', 'varchar', 16, 'NO' UNION ALL
+  SELECT 'toolbox_workspace_resources', 'resource_version', 'varchar', 128, 'NO' UNION ALL
+  SELECT 'toolbox_workspace_items', 'content', 'text', NULL, 'YES' UNION ALL
+  SELECT 'toolbox_workspace_sessions', 'summary', 'varchar', 1000, 'YES'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.tab AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL
+   OR LOWER(actual.data_type)<>expected.data_type
+   OR (expected.char_len IS NOT NULL AND COALESCE(actual.character_maximum_length, 0)<>expected.char_len)
+   OR actual.is_nullable<>expected.nullable_flag;
+
+SELECT '[62] invalid_toolbox_column_default' AS check_name,
+  CONCAT(expected.tab, '.', expected.col, '=', COALESCE(actual.column_default, 'NULL')) AS detail
+FROM (
+  SELECT 'toolbox_quotes' tab, 'billing_medium' col, 'points' expected_default UNION ALL
+  SELECT 'toolbox_jobs', 'billing_medium', 'points' UNION ALL
+  SELECT 'toolbox_jobs', 'status', 'queued' UNION ALL
+  SELECT 'toolbox_jobs', 'billing_status', 'reserved' UNION ALL
+  SELECT 'toolbox_jobs', 'save_status', 'unsaved' UNION ALL
+  SELECT 'toolbox_save_receipts', 'status', 'saving' UNION ALL
+  SELECT 'toolbox_save_receipts', 'save_generation', '1' UNION ALL
+  SELECT 'toolbox_workspaces', 'status', 'active' UNION ALL
+  SELECT 'toolbox_workspace_items', 'status', 'open'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.tab AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL OR COALESCE(actual.column_default, '')<>expected.expected_default;
+
+SELECT '[62] invalid_points_operation_status_width' AS check_name,
+  CONCAT('points_economy_operations.status=', actual.column_type) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name='points_economy_operations'
+  AND actual.column_name='status'
+  AND COALESCE(actual.character_maximum_length, 0)<24;
+
+SELECT '[62] missing_toolbox_index' AS check_name, CONCAT(expected.tab, '.', expected.ix) AS detail
+FROM (
+  SELECT 'toolbox_quotes' tab, 'uk_toolbox_quote_request' ix UNION ALL
+  SELECT 'toolbox_quotes', 'idx_toolbox_quote_expiry' UNION ALL
+  SELECT 'toolbox_jobs', 'uk_toolbox_job_request' UNION ALL
+  SELECT 'toolbox_jobs', 'uk_toolbox_job_quote' UNION ALL
+  SELECT 'toolbox_jobs', 'idx_toolbox_job_claim' UNION ALL
+  SELECT 'toolbox_job_inputs', 'uk_toolbox_job_input_order' UNION ALL
+  SELECT 'toolbox_artifacts', 'uk_toolbox_artifact_job' UNION ALL
+  SELECT 'toolbox_save_receipts', 'uk_toolbox_save_receipt' UNION ALL
+  SELECT 'toolbox_save_receipts', 'uk_toolbox_save_request' UNION ALL
+  SELECT 'toolbox_workspaces', 'idx_toolbox_workspace_user_kind' UNION ALL
+  SELECT 'toolbox_workspace_resources', 'uk_toolbox_workspace_resource' UNION ALL
+  SELECT 'toolbox_workspace_items', 'idx_toolbox_workspace_item_lane' UNION ALL
+  SELECT 'toolbox_workspace_sessions', 'idx_toolbox_workspace_session_time'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.tab AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;
+
+SELECT '[62] invalid_toolbox_index_definition' AS check_name,
+  CONCAT(
+    expected.tab, '.', expected.ix, '=',
+    COALESCE(CONCAT(IF(actual.non_unique=0, 'UNIQUE ', ''), actual.index_columns), 'missing')
+  ) AS detail
+FROM (
+  SELECT 'toolbox_quotes' tab, 'uk_toolbox_quote_request' ix, 0 non_unique, 'user_id,request_id' index_columns UNION ALL
+  SELECT 'toolbox_quotes', 'idx_toolbox_quote_expiry', 1, 'status,expires_at' UNION ALL
+  SELECT 'toolbox_jobs', 'uk_toolbox_job_request', 0, 'user_id,client_request_id' UNION ALL
+  SELECT 'toolbox_jobs', 'uk_toolbox_job_quote', 0, 'quote_id' UNION ALL
+  SELECT 'toolbox_jobs', 'idx_toolbox_job_claim', 1, 'status,available_at,locked_at' UNION ALL
+  SELECT 'toolbox_job_inputs', 'uk_toolbox_job_input_order', 0, 'job_id,input_index' UNION ALL
+  SELECT 'toolbox_artifacts', 'uk_toolbox_artifact_job', 0, 'job_id' UNION ALL
+  SELECT 'toolbox_save_receipts', 'uk_toolbox_save_receipt', 0, 'receipt_key' UNION ALL
+  SELECT 'toolbox_save_receipts', 'uk_toolbox_save_request', 0, 'user_id,idempotency_key' UNION ALL
+  SELECT 'toolbox_workspaces', 'idx_toolbox_workspace_user_kind', 1, 'user_id,kind,status,updated_at' UNION ALL
+  SELECT 'toolbox_workspace_resources', 'uk_toolbox_workspace_resource', 0, 'workspace_id,resource_type,resource_id' UNION ALL
+  SELECT 'toolbox_workspace_items', 'idx_toolbox_workspace_item_lane', 1, 'workspace_id,lane,status,position' UNION ALL
+  SELECT 'toolbox_workspace_sessions', 'idx_toolbox_workspace_session_time', 1, 'workspace_id,create_time'
+) expected
+LEFT JOIN (
+  SELECT table_name, index_name, MIN(non_unique) non_unique,
+         GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') index_columns
+  FROM information_schema.statistics
+  WHERE table_schema=DATABASE()
+  GROUP BY table_name, index_name
+) actual ON actual.table_name=expected.tab AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL
+   OR actual.non_unique<>expected.non_unique
+   OR actual.index_columns<>expected.index_columns;

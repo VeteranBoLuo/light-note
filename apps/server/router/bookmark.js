@@ -5,15 +5,24 @@ const router = express.Router();
 
 import * as bookmarkHandle from '../router_handle/bookmarkHandle.js';
 import * as tagGraphHandle from '../router_handle/tagGraphHandle.js';
+import * as tagSpaceHandle from '../router_handle/tagSpaceHandle.js';
 import { aiActionRateLimiter, expensiveFreeActionRateLimiter } from '../util/requestRateLimit.js';
 
 const upload = multer({ dest: '/tmp' }); // 临时目录用于上传文件
 
 router.post('/queryTagList', bookmarkHandle.queryTagList);
 
+router.post('/queryTagSpaces', tagSpaceHandle.queryTagSpaces);
+
+router.post('/getTagSpace', tagSpaceHandle.getTagSpace);
+
+router.post('/queryTagSpaceResources', tagSpaceHandle.queryTagSpaceResourceList);
+
 router.post('/updateTagSort', bookmarkHandle.updateTagSort);
 
 router.post('/getTagDetail', bookmarkHandle.getTagDetail);
+
+router.post('/getTagEditorData', tagSpaceHandle.getTagEditorData);
 
 router.post('/getRelatedTag', bookmarkHandle.getRelatedTag);
 

@@ -17,10 +17,15 @@ const createEvidence = ({ rule, field, value, message, scoreDelta, confidence })
 });
 
 const ENUM_SORT_VALUES_BY_PATH = [
-  { pattern: /\/todo\/list\/?$/i, values: new Set(['smart', 'due', 'newest', 'oldest']) },
+  { pattern: /\/todo\/list\/?$/i, values: new Set(['smart', 'action', 'priority', 'due', 'newest', 'oldest']) },
   { pattern: /\/inbox\/list\/?$/i, values: new Set(['newest', 'oldest']) },
   { pattern: /\/search\/global\/?$/i, values: new Set(['relevance', 'updated', 'name']) },
   { pattern: /\/featureRequest\/listPublic\/?$/i, values: new Set(['updated', 'newest', 'popular']) },
+  {
+    pattern: /\/bookmark\/queryTagSpaces\/?$/i,
+    values: new Set(['default', 'recent', 'resourcedesc', 'nameasc']),
+  },
+  { pattern: /\/bookmark\/queryTagSpaceResources\/?$/i, values: new Set(['updated', 'added']) },
 ];
 
 const isKnownSortEnum = (context, item) => {

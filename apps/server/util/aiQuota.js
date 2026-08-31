@@ -21,7 +21,7 @@ const RESERVE_TOKENS = 5000;
 const MAX_RESERVE_TOKENS = 500_000;
 const DAILY_QUOTA = {
   user: 100_000,
-  visitor: 200_000,
+  visitor: 50_000,
   system: (() => {
     const value = Number(process.env.AI_SYSTEM_DAILY_QUOTA || 5_000_000);
     return Number.isFinite(value) ? Math.max(5_000, Math.floor(value)) : 5_000_000;

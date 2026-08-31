@@ -1,5 +1,6 @@
 import { apiBasePost } from '@/http/request';
 import type { NoteTreeItem, NoteTreeQueryResult } from '@/types/noteTree';
+import { flattenNoteTree } from '@/utils/noteTree';
 
 export type NoteTreeFeatureName =
   | 'note_tree_read'
@@ -53,6 +54,27 @@ export interface NoteDeletePreview {
   totalCount: number;
 }
 
+export interface NoteTreeMoveItemResult {
+  id: string;
+  parentId: string | null;
+  previousParentId: string | null;
+  isTop?: boolean;
+  sort?: number;
+  moved?: boolean;
+}
+
+export interface NoteTreeBatchMoveResult {
+  items: NoteTreeMoveItemResult[];
+  parentId?: string | null;
+  requestedCount?: number;
+  rootCount?: number;
+  movedCount?: number;
+  affectedCount?: number;
+  updatedCount?: number;
+}
+
+export type NoteTreeMoveResult = NoteTreeMoveItemResult | NoteTreeBatchMoveResult;
+
 function collectTreeIds(items: NoteTreeItem[], visited = new Set<string>()) {
   for (const item of Array.isArray(items) ? items : []) {
     const id = String(item?.id || '').trim();
@@ -76,6 +98,19 @@ export async function fetchNoteDeletePreview(noteId: string): Promise<NoteDelete
     descendantCount: descendantIds.length,
     totalCount: descendantIds.length + 1,
   };
+}
+
+/**
+ * 返回某篇父笔记的完整后代列表。根笔记由选择器已有的搜索结果提供，接口只读取权威子树，
+ * 最终仍会展开成普通 note 引用提交，避免给工具箱服务端再维护一套目录范围协议与计价分支。
+ */
+export async function fetchNoteBranchItems(noteId: string): Promise<NoteTreeItem[]> {
+  const id = String(noteId || '').trim();
+  if (!id) throw new Error('NOTE_TREE_NODE_ID_REQUIRED');
+  const response = await apiBasePost('/api/note/queryNoteTree', { parentId: id, depth: 'all' }, { silent: true });
+  if (response.status !== 200) throw new Error(String(response.data?.code || 'NOTE_TREE_LOAD_FAILED'));
+  const payload = (response.data || {}) as NoteTreeQueryResult;
+  return flattenNoteTree(payload.items || []).map(({ depth: _depth, ...item }) => item);
 }
 
 export function collapseNoteDeletePreviews(previews: NoteDeletePreview[]) {

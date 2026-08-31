@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { createApp, h, nextTick, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createPinia } from 'pinia';
@@ -23,6 +25,13 @@ afterEach(() => {
 });
 
 describe('BDrawer compositor cleanup', () => {
+  it('keeps bottom drawers on the vertical enter path instead of inheriting the side-drawer transform', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/components/base/BasicComponents/BDrawer.vue'), 'utf8');
+    expect(source).toMatch(
+      /\.is-entered\s*\{[\s\S]*?\.b-drawer-panel--bottom\s*\{[\s\S]*?transform:\s*translateY\(0\)/u,
+    );
+  });
+
   it('can place the close control before a centered mobile title', async () => {
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       callback(0);
@@ -141,6 +150,7 @@ describe('BDrawer compositor cleanup', () => {
     document.body.append(opener);
     opener.focus();
     const open = ref(true);
+    const onAfterClose = vi.fn();
     const onClose = vi.fn(() => {
       open.value = false;
     });
@@ -151,7 +161,7 @@ describe('BDrawer compositor cleanup', () => {
         return () =>
           h(
             BDrawer,
-            { open: open.value, title: 'Accessible drawer', destroyOnClose: false, onClose },
+            { open: open.value, title: 'Accessible drawer', destroyOnClose: false, onClose, onAfterClose },
             { default: () => h('button', { class: 'drawer-action' }, 'Action') },
           );
       },
@@ -182,6 +192,7 @@ describe('BDrawer compositor cleanup', () => {
     expect(wrapper).not.toBeNull();
     expect(wrapper?.classList.contains('is-hidden')).toBe(true);
     expect(document.activeElement).toBe(document.body);
+    expect(onAfterClose).toHaveBeenCalledOnce();
   });
 
   it('closes with Escape when focus is inside a teleported child outside the drawer panel', async () => {

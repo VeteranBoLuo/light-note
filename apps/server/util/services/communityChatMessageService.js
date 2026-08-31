@@ -1,4 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
+import {
+  COMMUNITY_CHAT_INLINE_EMOJI_MAX_PER_MESSAGE,
+  COMMUNITY_CHAT_INLINE_EMOJI_MAX_RAW_LENGTH,
+  communityChatInlineEmojiLogicalLength,
+  communityChatInlineEmojiToPlainText,
+  countCommunityChatInlineEmojis,
+  findUnknownCommunityChatInlineEmojiTokens,
+} from '@lightnote/shared/community-chat-inline-emojis';
 import { resolveCommunityChatOfficialSticker } from '@lightnote/shared/community-chat-stickers';
 import pool from '../../db/index.js';
 import { COMMUNITY_CHAT_PRIMARY_ROOM_SLUG, getCommunityChatFeatureState } from '../communityChatFeature.js';
@@ -173,12 +181,42 @@ function messagePayloadFingerprint(payload) {
   return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }
 
-function normalizeMessageContent(value, { allowEmpty = false } = {}) {
+function normalizeMessageContent(value, { allowEmpty = false, allowInlineEmoji = true } = {}) {
   const content = String(value || '')
     .replace(/\r\n?/g, '\n')
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
     .trim();
-  const length = Array.from(content).length;
+  const rawLength = Array.from(content).length;
+  if (rawLength > COMMUNITY_CHAT_INLINE_EMOJI_MAX_RAW_LENGTH) {
+    throw chatError(
+      'MESSAGE_TOO_LONG',
+      400,
+      `消息不能超过 ${MAX_MESSAGE_LENGTH} 个字符`,
+      `Messages cannot exceed ${MAX_MESSAGE_LENGTH} characters`,
+    );
+  }
+  const unknownTokens = findUnknownCommunityChatInlineEmojiTokens(content);
+  if (unknownTokens.length) {
+    throw chatError('INLINE_EMOJI_NOT_FOUND', 400, '消息中包含不可用的小表情', 'Message contains an unavailable emoji');
+  }
+  const inlineEmojiCount = countCommunityChatInlineEmojis(content);
+  if (!allowInlineEmoji && inlineEmojiCount) {
+    throw chatError(
+      'INLINE_EMOJI_NOT_ALLOWED',
+      400,
+      '当前消息类型不能使用小表情',
+      'Inline emoji are not allowed in this message type',
+    );
+  }
+  if (inlineEmojiCount > COMMUNITY_CHAT_INLINE_EMOJI_MAX_PER_MESSAGE) {
+    throw chatError(
+      'TOO_MANY_INLINE_EMOJIS',
+      400,
+      `每条消息最多使用 ${COMMUNITY_CHAT_INLINE_EMOJI_MAX_PER_MESSAGE} 个小表情`,
+      `A message can include at most ${COMMUNITY_CHAT_INLINE_EMOJI_MAX_PER_MESSAGE} inline emoji`,
+    );
+  }
+  const length = communityChatInlineEmojiLogicalLength(content);
   if (!length && !allowEmpty) {
     throw chatError('MESSAGE_EMPTY', 400, '消息内容不能为空', 'Message content cannot be empty');
   }
@@ -1325,6 +1363,7 @@ export async function createCommunityChatMessage({
   const normalizedImagePublicIds = normalizeImagePublicIds(imagePublicIds);
   const normalizedContent = normalizeMessageContent(content, {
     allowEmpty: normalizedImagePublicIds.length > 0 || normalizedMessageKind === 'sticker',
+    allowInlineEmoji: normalizedMessageKind === 'text',
   });
   const normalizedPoll =
     normalizedMessageKind === 'poll'
@@ -1662,7 +1701,12 @@ export async function createCommunityChatMessage({
     });
     // 站内提醒是提交后的附加能力。尤其 Root 的 @所有人可能产生较大扇出，
     // 不能占用消息事务、拖慢响应，或因提醒链路失败把已成功消息伪装成发送失败。
-    void deliverCommunityChatMessageNotifications({ messagePublicId: publicId, env, db }).catch((error) => {
+    void deliverCommunityChatMessageNotifications({
+      messagePublicId: publicId,
+      messagePreview: communityChatInlineEmojiToPlainText(normalizedContent, '[表情]'),
+      env,
+      db,
+    }).catch((error) => {
       console.error('[community-chat] 站内提醒投递失败 code=%s', error?.code || error?.name || 'UNKNOWN');
     });
     return { message, idempotent: false };

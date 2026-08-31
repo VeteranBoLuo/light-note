@@ -9,13 +9,14 @@ import {
 import { getMobileTopBarBinding, registerMobileTopBarBinding } from '@/composables/useMobileTopBar';
 
 describe('移动端导航配置', () => {
-  it('只把资料列表路由归入顶部资料切换', () => {
+  it('把资料列表和标签详情归入顶部资料切换', () => {
     expect(getMobileResourcePath('home')).toBe('/home');
     expect(getMobileResourcePath('home:id')).toBe('/home');
     expect(getMobileResourcePath('home:search')).toBe('/home');
     expect(getMobileResourcePath('noteLibrary')).toBe('/noteLibrary');
     expect(getMobileResourcePath('cloudSpace')).toBe('/cloudSpace');
     expect(getMobileResourcePath('tagMg')).toBe('/manage/tagMg');
+    expect(getMobileResourcePath('tagDetail')).toBe('/manage/tagMg');
     expect(getMobileResourcePath('tagEditMg')).toBeNull();
     expect(getMobileResourcePath('noteDetail')).toBeNull();
     expect(getMobileResourcePath('personCenter')).toBeNull();
@@ -23,7 +24,7 @@ describe('移动端导航配置', () => {
 
   it('保持资料切换与底部主导航的固定顺序', () => {
     expect(MOBILE_RESOURCE_NAVIGATION.map((item) => item.key)).toEqual(['bookmark', 'note', 'cloud', 'tag']);
-    // 今日在首位、确定性的快速收集居中；AI 只在对应业务模块出现，不占全局一级入口。
+    // 中间入口负责日常新建；知识工坊从一级目的地降级到新建面板。
     expect(MOBILE_BOTTOM_NAVIGATION.map((item) => item.key)).toEqual([
       'today',
       'resources',
@@ -34,6 +35,8 @@ describe('移动端导航配置', () => {
     expect(MOBILE_BOTTOM_NAVIGATION.map((item) => item.key)).not.toContain('ai');
     expect(MOBILE_BOTTOM_NAVIGATION.map((item) => item.key)).not.toContain('search');
     expect(MOBILE_BOTTOM_NAVIGATION.find((item) => item.key === 'today')?.path).toBe('/workbenches');
+    expect(MOBILE_BOTTOM_NAVIGATION.find((item) => item.key === 'capture')?.path).toBeUndefined();
+    expect(MOBILE_BOTTOM_NAVIGATION.map((item) => item.key)).not.toContain('toolbox');
     expect(MOBILE_BOTTOM_NAVIGATION.find((item) => item.key === 'community')?.path).toBe('/community-chat');
   });
 

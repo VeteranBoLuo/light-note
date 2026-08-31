@@ -11,6 +11,7 @@
       "qs@<6.15.2": "6.15.3",
       "cookie@<0.7.0": "0.7.2",
       "exceljs>uuid": "11.1.1",
+      "pdf-lib>tslib": "2.8.1",
       "esdk-obs-nodejs>fast-xml-parser": "5.7.0",
       "brace-expansion@<1.1.18": "1.1.18",
       "brace-expansion@>=2.0.0 <2.1.4": "2.1.4",

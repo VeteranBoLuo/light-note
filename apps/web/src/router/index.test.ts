@@ -17,6 +17,15 @@ describe('官网与应用入口路由', () => {
     expect(legacyLanding?.redirect).toBe('/');
   });
 
+  it('浏览器扩展介绍页允许公开访问并使用独立 canonical', () => {
+    const resolved = router.resolve('/browser-extension');
+    expect(resolved.name).toBe('browserExtensionLanding');
+    expect(resolved.meta.publicStandalone).toBe(true);
+    expect(resolved.meta.hideAiAssistant).toBe(true);
+    expect(resolved.meta.seoIndexable).toBe(true);
+    expect(resolved.meta.canonicalPath).toBe('/browser-extension');
+  });
+
   it('用户通知使用独立页面路由，且不挂移动端主导航壳', () => {
     const resolved = router.resolve('/notifications');
     expect(resolved.name).toBe('notifications');
@@ -41,6 +50,22 @@ describe('官网与应用入口路由', () => {
     expect(resolved.meta.roles).toContain('visitor');
   });
 
+  it('知识工坊仅首页显示移动底栏，工作台与任务页保留工坊壳语义', () => {
+    const home = router.resolve('/toolbox');
+    const workbench = router.resolve('/toolbox/material_to_note');
+    const task = router.resolve('/toolbox/task/job-1');
+    expect(home.name).toBe('toolboxHome');
+    expect(workbench.name).toBe('toolboxWorkbench');
+    expect(task.name).toBe('toolboxTask');
+    for (const resolved of [home, workbench, task]) {
+      expect(resolved.meta.requireAuth).toBe(true);
+      expect(resolved.meta.mobileShell).toBe('toolbox');
+    }
+    expect(home.meta.mobileBottomNav).toBe(true);
+    expect(workbench.meta.mobileBottomNav).toBe(false);
+    expect(task.meta.mobileBottomNav).toBe(false);
+  });
+
   it('支持轻笺页面允许游客直达，且使用统一的双端路径', () => {
     const resolved = router.resolve('/support');
     expect(resolved.name).toBe('support');
@@ -61,6 +86,25 @@ describe('官网与应用入口路由', () => {
       name: 'aiUsage',
       replace: true,
     });
+  });
+
+  it('积分明细使用独立登录页，并与 AI 用量保持同级资产入口', () => {
+    const resolved = router.resolve('/points-usage');
+    expect(resolved.name).toBe('pointsUsage');
+    expect(resolved.meta.requireAuth).toBe(true);
+    expect(resolved.meta.roles).not.toContain('visitor');
+  });
+
+  it('标签列表与详情都是私人资源路由', () => {
+    const index = router.resolve('/manage/tagMg');
+    const detail = router.resolve('/tag/tag-1');
+    expect(index.name).toBe('tagMg');
+    expect(detail.name).toBe('tagDetail');
+    expect(index.meta.roles).not.toContain('visitor');
+    expect(detail.meta.roles).not.toContain('visitor');
+    expect(detail.meta.mobileShell).toBe('resources');
+    expect(detail.meta.mobileTopSwitcher).toBe(true);
+    expect(detail.meta.mobileBottomNav).toBe(true);
   });
 
   it('笔记分享使用独立只读页面，并显式隔离登录探测、AI 与搜索引擎收录', () => {

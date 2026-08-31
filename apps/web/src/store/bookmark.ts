@@ -4,6 +4,7 @@ import type { GlobalImageViewerOptions } from '@/types/imageViewer';
 import { trackConversion } from '@/utils/conversion';
 import { apiQueryPost } from '@/http/request.ts';
 import { resolveViewportDeviceType, VIEWPORT_BREAKPOINTS } from '@/config/responsive.ts';
+import { rememberAuthNavigationIntent } from '@/utils/authNavigationIntent.ts';
 
 // 接口定义
 interface BookmarkState {
@@ -211,7 +212,8 @@ export default defineStore('bookmark', {
     /**
      * 打开登录/注册弹窗，并指定初始展示的标签页（默认登录）
      */
-    openAuthModal(tab: '登录' | '注册' | '重置' = '登录', source = 'unknown'): void {
+    openAuthModal(tab: '登录' | '注册' | '重置' = '登录', source = 'unknown', returnTo?: string): void {
+      if (returnTo && !rememberAuthNavigationIntent(returnTo)) return;
       this.authModalTab = tab;
       this.authModalSource = source;
       this.isShowLogin = true;

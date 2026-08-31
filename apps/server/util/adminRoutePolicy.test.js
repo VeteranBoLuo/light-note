@@ -38,6 +38,7 @@ describe('adminRoutePolicyMiddleware', () => {
       'inbox.js': '/inbox',
       'infra.js': '/infra',
       'todo.js': '/todo',
+      'toolbox.js': '/toolbox',
       'json.js': '/json',
       'knowledgeBase.js': '/knowledgeBase',
       'noteLibrary.js': '/note',
@@ -77,6 +78,36 @@ describe('adminRoutePolicyMiddleware', () => {
     }
   });
 
+  it('工具箱结果可随主体只读检查，但报价、扣积分、取消和保存均不可代执行', () => {
+    for (const path of [
+      '/toolbox/home',
+      '/toolbox/jobs/job-1',
+      '/toolbox/artifacts/artifact-1',
+      '/toolbox/workspaces/workspace-1',
+    ]) {
+      const next = vi.fn();
+      adminRoutePolicyMiddleware(createReq(path, 'GET', 'readonly'), createRes(), next);
+      expect(next).toHaveBeenCalledTimes(1);
+    }
+    for (const path of [
+      '/toolbox/quotes',
+      '/toolbox/workspaces',
+      '/toolbox/workspaces/workspace-1/resources',
+      '/toolbox/workspaces/workspace-1/items',
+      '/toolbox/workspaces/workspace-1/sessions',
+      '/toolbox/workspaces/workspace-1/open',
+      '/toolbox/jobs',
+      '/toolbox/jobs/job-1/cancel',
+      '/toolbox/artifacts/artifact-1/save',
+    ]) {
+      const next = vi.fn();
+      const res = createRes();
+      adminRoutePolicyMiddleware(createReq(path, 'POST', 'maintain'), res, next);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }));
+    }
+  });
+
   it('插件授权与授权码交换不能在管理员代管上下文中代表目标用户执行', () => {
     for (const mode of ['readonly', 'maintain']) {
       for (const path of ['/user/extension/authorize', '/user/extension/exchange']) {
@@ -85,8 +116,23 @@ describe('adminRoutePolicyMiddleware', () => {
         adminRoutePolicyMiddleware(createReq(path, 'POST', mode), res, next);
         expect(next).not.toHaveBeenCalled();
         expect(res.status).toHaveBeenCalledWith(403);
-        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }));
+        expect(res.json).toHaveBeenCalledWith(
+          expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }),
+        );
       }
+    }
+  });
+
+  it('功能公告已读只能写入真实登录账号，管理员代管上下文不能代点', () => {
+    for (const mode of ['readonly', 'maintain']) {
+      const next = vi.fn();
+      const res = createRes();
+      adminRoutePolicyMiddleware(createReq('/user/feature-announcements/seen', 'POST', mode), res, next);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }),
+      );
     }
   });
 

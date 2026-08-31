@@ -28,10 +28,12 @@
               block
               role="menuitem"
               :aria-current="item.active ? 'page' : undefined"
+              :aria-label="item.unread ? [item.label, item.unreadLabel].filter(Boolean).join(' · ') : item.label"
               @click="onItemClick(item)"
             >
               <svg-icon v-if="item.icon" :src="item.icon" size="15" />
-              <span>{{ item.label }}</span>
+              <span class="b-dropdown-item__label">{{ item.label }}</span>
+              <span v-if="item.unread" class="b-dropdown-item__unread-dot" aria-hidden="true" />
             </BButton>
           </template>
         </div>
@@ -55,6 +57,8 @@
     danger?: boolean;
     active?: boolean;
     divider?: boolean;
+    unread?: boolean;
+    unreadLabel?: string;
     function?: () => void;
   }
 
@@ -307,6 +311,18 @@
   }
   .b-dropdown-panel .b-dropdown-item.b_btn:hover {
     background-color: var(--menu-item-h-bg-color) !important;
+  }
+  .b-dropdown-item__label {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .b-dropdown-item__unread-dot {
+    width: 7px;
+    height: 7px;
+    flex: 0 0 7px;
+    border: 1px solid var(--menu-body-bg-color);
+    border-radius: 50%;
+    background: var(--danger-color, #f04455);
   }
   .b-dropdown-panel .b-dropdown-item.b_btn.b-dropdown-item--active {
     border-left: 3px solid var(--primary-color) !important;

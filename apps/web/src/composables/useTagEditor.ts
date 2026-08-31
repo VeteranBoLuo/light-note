@@ -1,11 +1,9 @@
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, unref, type MaybeRef } from 'vue';
 import { onBeforeRouteLeave, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import type { TagInterface } from '@/config/bookmarkCfg.ts';
-import { bookmarkStore, useUserStore } from '@/store';
-import { apiBasePost, apiQueryPost } from '@/http/request.ts';
+import { apiBasePost } from '@/http/request.ts';
 import { RESOURCE_COLOR_HEX, type ResourceType } from '@/config/resourceColor.ts';
-import { CLOUD_FILE_CATEGORY_ORDER } from '@/constants/cloudFileCategory.ts';
 import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
 import { blockGuestWrite } from '@/composables/useGuestGuard';
@@ -15,10 +13,15 @@ import { normalizeTagIconValue } from '@/utils/tagIcon.ts';
 export type TagResourceKind = 'bookmark' | 'note' | 'file';
 export type TagResourceItem = { rawId: string; name: string; type: ResourceType };
 
-export function useTagEditor() {
+export interface UseTagEditorOptions {
+  tagId?: MaybeRef<string>;
+  onSaved?: (id: string) => void | Promise<void>;
+  onDeleted?: () => void | Promise<void>;
+  onClose?: () => void;
+}
+
+export function useTagEditor(options: UseTagEditorOptions = {}) {
   const router = useRouter();
-  const bookmark = bookmarkStore();
-  const user = useUserStore();
   const { t } = useI18n();
   const loading = ref(false);
   const saving = ref(false);
@@ -28,6 +31,7 @@ export function useTagEditor() {
   const tag = ref<TagInterface>({
     id: '',
     name: '',
+    description: '',
     iconUrl: '',
     color: '',
     createTime: '',
@@ -43,7 +47,10 @@ export function useTagEditor() {
   const activeResourceType = ref<TagResourceKind>('bookmark');
   const searchMap = reactive<Record<TagResourceKind, string>>({ bookmark: '', note: '', file: '' });
 
-  const handleType = computed<'add' | 'edit'>(() => (router.currentRoute.value.params.id === 'add' ? 'add' : 'edit'));
+  const resolvedTagId = computed(() =>
+    String(options.tagId === undefined ? router.currentRoute.value.params.id || '' : unref(options.tagId)).trim(),
+  );
+  const handleType = computed<'add' | 'edit'>(() => (resolvedTagId.value === 'add' ? 'add' : 'edit'));
   const pageTitle = computed(() =>
     t(handleType.value === 'add' ? 'tagManage.editorAddTitle' : 'tagManage.editorEditTitle'),
   );
@@ -111,6 +118,7 @@ export function useTagEditor() {
   function fingerprint() {
     return JSON.stringify({
       name: tag.value.name?.trim() || '',
+      description: tag.value.description?.trim() || '',
       iconUrl: tag.value.iconUrl || '',
       bookmarks: [...selectedBookmarkIds.value].sort(),
       notes: [...selectedNoteIds.value].sort(),
@@ -120,70 +128,24 @@ export function useTagEditor() {
 
   const isDirty = computed(() => Boolean(initialFingerprint.value && fingerprint() !== initialFingerprint.value));
 
-  async function getAllResources() {
-    const [bookmarkResponse, noteResponse, fileResponse] = await Promise.all([
-      apiQueryPost('/api/bookmark/getBookmarkList', {
-        pageSize: -1,
-        filters: { userId: user.id, type: 'all' },
-      }),
-      apiBasePost('/api/note/queryNoteList', { pageSize: -1 }),
-      apiBasePost('/api/file/queryFiles', {
-        pageSize: -1,
-        filters: { category: CLOUD_FILE_CATEGORY_ORDER },
-      }),
-    ]);
-    const resources: TagResourceItem[] = [];
-    if (bookmarkResponse.status === 200) {
-      (bookmarkResponse.data?.items || []).forEach((item: any) => {
-        resources.push({ rawId: String(item.id), name: item.name, type: 'bookmark' });
-      });
-    }
-    if (noteResponse.status === 200) {
-      (noteResponse.data || []).forEach((item: any) => {
-        resources.push({ rawId: String(item.id), name: item.title || t('inbox.untitledNote'), type: 'note' });
-      });
-    }
-    if (fileResponse.status === 200) {
-      (fileResponse.data || []).forEach((item: any) => {
-        resources.push({ rawId: String(item.id), name: item.fileName, type: 'file' });
-      });
-    }
-    allResources.value = resources;
-  }
-
-  // 仅用于刷新全局标签列表;原先派生的 tagOptions 服务于已下线的手工「相关标签」多选。
-  async function refreshTagList() {
-    const response = await apiQueryPost('/api/bookmark/queryTagList', { filters: { userId: user.id } });
-    if (response.status !== 200) return;
-    bookmark.tagList = response.data || [];
-  }
-
   async function loadEditor() {
     loading.value = true;
     try {
-      await Promise.all([getAllResources(), refreshTagList()]);
-      if (handleType.value === 'edit') {
-        const detailResponse = await apiQueryPost('/api/bookmark/getTagDetail', {
-          filters: { id: router.currentRoute.value.params.id },
-        });
-        if (detailResponse.status === 200 && detailResponse.data) tag.value = detailResponse.data;
+      const response = await apiBasePost(
+        '/api/bookmark/getTagEditorData',
+        handleType.value === 'edit' ? { tagId: resolvedTagId.value } : {},
+      );
+      if (response.status !== 200 || !response.data) return;
 
-        // 相关标签已改为自动推导,编辑器不再拉取也不再提交手工关系。
-        const [bookmarkResponse, noteResponse, fileResponse] = await Promise.all([
-          apiQueryPost('/api/bookmark/getBookmarkList', {
-            pageSize: -1,
-            filters: { userId: user.id, tagId: tag.value.id, type: 'normal' },
-          }),
-          apiBasePost('/api/note/queryNoteList', { pageSize: -1, tagId: tag.value.id }),
-          apiBasePost('/api/file/queryFiles', {
-            pageSize: -1,
-            filters: { tagId: tag.value.id, category: CLOUD_FILE_CATEGORY_ORDER },
-          }),
-        ]);
-        selectedBookmarkIds.value = (bookmarkResponse.data?.items || []).map((item: any) => String(item.id));
-        selectedNoteIds.value = (noteResponse.data || []).map((item: any) => String(item.id));
-        selectedFileIds.value = (fileResponse.data || []).map((item: any) => String(item.id));
-      }
+      if (response.data.tag) tag.value = response.data.tag;
+      allResources.value = (response.data.resources || []).map((item: TagResourceItem) => ({
+        rawId: String(item.rawId),
+        name: item.name || (item.type === 'note' ? t('inbox.untitledNote') : ''),
+        type: item.type,
+      }));
+      selectedBookmarkIds.value = (response.data.selectedIds?.bookmark || []).map(String);
+      selectedNoteIds.value = (response.data.selectedIds?.note || []).map(String);
+      selectedFileIds.value = (response.data.selectedIds?.file || []).map(String);
       initialFingerprint.value = fingerprint();
     } finally {
       loading.value = false;
@@ -218,7 +180,10 @@ export function useTagEditor() {
       });
       message.success(t('common.saveSuccess'));
       allowLeave.value = true;
-      router.back();
+      initialFingerprint.value = fingerprint();
+      const savedId = String(response.data?.id || tag.value.id || resolvedTagId.value);
+      if (options.onSaved) await options.onSaved(savedId);
+      else router.back();
     } finally {
       saving.value = false;
     }
@@ -242,7 +207,11 @@ export function useTagEditor() {
   }
 
   function requestCancel() {
-    confirmLeave(() => router.back());
+    confirmLeave(() => {
+      allowLeave.value = true;
+      if (options.onClose) options.onClose();
+      else router.back();
+    });
   }
 
   const deleting = ref(false);
@@ -261,9 +230,10 @@ export function useTagEditor() {
           if (res.status !== 200) return;
           recordOperation({ module: '标签管理', operation: `删除标签成功【${tag.value.name}】` });
           message.success(t('tagManage.deleteSuccess'));
-          // 删除后目标页已不存在,直接放行离开守卫回标签列表。
+          // 删除后目标页已不存在,直接放行离开守卫；弹框与旧路由各自处理下一落点。
           allowLeave.value = true;
-          router.push('/manage/tagMg');
+          if (options.onDeleted) await options.onDeleted();
+          else router.push('/manage/tagMg');
         } finally {
           deleting.value = false;
         }

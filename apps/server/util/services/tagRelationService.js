@@ -21,9 +21,30 @@ async function queryTagResourceCounts(db, userId, tagIds) {
   const placeholders = tagIds.map(() => '?').join(',');
   const [rows] = await db.query(
     `SELECT tag_id AS tagId, COUNT(*) AS total
-       FROM resource_tag_relations
-      WHERE user_id = ? AND tag_id IN (${placeholders})
-      GROUP BY tag_id`,
+       FROM resource_tag_relations r
+       LEFT JOIN bookmark b
+         ON r.resource_type = 'bookmark'
+        AND b.id = r.resource_id
+        AND b.user_id = r.user_id
+        AND b.del_flag = 0
+       LEFT JOIN note n
+         ON r.resource_type = 'note'
+        AND n.id = r.resource_id
+        AND n.create_by = r.user_id
+        AND n.del_flag = 0
+       LEFT JOIN files f
+         ON r.resource_type = 'file'
+        AND f.id = r.resource_id
+        AND f.create_by = r.user_id
+        AND f.del_flag = 0
+      WHERE r.user_id = ?
+        AND r.tag_id IN (${placeholders})
+        AND (
+          (r.resource_type = 'bookmark' AND b.id IS NOT NULL)
+          OR (r.resource_type = 'note' AND n.id IS NOT NULL)
+          OR (r.resource_type = 'file' AND f.id IS NOT NULL)
+        )
+      GROUP BY r.tag_id`,
     [userId, ...tagIds],
   );
   return new Map(rows.map((row) => [String(row.tagId), Number(row.total || 0)]));
@@ -48,7 +69,27 @@ async function queryCoOccurrence(db, userId, tagId) {
          AND candidate.tag_id <> center.tag_id
        INNER JOIN tag t
           ON t.id = candidate.tag_id AND t.user_id = center.user_id AND t.del_flag = 0
+       LEFT JOIN bookmark b
+          ON center.resource_type = 'bookmark'
+         AND b.id = center.resource_id
+         AND b.user_id = center.user_id
+         AND b.del_flag = 0
+       LEFT JOIN note n
+          ON center.resource_type = 'note'
+         AND n.id = center.resource_id
+         AND n.create_by = center.user_id
+         AND n.del_flag = 0
+       LEFT JOIN files f
+          ON center.resource_type = 'file'
+         AND f.id = center.resource_id
+         AND f.create_by = center.user_id
+         AND f.del_flag = 0
       WHERE center.user_id = ? AND center.tag_id = ?
+        AND (
+          (center.resource_type = 'bookmark' AND b.id IS NOT NULL)
+          OR (center.resource_type = 'note' AND n.id IS NOT NULL)
+          OR (center.resource_type = 'file' AND f.id IS NOT NULL)
+        )
       GROUP BY candidate.tag_id, t.name, t.icon_url
       ORDER BY sharedCount DESC, t.sort, t.create_time DESC
       LIMIT ?`,
@@ -69,10 +110,7 @@ export async function getDerivedRelatedTags(db, { userId, tagId, limit = DEFAULT
   const candidates = await queryCoOccurrence(db, ownerId, centerTagId);
   if (!candidates.length) return [];
 
-  const counts = await queryTagResourceCounts(db, ownerId, [
-    centerTagId,
-    ...candidates.map((row) => String(row.id)),
-  ]);
+  const counts = await queryTagResourceCounts(db, ownerId, [centerTagId, ...candidates.map((row) => String(row.id))]);
 
   return rankRelatedTags(
     candidates.map((row) => ({

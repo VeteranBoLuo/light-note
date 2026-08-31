@@ -27,12 +27,20 @@ describe('请求参数异常检测', () => {
   it.each([
     ['/todo/list', 'newest'],
     ['/api/todo/list', 'smart'],
+    ['/todo/list', 'action'],
+    ['/api/todo/list', 'priority'],
     ['/todo/list', 'due'],
     ['/inbox/list', 'oldest'],
     ['/search/global', 'relevance'],
     ['/api/search/global', 'updated'],
     ['/search/global', 'name'],
     ['/featureRequest/listPublic', 'popular'],
+    ['/bookmark/queryTagSpaces', 'default'],
+    ['/api/bookmark/queryTagSpaces', 'recent'],
+    ['/bookmark/queryTagSpaces', 'resourceDesc'],
+    ['/bookmark/queryTagSpaces', 'nameAsc'],
+    ['/bookmark/queryTagSpaceResources', 'updated'],
+    ['/api/bookmark/queryTagSpaceResources', 'added'],
   ])('允许列表接口的合法排序枚举：%s %s', (path, sort) => {
     expect(detectNumericAnomalies(path, { sort, status: 'pending', keyword: '' })).toEqual([]);
   });
@@ -47,7 +55,12 @@ describe('请求参数异常检测', () => {
   });
 
   it('列表接口不在白名单内的排序内容仍会被检测', () => {
-    for (const path of ['/todo/list', '/search/global']) {
+    for (const path of [
+      '/todo/list',
+      '/search/global',
+      '/bookmark/queryTagSpaces',
+      '/bookmark/queryTagSpaceResources',
+    ]) {
       expect(detectNumericAnomalies(path, { sort: 'DROP TABLE' })).toEqual([
         expect.objectContaining({
           ruleCode: 'NUMERIC_PARAM_ANOMALY',

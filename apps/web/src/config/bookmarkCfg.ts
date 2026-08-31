@@ -1,6 +1,7 @@
 export interface TagInterface {
   id: string;
   name: string;
+  description?: string;
   isRename?: boolean;
   iconUrl?: string;
   bookmarkList?: string[];

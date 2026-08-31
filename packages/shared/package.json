@@ -5,6 +5,9 @@
   "type": "module",
   "main": "index.js",
   "types": "index.d.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
   "exports": {
     ".": {
       "types": "./index.d.ts",
@@ -18,6 +21,10 @@
       "types": "./communityChatStickers.d.ts",
       "default": "./communityChatStickers.js"
     },
+    "./community-chat-inline-emojis": {
+      "types": "./communityChatInlineEmojis.d.ts",
+      "default": "./communityChatInlineEmojis.js"
+    },
     "./todo-reminder": {
       "types": "./todoReminder.d.ts",
       "default": "./todoReminder.js"
@@ -29,6 +36,17 @@
     "./ai-skill-protocol": {
       "types": "./aiSkillProtocol.d.ts",
       "default": "./aiSkillProtocol.js"
+    },
+    "./ai-citation-presentation": {
+      "types": "./aiCitationPresentation.d.ts",
+      "default": "./aiCitationPresentation.js"
+    },
+    "./toolbox-protocol": {
+      "types": "./toolboxProtocol.d.ts",
+      "default": "./toolboxProtocol.js"
     }
+  },
+  "devDependencies": {
+    "vitest": "^3.2.6"
   }
 }

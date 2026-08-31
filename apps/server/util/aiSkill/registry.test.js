@@ -25,17 +25,33 @@ const EXPECTED_SKILLS = Object.freeze([
   ['note.extract_todos', 'note', 'preview'],
   ['file.extract_todos', 'file', 'preview'],
 ]);
+const EXPECTED_INTERNAL_SKILLS = Object.freeze([
+  ['toolbox.idea_to_draft', 'toolbox', 'read'],
+  ['toolbox.material_to_note', 'toolbox', 'read'],
+  ['toolbox.research_brief', 'toolbox', 'read'],
+  ['toolbox.study_kit', 'toolbox', 'read'],
+  ['toolbox.concept_map', 'toolbox', 'read'],
+  ['toolbox.action_plan', 'toolbox', 'read'],
+  ['toolbox.source_comparison', 'toolbox', 'read'],
+  ['toolbox.knowledge_audit', 'toolbox', 'read'],
+]);
+const ALL_EXPECTED_SKILLS = Object.freeze([...EXPECTED_SKILLS, ...EXPECTED_INTERNAL_SKILLS]);
 
 const ALLOWED_ROLES = new Set(AI_SKILL_PUBLIC_ROLES);
 const RESOURCE_TYPES = new Set(AI_SKILL_RESOURCE_TYPES);
 const RESULT_KINDS = new Set(AI_SKILL_RESULT_KINDS);
 
 describe('AI Skill registry contract', () => {
-  it('固定登记当前产品批准的 20 个 Skill，避免能力静默增删或改名', () => {
-    expect(listAiSkills()).toEqual(EXPECTED_SKILLS.map(([id, domain, effect]) => ({ id, version: 1, domain, effect })));
+  it('固定登记公共 Skill 与工具箱内部 Profile，避免能力静默增删或改名', () => {
+    expect(listAiSkills()).toEqual(
+      ALL_EXPECTED_SKILLS.map(([id, domain, effect]) => ({ id, version: 1, domain, effect })),
+    );
+    expect(listAiSkills({ includeInternal: false })).toEqual(
+      EXPECTED_SKILLS.map(([id, domain, effect]) => ({ id, version: 1, domain, effect })),
+    );
   });
 
-  it.each(EXPECTED_SKILLS)('%s 的定义遵守统一能力、安全和上下文契约', (id, domain, effect) => {
+  it.each(ALL_EXPECTED_SKILLS)('%s 的定义遵守统一能力、安全和上下文契约', (id, domain, effect) => {
     const definition = resolveAiSkill(id, 1);
     const policy = definition.contextPolicy;
 

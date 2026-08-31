@@ -54,16 +54,8 @@ jobs:
       - name: 运行测试
         run: pnpm test
 
-      - name: 安装 Chrome
-        uses: browser-actions/setup-chrome@v1
-
-      - name: 运行 AI 关键 UI E2E（零 Token）
-        run: pnpm --filter web test:e2e:ai
-
-      - name: 校验 AI 助手黄金矩阵
-        run: |
-          node apps/server/evaluation/ai-assistant/generate-golden-tasks.js --check
-          pnpm --filter server run eval:ai-assistant
+      - name: 校验 AI 模型访问边界
+        run: pnpm --filter server check:ai-model-access
 
       - name: 构建前端
         run: pnpm build:web

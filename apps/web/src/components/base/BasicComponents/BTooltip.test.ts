@@ -4,7 +4,7 @@ import BTooltip from './BTooltip.vue';
 
 vi.mock('@/utils/zoom', () => ({ getRootZoom: () => 1 }));
 
-describe('BTooltip disabled 状态', () => {
+describe('BTooltip 交互状态', () => {
   let app: ReturnType<typeof createApp> | null = null;
   let host: HTMLElement | null = null;
 
@@ -52,5 +52,40 @@ describe('BTooltip disabled 状态', () => {
     vi.runAllTimers();
     await nextTick();
     expect(document.querySelector<HTMLElement>('.b-tooltip-popup')?.style.display).not.toBe('none');
+  });
+
+  it('点击触发内容后立即收起，并在指针离开前不重新遮挡目标名称', async () => {
+    host = document.createElement('div');
+    document.body.append(host);
+    app = createApp(
+      defineComponent({
+        components: { BTooltip },
+        template: '<BTooltip title="更多入口"><button id="more">更多</button></BTooltip>',
+      }),
+    );
+    app.mount(host);
+
+    const trigger = host.querySelector('.b-tooltip-wrap') as HTMLElement;
+    trigger.dispatchEvent(new MouseEvent('mouseenter'));
+    vi.runAllTimers();
+    await nextTick();
+    const popup = document.querySelector<HTMLElement>('.b-tooltip-popup');
+    expect(popup?.style.display).not.toBe('none');
+
+    host.querySelector<HTMLButtonElement>('#more')?.click();
+    await nextTick();
+    expect(popup?.style.display).toBe('none');
+
+    trigger.dispatchEvent(new MouseEvent('mouseenter'));
+    vi.runAllTimers();
+    await nextTick();
+    expect(popup?.style.display).toBe('none');
+
+    trigger.dispatchEvent(new MouseEvent('mouseleave'));
+    vi.runAllTimers();
+    trigger.dispatchEvent(new MouseEvent('mouseenter'));
+    vi.runAllTimers();
+    await nextTick();
+    expect(popup?.style.display).not.toBe('none');
   });
 });

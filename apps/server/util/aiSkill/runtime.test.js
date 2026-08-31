@@ -40,6 +40,7 @@ describe('executeAiSkill', () => {
       version: 1,
       domain: 'test',
       effect: 'read',
+      modelPolicy: { maxTokens: 6000, temperature: 0.3 },
       validateInput: vi.fn((input) => input),
       prepare: vi.fn(async () => {
         expect(insideExecution).toBe(true);
@@ -69,6 +70,7 @@ describe('executeAiSkill', () => {
         resolveContext: vi.fn().mockResolvedValue(resolvedContext('a'.repeat(64))),
         runExecution,
         callModel,
+        modelPolicyOverrides: { maxTokens: 4200, timeoutMs: 150000, temperature: 0 },
       },
     );
 
@@ -82,6 +84,9 @@ describe('executeAiSkill', () => {
     expect(executionConfig.resolveResultOutcome({ coverage: { warnings: [] } })).toEqual({ status: 'success' });
     expect(skill.prepare).toHaveBeenCalledTimes(1);
     expect(callModel).toHaveBeenCalledTimes(1);
+    expect(callModel).toHaveBeenCalledWith(
+      expect.objectContaining({ modelPolicy: { maxTokens: 4200, temperature: 0.3, timeoutMs: 150000 } }),
+    );
     expect(result).toMatchObject({ status: 'completed', result: { content: '答案 [1]' } });
   });
 
@@ -117,6 +122,109 @@ describe('executeAiSkill', () => {
     expect(runExecution).toHaveBeenCalledOnce();
     expect(operationSpy).toHaveBeenCalledOnce();
     expect(skill.prepare).not.toHaveBeenCalled();
+  });
+
+  it('服务端内部积分任务可以让固定产物使用系统额度，公开请求仍无法声明该策略', async () => {
+    let executionConfig;
+    const skill = {
+      id: 'help.answer',
+      version: 1,
+      domain: 'test',
+      effect: 'read',
+      validateInput: (input) => input,
+      prepare: async () => ({
+        result: { kind: 'grounded_markdown', content: '固定产物' },
+        sources: [],
+        coverage: { complete: true, warnings: [] },
+        modelCalled: false,
+      }),
+    };
+    await executeAiSkill(
+      request(),
+      { user: { id: 'u-1', role: 'user' } },
+      {
+        resolveSkill: () => skill,
+        assertDomainEnabled: () => {},
+        resolveContext: async () => resolvedContext('e'.repeat(64)),
+        runExecution: async (config, operation) => {
+          executionConfig = config;
+          return operation();
+        },
+        executionConfigOverrides: { billingPolicy: 'system', systemId: 'toolbox_points' },
+      },
+    );
+    expect(executionConfig).toMatchObject({ billingPolicy: 'system', systemId: 'toolbox_points' });
+  });
+
+  it('内部 Skill 拒绝公共调用，但可信 Worker 可按任务选择用户或系统计费', async () => {
+    const runExecution = vi.fn(async (_config, operation) => operation());
+    const skill = {
+      id: 'help.answer',
+      version: 1,
+      domain: 'test',
+      effect: 'read',
+      internalOnly: true,
+      allowedInternalCallers: ['toolbox_worker'],
+      validateInput: (input) => input,
+      prepare: async () => ({
+        result: { kind: 'grounded_markdown', content: '内部产物' },
+        sources: [],
+        coverage: { complete: true, warnings: [] },
+        modelCalled: false,
+      }),
+    };
+    await expect(
+      executeAiSkill(request(), { user: { id: 'u-1', role: 'user' } }, { resolveSkill: () => skill, runExecution }),
+    ).rejects.toMatchObject({ code: 'AI_SKILL_INTERNAL_ONLY', status: 403 });
+    expect(runExecution).not.toHaveBeenCalled();
+
+    await expect(
+      executeAiSkill(
+        request(),
+        { user: { id: 'u-1', role: 'user' } },
+        {
+          resolveSkill: () => skill,
+          runExecution,
+          executionConfigOverrides: { billingPolicy: 'system', systemId: 'toolbox_points' },
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'AI_SKILL_INTERNAL_ONLY', status: 403 });
+    expect(runExecution).not.toHaveBeenCalled();
+
+    await expect(
+      executeAiSkill(
+        request(),
+        { user: { id: 'u-1', role: 'user' } },
+        {
+          resolveSkill: () => skill,
+          assertDomainEnabled: () => {},
+          resolveContext: async () => resolvedContext('f'.repeat(64)),
+          runExecution,
+          internalCaller: 'toolbox_worker',
+          executionConfigOverrides: { billingPolicy: 'system', systemId: 'toolbox_points' },
+        },
+      ),
+    ).resolves.toMatchObject({ result: { content: '内部产物' } });
+    expect(runExecution).toHaveBeenCalledOnce();
+
+    let userBillingConfig;
+    await expect(
+      executeAiSkill(
+        request(),
+        { user: { id: 'u-1', role: 'user' } },
+        {
+          resolveSkill: () => skill,
+          assertDomainEnabled: () => {},
+          resolveContext: async () => resolvedContext('f'.repeat(64)),
+          runExecution: async (config, operation) => {
+            userBillingConfig = config;
+            return operation();
+          },
+          internalCaller: 'toolbox_worker',
+        },
+      ),
+    ).resolves.toMatchObject({ result: { content: '内部产物' } });
+    expect(userBillingConfig).toMatchObject({ billingPolicy: 'user', skillId: 'help.answer' });
   });
 
   it('Skill 可确定性返回结果而完全不调用模型', async () => {

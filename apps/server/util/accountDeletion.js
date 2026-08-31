@@ -436,6 +436,54 @@ async function disableCommunityChatReadReceiptsForAuthor(connection, tables, use
   );
 }
 
+export async function purgeToolboxWorkspace(connection, tables, userId) {
+  await deleteIfPresent(
+    connection,
+    tables,
+    'toolbox_workspace_sessions',
+    'DELETE FROM toolbox_workspace_sessions WHERE user_id = ?',
+    [userId],
+  );
+  await deleteIfPresent(
+    connection,
+    tables,
+    'toolbox_workspace_items',
+    'DELETE FROM toolbox_workspace_items WHERE user_id = ?',
+    [userId],
+  );
+  await deleteIfPresent(
+    connection,
+    tables,
+    'toolbox_workspace_resources',
+    'DELETE FROM toolbox_workspace_resources WHERE user_id = ?',
+    [userId],
+  );
+  await deleteIfPresent(connection, tables, 'toolbox_workspaces', 'DELETE FROM toolbox_workspaces WHERE user_id = ?', [
+    userId,
+  ]);
+  await deleteIfPresent(
+    connection,
+    tables,
+    'toolbox_save_receipts',
+    'DELETE FROM toolbox_save_receipts WHERE user_id = ?',
+    [userId],
+  );
+  await deleteIfPresent(connection, tables, 'toolbox_artifacts', 'DELETE FROM toolbox_artifacts WHERE user_id = ?', [
+    userId,
+  ]);
+  if (tables.has('toolbox_job_inputs') && tables.has('toolbox_jobs')) {
+    await connection.query(
+      `DELETE input
+         FROM toolbox_job_inputs input
+         JOIN toolbox_jobs job ON job.id = input.job_id
+        WHERE job.user_id = ?`,
+      [userId],
+    );
+  }
+  await deleteIfPresent(connection, tables, 'toolbox_jobs', 'DELETE FROM toolbox_jobs WHERE user_id = ?', [userId]);
+  await deleteIfPresent(connection, tables, 'toolbox_quotes', 'DELETE FROM toolbox_quotes WHERE user_id = ?', [userId]);
+}
+
 async function purgeAiWorkspace(connection, tables, userId) {
   if (tables.has('ai_skill_turns') && tables.has('ai_skill_threads')) {
     await connection.query(
@@ -894,6 +942,7 @@ async function purgeDatabaseForUser(userId) {
       );
     }
     const tables = await existingTables(connection);
+    await purgeToolboxWorkspace(connection, tables, userId);
     await purgeAiWorkspace(connection, tables, userId);
     await purgeFeatureRequests(connection, tables, userId);
     await purgeOwnedResources(connection, tables, userId);

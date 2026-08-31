@@ -8,6 +8,16 @@
       <div class="tag-field tag-field--icon">
         <TagIconPicker v-model:value="tag.iconUrl" :tag-name="tag.name" />
       </div>
+      <div class="tag-field tag-field--description">
+        <span class="tag-field__label">{{ $t('tagManage.tagDescription') }}</span>
+        <BInput
+          v-model:value="tag.description"
+          type="textarea"
+          :rows="3"
+          :maxlength="500"
+          :placeholder="$t('tagManage.tagDescriptionPlaceholder')"
+        />
+      </div>
       <!-- 手工「相关标签」多选已下线:标签关系改由共同资源自动推导,无需用户维护关系网 -->
     </BCard>
 
@@ -141,7 +151,7 @@
     --b-card-shadow: var(--surface-card-shadow);
 
     display: grid;
-    grid-template-columns: minmax(220px, 0.85fr) minmax(420px, 1.65fr) minmax(210px, 0.7fr);
+    grid-template-columns: minmax(220px, 0.85fr) minmax(420px, 1.65fr);
     gap: 14px;
   }
 
@@ -167,6 +177,15 @@
   .tag-field__label {
     color: var(--desc-color);
     font-size: 13px;
+  }
+
+  .tag-field--description {
+    grid-column: 1 / -1;
+  }
+
+  .tag-field--description :deep(.b-textarea) {
+    min-height: 78px;
+    resize: vertical;
   }
 
   .tag-editor-resources {

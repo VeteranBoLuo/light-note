@@ -134,21 +134,55 @@
 
       <!-- 内容区 -->
       <section class="content-layout">
-        <BCard as="aside" variant="card" padding="16px" class="filter-panel">
-          <div class="filter-title">{{ $t('bookmarkMg.filtersTitle') }}</div>
-          <BButton
-            v-for="filter in filters"
-            :key="filter.value"
-            class="filter-item"
-            :class="{ active: activeFilter === filter.value }"
-            @click="activeFilter = filter.value"
-          >
-            <span class="filter-left">
-              <span class="filter-dot" :class="`filter-dot--${filter.value}`"></span>
-              <span>{{ filter.label }}</span>
-            </span>
-            <span class="filter-count">{{ filter.count }}</span>
-          </BButton>
+        <BCard as="aside" variant="card" padding="12px" class="filter-panel bookmark-directory-panel">
+          <div class="bookmark-directory-heading">
+            <strong>{{ $t('bookmarkMg.directoryTitle') }}</strong>
+            <span>{{ $t('bookmarkMg.directoryHint') }}</span>
+          </div>
+
+          <TagDirectoryRow
+            :label="$t('bookmarkMg.filterAll')"
+            :count="tableData.length"
+            :icon-src="icon.resource.bookmark"
+            tone="bookmark"
+            :active="activeFilter === 'all'"
+            @activate="setBookmarkFilter('all')"
+          />
+
+          <div class="bookmark-directory-section bookmark-directory-section--tags">
+            <span class="bookmark-directory-section__label">{{ $t('tagSpace.directoryTopics') }}</span>
+            <BActionMenu
+              v-for="directoryTag in allTags"
+              :key="directoryTag.id"
+              :items="bookmarkTagActionItems()"
+              :triggers="tagMenuTriggers"
+              placement="right-start"
+              :disabled="!bookmark.isDesktop"
+              :aria-label="$t('bookmarkMg.tagFilterActions', { name: directoryTag.name })"
+              @select="(action, source) => handleBookmarkTagAction(action, directoryTag, source)"
+            >
+              <TagDirectoryRow
+                :label="directoryTag.name"
+                :count="directoryTag.count"
+                :icon-src="directoryTag.iconUrl || icon.manage_categoryBtn_tag"
+                :active="activeFilter === directoryTag.id"
+                @activate="setBookmarkFilter(directoryTag.id)"
+              />
+            </BActionMenu>
+            <p v-if="!allTags.length" class="bookmark-directory-empty">{{ $t('bookmarkMg.noTags') }}</p>
+          </div>
+
+          <div class="bookmark-directory-section bookmark-directory-section--other">
+            <span class="bookmark-directory-section__label">{{ $t('bookmarkMg.directoryOther') }}</span>
+            <TagDirectoryRow
+              :label="$t('bookmarkMg.filterNoTag')"
+              :count="untaggedBookmarkCount"
+              :icon-src="icon.filterPanel.noTag"
+              tone="muted"
+              :active="activeFilter === 'noTag'"
+              @activate="setBookmarkFilter('noTag')"
+            />
+          </div>
         </BCard>
 
         <BCard as="main" variant="panel" padding="20px" class="result-panel">
@@ -522,6 +556,12 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BUpload from '@/components/base/BasicComponents/BUpload.vue';
   import BActionButton from '@/components/base/BasicComponents/BActionButton.vue';
+  import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
+  import type {
+    BActionMenuItem,
+    BActionMenuSource,
+    BActionMenuTrigger,
+  } from '@/components/base/BasicComponents/actionMenu';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import { useI18n } from 'vue-i18n';
@@ -535,6 +575,7 @@
   import { resolveBookmarkUrlInput } from '@lightnote/shared';
   import { buildNetscapeBookmarkHtml } from '@/utils/bookmarkHtml';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
+  import TagDirectoryRow from '@/components/tagSpace/TagDirectoryRow.vue';
   import BookmarkAiDialog from '@/components/manage/bookmarkMg/BookmarkAiDialog.vue';
 
   const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
@@ -621,6 +662,7 @@
 
   type FilterValue = 'all' | string;
   const activeFilter = ref<FilterValue>('all');
+  const tagMenuTriggers: BActionMenuTrigger[] = ['hover', 'contextmenu'];
 
   const handleSelectionChange = (selected: string[]) => {
     selectedRows.value = selected;
@@ -659,17 +701,29 @@
 
   // ── 筛选逻辑 ──
   const allTags = computed(() => {
-    const tagMap = new Map<string, { id: string; name: string; count: number }>();
+    const canonicalTags = new Map(bookmark.tagList.map((item) => [String(item.id), item]));
+    const tagMap = new Map<string, { id: string; name: string; count: number; iconUrl?: string }>();
     tableData.value.forEach((item) => {
       item.tagList?.forEach((t) => {
+        const canonicalTag = canonicalTags.get(String(t.id));
         if (!tagMap.has(t.id)) {
-          tagMap.set(t.id, { id: t.id, name: t.name, count: 0 });
+          tagMap.set(t.id, {
+            id: t.id,
+            name: canonicalTag?.name || t.name,
+            count: 0,
+            iconUrl: canonicalTag?.iconUrl || t.iconUrl,
+          });
         }
-        tagMap.get(t.id)!.count++;
+        const entry = tagMap.get(t.id)!;
+        entry.count++;
+        if (!entry.iconUrl && (canonicalTag?.iconUrl || t.iconUrl)) {
+          entry.iconUrl = canonicalTag?.iconUrl || t.iconUrl;
+        }
       });
     });
     return Array.from(tagMap.values()).sort((a, b) => b.count - a.count);
   });
+  const untaggedBookmarkCount = computed(() => tableData.value.filter((item) => !item.tagList?.length).length);
 
   const filteredByKeyword = computed(() => {
     const keyword = tableSearchValue.value.trim().toLowerCase();
@@ -691,6 +745,40 @@
     activeFilter.value = 'all';
   }
 
+  function setBookmarkFilter(filter: FilterValue) {
+    activeFilter.value = filter;
+  }
+
+  function bookmarkTagActionItems(): BActionMenuItem[] {
+    return [
+      {
+        key: 'filter',
+        label: t('bookmarkMg.filterThisTag'),
+        icon: icon.filterPanel.check,
+      },
+      {
+        key: 'open',
+        label: t('tagSpace.openTagSpace'),
+        icon: icon.resource.tag,
+      },
+      { key: 'bookmark-tag-directory-divider', divider: true },
+      {
+        key: 'addBookmark',
+        label: t('tagSpace.addBookmarkToTag'),
+        icon: icon.manage_categoryBtn_bookmark,
+        disabled: user.adminContext?.mode === 'readonly',
+      },
+    ];
+  }
+
+  function handleBookmarkTagAction(action: string, target: { id: string; name: string }, _source: BActionMenuSource) {
+    if (action === 'filter') setBookmarkFilter(target.id);
+    if (action === 'open') router.push(`/tag/${target.id}`);
+    if (action === 'addBookmark' && !blockGuestWrite('create-bookmark')) {
+      router.push(`/manage/editBookmark/add/${target.id}`);
+    }
+  }
+
   async function retryInitialLoad() {
     try {
       await init();
@@ -706,22 +794,6 @@
       selectableBookmarkIds.value.length > 0 &&
       selectableBookmarkIds.value.every((id) => selectedRows.value.includes(id)),
   );
-
-  const filters = computed(() => {
-    const base = filteredByKeyword.value;
-    const items: { value: string; label: string; count: number }[] = [
-      { value: 'all', label: t('bookmarkMg.filterAll'), count: base.length },
-    ];
-    allTags.value.forEach((t) => {
-      items.push({ value: t.id, label: t.name, count: t.count });
-    });
-    items.push({
-      value: 'noTag',
-      label: t('bookmarkMg.filterNoTag'),
-      count: base.filter((item) => !item.tagList?.length).length,
-    });
-    return items;
-  });
 
   const stats = computed(() => {
     const uniqueTagIds = new Set<string>();
@@ -1138,17 +1210,18 @@
   };
 
   onMounted(async () => {
+    const tagListRequest = bookmark.loadTagList(String(user.id || ''), { showLoading: false });
     const pending = iconBatchTracker.readPendingBatch();
     if (pending) {
       try {
-        await init({ refreshIcons: false });
+        await Promise.all([init({ refreshIcons: false }), tagListRequest]);
         await startIconBatchTracking(pending, 0);
       } catch {
         // 列表错误状态和批次追踪降级逻辑分别负责反馈。
       }
       return;
     }
-    await retryInitialLoad();
+    await Promise.all([retryInitialLoad(), tagListRequest]);
   });
 
   onUnmounted(() => {
@@ -1470,66 +1543,57 @@
 
   .filter-panel {
     --b-card-shadow: var(--surface-card-shadow);
+
+    display: flex;
+    flex-direction: column;
   }
 
-  .filter-title {
-    font-size: 12px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    opacity: @opacity-secondary;
-    margin-bottom: 10px;
-    padding: 0 4px;
+  .bookmark-directory-heading {
+    padding: 2px 6px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
   }
 
-  .filter-item {
+  .bookmark-directory-heading strong {
+    color: var(--text-color);
+    font-size: 14px;
+  }
+
+  .bookmark-directory-heading span {
+    color: var(--desc-color);
+    font-size: 10px;
+    line-height: 1.45;
+  }
+
+  .bookmark-directory-section {
+    margin-top: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .bookmark-directory-section :deep(.b-action-menu-anchor) {
     width: 100%;
-    border: 0;
-    border-radius: @radius-sm;
-    background: transparent;
-    color: inherit;
-    padding: 10px 12px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    cursor: pointer;
-    transition: all 0.18s ease;
-    height: auto;
-    min-height: 40px;
-    line-height: 1.3;
-    & + & {
-      margin-top: 4px;
-    }
-    &:hover {
-      background: color-mix(in srgb, var(--resource-bookmark-color) @color-mix-hover, var(--bm-muted-bg));
-    }
-    &.active {
-      background: color-mix(in srgb, var(--resource-bookmark-color) @color-mix-active, var(--bm-muted-bg));
-      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--resource-bookmark-color) 20%, transparent);
-    }
   }
 
-  .filter-left {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 13px;
+  .bookmark-directory-section__label {
+    padding: 0 7px 5px;
+    color: var(--desc-color);
+    font-size: 10px;
+    font-weight: 650;
   }
-  .filter-count {
+
+  .bookmark-directory-section--other {
+    padding-top: 11px;
+    border-top: 1px solid var(--surface-divider-color);
+  }
+
+  .bookmark-directory-empty {
+    margin: 2px 7px 0;
+    color: var(--desc-color);
     font-size: 12px;
-    font-variant-numeric: tabular-nums;
-    opacity: @opacity-secondary;
-  }
-
-  .filter-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--resource-bookmark-color);
-    flex-shrink: 0;
-  }
-  .filter-dot--noTag {
-    background: #94a3b8;
+    line-height: 1.5;
   }
 
   .result-panel {
@@ -2064,13 +2128,22 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .content-layout {
-      grid-template-columns: 1fr;
-    }
-    .filter-panel {
-      position: static;
+      grid-template-columns: 196px minmax(0, 1fr);
+      gap: 10px;
     }
     .bookmark-grid {
       grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 1000px) {
+    .content-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .filter-panel {
+      position: static;
+      max-height: 220px;
     }
   }
 </style>

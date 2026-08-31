@@ -81,6 +81,30 @@ describe('BInput change payload', () => {
     expect(onChange).toHaveBeenCalledWith('22:30');
   });
 
+  it('有内容的可清除输入框为清除按钮预留空间，长文本不会压在按钮下方', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      setup: () => () => h(BInput, { value: 'data:image/svg+xml;base64,very-long-icon-content', clearable: true }),
+    });
+    app.use(
+      createI18n({
+        legacy: false,
+        locale: 'zh-CN',
+        messages: { 'zh-CN': { placeholder: { input: '请输入' } } },
+      }),
+    );
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+    await nextTick();
+
+    expect(host.querySelector<HTMLInputElement>('input')?.style.paddingRight).toBe('35px');
+    expect(host.querySelector('.input-clear-btn')).not.toBeNull();
+  });
+
   it('透传通用键盘、选区与输入法事件，外层阻止后不再触发 enter', async () => {
     const onKeydown = vi.fn((event: KeyboardEvent) => event.preventDefault());
     const onEnter = vi.fn();
