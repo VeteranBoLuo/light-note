@@ -123,6 +123,9 @@ describe('bookmarkDuplicateService', () => {
       canResolve: true,
       contextHash: expect.stringMatching(/^[a-f0-9]{64}$/),
     });
+    const [memberSql] = connection.query.mock.calls.find(([sql]) => String(sql).startsWith('SELECT id, name, url'));
+    expect(memberSql).toContain('create_time AS updatedAt');
+    expect(memberSql).not.toMatch(/\bupdate_time\b/);
     expect(preview.members.find((item) => item.id === 'bookmark-2')?.guard.blockerCount).toBe(1);
   });
 
@@ -156,6 +159,10 @@ describe('bookmarkDuplicateService', () => {
       String(sql).includes('LOWER(HEX(url_exact_hash)) AS groupKey'),
     );
     expect(memberQueries).toHaveLength(1);
+    expect(memberQueries[0][0]).not.toMatch(/\bupdate_time\b/);
+    const candidateSql = connection.query.mock.calls.find(([sql]) => String(sql).includes('SELECT groups.*'))?.[0];
+    expect(candidateSql).toContain('MAX(create_time) AS updated_at');
+    expect(candidateSql).not.toMatch(/\bupdate_time\b/);
   });
 
   it('解决动作在事务内复核上下文、合并标签并软删除，重试返回同一结果', async () => {

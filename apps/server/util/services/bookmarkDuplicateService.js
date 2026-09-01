@@ -151,7 +151,7 @@ async function loadDuplicatePreview(db, { userId, groupKey: rawGroupKey, lock = 
   const groupKey = normalizeBookmarkGroupKey(rawGroupKey);
   if (!groupKey) throw serviceError('DUPLICATE_GROUP_INVALID', '重复书签分组无效');
   const [rows] = await db.query(
-    `SELECT id, name, url, create_time AS createdAt, update_time AS updatedAt, del_flag AS delFlag
+    `SELECT id, name, url, create_time AS createdAt, create_time AS updatedAt, del_flag AS delFlag
        FROM bookmark
       WHERE user_id = ? AND del_flag = 0 AND url_exact_hash = UNHEX(?)
       ORDER BY create_time ASC, id ASC${lock ? ' FOR UPDATE' : ''}`,
@@ -168,7 +168,7 @@ async function loadDuplicatePreviews(db, { userId, candidates }) {
   const groupKeys = [...new Set(candidates.map((candidate) => normalizeBookmarkGroupKey(candidate.group_key)).filter(Boolean))];
   if (!groupKeys.length) return [];
   const [rows] = await db.query(
-    `SELECT id, name, url, create_time AS createdAt, update_time AS updatedAt, del_flag AS delFlag,
+    `SELECT id, name, url, create_time AS createdAt, create_time AS updatedAt, del_flag AS delFlag,
             LOWER(HEX(url_exact_hash)) AS groupKey
        FROM bookmark
       WHERE user_id = ? AND del_flag = 0
@@ -217,7 +217,7 @@ async function queryGroupCandidates(db, { userId, cursor, limit }) {
        FROM (
          SELECT LOWER(HEX(url_exact_hash)) AS group_key,
                 COUNT(*) AS member_count,
-                MAX(COALESCE(update_time, create_time)) AS updated_at
+                MAX(create_time) AS updated_at
            FROM bookmark
           WHERE user_id = ? AND del_flag = 0 AND url IS NOT NULL AND url <> '' AND url_exact_hash IS NOT NULL
           GROUP BY url_exact_hash, BINARY url

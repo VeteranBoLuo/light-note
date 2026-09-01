@@ -38,6 +38,8 @@ describe('resourceInventoryService.listUntaggedResources', () => {
     expect(sql).toContain('f.create_by = ?');
     expect(sql).toContain('untagged_tag.del_flag = 0');
     expect(sql).toContain("suppression.issue_type = 'untagged.ignore'");
+    expect(sql).toContain('b.create_time AS updated_at');
+    expect(sql).not.toContain('b.update_time');
     expect(sql).not.toMatch(/n\.content|note_versions|LONGTEXT/i);
     expect(params.filter((value) => value === 'user-1').length).toBeGreaterThanOrEqual(10);
     expect(result).toMatchObject({

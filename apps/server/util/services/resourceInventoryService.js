@@ -95,7 +95,8 @@ function buildUntaggedBranch(type, { userId, keyword }) {
       summary: 'b.description',
       url: 'b.url',
       created: 'b.create_time',
-      updated: 'COALESCE(b.update_time, b.create_time)',
+      // bookmark 表没有 update_time；列表契约中的 updatedAt 以创建时间回退。
+      updated: 'b.create_time',
       keyword: '(b.name LIKE ? ESCAPE \'\\\\\' OR b.description LIKE ? ESCAPE \'\\\\\' OR b.url LIKE ? ESCAPE \'\\\\\')',
       keywordParams: [like, like, like],
     },
