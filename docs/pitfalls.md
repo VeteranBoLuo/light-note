@@ -25,9 +25,9 @@
 
 ### Schema 双轨与整数类型比较
 
-**约束：** 排查 Schema 时同时检查 `migrations/*.sql` 与运行时 `ensure*()`；发布前以 Schema 断言为准。MySQL 整数展示宽度不是字段类型，门禁比较应规范化 `int(11)`、`int unsigned` 等表示，不能因显示宽度误报。（原 LN-PIT-187）
+**约束：** 排查 Schema 时同时检查 `migrations/*.sql` 与运行时 `ensure*()`；发布前以 Schema 断言为准。新增持久化模型在定名和建表前必须查询实际环境的历史表及列签名，`CREATE TABLE IF NOT EXISTS` 不能代替旧表升级；同名旧表承载不同业务语义时使用新的明确表名与旧数据并存，禁止直接套用新外键、清表或把旧状态强行解释成新状态。MySQL 整数展示宽度不是字段类型，门禁比较应规范化 `int(11)`、`int unsigned` 等表示，不能因显示宽度误报。（原 LN-PIT-187）
 
-**验收：** 在 MySQL 5.7 的真实 `information_schema` 输出上运行 `check:schema`，确认真实缺列/缺索引失败、仅展示宽度不同通过。
+**验收：** 同时用空库和带有同名旧表、旧数据的快照执行显式迁移与运行时 ensure 两次，确认新旧数据并存、外键正确且过程幂等；再在 MySQL 5.7 的真实 `information_schema` 输出上运行 `check:schema`，确认真实缺列/缺索引失败、仅展示宽度不同通过。
 
 ### 历史迁移必须自包含且只执行一次
 

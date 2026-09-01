@@ -32,7 +32,9 @@ PREPARE stmt FROM @daily_review_sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
-CREATE TABLE IF NOT EXISTS daily_review_sessions (
+-- 历史奖励型回顾已经占用旧版会话 / 条目表名。
+-- 内容回顾使用独立表名与旧数据并存，禁止通过 IF NOT EXISTS 把旧表误当成新版 Schema。
+CREATE TABLE IF NOT EXISTS daily_content_review_sessions (
   id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   user_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   review_date DATE NOT NULL,
@@ -44,12 +46,12 @@ CREATE TABLE IF NOT EXISTS daily_review_sessions (
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uk_daily_review_session_user_date (user_id, review_date),
-  KEY idx_daily_review_session_user_status (user_id, status, review_date)
+  UNIQUE KEY uk_daily_content_review_session_user_date (user_id, review_date),
+  KEY idx_daily_content_review_session_user_status (user_id, status, review_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC
   COMMENT='账号时区下的每日回顾固定会话';
 
-CREATE TABLE IF NOT EXISTS daily_review_items (
+CREATE TABLE IF NOT EXISTS daily_content_review_items (
   id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   session_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   user_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -64,12 +66,12 @@ CREATE TABLE IF NOT EXISTS daily_review_items (
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uk_daily_review_item_session_slot (session_id, slot),
-  UNIQUE KEY uk_daily_review_item_session_resource (session_id, resource_type, resource_id),
-  KEY idx_daily_review_item_user_resource (user_id, resource_type, resource_id(128), create_time),
-  KEY idx_daily_review_item_session_action (session_id, action, slot),
-  CONSTRAINT fk_daily_review_item_session
-    FOREIGN KEY (session_id) REFERENCES daily_review_sessions (id) ON DELETE CASCADE
+  UNIQUE KEY uk_daily_content_review_item_session_slot (session_id, slot),
+  UNIQUE KEY uk_daily_content_review_item_session_resource (session_id, resource_type, resource_id),
+  KEY idx_daily_content_review_item_user_resource (user_id, resource_type, resource_id(128), create_time),
+  KEY idx_daily_content_review_item_session_action (session_id, action, slot),
+  CONSTRAINT fk_daily_content_review_item_session
+    FOREIGN KEY (session_id) REFERENCES daily_content_review_sessions (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC
   COMMENT='每日回顾会话中的稳定资源条目';
 
@@ -77,12 +79,12 @@ SET @daily_review_resource_date_column := (
   SELECT COUNT(*)
   FROM information_schema.COLUMNS
   WHERE TABLE_SCHEMA = DATABASE()
-    AND TABLE_NAME = 'daily_review_items'
+    AND TABLE_NAME = 'daily_content_review_items'
     AND COLUMN_NAME = 'resource_date'
 );
 SET @daily_review_sql := IF(
   @daily_review_resource_date_column = 0,
-  'ALTER TABLE daily_review_items ADD COLUMN resource_date DATE DEFAULT NULL AFTER resource_id',
+  'ALTER TABLE daily_content_review_items ADD COLUMN resource_date DATE DEFAULT NULL AFTER resource_id',
   'SELECT 1'
 );
 PREPARE stmt FROM @daily_review_sql;

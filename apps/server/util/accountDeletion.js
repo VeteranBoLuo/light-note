@@ -26,8 +26,8 @@ const DIRECT_DELETE_TABLES = Object.freeze([
   ['user_achievements', 'user_id'],
   ['user_growth_preferences', 'user_id'],
   // items 必须先于 sessions 显式清理；即使 FK 可级联，也要兼容约束缺失或历史半迁移库。
-  ['daily_review_items', 'user_id'],
-  ['daily_review_sessions', 'user_id'],
+  ['daily_content_review_items', 'user_id'],
+  ['daily_content_review_sessions', 'user_id'],
   ['growth_recap_state', 'user_id'],
   ['ai_bonus_lot_allocations', 'user_id'],
   ['ai_bonus_lots', 'user_id'],

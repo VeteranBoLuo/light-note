@@ -152,9 +152,11 @@ describe('daily review read and ensure', () => {
   it('首次 ensure 在开启事务前解析账号日历，避免并发输家继承空的 RR 快照', async () => {
     const events = [];
     const connection = createConnection(async (sql) => {
-      events.push(String(sql).includes('INSERT INTO daily_review_sessions') ? 'insert-session' : 'transaction-query');
-      if (sql.includes('INSERT INTO daily_review_sessions')) return [{ affectedRows: 1 }];
-      if (sql.includes('UPDATE daily_review_sessions')) return [{ affectedRows: 1 }];
+      events.push(
+        String(sql).includes('INSERT INTO daily_content_review_sessions') ? 'insert-session' : 'transaction-query',
+      );
+      if (sql.includes('INSERT INTO daily_content_review_sessions')) return [{ affectedRows: 1 }];
+      if (sql.includes('UPDATE daily_content_review_sessions')) return [{ affectedRows: 1 }];
       if (sql.includes('SELECT hydrated.*')) return [[]];
       throw new Error(`未覆盖的测试 SQL: ${sql}`);
     });
@@ -202,10 +204,10 @@ describe('daily review read and ensure', () => {
       }),
     ];
     const connection = createConnection(async (sql) => {
-      if (sql.includes('INSERT INTO daily_review_sessions')) return [{ affectedRows: 1 }];
-      if (sql.includes('INSERT INTO daily_review_items')) return [{ affectedRows: 3 }];
+      if (sql.includes('INSERT INTO daily_content_review_sessions')) return [{ affectedRows: 1 }];
+      if (sql.includes('INSERT INTO daily_content_review_items')) return [{ affectedRows: 3 }];
       if (sql.includes('INSERT INTO growth_recap_state')) return [{ affectedRows: 3 }];
-      if (sql.includes('UPDATE daily_review_sessions')) return [{ affectedRows: 1 }];
+      if (sql.includes('UPDATE daily_content_review_sessions')) return [{ affectedRows: 1 }];
       if (sql.includes('SELECT hydrated.*')) return [rows];
       throw new Error(`未覆盖的测试 SQL: ${sql}`);
     });
@@ -233,9 +235,9 @@ describe('daily review read and ensure', () => {
     });
 
     const statements = connection.query.mock.calls.map(([sql]) => String(sql));
-    expect(statements[0]).toContain('INSERT INTO daily_review_sessions');
+    expect(statements[0]).toContain('INSERT INTO daily_content_review_sessions');
     expect(statements.findIndex((sql) => sql.includes('FOR UPDATE'))).toBe(-1);
-    expect(statements[1]).toContain('INSERT INTO daily_review_items');
+    expect(statements[1]).toContain('INSERT INTO daily_content_review_items');
     expect(connection.query.mock.calls[1][1]).toHaveLength(27);
     expect(statements[2]).toContain('last_shown_date');
     expect(review.progress).toEqual({ done: 0, total: 3, pending: 3 });
@@ -249,10 +251,10 @@ describe('daily review read and ensure', () => {
 
   it('并发 ensure 输家在 INSERT IGNORE 后锁读赢家，不再生成或改写固定列表', async () => {
     const connection = createConnection(async (sql) => {
-      if (sql.includes('INSERT INTO daily_review_sessions')) {
+      if (sql.includes('INSERT INTO daily_content_review_sessions')) {
         throw Object.assign(new Error('duplicate'), { code: 'ER_DUP_ENTRY' });
       }
-      if (sql.includes('FROM daily_review_sessions')) {
+      if (sql.includes('FROM daily_content_review_sessions')) {
         return [[{ id: sessionId, timezone: 'Asia/Tokyo', status: 'active', itemCount: 1 }]];
       }
       if (sql.includes('SELECT hydrated.*')) return [[hydratedItem()]];
@@ -268,7 +270,7 @@ describe('daily review read and ensure', () => {
       idFactory: () => 'aaaaaaaa-aaaa-1aaa-8aaa-aaaaaaaaaaaa',
     });
 
-    expect(connection.query.mock.calls[0][0]).toContain('INSERT INTO daily_review_sessions');
+    expect(connection.query.mock.calls[0][0]).toContain('INSERT INTO daily_content_review_sessions');
     expect(connection.query.mock.calls[1][0]).toContain('FOR UPDATE');
     expect(loadCandidates).not.toHaveBeenCalled();
     expect(review.timezone).toBe('Asia/Tokyo');
@@ -277,7 +279,7 @@ describe('daily review read and ensure', () => {
 
   it('候选生成异常会回滚且不提交', async () => {
     const connection = createConnection(async (sql) => {
-      if (sql.includes('INSERT INTO daily_review_sessions')) return [{ affectedRows: 1 }];
+      if (sql.includes('INSERT INTO daily_content_review_sessions')) return [{ affectedRows: 1 }];
       throw new Error(`不应继续查询: ${sql}`);
     });
     const db = { getConnection: vi.fn().mockResolvedValue(connection) };
@@ -297,7 +299,7 @@ describe('daily review read and ensure', () => {
 
   it('首次会话 INSERT 的非唯一键错误不会被吞掉或进入赢家锁读', async () => {
     const connection = createConnection(async (sql) => {
-      if (sql.includes('INSERT INTO daily_review_sessions')) {
+      if (sql.includes('INSERT INTO daily_content_review_sessions')) {
         throw Object.assign(new Error('data too long'), { code: 'ER_DATA_TOO_LONG' });
       }
       throw new Error(`不应继续查询: ${sql}`);
@@ -324,7 +326,7 @@ describe('daily review item actions', () => {
 
   it('只允许操作账号当天会话，并在同一事务原子返回更新后的 review', async () => {
     const connection = createConnection(async (sql, params) => {
-      if (sql.includes('FROM daily_review_items i') && sql.includes('FOR UPDATE')) {
+      if (sql.includes('FROM daily_content_review_items i') && sql.includes('FOR UPDATE')) {
         expect(sql).toContain('s.review_date = ?');
         expect(params).toEqual([itemId, 'user-1', '2026-09-01']);
         return [
@@ -347,10 +349,10 @@ describe('daily review item actions', () => {
       if (sql.startsWith('SELECT id, url FROM bookmark')) {
         return [[{ id: 'bookmark-1', url: 'https://example.com' }]];
       }
-      if (sql.includes('UPDATE daily_review_items')) return [{ affectedRows: 1 }];
+      if (sql.includes('UPDATE daily_content_review_items')) return [{ affectedRows: 1 }];
       if (sql.includes('SELECT COUNT(*) AS total')) return [[{ total: 1, pending: 0 }]];
-      if (sql.includes('UPDATE daily_review_sessions')) return [{ affectedRows: 1 }];
-      if (sql.includes('FROM daily_review_sessions')) {
+      if (sql.includes('UPDATE daily_content_review_sessions')) return [{ affectedRows: 1 }];
+      if (sql.includes('FROM daily_content_review_sessions')) {
         return [[{ id: sessionId, timezone: 'Asia/Shanghai', status: 'completed', itemCount: 1, completedAt: 'now' }]];
       }
       if (sql.includes('SELECT hydrated.*')) return [[hydratedItem({ action: 'opened' })]];
@@ -369,7 +371,7 @@ describe('daily review item actions', () => {
 
   it('同一动作重试保持幂等，不重复写资源状态', async () => {
     const connection = createConnection(async (sql) => {
-      if (sql.includes('FROM daily_review_items i') && sql.includes('FOR UPDATE')) {
+      if (sql.includes('FROM daily_content_review_items i') && sql.includes('FOR UPDATE')) {
         return [
           [
             {
@@ -387,7 +389,7 @@ describe('daily review item actions', () => {
           ],
         ];
       }
-      if (sql.includes('FROM daily_review_sessions')) {
+      if (sql.includes('FROM daily_content_review_sessions')) {
         return [[{ id: sessionId, timezone: 'Asia/Shanghai', status: 'skipped', itemCount: 1, skippedAt: 'now' }]];
       }
       if (sql.includes('SELECT hydrated.*')) return [[hydratedItem({ action: 'opened' })]];
@@ -399,13 +401,13 @@ describe('daily review item actions', () => {
 
     const statements = connection.query.mock.calls.map(([sql]) => String(sql));
     expect(statements.some((sql) => sql.startsWith('SELECT id FROM bookmark'))).toBe(false);
-    expect(statements.some((sql) => sql.includes('UPDATE daily_review_items'))).toBe(false);
+    expect(statements.some((sql) => sql.includes('UPDATE daily_content_review_items'))).toBe(false);
   });
 
   it('资源恢复后处理最后一条时刷新完成时间，不沿用资源失效前的 completed_at', async () => {
     const completionUpdates = [];
     const connection = createConnection(async (sql) => {
-      if (sql.includes('FROM daily_review_items i') && sql.includes('FOR UPDATE')) {
+      if (sql.includes('FROM daily_content_review_items i') && sql.includes('FOR UPDATE')) {
         return [
           [
             {
@@ -427,13 +429,13 @@ describe('daily review item actions', () => {
       if (sql.startsWith('SELECT id, url FROM bookmark')) {
         return [[{ id: 'bookmark-1', url: 'https://example.com' }]];
       }
-      if (sql.includes('UPDATE daily_review_items')) return [{ affectedRows: 1 }];
+      if (sql.includes('UPDATE daily_content_review_items')) return [{ affectedRows: 1 }];
       if (sql.includes('SELECT hydrated.*')) return [[hydratedItem({ action: 'opened' })]];
-      if (sql.includes('UPDATE daily_review_sessions')) {
+      if (sql.includes('UPDATE daily_content_review_sessions')) {
         completionUpdates.push(sql);
         return [{ affectedRows: 1 }];
       }
-      if (sql.includes('FROM daily_review_sessions')) {
+      if (sql.includes('FROM daily_content_review_sessions')) {
         return [[{ id: sessionId, timezone: 'Asia/Shanghai', status: 'completed', itemCount: 1, completedAt: 'new' }]];
       }
       throw new Error(`未覆盖的测试 SQL: ${sql}`);
@@ -450,7 +452,7 @@ describe('daily review item actions', () => {
 
   it('open_tag_space 仅允许 active_tag 原因，失败时回滚', async () => {
     const connection = createConnection(async (sql) => {
-      if (sql.includes('FROM daily_review_items i')) {
+      if (sql.includes('FROM daily_content_review_items i')) {
         return [
           [
             {
@@ -482,7 +484,7 @@ describe('daily review item actions', () => {
 
   it('历史畸形书签 URL 不会被记为 opened', async () => {
     const connection = createConnection(async (sql) => {
-      if (sql.includes('FROM daily_review_items i')) {
+      if (sql.includes('FROM daily_content_review_items i')) {
         return [
           [
             {
@@ -509,13 +511,13 @@ describe('daily review item actions', () => {
       code: 'DAILY_REVIEW_RESOURCE_UNAVAILABLE',
     });
 
-    expect(connection.query.mock.calls.some(([sql]) => sql.includes('UPDATE daily_review_items'))).toBe(false);
+    expect(connection.query.mock.calls.some(([sql]) => sql.includes('UPDATE daily_content_review_items'))).toBe(false);
     expect(connection.rollback).toHaveBeenCalledTimes(1);
   });
 
   it('snooze_7d 不会通过 upsert 清空已有 dismissed_at', async () => {
     const connection = createConnection(async (sql) => {
-      if (sql.includes('FROM daily_review_items i')) {
+      if (sql.includes('FROM daily_content_review_items i')) {
         return [
           [
             {
@@ -533,10 +535,10 @@ describe('daily review item actions', () => {
       }
       if (sql.startsWith('SELECT id FROM note')) return [[{ id: 'note-1' }]];
       if (sql.includes('INSERT INTO growth_recap_state')) return [{ affectedRows: 1 }];
-      if (sql.includes('UPDATE daily_review_items')) return [{ affectedRows: 1 }];
+      if (sql.includes('UPDATE daily_content_review_items')) return [{ affectedRows: 1 }];
       if (sql.includes('SELECT COUNT(*) AS total')) return [[{ total: 1, pending: 0 }]];
-      if (sql.includes('UPDATE daily_review_sessions')) return [{ affectedRows: 1 }];
-      if (sql.includes('FROM daily_review_sessions')) {
+      if (sql.includes('UPDATE daily_content_review_sessions')) return [{ affectedRows: 1 }];
+      if (sql.includes('FROM daily_content_review_sessions')) {
         return [[{ id: sessionId, timezone: 'Asia/Shanghai', status: 'completed', itemCount: 1 }]];
       }
       if (sql.includes('SELECT hydrated.*')) return [[hydratedItem({ resourceType: 'note', action: 'snoozed' })]];
@@ -557,7 +559,7 @@ describe('daily review session actions', () => {
   it('资源恢复让持久 completed 派生为 active 后，skip_today 仍能收起会话', async () => {
     let sessionReads = 0;
     const connection = createConnection(async (sql) => {
-      if (sql.includes('FROM daily_review_sessions')) {
+      if (sql.includes('FROM daily_content_review_sessions')) {
         sessionReads += 1;
         return [
           [

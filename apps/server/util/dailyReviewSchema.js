@@ -1,8 +1,10 @@
 import pool from '../db/index.js';
 import { GROWTH_RECAP_STATE_TABLE_SQL } from './growthCenterSchema.js';
 
+// 历史奖励型回顾已经占用旧版会话 / 条目表名；
+// 新版内容回顾必须保持物理隔离，不能依赖 CREATE TABLE IF NOT EXISTS 复用旧表。
 const DAILY_REVIEW_SESSIONS_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS daily_review_sessions (
+  CREATE TABLE IF NOT EXISTS daily_content_review_sessions (
     id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     user_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
     review_date DATE NOT NULL,
@@ -14,14 +16,14 @@ const DAILY_REVIEW_SESSIONS_TABLE_SQL = `
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uk_daily_review_session_user_date (user_id, review_date),
-    KEY idx_daily_review_session_user_status (user_id, status, review_date)
+    UNIQUE KEY uk_daily_content_review_session_user_date (user_id, review_date),
+    KEY idx_daily_content_review_session_user_status (user_id, status, review_date)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC
     COMMENT='账号时区下的每日回顾固定会话'
 `;
 
 const DAILY_REVIEW_ITEMS_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS daily_review_items (
+  CREATE TABLE IF NOT EXISTS daily_content_review_items (
     id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     session_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     user_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -36,12 +38,12 @@ const DAILY_REVIEW_ITEMS_TABLE_SQL = `
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uk_daily_review_item_session_slot (session_id, slot),
-    UNIQUE KEY uk_daily_review_item_session_resource (session_id, resource_type, resource_id),
-    KEY idx_daily_review_item_user_resource (user_id, resource_type, resource_id(128), create_time),
-    KEY idx_daily_review_item_session_action (session_id, action, slot),
-    CONSTRAINT fk_daily_review_item_session
-      FOREIGN KEY (session_id) REFERENCES daily_review_sessions (id) ON DELETE CASCADE
+    UNIQUE KEY uk_daily_content_review_item_session_slot (session_id, slot),
+    UNIQUE KEY uk_daily_content_review_item_session_resource (session_id, resource_type, resource_id),
+    KEY idx_daily_content_review_item_user_resource (user_id, resource_type, resource_id(128), create_time),
+    KEY idx_daily_content_review_item_session_action (session_id, action, slot),
+    CONSTRAINT fk_daily_content_review_item_session
+      FOREIGN KEY (session_id) REFERENCES daily_content_review_sessions (id) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC
     COMMENT='每日回顾会话中的稳定资源条目'
 `;
@@ -73,12 +75,14 @@ async function ensureDailyReviewResourceDate() {
     `SELECT COUNT(*) AS count
        FROM information_schema.columns
       WHERE table_schema = DATABASE()
-        AND table_name = 'daily_review_items'
+        AND table_name = 'daily_content_review_items'
         AND column_name = 'resource_date'`,
   );
   if (!Number(row?.count || 0)) {
     try {
-      await pool.query('ALTER TABLE daily_review_items ADD COLUMN resource_date DATE DEFAULT NULL AFTER resource_id');
+      await pool.query(
+        'ALTER TABLE daily_content_review_items ADD COLUMN resource_date DATE DEFAULT NULL AFTER resource_id',
+      );
     } catch (error) {
       if (error?.code !== 'ER_DUP_FIELDNAME') throw error;
     }

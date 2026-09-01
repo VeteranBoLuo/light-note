@@ -83,7 +83,7 @@ async function findSession(db, userId, date, { forUpdate = false } = {}) {
   const [rows] = await db.query(
     `SELECT id, timezone, status, item_count AS itemCount,
             completed_at AS completedAt, skipped_at AS skippedAt
-       FROM daily_review_sessions
+       FROM daily_content_review_sessions
       WHERE user_id = ? AND review_date = ?
       LIMIT 1${forUpdate ? ' FOR UPDATE' : ''}`,
     [userId, date],
@@ -107,7 +107,7 @@ const HYDRATE_ITEMS_SQL = `
            ${hydrateText('i.reason_tag_id')} AS reasonTagId,
            ${hydrateText('reason_tag.name')} AS reasonTagName,
            i.action, i.acted_at AS actedAt
-      FROM daily_review_items i
+      FROM daily_content_review_items i
       INNER JOIN bookmark b
         ON i.resource_type = 'bookmark'
        AND ${hydrateText('b.id')} = ${hydrateText('i.resource_id')}
@@ -137,7 +137,7 @@ const HYDRATE_ITEMS_SQL = `
            ${hydrateText('i.reason_tag_id')} AS reasonTagId,
            ${hydrateText('reason_tag.name')} AS reasonTagName,
            i.action, i.acted_at AS actedAt
-      FROM daily_review_items i
+      FROM daily_content_review_items i
       INNER JOIN note n
         ON i.resource_type = 'note'
        AND ${hydrateText('n.id')} = ${hydrateText('i.resource_id')}
@@ -166,7 +166,7 @@ const HYDRATE_ITEMS_SQL = `
            ${hydrateText('i.reason_tag_id')} AS reasonTagId,
            ${hydrateText('reason_tag.name')} AS reasonTagName,
            i.action, i.acted_at AS actedAt
-      FROM daily_review_items i
+      FROM daily_content_review_items i
       INNER JOIN files f
         ON i.resource_type = 'file'
        AND ${hydrateText('CAST(f.id AS CHAR)')} = ${hydrateText('i.resource_id')}
@@ -321,7 +321,7 @@ async function insertDailyItems(connection, { userId, sessionId, candidates, idF
     );
   });
   await connection.query(
-    `INSERT INTO daily_review_items
+    `INSERT INTO daily_content_review_items
        (id, session_id, user_id, slot, resource_type, resource_id, resource_date, reason_code, reason_tag_id, action)
      VALUES ${values}`,
     params,
@@ -365,7 +365,7 @@ export async function ensureDailyReviewToday(
     let inserted = false;
     try {
       await connection.query(
-        `INSERT INTO daily_review_sessions
+        `INSERT INTO daily_content_review_sessions
          (id, user_id, review_date, timezone, status, item_count)
        VALUES (?, ?, ?, ?, 'active', 0)`,
         [sessionId, ownerId, date, accountCalendar.timezone],
@@ -391,7 +391,7 @@ export async function ensureDailyReviewToday(
       await markCandidatesShown(connection, { userId: ownerId, date, candidates });
       const status = candidates.length ? 'active' : 'empty';
       await connection.query(
-        `UPDATE daily_review_sessions
+        `UPDATE daily_content_review_sessions
               SET status = ?, item_count = ?, completed_at = NULL, skipped_at = NULL
             WHERE id = ? AND user_id = ?`,
         [status, candidates.length, sessionId, ownerId],
@@ -429,8 +429,8 @@ async function findTodayItemForUpdate(connection, { itemId, userId, date }) {
             s.status AS sessionStatus, s.item_count AS sessionItemCount,
             s.completed_at AS sessionCompletedAt, s.skipped_at AS sessionSkippedAt,
             s.timezone AS sessionTimezone
-       FROM daily_review_items i
-       INNER JOIN daily_review_sessions s
+       FROM daily_content_review_items i
+       INNER JOIN daily_content_review_sessions s
          ON s.id = i.session_id AND s.user_id = i.user_id
       WHERE i.id = ? AND i.user_id = ? AND s.review_date = ?
       LIMIT 1 FOR UPDATE`,
@@ -528,7 +528,7 @@ async function updateCompletionStatus(connection, { userId, sessionId, refreshCo
   const status = pending === 0 ? 'completed' : 'active';
   if (status !== 'active') {
     await connection.query(
-      `UPDATE daily_review_sessions
+      `UPDATE daily_content_review_sessions
           SET status = ?,
               completed_at = ${status === 'completed' ? (refreshCompletedAt ? 'NOW()' : 'COALESCE(completed_at, NOW())') : 'NULL'},
               skipped_at = NULL
@@ -538,7 +538,7 @@ async function updateCompletionStatus(connection, { userId, sessionId, refreshCo
     return status;
   }
   await connection.query(
-    `UPDATE daily_review_sessions
+    `UPDATE daily_content_review_sessions
         SET status = 'active', completed_at = NULL, skipped_at = NULL
       WHERE id = ? AND user_id = ?`,
     [sessionId, userId],
@@ -619,7 +619,7 @@ export async function actOnDailyReviewItem(userId, itemId, action, { calendar = 
         date,
       });
       const [updateResult] = await connection.query(
-        `UPDATE daily_review_items
+        `UPDATE daily_content_review_items
             SET action = ?, acted_at = NOW()
           WHERE id = ? AND user_id = ? AND action = 'pending'`,
         [storedAction, normalizedItemId, ownerId],
@@ -672,7 +672,7 @@ export async function actOnDailyReviewToday(userId, action, { calendar = null, d
 
     if (normalizedAction === 'skip_today' && effectiveStatus === 'active') {
       await connection.query(
-        `UPDATE daily_review_sessions
+        `UPDATE daily_content_review_sessions
             SET status = 'skipped', skipped_at = COALESCE(skipped_at, NOW()), completed_at = NULL
           WHERE id = ? AND user_id = ?`,
         [session.id, ownerId],
@@ -682,7 +682,7 @@ export async function actOnDailyReviewToday(userId, action, { calendar = null, d
     if (normalizedAction === 'resume_today' && session.status === 'skipped') {
       const status = deriveLiveSessionStatus({ ...session, status: 'active' }, liveCounts);
       await connection.query(
-        `UPDATE daily_review_sessions
+        `UPDATE daily_content_review_sessions
             SET status = ?,
                 completed_at = ${status === 'completed' ? 'COALESCE(completed_at, NOW())' : 'NULL'},
                 skipped_at = NULL

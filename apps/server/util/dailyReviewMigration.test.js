@@ -28,9 +28,12 @@ describe('daily review migration and release order', () => {
     ]);
 
     for (const source of [migration, runtimeSchema, baselineSchema, assertions]) {
-      expect(source).toContain('daily_review_sessions');
-      expect(source).toContain('daily_review_items');
+      expect(source).toContain('daily_content_review_sessions');
+      expect(source).toContain('daily_content_review_items');
       expect(source).toContain('resource_date');
+      // 历史奖励型每日回顾已经占用这两个表名；新版内容回顾必须与它并存，不能再次复用。
+      expect(source).not.toMatch(/\bdaily_review_sessions\b/);
+      expect(source).not.toMatch(/\bdaily_review_items\b/);
     }
     for (const source of [migration, runtimeSchema, assertions]) expect(source).toContain('last_shown_date');
     expect(migration).toContain('CREATE TABLE IF NOT EXISTS growth_recap_state');
