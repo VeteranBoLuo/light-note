@@ -125,7 +125,7 @@ export function buildAdminNav({
       title: 'AI',
       icon: icons.ai,
       items: [
-        { id: 'agentLog', title: 'AI 监控' },
+        { id: 'agentLog', title: 'AI 运行中心' },
         { id: 'aiFeedback', title: 'AI 回答反馈' },
         { id: 'knowledgeBase', title: 'AI 知识库', path: EXTERNAL_PATHS.knowledgeBase, external: true },
       ],

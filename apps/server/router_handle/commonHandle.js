@@ -1489,6 +1489,9 @@ function buildAdminOverviewScope(hideInternal) {
   const notIntRole = hideInternal ? ` AND role NOT IN (${irSql})` : '';
   const notIntUser = hideInternal ? ` AND user_id NOT IN (SELECT id FROM \`user\` WHERE role IN (${irSql}))` : '';
   const notIntCreateBy = hideInternal ? ` AND create_by NOT IN (SELECT id FROM \`user\` WHERE role IN (${irSql}))` : '';
+  const notIntAiActor = hideInternal
+    ? ` AND (actor_user_id IS NULL OR actor_user_id NOT IN (SELECT id FROM \`user\` WHERE role IN (${irSql})))`
+    : '';
   const activeBookmarkOwner = ` AND EXISTS (
     SELECT 1 FROM \`user\` bookmark_owner
     WHERE bookmark_owner.id = bookmark.user_id AND bookmark_owner.del_flag = 0
@@ -1516,6 +1519,7 @@ function buildAdminOverviewScope(hideInternal) {
     notIntRole,
     notIntUser,
     notIntCreateBy,
+    notIntAiActor,
     activeBookmarkOwner,
     notOnboardingBookmark,
     notOnboardingNote,
@@ -1647,11 +1651,11 @@ async function queryAdminOverviewSnapshot({ hideInternal, now = new Date() }) {
         .query(
           `SELECT
              COUNT(*) AS totalCount,
-             COALESCE(SUM(total_tokens), 0) AS totalTokens,
+             COALESCE(SUM(provider_tokens), 0) AS totalTokens,
              COALESCE(SUM(created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY)), 0) AS todayCount,
-             COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY) THEN total_tokens ELSE 0 END), 0) AS todayTokens
-           FROM agent_logs
-           WHERE 1 = 1${scope.notIntUser}`,
+             COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY) THEN provider_tokens ELSE 0 END), 0) AS todayTokens
+           FROM ai_executions
+           WHERE model_called = 1${scope.notIntAiActor}`,
           [today, today, today, today],
         )
         .catch(() => [[{ todayCount: 0, todayTokens: 0, totalCount: 0, totalTokens: 0 }]]),
@@ -1814,8 +1818,9 @@ async function queryAdminOverviewTrend({ days, hideInternal, now = new Date() })
            GROUP BY d
            UNION ALL
            SELECT DATE_FORMAT(created_at, '%Y-%m-%d') AS d, 'aiCalls' AS kind, COUNT(*) AS c
-           FROM agent_logs
-           WHERE created_at >= ? AND created_at < ? AND TIME(created_at) <= ?${scope.notIntUser}
+           FROM ai_executions
+           WHERE model_called = 1
+             AND created_at >= ? AND created_at < ? AND TIME(created_at) <= ?${scope.notIntAiActor}
            GROUP BY d
          ) same_time_baseline
          GROUP BY d, kind`,

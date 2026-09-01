@@ -57,6 +57,7 @@
 - `system` 计费覆盖只允许受信任的服务端调用方显式注入固定系统主体，公开请求、页面字段和客户端 Header 均不能选择该策略；执行仍保留完整 Execution、Span 与 usage 审计。
 - Registry 同时支持公开与 internal-only Skill。internal-only Skill 不得出现在 `/ai/skills/config` 或被公开执行，但为了让用户理解真实 AI 消耗，其可读动作名可以进入用量目录。只有服务端传入的已登记调用者身份与该 Skill 允许的计费策略同时成立时才能执行；客户端 `surface`、body、query 或 Header 都不是内部身份。
 - 知识工坊纯 AI 任务允许用户每次选择积分或 AI 额度，不得双扣。积分分支由受信任 Worker 注入 `system` 覆盖；AI 额度分支由同一 Worker 使用默认 `user` 策略，按真实 Token 进入“知识工坊”用量明细。成果页不提供工具内追问；保存为笔记后的追问、润色与反复修改属于笔记模块独立 Skill，使用 AI 额度。工坊任务状态与单介质结算见 [知识工坊](./toolbox.md)。
+- Root 的 `/api/admin/ai-operations/*` 只把 `ai_executions` 与 `ai_provider_spans` 投影为平台治理读模型。actor 表示成本承担者，subject 只解释代操作或系统任务的目标；总览、趋势、模块、Provider、列表与详情必须共用同一筛选边界。管理端不得返回 Prompt、问题、正文、标题、URL、资源 ID、模型回答、Provider 原始错误或其他内容载荷；历史 `agent_logs` 不参与现行成本、质量或用户 360 统计。
 - 执行租约、规则版本、回收与历史修正必须可重放。历史修正默认 dry-run，只允许自动退款，不自动追扣。
 
 ## 开关、隐私与遥测

@@ -3088,3 +3088,28 @@ FROM daily_content_review_sessions session_row
 LEFT JOIN daily_content_review_items item ON item.session_id=session_row.id
 GROUP BY session_row.id, session_row.item_count
 HAVING COUNT(item.id)<>session_row.item_count OR COUNT(item.id)>3;
+
+-- 64) AI 运行中心必须可按创建时间 + 稳定 ID 做倒序游标扫描（期望 0 行）
+SELECT '[64] invalid_ai_operations_index' AS check_name,
+  CONCAT('idx_ai_execution_admin_created 实际=', IFNULL(actual.cols, '缺失')) AS detail
+FROM (SELECT 1) expected
+LEFT JOIN (
+  SELECT GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') AS cols
+  FROM information_schema.statistics
+  WHERE table_schema=DATABASE()
+    AND table_name='ai_executions'
+    AND index_name='idx_ai_execution_admin_created'
+) actual ON 1=1
+WHERE actual.cols IS NULL OR actual.cols <> 'created_at,id';
+
+SELECT '[64] invalid_ai_operations_provider_index' AS check_name,
+  CONCAT('idx_ai_provider_span_provider_execution 实际=', IFNULL(actual.cols, '缺失')) AS detail
+FROM (SELECT 1) expected
+LEFT JOIN (
+  SELECT GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') AS cols
+  FROM information_schema.statistics
+  WHERE table_schema=DATABASE()
+    AND table_name='ai_provider_spans'
+    AND index_name='idx_ai_provider_span_provider_execution'
+) actual ON 1=1
+WHERE actual.cols IS NULL OR actual.cols <> 'provider,execution_id';

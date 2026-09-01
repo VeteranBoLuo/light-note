@@ -139,6 +139,8 @@ API 使用 `resultData(data, status, msg)` 信封，snake_case 响应键统一�
 
 页面选择封闭 Skill，服务端 Registry 绑定资源、权限、历史、模型、输出与计费；所有模型访问经过统一 Gateway 与 AI Execution。完整规范见 [模块化 AI Skills](./ai-skills.md)。
 
+Root 的 AI 运行中心是统一 Execution/Span 账本上的低敏平台治理读模型；个人用量与后台治理共用动作、调用和计费事实，不恢复旧助手日志作为现行业务数据源。
+
 旧助手的会话、来源、反馈等表只用于导出、删除与审计兼容，不再作为普通 Skill 上下文。
 
 ### 知识工坊

@@ -30,6 +30,7 @@ describe('adminRoutePolicyMiddleware', () => {
     const routerDir = path.resolve(dirname, '../router');
     const prefixes = {
       'bookmark.js': '/bookmark',
+      'adminAiOperations.js': '/admin/ai-operations',
       'chat.js': '/chat',
       'common.js': '/common',
       'dailyReview.js': '/daily-review',

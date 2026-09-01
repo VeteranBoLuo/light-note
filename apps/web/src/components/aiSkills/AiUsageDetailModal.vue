@@ -164,6 +164,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import { aiUsageModuleKey } from '@/components/aiSkills/aiUsageModules';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
 
@@ -203,7 +204,14 @@
     calls: ProviderCall[];
   }
 
-  const props = defineProps<{ execution: UsageExecution | null }>();
+  const props = withDefaults(
+    defineProps<{
+      execution: UsageExecution | null;
+      /** 管理端与个人用量页共用同一套低敏调用链展示，只替换受权读取端点。 */
+      detailEndpoint?: string;
+    }>(),
+    { detailEndpoint: '/api/chat/aiUsageDetail' },
+  );
   const visible = defineModel<boolean>('visible');
   const { t, locale } = useI18n();
   const loading = ref(false);
@@ -232,7 +240,7 @@
     loading.value = true;
     errorCode.value = '';
     try {
-      const response = await apiBasePost('/api/chat/aiUsageDetail', { executionId }, { silent: true });
+      const response = await apiBasePost(props.detailEndpoint, { executionId }, { silent: true });
       if (current !== requestSequence || executionId !== props.execution?.id) return;
       if (Number(response?.status) !== 200 || !response?.data) throw new Error('AI_USAGE_DETAIL_REQUEST_FAILED');
       const next = response.data as UsageDetail;
@@ -276,8 +284,7 @@
   }
 
   function moduleLabel(module: string) {
-    const allowed = ['note', 'bookmark', 'file', 'todo', 'search', 'help', 'tag'];
-    return t(`settings.ai.usage.modules.${allowed.includes(module) ? module : 'other'}`);
+    return t(`settings.ai.usage.modules.${aiUsageModuleKey(module)}`);
   }
 
   function statusTone(status: string) {

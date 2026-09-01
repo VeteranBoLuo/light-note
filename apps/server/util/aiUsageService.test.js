@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getUserAiUsage, getUserAiUsageDetail, normalizeAiUsageQuery } from './aiUsageService.js';
+import {
+  buildAiUsageModuleFilter,
+  getUserAiUsage,
+  getUserAiUsageDetail,
+  normalizeAiUsageQuery,
+} from './aiUsageService.js';
 
 describe('aiUsageService', () => {
   it('查询参数只接受稳定白名单', () => {
@@ -16,6 +21,11 @@ describe('aiUsageService', () => {
       module: 'all',
     });
     expect(normalizeAiUsageQuery({ module: 'TOOLBOX' }).module).toBe('toolbox');
+  });
+
+  it('共享模块过滤器只接受安全 SQL 列别名前缀', () => {
+    expect(buildAiUsageModuleFilter('note', 'e.').sql).toContain("COALESCE(e.skill_id, '')");
+    expect(buildAiUsageModuleFilter('note', 'e); DROP TABLE ai_executions; --').sql).not.toContain('DROP TABLE');
   });
 
   it('只返回用量治理字段，并按目录把内部 task type 映射为用户可理解的动作', async () => {

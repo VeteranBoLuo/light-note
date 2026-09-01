@@ -46,10 +46,10 @@ function execution() {
   };
 }
 
-function mountDetail() {
+function mountDetail(props: Record<string, unknown> = {}) {
   const host = document.createElement('div');
   document.body.append(host);
-  const app = createApp(AiUsageDetailModal, { execution: execution(), visible: true });
+  const app = createApp(AiUsageDetailModal, { execution: execution(), visible: true, ...props });
   app.mount(host);
   cleanup = () => {
     app.unmount();
@@ -138,6 +138,18 @@ describe('AiUsageDetailModal', () => {
     const host = mountDetail();
     await vi.waitFor(() => expect(host.textContent).toContain('settings.ai.usage.detail.errorTitle'));
     expect(host.textContent).toContain('settings.ai.usage.retry');
+  });
+
+  it('管理端可复用同一低敏时间线并替换受权详情端点', async () => {
+    requestMocks.apiBasePost.mockResolvedValue({ status: 200, data: { execution: execution(), calls: [] } });
+    mountDetail({ detailEndpoint: '/api/admin/ai-operations/executions/detail' });
+
+    await vi.waitFor(() => expect(requestMocks.apiBasePost).toHaveBeenCalled());
+    expect(requestMocks.apiBasePost).toHaveBeenCalledWith(
+      '/api/admin/ai-operations/executions/detail',
+      { executionId: execution().id },
+      { silent: true },
+    );
   });
 
   it('明确展示历史修复原因缺失、Provider 用量缺失和脱敏失败类型', async () => {

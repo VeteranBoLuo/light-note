@@ -906,8 +906,7 @@ export const getUserAdminDetail = async (req, res) => {
       todoRows,
       opinionRows,
       growthRows,
-      agentRows,
-      aiWorkspaceRows,
+      aiUsageRows,
       securityRows,
       apiRows,
       operationRows,
@@ -956,20 +955,16 @@ export const getUserAdminDetail = async (req, res) => {
       readSection(
         'aiUsage',
         `SELECT COUNT(*) AS request_total,
-                COALESCE(SUM(total_tokens), 0) AS token_total,
-                COALESCE(SUM(cost), 0) AS cost_total,
-                COALESCE(SUM(status <> 'success'), 0) AS failed_total,
-                MAX(created_at) AS last_used_at
-         FROM agent_logs WHERE user_id = ?`,
-        [targetUserId],
-      ),
-      readSection(
-        'aiWorkspace',
-        `SELECT
-           (SELECT COUNT(*) FROM ai_conversations WHERE subject_user_id = ? AND status = 'active') AS conversation_total,
-           (SELECT COUNT(*) FROM ai_feedback WHERE subject_user_id = ?) AS feedback_total,
-           (SELECT COUNT(*) FROM ai_feedback WHERE subject_user_id = ? AND rating = 'down') AS negative_feedback_total`,
-        [targetUserId, targetUserId, targetUserId],
+                COALESCE(SUM(e.provider_tokens), 0) AS token_total,
+                (SELECT COALESCE(SUM(span.estimated_cost), 0)
+                   FROM ai_provider_spans span
+                   INNER JOIN ai_executions cost_execution ON cost_execution.id = span.execution_id
+                  WHERE cost_execution.actor_user_id = ? AND cost_execution.model_called = 1) AS cost_total,
+                COALESCE(SUM(e.status = 'failed'), 0) AS failed_total,
+                MAX(e.created_at) AS last_used_at
+         FROM ai_executions e
+         WHERE e.actor_user_id = ? AND e.model_called = 1`,
+        [targetUserId, targetUserId],
       ),
       readSection(
         'security',
@@ -1058,8 +1053,7 @@ export const getUserAdminDetail = async (req, res) => {
         todos: numberFields(todoRows[0]),
         opinions: numberFields(opinionRows[0]),
         growth: numberFields(growthRows[0]),
-        aiUsage: numberFields(agentRows[0]),
-        aiWorkspace: numberFields(aiWorkspaceRows[0]),
+        aiUsage: numberFields(aiUsageRows[0]),
         security: numberFields(securityRows[0]),
         apiHealth: numberFields(apiRows[0]),
         sessions,

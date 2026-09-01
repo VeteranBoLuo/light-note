@@ -9,7 +9,9 @@ describe('后台运营总览指标去重', () => {
   it('首屏只请求核心快照，核心落屏后再并发加载趋势与最近新增', () => {
     expect(source).toContain('getAdminOverviewSnapshot(hideInternalValue, { force })');
     expect(source).not.toContain("apiBasePost('/api/common/getAdminOverview',");
-    expect(source).toMatch(/data\.value = \{[\s\S]*?\.\.\.response\.data[\s\S]*?void loadTrend\(\);[\s\S]*?void loadRecent\(\);/u);
+    expect(source).toMatch(
+      /data\.value = \{[\s\S]*?\.\.\.response\.data[\s\S]*?void loadTrend\(\);[\s\S]*?void loadRecent\(\);/u,
+    );
     expect(template).toContain("t('adminOverview.loading')");
     expect(template).toContain("t('adminOverview.loadFailed')");
     expect(template).toContain("t('adminOverview.trendLoadFailed')");
@@ -27,7 +29,7 @@ describe('后台运营总览指标去重', () => {
     expect(healthSection).toBeTruthy();
     expect(healthSection?.match(/class="admin-stat-card/g)).toHaveLength(6);
 
-    for (const label of ['活跃用户', 'AI 调用', 'API 请求', '当前未完成', '当前逾期', '今日完成']) {
+    for (const label of ['活跃用户', 'AI 模型动作', 'API 请求', '当前未完成', '当前逾期', '今日完成']) {
       expect(healthSection).toContain(`>${label}<`);
     }
     expect(healthSection).not.toContain('待办总量');
