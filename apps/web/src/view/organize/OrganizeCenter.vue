@@ -1310,18 +1310,23 @@
     font-weight: 700;
   }
 
-  .organize-nav-item {
+  .organize-nav-item.b_btn {
     width: 100%;
     min-height: 42px;
     display: grid;
     grid-template-columns: 20px minmax(0, 1fr) auto;
     gap: 8px;
-    padding: 0 10px;
+    padding: 0 10px 0 7px;
     border: 1px solid transparent;
+    border-left: 4px solid transparent;
     border-radius: 11px;
     color: var(--text-color);
     background: transparent;
     text-align: left;
+    transition:
+      color 0.16s ease,
+      background-color 0.16s ease,
+      border-color 0.16s ease;
   }
 
   .organize-nav-item > span:nth-child(2) {
@@ -1338,8 +1343,7 @@
   }
 
   .organize-nav-item.active {
-    border-left: 4px solid var(--primary-color);
-    padding-left: 7px;
+    border-left-color: var(--primary-color);
     font-weight: 700;
   }
 

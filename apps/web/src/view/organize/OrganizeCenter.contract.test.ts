@@ -3,6 +3,10 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(resolve(process.cwd(), 'src/view/organize/OrganizeCenter.vue'), 'utf8');
+const desktopNavStyle = source.slice(
+  source.indexOf('  .organize-nav-item.b_btn {'),
+  source.indexOf('  .organize-nav-item > span:nth-child(2)'),
+);
 const mobileNavStyle = source.slice(
   source.indexOf('    .organize-mobile-nav {', source.indexOf('@media (max-width: 767px)')),
   source.indexOf('    .organize-mobile-nav::-webkit-scrollbar', source.indexOf('@media (max-width: 767px)')),
@@ -41,8 +45,17 @@ describe('整理中心 2.0 页面契约', () => {
     expect(source).toContain('var(--text-color)');
     expect(source).toContain('html.light-note-mobile-rendering .organize-nav-item.active');
     expect(source).toContain('html.light-note-mobile-rendering .organize-overview-card');
-    expect(source).toMatch(/\.organize-nav-item\.active\s*\{[\s\S]*?border-left:\s*4px solid/);
+    expect(source).toMatch(/\.organize-nav-item\.b_btn\s*\{[\s\S]*?border-left:\s*4px solid transparent/);
+    expect(source).toMatch(/\.organize-nav-item\.active\s*\{[\s\S]*?border-left-color:\s*var\(--primary-color\)/);
     expect(source).toMatch(/\.organize-mobile-nav__item\.active\s*\{[\s\S]*?border:\s*2px solid/);
+  });
+
+  it('桌面菜单切换只过渡颜色，选中前后不改变边框宽度或内边距', () => {
+    expect(source).toMatch(
+      /\.organize-nav-item\.b_btn\s*\{[\s\S]*?padding:\s*0 10px 0 7px;[\s\S]*?transition:\s*color[\s\S]*?background-color[\s\S]*?border-color/,
+    );
+    expect(desktopNavStyle).not.toContain('transition: all');
+    expect(source).not.toMatch(/\.organize-nav-item\.active\s*\{[^}]*padding-left/);
   });
 
   it('重复项弹窗关闭后把焦点还给触发点或主内容区', () => {
