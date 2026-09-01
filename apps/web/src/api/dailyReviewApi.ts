@@ -33,6 +33,14 @@ export interface DailyReviewSession {
   itemCount: number;
   completedAt?: string | null;
   skippedAt?: string | null;
+  reward?: {
+    /** 是否已经写入当天的幂等奖励账本；即使触顶实际到账 0，也会是 true。 */
+    settled: boolean;
+    /** 本次实际到账 EXP，可能受每日上限影响而小于 rewardExp。 */
+    grantedExp: number;
+    /** 当日回顾配置的最高奖励 EXP。 */
+    rewardExp: number;
+  };
 }
 
 export interface DailyReviewSnapshot {

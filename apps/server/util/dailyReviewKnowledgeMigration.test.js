@@ -10,6 +10,8 @@ describe('每日回顾公开帮助迁移', () => {
     const migration = await readFile(fileURLToPath(migrationUrl), 'utf8');
 
     expect(migration).toContain("SET @daily_review_help_title = '移动端「今日」页面是什么'");
+    expect(migration).toContain('自动结算一次 5 EXP（受每日经验上限影响）');
+    expect(migration).toContain('“7 天后再看”“不再推荐这条”和“今天先收起”都不计入奖励');
     expect(migration).toContain('NOT EXISTS (SELECT 1 FROM knowledge_base WHERE id = @daily_review_help_id)');
     expect(migration).toContain('NOT EXISTS (SELECT 1 FROM knowledge_base WHERE title = @daily_review_help_title)');
     expect(migration).toContain('WHERE id = @daily_review_help_id OR title = @daily_review_help_title');
@@ -30,6 +32,8 @@ describe('每日回顾公开帮助迁移', () => {
       '今天先收起',
       '同一天刷新、重新登录或换设备，条目与进度保持一致',
       '全部处理完会显示今日完成',
+      '自动结算一次 5 EXP（受每日经验上限影响）',
+      '“7 天后再看”“不再推荐这条”和“今天先收起”都不计入奖励',
       '“今天先收起”不会永久隐藏内容',
     ];
 

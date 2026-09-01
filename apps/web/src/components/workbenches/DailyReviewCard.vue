@@ -17,8 +17,14 @@
               isSkipped ? t('growth.dailyReviewSkippedTitle') : t('growth.dailyReviewCompletedTitle')
             }}</strong>
             <BChip v-if="readOnly" tone="neutral">{{ t('growth.dailyReviewReadOnly') }}</BChip>
+            <BChip v-if="completionRewardExp > 0" class="daily-review__reward" tone="success">
+              {{ t('growth.dailyReviewRewardGranted', { exp: completionRewardExp }) }}
+            </BChip>
+            <BChip v-else-if="completionRewardSettled" class="daily-review__reward" tone="neutral">
+              {{ t('growth.dailyReviewRewardCapReached') }}
+            </BChip>
           </div>
-          <span>{{ isSkipped ? t('growth.dailyReviewSkippedDesc') : t('growth.dailyReviewCompletedDesc') }}</span>
+          <span>{{ terminalDescription }}</span>
         </div>
         <time class="daily-review__date" :datetime="review?.date || undefined">{{ reviewDateLabel }}</time>
         <BButton
@@ -43,6 +49,9 @@
           <div class="daily-review__title-row">
             <h2>{{ t('growth.dailyReviewTitle') }}</h2>
             <BChip v-if="readOnly" tone="neutral">{{ t('growth.dailyReviewReadOnly') }}</BChip>
+            <BChip v-else-if="canEarnReward" class="daily-review__reward-preview" tone="neutral">
+              {{ t('growth.dailyReviewRewardPreview', { exp: configuredRewardExp }) }}
+            </BChip>
           </div>
           <p>{{ t('growth.dailyReviewSubtitle') }}</p>
         </div>
@@ -273,6 +282,32 @@
   const isCompleted = computed(() => review.value?.session?.status === 'completed');
   const isSkipped = computed(() => review.value?.session?.status === 'skipped');
   const isTerminal = computed(() => isCompleted.value || isSkipped.value);
+  const configuredRewardExp = computed(() => Math.max(0, Number(review.value?.session?.reward?.rewardExp || 0)));
+  const completionRewardSettled = computed(() => isCompleted.value && Boolean(review.value?.session?.reward?.settled));
+  const completionRewardExp = computed(() =>
+    completionRewardSettled.value ? Math.max(0, Number(review.value?.session?.reward?.grantedExp || 0)) : 0,
+  );
+  const allAvailableItemsReviewed = computed(
+    () =>
+      orderedItems.value.length > 0 &&
+      orderedItems.value.every((item) => item.action === 'opened' || item.action === 'opened_tag_space'),
+  );
+  const canEarnReward = computed(
+    () =>
+      !isTerminal.value &&
+      configuredRewardExp.value > 0 &&
+      !review.value?.session?.reward?.settled &&
+      orderedItems.value.length > 0 &&
+      orderedItems.value.every(
+        (item) => item.action === 'pending' || item.action === 'opened' || item.action === 'opened_tag_space',
+      ),
+  );
+  const terminalDescription = computed(() => {
+    if (isSkipped.value) return t('growth.dailyReviewSkippedDesc');
+    return allAvailableItemsReviewed.value
+      ? t('growth.dailyReviewCompletedDesc')
+      : t('growth.dailyReviewProcessedDesc');
+  });
   const showCard = computed(() => {
     if (isVisitor.value) return false;
     if ((loading.value && !review.value) || (error.value && !review.value)) return true;

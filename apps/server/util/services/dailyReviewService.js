@@ -1,5 +1,6 @@
 import pool from '../../db/index.js';
 import { insertData } from '../common.js';
+import { grantExp } from '../growth.js';
 import { getGrowthCalendarContext } from '../growthPreferences.js';
 import {
   DAILY_REVIEW_RESOURCE_TYPES,
@@ -10,6 +11,11 @@ import {
 
 export const DAILY_REVIEW_ITEM_ACTIONS = Object.freeze(['open', 'open_tag_space', 'snooze_7d', 'dismiss']);
 export const DAILY_REVIEW_SESSION_ACTIONS = Object.freeze(['skip_today', 'resume_today']);
+export const DAILY_REVIEW_REWARD_EXP = 5;
+
+// 历史奖励型回顾可能占用 daily_review 命名；新版内容回顾沿用独立命名，避免账本唯一键串线。
+const DAILY_REVIEW_REWARD_SOURCE = 'daily_content_review';
+const REVIEWED_STORED_ACTIONS = new Set(['opened', 'opened_tag_space']);
 
 const STORED_ACTION_BY_REQUEST = Object.freeze({
   open: 'opened',
@@ -69,6 +75,7 @@ async function resolveCalendar(userId, calendar, db) {
 
 function normalizeSession(row) {
   if (!row) return null;
+  const rawRewardExp = row.rewardExp ?? row.reward_exp;
   return {
     id: String(row.id || ''),
     status: String(row.status || 'active'),
@@ -76,17 +83,29 @@ function normalizeSession(row) {
     completedAt: row.completedAt ?? row.completed_at ?? null,
     skippedAt: row.skippedAt ?? row.skipped_at ?? null,
     timezoneSnapshot: String(row.timezone || row.timezoneSnapshot || '').trim() || null,
+    reward: {
+      settled: rawRewardExp !== null && rawRewardExp !== undefined,
+      grantedExp: Math.max(0, Number(rawRewardExp || 0)),
+      rewardExp: DAILY_REVIEW_REWARD_EXP,
+    },
   };
 }
 
 async function findSession(db, userId, date, { forUpdate = false } = {}) {
   const [rows] = await db.query(
     `SELECT id, timezone, status, item_count AS itemCount,
-            completed_at AS completedAt, skipped_at AS skippedAt
+            completed_at AS completedAt, skipped_at AS skippedAt,
+            (SELECT ge.amount
+               FROM growth_events ge
+              WHERE ge.user_id = ?
+                AND ge.source = ?
+                AND ge.day = REPLACE(?, '-', '')
+                AND ge.status = 'granted'
+              LIMIT 1) AS rewardExp
        FROM daily_content_review_sessions
       WHERE user_id = ? AND review_date = ?
       LIMIT 1${forUpdate ? ' FOR UPDATE' : ''}`,
-    [userId, date],
+    [userId, DAILY_REVIEW_REWARD_SOURCE, date, userId, date],
   );
   return normalizeSession(rows?.[0]);
 }
@@ -244,6 +263,11 @@ function buildReview({ date, timezone, session, items }) {
     itemCount: total,
     completedAt: session.completedAt || null,
     skippedAt: session.skippedAt || null,
+    reward: session.reward || {
+      settled: false,
+      grantedExp: 0,
+      rewardExp: DAILY_REVIEW_REWARD_EXP,
+    },
   };
   // GET 必须保持纯读；除明确跳过外，状态始终由当前仍可用的条目派生。这样资源删除时
   // 不会计入进度，资源当天恢复后也不会遗留 completed + pending > 0 的矛盾状态。
@@ -523,7 +547,8 @@ async function countLiveItems(connection, { userId, sessionId }) {
 }
 
 async function updateCompletionStatus(connection, { userId, sessionId, refreshCompletedAt = false }) {
-  const { pending } = await countLiveItems(connection, { userId, sessionId });
+  const items = await hydrateItems(connection, userId, sessionId);
+  const pending = items.filter((item) => item.action === 'pending').length;
   // 该函数只能由已有条目的动作进入；有效资源降到 0 代表原条目失效，应完成而不是伪装成从未生成内容。
   const status = pending === 0 ? 'completed' : 'active';
   if (status !== 'active') {
@@ -535,7 +560,7 @@ async function updateCompletionStatus(connection, { userId, sessionId, refreshCo
         WHERE id = ? AND user_id = ?`,
       [status, sessionId, userId],
     );
-    return status;
+    return { status, items };
   }
   await connection.query(
     `UPDATE daily_content_review_sessions
@@ -543,7 +568,27 @@ async function updateCompletionStatus(connection, { userId, sessionId, refreshCo
       WHERE id = ? AND user_id = ?`,
     [sessionId, userId],
   );
-  return 'active';
+  return { status: 'active', items };
+}
+
+function qualifiesForDailyReviewReward(items) {
+  return items.length > 0 && items.every((item) => REVIEWED_STORED_ACTIONS.has(String(item.action || '')));
+}
+
+async function settleDailyReviewReward(connection, { userId, sessionId, calendar, items }) {
+  if (!qualifiesForDailyReviewReward(items)) return;
+  await grantExp(
+    userId,
+    DAILY_REVIEW_REWARD_SOURCE,
+    {
+      refId: sessionId,
+      day: calendar.dayKey,
+      amount: DAILY_REVIEW_REWARD_EXP,
+      calendar,
+      meta: { reviewedCount: items.length },
+    },
+    connection,
+  );
 }
 
 function sessionFromLockedItem(item, status = item.sessionStatus) {
@@ -572,6 +617,9 @@ export async function actOnDailyReviewItem(userId, itemId, action, { calendar = 
   const accountCalendar = await resolveCalendar(ownerId, calendar, db);
   const connection = await db.getConnection();
   try {
+    // grantExp 的日上限统计必须看到等待 user_growth 行锁期间刚提交的其他奖励。该动作事务在
+    // 结算前还要读取资源与有效条目，因此使用 READ COMMITTED，避免 RR 的旧快照低估当日已发 EXP。
+    await connection.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
     await connection.beginTransaction();
     const date = dateFromCalendar(accountCalendar);
     const item = await findTodayItemForUpdate(connection, {
@@ -627,13 +675,22 @@ export async function actOnDailyReviewItem(userId, itemId, action, { calendar = 
       if (!Number(updateResult?.affectedRows || 0)) {
         throw new DailyReviewError('DAILY_REVIEW_ITEM_STATE_CHANGED', 409);
       }
-      nextStatus = await updateCompletionStatus(connection, {
+      const completion = await updateCompletionStatus(connection, {
         userId: ownerId,
         sessionId: String(item.sessionId),
         // 资源曾失效时会话可能已持久化为 completed；资源恢复后的本次动作属于一次新的
         // active -> completed 转换，不能沿用恢复前的审计时间。
         refreshCompletedAt: String(item.sessionStatus) === 'completed',
       });
+      nextStatus = completion.status;
+      if (nextStatus === 'completed' && (normalizedAction === 'open' || normalizedAction === 'open_tag_space')) {
+        await settleDailyReviewReward(connection, {
+          userId: ownerId,
+          sessionId: String(item.sessionId),
+          calendar: accountCalendar,
+          items: completion.items,
+        });
+      }
     }
 
     const refreshedSession = await findSession(connection, ownerId, date, { forUpdate: true });

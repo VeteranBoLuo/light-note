@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const pool = { query: vi.fn(), getConnection: vi.fn() };
+const grantExp = vi.fn();
 vi.mock('../../db/index.js', () => ({ default: pool }));
 vi.mock('../common.js', () => ({
   insertData: vi.fn(() => ({ id: 'aaaaaaaa-aaaa-1aaa-8aaa-aaaaaaaaaaaa' })),
 }));
+vi.mock('../growth.js', () => ({ grantExp }));
 
 const {
   actOnDailyReviewItem,
@@ -52,12 +54,18 @@ function createConnection(queryImplementation) {
     commit: vi.fn().mockResolvedValue(undefined),
     rollback: vi.fn().mockResolvedValue(undefined),
     release: vi.fn(),
-    query: vi.fn(queryImplementation),
+    query: vi.fn((sql, params) => {
+      if (String(sql).trim() === 'SET TRANSACTION ISOLATION LEVEL READ COMMITTED') {
+        return Promise.resolve([{ affectedRows: 0 }]);
+      }
+      return queryImplementation(sql, params);
+    }),
   };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  grantExp.mockResolvedValue({ granted: 5, duplicated: false });
 });
 
 describe('daily review response derivation', () => {
@@ -147,6 +155,31 @@ describe('daily review read and ensure', () => {
     expect(review.items).toHaveLength(1);
     expect(review.items[0]).toMatchObject({ reasonCode: 'active_tag', reasonTag: null });
     expect(db.getConnection).not.toHaveBeenCalled();
+  });
+
+  it('纯读从 EXP 账本返回实际结算结果，触顶的 0 EXP 也保持已结算', async () => {
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([
+          [
+            {
+              id: sessionId,
+              timezone: 'Asia/Shanghai',
+              status: 'completed',
+              itemCount: 1,
+              rewardExp: 0,
+            },
+          ],
+        ])
+        .mockResolvedValueOnce([[hydratedItem({ action: 'opened' })]]),
+      getConnection: vi.fn(),
+    };
+
+    const result = await getDailyReviewToday('user-1', { calendar, db });
+
+    expect(result.session.reward).toEqual({ settled: true, grantedExp: 0, rewardExp: 5 });
+    expect(grantExp).not.toHaveBeenCalled();
   });
 
   it('首次 ensure 在开启事务前解析账号日历，避免并发输家继承空的 RR 快照', async () => {
@@ -353,7 +386,18 @@ describe('daily review item actions', () => {
       if (sql.includes('SELECT COUNT(*) AS total')) return [[{ total: 1, pending: 0 }]];
       if (sql.includes('UPDATE daily_content_review_sessions')) return [{ affectedRows: 1 }];
       if (sql.includes('FROM daily_content_review_sessions')) {
-        return [[{ id: sessionId, timezone: 'Asia/Shanghai', status: 'completed', itemCount: 1, completedAt: 'now' }]];
+        return [
+          [
+            {
+              id: sessionId,
+              timezone: 'Asia/Shanghai',
+              status: 'completed',
+              itemCount: 1,
+              completedAt: 'now',
+              rewardExp: 5,
+            },
+          ],
+        ];
       }
       if (sql.includes('SELECT hydrated.*')) return [[hydratedItem({ action: 'opened' })]];
       throw new Error(`未覆盖的测试 SQL: ${sql}`);
@@ -365,6 +409,26 @@ describe('daily review item actions', () => {
     expect(result.ok).toBe(true);
     expect(result.review.items[0].action).toBe('opened');
     expect(result.review.session.status).toBe('completed');
+    expect(result.review.session.reward).toEqual({ settled: true, grantedExp: 5, rewardExp: 5 });
+    expect(grantExp).toHaveBeenCalledWith(
+      'user-1',
+      'daily_content_review',
+      {
+        refId: sessionId,
+        day: '20260901',
+        amount: 5,
+        calendar,
+        meta: { reviewedCount: 1 },
+      },
+      connection,
+    );
+    const isolationCall = connection.query.mock.calls.find(([sql]) =>
+      String(sql).includes('SET TRANSACTION ISOLATION LEVEL READ COMMITTED'),
+    );
+    expect(isolationCall).toBeTruthy();
+    expect(connection.query.mock.invocationCallOrder[0]).toBeLessThan(
+      connection.beginTransaction.mock.invocationCallOrder[0],
+    );
     expect(db.query).not.toHaveBeenCalled();
     expect(connection.commit).toHaveBeenCalledTimes(1);
   });
@@ -402,6 +466,50 @@ describe('daily review item actions', () => {
     const statements = connection.query.mock.calls.map(([sql]) => String(sql));
     expect(statements.some((sql) => sql.startsWith('SELECT id FROM bookmark'))).toBe(false);
     expect(statements.some((sql) => sql.includes('UPDATE daily_content_review_items'))).toBe(false);
+    expect(grantExp).not.toHaveBeenCalled();
+  });
+
+  it('最后打开一条但其他有效条目只是延后时，只完成处理进度而不发奖励', async () => {
+    const completedItems = [
+      hydratedItem({ action: 'opened' }),
+      hydratedItem({ id: '33333333-3333-3333-8333-333333333333', slot: 2, action: 'snoozed' }),
+    ];
+    const connection = createConnection(async (sql) => {
+      if (sql.includes('FROM daily_content_review_items i') && sql.includes('FOR UPDATE')) {
+        return [
+          [
+            {
+              id: itemId,
+              sessionId,
+              resourceType: 'bookmark',
+              resourceId: 'bookmark-1',
+              reasonCode: 'buried',
+              action: 'pending',
+              sessionStatus: 'active',
+              sessionItemCount: 2,
+              sessionTimezone: 'Asia/Shanghai',
+            },
+          ],
+        ];
+      }
+      if (sql.startsWith('SELECT id, url FROM bookmark')) {
+        return [[{ id: 'bookmark-1', url: 'https://example.com' }]];
+      }
+      if (sql.includes('UPDATE daily_content_review_items')) return [{ affectedRows: 1 }];
+      if (sql.includes('SELECT hydrated.*')) return [completedItems];
+      if (sql.includes('UPDATE daily_content_review_sessions')) return [{ affectedRows: 1 }];
+      if (sql.includes('FROM daily_content_review_sessions')) {
+        return [[{ id: sessionId, timezone: 'Asia/Shanghai', status: 'completed', itemCount: 2 }]];
+      }
+      throw new Error(`未覆盖的测试 SQL: ${sql}`);
+    });
+    const db = { getConnection: vi.fn().mockResolvedValue(connection) };
+
+    const result = await actOnDailyReviewItem('user-1', itemId, 'open', { calendar, db });
+
+    expect(result.review.session.status).toBe('completed');
+    expect(result.review.session.reward).toEqual({ settled: false, grantedExp: 0, rewardExp: 5 });
+    expect(grantExp).not.toHaveBeenCalled();
   });
 
   it('资源恢复后处理最后一条时刷新完成时间，不沿用资源失效前的 completed_at', async () => {
@@ -552,6 +660,7 @@ describe('daily review item actions', () => {
     const duplicateClause = recapSql.split('ON DUPLICATE KEY UPDATE')[1];
     expect(duplicateClause).toContain('growth_recap_state.dismissed_at IS NULL');
     expect(duplicateClause).not.toContain('dismissed_at =');
+    expect(grantExp).not.toHaveBeenCalled();
   });
 });
 
@@ -579,6 +688,7 @@ describe('daily review session actions', () => {
 
     expect(result.review.session.status).toBe('skipped');
     expect(connection.query.mock.calls.some(([sql]) => sql.includes("SET status = 'skipped'"))).toBe(true);
+    expect(grantExp).not.toHaveBeenCalled();
     expect(connection.commit).toHaveBeenCalledTimes(1);
   });
 });

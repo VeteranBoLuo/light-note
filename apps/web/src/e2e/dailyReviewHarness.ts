@@ -38,6 +38,7 @@ const activeSnapshot: DailyReviewSnapshot = {
     itemCount: 3,
     completedAt: null,
     skippedAt: null,
+    reward: { settled: false, grantedExp: 0, rewardExp: 5 },
   },
   progress: { done: 0, total: 3, pending: 3 },
   items: [
@@ -92,12 +93,34 @@ function snapshotForState(state: string): DailyReviewSnapshot {
       items: [],
     };
   }
-  if (state === 'completed') {
+  if (state === 'completed' || state === 'completed-cap' || state === 'completed-partial') {
+    const grantedExp = state === 'completed-cap' ? 0 : state === 'completed-partial' ? 2 : 5;
     return {
       ...activeSnapshot,
-      session: { ...activeSnapshot.session!, status: 'completed', completedAt: '2026-09-01 09:45:00' },
+      session: {
+        ...activeSnapshot.session!,
+        status: 'completed',
+        completedAt: '2026-09-01 09:45:00',
+        reward: { settled: true, grantedExp, rewardExp: 5 },
+      },
       progress: { done: 3, total: 3, pending: 0 },
       items: activeSnapshot.items.map((item) => ({ ...item, action: 'opened' as const })),
+    };
+  }
+  if (state === 'completed-processed') {
+    return {
+      ...activeSnapshot,
+      session: {
+        ...activeSnapshot.session!,
+        status: 'completed',
+        completedAt: '2026-09-01 09:45:00',
+        reward: { settled: false, grantedExp: 0, rewardExp: 5 },
+      },
+      progress: { done: 3, total: 3, pending: 0 },
+      items: activeSnapshot.items.map((item, index) => ({
+        ...item,
+        action: index === 0 ? ('opened' as const) : index === 1 ? ('snoozed' as const) : ('dismissed' as const),
+      })),
     };
   }
   if (state === 'skipped') {

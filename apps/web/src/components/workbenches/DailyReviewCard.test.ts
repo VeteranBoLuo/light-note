@@ -355,10 +355,16 @@ describe('DailyReviewCard', () => {
     warn.mockRestore();
   });
 
-  it('最后一条打开后保留无奖励压力的紧凑完成态', async () => {
+  it('最后一条真实打开后显示实际到账奖励的紧凑完成态', async () => {
     review.value = snapshot();
     const completed = snapshot({
-      session: { id: 'session-1', status: 'completed', itemCount: 1, completedAt: '2026-09-01 10:00:00' },
+      session: {
+        id: 'session-1',
+        status: 'completed',
+        itemCount: 1,
+        completedAt: '2026-09-01 10:00:00',
+        reward: { settled: true, grantedExp: 5, rewardExp: 5 },
+      },
       progress: { done: 1, total: 1, pending: 0 },
       items: [item({ action: 'opened' })],
     });
@@ -372,8 +378,83 @@ describe('DailyReviewCard', () => {
 
     expect(host.textContent).toContain(zhCN.growth.dailyReviewCompletedTitle);
     expect(host.textContent).toContain(zhCN.growth.dailyReviewCompletedDesc);
+    expect(host.textContent).toContain('+5 EXP 已到账');
+    expect(host.querySelector('.daily-review__reward')).not.toBeNull();
     expect(host.querySelector('.daily-review--compact')).not.toBeNull();
     expect(host.querySelector('.daily-review__open')).toBeNull();
+  });
+
+  it('奖励触顶和非真实回顾完成态不虚报 5 EXP', () => {
+    review.value = snapshot({
+      session: {
+        id: 'session-1',
+        status: 'completed',
+        itemCount: 1,
+        reward: { settled: true, grantedExp: 0, rewardExp: 5 },
+      },
+      progress: { done: 1, total: 1, pending: 0 },
+      items: [item({ action: 'opened' })],
+    });
+    const cappedHost = mountCard();
+    expect(cappedHost.textContent).toContain(zhCN.growth.dailyReviewRewardCapReached);
+    expect(cappedHost.textContent).not.toContain('+5 EXP 已到账');
+    unmountCard();
+
+    review.value = snapshot({
+      session: {
+        id: 'session-1',
+        status: 'completed',
+        itemCount: 1,
+        reward: { settled: false, grantedExp: 0, rewardExp: 5 },
+      },
+      progress: { done: 1, total: 1, pending: 0 },
+      items: [item({ action: 'snoozed' })],
+    });
+    const processedHost = mountCard();
+    expect(processedHost.textContent).toContain(zhCN.growth.dailyReviewProcessedDesc);
+    expect(processedHost.textContent).not.toContain('EXP 已到账');
+    expect(processedHost.textContent).not.toContain(zhCN.growth.dailyReviewRewardCapReached);
+  });
+
+  it('仍具备奖励资格时只预告最高奖励，延后任一条后不再误导', () => {
+    review.value = snapshot({
+      session: {
+        id: 'session-1',
+        status: 'active',
+        itemCount: 2,
+        reward: { settled: false, grantedExp: 0, rewardExp: 5 },
+      },
+      progress: { done: 0, total: 2, pending: 2 },
+      items: [item(), item({ id: 'daily-item-2', slot: 2, title: '第二条笔记' })],
+    });
+    const eligibleHost = mountCard();
+    expect(eligibleHost.textContent).toContain('完成至多 +5 EXP');
+    unmountCard();
+
+    review.value = snapshot({
+      session: {
+        id: 'session-1',
+        status: 'active',
+        itemCount: 2,
+        reward: { settled: false, grantedExp: 0, rewardExp: 5 },
+      },
+      progress: { done: 1, total: 2, pending: 1 },
+      items: [item({ action: 'snoozed' }), item({ id: 'daily-item-2', slot: 2, title: '第二条笔记' })],
+    });
+    const ineligibleHost = mountCard();
+    expect(ineligibleHost.textContent).not.toContain('完成至多 +5 EXP');
+    unmountCard();
+
+    review.value = snapshot({
+      session: {
+        id: 'session-1',
+        status: 'active',
+        itemCount: 1,
+        reward: { settled: true, grantedExp: 5, rewardExp: 5 },
+      },
+    });
+    const alreadySettledHost = mountCard();
+    expect(alreadySettledHost.textContent).not.toContain('完成至多 +5 EXP');
   });
 
   it('completed、skipped、empty 的旧快照刷新失败时共用明确的过期提示与重试', async () => {
