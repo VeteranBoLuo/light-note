@@ -71,6 +71,9 @@ describe('ResourceTagChip', () => {
     const onDetail = vi.fn();
     const host = mountTag({ showDetailCorner: true }, { onClick, onDetail });
     expect(host.querySelector('button button')).toBeNull();
+    expect(host.querySelector('.tag-detail-tooltip')).not.toBeNull();
+    expect(host.querySelector('.resource-tag-chip__detail')?.getAttribute('title')).toBeNull();
+    expect(host.querySelector('.resource-tag-chip__detail')?.getAttribute('aria-label')).toBe('详情');
 
     host.querySelector<HTMLButtonElement>('.resource-tag-chip__label')?.click();
     host.querySelector<HTMLButtonElement>('.resource-tag-chip__detail')?.click();

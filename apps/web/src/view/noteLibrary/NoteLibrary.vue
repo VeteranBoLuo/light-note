@@ -3032,21 +3032,32 @@
         opacity 0.2s ease !important;
     }
 
-    :deep(.note-card-drag-chosen) {
+    /* 卡片外层为长列表启用了 content-visibility；Sortable 按下和克隆时若继续沿用，
+       浏览器会把白色卡面合成到方形隔离层里。仅让活动项退出隔离，静止项仍保留虚拟化。 */
+    :deep(.note-sort-item.note-card-drag-chosen),
+    :deep(.note-sort-item.note-card-drag-ghost),
+    :deep(.note-sort-item.note-card-dragging),
+    :deep(.note-sort-item.sortable-fallback) {
+      content-visibility: visible;
+      contain-intrinsic-size: none;
+    }
+
+    /* Sortable 把状态类加在外层 RightMenu；阴影、描边和变形必须落到真正拥有圆角的卡片上。 */
+    :deep(.note-card-drag-chosen > .note-card) {
       box-shadow:
         0 14px 34px rgba(97, 92, 237, 0.18),
         0 4px 12px rgba(0, 0, 0, 0.12);
       border-color: var(--primary-color);
     }
 
-    :deep(.note-card-drag-ghost) {
+    :deep(.note-card-drag-ghost > .note-card) {
       opacity: 0.35;
       border: 1px dashed var(--primary-color);
       background: var(--category-item-ba-color);
       box-shadow: none;
     }
 
-    :deep(.note-card-dragging) {
+    :deep(.note-card-dragging > .note-card) {
       opacity: 0.95;
       transform: rotate(1deg) scale(1.02);
       box-shadow:
@@ -3055,12 +3066,17 @@
     }
   }
 
-  :global(.note-card-dragging) {
+  :global(.note-card-dragging > .note-card) {
     opacity: 0.95;
     transform: rotate(1deg) scale(1.02);
     box-shadow:
       0 18px 40px rgba(97, 92, 237, 0.22),
       0 8px 20px rgba(0, 0, 0, 0.14);
+  }
+
+  :global(.note-sort-item.sortable-fallback) {
+    content-visibility: visible;
+    contain-intrinsic-size: none;
   }
 
   .note-card-skeleton-wrap {

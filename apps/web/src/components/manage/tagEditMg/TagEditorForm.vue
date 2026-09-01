@@ -12,8 +12,6 @@
         <span class="tag-field__label">{{ $t('tagManage.tagDescription') }}</span>
         <BInput
           v-model:value="tag.description"
-          type="textarea"
-          :rows="3"
           :maxlength="500"
           :placeholder="$t('tagManage.tagDescriptionPlaceholder')"
         />
@@ -181,11 +179,6 @@
 
   .tag-field--description {
     grid-column: 1 / -1;
-  }
-
-  .tag-field--description :deep(.b-textarea) {
-    min-height: 78px;
-    resize: vertical;
   }
 
   .tag-editor-resources {

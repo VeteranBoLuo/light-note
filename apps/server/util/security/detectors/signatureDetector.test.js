@@ -54,6 +54,39 @@ describe('请求参数异常检测', () => {
     ]);
   });
 
+  it.each(['relevance', 'updated', 'name'])('允许批量搜索选择协议的合法嵌套排序枚举：%s', (sort) => {
+    expect(
+      detectNumericAnomalies('/search/batchSelectionPreview', {
+        selection: { mode: 'allMatching', query: { sort } },
+      }),
+    ).toEqual([]);
+  });
+
+  it('批量搜索选择协议的非法嵌套排序值仍会被检测', () => {
+    expect(
+      detectNumericAnomalies('/search/batchSelectionPreview', {
+        selection: { mode: 'allMatching', query: { sort: 'DROP TABLE' } },
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        ruleCode: 'NUMERIC_PARAM_ANOMALY',
+        matchedField: 'body.selection.query.sort',
+      }),
+    ]);
+  });
+
+  it.each([
+    ['错误方法', '/search/batchSelectionPreview', 'GET', { selection: { query: { sort: 'updated' } } }],
+    ['错误字段', '/search/batchSelectionPreview', 'POST', { filters: { sort: 'updated' } }],
+    ['普通排序错误方法', '/search/global', 'GET', { sort: 'updated' }],
+  ])('%s 不受排序枚举白名单影响', (_label, path, method, body) => {
+    expect(detectNumericAnomalies(path, body, method)).toEqual([
+      expect.objectContaining({
+        ruleCode: 'NUMERIC_PARAM_ANOMALY',
+      }),
+    ]);
+  });
+
   it('列表接口不在白名单内的排序内容仍会被检测', () => {
     for (const path of [
       '/todo/list',

@@ -225,14 +225,26 @@ h1 {
   white-space: nowrap;
 }
 
-.tag-detail-corner {
+.tag-detail-chip .tag-detail-tooltip.b-tooltip-wrap {
   /* 浮在标签右上角外侧。外溢量刻意比容器的 7px 内边距小 2px 以上:
      贴着裁切边界只留 1px 余量的话,字体或界面缩放一变就会切到圆边 */
   position: absolute;
   top: -5px;
   right: -4px;
   z-index: 3;
-  /* 尺寸写死并带 !important:BButton 自身的 scoped 样式特异性更高,不然会被撑成 30x32 */
+  width: 15px;
+  height: 15px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(2px, 2px) scale(0.72);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
+}
+
+.tag-detail-corner {
+  /* 尺寸写死并带 !important:BButton 自身的 scoped 样式特异性更高,不然会被撑成 30x32。
+     BTooltip 包裹层和按钮都是 15px，点击区域不会通过透明层向筛选主体扩张。 */
   width: 15px !important;
   min-width: 15px !important;
   height: 15px !important;
@@ -252,21 +264,9 @@ h1 {
   color: var(--chip-tag-fg) !important;
   box-shadow: 0 2px 6px color-mix(in srgb, var(--text-color) 22%, transparent);
   cursor: pointer;
-  opacity: 0;
-  pointer-events: none;
-  transform: translate(2px, 2px) scale(0.72);
   transition:
-    opacity 0.16s ease,
-    transform 0.16s ease,
     background-color 0.16s ease,
     border-color 0.16s ease;
-
-  /* 视觉 15px、热区 35px,兼顾触控端最小点击区 */
-  &::before {
-    content: '';
-    position: absolute;
-    inset: -10px;
-  }
 
   /*
    * 这里不要写 svg / path 规则:SvgIcon 会把任何图标(含原始 <svg> 字符串)统一 btoa 成
@@ -290,8 +290,8 @@ h1 {
  * 角标默认态是 opacity: 0 + pointer-events: none,所以触屏上它既不可见也不可点。
  */
 @media (hover: hover) and (pointer: fine) {
-  .tag-detail-chip:hover .tag-detail-corner,
-  .tag-detail-chip:focus-within .tag-detail-corner {
+  .tag-detail-chip:hover .tag-detail-tooltip,
+  .tag-detail-chip:focus-within .tag-detail-tooltip {
     opacity: 1;
     pointer-events: auto;
     transform: translate(0, 0) scale(1);

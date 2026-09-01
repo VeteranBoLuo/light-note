@@ -45,7 +45,15 @@
           @pointerdown="startResize"
           @keydown="handleResizeKeydown"
         />
-        <div class="b-drawer-header" :class="{ 'b-drawer-header--centered': mobileCenteredHeader }">
+        <div
+          class="b-drawer-header"
+          :class="{ 'b-drawer-header--centered': mobileCenteredHeader }"
+          :style="
+            mobileCenteredHeader && mobileHeaderSideWidth
+              ? { '--b-drawer-mobile-header-side-width': mobileHeaderSideWidth }
+              : undefined
+          "
+        >
           <slot name="header-leading">
             <BButton
               v-if="mobileCenteredHeader"
@@ -109,6 +117,7 @@
       fullScreen?: boolean;
       mobileFullScreen?: boolean;
       mobileCenteredHeader?: boolean;
+      mobileHeaderSideWidth?: string;
       closeIcon?: string;
       destroyOnClose?: boolean;
       keyboard?: boolean;
@@ -134,6 +143,7 @@
       fullScreen: false,
       mobileFullScreen: false,
       mobileCenteredHeader: false,
+      mobileHeaderSideWidth: '',
       closeIcon: '',
       destroyOnClose: true,
       keyboard: true,
@@ -671,7 +681,9 @@
 
   .b-drawer-header.b-drawer-header--centered {
     display: grid;
-    grid-template-columns: 44px minmax(0, 1fr) minmax(44px, auto);
+    grid-template-columns:
+      var(--b-drawer-mobile-header-side-width, 44px) minmax(0, 1fr)
+      var(--b-drawer-mobile-header-side-width, minmax(44px, auto));
     align-items: center;
     gap: 6px;
 

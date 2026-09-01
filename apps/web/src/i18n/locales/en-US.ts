@@ -5198,7 +5198,8 @@ export default {
       healthDescription: 'Bookmarks whose servers explicitly returned 404 or 410',
     },
     untagged: {
-      description: 'Resources without any active tag. Add tags, dismiss the finding, or move items to trash in batches.',
+      description:
+        'Resources without any active tag. Add tags, dismiss the finding, or move items to trash in batches.',
       searchPlaceholder: 'Search title, summary, or URL',
       typeFilter: 'Resource type',
       addTag: 'Add Tag',
@@ -9970,7 +9971,6 @@ export default {
     relatedSpaceHint: 'Calculated from bookmarks, notes, and files linked to both tags.',
     relatedEmptyTitle: 'No related tags yet',
     relatedEmptyHint: 'Connections will appear as more content uses multiple tags together.',
-    descriptionTitle: 'Tag Description',
     editDescription: 'Edit Tag',
     usageTipsTitle: 'Ways to Use This Space',
     tipCollect: 'Keep collecting pages and references related to “{name}”',
@@ -9978,8 +9978,7 @@ export default {
     tipFiles: 'Keep documents and attachments for this topic together',
     tipExploreRelations: 'Explore knowledge connections through related tags and the graph',
     tipBuildRelations: 'Combine tags on the same content to gradually build connections',
-    similarTagsTitle: 'Similar Tag Suggestions',
-    noSimilarTags: 'No similar tags yet. They will appear as more content is tagged.',
+    coUsedTitle: 'Often Used Together',
     detailTitle: 'Tag',
     detailSubtitle: '{count} linked items',
     detailLoading: 'Loading tag…',
@@ -10186,8 +10185,7 @@ export default {
     discardAndLeave: 'Discard and Leave',
     tagName: 'Tag Name',
     tagDescription: 'Tag Description',
-    tagDescriptionPlaceholder:
-      'Describe what this tag collects and how to use it. Leave blank for the automatic description.',
+    tagDescriptionPlaceholder: 'Describe what this tag collects in one sentence (optional)',
     icon: 'Icon',
     smartChooseIcon: 'Smart Icon',
     uploadIcon: 'Upload image',

@@ -15,7 +15,9 @@ describe('统一标签模块帮助知识迁移', () => {
     expect(source).toContain('桌面端左侧目录列出全部标签');
     expect(source).toContain('将鼠标移到标签上或右键');
     expect(source).toContain('新建或编辑不再跳转到单独页面');
-    expect(source).toContain('标签说明会展示在标签档案和右侧说明卡中');
+    expect(source).toContain('标签说明会直接展示在标签档案中');
+    expect(source).not.toContain('右侧说明卡');
+    expect(source).toContain('“常一起使用”展示与当前标签共同出现在同一资源上的其他标签');
     expect(source).toContain('“最近更新”与“最近加入”');
     expect(source).toContain('PC 端可在当前标签内搜索，移动端继续使用顶栏全局搜索');
     expect(source).toContain('点击“分析标签”会立即读取当前关联资料并生成分析');

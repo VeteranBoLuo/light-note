@@ -17,11 +17,26 @@ describe('Inbox todo preview integration', () => {
     expect(seriesGroupSource).toContain('@preview="emit(\'preview\', representative)"');
   });
 
-  it('待办页统一挂载详情抽屉并保留显式编辑入口', () => {
+  it('待办页统一挂载详情抽屉，并复用页面级编辑与删除编排', () => {
     expect(inboxSource).toContain('<TodoPreviewDrawer');
     expect(inboxSource).toContain('@preview="openTodoPreview"');
     expect(inboxSource).toContain('@edit="openTodoEditor"');
+    expect(inboxSource).toContain('@delete="confirmDeleteTodo"');
+    expect(inboxSource).toContain(':deleting="deletingTodoId === previewTodo.id"');
+    expect(inboxSource).toContain('@closed="clearTodoPreview"');
     expect(inboxSource).toMatch(/function openTodoPreview[\s\S]*?todoPreviewVisible\.value = true/);
+  });
+
+  it('删除成功后关闭当前详情，普通待办与系列仍走既有确认分支', () => {
+    expect(inboxSource).toMatch(
+      /function confirmDeleteTodo[\s\S]*?todoSeriesDeleteChoice[\s\S]*?removeTodoV2[\s\S]*?deleteTodoConfirm[\s\S]*?removeTodo\(item\)/,
+    );
+    expect(inboxSource).toMatch(
+      /async function removeTodo\([\s\S]*?result === true[\s\S]*?closeTodoPreview\(item\.id\)[\s\S]*?showTodoUndo/,
+    );
+    expect(inboxSource).toMatch(
+      /async function removeTodoV2[\s\S]*?scope === 'current' \|\| item\.status === 'pending'[\s\S]*?closeTodoPreview\(item\.id\)/,
+    );
   });
 
   it('搜索 todoId 深链先清理查询参数，再打开详情而不是编辑器', () => {

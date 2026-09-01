@@ -601,8 +601,11 @@
       v-model:visible="todoPreviewVisible"
       :item="previewTodo"
       :disabled="hasPendingOperation || todoBatchMutating"
+      :deleting="deletingTodoId === previewTodo.id"
       @edit="openTodoEditor"
+      @delete="confirmDeleteTodo"
       @update-checklist="updateTodoChecklist"
+      @closed="clearTodoPreview"
     />
     <TodoEditorModal v-model:visible="todoEditorVisible" :item="editingTodo" @saved="afterTodoSaved" />
     <TodoCalendarModal
@@ -1566,6 +1569,13 @@
     previewTodoSeed.value = item;
     todoPreviewVisible.value = true;
   }
+  function clearTodoPreview() {
+    previewTodoId.value = '';
+    previewTodoSeed.value = null;
+  }
+  function closeTodoPreview(itemId: string) {
+    if (previewTodoId.value === itemId) todoPreviewVisible.value = false;
+  }
   async function afterTodoSaved() {
     await refreshList();
   }
@@ -1742,6 +1752,7 @@
       const result = await todo.remove(item);
       if (result === true) {
         await inbox.refreshCount();
+        closeTodoPreview(item.id);
         showTodoUndo('delete', [item.id]);
       } else if (result !== 'preview') message.error(t('inbox.todoSaveFailed'));
     } finally {
@@ -1758,6 +1769,7 @@
         return;
       }
       await Promise.all([todo.refreshList(), inbox.refreshCount()]);
+      if (scope === 'current' || item.status === 'pending') closeTodoPreview(item.id);
       if (scope === 'current') showTodoUndo('delete', [item.id]);
       else message.success(t('inbox.todoSeriesChanged'));
     } catch (error: any) {

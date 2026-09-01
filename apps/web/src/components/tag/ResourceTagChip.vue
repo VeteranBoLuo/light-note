@@ -35,16 +35,23 @@
       <span v-if="showHash" aria-hidden="true">#</span>
       <span class="resource-tag-chip__text">{{ tag.name }}</span>
     </BButton>
-    <BButton
+    <BTooltip
       v-if="hasDetail"
-      class="resource-tag-chip__detail tag-detail-corner"
-      :disabled="disabled"
+      class="tag-detail-tooltip"
       :title="t('common.detail')"
-      :aria-label="t('common.detail')"
-      @click.stop="emit('detail', $event)"
+      :disabled="disabled"
+      :delay="120"
+      always
     >
-      <SvgIcon :src="icon.arrow_right" size="13" aria-hidden="true" />
-    </BButton>
+      <BButton
+        class="resource-tag-chip__detail tag-detail-corner"
+        :disabled="disabled"
+        :aria-label="t('common.detail')"
+        @click.stop="emit('detail', $event)"
+      >
+        <SvgIcon :src="icon.arrow_right" size="13" aria-hidden="true" />
+      </BButton>
+    </BTooltip>
   </BChip>
 </template>
 
@@ -53,6 +60,7 @@
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
 

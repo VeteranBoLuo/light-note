@@ -5,18 +5,37 @@
     :placement="bookmark.isMobile ? 'bottom' : 'right'"
     :mobile-full-screen="bookmark.isMobile"
     :mobile-centered-header="bookmark.isMobile"
+    mobile-header-side-width="96px"
     :close-icon="bookmark.isMobile ? icon.arrow_left : undefined"
     width="600px"
     height="100%"
     body-padding="0"
     :mask-closable="true"
     @close="close"
+    @after-close="afterClose"
   >
     <template #header-actions>
-      <BButton size="small" class="todo-preview__edit" :disabled="disabled" @click="openEditor">
-        <SvgIcon v-if="!bookmark.isMobile" :src="icon.table_edit" size="13" aria-hidden="true" />
-        <span>{{ t('inbox.editTodo') }}</span>
-      </BButton>
+      <BTooltip :title="t('inbox.deleteTodo')" :disabled="bookmark.isMobile || disabled || deleting" :delay="80">
+        <BButton
+          class="todo-preview__action todo-preview__delete"
+          :aria-label="t('inbox.deleteTodo')"
+          :disabled="disabled || deleting"
+          :loading="deleting"
+          @click="requestDelete"
+        >
+          <SvgIcon v-if="!deleting" :src="icon.table_delete" size="17" aria-hidden="true" />
+        </BButton>
+      </BTooltip>
+      <BTooltip :title="t('inbox.editTodo')" :disabled="bookmark.isMobile || disabled || deleting" :delay="80">
+        <BButton
+          class="todo-preview__action todo-preview__edit"
+          :aria-label="t('inbox.editTodo')"
+          :disabled="disabled || deleting"
+          @click="openEditor"
+        >
+          <SvgIcon :src="icon.table_edit" size="17" aria-hidden="true" />
+        </BButton>
+      </BTooltip>
     </template>
 
     <div v-auto-scrollbar class="todo-preview">
@@ -95,6 +114,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import TodoResourceLinks from '@/components/todo/TodoResourceLinks.vue';
   import icon from '@/config/icon';
@@ -107,12 +127,14 @@
     defineProps<{
       item: TodoItem;
       disabled?: boolean;
+      deleting?: boolean;
     }>(),
-    { disabled: false },
+    { disabled: false, deleting: false },
   );
   const visible = defineModel<boolean>('visible');
   const emit = defineEmits<{
     edit: [item: TodoItem];
+    delete: [item: TodoItem];
     'update-checklist': [item: TodoItem, checklist: TodoChecklistItem[]];
     closed: [];
   }>();
@@ -216,13 +238,21 @@
 
   function close() {
     visible.value = false;
+  }
+
+  function afterClose() {
     emit('closed');
   }
 
+  function requestDelete() {
+    emit('delete', props.item);
+  }
+
   function openEditor() {
+    const itemSnapshot = JSON.parse(JSON.stringify(props.item)) as TodoItem;
     void closeCurrentMobileOverlayThen(
       () => (visible.value = false),
-      () => emit('edit', props.item),
+      () => emit('edit', itemSnapshot),
     );
   }
 
@@ -247,9 +277,30 @@
     background: var(--page-background-color, var(--background-color));
   }
 
+  :deep(.b_btn.todo-preview__action) {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: 8px;
+  }
+
+  :deep(.b_btn.todo-preview__action .btn-spinner) {
+    margin-right: 0;
+  }
+
   :deep(.b_btn.todo-preview__edit) {
-    gap: 5px;
     color: var(--primary-color);
+  }
+
+  :deep(.b_btn.todo-preview__delete) {
+    color: var(--danger-color, #cc3333);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    :deep(.b_btn.todo-preview__action:hover) {
+      background: var(--primary-btn-h-bg-color);
+    }
   }
 
   .todo-preview__hero,
@@ -416,6 +467,12 @@
   }
 
   @media (max-width: 767px) {
+    :deep(.b_btn.todo-preview__action) {
+      width: 44px;
+      min-width: 44px;
+      height: 44px;
+    }
+
     .todo-preview {
       gap: 12px;
       padding: 14px 14px calc(24px + env(safe-area-inset-bottom));

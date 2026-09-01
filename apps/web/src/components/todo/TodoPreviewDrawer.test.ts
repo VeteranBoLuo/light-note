@@ -15,6 +15,7 @@ vi.mock('vue-router', async (importOriginal) => ({
 }));
 
 const editorModalSource = readFileSync(resolve(process.cwd(), 'src/components/todo/TodoEditorModal.vue'), 'utf8');
+const previewSource = readFileSync(resolve(process.cwd(), 'src/components/todo/TodoPreviewDrawer.vue'), 'utf8');
 let cleanup: (() => void) | undefined;
 
 const todo: TodoItem = {
@@ -42,7 +43,10 @@ const todo: TodoItem = {
 
 function mountPreview() {
   const visible = ref(true);
+  const deleting = ref(false);
   const onEdit = vi.fn();
+  const onDelete = vi.fn();
+  const onClosed = vi.fn();
   const onUpdateChecklist = vi.fn();
   const host = document.createElement('div');
   document.body.append(host);
@@ -52,8 +56,11 @@ function mountPreview() {
         h(TodoPreviewDrawer, {
           item: todo,
           visible: visible.value,
+          deleting: deleting.value,
           'onUpdate:visible': (value: boolean) => (visible.value = value),
           onEdit,
+          onDelete,
+          onClosed,
           onUpdateChecklist,
         });
     },
@@ -68,7 +75,7 @@ function mountPreview() {
     host.remove();
     document.querySelectorAll('.b-drawer-wrapper').forEach((element) => element.remove());
   };
-  return { visible, onEdit, onUpdateChecklist };
+  return { visible, deleting, onEdit, onDelete, onClosed, onUpdateChecklist };
 }
 
 afterEach(() => {
@@ -90,26 +97,57 @@ describe('TodoPreviewDrawer', () => {
     expect(drawer.querySelector('.todo-resource-link__title')?.textContent).toBe('开发文档');
   });
 
-  it('预览内清单可快速勾选，编辑仍由独立按钮触发', async () => {
-    const { visible, onEdit, onUpdateChecklist } = mountPreview();
+  it('预览内清单可快速勾选，删除与编辑使用带无障碍名称的纯图标按钮', async () => {
+    const { visible, onEdit, onDelete, onUpdateChecklist } = mountPreview();
     await nextTick();
 
     document.querySelector<HTMLElement>('.todo-preview__checklist-items .b-checkbox')!.click();
     expect(onUpdateChecklist).toHaveBeenCalledWith(todo, [{ ...todo.checklist[0], done: true }]);
 
-    document.querySelector<HTMLButtonElement>('.todo-preview__edit')!.click();
+    const deleteButton = document.querySelector<HTMLButtonElement>('.todo-preview__delete')!;
+    const editButton = document.querySelector<HTMLButtonElement>('.todo-preview__edit')!;
+    expect(deleteButton.getAttribute('aria-label')).toBe('删除待办');
+    expect(editButton.getAttribute('aria-label')).toBe('编辑待办');
+    expect(deleteButton.textContent?.trim()).toBe('');
+    expect(editButton.textContent?.trim()).toBe('');
+    expect(previewSource).toContain('mobile-header-side-width="96px"');
+
+    deleteButton.click();
+    expect(onDelete).toHaveBeenCalledWith(todo);
+    expect(visible.value).toBe(true);
+
+    editButton.click();
     await vi.waitFor(() => expect(onEdit).toHaveBeenCalledWith(todo));
+    const editedItem = onEdit.mock.calls[0]?.[0] as TodoItem;
+    expect(editedItem).not.toBe(todo);
+    expect(editedItem.checklist).not.toBe(todo.checklist);
     expect(visible.value).toBe(false);
   });
 
+  it('删除进行中只在删除按钮显示 loading，并禁用两个写操作', async () => {
+    const { deleting } = mountPreview();
+    await nextTick();
+
+    deleting.value = true;
+    await nextTick();
+
+    const deleteButton = document.querySelector<HTMLButtonElement>('.todo-preview__delete')!;
+    const editButton = document.querySelector<HTMLButtonElement>('.todo-preview__edit')!;
+    expect(deleteButton.disabled).toBe(true);
+    expect(deleteButton.querySelector('.btn-spinner')).not.toBeNull();
+    expect(editButton.disabled).toBe(true);
+  });
+
   it('点击详情抽屉外的遮罩会直接关闭预览', async () => {
-    const { visible } = mountPreview();
+    const { visible, onClosed } = mountPreview();
     await nextTick();
 
     document.querySelector<HTMLElement>('.b-drawer-mask')!.click();
     await nextTick();
 
     expect(visible.value).toBe(false);
+    expect(onClosed).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(onClosed).toHaveBeenCalledOnce());
   });
 
   it('预览与编辑器内的关联资料都接入统一路由，并先安全关闭当前抽屉', async () => {

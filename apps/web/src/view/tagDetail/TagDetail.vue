@@ -86,17 +86,6 @@
             </div>
           </BCard>
         </main>
-
-        <aside class="tag-insight-rail tag-insight-rail--skeleton" aria-hidden="true">
-          <BCard v-for="cardIndex in 2" :key="cardIndex" variant="card" class="skeleton-insight-card">
-            <div class="skeleton-insight-heading">
-              <span class="skeleton-block skeleton-block--insight-icon"></span>
-              <span class="skeleton-block skeleton-block--insight-title"></span>
-            </div>
-            <span class="skeleton-block skeleton-block--insight-copy"></span>
-            <span class="skeleton-block skeleton-block--insight-copy skeleton-block--insight-copy-short"></span>
-          </BCard>
-        </aside>
       </div>
 
       <BCard v-else-if="detailError || !tag" variant="card" class="detail-state" role="alert">
@@ -112,7 +101,7 @@
       <div
         v-else
         class="tag-space-workspace"
-        :class="{ 'is-switching': detailRefreshing }"
+        :class="{ 'is-switching': detailRefreshing, 'has-insights': relatedTags.length > 0 }"
         :aria-busy="detailRefreshing"
       >
         <aside class="tag-directory-rail" :aria-label="t('tagSpace.sidebarTitle')">
@@ -394,28 +383,19 @@
           </BCard>
         </main>
 
-        <aside class="tag-insight-rail">
-          <BCard as="section" variant="card" padding="15px" class="insight-card insight-card--description">
-            <div class="insight-heading">
-              <span class="insight-icon"><SvgIcon :src="icon.resource.tag" size="16" /></span>
-              <strong>{{ t('tagSpace.descriptionTitle') }}</strong>
-            </div>
-            <p>{{ spaceDescription }}</p>
-          </BCard>
-
+        <aside v-if="relatedTags.length" class="tag-insight-rail">
           <BCard as="section" variant="card" padding="15px" class="insight-card">
             <div class="insight-heading">
               <span class="insight-icon"><SvgIcon :src="icon.resource.tag" size="16" /></span>
-              <strong>{{ t('tagSpace.similarTagsTitle') }}</strong>
+              <strong>{{ t('tagSpace.coUsedTitle') }}</strong>
             </div>
-            <div v-if="relatedTags.length" class="similar-tag-list">
+            <div class="co-used-tag-list">
               <BButton v-for="related in relatedTags.slice(0, 5)" :key="related.id" @click="openRelatedTag(related.id)">
                 <span>{{ related.name }}</span>
                 <small>{{ t('tagSpace.sharedResources', { count: related.sharedCount || 0 }) }}</small>
                 <span aria-hidden="true">→</span>
               </BButton>
             </div>
-            <p v-else>{{ t('tagSpace.noSimilarTags') }}</p>
           </BCard>
         </aside>
       </div>
@@ -1880,9 +1860,13 @@
     height: 100%;
     min-height: 0;
     display: grid;
-    grid-template-columns: 214px minmax(0, 1fr) 262px;
+    grid-template-columns: 214px minmax(0, 1fr);
     align-items: stretch;
     gap: 18px;
+  }
+
+  .tag-space-workspace.has-insights {
+    grid-template-columns: 214px minmax(0, 1fr) 262px;
   }
 
   .tag-directory-rail,
@@ -2445,10 +2429,6 @@
     gap: 11px;
   }
 
-  .insight-card--description {
-    min-height: var(--tag-profile-height);
-  }
-
   .insight-heading {
     display: flex;
     align-items: center;
@@ -2474,20 +2454,13 @@
     font-weight: 750;
   }
 
-  .insight-card > p {
-    margin: 0;
-    color: var(--desc-color);
-    font-size: 11px;
-    line-height: 1.65;
-  }
-
-  .similar-tag-list {
+  .co-used-tag-list {
     display: flex;
     flex-direction: column;
     gap: 3px;
   }
 
-  .similar-tag-list :deep(.b_btn) {
+  .co-used-tag-list :deep(.b_btn) {
     width: 100%;
     min-width: 0;
     min-height: 34px;
@@ -2498,13 +2471,13 @@
     background: transparent;
   }
 
-  .similar-tag-list :deep(.b_btn:hover),
-  .similar-tag-list :deep(.b_btn:focus-visible) {
+  .co-used-tag-list :deep(.b_btn:hover),
+  .co-used-tag-list :deep(.b_btn:focus-visible) {
     color: var(--primary-color);
     background: var(--workspace-panel-bg-color);
   }
 
-  .similar-tag-list :deep(.b_btn > span:first-child) {
+  .co-used-tag-list :deep(.b_btn > span:first-child) {
     min-width: 0;
     overflow: hidden;
     flex: 1;
@@ -2514,7 +2487,7 @@
     white-space: nowrap;
   }
 
-  .similar-tag-list small {
+  .co-used-tag-list small {
     color: var(--desc-color);
     font-size: 9px;
   }
@@ -2718,8 +2691,7 @@
     padding-bottom: 14px;
   }
 
-  .skeleton-resource-heading,
-  .skeleton-insight-heading {
+  .skeleton-resource-heading {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -2740,37 +2712,6 @@
     height: 9px;
   }
 
-  .tag-insight-rail--skeleton .skeleton-insight-card:first-child {
-    min-height: var(--tag-profile-height);
-  }
-
-  .skeleton-insight-card {
-    padding: 15px !important;
-    display: flex;
-    flex-direction: column;
-    gap: 13px;
-  }
-
-  .skeleton-block--insight-icon {
-    width: 26px;
-    height: 26px;
-    border-radius: 8px;
-  }
-
-  .skeleton-block--insight-title {
-    width: 92px;
-    height: 11px;
-  }
-
-  .skeleton-block--insight-copy {
-    width: 100%;
-    height: 9px;
-  }
-
-  .skeleton-block--insight-copy-short {
-    width: 72%;
-  }
-
   .skeleton-row {
     min-height: 66px;
     display: block;
@@ -2784,8 +2725,12 @@
       --tag-workspace-heading-offset: 0px;
       --tag-profile-height: 112px;
 
-      grid-template-columns: 188px minmax(0, 1fr) 238px;
+      grid-template-columns: 188px minmax(0, 1fr);
       gap: 13px;
+    }
+
+    .tag-space-workspace.has-insights {
+      grid-template-columns: 188px minmax(0, 1fr) 238px;
     }
 
     .workspace-heading {
@@ -2907,6 +2852,10 @@
 
   @media (max-width: 1260px) {
     .tag-space-workspace {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .tag-space-workspace.has-insights {
       grid-template-columns: minmax(0, 1fr) 246px;
     }
 
@@ -2920,7 +2869,8 @@
   }
 
   @media (max-width: 980px) {
-    .tag-space-workspace {
+    .tag-space-workspace,
+    .tag-space-workspace.has-insights {
       grid-template-columns: minmax(0, 1fr);
     }
 

@@ -16,24 +16,53 @@ const createEvidence = ({ rule, field, value, message, scoreDelta, confidence })
   confidence: confidence ?? rule.confidence,
 });
 
-const ENUM_SORT_VALUES_BY_PATH = [
-  { pattern: /\/todo\/list\/?$/i, values: new Set(['smart', 'action', 'priority', 'due', 'newest', 'oldest']) },
-  { pattern: /\/inbox\/list\/?$/i, values: new Set(['newest', 'oldest']) },
-  { pattern: /\/search\/global\/?$/i, values: new Set(['relevance', 'updated', 'name']) },
-  { pattern: /\/featureRequest\/listPublic\/?$/i, values: new Set(['updated', 'newest', 'popular']) },
+const ENUM_SORT_VALUES_BY_REQUEST_FIELD = [
   {
+    method: 'POST',
+    pattern: /\/todo\/list\/?$/i,
+    field: 'body.sort',
+    values: new Set(['smart', 'action', 'priority', 'due', 'newest', 'oldest']),
+  },
+  { method: 'POST', pattern: /\/inbox\/list\/?$/i, field: 'body.sort', values: new Set(['newest', 'oldest']) },
+  {
+    method: 'POST',
+    pattern: /\/search\/global\/?$/i,
+    field: 'body.sort',
+    values: new Set(['relevance', 'updated', 'name']),
+  },
+  {
+    method: 'POST',
+    pattern: /\/search\/batchSelectionPreview\/?$/i,
+    field: 'body.selection.query.sort',
+    values: new Set(['relevance', 'updated', 'name']),
+  },
+  {
+    method: 'POST',
+    pattern: /\/featureRequest\/listPublic\/?$/i,
+    field: 'body.sort',
+    values: new Set(['updated', 'newest', 'popular']),
+  },
+  {
+    method: 'POST',
     pattern: /\/bookmark\/queryTagSpaces\/?$/i,
+    field: 'body.sort',
     values: new Set(['default', 'recent', 'resourcedesc', 'nameasc']),
   },
-  { pattern: /\/bookmark\/queryTagSpaceResources\/?$/i, values: new Set(['updated', 'added']) },
+  {
+    method: 'POST',
+    pattern: /\/bookmark\/queryTagSpaceResources\/?$/i,
+    field: 'body.sort',
+    values: new Set(['updated', 'added']),
+  },
 ];
 
 const isKnownSortEnum = (context, item) => {
-  const fieldName = String(item.field).split('.').pop();
-  if (fieldName?.toLowerCase() !== 'sort') return false;
+  const method = String(context.method || '').toUpperCase();
+  const path = String(context.path || '');
+  const field = String(item.field || '');
   const value = String(item.value).toLowerCase();
-  return ENUM_SORT_VALUES_BY_PATH.some(
-    ({ pattern, values }) => pattern.test(String(context.path || '')) && values.has(value),
+  return ENUM_SORT_VALUES_BY_REQUEST_FIELD.some(
+    (rule) => rule.method === method && rule.pattern.test(path) && rule.field === field && rule.values.has(value),
   );
 };
 

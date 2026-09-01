@@ -9,9 +9,11 @@ import type { TodoItem as TodoItemType } from '@/api/todoApi';
 const todoItemSource = readFileSync(resolve(process.cwd(), 'src/components/todo/TodoItem.vue'), 'utf8');
 
 const routerPush = vi.fn();
+const { recordOperation } = vi.hoisted(() => ({ recordOperation: vi.fn() }));
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: routerPush }),
 }));
+vi.mock('@/api/commonApi', () => ({ recordOperation }));
 
 let cleanup: (() => void) | undefined;
 
@@ -139,7 +141,10 @@ afterEach(() => {
   cleanup?.();
   cleanup = undefined;
   routerPush.mockReset();
-  document.querySelectorAll('.b-popover-panel, .select-dropdown').forEach((element) => element.remove());
+  recordOperation.mockReset();
+  document
+    .querySelectorAll('.b-popover-panel, .b-action-menu-panel, .select-dropdown')
+    .forEach((element) => element.remove());
 });
 
 describe('TodoItem card preview', () => {
@@ -345,5 +350,42 @@ describe('TodoItem card preview', () => {
     await vi.waitFor(() => {
       expect(onSeriesAction).toHaveBeenCalledWith('pause');
     });
+  });
+
+  it('桌面更多菜单使用轻量操作项、图标和独立危险分组', async () => {
+    const { host, onEdit } = mountTodoItem();
+    await nextTick();
+
+    host.querySelector<HTMLButtonElement>('.todo-more-button')?.click();
+    await nextTick();
+
+    const panel = document.body.querySelector<HTMLElement>('.b-action-menu-panel');
+    expect(panel).toBeTruthy();
+    expect(panel?.querySelectorAll('[role="menuitem"]')).toHaveLength(3);
+    expect(panel?.querySelectorAll('.b-action-menu__icon')).toHaveLength(3);
+    expect(panel?.querySelectorAll('[role="separator"]')).toHaveLength(1);
+    expect(panel?.querySelector('.is-danger')?.textContent).toContain('删除');
+
+    const editButton = Array.from(panel?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') || []).find(
+      (button) => button.textContent?.includes('编辑'),
+    );
+    editButton?.click();
+    expect(onEdit).toHaveBeenCalledOnce();
+    await vi.waitFor(() => {
+      expect(document.body.querySelector('.b-action-menu-panel')).toBeNull();
+    });
+  });
+
+  it('已完成待办的桌面更多菜单只显示删除且没有多余分隔线', async () => {
+    const { host } = mountTodoItem({ ...todo, status: 'completed' });
+    await nextTick();
+
+    host.querySelector<HTMLButtonElement>('.todo-more-button')?.click();
+    await nextTick();
+
+    const panel = document.body.querySelector<HTMLElement>('.b-action-menu-panel');
+    expect(panel?.querySelectorAll('[role="menuitem"]')).toHaveLength(1);
+    expect(panel?.querySelectorAll('[role="separator"]')).toHaveLength(0);
+    expect(panel?.textContent).toContain('删除');
   });
 });

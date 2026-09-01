@@ -12,11 +12,6 @@
     :mask-closable="false"
     @close="close"
   >
-    <template v-if="bookmark.isMobile && useSimpleEditor" #header-actions>
-      <BButton size="small" type="text" :disabled="saving" @click="simpleEditorRef?.submit()">
-        {{ props.item ? t('common.save') : t('inbox.todoCreateHeaderAction') }}
-      </BButton>
-    </template>
     <div
       v-auto-scrollbar
       class="todo-editor-shell"
@@ -25,7 +20,6 @@
     >
       <TodoSimpleEditorForm
         v-if="useSimpleEditor"
-        ref="simpleEditorRef"
         :item="item"
         :initial-values="initialValues"
         :saving="saving"
@@ -61,7 +55,6 @@
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
-  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import TodoEditorForm from '@/components/todo/TodoEditorForm.vue';
   import TodoSimpleEditorForm from '@/components/todo/TodoSimpleEditorForm.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
@@ -98,7 +91,6 @@
   const bookmark = bookmarkStore();
   const saving = ref(false);
   const mobileStep = ref<1 | 2 | 3>(1);
-  const simpleEditorRef = ref<{ submit: () => void } | null>(null);
   const simpleAdvanced = ref(false);
   const formKey = ref(0);
   const todoPlanFeatures = ref<TodoPlanFeatureState>({

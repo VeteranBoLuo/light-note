@@ -48,6 +48,7 @@ describe('BDrawer compositor cleanup', () => {
             open: true,
             title: '快速添加',
             mobileCenteredHeader: true,
+            mobileHeaderSideWidth: '96px',
             closeIcon: 'back-icon',
           });
       },
@@ -63,6 +64,7 @@ describe('BDrawer compositor cleanup', () => {
     await nextTick();
     const header = document.querySelector('.b-drawer-header');
     expect(header?.classList.contains('b-drawer-header--centered')).toBe(true);
+    expect((header as HTMLElement | null)?.style.getPropertyValue('--b-drawer-mobile-header-side-width')).toBe('96px');
     expect(header?.firstElementChild?.classList.contains('b-drawer-close--leading')).toBe(true);
     expect(header?.querySelector('.b-drawer-title')?.textContent).toBe('快速添加');
     expect(header?.querySelector('.b-drawer-header-actions .b-drawer-close')).toBeNull();

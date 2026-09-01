@@ -104,6 +104,14 @@ describe('待办创建页原型布局', () => {
     expect(quickCaptureSource).not.toContain('state: { todoInitialValues: todoDraft.value }');
   });
 
+  it('移动端编辑抽屉只保留底部主保存按钮，不在标题栏重复提交入口', () => {
+    expect(modalSource).not.toContain('#header-actions');
+    expect(modalSource).not.toContain('simpleEditorRef?.submit()');
+    expect(simpleSource).toMatch(
+      /\.is-mobile \.todo-simple-editor__footer[\s\S]*?position:\s*fixed[\s\S]*?\.b_btn[\s\S]*?min-height:\s*48px/,
+    );
+  });
+
   it('提醒间隔单位不放在同时包裹数字输入的 label 内，避免下拉刚打开就被关闭', () => {
     expect(repeatReminderSource).toContain('class="todo-reminder-repeat__field"');
     expect(repeatReminderSource).toContain(':aria-label="t(\'inbox.todoReminderIntervalUnit\')"');

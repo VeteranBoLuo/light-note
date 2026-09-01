@@ -92,13 +92,15 @@ describe('统一标签模块交互契约', () => {
     expect(settings).not.toContain('tagManageView');
   });
 
-  it('首屏骨架与最终三栏工作区同构，目录、主题内容和说明区不会突然跳位', () => {
+  it('首屏骨架保持目录与主题两栏，关联数据就绪后才出现可选辅助栏', () => {
     const detail = read('view/tagDetail/TagDetail.vue');
     expect(detail).toContain('class="tag-space-workspace tag-space-workspace--skeleton"');
     expect(detail).toContain('class="tag-directory-rail tag-directory-rail--skeleton"');
     expect(detail).toContain('class="skeleton-profile-card"');
     expect(detail).toContain('class="skeleton-resources-panel"');
-    expect(detail).toContain('class="tag-insight-rail tag-insight-rail--skeleton"');
+    expect(detail).not.toContain('tag-insight-rail--skeleton');
+    expect(detail).toContain("'has-insights': relatedTags.length > 0");
+    expect(detail).toContain('v-if="relatedTags.length" class="tag-insight-rail"');
     expect(detail).toMatch(/@media \(max-width: 1260px\)[\s\S]*?\.tag-directory-rail\s*\{[\s\S]*?display:\s*none/u);
     expect(detail).toMatch(/@media \(max-width: 980px\)[\s\S]*?\.tag-insight-rail\s*\{[\s\S]*?display:\s*none/u);
     expect(detail).toMatch(
@@ -179,15 +181,18 @@ describe('统一标签模块交互契约', () => {
     expect(resourceRow).toContain('resource-row-tags');
   });
 
-  it('标签档案使用中性图标底板，说明卡与主档案对齐且不再重复展示使用建议', () => {
+  it('标签说明只在主档案展示，辅助栏仅在存在关联标签时出现', () => {
     const detail = read('view/tagDetail/TagDetail.vue');
     expect(detail).toContain("'has-custom-icon': tag.iconUrl && !tagIconLoadError");
     expect(detail).toMatch(/\.tag-profile-icon\s*\{[\s\S]*?background:\s*var\(--workspace-panel-bg-color\)/u);
-    expect(detail).toContain('class="insight-card insight-card--description"');
-    expect(detail).toContain('--tag-profile-height: 120px');
-    expect(detail).toContain('--tag-workspace-heading-offset: 0px');
-    expect(detail).toMatch(/\.tag-insight-rail\s*\{[\s\S]*?padding-top:\s*var\(--tag-workspace-heading-offset\)/u);
-    expect(detail).toMatch(/\.insight-card--description\s*\{[\s\S]*?min-height:\s*var\(--tag-profile-height\)/u);
+    expect(detail).toContain("'has-insights': relatedTags.length > 0");
+    expect(detail).toContain('v-if="relatedTags.length" class="tag-insight-rail"');
+    expect(detail).toMatch(/\.tag-space-workspace\.has-insights\s*\{[\s\S]*?grid-template-columns:/u);
+    expect(detail).toContain("t('tagSpace.coUsedTitle')");
+    expect(detail).not.toContain('insight-card--description');
+    expect(detail).not.toContain("t('tagSpace.descriptionTitle')");
+    expect(detail).not.toContain("t('tagSpace.similarTagsTitle')");
+    expect(detail).not.toContain("t('tagSpace.noSimilarTags')");
     expect(detail).not.toContain("t('tagSpace.usageTipsTitle')");
     expect(detail).not.toContain('class="usage-tips"');
     expect(detail).toContain('class="mobile-tag-edit"');
@@ -223,6 +228,10 @@ describe('统一标签模块交互契约', () => {
     expect(dialog).toContain('if (!nextVisible && visible.value) requestCancel()');
     expect(form).toContain("$t('tagManage.tagDescription')");
     expect(form).toContain('v-model:value="tag.description"');
+    expect(form).toContain(':maxlength="500"');
+    expect(form).not.toContain('type="textarea"');
+    expect(form).not.toContain(':rows="3"');
+    expect(form).not.toContain('.tag-field--description :deep(.b-textarea)');
     expect(dialog).toContain(':can-delete="handleType === \'edit\'"');
     expect(form).toContain("$t('tagManage.deleteTag')");
     expect(form).toContain('@click="emit(\'delete\')"');

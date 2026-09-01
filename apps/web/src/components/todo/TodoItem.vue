@@ -121,48 +121,18 @@
             </template>
           </BPopover>
         </template>
-        <BPopover
-          trigger="click"
+        <BActionMenu
+          :items="desktopMoreMenuItems"
+          :triggers="['click']"
           placement="bottom-right"
-          :open="openMenu === 'desktopMore'"
-          @update:open="(visible: boolean) => setMenu('desktopMore', visible)"
+          :disabled="disabled"
+          :aria-label="t('common.more')"
+          @select="handleDesktopMoreAction"
         >
           <BButton class="todo-more-button" size="small" :disabled="disabled" :aria-label="t('common.more')">
             <SvgIcon :src="icon.common.more" size="18" aria-hidden="true" />
           </BButton>
-          <template #content>
-            <div class="todo-more-menu">
-              <template v-if="item.status === 'pending'">
-                <BButton @click="runMenuAction(() => emit('edit'))">{{ t('inbox.editTodo') }}</BButton>
-                <BButton
-                  v-click-log="OPERATION_LOG_MAP.inbox.openCalendarExport"
-                  @click="runMenuAction(() => emit('add-to-calendar'))"
-                >
-                  {{ t('inbox.addToCalendar') }}
-                </BButton>
-                <template v-if="item.seriesId">
-                  <span class="todo-more-menu__divider" aria-hidden="true"></span>
-                  <BButton @click="runMenuAction(() => emit('series-action', 'skip'))">
-                    {{ t('inbox.todoSeriesSkipInstance') }}
-                  </BButton>
-                  <BButton
-                    v-if="item.series?.status === 'paused'"
-                    @click="runMenuAction(() => emit('series-action', 'resume'))"
-                  >
-                    {{ t('inbox.todoSeriesResume') }}
-                  </BButton>
-                  <BButton v-else @click="runMenuAction(() => emit('series-action', 'pause'))">
-                    {{ t('inbox.todoSeriesPause') }}
-                  </BButton>
-                </template>
-              </template>
-              <span class="todo-more-menu__divider" aria-hidden="true"></span>
-              <BButton type="danger" :loading="deleting" @click="runMenuAction(() => emit('delete'))">
-                {{ t('inbox.deleteTodo') }}
-              </BButton>
-            </div>
-          </template>
-        </BPopover>
+        </BActionMenu>
       </div>
       <div class="todo-item__actions todo-item__actions--mobile">
         <template v-if="item.status === 'pending'">
@@ -198,6 +168,9 @@
 <script setup lang="ts">
   import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { recordOperation } from '@/api/commonApi';
+  import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
+  import type { BActionMenuItem } from '@/components/base/BasicComponents/actionMenu';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
@@ -245,12 +218,12 @@
   const { t, locale } = useI18n();
   const router = useRouter();
 
-  // 桌面端使用 BPopover；移动端优先进入统一的底部 Action Sheet。
-  const openMenu = ref<'desktopSnooze' | 'desktopMore' | ''>('');
+  // 桌面端稍后提醒使用 BPopover，更多操作使用统一 BActionMenu；移动端进入底部 Action Sheet。
+  const openMenu = ref<'desktopSnooze' | ''>('');
   const mobileMenu = ref<'priority' | 'snooze' | 'more'>('more');
   const mobileMenuOpen = ref(false);
 
-  function setMenu(key: 'desktopSnooze' | 'desktopMore', visible: boolean) {
+  function setMenu(key: 'desktopSnooze', visible: boolean) {
     openMenu.value = visible ? key : '';
   }
 
@@ -402,6 +375,33 @@
   });
   const priorityOptions = computed(() => [0, 1, 2].map((value) => ({ value, label: t(`inbox.todoPriority${value}`) })));
   const cardPreviewable = computed(() => !props.selectable && !props.disabled);
+  const desktopMoreMenuItems = computed<BActionMenuItem[]>(() => {
+    const actions: BActionMenuItem[] = [];
+    if (props.item.status === 'pending') {
+      actions.push(
+        { key: 'edit', label: t('inbox.editTodo'), icon: icon.table_edit },
+        { key: 'calendar', label: t('inbox.addToCalendar'), icon: icon.common.calendar },
+      );
+      if (props.item.seriesId) {
+        actions.push(
+          { key: 'series-divider', divider: true },
+          { key: 'series-skip', label: t('inbox.todoSeriesSkipInstance'), icon: icon.todo.repeat },
+          props.item.series?.status === 'paused'
+            ? { key: 'series-resume', label: t('inbox.todoSeriesResume'), icon: icon.ai.play }
+            : { key: 'series-pause', label: t('inbox.todoSeriesPause'), icon: icon.ai.pause },
+        );
+      }
+      actions.push({ key: 'delete-divider', divider: true });
+    }
+    actions.push({
+      key: 'delete',
+      label: t('inbox.deleteTodo'),
+      icon: icon.table_delete,
+      danger: true,
+      disabled: props.deleting,
+    });
+    return actions;
+  });
   const mobileMenuTitle = computed(() => {
     if (mobileMenu.value === 'priority') return t('inbox.todoPriority');
     if (mobileMenu.value === 'snooze') return t('inbox.todoSnooze');
@@ -429,12 +429,12 @@
             {
               key: 'series-skip',
               label: t('inbox.todoSeriesSkipInstance'),
-              icon: icon.common.branch,
+              icon: icon.todo.repeat,
               dividerBefore: true,
             },
             props.item.series?.status === 'paused'
-              ? { key: 'series-resume', label: t('inbox.todoSeriesResume'), icon: icon.common.play }
-              : { key: 'series-pause', label: t('inbox.todoSeriesPause'), icon: icon.common.pause },
+              ? { key: 'series-resume', label: t('inbox.todoSeriesResume'), icon: icon.ai.play }
+              : { key: 'series-pause', label: t('inbox.todoSeriesPause'), icon: icon.ai.pause },
           ]
         : [];
     return [
@@ -465,12 +465,22 @@
     if (action.key.startsWith('priority-')) changePriority(action.key.slice('priority-'.length));
     else if (action.key.startsWith('snooze-')) {
       emit('snooze', action.key.slice('snooze-'.length) as TodoSnoozePreset);
-    } else if (action.key === 'edit') emit('edit');
-    else if (action.key === 'calendar') emit('add-to-calendar');
-    else if (action.key === 'series-skip') emit('series-action', 'skip');
-    else if (action.key === 'series-pause') emit('series-action', 'pause');
-    else if (action.key === 'series-resume') emit('series-action', 'resume');
-    else if (action.key === 'delete') emit('delete');
+    } else handleMoreAction(action.key);
+  }
+
+  function handleDesktopMoreAction(key: string) {
+    handleMoreAction(key);
+  }
+
+  function handleMoreAction(key: string) {
+    if (key === 'edit') emit('edit');
+    else if (key === 'calendar') {
+      void recordOperation(OPERATION_LOG_MAP.inbox.openCalendarExport);
+      emit('add-to-calendar');
+    } else if (key === 'series-skip') emit('series-action', 'skip');
+    else if (key === 'series-pause') emit('series-action', 'pause');
+    else if (key === 'series-resume') emit('series-action', 'resume');
+    else if (key === 'delete') emit('delete');
   }
 
   function openPreviewFromCard(event: MouseEvent) {
@@ -834,30 +844,6 @@
     min-height: 30px;
     padding: 0 10px;
     font-size: 13px;
-  }
-  .todo-more-menu {
-    display: grid;
-    width: 176px;
-    padding: 4px;
-    gap: 2px;
-  }
-  .todo-more-menu :deep(.b_btn) {
-    width: 100%;
-    height: 32px;
-    min-height: 32px;
-    justify-content: flex-start;
-    padding: 0 10px;
-    border-radius: 7px;
-    font-size: 13px;
-  }
-  .todo-more-menu :deep(.danger_btn) {
-    color: var(--danger-color, #e5484d);
-    background: transparent;
-  }
-  .todo-more-menu__divider {
-    height: 1px;
-    margin: 4px 6px;
-    background: var(--surface-border-color, var(--card-border-color));
   }
   @media (pointer: coarse) {
     .todo-snooze-menu :deep(.b_btn) {
