@@ -36,6 +36,7 @@ async function mountNav(initialPath: string) {
   document.body.append(host);
   const app = createApp({ render: () => h(ResourceCenterSectionNav) });
   app.component('OriginalIcon', { render: () => h('span', { 'aria-hidden': 'true' }) });
+  app.component('svg-icon', { render: () => h('span', { 'aria-hidden': 'true' }) });
   app.use(router);
   app.use(
     createI18n({
@@ -45,8 +46,8 @@ async function mountNav(initialPath: string) {
         'zh-CN': {
           resourceCenter: {
             title: '资源中心',
-            sections: { resources: '全部资源', pendingResources: '待整理' },
-            knowledgeGraph: '知识地图',
+            sections: { resources: '查找', pendingResources: '待整理' },
+            knowledgeGraph: '全局图谱',
             knowledgeGraphShort: '图谱',
           },
         },
@@ -77,7 +78,7 @@ afterEach(() => {
 });
 
 describe('ResourceCenterSectionNav', () => {
-  it('桌面端将三个入口作为同级页签，知识地图不再是低存在感的独立按钮', async () => {
+  it('桌面端将查找、待整理和全局图谱作为同级页签', async () => {
     const { host } = await mountNav('/search?section=map');
     const tabs = host.querySelectorAll<HTMLElement>('[role="tab"]');
     const mapButton = host.querySelector<HTMLButtonElement>('.knowledge-map-view');
@@ -87,11 +88,12 @@ describe('ResourceCenterSectionNav', () => {
     expect(tabs[0].classList.contains('active')).toBe(false);
     expect(tabs[1].getAttribute('aria-selected')).toBe('false');
     expect(mapButton?.getAttribute('role')).toBe('tab');
-    expect(mapButton?.getAttribute('aria-label')).toBe('知识地图');
+    expect(tabs[0].textContent?.trim()).toBe('查找');
+    expect(mapButton?.getAttribute('aria-label')).toBe('全局图谱');
     expect(mapButton?.getAttribute('aria-selected')).toBe('true');
   });
 
-  it('从待整理进入和退出知识地图时保持范围与查看状态一致', async () => {
+  it('从待整理进入全局图谱时保持范围与查看状态一致', async () => {
     const { host, router } = await mountNav('/inbox');
     const tabs = host.querySelectorAll<HTMLButtonElement>('[role="tab"]');
     const mapButton = host.querySelector<HTMLButtonElement>('.knowledge-map-view')!;
@@ -109,7 +111,7 @@ describe('ResourceCenterSectionNav', () => {
     expect(router.currentRoute.value.fullPath).toBe('/search?section=map');
   });
 
-  it('移动端把知识地图纳入三段式单选导航', async () => {
+  it('移动端把全局图谱纳入三段式单选导航', async () => {
     mocks.bookmark.isMobile = true;
     const { host } = await mountNav('/search?section=map');
     const tablist = host.querySelector<HTMLElement>('.resource-center-section-bar');
