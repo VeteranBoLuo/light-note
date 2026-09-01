@@ -7,6 +7,7 @@ import {
   insertTagResourceRelations,
   replaceResourceTagRelations,
   replaceTagResourceRelations,
+  validateEditableTagResources,
   validateUserTags,
   validateUserResources,
 } from '../util/resourceTags.js';
@@ -414,7 +415,8 @@ export const updateTag = async (req, res) => {
 
     // 只要传了bookmarkList，就需要重新处理
     if (bookmarkList !== undefined) {
-      const resourceIds = await validateUserResources(connection, {
+      const resourceIds = await validateEditableTagResources(connection, {
+        tagId: id,
         resourceIds: bookmarkList || [],
         resourceType: RESOURCE_TYPE.BOOKMARK,
         userId,
@@ -427,7 +429,8 @@ export const updateTag = async (req, res) => {
       });
     }
     if (noteList !== undefined) {
-      const resourceIds = await validateUserResources(connection, {
+      const resourceIds = await validateEditableTagResources(connection, {
+        tagId: id,
         resourceIds: noteList || [],
         resourceType: RESOURCE_TYPE.NOTE,
         userId,
@@ -440,7 +443,8 @@ export const updateTag = async (req, res) => {
       });
     }
     if (fileList !== undefined) {
-      const resourceIds = await validateUserResources(connection, {
+      const resourceIds = await validateEditableTagResources(connection, {
+        tagId: id,
         resourceIds: fileList || [],
         resourceType: RESOURCE_TYPE.FILE,
         userId,

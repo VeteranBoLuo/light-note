@@ -252,6 +252,37 @@ export async function runAiExecution(config, operation, dependencies = {}) {
 }
 
 /**
+ * Context Resolver 才能知道完整材料规模的 Skill，可在第一次 Provider 调用前收紧或扩展
+ * 本轮阶段计划与额度预占。执行一旦开始占位或调用 Provider，就禁止再改写计划。
+ */
+export function configureActiveAiExecution(config = {}, execution = getActiveAiExecution()) {
+  if (!execution) {
+    const error = new Error('AI Execution 动态配置缺少执行上下文');
+    error.code = 'AI_EXECUTION_REQUIRED';
+    error.status = 500;
+    throw error;
+  }
+  if (execution.providerCallCount > 0 || execution.quotaReservationPromise || execution.quotaHandle) {
+    const error = new Error('AI Execution 已开始访问 Provider，不能再修改阶段计划');
+    error.code = 'AI_EXECUTION_CONFIGURATION_LOCKED';
+    error.status = 500;
+    throw error;
+  }
+  const providerPlan = normalizeAiProviderPlan(config.providerPlan);
+  if (!providerPlan) {
+    const error = new Error('AI Execution 动态配置缺少阶段计划');
+    error.code = 'AI_EXECUTION_PROVIDER_PLAN_INVALID';
+    error.status = 500;
+    throw error;
+  }
+  execution.providerPlan = providerPlan;
+  execution.maxUserProviderCalls = providerPlan.maxUserProviderCalls;
+  execution.maxPlatformProviderCalls = providerPlan.maxPlatformProviderCalls;
+  execution.reservationTokens = Math.max(1, Math.floor(Number(config.reservationTokens || 1)));
+  return execution;
+}
+
+/**
  * 第一次真实 Provider 调用前懒占位。并发子调用共享同一个 Promise，保证一个用户动作只有一次占位。
  * 缓存命中、确定性解析和本地检索不会触发这里，因此既不扣额度，也不要求用户仍有可用模型额度。
  */

@@ -4,7 +4,7 @@ import {
   validateAiSkillResponse,
 } from '@lightnote/shared/ai-skill-protocol';
 import { createAiSkillExecutionConfig } from '../aiBillingCatalog.js';
-import { runAiExecution } from '../aiExecution/service.js';
+import { configureActiveAiExecution, runAiExecution } from '../aiExecution/service.js';
 import { assertAiSkillDomainEnabled } from '../aiProductFeature.js';
 import { resolveAiSkillContext, resolveAiSkillIdentity } from './contextResolver.js';
 import { aiSkillError } from './errors.js';
@@ -48,6 +48,9 @@ function resolveAiSkillResultOutcome(response) {
   if (warningCodes.has('image_recognition_uncertain')) {
     return { status: 'partial', errorCode: 'IMAGE_RECOGNITION_UNCERTAIN' };
   }
+  if (response?.coverage?.complete === false) {
+    return { status: 'partial', errorCode: 'AI_SKILL_COVERAGE_PARTIAL' };
+  }
   return { status: 'success' };
 }
 
@@ -77,6 +80,7 @@ export async function executeAiSkill(rawRequest, req, dependencies = {}) {
   const resolveThread = dependencies.resolveThread || resolveAiSkillThread;
   const appendTurn = dependencies.appendTurn || appendAiSkillTurn;
   const runExecution = dependencies.runExecution || runAiExecution;
+  const configureExecution = dependencies.configureExecution || configureActiveAiExecution;
   const callModel = dependencies.callModel || callGroundedSkillModel;
   const skill = resolveSkill(request.skillId, request.skillVersion);
   const internalExecutionOverrides = dependencies.executionConfigOverrides || {};
@@ -102,10 +106,7 @@ export async function executeAiSkill(rawRequest, req, dependencies = {}) {
   try {
     const internalCaller = String(dependencies.internalCaller || '');
     const allowedInternalCallers = Array.isArray(skill.allowedInternalCallers) ? skill.allowedInternalCallers : [];
-    if (
-      skill.internalOnly &&
-      !allowedInternalCallers.includes(internalCaller)
-    ) {
+    if (skill.internalOnly && !allowedInternalCallers.includes(internalCaller)) {
       throw aiSkillError('AI_SKILL_INTERNAL_ONLY', '该 AI 能力只能由对应的产品流程调用', 403);
     }
     assertDomainEnabled(skill.domain);
@@ -132,6 +133,9 @@ export async function executeAiSkill(rawRequest, req, dependencies = {}) {
       async () => {
         const input = skill.validateInput(request.input);
         const context = await resolveContext({ skill, request, req, database: dependencies.database });
+        if (skill.providerPlanPolicy?.contextAware) {
+          configureExecution(createAiSkillExecutionConfig(skill, request, {}, context));
+        }
         const thread = await resolveThread({ skill, request, context, database: dependencies.database });
         const scopedContext = Object.freeze({
           ...context,

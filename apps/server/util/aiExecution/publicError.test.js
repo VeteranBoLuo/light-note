@@ -7,6 +7,7 @@ describe('resolvePublicAiExecutionError', () => {
     ['AI_ACCESS_RESTRICTED', 403, '当前账号的 AI 使用权限已被限制'],
     ['AI_RATE_LIMITED', 503, 'AI 服务当前繁忙，本次未生成内容，请稍后重试'],
     ['AI_NETWORK_ERROR', 503, 'AI 服务连接失败，本次未生成内容，请稍后重试'],
+    ['AI_PROVIDER_REQUEST_INVALID', 502, 'AI 服务暂时无法处理本次材料，请稍后重试'],
     ['AI_SKILL_OUTPUT_EMPTY', 502, 'AI 没有生成可用内容，请重新生成'],
     ['AI_SKILL_OUTPUT_SOURCE_INVALID', 502, '生成结果的来源引用校验未通过，请重新生成'],
     ['AI_SKILL_OUTPUT_PROFILE_INVALID', 502, '生成结果未满足当前工具的固定结构，自动修复后仍未通过'],

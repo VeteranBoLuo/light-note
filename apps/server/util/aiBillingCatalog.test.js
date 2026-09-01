@@ -131,4 +131,25 @@ describe('aiBillingCatalog', () => {
       taskType: 'skill_toolbox_research_brief',
     });
   });
+
+  it('标签分析按服务端展开后的完整范围编译分批调用与预占，而不是按一个标签选择器计数', () => {
+    const skill = resolveAiSkill('tag.analyze', 1);
+    const request = { scope: { resourceRefs: [{ type: 'tag', id: 'tag-1' }] } };
+    const context = {
+      resourceRefs: Array.from({ length: 81 }, (_, index) => ({ type: 'note', id: `n-${index + 1}` })),
+    };
+    const config = createAiSkillExecutionConfig(skill, request, {}, context);
+    expect(config).toMatchObject({
+      maxUserProviderCalls: 4,
+      maxPlatformProviderCalls: 4,
+      providerPlan: {
+        stages: {
+          model_generation: { billingScope: 'user', maxCalls: 4 },
+          output_repair: { billingScope: 'platform', maxCalls: 4 },
+        },
+      },
+    });
+    expect(config.providerPlan.stages).not.toHaveProperty('image_recognition');
+    expect(config.reservationTokens).toBeGreaterThan(80_000);
+  });
 });

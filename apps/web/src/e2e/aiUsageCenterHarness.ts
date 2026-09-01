@@ -47,6 +47,7 @@ const tokenActions = [
   ['note.organize_tags', 'note', 'noteOrganizeTags', 'item'],
   ['bookmark.organize', 'bookmark', 'bookmarkOrganize', 'item'],
   ['tag.icon_keywords', 'tag', 'tagIconKeywords'],
+  ['tag.analyze', 'tag', 'tagAnalyze'],
 ].map(([id, module, labelKey, unit = 'request']) => ({ id, module, labelKey, unit }));
 
 const freeActions = [

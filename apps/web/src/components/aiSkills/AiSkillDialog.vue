@@ -15,6 +15,7 @@
       :skill-id="skillId"
       :surface="surface"
       :resource-refs="resourceRefs"
+      :scope-resource-count="scopeResourceCount"
       :scope-label="scopeLabel"
       :actions="actions"
       :show-prompt="showPrompt"
@@ -26,6 +27,7 @@
       :auto-run-action-id="autoRunActionId"
       :icon-src="iconSrc"
       :show-grounding="showGrounding"
+      :reserve-result-space="reserveResultSpace"
       @result="emit('result', $event)"
       @error="emit('error', $event)"
       @result-action="forwardResultAction"
@@ -56,6 +58,7 @@
       skillId: string;
       surface: string;
       resourceRefs?: readonly AiSkillResourceRef[];
+      scopeResourceCount?: number;
       scopeLabel?: string;
       actions?: readonly AiSkillPanelAction[];
       showPrompt?: boolean;
@@ -67,6 +70,7 @@
       autoRunActionId?: string;
       iconSrc?: string;
       showGrounding?: boolean;
+      reserveResultSpace?: boolean;
       width?: string;
     }>(),
     {
@@ -83,6 +87,7 @@
       autoRunActionId: '',
       iconSrc: '',
       showGrounding: true,
+      reserveResultSpace: false,
       width: 'min(720px, calc(100vw - 24px))',
     },
   );

@@ -24,6 +24,7 @@ const EXPECTED_SKILLS = Object.freeze([
   ['todo.breakdown', 'todo', 'preview'],
   ['note.extract_todos', 'note', 'preview'],
   ['file.extract_todos', 'file', 'preview'],
+  ['tag.analyze', 'tag', 'read'],
 ]);
 const EXPECTED_INTERNAL_SKILLS = Object.freeze([
   ['toolbox.idea_to_draft', 'toolbox', 'read'],
@@ -81,6 +82,17 @@ describe('AI Skill registry contract', () => {
     expect(policy.allowConversation).toBe(policy.historyTurns > 0);
     expect(policy.resourceTypes.every((type) => RESOURCE_TYPES.has(type))).toBe(true);
     expect(new Set(policy.resourceTypes).size).toBe(policy.resourceTypes.length);
+    if (policy.scopeMode === 'tag_resources') {
+      expect(policy).toMatchObject({
+        resourceTypes: ['tag'],
+        minResources: 1,
+        maxResources: 1,
+        expandedResourceTypes: ['bookmark', 'note', 'file'],
+        minExpandedResources: 1,
+      });
+      expect(policy.maxExpandedResources).toBeGreaterThan(20);
+      expect(policy.maxExpandedResources).toBeLessThanOrEqual(500);
+    }
 
     expect(definition.modelPolicy).toEqual(
       expect.objectContaining({

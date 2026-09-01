@@ -17,7 +17,7 @@
         <SvgIcon :src="icon.table_edit" size="14" aria-hidden="true" />
         {{ t('common.edit') }}
       </BButton>
-      <BButton type="primary" :loading="aiLoading" :disabled="!tag || detailRefreshing" @click="openTagInAi">
+      <BButton type="primary" :disabled="!tag || detailRefreshing" @click="openTagInAi">
         <SvgIcon :src="icon.ai.ask" size="15" aria-hidden="true" />
         {{ t('tagSpace.askAi') }}
       </BButton>
@@ -452,15 +452,16 @@
       v-model:visible="tagAiVisible"
       :title="t('tagManage.aiSkillTitle')"
       :description="t('tagManage.aiSkillDescription')"
-      skill-id="search.summarize_selected"
+      skill-id="tag.analyze"
       prompt-key="instruction"
       surface="tag_detail"
       :resource-refs="tagAiResourceRefs"
-      :scope-label="t('tagManage.aiSkillScope', { count: tagAiResourceRefs.length })"
+      :scope-resource-count="tag?.counts.total || 0"
+      :scope-label="t('tagManage.aiSkillScope', { count: tag?.counts.total || 0 })"
       :actions="tagAiActions"
       :show-prompt="false"
       :show-grounding="false"
-      :empty-text="aiLoading ? t('tagSpace.aiPreparing') : ''"
+      reserve-result-space
       :auto-run-action-id="tagAiResourceRefs.length ? 'summarize' : ''"
     >
       <template #result-actions="{ response, result }">
@@ -563,12 +564,10 @@
   const filePreviewVisible = ref(false);
   const previewFileInfo = ref<any>({});
   const tagAiVisible = ref(false);
-  const aiLoading = ref(false);
   const creatingTagNote = ref(false);
   const tagEditorVisible = ref(false);
   const editingTagId = ref('');
   const tagMutationBusy = ref(false);
-  const aiResourceItems = ref<TagSpaceResourceItem[]>([]);
   const graphLoading = ref(false);
   const graphError = ref(false);
   const graphData = ref<TagGraphResponse | null>(null);
@@ -661,10 +660,7 @@
     showAdd: () => !isReadOnly.value,
   });
   const tagAiResourceRefs = computed<AiSkillResourceRef[]>(() =>
-    aiResourceItems.value.slice(0, 20).map((item) => ({
-      type: item.type,
-      id: String(item.id),
-    })),
+    displayedTagId.value && Number(tag.value?.counts.total || 0) > 0 ? [{ type: 'tag', id: displayedTagId.value }] : [],
   );
   const tagAiActions = computed(() =>
     tagAiResourceRefs.value.length
@@ -672,7 +668,7 @@
           {
             id: 'summarize',
             label: t('tagManage.aiSummarize'),
-            skillId: 'search.summarize_selected',
+            skillId: 'tag.analyze',
             input: {
               instruction: t('tagManage.aiSummarizeInstruction', { tag: String(tag.value?.name || '') }),
             },
@@ -764,7 +760,6 @@
       resourceLoading.value = false;
       resourceLoadingMore.value = false;
       resourceError.value = false;
-      aiResourceItems.value = [];
     }
     if (!sidebarTags.value.length) void loadSidebarTags();
 
@@ -802,7 +797,6 @@
       resourceLoading.value = false;
       resourceLoadingMore.value = false;
       resourceError.value = !resources;
-      aiResourceItems.value = [];
       if (resourcesResult.status === 'rejected') {
         console.warn('[tag-space] failed to load initial resources', resourcesResult.reason);
       }
@@ -887,35 +881,12 @@
     }
   }
 
-  async function openTagInAi() {
+  function openTagInAi() {
     if (!tag.value?.counts.total) {
       message.info(t('tagManage.aiNoResources'));
       return;
     }
-    aiResourceItems.value = [];
-    aiLoading.value = true;
     tagAiVisible.value = true;
-    try {
-      const result = await fetchTagSpaceResources({
-        id: displayedTagId.value,
-        type: 'all',
-        sort: 'updated',
-        page: 1,
-        pageSize: 20,
-      });
-      aiResourceItems.value = result.items;
-      if (!aiResourceItems.value.length) {
-        tagAiVisible.value = false;
-        message.info(t('tagManage.aiNoResources'));
-        return;
-      }
-      if (tag.value.counts.total > 20) message.info(t('ai.materialLimit', { count: 20 }));
-    } catch {
-      tagAiVisible.value = false;
-      message.error(t('tagSpace.aiLoadFailed'));
-    } finally {
-      aiLoading.value = false;
-    }
   }
 
   async function createNoteFromTagAnalysis(response: AiSkillResponse) {

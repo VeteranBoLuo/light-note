@@ -239,6 +239,10 @@ describe('统一标签模块交互契约', () => {
 
   it('标签分析打开后自动执行，隐藏来源角标并允许把同一结果保存为笔记', () => {
     const detail = read('view/tagDetail/TagDetail.vue');
+    expect(detail).toContain('skill-id="tag.analyze"');
+    expect(detail).toContain("[{ type: 'tag', id: displayedTagId.value }]");
+    expect(detail).not.toContain('aiResourceItems.value.slice(0, 20)');
+    expect(detail).not.toContain("t('ai.materialLimit'");
     expect(detail).toContain(':show-prompt="false"');
     expect(detail).toContain(':show-grounding="false"');
     expect(detail).toContain("tagAiResourceRefs.length ? 'summarize' : ''");

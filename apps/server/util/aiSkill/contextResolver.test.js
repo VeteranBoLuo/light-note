@@ -138,4 +138,116 @@ describe('resolveAiSkillContext', () => {
     });
     expect(resolveResourceVersions).toHaveBeenCalledWith(expect.objectContaining({ userId: 'test-1' }));
   });
+
+  it('标签范围只信任标签选择器，并由服务端展开全部当前关联资源', async () => {
+    const tagSkill = {
+      ...skill,
+      id: 'tag.analyze',
+      contextPolicy: {
+        scopeMode: 'tag_resources',
+        resourceTypes: ['tag'],
+        minResources: 1,
+        maxResources: 1,
+        expandedResourceTypes: ['bookmark', 'note', 'file'],
+        minExpandedResources: 1,
+        maxExpandedResources: 500,
+      },
+    };
+    const resolveTagScope = vi.fn().mockResolvedValue({
+      tag: { id: 'tag-1', name: '研发', description: '研发资料' },
+      resourceRefs: [
+        { type: 'bookmark', id: 'b-1' },
+        { type: 'note', id: 'n-1' },
+      ],
+    });
+    const resolveResourceVersions = vi.fn().mockResolvedValue([
+      { type: 'bookmark', id: 'b-1', version: 'v1' },
+      { type: 'note', id: 'n-1', version: 'v2' },
+    ]);
+
+    const context = await resolveAiSkillContext({
+      skill: tagSkill,
+      request: request([{ type: 'tag', id: 'tag-1' }]),
+      req: authenticatedRequest(),
+      resolveTagScope,
+      resolveResourceVersions,
+    });
+
+    expect(resolveTagScope).toHaveBeenCalledWith(undefined, { userId: 'user-1', tagId: 'tag-1' });
+    expect(resolveResourceVersions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-1',
+        resourceRefs: [
+          { type: 'bookmark', id: 'b-1' },
+          { type: 'note', id: 'n-1' },
+        ],
+      }),
+    );
+    expect(context).toMatchObject({
+      scopeSelector: { type: 'tag', id: 'tag-1' },
+      tag: { id: 'tag-1', name: '研发', description: '研发资料' },
+      resourceRefs: [
+        { type: 'bookmark', id: 'b-1', version: 'v1' },
+        { type: 'note', id: 'n-1', version: 'v2' },
+      ],
+    });
+    expect(context.scopeDigest).toMatch(/^[a-f0-9]{64}$/u);
+  });
+
+  it('标签范围拒绝客户端伪造资源、空标签、超限标签和解析期间失效的关联', async () => {
+    const tagSkill = {
+      ...skill,
+      id: 'tag.analyze',
+      contextPolicy: {
+        scopeMode: 'tag_resources',
+        resourceTypes: ['tag'],
+        minResources: 1,
+        maxResources: 1,
+        expandedResourceTypes: ['bookmark', 'note', 'file'],
+        minExpandedResources: 1,
+        maxExpandedResources: 2,
+      },
+    };
+    const base = {
+      skill: tagSkill,
+      req: authenticatedRequest(),
+      resolveResourceVersions: vi.fn(),
+    };
+
+    await expect(
+      resolveAiSkillContext({ ...base, request: request([{ type: 'note', id: 'n-1' }]) }),
+    ).rejects.toMatchObject({ code: 'AI_SKILL_SCOPE_TYPE_FORBIDDEN', status: 403 });
+    await expect(
+      resolveAiSkillContext({
+        ...base,
+        request: request([{ type: 'tag', id: 'tag-1' }]),
+        resolveTagScope: vi.fn().mockResolvedValue({ tag: { id: 'tag-1' }, resourceRefs: [] }),
+      }),
+    ).rejects.toMatchObject({ code: 'AI_SKILL_SCOPE_SIZE_INVALID' });
+    await expect(
+      resolveAiSkillContext({
+        ...base,
+        request: request([{ type: 'tag', id: 'tag-1' }]),
+        resolveTagScope: vi.fn().mockResolvedValue({
+          tag: { id: 'tag-1' },
+          resourceRefs: [
+            { type: 'note', id: '1' },
+            { type: 'note', id: '2' },
+            { type: 'note', id: '3' },
+          ],
+        }),
+      }),
+    ).rejects.toMatchObject({ code: 'AI_SKILL_SCOPE_SIZE_INVALID' });
+    await expect(
+      resolveAiSkillContext({
+        ...base,
+        request: request([{ type: 'tag', id: 'tag-1' }]),
+        resolveTagScope: vi.fn().mockResolvedValue({
+          tag: { id: 'tag-1' },
+          resourceRefs: [{ type: 'note', id: 'n-1' }],
+        }),
+        resolveResourceVersions: vi.fn().mockResolvedValue([]),
+      }),
+    ).rejects.toMatchObject({ code: 'AI_SKILL_SCOPE_RESOURCE_UNAVAILABLE', status: 409 });
+  });
 });

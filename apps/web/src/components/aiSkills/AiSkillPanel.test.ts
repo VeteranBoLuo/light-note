@@ -207,4 +207,73 @@ describe('AiSkillPanel 自动执行预设动作', () => {
     expect(executeAiSkill).toHaveBeenCalledTimes(2);
     expect(host.textContent).toContain('分析完成');
   });
+
+  it('展示服务端返回的精确覆盖统计，不把一个标签选择器误显示成一项材料', async () => {
+    executeAiSkill.mockResolvedValueOnce({
+      ...completedResponse('tag.analyze'),
+      coverage: {
+        complete: false,
+        warnings: [],
+        requestedResources: 46,
+        analyzedResources: 43,
+        unreadableResources: 3,
+        metadataOnlyResources: 5,
+        truncatedResources: 2,
+      },
+    });
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      render: () =>
+        h(AiSkillPanel, {
+          title: '标签分析',
+          skillId: 'tag.analyze',
+          surface: 'tag_detail',
+          resourceRefs: [{ type: 'tag', id: 'tag-1' }],
+          scopeResourceCount: 46,
+          scopeLabel: '完整分析当前标签下的 46 项资料',
+          actions: [{ id: 'analyze', label: '分析', input: {} }],
+          autoRunActionId: 'analyze',
+        }),
+    });
+    app.use(
+      createI18n({
+        legacy: false,
+        locale: 'zh-CN',
+        messages: {
+          'zh-CN': {
+            aiSkills: {
+              processing: '处理中',
+              retry: '重试',
+              unavailableTitle: '暂不可用',
+              unavailableDescription: '请稍后重试',
+              errorTitle: '执行失败',
+              quotaErrorTitle: '额度不足',
+              retryLater: '请稍后重试',
+              send: '发送',
+              promptPlaceholder: '请输入',
+              sources: '来源 {count}',
+              sourceFallback: '来源 {index}',
+              coverageSummary: '已纳入分析 {analyzed}/{total} 项资料',
+              coverageUnreadable: '{count} 项暂无可读正文',
+              coverageMetadataOnly: '{count} 项仅使用元数据',
+              coverageTruncated: '{count} 项正文按单项预算截取',
+            },
+          },
+        },
+      }),
+    );
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    await flushExecution();
+    expect(host.textContent).toContain('完整分析当前标签下的 46 项资料');
+    expect(host.textContent).toContain('已纳入分析 43/46 项资料');
+    expect(host.textContent).toContain('3 项暂无可读正文');
+    expect(host.textContent).toContain('5 项仅使用元数据');
+    expect(host.textContent).toContain('2 项正文按单项预算截取');
+  });
 });
