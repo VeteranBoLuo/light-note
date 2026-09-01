@@ -13,6 +13,42 @@ export interface OrganizeIssueSummary {
   errorCode?: string | null;
 }
 
+export interface OrganizeOverviewPreview<T> {
+  state: 'ready' | 'error';
+  items: T[];
+  hasMore: boolean;
+  errorCode?: string | null;
+}
+
+export interface PendingOverviewItem {
+  resourceType: OrganizeResourceType;
+  resourceId: string;
+  title: string;
+  source?: string;
+  collectedAt?: string | null;
+  resourceCreatedAt?: string | null;
+}
+
+export interface DuplicateBookmarkOverviewItem {
+  groupKey: string;
+  url: string;
+  memberCount: number;
+}
+
+export interface UntaggedOverviewItem {
+  resourceType: OrganizeResourceType;
+  resourceId: string;
+  title: string;
+  updatedAt?: string | null;
+}
+
+export interface BookmarkHealthOverviewItem {
+  id: string;
+  name: string;
+  observedCode?: string | null;
+  checkedAt?: string | null;
+}
+
 export interface OrganizeSummary {
   pendingShortcut: {
     state: 'ready' | 'error';
@@ -31,9 +67,23 @@ export interface OrganizeSummary {
     duplicateBookmark: OrganizeIssueSummary & { groupCount?: number | null };
     bookmarkHealth: OrganizeIssueSummary & {
       coverage?: { checked: number; total: number } | null;
-      unknownCount?: number;
-      userNormalCount?: number;
+      alive?: number | null;
+      unknownCount?: number | null;
+      userNormalCount?: number | null;
+      unchecked?: number | null;
+      running?: boolean | null;
+      runId?: string | null;
+      runStatus?: BookmarkHealthScanStatus | null;
+      startedAt?: string | null;
+      completedAt?: string | null;
+      lastCheckedAt?: string | null;
     };
+  };
+  previews?: {
+    pending: OrganizeOverviewPreview<PendingOverviewItem>;
+    untagged: OrganizeOverviewPreview<UntaggedOverviewItem>;
+    duplicateBookmark: OrganizeOverviewPreview<DuplicateBookmarkOverviewItem>;
+    bookmarkHealth: OrganizeOverviewPreview<BookmarkHealthOverviewItem>;
   };
   generatedAt: string;
 }

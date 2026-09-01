@@ -12,6 +12,7 @@ import {
 } from './organizeSuppressionService.js';
 
 const MAX_SUMMARY_GROUPS = 200;
+const SUMMARY_PREVIEW_GROUPS = 3;
 
 function serviceError(code, message, status = 400, details = {}) {
   const error = new Error(message);
@@ -143,7 +144,9 @@ function buildDuplicatePreview({ groupKey, rows, tags, guards }) {
           ? '优先保留标签更完整的书签'
           : '优先保留最早创建的书签',
     members,
-    canResolve: members.some((keep) => members.every((member) => member.id === keep.id || member.guard.blockerCount === 0)),
+    canResolve: members.some((keep) =>
+      members.every((member) => member.id === keep.id || member.guard.blockerCount === 0),
+    ),
   };
 }
 
@@ -165,7 +168,9 @@ async function loadDuplicatePreview(db, { userId, groupKey: rawGroupKey, lock = 
 }
 
 async function loadDuplicatePreviews(db, { userId, candidates }) {
-  const groupKeys = [...new Set(candidates.map((candidate) => normalizeBookmarkGroupKey(candidate.group_key)).filter(Boolean))];
+  const groupKeys = [
+    ...new Set(candidates.map((candidate) => normalizeBookmarkGroupKey(candidate.group_key)).filter(Boolean)),
+  ];
   if (!groupKeys.length) return [];
   const [rows] = await db.query(
     `SELECT id, name, url, create_time AS createdAt, create_time AS updatedAt, del_flag AS delFlag,
@@ -249,9 +254,7 @@ export async function listDuplicateBookmarkGroups(
     issueType: ORGANIZE_SUPPRESSION_TYPES.DUPLICATE,
     subjectKeys: previews.map(({ preview }) => preview.groupKey),
   });
-  const visible = previews.filter(
-    ({ preview }) => suppressions.get(preview.groupKey) !== preview.contextHash,
-  );
+  const visible = previews.filter(({ preview }) => suppressions.get(preview.groupKey) !== preview.contextHash);
   const returned = visible.slice(0, limit);
   const items = returned.map(({ preview }) =>
     includeMembers
@@ -293,11 +296,18 @@ export async function getDuplicateBookmarkSummary(db, { userId, maxGroups = MAX_
   });
   const items = result.items;
   const resourceKeys = items.flatMap((group) => group.members.map((member) => `bookmark:${member.id}`));
+  const previewItems = items.slice(0, SUMMARY_PREVIEW_GROUPS).map((group) => ({
+    groupKey: group.groupKey,
+    url: group.url,
+    memberCount: group.memberCount,
+  }));
   return {
     groupCount: items.length,
     findingCount: items.length,
     affectedResourceCount: new Set(resourceKeys).size,
     resourceKeys: [...new Set(resourceKeys)],
+    previewItems,
+    previewHasMore: items.length > SUMMARY_PREVIEW_GROUPS || result.hasMore,
     exact: !result.hasMore,
     hasMore: result.hasMore,
   };
@@ -305,10 +315,17 @@ export async function getDuplicateBookmarkSummary(db, { userId, maxGroups = MAX_
 
 function normalizeResolvePayload(payload = {}) {
   const keepBookmarkId = String(payload.keepBookmarkId || '').trim();
-  const deleteBookmarkIds = [...new Set((Array.isArray(payload.deleteBookmarkIds) ? payload.deleteBookmarkIds : []).map(String).filter(Boolean))].sort();
-  const expectedContextHash = String(payload.expectedContextHash || '').trim().toLowerCase();
-  const clientRequestId = String(payload.clientRequestId || '').trim().toLowerCase();
-  if (!keepBookmarkId || !deleteBookmarkIds.length) throw serviceError('DUPLICATE_SELECTION_INVALID', '请选择要保留的书签');
+  const deleteBookmarkIds = [
+    ...new Set((Array.isArray(payload.deleteBookmarkIds) ? payload.deleteBookmarkIds : []).map(String).filter(Boolean)),
+  ].sort();
+  const expectedContextHash = String(payload.expectedContextHash || '')
+    .trim()
+    .toLowerCase();
+  const clientRequestId = String(payload.clientRequestId || '')
+    .trim()
+    .toLowerCase();
+  if (!keepBookmarkId || !deleteBookmarkIds.length)
+    throw serviceError('DUPLICATE_SELECTION_INVALID', '请选择要保留的书签');
   if (!/^[a-f0-9]{64}$/.test(expectedContextHash)) throw serviceError('ORGANIZE_CONTEXT_INVALID', '问题上下文无效');
   if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(clientRequestId)) {
     throw serviceError('ORGANIZE_REQUEST_ID_INVALID', '请求标识无效');
@@ -392,12 +409,10 @@ export async function resolveDuplicateBookmarkGroup({ userId, groupKey: rawGroup
     if (normalized.mergeTags) {
       const mergedTagIds = new Set(preview.members.flatMap((member) => member.tags.map((tag) => tag.id)));
       if (mergedTagIds.size > 4) {
-        throw serviceError(
-          'DUPLICATE_TAG_LIMIT_EXCEEDED',
-          '合并后将超过 4 个标签，请先调整标签或取消合并标签',
-          409,
-          { tagCount: mergedTagIds.size, maxTagCount: 4 },
-        );
+        throw serviceError('DUPLICATE_TAG_LIMIT_EXCEEDED', '合并后将超过 4 个标签，请先调整标签或取消合并标签', 409, {
+          tagCount: mergedTagIds.size,
+          maxTagCount: 4,
+        });
       }
     }
     const mergedTagCount = normalized.mergeTags

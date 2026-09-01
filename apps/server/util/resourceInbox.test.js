@@ -89,6 +89,50 @@ describe('resourceInbox', () => {
     });
   });
 
+  it('总览预览可复用摘要视图并跳过重复数量查询', async () => {
+    const connection = {
+      query: vi.fn().mockResolvedValueOnce([
+        [
+          {
+            resourceType: 'bookmark',
+            resourceId: 'b1',
+            source: 'quick_capture',
+            collectedAt: '2026-09-01 09:00:00',
+            title: '最新书签',
+          },
+        ],
+      ]),
+    };
+
+    const result = await listInboxResources(connection, {
+      userId: 'u1',
+      type: 'all',
+      keyword: '',
+      sort: 'newest',
+      limit: 5,
+      view: 'summary',
+      includeTotal: false,
+      includeCounts: false,
+    });
+
+    expect(connection.query).toHaveBeenCalledTimes(1);
+    expect(connection.query.mock.calls[0][0]).not.toContain('r.title, r.summary, r.detail');
+    expect(connection.query.mock.calls[0][1]).toEqual(['u1', 6, 0]);
+    expect(result).toEqual({
+      items: [
+        {
+          resourceType: 'bookmark',
+          resourceId: 'b1',
+          source: 'quick_capture',
+          collectedAt: '2026-09-01 09:00:00',
+          title: '最新书签',
+        },
+      ],
+      total: 1,
+      nextCursor: null,
+    });
+  });
+
   it('待整理列表拒绝无效资源类型，且不会查询数据库', async () => {
     const connection = { query: vi.fn() };
     await expect(listInboxResources(connection, { userId: 'u1', type: 'unsafe' })).rejects.toMatchObject({

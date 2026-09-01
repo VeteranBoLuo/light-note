@@ -51,17 +51,6 @@
             </nav>
 
             <section v-if="activeView === 'overview'" class="organize-overview organize-scroll-view">
-              <header class="organize-view-heading">
-                <div>
-                  <span class="organize-view-heading__eyebrow">{{ t('organize.overview.eyebrow') }}</span>
-                  <h2>{{ t('organize.overview.title') }}</h2>
-                  <p>{{ t('organize.overview.description') }}</p>
-                </div>
-                <BButton :loading="organize.summaryLoading" @click="refreshSummary">
-                  {{ t('organize.refresh') }}
-                </BButton>
-              </header>
-
               <div v-if="organize.summaryError && !summary" class="organize-state organize-state--error" role="alert">
                 <strong>{{ t('organize.loadFailedTitle') }}</strong>
                 <span>{{ t('organize.loadFailedDescription') }}</span>
@@ -69,67 +58,7 @@
               </div>
 
               <BLoading v-else :loading="organize.summaryLoading" :title="t('organize.loading')">
-                <div class="organize-overview__content">
-                  <section class="organize-overview-section organize-overview-section--pending">
-                    <div class="organize-overview-section__heading">
-                      <div>
-                        <h3>{{ t('organize.overview.pendingTitle') }}</h3>
-                        <p>{{ t('organize.overview.pendingDescription') }}</p>
-                      </div>
-                      <span class="organize-overview-section__rule">{{ t('organize.overview.pendingRule') }}</span>
-                    </div>
-                    <BButton
-                      class="organize-overview-card organize-overview-card--pending"
-                      @click="selectView('pending')"
-                    >
-                      <span class="organize-overview-card__icon is-pending">
-                        <SvgIcon :src="icon.contextMenu.inbox" size="21" aria-hidden="true" />
-                      </span>
-                      <span class="organize-overview-card__body">
-                        <strong>{{ t('organize.views.pending') }}</strong>
-                        <small>{{ t('organize.overview.pendingCardDescription') }}</small>
-                      </span>
-                      <span class="organize-overview-card__count">{{ pendingCount }}</span>
-                    </BButton>
-                  </section>
-
-                  <section class="organize-overview-section">
-                    <div class="organize-overview-section__heading">
-                      <div>
-                        <h3>{{ t('organize.overview.governanceTitle') }}</h3>
-                        <p>{{ t('organize.overview.governanceDescription') }}</p>
-                      </div>
-                      <span v-if="summary" class="organize-overview-section__total">
-                        {{ t('organize.overview.affectedResources', { count: affectedResourceTotal }) }}
-                      </span>
-                    </div>
-                    <div class="organize-overview-grid">
-                      <BButton
-                        v-for="card in governanceCards"
-                        :key="card.key"
-                        class="organize-overview-card"
-                        :class="`is-${card.key}`"
-                        @click="selectView(card.key)"
-                      >
-                        <span class="organize-overview-card__icon" :class="`is-${card.key}`">
-                          <SvgIcon :src="card.icon" size="20" aria-hidden="true" />
-                        </span>
-                        <span class="organize-overview-card__body">
-                          <strong>{{ card.label }}</strong>
-                          <small>{{ card.description }}</small>
-                          <span v-if="card.state === 'error'" class="organize-overview-card__state">
-                            {{ t('organize.partialUnavailable') }}
-                          </span>
-                        </span>
-                        <span class="organize-overview-card__count">{{ card.count }}</span>
-                      </BButton>
-                    </div>
-                  </section>
-
-                  <div v-if="organize.summaryError" class="organize-inline-warning" role="status">
-                    {{ t('organize.staleSummaryHint') }}
-                  </div>
-                </div>
+                <OrganizeOverviewDashboard :summary="summary" :error="organize.summaryError" @select="selectView" />
               </BLoading>
             </section>
 
@@ -568,6 +497,7 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import ResourceCenterSectionNav from '@/components/searchCenter/ResourceCenterSectionNav.vue';
+  import OrganizeOverviewDashboard from '@/view/organize/OrganizeOverviewDashboard.vue';
   import OrganizeIssueListState from '@/view/organize/OrganizeIssueListState.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import Inbox from '@/view/inbox/Inbox.vue';
@@ -704,9 +634,6 @@
   }
 
   const pendingCount = computed(() => displayCount(summary.value?.pendingShortcut.count));
-  const affectedResourceTotal = computed(() =>
-    summary.value ? displayCount(summary.value.totals.affectedResourceTotal, summary.value.totals.hasMore) : '—',
-  );
   const issueOptions = computed<Array<{ key: OrganizeView; label: string; icon: string; count: string | null }>>(() => [
     { key: 'overview', label: t('organize.views.overview'), icon: icon.ai.organize, count: null },
     { key: 'pending', label: t('organize.views.pending'), icon: icon.contextMenu.inbox, count: pendingCount.value },
@@ -729,39 +656,6 @@
       key: 'bookmark_health',
       label: t('organize.views.bookmarkHealth'),
       icon: icon.bookmarkManage.healthCheck,
-      count: displayCount(
-        summary.value?.issues.bookmarkHealth.findingCount,
-        summary.value?.issues.bookmarkHealth.hasMore,
-      ),
-    },
-  ]);
-
-  const governanceCards = computed(() => [
-    {
-      key: 'untagged' as const,
-      label: t('organize.views.untagged'),
-      description: t('organize.overview.untaggedDescription'),
-      icon: icon.resource.tag,
-      state: summary.value?.issues.untagged.state,
-      count: displayCount(summary.value?.issues.untagged.findingCount, summary.value?.issues.untagged.hasMore),
-    },
-    {
-      key: 'duplicate_bookmark' as const,
-      label: t('organize.views.duplicateBookmark'),
-      description: t('organize.overview.duplicateDescription'),
-      icon: icon.resource.bookmark,
-      state: summary.value?.issues.duplicateBookmark.state,
-      count: displayCount(
-        summary.value?.issues.duplicateBookmark.groupCount ?? summary.value?.issues.duplicateBookmark.findingCount,
-        summary.value?.issues.duplicateBookmark.hasMore,
-      ),
-    },
-    {
-      key: 'bookmark_health' as const,
-      label: t('organize.views.bookmarkHealth'),
-      description: t('organize.overview.healthDescription'),
-      icon: icon.bookmarkManage.healthCheck,
-      state: summary.value?.issues.bookmarkHealth.state,
       count: displayCount(
         summary.value?.issues.bookmarkHealth.findingCount,
         summary.value?.issues.bookmarkHealth.hasMore,
@@ -1283,28 +1177,33 @@
 
   .organize-workspace {
     display: grid;
-    grid-template-columns: 224px minmax(0, 1fr);
-    gap: 14px;
+    grid-template-columns: 208px minmax(0, 1fr);
+    gap: 22px;
   }
 
   .organize-sidebar {
+    max-height: 100%;
     min-height: 0;
+    align-self: start;
     overflow: hidden auto;
     display: flex;
     flex-direction: column;
-    gap: 5px;
-    padding: 12px 10px;
+    gap: 4px;
+    padding: 6px 18px 8px 0;
     box-sizing: border-box;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 16px;
-    background: var(--card-background);
+    border: 0;
+    border-right: 1px solid var(--surface-divider-color);
+    border-radius: 0;
+    background: transparent;
   }
 
   .organize-sidebar__heading {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 4px 10px 10px;
+    margin: 0 0 5px;
+    padding: 5px 9px 12px;
+    border-bottom: 1px solid var(--surface-divider-color);
     color: var(--desc-color);
     font-size: 12px;
     font-weight: 700;
@@ -1335,22 +1234,29 @@
   }
 
   .organize-nav-item:hover,
-  .organize-nav-item:focus-visible,
-  .organize-nav-item.active {
-    border-color: color-mix(in srgb, var(--primary-color) 30%, var(--surface-border-color));
+  .organize-nav-item:focus-visible {
     color: var(--primary-color);
     background: color-mix(in srgb, var(--primary-color) 7%, var(--card-background));
   }
 
   .organize-nav-item.active {
     border-left-color: var(--primary-color);
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 7%, var(--card-background));
     font-weight: 700;
+  }
+
+  .organize-nav-item:focus-visible {
+    border-color: var(--primary-color);
+    outline: none;
   }
 
   .organize-nav-item__count,
   .organize-mobile-nav__count {
     min-width: 22px;
     padding: 1px 6px;
+    box-sizing: border-box;
+    border: 1px solid transparent;
     border-radius: 999px;
     color: var(--desc-color);
     background: var(--workspace-panel-bg-color);
@@ -1361,8 +1267,9 @@
 
   .organize-nav-item.active .organize-nav-item__count,
   .organize-mobile-nav__item.active .organize-mobile-nav__count {
-    color: #fff;
-    background: var(--primary-color);
+    border: 1px solid var(--primary-color);
+    color: var(--primary-color);
+    background: var(--card-background);
   }
 
   .organize-main {
@@ -1411,8 +1318,7 @@
     text-transform: uppercase;
   }
 
-  .organize-view-heading h2,
-  .organize-overview-section h3 {
+  .organize-view-heading h2 {
     margin: 0;
     color: var(--text-color);
   }
@@ -1422,130 +1328,11 @@
     line-height: 1.25;
   }
 
-  .organize-view-heading p,
-  .organize-overview-section p {
+  .organize-view-heading p {
     margin: 5px 0 0;
     color: var(--desc-color);
     font-size: 13px;
     line-height: 1.55;
-  }
-
-  .organize-overview__content {
-    display: grid;
-    gap: 20px;
-  }
-
-  .organize-overview-section {
-    display: grid;
-    gap: 12px;
-  }
-
-  .organize-overview-section--pending {
-    padding-bottom: 20px;
-    border-bottom: 1px solid var(--surface-divider-color);
-  }
-
-  .organize-overview-section__heading {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .organize-overview-section h3 {
-    font-size: 16px;
-  }
-
-  .organize-overview-section__rule,
-  .organize-overview-section__total {
-    flex: 0 0 auto;
-    color: var(--desc-color);
-    font-size: 12px;
-  }
-
-  .organize-overview-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
-  }
-
-  .organize-overview-card {
-    width: 100%;
-    height: auto;
-    min-height: 108px;
-    display: grid;
-    grid-template-columns: 44px minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 12px;
-    padding: 16px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 16px;
-    color: var(--text-color);
-    background: var(--card-background);
-    box-shadow: var(--surface-card-shadow, none);
-    text-align: left;
-    white-space: normal;
-  }
-
-  .organize-overview-card:hover,
-  .organize-overview-card:focus-visible {
-    border-color: var(--primary-color);
-  }
-
-  .organize-overview-card--pending {
-    min-height: 92px;
-    border-left: 4px solid var(--primary-color);
-  }
-
-  .organize-overview-card__icon {
-    width: 42px;
-    height: 42px;
-    display: grid;
-    place-items: center;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 13px;
-    color: var(--primary-color);
-    background: var(--workspace-panel-bg-color);
-  }
-
-  .organize-overview-card__icon.is-untagged {
-    color: var(--resource-tag-color, #ec4899);
-  }
-
-  .organize-overview-card__icon.is-duplicate_bookmark {
-    color: var(--resource-bookmark-color, #615ced);
-  }
-
-  .organize-overview-card__icon.is-bookmark_health {
-    color: var(--danger-color, #dc3f4f);
-  }
-
-  .organize-overview-card__body {
-    min-width: 0;
-    display: grid;
-    gap: 4px;
-  }
-
-  .organize-overview-card__body strong {
-    font-size: 15px;
-  }
-
-  .organize-overview-card__body small {
-    color: var(--desc-color);
-    font-size: 12px;
-    line-height: 1.5;
-  }
-
-  .organize-overview-card__count {
-    color: var(--text-color);
-    font-size: 28px;
-    font-weight: 760;
-    line-height: 1;
-  }
-
-  .organize-overview-card__state {
-    color: var(--danger-color, #dc3f4f);
-    font-size: 11px;
   }
 
   .organize-pending-content {
@@ -2074,11 +1861,7 @@
 
   @media (max-width: 1100px) and (min-width: 768px) {
     .organize-workspace {
-      grid-template-columns: 198px minmax(0, 1fr);
-    }
-
-    .organize-overview-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: 190px minmax(0, 1fr);
     }
 
     .organize-resource-row,
@@ -2148,10 +1931,11 @@
       flex: 0 0 auto;
       gap: 7px;
       padding: 0 12px;
-      border: 1px solid var(--surface-border-color);
+      border: 2px solid transparent;
       border-radius: 12px;
       color: var(--desc-color);
       background: var(--card-background);
+      box-shadow: inset 0 0 0 1px var(--surface-border-color);
       scroll-snap-align: start;
     }
 
@@ -2160,6 +1944,7 @@
       color: var(--primary-color);
       background: var(--card-background);
       font-weight: 700;
+      box-shadow: none;
     }
 
     .organize-scroll-view,
@@ -2191,26 +1976,6 @@
     .organize-view-heading > .b_btn {
       min-height: 40px;
       flex: 0 0 auto;
-    }
-
-    .organize-overview-section__heading {
-      align-items: flex-start;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .organize-overview-grid {
-      grid-template-columns: 1fr;
-      gap: 9px;
-    }
-
-    .organize-overview-card {
-      min-height: 92px;
-      padding: 13px;
-    }
-
-    .organize-overview-card__count {
-      font-size: 24px;
     }
 
     .organize-filter-bar {
@@ -2315,10 +2080,15 @@
     box-shadow: none;
   }
 
-  :global(html.light-note-mobile-rendering .organize-overview-card),
   :global(html.light-note-mobile-rendering .organize-resource-row),
   :global(html.light-note-mobile-rendering .organize-duplicate-card),
   :global(html.light-note-mobile-rendering .organize-health-row) {
     box-shadow: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .organize-nav-item.b_btn {
+      transition: none;
+    }
   }
 </style>

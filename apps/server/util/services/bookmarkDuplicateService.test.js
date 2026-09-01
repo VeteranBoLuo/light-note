@@ -64,9 +64,12 @@ vi.mock('./organizeSuppressionService.js', () => ({
   upsertOrganizeSuppression: vi.fn(async (_db, value) => value),
 }));
 
-const { getDuplicateBookmarkPreview, listDuplicateBookmarkGroups, resolveDuplicateBookmarkGroup } = await import(
-  './bookmarkDuplicateService.js'
-);
+const {
+  getDuplicateBookmarkPreview,
+  getDuplicateBookmarkSummary,
+  listDuplicateBookmarkGroups,
+  resolveDuplicateBookmarkGroup,
+} = await import('./bookmarkDuplicateService.js');
 
 function exactKey(url) {
   return crypto.createHash('sha256').update(Buffer.from(url, 'utf8')).digest('hex');
@@ -163,6 +166,49 @@ describe('bookmarkDuplicateService', () => {
     const candidateSql = connection.query.mock.calls.find(([sql]) => String(sql).includes('SELECT groups.*'))?.[0];
     expect(candidateSql).toContain('MAX(create_time) AS updated_at');
     expect(candidateSql).not.toMatch(/\bupdate_time\b/);
+  });
+
+  it('摘要在同一次分组查询中产出最多 3 条精简预览', async () => {
+    const groups = Array.from({ length: 4 }, (_, index) => {
+      const groupUrl = `https://example.com/group-${index}`;
+      return { url: groupUrl, groupKey: exactKey(groupUrl) };
+    });
+    state.candidates = groups.map((group, index) => ({
+      group_key: group.groupKey,
+      updated_at: `2026-08-${String(31 - index).padStart(2, '0')} 12:00:00`,
+    }));
+    state.members = groups.flatMap((group, index) => [
+      {
+        id: `bookmark-${index}-a`,
+        name: `分组 ${index} A`,
+        url: group.url,
+        createdAt: '2026-01-01',
+        groupKey: group.groupKey,
+      },
+      {
+        id: `bookmark-${index}-b`,
+        name: `分组 ${index} B`,
+        url: group.url,
+        createdAt: '2026-02-01',
+        groupKey: group.groupKey,
+      },
+    ]);
+    state.guards = new Map(state.members.map((member) => [member.id, emptyGuard()]));
+
+    const result = await getDuplicateBookmarkSummary(connection, { userId: 'user-1' });
+
+    expect(result.groupCount).toBe(4);
+    expect(result.previewItems).toHaveLength(3);
+    expect(result.previewHasMore).toBe(true);
+    expect(result.previewItems.map((item) => item.groupKey)).toEqual(groups.slice(0, 3).map((group) => group.groupKey));
+    result.previewItems.forEach((item) => {
+      expect(item).toEqual({
+        groupKey: expect.stringMatching(/^[a-f0-9]{64}$/),
+        url: expect.stringMatching(/^https:\/\/example\.com\/group-/),
+        memberCount: 2,
+      });
+    });
+    expect(connection.query.mock.calls.filter(([sql]) => String(sql).includes('SELECT groups.*'))).toHaveLength(1);
   });
 
   it('解决动作在事务内复核上下文、合并标签并软删除，重试返回同一结果', async () => {

@@ -103,17 +103,18 @@ function normalizeInboxListOptions(input = {}) {
  * 待整理列表的唯一查询入口。资源本体通过 UNION 后再与关系表 INNER JOIN，
  * 因此已删除、不可用或不属于当前主体的资源不会出现在页面或 Agent 结果中。
  * full 视图供页面渲染；summary 视图刻意不选择 note 正文、书签 URL 等敏感字段。
+ * 内部组合读模型可传 includeCounts=false，避免在已单独查询数量时重复聚合。
  */
 export async function listInboxResources(db, { userId, ...input } = {}) {
   const ownerId = String(userId || '').trim();
+  const includeCounts = input.includeCounts !== false;
   if (!ownerId) {
-    return {
+    const empty = {
       items: [],
       total: 0,
       nextCursor: null,
-      pendingTotal: 0,
-      typeTotals: { bookmark: 0, note: 0, file: 0 },
     };
+    return includeCounts ? { ...empty, pendingTotal: 0, typeTotals: { bookmark: 0, note: 0, file: 0 } } : empty;
   }
   const { type, sort, keyword, paginated, limit, offset, view, includeTotal } = normalizeInboxListOptions(input);
   const where = [`i.user_id = ?`, `i.status = 'pending'`];
@@ -147,7 +148,7 @@ export async function listInboxResources(db, { userId, ...input } = {}) {
   const [[rows], countResult, counts] = await Promise.all([
     db.query(pageSql, pageParams),
     includeTotal ? db.query(`SELECT COUNT(*) AS total ${fromSql}`, params) : null,
-    queryPendingCount(db, ownerId),
+    includeCounts ? queryPendingCount(db, ownerId) : null,
   ]);
   const hasMore = paginated && rows.length > limit;
   const page = hasMore ? rows.slice(0, limit) : rows;
@@ -160,7 +161,7 @@ export async function listInboxResources(db, { userId, ...input } = {}) {
     })),
     total: includeTotal ? Number(countResult?.[0]?.[0]?.total || 0) : page.length,
     nextCursor: hasMore ? encodeOffsetCursor(INBOX_PAGE_CURSOR_SCOPE, offset + page.length) : null,
-    ...counts,
+    ...(counts || {}),
   };
 }
 
