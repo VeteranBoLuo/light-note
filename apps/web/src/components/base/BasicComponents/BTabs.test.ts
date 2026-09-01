@@ -9,7 +9,7 @@ afterEach(() => {
   cleanup = undefined;
 });
 
-function mountTabs() {
+function mountTabs(variant: 'line' | 'solid' = 'line') {
   const host = document.createElement('div');
   document.body.append(host);
   const active = ref('ask');
@@ -25,6 +25,7 @@ function mountTabs() {
             { key: 'organize', label: 'Organize' },
           ],
           activeTab: active.value,
+          variant,
           'onUpdate:activeTab': (value: string) => {
             active.value = value;
           },
@@ -42,6 +43,12 @@ function mountTabs() {
 }
 
 describe('BTabs keyboard navigation', () => {
+  it('exposes the solid variant through the shared component root', () => {
+    const { host } = mountTabs('solid');
+    expect(host.querySelector('[role="tablist"]')?.classList.contains('is-solid')).toBe(true);
+    expect(host.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toContain('Ask');
+  });
+
   it('uses roving focus and activates the next tab with ArrowRight', async () => {
     const { host, active, onChange } = mountTabs();
     const tabs = host.querySelectorAll<HTMLElement>('[role="tab"]');

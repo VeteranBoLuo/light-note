@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import icon from '@/config/icon';
 
 const source = readFileSync(resolve(process.cwd(), 'src/view/noteLibrary/NoteLibrary.vue'), 'utf8');
 const detailSource = readFileSync(resolve(process.cwd(), 'src/view/noteLibrary/NoteDetail.vue'), 'utf8');
@@ -86,6 +87,13 @@ describe('笔记库批量 AI 操作语义', () => {
     expect(source).not.toContain('@click="openBatchTags(\'remove\')"');
     expect(source).not.toContain('@click="openBatchExportModal"');
     expect(source).toContain("{{ $t('note.exitBatch') }}");
+    expect(source).toContain('class="note-action-button note-exit-batch-button"');
+    expect(source).toContain('class="note-action-button note-batch-icon-button note-exit-batch-button"');
+    expect(source).toContain('<SvgIcon :src="icon.navigation.exit" size="16" />');
+    expect(source).toContain('<SvgIcon :src="icon.navigation.exit" size="17" />');
+    expect(icon.navigation.exit).toBeTruthy();
+    expect(icon.navigation.exit).not.toBe(icon.nullImg);
+    expect(source).toMatch(/\.note-exit-batch-button\s*\{[\s\S]*border: 1px solid var\(--desc-color\)/);
     expect(source).not.toContain("{{ $t('note.batchDone') }}");
     expect(zhLocaleSource).toContain("exitBatch: '退出批量操作'");
     expect(enLocaleSource).toContain("exitBatch: 'Exit Batch'");

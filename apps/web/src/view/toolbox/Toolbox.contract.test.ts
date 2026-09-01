@@ -445,7 +445,9 @@ describe('知识工具箱前端边界', () => {
     expect(task).toContain("t('toolbox.task.aiQuotaBillingDescription')");
     expect(home).toContain('aiQuotaBalanceLabel');
     expect(home).toContain("tool.billingMedia.includes('ai_quota')");
-    expect(home).toContain("t('toolbox.billingChoiceRange'");
+    expect(home).toContain("t('toolbox.billingChoiceLabel')");
+    expect(home).toContain("t('toolbox.pointsLabel')");
+    expect(home).not.toContain("t('toolbox.billingChoiceRange'");
     expect(task).toContain("job.artifactState === 'expired'");
     expect(task).toContain('v-if="artifactLoading"');
     expect(task).toContain('@click="retryArtifact"');

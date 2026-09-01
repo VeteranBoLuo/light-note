@@ -961,6 +961,7 @@ export default {
     historyStatus: '状态',
     historyCost: '积分',
     free: '免费',
+    pointsLabel: '积分',
     points: '{min}–{max} 积分',
     pointsExact: '{points} 积分',
     billingChoiceLabel: 'AI 额度 / 积分',

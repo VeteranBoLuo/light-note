@@ -562,11 +562,7 @@
   const toolDescription = (toolId: string) => t('toolbox.tool.' + toolId + '.description');
   function billingLabel(tool: ToolboxCatalogItem) {
     if (tool.price.kind !== 'free') {
-      if (tool.price.min <= 0) return t('toolbox.pointsTools');
-      if (tool.billingMedia.includes('ai_quota')) {
-        return t('toolbox.billingChoiceRange', { min: tool.price.min, max: tool.price.max });
-      }
-      return t('toolbox.points', { min: tool.price.min, max: tool.price.max });
+      return tool.billingMedia.includes('ai_quota') ? t('toolbox.billingChoiceLabel') : t('toolbox.pointsLabel');
     }
     return tool.executionMode === 'service' ? t('toolbox.accountFreeLabel') : t('toolbox.localFreeLabel');
   }

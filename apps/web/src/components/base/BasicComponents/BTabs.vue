@@ -39,7 +39,7 @@
   const props = withDefaults(
     defineProps<{
       options: (string | TabItem)[];
-      variant?: 'line' | 'pill' | 'segment';
+      variant?: 'line' | 'pill' | 'segment' | 'solid';
     }>(),
     {
       options: () => [],
@@ -289,5 +289,56 @@
     font-weight: 650;
     background: color-mix(in srgb, var(--primary-color) 8%, var(--card-background));
     box-shadow: inset 0 -2px 0 var(--primary-color);
+  }
+
+  .tab-container.is-solid {
+    width: fit-content;
+    max-width: 100%;
+    gap: 4px;
+    margin: 0;
+    padding: 4px;
+    overflow: hidden;
+    border: 1px solid var(--surface-border-color, var(--card-border-color));
+    border-radius: 14px;
+    background: var(--workspace-panel-bg-color, var(--card-background));
+  }
+
+  .is-solid .tab {
+    min-width: 122px;
+    min-height: 40px;
+    justify-content: center;
+    margin: 0;
+    padding: 0 18px;
+    border: 0;
+    border-radius: 10px;
+    color: var(--text-color-secondary, var(--desc-color));
+    font-size: 14px;
+    line-height: 1.35;
+    transition:
+      color 0.16s ease,
+      background 0.16s ease;
+  }
+
+  .is-solid .tab:hover {
+    color: var(--text-color);
+    background: var(--hover-background);
+  }
+
+  .is-solid .tab:focus-visible {
+    z-index: 1;
+    outline: 2px solid var(--b-tabs-accent-color, var(--primary-color));
+    outline-offset: 1px;
+  }
+
+  .is-solid .tab.is-active {
+    color: #fff;
+    font-weight: 700;
+    background: var(--b-tabs-accent-color, var(--primary-color));
+  }
+
+  .is-solid .tab.is-active .tab-badge {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.2);
+    opacity: 1;
   }
 </style>

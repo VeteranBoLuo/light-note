@@ -263,8 +263,9 @@
 .campaign-heading h3 {
   font-size: 21px;
 }
-.store-tabs {
-  margin-bottom: 17px;
+.store-tabs.is-solid {
+  margin-bottom: 20px;
+  overflow: visible;
 }
 .package-grid {
   display: grid;
@@ -424,15 +425,20 @@
   .store-section__heading h2 {
     font-size: 24px;
   }
-  .store-tabs {
+  .store-tabs.is-solid {
     position: sticky;
     z-index: 3;
     top: 8px;
-    margin: 0 -4px 16px;
-    padding: 4px;
-    border: 1px solid var(--surface-border-color);
+    width: calc(100% + 8px);
+    margin: 0 -4px 18px;
     border-radius: 12px;
     background: var(--surface-page-bg, var(--background-color));
+  }
+  .store-tabs.is-solid :deep(.tab) {
+    min-width: 0;
+    min-height: 44px;
+    flex: 1 1 0;
+    padding: 0 10px;
   }
   .package-grid,
   .store-flow__steps {

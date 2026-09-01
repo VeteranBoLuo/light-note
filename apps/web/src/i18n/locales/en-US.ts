@@ -1037,6 +1037,7 @@ export default {
     historyStatus: 'Status',
     historyCost: 'Points',
     free: 'Free',
+    pointsLabel: 'Points',
     points: '{min}–{max} points',
     pointsExact: '{points} points',
     billingChoiceLabel: 'AI quota / points',
