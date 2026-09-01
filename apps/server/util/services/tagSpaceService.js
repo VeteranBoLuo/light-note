@@ -630,6 +630,61 @@ export async function queryTagSpaceList(
   };
 }
 
+/**
+ * 资源中心关键词搜索里的标签导航候选。
+ *
+ * 标签不是资源结果，因而这里只复用标签空间的存活资源统计口径，返回轻量摘要；
+ * 不加载预览资源、分面和覆盖率，避免每次关键词搜索承担完整标签空间首页的查询成本。
+ */
+export async function queryTagMatches(db, { userId, keyword = '', limit = 8 } = {}) {
+  const ownerId = String(userId || '').trim();
+  if (!ownerId) throw new Error('USER_REQUIRED');
+  const normalizedKeyword = normalizeKeyword(keyword);
+  if (!normalizedKeyword) return [];
+
+  const normalizedLimit = toPositiveInteger(limit, 8, 20);
+  const params = [ownerId, ownerId];
+  const keywordCondition = buildKeywordCondition(normalizedKeyword, params);
+  const escapedKeyword = escapeLike(normalizedKeyword);
+  params.push(normalizedKeyword, `${escapedKeyword}%`, normalizedLimit);
+
+  const [rows] = await db.query(
+    `SELECT ${TAG_BASE_COLUMNS}
+     FROM tag t
+     ${LIVE_RESOURCE_STATS_JOIN}
+     WHERE t.user_id = ? AND t.del_flag = 0${keywordCondition}
+     ORDER BY
+       CASE
+         WHEN LOWER(t.name) = LOWER(?) THEN 0
+         WHEN t.name LIKE ? ESCAPE '!' THEN 1
+         ELSE 2
+       END,
+       (
+         COALESCE(stats.bookmark_count, 0)
+         + COALESCE(stats.note_count, 0)
+         + COALESCE(stats.file_count, 0)
+       ) DESC,
+       stats.last_activity_time DESC,
+       t.sort,
+       t.id DESC
+     LIMIT ?`,
+    params,
+  );
+
+  return (rows || []).map((row) => {
+    const summary = normalizeSummaryRow(row);
+    return {
+      id: summary.id,
+      name: summary.name,
+      description: summary.description,
+      iconUrl: summary.iconUrl,
+      lastActivityTime: summary.lastActivityTime,
+      counts: summary.counts,
+      route: `/tag/${encodeURIComponent(summary.id)}`,
+    };
+  });
+}
+
 export async function getTagSpaceOverview(db, { userId, tagId, relatedLimit = 8 } = {}) {
   const ownerId = String(userId || '').trim();
   const normalizedTagId = String(tagId || '').trim();

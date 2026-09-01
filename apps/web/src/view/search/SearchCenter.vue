@@ -1,6 +1,6 @@
 <template>
   <div class="search-center-route">
-    <!-- “全部资源 / 待整理”表达资源范围；知识地图是全部资源的独立查看方式。 -->
+    <!-- “查找 / 待整理”表达工作任务；全局图谱是跨资源关系的独立查看方式。 -->
     <ResourceCenterTopBar
       v-if="bookmark.isMobile && !isKnowledgeMapView"
       :keyword="queryState.keyword"
@@ -104,6 +104,73 @@
                     <span class="filter-dot" aria-hidden="true"></span>
                     <span class="resource-scope-item__label">{{ t('resourceCenter.untagged') }}</span>
                   </BButton>
+                </div>
+              </section>
+              <div class="resource-scope-divider"></div>
+              <section class="resource-scope-section resource-scope-section--tags">
+                <BButton
+                  class="resource-scope-title"
+                  :aria-expanded="scopeTagsExpanded"
+                  :title="t(scopeTagsExpanded ? 'common.collapse' : 'common.expand')"
+                  @click="scopeTagsExpanded = !scopeTagsExpanded"
+                >
+                  <span>{{ t('resourceCenter.tagFilter') }}</span>
+                  <span v-if="queryState.tags.length" class="resource-scope-title__count">{{
+                    queryState.tags.length
+                  }}</span>
+                  <SvgIcon
+                    class="resource-scope-chevron"
+                    :class="{ 'is-expanded': scopeTagsExpanded }"
+                    :src="icon.noteTree.chevron"
+                    size="13"
+                    aria-hidden="true"
+                  />
+                </BButton>
+                <div v-show="scopeTagsExpanded" class="resource-scope-tag-filter">
+                  <div v-if="queryState.tags.length" class="resource-scope-selected-tags">
+                    <ResourceTagChip
+                      v-for="tag in queryState.tags"
+                      :key="tag"
+                      :tag="{ name: tag }"
+                      size="small"
+                      interactive
+                      selected
+                      show-selected-indicator
+                      max-width="100%"
+                      @click="toggleTagFilter(tag)"
+                    />
+                  </div>
+                  <BPopover v-if="tagOptions.length" v-model:open="showAllTags" trigger="click" placement="bottom-left">
+                    <BButton class="resource-scope-tag-trigger">
+                      <SvgIcon :src="icon.resource.tag" size="15" aria-hidden="true" />
+                      <span>{{ t('resourceCenter.chooseTags') }}</span>
+                      <span>{{ tagOptions.length }}</span>
+                    </BButton>
+                    <template #content>
+                      <div class="tag-filter-popover">
+                        <BInput
+                          v-model:value="tagSearch"
+                          :placeholder="t('resourceCenter.tagSearchPlaceholder')"
+                          clearable
+                        />
+                        <div class="tag-filter-popover__items">
+                          <ResourceTagChip
+                            v-for="tag in filteredTagOptions"
+                            :key="tag"
+                            :tag="{ name: tag }"
+                            class="tag-chip"
+                            size="medium"
+                            interactive
+                            :selected="queryState.tags.includes(tag)"
+                            show-selected-indicator
+                            max-width="min(180px, 100%)"
+                            @click="toggleTagFilter(tag)"
+                          />
+                        </div>
+                      </div>
+                    </template>
+                  </BPopover>
+                  <span v-else class="resource-scope-empty-hint">{{ t('resourceCenter.noTagsAvailable') }}</span>
                 </div>
               </section>
             </aside>
@@ -249,66 +316,6 @@
                 </div>
               </div>
 
-              <section v-if="!bookmark.isMobile" class="advanced-filters">
-                <div class="tag-filter-wrap" v-if="tagOptions.length">
-                  <div class="tag-filter-label">
-                    <span>{{ t('resourceCenter.tagFilter') }}</span>
-                    <small>{{ t('resourceCenter.tagFilterAnyHint') }}</small>
-                  </div>
-                  <div class="tag-filter-main">
-                    <div class="tag-filter-list">
-                      <ResourceTagChip
-                        v-for="tag in inlineTagOptions"
-                        :key="tag"
-                        :tag="{ name: tag }"
-                        class="tag-chip"
-                        size="medium"
-                        interactive
-                        :selected="queryState.tags.includes(tag)"
-                        show-selected-indicator
-                        max-width="108px"
-                        @click="toggleTagFilter(tag)"
-                      />
-                    </div>
-                    <BPopover
-                      v-if="tagOptions.length > inlineTagOptions.length"
-                      v-model:open="showAllTags"
-                      trigger="click"
-                      placement="bottom-right"
-                    >
-                      <BButton class="tag-toggle-btn">
-                        {{
-                          showAllTags
-                            ? t('resourceCenter.tagCollapse')
-                            : t('resourceCenter.tagExpand', { count: tagOptions.length })
-                        }}
-                      </BButton>
-                      <template #content>
-                        <div class="tag-filter-popover">
-                          <BInput
-                            v-model:value="tagSearch"
-                            :placeholder="t('resourceCenter.tagSearchPlaceholder')"
-                            clearable
-                          />
-                          <ResourceTagChip
-                            v-for="tag in filteredTagOptions"
-                            :key="tag"
-                            :tag="{ name: tag }"
-                            class="tag-chip"
-                            size="medium"
-                            interactive
-                            :selected="queryState.tags.includes(tag)"
-                            show-selected-indicator
-                            max-width="min(180px, 100%)"
-                            @click="toggleTagFilter(tag)"
-                          />
-                        </div>
-                      </template>
-                    </BPopover>
-                  </div>
-                </div>
-              </section>
-
               <section v-if="batchMode" class="batch-toolbar">
                 <div class="batch-left">
                   <span>
@@ -380,6 +387,8 @@
                 @touchend.passive="pullRefresh.onTouchEnd"
                 @touchcancel.passive="pullRefresh.onTouchCancel"
               >
+                <TagMatchStrip v-if="!shouldShowLoadingSkeleton" :items="viewState.tagMatches" @open="openTagMatch" />
+
                 <div
                   v-if="shouldShowLoadingSkeleton"
                   class="result-skeleton"
@@ -469,13 +478,6 @@
                     >
                       {{ t('resourceCenter.emptyActionFile') }}
                     </BButton>
-                    <BButton
-                      class="empty-action-btn"
-                      @click="router.push('/manage/tagMg')"
-                      v-click-log="{ module: '资源中心', operation: '空状态进入标签管理' }"
-                    >
-                      {{ t('resourceCenter.emptyActionTag') }}
-                    </BButton>
                   </div>
                 </div>
                 <div
@@ -507,94 +509,21 @@
                 :icon-src="icon.ai.organize"
                 presentation="sidebar"
               />
-              <template v-else-if="inspectedResource">
-                <div
-                  class="resource-inspector-hero"
-                  :class="[
-                    'is-' + inspectedResource.type,
-                    { 'resource-inspector-hero--expanded': inspectedResource.type === 'note' },
-                  ]"
-                >
-                  <div class="resource-inspector-identity">
-                    <span class="resource-inspector-icon" aria-hidden="true">
-                      <SvgIcon :src="inspectedResourceIcon" size="23" />
-                    </span>
-                    <div class="resource-inspector-identity__copy">
-                      <span>{{ t('resourceCenter.currentResource') }}</span>
-                      <strong>{{ getSearchTypeLabel(t, inspectedResource.type) }}</strong>
-                    </div>
-                  </div>
-                  <h2>{{ inspectedResource.title || '-' }}</h2>
-                  <p v-auto-scrollbar class="resource-inspector-description">{{ inspectedResourcePreview }}</p>
-                </div>
-                <dl class="resource-inspector-meta">
-                  <div v-if="inspectedResource.type === 'note'">
-                    <dt>{{ t('resourceCenter.noteType') }}</dt>
-                    <dd>{{ inspectedNoteTypeLabel }}</dd>
-                  </div>
-                  <div>
-                    <dt>{{
-                      t(inspectedResource.type === 'note' ? 'resourceCenter.location' : 'resourceCenter.source')
-                    }}</dt>
-                    <dd>{{
-                      inspectedResource.type === 'note'
-                        ? inspectedResource.path || t('resourceCenter.rootLocation')
-                        : inspectedResource.domain || inspectedResource.category || '-'
-                    }}</dd>
-                  </div>
-                  <div>
-                    <dt>{{ t('resourceCenter.updatedAt') }}</dt>
-                    <dd>{{ inspectedResource.updatedAtText || inspectedResource.extra || '-' }}</dd>
-                  </div>
-                </dl>
-                <div v-if="inspectedResource.tagNames.length" class="resource-inspector-tags">
-                  <span>{{ t('resourceCenter.tags') }}</span>
-                  <ResourceTagChip
-                    v-for="tag in inspectedResource.tagNames.slice(0, 6)"
-                    :key="tag"
-                    :tag="{ name: tag }"
-                    size="small"
-                  />
-                </div>
-                <div class="resource-inspector-actions">
-                  <BButton
-                    v-if="inspectedResource.type !== 'tag'"
-                    block
-                    size="large"
-                    type="function"
-                    class="resource-inspector-action--ai"
-                    @click="openResourceAi(inspectedResource)"
-                  >
-                    <SvgIcon :src="icon.ai.organize" size="17" aria-hidden="true" />
-                    {{ t('resourceCenter.analyzeResource') }}
-                  </BButton>
-                  <BButton block size="large" type="primary" @click="openItem(inspectedResource)">
-                    <SvgIcon :src="icon.noteTree.openPage" size="17" aria-hidden="true" />
-                    {{ t('resourceCenter.openResource') }}
-                  </BButton>
-                  <BButton
-                    v-if="inspectedResource.type !== 'tag'"
-                    block
-                    size="large"
-                    class="resource-inspector-action--inbox"
-                    @click="handleItemMenu('addInbox', inspectedResource)"
-                  >
-                    {{ t('inbox.addExisting') }}
-                  </BButton>
-                  <BButton
-                    block
-                    size="large"
-                    class="resource-inspector-action--delete"
-                    @click="handleItemMenu('delete', inspectedResource)"
-                  >
-                    {{ t('inbox.deleteResource') }}
-                  </BButton>
-                </div>
-              </template>
-              <div v-else class="resource-inspector-empty">
-                <strong>{{ t('resourceCenter.inspectorEmptyTitle') }}</strong>
-                <p>{{ t('resourceCenter.inspectorEmptyDesc') }}</p>
-              </div>
+              <ResourceInspectorPanel
+                v-else
+                :resource="inspectedResource"
+                :icon-src="inspectedResourceIcon"
+                :type-label="inspectedResource ? getSearchTypeLabel(t, inspectedResource.type) : ''"
+                :preview="inspectedResourcePreview"
+                :note-type-label="inspectedNoteTypeLabel"
+                presentation="sidebar"
+                @open="openItem"
+                @analyze="openResourceAi"
+                @inbox="(item) => handleItemMenu('addInbox', item)"
+                @add-tag="(item) => openSingleTagWorkspace(item, 'add')"
+                @remove-tag="(item) => openSingleTagWorkspace(item, 'remove')"
+                @delete="(item) => handleItemMenu('delete', item)"
+              />
             </aside>
           </section>
         </template>
@@ -713,6 +642,30 @@
         </div>
       </div>
     </BDrawer>
+    <BDrawer
+      v-if="bookmark.isMobile && !isKnowledgeMapView"
+      :open="mobileInspectorVisible"
+      :title="t('resourceCenter.resourceDetails')"
+      placement="bottom"
+      height="min(82dvh, 720px)"
+      body-padding="14px 16px max(16px, env(safe-area-inset-bottom))"
+      @close="mobileInspectorVisible = false"
+    >
+      <ResourceInspectorPanel
+        :resource="inspectedResource"
+        :icon-src="inspectedResourceIcon"
+        :type-label="inspectedResource ? getSearchTypeLabel(t, inspectedResource.type) : ''"
+        :preview="inspectedResourcePreview"
+        :note-type-label="inspectedNoteTypeLabel"
+        presentation="drawer"
+        @open="openInspectedMobileResource"
+        @analyze="openInspectedMobileAi"
+        @inbox="(item) => handleItemMenu('addInbox', item)"
+        @add-tag="(item) => openSingleTagWorkspace(item, 'add')"
+        @remove-tag="(item) => openSingleTagWorkspace(item, 'remove')"
+        @delete="(item) => handleItemMenu('delete', item)"
+      />
+    </BDrawer>
     <MobilePageActionsDrawer
       v-if="bookmark.isMobile"
       v-model:open="mobileBatchActionsOpen"
@@ -751,7 +704,7 @@
     type BatchSelectionSummary,
     type SearchCursor,
     type SearchResultItem,
-    type SearchType,
+    type TagMatchItem,
   } from '@/api/search.ts';
   import { bookmarkStore, inboxStore, useUserStore } from '@/store';
   import { updatePreference } from '@/utils/savePreference';
@@ -768,7 +721,7 @@
     type ResourceView,
   } from '@/components/searchCenter/searchUtils.ts';
   import { getSearchTypeLabel, SEARCH_CENTER_TYPE_LIST } from '@/components/searchCenter/searchMeta.ts';
-  import { isResourceSearchType, type GlobalSearchType } from '@/utils/globalSearchTypes';
+  import { isTaggableResourceType, type GlobalSearchType, type TaggableResourceType } from '@/utils/globalSearchTypes';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { apiBasePost } from '@/http/request.ts';
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
@@ -782,6 +735,9 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { SEARCH_PAGE_SIZE, mergeResourcePage } from '@/utils/resourcePagination';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
+  import TagMatchStrip from '@/components/searchCenter/TagMatchStrip.vue';
+  import ResourceInspectorPanel from '@/components/searchCenter/ResourceInspectorPanel.vue';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
 
   const SearchResultItem = SearchResultItemComp;
   const GlobalGraph = defineAsyncComponent(() => import('@/view/graph/GlobalGraph.vue'));
@@ -801,12 +757,14 @@
   const syncTimer = ref<number | null>(null);
   const isRouteApplying = ref(false);
   const mobileFilterVisible = ref(false);
+  const mobileInspectorVisible = ref(false);
   const mobileBatchActionsOpen = ref(false);
   const batchMode = ref(false);
   const tagSearch = ref('');
   const showLoadingSkeleton = ref(false);
   const scopeTypesExpanded = ref(true);
   const scopeStateExpanded = ref(true);
+  const scopeTagsExpanded = ref(true);
   let skeletonTimer: number | null = null;
   const resultScrollRef = ref<HTMLElement | null>(null);
 
@@ -845,8 +803,8 @@
 
   const queryState = reactive<{
     keyword: string;
-    type: GlobalSearchType | 'all';
-    types: GlobalSearchType[];
+    type: TaggableResourceType | 'all';
+    types: TaggableResourceType[];
     sort: ResourceSort;
     view: ResourceView;
     tags: string[];
@@ -856,7 +814,7 @@
     keyword: '',
     type: 'all',
     types: [],
-    sort: (user.preferences.resourceSort as ResourceSort) || 'relevance',
+    sort: 'updated',
     view:
       (user.preferences.resourceView as ResourceView) ||
       (localStorage.getItem(SEARCH_VIEW_STORAGE_KEY) as ResourceView) ||
@@ -873,6 +831,7 @@
     nextCursor: SearchCursor | null;
     hasMore: boolean;
     tagOptions: string[];
+    tagMatches: TagMatchItem[];
     error: { message: string; requestId: string } | null;
   }>({
     loading: false,
@@ -881,6 +840,7 @@
     nextCursor: null,
     hasMore: false,
     tagOptions: [],
+    tagMatches: [],
     error: null,
   });
 
@@ -888,7 +848,7 @@
   const searchAiVisible = ref(false);
   const explicitSearchAiResourceContext = ref<{
     ref: AiSkillResourceRef;
-    type: GlobalSearchType;
+    type: TaggableResourceType;
     title: string;
   } | null>(null);
   const allMatchingSummary = ref<BatchSelectionSummary | null>(null);
@@ -931,16 +891,15 @@
   const activeInspectedResourceKey = computed(() =>
     inspectedResource.value ? getItemSelectionKey(inspectedResource.value) : '',
   );
-  const RESOURCE_INSPECTOR_ICONS: Record<GlobalSearchType, string> = {
+  const RESOURCE_INSPECTOR_ICONS: Record<TaggableResourceType, string> = {
     bookmark: icon.resource.bookmark,
     note: icon.resource.note,
     file: icon.resource.file,
-    tag: icon.resource.tag,
-    todo: icon.growth.action,
   };
-  const inspectedResourceIcon = computed(
-    () => RESOURCE_INSPECTOR_ICONS[inspectedResource.value?.type || 'tag'] || icon.resource.tag,
-  );
+  const inspectedResourceIcon = computed(() => {
+    const type = inspectedResource.value?.type;
+    return isTaggableResourceType(type) ? RESOURCE_INSPECTOR_ICONS[type] : icon.resource.bookmark;
+  });
   function compactInspectorText(value: unknown, format = '') {
     const source = String(value || '');
     if (!source) return '';
@@ -976,9 +935,9 @@
     const key = format === 'drawing' ? 'drawing' : format === 'markdown' || format === 'md' ? 'markdown' : 'html';
     return t('resourceCenter.noteTypes.' + key);
   });
-  // 资源中心数据域固定为书签、笔记、文件和标签。
+  // 标签是筛选条件与空间导航，不进入资源勾选、批量处理或右侧检查器。
   const selectableVisibleItems = computed(() =>
-    allVisibleItems.value.filter((item) => isResourceSearchType(item.type)),
+    allVisibleItems.value.filter((item) => isTaggableResourceType(item.type)),
   );
   const allMatchingActive = computed(() => allMatchingSummary.value?.mode === 'allMatching');
   const selectedCount = computed(() =>
@@ -1025,24 +984,17 @@
     // 从知识地图等入口携带标签筛选时，将已选项固定在折叠区最前面，确保过滤状态一眼可见。
     return [...queryState.tags, ...options.filter((tag) => !selected.has(tag))];
   });
-  const inlineTagLimit = computed(() => {
-    if (bookmark.screenWidth <= 980) return 3;
-    if (bookmark.isCompactLayout) return 4;
-    if (bookmark.screenWidth <= 1440) return 6;
-    return 7;
-  });
-  const inlineTagOptions = computed(() => tagOptions.value.slice(0, inlineTagLimit.value));
   const filteredTagOptions = computed(() => {
     const keyword = tagSearch.value.trim().toLocaleLowerCase();
     return keyword ? tagOptions.value.filter((tag) => tag.toLocaleLowerCase().includes(keyword)) : tagOptions.value;
   });
-  const selectedTypes = computed<GlobalSearchType[]>(() =>
+  const selectedTypes = computed<TaggableResourceType[]>(() =>
     queryState.types.length ? queryState.types : [...SEARCH_CENTER_TYPE_LIST],
   );
   const selectedSearchAiResourceRefs = computed<AiSkillResourceRef[]>(() =>
     mappedItems.value
       .filter((item) => selectedIds.value.includes(getItemSelectionKey(item)))
-      .filter((item) => ['note', 'bookmark', 'file', 'todo'].includes(item.type))
+      .filter((item) => isTaggableResourceType(item.type))
       .slice(0, 10)
       .map((item) => ({ type: item.type as AiSkillResourceRef['type'], id: String(item.id) })),
   );
@@ -1114,7 +1066,7 @@
       queryState.date !== 'all' ||
       queryState.untagged ||
       queryState.types.length > 0 ||
-      queryState.sort !== ((user.preferences.resourceSort as ResourceSort) || 'relevance'),
+      queryState.sort !== defaultSortForKeyword(queryState.keyword),
   );
   const mobileActiveFilterCount = computed(
     () =>
@@ -1123,10 +1075,10 @@
       Number(queryState.untagged) +
       // 类型 Tab 已收进抽屉，类型条件计入「筛选 N」角标
       Number(queryState.types.length > 0) +
-      Number(queryState.sort !== ((user.preferences.resourceSort as ResourceSort) || 'relevance')),
+      Number(queryState.sort !== defaultSortForKeyword(queryState.keyword)),
   );
 
-  // PC 端标签保持单行，完整列表通过「更多」浮层查看。
+  // PC 标签筛选位于左侧，完整列表通过轻量浮层查看。
   const showAllTags = ref(false);
 
   const typeFilters = computed(() => [
@@ -1146,7 +1098,12 @@
     selectedTypes.value.reduce((sum, type) => sum + Number(summaryTotals.value[type] || 0), 0),
   );
   const desktopTypeSummary = computed(() => {
-    if (!queryState.types.length) return typeFilters.value[0];
+    if (!queryState.types.length) {
+      return {
+        ...typeFilters.value[0],
+        label: queryState.keyword.trim() ? t('resourceCenter.results') : t('resourceCenter.recentContent'),
+      };
+    }
     if (queryState.types.length === 1) {
       return typeFilters.value.find((item) => item.value === queryState.types[0]) || typeFilters.value[0];
     }
@@ -1177,9 +1134,6 @@
       icon: icon.table_delete,
       danger: true,
     };
-    if (item.type === 'tag') {
-      return [openItem, { key: 'resource-open-divider', divider: true }, deleteItem];
-    }
     return [
       openItem,
       { key: 'resource-open-divider', divider: true },
@@ -1190,17 +1144,17 @@
     ];
   }
 
-  function isTypeFilterActive(type: GlobalSearchType | 'all') {
+  function isTypeFilterActive(type: TaggableResourceType | 'all') {
     return type === 'all' ? queryState.types.length === 0 : queryState.types.includes(type);
   }
 
   // 抽屉里的类型是多选：空数组表示全选（与 URL 协议一致），
   // 取消最后一个会让结果永远为空，因此忽略这次点击而不是清空。
-  function isTypeSelected(type: GlobalSearchType) {
+  function isTypeSelected(type: TaggableResourceType) {
     return queryState.types.length === 0 || queryState.types.includes(type);
   }
 
-  function toggleTypeFilter(type: GlobalSearchType) {
+  function toggleTypeFilter(type: TaggableResourceType) {
     const selected = new Set(queryState.types.length ? queryState.types : SEARCH_CENTER_TYPE_LIST);
     if (selected.has(type)) selected.delete(type);
     else selected.add(type);
@@ -1210,19 +1164,23 @@
     applyQueryState('筛选资源类型');
   }
 
-  function parseTypes(value: unknown): GlobalSearchType[] {
+  function parseTypes(value: unknown): TaggableResourceType[] {
     const raw = Array.isArray(value) ? String(value[0] || '') : String(value || '');
     const types = [...new Set(raw.split(',').map((item) => item.trim()))].filter((item) =>
-      SEARCH_CENTER_TYPE_LIST.includes(item as GlobalSearchType),
-    ) as GlobalSearchType[];
+      SEARCH_CENTER_TYPE_LIST.includes(item as TaggableResourceType),
+    ) as TaggableResourceType[];
     return types.length === SEARCH_CENTER_TYPE_LIST.length
       ? []
       : SEARCH_CENTER_TYPE_LIST.filter((type) => types.includes(type));
   }
 
-  function parseSort(value: unknown): ResourceSort {
-    // URL 未带 sort 时回退到用户偏好的默认排序(设置页「资源中心排序」),而非写死相关度
-    const fallback = (user.preferences.resourceSort as ResourceSort) || 'relevance';
+  function defaultSortForKeyword(keyword: string): ResourceSort {
+    return keyword.trim() ? 'relevance' : 'updated';
+  }
+
+  function parseSort(value: unknown, keyword: string): ResourceSort {
+    // 浏览模式默认最近更新；输入关键词后默认相关度。URL 只记录用户显式偏离当前默认值的选择。
+    const fallback = defaultSortForKeyword(keyword);
     const raw = String(value || fallback);
     return ['relevance', 'updated', 'name'].includes(raw) ? (raw as ResourceSort) : fallback;
   }
@@ -1260,9 +1218,9 @@
       .slice(0, 24);
   }
 
-  function normalizeItemType(input: unknown): SearchType | null {
+  function normalizeItemType(input: unknown): TaggableResourceType | null {
     const raw = String(input || '').trim();
-    if (SEARCH_CENTER_TYPE_LIST.includes(raw as GlobalSearchType)) return raw as GlobalSearchType;
+    if (SEARCH_CENTER_TYPE_LIST.includes(raw as TaggableResourceType)) return raw as TaggableResourceType;
     return null;
   }
 
@@ -1288,7 +1246,7 @@
     };
   }
 
-  function getItemSelectionKey(item: { id: string; type: SearchType }) {
+  function getItemSelectionKey(item: { id: string; type: GlobalSearchType }) {
     return `${item.type}:${item.id}`;
   }
 
@@ -1298,7 +1256,10 @@
       queryState.keyword = Array.isArray(route.query.q) ? String(route.query.q[0] || '') : String(route.query.q || '');
       queryState.types = parseTypes(route.query.type);
       queryState.type = queryState.types.length === 1 ? queryState.types[0] : 'all';
-      queryState.sort = parseSort(Array.isArray(route.query.sort) ? route.query.sort[0] : route.query.sort);
+      queryState.sort = parseSort(
+        Array.isArray(route.query.sort) ? route.query.sort[0] : route.query.sort,
+        queryState.keyword,
+      );
       queryState.view = parseView(Array.isArray(route.query.view) ? route.query.view[0] : route.query.view);
       queryState.tags = parseTags(route.query.tags);
       queryState.date = parseDate(Array.isArray(route.query.date) ? route.query.date[0] : route.query.date);
@@ -1314,7 +1275,7 @@
     return {
       ...(q ? { q } : {}),
       ...(queryState.types.length ? { type: queryState.types.join(',') } : {}),
-      ...(queryState.sort !== 'relevance' ? { sort: queryState.sort } : {}),
+      ...(queryState.sort !== defaultSortForKeyword(q) ? { sort: queryState.sort } : {}),
       ...(queryState.view !== 'card' ? { view: queryState.view } : {}),
       ...(queryState.tags.length ? { tags: queryState.tags.map((tag) => encodeURIComponent(tag)).join(',') } : {}),
       ...(queryState.date !== 'all' ? { date: queryState.date } : {}),
@@ -1362,6 +1323,13 @@
   async function loadData(force = false, skeletonDelayMs = SKELETON_DELAY_MS, append = false, silent = false) {
     if (append && (viewState.loading || viewState.loadingMore || !viewState.hasMore)) return false;
     const seq = append ? requestSeq : ++requestSeq;
+    const previousPagination =
+      silent && !append
+        ? {
+            nextCursor: viewState.nextCursor,
+            hasMore: viewState.hasMore,
+          }
+        : null;
     let loadSucceeded = false;
     if (append) {
       viewState.loadingMore = true;
@@ -1392,6 +1360,7 @@
         paginationMode: 'ordered',
         cursor: append ? viewState.nextCursor : null,
         includeMetadata: !append,
+        separateTagMatches: true,
       });
       if (seq !== requestSeq) return false;
       const normalizedItems = normalizeSearchResultItems(res);
@@ -1401,6 +1370,7 @@
       viewState.nextCursor = res.nextCursor || null;
       viewState.hasMore = Boolean(res.hasMore);
       if (Array.isArray(res.tagOptions)) viewState.tagOptions = res.tagOptions;
+      if (!append) viewState.tagMatches = queryState.keyword.trim() ? res.tagMatches || [] : [];
       if (res.typeTotals) {
         summaryTotals.value = {
           bookmark: Number(res.typeTotals.bookmark || 0),
@@ -1415,18 +1385,27 @@
       loadSucceeded = true;
       return true;
     } catch (error) {
+      if (seq !== requestSeq) return false;
       const requestError = error as Error & { requestId?: string };
       // 静默刷新失败必须保留旧结果:下拉一下就把列表清成错误态,比不刷新更糟
       if (!append && !silent) {
         viewState.rawItems = [];
+        viewState.tagMatches = [];
+        summaryTotals.value = { bookmark: 0, note: 0, file: 0, tag: 0, todo: 0 };
         viewState.error = {
           message: requestError.message || t('common.requestFailedDescription'),
           requestId: String(requestError.requestId || ''),
         };
-        message.error(t('resourceCenter.refreshFailed'));
+        // 请求层已经展示一次失败消息；这里保留可恢复的页内错误态，避免重复 Toast。
       }
       // 抛回给下拉刷新的调用方，由它统一提示；按钮刷新路径已在上面提示过
-      if (silent) throw error;
+      if (silent) {
+        if (previousPagination) {
+          viewState.nextCursor = previousPagination.nextCursor;
+          viewState.hasMore = previousPagination.hasMore;
+        }
+        throw error;
+      }
       return false;
     } finally {
       if (seq === requestSeq) {
@@ -1448,7 +1427,7 @@
     resultLoadObserver?.disconnect();
     await nextTick();
     const sentinel = resultLoadSentinel.value;
-    const root = bookmark.isMobile ? resultScrollRef.value : sentinel?.closest<HTMLElement>('.search-page') || null;
+    const root = resultScrollRef.value;
     if (!sentinel || !root) return;
     resultLoadObserver = new IntersectionObserver(
       (entries) => {
@@ -1469,8 +1448,18 @@
     router.replace({ path: '/search', query });
   }
 
+  function reconcileImplicitSortForKeyword() {
+    const routeKeyword = normalizeQueryValue(route.query.q);
+    const routeHasExplicitSort = Boolean(normalizeQueryValue(route.query.sort));
+    if (routeHasExplicitSort) return;
+    if (queryState.sort === defaultSortForKeyword(routeKeyword)) {
+      queryState.sort = defaultSortForKeyword(queryState.keyword);
+    }
+  }
+
   function syncQueryDebounced() {
     if (syncTimer.value) clearTimeout(syncTimer.value);
+    reconcileImplicitSortForKeyword();
     clearBatchSelection();
     viewState.loading = true;
     syncTimer.value = window.setTimeout(syncQueryNow, 250);
@@ -1490,6 +1479,7 @@
 
   function submitSearch() {
     clearBatchSelection();
+    reconcileImplicitSortForKeyword();
     const q = queryState.keyword.trim();
     if (q) {
       recordOperation({ module: '资源中心', operation: `搜索资源【${q}】` });
@@ -1497,11 +1487,16 @@
     syncQueryNow();
   }
 
-  function selectDesktopType(type: GlobalSearchType | 'all') {
+  function selectDesktopType(type: TaggableResourceType | 'all') {
     if (isTypeFilterActive(type) && (type === 'all' || queryState.types.length === 1)) return;
     queryState.types = type === 'all' ? [] : [type];
     queryState.type = type;
     applyQueryState(`切换资源类型【${getSearchTypeLabel(t, type)}】`);
+  }
+
+  function openTagMatch(item: TagMatchItem) {
+    recordOperation({ module: '资源中心', operation: `打开匹配标签【${item.name}】` });
+    void router.push(item.route || `/tag/${encodeURIComponent(item.id)}`);
   }
 
   function inspectResource(item: DisplaySearchItem) {
@@ -1510,7 +1505,9 @@
 
   function handleResultOpen(item: DisplaySearchItem) {
     if (bookmark.isMobile) {
-      openItem(item);
+      inspectResource(item);
+      closeSearchAi();
+      mobileInspectorVisible.value = true;
       return;
     }
     inspectResource(item);
@@ -1527,6 +1524,7 @@
 
   function clearKeyword() {
     queryState.keyword = '';
+    reconcileImplicitSortForKeyword();
     applyQueryState('清空搜索关键词');
   }
 
@@ -1549,7 +1547,7 @@
     queryState.date = 'all';
     queryState.untagged = false;
     queryState.types = [];
-    queryState.sort = (user.preferences.resourceSort as ResourceSort) || 'relevance';
+    queryState.sort = defaultSortForKeyword(queryState.keyword);
     applyQueryState('清空筛选');
   }
 
@@ -1568,7 +1566,6 @@
       await loadData(true, SKELETON_DELAY_MS, false, silent);
     } catch (error) {
       if (silent) throw error;
-      message.error(t('resourceCenter.refreshFailed'));
     }
   }
 
@@ -1629,9 +1626,9 @@
   function selectionItemFromKey(key: string): BatchResourceItem | null {
     const separator = key.indexOf(':');
     if (separator <= 0) return null;
-    const type = key.slice(0, separator) as SearchType;
+    const type = key.slice(0, separator);
     const id = key.slice(separator + 1);
-    return isResourceSearchType(type) && id ? { type, id } : null;
+    return isTaggableResourceType(type) && id ? { type, id } : null;
   }
 
   function buildAllMatchingSelection(): BatchSelection {
@@ -1639,7 +1636,7 @@
       mode: 'allMatching',
       query: {
         keyword: queryState.keyword.trim(),
-        types: selectedTypes.value.filter(isResourceSearchType),
+        types: [...selectedTypes.value],
         sort: queryState.sort,
         date: queryState.date,
         tags: [...queryState.tags],
@@ -1711,17 +1708,42 @@
   }
 
   function openResourceAi(item: DisplaySearchItem) {
-    if (!['note', 'bookmark', 'file', 'todo'].includes(item.type)) return;
+    if (!isTaggableResourceType(item.type)) return;
     inspectResource(item);
     explicitSearchAiResourceContext.value = {
       ref: { type: item.type as AiSkillResourceRef['type'], id: String(item.id) },
-      type: item.type as GlobalSearchType,
+      type: item.type,
       title: String(item.title || '').trim(),
     };
     searchAiVisible.value = true;
   }
 
-  function getSelectedItemsByTypes(types: SearchType[]) {
+  function snapshotDisplaySearchItem(item: DisplaySearchItem): DisplaySearchItem {
+    return {
+      ...item,
+      tags: item.tags?.map((tag) => ({ ...tag })),
+      tagNames: [...item.tagNames],
+      raw: undefined,
+    };
+  }
+
+  function closeMobileInspectorThen<T>(next: () => T | Promise<T>): Promise<T> {
+    return closeCurrentMobileOverlayThen(() => {
+      mobileInspectorVisible.value = false;
+    }, next);
+  }
+
+  function openInspectedMobileResource(item: DisplaySearchItem) {
+    const snapshot = snapshotDisplaySearchItem(item);
+    void closeMobileInspectorThen(() => openItem(snapshot));
+  }
+
+  function openInspectedMobileAi(item: DisplaySearchItem) {
+    const snapshot = snapshotDisplaySearchItem(item);
+    void closeMobileInspectorThen(() => openResourceAi(snapshot));
+  }
+
+  function getSelectedItemsByTypes(types: TaggableResourceType[]) {
     return allVisibleItems.value
       .filter((item) => selectedIds.value.includes(getItemSelectionKey(item)))
       .filter((item) => types.includes(item.type))
@@ -1734,17 +1756,10 @@
 
   function openBatchTagWorkspace(mode: 'add' | 'remove') {
     const selectedItems = getSelectedItemsByTypes(['bookmark', 'note', 'file']);
-    const excludedTagCount = excludedSelectionIds.value.filter((id) => id.startsWith('tag:')).length;
-    const selectedTagCount = allMatchingActive.value
-      ? Math.max(0, Number(allMatchingSummary.value?.typeCounts?.tag || 0) - excludedTagCount)
-      : selectedIds.value.filter((id) => id.startsWith('tag:')).length;
-    const editableCount = allMatchingActive.value ? selectedCount.value - selectedTagCount : selectedItems.length;
+    const editableCount = allMatchingActive.value ? selectedCount.value : selectedItems.length;
     if (!editableCount) {
       message.warning(t('resourceCenter.batch.onlyResourceSupported'));
       return;
-    }
-    if (selectedTagCount > 0) {
-      message.info(t('resourceCenter.batch.tagIgnoredForTagOps', { count: selectedTagCount }));
     }
     sessionStorage.setItem(
       SEARCH_BATCH_STORAGE_KEY,
@@ -1758,6 +1773,33 @@
       path: '/search/batch-tags',
       query: { mode, from: route.fullPath },
     });
+  }
+
+  function openSingleTagWorkspace(item: DisplaySearchItem, mode: 'add' | 'remove') {
+    if (!isTaggableResourceType(item.type)) return;
+    const selectedItem = { id: String(item.id), type: item.type, title: item.title };
+    sessionStorage.setItem(
+      SEARCH_BATCH_STORAGE_KEY,
+      JSON.stringify({
+        selection: {
+          mode: 'explicit',
+          items: [{ id: selectedItem.id, type: selectedItem.type }],
+        },
+        items: [selectedItem],
+        selectedCount: 1,
+      }),
+    );
+    const returnPath = route.fullPath;
+    recordOperation({
+      module: '资源中心',
+      operation: mode === 'add' ? '进入单项加标签工作页' : '进入单项移除标签工作页',
+    });
+    void closeMobileInspectorThen(() =>
+      router.push({
+        path: '/search/batch-tags',
+        query: { mode, from: returnPath },
+      }),
+    );
   }
 
   function batchAddTag() {
@@ -1778,11 +1820,10 @@
     openBatchTagWorkspace('remove');
   }
 
-  function getSingleDeleteApi(type: SearchType) {
+  function getSingleDeleteApi(type: TaggableResourceType) {
     if (type === 'bookmark') return '/api/bookmark/delBookmark';
     if (type === 'note') return '/api/note/delNote';
-    if (type === 'file') return '/api/file/deleteFileById';
-    return '/api/bookmark/delTag';
+    return '/api/file/deleteFileById';
   }
 
   function handleItemMenu(action: string, item: DisplaySearchItem) {
@@ -1790,23 +1831,21 @@
       openItem(item);
       return;
     }
-    if (action === 'addInbox' && item.type !== 'tag') {
+    if (action === 'addInbox' && isTaggableResourceType(item.type)) {
       addItemsToInbox([item]);
       return;
     }
-    if (action === 'ai' && item.type !== 'tag') {
+    if (action === 'ai' && isTaggableResourceType(item.type)) {
       openResourceAi(item);
       return;
     }
     if (action !== 'delete') return;
+    if (!isTaggableResourceType(item.type)) return;
     const typeLabel = getSearchTypeLabel(t, item.type);
     const name = item.title || '-';
     Alert.alert({
       title: t('resourceCenter.batch.deleteConfirmTitle'),
-      content:
-        item.type === 'tag'
-          ? t('resourceCenter.deleteConfirmUnbind', { type: typeLabel, name })
-          : t('resourceCenter.deleteConfirmTrash', { type: typeLabel, name }),
+      content: t('resourceCenter.deleteConfirmTrash', { type: typeLabel, name }),
       okText: t('resourceCenter.batch.deleteConfirmOk'),
       cancelText: t('resourceCenter.batch.deleteConfirmCancel'),
       async onOk() {
@@ -1817,9 +1856,10 @@
             message.error(res?.msg || t('resourceCenter.batch.deleteFailed'));
             return;
           }
-          recordOperation({ module: '资源中心', operation: `右键删除${typeLabel}成功【${name}】` });
+          recordOperation({ module: '资源中心', operation: `删除${typeLabel}成功【${name}】` });
           message.success(t('resourceCenter.batch.deleteSuccess', { count: 1 }));
           selectedIds.value = selectedIds.value.filter((id) => id !== getItemSelectionKey(item));
+          mobileInspectorVisible.value = false;
           clearGlobalSearchCache();
           await refreshData();
         } catch (error) {
@@ -1831,7 +1871,7 @@
 
   async function addItemsToInbox(items: DisplaySearchItem[]) {
     const resources = items
-      .filter((item) => item.type !== 'tag')
+      .filter((item) => isTaggableResourceType(item.type))
       .map((item) => ({ resourceType: item.type as 'bookmark' | 'note' | 'file', resourceId: String(item.id) }));
     await addResourcesToInbox(resources, '资源中心');
   }
@@ -1896,6 +1936,7 @@
     () => route.query,
     () => {
       clearBatchSelection();
+      mobileInspectorVisible.value = false;
       applyRouteState();
       nextTick(() => {
         const scrollRoot = bookmark.isMobile
@@ -2059,41 +2100,6 @@
     box-shadow: var(--surface-raised-shadow);
   }
 
-  .search-header-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .search-header-title {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-    min-width: 0;
-    flex-wrap: wrap;
-  }
-
-  .search-header-sub {
-    color: var(--desc-color);
-    font-size: 13px;
-  }
-
-  .eyebrow {
-    color: var(--resource-bookmark-color);
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-  }
-
-  h1 {
-    margin: 0;
-    font-size: 20px;
-    line-height: 1.2;
-    font-weight: 800;
-  }
-
   p {
     margin: 0;
     color: var(--desc-color);
@@ -2106,8 +2112,6 @@
 
   .refresh-btn,
   .clear-btn,
-  .filter-item,
-  .batch-btn,
   .tagless-btn,
   .view-btn,
   .empty-action-btn {
@@ -2185,6 +2189,9 @@
     flex-direction: column;
     gap: 0;
     padding: 12px 10px;
+    overflow: hidden auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
   }
 
   .resource-scope-section,
@@ -2261,6 +2268,103 @@
     background: var(--search-border-color);
   }
 
+  .resource-scope-section--tags {
+    min-height: 0;
+  }
+
+  .resource-scope-title__count {
+    min-width: 18px;
+    height: 18px;
+    margin-left: auto;
+    padding-inline: 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--primary-color);
+    border-radius: 999px;
+    color: var(--primary-color);
+    background: var(--search-card-bg);
+    font-size: 10px;
+    line-height: 1;
+  }
+
+  .resource-scope-tag-filter {
+    min-width: 0;
+    display: grid;
+    gap: 8px;
+    padding: 3px 6px 2px;
+  }
+
+  .resource-scope-selected-tags {
+    min-width: 0;
+    max-height: 122px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    overflow: hidden auto;
+    overscroll-behavior: contain;
+  }
+
+  .resource-scope-tag-trigger {
+    width: 100%;
+    min-width: 0;
+    height: 36px;
+    padding-inline: 10px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 7px;
+    border: 1px solid var(--search-border-color);
+    border-radius: 10px;
+    color: var(--desc-color);
+    background: var(--search-muted-bg);
+    text-align: left;
+  }
+
+  .resource-scope-tag-trigger:hover,
+  .resource-scope-tag-trigger:focus-visible {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+  }
+
+  .resource-scope-tag-trigger > span:nth-child(2) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .resource-scope-tag-trigger > span:last-child,
+  .resource-scope-empty-hint {
+    color: var(--desc-color);
+    font-size: 11px;
+  }
+
+  .resource-scope-empty-hint {
+    padding: 4px 2px;
+  }
+
+  .tag-filter-popover {
+    width: min(280px, calc(100vw - 32px));
+    display: grid;
+    gap: 10px;
+    padding: 4px;
+    box-sizing: border-box;
+  }
+
+  .tag-filter-popover :deep(.input-container) {
+    width: 100%;
+  }
+
+  .tag-filter-popover__items {
+    max-height: 280px;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 7px;
+    overflow: hidden auto;
+    overscroll-behavior: contain;
+  }
+
   .resource-inspector-pane {
     display: flex;
     flex-direction: column;
@@ -2281,197 +2385,6 @@
   .search-ai-panel--mobile {
     flex: 0 0 auto;
     margin: 0 0 12px;
-  }
-
-  .resource-inspector-hero {
-    --inspector-accent: var(--primary-color);
-    display: flex;
-    flex-direction: column;
-    gap: 11px;
-    padding: 14px;
-    border: 1px solid var(--search-border-color);
-    border-radius: 14px;
-    background:
-      linear-gradient(145deg, color-mix(in srgb, var(--inspector-accent) 10%, transparent), transparent 62%),
-      var(--search-card-bg);
-  }
-
-  .resource-inspector-hero.is-bookmark {
-    --inspector-accent: var(--resource-bookmark-color, #7166ff);
-  }
-
-  .resource-inspector-hero.is-note {
-    --inspector-accent: var(--resource-note-color, #10a77a);
-  }
-
-  .resource-inspector-hero--expanded {
-    min-height: 0;
-    flex: 1 1 0;
-    overflow: hidden;
-  }
-
-  .resource-inspector-hero.is-file {
-    --inspector-accent: var(--resource-file-color, #f58b22);
-  }
-
-  .resource-inspector-hero.is-tag {
-    --inspector-accent: var(--resource-tag-color, #e5488f);
-  }
-
-  .resource-inspector-identity {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .resource-inspector-icon {
-    width: 42px;
-    height: 42px;
-    flex: 0 0 42px;
-    display: grid;
-    place-items: center;
-    border: 1px solid color-mix(in srgb, var(--inspector-accent) 28%, var(--search-border-color));
-    border-radius: 13px;
-    color: var(--inspector-accent);
-    background: color-mix(in srgb, var(--inspector-accent) 11%, var(--search-card-bg));
-  }
-
-  .resource-inspector-identity__copy {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-  }
-
-  .resource-inspector-identity__copy > span {
-    color: var(--desc-color);
-    font-size: 11px;
-  }
-
-  .resource-inspector-identity__copy > strong {
-    color: var(--inspector-accent);
-    font-size: 12px;
-    font-weight: 700;
-  }
-
-  .resource-inspector-hero h2 {
-    margin: 0;
-    display: -webkit-box;
-    overflow: hidden;
-    font-size: 17px;
-    line-height: 1.4;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-  }
-
-  .resource-inspector-description,
-  .resource-inspector-empty p {
-    margin: 0;
-    color: var(--desc-color);
-    font-size: 13px;
-    line-height: 1.55;
-  }
-
-  .resource-inspector-description {
-    display: -webkit-box;
-    overflow: hidden;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
-  }
-
-  .resource-inspector-hero--expanded .resource-inspector-description {
-    min-height: 0;
-    display: block;
-    flex: 1 1 auto;
-    overflow: hidden auto;
-    -webkit-line-clamp: unset;
-  }
-
-  .resource-inspector-meta {
-    display: grid;
-    gap: 7px;
-    margin: 0;
-    padding: 10px;
-    border: 1px solid var(--search-border-color);
-    border-radius: 12px;
-    background: var(--search-muted-bg);
-  }
-
-  .resource-inspector-meta > div {
-    display: grid;
-    grid-template-columns: 74px minmax(0, 1fr);
-    gap: 8px;
-  }
-
-  .resource-inspector-meta dt,
-  .resource-inspector-meta dd {
-    margin: 0;
-    font-size: 12px;
-  }
-
-  .resource-inspector-meta dt {
-    color: var(--desc-color);
-  }
-
-  .resource-inspector-meta dd {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .resource-inspector-tags {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .resource-inspector-tags > span {
-    width: 100%;
-    color: var(--desc-color);
-    font-size: 12px;
-  }
-
-  .resource-inspector-tags :deep(.resource-tag-chip) {
-    width: auto;
-    max-width: 100%;
-  }
-
-  .resource-inspector-actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    margin-top: auto;
-    padding-top: 10px;
-    border-top: 1px solid var(--search-border-color);
-  }
-
-  .resource-inspector-actions :deep(.b_btn) {
-    width: 100%;
-    min-width: 0;
-    padding-inline: 12px;
-    font-size: 14px;
-    gap: 6px;
-  }
-
-  .resource-inspector-action--inbox {
-    border-color: color-mix(in srgb, var(--primary-color) 28%, var(--search-border-color));
-    color: var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 8%, var(--search-card-bg));
-  }
-
-  .resource-inspector-action--delete {
-    border-color: color-mix(in srgb, var(--danger-color, #e5484d) 32%, var(--search-border-color));
-    color: var(--danger-color, #e5484d);
-    background: color-mix(in srgb, var(--danger-color, #e5484d) 6%, var(--search-card-bg));
-  }
-
-  .resource-inspector-empty {
-    min-height: 220px;
-    display: grid;
-    align-content: center;
-    gap: 8px;
-    text-align: center;
   }
 
   .resource-result-entry {
@@ -2495,63 +2408,6 @@
     --b-card-border-color: var(--search-border-color);
 
     border-radius: 20px;
-  }
-
-  .filter-item {
-    width: 100%;
-    display: grid;
-    grid-template-columns: 10px 1fr auto;
-    align-items: center;
-    gap: 10px;
-    padding: 12px;
-    border-radius: 12px;
-    background: transparent;
-    text-align: left;
-  }
-
-  .filter-item.active,
-  .filter-item:hover {
-    background: var(--search-muted-bg);
-  }
-
-  .desktop-type-trigger {
-    width: 168px;
-    min-width: 0;
-    height: 34px;
-    padding: 0 10px;
-    display: grid;
-    grid-template-columns: 8px minmax(0, 1fr) auto auto;
-    align-items: center;
-    gap: 7px;
-    border: 1px solid var(--search-border-color);
-    border-radius: 10px;
-    background: var(--search-muted-bg);
-    text-align: left;
-  }
-
-  .desktop-type-trigger__label {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-weight: 650;
-  }
-
-  .desktop-type-trigger__arrow {
-    color: var(--desc-color);
-    font-size: 11px;
-  }
-
-  .desktop-type-menu {
-    width: 210px;
-    padding: 6px;
-    display: grid;
-    gap: 2px;
-  }
-
-  .desktop-type-menu .filter-item {
-    min-height: 36px;
-    padding: 7px 9px;
   }
 
   .filter-dot {
@@ -2618,46 +2474,12 @@
     cursor: not-allowed;
   }
 
-  .advanced-filters {
-    margin-top: 12px;
-    padding: 12px;
-    border-radius: 14px;
-    border: 1px solid var(--search-border-color);
-    background: var(--search-panel-bg);
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .filter-row {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    align-items: center;
-  }
-
-  .refresh-btn--inline {
-    height: 48px;
-    border-radius: 12px;
-    font-weight: 700;
-  }
-
   .select-wrap {
     display: flex;
     gap: 8px;
     align-items: center;
     font-size: 13px;
     color: var(--desc-color);
-  }
-
-  .select-wrap select {
-    height: 32px;
-    border-radius: 10px;
-    border: 1px solid var(--card-border-color);
-    background: var(--background-color);
-    color: var(--text-color);
-    padding: 0 10px;
-    min-width: 120px;
   }
 
   .filter-select {
@@ -2692,61 +2514,6 @@
     color: var(--resource-file-color);
   }
 
-  .tag-filter-wrap {
-    display: grid;
-    grid-template-columns: 76px minmax(0, 1fr);
-    gap: 10px;
-    align-items: start;
-  }
-
-  .tag-filter-label {
-    color: var(--desc-color);
-    font-size: 13px;
-    line-height: 30px;
-  }
-
-  .tag-filter-main {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    min-width: 0;
-  }
-
-  .tag-filter-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding-right: 2px;
-  }
-
-  .tag-toggle-btn {
-    align-self: flex-start;
-    border: 0;
-    cursor: pointer;
-    background: transparent;
-    color: var(--resource-bookmark-color);
-    font-size: 12px;
-    font-weight: 600;
-    padding: 2px 0;
-  }
-
-  .tag-filter-popover {
-    width: min(560px, calc(100vw - 32px));
-    max-height: min(320px, calc(100dvh - 32px));
-    padding: 12px;
-    box-sizing: border-box;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    overflow-y: auto;
-  }
-
-  .tag-filter-popover :deep(.input-container) {
-    flex: 0 0 100%;
-    width: 100%;
-    margin-bottom: 4px;
-  }
-
   .tag-chip {
     min-height: 28px;
   }
@@ -2767,13 +2534,6 @@
     align-items: center;
     color: var(--desc-color);
     font-size: 13px;
-  }
-
-  .batch-btn {
-    min-height: 30px;
-    border-radius: 10px;
-    padding: 0 10px;
-    background: var(--search-muted-bg);
   }
 
   .batch-select-all {
@@ -3044,25 +2804,6 @@
       box-shadow: var(--surface-raised-shadow);
     }
 
-    .search-header-copy {
-      flex: 0 1 460px;
-      min-width: 280px;
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-    }
-
-    .search-header-title {
-      flex-wrap: nowrap;
-      align-items: center;
-    }
-
-    .search-header-sub {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
     .search-header-input {
       width: 100%;
       flex: 1 1 auto;
@@ -3124,21 +2865,6 @@
     .result-panel {
       grid-column: 2;
       grid-row: 2;
-    }
-
-    .filter-item {
-      height: auto;
-      min-height: 38px;
-      line-height: 1.2;
-      padding: 8px 10px;
-      border-radius: 10px;
-      justify-content: initial;
-      background: transparent;
-    }
-
-    .filter-item.active {
-      color: var(--primary-color);
-      background: color-mix(in srgb, var(--primary-color) 9%, var(--search-muted-bg));
     }
 
     .result-panel {
@@ -3204,20 +2930,6 @@
       white-space: nowrap;
     }
 
-    .advanced-filters {
-      flex: 0 0 auto;
-      margin-top: 6px;
-      padding: 6px 8px;
-      border: 0;
-      border-radius: 10px;
-      background: color-mix(in srgb, var(--search-muted-bg) 78%, transparent);
-    }
-
-    .filter-row {
-      flex-wrap: nowrap;
-      gap: 8px;
-    }
-
     .select-wrap {
       flex: 0 0 auto;
     }
@@ -3258,61 +2970,10 @@
       background: color-mix(in srgb, var(--primary-color) 9%, var(--background-color));
     }
 
-    .tag-filter-wrap {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      min-width: 0;
-    }
-
-    .tag-filter-label {
-      flex: 0 0 auto;
-      display: grid;
-      gap: 1px;
-      line-height: 1.2;
-    }
-
-    .tag-filter-label small {
-      color: var(--desc-color);
-      font-size: 10px;
-      font-weight: 400;
-    }
-
-    .tag-filter-main {
-      min-width: 0;
-      flex: 1 1 auto;
-      flex-direction: row;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .tag-filter-list {
-      min-width: 0;
-      flex: 1 1 auto;
-      flex-wrap: nowrap;
-      gap: 6px;
-      overflow: hidden;
-    }
-
-    .tag-filter-list .tag-chip {
-      flex: 0 0 auto;
-      max-width: 100%;
-    }
-
     .tag-chip {
       min-height: 26px;
       height: 26px;
       line-height: 1;
-    }
-
-    .tag-toggle-btn {
-      flex: 0 0 auto;
-      align-self: center;
-      height: 22px;
-      min-height: 22px;
-      padding: 0 4px;
-      margin-top: 2px;
-      background: transparent;
     }
 
     .batch-toolbar {
@@ -3364,19 +3025,6 @@
   }
 
   @media (min-width: 768px) and (max-width: 1180px) {
-    .search-header-copy {
-      flex-basis: 300px;
-      min-width: 220px;
-    }
-
-    .search-header-sub {
-      display: none;
-    }
-
-    .filter-row {
-      flex-wrap: wrap;
-    }
-
     .select-visible-btn {
       margin-left: 0;
     }
@@ -3445,23 +3093,6 @@
     .resource-inspector-pane {
       padding: 10px;
     }
-
-    .resource-inspector-hero {
-      padding: 11px;
-    }
-
-    .resource-inspector-hero h2 {
-      font-size: 15px;
-    }
-
-    .resource-inspector-meta > div {
-      grid-template-columns: minmax(58px, auto) minmax(0, 1fr);
-    }
-
-    .resource-inspector-actions :deep(.b_btn) {
-      padding-inline: 8px;
-      font-size: 12px;
-    }
   }
 
   @media (min-width: 768px) and (max-width: 900px) {
@@ -3497,16 +3128,6 @@
       border-radius: 16px;
     }
 
-    .search-header-copy {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    h1 {
-      font-size: 18px;
-    }
-
     .search-layout {
       grid-template-columns: 1fr;
     }
@@ -3515,21 +3136,12 @@
       grid-template-columns: minmax(0, 1fr) auto;
     }
 
-    .tag-filter-wrap {
-      grid-template-columns: 1fr;
-      gap: 6px;
-    }
-
     .result-panel {
       overflow: visible;
     }
 
     .result-scroll-area {
       overflow: visible;
-    }
-
-    .filter-item {
-      padding: 6px;
     }
   }
 
@@ -3631,24 +3243,8 @@
       font-size: 12px;
     }
 
-    .advanced-filters {
-      margin-top: 8px;
-      padding: 8px;
-      gap: 8px;
-      border-radius: 12px;
-    }
-
-    .filter-row {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 6px;
-      align-items: center;
-    }
-
     .result-panel,
     .result-scroll-area,
-    .advanced-filters,
-    .filter-row,
     .batch-toolbar,
     .batch-actions,
     .result-group,
@@ -3689,51 +3285,12 @@
       white-space: nowrap;
     }
 
-    .tag-filter-wrap {
-      grid-template-columns: auto minmax(0, 1fr);
-      gap: 8px;
-      align-items: center;
-    }
-
-    .tag-filter-label {
-      font-size: 11px;
-      line-height: 26px;
-    }
-
-    .tag-filter-main {
-      min-width: 0;
-      flex-direction: row;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .tag-filter-list {
-      min-width: 0;
-      flex: 1 1 auto;
-      flex-wrap: nowrap;
-      gap: 6px;
-      overflow-x: auto;
-      overflow-y: hidden;
-      overscroll-behavior-x: contain;
-      scrollbar-width: none;
-      touch-action: pan-x;
-      -webkit-overflow-scrolling: touch;
-    }
-
-    .tag-filter-list::-webkit-scrollbar {
-      display: none;
-    }
-
     .tag-chip {
       flex: 0 0 auto;
       height: 40px;
       min-height: 40px;
       padding: 0 12px;
       line-height: 1;
-    }
-
-    .tag-toggle-btn {
-      display: none;
     }
 
     .result-scroll-area {
@@ -3807,29 +3364,6 @@
     flex-direction: column;
     gap: 6px;
     overflow: hidden;
-  }
-
-  .search-page--mobile .filter-item {
-    width: auto;
-    min-width: max-content;
-    height: 40px;
-    flex: 0 0 auto;
-    padding: 0 11px;
-    display: inline-flex;
-    grid-template-columns: none;
-    gap: 6px;
-    border: 1px solid var(--search-border-color);
-    border-radius: 999px;
-    background: var(--search-card-bg);
-    box-shadow: none;
-    font-size: 12px;
-    line-height: 1;
-  }
-
-  .search-page--mobile .filter-item.active {
-    border-color: color-mix(in srgb, var(--primary-color) 34%, var(--search-border-color));
-    background: color-mix(in srgb, var(--primary-color) 10%, var(--search-card-bg));
-    color: var(--primary-color);
   }
 
   .search-page--mobile .filter-dot {

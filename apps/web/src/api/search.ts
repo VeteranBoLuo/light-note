@@ -5,6 +5,7 @@ import {
   RESOURCE_SEARCH_TYPES,
   type GlobalSearchType,
   type ResourceSearchType,
+  type TaggableResourceType,
 } from '@/utils/globalSearchTypes';
 
 /** 历史别名：资料四类。待办请显式使用 GlobalSearchType。 */
@@ -48,6 +49,21 @@ export interface SearchGroup {
   items: SearchResultItem[];
 }
 
+export interface TagMatchItem {
+  id: string;
+  name: string;
+  description: string;
+  iconUrl: string;
+  route: string;
+  lastActivityTime?: string | null;
+  counts: {
+    bookmark: number;
+    note: number;
+    file: number;
+    total: number;
+  };
+}
+
 export interface GlobalSearchResponse {
   keyword: string;
   items: SearchResultItem[];
@@ -60,6 +76,8 @@ export interface GlobalSearchResponse {
   hasMore?: boolean;
   hasMoreByType?: Partial<Record<GlobalSearchType, boolean>>;
   nextCursor?: SearchCursor | null;
+  /** 资源中心专用的标签导航匹配；标签不会同时出现在 items/groups。 */
+  tagMatches?: TagMatchItem[];
 }
 
 export interface GlobalSearchQuery {
@@ -73,6 +91,8 @@ export interface GlobalSearchQuery {
   paginationMode?: 'perType' | 'ordered';
   cursor?: SearchCursor | null;
   includeMetadata?: boolean;
+  /** 将标签从资源结果剥离，并在首屏元数据中返回 tagMatches。 */
+  separateTagMatches?: boolean;
   /** 以下待办条件只有在 types 显式包含 todo 时才生效 */
   todoStatus?: 'all' | 'pending' | 'completed';
   todoPriority?: Array<0 | 1 | 2>;
@@ -81,13 +101,13 @@ export interface GlobalSearchQuery {
 
 export interface BatchResourceItem {
   id: string;
-  /** 批量操作只接受资料对象，待办不参与资源批量语义 */
-  type: ResourceSearchType;
+  /** 批量操作只接受可整理内容；标签是条件和导航，不是批量资源。 */
+  type: TaggableResourceType;
 }
 
 export interface BatchSelectionQuery {
   keyword: string;
-  types: ResourceSearchType[];
+  types: TaggableResourceType[];
   sort: 'relevance' | 'updated' | 'name';
   date: 'all' | '7d' | '30d' | '365d';
   tags: string[];
@@ -135,6 +155,7 @@ const emptySearchResult: GlobalSearchResponse = {
     todo: false,
   },
   nextCursor: null,
+  tagMatches: [],
 };
 
 const cache = new Map<string, GlobalSearchResponse>();
@@ -173,6 +194,8 @@ export async function fetchGlobalSearch(
       .filter(Boolean)
       .sort(),
     untagged: query.untagged === true,
+    // 标签匹配与资源结果是两类对象；显式开启时无论分页模式如何，都让服务端独立返回标签导航。
+    ...(query.separateTagMatches === true ? { separateTagMatches: true } : {}),
     // 待办条件只在显式搜索待办时下发，避免污染既有资源调用方的缓存键
     ...(includesTodo
       ? {
@@ -238,6 +261,35 @@ export async function fetchGlobalSearch(
     pageSize: Number(res.data?.pageSize || pageSize || 12),
     hasMore: Boolean(res.data?.hasMore),
     nextCursor: normalizeSearchCursor(res.data?.nextCursor),
+    tagMatches: Array.isArray(res.data?.tagMatches)
+      ? res.data.tagMatches
+          .map((item: any): TagMatchItem | null => {
+            const id = String(item?.id || '').trim();
+            const name = String(item?.name || '').trim();
+            if (!id || !name) return null;
+            const bookmark = Math.max(0, Number(item?.counts?.bookmark || 0));
+            const note = Math.max(0, Number(item?.counts?.note || 0));
+            const file = Math.max(0, Number(item?.counts?.file || 0));
+            return {
+              id,
+              name,
+              description: String(item?.description || ''),
+              iconUrl: String(item?.iconUrl || ''),
+              route: String(item?.route || `/tag/${encodeURIComponent(id)}`),
+              lastActivityTime: item?.lastActivityTime || null,
+              counts: {
+                bookmark,
+                note,
+                file,
+                total: Math.max(
+                  bookmark + note + file,
+                  Math.max(0, Number(item?.counts?.total ?? bookmark + note + file)),
+                ),
+              },
+            };
+          })
+          .filter((item: TagMatchItem | null): item is TagMatchItem => Boolean(item))
+      : [],
     ...(Array.isArray(res.data?.tagOptions)
       ? { tagOptions: res.data.tagOptions }
       : paginationMode === 'perType'

@@ -8,7 +8,8 @@ vi.mock('./tagRelationService.js', () => ({
   getDerivedRelatedTags: mocks.getDerivedRelatedTags,
 }));
 
-const { getTagSpaceOverview, queryTagSpaceList, queryTagSpaceResources } = await import('./tagSpaceService.js');
+const { getTagSpaceOverview, queryTagMatches, queryTagSpaceList, queryTagSpaceResources } =
+  await import('./tagSpaceService.js');
 
 describe('tagSpaceService', () => {
   beforeEach(() => {
@@ -66,17 +67,7 @@ describe('tagSpaceService', () => {
     expect(listSql).toContain('COALESCE(stats.bookmark_count, 0) > 0');
     expect(listSql).toContain('ORDER BY stats.last_activity_time IS NULL ASC');
     expect(listSql).toContain('LIMIT ? OFFSET ?');
-    expect(listParams).toEqual([
-      'user-1',
-      'user-1',
-      'user-1',
-      'user-1',
-      'user-1',
-      '%50!%!_!!%',
-      '%50!%!_!!%',
-      10,
-      10,
-    ]);
+    expect(listParams).toEqual(['user-1', 'user-1', 'user-1', 'user-1', 'user-1', '%50!%!_!!%', '%50!%!_!!%', 10, 10]);
     expect(result).toMatchObject({
       total: 2,
       page: 2,
@@ -228,5 +219,67 @@ describe('tagSpaceService', () => {
 
   it('拒绝缺失用户身份，避免无归属地扫描标签表', async () => {
     await expect(queryTagSpaceList({ query: vi.fn() }, {})).rejects.toThrow('USER_REQUIRED');
+  });
+
+  it('为资源中心返回轻量标签导航匹配，并沿用存活资源统计口径', async () => {
+    const db = {
+      query: vi.fn().mockResolvedValueOnce([
+        [
+          {
+            id: 'tag-1',
+            name: '项目 50%_!',
+            description: '项目资料入口',
+            icon_url: 'data:image/svg+xml;base64,icon',
+            bookmark_count: 2,
+            note_count: 1,
+            file_count: 1,
+            last_activity_time: '2026-08-28 10:00:00',
+          },
+        ],
+      ]),
+    };
+
+    const result = await queryTagMatches(db, {
+      userId: 'user-1',
+      keyword: '项目 50%_!',
+      limit: 99,
+    });
+
+    const [sql, params] = db.query.mock.calls[0];
+    expect(sql).toContain('LEFT JOIN bookmark b');
+    expect(sql).toContain('b.user_id = r.user_id');
+    expect(sql).toContain('LEFT JOIN note n');
+    expect(sql).toContain('n.create_by = r.user_id');
+    expect(sql).toContain('LEFT JOIN files f');
+    expect(sql).toContain('f.create_by = r.user_id');
+    expect(sql).toContain("t.name LIKE ? ESCAPE '!'");
+    expect(sql).toContain('WHEN LOWER(t.name) = LOWER(?) THEN 0');
+    expect(sql).not.toContain('bookmark_preview');
+    expect(params).toEqual([
+      'user-1',
+      'user-1',
+      '%项目 50!%!_!!%',
+      '%项目 50!%!_!!%',
+      '项目 50%_!',
+      '项目 50!%!_!!%',
+      20,
+    ]);
+    expect(result).toEqual([
+      {
+        id: 'tag-1',
+        name: '项目 50%_!',
+        description: '项目资料入口',
+        iconUrl: 'data:image/svg+xml;base64,icon',
+        lastActivityTime: '2026-08-28 10:00:00',
+        counts: { bookmark: 2, note: 1, file: 1, total: 4 },
+        route: '/tag/tag-1',
+      },
+    ]);
+  });
+
+  it('空关键词不扫描标签关系表', async () => {
+    const db = { query: vi.fn() };
+    await expect(queryTagMatches(db, { userId: 'user-1', keyword: '   ' })).resolves.toEqual([]);
+    expect(db.query).not.toHaveBeenCalled();
   });
 });
