@@ -1,6 +1,7 @@
 <template>
   <div
     v-if="!triggerless"
+    v-bind="$attrs"
     class="b-upload-trigger"
     :class="{ 'is-disabled': disabled, 'is-block': block }"
     :tabindex="hasDefaultSlot ? undefined : disabled ? -1 : 0"
@@ -43,6 +44,9 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { useI18n } from 'vue-i18n';
   import { computed, ref, useSlots } from 'vue';
+
+  // 原生 input 通过 Teleport 常驻 body，组件因此存在多个根节点；外部属性应落到可见触发器。
+  defineOptions({ inheritAttrs: false });
 
   const { t } = useI18n();
   const slots = useSlots();

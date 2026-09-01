@@ -6,13 +6,13 @@
       class="mobile-bottom-nav__item"
       :class="{
         'mobile-bottom-nav__item--active': isItemActive(item.key) || pendingKey === item.key,
-        'mobile-bottom-nav__item--capture': item.key === 'capture',
+        'mobile-bottom-nav__item--create': item.key === 'create',
       }"
       :aria-current="isItemActive(item.key) ? 'page' : undefined"
       :aria-busy="pendingKey === item.key ? 'true' : undefined"
-      :aria-label="item.key === 'capture' ? t(item.labelKey) : undefined"
-      :aria-haspopup="item.key === 'capture' ? 'dialog' : undefined"
-      :aria-expanded="item.key === 'capture' ? createHubOpen : undefined"
+      :aria-label="item.key === 'create' ? t(item.labelKey) : undefined"
+      :aria-haspopup="item.key === 'create' ? 'dialog' : undefined"
+      :aria-expanded="item.key === 'create' ? createHubOpen : undefined"
       @pointerdown="prefetchItem(item)"
       @focus="prefetchItem(item)"
       @click="activate(item)"
@@ -43,7 +43,7 @@
           {{ communityUnreadTotal > 99 ? '99+' : communityUnreadTotal }}
         </span>
       </span>
-      <span v-if="item.key !== 'capture'" class="mobile-bottom-nav__label">{{ t(item.labelKey) }}</span>
+      <span v-if="item.key !== 'create'" class="mobile-bottom-nav__label">{{ t(item.labelKey) }}</span>
     </BButton>
   </nav>
   <MobilePageActionsDrawer
@@ -64,7 +64,10 @@
   import icon from '@/config/icon';
   import {
     isMobileResourceInboxTab,
+    isMobileCreateHubActionKey,
+    isMobileFormalCreateActionKey,
     MOBILE_BOTTOM_NAVIGATION,
+    type MobileFormalCreateActionKey,
     type MobileBottomNavigationKey,
     type MobileBottomNavigationItem,
     type MobileShellSection,
@@ -74,6 +77,11 @@
   import { useCommunityChatUnread } from '@/composables/useCommunityChatUnread';
   import { inboxStore, useUserStore } from '@/store';
   import { prefetchResolvedRoute } from '@/utils/routePrefetch';
+
+  const emit = defineEmits<{
+    prepareFormalCreate: [];
+    formalCreate: [action: MobileFormalCreateActionKey];
+  }>();
 
   const route = useRoute();
   const router = useRouter();
@@ -98,7 +106,7 @@
   const bottomIcons = {
     today: icon.common.calendar,
     resources: icon.navigation.portal,
-    capture: icon.common.plus,
+    create: icon.common.plus,
     todo: icon.noteDetail.toolbar.todo,
     community: icon.ai.conversations,
   } as const;
@@ -138,7 +146,7 @@
   ]);
 
   function isItemActive(key: MobileBottomNavigationKey) {
-    if (key === 'capture') return false;
+    if (key === 'create') return false;
     if (route.name === 'inbox') {
       // 待整理是资料处理而不是待办：/inbox?tab=all|bookmark|note|file 归「资料」
       return key === (isMobileResourceInboxTab(route.query.tab) ? 'resources' : 'todo');
@@ -165,7 +173,8 @@
 
   async function activate(item: MobileBottomNavigationItem) {
     if (pendingKey.value === item.key) return;
-    if (item.key === 'capture') {
+    if (item.key === 'create') {
+      emit('prepareFormalCreate');
       createHubOpen.value = true;
       return;
     }
@@ -189,14 +198,21 @@
   }
 
   function runCreateAction(action: MobilePageActionItem) {
+    if (!isMobileCreateHubActionKey(action.key)) return;
     if (action.key === 'toolbox') {
-      void router.push('/toolbox');
+      void router.push({ path: '/toolbox' });
       return;
     }
-    if (blockGuestWrite('inbox-capture', t('inbox.guestPrompt'))) return;
-    if (['note', 'todo', 'bookmark', 'file'].includes(action.key)) {
-      inbox.openQuickCapture(action.key as 'note' | 'todo' | 'bookmark' | 'file');
+    if (blockGuestWrite('mobile-formal-create', t('inbox.guestPrompt'))) return;
+    if (action.key === 'bookmark') {
+      void router.push({ name: 'bookmarkEditMg', params: { id: 'add' } });
+      return;
     }
+    if (action.key === 'todo') {
+      void router.push({ name: 'todoCreate' });
+      return;
+    }
+    if (isMobileFormalCreateActionKey(action.key)) emit('formalCreate', action.key);
   }
 
   function getMobileResourcePathFromRoute() {
@@ -252,13 +268,13 @@
     background: color-mix(in srgb, var(--primary-color) 8%, transparent) !important;
   }
 
-  .mobile-bottom-nav__item--capture {
+  .mobile-bottom-nav__item--create {
     position: relative;
     overflow: visible;
     color: var(--primary-color);
   }
 
-  .mobile-bottom-nav__item--capture .mobile-bottom-nav__icon {
+  .mobile-bottom-nav__item--create .mobile-bottom-nav__icon {
     position: absolute;
     top: 50%;
     left: 50%;
@@ -320,7 +336,7 @@
     }
   }
 
-  :global(html.light-note-mobile-rendering .mobile-bottom-nav__item--capture .mobile-bottom-nav__icon) {
+  :global(html.light-note-mobile-rendering .mobile-bottom-nav__item--create .mobile-bottom-nav__icon) {
     border-color: var(--primary-color);
     background: var(--primary-color);
     box-shadow: none;

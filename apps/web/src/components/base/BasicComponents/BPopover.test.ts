@@ -34,7 +34,7 @@ describe('BPopover 键盘关闭', () => {
         return { open: ref(false), id };
       },
       template: `
-        <BPopover v-model:open="open" trigger="click">
+        <BPopover v-model:open="open" trigger="click" class="external-popover" data-testid="popover-trigger">
           <button :id="id + '-trigger'" type="button">打开</button>
           <template #content><button :id="id + '-content'" type="button">内容</button></template>
         </BPopover>
@@ -50,6 +50,14 @@ describe('BPopover 键盘关闭', () => {
     await new Promise((resolve) => setTimeout(resolve, 180));
     await nextTick();
   }
+
+  it('把外部属性透传给可见触发器而不是 Teleport 根节点', () => {
+    const host = mountPopover('attrs');
+    const trigger = host.querySelector<HTMLElement>('.b-popover-trigger');
+
+    expect(trigger?.classList.contains('external-popover')).toBe(true);
+    expect(trigger?.dataset.testid).toBe('popover-trigger');
+  });
 
   it('按 Escape 关闭浮层、阻止事件穿透并把焦点还给触发按钮', async () => {
     const host = mountPopover('single');

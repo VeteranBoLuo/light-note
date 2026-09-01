@@ -11,15 +11,15 @@ describe('移动端底部导航切换状态', () => {
     expect(source).not.toContain('mobile-navigation-pending');
   });
 
-  it('中间收集入口只显示居中的主操作图标，同时保留无障碍名称', () => {
-    expect(source).toContain(`:aria-label="item.key === 'capture' ? t(item.labelKey) : undefined"`);
-    expect(source).toContain(`<span v-if="item.key !== 'capture'" class="mobile-bottom-nav__label">`);
-    expect(source).toContain('.mobile-bottom-nav__item--capture {');
+  it('中间新建入口只显示居中的主操作图标，同时保留无障碍名称', () => {
+    expect(source).toContain(`:aria-label="item.key === 'create' ? t(item.labelKey) : undefined"`);
+    expect(source).toContain(`<span v-if="item.key !== 'create'" class="mobile-bottom-nav__label">`);
+    expect(source).toContain('.mobile-bottom-nav__item--create {');
     expect(source).toContain('position: relative;');
-    expect(source).toContain('.mobile-bottom-nav__item--capture .mobile-bottom-nav__icon {');
+    expect(source).toContain('.mobile-bottom-nav__item--create .mobile-bottom-nav__icon {');
     expect(source).toContain('top: 50%;');
     expect(source).toContain('transform: translate(-50%, -50%);');
-    expect(source).not.toContain('.mobile-bottom-nav__item--capture .mobile-bottom-nav__label {');
+    expect(source).not.toContain('.mobile-bottom-nav__item--create .mobile-bottom-nav__label {');
     expect(source).not.toContain('margin-top: -5px;');
   });
 });

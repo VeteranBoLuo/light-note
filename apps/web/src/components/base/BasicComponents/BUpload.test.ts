@@ -114,4 +114,12 @@ describe('BUpload semantics', () => {
     const blockHost = mountUpload({ block: true });
     expect(blockHost.querySelector('.b-upload-trigger')?.classList.contains('is-block')).toBe(true);
   });
+
+  it('把外部属性透传给可见触发器而不是 Teleport 根节点', () => {
+    const host = mountUpload({ class: 'external-upload', 'data-testid': 'upload-trigger' });
+    const trigger = host.querySelector<HTMLElement>('.b-upload-trigger');
+
+    expect(trigger?.classList.contains('external-upload')).toBe(true);
+    expect(trigger?.dataset.testid).toBe('upload-trigger');
+  });
 });

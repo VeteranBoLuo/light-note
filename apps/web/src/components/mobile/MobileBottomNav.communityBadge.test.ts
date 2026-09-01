@@ -6,6 +6,7 @@ import zhCN from '@/i18n/locales/zh-CN';
 const communityUnreadTotal = ref(0);
 const openQuickCapture = vi.fn();
 const routerPush = vi.fn();
+const formalCreate = vi.fn();
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ name: 'workbenches', query: {}, meta: { mobileShell: 'today' }, fullPath: '/workbenches' }),
@@ -58,7 +59,7 @@ let cleanup: (() => void) | undefined;
 function mount() {
   const host = document.createElement('div');
   document.body.append(host);
-  const app = createApp({ render: () => h(MobileBottomNav) });
+  const app = createApp({ render: () => h(MobileBottomNav, { onFormalCreate: formalCreate }) });
   app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
   app.directive('click-log', {});
   app.mount(host);
@@ -73,6 +74,7 @@ beforeEach(() => {
   communityUnreadTotal.value = 0;
   openQuickCapture.mockClear();
   routerPush.mockClear();
+  formalCreate.mockClear();
 });
 
 afterEach(() => {
@@ -81,10 +83,10 @@ afterEach(() => {
 });
 
 describe('移动底栏 · 聊天室未读角标', () => {
-  it('中间新建入口先打开动作面板，再按类型打开快速收集', async () => {
+  it('中间新建入口把笔记交给笔记库的正式创建流程，不再打开快速收集', async () => {
     const host = mount();
     const captureEntry = host.querySelector<HTMLButtonElement>(
-      `.mobile-bottom-nav__item[aria-label="${zhCN.mobileNavigation.quickCapture}"]`,
+      `.mobile-bottom-nav__item[aria-label="${zhCN.mobileNavigation.create}"]`,
     );
 
     captureEntry?.click();
@@ -96,13 +98,15 @@ describe('移动底栏 · 聊天室未读角标', () => {
 
     noteAction?.click();
     await nextTick();
-    expect(openQuickCapture).toHaveBeenCalledWith('note');
+    expect(formalCreate).toHaveBeenCalledWith('note');
+    expect(routerPush).not.toHaveBeenCalled();
+    expect(openQuickCapture).not.toHaveBeenCalled();
   });
 
   it('中间新建入口把资料生成作为二级动作打开知识工坊', async () => {
     const host = mount();
     const captureEntry = host.querySelector<HTMLButtonElement>(
-      `.mobile-bottom-nav__item[aria-label="${zhCN.mobileNavigation.quickCapture}"]`,
+      `.mobile-bottom-nav__item[aria-label="${zhCN.mobileNavigation.create}"]`,
     );
 
     captureEntry?.click();
@@ -113,7 +117,24 @@ describe('移动底栏 · 聊天室未读角标', () => {
 
     toolboxAction?.click();
     await nextTick();
-    expect(routerPush).toHaveBeenCalledWith('/toolbox');
+    expect(routerPush).toHaveBeenCalledWith({ path: '/toolbox' });
+  });
+
+  it('书签和待办继续进入各自的完整新建页面', async () => {
+    const host = mount();
+    host
+      .querySelector<HTMLButtonElement>(`.mobile-bottom-nav__item[aria-label="${zhCN.mobileNavigation.create}"]`)
+      ?.click();
+    await nextTick();
+    const actions = [...host.querySelectorAll<HTMLButtonElement>('.create-hub-stub button')];
+
+    actions.find((button) => button.textContent?.includes(zhCN.mobileNavigation.createHub.bookmark))?.click();
+    expect(routerPush).toHaveBeenCalledWith({ name: 'bookmarkEditMg', params: { id: 'add' } });
+
+    routerPush.mockClear();
+    actions.find((button) => button.textContent?.includes(zhCN.mobileNavigation.createHub.todo))?.click();
+    expect(routerPush).toHaveBeenCalledWith({ name: 'todoCreate' });
+    expect(formalCreate).not.toHaveBeenCalled();
   });
 
   it('只把数字角标挂在聊天室入口，并提供完整读屏语义', async () => {

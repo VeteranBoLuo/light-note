@@ -1,5 +1,6 @@
 <template>
   <BPopover
+    v-bind="$attrs"
     v-model:open="detailsOpen"
     trigger="click"
     placement="bottom-right"
@@ -141,6 +142,9 @@
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import EntitlementAcquireModal from '@/components/support/EntitlementAcquireModal.vue';
+
+  // 容量入口与权益弹窗是两个根节点，外部布局属性统一透传给可见的 BPopover 触发器。
+  defineOptions({ inheritAttrs: false });
 
   withDefaults(
     defineProps<{

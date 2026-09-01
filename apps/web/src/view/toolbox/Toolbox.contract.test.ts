@@ -573,6 +573,8 @@ describe('知识工具箱前端边界', () => {
     expect(selector).toContain('resourcePickerRef.value?.captureScrollAnchor?.()');
     expect(selector).toContain('resourcePickerRef.value?.prepareScrollAnchor?.(');
     expect(selector).toContain('shouldShowResourceListBackToTop');
+    expect(selector).toContain('icon.ai.scrollUp');
+    expect(selector).not.toContain('icon.ai.scrollDown');
     expect(selectorTemplate).toContain('class="toolbox-resource-selector__back-top"');
     expect(workbench).toContain(':page-scroll="false"');
     expect(workbench).toContain('width: min(1500px, 100%)');

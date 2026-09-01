@@ -111,7 +111,7 @@
         :aria-label="t('toolbox.workbench.backToResourceTop')"
         @click="backToResourceTop"
       >
-        <SvgIcon :src="icon.ai.scrollDown" size="15" aria-hidden="true" />
+        <SvgIcon :src="icon.ai.scrollUp" size="15" aria-hidden="true" />
         {{ t('toolbox.workbench.backToResourceTop') }}
       </BButton>
     </div>
