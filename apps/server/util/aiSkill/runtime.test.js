@@ -82,6 +82,10 @@ describe('executeAiSkill', () => {
       }),
     ).toEqual({ status: 'partial', errorCode: 'IMAGE_RECOGNITION_FALLBACK' });
     expect(executionConfig.resolveResultOutcome({ coverage: { warnings: [] } })).toEqual({ status: 'success' });
+    expect(executionConfig.resolveResultOutcome({ coverage: { complete: false, warnings: [] } })).toEqual({
+      status: 'partial',
+      errorCode: 'AI_SKILL_COVERAGE_PARTIAL',
+    });
     expect(skill.prepare).toHaveBeenCalledTimes(1);
     expect(callModel).toHaveBeenCalledTimes(1);
     expect(callModel).toHaveBeenCalledWith(
@@ -225,6 +229,65 @@ describe('executeAiSkill', () => {
       ),
     ).resolves.toMatchObject({ result: { content: '内部产物' } });
     expect(userBillingConfig).toMatchObject({ billingPolicy: 'user', skillId: 'help.answer' });
+  });
+
+  it('Context-aware Skill 在根 Execution 内按服务端权威范围重编译调用计划', async () => {
+    const configureExecution = vi.fn();
+    const context = {
+      ...resolvedContext('e'.repeat(64)),
+      resourceRefs: Array.from({ length: 81 }, (_, index) => ({
+        type: 'note',
+        id: `n-${index + 1}`,
+        version: 'v1',
+      })),
+    };
+    const skill = {
+      id: 'tag.analyze',
+      version: 1,
+      domain: 'tag',
+      effect: 'read',
+      modelPolicy: { maxTokens: 3_200, temperature: 0.1 },
+      providerPlanPolicy: {
+        contextAware: true,
+        modelGenerationCalls: ({ resourceCount }) => Math.ceil(resourceCount / 40) + 1,
+        outputRepairCalls: ({ resourceCount }) => Math.ceil(resourceCount / 40) + 1,
+        maxCharsPerResource: 800,
+        maxTotalEvidenceChars: 400_000,
+      },
+      validateInput: (input) => input,
+      prepare: async () => ({
+        result: { kind: 'grounded_markdown', content: '完成' },
+        sources: [],
+        coverage: { complete: true, warnings: [] },
+        modelCalled: false,
+      }),
+    };
+
+    const result = await executeAiSkill(
+      { ...request(), skillId: 'tag.analyze', scope: { resourceRefs: [{ type: 'tag', id: 'tag-1' }] } },
+      { user: { id: 'u-1', role: 'user' } },
+      {
+        resolveSkill: () => skill,
+        assertDomainEnabled: () => {},
+        resolveContext: async () => context,
+        runExecution: async (_config, operation) => operation(),
+        configureExecution,
+      },
+    );
+
+    expect(configureExecution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        maxUserProviderCalls: 4,
+        maxPlatformProviderCalls: 4,
+        providerPlan: expect.objectContaining({
+          stages: {
+            model_generation: { billingScope: 'user', maxCalls: 4 },
+            output_repair: { billingScope: 'platform', maxCalls: 4 },
+          },
+        }),
+      }),
+    );
+    expect(result.receipt.resourceCount).toBe(81);
   });
 
   it('Skill 可确定性返回结果而完全不调用模型', async () => {

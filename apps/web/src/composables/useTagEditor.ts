@@ -143,9 +143,12 @@ export function useTagEditor(options: UseTagEditorOptions = {}) {
         name: item.name || (item.type === 'note' ? t('inbox.untitledNote') : ''),
         type: item.type,
       }));
-      selectedBookmarkIds.value = (response.data.selectedIds?.bookmark || []).map(String);
-      selectedNoteIds.value = (response.data.selectedIds?.note || []).map(String);
-      selectedFileIds.value = (response.data.selectedIds?.file || []).map(String);
+      const activeIds = new Set(allResources.value.map((item) => `${item.type}:${item.rawId}`));
+      const selectedIds = (type: TagResourceKind) =>
+        (response.data.selectedIds?.[type] || []).map(String).filter((id: string) => activeIds.has(`${type}:${id}`));
+      selectedBookmarkIds.value = selectedIds('bookmark');
+      selectedNoteIds.value = selectedIds('note');
+      selectedFileIds.value = selectedIds('file');
       initialFingerprint.value = fingerprint();
     } finally {
       loading.value = false;

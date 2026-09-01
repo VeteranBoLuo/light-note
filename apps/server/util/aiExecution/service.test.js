@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createAiGateway } from '../agent/aiGateway.js';
 import { getActiveAiExecution } from './context.js';
 import { createAiProviderPlan } from './providerPlan.js';
-import { runAiExecution } from './service.js';
+import { configureActiveAiExecution, runAiExecution } from './service.js';
 
 function createPersistence() {
   return {
@@ -79,6 +79,56 @@ describe('aiExecution', () => {
       quotaSettlementStatus: 'not_used',
       status: 'success',
     });
+  });
+
+  it('Context 解析后可在首次 Provider 前按权威材料规模更新阶段计划，开始调用后即锁定', async () => {
+    const persistence = createPersistence();
+    const quota = {
+      reserve: vi.fn().mockResolvedValue({ blocked: false, reserved: 20_000, reservationKey: 'dynamic-plan' }),
+      reconcile: vi.fn().mockResolvedValue(true),
+    };
+    const client = vi.fn().mockResolvedValue({
+      content: 'ok',
+      usage: { promptTokens: 10, completionTokens: 2, totalTokens: 12 },
+      usageStatus: 'reported',
+    });
+    const gateway = createAiGateway({ completeClient: client, streamClient: vi.fn() });
+    const initialPlan = createAiProviderPlan({
+      model_generation: { billingScope: 'user', maxCalls: 1 },
+      output_repair: { billingScope: 'platform', maxCalls: 1 },
+    });
+    const expandedPlan = createAiProviderPlan({
+      model_generation: { billingScope: 'user', maxCalls: 2 },
+      output_repair: { billingScope: 'platform', maxCalls: 2 },
+    });
+
+    await runAiExecution(
+      {
+        requestId: 'f76bc925-0fc2-46e3-babc-cae19418fe27',
+        request: { user: { id: 'u1', role: 'user' }, headers: {}, body: {} },
+        taskType: 'skill_tag_analyze',
+        providerPlan: initialPlan,
+        reservationTokens: 5_000,
+        persistence,
+      },
+      async () => {
+        const execution = configureActiveAiExecution({ providerPlan: expandedPlan, reservationTokens: 20_000 });
+        expect(execution).toMatchObject({
+          maxUserProviderCalls: 2,
+          maxPlatformProviderCalls: 2,
+          reservationTokens: 20_000,
+        });
+        await gateway.complete([], { trace: { stage: 'skill_tag_analyze_batch_1' } });
+        await gateway.complete([], { trace: { stage: 'skill_tag_analyze_reduce' } });
+        expect(() => configureActiveAiExecution({ providerPlan: initialPlan, reservationTokens: 5_000 })).toThrowError(
+          expect.objectContaining({ code: 'AI_EXECUTION_CONFIGURATION_LOCKED' }),
+        );
+      },
+      { quota },
+    );
+
+    expect(client).toHaveBeenCalledTimes(2);
+    expect(quota.reserve).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ reserveTokens: 20_000 }));
   });
 
   it('最终没有可交付结果时记为失败、保留 Provider 用量，但退回用户额度', async () => {

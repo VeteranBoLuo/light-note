@@ -1,5 +1,9 @@
 <template>
-  <section class="ai-skill-panel" :class="`is-${presentation}`" :aria-label="title">
+  <section
+    class="ai-skill-panel"
+    :class="[`is-${presentation}`, { 'has-reserved-result-space': reserveResultSpace }]"
+    :aria-label="title"
+  >
     <header class="ai-skill-panel__header">
       <span class="ai-skill-panel__icon" aria-hidden="true">
         <SvgIcon :src="panelIcon" size="20" />
@@ -48,7 +52,7 @@
       <strong>{{ t('aiSkills.unavailableTitle') }}</strong>
       <span>{{ t('aiSkills.unavailableDescription') }}</span>
     </div>
-    <div v-else-if="loading" class="ai-skill-panel__state" role="status" aria-live="polite">
+    <div v-else-if="loading" class="ai-skill-panel__state is-loading" role="status" aria-live="polite">
       <BLoading inline loading :title="t('aiSkills.processing')" />
     </div>
     <div v-else-if="error" class="ai-skill-panel__state is-error" role="alert">
@@ -72,7 +76,14 @@
           {{ sourceTitle(source, index) }}
         </span>
       </div>
-      <div v-if="coverageWarnings.length" class="ai-skill-panel__coverage" role="status">
+      <div
+        v-if="coverageSummary || coverageWarnings.length"
+        class="ai-skill-panel__coverage"
+        :class="{ 'is-complete': response.coverage?.complete === true }"
+        role="status"
+      >
+        <strong v-if="coverageSummary">{{ coverageSummary }}</strong>
+        <span v-for="detail in coverageDetails" :key="detail">{{ detail }}</span>
         <span v-for="warning in coverageWarnings" :key="warning">{{ warning }}</span>
       </div>
       <div v-if="response.availableActions.length || $slots['result-actions']" class="ai-skill-panel__result-actions">
@@ -122,6 +133,7 @@
       skillId: string;
       surface: string;
       resourceRefs?: readonly AiSkillResourceRef[];
+      scopeResourceCount?: number;
       scopeLabel?: string;
       actions?: readonly AiSkillPanelAction[];
       showPrompt?: boolean;
@@ -137,6 +149,7 @@
       autoRunActionId?: string;
       iconSrc?: string;
       showGrounding?: boolean;
+      reserveResultSpace?: boolean;
     }>(),
     {
       description: '',
@@ -156,6 +169,7 @@
       autoRunActionId: '',
       iconSrc: '',
       showGrounding: true,
+      reserveResultSpace: false,
     },
   );
 
@@ -180,6 +194,28 @@
   const coverageWarnings = computed(() =>
     formatAiSkillCoverageWarnings(response.value?.coverage?.warnings, (key) => t(key)),
   );
+  const effectiveResourceCount = computed(() => {
+    const declared = Number(props.scopeResourceCount);
+    return Number.isFinite(declared) && declared >= 0 ? Math.floor(declared) : props.resourceRefs.length;
+  });
+  const coverageSummary = computed(() => {
+    const total = Number(response.value?.coverage?.requestedResources);
+    const analyzed = Number(response.value?.coverage?.analyzedResources);
+    if (!Number.isSafeInteger(total) || total < 0 || !Number.isSafeInteger(analyzed) || analyzed < 0) return '';
+    return t('aiSkills.coverageSummary', { analyzed, total });
+  });
+  const coverageDetails = computed(() => {
+    const coverage = response.value?.coverage;
+    if (!coverageSummary.value || !coverage) return [];
+    const details: string[] = [];
+    const unreadable = Number(coverage.unreadableResources || 0);
+    const metadataOnly = Number(coverage.metadataOnlyResources || 0);
+    const truncated = Number(coverage.truncatedResources || 0);
+    if (unreadable > 0) details.push(t('aiSkills.coverageUnreadable', { count: unreadable }));
+    if (metadataOnly > 0) details.push(t('aiSkills.coverageMetadataOnly', { count: metadataOnly }));
+    if (truncated > 0) details.push(t('aiSkills.coverageTruncated', { count: truncated }));
+    return details;
+  });
   const errorTitle = computed(() =>
     error.value?.code === 'AI_QUOTA_EXCEEDED' ? t('aiSkills.quotaErrorTitle') : t('aiSkills.errorTitle'),
   );
@@ -222,7 +258,7 @@
             : props.skillId.startsWith('search.')
               ? 'search'
               : 'none')) as any,
-      resourceCountBucket: aiResourceCountBucket(props.resourceRefs.length),
+      resourceCountBucket: aiResourceCountBucket(effectiveResourceCount.value),
     };
   });
 
@@ -479,6 +515,17 @@
     color: var(--danger-color);
   }
 
+  .ai-skill-panel.has-reserved-result-space .ai-skill-panel__state,
+  .ai-skill-panel.has-reserved-result-space .ai-skill-panel__result {
+    min-height: min(370px, 50vh);
+  }
+
+  .ai-skill-panel.has-reserved-result-space .ai-skill-panel__state.is-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   .ai-skill-panel__retry {
     align-self: flex-start;
     margin-top: 4px;
@@ -515,6 +562,15 @@
     border-radius: 999px;
     color: var(--text-color);
     background: var(--card-background);
+  }
+
+  .ai-skill-panel__coverage.is-complete {
+    border-left-color: var(--primary-color);
+    color: var(--desc-color);
+  }
+
+  .ai-skill-panel__coverage.is-complete strong {
+    color: var(--primary-color);
   }
 
   .ai-skill-panel__coverage {

@@ -10,7 +10,16 @@ describe('aiProductFeature', () => {
     expect(getAiProductFeatureState()).toEqual({
       protocolVersion: 1,
       kernelEnabled: true,
-      skills: { note: true, bookmark: true, file: true, todo: true, search: true, help: true, toolbox: true },
+      skills: {
+        note: true,
+        bookmark: true,
+        file: true,
+        todo: true,
+        search: true,
+        help: true,
+        toolbox: true,
+        tag: true,
+      },
       archive: { readonly: true },
     });
     expect(assertAiSkillDomainEnabled('file').kernelEnabled).toBe(true);

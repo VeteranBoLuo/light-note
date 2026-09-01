@@ -67,6 +67,38 @@ const PROVIDERS = {
   },
 };
 
+// DeepSeek function calling 当前只接受 JSON Schema 的兼容子集。业务侧仍保留完整 Schema，
+// 并在模型返回后执行 min/max/去重/长度等严格校验；这里只裁剪 Provider 不识别的声明，
+// 避免合法的结构化 Skill 在请求进入模型前就被 4xx 拒绝。
+const DEEPSEEK_UNSUPPORTED_SCHEMA_KEYS = new Set(['minItems', 'maxItems', 'uniqueItems', 'maxLength']);
+
+function sanitizeJsonSchemaForDeepSeek(value) {
+  if (Array.isArray(value)) return value.map(sanitizeJsonSchemaForDeepSeek);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => !DEEPSEEK_UNSUPPORTED_SCHEMA_KEYS.has(key))
+      .map(([key, item]) => [key, sanitizeJsonSchemaForDeepSeek(item)]),
+  );
+}
+
+function providerCompatibleTools(cfg, tools) {
+  if (cfg.name !== 'deepseek' || !Array.isArray(tools)) return tools;
+  return tools.map((tool) => ({
+    ...tool,
+    ...(tool?.function
+      ? {
+          function: {
+            ...tool.function,
+            ...(tool.function.parameters
+              ? { parameters: sanitizeJsonSchemaForDeepSeek(tool.function.parameters) }
+              : {}),
+          },
+        }
+      : {}),
+  }));
+}
+
 function getProviderConfig(providerOverride) {
   const name = providerOverride || process.env.AGENT_LLM_PROVIDER || 'deepseek';
   const cfg = PROVIDERS[name];
@@ -147,6 +179,12 @@ export function getActiveProviderInfo(providerOverride, modelOverride) {
   };
 }
 
+export const deepseekClientInternals = Object.freeze({
+  providerCompatibleTools,
+  sanitizeJsonSchemaForDeepSeek,
+  DEEPSEEK_UNSUPPORTED_SCHEMA_KEYS,
+});
+
 // ---- 超时控制 ----
 // Planner(同步)用整体超时;流式用"空闲超时"(见 requestDeepSeekStream),
 // 避免正常的长回答被绝对超时误杀,只拦截"连上却不吐字"的挂死。
@@ -211,7 +249,7 @@ export async function requestDeepSeek(messages, options = {}) {
   }
 
   if (options.tools?.length) {
-    body.tools = options.tools;
+    body.tools = providerCompatibleTools(cfg, options.tools);
     body.tool_choice = options.toolChoice ?? 'auto';
   }
 

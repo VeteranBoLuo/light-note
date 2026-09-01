@@ -10,6 +10,7 @@ const PUBLIC_AI_EXECUTION_ERRORS = Object.freeze({
   AI_RATE_LIMITED: { status: 503, message: 'AI 服务当前繁忙，本次未生成内容，请稍后重试' },
   AI_NETWORK_ERROR: { status: 503, message: 'AI 服务连接失败，本次未生成内容，请稍后重试' },
   AI_PROVIDER_AUTH_FAILED: { status: 503, message: 'AI 服务配置异常，暂时无法生成内容' },
+  AI_PROVIDER_REQUEST_INVALID: { status: 502, message: 'AI 服务暂时无法处理本次材料，请稍后重试' },
   AI_PROVIDER_ERROR: { status: 503, message: 'AI 服务暂时不可用，本次未生成内容，请稍后重试' },
   AI_SKILL_OUTPUT_EMPTY: { status: 502, message: 'AI 没有生成可用内容，请重新生成' },
   AI_SKILL_OUTPUT_TOO_LONG: { status: 502, message: '生成内容超过单次处理上限，请减少材料后重试' },

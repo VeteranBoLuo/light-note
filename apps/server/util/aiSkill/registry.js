@@ -9,6 +9,7 @@ import { searchSelectedSkills } from './skills/searchSelectedSkills.js';
 import { todoSkills } from './skills/todoSkills.js';
 import { todoExtractionSkills } from './skills/todoExtractionSkills.js';
 import { toolboxSkills } from './skills/toolboxSkills.js';
+import tagAnalysisSkill from './skills/tagAnalysisSkill.js';
 import { aiSkillError } from './errors.js';
 
 const definitions = Object.freeze([
@@ -22,6 +23,7 @@ const definitions = Object.freeze([
   bookmarkParseSkill,
   ...todoSkills,
   ...todoExtractionSkills,
+  tagAnalysisSkill,
   ...toolboxSkills,
 ]);
 const registry = new Map(definitions.map((definition) => [`${definition.id}@${definition.version}`, definition]));

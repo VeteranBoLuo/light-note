@@ -174,6 +174,49 @@ describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
     });
   });
 
+  it('DeepSeek 请求只裁剪不支持的 JSON Schema 关键字，完整校验契约仍留在业务侧', async () => {
+    delete process.env.AGENT_LLM_PROVIDER;
+    process.env.DEEPSEEK_API_KEY = 'test-key';
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: '', tool_calls: [] }, finish_reason: 'tool_calls' }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    const parameters = {
+      type: 'object',
+      properties: {
+        blocks: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 60,
+          uniqueItems: true,
+          items: {
+            type: 'object',
+            properties: { markdown: { type: 'string', maxLength: 10_000 } },
+          },
+        },
+      },
+    };
+
+    await requestDeepSeek([{ role: 'user', content: '总结' }], {
+      tools: [{ type: 'function', function: { name: 'submit_grounded_answer', parameters } }],
+    });
+
+    const requestBody = JSON.parse(globalThis.fetch.mock.calls[0][1].body);
+    const sentSchema = requestBody.tools[0].function.parameters;
+    expect(JSON.stringify(sentSchema)).not.toMatch(/minItems|maxItems|uniqueItems|maxLength/u);
+    expect(sentSchema).toMatchObject({
+      type: 'object',
+      properties: { blocks: { type: 'array', items: { type: 'object' } } },
+    });
+    expect(parameters.properties.blocks).toMatchObject({ minItems: 1, maxItems: 60, uniqueItems: true });
+    expect(parameters.properties.blocks.items.properties.markdown.maxLength).toBe(10_000);
+  });
+
   it('流式请求解析增量与末尾 usage，不把缺失 usage 记为 0 成功', async () => {
     delete process.env.AGENT_LLM_PROVIDER;
     process.env.DEEPSEEK_API_KEY = 'test-key';

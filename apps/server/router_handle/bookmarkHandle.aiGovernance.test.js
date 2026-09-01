@@ -32,6 +32,7 @@ vi.mock('../util/resourceTags.js', () => ({
   insertTagResourceRelations: vi.fn(),
   replaceResourceTagRelations: vi.fn(),
   replaceTagResourceRelations: vi.fn(),
+  validateEditableTagResources: vi.fn(),
   validateUserTags: vi.fn(),
   validateUserResources: vi.fn(),
 }));
