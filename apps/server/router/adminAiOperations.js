@@ -4,11 +4,12 @@ import {
   getAdminAiOperationsOverviewHandle,
   queryAdminAiExecutionsHandle,
 } from '../router_handle/adminAiOperationsHandle.js';
+import { aiUsageReadRateLimiter } from '../util/requestRateLimit.js';
 
 const router = express.Router();
 
-router.post('/overview', getAdminAiOperationsOverviewHandle);
-router.post('/executions/query', queryAdminAiExecutionsHandle);
-router.post('/executions/detail', getAdminAiExecutionDetailHandle);
+router.post('/overview', aiUsageReadRateLimiter, getAdminAiOperationsOverviewHandle);
+router.post('/executions/query', aiUsageReadRateLimiter, queryAdminAiExecutionsHandle);
+router.post('/executions/detail', aiUsageReadRateLimiter, getAdminAiExecutionDetailHandle);
 
 export default router;

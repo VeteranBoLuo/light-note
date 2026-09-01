@@ -172,6 +172,22 @@ function executionItems() {
       actor: { id: '', alias: null, role: null },
       subject: { id: 'user-004', alias: '听雨', role: 'user' },
     }),
+    executionFixture({
+      id: 'c809d2b7-8905-4b67-9702-2c5fe1a0f70a',
+      requestId: 'request-toolbox-research-007',
+      actionId: 'toolbox.research_brief',
+      module: 'toolbox',
+      labelKey: 'toolboxResearchBrief',
+      createdAt: now - 5 * 60 * 60_000,
+      updatedAt: now - 5 * 60 * 60_000 + 7_400,
+      providerTokens: 7_620,
+      chargedTokens: 7_620,
+      platformCoveredTokens: 0,
+      durationMs: 7_400,
+      actor: { id: 'user-005', alias: '清和', role: 'user' },
+      subject: { id: 'user-005', alias: '清和', role: 'user' },
+      surface: 'toolbox-worker',
+    }),
   ];
 }
 
@@ -284,6 +300,14 @@ function overviewFixture() {
             modelActions: 12,
             providerTokens: 4_960,
             chargedTokens: 4_200,
+            failures: 0,
+          },
+          {
+            module: 'toolbox',
+            executions: 9,
+            modelActions: 9,
+            providerTokens: 7_620,
+            chargedTokens: 7_620,
             failures: 0,
           },
         ],

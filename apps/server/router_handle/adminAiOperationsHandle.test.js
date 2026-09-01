@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 
 const serviceMocks = vi.hoisted(() => ({
   getAdminAiExecutionDetail: vi.fn(),
@@ -10,6 +11,7 @@ vi.mock('../util/services/adminAiOperationsService.js', () => serviceMocks);
 
 const { getAdminAiExecutionDetailHandle, getAdminAiOperationsOverviewHandle, queryAdminAiExecutionsHandle } =
   await import('./adminAiOperationsHandle.js');
+const routerSource = readFileSync(new URL('../router/adminAiOperations.js', import.meta.url), 'utf8');
 
 function response() {
   const res = {};
@@ -20,6 +22,10 @@ function response() {
 
 describe('adminAiOperationsHandle', () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it('三类聚合读取都复用 AI 用量限流器', () => {
+    expect(routerSource.match(/aiUsageReadRateLimiter/gu)).toHaveLength(4);
+  });
 
   it('仅允许 Root 自己的普通管理会话读取运行数据', async () => {
     for (const req of [

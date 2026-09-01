@@ -13,7 +13,8 @@ function ensureRootActor(req, res) {
 }
 
 function sendServiceError(res, error, scene) {
-  const status = Math.min(599, Math.max(400, Number(error?.status || 503)));
+  const requestedStatus = Number(error?.status);
+  const status = Number.isInteger(requestedStatus) ? Math.min(599, Math.max(400, requestedStatus)) : 503;
   const code = String(error?.code || 'AI_OPERATIONS_STORE_UNAVAILABLE');
   if (status >= 500) console.error('[admin-ai-operations] scene=%s failed code=%s', scene, stableAgentErrorCode(error));
   const messages = {
