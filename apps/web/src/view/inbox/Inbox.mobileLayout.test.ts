@@ -83,6 +83,12 @@ describe('移动端待办页签布局', () => {
     );
   });
 
+  it('移动端嵌入工具栏重置桌面宽度 flex 基准，不挤占待整理列表高度', () => {
+    expect(inboxSource).toMatch(
+      /@media \(max-width: 767px\)[\s\S]*?\.inbox-page--embedded \.inbox-toolbar__right--resources\s*\{[\s\S]*?flex:\s*0 0 auto;/,
+    );
+  });
+
   it('桌面待整理搜索框占满工具栏剩余宽度，快速添加固定在最右侧', () => {
     expect(inboxSource).toContain('class="inbox-toolbar__right inbox-toolbar__right--resources"');
     expect(inboxSource).toMatch(

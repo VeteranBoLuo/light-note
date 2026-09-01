@@ -2763,6 +2763,7 @@
     .inbox-page--embedded .inbox-toolbar__right--resources {
       width: 100%;
       min-width: 0;
+      flex: 0 0 auto;
       grid-template-columns: minmax(0, 1fr) 112px;
     }
 
