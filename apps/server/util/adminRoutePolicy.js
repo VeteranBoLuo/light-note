@@ -194,6 +194,23 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'inbox', [
   ['POST', '/inbox/enqueue'],
   ['POST', '/inbox/complete'],
 ]);
+declare(ADMIN_POLICIES.READ, 'organize', [
+  ['GET', '/organize/summary'],
+  ['GET', '/organize/issues/:issueType'],
+  ['GET', '/organize/duplicate-bookmarks/:groupKey/preview'],
+  ['GET', '/organize/bookmark-health'],
+]);
+declare(ADMIN_POLICIES.CONTENT_WRITE, 'organize', [
+  ['POST', '/organize/untagged/ignore'],
+  ['DELETE', '/organize/untagged/ignore'],
+  ['POST', '/organize/duplicate-bookmarks/:groupKey/resolve'],
+  ['POST', '/organize/duplicate-bookmarks/:groupKey/ignore'],
+  ['DELETE', '/organize/duplicate-bookmarks/:groupKey/ignore'],
+  ['POST', '/organize/bookmark-health/check-batch'],
+  ['POST', '/organize/bookmark-health/:bookmarkId/recheck'],
+  ['POST', '/organize/bookmark-health/:bookmarkId/mark-normal'],
+  ['DELETE', '/organize/bookmark-health/:bookmarkId/mark-normal'],
+]);
 declare(ADMIN_POLICIES.READ, 'todo', [
   ['POST', '/todo/list'],
   ['POST', '/todo/count'],
@@ -638,6 +655,17 @@ function resolvePolicy(method, path) {
   if (/^\/resource-governance\/jobs\/[^/]+\/(?:retry|cancel)$/.test(path)) {
     const action = path.endsWith('/retry') ? 'retry' : 'cancel';
     return routePolicies.get(`${method} /resource-governance/jobs/:id/${action}`);
+  }
+  if (/^\/organize\/issues\/[^/]+$/.test(path)) {
+    return routePolicies.get(`${method} /organize/issues/:issueType`);
+  }
+  if (/^\/organize\/duplicate-bookmarks\/[^/]+\/(?:preview|resolve|ignore)$/.test(path)) {
+    const action = path.split('/').pop();
+    return routePolicies.get(`${method} /organize/duplicate-bookmarks/:groupKey/${action}`);
+  }
+  if (/^\/organize\/bookmark-health\/[^/]+\/(?:recheck|mark-normal)$/.test(path)) {
+    const action = path.split('/').pop();
+    return routePolicies.get(`${method} /organize/bookmark-health/:bookmarkId/${action}`);
   }
   if (/^\/infra\/logs\/[^/]+$/.test(path)) {
     return routePolicies.get(`${method} /infra/logs/:serviceId`);

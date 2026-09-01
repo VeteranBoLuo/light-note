@@ -1,5 +1,6 @@
 import pool from '../db/index.js';
 import { inspectBookmarkUrl } from '../util/bookmarkUrl.js';
+import { createBookmarkExactUrlHash } from '../util/services/bookmarkExactUrlService.js';
 
 // 默认只读审计；显式传 --apply-safe 才会修复可确定的规范化差异和“协议后单一空格候选”。
 // 分享文案、多候选及无候选脏数据一律留在 unresolvedIds，禁止脚本猜测目标网址。
@@ -64,9 +65,15 @@ async function main() {
         const resetIcon = hostChanged(item.row.url, item.canonicalUrl);
         const [result] = await connection.query(
           resetIcon
-            ? 'UPDATE bookmark SET url = ?, icon_url = NULL, icon_checked_at = NULL WHERE id = ? AND user_id = ? AND url = ? AND del_flag = 0'
-            : 'UPDATE bookmark SET url = ? WHERE id = ? AND user_id = ? AND url = ? AND del_flag = 0',
-          [item.canonicalUrl, item.row.id, item.row.userId, item.row.url],
+            ? 'UPDATE bookmark SET url = ?, url_exact_hash = ?, icon_url = NULL, icon_checked_at = NULL WHERE id = ? AND user_id = ? AND url = ? AND del_flag = 0'
+            : 'UPDATE bookmark SET url = ?, url_exact_hash = ? WHERE id = ? AND user_id = ? AND url = ? AND del_flag = 0',
+          [
+            item.canonicalUrl,
+            createBookmarkExactUrlHash(item.canonicalUrl),
+            item.row.id,
+            item.row.userId,
+            item.row.url,
+          ],
         );
         stats.repaired += Number(result.affectedRows || 0);
       }

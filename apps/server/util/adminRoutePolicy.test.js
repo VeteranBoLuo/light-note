@@ -43,6 +43,7 @@ describe('adminRoutePolicyMiddleware', () => {
       'noteLibrary.js': '/note',
       'notification.js': '/notification',
       'opinion.js': '/opinion',
+      'organize.js': '/organize',
       'resourceGovernance.js': '/resource-governance',
       'search.js': '/search',
       'security.js': '/security',
@@ -131,6 +132,52 @@ describe('adminRoutePolicyMiddleware', () => {
       const next = vi.fn();
       adminRoutePolicyMiddleware(createReq('/bookmark/getBookmarkList', 'POST', mode), createRes(), next);
       expect(next).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('整理中心查询在 readonly 与 maintain 模式放行，动态问题路径也能命中声明', () => {
+    for (const mode of ['readonly', 'maintain']) {
+      for (const [method, path] of [
+        ['GET', '/organize/summary'],
+        ['GET', '/organize/issues/untagged'],
+        ['GET', '/organize/duplicate-bookmarks/group-1/preview'],
+        ['GET', '/organize/bookmark-health'],
+      ]) {
+        const next = vi.fn();
+        const res = createRes();
+        adminRoutePolicyMiddleware(createReq(path, method, mode), res, next);
+        expect(next).toHaveBeenCalledTimes(1);
+        expect(res.json).not.toHaveBeenCalled();
+      }
+    }
+  });
+
+  it('整理中心写操作在 readonly 阻断、maintain 放行，动态资源路径也能命中声明', () => {
+    for (const [method, path] of [
+      ['POST', '/organize/untagged/ignore'],
+      ['DELETE', '/organize/untagged/ignore'],
+      ['POST', '/organize/duplicate-bookmarks/group-1/resolve'],
+      ['POST', '/organize/duplicate-bookmarks/group-1/ignore'],
+      ['DELETE', '/organize/duplicate-bookmarks/group-1/ignore'],
+      ['POST', '/organize/bookmark-health/check-batch'],
+      ['POST', '/organize/bookmark-health/bookmark-1/recheck'],
+      ['POST', '/organize/bookmark-health/bookmark-1/mark-normal'],
+      ['DELETE', '/organize/bookmark-health/bookmark-1/mark-normal'],
+    ]) {
+      const readonlyNext = vi.fn();
+      const readonlyRes = createRes();
+      adminRoutePolicyMiddleware(createReq(path, method, 'readonly'), readonlyRes, readonlyNext);
+      expect(readonlyNext).not.toHaveBeenCalled();
+      expect(readonlyRes.status).toHaveBeenCalledWith(403);
+      expect(readonlyRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { code: 'ADMIN_PREVIEW_READONLY' } }),
+      );
+
+      const maintainNext = vi.fn();
+      const maintainRes = createRes();
+      adminRoutePolicyMiddleware(createReq(path, method, 'maintain'), maintainRes, maintainNext);
+      expect(maintainNext).toHaveBeenCalledTimes(1);
+      expect(maintainRes.json).not.toHaveBeenCalled();
     }
   });
 

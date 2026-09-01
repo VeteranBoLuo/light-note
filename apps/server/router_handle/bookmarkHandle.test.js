@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, it, expect, vi } from 'vitest';
 
 // common.js 的循环依赖链会一路拉到 router/file.js → util/obsClient.js,
@@ -19,6 +20,7 @@ vi.mock('../util/obsClient.js', () => ({
 // 先 import common.js 让 handler 作为叶子完成初始化,规避循环(同 auth.test.js / commonHandle.test.js)。
 await import('../util/common.js');
 const { normalizeBookmarkUrl } = await import('./bookmarkHandle.js');
+const source = readFileSync(new URL('./bookmarkHandle.js', import.meta.url), 'utf8');
 
 describe('normalizeBookmarkUrl', () => {
   it('裸域名补 https://', () => {
@@ -51,5 +53,24 @@ describe('normalizeBookmarkUrl', () => {
     expect(() => normalizeBookmarkUrl('https://%20keep.com')).toThrow('识别到候选地址');
     expect(() => normalizeBookmarkUrl('https://网址放这里→ https:// keep.com')).toThrow('识别到候选地址');
     expect(() => normalizeBookmarkUrl('javascript:alert(1)')).toThrow('仅支持 HTTP 或 HTTPS 地址');
+  });
+});
+
+describe('bookmarkHandle 资源主体与错误边界', () => {
+  it('编辑与排序在管理员代管模式下写入 resourceUser，而不是管理员本人', () => {
+    const updateSource = source.slice(source.indexOf('export const updateBookmark ='), source.indexOf('export const getBookmarkDetail'));
+    const sortSource = source.slice(source.indexOf('export const updateBookmarkSort ='), source.indexOf('// 解析 Netscape'));
+
+    expect(updateSource).toContain('const userId = (req.resourceUser || req.user).id');
+    expect(sortSource).toContain('const userId = (req.resourceUser || req.user).id');
+    expect(updateSource).not.toContain('const userId = req.user.id');
+    expect(sortSource).not.toContain('const userId = req.user.id');
+  });
+
+  it('书签编辑不会把数据库原始错误文本返回给客户端', () => {
+    const updateSource = source.slice(source.indexOf('export const updateBookmark ='), source.indexOf('export const getBookmarkDetail'));
+    expect(updateSource).toContain("console.error('[bookmark] update failed code=%s'");
+    expect(updateSource).toContain("resultData(null, 500, '服务器内部错误')");
+    expect(updateSource).not.toContain('resultData(null, 500, error.message)');
   });
 });

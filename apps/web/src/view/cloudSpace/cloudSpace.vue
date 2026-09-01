@@ -298,7 +298,7 @@
       return;
     }
     message.success(t('inbox.completedSuccess'));
-    router.push('/inbox');
+    router.push({ path: '/organize', query: { issue: 'pending', resourceType: 'file' } });
   }
 
   const CLOUD_SPACE_VIEW_STORAGE_KEY = 'cloud-space-view-mode';

@@ -18,11 +18,11 @@ export interface NavigableResource {
 /**
  * 待整理资源的标准入口。
  *
- * 移动端的 `/inbox` 一级入口属于待办，必须显式携带 `tab=all` 才会进入
- * 资源中心的「待整理」分区；桌面端继续沿用既有的 `/inbox` 地址。
+ * 待整理已经归入整理中心；桌面端和移动端统一使用同一个 canonical 地址。
+ * 参数暂时保留，避免调用方为这次信息架构调整做无意义的端型分支。
  */
-export function resolvePendingResourcesRoute(isMobile: boolean): RouteLocationRaw {
-  return isMobile ? { path: '/inbox', query: { tab: 'all' } } : '/inbox';
+export function resolvePendingResourcesRoute(_isMobile: boolean): RouteLocationRaw {
+  return { path: '/organize', query: { issue: 'pending' } };
 }
 
 export function resolveResourceRoute(resource: NavigableResource): RouteLocationRaw | null {

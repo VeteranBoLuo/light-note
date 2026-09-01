@@ -21,6 +21,7 @@ import trashRouter from '@/router/modules/trash.ts';
 import knowledgeBaseRouter from '@/router/modules/knowledgeBase.ts';
 import graphRouter from '@/router/modules/graph.ts';
 import inboxRouter from '@/router/modules/inbox.ts';
+import organizeRouter from '@/router/modules/organize.ts';
 import todoCreateRouter from '@/router/modules/todoCreate.ts';
 import coBuildRouter from '@/router/modules/coBuild.ts';
 import communityChatRouter from '@/router/modules/communityChat.ts';
@@ -72,6 +73,7 @@ export const routes: RouteRecordRaw[] = [
       knowledgeBaseRouter,
       graphRouter,
       inboxRouter,
+      organizeRouter,
       todoCreateRouter,
       communityChatRouter,
       ...coBuildRouter,

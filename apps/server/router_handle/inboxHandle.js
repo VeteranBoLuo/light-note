@@ -31,6 +31,10 @@ async function withActionCounts(counts, userId) {
   };
 }
 
+function resourceUserId(req) {
+  return (req.resourceUser || req.user)?.id;
+}
+
 function sendInboxError(res, error) {
   const status =
     error?.code === 'INBOX_RESOURCE_FORBIDDEN'
@@ -46,7 +50,8 @@ function sendInboxError(res, error) {
 
 export async function countInbox(req, res) {
   try {
-    res.send(resultData(await withActionCounts(await queryPendingCount(pool, req.user.id), req.user.id)));
+    const userId = resourceUserId(req);
+    res.send(resultData(await withActionCounts(await queryPendingCount(pool, userId), userId)));
   } catch (error) {
     return sendInboxError(res, error);
   }
@@ -54,8 +59,9 @@ export async function countInbox(req, res) {
 
 export async function listInbox(req, res) {
   try {
+    const userId = resourceUserId(req);
     const list = await listInboxResources(pool, {
-      userId: req.user.id,
+      userId,
       type: req.body?.type,
       sort: req.body?.sort,
       keyword: req.body?.keyword,
@@ -63,7 +69,7 @@ export async function listInbox(req, res) {
     });
     const counts = await withActionCounts(
       { pendingTotal: list.pendingTotal, typeTotals: list.typeTotals },
-      req.user.id,
+      userId,
     );
     res.send(
       resultData({
@@ -83,9 +89,10 @@ export async function enqueueInbox(req, res) {
   if (!items || !source) return res.send(resultData(null, 400, '无效的资源列表或来源'));
   let connection;
   try {
+    const userId = resourceUserId(req);
     connection = await pool.getConnection();
     await connection.beginTransaction();
-    const result = await enqueueResources(connection, { userId: req.user.id, items, source });
+    const result = await enqueueResources(connection, { userId, items, source });
     await connection.commit();
     res.send(resultData(result));
   } catch (error) {
@@ -102,9 +109,10 @@ export async function completeInbox(req, res) {
   if (!items) return res.send(resultData(null, 400, '无效的资源列表'));
   let connection;
   try {
+    const userId = resourceUserId(req);
     connection = await pool.getConnection();
     await connection.beginTransaction();
-    const options = { userId: req.user.id, items };
+    const options = { userId, items };
     if (req.suppressUserRewards || req.adminContext) options.suppressUserRewards = true;
     const result = await completeResources(connection, options);
     await connection.commit();

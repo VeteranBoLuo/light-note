@@ -28,7 +28,7 @@ import {
   resetHealth,
 } from '../util/linkHealth.js';
 import { suggestBookmarkMeta, suggestTagsFromText, ORGANIZE_MAX_BATCH } from '../util/aiOrganize.js';
-import { attachPendingStatus, removeInboxRelations } from '../util/resourceInbox.js';
+import { attachPendingStatus } from '../util/resourceInbox.js';
 import { createBookmark, normalizeBookmarkUrl, shouldResetBookmarkIcon } from '../util/services/bookmarkService.js';
 import { runBookmarkImportTransaction } from '../util/services/bookmarkImportService.js';
 import { createIconBatch } from '../util/bookmarkIconBatchService.js';
@@ -42,7 +42,6 @@ import {
 } from '../util/bookmarkUrl.js';
 import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
-import { cleanupBookmarkIconFiles } from '../util/bookmarkIconService.js';
 import { buildPagedResult, normalizeOptionalPagination } from '../util/pagination.js';
 import { AnchoredSortError, moveOwnedResourceByAnchors } from '../util/anchoredSort.js';
 import { completeGrowthTask } from '../util/growthTaskCompletion.js';
@@ -51,6 +50,8 @@ import { createUserAiExecutionConfig } from '../util/aiBillingCatalog.js';
 import { runAiExecution } from '../util/aiExecution/service.js';
 import { resolvePublicAiExecutionError } from '../util/aiExecution/publicError.js';
 import { createRequestAbortContext } from '../util/requestAbort.js';
+import { createBookmarkExactUrlHash } from '../util/services/bookmarkExactUrlService.js';
+import { runResourceDeleteSideEffects, softDeleteResources } from '../util/services/resourceDeleteService.js';
 
 function resolveBookmarkAiResultOutcome(result) {
   if (result?.ok !== false) return null;
@@ -131,7 +132,7 @@ export const resolveBookmarkUrl = async (req, res) => {
 };
 
 export const queryTagList = (req, res) => {
-  const userId = req.user.id;
+  const userId = (req.resourceUser || req.user).id;
   try {
     let sql = `SELECT
     t.*,
@@ -251,7 +252,7 @@ export const updateTagSort = async (req, res) => {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction(); // 开始事务
-    const userId = req.user.id;
+    const userId = (req.resourceUser || req.user).id;
     const { tags } = req.body;
     for (const tag of tags) {
       const { id, sort } = tag;
@@ -270,7 +271,7 @@ export const updateTagSort = async (req, res) => {
 
 export const getTagDetail = (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = (req.resourceUser || req.user).id;
     const { filters } = req.body;
     // 归属校验:只能读自己的标签,防止传他人 tag id 越权读取;越权/不存在统一 404
     pool
@@ -683,11 +684,11 @@ export const doArchiveAndSummarizeBookmark = async (req, res) => {
 export const doCheckHealth = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
-    const result = await checkBookmarkHealth(req.user.id);
+    const result = await checkBookmarkHealth((req.resourceUser || req.user).id);
     res.send(resultData(result));
   } catch (error) {
-    console.error('死链检测失败:', error);
-    res.send(resultData(null, 500, '检测失败: ' + error.message));
+    console.error('[bookmark-health] batch check failed code=%s', stableAgentErrorCode(error));
+    res.send(resultData(null, 500, '检测失败，请稍后重试'));
   }
 };
 
@@ -695,11 +696,12 @@ export const doCheckHealth = async (req, res) => {
 export const doResetHealth = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
-    const r = await resetHealth(req.user.id);
-    res.send(resultData(r.ok ? await getHealthSummary(req.user.id) : r));
+    const userId = (req.resourceUser || req.user).id;
+    const r = await resetHealth(userId);
+    res.send(resultData(r.ok ? await getHealthSummary(userId) : r));
   } catch (error) {
-    console.error('重置体检失败:', error);
-    res.send(resultData(null, 500, '重置失败: ' + error.message));
+    console.error('[bookmark-health] reset failed code=%s', stableAgentErrorCode(error));
+    res.send(resultData(null, 500, '重置失败，请稍后重试'));
   }
 };
 
@@ -707,10 +709,10 @@ export const doResetHealth = async (req, res) => {
 export const doCheckAllHealth = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
-    res.send(resultData(await startFullCheck(req.user.id)));
+    res.send(resultData(await startFullCheck((req.resourceUser || req.user).id)));
   } catch (error) {
-    console.error('启动全量检测失败:', error);
-    res.send(resultData(null, 500, '启动失败: ' + error.message));
+    console.error('[bookmark-health] full check failed code=%s', stableAgentErrorCode(error));
+    res.send(resultData(null, 500, '启动失败，请稍后重试'));
   }
 };
 
@@ -718,10 +720,10 @@ export const doCheckAllHealth = async (req, res) => {
 export const getHealth = async (req, res) => {
   if (!ensureUserOrAdminPolicy(req, res, ['read'])) return;
   try {
-    res.send(resultData(await getHealthSummary(req.user.id)));
+    res.send(resultData(await getHealthSummary((req.resourceUser || req.user).id)));
   } catch (error) {
-    console.error('获取健康概览失败:', error);
-    res.send(resultData(null, 500, '获取失败: ' + error.message));
+    console.error('[bookmark-health] summary failed code=%s', stableAgentErrorCode(error));
+    res.send(resultData(null, 500, '获取失败，请稍后重试'));
   }
 };
 
@@ -731,10 +733,10 @@ export const doIgnoreHealth = async (req, res) => {
   try {
     const { id } = req.body || {};
     if (!id) return res.send(resultData(null, 400, '缺少书签 id'));
-    res.send(resultData(await markLinkNormal(req.user.id, id)));
+    res.send(resultData(await markLinkNormal((req.resourceUser || req.user).id, id)));
   } catch (error) {
-    console.error('标记正常失败:', error);
-    res.send(resultData(null, 500, '操作失败: ' + error.message));
+    console.error('[bookmark-health] mark normal failed code=%s', stableAgentErrorCode(error));
+    res.send(resultData(null, 500, '操作失败，请稍后重试'));
   }
 };
 
@@ -770,7 +772,7 @@ export const getSnapshot = async (req, res) => {
 export const addBookmark = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
-    const userId = req.user.id;
+    const userId = (req.resourceUser || req.user).id;
     // saveSnapshot 是前端表单开关,不是书签字段:先摘出去,避免混进 INSERT(表里无此列)
     const {
       saveSnapshot = true,
@@ -823,7 +825,7 @@ export const updateBookmark = async (req, res) => {
   try {
     await connection.beginTransaction();
     const id = req.body.id;
-    const userId = req.user.id;
+    const userId = (req.resourceUser || req.user).id;
     const sqlCheck = 'SELECT * FROM bookmark WHERE user_id=? AND name = ? AND del_flag = 0';
     const [checkRes] = await connection.query(sqlCheck, [userId, req.body.name]);
     if (checkRes.length > 0 && checkRes[0].id != id) {
@@ -856,10 +858,22 @@ export const updateBookmark = async (req, res) => {
       delete req.body.iconUrl;
       delete req.body.iconCheckedAt;
     }
-    const sql = `update bookmark set ? where id=?`;
+    const updateFields = mergeExistingProperties(snakeCaseKeys(req.body), [], [
+      'related_tags',
+      'id',
+      'user_id',
+      'del_flag',
+      'deleted_at',
+      'create_time',
+      'update_time',
+      'url_exact_hash',
+    ]);
+    if (req.body.url !== undefined) updateFields.url_exact_hash = createBookmarkExactUrlHash(req.body.url);
+    const sql = `update bookmark set ? where id=? and user_id=? and del_flag=0`;
     const [updateResult] = await connection.query(sql, [
-      mergeExistingProperties(snakeCaseKeys(req.body), [], ['related_tags', 'related_tags']),
+      updateFields,
       id,
+      userId,
     ]);
     if (req.body.relatedTags && req.body.relatedTags.length > 4) {
       throw new Error('最多选择4个关联标签');
@@ -886,7 +900,13 @@ export const updateBookmark = async (req, res) => {
   } catch (error) {
     await connection.rollback(); // 回滚事务
     if (error instanceof BookmarkUrlError) return sendBookmarkUrlError(res, error);
-    res.send(resultData(null, 500, error.message)); // 设置状态码为500
+    const publicValidationError =
+      error?.message === '书签已存在' ||
+      error?.message === '最多选择4个关联标签' ||
+      String(error?.message || '').startsWith('该网址已收藏为');
+    if (publicValidationError) return res.send(resultData(null, 400, error.message));
+    console.error('[bookmark] update failed code=%s', stableAgentErrorCode(error));
+    return res.send(resultData(null, 500, '服务器内部错误'));
   } finally {
     await connection.release(); // 释放连接
   }
@@ -894,7 +914,7 @@ export const updateBookmark = async (req, res) => {
 
 export const getBookmarkDetail = (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = (req.resourceUser || req.user).id;
     // 归属校验:只能读自己的书签,防止传他人 bookmark id 越权读取;越权/不存在统一 404
     let sql = `SELECT * FROM bookmark WHERE id=? AND user_id=? AND del_flag=0`;
     pool
@@ -917,41 +937,25 @@ export const delBookmark = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   const connection = await pool.getConnection();
   try {
-    const userId = req.user.id;
-    const id = req.body.id;
-
+    const userId = (req.resourceUser || req.user).id;
+    const id = String(req.body.id || '').trim();
+    if (!id) return res.send(resultData(null, 400, '缺少书签 id'));
     await connection.beginTransaction();
-    const [result] = await connection.query(`SELECT * FROM bookmark WHERE id=? AND user_id=?`, [id, userId]);
-    if (result.length === 0) {
+    const deletion = await softDeleteResources(connection, {
+      userId,
+      items: [{ type: 'bookmark', id }],
+    });
+    if (!deletion.affectedItemCount) {
       await connection.rollback();
       return res.send(resultData(null, 404, '书签不存在'));
     }
-
-    const iconUrl = result[0].icon_url;
-
-    const params = {
-      del_flag: 1,
-      icon_url: null,
-      deleted_at: new Date(),
-    };
-
-    const [updateResult] = await connection.query(`UPDATE bookmark SET ? WHERE id=? AND user_id=?`, [
-      params,
-      id,
-      userId,
-    ]);
-    await removeInboxRelations(connection, {
-      userId,
-      items: [{ resourceType: 'bookmark', resourceId: String(id) }],
-    });
     await connection.commit();
-    await cleanupBookmarkIconFiles([{ id, iconUrl }], { db: connection }).catch(() => {});
-    await invalidatePersonalKnowledgeCache(userId);
-
-    res.send(resultData(updateResult));
+    await runResourceDeleteSideEffects(deletion.sideEffects);
+    res.send(resultData({ affectedRows: deletion.affectedItemCount }));
   } catch (e) {
     await connection.rollback();
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+    console.error('[bookmark] delete failed code=%s', String(e?.code || 'BOOKMARK_DELETE_FAILED'));
+    res.send(resultData(null, 500, '删除书签失败，请稍后重试'));
   } finally {
     connection.release();
   }
@@ -991,7 +995,7 @@ export const updateBookmarkSort = async (req, res) => {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction(); // 开始事务
-    const userId = req.user.id;
+    const userId = (req.resourceUser || req.user).id;
     if (req.body?.move) {
       const result = await moveOwnedResourceByAnchors(connection, {
         ...req.body.move,

@@ -1876,7 +1876,9 @@
     noteLibraryCache.updateNotePendingState(noteCacheScope.value, note.id, false);
     recordOperation({ module: '笔记', operation: `保存并完成整理笔记【${note.title}】` });
     message.success(t('inbox.saveAndCompleteSuccess'));
-    if (shouldReturnToInbox) router.push('/inbox');
+    if (shouldReturnToInbox) {
+      router.push({ path: '/organize', query: { issue: 'pending', resourceType: 'note' } });
+    }
   }
 
   const togglingInbox = ref(false);

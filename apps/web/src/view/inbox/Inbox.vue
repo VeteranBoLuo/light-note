@@ -1,18 +1,20 @@
 <template>
-  <main
+  <component
+    :is="embedded ? 'div' : 'main'"
     class="inbox-page"
     :class="{
+      'inbox-page--embedded': embedded,
       'inbox-page--todo-focused': isTodoFocused,
       'inbox-page--mobile-todo': isMobileTodoPrimary,
       'inbox-page--mobile-resources': isMobileResourceInbox,
-      'inbox-page--resource-workspace': !isTodoFocused && !bookmark.isMobile,
+      'inbox-page--resource-workspace': !embedded && !isTodoFocused && !bookmark.isMobile,
       'is-selection-mode': todoSelectionMode,
     }"
   >
     <!-- 待整理属于资源中心，顶栏与「全部资源」共用同一常驻搜索入口；
          待办是底部一级入口，继续使用共享顶栏（带 Logo）。 -->
     <ResourceCenterTopBar
-      v-if="isMobileResourceInbox"
+      v-if="isMobileResourceInbox && !embedded"
       :keyword="inbox.keyword"
       input-id="mobile-inbox-page-input"
       show-menu
@@ -33,7 +35,7 @@
       @delete-selected="confirmDelete(selectedItems, true)"
     />
 
-    <header v-if="!bookmark.isMobile" class="inbox-hero">
+    <header v-if="!bookmark.isMobile && !embedded" class="inbox-hero">
       <div class="inbox-hero__heading">
         <div class="inbox-hero__title-row">
           <span class="inbox-hero__accent" aria-hidden="true"></span>
@@ -86,10 +88,10 @@
       </article>
     </section>
 
-    <ResourceCenterSectionNav v-if="!isTodoFocused && isMobileResourceInbox" class="section-switcher" />
+    <ResourceCenterSectionNav v-if="!embedded && !isTodoFocused && isMobileResourceInbox" class="section-switcher" />
 
     <aside
-      v-if="!isTodoFocused && !bookmark.isMobile"
+      v-if="!embedded && !isTodoFocused && !bookmark.isMobile"
       class="resource-inbox-scope"
       :aria-label="t('inbox.pendingScopeTitle')"
     >
@@ -193,7 +195,7 @@
       </template>
       <template v-else>
         <BTabs
-          v-if="bookmark.isMobile"
+          v-if="bookmark.isMobile || embedded"
           v-model:active-tab="inbox.filterType"
           :options="filterOptions"
           variant="pill"
@@ -207,7 +209,12 @@
             clearable
             @enter="search"
           />
-          <BSelect v-if="bookmark.isMobile" v-model:value="inbox.sort" :options="sortOptions" @change="search" />
+          <BSelect
+            v-if="bookmark.isMobile || embedded"
+            v-model:value="inbox.sort"
+            :options="sortOptions"
+            @change="search"
+          />
           <BButton v-if="!bookmark.isMobile" type="primary" class="inbox-resource-capture" @click="openCapture">
             <SvgIcon :src="icon.common.plus" size="16" aria-hidden="true" />
             {{ t('inbox.quickCapture') }}
@@ -512,7 +519,7 @@
       </div>
     </section>
 
-    <aside v-if="!isTodoFocused && !bookmark.isMobile" class="resource-inbox-inspector">
+    <aside v-if="!embedded && !isTodoFocused && !bookmark.isMobile" class="resource-inbox-inspector">
       <AiSkillPanel
         v-if="inboxAiResource"
         class="resource-inbox-ai-panel"
@@ -606,7 +613,7 @@
       @confirm="exportTodoCalendar"
       @insert="addTodoToSystemCalendar"
     />
-  </main>
+  </component>
 </template>
 
 <script setup lang="ts">
@@ -673,6 +680,9 @@
   import icon from '@/config/icon';
   import { resolveFileAiSummaryPresentation } from '@/utils/fileAiSummary';
 
+  const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false });
+  const embedded = computed(() => props.embedded);
+
   const { t } = useI18n();
   const bookmark = bookmarkStore();
   const router = useRouter();
@@ -723,15 +733,26 @@
   const inboxAiResource = ref<InboxItemType | null>(null);
   let resizeObserver: ResizeObserver | null = null;
 
-  const isMobileResourceInbox = computed(() => bookmark.isMobile && isMobileResourceInboxTab(route.query.tab));
-  const isMobileTodoPrimary = computed(() => bookmark.isMobile && !isMobileResourceInbox.value);
-  const isTodoFocused = computed(() => isMobileTodoPrimary.value || inbox.filterType === 'todo');
+  const isMobileResourceInbox = computed(
+    () => bookmark.isMobile && (embedded.value || isMobileResourceInboxTab(route.query.tab)),
+  );
+  const isMobileTodoPrimary = computed(() => bookmark.isMobile && !embedded.value && !isMobileResourceInbox.value);
+  const isTodoFocused = computed(() => !embedded.value && (isMobileTodoPrimary.value || inbox.filterType === 'todo'));
 
   function resolveRequestedFilter(value: unknown) {
     const tab = String(value || '');
     if (tab === 'todo') return 'todo' as const;
     if (isMobileResourceInboxTab(tab)) return tab;
     return bookmark.isMobile ? ('todo' as const) : ('all' as const);
+  }
+
+  function resolveResourceFilter(value: unknown) {
+    const tab = String(value || '');
+    return isMobileResourceInboxTab(tab) ? tab : ('all' as const);
+  }
+
+  function resolveCurrentResourceFilter() {
+    return embedded.value ? resolveResourceFilter(route.query.resourceType) : resolveRequestedFilter(route.query.tab);
   }
 
   const selectedItems = computed(() =>
@@ -970,7 +991,7 @@
     todo.resetForOwner(user.id || 'visitor');
     resourceSelectionMode.value = false;
     if (bookmark.isMobile) syncRequestedMobileMode();
-    else inbox.filterType = resolveRequestedFilter(route.query.tab);
+    else inbox.filterType = resolveCurrentResourceFilter();
     if (isTodoFocused.value) applyDefaultTodoSort();
     const requestedTodoId = String(route.query.todoId || '');
     if (isTodoFocused.value) todo.status = requestedTodoId ? 'all' : 'pending';
@@ -1062,10 +1083,12 @@
   }
 
   watch(
-    () => route.query.tab,
-    async (tab, previousTab) => {
-      if (tab === previousTab) return;
-      const nextFilter = resolveRequestedFilter(tab);
+    () => (embedded.value ? route.query.resourceType : route.query.tab),
+    async (requestedFilter, previousFilter) => {
+      if (requestedFilter === previousFilter) return;
+      const nextFilter = embedded.value
+        ? resolveResourceFilter(requestedFilter)
+        : resolveRequestedFilter(requestedFilter);
       if (inbox.filterType === nextFilter) return;
       inbox.filterType = nextFilter;
       inbox.keyword = '';
@@ -1093,7 +1116,7 @@
 
   function syncRequestedMobileMode() {
     if (!bookmark.isMobile) return;
-    inbox.filterType = resolveRequestedFilter(route.query.tab);
+    inbox.filterType = resolveCurrentResourceFilter();
     if (inbox.filterType === 'todo') {
       if (!route.query.todoId) todo.status = 'pending';
     } else {
@@ -1204,12 +1227,18 @@
   async function changeFilter() {
     if (inbox.filterType === 'todo') applyDefaultTodoSort();
     else inbox.sort = 'newest';
-    router.replace({
-      query: {
-        ...route.query,
-        tab: isMobileResourceInbox.value ? inbox.filterType : inbox.filterType === 'all' ? undefined : inbox.filterType,
-      },
-    });
+    const query = { ...route.query };
+    if (embedded.value) {
+      delete query.tab;
+      query.resourceType = inbox.filterType === 'all' ? undefined : inbox.filterType;
+    } else {
+      query.tab = isMobileResourceInbox.value
+        ? inbox.filterType
+        : inbox.filterType === 'all'
+          ? undefined
+          : inbox.filterType;
+    }
+    router.replace({ query });
     await refreshList(true);
   }
   async function changeTodoStatus() {
@@ -1787,6 +1816,28 @@
     padding: 18px clamp(16px, 1.6vw, 40px) 24px;
     box-sizing: border-box;
     color: var(--text-color);
+  }
+  .inbox-page--embedded {
+    padding: 0;
+  }
+  .inbox-page--embedded > .inbox-toolbar {
+    margin-bottom: 10px;
+    padding: 0 0 10px;
+    border-bottom: 1px solid var(--surface-divider-color);
+    border-radius: 0;
+    background: transparent;
+  }
+  .inbox-page--embedded > .inbox-content {
+    overflow: hidden;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 16px;
+    background: var(--card-background);
+  }
+  .inbox-page--embedded .inbox-toolbar__right--resources {
+    width: auto;
+    min-width: min(100%, 360px);
+    flex: 0 1 520px;
+    grid-template-columns: minmax(140px, 1fr) 118px auto;
   }
   .inbox-page--todo-focused {
     --primary-color: var(--todo-accent-color, #0ea5e9);
@@ -2685,6 +2736,26 @@
        必须去掉上内边距并用负 margin 抵消左右，否则两个分区的顶栏会错位。 */
     .inbox-page--mobile-resources {
       padding: 0 12px;
+    }
+
+    .inbox-page--embedded.inbox-page--mobile-resources {
+      padding: 0;
+    }
+
+    .inbox-page--embedded > .inbox-toolbar {
+      margin-bottom: 8px;
+      padding: 0 0 8px;
+      border-bottom: 0;
+    }
+
+    .inbox-page--embedded .inbox-toolbar__right--resources {
+      width: 100%;
+      min-width: 0;
+      grid-template-columns: minmax(0, 1fr) 112px;
+    }
+
+    .inbox-page--embedded .inbox-resource-capture {
+      display: none;
     }
 
     .inbox-page--mobile-resources > .resource-center-topbar {

@@ -2635,3 +2635,55 @@ WHERE NOT EXISTS (
     AND COLUMN_NAME='description'
     AND CHARACTER_MAXIMUM_LENGTH=500
 );
+
+-- 62) 整理中心 2.0 的附加事实、精确网址索引和健康观测分层必须完整（期望 0 行）
+SELECT '[62] missing_organize_table' AS check_name, expected.table_name AS detail
+FROM (
+  SELECT 'organize_issue_suppressions' table_name UNION ALL
+  SELECT 'organize_action_requests'
+) expected
+LEFT JOIN information_schema.tables actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.table_name
+WHERE actual.table_name IS NULL;
+
+SELECT '[62] missing_organize_column' AS check_name, CONCAT(expected.table_name, '.', expected.column_name) AS detail
+FROM (
+  SELECT 'bookmark' table_name, 'url_exact_hash' column_name UNION ALL
+  SELECT 'bookmark_health', 'observed_status' UNION ALL
+  SELECT 'bookmark_health', 'observed_code' UNION ALL
+  SELECT 'bookmark_health', 'checked_url_hash' UNION ALL
+  SELECT 'bookmark_health', 'user_override' UNION ALL
+  SELECT 'bookmark_health', 'override_at' UNION ALL
+  SELECT 'organize_issue_suppressions', 'context_hash' UNION ALL
+  SELECT 'organize_action_requests', 'payload_hash' UNION ALL
+  SELECT 'organize_action_requests', 'response_json'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.table_name
+ AND actual.column_name=expected.column_name
+WHERE actual.column_name IS NULL;
+
+SELECT '[62] missing_organize_index' AS check_name, CONCAT(expected.table_name, '.', expected.index_name) AS detail
+FROM (
+  SELECT 'bookmark' table_name, 'idx_bookmark_exact_url' index_name UNION ALL
+  SELECT 'bookmark_health', 'idx_bookmark_health_observed' UNION ALL
+  SELECT 'organize_issue_suppressions', 'uk_organize_suppression' UNION ALL
+  SELECT 'organize_action_requests', 'PRIMARY'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.table_name
+ AND actual.index_name=expected.index_name
+WHERE actual.index_name IS NULL;
+
+SELECT '[62] missing_bookmark_exact_hash' AS check_name, id AS detail
+FROM bookmark
+WHERE del_flag=0
+  AND url IS NOT NULL
+  AND url<>''
+  AND (
+    url_exact_hash IS NULL
+    OR NOT (url_exact_hash <=> UNHEX(SHA2(CONVERT(url USING utf8mb4), 256)))
+  )
+LIMIT 100;

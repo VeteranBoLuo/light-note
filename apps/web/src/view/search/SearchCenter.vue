@@ -1,6 +1,6 @@
 <template>
   <div class="search-center-route">
-    <!-- “全部资源 / 待整理”表达资源范围；知识地图是全部资源的独立查看方式。 -->
+    <!-- 资源中心一级导航：全部资源 / 整理中心 / 知识地图。 -->
     <ResourceCenterTopBar
       v-if="bookmark.isMobile && !isKnowledgeMapView"
       :keyword="queryState.keyword"

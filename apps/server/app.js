@@ -17,7 +17,7 @@ import { assertPointsEarningActivationReady, getPointsEarningRuntime } from './u
 import { getPointsCampaignRuntime } from './util/pointsCampaignService.js';
 import { generateGrowthNudges } from './util/growth.js';
 import { ensureBookmarkSnapshotTable } from './util/snapshot.js';
-import { ensureBookmarkHealthTable } from './util/linkHealth.js';
+import { ensureOrganizeSchema } from './util/organizeSchema.js';
 import { startTodoReminderScheduler } from './util/todoReminder.js';
 import { startTodoReminderV2Scheduler } from './util/todoReminderV2.js';
 import { startTodoSeriesScheduler } from './util/todoSeriesScheduler.js';
@@ -140,7 +140,9 @@ try {
 }
 ensureNoteTreeSchema().catch((err) => console.error('笔记页面树初始化失败 code=%s', stableAgentErrorCode(err)));
 ensureBookmarkSnapshotTable().catch((err) => console.error('书签快照表初始化失败 code=%s', stableAgentErrorCode(err)));
-ensureBookmarkHealthTable().catch((err) => console.error('书签健康表初始化失败 code=%s', stableAgentErrorCode(err)));
+await ensureOrganizeSchema().catch((err) => {
+  console.error('整理中心 Schema 初始化失败 code=%s，整理接口将失败关闭', stableAgentErrorCode(err));
+});
 ensureFeatureRequestTables().catch((err) =>
   console.error('共建轻笺数据表初始化失败 code=%s', stableAgentErrorCode(err)),
 );

@@ -25,6 +25,7 @@ import communityChatRouter from '../router/communityChat.js';
 import supportRouter from '../router/support.js';
 import infraRouter from '../router/infra.js';
 import aiSkillsRouter from '../router/aiSkills.js';
+import organizeRouter from '../router/organize.js';
 
 export { INTERNAL_ROLES } from './internalRoles.js';
 
@@ -267,6 +268,10 @@ export const baseRouter = [
   {
     path: '/inbox',
     router: inboxRouter,
+  },
+  {
+    path: '/organize',
+    router: organizeRouter,
   },
   {
     path: '/todo',

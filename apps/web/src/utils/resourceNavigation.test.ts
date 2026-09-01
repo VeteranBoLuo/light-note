@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { resolvePendingResourcesRoute, resolveResourceRoute } from './resourceNavigation';
 
 describe('resourceNavigation', () => {
-  it('移动端待整理入口明确进入资源中心待整理分区，桌面端保持原地址', () => {
-    expect(resolvePendingResourcesRoute(true)).toEqual({ path: '/inbox', query: { tab: 'all' } });
-    expect(resolvePendingResourcesRoute(false)).toBe('/inbox');
+  it('桌面端和移动端待整理入口都进入整理中心', () => {
+    expect(resolvePendingResourcesRoute(true)).toEqual({ path: '/organize', query: { issue: 'pending' } });
+    expect(resolvePendingResourcesRoute(false)).toEqual({ path: '/organize', query: { issue: 'pending' } });
   });
 
   it('资源详情仍按资源类型解析标准地址', () => {

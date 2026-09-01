@@ -1,23 +1,31 @@
 import pool from '../db/index.js';
 import { resultData, formatDateTime } from '../util/common.js';
 import { resolveFileCategory } from '../util/fileCategory.js';
-import { normalizeTagIds, validateUserTags } from '../util/resourceTags.js';
+import { normalizeTagIds } from '../util/resourceTags.js';
 import { ensureNotVisitor } from '../util/auth.js';
-import { enqueueResources, removeInboxRelations } from '../util/resourceInbox.js';
-import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
-import { cleanupBookmarkIconFiles } from '../util/bookmarkIconService.js';
+import { enqueueResources } from '../util/resourceInbox.js';
 import {
   getNoteTreeChildren,
   loadOwnedNoteTree,
   resolveNoteBreadcrumbFromSnapshot,
 } from '../util/services/noteTreeService.js';
+import { appendResourceTagFilters } from '../util/services/resourceInventoryService.js';
+import {
+  batchWriteResourceTags,
+  queryOwnedResourceIds,
+} from '../util/services/resourceTagWriteService.js';
+import {
+  DELETABLE_RESOURCE_TYPES,
+  runResourceDeleteSideEffects,
+  softDeleteResources,
+} from '../util/services/resourceDeleteService.js';
 
 // 资源类型与全局搜索类型必须分开:待办只能被搜索到,不进资源选择器、标签操作和待整理。
 // 未显式声明 types 的历史调用方(资源选择器、提及选择器、桌面下拉)继续只拿到资源四类。
 const SEARCH_TYPES = ['bookmark', 'note', 'file', 'tag'];
 const GLOBAL_SEARCH_TYPES = [...SEARCH_TYPES, 'todo'];
 const BATCH_EDITABLE_TYPES = ['bookmark', 'note', 'file'];
-const BATCH_DELETE_TYPES = ['bookmark', 'note', 'file', 'tag'];
+const BATCH_DELETE_TYPES = [...DELETABLE_RESOURCE_TYPES];
 // 快捷搜索层:总量与单类型上限,避免一种类型占满最佳匹配
 const SUGGEST_TOTAL_LIMIT = 8;
 const SUGGEST_PER_TYPE_LIMIT = 3;
@@ -26,12 +34,6 @@ const TODO_DUE_FILTERS = ['overdue', 'today', '7d', 'none'];
 // 单次批量操作保持为一笔短事务，既覆盖管理页常见的大批量操作，也避免超长 IN 查询拖慢数据库。
 const MAX_BATCH_DELETE_ITEMS = 1000;
 const BATCH_CHUNK_SIZE = 200;
-const RESOURCE_OWNER_SQL = {
-  bookmark: `SELECT id FROM bookmark WHERE user_id = ? AND del_flag = 0 AND id IN ({ids})`,
-  note: `SELECT id FROM note WHERE create_by = ? AND del_flag = 0 AND id IN ({ids})`,
-  file: `SELECT id FROM files WHERE create_by = ? AND del_flag = 0 AND id IN ({ids})`,
-  tag: `SELECT id FROM tag WHERE user_id = ? AND del_flag = 0 AND id IN ({ids})`,
-};
 const TYPE_LABELS = {
   'zh-CN': {
     bookmark: '书签',
@@ -359,99 +361,6 @@ function formatText(template, params = {}) {
 
 function normalizeBatchAction(value) {
   return value === 'remove' ? 'remove' : value === 'add' ? 'add' : '';
-}
-
-async function queryValidResourceIds(connection, { userId, type, ids = [] }) {
-  if (!ids.length || !RESOURCE_OWNER_SQL[type]) return [];
-  const placeholders = ids.map(() => '?').join(',');
-  const sql = RESOURCE_OWNER_SQL[type].replace('{ids}', placeholders);
-  const [rows] = await connection.query(sql, [userId, ...ids]);
-  return rows.map((row) => toText(row.id)).filter(Boolean);
-}
-
-async function queryExistingRelationCount(connection, { userId, type, resourceIds = [], tagIds = [] }) {
-  if (!resourceIds.length || !tagIds.length) return 0;
-  const resourcePlaceholders = resourceIds.map(() => '?').join(',');
-  const tagPlaceholders = tagIds.map(() => '?').join(',');
-  const [rows] = await connection.query(
-    `
-      SELECT COUNT(*) AS total
-      FROM resource_tag_relations
-      WHERE user_id = ?
-        AND resource_type = ?
-        AND resource_id IN (${resourcePlaceholders})
-        AND tag_id IN (${tagPlaceholders})
-    `,
-    [userId, type, ...resourceIds, ...tagIds],
-  );
-  return Number(rows?.[0]?.total || 0);
-}
-
-async function insertRelations(connection, { userId, type, resourceIds = [], tagIds = [] }) {
-  if (!resourceIds.length || !tagIds.length) return 0;
-  const values = [];
-  resourceIds.forEach((resourceId) => {
-    tagIds.forEach((tagId) => {
-      values.push([tagId, type, resourceId, userId, 'manual']);
-    });
-  });
-  if (!values.length) return 0;
-  const [result] = await connection.query(
-    `INSERT IGNORE INTO resource_tag_relations (tag_id, resource_type, resource_id, user_id, source) VALUES ?`,
-    [values],
-  );
-  return Number(result?.affectedRows || 0);
-}
-
-async function removeRelations(connection, { userId, type, resourceIds = [], tagIds = [] }) {
-  if (!resourceIds.length || !tagIds.length) return 0;
-  const resourcePlaceholders = resourceIds.map(() => '?').join(',');
-  const tagPlaceholders = tagIds.map(() => '?').join(',');
-  const [result] = await connection.query(
-    `
-      DELETE FROM resource_tag_relations
-      WHERE user_id = ?
-        AND resource_type = ?
-        AND resource_id IN (${resourcePlaceholders})
-        AND tag_id IN (${tagPlaceholders})
-    `,
-    [userId, type, ...resourceIds, ...tagIds],
-  );
-  return Number(result?.affectedRows || 0);
-}
-
-function appendResourceTagFilters({ where, params, alias, resourceType, tagNames, untagged, userId }) {
-  if (tagNames.length) {
-    where.push(`
-      EXISTS (
-        SELECT 1
-        FROM resource_tag_relations selected_rel
-        INNER JOIN tag selected_tag ON selected_tag.id = selected_rel.tag_id
-        WHERE selected_rel.resource_type = ?
-          AND selected_rel.resource_id = ${alias}.id
-          AND selected_rel.user_id = ?
-          AND selected_tag.user_id = ?
-          AND selected_tag.del_flag = 0
-          AND selected_tag.name IN (${tagNames.map(() => '?').join(', ')})
-      )
-    `);
-    params.push(resourceType, userId, userId, ...tagNames);
-  }
-  if (untagged) {
-    where.push(`
-      NOT EXISTS (
-        SELECT 1
-        FROM resource_tag_relations untagged_rel
-        INNER JOIN tag untagged_tag ON untagged_tag.id = untagged_rel.tag_id
-        WHERE untagged_rel.resource_type = ?
-          AND untagged_rel.resource_id = ${alias}.id
-          AND untagged_rel.user_id = ?
-          AND untagged_tag.user_id = ?
-          AND untagged_tag.del_flag = 0
-      )
-    `);
-    params.push(resourceType, userId, userId);
-  }
 }
 
 function buildBookmarkSearchFilter(userId, options) {
@@ -1236,7 +1145,7 @@ async function querySearchTagOptions(userId) {
 
 export const globalSearch = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = (req.resourceUser || req.user)?.id;
     if (!userId) return res.send(resultData(null, 400, '缺少用户信息'));
 
     const keyword = toText(req.body?.keyword || req.body?.filters?.keyword).slice(0, 200);
@@ -1392,7 +1301,7 @@ export const globalSearch = async (req, res) => {
 
 export const previewBatchSelection = async (req, res) => {
   try {
-    const userId = req.user?.id;
+    const userId = (req.resourceUser || req.user)?.id;
     if (!userId) return res.send(resultData(null, 401, '请先登录'));
     const resolved = await resolveBatchSelection(pool, {
       userId,
@@ -1414,117 +1323,34 @@ export const previewBatchSelection = async (req, res) => {
 
 export const batchUpdateResourceTags = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
+  const userId = (req.resourceUser || req.user)?.id;
+  if (!userId) return res.send(resultData(null, 401, '请先登录'));
+  const action = normalizeBatchAction(req.body?.action);
+  const tagIds = normalizeTagIds(req.body?.tagIds || []);
+  if (!action) return res.send(resultData(null, 400, '缺少有效操作类型'));
+  if (!tagIds.length) return res.send(resultData(null, 400, '请至少选择一个标签'));
+
   const connection = await pool.getConnection();
   try {
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.send(resultData(null, 401, '请先登录'));
-    }
-
-    const action = normalizeBatchAction(req.body?.action);
-    const tagIds = normalizeTagIds(req.body?.tagIds || []);
-
-    if (!action) {
-      return res.send(resultData(null, 400, '缺少有效操作类型'));
-    }
-    if (!tagIds.length) {
-      return res.send(resultData(null, 400, '请至少选择一个标签'));
-    }
-
     const selection = await resolveBatchSelection(connection, {
       userId,
       body: req.body,
       allowedTypes: BATCH_EDITABLE_TYPES,
     });
-    const items = selection.items;
-    if (!items.length) return res.send(resultData(null, 400, '未选择可编辑资源'));
-
+    if (!selection.items.length) return res.send(resultData(null, 400, '未选择可编辑资源'));
     await connection.beginTransaction();
-    const validTagIds = await validateUserTags(connection, { tagIds, userId });
-    const grouped = {
-      bookmark: [],
-      note: [],
-      file: [],
-    };
-    items.forEach((item) => grouped[item.type].push(item.id));
-
-    const typeStats = [];
-    let affectedRelationCount = 0;
-    let existingRelationCount = 0;
-    let validItemCount = 0;
-
-    for (const type of BATCH_EDITABLE_TYPES) {
-      const requestedIds = grouped[type];
-      if (!requestedIds.length) continue;
-      const validIds = [];
-      for (const requestedChunk of chunkItems(requestedIds)) {
-        validIds.push(...(await queryValidResourceIds(connection, { userId, type, ids: requestedChunk })));
-      }
-      validItemCount += validIds.length;
-      const totalPairs = validIds.length * validTagIds.length;
-      let affected = 0;
-      let existed = 0;
-
-      if (totalPairs > 0) {
-        for (const validChunk of chunkItems(validIds)) {
-          existed += await queryExistingRelationCount(connection, {
-            userId,
-            type,
-            resourceIds: validChunk,
-            tagIds: validTagIds,
-          });
-          if (action === 'add') {
-            affected += await insertRelations(connection, {
-              userId,
-              type,
-              resourceIds: validChunk,
-              tagIds: validTagIds,
-            });
-          } else {
-            affected += await removeRelations(connection, {
-              userId,
-              type,
-              resourceIds: validChunk,
-              tagIds: validTagIds,
-            });
-          }
-        }
-      }
-
-      affectedRelationCount += affected;
-      existingRelationCount += existed;
-      typeStats.push({
-        type,
-        requestedCount: requestedIds.length,
-        validCount: validIds.length,
-        affectedRelationCount: affected,
-      });
-    }
-
+    const result = await batchWriteResourceTags(connection, {
+      userId,
+      items: selection.items,
+      tagIds,
+      action,
+    });
     await connection.commit();
-
-    const totalPairs = validItemCount * validTagIds.length;
-    const skippedRelationCount =
-      action === 'add'
-        ? Math.max(totalPairs - affectedRelationCount, 0)
-        : Math.max(totalPairs - existingRelationCount, 0);
-
-    res.send(
-      resultData({
-        action,
-        requestedItemCount: items.length,
-        validItemCount,
-        invalidItemCount: Math.max(items.length - validItemCount, 0),
-        requestedTagCount: tagIds.length,
-        validTagCount: validTagIds.length,
-        affectedRelationCount,
-        skippedRelationCount,
-        typeStats,
-      }),
-    );
+    res.send(resultData(result));
   } catch (error) {
     await connection.rollback();
-    res.send(resultData(null, 500, '批量更新资源标签失败: ' + error.message));
+    console.error('[search] batch tag update failed code=%s', String(error?.code || 'BATCH_TAG_UPDATE_FAILED'));
+    res.send(resultData(null, 500, '批量更新资源标签失败，请稍后重试'));
   } finally {
     connection.release();
   }
@@ -1533,7 +1359,7 @@ export const batchUpdateResourceTags = async (req, res) => {
 export const getBatchResourceTagWorkspace = async (req, res) => {
   const connection = await pool.getConnection();
   try {
-    const userId = req.user?.id;
+    const userId = (req.resourceUser || req.user)?.id;
     if (!userId) {
       return res.send(resultData(null, 401, '请先登录'));
     }
@@ -1564,7 +1390,7 @@ export const getBatchResourceTagWorkspace = async (req, res) => {
       if (!requestedIds.length) continue;
       const validIds = [];
       for (const requestedChunk of chunkItems(requestedIds)) {
-        validIds.push(...(await queryValidResourceIds(connection, { userId, type, ids: requestedChunk })));
+        validIds.push(...(await queryOwnedResourceIds(connection, { userId, type, ids: requestedChunk })));
       }
       if (!validIds.length) continue;
       for (const validChunk of chunkItems(validIds)) {
@@ -1621,7 +1447,8 @@ export const getBatchResourceTagWorkspace = async (req, res) => {
       }),
     );
   } catch (error) {
-    res.send(resultData(null, 500, '获取批量标签工作台数据失败: ' + error.message));
+    console.error('[search] batch tag workspace failed code=%s', String(error?.code || 'BATCH_TAG_WORKSPACE_FAILED'));
+    res.send(resultData(null, 500, '获取批量标签工作台数据失败，请稍后重试'));
   } finally {
     connection.release();
   }
@@ -1629,7 +1456,7 @@ export const getBatchResourceTagWorkspace = async (req, res) => {
 
 export const batchAddResourcesToInbox = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
-  const userId = req.user?.id;
+  const userId = (req.resourceUser || req.user)?.id;
   if (!userId) return res.send(resultData(null, 401, '请先登录'));
   const connection = await pool.getConnection();
   try {
@@ -1664,7 +1491,7 @@ export const batchAddResourcesToInbox = async (req, res) => {
 
 export const batchDeleteResources = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
-  const userId = req.user?.id;
+  const userId = (req.resourceUser || req.user)?.id;
   if (!userId) {
     return res.send(resultData(null, 401, '请先登录'));
   }
@@ -1687,104 +1514,16 @@ export const batchDeleteResources = async (req, res) => {
     });
     const items = selection.items;
     if (!items.length) return res.send(resultData(null, 400, '未选择可删除资源'));
-    const grouped = {
-      bookmark: [],
-      note: [],
-      file: [],
-      tag: [],
-    };
-    items.forEach((item) => grouped[item.type].push(item.id));
-
     await connection.beginTransaction();
-
-    const typeStats = [];
-    let affectedItemCount = 0;
-    let validItemCount = 0;
-    const bookmarkIconsToCleanup = [];
-
-    for (const type of BATCH_DELETE_TYPES) {
-      const requestedIds = grouped[type];
-      if (!requestedIds.length) continue;
-
-      let typeValidCount = 0;
-      let typeAffectedCount = 0;
-      for (const requestedChunk of chunkItems(requestedIds)) {
-        const validIds = await queryValidResourceIds(connection, { userId, type, ids: requestedChunk });
-        typeValidCount += validIds.length;
-        if (!validIds.length) continue;
-        const placeholders = validIds.map(() => '?').join(',');
-        let result = { affectedRows: 0 };
-        if (type === 'bookmark') {
-          const [bookmarkRows] = await connection.query(
-            `SELECT id, icon_url AS iconUrl
-             FROM bookmark
-             WHERE id IN (${placeholders}) AND user_id = ? AND del_flag = 0`,
-            [...validIds, userId],
-          );
-          bookmarkIconsToCleanup.push(...(bookmarkRows || []));
-          [result] = await connection.query(
-            `UPDATE bookmark SET del_flag = 1, deleted_at = NOW(), icon_url = NULL
-             WHERE id IN (${placeholders}) AND user_id = ? AND del_flag = 0`,
-            [...validIds, userId],
-          );
-        } else if (type === 'note') {
-          [result] = await connection.query(
-            `UPDATE note SET del_flag = 1, deleted_at = NOW()
-             WHERE id IN (${placeholders}) AND create_by = ? AND del_flag = 0`,
-            [...validIds, userId],
-          );
-        } else if (type === 'file') {
-          [result] = await connection.query(
-            `UPDATE files SET del_flag = 1, deleted_at = NOW()
-             WHERE id IN (${placeholders}) AND create_by = ? AND del_flag = 0`,
-            [...validIds, userId],
-          );
-        } else if (type === 'tag') {
-          await connection.query(`DELETE FROM resource_tag_relations WHERE tag_id IN (${placeholders})`, validIds);
-          [result] = await connection.query(
-            `DELETE FROM tag
-             WHERE id IN (${placeholders}) AND user_id = ? AND del_flag = 0`,
-            [...validIds, userId],
-          );
-        }
-
-        if (type !== 'tag') {
-          await removeInboxRelations(connection, {
-            userId,
-            items: validIds.map((id) => ({ resourceType: type, resourceId: String(id) })),
-          });
-        }
-        typeAffectedCount += Number(result?.affectedRows || 0);
-      }
-
-      validItemCount += typeValidCount;
-      affectedItemCount += typeAffectedCount;
-      typeStats.push({
-        type,
-        requestedCount: requestedIds.length,
-        validCount: typeValidCount,
-        affectedItemCount: typeAffectedCount,
-      });
-    }
-
+    const result = await softDeleteResources(connection, { userId, items });
     await connection.commit();
-    await cleanupBookmarkIconFiles(bookmarkIconsToCleanup, { db: connection }).catch(() => {});
-    if (affectedItemCount > 0) {
-      // 资源已经提交删除后再推进个人检索代际；持久化清理不占用本次批量删除的连接。
-      void invalidatePersonalKnowledgeCache(userId);
-    }
-    res.send(
-      resultData({
-        requestedItemCount: items.length,
-        validItemCount,
-        invalidItemCount: Math.max(items.length - validItemCount, 0),
-        affectedItemCount,
-        typeStats,
-      }),
-    );
+    await runResourceDeleteSideEffects(result.sideEffects);
+    const { sideEffects: _sideEffects, ...response } = result;
+    res.send(resultData(response));
   } catch (error) {
     await connection.rollback();
-    res.send(resultData(null, 500, '批量删除资源失败: ' + error.message));
+    console.error('[search] batch delete failed code=%s', String(error?.code || 'BATCH_DELETE_FAILED'));
+    res.send(resultData(null, 500, '批量删除资源失败，请稍后重试'));
   } finally {
     connection.release();
   }

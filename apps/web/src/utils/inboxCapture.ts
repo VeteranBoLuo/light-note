@@ -1,4 +1,5 @@
 import { resolveBookmarkUrlInput } from '@lightnote/shared';
+import { isMobileResourceInboxTab } from '@/config/mobileNavigation';
 
 export type InboxCaptureType = 'bookmark' | 'note' | 'file';
 export type QuickCaptureType = InboxCaptureType | 'todo';
@@ -19,10 +20,23 @@ export function normalizeQuickCaptureType(type: QuickCaptureType, _isMobile: boo
   return type;
 }
 
-export function getQuickCaptureInboxTarget(type: QuickCaptureType, isMobile: boolean) {
+export function getQuickCaptureInboxTarget(type: QuickCaptureType, _isMobile: boolean) {
   if (type === 'todo') return { path: '/inbox' as const, query: { tab: 'todo' as const } };
-  if (isMobile) return { path: '/inbox' as const, query: { tab: 'all' as const } };
-  return '/inbox' as const;
+  return { path: '/organize' as const, query: { issue: 'pending' as const } };
+}
+
+export function isQuickCaptureWorkspaceActive(
+  type: QuickCaptureType,
+  path: string,
+  query: Record<string, unknown> = {},
+) {
+  if (type === 'todo') {
+    return path === '/inbox' && !isMobileResourceInboxTab(query.tab);
+  }
+  return (
+    (path === '/organize' && String(query.issue || 'overview') === 'pending') ||
+    (path === '/inbox' && isMobileResourceInboxTab(query.tab))
+  );
 }
 
 export async function refreshQuickCaptureStores(

@@ -194,6 +194,8 @@ describe('newUserSeedService', () => {
       url: 'https://demo.test/help',
       del_flag: 0,
     });
+    expect(bookmarkInserts.every(([, [row]]) => Buffer.isBuffer(row.url_exact_hash))).toBe(true);
+    expect(bookmarkInserts.every(([, [row]]) => row.url_exact_hash.length === 32)).toBe(true);
     expect(noteInserts.map(([, [row]]) => row.type).sort()).toEqual([
       'drawing',
       'html',

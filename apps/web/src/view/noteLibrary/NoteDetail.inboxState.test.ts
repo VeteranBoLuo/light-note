@@ -33,7 +33,7 @@ describe('笔记详情待整理状态', () => {
 
   it('普通入口完成后留在当前页，只有待整理入口返回待整理页', () => {
     expect(detailSource).toContain('const shouldReturnToInbox = isOrganizingFromInbox.value');
-    expect(detailSource).toContain("if (shouldReturnToInbox) router.push('/inbox')");
+    expect(detailSource).toContain("router.push({ path: '/organize', query: { issue: 'pending', resourceType: 'note' } })");
   });
 
   it('编辑顶栏展示待整理胶囊并为桌面和移动端提供切换入口', () => {

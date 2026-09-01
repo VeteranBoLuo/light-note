@@ -7,22 +7,22 @@
     <div class="resource-center-section-nav">
       <BButton
         class="section-nav-item"
-        :class="{ active: activeSection === 'resources' && !isKnowledgeMapView }"
+        :class="{ active: activeSection === 'resources' }"
         role="tab"
-        :aria-selected="activeSection === 'resources' && !isKnowledgeMapView"
+        :aria-selected="activeSection === 'resources'"
         @click="goTo('resources')"
       >
         {{ t('resourceCenter.sections.resources') }}
       </BButton>
       <BButton
         class="section-nav-item"
-        :class="{ active: activeSection === 'inbox' }"
+        :class="{ active: activeSection === 'organize' }"
         role="tab"
-        :aria-selected="activeSection === 'inbox'"
-        @click="goTo('inbox')"
+        :aria-selected="activeSection === 'organize'"
+        @click="goTo('organize')"
       >
-        {{ inboxSectionLabel }}
-        <span v-if="displayCountValue" class="section-nav-count">{{ displayInboxCount }}</span>
+        <SvgIcon :src="icon.ai.organize" size="15" aria-hidden="true" />
+        {{ t('resourceCenter.sections.organize') }}
       </BButton>
     </div>
     <BButton
@@ -51,37 +51,25 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { recordOperation } from '@/api/commonApi';
-  import { isMobileResourceInboxTab } from '@/config/mobileNavigation';
   import icon from '@/config/icon';
-  import { bookmarkStore, inboxStore } from '@/store';
 
   const { t } = useI18n();
   const route = useRoute();
   const router = useRouter();
-  const bookmark = bookmarkStore();
-  const inbox = inboxStore();
   const isKnowledgeMapView = computed(() => route.path === '/search' && route.query.section === 'map');
 
   const activeSection = computed(() => {
-    if (!route.path.startsWith('/inbox')) return 'resources';
-    if (!bookmark.isMobile) return 'inbox';
-    return isMobileResourceInboxTab(route.query.tab) ? 'inbox' : 'resources';
+    if (isKnowledgeMapView.value) return 'map';
+    if (route.path.startsWith('/organize')) return 'organize';
+    return 'resources';
   });
-  const displayCountValue = computed(() => inbox.pendingTotal);
-  const displayInboxCount = computed(() => (displayCountValue.value > 99 ? '99+' : String(displayCountValue.value)));
-  const inboxSectionLabel = computed(() => t('resourceCenter.sections.pendingResources'));
 
-  function goTo(section: 'resources' | 'inbox') {
-    const target =
-      section === 'inbox' && bookmark.isMobile
-        ? { path: '/inbox', query: { tab: 'all' } }
-        : section === 'inbox'
-          ? '/inbox'
-          : '/search';
+  function goTo(section: 'resources' | 'organize') {
+    const target = section === 'organize' ? '/organize' : '/search';
     if (router.resolve(target).fullPath === route.fullPath) return;
     recordOperation({
       module: '资源中心',
-      operation: section === 'inbox' ? '切换待整理视图' : '切换全部资源视图',
+      operation: section === 'organize' ? '切换整理中心视图' : '切换全部资源视图',
     });
     // 同级分区切换不产生历史记录，否则返回键要按很多次才能离开资源中心
     router.replace(target);
@@ -131,22 +119,6 @@
     background: var(--background-color);
     color: var(--primary-color);
     box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
-  }
-
-  .section-nav-count {
-    min-width: 17px;
-    height: 17px;
-    margin-left: 5px;
-    padding: 0 4px;
-    border-radius: 9px;
-    box-sizing: border-box;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--primary-color);
-    color: #fff;
-    font-size: 10px;
-    line-height: 1;
   }
 
   .knowledge-map-view {
@@ -199,6 +171,10 @@
       border: 1px solid transparent;
       background: transparent !important;
       box-shadow: none;
+    }
+
+    .section-nav-item :deep(svg) {
+      display: none;
     }
 
     .section-nav-item.active {

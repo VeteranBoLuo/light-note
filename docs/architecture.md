@@ -98,6 +98,11 @@ API 使用 `resultData(data, status, msg)` 信封，snake_case 响应键统一�
 - “标签”使用单一浏览与治理模块：`/manage/tagMg` 只作为兼容 URL，由 `TagSpaceEntry` 在路由提交前进入上次使用或最近标签；历史 `TagMg` 页面实现已删除。浏览、创建、编辑和删除都在同一标签目录与 `/tag/:id` 工作区完成，不再挂载第二套标签总览页。历史 `?mode=manage` 只做兼容规范化。
 - `/tag/:id` 按标签 ID 读取内容；同名标签不合并。目录摘要、分区预览和跨类型时间线都由服务端分页读模型提供，不能先分表截断再在前端伪造全局顺序。
 - `resource_inbox` 保存书签、笔记和文件的待整理关系。入口参数和页面位置不构成待整理事实。
+- `/organize` 是资源整理的统一工作区；`/inbox?tab=todo` 只承载待办，历史资源待整理地址在路由提交前规范化到 `/organize?issue=pending`。待整理数量来自 `resource_inbox`，不并入无标签、重复网址和疑似失效的治理总数。
+- `/api/organize` 只编排共享领域 Service：无标签判定复用有效标签关系口径，标签写入与软删除复用资源中心能力；所有查询按 `resourceUser` 隔离，写操作继续受游客和管理员代管策略约束。
+- `bookmark.url_exact_hash` 是相同网址候选索引；所有 URL 创建、导入、恢复和编辑入口必须同步写入。自动治理仍以完整 URL 二进制复核，并在事务内检查快照、笔记引用和待办引用后才允许软删除。
+- `organize_issue_suppressions` 保存可撤销的忽略决定；重复网址忽略绑定当前问题上下文，成员、标签或引用变化后自动重新出现。`organize_action_requests` 保存高风险合并动作的请求幂等结果。
+- `bookmark_health` 将外部观测、被检测 URL 哈希和用户“标记正常”分列保存。仅明确 HTTP 404/410 进入疑似失效；网络、DNS 等未知结果不覆盖同一 URL 的既有结论，URL 变化才使旧覆盖决定失效。
 - `tag_relations` 保存由有效共享资源派生的标签关系；软删除资源保留的恢复关系不能计入活跃统计。
 
 ### 笔记

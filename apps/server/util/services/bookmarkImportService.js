@@ -1,6 +1,7 @@
 import { insertData } from '../agent/data.js';
 import { RESOURCE_TYPE, insertResourceTagRelations } from '../resourceTags.js';
 import { inspectBookmarkUrl } from '../bookmarkUrl.js';
+import { createBookmarkExactUrlHash } from './bookmarkExactUrlService.js';
 
 function toText(value, maxLength = 255) {
   return String(value ?? '')
@@ -97,6 +98,7 @@ export async function importBookmarksWithTags(connection, { userId, items = [] }
         url: canonicalUrl,
         description: item.description,
       });
+      bookmarkPayload.url_exact_hash = createBookmarkExactUrlHash(canonicalUrl);
       await connection.query('INSERT INTO bookmark SET ?', [bookmarkPayload]);
       bookmarkId = bookmarkPayload.id;
       bookmarkMap.set(bookmarkName, bookmarkId);

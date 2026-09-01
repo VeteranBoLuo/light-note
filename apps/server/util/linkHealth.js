@@ -1,86 +1,132 @@
+import { randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
 import { checkUrlLiveness } from './fetchWebMeta.js';
-import { randomUUID } from 'node:crypto';
+import { ensureOrganizeSchema } from './organizeSchema.js';
+import { createBookmarkExactUrlHash } from './services/bookmarkExactUrlService.js';
 
-// 链接体检·快照兜底:定期/按需检测收藏链接,把"疑似失效"的挑出来供用户确认,失效的可回退到网页快照阅读。
-// 判定用 checkUrlLiveness:404/410 → 'suspect'(疑似,非断言:SPA 深层路由、被删子页都可能"浏览器能开、服务器 404");
-// 反爬(403/429/412)/限流/5xx/超时/网络错都不算(站点仍在);用户可对疑似项「标记正常」永久消除误报。
-
-const BATCH = 25; // 单次检测上限(每次检最久未测/待复验的这么多条)
-const CONCURRENCY = 4; // 单核服务器降并发,减少并发挤占导致的超时(超时不再误判死链,但仍拖慢批次)
+const BATCH = 25;
+const CONCURRENCY = 4;
 
 export async function ensureBookmarkHealthTable() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS bookmark_health (
-      bookmark_id VARCHAR(64) NOT NULL,
-      user_id VARCHAR(64) NOT NULL,
-      status VARCHAR(16) NOT NULL DEFAULT 'unknown',
-      note VARCHAR(32) DEFAULT NULL,
-      checked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY (bookmark_id),
-      KEY idx_user_status (user_id, status)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='书签链接健康(死链检测结果)'
-  `);
+  await ensureOrganizeSchema();
 }
 
-// 正在全量检测的用户(内存态,进程级):防重入 + 供前端轮询判断是否还在跑
 const fullChecking = new Set();
 const fullCheckRuns = new Map();
+
 export function isChecking(userId) {
   return fullChecking.has(userId);
 }
 
-// 简单并发池:对 items 逐个跑 worker,最多 CONCURRENCY 个同时进行
 async function runPool(items, worker) {
-  let i = 0;
+  let index = 0;
   const runners = Array.from({ length: Math.min(CONCURRENCY, items.length) }, async () => {
-    while (i < items.length) {
-      const idx = i++;
-      await worker(items[idx]);
+    while (index < items.length) {
+      const current = index++;
+      await worker(items[current]);
     }
   });
   await Promise.all(runners);
 }
 
-// 检测一批(最久未测优先:先没有 health 记录的,再按 checked_at 最早)。返回本批结果 + 累计概览。
+function normalizeObservation(result) {
+  const code = String(result?.code ?? result?.status ?? 'ERR').slice(0, 32);
+  if (result?.status === 'alive') return { status: 'alive', code };
+  // 首版只把外部服务器明确返回的 404 / 410 作为疑似失效；DNS、格式、协议与网络失败均为未知。
+  if (result?.status === 'suspect' && ['404', '410'].includes(code)) return { status: 'suspect', code };
+  return { status: 'unknown', code };
+}
+
+async function saveObservation(userId, bookmark) {
+  let rawResult;
+  try {
+    rawResult = await checkUrlLiveness(bookmark.url);
+  } catch {
+    rawResult = { status: 'unknown', code: 'ERR' };
+  }
+  const observation = normalizeObservation(rawResult);
+  const urlHash = createBookmarkExactUrlHash(bookmark.url);
+  if (!urlHash) return { saved: false, ...observation };
+  const [result] = await pool.query(
+    `INSERT INTO bookmark_health
+       (bookmark_id, user_id, status, note, checked_at, observed_status, observed_code, checked_url_hash)
+     SELECT b.id, b.user_id, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?
+       FROM bookmark b
+      WHERE b.id = ? AND b.user_id = ? AND b.del_flag = 0 AND b.url_exact_hash = ?
+     ON DUPLICATE KEY UPDATE
+       user_override = IF(checked_url_hash <=> VALUES(checked_url_hash), user_override, NULL),
+       override_at = IF(checked_url_hash <=> VALUES(checked_url_hash), override_at, NULL),
+       observed_status = IF(
+         VALUES(observed_status) = 'unknown' AND checked_url_hash <=> VALUES(checked_url_hash),
+         observed_status,
+         VALUES(observed_status)
+       ),
+       observed_code = IF(
+         VALUES(observed_status) = 'unknown' AND checked_url_hash <=> VALUES(checked_url_hash),
+         observed_code,
+         VALUES(observed_code)
+       ),
+       status = IF(
+         VALUES(observed_status) = 'unknown' AND checked_url_hash <=> VALUES(checked_url_hash),
+         status,
+         VALUES(status)
+       ),
+       note = IF(
+         VALUES(observed_status) = 'unknown' AND checked_url_hash <=> VALUES(checked_url_hash),
+         note,
+         VALUES(note)
+       ),
+       checked_url_hash = VALUES(checked_url_hash),
+       checked_at = CURRENT_TIMESTAMP,
+       user_id = VALUES(user_id)`,
+    [
+      observation.status,
+      observation.code,
+      observation.status,
+      observation.code,
+      urlHash,
+      bookmark.id,
+      userId,
+      urlHash,
+    ],
+  );
+  return { saved: Number(result?.affectedRows || 0) > 0, ...observation };
+}
+
+export async function recheckBookmarkHealth(userId, bookmarkId) {
+  const [rows] = await pool.query(
+    `SELECT id, url FROM bookmark
+      WHERE id = ? AND user_id = ? AND del_flag = 0 AND url IS NOT NULL AND url <> '' LIMIT 1`,
+    [bookmarkId, userId],
+  );
+  if (!rows.length) return { ok: false, reason: 'not_found' };
+  const observation = await saveObservation(userId, rows[0]);
+  return { ok: observation.saved, observation, item: await getBookmarkHealthItem(userId, bookmarkId) };
+}
+
 export async function checkBookmarkHealth(userId) {
-  // 顺序:①优先复验"1 小时前判过疑似失效"的(纠正历史误报,又不在同一轮反复复检刚确认的)
-  //       ②其次从未检测过的 ③再按最久未测。点几次就能把误报纠正过来,同时新书签也能推进。
-  const [bms] = await pool.query(
-    `SELECT b.id, b.url FROM bookmark b
-       LEFT JOIN bookmark_health h ON h.bookmark_id = b.id
+  const [bookmarks] = await pool.query(
+    `SELECT b.id, b.url
+       FROM bookmark b
+       LEFT JOIN bookmark_health h
+         ON h.bookmark_id = b.id AND h.user_id = b.user_id AND h.checked_url_hash = b.url_exact_hash
       WHERE b.user_id = ? AND b.del_flag = 0 AND b.url IS NOT NULL AND b.url <> ''
-      ORDER BY (h.status = 'suspect' AND h.checked_at < DATE_SUB(NOW(), INTERVAL 1 HOUR)) DESC,
-               (h.checked_at IS NULL) DESC,
+      ORDER BY (h.observed_status = 'suspect' AND h.checked_at < DATE_SUB(NOW(), INTERVAL 1 HOUR)) DESC,
+               (h.checked_url_hash IS NULL) DESC,
                h.checked_at ASC
       LIMIT ${BATCH}`,
     [userId],
   );
-  await runPool(bms, (b) => checkOneAndSave(userId, b));
-  return { checkedThisRun: bms.length, ...(await getHealthSummary(userId)) };
+  await runPool(bookmarks, (bookmark) => saveObservation(userId, bookmark));
+  return { checkedThisRun: bookmarks.length, ...(await getHealthSummary(userId)) };
 }
 
-// 单条检测并落库(全量/增量共用)
-async function checkOneAndSave(userId, b) {
-  let r;
-  try {
-    r = await checkUrlLiveness(b.url);
-  } catch {
-    r = { status: 'unknown', code: 'ERR' };
-  }
-  const note = String(r.code || r.status).slice(0, 32);
-  await pool.query(
-    `INSERT INTO bookmark_health (bookmark_id, user_id, status, note) VALUES (?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE status = ?, note = ?, checked_at = CURRENT_TIMESTAMP`,
-    [b.id, userId, r.status, note, r.status, note],
-  );
-}
-
-// 全量后台检测:一次把该用户所有书签查完(并发受限),后台跑不阻塞请求;前端轮询 getHealthSummary 看进度。
-// 用 fullChecking 防重入(同一用户同时只跑一个)。逐条落库,故轮询能看到 checked/suspect 实时增长。
+/**
+ * 兼容既有书签管理页的全量入口：不再清空旧结果，也不触碰用户“标记正常”。
+ * 新整理中心只使用 25 条显式批次；可恢复的全量任务留给独立 Worker 阶段。
+ */
 export async function startFullCheck(userId) {
   if (fullChecking.has(userId)) return { ...(await getHealthSummary(userId)), already: true };
-  await pool.query('DELETE FROM bookmark_health WHERE user_id = ?', [userId]); // 先清空 → 进度从 0 起,一次全新扫描
   const run = {
     runId: randomUUID(),
     status: 'running',
@@ -90,96 +136,191 @@ export async function startFullCheck(userId) {
   };
   fullCheckRuns.set(userId, run);
   fullChecking.add(userId);
-  (async () => {
+  void (async () => {
     try {
-      const [bms] = await pool.query(
-        "SELECT id, url FROM bookmark WHERE user_id = ? AND del_flag = 0 AND url IS NOT NULL AND url <> ''",
+      const [bookmarks] = await pool.query(
+        `SELECT id, url FROM bookmark
+          WHERE user_id = ? AND del_flag = 0 AND url IS NOT NULL AND url <> ''`,
         [userId],
       );
-      await runPool(bms, (b) => checkOneAndSave(userId, b));
-    } catch (e) {
+      await runPool(bookmarks, (bookmark) => saveObservation(userId, bookmark));
+      run.status = 'succeeded';
+    } catch (error) {
       run.status = 'failed';
-      run.errorCode = String(e?.code || e?.name || 'BOOKMARK_HEALTH_FAILED').slice(0, 64);
-      console.warn('[死链体检] 全量检测失败 code=%s', run.errorCode);
+      run.errorCode = String(error?.code || error?.name || 'BOOKMARK_HEALTH_FAILED').slice(0, 64);
+      console.warn('[bookmark-health] full compatibility check failed code=%s', run.errorCode);
     } finally {
-      if (run.status === 'running') run.status = 'succeeded';
       run.completedAt = new Date().toISOString();
       fullChecking.delete(userId);
     }
   })();
-  return await getHealthSummary(userId);
+  return getHealthSummary(userId);
 }
 
-// 概览:总书签数、已测数 + 疑似失效列表(含书签名、是否有快照可兜底);running=是否正在全量检测
-export async function getHealthSummary(userId) {
-  const [[tot]] = await pool.query(
-    "SELECT COUNT(*) AS c FROM bookmark WHERE user_id = ? AND del_flag = 0 AND url IS NOT NULL AND url <> ''",
+function effectiveStatusSql(alias = 'h') {
+  return `CASE
+    WHEN ${alias}.checked_url_hash IS NULL THEN 'unchecked'
+    WHEN ${alias}.user_override = 'normal' THEN 'user_normal'
+    WHEN ${alias}.observed_status = 'suspect' THEN 'suspect'
+    WHEN ${alias}.observed_status = 'alive' THEN 'alive'
+    ELSE 'unknown'
+  END`;
+}
+
+export async function getBookmarkHealthItem(userId, bookmarkId) {
+  const [rows] = await pool.query(
+    `SELECT b.id, b.name, b.url, h.observed_code AS observedCode, h.checked_at AS checkedAt,
+            h.user_override AS userOverride, ${effectiveStatusSql()} AS effectiveStatus,
+            (SELECT COUNT(*) FROM bookmark_snapshot snapshot
+              WHERE snapshot.bookmark_id = b.id AND snapshot.user_id = b.user_id) AS hasSnapshot
+       FROM bookmark b
+       LEFT JOIN bookmark_health h
+         ON h.bookmark_id = b.id AND h.user_id = b.user_id AND h.checked_url_hash = b.url_exact_hash
+      WHERE b.id = ? AND b.user_id = ? AND b.del_flag = 0 LIMIT 1`,
+    [bookmarkId, userId],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return { ...row, hasSnapshot: Number(row.hasSnapshot || 0) > 0 };
+}
+
+export async function listBookmarkHealthIssues(userId, { limit = 50, cursor = null } = {}) {
+  const pageSize = Math.min(Math.max(Number(limit) || 20, 1), 50);
+  let decoded = null;
+  if (cursor) {
+    try {
+      decoded = JSON.parse(Buffer.from(String(cursor), 'base64url').toString('utf8'));
+      if (decoded?.v !== 1 || !decoded?.time || !decoded?.id) throw new Error();
+      const time = new Date(decoded.time);
+      if (Number.isNaN(time.getTime())) throw new Error();
+      decoded.time = time;
+    } catch {
+      const error = new Error('分页位置已失效，请重新加载');
+      error.code = 'ORGANIZE_CURSOR_INVALID';
+      throw error;
+    }
+  }
+  const cursorWhere = decoded ? 'AND (h.checked_at < ? OR (h.checked_at = ? AND b.id < ?))' : '';
+  const params = [userId];
+  if (decoded) params.push(decoded.time, decoded.time, decoded.id);
+  params.push(pageSize + 1);
+  const [rows] = await pool.query(
+    `SELECT b.id, b.name, b.url, h.observed_code AS observedCode, h.checked_at AS checkedAt,
+            h.user_override AS userOverride, ${effectiveStatusSql()} AS effectiveStatus,
+            (SELECT COUNT(*) FROM bookmark_snapshot snapshot
+              WHERE snapshot.bookmark_id = b.id AND snapshot.user_id = b.user_id) AS hasSnapshot
+       FROM bookmark b
+       INNER JOIN bookmark_health h
+         ON h.bookmark_id = b.id AND h.user_id = b.user_id AND h.checked_url_hash = b.url_exact_hash
+      WHERE b.user_id = ? AND b.del_flag = 0 AND h.observed_status = 'suspect' AND h.user_override IS NULL
+            ${cursorWhere}
+      ORDER BY h.checked_at DESC, b.id DESC
+      LIMIT ?`,
+    params,
+  );
+  const hasMore = rows.length > pageSize;
+  const items = rows.slice(0, pageSize).map((row) => ({ ...row, hasSnapshot: Number(row.hasSnapshot || 0) > 0 }));
+  const last = items[items.length - 1];
+  return {
+    items,
+    hasMore,
+    nextCursor:
+      hasMore && last
+        ? Buffer.from(
+            JSON.stringify({
+              v: 1,
+              time: last.checkedAt instanceof Date ? last.checkedAt.toISOString() : String(last.checkedAt),
+              id: String(last.id),
+            }),
+            'utf8',
+          ).toString('base64url')
+        : null,
+  };
+}
+
+export async function getHealthSummary(userId, { includeSuspect = true } = {}) {
+  const [[totalRow]] = await pool.query(
+    `SELECT COUNT(*) AS total FROM bookmark
+      WHERE user_id = ? AND del_flag = 0 AND url IS NOT NULL AND url <> ''`,
     [userId],
   );
   const [[counts]] = await pool.query(
     `SELECT COUNT(*) AS checked,
-            SUM(h.status = 'alive') AS alive,
-            SUM(h.status = 'suspect') AS suspect,
-            SUM(h.status NOT IN ('alive', 'suspect')) AS unknown,
+            SUM(h.user_override = 'normal') AS user_normal,
+            SUM(h.user_override IS NULL AND h.observed_status = 'alive') AS alive,
+            SUM(h.user_override IS NULL AND h.observed_status = 'suspect') AS suspect,
+            SUM(h.user_override IS NULL AND h.observed_status = 'unknown') AS unknown,
             MAX(h.checked_at) AS last_checked_at
        FROM bookmark_health h
-       JOIN bookmark b ON b.id = h.bookmark_id AND b.user_id = h.user_id
+       INNER JOIN bookmark b
+         ON b.id = h.bookmark_id AND b.user_id = h.user_id AND b.url_exact_hash = h.checked_url_hash
       WHERE h.user_id = ? AND b.del_flag = 0 AND b.url IS NOT NULL AND b.url <> ''`,
     [userId],
   );
-  const [rows] = await pool.query(
-    `SELECT h.bookmark_id, b.name, b.url, h.note, h.checked_at,
-            (SELECT COUNT(*) FROM bookmark_snapshot s WHERE s.bookmark_id = h.bookmark_id) AS has_snapshot
-       FROM bookmark_health h
-       JOIN bookmark b ON b.id = h.bookmark_id AND b.del_flag = 0
-      WHERE h.user_id = ? AND h.status = 'suspect'
-      ORDER BY h.checked_at DESC LIMIT 100`,
-    [userId],
-  );
+  const suspectList = includeSuspect ? await listBookmarkHealthIssues(userId, { limit: 50 }) : { items: [] };
   const run = fullCheckRuns.get(userId) || null;
   const running = fullChecking.has(userId);
-  const checked = Number(counts.checked || 0);
-  const total = Number(tot.c || 0);
+  const total = Number(totalRow?.total || 0);
+  const checked = Number(counts?.checked || 0);
   return {
     total,
     checked,
-    alive: Number(counts.alive || 0),
-    suspectCount: Number(counts.suspect || 0),
-    unknown: Number(counts.unknown || 0),
+    alive: Number(counts?.alive || 0),
+    suspectCount: Number(counts?.suspect || 0),
+    unknown: Number(counts?.unknown || 0),
+    userNormal: Number(counts?.user_normal || 0),
+    unchecked: Math.max(total - checked, 0),
     running,
     runId: run?.runId || 'latest',
     runStatus: running ? 'running' : run?.status || (checked >= total ? 'succeeded' : 'idle'),
     startedAt: run?.startedAt || null,
     completedAt: run?.completedAt || null,
-    lastCheckedAt: counts.last_checked_at || null,
+    lastCheckedAt: counts?.last_checked_at || null,
     pollAfterMs: 2500,
-    suspect: rows.map((r) => ({
-      id: r.bookmark_id,
-      name: r.name,
-      url: r.url,
-      note: r.note,
-      hasSnapshot: Number(r.has_snapshot) > 0,
-      checkedAt: r.checked_at,
+    suspect: suspectList.items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      url: item.url,
+      note: item.observedCode,
+      observedCode: item.observedCode,
+      hasSnapshot: item.hasSnapshot,
+      checkedAt: item.checkedAt,
+      effectiveStatus: item.effectiveStatus,
     })),
   };
 }
 
-// 重置:清空该用户所有体检记录(回到"未检测"),供从头重新体检。正在全量检测时不允许重置。
 export async function resetHealth(userId) {
-  if (fullChecking.has(userId)) return { ok: false, reason: 'running', msg: '正在检测中,请稍后再重置' };
-  await pool.query('DELETE FROM bookmark_health WHERE user_id = ?', [userId]);
+  if (fullChecking.has(userId)) return { ok: false, reason: 'running', msg: '正在检测中，请稍后再重置' };
+  // “标记正常”是用户决定，系统重置只清除观测事实；覆盖决定只会在 URL 变化或用户撤销时失效。
+  await pool.query(
+    `DELETE FROM bookmark_health
+      WHERE user_id = ? AND user_override IS NULL`,
+    [userId],
+  );
   return { ok: true };
 }
 
-// 用户「标记正常」:把某书签的体检状态置为 alive,消除误报(SPA/需登录等浏览器能开的)。
 export async function markLinkNormal(userId, bookmarkId) {
   const [result] = await pool.query(
-    `INSERT INTO bookmark_health (bookmark_id, user_id, status, note)
-     SELECT id, user_id, 'alive', 'user'
-       FROM bookmark
-      WHERE id = ? AND user_id = ? AND del_flag = 0
-     ON DUPLICATE KEY UPDATE status = 'alive', note = 'user', checked_at = CURRENT_TIMESTAMP`,
+    `UPDATE bookmark_health h
+     INNER JOIN bookmark b
+       ON b.id = h.bookmark_id AND b.user_id = h.user_id AND b.url_exact_hash = h.checked_url_hash
+        SET h.user_override = 'normal', h.override_at = CURRENT_TIMESTAMP
+      WHERE h.bookmark_id = ? AND h.user_id = ? AND b.del_flag = 0 AND h.observed_status = 'suspect'`,
     [bookmarkId, userId],
   );
-  return { ok: Number(result.affectedRows || 0) > 0 };
+  return { ok: Number(result?.affectedRows || 0) > 0 };
+}
+
+export async function unmarkLinkNormal(userId, bookmarkId) {
+  const [result] = await pool.query(
+    `UPDATE bookmark_health h
+     INNER JOIN bookmark b
+       ON b.id = h.bookmark_id AND b.user_id = h.user_id AND b.url_exact_hash = h.checked_url_hash
+        SET h.user_override = NULL, h.override_at = NULL
+      WHERE h.bookmark_id = ? AND h.user_id = ? AND b.del_flag = 0 AND h.user_override = 'normal'`,
+    [bookmarkId, userId],
+  );
+  return { ok: Number(result?.affectedRows || 0) > 0, item: await getBookmarkHealthItem(userId, bookmarkId) };
 }

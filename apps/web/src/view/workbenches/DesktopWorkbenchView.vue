@@ -777,12 +777,15 @@
       openNotificationPanel();
       return;
     }
-    const tab = key === 'todo' ? 'todo' : 'all';
     recordOperation({
       module: '工作台',
       operation: key === 'todo' ? '从今日待处理查看未完成待办' : '从今日待处理查看待整理资源',
     });
-    router.push({ path: '/inbox', query: { tab } });
+    router.push(
+      key === 'todo'
+        ? { path: '/inbox', query: { tab: 'todo' } }
+        : { path: '/organize', query: { issue: 'pending' } },
+    );
   }
 
   function openGrowthTasks() {
