@@ -35,12 +35,7 @@
             </BButton>
           </aside>
 
-          <component
-            :is="bookmark.isMobile ? 'div' : 'main'"
-            ref="organizeMainRef"
-            class="organize-main"
-            tabindex="-1"
-          >
+          <component :is="bookmark.isMobile ? 'div' : 'main'" ref="organizeMainRef" class="organize-main" tabindex="-1">
             <nav v-if="bookmark.isMobile" class="organize-mobile-nav" :aria-label="t('organize.navigationLabel')">
               <BButton
                 v-for="item in issueOptions"
@@ -83,7 +78,10 @@
                       </div>
                       <span class="organize-overview-section__rule">{{ t('organize.overview.pendingRule') }}</span>
                     </div>
-                    <BButton class="organize-overview-card organize-overview-card--pending" @click="selectView('pending')">
+                    <BButton
+                      class="organize-overview-card organize-overview-card--pending"
+                      @click="selectView('pending')"
+                    >
                       <span class="organize-overview-card__icon is-pending">
                         <SvgIcon :src="icon.contextMenu.inbox" size="21" aria-hidden="true" />
                       </span>
@@ -205,7 +203,12 @@
                 @retry="loadUntagged(true)"
               >
                 <div class="organize-resource-list" role="list">
-                  <article v-for="item in untaggedItems" :key="untaggedKey(item)" class="organize-resource-row" role="listitem">
+                  <article
+                    v-for="item in untaggedItems"
+                    :key="untaggedKey(item)"
+                    class="organize-resource-row"
+                    role="listitem"
+                  >
                     <BCheckbox
                       :model-value="selectedUntaggedKeys.includes(untaggedKey(item))"
                       :aria-label="t('organize.selectResource', { title: item.title || t('inbox.untitled') })"
@@ -250,7 +253,9 @@
                   <h2>{{ t('organize.views.duplicateBookmark') }}</h2>
                   <p>{{ t('organize.duplicate.description') }}</p>
                 </div>
-                <BButton :loading="duplicateList.loading" @click="loadDuplicates(true)">{{ t('organize.refresh') }}</BButton>
+                <BButton :loading="duplicateList.loading" @click="loadDuplicates(true)">{{
+                  t('organize.refresh')
+                }}</BButton>
               </header>
 
               <OrganizeIssueListState
@@ -262,7 +267,12 @@
                 @retry="loadDuplicates(true)"
               >
                 <div class="organize-duplicate-list" role="list">
-                  <article v-for="group in duplicateGroups" :key="group.groupKey" class="organize-duplicate-card" role="listitem">
+                  <article
+                    v-for="group in duplicateGroups"
+                    :key="group.groupKey"
+                    class="organize-duplicate-card"
+                    role="listitem"
+                  >
                     <span class="organize-duplicate-card__icon">
                       <SvgIcon :src="icon.resource.bookmark" size="20" aria-hidden="true" />
                     </span>
@@ -306,10 +316,88 @@
                   <h2>{{ t('organize.views.bookmarkHealth') }}</h2>
                   <p>{{ t('organize.health.description') }}</p>
                 </div>
-                <BButton type="primary" :loading="checkingHealthBatch" @click="checkHealthBatch">
-                  {{ t('organize.health.checkBatch') }}
+                <BButton
+                  type="primary"
+                  :loading="healthScanStarting || healthScanRunning"
+                  :disabled="healthActionDisabled"
+                  @click="startHealthScan"
+                >
+                  {{ healthActionLabel }}
                 </BButton>
               </header>
+
+              <div v-if="healthSummary" class="organize-health-scan" :class="`is-${healthRunStatus}`">
+                <div class="organize-health-scan__heading">
+                  <div>
+                    <strong>{{ healthScanTitle }}</strong>
+                    <span>{{ healthScanDescription }}</span>
+                  </div>
+                  <BChip :tone="healthStatusTone" size="medium">{{ healthStatusLabel }}</BChip>
+                </div>
+                <template v-if="healthScanRunning">
+                  <BProgress
+                    :percent="healthProgressPercent"
+                    :aria-label="
+                      t('organize.health.progressAria', { processed: healthProcessed, total: healthScanTotal })
+                    "
+                    show-info
+                  />
+                  <div class="organize-health-scan__progress-copy">
+                    <strong>{{
+                      t('organize.health.progress', { processed: healthProcessed, total: healthScanTotal })
+                    }}</strong>
+                    <span>{{ t('organize.health.canLeave') }}</span>
+                  </div>
+                </template>
+                <div v-else-if="healthRunFinished" class="organize-health-scan__results">
+                  <div>
+                    <strong>{{ healthNormalCount }}</strong>
+                    <span>{{ t('organize.health.resultNormal') }}</span>
+                  </div>
+                  <div>
+                    <strong>{{ healthSummary.suspectCount }}</strong>
+                    <span>{{ t('organize.health.resultSuspect') }}</span>
+                  </div>
+                  <div>
+                    <strong>{{ healthSummary.unknown }}</strong>
+                    <span>{{ t('organize.health.resultUnknown') }}</span>
+                  </div>
+                </div>
+                <p
+                  v-if="
+                    healthRunFinished && (Number(healthScan?.skipped || 0) > 0 || Number(healthScan?.failed || 0) > 0)
+                  "
+                  class="organize-health-scan__coverage"
+                >
+                  {{
+                    t('organize.health.scanExceptions', {
+                      skipped: Number(healthScan?.skipped || 0),
+                      failed: Number(healthScan?.failed || 0),
+                    })
+                  }}
+                </p>
+                <p v-if="!healthScanRunning && !healthRunFinished" class="organize-health-scan__coverage">
+                  {{
+                    t('organize.health.currentCoverage', { checked: healthSummary.checked, total: healthSummary.total })
+                  }}
+                </p>
+                <div v-if="healthSummaryError" class="organize-health-scan__stale" role="alert">
+                  <span>{{ t('organize.health.statusStale') }}</span>
+                  <BButton size="small" @click="refreshHealthScan()">{{ t('organize.retry') }}</BButton>
+                </div>
+              </div>
+              <div v-else-if="healthSummaryLoading" class="organize-health-scan is-loading">
+                <BLoading inline :loading="true" :title="t('organize.health.statusLoading')" />
+              </div>
+              <div v-else-if="healthSummaryError" class="organize-health-scan is-error" role="alert">
+                <div class="organize-health-scan__heading">
+                  <div>
+                    <strong>{{ t('organize.health.statusLoadFailed') }}</strong>
+                    <span>{{ t('organize.health.statusLoadFailedDescription') }}</span>
+                  </div>
+                  <BButton size="small" @click="refreshHealthScan()">{{ t('organize.retry') }}</BButton>
+                </div>
+              </div>
 
               <div class="organize-health-note" role="note">
                 <SvgIcon :src="icon.bookmarkManage.healthCheck" size="17" aria-hidden="true" />
@@ -344,11 +432,7 @@
                     </div>
                     <div class="organize-health-row__actions">
                       <BButton size="small" @click="openExternal(item.url)">{{ t('organize.open') }}</BButton>
-                      <BButton
-                        size="small"
-                        :loading="checkingHealthIds.has(item.id)"
-                        @click="recheckHealth(item)"
-                      >
+                      <BButton size="small" :loading="checkingHealthIds.has(item.id)" @click="recheckHealth(item)">
                         {{ t('organize.health.recheck') }}
                       </BButton>
                       <BButton size="small" type="primary" @click="markHealthNormal(item)">
@@ -409,7 +493,10 @@
             >
               <span class="duplicate-candidate__header">
                 <strong>{{ member.name || t('inbox.untitled') }}</strong>
-                <span v-if="duplicatePreview.recommendedKeepBookmarkId === member.id" class="organize-status-chip is-recommended">
+                <span
+                  v-if="duplicatePreview.recommendedKeepBookmarkId === member.id"
+                  class="organize-status-chip is-recommended"
+                >
                   {{ t('organize.duplicate.recommended') }}
                 </span>
               </span>
@@ -466,15 +553,17 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, nextTick, onActivated, onMounted, ref, watch } from 'vue';
+  import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import BProgress from '@/components/base/BasicComponents/BProgress.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
@@ -484,13 +573,16 @@
   import Inbox from '@/view/inbox/Inbox.vue';
   import { bookmarkStore, organizeStore, useUserStore } from '@/store';
   import {
-    checkBookmarkHealthBatch,
+    getBookmarkHealth,
     getDuplicateBookmarkPreview,
     ignoreDuplicateBookmarks,
     ignoreUntaggedResources,
     markBookmarkHealthNormal,
     recheckBookmarkHealth,
     resolveDuplicateBookmarks,
+    startBookmarkHealthScan,
+    type BookmarkHealthScanStatus,
+    type BookmarkHealthSummary,
     type BookmarkHealthItem,
     type DuplicateBookmarkGroup,
     type OrganizeIssueType,
@@ -514,7 +606,10 @@
   const untaggedType = ref<'all' | OrganizeResourceType>('all');
   const selectedUntaggedKeys = ref<string[]>([]);
   const ignoringUntagged = ref(false);
-  const checkingHealthBatch = ref(false);
+  const healthSummary = ref<BookmarkHealthSummary | null>(null);
+  const healthSummaryLoading = ref(false);
+  const healthSummaryError = ref(false);
+  const healthScanStarting = ref(false);
   const checkingHealthIds = ref(new Set<string>());
   const duplicateModalVisible = ref(false);
   const duplicatePreviewLoading = ref(false);
@@ -526,6 +621,8 @@
   const pendingDuplicateResolveRequest = ref<{ payloadKey: string; requestId: string } | null>(null);
   const organizeMainRef = ref<HTMLElement | null>(null);
   let duplicateReturnFocus: HTMLElement | null = null;
+  let healthPoller: ReturnType<typeof setTimeout> | null = null;
+  let healthRequestGeneration = 0;
   let mounted = false;
   let activatedOnce = false;
 
@@ -542,13 +639,63 @@
   const untaggedItems = computed(() => untaggedList.value.items as UntaggedResourceItem[]);
   const duplicateGroups = computed(() => duplicateList.value.items as DuplicateBookmarkGroup[]);
   const healthItems = computed(() => healthList.value.items as BookmarkHealthItem[]);
+  const healthScan = computed(() => healthSummary.value?.scan || null);
+  const healthRunStatus = computed<BookmarkHealthScanStatus>(
+    () => healthScan.value?.status || healthSummary.value?.runStatus || 'idle',
+  );
+  const healthScanRunning = computed(() => Boolean(healthScan.value?.running));
+  const healthRunFinished = computed(() =>
+    ['succeeded', 'completed_with_errors', 'failed'].includes(healthRunStatus.value),
+  );
+  const healthScanTotal = computed(() => Number(healthScan.value?.total || healthSummary.value?.total || 0));
+  const healthProcessed = computed(() => Number(healthScan.value?.processed || 0));
+  const healthProgressPercent = computed(() =>
+    healthScanTotal.value > 0 ? (healthProcessed.value / healthScanTotal.value) * 100 : 0,
+  );
+  const healthNormalCount = computed(
+    () => Number(healthSummary.value?.alive || 0) + Number(healthSummary.value?.userNormal || 0),
+  );
+  const healthActionDisabled = computed(
+    () =>
+      healthScanStarting.value ||
+      healthScanRunning.value ||
+      healthSummaryLoading.value ||
+      !healthSummary.value ||
+      healthSummaryError.value ||
+      Number(healthSummary.value.total || 0) <= 0,
+  );
+  const healthActionLabel = computed(() => {
+    if (healthScanRunning.value) return t('organize.health.checking');
+    if (healthRunFinished.value) return t('organize.health.recheckAll');
+    return t('organize.health.checkAll');
+  });
+  const healthStatusLabel = computed(() => t(`organize.health.status.${healthRunStatus.value}`));
+  const healthStatusTone = computed<'pending' | 'bookmark' | 'success' | 'danger' | 'neutral'>(() => {
+    if (healthRunStatus.value === 'queued') return 'pending';
+    if (healthRunStatus.value === 'running') return 'bookmark';
+    if (healthRunStatus.value === 'succeeded') return 'success';
+    if (['completed_with_errors', 'failed'].includes(healthRunStatus.value)) return 'danger';
+    return 'neutral';
+  });
+  const healthScanTitle = computed(() => {
+    if (healthScanRunning.value) return t('organize.health.scanRunningTitle');
+    if (healthRunFinished.value) return t('organize.health.scanResultTitle');
+    return t('organize.health.scanIdleTitle');
+  });
+  const healthScanDescription = computed(() => {
+    if (healthRunStatus.value === 'queued') return t('organize.health.scanQueuedDescription');
+    if (healthRunStatus.value === 'running') return t('organize.health.scanRunningDescription');
+    if (healthRunStatus.value === 'completed_with_errors')
+      return t('organize.health.scanPartialDescription', { count: Number(healthScan.value?.failed || 0) });
+    if (healthRunStatus.value === 'failed')
+      return t('organize.health.scanFailedDescription', { count: Number(healthScan.value?.failed || 0) });
+    if (healthRunStatus.value === 'succeeded') return t('organize.health.scanCompletedDescription');
+    return t('organize.health.scanIdleDescription');
+  });
   const organizeOwnerKey = computed(() =>
-    [
-      user.id || 'visitor',
-      user.role || '',
-      user.adminContext?.subjectUserId || '',
-      user.adminContext?.mode || '',
-    ].join('|'),
+    [user.id || 'visitor', user.role || '', user.adminContext?.subjectUserId || '', user.adminContext?.mode || ''].join(
+      '|',
+    ),
   );
 
   function displayCount(value: number | null | undefined, hasMore = false) {
@@ -558,23 +705,16 @@
 
   const pendingCount = computed(() => displayCount(summary.value?.pendingShortcut.count));
   const affectedResourceTotal = computed(() =>
-    summary.value
-      ? displayCount(summary.value.totals.affectedResourceTotal, summary.value.totals.hasMore)
-      : '—',
+    summary.value ? displayCount(summary.value.totals.affectedResourceTotal, summary.value.totals.hasMore) : '—',
   );
-  const issueOptions = computed<
-    Array<{ key: OrganizeView; label: string; icon: string; count: string | null }>
-  >(() => [
+  const issueOptions = computed<Array<{ key: OrganizeView; label: string; icon: string; count: string | null }>>(() => [
     { key: 'overview', label: t('organize.views.overview'), icon: icon.ai.organize, count: null },
     { key: 'pending', label: t('organize.views.pending'), icon: icon.contextMenu.inbox, count: pendingCount.value },
     {
       key: 'untagged',
       label: t('organize.views.untagged'),
       icon: icon.resource.tag,
-      count: displayCount(
-        summary.value?.issues.untagged.findingCount,
-        summary.value?.issues.untagged.hasMore,
-      ),
+      count: displayCount(summary.value?.issues.untagged.findingCount, summary.value?.issues.untagged.hasMore),
     },
     {
       key: 'duplicate_bookmark',
@@ -646,19 +786,20 @@
   const someVisibleUntaggedSelected = computed(
     () => selectedUntaggedItems.value.length > 0 && !allVisibleUntaggedSelected.value,
   );
-  const duplicateDeleteIds = computed(() =>
-    duplicatePreview.value?.members.filter((member) => member.id !== duplicateKeepId.value).map((member) => member.id) || [],
+  const duplicateDeleteIds = computed(
+    () =>
+      duplicatePreview.value?.members
+        .filter((member) => member.id !== duplicateKeepId.value)
+        .map((member) => member.id) || [],
   );
-  const selectedKeeperCanResolve = computed(
-    () => Boolean(duplicatePreview.value && duplicateKeepId.value && canKeepDuplicateMember(duplicateKeepId.value)),
+  const selectedKeeperCanResolve = computed(() =>
+    Boolean(duplicatePreview.value && duplicateKeepId.value && canKeepDuplicateMember(duplicateKeepId.value)),
   );
   const duplicateMergedTagCount = computed(
     () => new Set(duplicatePreview.value?.members.flatMap((member) => member.tags.map((tag) => tag.id)) || []).size,
   );
   const duplicateTagMergeBlocked = computed(() => mergeDuplicateTags.value && duplicateMergedTagCount.value > 4);
-  const selectedKeeperCanSubmit = computed(
-    () => selectedKeeperCanResolve.value && !duplicateTagMergeBlocked.value,
-  );
+  const selectedKeeperCanSubmit = computed(() => selectedKeeperCanResolve.value && !duplicateTagMergeBlocked.value);
 
   function selectView(view: OrganizeView) {
     if (view === activeView.value) return;
@@ -677,7 +818,9 @@
   async function loadActiveView(reset = true) {
     if (activeView.value === 'untagged') await loadUntagged(reset);
     else if (activeView.value === 'duplicate_bookmark') await loadDuplicates(reset);
-    else if (activeView.value === 'bookmark_health') await loadHealth(reset);
+    else if (activeView.value === 'bookmark_health') {
+      await Promise.all([loadHealth(reset), refreshHealthScan({ silent: Boolean(healthSummary.value) })]);
+    }
   }
 
   async function loadUntagged(reset: boolean) {
@@ -707,6 +850,80 @@
 
   async function loadHealth(reset: boolean) {
     await organize.loadIssue('bookmark_health', { reset });
+  }
+
+  function stopHealthPolling() {
+    if (!healthPoller) return;
+    clearTimeout(healthPoller);
+    healthPoller = null;
+  }
+
+  function scheduleHealthPolling() {
+    stopHealthPolling();
+    if (!healthScanRunning.value || activeView.value !== 'bookmark_health' || document.hidden) return;
+    const delay = Math.min(10_000, Math.max(1500, Number(healthSummary.value?.pollAfterMs || 2500)));
+    healthPoller = setTimeout(() => {
+      healthPoller = null;
+      void refreshHealthScan({ silent: true });
+    }, delay);
+  }
+
+  async function refreshHealthScan({ silent = false } = {}) {
+    const generation = ++healthRequestGeneration;
+    const wasRunning = healthScanRunning.value;
+    if (!silent || !healthSummary.value) healthSummaryLoading.value = true;
+    healthSummaryError.value = false;
+    try {
+      const response = await getBookmarkHealth({ includeSuspect: false });
+      if (generation !== healthRequestGeneration) return false;
+      if (response.status !== 200 || !response.data) {
+        healthSummaryError.value = true;
+        return false;
+      }
+      healthSummary.value = response.data as BookmarkHealthSummary;
+      if (wasRunning && !healthScanRunning.value) {
+        await Promise.all([loadHealth(true), refreshSummary()]);
+      }
+      return true;
+    } catch {
+      if (generation === healthRequestGeneration) healthSummaryError.value = true;
+      return false;
+    } finally {
+      if (generation === healthRequestGeneration) {
+        healthSummaryLoading.value = false;
+        scheduleHealthPolling();
+      }
+    }
+  }
+
+  async function startHealthScan() {
+    if (healthActionDisabled.value) return;
+    stopHealthPolling();
+    const generation = ++healthRequestGeneration;
+    healthScanStarting.value = true;
+    try {
+      const response = await startBookmarkHealthScan();
+      if (generation !== healthRequestGeneration) return;
+      if (response.status !== 200 || !response.data) {
+        message.error(response.msg || t('organize.actionFailed'));
+        return;
+      }
+      healthSummary.value = response.data as BookmarkHealthSummary;
+      healthSummaryError.value = false;
+      message.success(response.data?.already ? t('organize.health.scanReused') : t('organize.health.scanStarted'));
+    } catch (error) {
+      if (generation === healthRequestGeneration) message.error(actionErrorMessage(error));
+    } finally {
+      if (generation === healthRequestGeneration) {
+        healthScanStarting.value = false;
+        scheduleHealthPolling();
+      }
+    }
+  }
+
+  function handleHealthVisibilityChange() {
+    if (document.hidden) stopHealthPolling();
+    else if (activeView.value === 'bookmark_health') void refreshHealthScan({ silent: Boolean(healthSummary.value) });
   }
 
   function untaggedKey(item: UntaggedResourceItem) {
@@ -753,11 +970,11 @@
         return;
       }
       const keys = new Set(items.map((item) => `${item.resourceType}:${item.resourceId}`));
-      organize.removeIssueItems('untagged', (item) =>
-        keys.has(untaggedKey(item as UntaggedResourceItem)),
-      );
+      organize.removeIssueItems('untagged', (item) => keys.has(untaggedKey(item as UntaggedResourceItem)));
       selectedUntaggedKeys.value = [];
-      message.success(t('organize.untagged.ignoreSuccess', { count: Number(response.data?.ignoredCount || items.length) }));
+      message.success(
+        t('organize.untagged.ignoreSuccess', { count: Number(response.data?.ignoredCount || items.length) }),
+      );
       await refreshSummary();
     } catch (error) {
       message.error(actionErrorMessage(error));
@@ -940,24 +1157,6 @@
     });
   }
 
-  async function checkHealthBatch() {
-    if (checkingHealthBatch.value) return;
-    checkingHealthBatch.value = true;
-    try {
-      const response = await checkBookmarkHealthBatch();
-      if (response.status !== 200) {
-        message.error(response.msg || t('organize.actionFailed'));
-        return;
-      }
-      message.success(t('organize.health.checkedBatch', { count: Number(response.data?.checkedThisRun || 0) }));
-      await Promise.all([loadHealth(true), refreshSummary()]);
-    } catch (error) {
-      message.error(actionErrorMessage(error));
-    } finally {
-      checkingHealthBatch.value = false;
-    }
-  }
-
   async function recheckHealth(item: BookmarkHealthItem) {
     checkingHealthIds.value = new Set([...checkingHealthIds.value, item.id]);
     try {
@@ -968,7 +1167,7 @@
       }
       const status = String(response.data?.observation?.status || 'unknown');
       message.success(t(`organize.health.recheckResult.${status}`));
-      await Promise.all([loadHealth(true), refreshSummary()]);
+      await Promise.all([loadHealth(true), refreshSummary(), refreshHealthScan({ silent: true })]);
     } catch (error) {
       message.error(actionErrorMessage(error));
     } finally {
@@ -987,7 +1186,7 @@
       }
       organize.removeIssueItems('bookmark_health', (entry) => (entry as BookmarkHealthItem).id === item.id);
       message.success(t('organize.health.markNormalSuccess'));
-      await refreshSummary();
+      await Promise.all([refreshSummary(), refreshHealthScan({ silent: true })]);
     } catch (error) {
       message.error(actionErrorMessage(error));
     }
@@ -1008,14 +1207,15 @@
     showNotification: false,
   });
 
-  watch(
-    organizeOwnerKey,
-    async (ownerKey) => {
-      organize.resetForOwner(ownerKey);
-      selectedUntaggedKeys.value = [];
-      await Promise.all([refreshSummary(), loadActiveView(true)]);
-    },
-  );
+  watch(organizeOwnerKey, async (ownerKey) => {
+    stopHealthPolling();
+    healthRequestGeneration += 1;
+    healthSummary.value = null;
+    healthSummaryError.value = false;
+    organize.resetForOwner(ownerKey);
+    selectedUntaggedKeys.value = [];
+    await Promise.all([refreshSummary(), loadActiveView(true)]);
+  });
 
   watch(duplicateModalVisible, async (visible) => {
     if (visible) return;
@@ -1029,12 +1229,14 @@
     () => [route.query.issue, route.query._rt],
     async () => {
       if (!mounted) return;
+      if (activeView.value !== 'bookmark_health') stopHealthPolling();
       await loadActiveView(true);
       if (route.query._rt) await refreshSummary();
     },
   );
 
   onMounted(async () => {
+    document.addEventListener('visibilitychange', handleHealthVisibilityChange);
     organize.resetForOwner(organizeOwnerKey.value);
     mounted = true;
     await Promise.all([refreshSummary(), loadActiveView(true)]);
@@ -1047,6 +1249,14 @@
       return;
     }
     void Promise.all([organize.loadSummary({ silent: true }), loadActiveView(true)]);
+  });
+
+  onDeactivated(stopHealthPolling);
+
+  onBeforeUnmount(() => {
+    stopHealthPolling();
+    healthRequestGeneration += 1;
+    document.removeEventListener('visibilitychange', handleHealthVisibilityChange);
   });
 </script>
 
@@ -1532,6 +1742,106 @@
     white-space: nowrap;
   }
 
+  .organize-health-scan {
+    flex: 0 0 auto;
+    display: grid;
+    gap: 12px;
+    margin-bottom: 10px;
+    padding: 14px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 13px;
+    background: var(--card-background);
+  }
+
+  .organize-health-scan.is-running,
+  .organize-health-scan.is-queued {
+    border-color: var(--primary-color);
+  }
+
+  .organize-health-scan.is-completed_with_errors,
+  .organize-health-scan.is-failed,
+  .organize-health-scan.is-error {
+    border-color: var(--danger-color, #dc3f4f);
+  }
+
+  .organize-health-scan__heading {
+    min-width: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .organize-health-scan__heading > div {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+  }
+
+  .organize-health-scan__heading strong {
+    color: var(--text-color);
+    font-size: 14px;
+  }
+
+  .organize-health-scan__heading span,
+  .organize-health-scan__coverage,
+  .organize-health-scan__progress-copy span,
+  .organize-health-scan__results span {
+    color: var(--desc-color);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .organize-health-scan__coverage {
+    margin: 0;
+  }
+
+  .organize-health-scan__progress-copy {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 12px;
+  }
+
+  .organize-health-scan__progress-copy strong {
+    color: var(--primary-color);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .organize-health-scan__results {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .organize-health-scan__results > div {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+    padding: 9px 10px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 10px;
+    background: var(--workspace-panel-bg-color);
+  }
+
+  .organize-health-scan__results strong {
+    color: var(--text-color);
+    font-size: 18px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .organize-health-scan__stale {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--surface-border-color);
+    color: var(--danger-color, #dc3f4f);
+    font-size: 12px;
+  }
+
   .organize-health-note,
   .organize-inline-warning {
     flex: 0 0 auto;
@@ -1917,6 +2227,20 @@
     .organize-selection-bar__actions {
       width: 100%;
       justify-content: flex-start;
+    }
+
+    .organize-health-scan {
+      padding: 12px;
+    }
+
+    .organize-health-scan__progress-copy {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .organize-health-scan__results {
+      grid-template-columns: repeat(3, minmax(74px, 1fr));
     }
 
     .organize-resource-row,

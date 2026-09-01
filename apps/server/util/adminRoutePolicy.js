@@ -206,6 +206,7 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'organize', [
   ['POST', '/organize/duplicate-bookmarks/:groupKey/resolve'],
   ['POST', '/organize/duplicate-bookmarks/:groupKey/ignore'],
   ['DELETE', '/organize/duplicate-bookmarks/:groupKey/ignore'],
+  ['POST', '/organize/bookmark-health/scan'],
   ['POST', '/organize/bookmark-health/check-batch'],
   ['POST', '/organize/bookmark-health/:bookmarkId/recheck'],
   ['POST', '/organize/bookmark-health/:bookmarkId/mark-normal'],

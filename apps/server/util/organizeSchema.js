@@ -32,7 +32,9 @@ async function addColumnIfMissing(tableName, columnName, definition) {
 export async function ensureOrganizeSchema() {
   await addColumnIfMissing('bookmark', 'url_exact_hash', 'BINARY(32) DEFAULT NULL AFTER `url`');
   if (!(await indexExists('bookmark', 'idx_bookmark_exact_url'))) {
-    await pool.query('ALTER TABLE `bookmark` ADD KEY `idx_bookmark_exact_url` (`user_id`, `del_flag`, `url_exact_hash`)');
+    await pool.query(
+      'ALTER TABLE `bookmark` ADD KEY `idx_bookmark_exact_url` (`user_id`, `del_flag`, `url_exact_hash`)',
+    );
   }
   await pool.query(`
     CREATE TABLE IF NOT EXISTS organize_issue_suppressions (
@@ -82,7 +84,53 @@ export async function ensureOrganizeSchema() {
       KEY idx_bookmark_health_observed (user_id, observed_status, checked_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='书签链接健康观测与用户覆盖决定'
   `);
-  await addColumnIfMissing('bookmark_health', 'observed_status', "VARCHAR(16) NOT NULL DEFAULT 'unknown' AFTER `checked_at`");
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS bookmark_health_scan_jobs (
+      user_id VARCHAR(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+      run_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+      status VARCHAR(28) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'pending',
+      total INT UNSIGNED NOT NULL DEFAULT 0,
+      processed INT UNSIGNED NOT NULL DEFAULT 0,
+      alive INT UNSIGNED NOT NULL DEFAULT 0,
+      suspect INT UNSIGNED NOT NULL DEFAULT 0,
+      unknown_count INT UNSIGNED NOT NULL DEFAULT 0,
+      skipped INT UNSIGNED NOT NULL DEFAULT 0,
+      failed INT UNSIGNED NOT NULL DEFAULT 0,
+      lease_owner VARCHAR(128) DEFAULT NULL,
+      lease_expires_at DATETIME DEFAULT NULL,
+      started_at DATETIME DEFAULT NULL,
+      heartbeat_at DATETIME DEFAULT NULL,
+      finished_at DATETIME DEFAULT NULL,
+      last_error_code VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+      create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id),
+      UNIQUE KEY uk_bookmark_health_scan_run (run_id),
+      KEY idx_bookmark_health_scan_claim (status, lease_expires_at, create_time)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='每个账号当前一次书签健康全量检测任务'
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS bookmark_health_scan_items (
+      run_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+      user_id VARCHAR(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+      bookmark_id VARCHAR(64) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+      status VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'pending',
+      attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+      result_status VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+      result_code VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+      finished_at DATETIME DEFAULT NULL,
+      create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (run_id, bookmark_id),
+      KEY idx_bookmark_health_scan_item_claim (run_id, status, attempts, bookmark_id),
+      KEY idx_bookmark_health_scan_item_user (user_id, run_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='书签健康全量检测任务快照与逐项结果'
+  `);
+  await addColumnIfMissing(
+    'bookmark_health',
+    'observed_status',
+    "VARCHAR(16) NOT NULL DEFAULT 'unknown' AFTER `checked_at`",
+  );
   await addColumnIfMissing('bookmark_health', 'observed_code', 'VARCHAR(32) DEFAULT NULL AFTER `observed_status`');
   await addColumnIfMissing('bookmark_health', 'checked_url_hash', 'BINARY(32) DEFAULT NULL AFTER `observed_code`');
   await addColumnIfMissing('bookmark_health', 'user_override', 'VARCHAR(16) DEFAULT NULL AFTER `checked_url_hash`');
@@ -93,3 +141,5 @@ export async function ensureOrganizeSchema() {
     );
   }
 }
+
+export const ORGANIZE_BACKGROUND_TABLES = Object.freeze(['bookmark_health_scan_jobs', 'bookmark_health_scan_items']);

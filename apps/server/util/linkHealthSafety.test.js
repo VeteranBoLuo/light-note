@@ -11,56 +11,69 @@ function hash(url) {
   return crypto.createHash('sha256').update(Buffer.from(url, 'utf8')).digest();
 }
 
-vi.mock('../db/index.js', () => ({
-  default: {
-    query: vi.fn(async (sql, params = []) => {
-      const text = String(sql).replace(/\s+/g, ' ').trim();
-      if (text.startsWith('SELECT id, url FROM bookmark')) {
-        return [[{ id: state.bookmark.id, url: state.bookmark.url }]];
+vi.mock('../db/index.js', () => {
+  const query = vi.fn(async (sql, params = []) => {
+    const text = String(sql).replace(/\s+/g, ' ').trim();
+    if (text.startsWith('SELECT user_id, run_id, status, total, processed')) {
+      return [[]];
+    }
+    if (text.startsWith('SELECT id, url FROM bookmark')) {
+      return [[{ id: state.bookmark.id, url: state.bookmark.url }]];
+    }
+    if (text.startsWith('INSERT INTO bookmark_health')) {
+      const next = { status: params[2], code: params[3], urlHash: params[4], userOverride: null };
+      const sameUrl = Boolean(state.health?.urlHash?.equals(next.urlHash));
+      if (state.health && sameUrl && next.status === 'unknown') {
+        state.health.urlHash = next.urlHash;
+      } else {
+        state.health = {
+          ...next,
+          userOverride: sameUrl ? state.health?.userOverride || null : null,
+        };
       }
-      if (text.startsWith('INSERT INTO bookmark_health')) {
-        const next = { status: params[2], code: params[3], urlHash: params[4], userOverride: null };
-        const sameUrl = Boolean(state.health?.urlHash?.equals(next.urlHash));
-        if (state.health && sameUrl && next.status === 'unknown') {
-          state.health.urlHash = next.urlHash;
-        } else {
-          state.health = {
-            ...next,
-            userOverride: sameUrl ? state.health?.userOverride || null : null,
-          };
-        }
-        return [{ affectedRows: 1 }];
-      }
-      if (text.startsWith('SELECT b.id, b.name')) {
-        if (!state.health || !state.health.urlHash.equals(hash(state.bookmark.url))) return [[]];
-        const effectiveStatus =
-          state.health.userOverride === 'normal' ? 'user_normal' : state.health.status;
-        return [
-          [
-            {
-              ...state.bookmark,
-              observedCode: state.health.code,
-              checkedAt: '2026-08-31 10:00:00',
-              userOverride: state.health.userOverride,
-              effectiveStatus,
-              hasSnapshot: 0,
-            },
-          ],
-        ];
-      }
-      if (text.startsWith('UPDATE bookmark_health h') && text.includes("SET h.user_override = 'normal'")) {
-        if (!state.health || state.health.status !== 'suspect') return [{ affectedRows: 0 }];
-        state.health.userOverride = 'normal';
-        return [{ affectedRows: 1 }];
-      }
-      if (text.startsWith('DELETE FROM bookmark_health')) {
-        if (state.health?.userOverride !== 'normal') state.health = null;
-        return [{ affectedRows: 1 }];
-      }
-      throw new Error(`UNEXPECTED_QUERY:${text.slice(0, 100)}`);
-    }),
-  },
-}));
+      return [{ affectedRows: 1 }];
+    }
+    if (text.startsWith('SELECT b.id, b.name')) {
+      if (!state.health || !state.health.urlHash.equals(hash(state.bookmark.url))) return [[]];
+      const effectiveStatus = state.health.userOverride === 'normal' ? 'user_normal' : state.health.status;
+      return [
+        [
+          {
+            ...state.bookmark,
+            observedCode: state.health.code,
+            checkedAt: '2026-08-31 10:00:00',
+            userOverride: state.health.userOverride,
+            effectiveStatus,
+            hasSnapshot: 0,
+          },
+        ],
+      ];
+    }
+    if (text.startsWith('UPDATE bookmark_health h') && text.includes("SET h.user_override = 'normal'")) {
+      if (!state.health || state.health.status !== 'suspect') return [{ affectedRows: 0 }];
+      state.health.userOverride = 'normal';
+      return [{ affectedRows: 1 }];
+    }
+    if (text.startsWith('DELETE FROM bookmark_health')) {
+      if (state.health?.userOverride !== 'normal') state.health = null;
+      return [{ affectedRows: 1 }];
+    }
+    throw new Error(`UNEXPECTED_QUERY:${text.slice(0, 100)}`);
+  });
+  const connection = {
+    query,
+    beginTransaction: vi.fn(async () => {}),
+    commit: vi.fn(async () => {}),
+    rollback: vi.fn(async () => {}),
+    release: vi.fn(),
+  };
+  return {
+    default: {
+      query,
+      getConnection: vi.fn(async () => connection),
+    },
+  };
+});
 
 vi.mock('./fetchWebMeta.js', () => ({
   checkUrlLiveness: vi.fn(async () => state.liveness),

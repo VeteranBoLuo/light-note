@@ -105,7 +105,7 @@ API 使用 `resultData(data, status, msg)` 信封，snake_case 响应键统一�
 - `/api/organize` 只编排共享领域 Service：无标签判定复用有效标签关系口径，标签写入与软删除复用资源中心能力；所有查询按 `resourceUser` 隔离，写操作继续受游客和管理员代管策略约束。
 - `bookmark.url_exact_hash` 是相同网址候选索引；所有 URL 创建、导入、恢复和编辑入口必须同步写入。自动治理仍以完整 URL 二进制复核，并在事务内检查快照、笔记引用和待办引用后才允许软删除。
 - `organize_issue_suppressions` 保存可撤销的忽略决定；重复网址忽略绑定当前问题上下文，成员、标签或引用变化后自动重新出现。`organize_action_requests` 保存高风险合并动作的请求幂等结果。
-- `bookmark_health` 将外部观测、被检测 URL 哈希和用户“标记正常”分列保存。仅明确 HTTP 404/410 进入疑似失效；网络、DNS 等未知结果不覆盖同一 URL 的既有结论，URL 变化才使旧覆盖决定失效。
+- `bookmark_health` 将外部观测、被检测 URL 哈希和用户“标记正常”分列保存。仅明确 HTTP 404/410 进入疑似失效；网络、DNS 等未知结果不覆盖同一 URL 的既有结论，URL 变化才使旧覆盖决定失效。全量检测由 HTTP 入口创建或复用账号级持久任务，资源治理 Worker 按快照分批领取、受控并发并写回进度；任务租约过期后可由新 Worker 续跑，不能依赖 Node 进程内存保存状态。
 - `tag_relations` 保存由有效共享资源派生的标签关系；软删除资源保留的恢复关系不能计入活跃统计。
 
 ### 笔记

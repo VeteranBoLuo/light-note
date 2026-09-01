@@ -48,6 +48,9 @@ describe('移动端书签列表布局', () => {
 
   it('死链体检在窄屏改为纵向结果卡，并保留 44px 触控操作', () => {
     expect(linkHealthSource).toContain('v-auto-scrollbar class="lh-list"');
+    expect(linkHealthSource).toContain('<BProgress');
+    expect(linkHealthSource).toContain('summary.value.scan?.processed');
+    expect(linkHealthSource).toContain('关闭弹窗不会中止 Worker');
     expect(linkHealthSource).toMatch(/@media \(max-width: 767px\)[\s\S]*?\.lh-bar[\s\S]*?flex-direction:\s*column/);
     expect(linkHealthSource).toMatch(
       /@media \(max-width: 767px\)[\s\S]*?\.lh-item[\s\S]*?flex-direction:\s*column[\s\S]*?border-color:\s*var\(--danger-color\)/,

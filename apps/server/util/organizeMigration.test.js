@@ -2,7 +2,18 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const migration = readFileSync(new URL('../migrations/20260831_organize_center_v2.sql', import.meta.url), 'utf8');
-const rollback = readFileSync(new URL('../migrations/20260831_organize_center_v2_rollback.sql', import.meta.url), 'utf8');
+const rollback = readFileSync(
+  new URL('../migrations/20260831_organize_center_v2_rollback.sql', import.meta.url),
+  'utf8',
+);
+const healthScanMigration = readFileSync(
+  new URL('../migrations/20260901_bookmark_health_scan_jobs.sql', import.meta.url),
+  'utf8',
+);
+const healthScanRollback = readFileSync(
+  new URL('../migrations/20260901_bookmark_health_scan_jobs_rollback.sql', import.meta.url),
+  'utf8',
+);
 const assertions = readFileSync(new URL('../migrations/schema-assertions.sql', import.meta.url), 'utf8');
 const runtimeEnsure = readFileSync(new URL('./organizeSchema.js', import.meta.url), 'utf8');
 
@@ -23,6 +34,19 @@ describe('整理中心迁移契约', () => {
     expect(assertions).toContain('[65] missing_organize_table');
     expect(assertions).toContain('idx_bookmark_exact_url');
     expect(assertions).toContain('url_exact_hash <=> UNHEX(SHA2');
+    expect(assertions).toContain('bookmark_health_scan_jobs');
+    expect(assertions).toContain('idx_bookmark_health_scan_item_claim');
+  });
+
+  it('全量健康检测使用可恢复任务与逐项快照，运行时 ensure 和显式迁移保持一致', () => {
+    for (const source of [healthScanMigration, runtimeEnsure]) {
+      expect(source).toMatch(/CREATE TABLE IF NOT EXISTS\s+`?bookmark_health_scan_jobs`?/);
+      expect(source).toMatch(/CREATE TABLE IF NOT EXISTS\s+`?bookmark_health_scan_items`?/);
+      expect(source).toContain('lease_expires_at');
+      expect(source).toContain('attempts');
+    }
+    expect(healthScanRollback).toContain('DROP TABLE IF EXISTS `bookmark_health_scan_items`');
+    expect(healthScanRollback).toContain('DROP TABLE IF EXISTS `bookmark_health_scan_jobs`');
   });
 
   it('运行时 ensure 只补结构，不执行历史数据回填', () => {
