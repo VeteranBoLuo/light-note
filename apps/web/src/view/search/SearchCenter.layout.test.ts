@@ -9,6 +9,10 @@ const inspectorSource = readFileSync(
   'utf8',
 );
 const tagMatchSource = readFileSync(resolve(process.cwd(), 'src/components/searchCenter/TagMatchStrip.vue'), 'utf8');
+const tagFilterSource = readFileSync(
+  resolve(process.cwd(), 'src/components/searchCenter/ResourceTagFilterPopover.vue'),
+  'utf8',
+);
 
 describe('资源中心 2.0 工作区边界', () => {
   it('只把书签、笔记和文件作为可检索资源，标签不再混进资源结果', () => {
@@ -24,10 +28,19 @@ describe('资源中心 2.0 工作区边界', () => {
   it('标签筛选位于桌面左栏，移动端复用同一查询状态并收进筛选抽屉', () => {
     expect(source).toContain('class="resource-scope-section resource-scope-section--tags"');
     expect(source).toContain('class="resource-scope-tag-filter"');
-    expect(source).toContain('<BPopover');
-    expect(source).toContain('<BInput');
-    expect(source).toContain(':selected="queryState.tags.includes(tag)"');
-    expect(source).toContain('@click="toggleTagFilter(tag)"');
+    expect(source).toContain('<ResourceTagFilterPopover');
+    expect(source).toContain(':selected="queryState.tags"');
+    expect(source).toContain('@toggle="toggleTagFilter"');
+    expect(source).toContain('@clear="clearTagFilters"');
+    expect(tagFilterSource).toContain('<BPopover');
+    expect(tagFilterSource).toContain('<BInput');
+    expect(tagFilterSource).toContain(':aria-selected="selected.includes(tag)"');
+    expect(tagFilterSource).toMatch(/resource-tag-picker\s*\{[\s\S]*?height:\s*min\(390px/);
+    expect(source).toContain('const options = [');
+    expect(source).toContain('...new Set(viewState.tagOptions.length');
+    expect(source).toMatch(/return \[\.\.\.options, \.\.\.queryState\.tags\.filter/);
+    expect(source).toContain("{ tags: queryState.tags.join(',') }");
+    expect(source).not.toContain("queryState.tags.map((tag) => encodeURIComponent(tag)).join(',')");
     expect(source).toContain('class="mobile-filter-tags"');
     expect(source).toMatch(/const mobileActiveFilterCount = computed\([\s\S]*?queryState\.tags\.length/);
     expect(source).toMatch(/fetchGlobalSearch\([\s\S]*?tags:\s*queryState\.tags/);
@@ -104,6 +117,9 @@ describe('资源中心 2.0 工作区边界', () => {
       /function openSingleTagWorkspace[\s\S]*?mode: 'explicit'[\s\S]*?selectedCount: 1[\s\S]*?closeMobileInspectorThen\([\s\S]*?path: '\/search\/batch-tags'/,
     );
     expect(source).not.toMatch(/getSingleDeleteApi[\s\S]{0,180}?tag/);
+    expect(inspectorSource).toContain('class="resource-inspector-tags__label"');
+    expect(inspectorSource).toContain('max-width="min(100%, 180px)"');
+    expect(inspectorSource).not.toContain('.resource-inspector-tags > span');
   });
 
   it('结果始终保留资源类型分组，并通过观察器滚动加载', () => {

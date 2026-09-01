@@ -42,8 +42,14 @@
     </dl>
 
     <div v-if="resource.tagNames.length" class="resource-inspector-tags">
-      <span>{{ t('resourceCenter.tags') }}</span>
-      <ResourceTagChip v-for="tag in resource.tagNames.slice(0, 6)" :key="tag" :tag="{ name: tag }" size="small" />
+      <span class="resource-inspector-tags__label">{{ t('resourceCenter.tags') }}</span>
+      <ResourceTagChip
+        v-for="tag in resource.tagNames.slice(0, 6)"
+        :key="tag"
+        :tag="{ name: tag }"
+        size="small"
+        max-width="min(100%, 180px)"
+      />
     </div>
 
     <div class="resource-inspector-actions">
@@ -291,7 +297,7 @@
     gap: 6px;
   }
 
-  .resource-inspector-tags > span {
+  .resource-inspector-tags__label {
     width: 100%;
     color: var(--desc-color);
     font-size: 12px;

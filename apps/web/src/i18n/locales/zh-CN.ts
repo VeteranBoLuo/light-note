@@ -4745,8 +4745,11 @@ export default {
     clearFilters: '清空筛选',
     tagFilter: '标签筛选',
     chooseTags: '选择标签',
+    selectedTagCount: '已选 {count} 个标签',
+    availableTagCount: '共 {count} 个标签',
     noTagsAvailable: '暂无可筛选标签',
     tagSearchPlaceholder: '搜索标签',
+    noTagMatches: '没有匹配的标签',
     tagMatches: {
       title: '匹配标签',
       hint: '标签是内容空间入口，不计入资源结果',

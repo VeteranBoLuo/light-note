@@ -5046,8 +5046,11 @@ export default {
     clearFilters: 'Clear Filters',
     tagFilter: 'Tag Filter',
     chooseTags: 'Choose Tags',
+    selectedTagCount: '{count} tags selected',
+    availableTagCount: '{count} tags available',
     noTagsAvailable: 'No tags available for filtering',
     tagSearchPlaceholder: 'Search tags',
+    noTagMatches: 'No matching tags',
     tagMatches: {
       title: 'Matching Tags',
       hint: 'Tags open content spaces and are not counted as resource results',

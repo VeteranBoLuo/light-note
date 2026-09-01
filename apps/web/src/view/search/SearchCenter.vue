@@ -127,49 +127,13 @@
                   />
                 </BButton>
                 <div v-show="scopeTagsExpanded" class="resource-scope-tag-filter">
-                  <div v-if="queryState.tags.length" class="resource-scope-selected-tags">
-                    <ResourceTagChip
-                      v-for="tag in queryState.tags"
-                      :key="tag"
-                      :tag="{ name: tag }"
-                      size="small"
-                      interactive
-                      selected
-                      show-selected-indicator
-                      max-width="100%"
-                      @click="toggleTagFilter(tag)"
-                    />
-                  </div>
-                  <BPopover v-if="tagOptions.length" v-model:open="showAllTags" trigger="click" placement="bottom-left">
-                    <BButton class="resource-scope-tag-trigger">
-                      <SvgIcon :src="icon.resource.tag" size="15" aria-hidden="true" />
-                      <span>{{ t('resourceCenter.chooseTags') }}</span>
-                      <span>{{ tagOptions.length }}</span>
-                    </BButton>
-                    <template #content>
-                      <div class="tag-filter-popover">
-                        <BInput
-                          v-model:value="tagSearch"
-                          :placeholder="t('resourceCenter.tagSearchPlaceholder')"
-                          clearable
-                        />
-                        <div class="tag-filter-popover__items">
-                          <ResourceTagChip
-                            v-for="tag in filteredTagOptions"
-                            :key="tag"
-                            :tag="{ name: tag }"
-                            class="tag-chip"
-                            size="medium"
-                            interactive
-                            :selected="queryState.tags.includes(tag)"
-                            show-selected-indicator
-                            max-width="min(180px, 100%)"
-                            @click="toggleTagFilter(tag)"
-                          />
-                        </div>
-                      </div>
-                    </template>
-                  </BPopover>
+                  <ResourceTagFilterPopover
+                    v-if="tagOptions.length"
+                    :items="tagOptions"
+                    :selected="queryState.tags"
+                    @toggle="toggleTagFilter"
+                    @clear="clearTagFilters"
+                  />
                   <span v-else class="resource-scope-empty-hint">{{ t('resourceCenter.noTagsAvailable') }}</span>
                 </div>
               </section>
@@ -736,6 +700,7 @@
   import { SEARCH_PAGE_SIZE, mergeResourcePage } from '@/utils/resourcePagination';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
   import TagMatchStrip from '@/components/searchCenter/TagMatchStrip.vue';
+  import ResourceTagFilterPopover from '@/components/searchCenter/ResourceTagFilterPopover.vue';
   import ResourceInspectorPanel from '@/components/searchCenter/ResourceInspectorPanel.vue';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
 
@@ -979,10 +944,12 @@
     },
   ]);
   const tagOptions = computed(() => {
-    const options = viewState.tagOptions.length ? viewState.tagOptions : collectTagOptions(mappedItems.value);
-    const selected = new Set(queryState.tags);
-    // 从知识地图等入口携带标签筛选时，将已选项固定在折叠区最前面，确保过滤状态一眼可见。
-    return [...queryState.tags, ...options.filter((tag) => !selected.has(tag))];
+    const options = [
+      ...new Set(viewState.tagOptions.length ? viewState.tagOptions : collectTagOptions(mappedItems.value)),
+    ];
+    const optionSet = new Set(options);
+    // 浮层打开期间必须保持原有顺序；选中项跳到首位会让鼠标下方的目标瞬间换位。
+    return [...options, ...queryState.tags.filter((tag) => !optionSet.has(tag))];
   });
   const filteredTagOptions = computed(() => {
     const keyword = tagSearch.value.trim().toLocaleLowerCase();
@@ -1077,9 +1044,6 @@
       Number(queryState.types.length > 0) +
       Number(queryState.sort !== defaultSortForKeyword(queryState.keyword)),
   );
-
-  // PC 标签筛选位于左侧，完整列表通过轻量浮层查看。
-  const showAllTags = ref(false);
 
   const typeFilters = computed(() => [
     {
@@ -1277,7 +1241,8 @@
       ...(queryState.types.length ? { type: queryState.types.join(',') } : {}),
       ...(queryState.sort !== defaultSortForKeyword(q) ? { sort: queryState.sort } : {}),
       ...(queryState.view !== 'card' ? { view: queryState.view } : {}),
-      ...(queryState.tags.length ? { tags: queryState.tags.map((tag) => encodeURIComponent(tag)).join(',') } : {}),
+      // vue-router 会负责查询参数编码；这里保留原值，避免中文标签被二次编码且刷新后失效。
+      ...(queryState.tags.length ? { tags: queryState.tags.join(',') } : {}),
       ...(queryState.date !== 'all' ? { date: queryState.date } : {}),
       ...(queryState.untagged ? { untagged: '1' } : {}),
     };
@@ -1540,6 +1505,12 @@
       queryState.tags = [...queryState.tags, tag];
     }
     applyQueryState('应用筛选');
+  }
+
+  function clearTagFilters() {
+    if (!queryState.tags.length) return;
+    queryState.tags = [];
+    applyQueryState('清空标签筛选');
   }
 
   function clearAdvancedFilters() {
@@ -2295,45 +2266,6 @@
     padding: 3px 6px 2px;
   }
 
-  .resource-scope-selected-tags {
-    min-width: 0;
-    max-height: 122px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    overflow: hidden auto;
-    overscroll-behavior: contain;
-  }
-
-  .resource-scope-tag-trigger {
-    width: 100%;
-    min-width: 0;
-    height: 36px;
-    padding-inline: 10px;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 7px;
-    border: 1px solid var(--search-border-color);
-    border-radius: 10px;
-    color: var(--desc-color);
-    background: var(--search-muted-bg);
-    text-align: left;
-  }
-
-  .resource-scope-tag-trigger:hover,
-  .resource-scope-tag-trigger:focus-visible {
-    border-color: var(--primary-color);
-    color: var(--primary-color);
-  }
-
-  .resource-scope-tag-trigger > span:nth-child(2) {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .resource-scope-tag-trigger > span:last-child,
   .resource-scope-empty-hint {
     color: var(--desc-color);
     font-size: 11px;
@@ -2341,28 +2273,6 @@
 
   .resource-scope-empty-hint {
     padding: 4px 2px;
-  }
-
-  .tag-filter-popover {
-    width: min(280px, calc(100vw - 32px));
-    display: grid;
-    gap: 10px;
-    padding: 4px;
-    box-sizing: border-box;
-  }
-
-  .tag-filter-popover :deep(.input-container) {
-    width: 100%;
-  }
-
-  .tag-filter-popover__items {
-    max-height: 280px;
-    display: flex;
-    flex-wrap: wrap;
-    align-content: flex-start;
-    gap: 7px;
-    overflow: hidden auto;
-    overscroll-behavior: contain;
   }
 
   .resource-inspector-pane {
