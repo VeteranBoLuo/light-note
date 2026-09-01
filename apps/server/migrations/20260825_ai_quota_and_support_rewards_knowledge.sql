@@ -22,7 +22,8 @@ UPDATE knowledge_base
 SET content = @ai_quota_content,
     category = '帮助中心', status = 'public', type = 'html', sort = 96,
     admin_archived = 0, updated_by = NULL
-WHERE id = @ai_quota_id OR title = @ai_quota_title;
+WHERE (id = @ai_quota_id OR title = @ai_quota_title)
+  AND LOCATE('data-ln-policy:ai-quota-v', COALESCE(content, '')) = 0;
 
 SET @points_id = '11a21140-7ecf-117e-8c23-96d5e1f6a052';
 SET @points_content = '在“我的成长 → 奖励”可以兑换积分商品、查看头像框，并参加每日惊喜或积分抽奖。

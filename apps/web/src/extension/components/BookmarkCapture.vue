@@ -161,6 +161,7 @@
   import { belongsToExtensionDraftSession, createExtensionDraftPersistence } from '../draftPersistence';
   import { resolveExtensionOperationReceipt } from '../operationIdempotency';
   import type { BookmarkDraft, ExtensionOperationReceipt, ExtensionSuccess } from '../types';
+  import { buildBookmarkCapturePayload } from '@/utils/bookmarkCapture.ts';
 
   const props = defineProps<{ authenticated: boolean; draftSessionId: string }>();
   const emit = defineEmits<{ 'auth-required': []; success: [result: ExtensionSuccess] }>();
@@ -351,17 +352,15 @@
       })();
     savingMode.value = mode;
     errorMessage.value = '';
-    const payload = {
+    const payload = buildBookmarkCapturePayload({
+      mode,
+      source: 'browser_extension',
       url,
       name,
       description: draft.description.trim(),
-      relatedTags: mode === 'formal' ? [...draft.selectedTagIds] : [],
-      relatedTagNames: mode === 'formal' ? [...draft.selectedNewTags] : [],
-      tagSource: 'browser_extension',
-      addToInbox: mode === 'inbox',
-      inboxSource: 'browser_extension',
-      saveSnapshot: mode === 'formal',
-    };
+      relatedTags: draft.selectedTagIds,
+      relatedTagNames: draft.selectedNewTags,
+    });
     try {
       const operation = await resolveExtensionOperationReceipt({
         current: draft.operations?.[mode],

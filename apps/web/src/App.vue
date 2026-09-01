@@ -105,6 +105,7 @@
   import { usePwaInstall } from '@/composables/usePwaInstall';
   import { prefetchResolvedRoute } from '@/utils/routePrefetch';
   import { scheduleNoteEditorStartupPreload } from '@/utils/noteEditorStartupPreload';
+  import { resolveRouteAuthDecision } from '@/utils/authNavigationIntent.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
 
@@ -154,6 +155,7 @@
     'landing',
     'banned',
     'quickSave',
+    'browserExtensionLanding',
     'extensionAuthorize',
     'noteShare',
   ]);
@@ -340,6 +342,7 @@
     'landing',
     'banned',
     'quickSave',
+    'browserExtensionLanding',
     'extensionAuthorize',
     'noteShare',
   ];
@@ -428,11 +431,13 @@
         const pvPage =
           location.pathname === '/' || location.pathname === '/landing'
             ? 'landing'
-            : location.pathname.startsWith('/share')
-              ? 'share'
-              : location.pathname === '/home'
-                ? 'home'
-                : 'app';
+            : location.pathname === '/browser-extension'
+              ? 'browser_extension'
+              : location.pathname.startsWith('/share')
+                ? 'share'
+                : location.pathname === '/home'
+                  ? 'home'
+                  : 'app';
         apiBasePost(
           '/api/common/recordConversion',
           { event: 'page_view', source: pvPage },
@@ -819,6 +824,7 @@
     'not-role',
     'banned',
     'quickSave',
+    'browserExtensionLanding',
     'extensionAuthorize',
     'noteShare',
   ]);
@@ -911,17 +917,31 @@
     const requiredRoles = getRequiredRoles(to);
     // 白名单含 VISITOR = 该页面对所有人开放(游客都能看,已登录角色自然都能看)。
     // 这样新增的 user / test 角色无需改任何路由文件即可访问所有普通页;仅 [Root] 页面(不含 VISITOR)才继续只放行 root。
-    const isPublicRoute = requiredRoles.includes(RoleEnum.VISITOR);
-    if (requiredRoles.length > 0 && !isPublicRoute && !requiredRoles.includes(user.role)) {
-      if (!user.id || user.role === RoleEnum.VISITOR) {
-        handleUserLogout();
-        next(
-          getRuntimeGuestEntryPath(user.preferences, {
-            isMobileLayout: bookmark.isMobile,
-          }),
-        );
-        return;
-      }
+    const routeAuthDecision = resolveRouteAuthDecision({
+      requiredRoles,
+      userId: user.id,
+      userRole: user.role,
+      visitorWorkspace: user.visitorWorkspace,
+      fromRouteName: from.name,
+      fromMatchedCount: from.matched.length,
+    });
+    if (routeAuthDecision === 'prompt-auth') {
+      // 用户已在应用内明确点击受保护入口：保留当前页面作为上下文，在原地登录；
+      // 登录、注册或 OAuth 成功后由统一认证意图消费 to.fullPath，继续本次导航。
+      bookmark.openAuthModal('登录', 'preview_guide', to.fullPath);
+      next(false);
+      return;
+    }
+    if (routeAuthDecision === 'guest-home') {
+      handleUserLogout();
+      next(
+        getRuntimeGuestEntryPath(user.preferences, {
+          isMobileLayout: bookmark.isMobile,
+        }),
+      );
+      return;
+    }
+    if (routeAuthDecision === 'forbidden') {
       next('/403');
       return;
     }

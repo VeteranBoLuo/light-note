@@ -274,6 +274,7 @@
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import AiUsageDetailModal from '@/components/aiSkills/AiUsageDetailModal.vue';
+  import { AI_USAGE_FILTER_MODULE_KEYS, aiUsageModuleKey } from '@/components/aiSkills/aiUsageModules';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
 
@@ -337,7 +338,6 @@
   const detailVisible = ref(false);
   let requestSequence = 0;
 
-  const moduleKeys = ['all', 'note', 'bookmark', 'file', 'todo', 'search', 'help', 'tag', 'other'];
   const tabOptions = computed(() => [
     { key: 'details', label: t('settings.ai.usage.detailsTab') },
     { key: 'rules', label: t('settings.ai.usage.rulesTab') },
@@ -345,7 +345,9 @@
   const periodOptions = computed(() =>
     [7, 30, 90].map((value) => ({ label: t('settings.ai.usage.days', { n: value }), value })),
   );
-  const moduleOptions = computed(() => moduleKeys.map((value) => ({ label: moduleLabel(value), value })));
+  const moduleOptions = computed(() =>
+    AI_USAGE_FILTER_MODULE_KEYS.map((value) => ({ label: moduleLabel(value), value })),
+  );
 
   const tokenActionGroups = computed(() => {
     const grouped = new Map<string, PublicCatalog['tokenActions']>();
@@ -451,6 +453,7 @@
       search: '搜索',
       help: '帮助',
       tag: '标签',
+      toolbox: '知识工坊',
     };
     return labels[module] || '其他';
   }
@@ -469,7 +472,7 @@
   }
 
   function moduleLabel(module: string) {
-    return t(`settings.ai.usage.modules.${moduleKeys.includes(module) ? module : 'other'}`);
+    return t(`settings.ai.usage.modules.${aiUsageModuleKey(module, true)}`);
   }
 
   function actionLabel(labelKey: string) {

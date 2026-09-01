@@ -109,6 +109,8 @@
       </div>
     </section>
 
+    <DailyReviewCard v-if="todaySettled" class="mobile-today__daily-review" :read-only="growthReadOnly" />
+
     <WorkbenchGrowth v-if="todaySettled" class="mobile-today__growth-card" compact-today />
 
     <section v-if="todaySettled && showDailyGrowthTasks" class="mobile-today__growth">
@@ -117,6 +119,7 @@
         :bonus="dailyGrowthBonus"
         :read-only="growthReadOnly"
         :show-claim-action="false"
+        @go="handleDailyQuestAction"
       />
     </section>
 
@@ -142,6 +145,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import TodayActionSection from '@/components/workbenches/TodayActionSection.vue';
+  import DailyReviewCard from '@/components/workbenches/DailyReviewCard.vue';
   import WorkbenchGrowth from '@/components/workbenches/WorkbenchGrowth.vue';
   import DailyQuests from '@/components/growth/DailyQuests.vue';
   import GrowthTasks from '@/components/growth/GrowthTasks.vue';
@@ -152,9 +156,11 @@
   import type { TodoItem } from '@/api/todoApi';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
+  import { useDailyReview } from '@/composables/useDailyReview.ts';
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
+  import { resolveDailyQuestRoute } from '@/utils/growthNavigation';
 
   interface TodayInboxItem {
     resourceType: 'bookmark' | 'note' | 'file';
@@ -178,6 +184,12 @@
   const scrollRef = ref<HTMLElement | null>(null);
   const { dashboard, growthTasks, loadDashboard, loadGrowthTasks, loadClaimable } = useGrowth();
   const growthReadOnly = computed(() => Boolean(user.adminContext));
+  const { loadDailyReview } = useDailyReview();
+
+  function refreshDailyReview() {
+    if (user.role === 'visitor') return Promise.resolve(null);
+    return loadDailyReview({ ensure: !growthReadOnly.value });
+  }
   const dailyGrowthQuests = computed(() => dashboard.value?.quests || []);
   const dailyGrowthBonus = computed(
     () => dashboard.value?.questBonus || { exp: 0, points: 0, claimed: false, claimable: false },
@@ -279,11 +291,16 @@
     },
   ]);
 
-  // 今日顶栏：宽全局搜索 + 快速创建 + 通知（通知由共享顶栏按登录态决定）
+  // 今日顶栏的加号打开通用收集器；页面内四个动作才负责预选具体类型。
   useMobileTopBar(['workbenches'], {
-    onAdd: () => runCapture({ type: 'note' }),
+    onAdd: openGenericCapture,
     addLabel: () => t('inbox.quickCapture'),
   });
+
+  function openGenericCapture() {
+    if (blockGuestWrite('today-capture', t('inbox.guestPrompt'))) return;
+    inbox.openQuickCapture();
+  }
 
   function goToTodo(tab: 'todo' | 'all') {
     void router.push(
@@ -301,6 +318,15 @@
 
   function openGrowthTasks() {
     void router.push({ path: '/growth', hash: '#growth-tasks' });
+  }
+
+  function handleDailyQuestAction(key: string) {
+    const target = resolveDailyQuestRoute(key, true);
+    if (!target) {
+      openGrowthTasks();
+      return;
+    }
+    void router.push(target);
   }
 
   function continueMeta(item: TodayContinueItem) {
@@ -385,7 +411,8 @@
     enabled: true,
     externalBusy: initialTodayLoading,
     getScrollContainer: () => scrollRef.value,
-    onRefresh: () => Promise.all([loadToday(), loadDashboard(), loadGrowthTasks(true), loadClaimable()]),
+    onRefresh: () =>
+      Promise.all([loadToday(), loadDashboard(), loadGrowthTasks(true), loadClaimable(), refreshDailyReview()]),
   });
   /*
    * 从后台切回来时补一次数据。今日页最需要这个:日期、待办和签到状态都跟"今天"绑定,
@@ -396,7 +423,7 @@
     refresh: () => {
       // 先让日期/问候语跟上真实时间,再取数据,避免出现"今天的数据 + 昨天的标题"。
       clockTick.value += 1;
-      return Promise.all([loadToday(), loadDashboard(), loadGrowthTasks(true), loadClaimable()]);
+      return Promise.all([loadToday(), loadDashboard(), loadGrowthTasks(true), loadClaimable(), refreshDailyReview()]);
     },
     canRefresh: () => !initialTodayLoading.value,
   });
@@ -414,7 +441,8 @@
       inboxItems.value = [];
       continueItems.value = [];
       counts.value = { overdue: 0, dueToday: 0, inbox: 0, todoPending: 0, unreadNotification: 0 };
-      if (user.id) void Promise.all([loadToday(), loadDashboard(), loadGrowthTasks(true), loadClaimable()]);
+      if (user.id)
+        void Promise.all([loadToday(), loadDashboard(), loadGrowthTasks(true), loadClaimable(), refreshDailyReview()]);
     },
   );
 
@@ -425,6 +453,7 @@
     void loadDashboard();
     void loadGrowthTasks();
     void loadClaimable();
+    void refreshDailyReview();
   });
 
   /*
@@ -436,6 +465,7 @@
     if (dashboard.value) void loadDashboard();
     if (growthTasks.value) void loadGrowthTasks(true);
     void loadClaimable();
+    void refreshDailyReview();
   });
 </script>
 
@@ -467,6 +497,10 @@
   }
 
   .mobile-today__growth-card {
+    margin: 14px 0;
+  }
+
+  .mobile-today__daily-review {
     margin: 14px 0;
   }
 

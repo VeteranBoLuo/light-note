@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.resolve(__dirname, '../dist');
 const SITE = 'https://boluo66.top/';
+const EXTENSION_SITE = 'https://boluo66.top/browser-extension';
+const EXTENSION_STORE = 'https://chromewebstore.google.com/detail/hfdpgaiggloacopnkihfkloicjepldig';
 const EARLY_APP_ENTRY_MARKER = 'data-light-note-early-app-entry';
 const MOBILE_LANDING_VISIT_MARKER = 'ln-mobile-landing-visited';
 
@@ -38,6 +40,7 @@ async function main() {
   const spaFile = path.join(DIST, 'index.html');
   const communityChatSpaFile = path.join(DIST, 'community-chat/index.html');
   const rootFile = path.join(DIST, '__seo/root/index.html');
+  const browserExtensionFile = path.join(DIST, 'browser-extension/index.html');
   const legacyLandingFile = path.join(DIST, 'landing/index.html');
   const manifestFile = path.join(DIST, 'site.webmanifest');
   const robotsFile = path.join(DIST, 'robots.txt');
@@ -56,11 +59,7 @@ async function main() {
 
   assert(communityChatSpaHtml === spaHtml, '聊天室静态目录 SPA 入口必须与通用 SPA 入口一致');
 
-  const spaRobots = findTag(
-    spaHtml,
-    /<meta\b[^>]*name=["']robots["'][^>]*>/i,
-    'SPA robots 元标签',
-  );
+  const spaRobots = findTag(spaHtml, /<meta\b[^>]*name=["']robots["'][^>]*>/i, 'SPA robots 元标签');
   assert(readAttribute(spaRobots, 'content') === 'noindex, nofollow', '通用 SPA 空壳必须保持 noindex, nofollow');
   assert(!/<link\b[^>]*rel=["']canonical["'][^>]*>/i.test(spaHtml), '通用 SPA 空壳不应声明固定 canonical');
   assert(spaHtml.includes(EARLY_APP_ENTRY_MARKER), '通用 SPA 缺少移动端首屏前应用入口守卫');
@@ -78,26 +77,18 @@ async function main() {
   }
 
   assert(existsSync(rootFile), '缺少根官网 SEO 产物 dist/__seo/root/index.html');
-  const rootHtml = await readFile(rootFile, 'utf8');
-  const rootRobots = findTag(
-    rootHtml,
-    /<meta\b[^>]*name=["']robots["'][^>]*>/i,
-    '根官网 robots 元标签',
-  );
+  assert(existsSync(browserExtensionFile), '缺少浏览器扩展 SEO 产物 dist/browser-extension/index.html');
+  const [rootHtml, browserExtensionHtml] = await Promise.all([
+    readFile(rootFile, 'utf8'),
+    readFile(browserExtensionFile, 'utf8'),
+  ]);
+  const rootRobots = findTag(rootHtml, /<meta\b[^>]*name=["']robots["'][^>]*>/i, '根官网 robots 元标签');
   assert(readAttribute(rootRobots, 'content') === 'index, follow', '根官网必须为 index, follow');
 
-  const canonicalTag = findTag(
-    rootHtml,
-    /<link\b[^>]*rel=["']canonical["'][^>]*>/i,
-    '根官网 canonical',
-  );
+  const canonicalTag = findTag(rootHtml, /<link\b[^>]*rel=["']canonical["'][^>]*>/i, '根官网 canonical');
   assert(readAttribute(canonicalTag, 'href') === SITE, '根官网 canonical 必须自引用 https://boluo66.top/');
 
-  const ogUrlTag = findTag(
-    rootHtml,
-    /<meta\b[^>]*property=["']og:url["'][^>]*>/i,
-    '根官网 og:url',
-  );
+  const ogUrlTag = findTag(rootHtml, /<meta\b[^>]*property=["']og:url["'][^>]*>/i, '根官网 og:url');
   assert(readAttribute(ogUrlTag, 'content') === SITE, '根官网 og:url 必须指向 https://boluo66.top/');
   assert(/<h1\b[^>]*class=["'][^"']*\bhero-title\b[^"']*["'][^>]*>/i.test(rootHtml), '根官网缺少 hero H1');
   assert(plainText(rootHtml).includes('轻笺'), '根官网正文必须包含品牌词“轻笺”');
@@ -106,8 +97,28 @@ async function main() {
   assert(rootHtml.includes(MOBILE_LANDING_VISIT_MARKER), '根官网入口守卫缺少移动浏览器首访记录');
   assert(!/googlebot|baiduspider|bingbot/i.test(rootHtml), '根官网不得按搜索引擎 UA 分流');
 
+  const extensionRobots = findTag(
+    browserExtensionHtml,
+    /<meta\b[^>]*name=["']robots["'][^>]*>/i,
+    '浏览器扩展页 robots 元标签',
+  );
+  assert(readAttribute(extensionRobots, 'content') === 'index, follow', '浏览器扩展页必须为 index, follow');
+  const extensionCanonical = findTag(
+    browserExtensionHtml,
+    /<link\b[^>]*rel=["']canonical["'][^>]*>/i,
+    '浏览器扩展页 canonical',
+  );
+  assert(readAttribute(extensionCanonical, 'href') === EXTENSION_SITE, '浏览器扩展页 canonical 必须自引用');
+  assert(
+    /<h1\b[^>]*class=["'][^"']*\bbrowser-extension-hero__title\b[^"']*["'][^>]*>/i.test(browserExtensionHtml),
+    '浏览器扩展页缺少产品 H1',
+  );
+  assert(plainText(browserExtensionHtml).includes('轻笺 · 随手收'), '浏览器扩展页正文缺少正式产品名');
+  assert(browserExtensionHtml.includes(EXTENSION_STORE), '浏览器扩展页缺少 Chrome Web Store 长期链接');
+  assert(plainText(browserExtensionHtml).length >= 700, '浏览器扩展页正文过短，疑似预渲染空壳');
+
   console.log(
-    '✅ SEO 产物校验通过：根官网可索引且无爬虫 UA 分流，移动首访守卫存在，通用 SPA 保持 noindex，PWA 使用带来源标记的 /app',
+    '✅ SEO 产物校验通过：根官网与浏览器扩展页可索引且自引用，通用 SPA 保持 noindex，PWA 使用带来源标记的 /app',
   );
 }
 

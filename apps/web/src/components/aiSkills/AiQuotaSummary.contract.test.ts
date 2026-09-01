@@ -15,11 +15,11 @@ describe('AI 额度快捷展示契约', () => {
   it('桌面头像弹层和移动个人中心复用同一个额度摘要组件', () => {
     expect(desktopProfileSource).toContain('<AiQuotaSummary');
     expect(desktopProfileSource).toContain(':active="menuVisible"');
-    expect(desktopProfileSource).toContain('surface="plain"');
+    expect(desktopProfileSource).toContain('layout="tile"');
     expect(desktopProfileSource).toContain('entry-source="桌面个人中心"');
     expect(mobileProfileSource).toContain('<AiQuotaSummary');
     expect(mobileProfileSource).toContain('density="comfortable"');
-    expect(mobileProfileSource).toContain('surface="plain"');
+    expect(mobileProfileSource).toContain('layout="tile"');
     expect(mobileProfileSource).toContain('entry-source="移动个人中心"');
     expect(desktopProfileSource).toContain('@open-details="goAiQuotaDetails"');
     expect(mobileProfileSource).toContain('@open-details="goAiQuotaDetails"');
@@ -46,11 +46,34 @@ describe('AI 额度快捷展示契约', () => {
     expect(summarySource).toContain('<BProgress');
     expect(summarySource).toContain('icon.growth.ai');
     expect(summarySource).toContain("surface?: 'panel' | 'plain'");
+    expect(summarySource).toContain("layout?: 'row' | 'tile'");
     expect(summarySource).toContain('.ai-quota-summary.is-plain.b_btn');
+    expect(summarySource).toContain('.ai-quota-summary.is-tile.b_btn');
     expect(summarySource).toContain("t('personCenter.aiQuotaUnavailable')");
+    expect(summarySource).toContain("{ 'is-loading': loading, 'is-unavailable': unavailable }");
+    expect(summarySource).toContain(':aria-busy="loading"');
     expect(summarySource).toContain("t('personCenter.aiQuotaBreakdown'");
+    expect(summarySource).toContain('class="ai-quota-summary__primary-value"');
+    expect(summarySource).toContain("t('personCenter.aiQuotaTodayRemaining')");
+    expect(summarySource).toContain('class="ai-quota-summary__secondary-value"');
+    expect(summarySource).toContain("t('personCenter.aiQuotaPermanentShort')");
+    expect(summarySource).not.toContain("layout !== 'tile'");
+    expect(summarySource).toContain('min-height: 68px');
+    expect(summarySource).toContain('.ai-quota-summary.is-tile :deep(.b-progress__trail)');
+    expect(summarySource).not.toContain('text-overflow: ellipsis');
     expect(summarySource).toContain("module: 'AI 用量与计费'");
     expect(summarySource).toContain('`打开页面【${entrySource}】`');
+  });
+
+  it('AI 卡以今日剩余为主、永久额度为辅助，进度只读取今日额度比例', () => {
+    expect(summarySource).toContain('daily: formatAiQuotaTokens(status.value.dailyRemaining');
+    expect(summarySource).toContain('permanent: formatAiQuotaTokens(status.value.bonusTokens');
+    expect(summarySource).toContain(':percent="remainingPercent"');
+    expect(summarySource).toContain('v-if="status && !status.exempt && !unavailable"');
+    expect(summarySource).toMatch(/\.ai-quota-summary__primary-value strong\s*\{[\s\S]*?font-size:\s*13px;/);
+    expect(summarySource).toMatch(
+      /\.ai-quota-summary__secondary-value strong\s*\{[\s\S]*?color:\s*var\(--desc-color\);/,
+    );
   });
 
   it('详细额度只在独立页读取，设置页保留紧凑入口', () => {

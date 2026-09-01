@@ -47,6 +47,7 @@ const tokenActions = [
   ['note.organize_tags', 'note', 'noteOrganizeTags', 'item'],
   ['bookmark.organize', 'bookmark', 'bookmarkOrganize', 'item'],
   ['tag.icon_keywords', 'tag', 'tagIconKeywords'],
+  ['tag.analyze', 'tag', 'tagAnalyze'],
 ].map(([id, module, labelKey, unit = 'request']) => ({ id, module, labelKey, unit }));
 
 const freeActions = [
@@ -395,11 +396,11 @@ request.defaults.adapter = async (config) => {
         data: {
           exempt: false,
           used: 103_000,
-          quota: 15_042_000,
-          remaining: 14_939_000,
-          dailyQuota: 2_000_000,
+          quota: 11_842_000,
+          remaining: 11_739_000,
+          dailyQuota: 800_000,
           dailyUsed: 103_000,
-          dailyRemaining: 3_897_000,
+          dailyRemaining: 697_000,
           bonusTokens: 11_042_000,
           enforcing: true,
         },

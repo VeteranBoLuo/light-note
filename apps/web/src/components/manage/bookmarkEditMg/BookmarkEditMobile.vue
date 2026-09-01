@@ -1,5 +1,6 @@
 <template>
   <ResourcePageShell
+    class="bookmark-edit-mobile-page"
     :title="pageTitle"
     :subtitle="$t('bookmarkEditor.subtitle')"
     accent="bookmark"
@@ -25,11 +26,7 @@
         @add-tag="goAddTag"
         @view-snapshot="snapVisible = true"
       />
-      <ResourceBacklinks
-        v-if="isEdit && bookmarkId"
-        target-type="bookmark"
-        :target-id="bookmarkId"
-      />
+      <ResourceBacklinks v-if="isEdit && bookmarkId" target-type="bookmark" :target-id="bookmarkId" />
     </BLoading>
     <BookmarkSnapshotModal v-model:visible="snapVisible" :bookmark-id="bookmarkId" />
   </ResourcePageShell>
@@ -65,3 +62,12 @@
     goAddTag,
   } = useBookmarkEditor();
 </script>
+
+<style scoped lang="less">
+  .bookmark-edit-mobile-page :deep(.resource-page-body) {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+</style>

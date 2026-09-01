@@ -18,12 +18,40 @@
       <!-- 已保存 -->
       <div v-else-if="saved" class="qs-state qs-done">
         <div class="qs-check">✓</div>
-        <p>{{ $t('quickSave.saved') }}</p>
+        <p>{{ $t(mode === 'inbox' ? 'quickSave.savedInbox' : 'quickSave.savedFormal') }}</p>
         <BButton size="small" @click="closeWin">{{ $t('quickSave.close') }}</BButton>
       </div>
 
       <!-- 表单 -->
       <div v-else class="qs-form">
+        <div class="qs-mode" role="group" :aria-label="$t('quickSave.modeLabel')">
+          <BButton
+            class="qs-mode-btn"
+            :class="{ active: mode === 'inbox' }"
+            :type="mode === 'inbox' ? 'primary' : undefined"
+            :aria-pressed="mode === 'inbox'"
+            :disabled="saving"
+            @click="mode = 'inbox'"
+          >
+            <strong>{{ $t('quickSave.modeInbox') }}</strong>
+            <small>{{ $t('quickSave.modeInboxShort') }}</small>
+          </BButton>
+          <BButton
+            class="qs-mode-btn"
+            :class="{ active: mode === 'formal' }"
+            :type="mode === 'formal' ? 'primary' : undefined"
+            :aria-pressed="mode === 'formal'"
+            :disabled="saving"
+            @click="mode = 'formal'"
+          >
+            <strong>{{ $t('quickSave.modeFormal') }}</strong>
+            <small>{{ $t('quickSave.modeFormalShort') }}</small>
+          </BButton>
+        </div>
+        <p class="qs-mode-hint">
+          {{ $t(mode === 'inbox' ? 'quickSave.modeInboxHint' : 'quickSave.modeFormalHint') }}
+        </p>
+
         <label class="qs-label">{{ $t('quickSave.name') }}</label>
         <BInput v-model:value="form.name" :placeholder="$t('quickSave.namePh')" />
 
@@ -33,48 +61,50 @@
         <label class="qs-label">{{ $t('quickSave.desc') }}</label>
         <BInput v-model:value="form.description" :placeholder="$t('quickSave.descPh')" />
 
-        <div class="qs-label-row">
-          <label class="qs-label" style="margin: 0">{{ $t('quickSave.tags') }}</label>
-          <span v-if="aiRunning" class="qs-ai-hint">
-            <SvgIcon :src="icon.message.loading" size="13" aria-hidden="true" />
-            {{ $t('quickSave.aiRunning') }}
-          </span>
-          <BButton v-else class="qs-ai-btn" size="small" @click="runAi">
-            <SvgIcon :src="icon.common.magicWand" size="13" aria-hidden="true" />
-            {{ $t('quickSave.aiSuggest') }}
-          </BButton>
-        </div>
-        <BSelect
-          mode="multiple"
-          chip-tone="tag"
-          :max-tag-count="4"
-          :options="tagOptions"
-          :placeholder="$t('quickSave.tagsPh')"
-          :show-search="true"
-          v-model:value="form.relatedTags"
-        />
-        <div v-if="aiNewTags.length" class="qs-newtags">
-          <span class="qs-newtags-label">{{ $t('quickSave.aiNewTags') }}</span>
-          <BChip
-            v-for="nt in aiNewTags"
-            :key="nt"
-            class="qs-newtag"
-            tone="tag"
-            size="medium"
-            interactive
-            :disabled="creatingTag === nt"
-            @click="createAndSelect(nt)"
-          >
-            ＋ {{ nt }}
-          </BChip>
-        </div>
+        <template v-if="mode === 'formal'">
+          <div class="qs-label-row">
+            <label class="qs-label" style="margin: 0">{{ $t('quickSave.tags') }}</label>
+            <span v-if="aiRunning" class="qs-ai-hint">
+              <SvgIcon :src="icon.message.loading" size="13" aria-hidden="true" />
+              {{ $t('quickSave.aiRunning') }}
+            </span>
+            <BButton v-else class="qs-ai-btn" size="small" @click="runAi">
+              <SvgIcon :src="icon.common.magicWand" size="13" aria-hidden="true" />
+              {{ $t('quickSave.aiSuggest') }}
+            </BButton>
+          </div>
+          <BSelect
+            mode="multiple"
+            chip-tone="tag"
+            :max-tag-count="4"
+            :options="tagOptions"
+            :placeholder="$t('quickSave.tagsPh')"
+            :show-search="true"
+            v-model:value="form.relatedTags"
+          />
+          <div v-if="aiNewTags.length" class="qs-newtags">
+            <span class="qs-newtags-label">{{ $t('quickSave.aiNewTags') }}</span>
+            <BChip
+              v-for="nt in aiNewTags"
+              :key="nt"
+              class="qs-newtag"
+              tone="tag"
+              size="medium"
+              interactive
+              :disabled="creatingTag === nt"
+              @click="createAndSelect(nt)"
+            >
+              ＋ {{ nt }}
+            </BChip>
+          </div>
 
-        <BCheckbox v-model="form.saveSnapshot" class="qs-check-line">
-          {{ $t('quickSave.saveSnapshot') }}
-        </BCheckbox>
+          <BCheckbox v-model="form.saveSnapshot" class="qs-check-line">
+            {{ $t('quickSave.saveSnapshot') }}
+          </BCheckbox>
+        </template>
 
         <BButton class="qs-save" type="primary" :loading="saving" :disabled="saving" @click="save">
-          {{ saving ? $t('quickSave.saving') : $t('quickSave.save') }}
+          {{ saving ? $t('quickSave.saving') : $t(mode === 'inbox' ? 'quickSave.saveInbox' : 'quickSave.saveFormal') }}
         </BButton>
       </div>
     </div>
@@ -100,6 +130,12 @@
   import { createAiSkillRequest, executeAiSkill } from '@/api/aiSkillApi';
   import { recordAiSkillApplied } from '@/api/aiTelemetry';
   import { appendSessionAiTagSelection, replaceSessionAiTagSelection } from '@/utils/aiTagSelection';
+  import {
+    buildBookmarkCapturePayload,
+    resolveBookmarkCaptureReceipt,
+    type BookmarkCaptureMode,
+    type BookmarkCaptureOperationReceipt,
+  } from '@/utils/bookmarkCapture.ts';
 
   const { t } = useI18n();
   const MAX_TAGS = 4; // 与后端 addBookmark 上限一致
@@ -113,6 +149,9 @@
   const creatingTag = ref('');
   const tagOptions = ref<{ label: string; value: string }[]>([]);
   const aiNewTags = ref<string[]>([]);
+  // 保留原入口的正式收藏默认值，避免升级后用户在未留意模式时静默改变保存结果。
+  const mode = ref<BookmarkCaptureMode>('formal');
+  const operationReceipts = reactive<Partial<Record<BookmarkCaptureMode, BookmarkCaptureOperationReceipt>>>({});
   let aiSelectedTagIds: string[] = [];
 
   const form = reactive({
@@ -160,6 +199,7 @@
 
   // AI 建议:抓网页 → 生成名称/描述 + 从已有标签匹配 + 建议新标签(复用现成接口)
   async function runAi() {
+    if (mode.value !== 'formal') return;
     const url = String(form.url || '').trim();
     if (!url || aiRunning.value) return;
     aiRunning.value = true;
@@ -258,26 +298,44 @@
 
   async function save() {
     if (saving.value) return;
-    if (!form.name.trim()) return message.warning(t('quickSave.needName'));
     if (!form.url.trim()) return message.warning(t('quickSave.needUrl'));
+    const selectedMode = mode.value;
     saving.value = true;
     try {
       const urlResult = await preflightBookmarkUrl(form.url, { checkLiveness: true });
       if (!urlResult.ok || !urlResult.url) return;
       form.url = urlResult.url;
-      const res = await apiBasePost('/api/bookmark/addBookmark', {
-        name: form.name.trim(),
-        url: form.url.trim(),
-        description: form.description.trim(),
-        relatedTags: form.relatedTags,
+      const name = getSafeBookmarkLabel(form.url);
+      form.name = name;
+      const payload = {
+        ...buildBookmarkCapturePayload({
+          mode: selectedMode,
+          source: 'quick_capture',
+          name,
+          url: form.url,
+          description: form.description,
+          relatedTags: form.relatedTags,
+          saveSnapshot: form.saveSnapshot,
+        }),
         userId: userId.value,
-        saveSnapshot: form.saveSnapshot,
+      };
+      const receipt = await resolveBookmarkCaptureReceipt({
+        current: operationReceipts[selectedMode],
+        mode: selectedMode,
+        source: 'quick_capture',
+        payload,
       });
+      operationReceipts[selectedMode] = receipt;
+      const res = await apiBasePost('/api/bookmark/addBookmark', { ...payload, idempotencyKey: receipt.key });
       if (res?.status === 200) {
+        delete operationReceipts[selectedMode];
         saved.value = true;
         recordOperation({
           ...OPERATION_LOG_MAP.quickSave.save,
-          operation: `一键收藏书签成功【${form.name.trim()}】${form.saveSnapshot ? '（含网页存档）' : ''}`,
+          operation:
+            selectedMode === 'inbox'
+              ? `书签栏快速加入待整理成功【${name}】`
+              : `书签栏正式收藏成功【${name}】${form.saveSnapshot ? '（含网页存档）' : ''}`,
         });
         setTimeout(() => window.close(), 1500); // 弹窗由脚本打开,可自动关闭
       } else if (res?.status === 401 || res?.status === 403) {
@@ -374,6 +432,44 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+  }
+  .qs-mode {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 2px;
+  }
+  .qs-mode-btn.b_btn {
+    width: 100%;
+    min-height: 58px;
+    height: auto;
+    padding: 9px 10px;
+    border: 1px solid var(--card-border-color, #e6e9f2);
+    border-radius: 11px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    line-height: 1.35;
+  }
+  .qs-mode-btn strong {
+    font-size: 13px;
+  }
+  .qs-mode-btn small {
+    color: var(--desc-color, #888);
+    font-size: 11px;
+  }
+  .qs-mode-btn.active small {
+    color: rgba(255, 255, 255, 0.82);
+  }
+  .qs-mode-hint {
+    margin: 0 0 4px;
+    padding: 8px 10px;
+    border-left: 3px solid var(--primary-color, #615ced);
+    border-radius: 8px;
+    color: var(--desc-color, #777);
+    background: var(--surface-panel-bg, #f6f7fb);
+    font-size: 11px;
+    line-height: 1.55;
   }
   .qs-label {
     font-size: 12px;

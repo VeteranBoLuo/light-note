@@ -36,6 +36,11 @@ describe('CloudStorageBar compact layout', () => {
     expect(pageSource).toMatch(/@media \(max-width: 767px\)[\s\S]*?\.cloud-view-label\s*\{\s*display:\s*none;/u);
   });
 
+  it('forwards external layout attributes to the visible popover trigger', () => {
+    expect(source).toContain('v-bind="$attrs"');
+    expect(source).toContain('defineOptions({ inheritAttrs: false })');
+  });
+
   it('explains the shared quota and separates current files from Trash', () => {
     expect(source).toContain("t('cloudSpace.storageSharedHint')");
     expect(source).toContain("t('cloudSpace.storageActiveFiles')");

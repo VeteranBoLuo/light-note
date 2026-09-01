@@ -31,7 +31,8 @@ SET content = @ai_quota_guide_content,
     sort = 96,
     admin_archived = 0,
     updated_by = NULL
-WHERE id = @ai_quota_guide_id OR title = 'AI 额度、等级与加油包';
+WHERE (id = @ai_quota_guide_id OR title = 'AI 额度、等级与加油包')
+  AND LOCATE('data-ln-policy:ai-quota-v', COALESCE(content, '')) = 0;
 
 COMMIT;
 

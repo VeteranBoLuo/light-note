@@ -7,6 +7,9 @@ const userApi = {
   updateUserInfo(user) {
     return apiBasePost('/api/user/saveUserInfo', user);
   },
+  markFeatureAnnouncementSeen(payload: { announcementId: string; version: string }) {
+    return apiBasePost('/api/user/feature-announcements/seen', payload, { silent: true });
+  },
   saveAdminUserRemark(targetUserId: string, remarkName: string) {
     return apiBasePost('/api/user/admin/remark', { targetUserId, remarkName });
   },

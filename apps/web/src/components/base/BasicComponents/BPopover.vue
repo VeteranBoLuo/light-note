@@ -1,6 +1,7 @@
 <template>
   <span
     ref="triggerRef"
+    v-bind="$attrs"
     class="b-popover-trigger"
     @mouseenter="onTriggerEnter"
     @mouseleave="onLeave"
@@ -29,6 +30,10 @@
 <script lang="ts" setup>
   import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
   import { getRootZoom } from '@/utils/zoom';
+
+  // 组件同时渲染触发器与 Teleport，Vue 无法自动决定非 prop 属性应落到哪个根节点。
+  // 显式把 class、style、data-* 等业务属性透传给可见触发器，避免样式静默失效与运行时警告。
+  defineOptions({ inheritAttrs: false });
 
   // 项目自研通用浮层(替代 ant a-popover):任意内容(content 插槽),按实时 getBoundingClientRect 定位。
   // 关键:定位与 fixed 都基于同一视口坐标系,与 <html> zoom(界面缩放)自洽,不会像 a-popover 那样在缩放下错位。

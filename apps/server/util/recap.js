@@ -50,7 +50,9 @@ async function loadRecapBlocklist(userId, db = pool) {
   const states = Array.isArray(result?.[0]) ? result[0] : [];
   return new Set(
     states
-      .filter((state) => state.dismissedAt || (state.snoozedUntil && new Date(state.snoozedUntil).getTime() > Date.now()))
+      .filter(
+        (state) => state.dismissedAt || (state.snoozedUntil && new Date(state.snoozedUntil).getTime() > Date.now()),
+      )
       .map((state) => `${state.resourceType}:${state.resourceId}`),
   );
 }
@@ -119,7 +121,9 @@ export async function getRecap(userId, { calendar = null, db = pool } = {}) {
 
 export async function updateRecapState(userId, { type, id, action } = {}) {
   const resourceType = String(type || '');
-  const resourceId = String(id || '').trim().slice(0, 255);
+  const resourceId = String(id || '')
+    .trim()
+    .slice(0, 255);
   if (!userId || userId === 'visitor') return { ok: false, reason: 'visitor' };
   if (!['bookmark', 'note'].includes(resourceType) || !resourceId) return { ok: false, reason: 'invalid_resource' };
   if (!['snooze_7d', 'dismiss'].includes(action)) return { ok: false, reason: 'invalid_action' };
@@ -130,15 +134,30 @@ export async function updateRecapState(userId, { type, id, action } = {}) {
     [resourceId, String(userId)],
   );
   if (!Number(owned?.count || 0)) return { ok: false, reason: 'not_found' };
-  await pool.query(
-    `INSERT INTO growth_recap_state
-       (user_id, resource_type, resource_id, snoozed_until, dismissed_at)
-     VALUES (?, ?, ?, ${action === 'snooze_7d' ? 'DATE_ADD(NOW(), INTERVAL 7 DAY)' : 'NULL'}, ${action === 'dismiss' ? 'NOW()' : 'NULL'})
-     ON DUPLICATE KEY UPDATE
-       snoozed_until = VALUES(snoozed_until),
-       dismissed_at = VALUES(dismissed_at)`,
-    [String(userId), resourceType, resourceId],
-  );
+  if (action === 'snooze_7d') {
+    await pool.query(
+      `INSERT INTO growth_recap_state
+         (user_id, resource_type, resource_id, snoozed_until, dismissed_at)
+       VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY), NULL)
+       ON DUPLICATE KEY UPDATE
+         snoozed_until = IF(
+           growth_recap_state.dismissed_at IS NULL,
+           GREATEST(COALESCE(growth_recap_state.snoozed_until, NOW()), VALUES(snoozed_until)),
+           growth_recap_state.snoozed_until
+         )`,
+      [String(userId), resourceType, resourceId],
+    );
+  } else {
+    await pool.query(
+      `INSERT INTO growth_recap_state
+         (user_id, resource_type, resource_id, snoozed_until, dismissed_at)
+       VALUES (?, ?, ?, NULL, NOW())
+       ON DUPLICATE KEY UPDATE
+         snoozed_until = NULL,
+         dismissed_at = COALESCE(growth_recap_state.dismissed_at, VALUES(dismissed_at))`,
+      [String(userId), resourceType, resourceId],
+    );
+  }
   return { ok: true, action };
 }
 

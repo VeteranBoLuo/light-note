@@ -34,12 +34,12 @@
             <SvgIcon :src="icon.common.more" size="17" />
           </BButton>
           <BButton
-            class="note-action-button note-batch-icon-button"
+            class="note-action-button note-batch-icon-button note-exit-batch-button"
             :aria-label="$t('note.exitBatch')"
             :title="$t('note.exitBatch')"
             @click="exitBatch"
           >
-            <SvgIcon :src="icon.common.close" size="17" />
+            <SvgIcon :src="icon.navigation.exit" size="17" />
           </BButton>
         </template>
         <template v-else>
@@ -77,7 +77,10 @@
             <SvgIcon :src="icon.noteDetail.delete" size="16" />
             {{ $t('note.deleteSelected') }}
           </BButton>
-          <BButton class="note-action-button" @click="exitBatch">{{ $t('note.exitBatch') }}</BButton>
+          <BButton class="note-action-button note-exit-batch-button" @click="exitBatch">
+            <SvgIcon :src="icon.navigation.exit" size="16" />
+            {{ $t('note.exitBatch') }}
+          </BButton>
         </template>
       </template>
       <template v-else>
@@ -3347,6 +3350,21 @@
   .note-ai-button:active {
     color: var(--primary-color, #615ced);
     background: color-mix(in srgb, var(--primary-color, #615ced) 14%, var(--menu-body-bg-color));
+  }
+
+  .note-exit-batch-button {
+    border: 1px solid var(--desc-color);
+    color: var(--text-color);
+    background: var(--menu-body-bg-color);
+    font-weight: 650;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .note-exit-batch-button:hover {
+      border-color: var(--text-color);
+      color: var(--text-color);
+      background: var(--primary-btn-h-bg-color);
+    }
   }
 
   .note-mobile-actions {

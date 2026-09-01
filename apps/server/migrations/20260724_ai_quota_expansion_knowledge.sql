@@ -44,7 +44,8 @@ SET content = @ai_quota_help_content,
     type = 'html',
     sort = 96,
     updated_by = NULL
-WHERE id = @ai_quota_help_id OR title = @ai_quota_help_title;
+WHERE (id = @ai_quota_help_id OR title = @ai_quota_help_title)
+  AND LOCATE('data-ln-policy:ai-quota-v', COALESCE(content, '')) = 0;
 
 COMMIT;
 

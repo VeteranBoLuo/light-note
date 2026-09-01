@@ -4,10 +4,17 @@ import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
 
 const communityUnreadTotal = ref(0);
+const openQuickCapture = vi.fn();
+const routerPush = vi.fn();
+const formalCreate = vi.fn();
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ name: 'workbenches', query: {}, meta: { mobileShell: 'today' }, fullPath: '/workbenches' }),
-  useRouter: () => ({ replace: vi.fn(), resolve: (target: unknown) => ({ fullPath: String(target) }) }),
+  useRouter: () => ({
+    replace: vi.fn(),
+    push: routerPush,
+    resolve: (target: unknown) => ({ fullPath: String(target) }),
+  }),
 }));
 vi.mock('@/store', () => ({
   inboxStore: () => ({
@@ -15,6 +22,7 @@ vi.mock('@/store', () => ({
     todoOverdueTotal: 0,
     todoDueTodayTotal: 0,
     refreshCount: vi.fn(),
+    openQuickCapture,
   }),
   useUserStore: () => ({ id: 'user-1', role: 'user' }),
 }));
@@ -26,6 +34,16 @@ vi.mock('@/composables/useCommunityChatUnread', () => ({
   useCommunityChatUnread: () => ({
     totalUnread: communityUnreadTotal,
   }),
+}));
+vi.mock('@/composables/useGuestGuard', () => ({ blockGuestWrite: () => false }));
+vi.mock('@/components/mobile/MobilePageActionsDrawer.vue', () => ({
+  default: {
+    name: 'MobilePageActionsDrawerStub',
+    props: ['open', 'actions'],
+    emits: ['update:open', 'action'],
+    template:
+      '<div v-if="open" class="create-hub-stub"><button v-for="action in actions" :key="action.key" @click="$emit(\'action\', action)">{{ action.label }}</button></div>',
+  },
 }));
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
   default: { name: 'SvgIconStub', template: '<i />' },
@@ -41,7 +59,7 @@ let cleanup: (() => void) | undefined;
 function mount() {
   const host = document.createElement('div');
   document.body.append(host);
-  const app = createApp({ render: () => h(MobileBottomNav) });
+  const app = createApp({ render: () => h(MobileBottomNav, { onFormalCreate: formalCreate }) });
   app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
   app.directive('click-log', {});
   app.mount(host);
@@ -54,6 +72,9 @@ function mount() {
 
 beforeEach(() => {
   communityUnreadTotal.value = 0;
+  openQuickCapture.mockClear();
+  routerPush.mockClear();
+  formalCreate.mockClear();
 });
 
 afterEach(() => {
@@ -62,6 +83,60 @@ afterEach(() => {
 });
 
 describe('移动底栏 · 聊天室未读角标', () => {
+  it('中间新建入口把笔记交给笔记库的正式创建流程，不再打开快速收集', async () => {
+    const host = mount();
+    const captureEntry = host.querySelector<HTMLButtonElement>(
+      `.mobile-bottom-nav__item[aria-label="${zhCN.mobileNavigation.create}"]`,
+    );
+
+    captureEntry?.click();
+    await nextTick();
+    const noteAction = [...host.querySelectorAll<HTMLButtonElement>('.create-hub-stub button')].find((button) =>
+      button.textContent?.includes(zhCN.mobileNavigation.createHub.note),
+    );
+    expect(noteAction).not.toBeUndefined();
+
+    noteAction?.click();
+    await nextTick();
+    expect(formalCreate).toHaveBeenCalledWith('note');
+    expect(routerPush).not.toHaveBeenCalled();
+    expect(openQuickCapture).not.toHaveBeenCalled();
+  });
+
+  it('中间新建入口把资料生成作为二级动作打开知识工坊', async () => {
+    const host = mount();
+    const captureEntry = host.querySelector<HTMLButtonElement>(
+      `.mobile-bottom-nav__item[aria-label="${zhCN.mobileNavigation.create}"]`,
+    );
+
+    captureEntry?.click();
+    await nextTick();
+    const toolboxAction = [...host.querySelectorAll<HTMLButtonElement>('.create-hub-stub button')].find((button) =>
+      button.textContent?.includes(zhCN.mobileNavigation.createHub.toolbox),
+    );
+
+    toolboxAction?.click();
+    await nextTick();
+    expect(routerPush).toHaveBeenCalledWith({ path: '/toolbox' });
+  });
+
+  it('书签和待办继续进入各自的完整新建页面', async () => {
+    const host = mount();
+    host
+      .querySelector<HTMLButtonElement>(`.mobile-bottom-nav__item[aria-label="${zhCN.mobileNavigation.create}"]`)
+      ?.click();
+    await nextTick();
+    const actions = [...host.querySelectorAll<HTMLButtonElement>('.create-hub-stub button')];
+
+    actions.find((button) => button.textContent?.includes(zhCN.mobileNavigation.createHub.bookmark))?.click();
+    expect(routerPush).toHaveBeenCalledWith({ name: 'bookmarkEditMg', params: { id: 'add' } });
+
+    routerPush.mockClear();
+    actions.find((button) => button.textContent?.includes(zhCN.mobileNavigation.createHub.todo))?.click();
+    expect(routerPush).toHaveBeenCalledWith({ name: 'todoCreate' });
+    expect(formalCreate).not.toHaveBeenCalled();
+  });
+
   it('只把数字角标挂在聊天室入口，并提供完整读屏语义', async () => {
     const host = mount();
     communityUnreadTotal.value = 12;

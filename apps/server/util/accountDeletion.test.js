@@ -39,6 +39,7 @@ const {
   processAccountDeletionRequest,
   purgeLogsAndSecurityLinks,
   purgeOwnedResources,
+  purgeToolboxWorkspace,
   requestAccountDeletion,
   sendAccountDeletionCode,
 } = await import('./accountDeletion.js');
@@ -196,6 +197,37 @@ describe('账号注销提交', () => {
 });
 
 describe('账号注销后台清理', () => {
+  it('按引用顺序清理工具箱任务、产物与报价', async () => {
+    const connection = createConnection(async () => [{ affectedRows: 1 }]);
+    const tables = new Set([
+      'toolbox_workspaces',
+      'toolbox_workspace_resources',
+      'toolbox_workspace_items',
+      'toolbox_workspace_sessions',
+      'toolbox_quotes',
+      'toolbox_jobs',
+      'toolbox_job_inputs',
+      'toolbox_artifacts',
+      'toolbox_save_receipts',
+    ]);
+
+    await purgeToolboxWorkspace(connection, tables, 'user-1');
+
+    const statements = connection.query.mock.calls.map(([sql]) => String(sql));
+    expect(statements).toHaveLength(9);
+    expect(statements[0]).toContain('DELETE FROM toolbox_workspace_sessions');
+    expect(statements[1]).toContain('DELETE FROM toolbox_workspace_items');
+    expect(statements[2]).toContain('DELETE FROM toolbox_workspace_resources');
+    expect(statements[3]).toContain('DELETE FROM toolbox_workspaces');
+    expect(statements[4]).toContain('DELETE FROM toolbox_save_receipts');
+    expect(statements[5]).toContain('DELETE FROM toolbox_artifacts');
+    expect(statements[6]).toContain('DELETE input');
+    expect(statements[6]).toContain('JOIN toolbox_jobs');
+    expect(statements[7]).toContain('DELETE FROM toolbox_jobs');
+    expect(statements[8]).toContain('DELETE FROM toolbox_quotes');
+    expect(connection.query.mock.calls.every(([, params]) => params[0] === 'user-1')).toBe(true);
+  });
+
   it('删除用户的投票选择与逐消息已读回执，避免注销后继续参与聚合统计', async () => {
     const connection = createConnection(async () => [{ affectedRows: 1 }]);
     const tables = new Set([
@@ -317,6 +349,21 @@ describe('账号注销后台清理', () => {
     expect(refSql).toContain('CONVERT(target_id USING utf8mb4) COLLATE utf8mb4_unicode_ci');
     expect(refSql).toContain('CONVERT(id USING utf8mb4) COLLATE utf8mb4_unicode_ci');
     expect(versionSql).toContain('CONVERT(note_id USING utf8mb4) COLLATE utf8mb4_unicode_ci');
+  });
+
+  it('先删除每日回顾条目再删除会话，且随后清理共享回顾抑制状态', async () => {
+    const connection = createConnection(async () => [{ affectedRows: 1 }]);
+    const tables = new Set(['daily_content_review_items', 'daily_content_review_sessions', 'growth_recap_state']);
+
+    await purgeOwnedResources(connection, tables, 'user-1');
+
+    const statements = connection.query.mock.calls.map(([sql]) => String(sql));
+    expect(statements).toEqual([
+      'DELETE FROM daily_content_review_items WHERE user_id = ?',
+      'DELETE FROM daily_content_review_sessions WHERE user_id = ?',
+      'DELETE FROM growth_recap_state WHERE user_id = ?',
+    ]);
+    expect(connection.query.mock.calls.every(([, params]) => params[0] === 'user-1')).toBe(true);
   });
 
   it('已完成的清理任务记录只保留 180 天并分批删除', async () => {

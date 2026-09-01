@@ -13,6 +13,7 @@ export const AI_USAGE_MODULES = Object.freeze([
   'search',
   'help',
   'tag',
+  'toolbox',
   'other',
 ]);
 const ALLOWED_MODULES = new Set(AI_USAGE_MODULES);
@@ -72,20 +73,29 @@ function sqlPlaceholders(values) {
 }
 
 /** SQL 结构只由服务端白名单目录生成，用户输入永远只决定选哪一组参数。 */
-function buildModuleFilter(module) {
+function buildModuleFilter(module, columnPrefix = '') {
   if (module === 'all') return { sql: '', params: [] };
   const actions = module === 'other' ? AI_BILLING_ACTIONS : AI_BILLING_ACTIONS.filter((item) => item.module === module);
   const skillIds = [...new Set(actions.map((item) => item.id))];
   const taskTypes = [...new Set(actions.flatMap((item) => item.taskTypes))];
+  const requestedPrefix = String(columnPrefix || '');
+  const prefix = /^[a-z_][a-z0-9_]{0,31}\.$/iu.test(requestedPrefix) ? requestedPrefix : '';
   const knownExpression = `(
-    COALESCE(skill_id, '') IN (${sqlPlaceholders(skillIds)})
-    OR COALESCE(task_type, '') IN (${sqlPlaceholders(taskTypes)})
+    COALESCE(${prefix}skill_id, '') IN (${sqlPlaceholders(skillIds)})
+    OR COALESCE(${prefix}task_type, '') IN (${sqlPlaceholders(taskTypes)})
   )`;
   return {
     sql: ` AND ${module === 'other' ? `NOT ${knownExpression}` : knownExpression}`,
     params: [...skillIds, ...taskTypes],
   };
 }
+
+// 后台运行中心与个人用量页必须共用同一套动作、模块、阶段和低敏错误映射，
+// 避免两个入口按 task_type 自行猜测后逐渐产生不同口径。
+export const resolveAiUsageAction = publicAction;
+export const buildAiUsageModuleFilter = buildModuleFilter;
+export const mapAiUsageExecution = mapUsageItem;
+export const mapAiUsageProviderSpan = mapProviderSpan;
 
 function mapUsageItem(row) {
   const action = publicAction(row.skill_id, row.task_type);

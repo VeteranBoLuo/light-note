@@ -23,12 +23,14 @@ function normalizeResources(rows, type, nameKey) {
   }));
 }
 
-function normalizeSelectedIds(rows) {
+function normalizeSelectedIds(rows, activeResourceIds = {}) {
   const selectedIds = { bookmark: [], note: [], file: [] };
   for (const row of rows || []) {
     const type = String(row?.resource_type || '');
     if (!RESOURCE_TYPES.includes(type)) continue;
-    selectedIds[type].push(String(row.resource_id));
+    const resourceId = String(row.resource_id);
+    if (!activeResourceIds[type]?.has(resourceId)) continue;
+    selectedIds[type].push(resourceId);
   }
   return selectedIds;
 }
@@ -93,6 +95,12 @@ export async function getTagEditorBootstrap(db, { userId: rawUserId, tagId: rawT
 
   if (tagId && !tagRows?.length) return null;
 
+  const activeResourceIds = {
+    bookmark: new Set((bookmarkRows || []).map((row) => String(row.id))),
+    note: new Set((noteRows || []).map((row) => String(row.id))),
+    file: new Set((fileRows || []).map((row) => String(row.id))),
+  };
+
   return {
     tag: tagRows?.[0] || null,
     resources: [
@@ -100,6 +108,8 @@ export async function getTagEditorBootstrap(db, { userId: rawUserId, tagId: rawT
       ...normalizeResources(noteRows, 'note', 'title'),
       ...normalizeResources(fileRows, 'file', 'file_name'),
     ],
-    selectedIds: normalizeSelectedIds(relationRows),
+    // 关系表可能保留已删除资源的恢复关系。编辑器只能提交当前仍可编辑的候选资源，
+    // 否则不可见的历史 ID 会在保存时触发归属校验，导致用户无法修改标签本身。
+    selectedIds: normalizeSelectedIds(relationRows, activeResourceIds),
   };
 }

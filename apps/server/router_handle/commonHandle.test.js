@@ -270,7 +270,7 @@ function mockAdminOverviewSnapshotStatement(sql) {
   if (statement.includes('AS activeToday')) {
     return [[{ activeToday: 19, active7d: 31, total: 4359, businessErrors: 46, invalidRequests: 0, serverErrors: 0 }]];
   }
-  if (statement.includes('AS totalCount') && statement.includes('FROM agent_logs')) {
+  if (statement.includes('AS totalCount') && statement.includes('FROM ai_executions')) {
     return [[{ totalCount: 31, totalTokens: 39473, todayCount: 31, todayTokens: 39473 }]];
   }
   return null;
@@ -300,10 +300,13 @@ describe('getAdminOverviewSnapshot 首屏快照', () => {
     expect(activitySql).toContain('api_log.request_time >= ?');
     expect(activitySql).not.toContain('user_sessions');
 
-    const aiCalls = query.mock.calls.filter(([sql]) => String(sql).includes('FROM agent_logs'));
+    const aiCalls = query.mock.calls.filter(([sql]) => String(sql).includes('FROM ai_executions'));
     expect(aiCalls).toHaveLength(1);
     expect(String(aiCalls[0][0])).toContain('AS totalCount');
     expect(String(aiCalls[0][0])).toContain('AS todayCount');
+    expect(String(aiCalls[0][0])).toContain('model_called = 1');
+    expect(String(aiCalls[0][0])).toContain('actor_user_id IS NULL OR');
+    expect(String(aiCalls[0][0])).toContain('actor_user_id NOT IN');
     expect(query.mock.calls.some(([sql]) => String(sql).includes('admin_overview_trend'))).toBe(false);
     expect(query.mock.calls.some(([sql]) => String(sql).includes('same_time_baseline'))).toBe(false);
 

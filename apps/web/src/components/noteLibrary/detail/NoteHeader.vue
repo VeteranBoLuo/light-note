@@ -9,7 +9,7 @@
     <template v-if="bookmark.isMobile">
       <BButton
         class="note-header-mobile-icon-button note-header-mobile-back"
-        :aria-label="$t('common.back')"
+        :aria-label="backLabel || $t('common.back')"
         @click="$emit('back')"
       >
         <SvgIcon :src="icon.noteDetail.back" size="20" />
@@ -76,9 +76,11 @@
 
     <template v-else>
       <div class="note-header-leading">
-        <BButton class="back-icon" :aria-label="$t('common.back')" @click="$emit('back')">
-          <SvgIcon :src="icon.noteDetail.back" />
-        </BButton>
+        <BTooltip :title="backLabel || $t('common.back')">
+          <BButton class="back-icon" :aria-label="backLabel || $t('common.back')" @click="$emit('back')">
+            <SvgIcon :src="icon.noteDetail.back" />
+          </BButton>
+        </BTooltip>
         <div class="note-header-save-state" aria-live="polite">
           <span>{{ desktopSaveState }}</span>
           <BButton
@@ -244,6 +246,7 @@
     hasNavigation?: boolean;
     childCount?: number;
     pageTreeWritable?: boolean;
+    backLabel?: string;
   }>();
 
   interface HeaderMenuOption {

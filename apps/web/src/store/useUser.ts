@@ -69,6 +69,7 @@ interface UserInfo {
     notificationsDndStart?: string; // 免打扰开始时间，HH:mm
     notificationsDndEnd?: string; // 免打扰结束时间，HH:mm
     notificationsTimezoneOffset?: number; // 保存免打扰设置时的客户端时区偏移（分钟）
+    featureAnnouncements?: Record<string, string>; // 服务端持久化的功能上新已读版本
   };
 }
 

@@ -28,6 +28,7 @@ async function mountNav(initialPath: string) {
   document.body.append(host);
   const app = createApp({ render: () => h(ResourceCenterSectionNav) });
   app.component('OriginalIcon', { render: () => h('span', { 'aria-hidden': 'true' }) });
+  app.component('svg-icon', { render: () => h('span', { 'aria-hidden': 'true' }) });
   app.use(router);
   app.use(
     createI18n({
@@ -37,8 +38,8 @@ async function mountNav(initialPath: string) {
         'zh-CN': {
           resourceCenter: {
             title: '资源中心',
-            sections: { resources: '全部资源', organize: '整理中心' },
-            knowledgeGraph: '知识地图',
+            sections: { resources: '查找', organize: '整理中心' },
+            knowledgeGraph: '全局图谱',
             knowledgeGraphShort: '图谱',
           },
         },
@@ -67,7 +68,7 @@ afterEach(() => {
 });
 
 describe('ResourceCenterSectionNav', () => {
-  it('桌面端将三个入口作为同级页签，知识地图不再是低存在感的独立按钮', async () => {
+  it('桌面端将查找、整理中心和全局图谱作为同级页签', async () => {
     const { host } = await mountNav('/search?section=map');
     const tabs = host.querySelectorAll<HTMLElement>('[role="tab"]');
     const mapButton = host.querySelector<HTMLButtonElement>('.knowledge-map-view');
@@ -77,11 +78,12 @@ describe('ResourceCenterSectionNav', () => {
     expect(tabs[0].classList.contains('active')).toBe(false);
     expect(tabs[1].getAttribute('aria-selected')).toBe('false');
     expect(mapButton?.getAttribute('role')).toBe('tab');
-    expect(mapButton?.getAttribute('aria-label')).toBe('知识地图');
+    expect(tabs[0].textContent?.trim()).toBe('查找');
+    expect(mapButton?.getAttribute('aria-label')).toBe('全局图谱');
     expect(mapButton?.getAttribute('aria-selected')).toBe('true');
   });
 
-  it('整理中心位于全部资源与知识地图之间，并能切换到知识地图', async () => {
+  it('整理中心位于查找与全局图谱之间，并能切换到全局图谱', async () => {
     const { host, router } = await mountNav('/organize?issue=pending');
     const tabs = host.querySelectorAll<HTMLButtonElement>('[role="tab"]');
     const mapButton = host.querySelector<HTMLButtonElement>('.knowledge-map-view')!;

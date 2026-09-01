@@ -29,7 +29,8 @@ SET title = 'AI 额度、用量明细与加油包',
     sort = 96,
     admin_archived = 0,
     updated_by = NULL
-WHERE id = @ai_quota_id;
+WHERE id = @ai_quota_id
+  AND LOCATE('data-ln-policy:ai-quota-v', COALESCE(content, '')) = 0;
 
 SET @bookmark_snapshot_id = '2308c270-7ed0-117e-80f0-dfa644922619';
 SET @bookmark_snapshot_content = '# 网页存档、AI 摘要与防死链\n\n网页存档和 AI 摘要现在是两个清楚分开的动作。\n\n## 免费的网页存档\n- 新增书签时可选择“保存网页存档”，也可在存档详情中手动生成或更新。\n- 它只抓取并保存当时可读取的网页正文，不调用模型、不消耗 AI 额度。\n- 后台自动存档有并发和积压保护，手动抓取有频率、安全和正文大小限制；这些限制不会影响书签本身保存。\n\n## 消耗额度的 AI 摘要\n- 已经有网页正文后，用户再明确点击“生成 AI 摘要”。\n- 摘要按本次真实模型 token 计入统一 AI 额度；更新正文不会自动连带生成摘要。\n- 已有摘要在不要求重新生成时可直接读取缓存，缓存读取不扣额度。\n\n需要登录使用；需登录访问、强反爬或纯前端渲染的网站可能无法保存正文。抓取失败不会覆盖已有的成功存档。';

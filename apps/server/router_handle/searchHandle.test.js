@@ -422,6 +422,67 @@ describe('globalSearch pagination', () => {
     expect(payload.data).not.toHaveProperty('typeTotals');
     expect(payload.data).not.toHaveProperty('tagOptions');
   });
+
+  it('资源中心独立返回标签导航匹配，标签不再进入资源列表或资源总数', async () => {
+    mocks.pool.query.mockImplementation(async (sql) => {
+      const normalizedSql = String(sql);
+      if (normalizedSql.includes('SELECT name') && normalizedSql.includes('FROM tag')) {
+        return [[{ name: '项目管理' }]];
+      }
+      if (normalizedSql.includes('FROM tag t') && normalizedSql.includes('stats.last_activity_time DESC')) {
+        return [
+          [
+            {
+              id: 'tag-1',
+              name: '项目管理',
+              description: '项目资料入口',
+              icon_url: '',
+              bookmark_count: 1,
+              note_count: 1,
+              file_count: 0,
+            },
+          ],
+        ];
+      }
+      if (normalizedSql.includes('COUNT(*) AS total FROM bookmark')) return [[{ total: 1 }]];
+      if (normalizedSql.includes('COUNT(*) AS total FROM note')) return [[{ total: 0 }]];
+      if (normalizedSql.includes('COUNT(*) AS total FROM files')) return [[{ total: 0 }]];
+      if (normalizedSql.includes('FROM bookmark b')) {
+        return [[{ id: 'bookmark-1', name: '项目资料', description: '', url: '', tag_list: [] }]];
+      }
+      return [[]];
+    });
+    const res = createResponse();
+
+    await globalSearch(
+      {
+        user: { id: 'user-1' },
+        body: {
+          keyword: '项目',
+          types: ['tag', 'todo'],
+          separateTagMatches: true,
+        },
+        headers: { 'x-lang': 'zh-CN' },
+      },
+      res,
+    );
+
+    const payload = res.send.mock.calls.at(-1)?.[0];
+    expect(payload.status).toBe(200);
+    expect(payload.data.items).toEqual([expect.objectContaining({ id: 'bookmark-1', type: 'bookmark' })]);
+    expect(payload.data.items.some((item) => item.type === 'tag')).toBe(false);
+    expect(payload.data.typeTotals).toEqual({ bookmark: 1, note: 0, file: 0, tag: 0, todo: 0 });
+    expect(payload.data.total).toBe(1);
+    expect(payload.data.tagMatches).toEqual([
+      expect.objectContaining({
+        id: 'tag-1',
+        name: '项目管理',
+        counts: { bookmark: 1, note: 1, file: 0, total: 2 },
+        route: '/tag/tag-1',
+      }),
+    ]);
+    expect(mocks.pool.query.mock.calls.some(([sql]) => String(sql).includes('COUNT(*) AS total FROM tag'))).toBe(false);
+  });
 });
 
 describe('globalSearch 待办', () => {

@@ -6,6 +6,7 @@
         :readonly="readonly"
         :isStartEdit="isStartEdit || isLeaving"
         :save-status="saveStatus"
+        :back-label="noteBackLabel"
         @back="back"
         @focusout="titleBlur"
         :note="note"
@@ -381,7 +382,7 @@
   import { normalizeMarkdownBlockquoteEntities } from '@lightnote/shared';
   import { noteHtmlToMarkdown } from '@/utils/noteHtmlToMarkdown';
   import { buildNoteBreadcrumbDisplay } from '@/utils/noteBreadcrumb';
-  import { resolveNoteDetailReturnPath } from '@/utils/noteDetailNavigation';
+  import { resolveDeletedNoteFallbackId, resolveNoteDetailReturnPath } from '@/utils/noteDetailNavigation';
   import { hasMeaningfulNoteContent } from '@/utils/noteTree';
   import { resolveNoteWorkspaceLayout, type NoteWorkspaceLayoutState } from '@/utils/noteWorkspaceLayout';
   import { markNoteDraftPromoted } from '@/utils/routeViewKey';
@@ -470,6 +471,12 @@
     return parent ? { path: '/noteLibrary', query: { parent } } : { path: '/noteLibrary' };
   };
   const sourceReturnPath = () => resolveNoteDetailReturnPath(router.currentRoute.value.query.from);
+  const noteBackLabel = computed(() => {
+    const source = sourceReturnPath();
+    if (source.startsWith('/toolbox/task/')) return t('noteDetail.backToToolboxResult');
+    if (source.startsWith('/workbenches')) return t('noteDetail.backToWorkbench');
+    return t('noteDetail.backToLibrary');
+  });
   const detailSourceQuery = () => {
     const from = sourceReturnPath();
     return from ? { from } : {};
@@ -1978,6 +1985,7 @@
         content: t('note.deleteOneConfirm', { title: note.title || t('note.untitled') }),
         okText: t('note.moveToTrash'),
         async onOk() {
+          const fallbackId = currentNoteDeletionFallbackId();
           const res = await apiBasePost('/api/note/delNote', { ids: [String(note.id)] });
           if (res.status === 409 && res.data?.code === 'NOTE_HAS_CHILDREN') {
             message.warning(res.msg || t('note.deleteScopeChanged'));
@@ -1995,11 +2003,7 @@
               result: 'success',
             });
           }
-          skipSaveOnLeave = true;
-          clearScheduledSave();
-          noteWorkspace.setNavigation({ activePageId: null });
-          await refreshTree();
-          returnToSource();
+          await leaveDeletedNote(fallbackId);
         },
       });
       return;
@@ -2024,6 +2028,7 @@
       okText:
         preview.totalCount > 1 ? t('note.moveItemsToTrash', { count: preview.totalCount }) : t('note.moveToTrash'),
       async onOk() {
+        const fallbackId = currentNoteDeletionFallbackId();
         const res = await apiBasePost('/api/note/deleteNoteSubtree', {
           id: preview.id,
           expectedDescendantCount: preview.descendantCount,
@@ -2044,14 +2049,38 @@
           subtreeSize: deletedCount,
           result: 'success',
         });
-        // 删除已在服务端成功完成，离开时不能再把排队中的旧编辑内容写回已删除笔记。
-        skipSaveOnLeave = true;
-        clearScheduledSave();
-        noteWorkspace.setNavigation({ activePageId: null });
-        await refreshTree();
-        returnToSource();
+        await leaveDeletedNote(fallbackId);
       },
     });
+  }
+
+  function currentNoteDeletionFallbackId() {
+    const parentId = String(note.parentId || '').trim();
+    const siblings = childrenByParent.value[parentId || NOTE_TREE_ROOT_KEY] || [];
+    return resolveDeletedNoteFallbackId({ currentId: note.id, parentId, siblings });
+  }
+
+  async function leaveDeletedNote(fallbackId: string) {
+    // 删除已在服务端成功完成，离开时不能再把排队中的旧编辑内容写回已删除笔记。
+    skipSaveOnLeave = true;
+    clearScheduledSave();
+    noteWorkspace.setLibraryPreviewPage(fallbackId || null);
+    noteWorkspace.setNavigation({ activePageId: fallbackId || null, browseParentId: null });
+    await refreshTree();
+
+    if (fallbackId) {
+      try {
+        const fallback = await prefetchNoteDetail(user, fallbackId);
+        if (fallback?.status === 200) {
+          await router.replace(`/noteLibrary/${encodeURIComponent(fallbackId)}`);
+          return;
+        }
+      } catch {
+        // 同级页也被另一端删除时降级到笔记库，不能把用户带进第二个失效详情地址。
+      }
+    }
+    noteWorkspace.resetLibraryRootState();
+    await router.replace('/noteLibrary');
   }
 
   const handleKeyDown = (event) => {

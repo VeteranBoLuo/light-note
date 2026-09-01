@@ -19,6 +19,7 @@ import {
   runResourceDeleteSideEffects,
   softDeleteResources,
 } from '../util/services/resourceDeleteService.js';
+import { queryTagMatches } from '../util/services/tagSpaceService.js';
 
 // 资源类型与全局搜索类型必须分开:待办只能被搜索到,不进资源选择器、标签操作和待整理。
 // 未显式声明 types 的历史调用方(资源选择器、提及选择器、桌面下拉)继续只拿到资源四类。
@@ -1157,7 +1158,15 @@ export const globalSearch = async (req, res) => {
       paginationMode === 'ordered' ? 40 : 12,
       paginationMode === 'ordered' ? 40 : 50,
     );
-    const selectedTypes = normalizeSearchTypes(req.body?.types, req.body?.type);
+    const separateTagMatches =
+      mode === 'full' && (req.body?.separateTagMatches === true || String(req.body?.separateTagMatches || '') === '1');
+    const requestedTypes = normalizeSearchTypes(req.body?.types, req.body?.type);
+    const selectedTypes = separateTagMatches
+      ? requestedTypes.filter((type) => BATCH_EDITABLE_TYPES.includes(type))
+      : requestedTypes;
+    // 独立标签匹配模式用于资源中心。即使旧客户端漏传 types（或误传标签/待办），
+    // 也不能退回“导航对象也是资源结果”的旧语义。
+    if (!selectedTypes.length) selectedTypes.push(...BATCH_EDITABLE_TYPES);
     const lang = normalizeLang(req.headers['x-lang']);
     const options = {
       keyword,
@@ -1215,12 +1224,13 @@ export const globalSearch = async (req, res) => {
             queryBookmarks(userId, options, lang, false),
             queryNotes(userId, options, lang, false),
             queryFiles(userId, options, lang, false),
-            queryTags(userId, options, lang, false),
+            separateTagMatches ? Promise.resolve({ total: 0, items: [] }) : queryTags(userId, options, lang, false),
             // 待办统计只在调用方显式请求待办时才执行，既有资源调用方不承担这次查询
             selectedTypes.includes('todo')
               ? queryTodos(userId, options, lang, false)
               : Promise.resolve({ total: 0, items: [] }),
             querySearchTagOptions(userId),
+            separateTagMatches && keyword ? queryTagMatches(pool, { userId, keyword, limit: 8 }) : Promise.resolve([]),
           ])
         : Promise.resolve(null);
       const [orderedResult, metadata] = await Promise.all([orderedItemsPromise, metadataPromise]);
@@ -1234,7 +1244,7 @@ export const globalSearch = async (req, res) => {
         hasMore: Boolean(orderedResult.nextCursor),
       };
       if (metadata) {
-        const [bookmarkResult, noteResult, fileResult, tagResult, todoResult, tagOptions] = metadata;
+        const [bookmarkResult, noteResult, fileResult, tagResult, todoResult, tagOptions, tagMatches] = metadata;
         const typeTotals = {
           bookmark: bookmarkResult.total,
           note: noteResult.total,
@@ -1246,22 +1256,26 @@ export const globalSearch = async (req, res) => {
           total: Object.values(typeTotals).reduce((sum, count) => sum + Number(count || 0), 0),
           typeTotals,
           tagOptions,
+          tagMatches,
           hasMoreByType: buildOrderedHasMoreByType(typeTotals, selectedTypes, orderedResult.nextCursor),
         });
       }
       return res.send(resultData(response));
     }
 
-    const [bookmarkResult, noteResult, fileResult, tagResult, todoResult, tagOptions] = await Promise.all([
+    const [bookmarkResult, noteResult, fileResult, tagResult, todoResult, tagOptions, tagMatches] = await Promise.all([
       queryBookmarks(userId, options, lang, selectedTypes.includes('bookmark')),
       queryNotes(userId, options, lang, selectedTypes.includes('note')),
       queryFiles(userId, options, lang, selectedTypes.includes('file')),
-      queryTags(userId, options, lang, selectedTypes.includes('tag')),
+      separateTagMatches
+        ? Promise.resolve({ total: 0, items: [] })
+        : queryTags(userId, options, lang, selectedTypes.includes('tag')),
       // 同 ordered 模式：未显式请求待办时完全不查 todo_items
       selectedTypes.includes('todo')
         ? queryTodos(userId, options, lang, true)
         : Promise.resolve({ total: 0, items: [] }),
       querySearchTagOptions(userId),
+      separateTagMatches && keyword ? queryTagMatches(pool, { userId, keyword, limit: 8 }) : Promise.resolve([]),
     ]);
     const resultMap = {
       bookmark: bookmarkResult,
@@ -1287,6 +1301,7 @@ export const globalSearch = async (req, res) => {
         total: Object.values(typeTotals).reduce((sum, count) => sum + Number(count || 0), 0),
         typeTotals,
         tagOptions,
+        tagMatches,
         page,
         pageSize,
         hasMoreByType,

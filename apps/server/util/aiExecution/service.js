@@ -54,10 +54,13 @@ function resolveExecutionIdentity(config) {
   if (billingPolicy === 'system') {
     const systemId = normalizeTaskType(config.systemId || config.taskType);
     const userId = `system:${systemId}`.slice(0, 128);
+    const subject = config.subjectIdentity || request?.resourceUser || request?.user || {};
     return {
       billingPolicy,
       actorUserId: userId,
-      subjectUserId: userId,
+      // 平台额度的承担方是 system，但审计仍保留任务实际处理的数据主体；这不会改变
+      // system 配额分桶，也不会让产物内容或用户 ID进入 Provider 日志。
+      subjectUserId: normalizeIdentifier(subject.id, userId),
       userRole: 'system',
       quotaRequest: request || { headers: { fingerprint: userId }, body: {}, ip: 'ai-execution-system' },
     };
@@ -246,6 +249,37 @@ export async function runAiExecution(config, operation, dependencies = {}) {
       console.warn('[ai-execution] persistence degraded code=%s', execution.persistenceErrors.at(-1));
     }
   }
+}
+
+/**
+ * Context Resolver 才能知道完整材料规模的 Skill，可在第一次 Provider 调用前收紧或扩展
+ * 本轮阶段计划与额度预占。执行一旦开始占位或调用 Provider，就禁止再改写计划。
+ */
+export function configureActiveAiExecution(config = {}, execution = getActiveAiExecution()) {
+  if (!execution) {
+    const error = new Error('AI Execution 动态配置缺少执行上下文');
+    error.code = 'AI_EXECUTION_REQUIRED';
+    error.status = 500;
+    throw error;
+  }
+  if (execution.providerCallCount > 0 || execution.quotaReservationPromise || execution.quotaHandle) {
+    const error = new Error('AI Execution 已开始访问 Provider，不能再修改阶段计划');
+    error.code = 'AI_EXECUTION_CONFIGURATION_LOCKED';
+    error.status = 500;
+    throw error;
+  }
+  const providerPlan = normalizeAiProviderPlan(config.providerPlan);
+  if (!providerPlan) {
+    const error = new Error('AI Execution 动态配置缺少阶段计划');
+    error.code = 'AI_EXECUTION_PROVIDER_PLAN_INVALID';
+    error.status = 500;
+    throw error;
+  }
+  execution.providerPlan = providerPlan;
+  execution.maxUserProviderCalls = providerPlan.maxUserProviderCalls;
+  execution.maxPlatformProviderCalls = providerPlan.maxPlatformProviderCalls;
+  execution.reservationTokens = Math.max(1, Math.floor(Number(config.reservationTokens || 1)));
+  return execution;
 }
 
 /**

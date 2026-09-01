@@ -27,6 +27,9 @@ const DIRECT_DELETE_TABLES = Object.freeze([
   ['user_growth_tasks', 'user_id'],
   ['user_achievements', 'user_id'],
   ['user_growth_preferences', 'user_id'],
+  // items 必须先于 sessions 显式清理；即使 FK 可级联，也要兼容约束缺失或历史半迁移库。
+  ['daily_content_review_items', 'user_id'],
+  ['daily_content_review_sessions', 'user_id'],
   ['growth_recap_state', 'user_id'],
   ['ai_bonus_lot_allocations', 'user_id'],
   ['ai_bonus_lots', 'user_id'],
@@ -436,6 +439,54 @@ async function disableCommunityChatReadReceiptsForAuthor(connection, tables, use
       WHERE user_id = ? AND read_receipt_enabled = 1`,
     [userId],
   );
+}
+
+export async function purgeToolboxWorkspace(connection, tables, userId) {
+  await deleteIfPresent(
+    connection,
+    tables,
+    'toolbox_workspace_sessions',
+    'DELETE FROM toolbox_workspace_sessions WHERE user_id = ?',
+    [userId],
+  );
+  await deleteIfPresent(
+    connection,
+    tables,
+    'toolbox_workspace_items',
+    'DELETE FROM toolbox_workspace_items WHERE user_id = ?',
+    [userId],
+  );
+  await deleteIfPresent(
+    connection,
+    tables,
+    'toolbox_workspace_resources',
+    'DELETE FROM toolbox_workspace_resources WHERE user_id = ?',
+    [userId],
+  );
+  await deleteIfPresent(connection, tables, 'toolbox_workspaces', 'DELETE FROM toolbox_workspaces WHERE user_id = ?', [
+    userId,
+  ]);
+  await deleteIfPresent(
+    connection,
+    tables,
+    'toolbox_save_receipts',
+    'DELETE FROM toolbox_save_receipts WHERE user_id = ?',
+    [userId],
+  );
+  await deleteIfPresent(connection, tables, 'toolbox_artifacts', 'DELETE FROM toolbox_artifacts WHERE user_id = ?', [
+    userId,
+  ]);
+  if (tables.has('toolbox_job_inputs') && tables.has('toolbox_jobs')) {
+    await connection.query(
+      `DELETE input
+         FROM toolbox_job_inputs input
+         JOIN toolbox_jobs job ON job.id = input.job_id
+        WHERE job.user_id = ?`,
+      [userId],
+    );
+  }
+  await deleteIfPresent(connection, tables, 'toolbox_jobs', 'DELETE FROM toolbox_jobs WHERE user_id = ?', [userId]);
+  await deleteIfPresent(connection, tables, 'toolbox_quotes', 'DELETE FROM toolbox_quotes WHERE user_id = ?', [userId]);
 }
 
 async function purgeAiWorkspace(connection, tables, userId) {
@@ -896,6 +947,7 @@ async function purgeDatabaseForUser(userId) {
       );
     }
     const tables = await existingTables(connection);
+    await purgeToolboxWorkspace(connection, tables, userId);
     await purgeAiWorkspace(connection, tables, userId);
     await purgeFeatureRequests(connection, tables, userId);
     await purgeOwnedResources(connection, tables, userId);

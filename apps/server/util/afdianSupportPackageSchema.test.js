@@ -109,6 +109,8 @@ describe('爱发电 v2 套餐 Schema', () => {
     expect(schemaAssertions).toContain('[59] invalid_support_campaign_sku_index');
     expect(schemaAssertions).toContain('[59] obsolete_support_campaign_sku_index');
     expect(schemaAssertions).toContain('[59] invalid_credited_support_entitlement_storage');
+    expect(schemaAssertions).toContain("claim.sku_id='scope-ai-account-v3'");
+    expect(schemaAssertions).toContain('grant_row.calculated_ai_tokens>0');
     expect(schemaAssertions).toContain("intent.intent_status NOT IN ('issued','consumed','expired','cancelled')");
     expect(schemaAssertions).toMatch(
       /grant_row\.grant_status IN \('credited','reversal_review'\)[\s\S]*grant_row\.paid_amount <=> intent\.quoted_amount/,

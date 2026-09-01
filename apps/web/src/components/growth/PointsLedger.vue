@@ -21,7 +21,7 @@
       <div v-for="row in rows" :key="row.id" class="ledger-row">
         <div class="ledger-main">
           <b>{{ labelOf(row.reason) }}</b>
-          <span>{{ sourceOf(row) }} · {{ fmtTime(row.create_time) }}</span>
+          <span>{{ sourceOf(row) }} · {{ fmtTime(row.createTime || row.create_time || '') }}</span>
         </div>
         <strong :class="row.delta > 0 || row.assetChange ? 'up' : row.delta < 0 ? 'down' : 'flat'">
           {{ amountOf(row) }}
@@ -48,7 +48,8 @@
     id: number;
     delta: number;
     reason: string;
-    create_time: string;
+    createTime?: string;
+    create_time?: string;
     sourceType?: string;
     sourceKey?: string | null;
     assetChange?: GrowthAssetChange | null;

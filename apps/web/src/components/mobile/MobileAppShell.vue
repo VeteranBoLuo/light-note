@@ -34,15 +34,25 @@
       :aria-hidden="keyboardOpen ? 'true' : undefined"
       :inert="keyboardOpen || undefined"
     >
-      <MobileBottomNav />
+      <MobileBottomNav @prepare-formal-create="prepareFormalCreate" @formal-create="openFormalCreate" />
     </div>
+    <MobileFormalCreateLayer v-if="formalCreateLayerMounted" v-model:action="formalCreateAction" />
     <MobileGlobalSearchOverlay />
   </div>
   <slot v-else />
 </template>
 
 <script setup lang="ts">
-  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from 'vue';
+  import {
+    computed,
+    defineAsyncComponent,
+    nextTick,
+    onBeforeUnmount,
+    onMounted,
+    ref,
+    watch,
+    type CSSProperties,
+  } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
   import MobileResourceTabs from '@/components/mobile/MobileResourceTabs.vue';
   import MobileBottomNav from '@/components/mobile/MobileBottomNav.vue';
@@ -50,8 +60,10 @@
   import MobilePullRefreshIndicator from '@/components/mobile/MobilePullRefreshIndicator.vue';
   import { activePullIndicator } from '@/composables/useAndroidPullRefresh';
   import MobileGlobalSearchOverlay from '@/components/globalSearch/MobileGlobalSearchOverlay.vue';
-  import { getMobileResourcePath } from '@/config/mobileNavigation';
+  import { getMobileResourcePath, type MobileFormalCreateActionKey } from '@/config/mobileNavigation';
   import { useMobileNavigationState } from '@/composables/useMobileNavigationState';
+
+  const MobileFormalCreateLayer = defineAsyncComponent(() => import('@/components/mobile/MobileFormalCreateLayer.vue'));
 
   const props = defineProps<{
     enabled: boolean;
@@ -67,6 +79,8 @@
   const keyboardObscuredHeight = ref(0);
   const bottomNavElement = ref<HTMLElement | null>(null);
   const bottomNavFullHeight = ref(56);
+  const formalCreateAction = ref<MobileFormalCreateActionKey | null>(null);
+  const formalCreateLayerMounted = ref(false);
   const { rememberResourceFromRoute, restoreResourceScroll, saveResourceScroll } = useMobileNavigationState();
   const restoreTimers = new Set<number>();
   const SCROLL_RESTORE_RETRY_DELAYS = [80, 240, 640, 1280] as const;
@@ -77,6 +91,15 @@
   let stableViewportWidth = 0;
   let focusFrame = 0;
   let scrollRestoreRequestId = 0;
+
+  function openFormalCreate(action: MobileFormalCreateActionKey) {
+    prepareFormalCreate();
+    formalCreateAction.value = action;
+  }
+
+  function prepareFormalCreate() {
+    formalCreateLayerMounted.value = true;
+  }
 
   const bottomNavVisibleHeight = computed(() =>
     keyboardOpen.value
@@ -233,7 +256,10 @@
       // 详情页会临时卸下统一移动壳。若此时输入框仍处于聚焦或 visualViewport 的
       // 键盘收起事件晚到，旧的可视高度不能被下一次笔记库挂载继续复用。
       resetKeyboardViewportState();
-      if (!enabled) return;
+      if (!enabled) {
+        formalCreateAction.value = null;
+        return;
+      }
       nextTick(() => scheduleKeyboardStateUpdate());
     },
     { immediate: true },

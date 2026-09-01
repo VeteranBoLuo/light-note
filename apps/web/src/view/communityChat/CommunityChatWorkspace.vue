@@ -3636,19 +3636,12 @@
       );
       return;
     }
-    const selection = composerInput.value?.getSelectionRange() || {
-      start: draft.value.length,
-      end: draft.value.length,
-    };
-    const { start, end } = selection;
-    draft.value = `${draft.value.slice(0, start)}${emoji}${draft.value.slice(end)}`;
+    if (!composerInput.value?.replaceSelection(emoji)) return;
     rememberEmoji(emoji);
     pendingClientRequestId.value = null;
     expressionPanelOpen.value = false;
     closeMentionSuggestions();
     void nextTick(() => {
-      const nextCaret = start + emoji.length;
-      composerInput.value?.setSelectionRange(nextCaret, nextCaret);
       composerInput.value?.focus();
     });
   }
@@ -5647,7 +5640,7 @@
   }
 
   .community-composer {
-    padding: 7px 14px 6px;
+    padding: 7px 14px 12px;
     border-top: 1px solid var(--surface-divider-color);
     background: var(--card-background);
   }
@@ -6189,7 +6182,7 @@
     }
 
     .community-composer {
-      padding: 5px 8px calc(5px + env(safe-area-inset-bottom));
+      padding: 5px 8px calc(8px + env(safe-area-inset-bottom));
     }
 
     .community-composer__surface {

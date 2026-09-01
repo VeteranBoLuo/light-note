@@ -1,5 +1,16 @@
 <template>
-  <div class="resource-picker-panel" :class="{ 'is-inline': inline, 'has-search': showSearch }">
+  <div
+    ref="panelRef"
+    class="resource-picker-panel"
+    :class="{
+      'is-inline': inline,
+      'has-search': showSearch,
+      'is-fill': fill,
+      'is-virtualized': virtualizedMode,
+      'is-page-scroll': pageScroll,
+    }"
+    :style="pageScrollHoldStyle"
+  >
     <!-- @ 触发时不带搜索框:关键词直接来自输入框里 @ 后面的文字(与 Claude Code 的 @ 一致);
          显式按钮打开时才需要自己的搜索框 -->
     <BInput
@@ -8,6 +19,7 @@
       v-model:value="innerKeyword"
       class="resource-picker-panel__search"
       :placeholder="placeholder || t('ai.searchContext')"
+      :disabled="disabled"
       clearable
       @enter="chooseActive"
       @keydown.down.prevent="moveActive(1)"
@@ -15,23 +27,122 @@
       @keydown.esc.prevent.stop="emit('close')"
     />
 
-    <div
-      ref="resultsRef"
-      class="resource-picker-panel__results auto-hide-scrollbar"
-      :class="{ 'is-scrolling': scrolling }"
+    <div v-if="multiSelect && flatItems.length" class="resource-picker-panel__batch">
+      <span>{{
+        virtualizedMode
+          ? t('toolbox.workbench.loadedResults', { loaded: flatItems.length, total: resultTotal })
+          : t('toolbox.workbench.currentResults', { count: flatItems.length })
+      }}</span>
+      <BButton size="small" :disabled="disabled || !selectableFlatItems.length" @click="selectCurrentResults">
+        {{ t('toolbox.workbench.addCurrentResults') }}
+      </BButton>
+    </div>
+
+    <div v-if="searchFailed" class="resource-picker-panel__load-error" role="alert">
+      <span>{{ t('toolbox.workbench.resourceSearchFailed') }}</span>
+      <BButton size="small" @click="retryInitialSearch">{{ t('common.retry') }}</BButton>
+    </div>
+
+    <BVirtualList
+      v-else-if="virtualizedMode && virtualOptions.length"
+      ref="virtualListRef"
+      class="resource-picker-panel__virtual-list"
       role="listbox"
-      @scroll="onScroll"
+      :items="virtualOptions"
+      item-key="key"
+      :total-count="virtualTotalCount"
+      :item-height="52"
+      :gap="2"
+      :overscan="7"
+      :loading="loadingMore"
+      :loading-text="t('common.loading')"
+      :has-more="hasMore && !loadMoreFailed"
+      :scroll-mode="pageScroll ? 'ancestor' : 'self'"
+      @load-more="loadMore"
+      @scroll-position="forwardScrollPosition"
+    >
+      <template #default="{ item: entry }">
+        <BButton
+          v-if="entry.kind === 'resource'"
+          class="resource-picker-panel__item"
+          :class="{
+            'is-active': entry.index === activeIndex,
+            'is-selected': resourceSelected(entry.item),
+            'is-multi': multiSelect,
+          }"
+          :disabled="resourceDisabled(entry.item)"
+          :aria-selected="resourceSelected(entry.item)"
+          :aria-current="entry.index === activeIndex ? 'true' : undefined"
+          @mousemove="activateFromPointer(entry.index)"
+          @click="chooseResource(entry.item)"
+        >
+          <span v-if="multiSelect" class="resource-picker-panel__check" aria-hidden="true">
+            <SvgIcon v-if="resourceSelected(entry.item)" :src="icon.message.success" size="13" />
+          </span>
+          <span v-if="entry.pinned" class="resource-picker-panel__pinned-tag">{{ t('ai.currentPage') }}</span>
+          <span v-else class="resource-picker-panel__dot" :style="{ background: typeColor(entry.item.type) }" />
+          <span class="resource-picker-panel__copy">
+            <span class="resource-picker-panel__title">{{ entry.item.title }}</span>
+            <small v-if="entry.item.path">{{ entry.item.path }}</small>
+          </span>
+        </BButton>
+        <BButton
+          v-else
+          class="resource-picker-panel__item resource-picker-panel__item--scope"
+          :class="{
+            'is-active': entry.index === activeIndex,
+            'is-selected': scopeSelected(entry.scope),
+            'is-multi': multiSelect,
+          }"
+          :disabled="scopeDisabled(entry.scope)"
+          :aria-selected="scopeSelected(entry.scope)"
+          :aria-current="entry.index === activeIndex ? 'true' : undefined"
+          @mousemove="activateFromPointer(entry.index)"
+          @click="chooseScope(entry.scope)"
+        >
+          <span v-if="multiSelect" class="resource-picker-panel__check" aria-hidden="true">
+            <SvgIcon v-if="scopeSelected(entry.scope)" :src="icon.message.success" size="13" />
+          </span>
+          <span class="resource-picker-panel__scope-icon" aria-hidden="true">
+            <SvgIcon :src="icon.noteTree.root" size="15" />
+          </span>
+          <span class="resource-picker-panel__copy">
+            <span class="resource-picker-panel__title">{{ entry.scope.title }}</span>
+            <small>{{ scopeDescription(entry) }}</small>
+          </span>
+        </BButton>
+      </template>
+    </BVirtualList>
+    <span v-else-if="virtualizedMode && loading" class="resource-picker-panel__hint">{{ t('ai.searching') }}</span>
+    <span v-else-if="virtualizedMode" class="resource-picker-panel__hint">{{ t('ai.noContext') }}</span>
+
+    <div
+      v-else
+      ref="resultsRef"
+      v-auto-scrollbar
+      class="resource-picker-panel__results"
+      role="listbox"
+      @scroll.passive="handleResultsScroll"
     >
       <BButton
         v-for="(item, index) in pinned"
         :key="`pinned:${item.type}:${item.id}`"
         class="resource-picker-panel__item"
-        :class="{ 'is-active': index === activeIndex }"
+        :class="{
+          'is-active': index === activeIndex,
+          'is-selected': resourceSelected(item),
+          'is-multi': multiSelect,
+        }"
         :disabled="resourceDisabled(item)"
-        :aria-selected="index === activeIndex"
+        :data-scroll-anchor="`resource:${resourceItemKey(item)}`"
+        :aria-selected="resourceSelected(item)"
+        :aria-current="index === activeIndex ? 'true' : undefined"
         @mousemove="activateFromPointer(index)"
-        @click="emit('select', item)"
+        @click="chooseResource(item)"
       >
+        <span v-if="multiSelect" class="resource-picker-panel__check" aria-hidden="true">
+          <SvgIcon v-if="resourceSelected(item)" :src="icon.message.success" size="13" />
+        </span>
         <span class="resource-picker-panel__pinned-tag">{{ t('ai.currentPage') }}</span>
         <span class="resource-picker-panel__copy">
           <span class="resource-picker-panel__title">{{ item.title }}</span>
@@ -43,12 +154,21 @@
           v-for="entry in group.items"
           :key="`${entry.item.type}:${entry.item.id}`"
           class="resource-picker-panel__item"
-          :class="{ 'is-active': entry.index === activeIndex }"
+          :class="{
+            'is-active': entry.index === activeIndex,
+            'is-selected': resourceSelected(entry.item),
+            'is-multi': multiSelect,
+          }"
           :disabled="resourceDisabled(entry.item)"
-          :aria-selected="entry.index === activeIndex"
+          :data-scroll-anchor="`resource:${resourceItemKey(entry.item)}`"
+          :aria-selected="resourceSelected(entry.item)"
+          :aria-current="entry.index === activeIndex ? 'true' : undefined"
           @mousemove="activateFromPointer(entry.index)"
-          @click="emit('select', entry.item)"
+          @click="chooseResource(entry.item)"
         >
+          <span v-if="multiSelect" class="resource-picker-panel__check" aria-hidden="true">
+            <SvgIcon v-if="resourceSelected(entry.item)" :src="icon.message.success" size="13" />
+          </span>
           <span class="resource-picker-panel__dot" :style="{ background: typeColor(entry.item.type) }" />
           <span class="resource-picker-panel__copy">
             <span class="resource-picker-panel__title">{{ entry.item.title }}</span>
@@ -64,12 +184,21 @@
           v-for="entry in scopeEntries"
           :key="`scope:${entry.scope.id}`"
           class="resource-picker-panel__item resource-picker-panel__item--scope"
-          :class="{ 'is-active': entry.index === activeIndex }"
+          :class="{
+            'is-active': entry.index === activeIndex,
+            'is-selected': scopeSelected(entry.scope),
+            'is-multi': multiSelect,
+          }"
           :disabled="scopeDisabled(entry.scope)"
-          :aria-selected="entry.index === activeIndex"
+          :data-scroll-anchor="`scope:${entry.scope.id}`"
+          :aria-selected="scopeSelected(entry.scope)"
+          :aria-current="entry.index === activeIndex ? 'true' : undefined"
           @mousemove="activateFromPointer(entry.index)"
-          @click="emit('select-scope', entry.scope)"
+          @click="chooseScope(entry.scope)"
         >
+          <span v-if="multiSelect" class="resource-picker-panel__check" aria-hidden="true">
+            <SvgIcon v-if="scopeSelected(entry.scope)" :src="icon.message.success" size="13" />
+          </span>
           <span class="resource-picker-panel__scope-icon" aria-hidden="true">
             <SvgIcon :src="icon.noteTree.root" size="15" />
           </span>
@@ -89,6 +218,10 @@
       <span v-if="loading && !flatOptions.length" class="resource-picker-panel__hint">{{ t('ai.searching') }}</span>
       <span v-else-if="!flatOptions.length" class="resource-picker-panel__hint">{{ t('ai.noContext') }}</span>
     </div>
+    <div v-if="virtualizedMode && loadMoreFailed" class="resource-picker-panel__load-error" role="status">
+      <span>{{ t('toolbox.workbench.loadMoreFailed') }}</span>
+      <BButton size="small" @click="retryLoadMore">{{ t('common.retry') }}</BButton>
+    </div>
   </div>
 </template>
 
@@ -97,16 +230,19 @@
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BVirtualList from '@/components/base/BasicComponents/BVirtualList.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { RESOURCE_COLOR_CSS_VAR, type ResourceType } from '@/config/resourceColor';
   import {
+    resourceItemKey,
     useResourcePickerSearch,
     type ResourcePickerItem,
     type ResourcePickerType,
   } from '@/composables/useResourcePickerSearch';
-  import { useAutoHideScrollbar } from '@/composables/useAutoHideScrollbar';
   import type { AiScopeRef } from '@/types/aiScope';
+  import type { ResourceListScrollAnchor, ResourceListScrollPosition } from '@/utils/resourceListScroll';
+  import { findScrollContainer, restoreScrollTop } from '@/utils/scrollContainer';
   import { scrollNearestIntoContainer } from '@/utils/zoom';
 
   /**
@@ -125,7 +261,15 @@
       showSearch?: boolean;
       /** 是否作为编辑器光标旁的紧凑内联浮层展示。 */
       inline?: boolean;
+      /** 是否填满调用方提供的可用高度。 */
+      fill?: boolean;
+      /** 结果跟随最近的页面滚动容器，不再创建面板内滚动区。 */
+      pageScroll?: boolean;
       perType?: number;
+      limit?: number;
+      /** 单类型筛选时使用游标分页与虚拟列表浏览完整结果。 */
+      exhaustiveSingleType?: boolean;
+      singleTypePageSize?: number;
       autoFocus?: boolean;
       placeholder?: string;
       /** 置顶快捷项(如「当前页面」),始终显示在结果最上方 */
@@ -139,39 +283,208 @@
       /** 达到业务选择上限时只禁用对应类别，不影响另一类入口。 */
       resourcesDisabled?: boolean;
       scopesDisabled?: boolean;
+      /** 工具箱等批量场景可启用；默认单选以保持 @ 提及等现有交互不变。 */
+      multiSelect?: boolean;
+      /** 锁定搜索与选择操作，但保留当前结果供用户查看。 */
+      disabled?: boolean;
     }>(),
     {
       keyword: '',
       showSearch: true,
       inline: false,
+      fill: false,
+      pageScroll: false,
+      exhaustiveSingleType: false,
+      singleTypePageSize: 40,
       autoFocus: true,
       includeNoteScopes: false,
       selectedResourceKeys: () => [],
       selectedScopeKeys: () => [],
+      multiSelect: false,
+      disabled: false,
     },
   );
   const emit = defineEmits<{
     select: [value: ResourcePickerItem];
+    deselect: [value: ResourcePickerItem];
+    'select-many': [value: ResourcePickerItem[]];
     'select-scope': [value: AiScopeRef];
+    'deselect-scope': [value: AiScopeRef];
     close: [];
     'results-count': [value: number];
+    'scroll-position': [position: ResourceListScrollPosition];
   }>();
 
   const { t } = useI18n();
-  const { scrolling, onScroll } = useAutoHideScrollbar();
   const innerKeyword = ref('');
+  const panelRef = ref<HTMLElement | null>(null);
   const keywordInputRef = ref<{ focus?: () => void } | null>(null);
   const resultsRef = ref<HTMLElement | null>(null);
-  const { results, loading, activeIndex, search, searchNow, reset } = useResourcePickerSearch({
-    allowedTypes: props.allowedTypes,
+  const virtualListRef = ref<InstanceType<typeof BVirtualList> | null>(null);
+  const pageScrollHoldHeight = ref(0);
+  const pageScrollHoldStyle = computed(() =>
+    pageScrollHoldHeight.value > 0 ? { minHeight: `${pageScrollHoldHeight.value}px` } : undefined,
+  );
+  let pageScrollTransitionId = 0;
+  let pendingPageScroll:
+    | {
+        id: number;
+        container: HTMLElement;
+        scrollTop: number;
+      }
+    | undefined;
+  let pendingPreparedScrollAnchor: ResourceListScrollAnchor | null | undefined;
+  let preparedAnchorAwaitingFilterChange = false;
+  let filterTransitionVersion = 0;
+  let activeFilterTransition = 0;
+  const {
+    results,
+    loading,
+    searchFailed,
+    loadingMore,
+    loadMoreFailed,
+    hasMore,
+    total: resultTotal,
+    activeIndex,
+    search,
+    searchNow,
+    loadMore,
+    retryLoadMore,
+    reset,
+  } = useResourcePickerSearch({
+    allowedTypes: () => props.allowedTypes,
+    limit: props.limit,
     perType: props.perType,
+    exhaustiveSingleType: props.exhaustiveSingleType,
+    singleTypePageSize: props.singleTypePageSize,
   });
+  const virtualizedMode = computed(() => props.exhaustiveSingleType && (props.allowedTypes || []).length === 1);
+
+  function beginPageScrollTransition() {
+    const panel = panelRef.value;
+    // 调用方会在改变 allowedTypes 之前先触发一次；子组件的属性 watcher 随后
+    // 再进入这里时必须沿用最早的快照，不能把已经被浏览器夹紧的位置覆盖掉。
+    if (!props.pageScroll || !panel || pendingPageScroll) return;
+    const container = findScrollContainer(panel);
+    const id = ++pageScrollTransitionId;
+    pageScrollHoldHeight.value = Math.max(pageScrollHoldHeight.value, Math.ceil(panel.getBoundingClientRect().height));
+    pendingPageScroll = { id, container, scrollTop: container.scrollTop };
+  }
+
+  async function finishPageScrollTransition() {
+    const snapshot = pendingPageScroll;
+    if (!snapshot) return;
+    await nextTick();
+    if (pendingPageScroll?.id !== snapshot.id) return;
+    restoreScrollTop(snapshot.container, snapshot.scrollTop);
+    pageScrollHoldHeight.value = 0;
+    await nextTick();
+    if (pendingPageScroll?.id !== snapshot.id) return;
+    restoreScrollTop(snapshot.container, snapshot.scrollTop);
+    pendingPageScroll = undefined;
+  }
+
+  function forwardScrollPosition(position: ResourceListScrollPosition) {
+    emit('scroll-position', position);
+  }
+
+  function handleResultsScroll() {
+    const results = resultsRef.value;
+    if (!results) return;
+    forwardScrollPosition({ top: results.scrollTop, viewportHeight: results.clientHeight });
+  }
+
+  function regularAnchorElements() {
+    return [...(resultsRef.value?.querySelectorAll<HTMLElement>('[data-scroll-anchor]') || [])];
+  }
+
+  function captureRegularScrollAnchor(): ResourceListScrollAnchor | null {
+    const results = resultsRef.value;
+    const entries = regularAnchorElements();
+    if (!results || !entries.length) return null;
+    const top = Math.max(0, results.scrollTop);
+    let index = 0;
+    for (let current = 1; current < entries.length; current += 1) {
+      if ((entries[current]?.offsetTop || 0) > top) break;
+      index = current;
+    }
+    const entry = entries[index];
+    return {
+      key: String(entry?.dataset.scrollAnchor || ''),
+      index,
+      offset: Math.max(0, top - (entry?.offsetTop || 0)),
+    };
+  }
+
+  function captureScrollAnchor(): ResourceListScrollAnchor | null {
+    if (props.pageScroll) return null;
+    return virtualizedMode.value ? virtualListRef.value?.captureScrollAnchor?.() || null : captureRegularScrollAnchor();
+  }
+
+  function prepareScrollAnchor(anchor: ResourceListScrollAnchor | null) {
+    if (props.pageScroll) return;
+    pendingPreparedScrollAnchor = anchor;
+    // 父级会先准备目标筛选的锚点，再修改 allowedTypes。两者之间 flatOptions
+    // 可能先触发一次 watcher；此时不能提前消费锚点，否则真正的筛选归零会覆盖恢复值。
+    preparedAnchorAwaitingFilterChange = true;
+  }
+
+  function restoreRegularScrollAnchor(anchor: ResourceListScrollAnchor) {
+    const results = resultsRef.value;
+    const entries = regularAnchorElements();
+    if (!results || !entries.length) return false;
+    const keyedIndex = anchor.key ? entries.findIndex((entry) => entry.dataset.scrollAnchor === anchor.key) : -1;
+    const index = keyedIndex >= 0 ? keyedIndex : Math.min(entries.length - 1, Math.max(0, anchor.index));
+    const entry = entries[index];
+    results.scrollTop = Math.max(0, (entry?.offsetTop || 0) + Math.max(0, anchor.offset));
+    handleResultsScroll();
+    return keyedIndex >= 0;
+  }
+
+  async function restorePreparedScrollAnchor() {
+    if (
+      props.pageScroll ||
+      preparedAnchorAwaitingFilterChange ||
+      activeFilterTransition ||
+      pendingPreparedScrollAnchor === undefined
+    )
+      return;
+    await nextTick();
+    const anchor = pendingPreparedScrollAnchor;
+    if (anchor === null) {
+      scrollToTop('auto');
+      pendingPreparedScrollAnchor = undefined;
+      return;
+    }
+    const matched = virtualizedMode.value
+      ? virtualListRef.value?.restoreScrollAnchor?.(anchor) === true
+      : restoreRegularScrollAnchor(anchor);
+    if (matched || !virtualizedMode.value || !hasMore.value) pendingPreparedScrollAnchor = undefined;
+  }
+
+  function scrollToTop(behavior: ScrollBehavior = 'auto') {
+    if (props.pageScroll) return;
+    if (virtualizedMode.value) {
+      virtualListRef.value?.scrollToTop(behavior);
+      return;
+    }
+    const results = resultsRef.value;
+    if (!results) return;
+    if (behavior === 'smooth' && typeof results.scrollTo === 'function') {
+      results.scrollTo({ top: 0, left: 0, behavior });
+    } else results.scrollTop = 0;
+    forwardScrollPosition({ top: 0, viewportHeight: results.clientHeight });
+  }
 
   async function moveActive(offset: number) {
-    const total = flatOptions.value.length;
-    if (!total) return;
-    activeIndex.value = (activeIndex.value + offset + total) % total;
+    const optionCount = flatOptions.value.length;
+    if (!optionCount) return;
+    activeIndex.value = (activeIndex.value + offset + optionCount) % optionCount;
     await nextTick();
+    if (virtualizedMode.value) {
+      virtualListRef.value?.scrollToIndex(activeIndex.value);
+      return;
+    }
     const container = resultsRef.value;
     const activeItem = container?.querySelector<HTMLElement>('.resource-picker-panel__item.is-active');
     if (container && activeItem) scrollNearestIntoContainer(container, activeItem, 'auto');
@@ -188,10 +501,26 @@
   };
   const selectedResourceKeySet = computed(() => new Set(props.selectedResourceKeys));
   const selectedScopeKeySet = computed(() => new Set(props.selectedScopeKeys));
+  const resourceSelected = (item: Pick<ResourcePickerItem, 'type' | 'id'>) =>
+    selectedResourceKeySet.value.has(`${item.type}:${item.id}`);
+  const scopeSelected = (item: Pick<AiScopeRef, 'type' | 'id'>) =>
+    selectedScopeKeySet.value.has(`${item.type}:${item.id}`);
   const resourceDisabled = (item: Pick<ResourcePickerItem, 'type' | 'id'>) =>
-    props.resourcesDisabled === true || selectedResourceKeySet.value.has(`${item.type}:${item.id}`);
+    props.disabled || (resourceSelected(item) ? !props.multiSelect : props.resourcesDisabled === true);
   const scopeDisabled = (item: Pick<AiScopeRef, 'type' | 'id'>) =>
-    props.scopesDisabled === true || selectedScopeKeySet.value.has(`${item.type}:${item.id}`);
+    props.disabled || (scopeSelected(item) ? !props.multiSelect : props.scopesDisabled === true);
+
+  function chooseResource(item: ResourcePickerItem) {
+    if (resourceDisabled(item)) return;
+    if (props.multiSelect && resourceSelected(item)) emit('deselect', item);
+    else emit('select', item);
+  }
+
+  function chooseScope(scope: AiScopeRef) {
+    if (scopeDisabled(scope)) return;
+    if (props.multiSelect && scopeSelected(scope)) emit('deselect-scope', scope);
+    else emit('select-scope', scope);
+  }
 
   // 置顶项跟随生效关键字过滤,占据键盘导航的前几个下标
   const pinned = computed(() => {
@@ -231,6 +560,14 @@
     ...pinned.value,
     ...groups.value.flatMap((group) => group.items.map((entry) => entry.item)),
   ]);
+  const selectableFlatItems = computed(() =>
+    flatItems.value.filter((item) => !resourceSelected(item) && !resourceDisabled(item)),
+  );
+
+  function selectCurrentResults() {
+    if (props.disabled || !selectableFlatItems.value.length) return;
+    emit('select-many', selectableFlatItems.value);
+  }
 
   const scopeEntries = computed(() => {
     if (!props.includeNoteScopes) return [];
@@ -243,35 +580,143 @@
         byId.set(item.id, item);
       }
     }
-    return [...byId.values()].map((item, offset) => {
-      const descendantCount = Math.max(0, Number(item.descendantCount || 0));
-      return {
-        index: flatItems.value.length + offset,
-        path: String(item.path || ''),
-        descendantCount,
-        scope: {
-          type: 'note_branch' as const,
-          id: item.id,
-          title: item.title,
-          estimatedResourceCount: descendantCount + 1,
-        },
-      };
-    });
+    return [...byId.values()]
+      .filter((item) => Number(item.descendantCount || 0) > 0)
+      .map((item, offset) => {
+        const descendantCount = Math.max(0, Number(item.descendantCount || 0));
+        return {
+          index: flatItems.value.length + offset,
+          path: String(item.path || ''),
+          descendantCount,
+          scope: {
+            type: 'note_branch' as const,
+            id: item.id,
+            title: item.title,
+            estimatedResourceCount: descendantCount + 1,
+          },
+        };
+      });
   });
 
-  const flatOptions = computed(() => [
-    ...flatItems.value.map((item) => ({ kind: 'resource' as const, item })),
-    ...scopeEntries.value.map((entry) => ({ kind: 'scope' as const, item: entry.scope })),
-  ]);
+  const virtualOptions = computed(() => {
+    const pinnedKeys = new Set(pinned.value.map((item) => resourceItemKey(item)));
+    const scopesById = new Map(scopeEntries.value.map((entry) => [entry.scope.id, entry]));
+    const entries: Array<
+      | {
+          key: string;
+          kind: 'resource';
+          index: number;
+          item: ResourcePickerItem;
+          pinned: boolean;
+        }
+      | {
+          key: string;
+          kind: 'scope';
+          index: number;
+          scope: AiScopeRef;
+          path: string;
+          descendantCount: number;
+        }
+    > = [];
+    for (const item of flatItems.value) {
+      entries.push({
+        key: `resource:${resourceItemKey(item)}`,
+        kind: 'resource',
+        index: entries.length,
+        item,
+        pinned: pinnedKeys.has(resourceItemKey(item)),
+      });
+      const scopeEntry = item.type === 'note' ? scopesById.get(item.id) : undefined;
+      if (scopeEntry) {
+        entries.push({
+          key: `scope:${scopeEntry.scope.id}`,
+          kind: 'scope',
+          index: entries.length,
+          scope: scopeEntry.scope,
+          path: scopeEntry.path,
+          descendantCount: scopeEntry.descendantCount,
+        });
+      }
+    }
+    return entries;
+  });
+  const virtualTotalCount = computed(() =>
+    hasMore.value && !loadMoreFailed.value
+      ? Math.max(resultTotal.value, virtualOptions.value.length)
+      : virtualOptions.value.length,
+  );
+
+  const flatOptions = computed(() =>
+    virtualizedMode.value
+      ? virtualOptions.value.map((entry) =>
+          entry.kind === 'scope'
+            ? { kind: 'scope' as const, item: entry.scope }
+            : { kind: 'resource' as const, item: entry.item },
+        )
+      : [
+          ...flatItems.value.map((item) => ({ kind: 'resource' as const, item })),
+          ...scopeEntries.value.map((entry) => ({ kind: 'scope' as const, item: entry.scope })),
+        ],
+  );
+
+  function scopeDescription(entry: { path: string; descendantCount: number }) {
+    const description = t('ai.scope.branchDescription', { count: entry.descendantCount });
+    return entry.path ? `${entry.path} · ${description}` : description;
+  }
 
   function chooseActive() {
     const option = flatOptions.value[activeIndex.value];
     if (!option) return;
     if (option.kind === 'scope') {
-      if (!scopeDisabled(option.item)) emit('select-scope', option.item);
-    } else if (!resourceDisabled(option.item)) {
-      emit('select', option.item);
+      chooseScope(option.item);
+    } else chooseResource(option.item);
+  }
+
+  function currentKeyword() {
+    return props.showSearch ? innerKeyword.value : props.keyword || '';
+  }
+
+  async function resetResultScroll(preservePreparedAnchor = false) {
+    if (!preservePreparedAnchor) {
+      pendingPreparedScrollAnchor = undefined;
+      preparedAnchorAwaitingFilterChange = false;
     }
+    activeIndex.value = 0;
+    await nextTick();
+    // 页面滚动模式的唯一滚动所有者是外层工作台。类型切换时如果调用
+    // BVirtualList.scrollToTop(),会把整页强制拉回资源列表起点；异步分页随后扩高左栏，
+    // 用户在右栏继续滚动时就会感知为二次回弹。这里只重置键盘高亮，保留页面位置。
+    if (props.pageScroll) return;
+    if (virtualizedMode.value) virtualListRef.value?.scrollToTop();
+    else if (resultsRef.value) {
+      resultsRef.value.scrollTop = 0;
+      forwardScrollPosition({ top: 0, viewportHeight: resultsRef.value.clientHeight });
+    }
+  }
+
+  async function handleAllowedTypesChange() {
+    const version = ++filterTransitionVersion;
+    preparedAnchorAwaitingFilterChange = false;
+    activeFilterTransition = version;
+    beginPageScrollTransition();
+    reset();
+    try {
+      // 必须先等新筛选对应的容器完成归零，再发起搜索并恢复语义锚点。
+      // 否则 loading/flatOptions watcher 可能提前恢复，随后又被异步归零覆盖，
+      // 形成用户看到的“先回原位、再跳到顶部”。
+      await resetResultScroll(true);
+      await searchNow(currentKeyword());
+    } finally {
+      if (activeFilterTransition !== version) return;
+      activeFilterTransition = 0;
+      await restorePreparedScrollAnchor();
+    }
+  }
+
+  async function retryInitialSearch() {
+    beginPageScrollTransition();
+    await resetResultScroll();
+    await searchNow(currentKeyword());
   }
 
   onMounted(async () => {
@@ -281,17 +726,39 @@
       if (props.autoFocus) keywordInputRef.value?.focus?.();
     }
     // 打开即出结果,不必等用户输入
-    void searchNow(props.showSearch ? innerKeyword.value : props.keyword || '');
+    void searchNow(currentKeyword());
   });
 
   watch(innerKeyword, (value) => {
-    if (props.showSearch) search(String(value || ''));
+    if (!props.showSearch) return;
+    beginPageScrollTransition();
+    void resetResultScroll();
+    search(String(value || ''));
   });
   watch(
     () => props.keyword,
     (value) => {
-      if (!props.showSearch) search(String(value || ''));
+      if (props.showSearch) return;
+      beginPageScrollTransition();
+      void resetResultScroll();
+      search(String(value || ''));
     },
+  );
+  watch(
+    () => (props.allowedTypes || []).join(','),
+    () => void handleAllowedTypesChange(),
+  );
+
+  watch(loading, (value, previous) => {
+    if (previous && !value) {
+      void finishPageScrollTransition();
+      void restorePreparedScrollAnchor();
+    }
+  });
+
+  watch(
+    () => flatOptions.value.length,
+    () => void restorePreparedScrollAnchor(),
   );
 
   watch(
@@ -300,9 +767,24 @@
     { immediate: true },
   );
 
-  onBeforeUnmount(reset);
+  onBeforeUnmount(() => {
+    filterTransitionVersion += 1;
+    activeFilterTransition = 0;
+    preparedAnchorAwaitingFilterChange = false;
+    pendingPageScroll = undefined;
+    pendingPreparedScrollAnchor = undefined;
+    pageScrollHoldHeight.value = 0;
+    reset();
+  });
 
-  defineExpose({ chooseActive, moveActive });
+  defineExpose({
+    beginPageScrollTransition,
+    captureScrollAnchor,
+    chooseActive,
+    moveActive,
+    prepareScrollAnchor,
+    scrollToTop,
+  });
 </script>
 
 <style scoped lang="less">
@@ -324,6 +806,18 @@
     padding: 6px;
   }
 
+  .resource-picker-panel.is-fill {
+    height: 100%;
+    max-height: none;
+  }
+
+  .resource-picker-panel.is-page-scroll {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+    overflow-anchor: none;
+  }
+
   .resource-picker-panel__results {
     display: grid;
     grid-auto-rows: max-content;
@@ -336,38 +830,47 @@
     overscroll-behavior: contain;
   }
 
+  .resource-picker-panel.is-fill .resource-picker-panel__results,
+  .resource-picker-panel__virtual-list {
+    min-height: 0;
+    flex: 1;
+  }
+
+  .resource-picker-panel.is-page-scroll .resource-picker-panel__results,
+  .resource-picker-panel.is-page-scroll .resource-picker-panel__virtual-list {
+    flex: none;
+    overflow: visible;
+  }
+
+  .resource-picker-panel__virtual-list .resource-picker-panel__item {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .resource-picker-panel__virtual-list .resource-picker-panel__item--scope {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
   .resource-picker-panel.has-search .resource-picker-panel__results {
     margin-top: 8px;
   }
 
-  /* 滚动条默认隐形,hover 或滚动中才显现,停止后淡出 */
-  .auto-hide-scrollbar {
-    scrollbar-width: thin;
-    scrollbar-color: transparent transparent;
-    transition: scrollbar-color 0.25s ease;
+  .resource-picker-panel__batch {
+    min-height: 34px;
+    margin-top: 8px;
+    padding: 0 4px 7px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border-bottom: 1px solid var(--surface-divider-color);
+    color: var(--desc-color);
+    font-size: 11px;
   }
 
-  .auto-hide-scrollbar::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-
-  .auto-hide-scrollbar::-webkit-scrollbar-thumb {
-    border: 2px solid transparent;
-    border-radius: 999px;
-    background-clip: content-box;
-    background-color: transparent;
-    transition: background-color 0.25s ease;
-  }
-
-  .auto-hide-scrollbar:hover,
-  .auto-hide-scrollbar.is-scrolling {
-    scrollbar-color: color-mix(in srgb, var(--text-color) 26%, transparent) transparent;
-  }
-
-  .auto-hide-scrollbar:hover::-webkit-scrollbar-thumb,
-  .auto-hide-scrollbar.is-scrolling::-webkit-scrollbar-thumb {
-    background-color: color-mix(in srgb, var(--text-color) 26%, transparent);
+  .resource-picker-panel__batch :deep(.b_btn) {
+    min-height: 27px;
   }
 
   .resource-picker-panel__group {
@@ -409,6 +912,38 @@
       color: var(--primary-color);
       font-weight: 600;
     }
+
+    &.is-multi.is-active:not(.is-selected) {
+      border-color: transparent;
+      color: var(--text-color);
+      background: color-mix(in srgb, var(--primary-color) 7%, transparent) !important;
+      box-shadow: inset 2px 0 var(--primary-color);
+      font-weight: 500;
+    }
+
+    &.is-selected {
+      border-color: var(--primary-color);
+      color: var(--primary-color);
+      background: var(--card-background) !important;
+    }
+  }
+
+  .resource-picker-panel__check {
+    width: 17px;
+    height: 17px;
+    flex: 0 0 17px;
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 5px;
+    color: #fff;
+    background: var(--card-background);
+  }
+
+  .resource-picker-panel__item.is-selected .resource-picker-panel__check {
+    border-color: var(--primary-color);
+    background: var(--primary-color);
   }
 
   .resource-picker-panel__group--scope {
@@ -486,10 +1021,37 @@
     text-align: center;
   }
 
+  .resource-picker-panel__load-error {
+    min-height: 36px;
+    padding: 5px 8px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border-top: 1px solid var(--surface-divider-color);
+    color: var(--desc-color);
+    font-size: 11px;
+  }
+
+  .resource-picker-panel__load-error :deep(.b_btn) {
+    min-height: 28px;
+    flex: 0 0 auto;
+  }
+
   @media (max-width: 767px) {
     .resource-picker-panel {
       width: 100%;
       max-width: none;
     }
+  }
+
+  html.light-note-mobile-rendering .resource-picker-panel__item.is-active,
+  html.light-note-mobile-rendering .resource-picker-panel__item.is-selected {
+    border-color: var(--primary-color);
+    background: var(--card-background) !important;
+  }
+  html.light-note-mobile-rendering .resource-picker-panel__item.is-multi.is-active:not(.is-selected) {
+    border-color: transparent;
+    box-shadow: inset 2px 0 var(--primary-color);
   }
 </style>

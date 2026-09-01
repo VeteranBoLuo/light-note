@@ -144,7 +144,6 @@
     display: block;
     flex: none;
     object-fit: contain;
-    transform: translate(-5px, -3.5px);
   }
 
   .chat-emoji-panel__heading {
@@ -199,6 +198,8 @@
     width: 36px;
     height: 36px;
     max-width: 100%;
+    display: block;
+    flex: none;
     object-fit: contain;
   }
 

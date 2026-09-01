@@ -91,9 +91,8 @@ describe('后台用户管理增强', () => {
       if (statement.includes('FROM user_growth WHERE user_id')) {
         return [[{ exp: 120, level: 3, equipped_frame: 'frame_celestial' }]];
       }
-      if (statement.includes('FROM agent_logs WHERE user_id')) return [[{ request_total: 9, token_total: 1000 }]];
-      if (statement.includes('FROM ai_conversations WHERE subject_user_id')) {
-        return [[{ conversation_total: 2, feedback_total: 1, negative_feedback_total: 1 }]];
+      if (statement.includes('FROM ai_executions e') && statement.includes('e.actor_user_id = ?')) {
+        return [[{ request_total: 9, token_total: 1000, failed_total: 1, last_used_at: '2026-08-09 08:00:00' }]];
       }
       if (statement.includes('FROM security_events WHERE user_id')) return [[{ event_total: 1, unhandled_total: 0 }]];
       if (statement.includes('FROM api_logs')) return [[{ request_total: 20, server_error_total: 0 }]];
@@ -132,6 +131,11 @@ describe('后台用户管理增强', () => {
       trashStorageUsed: 2.5,
     });
     expect(payload.data.growth).toMatchObject({ equippedFrame: 'frame_celestial' });
+    expect(payload.data.aiUsage).toMatchObject({ requestTotal: 9, tokenTotal: 1000, failedTotal: 1 });
+    expect(payload.data).not.toHaveProperty('aiWorkspace');
+    const aiUsageCall = query.mock.calls.find(([sql]) => normalized(sql).includes('FROM ai_executions e'));
+    expect(normalized(aiUsageCall[0])).toContain('cost_execution.actor_user_id = ?');
+    expect(normalized(aiUsageCall[0])).not.toContain('agent_logs');
     expect(payload.data.sessions).toHaveLength(1);
     expect(payload.data.sessions[0]).toMatchObject({ ip: '203.0.113.*', sessionCount: 1 });
     expect(payload.data.sessions[0].id).toMatch(/^[a-f0-9]{16}$/);

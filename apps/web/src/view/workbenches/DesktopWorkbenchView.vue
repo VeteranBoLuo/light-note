@@ -188,6 +188,8 @@
         </aside>
       </section>
 
+      <DailyReviewCard class="workbench-daily-review" :read-only="growthReadOnly" />
+
       <section v-if="growthSectionLoading" class="growth-task-grid growth-task-grid--loading" aria-hidden="true">
         <article v-for="panel in 2" :key="`growth-panel-skeleton-${panel}`" class="panel-card growth-panel-skeleton">
           <div class="growth-panel-skeleton__header">
@@ -222,6 +224,7 @@
             :bonus="dailyGrowthBonus"
             :read-only="growthReadOnly"
             :show-claim-action="false"
+            @go="handleDailyQuestAction"
           />
         </article>
 
@@ -411,6 +414,7 @@
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import TodayActionSection from '@/components/workbenches/TodayActionSection.vue';
+  import DailyReviewCard from '@/components/workbenches/DailyReviewCard.vue';
   import WorkbenchCharts from '@/components/workbenches/WorkbenchCharts.vue';
   import WorkbenchGrowth from '@/components/workbenches/WorkbenchGrowth.vue';
   import DailyQuests from '@/components/growth/DailyQuests.vue';
@@ -421,10 +425,12 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard.ts';
+  import { useDailyReview } from '@/composables/useDailyReview.ts';
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import type { ActionCaptureType } from '@/store/inbox.ts';
   import { openNotificationPanel } from '@/utils/notificationEntry';
+  import { resolveDailyQuestRoute } from '@/utils/growthNavigation';
 
   type ContinueTab = 'notes' | 'files' | 'bookmarks';
   type ContinueItemType = 'note' | 'file' | 'bookmark';
@@ -448,6 +454,12 @@
   const { growth, dashboard, dashboardLoading, growthTasks, growthTasksLoading, loadDashboard, loadGrowthTasks } =
     useGrowth();
   const growthReadOnly = computed(() => Boolean(user.adminContext));
+  const { loadDailyReview } = useDailyReview();
+
+  function refreshDailyReview() {
+    if (user.role === 'visitor') return Promise.resolve(null);
+    return loadDailyReview({ ensure: !growthReadOnly.value });
+  }
   const dailyGrowthQuests = computed(() => dashboard.value?.quests || []);
   const dailyGrowthBonus = computed(
     () => dashboard.value?.questBonus || { exp: 0, points: 0, claimed: false, claimable: false },
@@ -792,6 +804,15 @@
     void router.push({ path: '/growth', hash: '#growth-tasks' });
   }
 
+  function handleDailyQuestAction(key: string) {
+    const target = resolveDailyQuestRoute(key, false);
+    if (!target) {
+      openGrowthTasks();
+      return;
+    }
+    void router.push(target);
+  }
+
   function openQuickCapture(type: ActionCaptureType) {
     if (blockGuestWrite('workbench-quick-capture', t('inbox.guestPrompt'))) return;
     recordOperation(OPERATION_LOG_MAP.inbox.openCapture);
@@ -948,7 +969,13 @@
       inbox.resetForOwner(user.id || 'visitor');
     }
     try {
-      await Promise.allSettled([fetchWorkbenchSummary(), fetchUpdateLogs(), loadDashboard(), loadGrowthTasks(true)]);
+      await Promise.allSettled([
+        fetchWorkbenchSummary(),
+        fetchUpdateLogs(),
+        loadDashboard(),
+        loadGrowthTasks(true),
+        refreshDailyReview(),
+      ]);
       if (user.id && user.role !== 'visitor') {
         // 待处理数量以导航角标共用的计数接口为最终口径，避免工作台与快速添加显示不一致。
         await inbox.refreshCount();
@@ -982,7 +1009,12 @@
    */
   useForegroundRefresh({
     refresh: async () => {
-      await Promise.all([fetchWorkbenchSummary({ silent: true }), loadDashboard(), loadGrowthTasks(true)]);
+      await Promise.all([
+        fetchWorkbenchSummary({ silent: true }),
+        loadDashboard(),
+        loadGrowthTasks(true),
+        refreshDailyReview(),
+      ]);
       // 与 init 同口径：角标计数最终以 /inbox/count 为准，否则静默刷新会把工作台自己的口径留给角标。
       if (user.id && user.role !== 'visitor') await inbox.refreshCount();
     },

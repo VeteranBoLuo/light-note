@@ -10,6 +10,27 @@ export const SUPPORT_COST_POLICY_VERSION = 'support-cost-v1';
 export const SUPPORT_CAMPAIGN_MIN_MARGIN_BPS = 4_000;
 
 const PACKAGE_BY_SKU = new Map(SUPPORT_PACKAGE_CATALOG.map((item) => [item.skuId, item]));
+export const SUPPORT_AI_FIRST_PURCHASE_CLAIM_KEY = 'scope-ai-account-v3';
+// 已经写入 v2 首购账本的 SKU 是永久兼容事实，不能跟随未来目录删改而漂移。
+const LEGACY_AI_FIRST_PURCHASE_KEYS = Object.freeze([
+  'ai-6',
+  'ai-18',
+  'ai-50',
+  'ai-100',
+  'combo-10',
+  'combo-30',
+  'combo-88',
+  'combo-168',
+]);
+
+export function supportFirstPurchaseClaimKey(item) {
+  return item?.firstPurchaseScope === 'ai_account' ? SUPPORT_AI_FIRST_PURCHASE_CLAIM_KEY : String(item?.skuId || '');
+}
+
+export function supportFirstPurchaseCompatibleClaimKeys(item) {
+  if (item?.firstPurchaseScope !== 'ai_account') return [String(item?.skuId || '')].filter(Boolean);
+  return [SUPPORT_AI_FIRST_PURCHASE_CLAIM_KEY, ...LEGACY_AI_FIRST_PURCHASE_KEYS];
+}
 
 function campaignCatalogVersion(campaignId, version) {
   return `campaign:${campaignId}:v${Number(version)}`;
@@ -141,9 +162,11 @@ export function normalizeSupportCampaignSkus(skus, { requireMargin = false } = {
 }
 
 function packageDto(item, usedSkuIds) {
+  const alreadyUsed =
+    usedSkuIds !== null && supportFirstPurchaseCompatibleClaimKeys(item).some((key) => usedSkuIds.has(key));
   return {
     ...item,
-    firstPurchaseStatus: usedSkuIds === null ? 'login_required' : usedSkuIds.has(item.skuId) ? 'used' : 'available',
+    firstPurchaseStatus: usedSkuIds === null ? 'login_required' : alreadyUsed ? 'used' : 'available',
   };
 }
 

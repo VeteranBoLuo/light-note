@@ -555,29 +555,36 @@ function isInScope(result, scope) {
   return true;
 }
 
-async function authoritativeResourceVersions(userId, resourceType, resourceIds, database = pool) {
+async function authoritativeResourceMetadata(userId, resourceType, resourceIds, database = pool, lockForShare = false) {
   if (!resourceIds.length) return new Map();
   const placeholders = resourceIds.map(() => '?').join(',');
   let sql;
   if (resourceType === 'note') {
-    sql = `SELECT id, update_time FROM note
+    sql = `SELECT id, update_time, title AS resource_title FROM note
            WHERE create_by = ? AND del_flag = 0 AND id IN (${placeholders})`;
   } else if (resourceType === 'bookmark') {
-    sql = `SELECT b.id, COALESCE(s.update_time, b.create_time) AS update_time
+    sql = `SELECT b.id, COALESCE(s.update_time, b.create_time) AS update_time,
+                  COALESCE(NULLIF(b.name, ''), NULLIF(b.url, ''), '无标题书签') AS resource_title
              FROM bookmark b LEFT JOIN bookmark_snapshot s ON s.bookmark_id = b.id
             WHERE b.user_id = ? AND b.del_flag = 0 AND b.id IN (${placeholders})`;
   } else if (resourceType === 'file') {
-    sql = `SELECT id, create_time AS update_time FROM files
+    sql = `SELECT id, create_time AS update_time, file_name AS resource_title FROM files
            WHERE create_by = ? AND del_flag = 0 AND id IN (${placeholders})`;
   } else if (resourceType === 'todo') {
-    sql = `SELECT id, update_time FROM todo_items
+    sql = `SELECT id, update_time, title AS resource_title FROM todo_items
            WHERE user_id = ? AND del_flag = 0 AND id IN (${placeholders})`;
   } else {
     return new Map();
   }
+  if (lockForShare) sql += ' LOCK IN SHARE MODE';
   try {
     const [rows] = await database.query(sql, [userId, ...resourceIds]);
-    return new Map(rows.map((row) => [String(row.id), versionOf(row.update_time)]));
+    return new Map(
+      rows.map((row) => [
+        String(row.id),
+        { version: versionOf(row.update_time), title: String(row.resource_title || '').slice(0, 255) },
+      ]),
+    );
   } catch (error) {
     console.error(
       '[personal-search] authoritative validation failed type=%s code=%s',
@@ -589,11 +596,12 @@ async function authoritativeResourceVersions(userId, resourceType, resourceIds, 
   }
 }
 
-/**
- * 按当前 owner 重读明确选择的资源版本。客户端资源 ID 只是候选；缺失、越权、已删除或版本无法验证
- * 都不会出现在返回值中。Skill Context Resolver 复用这里，避免再维护一套资源归属 SQL。
- */
-export async function resolvePersonalKnowledgeResourceVersions({ userId, resourceRefs = [], database = pool }) {
+async function authoritativeResourceVersions(userId, resourceType, resourceIds, database = pool, lockForShare = false) {
+  const metadata = await authoritativeResourceMetadata(userId, resourceType, resourceIds, database, lockForShare);
+  return new Map([...metadata.entries()].map(([id, value]) => [id, value.version]));
+}
+
+function groupPersonalKnowledgeResourceIds(resourceRefs) {
   const refs = Array.isArray(resourceRefs) ? resourceRefs : [];
   const idsByType = new Map();
   for (const ref of refs) {
@@ -604,11 +612,25 @@ export async function resolvePersonalKnowledgeResourceVersions({ userId, resourc
     ids.add(id);
     idsByType.set(type, ids);
   }
+  return { refs, idsByType };
+}
+
+/**
+ * 按当前 owner 重读明确选择的资源版本。客户端资源 ID 只是候选；缺失、越权、已删除或版本无法验证
+ * 都不会出现在返回值中。Skill Context Resolver 复用这里，避免再维护一套资源归属 SQL。
+ */
+export async function resolvePersonalKnowledgeResourceVersions({
+  userId,
+  resourceRefs = [],
+  database = pool,
+  lockForShare = false,
+}) {
+  const { refs, idsByType } = groupPersonalKnowledgeResourceIds(resourceRefs);
   const versions = new Map(
     await Promise.all(
       [...idsByType.entries()].map(async ([type, ids]) => [
         type,
-        await authoritativeResourceVersions(String(userId || ''), type, [...ids], database),
+        await authoritativeResourceVersions(String(userId || ''), type, [...ids], database, lockForShare),
       ]),
     ),
   );
@@ -617,6 +639,30 @@ export async function resolvePersonalKnowledgeResourceVersions({ userId, resourc
     const id = String(ref?.id || '');
     const version = versions.get(type)?.get(id);
     return version ? [{ type, id, version }] : [];
+  });
+}
+
+/** 工作区等需要同时保存权威标题快照的场景复用同一归属、版本与行锁查询。 */
+export async function resolvePersonalKnowledgeResourceMetadata({
+  userId,
+  resourceRefs = [],
+  database = pool,
+  lockForShare = false,
+}) {
+  const { refs, idsByType } = groupPersonalKnowledgeResourceIds(resourceRefs);
+  const metadata = new Map(
+    await Promise.all(
+      [...idsByType.entries()].map(async ([type, ids]) => [
+        type,
+        await authoritativeResourceMetadata(String(userId || ''), type, [...ids], database, lockForShare),
+      ]),
+    ),
+  );
+  return refs.flatMap((ref) => {
+    const type = String(ref?.type || '');
+    const id = String(ref?.id || '');
+    const value = metadata.get(type)?.get(id);
+    return value ? [{ type, id, version: value.version, title: value.title }] : [];
   });
 }
 
@@ -729,7 +775,9 @@ export async function searchPersonalKnowledge({ userId, query, limit = 8, scope 
         if (sampleCandidates.length >= take) break;
       }
       const verifiedSample = await validateAuthoritativeHits(key, sampleCandidates);
-      const sampleHits = verifiedSample.slice(0, take).map((hit, index) => ({ ...hit, citationKey: String(index + 1) }));
+      const sampleHits = verifiedSample
+        .slice(0, take)
+        .map((hit, index) => ({ ...hit, citationKey: String(index + 1) }));
       if (sampleHits.length) {
         return { query: normalizedQuery, hits: sampleHits, indexedChunks: bundle.documents.length, sampled: true };
       }

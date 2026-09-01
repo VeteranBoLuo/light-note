@@ -101,6 +101,24 @@ describe('请求参数异常检测', () => {
 });
 
 describe('业务载荷语义检测', () => {
+  it.each([
+    ['/api/daily-review/items/6f1fbf56-31e4-4e87-8a58-c420ed3819ce/action', 'open'],
+    ['/daily-review/items/6f1fbf56-31e4-4e87-8a58-c420ed3819ce/action', 'open_tag_space'],
+    ['/daily-review/today/action', 'skip_today'],
+    ['/api/daily-review/today/action/', 'resume_today'],
+  ])('每日回顾合法 action 不产生注入证据：%s %s', (path, action) => {
+    expect(detectRequestSignatures(path, { action })).toEqual([]);
+  });
+
+  it.each([
+    ["' OR 1=1 --", 'SQL_BOOLEAN_COMMENT'],
+    ['; rm -rf /tmp/x', 'COMMAND_INJECTION'],
+  ])('每日回顾非法 action 回退到标识符上下文并命中 %s', (action, ruleCode) => {
+    expect(
+      detectRequestSignatures('/daily-review/items/6f1fbf56-31e4-4e87-8a58-c420ed3819ce/action', { action }),
+    ).toContainEqual(expect.objectContaining({ ruleCode, matchedField: 'body.action' }));
+  });
+
   it('合法 WebP Data URL 不会把 ;base64 误报为命令注入或参数溢出', () => {
     const thumbnail = `data:image/webp;base64,${Buffer.alloc(6000, 1).toString('base64')}`;
     const evidence = detectRequestSignatures('/note/uploadDrawingThumbnail', { thumbnail });

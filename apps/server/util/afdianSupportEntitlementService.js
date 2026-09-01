@@ -1,7 +1,13 @@
 import crypto from 'node:crypto';
 import { creditAiBonusTokens } from './aiBonusWallet.js';
 import { earnStorage } from './points.js';
-import { getSupportPackageFeatureState, supportProviderIdentityHash } from './afdianSupportPackageCatalog.js';
+import {
+  getSupportPackage,
+  getSupportPackageFeatureState,
+  supportFirstPurchaseCompatibleClaimKeys,
+  supportFirstPurchaseClaimKey,
+  supportProviderIdentityHash,
+} from './afdianSupportPackageCatalog.js';
 
 export const SUPPORT_ENTITLEMENT_STATUS = Object.freeze({
   PENDING: 'pending',
@@ -180,12 +186,41 @@ async function claimFirstPurchase(connection, order) {
   if (Number(order.first_purchase_candidate || 0) !== 1) return false;
   const identityHash = supportProviderIdentityHash(order.provider_user_id);
   if (!identityHash) return false;
+  const definition = getSupportPackage(order.sku_id);
+  // 发放时按当前产品范围重新核验。尚未结算的 v2 意图仍使用其冻结权益快照，
+  // 但 AI/组合套餐统一占用账号级 sentinel，避免与 v3 并发重复加赠。
+  const claimKey = definition ? supportFirstPurchaseClaimKey(definition) : String(order.sku_id || '');
+  if (!claimKey) return false;
+  const compatibleKeys = definition ? supportFirstPurchaseCompatibleClaimKeys(definition) : [claimKey];
+  const placeholders = compatibleKeys.map(() => '?').join(', ');
+  const [userClaims] = await connection.query(
+    `SELECT id
+       FROM support_first_purchase_claims
+      WHERE sku_id IN (${placeholders})
+        AND user_id = ?
+      ORDER BY id
+      LIMIT 1
+      FOR UPDATE`,
+    [...compatibleKeys, order.light_note_user_id],
+  );
+  if (userClaims.length) return false;
+  const [identityClaims] = await connection.query(
+    `SELECT id
+       FROM support_first_purchase_claims
+      WHERE sku_id IN (${placeholders})
+        AND provider_identity_hash = ?
+      ORDER BY id
+      LIMIT 1
+      FOR UPDATE`,
+    [...compatibleKeys, identityHash],
+  );
+  if (identityClaims.length) return false;
   try {
     await connection.query(
       `INSERT INTO support_first_purchase_claims
         (id, user_id, provider_identity_hash, sku_id, support_order_id)
        VALUES (?, ?, ?, ?, ?)`,
-      [crypto.randomUUID(), order.light_note_user_id, identityHash, order.sku_id, order.id],
+      [crypto.randomUUID(), order.light_note_user_id, identityHash, claimKey, order.id],
     );
     return true;
   } catch (error) {

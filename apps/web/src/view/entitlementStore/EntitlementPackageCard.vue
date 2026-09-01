@@ -168,7 +168,6 @@
     flex-direction: column;
     border: 1px solid var(--surface-border-color);
     transition:
-      transform 0.18s ease,
       border-color 0.18s ease;
   }
   .package-card.is-campaign {
@@ -286,7 +285,6 @@
   }
   @media (hover: hover) and (pointer: fine) {
     .package-card:hover {
-      transform: translateY(-2px);
       border-color: var(--primary-color);
     }
   }

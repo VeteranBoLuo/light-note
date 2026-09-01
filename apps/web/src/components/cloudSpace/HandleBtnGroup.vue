@@ -1,8 +1,8 @@
 <template>
   <b-space :size="15">
-    <CloudStorageBar v-if="!bookmark.isMobile" ref="cloudStorageBar" />
+    <CloudStorageBar v-if="showControls && !bookmark.isMobile" ref="cloudStorageBar" />
     <!-- 上传按钮及提示 -->
-    <div class="upload-container" :class="{ 'upload-container--mobile': bookmark.isMobile }">
+    <div v-if="showControls" class="upload-container" :class="{ 'upload-container--mobile': bookmark.isMobile }">
       <b-upload ref="uploadPicker" multiple raw-file class="upload-btn" @change="handleChange" :max-total-size="null">
         <b-button
           type="primary"
@@ -77,6 +77,7 @@
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
   const { t } = useI18n();
+  const { showControls = true } = defineProps<{ showControls?: boolean }>();
   const emit = defineEmits<{ storageQuota: [shortfallMb: number] }>();
   const uploadPicker = ref<{ open: () => void } | null>(null);
   const cloudStorageBar = ref<{ openDetails: (shortfallMb?: number) => void } | null>(null);
@@ -418,6 +419,11 @@
     });
   }
 
+  async function uploadSelectedFiles(files: File[], folderId: string | null = null) {
+    pendingUploadFolderId.value = folderId;
+    await handleChange(files);
+  }
+
   function openFileDialog(folderId: string | null = null) {
     if (blockGuestWrite('upload-file')) return;
     if (uploadProgress.visible) {
@@ -447,7 +453,7 @@
     });
   };
 
-  defineExpose({ uploadFiles, openFileDialog });
+  defineExpose({ uploadFiles, uploadSelectedFiles, openFileDialog });
 </script>
 <style lang="less" scoped>
   .upload-btn {

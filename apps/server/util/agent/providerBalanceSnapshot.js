@@ -2,7 +2,7 @@ import pool from '../../db/index.js';
 import { stableAgentErrorCode } from './logSafety.js';
 import { getDeepSeekBalance } from './providerBalance.js';
 
-// AI 监控的“今日账户余额变化”统一按产品业务日计算，而不是依赖服务器所在时区。
+// AI 运行中心的“今日账户余额变化”统一按产品业务日计算，而不是依赖服务器所在时区。
 // 当前 DeepSeek 余额接口只提供余额快照，没有逐笔账单 API；因此这里保存每日开盘余额，
 // 明确展示“账户余额变化”，不把它伪装成按请求精确结算的费用。
 export const AI_BALANCE_TIME_ZONE = 'Asia/Shanghai';

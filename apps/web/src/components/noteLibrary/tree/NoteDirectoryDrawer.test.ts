@@ -20,13 +20,21 @@ vi.mock('@/utils/mobileOverlayHistory', () => ({
   requestMobileOverlayHistoryClose: vi.fn(() => false),
 }));
 vi.mock('@/components/base/BasicComponents/BDrawer.vue', async () => {
-  const { defineComponent, h } = await import('vue');
+  const { defineComponent, h, nextTick, watch } = await import('vue');
   return {
     default: defineComponent({
       name: 'BDrawerStub',
       props: { open: Boolean },
-      emits: ['close'],
-      setup(props, { slots }) {
+      emits: ['close', 'afterClose'],
+      setup(props, { emit, slots }) {
+        watch(
+          () => props.open,
+          async (open, wasOpen) => {
+            if (open || !wasOpen) return;
+            await nextTick();
+            emit('afterClose');
+          },
+        );
         return () => (props.open ? h('section', { class: 'drawer-stub' }, slots.default?.()) : null);
       },
     }),

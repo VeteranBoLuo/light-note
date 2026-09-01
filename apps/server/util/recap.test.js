@@ -5,7 +5,7 @@ vi.mock('../db/index.js', () => ({
 }));
 
 import pool from '../db/index.js';
-import { buildRecapUnion, getRecap } from './recap.js';
+import { buildRecapUnion, getRecap, updateRecapState } from './recap.js';
 
 describe('growth recap', () => {
   beforeEach(() => {
@@ -45,10 +45,33 @@ describe('growth recap', () => {
       timezone: 'Asia/Shanghai',
     });
     expect(pool.query).toHaveBeenCalledTimes(4);
-    expect(pool.query.mock.calls.slice(0, 3).every(([, params]) => params[0] === 'user-1' && params[1] === 'user-1')).toBe(
-      true,
-    );
+    expect(
+      pool.query.mock.calls.slice(0, 3).every(([, params]) => params[0] === 'user-1' && params[1] === 'user-1'),
+    ).toBe(true);
     expect(pool.query.mock.calls[3][1]).toEqual(['user-1']);
     expect(pool.query.mock.calls[2][0]).toContain("CRC32(CONCAT('2026-08-01'");
+  });
+
+  it('旧入口稍后提醒不会清掉已有永久屏蔽，且只会延长提醒时间', async () => {
+    pool.query.mockResolvedValueOnce([[{ count: 1 }]]).mockResolvedValueOnce([{ affectedRows: 1 }]);
+
+    await expect(
+      updateRecapState('user-1', { type: 'bookmark', id: 'bookmark-1', action: 'snooze_7d' }),
+    ).resolves.toEqual({ ok: true, action: 'snooze_7d' });
+
+    const sql = pool.query.mock.calls[1][0];
+    expect(sql).toContain('growth_recap_state.dismissed_at IS NULL');
+    expect(sql).toContain('GREATEST(COALESCE(growth_recap_state.snoozed_until, NOW())');
+    expect(sql).not.toContain('dismissed_at = VALUES(dismissed_at)');
+  });
+
+  it('旧入口永久屏蔽保持幂等，并清掉已失效的稍后提醒', async () => {
+    pool.query.mockResolvedValueOnce([[{ count: 1 }]]).mockResolvedValueOnce([{ affectedRows: 1 }]);
+
+    await updateRecapState('user-1', { type: 'note', id: 'note-1', action: 'dismiss' });
+
+    const sql = pool.query.mock.calls[1][0];
+    expect(sql).toContain('snoozed_until = NULL');
+    expect(sql).toContain('dismissed_at = COALESCE(growth_recap_state.dismissed_at, VALUES(dismissed_at))');
   });
 });

@@ -163,6 +163,58 @@ describe('fetchGlobalSearch cache policy', () => {
     expect(appended.tagOptions).toBeUndefined();
   });
 
+  it('资源中心可单独请求标签匹配，并过滤无效匹配与修正资源总数', async () => {
+    mocks.apiBasePost.mockResolvedValueOnce({
+      status: 200,
+      data: {
+        items: [{ id: 'bookmark-1', type: 'bookmark', title: '项目资料' }],
+        total: 1,
+        tagMatches: [
+          {
+            id: 'tag-1',
+            name: '项目管理',
+            description: '项目资料入口',
+            counts: { bookmark: 2, note: 1, file: 0, total: 1 },
+          },
+          { id: '', name: '无效标签', counts: {} },
+        ],
+      },
+    });
+
+    const result = await fetchGlobalSearch('项目', 40, false, {
+      types: ['bookmark', 'note', 'file'],
+      paginationMode: 'ordered',
+      includeMetadata: true,
+      separateTagMatches: true,
+    });
+
+    expect(mocks.apiBasePost).toHaveBeenCalledWith('/api/search/global', {
+      keyword: '项目',
+      pageSize: 40,
+      types: ['bookmark', 'file', 'note'],
+      type: 'all',
+      sort: 'relevance',
+      date: 'all',
+      tags: [],
+      untagged: false,
+      paginationMode: 'ordered',
+      cursor: null,
+      includeMetadata: true,
+      separateTagMatches: true,
+    });
+    expect(result.tagMatches).toEqual([
+      {
+        id: 'tag-1',
+        name: '项目管理',
+        description: '项目资料入口',
+        iconUrl: '',
+        route: '/tag/tag-1',
+        lastActivityTime: null,
+        counts: { bookmark: 2, note: 1, file: 0, total: 3 },
+      },
+    ]);
+  });
+
   it('默认调用不请求待办，避免资源选择器等既有调用方突然拿到行动对象', async () => {
     mocks.apiBasePost.mockResolvedValue({ status: 200, data: { items: [] } });
     await fetchGlobalSearch('备案', 10);

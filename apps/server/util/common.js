@@ -26,6 +26,9 @@ import supportRouter from '../router/support.js';
 import infraRouter from '../router/infra.js';
 import aiSkillsRouter from '../router/aiSkills.js';
 import organizeRouter from '../router/organize.js';
+import toolboxRouter from '../router/toolbox.js';
+import dailyReviewRouter from '../router/dailyReview.js';
+import adminAiOperationsRouter from '../router/adminAiOperations.js';
 
 export { INTERNAL_ROLES } from './internalRoles.js';
 
@@ -183,6 +186,18 @@ export const insertData = function (params) {
 };
 
 export const baseRouter = [
+  {
+    path: '/admin/ai-operations',
+    router: adminAiOperationsRouter,
+  },
+  {
+    path: '/daily-review',
+    router: dailyReviewRouter,
+  },
+  {
+    path: '/toolbox',
+    router: toolboxRouter,
+  },
   {
     path: '/ai/skills',
     router: aiSkillsRouter,

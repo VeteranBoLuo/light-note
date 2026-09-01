@@ -27,19 +27,13 @@ async function addColumnIfMissing(tableName, columnName, definition) {
 
 /**
  * 整理中心读取接口保持纯只读，因此所有附加 Schema 都在服务启动阶段完成。
- * 这里仅做幂等的结构补齐与一次性历史事实回填，不启动扫描任务。
+ * 这里只做幂等结构补齐；历史数据回填必须由显式 migration 完成。
  */
 export async function ensureOrganizeSchema() {
   await addColumnIfMissing('bookmark', 'url_exact_hash', 'BINARY(32) DEFAULT NULL AFTER `url`');
   if (!(await indexExists('bookmark', 'idx_bookmark_exact_url'))) {
     await pool.query('ALTER TABLE `bookmark` ADD KEY `idx_bookmark_exact_url` (`user_id`, `del_flag`, `url_exact_hash`)');
   }
-  await pool.query(
-    `UPDATE bookmark
-        SET url_exact_hash = UNHEX(SHA2(CONVERT(url USING utf8mb4), 256))
-      WHERE url_exact_hash IS NULL AND url IS NOT NULL AND url <> ''`,
-  );
-
   await pool.query(`
     CREATE TABLE IF NOT EXISTS organize_issue_suppressions (
       id CHAR(36) NOT NULL,
@@ -98,17 +92,4 @@ export async function ensureOrganizeSchema() {
       'ALTER TABLE `bookmark_health` ADD KEY `idx_bookmark_health_observed` (`user_id`, `observed_status`, `checked_at`)',
     );
   }
-  await pool.query(`
-    UPDATE bookmark_health h
-    INNER JOIN bookmark b ON b.id = h.bookmark_id AND b.user_id = h.user_id
-       SET h.observed_status = CASE
-             WHEN h.status IN ('alive', 'suspect') THEN h.status
-             ELSE 'unknown'
-           END,
-           h.observed_code = COALESCE(h.observed_code, h.note),
-           h.checked_url_hash = b.url_exact_hash,
-           h.user_override = CASE WHEN h.note = 'user' THEN 'normal' ELSE h.user_override END,
-           h.override_at = CASE WHEN h.note = 'user' THEN COALESCE(h.override_at, h.checked_at) ELSE h.override_at END
-     WHERE h.checked_url_hash IS NULL
-  `);
 }

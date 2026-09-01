@@ -1,9 +1,5 @@
 <template>
-  <div
-    class="resource-center-section-bar"
-    role="tablist"
-    :aria-label="t('resourceCenter.title')"
-  >
+  <div class="resource-center-section-bar" role="tablist" :aria-label="t('resourceCenter.title')">
     <div class="resource-center-section-nav">
       <BButton
         class="section-nav-item"
@@ -69,7 +65,7 @@
     if (router.resolve(target).fullPath === route.fullPath) return;
     recordOperation({
       module: '资源中心',
-      operation: section === 'organize' ? '切换整理中心视图' : '切换全部资源视图',
+      operation: section === 'organize' ? '切换整理中心视图' : '切换查找视图',
     });
     // 同级分区切换不产生历史记录，否则返回键要按很多次才能离开资源中心
     router.replace(target);
@@ -80,7 +76,7 @@
     const query = route.path === '/search' ? { ...route.query, section: 'map' } : { section: 'map' };
     recordOperation({
       module: '资源中心',
-      operation: '切换知识地图视图',
+      operation: '切换全局图谱视图',
     });
     router.replace({ path: '/search', query });
   }

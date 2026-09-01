@@ -47,9 +47,10 @@ function benefit(aiTokens = 0, storageMb = 0): SupportBenefit {
   return { aiTokens, storageMb };
 }
 
-function firstStatus(index: number): FirstPurchaseStatus {
+function firstStatus(index: number, category: SupportPackageCategory): FirstPurchaseStatus {
   if (isGuest) return 'login_required';
   if (visualState === 'used') return 'used';
+  if (category !== 'storage') return 'available';
   return index % 3 === 1 ? 'used' : 'available';
 }
 
@@ -65,28 +66,29 @@ function regularPackage(
   return {
     skuId,
     category,
+    firstPurchaseScope: category === 'storage' ? 'sku' : 'ai_account',
     amount,
     base,
     firstPurchase,
     comboSavings,
-    firstPurchaseStatus: firstStatus(index),
+    firstPurchaseStatus: firstStatus(index, category),
   };
 }
 
 function regularPackages(): SupportPackage[] {
   return [
-    regularPackage('ai-6', 'ai', 6, benefit(600_000), benefit(780_000), 0),
-    regularPackage('ai-18', 'ai', 18, benefit(1_800_000), benefit(2_340_000), 1),
-    regularPackage('ai-50', 'ai', 50, benefit(5_000_000), benefit(6_500_000), 2),
-    regularPackage('ai-100', 'ai', 100, benefit(10_000_000), benefit(13_000_000), 3),
+    regularPackage('ai-6', 'ai', 6, benefit(600_000), benefit(720_000), 0),
+    regularPackage('ai-18', 'ai', 18, benefit(1_800_000), benefit(2_160_000), 1),
+    regularPackage('ai-50', 'ai', 50, benefit(5_000_000), benefit(6_000_000), 2),
+    regularPackage('ai-100', 'ai', 100, benefit(10_000_000), benefit(12_000_000), 3),
     regularPackage('storage-6', 'storage', 6, benefit(0, 128), benefit(0, 160), 0),
     regularPackage('storage-18', 'storage', 18, benefit(0, 512), benefit(0, 640), 1),
     regularPackage('storage-50', 'storage', 50, benefit(0, 1_536), benefit(0, 2_048), 2),
     regularPackage('storage-100', 'storage', 100, benefit(0, 3_072), benefit(0, 4_096), 3),
-    regularPackage('combo-10', 'combo', 10, benefit(600_000, 128), benefit(780_000, 160), 0, 2),
-    regularPackage('combo-30', 'combo', 30, benefit(1_800_000, 512), benefit(2_340_000, 640), 1, 6),
-    regularPackage('combo-88', 'combo', 88, benefit(5_000_000, 1_536), benefit(6_500_000, 2_048), 2, 12),
-    regularPackage('combo-168', 'combo', 168, benefit(10_000_000, 3_072), benefit(13_000_000, 4_096), 3, 32),
+    regularPackage('combo-10', 'combo', 10, benefit(600_000, 128), benefit(720_000, 128), 0, 2),
+    regularPackage('combo-30', 'combo', 30, benefit(1_800_000, 512), benefit(2_160_000, 512), 1, 6),
+    regularPackage('combo-88', 'combo', 88, benefit(5_000_000, 1_536), benefit(6_000_000, 1_536), 2, 12),
+    regularPackage('combo-168', 'combo', 168, benefit(10_000_000, 3_072), benefit(12_000_000, 3_072), 3, 32),
   ];
 }
 
@@ -149,7 +151,7 @@ function catalogFixture() {
   const campaignLimitReached = visualState === 'limit';
   const campaignPending = visualState === 'pending';
   return {
-    catalogVersion: 'support-packages-v2',
+    catalogVersion: 'support-packages-v3',
     catalogEnabled: true,
     checkoutEnabled: true,
     grantEnabled: true,
@@ -208,7 +210,7 @@ request.defaults.adapter = async (config) => {
       name: '拾光者',
       spaceMb: 5_120,
       spaceBonusMb: 2_048,
-      aiTokenDaily: 2_000_000,
+      aiTokenDaily: 800_000,
       streak: 8,
       points: 1_860,
       checkedInToday: true,

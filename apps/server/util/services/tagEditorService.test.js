@@ -24,6 +24,7 @@ describe('tagEditorService', () => {
         .mockResolvedValueOnce([
           [
             { resource_type: 'bookmark', resource_id: 'bookmark-1' },
+            { resource_type: 'bookmark', resource_id: 'deleted-bookmark' },
             { resource_type: 'file', resource_id: '7' },
           ],
         ]),

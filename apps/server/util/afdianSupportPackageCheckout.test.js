@@ -5,7 +5,7 @@ import { createAfdianPackageCheckoutIntent } from './afdianSupportService.js';
 const CAMPAIGN_ID = '11111111-1111-4111-8111-111111111111';
 const CAMPAIGN_SKU_ID = '22222222-2222-4222-8222-222222222222';
 
-function connectionFor({ campaign = false } = {}) {
+function connectionFor({ campaign = false, firstPurchaseUsed = false } = {}) {
   const connection = {
     beginTransaction: vi.fn(),
     commit: vi.fn(),
@@ -13,7 +13,9 @@ function connectionFor({ campaign = false } = {}) {
     release: vi.fn(),
     query: vi.fn(async (sql) => {
       const statement = String(sql);
-      if (statement.includes('FROM support_first_purchase_claims')) return [[], []];
+      if (statement.includes('FROM support_first_purchase_claims')) {
+        return [firstPurchaseUsed ? [{ claimed: 1 }] : [], []];
+      }
       if (statement.includes('FROM support_account_links')) return [[], []];
       if (campaign && statement.includes('FROM support_campaign_skus s')) {
         return [[{
@@ -58,7 +60,7 @@ beforeEach(() => {
 
 afterEach(() => vi.unstubAllEnvs());
 
-describe('爱发电 v2 套餐结算意图', () => {
+describe('爱发电 v3 套餐结算意图', () => {
   it('常驻套餐生成精确金额和一次性随机码，只在数据库保存摘要与不可变首充快照', async () => {
     const connection = connectionFor();
     const result = await createAfdianPackageCheckoutIntent({
@@ -89,8 +91,8 @@ describe('爱发电 v2 套餐结算意图', () => {
       '10.00',
       600_000,
       128,
-      780_000,
-      160,
+      720_000,
+      128,
       1,
     ]));
     expect(connection.commit).toHaveBeenCalledOnce();
@@ -134,6 +136,25 @@ describe('爱发电 v2 套餐结算意图', () => {
         ([sql, params]) => String(sql).includes('active_until = DATE_ADD') && params[1] === 24 * 60 * 60,
       ),
     ).toBe(true);
+  });
+
+  it('任一历史 AI 或组合首购已用时，其他含 AI 档位只快照基础权益', async () => {
+    const connection = connectionFor({ firstPurchaseUsed: true });
+    const result = await createAfdianPackageCheckoutIntent({
+      userId: 'user-1',
+      skuId: 'ai-6',
+      catalogVersion: SUPPORT_PACKAGE_CATALOG_VERSION,
+      db: { getConnection: vi.fn().mockResolvedValue(connection) },
+      env: {
+        SUPPORT_PACKAGES_CATALOG_ENABLED: 'true',
+        SUPPORT_PACKAGES_CHECKOUT_ENABLED: 'true',
+        SUPPORT_PACKAGES_GRANT_ENABLED: 'true',
+      },
+    });
+
+    expect(result.firstPurchaseCandidate).toBe(false);
+    const insert = connection.query.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO support_checkout_intents'));
+    expect(insert?.[1]?.slice(7, 12)).toEqual([600_000, 0, 600_000, 0, 0]);
   });
 
   it('结算目录关闭时在取数据库连接前失败关闭', async () => {

@@ -82,8 +82,8 @@ describe('growth 段位表', () => {
       1024, 1280, 1536, 1792, 2048, 2560, 3072, 4096, 5120, 6144, 8192, 10752, 13824, 16896, 20480,
     ]);
     expect(RANKS.map((rank) => rank.aiTokenDaily)).toEqual([
-      300_000, 350_000, 400_000, 450_000, 500_000, 600_000, 700_000, 800_000, 900_000, 1_050_000, 1_200_000, 1_400_000,
-      1_600_000, 1_800_000, 2_000_000,
+      200_000, 220_000, 240_000, 260_000, 280_000, 310_000, 340_000, 370_000, 400_000, 450_000, 500_000, 560_000,
+      620_000, 700_000, 800_000,
     ]);
     for (let i = 1; i < RANKS.length; i++) {
       expect(RANKS[i].spaceMb).toBeGreaterThanOrEqual(RANKS[i - 1].spaceMb);
@@ -431,13 +431,13 @@ describe('root 真实等级口径', () => {
     });
   }
 
-  it('已固化的历史 root 按真实 50000 EXP 返回 Lv.15 和 200 万 AI', async () => {
+  it('已固化的历史 root 按真实 50000 EXP 返回 Lv.15 和 80 万 AI', async () => {
     vi.clearAllMocks();
     mockGrowthRow(50_000, 15);
 
     const growth = await getGrowth('root-1', { userRole: 'root', calendar: accountCalendar('20260825') });
 
-    expect(growth).toMatchObject({ exp: 50_000, level: 15, aiTokenDaily: 2_000_000, spaceMb: 20_480 });
+    expect(growth).toMatchObject({ exp: 50_000, level: 15, aiTokenDaily: 800_000, spaceMb: 20_480 });
   });
 
   it('未经迁移的低经验 root 不再被展示层伪造成 Lv.15', async () => {
@@ -446,7 +446,7 @@ describe('root 真实等级口径', () => {
 
     const growth = await getGrowth('future-root', { userRole: 'root', calendar: accountCalendar('20260825') });
 
-    expect(growth).toMatchObject({ exp: 0, level: 1, aiTokenDaily: 300_000, spaceMb: 1024 });
+    expect(growth).toMatchObject({ exp: 0, level: 1, aiTokenDaily: 200_000, spaceMb: 1024 });
   });
 });
 

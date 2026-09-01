@@ -6,17 +6,20 @@
       class="mobile-bottom-nav__item"
       :class="{
         'mobile-bottom-nav__item--active': isItemActive(item.key) || pendingKey === item.key,
-        'mobile-bottom-nav__item--capture': item.key === 'capture',
+        'mobile-bottom-nav__item--create': item.key === 'create',
       }"
       :aria-current="isItemActive(item.key) ? 'page' : undefined"
       :aria-busy="pendingKey === item.key ? 'true' : undefined"
+      :aria-label="item.key === 'create' ? t(item.labelKey) : undefined"
+      :aria-haspopup="item.key === 'create' ? 'dialog' : undefined"
+      :aria-expanded="item.key === 'create' ? createHubOpen : undefined"
       @pointerdown="prefetchItem(item)"
       @focus="prefetchItem(item)"
       @click="activate(item)"
       v-click-log="{ module: '移动端导航', operation: `打开${t(item.labelKey)}` }"
     >
       <span class="mobile-bottom-nav__icon">
-        <SvgIcon :src="bottomIcons[item.key]" :size="item.key === 'capture' ? '21' : '20'" aria-hidden="true" />
+        <SvgIcon :src="bottomIcons[item.key]" size="20" aria-hidden="true" />
         <!--
           与桌面顶栏同一口径：只提醒「逾期 + 今天到期」。原来用全部未完成待办，
           那个数字永不清零，挂成常驻角标会被用户学会忽略。两端必须一致，
@@ -40,9 +43,15 @@
           {{ communityUnreadTotal > 99 ? '99+' : communityUnreadTotal }}
         </span>
       </span>
-      <span class="mobile-bottom-nav__label">{{ t(item.labelKey) }}</span>
+      <span v-if="item.key !== 'create'" class="mobile-bottom-nav__label">{{ t(item.labelKey) }}</span>
     </BButton>
   </nav>
+  <MobilePageActionsDrawer
+    v-model:open="createHubOpen"
+    :title="t('mobileNavigation.createHub.title')"
+    :actions="createActions"
+    @action="runCreateAction"
+  />
 </template>
 
 <script setup lang="ts">
@@ -51,17 +60,28 @@
   import { useRoute, useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import icon from '@/config/icon';
   import {
     isMobileResourceInboxTab,
+    isMobileCreateHubActionKey,
+    isMobileFormalCreateActionKey,
     MOBILE_BOTTOM_NAVIGATION,
+    type MobileFormalCreateActionKey,
+    type MobileBottomNavigationKey,
     type MobileBottomNavigationItem,
     type MobileShellSection,
   } from '@/config/mobileNavigation';
+  import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { getMobileResourceEntryPath, useMobileNavigationState } from '@/composables/useMobileNavigationState';
   import { useCommunityChatUnread } from '@/composables/useCommunityChatUnread';
   import { inboxStore, useUserStore } from '@/store';
   import { prefetchResolvedRoute } from '@/utils/routePrefetch';
+
+  const emit = defineEmits<{
+    prepareFormalCreate: [];
+    formalCreate: [action: MobileFormalCreateActionKey];
+  }>();
 
   const route = useRoute();
   const router = useRouter();
@@ -72,6 +92,7 @@
   const communityUnread = useCommunityChatUnread();
   const { totalUnread: communityUnreadTotal } = communityUnread;
   const pendingKey = ref<MobileShellSection | null>(null);
+  const createHubOpen = ref(false);
 
   // 屏幕阅读器听到的是完整语义，而不是一个孤立数字
   const todoAttentionLabel = computed(() =>
@@ -85,12 +106,47 @@
   const bottomIcons = {
     today: icon.common.calendar,
     resources: icon.navigation.portal,
+    create: icon.common.plus,
     todo: icon.noteDetail.toolbar.todo,
-    capture: icon.common.plus,
     community: icon.ai.conversations,
   } as const;
 
-  function isItemActive(key: MobileShellSection) {
+  const createActions = computed<MobilePageActionItem[]>(() => [
+    {
+      key: 'note',
+      label: t('mobileNavigation.createHub.note'),
+      description: t('mobileNavigation.createHub.noteDescription'),
+      icon: icon.resource.note,
+    },
+    {
+      key: 'todo',
+      label: t('mobileNavigation.createHub.todo'),
+      description: t('mobileNavigation.createHub.todoDescription'),
+      icon: icon.noteDetail.toolbar.todo,
+    },
+    {
+      key: 'bookmark',
+      label: t('mobileNavigation.createHub.bookmark'),
+      description: t('mobileNavigation.createHub.bookmarkDescription'),
+      icon: icon.resource.bookmark,
+    },
+    {
+      key: 'file',
+      label: t('mobileNavigation.createHub.file'),
+      description: t('mobileNavigation.createHub.fileDescription'),
+      icon: icon.resource.file,
+    },
+    {
+      key: 'toolbox',
+      label: t('mobileNavigation.createHub.toolbox'),
+      description: t('mobileNavigation.createHub.toolboxDescription'),
+      icon: icon.toolbox.home,
+      dividerBefore: true,
+    },
+  ]);
+
+  function isItemActive(key: MobileBottomNavigationKey) {
+    if (key === 'create') return false;
     if (route.name === 'inbox') {
       // 历史待整理地址仍归“资料”；新入口统一由 /organize 的 mobileShell 识别。
       return key === (isMobileResourceInboxTab(route.query.tab) ? 'resources' : 'todo');
@@ -99,7 +155,6 @@
   }
 
   function getItemTarget(item: MobileBottomNavigationItem) {
-    if (item.key === 'capture') return null;
     return item.key === 'resources'
       ? getMobileResourceEntryPath()
       : item.key === 'todo'
@@ -118,8 +173,9 @@
 
   async function activate(item: MobileBottomNavigationItem) {
     if (pendingKey.value === item.key) return;
-    if (item.key === 'capture') {
-      inbox.openQuickCapture();
+    if (item.key === 'create') {
+      emit('prepareFormalCreate');
+      createHubOpen.value = true;
       return;
     }
     if (item.key === 'resources' && route.meta.mobileShell === 'resources') {
@@ -139,6 +195,24 @@
     } finally {
       if (pendingKey.value === item.key) pendingKey.value = null;
     }
+  }
+
+  function runCreateAction(action: MobilePageActionItem) {
+    if (!isMobileCreateHubActionKey(action.key)) return;
+    if (action.key === 'toolbox') {
+      void router.push({ path: '/toolbox' });
+      return;
+    }
+    if (blockGuestWrite('mobile-formal-create', t('inbox.guestPrompt'))) return;
+    if (action.key === 'bookmark') {
+      void router.push({ name: 'bookmarkEditMg', params: { id: 'add' } });
+      return;
+    }
+    if (action.key === 'todo') {
+      void router.push({ name: 'todoCreate' });
+      return;
+    }
+    if (isMobileFormalCreateActionKey(action.key)) emit('formalCreate', action.key);
   }
 
   function getMobileResourcePathFromRoute() {
@@ -194,18 +268,28 @@
     background: color-mix(in srgb, var(--primary-color) 8%, transparent) !important;
   }
 
-  .mobile-bottom-nav__item--capture .mobile-bottom-nav__icon {
-    width: 30px;
-    height: 25px;
-    border-radius: 9px;
-    color: #fff;
-    background: linear-gradient(145deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 64%, #9b8cff));
+  .mobile-bottom-nav__item--create {
+    position: relative;
+    overflow: visible;
+    color: var(--primary-color);
   }
 
-  .mobile-bottom-nav__item--capture:focus-visible .mobile-bottom-nav__icon,
-  .mobile-bottom-nav__item--capture:hover .mobile-bottom-nav__icon {
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 14%, transparent);
+  .mobile-bottom-nav__item--create .mobile-bottom-nav__icon {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 38px;
+    height: 38px;
+    min-height: 38px;
+    margin: 0;
+    border: 1px solid var(--primary-color);
+    border-radius: 13px;
+    color: #fff;
+    background: var(--primary-color);
+    box-shadow: 0 8px 20px -12px var(--primary-color);
+    transform: translate(-50%, -50%);
   }
+
   .mobile-bottom-nav__icon {
     position: relative;
     min-height: 25px;
@@ -250,6 +334,11 @@
     .mobile-bottom-nav__item {
       transition: none;
     }
+  }
 
+  :global(html.light-note-mobile-rendering .mobile-bottom-nav__item--create .mobile-bottom-nav__icon) {
+    border-color: var(--primary-color);
+    background: var(--primary-color);
+    box-shadow: none;
   }
 </style>

@@ -4,9 +4,10 @@ import {
   validateAiSkillResponse,
 } from '@lightnote/shared/ai-skill-protocol';
 import { createAiSkillExecutionConfig } from '../aiBillingCatalog.js';
-import { runAiExecution } from '../aiExecution/service.js';
+import { configureActiveAiExecution, runAiExecution } from '../aiExecution/service.js';
 import { assertAiSkillDomainEnabled } from '../aiProductFeature.js';
 import { resolveAiSkillContext, resolveAiSkillIdentity } from './contextResolver.js';
+import { aiSkillError } from './errors.js';
 import { callGroundedSkillModel } from './model.js';
 import { resolveAiSkill } from './registry.js';
 import { appendAiSkillTurn, resolveAiSkillThread } from './threadService.js';
@@ -47,7 +48,28 @@ function resolveAiSkillResultOutcome(response) {
   if (warningCodes.has('image_recognition_uncertain')) {
     return { status: 'partial', errorCode: 'IMAGE_RECOGNITION_UNCERTAIN' };
   }
+  if (response?.coverage?.complete === false) {
+    return { status: 'partial', errorCode: 'AI_SKILL_COVERAGE_PARTIAL' };
+  }
   return { status: 'success' };
+}
+
+function resolveInternalModelPolicy(modelPolicy = {}, overrides = {}) {
+  const resolved = { ...modelPolicy };
+  const baseMaxTokens = Number(modelPolicy.maxTokens);
+  const requestedMaxTokens = Number(overrides.maxTokens);
+  if (Number.isFinite(requestedMaxTokens) && requestedMaxTokens > 0) {
+    resolved.maxTokens = Math.trunc(
+      Number.isFinite(baseMaxTokens) && baseMaxTokens > 0
+        ? Math.min(baseMaxTokens, requestedMaxTokens)
+        : requestedMaxTokens,
+    );
+  }
+  const requestedTimeoutMs = Number(overrides.timeoutMs);
+  if (Number.isFinite(requestedTimeoutMs) && requestedTimeoutMs > 0) {
+    resolved.timeoutMs = Math.min(180_000, Math.max(1_000, Math.trunc(requestedTimeoutMs)));
+  }
+  return Object.freeze(resolved);
 }
 
 export async function executeAiSkill(rawRequest, req, dependencies = {}) {
@@ -58,8 +80,10 @@ export async function executeAiSkill(rawRequest, req, dependencies = {}) {
   const resolveThread = dependencies.resolveThread || resolveAiSkillThread;
   const appendTurn = dependencies.appendTurn || appendAiSkillTurn;
   const runExecution = dependencies.runExecution || runAiExecution;
+  const configureExecution = dependencies.configureExecution || configureActiveAiExecution;
   const callModel = dependencies.callModel || callGroundedSkillModel;
   const skill = resolveSkill(request.skillId, request.skillVersion);
+  const internalExecutionOverrides = dependencies.executionConfigOverrides || {};
   const telemetryIdentity = resolveAiSkillIdentity(req);
   const telemetryStartedAt = Date.now();
   const recordTelemetry = (event, extra = {}) =>
@@ -80,6 +104,11 @@ export async function executeAiSkill(rawRequest, req, dependencies = {}) {
     });
   void recordTelemetry('ai_skill_started');
   try {
+    const internalCaller = String(dependencies.internalCaller || '');
+    const allowedInternalCallers = Array.isArray(skill.allowedInternalCallers) ? skill.allowedInternalCallers : [];
+    if (skill.internalOnly && !allowedInternalCallers.includes(internalCaller)) {
+      throw aiSkillError('AI_SKILL_INTERNAL_ONLY', '该 AI 能力只能由对应的产品流程调用', 403);
+    }
     assertDomainEnabled(skill.domain);
     const result = await runExecution(
       createAiSkillExecutionConfig(skill, request, {
@@ -87,17 +116,26 @@ export async function executeAiSkill(rawRequest, req, dependencies = {}) {
         request: req,
         identity: req?.billingUser || req?.user,
         subjectIdentity: req?.resourceUser || req?.user,
-        // 是否真正调用模型只能在 Context/prepare 后确定。统一使用 user 策略并由
-        // Gateway 第一次访问 Provider 时懒占位，确定性结果自然 settle 为 not_used。
+        // 是否真正调用模型只能在 Context/prepare 后确定。公开 Skill 默认使用 user 策略，
+        // 仅受信任的内部调用方可覆盖为 system；两者都在 Gateway 首次访问 Provider 时懒占位。
         taskType: `skill_${skill.id.replace('.', '_')}`,
         skillVersion: skill.version,
         surface: request.client.surface,
         persistence: dependencies.persistence,
         resolveResultOutcome: resolveAiSkillResultOutcome,
+        ...(internalExecutionOverrides.billingPolicy === 'system'
+          ? {
+              billingPolicy: 'system',
+              systemId: String(internalExecutionOverrides.systemId || 'ai_skill_internal').slice(0, 64),
+            }
+          : {}),
       }),
       async () => {
         const input = skill.validateInput(request.input);
         const context = await resolveContext({ skill, request, req, database: dependencies.database });
+        if (skill.providerPlanPolicy?.contextAware) {
+          configureExecution(createAiSkillExecutionConfig(skill, request, {}, context));
+        }
         const thread = await resolveThread({ skill, request, context, database: dependencies.database });
         const scopedContext = Object.freeze({
           ...context,
@@ -124,8 +162,10 @@ export async function executeAiSkill(rawRequest, req, dependencies = {}) {
               messages: messagesWithBoundedHistory(prepared.messages, scopedContext.history),
               sources,
               coverage,
-              modelPolicy: skill.modelPolicy,
+              modelPolicy: resolveInternalModelPolicy(skill.modelPolicy, dependencies.modelPolicyOverrides),
               outputPolicy: prepared.outputPolicy || {},
+              resultValidator: prepared.resultValidator,
+              resultRepairInstruction: prepared.resultRepairInstruction,
               signal: dependencies.signal,
               structuredTool: prepared.structuredTool,
               validateArguments: prepared.validateArguments,

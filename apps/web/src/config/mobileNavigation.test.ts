@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   getMobileResourcePath,
+  isMobileCreateHubActionKey,
+  isMobileFormalCreateActionKey,
   isMobileResourceInboxTab,
   isMobileResourcePath,
   MOBILE_BOTTOM_NAVIGATION,
@@ -24,17 +26,19 @@ describe('移动端导航配置', () => {
 
   it('保持资料切换与底部主导航的固定顺序', () => {
     expect(MOBILE_RESOURCE_NAVIGATION.map((item) => item.key)).toEqual(['bookmark', 'note', 'cloud', 'tag']);
-    // 今日在首位、确定性的快速收集居中；AI 只在对应业务模块出现，不占全局一级入口。
+    // 中间入口负责正式新建；快速收集继续留在「今日」。
     expect(MOBILE_BOTTOM_NAVIGATION.map((item) => item.key)).toEqual([
       'today',
       'resources',
-      'capture',
+      'create',
       'todo',
       'community',
     ]);
     expect(MOBILE_BOTTOM_NAVIGATION.map((item) => item.key)).not.toContain('ai');
     expect(MOBILE_BOTTOM_NAVIGATION.map((item) => item.key)).not.toContain('search');
     expect(MOBILE_BOTTOM_NAVIGATION.find((item) => item.key === 'today')?.path).toBe('/workbenches');
+    expect(MOBILE_BOTTOM_NAVIGATION.find((item) => item.key === 'create')?.path).toBeUndefined();
+    expect(MOBILE_BOTTOM_NAVIGATION.map((item) => item.key)).not.toContain('toolbox');
     expect(MOBILE_BOTTOM_NAVIGATION.find((item) => item.key === 'community')?.path).toBe('/community-chat');
   });
 
@@ -51,6 +55,15 @@ describe('移动端导航配置', () => {
     expect(['all', 'bookmark', 'note', 'file'].every(isMobileResourceInboxTab)).toBe(true);
     expect(isMobileResourceInboxTab('todo')).toBe(false);
     expect(isMobileResourceInboxTab(undefined)).toBe(false);
+  });
+
+  it('区分全局正式新建动作与知识工坊跳转', () => {
+    expect(['bookmark', 'note', 'file', 'todo', 'toolbox'].every(isMobileCreateHubActionKey)).toBe(true);
+    expect(['note', 'file'].every(isMobileFormalCreateActionKey)).toBe(true);
+    expect(isMobileFormalCreateActionKey('bookmark')).toBe(false);
+    expect(isMobileFormalCreateActionKey('todo')).toBe(false);
+    expect(isMobileFormalCreateActionKey('toolbox')).toBe(false);
+    expect(isMobileCreateHubActionKey('capture')).toBe(false);
   });
 
   it('按当前路由绑定顶部动作，并在离开后清理', () => {

@@ -32,6 +32,8 @@ function tokenAction({
   maxUserProviderCalls = 1,
   maxPlatformProviderCalls = 1,
   reservationTokens = DEFAULT_RESERVATION_TOKENS,
+  publicCatalog = true,
+  allowedBillingPolicies = ['user', 'system'],
 }) {
   return Object.freeze({
     id,
@@ -44,6 +46,8 @@ function tokenAction({
     maxUserProviderCalls,
     maxPlatformProviderCalls,
     reservationTokens,
+    publicCatalog,
+    allowedBillingPolicies: Object.freeze([...allowedBillingPolicies]),
   });
 }
 
@@ -195,6 +199,32 @@ export const AI_BILLING_ACTIONS = Object.freeze([
     taskTypes: ['tag_icon_search'],
     maxPlatformProviderCalls: 0,
   }),
+  tokenAction({
+    id: 'tag.analyze',
+    module: 'tag',
+    labelKey: 'tagAnalyze',
+    taskTypes: ['skill_tag_analyze'],
+  }),
+  ...[
+    ['idea_to_draft', 'toolboxIdeaToDraft'],
+    ['material_to_note', 'toolboxMaterialToNote'],
+    ['research_brief', 'toolboxResearchBrief'],
+    ['study_kit', 'toolboxStudyKit'],
+    ['concept_map', 'toolboxConceptMap'],
+    ['action_plan', 'toolboxActionPlan'],
+    ['source_comparison', 'toolboxSourceComparison'],
+    ['knowledge_audit', 'toolboxKnowledgeAudit'],
+  ].map(([profileId, labelKey]) =>
+    tokenAction({
+      id: `toolbox.${profileId}`,
+      module: 'toolbox',
+      labelKey,
+      taskTypes: [`skill_toolbox_${profileId}`],
+      reservationTokens: 12_000,
+      publicCatalog: true,
+      allowedBillingPolicies: ['user', 'system'],
+    }),
+  ),
 ]);
 
 export const AI_FREE_ACTION_GROUPS = Object.freeze([
@@ -258,6 +288,12 @@ export function resolveAiBillingAction({ skillId, taskType } = {}) {
 
 export function createUserAiExecutionConfig(actionId, overrides = {}) {
   const action = getAiBillingAction(actionId);
+  if (!action.allowedBillingPolicies.includes('user')) {
+    const error = new Error('该 AI 能力不使用用户 AI 额度');
+    error.code = 'AI_BILLING_POLICY_NOT_ALLOWED';
+    error.status = 500;
+    throw error;
+  }
   return {
     billingPolicy: 'user',
     taskType: action.taskTypes[0] || action.id.replaceAll('.', '_'),
@@ -269,8 +305,15 @@ export function createUserAiExecutionConfig(actionId, overrides = {}) {
   };
 }
 
-function normalizedResourceRefs(request) {
+function normalizedResourceRefs(request, context) {
+  if (Array.isArray(context?.resourceRefs)) return context.resourceRefs;
   return Array.isArray(request?.scope?.resourceRefs) ? request.scope.resourceRefs : [];
+}
+
+function resolvePolicyValue(value, context, fallback) {
+  const resolved = typeof value === 'function' ? value(context) : value;
+  const number = Number(resolved ?? fallback);
+  return Number.isFinite(number) ? number : fallback;
 }
 
 function estimateInputReservationTokens(request) {
@@ -287,8 +330,17 @@ function estimateInputReservationTokens(request) {
   return Math.min(AI_SKILL_MAX_INPUT_RESERVATION_TOKENS, Math.ceil(Buffer.byteLength(serialized, 'utf8') / 3));
 }
 
-export function compileAiSkillProviderPlan(skill, request) {
-  const refs = normalizedResourceRefs(request);
+export function compileAiSkillProviderPlan(skill, request, context) {
+  const refs = normalizedResourceRefs(request, context);
+  const policyContext = Object.freeze({ resourceCount: refs.length, resourceRefs: refs, request, context });
+  const modelGenerationCalls = Math.max(
+    0,
+    Math.floor(resolvePolicyValue(skill?.providerPlanPolicy?.modelGenerationCalls, policyContext, 1)),
+  );
+  const outputRepairCalls = Math.max(
+    0,
+    Math.floor(resolvePolicyValue(skill?.providerPlanPolicy?.outputRepairCalls, policyContext, modelGenerationCalls)),
+  );
   const imageRecognitionCalls = skill?.providerPlanPolicy?.imageRecognition
     ? refs.filter((ref) => ref?.type === 'file').length
     : 0;
@@ -301,32 +353,34 @@ export function compileAiSkillProviderPlan(skill, request) {
           },
         }
       : {}),
-    [AI_PROVIDER_STAGE_TYPES.MODEL_GENERATION]: { billingScope: 'user', maxCalls: 1 },
-    [AI_PROVIDER_STAGE_TYPES.OUTPUT_REPAIR]: { billingScope: 'platform', maxCalls: 1 },
+    [AI_PROVIDER_STAGE_TYPES.MODEL_GENERATION]: { billingScope: 'user', maxCalls: modelGenerationCalls },
+    [AI_PROVIDER_STAGE_TYPES.OUTPUT_REPAIR]: { billingScope: 'platform', maxCalls: outputRepairCalls },
   });
 }
 
-export function estimateAiSkillReservationTokens(skill, request, action = getAiBillingAction(skill?.id)) {
-  const refs = normalizedResourceRefs(request);
+export function estimateAiSkillReservationTokens(skill, request, action = getAiBillingAction(skill?.id), context) {
+  const refs = normalizedResourceRefs(request, context);
   const policy = skill?.providerPlanPolicy || {};
+  const policyContext = Object.freeze({ resourceCount: refs.length, resourceRefs: refs, request, context });
   const maxCharsPerResource = Math.max(
     1,
-    Math.floor(Number(policy.maxCharsPerResource || AI_SKILL_MAX_CHARS_PER_RESOURCE)),
+    Math.floor(resolvePolicyValue(policy.maxCharsPerResource, policyContext, AI_SKILL_MAX_CHARS_PER_RESOURCE)),
   );
   const maxTotalEvidenceChars = Math.max(
     1,
-    Math.floor(Number(policy.maxTotalEvidenceChars || AI_SKILL_MAX_TOTAL_EVIDENCE_CHARS)),
+    Math.floor(resolvePolicyValue(policy.maxTotalEvidenceChars, policyContext, AI_SKILL_MAX_TOTAL_EVIDENCE_CHARS)),
   );
   const explicitEvidenceTokens = refs.length
     ? Math.min(maxTotalEvidenceChars, refs.length * maxCharsPerResource)
     : AI_SKILL_IMPLICIT_EVIDENCE_RESERVATION_TOKENS;
   const imageFileCount = policy.imageRecognition ? refs.filter((ref) => ref?.type === 'file').length : 0;
+  const generationCalls = Math.max(1, Math.floor(resolvePolicyValue(policy.modelGenerationCalls, policyContext, 1)));
   const requested =
     explicitEvidenceTokens +
     estimateInputReservationTokens(request) +
     imageFileCount * AI_SKILL_VISION_RESERVATION_TOKENS_PER_FILE +
-    Math.max(1, Math.floor(Number(skill?.modelPolicy?.maxTokens || 1_024))) +
-    AI_SKILL_PROTOCOL_RESERVATION_TOKENS;
+    generationCalls *
+      (Math.max(1, Math.floor(Number(skill?.modelPolicy?.maxTokens || 1_024))) + AI_SKILL_PROTOCOL_RESERVATION_TOKENS);
   return Math.min(
     AI_SKILL_MAX_RESERVATION_TOKENS,
     Math.max(action.reservationTokens, Math.max(1, Math.floor(requested))),
@@ -337,16 +391,31 @@ export function estimateAiSkillReservationTokens(skill, request, action = getAiB
  * Skill 的调用阶段由“能力声明 + 本轮已校验材料”编译。计费目录只负责动作身份；
  * 图片数、修复数和预占预算不再由每个 action 手工复制。
  */
-export function createAiSkillExecutionConfig(skill, request, overrides = {}) {
+export function createAiSkillExecutionConfig(skill, request, overrides = {}, context) {
   const action = getAiBillingAction(skill?.id);
-  const providerPlan = compileAiSkillProviderPlan(skill, request);
+  const providerPlan = compileAiSkillProviderPlan(skill, request, context);
+  const billingPolicy = String(overrides.billingPolicy || 'user');
+  if (!['user', 'system'].includes(billingPolicy)) {
+    const error = new Error('AI Skill 额度策略无效');
+    error.code = 'AI_SKILL_BILLING_POLICY_INVALID';
+    error.status = 500;
+    throw error;
+  }
+  if (!action.allowedBillingPolicies.includes(billingPolicy)) {
+    const error = new Error('当前 AI 能力不允许使用该额度策略');
+    error.code = 'AI_BILLING_POLICY_NOT_ALLOWED';
+    error.status = 500;
+    throw error;
+  }
   return {
     taskType: action.taskTypes[0] || action.id.replaceAll('.', '_'),
     ...overrides,
-    billingPolicy: 'user',
+    // 只有服务端内部调用方能传 overrides；公开 Skill HTTP 协议没有该字段。工具箱积分任务
+    // 使用 system 额度承担固定产物的模型成本，避免同一次执行同时扣积分和用户 AI 额度。
+    billingPolicy,
     skillId: action.id,
     providerPlan,
-    reservationTokens: estimateAiSkillReservationTokens(skill, request, action),
+    reservationTokens: estimateAiSkillReservationTokens(skill, request, action, context),
     maxUserProviderCalls: providerPlan.maxUserProviderCalls,
     maxPlatformProviderCalls: providerPlan.maxPlatformProviderCalls,
     billingRuleVersion: AI_BILLING_RULE_VERSION,
@@ -361,7 +430,7 @@ export function listPublicAiBillingCatalog() {
     repairBilling: 'platform',
     failedExecutionBilling: 'platform',
     missingUsageBilling: 'request_estimate_capped',
-    tokenActions: AI_BILLING_ACTIONS.map(({ id, module, labelKey, unit }) => ({
+    tokenActions: AI_BILLING_ACTIONS.filter((action) => action.publicCatalog).map(({ id, module, labelKey, unit }) => ({
       id,
       module,
       labelKey,

@@ -130,7 +130,7 @@
               </div>
             </section>
 
-            <BTabs v-model:active-tab="activeCategory" class="store-tabs" variant="segment" :options="categoryTabs" />
+            <BTabs v-model:active-tab="activeCategory" class="store-tabs" variant="solid" :options="categoryTabs" />
             <div class="package-grid">
               <EntitlementPackageCard
                 v-for="(item, index) in visiblePackages"

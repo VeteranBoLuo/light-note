@@ -13,6 +13,7 @@ import { ensurePointsSchema } from './util/points.js';
 import { assertPointsEconomyActivationReady } from './util/pointsEconomyOperations.js';
 import { ensureGrowthTaskSchema } from './util/growthTaskSchema.js';
 import { ensureGrowthCenterSchema } from './util/growthCenterSchema.js';
+import { ensureDailyReviewSchema } from './util/dailyReviewSchema.js';
 import { assertPointsEarningActivationReady, getPointsEarningRuntime } from './util/pointsEarningPolicy.js';
 import { getPointsCampaignRuntime } from './util/pointsCampaignService.js';
 import { generateGrowthNudges } from './util/growth.js';
@@ -48,6 +49,7 @@ import { ensureAfdianSupportRewardSchema } from './util/afdianSupportRewardSchem
 import { ensureAfdianSupportPackageSchema } from './util/afdianSupportPackageSchema.js';
 import { startAfdianReconciliationScheduler } from './util/afdianSupportService.js';
 import { ensureAiBonusWalletSchema } from './util/aiBonusWalletSchema.js';
+import { ensureToolboxSchema } from './util/toolboxSchema.js';
 
 import dotenv from 'dotenv';
 import path from 'path';
@@ -120,6 +122,7 @@ try {
   await assertPointsEconomyActivationReady();
   await ensureGrowthTaskSchema();
   await ensureGrowthCenterSchema();
+  await ensureDailyReviewSchema();
   await assertPointsEarningActivationReady({
     db: pool,
     runtime: getPointsEarningRuntime(),
@@ -127,6 +130,15 @@ try {
   });
 } catch (err) {
   console.error('成长中心 Schema 初始化失败 code=%s，终止启动', stableAgentErrorCode(err));
+  process.exit(1);
+}
+// 工具箱报价/任务依赖积分收据与 AI 文档表，必须在开始接请求前一次性失败关闭，
+// 否则首个用户可能已经预占积分，却在创建输入或任务记录时撞上半初始化 Schema。
+try {
+  await ensureAiDocumentSchema();
+  await ensureToolboxSchema();
+} catch (err) {
+  console.error('知识工具箱 Schema 初始化失败 code=%s，终止启动', stableAgentErrorCode(err));
   process.exit(1);
 }
 try {
@@ -146,7 +158,6 @@ await ensureOrganizeSchema().catch((err) => {
 ensureFeatureRequestTables().catch((err) =>
   console.error('共建轻笺数据表初始化失败 code=%s', stableAgentErrorCode(err)),
 );
-ensureAiDocumentSchema().catch((err) => console.error('AI 文档数据表初始化失败 code=%s', stableAgentErrorCode(err)));
 ensureFilePreviewSchema().catch((err) => console.error('文件预览数据表初始化失败 code=%s', stableAgentErrorCode(err)));
 // 治理接口必须先有完整快照/审计表；这里只做幂等 Schema 就绪，不在 HTTP 进程执行任何扫描或清理。
 await ensureResourceGovernanceSchema().catch((err) => {

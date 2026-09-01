@@ -200,12 +200,12 @@
                 ><dd>{{ formatCount(detail.opinions?.total) }}</dd></div
               >
               <div
-                ><dt>{{ t('adminUserManagement.detail.aiConversations') }}</dt
-                ><dd>{{ formatCount(detail.aiWorkspace?.conversationTotal) }}</dd></div
+                ><dt>{{ t('adminUserManagement.detail.aiLastUsed') }}</dt
+                ><dd>{{ formatTime(detail.aiUsage?.lastUsedAt) }}</dd></div
               >
               <div
-                ><dt>{{ t('adminUserManagement.detail.aiNegativeFeedback') }}</dt
-                ><dd>{{ formatCount(detail.aiWorkspace?.negativeFeedbackTotal) }}</dd></div
+                ><dt>{{ t('adminUserManagement.detail.aiTechnicalFailures') }}</dt
+                ><dd>{{ formatCount(detail.aiUsage?.failedTotal) }}</dd></div
               >
               <div
                 ><dt>{{ t('adminUserManagement.detail.apiRequests7d') }}</dt
@@ -334,7 +334,6 @@
     opinions?: Record<string, any>;
     growth?: Record<string, any>;
     aiUsage?: Record<string, any>;
-    aiWorkspace?: Record<string, any>;
     security?: Record<string, any>;
     apiHealth?: Record<string, any>;
     sessions?: Record<string, any>[];

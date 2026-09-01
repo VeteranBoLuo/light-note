@@ -7,7 +7,11 @@ import {
 import { validateGroundedMarkdownOutput } from './outputValidator.js';
 import { callStructuredSkillModel } from './structuredModel.js';
 
-const FREE_TEXT_REPAIRABLE_OUTPUT_ERRORS = new Set(['AI_SKILL_OUTPUT_EMPTY', 'AI_SKILL_OUTPUT_TOO_SHORT']);
+const FREE_TEXT_REPAIRABLE_OUTPUT_ERRORS = new Set([
+  'AI_SKILL_OUTPUT_EMPTY',
+  'AI_SKILL_OUTPUT_TOO_SHORT',
+  'AI_SKILL_OUTPUT_PROFILE_INVALID',
+]);
 const GROUNDED_REPAIRABLE_OUTPUT_ERRORS = Object.freeze([
   'AI_SKILL_STRUCTURED_OUTPUT_MISSING',
   'AI_SKILL_STRUCTURED_OUTPUT_INVALID',
@@ -15,6 +19,7 @@ const GROUNDED_REPAIRABLE_OUTPUT_ERRORS = Object.freeze([
   'AI_SKILL_OUTPUT_SOURCE_INVALID',
   'AI_SKILL_OUTPUT_EMPTY',
   'AI_SKILL_OUTPUT_TOO_LONG',
+  'AI_SKILL_OUTPUT_PROFILE_INVALID',
 ]);
 
 function withGroundedProtocol(messages) {
@@ -29,13 +34,20 @@ function withGroundedProtocol(messages) {
   return [{ role: 'system', content: GROUNDED_OUTPUT_PROTOCOL_INSTRUCTION }, ...normalized];
 }
 
-function freeTextRepairInstruction(outputPolicy = {}) {
+function validateSkillResult(result, resultValidator) {
+  return typeof resultValidator === 'function' ? resultValidator(result) : result;
+}
+
+function freeTextRepairInstruction(outputPolicy = {}, resultRepairInstruction = '') {
   return [
     '修复上一版输出，直接返回完整正文，不要解释过程。',
     outputPolicy.minimumChars
       ? `正文必须至少 ${outputPolicy.minimumChars} 个字符；只能通过充分表达输入已有信息扩展，禁止编造。`
       : '正文不能为空。',
-  ].join('\n');
+    resultRepairInstruction,
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 export async function callGroundedSkillModel({
@@ -44,6 +56,8 @@ export async function callGroundedSkillModel({
   coverage,
   modelPolicy,
   outputPolicy = {},
+  resultValidator,
+  resultRepairInstruction = '',
   trace,
   signal,
 }) {
@@ -52,16 +66,22 @@ export async function callGroundedSkillModel({
     return callStructuredSkillModel({
       messages: withGroundedProtocol(messages),
       structuredTool,
-      validateArguments: (args) => validateGroundedAnswerArguments(args, sources, coverage),
+      validateArguments: (args) =>
+        validateSkillResult(validateGroundedAnswerArguments(args, sources, coverage), resultValidator),
       modelPolicy,
       trace,
       signal,
       repairableErrorCodes: GROUNDED_REPAIRABLE_OUTPUT_ERRORS,
       buildRepairInstruction: ({ error, toolName }) =>
         [
-          `上一版未通过引用协议（${error.code}）。`,
+          error.code === 'AI_SKILL_OUTPUT_PROFILE_INVALID'
+            ? '上一版没有满足当前 Skill 的固定成果结构。'
+            : `上一版未通过引用协议（${error.code}）。`,
+          resultRepairInstruction,
           `必须且只能调用 ${toolName} 一次；每个 block 都要填写本轮真实 sourceIndexes；markdown 内不要手写 [数字] 引用；不要输出解释文本。`,
-        ].join('\n'),
+        ]
+          .filter(Boolean)
+          .join('\n'),
     });
   }
 
@@ -69,24 +89,28 @@ export async function callGroundedSkillModel({
     toolChoice: 'none',
     maxTokens: modelPolicy.maxTokens,
     temperature: modelPolicy.temperature,
+    timeoutMs: modelPolicy.timeoutMs,
     trace,
     signal,
   };
   let response = await requestAi(messages, requestOptions);
   try {
-    return validateGroundedMarkdownOutput({
-      content: response.content,
-      sources,
-      coverage,
-      minimumChars: outputPolicy.minimumChars,
-    });
+    return validateSkillResult(
+      validateGroundedMarkdownOutput({
+        content: response.content,
+        sources,
+        coverage,
+        minimumChars: outputPolicy.minimumChars,
+      }),
+      resultValidator,
+    );
   } catch (error) {
     if (!FREE_TEXT_REPAIRABLE_OUTPUT_ERRORS.has(error?.code)) throw error;
     response = await requestAi(
       [
         ...messages,
         { role: 'assistant', content: String(response.content || '') },
-        { role: 'user', content: freeTextRepairInstruction(outputPolicy) },
+        { role: 'user', content: freeTextRepairInstruction(outputPolicy, resultRepairInstruction) },
       ],
       {
         ...requestOptions,
@@ -96,12 +120,15 @@ export async function callGroundedSkillModel({
         trace: { ...trace, stage: `${trace?.stage || 'skill_output'}_repair` },
       },
     );
-    return validateGroundedMarkdownOutput({
-      content: response.content,
-      sources,
-      coverage,
-      minimumChars: outputPolicy.minimumChars,
-    });
+    return validateSkillResult(
+      validateGroundedMarkdownOutput({
+        content: response.content,
+        sources,
+        coverage,
+        minimumChars: outputPolicy.minimumChars,
+      }),
+      resultValidator,
+    );
   }
 }
 
@@ -115,6 +142,8 @@ export async function callGroundedSkillModelStream({
   coverage,
   modelPolicy,
   outputPolicy = {},
+  resultValidator,
+  resultRepairInstruction = '',
   trace,
   signal,
   onDelta,
@@ -130,18 +159,22 @@ export async function callGroundedSkillModelStream({
     toolChoice: 'none',
     maxTokens: modelPolicy.maxTokens,
     temperature: modelPolicy.temperature,
+    timeoutMs: modelPolicy.timeoutMs,
     trace,
     signal,
     onDelta,
   };
   let response = await requestAiStream(messages, requestOptions);
   try {
-    return validateGroundedMarkdownOutput({
-      content: response.content,
-      sources,
-      coverage,
-      minimumChars: outputPolicy.minimumChars,
-    });
+    return validateSkillResult(
+      validateGroundedMarkdownOutput({
+        content: response.content,
+        sources,
+        coverage,
+        minimumChars: outputPolicy.minimumChars,
+      }),
+      resultValidator,
+    );
   } catch (error) {
     if (!FREE_TEXT_REPAIRABLE_OUTPUT_ERRORS.has(error?.code)) throw error;
     onReset?.();
@@ -149,7 +182,7 @@ export async function callGroundedSkillModelStream({
       [
         ...messages,
         { role: 'assistant', content: String(response.content || '') },
-        { role: 'user', content: freeTextRepairInstruction(outputPolicy) },
+        { role: 'user', content: freeTextRepairInstruction(outputPolicy, resultRepairInstruction) },
       ],
       {
         ...requestOptions,
@@ -159,12 +192,15 @@ export async function callGroundedSkillModelStream({
         trace: { ...trace, stage: `${trace?.stage || 'skill_output'}_repair` },
       },
     );
-    return validateGroundedMarkdownOutput({
-      content: response.content,
-      sources,
-      coverage,
-      minimumChars: outputPolicy.minimumChars,
-    });
+    return validateSkillResult(
+      validateGroundedMarkdownOutput({
+        content: response.content,
+        sources,
+        coverage,
+        minimumChars: outputPolicy.minimumChars,
+      }),
+      resultValidator,
+    );
   }
 }
 
@@ -172,5 +208,6 @@ export const aiSkillModelInternals = Object.freeze({
   FREE_TEXT_REPAIRABLE_OUTPUT_ERRORS,
   GROUNDED_REPAIRABLE_OUTPUT_ERRORS,
   freeTextRepairInstruction,
+  validateSkillResult,
   withGroundedProtocol,
 });

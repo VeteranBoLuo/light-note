@@ -1510,7 +1510,8 @@ FROM (
   SELECT 'user_growth_preferences', 'timezone', 'user_growth_preferences.timezone' UNION ALL
   SELECT 'user_growth_preferences', 'utc_offset_minutes', 'user_growth_preferences.utc_offset_minutes' UNION ALL
   SELECT 'growth_recap_state', 'snoozed_until', 'growth_recap_state.snoozed_until' UNION ALL
-  SELECT 'growth_recap_state', 'dismissed_at', 'growth_recap_state.dismissed_at'
+  SELECT 'growth_recap_state', 'dismissed_at', 'growth_recap_state.dismissed_at' UNION ALL
+  SELECT 'growth_recap_state', 'last_shown_date', 'growth_recap_state.last_shown_date'
 ) expected
 LEFT JOIN information_schema.columns actual
   ON actual.table_schema=DATABASE()
@@ -2327,7 +2328,13 @@ LEFT JOIN support_entitlement_grants grant_row ON grant_row.support_order_id=cla
 WHERE grant_row.id IS NULL
    OR (grant_row.user_id IS NOT NULL AND NOT (grant_row.user_id <=> claim.user_id))
    OR (grant_row.user_id IS NULL AND claim.user_id NOT LIKE 'deleted:%')
-   OR NOT (grant_row.sku_id <=> claim.sku_id)
+   OR NOT (
+     grant_row.sku_id <=> claim.sku_id
+     OR (
+       claim.sku_id='scope-ai-account-v3'
+       AND grant_row.calculated_ai_tokens>0
+     )
+   )
    OR grant_row.entitlement_type<>'permanent'
    OR grant_row.first_purchase_applied<>1;
 
@@ -2636,8 +2643,479 @@ WHERE NOT EXISTS (
     AND CHARACTER_MAXIMUM_LENGTH=500
 );
 
--- 62) 整理中心 2.0 的附加事实、精确网址索引和健康观测分层必须完整（期望 0 行）
-SELECT '[62] missing_organize_table' AS check_name, expected.table_name AS detail
+-- 62) 知识工具箱的任务链路与持续工作区必须完整（期望 0 行）
+SELECT '[62] missing_toolbox_table' AS check_name, expected.t AS detail
+FROM (
+  SELECT 'toolbox_quotes' t UNION ALL
+  SELECT 'toolbox_jobs' UNION ALL
+  SELECT 'toolbox_job_inputs' UNION ALL
+  SELECT 'toolbox_artifacts' UNION ALL
+  SELECT 'toolbox_save_receipts' UNION ALL
+  SELECT 'toolbox_workspaces' UNION ALL
+  SELECT 'toolbox_workspace_resources' UNION ALL
+  SELECT 'toolbox_workspace_items' UNION ALL
+  SELECT 'toolbox_workspace_sessions'
+) expected
+LEFT JOIN information_schema.tables actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.t AND actual.engine='InnoDB'
+WHERE actual.table_name IS NULL;
+
+SELECT '[62] missing_toolbox_column' AS check_name, CONCAT(expected.tab, '.', expected.col) AS detail
+FROM (
+  SELECT 'toolbox_quotes' tab, 'input_digest' col UNION ALL
+  SELECT 'toolbox_quotes', 'billing_medium' UNION ALL
+  SELECT 'toolbox_quotes', 'input_snapshot_json' UNION ALL
+  SELECT 'toolbox_quotes', 'quoted_points' UNION ALL
+  SELECT 'toolbox_quotes', 'expires_at' UNION ALL
+  SELECT 'toolbox_jobs', 'client_request_id' UNION ALL
+  SELECT 'toolbox_jobs', 'billing_medium' UNION ALL
+  SELECT 'toolbox_jobs', 'input_digest' UNION ALL
+  SELECT 'toolbox_jobs', 'status' UNION ALL
+  SELECT 'toolbox_jobs', 'billing_status' UNION ALL
+  SELECT 'toolbox_jobs', 'save_status' UNION ALL
+  SELECT 'toolbox_jobs', 'points_operation_id' UNION ALL
+  SELECT 'toolbox_jobs', 'external_cost_committed' UNION ALL
+  SELECT 'toolbox_job_inputs', 'input_type' UNION ALL
+  SELECT 'toolbox_job_inputs', 'resource_id' UNION ALL
+  SELECT 'toolbox_job_inputs', 'document_source_id' UNION ALL
+  SELECT 'toolbox_artifacts', 'artifact_version' UNION ALL
+  SELECT 'toolbox_artifacts', 'content' UNION ALL
+  SELECT 'toolbox_artifacts', 'coverage_json' UNION ALL
+  SELECT 'toolbox_save_receipts', 'receipt_key' UNION ALL
+  SELECT 'toolbox_save_receipts', 'idempotency_key' UNION ALL
+  SELECT 'toolbox_save_receipts', 'status' UNION ALL
+  SELECT 'toolbox_save_receipts', 'lease_token' UNION ALL
+  SELECT 'toolbox_save_receipts', 'save_generation' UNION ALL
+  SELECT 'toolbox_workspaces', 'kind' UNION ALL
+  SELECT 'toolbox_workspaces', 'status' UNION ALL
+  SELECT 'toolbox_workspaces', 'next_step' UNION ALL
+  SELECT 'toolbox_workspace_resources', 'resource_version' UNION ALL
+  SELECT 'toolbox_workspace_resources', 'resource_title' UNION ALL
+  SELECT 'toolbox_workspace_items', 'lane' UNION ALL
+  SELECT 'toolbox_workspace_items', 'status' UNION ALL
+  SELECT 'toolbox_workspace_sessions', 'summary' UNION ALL
+  SELECT 'toolbox_workspace_sessions', 'next_step'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.tab AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[62] invalid_toolbox_column_shape' AS check_name,
+  CONCAT(expected.tab, '.', expected.col, '=', COALESCE(actual.column_type, 'missing')) AS detail
+FROM (
+  SELECT 'toolbox_quotes' tab, 'input_digest' col, 'char' data_type, 64 char_len, 'NO' nullable_flag UNION ALL
+  SELECT 'toolbox_quotes', 'billing_medium', 'varchar', 16, 'NO' UNION ALL
+  SELECT 'toolbox_quotes', 'input_snapshot_json', 'json', NULL, 'NO' UNION ALL
+  SELECT 'toolbox_jobs', 'client_request_id', 'varchar', 64, 'NO' UNION ALL
+  SELECT 'toolbox_jobs', 'billing_medium', 'varchar', 16, 'NO' UNION ALL
+  SELECT 'toolbox_jobs', 'status', 'varchar', 24, 'NO' UNION ALL
+  SELECT 'toolbox_jobs', 'billing_status', 'varchar', 24, 'NO' UNION ALL
+  SELECT 'toolbox_jobs', 'save_status', 'varchar', 16, 'NO' UNION ALL
+  SELECT 'toolbox_jobs', 'locked_by', 'varchar', 128, 'YES' UNION ALL
+  SELECT 'toolbox_job_inputs', 'resource_id', 'varchar', 128, 'YES' UNION ALL
+  SELECT 'toolbox_artifacts', 'content', 'mediumtext', NULL, 'NO' UNION ALL
+  SELECT 'toolbox_artifacts', 'coverage_json', 'json', NULL, 'YES' UNION ALL
+  SELECT 'toolbox_save_receipts', 'receipt_key', 'char', 64, 'NO' UNION ALL
+  SELECT 'toolbox_save_receipts', 'idempotency_key', 'varchar', 128, 'NO' UNION ALL
+  SELECT 'toolbox_save_receipts', 'status', 'varchar', 16, 'NO' UNION ALL
+  SELECT 'toolbox_save_receipts', 'lease_token', 'char', 36, 'YES' UNION ALL
+  SELECT 'toolbox_save_receipts', 'save_generation', 'int', NULL, 'NO' UNION ALL
+  SELECT 'toolbox_workspaces', 'title', 'varchar', 120, 'NO' UNION ALL
+  SELECT 'toolbox_workspaces', 'status', 'varchar', 16, 'NO' UNION ALL
+  SELECT 'toolbox_workspace_resources', 'resource_version', 'varchar', 128, 'NO' UNION ALL
+  SELECT 'toolbox_workspace_items', 'content', 'text', NULL, 'YES' UNION ALL
+  SELECT 'toolbox_workspace_sessions', 'summary', 'varchar', 1000, 'YES'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.tab AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL
+   OR LOWER(actual.data_type)<>expected.data_type
+   OR (expected.char_len IS NOT NULL AND COALESCE(actual.character_maximum_length, 0)<>expected.char_len)
+   OR actual.is_nullable<>expected.nullable_flag;
+
+SELECT '[62] invalid_toolbox_column_default' AS check_name,
+  CONCAT(expected.tab, '.', expected.col, '=', COALESCE(actual.column_default, 'NULL')) AS detail
+FROM (
+  SELECT 'toolbox_quotes' tab, 'billing_medium' col, 'points' expected_default UNION ALL
+  SELECT 'toolbox_jobs', 'billing_medium', 'points' UNION ALL
+  SELECT 'toolbox_jobs', 'status', 'queued' UNION ALL
+  SELECT 'toolbox_jobs', 'billing_status', 'reserved' UNION ALL
+  SELECT 'toolbox_jobs', 'save_status', 'unsaved' UNION ALL
+  SELECT 'toolbox_save_receipts', 'status', 'saving' UNION ALL
+  SELECT 'toolbox_save_receipts', 'save_generation', '1' UNION ALL
+  SELECT 'toolbox_workspaces', 'status', 'active' UNION ALL
+  SELECT 'toolbox_workspace_items', 'status', 'open'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.tab AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL OR COALESCE(actual.column_default, '')<>expected.expected_default;
+
+SELECT '[62] invalid_points_operation_status_width' AS check_name,
+  CONCAT('points_economy_operations.status=', actual.column_type) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name='points_economy_operations'
+  AND actual.column_name='status'
+  AND COALESCE(actual.character_maximum_length, 0)<24;
+
+SELECT '[62] missing_toolbox_index' AS check_name, CONCAT(expected.tab, '.', expected.ix) AS detail
+FROM (
+  SELECT 'toolbox_quotes' tab, 'uk_toolbox_quote_request' ix UNION ALL
+  SELECT 'toolbox_quotes', 'idx_toolbox_quote_expiry' UNION ALL
+  SELECT 'toolbox_jobs', 'uk_toolbox_job_request' UNION ALL
+  SELECT 'toolbox_jobs', 'uk_toolbox_job_quote' UNION ALL
+  SELECT 'toolbox_jobs', 'idx_toolbox_job_claim' UNION ALL
+  SELECT 'toolbox_job_inputs', 'uk_toolbox_job_input_order' UNION ALL
+  SELECT 'toolbox_artifacts', 'uk_toolbox_artifact_job' UNION ALL
+  SELECT 'toolbox_save_receipts', 'uk_toolbox_save_receipt' UNION ALL
+  SELECT 'toolbox_save_receipts', 'uk_toolbox_save_request' UNION ALL
+  SELECT 'toolbox_workspaces', 'idx_toolbox_workspace_user_kind' UNION ALL
+  SELECT 'toolbox_workspace_resources', 'uk_toolbox_workspace_resource' UNION ALL
+  SELECT 'toolbox_workspace_items', 'idx_toolbox_workspace_item_lane' UNION ALL
+  SELECT 'toolbox_workspace_sessions', 'idx_toolbox_workspace_session_time'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.tab AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;
+
+SELECT '[62] invalid_toolbox_index_definition' AS check_name,
+  CONCAT(
+    expected.tab, '.', expected.ix, '=',
+    COALESCE(CONCAT(IF(actual.non_unique=0, 'UNIQUE ', ''), actual.index_columns), 'missing')
+  ) AS detail
+FROM (
+  SELECT 'toolbox_quotes' tab, 'uk_toolbox_quote_request' ix, 0 non_unique, 'user_id,request_id' index_columns UNION ALL
+  SELECT 'toolbox_quotes', 'idx_toolbox_quote_expiry', 1, 'status,expires_at' UNION ALL
+  SELECT 'toolbox_jobs', 'uk_toolbox_job_request', 0, 'user_id,client_request_id' UNION ALL
+  SELECT 'toolbox_jobs', 'uk_toolbox_job_quote', 0, 'quote_id' UNION ALL
+  SELECT 'toolbox_jobs', 'idx_toolbox_job_claim', 1, 'status,available_at,locked_at' UNION ALL
+  SELECT 'toolbox_job_inputs', 'uk_toolbox_job_input_order', 0, 'job_id,input_index' UNION ALL
+  SELECT 'toolbox_artifacts', 'uk_toolbox_artifact_job', 0, 'job_id' UNION ALL
+  SELECT 'toolbox_save_receipts', 'uk_toolbox_save_receipt', 0, 'receipt_key' UNION ALL
+  SELECT 'toolbox_save_receipts', 'uk_toolbox_save_request', 0, 'user_id,idempotency_key' UNION ALL
+  SELECT 'toolbox_workspaces', 'idx_toolbox_workspace_user_kind', 1, 'user_id,kind,status,updated_at' UNION ALL
+  SELECT 'toolbox_workspace_resources', 'uk_toolbox_workspace_resource', 0, 'workspace_id,resource_type,resource_id' UNION ALL
+  SELECT 'toolbox_workspace_items', 'idx_toolbox_workspace_item_lane', 1, 'workspace_id,lane,status,position' UNION ALL
+  SELECT 'toolbox_workspace_sessions', 'idx_toolbox_workspace_session_time', 1, 'workspace_id,create_time'
+) expected
+LEFT JOIN (
+  SELECT table_name, index_name, MIN(non_unique) non_unique,
+         GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') index_columns
+  FROM information_schema.statistics
+  WHERE table_schema=DATABASE()
+  GROUP BY table_name, index_name
+) actual ON actual.table_name=expected.tab AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL
+   OR actual.non_unique<>expected.non_unique
+   OR actual.index_columns<>expected.index_columns;
+
+-- 63) 每日回顾会话、固定条目、枚举状态与抑制事实必须完整（期望 0 行）
+SELECT '[63] missing_daily_review_table' AS check_name, expected.t AS detail
+FROM (
+  SELECT 'daily_content_review_sessions' t UNION ALL
+  SELECT 'daily_content_review_items'
+) expected
+LEFT JOIN information_schema.tables actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.t
+ AND actual.engine='InnoDB'
+WHERE actual.table_name IS NULL;
+
+SELECT '[63] missing_daily_review_column' AS check_name, CONCAT(expected.tab, '.', expected.col) AS detail
+FROM (
+  SELECT 'daily_content_review_sessions' tab, 'id' col UNION ALL
+  SELECT 'daily_content_review_sessions', 'user_id' UNION ALL
+  SELECT 'daily_content_review_sessions', 'review_date' UNION ALL
+  SELECT 'daily_content_review_sessions', 'timezone' UNION ALL
+  SELECT 'daily_content_review_sessions', 'status' UNION ALL
+  SELECT 'daily_content_review_sessions', 'item_count' UNION ALL
+  SELECT 'daily_content_review_sessions', 'completed_at' UNION ALL
+  SELECT 'daily_content_review_sessions', 'skipped_at' UNION ALL
+  SELECT 'daily_content_review_sessions', 'create_time' UNION ALL
+  SELECT 'daily_content_review_sessions', 'update_time' UNION ALL
+  SELECT 'daily_content_review_items', 'id' UNION ALL
+  SELECT 'daily_content_review_items', 'session_id' UNION ALL
+  SELECT 'daily_content_review_items', 'user_id' UNION ALL
+  SELECT 'daily_content_review_items', 'slot' UNION ALL
+  SELECT 'daily_content_review_items', 'resource_type' UNION ALL
+  SELECT 'daily_content_review_items', 'resource_id' UNION ALL
+  SELECT 'daily_content_review_items', 'resource_date' UNION ALL
+  SELECT 'daily_content_review_items', 'reason_code' UNION ALL
+  SELECT 'daily_content_review_items', 'reason_tag_id' UNION ALL
+  SELECT 'daily_content_review_items', 'action' UNION ALL
+  SELECT 'daily_content_review_items', 'acted_at' UNION ALL
+  SELECT 'daily_content_review_items', 'create_time' UNION ALL
+  SELECT 'daily_content_review_items', 'update_time'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tab
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[63] invalid_daily_review_table_shape' AS check_name,
+  CONCAT(expected.tab, '=', COALESCE(actual.engine, 'missing'), '/', COALESCE(actual.table_collation, 'missing'), '/',
+         COALESCE(actual.row_format, 'missing')) AS detail
+FROM (
+  SELECT 'daily_content_review_sessions' tab UNION ALL
+  SELECT 'daily_content_review_items'
+) expected
+LEFT JOIN information_schema.tables actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.tab
+WHERE actual.table_name IS NULL
+   OR actual.engine<>'InnoDB'
+   OR actual.table_collation<>'utf8mb4_unicode_ci'
+   OR UPPER(actual.row_format)<>'DYNAMIC';
+
+SELECT '[63] invalid_daily_review_column_shape' AS check_name,
+  CONCAT(
+    expected.tab, '.', expected.col, ' actual=',
+    COALESCE(
+      CONCAT(
+        actual.ordinal_position, '/', actual.column_type, '/', actual.is_nullable, '/',
+        COALESCE(actual.column_default, 'NULL'), '/', COALESCE(actual.character_set_name, 'NULL'), '/',
+        COALESCE(actual.collation_name, 'NULL'), '/', COALESCE(actual.extra, '')
+      ),
+      'missing'
+    )
+  ) AS detail
+FROM (
+  SELECT 'daily_content_review_sessions' tab, 1 pos, 'id' col, 'char(36)' ct, 'NO' nullable_flag,
+    CAST(NULL AS CHAR) dflt, 'ascii' charset_name, 'ascii_bin' collation_name, '' extra UNION ALL
+  SELECT 'daily_content_review_sessions', 2, 'user_id', 'varchar(64)', 'NO', CAST(NULL AS CHAR),
+    'utf8mb4', 'utf8mb4_unicode_ci', '' UNION ALL
+  SELECT 'daily_content_review_sessions', 3, 'review_date', 'date', 'NO', CAST(NULL AS CHAR),
+    CAST(NULL AS CHAR), CAST(NULL AS CHAR), '' UNION ALL
+  SELECT 'daily_content_review_sessions', 4, 'timezone', 'varchar(64)', 'NO', CAST(NULL AS CHAR),
+    'utf8mb4', 'utf8mb4_unicode_ci', '' UNION ALL
+  SELECT 'daily_content_review_sessions', 5, 'status', 'varchar(16)', 'NO', 'active',
+    'utf8mb4', 'utf8mb4_unicode_ci', '' UNION ALL
+  SELECT 'daily_content_review_sessions', 6, 'item_count', 'tinyint(3) unsigned', 'NO', '0',
+    CAST(NULL AS CHAR), CAST(NULL AS CHAR), '' UNION ALL
+  SELECT 'daily_content_review_sessions', 7, 'completed_at', 'datetime', 'YES', CAST(NULL AS CHAR),
+    CAST(NULL AS CHAR), CAST(NULL AS CHAR), '' UNION ALL
+  SELECT 'daily_content_review_sessions', 8, 'skipped_at', 'datetime', 'YES', CAST(NULL AS CHAR),
+    CAST(NULL AS CHAR), CAST(NULL AS CHAR), '' UNION ALL
+  SELECT 'daily_content_review_sessions', 9, 'create_time', 'datetime', 'NO', 'CURRENT_TIMESTAMP',
+    CAST(NULL AS CHAR), CAST(NULL AS CHAR), '' UNION ALL
+  SELECT 'daily_content_review_sessions', 10, 'update_time', 'datetime', 'NO', 'CURRENT_TIMESTAMP',
+    CAST(NULL AS CHAR), CAST(NULL AS CHAR), 'on update CURRENT_TIMESTAMP' UNION ALL
+  SELECT 'daily_content_review_items', 1, 'id', 'char(36)', 'NO', CAST(NULL AS CHAR),
+    'ascii', 'ascii_bin', '' UNION ALL
+  SELECT 'daily_content_review_items', 2, 'session_id', 'char(36)', 'NO', CAST(NULL AS CHAR),
+    'ascii', 'ascii_bin', '' UNION ALL
+  SELECT 'daily_content_review_items', 3, 'user_id', 'varchar(64)', 'NO', CAST(NULL AS CHAR),
+    'utf8mb4', 'utf8mb4_unicode_ci', '' UNION ALL
+  SELECT 'daily_content_review_items', 4, 'slot', 'tinyint(3) unsigned', 'NO', CAST(NULL AS CHAR),
+    CAST(NULL AS CHAR), CAST(NULL AS CHAR), '' UNION ALL
+  SELECT 'daily_content_review_items', 5, 'resource_type', 'varchar(16)', 'NO', CAST(NULL AS CHAR),
+    'utf8mb4', 'utf8mb4_unicode_ci', '' UNION ALL
+  SELECT 'daily_content_review_items', 6, 'resource_id', 'varchar(255)', 'NO', CAST(NULL AS CHAR),
+    'utf8mb4', 'utf8mb4_unicode_ci', '' UNION ALL
+  SELECT 'daily_content_review_items', 7, 'resource_date', 'date', 'YES', CAST(NULL AS CHAR),
+    CAST(NULL AS CHAR), CAST(NULL AS CHAR), '' UNION ALL
+  SELECT 'daily_content_review_items', 8, 'reason_code', 'varchar(24)', 'NO', CAST(NULL AS CHAR),
+    'utf8mb4', 'utf8mb4_unicode_ci', '' UNION ALL
+  SELECT 'daily_content_review_items', 9, 'reason_tag_id', 'varchar(255)', 'YES', CAST(NULL AS CHAR),
+    'utf8', 'utf8_general_ci', '' UNION ALL
+  SELECT 'daily_content_review_items', 10, 'action', 'varchar(24)', 'NO', 'pending',
+    'utf8mb4', 'utf8mb4_unicode_ci', '' UNION ALL
+  SELECT 'daily_content_review_items', 11, 'acted_at', 'datetime', 'YES', CAST(NULL AS CHAR),
+    CAST(NULL AS CHAR), CAST(NULL AS CHAR), '' UNION ALL
+  SELECT 'daily_content_review_items', 12, 'create_time', 'datetime', 'NO', 'CURRENT_TIMESTAMP',
+    CAST(NULL AS CHAR), CAST(NULL AS CHAR), '' UNION ALL
+  SELECT 'daily_content_review_items', 13, 'update_time', 'datetime', 'NO', 'CURRENT_TIMESTAMP',
+    CAST(NULL AS CHAR), CAST(NULL AS CHAR), 'on update CURRENT_TIMESTAMP'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tab
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL
+   OR actual.ordinal_position<>expected.pos
+   OR LOWER(actual.column_type)<>expected.ct
+   OR actual.is_nullable<>expected.nullable_flag
+   OR NOT (actual.column_default <=> expected.dflt)
+   OR NOT (actual.character_set_name <=> expected.charset_name)
+   OR NOT (actual.collation_name <=> expected.collation_name)
+   OR LOWER(COALESCE(actual.extra, ''))<>LOWER(expected.extra);
+
+SELECT '[63] invalid_growth_recap_last_shown_date_shape' AS check_name,
+  CONCAT('growth_recap_state.last_shown_date=', COALESCE(actual.column_type, 'missing'), '/',
+         COALESCE(actual.is_nullable, 'missing'), '/', COALESCE(actual.column_default, 'NULL'), '/',
+         COALESCE(actual.extra, '')) AS detail
+FROM (SELECT 1) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='growth_recap_state'
+ AND actual.column_name='last_shown_date'
+WHERE actual.column_name IS NULL
+   OR LOWER(actual.column_type)<>'date'
+   OR actual.is_nullable<>'YES'
+   OR actual.column_default IS NOT NULL
+   OR COALESCE(actual.extra, '')<>'';
+
+SELECT '[63] invalid_daily_review_identifier_collation' AS check_name,
+  CONCAT(actual.table_name, '.', actual.column_name, '=', actual.character_set_name, '/', actual.collation_name) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND (
+    (actual.table_name IN ('daily_content_review_sessions', 'daily_content_review_items')
+      AND actual.column_name='user_id'
+      AND (actual.character_set_name<>'utf8mb4' OR actual.collation_name<>'utf8mb4_unicode_ci'))
+    OR (actual.table_name='daily_content_review_items'
+      AND actual.column_name='reason_tag_id'
+      AND (actual.character_set_name<>'utf8' OR actual.collation_name<>'utf8_general_ci'))
+    OR (actual.table_name IN ('daily_content_review_sessions', 'daily_content_review_items')
+      AND actual.column_name IN ('id', 'session_id')
+      AND (actual.character_set_name<>'ascii' OR actual.collation_name<>'ascii_bin'))
+  );
+
+SELECT '[63] missing_daily_review_index' AS check_name, CONCAT(expected.tab, '.', expected.ix) AS detail
+FROM (
+  SELECT 'daily_content_review_sessions' tab, 'PRIMARY' ix UNION ALL
+  SELECT 'daily_content_review_sessions', 'uk_daily_content_review_session_user_date' UNION ALL
+  SELECT 'daily_content_review_sessions', 'idx_daily_content_review_session_user_status' UNION ALL
+  SELECT 'daily_content_review_items', 'PRIMARY' UNION ALL
+  SELECT 'daily_content_review_items', 'uk_daily_content_review_item_session_slot' UNION ALL
+  SELECT 'daily_content_review_items', 'uk_daily_content_review_item_session_resource' UNION ALL
+  SELECT 'daily_content_review_items', 'idx_daily_content_review_item_user_resource' UNION ALL
+  SELECT 'daily_content_review_items', 'idx_daily_content_review_item_session_action'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tab
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;
+
+SELECT '[63] invalid_daily_review_index_shape' AS check_name,
+  CONCAT(expected.tab, '.', expected.ix, '=', COALESCE(CONCAT(actual.non_unique, '/', actual.cols), 'missing')) AS detail
+FROM (
+  SELECT 'daily_content_review_sessions' tab, 'PRIMARY' ix, 0 non_unique, 'id' cols UNION ALL
+  SELECT 'daily_content_review_sessions', 'uk_daily_content_review_session_user_date', 0, 'user_id,review_date' UNION ALL
+  SELECT 'daily_content_review_sessions', 'idx_daily_content_review_session_user_status', 1, 'user_id,status,review_date' UNION ALL
+  SELECT 'daily_content_review_items', 'PRIMARY', 0, 'id' UNION ALL
+  SELECT 'daily_content_review_items', 'uk_daily_content_review_item_session_slot', 0, 'session_id,slot' UNION ALL
+  SELECT 'daily_content_review_items', 'uk_daily_content_review_item_session_resource', 0, 'session_id,resource_type,resource_id' UNION ALL
+  SELECT 'daily_content_review_items', 'idx_daily_content_review_item_user_resource', 1,
+    'user_id,resource_type,resource_id(128),create_time' UNION ALL
+  SELECT 'daily_content_review_items', 'idx_daily_content_review_item_session_action', 1, 'session_id,action,slot'
+) expected
+LEFT JOIN (
+  SELECT table_name, index_name, MAX(non_unique) non_unique,
+    GROUP_CONCAT(
+      CONCAT(column_name, IF(sub_part IS NULL, '', CONCAT('(', sub_part, ')')))
+      ORDER BY seq_in_index SEPARATOR ','
+    ) cols
+  FROM information_schema.statistics
+  WHERE table_schema=DATABASE() AND table_name IN ('daily_content_review_sessions', 'daily_content_review_items')
+  GROUP BY table_name, index_name
+) actual ON actual.table_name=expected.tab AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL
+   OR actual.non_unique<>expected.non_unique
+   OR actual.cols<>expected.cols;
+
+SELECT '[63] invalid_daily_review_foreign_key' AS check_name,
+  'daily_content_review_items.fk_daily_content_review_item_session' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM information_schema.referential_constraints constraint_row
+  WHERE constraint_row.constraint_schema=DATABASE()
+    AND constraint_row.table_name='daily_content_review_items'
+    AND constraint_row.constraint_name='fk_daily_content_review_item_session'
+    AND constraint_row.referenced_table_name='daily_content_review_sessions'
+    AND constraint_row.delete_rule='CASCADE'
+);
+
+SELECT '[63] invalid_daily_review_foreign_key_mapping' AS check_name,
+  CONCAT('fk_daily_content_review_item_session=', COALESCE(actual.mapping, 'missing'), '/', COALESCE(actual.delete_rule, 'missing')) AS detail
+FROM (SELECT 1) expected
+LEFT JOIN (
+  SELECT mapping_row.constraint_name,
+    GROUP_CONCAT(
+      CONCAT(mapping_row.column_name, '->', mapping_row.referenced_table_name, '.', mapping_row.referenced_column_name)
+      ORDER BY mapping_row.ordinal_position SEPARATOR ','
+    ) mapping,
+    MAX(constraint_row.delete_rule) delete_rule
+  FROM information_schema.key_column_usage mapping_row
+  INNER JOIN information_schema.referential_constraints constraint_row
+    ON constraint_row.constraint_schema=mapping_row.constraint_schema
+   AND constraint_row.table_name=mapping_row.table_name
+   AND constraint_row.constraint_name=mapping_row.constraint_name
+  WHERE mapping_row.constraint_schema=DATABASE()
+    AND mapping_row.table_name='daily_content_review_items'
+    AND mapping_row.constraint_name='fk_daily_content_review_item_session'
+  GROUP BY mapping_row.constraint_name
+) actual ON actual.constraint_name='fk_daily_content_review_item_session'
+WHERE actual.constraint_name IS NULL
+   OR actual.mapping<>'session_id->daily_content_review_sessions.id'
+   OR actual.delete_rule<>'CASCADE';
+
+SELECT '[63] invalid_daily_review_session_state' AS check_name,
+  CONCAT(id, ':', status, ':', item_count) AS detail
+FROM daily_content_review_sessions
+WHERE BINARY status NOT IN ('active', 'completed', 'empty', 'skipped')
+   OR item_count>3
+   OR (BINARY status='empty' AND item_count<>0)
+   OR (BINARY status<>'empty' AND item_count=0)
+   OR (status='skipped' AND skipped_at IS NULL)
+   OR (status<>'skipped' AND skipped_at IS NOT NULL)
+   OR (status='completed' AND completed_at IS NULL)
+   OR (status<>'completed' AND completed_at IS NOT NULL);
+
+SELECT '[63] invalid_daily_review_item_state' AS check_name,
+  CONCAT(id, ':', slot, ':', resource_type, ':', reason_code, ':', action) AS detail
+FROM daily_content_review_items
+WHERE slot NOT BETWEEN 1 AND 3
+   OR BINARY resource_type NOT IN ('bookmark', 'note', 'file')
+   OR BINARY reason_code NOT IN ('on_this_day', 'active_tag', 'buried')
+   OR BINARY action NOT IN ('pending', 'opened', 'opened_tag_space', 'snoozed', 'dismissed')
+   OR (action='pending' AND acted_at IS NOT NULL)
+   OR (action<>'pending' AND acted_at IS NULL)
+   OR (BINARY reason_code='active_tag' AND NULLIF(TRIM(reason_tag_id), '') IS NULL)
+   OR (BINARY reason_code<>'active_tag' AND NULLIF(TRIM(reason_tag_id), '') IS NOT NULL)
+   OR (BINARY action='opened_tag_space' AND BINARY reason_code<>'active_tag');
+
+SELECT '[63] invalid_daily_review_item_owner' AS check_name, item.id AS detail
+FROM daily_content_review_items item
+LEFT JOIN daily_content_review_sessions session_row ON session_row.id=item.session_id
+WHERE session_row.id IS NULL OR session_row.user_id<>item.user_id;
+
+SELECT '[63] invalid_daily_review_item_count' AS check_name,
+  CONCAT(session_row.id, ':stored=', session_row.item_count, ':actual=', COUNT(item.id)) AS detail
+FROM daily_content_review_sessions session_row
+LEFT JOIN daily_content_review_items item ON item.session_id=session_row.id
+GROUP BY session_row.id, session_row.item_count
+HAVING COUNT(item.id)<>session_row.item_count OR COUNT(item.id)>3;
+
+-- 64) AI 运行中心必须可按创建时间 + 稳定 ID 做倒序游标扫描（期望 0 行）
+SELECT '[64] invalid_ai_operations_index' AS check_name,
+  CONCAT('idx_ai_execution_admin_created 实际=', IFNULL(actual.cols, '缺失')) AS detail
+FROM (SELECT 1) expected
+LEFT JOIN (
+  SELECT GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') AS cols
+  FROM information_schema.statistics
+  WHERE table_schema=DATABASE()
+    AND table_name='ai_executions'
+    AND index_name='idx_ai_execution_admin_created'
+) actual ON 1=1
+WHERE actual.cols IS NULL OR actual.cols <> 'created_at,id';
+
+SELECT '[64] invalid_ai_operations_provider_index' AS check_name,
+  CONCAT('idx_ai_provider_span_provider_execution 实际=', IFNULL(actual.cols, '缺失')) AS detail
+FROM (SELECT 1) expected
+LEFT JOIN (
+  SELECT GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') AS cols
+  FROM information_schema.statistics
+  WHERE table_schema=DATABASE()
+    AND table_name='ai_provider_spans'
+    AND index_name='idx_ai_provider_span_provider_execution'
+) actual ON 1=1
+WHERE actual.cols IS NULL OR actual.cols <> 'provider,execution_id';
+
+-- 65) 整理中心 2.0 的附加事实、精确网址索引和健康观测分层必须完整（期望 0 行）
+SELECT '[65] missing_organize_table' AS check_name, expected.table_name AS detail
 FROM (
   SELECT 'organize_issue_suppressions' table_name UNION ALL
   SELECT 'organize_action_requests'
@@ -2646,7 +3124,7 @@ LEFT JOIN information_schema.tables actual
   ON actual.table_schema=DATABASE() AND actual.table_name=expected.table_name
 WHERE actual.table_name IS NULL;
 
-SELECT '[62] missing_organize_column' AS check_name, CONCAT(expected.table_name, '.', expected.column_name) AS detail
+SELECT '[65] missing_organize_column' AS check_name, CONCAT(expected.table_name, '.', expected.column_name) AS detail
 FROM (
   SELECT 'bookmark' table_name, 'url_exact_hash' column_name UNION ALL
   SELECT 'bookmark_health', 'observed_status' UNION ALL
@@ -2664,7 +3142,7 @@ LEFT JOIN information_schema.columns actual
  AND actual.column_name=expected.column_name
 WHERE actual.column_name IS NULL;
 
-SELECT '[62] missing_organize_index' AS check_name, CONCAT(expected.table_name, '.', expected.index_name) AS detail
+SELECT '[65] missing_organize_index' AS check_name, CONCAT(expected.table_name, '.', expected.index_name) AS detail
 FROM (
   SELECT 'bookmark' table_name, 'idx_bookmark_exact_url' index_name UNION ALL
   SELECT 'bookmark_health', 'idx_bookmark_health_observed' UNION ALL
@@ -2677,7 +3155,7 @@ LEFT JOIN information_schema.statistics actual
  AND actual.index_name=expected.index_name
 WHERE actual.index_name IS NULL;
 
-SELECT '[62] missing_bookmark_exact_hash' AS check_name, id AS detail
+SELECT '[65] missing_bookmark_exact_hash' AS check_name, id AS detail
 FROM bookmark
 WHERE del_flag=0
   AND url IS NOT NULL

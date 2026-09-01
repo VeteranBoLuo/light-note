@@ -64,9 +64,26 @@ describe('移动端今日加载布局', () => {
     expect(source).toContain("import WorkbenchGrowth from '@/components/workbenches/WorkbenchGrowth.vue'");
     expect(source).not.toContain('class="mobile-today__growth-claim"');
     expect(source).toContain(':show-claim-action="false"');
+    expect(source).toContain('@go="handleDailyQuestAction"');
+    expect(source).toContain('resolveDailyQuestRoute(key, true)');
     expect(source).not.toContain('@claim="claimDailyGrowth"');
     expect(source).not.toContain('function claimDailyGrowth');
     expect(source).toMatch(/\.mobile-today__growth-card\s*\{[\s\S]*?margin:\s*14px 0/);
+  });
+
+  it('首屏稳定后在继续处理与成长卡之间渐进展示共享每日回顾，并纳入所有刷新入口', () => {
+    const reviewIndex = source.indexOf('<DailyReviewCard v-if="todaySettled"');
+    const continueIndex = source.indexOf('class="mobile-today__continue"');
+    const growthIndex = source.indexOf('<WorkbenchGrowth v-if="todaySettled"');
+
+    expect(source).toContain("import DailyReviewCard from '@/components/workbenches/DailyReviewCard.vue'");
+    expect(source).toContain("import { useDailyReview } from '@/composables/useDailyReview.ts'");
+    expect(reviewIndex).toBeGreaterThan(continueIndex);
+    expect(reviewIndex).toBeLessThan(growthIndex);
+    expect(source).toContain(':read-only="growthReadOnly"');
+    expect(source.match(/refreshDailyReview\(\)/g)).toHaveLength(6);
+    expect(source).not.toContain('loadRecap');
+    expect(source).toMatch(/\.mobile-today__daily-review\s*\{[\s\S]*?margin:\s*14px 0/);
   });
 
   it('骨架分组与真实待处理列表一样不显示内层外框', () => {

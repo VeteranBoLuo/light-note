@@ -25,6 +25,7 @@ import organizeRouter from '@/router/modules/organize.ts';
 import todoCreateRouter from '@/router/modules/todoCreate.ts';
 import coBuildRouter from '@/router/modules/coBuild.ts';
 import communityChatRouter from '@/router/modules/communityChat.ts';
+import toolboxRouter from '@/router/modules/toolbox.ts';
 import { getRuntimeApplicationEntryPath } from '@/utils/appEntry.ts';
 import { resolveLightNoteRuntime, shouldRedirectLandingToApplication } from '@/utils/appRuntime.ts';
 import { isMobileViewport } from '@/config/responsive.ts';
@@ -76,6 +77,7 @@ export const routes: RouteRecordRaw[] = [
       organizeRouter,
       todoCreateRouter,
       communityChatRouter,
+      ...toolboxRouter,
       ...coBuildRouter,
       ...securityCenterRouter,
       notificationsRouter,
@@ -113,6 +115,18 @@ export const routes: RouteRecordRaw[] = [
     path: '/quick-save',
     name: 'quickSave',
     component: () => import('@/view/quickSave/QuickSave.vue'),
+  },
+  {
+    meta: {
+      title: '轻笺 · 随手收 — 浏览器扩展',
+      publicStandalone: true,
+      hideAiAssistant: true,
+      seoIndexable: true,
+      canonicalPath: '/browser-extension',
+    },
+    path: '/browser-extension',
+    name: 'browserExtensionLanding',
+    component: () => import('@/view/browserExtension/BrowserExtensionLanding.vue'),
   },
   {
     meta: {

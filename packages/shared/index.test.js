@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { SITE_COMPLIANCE, normalizeMarkdownBlockquoteEntities, resolveBookmarkUrlInput } from './index.js';
+import {
+  FEATURE_ANNOUNCEMENTS,
+  getFeatureAnnouncement,
+  isFeatureAnnouncementActive,
+  SITE_COMPLIANCE,
+  normalizeMarkdownBlockquoteEntities,
+  resolveBookmarkUrlInput,
+} from './index.js';
 
 describe('SITE_COMPLIANCE', () => {
   it('明确区分产品品牌、网站 ICP 和网站公安备案信息', () => {
@@ -12,6 +19,18 @@ describe('SITE_COMPLIANCE', () => {
       publicSecurityQueryUrl: 'https://beian.mps.gov.cn/#/query/webSearch?code=51200002001211',
       publicSecurityBadgePath: '/public-security-filing-badge.png',
     });
+  });
+});
+
+describe('FEATURE_ANNOUNCEMENTS', () => {
+  it('用绝对发布时间和失效时间限制知识工坊上新提示', () => {
+    const announcement = getFeatureAnnouncement(FEATURE_ANNOUNCEMENTS.KNOWLEDGE_WORKSHOP.id);
+
+    expect(announcement).toBe(FEATURE_ANNOUNCEMENTS.KNOWLEDGE_WORKSHOP);
+    expect(isFeatureAnnouncementActive(announcement, new Date('2026-08-30T15:59:59.999Z'))).toBe(false);
+    expect(isFeatureAnnouncementActive(announcement, new Date('2026-08-30T16:00:00.000Z'))).toBe(true);
+    expect(isFeatureAnnouncementActive(announcement, new Date('2026-09-14T15:59:59.999Z'))).toBe(true);
+    expect(isFeatureAnnouncementActive(announcement, new Date('2026-09-14T16:00:00.000Z'))).toBe(false);
   });
 });
 

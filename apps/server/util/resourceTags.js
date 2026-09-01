@@ -118,6 +118,40 @@ export const validateUserResources = async (connection, { resourceIds = [], reso
   return normalizedResourceIds;
 };
 
+/**
+ * 标签编辑保存时允许丢弃“原本已关联、但当前已删除”的历史关系，避免不可见旧 ID 阻断保存。
+ * 新提交且不属于当前用户的资源仍严格拒绝，不能用容错逻辑放宽归属边界。
+ */
+export const validateEditableTagResources = async (connection, { tagId, resourceIds = [], resourceType, userId }) => {
+  const normalizedResourceIds = normalizeTagIds(resourceIds);
+  if (!normalizedResourceIds.length) return [];
+  const config = RESOURCE_OWNER_CONFIG[resourceType];
+  if (!config) throw new Error('不支持的资源类型');
+
+  const placeholders = normalizedResourceIds.map(() => '?').join(',');
+  const [rows] = await connection.query(
+    `SELECT id FROM \`${config.table}\` WHERE id IN (${placeholders}) AND ${config.ownerField} = ? AND del_flag = 0`,
+    [...normalizedResourceIds, userId],
+  );
+  const activeIds = new Set((rows || []).map((row) => String(row.id)));
+  const unavailableIds = normalizedResourceIds.filter((id) => !activeIds.has(id));
+  if (!unavailableIds.length) return normalizedResourceIds;
+
+  const unavailablePlaceholders = unavailableIds.map(() => '?').join(',');
+  const [existingRelations] = await connection.query(
+    `SELECT resource_id
+       FROM resource_tag_relations
+      WHERE tag_id = ? AND resource_type = ? AND user_id = ?
+        AND resource_id IN (${unavailablePlaceholders})`,
+    [tagId, resourceType, userId, ...unavailableIds],
+  );
+  const staleRelationIds = new Set((existingRelations || []).map((row) => String(row.resource_id)));
+  if (unavailableIds.some((id) => !staleRelationIds.has(id))) {
+    throw new Error('包含无权访问或不存在的资源');
+  }
+  return normalizedResourceIds.filter((id) => activeIds.has(id));
+};
+
 export const queryTagsForResource = async ({ resourceType, resourceId }) => {
   const [rows] = await pool.query(
     `

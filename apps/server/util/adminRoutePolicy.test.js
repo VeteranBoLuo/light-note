@@ -30,14 +30,17 @@ describe('adminRoutePolicyMiddleware', () => {
     const routerDir = path.resolve(dirname, '../router');
     const prefixes = {
       'bookmark.js': '/bookmark',
+      'adminAiOperations.js': '/admin/ai-operations',
       'chat.js': '/chat',
       'common.js': '/common',
+      'dailyReview.js': '/daily-review',
       'file.js': '/file',
       'featureRequest.js': '/featureRequest',
       'growth.js': '/growth',
       'inbox.js': '/inbox',
       'infra.js': '/infra',
       'todo.js': '/todo',
+      'toolbox.js': '/toolbox',
       'json.js': '/json',
       'knowledgeBase.js': '/knowledgeBase',
       'noteLibrary.js': '/note',
@@ -78,6 +81,36 @@ describe('adminRoutePolicyMiddleware', () => {
     }
   });
 
+  it('工具箱结果可随主体只读检查，但报价、扣积分、取消和保存均不可代执行', () => {
+    for (const path of [
+      '/toolbox/home',
+      '/toolbox/jobs/job-1',
+      '/toolbox/artifacts/artifact-1',
+      '/toolbox/workspaces/workspace-1',
+    ]) {
+      const next = vi.fn();
+      adminRoutePolicyMiddleware(createReq(path, 'GET', 'readonly'), createRes(), next);
+      expect(next).toHaveBeenCalledTimes(1);
+    }
+    for (const path of [
+      '/toolbox/quotes',
+      '/toolbox/workspaces',
+      '/toolbox/workspaces/workspace-1/resources',
+      '/toolbox/workspaces/workspace-1/items',
+      '/toolbox/workspaces/workspace-1/sessions',
+      '/toolbox/workspaces/workspace-1/open',
+      '/toolbox/jobs',
+      '/toolbox/jobs/job-1/cancel',
+      '/toolbox/artifacts/artifact-1/save',
+    ]) {
+      const next = vi.fn();
+      const res = createRes();
+      adminRoutePolicyMiddleware(createReq(path, 'POST', 'maintain'), res, next);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }));
+    }
+  });
+
   it('插件授权与授权码交换不能在管理员代管上下文中代表目标用户执行', () => {
     for (const mode of ['readonly', 'maintain']) {
       for (const path of ['/user/extension/authorize', '/user/extension/exchange']) {
@@ -86,8 +119,21 @@ describe('adminRoutePolicyMiddleware', () => {
         adminRoutePolicyMiddleware(createReq(path, 'POST', mode), res, next);
         expect(next).not.toHaveBeenCalled();
         expect(res.status).toHaveBeenCalledWith(403);
-        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }));
+        expect(res.json).toHaveBeenCalledWith(
+          expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }),
+        );
       }
+    }
+  });
+
+  it('功能公告已读只能写入真实登录账号，管理员代管上下文不能代点', () => {
+    for (const mode of ['readonly', 'maintain']) {
+      const next = vi.fn();
+      const res = createRes();
+      adminRoutePolicyMiddleware(createReq('/user/feature-announcements/seen', 'POST', mode), res, next);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }));
     }
   });
 
@@ -365,6 +411,26 @@ describe('adminRoutePolicyMiddleware', () => {
       adminRoutePolicyMiddleware(createReq('/growth/preferences', 'PUT', mode), preferencesRes, preferencesNext);
       expect(preferencesNext).not.toHaveBeenCalled();
       expect(preferencesRes.status).toHaveBeenCalledWith(403);
+    }
+  });
+
+  it('管理员可只读检查已有每日回顾，但不能替目标账号生成、处理或跳过', () => {
+    for (const mode of ['readonly', 'maintain']) {
+      const readNext = vi.fn();
+      adminRoutePolicyMiddleware(createReq('/daily-review/today', 'GET', mode), createRes(), readNext);
+      expect(readNext).toHaveBeenCalledTimes(1);
+
+      for (const path of [
+        '/daily-review/today/ensure',
+        '/daily-review/today/action',
+        '/daily-review/items/3412f2d3-22a2-49b5-9485-5653c5eb8e62/action',
+      ]) {
+        const next = vi.fn();
+        const res = createRes();
+        adminRoutePolicyMiddleware(createReq(path, 'POST', mode), res, next);
+        expect(next).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(403);
+      }
     }
   });
 

@@ -18,6 +18,7 @@ import { syncAfdianRewardForOrder, syncAfdianRewardsForUser } from './afdianSupp
 import {
   getSupportPackage,
   getSupportPackageFeatureState,
+  supportFirstPurchaseCompatibleClaimKeys,
   supportProviderIdentityHash,
 } from './afdianSupportPackageCatalog.js';
 import { lockCampaignSkuForCheckout } from './afdianSupportCampaignService.js';
@@ -176,10 +177,13 @@ export async function createAfdianCheckoutIntent({ userId, optionKey, db = pool 
   return { url: buildCheckoutUrl(option, token), expiresIn: CHECKOUT_TOKEN_TTL_DAYS * 24 * 60 * 60 };
 }
 
-async function regularFirstPurchaseCandidate(connection, { userId, skuId }) {
+async function regularFirstPurchaseCandidate(connection, { userId, definition }) {
+  const claimKeys = supportFirstPurchaseCompatibleClaimKeys(definition);
+  if (!claimKeys.length) return false;
+  const placeholders = claimKeys.map(() => '?').join(', ');
   const [userClaims] = await connection.query(
-    'SELECT 1 FROM support_first_purchase_claims WHERE user_id = ? AND sku_id = ? LIMIT 1',
-    [userId, skuId],
+    `SELECT 1 FROM support_first_purchase_claims WHERE user_id = ? AND sku_id IN (${placeholders}) LIMIT 1`,
+    [userId, ...claimKeys],
   );
   if (userClaims.length) return false;
   const [links] = await connection.query(
@@ -189,8 +193,9 @@ async function regularFirstPurchaseCandidate(connection, { userId, skuId }) {
   const identityHash = supportProviderIdentityHash(links[0]?.provider_user_id);
   if (!identityHash) return true;
   const [identityClaims] = await connection.query(
-    'SELECT 1 FROM support_first_purchase_claims WHERE provider_identity_hash = ? AND sku_id = ? LIMIT 1',
-    [identityHash, skuId],
+    `SELECT 1 FROM support_first_purchase_claims
+      WHERE provider_identity_hash = ? AND sku_id IN (${placeholders}) LIMIT 1`,
+    [identityHash, ...claimKeys],
   );
   return !identityClaims.length;
 }
@@ -241,7 +246,7 @@ export async function createAfdianPackageCheckoutIntent({
       if (!definition) throw afdianError('SUPPORT_PACKAGE_SKU_INVALID', '请选择有效的套餐', 400);
       firstPurchaseCandidate = await regularFirstPurchaseCandidate(connection, {
         userId: normalizedUserId,
-        skuId: definition.skuId,
+        definition,
       });
       amount = definition.amount;
       intentType = 'permanent';

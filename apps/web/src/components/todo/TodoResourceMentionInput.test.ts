@@ -100,7 +100,10 @@ describe('TodoResourceMentionInput', () => {
     expect(anchor?.style.top).toBe('24px');
     expect(panel?.querySelector('.resource-picker-panel')?.classList.contains('is-inline')).toBe(true);
     expect(panel?.querySelector('input')).toBeNull();
-    expect(searchMock).toHaveBeenLastCalledWith('codex', 12, true, { sort: 'relevance' });
+    expect(searchMock).toHaveBeenLastCalledWith('codex', 12, true, {
+      sort: 'relevance',
+      types: ['bookmark', 'note', 'file'],
+    });
   });
 
   it('选择候选后消费 @关键词、发出结构化资源并把焦点留在说明框', async () => {

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 const migration = readFileSync(new URL('../migrations/20260831_organize_center_v2.sql', import.meta.url), 'utf8');
 const rollback = readFileSync(new URL('../migrations/20260831_organize_center_v2_rollback.sql', import.meta.url), 'utf8');
 const assertions = readFileSync(new URL('../migrations/schema-assertions.sql', import.meta.url), 'utf8');
+const runtimeEnsure = readFileSync(new URL('./organizeSchema.js', import.meta.url), 'utf8');
 
 describe('整理中心迁移契约', () => {
   it('先补齐精确 URL、忽略事实、动作幂等与健康观测，再执行历史回填', () => {
@@ -19,9 +20,14 @@ describe('整理中心迁移契约', () => {
   });
 
   it('Schema 门禁同时检查缺列、缺索引与错误哈希，而不只检查 NULL', () => {
-    expect(assertions).toContain('[62] missing_organize_table');
+    expect(assertions).toContain('[65] missing_organize_table');
     expect(assertions).toContain('idx_bookmark_exact_url');
     expect(assertions).toContain('url_exact_hash <=> UNHEX(SHA2');
+  });
+
+  it('运行时 ensure 只补结构，不执行历史数据回填', () => {
+    expect(runtimeEnsure).not.toMatch(/UPDATE\s+bookmark\b/i);
+    expect(runtimeEnsure).not.toMatch(/UPDATE\s+bookmark_health\b/i);
   });
 
   it('紧急回滚包含所有新增表、列和索引', () => {
