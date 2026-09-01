@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
 import { createApp, h, nextTick } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import ResourceCenterSectionNav from './ResourceCenterSectionNav.vue';
+import useInboxStore from '@/store/inbox';
 
 const mocks = vi.hoisted(() => ({ recordOperation: vi.fn() }));
 
@@ -12,7 +14,14 @@ vi.mock('@/api/commonApi', () => ({
 
 let cleanup: (() => void) | undefined;
 
-async function mountNav(initialPath: string) {
+async function mountNav(
+  initialPath: string,
+  countState: Partial<Pick<ReturnType<typeof useInboxStore>, 'pendingTotal' | 'countReady' | 'countFailed'>> = {},
+) {
+  const pinia = createPinia();
+  setActivePinia(pinia);
+  const inbox = useInboxStore(pinia);
+  Object.assign(inbox, countState);
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -29,6 +38,7 @@ async function mountNav(initialPath: string) {
   const app = createApp({ render: () => h(ResourceCenterSectionNav) });
   app.component('OriginalIcon', { render: () => h('span', { 'aria-hidden': 'true' }) });
   app.component('svg-icon', { render: () => h('span', { 'aria-hidden': 'true' }) });
+  app.use(pinia);
   app.use(router);
   app.use(
     createI18n({
@@ -42,6 +52,9 @@ async function mountNav(initialPath: string) {
             knowledgeGraph: '全局图谱',
             knowledgeGraphShort: '图谱',
           },
+          inbox: {
+            pendingSummary: '还有 {count} 项待整理',
+          },
         },
       },
     }),
@@ -53,7 +66,7 @@ async function mountNav(initialPath: string) {
     app.unmount();
     host.remove();
   };
-  return { host, router };
+  return { host, router, inbox };
 }
 
 async function settleNavigation() {
@@ -109,5 +122,43 @@ describe('ResourceCenterSectionNav', () => {
     expect(tablist?.getAttribute('role')).toBe('tablist');
     expect(tabs).toHaveLength(3);
     expect(Array.from(tabs).map((tab) => tab.getAttribute('aria-selected'))).toEqual(['false', 'false', 'true']);
+  });
+
+  it('只在待整理数量权威且大于零时显示语义角标，并实时同步数量', async () => {
+    const { host, inbox } = await mountNav('/search', { pendingTotal: 1, countReady: true, countFailed: false });
+    const badge = host.querySelector<HTMLElement>('.organize-pending-badge')!;
+
+    expect(badge.classList.contains('is-hidden')).toBe(false);
+    expect(badge.getAttribute('role')).toBe('status');
+    expect(badge.getAttribute('aria-label')).toBe('还有 1 项待整理');
+    expect(badge.textContent?.trim()).toBe('1');
+
+    inbox.pendingTotal = 120;
+    await nextTick();
+    expect(badge.textContent?.trim()).toBe('99+');
+
+    inbox.pendingTotal = 0;
+    await nextTick();
+    expect(badge.classList.contains('is-hidden')).toBe(true);
+    expect(badge.getAttribute('aria-hidden')).toBe('true');
+    expect(badge.getAttribute('role')).toBeNull();
+  });
+
+  it('首次加载和最近一次计数失败时隐藏角标，不展示旧数字或占位符', async () => {
+    const { host, inbox } = await mountNav('/organize', { pendingTotal: 8, countReady: false });
+    const badge = host.querySelector<HTMLElement>('.organize-pending-badge')!;
+
+    expect(badge.classList.contains('is-hidden')).toBe(true);
+    expect(badge.textContent?.trim()).toBe('');
+
+    inbox.countReady = true;
+    inbox.countFailed = true;
+    await nextTick();
+    expect(badge.classList.contains('is-hidden')).toBe(true);
+
+    inbox.countFailed = false;
+    await nextTick();
+    expect(badge.classList.contains('is-hidden')).toBe(false);
+    expect(badge.textContent?.trim()).toBe('8');
   });
 });

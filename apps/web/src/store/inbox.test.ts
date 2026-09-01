@@ -33,13 +33,20 @@ describe('inbox store', () => {
     store.selectedKeys = ['note:n1'];
     store.quickCaptureVisible = true;
     store.quickCaptureType = 'file';
+    store.countReady = true;
+    store.countFailed = true;
     const before = store.requestId;
+    const countBefore = store.countRequestId;
     store.resetForOwner('user-b');
     expect(store.ownerId).toBe('user-b');
     expect(store.items).toEqual([]);
     expect(store.selectedKeys).toEqual([]);
     expect(store.quickCaptureVisible).toBe(false);
     expect(store.quickCaptureType).toBe('bookmark');
+    expect(store.countReady).toBe(false);
+    expect(store.countLoading).toBe(false);
+    expect(store.countFailed).toBe(false);
+    expect(store.countRequestId).toBe(countBefore + 1);
     expect(store.requestId).toBe(before + 1);
   });
 
@@ -154,6 +161,9 @@ describe('inbox store', () => {
     expect(store.todoPendingTotal).toBe(3);
     expect(store.actionTotal).toBe(5);
     expect(store.typeTotals).toEqual({ bookmark: 0, note: 0, file: 0 });
+    expect(store.countReady).toBe(true);
+    expect(store.countLoading).toBe(false);
+    expect(store.countFailed).toBe(false);
   });
 
   describe('注意力口径计数', () => {
@@ -181,6 +191,8 @@ describe('inbox store', () => {
       // 注意力：导航角标用
       expect(store.todoAttentionTotal).toBe(2);
       expect(store.todoOverdueTotal).toBe(1);
+      expect(store.countReady).toBe(true);
+      expect(store.countFailed).toBe(false);
       expect(store.todoDueTodayTotal).toBe(1);
     });
 
@@ -263,6 +275,9 @@ describe('inbox store', () => {
 
       expect(store.todoAttentionTotal).toBe(2);
       expect(store.todoOverdueTotal).toBe(1);
+      expect(store.countReady).toBe(true);
+      expect(store.countLoading).toBe(false);
+      expect(store.countFailed).toBe(true);
     });
 
     it('接口返回非 200 时不写入任何计数', async () => {
@@ -274,6 +289,8 @@ describe('inbox store', () => {
       await expect(store.refreshCount()).resolves.toBe(false);
 
       expect(store.todoAttentionTotal).toBe(2);
+      expect(store.countReady).toBe(true);
+      expect(store.countFailed).toBe(true);
     });
   });
 });

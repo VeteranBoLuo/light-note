@@ -19,6 +19,17 @@
       >
         <SvgIcon :src="icon.ai.organize" size="15" aria-hidden="true" />
         {{ t('resourceCenter.sections.organize') }}
+        <BChip
+          class="organize-pending-badge"
+          :class="{ 'is-hidden': !pendingBadgeVisible }"
+          tone="neutral"
+          size="small"
+          :role="pendingBadgeVisible ? 'status' : undefined"
+          :aria-hidden="pendingBadgeVisible ? undefined : 'true'"
+          :aria-label="pendingBadgeVisible ? pendingBadgeLabel : undefined"
+        >
+          {{ pendingBadgeVisible ? pendingBadgeText : '' }}
+        </BChip>
       </BButton>
     </div>
     <BButton
@@ -45,14 +56,24 @@
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { recordOperation } from '@/api/commonApi';
   import icon from '@/config/icon';
+  import { inboxStore } from '@/store';
 
   const { t } = useI18n();
   const route = useRoute();
   const router = useRouter();
+  const inbox = inboxStore();
   const isKnowledgeMapView = computed(() => route.path === '/search' && route.query.section === 'map');
+  const pendingBadgeVisible = computed(
+    () => inbox.countReady && !inbox.countFailed && Number(inbox.pendingTotal) > 0,
+  );
+  const pendingBadgeText = computed(() =>
+    inbox.pendingTotal > 99 ? '99+' : String(Math.max(0, Number(inbox.pendingTotal) || 0)),
+  );
+  const pendingBadgeLabel = computed(() => t('inbox.pendingSummary', { count: inbox.pendingTotal }));
 
   const activeSection = computed(() => {
     if (isKnowledgeMapView.value) return 'map';
@@ -102,9 +123,30 @@
   .section-nav-item {
     height: 30px;
     padding: 0 13px;
+    gap: 6px;
     border-radius: 7px;
     background: transparent;
     color: var(--desc-color);
+  }
+
+  :deep(.organize-pending-badge.b-chip--neutral.b-chip--small) {
+    --b-chip-fg: var(--primary-color);
+    --b-chip-bg: var(--mobile-selected-bg, var(--workspace-panel-bg-color));
+    --b-chip-border: var(--primary-color);
+
+    width: 27px;
+    min-width: 27px;
+    height: 18px;
+    min-height: 18px;
+    padding: 0 4px;
+    font-size: 10px;
+    line-height: 16px;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+  }
+
+  :deep(.organize-pending-badge.is-hidden) {
+    visibility: hidden;
   }
 
   .section-nav-item:hover {
