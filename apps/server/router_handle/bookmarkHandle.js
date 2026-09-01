@@ -684,14 +684,14 @@ export const doArchiveAndSummarizeBookmark = async (req, res) => {
   }
 };
 
-// POST /bookmark/health/check —— 检测一批链接死活(增量,最久未测优先)
+// POST /bookmark/health/check —— 兼容旧入口：创建或复用一次持久化全量检测任务
 export const doCheckHealth = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
     const result = await checkBookmarkHealth((req.resourceUser || req.user).id);
     res.send(resultData(result));
   } catch (error) {
-    console.error('[bookmark-health] batch check failed code=%s', stableAgentErrorCode(error));
+    console.error('[bookmark-health] scan start failed code=%s', stableAgentErrorCode(error));
     res.send(resultData(null, 500, '检测失败，请稍后重试'));
   }
 };
@@ -709,7 +709,7 @@ export const doResetHealth = async (req, res) => {
   }
 };
 
-// POST /bookmark/health/checkAll —— 启动一次全量后台检测(前端随后轮询 GET /health 看进度)
+// POST /bookmark/health/checkAll —— 创建或复用一次持久化全量检测任务（前端轮询 GET /health）
 export const doCheckAllHealth = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {

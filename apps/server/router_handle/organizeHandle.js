@@ -2,11 +2,11 @@ import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import {
-  checkBookmarkHealth,
   getHealthSummary,
   listBookmarkHealthIssues,
   markLinkNormal,
   recheckBookmarkHealth,
+  startFullCheck,
   unmarkLinkNormal,
 } from '../util/linkHealth.js';
 import {
@@ -234,17 +234,21 @@ export async function bookmarkHealth(req, res) {
   const current = requirePrivateSubject(req, res);
   if (!current) return;
   try {
-    return res.send(resultData(await getHealthSummary(current.id)));
+    return res.send(
+      resultData(
+        await getHealthSummary(current.id, { includeSuspect: String(req.query?.includeSuspect || '') !== '0' }),
+      ),
+    );
   } catch (error) {
     return sendError(res, error);
   }
 }
 
-export async function checkHealthBatch(req, res) {
+export async function startHealthScan(req, res) {
   const current = requireWrite(req, res);
   if (!current) return;
   try {
-    return res.send(resultData(await checkBookmarkHealth(current.id)));
+    return res.send(resultData(await startFullCheck(current.id)));
   } catch (error) {
     return sendError(res, error);
   }

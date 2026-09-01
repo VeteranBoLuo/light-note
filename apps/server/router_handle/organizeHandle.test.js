@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   listUntaggedResources: vi.fn(),
   listDuplicateBookmarkGroups: vi.fn(),
   listBookmarkHealthIssues: vi.fn(),
+  startFullCheck: vi.fn(),
 }));
 
 vi.mock('../db/index.js', () => ({
@@ -30,11 +31,11 @@ vi.mock('../util/services/bookmarkDuplicateService.js', () => ({
   unignoreDuplicateBookmarkGroup: vi.fn(),
 }));
 vi.mock('../util/linkHealth.js', () => ({
-  checkBookmarkHealth: vi.fn(),
   getHealthSummary: vi.fn(),
   listBookmarkHealthIssues: mocks.listBookmarkHealthIssues,
   markLinkNormal: vi.fn(),
   recheckBookmarkHealth: vi.fn(),
+  startFullCheck: mocks.startFullCheck,
   unmarkLinkNormal: vi.fn(),
 }));
 vi.mock('../util/services/organizeSuppressionService.js', () => ({
@@ -43,7 +44,7 @@ vi.mock('../util/services/organizeSuppressionService.js', () => ({
   upsertOrganizeSuppression: vi.fn(),
 }));
 
-const { ignoreUntagged, listIssues, summary } = await import('./organizeHandle.js');
+const { ignoreUntagged, listIssues, startHealthScan, summary } = await import('./organizeHandle.js');
 
 function mockRes() {
   const res = { status: vi.fn(), send: vi.fn() };
@@ -123,5 +124,20 @@ describe('organizeHandle', () => {
     );
 
     expect(mocks.getConnection).not.toHaveBeenCalled();
+  });
+
+  it('全量健康检测只创建或复用持久任务，不在请求内等待链接检测', async () => {
+    mocks.startFullCheck.mockResolvedValue({ running: true, already: false, scan: { total: 232, processed: 0 } });
+    const res = mockRes();
+
+    await startHealthScan({ user: { id: 'user-1', role: 'user' } }, res);
+
+    expect(mocks.startFullCheck).toHaveBeenCalledWith('user-1');
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 200,
+        data: expect.objectContaining({ running: true, scan: { total: 232, processed: 0 } }),
+      }),
+    );
   });
 });

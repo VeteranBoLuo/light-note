@@ -1,19 +1,21 @@
 import { constants as fsConstants, promises as fsP } from 'node:fs';
 import pool from '../db/index.js';
+import { ensureOrganizeSchema, ORGANIZE_BACKGROUND_TABLES } from '../util/organizeSchema.js';
 import { ensureResourceGovernanceSchema, RESOURCE_GOVERNANCE_TABLES } from '../util/resourceGovernanceSchema.js';
 import { resolveGovernedImageRoots } from '../util/resourceGovernance/safety.js';
 import { resourceGovernanceCleanupEnabled } from '../util/resourceGovernance/registry.js';
 
 let failed = false;
 try {
-  await ensureResourceGovernanceSchema();
+  await Promise.all([ensureResourceGovernanceSchema(), ensureOrganizeSchema()]);
+  const requiredTables = [...RESOURCE_GOVERNANCE_TABLES, ...ORGANIZE_BACKGROUND_TABLES];
   const [tables] = await pool.query(
     `SELECT table_name FROM information_schema.tables
-      WHERE table_schema = DATABASE() AND table_name IN (${RESOURCE_GOVERNANCE_TABLES.map(() => '?').join(',')})`,
-    RESOURCE_GOVERNANCE_TABLES,
+      WHERE table_schema = DATABASE() AND table_name IN (${requiredTables.map(() => '?').join(',')})`,
+    requiredTables,
   );
   const existing = new Set(tables.map((row) => String(row.table_name || row.TABLE_NAME || '')));
-  const missing = RESOURCE_GOVERNANCE_TABLES.filter((table) => !existing.has(table));
+  const missing = requiredTables.filter((table) => !existing.has(table));
   if (missing.length) throw new Error(`RESOURCE_GOVERNANCE_SCHEMA_MISSING:${missing.join(',')}`);
 
   for (const root of resolveGovernedImageRoots()) {

@@ -205,6 +205,7 @@ describe('adminRoutePolicyMiddleware', () => {
       ['POST', '/organize/duplicate-bookmarks/group-1/resolve'],
       ['POST', '/organize/duplicate-bookmarks/group-1/ignore'],
       ['DELETE', '/organize/duplicate-bookmarks/group-1/ignore'],
+      ['POST', '/organize/bookmark-health/scan'],
       ['POST', '/organize/bookmark-health/check-batch'],
       ['POST', '/organize/bookmark-health/bookmark-1/recheck'],
       ['POST', '/organize/bookmark-health/bookmark-1/mark-normal'],

@@ -3118,7 +3118,9 @@ WHERE actual.cols IS NULL OR actual.cols <> 'provider,execution_id';
 SELECT '[65] missing_organize_table' AS check_name, expected.table_name AS detail
 FROM (
   SELECT 'organize_issue_suppressions' table_name UNION ALL
-  SELECT 'organize_action_requests'
+  SELECT 'organize_action_requests' UNION ALL
+  SELECT 'bookmark_health_scan_jobs' UNION ALL
+  SELECT 'bookmark_health_scan_items'
 ) expected
 LEFT JOIN information_schema.tables actual
   ON actual.table_schema=DATABASE() AND actual.table_name=expected.table_name
@@ -3132,6 +3134,11 @@ FROM (
   SELECT 'bookmark_health', 'checked_url_hash' UNION ALL
   SELECT 'bookmark_health', 'user_override' UNION ALL
   SELECT 'bookmark_health', 'override_at' UNION ALL
+  SELECT 'bookmark_health_scan_jobs', 'run_id' UNION ALL
+  SELECT 'bookmark_health_scan_jobs', 'lease_expires_at' UNION ALL
+  SELECT 'bookmark_health_scan_jobs', 'processed' UNION ALL
+  SELECT 'bookmark_health_scan_items', 'attempts' UNION ALL
+  SELECT 'bookmark_health_scan_items', 'result_status' UNION ALL
   SELECT 'organize_issue_suppressions', 'context_hash' UNION ALL
   SELECT 'organize_action_requests', 'payload_hash' UNION ALL
   SELECT 'organize_action_requests', 'response_json'
@@ -3146,6 +3153,9 @@ SELECT '[65] missing_organize_index' AS check_name, CONCAT(expected.table_name, 
 FROM (
   SELECT 'bookmark' table_name, 'idx_bookmark_exact_url' index_name UNION ALL
   SELECT 'bookmark_health', 'idx_bookmark_health_observed' UNION ALL
+  SELECT 'bookmark_health_scan_jobs', 'uk_bookmark_health_scan_run' UNION ALL
+  SELECT 'bookmark_health_scan_jobs', 'idx_bookmark_health_scan_claim' UNION ALL
+  SELECT 'bookmark_health_scan_items', 'idx_bookmark_health_scan_item_claim' UNION ALL
   SELECT 'organize_issue_suppressions', 'uk_organize_suppression' UNION ALL
   SELECT 'organize_action_requests', 'PRIMARY'
 ) expected

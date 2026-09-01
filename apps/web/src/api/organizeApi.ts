@@ -92,6 +92,44 @@ export interface BookmarkHealthItem {
   hasSnapshot: boolean;
 }
 
+export type BookmarkHealthScanStatus = 'queued' | 'running' | 'succeeded' | 'completed_with_errors' | 'failed' | 'idle';
+
+export interface BookmarkHealthScan {
+  id: string;
+  status: BookmarkHealthScanStatus;
+  running: boolean;
+  total: number;
+  processed: number;
+  checked: number;
+  alive: number;
+  suspect: number;
+  unknown: number;
+  skipped: number;
+  failed: number;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  errorCode?: string | null;
+}
+
+export interface BookmarkHealthSummary {
+  total: number;
+  checked: number;
+  alive: number;
+  suspectCount: number;
+  unknown: number;
+  userNormal: number;
+  unchecked: number;
+  running: boolean;
+  runId: string;
+  runStatus: BookmarkHealthScanStatus;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  lastCheckedAt?: string | null;
+  pollAfterMs?: number;
+  scan: BookmarkHealthScan | null;
+  suspect: BookmarkHealthItem[];
+}
+
 export interface OrganizeIssueListResponse<T> {
   items: T[];
   nextCursor: string | null;
@@ -132,9 +170,9 @@ export const ignoreDuplicateBookmarks = (groupKey: string) =>
 export const unignoreDuplicateBookmarks = (groupKey: string) =>
   apiBaseDelete(`/api/organize/duplicate-bookmarks/${groupKey}/ignore`, undefined, { silent: true });
 
-export const getBookmarkHealth = () => apiBaseGet('/api/organize/bookmark-health', undefined, { silent: true });
-export const checkBookmarkHealthBatch = () =>
-  apiBasePost('/api/organize/bookmark-health/check-batch', {}, { silent: true });
+export const getBookmarkHealth = ({ includeSuspect = true }: { includeSuspect?: boolean } = {}) =>
+  apiBaseGet('/api/organize/bookmark-health', { includeSuspect: includeSuspect ? 1 : 0 }, { silent: true });
+export const startBookmarkHealthScan = () => apiBasePost('/api/organize/bookmark-health/scan', {}, { silent: true });
 export const recheckBookmarkHealth = (bookmarkId: string) =>
   apiBasePost(`/api/organize/bookmark-health/${bookmarkId}/recheck`, {}, { silent: true });
 export const markBookmarkHealthNormal = (bookmarkId: string) =>

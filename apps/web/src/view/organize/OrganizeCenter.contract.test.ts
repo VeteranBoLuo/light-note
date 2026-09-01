@@ -22,6 +22,7 @@ describe('整理中心 2.0 页面契约', () => {
     expect(source).toContain("import BInput from '@/components/base/BasicComponents/BInput.vue'");
     expect(source).toContain("import BSelect from '@/components/base/BasicComponents/BSelect.vue'");
     expect(source).toContain("import BModal from '@/components/base/BasicComponents/BModal/BModal.vue'");
+    expect(source).toContain("import BProgress from '@/components/base/BasicComponents/BProgress.vue'");
     expect(source).toContain("import icon from '@/config/icon'");
     expect(source).not.toMatch(/<(input|select|table)\b/);
     expect(source).not.toMatch(/<svg\b|<path\b/);
@@ -57,5 +58,17 @@ describe('整理中心 2.0 页面契约', () => {
     expect(source).not.toContain('clientRequestId: generateUUID()');
     expect(source).toContain('duplicateTagMergeBlocked');
     expect(source).toContain('selectedKeeperCanSubmit');
+  });
+
+  it('疑似失效一次提交全部书签，并轮询持久任务而不暴露内部批次', () => {
+    expect(source).toContain('startBookmarkHealthScan');
+    expect(source).toContain('<BProgress');
+    expect(source).toContain('healthScan.value?.processed');
+    expect(source).toContain('scheduleHealthPolling');
+    expect(source).toContain('visibilitychange');
+    expect(source).toContain("t('organize.health.canLeave')");
+    expect(source).not.toContain('checkBookmarkHealthBatch');
+    expect(source).not.toContain('checkBatch');
+    expect(source).not.toMatch(/检测下一批|25\s*条/);
   });
 });

@@ -40,6 +40,8 @@ const DIRECT_DELETE_TABLES = Object.freeze([
   ['ai_daily_bonus', 'user_id'],
   ['user_item', 'user_id'],
   ['bookmark_snapshot', 'user_id'],
+  ['bookmark_health_scan_items', 'user_id'],
+  ['bookmark_health_scan_jobs', 'user_id'],
   ['bookmark_health', 'user_id'],
   ['bookmark_icon_jobs', 'user_id'],
   ['api_logs', 'user_id'],

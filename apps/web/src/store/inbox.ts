@@ -50,6 +50,10 @@ export default defineStore('inbox', {
     quickCaptureVisible: false,
     quickCaptureType: 'bookmark' as ActionCaptureType,
     ownerId: '',
+    countReady: false,
+    countLoading: false,
+    countFailed: false,
+    countRequestId: 0,
     requestId: 0,
   }),
   actions: {
@@ -72,6 +76,10 @@ export default defineStore('inbox', {
       this.selectedKeys = [];
       this.quickCaptureVisible = false;
       this.quickCaptureType = 'bookmark';
+      this.countReady = false;
+      this.countLoading = false;
+      this.countFailed = false;
+      this.countRequestId += 1;
       this.loadFailed = false;
       this.requestId += 1;
     },
@@ -80,18 +88,29 @@ export default defineStore('inbox', {
       this.quickCaptureVisible = true;
     },
     async refreshCount() {
+      const requestId = ++this.countRequestId;
+      this.countLoading = true;
       try {
         const res = await countInbox();
-        if (res.status !== 200) return false;
+        if (requestId !== this.countRequestId) return false;
+        if (res.status !== 200) {
+          this.countFailed = true;
+          return false;
+        }
         this.pendingTotal = Number(res.data?.pendingTotal || 0);
         this.todoPendingTotal = Number(res.data?.todoPendingTotal || 0);
         this.actionTotal = Number(res.data?.actionTotal || this.pendingTotal + this.todoPendingTotal);
         Object.assign(this, readAttentionCounts(res.data));
         this.typeTotals = res.data?.typeTotals || { bookmark: 0, note: 0, file: 0 };
+        this.countReady = true;
+        this.countFailed = false;
         return true;
       } catch {
-        // 导航角标属于增强信息，接口暂不可用时保留现有数量，避免影响主页面。
+        if (requestId === this.countRequestId) this.countFailed = true;
+        // 保留现有库存与待办注意力数字，避免影响主页面；依赖权威计数的入口角标由 countFailed 隐藏。
         return false;
+      } finally {
+        if (requestId === this.countRequestId) this.countLoading = false;
       }
     },
     // silent: 下拉刷新等场景不进 loading,避免旧列表被骨架屏替换。
@@ -121,6 +140,8 @@ export default defineStore('inbox', {
         this.actionTotal = Number(res.data?.actionTotal || this.pendingTotal + this.todoPendingTotal);
         Object.assign(this, readAttentionCounts(res.data));
         this.typeTotals = res.data?.typeTotals || { bookmark: 0, note: 0, file: 0 };
+        this.countReady = true;
+        this.countFailed = false;
         this.selectedKeys = [];
         return true;
       } catch {

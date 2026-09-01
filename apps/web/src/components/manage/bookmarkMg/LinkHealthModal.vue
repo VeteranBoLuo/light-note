@@ -5,10 +5,11 @@
 
       <div class="lh-bar">
         <div class="lh-stats">
-          <span>{{ $t('bookmarkMg.healthProgress', { checked: summary.checked, total: summary.total }) }}</span>
+          <span>{{ $t('bookmarkMg.healthProgress', { checked: progressChecked, total: progressTotal }) }}</span>
           <span v-if="summary.suspect.length" class="lh-dead-n"
             >· {{ $t('bookmarkMg.healthSuspectCount', { n: summary.suspect.length }) }}</span
           >
+          <small v-if="running">{{ $t('bookmarkMg.healthContinueInBackground') }}</small>
         </div>
         <b-space>
           <b-button
@@ -36,7 +37,14 @@
         </b-space>
       </div>
 
-      <div v-if="!summary.suspect.length && summary.checked > 0" class="lh-empty"
+      <BProgress
+        v-if="running"
+        :percent="progressPercent"
+        :aria-label="$t('bookmarkMg.healthProgress', { checked: progressChecked, total: progressTotal })"
+        show-info
+      />
+
+      <div v-if="!running && !summary.suspect.length && summary.checked > 0" class="lh-empty"
         >✅ {{ $t('bookmarkMg.healthNoDead') }}</div
       >
 
@@ -77,6 +85,7 @@
   import { apiBaseGet, apiBasePost } from '@/http/request.ts';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BProgress from '@/components/base/BasicComponents/BProgress.vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -91,10 +100,25 @@
     note: string;
     hasSnapshot: boolean;
   }
-  const summary = ref<{ total: number; checked: number; running: boolean; suspect: SuspectItem[] }>({
+  interface HealthScan {
+    status: 'queued' | 'running' | 'succeeded' | 'completed_with_errors' | 'failed';
+    running: boolean;
+    total: number;
+    processed: number;
+  }
+  interface HealthSummary {
+    total: number;
+    checked: number;
+    running: boolean;
+    runStatus?: string;
+    scan: HealthScan | null;
+    suspect: SuspectItem[];
+  }
+  const summary = ref<HealthSummary>({
     total: 0,
     checked: 0,
     running: false,
+    scan: null,
     suspect: [],
   });
   const starting = ref(false);
@@ -104,14 +128,30 @@
   const snapId = ref('');
   let poller: ReturnType<typeof setInterval> | null = null;
 
-  const running = computed(() => summary.value.running);
-  const allChecked = computed(() => summary.value.total > 0 && summary.value.checked >= summary.value.total);
+  const running = computed(() => Boolean(summary.value.scan?.running || summary.value.running));
+  const progressTotal = computed(() => Number(summary.value.scan?.total ?? summary.value.total));
+  const progressChecked = computed(() => Number(summary.value.scan?.processed ?? summary.value.checked));
+  const progressPercent = computed(() =>
+    progressTotal.value > 0 ? (progressChecked.value / progressTotal.value) * 100 : 0,
+  );
+  const allChecked = computed(
+    () =>
+      ['succeeded', 'completed_with_errors', 'failed'].includes(String(summary.value.scan?.status || '')) ||
+      (summary.value.total > 0 && summary.value.checked >= summary.value.total),
+  );
 
   function normalizeUrl(u: string) {
     return resolveBookmarkUrlInput(u, { allowTextExtraction: false }).canonicalUrl;
   }
   function applySummary(d: any) {
-    summary.value = { total: d.total || 0, checked: d.checked || 0, running: !!d.running, suspect: d.suspect || [] };
+    summary.value = {
+      total: Number(d.total || 0),
+      checked: Number(d.checked || 0),
+      running: Boolean(d.running),
+      runStatus: d.runStatus,
+      scan: d.scan || null,
+      suspect: d.suspect || [],
+    };
   }
   async function loadSummary() {
     const res = await apiBaseGet('/api/bookmark/health');
@@ -123,7 +163,7 @@
       poller = null;
     }
   }
-  // 全量检测:启动后台任务,再轮询进度(checked/total 与疑似列表实时增长),跑完自动停
+  // 全量检测：创建或复用持久任务；弹窗只轮询进度，关闭弹窗不会中止 Worker。
   async function startCheck() {
     if (starting.value || running.value) return;
     const isRecheck = allChecked.value;
@@ -235,9 +275,15 @@
     background: color-mix(in srgb, var(--card-border-color) 14%, transparent);
   }
   .lh-stats {
+    display: grid;
+    gap: 2px;
     font-size: 13px;
     color: var(--text-color);
     font-variant-numeric: tabular-nums;
+  }
+  .lh-stats small {
+    color: var(--desc-color);
+    font-size: 11px;
   }
   .lh-dead-n {
     color: #dc2626;

@@ -2,6 +2,8 @@
 
 import os from 'node:os';
 import pool from './db/index.js';
+import { processBookmarkHealthScanBatch } from './util/linkHealth.js';
+import { ensureOrganizeSchema } from './util/organizeSchema.js';
 import { ensureResourceGovernanceSchema } from './util/resourceGovernanceSchema.js';
 import { claimGovernanceScan, runGovernanceScan } from './util/resourceGovernance/scanService.js';
 import { claimCleanupJob, runCleanupJob } from './util/resourceGovernance/jobService.js';
@@ -15,9 +17,9 @@ let stopping = false;
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function run() {
-  await ensureResourceGovernanceSchema();
+  await Promise.all([ensureResourceGovernanceSchema(), ensureOrganizeSchema()]);
   console.log(
-    '[resource-governance-worker] started id=%s scan=%s cleanup=%s',
+    '[resource-governance-worker] started id=%s scan=%s cleanup=%s bookmarkHealth=true',
     workerId,
     resourceGovernanceScanEnabled(),
     resourceGovernanceCleanupEnabled(),
@@ -39,6 +41,7 @@ async function run() {
           await runCleanupJob(job, workerId);
         }
       }
+      if (await processBookmarkHealthScanBatch(workerId)) handled = true;
       if (!handled) await wait(pollMs);
     } catch (error) {
       console.error('[resource-governance-worker] loop failed code=%s', stableAgentErrorCode(error));
