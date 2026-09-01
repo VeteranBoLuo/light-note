@@ -150,7 +150,9 @@
   const fromPath = computed(() => {
     const raw = Array.isArray(route.query.from) ? route.query.from[0] : route.query.from;
     const text = String(raw || '/search');
-    return text.startsWith('/search') || text.startsWith('/noteLibrary') ? text : '/search';
+    return text.startsWith('/search') || text.startsWith('/noteLibrary') || text.startsWith('/organize')
+      ? text
+      : '/search';
   });
   const pageTitle = computed(() =>
     mode.value === 'add' ? t('resourceCenter.batch.workspaceAddTitle') : t('resourceCenter.batch.workspaceRemoveTitle'),
@@ -313,7 +315,7 @@
     const stored = loadBatchStateFromStorage();
     if (!stored?.selection || !stored.selectedCount) {
       message.warning(t('resourceCenter.batch.noSelection'));
-      router.replace('/search');
+      router.replace(fromPath.value);
       return;
     }
     items.value = stored.items;
@@ -321,7 +323,7 @@
     selectedResourceCount.value = stored.selectedCount;
     const ok = await loadWorkspaceData();
     if (!ok) {
-      router.replace('/search');
+      router.replace(fromPath.value);
     }
   });
 </script>

@@ -10,6 +10,7 @@ import { ensureTag } from './tagService.js';
 import { triggerResourceCreateEffects } from './resourceCreateEffects.js';
 import { inspectBookmarkUrl, requireBookmarkUrl } from '../bookmarkUrl.js';
 import { actionIdempotencyUuid } from '../agent/actionIdempotency.js';
+import { createBookmarkExactUrlHash } from './bookmarkExactUrlService.js';
 
 export function normalizeBookmarkUrl(value) {
   return requireBookmarkUrl(value).canonicalUrl;
@@ -34,7 +35,10 @@ function cleanBookmarkFields(bookmark, { userId, url, name, description, id }) {
   if (bookmark?.iconUrl !== undefined) fields.iconUrl = bookmark.iconUrl;
   if (bookmark?.sort !== undefined && Number.isFinite(Number(bookmark.sort))) fields.sort = Number(bookmark.sort);
   if (bookmark?.isTop !== undefined) fields.isTop = Number(bookmark.isTop) === 1 ? 1 : 0;
-  return insertData(fields);
+  const data = insertData(fields);
+  // Buffer 不能经过通用 key-transform（会被展开成普通对象），因此在转换后补入二进制列。
+  data.url_exact_hash = createBookmarkExactUrlHash(url);
+  return data;
 }
 
 function bookmarkServiceError(code, message, details = {}, httpStatus = 400) {

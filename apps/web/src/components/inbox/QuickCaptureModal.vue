@@ -176,6 +176,7 @@
     getAvailableQuickCaptureTypes,
     getQuickCaptureInboxTarget,
     hasCaptureBookmarkCandidate,
+    isQuickCaptureWorkspaceActive,
     normalizeQuickCaptureType,
     refreshQuickCaptureStores,
   } from '@/utils/inboxCapture';
@@ -293,6 +294,11 @@
   const captureTargetLog = computed(() =>
     isTodoCapture.value ? OPERATION_LOG_MAP.inbox.openTodoFromCapture : OPERATION_LOG_MAP.inbox.openInboxFromCapture,
   );
+
+  function captureWorkspaceActive(type: ActionCaptureType) {
+    const current = router.currentRoute.value;
+    return isQuickCaptureWorkspaceActive(type, current.path, current.query);
+  }
 
   watch(visible, (value) => {
     if (value) {
@@ -483,7 +489,7 @@
       manualType.value = false;
       await refreshQuickCaptureStores(
         captureType.value,
-        router.currentRoute.value.path.startsWith('/inbox'),
+        captureWorkspaceActive(captureType.value),
         inbox,
         todo,
       );
@@ -518,7 +524,7 @@
       };
       successText.value = t('inbox.todoSaved');
       recordOperation(OPERATION_LOG_MAP.inbox.captureTodo);
-      await refreshQuickCaptureStores('todo', router.currentRoute.value.path.startsWith('/inbox'), inbox, todo);
+      await refreshQuickCaptureStores('todo', captureWorkspaceActive('todo'), inbox, todo);
       emit('captured');
       message.success(successText.value);
     } catch (error: any) {
@@ -569,7 +575,7 @@
   async function afterDetailedTodoSaved(result: { id: string; title: string }) {
     capturedResource.value = { type: 'todo', id: result.id, title: result.title };
     recordOperation(OPERATION_LOG_MAP.inbox.captureTodo);
-    await refreshQuickCaptureStores('todo', router.currentRoute.value.path.startsWith('/inbox'), inbox, todo);
+    await refreshQuickCaptureStores('todo', captureWorkspaceActive('todo'), inbox, todo);
     emit('captured');
     todoDetailsVisible.value = false;
     quickShellSuppressed.value = false;

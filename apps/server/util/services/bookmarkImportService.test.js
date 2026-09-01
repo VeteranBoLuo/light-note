@@ -63,6 +63,8 @@ describe('importBookmarksWithTags', () => {
     expect(connection.query).toHaveBeenCalledTimes(4);
     expect(connection.query.mock.calls[2][0]).toBe('INSERT INTO tag SET ?');
     expect(connection.query.mock.calls[3][0]).toBe('INSERT INTO bookmark SET ?');
+    expect(connection.query.mock.calls[3][1][0].url_exact_hash).toBeInstanceOf(Buffer);
+    expect(connection.query.mock.calls[3][1][0].url_exact_hash).toHaveLength(32);
     expect(mocks.insertData).toHaveBeenCalledTimes(2);
     expect(mocks.insertResourceTagRelations).toHaveBeenNthCalledWith(1, connection, {
       tagIds: ['tag-ai', 'tag-new'],

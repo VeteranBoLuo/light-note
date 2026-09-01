@@ -88,6 +88,9 @@ describe('bookmarkService.createBookmark', () => {
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(connection.rollback).not.toHaveBeenCalled();
     expect(connection.release).toHaveBeenCalledTimes(1);
+    const bookmarkInsert = connection.query.mock.calls.find(([sql]) => sql === 'INSERT INTO bookmark SET ?');
+    expect(bookmarkInsert?.[1]?.[0]?.url_exact_hash).toBeInstanceOf(Buffer);
+    expect(bookmarkInsert?.[1]?.[0]?.url_exact_hash).toHaveLength(32);
   });
 
   it('浏览器插件可在同一事务匹配既有标签并创建用户确认的新标签', async () => {

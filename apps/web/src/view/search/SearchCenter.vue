@@ -1,6 +1,6 @@
 <template>
   <div class="search-center-route">
-    <!-- “查找 / 待整理”表达工作任务；全局图谱是跨资源关系的独立查看方式。 -->
+    <!-- 资源中心一级导航：查找 / 整理中心 / 全局图谱。 -->
     <ResourceCenterTopBar
       v-if="bookmark.isMobile && !isKnowledgeMapView"
       :keyword="queryState.keyword"

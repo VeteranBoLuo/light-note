@@ -303,7 +303,9 @@
   }
 
   function goToTodo(tab: 'todo' | 'all') {
-    void router.push({ path: '/inbox', query: { tab } });
+    void router.push(
+      tab === 'todo' ? { path: '/inbox', query: { tab: 'todo' } } : { path: '/organize', query: { issue: 'pending' } },
+    );
   }
 
   function openSummaryItem(key: 'todo' | 'inbox' | 'notification') {

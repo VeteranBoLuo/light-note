@@ -20,6 +20,8 @@ const DIRECT_DELETE_TABLES = Object.freeze([
   ['opinion', 'user_id'],
   ['resource_inbox', 'user_id'],
   ['resource_tag_relations', 'user_id'],
+  ['organize_issue_suppressions', 'user_id'],
+  ['organize_action_requests', 'user_id'],
   ['onboarding_seed_resources', 'user_id'],
   ['growth_events', 'user_id'],
   ['user_growth_tasks', 'user_id'],

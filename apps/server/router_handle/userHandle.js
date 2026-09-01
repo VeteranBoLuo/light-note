@@ -63,6 +63,7 @@ import {
   normalizeAdminListLimit,
 } from '../util/adminListCursor.js';
 import { seedNewUserCloudFile, seedNewUserWorkspaceData } from '../util/services/newUserSeedService.js';
+import { createBookmarkExactUrlHash } from '../util/services/bookmarkExactUrlService.js';
 import { ensureCommunityChatIdentity } from '../util/services/communityChatIdentityService.js';
 import {
   processAccountDeletionRequest,
@@ -2234,6 +2235,7 @@ export const importData = async (req, res) => {
         userId,
         ...(b?.createTime ? { createTime: b.createTime } : {}),
       });
+      payload.url_exact_hash = createBookmarkExactUrlHash(url);
       await connection.query('INSERT INTO bookmark SET ?', [payload]);
       if (url) existUrls.add(url);
       if (bmName) existNames.add(bmName);

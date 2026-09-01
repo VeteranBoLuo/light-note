@@ -6,6 +6,7 @@ import {
   getAvailableQuickCaptureTypes,
   getQuickCaptureInboxTarget,
   hasCaptureBookmarkCandidate,
+  isQuickCaptureWorkspaceActive,
   normalizeQuickCaptureType,
   normalizeCaptureUrl,
   refreshQuickCaptureStores,
@@ -63,11 +64,22 @@ describe('inboxCapture', () => {
     expect(normalizeQuickCaptureType('todo', false)).toBe('todo');
   });
 
-  it('移动端资源整理入口进入搜索模块的待整理页，待办仍进入待办页', () => {
-    expect(getQuickCaptureInboxTarget('note', true)).toEqual({ path: '/inbox', query: { tab: 'all' } });
-    expect(getQuickCaptureInboxTarget('file', true)).toEqual({ path: '/inbox', query: { tab: 'all' } });
+  it('资源整理入口进入整理中心，待办仍进入待办页', () => {
+    expect(getQuickCaptureInboxTarget('note', true)).toEqual({ path: '/organize', query: { issue: 'pending' } });
+    expect(getQuickCaptureInboxTarget('file', true)).toEqual({ path: '/organize', query: { issue: 'pending' } });
     expect(getQuickCaptureInboxTarget('todo', true)).toEqual({ path: '/inbox', query: { tab: 'todo' } });
-    expect(getQuickCaptureInboxTarget('bookmark', false)).toBe('/inbox');
+    expect(getQuickCaptureInboxTarget('bookmark', false)).toEqual({
+      path: '/organize',
+      query: { issue: 'pending' },
+    });
+  });
+
+  it('只在当前可见的待整理或待办工作区刷新对应列表', () => {
+    expect(isQuickCaptureWorkspaceActive('note', '/organize', { issue: 'pending' })).toBe(true);
+    expect(isQuickCaptureWorkspaceActive('file', '/organize', { issue: 'untagged' })).toBe(false);
+    expect(isQuickCaptureWorkspaceActive('bookmark', '/inbox', { tab: 'bookmark' })).toBe(true);
+    expect(isQuickCaptureWorkspaceActive('todo', '/inbox', { tab: 'todo' })).toBe(true);
+    expect(isQuickCaptureWorkspaceActive('todo', '/inbox', { tab: 'all' })).toBe(false);
   });
 
   it('快速添加后只刷新对应业务列表，避免待办排序串入待整理请求', async () => {

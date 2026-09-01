@@ -188,7 +188,7 @@ export function useBookmarkEditor() {
         }
         message.success(t('inbox.saveAndCompleteSuccess'));
         allowLeave = true;
-        await router.push('/inbox');
+        await router.push({ path: '/organize', query: { issue: 'pending', resourceType: 'bookmark' } });
         return;
       }
 

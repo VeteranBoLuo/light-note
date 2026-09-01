@@ -148,7 +148,7 @@
   function isItemActive(key: MobileBottomNavigationKey) {
     if (key === 'create') return false;
     if (route.name === 'inbox') {
-      // 待整理是资料处理而不是待办：/inbox?tab=all|bookmark|note|file 归「资料」
+      // 历史待整理地址仍归“资料”；新入口统一由 /organize 的 mobileShell 识别。
       return key === (isMobileResourceInboxTab(route.query.tab) ? 'resources' : 'todo');
     }
     return route.meta.mobileShell === key;

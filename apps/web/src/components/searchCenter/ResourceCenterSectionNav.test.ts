@@ -4,16 +4,7 @@ import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import ResourceCenterSectionNav from './ResourceCenterSectionNav.vue';
 
-const mocks = vi.hoisted(() => ({
-  bookmark: { isMobile: false },
-  inbox: { pendingTotal: 0 },
-  recordOperation: vi.fn(),
-}));
-
-vi.mock('@/store', () => ({
-  bookmarkStore: () => mocks.bookmark,
-  inboxStore: () => mocks.inbox,
-}));
+const mocks = vi.hoisted(() => ({ recordOperation: vi.fn() }));
 
 vi.mock('@/api/commonApi', () => ({
   recordOperation: mocks.recordOperation,
@@ -27,6 +18,7 @@ async function mountNav(initialPath: string) {
     routes: [
       { path: '/search', component: { render: () => null } },
       { path: '/inbox', component: { render: () => null } },
+      { path: '/organize', component: { render: () => null } },
     ],
   });
   await router.push(initialPath);
@@ -46,7 +38,7 @@ async function mountNav(initialPath: string) {
         'zh-CN': {
           resourceCenter: {
             title: '资源中心',
-            sections: { resources: '查找', pendingResources: '待整理' },
+            sections: { resources: '查找', organize: '整理中心' },
             knowledgeGraph: '全局图谱',
             knowledgeGraphShort: '图谱',
           },
@@ -72,13 +64,11 @@ async function settleNavigation() {
 afterEach(() => {
   cleanup?.();
   cleanup = undefined;
-  mocks.bookmark.isMobile = false;
-  mocks.inbox.pendingTotal = 0;
   mocks.recordOperation.mockReset();
 });
 
 describe('ResourceCenterSectionNav', () => {
-  it('桌面端将查找、待整理和全局图谱作为同级页签', async () => {
+  it('桌面端将查找、整理中心和全局图谱作为同级页签', async () => {
     const { host } = await mountNav('/search?section=map');
     const tabs = host.querySelectorAll<HTMLElement>('[role="tab"]');
     const mapButton = host.querySelector<HTMLButtonElement>('.knowledge-map-view');
@@ -93,8 +83,8 @@ describe('ResourceCenterSectionNav', () => {
     expect(mapButton?.getAttribute('aria-selected')).toBe('true');
   });
 
-  it('从待整理进入全局图谱时保持范围与查看状态一致', async () => {
-    const { host, router } = await mountNav('/inbox');
+  it('整理中心位于查找与全局图谱之间，并能切换到全局图谱', async () => {
+    const { host, router } = await mountNav('/organize?issue=pending');
     const tabs = host.querySelectorAll<HTMLButtonElement>('[role="tab"]');
     const mapButton = host.querySelector<HTMLButtonElement>('.knowledge-map-view')!;
 
@@ -111,8 +101,7 @@ describe('ResourceCenterSectionNav', () => {
     expect(router.currentRoute.value.fullPath).toBe('/search?section=map');
   });
 
-  it('移动端把全局图谱纳入三段式单选导航', async () => {
-    mocks.bookmark.isMobile = true;
+  it('移动端把三个一级入口纳入同一组三段式导航', async () => {
     const { host } = await mountNav('/search?section=map');
     const tablist = host.querySelector<HTMLElement>('.resource-center-section-bar');
     const tabs = host.querySelectorAll<HTMLElement>('[role="tab"]');

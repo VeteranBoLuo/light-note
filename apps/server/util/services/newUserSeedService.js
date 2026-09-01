@@ -8,6 +8,7 @@ import { markOnboardingSeedResource, ONBOARDING_SEED_VERSION } from '../onboardi
 import { insertResourceTagRelations, RESOURCE_TYPE } from '../resourceTags.js';
 import { sanitizePersistedNoteContent } from '../noteHtmlSanitizer.js';
 import { NEW_USER_DRAWING_NOTE_EXAMPLE_SCENE } from './newUserDrawingNoteExample.js';
+import { createBookmarkExactUrlHash } from './bookmarkExactUrlService.js';
 
 export const NEW_USER_SEED_VERSION = ONBOARDING_SEED_VERSION;
 
@@ -525,16 +526,18 @@ export async function seedNewUserWorkspaceData({ userId, lang = 'zh-CN', siteUrl
 
     for (const bookmark of content.bookmarks) {
       const bookmarkId = ids.bookmarks[bookmark.key];
+      const bookmarkPayload = insertData({
+        id: bookmarkId,
+        name: bookmark.name,
+        userId,
+        url: bookmark.url,
+        description: bookmark.description,
+        sort: 0,
+        delFlag: 0,
+      });
+      bookmarkPayload.url_exact_hash = createBookmarkExactUrlHash(bookmark.url);
       await connection.query('INSERT INTO bookmark SET ?', [
-        insertData({
-          id: bookmarkId,
-          name: bookmark.name,
-          userId,
-          url: bookmark.url,
-          description: bookmark.description,
-          sort: 0,
-          delFlag: 0,
-        }),
+        bookmarkPayload,
       ]);
       await markOnboardingSeedResource(connection, {
         userId,

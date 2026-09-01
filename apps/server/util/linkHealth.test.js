@@ -13,15 +13,11 @@ vi.mock('../db/index.js', () => ({
   default: {
     query: vi.fn(async (sql, params = []) => {
       const text = String(sql).replace(/\s+/g, ' ').trim();
-      if (text.startsWith('DELETE FROM bookmark_health')) {
-        state.health.clear();
-        return [{ affectedRows: 2 }];
-      }
       if (text.startsWith('SELECT id, url FROM bookmark')) {
         return [state.bookmarks.map(({ id, url }) => ({ id, url }))];
       }
-      if (text.includes('SELECT COUNT(*) AS c FROM bookmark')) {
-        return [[{ c: state.bookmarks.length }]];
+      if (text.includes('SELECT COUNT(*) AS total FROM bookmark')) {
+        return [[{ total: state.bookmarks.length }]];
       }
       if (text.includes('SELECT COUNT(*) AS checked')) {
         const values = [...state.health.values()];
@@ -29,6 +25,7 @@ vi.mock('../db/index.js', () => ({
           [
             {
               checked: values.length,
+              user_normal: 0,
               alive: values.filter((item) => item.status === 'alive').length,
               suspect: values.filter((item) => item.status === 'suspect').length,
               unknown: values.filter((item) => item.status === 'unknown').length,
@@ -37,22 +34,23 @@ vi.mock('../db/index.js', () => ({
           ],
         ];
       }
-      if (text.startsWith('SELECT h.bookmark_id')) {
+      if (text.startsWith('SELECT b.id, b.name')) {
         return [
           state.bookmarks
             .filter((bookmark) => state.health.get(bookmark.id)?.status === 'suspect')
             .map((bookmark) => ({
-              bookmark_id: bookmark.id,
+              id: bookmark.id,
               name: bookmark.name,
               url: bookmark.url,
-              note: state.health.get(bookmark.id)?.note,
-              checked_at: '2026-08-10T12:00:00.000Z',
-              has_snapshot: 0,
+              observedCode: state.health.get(bookmark.id)?.note,
+              checkedAt: '2026-08-10T12:00:00.000Z',
+              effectiveStatus: 'suspect',
+              hasSnapshot: 0,
             })),
         ];
       }
       if (text.startsWith('INSERT INTO bookmark_health')) {
-        state.health.set(params[0], { status: params[2], note: params[3] });
+        state.health.set(params[5], { status: params[0], note: params[1] });
         return [{ affectedRows: 1 }];
       }
       throw new Error(`UNEXPECTED_QUERY:${text.slice(0, 80)}`);

@@ -70,7 +70,7 @@ describe('batchDeleteResources', () => {
 
     expect(connection.beginTransaction).toHaveBeenCalledOnce();
     expect(connection.query).toHaveBeenCalledTimes(3);
-    expect(connection.query.mock.calls[0][0]).toContain('SELECT id FROM bookmark');
+    expect(connection.query.mock.calls[0][0]).toMatch(/SELECT id FROM `?bookmark`?/);
     expect(connection.query.mock.calls[1][0]).toContain('SELECT id, icon_url AS iconUrl');
     expect(connection.query.mock.calls[2][0]).toContain('UPDATE bookmark SET del_flag = 1');
     expect(mocks.removeInboxRelations).toHaveBeenCalledWith(connection, {
@@ -80,7 +80,7 @@ describe('batchDeleteResources', () => {
     expect(connection.commit).toHaveBeenCalledOnce();
     expect(mocks.cleanupBookmarkIconFiles).toHaveBeenCalledWith(
       ids.map((id) => ({ id, iconUrl: `/uploads/${id}.png` })),
-      { db: connection },
+      { db: mocks.pool },
     );
     expect(mocks.invalidatePersonalKnowledgeCache).toHaveBeenCalledOnce();
     expect(res.send).toHaveBeenCalledWith({

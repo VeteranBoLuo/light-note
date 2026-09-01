@@ -20,7 +20,7 @@ const mobileTodoTemplate = inboxSource.slice(
 describe('移动端待办页签布局', () => {
   it('待整理桌面端使用范围、队列和检查器三栏，移动端回落到单列', () => {
     expect(inboxSource).toContain('class="resource-inbox-scope"');
-    expect(inboxSource).toContain("'inbox-page--resource-workspace': !isTodoFocused && !bookmark.isMobile");
+    expect(inboxSource).toContain("'inbox-page--resource-workspace': !embedded && !isTodoFocused && !bookmark.isMobile");
     expect(inboxSource).toContain('class="resource-inbox-inspector"');
     expect(inboxSource).toMatch(
       /\.inbox-page--resource-workspace\s*\{[\s\S]*?grid-template-columns:\s*210px minmax\(0, 1fr\) 320px/,
@@ -28,7 +28,7 @@ describe('移动端待办页签布局', () => {
     expect(inboxSource).toMatch(
       /@media \(min-width: 768px\) and \(max-width: 980px\)[\s\S]*?\.resource-inbox-scope,[\s\S]*?\.resource-inbox-inspector\s*\{[\s\S]*?display:\s*none/,
     );
-    expect(inboxSource).toContain('v-if="!isTodoFocused && isMobileResourceInbox"');
+    expect(inboxSource).toContain('v-if="!embedded && !isTodoFocused && isMobileResourceInbox"');
   });
 
   it('桌面待整理与资源中心其他视图保持相同标题和正文纵向基线', () => {
@@ -66,6 +66,20 @@ describe('移动端待办页签布局', () => {
     expect(inboxSource).toMatch(/\.resource-inbox-inspector\s*\{[\s\S]*?overflow:\s*hidden;/);
     expect(inboxSource).toMatch(
       /\.resource-inbox-inspector__summary\.is-scrollable\s*\{[\s\S]*?flex:\s*1 1 auto;[\s\S]*?overflow:\s*hidden auto;/,
+    );
+  });
+
+  it('嵌入整理中心时只解析资源类型，空筛选稳定回落到全部资源而不是待办', () => {
+    expect(inboxSource).toContain(':is="embedded ? \'div\' : \'main\'"');
+    expect(inboxSource).not.toContain('<main\n    class="inbox-page"');
+    expect(inboxSource).toContain(
+      'return embedded.value ? resolveResourceFilter(route.query.resourceType) : resolveRequestedFilter(route.query.tab);',
+    );
+    expect(inboxSource).toMatch(
+      /const nextFilter = embedded\.value\s*\? resolveResourceFilter\(requestedFilter\)\s*: resolveRequestedFilter\(requestedFilter\)/,
+    );
+    expect(inboxSource).toMatch(
+      /function resolveResourceFilter[\s\S]*?isMobileResourceInboxTab\(tab\) \? tab : \('all' as const\)/,
     );
   });
 

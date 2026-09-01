@@ -25,6 +25,7 @@ import communityChatRouter from '../router/communityChat.js';
 import supportRouter from '../router/support.js';
 import infraRouter from '../router/infra.js';
 import aiSkillsRouter from '../router/aiSkills.js';
+import organizeRouter from '../router/organize.js';
 import toolboxRouter from '../router/toolbox.js';
 import dailyReviewRouter from '../router/dailyReview.js';
 import adminAiOperationsRouter from '../router/adminAiOperations.js';
@@ -282,6 +283,10 @@ export const baseRouter = [
   {
     path: '/inbox',
     router: inboxRouter,
+  },
+  {
+    path: '/organize',
+    router: organizeRouter,
   },
   {
     path: '/todo',
