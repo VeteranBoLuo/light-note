@@ -2009,9 +2009,9 @@ export default {
         query: '路径查询',
       },
       structuredSummary: '结果共 {count} 个字符',
-      chooseMarkdownFolder: '选择 Markdown 文件夹',
-      chooseMarkdownFiles: '或选择多个文件',
-      fileLimit: '支持 Markdown 文件，本次最多 {count} 个，总计不超过 40MB',
+      chooseMarkdownFolder: '选择文件夹',
+      chooseMarkdownFiles: '选择文件',
+      fileLimit: '支持 .md 与 .markdown；可选择整个文件夹或多个文件，最多 {count} 个，总计不超过 40MB',
       fileEmptyTitle: {
         markdown_checker: '检查一个 Markdown 知识库',
         frontmatter_batch: '批量维护 Markdown 属性',

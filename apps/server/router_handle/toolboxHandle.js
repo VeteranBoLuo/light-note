@@ -1,5 +1,7 @@
 import { ensureNotVisitor, ensureUserOrAdminPolicy } from '../util/auth.js';
 import { resultData } from '../util/common.js';
+import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+import { recordServerOperation } from '../util/operationLog.js';
 import { parseToolboxError } from '../util/toolbox/errors.js';
 import { getToolboxKnowledgeOverview } from '../util/toolbox/knowledgeStructure.js';
 import {
@@ -43,6 +45,15 @@ function requireRead(req, res) {
 
 function readUserId(req) {
   return (req.resourceUser || req.user)?.id;
+}
+
+async function recordToolboxOperation(req, operation) {
+  try {
+    await recordServerOperation(req, { module: '知识工坊', operation });
+  } catch (error) {
+    // 操作日志是审计旁路，不能把已经成功的工坊写操作反转成 500。
+    console.error('[toolbox] operation log failed code=%s', stableAgentErrorCode(error));
+  }
 }
 
 export function getCatalog(_req, res) {
@@ -91,6 +102,7 @@ export async function createWorkspace(req, res) {
   if (!requireWrite(req, res)) return;
   try {
     const workspace = await createToolboxWorkspace({ userId: req.user.id, input: req.body });
+    await recordToolboxOperation(req, `新建持续工作区【${workspace.kind || 'unknown'}】`);
     return res.status(201).send(resultData(workspace));
   } catch (error) {
     return sendError(res, error);
@@ -131,6 +143,7 @@ export async function updateWorkspace(req, res) {
       workspaceId: req.params.workspaceId,
       input: req.body,
     });
+    await recordToolboxOperation(req, '更新持续工作区');
     return res.send(resultData(workspace));
   } catch (error) {
     return sendError(res, error);
@@ -145,6 +158,7 @@ export async function addWorkspaceResources(req, res) {
       workspaceId: req.params.workspaceId,
       resourceRefs: req.body?.resourceRefs,
     });
+    await recordToolboxOperation(req, '添加工作区资料');
     return res.send(resultData(workspace));
   } catch (error) {
     return sendError(res, error);
@@ -159,6 +173,7 @@ export async function removeWorkspaceResource(req, res) {
       workspaceId: req.params.workspaceId,
       resource: req.body?.resource,
     });
+    await recordToolboxOperation(req, '移除工作区资料');
     return res.send(resultData(workspace));
   } catch (error) {
     return sendError(res, error);
@@ -173,6 +188,7 @@ export async function createWorkspaceItem(req, res) {
       workspaceId: req.params.workspaceId,
       input: req.body,
     });
+    await recordToolboxOperation(req, '新建工作区事项');
     return res.status(201).send(resultData(workspace));
   } catch (error) {
     return sendError(res, error);
@@ -188,6 +204,7 @@ export async function updateWorkspaceItem(req, res) {
       itemId: req.params.itemId,
       input: req.body,
     });
+    await recordToolboxOperation(req, '更新工作区事项');
     return res.send(resultData(workspace));
   } catch (error) {
     return sendError(res, error);
@@ -202,6 +219,7 @@ export async function createWorkspaceSession(req, res) {
       workspaceId: req.params.workspaceId,
       input: req.body,
     });
+    await recordToolboxOperation(req, '记录工作区推进');
     return res.status(201).send(resultData(workspace));
   } catch (error) {
     return sendError(res, error);
@@ -249,6 +267,7 @@ export async function createJob(req, res) {
       quoteId: req.body?.quoteId,
       clientRequestId: req.body?.clientRequestId,
     });
+    await recordToolboxOperation(req, `创建处理任务【${job.toolId || 'unknown'}】`);
     return res.status(202).send(resultData(job));
   } catch (error) {
     return sendError(res, error);
@@ -279,6 +298,9 @@ export async function cancelJob(req, res) {
   if (!requireWrite(req, res)) return;
   try {
     const job = await cancelToolboxJob({ userId: req.user.id, jobId: req.params.jobId });
+    if (job.status === 'cancelled') {
+      await recordToolboxOperation(req, `取消处理任务【${job.toolId || 'unknown'}】`);
+    }
     return res.send(resultData(job));
   } catch (error) {
     return sendError(res, error);
@@ -306,6 +328,12 @@ export async function saveArtifact(req, res) {
       action: req.body?.action,
       request: req,
     });
+    if (!receipt.idempotent) {
+      await recordToolboxOperation(
+        req,
+        req.body?.action === 'recreate_missing_target' ? '重新保存工具成果为新笔记' : '保存工具成果为笔记',
+      );
+    }
     return res.send(resultData(receipt));
   } catch (error) {
     return sendError(res, error);

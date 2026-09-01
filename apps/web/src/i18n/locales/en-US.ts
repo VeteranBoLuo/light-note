@@ -2174,9 +2174,9 @@ export default {
         query: 'Query path',
       },
       structuredSummary: '{count} output characters',
-      chooseMarkdownFolder: 'Choose Markdown folder',
-      chooseMarkdownFiles: 'Or choose files',
-      fileLimit: 'Markdown only; up to {count} files and 40MB total',
+      chooseMarkdownFolder: 'Choose folder',
+      chooseMarkdownFiles: 'Choose files',
+      fileLimit: 'Supports .md and .markdown; choose a folder or files, up to {count} files and 40MB total',
       fileEmptyTitle: {
         markdown_checker: 'Check a Markdown knowledge base',
         frontmatter_batch: 'Maintain Markdown properties in bulk',

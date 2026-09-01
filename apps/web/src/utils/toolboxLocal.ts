@@ -20,6 +20,8 @@ export function safeDownloadBaseName(fileName: string, fallback = 'lightnote-out
   return stripped || fallback;
 }
 
+export const TOOLBOX_LOCAL_DELIVERY_EVENT = 'lightnote:toolbox-local-delivery';
+
 /**
  * 下载链接是浏览器文件保存能力的底层适配，不是页面可见控件；交互入口仍统一由 BButton 提供。
  */
@@ -33,6 +35,7 @@ export function downloadToolboxBlob(blob: Blob, fileName: string) {
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
+  window.dispatchEvent(new Event(TOOLBOX_LOCAL_DELIVERY_EVENT));
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 

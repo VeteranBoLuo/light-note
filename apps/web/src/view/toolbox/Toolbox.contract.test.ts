@@ -9,6 +9,7 @@ import {
   TOOLBOX_PRIMARY_OUTCOME_TOOL_IDS,
   TOOLBOX_STARTER_TOOL_IDS,
   TOOLBOX_WORKFLOW_PRESENTATION,
+  resolveToolboxQuickToolIds,
   toolboxToolPath,
 } from '@/config/toolbox';
 import enUS from '@/i18n/locales/en-US';
@@ -68,6 +69,22 @@ describe('知识工具箱前端边界', () => {
       const content = source(path);
       expect(content).not.toMatch(/apiBase|fetch\(|uploadToolbox|createToolboxJob|createToolboxQuote/u);
     }
+  });
+
+  it('Markdown 文件工具只保留真实文件入口，空态操作保持同组展示', () => {
+    const workbench = source('src/view/toolbox/components/KnowledgeTextWorkbench.vue');
+    const emptyStart = workbench.indexOf('<section v-if="sourceFiles.length === 0"');
+    const emptyEnd = workbench.indexOf('</section>', emptyStart);
+    const emptyState = workbench.slice(emptyStart, emptyEnd);
+
+    expect(emptyStart).toBeGreaterThan(-1);
+    expect(emptyEnd).toBeGreaterThan(emptyStart);
+    expect(emptyState).toContain('class="knowledge-file-empty__actions"');
+    expect(emptyState).toContain('directory');
+    expect(emptyState).toContain("t('toolbox.knowledgeText.chooseMarkdownFolder')");
+    expect(emptyState).toContain("t('toolbox.knowledgeText.chooseMarkdownFiles')");
+    expect(emptyState).not.toContain('@click="loadSample"');
+    expect(workbench).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
   });
 
   it('本地与知识库免费工作台统一通过注册表扩展，全部免费工具均已接入', () => {
@@ -241,7 +258,19 @@ describe('知识工具箱前端边界', () => {
     expect(home).toContain('readToolboxRecentUses');
     expect(home).toContain('readToolboxPinnedTools');
     expect(home).toContain('TOOLBOX_DEFAULT_QUICK_TOOL_IDS');
+    expect(home).toContain('resolveToolboxQuickToolIds(pinnedToolIds.value)');
     expect(TOOLBOX_DEFAULT_QUICK_TOOL_IDS[0]).toBe('knowledge_structure_audit');
+    expect(resolveToolboxQuickToolIds(['image_optimizer', 'pdf_organizer']).slice(0, 3)).toEqual([
+      'knowledge_structure_audit',
+      'image_optimizer',
+      'pdf_organizer',
+    ]);
+    expect(
+      resolveToolboxQuickToolIds(['image_optimizer', 'knowledge_structure_audit']).filter(
+        (toolId) => toolId === 'knowledge_structure_audit',
+      ),
+    ).toHaveLength(1);
+    expect(home).toContain('tool.id !== TOOLBOX_DEFAULT_QUICK_TOOL_IDS[0]');
     expect(homeTemplate).not.toContain('icon.toolbox.arrow');
     expect(zhCN.toolbox.maintenance.issue).not.toHaveProperty('unlinked');
     expect(zhCN.toolbox.maintenance.recommendation).not.toHaveProperty('build_links');

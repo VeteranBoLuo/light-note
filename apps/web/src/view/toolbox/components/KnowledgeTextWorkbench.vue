@@ -22,35 +22,40 @@
     <template v-if="isFileTool">
       <section v-if="sourceFiles.length === 0" class="knowledge-file-empty">
         <span><SvgIcon :src="icon.toolbox.markdown" size="34" /></span>
-        <div
+        <div class="knowledge-file-empty__intro"
           ><h3>{{ fileEmptyTitle }}</h3
           ><p>{{ fileEmptyDescription }}</p></div
         >
-        <BUpload
-          raw-file
-          multiple
-          directory
-          accept=".md,.markdown,text/markdown,text/plain"
-          :max-total-size="null"
-          :disabled="loading"
-          @change="loadMarkdownFiles"
-        >
-          <BButton type="primary" size="large" :loading="loading">
-            <SvgIcon :src="icon.toolbox.upload" size="17" />{{ t('toolbox.knowledgeText.chooseMarkdownFolder') }}
-          </BButton>
-        </BUpload>
-        <BUpload
-          raw-file
-          multiple
-          accept=".md,.markdown,text/markdown,text/plain"
-          :max-total-size="null"
-          :disabled="loading"
-          @change="loadMarkdownFiles"
-        >
-          <BButton :disabled="loading">{{ t('toolbox.knowledgeText.chooseMarkdownFiles') }}</BButton>
-        </BUpload>
-        <BButton :disabled="loading" @click="loadSample">{{ t('toolbox.local.loadSample') }}</BButton>
-        <small>{{ fileLimitHint }}</small>
+        <div class="knowledge-file-empty__actions">
+          <BUpload
+            raw-file
+            block
+            multiple
+            directory
+            accept=".md,.markdown,text/markdown,text/plain"
+            :max-total-size="null"
+            :disabled="loading"
+            @change="loadMarkdownFiles"
+          >
+            <BButton type="primary" size="large" block :loading="loading">
+              <SvgIcon :src="icon.toolbox.upload" size="17" />{{ t('toolbox.knowledgeText.chooseMarkdownFolder') }}
+            </BButton>
+          </BUpload>
+          <BUpload
+            raw-file
+            block
+            multiple
+            accept=".md,.markdown,text/markdown,text/plain"
+            :max-total-size="null"
+            :disabled="loading"
+            @change="loadMarkdownFiles"
+          >
+            <BButton size="large" block :disabled="loading">
+              <SvgIcon :src="icon.toolbox.upload" size="17" />{{ t('toolbox.knowledgeText.chooseMarkdownFiles') }}
+            </BButton>
+          </BUpload>
+        </div>
+        <small class="knowledge-file-empty__hint">{{ fileLimitHint }}</small>
       </section>
 
       <template v-else>
@@ -609,12 +614,6 @@
     else if (props.toolId === 'structured_data_lab')
       source.value =
         '{\n  "project": "Light Note",\n  "items": [\n    { "title": "Research brief", "points": 20 },\n    { "title": "Data audit", "points": 0 }\n  ]\n}';
-    else {
-      sourceFiles.value = [
-        { name: 'index.md', content: '# 首页\n\n## 主题\n\n[有效链接](notes/topic.md)\n[失效链接](missing.md)' },
-        { name: 'notes/topic.md', content: '---\ntags: demo\n---\n# 主题\n\n### 跳级标题\n\n[[不存在的笔记]]' },
-      ];
-    }
   }
 
   function clearAll() {
@@ -1066,14 +1065,26 @@
     background: var(--card-background);
   }
 
-  .knowledge-file-empty > div {
+  .knowledge-file-empty__intro {
     max-width: 560px;
     display: grid;
     gap: 6px;
   }
 
+  .knowledge-file-empty__actions {
+    width: min(420px, 100%);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .knowledge-file-empty__actions :deep(.b-upload-trigger),
+  .knowledge-file-empty__actions :deep(.b_btn) {
+    width: 100%;
+  }
+
   .knowledge-file-empty p,
-  .knowledge-file-empty > small {
+  .knowledge-file-empty__hint {
     color: var(--desc-color);
     font-size: 12px;
     line-height: 1.6;
@@ -1311,6 +1322,15 @@
 
     .knowledge-result-summary > :deep(.b_btn) {
       grid-column: 1 / -1;
+      width: 100%;
+    }
+
+    .knowledge-file-empty {
+      min-height: 310px;
+      padding: 30px 16px;
+    }
+
+    .knowledge-file-empty__actions {
       width: 100%;
     }
   }

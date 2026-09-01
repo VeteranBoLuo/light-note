@@ -396,6 +396,7 @@
     TOOLBOX_DEFAULT_QUICK_TOOL_IDS,
     TOOLBOX_PRIMARY_OUTCOME_TOOL_IDS,
     TOOLBOX_PRESENTATION,
+    resolveToolboxQuickToolIds,
     toolboxToolPath,
     toolboxWorkspaceToolId,
   } from '@/config/toolbox';
@@ -508,13 +509,18 @@
   });
   const quickTools = computed(() => {
     const byId = new Map(tools.value.map((tool) => [tool.id, tool]));
-    const candidates = [...pinnedToolIds.value, ...TOOLBOX_DEFAULT_QUICK_TOOL_IDS];
+    const candidates = resolveToolboxQuickToolIds(pinnedToolIds.value);
     const seen = new Set<string>();
     return candidates
       .map((toolId) => byId.get(toolId as ToolboxToolId))
       .filter((tool): tool is ToolboxCatalogItem => {
         if (!tool || seen.has(tool.id)) return false;
-        if (isGuest.value && (tool.billingMedium !== 'free' || tool.executionMode !== 'browser')) return false;
+        if (
+          isGuest.value &&
+          tool.id !== TOOLBOX_DEFAULT_QUICK_TOOL_IDS[0] &&
+          (tool.billingMedium !== 'free' || tool.executionMode !== 'browser')
+        )
+          return false;
         seen.add(tool.id);
         return true;
       })

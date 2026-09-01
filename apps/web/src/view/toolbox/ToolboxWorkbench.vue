@@ -399,6 +399,7 @@
   import BUpload from '@/components/base/BasicComponents/BUpload.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import { recordOperation } from '@/api/commonApi';
   import {
     createToolboxClientRequestId,
     createToolboxJob,
@@ -422,7 +423,11 @@
     TOOLBOX_WORKFLOW_PRESENTATION,
   } from '@/config/toolbox';
   import { useUserStore } from '@/store';
-  import { formatToolboxBytes, createLocalId } from '@/utils/toolboxLocal';
+  import {
+    createLocalId,
+    formatToolboxBytes,
+    TOOLBOX_LOCAL_DELIVERY_EVENT,
+  } from '@/utils/toolboxLocal';
   import {
     restoreToolboxScrollSnapshot,
     returnFromToolboxPage,
@@ -835,10 +840,20 @@
       if (!restored) pageRef.value?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
     });
   }
+  function recordLocalDelivery() {
+    const currentTool = tool.value;
+    if (user.role === 'visitor' || !currentTool || !['browser', 'service'].includes(currentTool.executionMode)) return;
+    void recordOperation({
+      module: '知识工坊',
+      operation: `导出工具结果【${currentTool.id}】`,
+    });
+  }
   onMounted(() => {
+    window.addEventListener(TOOLBOX_LOCAL_DELIVERY_EVENT, recordLocalDelivery);
     void initializeWorkbench();
   });
   onBeforeUnmount(() => {
+    window.removeEventListener(TOOLBOX_LOCAL_DELIVERY_EVENT, recordLocalDelivery);
     stateVersion += 1;
   });
 </script>

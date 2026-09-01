@@ -38,6 +38,15 @@ export const TOOLBOX_DEFAULT_QUICK_TOOL_IDS = [
   'text_batch',
 ] as const satisfies readonly ToolboxToolId[];
 
+/**
+ * “知识库整理”是常用区的固定首项；账号或访客已有的固定工具从第二项开始排列。
+ * 去重在这里完成，避免旧的本地固定记录再次把默认首项挤到后面。
+ */
+export function resolveToolboxQuickToolIds(pinnedToolIds: readonly string[]): string[] {
+  const [leadToolId, ...remainingDefaultToolIds] = TOOLBOX_DEFAULT_QUICK_TOOL_IDS;
+  return [...new Set([leadToolId, ...pinnedToolIds, ...remainingDefaultToolIds])];
+}
+
 export const TOOLBOX_STARTER_TOOL_IDS = [
   'writing_workspace',
   'learning_workspace',
