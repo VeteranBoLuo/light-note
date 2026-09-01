@@ -41,11 +41,36 @@
       </div>
       <span class="table-tool__bridge" aria-hidden="true"><SvgIcon :src="icon.toolbox.arrow" size="18" /></span>
       <div>
-        <header
-          ><strong>{{ outputFormatLabel }}</strong
-          ><span>{{ output.length.toLocaleString() }}</span></header
-        >
+        <header class="table-tool__result-header">
+          <strong>{{ outputFormatLabel }}</strong>
+          <div v-if="output" class="table-tool__view-switch" role="tablist" :aria-label="t('toolbox.local.resultView')">
+            <BChip
+              v-for="option in resultViewOptions"
+              :key="option.value"
+              tone="neutral"
+              interactive
+              :selected="resultView === option.value"
+              role="tab"
+              :aria-selected="resultView === option.value"
+              @click="resultView = option.value"
+            >
+              {{ option.label }}
+            </BChip>
+          </div>
+          <span>{{ output.length.toLocaleString() }}</span>
+        </header>
+        <template v-if="output && resultView === 'preview'">
+          <div class="table-tool__preview" role="region" :aria-label="t('toolbox.local.tablePreview')">
+            <div class="table-tool__preview-scroll">
+              <div class="table-tool__preview-table" :style="previewTableStyle">
+                <BTable :data="previewRows" :columns="previewColumns" row-key="__rowId" />
+              </div>
+            </div>
+            <small>{{ previewNote }}</small>
+          </div>
+        </template>
         <BInput
+          v-else
           v-model:value="output"
           type="textarea"
           :rows="16"
@@ -83,6 +108,8 @@
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
+  import type { Column } from '@/components/base/BasicComponents/BTable/config';
   import BUpload from '@/components/base/BasicComponents/BUpload.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -96,6 +123,8 @@
   const outputFormat = ref<TableFormat>('markdown');
   const source = ref('');
   const output = ref('');
+  const resultTable = ref<string[][]>([]);
+  const resultView = ref<'preview' | 'raw'>('preview');
   const stats = ref<{ rows: number; columns: number } | null>(null);
   const error = ref('');
   const formats: TableFormat[] = ['csv', 'tsv', 'json', 'markdown'];
@@ -104,6 +133,34 @@
   const outputFormatOptions = computed(() => formats.map((value) => ({ value, label: labelFor(value) })));
   const inputFormatLabel = computed(() => labelFor(inputFormat.value));
   const outputFormatLabel = computed(() => labelFor(outputFormat.value));
+  const resultViewOptions = computed(() => [
+    { value: 'preview' as const, label: t('toolbox.local.tablePreview') },
+    { value: 'raw' as const, label: t('toolbox.local.rawResult') },
+  ]);
+  const previewColumns = computed<Column[]>(() =>
+    (resultTable.value[0] || []).slice(0, 20).map((header, index) => ({
+      key: `column_${index}`,
+      title: header.trim() || t('toolbox.local.unnamedColumn', { index: index + 1 }),
+      width: '112px',
+    })),
+  );
+  const previewRows = computed(() =>
+    resultTable.value.slice(1, 101).map((row, rowIndex) => ({
+      __rowId: rowIndex,
+      ...Object.fromEntries(previewColumns.value.map((column, columnIndex) => [column.key, row[columnIndex] ?? ''])),
+    })),
+  );
+  const previewTableStyle = computed(() => ({ minWidth: `${Math.max(112, previewColumns.value.length * 122)}px` }));
+  const previewNote = computed(() =>
+    stats.value
+      ? t('toolbox.local.tablePreviewLimit', {
+          rows: Math.min(stats.value.rows, 100),
+          totalRows: stats.value.rows,
+          columns: Math.min(stats.value.columns, 20),
+          totalColumns: stats.value.columns,
+        })
+      : '',
+  );
 
   function showError(cause: unknown) {
     if (cause instanceof ToolboxTextError) {
@@ -119,9 +176,12 @@
     try {
       const converted = convertTable(source.value, inputFormat.value, outputFormat.value);
       output.value = converted.output;
+      resultTable.value = converted.table;
+      resultView.value = 'preview';
       stats.value = { rows: converted.rows, columns: converted.columns };
     } catch (cause) {
       output.value = '';
+      resultTable.value = [];
       stats.value = null;
       showError(cause);
     }
@@ -133,6 +193,7 @@
     outputFormat.value = previousInput;
     if (output.value) source.value = output.value;
     output.value = '';
+    resultTable.value = [];
     stats.value = null;
     error.value = '';
   }
@@ -146,6 +207,7 @@
     };
     source.value = samples[inputFormat.value];
     output.value = '';
+    resultTable.value = [];
     stats.value = null;
     error.value = '';
   }
@@ -153,6 +215,7 @@
   function clear() {
     source.value = '';
     output.value = '';
+    resultTable.value = [];
     stats.value = null;
     error.value = '';
   }
@@ -176,6 +239,7 @@
     if (outputFormat.value === inferred) outputFormat.value = inferred === 'markdown' ? 'csv' : 'markdown';
     source.value = await file.text();
     output.value = '';
+    resultTable.value = [];
     stats.value = null;
     error.value = '';
   }
@@ -193,6 +257,8 @@
 
   watch([source, inputFormat, outputFormat], () => {
     output.value = '';
+    resultTable.value = [];
+    resultView.value = 'preview';
     stats.value = null;
     error.value = '';
   });
@@ -251,11 +317,54 @@
     color: var(--desc-color);
     font-size: 11px;
   }
+  .table-tool__result-header {
+    min-height: 28px;
+  }
+  .table-tool__view-switch {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .table-tool__result-header > span {
+    min-width: 34px;
+    text-align: right;
+  }
   .table-tool__editors :deep(textarea) {
     min-height: 340px;
     resize: vertical;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     line-height: 1.55;
+  }
+  .table-tool__preview {
+    height: 340px;
+    padding: 10px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    overflow: hidden;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 8px;
+    background: var(--workspace-panel-bg-color);
+  }
+  .table-tool__preview-scroll {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  .table-tool__preview-table {
+    width: 100%;
+  }
+  .table-tool__preview :deep(.table-container) {
+    box-shadow: none;
+  }
+  .table-tool__preview > small {
+    margin-top: auto;
+    color: var(--desc-color);
+    font-size: 11px;
   }
   .table-tool__bridge {
     align-self: center;
@@ -319,6 +428,17 @@
     }
     .table-tool__editors :deep(textarea) {
       min-height: 260px;
+    }
+    .table-tool__preview {
+      height: 260px;
+    }
+    .table-tool__result-header {
+      flex-wrap: wrap;
+    }
+    .table-tool__view-switch {
+      order: 3;
+      width: 100%;
+      margin-left: 0;
     }
     .table-tool__actions {
       align-items: stretch;

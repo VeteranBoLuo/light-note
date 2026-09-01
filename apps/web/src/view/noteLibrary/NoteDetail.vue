@@ -6,6 +6,7 @@
         :readonly="readonly"
         :isStartEdit="isStartEdit || isLeaving"
         :save-status="saveStatus"
+        :back-label="noteBackLabel"
         @back="back"
         @focusout="titleBlur"
         :note="note"
@@ -470,6 +471,12 @@
     return parent ? { path: '/noteLibrary', query: { parent } } : { path: '/noteLibrary' };
   };
   const sourceReturnPath = () => resolveNoteDetailReturnPath(router.currentRoute.value.query.from);
+  const noteBackLabel = computed(() => {
+    const source = sourceReturnPath();
+    if (source.startsWith('/toolbox/task/')) return t('noteDetail.backToToolboxResult');
+    if (source.startsWith('/workbenches')) return t('noteDetail.backToWorkbench');
+    return t('noteDetail.backToLibrary');
+  });
   const detailSourceQuery = () => {
     const from = sourceReturnPath();
     return from ? { from } : {};

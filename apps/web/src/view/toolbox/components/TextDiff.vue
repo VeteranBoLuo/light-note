@@ -8,6 +8,9 @@
         <BCheckbox :checked="ignoreCase" @update:checked="ignoreCase = $event">{{
           t('toolbox.local.ignoreCase')
         }}</BCheckbox>
+        <BCheckbox :checked="showUnchanged" @update:checked="showUnchanged = $event">{{
+          t('toolbox.local.showUnchanged')
+        }}</BCheckbox>
       </div>
       <BButton @click="swap"><SvgIcon :src="icon.toolbox.swap" size="15" />{{ t('toolbox.local.swapSides') }}</BButton>
       <BButton @click="loadSample">{{ t('toolbox.local.loadSample') }}</BButton>
@@ -65,14 +68,18 @@
     <section v-if="result" class="text-diff-result" aria-live="polite">
       <header
         ><strong>{{ t('toolbox.local.originalText') }}</strong
+        ><span>{{ t('toolbox.local.diffChangeType') }}</span
         ><strong>{{ t('toolbox.local.revisedText') }}</strong></header
       >
-      <div v-if="result.rows.length" class="text-diff-result__rows">
-        <article v-for="row in result.rows" :key="row.id" :class="`is-${row.kind}`">
+      <div v-if="visibleRows.length" class="text-diff-result__rows">
+        <article v-for="row in visibleRows" :key="row.id" :class="`is-${row.kind}`">
           <div class="text-diff-result__cell is-left">
             <strong class="text-diff-result__mobile-label">{{ t('toolbox.local.originalText') }}</strong>
             <span>{{ row.leftLine ?? '·' }}</span
             ><pre>{{ row.left || ' ' }}</pre>
+          </div>
+          <div class="text-diff-result__status">
+            <span>{{ diffKindLabel(row.kind) }}</span>
           </div>
           <div class="text-diff-result__cell is-right">
             <strong class="text-diff-result__mobile-label">{{ t('toolbox.local.revisedText') }}</strong>
@@ -87,7 +94,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, watch } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
@@ -105,8 +112,16 @@
   const right = ref('');
   const ignoreWhitespace = ref(false);
   const ignoreCase = ref(false);
+  const showUnchanged = ref(false);
   const result = ref<TextDiffResult | null>(null);
   const error = ref('');
+  const visibleRows = computed(() =>
+    (result.value?.rows || []).filter((row) => showUnchanged.value || row.kind !== 'equal'),
+  );
+
+  function diffKindLabel(kind: TextDiffResult['rows'][number]['kind']) {
+    return t(`toolbox.local.diffKind.${kind}`);
+  }
 
   function compare() {
     error.value = '';
@@ -219,8 +234,10 @@
     font-size: 11px;
   }
   .text-diff-tool__editors :deep(textarea) {
-    min-height: 300px;
-    resize: vertical;
+    height: 260px;
+    min-height: 260px;
+    max-height: 260px;
+    resize: none;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     line-height: 1.55;
   }
@@ -263,19 +280,27 @@
   }
   .text-diff-result > header {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr) 76px minmax(0, 1fr);
+    align-items: center;
     border-bottom: 1px solid var(--surface-border-color);
     background: var(--workspace-panel-bg-color);
   }
   .text-diff-result > header strong {
     padding: 11px 13px;
   }
-  .text-diff-result > header strong + strong {
+  .text-diff-result > header > span {
+    align-self: stretch;
+    display: grid;
+    place-items: center;
+    color: var(--desc-color);
+    border-right: 1px solid var(--surface-border-color);
     border-left: 1px solid var(--surface-border-color);
+    font-size: 11px;
+    font-weight: 650;
   }
   .text-diff-result__rows article {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr) 76px minmax(0, 1fr);
     border-bottom: 1px solid var(--surface-border-color);
   }
   .text-diff-result__rows article:last-child {
@@ -289,8 +314,24 @@
   .text-diff-result__mobile-label {
     display: none;
   }
-  .text-diff-result__cell + .text-diff-result__cell {
+  .text-diff-result__status {
+    display: grid;
+    place-items: center;
+    padding: 6px;
+    border-right: 1px solid var(--surface-border-color);
     border-left: 1px solid var(--surface-border-color);
+    background: var(--workspace-panel-bg-color);
+  }
+  .text-diff-result__status span {
+    min-width: 48px;
+    padding: 4px 6px;
+    color: var(--desc-color);
+    border: 1px solid var(--surface-border-color);
+    border-radius: 999px;
+    background: var(--card-background);
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
   }
   .text-diff-result__cell > span {
     padding: 8px 7px;
@@ -321,13 +362,30 @@
   }
   .text-diff-result__rows article.is-changed .is-left pre,
   .text-diff-result__rows article.is-removed .is-left pre {
-    color: #9f2f42;
+    color: var(--danger-color);
+    border-left: 3px solid var(--danger-color);
     background: rgba(194, 75, 104, 0.08);
   }
   .text-diff-result__rows article.is-changed .is-right pre,
   .text-diff-result__rows article.is-added .is-right pre {
-    color: #067454;
+    color: var(--success-color);
+    border-left: 3px solid var(--success-color);
     background: rgba(7, 131, 95, 0.08);
+  }
+  .text-diff-result__rows article.is-changed .text-diff-result__status span {
+    color: var(--warning-color);
+    border-color: var(--warning-color);
+    background: rgba(184, 117, 8, 0.12);
+  }
+  .text-diff-result__rows article.is-added .text-diff-result__status span {
+    color: var(--success-color);
+    border-color: var(--success-color);
+    background: rgba(7, 131, 95, 0.12);
+  }
+  .text-diff-result__rows article.is-removed .text-diff-result__status span {
+    color: var(--danger-color);
+    border-color: var(--danger-color);
+    background: rgba(194, 75, 104, 0.12);
   }
   .text-diff-result__empty {
     padding: 28px;
@@ -335,21 +393,34 @@
     text-align: center;
   }
   @media (max-width: 767px) {
-    .text-diff-tool__toolbar,
-    .text-diff-tool__actions {
+    .text-diff-tool__toolbar {
       align-items: stretch;
       flex-direction: column;
+    }
+    .text-diff-tool__actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
     .text-diff-tool__options,
     .text-diff-tool__actions > span,
     .text-diff-tool__stats {
       margin-right: 0;
     }
+    .text-diff-tool__actions > span,
+    .text-diff-tool__stats {
+      grid-column: 1 / -1;
+    }
+    .text-diff-tool__actions :deep(.b_btn) {
+      width: 100%;
+      padding: 0 7px;
+    }
     .text-diff-tool__editors {
       grid-template-columns: 1fr;
     }
     .text-diff-tool__editors :deep(textarea) {
-      min-height: 240px;
+      height: 220px;
+      min-height: 220px;
+      max-height: 220px;
     }
     .text-diff-result > header {
       display: none;
@@ -357,7 +428,18 @@
     .text-diff-result__rows article {
       grid-template-columns: 1fr;
     }
-    .text-diff-result__cell + .text-diff-result__cell {
+    .text-diff-result__status {
+      grid-row: 1;
+      justify-items: start;
+      padding: 8px 9px 0;
+      border: 0;
+      background: var(--card-background);
+    }
+    .text-diff-result__cell.is-left {
+      grid-row: 2;
+    }
+    .text-diff-result__cell.is-right {
+      grid-row: 3;
       border-top: 1px solid var(--surface-border-color);
       border-left: 0;
     }

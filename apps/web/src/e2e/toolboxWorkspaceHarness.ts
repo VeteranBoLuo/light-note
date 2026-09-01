@@ -11,7 +11,7 @@ import zhCN from '@/i18n/locales/zh-CN';
 import { bookmarkStore, useUserStore } from '@/store';
 import ToolboxWorkbench from '@/view/toolbox/ToolboxWorkbench.vue';
 import ToolboxHome from '@/view/toolbox/ToolboxHome.vue';
-import type { ToolboxWorkspace } from '@/api/toolbox';
+import type { ToolboxHomeWorkspaceSummary, ToolboxWorkspace } from '@/api/toolbox';
 import '@/assets/css/index.less';
 
 const params = new URLSearchParams(window.location.search);
@@ -211,6 +211,45 @@ const listFixture = [
   },
 ];
 
+function toHomeWorkspace(value: ToolboxWorkspace): ToolboxHomeWorkspaceSummary {
+  return {
+    id: value.id,
+    kind: value.kind,
+    title: value.title,
+    status: value.status,
+    nextStep: value.nextStep,
+    resourceCount: value.resourceCount,
+    openItemCount: value.openItemCount,
+    completedItemCount: value.completedItemCount,
+    lastOpenedAt: value.lastOpenedAt,
+    updatedAt: value.updatedAt,
+  };
+}
+
+const homeWorkspaceFixtures = [
+  toHomeWorkspace({
+    ...workspaceFixture,
+    id: 'visual-learning-workspace',
+    kind: 'learning',
+    title: '系统学习产品数据分析',
+    nextStep: '用一份真实数据练习 cohort 留存表',
+  }),
+  toHomeWorkspace({
+    ...workspaceFixture,
+    id: 'visual-research-workspace',
+    kind: 'research',
+    title: '知识产品长期活跃机制研究',
+    nextStep: '访谈 5 位已沉默用户并归纳第二周退出节点',
+  }),
+  toHomeWorkspace({
+    ...workspaceFixture,
+    id: 'visual-writing-workspace',
+    kind: 'writing',
+    title: '轻量知识管理产品设计手册',
+    nextStep: '补完“从收藏到推进”的核心案例',
+  }),
+];
+
 function response(config: any, data: unknown, status = 200) {
   return {
     data: { status, msg: 'ok', data },
@@ -271,6 +310,13 @@ request.defaults.adapter = async (config) => {
       expToNext: 300,
       progress: 40,
       isMax: false,
+    });
+  }
+  if (url === '/api/toolbox/home') {
+    return response(config, {
+      schemaVersion: 2,
+      workspaces: { continue: homeWorkspaceFixtures, recent: homeWorkspaceFixtures },
+      tasks: { active: [], ready: [], recent: [] },
     });
   }
   throw Object.assign(new Error(`Unexpected workspace visual fixture request: ${url}`), {

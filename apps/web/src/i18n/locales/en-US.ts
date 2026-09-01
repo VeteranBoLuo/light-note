@@ -1303,28 +1303,12 @@ export default {
       completeWorkspace: 'Mark complete',
       reopenWorkspace: 'Reopen',
       metrics: { materials: 'Sources', openItems: 'Open', completed: 'Done', streak: 'Day streak' },
-      todayTitle: 'Move it one small step today',
-      todayDescription: 'Leave progress and a next step so the next session starts with context.',
-      recordProgress: 'Record this session',
-      progressKicker: "Today's progress",
-      progressTitle: 'Finish this session',
-      progressDescription: 'Hand off to your future self in under a minute. Sessions build a progress timeline.',
-      progressSummaryLabel: 'What changed this time',
-      progressNextLabel: 'Where to continue next',
+      sectionNavigation: 'Workspace section navigation',
       durationLabel: 'Time spent',
       durationMinutes: '{count} min',
       durationUnspecified: 'Do not track time',
-      finishProgress: 'Save this session',
-      resourcesKicker: 'Project context',
-      resourcesTitle: 'Source library',
-      resourcesDescription:
-        'Link Light Note notes, bookmarks, and files. Only references are stored, never copied content.',
-      addResources: 'Add sources',
-      resourcesEmpty: 'No project sources yet. Select several from Light Note when ready.',
       removeResource: 'Remove {title} from workspace',
       addSelectedResources: 'Add {count} sources',
-      boardKicker: 'Keep organizing',
-      boardTitle: 'Progress board',
       inProgress: 'In progress',
       done: 'Done',
       startItem: 'Start',
@@ -1337,10 +1321,6 @@ export default {
       itemNoteLabel: 'Notes (optional)',
       itemNotePlaceholder: 'Capture the rationale, scope, or definition of done',
       itemDueLabel: 'Target date (optional)',
-      timelineKicker: 'Compounding progress',
-      timelineTitle: 'Session history',
-      timelineDescription: 'Short, honest progress notes keep long projects from restarting at zero.',
-      timelineEmpty: 'Your first completed session will start the timeline.',
       titleLabel: 'Workspace name',
       goalLabel: 'What should this ultimately produce?',
       targetDateLabel: 'Target date (optional)',
@@ -1370,6 +1350,39 @@ export default {
           nextStepPlaceholder: 'For example: compare retention loops in five adjacent products',
           progressPlaceholder:
             'For example: compared NotebookLM and Readwise and confirmed persistent context plus daily review as a shared pattern',
+          resumeTitle: 'Validate one research question at a time',
+          resumeDescription:
+            'Leave new evidence, your current judgment, and the next check so research can resume in context.',
+          recordAction: 'Record research progress',
+          steps: {
+            progress: {
+              label: 'Research question',
+              title: 'Record progress around the research question',
+              description:
+                'Capture new evidence, changes in judgment, and unresolved conflicts, then hand the research to the next session.',
+              summaryLabel: 'What was confirmed or disproved',
+              nextLabel: 'What should be validated next',
+              requiredHint: 'Enter either what was confirmed or disproved, or what should be validated next.',
+              readyHint: 'Ready to save. This entry will appear in the validation log.',
+              submit: 'Save research log',
+            },
+            resources: {
+              label: 'Evidence',
+              title: 'Research evidence library',
+              description:
+                'Link Light Note notes, bookmarks, and files as evidence for questions, judgments, and validation. Only references are stored.',
+              addAction: 'Add evidence',
+              empty: 'No evidence has been linked yet. Select several sources from Light Note when ready.',
+            },
+            board: { label: 'Findings & hypotheses', title: 'Findings and hypotheses board' },
+            timeline: {
+              label: 'Validation log',
+              title: 'Research validation log',
+              description:
+                'Keep evidence changes, revised judgments, and follow-up validation in chronological order so research never restarts at zero.',
+              empty: 'Complete the first research session to start the validation log.',
+            },
+          },
           boardDescription: 'Separate questions to explore, verified findings, and concrete next actions.',
           lanes: {
             inbox: {
@@ -1408,6 +1421,39 @@ export default {
           nextStepPlaceholder: 'For example: learn North Star metrics and summarize three cases',
           progressPlaceholder:
             'For example: understood three retention-curve shapes and classified our own product data',
+          resumeTitle: 'Master one concept toward the learning goal',
+          resumeDescription:
+            'Leave new understanding, practice results, and the next review action so learning resumes in context.',
+          recordAction: 'Record learning progress',
+          steps: {
+            progress: {
+              label: 'Learning goal',
+              title: 'Record this session around the learning goal',
+              description:
+                'Capture new understanding, practice results, and remaining uncertainty, then hand learning to the next session.',
+              summaryLabel: 'What was learned or practiced',
+              nextLabel: 'What to learn or review next',
+              requiredHint: 'Enter either what was learned or practiced, or what to learn or review next.',
+              readyHint: 'Ready to save. This entry will appear in learning and review history.',
+              submit: 'Save learning log',
+            },
+            resources: {
+              label: 'Learning sources',
+              title: 'Learning source library',
+              description:
+                'Link course notes, bookmarks, and files from Light Note around the current learning goal. Only references are stored.',
+              addAction: 'Add learning sources',
+              empty: 'No learning sources have been linked yet. Select several from Light Note when ready.',
+            },
+            board: { label: 'Mastery & practice', title: 'Mastery and practice board' },
+            timeline: {
+              label: 'Review log',
+              title: 'Learning and review log',
+              description:
+                'Keep understanding, practice, and review results in chronological order so real mastery stays visible.',
+              empty: 'Complete the first learning session to start the learning and review log.',
+            },
+          },
           boardDescription: 'Separate what to learn, what you can explain, and the actions that test retention.',
           lanes: {
             inbox: {
@@ -1447,6 +1493,39 @@ export default {
           nextStepPlaceholder: 'For example: define the reader and the central claim',
           progressPlaceholder:
             'For example: finished the opening and problem definition, then removed two off-topic cases',
+          resumeTitle: 'Finish one visible piece toward the writing goal',
+          resumeDescription:
+            'Leave what changed, the editorial judgment, and the next place to write so the draft resumes immediately.',
+          recordAction: 'Record writing progress',
+          steps: {
+            progress: {
+              label: 'Writing goal',
+              title: 'Record this session around the writing goal',
+              description:
+                'Capture what was written, revised, or removed, then leave a precise starting point for the next writing session.',
+              summaryLabel: 'What was written or revised',
+              nextLabel: 'Where to continue writing next',
+              requiredHint: 'Enter either what was written or revised, or where to continue writing next.',
+              readyHint: 'Ready to save. This entry will appear in revision history.',
+              submit: 'Save writing log',
+            },
+            resources: {
+              label: 'Sources',
+              title: 'Writing source library',
+              description:
+                'Link Light Note notes, bookmarks, and files as sources for the current work. Only references are stored.',
+              addAction: 'Add sources',
+              empty: 'No writing sources have been linked yet. Select several from Light Note when ready.',
+            },
+            board: { label: 'Outline & draft', title: 'Outline and draft board' },
+            timeline: {
+              label: 'Revision log',
+              title: 'Writing revision log',
+              description:
+                'Keep drafting, cuts, and structural revisions in chronological order so the evolution of the work stays visible.',
+              empty: 'Complete the first writing session to start the revision log.',
+            },
+          },
           boardDescription: 'Separate sections to develop, reusable source ideas, and concrete writing actions.',
           lanes: {
             inbox: {
@@ -2520,6 +2599,7 @@ export default {
       downloadResult: 'Download result',
       ignoreWhitespace: 'Ignore whitespace',
       ignoreCase: 'Ignore letter case',
+      showUnchanged: 'Show unchanged lines',
       swapSides: 'Swap sides',
       originalText: 'Original text',
       revisedText: 'Revised text',
@@ -2529,6 +2609,8 @@ export default {
       changedLines: '{count} changed',
       addedLines: '{count} added',
       removedLines: '{count} removed',
+      diffChangeType: 'Change',
+      diffKind: { equal: 'Same', changed: 'Changed', added: 'Added', removed: 'Removed' },
       diffHint: 'Enter two versions and compare them line by line',
       copyDiff: 'Copy diff',
       downloadDiff: 'Download diff',
@@ -2538,6 +2620,12 @@ export default {
       compareFailed: 'Text comparison failed. Try again.',
       inputFormat: 'Input format',
       outputFormat: 'Output format',
+      resultView: 'Result view',
+      tablePreview: 'Table preview',
+      rawResult: 'Raw text',
+      unnamedColumn: 'Column {index}',
+      tablePreviewLimit:
+        'Previewing {rows}/{totalRows} rows and {columns}/{totalColumns} columns; copy and download still use the full result',
       loadLocalFile: 'Open local file',
       tableInputPlaceholder: 'Paste table data or open a CSV, TSV, JSON, or Markdown file…',
       tableSize: '{rows} rows · {columns} columns',
@@ -5567,6 +5655,9 @@ export default {
     },
   },
   noteDetail: {
+    backToLibrary: 'Back to notes',
+    backToWorkbench: 'Back to workspace',
+    backToToolboxResult: 'Back to tool result',
     loadingTitle: 'Opening note',
     loadingDescription: 'Fetching the content and preparing the editor. This may take a moment on a slow connection.',
     loadFailedTitle: 'This note could not be opened',

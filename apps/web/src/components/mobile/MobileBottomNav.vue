@@ -10,6 +10,7 @@
       }"
       :aria-current="isItemActive(item.key) ? 'page' : undefined"
       :aria-busy="pendingKey === item.key ? 'true' : undefined"
+      :aria-label="item.key === 'capture' ? t(item.labelKey) : undefined"
       :aria-haspopup="item.key === 'capture' ? 'dialog' : undefined"
       :aria-expanded="item.key === 'capture' ? createHubOpen : undefined"
       @pointerdown="prefetchItem(item)"
@@ -42,7 +43,7 @@
           {{ communityUnreadTotal > 99 ? '99+' : communityUnreadTotal }}
         </span>
       </span>
-      <span class="mobile-bottom-nav__label">{{ t(item.labelKey) }}</span>
+      <span v-if="item.key !== 'capture'" class="mobile-bottom-nav__label">{{ t(item.labelKey) }}</span>
     </BButton>
   </nav>
   <MobilePageActionsDrawer
@@ -252,23 +253,25 @@
   }
 
   .mobile-bottom-nav__item--capture {
+    position: relative;
+    overflow: visible;
     color: var(--primary-color);
   }
 
   .mobile-bottom-nav__item--capture .mobile-bottom-nav__icon {
+    position: absolute;
+    top: 50%;
+    left: 50%;
     width: 38px;
+    height: 38px;
     min-height: 38px;
-    margin-top: -8px;
+    margin: 0;
     border: 1px solid var(--primary-color);
     border-radius: 13px;
     color: #fff;
     background: var(--primary-color);
     box-shadow: 0 8px 20px -12px var(--primary-color);
-  }
-
-  .mobile-bottom-nav__item--capture .mobile-bottom-nav__label {
-    margin-top: -5px;
-    color: var(--primary-color);
+    transform: translate(-50%, -50%);
   }
 
   .mobile-bottom-nav__icon {

@@ -75,7 +75,12 @@
           </span>
           <span class="toolbox-activity-card__copy">
             <span class="toolbox-activity-card__topline">
-              <BChip tone="success">{{ t('toolbox.workspace.status.active') }}</BChip>
+              <span class="toolbox-activity-card__badges">
+                <BChip tone="neutral" class="toolbox-activity-card__type">
+                  {{ toolName(toolboxWorkspaceToolId(workspace.kind)) }}
+                </BChip>
+                <BChip tone="success">{{ t('toolbox.workspace.status.active') }}</BChip>
+              </span>
               <small>{{ formatRelativeDate(workspace.lastOpenedAt || workspace.updatedAt) }}</small>
             </span>
             <strong>{{ workspace.title }}</strong>
@@ -1205,6 +1210,15 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+  }
+  .toolbox-activity-card__badges {
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .toolbox-activity-card__type {
+    max-width: 104px;
   }
   .toolbox-activity-card__topline small {
     overflow: hidden;

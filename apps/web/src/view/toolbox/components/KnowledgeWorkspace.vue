@@ -163,23 +163,41 @@
           </div>
         </div>
         <div class="workspace-resume__copy">
-          <h3>{{ t('toolbox.workspace.todayTitle') }}</h3>
-          <p>{{ t('toolbox.workspace.todayDescription') }}</p>
+          <h3>{{ templateText('resumeTitle') }}</h3>
+          <p>{{ templateText('resumeDescription') }}</p>
         </div>
-        <BButton type="primary" @click="focusProgressForm">{{ t('toolbox.workspace.recordProgress') }}</BButton>
+        <BButton type="primary" @click="focusProgressForm">{{ templateText('recordAction') }}</BButton>
       </section>
 
-      <section ref="progressSection" class="workspace-section workspace-progress-section">
+      <nav class="workspace-section-nav" :aria-label="t('toolbox.workspace.sectionNavigation')">
+        <BButton
+          v-for="step in workspaceSteps"
+          :key="step.key"
+          class="workspace-section-nav__item"
+          :class="{ 'is-active': activeSection === step.key }"
+          :aria-current="activeSection === step.key ? 'step' : undefined"
+          @click="focusWorkspaceSection(step.key)"
+        >
+          <span>{{ step.number }}</span>
+          <strong>{{ step.title }}</strong>
+        </BButton>
+      </nav>
+
+      <section
+        ref="progressSection"
+        class="workspace-section workspace-progress-section"
+        :class="{ 'is-section-focused': focusedSection === 'progress' }"
+      >
         <header class="workspace-section__head">
           <div>
-            <span class="workspace-section__kicker">01 · {{ t('toolbox.workspace.progressKicker') }}</span>
-            <h3>{{ t('toolbox.workspace.progressTitle') }}</h3>
-            <p>{{ t('toolbox.workspace.progressDescription') }}</p>
+            <span class="workspace-section__kicker">01 · {{ stepText('progress', 'label') }}</span>
+            <h3>{{ stepText('progress', 'title') }}</h3>
+            <p>{{ stepText('progress', 'description') }}</p>
           </div>
         </header>
         <div class="workspace-progress-form">
-          <label>
-            <span>{{ t('toolbox.workspace.progressSummaryLabel') }}</span>
+          <label class="workspace-progress-form__summary">
+            <span>{{ stepText('progress', 'summaryLabel') }}</span>
             <BInput
               ref="progressInput"
               v-model:value="progressSummary"
@@ -189,8 +207,11 @@
               :placeholder="templateText('progressPlaceholder')"
             />
           </label>
-          <label>
-            <span>{{ t('toolbox.workspace.progressNextLabel') }}</span>
+          <p class="workspace-progress-form__hint" :class="{ 'is-ready': canSaveProgress }" aria-live="polite">
+            {{ stepText('progress', canSaveProgress ? 'readyHint' : 'requiredHint') }}
+          </p>
+          <label class="workspace-progress-form__next">
+            <span>{{ stepText('progress', 'nextLabel') }}</span>
             <BInput
               v-model:value="progressNextStep"
               :maxlength="500"
@@ -203,30 +224,35 @@
             <BSelect v-model:value="progressDuration" :options="durationOptions" />
           </label>
           <BButton
+            class="workspace-progress-form__submit"
             type="primary"
             size="large"
             :loading="savingProgress"
             :disabled="!canSaveProgress"
             @click="saveProgress"
-            >{{ t('toolbox.workspace.finishProgress') }}</BButton
+            >{{ stepText('progress', 'submit') }}</BButton
           >
         </div>
       </section>
 
-      <section class="workspace-section workspace-resources-section">
+      <section
+        ref="resourcesSection"
+        class="workspace-section workspace-resources-section"
+        :class="{ 'is-section-focused': focusedSection === 'resources' }"
+      >
         <header class="workspace-section__head">
           <div>
-            <span class="workspace-section__kicker">02 · {{ t('toolbox.workspace.resourcesKicker') }}</span>
-            <h3>{{ t('toolbox.workspace.resourcesTitle') }}</h3>
-            <p>{{ t('toolbox.workspace.resourcesDescription') }}</p>
+            <span class="workspace-section__kicker">02 · {{ stepText('resources', 'label') }}</span>
+            <h3>{{ stepText('resources', 'title') }}</h3>
+            <p>{{ stepText('resources', 'description') }}</p>
           </div>
           <BButton @click="openResourceModal">
-            <SvgIcon :src="icon.common.plus" size="15" />{{ t('toolbox.workspace.addResources') }}
+            <SvgIcon :src="icon.common.plus" size="15" />{{ stepText('resources', 'addAction') }}
           </BButton>
         </header>
         <div v-if="!workspace.resources.length" class="workspace-section-empty">
           <SvgIcon :src="icon.toolbox.locate" size="22" />
-          <span>{{ t('toolbox.workspace.resourcesEmpty') }}</span>
+          <span>{{ stepText('resources', 'empty') }}</span>
         </div>
         <div v-else class="workspace-resource-grid">
           <article v-for="resource in workspace.resources" :key="`${resource.type}:${resource.resourceId}`">
@@ -247,11 +273,15 @@
         </div>
       </section>
 
-      <section class="workspace-section workspace-board-section">
+      <section
+        ref="boardSection"
+        class="workspace-section workspace-board-section"
+        :class="{ 'is-section-focused': focusedSection === 'board' }"
+      >
         <header class="workspace-section__head">
           <div>
-            <span class="workspace-section__kicker">03 · {{ t('toolbox.workspace.boardKicker') }}</span>
-            <h3>{{ t('toolbox.workspace.boardTitle') }}</h3>
+            <span class="workspace-section__kicker">03 · {{ stepText('board', 'label') }}</span>
+            <h3>{{ stepText('board', 'title') }}</h3>
             <p>{{ templateText('boardDescription') }}</p>
           </div>
         </header>
@@ -319,17 +349,21 @@
         </div>
       </section>
 
-      <section class="workspace-section workspace-timeline-section">
+      <section
+        ref="timelineSection"
+        class="workspace-section workspace-timeline-section"
+        :class="{ 'is-section-focused': focusedSection === 'timeline' }"
+      >
         <header class="workspace-section__head">
           <div>
-            <span class="workspace-section__kicker">04 · {{ t('toolbox.workspace.timelineKicker') }}</span>
-            <h3>{{ t('toolbox.workspace.timelineTitle') }}</h3>
-            <p>{{ t('toolbox.workspace.timelineDescription') }}</p>
+            <span class="workspace-section__kicker">04 · {{ stepText('timeline', 'label') }}</span>
+            <h3>{{ stepText('timeline', 'title') }}</h3>
+            <p>{{ stepText('timeline', 'description') }}</p>
           </div>
         </header>
         <div v-if="!workspace.sessions.length" class="workspace-section-empty">
           <SvgIcon :src="icon.common.time" size="21" />
-          <span>{{ t('toolbox.workspace.timelineEmpty') }}</span>
+          <span>{{ stepText('timeline', 'empty') }}</span>
         </div>
         <div v-else class="workspace-timeline">
           <article v-for="session in workspace.sessions" :key="session.id">
@@ -413,7 +447,7 @@
 
     <BModal
       v-model:visible="resourceModalVisible"
-      :title="t('toolbox.workspace.addResources')"
+      :title="stepText('resources', 'addAction')"
       width="880px"
       :show-footer="true"
       fullscreen-mobile
@@ -483,7 +517,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import type { ToolboxToolId } from '@lightnote/shared/toolbox-protocol';
@@ -550,8 +584,27 @@
   const progressSummary = ref('');
   const progressNextStep = ref('');
   const progressDuration = ref(25);
+  type WorkspaceSectionKey = 'progress' | 'resources' | 'board' | 'timeline';
+  type WorkspaceStepTextKey =
+    | 'label'
+    | 'title'
+    | 'description'
+    | 'summaryLabel'
+    | 'nextLabel'
+    | 'requiredHint'
+    | 'readyHint'
+    | 'submit'
+    | 'addAction'
+    | 'empty';
   const progressSection = ref<HTMLElement | null>(null);
+  const resourcesSection = ref<HTMLElement | null>(null);
+  const boardSection = ref<HTMLElement | null>(null);
+  const timelineSection = ref<HTMLElement | null>(null);
   const progressInput = ref<InstanceType<typeof BInput> | null>(null);
+  const activeSection = ref<WorkspaceSectionKey>('progress');
+  const focusedSection = ref<WorkspaceSectionKey | null>(null);
+  let sectionFocusTimer: number | undefined;
+  let progressInputTimer: number | undefined;
   let initializationVersion = 0;
   const createForm = reactive({ title: '', goal: '', targetDate: '', nextStep: '' });
   const itemForm = reactive<{ lane: ToolboxWorkspaceLane; title: string; content: string; dueOn: string }>({
@@ -574,6 +627,12 @@
     { key: 'next', icon: icon.noteTemplate.project },
     { key: 'rhythm', icon: icon.noteTemplate.review },
   ]);
+  const workspaceSteps = computed<{ key: WorkspaceSectionKey; number: string; title: string }[]>(() => [
+    { key: 'progress', number: '01', title: stepText('progress', 'label') },
+    { key: 'resources', number: '02', title: stepText('resources', 'label') },
+    { key: 'board', number: '03', title: stepText('board', 'label') },
+    { key: 'timeline', number: '04', title: stepText('timeline', 'label') },
+  ]);
   const itemsByLane = computed<Record<ToolboxWorkspaceLane, ToolboxWorkspaceItem[]>>(() => ({
     inbox: workspace.value?.items.filter((item) => item.lane === 'inbox') || [],
     knowledge: workspace.value?.items.filter((item) => item.lane === 'knowledge') || [],
@@ -588,6 +647,9 @@
 
   function templateText(key: string) {
     return t(`toolbox.workspace.template.${kind.value}.${key}`);
+  }
+  function stepText(section: WorkspaceSectionKey, key: WorkspaceStepTextKey) {
+    return templateText(`steps.${section}.${key}`);
   }
   function laneText(lane: ToolboxWorkspaceLane, key: string) {
     return t(`toolbox.workspace.template.${kind.value}.lanes.${lane}.${key}`);
@@ -758,10 +820,30 @@
       mutating.value = false;
     }
   }
-  async function focusProgressForm() {
-    progressSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  function sectionElement(section: WorkspaceSectionKey) {
+    return {
+      progress: progressSection.value,
+      resources: resourcesSection.value,
+      board: boardSection.value,
+      timeline: timelineSection.value,
+    }[section];
+  }
+  async function focusWorkspaceSection(section: WorkspaceSectionKey, focusInput = false) {
+    activeSection.value = section;
+    focusedSection.value = section;
     await nextTick();
-    progressInput.value?.focus();
+    sectionElement(section)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.clearTimeout(sectionFocusTimer);
+    sectionFocusTimer = window.setTimeout(() => {
+      focusedSection.value = null;
+    }, 1600);
+    window.clearTimeout(progressInputTimer);
+    if (focusInput && section === 'progress') {
+      progressInputTimer = window.setTimeout(() => progressInput.value?.focus(), 360);
+    }
+  }
+  async function focusProgressForm() {
+    await focusWorkspaceSection('progress', true);
   }
   async function saveProgress() {
     if (!workspace.value || !canSaveProgress.value || savingProgress.value) return;
@@ -777,6 +859,7 @@
       progressSummary.value = '';
       await loadWorkspaceList();
       message.success(t('toolbox.workspace.progressSaved'));
+      await focusWorkspaceSection('timeline');
     } catch (error) {
       showMutationError(error);
     } finally {
@@ -862,9 +945,15 @@
 
   watch([() => props.toolId, workspaceQuery], () => {
     workspace.value = null;
+    activeSection.value = 'progress';
+    focusedSection.value = null;
     void initialize();
   });
   onMounted(initialize);
+  onBeforeUnmount(() => {
+    window.clearTimeout(sectionFocusTimer);
+    window.clearTimeout(progressInputTimer);
+  });
 </script>
 
 <style lang="less" scoped>
@@ -994,6 +1083,16 @@
   .workspace-list-section,
   .workspace-section {
     padding: 22px;
+  }
+  .workspace-section {
+    scroll-margin-top: 150px;
+    transition:
+      border-color 0.2s ease,
+      box-shadow 0.2s ease;
+  }
+  .workspace-section.is-section-focused {
+    border: 2px solid var(--workspace-accent);
+    box-shadow: 0 0 0 3px var(--workspace-accent-soft);
   }
   .workspace-card-grid {
     display: grid;
@@ -1220,15 +1319,72 @@
   .workspace-resume__copy p {
     margin: 0;
   }
-  .workspace-progress-section {
-    scroll-margin-top: 100px;
+  .workspace-section-nav {
+    padding: 7px;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 7px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 14px;
+    background: var(--workspace-panel-bg-color);
+  }
+  .workspace-section-nav :deep(.workspace-section-nav__item) {
+    width: 100%;
+    height: 46px;
+    padding: 0 12px;
+    justify-content: flex-start;
+    gap: 9px;
+    color: var(--desc-color);
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: transparent;
+  }
+  .workspace-section-nav__item > span {
+    width: 27px;
+    height: 27px;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    color: var(--workspace-accent);
+    border: 1px solid var(--workspace-accent);
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 750;
+    line-height: 1;
+  }
+  .workspace-section-nav__item > strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .workspace-section-nav :deep(.workspace-section-nav__item.is-active) {
+    color: var(--text-color);
+    border-color: var(--workspace-accent);
+    background: var(--card-background);
+  }
+  .workspace-section-nav__item.is-active > span {
+    color: #fff;
+    background: var(--workspace-accent);
   }
   .workspace-progress-form {
     display: grid;
-    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) 150px auto;
+    grid-template-columns: minmax(0, 1fr) 150px auto;
     align-items: end;
     gap: 12px;
     margin-top: 18px;
+  }
+  .workspace-progress-form__summary,
+  .workspace-progress-form__hint {
+    grid-column: 1 / -1;
+  }
+  .workspace-progress-form__hint {
+    margin: -3px 0 2px;
+    color: var(--desc-color);
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .workspace-progress-form__hint.is-ready {
+    color: var(--workspace-accent);
   }
   .workspace-progress-form label,
   .workspace-modal-form label {
@@ -1244,6 +1400,25 @@
     color: var(--text-color);
     border-color: var(--surface-border-color);
     background: var(--workspace-panel-bg-color);
+  }
+  .workspace-progress-form :deep(.b-textarea) {
+    height: 118px;
+    min-height: 118px;
+    max-height: 118px;
+    padding: 11px 12px !important;
+    resize: none;
+    line-height: 1.6;
+  }
+  .workspace-progress-form :deep(.b-input) {
+    color: var(--text-color);
+    border: 1px solid var(--surface-border-color) !important;
+    border-radius: 8px;
+    background: var(--workspace-panel-bg-color) !important;
+  }
+  .workspace-progress-form :deep(.b-input:focus-visible) {
+    border-color: var(--workspace-accent) !important;
+    outline: 2px solid var(--workspace-accent-soft);
+    outline-offset: 1px;
   }
   .workspace-progress-form :deep(.select-trigger) {
     min-height: 42px;
@@ -1537,7 +1712,7 @@
       max-width: 580px;
     }
     .workspace-progress-form {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: minmax(0, 1fr) 150px auto;
     }
     .workspace-resume {
       grid-template-columns: 1fr auto;
@@ -1604,6 +1779,21 @@
     .workspace-modal-form__row {
       grid-template-columns: 1fr;
     }
+    .workspace-section-nav {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .workspace-section {
+      scroll-margin-top: 92px;
+    }
+    .workspace-section-nav :deep(.workspace-section-nav__item) {
+      min-width: 0;
+      padding: 0 9px;
+    }
+    .workspace-progress-form__summary,
+    .workspace-progress-form__hint {
+      grid-column: auto;
+    }
     .workspace-card-grid :deep(.workspace-card) {
       min-height: 210px;
     }
@@ -1665,6 +1855,10 @@
     }
   }
   :global(html.light-note-mobile-rendering .workspace-item.is-in_progress) {
+    border: 2px solid var(--workspace-accent);
+    box-shadow: none;
+  }
+  :global(html.light-note-mobile-rendering .workspace-section.is-section-focused) {
     border: 2px solid var(--workspace-accent);
     box-shadow: none;
   }

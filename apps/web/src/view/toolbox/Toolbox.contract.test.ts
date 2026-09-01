@@ -71,6 +71,19 @@ describe('知识工具箱前端边界', () => {
     }
   });
 
+  it('表格转换复用解析结果提供受限预览，并保留完整原始结果', () => {
+    const converter = source('src/view/toolbox/components/TableConverter.vue');
+
+    expect(converter).toContain("BTable from '@/components/base/BasicComponents/BTable/BTable.vue'");
+    expect(converter).toContain('resultTable.value = converted.table');
+    expect(converter).toContain("resultView.value = 'preview'");
+    expect(converter).toContain('resultTable.value.slice(1, 101)');
+    expect(converter).toContain('(resultTable.value[0] || []).slice(0, 20)');
+    expect(converter).toContain("{ value: 'raw' as const");
+    expect(converter).toContain('overflow: auto');
+    expect(converter).toContain('downloadToolboxBlob(new Blob([output.value]');
+  });
+
   it('Markdown 文件工具只保留真实文件入口，空态操作保持同组展示', () => {
     const workbench = source('src/view/toolbox/components/KnowledgeTextWorkbench.vue');
     const emptyStart = workbench.indexOf('<section v-if="sourceFiles.length === 0"');
@@ -198,8 +211,9 @@ describe('知识工具箱前端边界', () => {
       workbench.indexOf('await router.push(`/toolbox/task/${job.id}`)'),
     );
     expect(task.indexOf('rememberTaskScroll();')).toBeLessThan(
-      task.indexOf('await router.push(`/noteLibrary/${encodeURIComponent(savedNoteId.value)}`)'),
+      task.indexOf('path: `/noteLibrary/${encodeURIComponent(savedNoteId.value)}`'),
     );
+    expect(task).toContain('query: { from: route.fullPath }');
   });
 
   it('首页先续接现场，再提供高价值产出入口，并完整展示常用/最近与全部分类目录', () => {
@@ -251,6 +265,8 @@ describe('知识工具箱前端边界', () => {
     expect(homeTemplate).toContain('class="toolbox-home-group"');
     expect(home).toContain('fetchToolboxHome');
     expect(home).toContain('overview.value?.workspaces?.continue');
+    expect(homeTemplate).toContain('class="toolbox-activity-card__type"');
+    expect(homeTemplate).toContain('toolName(toolboxWorkspaceToolId(workspace.kind))');
     expect(home).toContain('overview.value?.tasks?.active');
     expect(home).toContain('overviewLoading');
     expect(home).toContain('overviewFailed');
@@ -427,6 +443,15 @@ describe('知识工具箱前端边界', () => {
     expect(workspace).toContain('toolboxWorkspaceKind(props.toolId)');
     expect(workspace).toContain('markToolboxWorkspaceOpened');
     expect(workspace).toContain('initializationVersion');
+    expect(workspace).toContain('class="workspace-section-nav"');
+    expect(workspace).toContain('focusWorkspaceSection');
+    expect(workspace).toContain("await focusWorkspaceSection('timeline')");
+    expect(workspace).toContain("stepText('progress', 'label')");
+    expect(workspace).toContain("stepText('resources', 'label')");
+    expect(workspace).toContain("stepText('board', 'label')");
+    expect(workspace).toContain("stepText('timeline', 'label')");
+    expect(workspace).toContain("canSaveProgress ? 'readyHint' : 'requiredHint'");
+    expect(workspace).toContain('resize: none');
     expect(workspace).toContain('ToolboxResourceSelector');
     expect(workspace).toContain('existing-resource-keys');
     expect(workspace).toContain('workspaceQuery');
@@ -437,6 +462,34 @@ describe('知识工具箱前端边界', () => {
     expect(workspaceTemplate).not.toMatch(/<input\b|<select\b|<textarea\b|<a-/u);
     expect(workspace).not.toMatch(/overflow-y:\s*(?:auto|scroll)/u);
     expect(workspace).toContain('@media (max-width: 767px)');
+  });
+
+  it('研究、学习与写作在同一数据引擎上呈现各自的四步推进语义', () => {
+    const templates = zhCN.toolbox.workspace.template;
+    const stepLabels = (template: (typeof templates)[keyof typeof templates]) => [
+      template.steps.progress.label,
+      template.steps.resources.label,
+      template.steps.board.label,
+      template.steps.timeline.label,
+    ];
+
+    expect(stepLabels(templates.research)).toEqual(['研究问题', '证据材料', '发现与假设', '验证记录']);
+    expect(stepLabels(templates.learning)).toEqual(['学习目标', '学习资料', '掌握与练习', '复习记录']);
+    expect(stepLabels(templates.writing)).toEqual(['写作目标', '素材', '大纲与草稿', '修订记录']);
+    expect(new Set(Object.values(templates).map((template) => stepLabels(template).join('|'))).size).toBe(3);
+  });
+
+  it('文本对比默认聚焦变化行，并用明确状态而非仅靠底色表达差异', () => {
+    const diff = source('src/view/toolbox/components/TextDiff.vue');
+    const diffTemplate = diff.slice(0, diff.indexOf('<script setup'));
+    expect(diff).toContain('showUnchanged');
+    expect(diff).toContain('visibleRows');
+    expect(diffTemplate).toContain('class="text-diff-result__status"');
+    expect(diff).toContain('diffKindLabel');
+    expect(diff).toContain('border-left: 3px solid var(--danger-color)');
+    expect(diff).toContain('border-left: 3px solid var(--success-color)');
+    expect(diff).toContain('resize: none');
+    expect(diffTemplate).not.toMatch(/<input\b|<select\b|<textarea\b|<a-/u);
   });
 
   it('PC 搜索常驻位仅保留图标，输入框位于带焦点管理的结果浮层内', () => {

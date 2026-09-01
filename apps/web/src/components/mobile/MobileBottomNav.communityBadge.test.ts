@@ -83,8 +83,8 @@ afterEach(() => {
 describe('移动底栏 · 聊天室未读角标', () => {
   it('中间新建入口先打开动作面板，再按类型打开快速收集', async () => {
     const host = mount();
-    const captureEntry = [...host.querySelectorAll<HTMLButtonElement>('.mobile-bottom-nav__item')].find((button) =>
-      button.textContent?.includes(zhCN.mobileNavigation.quickCapture),
+    const captureEntry = host.querySelector<HTMLButtonElement>(
+      `.mobile-bottom-nav__item[aria-label="${zhCN.mobileNavigation.quickCapture}"]`,
     );
 
     captureEntry?.click();
@@ -101,8 +101,8 @@ describe('移动底栏 · 聊天室未读角标', () => {
 
   it('中间新建入口把资料生成作为二级动作打开知识工坊', async () => {
     const host = mount();
-    const captureEntry = [...host.querySelectorAll<HTMLButtonElement>('.mobile-bottom-nav__item')].find((button) =>
-      button.textContent?.includes(zhCN.mobileNavigation.quickCapture),
+    const captureEntry = host.querySelector<HTMLButtonElement>(
+      `.mobile-bottom-nav__item[aria-label="${zhCN.mobileNavigation.quickCapture}"]`,
     );
 
     captureEntry?.click();

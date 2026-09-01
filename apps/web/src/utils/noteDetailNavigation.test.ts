@@ -37,16 +37,32 @@ describe('resolveNoteLibraryListPath', () => {
 });
 
 describe('resolveNoteDetailReturnPath', () => {
-  it('允许今日与工作台作为明确来源并保留查询参数', () => {
+  it('允许工作台作为明确来源并保留查询参数', () => {
     expect(resolveNoteDetailReturnPath('/workbenches?panel=recent#continue')).toBe(
       '/workbenches?panel=recent#continue',
     );
+  });
+
+  it('允许具体工具任务作为明确来源，但拒绝模糊的工具入口', () => {
+    expect(resolveNoteDetailReturnPath('/toolbox/task/job-1?tab=output#result')).toBe(
+      '/toolbox/task/job-1?tab=output#result',
+    );
+    expect(resolveNoteDetailReturnPath('/toolbox')).toBe('');
+    expect(resolveNoteDetailReturnPath('/toolbox/material_to_note')).toBe('');
+    expect(resolveNoteDetailReturnPath('/toolbox/task/job-1/extra')).toBe('');
   });
 
   it('在详情页之间切换后仍解析到最初的工作台来源', () => {
     const parent = `/noteLibrary/parent?from=${encodeURIComponent('/workbenches')}`;
     const child = `/noteLibrary/child?from=${encodeURIComponent(parent)}`;
     expect(resolveNoteDetailReturnPath(child)).toBe('/workbenches');
+  });
+
+  it('从工具结果进入后，即使在笔记树中切换页面也保留原任务来源', () => {
+    const source = '/toolbox/task/job-1?tab=output';
+    const parent = `/noteLibrary/parent?from=${encodeURIComponent(source)}`;
+    const child = `/noteLibrary/child?from=${encodeURIComponent(parent)}`;
+    expect(resolveNoteDetailReturnPath(child)).toBe(source);
   });
 
   it.each(['/search', '/inbox', 'https://example.com/workbenches', '//example.com/workbenches'])(

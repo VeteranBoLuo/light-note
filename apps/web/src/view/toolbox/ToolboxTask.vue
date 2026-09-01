@@ -636,7 +636,10 @@
       }
       registerSavedNoteInWorkspace(savedNoteId.value);
       rememberTaskScroll();
-      await router.push(`/noteLibrary/${encodeURIComponent(savedNoteId.value)}`);
+      await router.push({
+        path: `/noteLibrary/${encodeURIComponent(savedNoteId.value)}`,
+        query: { from: route.fullPath },
+      });
     } catch {
       message.error(t('toolbox.task.openNoteCheckFailed'));
     } finally {
