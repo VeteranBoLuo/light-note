@@ -79,6 +79,81 @@ describe('ChatOnlineMembersModal', () => {
     );
   });
 
+  it('游客汇总只占一行，结果高度不沿用在线总人数的骨架高度', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const loading = ref(true);
+    const snapshot = ref<CommunityChatOnlineMembersSnapshot | null>(null);
+    const app = createApp(
+      defineComponent({
+        setup() {
+          return () =>
+            h(ChatOnlineMembersModal, {
+              visible: true,
+              onlineCount: 6,
+              loading: loading.value,
+              snapshot: snapshot.value,
+            });
+        },
+      }),
+    );
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.mount(host);
+    cleanup = () => app.unmount();
+
+    const loadingList = host.querySelector('.chat-online-members-modal__list') as HTMLElement;
+    expect(host.querySelectorAll('.chat-online-members-modal__skeleton-row')).toHaveLength(6);
+    expect(loadingList.style.minHeight).toBe('min(407px, 54vh)');
+
+    snapshot.value = {
+      onlineCount: 6,
+      memberCount: 1,
+      guestCount: 5,
+      members: [{ alias: '菠萝', role: 'root', avatar: '', frameId: 'frame_celestial' }],
+    };
+    loading.value = false;
+    await nextTick();
+
+    const resultList = host.querySelector('.chat-online-members-modal__list') as HTMLElement;
+    expect(host.querySelectorAll('.chat-online-members-modal__list li')).toHaveLength(2);
+    expect(host.textContent).toContain('游客 5 人');
+    expect(resultList.style.minHeight).toBe('min(131px, 54vh)');
+  });
+
+  it('空名单只显示紧凑空态，不额外渲染空列表占位', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ChatOnlineMembersModal, {
+      visible: true,
+      onlineCount: 0,
+      snapshot: { onlineCount: 0, memberCount: 0, guestCount: 0, members: [] },
+    });
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.mount(host);
+    cleanup = () => app.unmount();
+
+    expect(host.querySelector('.chat-online-members-modal__list')).toBeNull();
+    expect(host.querySelector('.chat-online-members-modal__empty')).not.toBeNull();
+  });
+
+  it('加载失败只显示紧凑错误态，不继承在线人数的列表高度', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ChatOnlineMembersModal, {
+      visible: true,
+      onlineCount: 7,
+      error: true,
+    });
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.mount(host);
+    cleanup = () => app.unmount();
+
+    const errorState = host.querySelector('.chat-online-members-modal__state') as HTMLElement;
+    expect(errorState).not.toBeNull();
+    expect(errorState.style.minHeight).toBe('');
+    expect(host.querySelector('.chat-online-members-modal__list')).toBeNull();
+  });
+
   it('大量在线成员时最多渲染七行骨架，避免无意义创建全部占位节点', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

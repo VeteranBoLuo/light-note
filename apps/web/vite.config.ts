@@ -8,13 +8,15 @@ import androidColorMixFallback from './src/vite/androidColorMixFallback';
 import androidFontWeightFallback from './src/vite/androidFontWeightFallback';
 import dynamicViewportFallback from './src/vite/dynamicViewportFallback';
 import earlyAppEntryBootstrap from './src/vite/earlyAppEntryBootstrap';
+import { assertLocalViteBackend, createLocalBackendProxy } from './src/vite/localBackendProxy';
 import seoPreviewRoutes from './src/vite/seoPreviewRoutes';
 
 import path from 'path';
-export default defineConfig(({ mode }) => {
-  // 加载环境变量
+export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  console.log('env.VITE_ENV', env.VITE_ENV);
+  // 构建产物在生产域名下直接走同源请求；Vite serve 只允许连接本机后端，
+  // 避免缺失或误配 .env 时把调试请求、游客在线状态写入生产运行时。
+  if (command === 'serve') assertLocalViteBackend(env.VITE_ENV);
   return {
     esbuild: {
       pure: ['console.log'], // 构建时删除 console.log
@@ -48,72 +50,13 @@ export default defineConfig(({ mode }) => {
         plugins: [androidColorMixFallback(), androidFontWeightFallback(), dynamicViewportFallback()],
       },
     },
-    // 加载对应的.env文件
     envPrefix: 'VITE_',
-    // 根据mode加载不同的.env文件
     envDir: './',
     server: {
       // 读 PORT 环境变量(便于 CI / 多实例 / 预览工具用分配端口);缺省仍用 vite 默认端口
       port: process.env.PORT ? Number(process.env.PORT) : undefined,
       proxy: {
-        // 只代理真正的 API 前缀。若使用 `/api` 的普通前缀匹配，移动端路由
-        // `/apiLog` 刷新时也会被代理到线上，返回带旧构建哈希的 HTML，随后本地资源 404。
-        '^/api(?:/|$)':
-          env.VITE_ENV === 'local'
-            ? {
-                target: 'http://127.0.0.1:9001',
-                changeOrigin: true,
-                rewrite: (path: string) => path.replace(/^\/api/, ''),
-              }
-            : {
-                target: 'https://boluo66.top',
-                changeOrigin: true,
-                secure: false,
-              },
-        // favicon 的 icon_url 使用同源 /uploads 路径。本地预览必须转发给
-        // 本机后端，否则 Vite SPA fallback 会返回 index.html，图片随即回退为默认图标。
-        '/uploads':
-          env.VITE_ENV === 'local'
-            ? {
-                target: 'http://127.0.0.1:9001',
-                changeOrigin: true,
-              }
-            : {
-                target: 'https://boluo66.top',
-                changeOrigin: true,
-                secure: false,
-              },
-        // 公共聊天室与 REST 共用 9001 服务；浏览器始终连接同源路径，避免暴露 sid 或额外端口。
-        '/realtime/chat':
-          env.VITE_ENV === 'local'
-            ? {
-                target: 'http://127.0.0.1:9001',
-                // 真机通过局域网访问 Vite 时，浏览器 Origin 是 LAN-IP:前端端口。
-                // WebSocket Origin 校验必须继续看到这个同源 Host；若改写为 127.0.0.1:9001，
-                // Debug App 会被后端按跨站升级拒绝，只能退化到低频轮询。
-                changeOrigin: false,
-                ws: true,
-              }
-            : {
-                target: 'https://boluo66.top',
-                changeOrigin: true,
-                secure: false,
-                ws: true,
-              },
-        // Root App 原生通知只接收“通知数据已变化”信号，正文和未读数仍回源受权 REST。
-        '/realtime/notifications':
-          env.VITE_ENV === 'local'
-            ? {
-                target: 'http://127.0.0.1:9001',
-                changeOrigin: false,
-                ws: true,
-              }
-            : {
-                target: 'https://boluo66.top',
-                changeOrigin: true,
-                secure: false,
-                ws: true,
-              },
+        ...createLocalBackendProxy(),
         '/obs': {
           target: 'https://obs.cn-south-1.myhuaweicloud.com',
           changeOrigin: true,

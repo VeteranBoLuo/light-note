@@ -4,12 +4,17 @@ import { describe, expect, it } from 'vitest';
 
 const desktopSource = readFileSync(resolve(process.cwd(), 'src/view/workbenches/DesktopWorkbenchView.vue'), 'utf8');
 const mobileSource = readFileSync(resolve(process.cwd(), 'src/view/workbenches/MobileTodayView.vue'), 'utf8');
-const actionSource = readFileSync(
-  resolve(process.cwd(), 'src/components/workbenches/TodayActionSection.vue'),
-  'utf8',
-);
+const actionSource = readFileSync(resolve(process.cwd(), 'src/components/workbenches/TodayActionSection.vue'), 'utf8');
 
 describe('今日与工作台打开笔记时记录返回来源', () => {
+  it('汇总层进入整理中心总览，待整理明细的查看全部直达待整理子页', () => {
+    expect(desktopSource).toContain("key: 'organize'");
+    expect(desktopSource).toMatch(/function openTodaySummaryItem[\s\S]*?\{ path: '\/organize' \}/);
+    expect(actionSource).toMatch(
+      /function openAllInboxItems[\s\S]*?\{ path: '\/organize', query: \{ issue: 'pending' \} \}/,
+    );
+  });
+
   it('桌面工作台最近笔记携带当前工作台地址', () => {
     expect(desktopSource).toMatch(
       /function openContinueItem[\s\S]*?path: `\/noteLibrary\/\$\{item\.raw\.id\}`[\s\S]*?from: router\.currentRoute\.value\.fullPath/,

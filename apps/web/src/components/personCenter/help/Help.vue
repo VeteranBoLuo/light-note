@@ -1,5 +1,12 @@
 <template>
-  <div class="help-container" :class="{ 'is-compact': isCompactHelpLayout }">
+  <div
+    class="help-container"
+    :class="{
+      'is-compact': isCompactHelpLayout,
+      'is-desktop-compact': isCompactDesktopLayout,
+      'is-landing': isLandingView,
+    }"
+  >
     <div v-if="isCompactHelpLayout" class="help-mobile-header">
       <BButton class="help-mobile-exit" :aria-label="t('help.exitToProfile')" @click="exitHelpCenter">
         <SvgIcon :src="icon.arrow_left" size="18" />
@@ -17,7 +24,7 @@
             aria-controls="help-article-list"
             @click="toggleCompactCatalog"
           >
-            <SvgIcon :src="icon.catalogue" size="18" />
+            <SvgIcon :src="icon.noteDetail.catalogue" size="18" />
           </BButton>
         </BTooltip>
         <BTooltip :title="t('help.outline')" :disabled="bookmark.isMobile">
@@ -26,11 +33,11 @@
             :class="{ active: isCompactOutlineOpen }"
             :aria-label="t('help.outline')"
             :aria-expanded="isCompactOutlineOpen"
-            :disabled="isSearching || !helpOutline.length"
+            :disabled="isSearching || isLandingView || !helpOutline.length"
             aria-controls="help-article-outline"
             @click="toggleCompactOutline"
           >
-            <SvgIcon :src="icon.navigation.list" size="18" />
+            <SvgIcon :src="icon.filterPanel.list" size="18" />
           </BButton>
         </BTooltip>
       </div>
@@ -39,18 +46,11 @@
       class="help-body"
       :class="{ 'help-body--catalog-open': isCompactHelpLayout && isCompactCatalogOpen && !isSearching }"
     >
-      <div class="help-sidebar">
-        <b-input
-          v-model:value="searchValue"
-          :placeholder="t('help.searchPlaceholder')"
-          class="help-search-input"
-          clearable
-          id="ref2"
-        >
-          <template #prefix>
-            <svg-icon color="#cccccc" :src="icon.navigation.search" size="16" />
-          </template>
-        </b-input>
+      <aside
+        v-if="!isCompactHelpLayout || isCompactCatalogOpen || isCompactOutlineOpen"
+        class="help-sidebar"
+        :aria-label="isCompactOutlineOpen && !isCompactCatalogOpen ? t('help.outline') : t('help.catalog')"
+      >
         <div
           v-if="isCompactHelpLayout && !isSearching && isCompactOutlineOpen && helpOutline.length"
           id="help-article-outline"
@@ -63,87 +63,265 @@
             @select="scrollToHelpHeading"
           />
         </div>
-        <div v-if="isSearching && !isCompactHelpLayout" class="help-search-hint"> 搜索中，请在右侧结果中选择 </div>
-        <BList
-          v-else-if="!isCompactHelpLayout || isCompactCatalogOpen"
-          id="help-article-list"
-          class="help-menu-list"
-          style="font-size: 12px"
-          :listOptions="viewOptions"
-          @nodeClick="logItem"
-          :check-id="checkId"
-        >
-          <template #icon>
-            <svg-icon :src="icon.help_document" />
-          </template>
-        </BList>
-      </div>
-
-      <div class="help-content-workspace">
-        <!-- 搜索模式：展示搜索结果列表（未从结果中选具体文章时） -->
-        <div v-if="isSearching && !selectedFromSearch" class="help-editor search-results-panel">
-          <div class="search-results-header">
-            <span class="search-results-count">{{ t('help.searchResults', { count: searchResults.length }) }}</span>
-            <span class="search-results-hint" v-if="searchResults.length === 0">{{ t('help.searchEmpty') }}</span>
-          </div>
-          <div
-            v-for="result in searchResults"
-            :key="result.id"
-            class="search-result-card"
-            @click="selectSearchResult(result)"
+        <div v-if="!isCompactHelpLayout || isCompactCatalogOpen" id="help-article-list" class="help-catalog">
+          <BButton
+            class="help-home-link"
+            :class="{ active: isLandingView && !isSearching }"
+            :aria-current="isLandingView && !isSearching ? 'page' : undefined"
+            @click="goToHelpHome"
           >
-            <div class="search-result-icon">📄</div>
-            <div class="search-result-body">
-              <div class="search-result-title" v-html="highlightText(result.title, searchValue)"></div>
-              <div class="search-result-snippets">
-                <div
-                  v-for="(snippet, si) in result.snippets"
-                  :key="si"
-                  class="search-result-snippet"
-                  v-html="highlightText(snippet, searchValue)"
-                ></div>
-              </div>
-            </div>
+            <span class="help-home-link__icon" aria-hidden="true">
+              <SvgIcon :src="icon.common.question" size="17" />
+            </span>
+            <span class="help-home-link__copy">
+              <strong>{{ t('help.title') }}</strong>
+              <small>{{ t('help.homeDescription') }}</small>
+            </span>
+          </BButton>
+
+          <div class="help-catalog__label">{{ t('help.catalog') }}</div>
+          <div v-if="!helpConfigLoaded" class="help-catalog-state">
+            <BLoading inline loading :title="t('help.loading')" />
+          </div>
+          <div v-else-if="helpConfigError" class="help-catalog-state is-error">
+            <span>{{ t('help.loadFailed') }}</span>
+            <BButton size="small" @click="loadHelpConfig">{{ t('help.retry') }}</BButton>
+          </div>
+          <div v-else-if="!serverOptions.length" class="help-catalog-state">
+            {{ t('help.noArticles') }}
+          </div>
+          <div v-else class="help-catalog__scroll" v-auto-scrollbar>
+            <section v-for="group in catalogGroups" :key="group.id" class="help-catalog-group">
+              <BButton
+                class="help-catalog-group__title"
+                :class="{ active: activeSectionName === group.name && !checkId && !isSearching }"
+                :aria-current="activeSectionName === group.name && !checkId && !isSearching ? 'page' : undefined"
+                @click="openSection(group)"
+              >
+                <span>{{ group.name }}</span>
+                <small>{{ group.items.length }}</small>
+              </BButton>
+              <BButton
+                v-for="item in group.items"
+                :key="item.id"
+                class="help-catalog-item"
+                :class="{ active: String(checkId) === String(item.id) && !isSearching }"
+                :aria-current="String(checkId) === String(item.id) && !isSearching ? 'page' : undefined"
+                :title="item.title"
+                @click="logItem(item)"
+              >
+                <SvgIcon :src="icon.help_document" size="15" />
+                <span class="text-hidden">{{ item.title }}</span>
+              </BButton>
+            </section>
           </div>
         </div>
-        <!-- 正常文章浏览模式 -->
+      </aside>
+
+      <main class="help-content-workspace">
+        <header class="help-workspace-header" :class="{ 'is-discovery': isDiscoveryView }">
+          <div v-if="isDiscoveryView" class="help-hero-copy">
+            <span class="help-hero-eyebrow">{{ t('help.heroEyebrow') }}</span>
+            <h1>{{ t('help.heroTitle') }}</h1>
+            <p>{{ t('help.heroDescription') }}</p>
+          </div>
+          <BInput
+            id="help-search"
+            v-model:value="searchValue"
+            :placeholder="t('help.searchPlaceholder')"
+            :height="isDiscoveryView ? '50px' : '42px'"
+            class="help-search-input"
+            clearable
+          >
+            <template #prefix>
+              <SvgIcon :src="icon.navigation.search" size="17" />
+            </template>
+          </BInput>
+        </header>
+
+        <section v-if="isSearching && !selectedFromSearch" class="search-results-panel">
+          <div class="search-results-header">
+            <span class="search-results-count">{{ t('help.searchResults', { count: searchResults.length }) }}</span>
+            <span v-if="searchResults.length === 0 && !helpConfigError" class="search-results-hint">
+              {{ t('help.searchEmpty') }}
+            </span>
+          </div>
+          <div v-if="helpConfigError" class="help-state-card is-error" role="alert">
+            <SvgIcon :src="icon.common.question" size="22" />
+            <strong>{{ t('help.loadFailed') }}</strong>
+            <BButton size="small" @click="loadHelpConfig">{{ t('help.retry') }}</BButton>
+          </div>
+          <div v-else-if="searchResults.length === 0" class="help-state-card">
+            <SvgIcon :src="icon.navigation.search" size="22" />
+            <span>{{ t('help.searchSuggestion') }}</span>
+          </div>
+          <template v-else>
+            <BButton
+              v-for="result in searchResults"
+              :key="result.id"
+              class="search-result-card"
+              @click="selectSearchResult(result)"
+            >
+              <span class="search-result-icon" aria-hidden="true">
+                <SvgIcon :src="icon.help_document" size="18" />
+              </span>
+              <span class="search-result-body">
+                <span class="search-result-title" v-html="highlightText(result.title, searchValue)"></span>
+                <span class="search-result-snippets">
+                  <span
+                    v-for="(snippet, si) in result.snippets"
+                    :key="si"
+                    class="search-result-snippet"
+                    v-html="highlightText(snippet, searchValue)"
+                  ></span>
+                </span>
+              </span>
+            </BButton>
+          </template>
+        </section>
+
+        <section v-else-if="isSectionView && activeSection" class="help-section-panel">
+          <div class="help-section-panel__header">
+            <BButton class="help-section-back" @click="goToHelpHome">
+              <SvgIcon :src="icon.arrow_left" size="15" />
+              <span>{{ t('help.backToTopics') }}</span>
+            </BButton>
+            <div>
+              <h2>{{ activeSection.name }}</h2>
+              <p>{{ t('help.sectionResultCount', { count: activeSection.items.length }) }}</p>
+            </div>
+          </div>
+          <div class="help-section-list">
+            <BButton
+              v-for="item in activeSection.items"
+              :key="item.id"
+              class="search-result-card"
+              @click="openSectionArticle(item)"
+            >
+              <span class="search-result-icon" aria-hidden="true">
+                <SvgIcon :src="icon.help_document" size="18" />
+              </span>
+              <span class="search-result-body">
+                <strong class="search-result-title">{{ item.title }}</strong>
+                <span class="search-result-snippet">{{ articlePreview(item) }}</span>
+              </span>
+            </BButton>
+          </div>
+        </section>
+
+        <section v-else-if="isLandingView" class="help-topic-section">
+          <div class="help-topic-section__header">
+            <div>
+              <h2>{{ t('help.topicTitle') }}</h2>
+              <p>{{ t('help.topicDescription') }}</p>
+            </div>
+            <span v-if="helpConfigLoaded && !helpConfigError" class="help-topic-section__count">
+              {{ t('help.articleCount', { count: serverOptions.length }) }}
+            </span>
+          </div>
+          <div v-if="!helpConfigLoaded" class="help-state-card">
+            <BLoading inline loading :title="t('help.loading')" />
+          </div>
+          <div v-else-if="helpConfigError" class="help-state-card is-error" role="alert">
+            <SvgIcon :src="icon.common.question" size="22" />
+            <strong>{{ t('help.loadFailed') }}</strong>
+            <BButton size="small" @click="loadHelpConfig">{{ t('help.retry') }}</BButton>
+          </div>
+          <div v-else-if="!serverOptions.length" class="help-state-card">
+            <SvgIcon :src="icon.common.question" size="22" />
+            <span>{{ t('help.noArticles') }}</span>
+          </div>
+          <div v-else class="help-topic-grid">
+            <BButton
+              v-for="section in catalogGroups"
+              :key="section.id"
+              class="help-topic-card"
+              @click="openSection(section)"
+            >
+              <span class="help-topic-card__icon" aria-hidden="true">
+                <SvgIcon :src="icon.help_document" size="20" />
+              </span>
+              <span class="help-topic-card__copy">
+                <strong>{{ section.name }}</strong>
+                <small>{{ t('help.sectionDescription', { name: section.name }) }}</small>
+                <span>{{ t('help.relatedArticles', { count: section.items.length }) }}</span>
+              </span>
+            </BButton>
+          </div>
+        </section>
+
         <div
           v-else
           id="view-body"
           class="help-editor"
           :class="{ 'help-editor--search-active': selectedFromSearch }"
-          @scroll="!selectedFromSearch ? syncActiveOutline : undefined"
+          @scroll="syncActiveOutline"
         >
-          <div v-if="selectedFromSearch" class="search-back-bar" @click="backToSearchResults">
-            <span class="search-back-icon">←</span>
-            <span class="search-back-text">{{ t('help.backToResults') }}</span>
-          </div>
-          <div v-if="selectedFromSearch" class="search-content-scroll">
-            <div class="help-article-content" v-html="renderedContent"></div>
-          </div>
-          <div v-else class="help-article-content" v-html="renderedContent"></div>
+          <BButton v-if="selectedFromSearch" class="search-back-bar" @click="backToSearchResults">
+            <SvgIcon :src="icon.arrow_left" size="16" />
+            <span>{{ t('help.backToResults') }}</span>
+          </BButton>
+          <BButton v-else-if="activeSectionName" class="search-back-bar" @click="navigateToSection(activeSectionName)">
+            <SvgIcon :src="icon.arrow_left" size="16" />
+            <span>{{ t('help.backToSection', { name: activeSectionName }) }}</span>
+          </BButton>
+          <article class="help-article-content" v-html="renderedContent"></article>
         </div>
-        <aside v-if="!isSearching && !isCompactHelpLayout && helpOutline.length" class="help-outline">
+      </main>
+
+      <aside class="help-tools" :aria-label="t('help.tools')">
+        <div v-if="isCompactDesktopLayout" class="help-tools-compact-actions">
+          <BButton
+            class="help-compact-tool"
+            :class="{ active: isCompactAssistantOpen }"
+            :aria-expanded="isCompactAssistantOpen"
+            aria-controls="help-ai-assistant"
+            @click="toggleCompactAssistant"
+          >
+            <SvgIcon :src="icon.common.magicWand" size="17" />
+            <span>{{ t('help.aiTitle') }}</span>
+          </BButton>
+          <BButton
+            class="help-compact-tool"
+            :class="{ active: isCompactOutlineOpen }"
+            :disabled="isSearching || isLandingView || !helpOutline.length"
+            :aria-expanded="isCompactOutlineOpen"
+            aria-controls="help-desktop-outline"
+            @click="toggleCompactOutline"
+          >
+            <SvgIcon :src="icon.filterPanel.list" size="17" />
+            <span>{{ t('help.outline') }}</span>
+          </BButton>
+        </div>
+        <AiSkillPanel
+          id="help-ai-assistant"
+          v-show="!isCompactDesktopLayout || isCompactAssistantOpen"
+          class="help-ai-panel"
+          :title="t('help.aiTitle')"
+          :description="t('help.aiDescription')"
+          skill-id="help.answer"
+          :show-prompt="true"
+          surface="help.center"
+          :prompt-rows="2"
+          :placeholder="t('help.aiPlaceholder')"
+          :submit-label="t('help.aiSubmit')"
+          :show-grounding="false"
+          :clear-prompt-on-success="true"
+        />
+        <div
+          v-if="!isCompactHelpLayout && !isSearching && !isLandingView && helpOutline.length"
+          id="help-desktop-outline"
+          v-show="!isCompactDesktopLayout || isCompactOutlineOpen"
+          class="help-tools-outline"
+        >
           <HelpOutlineList
             :title="t('help.outline')"
             :items="helpOutline"
             :active-id="activeOutlineId"
             @select="scrollToHelpHeading"
           />
-        </aside>
-      </div>
-      <AiSkillPanel
-        class="help-ai-panel"
-        :title="t('help.aiTitle')"
-        :description="t('help.aiDescription')"
-        skill-id="help.answer"
-        :show-prompt="true"
-        surface="help.center"
-        presentation="sidebar"
-        :prompt-rows="3"
-        :placeholder="t('help.aiPlaceholder')"
-        :submit-label="t('help.aiSubmit')"
-      />
+        </div>
+      </aside>
     </div>
   </div>
 </template>
@@ -151,143 +329,68 @@
 <script lang="ts" setup>
   import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import BList from '@/components/base/BasicComponents/BList.vue';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore } from '@/store';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import { getHelpConfig } from '@/api/helpApi';
   import { useRoute, useRouter } from 'vue-router';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import AiSkillPanel from '@/components/aiSkills/AiSkillPanel.vue';
   import HelpOutlineList from './HelpOutlineList.vue';
+  import { groupHelpArticles, normalizeHelpSection, type HelpArticle, type HelpSectionGroup } from './helpCatalog';
 
-
-  const { t, locale } = useI18n();
-  const route = useRoute();
-  const router = useRouter();
-  const helpEntryHistoryPosition =
-    typeof window.history.state?.position === 'number' ? window.history.state.position : null;
-  const helpInfo = {
-    content:
-      locale.value === 'zh-CN'
-        ? `
-      <h2>欢迎来到轻笺帮助中心 👋</h2>
-<p>您好！感谢您选择<b>轻笺</b>——一款以智能标签为核心的云端知识管理工具。</p>
-<p>轻笺不只是书签收藏夹，更是一个将<b>书签、笔记、文件</b>统一管理、通过<b>共享标签体系</b>动态关联的知识中台。无论您是在收集灵感、整理资料还是深度写作，轻笺都能帮您把零散信息串联成体系。</p>
-
-<h3>✨ 核心功能</h3>
-<ul>
-  <li><strong>智能书签</strong>：一键收藏网页，AI 自动生成名称与描述；支持 Excel / HTML 格式导入导出，批量编辑标签</li>
-  <li><strong>统一标签</strong>：书签、笔记、云文件共享同一标签库，点击标签即可跨类型查看所有关联内容</li>
-  <li><strong>快速添加与待办</strong>：登录后可从导航栏添加网址、文本、文件或待办；资源进入“资源中心 → 整理中心 → 待整理”，待办进入独立待办列表</li>
-  <li><strong>笔记库</strong>：支持 HTML 富文本 / Markdown 双模式编辑器；AI 笔记助手可润色全文、优化标题、生成摘要、纠错语病、改写选段；可导出为 PDF / HTML / Markdown</li>
-  <li><strong>云空间</strong>：支持点击上传、Ctrl+V 粘贴上传、拖拽上传三种方式；文件可搜索、按类型筛选、移动、重命名、分享链接、批量操作与打包下载</li>
-  <li><strong>资源中心</strong>：顶部提供“全部资源 / 整理中心 / 知识地图”；整理中心集中处理待整理、无标签、重复网址和疑似失效问题；按 <code>/</code> 键可快速唤起搜索</li>
-  <li><strong>回收站</strong>：删除的书签、笔记、文件统一进入回收站，30 天内可随时恢复，过期自动清理</li>
-  <li><strong>模块 AI</strong>：在笔记、书签、文件、待办、资源中心和帮助中心内按当前对象使用专属能力；材料不会跨模块继承，生成内容先给出预览，再由原业务页面决定是否保存</li>
-  <li><strong>工作台</strong>：聚合书签/笔记/文件总数、7 天活跃趋势、高频书签与标签热度排行，快捷操作一步直达</li>
-</ul>
-<p>更多功能：<b>全局快捷键</b>（<code>/</code> 快速搜索，可在“设置”中查看）、<b>移动端</b>专属界面、<b>GitHub 快捷登录</b>，助你高效管理知识。</p>
-
-<h3>🖥 多端体验</h3>
-<p>轻笺全面适配<b>PC、手机和平板</b>，各端界面与交互均做了针对性优化，数据云端同步，随时随地访问您的知识库。</p>
-
-<h3>🎨 个性化设置</h3>
-<ul>
-  <li><strong>主题模式</strong>：浅色 / 深色 / 跟随系统，三种模式自由切换</li>
-  <li><strong>语言</strong>：支持中文和英文界面</li>
-</ul>
-
-<h3>📂 快速上手</h3>
-<ol>
-  <li>登录后点击导航栏的<b>快速添加</b>，随手保存网址、文本、文件或创建待办；资源稍后到<b>资源中心 → 整理中心 → 待整理</b>处理，任务则在<b>待办</b>中推进</li>
-  <li>在<b>书签页</b>点击标签筛选收藏的网页</li>
-  <li>进入<b>书签管理</b>新增、编辑或批量操作书签</li>
-  <li>打开<b>笔记库</b>新建笔记（支持 HTML 或 Markdown），用标签关联相关知识</li>
-  <li>使用<b>云空间</b>上传文件，为文件关联标签实现分类</li>
-  <li>在导航栏搜索框输入关键词，一键定位任何资源</li>
-</ol>
-
-<h3>💬 反馈与支持</h3>
-<p>如果您在使用中遇到问题或有改进建议，可通过以下方式联系我：</p>
-<div style="margin: 8px 0;">
-  邮箱：<a href="mailto:1902013368@qq.com" style="text-decoration: underline;">1902013368@qq.com</a>
-</div>
-<p>也可以在<b>个人中心 → 意见反馈</b>直接提交，我会尽快回复。</p>
-
-<p>感谢您的信任与支持！轻笺仍在持续迭代，更多实用功能正在路上 ✌️</p>
-    `
-        : `
-     <h2>Welcome to Light Note Help Center 👋</h2>
-<p>Hello! Thank you for choosing <b>Light Note</b> — a smart tag-powered cloud knowledge management tool.</p>
-<p>Light Note is more than a bookmark collector. It's a knowledge hub that unifies <b>bookmarks, notes, and files</b> under a <b>shared tag system</b> for dynamic cross-type association. Whether you're capturing inspiration, organizing research, or writing in depth, Light Note helps you connect scattered information into a coherent system.</p>
-
-<h3>✨ Core Features</h3>
-<ul>
-  <li><strong>Smart Bookmarks</strong>: Save web pages with one click; AI auto-generates titles and descriptions; import/export in Excel and HTML formats; batch tag editing</li>
-  <li><strong>Unified Tags</strong>: Bookmarks, notes, and cloud files share the same tag library — click a tag to view all associated content across types</li>
-  <li><strong>Quick Add & Todos</strong>: Signed-in users can add URLs, text, files, or todos from the navigation bar; resources go to Resource Center → To Organize, while tasks go to the dedicated Todos list</li>
-  <li><strong>Note Library</strong>: Dual-mode editor supporting HTML rich text and Markdown; AI Note Assistant can polish text, optimize titles, generate summaries, correct errors, and rewrite sections; export to PDF / HTML / Markdown</li>
-  <li><strong>Cloud Space</strong>: Upload via click, Ctrl+V paste, or drag & drop; search, filter by type, move, rename, share links, batch operations and zip download</li>
-  <li><strong>Resource Center</strong>: Find bookmarks, notes, files, and tags in one place, and switch between All Resources and Inbox; press <code>/</code> to quickly activate search</li>
-  <li><strong>Trash</strong>: Deleted bookmarks, notes, and files go to the trash for 30 days — recover anytime before automatic cleanup</li>
-  <li><strong>Module AI</strong>: Use focused skills inside Notes, Bookmarks, Files, Todos, Resource Center, and Help. Materials never carry across modules, and generated content is previewed before the original module saves it</li>
-  <li><strong>Workbench</strong>: Aggregate bookmark/note/file totals, 7-day activity trends, top bookmarks and tag popularity rankings, and one-click quick actions</li>
-</ul>
-<p>More features: <b>Global shortcuts</b> (<code>/</code> for search, listed in Settings), <b>mobile</b> optimized interface, <b>GitHub quick login</b>.</p>
-
-<h3>🖥 Multi-Device Experience</h3>
-<p>Light Note is fully optimized for <b>PC, mobile, and tablet</b>, with tailored interfaces and interactions for each device. Your data syncs via the cloud, so you can access your knowledge base anytime, anywhere.</p>
-
-<h3>🎨 Personalization</h3>
-<ul>
-  <li><strong>Theme</strong>: Light / Dark / Follow System — switch freely among three modes</li>
-  <li><strong>Language</strong>: Supports Chinese and English interfaces</li>
-</ul>
-
-<h3>📂 Quick Start</h3>
-<ol>
-  <li>After signing in, use <b>Quick Add</b> to save a URL, text, file, or todo; organize resources under <b>Resource Center → To Organize</b> and manage tasks in <b>Todos</b></li>
-  <li>On the <b>Bookmarks</b> page, click tags to filter your saved web pages</li>
-  <li>Go to <b>Bookmark Management</b> to add, edit, or batch-operate bookmarks</li>
-  <li>Open the <b>Note Library</b> to create notes and link them with tags</li>
-  <li>Use <b>Cloud Space</b> to upload files and associate tags for classification</li>
-  <li>Type keywords in the navigation search bar to locate any resource instantly</li>
-</ol>
-
-<h3>💬 Feedback & Support</h3>
-<p>If you encounter any issues or have suggestions for improvement, feel free to reach out:</p>
-<div style="margin: 8px 0;">
-  Email: <a href="mailto:1902013368@qq.com" style="text-decoration: underline;">1902013368@qq.com</a>
-</div>
-<p>You can also submit feedback directly via <b>Personal Center → Feedback</b>, and I'll respond as soon as possible.</p>
-
-<p>Thank you for your trust and support! Light Note is continuously evolving — more practical features are on the way ✌️</p>
-    `,
-  };
-
-  const node = ref(helpInfo);
   type HelpOutlineItem = {
     id: string;
     text: string;
     level: number;
   };
-  type HelpItem = {
-    id: string;
-    title: string;
-    content: string;
+  type HelpSearchResult = HelpArticle & {
+    score: number;
+    snippets: string[];
   };
-  const serverOptions = ref<HelpItem[]>([]);
+
+  const { t } = useI18n();
+  const route = useRoute();
+  const router = useRouter();
+  const helpEntryHistoryPosition =
+    typeof window.history.state?.position === 'number' ? window.history.state.position : null;
+  const helpInfo: HelpArticle = { id: '', title: '', content: '' };
+  const node = ref<HelpArticle>(helpInfo);
+  const serverOptions = ref<HelpArticle[]>([]);
 
   const bookmark = bookmarkStore();
   const isCompactHelpLayout = computed(() => bookmark.isMobileDevice);
+  const isCompactDesktopLayout = computed(() => bookmark.isDesktop && bookmark.isCompactLayout);
   const checkId = ref('');
   const activeOutlineId = ref('');
   const isCompactCatalogOpen = ref(false);
   const isCompactOutlineOpen = ref(false);
+  const isCompactAssistantOpen = ref(false);
+  const searchValue = ref('');
+  const selectedFromSearch = ref(false);
+  const helpConfigLoaded = ref(false);
+  const helpConfigError = ref(false);
+  const isSearching = computed(() => searchValue.value.trim().length > 0);
+  const activeSectionName = computed(routeSectionName);
+  const catalogGroups = computed(() => groupHelpArticles(serverOptions.value, t('help.uncategorizedSection')));
+  const activeSection = computed(
+    () => catalogGroups.value.find((group) => group.name === activeSectionName.value) || null,
+  );
+  const isSectionView = computed(
+    () => !isSearching.value && !checkId.value && !selectedFromSearch.value && Boolean(activeSection.value),
+  );
+  const isLandingView = computed(
+    () =>
+      !isSearching.value &&
+      !checkId.value &&
+      !selectedFromSearch.value &&
+      (!activeSectionName.value || !helpConfigLoaded.value || helpConfigError.value),
+  );
+  const isDiscoveryView = computed(() => !checkId.value && !selectedFromSearch.value);
   const renderedHelp = computed(() => {
     const source = node.value?.content || '';
     if (!source) {
@@ -316,10 +419,11 @@
   });
   const renderedContent = computed(() => renderedHelp.value.html);
   const helpOutline = computed(() => renderedHelp.value.outline);
-  function applyArticle(item: HelpItem) {
+  function applyArticle(item: HelpArticle) {
     isCompactCatalogOpen.value = false;
     isCompactOutlineOpen.value = false;
-    checkId.value = item.id;
+    isCompactAssistantOpen.value = false;
+    checkId.value = String(item.id);
     activeOutlineId.value = '';
     nextTick(() => {
       const dom = document.getElementById('view-body');
@@ -335,17 +439,28 @@
     return Array.isArray(value) ? String(value[0] || '') : String(value || '');
   }
 
-  function articleQuery(articleId = '') {
+  function routeSectionName() {
+    const value = route.query.section;
+    return Array.isArray(value) ? String(value[0] || '') : String(value || '');
+  }
+
+  function helpQuery(articleId = '', sectionName = '') {
     const query = { ...route.query };
     if (articleId) query.article = articleId;
     else delete query.article;
+    if (sectionName) query.section = sectionName;
+    else delete query.section;
     return query;
   }
 
-  function navigateToArticle(articleId: string, replace = false) {
-    if (routeArticleId() === articleId) return;
-    const navigation = { name: 'help', query: articleQuery(articleId) };
+  function navigateToArticle(articleId: string, replace = false, sectionName = routeSectionName()) {
+    if (routeArticleId() === articleId && routeSectionName() === sectionName) return;
+    const navigation = { name: 'help', query: helpQuery(articleId, sectionName) };
     void (replace ? router.replace(navigation) : router.push(navigation));
+  }
+
+  function navigateToSection(sectionName: string, replace = false) {
+    navigateToArticle('', replace, sectionName);
   }
 
   function exitHelpCenter() {
@@ -369,6 +484,7 @@
   function resetToIntro() {
     isCompactCatalogOpen.value = false;
     isCompactOutlineOpen.value = false;
+    isCompactAssistantOpen.value = false;
     checkId.value = '';
     activeOutlineId.value = '';
     node.value = helpInfo;
@@ -378,11 +494,32 @@
     });
   }
 
-  function logItem(item: HelpItem) {
+  function logItem(item: HelpArticle) {
     searchValue.value = '';
     selectedFromSearch.value = false;
     applyArticle(item);
-    navigateToArticle(String(item.id));
+    navigateToArticle(String(item.id), false, normalizeHelpSection(item.helpSection, t('help.uncategorizedSection')));
+  }
+  function goToHelpHome() {
+    searchValue.value = '';
+    selectedFromSearch.value = false;
+    resetToIntro();
+    navigateToArticle('', false, '');
+  }
+  function openSection(section: HelpSectionGroup) {
+    searchValue.value = '';
+    selectedFromSearch.value = false;
+    resetToIntro();
+    navigateToSection(section.name);
+  }
+  function openSectionArticle(item: HelpArticle) {
+    if (!activeSectionName.value) return;
+    applyArticle(item);
+    navigateToArticle(String(item.id), false, activeSectionName.value);
+  }
+  function articlePreview(item: HelpArticle) {
+    const text = stripHtml(item.content || '');
+    return text.length > 140 ? `${text.slice(0, 140)}…` : text;
   }
   function toggleCompactCatalog() {
     isCompactCatalogOpen.value = !isCompactCatalogOpen.value;
@@ -394,6 +531,13 @@
     isCompactOutlineOpen.value = !isCompactOutlineOpen.value;
     if (isCompactOutlineOpen.value) {
       isCompactCatalogOpen.value = false;
+      isCompactAssistantOpen.value = false;
+    }
+  }
+  function toggleCompactAssistant() {
+    isCompactAssistantOpen.value = !isCompactAssistantOpen.value;
+    if (isCompactAssistantOpen.value) {
+      isCompactOutlineOpen.value = false;
     }
   }
   function scrollToHelpHeading(id: string) {
@@ -418,22 +562,6 @@
     const current = [...headings].reverse().find((heading) => heading.offsetTop - container.scrollTop <= 36);
     activeOutlineId.value = current?.id || helpOutline.value[0]?.id || '';
   }
-  const searchValue = ref('');
-  const viewOptions = computed(() => {
-    if (searchValue.value) {
-      return serverOptions.value.filter((data) => {
-        return data.title.includes(searchValue.value);
-      });
-    }
-    return serverOptions.value;
-  });
-
-  /** 是否处于搜索模式 */
-  const isSearching = computed(() => searchValue.value.trim().length > 0);
-
-  /** 是否从搜索结果中选中了具体文章 */
-  const selectedFromSearch = ref(false);
-
   /** 从 HTML 中提取纯文本 */
   function stripHtml(html: string): string {
     const div = document.createElement('div');
@@ -442,11 +570,22 @@
   }
 
   /** 在文本中高亮关键词（返回安全 HTML） */
+  function escapeHtml(text: string): string {
+    return text
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+
   function highlightText(text: string, keyword: string): string {
-    if (!keyword?.trim()) return text;
-    const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const safeText = escapeHtml(text);
+    if (!keyword?.trim()) return safeText;
+    const escapedKeyword = escapeHtml(keyword.trim());
+    const escaped = escapedKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(`(${escaped})`, 'gi');
-    return text.replace(regex, '<mark class="search-highlight">$1</mark>');
+    return safeText.replace(regex, '<mark class="search-highlight">$1</mark>');
   }
 
   /** 从纯文本中提取匹配关键词的上下文片段 */
@@ -477,11 +616,11 @@
         const titleText = item.title || '';
         const contentText = stripHtml(item.content || '');
         const titleLower = titleText.toLowerCase();
-        const contentLower = contentText.toLowerCase();
         const kwLower = kw.toLowerCase();
 
         const titleMatch = titleLower.includes(kwLower);
-        const snippets = titleMatch ? [] : findSnippets(contentLower, kwLower);
+        const contentSnippets = findSnippets(contentText, kw);
+        const snippets = titleMatch ? [] : contentSnippets;
         const contentMatch = snippets.length > 0;
 
         if (!titleMatch && !contentMatch) return null;
@@ -491,24 +630,24 @@
         return {
           ...item,
           score,
-          snippets: titleMatch ? [findSnippets(contentLower, kwLower, 120, 1).pop() || ''] : snippets,
-        };
+          snippets: titleMatch ? findSnippets(contentText, kw, 120, 1) : snippets,
+        } as HelpSearchResult;
       })
       .filter((r): r is NonNullable<typeof r> => r !== null)
       .sort((a, b) => b.score - a.score);
   });
 
   /** 点击搜索结果 → 加载文章，保持搜索词 */
-  function selectSearchResult(result: any) {
+  function selectSearchResult(result: HelpSearchResult) {
     selectedFromSearch.value = true;
     applyArticle(result);
-    navigateToArticle(String(result.id));
+    navigateToArticle(String(result.id), false, '');
   }
 
   /** 返回搜索结果列表 */
   function backToSearchResults() {
     selectedFromSearch.value = false;
-    navigateToArticle('');
+    navigateToArticle('', false, '');
   }
 
   /** 搜索词变化时重置选中状态 */
@@ -524,7 +663,9 @@
       selectedFromSearch.value = false;
     }
     if (value.trim() && value !== previousValue && routeArticleId() && !selectedFromSearch.value) {
-      navigateToArticle('', true);
+      navigateToArticle('', true, '');
+    } else if (value.trim() && value !== previousValue && routeSectionName()) {
+      navigateToSection('', true);
     }
   });
 
@@ -532,6 +673,13 @@
     if (!isCompact) {
       isCompactCatalogOpen.value = false;
       isCompactOutlineOpen.value = false;
+    }
+  });
+
+  watch(isCompactDesktopLayout, (isCompact) => {
+    if (!isCompact) {
+      isCompactAssistantOpen.value = false;
+      if (!isCompactHelpLayout.value) isCompactOutlineOpen.value = false;
     }
   });
 
@@ -547,24 +695,36 @@
     }
   }
 
-  const helpConfigLoaded = ref(false);
   let unavailableArticleId = '';
 
   async function loadHelpConfig() {
-    const res = await getHelpConfig();
-    if (res.status === 200 && Array.isArray(res.data) && res.data.length > 0) {
+    helpConfigLoaded.value = false;
+    helpConfigError.value = false;
+    try {
+      const res = await getHelpConfig();
+      if (res.status !== 200 || !Array.isArray(res.data)) {
+        throw new Error('INVALID_HELP_CONFIG_RESPONSE');
+      }
       serverOptions.value = res.data;
+      helpConfigLoaded.value = true;
+      openArticleFromRoute();
+    } catch {
+      helpConfigLoaded.value = true;
+      helpConfigError.value = true;
     }
-    helpConfigLoaded.value = true;
-    openArticleFromRoute();
   }
 
   function openArticleFromRoute() {
-    if (!helpConfigLoaded.value) return;
+    if (!helpConfigLoaded.value || helpConfigError.value) return;
     const articleId = routeArticleId();
     if (!articleId) {
       unavailableArticleId = '';
       resetToIntro();
+      const sectionName = routeSectionName();
+      if (sectionName && !catalogGroups.value.some((group) => group.name === sectionName)) {
+        navigateToSection('', true);
+        message.warning(t('help.sectionUnavailable'));
+      }
       return;
     }
     const target = serverOptions.value.find((item) => String(item.id) === articleId);
@@ -585,7 +745,7 @@
   }
 
   watch(
-    () => route.query.article,
+    () => [route.query.article, route.query.section],
     () => openArticleFromRoute(),
   );
 
@@ -601,139 +761,408 @@
 
 <style lang="less">
   .help-container {
+    display: flex;
     width: 100%;
     height: 100%;
-    padding: 20px;
+    padding: clamp(12px, 1.4vw, 22px);
     box-sizing: border-box;
     flex-direction: column;
-    display: flex;
-    gap: 10px;
+    gap: 12px;
+    color: var(--text-color);
+    background: var(--surface-page-bg);
   }
+
   .help-mobile-header {
     position: relative;
+    display: flex;
     min-height: 40px;
     flex: 0 0 40px;
-    display: flex;
     align-items: center;
   }
+
   .help-mobile-exit.b_btn {
     position: relative;
     z-index: 1;
     height: 36px;
     padding: 0 8px;
     gap: 5px;
-    border: 0;
+    border: 0 !important;
+    color: var(--text-color);
     background: transparent;
     box-shadow: none;
-    color: var(--text-color);
   }
+
   .help-mobile-title {
     position: absolute;
     left: 50%;
     max-width: 42%;
-    transform: translateX(-50%);
     overflow: hidden;
+    transform: translateX(-50%);
     color: var(--text-color);
     font-size: 17px;
     font-weight: 700;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
   .help-mobile-actions {
     position: relative;
     z-index: 1;
+    display: flex;
     min-width: 0;
     margin-left: auto;
-    display: flex;
     align-items: center;
     gap: 4px;
   }
+
   .help-mobile-action.b_btn {
     width: 34px;
     height: 34px;
     padding: 0;
-    border: 1px solid transparent;
+    border: 1px solid transparent !important;
     border-radius: 9px;
     color: var(--desc-color);
     background: transparent;
   }
   .help-mobile-action.b_btn.active {
-    border-color: var(--resource-bookmark-color);
+    border-color: var(--resource-bookmark-color) !important;
     color: var(--resource-bookmark-color);
     background: var(--primary-btn-bg-color);
   }
-  .help-title {
-    height: 30px;
-    line-height: 1rem;
-    background-color: #fe2c55;
-    color: #ffffff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-  }
+
   .help-body {
     position: relative;
-    display: flex;
-    gap: 0;
-    height: auto;
+    display: grid;
+    grid-template-columns: 236px minmax(0, 1fr) minmax(286px, 320px);
+    grid-template-areas: 'catalog content tools';
+    gap: 14px;
     flex: 1 1 auto;
     min-height: 0;
     overflow: hidden;
+  }
+
+  .help-sidebar {
+    grid-area: catalog;
+    display: flex;
+    min-height: 0;
+    box-sizing: border-box;
+    flex-direction: column;
+    overflow: hidden;
     border: 1px solid var(--surface-border-color);
-    border-radius: 12px;
+    border-radius: 14px;
     background: var(--card-background);
     box-shadow: var(--surface-card-shadow);
   }
-  .help-sidebar {
-    width: 220px;
-    min-width: 220px;
-    max-width: 220px;
-    flex: 0 0 220px;
+
+  .help-catalog {
     display: flex;
-    flex-direction: column;
-    gap: 12px;
     min-height: 0;
-    padding: 16px;
+    flex: 1 1 auto;
+    padding: 12px 10px;
     box-sizing: border-box;
-    border-right: 1px solid var(--surface-border-color);
+    flex-direction: column;
+    gap: 8px;
+    overflow: hidden;
+  }
+
+  .help-home-link.b_btn {
+    width: 100%;
+    height: auto;
+    min-height: 58px;
+    padding: 8px;
+    justify-content: flex-start;
+    gap: 9px;
+    border: 1px solid transparent !important;
+    border-radius: 10px;
+    color: var(--text-color);
+    background: transparent;
+    line-height: 1.35;
+    text-align: left;
+  }
+
+  .help-home-link.b_btn.active {
+    border-color: var(--resource-bookmark-color) !important;
+    color: var(--resource-bookmark-color);
+    background: var(--primary-btn-bg-color);
+  }
+
+  .help-home-link__icon {
+    display: inline-flex;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 9px;
+    color: var(--resource-bookmark-color);
     background: var(--workspace-panel-bg-color);
   }
-  .help-ai-panel {
-    width: 320px;
-    min-width: 280px;
-    max-width: 360px;
-    margin: 12px;
-    align-self: stretch;
-    overflow: hidden;
-    box-sizing: border-box;
+
+  .help-home-link.active .help-home-link__icon {
+    border-color: var(--resource-bookmark-color);
+    color: #ffffff;
+    background: var(--resource-bookmark-color);
   }
+
+  .help-home-link__copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .help-home-link__copy strong,
+  .help-home-link__copy small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .help-home-link__copy strong {
+    font-size: 14px;
+  }
+
+  .help-home-link__copy small {
+    color: var(--desc-color);
+    font-size: 11px;
+  }
+
+  .help-catalog__label {
+    padding: 10px 8px 2px;
+    color: var(--desc-color);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+
+  .help-catalog__scroll {
+    min-height: 0;
+    flex: 1 1 auto;
+    padding-right: 2px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .help-catalog-group + .help-catalog-group {
+    margin-top: 12px;
+  }
+
+  .help-catalog-group__title.b_btn {
+    width: 100%;
+    height: 28px;
+    margin: 0 0 3px;
+    padding: 0 8px;
+    justify-content: space-between;
+    border: 1px solid transparent !important;
+    border-radius: 7px;
+    color: var(--desc-color);
+    background: transparent;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 18px;
+    text-align: left;
+  }
+
+  .help-catalog-group__title.b_btn small {
+    color: inherit;
+    font-size: 10px;
+    font-weight: 500;
+  }
+
+  .help-catalog-group__title.b_btn.active {
+    border-color: var(--resource-bookmark-color) !important;
+    color: var(--resource-bookmark-color);
+    background: var(--primary-btn-bg-color);
+  }
+
+  .help-catalog-item.b_btn {
+    position: relative;
+    width: 100%;
+    height: 34px;
+    min-width: 0;
+    padding: 0 9px;
+    justify-content: flex-start;
+    gap: 8px;
+    overflow: hidden;
+    border: 1px solid transparent !important;
+    border-radius: 8px;
+    color: var(--catalog-color);
+    background: transparent;
+    font-size: 13px;
+    text-align: left;
+  }
+
+  .help-catalog-item.b_btn .text-hidden {
+    min-width: 0;
+    flex: 1 1 auto;
+    text-align: left;
+  }
+
+  .help-catalog-item.b_btn.active {
+    border-color: var(--resource-bookmark-color) !important;
+    color: var(--resource-bookmark-color);
+    background: var(--primary-btn-bg-color);
+    font-weight: 700;
+  }
+
+  .help-catalog-state {
+    display: flex;
+    min-height: 100px;
+    padding: 12px;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 10px;
+    color: var(--desc-color);
+    font-size: 12px;
+    line-height: 1.5;
+    text-align: center;
+  }
+
+  .help-catalog-state.is-error {
+    color: var(--danger-color);
+  }
+
   .help-content-workspace {
+    grid-area: content;
     display: flex;
     min-width: 0;
     min-height: 0;
-    flex: 1 1 auto;
+    flex-direction: column;
+    box-sizing: border-box;
     overflow: hidden;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 14px;
     background: var(--card-background);
+    box-shadow: var(--surface-card-shadow);
   }
+
+  .help-workspace-header {
+    display: flex;
+    padding: 14px 20px;
+    min-width: 0;
+    flex: 0 0 auto;
+    justify-content: center;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--surface-divider-color);
+  }
+
+  .help-workspace-header.is-discovery {
+    padding: clamp(30px, 4vw, 52px) clamp(24px, 5vw, 64px) 34px;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 22px;
+    background: var(--surface-raised-background);
+  }
+
+  .help-hero-copy {
+    max-width: 680px;
+  }
+
+  .help-hero-eyebrow {
+    display: inline-flex;
+    margin-bottom: 10px;
+    color: var(--resource-bookmark-color);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+  }
+
+  .help-hero-copy h1 {
+    margin: 0;
+    color: var(--text-color);
+    font-size: clamp(28px, 3vw, 40px);
+    line-height: 1.18;
+    letter-spacing: -0.025em;
+  }
+
+  .help-hero-copy p {
+    max-width: 620px;
+    margin: 12px 0 0;
+    color: var(--desc-color);
+    font-size: 14px;
+    line-height: 1.75;
+  }
+
   .help-search-input {
     width: 100% !important;
-    min-width: 100%;
-    max-width: 100%;
+    max-width: 680px;
     flex: 0 0 auto;
     box-sizing: border-box;
   }
+
   .help-search-input.input-container {
     width: 100% !important;
   }
-  .help-search-input :deep(.b-input) {
-    border-color: var(--surface-border-color) !important;
-    background: var(--card-background) !important;
+
+  .help-search-input .b-input {
+    border: 1px solid var(--surface-border-color) !important;
+    border-radius: 11px;
+    color: var(--text-color);
+    background: var(--workspace-panel-bg-color);
   }
-  .help-menu-list {
-    flex: 1 1 auto;
+
+  .help-workspace-header.is-discovery .help-search-input .b-input {
+    background: var(--card-background);
+    box-shadow: var(--surface-card-shadow) !important;
+  }
+
+  .help-tools {
+    grid-area: tools;
+    display: flex;
     min-height: 0;
+    flex-direction: column;
+    gap: 12px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .help-ai-panel {
     width: 100%;
+    min-width: 0;
+    flex: 0 0 auto;
+    box-sizing: border-box;
+    box-shadow: var(--surface-card-shadow);
+  }
+
+  .help-tools .ai-skill-panel__result {
+    max-height: min(42vh, 420px);
+    overflow: auto;
+  }
+
+  .help-tools-outline {
+    padding: 14px 8px;
+    box-sizing: border-box;
+    overflow: hidden;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 14px;
+    background: var(--card-background);
+    box-shadow: var(--surface-card-shadow);
+  }
+
+  .help-tools-compact-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .help-compact-tool.b_btn {
+    height: 38px;
+    gap: 7px;
+    border: 1px solid var(--surface-border-color) !important;
+    border-radius: 10px;
+    color: var(--desc-color);
+    background: var(--card-background);
+  }
+
+  .help-compact-tool.b_btn.active {
+    border-color: var(--resource-bookmark-color) !important;
+    color: var(--resource-bookmark-color);
+    background: var(--primary-btn-bg-color);
+    font-weight: 700;
   }
 
   .tag-explanation {
@@ -764,30 +1193,32 @@
   }
   .help-editor {
     position: relative;
-    height: 100%;
-    border: 0;
-    border-radius: 0;
-    padding: clamp(24px, 3vw, 40px);
-    overflow: auto;
-    box-sizing: border-box;
-    line-height: 2rem;
     flex: 1 1 auto;
     min-width: 0;
+    min-height: 0;
+    padding: clamp(28px, 4vw, 52px);
+    overflow: auto;
+    box-sizing: border-box;
     background: var(--card-background);
-    box-shadow: none;
   }
+
   .help-article-content {
     width: 100%;
-    max-width: 960px;
+    max-width: 820px;
     margin: 0 auto;
     color: var(--text-color);
+    font-size: 15px;
+    line-height: 1.8;
   }
+
   .help-article-content > :first-child {
     margin-top: 0;
   }
+
   .help-article-content > :last-child {
     margin-bottom: 0;
   }
+
   .help-article-content h1,
   .help-article-content h2,
   .help-article-content h3,
@@ -795,73 +1226,101 @@
   .help-article-content h5,
   .help-article-content h6 {
     color: var(--text-color);
-    line-height: 1.4;
+    line-height: 1.35;
     scroll-margin-top: 24px;
   }
+
   .help-article-content h1,
   .help-article-content h2 {
-    margin: 36px 0 18px;
-    letter-spacing: -0.015em;
+    margin: 38px 0 18px;
+    letter-spacing: -0.02em;
   }
+
   .help-article-content > h1:first-child,
   .help-article-content > h2:first-child {
     margin-top: 0;
-    margin-bottom: 24px;
+    margin-bottom: 26px;
   }
+
   .help-article-content h3,
   .help-article-content h4,
   .help-article-content h5,
   .help-article-content h6 {
     margin: 32px 0 12px;
   }
+
   .help-article-content p {
-    margin: 0 0 16px;
-    line-height: 1.9;
+    margin: 0 0 18px;
+    line-height: 1.82;
   }
+
   .help-article-content ul,
   .help-article-content ol {
     margin: 12px 0 20px;
     padding-left: 1.75em;
   }
+
   .help-article-content li {
     margin: 6px 0;
-    line-height: 1.85;
+    line-height: 1.78;
   }
-  .help-outline {
-    width: 190px;
-    min-width: 190px;
-    max-width: 190px;
-    height: 100%;
-    padding: 16px 8px;
-    box-sizing: border-box;
-    overflow-y: auto;
-    overflow-x: hidden;
-    border-left: 1px solid var(--surface-border-color);
-    background: var(--workspace-panel-bg-color);
+
+  .help-article-content img {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 10px;
   }
+
+  .help-article-content a {
+    color: var(--resource-bookmark-color);
+  }
+
   .help-compact-outline {
     width: 100%;
     max-height: min(38vh, 320px);
-    padding: 10px 4px;
+    padding: 12px 6px;
     box-sizing: border-box;
-    overflow-y: auto;
     overflow-x: hidden;
-    border-radius: 8px;
-    border: 1px solid var(--card-border-color);
-    background: var(--menu-container-bg-color);
+    overflow-y: auto;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
+    background: var(--card-background);
     box-shadow: var(--surface-card-shadow);
   }
+
+  .help-container.is-desktop-compact .help-body {
+    grid-template-columns: 226px minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+      'catalog tools'
+      'catalog content';
+  }
+
+  .help-container.is-desktop-compact .help-tools {
+    overflow: visible;
+  }
+
+  .help-container.is-desktop-compact .help-ai-panel,
+  .help-container.is-desktop-compact .help-tools-outline {
+    margin-top: 2px;
+  }
+
+  .help-container.is-desktop-compact .help-tools-outline {
+    max-height: 220px;
+    overflow-y: auto;
+  }
+
   .help-container.is-compact {
-    padding: 12px;
+    height: auto;
+    min-height: 100%;
+    padding: 10px 12px 18px;
 
     .help-body {
+      display: flex;
       flex-direction: column;
       gap: 12px;
       overflow: visible;
-      border: 0;
-      border-radius: 0;
-      background: transparent;
-      box-shadow: none;
     }
 
     .help-sidebar {
@@ -869,34 +1328,25 @@
       min-width: 0;
       max-width: none;
       flex: 0 0 auto;
-      padding: 0;
-      border-right: 0;
-      background: transparent;
+      overflow: visible;
     }
 
     .help-content-workspace {
       width: 100%;
       min-height: 0;
-      flex: 1 1 auto;
-      overflow: visible;
-      border-radius: 10px;
-    }
-
-    .help-ai-panel {
-      width: auto;
-      min-width: 0;
-      max-width: none;
-      margin: 0;
       flex: 0 0 auto;
-      height: auto;
-      overflow: hidden;
+      overflow: visible;
     }
 
-    .help-menu-list {
-      flex: 0 1 auto;
+    .help-tools {
+      width: 100%;
+      min-height: 0;
+      flex: 0 0 auto;
+      overflow: visible;
     }
 
     .help-body--catalog-open {
+      height: calc(100vh - 82px);
       overflow: hidden;
     }
 
@@ -908,160 +1358,460 @@
     }
 
     .help-body--catalog-open .help-content-workspace,
-    .help-body--catalog-open .help-ai-panel {
+    .help-body--catalog-open .help-tools {
       display: none;
     }
 
-    .help-body--catalog-open #help-article-list.help-menu-list {
-      // BList 根节点自身有更高优先级的 height: 100%，这里必须明确覆盖，
-      // 目录打开时占满搜索区以下空间，正文暂时隐藏，目录自身负责完整滚动。
-      height: auto !important;
-      max-height: none;
+    .help-body--catalog-open .help-catalog {
+      height: 100%;
       min-height: 0;
       flex: 1 1 auto;
       overflow: hidden;
     }
 
-    .help-body--catalog-open #help-article-list.help-menu-list .category-body {
-      // 此处没有使用 BList 内置搜索框，不应再预留 50px；完整高度交给目录自身滚动。
-      height: 100% !important;
-      max-height: 100%;
-      box-sizing: border-box;
+    .help-body--catalog-open .help-catalog__scroll {
+      min-height: 0;
+      flex: 1 1 auto;
       overscroll-behavior: contain;
       touch-action: pan-y;
+    }
+
+    .help-workspace-header {
+      padding: 12px 14px;
+    }
+
+    .help-workspace-header.is-discovery {
+      padding: 26px 18px 24px;
+      gap: 18px;
+    }
+
+    .help-hero-copy h1 {
+      font-size: clamp(26px, 7vw, 34px);
+    }
+
+    .help-topic-section,
+    .help-section-panel,
+    .search-results-panel {
+      overflow: visible;
     }
 
     .help-editor {
       width: 100%;
       height: auto;
       min-height: 0;
-      flex: 1 1 auto;
-      padding: 22px 18px;
-      border: 1px solid color-mix(in srgb, var(--resource-bookmark-color) 14%, var(--card-border-color));
-      border-radius: 10px;
-      background: var(--menu-body-bg-color);
+      flex: 0 0 auto;
+      padding: 26px 20px;
+      overflow: visible;
     }
 
-    .help-editor--search-active {
-      padding: 0;
+    .help-tools .ai-skill-panel__result {
+      max-height: none;
     }
   }
 
-  /* ===== 搜索结果面板 ===== */
-  .search-results-panel {
-    padding: 20px;
+  .help-topic-section {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: clamp(24px, 3vw, 38px);
+    box-sizing: border-box;
+    overflow-x: hidden;
     overflow-y: auto;
   }
-  .search-results-header {
-    font-size: 14px;
-    color: var(--desc-color);
-    margin-bottom: 16px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid var(--card-border-color);
+
+  .help-topic-section__header {
+    display: flex;
+    margin-bottom: 22px;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 18px;
   }
-  .search-results-hint {
-    margin-left: 8px;
+
+  .help-topic-section__header h2 {
+    margin: 0;
+    color: var(--text-color);
+    font-size: 20px;
+    line-height: 1.35;
+  }
+
+  .help-topic-section__header p {
+    margin: 6px 0 0;
+    color: var(--desc-color);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .help-topic-section__count {
+    flex: 0 0 auto;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+
+  .help-topic-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .help-topic-card.b_btn {
+    --help-topic-color: var(--resource-bookmark-color);
+    width: 100%;
+    height: auto;
+    min-height: 142px;
+    padding: 18px;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 13px;
+    border: 1px solid var(--surface-border-color) !important;
+    border-radius: 13px;
+    color: var(--text-color);
+    background: var(--workspace-panel-bg-color);
+    box-shadow: none;
+    white-space: normal;
+    text-align: left;
+    transition:
+      border-color 0.18s ease,
+      transform 0.18s ease,
+      box-shadow 0.18s ease;
+  }
+
+  .help-topic-card:nth-child(6n + 2) {
+    --help-topic-color: var(--resource-tag-color);
+  }
+
+  .help-topic-card:nth-child(6n + 3) {
+    --help-topic-color: var(--resource-note-color);
+  }
+
+  .help-topic-card:nth-child(6n + 4) {
+    --help-topic-color: var(--resource-file-color);
+  }
+
+  .help-topic-card:nth-child(6n + 5) {
+    --help-topic-color: var(--todo-accent-color);
+  }
+
+  .help-topic-card:nth-child(6n + 6) {
+    --help-topic-color: var(--desc-color);
+  }
+
+  .help-topic-card__icon {
+    display: inline-flex;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--help-topic-color);
+    border-radius: 11px;
+    color: var(--help-topic-color);
+    background: color-mix(in srgb, var(--help-topic-color) 10%, var(--card-background));
+  }
+
+  .help-topic-card__copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    line-height: 1.45;
+  }
+
+  .help-topic-card__copy strong {
+    color: var(--text-color);
+    font-size: 15px;
+  }
+
+  .help-topic-card__copy small {
+    min-height: 42px;
+    margin-top: 5px;
+    color: var(--desc-color);
+    font-size: 12px;
+    line-height: 1.65;
+  }
+
+  .help-topic-card__copy > span {
+    margin-top: 10px;
+    color: var(--help-topic-color);
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .help-state-card {
+    display: flex;
+    min-height: 150px;
+    padding: 24px;
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 10px;
+    border: 1px dashed var(--surface-border-color);
+    border-radius: 12px;
+    color: var(--desc-color);
+    background: var(--workspace-panel-bg-color);
+    font-size: 13px;
+    line-height: 1.6;
+    text-align: center;
+  }
+
+  .help-state-card.is-error {
+    border-color: var(--danger-color);
+    color: var(--danger-color);
+  }
+
+  .help-section-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: clamp(22px, 3vw, 36px);
+    box-sizing: border-box;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .help-section-panel__header {
+    display: flex;
+    margin-bottom: 20px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .help-section-panel__header h2 {
+    margin: 0;
+    color: var(--text-color);
+    font-size: 24px;
+    line-height: 1.3;
+  }
+
+  .help-section-panel__header p {
+    margin: 6px 0 0;
     color: var(--desc-color);
     font-size: 13px;
   }
-  .search-result-card {
+
+  .help-section-back.b_btn {
+    width: max-content;
+    height: 34px;
+    padding: 0 10px;
+    gap: 6px;
+    border: 1px solid var(--surface-border-color) !important;
+    border-radius: 9px;
+    color: var(--resource-bookmark-color);
+    background: var(--workspace-panel-bg-color);
+  }
+
+  .help-section-list {
     display: flex;
-    gap: 12px;
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  .help-section-list .search-result-card.b_btn {
+    margin-bottom: 0;
+  }
+
+  .search-results-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: clamp(20px, 3vw, 34px);
+    box-sizing: border-box;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .search-results-header {
+    display: flex;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    align-items: baseline;
+    gap: 8px;
+    border-bottom: 1px solid var(--surface-divider-color);
+    color: var(--desc-color);
+    font-size: 13px;
+  }
+
+  .search-results-count {
+    color: var(--text-color);
+    font-weight: 700;
+  }
+
+  .search-results-hint {
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+
+  .search-result-card.b_btn {
+    display: flex;
+    width: 100%;
+    height: auto;
+    min-height: 82px;
+    margin-bottom: 9px;
     padding: 14px 16px;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: background 0.15s;
-    margin-bottom: 8px;
-    border: 1px solid var(--card-border-color);
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 12px;
+    border: 1px solid var(--surface-border-color) !important;
+    border-radius: 11px;
+    color: var(--text-color);
+    background: var(--card-background);
+    white-space: normal;
+    text-align: left;
+    transition:
+      border-color 0.16s ease,
+      background-color 0.16s ease;
   }
-  .search-result-card:hover {
-    background: var(--bl-input-noBorder-bg-color);
-    border-color: var(--primary-color);
-  }
+
   .search-result-icon {
-    flex: 0 0 auto;
-    font-size: 20px;
-    line-height: 1.4;
+    display: inline-flex;
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 9px;
+    color: var(--resource-bookmark-color);
+    background: var(--workspace-panel-bg-color);
   }
+
   .search-result-body {
+    display: flex;
     flex: 1;
     min-width: 0;
+    flex-direction: column;
   }
+
   .search-result-title {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--text-color);
     font-size: 15px;
     font-weight: 600;
-    color: var(--text-color);
-    margin-bottom: 6px;
     line-height: 1.5;
   }
+
   .search-result-snippets {
     display: flex;
     flex-direction: column;
     gap: 4px;
   }
+
   .search-result-snippet {
-    font-size: 13px;
-    color: var(--desc-color);
-    line-height: 1.6;
-    overflow: hidden;
-    text-overflow: ellipsis;
     display: -webkit-box;
+    overflow: hidden;
+    color: var(--desc-color);
+    font-size: 12px;
+    line-height: 1.6;
+    text-overflow: ellipsis;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
   }
+
   mark.search-highlight {
-    background: color-mix(in srgb, #facc15 72%, transparent);
-    color: #171717;
     padding: 1px 2px;
     border-radius: 2px;
-  }
-  .search-result-title mark.search-highlight {
-    background: color-mix(in srgb, #facc15 72%, transparent);
     color: #171717;
-    font-weight: 700;
-  }
-  .help-search-hint {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--desc-color);
-    font-size: 13px;
-    padding: 20px;
-    text-align: center;
-  }
-  /* ===== 搜索结果 → 文章 → 返回按钮 ===== */
-  .help-editor--search-active {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    padding: 0;
-  }
-  .search-back-bar {
-    flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 10px 20px;
-    cursor: pointer;
-    color: var(--primary-color);
-    font-size: 14px;
-    transition: background 0.15s;
-    user-select: none;
-    border-bottom: 1px solid var(--card-border-color);
-  }
-  .search-back-bar:hover {
-    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
-  }
-  .search-back-icon {
-    font-size: 16px;
-    line-height: 1;
-  }
-  .search-content-scroll {
-    flex: 1;
-    overflow: auto;
-    padding: clamp(24px, 3vw, 40px);
+    background: #fde047;
   }
 
-  /* ===== 搜索框清除按钮 ===== */
+  .search-result-title mark.search-highlight {
+    font-weight: 700;
+  }
+
+  .search-back-bar.b_btn {
+    width: max-content;
+    height: 34px;
+    margin: 0 0 24px;
+    padding: 0 10px;
+    gap: 6px;
+    border: 1px solid var(--surface-border-color) !important;
+    border-radius: 9px;
+    color: var(--resource-bookmark-color);
+    background: var(--workspace-panel-bg-color);
+    font-size: 14px;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .help-home-link.b_btn:hover,
+    .help-catalog-group__title.b_btn:hover,
+    .help-catalog-item.b_btn:hover {
+      background: var(--primary-btn-bg-color);
+    }
+
+    .help-topic-card.b_btn:hover {
+      transform: translateY(-1px);
+      border-color: var(--help-topic-color) !important;
+      box-shadow: var(--surface-hover-shadow);
+    }
+
+    .search-result-card.b_btn:hover {
+      border-color: var(--resource-bookmark-color) !important;
+      background: var(--workspace-panel-bg-color);
+    }
+  }
+
+  @media (max-width: 720px) {
+    .help-topic-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .help-topic-section__header {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .help-topic-card.b_btn {
+      min-height: 126px;
+      padding: 16px;
+    }
+
+    .help-topic-card__copy small {
+      min-height: 0;
+    }
+
+    .search-results-header {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .help-section-panel {
+      padding: 20px 16px 24px;
+    }
+
+    .help-section-panel__header h2 {
+      font-size: 21px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .help-topic-card.b_btn,
+    .search-result-card.b_btn {
+      transition: none;
+    }
+  }
+
+  html.light-note-mobile-rendering .help-workspace-header.is-discovery {
+    background: var(--workspace-panel-bg-color);
+  }
+
+  html.light-note-mobile-rendering .help-topic-card.b_btn,
+  html.light-note-mobile-rendering .help-ai-panel,
+  html.light-note-mobile-rendering .help-sidebar,
+  html.light-note-mobile-rendering .help-content-workspace {
+    box-shadow: none;
+  }
+
+  html.light-note-mobile-rendering .help-topic-card__icon {
+    background: var(--card-background);
+  }
+
+  html.light-note-mobile-rendering .help-home-link.b_btn.active,
+  html.light-note-mobile-rendering .help-catalog-group__title.b_btn.active,
+  html.light-note-mobile-rendering .help-catalog-item.b_btn.active,
+  html.light-note-mobile-rendering .help-mobile-action.b_btn.active {
+    border-color: var(--resource-bookmark-color) !important;
+    color: var(--resource-bookmark-color);
+    background: var(--workspace-panel-bg-color);
+  }
 </style>

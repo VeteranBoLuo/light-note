@@ -36,7 +36,7 @@ describe('失效账号资源治理清理', () => {
           [
             {
               id: 'finding-note',
-              issue_code: 'SOFT_DELETED_OWNER_HAS_RESOURCES',
+              issue_code: 'FORMALLY_DELETED_OWNER_HAS_RESOURCES',
               resource_type: 'note',
               target_id: 'owner-1',
               owner_id: 'owner-1',
@@ -72,6 +72,36 @@ describe('失效账号资源治理清理', () => {
     });
     expect(result).toMatchObject({ total: 2, ownerTotal: 1, completed: 2, failed: 0 });
     const resolveCall = query.mock.calls.find(([sql]) => sql.includes('UPDATE resource_governance_findings'));
-    expect(resolveCall?.[1]).toEqual(['root-1', 'owner-1']);
+    expect(resolveCall?.[1]).toEqual([
+      'root-1',
+      'owner-1',
+      'OWNER_MISSING',
+      'FORMALLY_DELETED_OWNER_HAS_RESOURCES',
+      'ACCOUNT_DELETION_STALLED',
+    ]);
+  });
+
+  it('历史软删除误报不再拥有清理授权', async () => {
+    query.mockResolvedValueOnce([
+      [
+        {
+          id: 'legacy-finding',
+          issue_code: 'SOFT_DELETED_OWNER_HAS_RESOURCES',
+          resource_type: 'note',
+          target_id: 'owner-1',
+          owner_id: 'owner-1',
+          state: 'open',
+        },
+      ],
+    ]);
+
+    await expect(
+      cleanupInvalidOwnerFindings({
+        findingIds: ['legacy-finding'],
+        confirmationPhrase: '删除 1 项失效资源',
+        actorUserId: 'root-1',
+      }),
+    ).rejects.toMatchObject({ code: 'RESOURCE_GOVERNANCE_FINDING_SCOPE_CHANGED' });
+    expect(cleanupInvalidOwnerResourcesNow).not.toHaveBeenCalled();
   });
 });

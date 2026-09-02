@@ -63,7 +63,10 @@ export function getCatalog(_req, res) {
 export async function getKnowledgeOverview(req, res) {
   if (!requireRead(req, res)) return;
   try {
-    const overview = await getToolboxKnowledgeOverview({ userId: readUserId(req) });
+    const overview = await getToolboxKnowledgeOverview({
+      userId: readUserId(req),
+      analysisOptions: { includeNodes: false },
+    });
     return res.send(resultData(overview));
   } catch (error) {
     return sendError(res, error);

@@ -7,7 +7,9 @@ const source = readFileSync(resolve(process.cwd(), 'src/view/workbenches/MobileT
 describe('移动端今日加载布局', () => {
   it('顶部总览与桌面端使用相同统计口径，并保留待整理短名称', () => {
     expect(source).toMatch(/key: 'todo'[\s\S]*?workbench\.today\.todoPending[\s\S]*?counts\.value\.todoPending/);
-    expect(source).toMatch(/key: 'inbox'[\s\S]*?workbench\.mobileToday\.inbox[\s\S]*?counts\.value\.inbox/);
+    expect(source).toMatch(
+      /key: 'organize'[\s\S]*?workbench\.mobileToday\.inbox[\s\S]*?organizer\.attentionCount \?\? counts\.value\.inbox/,
+    );
     expect(source).toMatch(
       /key: 'notification'[\s\S]*?workbench\.today\.unreadNotification[\s\S]*?counts\.value\.unreadNotification/,
     );
@@ -21,7 +23,7 @@ describe('移动端今日加载布局', () => {
 
   it('三项统计使用带语义图标的紧凑横向分段条', () => {
     expect(source).toMatch(/key: 'todo'[\s\S]*?icon: icon\.noteDetail\.toolbar\.todo/);
-    expect(source).toMatch(/key: 'inbox'[\s\S]*?icon: icon\.contextMenu\.inbox/);
+    expect(source).toMatch(/key: 'organize'[\s\S]*?icon: icon\.ai\.organize/);
     expect(source).toMatch(/key: 'notification'[\s\S]*?icon: icon\.settings\.notification/);
     expect(source).toMatch(/\.mobile-today__summary-item\s*\{[^}]*height:\s*52px[^}]*flex-direction:\s*row/);
     expect(source).toMatch(

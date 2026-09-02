@@ -17,18 +17,18 @@
         :aria-selected="activeSection === 'organize'"
         @click="goTo('organize')"
       >
-        <SvgIcon :src="icon.ai.organize" size="15" aria-hidden="true" />
+        <SvgIcon class="section-nav-item__icon" :src="icon.ai.organize" size="15" aria-hidden="true" />
         {{ t('resourceCenter.sections.organize') }}
         <BChip
-          class="organize-pending-badge"
-          :class="{ 'is-hidden': !pendingBadgeVisible }"
+          class="organize-attention-badge"
+          :class="{ 'is-hidden': !attentionBadgeVisible }"
           tone="neutral"
           size="small"
-          :role="pendingBadgeVisible ? 'status' : undefined"
-          :aria-hidden="pendingBadgeVisible ? undefined : 'true'"
-          :aria-label="pendingBadgeVisible ? pendingBadgeLabel : undefined"
+          :role="attentionBadgeVisible ? 'status' : undefined"
+          :aria-hidden="attentionBadgeVisible ? undefined : 'true'"
+          :aria-label="attentionBadgeVisible ? attentionBadgeLabel : undefined"
         >
-          {{ pendingBadgeVisible ? pendingBadgeText : '' }}
+          {{ attentionBadgeVisible ? attentionBadgeText : '' }}
         </BChip>
       </BButton>
     </div>
@@ -40,7 +40,7 @@
       :aria-selected="isKnowledgeMapView"
       @click="toggleKnowledgeMap"
     >
-      <SvgIcon :src="icon.noteTemplate.knowledge" size="16" aria-hidden="true" />
+      <SvgIcon class="knowledge-map-view__icon" :src="icon.noteTemplate.knowledge" size="16" aria-hidden="true" />
       <span class="knowledge-map-view__label knowledge-map-view__label--full">
         {{ t('resourceCenter.knowledgeGraph') }}
       </span>
@@ -52,7 +52,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -60,20 +60,26 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { recordOperation } from '@/api/commonApi';
   import icon from '@/config/icon';
-  import { inboxStore } from '@/store';
+  import { organizeStore, useUserStore } from '@/store';
 
   const { t } = useI18n();
   const route = useRoute();
   const router = useRouter();
-  const inbox = inboxStore();
+  const organizer = organizeStore();
+  const user = useUserStore();
   const isKnowledgeMapView = computed(() => route.path === '/search' && route.query.section === 'map');
-  const pendingBadgeVisible = computed(
-    () => inbox.countReady && !inbox.countFailed && Number(inbox.pendingTotal) > 0,
+  const organizeOwnerKey = computed(() =>
+    [user.id || 'visitor', user.role || '', user.adminContext?.subjectUserId || '', user.adminContext?.mode || ''].join(
+      '|',
+    ),
   );
-  const pendingBadgeText = computed(() =>
-    inbox.pendingTotal > 99 ? '99+' : String(Math.max(0, Number(inbox.pendingTotal) || 0)),
+  const attentionBadgeVisible = computed(() => Number(organizer.attentionCount) > 0);
+  const attentionBadgeText = computed(() =>
+    Number(organizer.attentionCount) > 99 ? '99+' : String(Math.max(0, Number(organizer.attentionCount) || 0)),
   );
-  const pendingBadgeLabel = computed(() => t('inbox.pendingSummary', { count: inbox.pendingTotal }));
+  const attentionBadgeLabel = computed(() =>
+    t('organize.attentionSummary', { count: Number(organizer.attentionCount) || 0 }),
+  );
 
   const activeSection = computed(() => {
     if (isKnowledgeMapView.value) return 'map';
@@ -101,18 +107,30 @@
     });
     router.replace({ path: '/search', query });
   }
+
+  watch(
+    organizeOwnerKey,
+    (ownerKey) => {
+      organizer.resetForOwner(ownerKey);
+      void Promise.all([
+        organizer.loadSummary({ silent: Boolean(organizer.summary) }),
+        organizer.loadKnowledgeStructureSummary({ silent: Boolean(organizer.knowledgeStructureSummary) }),
+      ]);
+    },
+    { immediate: true },
+  );
 </script>
 
 <style scoped lang="less">
   .resource-center-section-bar {
     min-width: 0;
-    height: 38px;
+    height: 40px;
     display: inline-flex;
     align-items: stretch;
-    gap: 0;
+    gap: 4px;
     padding: 4px;
-    border-radius: 10px;
-    background: var(--hover-background);
+    border-radius: 12px;
+    background: var(--workspace-panel-bg-color, var(--hover-background));
     box-sizing: border-box;
   }
 
@@ -121,64 +139,84 @@
   }
 
   .section-nav-item {
-    height: 30px;
+    position: relative;
+    height: 32px;
     padding: 0 13px;
     gap: 6px;
-    border-radius: 7px;
+    border: 1px solid transparent;
+    border-radius: 9px;
     background: transparent;
     color: var(--desc-color);
+    transition:
+      color 0.16s ease,
+      background-color 0.16s ease,
+      border-color 0.16s ease,
+      box-shadow 0.16s ease;
   }
 
-  :deep(.organize-pending-badge.b-chip--neutral.b-chip--small) {
+  :deep(.organize-attention-badge.b-chip--neutral.b-chip--small) {
     --b-chip-fg: var(--primary-color);
     --b-chip-bg: var(--mobile-selected-bg, var(--workspace-panel-bg-color));
-    --b-chip-border: var(--primary-color);
+    --b-chip-border: transparent;
 
-    width: 27px;
-    min-width: 27px;
+    min-width: 20px;
     height: 18px;
     min-height: 18px;
-    padding: 0 4px;
+    padding: 0 5px;
+    border: 0;
     font-size: 10px;
     line-height: 16px;
     font-variant-numeric: tabular-nums;
     pointer-events: none;
   }
 
-  :deep(.organize-pending-badge.is-hidden) {
+  :deep(.organize-attention-badge.is-hidden) {
     visibility: hidden;
   }
 
-  .section-nav-item:hover {
-    background: color-mix(in srgb, var(--primary-color) 9%, transparent);
+  .section-nav-item:not(.active):hover,
+  .knowledge-map-view:not(.active):hover {
+    color: var(--text-color);
+    background: var(--mobile-selected-bg, var(--hover-background));
   }
 
   .section-nav-item.active {
-    background: var(--background-color);
+    border-color: var(--surface-border-color, var(--card-border-color));
+    background: var(--card-background, var(--background-color));
     color: var(--primary-color);
-    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08);
+    font-weight: 650;
+  }
+
+  .section-nav-item:focus-visible,
+  .knowledge-map-view:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
   }
 
   .knowledge-map-view {
-    height: 30px;
+    position: relative;
+    height: 32px;
     padding: 0 13px;
     gap: 6px;
-    border: 0;
-    border-radius: 7px;
+    border: 1px solid transparent;
+    border-radius: 9px;
     background: transparent;
     color: var(--desc-color);
     white-space: nowrap;
-  }
-
-  .knowledge-map-view:hover {
-    color: var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 9%, transparent);
+    transition:
+      color 0.16s ease,
+      background-color 0.16s ease,
+      border-color 0.16s ease,
+      box-shadow 0.16s ease;
   }
 
   .knowledge-map-view.active {
-    background: var(--background-color);
+    border-color: var(--surface-border-color, var(--card-border-color));
+    background: var(--card-background, var(--background-color));
     color: var(--primary-color);
-    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08);
+    font-weight: 650;
   }
 
   .knowledge-map-view__label--short {
@@ -211,15 +249,17 @@
       box-shadow: none;
     }
 
-    .section-nav-item :deep(svg) {
+    .section-nav-item__icon {
       display: none;
     }
 
-    .section-nav-item.active {
-      border-color: var(--primary-color);
+    .section-nav-item.active,
+    .knowledge-map-view.active {
+      border-color: var(--surface-border-color, var(--card-border-color));
       color: var(--primary-color);
       background: var(--card-background) !important;
       font-weight: 650;
+      box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08);
     }
 
     .knowledge-map-view {
@@ -228,21 +268,13 @@
       height: var(--mobile-touch-size, 44px);
       padding-inline: 8px;
       border-color: transparent;
-      border-radius: 7px;
+      border-radius: 9px;
       background: transparent !important;
       box-shadow: none;
     }
 
-    .knowledge-map-view :deep(svg) {
+    .knowledge-map-view__icon {
       display: none;
-    }
-
-    .knowledge-map-view.active {
-      border-color: var(--resource-tag-color);
-      color: var(--resource-tag-color);
-      background: var(--card-background) !important;
-      font-weight: 650;
-      box-shadow: none;
     }
 
     .knowledge-map-view__label--full {

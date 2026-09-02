@@ -88,4 +88,26 @@ describe('toolbox knowledge structure', () => {
     expect(result.summary.empty).toBe(0);
     expect(result.nodes[0]).not.toHaveProperty('contentSample');
   });
+
+  it('可为整理中心生成轻量、按问题类型分页的读模型', () => {
+    const rows = Array.from({ length: 4 }, (_, index) => ({
+      id: `note-${index}`,
+      parent_id: null,
+      title: `笔记 ${index}`,
+      content_empty: index < 3 ? 1 : 0,
+      tag_count: 1,
+    }));
+    const result = analyzeKnowledgeStructure(rows, {
+      issueKinds: ['empty'],
+      issueOffset: 1,
+      issueLimit: 1,
+      includeNodes: false,
+    });
+
+    expect(result.nodes).toEqual([]);
+    expect(result.selectedIssueTotal).toBe(3);
+    expect(result.selectedAffectedNoteCount).toBe(3);
+    expect(result.selectedSeverityCounts.high).toBe(3);
+    expect(result.issues).toEqual([expect.objectContaining({ kind: 'empty', noteId: 'note-1' })]);
+  });
 });

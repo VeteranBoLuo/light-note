@@ -109,8 +109,13 @@ describe('community chat inline emoji', () => {
       /\.chat-composer-input__plain :deep\(\.b-textarea\)\s*\{[\s\S]*?display:\s*block;[\s\S]*?font-size:\s*inherit;/,
     );
     expect(composerSource).toMatch(
-      /\.chat-composer-input__emoji\)\s*\{[\s\S]*?width:\s*1em;[\s\S]*?height:\s*1em;[\s\S]*?margin-inline:\s*0\.38em;[\s\S]*?vertical-align:\s*-0\.12em;[\s\S]*?transform:\s*scale\(1\.45\);/,
+      /\.chat-composer-input__emoji\)\s*\{[\s\S]*?width:\s*1em;[\s\S]*?height:\s*1em;[\s\S]*?vertical-align:\s*-0\.12em;[\s\S]*?transform:\s*scale\(1\.45\);/,
     );
+    const composerEmojiStyle = composerSource.slice(
+      composerSource.indexOf('.chat-composer-input__emoji)'),
+      composerSource.indexOf('.chat-composer-input__emoji.is-selected'),
+    );
+    expect(composerEmojiStyle).not.toContain('margin-inline:');
     expect(messageTextSource).toMatch(
       /\.chat-inline-emoji-text__image\s*\{[\s\S]*?width:\s*2em;[\s\S]*?height:\s*2em;[\s\S]*?vertical-align:\s*-0\.65em;/,
     );

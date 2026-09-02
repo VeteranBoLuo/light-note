@@ -32,4 +32,10 @@ describe('资源治理批量操作', () => {
     expect(source).toContain('capabilities.reviewCleanupEnabled');
     expect(source).toContain('.governance-batch-bar__actions :deep(.b_btn)');
   });
+
+  it('按服务端实时账号状态解释候选，并明确阻断仅停用账号', () => {
+    expect(source).toContain("finding.ownerCleanupState === 'formally_deleted'");
+    expect(source).toContain("finding.ownerCleanupState === 'disabled'");
+    expect(source).toContain("t('resourceGovernance.guardOwnerNotDeleted')");
+  });
 });

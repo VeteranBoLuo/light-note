@@ -150,6 +150,8 @@ export async function archiveBookmark(userId, bookmarkId, { signal } = {}) {
   let meta = await fetchWebMeta(url, {
     bodyLimit: SNAPSHOT_LIMIT,
     maxContentBytes: EXPLICIT_WEB_READ_MAX_BYTES,
+    minimumBodyLength: MIN_SNAPSHOT_CHARS,
+    renderFallback: true,
     timeout: SNAPSHOT_FETCH_TIMEOUT,
     signal,
   });
@@ -159,6 +161,8 @@ export async function archiveBookmark(userId, bookmarkId, { signal } = {}) {
     meta = await fetchWebMeta(url, {
       bodyLimit: SNAPSHOT_LIMIT,
       maxContentBytes: EXPLICIT_WEB_READ_MAX_BYTES,
+      minimumBodyLength: MIN_SNAPSHOT_CHARS,
+      renderFallback: true,
       timeout: SNAPSHOT_FETCH_TIMEOUT,
       signal,
     });
@@ -167,6 +171,13 @@ export async function archiveBookmark(userId, bookmarkId, { signal } = {}) {
     // 归档失败给出更贴切的原因(SPA/需登录常见)
     const MSG = {
       EMPTY_CONTENT: '该网页正文为空(多为需 JS 渲染的单页应用或需登录),无法存档',
+      JS_REQUIRED: '该网页需要脚本渲染，但未能提取到正文，无法存档',
+      AUTH_REQUIRED: '该网页需要登录后查看，无法在不使用站点账号的情况下存档',
+      ACCESS_CHALLENGE: '该网页触发了访问验证，暂时无法存档',
+      ACCESS_DENIED: '该网页拒绝自动读取，暂时无法存档',
+      RENDERER_UNAVAILABLE: '网页渲染服务暂不可用，无法存档',
+      RENDERER_BUSY: '网页渲染任务较多，请稍后重试存档',
+      RENDER_TIMEOUT: '网页渲染超时，请稍后重试存档',
       NOT_HTML: '该链接不是网页(文件/图片等),无法存档',
       FETCH_FAILED: '网页无法访问(可能反爬、需登录或已失效),归档失败',
       BLOCKED_HOST: '拒绝访问该地址',

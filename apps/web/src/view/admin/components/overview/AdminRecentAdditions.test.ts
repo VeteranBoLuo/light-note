@@ -19,11 +19,19 @@ let cleanup: (() => void) | undefined;
 function mountRecent(options: {
   data: AdminRecentData | null;
   loading?: boolean;
-  error?: boolean;
   filter?: AdminRecentFilter;
   filteredTotal?: number | null;
+  resourceLoading?: boolean;
+  userLoading?: boolean;
+  resourceHasMore?: boolean;
+  userHasMore?: boolean;
+  resourceError?: 'initial' | 'append' | '';
+  userError?: 'initial' | 'append' | '';
 }) {
-  const onRetry = vi.fn();
+  const onRetryResource = vi.fn();
+  const onRetryUser = vi.fn();
+  const onLoadMoreResource = vi.fn();
+  const onLoadMoreUser = vi.fn();
   const onViewUsers = vi.fn();
   const onFilterChange = vi.fn();
   const host = document.createElement('div');
@@ -32,17 +40,29 @@ function mountRecent(options: {
     render: () =>
       h(AdminRecentAdditions, {
         ...options,
-        onRetry,
+        onRetryResource,
+        onRetryUser,
+        onLoadMoreResource,
+        onLoadMoreUser,
         onViewUsers,
         onFilterChange,
       }),
   });
+  app.directive('auto-scrollbar', {});
   app.mount(host);
   cleanup = () => {
     app.unmount();
     host.remove();
   };
-  return { host, onRetry, onViewUsers, onFilterChange };
+  return {
+    host,
+    onRetryResource,
+    onRetryUser,
+    onLoadMoreResource,
+    onLoadMoreUser,
+    onViewUsers,
+    onFilterChange,
+  };
 }
 
 afterEach(() => {
@@ -52,7 +72,7 @@ afterEach(() => {
 
 describe('AdminRecentAdditions', () => {
   it('初次加载展示两张结构化骨架卡', async () => {
-    const { host } = mountRecent({ data: null, loading: true });
+    const { host } = mountRecent({ data: null, loading: true, resourceLoading: true, userLoading: true });
     await nextTick();
 
     expect(host.querySelectorAll('.admin-recent__card')).toHaveLength(2);
@@ -96,7 +116,7 @@ describe('AdminRecentAdditions', () => {
     expect(onViewUsers).toHaveBeenCalledTimes(1);
   });
 
-  it('完整渲染 20 条最近记录', async () => {
+  it('使用 BVirtualList 保留完整高度且只挂载可视窗口', async () => {
     const createdAt = '2026-08-07T10:00:00.000Z';
     const data: AdminRecentData = {
       recentResources: Array.from({ length: 20 }, (_, index) => ({
@@ -117,13 +137,14 @@ describe('AdminRecentAdditions', () => {
     const { host } = mountRecent({ data });
     await nextTick();
 
-    const lists = host.querySelectorAll('.admin-recent__list');
+    const lists = host.querySelectorAll<HTMLElement>('.admin-recent__list');
     expect(lists).toHaveLength(2);
-    expect(lists[0].children).toHaveLength(20);
-    expect(lists[1].children).toHaveLength(20);
+    expect(lists[0].querySelector<HTMLElement>('.b-virtual-list__sizer')?.style.height).toBe('1160px');
+    expect(lists[1].querySelector<HTMLElement>('.b-virtual-list__sizer')?.style.height).toBe('1160px');
+    expect(host.querySelectorAll('.admin-recent__row').length).toBeLessThan(40);
   });
 
-  it('今日用户筛选只展示用户明细，并说明权威总数与展示上限', async () => {
+  it('今日用户筛选只展示用户明细，并说明权威总数与连续浏览', async () => {
     const data: AdminRecentData = {
       recentResources: [],
       recentUsers: [
@@ -169,12 +190,70 @@ describe('AdminRecentAdditions', () => {
     expect(onFilterChange).toHaveBeenCalledWith({ period: 'today', type: 'all' });
   });
 
-  it('加载失败时提供重试动作', async () => {
-    const { host, onRetry } = mountRecent({ data: null, error: true });
+  it('两条数据流可独立展示首次加载失败并重试', async () => {
+    const { host, onRetryResource, onRetryUser } = mountRecent({
+      data: null,
+      resourceError: 'initial',
+      userError: 'initial',
+    });
     await nextTick();
 
-    expect(host.textContent).toContain('adminOverviewRecent.loadFailed');
-    (host.querySelector('.admin-recent__error button') as HTMLButtonElement).click();
-    expect(onRetry).toHaveBeenCalledTimes(1);
+    const errors = host.querySelectorAll('.admin-recent__stream-error');
+    expect(errors).toHaveLength(2);
+    (errors[0].querySelector('button') as HTMLButtonElement).click();
+    (errors[1].querySelector('button') as HTMLButtonElement).click();
+    expect(onRetryResource).toHaveBeenCalledTimes(1);
+    expect(onRetryUser).toHaveBeenCalledTimes(1);
+  });
+
+  it('追加失败保留已加载资源并暂停自动重试', async () => {
+    const data: AdminRecentData = {
+      recentResources: [
+        {
+          id: 'bookmark-1',
+          type: 'bookmark',
+          title: '已加载书签',
+          userId: 'user-1',
+          createdAt: '2026-08-07T10:00:00.000Z',
+        },
+      ],
+      recentUsers: [],
+    };
+    const { host, onRetryResource } = mountRecent({
+      data,
+      filter: { period: 'recent', type: 'resource' },
+      resourceHasMore: true,
+      resourceError: 'append',
+    });
+    await nextTick();
+
+    expect(host.textContent).toContain('已加载书签');
+    expect(host.textContent).toContain('adminOverviewRecent.loadMoreFailed');
+    (host.querySelector('.admin-recent__stream-footer button') as HTMLButtonElement).click();
+    expect(onRetryResource).toHaveBeenCalledTimes(1);
+  });
+
+  it('接近已加载末尾时由虚拟列表自动请求下一页', async () => {
+    const data: AdminRecentData = {
+      recentResources: [
+        {
+          id: 'note-1',
+          type: 'note',
+          title: '第一页笔记',
+          userId: 'user-1',
+          createdAt: '2026-08-07T10:00:00.000Z',
+        },
+      ],
+      recentUsers: [],
+    };
+    const { onLoadMoreResource } = mountRecent({
+      data,
+      filter: { period: 'recent', type: 'resource' },
+      resourceHasMore: true,
+    });
+
+    await nextTick();
+    await nextTick();
+    expect(onLoadMoreResource).toHaveBeenCalledTimes(1);
   });
 });

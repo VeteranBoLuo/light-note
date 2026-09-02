@@ -155,12 +155,23 @@
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
-  import { captureCurrentTabAddress, captureTriggeredPage } from '../capture';
+  import {
+    captureCurrentPageText,
+    captureCurrentTabAddress,
+    captureTriggeredPage,
+    prepareCurrentPageTextCapture,
+  } from '../capture';
   import { ExtensionApiError, extensionPost, isExtensionAuthError } from '../api';
   import { clearBookmarkDraft, getBookmarkDraft, saveBookmarkDraft } from '../storage';
   import { belongsToExtensionDraftSession, createExtensionDraftPersistence } from '../draftPersistence';
   import { resolveExtensionOperationReceipt } from '../operationIdempotency';
-  import type { BookmarkDraft, ExtensionOperationReceipt, ExtensionSuccess } from '../types';
+  import type {
+    BookmarkDraft,
+    CapturedPageText,
+    ExtensionOperationReceipt,
+    ExtensionSuccess,
+    PreparedPageTextCapture,
+  } from '../types';
   import { buildBookmarkCapturePayload } from '@/utils/bookmarkCapture.ts';
 
   const props = defineProps<{ authenticated: boolean; draftSessionId: string }>();
@@ -184,6 +195,8 @@
   const savingMode = ref<'formal' | 'inbox' | ''>('');
   const tagOptions = ref<Array<{ label: string; value: string }>>([]);
   const suggestedNewTags = ref<string[]>([]);
+  const pageCaptureTarget = ref<PreparedPageTextCapture | null>(null);
+  let pageCaptureTargetRequest = 0;
   const draftPersistence = createExtensionDraftPersistence(saveBookmarkDraft, clearBookmarkDraft);
   const saving = computed(() => Boolean(savingMode.value));
 
@@ -231,6 +244,28 @@
     }
   }
 
+  function isSamePageUrl(left: string, right: string) {
+    try {
+      const leftUrl = new URL(left);
+      const rightUrl = new URL(right);
+      leftUrl.hash = '';
+      rightUrl.hash = '';
+      return leftUrl.href === rightUrl.href;
+    } catch {
+      return false;
+    }
+  }
+
+  async function refreshPageCaptureTarget() {
+    const requestId = ++pageCaptureTargetRequest;
+    try {
+      const target = await prepareCurrentPageTextCapture();
+      if (requestId === pageCaptureTargetRequest) pageCaptureTarget.value = target;
+    } catch {
+      if (requestId === pageCaptureTargetRequest) pageCaptureTarget.value = null;
+    }
+  }
+
   async function fillCurrentPage() {
     if (capturing.value || refillingPage.value || saving.value || aiLoading.value) return;
     refillingPage.value = true;
@@ -240,6 +275,7 @@
       const page = await captureCurrentTabAddress();
       draft.url = page.url;
       draft.name = page.title.slice(0, 255);
+      void refreshPageCaptureTarget();
     } catch {
       captureWarning.value = t('browserExtension.bookmark.captureFailed');
     } finally {
@@ -292,17 +328,40 @@
       return;
     }
     draft.url = url;
+    // 权限申请必须直接发生在按钮点击的同步调用栈里；失败时仅退回服务端公开网页读取。
+    let pageTextPromise: Promise<CapturedPageText | null> | null = null;
+    const captureTarget = pageCaptureTarget.value;
+    if (captureTarget && isSamePageUrl(captureTarget.url, url)) {
+      try {
+        pageTextPromise = captureCurrentPageText(captureTarget, 12_000).catch(() => {
+          void refreshPageCaptureTarget();
+          return null;
+        });
+      } catch {
+        pageTextPromise = null;
+        void refreshPageCaptureTarget();
+      }
+    }
     aiLoading.value = true;
     errorMessage.value = '';
     try {
       await loadTags();
+      const capturedPage = await pageTextPromise;
+      const pageContext =
+        capturedPage && isSamePageUrl(capturedPage.url, url) && (capturedPage.title || capturedPage.text)
+          ? {
+              url,
+              title: String(capturedPage.title || '').slice(0, 500),
+              text: String(capturedPage.text || '').slice(0, 12_000),
+            }
+          : null;
       const data = await extensionPost<any>('/api/ai/skills/execute', {
         protocolVersion: 1,
         requestId: crypto.randomUUID(),
         skillId: 'bookmark.parse_url',
         skillVersion: 1,
         threadId: null,
-        input: { url },
+        input: { url, ...(pageContext ? { pageContext } : {}) },
         scope: { resourceRefs: [] },
         client: {
           locale: navigator.language || 'zh-CN',
@@ -422,6 +481,7 @@
   );
 
   onMounted(async () => {
+    void refreshPageCaptureTarget();
     const stored = await getBookmarkDraft();
     if (stored && belongsToExtensionDraftSession(stored.sessionId, props.draftSessionId) && isUntouchedDraft()) {
       Object.assign(draft, stored);

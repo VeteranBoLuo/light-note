@@ -196,6 +196,7 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'inbox', [
 ]);
 declare(ADMIN_POLICIES.READ, 'organize', [
   ['GET', '/organize/summary'],
+  ['GET', '/organize/knowledge-structure/summary'],
   ['GET', '/organize/issues/:issueType'],
   ['GET', '/organize/duplicate-bookmarks/:groupKey/preview'],
   ['GET', '/organize/bookmark-health'],

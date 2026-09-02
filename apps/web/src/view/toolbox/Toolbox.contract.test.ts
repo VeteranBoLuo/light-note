@@ -138,7 +138,7 @@ describe('知识工具箱前端边界', () => {
     expect(serviceRegistry).toContain('learning_workspace:');
     expect(serviceRegistry).toContain('writing_workspace:');
     expect(serviceRegistry).toContain('knowledge_structure_audit:');
-    expect(serviceRegistry).toContain('directory_index:');
+    expect(serviceRegistry).not.toContain('directory_index:');
     const workbench = source('src/view/toolbox/ToolboxWorkbench.vue');
     expect(workbench).toContain('localToolComponent');
     expect(workbench).toContain('getToolboxLocalComponent');
@@ -402,14 +402,16 @@ describe('知识工具箱前端边界', () => {
     expect(home).not.toMatch(/\.toolbox-start(?:-grid|-card)?[^}]*overflow-y:\s*(?:auto|scroll)/u);
   });
 
-  it('知识库整理合并结构问题与目录索引，表格体检载入后自动运行', () => {
+  it('知识库整理聚焦结构问题且不再提供 Markdown 目录导出，表格体检载入后自动运行', () => {
     const maintenance = source('src/view/toolbox/components/KnowledgeMaintenanceWorkbench.vue');
     const dataset = source('src/view/toolbox/components/DatasetWorkbench.vue');
-    expect(maintenance).toContain("activeView === 'audit'");
-    expect(maintenance).toContain("value: 'directory' as const");
-    expect(maintenance).toContain('class="maintenance-mode-switch"');
-    expect(maintenance).toContain('generateKnowledgeDirectoryIndex');
-    expect(maintenance).toContain("const ALL_NOTES_SCOPE = '__all_notes__'");
+    expect(maintenance).not.toContain("activeView === 'audit'");
+    expect(maintenance).not.toContain("value: 'directory' as const");
+    expect(maintenance).not.toContain('class="maintenance-mode-switch"');
+    expect(maintenance).not.toContain('generateKnowledgeDirectoryIndex');
+    expect(maintenance).toContain('query: { from: route.fullPath }');
+    expect(maintenance).not.toContain("const ALL_NOTES_SCOPE = '__all_notes__'");
+    expect(maintenance).not.toContain('directory-preview');
     expect(maintenance).not.toContain("    'unlinked',");
     expect(maintenance).toContain("item.kind !== 'unlinked'");
     expect(maintenance).toContain("item.code !== 'build_links'");

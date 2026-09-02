@@ -18,6 +18,7 @@ const snoozeTodo = vi.fn();
 const completeTodo = vi.fn();
 const success = vi.fn();
 const error = vi.fn();
+const routerPush = vi.fn();
 
 vi.mock('@/api/todoApi', () => ({
   updateTodo,
@@ -40,7 +41,9 @@ vi.mock('@/components/base/BasicComponents/BMessage/BMessage.ts', () => ({
 vi.mock('@/components/todo/TodoEditorModal.vue', () => ({
   default: { name: 'TodoEditorModalStub', template: '<div />' },
 }));
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: routerPush, currentRoute: { value: { fullPath: '/workbenches' } } }),
+}));
 
 const { default: TodayActionSection } = await import('./TodayActionSection.vue');
 
@@ -120,6 +123,21 @@ afterEach(() => {
   completeTodo.mockReset();
   success.mockReset();
   error.mockReset();
+  routerPush.mockReset();
+});
+
+describe('工作台待整理明细入口', () => {
+  it('查看全部直达整理中心的待整理子页', async () => {
+    const host = await mountSection([], { inboxItems: inboxItems(1), inboxTotal: 1 });
+    const button = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (item) => item.textContent?.trim() === '查看全部',
+    );
+
+    button?.click();
+    await nextTick();
+
+    expect(routerPush).toHaveBeenCalledWith({ path: '/organize', query: { issue: 'pending' } });
+  });
 });
 
 describe('工作台今日待办 · 明天再看', () => {

@@ -13,6 +13,7 @@ import { collectUsedImageNames } from '../util/noteImages.js';
 import { deleteNoteImageThumbnail } from '../util/noteImageThumbnail.js';
 import { resolveKnowledgeSourceTarget } from '../util/agent/sourceUtils.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+import { toPublicHelpArticle } from '../util/helpKnowledge.js';
 import { processBookmarkIcons, isBookmarkIconCheckRecent } from '../util/bookmarkIconService.js';
 import { normalizeApiLogSystem } from '../util/apiLogSystem.js';
 import {
@@ -1191,9 +1192,9 @@ export const clearImages = async (req, res) => {
 export const getHelpConfig = async (req, res) => {
   try {
     const [result] = await pool.query(
-      "SELECT id,title,content,sort FROM knowledge_base WHERE category = '帮助中心' AND status = 'public' ORDER BY sort ASC, created_at ASC",
+      "SELECT id,title,content,sort,help_section FROM knowledge_base WHERE category = '帮助中心' AND status = 'public' AND COALESCE(admin_archived, 0) = 0 ORDER BY sort ASC, created_at ASC",
     );
-    res.send(resultData(result, 200));
+    res.send(resultData(result.map(toPublicHelpArticle), 200));
   } catch (e) {
     // 公开接口:不把 SQL 错误细节返给游客,降级空数组 + 500
     console.error('[help] 获取帮助中心配置失败 code=%s', stableAgentErrorCode(e));
@@ -1398,6 +1399,9 @@ const ADMIN_TREND_PERIODS = new Set([7, 15, 30, 90]);
 const ADMIN_RECENT_LIMIT = 20;
 const ADMIN_RECENT_PERIODS = new Set(['recent', 'today']);
 const ADMIN_RECENT_TYPES = new Set(['all', 'resource', 'user', 'bookmark', 'note', 'file']);
+const ADMIN_RECENT_TARGETS = new Set(['resource', 'user']);
+const ADMIN_RECENT_RESOURCE_TYPES = ['bookmark', 'note', 'file'];
+const ADMIN_RECENT_RESOURCE_ORDER = new Map(ADMIN_RECENT_RESOURCE_TYPES.map((type, index) => [type, index]));
 const ADMIN_TODAY_BASELINE_DAYS = 7;
 
 function adminOverviewDateHelpers(now = new Date()) {
@@ -1556,10 +1560,9 @@ async function queryAdminOverviewSnapshot({ hideInternal, now = new Date() }) {
   const activeApiInternalRole = hideInternal ? ` AND active_user.role NOT IN (${scope.irSql})` : '';
 
   // 首屏只读取当前快照。每张事实表至多扫描一次，且所有查询在同一批次发出，不再让 AI 汇总形成第二段瀑布。
-  const [resourceRows, conversionAgg, opinionAgg, securityAgg, todoAgg, activitySystemAgg, aiAgg] =
-    await Promise.all([
-      pool.query(
-        `SELECT kind, total, today, storageMb, trashMb, trashCount
+  const [resourceRows, conversionAgg, opinionAgg, securityAgg, todoAgg, activitySystemAgg, aiAgg] = await Promise.all([
+    pool.query(
+      `SELECT kind, total, today, storageMb, trashMb, trashCount
          FROM (
            SELECT 'user' AS kind,
                   COUNT(*) AS total,
@@ -1591,25 +1594,25 @@ async function queryAdminOverviewSnapshot({ hideInternal, now = new Date() }) {
            FROM files
            WHERE del_flag IN (0, 1)${scope.notIntCreateBy}${scope.notOnboardingFile}
          ) admin_overview_snapshot_resources`,
-        [today, today, today, today],
-      ),
-      pool.query(
-        `SELECT
+      [today, today, today, today],
+    ),
+    pool.query(
+      `SELECT
            COUNT(DISTINCT CASE WHEN event = 'page_view' THEN fingerprint END) AS visitors,
            COUNT(DISTINCT CASE WHEN event = 'register' THEN fingerprint END) AS registers
          FROM conversion_events`,
-      ),
-      pool.query('SELECT COUNT(*) AS pending FROM opinion WHERE del_flag = 0 AND status = ?' + scope.notIntUser, [
-        OPINION_STATUS.PENDING,
-      ]),
-      pool
-        .query(
-          "SELECT COUNT(*) AS unhandled FROM security_events WHERE handled_status = 'unhandled' AND severity IN ('high','critical')",
-        )
-        .catch(() => [[{ unhandled: 0 }]]),
-      pool
-        .query(
-          `SELECT
+    ),
+    pool.query('SELECT COUNT(*) AS pending FROM opinion WHERE del_flag = 0 AND status = ?' + scope.notIntUser, [
+      OPINION_STATUS.PENDING,
+    ]),
+    pool
+      .query(
+        "SELECT COUNT(*) AS unhandled FROM security_events WHERE handled_status = 'unhandled' AND severity IN ('high','critical')",
+      )
+      .catch(() => [[{ unhandled: 0 }]]),
+    pool
+      .query(
+        `SELECT
              COUNT(*) AS total,
              COALESCE(SUM(create_time >= ?), 0) AS createdToday,
              COALESCE(SUM(status = 'pending'), 0) AS pending,
@@ -1618,13 +1621,13 @@ async function queryAdminOverviewSnapshot({ hideInternal, now = new Date() }) {
              COALESCE(SUM(status = 'completed' AND completed_at >= ? AND completed_at < DATE_ADD(?, INTERVAL 1 DAY)), 0) AS completedToday
            FROM todo_items
            WHERE del_flag = 0${scope.notIntUser}`,
-          [today, today, today, today],
-        )
-        .catch(() => [[{ total: 0, createdToday: 0, pending: 0, dueToday: 0, overdue: 0, completedToday: 0 }]]),
-      // 活跃用户和系统健康复用同一次 7 日有界日志扫描；活跃口径也必须应用“有效业务请求”判定。
-      pool
-        .query(
-          `SELECT
+        [today, today, today, today],
+      )
+      .catch(() => [[{ total: 0, createdToday: 0, pending: 0, dueToday: 0, overdue: 0, completedToday: 0 }]]),
+    // 活跃用户和系统健康复用同一次 7 日有界日志扫描；活跃口径也必须应用“有效业务请求”判定。
+    pool
+      .query(
+        `SELECT
              COUNT(DISTINCT CASE
                WHEN api_log.request_time >= ? AND ${apiPredicates.validRequest}
                 AND active_user.id IS NOT NULL AND active_user.del_flag = 0
@@ -1642,24 +1645,24 @@ async function queryAdminOverviewSnapshot({ hideInternal, now = new Date() }) {
            FROM api_logs api_log
            LEFT JOIN \`user\` active_user ON active_user.id = api_log.user_id
            WHERE api_log.del_flag = '0' AND api_log.request_time >= ?`,
-          [today, today, today, today, today, weekAgo],
-        )
-        .catch(() => [
-          [{ activeToday: 0, active7d: 0, total: 0, businessErrors: 0, invalidRequests: 0, serverErrors: 0 }],
-        ]),
-      pool
-        .query(
-          `SELECT
+        [today, today, today, today, today, weekAgo],
+      )
+      .catch(() => [
+        [{ activeToday: 0, active7d: 0, total: 0, businessErrors: 0, invalidRequests: 0, serverErrors: 0 }],
+      ]),
+    pool
+      .query(
+        `SELECT
              COUNT(*) AS totalCount,
              COALESCE(SUM(provider_tokens), 0) AS totalTokens,
              COALESCE(SUM(created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY)), 0) AS todayCount,
              COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY) THEN provider_tokens ELSE 0 END), 0) AS todayTokens
            FROM ai_executions
            WHERE model_called = 1${scope.notIntAiActor}`,
-          [today, today, today, today],
-        )
-        .catch(() => [[{ todayCount: 0, todayTokens: 0, totalCount: 0, totalTokens: 0 }]]),
-    ]);
+        [today, today, today, today],
+      )
+      .catch(() => [[{ todayCount: 0, todayTokens: 0, totalCount: 0, totalTokens: 0 }]]),
+  ]);
 
   const resourceByKind = Object.fromEntries((resourceRows[0] || []).map((row) => [String(row.kind), row]));
   const user = resourceByKind.user || {};
@@ -1915,6 +1918,60 @@ function recentTimestamp(value) {
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
+function compareRecentResources(left, right) {
+  const timeDiff = recentTimestamp(right.createdAt) - recentTimestamp(left.createdAt);
+  if (timeDiff) return timeDiff;
+  const typeDiff =
+    (ADMIN_RECENT_RESOURCE_ORDER.get(left.type) ?? Number.MAX_SAFE_INTEGER) -
+    (ADMIN_RECENT_RESOURCE_ORDER.get(right.type) ?? Number.MAX_SAFE_INTEGER);
+  if (typeDiff) return typeDiff;
+  // files.id 是 INT，其余资源主键是字符串；合并排序必须与各自 SQL 的 id DESC 完全一致，
+  // 否则同一秒内的 10/9 会按字符串排成 9/10，导致游标翻页重项或漏项。
+  if (left.type === 'file') return Number(right.id) - Number(left.id);
+  return String(right.id).localeCompare(String(left.id));
+}
+
+function decodeRecentResourceCursor(cursor, scope, includedTypes) {
+  const decoded = decodeAdminListCursor(cursor, scope);
+  if (!decoded) return null;
+  try {
+    const key = JSON.parse(decoded.id);
+    if (
+      !ADMIN_RECENT_RESOURCE_ORDER.has(key?.type) ||
+      !includedTypes.includes(key.type) ||
+      typeof key?.id !== 'string' ||
+      !key.id ||
+      key.id.length > 255
+    ) {
+      throw new Error('invalid resource cursor key');
+    }
+    return { date: new Date(adminCursorTime(decoded.value)), type: key.type, id: key.id };
+  } catch (_error) {
+    const error = new Error('查询游标无效');
+    error.code = 'ADMIN_LIST_CURSOR_INVALID';
+    throw error;
+  }
+}
+
+function encodeRecentResourceCursor(scope, row) {
+  return encodeAdminListCursor(scope, {
+    value: adminCursorTime(row.createdAt),
+    id: JSON.stringify({ type: row.type, id: String(row.id) }),
+  });
+}
+
+function recentResourceCursorFilter(timeColumn, idColumn, resourceType, cursor) {
+  if (!cursor) return { sql: '', params: [] };
+  const resourceOrder = ADMIN_RECENT_RESOURCE_ORDER.get(resourceType);
+  const cursorOrder = ADMIN_RECENT_RESOURCE_ORDER.get(cursor.type);
+  if (resourceOrder > cursorOrder) return { sql: ` AND ${timeColumn} <= ?`, params: [cursor.date] };
+  if (resourceOrder < cursorOrder) return { sql: ` AND ${timeColumn} < ?`, params: [cursor.date] };
+  return {
+    sql: ` AND (${timeColumn} < ? OR (${timeColumn} = ? AND ${idColumn} < ?))`,
+    params: [cursor.date, cursor.date, cursor.id],
+  };
+}
+
 // POST /common/getAdminOverviewRecent —— 最近新增资源与注册用户（仅 root）
 // 独立于主看板查询：最近列表失败时不拖慢或阻断 KPI、趋势等核心统计。
 export const getAdminOverviewRecent = async (req, res) => {
@@ -1922,10 +1979,18 @@ export const getAdminOverviewRecent = async (req, res) => {
   if (!rootUserId) return;
   const period = req.body?.period == null ? 'recent' : String(req.body.period).trim();
   const type = req.body?.type == null ? 'all' : String(req.body.type).trim();
+  const cursorMode = isAdminCursorRequest(req.body);
+  const target = req.body?.target == null ? null : String(req.body.target).trim();
   if (!ADMIN_RECENT_PERIODS.has(period)) return res.send(resultData(null, 400, '最近新增时间范围不受支持'));
   if (!ADMIN_RECENT_TYPES.has(type)) return res.send(resultData(null, 400, '最近新增类型不受支持'));
+  if (target != null && !ADMIN_RECENT_TARGETS.has(target)) {
+    return res.send(resultData(null, 400, '最近新增分页目标不受支持'));
+  }
+  if (cursorMode && !target) return res.send(resultData(null, 400, '最近新增分页目标不能为空'));
   try {
     const hideInternal = req.body?.hideInternal !== false;
+    const pageSize = cursorMode ? normalizeAdminListLimit(req.body?.limit, ADMIN_RECENT_LIMIT) : ADMIN_RECENT_LIMIT;
+    const take = cursorMode ? pageSize + 1 : pageSize;
     const scope = buildAdminOverviewScope(hideInternal);
     const today = adminOverviewDateHelpers().formatDate(new Date());
     const dateFilter = (column) =>
@@ -1935,8 +2000,20 @@ export const getAdminOverviewRecent = async (req, res) => {
             params: [today, today],
           }
         : { sql: '', params: [] };
-    const include = (target) =>
-      type === 'all' || type === target || (type === 'resource' && ['bookmark', 'note', 'file'].includes(target));
+    const includeByType = (candidate) =>
+      type === 'all' || type === candidate || (type === 'resource' && ADMIN_RECENT_RESOURCE_TYPES.includes(candidate));
+    const include = (candidate) => {
+      if (target === 'resource' && candidate === 'user') return false;
+      if (target === 'user' && candidate !== 'user') return false;
+      return includeByType(candidate);
+    };
+    const includedResourceTypes = ADMIN_RECENT_RESOURCE_TYPES.filter(include);
+    const cursorScope = adminCursorScope('admin-overview-recent', [hideInternal, period, type, target]);
+    const resourceCursor =
+      cursorMode && target === 'resource'
+        ? decodeRecentResourceCursor(req.body?.cursor, cursorScope, includedResourceTypes)
+        : null;
+    const userCursor = cursorMode && target === 'user' ? decodeAdminListCursor(req.body?.cursor, cursorScope) : null;
     const resourceOwnerRole = hideInternal
       ? ` AND resource_owner.role NOT IN (${INTERNAL_ROLES.map((role) => `'${role}'`).join(', ')})`
       : '';
@@ -1944,6 +2021,24 @@ export const getAdminOverviewRecent = async (req, res) => {
     const noteDate = dateFilter('note.create_time');
     const fileDate = dateFilter('files.create_time');
     const userDate = dateFilter('recent_user.create_time');
+    const bookmarkCursor = recentResourceCursorFilter(
+      'bookmark.create_time',
+      'bookmark.id',
+      'bookmark',
+      resourceCursor,
+    );
+    const noteCursor = recentResourceCursorFilter('note.create_time', 'note.id', 'note', resourceCursor);
+    const fileCursor = recentResourceCursorFilter('files.create_time', 'files.id', 'file', resourceCursor);
+    const userCursorFilter = userCursor
+      ? {
+          sql: ' AND (recent_user.create_time < ? OR (recent_user.create_time = ? AND recent_user.id < ?))',
+          params: [
+            new Date(adminCursorTime(userCursor.value)),
+            new Date(adminCursorTime(userCursor.value)),
+            userCursor.id,
+          ],
+        }
+      : { sql: '', params: [] };
     const [bookmarkRows, noteRows, fileRows, userRows] = await Promise.all([
       include('bookmark')
         ? pool.query(
@@ -1954,10 +2049,10 @@ export const getAdminOverviewRecent = async (req, res) => {
          JOIN \`user\` resource_owner ON resource_owner.id = bookmark.user_id AND resource_owner.del_flag = 0
          LEFT JOIN admin_user_remarks owner_remark
            ON owner_remark.admin_user_id = ? AND owner_remark.target_user_id = resource_owner.id
-         WHERE bookmark.del_flag = 0${bookmarkDate.sql}${resourceOwnerRole}${scope.notOnboardingBookmark}
+         WHERE bookmark.del_flag = 0${bookmarkDate.sql}${bookmarkCursor.sql}${resourceOwnerRole}${scope.notOnboardingBookmark}
          ORDER BY bookmark.create_time DESC, bookmark.id DESC
-         LIMIT ${ADMIN_RECENT_LIMIT}`,
-            [rootUserId, ...bookmarkDate.params],
+         LIMIT ?`,
+            [rootUserId, ...bookmarkDate.params, ...bookmarkCursor.params, take],
           )
         : Promise.resolve([[]]),
       include('note')
@@ -1969,10 +2064,10 @@ export const getAdminOverviewRecent = async (req, res) => {
          JOIN \`user\` resource_owner ON resource_owner.id = note.create_by AND resource_owner.del_flag = 0
          LEFT JOIN admin_user_remarks owner_remark
            ON owner_remark.admin_user_id = ? AND owner_remark.target_user_id = resource_owner.id
-         WHERE note.del_flag = 0${noteDate.sql}${resourceOwnerRole}${scope.notOnboardingNote}
+         WHERE note.del_flag = 0${noteDate.sql}${noteCursor.sql}${resourceOwnerRole}${scope.notOnboardingNote}
          ORDER BY note.create_time DESC, note.id DESC
-         LIMIT ${ADMIN_RECENT_LIMIT}`,
-            [rootUserId, ...noteDate.params],
+         LIMIT ?`,
+            [rootUserId, ...noteDate.params, ...noteCursor.params, take],
           )
         : Promise.resolve([[]]),
       include('file')
@@ -1984,10 +2079,10 @@ export const getAdminOverviewRecent = async (req, res) => {
          JOIN \`user\` resource_owner ON resource_owner.id = files.create_by AND resource_owner.del_flag = 0
          LEFT JOIN admin_user_remarks owner_remark
            ON owner_remark.admin_user_id = ? AND owner_remark.target_user_id = resource_owner.id
-         WHERE files.del_flag = 0${fileDate.sql}${resourceOwnerRole}${scope.notOnboardingFile}
+         WHERE files.del_flag = 0${fileDate.sql}${fileCursor.sql}${resourceOwnerRole}${scope.notOnboardingFile}
          ORDER BY files.create_time DESC, files.id DESC
-         LIMIT ${ADMIN_RECENT_LIMIT}`,
-            [rootUserId, ...fileDate.params],
+         LIMIT ?`,
+            [rootUserId, ...fileDate.params, ...fileCursor.params, take],
           )
         : Promise.resolve([[]]),
       include('user')
@@ -1998,37 +2093,59 @@ export const getAdminOverviewRecent = async (req, res) => {
          FROM \`user\` recent_user
          LEFT JOIN admin_user_remarks user_remark
            ON user_remark.admin_user_id = ? AND user_remark.target_user_id = recent_user.id
-         WHERE recent_user.del_flag = 0 AND recent_user.role <> 'visitor'${userDate.sql}${scope.notIntRole}
+         WHERE recent_user.del_flag = 0 AND recent_user.role <> 'visitor'${userDate.sql}${userCursorFilter.sql}${scope.notIntRole}
          ORDER BY recent_user.create_time DESC, recent_user.id DESC
-         LIMIT ${ADMIN_RECENT_LIMIT}`,
-            [rootUserId, ...userDate.params],
+         LIMIT ?`,
+            [rootUserId, ...userDate.params, ...userCursorFilter.params, take],
           )
         : Promise.resolve([[]]),
     ]);
 
     const withType = (rows, type) => (rows[0] || []).map((row) => ({ ...row, type }));
-    const recentResources = [
+    const mergedResources = [
       ...withType(bookmarkRows, 'bookmark'),
       ...withType(noteRows, 'note'),
       ...withType(fileRows, 'file'),
-    ]
-      .sort((left, right) => {
-        const timeDiff = recentTimestamp(right.createdAt) - recentTimestamp(left.createdAt);
-        return timeDiff || String(right.id).localeCompare(String(left.id));
-      })
-      .slice(0, ADMIN_RECENT_LIMIT);
+    ].sort(compareRecentResources);
+    const recentResources = mergedResources.slice(0, pageSize);
+    const recentUsers = (userRows[0] || []).slice(0, pageSize);
+
+    if (cursorMode) {
+      const items = target === 'resource' ? recentResources : recentUsers;
+      const hasMore = target === 'resource' ? mergedResources.length > pageSize : (userRows[0] || []).length > pageSize;
+      const last = items[items.length - 1];
+      return res.send(
+        resultData({
+          items,
+          hasMore,
+          nextCursor:
+            hasMore && last
+              ? target === 'resource'
+                ? encodeRecentResourceCursor(cursorScope, last)
+                : encodeAdminListCursor(cursorScope, {
+                    value: adminCursorTime(last.createdAt),
+                    id: last.id,
+                  })
+              : null,
+          filter: { period, type, timezone: 'Asia/Shanghai' },
+          limit: pageSize,
+          target,
+        }),
+      );
+    }
 
     return res.send(
       resultData({
         recentResources,
-        recentUsers: userRows[0] || [],
+        recentUsers,
         filter: { period, type, timezone: 'Asia/Shanghai' },
         limit: ADMIN_RECENT_LIMIT,
       }),
     );
   } catch (error) {
+    const status = error?.code === 'ADMIN_LIST_CURSOR_INVALID' ? 400 : 500;
     console.error('[AdminOverviewRecent] 查询失败 code=%s', stableAgentErrorCode(error));
-    return res.send(resultData(null, 500, '获取最近新增数据失败'));
+    return res.send(resultData(null, status, status === 400 ? '查询游标无效' : '获取最近新增数据失败'));
   }
 };
 

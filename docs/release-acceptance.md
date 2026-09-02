@@ -69,6 +69,7 @@ pnpm --filter server check:schema
 | --- | --- |
 | AI 文档、OCR、文件预览 | `check:ocr`、`check:file-previews` |
 | 书签图标 | `check:bookmark-icons` |
+| 动态网页识别与快照 | `check:web-renderer` |
 | 资源治理 | `check:resource-governance` |
 | 模块化 AI | `check:ai-model-access` |
 

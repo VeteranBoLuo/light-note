@@ -41,7 +41,7 @@
       <div v-if="visibleTodos.length" class="today-actions__group">
         <header class="today-actions__group-head">
           <strong>{{ t('workbench.today.todoGroup') }}</strong>
-          <span>{{ todoCount }}</span>
+          <span class="today-actions__group-count">{{ todoCount }}</span>
         </header>
         <div class="today-actions__rows">
           <article v-for="todo in visibleTodos" :key="todo.id" class="today-action-row">
@@ -78,7 +78,10 @@
       <div v-if="visibleInbox.length" class="today-actions__group">
         <header class="today-actions__group-head">
           <strong>{{ t('workbench.today.inboxGroup') }}</strong>
-          <span>{{ inboxCount }}</span>
+          <span class="today-actions__group-count">{{ inboxCount }}</span>
+          <BButton size="small" class="today-actions__view-all" @click="openAllInboxItems">
+            {{ t('workbench.panel.viewAll') }}
+          </BButton>
         </header>
         <div class="today-actions__rows">
           <article v-for="item in visibleInbox" :key="inboxKey(item)" class="today-action-row">
@@ -394,6 +397,11 @@
     router.push({ path: '/cloudSpace', query: { fileId: item.resourceId, fileName: item.title, organize: 'inbox' } });
   }
 
+  function openAllInboxItems() {
+    recordOperation({ module: '工作台', operation: '查看全部待整理资源' });
+    router.push({ path: '/organize', query: { issue: 'pending' } });
+  }
+
   async function completeInboxItem(item: WorkbenchInboxItem) {
     if (blockGuestWrite('workbench-today-inbox', t('inbox.guestPrompt'))) return;
     const key = inboxKey(item);
@@ -534,7 +542,7 @@
       font-weight: 600;
     }
 
-    span {
+    .today-actions__group-count {
       min-width: 20px;
       padding: 0 6px;
       border-radius: 999px;
@@ -543,6 +551,13 @@
       font-size: 12px;
       text-align: center;
     }
+  }
+
+  .today-actions__view-all.b_btn {
+    min-height: 30px;
+    margin-left: auto;
+    color: var(--primary-color);
+    background: var(--workspace-panel-bg-color, var(--hover-background));
   }
 
   .today-actions__rows {

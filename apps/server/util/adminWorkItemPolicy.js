@@ -1,4 +1,4 @@
-const ADMIN_WORK_ITEM_POLICY_VERSION = '2026-08-12.1';
+const ADMIN_WORK_ITEM_POLICY_VERSION = '2026-09-02.1';
 
 const ADMIN_WORK_ITEM_POLICIES = Object.freeze({
   opinion: {

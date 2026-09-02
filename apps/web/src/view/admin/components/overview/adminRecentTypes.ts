@@ -33,3 +33,14 @@ export type AdminRecentData = {
   filter?: AdminRecentFilter & { timezone?: 'Asia/Shanghai' };
   limit?: number;
 };
+
+export type AdminRecentTarget = 'resource' | 'user';
+
+export type AdminRecentPage<T> = {
+  items: T[];
+  hasMore: boolean;
+  nextCursor: string | null;
+  filter?: AdminRecentFilter & { timezone?: 'Asia/Shanghai' };
+  limit: number;
+  target: AdminRecentTarget;
+};

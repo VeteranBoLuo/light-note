@@ -11,6 +11,8 @@ describe('resolvePublicAiExecutionError', () => {
     ['AI_SKILL_OUTPUT_EMPTY', 502, 'AI 没有生成可用内容，请重新生成'],
     ['AI_SKILL_OUTPUT_SOURCE_INVALID', 502, '生成结果的来源引用校验未通过，请重新生成'],
     ['AI_SKILL_OUTPUT_PROFILE_INVALID', 502, '生成结果未满足当前工具的固定结构，自动修复后仍未通过'],
+    ['BOOKMARK_PAGE_ACCESS_PROTECTED', 422, '网页触发了访问验证或拒绝自动读取，请稍后重试或手动填写书签信息'],
+    ['BOOKMARK_PAGE_RENDERER_UNAVAILABLE', 503, '当前服务暂时无法渲染这类动态网页，请稍后重试或手动填写书签信息'],
   ])('统一映射 %s', (code, status, message) => {
     expect(resolvePublicAiExecutionError(Object.assign(new Error('internal'), { code }))).toEqual({
       code,

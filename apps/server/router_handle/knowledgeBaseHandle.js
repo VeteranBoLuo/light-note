@@ -4,17 +4,15 @@ import { validateQueryParams } from '../util/request.js';
 import { upsertKnowledgeBase, updateKnowledgeBaseById } from '../util/services/knowledgeBaseService.js';
 import { invalidateKnowledgeCache } from '../util/knowledgeService.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
-import {
-  adminActionErrorResponse,
-  beginAdminAction,
-  finishAdminAction,
-} from '../util/adminActionExecution.js';
+import { adminActionErrorResponse, beginAdminAction, finishAdminAction } from '../util/adminActionExecution.js';
+import { DEFAULT_HELP_SECTION, HELP_KNOWLEDGE_CATEGORY, toPublicHelpArticle } from '../util/helpKnowledge.js';
 
 const KNOWLEDGE_CLIENT_ERRORS = new Set([
   'CONTENT_TOO_LONG',
   'DUPLICATE_TITLE',
   'EMPTY_PATCH',
   'ID_REQUIRED',
+  'HELP_SECTION_TOO_LONG',
   'INVALID_STATUS',
   'INVALID_TYPE',
   'TITLE_REQUIRED',
@@ -85,7 +83,7 @@ export const listKnowledgeBase = async (req, res) => {
     const offset = pageSize * (currentPage - 1);
 
     const [rows] = await pool.query(
-      `SELECT id, title, category, status, type, sort, created_at, updated_at FROM knowledge_base ${where} ORDER BY ${order || 'sort ASC, created_at DESC'} LIMIT ? OFFSET ?`,
+      `SELECT id, title, category, help_section, status, type, sort, created_at, updated_at FROM knowledge_base ${where} ORDER BY ${order || 'sort ASC, created_at DESC'} LIMIT ? OFFSET ?`,
       [...params, pageSize, offset],
     );
     const [countRes] = await pool.query(`SELECT COUNT(*) as total FROM knowledge_base ${where}`, params);
@@ -134,7 +132,7 @@ export const searchKnowledgeBase = async (req, res) => {
     const where = 'WHERE ' + conditions.join(' AND ');
 
     const [rows] = await pool.query(
-      `SELECT id, title, content, status, category FROM knowledge_base ${where} ORDER BY CASE WHEN title LIKE ? THEN 0 ELSE 1 END, sort ASC LIMIT 50`,
+      `SELECT id, title, content, status, category, help_section FROM knowledge_base ${where} ORDER BY CASE WHEN title LIKE ? THEN 0 ELSE 1 END, sort ASC LIMIT 50`,
       ['%' + keyword.trim() + '%', ...params],
     );
 
@@ -165,6 +163,7 @@ export const searchKnowledgeBase = async (req, res) => {
         contentPreview: snippet,
         status: r.status || 'internal',
         category: r.category || '',
+        helpSection: r.help_section || '',
       };
     });
 
@@ -180,18 +179,29 @@ export const createKnowledgeBase = async (req, res) => {
   try {
     const userId = await ensureRootRole(req, res);
     if (!userId) return;
-    const { title, content, category, status, type } = req.body;
+    const { title, content, category, helpSection, status, type } = req.body;
     const publishing = status === 'public';
     actionContext = await beginAdminAction(req, {
       action: publishing ? 'knowledge_base.publish' : 'knowledge_base.create',
       targetId: 'new',
       expectedConfirmText: publishing ? '确认发布知识' : null,
-      metadata: { operation: 'create', resultingStatus: status || 'internal', contentLength: String(content || '').length },
+      metadata: {
+        operation: 'create',
+        resultingStatus: status || 'internal',
+        contentLength: String(content || '').length,
+      },
     });
     const result = await upsertKnowledgeBase({
       userId,
       createOnly: true,
-      input: { title, content, category: category || 'internal', status: status || 'internal', type: type || 'html' },
+      input: {
+        title,
+        content,
+        category: category || 'internal',
+        helpSection,
+        status: status || 'internal',
+        type: type || 'html',
+      },
       actionContext,
     });
     return res.send(resultData({ id: result.id, auditId: result.auditId, requestId: result.requestId }));
@@ -210,10 +220,17 @@ export const updateKnowledgeBase = async (req, res) => {
     const { id, ...patch } = req.body;
     if (!id) return res.send(resultData(null, 400, '缺少 ID'));
     const [rows] = await pool.query(
-      'SELECT status FROM knowledge_base WHERE id = ? AND COALESCE(admin_archived, 0) = 0 LIMIT 1',
+      'SELECT status, category, help_section FROM knowledge_base WHERE id = ? AND COALESCE(admin_archived, 0) = 0 LIMIT 1',
       [id],
     );
     if (!rows.length) return res.send(resultData(null, 404, '条目不存在'));
+    const effectiveCategory = patch.category === undefined ? rows[0].category : String(patch.category || '').trim();
+    if (effectiveCategory === HELP_KNOWLEDGE_CATEGORY && patch.helpSection === undefined) {
+      patch.helpSection = rows[0].help_section;
+    }
+    if (patch.helpSection !== undefined && patch.category === undefined) {
+      patch.category = rows[0].category;
+    }
     const publishing = patch.status === 'public' && rows[0].status !== 'public';
     actionContext = await beginAdminAction(req, {
       action: publishing ? 'knowledge_base.publish' : 'knowledge_base.update',
@@ -330,9 +347,17 @@ export const batchUpdateKnowledgeCategory = async (req, res) => {
     });
     connection = await pool.getConnection();
     await connection.beginTransaction();
+    const normalizedCategory = category.trim();
     const [result] = await connection.query(
-      'UPDATE knowledge_base SET category = ?, updated_by = ? WHERE id IN (?) AND COALESCE(admin_archived, 0) = 0',
-      [category.trim(), req.user.id, ids],
+      `UPDATE knowledge_base
+       SET category = ?,
+           help_section = CASE
+             WHEN ? = '帮助中心' THEN COALESCE(NULLIF(TRIM(help_section), ''), ?)
+             ELSE NULL
+           END,
+           updated_by = ?
+       WHERE id IN (?) AND COALESCE(admin_archived, 0) = 0`,
+      [normalizedCategory, normalizedCategory, DEFAULT_HELP_SECTION, req.user.id, ids],
     );
     const receipt = await finishAdminAction(actionContext, {
       outcome: 'succeeded',
@@ -407,7 +432,7 @@ export const getKnowledgeCategories = async (req, res) => {
     );
     const categories = rows.map((r) => r.category);
     // Always include 帮助中心 as default
-    if (!categories.includes('帮助中心')) categories.unshift('帮助中心');
+    if (!categories.includes(HELP_KNOWLEDGE_CATEGORY)) categories.unshift(HELP_KNOWLEDGE_CATEGORY);
     res.send(resultData(categories));
   } catch (e) {
     res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
@@ -418,9 +443,9 @@ export const getKnowledgeCategories = async (req, res) => {
 export const getHelpCenterArticles = async (req, res) => {
   try {
     const [result] = await pool.query(
-      "SELECT id, title, content, sort FROM knowledge_base WHERE category = '帮助中心' AND status = 'public' ORDER BY sort ASC, created_at ASC",
+      "SELECT id, title, content, sort, help_section FROM knowledge_base WHERE category = '帮助中心' AND status = 'public' AND COALESCE(admin_archived, 0) = 0 ORDER BY sort ASC, created_at ASC",
     );
-    res.send(resultData(result, 200));
+    res.send(resultData(result.map(toPublicHelpArticle), 200));
   } catch (e) {
     // 公开接口:不把 SQL 错误细节返给游客,降级空数组 + 500
     console.error('[knowledge] 获取帮助中心文章失败 code=%s', stableAgentErrorCode(e));

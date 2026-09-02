@@ -56,6 +56,7 @@ const {
   getAgentLogsSummary,
   getAiFeedback,
   clearImages,
+  getHelpConfig,
   resolveHelpSources,
   getAdminOverview,
   getAdminOverviewSnapshot,
@@ -75,6 +76,47 @@ function mockRes() {
   res.status = vi.fn().mockReturnValue(res);
   return res;
 }
+
+describe('getHelpConfig 帮助栏目元数据', () => {
+  beforeEach(() => query.mockReset());
+
+  it('只返回公开未归档帮助文章，并把 help_section 暴露为 helpSection', async () => {
+    query.mockResolvedValueOnce([
+      [
+        {
+          id: 'help-1',
+          title: '笔记指南',
+          content: '<p>正文</p>',
+          sort: 1,
+          help_section: '笔记与编辑',
+        },
+      ],
+    ]);
+    const res = mockRes();
+
+    await getHelpConfig({}, res);
+
+    expect(query.mock.calls[0][0]).toContain('help_section');
+    expect(query.mock.calls[0][0]).toContain('COALESCE(admin_archived, 0) = 0');
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 200,
+        data: [expect.objectContaining({ id: 'help-1', helpSection: '笔记与编辑' })],
+      }),
+    );
+  });
+
+  it('迁移前遗留的空栏目稳定归入其他帮助', async () => {
+    query.mockResolvedValueOnce([[{ id: 'help-1', title: '旧文章', content: '', sort: 1, help_section: null }]]);
+    const res = mockRes();
+
+    await getHelpConfig({}, res);
+
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({ data: [expect.objectContaining({ helpSection: '其他帮助' })] }),
+    );
+  });
+});
 
 describe('getDeepSeekBalance 余额主指标', () => {
   beforeEach(() => {
@@ -557,11 +599,12 @@ describe('getAdminOverviewRecent 最近新增', () => {
     expect(resourceSql.every((sql) => sql.includes('LEFT JOIN admin_user_remarks'))).toBe(true);
     expect(resourceSql.every((sql) => sql.includes("COALESCE(owner_remark.remark_name, '') AS userRemark"))).toBe(true);
     expect(resourceSql.every((sql) => sql.includes("resource_owner.role NOT IN ('root', 'test')"))).toBe(true);
-    expect(resourceSql.every((sql) => sql.includes('LIMIT 20'))).toBe(true);
+    expect(resourceSql.every((sql) => sql.includes('LIMIT ?'))).toBe(true);
     expect(query.mock.calls.slice(1, 5).every(([, params]) => params?.[0] === 'root-id')).toBe(true);
+    expect(query.mock.calls.slice(1, 5).every(([, params]) => params?.at(-1) === 20)).toBe(true);
     expect(String(query.mock.calls[4][0])).toContain("role <> 'visitor'");
     expect(String(query.mock.calls[4][0])).toContain('LEFT JOIN admin_user_remarks');
-    expect(String(query.mock.calls[4][0])).toContain('LIMIT 20');
+    expect(String(query.mock.calls[4][0])).toContain('LIMIT ?');
     const payload = res.send.mock.calls[0][0];
     expect(payload.status).toBe(200);
     expect(payload.data.filter).toEqual({ period: 'recent', type: 'all', timezone: 'Asia/Shanghai' });
@@ -601,7 +644,7 @@ describe('getAdminOverviewRecent 最近新增', () => {
       const [userSql, userParams] = query.mock.calls[1];
       expect(String(userSql)).toContain('recent_user.create_time >= ?');
       expect(String(userSql)).toContain('recent_user.create_time < DATE_ADD(?, INTERVAL 1 DAY)');
-      expect(userParams).toEqual(['root-id', '2026-08-12', '2026-08-12']);
+      expect(userParams).toEqual(['root-id', '2026-08-12', '2026-08-12', 20]);
       const payload = res.send.mock.calls[0][0];
       expect(payload.data.filter).toEqual({ period: 'today', type: 'user', timezone: 'Asia/Shanghai' });
       expect(payload.data.recentResources).toEqual([]);
@@ -638,6 +681,162 @@ describe('getAdminOverviewRecent 最近新增', () => {
     const payload = res.send.mock.calls[0][0];
     expect(payload.data.recentResources).toEqual([expect.objectContaining({ id: 'note-only', type: 'note' })]);
     expect(payload.data.recentUsers).toEqual([]);
+  });
+
+  it('资源流使用稳定复合游标分页，并且不查询用户表', async () => {
+    const sameTime = new Date('2026-08-12T04:00:00Z');
+    query
+      .mockResolvedValueOnce([[{ role: 'root', del_flag: 0 }]])
+      .mockResolvedValueOnce([
+        [
+          { id: 'bookmark-b', title: '书签 B', userId: 'u1', userName: '甲', createdAt: sameTime },
+          { id: 'bookmark-a', title: '书签 A', userId: 'u1', userName: '甲', createdAt: sameTime },
+          {
+            id: 'bookmark-old',
+            title: '旧书签',
+            userId: 'u1',
+            userName: '甲',
+            createdAt: new Date('2026-08-12T03:00:00Z'),
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'note-1',
+            title: '同刻笔记',
+            userId: 'u2',
+            userName: '乙',
+            createdAt: sameTime,
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([[]]);
+    const firstRes = mockRes();
+
+    await getAdminOverviewRecent(
+      {
+        user: { id: 'root-id', role: 'root' },
+        body: { period: 'today', type: 'all', target: 'resource', cursor: null, limit: 2 },
+      },
+      firstRes,
+    );
+
+    expect(query).toHaveBeenCalledTimes(4);
+    expect(query.mock.calls.slice(1).every(([, params]) => params?.at(-1) === 3)).toBe(true);
+    const firstPage = firstRes.send.mock.calls[0][0].data;
+    expect(firstPage.items.map((item) => `${item.type}:${item.id}`)).toEqual([
+      'bookmark:bookmark-b',
+      'bookmark:bookmark-a',
+    ]);
+    expect(firstPage).toEqual(
+      expect.objectContaining({ target: 'resource', limit: 2, hasMore: true, nextCursor: expect.any(String) }),
+    );
+
+    query.mockReset();
+    query
+      .mockResolvedValueOnce([[{ role: 'root', del_flag: 0 }]])
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'bookmark-old',
+            title: '旧书签',
+            userId: 'u1',
+            userName: '甲',
+            createdAt: new Date('2026-08-12T03:00:00Z'),
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ id: 'note-1', title: '同刻笔记', userId: 'u2', userName: '乙', createdAt: sameTime }]])
+      .mockResolvedValueOnce([[]]);
+    const secondRes = mockRes();
+
+    await getAdminOverviewRecent(
+      {
+        user: { id: 'root-id', role: 'root' },
+        body: {
+          period: 'today',
+          type: 'all',
+          target: 'resource',
+          cursor: firstPage.nextCursor,
+          limit: 2,
+        },
+      },
+      secondRes,
+    );
+
+    expect(String(query.mock.calls[1][0])).toContain('bookmark.id < ?');
+    expect(String(query.mock.calls[2][0])).toContain('note.create_time <= ?');
+    expect(secondRes.send.mock.calls[0][0].data.items.map((item) => `${item.type}:${item.id}`)).toEqual([
+      'note:note-1',
+      'bookmark:bookmark-old',
+    ]);
+  });
+
+  it('文件流同一时间按数字主键倒序，保持 SQL 与合并游标排序一致', async () => {
+    const sameTime = new Date('2026-08-12T04:00:00Z');
+    query.mockResolvedValueOnce([[{ role: 'root', del_flag: 0 }]]).mockResolvedValueOnce([
+      [
+        { id: 10, title: '文件 10', userId: 'u1', userName: '甲', createdAt: sameTime },
+        { id: 9, title: '文件 9', userId: 'u1', userName: '甲', createdAt: sameTime },
+      ],
+    ]);
+    const res = mockRes();
+
+    await getAdminOverviewRecent(
+      {
+        user: { id: 'root-id', role: 'root' },
+        body: { period: 'today', type: 'file', target: 'resource', cursor: null, limit: 1 },
+      },
+      res,
+    );
+
+    const page = res.send.mock.calls[0][0].data;
+    expect(page.items.map((item) => item.id)).toEqual([10]);
+    expect(page).toEqual(expect.objectContaining({ hasMore: true, nextCursor: expect.any(String) }));
+  });
+
+  it('用户流独立游标分页，并拒绝跨筛选复用游标', async () => {
+    query.mockResolvedValueOnce([[{ role: 'root', del_flag: 0 }]]).mockResolvedValueOnce([
+      [
+        { id: 'user-3', name: '用户 3', role: 'user', createdAt: new Date('2026-08-12T03:00:00Z') },
+        { id: 'user-2', name: '用户 2', role: 'user', createdAt: new Date('2026-08-12T02:00:00Z') },
+      ],
+    ]);
+    const firstRes = mockRes();
+
+    await getAdminOverviewRecent(
+      {
+        user: { id: 'root-id', role: 'root' },
+        body: { period: 'recent', type: 'user', target: 'user', cursor: null, limit: 1 },
+      },
+      firstRes,
+    );
+
+    expect(query).toHaveBeenCalledTimes(2);
+    const firstPage = firstRes.send.mock.calls[0][0].data;
+    expect(firstPage.items).toEqual([expect.objectContaining({ id: 'user-3' })]);
+    expect(firstPage.nextCursor).toEqual(expect.any(String));
+
+    query.mockReset();
+    query.mockResolvedValueOnce([[{ role: 'root', del_flag: 0 }]]);
+    const invalidRes = mockRes();
+    await getAdminOverviewRecent(
+      {
+        user: { id: 'root-id', role: 'root' },
+        body: {
+          period: 'today',
+          type: 'user',
+          target: 'user',
+          cursor: firstPage.nextCursor,
+          limit: 1,
+        },
+      },
+      invalidRes,
+    );
+
+    expect(invalidRes.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
+    expect(query).toHaveBeenCalledTimes(1);
   });
 
   it('拒绝未知筛选值，避免把无效条件静默当成全部数据', async () => {

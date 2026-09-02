@@ -35,6 +35,7 @@ vi.mock('./bookmarkIconService.js', () => ({ cleanupBookmarkIconFiles }));
 
 const {
   ACCOUNT_DELETION_CONFIRMATION_TEXT,
+  cleanupInvalidOwnerResourcesNow,
   cleanupCompletedAccountDeletionRequests,
   processAccountDeletionRequest,
   purgeLogsAndSecurityLinks,
@@ -522,7 +523,7 @@ describe('账号注销后台清理', () => {
     expect(poolQuery.mock.calls.some(([sql]) => sql.includes("SET status = 'retry_wait'"))).toBe(true);
   });
 
-  it('后台软删除账号允许清理资源，但用户行删除条件仍只匹配正式注销账号', async () => {
+  it('管理员停用账号即使 del_flag=1 也强制阻断，不删除任何账号资源', async () => {
     const requestId = 'request-soft-deleted-account';
     poolQuery.mockImplementation(async (sql) => {
       if (sql.includes("SET status = 'processing'")) return [{ affectedRows: 1 }];
@@ -540,25 +541,43 @@ describe('账号注销后台清理', () => {
           ],
         ];
       }
-      if (sql.includes("SET status = 'completed'")) return [{ affectedRows: 1 }];
+      if (sql.includes("SET status = 'retry_wait'")) return [{ affectedRows: 1 }];
       throw new Error(`未覆盖的测试 SQL: ${sql}`);
     });
     const connection = createConnection(async (sql) => {
       if (sql.includes('SELECT role, del_flag') && sql.includes('FOR UPDATE')) {
         return [[{ role: 'user', del_flag: 1 }]];
       }
-      if (sql.includes('information_schema.TABLES')) return [[{ tableName: 'note' }, { tableName: 'user' }]];
-      if (sql.includes('DELETE FROM note WHERE create_by')) return [{ affectedRows: 2 }];
-      if (sql.includes('DELETE FROM user')) return [{ affectedRows: 0 }];
-      throw new Error(`未覆盖的测试 SQL: ${sql}`);
+      throw new Error(`停用账号阻断后不应继续执行 SQL: ${sql}`);
     });
     getConnection.mockResolvedValue(connection);
 
-    await expect(processAccountDeletionRequest(requestId)).resolves.toEqual({ claimed: true, completed: true });
-    expect(connection.query.mock.calls.some(([sql]) => sql.includes('DELETE FROM note WHERE create_by'))).toBe(true);
-    const userDeleteSql = connection.query.mock.calls.find(([sql]) => sql.includes('DELETE FROM user'))?.[0];
-    expect(userDeleteSql).toContain("role = 'deleted'");
-    expect(userDeleteSql).toContain('del_flag = 1');
+    await expect(processAccountDeletionRequest(requestId)).rejects.toMatchObject({
+      code: 'ACCOUNT_DELETION_ACTIVE_ACCOUNT_BLOCKED',
+      accountCleanupState: 'disabled',
+    });
+    expect(connection.query.mock.calls.some(([sql]) => sql.includes('DELETE FROM note'))).toBe(false);
+    expect(connection.query.mock.calls.some(([sql]) => sql.includes('DELETE FROM user'))).toBe(false);
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+    expect(poolQuery.mock.calls.some(([sql]) => sql.includes("SET status = 'retry_wait'"))).toBe(true);
+  });
+
+  it('资源治理入口在创建清理任务前同样阻断管理员停用账号', async () => {
+    const connection = createConnection(async (sql) => {
+      if (sql.includes('SELECT role, del_flag') && sql.includes('FOR UPDATE')) {
+        return [[{ role: 'test', del_flag: 1 }]];
+      }
+      throw new Error(`停用账号阻断后不应继续执行 SQL: ${sql}`);
+    });
+    const db = { getConnection: vi.fn().mockResolvedValue(connection) };
+
+    await expect(cleanupInvalidOwnerResourcesNow({ userId: 'user-1', db })).rejects.toMatchObject({
+      code: 'ACCOUNT_DELETION_ACTIVE_ACCOUNT_BLOCKED',
+      accountCleanupState: 'disabled',
+    });
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+    expect(connection.commit).not.toHaveBeenCalled();
+    expect(poolQuery).not.toHaveBeenCalled();
   });
 
   it('清理任务载荷损坏时进入 retry_wait，不会丢弃待删除对象', async () => {

@@ -37,6 +37,7 @@
                   <div class="kb-list-item-meta">
                     <span class="kb-badge" :class="'kb-badge--' + item.status">{{ item.status === 'public' ? '公开' : '内部' }}</span>
                     <span class="kb-category-label">{{ item.category }}</span>
+                    <span v-if="item.category === '帮助中心' && item.helpSection" class="kb-help-section-label">{{ item.helpSection }}</span>
                   </div>
                 </div>
               </div>
@@ -75,6 +76,7 @@
                 <div class="kb-search-card-meta">
                   <span class="kb-badge" :class="'kb-badge--' + item.status">{{ item.status === 'public' ? '公开' : '内部' }}</span>
                   <span class="kb-category-label">{{ item.category }}</span>
+                  <span v-if="item.category === '帮助中心' && item.helpSection" class="kb-help-section-label">{{ item.helpSection }}</span>
                 </div>
                 <div class="kb-search-card-snippet" v-html="getSearchSnippet(item, searchKeyword)"></div>
               </div>
@@ -94,6 +96,7 @@
               <BInput v-model:value="editTitle" placeholder="标题" class="kb-title-input" />
               <div class="kb-editor-meta">
                 <label class="kb-meta-label">分类：<BInput v-model:value="editCategory" placeholder="输入分类名称" class="kb-category-input" /></label>
+                <label v-if="isHelpCenterArticle" class="kb-meta-label">帮助栏目：<BInput v-model:value="editHelpSection" maxlength="50" placeholder="例如：笔记与编辑" class="kb-help-section-input" /></label>
                 <label class="kb-meta-label">状态：<BSelect v-model:value="editStatus" :options="statusOptions" class="kb-meta-select" /></label>
                 <label class="kb-meta-label">类型：<BSelect v-model:value="editType" :options="typeOptions" class="kb-meta-select" /></label>
               </div>
@@ -160,6 +163,7 @@ const currentId = ref('');
 const editTitle = ref('');
 const editContent = ref('');
 const editCategory = ref('帮助中心');
+const editHelpSection = ref('其他帮助');
 const editStatus = ref('internal');
 const editType = ref('html');
 const selectedIds = ref<string[]>([]);
@@ -181,6 +185,7 @@ const pendingBatchStatus = ref<'public' | 'internal'>('internal');
 
 const categories = ref<string[]>(['帮助中心']);
 let unavailableArticleId = '';
+const isHelpCenterArticle = computed(() => editCategory.value.trim() === '帮助中心');
 
 function routeArticleId() {
   const value = route.query.article;
@@ -304,6 +309,7 @@ async function loadItem(id: string) {
     editTitle.value = res.data.title || '';
     editContent.value = res.data.content || '';
     editCategory.value = res.data.category || '帮助中心';
+    editHelpSection.value = res.data.helpSection || '其他帮助';
     editStatus.value = res.data.status || 'internal';
     editType.value = res.data.type || 'html';
     return true;
@@ -343,10 +349,11 @@ async function openArticleFromRoute() {
 function startCreate() {
   currentId.value = '';
   returnToSearch.value = false;
-  currentItem.value = { title: '', content: '', category: '帮助中心', status: 'internal', type: 'html' };
+  currentItem.value = { title: '', content: '', category: '帮助中心', helpSection: '其他帮助', status: 'internal', type: 'html' };
   editTitle.value = '';
   editContent.value = '';
   editCategory.value = '帮助中心';
+  editHelpSection.value = '其他帮助';
   editStatus.value = 'internal';
   editType.value = 'html';
   syncArticleRoute('', true);
@@ -371,6 +378,7 @@ async function executeSave(action: RiskPayload) {
         title: editTitle.value.trim(),
         content: editContent.value,
         category: editCategory.value,
+        helpSection: isHelpCenterArticle.value ? editHelpSection.value.trim() || '其他帮助' : null,
         status: editStatus.value,
         type: editType.value,
         ...action,
@@ -381,6 +389,7 @@ async function executeSave(action: RiskPayload) {
         title: editTitle.value.trim(),
         content: editContent.value,
         category: editCategory.value,
+        helpSection: isHelpCenterArticle.value ? editHelpSection.value.trim() || '其他帮助' : null,
         status: editStatus.value,
         type: editType.value,
         ...action,
@@ -686,6 +695,10 @@ watch(
   color: var(--desc-color);
   font-size: 11px;
 }
+.kb-help-section-label {
+  color: var(--resource-bookmark-color);
+  font-size: 11px;
+}
 
 /* Batch */
 .kb-batch-bar {
@@ -771,7 +784,7 @@ watch(
   font-size: 13px;
   color: var(--text-color);
   align-items: center;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 .kb-meta-label {
   display: inline-flex;
@@ -790,7 +803,14 @@ watch(
 .kb-category-input {
   width: 120px !important;
 }
+.kb-help-section-input {
+  width: 150px !important;
+}
 .kb-category-input .input-container {
+  height: 28px !important;
+  min-width: 0 !important;
+}
+.kb-help-section-input .input-container {
   height: 28px !important;
   min-width: 0 !important;
 }

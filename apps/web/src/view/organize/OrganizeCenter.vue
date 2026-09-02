@@ -2,8 +2,8 @@
   <div class="organize-center-route">
     <ResourcePageShell
       class="organize-shell"
-      :title="t('organize.title')"
-      :subtitle="t('organize.subtitle')"
+      :title="t('resourceCenter.title')"
+      :subtitle="t('resourceCenter.subtitle')"
       accent="neutral"
       layout="workspace"
       :show-header="!bookmark.isMobile"
@@ -36,17 +36,27 @@
           </aside>
 
           <component :is="bookmark.isMobile ? 'div' : 'main'" ref="organizeMainRef" class="organize-main" tabindex="-1">
-            <nav v-if="bookmark.isMobile" class="organize-mobile-nav" :aria-label="t('organize.navigationLabel')">
+            <nav
+              v-if="bookmark.isMobile"
+              ref="mobileNavRef"
+              class="organize-mobile-nav"
+              role="tablist"
+              :aria-label="t('organize.navigationLabel')"
+            >
               <BButton
                 v-for="item in issueOptions"
                 :key="item.key"
+                :data-organize-view="item.key"
                 class="organize-mobile-nav__item"
                 :class="{ active: activeView === item.key }"
-                :aria-pressed="activeView === item.key"
+                role="tab"
+                :aria-selected="activeView === item.key"
                 @click="selectView(item.key)"
               >
                 <span>{{ item.label }}</span>
-                <span v-if="item.count !== null" class="organize-mobile-nav__count">{{ item.count }}</span>
+                <span v-if="showMobileNavigationCount(item.count)" class="organize-mobile-nav__count">
+                  {{ item.count }}
+                </span>
               </BButton>
             </nav>
 
@@ -58,7 +68,15 @@
               </div>
 
               <BLoading v-else :loading="organize.summaryLoading" :title="t('organize.loading')">
-                <OrganizeOverviewDashboard :summary="summary" :error="organize.summaryError" @select="selectView" />
+                <OrganizeOverviewDashboard
+                  :summary="summary"
+                  :knowledge-structure="knowledgeStructureSummary"
+                  :knowledge-loading="organize.knowledgeStructureLoading"
+                  :knowledge-error="organize.knowledgeStructureError"
+                  :error="organize.summaryError"
+                  @select="selectView"
+                  @refresh="refreshSummary"
+                />
               </BLoading>
             </section>
 
@@ -238,7 +256,7 @@
               </OrganizeIssueListState>
             </section>
 
-            <section v-else class="organize-issue-view">
+            <section v-else-if="activeView === 'bookmark_health'" class="organize-issue-view">
               <header class="organize-view-heading organize-view-heading--compact">
                 <div>
                   <span class="organize-view-heading__eyebrow">{{ t('organize.governanceEyebrow') }}</span>
@@ -380,6 +398,133 @@
                 </BButton>
               </OrganizeIssueListState>
             </section>
+
+            <section v-else-if="activeView === 'knowledge_structure'" class="organize-issue-view">
+              <header class="organize-view-heading organize-view-heading--compact organize-knowledge-heading">
+                <div>
+                  <span class="organize-view-heading__eyebrow">{{ t('organize.knowledge.eyebrow') }}</span>
+                  <h2>{{ t('organize.views.knowledgeStructure') }}</h2>
+                  <p>{{ t('organize.knowledge.description') }}</p>
+                </div>
+                <div class="organize-knowledge-heading__actions">
+                  <BButton type="primary" @click="openKnowledgeWorkbench">{{
+                    t('organize.knowledge.fullWorkbench')
+                  }}</BButton>
+                </div>
+              </header>
+
+              <div v-if="knowledgeStructureSummary" class="organize-knowledge-overview" :class="knowledgeHealthClass">
+                <div class="organize-knowledge-score" :style="knowledgeScoreStyle">
+                  <span
+                    ><strong>{{ knowledgeStructureSummary.healthScore }}</strong
+                    ><small>/100</small></span
+                  >
+                  <em>{{ t('organize.knowledge.healthLabel') }}</em>
+                </div>
+                <div class="organize-knowledge-overview__copy">
+                  <BChip :tone="knowledgeHealthTone" size="medium">{{ knowledgeHealthLabel }}</BChip>
+                  <strong>{{ t('organize.knowledge.overviewTitle') }}</strong>
+                  <p>{{
+                    t('organize.knowledge.overviewDescription', {
+                      count: knowledgeStructureSummary.totalNotes,
+                      issues: knowledgeStructureSummary.findingCount,
+                      notes: knowledgeStructureSummary.affectedNoteCount,
+                    })
+                  }}</p>
+                  <small>{{
+                    t('organize.knowledge.scannedAt', { time: formatDate(knowledgeStructureSummary.scannedAt) })
+                  }}</small>
+                </div>
+                <dl class="organize-knowledge-facts">
+                  <div>
+                    <dt>{{ t('organize.knowledge.priorityIssues') }}</dt>
+                    <dd>{{ knowledgeStructureSummary.priorityIssueCount }}</dd>
+                  </div>
+                  <div>
+                    <dt>{{ t('organize.knowledge.maxDepth') }}</dt>
+                    <dd>{{ knowledgeStructureSummary.maxDepth }}</dd>
+                  </div>
+                  <div>
+                    <dt>{{ t('organize.knowledge.rootNotes') }}</dt>
+                    <dd>{{ knowledgeStructureSummary.rootNotes }}</dd>
+                  </div>
+                </dl>
+                <div v-if="organize.knowledgeStructureError" class="organize-knowledge-overview__stale" role="status">
+                  <span>{{ t('organize.knowledge.stale') }}</span>
+                  <BButton size="small" @click="refreshKnowledgeStructure()">{{ t('organize.retry') }}</BButton>
+                </div>
+              </div>
+              <div v-else-if="organize.knowledgeStructureLoading" class="organize-knowledge-state">
+                <BLoading inline :loading="true" :title="t('organize.knowledge.loading')" />
+              </div>
+              <div v-else class="organize-knowledge-state is-error" role="alert">
+                <SvgIcon :src="icon.toolbox.audit" size="24" aria-hidden="true" />
+                <strong>{{ t('organize.knowledge.loadFailedTitle') }}</strong>
+                <span>{{ t('organize.knowledge.loadFailedDescription') }}</span>
+                <BButton size="small" type="primary" @click="refreshKnowledgeStructure()">{{
+                  t('organize.retry')
+                }}</BButton>
+              </div>
+
+              <div v-if="knowledgeStructureSummary" class="organize-knowledge-filters" role="tablist">
+                <BChip
+                  v-for="option in knowledgeFilterOptions"
+                  :key="option.value"
+                  tone="neutral"
+                  interactive
+                  :selected="knowledgeIssueKind === option.value"
+                  role="tab"
+                  :aria-selected="knowledgeIssueKind === option.value"
+                  @click="selectKnowledgeIssueKind(option.value)"
+                >
+                  {{ option.label }} · {{ option.count }}
+                </BChip>
+              </div>
+
+              <OrganizeIssueListState
+                :loading="knowledgeList.loading"
+                :error="knowledgeList.error"
+                :empty="!knowledgeItems.length"
+                :empty-title="t('organize.knowledge.emptyTitle')"
+                :empty-description="t('organize.knowledge.emptyDescription')"
+                @retry="loadKnowledgeIssues(true)"
+              >
+                <div class="organize-knowledge-list" role="list">
+                  <article
+                    v-for="item in knowledgeItems"
+                    :key="`${item.kind}:${item.noteId}`"
+                    class="organize-knowledge-row"
+                    :class="`is-${item.severity}`"
+                    role="listitem"
+                  >
+                    <span class="organize-knowledge-row__icon" aria-hidden="true">
+                      <SvgIcon :src="icon.toolbox.conceptMap" size="18" />
+                    </span>
+                    <div class="organize-knowledge-row__body">
+                      <div>
+                        <BChip :tone="knowledgeIssueTone(item.severity)" size="small">{{
+                          t(`organize.knowledge.issue.${item.kind}`)
+                        }}</BChip>
+                        <strong>{{ item.title || t('inbox.untitled') }}</strong>
+                      </div>
+                      <p>{{ t(`organize.knowledge.issueDescription.${item.kind}`) }}</p>
+                      <small>{{ item.path }}</small>
+                    </div>
+                    <BButton size="small" type="primary" @click="openKnowledgeNote(item.noteId)">{{
+                      t('organize.knowledge.openNote')
+                    }}</BButton>
+                  </article>
+                </div>
+                <BButton
+                  v-if="knowledgeList.hasMore"
+                  class="organize-load-more"
+                  :loading="knowledgeList.loadingMore"
+                  @click="loadKnowledgeIssues(false)"
+                >
+                  {{ t('organize.loadMore') }}
+                </BButton>
+              </OrganizeIssueListState>
+            </section>
           </component>
         </div>
       </div>
@@ -515,6 +660,8 @@
     type BookmarkHealthSummary,
     type BookmarkHealthItem,
     type DuplicateBookmarkGroup,
+    type KnowledgeStructureIssue,
+    type KnowledgeStructureIssueKind,
     type OrganizeIssueType,
     type OrganizeResourceType,
     type UntaggedResourceItem,
@@ -522,6 +669,7 @@
   import { batchDeleteSearchResources, clearGlobalSearchCache } from '@/api/search';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { generateUUID } from '@/utils/common';
+  import { toolboxToolPath } from '@/config/toolbox';
   import icon from '@/config/icon';
 
   type OrganizeView = 'overview' | 'pending' | OrganizeIssueType;
@@ -536,6 +684,7 @@
   const untaggedType = ref<'all' | OrganizeResourceType>('all');
   const selectedUntaggedKeys = ref<string[]>([]);
   const ignoringUntagged = ref(false);
+  const knowledgeIssueKind = ref<'all' | KnowledgeStructureIssueKind>('all');
   const healthSummary = ref<BookmarkHealthSummary | null>(null);
   const healthSummaryLoading = ref(false);
   const healthSummaryError = ref(false);
@@ -550,6 +699,7 @@
   const resolvingDuplicate = ref(false);
   const pendingDuplicateResolveRequest = ref<{ payloadKey: string; requestId: string } | null>(null);
   const organizeMainRef = ref<HTMLElement | null>(null);
+  const mobileNavRef = ref<HTMLElement | null>(null);
   let duplicateReturnFocus: HTMLElement | null = null;
   let healthPoller: ReturnType<typeof setTimeout> | null = null;
   let healthRequestGeneration = 0;
@@ -557,18 +707,21 @@
   let activatedOnce = false;
 
   const summary = computed(() => organize.summary);
+  const knowledgeStructureSummary = computed(() => organize.knowledgeStructureSummary);
   const activeView = computed<OrganizeView>(() => {
     const issue = String(route.query.issue || 'overview');
-    return ['pending', 'untagged', 'duplicate_bookmark', 'bookmark_health'].includes(issue)
+    return ['pending', 'untagged', 'duplicate_bookmark', 'bookmark_health', 'knowledge_structure'].includes(issue)
       ? (issue as OrganizeView)
       : 'overview';
   });
   const untaggedList = computed(() => organize.lists.untagged);
   const duplicateList = computed(() => organize.lists.duplicate_bookmark);
   const healthList = computed(() => organize.lists.bookmark_health);
+  const knowledgeList = computed(() => organize.lists.knowledge_structure);
   const untaggedItems = computed(() => untaggedList.value.items as UntaggedResourceItem[]);
   const duplicateGroups = computed(() => duplicateList.value.items as DuplicateBookmarkGroup[]);
   const healthItems = computed(() => healthList.value.items as BookmarkHealthItem[]);
+  const knowledgeItems = computed(() => knowledgeList.value.items as KnowledgeStructureIssue[]);
   const healthScan = computed(() => healthSummary.value?.scan || null);
   const healthRunStatus = computed<BookmarkHealthScanStatus>(
     () => healthScan.value?.status || healthSummary.value?.runStatus || 'idle',
@@ -633,6 +786,10 @@
     return hasMore ? `${value}+` : String(value);
   }
 
+  function showMobileNavigationCount(value: string | null) {
+    return value !== null && value !== '—' && value !== '0' && value !== '0+';
+  }
+
   const pendingCount = computed(() => displayCount(summary.value?.pendingShortcut.count));
   const issueOptions = computed<Array<{ key: OrganizeView; label: string; icon: string; count: string | null }>>(() => [
     { key: 'overview', label: t('organize.views.overview'), icon: icon.ai.organize, count: null },
@@ -661,7 +818,51 @@
         summary.value?.issues.bookmarkHealth.hasMore,
       ),
     },
+    {
+      key: 'knowledge_structure',
+      label: t('organize.views.knowledgeStructure'),
+      icon: icon.toolbox.conceptMap,
+      count: displayCount(knowledgeStructureSummary.value?.findingCount),
+    },
   ]);
+
+  const knowledgeIssueKinds: KnowledgeStructureIssueKind[] = [
+    'invalid_parent',
+    'empty',
+    'duplicate_title',
+    'untitled',
+    'deep',
+  ];
+  function knowledgeIssueCount(kind: KnowledgeStructureIssueKind) {
+    return Number(knowledgeStructureSummary.value?.issueCounts.find((item) => item.kind === kind)?.count || 0);
+  }
+  const knowledgeFilterOptions = computed(() => [
+    {
+      value: 'all' as const,
+      label: t('organize.knowledge.issue.all'),
+      count: Number(knowledgeStructureSummary.value?.findingCount || 0),
+    },
+    ...knowledgeIssueKinds
+      .filter((kind) => knowledgeIssueCount(kind) > 0)
+      .map((kind) => ({
+        value: kind,
+        label: t(`organize.knowledge.issue.${kind}`),
+        count: knowledgeIssueCount(kind),
+      })),
+  ]);
+  const knowledgeHealthClass = computed(() => {
+    const score = Number(knowledgeStructureSummary.value?.healthScore || 0);
+    return score >= 80 ? 'is-good' : score >= 60 ? 'is-attention' : 'is-risk';
+  });
+  const knowledgeHealthTone = computed<'success' | 'pending' | 'danger'>(() => {
+    if (knowledgeHealthClass.value === 'is-good') return 'success';
+    if (knowledgeHealthClass.value === 'is-attention') return 'pending';
+    return 'danger';
+  });
+  const knowledgeHealthLabel = computed(() => t(`organize.knowledge.health.${knowledgeHealthClass.value.slice(3)}`));
+  const knowledgeScoreStyle = computed(() => ({
+    '--knowledge-score': `${Math.min(100, Math.max(0, Number(knowledgeStructureSummary.value?.healthScore || 0)))}%`,
+  }));
 
   const resourceTypeOptions = computed(() => [
     { label: t('resourceCenter.types.all'), value: 'all' },
@@ -705,8 +906,22 @@
     void router.replace({ path: '/organize', query });
   }
 
+  async function scrollMobileNavigationToActive() {
+    if (!bookmark.isMobile) return;
+    await nextTick();
+    const navigation = mobileNavRef.value;
+    const selected = navigation?.querySelector<HTMLElement>(`[data-organize-view="${activeView.value}"]`);
+    if (!navigation || !selected) return;
+    const left = selected.offsetLeft - (navigation.clientWidth - selected.offsetWidth) / 2;
+    navigation.scrollTo({ left: Math.max(0, left), behavior: 'auto' });
+  }
+
   async function refreshSummary() {
     await organize.loadSummary({ silent: Boolean(organize.summary) });
+  }
+
+  async function refreshKnowledgeStructure({ silent = false } = {}) {
+    await organize.loadKnowledgeStructureSummary({ silent: silent || Boolean(knowledgeStructureSummary.value) });
   }
 
   async function loadActiveView(reset = true) {
@@ -714,7 +929,7 @@
     else if (activeView.value === 'duplicate_bookmark') await loadDuplicates(reset);
     else if (activeView.value === 'bookmark_health') {
       await Promise.all([loadHealth(reset), refreshHealthScan({ silent: Boolean(healthSummary.value) })]);
-    }
+    } else if (activeView.value === 'knowledge_structure') await loadKnowledgeIssues(reset);
   }
 
   async function loadUntagged(reset: boolean) {
@@ -744,6 +959,34 @@
 
   async function loadHealth(reset: boolean) {
     await organize.loadIssue('bookmark_health', { reset });
+  }
+
+  async function loadKnowledgeIssues(reset: boolean) {
+    await organize.loadIssue('knowledge_structure', {
+      reset,
+      kind: knowledgeIssueKind.value,
+    });
+  }
+
+  function selectKnowledgeIssueKind(kind: 'all' | KnowledgeStructureIssueKind) {
+    if (knowledgeIssueKind.value === kind) return;
+    knowledgeIssueKind.value = kind;
+    void loadKnowledgeIssues(true);
+  }
+
+  function knowledgeIssueTone(severity: KnowledgeStructureIssue['severity']) {
+    return severity === 'high' ? 'danger' : severity === 'medium' ? 'pending' : 'neutral';
+  }
+
+  function openKnowledgeNote(noteId: string) {
+    void router.push({
+      path: `/noteLibrary/${encodeURIComponent(noteId)}`,
+      query: { organize: 'knowledge_structure', from: route.fullPath },
+    });
+  }
+
+  function openKnowledgeWorkbench() {
+    void router.push(toolboxToolPath('knowledge_structure_audit'));
   }
 
   function stopHealthPolling() {
@@ -1108,7 +1351,8 @@
     healthSummaryError.value = false;
     organize.resetForOwner(ownerKey);
     selectedUntaggedKeys.value = [];
-    await Promise.all([refreshSummary(), loadActiveView(true)]);
+    knowledgeIssueKind.value = 'all';
+    await Promise.all([refreshSummary(), refreshKnowledgeStructure(), loadActiveView(true)]);
   });
 
   watch(duplicateModalVisible, async (visible) => {
@@ -1123,9 +1367,10 @@
     () => [route.query.issue, route.query._rt],
     async () => {
       if (!mounted) return;
+      void scrollMobileNavigationToActive();
       if (activeView.value !== 'bookmark_health') stopHealthPolling();
       await loadActiveView(true);
-      if (route.query._rt) await refreshSummary();
+      if (route.query._rt) await Promise.all([refreshSummary(), refreshKnowledgeStructure({ silent: true })]);
     },
   );
 
@@ -1133,7 +1378,8 @@
     document.addEventListener('visibilitychange', handleHealthVisibilityChange);
     organize.resetForOwner(organizeOwnerKey.value);
     mounted = true;
-    await Promise.all([refreshSummary(), loadActiveView(true)]);
+    await Promise.all([refreshSummary(), refreshKnowledgeStructure(), loadActiveView(true)]);
+    await scrollMobileNavigationToActive();
   });
 
   onActivated(() => {
@@ -1142,7 +1388,11 @@
       activatedOnce = true;
       return;
     }
-    void Promise.all([organize.loadSummary({ silent: true }), loadActiveView(true)]);
+    void Promise.all([
+      organize.loadSummary({ silent: true }),
+      organize.loadKnowledgeStructureSummary({ silent: true }),
+      loadActiveView(true),
+    ]);
   });
 
   onDeactivated(stopHealthPolling);
@@ -1670,6 +1920,273 @@
     background: var(--card-background);
   }
 
+  .organize-knowledge-heading__actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .organize-knowledge-overview {
+    position: relative;
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: 112px minmax(0, 1fr) minmax(260px, 0.75fr);
+    align-items: center;
+    gap: clamp(18px, 3vw, 34px);
+    margin-bottom: 12px;
+    padding: 20px clamp(18px, 3vw, 28px);
+    overflow: hidden;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 16px;
+    background:
+      radial-gradient(circle at 88% 12%, rgba(22, 138, 97, 0.1), transparent 32%),
+      radial-gradient(circle at 8% 88%, rgba(97, 92, 237, 0.09), transparent 34%), var(--card-background);
+  }
+
+  .organize-knowledge-overview.is-attention {
+    border-color: var(--warning-color, #d97706);
+  }
+
+  .organize-knowledge-overview.is-risk {
+    border-color: var(--danger-color, #dc3f4f);
+  }
+
+  .organize-knowledge-score {
+    position: relative;
+    width: 104px;
+    height: 104px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    color: var(--success-color, #168a61);
+    background: conic-gradient(currentColor var(--knowledge-score), var(--workspace-panel-bg-color) 0);
+  }
+
+  .organize-knowledge-overview.is-attention .organize-knowledge-score {
+    color: var(--warning-color, #d97706);
+  }
+
+  .organize-knowledge-overview.is-risk .organize-knowledge-score {
+    color: var(--danger-color, #dc3f4f);
+  }
+
+  .organize-knowledge-score::before {
+    position: absolute;
+    inset: 8px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: inherit;
+    background: var(--card-background);
+    content: '';
+  }
+
+  .organize-knowledge-score > span,
+  .organize-knowledge-score > em {
+    position: relative;
+    z-index: 1;
+  }
+
+  .organize-knowledge-score > span {
+    margin-top: 11px;
+    display: flex;
+    align-items: baseline;
+    gap: 2px;
+  }
+
+  .organize-knowledge-score strong {
+    color: var(--text-color);
+    font-size: 27px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .organize-knowledge-score small,
+  .organize-knowledge-score em {
+    color: var(--desc-color);
+    font-size: 9px;
+    font-style: normal;
+  }
+
+  .organize-knowledge-score > em {
+    margin-top: -22px;
+  }
+
+  .organize-knowledge-overview__copy {
+    min-width: 0;
+    display: grid;
+    justify-items: start;
+    gap: 6px;
+  }
+
+  .organize-knowledge-overview__copy > strong {
+    color: var(--text-color);
+    font-size: 19px;
+  }
+
+  .organize-knowledge-overview__copy p,
+  .organize-knowledge-overview__copy small {
+    margin: 0;
+    color: var(--desc-color);
+    font-size: 11px;
+    line-height: 1.55;
+  }
+
+  .organize-knowledge-facts {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0;
+  }
+
+  .organize-knowledge-facts > div {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+    padding: 10px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 10px;
+    background: var(--card-background);
+  }
+
+  .organize-knowledge-facts dt {
+    overflow: hidden;
+    color: var(--desc-color);
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .organize-knowledge-facts dd {
+    margin: 0;
+    color: var(--text-color);
+    font-size: 16px;
+    font-weight: 750;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .organize-knowledge-overview__stale {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding-top: 9px;
+    border-top: 1px solid var(--surface-border-color);
+    color: var(--danger-color, #dc3f4f);
+    font-size: 11px;
+  }
+
+  .organize-knowledge-state {
+    min-height: 176px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 18px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 16px;
+    color: var(--desc-color);
+    background: var(--card-background);
+    text-align: center;
+  }
+
+  .organize-knowledge-state.is-error {
+    border-color: var(--danger-color, #dc3f4f);
+    color: var(--danger-color, #dc3f4f);
+  }
+
+  .organize-knowledge-state strong {
+    color: var(--text-color);
+  }
+
+  .organize-knowledge-filters {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 12px;
+    padding-bottom: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .organize-knowledge-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .organize-knowledge-list {
+    display: grid;
+    gap: 9px;
+  }
+
+  .organize-knowledge-row {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 11px;
+    padding: 12px 14px;
+    border: 1px solid var(--surface-border-color);
+    border-left: 3px solid var(--primary-color);
+    border-radius: 13px;
+    background: var(--card-background);
+  }
+
+  .organize-knowledge-row.is-high {
+    border-left-color: var(--danger-color, #dc3f4f);
+  }
+
+  .organize-knowledge-row.is-medium {
+    border-left-color: var(--warning-color, #d97706);
+  }
+
+  .organize-knowledge-row__icon {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    color: var(--success-color, #168a61);
+    background: var(--workspace-panel-bg-color);
+  }
+
+  .organize-knowledge-row__body {
+    min-width: 0;
+  }
+
+  .organize-knowledge-row__body > div {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .organize-knowledge-row__body strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .organize-knowledge-row__body p {
+    margin: 4px 0 2px;
+    color: var(--desc-color);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .organize-knowledge-row__body small {
+    display: block;
+    overflow: hidden;
+    color: var(--desc-color);
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .organize-load-more {
     margin: 16px auto 0;
   }
@@ -1876,6 +2393,14 @@
       grid-column: 2 / -1;
       justify-content: flex-start;
     }
+
+    .organize-knowledge-overview {
+      grid-template-columns: 104px minmax(0, 1fr);
+    }
+
+    .organize-knowledge-facts {
+      grid-column: 1 / -1;
+    }
   }
 
   @media (max-width: 767px) {
@@ -1891,7 +2416,7 @@
     .organize-resource-tabs {
       width: 100%;
       display: grid;
-      margin: 6px 0 8px;
+      margin: 0 0 8px;
       flex: 0 0 auto;
     }
 
@@ -1908,13 +2433,14 @@
 
     .organize-mobile-nav {
       width: 100%;
-      min-height: 46px;
+      min-height: 45px;
       display: flex;
-      gap: 7px;
-      margin-bottom: 9px;
-      padding: 1px 1px 5px;
+      gap: 22px;
+      margin-bottom: 12px;
+      padding: 0 2px 7px;
       overflow-x: auto;
       flex: 0 0 auto;
+      border-bottom: 1px solid var(--surface-divider-color);
       scrollbar-width: none;
       scroll-snap-type: x proximity;
     }
@@ -1923,28 +2449,67 @@
       display: none;
     }
 
-    .organize-mobile-nav__item {
+    .organize-mobile-nav__item.b_btn {
+      position: relative;
       width: auto;
       min-width: max-content;
-      min-height: 42px;
+      min-height: 37px;
       display: flex;
       flex: 0 0 auto;
-      gap: 7px;
-      padding: 0 12px;
-      border: 2px solid transparent;
-      border-radius: 12px;
+      gap: 6px;
+      padding: 0 2px;
+      border: 0;
+      border-radius: 0;
       color: var(--desc-color);
-      background: var(--card-background);
-      box-shadow: inset 0 0 0 1px var(--surface-border-color);
+      background: transparent;
+      box-shadow: none;
       scroll-snap-align: start;
     }
 
+    .organize-mobile-nav__item.b_btn:hover,
+    .organize-mobile-nav__item.b_btn:focus-visible {
+      color: var(--text-color);
+      background: transparent;
+    }
+
+    .organize-mobile-nav__item.b_btn:focus-visible {
+      outline: 2px solid var(--primary-color);
+      outline-offset: 2px;
+    }
+
     .organize-mobile-nav__item.active {
-      border: 2px solid var(--primary-color);
       color: var(--primary-color);
-      background: var(--card-background);
+      background: transparent;
       font-weight: 700;
       box-shadow: none;
+    }
+
+    .organize-mobile-nav__item.active::after {
+      position: absolute;
+      right: 0;
+      bottom: -8px;
+      left: 0;
+      height: 3px;
+      border-radius: 999px 999px 0 0;
+      background: var(--primary-color);
+      content: '';
+    }
+
+    .organize-mobile-nav__count {
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border: 0;
+      color: var(--desc-color);
+      background: var(--workspace-panel-bg-color);
+      font-size: 10px;
+      line-height: 18px;
+    }
+
+    .organize-mobile-nav__item.active .organize-mobile-nav__count {
+      border: 0;
+      color: var(--primary-color);
+      background: var(--mobile-selected-bg, var(--workspace-panel-bg-color));
     }
 
     .organize-scroll-view,
@@ -1976,6 +2541,52 @@
     .organize-view-heading > .b_btn {
       min-height: 40px;
       flex: 0 0 auto;
+    }
+
+    .organize-knowledge-heading__actions {
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .organize-knowledge-heading__actions :deep(.b_btn) {
+      width: 100%;
+      min-height: 44px;
+    }
+
+    .organize-knowledge-overview {
+      grid-template-columns: 80px minmax(0, 1fr);
+      gap: 14px;
+      padding: 16px 14px;
+    }
+
+    .organize-knowledge-score {
+      width: 76px;
+      height: 76px;
+    }
+
+    .organize-knowledge-score strong {
+      font-size: 21px;
+    }
+
+    .organize-knowledge-facts {
+      grid-column: 1 / -1;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .organize-knowledge-overview__copy > strong {
+      font-size: 16px;
+    }
+
+    .organize-knowledge-row {
+      grid-template-columns: 34px minmax(0, 1fr);
+      align-items: start;
+    }
+
+    .organize-knowledge-row > .b_btn {
+      grid-column: 2;
+      justify-self: start;
+      min-height: 40px;
     }
 
     .organize-filter-bar {
@@ -2074,15 +2685,19 @@
   }
 
   :global(html.light-note-mobile-rendering .organize-nav-item.active),
-  :global(html.light-note-mobile-rendering .organize-mobile-nav__item.active),
   :global(html.light-note-mobile-rendering .duplicate-candidate.selected) {
     border-color: var(--primary-color);
     box-shadow: none;
   }
 
+  :global(html.light-note-mobile-rendering .organize-mobile-nav__item.active::after) {
+    background: var(--primary-color);
+  }
+
   :global(html.light-note-mobile-rendering .organize-resource-row),
   :global(html.light-note-mobile-rendering .organize-duplicate-card),
-  :global(html.light-note-mobile-rendering .organize-health-row) {
+  :global(html.light-note-mobile-rendering .organize-health-row),
+  :global(html.light-note-mobile-rendering .organize-knowledge-row) {
     box-shadow: none;
   }
 

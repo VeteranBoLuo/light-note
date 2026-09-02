@@ -52,11 +52,11 @@ pnpm --filter web package:extension
 | `sidePanel`                            | 打开浏览器原生侧栏                                                                | 点击工具栏图标                                                   |
 | `tabs`                                 | 只读取当前活动标签页的 URL 与标题，不遍历标签页、不调用历史 API、不持久化浏览记录 | 用户进入书签流程、主动回填网址；进入笔记页时仅在内存准备当前域名 |
 | `activeTab` + `scripting`              | 尽力读取当前页最多 2,000 字选中文本                                               | 用户从工具栏打开扩展并进入书签流程后                             |
-| 可选的当前网站 Host 权限 + `scripting` | 读取当前页最多 5 万字可见文字                                                     | 用户在笔记中点击“带入当前网页文字”并确认浏览器的当前域名授权后   |
+| 可选的当前网站 Host 权限 + `scripting` | 读取当前页可见文字；AI 书签最多发送 1.2 万字，笔记带入最多 5 万字                  | 用户点击 AI 书签补全或“带入当前网页文字”并确认当前域名授权后     |
 | `storage`                              | 保存设备 SID、主题和书签/笔记草稿                                                 | 对应状态变化时                                                   |
 | `identity`                             | 打开网站/GitHub 登录中转并接收 `chromiumapp.org` 回调                             | 用户主动选择网站登录                                             |
 
-Manifest 没有 `cookies`、常驻 `content_scripts` 或必需的 `<all_urls>`。必需 Host permissions 只覆盖轻笺 HTTPS Origin 与当前生产桶的精确 OBS 主机名，不使用覆盖同区域其他桶的通配符；`http://*/*` 与 `https://*/*` 只声明在 `optional_host_permissions`，运行时按当前页面的精确 Origin 单站申请。工具栏点击由 Chrome/Edge 原生 `openPanelOnActionClick` 行为打开 Side Panel，Service Worker 不读取或缓存标签页信息。固定 Side Panel 在标签页切换后不会重新产生 `activeTab` 用户手势，因此 URL/标题必须与 DOM 读取解耦：书签用 `tabs.query()` 只取得当前活动标签页元数据，选中文本注入失败也不阻断基本信息；笔记进入页只在内存准备当前域名，点击带入后才申请该域名并读取正文。入口页和文件流程不查询当前标签页，任何页面信息都不写入浏览记录或长期目标页缓存。
+Manifest 没有 `cookies`、常驻 `content_scripts` 或必需的 `<all_urls>`。必需 Host permissions 只覆盖轻笺 HTTPS Origin 与当前生产桶的精确 OBS 主机名，不使用覆盖同区域其他桶的通配符；`http://*/*` 与 `https://*/*` 只声明在 `optional_host_permissions`，运行时按当前页面的精确 Origin 单站申请。工具栏点击由 Chrome/Edge 原生 `openPanelOnActionClick` 行为打开 Side Panel，Service Worker 不读取或缓存标签页信息。固定 Side Panel 在标签页切换后不会重新产生 `activeTab` 用户手势，因此 URL/标题必须与 DOM 读取解耦：书签用 `tabs.query()` 只取得当前活动标签页元数据，选中文本注入失败也不阻断基本信息；书签 AI 按钮与笔记带入按钮才会申请当前域名并读取正文，且授权期间切换标签页会失败关闭。入口页和文件流程不查询当前标签页，任何页面信息都不写入浏览记录或长期目标页缓存。
 
 ## 登录与授权协议
 
@@ -82,7 +82,7 @@ Manifest 没有 `cookies`、常驻 `content_scripts` 或必需的 `<all_urls>`�
 - 进入书签视图后才读取操作时的当前活动页，并允许编辑 URL、名称、描述。
 - 基本字段上方提供紧凑的“当前页信息”操作，点击时只从当前标签页元数据同时更新网址和网页名称，不执行网页脚本，也不覆盖描述、标签或保存模式；Chrome/Edge 内部地址可以读取，但服务端书签仍只接受 HTTP/HTTPS。
 - 页面顶部先选择“快速待整理”或“正式保存”，每种模式只有一个最终提交按钮。快速待整理只显示 URL、名称和描述，不显示或调用 AI、标签与网页快照能力；正式保存才展示 AI 建议和标签。
-- “AI 智能补全”复用 `bookmark.parse_url`，只把可编辑的名称、描述和标签建议填入表单，绝不自动保存；失败只显示可重试错误，不阻断正式手工保存。
+- “AI 智能补全”复用 `bookmark.parse_url`。点击时先按当前精确 Origin 请求可选权限；授权成功则把当前顶层页面最多 1.2 万字可见文字作为 `browser_capture` 证据，拒绝授权或受保护页面则退回服务端公开网页读取。客户端和服务端都校验捕获 URL 与书签 URL 一致，禁止把切换后的另一页面当作证据。结果只填入可编辑的名称、描述和标签建议，绝不自动保存；失败不阻断正式手工保存。
 - 已有标签由服务端 AI 结果匹配并预选；建议新标签默认不勾选，只有用户勾选后才传 `relatedTagNames`。既有与新标签合计最多 4 个。
 - 正式保存传入 `idempotencyKey`，书签、新标签、标签关系及可选待整理关系在事务边界内完成。重复 URL 返回已有书签的结构化 ID，成功页可直接打开。
 - “快速加入待整理”不自动触发 AI，不创建标签和快照；切换模式不会清空已经填写的基本信息。

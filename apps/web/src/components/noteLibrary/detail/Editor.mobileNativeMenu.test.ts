@@ -99,15 +99,16 @@ describe('移动端富文本交给系统菜单', () => {
     expect(source).toContain('focusRichImageCaret(paragraph, 0)');
   });
 
-  it('移动端仍保留六项固定工具栏，格式化能力进入底部抽屉', () => {
+  it('移动端仍保留六项固定工具栏，列表与其他格式化能力分别进入底部抽屉', () => {
     expect(editorSource).toContain('id="editor-toolbar"');
     expect(editorSource).toContain('<EditorToolbarV2');
     expect(editorInitSource()).toContain('toolbar: false');
     expect(editorSource).not.toContain('@touchend="handleRenderedResourceLinkClick"');
     expect(editorInitSource()).not.toContain("editor.on('touchend'");
     expect(editorSource).toMatch(
-      /const moreActions = isMobile\.value[\s\S]*action\('redo'[\s\S]*action\('italic'[\s\S]*\.\.\.listActions[\s\S]*action\('link'/,
+      /const moreActions = isMobile\.value[\s\S]*action\('redo'[\s\S]*action\('italic'[\s\S]*action\('link'/,
     );
+    expect(editorSource).not.toMatch(/const moreActions = isMobile\.value[\s\S]*\.\.\.listActions/);
   });
 
   it('移动端图片尺寸使用共用底部抽屉，并允许连续切换档位', () => {

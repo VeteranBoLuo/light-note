@@ -11,7 +11,6 @@ export const TOOLBOX_SERVICE_COMPONENTS: Partial<Record<ToolboxToolId, Component
   learning_workspace: KnowledgeWorkspace,
   writing_workspace: KnowledgeWorkspace,
   knowledge_structure_audit: KnowledgeMaintenanceWorkbench,
-  directory_index: KnowledgeMaintenanceWorkbench,
 });
 
 export function getToolboxServiceComponent(toolId: ToolboxToolId | string) {

@@ -154,10 +154,21 @@ export function validateNoteTransformInput(input) {
 
 export function validateBookmarkParseInput(input) {
   const value = plainObject(input);
-  knownKeys(value, ['url']);
+  knownKeys(value, ['url', 'pageContext']);
   const url = optionalText(value.url, { label: '网址', maxLength: 2000 });
   if (!url) throw aiSkillError('AI_SKILL_BOOKMARK_URL_REQUIRED', '请输入要识别的网址');
-  return Object.freeze({ url });
+  let pageContext = null;
+  if (value.pageContext != null) {
+    const context = plainObject(value.pageContext, 'pageContext');
+    knownKeys(context, ['url', 'title', 'text']);
+    const contextUrl = optionalText(context.url, { label: '当前页网址', maxLength: 2000 });
+    const title = optionalText(context.title, { label: '当前页标题', maxLength: 500 });
+    const text = optionalText(context.text, { label: '当前页可见文字', maxLength: 12_000 });
+    if (!contextUrl) throw aiSkillError('AI_SKILL_BOOKMARK_CONTEXT_URL_REQUIRED', '当前页上下文缺少网址');
+    if (!title && !text) throw aiSkillError('AI_SKILL_BOOKMARK_CONTEXT_EMPTY', '当前页上下文没有可识别内容');
+    pageContext = Object.freeze({ url: contextUrl, title, text });
+  }
+  return Object.freeze({ url, pageContext });
 }
 
 export const aiSkillInputValidatorInternals = Object.freeze({ NOTE_TRANSFORM_OPERATIONS });

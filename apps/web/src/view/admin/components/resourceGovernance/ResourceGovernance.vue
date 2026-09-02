@@ -881,11 +881,20 @@
       .map(([key, value]) => [key, String(value)]);
   }
   function ownerState(finding: GovernanceFinding) {
+    if (finding.ownerCleanupState === 'missing') return t('resourceGovernance.ownerMissing');
+    if (finding.ownerCleanupState === 'formally_deleted') return t('resourceGovernance.ownerFormallyDeleted');
+    if (finding.ownerCleanupState === 'disabled') return t('resourceGovernance.ownerDisabled');
+    if (finding.ownerCleanupState === 'active') return t('resourceGovernance.ownerActive');
+    if (finding.ownerCleanupState === 'inconsistent') return t('resourceGovernance.ownerInconsistent');
     if (finding.evidenceJson?.ownerRowExists === false) return t('resourceGovernance.ownerMissing');
+    if (finding.evidenceJson?.ownerFormallyDeleted === true) return t('resourceGovernance.ownerFormallyDeleted');
     if (finding.evidenceJson?.ownerSoftDeleted === true) return t('resourceGovernance.ownerSoftDeleted');
     return t('resourceGovernance.ownerNotApplicable');
   }
   function guardDescription(finding: GovernanceFinding) {
+    if (['disabled', 'active', 'inconsistent'].includes(String(finding.ownerCleanupState || ''))) {
+      return t('resourceGovernance.guardOwnerNotDeleted');
+    }
     if (finding.actionKind === 'cleanup_invalid_owner') return t('resourceGovernance.guardInvalidOwnerCleanup');
     if (finding.riskLevel === 'safe') return t('resourceGovernance.guardSafe');
     if (finding.riskLevel === 'review') return t('resourceGovernance.guardReview');

@@ -52,6 +52,9 @@ ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/ensureToolboxSchema.js"
 echo "🔁  幂等初始化每日回顾 Schema…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/ensureDailyReviewSchema.js"
 
+echo "🧭  幂等迁移帮助中心栏目元数据…"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/migrateHelpCenterSections.js"
+
 echo "🔎  执行只读 Schema 发布门禁…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkSchemaAssertions.js"
 
@@ -60,6 +63,9 @@ ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkFilePreviewRuntime.js"
 
 echo "🔎  检查 OCR 运行时与语言包…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkOcrRuntime.js"
+
+echo "🔎  检查通用网页 Chromium 渲染运行时与低权限配置…"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkWebPageRendererRuntime.js"
 
 echo "♻️  pm2 restart ${PM2}…"
 ssh -i "$KEY" "$HOST" "pm2 restart $PM2 --update-env && \

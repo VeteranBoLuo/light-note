@@ -3624,7 +3624,6 @@
             dividerBefore: true,
             selected: !isMarkdown && state.italic,
           }),
-          ...listActions,
           action('link', t('noteDetail.editor.link'), icon.noteDetail.toolbar.link),
           ...formatMoreActions.map((item, index) => (index === 0 ? { ...item, dividerBefore: true } : item)),
         ]

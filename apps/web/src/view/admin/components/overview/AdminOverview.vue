@@ -251,12 +251,20 @@
       <AdminRecentAdditions
         :data="recentData"
         :loading="recentLoading"
-        :error="recentError"
+        :resource-loading="resourceRecent.loading.value"
+        :user-loading="userRecent.loading.value"
+        :resource-has-more="resourceRecent.hasMore.value"
+        :user-has-more="userRecent.hasMore.value"
+        :resource-error="resourceRecentError"
+        :user-error="userRecentError"
         :stacked="bookmark.isMobile || bookmark.isTablet"
         :mobile="bookmark.isMobile"
         :filter="recentFilter"
         :filtered-total="recentFilteredTotal"
-        @retry="loadRecent"
+        @retry-resource="retryResourceRecent"
+        @retry-user="retryUserRecent"
+        @load-more-resource="loadMoreResourceRecent"
+        @load-more-user="loadMoreUserRecent"
         @view-users="go('userMg')"
         @filter-change="changeRecentFilter"
       />
@@ -269,6 +277,7 @@
   import { useI18n } from 'vue-i18n';
   import { apiBasePost } from '@/http/request.ts';
   import { getAdminOverviewSnapshot } from '@/api/adminOverview.ts';
+  import { useAdminCursorList } from '@/composables/useAdminCursorList.ts';
   import router from '@/router';
   import { bookmarkStore } from '@/store';
   import AdminGrowthTrendCard from './AdminGrowthTrendCard.vue';
@@ -279,7 +288,15 @@
     type AdminTodayInsight,
     type AdminTodayMetricKey,
   } from './adminTodayInsights.ts';
-  import type { AdminRecentData, AdminRecentFilter, AdminRecentFilterType } from './adminRecentTypes.ts';
+  import type {
+    AdminRecentData,
+    AdminRecentFilter,
+    AdminRecentFilterType,
+    AdminRecentPage,
+    AdminRecentResource,
+    AdminRecentTarget,
+    AdminRecentUser,
+  } from './adminRecentTypes.ts';
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -297,10 +314,6 @@
   const loadError = ref(false);
   const trendLoading = ref(false);
   const trendError = ref(false);
-  const recentData = ref<AdminRecentData | null>(null);
-  const recentLoading = ref(false);
-  const recentError = ref(false);
-  const recentScope = ref<string | null>(null);
   const recentFilter = ref<AdminRecentFilter>({ period: 'recent', type: 'all' });
   const recentAnchor = ref<HTMLElement | null>(null);
   const trendDays = ref('7');
@@ -313,7 +326,50 @@
   const trendCache = new Map<string, any>();
   let snapshotRequestSequence = 0;
   let trendRequestSequence = 0;
-  let recentRequestSequence = 0;
+  const resourceRecentError = ref<'initial' | 'append' | ''>('');
+  const userRecentError = ref<'initial' | 'append' | ''>('');
+  let resourceRecentLoadMode: 'initial' | 'append' = 'initial';
+  let userRecentLoadMode: 'initial' | 'append' = 'initial';
+
+  function requestRecentPage<T>(target: AdminRecentTarget, cursor: string | null, limit: number) {
+    return apiBasePost('/api/common/getAdminOverviewRecent', {
+      hideInternal: hideInternal.value,
+      ...recentFilter.value,
+      target,
+      cursor,
+      limit,
+    }) as Promise<{ status?: number | boolean; msg?: string; data?: AdminRecentPage<T> }>;
+  }
+
+  const resourceRecent = useAdminCursorList<AdminRecentResource>({
+    limit: 20,
+    itemKey: (item) => `${item.type}:${item.id}`,
+    request: (cursor, limit) => requestRecentPage<AdminRecentResource>('resource', cursor, limit),
+    onError: () => {
+      resourceRecentError.value = resourceRecentLoadMode;
+    },
+  });
+  const userRecent = useAdminCursorList<AdminRecentUser>({
+    limit: 20,
+    itemKey: 'id',
+    request: (cursor, limit) => requestRecentPage<AdminRecentUser>('user', cursor, limit),
+    onError: () => {
+      userRecentError.value = userRecentLoadMode;
+    },
+  });
+  const showRecentResources = computed(() => recentFilter.value.type !== 'user');
+  const showRecentUsers = computed(() => ['all', 'user'].includes(recentFilter.value.type));
+  const recentData = computed<AdminRecentData>(() => ({
+    recentResources: resourceRecent.items.value,
+    recentUsers: userRecent.items.value,
+    filter: { ...recentFilter.value, timezone: 'Asia/Shanghai' },
+    limit: 20,
+  }));
+  const recentLoading = computed(
+    () =>
+      (showRecentResources.value && resourceRecent.loading.value) ||
+      (showRecentUsers.value && userRecent.loading.value),
+  );
   const todayResourceTotal = computed(() =>
     data.value
       ? Number(data.value.resources.bookmarkToday || 0) +
@@ -448,15 +504,14 @@
         : null;
     const requestSequence = ++snapshotRequestSequence;
     trendRequestSequence += 1;
-    recentRequestSequence += 1;
+    resourceRecent.cancel();
+    userRecent.cancel();
     trendLoading.value = false;
     trendError.value = false;
-    recentLoading.value = false;
-    recentError.value = false;
+    resourceRecentError.value = '';
+    userRecentError.value = '';
     if (resetScope) {
       data.value = null;
-      recentData.value = null;
-      recentScope.value = null;
     }
     loading.value = true;
     loadError.value = false;
@@ -496,27 +551,42 @@
   }
 
   async function loadRecent() {
-    const hideInternalValue = hideInternal.value;
-    const filter = { ...recentFilter.value };
-    const scopeKey = `${hideInternalValue}:${filter.period}:${filter.type}`;
-    const requestSequence = ++recentRequestSequence;
-    if (recentScope.value !== scopeKey) recentData.value = null;
-    recentScope.value = scopeKey;
-    recentLoading.value = true;
-    recentError.value = false;
-    try {
-      const response: any = await apiBasePost('/api/common/getAdminOverviewRecent', {
-        hideInternal: hideInternalValue,
-        ...filter,
-      });
-      if (requestSequence !== recentRequestSequence) return;
-      if (response.status === 200) recentData.value = response.data;
-      else recentError.value = true;
-    } catch (_error) {
-      if (requestSequence === recentRequestSequence) recentError.value = true;
-    } finally {
-      if (requestSequence === recentRequestSequence) recentLoading.value = false;
-    }
+    resourceRecentError.value = '';
+    userRecentError.value = '';
+    resourceRecentLoadMode = 'initial';
+    userRecentLoadMode = 'initial';
+    const loads: Array<Promise<boolean>> = [];
+    if (showRecentResources.value) loads.push(resourceRecent.reload());
+    else resourceRecent.cancel();
+    if (showRecentUsers.value) loads.push(userRecent.reload());
+    else userRecent.cancel();
+    await Promise.all(loads);
+  }
+
+  function loadMoreResourceRecent() {
+    resourceRecentLoadMode = 'append';
+    resourceRecentError.value = '';
+    void resourceRecent.loadMore();
+  }
+
+  function loadMoreUserRecent() {
+    userRecentLoadMode = 'append';
+    userRecentError.value = '';
+    void userRecent.loadMore();
+  }
+
+  function retryResourceRecent() {
+    if (resourceRecent.items.value.length) return loadMoreResourceRecent();
+    resourceRecentLoadMode = 'initial';
+    resourceRecentError.value = '';
+    void resourceRecent.reload();
+  }
+
+  function retryUserRecent() {
+    if (userRecent.items.value.length) return loadMoreUserRecent();
+    userRecentLoadMode = 'initial';
+    userRecentError.value = '';
+    void userRecent.reload();
   }
 
   function changeRecentFilter(filter: AdminRecentFilter) {

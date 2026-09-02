@@ -98,6 +98,31 @@ describe('浏览器插件按意图读取当前页', () => {
     );
   });
 
+  it('允许调用方把当前页正文读取量收紧到服务端接收上限', async () => {
+    queryTabs.mockResolvedValue([{ id: 31, url: 'https://example.com/article', title: '文章' }]);
+    requestPermission.mockResolvedValue(true);
+    executeScript.mockResolvedValue([
+      {
+        result: {
+          url: 'https://example.com/article',
+          title: '文章',
+          text: '正文内容',
+          truncated: false,
+        },
+      },
+    ]);
+    const target = await prepareCurrentPageTextCapture();
+
+    await captureCurrentPageText(target, 12_000);
+
+    expect(executeScript).toHaveBeenCalledWith(
+      expect.objectContaining({
+        target: { tabId: 31, frameIds: [0] },
+        args: [12_000],
+      }),
+    );
+  });
+
   it('用户拒绝当前网站权限时保留草稿并停止读取正文', async () => {
     requestPermission.mockResolvedValue(false);
     const target = {

@@ -2,6 +2,7 @@ import pool from '../../db/index.js';
 import { generateUUID } from '../agent/data.js';
 import { invalidateKnowledgeCache } from '../knowledgeService.js';
 import { finishAdminAction } from '../adminActionExecution.js';
+import { HELP_KNOWLEDGE_CATEGORY, normalizeKnowledgeHelpSection } from '../helpKnowledge.js';
 
 const STATUSES = new Set(['public', 'internal']);
 const TYPES = new Set(['html', 'markdown']);
@@ -27,14 +28,16 @@ function normalizeInput(input = {}, maxContentLength = 1_000_000) {
   const type = String(input.type || 'markdown');
   if (!STATUSES.has(status)) throw new Error('INVALID_STATUS: 状态仅支持 public 或 internal');
   if (!TYPES.has(type)) throw new Error('INVALID_TYPE: 内容类型仅支持 html 或 markdown');
-  return { title, content, category, status, type };
+  const helpSection = normalizeKnowledgeHelpSection(input.helpSection, category);
+  const helpSectionProvided = input.helpSection !== undefined && input.helpSection !== null;
+  return { title, content, category, helpSection, helpSectionProvided, status, type };
 }
 
 export async function findKnowledgeByTitle(title, connection = pool) {
   const normalizedTitle = String(title || '').trim();
   if (!normalizedTitle) return null;
   const [rows] = await connection.query(
-    'SELECT id, title, category, status, type FROM knowledge_base WHERE title = ? AND COALESCE(admin_archived, 0) = 0 LIMIT 1',
+    'SELECT id, title, category, help_section, status, type FROM knowledge_base WHERE title = ? AND COALESCE(admin_archived, 0) = 0 LIMIT 1',
     [normalizedTitle],
   );
   return rows[0] || null;
@@ -55,9 +58,13 @@ export async function upsertKnowledgeBase({
     const existing = await findKnowledgeByTitle(value.title, connection);
     if (existing) {
       if (createOnly) throw new Error('DUPLICATE_TITLE: 已存在同名知识条目');
+      const helpSection =
+        value.category === HELP_KNOWLEDGE_CATEGORY && !value.helpSectionProvided
+          ? existing.help_section || value.helpSection
+          : value.helpSection;
       await connection.query(
-        'UPDATE knowledge_base SET content = ?, category = ?, status = ?, type = ?, updated_by = ? WHERE id = ?',
-        [value.content, value.category, value.status, value.type, userId, existing.id],
+        'UPDATE knowledge_base SET content = ?, category = ?, help_section = ?, status = ?, type = ?, updated_by = ? WHERE id = ?',
+        [value.content, value.category, helpSection, value.status, value.type, userId, existing.id],
       );
       if (actionContext) actionContext.baseEntry.targetId = existing.id;
       const receipt = actionContext
@@ -75,13 +82,14 @@ export async function upsertKnowledgeBase({
     const [[sortRow]] = await connection.query('SELECT COALESCE(MAX(sort), -1) + 1 AS next_sort FROM knowledge_base');
     await connection.query(
       `INSERT INTO knowledge_base
-        (id, title, content, category, status, type, sort, created_by, updated_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, title, content, category, help_section, status, type, sort, created_by, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         value.title,
         value.content,
         value.category,
+        value.helpSection,
         value.status,
         value.type,
         Number(sortRow?.next_sort || 0),
@@ -132,12 +140,25 @@ export async function updateKnowledgeBaseById({
     params.push(content);
   }
   if (patch.category !== undefined) {
+    const category = String(patch.category || '')
+      .trim()
+      .slice(0, 50);
     fields.push('category = ?');
-    params.push(
-      String(patch.category || '')
-        .trim()
-        .slice(0, 50),
-    );
+    params.push(category);
+    if (patch.helpSection === undefined) {
+      fields.push('help_section = ?');
+      params.push(normalizeKnowledgeHelpSection(undefined, category));
+    }
+  }
+  if (patch.helpSection !== undefined) {
+    const category =
+      patch.category === undefined
+        ? HELP_KNOWLEDGE_CATEGORY
+        : String(patch.category || '')
+            .trim()
+            .slice(0, 50);
+    fields.push('help_section = ?');
+    params.push(normalizeKnowledgeHelpSection(patch.helpSection, category));
   }
   if (patch.status !== undefined) {
     const status = String(patch.status);
@@ -173,7 +194,9 @@ export async function updateKnowledgeBaseById({
       ? await finishAdminAction(actionContext, {
           outcome: 'succeeded',
           metadata: {
-            changedFields: Object.keys(patch).filter((key) => ['title', 'content', 'category', 'status', 'type'].includes(key)),
+            changedFields: Object.keys(patch).filter((key) =>
+              ['title', 'content', 'category', 'helpSection', 'status', 'type'].includes(key),
+            ),
             resultingStatus: patch.status || null,
           },
           db: connection,

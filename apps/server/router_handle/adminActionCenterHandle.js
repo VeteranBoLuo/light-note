@@ -3,11 +3,16 @@ import { resultData } from '../util/common.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { recordAdminOperationAudit } from '../util/adminOperationAudit.js';
 import {
+  ACCOUNT_DELETION_STALE_PROCESSING_MINUTES,
+  isAccountDeletionRequestStalled,
+} from '../util/accountDeletionPolicy.js';
+import {
   ADMIN_WORK_ITEM_POLICY_VERSION,
   enrichAdminWorkItems,
   getAdminWorkItemPolicy,
   summarizeAdminWorkItems,
 } from '../util/adminWorkItemPolicy.js';
+import { getOperatorReviewGovernanceRules } from '../util/resourceGovernance/registry.js';
 
 const DEFAULT_ITEM_LIMIT = 20;
 const MAX_ITEM_LIMIT = 60;
@@ -344,33 +349,53 @@ async function loadFeatureRequestWork(limit) {
 }
 
 async function loadResourceGovernanceWork(limit) {
+  const reviewRules = getOperatorReviewGovernanceRules().sort((left, right) => {
+    const priority = { critical: 0, high: 1, normal: 2 };
+    return (priority[left.operatorReviewSeverity] ?? 3) - (priority[right.operatorReviewSeverity] ?? 3);
+  });
+  if (!reviewRules.length) return workResult('resource_governance', '资源复核', 0, 0, []);
+  const ruleByIssueCode = new Map(reviewRules.map((rule) => [rule.issueCode, rule]));
+  const issueCodes = reviewRules.map((rule) => rule.issueCode);
+  const placeholders = issueCodes.map(() => '?').join(',');
   const [[summaryRows], [rows]] = await Promise.all([
     pool.query(
-      `SELECT COUNT(*) AS total,
-              COALESCE(SUM(risk_level = 'blocked'), 0) AS critical
-         FROM resource_governance_findings
-        WHERE state = 'open' AND risk_level IN ('review', 'blocked')`,
+      `SELECT issue_code, COUNT(*) AS total
+       FROM resource_governance_findings
+        WHERE state = 'open'
+          AND issue_code IN (${placeholders})
+        GROUP BY issue_code`,
+      issueCodes,
     ),
     pool.query(
       `SELECT id, issue_code, resource_type, risk_level, estimated_bytes,
               observation_count, first_seen_at, last_seen_at
          FROM resource_governance_findings
-        WHERE state = 'open' AND risk_level IN ('review', 'blocked')
-        ORDER BY (risk_level = 'blocked') DESC, first_seen_at ASC, id ASC
+        WHERE state = 'open'
+          AND issue_code IN (${placeholders})
+        ORDER BY FIELD(issue_code, ${placeholders}) ASC, first_seen_at ASC, id ASC
         LIMIT ?`,
-      [limit],
+      [...issueCodes, ...issueCodes, limit],
     ),
   ]);
+  const total = summaryRows.reduce((sum, row) => sum + number(row.total), 0);
+  const critical = summaryRows.reduce(
+    (sum, row) =>
+      sum +
+      (ruleByIssueCode.get(String(row.issue_code || ''))?.operatorReviewSeverity === 'critical'
+        ? number(row.total)
+        : 0),
+    0,
+  );
   return workResult(
     'resource_governance',
     '资源复核',
-    summaryRows[0]?.total,
-    summaryRows[0]?.critical,
+    total,
+    critical,
     rows.map((row) => ({
       id: String(row.id),
       source: 'resource_governance',
       status: 'pending',
-      severity: row.risk_level === 'blocked' ? 'critical' : 'high',
+      severity: ruleByIssueCode.get(String(row.issue_code || ''))?.operatorReviewSeverity || 'normal',
       title: row.issue_code || '资源治理发现',
       ownerLabel: row.resource_type || '',
       userId: null,
@@ -823,8 +848,12 @@ async function loadAccountDeletionJobs(limit) {
       `SELECT
          COUNT(*) AS total,
          COALESCE(SUM(status = 'retry_wait'
-           OR (status = 'processing' AND processing_started_at < DATE_SUB(NOW(), INTERVAL 15 MINUTE))), 0) AS attention,
-         COALESCE(SUM(status = 'processing' AND (processing_started_at IS NULL OR processing_started_at >= DATE_SUB(NOW(), INTERVAL 15 MINUTE))), 0) AS running,
+           OR (status = 'processing' AND (
+             processing_started_at IS NULL
+             OR processing_started_at < DATE_SUB(NOW(), INTERVAL ${ACCOUNT_DELETION_STALE_PROCESSING_MINUTES} MINUTE)
+           ))), 0) AS attention,
+         COALESCE(SUM(status = 'processing'
+           AND processing_started_at >= DATE_SUB(NOW(), INTERVAL ${ACCOUNT_DELETION_STALE_PROCESSING_MINUTES} MINUTE)), 0) AS running,
          COALESCE(SUM(status = 'pending'), 0) AS waiting,
          COALESCE(SUM(status = 'completed' AND completed_at >= DATE_SUB(NOW(), INTERVAL 1 DAY)), 0) AS completed_24h
        FROM account_deletion_requests
@@ -845,10 +874,7 @@ async function loadAccountDeletionJobs(limit) {
     '注销清理',
     summaryRows[0] || {},
     rows.map((row) => {
-      const stale =
-        row.status === 'processing' &&
-        row.processing_started_at &&
-        Date.now() - new Date(row.processing_started_at).getTime() > 15 * 60_000;
+      const stale = isAccountDeletionRequestStalled(row);
       return {
         id: String(row.id),
         source: 'account_deletion',

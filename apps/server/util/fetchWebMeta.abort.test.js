@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const axiosGet = vi.hoisted(() => vi.fn());
 vi.mock('axios', () => ({ default: { get: (...args) => axiosGet(...args) } }));
 
-const { checkUrlLiveness, extractReadableBodyText, fetchWebMeta } = await import('./fetchWebMeta.js');
+const { checkUrlLiveness, classifyWebPageSnapshot, extractReadableBodyText, fetchWebMeta } =
+  await import('./fetchWebMeta.js');
 
 describe('fetchWebMeta', () => {
   beforeEach(() => {
@@ -109,6 +110,167 @@ describe('fetchWebMeta', () => {
       ok: false,
       reason: 'ACCESS_CHALLENGE',
     });
+  });
+
+  it('按通用脚本与 Cookie/reload 特征识别访问挑战，不依赖站点域名', async () => {
+    axiosGet.mockResolvedValueOnce({
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+      data: Buffer.from(`
+        <html><head></head><body></body><script>
+          document.cookie = '__ac_signature=' + createSignature();
+          window.location.reload();
+        </script></html>`),
+    });
+
+    await expect(fetchWebMeta('https://video.example.com/share/1')).resolves.toEqual({
+      ok: false,
+      reason: 'ACCESS_CHALLENGE',
+    });
+  });
+
+  it('静态 HTML 是脚本空壳时调用通用渲染兜底，并标记 rendered_dom 来源', async () => {
+    axiosGet.mockResolvedValueOnce({
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+      data: Buffer.from('<html><body><div id="app"></div><script src="/app.js"></script></body></html>'),
+    });
+    const renderer = vi.fn().mockResolvedValue({
+      ok: true,
+      url: 'https://video.example.com/video/1',
+      status: 200,
+      contentType: 'text/html; charset=utf-8',
+      documentTitle: '浏览器渲染标题',
+      meta: { 'og:description': '浏览器渲染后得到的真实描述' },
+      jsonLd: [],
+      bodyText: '这是浏览器执行页面脚本后得到的真实正文内容。',
+      signals: { scriptCount: 3, diagnosticText: '真实正文', noscriptText: '', passwordInput: false },
+    });
+
+    await expect(
+      fetchWebMeta('https://video.example.com/share/1', { renderFallback: true, renderer }),
+    ).resolves.toMatchObject({
+      ok: true,
+      url: 'https://video.example.com/video/1',
+      title: '浏览器渲染标题',
+      description: '浏览器渲染后得到的真实描述',
+      source: 'rendered_dom',
+    });
+    expect(renderer).toHaveBeenCalledWith(
+      'https://video.example.com/share/1',
+      expect.objectContaining({ bodyLimit: 2000, timeout: 12000 }),
+    );
+  });
+
+  it('浏览器渲染后仍是访问验证页时返回真实失败原因，不把验证文案当元信息', async () => {
+    axiosGet.mockResolvedValueOnce({
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+      data: Buffer.from('<html><body><div id="app"></div><script src="/app.js"></script></body></html>'),
+    });
+    const renderer = vi.fn().mockResolvedValue({
+      ok: true,
+      url: 'https://video.example.com/verify',
+      status: 200,
+      documentTitle: '安全验证',
+      meta: {},
+      jsonLd: [],
+      bodyText: '请完成人机验证',
+      signals: { scriptCount: 4, diagnosticText: 'captcha security check', passwordInput: false },
+    });
+
+    await expect(
+      fetchWebMeta('https://video.example.com/share/1', { renderFallback: true, renderer }),
+    ).resolves.toEqual({ ok: false, reason: 'ACCESS_CHALLENGE', staticReason: 'JS_REQUIRED' });
+  });
+
+  it('桌面渲染仍是加载空壳时，用同一通用规则尝试移动页面', async () => {
+    axiosGet.mockResolvedValueOnce({
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+      data: Buffer.from('<html><body><div id="app"></div><script src="/app.js"></script></body></html>'),
+    });
+    const renderer = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        url: 'https://example.com/content/1',
+        status: 200,
+        documentTitle: '',
+        meta: {},
+        jsonLd: [],
+        bodyText: '视频数据加载中',
+        signals: { scriptCount: 10, diagnosticText: 'loading' },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        url: 'https://m.example.com/content/1?tracking=1',
+        status: 200,
+        documentTitle: '移动页真实标题',
+        meta: { description: '移动页面提供的真实内容描述' },
+        canonicalUrl: 'https://example.com/content/1',
+        jsonLd: [],
+        bodyText: '移动页面中已经渲染完成的真实正文内容。',
+        signals: { scriptCount: 3, diagnosticText: '真实正文' },
+      });
+
+    await expect(
+      fetchWebMeta('https://example.com/share/1', { renderFallback: true, renderer }),
+    ).resolves.toMatchObject({
+      ok: true,
+      url: 'https://example.com/content/1',
+      title: '移动页真实标题',
+      source: 'rendered_dom',
+    });
+    expect(renderer.mock.calls.map(([, options]) => options.profile)).toEqual(['desktop', 'mobile']);
+  });
+
+  it('从标准 JSON-LD 补全静态页面元信息和正文', async () => {
+    axiosGet.mockResolvedValueOnce({
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+      data: Buffer.from(
+        `<html><body><script type="application/ld+json">${JSON.stringify({
+          '@type': 'VideoObject',
+          name: '结构化视频标题',
+          description: '结构化视频描述',
+          text: '结构化数据中提供的正文摘要。',
+          keywords: ['视频', '教程'],
+        })}</script></body></html>`,
+      ),
+    });
+
+    await expect(fetchWebMeta('https://example.com/video/1')).resolves.toMatchObject({
+      ok: true,
+      title: '结构化视频标题',
+      description: '结构化视频描述',
+      bodyText: '结构化数据中提供的正文摘要。',
+      keywords: '视频, 教程',
+      source: 'static_html',
+    });
+  });
+
+  it('登录表单与脚本空壳分开判型', () => {
+    expect(
+      classifyWebPageSnapshot({
+        bodyText: '请先登录后查看',
+        passwordInput: true,
+        scriptCount: 2,
+        diagnosticText: '<form action="/login"><input type="password"></form>',
+      }),
+    ).toBe('AUTH_REQUIRED');
+    expect(
+      classifyWebPageSnapshot({
+        title: '通用页面标题',
+        description: '这是一段看似完整但其实来自错误页的默认描述',
+        bodyText: '抱歉出错了，请尝试在客户端内观看',
+        scriptCount: 20,
+      }),
+    ).toBe('ACCESS_DENIED');
+  });
+
+  it('只把短错误页判为拒绝访问，不误伤正文里引用错误提示的文章', () => {
+    expect(
+      classifyWebPageSnapshot({
+        title: '客户端错误处理指南',
+        bodyText: `页面可能显示“抱歉出错了”，这通常表示客户端未完成初始化。${'后续排查步骤与恢复建议。'.repeat(20)}`,
+      }),
+    ).toBe('');
   });
 
   it('在发起网络请求前拒绝带账号密码的 URL', async () => {

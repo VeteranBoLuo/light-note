@@ -30,6 +30,23 @@ const PUBLIC_AI_EXECUTION_ERRORS = Object.freeze({
   },
   AI_SKILL_STRUCTURED_OUTPUT_MISSING: { status: 502, message: 'AI 没有返回可用草稿，请重新生成' },
   AI_SKILL_STRUCTURED_OUTPUT_INVALID: { status: 502, message: 'AI 返回的草稿格式未通过校验，请重新生成' },
+  BOOKMARK_PAGE_AUTH_REQUIRED: {
+    status: 422,
+    message: '该网页需要登录后才能查看，轻笺不会使用你的站点账号或 Cookie，请手动填写书签信息',
+  },
+  BOOKMARK_PAGE_ACCESS_PROTECTED: {
+    status: 422,
+    message: '网页触发了访问验证或拒绝自动读取，请稍后重试或手动填写书签信息',
+  },
+  BOOKMARK_PAGE_RENDERER_UNAVAILABLE: {
+    status: 503,
+    message: '当前服务暂时无法渲染这类动态网页，请稍后重试或手动填写书签信息',
+  },
+  BOOKMARK_PAGE_RENDERER_BUSY: { status: 503, message: '动态网页读取任务较多，请稍后重试' },
+  BOOKMARK_PAGE_READ_TEMPORARY: { status: 503, message: '网页读取超时或暂时受限，请稍后重试' },
+  BOOKMARK_PAGE_NOT_HTML: { status: 422, message: '该链接不是可自动识别的网页，请手动填写书签信息' },
+  BOOKMARK_PAGE_URL_BLOCKED: { status: 400, message: '出于安全原因，轻笺不能读取该地址' },
+  BOOKMARK_PAGE_UNREADABLE: { status: 422, message: '未能从该网页读取到可靠内容，请手动填写书签信息' },
   UNSUPPORTED_FILE_TYPE: { status: 400, message: '该文件格式暂不支持 AI 解析' },
   FILE_TOO_LARGE: { status: 400, message: '文件超过 20MB，暂时无法用于 AI 分析' },
   FILE_TYPE_MISMATCH: { status: 400, message: '文件扩展名与实际类型不一致，无法安全解析' },

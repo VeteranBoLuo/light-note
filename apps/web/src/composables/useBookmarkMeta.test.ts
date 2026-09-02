@@ -224,6 +224,26 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
     expect(messageError).toHaveBeenCalledWith('当前账号不能使用该 AI 能力');
   });
 
+  it('网页访问验证失败时展示明确原因，且不回填推测内容', async () => {
+    apiBasePost.mockRejectedValueOnce({
+      response: {
+        status: 422,
+        data: {
+          status: 422,
+          msg: '网页触发了访问验证或拒绝自动读取，请稍后重试或手动填写书签信息',
+          data: { code: 'BOOKMARK_PAGE_ACCESS_PROTECTED' },
+        },
+      },
+    });
+    const t = setup([]);
+
+    await t.generateBookmarkMeta();
+
+    expect(messageError).toHaveBeenCalledWith('网页触发了访问验证或拒绝自动读取，请稍后重试或手动填写书签信息');
+    expect(t.bookmarkData.value.name).toBe('');
+    expect(t.bookmarkData.value.description).toBe('');
+  });
+
   it('未知本地异常继续使用安全兜底，不展示技术错误内容', async () => {
     preflightBookmarkUrl.mockRejectedValueOnce(new Error('internal implementation detail'));
     const t = setup([]);

@@ -43,6 +43,18 @@ describe('resolveNoteDetailReturnPath', () => {
     );
   });
 
+  it('允许整理中心作为明确来源并保留当前问题视图', () => {
+    expect(resolveNoteDetailReturnPath('/organize?issue=knowledge_structure')).toBe(
+      '/organize?issue=knowledge_structure',
+    );
+  });
+
+  it('允许知识结构完整整理页作为明确来源', () => {
+    expect(resolveNoteDetailReturnPath('/toolbox/knowledge_structure_audit')).toBe(
+      '/toolbox/knowledge_structure_audit',
+    );
+  });
+
   it('允许具体工具任务作为明确来源，但拒绝模糊的工具入口', () => {
     expect(resolveNoteDetailReturnPath('/toolbox/task/job-1?tab=output#result')).toBe(
       '/toolbox/task/job-1?tab=output#result',
@@ -65,7 +77,7 @@ describe('resolveNoteDetailReturnPath', () => {
     expect(resolveNoteDetailReturnPath(child)).toBe(source);
   });
 
-  it.each(['/search', '/inbox', 'https://example.com/workbenches', '//example.com/workbenches'])(
+  it.each(['/search', '/inbox', '/organize/other', 'https://example.com/workbenches', '//example.com/workbenches'])(
     '拒绝未授权的返回来源：%s',
     (path) => {
       expect(resolveNoteDetailReturnPath(path)).toBe('');

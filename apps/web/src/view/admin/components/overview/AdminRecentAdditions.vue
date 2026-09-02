@@ -30,51 +30,68 @@
       </div>
     </div>
 
-    <div v-if="loading && !data" class="admin-recent__grid" aria-busy="true">
-      <BCard v-for="card in skeletonCardCount" :key="card" variant="panel" padding="16px" class="admin-recent__card">
-        <div class="admin-recent__skeleton-title"></div>
-        <div v-for="row in 6" :key="row" class="admin-recent__skeleton-row">
-          <span></span>
-          <div><i></i><i></i></div>
-        </div>
-      </BCard>
-    </div>
-
-    <BCard v-else-if="error && !data" variant="panel" padding="20px" class="admin-recent__error">
-      <p>{{ t('adminOverviewRecent.loadFailed') }}</p>
-      <BButton size="small" @click="emit('retry')">{{ t('common.retry') }}</BButton>
-    </BCard>
-
-    <div v-else class="admin-recent__grid" :class="{ 'is-single': !(showResources && showUsers) }">
+    <div class="admin-recent__grid" :class="{ 'is-single': !(showResources && showUsers) }" :aria-busy="loading">
       <BCard v-if="showResources" variant="panel" padding="0" class="admin-recent__card admin-recent__card--resources">
         <template #title>
           <span class="admin-recent__card-title">{{ resourceCardTitle }}</span>
         </template>
-        <template v-if="recentResources.length">
-          <ul class="admin-recent__list">
-            <li v-for="item in recentResources" :key="`${item.type}:${item.id}`" class="admin-recent__row">
-              <span
-                class="admin-recent__resource-icon"
-                :style="{ color: `var(${RESOURCE_COLOR_CSS_VAR[item.type]})` }"
-                aria-hidden="true"
-              >
-                <SvgIcon :src="icon.resource[item.type]" size="19" />
-              </span>
-              <div class="admin-recent__body">
-                <strong :title="displayResourceTitle(item)">{{ displayResourceTitle(item) }}</strong>
-                <span>
-                  <BChip :tone="item.type">{{ resourceLabel(item.type) }}</BChip>
-                  <span class="admin-recent__owner">{{ displayUserName(item.userName) }}</span>
-                  <span v-if="displayUserRemark(item.userRemark)" class="admin-recent__remark">
-                    {{ t('adminOverviewRecent.userRemark', { remark: displayUserRemark(item.userRemark) }) }}
-                  </span>
+        <div v-if="resourceInitialLoading" class="admin-recent__skeleton-list">
+          <div v-for="row in 6" :key="row" class="admin-recent__skeleton-row">
+            <span></span>
+            <div><i></i><i></i></div>
+          </div>
+        </div>
+        <div v-else-if="resourceInitialError" class="admin-recent__stream-error" role="status">
+          <span>{{ t('adminOverviewRecent.loadFailedResources') }}</span>
+          <BButton size="small" @click="emit('retryResource')">{{ t('common.retry') }}</BButton>
+        </div>
+        <template v-else-if="recentResources.length">
+          <BVirtualList
+            class="admin-recent__list"
+            :items="virtualResources"
+            item-key="virtualKey"
+            :item-height="rowHeight"
+            :overscan="8"
+            :loading="resourceLoading"
+            :loading-text="t('adminOverviewRecent.loadingMore')"
+            :has-more="resourceHasMore && !resourceAppendError"
+            scroll-mode="ancestor"
+            role="list"
+            :aria-label="resourceCardTitle"
+            @load-more="emit('loadMoreResource')"
+          >
+            <template #default="{ item }">
+              <div class="admin-recent__row" role="listitem">
+                <span
+                  class="admin-recent__resource-icon"
+                  :style="{ color: `var(${RESOURCE_COLOR_CSS_VAR[item.type]})` }"
+                  aria-hidden="true"
+                >
+                  <SvgIcon :src="icon.resource[item.type]" size="19" />
                 </span>
+                <div class="admin-recent__body">
+                  <strong :title="displayResourceTitle(item)">{{ displayResourceTitle(item) }}</strong>
+                  <span>
+                    <BChip :tone="item.type">{{ resourceLabel(item.type) }}</BChip>
+                    <span class="admin-recent__owner">{{ displayUserName(item.userName) }}</span>
+                    <span v-if="displayUserRemark(item.userRemark)" class="admin-recent__remark">
+                      {{ t('adminOverviewRecent.userRemark', { remark: displayUserRemark(item.userRemark) }) }}
+                    </span>
+                  </span>
+                </div>
+                <BTooltip :title="formatFullTime(item.createdAt)">
+                  <time class="admin-recent__time" :datetime="item.createdAt">{{ formatTime(item.createdAt) }}</time>
+                </BTooltip>
               </div>
-              <BTooltip :title="formatFullTime(item.createdAt)">
-                <time class="admin-recent__time" :datetime="item.createdAt">{{ formatTime(item.createdAt) }}</time>
-              </BTooltip>
-            </li>
-          </ul>
+            </template>
+          </BVirtualList>
+          <div v-if="resourceAppendError" class="admin-recent__stream-footer is-error" role="status">
+            <span>{{ t('adminOverviewRecent.loadMoreFailed') }}</span>
+            <BButton size="small" @click="emit('retryResource')">{{ t('common.retry') }}</BButton>
+          </div>
+          <p v-else-if="resourceAllLoaded" class="admin-recent__stream-footer">
+            {{ t('adminOverviewRecent.allLoaded') }}
+          </p>
         </template>
         <p v-else class="admin-recent__empty">{{ t('adminOverviewRecent.emptyResources') }}</p>
       </BCard>
@@ -88,24 +105,55 @@
             {{ t('adminOverviewRecent.userManagement') }}
           </BButton>
         </template>
-        <template v-if="recentUsers.length">
-          <ul class="admin-recent__list">
-            <li v-for="user in recentUsers" :key="user.id" class="admin-recent__row">
-              <span class="admin-recent__avatar" aria-hidden="true">{{ userInitial(user.name) }}</span>
-              <div class="admin-recent__body">
-                <strong :title="displayUserName(user.name)">{{ displayUserName(user.name) }}</strong>
-                <span>
-                  <BChip tone="neutral">{{ roleLabel(user.role) }}</BChip>
-                  <span v-if="displayUserRemark(user.userRemark)" class="admin-recent__remark">
-                    {{ t('adminOverviewRecent.userRemark', { remark: displayUserRemark(user.userRemark) }) }}
+        <div v-if="userInitialLoading" class="admin-recent__skeleton-list">
+          <div v-for="row in 6" :key="row" class="admin-recent__skeleton-row">
+            <span></span>
+            <div><i></i><i></i></div>
+          </div>
+        </div>
+        <div v-else-if="userInitialError" class="admin-recent__stream-error" role="status">
+          <span>{{ t('adminOverviewRecent.loadFailedUsers') }}</span>
+          <BButton size="small" @click="emit('retryUser')">{{ t('common.retry') }}</BButton>
+        </div>
+        <template v-else-if="recentUsers.length">
+          <BVirtualList
+            class="admin-recent__list"
+            :items="recentUsers"
+            :item-height="rowHeight"
+            :overscan="8"
+            :loading="userLoading"
+            :loading-text="t('adminOverviewRecent.loadingMore')"
+            :has-more="userHasMore && !userAppendError"
+            scroll-mode="ancestor"
+            role="list"
+            :aria-label="userCardTitle"
+            @load-more="emit('loadMoreUser')"
+          >
+            <template #default="{ item: user }">
+              <div class="admin-recent__row" role="listitem">
+                <span class="admin-recent__avatar" aria-hidden="true">{{ userInitial(user.name) }}</span>
+                <div class="admin-recent__body">
+                  <strong :title="displayUserName(user.name)">{{ displayUserName(user.name) }}</strong>
+                  <span>
+                    <BChip tone="neutral">{{ roleLabel(user.role) }}</BChip>
+                    <span v-if="displayUserRemark(user.userRemark)" class="admin-recent__remark">
+                      {{ t('adminOverviewRecent.userRemark', { remark: displayUserRemark(user.userRemark) }) }}
+                    </span>
                   </span>
-                </span>
+                </div>
+                <BTooltip :title="formatFullTime(user.createdAt)">
+                  <time class="admin-recent__time" :datetime="user.createdAt">{{ formatTime(user.createdAt) }}</time>
+                </BTooltip>
               </div>
-              <BTooltip :title="formatFullTime(user.createdAt)">
-                <time class="admin-recent__time" :datetime="user.createdAt">{{ formatTime(user.createdAt) }}</time>
-              </BTooltip>
-            </li>
-          </ul>
+            </template>
+          </BVirtualList>
+          <div v-if="userAppendError" class="admin-recent__stream-footer is-error" role="status">
+            <span>{{ t('adminOverviewRecent.loadMoreFailed') }}</span>
+            <BButton size="small" @click="emit('retryUser')">{{ t('common.retry') }}</BButton>
+          </div>
+          <p v-else-if="userAllLoaded" class="admin-recent__stream-footer">
+            {{ t('adminOverviewRecent.allLoaded') }}
+          </p>
         </template>
         <p v-else class="admin-recent__empty">{{ t('adminOverviewRecent.emptyUsers') }}</p>
       </BCard>
@@ -124,6 +172,7 @@
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import BVirtualList from '@/components/base/BasicComponents/BVirtualList.vue';
   import type {
     AdminRecentData,
     AdminRecentFilter,
@@ -136,15 +185,23 @@
   const props = defineProps<{
     data: AdminRecentData | null;
     loading?: boolean;
-    error?: boolean;
     stacked?: boolean;
     mobile?: boolean;
     filter?: AdminRecentFilter;
     filteredTotal?: number | null;
+    resourceLoading?: boolean;
+    userLoading?: boolean;
+    resourceHasMore?: boolean;
+    userHasMore?: boolean;
+    resourceError?: 'initial' | 'append' | '';
+    userError?: 'initial' | 'append' | '';
   }>();
 
   const emit = defineEmits<{
-    retry: [];
+    retryResource: [];
+    retryUser: [];
+    loadMoreResource: [];
+    loadMoreUser: [];
     viewUsers: [];
     filterChange: [filter: AdminRecentFilter];
   }>();
@@ -156,9 +213,29 @@
   const activeFilter = computed<AdminRecentFilter>(() => props.filter || { period: 'recent', type: 'all' });
   const recentResources = computed(() => props.data?.recentResources || []);
   const recentUsers = computed(() => props.data?.recentUsers || []);
+  const virtualResources = computed(() =>
+    recentResources.value.map((item) => ({ ...item, virtualKey: `${item.type}:${item.id}` })),
+  );
   const showResources = computed(() => activeFilter.value.type !== 'user');
   const showUsers = computed(() => ['all', 'user'].includes(activeFilter.value.type));
-  const skeletonCardCount = computed(() => (showResources.value && showUsers.value ? 2 : 1));
+  const rowHeight = computed(() => (props.mobile ? 66 : 58));
+  const resourceLoading = computed(() => props.resourceLoading ?? props.loading ?? false);
+  const userLoading = computed(() => props.userLoading ?? props.loading ?? false);
+  const resourceError = computed(() => props.resourceError || '');
+  const userError = computed(() => props.userError || '');
+  const resourceInitialLoading = computed(() => resourceLoading.value && !recentResources.value.length);
+  const userInitialLoading = computed(() => userLoading.value && !recentUsers.value.length);
+  const resourceInitialError = computed(() => resourceError.value === 'initial' && !recentResources.value.length);
+  const userInitialError = computed(() => userError.value === 'initial' && !recentUsers.value.length);
+  const resourceAppendError = computed(() => resourceError.value === 'append');
+  const userAppendError = computed(() => userError.value === 'append');
+  const resourceHasMore = computed(() => props.resourceHasMore ?? false);
+  const userHasMore = computed(() => props.userHasMore ?? false);
+  const loadedPageSize = computed(() => Number(props.data?.limit || 20));
+  const resourceAllLoaded = computed(
+    () => recentResources.value.length >= loadedPageSize.value && !resourceHasMore.value,
+  );
+  const userAllLoaded = computed(() => recentUsers.value.length >= loadedPageSize.value && !userHasMore.value);
   const periodOptions = computed(() => [
     { value: 'recent', label: t('adminOverviewRecent.filters.periodRecent') },
     { value: 'today', label: t('adminOverviewRecent.filters.periodToday') },
@@ -173,10 +250,9 @@
   ]);
   const sectionSubtitle = computed(() => {
     if (activeFilter.value.period !== 'today') return t('adminOverviewRecent.subtitle');
-    const limit = Number(props.data?.limit || 20);
     return props.filteredTotal == null
-      ? t('adminOverviewRecent.todaySubtitle', { limit })
-      : t('adminOverviewRecent.todaySubtitleWithTotal', { count: props.filteredTotal, limit });
+      ? t('adminOverviewRecent.todaySubtitle')
+      : t('adminOverviewRecent.todaySubtitleWithTotal', { count: props.filteredTotal });
   });
   const resourceCardTitle = computed(() => {
     const { period, type } = activeFilter.value;
@@ -363,19 +439,18 @@
     list-style: none;
   }
 
+  .admin-recent__list :deep(.b-virtual-list__item) {
+    border-bottom: 1px solid var(--surface-border-color, var(--card-border-color));
+  }
+
   .admin-recent__row {
     min-width: 0;
-    min-height: 58px;
+    height: 100%;
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 8px 14px;
     box-sizing: border-box;
-    border-bottom: 1px solid var(--surface-border-color, var(--card-border-color));
-
-    &:last-child {
-      border-bottom: 0;
-    }
   }
 
   .admin-recent__resource-icon,
@@ -449,7 +524,8 @@
   }
 
   .admin-recent__empty,
-  .admin-recent__error {
+  .admin-recent__stream-error,
+  .admin-recent__stream-footer {
     color: var(--sub-text-color);
     font-size: 12px;
   }
@@ -462,30 +538,35 @@
     margin: 0;
   }
 
-  .admin-recent__error {
+  .admin-recent__stream-error,
+  .admin-recent__stream-footer {
+    min-height: 44px;
+    margin: 0;
+    padding: 8px 14px;
+    box-sizing: border-box;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-
-    p {
-      margin: 0;
-    }
+    justify-content: center;
+    gap: 10px;
+    text-align: center;
   }
 
-  .admin-recent__skeleton-title,
+  .admin-recent__stream-error,
+  .admin-recent__stream-footer.is-error {
+    color: var(--danger-color);
+    border-top: 1px solid var(--danger-color);
+  }
+
+  .admin-recent__skeleton-list {
+    padding: 0 14px;
+  }
+
   .admin-recent__skeleton-row span,
   .admin-recent__skeleton-row i {
     display: block;
     border-radius: 8px;
     background: var(--skeleton-background, var(--menu-item-h-bg-color));
     animation: admin-recent-pulse 1.25s ease-in-out infinite alternate;
-  }
-
-  .admin-recent__skeleton-title {
-    width: 108px;
-    height: 18px;
-    margin-bottom: 14px;
   }
 
   .admin-recent__skeleton-row {

@@ -52,6 +52,60 @@ async function flushExecution() {
   await nextTick();
 }
 
+function mountPromptPanel(overrides: Record<string, unknown> = {}) {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const app = createApp({
+    render: () =>
+      h(AiSkillPanel, {
+        title: '问问轻笺助手',
+        skillId: 'help.answer',
+        surface: 'help.center',
+        showPrompt: true,
+        submitLabel: '提问',
+        ...overrides,
+      }),
+  });
+  app.use(
+    createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: {
+        'zh-CN': {
+          aiSkills: {
+            processing: '处理中',
+            retry: '重试',
+            unavailableTitle: '暂不可用',
+            unavailableDescription: '请稍后重试',
+            errorTitle: '执行失败',
+            quotaErrorTitle: '额度不足',
+            retryLater: '请稍后重试',
+            send: '发送',
+            stop: '停止',
+            promptPlaceholder: '请输入',
+            sources: '来源 {count}',
+            sourceFallback: '来源 {index}',
+          },
+        },
+      },
+    }),
+  );
+  app.mount(host);
+  cleanup = () => {
+    app.unmount();
+    host.remove();
+  };
+  return host;
+}
+
+async function enterPrompt(host: HTMLElement, value: string) {
+  const textarea = host.querySelector('textarea') as HTMLTextAreaElement;
+  textarea.value = value;
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  await nextTick();
+  return textarea;
+}
+
 afterEach(() => {
   cleanup?.();
   cleanup = undefined;
@@ -275,5 +329,38 @@ describe('AiSkillPanel 自动执行预设动作', () => {
     expect(host.textContent).toContain('3 项暂无可读正文');
     expect(host.textContent).toContain('5 项仅使用元数据');
     expect(host.textContent).toContain('2 项正文按单项预算截取');
+  });
+});
+
+describe('AiSkillPanel 手动提问草稿', () => {
+  it('显式启用后仅在回答成功时清空输入，并可同时隐藏引用角标与来源条', async () => {
+    const response = completedResponse('help.answer');
+    response.result = { kind: 'grounded_markdown', content: '满级每日额度为 80 万 [1]' };
+    executeAiSkill.mockResolvedValueOnce(response);
+    const host = mountPromptPanel({ clearPromptOnSuccess: true, showGrounding: false });
+    const textarea = await enterPrompt(host, '不同等级的权益是什么？');
+
+    const submit = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('提问'));
+    submit?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(textarea.value).toBe('不同等级的权益是什么？');
+    await flushExecution();
+
+    expect(textarea.value).toBe('');
+    expect(host.textContent).toContain('满级每日额度为 80 万');
+    expect(host.textContent).not.toContain('[1]');
+    expect(host.textContent).not.toContain('来源 1');
+  });
+
+  it('回答失败时保留原问题，方便修改或重试', async () => {
+    executeAiSkill.mockRejectedValueOnce(Object.assign(new Error('暂时无法回答'), { code: 'HELP_FAILED' }));
+    const host = mountPromptPanel({ clearPromptOnSuccess: true });
+    const textarea = await enterPrompt(host, '怎么导出笔记？');
+
+    const submit = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('提问'));
+    submit?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushExecution();
+
+    expect(textarea.value).toBe('怎么导出笔记？');
+    expect(host.textContent).toContain('暂时无法回答');
   });
 });

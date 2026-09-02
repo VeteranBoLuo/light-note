@@ -24,6 +24,18 @@ export default Object.freeze({
   validateInput: validateBookmarkParseInput,
   async prepare({ input, context, dependencies = {} }) {
     const resolution = requireBookmarkUrl(input.url, { allowTextExtraction: true });
+    let pageContext = null;
+    if (input.pageContext) {
+      const contextResolution = requireBookmarkUrl(input.pageContext.url, { allowTextExtraction: false });
+      if (contextResolution.canonicalUrl !== resolution.canonicalUrl) {
+        throw aiSkillError(
+          'AI_SKILL_BOOKMARK_CONTEXT_URL_MISMATCH',
+          '当前页内容与要识别的网址不一致，请重新读取当前页面',
+          400,
+        );
+      }
+      pageContext = input.pageContext;
+    }
     const database = dependencies.database || pool;
     const [tagRows] = await database.query('SELECT id, name FROM tag WHERE user_id = ? AND del_flag = 0', [
       context.identity.subjectUserId,
@@ -37,6 +49,7 @@ export default Object.freeze({
       async callModel({ trace }) {
         const result = await suggest({
           url: resolution.canonicalUrl,
+          pageContext,
           userTags,
           signal: dependencies.signal,
           trace,

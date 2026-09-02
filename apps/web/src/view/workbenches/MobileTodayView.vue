@@ -151,7 +151,7 @@
   import GrowthTasks from '@/components/growth/GrowthTasks.vue';
   import icon from '@/config/icon';
   import { apiBasePost } from '@/http/request';
-  import { inboxStore, useUserStore } from '@/store';
+  import { inboxStore, organizeStore, useUserStore } from '@/store';
   import type { ActionCaptureType } from '@/store/inbox';
   import type { TodoItem } from '@/api/todoApi';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
@@ -180,6 +180,7 @@
   const { t, locale } = useI18n();
   const router = useRouter();
   const inbox = inboxStore();
+  const organizer = organizeStore();
   const user = useUserStore();
   const scrollRef = ref<HTMLElement | null>(null);
   const { dashboard, growthTasks, loadDashboard, loadGrowthTasks, loadClaimable } = useGrowth();
@@ -207,6 +208,11 @@
   const inboxItems = ref<TodayInboxItem[]>([]);
   const continueItems = ref<TodayContinueItem[]>([]);
   const counts = ref({ overdue: 0, dueToday: 0, inbox: 0, todoPending: 0, unreadNotification: 0 });
+  const organizeOwnerKey = computed(() =>
+    [user.id || 'visitor', user.role || '', user.adminContext?.subjectUserId || '', user.adminContext?.mode || ''].join(
+      '|',
+    ),
+  );
   let todayRequestId = 0;
   let currentTodayRequest: Promise<void> | null = null;
 
@@ -250,10 +256,10 @@
       icon: icon.noteDetail.toolbar.todo,
     },
     {
-      key: 'inbox' as const,
+      key: 'organize' as const,
       label: t('workbench.mobileToday.inbox'),
-      value: counts.value.inbox,
-      icon: icon.contextMenu.inbox,
+      value: organizer.attentionCount ?? counts.value.inbox,
+      icon: icon.ai.organize,
     },
     {
       key: 'notification' as const,
@@ -302,18 +308,16 @@
     inbox.openQuickCapture();
   }
 
-  function goToTodo(tab: 'todo' | 'all') {
-    void router.push(
-      tab === 'todo' ? { path: '/inbox', query: { tab: 'todo' } } : { path: '/organize', query: { issue: 'pending' } },
-    );
+  function goToSummary(key: 'todo' | 'organize') {
+    void router.push(key === 'todo' ? { path: '/inbox', query: { tab: 'todo' } } : { path: '/organize' });
   }
 
-  function openSummaryItem(key: 'todo' | 'inbox' | 'notification') {
+  function openSummaryItem(key: 'todo' | 'organize' | 'notification') {
     if (key === 'notification') {
       void router.push({ name: 'notifications' });
       return;
     }
-    goToTodo(key === 'todo' ? 'todo' : 'all');
+    goToSummary(key);
   }
 
   function openGrowthTasks() {
@@ -405,6 +409,14 @@
     return request;
   }
 
+  function loadOrganizerAttention() {
+    organizer.resetForOwner(organizeOwnerKey.value);
+    return Promise.all([
+      organizer.loadSummary({ silent: Boolean(organizer.summary) }),
+      organizer.loadKnowledgeStructureSummary({ silent: Boolean(organizer.knowledgeStructureSummary) }),
+    ]);
+  }
+
   // 手势细节(阈值、阻尼、方向锁、顶部判定、浮层拦截、竞态)全部收口在 composable 里,
   // 这里只声明「什么时候能刷」和「刷什么」。
   const pullRefresh = useAndroidPullRefresh({
@@ -412,7 +424,14 @@
     externalBusy: initialTodayLoading,
     getScrollContainer: () => scrollRef.value,
     onRefresh: () =>
-      Promise.all([loadToday(), loadDashboard(), loadGrowthTasks(true), loadClaimable(), refreshDailyReview()]),
+      Promise.all([
+        loadToday(),
+        loadOrganizerAttention(),
+        loadDashboard(),
+        loadGrowthTasks(true),
+        loadClaimable(),
+        refreshDailyReview(),
+      ]),
   });
   /*
    * 从后台切回来时补一次数据。今日页最需要这个:日期、待办和签到状态都跟"今天"绑定,
@@ -423,31 +442,43 @@
     refresh: () => {
       // 先让日期/问候语跟上真实时间,再取数据,避免出现"今天的数据 + 昨天的标题"。
       clockTick.value += 1;
-      return Promise.all([loadToday(), loadDashboard(), loadGrowthTasks(true), loadClaimable(), refreshDailyReview()]);
+      return Promise.all([
+        loadToday(),
+        loadOrganizerAttention(),
+        loadDashboard(),
+        loadGrowthTasks(true),
+        loadClaimable(),
+        refreshDailyReview(),
+      ]);
     },
     canRefresh: () => !initialTodayLoading.value,
   });
 
   // 账号切换后必须重新取数，不能把上一个账号的待办留在屏幕上
-  watch(
-    () => user.id,
-    () => {
-      todayRequestId += 1;
-      currentTodayRequest = null;
-      loading.value = false;
-      todaySettled.value = false;
-      overdueTodos.value = [];
-      dueTodayTodos.value = [];
-      inboxItems.value = [];
-      continueItems.value = [];
-      counts.value = { overdue: 0, dueToday: 0, inbox: 0, todoPending: 0, unreadNotification: 0 };
-      if (user.id)
-        void Promise.all([loadToday(), loadDashboard(), loadGrowthTasks(true), loadClaimable(), refreshDailyReview()]);
-    },
-  );
+  watch(organizeOwnerKey, () => {
+    todayRequestId += 1;
+    currentTodayRequest = null;
+    loading.value = false;
+    todaySettled.value = false;
+    overdueTodos.value = [];
+    dueTodayTodos.value = [];
+    inboxItems.value = [];
+    continueItems.value = [];
+    counts.value = { overdue: 0, dueToday: 0, inbox: 0, todoPending: 0, unreadNotification: 0 };
+    organizer.resetForOwner(organizeOwnerKey.value);
+    if (user.id)
+      void Promise.all([
+        loadToday(),
+        loadOrganizerAttention(),
+        loadDashboard(),
+        loadGrowthTasks(true),
+        loadClaimable(),
+        refreshDailyReview(),
+      ]);
+  });
 
   // 在组件首次渲染前同步进入 loading，不能先渲染一次“已清空”的短空状态。
-  void loadToday();
+  void Promise.all([loadToday(), loadOrganizerAttention()]);
 
   onMounted(() => {
     void loadDashboard();
@@ -663,8 +694,8 @@
     color: var(--primary-color);
   }
 
-  .mobile-today__summary-item.is-inbox .mobile-today__summary-icon,
-  .mobile-today__summary-item.is-inbox .mobile-today__summary-value {
+  .mobile-today__summary-item.is-organize .mobile-today__summary-icon,
+  .mobile-today__summary-item.is-organize .mobile-today__summary-value {
     color: var(--resource-note-color, #00a884);
   }
 

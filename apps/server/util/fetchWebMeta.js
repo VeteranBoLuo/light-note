@@ -12,11 +12,9 @@
  */
 
 import axios from 'axios';
-import http from 'node:http';
-import https from 'node:https';
-import net from 'node:net';
-import { lookup as dnsLookup } from 'node:dns';
 import { load } from 'cheerio';
+import { renderWebPage } from './webPageRenderer.js';
+import { guardedHttpAgent, guardedHttpsAgent, validatePublicWebUrl } from './webUrlSafety.js';
 
 const FETCH_TIMEOUT = 8000; // 8s：服务器 1 核，不宜久等
 const LIVENESS_TIMEOUT = 12000; // 死活探测用更宽松超时:宁可慢也别误判成死链
@@ -31,63 +29,6 @@ const BROWSER_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 const MAX_STORABLE_BOOKMARK_URL_LENGTH = 255;
 const XHS_SHORT_LINK_HOSTS = new Set(['xhslink.cn', 'www.xhslink.cn', 'xhslink.com', 'www.xhslink.com']);
-
-/** 判断 IPv4/IPv6 是否属于内网或保留网段（SSRF 防护） */
-function isPrivateIp(ip) {
-  const type = net.isIP(ip);
-  if (type === 4) {
-    const p = ip.split('.').map(Number);
-    if (p[0] === 0) return true; // 0.0.0.0/8
-    if (p[0] === 10) return true; // 10.0.0.0/8
-    if (p[0] === 127) return true; // 127.0.0.0/8 loopback
-    if (p[0] === 169 && p[1] === 254) return true; // 169.254.0.0/16 link-local（含云元数据）
-    if (p[0] === 172 && p[1] >= 16 && p[1] <= 31) return true; // 172.16.0.0/12
-    if (p[0] === 192 && p[1] === 168) return true; // 192.168.0.0/16
-    if (p[0] === 100 && p[1] >= 64 && p[1] <= 127) return true; // 100.64.0.0/10 CGNAT
-    if (p[0] === 192 && p[1] === 0 && (p[2] === 0 || p[2] === 2)) return true; // IETF/TEST-NET-1
-    if (p[0] === 192 && p[1] === 88 && p[2] === 99) return true; // 已废弃 6to4 relay anycast
-    if (p[0] === 198 && (p[1] === 18 || p[1] === 19)) return true; // 基准测试 198.18.0.0/15
-    if (p[0] === 198 && p[1] === 51 && p[2] === 100) return true; // TEST-NET-2
-    if (p[0] === 203 && p[1] === 0 && p[2] === 113) return true; // TEST-NET-3
-    if (p[0] >= 224) return true; // 组播及保留地址
-    return false;
-  }
-  if (type === 6) {
-    const v = ip.toLowerCase();
-    if (v === '::1' || v === '::') return true; // loopback / 未指定
-    if (v.startsWith('fc') || v.startsWith('fd')) return true; // fc00::/7 ULA
-    if (/^fe[89ab]/.test(v)) return true; // fe80::/10 link-local
-    if (v.startsWith('ff') || v === '2001:db8' || v.startsWith('2001:db8:')) return true; // 组播 / 文档保留地址
-    const mapped = v.match(/::ffff:(\d+\.\d+\.\d+\.\d+)/); // IPv4-mapped
-    if (mapped) return isPrivateIp(mapped[1]);
-    return false;
-  }
-  return false;
-}
-
-/**
- * 自定义 DNS lookup：解析后若命中内网 IP 直接报错阻断连接。
- * 挂到 http/https Agent 上，对初始请求与每次重定向都生效。
- */
-function guardedLookup(hostname, options, callback) {
-  if (typeof options === 'function') {
-    callback = options;
-    options = {};
-  }
-  dnsLookup(hostname, options, (err, address, family) => {
-    if (err) return callback(err);
-    const list = Array.isArray(address) ? address : [{ address, family }];
-    for (const item of list) {
-      if (isPrivateIp(item.address)) {
-        return callback(new Error('BLOCKED_PRIVATE_IP'));
-      }
-    }
-    callback(null, address, family);
-  });
-}
-
-const httpAgent = new http.Agent({ lookup: guardedLookup });
-const httpsAgent = new https.Agent({ lookup: guardedLookup });
 
 function axiosResponseUrl(response, fallbackUrl) {
   const candidates = [
@@ -117,18 +58,6 @@ function normalizeMaxContentBytes(value) {
 
 function isContentLimitError(error) {
   return /maxContentLength size of \d+ exceeded/i.test(String(error?.message || ''));
-}
-
-function isWechatAccessChallenge(responseUrl, html) {
-  let url;
-  try {
-    url = new URL(String(responseUrl || ''));
-  } catch {
-    return false;
-  }
-  if (url.hostname.toLowerCase() !== 'mp.weixin.qq.com') return false;
-  if (url.pathname.startsWith('/mp/wappoc_appmsgcaptcha')) return true;
-  return /mmbizwap:secitptpage\/verify\.html/i.test(html) && /\bid=["']js_verify["']/i.test(html);
 }
 
 function isXiaohongshuHost(hostname) {
@@ -165,6 +94,31 @@ function resolveKnownShortLinkTarget(originalUrl, responseUrl) {
   const accessSource = resolved.searchParams.get('xsec_source');
   if (accessSource) stableUrl.searchParams.set('xsec_source', accessSource);
   return stableUrl.href.length <= MAX_STORABLE_BOOKMARK_URL_LENGTH ? stableUrl.href : '';
+}
+
+function storablePublicUrl(candidate) {
+  try {
+    const parsed = validatePublicWebUrl(candidate);
+    return parsed.href.length <= MAX_STORABLE_BOOKMARK_URL_LENGTH ? parsed.href : '';
+  } catch {
+    return '';
+  }
+}
+
+function resolveFetchedUrl(originalUrl, responseUrl, canonicalUrl = '') {
+  let absoluteCanonical = canonicalUrl;
+  try {
+    absoluteCanonical = canonicalUrl ? new URL(canonicalUrl, responseUrl || originalUrl).href : '';
+  } catch {
+    absoluteCanonical = '';
+  }
+  return (
+    resolveKnownShortLinkTarget(originalUrl, responseUrl) ||
+    storablePublicUrl(absoluteCanonical) ||
+    storablePublicUrl(responseUrl) ||
+    storablePublicUrl(originalUrl) ||
+    String(originalUrl || '')
+  );
 }
 
 /** 常见 HTML 实体解码（仅覆盖高频实体，够用即可） */
@@ -204,6 +158,159 @@ function extractMeta(html, key) {
 function extractTitle(html) {
   const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   return m ? decodeEntities(m[1]).replace(/\s+/g, ' ').trim() : '';
+}
+
+function boundedDiagnosticText(value, limit = 260_000) {
+  const source = String(value || '');
+  if (source.length <= limit) return source;
+  const half = Math.floor(limit / 2);
+  return `${source.slice(0, half)}\n${source.slice(-half)}`;
+}
+
+function jsonLdString(value, limit = 8_000) {
+  if (Array.isArray(value))
+    return value
+      .map((item) => String(item || '').trim())
+      .filter(Boolean)
+      .join(', ')
+      .slice(0, limit);
+  return typeof value === 'string' || typeof value === 'number' ? String(value).trim().slice(0, limit) : '';
+}
+
+function extractJsonLdFields(sources, bodyLimit = BODY_TEXT_LIMIT) {
+  const candidates = [];
+  let visited = 0;
+  const visit = (value, depth = 0) => {
+    if (visited >= 500 || depth > 8 || value === null || typeof value !== 'object') return;
+    visited += 1;
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, depth + 1);
+      return;
+    }
+    const types = (Array.isArray(value['@type']) ? value['@type'] : [value['@type']])
+      .map((item) => String(item || '').toLowerCase())
+      .filter(Boolean);
+    const preferredType = types.some((type) =>
+      /article|posting|webpage|videoobject|audioobject|creativework|product|recipe|event/u.test(type),
+    );
+    const title = jsonLdString(value.headline || value.name, 1_000);
+    const description = jsonLdString(value.description, 4_000);
+    const bodyText = jsonLdString(value.articleBody || value.text, Math.max(bodyLimit, 8_000));
+    const keywords = jsonLdString(value.keywords, 2_000);
+    const siteName = jsonLdString(value.publisher?.name || value.isPartOf?.name, 1_000);
+    if (title || description || bodyText || keywords || siteName) {
+      candidates.push({
+        title,
+        description,
+        bodyText,
+        keywords,
+        siteName,
+        score: (preferredType ? 10_000 : 0) + bodyText.length * 2 + description.length + title.length,
+      });
+    }
+    for (const nested of Object.values(value)) visit(nested, depth + 1);
+  };
+  for (const source of Array.isArray(sources) ? sources : []) {
+    try {
+      visit(JSON.parse(String(source || '')));
+    } catch {
+      // 单个站点常混入非标准 JSON-LD；跳过坏块，不能拖垮其余元信息。
+    }
+  }
+  candidates.sort((a, b) => b.score - a.score);
+  const best = (field) => candidates.find((candidate) => candidate[field])?.[field] || '';
+  return {
+    title: best('title'),
+    description: best('description'),
+    bodyText: best('bodyText').slice(0, Math.max(0, bodyLimit)),
+    keywords: best('keywords'),
+    siteName: best('siteName'),
+  };
+}
+
+const SCRIPT_ACCESS_CHALLENGE_PATTERNS = Object.freeze([
+  /(?:id|class|action|src)\s*=\s*["'][^"']*(?:captcha|human[-_]?verification|challenge[-_/]platform|security[-_]?check)/iu,
+  /document\.cookie[\s\S]{0,20000}(?:location\.(?:reload|href)|window\.location)/iu,
+]);
+const VISIBLE_ACCESS_CHALLENGE_PATTERNS = Object.freeze([
+  /访问验证|安全验证|环境异常|人机验证|异常流量|完成验证|滑动验证|滑块验证/iu,
+  /verify (?:that )?you are human|checking your browser|unusual traffic|security check/iu,
+]);
+const ACCESS_CHALLENGE_PATTERNS = Object.freeze([
+  ...SCRIPT_ACCESS_CHALLENGE_PATTERNS,
+  ...VISIBLE_ACCESS_CHALLENGE_PATTERNS,
+]);
+const AUTH_REQUIRED_PATTERNS = Object.freeze([
+  /登录后(?:查看|继续|访问)|请先登录|账号登录|扫码登录/iu,
+  /sign in to (?:continue|view)|log in to (?:continue|view)|authentication required/iu,
+]);
+const VISIBLE_ERROR_PATTERNS = Object.freeze([
+  /抱歉.{0,20}(?:出错|无法|不可用)|页面.{0,10}(?:出错|异常)|内容.{0,10}(?:不存在|不可用|已删除)/iu,
+  /unexpected application error|something went wrong|content (?:is )?(?:unavailable|not found)/iu,
+]);
+const LOADING_SHELL_PATTERNS = Object.freeze([
+  /(?:视频|直播|页面|内容|数据)?(?:正在)?加载中/u,
+  /\b(?:loading|please wait)\b/iu,
+]);
+
+/**
+ * 不按站点名判断，而按页面可观察特征区分脚本空壳、环境验证、登录门槛与真空页。
+ * 只有正文/元信息不足时才把通用 captcha 脚本等信号当成拦截，避免误伤正文里提到验证的文章。
+ */
+export function classifyWebPageSnapshot({
+  title = '',
+  description = '',
+  bodyText = '',
+  diagnosticText = '',
+  noscriptText = '',
+  scriptCount = 0,
+  passwordInput = false,
+  status = 200,
+  minimumBodyLength = 0,
+} = {}) {
+  const normalizedTitle = String(title || '').trim();
+  const normalizedDescription = String(description || '').trim();
+  const normalizedBody = String(bodyText || '').trim();
+  const evidence = boundedDiagnosticText(
+    `${diagnosticText}\n${noscriptText}\n${normalizedTitle}\n${normalizedDescription}\n${normalizedBody}`,
+  );
+  const hasUsefulMetadata = normalizedTitle.length >= 3 && normalizedDescription.length >= 8;
+  const hasUsefulBody = normalizedBody.length >= 40;
+  const lowInformation = normalizedBody.length < 600 && !hasUsefulMetadata;
+  const visibleChallenge = VISIBLE_ACCESS_CHALLENGE_PATTERNS.some((pattern) =>
+    pattern.test(`${normalizedTitle}\n${normalizedBody}`),
+  );
+  const visibleText = `${normalizedTitle}\n${normalizedBody}`;
+
+  if ([401, 403].includes(Number(status)) && !hasUsefulMetadata && !hasUsefulBody) return 'ACCESS_DENIED';
+  if (normalizedBody.length < 240 && VISIBLE_ERROR_PATTERNS.some((pattern) => pattern.test(visibleText))) {
+    return 'ACCESS_DENIED';
+  }
+  if ((lowInformation || visibleChallenge) && ACCESS_CHALLENGE_PATTERNS.some((pattern) => pattern.test(evidence))) {
+    return 'ACCESS_CHALLENGE';
+  }
+  if (
+    normalizedBody.length < 600 &&
+    !hasUsefulMetadata &&
+    (passwordInput || AUTH_REQUIRED_PATTERNS.some((pattern) => pattern.test(evidence)))
+  ) {
+    return 'AUTH_REQUIRED';
+  }
+  if (Number(minimumBodyLength) > 0 && normalizedBody.length < Number(minimumBodyLength)) {
+    return Number(scriptCount) > 0 || /javascript|enable js|启用\s*javascript/iu.test(noscriptText)
+      ? 'JS_REQUIRED'
+      : 'EMPTY_CONTENT';
+  }
+  if (
+    normalizedBody.length < 800 &&
+    !hasUsefulMetadata &&
+    LOADING_SHELL_PATTERNS.some((pattern) => pattern.test(normalizedBody))
+  ) {
+    return 'JS_REQUIRED';
+  }
+  if (normalizedTitle || normalizedDescription || hasUsefulBody) return '';
+  if (Number(scriptCount) > 0 || /javascript|enable js|启用\s*javascript/iu.test(noscriptText)) return 'JS_REQUIRED';
+  return 'EMPTY_CONTENT';
 }
 
 const READABLE_CANDIDATE_SELECTORS = [
@@ -306,6 +413,102 @@ export function extractReadableBodyText(html, limit = BODY_TEXT_LIMIT) {
   }
 }
 
+function extractStaticPageSnapshot(html, bodyLimit) {
+  let jsonLdSources = [];
+  let noscriptText = '';
+  let scriptCount = 0;
+  let passwordInput = false;
+  let canonicalUrl = '';
+  try {
+    const $ = load(String(html || ''));
+    jsonLdSources = $('script[type="application/ld+json"]')
+      .toArray()
+      .map((element) => $(element).text())
+      .filter(Boolean)
+      .slice(0, 20);
+    noscriptText = $('noscript').text().replace(/\s+/gu, ' ').trim().slice(0, 2_000);
+    scriptCount = $('script').length;
+    passwordInput = $('input[type="password"]').length > 0;
+    canonicalUrl = $('link[rel~="canonical" i]').first().attr('href') || '';
+  } catch {
+    scriptCount = (String(html || '').match(/<script\b/giu) || []).length;
+    passwordInput = /<input[^>]+type\s*=\s*["']password["']/iu.test(String(html || ''));
+  }
+  const jsonLd = extractJsonLdFields(jsonLdSources, bodyLimit);
+  const readableBody = extractReadableBodyText(html, bodyLimit);
+  const bodyText = readableBody.length >= 40 ? readableBody : jsonLd.bodyText || readableBody;
+  return {
+    title: extractMeta(html, 'og:title') || extractMeta(html, 'twitter:title') || extractTitle(html) || jsonLd.title,
+    description:
+      extractMeta(html, 'og:description') ||
+      extractMeta(html, 'twitter:description') ||
+      extractMeta(html, 'description') ||
+      jsonLd.description,
+    siteName: extractMeta(html, 'og:site_name') || extractMeta(html, 'application-name') || jsonLd.siteName,
+    keywords: extractMeta(html, 'keywords') || jsonLd.keywords,
+    bodyText,
+    canonicalUrl,
+    signals: {
+      diagnosticText: boundedDiagnosticText(html),
+      noscriptText,
+      scriptCount,
+      passwordInput,
+    },
+  };
+}
+
+function renderedMetaValue(meta, ...keys) {
+  for (const key of keys) {
+    const value = String(meta?.[key] || '')
+      .replace(/\s+/gu, ' ')
+      .trim();
+    if (value) return value;
+  }
+  return '';
+}
+
+function normalizeRenderedPageSnapshot(snapshot, { originalUrl, bodyLimit, minimumBodyLength }) {
+  if (!snapshot?.ok) return snapshot || { ok: false, reason: 'RENDERER_FAILED' };
+  const jsonLd = extractJsonLdFields(snapshot.jsonLd, bodyLimit);
+  const title =
+    renderedMetaValue(snapshot.meta, 'og:title', 'twitter:title') ||
+    String(snapshot.documentTitle || '').trim() ||
+    jsonLd.title;
+  const description =
+    renderedMetaValue(snapshot.meta, 'og:description', 'twitter:description', 'description') || jsonLd.description;
+  const siteName = renderedMetaValue(snapshot.meta, 'og:site_name', 'application-name') || jsonLd.siteName;
+  const keywords = renderedMetaValue(snapshot.meta, 'keywords') || jsonLd.keywords;
+  const renderedBody = String(snapshot.bodyText || '')
+    .trim()
+    .slice(0, Math.max(0, bodyLimit));
+  const bodyText = renderedBody.length >= 40 ? renderedBody : jsonLd.bodyText || renderedBody;
+  const reason = classifyWebPageSnapshot({
+    title,
+    description,
+    bodyText,
+    diagnosticText: snapshot.signals?.diagnosticText,
+    noscriptText: snapshot.signals?.noscriptText,
+    scriptCount: snapshot.signals?.scriptCount,
+    passwordInput: snapshot.signals?.passwordInput,
+    status: snapshot.status,
+    minimumBodyLength,
+  });
+  if (reason) return { ok: false, reason };
+  return {
+    ok: true,
+    url: resolveFetchedUrl(originalUrl, snapshot.url, snapshot.canonicalUrl),
+    title,
+    description,
+    siteName,
+    keywords,
+    bodyText,
+    source: 'rendered_dom',
+  };
+}
+
+const RENDER_FALLBACK_REASONS = new Set(['ACCESS_CHALLENGE', 'ACCESS_DENIED', 'EMPTY_CONTENT', 'JS_REQUIRED']);
+const MOBILE_PROFILE_RETRY_REASONS = new Set(['ACCESS_CHALLENGE', 'ACCESS_DENIED', 'EMPTY_CONTENT', 'JS_REQUIRED']);
+
 /** 探测响应编码：优先 HTTP header，其次 HTML <meta charset>（国内站点常见 GBK） */
 function detectCharset(contentType, buf) {
   const fromHeader = /charset=([\w-]+)/i.exec(contentType || '')?.[1];
@@ -329,7 +532,7 @@ function decodeBuffer(buf, charset) {
 
 /**
  * 抓取网页并提取元信息。
- * 失败时返回 { ok:false, reason }，由调用方决定降级（例如仅凭 URL 生成）。
+ * 失败时返回 { ok:false, reason }。调用方不得在没有真实页面证据时让模型猜测。
  *
  * @param {string} rawUrl 用户填写的书签地址
  * @returns {Promise<
@@ -339,7 +542,15 @@ function decodeBuffer(buf, charset) {
  */
 export async function fetchWebMeta(
   rawUrl,
-  { bodyLimit = BODY_TEXT_LIMIT, maxContentBytes = DEFAULT_MAX_CONTENT_BYTES, signal, timeout = FETCH_TIMEOUT } = {},
+  {
+    bodyLimit = BODY_TEXT_LIMIT,
+    maxContentBytes = DEFAULT_MAX_CONTENT_BYTES,
+    minimumBodyLength = 0,
+    renderFallback = false,
+    renderer = renderWebPage,
+    signal,
+    timeout = FETCH_TIMEOUT,
+  } = {},
 ) {
   // 归一化:无协议头补 https://(与 read_url 一致)。老书签/导入的 URL 常不带协议,
   // 不补会直接 new URL() 抛错 → INVALID_URL,导致归档失败/死链误报。
@@ -347,28 +558,15 @@ export async function fetchWebMeta(
   if (input && !/^https?:\/\//i.test(input)) input = 'https://' + input;
   let target;
   try {
-    target = new URL(input);
-  } catch {
-    return { ok: false, reason: 'INVALID_URL' };
-  }
-  if (target.protocol !== 'http:' && target.protocol !== 'https:') {
-    return { ok: false, reason: 'UNSUPPORTED_PROTOCOL' };
-  }
-  if (target.username || target.password) {
-    return { ok: false, reason: 'URL_CREDENTIALS_FORBIDDEN' };
-  }
-  // 字面 IP 形式的 host 先同步预判（域名解析与重定向的内网阻断交给 guardedLookup）。
-  // IPv6 字面量在 URL.hostname 里带方括号（如 [::1]），且 Node 直连字面 IP 时会跳过
-  // 自定义 DNS lookup，因此这里必须剥掉方括号后同步判定，不能只依赖 guardedLookup。
-  const literalHost = target.hostname.replace(/^\[/, '').replace(/\]$/, '');
-  if (net.isIP(literalHost) && isPrivateIp(literalHost)) {
-    return { ok: false, reason: 'BLOCKED_HOST' };
+    target = validatePublicWebUrl(input);
+  } catch (error) {
+    return { ok: false, reason: String(error?.code || 'INVALID_URL') };
   }
 
   let buf;
   let contentType = '';
-  let fetchedUrl = target.href;
   let responseUrl = target.href;
+  let staticFailure = '';
   const contentBudget = normalizeMaxContentBytes(maxContentBytes);
   try {
     const resp = await axios.get(target.href, {
@@ -376,8 +574,8 @@ export async function fetchWebMeta(
       maxRedirects: MAX_REDIRECTS,
       maxContentLength: contentBudget,
       responseType: 'arraybuffer',
-      httpAgent,
-      httpsAgent,
+      httpAgent: guardedHttpAgent,
+      httpsAgent: guardedHttpsAgent,
       validateStatus: (s) => s >= 200 && s < 400,
       headers: {
         'User-Agent': BROWSER_UA,
@@ -390,7 +588,6 @@ export async function fetchWebMeta(
       signal,
     });
     responseUrl = axiosResponseUrl(resp, target.href);
-    fetchedUrl = resolveKnownShortLinkTarget(target.href, responseUrl) || target.href;
     contentType = resp.headers?.['content-type'] || '';
     // 只处理 HTML/文本，二进制（PDF/图片等）直接放弃
     if (contentType && !/text\/html|application\/xhtml|text\/plain|application\/xml/i.test(contentType)) {
@@ -409,39 +606,85 @@ export async function fetchWebMeta(
     }
     if (isContentLimitError(e)) return { ok: false, reason: 'CONTENT_TOO_LARGE' };
     const status = Number(e?.response?.status || 0);
-    if (status === 401 || status === 403) return { ok: false, reason: 'ACCESS_DENIED' };
+    if (status === 401 || status === 403) staticFailure = 'ACCESS_DENIED';
     if (status === 404 || status === 410) return { ok: false, reason: 'NOT_FOUND' };
     if (status === 429) return { ok: false, reason: 'RATE_LIMITED' };
-    if (e?.code === 'ECONNABORTED' || e?.code === 'ETIMEDOUT' || String(e?.message || '').includes('timeout')) {
+    if (
+      !staticFailure &&
+      (e?.code === 'ECONNABORTED' || e?.code === 'ETIMEDOUT' || String(e?.message || '').includes('timeout'))
+    ) {
       return { ok: false, reason: 'TIMEOUT' };
     }
-    if (e?.code === 'ENOTFOUND' || e?.code === 'EAI_AGAIN') return { ok: false, reason: 'DNS_FAILED' };
-    if (['CERT_HAS_EXPIRED', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'].includes(e?.code)) {
+    if (!staticFailure && (e?.code === 'ENOTFOUND' || e?.code === 'EAI_AGAIN'))
+      return { ok: false, reason: 'DNS_FAILED' };
+    if (
+      !staticFailure &&
+      ['CERT_HAS_EXPIRED', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'].includes(e?.code)
+    ) {
       return { ok: false, reason: 'TLS_FAILED' };
     }
-    return { ok: false, reason: 'FETCH_FAILED' };
+    if (!staticFailure) return { ok: false, reason: 'FETCH_FAILED' };
   }
 
-  const html = decodeBuffer(buf, detectCharset(contentType, buf));
-  if (isWechatAccessChallenge(responseUrl, html)) {
-    return { ok: false, reason: 'ACCESS_CHALLENGE' };
+  if (!staticFailure) {
+    const html = decodeBuffer(buf, detectCharset(contentType, buf));
+    const snapshot = extractStaticPageSnapshot(html, bodyLimit);
+    staticFailure = classifyWebPageSnapshot({
+      title: snapshot.title,
+      description: snapshot.description,
+      bodyText: snapshot.bodyText,
+      diagnosticText: snapshot.signals.diagnosticText,
+      noscriptText: snapshot.signals.noscriptText,
+      scriptCount: snapshot.signals.scriptCount,
+      passwordInput: snapshot.signals.passwordInput,
+      minimumBodyLength,
+    });
+    if (!staticFailure) {
+      return {
+        ok: true,
+        url: resolveFetchedUrl(target.href, responseUrl, snapshot.canonicalUrl),
+        title: snapshot.title,
+        description: snapshot.description,
+        siteName: snapshot.siteName,
+        keywords: snapshot.keywords,
+        bodyText: snapshot.bodyText,
+        source: 'static_html',
+      };
+    }
   }
 
-  const ogTitle = extractMeta(html, 'og:title');
-  const ogDesc = extractMeta(html, 'og:description');
-  const metaDesc = extractMeta(html, 'description');
-  const title = extractTitle(html) || ogTitle;
-  const description = metaDesc || ogDesc;
-  const siteName = extractMeta(html, 'og:site_name');
-  const keywords = extractMeta(html, 'keywords');
-  const bodyText = extractReadableBodyText(html, bodyLimit);
-
-  // 什么都没抓到（SPA 空壳等）→ 视为失败，让调用方降级
-  if (!title && !description && !bodyText) {
-    return { ok: false, reason: 'EMPTY_CONTENT' };
+  if (!renderFallback || !RENDER_FALLBACK_REASONS.has(staticFailure)) {
+    return { ok: false, reason: staticFailure || 'EMPTY_CONTENT' };
   }
-
-  return { ok: true, url: fetchedUrl, title, description, siteName, keywords, bodyText };
+  const renderWithProfile = async (profile) => {
+    let rendered;
+    try {
+      rendered = await renderer(target.href, {
+        bodyLimit,
+        signal,
+        timeout: Math.max(12_000, Number(timeout) || 0),
+        profile,
+      });
+    } catch (error) {
+      if (signal?.aborted || error?.name === 'AbortError' || error?.code === 'ABORT_ERR') throw error;
+      rendered = { ok: false, reason: 'RENDERER_FAILED' };
+    }
+    return normalizeRenderedPageSnapshot(rendered, {
+      originalUrl: target.href,
+      bodyLimit,
+      minimumBodyLength,
+    });
+  };
+  let normalized = await renderWithProfile('desktop');
+  // 同一套通用提取规则下，移动页面通常比桌面 SPA 更轻；首个渲染仍是空壳、验证或错误页时
+  // 再尝试一次移动视口，不读取用户浏览器 Cookie，也不引入任何站点选择器。
+  if (!normalized.ok && MOBILE_PROFILE_RETRY_REASONS.has(normalized.reason)) {
+    normalized = await renderWithProfile('mobile');
+  }
+  if (!normalized.ok) {
+    return { ok: false, reason: normalized.reason || staticFailure, staticReason: staticFailure };
+  }
+  return normalized;
 }
 
 /**
@@ -459,20 +702,19 @@ export async function checkUrlLiveness(rawUrl, { timeout = LIVENESS_TIMEOUT } = 
   if (!/^https?:\/\//i.test(input)) input = 'https://' + input;
   let target;
   try {
-    target = new URL(input);
-  } catch {
-    return { status: 'suspect', code: 'INVALID_URL' }; // URL 格式无效(乱写/多协议头等)= 明确坏链
+    target = validatePublicWebUrl(input);
+  } catch (error) {
+    const code = String(error?.code || 'INVALID_URL');
+    if (code === 'BLOCKED_HOST') return { status: 'skip', code: 'BLOCKED' };
+    return { status: 'suspect', code: code === 'UNSUPPORTED_PROTOCOL' ? 'PROTO' : code };
   }
-  if (target.protocol !== 'http:' && target.protocol !== 'https:') return { status: 'suspect', code: 'PROTO' };
-  const literalHost = target.hostname.replace(/^\[/, '').replace(/\]$/, '');
-  if (net.isIP(literalHost) && isPrivateIp(literalHost)) return { status: 'skip', code: 'BLOCKED' };
   try {
     const resp = await axios.get(target.href, {
       timeout,
       maxRedirects: MAX_REDIRECTS,
       validateStatus: () => true, // 接受所有状态码,自行按 code 判定
-      httpAgent,
-      httpsAgent,
+      httpAgent: guardedHttpAgent,
+      httpsAgent: guardedHttpsAgent,
       responseType: 'stream',
       headers: {
         'User-Agent': BROWSER_UA,
@@ -482,10 +724,10 @@ export async function checkUrlLiveness(rawUrl, { timeout = LIVENESS_TIMEOUT } = 
     });
     const code = resp.status;
     const responseUrl = axiosResponseUrl(resp, target.href);
-    const resolvedUrl = resolveKnownShortLinkTarget(target.href, responseUrl);
+    const resolvedUrl = resolveFetchedUrl(target.href, responseUrl);
     resp.data?.destroy?.(); // 拿到状态码即丢弃响应体,不下载
     if (code === 404 || code === 410) return { status: 'suspect', code }; // 仅疑似,交用户确认(SPA/子页删除都可能)
-    return { status: 'alive', code, ...(resolvedUrl ? { resolvedUrl } : {}) };
+    return { status: 'alive', code, ...(resolvedUrl && resolvedUrl !== target.href ? { resolvedUrl } : {}) };
   } catch (e) {
     if (String(e?.message || '').includes('BLOCKED_PRIVATE_IP')) return { status: 'skip', code: 'BLOCKED' };
     const code = e?.code || 'ERR';

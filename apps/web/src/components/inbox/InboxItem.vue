@@ -13,6 +13,7 @@
         'inbox-item',
         `inbox-item--${item.resourceType}`,
         { 'inbox-item--selection': selectionMode, 'inbox-item--selected': selected },
+        { 'inbox-item--inline-actions': showInlineActions && !selectionMode },
       ]"
     >
       <BCheckbox
@@ -23,7 +24,15 @@
         @update:model-value="emit('select', $event)"
       />
       <span v-else class="inbox-item__select-placeholder" aria-hidden="true"></span>
-      <div class="inbox-item__body" @click="handleBodyClick">
+      <div
+        class="inbox-item__body"
+        role="button"
+        tabindex="0"
+        :aria-label="item.title || t('inbox.untitled')"
+        @click="handleBodyClick"
+        @keydown.enter.prevent="handleBodyClick"
+        @keydown.space.prevent="handleBodyClick"
+      >
         <div class="inbox-item__meta">
           <span class="inbox-item__type">{{ t(`inbox.${item.resourceType}`) }}</span>
           <span>{{ formatTime(item.collectedAt) }}</span>
@@ -31,6 +40,16 @@
         <h3 :title="item.title">{{ item.title || t('inbox.untitled') }}</h3>
         <p v-if="plainSummary">{{ plainSummary }}</p>
         <span v-if="item.resourceType === 'bookmark'" class="inbox-item__detail">{{ item.detail }}</span>
+      </div>
+      <div
+        v-if="showInlineActions && !selectionMode"
+        class="inbox-item__actions inbox-item__actions--inline"
+        @click.stop
+      >
+        <BButton size="small" :disabled="disabled" @click="emit('open')">{{ t('inbox.organize') }}</BButton>
+        <BButton size="small" :loading="completing" :disabled="disabled" @click="emit('complete')">
+          {{ t('inbox.complete') }}
+        </BButton>
       </div>
       <div v-if="!selectionMode" class="inbox-item__actions inbox-item__actions--mobile" @click.stop>
         <BButton
@@ -58,9 +77,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import MobilePageActionsDrawer, {
-    type MobilePageActionItem,
-  } from '@/components/mobile/MobilePageActionsDrawer.vue';
+  import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import MobileSwipeActions, { type MobileSwipeActionItem } from '@/components/mobile/MobileSwipeActions.vue';
   import icon from '@/config/icon';
   import type { InboxItem } from '@/api/inboxApi';
@@ -76,8 +93,9 @@
       selectionMode?: boolean;
       swipeEnabled?: boolean;
       swipeOpen?: boolean;
+      showInlineActions?: boolean;
     }>(),
-    { selectable: true, selectionMode: false, swipeEnabled: false, swipeOpen: false },
+    { selectable: true, selectionMode: false, swipeEnabled: false, swipeOpen: false, showInlineActions: false },
   );
   const emit = defineEmits<{
     select: [selected: boolean];
@@ -164,7 +182,7 @@
     position: relative;
     overflow: hidden;
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     gap: 14px;
     padding: 16px;
@@ -261,6 +279,10 @@
   .inbox-item__actions--mobile {
     display: none;
   }
+  .inbox-item__actions--inline :deep(.b_btn) {
+    min-height: 32px;
+    white-space: nowrap;
+  }
   .inbox-item--selected {
     border-color: color-mix(in srgb, var(--primary-color) 55%, var(--card-border-color));
   }
@@ -292,5 +314,4 @@
       padding-right: 0;
     }
   }
-
 </style>

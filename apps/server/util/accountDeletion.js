@@ -4,13 +4,17 @@ import redisClient from './redisClient.js';
 import { sendTrackedEmail } from './emailDelivery.js';
 import { stableAgentErrorCode } from './agent/logSafety.js';
 import { invalidateAfdianLeaderboardCache } from './afdianSupportReadService.js';
+import {
+  ACCOUNT_DELETION_STALE_PROCESSING_MINUTES,
+  classifyAccountResourceCleanup,
+  isAccountDeletionRequestStalled,
+} from './accountDeletionPolicy.js';
 
 export const ACCOUNT_DELETION_CONFIRMATION_TEXT = '注销账号';
 
 const CODE_TTL_SECONDS = 5 * 60;
 const CODE_KEY_PREFIX = 'account:deletion:code:';
 const CLEANUP_INTERVAL_MS = 10 * 60 * 1000;
-const STALE_PROCESSING_MINUTES = 15;
 const CLEANUP_BATCH_SIZE = 5;
 const COMPLETED_RECORD_RETENTION_DAYS = 180;
 const COMPLETED_RECORD_CLEANUP_BATCH_SIZE = 500;
@@ -64,6 +68,18 @@ function accountDeletionError(code, message, status = 400) {
   error.code = code;
   error.status = status;
   return error;
+}
+
+function assertAccountResourceCleanupAllowed(account) {
+  const policy = classifyAccountResourceCleanup(account);
+  if (policy.eligible) return policy;
+  const error = accountDeletionError(
+    'ACCOUNT_DELETION_ACTIVE_ACCOUNT_BLOCKED',
+    '账号尚未进入正式注销状态，已拒绝物理清理',
+    409,
+  );
+  error.accountCleanupState = policy.state;
+  throw error;
 }
 
 function deletionCodeKey(userId) {
@@ -941,13 +957,7 @@ async function purgeDatabaseForUser(userId) {
       [userId],
     );
     const account = accounts[0] || null;
-    if (account && Number(account.del_flag || 0) !== 1) {
-      throw accountDeletionError(
-        'ACCOUNT_DELETION_ACTIVE_ACCOUNT_BLOCKED',
-        '账号当前仍处于可用状态，已拒绝物理清理',
-        409,
-      );
-    }
+    assertAccountResourceCleanupAllowed(account);
     const tables = await existingTables(connection);
     await purgeToolboxWorkspace(connection, tables, userId);
     await purgeAiWorkspace(connection, tables, userId);
@@ -993,7 +1003,7 @@ function mergeCleanupArtifacts(current, collected) {
 }
 
 /**
- * Root 资源治理专用：为已经不存在、已软删除或已正式注销的账号补建/恢复物理清理任务。
+ * Root 资源治理专用：为已经不存在或已正式注销的账号补建/恢复物理清理任务。
  *
  * 管理员权限只决定是否允许发起该动作；是否真的可删除仍由这里和
  * purgeDatabaseForUser 在两个事务阶段分别锁定 user 行复核，正常账号绝不进入清理。
@@ -1018,13 +1028,7 @@ export async function cleanupInvalidOwnerResourcesNow({ userId, expectedRequestI
       [normalizedUserId],
     );
     const account = accounts[0] || null;
-    if (account && Number(account.del_flag || 0) !== 1) {
-      throw accountDeletionError(
-        'ACCOUNT_DELETION_ACTIVE_ACCOUNT_BLOCKED',
-        '账号当前仍处于可用状态，已拒绝物理清理',
-        409,
-      );
-    }
+    assertAccountResourceCleanupAllowed(account);
 
     const tables = await existingTables(connection);
     if (!tables.has('account_deletion_requests')) {
@@ -1044,11 +1048,10 @@ export async function cleanupInvalidOwnerResourcesNow({ userId, expectedRequestI
     if (normalizedRequestId && (!current || String(current.id || '') !== normalizedRequestId)) {
       throw accountDeletionError('ACCOUNT_DELETION_RETRY_SCOPE_CHANGED', '注销清理任务状态已经变化', 409);
     }
-    if (
-      current?.status === 'processing' &&
-      current.processing_started_at &&
-      new Date(current.processing_started_at).getTime() >= Date.now() - STALE_PROCESSING_MINUTES * 60 * 1000
-    ) {
+    if (normalizedRequestId && !isAccountDeletionRequestStalled(current)) {
+      throw accountDeletionError('ACCOUNT_DELETION_RETRY_NOT_ALLOWED', '注销清理任务当前不可重试', 409);
+    }
+    if (current?.status === 'processing' && !isAccountDeletionRequestStalled(current)) {
       throw accountDeletionError('ACCOUNT_DELETION_RETRY_NOT_ALLOWED', '注销清理任务正在执行，请稍后刷新', 409);
     }
 
@@ -1156,7 +1159,10 @@ async function claimDeletionRequest(requestId) {
         AND (
           status = 'pending'
           OR (status = 'retry_wait' AND next_retry_at <= NOW())
-          OR (status = 'processing' AND processing_started_at < DATE_SUB(NOW(), INTERVAL ${STALE_PROCESSING_MINUTES} MINUTE))
+          OR (status = 'processing' AND (
+            processing_started_at IS NULL
+            OR processing_started_at < DATE_SUB(NOW(), INTERVAL ${ACCOUNT_DELETION_STALE_PROCESSING_MINUTES} MINUTE)
+          ))
         )`,
     [requestId],
   );
@@ -1244,7 +1250,10 @@ export async function processPendingAccountDeletions() {
     `SELECT id
        FROM account_deletion_requests
       WHERE (status IN ('pending', 'retry_wait') AND next_retry_at <= NOW())
-         OR (status = 'processing' AND processing_started_at < DATE_SUB(NOW(), INTERVAL ${STALE_PROCESSING_MINUTES} MINUTE))
+         OR (status = 'processing' AND (
+           processing_started_at IS NULL
+           OR processing_started_at < DATE_SUB(NOW(), INTERVAL ${ACCOUNT_DELETION_STALE_PROCESSING_MINUTES} MINUTE)
+         ))
       ORDER BY requested_at ASC
       LIMIT ${CLEANUP_BATCH_SIZE}`,
   );

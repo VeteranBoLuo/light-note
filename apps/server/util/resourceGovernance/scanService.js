@@ -4,8 +4,15 @@ import pool from '../../db/index.js';
 import { ensureResourceGovernanceSchema } from '../resourceGovernanceSchema.js';
 import { stableAgentErrorCode } from '../agent/logSafety.js';
 import {
+  ACCOUNT_DELETION_STALE_PROCESSING_MINUTES,
+  classifyAccountResourceCleanup,
+  isAccountDeletionRequestStalled,
+} from '../accountDeletionPolicy.js';
+import {
   canCreateCleanupJob,
   GOVERNANCE_RISK,
+  getInvalidOwnerCleanupGovernanceRules,
+  getOwnerStateGovernanceRules,
   normalizeGovernanceScopes,
   resourceGovernanceScanEnabled,
 } from './registry.js';
@@ -29,6 +36,8 @@ const OWNER_RESOURCE_DEFINITIONS = Object.freeze([
 
 const SCAN_LEASE_MINUTES = 5;
 const PAGE_SIZE = 250;
+const OWNER_STATE_ISSUES = new Set(getOwnerStateGovernanceRules().map((rule) => rule.issueCode));
+const INVALID_OWNER_CLEANUP_ISSUES = new Set(getInvalidOwnerCleanupGovernanceRules().map((rule) => rule.issueCode));
 
 function json(value) {
   return JSON.stringify(value ?? {});
@@ -343,7 +352,8 @@ async function scanOwnerIntegrity(scan, db, tables) {
             evidence: {
               ownerRowExists: false,
               resourceState: String(row.deleted_state ?? ''),
-              cleanupExecutorRegistered: false,
+              cleanupExecutorRegistered: true,
+              actionKind: 'cleanup_invalid_owner',
               reasonCode: 'OWNER_ROW_NOT_FOUND',
             },
           },
@@ -355,33 +365,41 @@ async function scanOwnerIntegrity(scan, db, tables) {
       if (rows.length < PAGE_SIZE) break;
     }
 
-    const [softDeletedGroups] = await db.query(
-      `SELECT CONVERT(r.${definition.owner} USING utf8mb4) AS owner_id, COUNT(*) AS resource_count
+    const [accountCleanupCandidates] = await db.query(
+      `SELECT CONVERT(r.${definition.owner} USING utf8mb4) AS owner_id,
+              u.role AS owner_role, u.del_flag AS owner_del_flag,
+              COUNT(*) AS resource_count
          FROM ${definition.table} r
          JOIN user u ON ${ownerJoin(definition)}
         WHERE u.del_flag = 1
-        GROUP BY r.${definition.owner}
+        GROUP BY r.${definition.owner}, u.role, u.del_flag
         ORDER BY r.${definition.owner} ASC`,
     );
-    for (const row of softDeletedGroups) {
+    for (const row of accountCleanupCandidates) {
+      const ownerCleanup = classifyAccountResourceCleanup({
+        role: row.owner_role,
+        del_flag: row.owner_del_flag,
+      });
+      if (!ownerCleanup.eligible) continue;
       // 已进入正式账号注销工作流的资源由 accountDeletion 领域服务处理，
-      // 不再为同一账号制造多条不可执行的“软删除 owner”噪声。
+      // 不再为同一账号制造重复的人工复核项。
       if (ownersWithDeletionWorkflow.has(String(row.owner_id || ''))) continue;
       await recordFinding(
         scan,
         {
-          issueCode: 'SOFT_DELETED_OWNER_HAS_RESOURCES',
+          issueCode: 'FORMALLY_DELETED_OWNER_HAS_RESOURCES',
           resourceType: definition.resourceType,
           stableTarget: `${row.owner_id}:${definition.resourceType}`,
           targetId: row.owner_id,
           ownerId: row.owner_id,
-          riskLevel: GOVERNANCE_RISK.BLOCKED,
+          riskLevel: GOVERNANCE_RISK.REVIEW,
           evidence: {
             ownerRowExists: true,
-            ownerSoftDeleted: true,
+            ownerFormallyDeleted: true,
             resourceCount: Number(row.resource_count || 0),
-            cleanupExecutorRegistered: false,
-            reasonCode: 'SOFT_DELETED_OWNER_IS_NOT_ORPHAN',
+            cleanupExecutorRegistered: true,
+            actionKind: 'cleanup_invalid_owner',
+            reasonCode: 'FORMALLY_DELETED_OWNER_HAS_RESOURCES',
           },
         },
         db,
@@ -397,9 +415,12 @@ async function scanAccountDeletionJobs(scan, db, tables) {
     return { scanned: 0, findings: 0 };
   const [rows] = await db.query(
     `SELECT id, user_id, status, attempts, last_error_code, update_time
-       FROM account_deletion_requests
+      FROM account_deletion_requests
       WHERE status = 'retry_wait'
-         OR (status = 'processing' AND processing_started_at < DATE_SUB(NOW(), INTERVAL 30 MINUTE))
+         OR (status = 'processing' AND (
+           processing_started_at IS NULL
+           OR processing_started_at < DATE_SUB(NOW(), INTERVAL ${ACCOUNT_DELETION_STALE_PROCESSING_MINUTES} MINUTE)
+         ))
       ORDER BY update_time ASC
       LIMIT 1000`,
   );
@@ -430,8 +451,7 @@ async function scanAccountDeletionJobs(scan, db, tables) {
 }
 
 async function decorateFindingActions(items, db) {
-  const invalidOwnerIssues = new Set(['OWNER_MISSING', 'SOFT_DELETED_OWNER_HAS_RESOURCES', 'ACCOUNT_DELETION_STALLED']);
-  const invalidOwnerItems = items.filter((item) => invalidOwnerIssues.has(item.issue_code) && item.owner_id);
+  const invalidOwnerItems = items.filter((item) => OWNER_STATE_ISSUES.has(item.issue_code) && item.owner_id);
   const ownerStates = new Map();
   const accountStates = new Map();
   if (invalidOwnerItems.length) {
@@ -465,18 +485,22 @@ async function decorateFindingActions(items, db) {
   }
 
   return items.map((item) => {
-    if (invalidOwnerIssues.has(item.issue_code)) {
+    if (OWNER_STATE_ISSUES.has(item.issue_code)) {
       const owner = ownerStates.get(String(item.owner_id || ''));
-      const ownerRetired = !owner || Number(owner.del_flag || 0) === 1;
+      const ownerCleanup = classifyAccountResourceCleanup(owner);
       const request =
         item.issue_code === 'ACCOUNT_DELETION_STALLED' ? accountStates.get(String(item.target_id || '')) : null;
       const requestMatches =
         item.issue_code !== 'ACCOUNT_DELETION_STALLED' ||
-        (request && String(request.user_id || '') === String(item.owner_id || ''));
+        (request &&
+          String(request.user_id || '') === String(item.owner_id || '') &&
+          isAccountDeletionRequestStalled(request));
+      const actionKind = INVALID_OWNER_CLEANUP_ISSUES.has(item.issue_code) ? 'cleanup_invalid_owner' : null;
       return {
         ...item,
-        action_kind: 'cleanup_invalid_owner',
-        action_eligible: Boolean(item.state === 'open' && ownerRetired && requestMatches),
+        owner_cleanup_state: ownerCleanup.state,
+        action_kind: actionKind,
+        action_eligible: Boolean(actionKind && item.state === 'open' && ownerCleanup.eligible && requestMatches),
       };
     }
     return {
@@ -660,7 +684,9 @@ export async function getGovernanceFinding(id, { db = pool } = {}) {
        FROM resource_governance_findings WHERE id = ? LIMIT 1`,
     [String(id || '')],
   );
-  return rows[0] ? { ...rows[0], evidence_json: parseJson(rows[0].evidence_json) } : null;
+  if (!rows[0]) return null;
+  const [decorated] = await decorateFindingActions(rows, db);
+  return { ...decorated, evidence_json: parseJson(decorated.evidence_json) };
 }
 
 export async function ignoreGovernanceFinding({ id, actorUserId, reasonCode, db = pool }) {

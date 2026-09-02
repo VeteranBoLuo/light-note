@@ -79,6 +79,14 @@
   />
   <MobilePageActionsDrawer
     v-if="mobile"
+    v-model:open="listDrawerOpen"
+    :title="listAction.label"
+    :actions="listActions"
+    compact
+    @action="emitAction"
+  />
+  <MobilePageActionsDrawer
+    v-if="mobile"
     v-model:open="insertDrawerOpen"
     :title="insertAction.label"
     :actions="insertActions"
@@ -146,6 +154,7 @@
   }>();
 
   const headingDrawerOpen = ref(false);
+  const listDrawerOpen = ref(false);
   const insertDrawerOpen = ref(false);
   const moreDrawerOpen = ref(false);
   const toolbarRef = useElementWidthClasses([
@@ -157,7 +166,7 @@
     props.undoAction,
     props.headingAction,
     props.boldAction,
-    props.imageAction,
+    props.listAction,
     props.insertAction,
     props.moreAction,
   ]);
@@ -170,6 +179,10 @@
     if (action.disabled) return;
     if (action.key === props.headingAction.key) {
       headingDrawerOpen.value = true;
+      return;
+    }
+    if (action.key === props.listAction.key) {
+      listDrawerOpen.value = true;
       return;
     }
     if (action.key === props.insertAction.key) {

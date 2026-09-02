@@ -584,14 +584,24 @@ describe('编辑器 V2 交互回归', () => {
     expect(editorSource).not.toContain('.md-editor-label {');
   });
 
-  it('固定工具栏以图片替代待办快捷位，待办归入列表结构菜单', () => {
+  it('PC 固定工具栏以图片替代待办快捷位，待办归入列表结构菜单', () => {
     expect(toolbarSource).toContain('<ToolbarButton :action="imageAction"');
     expect(toolbarSource).not.toContain('<ToolbarButton :action="todoAction"');
-    expect(toolbarSource).toContain('props.imageAction');
+    expect(toolbarSource).toContain('imageAction: EditorToolbarAction;');
     expect(editorSource).toMatch(
       /const listActions = \[[\s\S]*action\('bulletList'[\s\S]*action\('orderedList'[\s\S]*action\('todo'/u,
     );
     expect(editorSource).toContain("imageAction: action('insertImage'");
+  });
+
+  it('移动端固定工具栏把列表作为独立入口，并让待办与两种列表共用抽屉', () => {
+    expect(toolbarSource).toMatch(
+      /const mobilePrimaryActions = computed\(\(\) => \[[\s\S]*props\.boldAction,[\s\S]*props\.listAction,[\s\S]*props\.insertAction/u,
+    );
+    expect(toolbarSource).toContain('v-model:open="listDrawerOpen"');
+    expect(toolbarSource).toContain(':title="listAction.label"');
+    expect(toolbarSource).toContain(':actions="listActions"');
+    expect(toolbarSource).toContain('if (action.key === props.listAction.key)');
   });
 
   it('代码块通过主题变量分别提供浅色卡片和深色沉浸表面', () => {

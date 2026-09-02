@@ -2,8 +2,10 @@ import pool from '../../db/index.js';
 import { stableAgentErrorCode } from '../agent/logSafety.js';
 import { cleanupInvalidOwnerResourcesNow } from '../accountDeletion.js';
 import { ensureResourceGovernanceSchema } from '../resourceGovernanceSchema.js';
+import { getInvalidOwnerCleanupGovernanceRules } from './registry.js';
 
-const INVALID_OWNER_ISSUES = new Set(['OWNER_MISSING', 'SOFT_DELETED_OWNER_HAS_RESOURCES', 'ACCOUNT_DELETION_STALLED']);
+const INVALID_OWNER_ISSUE_CODES = Object.freeze(getInvalidOwnerCleanupGovernanceRules().map((rule) => rule.issueCode));
+const INVALID_OWNER_ISSUES = new Set(INVALID_OWNER_ISSUE_CODES);
 
 function governanceError(code, message, status = 400) {
   const error = new Error(message);
@@ -33,7 +35,7 @@ async function writeAudit(db, { actorUserId, ownerId, outcome, summary }) {
 
 /**
  * Root 手工确认后的失效 owner 清理入口。
- * 只接受扫描表中仍为 open 的 owner 缺失/软删除/已注销候选；真正执行前还会由
+ * 只接受扫描表中仍为 open 的 owner 缺失/正式注销/注销任务异常候选；真正执行前还会由
  * accountDeletion 领域服务再次锁定账号行，避免扫描后账号状态变化造成误删。
  */
 export async function cleanupInvalidOwnerFindings({ findingIds, confirmationPhrase, actorUserId, db = pool }) {
@@ -88,14 +90,15 @@ export async function cleanupInvalidOwnerFindings({ findingIds, confirmationPhra
       });
       const completed = execution?.completed === true;
       if (completed) {
+        const issuePlaceholders = INVALID_OWNER_ISSUE_CODES.map(() => '?').join(',');
         await db.query(
           `UPDATE resource_governance_findings
               SET state = 'resolved', resolution_code = 'INVALID_OWNER_RESOURCES_DELETED',
                   resolved_by = ?, resolved_at = NOW()
             WHERE state = 'open'
               AND owner_id = ?
-              AND issue_code IN ('OWNER_MISSING', 'SOFT_DELETED_OWNER_HAS_RESOURCES', 'ACCOUNT_DELETION_STALLED')`,
-          [actorUserId, group.ownerId],
+              AND issue_code IN (${issuePlaceholders})`,
+          [actorUserId, group.ownerId, ...INVALID_OWNER_ISSUE_CODES],
         );
       }
       await writeAudit(db, {

@@ -8,7 +8,7 @@
       'inbox-page--mobile-todo': isMobileTodoPrimary,
       'inbox-page--mobile-resources': isMobileResourceInbox,
       'inbox-page--resource-workspace': !embedded && !isTodoFocused && !bookmark.isMobile,
-      'is-selection-mode': todoSelectionMode,
+      'is-selection-mode': todoSelectionMode || resourceSelectionMode,
     }"
   >
     <!-- 待整理属于资源中心，顶栏与「全部资源」共用同一常驻搜索入口；
@@ -215,6 +215,14 @@
             :options="sortOptions"
             @change="search"
           />
+          <BButton
+            v-if="embedded && (inbox.items.length || pageLoading)"
+            class="inbox-resource-batch"
+            :aria-pressed="resourceSelectionMode"
+            @click="toggleResourceSelectionMode"
+          >
+            {{ t(resourceSelectionMode ? 'inbox.todoBatchCancel' : 'inbox.todoBatchSelect') }}
+          </BButton>
           <BButton v-if="!bookmark.isMobile" type="primary" class="inbox-resource-capture" @click="openCapture">
             <SvgIcon :src="icon.common.plus" size="16" aria-hidden="true" />
             {{ t('inbox.quickCapture') }}
@@ -307,7 +315,9 @@
     </section>
 
     <section
-      v-if="inbox.filterType !== 'todo' && inbox.items.length && (!isMobileResourceInbox || resourceSelectionMode)"
+      v-if="
+        inbox.filterType !== 'todo' && inbox.items.length && (!usesExplicitResourceSelection || resourceSelectionMode)
+      "
       class="inbox-batch"
     >
       <BCheckbox
@@ -478,7 +488,7 @@
               >
                 <InboxItem
                   :item="action.item"
-                  :selectable="!isMobileResourceInbox || resourceSelectionMode"
+                  :selectable="!usesExplicitResourceSelection || resourceSelectionMode"
                   :selected="inbox.selectedKeys.includes(inbox.resourceKey(action.item))"
                   :completing="completingKey === inbox.resourceKey(action.item)"
                   :deleting="deletingKey === inbox.resourceKey(action.item)"
@@ -486,6 +496,7 @@
                   :selection-mode="resourceSelectionMode"
                   :swipe-enabled="bookmark.isMobile"
                   :swipe-open="openSwipeResourceKey === inbox.resourceKey(action.item)"
+                  :show-inline-actions="embedded && !bookmark.isMobile"
                   @swipe-start="beginResourceSwipe(action.item)"
                   @update:swipe-open="updateResourceSwipe(action.item, $event)"
                   @select="toggleSelected(action.item, $event)"
@@ -739,6 +750,7 @@
   const isMobileResourceInbox = computed(
     () => bookmark.isMobile && (embedded.value || isMobileResourceInboxTab(route.query.tab)),
   );
+  const usesExplicitResourceSelection = computed(() => embedded.value || isMobileResourceInbox.value);
   const isMobileTodoPrimary = computed(() => bookmark.isMobile && !embedded.value && !isMobileResourceInbox.value);
   const isTodoFocused = computed(() => !embedded.value && (isMobileTodoPrimary.value || inbox.filterType === 'todo'));
 
@@ -907,15 +919,16 @@
   });
 
   const filterOptions = computed(() => {
+    const visibleBadge = (count: number) => (count > 0 ? count : undefined);
     return [
       {
         key: 'all',
         label: t('inbox.all'),
-        badge: inbox.pendingTotal,
+        badge: visibleBadge(inbox.pendingTotal),
       },
-      { key: 'bookmark', label: t('inbox.bookmark'), badge: inbox.typeTotals.bookmark },
-      { key: 'note', label: t('inbox.note'), badge: inbox.typeTotals.note },
-      { key: 'file', label: t('inbox.file'), badge: inbox.typeTotals.file },
+      { key: 'bookmark', label: t('inbox.bookmark'), badge: visibleBadge(inbox.typeTotals.bookmark) },
+      { key: 'note', label: t('inbox.note'), badge: visibleBadge(inbox.typeTotals.note) },
+      { key: 'file', label: t('inbox.file'), badge: visibleBadge(inbox.typeTotals.file) },
     ];
   });
   const sortOptions = computed(() =>
@@ -1160,7 +1173,7 @@
   }
 
   function handleInboxItemOpen(item: InboxItemType) {
-    if (bookmark.isMobile) {
+    if (embedded.value || bookmark.isMobile) {
       openResource(item);
       return;
     }
@@ -1172,7 +1185,7 @@
   }
 
   function enterResourceSelection() {
-    if (!isMobileResourceInbox.value) return;
+    if (!usesExplicitResourceSelection.value) return;
     openSwipeResourceKey.value = '';
     resourceSelectionMode.value = true;
     inbox.selectedKeys = [];
@@ -1182,6 +1195,12 @@
     openSwipeResourceKey.value = '';
     resourceSelectionMode.value = false;
     inbox.selectedKeys = [];
+  }
+
+  function toggleResourceSelectionMode() {
+    if (!usesExplicitResourceSelection.value) return;
+    if (resourceSelectionMode.value) leaveResourceSelection();
+    else enterResourceSelection();
   }
 
   async function toggleMobileResourceSort() {
@@ -1461,14 +1480,15 @@
   }
   function openResource(item: InboxItemType) {
     recordOperation(OPERATION_LOG_MAP.inbox.openResource);
+    const sourceQuery = embedded.value ? { from: route.fullPath } : {};
     if (item.resourceType === 'bookmark') {
-      router.push({ path: `/manage/editBookmark/${item.resourceId}`, query: { organize: 'inbox' } });
+      router.push({ path: `/manage/editBookmark/${item.resourceId}`, query: { organize: 'inbox', ...sourceQuery } });
     } else if (item.resourceType === 'note') {
-      router.push({ path: `/noteLibrary/${item.resourceId}`, query: { organize: 'inbox' } });
+      router.push({ path: `/noteLibrary/${item.resourceId}`, query: { organize: 'inbox', ...sourceQuery } });
     } else {
       router.push({
         path: '/cloudSpace',
-        query: { fileId: item.resourceId, fileName: item.title, organize: 'inbox' },
+        query: { fileId: item.resourceId, fileName: item.title, organize: 'inbox', ...sourceQuery },
       });
     }
   }
@@ -1497,7 +1517,7 @@
       if (completed) {
         recordOperation({ ...OPERATION_LOG_MAP.inbox.completeBatch, operation: `批量整理完成【${completed}项】` });
         message.success(t('inbox.completedCount', { count: completed }));
-        if (isMobileResourceInbox.value) leaveResourceSelection();
+        if (usesExplicitResourceSelection.value) leaveResourceSelection();
         await nextTick(updateScrollFade);
       }
     } finally {
@@ -1543,7 +1563,7 @@
       clearGlobalSearchCache();
       message.success(t('inbox.deleteSuccess', { count: affected }));
       await refreshList();
-      if (isMobileResourceInbox.value && isBatch) leaveResourceSelection();
+      if (usesExplicitResourceSelection.value && isBatch) leaveResourceSelection();
     } catch {
       message.error(t('inbox.deleteFailed'));
     } finally {
@@ -1839,6 +1859,42 @@
     border-radius: 0;
     background: transparent;
   }
+  .inbox-page--embedded .inbox-toolbar :deep(.tab-container.is-pill) {
+    gap: 6px;
+    padding: 0;
+    background: transparent;
+  }
+  .inbox-page--embedded .inbox-toolbar :deep(.is-pill .tab) {
+    min-height: 36px;
+    padding: 0 10px;
+    border-color: transparent;
+    border-radius: 9px;
+    color: var(--desc-color);
+    background: transparent;
+    box-shadow: none;
+  }
+  .inbox-page--embedded .inbox-toolbar :deep(.is-pill .tab:hover) {
+    color: var(--text-color);
+    background: var(--workspace-panel-bg-color);
+  }
+  .inbox-page--embedded .inbox-toolbar :deep(.is-pill .tab.is-active) {
+    border-color: var(--surface-border-color);
+    color: var(--primary-color);
+    background: var(--mobile-selected-bg, var(--workspace-panel-bg-color));
+    box-shadow: none;
+  }
+  .inbox-page--embedded .inbox-toolbar :deep(.tab-badge) {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    color: var(--desc-color);
+    background: var(--workspace-panel-bg-color);
+    font-size: 10px;
+  }
+  .inbox-page--embedded .inbox-toolbar :deep(.is-pill .tab.is-active .tab-badge) {
+    color: var(--primary-color);
+    background: var(--card-background);
+  }
   .inbox-page--embedded > .inbox-content {
     overflow: hidden;
     border: 1px solid var(--surface-border-color);
@@ -1847,9 +1903,17 @@
   }
   .inbox-page--embedded .inbox-toolbar__right--resources {
     width: auto;
-    min-width: min(100%, 360px);
+    min-width: min(100%, 480px);
     flex: 0 1 520px;
-    grid-template-columns: minmax(140px, 1fr) 118px auto;
+    grid-template-columns: minmax(140px, 1fr) 118px auto auto;
+  }
+  .inbox-page--embedded .inbox-toolbar__right--resources :deep(.b-input),
+  .inbox-page--embedded .inbox-toolbar__right--resources :deep(.select-trigger),
+  .inbox-page--embedded .inbox-toolbar__right--resources > .b_btn {
+    height: 40px;
+    min-height: 40px;
+    box-sizing: border-box;
+    border-radius: 10px;
   }
   .inbox-page--todo-focused {
     --primary-color: var(--todo-accent-color, #0ea5e9);
@@ -2131,6 +2195,11 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
+  }
+  .inbox-resource-batch.b_btn {
+    height: 40px;
+    min-height: 40px;
+    white-space: nowrap;
   }
   .inbox-toolbar__todo-tabs {
     display: flex;

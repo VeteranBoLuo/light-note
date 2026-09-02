@@ -41,7 +41,10 @@ describe('archiveBookmark 网页读取预算', () => {
     expect(mocks.fetchWebMeta).toHaveBeenCalledWith('https://example.com/article', {
       bodyLimit: 200_000,
       maxContentBytes: 4 * 1024 * 1024,
+      minimumBodyLength: 100,
+      renderFallback: true,
       timeout: 15_000,
+      signal: undefined,
     });
     expect(mocks.poolQuery.mock.calls[1][0]).toContain('summary = NULL, summary_at = NULL');
   });

@@ -1,10 +1,17 @@
 import express from 'express';
 import * as organizeHandle from '../router_handle/organizeHandle.js';
+import { localProcessingRateLimiter } from '../util/requestRateLimit.js';
 
 const router = express.Router();
 
 router.get('/summary', organizeHandle.summary);
-router.get('/issues/:issueType', organizeHandle.listIssues);
+router.get('/knowledge-structure/summary', localProcessingRateLimiter, organizeHandle.knowledgeStructureSummary);
+router.get(
+  '/issues/:issueType',
+  (req, res, next) =>
+    req.params.issueType === 'knowledge_structure' ? localProcessingRateLimiter(req, res, next) : next(),
+  organizeHandle.listIssues,
+);
 router.post('/untagged/ignore', organizeHandle.ignoreUntagged);
 router.delete('/untagged/ignore', organizeHandle.unignoreUntagged);
 router.get('/duplicate-bookmarks/:groupKey/preview', organizeHandle.duplicatePreview);

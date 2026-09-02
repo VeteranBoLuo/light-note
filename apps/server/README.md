@@ -121,6 +121,14 @@ pnpm --filter server check:file-previews
 pnpm --filter server worker:documents
 ```
 
+启用动态网页识别与网页快照的 Chromium 兜底前，安装系统 Chrome/Chromium，并运行：
+
+```bash
+pnpm --filter server check:web-renderer
+```
+
+浏览器路径、低权限 UID/GID、并发和队列上限见 `apps/server/.env.example`；生产后端以 root 运行时，渲染子进程不得继续使用 root。
+
 ---
 
 ## API 规范

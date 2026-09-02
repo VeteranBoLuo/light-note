@@ -49,9 +49,9 @@
       </div>
 
       <!--
-        这一块统计的是「全部未完成待办 + 全部待整理」，不是今天的范围，所以标题用
+        这一块统计的是「全部未完成待办 + 整理中心全部待处理事项」，不是今天的范围，所以标题用
         「待处理总览」而不是「今日待处理」—— 后者会让人以为它该等于顶栏待办角标
-        （逾期 + 今天）。统计口径不变，只收口用户可见文案。
+        （逾期 + 今天）。下方待整理明细仍只展示收集工作流，不与治理问题混在一起。
         内部命名沿用 todaySummary*，留给后续专门的工作台命名重构，不在此处机械改名。
       -->
       <section class="workbench-first-fold">
@@ -65,7 +65,7 @@
               <small>{{ t('workbench.panel.actionOverviewHint') }}</small>
             </span>
             <span class="today-summary-total">
-              <strong>{{ displayCount(inbox.actionTotal) }}</strong>
+              <strong>{{ displayCount(actionOverviewTotal) }}</strong>
               <small>{{ t('workbench.today.actionTotalUnit') }}</small>
             </span>
           </div>
@@ -408,7 +408,7 @@
   import { apiBasePost } from '@/http/request.ts';
   import { openBookmarkUrl } from '@/utils/openBookmark.ts';
   import { listUpdateLogs, updateLogMarkdownSummaryItems, type UpdateLogItem } from '@/api/updateLogApi.ts';
-  import { cloudSpaceStore, inboxStore, useUserStore } from '@/store';
+  import { cloudSpaceStore, inboxStore, organizeStore, useUserStore } from '@/store';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
@@ -451,6 +451,7 @@
   const user = useUserStore();
   const cloud = cloudSpaceStore();
   const inbox = inboxStore();
+  const organizer = organizeStore();
   const { growth, dashboard, dashboardLoading, growthTasks, growthTasksLoading, loadDashboard, loadGrowthTasks } =
     useGrowth();
   const growthReadOnly = computed(() => Boolean(user.adminContext));
@@ -707,11 +708,11 @@
       icon: icon.noteDetail.toolbar.todo,
     },
     {
-      key: 'inbox',
+      key: 'organize',
       label: t('workbench.today.inboxPending'),
-      value: inbox.pendingTotal,
+      value: organizer.attentionCount ?? inbox.pendingTotal,
       hint: t('workbench.today.inboxPendingHint'),
-      icon: icon.contextMenu.inbox,
+      icon: icon.ai.organize,
     },
     {
       key: 'notification',
@@ -721,6 +722,9 @@
       icon: icon.settings.notification,
     },
   ]);
+  const actionOverviewTotal = computed(
+    () => Number(inbox.todoPendingTotal || 0) + Number((organizer.attentionCount ?? inbox.pendingTotal) || 0),
+  );
   const lastUpdatedAt = computed(() => {
     if (!generatedAt.value) return '';
     const date = new Date(generatedAt.value);
@@ -791,13 +795,9 @@
     }
     recordOperation({
       module: '工作台',
-      operation: key === 'todo' ? '从今日待处理查看未完成待办' : '从今日待处理查看待整理资源',
+      operation: key === 'todo' ? '从待处理总览查看未完成待办' : '从待处理总览打开整理中心',
     });
-    router.push(
-      key === 'todo'
-        ? { path: '/inbox', query: { tab: 'todo' } }
-        : { path: '/organize', query: { issue: 'pending' } },
-    );
+    router.push(key === 'todo' ? { path: '/inbox', query: { tab: 'todo' } } : { path: '/organize' });
   }
 
   function openGrowthTasks() {
@@ -958,7 +958,12 @@
   const pendingInitOwner = ref('');
 
   async function init(force = false) {
-    const owner = `${user.id || 'visitor'}:${user.role || ''}`;
+    const owner = [
+      user.id || 'visitor',
+      user.role || '',
+      user.adminContext?.subjectUserId || '',
+      user.adminContext?.mode || '',
+    ].join('|');
     if (initRunning.value) {
       pendingInitOwner.value = owner;
       return;
@@ -967,6 +972,7 @@
     initRunning.value = true;
     if (initializedOwner.value !== owner) {
       inbox.resetForOwner(user.id || 'visitor');
+      organizer.resetForOwner(owner);
     }
     try {
       await Promise.allSettled([
@@ -975,6 +981,8 @@
         loadDashboard(),
         loadGrowthTasks(true),
         refreshDailyReview(),
+        organizer.loadSummary({ silent: Boolean(organizer.summary) }),
+        organizer.loadKnowledgeStructureSummary({ silent: Boolean(organizer.knowledgeStructureSummary) }),
       ]);
       if (user.id && user.role !== 'visitor') {
         // 待处理数量以导航角标共用的计数接口为最终口径，避免工作台与快速添加显示不一致。
@@ -995,7 +1003,7 @@
   }
 
   watch(
-    () => [user.id, user.role],
+    () => [user.id, user.role, user.adminContext?.subjectUserId, user.adminContext?.mode],
     () => init(),
     { immediate: true },
   );
@@ -1005,7 +1013,7 @@
    * 但全站没有 keep-alive，路由切回来就是重新挂载，那件事已由上面 immediate 的 watch 走 init 完成；
    * 剩下真正会拿到陈旧数据的只有「页面一直在、人离开了」—— 工作台正是最容易被丢在标签页里开一天的页面，
    * 而它满屏都是绑「今天」的内容（逾期/今日待办、收集箱、每日任务、签到）。
-   * 三个请求都走静默路径：不进骨架屏、失败保留旧数据，唯一的反馈是顶部那条全局细进度条。
+   * 请求都走静默路径：不进骨架屏、失败保留旧数据，唯一的反馈是顶部那条全局细进度条。
    */
   useForegroundRefresh({
     refresh: async () => {
@@ -1014,8 +1022,10 @@
         loadDashboard(),
         loadGrowthTasks(true),
         refreshDailyReview(),
+        organizer.loadSummary({ silent: true }),
+        organizer.loadKnowledgeStructureSummary({ silent: true }),
       ]);
-      // 与 init 同口径：角标计数最终以 /inbox/count 为准，否则静默刷新会把工作台自己的口径留给角标。
+      // 待整理明细仍以 /inbox/count 为准；整理中心汇总由 organize store 的两份摘要独立维护。
       if (user.id && user.role !== 'visitor') await inbox.refreshCount();
     },
     // 首屏还没成功过、或 init 正在跑时不插队：前者没有旧数据可保，后者会重复打同一批请求。
@@ -1374,7 +1384,7 @@
     --today-accent: var(--primary-color);
   }
 
-  .today-summary-item--inbox {
+  .today-summary-item--organize {
     --today-accent: var(--resource-note-color, #00a884);
   }
 

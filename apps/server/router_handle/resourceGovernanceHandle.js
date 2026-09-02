@@ -45,7 +45,7 @@ function sendError(res, scene, error) {
     ACCOUNT_DELETION_RETRY_SCOPE_INVALID: '注销清理重试范围无效',
     ACCOUNT_DELETION_RETRY_SCOPE_CHANGED: '注销清理任务状态已经变化，请重新扫描',
     ACCOUNT_DELETION_RETRY_NOT_ALLOWED: '注销清理任务当前不可重试',
-    ACCOUNT_DELETION_ACTIVE_ACCOUNT_BLOCKED: '账号当前仍处于可用状态，已拒绝物理清理',
+    ACCOUNT_DELETION_ACTIVE_ACCOUNT_BLOCKED: '账号尚未正式注销，已拒绝物理清理',
     FINDING_NOT_CLEANABLE: '该候选不允许自动清理',
     EXECUTOR_NOT_REGISTERED: '该资源类型没有注册清理执行器',
     IMAGE_KIND_EXECUTOR_DISABLED: '该图片类型当前仅支持只读复核',

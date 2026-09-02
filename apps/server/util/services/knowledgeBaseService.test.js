@@ -38,6 +38,42 @@ describe('knowledgeBaseService', () => {
     expect(cacheMocks.invalidateKnowledgeCache).toHaveBeenCalledTimes(1);
   });
 
+  it('帮助文章脚本更新未显式栏目时保留既有栏目，非帮助知识不保留展示栏目', async () => {
+    connection.query
+      .mockResolvedValueOnce([[{ id: 'kb-1', title: '说明', help_section: '笔记与编辑' }]])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]);
+
+    await upsertKnowledgeBase({
+      userId: 'root-1',
+      input: { title: '说明', content: '正文', category: '帮助中心', status: 'public', type: 'markdown' },
+    });
+
+    expect(connection.query.mock.calls[1][1]).toContain('笔记与编辑');
+
+    vi.clearAllMocks();
+    connection.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+    await updateKnowledgeBaseById({
+      userId: 'root-1',
+      id: 'kb-1',
+      patch: { category: '内部知识', helpSection: '不应保留' },
+    });
+    expect(connection.query.mock.calls[0][1]).toContain(null);
+  });
+
+  it('新建帮助文章未填写栏目时写入其他帮助', async () => {
+    connection.query
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[{ next_sort: 3 }]])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]);
+
+    await upsertKnowledgeBase({
+      userId: 'root-1',
+      input: { title: '新文章', content: '正文', category: '帮助中心', status: 'public', type: 'markdown' },
+    });
+
+    expect(connection.query.mock.calls[2][1]).toContain('其他帮助');
+  });
+
   it('事务提交失败时不会提前清理索引缓存', async () => {
     connection.query
       .mockResolvedValueOnce([[{ id: 'kb-1', title: '说明' }]])

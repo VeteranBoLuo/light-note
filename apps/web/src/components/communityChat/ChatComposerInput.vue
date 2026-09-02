@@ -558,7 +558,6 @@
   .chat-composer-input__rich :deep(.chat-composer-input__emoji) {
     width: 1em;
     height: 1em;
-    margin-inline: 0.38em;
     display: inline-block;
     vertical-align: -0.12em;
     object-fit: contain;

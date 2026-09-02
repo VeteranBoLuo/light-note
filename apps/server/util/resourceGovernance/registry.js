@@ -30,13 +30,29 @@ export const GOVERNANCE_RULES = Object.freeze({
     issueCode: 'OWNER_MISSING',
     resourceType: 'business',
     risk: GOVERNANCE_RISK.REVIEW,
+    operatorReviewSeverity: 'high',
+    ownerStateAware: true,
+    invalidOwnerCleanup: true,
     supportsBatch: false,
     revalidate: true,
   }),
+  // 历史规则仅用于展示旧扫描结果；del_flag=1 也可能只是管理员停用，禁止继续授权清理。
   SOFT_DELETED_OWNER_HAS_RESOURCES: Object.freeze({
     issueCode: 'SOFT_DELETED_OWNER_HAS_RESOURCES',
     resourceType: 'account',
     risk: GOVERNANCE_RISK.BLOCKED,
+    legacy: true,
+    ownerStateAware: true,
+    supportsBatch: false,
+    revalidate: true,
+  }),
+  FORMALLY_DELETED_OWNER_HAS_RESOURCES: Object.freeze({
+    issueCode: 'FORMALLY_DELETED_OWNER_HAS_RESOURCES',
+    resourceType: 'account',
+    risk: GOVERNANCE_RISK.REVIEW,
+    operatorReviewSeverity: 'high',
+    ownerStateAware: true,
+    invalidOwnerCleanup: true,
     supportsBatch: false,
     revalidate: true,
   }),
@@ -44,6 +60,8 @@ export const GOVERNANCE_RULES = Object.freeze({
     issueCode: 'ACCOUNT_DELETION_STALLED',
     resourceType: 'account_job',
     risk: GOVERNANCE_RISK.BLOCKED,
+    ownerStateAware: true,
+    invalidOwnerCleanup: true,
     supportsBatch: false,
     revalidate: true,
   }),
@@ -66,6 +84,18 @@ export function normalizeGovernanceScopes(value) {
 
 export function getGovernanceRule(issueCode) {
   return GOVERNANCE_RULES[String(issueCode || '')] || null;
+}
+
+export function getOperatorReviewGovernanceRules() {
+  return Object.values(GOVERNANCE_RULES).filter((rule) => Boolean(rule.operatorReviewSeverity));
+}
+
+export function getOwnerStateGovernanceRules() {
+  return Object.values(GOVERNANCE_RULES).filter((rule) => rule.ownerStateAware === true);
+}
+
+export function getInvalidOwnerCleanupGovernanceRules() {
+  return Object.values(GOVERNANCE_RULES).filter((rule) => rule.invalidOwnerCleanup === true);
 }
 
 export function canCreateCleanupJob(finding) {

@@ -160,6 +160,10 @@ describe('浏览器插件三类流程接线', () => {
     expect(bookmarkSource).toContain('draft.url = page.url');
     expect(bookmarkSource).toContain('draft.name = page.title.slice(0, 255)');
     expect(bookmarkSource).toContain('generateWithAi');
+    expect(bookmarkSource).toContain('captureCurrentPageText(captureTarget, 12_000)');
+    expect(bookmarkSource).toContain('prepareCurrentPageTextCapture()');
+    expect(bookmarkSource).toContain('input: { url, ...(pageContext ? { pageContext } : {}) }');
+    expect(bookmarkSource).toContain('isSamePageUrl(capturedPage.url, url)');
     expect(bookmarkSource).toContain('browserExtension.bookmark.aiDescription');
     expect(bookmarkSource).not.toContain('browserExtension.bookmark.modeInboxDescription');
     expect(bookmarkSource).not.toContain('ln-extension-mode-note');

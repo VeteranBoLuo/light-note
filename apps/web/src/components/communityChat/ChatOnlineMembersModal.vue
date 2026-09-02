@@ -31,46 +31,48 @@
           <span class="chat-online-members-modal__skeleton-status"></span>
         </div>
       </div>
-      <div v-else-if="error" class="chat-online-members-modal__state" :style="{ minHeight: loadingListMinHeight }">
+      <div v-else-if="error" class="chat-online-members-modal__state">
         <strong>{{ t('communityChat.onlineMembers.loadFailed') }}</strong>
         <span>{{ t('communityChat.onlineMembers.loadFailedDescription') }}</span>
         <BButton size="small" @click="emit('retry')">{{ t('communityChat.onlineMembers.retry') }}</BButton>
       </div>
-      <ul v-else class="chat-online-members-modal__list" :style="{ minHeight: loadingListMinHeight }">
-        <li v-for="(member, index) in snapshot?.members || []" :key="`${member.alias}-${member.role}-${index}`">
-          <span class="chat-online-members-modal__avatar-slot">
-            <AvatarFramePreview
-              :frame-id="member.frameId"
-              :src="member.avatar || icon.communityChat.defaultAvatar"
-              :size="38"
-              :animated="false"
-              class="chat-online-members-modal__avatar"
-            />
-          </span>
-          <span class="chat-online-members-modal__copy">
-            <strong>{{ member.alias || t('communityChat.memberFallback') }}</strong>
-            <small>{{ roleLabel(member.role) }}</small>
-          </span>
-          <i aria-hidden="true"></i>
-        </li>
-        <li v-if="snapshot?.guestCount" class="is-guest-summary">
-          <span class="chat-online-members-modal__guest-avatar" aria-hidden="true">
-            {{ t('communityChat.onlineMembers.guestInitial') }}
-          </span>
-          <span class="chat-online-members-modal__copy">
-            <strong>{{ t('communityChat.onlineMembers.guests', { count: snapshot.guestCount }) }}</strong>
-            <small>{{ t('communityChat.onlineMembers.guestPrivacy') }}</small>
-          </span>
-          <i aria-hidden="true"></i>
-        </li>
-      </ul>
-
-      <p
-        v-if="!loading && !error && !snapshot?.members.length && !snapshot?.guestCount"
-        class="chat-online-members-modal__empty"
-      >
-        {{ t('communityChat.onlineMembers.empty') }}
-      </p>
+      <template v-else>
+        <ul
+          v-if="resultRowCount"
+          class="chat-online-members-modal__list"
+          :style="{ minHeight: resultListMinHeight }"
+        >
+          <li v-for="(member, index) in snapshot?.members || []" :key="`${member.alias}-${member.role}-${index}`">
+            <span class="chat-online-members-modal__avatar-slot">
+              <AvatarFramePreview
+                :frame-id="member.frameId"
+                :src="member.avatar || icon.communityChat.defaultAvatar"
+                :size="38"
+                :animated="false"
+                class="chat-online-members-modal__avatar"
+              />
+            </span>
+            <span class="chat-online-members-modal__copy">
+              <strong>{{ member.alias || t('communityChat.memberFallback') }}</strong>
+              <small>{{ roleLabel(member.role) }}</small>
+            </span>
+            <i aria-hidden="true"></i>
+          </li>
+          <li v-if="snapshot?.guestCount" class="is-guest-summary">
+            <span class="chat-online-members-modal__guest-avatar" aria-hidden="true">
+              {{ t('communityChat.onlineMembers.guestInitial') }}
+            </span>
+            <span class="chat-online-members-modal__copy">
+              <strong>{{ t('communityChat.onlineMembers.guests', { count: snapshot.guestCount }) }}</strong>
+              <small>{{ t('communityChat.onlineMembers.guestPrivacy') }}</small>
+            </span>
+            <i aria-hidden="true"></i>
+          </li>
+        </ul>
+        <p v-else class="chat-online-members-modal__empty">
+          {{ t('communityChat.onlineMembers.empty') }}
+        </p>
+      </template>
       <p class="chat-online-members-modal__privacy">{{ t('communityChat.onlineMembers.privacy') }}</p>
       <div class="chat-online-members-modal__actions">
         <BButton @click="visible = false">{{ t('common.close') }}</BButton>
@@ -123,10 +125,19 @@
     { immediate: true, flush: 'sync' },
   );
   const loadingRowCount = computed(() => reservedRowCount.value);
-  const loadingListMinHeight = computed(() => {
-    const rowsHeight = loadingRowCount.value * 62 + (loadingRowCount.value - 1) * 7;
+  function listMinHeight(rowCount: number) {
+    const boundedCount = boundedRowCount(rowCount);
+    const rowsHeight = boundedCount * 62 + (boundedCount - 1) * 7;
     return `min(${Math.min(rowsHeight, 430)}px, 54vh)`;
+  }
+  const loadingListMinHeight = computed(() => {
+    return listMinHeight(loadingRowCount.value);
   });
+  const resultRowCount = computed(() => {
+    if (!props.snapshot) return 0;
+    return props.snapshot.members.length + (props.snapshot.guestCount > 0 ? 1 : 0);
+  });
+  const resultListMinHeight = computed(() => listMinHeight(resultRowCount.value));
 
   function roleLabel(role: CommunityChatOnlineMember['role']) {
     return t(`communityChat.onlineMembers.role.${role}`);
@@ -182,6 +193,8 @@
     margin: 0;
     padding: 0;
     display: grid;
+    grid-auto-rows: minmax(62px, max-content);
+    align-content: start;
     gap: 7px;
     overflow-y: auto;
     list-style: none;

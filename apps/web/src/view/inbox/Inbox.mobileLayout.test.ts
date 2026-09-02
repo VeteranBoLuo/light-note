@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const inboxSource = readFileSync(resolve(process.cwd(), 'src/view/inbox/Inbox.vue'), 'utf8');
+const inboxItemSource = readFileSync(resolve(process.cwd(), 'src/components/inbox/InboxItem.vue'), 'utf8');
 const resourcePageShellSource = readFileSync(
   resolve(process.cwd(), 'src/components/base/ResourcePageShell.vue'),
   'utf8',
@@ -20,7 +21,9 @@ const mobileTodoTemplate = inboxSource.slice(
 describe('移动端待办页签布局', () => {
   it('待整理桌面端使用范围、队列和检查器三栏，移动端回落到单列', () => {
     expect(inboxSource).toContain('class="resource-inbox-scope"');
-    expect(inboxSource).toContain("'inbox-page--resource-workspace': !embedded && !isTodoFocused && !bookmark.isMobile");
+    expect(inboxSource).toContain(
+      "'inbox-page--resource-workspace': !embedded && !isTodoFocused && !bookmark.isMobile",
+    );
     expect(inboxSource).toContain('class="resource-inbox-inspector"');
     expect(inboxSource).toMatch(
       /\.inbox-page--resource-workspace\s*\{[\s\S]*?grid-template-columns:\s*210px minmax\(0, 1fr\) 320px/,
@@ -70,7 +73,7 @@ describe('移动端待办页签布局', () => {
   });
 
   it('嵌入整理中心时只解析资源类型，空筛选稳定回落到全部资源而不是待办', () => {
-    expect(inboxSource).toContain(':is="embedded ? \'div\' : \'main\'"');
+    expect(inboxSource).toContain(":is=\"embedded ? 'div' : 'main'\"");
     expect(inboxSource).not.toContain('<main\n    class="inbox-page"');
     expect(inboxSource).toContain(
       'return embedded.value ? resolveResourceFilter(route.query.resourceType) : resolveRequestedFilter(route.query.tab);',
@@ -83,9 +86,33 @@ describe('移动端待办页签布局', () => {
     );
   });
 
+  it('嵌入整理中心默认浏览资源，只有显式进入批量模式才显示勾选与批量操作', () => {
+    expect(inboxSource).toContain(
+      'const usesExplicitResourceSelection = computed(() => embedded.value || isMobileResourceInbox.value)',
+    );
+    expect(inboxSource).toContain('@click="toggleResourceSelectionMode"');
+    expect(inboxSource).toContain(':selectable="!usesExplicitResourceSelection || resourceSelectionMode"');
+    expect(inboxSource).toContain('(!usesExplicitResourceSelection || resourceSelectionMode)');
+    expect(inboxSource).toMatch(/function toggleResourceSelectionMode[\s\S]*?enterResourceSelection\(\)/);
+    expect(inboxSource).toContain(':show-inline-actions="embedded && !bookmark.isMobile"');
+    expect(inboxItemSource).toContain('class="inbox-item__actions inbox-item__actions--inline"');
+    expect(inboxItemSource).toContain("t('inbox.organize')");
+    expect(inboxItemSource).toContain("t('inbox.complete')");
+  });
+
   it('移动端嵌入工具栏重置桌面宽度 flex 基准，不挤占待整理列表高度', () => {
     expect(inboxSource).toMatch(
       /@media \(max-width: 767px\)[\s\S]*?\.inbox-page--embedded \.inbox-toolbar__right--resources\s*\{[\s\S]*?flex:\s*0 0 auto;/,
+    );
+  });
+
+  it('整理中心内层筛选使用轻量胶囊，并隐藏零值角标', () => {
+    expect(inboxSource).toContain('const visibleBadge = (count: number) => (count > 0 ? count : undefined)');
+    expect(inboxSource).toMatch(
+      /\.inbox-page--embedded \.inbox-toolbar :deep\(\.is-pill \.tab\.is-active\)\s*\{[\s\S]*?border-color:\s*var\(--surface-border-color\);[\s\S]*?box-shadow:\s*none;/,
+    );
+    expect(inboxSource).toMatch(
+      /\.inbox-page--embedded \.inbox-toolbar :deep\(\.tab-badge\)\s*\{[\s\S]*?height:\s*18px;[\s\S]*?font-size:\s*10px;/,
     );
   });
 
@@ -93,6 +120,9 @@ describe('移动端待办页签布局', () => {
     expect(inboxSource).toContain('class="inbox-toolbar__right inbox-toolbar__right--resources"');
     expect(inboxSource).toMatch(
       /\.inbox-toolbar__right--resources\s*\{[\s\S]*?width:\s*100%;[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) auto;[\s\S]*?flex:\s*1 1 auto;/,
+    );
+    expect(inboxSource).toMatch(
+      /\.inbox-page--embedded \.inbox-toolbar__right--resources :deep\(\.b-input\),[\s\S]*?\.select-trigger[\s\S]*?> \.b_btn\s*\{[\s\S]*?height:\s*40px;[\s\S]*?min-height:\s*40px;/,
     );
   });
 
@@ -105,12 +135,15 @@ describe('移动端待办页签布局', () => {
     );
   });
 
-  it('桌面点击待整理卡片更新检查器，移动端仍直接打开资源', () => {
+  it('独立桌面页点击待整理卡片更新检查器，移动端与整理中心嵌入态直接打开资源', () => {
     expect(inboxSource).not.toContain('@mouseenter="inspectInboxResource(action.item)"');
     expect(inboxSource).not.toContain('@focusin="inspectInboxResource(action.item)"');
     expect(inboxSource).toContain('@open="handleInboxItemOpen(action.item)"');
     expect(inboxSource).toMatch(/const inspectedInboxItem = computed\([\s\S]*?inbox\.items\[0\]/);
-    expect(inboxSource).toMatch(/function handleInboxItemOpen[\s\S]*?bookmark\.isMobile[\s\S]*?openResource\(item\)/);
+    expect(inboxSource).toMatch(
+      /function handleInboxItemOpen[\s\S]*?embedded\.value \|\| bookmark\.isMobile[\s\S]*?openResource\(item\)/,
+    );
+    expect(inboxSource).toContain('const sourceQuery = embedded.value ? { from: route.fullPath } : {};');
     expect(inboxSource).toMatch(/function inspectInboxResource[\s\S]*?inboxAiResource\.value = null/);
     expect(inboxSource).toMatch(/const aiKey = inboxAiResource\.value[\s\S]*?!keys\.has\(aiKey\)/);
   });

@@ -249,6 +249,7 @@ describe('bookmarkService.createBookmark', () => {
     expect(fetchWebMeta).toHaveBeenCalledWith('https://example.com/article', {
       signal: undefined,
       maxContentBytes: 4 * 1024 * 1024,
+      renderFallback: true,
     });
   });
 

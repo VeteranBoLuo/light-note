@@ -473,8 +473,9 @@
   const sourceReturnPath = () => resolveNoteDetailReturnPath(router.currentRoute.value.query.from);
   const noteBackLabel = computed(() => {
     const source = sourceReturnPath();
-    if (source.startsWith('/toolbox/task/')) return t('noteDetail.backToToolboxResult');
+    if (source.startsWith('/toolbox/')) return t('noteDetail.backToToolboxResult');
     if (source.startsWith('/workbenches')) return t('noteDetail.backToWorkbench');
+    if (source.startsWith('/organize')) return t('noteDetail.backToOrganizer');
     return t('noteDetail.backToLibrary');
   });
   const detailSourceQuery = () => {

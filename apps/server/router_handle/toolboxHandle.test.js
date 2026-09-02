@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   createToolboxWorkspaceItem: vi.fn(),
   updateToolboxWorkspaceItem: vi.fn(),
   createToolboxWorkspaceSession: vi.fn(),
+  getToolboxKnowledgeOverview: vi.fn(),
 }));
 
 vi.mock('../util/auth.js', () => ({
@@ -36,7 +37,9 @@ vi.mock('../util/operationLog.js', () => ({
 vi.mock('../util/toolbox/errors.js', () => ({
   parseToolboxError: (error) => ({ status: 500, data: { code: error?.code || 'ERROR' }, message: 'failed' }),
 }));
-vi.mock('../util/toolbox/knowledgeStructure.js', () => ({ getToolboxKnowledgeOverview: vi.fn() }));
+vi.mock('../util/toolbox/knowledgeStructure.js', () => ({
+  getToolboxKnowledgeOverview: mocks.getToolboxKnowledgeOverview,
+}));
 vi.mock('../util/toolbox/service.js', () => ({
   cancelToolboxJob: mocks.cancelToolboxJob,
   createToolboxJob: mocks.createToolboxJob,
@@ -71,6 +74,7 @@ const {
   createWorkspaceItem,
   createWorkspaceSession,
   getHome,
+  getKnowledgeOverview,
   openWorkspace,
   removeWorkspaceResource,
   saveArtifact,
@@ -91,6 +95,20 @@ describe('toolbox home handlers', () => {
     mocks.ensureNotVisitor.mockReturnValue(true);
     mocks.ensureUserOrAdminPolicy.mockReturnValue(true);
     mocks.recordServerOperation.mockResolvedValue(true);
+  });
+
+  it('知识库整理接口不再返回目录导出所需的完整节点树', async () => {
+    const overview = { summary: { total: 3 }, issues: [] };
+    mocks.getToolboxKnowledgeOverview.mockResolvedValueOnce(overview);
+    const response = createResponse();
+
+    await getKnowledgeOverview({ user: { id: 'user-1' } }, response);
+
+    expect(mocks.getToolboxKnowledgeOverview).toHaveBeenCalledWith({
+      userId: 'user-1',
+      analysisOptions: { includeNodes: false },
+    });
+    expect(response.send).toHaveBeenCalledWith({ data: overview, status: 200, msg: 'success' });
   });
 
   it('首页只读取当前资源所有者，并返回固定版本的聚合读模型', async () => {
@@ -300,10 +318,7 @@ describe('toolbox home handlers', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const response = createResponse();
 
-    await createWorkspace(
-      { user: { id: 'user-1' }, body: { kind: 'learning', title: '学习计划' } },
-      response,
-    );
+    await createWorkspace({ user: { id: 'user-1' }, body: { kind: 'learning', title: '学习计划' } }, response);
 
     expect(response.status).toHaveBeenCalledWith(201);
     expect(response.send).toHaveBeenCalledWith({
@@ -311,10 +326,7 @@ describe('toolbox home handlers', () => {
       status: 200,
       msg: 'success',
     });
-    expect(consoleError).toHaveBeenCalledWith(
-      '[toolbox] operation log failed code=%s',
-      'OPERATION_LOG_FAILED',
-    );
+    expect(consoleError).toHaveBeenCalledWith('[toolbox] operation log failed code=%s', 'OPERATION_LOG_FAILED');
     consoleError.mockRestore();
   });
 });

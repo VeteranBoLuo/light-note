@@ -97,8 +97,12 @@ export async function prepareCurrentPageTextCapture(): Promise<PreparedPageTextC
   };
 }
 
-export function captureCurrentPageText(target: PreparedPageTextCapture): Promise<CapturedPageText> {
+export function captureCurrentPageText(
+  target: PreparedPageTextCapture,
+  maxLength = PAGE_TEXT_MAX_LENGTH,
+): Promise<CapturedPageText> {
   // permissions.request 必须在点击事件的同步调用栈内发起，不能先跨过异步边界。
+  const boundedMaxLength = Math.min(PAGE_TEXT_MAX_LENGTH, Math.max(1, Math.trunc(Number(maxLength) || 0)));
   const permissionRequest = chrome.permissions.request({ origins: [target.originPattern] });
   return permissionRequest
     .catch((cause) => {
@@ -116,7 +120,7 @@ export function captureCurrentPageText(target: PreparedPageTextCapture): Promise
         const results = await chrome.scripting.executeScript({
           target: { tabId: current.tabId, frameIds: [0] },
           func: readPageTextForLightNote,
-          args: [PAGE_TEXT_MAX_LENGTH],
+          args: [boundedMaxLength],
         });
         const value = results[0]?.result;
         if (!value?.url) throw new Error('CAPTURE_EMPTY');

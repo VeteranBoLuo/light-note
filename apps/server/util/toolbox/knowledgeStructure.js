@@ -6,6 +6,14 @@ const MAX_KNOWLEDGE_NOTES = 20_000;
 const STALE_AFTER_DAYS = 180;
 const DEEP_NOTE_DEPTH = 6;
 
+export const ORGANIZE_KNOWLEDGE_ISSUE_KINDS = Object.freeze([
+  'invalid_parent',
+  'empty',
+  'duplicate_title',
+  'untitled',
+  'deep',
+]);
+
 function numberOrZero(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
@@ -55,7 +63,10 @@ function recommendation(code, count, priority) {
   return { code, count, priority };
 }
 
-export function analyzeKnowledgeStructure(rows = [], { now = Date.now() } = {}) {
+export function analyzeKnowledgeStructure(
+  rows = [],
+  { now = Date.now(), issueKinds = null, issueOffset = 0, issueLimit = 500, includeNodes = true } = {},
+) {
   const sourceRows = Array.isArray(rows) ? rows : [];
   const snapshot = buildNoteTree(sourceRows);
   const metadataById = new Map(sourceRows.map((row) => [String(row.id), row]));
@@ -166,6 +177,18 @@ export function analyzeKnowledgeStructure(rows = [], { now = Date.now() } = {}) 
   );
   nodes.sort((left, right) => left.path.localeCompare(right.path, 'zh-CN'));
 
+  const selectedKinds = Array.isArray(issueKinds) && issueKinds.length ? new Set(issueKinds) : null;
+  const selectedIssues = selectedKinds ? issueItems.filter((item) => selectedKinds.has(item.kind)) : issueItems;
+  const normalizedOffset = Math.max(0, Math.floor(numberOrZero(issueOffset)));
+  const normalizedLimit = Math.max(0, Math.floor(numberOrZero(issueLimit)));
+  const selectedSeverityCounts = selectedIssues.reduce(
+    (counts, item) => {
+      counts[item.severity] += 1;
+      return counts;
+    },
+    { high: 0, medium: 0, low: 0 },
+  );
+
   return {
     scannedAt: new Date(Number(now)).toISOString(),
     policy: { staleAfterDays: STALE_AFTER_DAYS, deepNoteDepth: DEEP_NOTE_DEPTH },
@@ -183,14 +206,17 @@ export function analyzeKnowledgeStructure(rows = [], { now = Date.now() } = {}) 
       healthScore,
     },
     issueCounts,
-    issues: issueItems.slice(0, 500),
+    issues: selectedIssues.slice(normalizedOffset, normalizedOffset + normalizedLimit),
     issueTotal: issueItems.length,
+    selectedIssueTotal: selectedIssues.length,
+    selectedAffectedNoteCount: new Set(selectedIssues.map((item) => item.noteId)).size,
+    selectedSeverityCounts,
     recommendations,
-    nodes,
+    nodes: includeNodes ? nodes : [],
   };
 }
 
-export async function getToolboxKnowledgeOverview({ userId, db = pool } = {}) {
+export async function getToolboxKnowledgeOverview({ userId, db = pool, analysisOptions = {} } = {}) {
   const normalizedUserId = String(userId || '').trim();
   if (!normalizedUserId) throw toolboxError('TOOLBOX_USER_REQUIRED', '缺少用户身份', 401);
   const [rows] = await db.query(
@@ -290,7 +316,7 @@ export async function getToolboxKnowledgeOverview({ userId, db = pool } = {}) {
       413,
     );
   }
-  return analyzeKnowledgeStructure(rows);
+  return analyzeKnowledgeStructure(rows, analysisOptions);
 }
 
 export const knowledgeStructureInternals = Object.freeze({

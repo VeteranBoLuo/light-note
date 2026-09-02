@@ -97,14 +97,14 @@ function rowsFor(sql) {
   }
   if (statement.includes('FROM resource_governance_findings')) {
     return summary
-      ? [[{ total: 1, critical: 1 }]]
+      ? [[{ issue_code: 'OWNER_MISSING', total: 1 }]]
       : [
           [
             {
               id: 'finding-1',
               issue_code: 'OWNER_MISSING',
               resource_type: 'file',
-              risk_level: 'blocked',
+              risk_level: 'review',
               observation_count: 2,
               estimated_bytes: 1024,
               first_seen_at: '2026-08-09 08:00:00',
@@ -288,7 +288,7 @@ describe('后台统一待处理中心', () => {
       status: 200,
       data: {
         unavailableSources: ['community_report'],
-        work: { total: 6, critical: 2 },
+        work: { total: 6, critical: 1 },
         jobs: { attention: 7, running: 2, waiting: 4, completed24h: 37 },
         sla: { policyVersion: expect.any(String), sampled: true },
       },
@@ -317,7 +317,7 @@ describe('后台统一待处理中心', () => {
     });
     expect(res.body.data.work.items.find((item) => item.source === 'resource_governance')).toMatchObject({
       ownerTeam: '资源治理',
-      severity: 'critical',
+      severity: 'high',
     });
     const filePreview = res.body.data.jobs.items.find((item) => item.source === 'file_preview');
     expect(filePreview).toMatchObject({
@@ -352,6 +352,29 @@ describe('后台统一待处理中心', () => {
     expect(res.body.data.jobs.items.every((item) => item.source === 'bookmark_icon')).toBe(true);
     expect(query).toHaveBeenCalledTimes(2);
     expect(query.mock.calls.every(([sql]) => String(sql).includes('bookmark_icon_jobs'))).toBe(true);
+  });
+
+  it('资源复核只读取需要人工决策的规则，不混入图片观察项和注销任务健康', async () => {
+    const res = response();
+    await getAdminActionCenter({ user: { role: 'root' }, body: { source: 'resource_governance' } }, res);
+
+    expect(res.body).toMatchObject({
+      status: 200,
+      data: {
+        work: { total: 1, critical: 0 },
+      },
+    });
+    expect(res.body.data.work.items[0]).toMatchObject({ id: 'finding-1', severity: 'high' });
+    expect(query).toHaveBeenCalledTimes(2);
+    const queryText = query.mock.calls.map(([sql]) => String(sql)).join('\n');
+    expect(queryText).toContain('issue_code IN');
+    const params = query.mock.calls.flatMap(([, values]) => (Array.isArray(values) ? values : []));
+    expect(params).toContain('OWNER_MISSING');
+    expect(params).toContain('FORMALLY_DELETED_OWNER_HAS_RESOURCES');
+    expect(params).not.toContain('LOCAL_IMAGE_UNREFERENCED');
+    expect(params).not.toContain('LOCAL_IMAGE_UNSUPPORTED');
+    expect(params).not.toContain('ACCOUNT_DELETION_STALLED');
+    expect(params).not.toContain('SOFT_DELETED_OWNER_HAS_RESOURCES');
   });
 
   it('拒绝未知来源筛选且不查询数据库', async () => {

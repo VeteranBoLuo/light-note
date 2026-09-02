@@ -100,27 +100,6 @@ export type ToolboxHomeWorkspaceSummary = Pick<
   | 'updatedAt'
 >;
 
-export type ToolboxKnowledgeNode = {
-  id: string;
-  parentId: string | null;
-  effectiveParentId: string | null;
-  title: string;
-  type: string;
-  depth: number;
-  path: string;
-  childCount: number;
-  tagCount: number;
-  outgoingReferenceCount: number;
-  incomingReferenceCount: number;
-  contentLength: number;
-  contentEmpty: boolean;
-  invalidParent: boolean;
-  isTop: boolean;
-  sort: number;
-  updatedAt: string | null;
-  createdAt: string | null;
-};
-
 export type ToolboxKnowledgeIssue = {
   kind: string;
   severity: 'high' | 'medium' | 'low';
@@ -150,7 +129,6 @@ export type ToolboxKnowledgeOverview = {
   issues: ToolboxKnowledgeIssue[];
   issueTotal: number;
   recommendations: Array<{ code: string; count: number; priority: 'high' | 'medium' | 'low' }>;
-  nodes: ToolboxKnowledgeNode[];
 };
 
 export type ToolboxQuote = {

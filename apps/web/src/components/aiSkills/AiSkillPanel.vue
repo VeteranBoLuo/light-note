@@ -149,6 +149,7 @@
       autoRunActionId?: string;
       iconSrc?: string;
       showGrounding?: boolean;
+      clearPromptOnSuccess?: boolean;
       reserveResultSpace?: boolean;
     }>(),
     {
@@ -169,6 +170,7 @@
       autoRunActionId: '',
       iconSrc: '',
       showGrounding: true,
+      clearPromptOnSuccess: false,
       reserveResultSpace: false,
     },
   );
@@ -326,10 +328,13 @@
     return execute(action.skillId || props.skillId, input);
   }
 
-  function runPrompt() {
+  async function runPrompt() {
     const value = prompt.value.trim();
     if (!value || loading.value) return;
-    void execute(props.skillId, { ...props.initialInput, [props.promptKey]: value });
+    const result = await execute(props.skillId, { ...props.initialInput, [props.promptKey]: value });
+    if (result?.status === 'completed' && props.clearPromptOnSuccess && prompt.value.trim() === value) {
+      prompt.value = '';
+    }
   }
 
   function handleResultAction(action: Record<string, unknown>, result: AiSkillResponse) {

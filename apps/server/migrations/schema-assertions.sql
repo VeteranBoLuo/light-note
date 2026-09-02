@@ -3175,3 +3175,30 @@ WHERE del_flag=0
     OR NOT (url_exact_hash <=> UNHEX(SHA2(CONVERT(url USING utf8mb4), 256)))
   )
 LIMIT 100;
+
+-- 66) 帮助中心栏目必须是独立元数据，不能由前端根据标题猜测（期望 0 行）
+SELECT '[66] missing_help_section_column' AS check_name, 'knowledge_base.help_section' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM information_schema.columns
+  WHERE table_schema=DATABASE()
+    AND table_name='knowledge_base'
+    AND column_name='help_section'
+);
+
+SELECT '[66] invalid_help_section_column' AS check_name,
+  CONCAT(column_type, '/', is_nullable, '/', IFNULL(column_default, 'NULL')) AS detail
+FROM information_schema.columns
+WHERE table_schema=DATABASE()
+  AND table_name='knowledge_base'
+  AND column_name='help_section'
+  AND NOT (column_type='varchar(50)' AND is_nullable='YES' AND column_default IS NULL);
+
+SELECT '[66] missing_public_help_section' AS check_name, CONCAT(id, ':', title) AS detail
+FROM knowledge_base
+WHERE category='帮助中心'
+  AND status='public'
+  AND COALESCE(admin_archived, 0)=0
+  AND NULLIF(TRIM(help_section), '') IS NULL
+LIMIT 100;

@@ -1,6 +1,7 @@
 export type GovernanceRisk = 'safe' | 'review' | 'blocked';
 export type GovernanceFindingState = 'open' | 'ignored' | 'queued' | 'resolved' | 'stale';
 export type GovernanceActionKind = 'cleanup' | 'cleanup_invalid_owner';
+export type GovernanceOwnerCleanupState = 'missing' | 'formally_deleted' | 'disabled' | 'active' | 'inconsistent';
 
 export interface GovernanceFinding {
   id: string;
@@ -20,6 +21,7 @@ export interface GovernanceFinding {
   resolutionCode?: string | null;
   actionKind?: GovernanceActionKind | null;
   actionEligible?: boolean;
+  ownerCleanupState?: GovernanceOwnerCleanupState;
 }
 
 export interface GovernanceSummary {

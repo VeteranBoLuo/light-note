@@ -18,6 +18,10 @@ import {
 } from '../util/services/bookmarkDuplicateService.js';
 import { getOrganizeSummary } from '../util/services/organizeSummaryService.js';
 import {
+  getOrganizeKnowledgeStructureSummary,
+  listOrganizeKnowledgeStructureIssues,
+} from '../util/services/knowledgeStructureOrganizeService.js';
+import {
   isOwnedUntaggedResource,
   listUntaggedResources,
   normalizeOrganizableResourceType,
@@ -70,6 +74,16 @@ export async function summary(req, res) {
   }
 }
 
+export async function knowledgeStructureSummary(req, res) {
+  const current = requirePrivateSubject(req, res);
+  if (!current) return;
+  try {
+    return res.send(resultData(await getOrganizeKnowledgeStructureSummary({ userId: current.id })));
+  } catch (error) {
+    return sendError(res, error);
+  }
+}
+
 export async function listIssues(req, res) {
   const current = requirePrivateSubject(req, res);
   if (!current) return;
@@ -105,6 +119,18 @@ export async function listIssues(req, res) {
           await listBookmarkHealthIssues(current.id, {
             cursor: req.query.cursor,
             limit: req.query.limit,
+          }),
+        ),
+      );
+    }
+    if (issueType === 'knowledge_structure') {
+      return res.send(
+        resultData(
+          await listOrganizeKnowledgeStructureIssues({
+            userId: current.id,
+            cursor: req.query.cursor,
+            limit: req.query.limit,
+            kind: req.query.kind,
           }),
         ),
       );

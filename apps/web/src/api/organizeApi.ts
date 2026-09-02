@@ -1,7 +1,8 @@
 import { apiBaseDelete, apiBaseGet, apiBasePost, type ApiResponse } from '@/http/request';
 
-export type OrganizeIssueType = 'untagged' | 'duplicate_bookmark' | 'bookmark_health';
+export type OrganizeIssueType = 'untagged' | 'duplicate_bookmark' | 'bookmark_health' | 'knowledge_structure';
 export type OrganizeResourceType = 'bookmark' | 'note' | 'file';
+export type KnowledgeStructureIssueKind = 'invalid_parent' | 'empty' | 'duplicate_title' | 'untitled' | 'deep';
 
 export interface OrganizeIssueSummary {
   state: 'ready' | 'loading' | 'stale' | 'error';
@@ -47,6 +48,28 @@ export interface BookmarkHealthOverviewItem {
   name: string;
   observedCode?: string | null;
   checkedAt?: string | null;
+}
+
+export interface KnowledgeStructureIssue {
+  kind: KnowledgeStructureIssueKind;
+  severity: 'high' | 'medium' | 'low';
+  noteId: string;
+  title: string;
+  path: string;
+  reason: string;
+}
+
+export interface KnowledgeStructureSummary {
+  scannedAt: string;
+  healthScore: number;
+  totalNotes: number;
+  rootNotes: number;
+  maxDepth: number;
+  findingCount: number;
+  affectedNoteCount: number;
+  priorityIssueCount: number;
+  issueCounts: Array<{ kind: KnowledgeStructureIssueKind; count: number }>;
+  preview: OrganizeOverviewPreview<KnowledgeStructureIssue>;
 }
 
 export interface OrganizeSummary {
@@ -189,9 +212,12 @@ export interface OrganizeIssueListResponse<T> {
 export const getOrganizeSummary = (): Promise<ApiResponse> =>
   apiBaseGet('/api/organize/summary', undefined, { silent: true });
 
+export const getOrganizeKnowledgeStructureSummary = (): Promise<ApiResponse> =>
+  apiBaseGet('/api/organize/knowledge-structure/summary', undefined, { silent: true });
+
 export const getOrganizeIssueList = (
   issueType: OrganizeIssueType,
-  params: { cursor?: string | null; limit?: number; keyword?: string; resourceType?: string },
+  params: { cursor?: string | null; limit?: number; keyword?: string; resourceType?: string; kind?: string },
 ): Promise<ApiResponse> => apiBaseGet(`/api/organize/issues/${issueType}`, params, { silent: true });
 
 export const ignoreUntaggedResources = (items: Array<{ resourceType: OrganizeResourceType; resourceId: string }>) =>

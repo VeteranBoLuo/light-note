@@ -93,7 +93,11 @@ export async function createBookmark({
   let name = String(bookmark.name || '').trim();
   let description = String(bookmark.description || '').trim();
   if (fillMetadata && (!name || !description)) {
-    const meta = await fetchWebMeta(url, { signal, maxContentBytes: EXPLICIT_WEB_READ_MAX_BYTES });
+    const meta = await fetchWebMeta(url, {
+      signal,
+      maxContentBytes: EXPLICIT_WEB_READ_MAX_BYTES,
+      renderFallback: true,
+    });
     if (meta.ok) {
       if (!name) name = String(meta.title || '').trim();
       if (!description) description = String(meta.description || '').trim();
