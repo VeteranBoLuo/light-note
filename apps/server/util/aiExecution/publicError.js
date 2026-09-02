@@ -1,7 +1,15 @@
 import { stableAgentErrorCode } from '../agent/logSafety.js';
+import { AI_QUOTA_ERROR_CODES } from '@lightnote/shared/ai-quota-protocol';
 
 const PUBLIC_AI_EXECUTION_ERRORS = Object.freeze({
-  AI_QUOTA_EXCEEDED: { status: 429, message: '今日 AI 额度已用完' },
+  [AI_QUOTA_ERROR_CODES.EXHAUSTED]: {
+    status: 429,
+    message: '当前 AI 额度已用完。可前往 AI 用量与计费页补充永久额度，或等待每日额度重置。',
+  },
+  [AI_QUOTA_ERROR_CODES.INSUFFICIENT_FOR_REQUEST]: {
+    status: 429,
+    message: '当前仍有 AI 额度，但不足以完成本次任务。请减少处理内容、分段执行或补充额度后重试。',
+  },
   AI_ACCESS_RESTRICTED: { status: 403, message: '当前账号的 AI 使用权限已被限制' },
   AI_FIRST_TOKEN_TIMEOUT: { status: 504, message: 'AI 首次响应超时，请稍后重试' },
   AI_STREAM_IDLE_TIMEOUT: { status: 504, message: 'AI 生成中断，请重新生成' },
@@ -66,7 +74,20 @@ export function resolvePublicAiExecutionError(error, fallbackMessage = 'AI 能�
   // 未分类的数据库、程序异常即使可被日志分类器兜底为 AI_PROVIDER_ERROR，
   // 也必须继续使用调用方提供的安全文案，避免把内部故障误报成模型故障。
   const known = directCode ? PUBLIC_AI_EXECUTION_ERRORS[code] : null;
-  if (known) return Object.freeze({ code, ...known });
+  if (known) {
+    const requiredTokens = Math.max(0, Math.floor(Number(error?.requiredTokens || 0)));
+    const availableTokens = Math.max(0, Math.floor(Number(error?.availableTokens || 0)));
+    const message =
+      code === AI_QUOTA_ERROR_CODES.INSUFFICIENT_FOR_REQUEST && requiredTokens > 0
+        ? `本次任务预计最多需要约 ${requiredTokens.toLocaleString('zh-CN')} tokens，当前可用约 ${availableTokens.toLocaleString('zh-CN')}。请减少处理内容、分段执行或补充额度后重试。`
+        : known.message;
+    return Object.freeze({
+      code,
+      ...known,
+      message,
+      ...(requiredTokens > 0 ? { requiredTokens, availableTokens } : {}),
+    });
+  }
   const candidateStatus = Number(error?.status || 0);
   if (candidateStatus >= 400 && candidateStatus < 500) {
     return Object.freeze({
@@ -76,6 +97,15 @@ export function resolvePublicAiExecutionError(error, fallbackMessage = 'AI 能�
     });
   }
   return Object.freeze({ code, status: 500, message: fallbackMessage });
+}
+
+export function publicAiExecutionErrorData(failure, extra = {}) {
+  return {
+    ...extra,
+    code: failure.code,
+    ...(Number.isFinite(failure.requiredTokens) ? { requiredTokens: failure.requiredTokens } : {}),
+    ...(Number.isFinite(failure.availableTokens) ? { availableTokens: failure.availableTokens } : {}),
+  };
 }
 
 export const aiExecutionPublicErrorInternals = Object.freeze({ PUBLIC_AI_EXECUTION_ERRORS });

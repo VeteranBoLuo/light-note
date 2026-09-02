@@ -14,6 +14,7 @@ import {
   type BookmarkMetaOverwriteFieldId,
 } from '@/utils/bookmarkMetaOverwriteDecision';
 import { appendSessionAiTagSelection, replaceSessionAiTagSelection } from '@/utils/aiTagSelection';
+import { getAiQuotaErrorPresentation } from '@/utils/aiQuotaErrorPresentation';
 
 interface TagOption {
   label: string;
@@ -249,8 +250,9 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
       if (isRequestCancelled(error, controller)) return;
       // Skill API 使用 silent 请求，页面必须展示其已经过服务端脱敏的公开错误；
       // preflight 或其他未知异常仍使用本地兜底，避免把技术细节直接暴露给用户。
+      const quotaFailure = getAiQuotaErrorPresentation(error, (key, params) => i18n.global.t(key, params as any));
       const publicMessage = getAiSkillPublicErrorMessage(error);
-      message.error(publicMessage || i18n.global.t('bookmarkMeta.generateFailed'));
+      message.error(quotaFailure?.message || publicMessage || i18n.global.t('bookmarkMeta.generateFailed'));
     } finally {
       clearActiveGeneration(controller);
     }

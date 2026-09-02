@@ -185,6 +185,7 @@
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+  import { getAiQuotaErrorPresentation } from '@/utils/aiQuotaErrorPresentation';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -362,8 +363,9 @@
       recordOperation({ module: '标签详情', operation: `搜索标签图标【${query}】` });
     } catch (error: any) {
       console.error('search tag icons failed', error);
-      if (error?.status === 429 || error?.data?.code === 'AI_QUOTA_EXCEEDED') {
-        message.warning(t('tagManage.iconAiQuotaExceeded'));
+      const quotaFailure = getAiQuotaErrorPresentation(error, (key, params) => t(key, params));
+      if (quotaFailure) {
+        message.warning(quotaFailure.message);
       } else {
         message.error(t('tagManage.iconAiSearchFailed'));
       }

@@ -721,7 +721,12 @@ describe('aiExecution', () => {
         },
         { quota },
       ),
-    ).rejects.toMatchObject({ code: 'AI_QUOTA_EXCEEDED', status: 429 });
+    ).rejects.toMatchObject({
+      code: 'AI_QUOTA_INSUFFICIENT_FOR_REQUEST',
+      status: 429,
+      requiredTokens: 857,
+      availableTokens: 643,
+    });
 
     expect(client).toHaveBeenCalledOnce();
     expect(quota.reconcile).toHaveBeenCalledWith(expect.any(Object), 10, { aborted: false });

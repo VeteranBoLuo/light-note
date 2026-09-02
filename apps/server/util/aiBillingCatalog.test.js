@@ -106,6 +106,21 @@ describe('aiBillingCatalog', () => {
     expect(config.reservationTokens).toBeGreaterThan(80_000);
   });
 
+  it('笔记标题与摘要不再按全文输出上限预占，长笔记的小输出任务可以使用剩余额度', () => {
+    const skill = resolveAiSkill('note.transform_text', 1);
+    const request = (operation) => ({
+      input: { text: '字'.repeat(18_300), operation },
+      scope: { resourceRefs: [] },
+    });
+    const title = createAiSkillExecutionConfig(skill, request('title'));
+    const summary = createAiSkillExecutionConfig(skill, request('summarize'));
+    const polish = createAiSkillExecutionConfig(skill, request('polish'));
+
+    expect(title.reservationTokens).toBeLessThan(summary.reservationTokens);
+    expect(summary.reservationTokens).toBeLessThan(polish.reservationTokens);
+    expect(polish.reservationTokens - summary.reservationTokens).toBeGreaterThanOrEqual(6_140);
+  });
+
   it('知识工坊纯 AI Profile 支持积分或 AI 额度二选一，并进入公开 AI 用量目录', () => {
     const toolboxActions = AI_BILLING_ACTIONS.filter((action) => action.module === 'toolbox');
     expect(toolboxActions.map((action) => action.id)).toContain('toolbox.idea_to_draft');

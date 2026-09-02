@@ -375,12 +375,17 @@ export function estimateAiSkillReservationTokens(skill, request, action = getAiB
     : AI_SKILL_IMPLICIT_EVIDENCE_RESERVATION_TOKENS;
   const imageFileCount = policy.imageRecognition ? refs.filter((ref) => ref?.type === 'file').length : 0;
   const generationCalls = Math.max(1, Math.floor(resolvePolicyValue(policy.modelGenerationCalls, policyContext, 1)));
+  const resolvedModelPolicy =
+    typeof skill?.resolveModelPolicy === 'function'
+      ? skill.resolveModelPolicy(request?.input || {}) || skill.modelPolicy
+      : skill?.modelPolicy;
   const requested =
     explicitEvidenceTokens +
     estimateInputReservationTokens(request) +
     imageFileCount * AI_SKILL_VISION_RESERVATION_TOKENS_PER_FILE +
     generationCalls *
-      (Math.max(1, Math.floor(Number(skill?.modelPolicy?.maxTokens || 1_024))) + AI_SKILL_PROTOCOL_RESERVATION_TOKENS);
+      (Math.max(1, Math.floor(Number(resolvedModelPolicy?.maxTokens || 1_024))) +
+        AI_SKILL_PROTOCOL_RESERVATION_TOKENS);
   return Math.min(
     AI_SKILL_MAX_RESERVATION_TOKENS,
     Math.max(action.reservationTokens, Math.max(1, Math.floor(requested))),

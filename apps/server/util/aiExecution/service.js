@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { AI_QUOTA_ERROR_CODES, isAiQuotaErrorCode } from '@lightnote/shared/ai-quota-protocol';
 import * as aiQuota from '../aiQuota.js';
 import { getActiveProviderInfo } from '../agent/deepseekClient.js';
 import { stableAgentErrorCode } from '../agent/logSafety.js';
@@ -221,8 +222,11 @@ export async function runAiExecution(config, operation, dependencies = {}) {
   } catch (error) {
     caughtError = error;
     execution.errorCode = stableAgentErrorCode(error);
-    execution.status =
-      error?.code === 'AI_QUOTA_EXCEEDED' ? 'quota_blocked' : error?.name === 'AbortError' ? 'aborted' : 'failed';
+    execution.status = isAiQuotaErrorCode(error?.code)
+      ? 'quota_blocked'
+      : error?.name === 'AbortError'
+        ? 'aborted'
+        : 'failed';
     throw error;
   } finally {
     execution.durationMs = Date.now() - execution.startedAt;
@@ -329,7 +333,7 @@ export async function ensureAiExecutionQuotaReservation(execution = getActiveAiE
       if (execution.quotaHandle?.blocked) {
         execution.quotaSettlementStatus = 'blocked';
         const error = new Error('今日 AI 额度已用完');
-        error.code = 'AI_QUOTA_EXCEEDED';
+        error.code = AI_QUOTA_ERROR_CODES.EXHAUSTED;
         error.status = 429;
         throw error;
       }
@@ -339,10 +343,12 @@ export async function ensureAiExecutionQuotaReservation(execution = getActiveAiE
   return execution.quotaReservationPromise;
 }
 
-function quotaExceededError(message = '今日 AI 额度不足以开始下一次模型调用') {
-  const error = new Error(message);
-  error.code = 'AI_QUOTA_EXCEEDED';
+function quotaInsufficientForRequestError({ requiredTokens, availableTokens } = {}) {
+  const error = new Error('当前额度不足以完成本次任务');
+  error.code = AI_QUOTA_ERROR_CODES.INSUFFICIENT_FOR_REQUEST;
   error.status = 429;
+  error.requiredTokens = Math.max(1, Math.floor(Number(requiredTokens || 1)));
+  error.availableTokens = Math.max(0, Math.floor(Number(availableTokens || 0)));
   return error;
 }
 
@@ -447,7 +453,13 @@ export async function authorizeAiProviderCall({
   }
   assertPlannedStageAvailable();
   const nextCommitted = execution.estimatedBillableTokensCommitted + estimate;
-  if (nextCommitted > Math.max(0, Number(handle?.reserved || 0))) throw quotaExceededError();
+  const availableTokens = Math.max(0, Number(handle?.reserved || 0));
+  if (nextCommitted > availableTokens) {
+    throw quotaInsufficientForRequestError({
+      requiredTokens: estimate,
+      availableTokens: Math.max(0, availableTokens - execution.estimatedBillableTokensCommitted),
+    });
+  }
   // await 之后到递增之间没有异步切换；并发 Promise 也会串行完成这段认领，不能超卖预占。
   execution.estimatedBillableTokensCommitted = nextCommitted;
   commitPlannedStage();

@@ -254,6 +254,7 @@
   import { noteDisplayText } from '@/utils/common.ts';
   import DOMPurify from 'dompurify';
   import { renderStreamingMarkdown } from '@/utils/aiMessageRender';
+  import { getAiQuotaErrorPresentation } from '@/utils/aiQuotaErrorPresentation';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 
   const { t } = useI18n();
@@ -482,7 +483,7 @@
           correctErrors: 'proofread',
           continueWrite: 'expand',
           translate: 'translate',
-          outline: 'summarize',
+          outline: 'outline',
           custom: 'rewrite',
         } as const
       )[action as keyof typeof actionConfig] || 'rewrite'
@@ -583,10 +584,11 @@
           retryable: true,
         };
       } else {
+        const quotaFailure = getAiQuotaErrorPresentation(error, (key, params) => t(key, params));
         generationFeedback.value = {
           type: 'error',
-          text: String(error?.message || t('ai.reply.generationFailed')),
-          retryable: true,
+          text: quotaFailure?.message || String(error?.message || t('ai.reply.generationFailed')),
+          retryable: quotaFailure?.retryable ?? true,
         };
       }
     } finally {

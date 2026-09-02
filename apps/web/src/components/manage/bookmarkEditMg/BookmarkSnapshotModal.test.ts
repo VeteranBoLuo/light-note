@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, ref } from 'vue';
 
 const requestMocks = vi.hoisted(() => ({ apiBasePost: vi.fn() }));
+const messageMocks = vi.hoisted(() => ({ success: vi.fn(), info: vi.fn(), warning: vi.fn() }));
 
 vi.mock('@/http/request.ts', () => requestMocks);
 vi.mock('vue-i18n', () => ({
@@ -12,7 +13,7 @@ vi.mock('@/store', () => ({
 }));
 vi.mock('@/api/commonApi.ts', () => ({ recordOperation: vi.fn() }));
 vi.mock('@/components/base/BasicComponents/BMessage/BMessage.ts', () => ({
-  default: { success: vi.fn(), info: vi.fn(), warning: vi.fn() },
+  default: messageMocks,
 }));
 vi.mock('@/components/base/BasicComponents/BModal/BModal.vue', () => ({
   default: {
@@ -65,6 +66,7 @@ afterEach(() => {
   cleanup?.();
   cleanup = undefined;
   requestMocks.apiBasePost.mockReset();
+  Object.values(messageMocks).forEach((mock) => mock.mockReset());
 });
 
 describe('BookmarkSnapshotModal 网页存档生命周期', () => {
@@ -152,5 +154,50 @@ describe('BookmarkSnapshotModal 网页存档生命周期', () => {
       '/api/bookmark/summarize',
       '/api/bookmark/snapshot',
     ]);
+    expect(requestMocks.apiBasePost).toHaveBeenCalledWith(
+      '/api/bookmark/summarize',
+      { id: 'bookmark-1', force: true },
+      { silent: true },
+    );
+  });
+
+  it('AI 摘要单次预算不足时复用统一提示，并静默处理传输层 429', async () => {
+    requestMocks.apiBasePost.mockImplementation(async (path: string) => {
+      if (path === '/api/bookmark/snapshot') {
+        return {
+          status: 200,
+          data: { title: '示例网页', content: '完整正文', summary: null, update_time: '2026-08-24' },
+        };
+      }
+      if (path === '/api/bookmark/summarize') {
+        return {
+          status: 429,
+          data: {
+            ok: false,
+            code: 'AI_QUOTA_INSUFFICIENT_FOR_REQUEST',
+            requiredTokens: 12_345,
+            availableTokens: 8_765,
+          },
+        };
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+
+    const host = mountModal();
+    await vi.waitFor(() => expect(host.textContent).toContain('完整正文'));
+
+    const summaryButton = [...host.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('bookmarkMg.aiSummaryGenerate'),
+    );
+    summaryButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    await vi.waitFor(() =>
+      expect(messageMocks.warning).toHaveBeenCalledWith('aiQuotaErrors.insufficientWithAmounts'),
+    );
+    expect(requestMocks.apiBasePost).toHaveBeenCalledWith(
+      '/api/bookmark/summarize',
+      { id: 'bookmark-1', force: true },
+      { silent: true },
+    );
   });
 });

@@ -65,8 +65,13 @@
           </BCard>
         </div>
 
+        <div v-if="pendingQuotaText" class="ai-quota-pending" role="status" aria-live="polite">
+          <span aria-hidden="true"></span>
+          <p>{{ pendingQuotaText }}</p>
+        </div>
+
         <div
-          v-else
+          v-if="!aiQuotaMetrics.length"
           class="ai-quota-state"
           :class="{ 'is-error': aiQuotaUnavailable }"
           :role="aiQuotaUnavailable ? 'alert' : aiQuotaStatus ? 'status' : undefined"
@@ -167,6 +172,16 @@
     return t('settings.ai.quotaUsage', {
       used: formatAiQuotaTokens(status.used, locale.value),
       quota: formatAiQuotaTokens(status.quota, locale.value),
+    });
+  });
+
+  const pendingQuotaText = computed(() => {
+    const status = aiQuotaStatus.value;
+    const pending = Number(status?.pendingReservedTokens || 0);
+    if (!status || !Number.isFinite(pending) || pending <= 0) return '';
+    return t('settings.ai.quotaSettling', {
+      pending: formatAiQuotaTokens(pending, locale.value),
+      available: formatAiQuotaTokens(status.availableRemaining, locale.value),
     });
   });
 
@@ -283,6 +298,34 @@
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 9px;
+  }
+
+  .ai-quota-pending {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 9px 11px;
+    border: 1px solid var(--warning-color, #b56a00);
+    border-radius: 10px;
+    color: var(--text-color);
+    background: var(--workspace-panel-bg-color);
+  }
+
+  .ai-quota-pending > span {
+    width: 7px;
+    height: 7px;
+    flex: 0 0 7px;
+    margin-top: 5px;
+    border: 1px solid var(--warning-color, #b56a00);
+    border-radius: 50%;
+    background: var(--warning-color, #b56a00);
+  }
+
+  .ai-quota-pending p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.55;
   }
 
   .ai-quota-metric {

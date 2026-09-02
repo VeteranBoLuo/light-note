@@ -184,8 +184,30 @@ describe('summarizeBookmark AI Gateway', () => {
 
     await expect(summarizeBookmark('user-1', 'bookmark-1')).resolves.toEqual({
       ok: false,
+      code: 'AI_QUOTA_EXCEEDED',
       reason: 'quota_exceeded',
-      msg: '今日 AI 额度已用完，请明天再试',
+      msg: '当前 AI 额度已用完，请等待每日额度重置或补充永久额度',
+    });
+    warning.mockRestore();
+  });
+
+  it('单次摘要预算不足时返回独立错误码与所需/可用额度', async () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mocks.requestAi.mockRejectedValue(
+      Object.assign(new Error('当前额度不足以完成本次任务'), {
+        code: 'AI_QUOTA_INSUFFICIENT_FOR_REQUEST',
+        requiredTokens: 12_345,
+        availableTokens: 8_765,
+      }),
+    );
+
+    await expect(summarizeBookmark('user-1', 'bookmark-1')).resolves.toEqual({
+      ok: false,
+      code: 'AI_QUOTA_INSUFFICIENT_FOR_REQUEST',
+      reason: 'quota_insufficient_for_request',
+      requiredTokens: 12_345,
+      availableTokens: 8_765,
+      msg: '当前仍有 AI 额度，但不足以生成本次摘要，请减少材料或补充额度',
     });
     warning.mockRestore();
   });

@@ -460,7 +460,7 @@
   const aiQuotaBalanceLabel = computed(() =>
     aiQuotaStatus.value?.exempt
       ? t('settings.ai.quotaUnlimited')
-      : formatAiQuotaTokens(aiQuotaStatus.value?.remaining, locale.value),
+      : formatAiQuotaTokens(aiQuotaStatus.value?.availableRemaining ?? aiQuotaStatus.value?.remaining, locale.value),
   );
   const categoryOptions = computed(() => [
     { value: 'all' as const, label: t('toolbox.allTools') },

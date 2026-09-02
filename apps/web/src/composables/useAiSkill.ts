@@ -1,6 +1,8 @@
 import { computed, ref } from 'vue';
 import { createAiSkillRequest, executeAiSkill } from '@/api/aiSkillApi';
 import type { AiSkillRequest, AiSkillResourceRef, AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
+import { getAiQuotaErrorPresentation } from '@/utils/aiQuotaErrorPresentation';
+import i18n from '@/i18n';
 
 export function useAiSkill({
   skillId,
@@ -52,9 +54,10 @@ export function useAiSkill({
     } catch (cause) {
       if (sequence !== activeRequest) return null;
       const value = cause as { code?: string; message?: string };
+      const quotaFailure = getAiQuotaErrorPresentation(cause, (key, params) => i18n.global.t(key, params as any));
       error.value = {
-        code: String(value?.code || 'AI_SKILL_FAILED'),
-        message: String(value?.message || 'AI 能力暂时不可用'),
+        code: quotaFailure?.code || String(value?.code || 'AI_SKILL_FAILED'),
+        message: quotaFailure?.message || String(value?.message || 'AI 能力暂时不可用'),
       };
       throw cause;
     } finally {

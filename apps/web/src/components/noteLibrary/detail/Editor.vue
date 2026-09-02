@@ -831,6 +831,7 @@
   import type { CloudUploadResult } from '@/api/cloudFileUploadApi';
   import { createAiSkillRequest, executeAiSkill } from '@/api/aiSkillApi';
   import { recordAiSkillApplied } from '@/api/aiTelemetry';
+  import { getAiQuotaErrorPresentation } from '@/utils/aiQuotaErrorPresentation';
 
   // 两套重型编辑引擎按笔记类型分包，Markdown 不再下载 TinyMCE，富文本也不下载 CodeMirror。
   const TinyMceEditor = defineAsyncComponent({
@@ -5581,8 +5582,10 @@
           } else {
             message.info(t('noteDetail.editor.aiEmpty'));
           }
-        } catch {
-          message.info(t('noteDetail.editor.aiFailed'));
+        } catch (error) {
+          const quotaFailure = getAiQuotaErrorPresentation(error, (key, params) => t(key, params));
+          if (quotaFailure) message.warning(quotaFailure.message);
+          else message.info(t('noteDetail.editor.aiFailed'));
         } finally {
           removeSelectionAiPendingMarker(pendingMarker);
           editor.setProgressState(false);

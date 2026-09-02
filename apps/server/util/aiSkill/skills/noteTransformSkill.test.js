@@ -27,6 +27,14 @@ describe('note.transform_text', () => {
     );
   });
 
+  it('标题、摘要和大纲使用与任务相符的输出预算，全文变换保留完整上限', () => {
+    expect(noteTransformSkill.resolveModelPolicy({ operation: 'title' }).maxTokens).toBe(256);
+    expect(noteTransformSkill.resolveModelPolicy({ operation: 'summarize' }).maxTokens).toBe(2_048);
+    expect(noteTransformSkill.resolveModelPolicy({ operation: 'outline' }).maxTokens).toBe(2_048);
+    expect(noteTransformSkill.resolveModelPolicy({ operation: 'polish' }).maxTokens).toBe(8_192);
+    expect(noteTransformSkill.validateInput({ text: '正文', operation: 'outline' }).operation).toBe('outline');
+  });
+
   it('文字处理输入与安全字段策略复用同一个长度上限', () => {
     expect(
       noteTransformSkill.validateInput({

@@ -1,4 +1,14 @@
 export default {
+  aiQuotaErrors: {
+    exhaustedTitle: 'AI quota used up',
+    exhaustedMessage:
+      'Your AI quota is currently used up. Add permanent quota in AI Usage & Billing, or wait for the daily quota to reset.',
+    insufficientTitle: 'Not enough quota for this task',
+    insufficientMessage:
+      'You still have AI quota, but not enough for this task. Reduce or split the content, or add quota and try again.',
+    insufficientWithAmounts:
+      'This task may need about {required} tokens, while about {available} are available. Reduce or split the content, or add quota and try again.',
+  },
   aiSkills: {
     promptPlaceholder: 'Ask about the current content…',
     send: 'Send',
@@ -7,7 +17,7 @@ export default {
     retry: 'Try again',
     retryLater: 'Please try again later',
     errorTitle: 'Unable to complete',
-    quotaErrorTitle: 'Today’s AI quota has been used',
+    quotaErrorTitle: 'AI quota used up',
     unavailableTitle: 'This AI capability is unavailable',
     unavailableDescription: 'You can keep viewing and editing this content normally. Please try again later.',
     draftTitle: 'AI draft',
@@ -906,6 +916,9 @@ export default {
       quoteExpired: 'This confirmation expired. Start generating again to continue.',
       pointsInsufficient: 'There are not enough points. Reduce the material scope or earn more points.',
       aiQuotaInsufficient: 'There is not enough AI quota. Switch to points or add more AI quota first.',
+      aiQuotaExhausted: 'Your AI quota is used up. Switch to points, add permanent quota, or wait for the daily reset.',
+      aiQuotaTaskInsufficient:
+        'You still have AI quota, but not enough for this task. Reduce the material scope, switch to points, or add quota.',
       temporarilyUnavailable: 'The service is temporarily busy. Your current content remains available.',
       invalidInput: 'This input is no longer valid. Review it and submit again.',
       documentUnavailable: 'The file cannot be read. Check its format, size, or parsing status.',
@@ -6645,6 +6658,7 @@ export default {
     aiQuotaTodayShort: 'Today',
     aiQuotaTodayRemaining: 'Today left',
     aiQuotaPermanentShort: 'Permanent',
+    aiQuotaSettling: 'Settling · {amount} temporarily reserved',
     aiQuotaUnavailable: 'Temporarily unavailable',
     aiQuotaUnlimited: 'Unlimited',
     personalProfile: 'Personal Profile',
@@ -7638,7 +7652,9 @@ export default {
       permanentBalanceHint: 'Used after today’s quota runs out',
       acquireQuota: 'Get quota',
       totalAvailable: 'Total available now',
-      totalAvailableHint: 'Today’s remainder + permanent balance',
+      totalAvailableHint: 'Daily remainder + permanent balance (settled usage)',
+      quotaSettling:
+        'An AI task is running with about {pending} temporarily reserved. Balances show settled usage; about {available} remains available for a new task.',
       usage: {
         title: 'Recent usage and billing rules',
         description: 'Review actual model usage by module. Prompts, content, titles, and URLs are never shown here.',
@@ -10480,7 +10496,7 @@ export default {
     aiOrganizeStart: 'Start tagging',
     aiOrganizeRunning: 'AI is reading and tagging, please wait…',
     aiOrganizeRunFailed: 'Smart tagging failed. Please try again later.',
-    aiOrganizePartialQuota: 'AI quota is exhausted. The {n} completed suggestions were kept for review.',
+    aiOrganizePartialQuota: 'AI processing stopped early. The {n} completed suggestions were kept for review.',
     aiOrganizePartialFailure: '{n} item(s) could not be completed. The remaining suggestions were kept.',
     aiOrganizeReview: '{n} suggestions generated; uncheck to skip any',
     aiOrganizeFillMeta: 'Also fill missing name/description',
@@ -10688,6 +10704,7 @@ export default {
     loadFailed: 'Help content could not be loaded',
     retry: 'Retry',
     noArticles: 'No help articles are available yet',
+    aiEntry: 'Ask AI',
     aiTitle: 'Ask Light Note',
     aiDescription: 'Searches public help content only. Your notes, bookmarks, files, and tasks are not accessed.',
     aiPlaceholder: 'For example: How do I export a note on mobile?',

@@ -47,9 +47,13 @@ import { buildPagedResult, normalizeOptionalPagination } from '../util/paginatio
 import { AnchoredSortError, moveOwnedResourceByAnchors } from '../util/anchoredSort.js';
 import { completeGrowthTask } from '../util/growthTaskCompletion.js';
 import crypto from 'node:crypto';
+import { AI_QUOTA_ERROR_CODES, isAiQuotaErrorCode } from '@lightnote/shared/ai-quota-protocol';
 import { createUserAiExecutionConfig } from '../util/aiBillingCatalog.js';
 import { runAiExecution } from '../util/aiExecution/service.js';
-import { resolvePublicAiExecutionError } from '../util/aiExecution/publicError.js';
+import {
+  publicAiExecutionErrorData,
+  resolvePublicAiExecutionError,
+} from '../util/aiExecution/publicError.js';
 import { createRequestAbortContext } from '../util/requestAbort.js';
 import { createBookmarkExactUrlHash } from '../util/services/bookmarkExactUrlService.js';
 import { runResourceDeleteSideEffects, softDeleteResources } from '../util/services/resourceDeleteService.js';
@@ -59,8 +63,14 @@ function resolveBookmarkAiResultOutcome(result) {
   const reason = String(result.reason || 'failed')
     .trim()
     .toLowerCase();
-  if (reason === 'quota_exceeded') {
-    return { status: 'quota_blocked', errorCode: 'AI_QUOTA_EXCEEDED' };
+  if (['quota_exceeded', 'quota_insufficient_for_request'].includes(reason)) {
+    return {
+      status: 'quota_blocked',
+      errorCode:
+        reason === 'quota_exceeded'
+          ? AI_QUOTA_ERROR_CODES.EXHAUSTED
+          : AI_QUOTA_ERROR_CODES.INSUFFICIENT_FOR_REQUEST,
+    };
   }
   if (reason === 'ai_error') return { status: 'failed', errorCode: 'AI_PROVIDER_ERROR' };
   if (reason === 'empty') return { status: 'failed', errorCode: 'AI_SKILL_OUTPUT_EMPTY' };
@@ -69,7 +79,12 @@ function resolveBookmarkAiResultOutcome(result) {
 }
 
 function resolveOrganizeAiResultOutcome(result) {
-  if (result?.quotaLimited) return { status: 'quota_blocked', errorCode: 'AI_QUOTA_EXCEEDED' };
+  if (result?.quotaLimited) {
+    return {
+      status: 'quota_blocked',
+      errorCode: result.quotaErrorCode || AI_QUOTA_ERROR_CODES.INSUFFICIENT_FOR_REQUEST,
+    };
+  }
   const failedItems = Math.max(0, Number(result?.failedItems || 0));
   const successfulItems = Math.max(0, Number(result?.successfulItems || 0));
   if (!failedItems) return null;
@@ -627,14 +642,17 @@ export const doSummarizeBookmark = async (req, res) => {
           trace: { traceId: requestId, taskType: 'bookmark_summary', stage: 'bookmark_summary' },
         }),
     );
-    if (result?.reason === 'quota_exceeded') {
+    if (
+      isAiQuotaErrorCode(result?.code) ||
+      ['quota_exceeded', 'quota_insufficient_for_request'].includes(result?.reason)
+    ) {
       return res.status(429).send(resultData(result, 429, result.msg));
     }
     res.send(resultData(result));
   } catch (error) {
     const failure = resolvePublicAiExecutionError(error, 'AI 摘要暂时不可用，请稍后重试');
     if (failure.status >= 500) console.error('[bookmark] AI summary failed code=%s', failure.code);
-    return res.status(failure.status).send(resultData({ code: failure.code }, failure.status, failure.message));
+    return res.status(failure.status).send(resultData(publicAiExecutionErrorData(failure), failure.status, failure.message));
   } finally {
     abortContext.complete();
   }
@@ -671,14 +689,17 @@ export const doArchiveAndSummarizeBookmark = async (req, res) => {
           },
         }),
     );
-    if (result?.reason === 'quota_exceeded') {
+    if (
+      isAiQuotaErrorCode(result?.code) ||
+      ['quota_exceeded', 'quota_insufficient_for_request'].includes(result?.reason)
+    ) {
       return res.status(429).send(resultData(result, 429, result.msg));
     }
     return res.send(resultData(result));
   } catch (error) {
     const failure = resolvePublicAiExecutionError(error, '网页存档暂时无法生成，请稍后重试');
     if (failure.status >= 500) console.error('[bookmark] archive summary failed code=%s', failure.code);
-    return res.status(failure.status).send(resultData({ code: failure.code }, failure.status, failure.message));
+    return res.status(failure.status).send(resultData(publicAiExecutionErrorData(failure), failure.status, failure.message));
   } finally {
     abortContext.complete();
   }
@@ -1368,9 +1389,22 @@ export const doOrganizeRun = async (req, res) => {
     const toMatched = (ids) => tagRows.filter((t) => ids.includes(t.id)).map((t) => ({ id: t.id, name: t.name }));
     const suggestions = [];
     let quotaLimited = false;
+    let quotaErrorCode = '';
+    let quotaRequiredTokens = null;
+    let quotaAvailableTokens = null;
     let attemptedItems = 0;
     let successfulItems = 0;
     let failedItems = 0;
+    const captureQuotaFailure = (error) => {
+      quotaLimited = true;
+      quotaErrorCode = String(error.code);
+      const requiredTokens = Number(error?.requiredTokens);
+      const availableTokens = Number(error?.availableTokens);
+      if (quotaRequiredTokens == null && Number.isFinite(requiredTokens)) {
+        quotaRequiredTokens = Math.max(0, Math.floor(requiredTokens));
+        quotaAvailableTokens = Number.isFinite(availableTokens) ? Math.max(0, Math.floor(availableTokens)) : 0;
+      }
+    };
     const requestId = crypto.randomUUID();
     const actionId = resourceType === 'note' ? 'note.organize_tags' : 'bookmark.organize';
     const executionConfig = createUserAiExecutionConfig(actionId, {
@@ -1422,8 +1456,8 @@ export const doOrganizeRun = async (req, res) => {
             });
             return true;
           } catch (error) {
-            if (error?.code === 'AI_QUOTA_EXCEEDED') {
-              quotaLimited = true;
+            if (isAiQuotaErrorCode(error?.code)) {
+              captureQuotaFailure(error);
               return false;
             }
             if (error?.name === 'AbortError') throw error;
@@ -1432,7 +1466,7 @@ export const doOrganizeRun = async (req, res) => {
             return true;
           }
         });
-        return { quotaLimited, attemptedItems, successfulItems, failedItems };
+        return { quotaLimited, quotaErrorCode, attemptedItems, successfulItems, failedItems };
       });
     } else {
       const [rows] = await pool.query(
@@ -1471,8 +1505,8 @@ export const doOrganizeRun = async (req, res) => {
             });
             return true;
           } catch (error) {
-            if (error?.code === 'AI_QUOTA_EXCEEDED') {
-              quotaLimited = true;
+            if (isAiQuotaErrorCode(error?.code)) {
+              captureQuotaFailure(error);
               return false;
             }
             if (error?.name === 'AbortError') throw error;
@@ -1481,7 +1515,7 @@ export const doOrganizeRun = async (req, res) => {
             return true;
           }
         });
-        return { quotaLimited, attemptedItems, successfulItems, failedItems };
+        return { quotaLimited, quotaErrorCode, attemptedItems, successfulItems, failedItems };
       });
     }
     if (quotaLimited) {
@@ -1489,9 +1523,21 @@ export const doOrganizeRun = async (req, res) => {
         .status(429)
         .send(
           resultData(
-            { ok: false, code: 'AI_QUOTA_EXCEEDED', processed: suggestions.length, suggestions },
+            {
+              ok: false,
+              code: quotaErrorCode || AI_QUOTA_ERROR_CODES.INSUFFICIENT_FOR_REQUEST,
+              ...(Number.isFinite(quotaRequiredTokens)
+                ? { requiredTokens: quotaRequiredTokens, availableTokens: quotaAvailableTokens }
+                : {}),
+              processed: suggestions.length,
+              suggestions,
+            },
             429,
-            suggestions.length ? '额度不足，已保留本次完成的建议' : '今日 AI 额度不足',
+            suggestions.length
+              ? '本次可用 AI 额度不足，已保留完成的建议'
+              : quotaErrorCode === AI_QUOTA_ERROR_CODES.EXHAUSTED
+                ? '当前 AI 额度已用完，请等待每日额度重置或补充永久额度'
+                : '当前仍有 AI 额度，但不足以继续处理本批内容，请减少选择数量或补充额度',
           ),
         );
     }
@@ -1520,7 +1566,7 @@ export const doOrganizeRun = async (req, res) => {
     if (failure.status >= 500) console.error('[bookmark] AI organize failed code=%s', stableAgentErrorCode(e));
     return res
       .status(failure.status)
-      .send(resultData({ ok: false, code: failure.code }, failure.status, failure.message));
+      .send(resultData(publicAiExecutionErrorData(failure, { ok: false }), failure.status, failure.message));
   } finally {
     abortContext.complete();
   }

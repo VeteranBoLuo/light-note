@@ -9,6 +9,8 @@ export interface AiQuotaStatus {
   used?: number;
   quota?: number;
   remaining?: number;
+  availableRemaining?: number;
+  pendingReservedTokens?: number;
   dailyQuota?: number;
   dailyUsed?: number;
   dailyRemaining?: number;
@@ -40,6 +42,8 @@ function normalizeQuotaStatus(payload: unknown): AiQuotaStatus {
     used: normalizeQuotaNumber(status.used),
     quota: normalizeQuotaNumber(status.quota),
     remaining: normalizeQuotaNumber(status.remaining),
+    availableRemaining: normalizeOptionalQuotaNumber(status.availableRemaining),
+    pendingReservedTokens: normalizeOptionalQuotaNumber(status.pendingReservedTokens),
     dailyQuota: normalizeOptionalQuotaNumber(status.dailyQuota),
     dailyUsed: normalizeOptionalQuotaNumber(status.dailyUsed),
     dailyRemaining: normalizeOptionalQuotaNumber(status.dailyRemaining),

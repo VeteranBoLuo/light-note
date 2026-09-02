@@ -153,6 +153,8 @@ export async function executeAiSkill(rawRequest, req, dependencies = {}) {
           },
         });
         const modelCalled = prepared.modelCalled !== false && !prepared.result;
+        const modelPolicy =
+          (typeof skill.resolveModelPolicy === 'function' ? skill.resolveModelPolicy(input) : null) || skill.modelPolicy;
         const sources = prepared.sources || [];
         const coverage = prepared.coverage || { complete: true, warnings: [] };
         const invokeModel = prepared.callModel || callModel;
@@ -162,7 +164,7 @@ export async function executeAiSkill(rawRequest, req, dependencies = {}) {
               messages: messagesWithBoundedHistory(prepared.messages, scopedContext.history),
               sources,
               coverage,
-              modelPolicy: resolveInternalModelPolicy(skill.modelPolicy, dependencies.modelPolicyOverrides),
+              modelPolicy: resolveInternalModelPolicy(modelPolicy, dependencies.modelPolicyOverrides),
               outputPolicy: prepared.outputPolicy || {},
               resultValidator: prepared.resultValidator,
               resultRepairInstruction: prepared.resultRepairInstruction,

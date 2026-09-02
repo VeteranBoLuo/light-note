@@ -50,7 +50,7 @@ describe('AI 额度快捷展示契约', () => {
     expect(summarySource).toContain('.ai-quota-summary.is-plain.b_btn');
     expect(summarySource).toContain('.ai-quota-summary.is-tile.b_btn');
     expect(summarySource).toContain("t('personCenter.aiQuotaUnavailable')");
-    expect(summarySource).toContain("{ 'is-loading': loading, 'is-unavailable': unavailable }");
+    expect(summarySource).toContain("'is-unavailable': unavailable");
     expect(summarySource).toContain(':aria-busy="loading"');
     expect(summarySource).toContain("t('personCenter.aiQuotaBreakdown'");
     expect(summarySource).toContain('class="ai-quota-summary__primary-value"');
@@ -74,6 +74,16 @@ describe('AI 额度快捷展示契约', () => {
     expect(summarySource).toMatch(
       /\.ai-quota-summary__secondary-value strong\s*\{[\s\S]*?color:\s*var\(--desc-color\);/,
     );
+  });
+
+  it('运行中的额度预留作为独立状态展示，不把已结算余额改写成零', () => {
+    expect(summarySource).toContain('pendingReservedTokens');
+    expect(summarySource).toContain('class="ai-quota-summary__pending"');
+    expect(summarySource).toContain("t('personCenter.aiQuotaSettling'");
+    expect(summarySource).toContain('.ai-quota-summary__pending > span');
+    expect(usagePageSource).toContain('availableRemaining');
+    expect(usagePageSource).toContain('class="ai-quota-pending"');
+    expect(usagePageSource).toContain("t('settings.ai.quotaSettling'");
   });
 
   it('详细额度只在独立页读取，设置页保留紧凑入口', () => {

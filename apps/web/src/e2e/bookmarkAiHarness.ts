@@ -4,6 +4,7 @@ import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import type { InternalAxiosRequestConfig } from 'axios';
 import type { AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
+import { AI_QUOTA_ERROR_CODES } from '@lightnote/shared/ai-quota-protocol';
 import globalDirect from '@/config/globalDirect';
 import request from '@/http/request';
 import enUS from '@/i18n/locales/en-US';
@@ -11,11 +12,13 @@ import zhCN from '@/i18n/locales/zh-CN';
 import '@/assets/css/index.less';
 import BookmarkAiHarness from './BookmarkAiHarness.vue';
 
-type VisualState = 'success' | 'loading' | 'error' | 'empty';
+type VisualState = 'success' | 'loading' | 'error' | 'empty' | 'quota-exhausted' | 'quota-insufficient';
 
 const params = new URLSearchParams(window.location.search);
 const requestedState = params.get('state');
-const state: VisualState = ['success', 'loading', 'error', 'empty'].includes(String(requestedState))
+const state: VisualState = ['success', 'loading', 'error', 'empty', 'quota-exhausted', 'quota-insufficient'].includes(
+  String(requestedState),
+)
   ? (requestedState as VisualState)
   : 'success';
 const theme = params.get('theme') === 'night' ? 'night' : 'day';
@@ -92,6 +95,17 @@ request.defaults.adapter = async (config) => {
   }
   if (config.url === '/api/ai/skills/execute') {
     if (state === 'loading') await new Promise(() => {});
+    if (state === 'quota-exhausted' || state === 'quota-insufficient') {
+      const code =
+        state === 'quota-exhausted'
+          ? AI_QUOTA_ERROR_CODES.EXHAUSTED
+          : AI_QUOTA_ERROR_CODES.INSUFFICIENT_FOR_REQUEST;
+      const data =
+        state === 'quota-insufficient'
+          ? { code, requiredTokens: 26_900, availableTokens: 21_700 }
+          : { code };
+      throw Object.assign(new Error('Visual quota fixture'), { code, status: 429, data, config });
+    }
     if (state === 'error') {
       throw Object.assign(new Error('暂时无法读取该书签的网页存档，请稍后重试。'), {
         code: 'BOOKMARK_CONTENT_UNAVAILABLE',

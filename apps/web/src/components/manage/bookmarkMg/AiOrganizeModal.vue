@@ -153,6 +153,7 @@
   import { useI18n } from 'vue-i18n';
   import { apiBasePost } from '@/http/request.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+  import { getAiQuotaErrorPresentation } from '@/utils/aiQuotaErrorPresentation';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
@@ -281,12 +282,17 @@
       }
     } catch (e: any) {
       const partialSuggestions = Array.isArray(e?.data?.suggestions) ? e.data.suggestions : [];
+      const quotaFailure = getAiQuotaErrorPresentation(e, (key, params) => t(key, params));
       if (e?.status === 429 && partialSuggestions.length) {
         useSuggestions(partialSuggestions);
-        message.warning(t('bookmarkMg.aiOrganizePartialQuota', { n: partialSuggestions.length }));
+        message.warning(
+          [t('bookmarkMg.aiOrganizePartialQuota', { n: partialSuggestions.length }), quotaFailure?.message]
+            .filter(Boolean)
+            .join(' '),
+        );
         return;
       }
-      message.info(e?.message || t('bookmarkMg.aiOrganizeRunFailed'));
+      message.info(quotaFailure?.message || e?.message || t('bookmarkMg.aiOrganizeRunFailed'));
       step.value = 'confirm';
     }
   }

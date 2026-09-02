@@ -36,6 +36,7 @@
       "@lightnote/shared/host-agent-protocol": ["../../packages/shared/hostAgentProtocol.d.ts"],
       "@lightnote/shared/ai-skill-protocol": ["../../packages/shared/aiSkillProtocol.d.ts"],
       "@lightnote/shared/ai-citation-presentation": ["../../packages/shared/aiCitationPresentation.d.ts"],
+      "@lightnote/shared/ai-quota-protocol": ["../../packages/shared/aiQuotaProtocol.d.ts"],
       "@lightnote/shared/toolbox-protocol": ["../../packages/shared/toolboxProtocol.d.ts"]
     },
     "types": ["vite/client", "chrome"]

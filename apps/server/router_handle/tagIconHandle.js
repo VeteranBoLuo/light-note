@@ -5,7 +5,10 @@ import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import crypto from 'node:crypto';
 import { createUserAiExecutionConfig } from '../util/aiBillingCatalog.js';
 import { runAiExecution } from '../util/aiExecution/service.js';
-import { resolvePublicAiExecutionError } from '../util/aiExecution/publicError.js';
+import {
+  publicAiExecutionErrorData,
+  resolvePublicAiExecutionError,
+} from '../util/aiExecution/publicError.js';
 import { createRequestAbortContext } from '../util/requestAbort.js';
 
 function ensureIconAccess(req, res) {
@@ -70,7 +73,7 @@ export async function search(req, res) {
   } catch (error) {
     const failure = resolvePublicAiExecutionError(error, friendlyError(req, error));
     if (failure.status >= 500) console.error('[tag-icon] 搜索失败 code=%s', stableAgentErrorCode(error));
-    return res.status(failure.status).send(resultData({ code: failure.code }, failure.status, failure.message));
+    return res.status(failure.status).send(resultData(publicAiExecutionErrorData(failure), failure.status, failure.message));
   }
 }
 

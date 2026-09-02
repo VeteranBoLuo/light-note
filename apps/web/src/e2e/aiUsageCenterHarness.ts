@@ -15,7 +15,8 @@ const params = new URLSearchParams(window.location.search);
 const state = params.get('state') || 'default';
 const theme = params.get('theme') === 'night' ? 'night' : 'day';
 const locale = params.get('locale') === 'en-US' ? 'en-US' : 'zh-CN';
-const view = params.get('view') === 'settings' ? 'settings' : 'usage';
+const viewParam = params.get('view');
+const view = viewParam === 'settings' || viewParam === 'summary' ? viewParam : 'usage';
 let usageRequestCount = 0;
 
 document.documentElement.dataset.theme = theme;
@@ -389,21 +390,39 @@ request.defaults.adapter = async (config) => {
     if (state === 'error') {
       throw Object.assign(new Error('Visual quota fixture failed'), { code: 'AI_QUOTA_UNAVAILABLE' });
     }
+    const quotaFixture =
+      state === 'pending'
+        ? {
+            exempt: false,
+            used: 795_641,
+            quota: 800_000,
+            remaining: 4_359,
+            availableRemaining: 0,
+            pendingReservedTokens: 4_359,
+            dailyQuota: 800_000,
+            dailyUsed: 795_641,
+            dailyRemaining: 4_359,
+            bonusTokens: 0,
+            enforcing: true,
+          }
+        : {
+            exempt: false,
+            used: 103_000,
+            quota: 11_842_000,
+            remaining: 11_739_000,
+            availableRemaining: 11_739_000,
+            pendingReservedTokens: 0,
+            dailyQuota: 800_000,
+            dailyUsed: 103_000,
+            dailyRemaining: 697_000,
+            bonusTokens: 11_042_000,
+            enforcing: true,
+          };
     return {
       data: {
         status: 200,
         msg: 'ok',
-        data: {
-          exempt: false,
-          used: 103_000,
-          quota: 11_842_000,
-          remaining: 11_739_000,
-          dailyQuota: 800_000,
-          dailyUsed: 103_000,
-          dailyRemaining: 697_000,
-          bonusTokens: 11_042_000,
-          enforcing: true,
-        },
+        data: quotaFixture,
       },
       status: 200,
       statusText: 'OK',

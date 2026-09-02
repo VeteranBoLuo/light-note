@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { AI_QUOTA_ERROR_CODES } from '@lightnote/shared/ai-quota-protocol';
 import pool from '../../db/index.js';
 import * as aiQuota from '../aiQuota.js';
 import { getActiveProviderInfo } from './deepseekClient.js';
@@ -186,7 +187,7 @@ export async function beginAiGatewayGovernance({ governance, traceId, taskType, 
     });
     if (state.quotaHandle?.blocked) {
       const error = new Error('今日 AI 额度已用完');
-      error.code = 'AI_QUOTA_EXCEEDED';
+      error.code = AI_QUOTA_ERROR_CODES.EXHAUSTED;
       error.status = 429;
       await safeInsertAgentLog({
         state,

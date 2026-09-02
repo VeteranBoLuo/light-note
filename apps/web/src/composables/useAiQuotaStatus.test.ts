@@ -90,6 +90,28 @@ describe('useAiQuotaStatus', () => {
     expect(quota.remainingPercent.value).toBe(80);
   });
 
+  it('保留已结算余额、实际可用余额和在途预留三种口径', async () => {
+    mocks.apiBasePost.mockResolvedValue({
+      status: 200,
+      data: {
+        used: 4_359,
+        quota: 100_000,
+        remaining: 95_641,
+        availableRemaining: 91_282,
+        pendingReservedTokens: 4_359,
+      },
+    });
+    const quota = useAiQuotaStatus({ autoLoad: false });
+
+    await quota.load();
+
+    expect(quota.status.value).toMatchObject({
+      remaining: 95_641,
+      availableRemaining: 91_282,
+      pendingReservedTokens: 4_359,
+    });
+  });
+
   it('字段缺失或为空时不把异常响应伪装成零额度', async () => {
     mocks.apiBasePost.mockResolvedValue({ status: 200, data: { used: null, quota: 100, remaining: 100 } });
     const quota = useAiQuotaStatus({ autoLoad: false });

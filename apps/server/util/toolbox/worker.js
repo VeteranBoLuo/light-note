@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { AI_QUOTA_ERROR_CODES } from '@lightnote/shared/ai-quota-protocol';
 import pool from '../../db/index.js';
 import { executeAiSkill } from '../aiSkill/runtime.js';
 import {
@@ -114,7 +115,8 @@ const AI_TOOL_INTENT_INSTRUCTIONS = Object.freeze({
 });
 const NON_RETRYABLE_CODES = new Set([
   'AI_ACCESS_RESTRICTED',
-  'AI_QUOTA_EXCEEDED',
+  AI_QUOTA_ERROR_CODES.EXHAUSTED,
+  AI_QUOTA_ERROR_CODES.INSUFFICIENT_FOR_REQUEST,
   'AI_SKILL_ROLE_FORBIDDEN',
   'AI_SKILL_SCOPE_RESOURCE_UNAVAILABLE',
   'AI_SKILL_SCOPE_STALE',

@@ -4,7 +4,7 @@
     :class="[`is-${presentation}`, { 'has-reserved-result-space': reserveResultSpace }]"
     :aria-label="title"
   >
-    <header class="ai-skill-panel__header">
+    <header v-if="showHeader" class="ai-skill-panel__header">
       <span class="ai-skill-panel__icon" aria-hidden="true">
         <SvgIcon :src="panelIcon" size="20" />
       </span>
@@ -31,7 +31,11 @@
       </BTooltip>
     </div>
 
-    <div v-if="skillAvailable && showPrompt" class="ai-skill-panel__composer">
+    <div
+      v-if="skillAvailable && showPrompt"
+      class="ai-skill-panel__composer"
+      :class="{ 'is-chat': composerVariant === 'chat' }"
+    >
       <BInput
         v-model:value="prompt"
         type="textarea"
@@ -42,10 +46,18 @@
         submit-on-enter
         @enter="runPrompt"
       />
-      <BButton v-if="loading" @click="cancel">{{ t('aiSkills.stop') }}</BButton>
-      <BButton v-else type="primary" :disabled="interactionDisabled || !prompt.trim()" @click="runPrompt">{{
-        submitLabel
-      }}</BButton>
+      <BButton v-if="loading" class="ai-skill-panel__composer-action" @click="cancel">
+        {{ t('aiSkills.stop') }}
+      </BButton>
+      <BButton
+        v-else
+        class="ai-skill-panel__composer-action"
+        type="primary"
+        :disabled="interactionDisabled || !prompt.trim()"
+        @click="runPrompt"
+      >
+        {{ submitLabel }}
+      </BButton>
     </div>
 
     <div v-if="!feature.loading.value && !skillAvailable" class="ai-skill-panel__state is-unavailable" role="status">
@@ -58,7 +70,12 @@
     <div v-else-if="error" class="ai-skill-panel__state is-error" role="alert">
       <strong>{{ errorTitle }}</strong>
       <span>{{ error.message }}</span>
-      <BButton v-if="autoRunAction" size="small" class="ai-skill-panel__retry" @click="runAction(autoRunAction)">
+      <BButton
+        v-if="autoRunAction && error.retryable"
+        size="small"
+        class="ai-skill-panel__retry"
+        @click="runAction(autoRunAction)"
+      >
         {{ t('aiSkills.retry') }}
       </BButton>
     </div>
@@ -121,6 +138,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { formatAiSkillCoverageWarnings } from '@/utils/aiSkillPresentation';
+  import { getAiQuotaErrorPresentation } from '@/utils/aiQuotaErrorPresentation';
   import { aiResourceCountBucket, recordAiProductEvent } from '@/api/aiTelemetry';
   import { useAiSkillAvailability } from '@/composables/useAiSkillAvailability';
   import AiSkillResultContent from './AiSkillResultContent.vue';
@@ -143,6 +161,8 @@
       promptMaxLength?: number;
       promptRows?: number;
       presentation?: 'default' | 'sidebar';
+      composerVariant?: 'default' | 'chat';
+      showHeader?: boolean;
       emptyText?: string;
       initialInput?: Record<string, unknown>;
       initialPrompt?: string;
@@ -164,6 +184,8 @@
       promptMaxLength: 500,
       promptRows: 2,
       presentation: 'default',
+      composerVariant: 'default',
+      showHeader: true,
       emptyText: '',
       initialInput: () => ({}),
       initialPrompt: '',
@@ -184,7 +206,7 @@
   const prompt = ref(props.initialPrompt);
   const loading = ref(false);
   const response = ref<AiSkillResponse | null>(null);
-  const error = ref<{ code: string; message: string } | null>(null);
+  const error = ref<{ code: string; message: string; title?: string; retryable: boolean } | null>(null);
   const feature = useAiSkillAvailability(() => props.skillId);
   const threads = new Map<string, string>();
   let sequence = 0;
@@ -218,9 +240,7 @@
     if (truncated > 0) details.push(t('aiSkills.coverageTruncated', { count: truncated }));
     return details;
   });
-  const errorTitle = computed(() =>
-    error.value?.code === 'AI_QUOTA_EXCEEDED' ? t('aiSkills.quotaErrorTitle') : t('aiSkills.errorTitle'),
-  );
+  const errorTitle = computed(() => error.value?.title || t('aiSkills.errorTitle'));
   const scopeKey = computed(() =>
     props.resourceRefs.map((item) => `${item.type}:${item.id}:${item.version || ''}`).join('|'),
   );
@@ -308,9 +328,11 @@
       return result;
     } catch (cause: any) {
       if (current !== sequence || requestController.signal.aborted) return null;
-      const failure = {
+      const quotaFailure = getAiQuotaErrorPresentation(cause, (key, params) => t(key, params));
+      const failure = quotaFailure || {
         code: String(cause?.code || 'AI_SKILL_FAILED'),
         message: String(cause?.message || t('aiSkills.retryLater')),
+        retryable: true,
       };
       error.value = failure;
       emit('error', failure);
@@ -501,6 +523,60 @@
     background: var(--bl-input-noBorder-bg-color);
   }
 
+  .ai-skill-panel__composer.is-chat {
+    position: relative;
+    display: block;
+    overflow: hidden;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 15px;
+    background: var(--workspace-panel-bg-color);
+    transition:
+      border-color 0.16s ease,
+      box-shadow 0.16s ease;
+  }
+
+  .ai-skill-panel__composer.is-chat:focus-within {
+    border-color: var(--resource-bookmark-color);
+    box-shadow: 0 0 0 2px var(--primary-btn-bg-color);
+  }
+
+  .ai-skill-panel__composer.is-chat :deep(.input-container) {
+    min-width: 0;
+  }
+
+  .ai-skill-panel__composer.is-chat :deep(.b-textarea) {
+    min-height: 112px;
+    max-height: 180px;
+    padding: 13px 14px 50px !important;
+    resize: none;
+    border: 0 !important;
+    border-radius: 15px;
+    background: transparent !important;
+    box-shadow: none !important;
+    line-height: 1.6;
+  }
+
+  .ai-skill-panel__composer.is-chat :deep(.b_btn) {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    width: auto;
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 9px;
+    font-size: 12px;
+    line-height: 32px;
+  }
+
+  .ai-skill-panel.is-sidebar .ai-skill-panel__composer.is-chat :deep(.b-textarea) {
+    min-height: 112px;
+    max-height: 180px;
+  }
+
+  .ai-skill-panel.is-sidebar .ai-skill-panel__composer.is-chat :deep(.b_btn) {
+    width: auto;
+  }
+
   .ai-skill-panel__state,
   .ai-skill-panel__result {
     min-width: 0;
@@ -602,12 +678,16 @@
       border-radius: 12px;
     }
 
-    .ai-skill-panel__composer {
+    .ai-skill-panel__composer:not(.is-chat) {
       grid-template-columns: 1fr;
     }
 
-    .ai-skill-panel__composer :deep(.b_btn) {
+    .ai-skill-panel__composer:not(.is-chat) :deep(.b_btn) {
       width: 100%;
+    }
+
+    .ai-skill-panel__composer.is-chat :deep(.b_btn) {
+      width: auto;
     }
   }
 </style>

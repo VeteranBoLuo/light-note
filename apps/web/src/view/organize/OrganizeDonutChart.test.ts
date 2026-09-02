@@ -69,6 +69,25 @@ describe('OrganizeDonutChart', () => {
     expect(host.innerHTML).not.toMatch(/NaN|Infinity/);
   });
 
+  it('已知总数为零时保留显式数字，不把长空态文案塞进圆环中心', () => {
+    const host = mountChart({
+      total: 0,
+      centerLabel: '待整理',
+      centerValue: '0',
+      emptyLabel: '暂无可用统计数据',
+      items: [
+        { key: 'bookmark', label: '书签', value: 0, color: '#615ced' },
+        { key: 'note', label: '笔记', value: 0, color: '#00a884' },
+        { key: 'file', label: '文件', value: 0, color: '#ff8a00' },
+      ],
+    });
+
+    expect(host.querySelector('.organize-donut-chart__center strong')?.textContent).toBe('0');
+    expect(host.querySelector('.organize-donut-chart__center span')?.textContent).toBe('待整理');
+    expect(host.querySelector('.organize-donut-chart__mobile-empty')).toBeNull();
+    expect(host.textContent).not.toContain('暂无可用统计数据');
+  });
+
   it('分项超过传入总数或出现超大数时，以安全分母归一化且环段不超过一圈', () => {
     const host = mountChart({
       total: 1,

@@ -185,8 +185,8 @@ async function userDailyQuota(userId, userRole) {
   }
 }
 
-async function getUserBonusTokens(userId) {
-  const [rows] = await pool.query('SELECT ai_bonus_tokens FROM user_growth WHERE user_id = ? LIMIT 1', [userId]);
+async function getUserBonusTokens(userId, database = pool) {
+  const [rows] = await database.query('SELECT ai_bonus_tokens FROM user_growth WHERE user_id = ? LIMIT 1', [userId]);
   return Math.max(0, Number(rows[0]?.ai_bonus_tokens || 0));
 }
 
@@ -669,14 +669,98 @@ export async function reconcile(handle, actualTokens, { aborted = false, databas
   }
 }
 
-async function getDayUsed(type, key, pk) {
-  const [rows] = await pool.query(
+async function getDayUsed(type, key, pk, database = pool) {
+  const [rows] = await database.query(
     `SELECT tokens_used
        FROM ai_token_usage
       WHERE subject_type = ? AND subject_key = ? AND period_type = 'day' AND period_key = ?`,
     [type, key, pk],
   );
   return Math.max(0, Number(rows[0]?.tokens_used || 0));
+}
+
+function quotaSubjectKey(subject) {
+  return `${String(subject?.type || '')}\0${String(subject?.key || '')}`;
+}
+
+function pendingReservationTotals(rows, subjects) {
+  const requestedKeys = new Set(subjects.map(quotaSubjectKey));
+  const totals = new Map(
+    subjects.map((subject) => [quotaSubjectKey(subject), { reservedTokens: 0, walletReserved: 0 }]),
+  );
+  for (const row of rows) {
+    for (const subject of normalizeStoredSubjects(row?.subjects_json)) {
+      const key = quotaSubjectKey(subject);
+      if (!requestedKeys.has(key)) continue;
+      const total = totals.get(key);
+      total.reservedTokens += Math.max(0, Number(subject.reservedTokens || 0));
+      total.walletReserved += Math.max(0, Number(subject.walletReserved || 0));
+    }
+  }
+  return totals;
+}
+
+/**
+ * 状态页展示已结算余额，但并发门禁仍使用包含在途预留的可用余额。
+ * 三类账本必须来自同一个一致性快照，否则 reservation 刚结算时会短暂重复加回或扣除。
+ */
+async function readStatusSnapshot(subjects, pk, userId) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const rawSubjects = [];
+    for (const subject of subjects) {
+      rawSubjects.push({
+        ...subject,
+        used: await getDayUsed(subject.type, subject.key, pk, connection),
+      });
+    }
+    const [reservationRows] = await connection.query(
+      `SELECT subjects_json
+         FROM ai_token_reservations
+        WHERE period_key = ? AND status = 'reserved'`,
+      [pk],
+    );
+    const walletBalance = userId ? await getUserBonusTokens(userId, connection) : 0;
+    await connection.commit();
+
+    const pendingBySubject = pendingReservationTotals(reservationRows, rawSubjects);
+    const resolved = rawSubjects.map((subject) => {
+      const pending = pendingBySubject.get(quotaSubjectKey(subject)) || { reservedTokens: 0, walletReserved: 0 };
+      return {
+        ...subject,
+        pendingReservedTokens: pending.reservedTokens,
+        pendingWalletReservedTokens: pending.walletReserved,
+        ...(subject.type === 'user' ? { walletBalance } : {}),
+      };
+    });
+    const settled = resolved.map((subject) => ({
+      ...subject,
+      used: Math.max(0, Number(subject.used || 0) - Number(subject.pendingReservedTokens || 0)),
+      ...(subject.type === 'user'
+        ? {
+            walletBalance:
+              Math.max(0, Number(subject.walletBalance || 0)) +
+              Math.max(0, Number(subject.pendingWalletReservedTokens || 0)),
+          }
+        : {}),
+    }));
+    const pendingValues = resolved.map((subject) => Math.max(0, Number(subject.pendingReservedTokens || 0)));
+    return {
+      raw: resolved,
+      settled,
+      pendingReservedTokens: pendingValues.length ? Math.min(...pendingValues) : 0,
+    };
+  } catch (error) {
+    try {
+      await connection.rollback();
+    } catch {
+      // 原始查询异常优先。
+    }
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
 
 /** 查询当前请求主体的当日额度；异常时明确标记 unavailable，不伪装成豁免。 */
@@ -687,17 +771,21 @@ export async function getStatus(req, ctx = {}) {
     const quotaType = visitor ? 'fingerprint' : subjects[0]?.type || 'user';
     if (!visitor) {
       subjects[0].quota = await userDailyQuota(ctx.userId, ctx.userRole);
-      if (subjects[0].type === 'user') subjects[0].walletBalance = await getUserBonusTokens(ctx.userId);
     }
     const pk = dayKey();
-    const resolved = await Promise.all(
-      subjects.map(async (subject) => ({ ...subject, used: await getDayUsed(subject.type, subject.key, pk) })),
+    const snapshot = await readStatusSnapshot(
+      subjects,
+      pk,
+      !visitor && subjects[0]?.type === 'user' ? ctx.userId : null,
     );
-    const status = effectiveStatus(resolved, visitor);
+    const status = effectiveStatus(snapshot.settled, visitor);
+    const availableStatus = effectiveStatus(snapshot.raw, visitor);
     return {
       exempt: false,
       type: quotaType,
       ...status,
+      availableRemaining: availableStatus.remaining,
+      pendingReservedTokens: snapshot.pendingReservedTokens,
       enforcing: ENFORCE,
     };
   } catch {
@@ -719,11 +807,15 @@ export async function getStatusForUser(userId, userRole) {
       return { guest: true, quota: DAILY_QUOTA.visitor, enforcing: ENFORCE };
     }
     const quota = await userDailyQuota(userId, userRole);
-    const used = await getDayUsed('user', String(userId).slice(0, 128), dayKey());
-    const walletBalance = await getUserBonusTokens(userId);
+    const subject = { type: 'user', key: String(userId).slice(0, 128), quota };
+    const snapshot = await readStatusSnapshot([subject], dayKey(), userId);
+    const status = effectiveStatus(snapshot.settled, false);
+    const availableStatus = effectiveStatus(snapshot.raw, false);
     return {
       type: 'user',
-      ...effectiveStatus([{ type: 'user', key: userId, used, quota, walletBalance }], false),
+      ...status,
+      availableRemaining: availableStatus.remaining,
+      pendingReservedTokens: snapshot.pendingReservedTokens,
       enforcing: ENFORCE,
     };
   } catch {

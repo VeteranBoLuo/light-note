@@ -510,12 +510,13 @@
     if (quote.value.billingMedium === 'points') {
       return growth.value?.points != null && Number(growth.value.points) < quote.value.quotedPoints;
     }
-    return aiQuotaStatus.value?.exempt !== true && Number(aiQuotaStatus.value?.remaining) <= 0;
+    const available = aiQuotaStatus.value?.availableRemaining ?? aiQuotaStatus.value?.remaining;
+    return aiQuotaStatus.value?.exempt !== true && Number(available) <= 0;
   });
   const aiQuotaBalanceLabel = computed(() =>
     aiQuotaStatus.value?.exempt
       ? t('settings.ai.quotaUnlimited')
-      : formatAiQuotaTokens(aiQuotaStatus.value?.remaining, locale.value),
+      : formatAiQuotaTokens(aiQuotaStatus.value?.availableRemaining ?? aiQuotaStatus.value?.remaining, locale.value),
   );
   const workbenchCostLabel = computed(() => {
     if (!tool.value || tool.value.price.kind === 'free') return t('toolbox.free');

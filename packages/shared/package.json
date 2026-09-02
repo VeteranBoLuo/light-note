@@ -41,6 +41,10 @@
       "types": "./aiCitationPresentation.d.ts",
       "default": "./aiCitationPresentation.js"
     },
+    "./ai-quota-protocol": {
+      "types": "./aiQuotaProtocol.d.ts",
+      "default": "./aiQuotaProtocol.js"
+    },
     "./toolbox-protocol": {
       "types": "./toolboxProtocol.d.ts",
       "default": "./toolboxProtocol.js"

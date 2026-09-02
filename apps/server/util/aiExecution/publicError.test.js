@@ -3,7 +3,11 @@ import { resolvePublicAiExecutionError } from './publicError.js';
 
 describe('resolvePublicAiExecutionError', () => {
   it.each([
-    ['AI_QUOTA_EXCEEDED', 429, '今日 AI 额度已用完'],
+    [
+      'AI_QUOTA_EXCEEDED',
+      429,
+      '当前 AI 额度已用完。可前往 AI 用量与计费页补充永久额度，或等待每日额度重置。',
+    ],
     ['AI_ACCESS_RESTRICTED', 403, '当前账号的 AI 使用权限已被限制'],
     ['AI_RATE_LIMITED', 503, 'AI 服务当前繁忙，本次未生成内容，请稍后重试'],
     ['AI_NETWORK_ERROR', 503, 'AI 服务连接失败，本次未生成内容，请稍后重试'],
@@ -18,6 +22,25 @@ describe('resolvePublicAiExecutionError', () => {
       code,
       status,
       message,
+    });
+  });
+
+  it('本次任务预算不足时返回独立错误码和可行动的额度差额', () => {
+    expect(
+      resolvePublicAiExecutionError(
+        Object.assign(new Error('internal'), {
+          code: 'AI_QUOTA_INSUFFICIENT_FOR_REQUEST',
+          requiredTokens: 26_903,
+          availableTokens: 21_700,
+        }),
+      ),
+    ).toEqual({
+      code: 'AI_QUOTA_INSUFFICIENT_FOR_REQUEST',
+      status: 429,
+      message:
+        '本次任务预计最多需要约 26,903 tokens，当前可用约 21,700。请减少处理内容、分段执行或补充额度后重试。',
+      requiredTokens: 26_903,
+      availableTokens: 21_700,
     });
   });
 

@@ -5,7 +5,7 @@
       `is-${density}`,
       `is-${surface}`,
       `is-${layout}`,
-      { 'is-loading': loading, 'is-unavailable': unavailable },
+      { 'is-loading': loading, 'is-unavailable': unavailable, 'has-pending-reservation': pendingReservationText },
     ]"
     :aria-label="accessibleLabel"
     :aria-busy="loading"
@@ -30,6 +30,10 @@
           <span class="ai-quota-summary__secondary-value">
             <small>{{ t('personCenter.aiQuotaPermanentShort') }}</small>
             <strong>{{ quotaBreakdown.permanent }}</strong>
+          </span>
+          <span v-if="pendingReservationText" class="ai-quota-summary__pending">
+            <span aria-hidden="true"></span>
+            {{ pendingReservationText }}
           </span>
         </span>
         <strong v-else class="ai-quota-summary__status">{{ statusText }}</strong>
@@ -107,7 +111,16 @@
       amount: formatAiQuotaTokens(status.value.remaining, locale.value),
     });
   });
-  const accessibleLabel = computed(() => `${t('personCenter.aiQuotaLabel')}，${statusText.value}`);
+  const pendingReservationText = computed(() => {
+    const amount = Number(status.value?.pendingReservedTokens || 0);
+    if (!Number.isFinite(amount) || amount <= 0) return '';
+    return t('personCenter.aiQuotaSettling', {
+      amount: formatAiQuotaTokens(amount, locale.value),
+    });
+  });
+  const accessibleLabel = computed(() =>
+    [t('personCenter.aiQuotaLabel'), statusText.value, pendingReservationText.value].filter(Boolean).join('，'),
+  );
 </script>
 
 <style scoped lang="less">
@@ -272,6 +285,25 @@
     font-size: 10px;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
+  }
+
+  .ai-quota-summary__pending {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--warning-color, #b56a00);
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 1.25;
+  }
+
+  .ai-quota-summary__pending > span {
+    width: 5px;
+    height: 5px;
+    flex: 0 0 5px;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    background: currentColor;
   }
 
   .ai-quota-summary.is-tile :deep(.b-progress__trail) {

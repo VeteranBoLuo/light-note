@@ -11,6 +11,10 @@ describe('独立 AI 用量页信息架构', () => {
     expect(source).toContain('class="ai-quota-panel"');
     expect(source).toContain('<AiUsageCenter');
     expect(source).toContain('aiQuotaMetrics');
+    expect(source).toContain('pendingQuotaText');
+    expect(source).toContain('pendingReservedTokens');
+    expect(source).toContain('availableRemaining');
+    expect(source).toContain('v-if="!aiQuotaMetrics.length"');
   });
 
   it('卡片、按钮和加载态都使用自研 B 组件', () => {

@@ -20,6 +20,7 @@
 | 输入、输出和 Grounding 校验 | `inputValidators.js`、`outputValidator.js`、`groundedOutput.js` |
 | 模型访问                    | `apps/server/util/agent/aiGateway.js`                           |
 | 动作与计费目录              | `apps/server/util/aiBillingCatalog.js`                          |
+| 额度错误协议                | `packages/shared/aiQuotaProtocol.js`                            |
 | 前端执行与展示              | `AiSkillPanel.vue`、`AiSkillResultContent.vue`、`useAiSkill.ts` |
 
 新增或修改能力时更新这些事实源和契约测试，不在页面、Prompt、帮助文案或本文复制第二份 Skill 清单。
@@ -53,6 +54,9 @@
 
 - 所有真实 Provider 调用都必须经过 `aiGateway.js` 并归属唯一根 AI Execution；源码门禁禁止裸 Provider 和未登记调用方。
 - 用户动作在第一次真实 Provider 调用前懒占位一次。缓存命中、确定性解析和纯本地处理不占模型额度。
+- 额度闸门用包含在途预留的余额阻止并发超卖；用户界面展示已结算余额，并用 `pendingReservedTokens` 单独标出在途预留、用 `availableRemaining` 解释当前还能供新任务使用的额度。禁止把临时预留伪装成已消费或余额归零。
+- `AI_QUOTA_EXCEEDED` 只表示当前总可用额度为零；余额仍大于零但低于本次调用保守预算时返回 `AI_QUOTA_INSUFFICIENT_FOR_REQUEST`，并携带本次所需与当前可用预算。所有 AI 入口必须复用共享协议和统一前端提示，不得把两类情况合并成“今日额度已用完”。
+- 同一 Skill 内输出规模不同的固定动作应声明各自模型输出预算；标题、摘要、大纲等短输出不能沿用全文改写上限。无法在剩余额度内安全完成的全文任务应明确建议减少或分段处理，不能先向 Provider 发出可能超额的请求。
 - Provider 阶段计划可在 Context Resolver 得到权威材料规模后、首次调用前重编译；一旦开始占位或访问 Provider 就锁定，避免聚合选择器被按“一项材料”错误计费或放宽调用上限。
 - 主调用、图片识别、结构修复和 Provider 失败分别记录 Span，并由根 Execution 形成唯一终态；用户额度只结算明确属于用户的真实 usage。
 - 平台协议修复由平台承担。usage 缺失按已声明预算保守结算，不能让已发出的调用变成免费，也不能超过预占。

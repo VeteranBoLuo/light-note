@@ -4,7 +4,10 @@ import { executeAiSkill } from '../util/aiSkill/runtime.js';
 import { callGroundedSkillModelStream } from '../util/aiSkill/model.js';
 import { listAiSkills } from '../util/aiSkill/registry.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
-import { resolvePublicAiExecutionError } from '../util/aiExecution/publicError.js';
+import {
+  publicAiExecutionErrorData,
+  resolvePublicAiExecutionError,
+} from '../util/aiExecution/publicError.js';
 import { recordAiProductEvent } from '../util/aiProductTelemetry.js';
 import { createRequestAbortContext } from '../util/requestAbort.js';
 
@@ -32,7 +35,7 @@ export async function executeAiSkillRequest(req, res) {
     if (res.destroyed || res.writableEnded) return;
     const failure = resolvePublicAiExecutionError(error);
     if (failure.status >= 500) console.error('[ai-skill] execute failed code=%s', stableAgentErrorCode(error));
-    return res.status(failure.status).send(resultData({ code: failure.code }, failure.status, failure.message));
+    return res.status(failure.status).send(resultData(publicAiExecutionErrorData(failure), failure.status, failure.message));
   } finally {
     abortContext.complete();
   }

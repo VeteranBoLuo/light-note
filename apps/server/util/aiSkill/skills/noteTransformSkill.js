@@ -8,8 +8,24 @@ const OPERATION_INSTRUCTIONS = Object.freeze({
   expand: '扩写现有内容，只能增加解释、结构、示例框架和分析，不得编造新事实。',
   proofread: '纠正错别字、语法、标点和不通顺表达，尽量少改动。',
   title: '根据内容生成一个简洁、准确的标题，只输出标题。',
+  outline: '根据内容生成层级清晰的大纲，保留关键事实与论述关系。',
   translate: '准确翻译到指定目标语言，保留 Markdown 结构、专有名词和事实。',
 });
+
+const NOTE_TRANSFORM_MODEL_POLICY = Object.freeze({ temperature: 0.25, maxTokens: 8192 });
+const NOTE_TRANSFORM_OUTPUT_BUDGETS = Object.freeze({
+  title: 256,
+  summarize: 2048,
+  outline: 2048,
+});
+
+function resolveNoteTransformModelPolicy(input = {}) {
+  const operation = String(input?.operation || '').trim();
+  return Object.freeze({
+    ...NOTE_TRANSFORM_MODEL_POLICY,
+    maxTokens: NOTE_TRANSFORM_OUTPUT_BUDGETS[operation] || NOTE_TRANSFORM_MODEL_POLICY.maxTokens,
+  });
+}
 
 export default Object.freeze({
   id: 'note.transform_text',
@@ -25,7 +41,8 @@ export default Object.freeze({
     historyTurns: 0,
     freezeScopeAcrossThread: true,
   }),
-  modelPolicy: Object.freeze({ temperature: 0.25, maxTokens: 8192 }),
+  modelPolicy: NOTE_TRANSFORM_MODEL_POLICY,
+  resolveModelPolicy: resolveNoteTransformModelPolicy,
   outputContract: Object.freeze({ kind: 'grounded_markdown', requireSources: false }),
   validateInput: validateNoteTransformInput,
   async prepare({ input }) {
@@ -54,4 +71,8 @@ export default Object.freeze({
   },
 });
 
-export const noteTransformSkillInternals = Object.freeze({ OPERATION_INSTRUCTIONS });
+export const noteTransformSkillInternals = Object.freeze({
+  NOTE_TRANSFORM_OUTPUT_BUDGETS,
+  OPERATION_INSTRUCTIONS,
+  resolveNoteTransformModelPolicy,
+});

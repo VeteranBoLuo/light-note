@@ -1,6 +1,7 @@
 import pool from '../db/index.js';
 import { EXPLICIT_WEB_READ_MAX_BYTES, fetchWebMeta } from './fetchWebMeta.js';
 import { requestAi } from './agent/aiGateway.js';
+import { classifyAiQuotaErrorCode } from '@lightnote/shared/ai-quota-protocol';
 import { safeAgentError } from './agent/logSafety.js';
 import { invalidatePersonalKnowledgeCache } from './personalKnowledgeSearch.js';
 
@@ -278,8 +279,25 @@ export async function summarizeBookmark(
   } catch (e) {
     if (e?.name === 'AbortError') throw e;
     console.warn('[snapshot] AI 摘要调用失败:', safeAgentError(e));
-    if (e?.code === 'AI_QUOTA_EXCEEDED') {
-      return { ok: false, reason: 'quota_exceeded', msg: '今日 AI 额度已用完，请明天再试' };
+    const quotaErrorKind = classifyAiQuotaErrorCode(e?.code);
+    if (quotaErrorKind) {
+      const requiredTokens = Number(e?.requiredTokens);
+      const availableTokens = Number(e?.availableTokens);
+      return {
+        ok: false,
+        code: String(e.code),
+        reason: quotaErrorKind === 'exhausted' ? 'quota_exceeded' : 'quota_insufficient_for_request',
+        ...(Number.isFinite(requiredTokens)
+          ? {
+              requiredTokens: Math.max(0, Math.floor(requiredTokens)),
+              availableTokens: Number.isFinite(availableTokens) ? Math.max(0, Math.floor(availableTokens)) : 0,
+            }
+          : {}),
+        msg:
+          quotaErrorKind === 'exhausted'
+            ? '当前 AI 额度已用完，请等待每日额度重置或补充永久额度'
+            : '当前仍有 AI 额度，但不足以生成本次摘要，请减少材料或补充额度',
+      };
     }
     return { ok: false, reason: 'ai_error', msg: 'AI 服务暂时不可用,请稍后再试' };
   }

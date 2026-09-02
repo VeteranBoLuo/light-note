@@ -3,7 +3,6 @@
     class="help-container"
     :class="{
       'is-compact': isCompactHelpLayout,
-      'is-desktop-compact': isCompactDesktopLayout,
       'is-landing': isLandingView,
     }"
   >
@@ -125,18 +124,63 @@
             <h1>{{ t('help.heroTitle') }}</h1>
             <p>{{ t('help.heroDescription') }}</p>
           </div>
-          <BInput
-            id="help-search"
-            v-model:value="searchValue"
-            :placeholder="t('help.searchPlaceholder')"
-            :height="isDiscoveryView ? '50px' : '42px'"
-            class="help-search-input"
-            clearable
-          >
-            <template #prefix>
-              <SvgIcon :src="icon.navigation.search" size="17" />
-            </template>
-          </BInput>
+          <div class="help-workspace-actions">
+            <BInput
+              id="help-search"
+              v-model:value="searchValue"
+              :placeholder="t('help.searchPlaceholder')"
+              :height="isDiscoveryView ? '50px' : '42px'"
+              class="help-search-input"
+              clearable
+            >
+              <template #prefix>
+                <SvgIcon :src="icon.navigation.search" size="17" />
+              </template>
+            </BInput>
+
+            <BPopover
+              v-if="!isCompactHelpLayout && !isSearching && !isLandingView && helpOutline.length"
+              v-model:open="isCompactOutlineOpen"
+              trigger="click"
+              placement="bottom-right"
+              overlay-class-name="help-outline-popover"
+              @open-change="handleDesktopOutlineOpenChange"
+            >
+              <BButton
+                class="help-workspace-tool"
+                :class="{ active: isCompactOutlineOpen }"
+                :aria-label="t('help.outline')"
+                :aria-expanded="isCompactOutlineOpen"
+                aria-controls="help-desktop-outline"
+              >
+                <SvgIcon :src="icon.filterPanel.list" size="17" />
+                <span class="help-workspace-tool__label">{{ t('help.outline') }}</span>
+              </BButton>
+              <template #content>
+                <div id="help-desktop-outline" class="help-tools-outline">
+                  <HelpOutlineList
+                    :title="t('help.outline')"
+                    :items="helpOutline"
+                    :active-id="activeOutlineId"
+                    @select="scrollToHelpHeading"
+                  />
+                </div>
+              </template>
+            </BPopover>
+
+            <BButton
+              class="help-workspace-tool help-assistant-trigger"
+              :class="{ active: isAssistantOpen }"
+              :aria-label="t('help.aiTitle')"
+              :aria-expanded="isAssistantOpen"
+              aria-controls="help-ai-assistant"
+              data-drawer-keep-open
+              @click="toggleAssistant"
+            >
+              <SvgIcon :src="icon.common.magicWand" size="17" />
+              <span class="help-workspace-tool__label">{{ t('help.aiEntry') }}</span>
+            </BButton>
+          </div>
         </header>
 
         <section v-if="isSearching && !selectedFromSearch" class="search-results-panel">
@@ -268,61 +312,47 @@
           <article class="help-article-content" v-html="renderedContent"></article>
         </div>
       </main>
+    </div>
 
-      <aside class="help-tools" :aria-label="t('help.tools')">
-        <div v-if="isCompactDesktopLayout" class="help-tools-compact-actions">
-          <BButton
-            class="help-compact-tool"
-            :class="{ active: isCompactAssistantOpen }"
-            :aria-expanded="isCompactAssistantOpen"
-            aria-controls="help-ai-assistant"
-            @click="toggleCompactAssistant"
-          >
-            <SvgIcon :src="icon.common.magicWand" size="17" />
-            <span>{{ t('help.aiTitle') }}</span>
-          </BButton>
-          <BButton
-            class="help-compact-tool"
-            :class="{ active: isCompactOutlineOpen }"
-            :disabled="isSearching || isLandingView || !helpOutline.length"
-            :aria-expanded="isCompactOutlineOpen"
-            aria-controls="help-desktop-outline"
-            @click="toggleCompactOutline"
-          >
-            <SvgIcon :src="icon.filterPanel.list" size="17" />
-            <span>{{ t('help.outline') }}</span>
-          </BButton>
+    <BDrawer
+      :open="isAssistantOpen"
+      :title="t('help.aiTitle')"
+      width="420px"
+      height="min(78dvh, 680px)"
+      :placement="isCompactHelpLayout ? 'bottom' : 'right'"
+      :modal="isCompactHelpLayout"
+      :close-on-click-outside="!isCompactHelpLayout"
+      :destroy-on-close="false"
+      :mobile-centered-header="isCompactHelpLayout"
+      :show-handle="isCompactHelpLayout"
+      body-padding="0"
+      @close="isAssistantOpen = false"
+    >
+      <div class="help-assistant-drawer-content">
+        <div class="help-assistant-intro">
+          <span class="help-assistant-intro__icon" aria-hidden="true">
+            <SvgIcon :src="icon.common.magicWand" size="18" />
+          </span>
+          <p>{{ t('help.aiDescription') }}</p>
         </div>
         <AiSkillPanel
           id="help-ai-assistant"
-          v-show="!isCompactDesktopLayout || isCompactAssistantOpen"
           class="help-ai-panel"
           :title="t('help.aiTitle')"
-          :description="t('help.aiDescription')"
           skill-id="help.answer"
           :show-prompt="true"
           surface="help.center"
-          :prompt-rows="2"
+          :prompt-rows="3"
           :placeholder="t('help.aiPlaceholder')"
           :submit-label="t('help.aiSubmit')"
+          presentation="sidebar"
+          composer-variant="chat"
+          :show-header="false"
           :show-grounding="false"
           :clear-prompt-on-success="true"
         />
-        <div
-          v-if="!isCompactHelpLayout && !isSearching && !isLandingView && helpOutline.length"
-          id="help-desktop-outline"
-          v-show="!isCompactDesktopLayout || isCompactOutlineOpen"
-          class="help-tools-outline"
-        >
-          <HelpOutlineList
-            :title="t('help.outline')"
-            :items="helpOutline"
-            :active-id="activeOutlineId"
-            @select="scrollToHelpHeading"
-          />
-        </div>
-      </aside>
-    </div>
+      </div>
+    </BDrawer>
   </div>
 </template>
 
@@ -336,6 +366,8 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import BPopover from '@/components/base/BasicComponents/BPopover.vue';
+  import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import { getHelpConfig } from '@/api/helpApi';
   import { useRoute, useRouter } from 'vue-router';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
@@ -364,12 +396,11 @@
 
   const bookmark = bookmarkStore();
   const isCompactHelpLayout = computed(() => bookmark.isMobileDevice);
-  const isCompactDesktopLayout = computed(() => bookmark.isDesktop && bookmark.isCompactLayout);
   const checkId = ref('');
   const activeOutlineId = ref('');
   const isCompactCatalogOpen = ref(false);
   const isCompactOutlineOpen = ref(false);
-  const isCompactAssistantOpen = ref(false);
+  const isAssistantOpen = ref(false);
   const searchValue = ref('');
   const selectedFromSearch = ref(false);
   const helpConfigLoaded = ref(false);
@@ -422,7 +453,7 @@
   function applyArticle(item: HelpArticle) {
     isCompactCatalogOpen.value = false;
     isCompactOutlineOpen.value = false;
-    isCompactAssistantOpen.value = false;
+    isAssistantOpen.value = false;
     checkId.value = String(item.id);
     activeOutlineId.value = '';
     nextTick(() => {
@@ -484,7 +515,7 @@
   function resetToIntro() {
     isCompactCatalogOpen.value = false;
     isCompactOutlineOpen.value = false;
-    isCompactAssistantOpen.value = false;
+    isAssistantOpen.value = false;
     checkId.value = '';
     activeOutlineId.value = '';
     node.value = helpInfo;
@@ -531,12 +562,16 @@
     isCompactOutlineOpen.value = !isCompactOutlineOpen.value;
     if (isCompactOutlineOpen.value) {
       isCompactCatalogOpen.value = false;
-      isCompactAssistantOpen.value = false;
+      isAssistantOpen.value = false;
     }
   }
-  function toggleCompactAssistant() {
-    isCompactAssistantOpen.value = !isCompactAssistantOpen.value;
-    if (isCompactAssistantOpen.value) {
+  function handleDesktopOutlineOpenChange(open: boolean) {
+    isCompactOutlineOpen.value = open;
+    if (open) isAssistantOpen.value = false;
+  }
+  function toggleAssistant() {
+    isAssistantOpen.value = !isAssistantOpen.value;
+    if (isAssistantOpen.value) {
       isCompactOutlineOpen.value = false;
     }
   }
@@ -669,18 +704,10 @@
     }
   });
 
-  watch(isCompactHelpLayout, (isCompact) => {
-    if (!isCompact) {
-      isCompactCatalogOpen.value = false;
-      isCompactOutlineOpen.value = false;
-    }
-  });
-
-  watch(isCompactDesktopLayout, (isCompact) => {
-    if (!isCompact) {
-      isCompactAssistantOpen.value = false;
-      if (!isCompactHelpLayout.value) isCompactOutlineOpen.value = false;
-    }
+  watch(isCompactHelpLayout, () => {
+    isCompactCatalogOpen.value = false;
+    isCompactOutlineOpen.value = false;
+    isAssistantOpen.value = false;
   });
 
   function setupClickListener() {
@@ -833,8 +860,8 @@
   .help-body {
     position: relative;
     display: grid;
-    grid-template-columns: 236px minmax(0, 1fr) minmax(286px, 320px);
-    grid-template-areas: 'catalog content tools';
+    grid-template-columns: 236px minmax(0, 1fr);
+    grid-template-areas: 'catalog content';
     gap: 14px;
     flex: 1 1 auto;
     min-height: 0;
@@ -1089,8 +1116,8 @@
 
   .help-search-input {
     width: 100% !important;
-    max-width: 680px;
-    flex: 0 0 auto;
+    min-width: 0;
+    flex: 1 1 auto;
     box-sizing: border-box;
   }
 
@@ -1105,64 +1132,135 @@
     background: var(--workspace-panel-bg-color);
   }
 
+  .help-search-input .b-input:focus-visible {
+    border-color: var(--resource-bookmark-color) !important;
+    outline: 2px solid var(--primary-btn-bg-color);
+    outline-offset: -2px;
+  }
+
   .help-workspace-header.is-discovery .help-search-input .b-input {
     background: var(--card-background);
     box-shadow: var(--surface-card-shadow) !important;
   }
 
-  .help-tools {
-    grid-area: tools;
+  .help-workspace-actions {
     display: flex;
-    min-height: 0;
-    flex-direction: column;
-    gap: 12px;
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-
-  .help-ai-panel {
     width: 100%;
+    max-width: 860px;
     min-width: 0;
+    align-items: center;
+    gap: 9px;
+  }
+
+  .help-workspace-actions > .b-popover-trigger {
     flex: 0 0 auto;
-    box-sizing: border-box;
-    box-shadow: var(--surface-card-shadow);
   }
 
-  .help-tools .ai-skill-panel__result {
-    max-height: min(42vh, 420px);
-    overflow: auto;
-  }
-
-  .help-tools-outline {
-    padding: 14px 8px;
-    box-sizing: border-box;
-    overflow: hidden;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 14px;
-    background: var(--card-background);
-    box-shadow: var(--surface-card-shadow);
-  }
-
-  .help-tools-compact-actions {
-    display: flex;
-    gap: 8px;
-  }
-
-  .help-compact-tool.b_btn {
-    height: 38px;
+  .help-workspace-tool.b_btn {
+    height: 42px;
+    padding: 0 13px;
+    flex: 0 0 auto;
     gap: 7px;
     border: 1px solid var(--surface-border-color) !important;
-    border-radius: 10px;
+    border-radius: 11px;
     color: var(--desc-color);
     background: var(--card-background);
   }
 
-  .help-compact-tool.b_btn.active {
+  .help-workspace-header.is-discovery .help-workspace-tool.b_btn {
+    height: 50px;
+  }
+
+  .help-workspace-tool.b_btn.active {
     border-color: var(--resource-bookmark-color) !important;
     color: var(--resource-bookmark-color);
     background: var(--primary-btn-bg-color);
     font-weight: 700;
+  }
+
+  .help-assistant-trigger.b_btn {
+    border-color: var(--resource-bookmark-color) !important;
+    color: var(--resource-bookmark-color);
+    background: var(--primary-btn-bg-color);
+  }
+
+  .help-assistant-trigger.b_btn.active {
+    color: #ffffff;
+    background: var(--resource-bookmark-color);
+  }
+
+  .help-workspace-tool__label {
+    line-height: 1;
+  }
+
+  .help-tools-outline {
+    min-width: 0;
+    padding: 4px 0;
+    box-sizing: border-box;
+    overflow: hidden;
+    border: 0;
+    background: transparent;
+  }
+
+  .help-outline-popover {
+    width: min(300px, calc(100vw - 16px));
+    max-height: min(62vh, 520px);
+    padding: 10px 8px;
+    box-sizing: border-box;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .help-assistant-drawer-content {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    flex-direction: column;
+    background: var(--card-background);
+  }
+
+  .help-assistant-intro {
+    display: flex;
+    margin: 14px 16px 0;
+    padding: 12px;
+    flex: 0 0 auto;
+    align-items: flex-start;
+    gap: 10px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
+    background: var(--workspace-panel-bg-color);
+  }
+
+  .help-assistant-intro__icon {
+    display: inline-flex;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--resource-bookmark-color);
+    border-radius: 10px;
+    color: var(--resource-bookmark-color);
+    background: var(--primary-btn-bg-color);
+  }
+
+  .help-assistant-intro p {
+    margin: 1px 0 0;
+    color: var(--desc-color);
+    font-size: 12px;
+    line-height: 1.65;
+  }
+
+  .help-assistant-drawer-content .help-ai-panel {
+    height: auto;
+    min-height: 0;
+    flex: 1 1 auto;
+    padding: 16px;
+    overflow: hidden;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .tag-explanation {
@@ -1289,28 +1387,6 @@
     box-shadow: var(--surface-card-shadow);
   }
 
-  .help-container.is-desktop-compact .help-body {
-    grid-template-columns: 226px minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
-    grid-template-areas:
-      'catalog tools'
-      'catalog content';
-  }
-
-  .help-container.is-desktop-compact .help-tools {
-    overflow: visible;
-  }
-
-  .help-container.is-desktop-compact .help-ai-panel,
-  .help-container.is-desktop-compact .help-tools-outline {
-    margin-top: 2px;
-  }
-
-  .help-container.is-desktop-compact .help-tools-outline {
-    max-height: 220px;
-    overflow-y: auto;
-  }
-
   .help-container.is-compact {
     height: auto;
     min-height: 100%;
@@ -1338,13 +1414,6 @@
       overflow: visible;
     }
 
-    .help-tools {
-      width: 100%;
-      min-height: 0;
-      flex: 0 0 auto;
-      overflow: visible;
-    }
-
     .help-body--catalog-open {
       height: calc(100vh - 82px);
       overflow: hidden;
@@ -1357,8 +1426,7 @@
       overflow: hidden;
     }
 
-    .help-body--catalog-open .help-content-workspace,
-    .help-body--catalog-open .help-tools {
+    .help-body--catalog-open .help-content-workspace {
       display: none;
     }
 
@@ -1404,8 +1472,31 @@
       overflow: visible;
     }
 
-    .help-tools .ai-skill-panel__result {
-      max-height: none;
+    .help-workspace-actions {
+      gap: 8px;
+    }
+
+    .help-workspace-tool.b_btn {
+      width: 42px;
+      height: 42px;
+      padding: 0;
+    }
+
+    .help-workspace-header.is-discovery .help-workspace-tool.b_btn {
+      width: 50px;
+      height: 50px;
+    }
+
+    .help-workspace-tool__label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
     }
   }
 
@@ -1746,6 +1837,31 @@
     .search-result-card.b_btn:hover {
       border-color: var(--resource-bookmark-color) !important;
       background: var(--workspace-panel-bg-color);
+    }
+
+    .help-workspace-tool.b_btn:hover {
+      border-color: var(--resource-bookmark-color) !important;
+      color: var(--resource-bookmark-color);
+      background: var(--primary-btn-bg-color);
+    }
+  }
+
+  @media (max-width: 1180px) and (min-width: 721px) {
+    .help-workspace-tool.b_btn {
+      width: 42px;
+      padding: 0;
+    }
+
+    .help-workspace-tool__label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
     }
   }
 

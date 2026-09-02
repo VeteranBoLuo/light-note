@@ -1,17 +1,20 @@
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import { createI18n } from 'vue-i18n';
+import { AI_QUOTA_ERROR_CODES } from '@lightnote/shared/ai-quota-protocol';
 import globalDirect from '@/config/globalDirect';
 import enUS from '@/i18n/locales/en-US';
 import zhCN from '@/i18n/locales/zh-CN';
 import '@/assets/css/index.less';
 import NoteAiReplyHarness from './NoteAiReplyHarness.vue';
 
-type VisualState = 'success' | 'loading' | 'error' | 'empty';
+type VisualState = 'success' | 'loading' | 'error' | 'empty' | 'quota-exhausted' | 'quota-insufficient';
 
 const params = new URLSearchParams(window.location.search);
 const requestedState = params.get('state');
-const state: VisualState = ['success', 'loading', 'error', 'empty'].includes(String(requestedState))
+const state: VisualState = ['success', 'loading', 'error', 'empty', 'quota-exhausted', 'quota-insufficient'].includes(
+  String(requestedState),
+)
   ? (requestedState as VisualState)
   : 'success';
 const theme = params.get('theme') === 'night' ? 'night' : 'day';
@@ -84,6 +87,26 @@ function sseResponse(frames: Array<{ event: string; data: unknown }>, keepOpen =
 
 window.fetch = async () => {
   if (state === 'loading') return sseResponse([{ event: 'start', data: {} }], true);
+  if (state === 'quota-exhausted') {
+    return sseResponse([
+      { event: 'start', data: {} },
+      { event: 'error', data: { code: AI_QUOTA_ERROR_CODES.EXHAUSTED, status: 429 } },
+    ]);
+  }
+  if (state === 'quota-insufficient') {
+    return sseResponse([
+      { event: 'start', data: {} },
+      {
+        event: 'error',
+        data: {
+          code: AI_QUOTA_ERROR_CODES.INSUFFICIENT_FOR_REQUEST,
+          status: 429,
+          requiredTokens: 26_900,
+          availableTokens: 21_700,
+        },
+      },
+    ]);
+  }
   if (state === 'error') {
     return sseResponse([
       { event: 'start', data: {} },

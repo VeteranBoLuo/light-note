@@ -72,6 +72,13 @@ function mountPromptPanel(overrides: Record<string, unknown> = {}) {
       locale: 'zh-CN',
       messages: {
         'zh-CN': {
+          aiQuotaErrors: {
+            exhaustedTitle: 'AI 额度已用完',
+            exhaustedMessage: '额度已经用完',
+            insufficientTitle: '本次任务所需额度不足',
+            insufficientMessage: '请减少内容',
+            insufficientWithAmounts: '需要 {required}，可用 {available}，请分段处理',
+          },
           aiSkills: {
             processing: '处理中',
             retry: '重试',
@@ -333,6 +340,40 @@ describe('AiSkillPanel 自动执行预设动作', () => {
 });
 
 describe('AiSkillPanel 手动提问草稿', () => {
+  it('余额仍有但不足以完成当前任务时展示独立说明，并隐藏无意义的原样重试', async () => {
+    executeAiSkill.mockRejectedValueOnce(
+      Object.assign(new Error('server message'), {
+        code: 'AI_QUOTA_INSUFFICIENT_FOR_REQUEST',
+        requiredTokens: 26_903,
+        availableTokens: 21_700,
+      }),
+    );
+    const host = mountPromptPanel({
+      actions: [{ id: 'summarize', label: '摘要', input: {} }],
+      autoRunActionId: 'summarize',
+    });
+
+    await flushExecution();
+
+    expect(host.textContent).toContain('本次任务所需额度不足');
+    expect(host.textContent).toContain('需要 26,903，可用 21,700，请分段处理');
+    expect(Array.from(host.querySelectorAll('button')).some((button) => button.textContent?.includes('重试'))).toBe(
+      false,
+    );
+  });
+
+  it('支持在侧栏场景隐藏重复标题，并启用一体化对话输入框', () => {
+    const host = mountPromptPanel({
+      presentation: 'sidebar',
+      composerVariant: 'chat',
+      showHeader: false,
+    });
+
+    expect(host.querySelector('.ai-skill-panel__header')).toBeNull();
+    expect(host.querySelector('.ai-skill-panel__composer')?.classList.contains('is-chat')).toBe(true);
+    expect(host.querySelector('.ai-skill-panel')?.classList.contains('is-sidebar')).toBe(true);
+  });
+
   it('显式启用后仅在回答成功时清空输入，并可同时隐藏引用角标与来源条', async () => {
     const response = completedResponse('help.answer');
     response.result = { kind: 'grounded_markdown', content: '满级每日额度为 80 万 [1]' };

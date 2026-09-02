@@ -101,6 +101,26 @@ describe('aiSkillApi', () => {
     });
   });
 
+  it('本次任务额度不足时保留预算差额，供所有界面生成统一提示', async () => {
+    apiBasePost.mockRejectedValue({
+      code: 'HTTP_429',
+      message: '当前仍有额度，但不足以完成本次任务',
+      status: 429,
+      data: {
+        code: 'AI_QUOTA_INSUFFICIENT_FOR_REQUEST',
+        requiredTokens: 26_903,
+        availableTokens: 21_700,
+      },
+    });
+
+    await expect(executeAiSkill(request)).rejects.toMatchObject({
+      code: 'AI_QUOTA_INSUFFICIENT_FOR_REQUEST',
+      requiredTokens: 26_903,
+      availableTokens: 21_700,
+      isPublicMessage: true,
+    });
+  });
+
   it('SSE 帧解析支持事件名与 JSON 数据', () => {
     expect(aiSkillApiInternals.parseSseFrame('event: delta\ndata: {"content":"片段"}')).toEqual({
       event: 'delta',

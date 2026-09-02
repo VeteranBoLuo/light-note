@@ -277,7 +277,13 @@ describe('bookmark AI entry governance', () => {
     ]);
     mocks.suggestTagsFromText
       .mockResolvedValueOnce({ matchedTagIds: ['tag-1'], newTags: [] })
-      .mockRejectedValueOnce(Object.assign(new Error('quota'), { code: 'AI_QUOTA_EXCEEDED' }));
+      .mockRejectedValueOnce(
+        Object.assign(new Error('quota'), {
+          code: 'AI_QUOTA_INSUFFICIENT_FOR_REQUEST',
+          requiredTokens: 857,
+          availableTokens: 643,
+        }),
+      );
     const req = {
       body: { resourceType: 'note', ids: ['note-1', 'note-2'] },
       user: { id: 'user-1', role: 'user' },
@@ -296,16 +302,19 @@ describe('bookmark AI entry governance', () => {
     expect(
       mocks.runAiExecution.mock.calls[0][0].resolveResultOutcome({
         quotaLimited: true,
+        quotaErrorCode: 'AI_QUOTA_INSUFFICIENT_FOR_REQUEST',
         successfulItems: 1,
         failedItems: 0,
       }),
-    ).toEqual({ status: 'quota_blocked', errorCode: 'AI_QUOTA_EXCEEDED' });
+    ).toEqual({ status: 'quota_blocked', errorCode: 'AI_QUOTA_INSUFFICIENT_FOR_REQUEST' });
     expect(res.statusCode).toBe(429);
     expect(res.payload).toMatchObject({
       status: 429,
       data: {
         ok: false,
-        code: 'AI_QUOTA_EXCEEDED',
+        code: 'AI_QUOTA_INSUFFICIENT_FOR_REQUEST',
+        requiredTokens: 857,
+        availableTokens: 643,
         processed: 1,
         suggestions: [expect.objectContaining({ id: 'note-1' })],
       },

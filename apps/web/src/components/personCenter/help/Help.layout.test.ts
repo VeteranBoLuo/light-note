@@ -11,7 +11,7 @@ describe('帮助中心布局契约', () => {
 
   it('首页发现态与文章阅读态复用同一个搜索工作区', () => {
     const workspaceStart = helpSource.indexOf('<main class="help-content-workspace">');
-    const workspaceEnd = helpSource.indexOf('<aside class="help-tools"', workspaceStart);
+    const workspaceEnd = helpSource.indexOf('</main>', workspaceStart);
     const workspace = helpSource.slice(workspaceStart, workspaceEnd);
 
     expect(workspaceStart).toBeGreaterThan(-1);
@@ -35,23 +35,23 @@ describe('帮助中心布局契约', () => {
     expect(helpSource).not.toContain('searchValue.value = topic.query');
   });
 
-  it('桌面辅助区合并自然高度 AI 与内容大纲，不再形成第四栏', () => {
-    const toolsStart = helpSource.indexOf('<aside class="help-tools"');
-    const toolsEnd = helpSource.indexOf('</aside>', toolsStart);
-    const tools = helpSource.slice(toolsStart, toolsEnd);
-
-    expect(toolsStart).toBeGreaterThan(-1);
-    expect(tools).toContain('<AiSkillPanel');
-    expect(tools).toContain('class="help-tools-outline"');
-    expect(tools).toContain('<HelpOutlineList');
-    expect(helpSource).not.toContain('presentation="sidebar"');
-    expect(helpSource).toContain("grid-template-areas: 'catalog content tools'");
+  it('默认只保留目录与正文两栏，助手按需进入自研抽屉', () => {
+    expect(helpSource).toContain('<BDrawer');
+    expect(helpSource).toContain(':open="isAssistantOpen"');
+    expect(helpSource).toContain(":placement=\"isCompactHelpLayout ? 'bottom' : 'right'\"");
+    expect(helpSource).toContain(':destroy-on-close="false"');
+    expect(helpSource).toContain('presentation="sidebar"');
+    expect(helpSource).toContain('composer-variant="chat"');
+    expect(helpSource).toContain(':show-header="false"');
+    expect(helpSource).not.toContain('<aside class="help-tools"');
+    expect(helpSource).toContain("grid-template-areas: 'catalog content'");
+    expect(helpSource).not.toContain("grid-template-areas: 'catalog content tools'");
   });
 
-  it('窄桌面折叠辅助工具，移动端目录与大纲继续使用正常文档流', () => {
-    expect(helpSource).toContain("'is-desktop-compact': isCompactDesktopLayout");
-    expect(helpSource).toContain('class="help-tools-compact-actions"');
-    expect(helpSource).toContain('class="help-compact-tool"');
+  it('桌面大纲使用按需浮层，移动端目录与大纲继续使用正常文档流', () => {
+    expect(helpSource).toContain('<BPopover');
+    expect(helpSource).toContain('overlay-class-name="help-outline-popover"');
+    expect(helpSource).toContain('class="help-workspace-tool"');
     expect(helpSource).toContain('class="help-mobile-actions"');
     expect(helpSource).toContain('class="help-mobile-action"');
     expect(helpSource).toContain(':src="icon.noteDetail.catalogue"');
@@ -61,12 +61,16 @@ describe('帮助中心布局契约', () => {
     expect(helpSource).not.toMatch(/\.help-compact-outline\s*\{[^}]*position:\s*fixed/s);
   });
 
-  it('问答区复用通用自然高度形态，并保留输入重置与隐去来源能力', () => {
-    expect(helpSource).toContain(':prompt-rows="2"');
+  it('问答抽屉复用通用侧栏形态与一体化输入，并保留输入重置与隐去来源能力', () => {
+    expect(helpSource).toContain(':prompt-rows="3"');
     expect(helpSource).toContain(':show-grounding="false"');
     expect(helpSource).toContain(':clear-prompt-on-success="true"');
     expect(helpSource).not.toContain(':empty-text="t(\'help.aiEmpty\')"');
     expect(panelSource).toContain("presentation?: 'default' | 'sidebar'");
+    expect(panelSource).toContain("composerVariant?: 'default' | 'chat'");
+    expect(panelSource).toContain('showHeader?: boolean');
+    expect(panelSource).toContain("{ 'is-chat': composerVariant === 'chat' }");
+    expect(panelSource).toContain('.ai-skill-panel__composer.is-chat');
     expect(panelSource).toContain(':rows="promptRows"');
     expect(panelSource).toContain('.ai-skill-panel.is-sidebar');
   });
@@ -76,6 +80,8 @@ describe('帮助中心布局契约', () => {
     expect(helpSource).toContain('<BInput');
     expect(helpSource).toContain('<BButton');
     expect(helpSource).toContain('<BLoading');
+    expect(helpSource).toContain('<BPopover');
+    expect(helpSource).toContain('<BDrawer');
     expect(helpSource).toContain(':src="icon.help_document"');
     expect(helpSource).toContain('v-else-if="helpConfigError"');
     expect(helpSource).toContain('v-else-if="!serverOptions.length"');

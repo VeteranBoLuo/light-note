@@ -75,6 +75,7 @@
   import { useI18n } from 'vue-i18n';
   import { apiBasePost } from '@/http/request.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+  import { getAiQuotaErrorPresentation } from '@/utils/aiQuotaErrorPresentation';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
@@ -149,7 +150,7 @@
     const bookmarkId = props.bookmarkId;
     summarizing.value = true;
     try {
-      const res = await apiBasePost('/api/bookmark/summarize', { id: bookmarkId, force: true });
+      const res = await apiBasePost('/api/bookmark/summarize', { id: bookmarkId, force: true }, { silent: true });
       if (bookmarkId !== props.bookmarkId) return;
       if (res?.status === 200 && res.data?.ok) {
         message.success(t('bookmarkMg.aiSummaryGenerated'));
@@ -158,14 +159,15 @@
           operation: `生成网页存档 AI 摘要成功【${snap.value?.title || bookmarkId}】`,
         });
         await loadSnap();
-      } else if (res?.data?.reason === 'quota_exceeded') {
-        message.warning(t('bookmarkMg.aiSummaryQuotaExceeded'));
       } else {
-        message.info(res?.data?.msg || t('bookmarkMg.aiSummaryFail'));
+        const quotaFailure = getAiQuotaErrorPresentation(res?.data, (key, params) => t(key, params));
+        if (quotaFailure) message.warning(quotaFailure.message);
+        else message.info(res?.data?.msg || t('bookmarkMg.aiSummaryFail'));
       }
     } catch (error: any) {
-      if (error?.status === 429 || error?.data?.code === 'AI_QUOTA_EXCEEDED') {
-        message.warning(t('bookmarkMg.aiSummaryQuotaExceeded'));
+      const quotaFailure = getAiQuotaErrorPresentation(error, (key, params) => t(key, params));
+      if (quotaFailure) {
+        message.warning(quotaFailure.message);
       } else {
         message.info(error?.message || t('bookmarkMg.aiSummaryFail'));
       }

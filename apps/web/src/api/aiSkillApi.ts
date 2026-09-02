@@ -4,18 +4,31 @@ import {
   type AiSkillRequest,
   type AiSkillResponse,
 } from '@lightnote/shared/ai-skill-protocol';
+import { isAiQuotaErrorCode } from '@lightnote/shared/ai-quota-protocol';
 
 export class AiSkillApiError extends Error {
   code: string;
   status: number;
   isPublicMessage: boolean;
+  requiredTokens?: number;
+  availableTokens?: number;
 
-  constructor(code: string, message: string, status = 500, isPublicMessage = false) {
+  constructor(
+    code: string,
+    message: string,
+    status = 500,
+    isPublicMessage = false,
+    details: { requiredTokens?: unknown; availableTokens?: unknown } = {},
+  ) {
     super(message);
     this.name = 'AiSkillApiError';
     this.code = code;
     this.status = status;
     this.isPublicMessage = isPublicMessage;
+    const requiredTokens = Number(details.requiredTokens);
+    const availableTokens = Number(details.availableTokens);
+    if (Number.isFinite(requiredTokens)) this.requiredTokens = Math.max(0, Math.floor(requiredTokens));
+    if (Number.isFinite(availableTokens)) this.availableTokens = Math.max(0, Math.floor(availableTokens));
   }
 }
 
@@ -33,9 +46,13 @@ function normalizeAiSkillApiError(cause: unknown, fallbackCode = 'AI_SKILL_FAILE
   const status = Number(envelope?.status || value?.status || value?.response?.status || 500);
   const code = String(envelope?.data?.code || value?.data?.code || value?.code || fallbackCode);
   const message = String(envelope?.msg || value?.message || 'AI 能力暂时不可用');
+  const details = envelope?.data || value?.data || value;
   const isPublicMessage =
-    typeof envelope?.msg === 'string' || /^HTTP_\d{3}$/u.test(code) || PUBLIC_TRANSPORT_ERROR_CODES.has(code);
-  return new AiSkillApiError(code, message, Number.isFinite(status) ? status : 500, isPublicMessage);
+    typeof envelope?.msg === 'string' ||
+    /^HTTP_\d{3}$/u.test(code) ||
+    PUBLIC_TRANSPORT_ERROR_CODES.has(code) ||
+    isAiQuotaErrorCode(code);
+  return new AiSkillApiError(code, message, Number.isFinite(status) ? status : 500, isPublicMessage, details);
 }
 
 function assertSuccessEnvelope(response: any, fallbackCode: string) {
@@ -45,6 +62,7 @@ function assertSuccessEnvelope(response: any, fallbackCode: string) {
     String(response?.msg || 'AI 能力暂时不可用'),
     Number(response?.status || 500),
     true,
+    response?.data || {},
   );
 }
 
@@ -183,6 +201,7 @@ export async function executeAiSkillStream(
           String(parsed.data?.message || 'AI 能力暂时不可用'),
           Number(parsed.data?.status || 500),
           true,
+          parsed.data || {},
         );
       }
     };

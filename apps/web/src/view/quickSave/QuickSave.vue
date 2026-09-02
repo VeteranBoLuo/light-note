@@ -115,6 +115,7 @@
   import { onMounted, reactive, ref } from 'vue';
   import { apiBaseGet, apiBasePost, apiQueryPost } from '@/http/request.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+  import { getAiQuotaErrorPresentation } from '@/utils/aiQuotaErrorPresentation';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -253,7 +254,8 @@
         if (skillResponse.result.metadataSource === 'inferred') message.warning(t('bookmarkMeta.inferredWarning'));
       }
     } catch (error: any) {
-      if (error?.code === 'AI_QUOTA_EXCEEDED') message.warning(t('quickSave.aiQuotaExceeded'));
+      const quotaFailure = getAiQuotaErrorPresentation(error, (key, params) => t(key, params));
+      if (quotaFailure) message.warning(quotaFailure.message);
       else message.info(t('quickSave.aiFailed'));
     } finally {
       aiRunning.value = false;

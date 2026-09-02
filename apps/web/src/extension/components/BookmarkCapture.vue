@@ -173,6 +173,7 @@
     PreparedPageTextCapture,
   } from '../types';
   import { buildBookmarkCapturePayload } from '@/utils/bookmarkCapture.ts';
+  import { getAiQuotaErrorPresentation } from '@/utils/aiQuotaErrorPresentation';
 
   const props = defineProps<{ authenticated: boolean; draftSessionId: string }>();
   const emit = defineEmits<{ 'auth-required': []; success: [result: ExtensionSuccess] }>();
@@ -383,7 +384,10 @@
       aiGenerated.value = true;
     } catch (error: any) {
       if (isExtensionAuthError(error)) emit('auth-required');
-      else errorMessage.value = error?.message || t('browserExtension.bookmark.aiFailed');
+      else {
+        const quotaFailure = getAiQuotaErrorPresentation(error, (key, params) => t(key, params));
+        errorMessage.value = quotaFailure?.message || error?.message || t('browserExtension.bookmark.aiFailed');
+      }
     } finally {
       aiLoading.value = false;
     }

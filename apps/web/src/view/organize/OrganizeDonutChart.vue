@@ -45,7 +45,7 @@
         <span class="organize-donut-chart__legend-percent">{{ formatPercent(item.ratio) }}</span>
       </li>
     </ul>
-    <figcaption v-if="isEmpty && emptyLabel" class="organize-donut-chart__mobile-empty">
+    <figcaption v-if="showEmptyLabel" class="organize-donut-chart__mobile-empty">
       {{ emptyLabel }}
     </figcaption>
   </figure>
@@ -138,6 +138,8 @@
   // 回退到分项总和，避免环段超过 100% 或产生无效 SVG 数值。
   const chartTotal = computed(() => Math.max(normalizeCount(props.total), itemTotal.value));
   const isEmpty = computed(() => chartTotal.value <= 0);
+  const hasExplicitCenterValue = computed(() => props.centerValue !== undefined && props.centerValue !== null);
+  const showEmptyLabel = computed(() => isEmpty.value && Boolean(props.emptyLabel) && !hasExplicitCenterValue.value);
 
   const normalizedItems = computed<NormalizedItem[]>(() =>
     preparedItems.value.map((item) => ({
@@ -172,12 +174,12 @@
   }
 
   const displayedCenterValue = computed(() => {
+    // 显式中心值代表调用方已经掌握权威状态；即使数值为 0，也不能被“暂无数据”覆盖。
+    if (hasExplicitCenterValue.value) return String(props.centerValue);
     if (isEmpty.value) {
       if (props.emptyLabel) return props.emptyLabel;
-      if (props.centerValue !== undefined && props.centerValue !== null) return String(props.centerValue);
       return formatCount(0);
     }
-    if (props.centerValue !== undefined && props.centerValue !== null) return String(props.centerValue);
     return formatCount(chartTotal.value);
   });
 

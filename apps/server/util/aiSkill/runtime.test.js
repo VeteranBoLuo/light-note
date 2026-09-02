@@ -94,6 +94,42 @@ describe('executeAiSkill', () => {
     expect(result).toMatchObject({ status: 'completed', result: { content: '答案 [1]' } });
   });
 
+  it('按校验后的操作输入解析模型输出预算并传给真实模型调用', async () => {
+    const callModel = vi.fn().mockResolvedValue({ kind: 'grounded_markdown', content: '短结果' });
+    const resolveModelPolicy = vi.fn(() => ({ maxTokens: 256, temperature: 0.2 }));
+    const skill = {
+      id: 'help.answer',
+      version: 1,
+      domain: 'test',
+      effect: 'read',
+      modelPolicy: { maxTokens: 8_192, temperature: 0.3 },
+      resolveModelPolicy,
+      validateInput: vi.fn((input) => ({ ...input, normalized: true })),
+      prepare: vi.fn(async () => ({
+        messages: [{ role: 'user', content: '证据' }],
+        sources: [],
+        coverage: { complete: true, warnings: [] },
+      })),
+    };
+
+    await executeAiSkill(
+      request(),
+      { user: { id: 'u-1', role: 'user' } },
+      {
+        resolveSkill: () => skill,
+        assertDomainEnabled: () => {},
+        resolveContext: async () => resolvedContext('b'.repeat(64)),
+        runExecution: async (_config, operation) => operation(),
+        callModel,
+      },
+    );
+
+    expect(resolveModelPolicy).toHaveBeenCalledWith({ question: '问题', normalized: true });
+    expect(callModel).toHaveBeenCalledWith(
+      expect.objectContaining({ modelPolicy: { maxTokens: 256, temperature: 0.2 } }),
+    );
+  });
+
   it('Context 或 prepare 失败也属于同一个可审计根 Execution', async () => {
     const failure = Object.assign(new Error('资源范围失效'), { code: 'AI_SKILL_SCOPE_STALE' });
     const operationSpy = vi.fn();

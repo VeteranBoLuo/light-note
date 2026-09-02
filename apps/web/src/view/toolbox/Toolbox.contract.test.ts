@@ -528,6 +528,8 @@ describe('知识工具箱前端边界', () => {
     expect(task).toContain("router.push('/ai-usage')");
     expect(task).toContain("t('toolbox.task.aiQuotaBillingDescription')");
     expect(home).toContain('aiQuotaBalanceLabel');
+    expect(home).toContain('availableRemaining ?? aiQuotaStatus.value?.remaining');
+    expect(workbench).toContain('availableRemaining ?? aiQuotaStatus.value?.remaining');
     expect(home).toContain("tool.billingMedia.includes('ai_quota')");
     expect(home).toContain("t('toolbox.billingChoiceLabel')");
     expect(home).toContain("t('toolbox.pointsLabel')");

@@ -122,6 +122,7 @@ const NOTE_TRANSFORM_OPERATIONS = new Set([
   'expand',
   'proofread',
   'title',
+  'outline',
   'translate',
 ]);
 

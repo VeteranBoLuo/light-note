@@ -56,6 +56,15 @@ const pool = vi.hoisted(() => ({
           });
           return [{ affectedRows: 1 }, []];
         }
+        if (/SELECT subjects_json[\s\S]+WHERE period_key = \? AND status = 'reserved'/i.test(sql)) {
+          const periodKey = params[0];
+          return [
+            [...state.reservations.values()]
+              .filter((row) => row.period_key === periodKey && row.status === 'reserved')
+              .map((row) => ({ subjects_json: row.subjects_json })),
+            [],
+          ];
+        }
         if (/FROM ai_token_reservations/i.test(sql)) {
           const row = state.reservations.get(params[0]);
           return [row ? [{ ...row }] : [], []];
@@ -125,6 +134,9 @@ const pool = vi.hoisted(() => ({
           return [{ affectedRows: 1 }, []];
         }
         if (/SELECT ai_bonus_tokens FROM user_growth[\s\S]+FOR UPDATE/i.test(sql)) {
+          return [[{ ai_bonus_tokens: state.wallets.get(params[0]) || 0 }], []];
+        }
+        if (/SELECT ai_bonus_tokens FROM user_growth/i.test(sql)) {
           return [[{ ai_bonus_tokens: state.wallets.get(params[0]) || 0 }], []];
         }
         if (/SET ai_bonus_tokens = ai_bonus_tokens - \?/i.test(sql)) {
@@ -438,6 +450,54 @@ describe('AI quota abuse hardening', () => {
     expect(state.wallets.get('user-wallet')).toBe(28_200);
     await aiQuota.correctReconciledReservation(handle, 1000);
     expect(state.wallets.get('user-wallet')).toBe(29_000);
+  });
+
+  it('状态页把在途预留与已结算余额分开，不再在模型生成期间把余额显示为零', async () => {
+    const request = visitorRequest();
+    const context = { userId: 'user-status', userRole: 'user', requestId: 'status-running' };
+    const handle = await aiQuota.reserve(request, { ...context, reserveTokens: 100_000 });
+
+    await expect(aiQuota.getStatus(request, context)).resolves.toMatchObject({
+      dailyUsed: 0,
+      dailyRemaining: 100_000,
+      remaining: 100_000,
+      availableRemaining: 0,
+      pendingReservedTokens: 100_000,
+    });
+
+    await aiQuota.reconcile(handle, 4_359);
+    await expect(aiQuota.getStatus(request, context)).resolves.toMatchObject({
+      dailyUsed: 4_359,
+      dailyRemaining: 95_641,
+      remaining: 95_641,
+      availableRemaining: 95_641,
+      pendingReservedTokens: 0,
+    });
+  });
+
+  it('永久余额在预留期间仍按已结算值展示，同时报告实际可供新任务使用的余额', async () => {
+    state.wallets.set('user-status-wallet', 10_000);
+    const now = new Date();
+    const periodKey = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    state.usage.set(usageKey('user', 'user-status-wallet', periodKey), { tokens: 100_000, calls: 2 });
+    const request = visitorRequest();
+    const context = { userId: 'user-status-wallet', userRole: 'user', requestId: 'wallet-status-running' };
+    const handle = await aiQuota.reserve(request, { ...context, reserveTokens: 5_000 });
+
+    await expect(aiQuota.getStatus(request, context)).resolves.toMatchObject({
+      bonusTokens: 10_000,
+      remaining: 10_000,
+      availableRemaining: 5_000,
+      pendingReservedTokens: 5_000,
+    });
+
+    await aiQuota.reconcile(handle, 1_800);
+    await expect(aiQuota.getStatus(request, context)).resolves.toMatchObject({
+      bonusTokens: 8_200,
+      remaining: 8_200,
+      availableRemaining: 8_200,
+      pendingReservedTokens: 0,
+    });
   });
 
   it('并发 gate 在同一设备账本只允许一个请求占用最后额度', async () => {
