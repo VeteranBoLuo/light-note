@@ -298,6 +298,10 @@ try {
 } catch (error) {
   result = { ok: false, reason: stableReason(error), stage: currentStage };
 }
-process.stdout.write(JSON.stringify(result));
+// Runner 是一次性隔离进程。Linux 上 Chromium/Playwright 关闭后可能仍短暂保留底层
+// 活动句柄；若只设置 exitCode，父进程会一直等到渲染硬超时并把成功误报为超时。
+// 先等待协议结果完整写入 stdout，再显式结束已经完成清理的 Runner。
+await new Promise((resolve) => process.stdout.write(JSON.stringify(result), resolve));
+process.exit(0);
 
 export const webPageRendererRunnerInternals = Object.freeze({ browserUserAgent, stableReason });
