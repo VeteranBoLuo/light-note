@@ -18,15 +18,18 @@ export interface ResolvedResourceReference extends ResolvedResourceRefState {
 }
 
 export interface ResourceBacklinkItem {
+  sourceType: 'note' | 'todo';
   id: string;
   title: string;
   updateTime: string | null;
+  status?: 'pending' | 'completed';
 }
 
 export interface ResourceBacklinksResult {
   available: boolean;
   items: ResourceBacklinkItem[];
   hasMore: boolean;
+  hasMoreByType: Record<ResourceBacklinkItem['sourceType'], boolean>;
 }
 
 function normalizeRef(value: unknown): ResourceRef | null {
@@ -88,20 +91,22 @@ export async function resolveNoteResourceRefs(refs: readonly ResourceRef[]): Pro
   return results;
 }
 
-/** N2 反链读取；服务端二次校验目标与源笔记的当前归属，前端只渲染最小字段。 */
+/** 反链读取；服务端二次校验目标与笔记/待办来源的当前归属。 */
 export async function fetchResourceBacklinks(
   targetType: ResourceRefType,
   targetId: string,
   limit = 5,
 ): Promise<ResourceBacklinksResult> {
   const target = normalizeRef({ type: targetType, id: targetId });
-  if (!target) return { available: false, items: [], hasMore: false };
+  if (!target) return { available: false, items: [], hasMore: false, hasMoreByType: { note: false, todo: false } };
   const res = await apiBasePost(
     '/api/note/resourceBacklinks',
     { targetType: target.type, targetId: target.id, limit },
     { silent: true },
   );
-  if (res.status !== 200 || !res.data?.available) return { available: false, items: [], hasMore: false };
+  if (res.status !== 200 || !res.data?.available) {
+    return { available: false, items: [], hasMore: false, hasMoreByType: { note: false, todo: false } };
+  }
   return {
     available: true,
     items: Array.isArray(res.data.items)
@@ -110,14 +115,23 @@ export async function fetchResourceBacklinks(
             const raw = item as Partial<ResourceBacklinkItem> | null;
             const id = String(raw?.id || '');
             if (!id) return null;
+            const sourceType = raw?.sourceType === 'todo' ? 'todo' : 'note';
             return {
+              sourceType,
               id,
               title: String(raw?.title || ''),
               updateTime: raw?.updateTime ? String(raw.updateTime) : null,
+              ...(sourceType === 'todo'
+                ? { status: raw?.status === 'completed' ? ('completed' as const) : ('pending' as const) }
+                : {}),
             };
           })
           .filter((item): item is ResourceBacklinkItem => Boolean(item))
       : [],
     hasMore: res.data.hasMore === true,
+    hasMoreByType: {
+      note: res.data.hasMoreByType?.note === true,
+      todo: res.data.hasMoreByType?.todo === true,
+    },
   };
 }

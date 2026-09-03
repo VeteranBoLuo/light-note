@@ -1,5 +1,7 @@
 import type { RouteLocationRaw } from 'vue-router';
 
+const RESOURCE_NAVIGATION_ORIGIN = 'https://light-note.local';
+
 /**
  * 资源的中性跳转规则。
  *
@@ -15,6 +17,10 @@ export interface NavigableResource {
   title?: string;
 }
 
+export interface ResourceNavigationOptions {
+  noteReturnPath?: string;
+}
+
 /**
  * 待整理资源的标准入口。
  *
@@ -25,10 +31,46 @@ export function resolvePendingResourcesRoute(_isMobile: boolean): RouteLocationR
   return { path: '/organize', query: { issue: 'pending' } };
 }
 
-export function resolveResourceRoute(resource: NavigableResource): RouteLocationRaw | null {
+/**
+ * 从待办中的参考资料进入笔记时，保留可恢复的待办现场。
+ *
+ * 只有待办页会补充 todoId/focusRef；工作台等其他来源继续原样返回，避免跨页面篡改其查询语义。
+ */
+export function resolveTodoResourceReturnPath(
+  currentFullPath: string,
+  todoId: string,
+  resource?: Pick<NavigableResource, 'type' | 'id'>,
+): string {
+  const source = String(currentFullPath || '').trim();
+  const normalizedTodoId = String(todoId || '').trim();
+  if (!source || !normalizedTodoId) return source;
+  try {
+    const parsed = new URL(source, RESOURCE_NAVIGATION_ORIGIN);
+    if (parsed.origin !== RESOURCE_NAVIGATION_ORIGIN || parsed.pathname !== '/inbox') return source;
+    parsed.searchParams.set('tab', 'todo');
+    parsed.searchParams.set('todoId', normalizedTodoId);
+    const resourceType = String(resource?.type || '').trim();
+    const resourceId = String(resource?.id || '').trim();
+    if (resourceType && resourceId) parsed.searchParams.set('focusRef', `${resourceType}:${resourceId}`);
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return source;
+  }
+}
+
+export function resolveResourceRoute(
+  resource: NavigableResource,
+  options: ResourceNavigationOptions = {},
+): RouteLocationRaw | null {
   const id = String(resource?.id || '');
   if (!id) return null;
-  if (resource.type === 'note') return { path: `/noteLibrary/${id}` };
+  if (resource.type === 'note') {
+    const from = String(options.noteReturnPath || '').trim();
+    return {
+      path: `/noteLibrary/${id}`,
+      ...(from ? { query: { from } } : {}),
+    };
+  }
   if (resource.type === 'bookmark') return { path: `/manage/editBookmark/${id}` };
   if (resource.type === 'file') {
     const query: Record<string, string> = { fileId: id };

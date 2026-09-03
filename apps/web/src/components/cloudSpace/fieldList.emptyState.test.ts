@@ -3,6 +3,10 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(resolve(process.cwd(), 'src/components/cloudSpace/fieldList.vue'), 'utf8');
+const batchBarSource = readFileSync(
+  resolve(process.cwd(), 'src/components/resourceActions/ResourceBatchActionBar.vue'),
+  'utf8',
+);
 const themeSource = readFileSync(resolve(process.cwd(), 'src/assets/css/theme.less'), 'utf8');
 
 describe('cloud file empty state layout', () => {
@@ -41,15 +45,28 @@ describe('cloud file empty state layout', () => {
     expect(source.match(/\.\.\.\(isAiDocumentFileNameSupported\(item\.fileName\)/g)).toHaveLength(2);
   });
 
-  it('桌面批量栏为选中数量保留固定宽度，数量变化不再推动后续按钮', () => {
-    expect(source).toMatch(
-      /@media \(min-width: 768px\)[\s\S]*?\.batch-actions \.selected-count\s*\{[\s\S]*?width:\s*148px;[\s\S]*?flex:\s*0 0 148px;/,
+  it('桌面批量栏脱离文档流，数量变化不会重排文件列表和后续操作', () => {
+    expect(source).toContain('<ResourceBatchActionBar');
+    expect(batchBarSource).toMatch(/\.resource-batch-action-bar\s*\{[\s\S]*?position:\s*fixed/);
+    expect(batchBarSource).toMatch(/\.resource-batch-action-bar__selection\s*\{[\s\S]*?min-width:\s*176px/);
+    expect(batchBarSource).toMatch(
+      /\.resource-batch-action-bar__copy strong,[\s\S]*?overflow:\s*hidden;[\s\S]*?text-overflow:\s*ellipsis;/,
     );
-    expect(source).toContain('font-variant-numeric: tabular-nums;');
-    expect(source).toMatch(
-      /\.ai-file-analysis-action\s*\{[\s\S]*?min-width:\s*128px;[\s\S]*?border:\s*1px solid transparent;/,
-    );
-    expect(source).toMatch(/\.ai-file-analysis-action:not\(\.disabled\)\s*\{[\s\S]*?border-color:/);
+  });
+
+  it('移动批量栏直接提供全选控制，并把生成与处理收进更多抽屉', () => {
+    expect(source).not.toContain(`:detail="$t('resourceOutcome.batch.cloudDetail')"`);
+    expect(source).toContain(':show-mobile-primary="false"');
+    expect(source).toContain('<template #leading>');
+    expect(source).toContain("key: 'outcome'");
+    expect(source).toContain("label: t('resourceOutcome.primaryAction')");
+    expect(source).not.toMatch(/mobileBatchActions[\s\S]*?key: 'toggleAll'/);
+    expect(batchBarSource).toContain('v-if="$slots.leading"');
+    expect(batchBarSource).toContain('v-if="showMobilePrimary"');
+  });
+
+  it('卡片正文高度包含内边距，不会比原卡片密度额外增高', () => {
+    expect(source).toMatch(/\.file-card-body\s*\{[\s\S]*?box-sizing:\s*border-box/);
   });
 
   it('移动端卡片隐藏直接下载，卡片本身仍可拖入文件夹', () => {
@@ -61,15 +78,16 @@ describe('cloud file empty state layout', () => {
     expect(source).toContain('suppressCardClickUntil = Date.now() + 250');
   });
 
-  it('批量下载先选择分别下载或 ZIP，分别下载直接逐项交给浏览器且单文件仍直接下载', () => {
+  it('批量下载先选择分别下载或 ZIP，分别下载按顺序交给浏览器默认下载器', () => {
     expect(source).toContain('v-model:visible="batchDownloadChoiceVisible"');
     expect(source).toContain(`startBatchDownload('individual')`);
     expect(source).toContain(`startBatchDownload('zip')`);
-    expect(source).toContain('const runBrowserDirectDownloads = async');
+    expect(source).toContain('const runBrowserSequentialDownloads = async');
     expect(source).toContain('submitBrowserBatchDownloads({');
     expect(source).toContain('submit: triggerPreparedBrowserDownload');
     expect(source).not.toContain('showDirectoryPicker');
     expect(source).not.toContain('preparedDownloadsVisible');
+    expect(source).not.toContain('batchDownloadBrowserSubmitted');
     expect(source).toContain('const runZipBatchDownload = async');
     expect(source).toMatch(
       /if \(selectedFiles\.length === 1\)[\s\S]*?downloadField\(selectedFiles\[0\]\.id\)[\s\S]*?batchDownloadChoiceVisible\.value = true/,
@@ -89,5 +107,31 @@ describe('cloud file empty state layout', () => {
     expect(themeSource).toContain('--cloud-file-list-row-hover-bg: #fffcf8;');
     expect(themeSource).toContain('--cloud-file-list-header-bg: #30343d;');
     expect(themeSource).toContain('--cloud-file-list-row-hover-bg: #33363c;');
+  });
+
+  it('列表批量态点击整行、文件名或标签都只切换选择，不再打开预览或标签页', () => {
+    const rowHandler = source.match(/const onListRowClick = \(item: any\) => \{([\s\S]*?)\n  \};/)?.[1] || '';
+    const labelHandler = source.match(/const onFileLabelClick = \(item: any\) => \{([\s\S]*?)\n  \};/)?.[1] || '';
+    const tagHandler =
+      source.match(/const onFileTagClick = \(item: any, tagId: string\) => \{([\s\S]*?)\n  \};/)?.[1] || '';
+
+    expect(rowHandler.indexOf('if (batchMode.value)')).toBeLessThan(rowHandler.indexOf('if (!bookmark.isMobile)'));
+    expect(rowHandler).toContain('toggleRow(item.id, !selectedRows.value.includes(item.id))');
+    expect(labelHandler).toContain('if (batchMode.value)');
+    expect(labelHandler).toContain('toggleRow(item.id, !selectedRows.value.includes(item.id))');
+    expect(tagHandler).toContain('if (batchMode.value)');
+    expect(tagHandler).toContain('toggleRow(item.id, !selectedRows.value.includes(item.id))');
+    expect(source).toContain('@click.stop="onFileTagClick(item, tag.id)"');
+  });
+
+  it('批量删除确认只预览少量文件名，并用危险操作和分层富文本明确后果', () => {
+    expect(source).toContain('const previewLimit = 3;');
+    expect(source).toContain("t('cloudSpace.batchDeleteRemaining', { count: remainingCount })");
+    expect(source).toContain('class="b-alert-rich-content__lead"');
+    expect(source).toContain('class="b-alert-rich-content__file"');
+    expect(source).toContain("okType: 'danger'");
+    expect(source).toContain("okText: t('cloudSpace.batchDeleteConfirmAction')");
+    expect(source).toContain("escapeHtml(file.fileName || t('cloudSpace.unnamedFile'))");
+    expect(source).not.toContain("map((f) => f.fileName).join('、')");
   });
 });

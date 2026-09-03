@@ -1497,7 +1497,7 @@ export const resolveResourceRefs = async (req, res) => {
   }
 };
 
-// N2 反链：目标与每一条源笔记都在 service 内重新按当前主体校验；目标不可用统一返回空，避免资源探测。
+// 资源反链：目标与笔记/待办来源都在 service 内重新按当前主体校验；目标不可用统一返回空，避免资源探测。
 export const resourceBacklinks = async (req, res) => {
   try {
     const target = normalizeResourceRef({

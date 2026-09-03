@@ -22,7 +22,16 @@ export interface SubmitBrowserBatchDownloadsOptions<T> {
   submit?(meta: BrowserDownloadMeta, index: number): void;
   isCancelled?(): boolean;
   onSettled?(completed: number, total: number): void;
+  intervalMs?: number;
+  wait?(delayMs: number): Promise<void>;
 }
+
+export const BROWSER_BATCH_DOWNLOAD_INTERVAL_MS = 600;
+
+const waitForNextDownload = (delayMs: number) =>
+  new Promise<void>((resolve) => {
+    window.setTimeout(resolve, delayMs);
+  });
 
 export const triggerPreparedBrowserDownload = (meta: BrowserDownloadMeta) => {
   const anchor = document.createElement('a');
@@ -36,8 +45,8 @@ export const triggerPreparedBrowserDownload = (meta: BrowserDownloadMeta) => {
 };
 
 /**
- * 逐项把下载请求交给浏览器。普通网页拿不到浏览器下载完成回执，
- * 因此这里只统计「已提交」，绝不能把 anchor.click() 记成「已保存」。
+ * 按选择顺序逐项交给浏览器默认下载器，并在相邻提交之间主动让出事件循环。
+ * 普通网页拿不到浏览器落盘回执，因此这里只统计“已提交”，不能宣称“已下载成功”。
  */
 export const submitBrowserBatchDownloads = async <T>({
   files,
@@ -45,10 +54,13 @@ export const submitBrowserBatchDownloads = async <T>({
   submit = triggerPreparedBrowserDownload,
   isCancelled = () => false,
   onSettled,
+  intervalMs = BROWSER_BATCH_DOWNLOAD_INTERVAL_MS,
+  wait = waitForNextDownload,
 }: SubmitBrowserBatchDownloadsOptions<T>): Promise<BrowserBatchDownloadSubmissionResult> => {
   let submitted = 0;
   let failed = 0;
   let cancelled = false;
+  let hasSubmitted = false;
   const failures: BrowserBatchDownloadFailure[] = [];
 
   for (let index = 0; index < files.length; index += 1) {
@@ -65,8 +77,18 @@ export const submitBrowserBatchDownloads = async <T>({
         cancelled = true;
         break;
       }
+
+      if (hasSubmitted && intervalMs > 0) {
+        await wait(intervalMs);
+        if (isCancelled()) {
+          cancelled = true;
+          break;
+        }
+      }
+
       submit(meta, index);
       submitted += 1;
+      hasSubmitted = true;
     } catch (error) {
       failed += 1;
       failures.push({ index, fileName, error });

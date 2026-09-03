@@ -106,6 +106,12 @@ describe('资源中心 2.0 工作区边界', () => {
     expect(inspectorSource).toContain("emit('delete', resource)");
   });
 
+  it('移动操作抽屉的同 URL 历史回退不会误清空批量选择', () => {
+    expect(source).toContain('只在可见 URL 真正变化时重置筛选与批量选择');
+    expect(source).toMatch(/watch\([\s\S]{0,180}?\(\) => route\.fullPath,[\s\S]*?clearBatchSelection\(\)/);
+    expect(source).not.toMatch(/watch\(\s*\(\) => route\.query,[\s\S]*?clearBatchSelection\(\)/);
+  });
+
   it('检查器提供资源级动作，标签管理只跳转到单资源标签工作页', () => {
     expect(inspectorSource).toContain('<BActionMenu');
     expect(inspectorSource).toContain('icon.manage_categoryBtn_tag');

@@ -11,7 +11,7 @@ import TodoPreviewDrawer from './TodoPreviewDrawer.vue';
 const routerPush = vi.fn();
 vi.mock('vue-router', async (importOriginal) => ({
   ...(await importOriginal<typeof import('vue-router')>()),
-  useRouter: () => ({ push: routerPush }),
+  useRouter: () => ({ push: routerPush, currentRoute: { value: { fullPath: '/inbox?tab=todo' } } }),
 }));
 
 const editorModalSource = readFileSync(resolve(process.cwd(), 'src/components/todo/TodoEditorModal.vue'), 'utf8');
@@ -41,7 +41,7 @@ const todo: TodoItem = {
   ],
 };
 
-function mountPreview() {
+function mountPreview(focusRef = '') {
   const visible = ref(true);
   const deleting = ref(false);
   const onEdit = vi.fn();
@@ -57,6 +57,7 @@ function mountPreview() {
           item: todo,
           visible: visible.value,
           deleting: deleting.value,
+          focusRef,
           'onUpdate:visible': (value: boolean) => (visible.value = value),
           onEdit,
           onDelete,
@@ -95,6 +96,18 @@ describe('TodoPreviewDrawer', () => {
     expect(drawer.querySelector('.todo-preview__checklist')?.textContent).toContain('检查关联资料');
     expect(drawer.querySelector('.todo-preview__schedule')?.textContent).toContain('下一次提醒');
     expect(drawer.querySelector('.todo-resource-link__title')?.textContent).toBe('开发文档');
+  });
+
+  it('深链打开详情时定位并强调对应的参考资料', async () => {
+    mountPreview('note:note-preview-1');
+    await nextTick();
+
+    const section = document.querySelector('.todo-preview__resources');
+    const resource = document.querySelector('.todo-resource-link');
+    expect(section?.classList.contains('is-focused')).toBe(true);
+    expect(section?.textContent).toContain('已定位到此引用');
+    expect(resource?.classList.contains('is-focused')).toBe(true);
+    expect(resource?.getAttribute('aria-current')).toBe('true');
   });
 
   it('预览内清单可快速勾选，删除与编辑使用带无障碍名称的纯图标按钮', async () => {
@@ -155,10 +168,16 @@ describe('TodoPreviewDrawer', () => {
     await nextTick();
 
     document.querySelector<HTMLButtonElement>('.todo-resource-link__open')!.click();
-    await vi.waitFor(() => expect(routerPush).toHaveBeenCalledWith({ path: '/noteLibrary/note-preview-1' }));
+    await vi.waitFor(() =>
+      expect(routerPush).toHaveBeenCalledWith({
+        path: '/noteLibrary/note-preview-1',
+        query: { from: '/inbox?tab=todo&todoId=todo-preview-1&focusRef=note%3Anote-preview-1' },
+      }),
+    );
 
     expect(editorModalSource).toContain('@open-resource="openResourceRef"');
     expect(editorModalSource).toContain('closeCurrentMobileOverlayThen');
-    expect(editorModalSource).toContain('resolveResourceRoute(resource)');
+    expect(editorModalSource).toContain('resolveTodoResourceReturnPath(');
+    expect(editorModalSource).toContain('const target = resolveResourceRoute(resource, { noteReturnPath })');
   });
 });

@@ -14,7 +14,7 @@
       <div v-if="selectable" class="row-checkbox-wrap">
         <BCheckbox :checked="selected" @click.stop @change="emit('toggle-select')" />
       </div>
-      <BButton class="result-row" @click="emit('open')">
+      <BButton class="result-row" @click="handlePrimaryClick">
         <span class="type-pill" :class="`type-pill--${item.type}`">{{ typeLabel }}</span>
         <span class="row-title">
           <template v-for="(segment, index) in titleSegments" :key="`lt-${index}`">
@@ -44,7 +44,11 @@
         @change="emit('toggle-select')"
       />
 
-      <BButton class="result-click-area" :class="{ 'result-click-area--selectable': selectable }" @click="emit('open')">
+      <BButton
+        class="result-click-area"
+        :class="{ 'result-click-area--selectable': selectable }"
+        @click="handlePrimaryClick"
+      >
         <header class="item-head">
           <span class="type-pill" :class="`type-pill--${item.type}`">{{ typeLabel }}</span>
           <span class="item-extra">{{ headerExtra }}</span>
@@ -107,6 +111,14 @@
   }>();
 
   const { t } = useI18n();
+
+  function handlePrimaryClick() {
+    if (props.selectable) {
+      emit('toggle-select');
+      return;
+    }
+    emit('open');
+  }
 
   interface TextSegment {
     text: string;

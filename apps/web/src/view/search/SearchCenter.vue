@@ -37,6 +37,7 @@
         :class="{
           'search-page--night': user.currentTheme === 'night',
           'search-page--mobile': bookmark.isMobile,
+          'search-page--batch': batchMode,
         }"
       >
         <div v-if="bookmark.isMobile" class="search-page-topbar">
@@ -280,54 +281,8 @@
                 </div>
               </div>
 
-              <section v-if="batchMode" class="batch-toolbar">
-                <div class="batch-left">
-                  <span>
-                    {{
-                      allMatchingActive
-                        ? t('resourceCenter.batch.allMatchingSelected', { count: selectedCount })
-                        : t('resourceCenter.batch.selectedCount', { count: selectedCount })
-                    }}
-                  </span>
-                  <BButton
-                    size="small"
-                    class="batch-select-all"
-                    :loading="selectionPreviewLoading"
-                    :disabled="!filteredResultTotal"
-                    @click="toggleSelectAllMatching"
-                  >
-                    {{
-                      allMatchingActive
-                        ? t('resourceCenter.batch.unselectAll')
-                        : t('resourceCenter.batch.selectAll', { count: filteredResultTotal })
-                    }}
-                  </BButton>
-                </div>
-                <div class="batch-actions">
-                  <BButton
-                    v-if="bookmark.isMobile"
-                    class="mobile-batch-actions-button"
-                    :disabled="!selectedCount"
-                    @click="mobileBatchActionsOpen = true"
-                  >
-                    <SvgIcon :src="icon.common.more" size="16" />
-                    {{ t('common.more') }}
-                  </BButton>
-                  <template v-else>
-                    <BButton :disabled="allMatchingActive || !selectedCount" @click="toggleSearchAi">
-                      <SvgIcon :src="icon.ai.materials" size="15" />
-                      {{ t('ai.entry.summarizeSelected') }}
-                    </BButton>
-                    <BButton @click="batchAddToInbox">{{ t('inbox.addExisting') }}</BButton>
-                    <BButton type="primary" @click="batchAddTag">{{ t('resourceCenter.batch.addTag') }}</BButton>
-                    <BButton type="primary" @click="batchRemoveTag">{{ t('resourceCenter.batch.removeTag') }}</BButton>
-                    <BButton type="danger" @click="batchDelete">{{ t('resourceCenter.batch.delete') }}</BButton>
-                  </template>
-                </div>
-              </section>
-
               <AiSkillPanel
-                v-if="bookmark.isMobile && searchAiVisible"
+                v-if="bookmark.isMobile && searchAiVisible && explicitSearchAiResourceContext"
                 class="search-ai-panel search-ai-panel--mobile"
                 :title="t('ai.entry.searchSkillTitle')"
                 :description="t('ai.entry.searchSkillDescription')"
@@ -457,7 +412,7 @@
 
             <aside v-if="!bookmark.isMobile" class="resource-inspector-pane">
               <AiSkillPanel
-                v-if="searchAiVisible"
+                v-if="searchAiVisible && explicitSearchAiResourceContext"
                 class="search-ai-panel"
                 :title="t('ai.entry.searchSkillTitle')"
                 :description="t('ai.entry.searchSkillDescription')"
@@ -630,10 +585,70 @@
         @delete="(item) => handleItemMenu('delete', item)"
       />
     </BDrawer>
+
+    <ResourceBatchActionBar
+      v-if="!isKnowledgeMapView"
+      :open="batchMode"
+      :mobile="bookmark.isMobile"
+      :summary="batchActionSummary"
+      :detail="batchActionDetail"
+      :aria-label="t('resourceOutcome.batch.ariaLabel')"
+      :clear-label="t('resourceOutcome.batch.clear')"
+      :show-clear="selectedCount > 0"
+      :show-mobile-primary="false"
+      :primary-label="t('resourceOutcome.primaryAction')"
+      :more-label="t('common.more')"
+      :primary-disabled="allMatchingActive || !selectedCount"
+      :primary-disabled-reason="batchPrimaryDisabledReason"
+      @clear="clearBatchSelection"
+      @more="mobileBatchActionsOpen = true"
+      @primary="openBatchOutcomeDrawer"
+    >
+      <template #leading>
+        <span class="batch-action-select-all" @click.stop>
+          <BCheckbox
+            :checked="batchSelectAllChecked"
+            :indeterminate="batchSelectAllIndeterminate"
+            :disabled="!filteredResultTotal || selectionPreviewLoading"
+            :aria-label="batchSelectAllLabel"
+            @change="handleBatchSelectAllChange"
+          />
+        </span>
+      </template>
+      <template #actions>
+        <BButton :disabled="!selectedCount" @click="batchAddToInbox">
+          <SvgIcon :src="icon.contextMenu.inbox" size="16" aria-hidden="true" />
+          {{ t('inbox.addExisting') }}
+        </BButton>
+        <BActionMenu
+          :items="desktopBatchTagActions"
+          placement="top-right"
+          :aria-label="t('resourceOutcome.batch.tags')"
+          @select="handleDesktopBatchAction"
+        >
+          <BButton :disabled="!selectedCount">
+            <SvgIcon :src="icon.manage_categoryBtn_tag" size="16" aria-hidden="true" />
+            {{ t('resourceOutcome.batch.tags') }}
+          </BButton>
+        </BActionMenu>
+        <BButton class="batch-action-delete" :disabled="!selectedCount" @click="batchDelete">
+          <SvgIcon :src="icon.table_delete" size="16" aria-hidden="true" />
+          {{ t('resourceCenter.batch.delete') }}
+        </BButton>
+      </template>
+    </ResourceBatchActionBar>
+
+    <ResourceOutcomeDrawer
+      v-model:open="outcomeDrawerOpen"
+      :resources="outcomeResources"
+      :quick-actions="searchOutcomeQuickActions"
+      surface="search"
+    />
+
     <MobilePageActionsDrawer
       v-if="bookmark.isMobile"
       v-model:open="mobileBatchActionsOpen"
-      :title="t('resourceCenter.batch.selectedCount', { count: selectedCount })"
+      :title="batchActionSummary"
       :actions="mobileBatchActions"
       @action="handleMobileBatchAction"
     />
@@ -651,7 +666,10 @@
   import BCard from '@/components/base/BasicComponents/BCard.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
+  import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
+  import type { BActionMenuItem } from '@/components/base/BasicComponents/actionMenu';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -695,6 +713,7 @@
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import AiSkillPanel from '@/components/aiSkills/AiSkillPanel.vue';
+  import { isAiDocumentFileNameSupported } from '@lightnote/shared';
   import type { AiSkillResourceRef } from '@lightnote/shared/ai-skill-protocol';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { SEARCH_PAGE_SIZE, mergeResourcePage } from '@/utils/resourcePagination';
@@ -703,6 +722,12 @@
   import ResourceTagFilterPopover from '@/components/searchCenter/ResourceTagFilterPopover.vue';
   import ResourceInspectorPanel from '@/components/searchCenter/ResourceInspectorPanel.vue';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
+  import ResourceBatchActionBar from '@/components/resourceActions/ResourceBatchActionBar.vue';
+  import ResourceOutcomeDrawer, {
+    type ResourceOutcomeQuickAction,
+    type ResourceOutcomeResource,
+  } from '@/components/resourceActions/ResourceOutcomeDrawer.vue';
+  import { aiResourceCountBucket, recordAiProductEvent } from '@/api/aiTelemetry';
 
   const SearchResultItem = SearchResultItemComp;
   const GlobalGraph = defineAsyncComponent(() => import('@/view/graph/GlobalGraph.vue'));
@@ -811,6 +836,8 @@
 
   const selectedIds = ref<string[]>([]);
   const searchAiVisible = ref(false);
+  const outcomeDrawerOpen = ref(false);
+  const outcomeResources = ref<ResourceOutcomeResource[]>([]);
   const explicitSearchAiResourceContext = ref<{
     ref: AiSkillResourceRef;
     type: TaggableResourceType;
@@ -904,18 +931,85 @@
   const selectableVisibleItems = computed(() =>
     allVisibleItems.value.filter((item) => isTaggableResourceType(item.type)),
   );
+  const selectedTypes = computed<TaggableResourceType[]>(() =>
+    queryState.types.length ? queryState.types : [...SEARCH_CENTER_TYPE_LIST],
+  );
+  const filteredResultTotal = computed(() =>
+    selectedTypes.value.reduce((sum, type) => sum + Number(summaryTotals.value[type] || 0), 0),
+  );
   const allMatchingActive = computed(() => allMatchingSummary.value?.mode === 'allMatching');
   const selectedCount = computed(() =>
     allMatchingActive.value
       ? Math.max(0, Number(allMatchingSummary.value?.total || 0) - excludedSelectionIds.value.length)
       : selectedIds.value.length,
   );
+  const batchSelectAllChecked = computed(
+    () => filteredResultTotal.value > 0 && selectedCount.value === filteredResultTotal.value,
+  );
+  const batchSelectAllIndeterminate = computed(() => selectedCount.value > 0 && !batchSelectAllChecked.value);
+  const batchSelectAllLabel = computed(() =>
+    batchSelectAllChecked.value
+      ? t('resourceCenter.batch.unselectAll')
+      : t('resourceCenter.batch.selectAll', { count: filteredResultTotal.value }),
+  );
+  const selectedExplicitItems = computed(() =>
+    allVisibleItems.value
+      .filter((item) => selectedIds.value.includes(getItemSelectionKey(item)))
+      .filter((item) => isTaggableResourceType(item.type)),
+  );
+  const batchActionSummary = computed(() => {
+    if (allMatchingActive.value) {
+      return t('resourceCenter.batch.allMatchingSelected', { count: selectedCount.value });
+    }
+    return selectedCount.value
+      ? t('resourceCenter.batch.selectedCount', { count: selectedCount.value })
+      : t('resourceOutcome.batch.selectResources');
+  });
+  const batchActionDetail = computed(() => {
+    if (allMatchingActive.value) return t('resourceOutcome.batch.allMatchingDetail');
+    const counts = selectedExplicitItems.value.reduce<Record<TaggableResourceType, number>>(
+      (result, item) => {
+        result[item.type] += 1;
+        return result;
+      },
+      { bookmark: 0, note: 0, file: 0 },
+    );
+    return SEARCH_CENTER_TYPE_LIST.filter((type) => counts[type])
+      .map((type) => t('resourceOutcome.typeCount', { type: getSearchTypeLabel(t, type), count: counts[type] }))
+      .join(' · ');
+  });
+  const batchPrimaryDisabledReason = computed(() => {
+    if (allMatchingActive.value) return t('resourceCenter.batch.aiExplicitOnly');
+    if (!selectedCount.value) return t('resourceOutcome.batch.selectFirst');
+    return '';
+  });
+  const desktopBatchTagActions = computed<BActionMenuItem[]>(() => [
+    {
+      key: 'addTag',
+      label: t('resourceCenter.batch.addTag'),
+      icon: icon.manage_categoryBtn_tag,
+      disabled: !selectedCount.value,
+    },
+    {
+      key: 'removeTag',
+      label: t('resourceCenter.batch.removeTag'),
+      icon: icon.manage_categoryBtn_tag,
+      disabled: !selectedCount.value,
+    },
+  ]);
   const mobileBatchActions = computed<MobilePageActionItem[]>(() => [
     {
-      key: 'ai',
-      label: t('ai.entry.summarizeSelected'),
-      icon: icon.ai.materials,
+      key: 'outcome',
+      label: t('resourceOutcome.primaryAction'),
+      icon: icon.common.magicWand,
       disabled: allMatchingActive.value || selectedCount.value < 1,
+      description: batchPrimaryDisabledReason.value || undefined,
+    },
+    {
+      key: 'clear',
+      label: t('resourceOutcome.batch.clear'),
+      icon: icon.common.close,
+      disabled: selectedCount.value < 1,
     },
     {
       key: 'inbox',
@@ -940,7 +1034,36 @@
       label: t('resourceCenter.batch.delete'),
       icon: icon.table_delete,
       danger: true,
+      dividerBefore: true,
       disabled: selectedCount.value < 1,
+    },
+  ]);
+  const searchOutcomeQuickActions = computed<ResourceOutcomeQuickAction[]>(() => [
+    {
+      id: 'summarize',
+      label: t('ai.entry.summarizeSelected'),
+      description: t('resourceOutcome.quickSummaryDescription'),
+      skillId: 'search.summarize_selected',
+      input: { instruction: t('ai.entry.summarizeSelectedInstruction') },
+      minItems: 1,
+      maxItems: 10,
+      supportedTypes: ['bookmark', 'note', 'file'],
+      requireReadable: true,
+      icon: icon.ai.materials,
+      generatedNoteTitle: t('resourceOutcome.quickGeneratedNoteTitle'),
+    },
+    {
+      id: 'compare',
+      label: t('ai.entry.compareSelected'),
+      description: t('resourceOutcome.quickCompareDescription'),
+      skillId: 'search.compare_selected',
+      input: { instruction: t('ai.entry.compareSelectedInstruction') },
+      minItems: 2,
+      maxItems: 10,
+      supportedTypes: ['bookmark', 'note', 'file'],
+      requireReadable: true,
+      icon: icon.toolbox.comparison,
+      generatedNoteTitle: t('resourceOutcome.quickGeneratedNoteTitle'),
     },
   ]);
   const tagOptions = computed(() => {
@@ -955,9 +1078,6 @@
     const keyword = tagSearch.value.trim().toLocaleLowerCase();
     return keyword ? tagOptions.value.filter((tag) => tag.toLocaleLowerCase().includes(keyword)) : tagOptions.value;
   });
-  const selectedTypes = computed<TaggableResourceType[]>(() =>
-    queryState.types.length ? queryState.types : [...SEARCH_CENTER_TYPE_LIST],
-  );
   const selectedSearchAiResourceRefs = computed<AiSkillResourceRef[]>(() =>
     mappedItems.value
       .filter((item) => selectedIds.value.includes(getItemSelectionKey(item)))
@@ -1058,9 +1178,6 @@
     })),
   ]);
 
-  const filteredResultTotal = computed(() =>
-    selectedTypes.value.reduce((sum, type) => sum + Number(summaryTotals.value[type] || 0), 0),
-  );
   const desktopTypeSummary = computed(() => {
     if (!queryState.types.length) {
       return {
@@ -1576,6 +1693,8 @@
 
   function toggleBatchMode() {
     batchMode.value = !batchMode.value;
+    closeSearchAi();
+    outcomeDrawerOpen.value = false;
     if (!batchMode.value) clearBatchSelection();
   }
 
@@ -1583,15 +1702,22 @@
     if (!batchMode.value) return;
     batchMode.value = false;
     mobileBatchActionsOpen.value = false;
+    outcomeDrawerOpen.value = false;
     clearBatchSelection();
   }
 
   function handleMobileBatchAction(action: MobilePageActionItem) {
-    if (action.key === 'ai') toggleSearchAi();
+    if (action.key === 'outcome') openBatchOutcomeDrawer();
+    else if (action.key === 'clear') clearBatchSelection();
     else if (action.key === 'inbox') void batchAddToInbox();
     else if (action.key === 'addTag') batchAddTag();
     else if (action.key === 'removeTag') batchRemoveTag();
     else if (action.key === 'delete') void batchDelete();
+  }
+
+  function handleDesktopBatchAction(key: string) {
+    if (key === 'addTag') batchAddTag();
+    else if (key === 'removeTag') batchRemoveTag();
   }
 
   function selectionItemFromKey(key: string): BatchResourceItem | null {
@@ -1657,25 +1783,43 @@
     }
   }
 
+  function handleBatchSelectAllChange(checked: boolean) {
+    if (!checked) {
+      clearBatchSelection();
+      return;
+    }
+    if (allMatchingActive.value) {
+      excludedSelectionIds.value = [];
+      return;
+    }
+    void toggleSelectAllMatching();
+  }
+
   function closeSearchAi() {
     searchAiVisible.value = false;
     explicitSearchAiResourceContext.value = null;
   }
 
-  function toggleSearchAi() {
+  function openBatchOutcomeDrawer() {
     if (allMatchingActive.value) {
       message.warning(t('resourceCenter.batch.aiExplicitOnly'));
       return;
     }
-    const selected = mappedItems.value.filter((item) => selectedIds.value.includes(getItemSelectionKey(item)));
-    if (selected.length > 10) message.info(t('ai.materialLimit', { count: 10 }));
-    if (searchAiVisible.value) {
-      closeSearchAi();
+    if (!selectedExplicitItems.value.length) {
+      message.warning(
+        t(selectedCount.value ? 'resourceOutcome.batch.selectionChanged' : 'resourceOutcome.batch.selectFirst'),
+      );
       return;
     }
-    explicitSearchAiResourceContext.value = null;
-    searchAiVisible.value = true;
-    if (bookmark.isMobile) mobileBatchActionsOpen.value = false;
+    outcomeResources.value = selectedExplicitItems.value.map((item) => ({
+      type: item.type,
+      id: String(item.id),
+      title: String(item.title || t('inbox.untitled')),
+      quickReadable: item.type !== 'file' || isAiDocumentFileNameSupported(item.title),
+    }));
+    closeSearchAi();
+    outcomeDrawerOpen.value = true;
+    recordOperation({ module: '资源中心', operation: `用所选资源生成与处理【${outcomeResources.value.length}项】` });
   }
 
   function openResourceAi(item: DisplaySearchItem) {
@@ -1904,7 +2048,8 @@
 
   let isInitialRouteLoad = true;
   watch(
-    () => route.query,
+    // 移动抽屉会用同 URL 的 history state 管理返回栈；只在可见 URL 真正变化时重置筛选与批量选择。
+    () => route.fullPath,
     () => {
       clearBatchSelection();
       mobileInspectorVisible.value = false;
@@ -1944,6 +2089,18 @@
       void setupResultLoadObserver();
     },
   );
+
+  watch(selectedCount, (count, previousCount) => {
+    if (!batchMode.value || count < 1 || previousCount > 0 || allMatchingActive.value) return;
+    const types = [...new Set(selectedExplicitItems.value.map((item) => item.type))];
+    void recordAiProductEvent('ai_entry_impression', {
+      surface: 'search',
+      scopeMode: 'selected',
+      resourceType: types.length > 1 ? 'mixed' : types[0] || 'none',
+      resourceCountBucket: aiResourceCountBucket(count),
+      selectedCount: count,
+    });
+  });
 
   function focusSearchInput() {
     nextTick(() => {
@@ -2428,32 +2585,6 @@
     min-height: 28px;
   }
 
-  .batch-toolbar {
-    margin-top: 12px;
-    display: flex;
-    justify-content: space-between;
-    gap: 10px;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-
-  .batch-left,
-  .batch-actions {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    color: var(--desc-color);
-    font-size: 13px;
-  }
-
-  .batch-select-all {
-    min-height: 28px;
-    padding-inline: 10px;
-    border-radius: 9px;
-    color: var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 8%, var(--search-muted-bg));
-  }
-
   .result-scroll-area {
     position: relative;
     margin-top: 12px;
@@ -2772,6 +2903,10 @@
       grid-column: 3;
     }
 
+    .search-page--batch .resource-inspector-pane {
+      padding-bottom: 112px;
+    }
+
     .result-panel {
       grid-column: 2;
       grid-row: 2;
@@ -2884,22 +3019,6 @@
       min-height: 26px;
       height: 26px;
       line-height: 1;
-    }
-
-    .batch-toolbar {
-      flex: 0 0 auto;
-      min-height: 40px;
-      margin-top: 8px;
-      padding: 5px 8px 5px 12px;
-      border-radius: 11px;
-      background: color-mix(in srgb, var(--primary-color) 8%, var(--background-color));
-      box-shadow: inset 3px 0 0 var(--primary-color);
-    }
-
-    .batch-actions :deep(.b_btn) {
-      height: 28px;
-      padding: 0 10px;
-      font-size: 12px;
     }
 
     .result-scroll-area {
@@ -3155,8 +3274,6 @@
 
     .result-panel,
     .result-scroll-area,
-    .batch-toolbar,
-    .batch-actions,
     .result-group,
     .result-grid {
       min-width: 0;
@@ -3205,26 +3322,6 @@
 
     .result-scroll-area {
       margin-top: 8px;
-    }
-
-    .batch-toolbar {
-      align-items: stretch;
-      flex-direction: column;
-    }
-
-    .batch-left {
-      min-width: 0;
-    }
-
-    .batch-actions {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      width: 100%;
-    }
-
-    .batch-actions :deep(.b_btn) {
-      width: 100%;
-      padding-inline: 8px;
     }
 
     .result-grid,
@@ -3382,44 +3479,6 @@
     font-weight: 700;
   }
 
-  .search-page--mobile .batch-toolbar {
-    flex: 0 0 auto;
-    min-width: 0;
-    margin-top: 6px;
-    padding: 6px 8px;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    align-items: center;
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--primary-color) 8%, var(--search-card-bg));
-  }
-
-  .search-page--mobile .batch-left {
-    flex: 0 0 auto;
-    white-space: nowrap;
-  }
-
-  .search-page--mobile .batch-select-all {
-    min-height: 30px;
-    padding-inline: 8px;
-    font-size: 11px;
-  }
-
-  .search-page--mobile .batch-actions {
-    min-width: 0;
-    width: auto;
-    flex: 1 1 auto;
-    display: flex;
-    justify-content: flex-end;
-  }
-
-  .search-page--mobile .batch-actions :deep(.b_btn) {
-    min-width: 88px;
-    height: 32px;
-    padding: 0 9px;
-    font-size: 12px;
-  }
-
   .search-page--mobile .result-scroll-area {
     flex: 1 1 auto;
     min-height: 0;
@@ -3431,6 +3490,16 @@
     background: transparent;
     overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;
+  }
+
+  .search-page.search-page--batch .result-scroll-area {
+    padding-bottom: 112px;
+    scroll-padding-bottom: 112px;
+  }
+
+  .search-page--mobile.search-page--batch .result-scroll-area {
+    padding-bottom: 164px;
+    scroll-padding-bottom: 164px;
   }
 
   .search-page--mobile .result-group {

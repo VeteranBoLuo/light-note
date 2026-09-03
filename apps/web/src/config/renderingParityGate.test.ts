@@ -212,14 +212,14 @@ describe('移动浏览器与 App 渲染一致性门禁', () => {
       .map((path) => relative(sourceRoot, path))
       .sort();
 
-    expect(containerQueryFiles).toEqual(['components/cloudSpace/fieldList.vue', 'view/settings/Settings.vue']);
+    expect(containerQueryFiles).toEqual(['view/settings/Settings.vue']);
     expect(containerTypeFiles).toEqual([
       'components/cloudSpace/fieldList.vue',
       'components/home/CardPanel.vue',
       'view/noteLibrary/NoteLibrary.vue',
       'view/settings/Settings.vue',
     ]);
-    expect(baselineStyles).toContain('.field-list .mobile-batch-actions');
+    expect(baselineStyles).not.toContain('.field-list .mobile-batch-actions');
     expect(baselineStyles).toContain('--bookmark-card-min-width: 260px !important');
     expect(baselineStyles).toContain('--file-card-min-width: 260px !important');
     expect(baselineStyles).toContain('--note-card-min-width: 320px !important');

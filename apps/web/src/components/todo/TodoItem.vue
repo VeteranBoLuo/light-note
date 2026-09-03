@@ -182,7 +182,7 @@
   import { OPERATION_LOG_MAP } from '@/config/logMap';
   import { useRouter } from 'vue-router';
   import type { TodoChecklistItem, TodoItem, TodoPriority, TodoResourceRefView, TodoSeriesAction } from '@/api/todoApi';
-  import { resolveResourceRoute } from '@/utils/resourceNavigation';
+  import { resolveResourceRoute, resolveTodoResourceReturnPath } from '@/utils/resourceNavigation';
   import {
     formatTodoDateTime,
     isTodoOverdue,
@@ -498,7 +498,11 @@
 
   function openResourceRef(ref: TodoResourceRefView) {
     if (!ref.available) return;
-    const target = resolveResourceRoute({ type: ref.type, id: ref.id, title: ref.title });
+    const noteReturnPath = resolveTodoResourceReturnPath(router.currentRoute.value.fullPath, props.item.id, ref);
+    const target = resolveResourceRoute(
+      { type: ref.type, id: ref.id, title: ref.title },
+      { noteReturnPath },
+    );
     if (target) router.push(target);
   }
 

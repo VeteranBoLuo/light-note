@@ -74,7 +74,7 @@
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { bookmarkStore } from '@/store';
   import icon from '@/config/icon';
-  import { resolveResourceRoute } from '@/utils/resourceNavigation';
+  import { resolveResourceRoute, resolveTodoResourceReturnPath } from '@/utils/resourceNavigation';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
 
   const props = defineProps<{
@@ -165,7 +165,12 @@
   }
 
   function openResourceRef(resource: TodoResourceRefView) {
-    const target = resolveResourceRoute(resource);
+    const noteReturnPath = resolveTodoResourceReturnPath(
+      router.currentRoute.value.fullPath,
+      String(props.item?.id || ''),
+      resource,
+    );
+    const target = resolveResourceRoute(resource, { noteReturnPath });
     if (!target) return;
     void closeCurrentMobileOverlayThen(
       () => {

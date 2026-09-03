@@ -13,6 +13,21 @@ const alertApiSource = readFileSync(
 const inboxSource = readFileSync(resolve(process.cwd(), 'src/view/inbox/Inbox.vue'), 'utf8');
 
 describe('BAlert 多操作布局', () => {
+  it('确认弹框由遮罩层在可视区域中真正居中', () => {
+    expect(alertSource).toMatch(
+      /\.bAlert-bg\s*\{[\s\S]*?display:\s*flex;[\s\S]*?align-items:\s*center;[\s\S]*?justify-content:\s*center;/,
+    );
+    expect(alertSource).not.toMatch(/\.bAlert\s*\{[\s\S]*?top:\s*30%/);
+    expect(alertSource).not.toContain('top: 45%;');
+  });
+
+  it('桌面和移动确认框都安全渲染分层正文，并强化标题与固定重点', () => {
+    expect(alertSource.match(/v-html="safeContent"/g)).toHaveLength(2);
+    expect(alertSource).toMatch(/\.bAlert-title\s*\{[\s\S]*?font-weight:\s*600/);
+    expect(alertSource).toContain('.b-alert-rich-content__lead strong');
+    expect(alertSource).toContain('.b-alert-rich-content__list-title');
+  });
+
   it('桌面端三个以上操作自动使用宽版弹窗，并允许按钮组换行', () => {
     expect(alertSource).toContain("'bAlert--multi-action': footer.length > 2");
     expect(alertSource).toContain(':wrap="footer.length > 2"');
@@ -34,9 +49,7 @@ describe('BAlert 多操作布局', () => {
   });
 
   it('移动端清除桌面弹框最小高度并按内容自适应', () => {
-    expect(alertSource).toMatch(
-      /\.bAlert\.bAlert--mobile\s*\{[\s\S]*?min-height:\s*0;[\s\S]*?height:\s*auto;/,
-    );
+    expect(alertSource).toMatch(/\.bAlert\.bAlert--mobile\s*\{[\s\S]*?min-height:\s*0;[\s\S]*?height:\s*auto;/);
   });
 
   it('移动端操作单元清除 BButton 默认底色和圆角，危险确认使用危险语义', () => {

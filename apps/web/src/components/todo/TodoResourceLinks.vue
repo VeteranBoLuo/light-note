@@ -4,8 +4,16 @@
       v-for="ref in visibleItems"
       :key="`${ref.type}:${ref.id}`"
       class="todo-resource-link"
-      :class="[`is-${ref.type}`, { 'is-unavailable': !ref.available, 'is-removable': removable }]"
+      :class="[
+        `is-${ref.type}`,
+        {
+          'is-unavailable': !ref.available,
+          'is-removable': removable,
+          'is-focused': focusKey === `${ref.type}:${ref.id}`,
+        },
+      ]"
       role="listitem"
+      :aria-current="focusKey === `${ref.type}:${ref.id}` ? 'true' : undefined"
     >
       <BButton
         size="small"
@@ -59,12 +67,14 @@
       removable?: boolean;
       disabled?: boolean;
       ariaLabel?: string;
+      focusKey?: string;
     }>(),
     {
       maxVisible: 0,
       removable: false,
       disabled: false,
       ariaLabel: '',
+      focusKey: '',
     },
   );
   const emit = defineEmits<{
@@ -122,6 +132,12 @@
 
   .todo-resource-link.is-unavailable {
     opacity: 0.58;
+  }
+
+  .todo-resource-link.is-focused {
+    border-color: var(--todo-resource-tone);
+    outline: 2px solid var(--todo-resource-tone);
+    outline-offset: 2px;
   }
 
   :deep(.b_btn.todo-resource-link__open),

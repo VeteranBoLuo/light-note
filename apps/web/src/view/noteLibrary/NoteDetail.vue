@@ -475,6 +475,7 @@
     const source = sourceReturnPath();
     if (source.startsWith('/toolbox/')) return t('noteDetail.backToToolboxResult');
     if (source.startsWith('/workbenches')) return t('noteDetail.backToWorkbench');
+    if (source.startsWith('/inbox')) return t('noteDetail.backToTodo');
     if (source.startsWith('/organize')) return t('noteDetail.backToOrganizer');
     return t('noteDetail.backToLibrary');
   });

@@ -19,6 +19,8 @@ import {
 function fakeConn(handlers = {}) {
   const query = vi.fn((sql) => {
     const s = String(sql);
+    if (/FROM todo_resource_refs\s+r[\s\S]*INNER JOIN todo_items\s+t/i.test(s))
+      return Promise.resolve([handlers.todoBacklinkRows || []]);
     if (/FROM note_resource_refs\s+r[\s\S]*INNER JOIN note\s+n/i.test(s))
       return Promise.resolve([handlers.backlinkRows || []]);
     if (/SELECT[\s\S]*FROM note_resource_refs/i.test(s)) return Promise.resolve([handlers.oldRows || []]);
@@ -338,8 +340,16 @@ describe('noteReferenceService', () => {
       });
       expect(out).toEqual({
         available: true,
-        items: [{ id: 'source-1', title: '引用笔记一', updateTime: '2026-07-23 09:00:00' }],
+        items: [
+          {
+            sourceType: 'note',
+            id: 'source-1',
+            title: '引用笔记一',
+            updateTime: '2026-07-23 09:00:00',
+          },
+        ],
         hasMore: true,
+        hasMoreByType: { note: true, todo: false },
       });
       const query = conn.query.mock.calls.find(([sql]) =>
         /FROM note_resource_refs\s+r[\s\S]*INNER JOIN note\s+n/i.test(String(sql)),
@@ -348,11 +358,63 @@ describe('noteReferenceService', () => {
       expect(String(query[0])).not.toMatch(/\bcontent\b/i);
     });
 
+    it('合并待办反链，过滤软删除项并对待办系列只取一个可打开实例', async () => {
+      const conn = fakeConn({
+        fileRows: [{ id: 'f1', name: '目标文件' }],
+        backlinkRows: [{ id: 'note-1', title: '引用笔记', update_time: '2026-08-20 08:00:00' }],
+        todoBacklinkRows: [
+          {
+            id: 'todo-1',
+            title: '引用待办',
+            status: 'pending',
+            update_time: '2026-08-21 08:00:00',
+            series_id: 'series-1',
+          },
+        ],
+      });
+
+      await expect(
+        listOwnedResourceBacklinks(conn, { userId: 'u1', targetType: 'file', targetId: 'f1', limit: 5 }),
+      ).resolves.toEqual({
+        available: true,
+        items: [
+          {
+            sourceType: 'note',
+            id: 'note-1',
+            title: '引用笔记',
+            updateTime: '2026-08-20 08:00:00',
+          },
+          {
+            sourceType: 'todo',
+            id: 'todo-1',
+            title: '引用待办',
+            updateTime: '2026-08-21 08:00:00',
+            status: 'pending',
+          },
+        ],
+        hasMore: false,
+        hasMoreByType: { note: false, todo: false },
+      });
+
+      const todoQuery = conn.query.mock.calls.find(([sql]) =>
+        /FROM todo_resource_refs\s+r[\s\S]*INNER JOIN todo_items\s+t/i.test(String(sql)),
+      );
+      expect(todoQuery[1]).toEqual(['u1', 'u1', 'file', 'f1', 6]);
+      expect(String(todoQuery[0])).toContain('t.del_flag = 0');
+      expect(String(todoQuery[0])).toContain('t.series_id IS NULL');
+      expect(String(todoQuery[0])).toContain("(t2.status = 'pending') DESC");
+    });
+
     it('目标已删除、越权或不存在时统一空结果，且不查询源反链', async () => {
       const conn = fakeConn({ bookmarkRows: [] });
       await expect(
         listOwnedResourceBacklinks(conn, { userId: 'u1', targetType: 'bookmark', targetId: 'missing', limit: 5 }),
-      ).resolves.toEqual({ available: false, items: [], hasMore: false });
+      ).resolves.toEqual({
+        available: false,
+        items: [],
+        hasMore: false,
+        hasMoreByType: { note: false, todo: false },
+      });
       expect(
         conn.query.mock.calls.some(([sql]) =>
           /FROM note_resource_refs\s+r[\s\S]*INNER JOIN note\s+n/i.test(String(sql)),

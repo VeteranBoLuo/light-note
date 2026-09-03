@@ -664,12 +664,14 @@ describe('FilePreview text request lifecycle', () => {
 });
 
 describe('FilePreview resource backlinks', () => {
-  it('uses the compact inline backlink card so it does not cover the preview content', async () => {
+  it('places the compact backlink trigger in the file header instead of covering preview content', async () => {
     await mountImagePreview();
 
     const backlinks = document.body.querySelector<HTMLElement>('.file-preview-backlinks');
     expect(backlinks?.dataset.compact).toBe('true');
-    expect(backlinks?.dataset.placement).toBe('inline');
+    expect(backlinks?.dataset.placement).toBe('header');
+    expect(backlinks?.closest('.preview-title')).not.toBeNull();
+    expect(document.body.querySelector('.preview-content .file-preview-backlinks')).toBeNull();
   });
 });
 

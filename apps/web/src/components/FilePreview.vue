@@ -10,6 +10,14 @@
         <div class="preview-title">
           <span class="file-type-badge">{{ getFileTypeName(currentCategory) }}</span>
           <span class="file-name" :title="fileInfo.fileName">{{ fileInfo.fileName }}</span>
+          <ResourceBacklinks
+            v-if="fileInfo?.id && previewAccess?.kind !== 'share' && !isHtmlFullscreen"
+            class="file-preview-backlinks"
+            target-type="file"
+            :target-id="String(fileInfo.id)"
+            placement="header"
+            compact
+          />
         </div>
         <div class="preview-actions">
           <BTooltip
@@ -51,14 +59,6 @@
         </BTooltip>
       </div>
       <div class="preview-content" @click.stop>
-        <ResourceBacklinks
-          v-if="fileInfo?.id && previewAccess?.kind !== 'share' && !isHtmlFullscreen"
-          class="file-preview-backlinks"
-          target-type="file"
-          :target-id="String(fileInfo.id)"
-          placement="inline"
-          compact
-        />
         <!-- 加载状态 -->
         <div v-if="loading" class="preview-loading">
           <div class="b-spin">
@@ -1473,6 +1473,10 @@
         max-width: min(720px, calc(100% - 96px));
       }
 
+      .file-preview-backlinks {
+        flex: 0 0 auto;
+      }
+
       .file-name {
         overflow: hidden;
         text-overflow: ellipsis;
@@ -1531,16 +1535,6 @@
       background:
         radial-gradient(circle at 18% 12%, color-mix(in srgb, var(--primary-color) 5%, transparent), transparent 30%),
         var(--background-color);
-
-      .file-preview-backlinks {
-        position: absolute;
-        top: 12px;
-        left: 14px;
-        z-index: 20;
-        // 反链是辅助信息，不应在文件预览中抢占画面；长标题仍可在卡片内省略显示。
-        width: min(276px, calc(100% - 32px));
-        box-shadow: 0 8px 24px color-mix(in srgb, #000 12%, transparent);
-      }
 
       .preview-loading {
         position: absolute;

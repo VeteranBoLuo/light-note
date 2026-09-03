@@ -611,6 +611,7 @@
       v-if="previewTodo"
       v-model:visible="todoPreviewVisible"
       :item="previewTodo"
+      :focus-ref="previewTodoFocusRef"
       :disabled="hasPendingOperation || todoBatchMutating"
       :deleting="deletingTodoId === previewTodo.id"
       @edit="openTodoEditor"
@@ -713,6 +714,7 @@
   const todoPreviewVisible = ref(false);
   const previewTodoId = ref('');
   const previewTodoSeed = ref<TodoItemType | null>(null);
+  const previewTodoFocusRef = ref('');
   const previewTodo = computed(
     () => todo.items.find((item) => item.id === previewTodoId.value) || previewTodoSeed.value,
   );
@@ -1092,10 +1094,12 @@
       requestedTodo = todo.items.find((item) => item.id === todoId);
     }
     if (!requestedTodo) return;
+    const requestedFocusRef = String(route.query.focusRef || '');
     const query = { ...route.query };
     delete query.todoId;
+    delete query.focusRef;
     await router.replace({ query });
-    openTodoPreview(requestedTodo);
+    openTodoPreview(requestedTodo, requestedFocusRef);
   }
 
   watch(
@@ -1582,16 +1586,18 @@
     editingTodo.value = item;
     todoEditorVisible.value = true;
   }
-  function openTodoPreview(item: TodoItemType) {
+  function openTodoPreview(item: TodoItemType, focusRef = '') {
     openSwipeTodoId.value = '';
     scheduleViewRef.value?.closeSwipe();
     previewTodoId.value = item.id;
     previewTodoSeed.value = item;
+    previewTodoFocusRef.value = focusRef;
     todoPreviewVisible.value = true;
   }
   function clearTodoPreview() {
     previewTodoId.value = '';
     previewTodoSeed.value = null;
+    previewTodoFocusRef.value = '';
   }
   function closeTodoPreview(itemId: string) {
     if (previewTodoId.value === itemId) todoPreviewVisible.value = false;

@@ -49,6 +49,12 @@ describe('resolveNoteDetailReturnPath', () => {
     );
   });
 
+  it('允许待办作为明确来源并保留页签与目标参数', () => {
+    expect(resolveNoteDetailReturnPath('/inbox?tab=todo&todoId=todo-1')).toBe(
+      '/inbox?tab=todo&todoId=todo-1',
+    );
+  });
+
   it('允许知识结构完整整理页作为明确来源', () => {
     expect(resolveNoteDetailReturnPath('/toolbox/knowledge_structure_audit')).toBe(
       '/toolbox/knowledge_structure_audit',
@@ -77,7 +83,7 @@ describe('resolveNoteDetailReturnPath', () => {
     expect(resolveNoteDetailReturnPath(child)).toBe(source);
   });
 
-  it.each(['/search', '/inbox', '/organize/other', 'https://example.com/workbenches', '//example.com/workbenches'])(
+  it.each(['/search', '/organize/other', 'https://example.com/workbenches', '//example.com/workbenches'])(
     '拒绝未授权的返回来源：%s',
     (path) => {
       expect(resolveNoteDetailReturnPath(path)).toBe('');

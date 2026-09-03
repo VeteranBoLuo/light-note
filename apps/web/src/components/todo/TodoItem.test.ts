@@ -11,7 +11,7 @@ const todoItemSource = readFileSync(resolve(process.cwd(), 'src/components/todo/
 const routerPush = vi.fn();
 const { recordOperation } = vi.hoisted(() => ({ recordOperation: vi.fn() }));
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: routerPush }),
+  useRouter: () => ({ push: routerPush, currentRoute: { value: { fullPath: '/inbox?tab=todo' } } }),
 }));
 vi.mock('@/api/commonApi', () => ({ recordOperation }));
 
@@ -172,6 +172,18 @@ describe('TodoItem card preview', () => {
     await nextTick();
 
     expect(onPreview).toHaveBeenCalledTimes(1);
+  });
+
+  it('从待办打开关联笔记时携带当前待办地址', async () => {
+    const { host } = mountTodoItem();
+    await nextTick();
+
+    host.querySelector<HTMLButtonElement>('.todo-resource-link__open')!.click();
+
+    expect(routerPush).toHaveBeenCalledWith({
+      path: '/noteLibrary/note-1',
+      query: { from: '/inbox?tab=todo&todoId=todo-1&focusRef=note%3Anote-1' },
+    });
   });
 
   it('批量选择态不通过正文打开预览', async () => {

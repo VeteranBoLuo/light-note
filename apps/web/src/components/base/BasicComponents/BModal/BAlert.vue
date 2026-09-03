@@ -7,7 +7,7 @@
           <slot name="title">
             <div class="bAlert-m-title">{{ title }}</div>
           </slot>
-          <div class="bAlert-m-content">{{ content }}</div>
+          <div class="bAlert-m-content" v-html="safeContent" />
         </div>
         <div class="bAlert-m-footer">
           <slot name="footer" v-if="footer?.length > 0">
@@ -181,14 +181,18 @@
     inset: 0;
     background-color: rgba(0, 0, 0, 0.8);
     z-index: 1300;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    padding: 20px;
   }
   .bAlert {
     position: relative;
-    left: 50%;
-    top: 30%;
-    transform: translate(-50%, -50%);
     box-sizing: border-box;
     width: 460px;
+    max-width: 100%;
+    max-height: 100%;
     min-height: 180px;
     //box-shadow: 0px 0px 12px rgba(0, 0, 0, 0.12);
     border-radius: 16px;
@@ -207,6 +211,7 @@
     flex: 0 0 auto;
     margin-bottom: 15px;
     font-size: 16px;
+    font-weight: 600;
   }
   .bAlert-content {
     flex: 1 1 auto;
@@ -217,6 +222,57 @@
     font-size: 14px;
     line-height: 1.55;
     overflow-wrap: anywhere;
+  }
+  .bAlert-content :deep(.b-alert-rich-content),
+  .bAlert-m-content :deep(.b-alert-rich-content) {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    text-align: left;
+  }
+  .bAlert-content :deep(.b-alert-rich-content p),
+  .bAlert-m-content :deep(.b-alert-rich-content p) {
+    margin: 0;
+  }
+  .bAlert-content :deep(.b-alert-rich-content__lead strong),
+  .bAlert-m-content :deep(.b-alert-rich-content__lead strong),
+  .bAlert-content :deep(.b-alert-rich-content__list-title),
+  .bAlert-m-content :deep(.b-alert-rich-content__list-title) {
+    color: var(--text-color);
+    font-weight: 600;
+  }
+  .bAlert-content :deep(.b-alert-rich-content__list),
+  .bAlert-m-content :deep(.b-alert-rich-content__list) {
+    padding: 10px 12px;
+    border: 1px solid var(--card-border-color);
+    border-radius: 10px;
+    background: var(--bl-input-noBorder-bg-color);
+  }
+  .bAlert-content :deep(.b-alert-rich-content__list-title),
+  .bAlert-m-content :deep(.b-alert-rich-content__list-title) {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 13px;
+  }
+  .bAlert-content :deep(.b-alert-rich-content ul),
+  .bAlert-m-content :deep(.b-alert-rich-content ul) {
+    margin: 0;
+    padding-left: 18px;
+  }
+  .bAlert-content :deep(.b-alert-rich-content li + li),
+  .bAlert-m-content :deep(.b-alert-rich-content li + li) {
+    margin-top: 3px;
+  }
+  .bAlert-content :deep(.b-alert-rich-content__file),
+  .bAlert-m-content :deep(.b-alert-rich-content__file) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .bAlert-content :deep(.b-alert-rich-content__remaining),
+  .bAlert-m-content :deep(.b-alert-rich-content__remaining) {
+    color: var(--desc-color);
   }
   .bAlert-footer {
     flex: 0 0 auto;
@@ -257,7 +313,6 @@
      高度自适应(不再固定 160px),标题正文正常流(不再 .row-center 绝对定位),底部按钮不撑破弹框。 */
   .bAlert.bAlert--mobile {
     width: min(78%, 320px);
-    top: 45%;
     /* 桌面弹框用 min-height 承托多操作布局；移动端必须恢复内容自适应，
        否则短确认文案也会被继承的 180px 最小高度强行撑大。 */
     min-height: 0;

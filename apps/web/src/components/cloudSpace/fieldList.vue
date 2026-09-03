@@ -2,83 +2,12 @@
   <div
     ref="fieldListRef"
     class="field-list"
+    :class="{ 'field-list--batch-mode': batchMode }"
     @touchstart.passive="pullRefresh.onTouchStart"
     @touchmove="pullRefresh.onTouchMove"
     @touchend.passive="pullRefresh.onTouchEnd"
     @touchcancel.passive="pullRefresh.onTouchCancel"
   >
-    <section v-if="batchMode && bookmark.isMobile" class="mobile-batch-toolbar">
-      <div class="mobile-batch-summary">
-        <BCheckbox
-          :indeterminate="indeterminate"
-          :checked="selectAll"
-          @change="(checked: boolean) => onToggleSelectAll({ target: { checked } })"
-          class="batch-select-all"
-        />
-        <span class="selected-count">{{ $t('cloudSpace.selectedCount', { count: selectedRows.length }) }}</span>
-        <BButton size="small" class="mobile-batch-exit" @click="emit('exitBatch')">
-          {{ $t('cloudSpace.exitBatch') }}
-        </BButton>
-      </div>
-      <div class="mobile-batch-actions">
-        <BButton class="ai-file-analysis-action" :disabled="!hasAiAnalyzableSelection" @click="openSelectedFilesInAi">
-          <SvgIcon :src="icon.ai.organize" size="16" aria-hidden="true" />
-          {{ $t('cloudSpace.aiUseSelected') }}
-        </BButton>
-        <BButton type="danger" :disabled="!hasSelection" @click="handleBatchDelete">
-          <SvgIcon :src="icon.table_delete" size="16" aria-hidden="true" />
-          {{ $t('cloudSpace.batchDelete') }}
-        </BButton>
-        <BButton
-          class="mobile-batch-move"
-          :disabled="!hasSelection"
-          @click="handleBatchMove"
-          v-click-log="{ module: '云空间', operation: '点击批量移动文件' }"
-        >
-          <SvgIcon :src="icon.cloudSpace.moveFile" size="16" aria-hidden="true" />
-          {{ $t('cloudSpace.batchMove') }}
-        </BButton>
-        <BButton :disabled="!hasSelection" :loading="batchDownloadLoading" @click="handleBatchDownload">
-          <SvgIcon :src="icon.cloudSpace.download" size="16" aria-hidden="true" />
-          {{ $t('cloudSpace.batchDownload') }}
-        </BButton>
-      </div>
-    </section>
-    <div v-if="viewMode === 'card' && batchMode && !bookmark.isMobile" class="card-toolbar">
-      <div class="batch-actions">
-        <BSpace class="file-batch-actions-space" :size="10">
-          <BCheckbox
-            v-if="viewMode === 'card'"
-            :indeterminate="indeterminate"
-            :checked="selectAll"
-            @change="(checked: boolean) => onToggleSelectAll({ target: { checked } })"
-            class="batch-select-all"
-          />
-          <span class="selected-count">{{ $t('cloudSpace.selectedCount', { count: selectedRows.length }) }}</span>
-          <BButton
-            size="small"
-            class="ai-file-analysis-action"
-            :disabled="!hasAiAnalyzableSelection"
-            @click="openSelectedFilesInAi"
-          >
-            <SvgIcon :src="icon.ai.organize" size="14" aria-hidden="true" />
-            {{ $t('cloudSpace.aiUseSelected') }}
-          </BButton>
-          <BButton size="small" type="danger" @click="handleBatchDelete">{{ $t('cloudSpace.batchDelete') }}</BButton>
-          <BButton
-            size="small"
-            type="primary"
-            @click="handleBatchMove"
-            v-click-log="{ module: '云空间', operation: '点击批量移动文件' }"
-          >
-            {{ $t('cloudSpace.batchMove') }}
-          </BButton>
-          <BButton size="small" type="success" :loading="batchDownloadLoading" @click="handleBatchDownload">
-            {{ $t('cloudSpace.batchDownload') }}
-          </BButton>
-        </BSpace>
-      </div>
-    </div>
     <div
       v-if="viewMode === 'card' && (cloud.loading || cloud.fileList.length)"
       class="file-card-grid"
@@ -309,35 +238,6 @@
         <div> {{ $t('cloudSpace.uploadTime') }} </div>
       </div>
     </div>
-    <div v-if="viewMode === 'table' && batchMode && !bookmark.isMobile" class="batch-actions table-batch-actions">
-      <BCheckbox
-        :indeterminate="indeterminate"
-        :checked="selectAll"
-        @change="(checked: boolean) => onToggleSelectAll({ target: { checked } })"
-      />
-      <span class="selected-count">{{ $t('cloudSpace.selectedCount', { count: selectedRows.length }) }}</span>
-      <BButton
-        size="small"
-        class="ai-file-analysis-action"
-        :disabled="!hasAiAnalyzableSelection"
-        @click="openSelectedFilesInAi"
-      >
-        <SvgIcon :src="icon.ai.organize" size="14" aria-hidden="true" />
-        {{ $t('cloudSpace.aiUseSelected') }}
-      </BButton>
-      <BButton size="small" type="danger" @click="handleBatchDelete">{{ $t('cloudSpace.batchDelete') }}</BButton>
-      <BButton
-        size="small"
-        type="primary"
-        @click="handleBatchMove"
-        v-click-log="{ module: '云空间', operation: '点击批量移动文件' }"
-      >
-        {{ $t('cloudSpace.batchMove') }}
-      </BButton>
-      <BButton size="small" type="success" :loading="batchDownloadLoading" @click="handleBatchDownload">
-        {{ $t('cloudSpace.batchDownload') }}
-      </BButton>
-    </div>
     <div
       v-if="viewMode === 'table' && (cloud.loading || cloud.fileList.length)"
       class="file-container"
@@ -517,7 +417,7 @@
                 size="medium"
                 interactive
                 max-width="90px"
-                @click.stop="goToTagDetail(tag.id)"
+                @click.stop="onFileTagClick(item, tag.id)"
                 v-click-log="{ module: '云空间', operation: `点击文件关联标签【${tag.name}】` }"
               />
             </div>
@@ -678,6 +578,63 @@
       </div>
     </b-modal>
 
+    <ResourceBatchActionBar
+      :open="batchMode"
+      :mobile="bookmark.isMobile"
+      :summary="batchActionSummary"
+      :aria-label="$t('resourceOutcome.batch.ariaLabel')"
+      :clear-label="$t('resourceOutcome.batch.clear')"
+      :show-clear="hasSelection"
+      :show-mobile-primary="false"
+      :primary-label="$t('resourceOutcome.primaryAction')"
+      :more-label="$t('common.more')"
+      :primary-disabled="!hasSelection"
+      :primary-disabled-reason="!hasSelection ? $t('resourceOutcome.batch.selectFirst') : ''"
+      @clear="clearSelectedFiles"
+      @more="mobileBatchActionsOpen = true"
+      @primary="openSelectedOutcomeDrawer"
+    >
+      <template #leading>
+        <span class="batch-action-select-all" @click.stop>
+          <BCheckbox
+            :indeterminate="indeterminate"
+            :checked="selectAll"
+            :aria-label="$t(selectAll ? 'resourceOutcome.batch.unselectAll' : 'resourceOutcome.batch.selectAll')"
+            @change="(checked: boolean) => onToggleSelectAll({ target: { checked } })"
+          />
+        </span>
+      </template>
+      <template #actions>
+        <BButton :disabled="!hasSelection" @click="handleBatchMove">
+          <SvgIcon :src="icon.cloudSpace.moveFile" size="16" aria-hidden="true" />
+          {{ $t('cloudSpace.batchMove') }}
+        </BButton>
+        <BButton :disabled="!hasSelection" :loading="batchDownloadLoading" @click="handleBatchDownload">
+          <SvgIcon :src="icon.cloudSpace.download" size="16" aria-hidden="true" />
+          {{ $t('cloudSpace.batchDownload') }}
+        </BButton>
+        <BButton class="batch-action-delete" :disabled="!hasSelection" @click="handleBatchDelete">
+          <SvgIcon :src="icon.table_delete" size="16" aria-hidden="true" />
+          {{ $t('cloudSpace.batchDelete') }}
+        </BButton>
+      </template>
+    </ResourceBatchActionBar>
+
+    <MobilePageActionsDrawer
+      v-if="bookmark.isMobile"
+      v-model:open="mobileBatchActionsOpen"
+      :title="batchActionSummary"
+      :actions="mobileBatchActions"
+      @action="handleMobileBatchAction"
+    />
+
+    <ResourceOutcomeDrawer
+      v-model:open="outcomeDrawerOpen"
+      :resources="outcomeResources"
+      :quick-actions="cloudOutcomeQuickActions"
+      surface="cloud_space"
+    />
+
     <MobilePageActionsDrawer
       v-if="bookmark.isMobile"
       v-model:open="mobileFileActionsOpen"
@@ -754,7 +711,6 @@
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
-  import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
@@ -799,6 +755,13 @@
   import CloudTextCardPreview from '@/components/cloudSpace/CloudTextCardPreview.vue';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
+  import ResourceBatchActionBar from '@/components/resourceActions/ResourceBatchActionBar.vue';
+  import ResourceOutcomeDrawer, {
+    type ResourceOutcomeQuickAction,
+    type ResourceOutcomeResource,
+  } from '@/components/resourceActions/ResourceOutcomeDrawer.vue';
+  import { aiResourceCountBucket, recordAiProductEvent } from '@/api/aiTelemetry';
+  import { escapeHtml } from '@/utils/globalSearchHighlight';
 
   const FileTagConfig = defineAsyncComponent(() => import('@/components/cloudSpace/FileTagConfig.vue'));
 
@@ -944,12 +907,94 @@
   const videoDurationLabels = ref<Record<string, string>>({});
   const failedVideoPreviewIds = ref<Set<string>>(new Set());
   const hasSelection = computed(() => selectedRows.value.length > 0);
-  const hasAiAnalyzableSelection = computed(() =>
-    cloud.fileList.some((file) => selectedRows.value.includes(file.id) && isAiDocumentFileNameSupported(file.fileName)),
-  );
+  const batchDownloadLoading = ref(false);
   const indeterminate = computed(
     () => selectedRows.value.length > 0 && selectedRows.value.length < cloud.fileList.length,
   );
+  const mobileBatchActionsOpen = ref(false);
+  const outcomeDrawerOpen = ref(false);
+  const outcomeResources = ref<ResourceOutcomeResource[]>([]);
+  const batchActionSummary = computed(() =>
+    selectedRows.value.length
+      ? t('cloudSpace.selectedCount', { count: selectedRows.value.length })
+      : t('resourceOutcome.batch.selectCloudFiles'),
+  );
+  const mobileBatchActions = computed<MobilePageActionItem[]>(() => [
+    {
+      key: 'outcome',
+      label: t('resourceOutcome.primaryAction'),
+      icon: icon.common.magicWand,
+      disabled: !hasSelection.value,
+    },
+    {
+      key: 'clear',
+      label: t('resourceOutcome.batch.clear'),
+      icon: icon.common.close,
+      disabled: !hasSelection.value,
+    },
+    {
+      key: 'move',
+      label: t('cloudSpace.batchMove'),
+      icon: icon.cloudSpace.moveFile,
+      disabled: !hasSelection.value,
+    },
+    {
+      key: 'download',
+      label: t('cloudSpace.batchDownload'),
+      icon: icon.cloudSpace.download,
+      disabled: !hasSelection.value,
+      loading: batchDownloadLoading.value,
+    },
+    {
+      key: 'delete',
+      label: t('cloudSpace.batchDelete'),
+      icon: icon.table_delete,
+      danger: true,
+      dividerBefore: true,
+      disabled: !hasSelection.value,
+    },
+  ]);
+  const cloudOutcomeQuickActions = computed<ResourceOutcomeQuickAction[]>(() => {
+    const count = outcomeResources.value.length;
+    if (count >= 2) {
+      return [
+        {
+          id: 'compare',
+          label: t('cloudSpace.aiCompareFiles'),
+          description: t('resourceOutcome.quickCompareDescription'),
+          skillId: 'file.compare',
+          input: { instruction: t('cloudSpace.aiCompareInstruction') },
+          minItems: 2,
+          maxItems: 5,
+          supportedTypes: ['file'],
+          requireReadable: true,
+          icon: icon.toolbox.comparison,
+          generatedNoteTitle: t('cloudSpace.aiGeneratedMultiNoteTitle', {
+            name: outcomeResources.value[0]?.title || t('cloudSpace.aiGeneratedNoteTitle'),
+          }),
+        },
+      ];
+    }
+    const selectedFile = cloud.fileList.find((file) => String(file.id) === outcomeResources.value[0]?.id);
+    const summaryPresentation = resolveFileAiSummaryPresentation(selectedFile);
+    return [
+      {
+        id: 'summarize',
+        label: t(summaryPresentation.labelKey),
+        description: t('resourceOutcome.quickSummaryDescription'),
+        skillId: 'file.summarize',
+        input: { instruction: t(summaryPresentation.instructionKey) },
+        minItems: 1,
+        maxItems: 1,
+        supportedTypes: ['file'],
+        requireReadable: true,
+        icon: icon.ai.materials,
+        generatedNoteTitle: t('cloudSpace.aiGeneratedSingleNoteTitle', {
+          name: outcomeResources.value[0]?.title || t('cloudSpace.aiGeneratedNoteTitle'),
+        }),
+      },
+    ];
+  });
   let suppressCardClickUntil = 0;
 
   const onToggleSelectAll = (e: any) => {
@@ -967,6 +1012,40 @@
     selectAll.value = cloud.fileList.length > 0 && selectedRows.value.length === cloud.fileList.length;
   };
 
+  function clearSelectedFiles() {
+    selectedRows.value = [];
+    selectAll.value = false;
+  }
+
+  function handleMobileBatchAction(action: MobilePageActionItem) {
+    if (action.key === 'outcome') openSelectedOutcomeDrawer();
+    else if (action.key === 'clear') clearSelectedFiles();
+    else if (action.key === 'move') handleBatchMove();
+    else if (action.key === 'download') void handleBatchDownload();
+    else if (action.key === 'delete') handleBatchDelete();
+  }
+
+  function openSelectedOutcomeDrawer() {
+    if (!hasSelection.value) {
+      message.warning(t('resourceOutcome.batch.selectFirst'));
+      return;
+    }
+    outcomeResources.value = cloud.fileList
+      .filter((file) => selectedRows.value.includes(file.id))
+      .map((file) => ({
+        type: 'file' as const,
+        id: String(file.id),
+        title: String(file.fileName || t('cloudSpace.unnamedFile')),
+        quickReadable: isAiDocumentFileNameSupported(file.fileName),
+      }));
+    if (!outcomeResources.value.length) {
+      message.warning(t('resourceOutcome.batch.selectionChanged'));
+      return;
+    }
+    outcomeDrawerOpen.value = true;
+    recordOperation({ module: '云空间', operation: `用所选文件生成与处理【${outcomeResources.value.length}个】` });
+  }
+
   const onCardClick = (item: any) => {
     if (Date.now() < suppressCardClickUntil) return;
     if (batchMode.value) {
@@ -977,7 +1056,16 @@
   };
 
   const onListRowClick = (item: any) => {
+    if (batchMode.value) {
+      toggleRow(item.id, !selectedRows.value.includes(item.id));
+      return;
+    }
     if (!bookmark.isMobile) return;
+    recordOperation({ module: '云空间', operation: `预览文件【${item.fileName}】` });
+    emit('previewFile', item);
+  };
+
+  const onFileLabelClick = (item: any) => {
     if (batchMode.value) {
       toggleRow(item.id, !selectedRows.value.includes(item.id));
       return;
@@ -986,13 +1074,12 @@
     emit('previewFile', item);
   };
 
-  const onFileLabelClick = (item: any) => {
-    if (bookmark.isMobile && batchMode.value) {
+  const onFileTagClick = (item: any, tagId: string) => {
+    if (batchMode.value) {
       toggleRow(item.id, !selectedRows.value.includes(item.id));
       return;
     }
-    recordOperation({ module: '云空间', operation: `预览文件【${item.fileName}】` });
-    emit('previewFile', item);
+    goToTagDetail(tagId);
   };
 
   const fileAiVisible = ref(false);
@@ -1083,10 +1170,6 @@
     fileAiVisible.value = true;
   }
 
-  function openSelectedFilesInAi() {
-    void openFilesInAi(cloud.fileList.filter((file) => selectedRows.value.includes(file.id)));
-  }
-
   const goToTagDetail = (tagId: string) => {
     if (!tagId) return;
     router.push(`/tag/${tagId}`);
@@ -1114,7 +1197,6 @@
     { value: 7, label: t('cloudSpace.shareExpirySevenDays') },
     { value: 30, label: t('cloudSpace.shareExpiryThirtyDays') },
   ]);
-  const batchDownloadLoading = ref(false);
   const batchDownloadChoiceVisible = ref(false);
   const batchDownloadChoiceFiles = ref<any[]>([]);
   const batchDownloadZipUnavailable = computed(() => hasAndroidBridge());
@@ -1217,11 +1299,23 @@
     () => props.batchMode,
     (val) => {
       if (!val) {
-        selectedRows.value = [];
-        selectAll.value = false;
+        clearSelectedFiles();
+        mobileBatchActionsOpen.value = false;
+        outcomeDrawerOpen.value = false;
       }
     },
   );
+
+  watch(hasSelection, (selected, wasSelected) => {
+    if (!selected || wasSelected) return;
+    void recordAiProductEvent('ai_entry_impression', {
+      surface: 'cloud_space',
+      scopeMode: 'selected',
+      resourceType: 'file',
+      resourceCountBucket: aiResourceCountBucket(selectedRows.value.length),
+      selectedCount: selectedRows.value.length,
+    });
+  });
 
   const getFileExt = (name: string) => {
     const lastDot = name.lastIndexOf('.');
@@ -1331,14 +1425,37 @@
       return;
     }
 
-    const selectedFiles = cloud.fileList.filter((item) => selectedRows.value.includes(item.id));
-    const names = selectedFiles.map((f) => f.fileName).join('、');
+    const deletingIds = selectedRows.value.map(String);
+    const selectedFiles = cloud.fileList.filter((item) => deletingIds.includes(String(item.id)));
+    const previewLimit = 3;
+    const previewNames = selectedFiles
+      .slice(0, previewLimit)
+      .map((file) => escapeHtml(file.fileName || t('cloudSpace.unnamedFile')));
+    const remainingCount = Math.max(0, deletingIds.length - previewNames.length);
+    const fileItems = previewNames
+      .map((name) => `<li class="b-alert-rich-content__file" title="${name}">${name}</li>`)
+      .join('');
+    const remainingItem = remainingCount
+      ? `<li class="b-alert-rich-content__remaining">${escapeHtml(
+          t('cloudSpace.batchDeleteRemaining', { count: remainingCount }),
+        )}</li>`
+      : '';
 
     Alert.alert({
-      title: t('cloudSpace.alertTitle'),
-      content: `${t('cloudSpace.confirmBatchDelete')} ${selectedRows.value.length} ${t('cloudSpace.files')}<br/>${t('cloudSpace.fileList')}: ${names}`,
+      title: t('cloudSpace.batchDeleteConfirmTitle'),
+      okType: 'danger',
+      okText: t('cloudSpace.batchDeleteConfirmAction'),
+      content: `<div class="b-alert-rich-content">
+        <p class="b-alert-rich-content__lead"><strong>${escapeHtml(
+          t('cloudSpace.confirmBatchDelete', { count: deletingIds.length }),
+        )}</strong></p>
+        <p>${escapeHtml(t('cloudSpace.batchDeleteRecoverable'))}</p>
+        <div class="b-alert-rich-content__list">
+          <strong class="b-alert-rich-content__list-title">${escapeHtml(t('cloudSpace.fileList'))}</strong>
+          <ul>${fileItems}${remainingItem}</ul>
+        </div>
+      </div>`,
       onOk() {
-        const deletingIds = selectedRows.value.map(String);
         apiBasePost('/api/file/deleteFileById', { ids: deletingIds }).then((res) => {
           if (res.status === 200) {
             const count = res.data?.count || selectedRows.value.length;
@@ -1494,7 +1611,7 @@
     }
   };
 
-  const runBrowserDirectDownloads = async (selectedFiles: any[]) => {
+  const runBrowserSequentialDownloads = async (selectedFiles: any[]) => {
     batchDownloadLoading.value = true;
     batchDownloadCancelled.value = false;
     downloadProgress.value = {
@@ -1542,12 +1659,10 @@
       message.error(t('cloudSpace.batchDownloadFailed'));
     } else if (failed > 0) {
       message.warning(t('cloudSpace.batchDownloadBrowserPartial', { submitted, failed }));
-    } else {
-      message.success(t('cloudSpace.batchDownloadBrowserSubmitted', { count: submitted }));
     }
 
     if (submitted > 0) {
-      recordOperation({ module: '云空间', operation: `分别提交下载文件【${submitted}个】` });
+      recordOperation({ module: '云空间', operation: `依次提交下载文件【${submitted}个】` });
     }
   };
 
@@ -1663,7 +1778,7 @@
 
     batchDownloadChoiceVisible.value = false;
     batchDownloadChoiceFiles.value = [];
-    await runBrowserDirectDownloads(selectedFiles);
+    await runBrowserSequentialDownloads(selectedFiles);
   };
 
   const handleBatchDownload = async () => {
@@ -2008,97 +2123,6 @@
     opacity: 1;
     color: var(--resource-file-color, #ff8a00);
   }
-  .header-checkbox {
-    margin-right: 8px;
-  }
-  .batch-actions {
-    margin-bottom: 10px;
-    padding: 10px 20px;
-    border-bottom: 1px solid var(--folder-list-border-color);
-    display: flex;
-    align-items: center;
-    color: var(--text-color);
-    .selected-count {
-      color: var(--desc-color);
-      font-size: 14px;
-      font-variant-numeric: tabular-nums;
-    }
-  }
-  .ai-file-analysis-action {
-    min-width: 128px;
-    border: 1px solid transparent;
-    font-weight: 600;
-  }
-  .ai-file-analysis-action:not(.disabled) {
-    border-color: color-mix(in srgb, var(--primary-color) 28%, var(--surface-border-color));
-    color: var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 8%, var(--card-background));
-  }
-  @media (min-width: 768px) {
-    .batch-actions .selected-count {
-      width: 148px;
-      flex: 0 0 148px;
-      white-space: nowrap;
-    }
-  }
-  .table-batch-actions {
-    margin: 8px 10px;
-    padding: 8px 10px;
-    gap: 8px;
-    flex-shrink: 0;
-    border: 0;
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 6%, var(--menu-body-bg-color));
-  }
-  .mobile-batch-toolbar {
-    margin: 8px 10px 0;
-    padding: 10px;
-    display: grid;
-    gap: 10px;
-    flex-shrink: 0;
-    border: 1px solid color-mix(in srgb, var(--resource-file-color, #ff8a00) 18%, var(--surface-border-color));
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 6%, var(--card-background));
-  }
-  .mobile-batch-summary {
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .mobile-batch-summary .selected-count {
-    min-width: 0;
-    flex: 1;
-    color: var(--desc-color);
-    font-size: 13px;
-    line-height: 20px;
-    white-space: nowrap;
-  }
-  .mobile-batch-exit {
-    flex: 0 0 auto;
-  }
-  .mobile-batch-actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-  }
-  .mobile-batch-actions :deep(.b_btn) {
-    width: 100%;
-    min-width: 0;
-    min-height: 40px;
-    height: auto;
-    padding: 8px 10px;
-    gap: 6px;
-    line-height: 20px;
-  }
-  .mobile-batch-actions .ai-file-analysis-action {
-    min-width: 0;
-  }
-  .mobile-batch-move {
-    color: #fff;
-    border-color: var(--resource-file-color, #ff8a00);
-    background: var(--resource-file-color, #ff8a00);
-  }
   .download-progress-floating {
     position: absolute;
     top: 12px;
@@ -2195,6 +2219,7 @@
   .file-container {
     min-height: 0;
     flex: 1;
+    box-sizing: border-box;
     overflow-y: auto;
     scrollbar-gutter: stable;
     background: var(--workspace-panel-bg-color);
@@ -2260,11 +2285,6 @@
     cursor: grab;
     &:active {
       cursor: grabbing;
-    }
-  }
-  @container (min-width: 480px) {
-    .mobile-batch-actions {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
     }
   }
   .edit-file-input {
@@ -2391,9 +2411,6 @@
     }
   }
   @media (max-width: 1024px) {
-    .batch-actions {
-      padding: 10px 0;
-    }
     .field-header {
       padding: 0 10px 10px 10px;
     }
@@ -2457,27 +2474,21 @@
   }
 
   // ── 卡片视图 ──
-  .card-toolbar {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 14px;
-  }
-  .card-toolbar .batch-actions {
-    flex-shrink: 0;
-    margin-bottom: 0;
-    padding: 0;
-    border: none;
-  }
-
   .file-card-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(var(--file-card-min-width), 1fr));
     gap: 14px;
     padding: 14px;
+    box-sizing: border-box;
     overflow-y: auto;
     height: 100%;
     align-content: start;
+  }
+
+  .field-list--batch-mode .file-container,
+  .field-list--batch-mode .file-card-grid {
+    padding-bottom: 112px;
+    scroll-padding-bottom: 112px;
   }
 
   .file-card {
@@ -2753,6 +2764,7 @@
 
   .file-card-body {
     padding: 12px 14px 13px;
+    box-sizing: border-box;
     min-width: 0;
     display: flex;
     flex-direction: column;
@@ -2880,6 +2892,12 @@
       padding: 10px;
     }
 
+    .field-list--batch-mode .file-container,
+    .field-list--batch-mode .file-card-grid {
+      padding-bottom: 164px;
+      scroll-padding-bottom: 164px;
+    }
+
     .file-card {
       min-height: 260px;
     }
@@ -2908,45 +2926,6 @@
       &:hover {
         border-color: var(--primary-color);
         box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-color) 40%, transparent);
-      }
-    }
-  }
-
-  .batch-select-all {
-    margin-right: 2px;
-  }
-
-  // 全选 a-checkbox 覆写：与 b-checkbox 蓝底风格统一
-  .batch-select-all,
-  .header-checkbox {
-    :deep(.ant-checkbox-inner) {
-      width: 14px;
-      height: 14px;
-      border-radius: 4px;
-      border-color: var(--card-border-color);
-      background: transparent;
-      transition: all 0.1s ease;
-    }
-    &:hover :deep(.ant-checkbox-inner) {
-      border-color: var(--primary-color) !important;
-    }
-    :deep(.ant-checkbox-checked .ant-checkbox-inner) {
-      background-color: var(--primary-color) !important;
-      border-color: var(--primary-color) !important;
-    }
-    :deep(.ant-checkbox-indeterminate .ant-checkbox-inner) {
-      background-color: var(--primary-color) !important;
-      border-color: var(--primary-color) !important;
-    }
-    :deep(.ant-checkbox-indeterminate .ant-checkbox-inner::after) {
-      background-color: #fff !important;
-    }
-  }
-  [data-theme='night'] {
-    .batch-select-all,
-    .header-checkbox {
-      :deep(.ant-checkbox-inner) {
-        border-color: #6e6e77 !important;
       }
     }
   }

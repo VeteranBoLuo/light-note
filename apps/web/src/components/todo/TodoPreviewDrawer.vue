@@ -90,12 +90,24 @@
         </dl>
       </section>
 
-      <section v-if="item.resourceRefs?.length" class="todo-preview__section todo-preview__resources">
+      <section
+        v-if="item.resourceRefs?.length"
+        ref="resourceSectionRef"
+        class="todo-preview__section todo-preview__resources"
+        :class="{ 'is-focused': hasFocusedResource }"
+      >
         <div class="todo-preview__section-head">
           <h3>{{ t('inbox.todoResourceRefs', { count: item.resourceRefs.length }) }}</h3>
-          <span>{{ t('inbox.todoPreviewResourceHint') }}</span>
+          <span>{{
+            t(hasFocusedResource ? 'inbox.todoPreviewLocatedResource' : 'inbox.todoPreviewResourceHint')
+          }}</span>
         </div>
-        <TodoResourceLinks :items="item.resourceRefs" :disabled="disabled" @open="openResourceRef" />
+        <TodoResourceLinks
+          :items="item.resourceRefs"
+          :disabled="disabled"
+          :focus-key="hasFocusedResource ? normalizedFocusRef : ''"
+          @open="openResourceRef"
+        />
       </section>
 
       <footer class="todo-preview__meta">
@@ -107,7 +119,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, nextTick, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import type { TodoChecklistItem, TodoItem, TodoResourceRefView } from '@/api/todoApi';
@@ -120,7 +132,7 @@
   import icon from '@/config/icon';
   import { bookmarkStore } from '@/store';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
-  import { resolveResourceRoute } from '@/utils/resourceNavigation';
+  import { resolveResourceRoute, resolveTodoResourceReturnPath } from '@/utils/resourceNavigation';
   import { formatTodoDateTime, normalizeTodoDateOnly, todoNextReminderAt } from '@/utils/todoPlanning';
 
   const props = withDefaults(
@@ -128,8 +140,9 @@
       item: TodoItem;
       disabled?: boolean;
       deleting?: boolean;
+      focusRef?: string;
     }>(),
-    { disabled: false, deleting: false },
+    { disabled: false, deleting: false, focusRef: '' },
   );
   const visible = defineModel<boolean>('visible');
   const emit = defineEmits<{
@@ -141,6 +154,24 @@
   const { t, locale } = useI18n();
   const router = useRouter();
   const bookmark = bookmarkStore();
+  const resourceSectionRef = ref<HTMLElement | null>(null);
+  const normalizedFocusRef = computed(() => String(props.focusRef || '').trim());
+  const hasFocusedResource = computed(() =>
+    Boolean(
+      normalizedFocusRef.value &&
+      props.item.resourceRefs?.some((resource) => `${resource.type}:${resource.id}` === normalizedFocusRef.value),
+    ),
+  );
+
+  watch(
+    [() => visible.value, () => props.item.id, normalizedFocusRef],
+    async ([isVisible]) => {
+      if (!isVisible || !hasFocusedResource.value) return;
+      await nextTick();
+      resourceSectionRef.value?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+    },
+    { immediate: true, flush: 'post' },
+  );
 
   const statusLabel = computed(() =>
     t(props.item.status === 'completed' ? 'inbox.todoCompleted' : 'inbox.todoPending'),
@@ -257,7 +288,8 @@
   }
 
   function openResourceRef(resource: TodoResourceRefView) {
-    const target = resolveResourceRoute(resource);
+    const noteReturnPath = resolveTodoResourceReturnPath(router.currentRoute.value.fullPath, props.item.id, resource);
+    const target = resolveResourceRoute(resource, { noteReturnPath });
     if (!target) return;
     void closeCurrentMobileOverlayThen(
       () => (visible.value = false),
@@ -308,6 +340,15 @@
     border: 1px solid var(--surface-border-color, var(--card-border-color));
     border-radius: 16px;
     background: var(--card-background, var(--background-color));
+  }
+
+  .todo-preview__resources.is-focused {
+    border-color: var(--primary-color);
+  }
+
+  .todo-preview__resources.is-focused .todo-preview__section-head > span {
+    color: var(--primary-color);
+    font-weight: 600;
   }
 
   .todo-preview__hero {

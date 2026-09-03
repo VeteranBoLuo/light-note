@@ -271,12 +271,6 @@ html.light-note-mobile-rendering {
     --note-card-min-width: 320px !important;
   }
 
-  @media (min-width: 480px) {
-    .field-list .mobile-batch-actions {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-  }
-
   // 旧 WebView 明确声明轻触导航，避免等待双击缩放判定造成约 300ms 的点击迟滞。
   .mobile-resource-tab,
   .mobile-bottom-nav__item,

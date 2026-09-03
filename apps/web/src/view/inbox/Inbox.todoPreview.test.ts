@@ -41,8 +41,16 @@ describe('Inbox todo preview integration', () => {
 
   it('搜索 todoId 深链先清理查询参数，再打开详情而不是编辑器', () => {
     expect(inboxSource).toMatch(
-      /async function openRequestedTodo[\s\S]*?delete query\.todoId;[\s\S]*?await router\.replace\(\{ query \}\);[\s\S]*?openTodoPreview\(requestedTodo\)/,
+      /async function openRequestedTodo[\s\S]*?delete query\.todoId;[\s\S]*?delete query\.focusRef;[\s\S]*?await router\.replace\(\{ query \}\);[\s\S]*?openTodoPreview\(requestedTodo, requestedFocusRef\)/,
     );
     expect(inboxSource).not.toMatch(/openRequestedTodo[\s\S]{0,800}openTodoEditor\(requestedTodo\)/);
+  });
+
+  it('待办反链深链会把 focusRef 交给详情抽屉后清理临时查询参数', () => {
+    expect(inboxSource).toContain(':focus-ref="previewTodoFocusRef"');
+    expect(inboxSource).toMatch(
+      /const requestedFocusRef = String\(route\.query\.focusRef \|\| ''\);[\s\S]*?delete query\.focusRef;[\s\S]*?openTodoPreview\(requestedTodo, requestedFocusRef\)/,
+    );
+    expect(inboxSource).toMatch(/function clearTodoPreview[\s\S]*?previewTodoFocusRef\.value = ''/);
   });
 });

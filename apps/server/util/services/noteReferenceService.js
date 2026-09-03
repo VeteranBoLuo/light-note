@@ -257,11 +257,11 @@ export async function resolveOwnedResourceRefSummaries(db, { userId, refs } = {}
 }
 
 /**
- * 读取一个资源被哪些仍有效、仍归当前主体所有的笔记引用。
+ * 读取一个资源被哪些仍有效、仍归当前主体所有的笔记或待办引用。
  *
- * 注意这里必须同时约束 r.source_user_id、n.create_by、目标归属和 n.del_flag：
+ * 注意这里必须同时约束关系表主体、来源主体、目标归属和来源软删除状态：
  * - 关系表是派生数据，不能单独信任；
- * - 源笔记软删除后不应出现在反链；
+ * - 源笔记或待办软删除后不应出现在反链；
  * - 目标不存在/越权/已删统一返回 available:false，不泄露存在性。
  *
  * 「查看更多」由调用方提升 limit 后重新读取，避免 cursor/offset 组合让隐藏来源在翻页时泄露。
@@ -271,7 +271,13 @@ export async function listOwnedResourceBacklinks(
   { userId, targetType, targetId, limit = DEFAULT_RESOURCE_BACKLINK_LIMIT } = {},
 ) {
   const target = normalizeResourceRef({ type: targetType, id: targetId });
-  if (!userId || !target) return { available: false, items: [], hasMore: false };
+  const unavailable = {
+    available: false,
+    items: [],
+    hasMore: false,
+    hasMoreByType: { note: false, todo: false },
+  };
+  if (!userId || !target) return unavailable;
 
   const requested = Number(limit);
   const safeLimit = Number.isFinite(requested)
@@ -281,33 +287,86 @@ export async function listOwnedResourceBacklinks(
   // 先重新确认当前目标属于请求主体。不能只查 note_resource_refs，否则已删、越权、
   // 或从未真正属于该主体的目标会成为可探测的反链入口。
   const [ownedTarget] = await validateOwnedResourceRefs(db, { userId, refs: [target] });
-  if (!ownedTarget) return { available: false, items: [], hasMore: false };
+  if (!ownedTarget) return unavailable;
 
-  const [rows] = await db.query(
-    `SELECT n.id, n.title, n.update_time
-     FROM note_resource_refs r
-     INNER JOIN note n
-       ON n.id = r.source_note_id
-      AND n.create_by = r.source_user_id
-      AND n.del_flag = 0
-     WHERE r.source_user_id = ?
-       AND n.create_by = ?
-       AND r.target_type = ?
-       AND r.target_id = ?
-     ORDER BY COALESCE(n.update_time, n.create_time) DESC, n.id DESC
-     LIMIT ?`,
-    [userId, userId, target.type, target.id, safeLimit + 1],
-  );
-  const page = Array.isArray(rows) ? rows : [];
-  const hasMore = page.length > safeLimit;
+  const [noteResult, todoResult] = await Promise.all([
+    db.query(
+      `SELECT n.id, n.title, n.update_time
+       FROM note_resource_refs r
+       INNER JOIN note n
+         ON n.id = r.source_note_id
+        AND n.create_by = r.source_user_id
+        AND n.del_flag = 0
+       WHERE r.source_user_id = ?
+         AND n.create_by = ?
+         AND r.target_type = ?
+         AND r.target_id = ?
+       ORDER BY COALESCE(n.update_time, n.create_time) DESC, n.id DESC
+       LIMIT ?`,
+      [userId, userId, target.type, target.id, safeLimit + 1],
+    ),
+    db.query(
+      `SELECT t.id, t.title, t.status, t.update_time, t.series_id
+       FROM todo_resource_refs r
+       INNER JOIN todo_items t
+         ON t.id = r.todo_id
+        AND t.user_id = r.user_id
+        AND t.del_flag = 0
+        AND COALESCE(t.instance_state, 'normal') = 'normal'
+       WHERE r.user_id = ?
+         AND t.user_id = ?
+         AND r.target_type = ?
+         AND r.target_id = ?
+         AND (
+           t.series_id IS NULL
+           OR t.id = (
+             SELECT t2.id
+             FROM todo_resource_refs r2
+             INNER JOIN todo_items t2
+               ON t2.id = r2.todo_id
+              AND t2.user_id = r2.user_id
+              AND t2.del_flag = 0
+              AND COALESCE(t2.instance_state, 'normal') = 'normal'
+             WHERE r2.user_id = r.user_id
+               AND r2.target_type = r.target_type
+               AND r2.target_id = r.target_id
+               AND t2.series_id = t.series_id
+             ORDER BY (t2.status = 'pending') DESC,
+               CASE WHEN t2.status = 'pending' THEN t2.occurrence_no END ASC,
+               t2.update_time DESC,
+               t2.id DESC
+             LIMIT 1
+           )
+         )
+       ORDER BY COALESCE(t.update_time, t.create_time) DESC, t.id DESC
+       LIMIT ?`,
+      [userId, userId, target.type, target.id, safeLimit + 1],
+    ),
+  ]);
+  const noteRows = Array.isArray(noteResult?.[0]) ? noteResult[0] : [];
+  const todoRows = Array.isArray(todoResult?.[0]) ? todoResult[0] : [];
+  const noteItems = noteRows.slice(0, safeLimit).map((row) => ({
+    sourceType: 'note',
+    id: String(row.id || ''),
+    title: String(row.title || ''),
+    updateTime: row.update_time ?? row.updateTime ?? null,
+  }));
+  const todoItems = todoRows.slice(0, safeLimit).map((row) => ({
+    sourceType: 'todo',
+    id: String(row.id || ''),
+    title: String(row.title || ''),
+    updateTime: row.update_time ?? row.updateTime ?? null,
+    status: String(row.status || '') === 'completed' ? 'completed' : 'pending',
+  }));
+  const hasMoreByType = {
+    note: noteRows.length > safeLimit,
+    todo: todoRows.length > safeLimit,
+  };
   return {
     available: true,
-    items: page.slice(0, safeLimit).map((row) => ({
-      id: String(row.id || ''),
-      title: String(row.title || ''),
-      updateTime: row.update_time ?? row.updateTime ?? null,
-    })),
-    hasMore,
+    items: [...noteItems, ...todoItems],
+    hasMore: hasMoreByType.note || hasMoreByType.todo,
+    hasMoreByType,
   };
 }
 

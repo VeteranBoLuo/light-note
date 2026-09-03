@@ -4,29 +4,44 @@
     class="resource-backlinks"
     :class="[`resource-backlinks--${placement}`, { 'resource-backlinks--compact': compact }]"
   >
-    <BButton class="resource-backlinks__trigger" :aria-expanded="expanded" @click="expanded = !expanded">
-      <span class="resource-backlinks__title">{{ t('note.resourceBacklinks.title') }}</span>
-      <span class="resource-backlinks__count">{{ items.length }}{{ hasMore ? '+' : '' }}</span>
-    </BButton>
+    <BPopover
+      v-if="compactHeader"
+      v-model:open="expanded"
+      trigger="click"
+      placement="bottom-right"
+      overlay-class-name="resource-backlinks-popover"
+    >
+      <BButton class="resource-backlinks__trigger" :aria-expanded="expanded" :title="t('note.resourceBacklinks.title')">
+        <span class="resource-backlinks__title">{{ t('note.resourceBacklinks.compactTitle') }}</span>
+        <span class="resource-backlinks__count">{{ items.length }}{{ hasMore ? '+' : '' }}</span>
+      </BButton>
+      <template #content>
+        <ResourceBacklinkContent
+          :groups="groups"
+          :compact="compact"
+          :loading="loading"
+          :has-more="hasMore"
+          @open-source="openSource"
+          @show-more="showMore"
+        />
+      </template>
+    </BPopover>
 
-    <div v-if="expanded" class="resource-backlinks__content">
-      <BButton v-for="item in items" :key="item.id" class="resource-backlinks__item" @click="openSourceNote(item.id)">
-        <span class="resource-backlinks__item-copy">
-          <strong>{{ item.title || t('note.resourceBacklinks.untitled') }}</strong>
-          <span class="resource-backlinks__item-meta">
-            <small v-if="item.updateTime">{{
-              t('note.resourceBacklinks.updatedAt', { time: formatTime(item.updateTime) })
-            }}</small>
-            <small class="resource-backlinks__locate">{{
-              t(compact ? 'note.resourceBacklinks.locateReferenceCompact' : 'note.resourceBacklinks.locateReference')
-            }}</small>
-          </span>
-        </span>
+    <template v-else>
+      <BButton class="resource-backlinks__trigger" :aria-expanded="expanded" @click="expanded = !expanded">
+        <span class="resource-backlinks__title">{{ t('note.resourceBacklinks.title') }}</span>
+        <span class="resource-backlinks__count">{{ items.length }}{{ hasMore ? '+' : '' }}</span>
       </BButton>
-      <BButton v-if="hasMore" class="resource-backlinks__more" :loading="loading" :disabled="loading" @click="showMore">
-        {{ t('note.resourceBacklinks.showMore') }}
-      </BButton>
-    </div>
+      <ResourceBacklinkContent
+        v-if="expanded"
+        :groups="groups"
+        :compact="compact"
+        :loading="loading"
+        :has-more="hasMore"
+        @open-source="openSource"
+        @show-more="showMore"
+      />
+    </template>
   </section>
 </template>
 
@@ -35,6 +50,8 @@
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BPopover from '@/components/base/BasicComponents/BPopover.vue';
+  import ResourceBacklinkContent from '@/components/noteLibrary/detail/ResourceBacklinkContent.vue';
   import { fetchResourceBacklinks, type ResourceBacklinkItem } from '@/api/noteReferences';
   import { resolveAiSourceNavigation } from '@/utils/aiSourceNavigation';
   import type { ResourceRefType } from '@/utils/noteResourceRefs';
@@ -49,7 +66,7 @@
     { placement: 'panel', compact: false },
   );
 
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const router = useRouter();
   const loading = ref(false);
   const initialized = ref(false);
@@ -57,16 +74,21 @@
   const expanded = ref(false);
   const items = ref<ResourceBacklinkItem[]>([]);
   const hasMore = ref(false);
+  const hasMoreByType = ref<Record<ResourceBacklinkItem['sourceType'], boolean>>({ note: false, todo: false });
   const currentLimit = ref(5);
   let requestVersion = 0;
 
   const visible = computed(() => initialized.value && available.value && items.value.length > 0);
-
-  function formatTime(value: string) {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-    return new Intl.DateTimeFormat(locale.value, { month: 'numeric', day: 'numeric' }).format(date);
-  }
+  const compactHeader = computed(() => props.compact && props.placement === 'header');
+  const groups = computed(() =>
+    (['note', 'todo'] as const)
+      .map((type) => ({
+        type,
+        items: items.value.filter((item) => item.sourceType === type),
+        hasMore: hasMoreByType.value[type],
+      }))
+      .filter((group) => group.items.length > 0),
+  );
 
   async function load(limit = 5) {
     const request = ++requestVersion;
@@ -77,12 +99,14 @@
       available.value = result.available;
       items.value = result.items;
       hasMore.value = result.hasMore;
+      hasMoreByType.value = result.hasMoreByType;
       currentLimit.value = limit;
     } catch {
       if (request !== requestVersion) return;
       available.value = false;
       items.value = [];
       hasMore.value = false;
+      hasMoreByType.value = { note: false, todo: false };
     } finally {
       if (request === requestVersion) {
         initialized.value = true;
@@ -96,13 +120,16 @@
     void load(Math.min(currentLimit.value + 15, 50));
   }
 
-  function openSourceNote(id: string) {
-    const navigation = resolveAiSourceNavigation({ type: 'note', id, title: '', target: 'note-detail' });
-    if (navigation.kind !== 'internal') return;
-    void router.push({
-      path: navigation.target,
-      query: { focusRef: `${props.targetType}:${props.targetId}` },
-    });
+  function openSource(item: ResourceBacklinkItem) {
+    const focusRef = `${props.targetType}:${props.targetId}`;
+    if (item.sourceType === 'todo') {
+      void router.push({ path: '/inbox', query: { tab: 'todo', todoId: item.id, focusRef } });
+      return;
+    }
+    const navigation = resolveAiSourceNavigation({ type: 'note', id: item.id, title: '', target: 'note-detail' });
+    if (navigation.kind === 'internal') {
+      void router.push({ path: navigation.target, query: { focusRef } });
+    }
   }
 
   watch(
@@ -113,6 +140,7 @@
       expanded.value = false;
       items.value = [];
       hasMore.value = false;
+      hasMoreByType.value = { note: false, todo: false };
       currentLimit.value = 5;
       void load(5);
     },
@@ -163,22 +191,9 @@
     .resource-backlinks__title {
       font-weight: 600;
     }
-
-    .resource-backlinks__content {
-      position: absolute;
-      z-index: 20;
-      top: calc(100% + 7px);
-      left: 0;
-      width: min(320px, calc(100vw - 40px));
-      border: 1px solid var(--surface-border-color);
-      border-radius: 10px;
-      box-shadow: var(--surface-raised-shadow, 0 10px 28px rgba(0, 0, 0, 0.12));
-    }
   }
 
-  .resource-backlinks__trigger,
-  .resource-backlinks__item,
-  .resource-backlinks__more {
+  .resource-backlinks__trigger {
     width: 100%;
     min-height: 40px;
     height: auto;
@@ -222,57 +237,6 @@
     font-variant-numeric: tabular-nums;
   }
 
-  .resource-backlinks__content {
-    display: grid;
-    gap: 3px;
-    padding: 5px;
-    border-top: 1px solid color-mix(in srgb, var(--surface-border-color) 76%, transparent);
-    background: color-mix(in srgb, var(--primary-color) 2%, var(--card-background));
-  }
-
-  :deep(.resource-backlinks__item.b_btn.default_btn) {
-    justify-content: flex-start;
-    border-radius: 7px;
-    background: transparent;
-    text-align: left;
-    white-space: normal;
-
-    &:hover {
-      background: color-mix(in srgb, var(--primary-color) 8%, var(--card-background));
-    }
-  }
-
-  .resource-backlinks__item-copy {
-    display: grid;
-    min-width: 0;
-    gap: 2px;
-  }
-
-  .resource-backlinks__item-meta {
-    display: grid;
-    min-width: 0;
-    gap: 2px;
-  }
-
-  .resource-backlinks__item-copy strong,
-  .resource-backlinks__item-copy small {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .resource-backlinks__item-copy strong {
-    color: var(--text-color);
-    font-weight: 550;
-    line-height: 1.35;
-  }
-
-  .resource-backlinks__item-copy small {
-    color: var(--desc-color);
-    font-size: 12px;
-    line-height: 1.35;
-  }
-
   .resource-backlinks--compact {
     :deep(.resource-backlinks__trigger.b_btn.default_btn) {
       min-height: 32px;
@@ -280,74 +244,12 @@
       font-size: 12px;
       line-height: 1.2;
     }
-
-    .resource-backlinks__content {
-      gap: 1px;
-      padding: 3px;
-    }
-
-    :deep(.resource-backlinks__item.b_btn.default_btn) {
-      min-height: 44px;
-      padding: 6px 8px;
-    }
-
-    .resource-backlinks__item-copy {
-      width: 100%;
-      gap: 3px;
-    }
-
-    .resource-backlinks__item-copy strong {
-      font-size: 13px;
-      line-height: 1.3;
-    }
-
-    .resource-backlinks__item-meta {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      overflow: hidden;
-    }
-
-    .resource-backlinks__item-meta small {
-      min-width: 0;
-      font-size: 11px;
-      line-height: 1.3;
-    }
-
-    .resource-backlinks__locate {
-      flex: 1 1 auto;
-      color: var(--primary-color);
-    }
-
-    .resource-backlinks__item-meta small:not(.resource-backlinks__locate) {
-      flex: 0 0 auto;
-    }
-
-    .resource-backlinks__item-meta small + small::before {
-      margin-right: 6px;
-      color: var(--desc-color);
-      content: '·';
-    }
-
-    :deep(.resource-backlinks__more.b_btn.default_btn) {
-      min-height: 32px;
-      padding: 4px 8px;
-      line-height: 1.2;
-    }
   }
 
-  :deep(.resource-backlinks__more.b_btn.default_btn) {
-    justify-self: start;
-    width: auto;
-    min-height: 40px;
-    border-radius: 6px;
-    color: var(--primary-color);
-    background: transparent;
-    font-size: 12px;
-
-    &:hover {
-      background: color-mix(in srgb, var(--primary-color) 8%, var(--card-background));
-    }
+  :global(.b-popover-panel.resource-backlinks-popover) {
+    z-index: 930;
+    width: min(320px, calc(100vw - 20px));
+    overflow: hidden;
   }
 
   @media (max-width: 767px) {
@@ -355,22 +257,17 @@
       margin: 8px 8px 10px;
     }
 
-    .resource-backlinks--inline {
+    .resource-backlinks--inline,
+    .resource-backlinks--header {
       margin: 0;
     }
 
-    .resource-backlinks__trigger,
-    .resource-backlinks__item,
-    .resource-backlinks__more {
+    .resource-backlinks__trigger {
       min-height: 44px;
     }
 
-    .resource-backlinks--compact {
-      :deep(.resource-backlinks__trigger.b_btn.default_btn),
-      :deep(.resource-backlinks__item.b_btn.default_btn),
-      :deep(.resource-backlinks__more.b_btn.default_btn) {
-        min-height: 44px;
-      }
+    .resource-backlinks--compact :deep(.resource-backlinks__trigger.b_btn.default_btn) {
+      min-height: 44px;
     }
   }
 </style>
