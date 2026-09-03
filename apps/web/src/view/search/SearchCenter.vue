@@ -2459,8 +2459,17 @@
   }
 
   .resource-result-entry.is-inspected :deep(.result-item) {
-    border-color: var(--primary-color);
+    border-color: var(--search-border-color);
+    border-left: 3px solid var(--primary-color);
+    background: var(--search-muted-bg);
     box-shadow: none;
+  }
+
+  .resource-result-entry.is-inspected :deep(.result-item.result-item--selected) {
+    border-color: var(--primary-color);
+    border-left-width: 3px;
+    background: var(--search-card-bg);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary-color) 45%, transparent);
   }
 
   .search-layout {

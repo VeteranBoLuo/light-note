@@ -103,6 +103,40 @@ describe.each([
 
     expect(host.querySelector('.note-parent-path')).toBeNull();
   });
+
+  it('批量态点击父级入口只切换当前笔记选择，不发生导航', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const open = vi.fn();
+    const openParent = vi.fn();
+    const note = {
+      id: 'current',
+      parentId: 'direct-parent',
+      title: '开发修复计划',
+      type: 'html',
+      tags: [],
+      isCheck: false,
+      path: [
+        { id: 'direct-parent', title: '开发文档' },
+        { id: 'current', title: '开发修复计划' },
+      ],
+    };
+    const app = createApp({
+      render: () => h(Component, { note, batchMode: true, onOpen: open, onOpenParent: openParent }),
+    });
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.directive('click-log', {});
+    app.mount(host);
+    cleanup = () => app.unmount();
+    await nextTick();
+
+    host.querySelector<HTMLButtonElement>('.note-parent-path')!.click();
+    await nextTick();
+
+    expect(note.isCheck).toBe(true);
+    expect(openParent).not.toHaveBeenCalled();
+    expect(open).not.toHaveBeenCalled();
+  });
 });
 
 describe('笔记卡片缩略图', () => {

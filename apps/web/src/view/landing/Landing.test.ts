@@ -7,7 +7,11 @@ const mocks = vi.hoisted(() => ({
   routerPush: vi.fn(() => Promise.resolve()),
   recordOperation: vi.fn(() => Promise.resolve()),
   retryAuth: vi.fn(() => Promise.resolve()),
+  loadUserAuthModal: vi.fn(() => Promise.resolve()),
+  scheduleLandingStartupPreload: vi.fn(() => vi.fn()),
+  prefetchResolvedRoute: vi.fn(() => Promise.resolve()),
   messageWarning: vi.fn(),
+  hasLoginHint: true,
   user: {
     id: '',
     role: 'visitor',
@@ -33,7 +37,19 @@ vi.mock('@/store', () => ({
 }));
 
 vi.mock('@/utils/authStorage.ts', () => ({
-  hasLoggedInBefore: () => true,
+  hasLoggedInBefore: () => mocks.hasLoginHint,
+}));
+
+vi.mock('@/utils/userAuthModalLoader.ts', () => ({
+  loadUserAuthModal: mocks.loadUserAuthModal,
+}));
+
+vi.mock('@/utils/routePrefetch.ts', () => ({
+  prefetchResolvedRoute: mocks.prefetchResolvedRoute,
+}));
+
+vi.mock('./landingPreload.ts', () => ({
+  scheduleLandingStartupPreload: mocks.scheduleLandingStartupPreload,
 }));
 
 vi.mock('@/api/commonApi.ts', () => ({
@@ -85,7 +101,9 @@ let cleanup: (() => void) | undefined;
 let canvasContextSpy: ReturnType<typeof vi.spyOn> | undefined;
 
 beforeEach(() => {
+  mocks.hasLoginHint = true;
   mocks.routerPush.mockImplementation(() => Promise.resolve());
+  mocks.loadUserAuthModal.mockImplementation(() => Promise.resolve());
   const context = {
     clearRect: vi.fn(),
     beginPath: vi.fn(),
@@ -105,10 +123,10 @@ beforeEach(() => {
   vi.stubGlobal('cancelAnimationFrame', vi.fn());
 });
 
-async function mountLanding() {
+async function mountLanding(authState: 'pending' | 'authenticated' | 'anonymous' | 'error' = 'pending') {
   const host = document.createElement('div');
   document.body.append(host);
-  const authStatus = ref<'pending'>('pending');
+  const authStatus = ref(authState);
   const app = createApp({
     setup() {
       provide(LANDING_AUTH_CONTEXT, {
@@ -152,7 +170,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
   mocks.routerPush.mockClear();
   mocks.recordOperation.mockClear();
+  mocks.retryAuth.mockClear();
+  mocks.loadUserAuthModal.mockClear();
+  mocks.prefetchResolvedRoute.mockClear();
+  mocks.bookmark.openAuthModal.mockClear();
   mocks.messageWarning.mockClear();
+  vi.useRealTimers();
 });
 
 describe('Landing CTA', () => {
@@ -215,6 +238,53 @@ describe('Landing CTA', () => {
     expect(enterButton?.querySelector('.btn-arrow--loading')).toBeNull();
   });
 
+  it('首次访客统一显示“开始使用轻笺”，加载注册弹窗后再打开', async () => {
+    mocks.hasLoginHint = false;
+    const host = await mountLanding('anonymous');
+    const startButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
+      button.textContent?.includes('landing.ctaStart'),
+    );
+
+    expect(startButton).not.toBeUndefined();
+    expect(host.textContent).not.toContain('landing.ctaCreateSpace');
+    startButton?.click();
+    await vi.waitFor(() => expect(mocks.bookmark.openAuthModal).toHaveBeenCalledWith('注册', 'landing_primary'));
+
+    expect(mocks.loadUserAuthModal).toHaveBeenCalledTimes(1);
+    expect(mocks.routerPush).not.toHaveBeenCalled();
+  });
+
+  it('慢于阈值的应用跳转显示可理解的加载说明，完成后自动收起', async () => {
+    vi.useFakeTimers();
+    let finishNavigation!: () => void;
+    mocks.routerPush.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishNavigation = resolve;
+        }),
+    );
+    const host = await mountLanding();
+    const enterButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
+      button.textContent?.includes('landing.ctaEnterApp'),
+    );
+
+    enterButton?.click();
+    await vi.advanceTimersByTimeAsync(349);
+    expect(host.querySelector('.landing-navigation-feedback')).toBeNull();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(host.querySelector('.landing-navigation-feedback')?.textContent).toContain('landing.navigationOpeningApp');
+    await vi.advanceTimersByTimeAsync(850);
+    expect(host.querySelector('.landing-navigation-feedback')?.textContent).toContain('landing.navigationLoadingHint');
+    await vi.advanceTimersByTimeAsync(6_800);
+    expect(host.querySelector('.landing-navigation-feedback')?.textContent).toContain('landing.navigationStillLoading');
+
+    finishNavigation();
+    await Promise.resolve();
+    await nextTick();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(host.querySelector('.landing-navigation-feedback')).toBeNull();
+  });
+
   it('把官网的支持入口收敛到站内说明页', async () => {
     const host = await mountLanding();
     const reasonLink = host.querySelector<HTMLAnchorElement>('.reason-support-link');
@@ -249,6 +319,7 @@ describe('Landing CTA', () => {
     const host = await mountLanding();
     const footer = host.querySelector<HTMLElement>('.landing-footer');
     const aboutLink = footer?.querySelector<HTMLAnchorElement>('a[href="/about.html"]');
+    const helpLink = footer?.querySelector<HTMLAnchorElement>('a[href="/helpCenter"]');
     const publicSecurityLink = footer?.querySelector<HTMLAnchorElement>(
       'a[href="https://beian.mps.gov.cn/#/query/webSearch?code=51200002001211"]',
     );
@@ -258,5 +329,6 @@ describe('Landing CTA', () => {
     expect(footer?.textContent).toContain('川公网安备51200002001211号');
     expect(publicSecurityLink?.querySelector('img')?.getAttribute('src')).toBe('/public-security-filing-badge.png');
     expect(aboutLink).not.toBeNull();
+    expect(helpLink).not.toBeNull();
   });
 });

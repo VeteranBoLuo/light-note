@@ -26,56 +26,34 @@
                 <span class="hero-tagline">{{ t('landing.heroTagline') }}</span>
               </h1>
               <div class="hero-actions">
-                <template v-if="landingCtaMode === 'enter'">
-                  <BButton
-                    type="primary"
-                    class="btn-primary"
-                    :disabled="startingApp"
-                    :aria-busy="startingApp || undefined"
-                    @click="handleEnterApp"
-                  >
-                    <span>{{ t('landing.ctaEnterApp') }}</span>
-                    <SvgIcon
-                      :class="['btn-arrow', { 'btn-arrow--loading': startingApp }]"
-                      :src="startingApp ? icon.message.loading : icon.arrow_right"
-                      size="18"
-                      aria-hidden="true"
-                    />
-                  </BButton>
-                </template>
-                <template v-else>
-                  <BButton
-                    v-if="landingCtaMode === 'register'"
-                    type="primary"
-                    class="btn-primary"
-                    @click="handleRegister('landing_primary')"
-                  >
-                    <span>{{ t('landing.ctaCreateSpace') }}</span>
-                    <SvgIcon class="btn-arrow" :src="icon.arrow_right" size="18" aria-hidden="true" />
-                  </BButton>
-                  <BButton
-                    v-else
-                    type="primary"
-                    class="btn-primary"
-                    :loading="startingApp"
-                    @click="handleStart('landing_primary')"
-                  >
-                    <span>{{ t('landing.ctaStart') }}</span>
-                    <SvgIcon
-                      v-if="!startingApp"
-                      class="btn-arrow"
-                      :src="icon.arrow_right"
-                      size="18"
-                      aria-hidden="true"
-                    />
-                  </BButton>
-                  <BButton
-                    class="btn-ghost"
-                    @click="goHome"
-                    v-click-log="{ module: '官网首页', operation: '先体验示例' }"
-                    >{{ t('landing.ctaTryDemo') }}</BButton
-                  >
-                </template>
+                <BButton
+                  type="primary"
+                  class="btn-primary"
+                  :disabled="navigationPending"
+                  :aria-busy="startingApp || undefined"
+                  @pointerdown="prefetchPrimaryIntent"
+                  @focus="prefetchPrimaryIntent"
+                  @click="handlePrimaryAction('landing_primary')"
+                >
+                  <span>{{ t(landingCtaMode === 'enter' ? 'landing.ctaEnterApp' : 'landing.ctaStart') }}</span>
+                  <SvgIcon
+                    :class="['btn-arrow', { 'btn-arrow--loading': startingApp }]"
+                    :src="startingApp ? icon.message.loading : icon.arrow_right"
+                    size="18"
+                    aria-hidden="true"
+                  />
+                </BButton>
+                <BButton
+                  v-if="landingCtaMode !== 'enter'"
+                  class="btn-ghost"
+                  :loading="tryingDemo"
+                  :disabled="navigationPending && !tryingDemo"
+                  @pointerdown="prefetchDemoIntent"
+                  @focus="prefetchDemoIntent"
+                  @click="goHome"
+                  v-click-log="{ module: '官网首页', operation: '先体验示例' }"
+                  >{{ t('landing.ctaTryDemo') }}</BButton
+                >
               </div>
               <div v-if="!isAndroidApp" class="pwa-install-strip">
                 <span class="pwa-install-strip__icon">
@@ -122,22 +100,35 @@
                       >
                         <div class="mobile-preview-device mobile-preview-device--light">
                           <img
-                            :src="item.png"
+                            :src="item.src"
+                            :srcset="item.srcset"
+                            :sizes="item.sizes"
                             :alt="item.label"
                             :loading="itemIndex === previewIndex ? 'eager' : 'lazy'"
-                            :fetchpriority="itemIndex === previewIndex ? 'high' : 'auto'"
+                            fetchpriority="auto"
+                            decoding="async"
                           />
                         </div>
                         <div class="mobile-preview-device mobile-preview-device--dark" aria-hidden="true">
-                          <img :src="item.png" alt="" loading="lazy" />
+                          <img
+                            :src="item.src"
+                            :srcset="item.srcset"
+                            :sizes="item.sizes"
+                            alt=""
+                            loading="lazy"
+                            decoding="async"
+                          />
                         </div>
                       </div>
                       <img
                         v-else
-                        :src="item.png"
+                        :src="item.src"
+                        :srcset="item.srcset"
+                        :sizes="item.sizes"
                         :alt="item.label"
                         :loading="itemIndex === previewIndex ? 'eager' : 'lazy'"
-                        :fetchpriority="itemIndex === previewIndex ? 'high' : 'auto'"
+                        fetchpriority="auto"
+                        decoding="async"
                       />
                     </div>
                   </div>
@@ -244,7 +235,14 @@
                 <SvgIcon :src="icon.support.store" size="17" aria-hidden="true" />
                 {{ t('landing.extensionInstall') }}
               </a>
-              <BButton class="btn-ghost extension-detail-button" @click="openExtensionDetails">
+              <BButton
+                class="btn-ghost extension-detail-button"
+                :loading="openingExtension"
+                :disabled="navigationPending && !openingExtension"
+                @pointerdown="prefetchExtensionIntent"
+                @focus="prefetchExtensionIntent"
+                @click="openExtensionDetails"
+              >
                 {{ t(bookmark.isMobile ? 'landing.extensionMobileCta' : 'landing.extensionLearnMore') }}
                 <SvgIcon :src="icon.arrow_right" size="15" aria-hidden="true" />
               </BButton>
@@ -307,6 +305,8 @@
                   v-if="r.supportCta"
                   class="reason-support-link"
                   href="/support"
+                  @pointerdown="prefetchSupportIntent"
+                  @focus="prefetchSupportIntent"
                   @click="openSupport"
                   v-click-log="{ module: '官网首页', operation: '从永久免费说明了解支持轻笺' }"
                 >
@@ -335,50 +335,34 @@
             <h2 class="cta-title">{{ t('landing.ctaTitle') }}</h2>
             <p class="cta-desc">{{ t('landing.ctaDesc') }}</p>
             <div class="cta-actions">
-              <template v-if="landingCtaMode === 'enter'">
-                <BButton
-                  type="primary"
-                  class="btn-primary btn-large"
-                  :disabled="startingApp"
-                  :aria-busy="startingApp || undefined"
-                  @click="handleEnterApp"
-                >
-                  {{ t('landing.ctaEnterApp') }}
-                  <SvgIcon
-                    :class="['btn-arrow', { 'btn-arrow--loading': startingApp }]"
-                    :src="startingApp ? icon.message.loading : icon.arrow_right"
-                    size="20"
-                    aria-hidden="true"
-                  />
-                </BButton>
-              </template>
-              <template v-else>
-                <BButton
-                  v-if="landingCtaMode === 'register'"
-                  type="primary"
-                  class="btn-primary btn-large"
-                  @click="handleRegister('landing_final')"
-                >
-                  {{ t('landing.ctaCreateSpace') }}
-                  <SvgIcon class="btn-arrow" :src="icon.arrow_right" size="20" aria-hidden="true" />
-                </BButton>
-                <BButton
-                  v-else
-                  type="primary"
-                  class="btn-primary btn-large"
-                  :loading="startingApp"
-                  @click="handleStart('landing_final')"
-                >
-                  {{ t('landing.ctaStart') }}
-                  <SvgIcon v-if="!startingApp" class="btn-arrow" :src="icon.arrow_right" size="20" aria-hidden="true" />
-                </BButton>
-                <BButton
-                  class="btn-ghost"
-                  @click="goHome"
-                  v-click-log="{ module: '官网首页', operation: '先体验示例' }"
-                  >{{ t('landing.ctaTryDemo') }}</BButton
-                >
-              </template>
+              <BButton
+                type="primary"
+                class="btn-primary btn-large"
+                :disabled="navigationPending"
+                :aria-busy="startingApp || undefined"
+                @pointerdown="prefetchPrimaryIntent"
+                @focus="prefetchPrimaryIntent"
+                @click="handlePrimaryAction('landing_final')"
+              >
+                {{ t(landingCtaMode === 'enter' ? 'landing.ctaEnterApp' : 'landing.ctaStart') }}
+                <SvgIcon
+                  :class="['btn-arrow', { 'btn-arrow--loading': startingApp }]"
+                  :src="startingApp ? icon.message.loading : icon.arrow_right"
+                  size="20"
+                  aria-hidden="true"
+                />
+              </BButton>
+              <BButton
+                v-if="landingCtaMode !== 'enter'"
+                class="btn-ghost"
+                :loading="tryingDemo"
+                :disabled="navigationPending && !tryingDemo"
+                @pointerdown="prefetchDemoIntent"
+                @focus="prefetchDemoIntent"
+                @click="goHome"
+                v-click-log="{ module: '官网首页', operation: '先体验示例' }"
+                >{{ t('landing.ctaTryDemo') }}</BButton
+              >
             </div>
             <ul class="trust-badges">
               <li>{{ t('landing.trustUnified') }}</li>
@@ -407,24 +391,32 @@
               </a>
             </template>
             <span class="footer-sep">|</span>
-            <a href="/about.html">{{ t('landing.about') }}</a>
+            <a href="/about.html" @click="handleDocumentNavigation">{{ t('landing.about') }}</a>
             <span class="footer-sep">|</span>
             <!-- 后端直出的 SEO 内容页,不走 SPA 路由;爬虫由此发现帮助中心。
                  注意:路径是 /helpCenter 不是 /help —— /help 是 App 内已有的
                  AI 助手/帮助文档路由(router/modules/common.ts),不能撞 -->
-            <a href="/helpCenter">{{ t('landing.helpCenter') }}</a>
+            <a href="/helpCenter" @click="handleDocumentNavigation">{{ t('landing.helpCenter') }}</a>
             <span class="footer-sep">|</span>
-            <a :href="BROWSER_EXTENSION_LANDING_PATH">{{ t('landing.browserExtension') }}</a>
+            <a
+              :href="BROWSER_EXTENSION_LANDING_PATH"
+              @pointerdown="prefetchExtensionIntent"
+              @focus="prefetchExtensionIntent"
+              @click="openExtensionFromLink"
+              >{{ t('landing.browserExtension') }}</a
+            >
             <span class="footer-sep">|</span>
-            <a href="/legal/privacy-policy.html">{{ t('landing.privacyPolicy') }}</a>
+            <a href="/legal/privacy-policy.html" @click="handleDocumentNavigation">{{ t('landing.privacyPolicy') }}</a>
             <span class="footer-sep">|</span>
-            <a href="/legal/user-agreement.html">{{ t('landing.userAgreement') }}</a>
+            <a href="/legal/user-agreement.html" @click="handleDocumentNavigation">{{ t('landing.userAgreement') }}</a>
             <span class="footer-sep">|</span>
             <a href="#" @click.prevent="handleContact">{{ t('landing.contactUs') }}</a>
             <span class="footer-sep">|</span>
             <a
               class="footer-support-link"
               href="/support"
+              @pointerdown="prefetchSupportIntent"
+              @focus="prefetchSupportIntent"
               @click="openSupport"
               v-click-log="{ module: '官网首页', operation: '从官网页脚打开支持轻笺' }"
             >
@@ -452,6 +444,18 @@
       </BButton>
     </div>
     <div class="slide-counter" :class="{ pulse: animating }">{{ navLabels[current] }}</div>
+
+    <Transition name="landing-navigation-status">
+      <div v-if="navigationFeedbackVisible" class="landing-navigation-feedback" role="status" aria-live="polite">
+        <span class="landing-navigation-feedback__icon" aria-hidden="true">
+          <SvgIcon class="landing-navigation-feedback__spinner" :src="icon.message.loading" size="22" />
+        </span>
+        <span class="landing-navigation-feedback__copy">
+          <strong>{{ navigationFeedbackTitle }}</strong>
+          <span v-if="navigationFeedbackDetailed">{{ t('landing.navigationLoadingHint') }}</span>
+        </span>
+      </div>
+    </Transition>
 
     <!-- Contact Modal -->
     <BModal
@@ -508,6 +512,10 @@
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { resolveLightNoteRuntime } from '@/utils/appRuntime.ts';
   import { markMobileLandingVisited } from '@/utils/mobileLandingVisit.ts';
+  import { getRuntimeApplicationEntryPath } from '@/utils/appEntry.ts';
+  import { prefetchResolvedRoute } from '@/utils/routePrefetch.ts';
+  import { loadUserAuthModal } from '@/utils/userAuthModalLoader.ts';
+  import { scheduleLandingStartupPreload } from './landingPreload.ts';
   import {
     MIIT_QUERY_URL,
     PUBLIC_SECURITY_BADGE_PATH,
@@ -552,7 +560,27 @@
   const showContactModal = ref(false);
   const feedbackContent = ref('');
   const submitting = ref(false);
-  const startingApp = ref(false);
+  type LandingNavigationAction = 'primary' | 'demo' | 'support' | 'extension' | 'document';
+  type LandingNavigationKind = 'app' | 'registration' | 'page';
+  const activeLandingAction = ref<LandingNavigationAction | null>(null);
+  const navigationFeedbackKind = ref<LandingNavigationKind>('app');
+  const navigationFeedbackVisible = ref(false);
+  const navigationFeedbackDetailed = ref(false);
+  const navigationFeedbackSlow = ref(false);
+  const navigationPending = computed(() => activeLandingAction.value !== null);
+  const startingApp = computed(() => activeLandingAction.value === 'primary');
+  const tryingDemo = computed(() => activeLandingAction.value === 'demo');
+  const openingExtension = computed(() => activeLandingAction.value === 'extension');
+  const navigationFeedbackTitle = computed(() => {
+    if (navigationFeedbackSlow.value) return t('landing.navigationStillLoading');
+    if (navigationFeedbackKind.value === 'registration') return t('landing.navigationPreparingRegistration');
+    if (navigationFeedbackKind.value === 'page') return t('landing.navigationOpeningPage');
+    return t('landing.navigationOpeningApp');
+  });
+  let navigationFeedbackTimer: number | null = null;
+  let navigationFeedbackDetailTimer: number | null = null;
+  let navigationFeedbackSlowTimer: number | null = null;
+  let disposeLandingStartupPreload: (() => void) | null = null;
 
   // 桌面截图是 2940x1846，移动端预览是就地生成的 1:1 舞台。
   // 比例跟着每张预览走，窄屏才不会让宽截图在为 1:1 设计的容器里留出大片空白。
@@ -562,32 +590,41 @@
     {
       key: 'bookmark',
       label: t('landing.tabBookmark'),
-      png: '/screenshots/bookmark.png',
+      src: '/screenshots/bookmark-900.webp',
+      srcset: '/screenshots/bookmark-900.webp 900w, /screenshots/bookmark-1800.webp 1800w',
+      sizes: '(max-width: 767px) calc(100vw - 48px), min(46vw, 900px)',
       aspect: DESKTOP_SHOT_ASPECT,
     },
     {
       key: 'note',
       label: t('landing.tabNote'),
-      png: '/screenshots/note1.png',
+      src: '/screenshots/note1-900.webp',
+      srcset: '/screenshots/note1-900.webp 900w, /screenshots/note1-1800.webp 1800w',
+      sizes: '(max-width: 767px) calc(100vw - 48px), min(46vw, 900px)',
       aspect: DESKTOP_SHOT_ASPECT,
     },
     {
       key: 'cloud',
       label: t('landing.tabCloud'),
-      png: '/screenshots/cloud-space.png',
+      src: '/screenshots/cloud-space-900.webp',
+      srcset: '/screenshots/cloud-space-900.webp 900w, /screenshots/cloud-space-1800.webp 1800w',
+      sizes: '(max-width: 767px) calc(100vw - 48px), min(46vw, 900px)',
       aspect: DESKTOP_SHOT_ASPECT,
     },
     {
       key: 'mobile',
       label: t('landing.tabMobile'),
-      // public 静态资源不会由 Vite 自动生成内容哈希；图片替换后同步更新版本，避免浏览器继续展示旧图。
-      png: '/screenshots/mobile.png?v=531585f78bd6',
+      src: '/screenshots/mobile-900.webp',
+      srcset: '/screenshots/mobile-900.webp 900w',
+      sizes: '(max-width: 767px) 38vw, min(21vw, 420px)',
       aspect: MOBILE_STAGE_ASPECT,
     },
     {
       key: 'co-build',
       label: t('landing.tabCoBuild'),
-      png: '/screenshots/require.png',
+      src: '/screenshots/require-900.webp',
+      srcset: '/screenshots/require-900.webp 900w, /screenshots/require-1800.webp 1800w',
+      sizes: '(max-width: 767px) calc(100vw - 48px), min(46vw, 900px)',
       aspect: DESKTOP_SHOT_ASPECT,
     },
   ]);
@@ -612,19 +649,113 @@
   function goTo(i: number) {
     slidesRef.value?.children[i]?.scrollIntoView({ behavior: 'smooth' });
   }
-  function goHome() {
+
+  function clearNavigationFeedbackTimers() {
+    if (navigationFeedbackTimer !== null) window.clearTimeout(navigationFeedbackTimer);
+    if (navigationFeedbackDetailTimer !== null) window.clearTimeout(navigationFeedbackDetailTimer);
+    if (navigationFeedbackSlowTimer !== null) window.clearTimeout(navigationFeedbackSlowTimer);
+    navigationFeedbackTimer = null;
+    navigationFeedbackDetailTimer = null;
+    navigationFeedbackSlowTimer = null;
+  }
+
+  function beginLandingNavigation(action: LandingNavigationAction, kind: LandingNavigationKind) {
+    if (navigationPending.value) return false;
+    clearNavigationFeedbackTimers();
+    activeLandingAction.value = action;
+    navigationFeedbackKind.value = kind;
+    navigationFeedbackVisible.value = false;
+    navigationFeedbackDetailed.value = false;
+    navigationFeedbackSlow.value = false;
+    // 快速命中缓存时只显示按钮内即时反馈；超过阈值才浮出解释，避免短任务闪屏。
+    navigationFeedbackTimer = window.setTimeout(() => {
+      navigationFeedbackVisible.value = true;
+    }, 350);
+    navigationFeedbackDetailTimer = window.setTimeout(() => {
+      navigationFeedbackVisible.value = true;
+      navigationFeedbackDetailed.value = true;
+    }, 1_200);
+    navigationFeedbackSlowTimer = window.setTimeout(() => {
+      navigationFeedbackVisible.value = true;
+      navigationFeedbackDetailed.value = true;
+      navigationFeedbackSlow.value = true;
+    }, 8_000);
+    return true;
+  }
+
+  function finishLandingNavigation() {
+    clearNavigationFeedbackTimers();
+    activeLandingAction.value = null;
+    navigationFeedbackVisible.value = false;
+    navigationFeedbackDetailed.value = false;
+    navigationFeedbackSlow.value = false;
+  }
+
+  function warnNavigationFailed() {
+    message.warning(t('landing.serviceUnavailable'));
+  }
+
+  function preloadRoute(target: string) {
+    return prefetchResolvedRoute(router, target);
+  }
+
+  function applicationEntryTarget() {
+    return getRuntimeApplicationEntryPath(user.preferences, window.innerWidth);
+  }
+
+  function preloadPrimaryTarget() {
+    if (landingCtaMode.value === 'enter') return preloadRoute(applicationEntryTarget());
+    return loadUserAuthModal();
+  }
+
+  function prefetchPrimaryIntent() {
+    void preloadPrimaryTarget().catch(() => undefined);
+  }
+
+  function prefetchDemoIntent() {
+    void preloadRoute('/home').catch(() => undefined);
+  }
+
+  function prefetchSupportIntent() {
+    void preloadRoute('/support').catch(() => undefined);
+  }
+
+  function prefetchExtensionIntent() {
+    void preloadRoute(BROWSER_EXTENSION_LANDING_PATH).catch(() => undefined);
+  }
+
+  async function preloadSecondaryTargets() {
+    await Promise.allSettled([preloadRoute('/home'), loadUserAuthModal()]);
+  }
+
+  async function goHome() {
+    if (!beginLandingNavigation('demo', 'app')) return;
     // 次 CTA「先体验示例」:进入游客共享示例空间,记 demo_enter
     trackConversion('demo_enter', 'landing_demo');
-    router.push('/home');
+    try {
+      await router.push('/home');
+    } catch {
+      warnNavigationFailed();
+    } finally {
+      finishLandingNavigation();
+    }
   }
-  function openExtensionDetails() {
-    void router.push(BROWSER_EXTENSION_LANDING_PATH);
+
+  async function openExtensionDetails() {
+    if (!beginLandingNavigation('extension', 'page')) return;
     void recordOperation({ module: '官网首页', operation: '查看浏览器扩展完整介绍' });
+    try {
+      await router.push(BROWSER_EXTENSION_LANDING_PATH);
+    } catch {
+      warnNavigationFailed();
+    } finally {
+      finishLandingNavigation();
+    }
   }
   function trackExtensionStoreOpen() {
     void recordOperation({ module: '官网首页', operation: '打开 Chrome 扩展商店' });
   }
-  // 主 CTA「免费注册，开始使用」:打开注册弹窗(openAuthModal 内部记 signup_open,source 区分主/末屏)
+  // 首次访客可见文案统一为「开始使用轻笺」，实际动作仍是打开注册弹窗。
   function goRegister(source: string) {
     bookmark.openAuthModal('注册', source);
   }
@@ -634,56 +765,74 @@
     void recordOperation(LANDING_OPERATION_LOG.enter);
     await router.push('/app');
   }
-  async function handleStart(source: string) {
-    if (startingApp.value) return;
-    if (!landingAuth) {
-      handleRegister(source);
-      return;
-    }
-
-    startingApp.value = true;
-    try {
-      await landingAuth.retry();
-      if (isLoggedIn.value) {
-        await enterApp();
-        return;
-      }
-      if (landingAuth.status.value === 'anonymous') {
-        handleRegister(source);
-        return;
-      }
-      message.warning(t('landing.serviceUnavailable'));
-    } catch {
-      message.warning(t('landing.serviceUnavailable'));
-    } finally {
-      startingApp.value = false;
-    }
-  }
-  // 点击瞬间再次判断，避免 /me 完成与用户点击同一时刻竞争时记录错误的“免费注册”日志。
-  function handleRegister(source: string) {
-    if (landingCtaMode.value === 'enter') {
-      handleEnterApp();
-      return;
-    }
-    if (landingCtaMode.value !== 'register') return;
+  async function openRegistration(source: string) {
+    navigationFeedbackKind.value = 'registration';
+    await loadUserAuthModal();
     void recordOperation(LANDING_OPERATION_LOG.register);
     goRegister(source);
   }
-  async function handleEnterApp() {
-    if (landingCtaMode.value !== 'enter' || startingApp.value) return;
-    startingApp.value = true;
+
+  async function handlePrimaryAction(source: string) {
+    if (!beginLandingNavigation('primary', landingCtaMode.value === 'register' ? 'registration' : 'app')) return;
     try {
-      await enterApp();
+      const initialMode = landingCtaMode.value;
+      if (initialMode === 'enter') {
+        await enterApp();
+        return;
+      }
+
+      if (initialMode === 'register' || !landingAuth) {
+        await openRegistration(source);
+        return;
+      }
+
+      await landingAuth.retry();
+      if (isLoggedIn.value || landingCtaMode.value === 'enter') {
+        await enterApp();
+      } else if (landingAuth.status.value === 'anonymous') {
+        await openRegistration(source);
+      } else {
+        warnNavigationFailed();
+      }
     } catch {
-      message.warning(t('landing.serviceUnavailable'));
+      warnNavigationFailed();
     } finally {
-      startingApp.value = false;
+      finishLandingNavigation();
     }
   }
-  function openSupport(event: MouseEvent) {
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+  function isPlainLeftClick(event: MouseEvent) {
+    return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+  }
+
+  async function navigateFromLink(event: MouseEvent, target: string, action: 'support' | 'extension') {
+    if (!isPlainLeftClick(event)) return;
     event.preventDefault();
-    void router.push('/support');
+    if (!beginLandingNavigation(action, 'page')) return;
+    try {
+      await router.push(target);
+    } catch {
+      warnNavigationFailed();
+    } finally {
+      finishLandingNavigation();
+    }
+  }
+
+  function openSupport(event: MouseEvent) {
+    void navigateFromLink(event, '/support', 'support');
+  }
+  function openExtensionFromLink(event: MouseEvent) {
+    if (!isPlainLeftClick(event)) return;
+    void recordOperation({ module: '官网首页', operation: '从官网页脚查看浏览器扩展介绍' });
+    void navigateFromLink(event, BROWSER_EXTENSION_LANDING_PATH, 'extension');
+  }
+  function handleDocumentNavigation(event: MouseEvent) {
+    if (!isPlainLeftClick(event)) return;
+    // 保留原生链接、SEO 和浏览器打开方式，只在服务器响应较慢时补充旧页上的状态说明。
+    beginLandingNavigation('document', 'page');
+  }
+  function handlePageShow(event: PageTransitionEvent) {
+    if (event.persisted) finishLandingNavigation();
   }
   function handleContact() {
     showContactModal.value = true;
@@ -810,6 +959,12 @@
     if (bookmark.isMobile && resolveLightNoteRuntime() === 'browser') {
       markMobileLandingVisited();
     }
+    disposeLandingStartupPreload = scheduleLandingStartupPreload({
+      prerender: Boolean((window as any).__PRERENDER__),
+      preloadPrimary: preloadPrimaryTarget,
+      preloadSecondary: preloadSecondaryTargets,
+    });
+    window.addEventListener('pageshow', handlePageShow);
 
     const canvas = canvasRef.value;
     if (!canvas) return;
@@ -874,6 +1029,10 @@
   });
 
   onBeforeUnmount(() => {
+    finishLandingNavigation();
+    disposeLandingStartupPreload?.();
+    disposeLandingStartupPreload = null;
+    window.removeEventListener('pageshow', handlePageShow);
     cancelAnimationFrame(animId);
     if (resizeCanvas) {
       window.removeEventListener('resize', resizeCanvas);
@@ -2113,6 +2272,68 @@
     color: #333;
   }
 
+  .landing-navigation-feedback {
+    position: fixed;
+    z-index: 120;
+    left: 50%;
+    bottom: max(24px, calc(env(safe-area-inset-bottom) + 16px));
+    width: min(430px, calc(100vw - 32px));
+    min-height: 64px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #f4f3ff;
+    background: rgba(18, 18, 29, 0.94);
+    border: 1px solid rgba(135, 129, 255, 0.44);
+    border-radius: 16px;
+    box-shadow: 0 18px 54px rgba(0, 0, 0, 0.42);
+    backdrop-filter: blur(18px);
+    transform: translateX(-50%);
+    pointer-events: none;
+  }
+  .landing-navigation-feedback__icon {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    display: grid;
+    place-items: center;
+    color: #918cff;
+    background: rgba(99, 92, 237, 0.16);
+    border: 1px solid rgba(145, 140, 255, 0.28);
+    border-radius: 12px;
+  }
+  .landing-navigation-feedback__spinner {
+    animation: landing-btn-spin 0.8s linear infinite;
+  }
+  .landing-navigation-feedback__copy {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+    text-align: left;
+  }
+  .landing-navigation-feedback__copy strong {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.45;
+  }
+  .landing-navigation-feedback__copy > span {
+    color: #9291a0;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .landing-navigation-status-enter-active,
+  .landing-navigation-status-leave-active {
+    transition:
+      opacity 0.18s ease,
+      transform 0.18s ease;
+  }
+  .landing-navigation-status-enter-from,
+  .landing-navigation-status-leave-to {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+
   /* ============ Nav ============ */
   .nav-dots {
     position: fixed;
@@ -2437,6 +2658,10 @@
       .mockup-carousel {
         transition: none;
       }
+      .landing-navigation-status-enter-active,
+      .landing-navigation-status-leave-active {
+        transition: none;
+      }
     }
 
     .mockup-screen img {
@@ -2631,6 +2856,23 @@
       gap: 6px;
       line-height: 1.6;
     }
+    .landing-navigation-feedback {
+      bottom: max(14px, calc(env(safe-area-inset-bottom) + 10px));
+      min-height: 60px;
+      padding: 10px 12px;
+      border-color: #5f5add;
+      border-radius: 14px;
+      background: #151520;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.38);
+      backdrop-filter: none;
+    }
+    .landing-navigation-feedback__icon {
+      width: 38px;
+      height: 38px;
+      flex-basis: 38px;
+      border-color: #48437d;
+      background: #27243d;
+    }
     .nav-dots,
     .slide-counter,
     .float-el,
@@ -2748,5 +2990,15 @@
     width: 100%;
     min-height: 42px;
     border-radius: 9px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .landing-navigation-feedback__spinner {
+      animation-duration: 1.4s;
+    }
+    .landing-navigation-status-enter-active,
+    .landing-navigation-status-leave-active {
+      transition: none;
+    }
   }
 </style>

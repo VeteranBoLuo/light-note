@@ -5,8 +5,9 @@ import { describe, expect, it } from 'vitest';
 const source = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/library/TagFilterSelector.vue'), 'utf8');
 
 describe('TagFilterSelector', () => {
-  it('桌面与移动端使用同一个标准下拉箭头，并在展开时转为向上', () => {
+  it('桌面与移动紧凑态使用同一个标准下拉箭头，并在展开时转为向上', () => {
     expect(source.match(/:src="icon\.noteTree\.chevron"/gu)).toHaveLength(2);
+    expect(source.match(/:size="compact \? 10 : 14"/gu)).toHaveLength(2);
     expect(source.match(/:class="\{ 'is-open': filterVisible \}"/gu)).toHaveLength(2);
     expect(source).not.toContain('icon.arrow_left');
     expect(source).toMatch(/\.filter-chevron\s*\{[\s\S]*transform:\s*rotate\(0deg\);/u);
@@ -15,8 +16,17 @@ describe('TagFilterSelector', () => {
 
   it('箭头保持低视觉权重，并尊重减少动态效果设置', () => {
     expect(source.match(/class="filter-chevron"/gu)).toHaveLength(2);
-    expect(source.match(/size="14"/gu)).toHaveLength(2);
+    expect(source.match(/:size="compact \? 10 : 14"/gu)).toHaveLength(2);
     expect(source).toMatch(/\.filter-chevron\s*\{[\s\S]*opacity:\s*0\.68;/u);
     expect(source).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*transition:\s*none;/u);
+  });
+
+  it('移动端紧凑入口放大标签与箭头，但保持和相邻视图控件同高', () => {
+    expect(source.match(/:src="icon\.resource\.tag"/gu)).toHaveLength(2);
+    expect(source.match(/:size="compact \? 18 : 16"/gu)).toHaveLength(2);
+    expect(source.match(/'is-compact': compact/gu)).toHaveLength(2);
+    expect(source).toMatch(
+      /\.noteType-select\.is-compact\s*\{[\s\S]*?height:\s*36px;[\s\S]*?gap:\s*3px;[\s\S]*?padding-inline:\s*0;/u,
+    );
   });
 });

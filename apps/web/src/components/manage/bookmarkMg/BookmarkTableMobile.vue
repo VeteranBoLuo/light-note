@@ -1,5 +1,7 @@
 <template>
   <PhoneListMg
+    class="bookmark-mobile-list"
+    :class="{ 'bookmark-mobile-list--batch': batchMode }"
     :loading="initialLoading"
     :error="loadError"
     :list-data="tableData"
@@ -22,7 +24,7 @@
               type="snapshot"
               :label="$t('bookmarkMg.badgeArchived')"
               :tooltip="$t('bookmarkMg.badgeArchivedHint')"
-              @click="openSnap(String(data.id))"
+              @click="handleBookmarkSnapshotClick(data)"
               v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSnapshot"
             />
           </span>
@@ -42,12 +44,30 @@
       </span>
     </template>
   </PhoneListMg>
-  <MobileStickyActionBar v-if="batchMode">
-    <BButton type="danger" :disabled="!selectedIds.length" :loading="mutating" @click="handleBatchDelete">
-      <SvgIcon :src="icon.table_delete" size="18" aria-hidden="true" />
-      {{ $t('common.delete') }}
-    </BButton>
-  </MobileStickyActionBar>
+  <ResourceBatchActionBar
+    :open="batchMode"
+    mobile
+    :summary="batchActionSummary"
+    :aria-label="$t('resourceOutcome.batch.ariaLabel')"
+    :clear-label="$t('resourceOutcome.batch.clear')"
+    :show-clear="false"
+    :show-mobile-primary="false"
+    :primary-label="$t('resourceOutcome.primaryAction')"
+    :more-label="$t('common.more')"
+    :primary-disabled="!selectedIds.length"
+    :primary-disabled-reason="!selectedIds.length ? $t('resourceOutcome.batch.selectFirst') : ''"
+    @more="mobileBatchActionsOpen = true"
+  >
+    <template #leading>
+      <BCheckbox
+        :checked="allBookmarksSelected"
+        :indeterminate="someBookmarksSelected"
+        :disabled="!tableData.length"
+        :aria-label="$t(allBookmarksSelected ? 'bookmarkMg.batchDeselectAll' : 'bookmarkMg.batchSelectAll')"
+        @change="toggleSelectAll"
+      />
+    </template>
+  </ResourceBatchActionBar>
   <MobilePageActionsDrawer
     v-model:open="pageActionsOpen"
     :title="$t('bookmarkMg.title')"
@@ -60,19 +80,31 @@
     :actions="mobilePageActions"
     @action="handleMobilePageAction"
   />
+  <MobilePageActionsDrawer
+    v-model:open="mobileBatchActionsOpen"
+    :title="batchActionSummary"
+    :actions="mobileBatchActions"
+    @action="handleMobileBatchAction"
+  />
   <LinkHealthModal v-model:visible="healthVisible" />
   <BookmarkSnapshotModal v-model:visible="snapVisible" :bookmark-id="snapBookmarkId" />
+  <AiOrganizeModal v-model:visible="aiOrgVisible" :selected-ids="selectedAiOrganizeIds" @applied="reloadBookmarks" />
   <BookmarkAiDialog v-model:visible="bookmarkAiVisible" :bookmarks="bookmarkAiItems" />
+  <ResourceOutcomeDrawer
+    v-model:open="outcomeDrawerOpen"
+    :resources="outcomeResources"
+    :quick-actions="bookmarkOutcomeQuickActions"
+    surface="bookmark_manage"
+  />
 </template>
 
 <script lang="ts" setup>
-  import { computed, ref } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import router from '@/router';
-  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
-  import MobileStickyActionBar from '@/components/mobile/MobileStickyActionBar.vue';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BookmarkFavicon from '@/components/base/BookmarkFavicon.vue';
   import BookmarkCapabilityBadge from '@/components/manage/bookmarkMg/BookmarkCapabilityBadge.vue';
   import PhoneListMg from '@/components/base/phoneComponents/PhoneListMg.vue';
@@ -90,6 +122,12 @@
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import { OPERATION_LOG_MAP } from '@/config/logMap';
   import BookmarkAiDialog from '@/components/manage/bookmarkMg/BookmarkAiDialog.vue';
+  import AiOrganizeModal from '@/components/manage/bookmarkMg/AiOrganizeModal.vue';
+  import ResourceBatchActionBar from '@/components/resourceActions/ResourceBatchActionBar.vue';
+  import ResourceOutcomeDrawer, {
+    type ResourceOutcomeQuickAction,
+    type ResourceOutcomeResource,
+  } from '@/components/resourceActions/ResourceOutcomeDrawer.vue';
 
   const { t } = useI18n();
 
@@ -108,10 +146,15 @@
   const mutating = ref(false);
   const pageActionsOpen = ref(false);
   const mobilePageActionsOpen = ref(false);
+  const mobileBatchActionsOpen = ref(false);
   const healthVisible = ref(false);
   const activeBookmark = ref<BookmarkInterface | null>(null);
   const bookmarkAiVisible = ref(false);
   const bookmarkAiItems = ref<BookmarkInterface[]>([]);
+  const aiOrgVisible = ref(false);
+  const selectedAiOrganizeIds = ref<string[]>([]);
+  const outcomeDrawerOpen = ref(false);
+  const outcomeResources = ref<ResourceOutcomeResource[]>([]);
   const pageActions = computed<MobilePageActionItem[]>(() => [
     {
       key: 'health',
@@ -143,6 +186,87 @@
       },
     ];
   });
+  const selectedBookmarkItems = computed(() => {
+    const selected = new Set(selectedIds.value);
+    return tableData.value.filter((item) => selected.has(String(item.id)));
+  });
+  watch(
+    () => tableData.value.map((item) => String(item.id)),
+    (bookmarkIds) => {
+      const availableIds = new Set(bookmarkIds);
+      const nextSelection = selectedIds.value.filter((id) => availableIds.has(id));
+      if (nextSelection.length !== selectedIds.value.length) selectedIds.value = nextSelection;
+    },
+    { flush: 'sync' },
+  );
+  const allBookmarksSelected = computed(
+    () => tableData.value.length > 0 && tableData.value.every((item) => selectedIds.value.includes(String(item.id))),
+  );
+  const someBookmarksSelected = computed(
+    () => !allBookmarksSelected.value && tableData.value.some((item) => selectedIds.value.includes(String(item.id))),
+  );
+  const batchActionSummary = computed(() =>
+    selectedIds.value.length
+      ? t('bookmarkMg.batchSelected', { count: selectedIds.value.length })
+      : t('resourceOutcome.batch.selectResources'),
+  );
+  const mobileBatchActions = computed<MobilePageActionItem[]>(() => [
+    {
+      key: 'outcome',
+      label: t('resourceOutcome.primaryAction'),
+      icon: icon.common.magicWand,
+      disabled: !selectedIds.value.length,
+    },
+    {
+      key: 'smartOrganize',
+      label: t('bookmarkMg.aiOrganizeBtn'),
+      icon: icon.ai.organize,
+      disabled: !selectedIds.value.length,
+    },
+    {
+      key: 'clear',
+      label: t('resourceOutcome.batch.clear'),
+      icon: icon.common.close,
+      disabled: !selectedIds.value.length,
+    },
+    {
+      key: 'delete',
+      label: t('bookmarkMg.batchDelete'),
+      icon: icon.table_delete,
+      danger: true,
+      dividerBefore: true,
+      disabled: !selectedIds.value.length,
+      loading: mutating.value,
+    },
+  ]);
+  const bookmarkOutcomeQuickActions = computed<ResourceOutcomeQuickAction[]>(() => [
+    {
+      id: 'summarize',
+      label: t('ai.entry.summarizeSelected'),
+      description: t('resourceOutcome.quickSummaryDescription'),
+      skillId: 'search.summarize_selected',
+      input: { instruction: t('ai.entry.summarizeSelectedInstruction') },
+      minItems: 1,
+      maxItems: 10,
+      supportedTypes: ['bookmark'],
+      requireReadable: true,
+      icon: icon.ai.materials,
+      generatedNoteTitle: t('bookmarkMg.aiGeneratedNoteTitle'),
+    },
+    {
+      id: 'compare',
+      label: t('ai.entry.compareSelected'),
+      description: t('resourceOutcome.quickCompareDescription'),
+      skillId: 'search.compare_selected',
+      input: { instruction: t('bookmarkMg.aiCompareInstruction') },
+      minItems: 2,
+      maxItems: 10,
+      supportedTypes: ['bookmark'],
+      requireReadable: true,
+      icon: icon.toolbox.comparison,
+      generatedNoteTitle: t('bookmarkMg.aiGeneratedNoteTitle'),
+    },
+  ]);
 
   useMobileTopBar(['bookmarkMg'], {
     title: () =>
@@ -163,17 +287,10 @@
     },
     auxiliaryActionLabel: () => (batchMode.value ? '' : t('common.more')),
     auxiliaryActionIcon: () => icon.common.more,
-    onAdd: () => {
-      if (batchMode.value) toggleSelectAll(tableData.value);
-      else router.push('/manage/editBookmark/add');
-    },
-    addLabel: () =>
-      batchMode.value && allVisibleSelected(tableData.value)
-        ? t('bookmarkMg.batchDeselectAll')
-        : batchMode.value
-          ? t('bookmarkMg.batchSelectAll')
-          : t('common.add'),
-    addActionMode: () => (batchMode.value ? 'text' : 'icon'),
+    onAdd: () => router.push('/manage/editBookmark/add'),
+    addLabel: () => t('common.add'),
+    showAdd: () => !batchMode.value,
+    addActionMode: () => 'icon',
   });
   const openSnap = (id: string) => {
     snapBookmarkId.value = id;
@@ -205,6 +322,14 @@
     openItemActions(item);
   }
 
+  function handleBookmarkSnapshotClick(item: BookmarkInterface) {
+    if (batchMode.value) {
+      toggleSelection(item.id);
+      return;
+    }
+    openSnap(String(item.id));
+  }
+
   async function handlePageAction(action: MobilePageActionItem) {
     if (action.key === 'batch') {
       enterBatch();
@@ -230,13 +355,9 @@
       : [...selectedIds.value, key];
   }
 
-  function allVisibleSelected(items: Record<string, any>[]) {
-    return items.length > 0 && items.every((item) => selectedIds.value.includes(String(item.id)));
-  }
-
-  function toggleSelectAll(items: Record<string, any>[]) {
-    const visibleIds = items.map((item) => String(item.id));
-    if (allVisibleSelected(items)) {
+  function toggleSelectAll(checked: boolean) {
+    const visibleIds = tableData.value.map((item) => String(item.id));
+    if (!checked) {
       selectedIds.value = selectedIds.value.filter((id) => !visibleIds.includes(id));
       return;
     }
@@ -251,6 +372,8 @@
   function exitBatch() {
     batchMode.value = false;
     selectedIds.value = [];
+    mobileBatchActionsOpen.value = false;
+    outcomeDrawerOpen.value = false;
   }
 
   function handleMobilePageAction(action: MobilePageActionItem) {
@@ -260,6 +383,41 @@
     else if (action.key === 'snapshot') openSnap(String(item.id));
     else if (action.key === 'ai') openBookmarksInAi([item]);
     else if (action.key === 'delete') deleteBookmark(item);
+  }
+
+  function handleMobileBatchAction(action: MobilePageActionItem) {
+    if (action.key === 'outcome') openSelectedOutcomeDrawer();
+    else if (action.key === 'smartOrganize') openSelectedAiOrganize();
+    else if (action.key === 'clear') selectedIds.value = [];
+    else if (action.key === 'delete') handleBatchDelete();
+  }
+
+  function openSelectedAiOrganize() {
+    const ids = selectedBookmarkItems.value.map((item) => String(item.id));
+    if (!ids.length) return;
+    selectedAiOrganizeIds.value = ids;
+    mobileBatchActionsOpen.value = false;
+    aiOrgVisible.value = true;
+  }
+
+  function openSelectedOutcomeDrawer() {
+    if (!selectedBookmarkItems.value.length) {
+      message.warning(t('resourceOutcome.batch.selectFirst'));
+      return;
+    }
+    outcomeResources.value = selectedBookmarkItems.value.map((item) => ({
+      type: 'bookmark',
+      id: String(item.id),
+      title: String(item.name || t('bookmarkMg.untitled')),
+      quickReadable: true,
+    }));
+    mobileBatchActionsOpen.value = false;
+    bookmarkAiVisible.value = false;
+    outcomeDrawerOpen.value = true;
+    recordOperation({
+      module: '书签管理',
+      operation: `用所选书签生成与处理【${outcomeResources.value.length}个】`,
+    });
   }
 
   function handleBatchDelete() {
@@ -419,6 +577,10 @@
   }
   :deep(.list-item .mobile-list-row.is-complex) {
     min-height: 70px;
+  }
+  .bookmark-mobile-list--batch :deep(.list-body) {
+    padding-bottom: 164px;
+    scroll-padding-bottom: 164px;
   }
   .table-search-input {
     width: 100%;

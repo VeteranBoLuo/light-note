@@ -2,20 +2,20 @@
   <template v-if="bookmark.isMobile">
     <BButton
       class="noteType-select"
-      :class="{ active: filterVisible || tag !== undefined }"
+      :class="{ active: filterVisible || tag !== undefined, 'is-compact': compact }"
       :aria-expanded="filterVisible"
       :aria-label="`${t('note.tagsTab')}：${viewNoteFilter}`"
       :title="viewNoteFilter"
       @click="filterVisible = true"
       v-click-log="OPERATION_LOG_MAP.noteLibrary.filterNote"
     >
-      <SvgIcon :src="icon.manage_categoryBtn_tag" size="16" aria-hidden="true" />
+      <SvgIcon :src="icon.resource.tag" :size="compact ? 18 : 16" aria-hidden="true" />
       <span v-if="!compact" class="filter-label text-hidden">{{ viewNoteFilter }}</span>
       <SvgIcon
         class="filter-chevron"
         :class="{ 'is-open': filterVisible }"
         :src="icon.noteTree.chevron"
-        size="14"
+        :size="compact ? 10 : 14"
         aria-hidden="true"
       />
     </BButton>
@@ -88,19 +88,19 @@
   <BPopover v-else v-model:open="filterVisible" trigger="click" placement="bottom-right">
     <BButton
       class="noteType-select"
-      :class="{ active: filterVisible || tag !== undefined }"
+      :class="{ active: filterVisible || tag !== undefined, 'is-compact': compact }"
       :aria-expanded="filterVisible"
       :aria-label="`${t('note.tagsTab')}：${viewNoteFilter}`"
       :title="viewNoteFilter"
       v-click-log="OPERATION_LOG_MAP.noteLibrary.filterNote"
     >
-      <SvgIcon :src="icon.manage_categoryBtn_tag" size="16" aria-hidden="true" />
+      <SvgIcon :src="icon.resource.tag" :size="compact ? 18 : 16" aria-hidden="true" />
       <span class="filter-label text-hidden">{{ viewNoteFilter }}</span>
       <SvgIcon
         class="filter-chevron"
         :class="{ 'is-open': filterVisible }"
         :src="icon.noteTree.chevron"
-        size="14"
+        :size="compact ? 10 : 14"
         aria-hidden="true"
       />
     </BButton>
@@ -260,6 +260,12 @@
 
   .filter-label {
     max-width: 112px;
+  }
+  .noteType-select.is-compact {
+    height: 36px;
+    min-height: 36px;
+    gap: 3px;
+    padding-inline: 0;
   }
   .filter-chevron {
     flex: 0 0 auto;

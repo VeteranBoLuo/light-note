@@ -62,7 +62,7 @@ describe('cloud file empty state layout', () => {
     expect(source).toContain("label: t('resourceOutcome.primaryAction')");
     expect(source).not.toMatch(/mobileBatchActions[\s\S]*?key: 'toggleAll'/);
     expect(batchBarSource).toContain('v-if="$slots.leading"');
-    expect(batchBarSource).toContain('v-if="showMobilePrimary"');
+    expect(batchBarSource).toContain('v-if="showPrimary && showMobilePrimary"');
   });
 
   it('卡片正文高度包含内边距，不会比原卡片密度额外增高', () => {

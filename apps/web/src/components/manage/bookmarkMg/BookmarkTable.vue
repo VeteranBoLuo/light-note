@@ -6,9 +6,6 @@
     layout="workspace"
   >
     <template #actions>
-      <BButton v-if="selectedRows.length > 0" type="danger" @click="handleBatchDelete">
-        {{ $t('bookmarkMg.batchDelete') }}
-      </BButton>
       <BButton
         class="resource-action resource-action--utility"
         :disabled="isImporting"
@@ -28,7 +25,7 @@
       </BButton>
       <BButton
         class="resource-action resource-action--ai"
-        @click="aiOrgVisible = true"
+        @click="openGlobalAiOrganize"
         v-click-log="OPERATION_LOG_MAP.bookmarkMg.aiOrganize"
       >
         <SvgIcon :src="icon.ai.organize" color="currentColor" size="18" />
@@ -44,7 +41,13 @@
         {{ $t('common.add') }}
       </BButton>
     </template>
-    <div class="bookmark-manage-page" :class="{ 'bookmark-manage-page--night': user.currentTheme === 'night' }">
+    <div
+      class="bookmark-manage-page"
+      :class="{
+        'bookmark-manage-page--night': user.currentTheme === 'night',
+        'bookmark-manage-page--batch': selectionMode,
+      }"
+    >
       <!-- 图标补全进度卡 -->
       <BCard v-if="iconBatchState" class="icon-batch-progress-card">
         <div class="icon-batch-progress-content">
@@ -199,22 +202,13 @@
                 </BButton>
               </div>
               <BButton
-                v-if="viewMode === 'card'"
                 size="small"
                 class="card-selection-toggle"
-                :class="{ active: cardSelectionMode }"
-                :aria-pressed="cardSelectionMode"
-                @click="toggleCardSelectionMode"
+                :class="{ active: selectionMode }"
+                :aria-pressed="selectionMode"
+                @click="toggleSelectionMode"
               >
-                {{ $t(cardSelectionMode ? 'bookmarkMg.batchCancel' : 'bookmarkMg.batchSelect') }}
-              </BButton>
-              <BButton
-                v-if="viewMode === 'card' && cardSelectionMode && selectableBookmarkIds.length"
-                size="small"
-                class="card-selection-toggle"
-                @click="toggleSelectAllVisibleBookmarks"
-              >
-                {{ $t(allVisibleBookmarksSelected ? 'bookmarkMg.batchDeselectAll' : 'bookmarkMg.batchSelectAll') }}
+                {{ $t(selectionMode ? 'bookmarkMg.batchCancel' : 'bookmarkMg.batchSelect') }}
               </BButton>
               <b-input
                 v-model:value="tableSearchValue"
@@ -229,9 +223,6 @@
             <div class="result-toolbar-right">
               <div class="result-title">{{ $t('bookmarkMg.resultTitle') }}</div>
               <div class="result-subtitle">{{ resultSubtitle }}</div>
-              <div v-if="cardSelectionMode" class="result-selection-count">
-                {{ $t('bookmarkMg.batchSelected', { count: selectedRows.length }) }}
-              </div>
             </div>
           </div>
 
@@ -319,12 +310,12 @@
               class="bookmark-card"
               :class="{
                 'is-selected': selectedRows.includes(bookmarkItem.id),
-                'is-selection-mode': cardSelectionActive,
+                'is-selection-mode': selectionMode,
               }"
               @click="handleBookmarkCardClick(bookmarkItem.id)"
             >
               <BCheckbox
-                v-if="cardSelectionActive"
+                v-if="selectionMode"
                 class="bookmark-selection-checkbox"
                 :checked="selectedRows.includes(bookmarkItem.id)"
                 :aria-label="bookmarkItem.name"
@@ -347,7 +338,7 @@
                         :href="withProtocol(bookmarkItem.url)"
                         target="_blank"
                         rel="noopener noreferrer"
-                        @click.stop="handleStoredBookmarkClick($event, bookmarkItem.url)"
+                        @click.stop="handleBookmarkUrlClick($event, bookmarkItem)"
                         >{{ bookmarkItem.url }}</a
                       >
                     </div>
@@ -356,14 +347,14 @@
                         type="snapshot"
                         :label="$t('bookmarkMg.badgeArchived')"
                         :tooltip="$t('bookmarkMg.badgeArchivedHint')"
-                        @click="openSnap(bookmarkItem.id)"
+                        @click="handleBookmarkSnapshotClick(bookmarkItem)"
                         v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSnapshot"
                       />
                     </div>
                   </div>
                 </div>
 
-                <div v-if="!cardSelectionActive" class="bookmark-actions" @click.stop>
+                <div v-if="!selectionMode" class="bookmark-actions" @click.stop>
                   <BButton
                     class="bookmark-ai-action"
                     :aria-label="$t('bookmarkMg.aiUseBookmark')"
@@ -401,7 +392,7 @@
                     size="medium"
                     interactive
                     max-width="160px"
-                    @click.stop="router.push(`/tag/${t.id}`)"
+                    @click.stop="handleBookmarkTagClick(bookmarkItem.id, t.id)"
                   />
                 </div>
                 <div v-else class="empty-inline">{{ $t('bookmarkMg.noTags') }}</div>
@@ -415,10 +406,12 @@
             :data="filteredBookmarks"
             :columns="tagColumns"
             style="margin-top: 10px; width: 100%; height: calc(100% - 50px)"
-            :selectable="true"
+            :selectable="selectionMode"
             :selectedRows="selectedRows"
             :rowKey="'id'"
+            :row-clickable="selectionMode"
             @selectionChange="handleSelectionChange"
+            @rowClick="(record) => toggleBookmarkSelection((record as BookmarkInterface).id)"
           >
             <template #bodyCell="{ column, text, record }">
               <template v-if="column.key === 'name'">
@@ -436,7 +429,7 @@
                     compact
                     :label="$t('bookmarkMg.badgeArchived')"
                     :tooltip="$t('bookmarkMg.badgeArchivedHint')"
-                    @click="openSnap((record as BookmarkInterface).id)"
+                    @click="handleBookmarkSnapshotClick(record as BookmarkInterface)"
                     v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSnapshot"
                   />
                 </div>
@@ -449,7 +442,7 @@
                     :tag="t"
                     interactive
                     max-width="120px"
-                    @click.stop="router.push(`/tag/${t.id}`)"
+                    @click.stop="handleBookmarkTagClick((record as BookmarkInterface).id, t.id)"
                   />
                 </div>
               </template>
@@ -459,13 +452,13 @@
                     :href="withProtocol(text)"
                     target="_blank"
                     rel="noopener noreferrer"
-                    @click="handleStoredBookmarkClick($event, text)"
+                    @click.stop="handleBookmarkUrlClick($event, record as BookmarkInterface)"
                     >{{ text }}</a
                   >
                 </div>
               </template>
               <template v-else-if="column.key === 'operation'">
-                <div class="edit-tag-operation">
+                <div v-if="!selectionMode" class="edit-tag-operation">
                   <BActionButton
                     action="edit"
                     :tooltip="$t('common.edit')"
@@ -530,15 +523,56 @@
       />
       <LinkHealthModal v-model:visible="healthVisible" />
       <BookmarkSnapshotModal v-model:visible="snapVisible" :bookmark-id="snapBookmarkId" />
-      <AiOrganizeModal v-model:visible="aiOrgVisible" @applied="init" />
+      <AiOrganizeModal v-model:visible="aiOrgVisible" :selected-ids="selectedAiOrganizeIds" @applied="init" />
       <BookmarkAiDialog v-model:visible="bookmarkAiVisible" :bookmarks="bookmarkAiItems" />
+      <ResourceBatchActionBar
+        :open="selectionMode"
+        :summary="batchActionSummary"
+        :aria-label="$t('resourceOutcome.batch.ariaLabel')"
+        :clear-label="$t('resourceOutcome.batch.clear')"
+        :show-clear="selectedRows.length > 0"
+        :primary-label="$t('resourceOutcome.primaryAction')"
+        :more-label="$t('common.more')"
+        :primary-disabled="!selectedRows.length"
+        :primary-disabled-reason="!selectedRows.length ? $t('resourceOutcome.batch.selectFirst') : ''"
+        @clear="clearBookmarkSelection"
+        @primary="openSelectedOutcomeDrawer"
+      >
+        <template #leading>
+          <span class="batch-action-select-all" @click.stop>
+            <BCheckbox
+              :checked="allVisibleBookmarksSelected"
+              :indeterminate="someVisibleBookmarksSelected"
+              :disabled="!selectableBookmarkIds.length"
+              :aria-label="$t(allVisibleBookmarksSelected ? 'bookmarkMg.batchDeselectAll' : 'bookmarkMg.batchSelectAll')"
+              @change="toggleSelectAllVisibleBookmarks"
+            />
+          </span>
+        </template>
+        <template #actions>
+          <BButton :disabled="!selectedRows.length" @click="openSelectedAiOrganize">
+            <SvgIcon :src="icon.ai.organize" size="16" aria-hidden="true" />
+            {{ $t('bookmarkMg.aiOrganizeBtn') }}
+          </BButton>
+          <BButton class="batch-action-delete" :disabled="!selectedRows.length" @click="handleBatchDelete">
+            <SvgIcon :src="icon.table_delete" size="16" aria-hidden="true" />
+            {{ $t('bookmarkMg.batchDelete') }}
+          </BButton>
+        </template>
+      </ResourceBatchActionBar>
+      <ResourceOutcomeDrawer
+        v-model:open="outcomeDrawerOpen"
+        :resources="outcomeResources"
+        :quick-actions="bookmarkOutcomeQuickActions"
+        surface="bookmark_manage"
+      />
     </div>
   </ResourcePageShell>
 </template>
 
 <script lang="ts" setup>
   import { bookmarkStore, useUserStore } from '@/store';
-  import { computed, defineAsyncComponent, ref, onMounted, onUnmounted } from 'vue';
+  import { computed, defineAsyncComponent, ref, onMounted, onUnmounted, watch } from 'vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { apiBasePost } from '@/http/request.ts';
   import { batchDeleteSearchResources, clearGlobalSearchCache } from '@/api/search.ts';
@@ -577,6 +611,11 @@
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
   import TagDirectoryRow from '@/components/tagSpace/TagDirectoryRow.vue';
   import BookmarkAiDialog from '@/components/manage/bookmarkMg/BookmarkAiDialog.vue';
+  import ResourceBatchActionBar from '@/components/resourceActions/ResourceBatchActionBar.vue';
+  import ResourceOutcomeDrawer, {
+    type ResourceOutcomeQuickAction,
+    type ResourceOutcomeResource,
+  } from '@/components/resourceActions/ResourceOutcomeDrawer.vue';
 
   const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
 
@@ -625,6 +664,9 @@
   const selectedRows = ref<string[]>([]);
   const bookmarkAiVisible = ref(false);
   const bookmarkAiItems = ref<BookmarkInterface[]>([]);
+  const selectedAiOrganizeIds = ref<string[]>([]);
+  const outcomeDrawerOpen = ref(false);
+  const outcomeResources = ref<ResourceOutcomeResource[]>([]);
   const importExportModalVisible = ref(false);
   const healthVisible = ref(false);
   const aiOrgVisible = ref(false); // 智能打标签弹框
@@ -636,8 +678,7 @@
     snapVisible.value = true;
   };
   const viewMode = ref<'card' | 'table'>('card');
-  const cardSelectionMode = ref(false);
-  const cardSelectionActive = computed(() => cardSelectionMode.value || selectedRows.value.length > 0);
+  const selectionMode = ref(false);
   const tableSearchValue = ref('');
   type ImportStage = 'idle' | 'reading' | 'importing' | 'refreshing';
   const importStage = ref<ImportStage>('idle');
@@ -668,9 +709,12 @@
     selectedRows.value = selected;
   };
 
-  function toggleCardSelectionMode() {
-    if (cardSelectionMode.value) selectedRows.value = [];
-    cardSelectionMode.value = !cardSelectionMode.value;
+  function toggleSelectionMode() {
+    if (selectionMode.value) {
+      clearBookmarkSelection();
+      outcomeDrawerOpen.value = false;
+    }
+    selectionMode.value = !selectionMode.value;
   }
 
   function toggleBookmarkSelection(id: string) {
@@ -681,8 +725,33 @@
   }
 
   function handleBookmarkCardClick(id: string) {
-    if (!cardSelectionActive.value) return;
+    if (!selectionMode.value) return;
     toggleBookmarkSelection(id);
+  }
+
+  function handleBookmarkUrlClick(event: MouseEvent, item: BookmarkInterface) {
+    if (selectionMode.value) {
+      event.preventDefault();
+      toggleBookmarkSelection(item.id);
+      return;
+    }
+    handleStoredBookmarkClick(event, item.url);
+  }
+
+  function handleBookmarkSnapshotClick(item: BookmarkInterface) {
+    if (selectionMode.value) {
+      toggleBookmarkSelection(item.id);
+      return;
+    }
+    openSnap(item.id);
+  }
+
+  function handleBookmarkTagClick(bookmarkId: string, tagId: string) {
+    if (selectionMode.value) {
+      toggleBookmarkSelection(bookmarkId);
+      return;
+    }
+    void router.push(`/tag/${tagId}`);
   }
 
   function openBookmarksInAi(items: BookmarkInterface[]) {
@@ -690,6 +759,18 @@
     if (!available.length) return;
     bookmarkAiItems.value = available.slice(0, 1);
     bookmarkAiVisible.value = true;
+  }
+
+  function openGlobalAiOrganize() {
+    selectedAiOrganizeIds.value = [];
+    aiOrgVisible.value = true;
+  }
+
+  function openSelectedAiOrganize() {
+    const selectedIds = selectedBookmarkItems.value.map((item) => String(item.id));
+    if (!selectedIds.length) return;
+    selectedAiOrganizeIds.value = selectedIds;
+    aiOrgVisible.value = true;
   }
   const showImportExportModal = () => {
     if (isImporting.value) {
@@ -789,11 +870,61 @@
   const selectableBookmarkIds = computed(() =>
     filteredBookmarks.value.map((item) => String(item.id || '')).filter((id) => Boolean(id)),
   );
+  const selectedBookmarkItems = computed(() => {
+    const selected = new Set(selectedRows.value);
+    return tableData.value.filter((item) => selected.has(String(item.id)));
+  });
+  watch(
+    () => tableData.value.map((item) => String(item.id)),
+    (bookmarkIds) => {
+      const availableIds = new Set(bookmarkIds);
+      const nextSelection = selectedRows.value.filter((id) => availableIds.has(id));
+      if (nextSelection.length !== selectedRows.value.length) selectedRows.value = nextSelection;
+    },
+    { flush: 'sync' },
+  );
   const allVisibleBookmarksSelected = computed(
     () =>
       selectableBookmarkIds.value.length > 0 &&
       selectableBookmarkIds.value.every((id) => selectedRows.value.includes(id)),
   );
+  const someVisibleBookmarksSelected = computed(() => {
+    if (allVisibleBookmarksSelected.value) return false;
+    return selectableBookmarkIds.value.some((id) => selectedRows.value.includes(id));
+  });
+  const batchActionSummary = computed(() =>
+    selectedRows.value.length
+      ? t('bookmarkMg.batchSelected', { count: selectedRows.value.length })
+      : t('resourceOutcome.batch.selectResources'),
+  );
+  const bookmarkOutcomeQuickActions = computed<ResourceOutcomeQuickAction[]>(() => [
+    {
+      id: 'summarize',
+      label: t('ai.entry.summarizeSelected'),
+      description: t('resourceOutcome.quickSummaryDescription'),
+      skillId: 'search.summarize_selected',
+      input: { instruction: t('ai.entry.summarizeSelectedInstruction') },
+      minItems: 1,
+      maxItems: 10,
+      supportedTypes: ['bookmark'],
+      requireReadable: true,
+      icon: icon.ai.materials,
+      generatedNoteTitle: t('bookmarkMg.aiGeneratedNoteTitle'),
+    },
+    {
+      id: 'compare',
+      label: t('ai.entry.compareSelected'),
+      description: t('resourceOutcome.quickCompareDescription'),
+      skillId: 'search.compare_selected',
+      input: { instruction: t('bookmarkMg.aiCompareInstruction') },
+      minItems: 2,
+      maxItems: 10,
+      supportedTypes: ['bookmark'],
+      requireReadable: true,
+      icon: icon.toolbox.comparison,
+      generatedNoteTitle: t('bookmarkMg.aiGeneratedNoteTitle'),
+    },
+  ]);
 
   const stats = computed(() => {
     const uniqueTagIds = new Set<string>();
@@ -840,14 +971,37 @@
     return t('bookmarkMg.resultSubtitle', { count: filteredBookmarks.value.length });
   });
 
-  function toggleSelectAllVisibleBookmarks() {
+  function toggleSelectAllVisibleBookmarks(checked = !allVisibleBookmarksSelected.value) {
     const selected = new Set(selectedRows.value);
-    if (allVisibleBookmarksSelected.value) {
+    if (!checked) {
       selectableBookmarkIds.value.forEach((id) => selected.delete(id));
     } else {
       selectableBookmarkIds.value.forEach((id) => selected.add(id));
     }
     selectedRows.value = Array.from(selected);
+  }
+
+  function clearBookmarkSelection() {
+    selectedRows.value = [];
+  }
+
+  function openSelectedOutcomeDrawer() {
+    if (!selectedBookmarkItems.value.length) {
+      message.warning(t('resourceOutcome.batch.selectFirst'));
+      return;
+    }
+    outcomeResources.value = selectedBookmarkItems.value.map((item) => ({
+      type: 'bookmark',
+      id: String(item.id),
+      title: String(item.name || t('bookmarkMg.untitled')),
+      quickReadable: true,
+    }));
+    bookmarkAiVisible.value = false;
+    outcomeDrawerOpen.value = true;
+    recordOperation({
+      module: '书签管理',
+      operation: `用所选书签生成与处理【${outcomeResources.value.length}个】`,
+    });
   }
 
   // ── 导入导出配置 ──
@@ -954,7 +1108,8 @@
               : t('bookmarkMg.batchDeleteSuccess', { count: successCount }),
           );
           selectedRows.value = [];
-          cardSelectionMode.value = false;
+          selectionMode.value = false;
+          outcomeDrawerOpen.value = false;
           clearGlobalSearchCache();
           await init();
         } catch {
@@ -1413,13 +1568,6 @@
     flex-shrink: 0;
   }
 
-  .result-selection-count {
-    margin-top: 4px;
-    color: var(--resource-bookmark-color);
-    font-size: 12px;
-    font-variant-numeric: tabular-nums;
-  }
-
   .result-search {
     width: 200px;
   }
@@ -1598,6 +1746,11 @@
 
   .result-panel {
     --b-card-background: var(--bm-panel-bg);
+  }
+
+  .bookmark-manage-page--batch .result-panel {
+    padding-bottom: 112px !important;
+    scroll-padding-bottom: 112px;
   }
 
   .result-panel :deep(.table-container) {

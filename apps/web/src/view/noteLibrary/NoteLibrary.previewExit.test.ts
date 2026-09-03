@@ -70,6 +70,13 @@ describe('笔记库桌面预览退出', () => {
   });
 
   it('顶部笔记入口在路由成功落到根页时清除 keepAlive 内的预览和筛选现场', () => {
+    const outcomeStateIndex = source.indexOf('const outcomeDrawerOpen = ref(false);');
+    const rootEntryWatchIndex = source.indexOf(
+      'watch([libraryRootEntryRequestToken, () => router.currentRoute.value.path], applyPendingLibraryRootEntryRequest',
+    );
+    expect(outcomeStateIndex).toBeGreaterThan(-1);
+    expect(rootEntryWatchIndex).toBeGreaterThan(-1);
+    expect(outcomeStateIndex).toBeLessThan(rootEntryWatchIndex);
     expect(source).toContain('libraryRootEntryRequestToken');
     expect(source).toMatch(
       /function applyPendingLibraryRootEntryRequest[\s\S]*router\.currentRoute\.value\.path !== '\/noteLibrary'[\s\S]*clearNoteLibraryRootViewState\(\);/,

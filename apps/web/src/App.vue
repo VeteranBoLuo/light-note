@@ -106,10 +106,15 @@
   import { prefetchResolvedRoute } from '@/utils/routePrefetch';
   import { scheduleNoteEditorStartupPreload } from '@/utils/noteEditorStartupPreload';
   import { resolveRouteAuthDecision } from '@/utils/authNavigationIntent.ts';
+  import { loadUserAuthModal } from '@/utils/userAuthModalLoader.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
 
-  const Login = defineAsyncComponent(() => import('@/view/login/UserAuthModal.vue'));
+  const Login = defineAsyncComponent({
+    loader: loadUserAuthModal,
+    loadingComponent: AsyncFeatureLoadingOverlay,
+    delay: 240,
+  });
   // 图片查看器包含 viewer.js，只有用户真正打开图片时才下载，避免每次启动都解析第三方预览运行时。
   const BViewer = defineAsyncComponent({
     loader: () => import('@/components/base/Viewer/BViewer.vue'),

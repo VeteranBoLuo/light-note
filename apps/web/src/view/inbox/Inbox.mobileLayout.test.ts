@@ -135,6 +135,43 @@ describe('移动端待办页签布局', () => {
     );
   });
 
+  it('待办列表复用稳定批量入口与共享底栏，移动端动作收进更多抽屉', () => {
+    expect(inboxSource.match(/v-if="todoView === 'list' && \(todo\.items\.length \|\| pageLoading\)"/g)).toHaveLength(
+      2,
+    );
+    expect(inboxSource.match(/:aria-pressed="todoSelectionMode"/g)).toHaveLength(2);
+    expect(
+      inboxSource.match(/t\(todoSelectionMode \? 'inbox\.todoBatchCancel' : 'inbox\.todoBatchSelect'\)/g),
+    ).toHaveLength(2);
+    expect(inboxSource).toContain('<ResourceBatchActionBar');
+    expect(inboxSource).toContain(':open="isTodoFocused && todoView === \'list\' && todoSelectionMode"');
+    expect(inboxSource).toContain(':checked="allTodoItemsSelected"');
+    expect(inboxSource).toContain(':indeterminate="someTodoItemsSelected"');
+    expect(inboxSource).toContain(':show-primary="!bookmark.isMobile && todo.status !== \'completed\'"');
+    expect(inboxSource).toContain(':show-mobile-primary="false"');
+    expect(inboxSource).toContain(':primary-icon="icon.filterPanel.check"');
+    expect(inboxSource).toContain('class="batch-action-delete"');
+    expect(inboxSource).toContain('<MobilePageActionsDrawer');
+    expect(inboxSource).toContain(':actions="todoMobileBatchActions"');
+    expect(inboxSource).toContain("key: 'complete'");
+    expect(inboxSource).toContain("key: 'clear'");
+    expect(inboxSource).toContain("key: 'delete'");
+    expect(inboxSource).not.toContain('<MobileStickyActionBar');
+    expect(inboxSource).not.toContain('class="todo-list-toolbar"');
+    expect(inboxSource).toMatch(/\.todo-workspace-toolbar__select\s*\{[\s\S]*?width:\s*80px;/);
+    expect(inboxSource).toMatch(/\.todo-toolbar-control--batch\.b_btn\s*\{[\s\S]*?width:\s*14ch;/);
+    expect(inboxSource).toMatch(
+      /\.inbox-page--todo-focused\.is-selection-mode \.todo-group-list\s*\{[\s\S]*?padding-bottom:\s*110px/,
+    );
+
+    const mobileActionsSource = inboxSource.slice(
+      inboxSource.indexOf('const todoMobileBatchActions'),
+      inboxSource.indexOf('const hasPendingOperation'),
+    );
+    expect(mobileActionsSource).not.toContain("key: 'outcome'");
+    expect(mobileActionsSource).not.toContain('magicWand');
+  });
+
   it('独立桌面页点击待整理卡片更新检查器，移动端与整理中心嵌入态直接打开资源', () => {
     expect(inboxSource).not.toContain('@mouseenter="inspectInboxResource(action.item)"');
     expect(inboxSource).not.toContain('@focusin="inspectInboxResource(action.item)"');

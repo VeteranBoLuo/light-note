@@ -168,6 +168,7 @@
     box-shadow: var(--surface-card-shadow, none);
     transition:
       border-color 0.2s,
+      background-color 0.2s,
       box-shadow 0.2s;
     display: flex;
     min-width: 0;
@@ -259,7 +260,19 @@
     align-items: stretch;
   }
   .result-item--list:hover {
+    border-color: var(--surface-border-color, var(--card-border-color));
+    background: var(--search-muted-bg, var(--hover-background));
+    box-shadow: none;
     transform: none;
+  }
+  .result-item--list.result-item--selected:hover {
+    border-color: var(--primary-color);
+    background: var(--card-background, var(--background-color));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary-color) 45%, transparent);
+  }
+  .result-item--list:hover .result-row,
+  .result-item--list .result-row:active {
+    background: transparent !important;
   }
   .row-checkbox-wrap {
     flex: 0 0 auto;

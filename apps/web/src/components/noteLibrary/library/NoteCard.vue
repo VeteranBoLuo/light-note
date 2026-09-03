@@ -21,7 +21,7 @@
       v-if="parentPathText && parentTargetId"
       class="note-parent-path"
       :path-text="parentPathText"
-      @activate="emit('openParent', parentTargetId)"
+      @activate="handleParentActivate(parentTargetId)"
     />
     <div class="note-preview-body" :class="{ 'has-image': hasPreviewImage }">
       <!-- 正文仍只做纯文本插值；压缩首图按正文原顺序插入，绝不恢复 v-html。 -->
@@ -66,8 +66,8 @@
             :tag="tag"
             show-detail-corner
             max-width="96px"
-            @click.stop="noteTypeChange(tag)"
-            @detail="openTagDetail(tag)"
+            @click.stop="handleTagClick(tag)"
+            @detail="handleTagDetail(tag)"
             v-click-log="{ module: '笔记库', operation: `筛选标签【${tag.name}】` }"
           />
           <BChip
@@ -76,23 +76,23 @@
             tone="neutral"
             size="small"
             :title="hiddenTagsLabel"
-            @click.stop
+            @click.stop="handlePassiveChipClick"
           >
             +{{ hiddenTagCount }}
           </BChip>
         </div>
         <div v-else class="note-tags note-tags--empty"></div>
-        <BButton v-if="childCount" class="note-child-count" @click.stop="emit('action', 'enterDirectory')">
+        <BButton v-if="childCount" class="note-child-count" @click.stop="handleChildPagesClick">
           <span>{{ $t('note.childPages', { count: childCount }) }}</span>
           <SvgIcon :src="icon.arrow_right" size="12" aria-hidden="true" />
         </BButton>
       </div>
       <div class="note-time">{{ note['updateTime'] ?? note['createTime'] }}</div>
     </div>
-    <div v-if="!bookmark.isMobile || batchMode" class="note-select-control">
+    <div v-if="batchMode" class="note-select-control">
       <b-checkbox v-model:checked="note.isCheck" @click.stop />
     </div>
-    <div v-else-if="!batchMode" class="note-mobile-actions" @click.stop>
+    <div v-else-if="bookmark.isMobile" class="note-mobile-actions" @click.stop>
       <BButton class="note-more-button" :aria-label="$t('common.more')" @click="emit('action', 'more')">
         <span class="note-more-button__visual">
           <SvgIcon :src="icon.common.more" size="18" />
@@ -205,18 +205,50 @@
       .join('、'),
   );
 
-  const noteTypeChange = function (tag) {
-    emit('nodeTypeChange', tag);
-  };
+  function toggleBatchSelection() {
+    props.note.isCheck = !props.note.isCheck;
+  }
 
-  function openTagDetail(tag) {
+  function handleParentActivate(noteId: string) {
+    if (props.batchMode) {
+      toggleBatchSelection();
+      return;
+    }
+    emit('openParent', noteId);
+  }
+
+  function handleTagClick(tag: any) {
+    if (props.batchMode) {
+      toggleBatchSelection();
+      return;
+    }
+    emit('nodeTypeChange', tag);
+  }
+
+  function handleTagDetail(tag: any) {
+    if (props.batchMode) {
+      toggleBatchSelection();
+      return;
+    }
     if (!tag?.id) return;
     router.push(`/tag/${tag.id}`);
   }
 
+  function handlePassiveChipClick() {
+    if (props.batchMode) toggleBatchSelection();
+  }
+
+  function handleChildPagesClick() {
+    if (props.batchMode) {
+      toggleBatchSelection();
+      return;
+    }
+    emit('action', 'enterDirectory');
+  }
+
   function handleCardClick() {
     if (props.batchMode) {
-      props.note.isCheck = !props.note.isCheck;
+      toggleBatchSelection();
       return;
     }
     emit('open');
@@ -264,9 +296,6 @@
       }
     }
 
-    &:hover,
-    &:focus-visible,
-    &.is-selected,
     &.is-batch-mode {
       .note-select-control {
         opacity: 1;

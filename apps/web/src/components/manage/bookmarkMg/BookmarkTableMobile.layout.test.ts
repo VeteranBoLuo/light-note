@@ -46,6 +46,21 @@ describe('移动端书签列表布局', () => {
     );
   });
 
+  it('批量态复用共享底栏，以复选框控制全选，并把生成与处理收进更多抽屉', () => {
+    expect(bookmarkSource).toContain('<ResourceBatchActionBar');
+    expect(bookmarkSource).toContain(':show-mobile-primary="false"');
+    expect(bookmarkSource).toContain(':checked="allBookmarksSelected"');
+    expect(bookmarkSource).toContain(':indeterminate="someBookmarksSelected"');
+    expect(bookmarkSource).toContain("key: 'outcome'");
+    expect(bookmarkSource).toMatch(/key: 'clear',[\s\S]*?icon: icon\.common\.close/);
+    expect(bookmarkSource).toContain('surface="bookmark_manage"');
+    expect(bookmarkSource).toContain('showAdd: () => !batchMode.value');
+    expect(bookmarkSource).toMatch(
+      /function handleBookmarkSnapshotClick[\s\S]*?if \(batchMode\.value\)[\s\S]*?toggleSelection\(item\.id\)/,
+    );
+    expect(bookmarkSource).not.toContain('<MobileStickyActionBar');
+  });
+
   it('死链体检在窄屏改为纵向结果卡，并保留 44px 触控操作', () => {
     expect(linkHealthSource).toContain('v-auto-scrollbar class="lh-list"');
     expect(linkHealthSource).toContain('<BProgress');

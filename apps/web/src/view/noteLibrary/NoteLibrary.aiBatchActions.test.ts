@@ -34,6 +34,7 @@ const mobileNavigationDrawerSource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/workspace/NoteMobileNavigationDrawer.vue'),
   'utf8',
 );
+const inboxEnqueueSource = readFileSync(resolve(process.cwd(), 'src/composables/useInboxEnqueue.ts'), 'utf8');
 const treeRowSource = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/tree/NoteTreeRow.vue'), 'utf8');
 const noteTreeComposableSource = readFileSync(resolve(process.cwd(), 'src/composables/useNoteTree.ts'), 'utf8');
 const noteTreeDragDropSource = readFileSync(resolve(process.cwd(), 'src/composables/useNoteTreeDragDrop.ts'), 'utf8');
@@ -58,12 +59,14 @@ describe('笔记库批量 AI 操作语义', () => {
     expect(source).toContain('v-if="!desktopPreviewOpen && !loading && !visibleDragNoteList.length"');
   });
 
-  it('桌面与移动端都区分“分析所选笔记”和确定性的“智能打标签”', () => {
-    expect(source).toContain("t('note.aiSummarizeSelected')");
+  it('桌面与移动端都区分“生成与处理”和确定性的“智能打标签”', () => {
+    expect(source).toContain('<ResourceBatchActionBar');
+    expect(source).toContain('<ResourceOutcomeDrawer');
+    expect(source).toContain('surface="note_library"');
     expect(source).toContain("$t('bookmarkMg.aiOrganizeBtn')");
-    expect(source).toContain("key: 'analyze'");
+    expect(source).toContain("key: 'outcome'");
     expect(source).toContain("key: 'smartOrganize'");
-    expect(source).toContain('icon: icon.ai.materials');
+    expect(source).toContain('icon: icon.common.magicWand');
     expect(source).toContain('icon: icon.ai.organize');
     expect(source).toContain('<NoteAiDialog');
     expect(source).not.toContain("key: 'assistant'");
@@ -76,27 +79,52 @@ describe('笔记库批量 AI 操作语义', () => {
     expect(source).toMatch(/const mobileNoteActions = computed[\s\S]*menuForNote\(activeMobileNote\.value\)/);
   });
 
-  it('桌面批量工具栏只保留高频动作，低频动作收进更多菜单', () => {
+  it('桌面批量操作落在悬浮底栏，入口原位切换且其余顶栏控件保持稳定', () => {
+    const batchToggleClassIndex = source.indexOf('class="note-action-button note-batch-toggle"');
+    const batchToggleMarkup = source.slice(
+      source.lastIndexOf('<BButton', batchToggleClassIndex),
+      source.indexOf('</BButton>', batchToggleClassIndex) + '</BButton>'.length,
+    );
+    expect(source).toContain('class="note-action-button note-batch-toggle"');
+    expect(source).toContain('@click="toggleBatchMode"');
+    expect(batchToggleMarkup).toContain(":aria-label=\"$t(batchMode ? 'note.exitBatch' : 'note.batchAction')\"");
+    expect(batchToggleMarkup).toContain("{{ $t('note.batchAction') }}");
+    expect(batchToggleMarkup).toContain("{{ $t('note.exitBatch') }}");
+    expect(batchToggleMarkup).not.toContain('<SvgIcon');
+    expect(source).toContain(':open="batchMode"');
+    expect(source).toContain('@primary="openSelectedOutcomeDrawer"');
+    expect(source).toContain('@clear="clearSelectedNotes"');
+    expect(source).toContain(':checked="allVisibleChecked"');
+    expect(source).toContain(':indeterminate="someVisibleChecked"');
     expect(source).toContain(':menu-options="desktopBatchMoreOptions"');
-    expect(source).toMatch(/const desktopBatchMoreOptions = computed\(\(\) => \[[\s\S]*key: 'analyze'/);
+    expect(source).toMatch(/const desktopBatchMoreOptions = computed\(\(\) => \[[\s\S]*key: 'move'/);
     expect(source).toMatch(/const desktopBatchMoreOptions = computed\(\(\) => \[[\s\S]*key: 'addTags'/);
     expect(source).toMatch(/const desktopBatchMoreOptions = computed\(\(\) => \[[\s\S]*key: 'removeTags'/);
     expect(source).toMatch(/const desktopBatchMoreOptions = computed\(\(\) => \[[\s\S]*key: 'export'/);
-    expect(source).not.toContain('@click="openSelectedNotesAi"');
+    expect(source).not.toContain("key: 'analyze'");
     expect(source).not.toContain('@click="openBatchTags(\'add\')"');
     expect(source).not.toContain('@click="openBatchTags(\'remove\')"');
     expect(source).not.toContain('@click="openBatchExportModal"');
-    expect(source).toContain("{{ $t('note.exitBatch') }}");
-    expect(source).toContain('class="note-action-button note-exit-batch-button"');
-    expect(source).toContain('class="note-action-button note-batch-icon-button note-exit-batch-button"');
-    expect(source).toContain('<SvgIcon :src="icon.navigation.exit" size="16" />');
-    expect(source).toContain('<SvgIcon :src="icon.navigation.exit" size="17" />');
-    expect(icon.navigation.exit).toBeTruthy();
-    expect(icon.navigation.exit).not.toBe(icon.nullImg);
-    expect(source).toMatch(/\.note-exit-batch-button\s*\{[\s\S]*border: 1px solid var\(--desc-color\)/);
+    expect(source).toMatch(/\.note-batch-toggle\s*\{[\s\S]*border: 1px solid transparent;/);
+    expect(source).toMatch(/\.note-batch-toggle__labels\s*\{[\s\S]*display: grid;/);
+    expect(source).toMatch(
+      /\.note-batch-toggle__labels > span\s*\{[\s\S]*grid-area: 1 \/ 1;[\s\S]*visibility: hidden;/,
+    );
+    expect(source).toMatch(/\.note-batch-toggle\.is-batch-active\s*\{[\s\S]*border: 1px solid var\(--desc-color\)/);
     expect(source).not.toContain("{{ $t('note.batchDone') }}");
-    expect(zhLocaleSource).toContain("exitBatch: '退出批量操作'");
+    expect(zhLocaleSource).toContain("exitBatch: '退出批量'");
     expect(enLocaleSource).toContain("exitBatch: 'Exit Batch'");
+  });
+
+  it('普通态不再靠 hover 露出复选框，显式进入批量后卡片和列表才渲染选择入口', () => {
+    expect(cardSource).toContain('v-if="batchMode" class="note-select-control"');
+    expect(cardSource).toContain('v-else-if="bookmark.isMobile" class="note-mobile-actions"');
+    expect(cardSource).not.toContain('v-else-if="!batchMode" class="note-mobile-actions"');
+    expect(listItemSource).toContain('v-if="!bookmark.isMobile && batchMode" class="note-select-column"');
+    expect(cardSource).not.toMatch(/&:hover,[\s\S]{0,120}\.note-select-control/);
+    expect(source).not.toMatch(/watch\([\s\S]{0,120}selectedVisibleCount[\s\S]{0,180}batchMode\.value = true/);
+    expect(zhLocaleSource).toContain("batchAction: '批量操作'");
+    expect(enLocaleSource).toContain("batchAction: 'Batch Actions'");
   });
 
   it('智能打标签把当前所选笔记 ID 交给自动打标签弹窗', () => {
@@ -105,15 +133,32 @@ describe('笔记库批量 AI 操作语义', () => {
     expect(source).toMatch(/action\.key === 'smartOrganize'[\s\S]*openSelectedAiOrganize\(\)/);
   });
 
-  it('普通态与批量态的智能打标签共用系统主紫色强调样式', () => {
-    expect(source).toMatch(/class="note-action-button note-ai-button"[\s\S]{0,180}@click="openSelectedAiOrganize"/);
+  it('普通态智能打标签保持紫色语义，批量态通过共享底栏调用相同能力', () => {
     expect(source).toMatch(/class="note-action-button note-ai-button"[\s\S]{0,180}@click="openGlobalAiOrganize"/);
+    expect(source).toMatch(/<ResourceBatchActionBar[\s\S]*?@click="openSelectedAiOrganize"/);
 
     const aiButtonRule = source.match(/\.note-ai-button\s*\{([\s\S]*?)\n\s*\}/)?.[1] || '';
     expect(aiButtonRule).toContain('border: 1px solid var(--primary-color');
     expect(aiButtonRule).toContain('color: var(--primary-color');
     expect(aiButtonRule).toContain('background: color-mix(in srgb, var(--primary-color');
     expect(aiButtonRule).not.toContain('--resource-note-color');
+  });
+
+  it('加入待整理是批量底栏高频动作，移动及标签等低频动作进入更多菜单', () => {
+    expect(source).toMatch(/<ResourceBatchActionBar[\s\S]*?@click="addSelectedNotesToInbox"/);
+    expect(source).toContain('<SvgIcon :src="icon.contextMenu.inbox" size="16"');
+    expect(source).toMatch(
+      /function addSelectedNotesToInbox\(\)[\s\S]*addResourcesToInbox\([\s\S]*resourceType: 'note'/,
+    );
+    expect(source).toMatch(/const mobileBatchActions = computed[\s\S]*key: 'inbox'/);
+    expect(source).toMatch(/action\.key === 'inbox'\) void addSelectedNotesToInbox\(\)/);
+    expect(source).not.toContain('@click="openBatchMove"');
+    expect(icon.contextMenu.inbox).toBeTruthy();
+    expect(icon.contextMenu.inbox).not.toBe(icon.nullImg);
+    expect(inboxEnqueueSource).toContain('const INBOX_DIRECT_WRITE_LIMIT = 50;');
+    expect(inboxEnqueueSource).toMatch(
+      /items\.length <= INBOX_DIRECT_WRITE_LIMIT[\s\S]*batchAddSearchResourcesToInbox\([\s\S]*mode: 'explicit'/,
+    );
   });
 });
 
@@ -249,6 +294,9 @@ describe('笔记库页面树交互接线', () => {
   it('移动端把目录范围与标签筛选拆成两个职责明确的入口', () => {
     expect(source).toContain('<span>{{ mobileScopeLabel }}</span>');
     expect(source).toContain('<TagFilterSelector compact');
+    expect(source).toMatch(
+      /\.note-mobile-actions :deep\(\.noteType-select\)\s*\{[\s\S]*?width:\s*44px;[\s\S]*?padding-inline:\s*0;/u,
+    );
     expect(noteDirectoryDrawerSource).not.toContain('NoteTagSidebar');
     expect(noteDirectoryDrawerSource).not.toContain("'tags'");
   });

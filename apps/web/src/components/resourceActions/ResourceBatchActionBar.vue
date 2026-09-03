@@ -19,7 +19,11 @@
           <SvgIcon :src="icon.common.more" size="17" aria-hidden="true" />
           <span>{{ moreLabel }}</span>
         </BButton>
-        <BTooltip v-if="showMobilePrimary" :title="primaryDisabledReason" :disabled="!primaryDisabledReason">
+        <BTooltip
+          v-if="showPrimary && showMobilePrimary"
+          :title="primaryDisabledReason"
+          :disabled="!primaryDisabledReason"
+        >
           <span class="resource-batch-action-bar__tooltip-anchor">
             <BButton
               class="resource-batch-action-bar__primary"
@@ -28,7 +32,7 @@
               :loading="primaryLoading"
               @click="emit('primary')"
             >
-              <SvgIcon :src="icon.common.magicWand" size="17" aria-hidden="true" />
+              <SvgIcon :src="primaryIcon || icon.common.magicWand" size="17" aria-hidden="true" />
               <span>{{ primaryLabel }}</span>
             </BButton>
           </span>
@@ -53,7 +57,7 @@
         <BButton v-if="showClear" class="resource-batch-action-bar__clear" @click="emit('clear')">
           {{ clearLabel }}
         </BButton>
-        <BTooltip :title="primaryDisabledReason" :disabled="!primaryDisabledReason">
+        <BTooltip v-if="showPrimary" :title="primaryDisabledReason" :disabled="!primaryDisabledReason">
           <span class="resource-batch-action-bar__tooltip-anchor">
             <BButton
               class="resource-batch-action-bar__primary"
@@ -62,7 +66,7 @@
               :loading="primaryLoading"
               @click="emit('primary')"
             >
-              <SvgIcon :src="icon.common.magicWand" size="17" aria-hidden="true" />
+              <SvgIcon :src="primaryIcon || icon.common.magicWand" size="17" aria-hidden="true" />
               <span>{{ primaryLabel }}</span>
             </BButton>
           </span>
@@ -91,7 +95,9 @@
       moreLabel: string;
       showClear?: boolean;
       showMore?: boolean;
+      showPrimary?: boolean;
       showMobilePrimary?: boolean;
+      primaryIcon?: string;
       primaryDisabled?: boolean;
       primaryDisabledReason?: string;
       primaryLoading?: boolean;
@@ -103,7 +109,9 @@
       ariaLabel: '',
       showClear: true,
       showMore: true,
+      showPrimary: true,
       showMobilePrimary: true,
+      primaryIcon: '',
       primaryDisabled: false,
       primaryDisabledReason: '',
       primaryLoading: false,

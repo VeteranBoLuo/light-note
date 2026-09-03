@@ -1,9 +1,12 @@
 import { useI18n } from 'vue-i18n';
 import { completeInbox, enqueueInbox, type InboxResourceRef } from '@/api/inboxApi';
 import { recordOperation } from '@/api/commonApi';
+import { batchAddSearchResourcesToInbox } from '@/api/search';
 import message from '@/components/base/BasicComponents/BMessage/BMessage';
 import { blockGuestWrite } from '@/composables/useGuestGuard';
 import { inboxStore } from '@/store';
+
+const INBOX_DIRECT_WRITE_LIMIT = 50;
 
 export function useInboxEnqueue() {
   const { t } = useI18n();
@@ -17,7 +20,13 @@ export function useInboxEnqueue() {
     if (blockGuestWrite('inbox-enqueue', t('inbox.guestPrompt'))) return false;
 
     try {
-      const res = await enqueueInbox(items, 'manual');
+      const res =
+        items.length <= INBOX_DIRECT_WRITE_LIMIT
+          ? await enqueueInbox(items, 'manual')
+          : await batchAddSearchResourcesToInbox({
+              mode: 'explicit',
+              items: items.map((item) => ({ id: item.resourceId, type: item.resourceType })),
+            });
       if (res.status !== 200) {
         message.error(res.msg || t('inbox.addFailed'));
         return false;

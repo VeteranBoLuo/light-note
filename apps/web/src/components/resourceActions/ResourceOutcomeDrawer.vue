@@ -411,7 +411,7 @@
     defineProps<{
       open: boolean;
       resources: readonly ResourceOutcomeResource[];
-      surface: 'cloud_space' | 'search';
+      surface: 'cloud_space' | 'search' | 'bookmark_manage' | 'note_library';
       quickActions?: readonly ResourceOutcomeQuickAction[];
     }>(),
     { quickActions: () => [] },

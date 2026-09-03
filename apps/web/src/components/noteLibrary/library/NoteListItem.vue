@@ -10,7 +10,7 @@
     tabindex="0"
     v-click-log="{ module: '笔记库', operation: `打开笔记【${note.title}】` }"
   >
-    <div v-if="!bookmark.isMobile" class="note-select-column">
+    <div v-if="!bookmark.isMobile && batchMode" class="note-select-column">
       <b-checkbox v-model:checked="note.isCheck" @click.stop />
     </div>
     <div class="note-info">
@@ -39,7 +39,7 @@
           v-if="parentPathText && parentTargetId"
           class="note-parent-path"
           :path-text="parentPathText"
-          @activate="emit('openParent', parentTargetId)"
+          @activate="handleParentActivate(parentTargetId)"
         />
         <div class="note-description" v-if="!bookmark.isMobile || description">{{ description }}</div>
         <!--
@@ -52,7 +52,7 @@
             <InboxPendingBadge v-if="note.isPending" />
             <!-- 手机的标题行只剩标题 + 时间 + ⋯，没有余量；格式标识跟徽章一起进 chip 行 -->
             <NoteFormatBadge :type="note.type" />
-            <BButton v-if="childCount" class="note-child-count" @click.stop="emit('action', 'enterDirectory')">
+            <BButton v-if="childCount" class="note-child-count" @click.stop="handleChildPagesClick">
               {{ $t('note.childPages', { count: childCount }) }}
               <SvgIcon :src="icon.arrow_right" size="12" aria-hidden="true" />
             </BButton>
@@ -63,8 +63,8 @@
             :tag="tag"
             show-detail-corner
             max-width="120px"
-            @click.stop="noteTypeChange(tag)"
-            @detail="openTagDetail(tag)"
+            @click.stop="handleTagClick(tag)"
+            @detail="handleTagDetail(tag)"
             v-click-log="{ module: '笔记库', operation: `筛选标签【${tag.name}】` }"
           />
           <BChip
@@ -73,7 +73,7 @@
             tone="neutral"
             size="small"
             :title="hiddenTagsLabel"
-            @click.stop
+            @click.stop="handlePassiveChipClick"
           >
             +{{ hiddenTagCount }}
           </BChip>
@@ -83,7 +83,7 @@
     <BButton
       v-if="!bookmark.isMobile && childCount"
       class="note-child-count note-child-count-column"
-      @click.stop="emit('action', 'enterDirectory')"
+      @click.stop="handleChildPagesClick"
     >
       {{ $t('note.childPages', { count: childCount }) }}
       <SvgIcon :src="icon.arrow_right" size="12" aria-hidden="true" />
@@ -176,18 +176,50 @@
   const childCount = computed(() => (props.treeReadEnabled ? Math.max(0, Number(props.note?.childCount || 0)) : 0));
   const parentPathText = computed(() => getNoteParentPathText(props.note || {}));
   const parentTargetId = computed(() => getNoteParentTargetId(props.note || {}));
-  const noteTypeChange = function (tag) {
-    emit('nodeTypeChange', tag);
-  };
+  function toggleBatchSelection() {
+    props.note.isCheck = !props.note.isCheck;
+  }
 
-  function openTagDetail(tag) {
+  function handleParentActivate(noteId: string) {
+    if (props.batchMode) {
+      toggleBatchSelection();
+      return;
+    }
+    emit('openParent', noteId);
+  }
+
+  function handleTagClick(tag: any) {
+    if (props.batchMode) {
+      toggleBatchSelection();
+      return;
+    }
+    emit('nodeTypeChange', tag);
+  }
+
+  function handleTagDetail(tag: any) {
+    if (props.batchMode) {
+      toggleBatchSelection();
+      return;
+    }
     if (!tag?.id) return;
     router.push(`/tag/${tag.id}`);
   }
 
+  function handlePassiveChipClick() {
+    if (props.batchMode) toggleBatchSelection();
+  }
+
+  function handleChildPagesClick() {
+    if (props.batchMode) {
+      toggleBatchSelection();
+      return;
+    }
+    emit('action', 'enterDirectory');
+  }
+
   function handleItemClick() {
     if (props.batchMode) {
-      props.note.isCheck = !props.note.isCheck;
+      toggleBatchSelection();
       return;
     }
     emit('open');
@@ -209,7 +241,7 @@
     --note-row-line: 22px;
 
     display: grid;
-    grid-template-columns: 26px minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     column-gap: 12px;
     align-items: flex-start;
     padding: 11px 14px;
@@ -233,6 +265,10 @@
       background: color-mix(in srgb, var(--resource-note-color, #00a884) 4%, var(--card-background));
       border-color: color-mix(in srgb, var(--resource-note-color, #00a884) 62%, var(--surface-border-color));
       box-shadow: 0 0 0 1px color-mix(in srgb, var(--resource-note-color, #00a884) 18%, transparent);
+    }
+
+    &.is-batch-mode:not(.is-mobile) {
+      grid-template-columns: 26px minmax(0, 1fr) auto auto;
     }
 
     /*

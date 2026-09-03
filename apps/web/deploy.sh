@@ -1,20 +1,5 @@
-#!/bin/bash
-set -e
-
-HOST="root@139.9.83.16"
-SSH_KEY="$HOME/.ssh/hermes_server"
-DEPLOY_DIR="/www/wwwroot"
-TIMESTAMP=$(date +%Y%m%d%H%M%S)
-
-echo "🏗️  Building..."
-npm run build
-
-echo "📦  Packing..."
-tar czf /tmp/light-note-dist.tar.gz dist
-
-echo "🚀  Deploying to $HOST..."
-cat /tmp/light-note-dist.tar.gz | ssh -i "$SSH_KEY" "$HOST" "cd $DEPLOY_DIR && mv dist dist_bak_$TIMESTAMP && tar xzf -"
-
-rm /tmp/light-note-dist.tar.gz
-
-echo "✅  Done! https://boluo66.top"
+#!/usr/bin/env bash
+# 保留旧入口给历史使用方式；实际发布统一交给仓库根脚本，避免两套切换协议漂移。
+set -euo pipefail
+WEB_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+exec bash "$WEB_SCRIPT_DIR/../../scripts/deploy-web.sh"

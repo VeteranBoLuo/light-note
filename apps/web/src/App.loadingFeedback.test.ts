@@ -11,6 +11,7 @@ describe('应用加载反馈边界', () => {
     expect(appSource).not.toContain('globalRefreshing');
     expect(appSource).not.toContain('networkRequestLoading');
     expect(appSource).toContain('AsyncFeatureLoadingOverlay');
+    expect(appSource).toContain('loader: loadUserAuthModal');
     expect(appSource).toContain('AndroidDownloadProgress');
   });
 });

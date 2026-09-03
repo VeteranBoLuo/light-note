@@ -1,5 +1,6 @@
 import { RouteRecordRaw } from 'vue-router';
 import { ALL_ROLES } from '@/config/bookmarkCfg.ts';
+import { loadUserAuthModal } from '@/utils/userAuthModalLoader.ts';
 
 const loginRouter: RouteRecordRaw = {
   meta: {
@@ -7,7 +8,7 @@ const loginRouter: RouteRecordRaw = {
   },
   path: '/login',
   name: 'login',
-  component: () => import('@/view/login/UserAuthModal.vue'),
+  component: loadUserAuthModal,
 };
 
 export default loginRouter;

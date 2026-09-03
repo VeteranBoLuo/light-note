@@ -184,11 +184,13 @@
               @change="search"
             />
             <BButton
-              v-if="todoView === 'list' && !todoSelectionMode && (todo.items.length || pageLoading)"
+              v-if="todoView === 'list' && (todo.items.length || pageLoading)"
               class="todo-toolbar-control todo-toolbar-control--batch"
+              :class="{ 'is-active': todoSelectionMode }"
+              :aria-pressed="todoSelectionMode"
               @click="toggleTodoSelectionMode"
             >
-              {{ t('inbox.todoBatchSelect') }}
+              {{ t(todoSelectionMode ? 'inbox.todoBatchCancel' : 'inbox.todoBatchSelect') }}
             </BButton>
           </div>
         </template>
@@ -241,68 +243,70 @@
         variant="pill"
       />
       <BButton
-        v-if="todoView === 'list' && !todoSelectionMode && (todo.items.length || pageLoading)"
+        v-if="todoView === 'list' && (todo.items.length || pageLoading)"
         class="todo-workspace-toolbar__select"
+        :class="{ 'is-active': todoSelectionMode }"
+        :aria-pressed="todoSelectionMode"
         size="small"
         @click="toggleTodoSelectionMode"
       >
-        {{ t('inbox.todoBatchSelect') }}
+        {{ t(todoSelectionMode ? 'inbox.todoBatchCancel' : 'inbox.todoBatchSelect') }}
       </BButton>
     </section>
 
-    <section v-if="isTodoFocused && todoView === 'list' && todoSelectionMode" class="todo-list-toolbar">
-      <BCheckbox
-        :model-value="selectedTodoIds.length === todo.items.length"
-        :indeterminate="selectedTodoIds.length > 0 && selectedTodoIds.length < todo.items.length"
-        @update:model-value="toggleSelectAllTodos"
-      >
-        {{ t('inbox.selectedCount', { count: selectedTodoIds.length }) }}
-      </BCheckbox>
-      <div v-if="!bookmark.isMobile" class="todo-list-toolbar__actions">
+    <ResourceBatchActionBar
+      :open="isTodoFocused && todoView === 'list' && todoSelectionMode"
+      :mobile="bookmark.isMobile"
+      :summary="todoBatchSummary"
+      :aria-label="t('inbox.todoBatchAriaLabel')"
+      :clear-label="t('inbox.todoBatchClear')"
+      :primary-label="t('inbox.completeSelected')"
+      :more-label="t('common.more')"
+      :show-clear="selectedTodoIds.length > 0"
+      :show-more="bookmark.isMobile"
+      :show-primary="!bookmark.isMobile && todo.status !== 'completed'"
+      :show-mobile-primary="false"
+      :primary-icon="icon.filterPanel.check"
+      :primary-disabled="!selectedTodoIds.length"
+      :primary-disabled-reason="!selectedTodoIds.length ? t('inbox.todoBatchSelectFirst') : ''"
+      :primary-loading="todoBatchMutating"
+      @clear="clearTodoSelection"
+      @more="todoBatchActionsOpen = true"
+      @primary="completeSelectedTodos"
+    >
+      <template #leading>
+        <BCheckbox
+          :checked="allTodoItemsSelected"
+          :indeterminate="someTodoItemsSelected"
+          :disabled="!todo.items.length || todoBatchMutating"
+          :aria-label="
+            t(allTodoItemsSelected ? 'inbox.todoBatchUnselectAll' : 'inbox.selectAll', {
+              count: todo.items.length,
+            })
+          "
+          @change="toggleSelectAllTodos"
+        />
+      </template>
+      <template #actions>
         <BButton
-          v-if="todo.status !== 'completed'"
-          size="small"
-          type="primary"
-          :loading="todoBatchMutating"
-          :disabled="!selectedTodoIds.length"
-          @click="completeSelectedTodos"
-        >
-          {{ t('inbox.completeSelected') }}
-        </BButton>
-        <BButton
-          size="small"
-          type="danger"
+          class="batch-action-delete"
           :loading="todoBatchMutating"
           :disabled="!selectedTodoIds.length"
           @click="confirmDeleteSelectedTodos"
         >
-          {{ t('inbox.deleteSelected') }}
+          <SvgIcon :src="icon.table_delete" size="16" aria-hidden="true" />
+          <span>{{ t('inbox.deleteSelected') }}</span>
         </BButton>
-        <BButton size="small" @click="toggleTodoSelectionMode">{{ t('inbox.todoBatchCancel') }}</BButton>
-      </div>
-      <BButton v-else size="small" class="todo-list-toolbar__cancel" @click="toggleTodoSelectionMode">
-        {{ t('common.cancel') }}
-      </BButton>
-    </section>
-    <MobileStickyActionBar v-if="isMobileTodoPrimary && todoView === 'list' && todoSelectionMode">
-      <BButton
-        v-if="todo.status !== 'completed'"
-        type="primary"
-        :loading="todoBatchMutating"
-        :disabled="!selectedTodoIds.length"
-        @click="completeSelectedTodos"
-      >
-        {{ t('inbox.completeSelected') }}
-      </BButton>
-      <BButton
-        type="danger"
-        :loading="todoBatchMutating"
-        :disabled="!selectedTodoIds.length"
-        @click="confirmDeleteSelectedTodos"
-      >
-        {{ t('inbox.deleteSelected') }}
-      </BButton>
-    </MobileStickyActionBar>
+      </template>
+    </ResourceBatchActionBar>
+
+    <MobilePageActionsDrawer
+      v-if="bookmark.isMobile && isTodoFocused"
+      v-model:open="todoBatchActionsOpen"
+      :title="todoBatchSummary"
+      :actions="todoMobileBatchActions"
+      @action="handleTodoMobileBatchAction"
+    />
 
     <section v-if="todoUndo" class="todo-undo-banner" role="status">
       <span>{{
@@ -637,7 +641,6 @@
   import { useRoute, useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import MobileStickyActionBar from '@/components/mobile/MobileStickyActionBar.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -694,6 +697,8 @@
   import { generateUUID } from '@/utils/common';
   import icon from '@/config/icon';
   import { resolveFileAiSummaryPresentation } from '@/utils/fileAiSummary';
+  import ResourceBatchActionBar from '@/components/resourceActions/ResourceBatchActionBar.vue';
+  import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
 
   const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false });
   const embedded = computed(() => props.embedded);
@@ -736,6 +741,7 @@
   const resourceSelectionMode = ref(false);
   const selectedTodoIds = ref<string[]>([]);
   const todoBatchMutating = ref(false);
+  const todoBatchActionsOpen = ref(false);
   const todoUndo = ref<{ kind: 'complete' | 'delete'; ids: string[] } | null>(null);
   const todoUndoing = ref(false);
   const todoGroupLists = ref<Array<{ key: TodoGroupKey; count: number; items: TodoListNode[] }>>([]);
@@ -844,6 +850,46 @@
   const someItemsSelected = computed(
     () => selectedItems.value.length > 0 && selectedItems.value.length < inbox.items.length,
   );
+  const allTodoItemsSelected = computed(
+    () => todo.items.length > 0 && selectedTodoIds.value.length === todo.items.length,
+  );
+  const someTodoItemsSelected = computed(
+    () => selectedTodoIds.value.length > 0 && selectedTodoIds.value.length < todo.items.length,
+  );
+  const todoBatchSummary = computed(() =>
+    selectedTodoIds.value.length
+      ? t('inbox.selectedCount', { count: selectedTodoIds.value.length })
+      : t('inbox.todoBatchSelectPrompt'),
+  );
+  const todoMobileBatchActions = computed<MobilePageActionItem[]>(() => {
+    const disabled = !selectedTodoIds.value.length || todoBatchMutating.value;
+    const actions: MobilePageActionItem[] = [];
+    if (todo.status !== 'completed') {
+      actions.push({
+        key: 'complete',
+        label: t('inbox.completeSelected'),
+        icon: icon.filterPanel.check,
+        disabled,
+        loading: todoBatchMutating.value,
+      });
+    }
+    actions.push({
+      key: 'clear',
+      label: t('inbox.todoBatchClear'),
+      icon: icon.common.close,
+      disabled,
+    });
+    actions.push({
+      key: 'delete',
+      label: t('inbox.deleteSelected'),
+      icon: icon.table_delete,
+      danger: true,
+      dividerBefore: actions.length > 0,
+      disabled,
+      loading: todoBatchMutating.value,
+    });
+    return actions;
+  });
   const hasPendingOperation = computed(() =>
     Boolean(
       completingKey.value ||
@@ -1064,6 +1110,7 @@
     if (view !== 'list' && todoSelectionMode.value) {
       todoSelectionMode.value = false;
       selectedTodoIds.value = [];
+      todoBatchActionsOpen.value = false;
     }
     // 列表和四象限共用未完成/已完成/全部；议程、日历始终展示全量。
     // preserveStatus 保住页签选择，切回有状态筛选的视图时再按该口径恢复。
@@ -1364,11 +1411,26 @@
   }
   function toggleTodoSelectionMode() {
     openSwipeTodoId.value = '';
+    todoBatchActionsOpen.value = false;
     todoSelectionMode.value = !todoSelectionMode.value;
     if (!todoSelectionMode.value) selectedTodoIds.value = [];
   }
+  function clearTodoSelection() {
+    selectedTodoIds.value = [];
+  }
   function toggleSelectAllTodos(selected: boolean) {
     selectedTodoIds.value = selected ? todo.items.map((item) => item.id) : [];
+  }
+  function handleTodoMobileBatchAction(action: MobilePageActionItem) {
+    if (action.key === 'complete') {
+      void completeSelectedTodos();
+      return;
+    }
+    if (action.key === 'clear') {
+      clearTodoSelection();
+      return;
+    }
+    if (action.key === 'delete') confirmDeleteSelectedTodos();
   }
   async function completeSelectedTodos() {
     const ids = [...selectedTodoIds.value];
@@ -1989,31 +2051,18 @@
     flex-shrink: 0;
   }
   .todo-workspace-toolbar__select {
+    width: 80px;
+    min-width: 80px;
     flex-shrink: 0;
+    justify-content: center;
     margin-left: auto;
+    white-space: nowrap;
   }
-  .todo-list-toolbar {
-    min-height: 46px;
-    margin-bottom: 10px;
-    padding: 6px 10px;
-    box-sizing: border-box;
-    border: 1px solid color-mix(in srgb, var(--card-border-color) 82%, transparent);
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--primary-color) 2.5%, var(--background-color));
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    flex-shrink: 0;
-  }
-  .todo-list-toolbar__actions {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-  }
-  .todo-list-toolbar :deep(.b_btn) {
-    min-height: 34px;
+  .todo-workspace-toolbar__select.is-active,
+  .todo-toolbar-control--batch.is-active {
+    border-color: var(--todo-navigation-color);
+    color: var(--todo-navigation-color);
+    background: var(--mobile-selected-bg, var(--todo-navigation-soft-color)) !important;
   }
   .todo-undo-banner {
     display: flex;
@@ -2033,6 +2082,9 @@
     display: grid;
     gap: 14px;
     padding: 6px 2px 24px;
+  }
+  .inbox-page--todo-focused.is-selection-mode .todo-group-list {
+    padding-bottom: 110px;
   }
   .todo-group {
     display: grid;
@@ -2190,6 +2242,12 @@
     min-height: 40px;
     box-sizing: border-box;
     border-radius: 10px;
+  }
+  .todo-toolbar-control--batch.b_btn {
+    width: 14ch;
+    min-width: 14ch;
+    justify-content: center;
+    white-space: nowrap;
   }
   .inbox-toolbar__right--resources {
     width: 100%;
@@ -2803,15 +2861,6 @@
     .todo-workspace-toolbar__select {
       min-height: 36px;
     }
-    .todo-list-toolbar {
-      align-items: stretch;
-      flex-wrap: wrap;
-    }
-    .todo-list-toolbar__actions {
-      width: 100%;
-      justify-content: flex-start;
-      flex-wrap: wrap;
-    }
     .todo-undo-banner {
       flex-wrap: wrap;
     }
@@ -3065,17 +3114,10 @@
       background: transparent !important;
       font-weight: 700;
     }
-    .inbox-page--mobile-todo .todo-list-toolbar {
-      min-height: 44px;
-      padding: 0 2px;
-      border: 0;
-      border-radius: 0;
-      background: transparent;
-    }
-    .todo-list-toolbar__cancel {
-      min-height: 44px;
-      color: var(--primary-color);
-      background: transparent !important;
+    .inbox-page--mobile-todo .todo-workspace-toolbar__select.is-active {
+      border: 1px solid var(--todo-navigation-color);
+      color: var(--todo-navigation-color);
+      background: var(--mobile-selected-bg, var(--todo-navigation-soft-color)) !important;
     }
   }
 </style>
