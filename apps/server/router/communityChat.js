@@ -77,6 +77,16 @@ const imageWriteLimiter = rateLimit({
     res.status(429).send({ data: { code: 'RATE_LIMITED' }, status: 429, msg: '图片上传过于频繁，请稍后再试' }),
 });
 
+const attachmentWriteLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: 80,
+  keyGenerator: (req) => `community-chat-attachment:${req.user?.id || ipKeyGenerator(req.ip || '')}`,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) =>
+    res.status(429).send({ data: { code: 'RATE_LIMITED' }, status: 429, msg: '附件操作过于频繁，请稍后再试' }),
+});
+
 const imageUpload = multer({
   dest: os.tmpdir(),
   limits: { fileSize: COMMUNITY_CHAT_IMAGE_MAX_BYTES, files: 1 },
@@ -109,6 +119,18 @@ router.post(
   receiveChatImage,
   handle.uploadCustomSticker,
 );
+router.post(
+  '/rooms/:slug/files/prepare',
+  handle.requireImageUploadIdentity,
+  attachmentWriteLimiter,
+  handle.prepareFileUpload,
+);
+router.post('/files/:publicId/confirm', attachmentWriteLimiter, handle.confirmFileUpload);
+router.post('/files/:publicId/discard', attachmentWriteLimiter, handle.discardFile);
+router.post('/files/:publicId/download', handle.fileDownload);
+router.post('/files/:publicId/preview/resolve', handle.resolveFilePreview);
+router.post('/files/:publicId/preview/prepare', attachmentWriteLimiter, handle.prepareFilePreview);
+router.post('/files/:publicId/preview/archive', handle.listFileArchivePreview);
 router.get('/stickers/:publicId/content', handle.customStickerContent);
 router.post('/stickers/:publicId/remove', imageWriteLimiter, handle.removeCustomSticker);
 router.post(

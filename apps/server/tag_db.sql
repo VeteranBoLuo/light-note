@@ -194,7 +194,8 @@ DROP TABLE IF EXISTS `file_preview_jobs`;
 DROP TABLE IF EXISTS `file_preview_artifacts`;
 CREATE TABLE `file_preview_artifacts` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `file_id` int(11) NOT NULL,
+  `source_type` varchar(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'cloud_file',
+  `file_id` bigint(20) unsigned NOT NULL,
   `owner_user_id` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `strategy` enum('archive_manifest','converted_pdf') COLLATE utf8mb4_unicode_ci NOT NULL,
   `strategy_version` smallint(5) unsigned NOT NULL,
@@ -214,10 +215,10 @@ CREATE TABLE `file_preview_artifacts` (
   `create_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `update_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_file_preview_artifact` (`file_id`,`strategy`,`strategy_version`),
+  UNIQUE KEY `uk_file_preview_artifact` (`source_type`,`file_id`,`strategy`,`strategy_version`),
   KEY `idx_file_preview_owner_status` (`owner_user_id`,`status`,`update_time`),
   KEY `idx_file_preview_cleanup` (`last_access_at`,`update_time`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='云文件派生预览缓存';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文件派生预览缓存';
 
 CREATE TABLE `file_preview_jobs` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -1004,7 +1005,8 @@ CREATE TABLE `community_chat_message_images` (
   `public_id` char(36) NOT NULL,
   `owner_user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
   `message_id` bigint unsigned DEFAULT NULL,
-  `object_key` varchar(512) NOT NULL,
+  `object_key` varchar(512) DEFAULT NULL,
+  `file_name` varchar(255) NOT NULL DEFAULT '',
   `content_type` varchar(64) NOT NULL,
   `file_size` int unsigned NOT NULL,
   `width` int unsigned NOT NULL,
@@ -1012,13 +1014,43 @@ CREATE TABLE `community_chat_message_images` (
   `status` varchar(24) NOT NULL DEFAULT 'uploading',
   `sort_order` tinyint unsigned NOT NULL DEFAULT 0,
   `expires_at` datetime DEFAULT NULL,
+  `expired_at` datetime DEFAULT NULL,
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_community_chat_image_public` (`public_id`),
   UNIQUE KEY `uk_community_chat_image_object` (`object_key`),
   KEY `idx_community_chat_image_owner_status_expiry` (`owner_user_id`,`status`,`expires_at`),
-  KEY `idx_community_chat_image_message_status_sort` (`message_id`,`status`,`sort_order`,`id`)
+  KEY `idx_community_chat_image_message_status_sort` (`message_id`,`status`,`sort_order`,`id`),
+  KEY `idx_community_chat_image_status_expiry` (`status`,`expires_at`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
+-- Table structure for community_chat_message_files
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_message_files`;
+CREATE TABLE `community_chat_message_files` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `public_id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `owner_user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `room_id` bigint unsigned NOT NULL,
+  `message_id` bigint unsigned DEFAULT NULL,
+  `object_key` varchar(512) DEFAULT NULL,
+  `file_name` varchar(255) NOT NULL,
+  `content_type` varchar(160) NOT NULL DEFAULT 'application/octet-stream',
+  `file_size` bigint unsigned NOT NULL,
+  `status` varchar(24) NOT NULL DEFAULT 'uploading',
+  `sort_order` tinyint unsigned NOT NULL DEFAULT 0,
+  `expires_at` datetime NOT NULL,
+  `expired_at` datetime DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_community_chat_file_public` (`public_id`),
+  UNIQUE KEY `uk_community_chat_file_object` (`object_key`),
+  KEY `idx_community_chat_file_owner_status_expiry` (`owner_user_id`,`status`,`expires_at`,`id`),
+  KEY `idx_community_chat_file_message_status_sort` (`message_id`,`status`,`sort_order`,`id`),
+  KEY `idx_community_chat_file_status_expiry` (`status`,`expires_at`,`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------

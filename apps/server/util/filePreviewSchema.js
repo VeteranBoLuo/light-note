@@ -5,7 +5,8 @@ let ensurePromise = null;
 const statements = [
   `CREATE TABLE IF NOT EXISTS file_preview_artifacts (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    file_id INT NOT NULL,
+    source_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'cloud_file',
+    file_id BIGINT UNSIGNED NOT NULL,
     owner_user_id VARCHAR(255) NOT NULL,
     strategy ENUM('archive_manifest', 'converted_pdf') NOT NULL,
     strategy_version SMALLINT UNSIGNED NOT NULL,
@@ -25,7 +26,7 @@ const statements = [
     create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uk_file_preview_artifact (file_id, strategy, strategy_version),
+    UNIQUE KEY uk_file_preview_artifact (source_type, file_id, strategy, strategy_version),
     KEY idx_file_preview_owner_status (owner_user_id, status, update_time),
     KEY idx_file_preview_cleanup (last_access_at, update_time)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
@@ -48,10 +49,45 @@ const statements = [
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 ];
 
+async function ensurePreviewSourceContract() {
+  const [columnRows] = await pool.query(
+    `SELECT column_name AS columnName, column_type AS columnType
+       FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'file_preview_artifacts'
+        AND column_name IN ('source_type', 'file_id')`,
+  );
+  const columns = new Map(columnRows.map((row) => [row.columnName, String(row.columnType || '').toLowerCase()]));
+  if (!columns.has('source_type')) {
+    await pool.query(
+      "ALTER TABLE file_preview_artifacts ADD COLUMN source_type varchar(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'cloud_file' AFTER id",
+    );
+  }
+  if (!String(columns.get('file_id') || '').includes('bigint')) {
+    await pool.query('ALTER TABLE file_preview_artifacts MODIFY COLUMN file_id bigint unsigned NOT NULL');
+  }
+  const [indexRows] = await pool.query(
+    `SELECT column_name AS columnName
+       FROM information_schema.STATISTICS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'file_preview_artifacts'
+        AND INDEX_NAME = 'uk_file_preview_artifact'
+      ORDER BY seq_in_index`,
+  );
+  const expected = ['source_type', 'file_id', 'strategy', 'strategy_version'];
+  if (indexRows.map((row) => row.columnName).join(',') !== expected.join(',')) {
+    if (indexRows.length) await pool.query('ALTER TABLE file_preview_artifacts DROP INDEX uk_file_preview_artifact');
+    await pool.query(
+      'ALTER TABLE file_preview_artifacts ADD UNIQUE KEY uk_file_preview_artifact (source_type, file_id, strategy, strategy_version)',
+    );
+  }
+}
+
 export function ensureFilePreviewSchema() {
   if (!ensurePromise) {
     ensurePromise = (async () => {
       for (const sql of statements) await pool.query(sql);
+      await ensurePreviewSourceContract();
     })().catch((error) => {
       ensurePromise = null;
       throw error;

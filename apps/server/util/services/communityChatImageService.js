@@ -1,5 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
+import {
+  COMMUNITY_CHAT_ATTACHMENT_MAX_COUNT,
+  COMMUNITY_CHAT_ATTACHMENT_MAX_PENDING_PER_USER,
+  COMMUNITY_CHAT_ATTACHMENT_PENDING_HOURS,
+  COMMUNITY_CHAT_ATTACHMENT_RETENTION_DAYS,
+  COMMUNITY_CHAT_IMAGE_MAX_BYTES,
+} from '@lightnote/shared/community-chat-attachments';
 import { safeImageSize } from '../safeImageSize.js';
 import pool from '../../db/index.js';
 import { COMMUNITY_CHAT_PRIMARY_ROOM_SLUG } from '../communityChatFeature.js';
@@ -13,10 +20,11 @@ import {
 } from './communityChatAccessService.js';
 import { assertCommunityChatPostingAllowed } from './communityChatModerationService.js';
 
-export const COMMUNITY_CHAT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
-export const COMMUNITY_CHAT_IMAGE_MAX_COUNT = 4;
-export const COMMUNITY_CHAT_IMAGE_MAX_PENDING_PER_USER = 12;
-export const COMMUNITY_CHAT_IMAGE_PENDING_HOURS = 24;
+export { COMMUNITY_CHAT_IMAGE_MAX_BYTES };
+export const COMMUNITY_CHAT_IMAGE_MAX_COUNT = COMMUNITY_CHAT_ATTACHMENT_MAX_COUNT;
+export const COMMUNITY_CHAT_IMAGE_MAX_PENDING_PER_USER = COMMUNITY_CHAT_ATTACHMENT_MAX_PENDING_PER_USER;
+export const COMMUNITY_CHAT_IMAGE_PENDING_HOURS = COMMUNITY_CHAT_ATTACHMENT_PENDING_HOURS;
+export const COMMUNITY_CHAT_IMAGE_RETENTION_DAYS = COMMUNITY_CHAT_ATTACHMENT_RETENTION_DAYS;
 
 const MAX_IMAGE_PIXELS = 20_000_000;
 const MAX_IMAGE_EDGE = 12_000;
@@ -45,6 +53,22 @@ function normalizePublicId(value) {
     throw chatError('INVALID_IMAGE_ID', 400, '图片标识无效', 'Invalid image identifier');
   }
   return publicId;
+}
+
+function normalizeImageFileName(value) {
+  const fileName = String(value || '')
+    .normalize('NFC')
+    .trim();
+  if (
+    !fileName ||
+    fileName === '.' ||
+    fileName === '..' ||
+    Array.from(fileName).length > 255 ||
+    /[\\/:*?"<>|\x00-\x1F\x7F]/u.test(fileName)
+  ) {
+    throw chatError('FILE_NAME_INVALID', 400, '图片文件名无效', 'Invalid image file name');
+  }
+  return fileName;
 }
 
 async function queryFirst(db, sql, params = []) {
@@ -133,28 +157,44 @@ function ownerObjectSegment(userId) {
 function publicImage(image) {
   return {
     publicId: image.publicId,
+    kind: 'image',
     url: `/api/community-chat/images/${encodeURIComponent(image.publicId)}`,
+    fileName:
+      image.fileName ||
+      `图片.${image.contentType === 'image/png' ? 'png' : image.contentType === 'image/webp' ? 'webp' : 'jpg'}`,
+    fileType: image.contentType,
     contentType: image.contentType,
     fileSize: Number(image.fileSize || 0),
+    availability: 'available',
+    expiresAt: image.expiresAt || null,
     width: Number(image.width || 0),
     height: Number(image.height || 0),
   };
 }
 
-async function removeTrackedObject({ publicId, objectKey, db, deleteObject }) {
+async function removeTrackedObject({ publicId, objectKey, messageId = null, db, deleteObject }) {
   try {
-    await deleteObject(objectKey);
-    await db.query(
-      `DELETE FROM community_chat_message_images
-        WHERE public_id = ? AND status IN ('delete_pending', 'deleting')`,
-      [publicId],
-    );
+    if (objectKey) await deleteObject(objectKey);
+    if (messageId === null || messageId === undefined) {
+      await db.query(
+        `DELETE FROM community_chat_message_images
+          WHERE public_id = ? AND message_id IS NULL AND status IN ('delete_pending', 'deleting')`,
+        [publicId],
+      );
+    } else {
+      await db.query(
+        `UPDATE community_chat_message_images
+            SET status = 'expired', object_key = NULL, expired_at = COALESCE(expired_at, NOW())
+          WHERE public_id = ? AND message_id IS NOT NULL AND status = 'deleting'`,
+        [publicId],
+      );
+    }
     return true;
   } catch {
     await db
       .query(
         `UPDATE community_chat_message_images
-            SET status = 'delete_pending', expires_at = NOW()
+            SET status = 'delete_pending'
           WHERE public_id = ? AND status = 'deleting'`,
         [publicId],
       )
@@ -171,6 +211,7 @@ export async function uploadCommunityChatImage({
   user,
   roomSlug,
   file,
+  fileName: requestedFileName,
   env = process.env,
   db = pool,
   putObject = putObjectToObs,
@@ -194,6 +235,7 @@ export async function uploadCommunityChatImage({
     }
 
     const validated = await validateCommunityChatImage(file);
+    const fileName = normalizeImageFileName(requestedFileName || file.originalname);
     const publicId = randomUUID();
     const objectKey = `community-chat/${ownerObjectSegment(user.id)}/${publicId}.${validated.extension}`;
     const connection = await db.getConnection();
@@ -214,12 +256,15 @@ export async function uploadCommunityChatImage({
       }
       const pending = await queryFirst(
         connection,
-        `SELECT COUNT(*) AS pendingCount
-           FROM community_chat_message_images
-          WHERE owner_user_id = ?
-            AND message_id IS NULL
-            AND status IN ('uploading', 'pending', 'delete_pending', 'deleting')`,
-        [user.id],
+        `SELECT (
+           (SELECT COUNT(*) FROM community_chat_message_images
+             WHERE owner_user_id = ? AND message_id IS NULL
+               AND status IN ('uploading', 'pending', 'delete_pending', 'deleting')) +
+           (SELECT COUNT(*) FROM community_chat_message_files
+             WHERE owner_user_id = ? AND message_id IS NULL
+               AND status IN ('uploading', 'pending', 'delete_pending', 'deleting'))
+         ) AS pendingCount`,
+        [user.id, user.id],
       );
       if (Number(pending?.pendingCount || 0) >= COMMUNITY_CHAT_IMAGE_MAX_PENDING_PER_USER) {
         throw chatError(
@@ -231,12 +276,13 @@ export async function uploadCommunityChatImage({
       }
       await connection.query(
         `INSERT INTO community_chat_message_images
-           (public_id, owner_user_id, object_key, content_type, file_size, width, height, status, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'uploading', DATE_ADD(NOW(), INTERVAL ? HOUR))`,
+           (public_id, owner_user_id, object_key, file_name, content_type, file_size, width, height, status, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'uploading', DATE_ADD(NOW(), INTERVAL ? HOUR))`,
         [
           publicId,
           user.id,
           objectKey,
+          fileName,
           validated.contentType,
           validated.fileSize,
           validated.width,
@@ -268,7 +314,12 @@ export async function uploadCommunityChatImage({
           'The image upload state expired. Select the image again.',
         );
       }
-      return publicImage({ publicId, ...validated });
+      return publicImage({
+        publicId,
+        fileName,
+        ...validated,
+        expiresAt: new Date(Date.now() + COMMUNITY_CHAT_IMAGE_PENDING_HOURS * 3600_000).toISOString(),
+      });
     } catch (error) {
       await db.query(
         `UPDATE community_chat_message_images
@@ -297,9 +348,11 @@ export async function getCommunityChatImageDownload({
   const canViewRecalled = memberRole === 'admin' || memberRole === 'moderator';
   const image = await queryFirst(
     db,
-    `SELECT image.public_id AS publicId, image.object_key AS objectKey,
+    `SELECT image.public_id AS publicId, image.object_key AS objectKey, image.file_name AS fileName,
             image.content_type AS contentType, image.file_size AS fileSize,
-            image.width, image.height, image.status
+            image.width, image.height, image.status, image.message_id AS messageId,
+            image.expires_at AS expiresAt, image.expires_at <= NOW() AS isExpired,
+            GREATEST(0, TIMESTAMPDIFF(SECOND, NOW(), image.expires_at)) AS remainingSeconds
        FROM community_chat_message_images image
        LEFT JOIN community_chat_messages message ON message.id = image.message_id
        LEFT JOIN community_chat_rooms room ON room.id = message.room_id
@@ -312,7 +365,7 @@ export async function getCommunityChatImageDownload({
             AND image.expires_at > NOW()
           )
           OR (
-            image.status = 'attached'
+            image.message_id IS NOT NULL
             AND (message.status = 'active' OR (? = 1 AND message.status = 'recalled'))
             AND room.slug = ?
             AND room.status = 'active'
@@ -320,10 +373,21 @@ export async function getCommunityChatImageDownload({
               SELECT 1 FROM community_chat_blocks blocked
                WHERE blocked.user_id = ? AND blocked.blocked_user_id = message.user_id
             )
+            AND NOT EXISTS (
+              SELECT 1 FROM community_chat_message_deletions deletion
+               WHERE deletion.user_id = ? AND deletion.message_id = message.id
+            )
           )
         )
       LIMIT 1`,
-    [normalizedPublicId, viewerUserId, canViewRecalled ? 1 : 0, COMMUNITY_CHAT_PRIMARY_ROOM_SLUG, viewerUserId],
+    [
+      normalizedPublicId,
+      viewerUserId,
+      canViewRecalled ? 1 : 0,
+      COMMUNITY_CHAT_PRIMARY_ROOM_SLUG,
+      viewerUserId,
+      viewerUserId,
+    ],
   );
   if (!image) {
     throw chatError(
@@ -333,11 +397,25 @@ export async function getCommunityChatImageDownload({
       'Image not found or unavailable',
     );
   }
-  const signed = createSignedUrl({ objectKey: image.objectKey, expires: 300 });
+  if (
+    Number(image.isExpired) ||
+    !image.expiresAt ||
+    image.status !== (image.messageId === null ? 'pending' : 'attached') ||
+    !image.objectKey
+  ) {
+    throw chatError('COMMUNITY_CHAT_IMAGE_EXPIRED', 410, '图片已过期', 'The image has expired');
+  }
+  const remainingSeconds = Math.floor(Number(image.remainingSeconds));
+  if (!Number.isFinite(remainingSeconds) || remainingSeconds <= 1) {
+    throw chatError('COMMUNITY_CHAT_IMAGE_EXPIRED', 410, '图片已过期', 'The image has expired');
+  }
+  // OBS 只接受整数秒 TTL，预留 1 秒覆盖查询与签名耗时，保证 URL 不越过资源截止点。
+  const expires = Math.min(300, remainingSeconds - 1);
+  const signed = createSignedUrl({ objectKey: image.objectKey, expires });
   if (!signed?.url) {
     throw chatError('COMMUNITY_CHAT_IMAGE_UNAVAILABLE', 503, '图片暂时无法打开', 'Image is temporarily unavailable');
   }
-  return { ...publicImage(image), signedUrl: signed.url };
+  return { ...publicImage(image), signedUrl: signed.url, expiresIn: expires };
 }
 
 export async function discardCommunityChatImage({
@@ -354,7 +432,7 @@ export async function discardCommunityChatImage({
     await connection.beginTransaction();
     const image = await queryFirst(
       connection,
-      `SELECT object_key AS objectKey, status
+      `SELECT object_key AS objectKey, status, message_id AS messageId
          FROM community_chat_message_images
         WHERE public_id = ? AND owner_user_id = ?
         LIMIT 1 FOR UPDATE`,
@@ -364,7 +442,7 @@ export async function discardCommunityChatImage({
       await connection.commit();
       return { publicId: normalizedPublicId, discarded: true };
     }
-    if (!['uploading', 'pending', 'delete_pending'].includes(image.status)) {
+    if (image.messageId !== null || !['uploading', 'pending', 'delete_pending'].includes(image.status)) {
       throw chatError(
         'COMMUNITY_CHAT_IMAGE_ALREADY_ATTACHED',
         409,
@@ -398,11 +476,12 @@ export async function cleanupExpiredCommunityChatImages({
 } = {}) {
   const safeLimit = Math.min(200, Math.max(1, Math.floor(Number(limit) || 50)));
   const [rows] = await db.query(
-    `SELECT public_id AS publicId, object_key AS objectKey
+    `SELECT public_id AS publicId, object_key AS objectKey, message_id AS messageId
        FROM community_chat_message_images
-      WHERE status IN ('uploading', 'pending', 'delete_pending', 'deleting')
+      WHERE status IN ('uploading', 'pending', 'attached', 'delete_pending', 'deleting')
         AND expires_at IS NOT NULL
         AND expires_at <= NOW()
+        AND (status <> 'deleting' OR update_time < DATE_SUB(NOW(), INTERVAL 10 MINUTE))
       ORDER BY expires_at ASC, id ASC
       LIMIT ?`,
     [safeLimit],
@@ -411,15 +490,25 @@ export async function cleanupExpiredCommunityChatImages({
   for (const row of rows) {
     const [claimed] = await db.query(
       `UPDATE community_chat_message_images
-          SET status = 'deleting', expires_at = DATE_ADD(NOW(), INTERVAL 5 MINUTE)
+          SET status = 'deleting', update_time = NOW()
         WHERE public_id = ?
-          AND status IN ('uploading', 'pending', 'delete_pending', 'deleting')
+          AND status IN ('uploading', 'pending', 'attached', 'delete_pending', 'deleting')
           AND expires_at IS NOT NULL
-          AND expires_at <= NOW()`,
+          AND expires_at <= NOW()
+          AND (status <> 'deleting' OR update_time < DATE_SUB(NOW(), INTERVAL 10 MINUTE))`,
       [row.publicId],
     );
     if (!Number(claimed?.affectedRows || 0)) continue;
-    if (await removeTrackedObject({ publicId: row.publicId, objectKey: row.objectKey, db, deleteObject })) removed += 1;
+    if (
+      await removeTrackedObject({
+        publicId: row.publicId,
+        objectKey: row.objectKey,
+        messageId: row.messageId,
+        db,
+        deleteObject,
+      })
+    )
+      removed += 1;
   }
   return { scanned: rows.length, removed };
 }

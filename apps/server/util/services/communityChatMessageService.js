@@ -22,6 +22,10 @@ import { assertCommunityChatPostingAllowed, getCommunityChatBlockedUserIds } fro
 import { publishCommunityChatRealtimeEvent } from '../communityChat/realtimeBroker.js';
 import { deliverCommunityChatMessageNotifications } from './communityChatNotificationService.js';
 import { COMMUNITY_CHAT_IMAGE_MAX_COUNT } from './communityChatImageService.js';
+import {
+  COMMUNITY_CHAT_ATTACHMENT_MAX_COUNT,
+  COMMUNITY_CHAT_ATTACHMENT_MAX_TOTAL_BYTES,
+} from './communityChatFileService.js';
 import { ensureCommunityChatIdentity, normalizeCommunityChatUserPublicIds } from './communityChatIdentityService.js';
 import {
   assertCommunityChatPollDeadlineRangeInDatabase,
@@ -123,6 +127,50 @@ function normalizeImagePublicIds(value) {
     );
   }
   return normalized;
+}
+
+function normalizeAttachmentRefs(value, legacyImagePublicIds) {
+  if (value === undefined || value === null) {
+    return legacyImagePublicIds.map((publicId) => ({ kind: 'image', publicId }));
+  }
+  if (!Array.isArray(value)) {
+    throw chatError('INVALID_ATTACHMENTS', 400, '附件参数无效', 'Invalid attachments');
+  }
+  const seen = new Set();
+  const refs = value.map((item) => {
+    const kind = String(item?.kind || '').trim();
+    if (!['image', 'file'].includes(kind)) {
+      throw chatError('INVALID_ATTACHMENT_KIND', 400, '附件类型无效', 'Invalid attachment kind');
+    }
+    const publicId = normalizePublicMessageId(item?.publicId);
+    const key = `${kind}:${publicId}`;
+    if (seen.has(key)) throw chatError('DUPLICATE_ATTACHMENT', 400, '附件不能重复', 'Attachments cannot be repeated');
+    seen.add(key);
+    return { kind, publicId };
+  });
+  if (refs.length > COMMUNITY_CHAT_ATTACHMENT_MAX_COUNT) {
+    throw chatError(
+      'TOO_MANY_ATTACHMENTS',
+      400,
+      `每条消息最多发送 ${COMMUNITY_CHAT_ATTACHMENT_MAX_COUNT} 个附件`,
+      `A message can include at most ${COMMUNITY_CHAT_ATTACHMENT_MAX_COUNT} attachments`,
+    );
+  }
+  if (legacyImagePublicIds.length) {
+    const referencedImages = refs.filter((item) => item.kind === 'image').map((item) => item.publicId);
+    if (
+      referencedImages.length !== legacyImagePublicIds.length ||
+      referencedImages.some((publicId, index) => publicId !== legacyImagePublicIds[index])
+    ) {
+      throw chatError(
+        'ATTACHMENT_FIELDS_CONFLICT',
+        409,
+        '新旧附件参数不一致，请刷新后重试',
+        'Legacy and current attachment fields do not match',
+      );
+    }
+  }
+  return refs;
 }
 
 function normalizeMessageKind(value) {
@@ -356,8 +404,17 @@ const MESSAGE_SELECT = `
          (
            SELECT COUNT(*)
              FROM community_chat_message_images reply_image
-            WHERE reply_image.message_id = reply.id AND reply_image.status = 'attached'
+           WHERE reply_image.message_id = reply.id
+             AND reply_image.status = 'attached'
+             AND reply_image.expires_at > NOW()
          ) AS replyImageCount
+         ,(
+           (SELECT COUNT(*) FROM community_chat_message_images reply_attachment_image
+             WHERE reply_attachment_image.message_id = reply.id)
+           +
+           (SELECT COUNT(*) FROM community_chat_message_files reply_attachment_file
+             WHERE reply_attachment_file.message_id = reply.id)
+         ) AS replyAttachmentCount
     FROM community_chat_messages message
     LEFT JOIN user account ON account.id = message.user_id
     LEFT JOIN community_chat_user_identities author_identity ON author_identity.user_id = message.user_id
@@ -379,14 +436,62 @@ function publicGrowthProfile(row) {
   };
 }
 
-function toPublicImage(row) {
+function toPublicAttachment(row) {
+  const kind = row.kind === 'file' ? 'file' : 'image';
+  const contentType = row.contentType || 'application/octet-stream';
+  const defaultImageName =
+    contentType === 'image/png' ? '图片.png' : contentType === 'image/webp' ? '图片.webp' : '图片.jpg';
+  const availability =
+    Number(row.isExpired) || row.status !== 'attached' || !Number(row.hasObject) ? 'expired' : 'available';
   return {
     publicId: row.publicId,
-    url: `/api/community-chat/images/${encodeURIComponent(row.publicId)}`,
-    contentType: row.contentType,
+    kind,
+    fileName: row.fileName || (kind === 'image' ? defaultImageName : '文件'),
+    fileType: contentType,
     fileSize: Number(row.fileSize || 0),
-    width: Number(row.width || 0),
-    height: Number(row.height || 0),
+    availability,
+    expiresAt: row.expiresAt || null,
+    ...(kind === 'image'
+      ? {
+          contentType,
+          width: Number(row.width || 0),
+          height: Number(row.height || 0),
+          ...(availability === 'available'
+            ? { url: `/api/community-chat/images/${encodeURIComponent(row.publicId)}` }
+            : {}),
+        }
+      : {}),
+  };
+}
+
+function normalizePublicAttachment(item) {
+  if (item?.kind) return item;
+  const contentType = item?.contentType || item?.fileType || 'image/jpeg';
+  return {
+    publicId: item?.publicId,
+    kind: 'image',
+    fileName:
+      item?.fileName ||
+      (contentType === 'image/png' ? '图片.png' : contentType === 'image/webp' ? '图片.webp' : '图片.jpg'),
+    fileType: contentType,
+    fileSize: Number(item?.fileSize || 0),
+    availability: item?.url ? 'available' : 'expired',
+    expiresAt: item?.expiresAt || null,
+    ...(item?.url ? { url: item.url } : {}),
+    contentType,
+    width: Number(item?.width || 0),
+    height: Number(item?.height || 0),
+  };
+}
+
+function toLegacyImage(item) {
+  return {
+    publicId: item.publicId,
+    url: item.url,
+    contentType: item.contentType || item.fileType,
+    fileSize: Number(item.fileSize || 0),
+    width: Number(item.width || 0),
+    height: Number(item.height || 0),
   };
 }
 
@@ -422,25 +527,43 @@ function publicMentionItems(row) {
     .slice(0, MAX_MENTION_TARGETS);
 }
 
-async function loadMessageImages(db, rows) {
+async function loadMessageAttachments(db, rows) {
   const messageIds = [
     ...new Set(rows.map((row) => Number(row.internalId)).filter((id) => Number.isInteger(id) && id > 0)),
   ];
   const byMessageId = new Map();
   if (!messageIds.length) return byMessageId;
   const placeholders = messageIds.map(() => '?').join(',');
-  const [imageRows] = await db.query(
-    `SELECT message_id AS messageId, public_id AS publicId, content_type AS contentType,
-            file_size AS fileSize, width, height
-       FROM community_chat_message_images
-      WHERE message_id IN (${placeholders}) AND status = 'attached'
-      ORDER BY message_id ASC, sort_order ASC, id ASC`,
-    messageIds,
+  const [attachmentRows] = await db.query(
+    `SELECT attachment.*
+       FROM (
+         SELECT image.message_id AS messageId, image.public_id AS publicId, 'image' AS kind,
+                image.file_name AS fileName, image.content_type AS contentType,
+                image.file_size AS fileSize, image.width, image.height, image.status,
+                image.sort_order AS sortOrder, image.id,
+                image.expires_at AS expiresAt,
+                (image.expires_at IS NULL OR image.expires_at <= NOW()) AS isExpired,
+                (image.object_key IS NOT NULL) AS hasObject
+           FROM community_chat_message_images image
+          WHERE image.message_id IN (${placeholders})
+         UNION ALL
+         SELECT file.message_id AS messageId, file.public_id AS publicId, 'file' AS kind,
+                file.file_name AS fileName, file.content_type AS contentType,
+                file.file_size AS fileSize, 0 AS width, 0 AS height, file.status,
+                file.sort_order AS sortOrder, file.id,
+                file.expires_at AS expiresAt,
+                (file.expires_at <= NOW()) AS isExpired,
+                (file.object_key IS NOT NULL) AS hasObject
+           FROM community_chat_message_files file
+          WHERE file.message_id IN (${placeholders})
+       ) attachment
+      ORDER BY attachment.messageId ASC, attachment.sortOrder ASC, attachment.id ASC`,
+    [...messageIds, ...messageIds],
   );
-  for (const image of imageRows) {
-    const messageId = Number(image.messageId);
+  for (const attachment of attachmentRows) {
+    const messageId = Number(attachment.messageId);
     const items = byMessageId.get(messageId) || [];
-    items.push(toPublicImage(image));
+    items.push(toPublicAttachment(attachment));
     byMessageId.set(messageId, items);
   }
   return byMessageId;
@@ -511,10 +634,11 @@ function toPublicMessage(
   row,
   viewerUserId,
   blockedUserIds = new Set(),
-  images = [],
+  attachments = [],
   likes = {},
   { memberRole = 'visitor', now = Date.now(), authorAvatar = row.authorAvatar || '', poll = null, readCount } = {},
 ) {
+  const publicAttachments = attachments.map(normalizePublicAttachment);
   const replyBlocked = Boolean(row.replyUserId && blockedUserIds.has(row.replyUserId));
   const growth = publicGrowthProfile(row);
   const isOwn = row.userId === viewerUserId;
@@ -575,7 +699,12 @@ function toPublicMessage(
     canDelete,
     recallDeadlineAt,
     isOwn,
-    images: contentVisible ? images : [],
+    images: contentVisible
+      ? publicAttachments
+          .filter((item) => item.kind === 'image' && item.availability === 'available')
+          .map(toLegacyImage)
+      : [],
+    attachments: contentVisible ? publicAttachments : [],
     mentionEveryone: contentVisible && Boolean(Number(row.mentionEveryone || 0)),
     mentions: mentionItems.length
       ? mentionItems.map((item) => item.displayName)
@@ -604,6 +733,7 @@ function toPublicMessage(
           status: replyBlocked ? 'blocked' : row.replyStatus || 'unavailable',
           authorName: replyBlocked ? '' : row.replyAuthorName || '',
           hasImages: replyBlocked ? false : Boolean(Number(row.replyImageCount || 0)),
+          hasAttachments: replyBlocked ? false : Boolean(Number(row.replyAttachmentCount || 0)),
           hasSticker: replyBlocked ? false : row.replyMessageKind === 'sticker',
           hasPoll: replyBlocked ? false : row.replyMessageKind === 'poll',
         }
@@ -672,8 +802,8 @@ async function loadMessageByPublicId(
   const [rows] = await db.query(`${MESSAGE_SELECT} WHERE message.public_id = ? LIMIT 1`, [publicId]);
   if (!rows[0]) return null;
   const viewerIsRoot = memberRole === 'admin';
-  const [images, likes, polls, readCounts] = await Promise.all([
-    loadMessageImages(db, rows),
+  const [attachments, likes, polls, readCounts] = await Promise.all([
+    loadMessageAttachments(db, rows),
     loadMessageLikes(db, rows, viewerUserId),
     loadCommunityChatPolls(db, rows, {
       viewerUserId,
@@ -690,7 +820,7 @@ async function loadMessageByPublicId(
     rows[0],
     viewerUserId,
     blockedUserIds,
-    images.get(internalId) || [],
+    attachments.get(internalId) || [],
     likes.get(internalId) || {},
     {
       memberRole,
@@ -939,7 +1069,7 @@ async function loadAttachedImagePublicIds(db, messageId) {
   const [rows] = await db.query(
     `SELECT public_id AS publicId
        FROM community_chat_message_images
-      WHERE message_id = ? AND status = 'attached'
+      WHERE message_id = ?
       ORDER BY sort_order ASC, id ASC`,
     [messageId],
   );
@@ -950,7 +1080,8 @@ async function resolvePendingImages(db, { ownerUserId, publicIds }) {
   if (!publicIds.length) return [];
   const placeholders = publicIds.map(() => '?').join(',');
   const [rows] = await db.query(
-    `SELECT id, public_id AS publicId, status, message_id AS messageId, expires_at AS expiresAt
+    `SELECT id, public_id AS publicId, file_size AS fileSize, status,
+            message_id AS messageId, expires_at AS expiresAt
        FROM community_chat_message_images
       WHERE owner_user_id = ? AND public_id IN (${placeholders})
       FOR UPDATE`,
@@ -974,6 +1105,40 @@ async function resolvePendingImages(db, { ownerUserId, publicIds }) {
       409,
       '有图片已失效或不属于当前账号，请重新选择',
       'An image expired or does not belong to this account. Select it again.',
+    );
+  }
+  return ordered;
+}
+
+async function resolvePendingFiles(db, { ownerUserId, publicIds }) {
+  if (!publicIds.length) return [];
+  const placeholders = publicIds.map(() => '?').join(',');
+  const [rows] = await db.query(
+    `SELECT id, public_id AS publicId, file_size AS fileSize, status,
+            message_id AS messageId, expires_at AS expiresAt
+       FROM community_chat_message_files
+      WHERE owner_user_id = ? AND public_id IN (${placeholders})
+      FOR UPDATE`,
+    [ownerUserId, ...publicIds],
+  );
+  const byPublicId = new Map(rows.map((row) => [row.publicId, row]));
+  const now = Date.now();
+  const ordered = publicIds.map((publicId) => byPublicId.get(publicId));
+  if (
+    ordered.some(
+      (file) =>
+        !file ||
+        file.status !== 'pending' ||
+        file.messageId !== null ||
+        !file.expiresAt ||
+        new Date(file.expiresAt).getTime() <= now,
+    )
+  ) {
+    throw chatError(
+      'COMMUNITY_CHAT_FILE_UNAVAILABLE',
+      409,
+      '有文件已失效或不属于当前账号，请重新选择',
+      'A file expired or does not belong to this account. Select it again.',
     );
   }
   return ordered;
@@ -1296,8 +1461,8 @@ export async function listCommunityChatMessages({
     );
   }
   const viewerIsRoot = memberRole === 'admin';
-  const [images, likes, polls, readCounts] = await Promise.all([
-    loadMessageImages(db, rows),
+  const [attachments, likes, polls, readCounts] = await Promise.all([
+    loadMessageAttachments(db, rows),
     loadMessageLikes(db, rows, viewerUserId),
     loadCommunityChatPolls(db, rows, {
       viewerUserId,
@@ -1311,7 +1476,7 @@ export async function listCommunityChatMessages({
       row,
       viewerUserId,
       blockedUserIds,
-      images.get(Number(row.internalId)) || [],
+      attachments.get(Number(row.internalId)) || [],
       likes.get(Number(row.internalId)) || {},
       {
         memberRole,
@@ -1348,6 +1513,7 @@ export async function createCommunityChatMessage({
   mentionUserPublicIds,
   mentionMessagePublicIds,
   imagePublicIds,
+  attachmentRefs,
   messageKind,
   stickerSource,
   stickerKey,
@@ -1361,8 +1527,16 @@ export async function createCommunityChatMessage({
   const normalizedStickerSource = normalizeStickerSource(stickerSource, normalizedMessageKind);
   const normalizedStickerKey = normalizeStickerKey(stickerKey, normalizedMessageKind, normalizedStickerSource);
   const normalizedImagePublicIds = normalizeImagePublicIds(imagePublicIds);
+  const normalizedAttachmentRefs = normalizeAttachmentRefs(attachmentRefs, normalizedImagePublicIds);
+  const normalizedAttachmentImagePublicIds = normalizedAttachmentRefs
+    .filter((item) => item.kind === 'image')
+    .map((item) => item.publicId);
+  const normalizedFilePublicIds = normalizedAttachmentRefs
+    .filter((item) => item.kind === 'file')
+    .map((item) => item.publicId);
+  const usesFileAttachmentContract = normalizedFilePublicIds.length > 0;
   const normalizedContent = normalizeMessageContent(content, {
-    allowEmpty: normalizedImagePublicIds.length > 0 || normalizedMessageKind === 'sticker',
+    allowEmpty: normalizedAttachmentRefs.length > 0 || normalizedMessageKind === 'sticker',
     allowInlineEmoji: normalizedMessageKind === 'text',
   });
   const normalizedPoll =
@@ -1381,8 +1555,8 @@ export async function createCommunityChatMessage({
   if (normalizedMessageKind === 'poll' && user?.role !== 'root') {
     throw chatError('POLL_CREATE_ROOT_REQUIRED', 403, '只有 Root 可以发起投票', 'Only Root can create polls');
   }
-  if (normalizedMessageKind === 'poll' && normalizedImagePublicIds.length) {
-    throw chatError('INVALID_POLL', 400, '投票消息不能混合图片', 'Poll messages cannot include images');
+  if (normalizedMessageKind === 'poll' && normalizedAttachmentRefs.length) {
+    throw chatError('INVALID_POLL', 400, '投票消息不能混合附件', 'Poll messages cannot include attachments');
   }
 
   if (normalizedMentionEveryone && user?.role !== 'root') {
@@ -1408,7 +1582,7 @@ export async function createCommunityChatMessage({
   if (
     normalizedMessageKind === 'sticker' &&
     (normalizedContent ||
-      normalizedImagePublicIds.length ||
+      normalizedAttachmentRefs.length ||
       normalizedMentionEveryone ||
       normalizedMentionUserPublicIds.length ||
       normalizedMentionMessagePublicIds.length)
@@ -1416,8 +1590,8 @@ export async function createCommunityChatMessage({
     throw chatError(
       'INVALID_STICKER_MESSAGE',
       400,
-      '轻笺表情不能混合文字、图片或提及',
-      'A Light Note sticker cannot be combined with text, images, or mentions',
+      '轻笺表情不能混合文字、附件或提及',
+      'A Light Note sticker cannot be combined with text, attachments, or mentions',
     );
   }
 
@@ -1425,7 +1599,8 @@ export async function createCommunityChatMessage({
   const payloadFingerprint = messagePayloadFingerprint({
     // 普通消息必须继续沿用 v2，保证新旧实例滚动发布期间的重试仍能命中同一幂等指纹；
     // 旧单选投票继续沿用 v3；只有多选新增字段进入 v4，避免同一单选请求跨版本重试冲突。
-    version: multipleChoicePoll ? 4 : normalizedPoll ? 3 : 2,
+    // v5 只用于普通文件；显式 attachmentRefs 中仅有图片时仍折叠成旧 imagePublicIds 契约。
+    version: usesFileAttachmentContract ? 5 : multipleChoicePoll ? 4 : normalizedPoll ? 3 : 2,
     roomSlug: normalizedRoomSlug,
     messageKind: normalizedMessageKind,
     stickerSource: normalizedStickerSource,
@@ -1435,7 +1610,9 @@ export async function createCommunityChatMessage({
     ...(normalizedMentionEveryone ? { mentionEveryone: true } : {}),
     mentionUserPublicIds: normalizedMentionUserPublicIds,
     mentionMessagePublicIds: normalizedMentionMessagePublicIds,
-    imagePublicIds: normalizedImagePublicIds,
+    ...(usesFileAttachmentContract
+      ? { attachmentRefs: normalizedAttachmentRefs }
+      : { imagePublicIds: normalizedAttachmentImagePublicIds }),
     ...(normalizedPoll
       ? {
           poll: {
@@ -1515,6 +1692,17 @@ export async function createCommunityChatMessage({
       return { message, idempotent: true };
     }
 
+    // 附件子开关只拦截首次创建：一次已成功但响应丢失的请求，
+    // 在运维关闭文件功能后重放仍必须返回原消息，不能伪装成发送失败。
+    if (normalizedFilePublicIds.length && !feature.filesEnabled) {
+      throw chatError(
+        'COMMUNITY_CHAT_FILES_DISABLED',
+        403,
+        '聊天室文件功能当前未开放',
+        'Chat file attachments are currently disabled',
+      );
+    }
+
     // 幂等重放先返回已经落库的投票；只有首次创建才复核子开关和相对当前时间的截止窗口。
     // 否则一次成功但响应丢失的请求，会因时间流逝或运维关开关从“可重放”变成失败。
     if (normalizedPoll) {
@@ -1560,8 +1748,26 @@ export async function createCommunityChatMessage({
     const mentionTargets = stableMentionTargets.length ? stableMentionTargets : legacyMentionTargets;
     const pendingImages = await resolvePendingImages(connection, {
       ownerUserId: user.id,
-      publicIds: normalizedImagePublicIds,
+      publicIds: normalizedAttachmentImagePublicIds,
     });
+    const pendingFiles = await resolvePendingFiles(connection, {
+      ownerUserId: user.id,
+      publicIds: normalizedFilePublicIds,
+    });
+    const pendingImageByPublicId = new Map(pendingImages.map((item) => [item.publicId, item]));
+    const pendingFileByPublicId = new Map(pendingFiles.map((item) => [item.publicId, item]));
+    const totalAttachmentBytes = [...pendingImages, ...pendingFiles].reduce(
+      (sum, item) => sum + Number(item.fileSize || 0),
+      0,
+    );
+    if (totalAttachmentBytes > COMMUNITY_CHAT_ATTACHMENT_MAX_TOTAL_BYTES) {
+      throw chatError(
+        'COMMUNITY_CHAT_ATTACHMENTS_TOO_LARGE',
+        413,
+        '单条消息的附件总大小不能超过 20MB',
+        'Attachments in one message must total 20MB or less',
+      );
+    }
     if (normalizedStickerSource === 'custom') {
       const customSticker = await queryFirst(
         connection,
@@ -1653,19 +1859,27 @@ export async function createCommunityChatMessage({
     if (normalizedPoll) {
       await insertCommunityChatPoll(connection, { messageId, poll: normalizedPoll });
     }
-    for (const [sortOrder, image] of pendingImages.entries()) {
+    for (const [sortOrder, attachmentRef] of normalizedAttachmentRefs.entries()) {
+      const attachment =
+        attachmentRef.kind === 'image'
+          ? pendingImageByPublicId.get(attachmentRef.publicId)
+          : pendingFileByPublicId.get(attachmentRef.publicId);
+      const table = attachmentRef.kind === 'image' ? 'community_chat_message_images' : 'community_chat_message_files';
       const [attached] = await connection.query(
-        `UPDATE community_chat_message_images
-            SET message_id = ?, status = 'attached', sort_order = ?, expires_at = NULL
-          WHERE id = ? AND owner_user_id = ? AND status = 'pending' AND message_id IS NULL`,
-        [messageId, sortOrder, image.id, user.id],
+        `UPDATE ${table}
+            SET message_id = ?, status = 'attached', sort_order = ?,
+                expires_at = (SELECT DATE_ADD(create_time, INTERVAL 30 DAY)
+                                FROM community_chat_messages WHERE id = ?)
+          WHERE id = ? AND owner_user_id = ? AND status = 'pending' AND message_id IS NULL
+            AND expires_at > NOW()`,
+        [messageId, sortOrder, messageId, attachment?.id || 0, user.id],
       );
       if (Number(attached?.affectedRows || 0) !== 1) {
         throw chatError(
-          'COMMUNITY_CHAT_IMAGE_UNAVAILABLE',
+          'COMMUNITY_CHAT_ATTACHMENT_UNAVAILABLE',
           409,
-          '有图片已失效，请重新选择',
-          'An image is no longer available. Select it again.',
+          '有附件已失效，请重新选择',
+          'An attachment is no longer available. Select it again.',
         );
       }
     }
@@ -2060,6 +2274,7 @@ export async function markCommunityChatRoomRead({ user, roomSlug, lastMessagePub
 export const __test__ = {
   normalizeClientRequestId,
   normalizeImagePublicIds,
+  normalizeAttachmentRefs,
   normalizeMessageContent,
   normalizeStickerKey,
   normalizeStickerSource,

@@ -44,6 +44,11 @@ const PUBLIC_ENV = {
   COMMUNITY_CHAT_RULES_VERSION: 'rules-v1',
 };
 
+const FILES_ENV = {
+  ...PUBLIC_ENV,
+  COMMUNITY_CHAT_FILES_ENABLED: '1',
+};
+
 const POLL_ENV = {
   ...PUBLIC_ENV,
   COMMUNITY_CHAT_POLLS_ENABLED: '1',
@@ -155,6 +160,41 @@ describe('communityChatMessageService', () => {
       }),
     ).rejects.toMatchObject({ code: 'MENTION_EVERYONE_CONFLICT', status: 400 });
     expect(db.getConnection).not.toHaveBeenCalled();
+  });
+
+  it('统一附件引用保留混合顺序，并拒绝重复、超限及新旧字段冲突', () => {
+    const imagePublicId = '33333333-3333-4333-8333-333333333333';
+    const filePublicId = '44444444-4444-4444-8444-444444444444';
+    expect(
+      __test__.normalizeAttachmentRefs(
+        [
+          { kind: 'file', publicId: filePublicId },
+          { kind: 'image', publicId: imagePublicId },
+        ],
+        [imagePublicId],
+      ),
+    ).toEqual([
+      { kind: 'file', publicId: filePublicId },
+      { kind: 'image', publicId: imagePublicId },
+    ]);
+    expect(() =>
+      __test__.normalizeAttachmentRefs(
+        [
+          { kind: 'file', publicId: filePublicId },
+          { kind: 'file', publicId: filePublicId },
+        ],
+        [],
+      ),
+    ).toThrow(expect.objectContaining({ code: 'DUPLICATE_ATTACHMENT' }));
+    expect(() =>
+      __test__.normalizeAttachmentRefs(
+        Array.from({ length: 5 }, (_, index) => ({ kind: 'file', publicId: `file-${index}` })),
+        [],
+      ),
+    ).toThrow(expect.objectContaining({ code: 'TOO_MANY_ATTACHMENTS' }));
+    expect(() => __test__.normalizeAttachmentRefs([{ kind: 'file', publicId: filePublicId }], [imagePublicId])).toThrow(
+      expect.objectContaining({ code: 'ATTACHMENT_FIELDS_CONFLICT' }),
+    );
   });
 
   it('历史消息使用不透明游标分页、按时间正序返回且不暴露账号 ID', async () => {
@@ -1361,7 +1401,7 @@ describe('communityChatMessageService', () => {
       }
       if (text.includes('INSERT INTO community_chat_messages')) return [{ insertId: 40 }, []];
       if (text.includes("SET message_id = ?, status = 'attached'")) {
-        expect(params).toEqual([40, 0, 91, 'user-1']);
+        expect(params).toEqual([40, 0, 40, 91, 'user-1']);
         return [{ affectedRows: 1 }, []];
       }
       if (text.includes('UPDATE community_chat_rooms')) return [{ affectedRows: 1 }, []];
@@ -1375,10 +1415,16 @@ describe('communityChatMessageService', () => {
             {
               messageId: 40,
               publicId: imagePublicId,
+              kind: 'image',
+              fileName: 'photo.png',
               contentType: 'image/png',
               fileSize: 120,
               width: 640,
               height: 480,
+              status: 'attached',
+              expiresAt: '2099-09-09T10:00:00.000Z',
+              isExpired: 0,
+              hasObject: 1,
             },
           ],
           [],
@@ -1415,6 +1461,320 @@ describe('communityChatMessageService', () => {
     });
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(connection.rollback).not.toHaveBeenCalled();
+  });
+
+  it('图片与文件按统一顺序绑定，期限以消息时间为唯一事实', async () => {
+    const imagePublicId = '33333333-3333-4333-8333-333333333333';
+    const filePublicId = '44444444-4444-4444-8444-444444444444';
+    const connection = createConnection(async (sql, params) => {
+      const text = String(sql);
+      if (text.includes('FROM community_chat_members')) return [[MEMBER], []];
+      if (text.includes('FROM community_chat_runtime_policy')) return [[{ postingEnabled: 1 }], []];
+      if (text.includes('FROM community_chat_member_sanctions')) return [[], []];
+      if (text.includes('FROM community_chat_rooms')) {
+        return [[{ id: 2, slug: 'general', type: 'text', status: 'active', slowModeSeconds: 0 }], []];
+      }
+      if (text.includes('WHERE message.user_id = ?') && text.includes('client_request_id')) return [[], []];
+      if (text.includes('SELECT attachment.*')) {
+        expect(params).toEqual([40, 40]);
+        return [
+          [
+            {
+              messageId: 40,
+              publicId: imagePublicId,
+              kind: 'image',
+              fileName: 'photo.png',
+              contentType: 'image/png',
+              fileSize: 120,
+              width: 640,
+              height: 480,
+              status: 'attached',
+              sortOrder: 0,
+              id: 91,
+              expiresAt: '2099-09-09T10:00:00.000Z',
+              isExpired: 0,
+              hasObject: 1,
+            },
+            {
+              messageId: 40,
+              publicId: filePublicId,
+              kind: 'file',
+              fileName: 'notes.pdf',
+              contentType: 'application/pdf',
+              fileSize: 2 * 1024 * 1024,
+              width: 0,
+              height: 0,
+              status: 'attached',
+              sortOrder: 1,
+              id: 92,
+              expiresAt: '2099-09-09T10:00:00.000Z',
+              isExpired: 0,
+              hasObject: 1,
+            },
+          ],
+          [],
+        ];
+      }
+      if (text.includes('FROM community_chat_message_likes')) return [[], []];
+      if (text.includes('FROM community_chat_message_images') && text.includes('FOR UPDATE')) {
+        return [
+          [
+            {
+              id: 91,
+              publicId: imagePublicId,
+              fileSize: 120,
+              status: 'pending',
+              messageId: null,
+              expiresAt: '2099-08-10T10:00:00.000Z',
+            },
+          ],
+          [],
+        ];
+      }
+      if (text.includes('FROM community_chat_message_files') && text.includes('FOR UPDATE')) {
+        return [
+          [
+            {
+              id: 92,
+              publicId: filePublicId,
+              fileSize: 2 * 1024 * 1024,
+              status: 'pending',
+              messageId: null,
+              expiresAt: '2099-08-10T10:00:00.000Z',
+            },
+          ],
+          [],
+        ];
+      }
+      if (text.includes('INSERT INTO community_chat_messages')) return [{ insertId: 40 }, []];
+      if (text.includes('UPDATE community_chat_message_images')) return [{ affectedRows: 1 }, []];
+      if (text.includes('UPDATE community_chat_message_files')) return [{ affectedRows: 1 }, []];
+      if (text.includes('UPDATE community_chat_rooms')) return [{ affectedRows: 1 }, []];
+      if (text.includes('INSERT INTO community_chat_reads')) return [{ affectedRows: 1 }, []];
+      if (text.includes('WHERE message.public_id = ?')) {
+        return [[messageRow({ internalId: 40, publicId: params[0], userId: 'user-1', content: '' })], []];
+      }
+      throw new Error(`unexpected query: ${sql}`);
+    });
+    const db = { getConnection: vi.fn(async () => connection) };
+
+    const result = await createCommunityChatMessage({
+      user: { id: 'user-1', role: 'user' },
+      roomSlug: 'general',
+      clientRequestId: 'request-mixed-success',
+      content: '',
+      imagePublicIds: [imagePublicId],
+      attachmentRefs: [
+        { kind: 'image', publicId: imagePublicId },
+        { kind: 'file', publicId: filePublicId },
+      ],
+      env: FILES_ENV,
+      db,
+    });
+
+    expect(result.message.attachments).toMatchObject([
+      { publicId: imagePublicId, kind: 'image', availability: 'available' },
+      { publicId: filePublicId, kind: 'file', availability: 'available' },
+    ]);
+    expect(result.message.images).toHaveLength(1);
+    const attachmentUpdates = connection.query.mock.calls.filter(([sql]) =>
+      String(sql).includes("SET message_id = ?, status = 'attached'"),
+    );
+    expect(attachmentUpdates).toHaveLength(2);
+    for (const [sql] of attachmentUpdates) {
+      expect(String(sql)).toContain('DATE_ADD(create_time, INTERVAL 30 DAY)');
+      expect(String(sql)).toContain('expires_at > NOW()');
+    }
+    expect(attachmentUpdates[0]?.[1]).toEqual([40, 0, 40, 91, 'user-1']);
+    expect(attachmentUpdates[1]?.[1]).toEqual([40, 1, 40, 92, 'user-1']);
+    const messageInsert = connection.query.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT INTO community_chat_messages'),
+    );
+    const expectedFingerprint = createHash('sha256')
+      .update(
+        JSON.stringify({
+          version: 5,
+          roomSlug: 'general',
+          messageKind: 'text',
+          stickerSource: null,
+          stickerKey: null,
+          content: '',
+          replyToPublicId: null,
+          mentionUserPublicIds: [],
+          mentionMessagePublicIds: [],
+          attachmentRefs: [
+            { kind: 'image', publicId: imagePublicId },
+            { kind: 'file', publicId: filePublicId },
+          ],
+        }),
+      )
+      .digest('hex');
+    expect(messageInsert?.[1]?.[4]).toBe(expectedFingerprint);
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('图片与文件共用 4 个、20MB 消息级限制，超限时在写消息前整体回滚', async () => {
+    const imagePublicId = '33333333-3333-4333-8333-333333333333';
+    const filePublicId = '44444444-4444-4444-8444-444444444444';
+    const connection = createConnection(async (sql) => {
+      const text = String(sql);
+      if (text.includes('FROM community_chat_members')) return [[MEMBER], []];
+      if (text.includes('FROM community_chat_runtime_policy')) return [[{ postingEnabled: 1 }], []];
+      if (text.includes('FROM community_chat_member_sanctions')) return [[], []];
+      if (text.includes('FROM community_chat_rooms')) {
+        return [[{ id: 2, slug: 'general', type: 'text', status: 'active', slowModeSeconds: 0 }], []];
+      }
+      if (text.includes('WHERE message.user_id = ?') && text.includes('client_request_id')) return [[], []];
+      if (text.includes('FROM community_chat_message_images') && text.includes('FOR UPDATE')) {
+        return [
+          [
+            {
+              id: 91,
+              publicId: imagePublicId,
+              fileSize: 5 * 1024 * 1024,
+              status: 'pending',
+              messageId: null,
+              expiresAt: '2099-08-10T10:00:00.000Z',
+            },
+          ],
+          [],
+        ];
+      }
+      if (text.includes('FROM community_chat_message_files') && text.includes('FOR UPDATE')) {
+        return [
+          [
+            {
+              id: 92,
+              publicId: filePublicId,
+              fileSize: 16 * 1024 * 1024,
+              status: 'pending',
+              messageId: null,
+              expiresAt: '2099-08-10T10:00:00.000Z',
+            },
+          ],
+          [],
+        ];
+      }
+      throw new Error(`unexpected query: ${sql}`);
+    });
+    const db = { getConnection: vi.fn(async () => connection) };
+
+    await expect(
+      createCommunityChatMessage({
+        user: { id: 'user-1', role: 'user' },
+        roomSlug: 'general',
+        clientRequestId: 'request-mixed-too-large',
+        content: '',
+        imagePublicIds: [imagePublicId],
+        attachmentRefs: [
+          { kind: 'image', publicId: imagePublicId },
+          { kind: 'file', publicId: filePublicId },
+        ],
+        env: FILES_ENV,
+        db,
+      }),
+    ).rejects.toMatchObject({ code: 'COMMUNITY_CHAT_ATTACHMENTS_TOO_LARGE', status: 413 });
+
+    expect(
+      connection.query.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO community_chat_messages')),
+    ).toBe(false);
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+    expect(connection.commit).not.toHaveBeenCalled();
+  });
+
+  it('文件子开关关闭后，已成功请求的同负载重放仍返回原消息', async () => {
+    const filePublicId = '44444444-4444-4444-8444-444444444444';
+    const payloadFingerprint = createHash('sha256')
+      .update(
+        JSON.stringify({
+          version: 5,
+          roomSlug: 'general',
+          messageKind: 'text',
+          stickerSource: null,
+          stickerKey: null,
+          content: '',
+          replyToPublicId: null,
+          mentionUserPublicIds: [],
+          mentionMessagePublicIds: [],
+          attachmentRefs: [{ kind: 'file', publicId: filePublicId }],
+        }),
+      )
+      .digest('hex');
+    const connection = createConnection(async (sql, params) => {
+      const text = String(sql);
+      if (text.includes('FROM community_chat_members')) return [[MEMBER], []];
+      if (text.includes('FROM community_chat_runtime_policy')) return [[{ postingEnabled: 1 }], []];
+      if (text.includes('FROM community_chat_member_sanctions')) return [[], []];
+      if (text.includes('FROM community_chat_rooms')) {
+        return [[{ id: 2, slug: 'general', type: 'text', status: 'active', slowModeSeconds: 0 }], []];
+      }
+      if (text.includes('client_request_id')) {
+        return [
+          [
+            {
+              internalId: 40,
+              publicId: 'message-file-existing',
+              roomId: 2,
+              content: '',
+              payloadFingerprint,
+              mentionEveryone: 0,
+              replyToId: null,
+              replyPublicId: null,
+            },
+          ],
+          [],
+        ];
+      }
+      if (text.includes('SELECT public_id AS publicId') && text.includes('community_chat_message_images')) {
+        return [[], []];
+      }
+      if (text.includes('WHERE message.public_id = ?')) {
+        return [[messageRow({ internalId: 40, publicId: params[0], userId: 'user-1', content: '' })], []];
+      }
+      if (text.includes('SELECT attachment.*')) {
+        return [
+          [
+            {
+              messageId: 40,
+              publicId: filePublicId,
+              kind: 'file',
+              fileName: 'notes.pdf',
+              contentType: 'application/pdf',
+              fileSize: 128,
+              status: 'attached',
+              sortOrder: 0,
+              id: 92,
+              expiresAt: '2099-09-09T10:00:00.000Z',
+              isExpired: 0,
+              hasObject: 1,
+            },
+          ],
+          [],
+        ];
+      }
+      if (text.includes('FROM community_chat_message_likes')) return [[], []];
+      throw new Error(`unexpected query: ${sql}`);
+    });
+    const db = { getConnection: vi.fn(async () => connection) };
+
+    const result = await createCommunityChatMessage({
+      user: { id: 'user-1', role: 'user' },
+      roomSlug: 'general',
+      clientRequestId: 'request-file-replay',
+      content: '',
+      attachmentRefs: [{ kind: 'file', publicId: filePublicId }],
+      env: PUBLIC_ENV,
+      db,
+    });
+
+    expect(result).toMatchObject({
+      idempotent: true,
+      message: { publicId: 'message-file-existing', attachments: [{ publicId: filePublicId }] },
+    });
+    expect(
+      connection.query.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO community_chat_messages')),
+    ).toBe(false);
+    expect(connection.commit).toHaveBeenCalledTimes(1);
   });
 
   it('相同用户与 clientRequestId 的同负载重放直接返回既有消息，不重复 INSERT', async () => {
@@ -1614,6 +1974,7 @@ describe('communityChatMessageService', () => {
       status: 'blocked',
       authorName: '',
       hasImages: false,
+      hasAttachments: false,
       hasSticker: false,
       hasPoll: false,
     });
@@ -1877,6 +2238,59 @@ describe('communityChatMessageService', () => {
       canViewRecalledContent: true,
       canDelete: true,
     });
+  });
+
+  it('统一附件响应保留过期元数据，旧 images 只包含仍可访问的图片', () => {
+    const attachments = [
+      {
+        publicId: 'image-ready',
+        kind: 'image',
+        fileName: 'photo.png',
+        fileType: 'image/png',
+        contentType: 'image/png',
+        fileSize: 120,
+        availability: 'available',
+        expiresAt: '2099-01-01T00:00:00.000Z',
+        url: '/api/community-chat/images/image-ready',
+        width: 640,
+        height: 480,
+      },
+      {
+        publicId: 'image-expired',
+        kind: 'image',
+        fileName: 'old.webp',
+        fileType: 'image/webp',
+        contentType: 'image/webp',
+        fileSize: 80,
+        availability: 'expired',
+        expiresAt: '2026-01-01T00:00:00.000Z',
+        width: 320,
+        height: 240,
+      },
+      {
+        publicId: 'file-expired',
+        kind: 'file',
+        fileName: 'old.pdf',
+        fileType: 'application/pdf',
+        fileSize: 2048,
+        availability: 'expired',
+        expiresAt: '2026-01-01T00:00:00.000Z',
+      },
+    ];
+
+    const view = __test__.toPublicMessage(messageRow(), 'user-1', new Set(), attachments);
+
+    expect(view.attachments).toEqual(attachments);
+    expect(view.images).toEqual([
+      {
+        publicId: 'image-ready',
+        url: '/api/community-chat/images/image-ready',
+        contentType: 'image/png',
+        fileSize: 120,
+        width: 640,
+        height: 480,
+      },
+    ]);
   });
 
   it('普通用户超过两分钟后仍获得撤回入口状态，由客户端解释时间限制', () => {

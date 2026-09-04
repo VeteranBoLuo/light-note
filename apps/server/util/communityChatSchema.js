@@ -214,7 +214,8 @@ export const COMMUNITY_CHAT_TABLE_SQL = [
     public_id char(36) NOT NULL,
     owner_user_id varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
     message_id bigint unsigned DEFAULT NULL,
-    object_key varchar(512) NOT NULL,
+    object_key varchar(512) DEFAULT NULL,
+    file_name varchar(255) NOT NULL DEFAULT '',
     content_type varchar(64) NOT NULL,
     file_size int unsigned NOT NULL,
     width int unsigned NOT NULL,
@@ -222,13 +223,38 @@ export const COMMUNITY_CHAT_TABLE_SQL = [
     status varchar(24) NOT NULL DEFAULT 'uploading',
     sort_order tinyint unsigned NOT NULL DEFAULT 0,
     expires_at datetime DEFAULT NULL,
+    expired_at datetime DEFAULT NULL,
     create_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uk_community_chat_image_public (public_id),
     UNIQUE KEY uk_community_chat_image_object (object_key),
     KEY idx_community_chat_image_owner_status_expiry (owner_user_id, status, expires_at),
-    KEY idx_community_chat_image_message_status_sort (message_id, status, sort_order, id)
+    KEY idx_community_chat_image_message_status_sort (message_id, status, sort_order, id),
+    KEY idx_community_chat_image_status_expiry (status, expires_at, id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS community_chat_message_files (
+    id bigint unsigned NOT NULL AUTO_INCREMENT,
+    public_id char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    owner_user_id varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+    room_id bigint unsigned NOT NULL,
+    message_id bigint unsigned DEFAULT NULL,
+    object_key varchar(512) DEFAULT NULL,
+    file_name varchar(255) NOT NULL,
+    content_type varchar(160) NOT NULL DEFAULT 'application/octet-stream',
+    file_size bigint unsigned NOT NULL,
+    status varchar(24) NOT NULL DEFAULT 'uploading',
+    sort_order tinyint unsigned NOT NULL DEFAULT 0,
+    expires_at datetime NOT NULL,
+    expired_at datetime DEFAULT NULL,
+    create_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_community_chat_file_public (public_id),
+    UNIQUE KEY uk_community_chat_file_object (object_key),
+    KEY idx_community_chat_file_owner_status_expiry (owner_user_id, status, expires_at, id),
+    KEY idx_community_chat_file_message_status_sort (message_id, status, sort_order, id),
+    KEY idx_community_chat_file_status_expiry (status, expires_at, id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
   `CREATE TABLE IF NOT EXISTS community_chat_custom_stickers (
     id bigint unsigned NOT NULL AUTO_INCREMENT,
@@ -401,6 +427,17 @@ export const COMMUNITY_CHAT_MENTION_SNAPSHOT_COLUMNS = [
   },
 ];
 
+export const COMMUNITY_CHAT_IMAGE_RETENTION_COLUMNS = [
+  {
+    name: 'file_name',
+    ddl: "`file_name` varchar(255) NOT NULL DEFAULT '' AFTER `object_key`",
+  },
+  {
+    name: 'expired_at',
+    ddl: '`expired_at` datetime DEFAULT NULL AFTER `expires_at`',
+  },
+];
+
 async function ensureTableColumns(tableName, columns) {
   const names = columns.map((column) => column.name);
   const placeholders = names.map(() => '?').join(',');
@@ -464,6 +501,21 @@ async function ensureCommunityChatMentionSnapshotColumns() {
   await ensureTableColumns('community_chat_message_mentions', COMMUNITY_CHAT_MENTION_SNAPSHOT_COLUMNS);
 }
 
+async function ensureCommunityChatImageRetentionColumns() {
+  await ensureTableColumns('community_chat_message_images', COMMUNITY_CHAT_IMAGE_RETENTION_COLUMNS);
+  const [rows] = await pool.query(
+    `SELECT IS_NULLABLE AS isNullable
+       FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'community_chat_message_images'
+        AND COLUMN_NAME = 'object_key'
+      LIMIT 1`,
+  );
+  if (rows[0]?.isNullable === 'NO') {
+    await pool.query('ALTER TABLE community_chat_message_images MODIFY COLUMN object_key varchar(512) DEFAULT NULL');
+  }
+}
+
 export const COMMUNITY_CHAT_ROOM_SEED_SQL = `
   INSERT INTO community_chat_rooms
     (slug, name_zh, name_en, description_zh, description_en, type, default_notification_level, sort_order)
@@ -499,6 +551,7 @@ export function ensureCommunityChatSchema() {
       await ensureCommunityChatMessagePayloadColumns();
       await ensureCommunityChatPollSelectionColumns();
       await ensureCommunityChatMentionSnapshotColumns();
+      await ensureCommunityChatImageRetentionColumns();
       await pool.query(COMMUNITY_CHAT_RUNTIME_POLICY_SEED_SQL);
       await pool.query(COMMUNITY_CHAT_ROOM_SEED_SQL);
     })().finally(() => {

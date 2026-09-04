@@ -1,3 +1,5 @@
+import axios from 'axios';
+import type { CommunityChatAttachment as CommunityChatAttachmentContract } from '@lightnote/shared/community-chat-attachments';
 import { apiBaseGet, apiBasePost, apiBasePut } from '@/http/request';
 
 export type CommunityChatAccessStatus =
@@ -7,6 +9,8 @@ export interface CommunityChatAccess {
   accessMode: 'closed' | 'invite_only' | 'public';
   waitlistEnabled: boolean;
   messagingEnabled: boolean;
+  /** 旧服务端缺少该字段时必须视为关闭，避免文件在滚动发布期间丢失。 */
+  filesEnabled?: boolean;
   pollsEnabled: boolean;
   /** 旧服务端缺少该字段时，客户端只开放单选发布，避免把多选草稿降级落成单选。 */
   pollSelectionModes?: CommunityChatPollSelectionMode[];
@@ -111,6 +115,7 @@ export interface CommunityChatMessageReply {
   status: 'active' | 'deleted' | 'hidden' | 'unavailable' | string;
   authorName: string;
   hasImages: boolean;
+  hasAttachments?: boolean;
   hasSticker?: boolean;
   hasPoll?: boolean;
 }
@@ -122,6 +127,18 @@ export interface CommunityChatImage {
   fileSize: number;
   width: number;
   height: number;
+}
+
+export interface CommunityChatAttachment extends CommunityChatAttachmentContract {
+  contentType?: 'image/jpeg' | 'image/png' | 'image/webp' | string;
+}
+
+export interface CommunityChatPendingAttachment extends CommunityChatAttachment {
+  localId: string;
+  state: 'uploading' | 'ready' | 'failed';
+  progress: number;
+  sourceFile?: File;
+  errorMessage?: string;
 }
 
 export interface CommunityChatMentionItem {
@@ -206,6 +223,7 @@ export interface CommunityChatMessage {
   recallDeadlineAt: string | null;
   isOwn: boolean;
   images: CommunityChatImage[];
+  attachments?: CommunityChatAttachment[];
   mentionEveryone?: boolean;
   mentions: string[];
   mentionItems?: CommunityChatMentionItem[];
@@ -290,6 +308,7 @@ export interface SendCommunityChatMessageInput {
   mentionUserPublicIds?: string[];
   mentionMessagePublicIds?: string[];
   imagePublicIds?: string[];
+  attachmentRefs?: Array<{ kind: 'image' | 'file'; publicId: string }>;
   poll?: {
     endsAt: string;
     options: string[];
@@ -466,14 +485,100 @@ export const uploadCommunityChatCustomSticker = (file: File, name = '') => {
 export const removeCommunityChatCustomSticker = (stickerPublicId: string) =>
   apiBasePost(`/api/community-chat/stickers/${encodeURIComponent(stickerPublicId)}/remove`, {}, { silent: true });
 
-export const uploadCommunityChatImage = (roomSlug: string, file: File) => {
+export const uploadCommunityChatImage = (
+  roomSlug: string,
+  file: File,
+  options: { signal?: AbortSignal; onProgress?: (percent: number) => void } = {},
+) => {
   const formData = new FormData();
+  formData.append('fileName', file.name);
   formData.append('file', file);
-  return apiBasePost(`${roomPath(roomSlug)}/images`, formData, { silent: true });
+  return apiBasePost(`${roomPath(roomSlug)}/images`, formData, {
+    silent: true,
+    ...(options.signal ? { signal: options.signal } : {}),
+    ...(options.onProgress
+      ? {
+          onUploadProgress: (event) => {
+            if (!event.total || event.total <= 0) return;
+            options.onProgress?.(Math.min(100, Math.max(0, Math.round((event.loaded / event.total) * 100))));
+          },
+        }
+      : {}),
+  });
 };
 
 export const discardCommunityChatImage = (imagePublicId: string) =>
   apiBasePost(`/api/community-chat/images/${encodeURIComponent(imagePublicId)}/discard`, {}, { silent: true });
+
+function communityChatApiError(response: any, fallback: string) {
+  return Object.assign(new Error(response?.msg || fallback), {
+    code: response?.data?.code || fallback,
+    status: response?.status,
+  });
+}
+
+export async function uploadCommunityChatFile(
+  roomSlug: string,
+  file: File,
+  options: { signal?: AbortSignal; onProgress?: (percent: number) => void } = {},
+): Promise<CommunityChatAttachment> {
+  const prepareResponse = await apiBasePost(
+    `${roomPath(roomSlug)}/files/prepare`,
+    {
+      fileName: file.name,
+      fileType: file.type || 'application/octet-stream',
+      fileSize: file.size,
+    },
+    { silent: true },
+  );
+  const prepared = prepareResponse?.data;
+  const publicId = String(prepared?.attachment?.publicId || '');
+  if (prepareResponse?.status !== 200 || !publicId || !prepared?.uploadUrl) {
+    throw communityChatApiError(prepareResponse, 'COMMUNITY_CHAT_FILE_PREPARE_FAILED');
+  }
+  let uploadCompleted = false;
+  try {
+    await axios.put(prepared.uploadUrl, file, {
+      headers: {
+        ...(prepared.headers || {}),
+        'Content-Type': prepared.attachment.fileType || file.type || 'application/octet-stream',
+      },
+      signal: options.signal,
+      onUploadProgress: (event) => {
+        if (!event.total || event.total <= 0) return;
+        options.onProgress?.(Math.min(100, Math.max(0, Math.round((event.loaded / event.total) * 100))));
+      },
+    });
+    uploadCompleted = true;
+    options.onProgress?.(100);
+    const confirmed = await apiBasePost(
+      `/api/community-chat/files/${encodeURIComponent(publicId)}/confirm`,
+      {},
+      { silent: true },
+    );
+    if (confirmed?.status !== 200 || !confirmed?.data?.publicId) {
+      throw communityChatApiError(confirmed, 'COMMUNITY_CHAT_FILE_CONFIRM_FAILED');
+    }
+    return confirmed.data as CommunityChatAttachment;
+  } catch (error: any) {
+    if (uploadCompleted && error?.name !== 'CanceledError' && error?.name !== 'AbortError') {
+      const recovered = await apiBasePost(
+        `/api/community-chat/files/${encodeURIComponent(publicId)}/confirm`,
+        {},
+        { silent: true },
+      ).catch(() => null);
+      if (recovered?.status === 200 && recovered?.data?.publicId) return recovered.data as CommunityChatAttachment;
+    }
+    await discardCommunityChatFile(publicId).catch(() => undefined);
+    throw error;
+  }
+}
+
+export const discardCommunityChatFile = (filePublicId: string) =>
+  apiBasePost(`/api/community-chat/files/${encodeURIComponent(filePublicId)}/discard`, {}, { silent: true });
+
+export const getCommunityChatFileDownload = (filePublicId: string) =>
+  apiBasePost(`/api/community-chat/files/${encodeURIComponent(filePublicId)}/download`, {}, { silent: true });
 
 export const markCommunityChatRoomRead = (roomSlug: string, lastMessagePublicId?: string | null) =>
   apiBasePut(`${roomPath(roomSlug)}/read`, { lastMessagePublicId: lastMessagePublicId || null }, { silent: true });

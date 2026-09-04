@@ -2,6 +2,7 @@ import os from 'node:os';
 import { ensureAiDocumentSchema } from './util/aiDocumentSchema.js';
 import { cleanupExpiredDocumentSources, runSingleDocumentJob } from './util/aiDocument/service.js';
 import { ensureFilePreviewSchema } from './util/filePreviewSchema.js';
+import { ensureCommunityChatSchema } from './util/communityChatSchema.js';
 import { cleanupStaleFilePreviewArtifacts, runSingleFilePreviewJob } from './util/filePreview/service.js';
 import { inspectAllFilePreviewRuntimes } from './util/filePreview/runtime.js';
 import { inspectLocalOcrRuntime } from './util/aiDocument/localOcr.js';
@@ -18,6 +19,7 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function run() {
   await ensureAiDocumentSchema();
+  await ensureCommunityChatSchema();
   await ensureFilePreviewSchema();
   await ensureToolboxSchema();
   const ocrRuntime = await inspectLocalOcrRuntime();

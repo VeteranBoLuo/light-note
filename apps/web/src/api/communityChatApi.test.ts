@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   apiBaseGet: vi.fn(),
   apiBasePost: vi.fn(),
   apiBasePut: vi.fn(),
+  axiosPut: vi.fn(),
 }));
 
 vi.mock('@/http/request', () => ({
@@ -11,6 +12,7 @@ vi.mock('@/http/request', () => ({
   apiBasePost: mocks.apiBasePost,
   apiBasePut: mocks.apiBasePut,
 }));
+vi.mock('axios', () => ({ default: { put: mocks.axiosPut } }));
 
 const {
   acceptCommunityChatRules,
@@ -18,6 +20,7 @@ const {
   closeCommunityChatPoll,
   createCommunityChatClientRequestId,
   deleteCommunityChatMessage,
+  discardCommunityChatFile,
   discardCommunityChatImage,
   getCommunityChatAdminRuntimePolicy,
   getCommunityChatAdminReports,
@@ -33,6 +36,7 @@ const {
   getCommunityChatMessageAuthorAchievements,
   getCommunityChatOwnProfile,
   getCommunityChatBlocks,
+  getCommunityChatFileDownload,
   getCommunityChatRooms,
   markCommunityChatRoomRead,
   recordCommunityChatReadReceipts,
@@ -50,11 +54,12 @@ const {
   updateCommunityChatNotificationSettings,
   updateCommunityChatOwnProfile,
   uploadCommunityChatImage,
+  uploadCommunityChatFile,
 } = await import('./communityChatApi');
 
 describe('communityChatApi', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it('读取访问状态和房间目录时使用独立 community-chat REST 域', () => {
@@ -184,6 +189,7 @@ describe('communityChatApi', () => {
     const uploadCall = mocks.apiBasePost.mock.calls[0];
     expect(uploadCall[0]).toBe('/api/community-chat/rooms/general/images');
     expect(uploadCall[1]).toBeInstanceOf(FormData);
+    expect((uploadCall[1] as FormData).get('fileName')).toBe('photo.png');
     expect((uploadCall[1] as FormData).get('file')).toBe(file);
     expect(uploadCall[2]).toEqual({ silent: true });
     expect(mocks.apiBasePost).toHaveBeenNthCalledWith(
@@ -192,6 +198,91 @@ describe('communityChatApi', () => {
       {},
       { silent: true },
     );
+  });
+
+  it('普通文件按准备、OBS 直传、确认三阶段上传，确认响应丢失时幂等恢复', async () => {
+    const file = new File(['notes'], 'notes.txt', { type: 'text/plain' });
+    const progress = vi.fn();
+    let confirmAttempts = 0;
+    mocks.apiBasePost.mockImplementation(async (url) => {
+      if (url === '/api/community-chat/rooms/general/files/prepare') {
+        return {
+          status: 200,
+          data: {
+            attachment: {
+              publicId: 'file-1',
+              kind: 'file',
+              fileName: 'notes.txt',
+              fileType: 'text/plain',
+              fileSize: file.size,
+              availability: 'available',
+              expiresAt: null,
+            },
+            uploadUrl: 'https://upload.example/signed',
+            headers: { 'Content-Type': 'text/plain' },
+          },
+        };
+      }
+      if (url === '/api/community-chat/files/file-1/confirm') {
+        confirmAttempts += 1;
+        if (confirmAttempts === 1) throw new Error('response lost');
+        return {
+          status: 200,
+          data: {
+            publicId: 'file-1',
+            kind: 'file',
+            fileName: 'notes.txt',
+            fileType: 'text/plain',
+            fileSize: file.size,
+            availability: 'available',
+            expiresAt: null,
+            alreadyConfirmed: true,
+          },
+        };
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
+    mocks.axiosPut.mockImplementation(async (_url, _body, config) => {
+      config.onUploadProgress({ loaded: file.size, total: file.size });
+      return { status: 200 };
+    });
+
+    await expect(uploadCommunityChatFile('general', file, { onProgress: progress })).resolves.toMatchObject({
+      publicId: 'file-1',
+      alreadyConfirmed: true,
+    });
+    expect(mocks.axiosPut).toHaveBeenCalledWith(
+      'https://upload.example/signed',
+      file,
+      expect.objectContaining({ headers: { 'Content-Type': 'text/plain' } }),
+    );
+    expect(confirmAttempts).toBe(2);
+    expect(progress).toHaveBeenCalledWith(100);
+  });
+
+  it('OBS 直传失败后主动丢弃临时记录，下载始终走聊天室鉴权接口', async () => {
+    const file = new File(['notes'], 'notes.txt', { type: 'text/plain' });
+    mocks.apiBasePost.mockImplementation(async (url) => {
+      if (url === '/api/community-chat/rooms/general/files/prepare') {
+        return {
+          status: 200,
+          data: {
+            attachment: { publicId: 'file/1', fileType: 'text/plain' },
+            uploadUrl: 'https://upload.example/signed',
+          },
+        };
+      }
+      return { status: 200, data: {} };
+    });
+    mocks.axiosPut.mockRejectedValue(new Error('upload failed'));
+
+    await expect(uploadCommunityChatFile('general', file)).rejects.toThrow('upload failed');
+    expect(mocks.apiBasePost).toHaveBeenCalledWith('/api/community-chat/files/file%2F1/discard', {}, { silent: true });
+
+    discardCommunityChatFile('file/2');
+    getCommunityChatFileDownload('file/3');
+    expect(mocks.apiBasePost).toHaveBeenCalledWith('/api/community-chat/files/file%2F2/discard', {}, { silent: true });
+    expect(mocks.apiBasePost).toHaveBeenCalledWith('/api/community-chat/files/file%2F3/download', {}, { silent: true });
   });
 
   it('聊天室四档提醒在全局设置与聊天室复用同一 REST 资源', () => {

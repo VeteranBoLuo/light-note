@@ -93,6 +93,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import {
+    listCommunityChatArchivePreview,
     listOwnedArchivePreview,
     listSharedArchivePreview,
     type ArchivePreviewEntry,
@@ -102,6 +103,7 @@
   const props = defineProps<{
     fileId: string;
     previewTicket?: string;
+    communityChatPublicId?: string;
   }>();
   const emit = defineEmits<{ error: [error: unknown] }>();
   const { t } = useI18n();
@@ -153,7 +155,9 @@
       };
       const page = props.previewTicket
         ? await listSharedArchivePreview(props.previewTicket, input)
-        : await listOwnedArchivePreview(props.fileId, input);
+        : props.communityChatPublicId
+          ? await listCommunityChatArchivePreview(props.communityChatPublicId, input)
+          : await listOwnedArchivePreview(props.fileId, input);
       if (currentRequest !== requestId) return;
       items.value = append ? [...items.value, ...page.items] : page.items;
       summary.value = page.summary;
@@ -193,7 +197,7 @@
   }
 
   watch(
-    () => [props.fileId, props.previewTicket],
+    () => [props.fileId, props.previewTicket, props.communityChatPublicId],
     () => {
       directory.value = '';
       activeQuery.value = '';

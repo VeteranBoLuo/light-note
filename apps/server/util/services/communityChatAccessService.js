@@ -57,6 +57,7 @@ function resolveRuntimePolicy(feature, row = null) {
   const postingEnabled = Boolean(feature.messagingEnabled && databasePostingEnabled && !environmentReadOnly);
   return {
     messagingEnabled: feature.messagingEnabled,
+    filesEnabled: feature.filesEnabled,
     postingEnabled,
     databasePostingEnabled,
     emergencyReadOnly: Boolean(feature.messagingEnabled && !postingEnabled),
@@ -83,6 +84,7 @@ function baseAccess(feature, user, runtimePolicy) {
     accessMode: feature.accessMode,
     waitlistEnabled: feature.waitlistEnabled,
     messagingEnabled: feature.messagingEnabled,
+    filesEnabled: feature.filesEnabled,
     pollsEnabled: feature.pollsEnabled,
     pollSelectionModes: ['single', 'multiple'],
     readReceiptsEnabled: feature.readReceiptsEnabled,

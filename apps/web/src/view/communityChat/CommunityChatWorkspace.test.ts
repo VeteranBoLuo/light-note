@@ -16,7 +16,10 @@ const mocks = vi.hoisted(() => ({
   getPinnedMessage: vi.fn(),
   getAuthorProfile: vi.fn(),
   uploadImage: vi.fn(),
+  uploadFile: vi.fn(),
   discardImage: vi.fn(),
+  discardFile: vi.fn(),
+  downloadFile: vi.fn(),
   deleteMessage: vi.fn(),
   markRead: vi.fn(),
   sendMessage: vi.fn(),
@@ -75,7 +78,10 @@ vi.mock('@/api/communityChatApi', () => ({
   getCommunityChatPinnedMessage: mocks.getPinnedMessage,
   getCommunityChatMessageAuthorProfile: mocks.getAuthorProfile,
   uploadCommunityChatImage: mocks.uploadImage,
+  uploadCommunityChatFile: mocks.uploadFile,
   discardCommunityChatImage: mocks.discardImage,
+  discardCommunityChatFile: mocks.discardFile,
+  getCommunityChatFileDownload: mocks.downloadFile,
   markCommunityChatRoomRead: mocks.markRead,
   sendCommunityChatMessage: mocks.sendMessage,
   getCommunityChatRooms: mocks.getRooms,
@@ -99,6 +105,8 @@ vi.mock('@/api/communityChatApi', () => ({
   unblockCommunityChatUser: mocks.unblockUser,
 }));
 vi.mock('@/api/commonApi', () => ({ recordOperation: mocks.recordOperation }));
+vi.mock('@/http/common.ts', () => ({ requestAndroidDownload: vi.fn(() => false), getFileShareDownload: vi.fn() }));
+vi.mock('@/composables/useAndroidDownloadProgress', () => ({ announceNativeDownloadStart: vi.fn() }));
 vi.mock('@/utils/prepareCommunityChatSticker', () => ({
   prepareCommunityChatSticker: mocks.prepareSticker,
 }));
@@ -122,7 +130,8 @@ vi.mock('@/composables/useGrowth', () => ({
 vi.mock('@/composables/useNotification', () => ({
   useNotification: () => ({ refreshUnread: vi.fn(async () => {}) }),
 }));
-vi.mock('vue-router', () => ({
+vi.mock('vue-router', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   useRoute: () => mocks.route,
   useRouter: () => ({ replace: mocks.routerReplace }),
 }));
@@ -137,6 +146,7 @@ const access = {
   accessMode: 'public',
   waitlistEnabled: false,
   messagingEnabled: true,
+  filesEnabled: true,
   pollsEnabled: false,
   readReceiptsEnabled: false,
   realtimeEnabled: false,
@@ -447,7 +457,21 @@ beforeEach(() => {
       height: 480,
     },
   });
+  mocks.uploadFile.mockResolvedValue({
+    publicId: 'file-1',
+    kind: 'file',
+    fileName: 'notes.txt',
+    fileType: 'text/plain',
+    fileSize: 12,
+    availability: 'available',
+    expiresAt: '2026-08-10T10:00:00.000Z',
+  });
   mocks.discardImage.mockResolvedValue({ status: 200, data: { publicId: 'image-1', discarded: true } });
+  mocks.discardFile.mockResolvedValue({ status: 200, data: { publicId: 'file-1', discarded: true } });
+  mocks.downloadFile.mockResolvedValue({
+    status: 200,
+    data: { downloadUrl: 'https://download.example/file-1', fileName: 'notes.txt' },
+  });
 });
 
 afterEach(() => {
@@ -1952,7 +1976,7 @@ describe('CommunityChatWorkspace', () => {
     Object.defineProperty(fileInput, 'files', { configurable: true, value: [file] });
     fileInput?.dispatchEvent(new Event('change', { bubbles: true }));
     await flushAsync();
-    expect(firstHost.textContent).toContain('正在处理 1 张图片');
+    expect(firstHost.textContent).toContain('正在上传 0%');
 
     cleanup?.();
     cleanup = undefined;
@@ -3785,7 +3809,7 @@ describe('CommunityChatWorkspace', () => {
     expect(mocks.messageError).not.toHaveBeenCalledWith(expect.stringContaining('CUSTOM_STICKER'));
   });
 
-  it('支持上传安全图片并发送纯图片消息，客户端只提交图片公有 ID', async () => {
+  it('支持上传安全图片并发送纯图片消息，同时提交新旧附件契约', async () => {
     mocks.sendMessage.mockResolvedValue({
       data: {
         message: chatMessage({
@@ -3809,10 +3833,10 @@ describe('CommunityChatWorkspace', () => {
     expect(host.querySelector('.community-composer__surface .community-composer__input')).not.toBeNull();
     expect(host.querySelector('.community-composer__surface .community-composer__toolbar')).not.toBeNull();
     const imageButton = host.querySelector<HTMLButtonElement>(
-      `.community-composer__attach[aria-label="${zhCN.communityChat.image.add}"]`,
+      `.community-composer__attach[aria-label="${zhCN.communityChat.attachment.add}"]`,
     );
     expect(imageButton?.textContent?.trim()).toBe('');
-    expect(imageButton?.getAttribute('aria-label')).toBe(zhCN.communityChat.image.add);
+    expect(imageButton?.getAttribute('aria-label')).toBe(zhCN.communityChat.attachment.add);
     const file = new File(['image-bytes'], 'photo.png', { type: 'image/png' });
     const fileInput = document.body.querySelector<HTMLInputElement>('.b-upload-native-input');
     expect(fileInput).not.toBeNull();
@@ -3820,7 +3844,11 @@ describe('CommunityChatWorkspace', () => {
     fileInput?.dispatchEvent(new Event('change', { bubbles: true }));
     await flushAsync();
 
-    expect(mocks.uploadImage).toHaveBeenCalledWith('general', file);
+    expect(mocks.uploadImage).toHaveBeenCalledWith(
+      'general',
+      file,
+      expect.objectContaining({ signal: expect.any(AbortSignal), onProgress: expect.any(Function) }),
+    );
     expect(host.querySelector('.community-composer__image img')).not.toBeNull();
     const sendButton = host.querySelector<HTMLButtonElement>('.community-composer__send');
     expect(sendButton?.textContent?.trim()).toBe('');
@@ -3833,12 +3861,123 @@ describe('CommunityChatWorkspace', () => {
       clientRequestId: 'request-fixed-0001',
       content: '',
       imagePublicIds: ['image-1'],
+      attachmentRefs: [{ kind: 'image', publicId: 'image-1' }],
     });
     await vi.waitFor(() =>
       expect(
         host.querySelector('[data-message-public-id="message-image-1"] .community-message__image img'),
       ).not.toBeNull(),
     );
+  });
+
+  it('普通文件进入统一队列并只通过 attachmentRefs 发送，保留名称、类型和大小', async () => {
+    mocks.sendMessage.mockResolvedValue({
+      data: {
+        message: chatMessage({
+          publicId: 'message-file-1',
+          content: '',
+          isOwn: true,
+          attachments: [
+            {
+              publicId: 'file-1',
+              kind: 'file',
+              fileName: 'notes.txt',
+              fileType: 'text/plain',
+              fileSize: 12,
+              availability: 'available',
+              expiresAt: '2099-09-04T10:00:00.000Z',
+            },
+          ],
+        }),
+      },
+    });
+    const host = await mountWorkspace();
+    const file = new File(['plain-notes'], 'notes.txt', { type: 'text/plain' });
+    const fileInput = document.body.querySelector<HTMLInputElement>('.b-upload-native-input[multiple]');
+    if (!fileInput) throw new Error('missing attachment input');
+    Object.defineProperty(fileInput, 'files', { configurable: true, value: [file] });
+    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    await flushAsync();
+
+    expect(mocks.uploadFile).toHaveBeenCalledWith(
+      'general',
+      file,
+      expect.objectContaining({ signal: expect.any(AbortSignal), onProgress: expect.any(Function) }),
+    );
+    expect(host.textContent).toContain('notes.txt');
+    expect(host.querySelector('.chat-pending-attachment.is-ready')).not.toBeNull();
+
+    host.querySelector<HTMLButtonElement>('.community-composer__send')?.click();
+    await flushAsync();
+    expect(mocks.sendMessage).toHaveBeenCalledWith('general', {
+      clientRequestId: 'request-fixed-0001',
+      content: '',
+      attachmentRefs: [{ kind: 'file', publicId: 'file-1' }],
+    });
+    await vi.waitFor(() => expect(host.textContent).toContain('notes.txt'));
+  });
+
+  it('待发送附件正在移除时禁用发送，避免绑定和丢弃请求竞争', async () => {
+    const discardRequest = deferred<any>();
+    mocks.discardFile.mockReturnValueOnce(discardRequest.promise);
+    const host = await mountWorkspace();
+    const file = new File(['plain-notes'], 'remove-me.txt', { type: 'text/plain' });
+    const fileInput = document.body.querySelector<HTMLInputElement>('.b-upload-native-input[multiple]');
+    if (!fileInput) throw new Error('missing attachment input');
+    Object.defineProperty(fileInput, 'files', { configurable: true, value: [file] });
+    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    await flushAsync();
+
+    const sendButton = host.querySelector<HTMLButtonElement>('.community-composer__send');
+    expect(sendButton?.disabled).toBe(false);
+    host
+      .querySelector<HTMLButtonElement>('.chat-pending-attachment.is-ready .chat-pending-attachment__remove')
+      ?.click();
+    await nextTick();
+
+    expect(mocks.discardFile).toHaveBeenCalledWith('file-1');
+    expect(sendButton?.disabled).toBe(true);
+    sendButton?.click();
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+
+    discardRequest.resolve({ status: 200, data: { publicId: 'file-1', discarded: true } });
+    await flushAsync();
+    expect(host.textContent).not.toContain('remove-me.txt');
+    expect(sendButton?.disabled).toBe(true);
+  });
+
+  it('上传中的附件可取消；迟到的上传结果会立即丢弃而不会重新进入草稿', async () => {
+    const uploadRequest = deferred<any>();
+    mocks.uploadFile.mockReturnValueOnce(uploadRequest.promise);
+    const host = await mountWorkspace();
+    const file = new File(['plain-notes'], 'cancel-me.txt', { type: 'text/plain' });
+    const fileInput = document.body.querySelector<HTMLInputElement>('.b-upload-native-input[multiple]');
+    if (!fileInput) throw new Error('missing attachment input');
+    Object.defineProperty(fileInput, 'files', { configurable: true, value: [file] });
+    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    await flushAsync();
+
+    const uploadOptions = mocks.uploadFile.mock.calls[0][2];
+    expect(uploadOptions.signal.aborted).toBe(false);
+    host
+      .querySelector<HTMLButtonElement>('.chat-pending-attachment.is-uploading .chat-pending-attachment__remove')
+      ?.click();
+    await flushAsync();
+    expect(uploadOptions.signal.aborted).toBe(true);
+    expect(host.textContent).not.toContain('cancel-me.txt');
+
+    uploadRequest.resolve({
+      publicId: 'file-cancelled',
+      kind: 'file',
+      fileName: 'cancel-me.txt',
+      fileType: 'text/plain',
+      fileSize: file.size,
+      availability: 'available',
+      expiresAt: '2099-09-04T10:00:00.000Z',
+    });
+    await flushAsync();
+    expect(mocks.discardFile).toHaveBeenCalledWith('file-cancelled');
+    expect(host.textContent).not.toContain('cancel-me.txt');
   });
 
   it('移动端点击聊天图片先打开消息操作抽屉，再由查看大图进入统一查看器', async () => {
@@ -3956,7 +4095,11 @@ describe('CommunityChatWorkspace', () => {
     await flushAsync();
 
     expect(imagePaste.defaultPrevented).toBe(true);
-    expect(mocks.uploadImage).toHaveBeenCalledWith('general', file);
+    expect(mocks.uploadImage).toHaveBeenCalledWith(
+      'general',
+      file,
+      expect.objectContaining({ signal: expect.any(AbortSignal), onProgress: expect.any(Function) }),
+    );
     expect(host.querySelector('.community-composer__image img')).not.toBeNull();
 
     const textPaste = new Event('paste', { bubbles: true, cancelable: true });
@@ -4001,7 +4144,7 @@ describe('CommunityChatWorkspace', () => {
     surface?.dispatchEvent(dragEnter);
     await nextTick();
 
-    expect(host.textContent).toContain(zhCN.communityChat.image.dropHint);
+    expect(host.textContent).toContain(zhCN.communityChat.attachment.dropHint);
     expect(surface?.classList.contains('is-drag-active')).toBe(true);
 
     const drop = new Event('drop', { bubbles: true, cancelable: true });
@@ -4010,9 +4153,13 @@ describe('CommunityChatWorkspace', () => {
     await flushAsync();
 
     expect(drop.defaultPrevented).toBe(true);
-    expect(mocks.uploadImage).toHaveBeenCalledWith('general', file);
+    expect(mocks.uploadImage).toHaveBeenCalledWith(
+      'general',
+      file,
+      expect.objectContaining({ signal: expect.any(AbortSignal), onProgress: expect.any(Function) }),
+    );
     expect(surface?.classList.contains('is-drag-active')).toBe(false);
-    expect(host.textContent).not.toContain(zhCN.communityChat.image.dropHint);
+    expect(host.textContent).not.toContain(zhCN.communityChat.attachment.dropHint);
   });
 
   it('屏蔽操作先展示明确确认，确认后按消息公有 ID 屏蔽作者', async () => {
