@@ -9,6 +9,7 @@ import i18n, { prepareInitialLocale } from '@/i18n';
 import { initializePwaInstall } from '@/composables/usePwaInstall';
 import { isAndroidWebViewRuntime, isLightNoteAndroidApp } from '@/utils/androidBridge';
 import { installRenderingProfileSync } from '@/config/renderingProfile';
+import { waitForApplicationMountReadiness } from '@/utils/appMountReadiness';
 
 // Android 系统 WebView 的部分旧版本会把 color-mix() 与多层阴影渲染成实心黑框。
 // 原生壳会在 UA 中追加 LightNoteAndroid；`; wv)` 保留给旧调试包与系统 WebView。
@@ -40,9 +41,17 @@ if (!isAndroidApp) {
   initializePwaInstall();
 }
 async function mountApplication() {
-  // 中文词典已经在主包中；只有英文用户会并行等待英文词典分包，避免先显示翻译 key 再闪变。
-  await prepareInitialLocale();
-  app.mount('#app');
+  const appRoot = document.querySelector<HTMLElement>('#app');
+  if (!appRoot) throw new Error('Application root not found');
+
+  // 公开页的构建产物已经包含完整首屏。保留它直到语言与首路由分包同时就绪，
+  // 避免 Vue 先清空预渲染内容、再等待异步 RouterView 而产生明显白闪。
+  await waitForApplicationMountReadiness({
+    appRoot,
+    prepareLocale: prepareInitialLocale,
+    waitForInitialRoute: () => router.isReady(),
+  });
+  app.mount(appRoot);
 }
 
 void mountApplication();

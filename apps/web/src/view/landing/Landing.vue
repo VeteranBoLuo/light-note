@@ -46,14 +46,21 @@
                 <BButton
                   v-if="landingCtaMode !== 'enter'"
                   class="btn-ghost"
-                  :loading="tryingDemo"
-                  :disabled="navigationPending && !tryingDemo"
+                  :disabled="navigationPending"
+                  :aria-busy="tryingDemo || undefined"
                   @pointerdown="prefetchDemoIntent"
                   @focus="prefetchDemoIntent"
                   @click="goHome"
                   v-click-log="{ module: '官网首页', operation: '先体验示例' }"
-                  >{{ t('landing.ctaTryDemo') }}</BButton
                 >
+                  <span
+                    :class="['btn-ghost__loading-indicator', { 'is-visible': tryingDemo }]"
+                    aria-hidden="true"
+                  >
+                    <SvgIcon :src="icon.message.loading" size="18" />
+                  </span>
+                  <span>{{ t('landing.ctaTryDemo') }}</span>
+                </BButton>
               </div>
               <div v-if="!isAndroidApp" class="pwa-install-strip">
                 <span class="pwa-install-strip__icon">
@@ -355,14 +362,21 @@
               <BButton
                 v-if="landingCtaMode !== 'enter'"
                 class="btn-ghost"
-                :loading="tryingDemo"
-                :disabled="navigationPending && !tryingDemo"
+                :disabled="navigationPending"
+                :aria-busy="tryingDemo || undefined"
                 @pointerdown="prefetchDemoIntent"
                 @focus="prefetchDemoIntent"
                 @click="goHome"
                 v-click-log="{ module: '官网首页', operation: '先体验示例' }"
-                >{{ t('landing.ctaTryDemo') }}</BButton
               >
+                <span
+                  :class="['btn-ghost__loading-indicator', { 'is-visible': tryingDemo }]"
+                  aria-hidden="true"
+                >
+                  <SvgIcon :src="icon.message.loading" size="18" />
+                </span>
+                <span>{{ t('landing.ctaTryDemo') }}</span>
+              </BButton>
             </div>
             <ul class="trust-badges">
               <li>{{ t('landing.trustUnified') }}</li>
@@ -1697,11 +1711,11 @@
     height: auto;
     line-height: 1.2;
   }
-  .btn-primary:hover {
+  .btn-primary:not(.disabled):hover {
     transform: translateY(-3px) scale(1.02);
     box-shadow: 0 16px 40px rgba(99, 92, 237, 0.4);
   }
-  .btn-primary:active {
+  .btn-primary:not(.disabled):active {
     transform: scale(0.97);
   }
   .btn-arrow {
@@ -1729,6 +1743,7 @@
   }
 
   .btn-ghost {
+    position: relative;
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -1744,14 +1759,44 @@
     height: auto;
     line-height: 1.2;
   }
+  .btn-ghost__loading-indicator {
+    position: absolute;
+    top: 50%;
+    left: 13px;
+    width: 18px;
+    height: 18px;
+    display: inline-grid;
+    place-items: center;
+    opacity: 0;
+    transform: translateY(-50%);
+    pointer-events: none;
+  }
+  .btn-ghost__loading-indicator.is-visible {
+    opacity: 1;
+    animation: landing-btn-spin 0.8s linear infinite;
+  }
   /* BButton 默认 hover 是浅色背景；落在深色官网首屏会让白字失去对比度。 */
-  .btn-ghost.b_btn:hover,
-  .btn-ghost.b_btn:focus-visible {
+  .btn-ghost.b_btn:not(.disabled):hover,
+  .btn-ghost.b_btn:not(.disabled):focus-visible {
     background-color: rgba(99, 92, 237, 0.42);
     border-color: rgba(165, 160, 255, 0.9);
     color: #fff;
     box-shadow: 0 8px 24px rgba(99, 92, 237, 0.24);
     transform: translateY(-2px);
+  }
+  .btn-ghost.b_btn.disabled {
+    background-color: transparent;
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #bbb;
+    box-shadow: none;
+    transform: none;
+  }
+  .btn-ghost.b_btn[aria-busy='true'] {
+    opacity: 0.78;
+    cursor: wait;
+    background-color: rgba(99, 92, 237, 0.18);
+    border-color: rgba(165, 160, 255, 0.66);
+    color: #fff;
   }
 
   /* ============ Core Cards ============ */
@@ -2489,6 +2534,11 @@
       color: #9695a2;
       background: transparent;
       font-size: 13px;
+    }
+    .hero-actions .btn-ghost__loading-indicator {
+      left: 0;
+      width: 14px;
+      height: 14px;
     }
     .cta-actions {
       width: 100%;

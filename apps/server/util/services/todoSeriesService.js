@@ -667,14 +667,32 @@ export async function snoozeV2Todo(connection, userId, current, targetAt) {
     return { id: current.id, scheduledAt: scheduledAtLocal, snoozedJobs: firstByChannel.size };
   }
 
-  const reminder = {
-    mode: 'once_per_instance',
-    trigger: { type: 'fixed_time', fixedTime: scheduledAtLocal.slice(11, 16) },
-    channels: ['in_app'],
-    quietPolicy: 'defer_once',
-    timezone,
-  };
+  const standalone = !(current.series_id || current.seriesId);
+  // 新版默认单任务使用版本化 single_schedule。原提醒已经投递完后再次“稍后提醒”，
+  // 本质上是在为这条任务设置新的绝对提醒时间，不能降级成只保存 HH:mm 的系列提醒结构；
+  // 否则再次编辑时既会退回兼容表单，也无法从规则还原目标日期。
+  const reminder = standalone
+    ? {
+        version: 1,
+        mode: 'once',
+        once: { type: 'fixed_at', fixedAt: scheduledAtLocal },
+        channels: ['in_app'],
+        quietPolicy: 'defer_once',
+        timezone,
+      }
+    : {
+        mode: 'once_per_instance',
+        trigger: { type: 'fixed_time', fixedTime: scheduledAtLocal.slice(11, 16) },
+        channels: ['in_app'],
+        quietPolicy: 'defer_once',
+        timezone,
+      };
   const rule = ruleRow(userId, { todoId: current.id, reminder });
+  const [ruleVersions] = await connection.query(
+    'SELECT COALESCE(MAX(version), 0) AS maxVersion FROM todo_reminder_rules WHERE todo_id = ? AND user_id = ? FOR UPDATE',
+    [current.id, userId],
+  );
+  rule.version = Number(ruleVersions[0]?.maxVersion || 0) + 1;
   await connection.query('UPDATE todo_reminder_rules SET enabled = 0 WHERE todo_id = ? AND user_id = ?', [
     current.id,
     userId,
@@ -1511,7 +1529,8 @@ export async function loadV2ReminderMap(db, userId, items) {
     ruleParams,
   );
   const [jobs] = await db.query(
-    `SELECT todo_id AS todoId, channel, sequence_no AS sequenceNo, scheduled_at_local AS scheduledAtLocal, status
+    `SELECT todo_id AS todoId, channel, sequence_no AS sequenceNo,
+            scheduled_at_local AS scheduledAtLocal, status, cancel_reason AS cancelReason
        FROM todo_reminder_jobs
       WHERE user_id = ? AND todo_id IN (${ids.map(() => '?').join(',')})
         AND status IN ('pending','processing','paused')
@@ -1539,7 +1558,35 @@ export async function loadV2ReminderMap(db, userId, items) {
     const activeJobs = jobsByTodo.get(todoId) || [];
     const channels = parseJson(rule.channels, []);
     const versionedSchedule = parseJson(rule.scheduleJson, null);
-    const schedule = versionedSchedule?.version === 2 ? versionedSchedule.schedule : null;
+    const persistedSchedule = versionedSchedule?.version === 2 ? versionedSchedule.schedule : null;
+    const nextJob = activeJobs[0] || null;
+    const nextAt = nextJob?.scheduledAtLocal || null;
+    let schedule = persistedSchedule;
+    if (
+      !item.seriesId &&
+      !schedule &&
+      rule.mode === 'once_per_instance' &&
+      rule.triggerType === 'fixed_time' &&
+      nextAt
+    ) {
+      // 兼容历史 snooze 兜底分支写出的 standalone once_per_instance：
+      // Job 中的绝对时间才是当前有效事实，把它投影成新版单次提醒即可无损回到新版编辑器。
+      schedule = {
+        version: 1,
+        mode: 'once',
+        once: { type: 'fixed_at', fixedAt: nextAt },
+        channels,
+        targetEmail: rule.targetEmail || null,
+        quietPolicy: rule.quietPolicy || 'defer_once',
+      };
+    } else if (!item.seriesId && schedule?.mode === 'once' && nextJob?.cancelReason === 'user_snoozed' && nextAt) {
+      // 单次提醒被延期后，Job 的 scheduledAtLocal 是当前有效执行时间；规则中的原始
+      // at_start/at_due/fixed_at 只用于历史解释。编辑与原样保存都必须沿用延期后的绝对时间。
+      schedule = {
+        ...schedule,
+        once: { type: 'fixed_at', fixedAt: nextAt },
+      };
+    }
     const current = {
       ...(schedule || {}),
       mode: rule.mode,
@@ -1550,7 +1597,7 @@ export async function loadV2ReminderMap(db, userId, items) {
         ...(rule.offsetMinutes !== null ? { offsetMinutes: Number(rule.offsetMinutes) } : {}),
       },
       channels,
-      nextAt: activeJobs[0]?.scheduledAtLocal || null,
+      nextAt,
       targetEmail: rule.targetEmail || null,
       quietPolicy: rule.quietPolicy || 'defer_once',
       intervalMinutes: rule.intervalMinutes === null ? null : Number(rule.intervalMinutes),
@@ -1572,7 +1619,7 @@ export async function loadV2ReminderMap(db, userId, items) {
       current.version = schedule.version || 1;
       current.channels = schedule.channels || channels;
       current.targetEmail = schedule.targetEmail || null;
-      current.scheduleVersion = versionedSchedule.version;
+      if (versionedSchedule?.version) current.scheduleVersion = versionedSchedule.version;
     }
     map.set(todoId, current);
   }

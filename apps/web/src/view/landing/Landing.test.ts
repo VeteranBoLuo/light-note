@@ -254,6 +254,37 @@ describe('Landing CTA', () => {
     expect(mocks.routerPush).not.toHaveBeenCalled();
   });
 
+  it('体验示例加载时使用不参与排版的原位图标，不插入会撑宽按钮的基础 loading', async () => {
+    let finishNavigation!: () => void;
+    mocks.hasLoginHint = false;
+    mocks.routerPush.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishNavigation = resolve;
+        }),
+    );
+    const host = await mountLanding('anonymous');
+    const demoButton = host.querySelector<HTMLButtonElement>('.s-cover .btn-ghost');
+
+    expect(demoButton?.querySelector('.btn-ghost__loading-indicator.is-visible')).toBeNull();
+    expect(demoButton?.querySelector('.btn-spinner')).toBeNull();
+
+    demoButton?.click();
+    await nextTick();
+
+    expect(demoButton?.textContent).toContain('landing.ctaTryDemo');
+    expect(demoButton?.disabled).toBe(true);
+    expect(demoButton?.getAttribute('aria-busy')).toBe('true');
+    expect(demoButton?.querySelector('.btn-ghost__loading-indicator.is-visible')).not.toBeNull();
+    expect(demoButton?.querySelector('.btn-spinner')).toBeNull();
+
+    finishNavigation();
+    await vi.waitFor(() => {
+      expect(demoButton?.disabled).toBe(false);
+      expect(demoButton?.getAttribute('aria-busy')).toBeNull();
+    });
+  });
+
   it('慢于阈值的应用跳转显示可理解的加载说明，完成后自动收起', async () => {
     vi.useFakeTimers();
     let finishNavigation!: () => void;

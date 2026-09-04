@@ -19,6 +19,15 @@ const todoCreateRouteSource = readFileSync(resolve(process.cwd(), 'src/router/mo
 const quickCaptureSource = readFileSync(resolve(process.cwd(), 'src/components/inbox/QuickCaptureModal.vue'), 'utf8');
 
 describe('待办创建页原型布局', () => {
+  it('版本化 v2 单任务使用新版编辑器，不因稍后提醒回退到兼容表单', () => {
+    expect(modalSource).toMatch(
+      /Number\(props\.item\.planVersion \|\| 1\) === 2[\s\S]*?!props\.item\.seriesId[\s\S]*?'version' in props\.item\.reminder/,
+    );
+    expect(draftSource).toContain(
+      "item?.planVersion === 2 && !item.seriesId && item.reminder && 'version' in item.reminder",
+    );
+  });
+
   it('PC 使用宽幅编辑区，并将服务端计划预览固定为独立右栏', () => {
     expect(modalSource).toContain('width="min(1280px, 94vw)"');
     expect(simpleSource).toContain('class="todo-simple-editor__preview"');

@@ -357,6 +357,114 @@ describe('todoSeriesService v2', () => {
     });
   });
 
+  it('历史稍后提醒兜底规则按 Job 绝对时间投影为新版单次提醒', async () => {
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([
+          [
+            {
+              id: 'direct-rule',
+              todoId: 'todo-1',
+              seriesId: null,
+              mode: 'once_per_instance',
+              triggerType: 'fixed_time',
+              fixedTime: '18:40:00',
+              offsetMinutes: null,
+              intervalMinutes: null,
+              maxCount: null,
+              stopType: null,
+              channels: '["in_app"]',
+              targetEmail: null,
+              quietPolicy: 'defer_once',
+              scheduleJson: null,
+            },
+          ],
+        ])
+        .mockResolvedValueOnce([
+          [
+            {
+              todoId: 'todo-1',
+              channel: 'in_app',
+              sequenceNo: 1,
+              scheduledAtLocal: '2026-09-04 18:40:00',
+              status: 'pending',
+              cancelReason: null,
+            },
+          ],
+        ]),
+    };
+
+    const result = await loadV2ReminderMap(db, 'user-1', [{ id: 'todo-1', seriesId: null }]);
+
+    expect(result.get('todo-1')).toMatchObject({
+      version: 1,
+      mode: 'once',
+      once: { type: 'fixed_at', fixedAt: '2026-09-04 18:40:00' },
+      channels: ['in_app'],
+      nextAt: '2026-09-04 18:40:00',
+      remainingCount: 1,
+    });
+  });
+
+  it('新版单次提醒已稍后提醒时使用 Job 的当前执行时间回显', async () => {
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([
+          [
+            {
+              id: 'direct-rule',
+              todoId: 'todo-1',
+              seriesId: null,
+              mode: 'single_schedule',
+              triggerType: 'fixed_time',
+              fixedTime: null,
+              offsetMinutes: null,
+              intervalMinutes: null,
+              maxCount: null,
+              stopType: null,
+              channels: '["in_app"]',
+              targetEmail: null,
+              quietPolicy: 'defer_once',
+              scheduleJson: JSON.stringify({
+                version: 2,
+                schedule: {
+                  version: 1,
+                  mode: 'once',
+                  once: { type: 'fixed_at', fixedAt: '2026-09-03 18:40:00' },
+                  channels: ['in_app'],
+                  quietPolicy: 'defer_once',
+                },
+              }),
+            },
+          ],
+        ])
+        .mockResolvedValueOnce([
+          [
+            {
+              todoId: 'todo-1',
+              channel: 'in_app',
+              sequenceNo: 1,
+              scheduledAtLocal: '2026-09-04 18:40:00',
+              status: 'pending',
+              cancelReason: 'user_snoozed',
+            },
+          ],
+        ]),
+    };
+
+    const result = await loadV2ReminderMap(db, 'user-1', [{ id: 'todo-1', seriesId: null }]);
+
+    expect(result.get('todo-1')).toMatchObject({
+      version: 1,
+      scheduleVersion: 2,
+      mode: 'once',
+      once: { type: 'fixed_at', fixedAt: '2026-09-04 18:40:00' },
+      nextAt: '2026-09-04 18:40:00',
+    });
+  });
+
   it('双渠道催办的剩余次数按催办序号计算，不把渠道数重复相加', async () => {
     const db = {
       query: vi
@@ -856,11 +964,12 @@ describe('todoSeriesService v2', () => {
     expect(db.query).not.toHaveBeenCalled();
   });
 
-  it('v2 稍后提醒没有现成 Job 时只创建当前实例的单次站内提醒', async () => {
+  it('v2 系列实例稍后提醒没有现成 Job 时只创建当前实例的单次站内提醒', async () => {
     const db = {
       query: vi
         .fn()
         .mockResolvedValueOnce([[]])
+        .mockResolvedValueOnce([[{ maxVersion: 2 }]])
         .mockResolvedValueOnce([{ affectedRows: 0 }])
         .mockResolvedValueOnce([{ affectedRows: 1 }])
         .mockResolvedValueOnce([{ affectedRows: 1 }]),
@@ -879,10 +988,67 @@ describe('todoSeriesService v2', () => {
     );
 
     expect(result).toMatchObject({ id: 'todo-1', scheduledAt: '2099-08-07 09:00:00', snoozedJobs: 1 });
-    expect(db.query.mock.calls[1][0]).toContain('UPDATE todo_reminder_rules');
-    expect(db.query.mock.calls[2][0]).toBe('INSERT INTO todo_reminder_rules SET ?');
-    expect(db.query.mock.calls[3][0]).toBe('INSERT IGNORE INTO todo_reminder_jobs SET ?');
+    expect(db.query.mock.calls[1][0]).toContain('MAX(version)');
+    expect(db.query.mock.calls[2][0]).toContain('UPDATE todo_reminder_rules');
+    expect(db.query.mock.calls[3][0]).toBe('INSERT INTO todo_reminder_rules SET ?');
+    expect(db.query.mock.calls[3][1][0]).toMatchObject({
+      version: 3,
+      mode: 'once_per_instance',
+      fixed_local_time: '09:00',
+      schedule_json: null,
+    });
+    expect(db.query.mock.calls[4][0]).toBe('INSERT IGNORE INTO todo_reminder_jobs SET ?');
     expect(db.query.mock.calls.every(([sql]) => !sql.includes('todo_reminders'))).toBe(true);
+  });
+
+  it('v2 单任务无现成 Job 时稍后提醒保存版本化绝对时间规则', async () => {
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[]])
+        .mockResolvedValueOnce([[{ maxVersion: 4 }]])
+        .mockResolvedValueOnce([{ affectedRows: 0 }])
+        .mockResolvedValueOnce([{ affectedRows: 1 }])
+        .mockResolvedValueOnce([{ affectedRows: 1 }]),
+    };
+
+    const result = await snoozeV2Todo(
+      db,
+      'user-1',
+      {
+        id: 'todo-1',
+        plan_version: 2,
+        series_id: null,
+        instance_timezone: 'Asia/Shanghai',
+      },
+      '2099-08-07 09:00:00',
+    );
+
+    expect(result).toMatchObject({ id: 'todo-1', scheduledAt: '2099-08-07 09:00:00', snoozedJobs: 1 });
+    const rule = db.query.mock.calls[3][1][0];
+    expect(rule).toMatchObject({
+      version: 5,
+      mode: 'single_schedule',
+      trigger_type: 'fixed_time',
+      fixed_local_time: null,
+      timezone: 'Asia/Shanghai',
+    });
+    expect(JSON.parse(rule.schedule_json)).toEqual({
+      version: 2,
+      schedule: {
+        version: 1,
+        mode: 'once',
+        once: { type: 'fixed_at', fixedAt: '2099-08-07 09:00:00' },
+        channels: ['in_app'],
+        quietPolicy: 'defer_once',
+        timezone: 'Asia/Shanghai',
+      },
+    });
+    expect(db.query.mock.calls[4][1][0]).toMatchObject({
+      rule_version: 5,
+      scheduled_at_local: '2099-08-07 09:00:00',
+      series_id: null,
+    });
   });
 
   it('v2 稍后提醒每个渠道只移动最早一条，不级联后续催办', async () => {

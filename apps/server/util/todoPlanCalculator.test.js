@@ -54,6 +54,36 @@ describe('todoPlanCalculator', () => {
     expect(preview.firstOccurrence).toMatchObject({ occurrenceDate: null, startAt: null, dueAt: null });
   });
 
+  it('无日期单任务的绝对提醒时间可以独立落在明天', () => {
+    const preview = calculateTodoPlan(
+      {
+        taskMode: 'single',
+        title: '买芥菜做泡菜',
+        timing: { timezone: 'Asia/Shanghai', anchorDate: null, startTime: null, dueTime: null },
+        plan: { type: 'once' },
+        reminder: { mode: 'none' },
+        singleTaskReminder: {
+          version: 1,
+          mode: 'once',
+          once: { type: 'fixed_at', fixedAt: '2026-09-04 18:40:00' },
+          channels: ['in_app'],
+        },
+      },
+      { now: new Date('2026-09-03T00:00:00.000Z') },
+    );
+
+    expect(preview.firstOccurrence).toMatchObject({ occurrenceDate: null, startAt: null, dueAt: null });
+    expect(preview.normalizedPlan.reminder).toMatchObject({
+      version: 1,
+      mode: 'once',
+      once: { type: 'fixed_at', fixedAt: '2026-09-04 18:40:00' },
+    });
+    expect(preview.reminderMoments[0].moments).toEqual([
+      expect.objectContaining({ scheduledAtLocal: '2026-09-04 18:40:00', deliverable: true }),
+    ]);
+    expect(preview.nextReminderAt).toBe('2026-09-04 18:40:00');
+  });
+
   it('重复任务未填开始和截止时间时从计划时区的今天生成全天待办，固定提醒仍独立生效', () => {
     const input = {
       taskMode: 'independent',

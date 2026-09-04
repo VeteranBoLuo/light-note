@@ -7,7 +7,7 @@
  * dist/<route>/index.html。根官网单独落到 dist/__seo/root/index.html，避免覆盖
  * 仍需 noindex 的通用 SPA fallback。线上 nginx 对这些路由使用精确
  * 匹配直接回静态文件（见服务器 www.boluo.com.conf），浏览器端 SPA bundle
- * 照常加载并重新挂载 #app，用户体验不变。
+ * 照常加载并接管 #app；运行时会把这份首屏保留到初始路由分包就绪，避免接管期间闪空白页。
  *
  * 预渲染页面清单见 PAGES：
  *   - /            官网首页（critical：失败则整个构建失败，绝不上线空壳门面）
