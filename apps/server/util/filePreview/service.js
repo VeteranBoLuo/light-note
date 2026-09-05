@@ -15,8 +15,13 @@ import { convertOfficeToPdf } from './office.js';
 import { getFilePreviewRuntimeConfig, inspectFilePreviewRuntime } from './runtime.js';
 
 export const FILE_PREVIEW_STRATEGY_VERSION = 1;
+export const FILE_PREVIEW_SOURCE_TYPE = Object.freeze({
+  CLOUD_FILE: 'cloud_file',
+  COMMUNITY_CHAT_FILE: 'community_chat_file',
+});
 const MAX_JOB_ATTEMPTS = 3;
 const PREVIEW_URL_EXPIRES_SECONDS = 600;
+const PREVIEW_CLEANUP_PENDING_ERROR = 'FILE_PREVIEW_CLEANUP_PENDING';
 const NON_RETRYABLE_ERRORS = new Set([
   'FILE_CONTENT_INVALID',
   'FILE_SIZE_INVALID',
@@ -58,6 +63,20 @@ function sourceObjectKey(file) {
   return file.obs_key || buildObjectKey(file.create_by, file.file_name);
 }
 
+function normalizeSourceType(value) {
+  const sourceType = String(value || FILE_PREVIEW_SOURCE_TYPE.CLOUD_FILE);
+  if (!Object.values(FILE_PREVIEW_SOURCE_TYPE).includes(sourceType)) {
+    throw previewError('FILE_PREVIEW_SOURCE_INVALID', 400);
+  }
+  return sourceType;
+}
+
+function sourceUnavailableError(sourceType) {
+  return normalizeSourceType(sourceType) === FILE_PREVIEW_SOURCE_TYPE.COMMUNITY_CHAT_FILE
+    ? previewError('COMMUNITY_CHAT_FILE_EXPIRED', 410)
+    : previewError('FILE_NOT_FOUND', 404);
+}
+
 function resolveDescriptor(file) {
   const format = resolveFilePreviewFormat({ fileName: file.file_name, fileType: file.file_type });
   if (!format) throw previewError('FILE_PREVIEW_UNSUPPORTED', 415);
@@ -65,33 +84,56 @@ function resolveDescriptor(file) {
   return { format, extension };
 }
 
-async function selectOwnedFile(db, ownerUserId, fileId, lock = false) {
-  const [rows] = await db.query(
-    `SELECT id, create_by, file_name, file_type, file_size, obs_key
-     FROM files WHERE id = ? AND create_by = ? AND del_flag = 0 LIMIT 1${lock ? ' FOR UPDATE' : ''}`,
-    [fileId, ownerUserId],
-  );
+async function selectOwnedFile(
+  db,
+  ownerUserId,
+  fileId,
+  lock = false,
+  sourceType = FILE_PREVIEW_SOURCE_TYPE.CLOUD_FILE,
+) {
+  const normalizedSourceType = normalizeSourceType(sourceType);
+  const sql =
+    normalizedSourceType === FILE_PREVIEW_SOURCE_TYPE.CLOUD_FILE
+      ? `SELECT id, create_by, file_name, file_type, file_size, obs_key, NULL AS expires_at
+           FROM files WHERE id = ? AND create_by = ? AND del_flag = 0 LIMIT 1${lock ? ' FOR UPDATE' : ''}`
+      : `SELECT id, owner_user_id AS create_by, file_name, content_type AS file_type,
+                file_size, object_key AS obs_key, expires_at
+           FROM community_chat_message_files
+          WHERE id = ? AND owner_user_id = ? AND message_id IS NOT NULL
+            AND status = 'attached' AND object_key IS NOT NULL AND expires_at > NOW()
+          LIMIT 1${lock ? ' FOR UPDATE' : ''}`;
+  const [rows] = await db.query(sql, [fileId, ownerUserId]);
   return rows[0] || null;
 }
 
-async function selectArtifact(db, fileId, strategy, lock = false) {
+async function selectArtifact(db, fileId, strategy, lock = false, sourceType = FILE_PREVIEW_SOURCE_TYPE.CLOUD_FILE) {
   const [rows] = await db.query(
     `SELECT * FROM file_preview_artifacts
-     WHERE file_id = ? AND strategy = ? AND strategy_version = ? LIMIT 1${lock ? ' FOR UPDATE' : ''}`,
-    [fileId, strategy, FILE_PREVIEW_STRATEGY_VERSION],
+     WHERE source_type = ? AND file_id = ? AND strategy = ? AND strategy_version = ?
+     LIMIT 1${lock ? ' FOR UPDATE' : ''}`,
+    [normalizeSourceType(sourceType), fileId, strategy, FILE_PREVIEW_STRATEGY_VERSION],
   );
   return rows[0] || null;
 }
 
-function createArtifactPreviewUrl(row) {
+function previewUrlExpiresSeconds(file) {
+  if (!file?.expires_at) return PREVIEW_URL_EXPIRES_SECONDS;
+  const remaining = Math.floor((new Date(file.expires_at).getTime() - Date.now()) / 1000);
+  if (!Number.isFinite(remaining) || remaining <= 1) throw previewError('COMMUNITY_CHAT_FILE_EXPIRED', 410);
+  // 签名服务使用相对整数秒，预留 1 秒覆盖计算与签名耗时，避免派生预览跨过附件边界。
+  return Math.min(PREVIEW_URL_EXPIRES_SECONDS, remaining - 1);
+}
+
+function createArtifactPreviewUrl(row, file) {
   if (row?.status !== 'ready' || row?.strategy !== FILE_PREVIEW_STRATEGY.CONVERTED_PDF) return '';
   if (!row.artifact_object_key) throw previewError('FILE_PREVIEW_ARTIFACT_MISSING', 503);
+  const expires = previewUrlExpiresSeconds(file);
   const signed = createDownloadSignedUrl({
     objectKey: row.artifact_object_key,
-    expires: PREVIEW_URL_EXPIRES_SECONDS,
+    expires,
   });
   if (!signed?.url) throw previewError('FILE_PREVIEW_URL_FAILED', 503);
-  return signed.url;
+  return { url: signed.url, expires };
 }
 
 function formatPreviewState(file, descriptor, artifact) {
@@ -106,10 +148,11 @@ function formatPreviewState(file, descriptor, artifact) {
   };
   if (!artifact) return base;
   if (artifact.status === 'ready' && artifact.strategy === FILE_PREVIEW_STRATEGY.CONVERTED_PDF) {
+    const signed = createArtifactPreviewUrl(artifact, file);
     return {
       ...base,
-      previewUrl: createArtifactPreviewUrl(artifact),
-      expiresIn: PREVIEW_URL_EXPIRES_SECONDS,
+      previewUrl: signed.url,
+      expiresIn: signed.expires,
       artifactSize: Number(artifact.artifact_size || 0),
     };
   }
@@ -127,16 +170,17 @@ function formatPreviewState(file, descriptor, artifact) {
   return base;
 }
 
-function artifactMatchesFileIdentity(file, descriptor, artifact) {
+function artifactMatchesFileIdentity(file, descriptor, artifact, sourceType) {
   return (
+    artifact?.source_type === normalizeSourceType(sourceType) &&
     artifact?.owner_user_id === file.create_by &&
     Number(artifact.source_size) === Number(file.file_size) &&
     artifact.format_id === descriptor.format.id
   );
 }
 
-async function artifactMatchesCurrentSource(file, descriptor, artifact) {
-  if (!artifactMatchesFileIdentity(file, descriptor, artifact)) return false;
+async function artifactMatchesCurrentSource(file, descriptor, artifact, sourceType) {
+  if (!artifactMatchesFileIdentity(file, descriptor, artifact, sourceType)) return false;
   const metadata = await getObjectMetadataFromObs(sourceObjectKey(file));
   return (
     Number(metadata?.contentLength) === Number(artifact.source_size) &&
@@ -153,14 +197,23 @@ function touchArtifact(artifactId) {
     );
 }
 
-export async function resolveFilePreview({ ownerUserId, fileId, touch = true }) {
-  const file = await selectOwnedFile(pool, ownerUserId, fileId);
-  if (!file) throw previewError('FILE_NOT_FOUND', 404);
+export async function resolveFilePreview({
+  ownerUserId,
+  fileId,
+  sourceType = FILE_PREVIEW_SOURCE_TYPE.CLOUD_FILE,
+  touch = true,
+}) {
+  const normalizedSourceType = normalizeSourceType(sourceType);
+  const file = await selectOwnedFile(pool, ownerUserId, fileId, false, normalizedSourceType);
+  if (!file) throw sourceUnavailableError(normalizedSourceType);
   const descriptor = resolveDescriptor(file);
-  let artifact = await selectArtifact(pool, file.id, descriptor.format.strategy);
-  if (artifact && !artifactMatchesFileIdentity(file, descriptor, artifact)) {
+  let artifact = await selectArtifact(pool, file.id, descriptor.format.strategy, false, normalizedSourceType);
+  if (artifact && !artifactMatchesFileIdentity(file, descriptor, artifact, normalizedSourceType)) {
     artifact = null;
-  } else if (artifact?.status === 'ready' && !(await artifactMatchesCurrentSource(file, descriptor, artifact))) {
+  } else if (
+    artifact?.status === 'ready' &&
+    !(await artifactMatchesCurrentSource(file, descriptor, artifact, normalizedSourceType))
+  ) {
     artifact = null;
   }
   if (artifact?.status === 'ready' && touch) touchArtifact(artifact.id);
@@ -186,9 +239,15 @@ async function loadSourceMetadata(file, descriptor) {
   return { sourceSize, sourceEtag };
 }
 
-export async function prepareFilePreview({ ownerUserId, fileId, retry = false }) {
-  const initialFile = await selectOwnedFile(pool, ownerUserId, fileId);
-  if (!initialFile) throw previewError('FILE_NOT_FOUND', 404);
+export async function prepareFilePreview({
+  ownerUserId,
+  fileId,
+  sourceType = FILE_PREVIEW_SOURCE_TYPE.CLOUD_FILE,
+  retry = false,
+}) {
+  const normalizedSourceType = normalizeSourceType(sourceType);
+  const initialFile = await selectOwnedFile(pool, ownerUserId, fileId, false, normalizedSourceType);
+  if (!initialFile) throw sourceUnavailableError(normalizedSourceType);
   const descriptor = resolveDescriptor(initialFile);
   const metadata = await loadSourceMetadata(initialFile, descriptor);
   const connection = await pool.getConnection();
@@ -198,12 +257,12 @@ export async function prepareFilePreview({ ownerUserId, fileId, retry = false })
   let resetJob = false;
   try {
     await connection.beginTransaction();
-    const file = await selectOwnedFile(connection, ownerUserId, fileId, true);
-    if (!file) throw previewError('FILE_NOT_FOUND', 404);
+    const file = await selectOwnedFile(connection, ownerUserId, fileId, true, normalizedSourceType);
+    if (!file) throw sourceUnavailableError(normalizedSourceType);
     if (Number(file.file_size || 0) !== metadata.sourceSize || sourceObjectKey(file) !== sourceObjectKey(initialFile)) {
       throw previewError('FILE_PREVIEW_SOURCE_CHANGED', 409);
     }
-    artifact = await selectArtifact(connection, file.id, descriptor.format.strategy, true);
+    artifact = await selectArtifact(connection, file.id, descriptor.format.strategy, true, normalizedSourceType);
     const sourceMatches =
       artifact &&
       artifact.source_etag === metadata.sourceEtag &&
@@ -213,9 +272,10 @@ export async function prepareFilePreview({ ownerUserId, fileId, retry = false })
     if (!artifact) {
       const [insertResult] = await connection.query(
         `INSERT INTO file_preview_artifacts
-          (file_id, owner_user_id, strategy, strategy_version, format_id, source_etag, source_size, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'queued')`,
+          (source_type, file_id, owner_user_id, strategy, strategy_version, format_id, source_etag, source_size, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued')`,
         [
+          normalizedSourceType,
           file.id,
           ownerUserId,
           descriptor.format.strategy,
@@ -225,7 +285,7 @@ export async function prepareFilePreview({ ownerUserId, fileId, retry = false })
           metadata.sourceSize,
         ],
       );
-      artifact = await selectArtifact(connection, file.id, descriptor.format.strategy, true);
+      artifact = await selectArtifact(connection, file.id, descriptor.format.strategy, true, normalizedSourceType);
       if (!artifact) artifact = { id: insertResult.insertId, status: 'queued' };
       resetJob = true;
     } else if (!sourceMatches || (retry && ['failed', 'ready'].includes(artifact.status))) {
@@ -279,21 +339,31 @@ export async function prepareFilePreview({ ownerUserId, fileId, retry = false })
       console.warn('[file-preview] pending artifact cleanup failed code=%s', stableAgentErrorCode(error)),
     );
   }
-  return resolveFilePreview({ ownerUserId, fileId });
+  return resolveFilePreview({ ownerUserId, fileId, sourceType: normalizedSourceType });
 }
 
-export async function listArchivePreview({ ownerUserId, fileId, directory, query, offset, limit, touch = true }) {
-  const file = await selectOwnedFile(pool, ownerUserId, fileId);
-  if (!file) throw previewError('FILE_NOT_FOUND', 404);
+export async function listArchivePreview({
+  ownerUserId,
+  fileId,
+  sourceType = FILE_PREVIEW_SOURCE_TYPE.CLOUD_FILE,
+  directory,
+  query,
+  offset,
+  limit,
+  touch = true,
+}) {
+  const normalizedSourceType = normalizeSourceType(sourceType);
+  const file = await selectOwnedFile(pool, ownerUserId, fileId, false, normalizedSourceType);
+  if (!file) throw sourceUnavailableError(normalizedSourceType);
   const descriptor = resolveDescriptor(file);
   if (descriptor.format.strategy !== FILE_PREVIEW_STRATEGY.ARCHIVE_MANIFEST) {
     throw previewError('FILE_PREVIEW_UNSUPPORTED', 415);
   }
-  const artifact = await selectArtifact(pool, file.id, descriptor.format.strategy);
+  const artifact = await selectArtifact(pool, file.id, descriptor.format.strategy, false, normalizedSourceType);
   if (!artifact || artifact.status !== 'ready' || !artifact.manifest_json) {
     throw previewError('FILE_PREVIEW_NOT_READY', 409);
   }
-  if (!artifactMatchesFileIdentity(file, descriptor, artifact)) {
+  if (!artifactMatchesFileIdentity(file, descriptor, artifact, normalizedSourceType)) {
     throw previewError('FILE_PREVIEW_SOURCE_CHANGED', 409);
   }
   let manifest;
@@ -331,12 +401,29 @@ async function claimNextJob(workerId) {
     );
     const [rows] = await connection.query(
       `SELECT j.id AS job_id, j.attempts, j.output_object_key AS previous_output_object_key,
-              a.*, f.file_name, f.file_type, f.file_size, f.obs_key,
-              f.create_by, f.del_flag
+              a.*,
+              CASE WHEN a.source_type = 'cloud_file' THEN cloud_file.file_name ELSE chat_file.file_name END AS file_name,
+              CASE WHEN a.source_type = 'cloud_file' THEN cloud_file.file_type ELSE chat_file.content_type END AS file_type,
+              CASE WHEN a.source_type = 'cloud_file' THEN cloud_file.file_size ELSE chat_file.file_size END AS file_size,
+              CASE WHEN a.source_type = 'cloud_file' THEN cloud_file.obs_key ELSE chat_file.object_key END AS obs_key,
+              a.owner_user_id AS create_by,
+              CASE WHEN a.source_type = 'cloud_file' THEN cloud_file.del_flag ELSE 0 END AS del_flag,
+              chat_file.expires_at
        FROM file_preview_jobs j
        INNER JOIN file_preview_artifacts a ON a.id = j.artifact_id
-       INNER JOIN files f ON f.id = a.file_id AND f.create_by = a.owner_user_id
-       WHERE f.del_flag = 0 AND j.attempts < ? AND (
+       LEFT JOIN files cloud_file
+              ON a.source_type = 'cloud_file'
+             AND cloud_file.id = a.file_id AND cloud_file.create_by = a.owner_user_id
+       LEFT JOIN community_chat_message_files chat_file
+              ON a.source_type = 'community_chat_file'
+             AND chat_file.id = a.file_id AND chat_file.owner_user_id = a.owner_user_id
+       WHERE (
+         (a.source_type = 'cloud_file' AND cloud_file.id IS NOT NULL AND cloud_file.del_flag = 0)
+         OR
+         (a.source_type = 'community_chat_file' AND chat_file.id IS NOT NULL
+          AND chat_file.status = 'attached' AND chat_file.object_key IS NOT NULL AND chat_file.expires_at > NOW())
+       )
+       AND j.attempts < ? AND (
          (j.status = 'queued' AND j.available_at <= NOW()) OR
          (j.status = 'processing' AND j.locked_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE))
        )
@@ -374,14 +461,20 @@ async function claimNextJob(workerId) {
 }
 
 function artifactObjectKey(job) {
+  const sourceType = normalizeSourceType(job.source_type);
+  const sourceIdentity = sourceType === FILE_PREVIEW_SOURCE_TYPE.CLOUD_FILE ? '' : `${sourceType}:`;
   const digest = crypto
     .createHash('sha256')
     .update(
-      `${job.file_id}:${job.source_etag}:${job.source_size}:${job.strategy_version}:${job.job_id}:${job.attempts}:${job.worker_id}`,
+      `${sourceIdentity}${job.file_id}:${job.source_etag}:${job.source_size}:${job.strategy_version}:${job.job_id}:${job.attempts}:${job.worker_id}`,
       'utf8',
     )
     .digest('hex');
-  return `file-previews/${job.owner_user_id}/${job.file_id}/${digest}.pdf`;
+  const prefix =
+    sourceType === FILE_PREVIEW_SOURCE_TYPE.CLOUD_FILE
+      ? `file-previews/${job.owner_user_id}`
+      : `file-previews/${sourceType}/${job.owner_user_id}`;
+  return `${prefix}/${job.file_id}/${digest}.pdf`;
 }
 
 async function recordPendingObjectKey(job, objectKey) {
@@ -398,6 +491,8 @@ async function completeJob(job, result) {
   let current = false;
   try {
     await connection.beginTransaction();
+    // 与预览准备保持“源文件 → 派生产物”的加锁顺序，并在提交前重新核验聊天附件仍未过期。
+    const currentSource = await selectOwnedFile(connection, job.owner_user_id, job.file_id, true, job.source_type);
     const [rows] = await connection.query(
       `SELECT a.*, j.status AS job_status, j.attempts AS job_attempts, j.locked_by AS job_locked_by
        FROM file_preview_artifacts a
@@ -407,6 +502,7 @@ async function completeJob(job, result) {
     );
     const artifact = rows[0];
     current =
+      currentSource &&
       artifact &&
       artifact.source_etag === job.source_etag &&
       Number(artifact.source_size) === Number(job.source_size) &&
@@ -584,42 +680,97 @@ export async function cleanupStaleFilePreviewArtifacts() {
       `SELECT a.id, a.artifact_object_key, j.output_object_key
        FROM file_preview_artifacts a
        LEFT JOIN file_preview_jobs j ON j.artifact_id = a.id
-       LEFT JOIN files f ON f.id = a.file_id AND f.create_by = a.owner_user_id
-       WHERE f.id IS NULL OR (
+       LEFT JOIN files cloud_file
+              ON a.source_type = 'cloud_file'
+             AND cloud_file.id = a.file_id AND cloud_file.create_by = a.owner_user_id AND cloud_file.del_flag = 0
+       LEFT JOIN community_chat_message_files chat_file
+              ON a.source_type = 'community_chat_file'
+             AND chat_file.id = a.file_id AND chat_file.owner_user_id = a.owner_user_id
+             AND chat_file.status = 'attached' AND chat_file.object_key IS NOT NULL AND chat_file.expires_at > NOW()
+       WHERE (a.source_type = 'cloud_file' AND cloud_file.id IS NULL)
+          OR (a.source_type = 'community_chat_file' AND chat_file.id IS NULL)
+          OR (a.source_type NOT IN ('cloud_file', 'community_chat_file'))
+          OR a.error_code = ?
+          OR (
          COALESCE(a.last_access_at, a.update_time) < DATE_SUB(NOW(), INTERVAL ${retentionDays} DAY)
          AND a.status IN ('ready', 'failed')
        )
        ORDER BY a.update_time ASC LIMIT 100`,
+      [PREVIEW_CLEANUP_PENDING_ERROR],
     );
     if (!rows.length) break;
     for (const row of rows) {
-      const [result] = await pool.query(
-        `DELETE a FROM file_preview_artifacts a
-         LEFT JOIN files f ON f.id = a.file_id AND f.create_by = a.owner_user_id
+      // 先用与候选查询相同的条件原子领取。领取后 ready 会立即失效，
+      // 避免并发访问已刷新 last_access_at 时，清理器删掉仍在被使用的 OBS 对象。
+      const [claimed] = await pool.query(
+        `UPDATE file_preview_artifacts a
+         LEFT JOIN files cloud_file
+                ON a.source_type = 'cloud_file'
+               AND cloud_file.id = a.file_id AND cloud_file.create_by = a.owner_user_id AND cloud_file.del_flag = 0
+         LEFT JOIN community_chat_message_files chat_file
+                ON a.source_type = 'community_chat_file'
+               AND chat_file.id = a.file_id AND chat_file.owner_user_id = a.owner_user_id
+               AND chat_file.status = 'attached' AND chat_file.object_key IS NOT NULL AND chat_file.expires_at > NOW()
+         SET a.status = 'failed', a.error_code = ?, a.update_time = NOW()
          WHERE a.id = ? AND (
-           f.id IS NULL OR (
+           (a.source_type = 'cloud_file' AND cloud_file.id IS NULL)
+           OR (a.source_type = 'community_chat_file' AND chat_file.id IS NULL)
+           OR (a.source_type NOT IN ('cloud_file', 'community_chat_file'))
+           OR a.error_code = ?
+           OR (
              COALESCE(a.last_access_at, a.update_time) < DATE_SUB(NOW(), INTERVAL ${retentionDays} DAY)
              AND a.status IN ('ready', 'failed')
            )
          )`,
-        [row.id],
+        [PREVIEW_CLEANUP_PENDING_ERROR, row.id, PREVIEW_CLEANUP_PENDING_ERROR],
+      );
+      if (!Number(claimed?.affectedRows || 0)) continue;
+      const objectKeys = [...new Set([row.artifact_object_key, row.output_object_key].filter(Boolean))];
+      let objectsDeleted = true;
+      for (const objectKey of objectKeys) {
+        try {
+          await deleteObjectFromObs(objectKey);
+        } catch (error) {
+          objectsDeleted = false;
+          console.warn('[file-preview] retained artifact cleanup failed code=%s', stableAgentErrorCode(error));
+          break;
+        }
+      }
+      if (!objectsDeleted) continue;
+      const [result] = await pool.query(
+        `DELETE FROM file_preview_artifacts
+          WHERE id = ? AND status = 'failed' AND error_code = ?`,
+        [row.id, PREVIEW_CLEANUP_PENDING_ERROR],
       );
       if (!result.affectedRows) continue;
       cleaned += 1;
-      if (row.artifact_object_key) {
-        await deleteObjectFromObs(row.artifact_object_key).catch((error) =>
-          console.warn('[file-preview] retained artifact cleanup failed code=%s', stableAgentErrorCode(error)),
-        );
-      }
-      if (row.output_object_key && row.output_object_key !== row.artifact_object_key) {
-        await deleteObjectFromObs(row.output_object_key).catch((error) =>
-          console.warn('[file-preview] pending object cleanup failed code=%s', stableAgentErrorCode(error)),
-        );
-      }
     }
     if (rows.length < 100) break;
   }
   return cleaned;
+}
+
+export async function deleteFilePreviewArtifactsForSource({
+  sourceType,
+  fileId,
+  db = pool,
+  deleteObject = deleteObjectFromObs,
+}) {
+  const normalizedSourceType = normalizeSourceType(sourceType);
+  const [rows] = await db.query(
+    `SELECT a.id, a.artifact_object_key AS artifactObjectKey, j.output_object_key AS outputObjectKey
+       FROM file_preview_artifacts a
+       LEFT JOIN file_preview_jobs j ON j.artifact_id = a.id
+      WHERE a.source_type = ? AND a.file_id = ?`,
+    [normalizedSourceType, fileId],
+  );
+  const objectKeys = [...new Set(rows.flatMap((row) => [row.artifactObjectKey, row.outputObjectKey]).filter(Boolean))];
+  for (const objectKey of objectKeys) await deleteObject(objectKey);
+  const [result] = await db.query(`DELETE FROM file_preview_artifacts WHERE source_type = ? AND file_id = ?`, [
+    normalizedSourceType,
+    fileId,
+  ]);
+  return { deletedArtifacts: Number(result?.affectedRows || 0), deletedObjects: objectKeys.length };
 }
 
 export function getFilePreviewErrorStatus(error) {

@@ -50,6 +50,20 @@ import {
   uploadCommunityChatImage,
 } from '../util/services/communityChatImageService.js';
 import {
+  confirmCommunityChatFileUpload,
+  discardCommunityChatFile,
+  getCommunityChatFileDownload,
+  getCommunityChatFileSource,
+  prepareCommunityChatFileUpload,
+} from '../util/services/communityChatFileService.js';
+import {
+  FILE_PREVIEW_SOURCE_TYPE,
+  listArchivePreview as listPreviewArchive,
+  prepareFilePreview as preparePreviewArtifact,
+  resolveFilePreview as resolvePreviewArtifact,
+} from '../util/filePreview/service.js';
+import { sendPreviewError } from './filePreviewHandle.js';
+import {
   blockCommunityChatMessageAuthor,
   listCommunityChatBlocks,
   listCommunityChatReports,
@@ -285,6 +299,7 @@ export async function createMessage(req, res) {
       mentionUserPublicIds: req.body?.mentionUserPublicIds,
       mentionMessagePublicIds: req.body?.mentionMessagePublicIds,
       imagePublicIds: req.body?.imagePublicIds,
+      attachmentRefs: req.body?.attachmentRefs,
       poll: req.body?.poll,
     });
     return res.send(resultData(data, 200, L(req, '消息已发送', 'Message sent')));
@@ -489,6 +504,7 @@ export async function uploadImage(req, res) {
       user: req.user,
       roomSlug: req.params?.slug,
       file: req.file,
+      fileName: req.body?.fileName,
     });
     return res.send(resultData(data, 200, L(req, '图片已就绪', 'Image ready')));
   } catch (error) {
@@ -503,7 +519,7 @@ export async function image(req, res) {
       user: req.user,
       imagePublicId: req.params?.publicId,
     });
-    res.set('Cache-Control', 'private, max-age=60');
+    res.set('Cache-Control', `private, max-age=${Math.max(0, Math.min(60, Number(data.expiresIn || 0)))}`);
     return res.redirect(302, data.signedUrl);
   } catch (error) {
     if (error instanceof CommunityChatError && error.status === 404) return res.status(404).end();
@@ -521,6 +537,117 @@ export async function discardImage(req, res) {
     return res.send(resultData(data, 200, L(req, '图片已移除', 'Image discarded')));
   } catch (error) {
     return sendError(req, res, error);
+  }
+}
+
+export async function prepareFileUpload(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await prepareCommunityChatFileUpload({
+      user: req.user,
+      roomSlug: req.params?.slug,
+      fileName: req.body?.fileName,
+      fileType: req.body?.fileType,
+      fileSize: req.body?.fileSize,
+    });
+    return res.send(resultData(data, 200, L(req, '文件上传已准备', 'File upload prepared')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function confirmFileUpload(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await confirmCommunityChatFileUpload({
+      user: req.user,
+      filePublicId: req.params?.publicId,
+    });
+    return res.send(resultData(data, 200, L(req, '文件已就绪', 'File ready')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function discardFile(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await discardCommunityChatFile({ user: req.user, filePublicId: req.params?.publicId });
+    return res.send(resultData(data, 200, L(req, '文件已移除', 'File discarded')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function fileDownload(req, res) {
+  if (rejectAdminPreview(req, res)) return;
+  try {
+    const data = await getCommunityChatFileDownload({ user: req.user, filePublicId: req.params?.publicId });
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+async function communityChatPreviewSource(req) {
+  return getCommunityChatFileSource({ user: req.user, filePublicId: req.params?.publicId });
+}
+
+function publicCommunityChatPreviewState(data, source) {
+  return { ...data, fileId: source.publicId };
+}
+
+export async function resolveFilePreview(req, res) {
+  if (rejectAdminPreview(req, res)) return;
+  try {
+    const source = await communityChatPreviewSource(req);
+    const data = await resolvePreviewArtifact({
+      ownerUserId: source.ownerUserId,
+      fileId: source.id,
+      sourceType: FILE_PREVIEW_SOURCE_TYPE.COMMUNITY_CHAT_FILE,
+    });
+    return res.send(resultData(publicCommunityChatPreviewState(data, source)));
+  } catch (error) {
+    if (error instanceof CommunityChatError) return sendError(req, res, error);
+    return sendPreviewError(req, res, error, 'community-chat-resolve');
+  }
+}
+
+export async function prepareFilePreview(req, res) {
+  if (rejectAdminPreview(req, res)) return;
+  try {
+    const source = await communityChatPreviewSource(req);
+    const data = await preparePreviewArtifact({
+      ownerUserId: source.ownerUserId,
+      fileId: source.id,
+      sourceType: FILE_PREVIEW_SOURCE_TYPE.COMMUNITY_CHAT_FILE,
+      retry: req.body?.retry === true,
+    });
+    return res.send(resultData(publicCommunityChatPreviewState(data, source)));
+  } catch (error) {
+    if (error instanceof CommunityChatError) return sendError(req, res, error);
+    return sendPreviewError(req, res, error, 'community-chat-prepare');
+  }
+}
+
+export async function listFileArchivePreview(req, res) {
+  if (rejectAdminPreview(req, res)) return;
+  try {
+    const source = await communityChatPreviewSource(req);
+    const data = await listPreviewArchive({
+      ownerUserId: source.ownerUserId,
+      fileId: source.id,
+      sourceType: FILE_PREVIEW_SOURCE_TYPE.COMMUNITY_CHAT_FILE,
+      directory: req.body?.directory,
+      query: req.body?.query,
+      offset: req.body?.offset,
+      limit: req.body?.limit,
+      touch: false,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    if (error instanceof CommunityChatError) return sendError(req, res, error);
+    return sendPreviewError(req, res, error, 'community-chat-archive-list');
   }
 }
 

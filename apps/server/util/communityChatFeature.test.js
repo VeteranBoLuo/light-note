@@ -7,6 +7,7 @@ describe('getCommunityChatFeatureState', () => {
       accessMode: 'closed',
       waitlistEnabled: false,
       messagingEnabled: false,
+      filesEnabled: false,
       pollsEnabled: false,
       readReceiptsEnabled: false,
       realtimeEnabled: false,
@@ -30,6 +31,7 @@ describe('getCommunityChatFeatureState', () => {
       accessMode: 'invite_only',
       waitlistEnabled: true,
       messagingEnabled: true,
+      filesEnabled: false,
       pollsEnabled: false,
       readReceiptsEnabled: false,
       realtimeEnabled: true,
@@ -94,5 +96,16 @@ describe('getCommunityChatFeatureState', () => {
         COMMUNITY_CHAT_READ_RECEIPTS_ENABLED: '1',
       }),
     ).toMatchObject({ pollsEnabled: false, readReceiptsEnabled: false });
+  });
+
+  it('文件附件必须在消息能力已开启时单独显式开放', () => {
+    expect(
+      getCommunityChatFeatureState({
+        COMMUNITY_CHAT_ACCESS_MODE: 'public',
+        COMMUNITY_CHAT_MESSAGING_ENABLED: '1',
+        COMMUNITY_CHAT_FILES_ENABLED: '1',
+      }),
+    ).toMatchObject({ messagingEnabled: true, filesEnabled: true });
+    expect(getCommunityChatFeatureState({ COMMUNITY_CHAT_FILES_ENABLED: '1' }).filesEnabled).toBe(false);
   });
 });

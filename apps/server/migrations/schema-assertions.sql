@@ -196,6 +196,7 @@ SELECT '[13] missing_core_table' AS check_name, expected.t AS detail FROM (
   UNION ALL SELECT 'note_share_events'
   UNION ALL SELECT 'file_preview_artifacts'
   UNION ALL SELECT 'file_preview_jobs'
+  UNION ALL SELECT 'community_chat_message_files'
 ) expected
 LEFT JOIN information_schema.tables actual
   ON actual.table_schema=DATABASE() AND actual.table_name=expected.t
@@ -221,6 +222,8 @@ SELECT '[14] missing_core_column' AS check_name, expected.n AS detail FROM (
   SELECT 'note_shares', 'expires_at', 'note_shares.expires_at' UNION ALL
   SELECT 'note_shares', 'status', 'note_shares.status' UNION ALL
   SELECT 'note_share_events', 'visitor_hash', 'note_share_events.visitor_hash' UNION ALL
+  SELECT 'file_preview_artifacts', 'source_type', 'file_preview_artifacts.source_type' UNION ALL
+  SELECT 'file_preview_artifacts', 'file_id', 'file_preview_artifacts.file_id' UNION ALL
   SELECT 'file_preview_artifacts', 'strategy', 'file_preview_artifacts.strategy' UNION ALL
   SELECT 'file_preview_artifacts', 'source_etag', 'file_preview_artifacts.source_etag' UNION ALL
   SELECT 'file_preview_artifacts', 'status', 'file_preview_artifacts.status' UNION ALL
@@ -1237,7 +1240,8 @@ FROM (
   SELECT 'uk_community_chat_image_public' UNION ALL
   SELECT 'uk_community_chat_image_object' UNION ALL
   SELECT 'idx_community_chat_image_owner_status_expiry' UNION ALL
-  SELECT 'idx_community_chat_image_message_status_sort'
+  SELECT 'idx_community_chat_image_message_status_sort' UNION ALL
+  SELECT 'idx_community_chat_image_status_expiry'
 ) expected
 LEFT JOIN information_schema.statistics actual
   ON actual.table_schema=DATABASE()
@@ -3201,4 +3205,159 @@ WHERE category='帮助中心'
   AND status='public'
   AND COALESCE(admin_archived, 0)=0
   AND NULLIF(TRIM(help_section), '') IS NULL
+LIMIT 100;
+
+-- 67) 聊天临时附件必须保留元数据、按消息时间过期，并隔离云文件与聊天文件预览缓存（期望 0 行）
+SELECT '[67] missing_community_chat_attachment_table' AS check_name,
+  'community_chat_message_files' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM information_schema.tables
+  WHERE table_schema=DATABASE()
+    AND table_name='community_chat_message_files'
+    AND engine='InnoDB'
+    AND table_collation='utf8mb4_unicode_ci'
+);
+
+SELECT '[67] missing_community_chat_attachment_column' AS check_name,
+  CONCAT('community_chat_message_files.', expected.column_name) AS detail
+FROM (
+  SELECT 'id' column_name UNION ALL
+  SELECT 'public_id' UNION ALL
+  SELECT 'owner_user_id' UNION ALL
+  SELECT 'room_id' UNION ALL
+  SELECT 'message_id' UNION ALL
+  SELECT 'object_key' UNION ALL
+  SELECT 'file_name' UNION ALL
+  SELECT 'content_type' UNION ALL
+  SELECT 'file_size' UNION ALL
+  SELECT 'status' UNION ALL
+  SELECT 'sort_order' UNION ALL
+  SELECT 'expires_at' UNION ALL
+  SELECT 'expired_at' UNION ALL
+  SELECT 'create_time' UNION ALL
+  SELECT 'update_time'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='community_chat_message_files'
+ AND actual.column_name=expected.column_name
+WHERE actual.column_name IS NULL;
+
+SELECT '[67] invalid_community_chat_attachment_column' AS check_name,
+  CONCAT(actual.column_name, ' actual=', actual.column_type, '/', actual.is_nullable, '/', IFNULL(actual.column_default, 'NULL')) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name='community_chat_message_files'
+  AND (
+    (actual.column_name='object_key' AND actual.is_nullable<>'YES')
+    OR (actual.column_name='file_name' AND NOT (actual.column_type='varchar(255)' AND actual.is_nullable='NO'))
+    OR (actual.column_name='content_type' AND NOT (actual.column_type='varchar(160)' AND actual.is_nullable='NO' AND actual.column_default='application/octet-stream'))
+    OR (actual.column_name='file_size' AND NOT (actual.data_type='bigint' AND actual.column_type LIKE '%unsigned' AND actual.is_nullable='NO'))
+    OR (actual.column_name='status' AND NOT (actual.is_nullable='NO' AND actual.column_default='uploading'))
+    OR (actual.column_name='sort_order' AND NOT (actual.is_nullable='NO' AND actual.column_default='0'))
+    OR (actual.column_name='expires_at' AND actual.is_nullable<>'NO')
+  );
+
+SELECT '[67] invalid_community_chat_attachment_account_id_collation' AS check_name,
+  CONCAT('owner_user_id actual=', IFNULL(actual.character_set_name, 'NULL'), '/', IFNULL(actual.collation_name, 'NULL')) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name='community_chat_message_files'
+  AND actual.column_name='owner_user_id'
+  AND (actual.character_set_name<>'utf8' OR actual.collation_name<>'utf8_general_ci');
+
+SELECT '[67] invalid_community_chat_attachment_index' AS check_name,
+  CONCAT(expected.index_name, ' actual=', IFNULL(actual.cols, '缺失'), '/', IFNULL(actual.non_unique, -1)) AS detail
+FROM (
+  SELECT 'PRIMARY' index_name, 0 non_unique, 'id' cols UNION ALL
+  SELECT 'uk_community_chat_file_public', 0, 'public_id' UNION ALL
+  SELECT 'uk_community_chat_file_object', 0, 'object_key' UNION ALL
+  SELECT 'idx_community_chat_file_owner_status_expiry', 1, 'owner_user_id,status,expires_at,id' UNION ALL
+  SELECT 'idx_community_chat_file_message_status_sort', 1, 'message_id,status,sort_order,id' UNION ALL
+  SELECT 'idx_community_chat_file_status_expiry', 1, 'status,expires_at,id'
+) expected
+LEFT JOIN (
+  SELECT index_name, MIN(non_unique) AS non_unique,
+    GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') AS cols
+  FROM information_schema.statistics
+  WHERE table_schema=DATABASE()
+    AND table_name='community_chat_message_files'
+  GROUP BY index_name
+) actual ON actual.index_name=expected.index_name
+WHERE actual.index_name IS NULL
+   OR actual.non_unique<>expected.non_unique
+   OR actual.cols<>expected.cols;
+
+SELECT '[67] invalid_community_chat_image_retention_column' AS check_name,
+  CONCAT(expected.column_name, ' actual=', IFNULL(actual.column_type, '缺失'), '/', IFNULL(actual.is_nullable, '缺失')) AS detail
+FROM (
+  SELECT 'file_name' column_name, 'NO' is_nullable UNION ALL
+  SELECT 'expired_at', 'YES' UNION ALL
+  SELECT 'object_key', 'YES'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='community_chat_message_images'
+ AND actual.column_name=expected.column_name
+WHERE actual.column_name IS NULL OR actual.is_nullable<>expected.is_nullable;
+
+SELECT '[67] invalid_file_preview_source_column' AS check_name,
+  CONCAT(actual.column_name, ' actual=', actual.column_type, '/', actual.is_nullable, '/', IFNULL(actual.column_default, 'NULL')) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name='file_preview_artifacts'
+  AND (
+    (actual.column_name='source_type' AND NOT (
+      actual.column_type='varchar(32)'
+      AND actual.character_set_name='ascii'
+      AND actual.collation_name='ascii_bin'
+      AND actual.is_nullable='NO'
+      AND actual.column_default='cloud_file'
+    ))
+    OR (actual.column_name='file_id' AND NOT (
+      actual.data_type='bigint'
+      AND actual.column_type LIKE '%unsigned'
+      AND actual.is_nullable='NO'
+    ))
+  );
+
+SELECT '[67] invalid_file_preview_source_index' AS check_name,
+  CONCAT('uk_file_preview_artifact actual=', IFNULL(actual.cols, '缺失'), '/', IFNULL(actual.non_unique, -1)) AS detail
+FROM (SELECT 1) expected
+LEFT JOIN (
+  SELECT MIN(non_unique) AS non_unique,
+    GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') AS cols
+  FROM information_schema.statistics
+  WHERE table_schema=DATABASE()
+    AND table_name='file_preview_artifacts'
+    AND index_name='uk_file_preview_artifact'
+) actual ON 1=1
+WHERE actual.cols IS NULL
+   OR actual.non_unique<>0
+   OR actual.cols<>'source_type,file_id,strategy,strategy_version';
+
+SELECT '[67] invalid_community_chat_attachment_expiry' AS check_name,
+  CONCAT(attachment_kind, ':', public_id) AS detail
+FROM (
+  SELECT 'image' attachment_kind, image.public_id, image.expires_at, message.create_time
+  FROM community_chat_message_images image
+  INNER JOIN community_chat_messages message ON message.id=image.message_id
+  UNION ALL
+  SELECT 'file', chat_file.public_id, chat_file.expires_at, message.create_time
+  FROM community_chat_message_files chat_file
+  INNER JOIN community_chat_messages message ON message.id=chat_file.message_id
+) attached
+WHERE NOT (attached.expires_at <=> DATE_ADD(attached.create_time, INTERVAL 30 DAY))
+LIMIT 100;
+
+SELECT '[67] invalid_expired_community_chat_attachment_object' AS check_name,
+  CONCAT(attachment_kind, ':', public_id) AS detail
+FROM (
+  SELECT 'image' attachment_kind, public_id, object_key, status FROM community_chat_message_images
+  UNION ALL
+  SELECT 'file', public_id, object_key, status FROM community_chat_message_files
+) attachment
+WHERE attachment.status='expired' AND attachment.object_key IS NOT NULL
 LIMIT 100;

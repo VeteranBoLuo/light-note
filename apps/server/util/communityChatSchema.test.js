@@ -24,10 +24,11 @@ describe('ensureCommunityChatSchema', () => {
   it('幂等创建社区身份、消息、投票、已读回执与治理表，并补齐增量字段和默认数据', async () => {
     await ensureCommunityChatSchema();
 
-    expect(COMMUNITY_CHAT_TABLE_SQL).toHaveLength(24);
-    expect(mocks.query).toHaveBeenCalledTimes(47);
+    expect(COMMUNITY_CHAT_TABLE_SQL).toHaveLength(25);
     expect(
-      mocks.query.mock.calls.slice(0, 24).every(([sql]) => String(sql).includes('CREATE TABLE IF NOT EXISTS')),
+      mocks.query.mock.calls
+        .slice(0, COMMUNITY_CHAT_TABLE_SQL.length)
+        .every(([sql]) => String(sql).includes('CREATE TABLE IF NOT EXISTS')),
     ).toBe(true);
     const sqlCalls = mocks.query.mock.calls.map(([sql]) => String(sql));
     for (const column of [
@@ -47,6 +48,8 @@ describe('ensureCommunityChatSchema', () => {
       'sort_order',
       'display_name_snapshot',
       'community_id_snapshot',
+      'file_name',
+      'expired_at',
     ]) {
       expect(sqlCalls.some((sql) => sql.includes(`ADD COLUMN \`${column}\``))).toBe(true);
     }
@@ -115,6 +118,7 @@ describe('ensureCommunityChatSchema', () => {
       identityMentionStickerMigration,
       pollReceiptMigration,
       multipleChoicePollMigration,
+      attachmentMigration,
       baseline,
       assertions,
     ] = await Promise.all([
@@ -135,6 +139,7 @@ describe('ensureCommunityChatSchema', () => {
       ),
       readFile(new URL('../migrations/20260826_community_chat_polls_read_receipts.sql', import.meta.url), 'utf8'),
       readFile(new URL('../migrations/20260827_community_chat_multiple_choice_polls.sql', import.meta.url), 'utf8'),
+      readFile(new URL('../migrations/20260904_community_chat_attachments.sql', import.meta.url), 'utf8'),
       readFile(new URL('../tag_db.sql', import.meta.url), 'utf8'),
       readFile(new URL('../migrations/schema-assertions.sql', import.meta.url), 'utf8'),
     ]);
@@ -260,6 +265,22 @@ describe('ensureCommunityChatSchema', () => {
     expect(assertions).toContain("COALESCE(reader.del_flag, '1')<>'0'");
     expect(assertions).toContain("COALESCE(author.role, '')<>'root'");
     expect(assertions).not.toContain('poll.ends_at_utc<=message.create_time');
+    expect(attachmentMigration).toContain('CREATE TABLE IF NOT EXISTS `community_chat_message_files`');
+    expect(attachmentMigration).toContain('DATE_ADD(message.create_time, INTERVAL 30 DAY)');
+    expect(attachmentMigration).toContain(
+      'ADD UNIQUE KEY uk_file_preview_artifact (source_type,file_id,strategy,strategy_version)',
+    );
+    expect(baseline).toContain('CREATE TABLE `community_chat_message_files`');
+    expect(baseline).toContain(
+      "`source_type` varchar(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'cloud_file'",
+    );
+    expect(baseline).toContain(
+      'UNIQUE KEY `uk_file_preview_artifact` (`source_type`,`file_id`,`strategy`,`strategy_version`)',
+    );
+    expect(assertions).toContain('missing_community_chat_attachment_table');
+    expect(assertions).toContain('invalid_community_chat_attachment_expiry');
+    expect(assertions).toContain("actual.cols<>'source_type,file_id,strategy,strategy_version'");
+    expect(COMMUNITY_CHAT_TABLE_SQL.join('\n')).toContain('CREATE TABLE IF NOT EXISTS community_chat_message_files');
     expect(textMigration).toContain('uk_community_chat_message_request');
     expect(textMigration).toContain('last_read_message_id');
     expect(singleRoomMigration).toContain("('general'");

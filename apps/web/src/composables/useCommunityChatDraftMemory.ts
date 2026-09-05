@@ -1,5 +1,5 @@
 import { reactive } from 'vue';
-import type { CommunityChatImage, CommunityChatMessageReply } from '@/api/communityChatApi';
+import type { CommunityChatMessageReply, CommunityChatPendingAttachment } from '@/api/communityChatApi';
 
 const MAX_REMEMBERED_DRAFTS = 32;
 
@@ -18,8 +18,8 @@ export interface CommunityChatComposerDraftSession {
   replyTarget: CommunityChatMessageReply | null;
   mentionTargets: CommunityChatDraftMentionTarget[];
   mentionEveryone: boolean;
-  pendingImages: CommunityChatImage[];
-  imageUploadsInFlight: number;
+  pendingAttachments: CommunityChatPendingAttachment[];
+  attachmentUploadsInFlight: number;
   sending: boolean;
   pendingClientRequestId: string | null;
   updatedAt: number;
@@ -39,8 +39,8 @@ function createDraftSession(identityKey = '', roomSlug = ''): CommunityChatCompo
     replyTarget: null,
     mentionTargets: [],
     mentionEveryone: false,
-    pendingImages: [],
-    imageUploadsInFlight: 0,
+    pendingAttachments: [],
+    attachmentUploadsInFlight: 0,
     sending: false,
     pendingClientRequestId: null,
     updatedAt: Date.now(),
@@ -48,12 +48,12 @@ function createDraftSession(identityKey = '', roomSlug = ''): CommunityChatCompo
 }
 
 function sessionOwnsPendingUpload(session: CommunityChatComposerDraftSession) {
-  return session.pendingImages.length > 0 || session.imageUploadsInFlight > 0 || session.sending;
+  return session.pendingAttachments.length > 0 || session.attachmentUploadsInFlight > 0 || session.sending;
 }
 
 function trimDraftMemory() {
   while (draftMemory.size > MAX_REMEMBERED_DRAFTS) {
-    // 已上传但尚未发送的图片由服务器绑定当前用户并设置过期时间。运行期内不能为了 LRU
+    // 已上传但尚未发送的附件由服务器绑定当前用户并设置过期时间。运行期内不能为了 LRU
     // 直接丢弃这类会话，否则用户切回页面时会无提示地丢失附件；优先淘汰无附件会话。
     const oldestDisposableKey = [...draftMemory.entries()].find(
       ([, session]) => !sessionOwnsPendingUpload(session),
@@ -72,7 +72,7 @@ export function createCommunityChatDraftSession() {
 
 /**
  * 获取账号 + 聊天室隔离的运行期输入会话。同一 key 始终返回同一个响应式对象，
- * 因此页面切换只需重新绑定，无需复制/反序列化文字、回复、提及和待发送图片。
+ * 因此页面切换只需重新绑定，无需复制/反序列化文字、回复、提及和待发送附件。
  */
 export function getCommunityChatDraftSession(identityKey: string, roomSlug: string) {
   const normalizedIdentityKey = String(identityKey || '').trim();

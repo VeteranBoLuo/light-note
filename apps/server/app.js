@@ -43,6 +43,7 @@ import { ensureResourceGovernanceSchema } from './util/resourceGovernanceSchema.
 import { ensureCommunityChatSchema } from './util/communityChatSchema.js';
 import { registerCommunityChatRealtimeHub } from './util/communityChat/realtimeHub.js';
 import { startCommunityChatImageCleanupScheduler } from './util/services/communityChatImageService.js';
+import { startCommunityChatFileCleanupScheduler } from './util/services/communityChatFileService.js';
 import { startCommunityChatCustomStickerCleanupScheduler } from './util/services/communityChatCustomStickerService.js';
 import { ensureAfdianSupportOrderPurposeBackfill, ensureAfdianSupportSchema } from './util/afdianSupportSchema.js';
 import { ensureAfdianSupportRewardSchema } from './util/afdianSupportRewardSchema.js';
@@ -158,16 +159,25 @@ await ensureOrganizeSchema().catch((err) => {
 ensureFeatureRequestTables().catch((err) =>
   console.error('共建轻笺数据表初始化失败 code=%s', stableAgentErrorCode(err)),
 );
-ensureFilePreviewSchema().catch((err) => console.error('文件预览数据表初始化失败 code=%s', stableAgentErrorCode(err)));
+const filePreviewSchemaReady = ensureFilePreviewSchema();
+filePreviewSchemaReady.catch((err) => console.error('文件预览数据表初始化失败 code=%s', stableAgentErrorCode(err)));
 // 治理接口必须先有完整快照/审计表；这里只做幂等 Schema 就绪，不在 HTTP 进程执行任何扫描或清理。
 await ensureResourceGovernanceSchema().catch((err) => {
   console.error('资源治理 Schema 初始化失败 code=%s，治理接口将失败关闭', stableAgentErrorCode(err));
 });
 ensureCommunityChatSchema()
-  .then(() => {
+  .then(async () => {
     startCommunityChatImageCleanupScheduler().catch((err) =>
       console.error('社区客厅图片清理调度启动失败 code=%s', stableAgentErrorCode(err)),
     );
+    try {
+      await filePreviewSchemaReady;
+      startCommunityChatFileCleanupScheduler().catch((err) =>
+        console.error('社区客厅文件清理调度启动失败 code=%s', stableAgentErrorCode(err)),
+      );
+    } catch {
+      // 文件清理必须等预览表可用，避免原文件先删而派生预览残留；Schema 错误已在上方记录。
+    }
     startCommunityChatCustomStickerCleanupScheduler().catch((err) =>
       console.error('社区客厅自定义表情清理调度启动失败 code=%s', stableAgentErrorCode(err)),
     );

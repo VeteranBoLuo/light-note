@@ -29,7 +29,13 @@ vi.mock('./runtime.js', () => ({
   inspectFilePreviewRuntime: vi.fn(),
 }));
 
-const { resolveFilePreview, runSingleFilePreviewJob } = await import('./service.js');
+const {
+  FILE_PREVIEW_SOURCE_TYPE,
+  cleanupStaleFilePreviewArtifacts,
+  deleteFilePreviewArtifactsForSource,
+  resolveFilePreview,
+  runSingleFilePreviewJob,
+} = await import('./service.js');
 
 function connection(query) {
   return {
@@ -43,7 +49,7 @@ function connection(query) {
 
 const sourceBuffer = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
 
-function convertedJob() {
+function convertedJob(overrides = {}) {
   return {
     job_id: 5,
     attempts: 0,
@@ -62,14 +68,16 @@ function convertedJob() {
     obs_key: 'source-key',
     create_by: 'user-1',
     del_flag: 0,
+    source_type: FILE_PREVIEW_SOURCE_TYPE.CLOUD_FILE,
+    ...overrides,
   };
 }
 
-function arrangeConvertedWorker({ staleCompletion = false } = {}) {
+function arrangeConvertedWorker({ staleCompletion = false, sourceAvailable = true, jobOverrides = {} } = {}) {
   let leaseOwner = '';
   const claimQuery = vi.fn(async (sql, params = []) => {
     const statement = String(sql);
-    if (statement.includes('SELECT j.id AS job_id')) return [[convertedJob()]];
+    if (statement.includes('SELECT j.id AS job_id')) return [[convertedJob(jobOverrides)]];
     if (statement.includes("UPDATE file_preview_jobs SET status = 'processing'")) {
       leaseOwner = params[1];
       return [{ affectedRows: 1 }];
@@ -78,11 +86,32 @@ function arrangeConvertedWorker({ staleCompletion = false } = {}) {
   });
   const completeQuery = vi.fn(async (sql) => {
     const statement = String(sql);
+    if (statement.includes('FROM files WHERE') || statement.includes('FROM community_chat_message_files')) {
+      if (!sourceAvailable) return [[], []];
+      const job = convertedJob(jobOverrides);
+      return [
+        [
+          {
+            id: job.file_id,
+            create_by: job.owner_user_id,
+            file_name: job.file_name,
+            file_type: job.file_type,
+            file_size: job.file_size,
+            obs_key: job.obs_key,
+            expires_at:
+              job.source_type === FILE_PREVIEW_SOURCE_TYPE.COMMUNITY_CHAT_FILE
+                ? new Date(Date.now() + 60_000).toISOString()
+                : null,
+          },
+        ],
+        [],
+      ];
+    }
     if (statement.includes('SELECT a.*, j.status AS job_status')) {
       return [
         [
           {
-            ...convertedJob(),
+            ...convertedJob(jobOverrides),
             status: 'processing',
             job_status: 'processing',
             job_attempts: 1,
@@ -185,5 +214,182 @@ describe('file preview service', () => {
       previewType: 'converted-pdf',
     });
     expect(obsMocks.createDownloadSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it('聊天文件只查询受控来源，并把派生预览签名寿命限制在附件剩余时间内', async () => {
+    const expiresAt = new Date(Date.now() + 18_000).toISOString();
+    poolMocks.query.mockImplementation(async (sql, params) => {
+      const statement = String(sql);
+      if (statement.includes('FROM community_chat_message_files')) {
+        expect(params).toEqual([42, 'user-1']);
+        return [
+          [
+            {
+              id: 42,
+              create_by: 'user-1',
+              file_name: 'legacy.doc',
+              file_type: 'application/msword',
+              file_size: sourceBuffer.length,
+              obs_key: 'community-chat/source-key',
+              expires_at: expiresAt,
+            },
+          ],
+        ];
+      }
+      if (statement.includes('FROM file_preview_artifacts')) {
+        expect(params).toEqual(['community_chat_file', 42, 'converted_pdf', 1]);
+        return [
+          [
+            {
+              id: 10,
+              source_type: 'community_chat_file',
+              file_id: 42,
+              owner_user_id: 'user-1',
+              strategy: 'converted_pdf',
+              strategy_version: 1,
+              format_id: 'legacy-word',
+              source_etag: 'etag-1',
+              source_size: sourceBuffer.length,
+              status: 'ready',
+              artifact_object_key: 'derived-key',
+              artifact_size: 100,
+            },
+          ],
+        ];
+      }
+      if (statement.includes('UPDATE file_preview_artifacts SET last_access_at')) return [{ affectedRows: 1 }];
+      throw new Error(`unexpected query: ${statement}`);
+    });
+
+    const result = await resolveFilePreview({
+      ownerUserId: 'user-1',
+      fileId: 42,
+      sourceType: FILE_PREVIEW_SOURCE_TYPE.COMMUNITY_CHAT_FILE,
+    });
+
+    expect(result).toMatchObject({ status: 'ready', previewUrl: 'https://preview.example/derived.pdf' });
+    const signedExpiry = obsMocks.createDownloadSignedUrl.mock.calls[0][0].expires;
+    expect(signedExpiry).toBeGreaterThan(0);
+    expect(signedExpiry).toBeLessThanOrEqual(18);
+  });
+
+  it('聊天源在鉴权与预览解析之间到期时仍返回 410', async () => {
+    poolMocks.query.mockResolvedValueOnce([[], []]);
+
+    await expect(
+      resolveFilePreview({
+        ownerUserId: 'user-1',
+        fileId: 42,
+        sourceType: FILE_PREVIEW_SOURCE_TYPE.COMMUNITY_CHAT_FILE,
+      }),
+    ).rejects.toMatchObject({ code: 'COMMUNITY_CHAT_FILE_EXPIRED', status: 410 });
+  });
+
+  it('聊天预览 Worker 使用带来源类型的对象键，避免与同 ID 云文件冲突', async () => {
+    arrangeConvertedWorker({
+      jobOverrides: {
+        source_type: FILE_PREVIEW_SOURCE_TYPE.COMMUNITY_CHAT_FILE,
+        obs_key: 'community-chat/source-key',
+      },
+    });
+
+    await expect(runSingleFilePreviewJob('worker-chat')).resolves.toBe(true);
+
+    expect(obsMocks.putObjectBodyToObs.mock.calls[0][0]).toMatch(
+      /^file-previews\/community_chat_file\/user-1\/42\/[a-f0-9]{64}\.pdf$/u,
+    );
+  });
+
+  it('聊天附件在转换期间过期时拒绝提交派生结果并删除刚上传的对象', async () => {
+    const arranged = arrangeConvertedWorker({
+      sourceAvailable: false,
+      jobOverrides: {
+        source_type: FILE_PREVIEW_SOURCE_TYPE.COMMUNITY_CHAT_FILE,
+        obs_key: 'community-chat/source-key',
+      },
+    });
+
+    await expect(runSingleFilePreviewJob('worker-expired')).resolves.toBe(true);
+
+    const [uploadedKey] = obsMocks.putObjectBodyToObs.mock.calls[0];
+    expect(obsMocks.deleteObjectFromObs).toHaveBeenCalledWith(uploadedKey);
+    expect(
+      arranged.completeConnection.query.mock.calls.some(([sql]) => String(sql).includes("SET status = 'ready'")),
+    ).toBe(false);
+  });
+
+  it('全局预览清理删除对象失败时保留数据库记录，供下一轮继续重试', async () => {
+    let candidateQueryCount = 0;
+    poolMocks.query.mockImplementation(async (sql) => {
+      const statement = String(sql);
+      if (statement.includes('FROM file_preview_jobs') && statement.includes("status = 'failed'")) return [[], []];
+      if (statement.includes('SELECT a.id, a.artifact_object_key')) {
+        candidateQueryCount += 1;
+        return candidateQueryCount === 1
+          ? [[{ id: 10, artifact_object_key: 'preview/retry.pdf', output_object_key: null }], []]
+          : [[], []];
+      }
+      if (statement.includes("SET a.status = 'failed'")) return [{ affectedRows: 1 }, []];
+      throw new Error(`unexpected query: ${statement}`);
+    });
+    obsMocks.deleteObjectFromObs.mockRejectedValueOnce(new Error('OBS unavailable'));
+
+    await expect(cleanupStaleFilePreviewArtifacts()).resolves.toBe(0);
+
+    expect(obsMocks.deleteObjectFromObs).toHaveBeenCalledWith('preview/retry.pdf');
+    expect(poolMocks.query.mock.calls.some(([sql]) => String(sql).includes('DELETE FROM file_preview_artifacts'))).toBe(
+      false,
+    );
+  });
+
+  it('全局预览清理原子领取失败时不删对象，保留并发访问刷新的缓存', async () => {
+    let candidateQueryCount = 0;
+    poolMocks.query.mockImplementation(async (sql) => {
+      const statement = String(sql);
+      if (statement.includes('FROM file_preview_jobs') && statement.includes("status = 'failed'")) return [[], []];
+      if (statement.includes('SELECT a.id, a.artifact_object_key')) {
+        candidateQueryCount += 1;
+        return candidateQueryCount === 1
+          ? [[{ id: 10, artifact_object_key: 'preview/active.pdf', output_object_key: null }], []]
+          : [[], []];
+      }
+      if (statement.includes("SET a.status = 'failed'")) return [{ affectedRows: 0 }, []];
+      throw new Error(`unexpected query: ${statement}`);
+    });
+
+    await expect(cleanupStaleFilePreviewArtifacts()).resolves.toBe(0);
+
+    expect(obsMocks.deleteObjectFromObs).not.toHaveBeenCalled();
+  });
+
+  it('附件清理会先删除所有派生对象，再按来源类型删除可级联的预览记录', async () => {
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([
+          [
+            { id: 1, artifactObjectKey: 'preview/a.pdf', outputObjectKey: 'preview/a.pdf' },
+            { id: 2, artifactObjectKey: null, outputObjectKey: 'preview/pending.pdf' },
+          ],
+        ])
+        .mockResolvedValueOnce([{ affectedRows: 2 }]),
+    };
+
+    await expect(
+      deleteFilePreviewArtifactsForSource({
+        sourceType: FILE_PREVIEW_SOURCE_TYPE.COMMUNITY_CHAT_FILE,
+        fileId: 42,
+        db,
+        deleteObject: obsMocks.deleteObjectFromObs,
+      }),
+    ).resolves.toEqual({ deletedArtifacts: 2, deletedObjects: 2 });
+    expect(obsMocks.deleteObjectFromObs.mock.calls.map(([key]) => key)).toEqual([
+      'preview/a.pdf',
+      'preview/pending.pdf',
+    ]);
+    expect(db.query).toHaveBeenLastCalledWith(expect.stringContaining('DELETE FROM file_preview_artifacts'), [
+      'community_chat_file',
+      42,
+    ]);
   });
 });

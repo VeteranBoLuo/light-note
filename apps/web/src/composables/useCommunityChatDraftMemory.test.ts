@@ -15,9 +15,17 @@ describe('community chat draft memory', () => {
       hasImages: false,
     };
     general.mentionTargets = [{ key: 'user:user-2', name: '菠萝', userPublicId: 'user-2' }];
-    general.pendingImages = [
+    general.pendingAttachments = [
       {
+        localId: 'local-image-1',
         publicId: 'image-1',
+        kind: 'image',
+        fileName: 'diagram.png',
+        fileType: 'image/png',
+        availability: 'available',
+        expiresAt: null,
+        state: 'ready',
+        progress: 100,
         url: '/api/community-chat/images/image-1',
         contentType: 'image/png',
         fileSize: 12,
@@ -33,7 +41,7 @@ describe('community chat draft memory', () => {
       text: '未发送内容',
       replyTarget: { publicId: 'message-1' },
       mentionTargets: [{ userPublicId: 'user-2' }],
-      pendingImages: [{ publicId: 'image-1' }],
+      pendingAttachments: [{ publicId: 'image-1', kind: 'image', state: 'ready' }],
       sending: true,
       pendingClientRequestId: 'request-1',
     });

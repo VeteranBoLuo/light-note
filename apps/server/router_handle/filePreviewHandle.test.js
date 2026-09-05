@@ -14,7 +14,7 @@ vi.mock('../util/common.js', () => ({
 }));
 vi.mock('../util/agent/logSafety.js', () => ({ stableAgentErrorCode: () => 'SAFE_ERROR' }));
 
-const { resolveOwnedFilePreview } = await import('./filePreviewHandle.js');
+const { resolveOwnedFilePreview, sendPreviewError } = await import('./filePreviewHandle.js');
 
 function response() {
   return { send: vi.fn() };
@@ -57,6 +57,26 @@ describe('file preview handler', () => {
       data: { errorCode: 'FILE_PREVIEW_SERVICE_UNAVAILABLE' },
       status: 500,
       msg: '文件预览暂时不可用，请稍后重试',
+    });
+  });
+
+  it('保留聊天附件过期的 410 语义和稳定业务码', () => {
+    previewServiceMocks.getFilePreviewErrorStatus.mockReturnValue(410);
+    const res = response();
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    sendPreviewError(
+      {},
+      res,
+      Object.assign(new Error('expired'), { code: 'COMMUNITY_CHAT_FILE_EXPIRED', status: 410 }),
+      'community-chat-resolve',
+    );
+
+    errorSpy.mockRestore();
+    expect(res.send).toHaveBeenCalledWith({
+      data: { errorCode: 'COMMUNITY_CHAT_FILE_EXPIRED' },
+      status: 410,
+      msg: '资源已过期',
     });
   });
 });

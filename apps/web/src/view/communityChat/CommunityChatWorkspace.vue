@@ -286,41 +286,18 @@
                           </span>
                           <ChatInlineEmojiText v-if="chatMessage.content" :content="chatMessage.content" />
                         </p>
-                        <div
-                          v-else-if="messageHasImages(chatMessage)"
-                          class="community-message__images"
-                          :class="`has-${Math.min(chatMessage.images.length, 4)}`"
-                        >
-                          <BButton
-                            v-for="imageItem in chatMessage.images"
-                            :key="imageItem.publicId"
-                            class="community-message__image"
-                            :class="{ 'is-ready': isMessageImageReady(imageItem.publicId) }"
-                            :style="messageImageLayoutStyle(imageItem)"
-                            :aria-label="t('communityChat.image.preview')"
-                            @click.stop="handleMessageImageClick(chatMessage, imageItem)"
-                          >
-                            <span class="community-message__image-sizer" aria-hidden="true"></span>
-                            <span
-                              v-if="!isMessageImageReady(imageItem.publicId)"
-                              class="community-message__image-placeholder"
-                              aria-hidden="true"
-                            >
-                              <SvgIcon :src="icon.noteDetail.toolbar.image" size="22" />
-                            </span>
-                            <img
-                              :src="imageItem.url"
-                              :alt="t('communityChat.image.messageAlt', { name: authorName(chatMessage) })"
-                              :width="positiveImageDimension(imageItem.width)"
-                              :height="positiveImageDimension(imageItem.height)"
-                              :loading="isMessageImagePriority(imageItem.publicId) ? 'eager' : 'lazy'"
-                              :fetchpriority="isMessageImagePriority(imageItem.publicId) ? 'high' : 'auto'"
-                              decoding="async"
-                              @load="handleMessageImageLoaded($event, imageItem)"
-                              @error="handleMessageImageError(imageItem)"
-                            />
-                          </BButton>
-                        </div>
+                        <ChatMessageAttachments
+                          v-else-if="messageHasAttachments(chatMessage)"
+                          :attachments="messageAttachments(chatMessage)"
+                          :author-name="authorName(chatMessage)"
+                          :ready-image-ids="readyMessageImageIds"
+                          :priority-image-ids="priorityMessageImageIds"
+                          @preview-image="handleMessageAttachmentImageClick(chatMessage, $event)"
+                          @open-file="openFileAttachmentPreview"
+                          @download-file="downloadFileAttachment"
+                          @image-loaded="handleMessageAttachmentImageLoaded"
+                          @image-error="handleMessageAttachmentImageError"
+                        />
                         <div
                           v-else-if="chatMessage.messageKind === 'sticker'"
                           class="community-message__sticker"
@@ -421,44 +398,21 @@
                           </BActionMenu>
                         </div>
                       </div>
-                      <div
-                        v-if="messageHasText(chatMessage) && messageHasImages(chatMessage)"
-                        class="community-message__images"
-                        :class="`has-${Math.min(chatMessage.images.length, 4)}`"
-                      >
-                        <BButton
-                          v-for="imageItem in chatMessage.images"
-                          :key="imageItem.publicId"
-                          class="community-message__image"
-                          :class="{ 'is-ready': isMessageImageReady(imageItem.publicId) }"
-                          :style="messageImageLayoutStyle(imageItem)"
-                          :aria-label="t('communityChat.image.preview')"
-                          @click.stop="handleMessageImageClick(chatMessage, imageItem)"
-                        >
-                          <span class="community-message__image-sizer" aria-hidden="true"></span>
-                          <span
-                            v-if="!isMessageImageReady(imageItem.publicId)"
-                            class="community-message__image-placeholder"
-                            aria-hidden="true"
-                          >
-                            <SvgIcon :src="icon.noteDetail.toolbar.image" size="22" />
-                          </span>
-                          <img
-                            :src="imageItem.url"
-                            :alt="t('communityChat.image.messageAlt', { name: authorName(chatMessage) })"
-                            :width="positiveImageDimension(imageItem.width)"
-                            :height="positiveImageDimension(imageItem.height)"
-                            :loading="isMessageImagePriority(imageItem.publicId) ? 'eager' : 'lazy'"
-                            :fetchpriority="isMessageImagePriority(imageItem.publicId) ? 'high' : 'auto'"
-                            decoding="async"
-                            @load="handleMessageImageLoaded($event, imageItem)"
-                            @error="handleMessageImageError(imageItem)"
-                          />
-                        </BButton>
-                      </div>
+                      <ChatMessageAttachments
+                        v-if="messageHasText(chatMessage) && messageHasAttachments(chatMessage)"
+                        :attachments="messageAttachments(chatMessage)"
+                        :author-name="authorName(chatMessage)"
+                        :ready-image-ids="readyMessageImageIds"
+                        :priority-image-ids="priorityMessageImageIds"
+                        @preview-image="handleMessageAttachmentImageClick(chatMessage, $event)"
+                        @open-file="openFileAttachmentPreview"
+                        @download-file="downloadFileAttachment"
+                        @image-loaded="handleMessageAttachmentImageLoaded"
+                        @image-error="handleMessageAttachmentImageError"
+                      />
                       <div
                         v-if="
-                          (messageHasText(chatMessage) || messageHasImages(chatMessage)) &&
+                          (messageHasText(chatMessage) || messageHasAttachments(chatMessage)) &&
                           chatMessage.messageKind === 'sticker'
                         "
                         class="community-message__sticker"
@@ -532,7 +486,7 @@
           v-if="canPostCurrentRoom"
           class="community-composer__surface"
           :class="{ 'is-drag-active': isComposerDragActive }"
-          :aria-busy="imageUploadsInFlight > 0"
+          :aria-busy="attachmentUploadsInFlight > 0"
           @paste="handleComposerPaste"
           @dragenter.prevent="handleComposerDragEnter"
           @dragover.prevent="handleComposerDragOver"
@@ -541,32 +495,19 @@
         >
           <div v-if="isComposerDragActive" class="community-composer__drop-overlay" role="status">
             <span aria-hidden="true">
-              <SvgIcon :src="icon.noteDetail.toolbar.image" size="22" />
+              <SvgIcon :src="icon.file_upload" size="22" />
             </span>
-            <strong>{{ t('communityChat.image.dropHint') }}</strong>
+            <strong>{{ t('communityChat.attachment.dropHint') }}</strong>
           </div>
 
-          <div v-if="pendingImages.length || imageUploadsInFlight" class="community-composer__images">
-            <div v-for="imageItem in pendingImages" :key="imageItem.publicId" class="community-composer__image">
-              <BButton
-                :aria-label="t('communityChat.image.preview')"
-                @click="openImagePreview(imageItem, pendingImages)"
-              >
-                <img :src="imageItem.url" :alt="t('communityChat.image.pendingAlt')" />
-              </BButton>
-              <BButton
-                class="community-composer__image-remove"
-                :loading="removingImageIds.has(imageItem.publicId)"
-                :aria-label="t('communityChat.image.remove')"
-                @click="removePendingImage(imageItem)"
-              >
-                <SvgIcon :src="icon.common.close" size="12" aria-hidden="true" />
-              </BButton>
-            </div>
-            <span v-if="imageUploadsInFlight" class="community-composer__image-uploading" role="status">
-              {{ t('communityChat.image.uploading', { count: imageUploadsInFlight }) }}
-            </span>
-          </div>
+          <ChatPendingAttachments
+            v-if="pendingAttachments.length"
+            :attachments="pendingAttachments"
+            :removing-ids="removingAttachmentIds"
+            @preview="previewPendingAttachment"
+            @retry="retryPendingAttachment"
+            @remove="removePendingAttachment"
+          />
 
           <div v-if="mentionEveryone || mentionTargets.length" class="community-composer__mentions">
             <strong>{{ t('communityChat.mentioning') }}</strong>
@@ -697,18 +638,18 @@
               <BUpload
                 raw-file
                 multiple
-                accept="image/jpeg,image/png,image/webp"
-                :max-total-size="20 * 1024 * 1024"
-                :disabled="imageUploadDisabled"
-                @change="handleImageFiles"
+                :accept="props.access.filesEnabled ? '' : 'image/jpeg,image/png,image/webp'"
+                :max-total-size="null"
+                :disabled="attachmentUploadDisabled"
+                @change="handleAttachmentFiles"
               >
                 <BButton
                   class="community-composer__attach"
-                  :disabled="imageUploadDisabled"
-                  :aria-label="t('communityChat.image.add')"
-                  :title="t('communityChat.image.add')"
+                  :disabled="attachmentUploadDisabled"
+                  :aria-label="t('communityChat.attachment.add')"
+                  :title="t('communityChat.attachment.add')"
                 >
-                  <SvgIcon :src="icon.noteDetail.toolbar.image" size="19" aria-hidden="true" />
+                  <SvgIcon :src="icon.file_upload" size="19" aria-hidden="true" />
                 </BButton>
               </BUpload>
               <BButton
@@ -721,7 +662,7 @@
                 <SvgIcon :src="icon.communityChat.poll" size="19" aria-hidden="true" />
               </BButton>
               <span class="community-composer__upload-hint">{{
-                t(bookmark.isMobile ? 'communityChat.image.inputHintMobile' : 'communityChat.image.inputHint')
+                t(bookmark.isMobile ? 'communityChat.attachment.inputHintMobile' : 'communityChat.attachment.inputHint')
               }}</span>
             </div>
             <div class="community-composer__actions">
@@ -839,6 +780,18 @@
     :images="activeImageViewerImages"
     :initial-public-id="imageViewerInitialPublicId"
   />
+  <FilePreview
+    v-if="filePreviewAttachment"
+    v-model:visible="filePreviewVisible"
+    :file-info="{
+      id: filePreviewAttachment.publicId,
+      fileName: filePreviewAttachment.fileName,
+      fileType: filePreviewAttachment.fileType,
+    }"
+    :preview-access="{ kind: 'community_chat_file', publicId: filePreviewAttachment.publicId }"
+    @source-expired="handleFilePreviewExpired"
+    @close="closeFileAttachmentPreview"
+  />
   <ChatUserProfileModal
     v-model:visible="profileVisible"
     :profile="authorProfile"
@@ -866,6 +819,14 @@
 
 <script setup lang="ts">
   import {
+    COMMUNITY_CHAT_ATTACHMENT_MAX_COUNT,
+    COMMUNITY_CHAT_ATTACHMENT_MAX_TOTAL_BYTES,
+    COMMUNITY_CHAT_ATTACHMENT_RETENTION_DAYS,
+    COMMUNITY_CHAT_BLOCKED_FILE_EXTENSIONS as COMMUNITY_CHAT_BLOCKED_FILE_EXTENSION_LIST,
+    COMMUNITY_CHAT_BLOCKED_FILE_MIME_TYPES as COMMUNITY_CHAT_BLOCKED_FILE_TYPE_LIST,
+    COMMUNITY_CHAT_IMAGE_MAX_BYTES,
+  } from '@lightnote/shared/community-chat-attachments';
+  import {
     COMMUNITY_CHAT_INLINE_EMOJI_MAX_PER_MESSAGE,
     COMMUNITY_CHAT_INLINE_EMOJI_MAX_RAW_LENGTH,
     communityChatInlineEmojiLogicalLength,
@@ -883,6 +844,7 @@
     closeCommunityChatPoll,
     createCommunityChatClientRequestId,
     deleteCommunityChatMessage,
+    discardCommunityChatFile,
     discardCommunityChatImage,
     ensureCommunityChatIdentity,
     getCommunityChatBlocks,
@@ -892,6 +854,7 @@
     getCommunityChatPollOptionVoters,
     getCommunityChatReadReceiptCounts,
     getCommunityChatReadReceiptReaders,
+    getCommunityChatFileDownload,
     markCommunityChatRoomRead,
     pinCommunityChatMessage,
     recallCommunityChatMessage,
@@ -904,8 +867,10 @@
     voteCommunityChatPoll,
     unblockCommunityChatUser,
     unpinCommunityChatMessage,
+    uploadCommunityChatFile,
     uploadCommunityChatImage,
     type CommunityChatAccess,
+    type CommunityChatAttachment,
     type CommunityChatBlockItem,
     type CommunityChatImage,
     type CommunityChatMessage,
@@ -913,6 +878,7 @@
     type CommunityChatMessagePage,
     type CommunityChatMessageReply,
     type CommunityChatPinnedMessage,
+    type CommunityChatPendingAttachment,
     type CommunityChatPoll,
     type CommunityChatPollSelectionMode,
     type CommunityChatPollVoter,
@@ -940,6 +906,8 @@
   import ChatSettingsModal from '@/components/communityChat/ChatSettingsModal.vue';
   import ChatReportModal from '@/components/communityChat/ChatReportModal.vue';
   import ChatImageViewerModal from '@/components/communityChat/ChatImageViewerModal.vue';
+  import ChatMessageAttachments from '@/components/communityChat/ChatMessageAttachments.vue';
+  import ChatPendingAttachments from '@/components/communityChat/ChatPendingAttachments.vue';
   import ChatUserProfileModal from '@/components/communityChat/ChatUserProfileModal.vue';
   import ChatOnlineMembersModal from '@/components/communityChat/ChatOnlineMembersModal.vue';
   import ChatExpressionPanel from '@/components/communityChat/ChatExpressionPanel.vue';
@@ -968,7 +936,11 @@
   } from '@/composables/useCommunityChatDraftMemory';
   import { useCommunityChatEmojiRecent } from '@/composables/useCommunityChatEmojiRecent';
   import { useCommunityChatViewportController } from '@/composables/useCommunityChatViewportController';
+  import FilePreview from '@/components/FilePreview.vue';
+  import { announceNativeDownloadStart } from '@/composables/useAndroidDownloadProgress';
   import icon from '@/config/icon';
+  import { requestAndroidDownload } from '@/http/common';
+  import { getCloudPreviewType } from '@/constants/cloudFileCategory';
   import { frameVariant } from '@/config/growthFrames';
   import { bookmarkStore, useUserStore } from '@/store';
   import { resolveCommunityChatMentionQuery } from '@/utils/communityChatMentionQuery';
@@ -1115,10 +1087,10 @@
   const readReceiptReadersError = ref(false);
   const readReceiptReadersLoaded = ref(false);
   const reportedMessageIds = ref(new Set<string>());
-  const pendingImages = computed({
-    get: () => composerDraftSession.value.pendingImages,
-    set: (value: CommunityChatImage[]) => {
-      composerDraftSession.value.pendingImages = value;
+  const pendingAttachments = computed({
+    get: () => composerDraftSession.value.pendingAttachments,
+    set: (value: CommunityChatPendingAttachment[]) => {
+      composerDraftSession.value.pendingAttachments = value;
     },
   });
   const imageViewerVisible = ref(false);
@@ -1128,14 +1100,17 @@
   const readyMessageImageIds = ref(new Set<string>());
   const priorityMessageImageIds = ref(new Set<string>());
   const messageImagePreloads = new Map<string, HTMLImageElement>();
-  const imageUploadsInFlight = computed({
-    get: () => composerDraftSession.value.imageUploadsInFlight,
+  const attachmentUploadsInFlight = computed({
+    get: () => composerDraftSession.value.attachmentUploadsInFlight,
     set: (value: number) => {
-      composerDraftSession.value.imageUploadsInFlight = value;
+      composerDraftSession.value.attachmentUploadsInFlight = value;
     },
   });
   const isComposerDragActive = ref(false);
-  const removingImageIds = ref(new Set<string>());
+  const removingAttachmentIds = ref(new Set<string>());
+  const attachmentUploadControllers = new Map<string, AbortController>();
+  const filePreviewVisible = ref(false);
+  const filePreviewAttachment = ref<CommunityChatAttachment | null>(null);
   const blocksVisible = ref(false);
   const settingsVisible = ref(false);
   const onlineMembersVisible = ref(false);
@@ -1216,6 +1191,13 @@
   const INITIAL_IMAGE_PRIORITY_MAX = 4;
   const INITIAL_BOTTOM_ANCHOR_WINDOW_MS = 6000;
   const INITIAL_BOTTOM_ANCHOR_CHECK_MS = 120;
+  const COMMUNITY_CHAT_ATTACHMENT_LIMIT = COMMUNITY_CHAT_ATTACHMENT_MAX_COUNT;
+  const COMMUNITY_CHAT_ATTACHMENT_TOTAL_SIZE = COMMUNITY_CHAT_ATTACHMENT_MAX_TOTAL_BYTES;
+  const COMMUNITY_CHAT_ATTACHMENT_RETENTION_MS = COMMUNITY_CHAT_ATTACHMENT_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  const COMMUNITY_CHAT_IMAGE_MAX_SIZE = COMMUNITY_CHAT_IMAGE_MAX_BYTES;
+  const COMMUNITY_CHAT_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+  const COMMUNITY_CHAT_BLOCKED_FILE_EXTENSIONS = new Set(COMMUNITY_CHAT_BLOCKED_FILE_EXTENSION_LIST);
+  const COMMUNITY_CHAT_BLOCKED_FILE_TYPES = new Set(COMMUNITY_CHAT_BLOCKED_FILE_TYPE_LIST);
   const READ_RECEIPT_VISIBLE_MS = 800;
   const READ_RECEIPT_RETRY_MS = 5000;
   const READ_RECEIPT_COUNT_BATCH_MAX = 100;
@@ -1230,7 +1212,7 @@
     const seen = new Set<string>();
     return chatMessages.value.flatMap((chatMessage) => {
       if (chatMessage.status !== 'active' && !chatMessage.canViewRecalledContent) return [];
-      return (chatMessage.images || []).filter((imageItem) => {
+      return messageAttachmentImages(chatMessage).filter((imageItem) => {
         if (!imageItem.publicId || !imageItem.url || seen.has(imageItem.publicId)) return false;
         seen.add(imageItem.publicId);
         return true;
@@ -1263,14 +1245,21 @@
     return typeof value === 'string' ? value.trim() : '';
   });
   const canSend = computed(() => {
-    const hasPayload = Boolean(String(draft.value || '').trim()) || pendingImages.value.length > 0;
+    const hasPayload = Boolean(String(draft.value || '').trim()) || pendingAttachments.value.length > 0;
+    const allAttachmentsReady = pendingAttachments.value.every((attachment) => attachment.state === 'ready');
+    const allAttachmentKindsEnabled = pendingAttachments.value.every(
+      (attachment) => attachment.kind === 'image' || Boolean(props.access.filesEnabled),
+    );
     return (
       hasPayload &&
       draftLength.value <= 2000 &&
       Array.from(String(draft.value || '')).length <= COMMUNITY_CHAT_INLINE_EMOJI_MAX_RAW_LENGTH &&
       draftInlineEmojiCount.value <= COMMUNITY_CHAT_INLINE_EMOJI_MAX_PER_MESSAGE &&
       !sending.value &&
-      imageUploadsInFlight.value === 0
+      removingAttachmentIds.value.size === 0 &&
+      attachmentUploadsInFlight.value === 0 &&
+      allAttachmentsReady &&
+      allAttachmentKindsEnabled
     );
   });
   const canMentionEveryone = computed(() => currentUser.role === 'root');
@@ -1304,8 +1293,12 @@
   const canManagePinnedMessage = computed(
     () => props.access.memberRole === 'admin' || props.access.memberRole === 'moderator',
   );
-  const imageUploadBusy = computed(() => !canPostCurrentRoom.value || sending.value || imageUploadsInFlight.value > 0);
-  const imageUploadDisabled = computed(() => imageUploadBusy.value || pendingImages.value.length >= 4);
+  const attachmentUploadBusy = computed(
+    () => !canPostCurrentRoom.value || sending.value || attachmentUploadsInFlight.value > 0,
+  );
+  const attachmentUploadDisabled = computed(
+    () => attachmentUploadBusy.value || pendingAttachments.value.length >= COMMUNITY_CHAT_ATTACHMENT_LIMIT,
+  );
   const realtimeEnabled = computed(() => Boolean(props.access.realtimeEnabled && props.access.canRead));
   const realtimeIdentityKey = computed(() => `${currentUser.id || 'guest'}:${currentUser.role || 'visitor'}`);
   const emojiRecentOwnerId = computed(() => currentUser.id || 'visitor');
@@ -1447,12 +1440,60 @@
     );
   }
 
+  function messageAttachments(chatMessage: CommunityChatMessage): CommunityChatAttachment[] {
+    const source = Array.isArray(chatMessage.attachments)
+      ? chatMessage.attachments
+      : (chatMessage.images || []).map((imageItem, index) => ({
+          ...imageItem,
+          kind: 'image' as const,
+          fileName: `image-${index + 1}.${imageItem.contentType.split('/')[1] || 'jpg'}`,
+          fileType: imageItem.contentType,
+          availability: 'available' as const,
+          expiresAt: null,
+        }));
+    return source.map((attachment) => {
+      const expiresAt = attachment.expiresAt ? new Date(attachment.expiresAt).getTime() : Number.NaN;
+      const expired =
+        attachment.availability === 'expired' || (Number.isFinite(expiresAt) && expiresAt <= communityClock.value);
+      return expired ? { ...attachment, availability: 'expired', url: undefined } : attachment;
+    });
+  }
+
+  function attachmentToImage(attachment: CommunityChatAttachment): CommunityChatImage | null {
+    if (
+      attachment.kind !== 'image' ||
+      attachment.availability !== 'available' ||
+      !attachment.url ||
+      !COMMUNITY_CHAT_IMAGE_TYPES.has(attachment.fileType)
+    ) {
+      return null;
+    }
+    return {
+      publicId: attachment.publicId,
+      url: attachment.url,
+      contentType: attachment.fileType as CommunityChatImage['contentType'],
+      fileSize: attachment.fileSize,
+      width: Number(attachment.width || 0),
+      height: Number(attachment.height || 0),
+    };
+  }
+
+  function messageAttachmentImages(chatMessage: CommunityChatMessage) {
+    return messageAttachments(chatMessage)
+      .map(attachmentToImage)
+      .filter((imageItem): imageItem is CommunityChatImage => Boolean(imageItem));
+  }
+
   function messageHasImages(chatMessage: CommunityChatMessage) {
-    return Boolean(chatMessage.images?.length);
+    return messageAttachmentImages(chatMessage).length > 0;
+  }
+
+  function messageHasAttachments(chatMessage: CommunityChatMessage) {
+    return messageAttachments(chatMessage).length > 0;
   }
 
   function messageIsStickerOnly(chatMessage: CommunityChatMessage) {
-    return chatMessage.messageKind === 'sticker' && !messageHasText(chatMessage) && !messageHasImages(chatMessage);
+    return chatMessage.messageKind === 'sticker' && !messageHasText(chatMessage) && !messageHasAttachments(chatMessage);
   }
 
   function likeActionLabel(chatMessage: CommunityChatMessage) {
@@ -1509,7 +1550,8 @@
     }
     if (content) return content;
     if (chatMessage.messageKind === 'sticker' || chatMessage.sticker) return t('communityChat.sticker.messageFallback');
-    if (chatMessage.images?.length) return t('communityChat.image.messageFallback');
+    if (messageHasImages(chatMessage)) return t('communityChat.image.messageFallback');
+    if (messageHasAttachments(chatMessage)) return t('communityChat.attachment.messageFallback');
     return t('communityChat.replyUnavailable');
   }
 
@@ -1521,6 +1563,7 @@
     if (content) return content;
     if (reply.hasSticker) return t('communityChat.sticker.messageFallback');
     if (reply.hasImages) return t('communityChat.image.messageFallback');
+    if (reply.hasAttachments) return t('communityChat.attachment.messageFallback');
     return t('communityChat.replyUnavailable');
   }
 
@@ -1542,7 +1585,9 @@
           ? t('communityChat.sticker.messageFallback')
           : reply.hasImages
             ? t('communityChat.image.messageFallback')
-            : t('communityChat.replyUnavailable'))
+            : reply.hasAttachments
+              ? t('communityChat.attachment.messageFallback')
+              : t('communityChat.replyUnavailable'))
       );
     }
     return reply.status === 'recalled' ? t('communityChat.replyRecalled') : t('communityChat.replyUnavailable');
@@ -1816,35 +1861,6 @@
     if (initialBottomAnchorActive) void restoreInitialBottomAnchor();
   }
 
-  function positiveImageDimension(value: number) {
-    const normalized = Math.floor(Number(value));
-    return Number.isFinite(normalized) && normalized > 0 ? normalized : undefined;
-  }
-
-  function messageImageAspectRatio(imageItem: CommunityChatImage) {
-    const width = positiveImageDimension(imageItem.width);
-    const height = positiveImageDimension(imageItem.height);
-    return width && height ? `${width} / ${height}` : '4 / 3';
-  }
-
-  function messageImageLayoutStyle(imageItem: CommunityChatImage) {
-    const width = positiveImageDimension(imageItem.width);
-    const height = positiveImageDimension(imageItem.height);
-    const paddingPercent = width && height ? Math.min(400, Math.max(20, (height / width) * 100)) : 75;
-    return {
-      aspectRatio: messageImageAspectRatio(imageItem),
-      '--community-message-image-padding': `${paddingPercent}%`,
-    };
-  }
-
-  function isMessageImageReady(publicId: string) {
-    return readyMessageImageIds.value.has(publicId);
-  }
-
-  function isMessageImagePriority(publicId: string) {
-    return priorityMessageImageIds.value.has(publicId);
-  }
-
   function markMessageImageReady(publicId: string) {
     if (!publicId || readyMessageImageIds.value.has(publicId)) return;
     const next = new Set(readyMessageImageIds.value);
@@ -1894,7 +1910,7 @@
     }
     const candidates: CommunityChatImage[] = [];
     for (const index of messageIndexes) {
-      for (const imageItem of messages[index]?.images || []) {
+      for (const imageItem of messageAttachmentImages(messages[index])) {
         if (!imageItem.publicId || !imageItem.url) continue;
         if (candidates.some((candidate) => candidate.publicId === imageItem.publicId)) continue;
         candidates.push(imageItem);
@@ -1933,6 +1949,16 @@
 
   function handleMessageImageError(imageItem: CommunityChatImage) {
     messageImagePreloads.delete(imageItem.publicId);
+  }
+
+  function handleMessageAttachmentImageLoaded(event: Event, attachment: CommunityChatAttachment) {
+    const imageItem = attachmentToImage(attachment);
+    if (imageItem) handleMessageImageLoaded(event, imageItem);
+  }
+
+  function handleMessageAttachmentImageError(attachment: CommunityChatAttachment) {
+    const imageItem = attachmentToImage(attachment);
+    if (imageItem) handleMessageImageError(imageItem);
   }
 
   function nextAnimationFrame() {
@@ -2771,6 +2797,11 @@
     openMobileMessageActions(chatMessage, imageItem);
   }
 
+  function handleMessageAttachmentImageClick(chatMessage: CommunityChatMessage, attachment: CommunityChatAttachment) {
+    const imageItem = attachmentToImage(attachment);
+    if (imageItem) handleMessageImageClick(chatMessage, imageItem);
+  }
+
   function handleMessageTap(event: MouseEvent, chatMessage: CommunityChatMessage) {
     if (!bookmark.isMobile || !messageHasActions(chatMessage)) return;
     const target = event.target instanceof HTMLElement ? event.target : null;
@@ -3382,7 +3413,8 @@
       content: chatMessage.content,
       status: chatMessage.status,
       authorName: authorName(chatMessage),
-      hasImages: chatMessage.images.length > 0,
+      hasImages: messageHasImages(chatMessage),
+      hasAttachments: messageHasAttachments(chatMessage),
       hasSticker: chatMessage.messageKind === 'sticker' || Boolean(chatMessage.sticker),
       hasPoll: chatMessage.messageKind === 'poll' || Boolean(chatMessage.poll),
     };
@@ -3661,6 +3693,77 @@
     imageViewerVisible.value = true;
   }
 
+  function openFileAttachmentPreview(attachment: CommunityChatAttachment) {
+    if (attachment.availability !== 'available') return;
+    if (getCloudPreviewType(attachment) === 'unsupported') {
+      void downloadFileAttachment(attachment);
+      return;
+    }
+    filePreviewAttachment.value = { ...attachment };
+    filePreviewVisible.value = true;
+  }
+
+  function closeFileAttachmentPreview() {
+    filePreviewVisible.value = false;
+    filePreviewAttachment.value = null;
+  }
+
+  function handleFilePreviewExpired() {
+    const publicId = filePreviewAttachment.value?.publicId;
+    if (publicId) markMessageAttachmentExpired(publicId);
+    closeFileAttachmentPreview();
+    message.warning(t('communityChat.attachment.resourceExpired'));
+  }
+
+  function markMessageAttachmentExpired(publicId: string) {
+    chatMessages.value = chatMessages.value.map((chatMessage) => {
+      if (!chatMessage.attachments?.some((attachment) => attachment.publicId === publicId)) return chatMessage;
+      return {
+        ...chatMessage,
+        attachments: chatMessage.attachments.map((attachment) =>
+          attachment.publicId === publicId
+            ? { ...attachment, availability: 'expired' as const, url: undefined }
+            : attachment,
+        ),
+        images: (chatMessage.images || []).filter((imageItem) => imageItem.publicId !== publicId),
+      };
+    });
+  }
+
+  function communityChatAttachmentErrorStatus(error: any) {
+    return Number(error?.response?.status || error?.status || error?.response?.data?.status || 0);
+  }
+
+  async function downloadFileAttachment(attachment: CommunityChatAttachment) {
+    if (attachment.availability !== 'available') return;
+    try {
+      const response = await getCommunityChatFileDownload(attachment.publicId);
+      const downloadUrl = String(response?.data?.downloadUrl || '');
+      if (response?.status !== 200 || !downloadUrl) throw new Error('COMMUNITY_CHAT_FILE_DOWNLOAD_FAILED');
+      if (requestAndroidDownload(downloadUrl, attachment.fileName)) {
+        announceNativeDownloadStart();
+        return;
+      }
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = attachment.fileName;
+      link.rel = 'noopener';
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      message.success(t('common.downloadStarted'));
+    } catch (error: any) {
+      if (communityChatAttachmentErrorStatus(error) === 410) {
+        markMessageAttachmentExpired(attachment.publicId);
+        if (filePreviewAttachment.value?.publicId === attachment.publicId) closeFileAttachmentPreview();
+        message.warning(t('communityChat.attachment.resourceExpired'));
+        return;
+      }
+      message.error(error?.response?.data?.msg || error?.message || t('communityChat.attachment.downloadFailed'));
+    }
+  }
+
   function syncComposerInputHeight() {
     composerInput.value?.syncHeight(COMPOSER_INPUT_MIN_HEIGHT, COMPOSER_INPUT_MAX_HEIGHT);
   }
@@ -3676,7 +3779,7 @@
   }
 
   function handleComposerDragEnter(event: DragEvent) {
-    if (imageUploadDisabled.value || !transferHasFiles(event.dataTransfer)) return;
+    if (attachmentUploadDisabled.value || !transferHasFiles(event.dataTransfer)) return;
     composerDragDepth += 1;
     isComposerDragActive.value = true;
   }
@@ -3696,87 +3799,305 @@
   function handleComposerDrop(event: DragEvent) {
     const files = Array.from(event.dataTransfer?.files || []);
     resetComposerDragState();
-    if (imageUploadBusy.value || !files.length) return;
-    void handleImageFiles(files);
+    if (attachmentUploadBusy.value || !files.length) return;
+    void handleAttachmentFiles(files);
   }
 
   function handleComposerPaste(event: ClipboardEvent) {
-    if (imageUploadBusy.value || !event.clipboardData) return;
+    if (attachmentUploadBusy.value || !event.clipboardData) return;
     const itemFiles = Array.from(event.clipboardData.items || [])
-      .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+      .filter((item) => item.kind === 'file')
       .map((item) => item.getAsFile())
       .filter((file): file is File => file instanceof File);
-    const files = itemFiles.length
-      ? itemFiles
-      : Array.from(event.clipboardData.files || []).filter((file) => file.type.startsWith('image/'));
+    const files = itemFiles.length ? itemFiles : Array.from(event.clipboardData.files || []);
     if (!files.length) return;
     event.preventDefault();
-    void handleImageFiles(files);
+    void handleAttachmentFiles(files);
   }
 
-  async function handleImageFiles(selected: unknown) {
+  function communityChatAttachmentKind(file: File): CommunityChatAttachment['kind'] {
+    return COMMUNITY_CHAT_IMAGE_TYPES.has(String(file.type || '').toLowerCase()) ? 'image' : 'file';
+  }
+
+  function communityChatFileExtension(fileName: string) {
+    const normalized = String(fileName || '')
+      .trim()
+      .toLowerCase();
+    const dotIndex = normalized.lastIndexOf('.');
+    return dotIndex >= 0 ? normalized.slice(dotIndex + 1) : '';
+  }
+
+  function validateCommunityChatAttachment(file: File) {
+    const fileName = String(file.name || '')
+      .normalize('NFC')
+      .trim();
+    const fileType = String(file.type || 'application/octet-stream')
+      .trim()
+      .toLowerCase();
+    const hasControlCharacter = Array.from(fileName).some((character) => {
+      const code = character.charCodeAt(0);
+      return code < 32 || code === 127;
+    });
+    if (
+      !fileName ||
+      Array.from(fileName).length > 255 ||
+      fileName.includes('/') ||
+      fileName.includes(String.fromCharCode(92)) ||
+      fileName.includes(':') ||
+      fileName.includes('*') ||
+      fileName.includes('?') ||
+      fileName.includes('"') ||
+      fileName.includes('<') ||
+      fileName.includes('>') ||
+      fileName.includes('|') ||
+      hasControlCharacter ||
+      fileName === '.' ||
+      fileName === '..'
+    ) {
+      return 'communityChat.attachment.nameInvalid';
+    }
+    if (!file.size) return 'communityChat.attachment.emptyInvalid';
+    const kind = communityChatAttachmentKind(file);
+    if (kind === 'image' && file.size > COMMUNITY_CHAT_IMAGE_MAX_SIZE) {
+      return 'communityChat.image.sizeInvalid';
+    }
+    if (!props.access.filesEnabled && kind === 'file') return 'communityChat.attachment.filesDisabled';
+    if (
+      COMMUNITY_CHAT_BLOCKED_FILE_EXTENSIONS.has(communityChatFileExtension(fileName)) ||
+      COMMUNITY_CHAT_BLOCKED_FILE_TYPES.has(fileType)
+    ) {
+      return 'communityChat.attachment.typeBlocked';
+    }
+    return '';
+  }
+
+  function updatePendingAttachment(
+    draftSession: ReturnType<typeof createCommunityChatDraftSession>,
+    localId: string,
+    update: (attachment: CommunityChatPendingAttachment) => CommunityChatPendingAttachment,
+  ) {
+    draftSession.pendingAttachments = draftSession.pendingAttachments.map((attachment) =>
+      attachment.localId === localId ? update(attachment) : attachment,
+    );
+    touchCommunityChatDraftSession(draftSession);
+  }
+
+  async function uploadPendingAttachment(
+    draftSession: ReturnType<typeof createCommunityChatDraftSession>,
+    roomSlug: string,
+    pendingAttachment: CommunityChatPendingAttachment,
+  ) {
+    const sourceFile = pendingAttachment.sourceFile;
+    if (!sourceFile) return;
+    const controller = new AbortController();
+    attachmentUploadControllers.get(pendingAttachment.localId)?.abort();
+    attachmentUploadControllers.set(pendingAttachment.localId, controller);
+    updatePendingAttachment(draftSession, pendingAttachment.localId, (attachment) => ({
+      ...attachment,
+      state: 'uploading',
+      progress: 0,
+      errorMessage: undefined,
+    }));
+    try {
+      let uploaded: CommunityChatAttachment;
+      if (pendingAttachment.kind === 'image') {
+        const response = await uploadCommunityChatImage(roomSlug, sourceFile, {
+          signal: controller.signal,
+          onProgress: (progress) => {
+            updatePendingAttachment(draftSession, pendingAttachment.localId, (attachment) => ({
+              ...attachment,
+              progress,
+            }));
+          },
+        });
+        if (response?.status !== 200 || !response.data?.publicId) {
+          throw new Error('COMMUNITY_CHAT_IMAGE_UPLOAD_FAILED');
+        }
+        uploaded = response.data as CommunityChatAttachment;
+      } else {
+        uploaded = await uploadCommunityChatFile(roomSlug, sourceFile, {
+          signal: controller.signal,
+          onProgress: (progress) => {
+            updatePendingAttachment(draftSession, pendingAttachment.localId, (attachment) => ({
+              ...attachment,
+              progress,
+            }));
+          },
+        });
+      }
+      if (!draftSession.pendingAttachments.some((attachment) => attachment.localId === pendingAttachment.localId)) {
+        const discard = pendingAttachment.kind === 'image' ? discardCommunityChatImage : discardCommunityChatFile;
+        await discard(uploaded.publicId).catch(() => undefined);
+        return;
+      }
+      updatePendingAttachment(draftSession, pendingAttachment.localId, (attachment) => ({
+        ...attachment,
+        ...uploaded,
+        localId: pendingAttachment.localId,
+        state: 'ready',
+        progress: 100,
+        sourceFile,
+        errorMessage: undefined,
+      }));
+      draftSession.pendingClientRequestId = null;
+    } catch (error: any) {
+      if (controller.signal.aborted) return;
+      updatePendingAttachment(draftSession, pendingAttachment.localId, (attachment) => ({
+        ...attachment,
+        publicId: attachment.localId,
+        url: undefined,
+        state: 'failed',
+        progress: 0,
+        errorMessage: String(error?.message || ''),
+      }));
+    } finally {
+      if (attachmentUploadControllers.get(pendingAttachment.localId) === controller) {
+        attachmentUploadControllers.delete(pendingAttachment.localId);
+      }
+    }
+  }
+
+  async function handleAttachmentFiles(selected: unknown) {
     const files = Array.isArray(selected) ? selected.filter((item): item is File => item instanceof File) : [];
-    if (!files.length || imageUploadBusy.value) return;
+    if (!files.length || attachmentUploadBusy.value) return;
     const draftSession = composerDraftSession.value;
-    const available = Math.max(0, 4 - draftSession.pendingImages.length);
+    const available = Math.max(0, COMMUNITY_CHAT_ATTACHMENT_LIMIT - draftSession.pendingAttachments.length);
     if (!available) {
-      message.warning(t('communityChat.image.limit'));
+      message.warning(t('communityChat.attachment.limit'));
       return;
     }
-    if (files.length > available) message.warning(t('communityChat.image.limit'));
+    if (files.length > available) message.warning(t('communityChat.attachment.limit'));
     const accepted = files.slice(0, available);
-    const supportedTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
-    const validFiles = accepted.filter((file) => {
-      if (!supportedTypes.has(file.type)) {
-        message.warning(t('communityChat.image.formatInvalid'));
-        return false;
+    const warnings = new Set<string>();
+    let totalSize = draftSession.pendingAttachments.reduce(
+      (total, attachment) => total + Math.max(0, Number(attachment.fileSize || 0)),
+      0,
+    );
+    const pending = accepted.flatMap((file) => {
+      const validationError = validateCommunityChatAttachment(file);
+      if (validationError) {
+        warnings.add(validationError);
+        return [];
       }
-      if (!file.size || file.size > 5 * 1024 * 1024) {
-        message.warning(t('communityChat.image.sizeInvalid'));
-        return false;
+      if (totalSize + file.size > COMMUNITY_CHAT_ATTACHMENT_TOTAL_SIZE) {
+        warnings.add('communityChat.attachment.totalSizeInvalid');
+        return [];
       }
-      return true;
+      totalSize += file.size;
+      const localId = 'local-' + createCommunityChatClientRequestId();
+      return [
+        {
+          localId,
+          publicId: localId,
+          kind: communityChatAttachmentKind(file),
+          fileName: String(file.name || '')
+            .normalize('NFC')
+            .trim(),
+          fileType: String(file.type || 'application/octet-stream')
+            .trim()
+            .toLowerCase(),
+          fileSize: file.size,
+          availability: 'available' as const,
+          expiresAt: null,
+          state: 'uploading' as const,
+          progress: 0,
+          sourceFile: file,
+        },
+      ];
     });
-    if (!validFiles.length) return;
+    for (const warning of warnings) message.warning(t(warning));
+    if (!pending.length) return;
 
     const roomSlug = selectedRoomSlug.value;
-    draftSession.imageUploadsInFlight += validFiles.length;
+    draftSession.pendingAttachments = [...draftSession.pendingAttachments, ...pending];
+    draftSession.attachmentUploadsInFlight += pending.length;
+    draftSession.pendingClientRequestId = null;
     touchCommunityChatDraftSession(draftSession);
     try {
-      const results = await Promise.allSettled(validFiles.map((file) => uploadCommunityChatImage(roomSlug, file)));
-      const uploaded = results
-        .filter((result): result is PromiseFulfilledResult<any> => result.status === 'fulfilled')
-        .map((result) => result.value?.data as CommunityChatImage)
-        .filter((imageItem) => imageItem?.publicId && imageItem?.url);
-      draftSession.pendingImages = [...draftSession.pendingImages, ...uploaded].slice(0, 4);
-      touchCommunityChatDraftSession(draftSession);
-      const failed = results.length - uploaded.length;
-      if (uploaded.length) draftSession.pendingClientRequestId = null;
-      if (!isUnmounted && composerDraftSession.value === draftSession) {
-        if (failed > 0) message.error(t('communityChat.image.uploadFailed', { count: failed }));
+      await Promise.all(pending.map((attachment) => uploadPendingAttachment(draftSession, roomSlug, attachment)));
+      const failed = pending.filter((attachment) =>
+        draftSession.pendingAttachments.some(
+          (current) => current.localId === attachment.localId && current.state === 'failed',
+        ),
+      ).length;
+      if (failed && !isUnmounted && composerDraftSession.value === draftSession) {
+        message.error(t('communityChat.attachment.uploadFailedCount', { count: failed }));
       }
     } finally {
-      draftSession.imageUploadsInFlight = Math.max(0, draftSession.imageUploadsInFlight - validFiles.length);
+      draftSession.attachmentUploadsInFlight = Math.max(0, draftSession.attachmentUploadsInFlight - pending.length);
       touchCommunityChatDraftSession(draftSession);
     }
   }
 
-  async function removePendingImage(imageItem: CommunityChatImage) {
-    if (removingImageIds.value.has(imageItem.publicId) || sending.value) return;
+  function previewPendingAttachment(attachment: CommunityChatPendingAttachment) {
+    const imageItem = attachmentToImage(attachment);
+    if (!imageItem) return;
+    const images = pendingAttachments.value
+      .map(attachmentToImage)
+      .filter((item): item is CommunityChatImage => Boolean(item));
+    openImagePreview(imageItem, images);
+  }
+
+  async function retryPendingAttachment(attachment: CommunityChatPendingAttachment) {
+    if (
+      attachment.state !== 'failed' ||
+      !attachment.sourceFile ||
+      attachmentUploadBusy.value ||
+      !selectedRoomSlug.value
+    ) {
+      return;
+    }
     const draftSession = composerDraftSession.value;
-    removingImageIds.value = new Set([...removingImageIds.value, imageItem.publicId]);
+    draftSession.attachmentUploadsInFlight += 1;
+    touchCommunityChatDraftSession(draftSession);
     try {
-      const response = await discardCommunityChatImage(imageItem.publicId);
-      if (response?.status !== 200) throw new Error('COMMUNITY_CHAT_IMAGE_DISCARD_FAILED');
-      draftSession.pendingImages = draftSession.pendingImages.filter((item) => item.publicId !== imageItem.publicId);
+      await uploadPendingAttachment(draftSession, selectedRoomSlug.value, attachment);
+    } finally {
+      draftSession.attachmentUploadsInFlight = Math.max(0, draftSession.attachmentUploadsInFlight - 1);
+      touchCommunityChatDraftSession(draftSession);
+    }
+  }
+
+  async function removePendingAttachment(attachment: CommunityChatPendingAttachment) {
+    if (removingAttachmentIds.value.has(attachment.publicId) || sending.value) {
+      return;
+    }
+    const draftSession = composerDraftSession.value;
+    if (attachment.state === 'uploading') {
+      attachmentUploadControllers.get(attachment.localId)?.abort();
+      draftSession.pendingAttachments = draftSession.pendingAttachments.filter(
+        (item) => item.localId !== attachment.localId,
+      );
+      draftSession.pendingClientRequestId = null;
+      touchCommunityChatDraftSession(draftSession);
+      return;
+    }
+    if (attachment.state === 'failed') {
+      draftSession.pendingAttachments = draftSession.pendingAttachments.filter(
+        (item) => item.localId !== attachment.localId,
+      );
+      draftSession.pendingClientRequestId = null;
+      touchCommunityChatDraftSession(draftSession);
+      return;
+    }
+    removingAttachmentIds.value = new Set([...removingAttachmentIds.value, attachment.publicId]);
+    try {
+      const response =
+        attachment.kind === 'image'
+          ? await discardCommunityChatImage(attachment.publicId)
+          : await discardCommunityChatFile(attachment.publicId);
+      if (response?.status !== 200) throw new Error('COMMUNITY_CHAT_ATTACHMENT_DISCARD_FAILED');
+      draftSession.pendingAttachments = draftSession.pendingAttachments.filter(
+        (item) => item.localId !== attachment.localId,
+      );
       draftSession.pendingClientRequestId = null;
       touchCommunityChatDraftSession(draftSession);
     } catch (error: any) {
-      message.error(error?.message || t('communityChat.image.removeFailed'));
+      message.error(error?.message || t('communityChat.attachment.removeFailed'));
     } finally {
-      const next = new Set(removingImageIds.value);
-      next.delete(imageItem.publicId);
-      removingImageIds.value = next;
+      const next = new Set(removingAttachmentIds.value);
+      next.delete(attachment.publicId);
+      removingAttachmentIds.value = next;
     }
   }
 
@@ -4085,7 +4406,7 @@
   function buildOptimisticMessage(input: {
     publicId: string;
     content: string;
-    images: CommunityChatImage[];
+    attachments: CommunityChatAttachment[];
     replyTarget: CommunityChatMessageReply | null;
     mentions: string[];
     mentionEveryone?: boolean;
@@ -4098,6 +4419,11 @@
     const authorRole: CommunityChatMessage['author']['role'] =
       currentUser.role === 'root' ? 'official' : props.access.memberRole === 'moderator' ? 'moderator' : 'member';
     const now = new Date();
+    const optimisticAttachments = input.attachments.map((attachment) => ({
+      ...attachment,
+      availability: 'available' as const,
+      expiresAt: new Date(now.getTime() + COMMUNITY_CHAT_ATTACHMENT_RETENTION_MS).toISOString(),
+    }));
     return {
       publicId: input.publicId,
       content: input.content,
@@ -4116,7 +4442,10 @@
       canDelete: false,
       recallDeadlineAt: null,
       isOwn: true,
-      images: input.images.map((imageItem) => ({ ...imageItem })),
+      images: optimisticAttachments
+        .map(attachmentToImage)
+        .filter((imageItem): imageItem is CommunityChatImage => Boolean(imageItem)),
+      attachments: optimisticAttachments,
       mentions: [...input.mentions],
       mentionEveryone: Boolean(input.mentionEveryone),
       mentionItems: [],
@@ -4146,7 +4475,13 @@
     if (!roomSlug || !canSend.value || !canPostCurrentRoom.value) return;
     const clientRequestId = draftSession.pendingClientRequestId || createCommunityChatClientRequestId();
     draftSession.pendingClientRequestId = clientRequestId;
-    const imagePublicIds = draftSession.pendingImages.map((imageItem) => imageItem.publicId);
+    const attachmentRefs = draftSession.pendingAttachments.map((attachment) => ({
+      kind: attachment.kind,
+      publicId: attachment.publicId,
+    }));
+    const imagePublicIds = attachmentRefs
+      .filter((attachment) => attachment.kind === 'image')
+      .map((attachment) => attachment.publicId);
     // 新客户端以不可变用户公有 UUID 发送；仅对尚未回填身份的旧消息保留历史消息 ID 兼容字段。
     const mentionUserPublicIds = draftSession.mentionTargets
       .map((target) => target.userPublicId)
@@ -4159,11 +4494,24 @@
     const replySnapshot = draftSession.replyTarget ? { ...draftSession.replyTarget } : null;
     const mentionSnapshot = draftSession.mentionTargets.map((target) => ({ ...target }));
     const mentionEveryoneSnapshot = draftSession.mentionEveryone;
-    const imageSnapshot = draftSession.pendingImages.map((imageItem) => ({ ...imageItem }));
+    const attachmentSnapshot = draftSession.pendingAttachments.map((attachment) => ({ ...attachment }));
+    const optimisticAttachments: CommunityChatAttachment[] = attachmentSnapshot.map((attachment) => ({
+      publicId: attachment.publicId,
+      kind: attachment.kind,
+      fileName: attachment.fileName,
+      fileType: attachment.fileType,
+      fileSize: attachment.fileSize,
+      availability: attachment.availability,
+      expiresAt: attachment.expiresAt,
+      url: attachment.url,
+      contentType: attachment.contentType,
+      width: attachment.width,
+      height: attachment.height,
+    }));
     const optimisticMessage = buildOptimisticMessage({
       publicId: optimisticPublicId,
       content,
-      images: imageSnapshot,
+      attachments: optimisticAttachments,
       replyTarget: replySnapshot,
       mentions: mentionSnapshot.map((target) => target.name),
       mentionEveryone: mentionEveryoneSnapshot,
@@ -4174,7 +4522,7 @@
     draftSession.replyTarget = null;
     draftSession.mentionTargets = [];
     draftSession.mentionEveryone = false;
-    draftSession.pendingImages = [];
+    draftSession.pendingAttachments = [];
     touchCommunityChatDraftSession(draftSession);
     await revealOutgoingMessage();
     try {
@@ -4186,6 +4534,7 @@
         ...(mentionMessagePublicIds.length ? { mentionMessagePublicIds } : {}),
         ...(mentionEveryoneSnapshot ? { mentionEveryone: true } : {}),
         ...(imagePublicIds.length ? { imagePublicIds } : {}),
+        ...(attachmentRefs.length ? { attachmentRefs } : {}),
       };
       const response = await sendCommunityChatMessage(roomSlug, payload);
       const sentMessage = response.data?.message as CommunityChatMessage | undefined;
@@ -4203,7 +4552,7 @@
       draftSession.replyTarget = replySnapshot;
       draftSession.mentionTargets = mentionSnapshot;
       draftSession.mentionEveryone = mentionEveryoneSnapshot;
-      draftSession.pendingImages = imageSnapshot;
+      draftSession.pendingAttachments = attachmentSnapshot;
       touchCommunityChatDraftSession(draftSession);
       emit('accessInvalidated');
       message.error(error?.message || t('communityChat.sendFailed'));
@@ -4227,7 +4576,7 @@
     const optimisticMessage = buildOptimisticMessage({
       publicId: optimisticPublicId,
       content: '',
-      images: [],
+      attachments: [],
       replyTarget: replySnapshot,
       mentions: [],
       messageKind: 'sticker',
@@ -4295,7 +4644,7 @@
 
   function bindComposerDraftSession(identityKey: string, roomSlug: string) {
     composerDraftSession.value = getCommunityChatDraftSession(identityKey, roomSlug);
-    removingImageIds.value = new Set();
+    removingAttachmentIds.value = new Set();
     void nextTick(syncComposerInputHeight);
   }
 
@@ -4386,7 +4735,10 @@
       () => replyTarget.value?.publicId,
       () => mentionTargets.value.map((target) => target.key).join('|'),
       mentionEveryone,
-      () => pendingImages.value.map((imageItem) => imageItem.publicId).join('|'),
+      () =>
+        pendingAttachments.value
+          .map((attachment) => `${attachment.localId}:${attachment.publicId}:${attachment.state}`)
+          .join('|'),
     ],
     () => {
       touchCommunityChatDraftSession(composerDraftSession.value);
@@ -5384,8 +5736,8 @@
   }
 
   .community-message.is-recalled .community-message__content,
-  .community-message.is-recalled .community-message__images,
   .community-message.is-recalled .community-message__sticker,
+  .community-message.is-recalled :deep(.chat-attachments),
   .community-message.is-recalled :deep(.chat-poll-card) {
     opacity: 0.76;
   }
@@ -5488,79 +5840,10 @@
     outline-offset: 3px;
   }
 
-  .community-message__images {
-    width: min(360px, 100%);
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 5px;
-  }
-
-  .community-message__images.has-1 {
-    width: min(320px, 100%);
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .community-message.is-focused .community-message__images {
+  .community-message.is-focused :deep(.chat-attachments) {
     outline: 2px solid var(--primary-color);
     outline-offset: 3px;
     border-radius: 13px;
-  }
-
-  .community-message__image {
-    position: relative;
-    isolation: isolate;
-    display: block !important;
-    width: 100%;
-    min-width: 0;
-    height: auto !important;
-    min-height: 92px;
-    max-height: 280px;
-    line-height: 0 !important;
-    padding: 0 !important;
-    overflow: hidden;
-    border: 1px solid var(--surface-border-color) !important;
-    border-radius: 12px !important;
-    background: var(--workspace-panel-bg-color) !important;
-  }
-
-  .community-message__image-sizer {
-    display: block;
-    width: 100%;
-    padding-top: var(--community-message-image-padding, 75%);
-    pointer-events: none;
-  }
-
-  .community-message__image-placeholder {
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    display: grid;
-    place-items: center;
-    color: var(--text-color-secondary);
-    background: var(--workspace-panel-bg-color);
-    pointer-events: none;
-  }
-
-  .community-message__image img {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    width: 100%;
-    height: 100%;
-    min-height: 92px;
-    max-height: 280px;
-    display: block;
-    object-fit: cover;
-    opacity: 0;
-    transition: opacity 0.12s ease-out;
-  }
-
-  .community-message__image.is-ready img {
-    opacity: 1;
-  }
-
-  .community-message__images.has-1 .community-message__image img {
-    object-fit: contain;
   }
 
   .community-message__actions {
@@ -5694,66 +5977,6 @@
 
   .community-composer__drop-overlay strong {
     font-size: 12px;
-  }
-
-  .community-composer__images {
-    min-height: 56px;
-    padding: 10px 12px 2px;
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 7px;
-  }
-
-  .community-composer__image {
-    width: 56px;
-    height: 56px;
-    position: relative;
-  }
-
-  .community-composer__image > .b_btn:first-child {
-    width: 56px;
-    height: 56px;
-    padding: 0 !important;
-    overflow: hidden;
-    border: 1px solid var(--surface-border-color) !important;
-    border-radius: 10px;
-    background: var(--workspace-panel-bg-color) !important;
-  }
-
-  .community-composer__image img {
-    width: 100%;
-    height: 100%;
-    display: block;
-    object-fit: cover;
-  }
-
-  .community-composer__image-remove {
-    width: 24px;
-    min-width: 24px;
-    height: 24px;
-    min-height: 24px;
-    padding: 0 !important;
-    position: absolute;
-    top: -7px;
-    right: -7px;
-    border: 1px solid var(--danger-color) !important;
-    border-radius: 50% !important;
-    color: var(--danger-color) !important;
-    background: var(--card-background) !important;
-  }
-
-  .community-composer__image-uploading {
-    min-height: 36px;
-    padding: 0 10px;
-    display: inline-flex;
-    align-items: center;
-    border: 1px solid var(--primary-color);
-    border-radius: 999px;
-    color: var(--primary-color);
-    background: var(--card-background);
-    font-size: 10px;
-    font-weight: 700;
   }
 
   .community-composer__mentions {
@@ -6163,10 +6386,6 @@
       max-height: 148px;
     }
 
-    .community-message__images {
-      width: min(300px, 100%);
-    }
-
     .community-message__actions {
       display: none !important;
     }
@@ -6191,16 +6410,6 @@
 
     .community-composer__auxiliary {
       padding-inline: 6px;
-    }
-
-    .community-composer__images {
-      padding: 9px 10px 2px;
-    }
-
-    .community-composer__image,
-    .community-composer__image > .b_btn:first-child {
-      width: 52px;
-      height: 52px;
     }
 
     .community-composer__input.chat-composer-input__rich,

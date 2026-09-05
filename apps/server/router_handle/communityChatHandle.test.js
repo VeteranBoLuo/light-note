@@ -35,6 +35,14 @@ const mocks = vi.hoisted(() => ({
   uploadImage: vi.fn(),
   getImageDownload: vi.fn(),
   discardImage: vi.fn(),
+  prepareFileUpload: vi.fn(),
+  confirmFileUpload: vi.fn(),
+  discardFile: vi.fn(),
+  getFileDownload: vi.fn(),
+  getFileSource: vi.fn(),
+  resolvePreviewArtifact: vi.fn(),
+  preparePreviewArtifact: vi.fn(),
+  listPreviewArchive: vi.fn(),
   reportMessage: vi.fn(),
   blockAuthor: vi.fn(),
   listBlocks: vi.fn(),
@@ -103,6 +111,20 @@ vi.mock('../util/services/communityChatImageService.js', () => ({
   getCommunityChatImageDownload: mocks.getImageDownload,
   discardCommunityChatImage: mocks.discardImage,
 }));
+vi.mock('../util/services/communityChatFileService.js', () => ({
+  prepareCommunityChatFileUpload: mocks.prepareFileUpload,
+  confirmCommunityChatFileUpload: mocks.confirmFileUpload,
+  discardCommunityChatFile: mocks.discardFile,
+  getCommunityChatFileDownload: mocks.getFileDownload,
+  getCommunityChatFileSource: mocks.getFileSource,
+}));
+vi.mock('../util/filePreview/service.js', () => ({
+  FILE_PREVIEW_SOURCE_TYPE: { COMMUNITY_CHAT_FILE: 'community_chat_file' },
+  resolveFilePreview: mocks.resolvePreviewArtifact,
+  prepareFilePreview: mocks.preparePreviewArtifact,
+  listArchivePreview: mocks.listPreviewArchive,
+}));
+vi.mock('./filePreviewHandle.js', () => ({ sendPreviewError: vi.fn() }));
 vi.mock('../util/services/communityChatModerationService.js', () => ({
   reportCommunityChatMessage: mocks.reportMessage,
   blockCommunityChatMessageAuthor: mocks.blockAuthor,
@@ -150,6 +172,7 @@ const {
   recordReadReceipts,
   readReceiptCounts,
   readReceiptReaders,
+  resolveFilePreview: resolveChatFilePreview,
   unpinMessage,
   updateRuntimePolicy,
   updateOwnProfile,
@@ -429,6 +452,10 @@ describe('communityChatHandle', () => {
           replyToPublicId: 'message-0',
           mentionMessagePublicIds: ['message-mention-1'],
           imagePublicIds: ['image-1'],
+          attachmentRefs: [
+            { kind: 'image', publicId: 'image-1' },
+            { kind: 'file', publicId: 'file-1' },
+          ],
           userId: 'forged-user',
           status: 'official',
         },
@@ -452,6 +479,10 @@ describe('communityChatHandle', () => {
       replyToPublicId: 'message-0',
       mentionMessagePublicIds: ['message-mention-1'],
       imagePublicIds: ['image-1'],
+      attachmentRefs: [
+        { kind: 'image', publicId: 'image-1' },
+        { kind: 'file', publicId: 'file-1' },
+      ],
     });
     expect(mocks.markRead).toHaveBeenCalledWith({
       user,
@@ -461,6 +492,42 @@ describe('communityChatHandle', () => {
     expect(createRes.send).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ idempotent: false }), msg: '消息已发送' }),
     );
+  });
+
+  it('聊天文件预览只向客户端返回公有 ID，不暴露内部数字主键', async () => {
+    const user = { id: 'visitor-1', role: 'visitor' };
+    mocks.getFileSource.mockResolvedValue({
+      id: 42,
+      publicId: '33333333-3333-4333-8333-333333333333',
+      ownerUserId: 'user-1',
+    });
+    mocks.resolvePreviewArtifact.mockResolvedValue({
+      fileId: '42',
+      previewType: 'converted-pdf',
+      status: 'ready',
+    });
+    const res = mockRes();
+
+    await resolveChatFilePreview({ user, params: { publicId: '33333333-3333-4333-8333-333333333333' } }, res);
+
+    expect(mocks.getFileSource).toHaveBeenCalledWith({
+      user,
+      filePublicId: '33333333-3333-4333-8333-333333333333',
+    });
+    expect(mocks.resolvePreviewArtifact).toHaveBeenCalledWith({
+      ownerUserId: 'user-1',
+      fileId: 42,
+      sourceType: 'community_chat_file',
+    });
+    expect(res.send).toHaveBeenCalledWith({
+      data: {
+        fileId: '33333333-3333-4333-8333-333333333333',
+        previewType: 'converted-pdf',
+        status: 'ready',
+      },
+      status: 200,
+      msg: '',
+    });
   });
 
   it('投票、单条详情和已读回执只透传公有 ID，结束投票额外要求 Root', async () => {

@@ -89,3 +89,20 @@ export async function listSharedArchivePreview(
 ): Promise<ArchivePreviewPage> {
   return unwrap(await apiBasePost('/api/file/share/preview/archive', { previewTicket, ...input }, { silent: true }));
 }
+
+const communityChatFilePath = (publicId: string) => `/api/community-chat/files/${encodeURIComponent(publicId)}/preview`;
+
+export async function resolveCommunityChatFilePreview(publicId: string): Promise<FilePreviewState> {
+  return unwrap(await apiBasePost(`${communityChatFilePath(publicId)}/resolve`, {}, { silent: true }));
+}
+
+export async function prepareCommunityChatFilePreview(publicId: string, retry = false): Promise<FilePreviewState> {
+  return unwrap(await apiBasePost(`${communityChatFilePath(publicId)}/prepare`, { retry }, { silent: true }));
+}
+
+export async function listCommunityChatArchivePreview(
+  publicId: string,
+  input: { directory?: string; query?: string; offset?: number; limit?: number },
+): Promise<ArchivePreviewPage> {
+  return unwrap(await apiBasePost(`${communityChatFilePath(publicId)}/archive`, input, { silent: true }));
+}

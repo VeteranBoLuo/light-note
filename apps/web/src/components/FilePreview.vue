@@ -11,7 +11,7 @@
           <span class="file-type-badge">{{ getFileTypeName(currentCategory) }}</span>
           <span class="file-name" :title="fileInfo.fileName">{{ fileInfo.fileName }}</span>
           <ResourceBacklinks
-            v-if="fileInfo?.id && previewAccess?.kind !== 'share' && !isHtmlFullscreen"
+            v-if="fileInfo?.id && (!previewAccess || previewAccess.kind === 'owner') && !isHtmlFullscreen"
             class="file-preview-backlinks"
             target-type="file"
             :target-id="String(fileInfo.id)"
@@ -95,6 +95,9 @@
             v-else-if="previewType === 'archive' && derivedReady"
             :file-id="String(fileInfo.id)"
             :preview-ticket="sharePreviewTicket"
+            :community-chat-public-id="
+              previewAccess?.kind === 'community_chat_file' ? previewAccess.publicId : undefined
+            "
             @error="onDerivedPreviewError"
           />
 
@@ -333,10 +336,14 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { recordOperation } from '@/api/commonApi.ts';
-  import { getFileShareDownload } from '@/http/common.ts';
+  import { announceNativeDownloadStart } from '@/composables/useAndroidDownloadProgress';
+  import { getCommunityChatFileDownload } from '@/api/communityChatApi';
+  import { getFileShareDownload, requestAndroidDownload } from '@/http/common.ts';
   import {
+    prepareCommunityChatFilePreview,
     prepareOwnedFilePreview,
     prepareSharedFilePreview,
+    resolveCommunityChatFilePreview,
     resolveOwnedFilePreview,
     resolveSharedFilePreview,
     type FilePreviewState,
@@ -381,7 +388,10 @@
       fileUrl?: string;
       category?: string;
     };
-    previewAccess?: { kind: 'share'; token: string; accessCode?: string } | { kind: 'owner' };
+    previewAccess?:
+      | { kind: 'share'; token: string; accessCode?: string }
+      | { kind: 'owner' }
+      | { kind: 'community_chat_file'; publicId: string };
   }>();
 
   const emit = defineEmits<{
@@ -389,6 +399,7 @@
     close: [];
     prev: [];
     next: [];
+    'source-expired': [];
   }>();
 
   const showNext = computed(() => !!props.showNext);
@@ -670,6 +681,19 @@
         if (expectedFileId !== activePreviewFileId) return;
         sharedSourceFileUrl.value = result.downloadUrl;
       }
+      if (
+        props.previewAccess?.kind === 'community_chat_file' &&
+        !effectiveFileUrl.value &&
+        !unsupportedTypes.includes(previewType.value)
+      ) {
+        const expectedFileId = activePreviewFileId;
+        const response = await getCommunityChatFileDownload(props.previewAccess.publicId);
+        if (response?.status !== 200 || !response?.data?.downloadUrl) {
+          throw new Error(response?.msg || 'COMMUNITY_CHAT_FILE_DOWNLOAD_FAILED');
+        }
+        if (expectedFileId !== activePreviewFileId) return;
+        sharedSourceFileUrl.value = String(response.data.downloadUrl);
+      }
       if (['word', 'excel', 'ppt'].includes(previewType.value)) {
         await ensureOfficeStylesLoaded();
       }
@@ -688,6 +712,11 @@
         loading.value = false;
       }
     } catch (err) {
+      if (props.previewAccess?.kind === 'community_chat_file' && previewRequestStatus(err) === 410) {
+        loading.value = false;
+        emit('source-expired');
+        return;
+      }
       error.value = true;
       errorMessage.value = (err as Error)?.message || t('cloudSpace.previewPanel.loadFailed');
       loading.value = false;
@@ -741,6 +770,7 @@
     const expectedFileId = activePreviewFileId;
     const pollingStartedAt = Date.now();
     const shareAccess = props.previewAccess?.kind === 'share' ? props.previewAccess : null;
+    const chatAccess = props.previewAccess?.kind === 'community_chat_file' ? props.previewAccess : null;
     let state: FilePreviewState;
     if (shareAccess) {
       state = await prepareSharedFilePreview(
@@ -750,6 +780,15 @@
       );
       sharePreviewTicket.value = String(state.previewTicket || '');
       sharedSourceFileUrl.value = String(state.sourceDownloadUrl || '');
+    } else if (chatAccess) {
+      state = await resolveCommunityChatFilePreview(chatAccess.publicId);
+      if (state.status === 'missing' || (state.status === 'failed' && retryDerived)) {
+        state = await prepareCommunityChatFilePreview(chatAccess.publicId, retryDerived);
+      }
+      const downloadResponse = await getCommunityChatFileDownload(chatAccess.publicId);
+      if (downloadResponse?.status === 200) {
+        sharedSourceFileUrl.value = String(downloadResponse.data?.downloadUrl || '');
+      }
     } else {
       state = await resolveOwnedFilePreview(expectedFileId);
       if (state.status === 'missing' || (state.status === 'failed' && retryDerived)) {
@@ -782,7 +821,9 @@
       if (expectedFileId !== activePreviewFileId || !props.visible) return;
       state = shareAccess
         ? await resolveSharedFilePreview(sharePreviewTicket.value)
-        : await resolveOwnedFilePreview(expectedFileId);
+        : chatAccess
+          ? await resolveCommunityChatFilePreview(chatAccess.publicId)
+          : await resolveOwnedFilePreview(expectedFileId);
     }
   }
 
@@ -937,6 +978,11 @@
   }
 
   function onDerivedPreviewError(err: unknown) {
+    if (props.previewAccess?.kind === 'community_chat_file' && previewRequestStatus(err) === 410) {
+      loading.value = false;
+      emit('source-expired');
+      return;
+    }
     loading.value = false;
     error.value = true;
     errorMessage.value = (err as Error)?.message || t('cloudSpace.previewPanel.derivedPreviewFailed');
@@ -1041,13 +1087,40 @@
 
   function onTextScroll() {}
 
-  function downloadFile() {
-    if (!sourceDownloadUrl.value) return;
+  function previewRequestStatus(error: unknown) {
+    const requestError = error as any;
+    return Number(requestError?.status || requestError?.response?.status || requestError?.response?.data?.status || 0);
+  }
+
+  async function downloadFile() {
+    let downloadUrl = sourceDownloadUrl.value;
+    try {
+      if (props.previewAccess?.kind === 'community_chat_file') {
+        const response = await getCommunityChatFileDownload(props.previewAccess.publicId);
+        downloadUrl = String(response?.data?.downloadUrl || '');
+        if (response?.status !== 200 || !downloadUrl) throw new Error('COMMUNITY_CHAT_FILE_DOWNLOAD_FAILED');
+        sharedSourceFileUrl.value = downloadUrl;
+      }
+    } catch (err) {
+      if (previewRequestStatus(err) === 410) {
+        emit('source-expired');
+        return;
+      }
+      message.error((err as Error)?.message || t('communityChat.attachment.downloadFailed'));
+      return;
+    }
+    if (!downloadUrl) return;
+
+    if (requestAndroidDownload(downloadUrl, props.fileInfo.fileName)) {
+      announceNativeDownloadStart();
+      return;
+    }
 
     const link = document.createElement('a');
-    link.href = sourceDownloadUrl.value;
+    link.href = downloadUrl;
     link.download = props.fileInfo.fileName;
     link.target = '_blank';
+    link.rel = 'noopener';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

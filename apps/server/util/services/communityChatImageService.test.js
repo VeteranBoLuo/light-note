@@ -78,7 +78,10 @@ describe('communityChatImageService', () => {
       query: vi.fn(async (sql, params) => {
         const text = String(sql);
         if (text.includes('SELECT id FROM user')) return [[{ id: 'user-1' }], []];
-        if (text.includes('COUNT(*) AS pendingCount')) return [[{ pendingCount: 0 }], []];
+        if (text.includes('AS pendingCount')) {
+          expect(params).toEqual(['user-1', 'user-1']);
+          return [[{ pendingCount: 0 }], []];
+        }
         if (text.includes('INSERT INTO community_chat_message_images')) return [{ insertId: 8 }, []];
         throw new Error(`unexpected transaction query: ${sql} ${JSON.stringify(params)}`);
       }),
@@ -140,8 +143,8 @@ describe('communityChatImageService', () => {
           expect(params).toEqual(['user-1']);
           return [[{ id: 'user-1' }], []];
         }
-        if (text.includes('COUNT(*) AS pendingCount')) {
-          expect(params).toEqual(['user-1']);
+        if (text.includes('AS pendingCount')) {
+          expect(params).toEqual(['user-1', 'user-1']);
           return [[{ pendingCount: COMMUNITY_CHAT_IMAGE_MAX_PENDING_PER_USER }], []];
         }
         throw new Error(`unexpected transaction query: ${sql} ${JSON.stringify(params)}`);
@@ -189,7 +192,7 @@ describe('communityChatImageService', () => {
         const text = String(sql);
         if (text.includes('FROM community_chat_members')) return [[], []];
         if (text.includes('FROM community_chat_message_images image')) {
-          expect(params).toEqual(['image-1', 'user-1', 0, 'general', 'user-1']);
+          expect(params).toEqual(['image-1', 'user-1', 0, 'general', 'user-1', 'user-1']);
           return [
             [
               {
@@ -200,6 +203,10 @@ describe('communityChatImageService', () => {
                 width: 640,
                 height: 480,
                 status: 'attached',
+                messageId: 10,
+                expiresAt: '2099-09-04T10:00:00.000Z',
+                isExpired: 0,
+                remainingSeconds: 301,
               },
             ],
             [],
@@ -229,7 +236,7 @@ describe('communityChatImageService', () => {
     const db = {
       query: vi.fn(async (sql, params) => {
         if (String(sql).includes('FROM community_chat_message_images image')) {
-          expect(params).toEqual(['image-recalled', 'root-1', 1, 'general', 'root-1']);
+          expect(params).toEqual(['image-recalled', 'root-1', 1, 'general', 'root-1', 'root-1']);
           return [
             [
               {
@@ -240,6 +247,10 @@ describe('communityChatImageService', () => {
                 width: 320,
                 height: 320,
                 status: 'attached',
+                messageId: 11,
+                expiresAt: '2099-09-04T10:00:00.000Z',
+                isExpired: 0,
+                remainingSeconds: 301,
               },
             ],
             [],
@@ -267,7 +278,7 @@ describe('communityChatImageService', () => {
         const text = String(sql);
         if (text.includes('SELECT object_key')) {
           expect(params).toEqual(['image-1', 'user-1']);
-          return [[{ objectKey: 'community-chat/private/image-1.png', status: 'pending' }], []];
+          return [[{ objectKey: 'community-chat/private/image-1.png', status: 'pending', messageId: null }], []];
         }
         if (text.includes("SET status = 'delete_pending'")) return [{ affectedRows: 1 }, []];
         throw new Error(`unexpected query: ${sql}`);
@@ -297,6 +308,46 @@ describe('communityChatImageService', () => {
     expect(db.query).toHaveBeenCalledWith(expect.stringContaining("status IN ('delete_pending', 'deleting')"), [
       'image-1',
     ]);
+  });
+
+  it('即使已发送图片处于待清理状态，所有者也不能通过草稿丢弃接口移除元数据', async () => {
+    const connection = {
+      beginTransaction: vi.fn(async () => {}),
+      query: vi.fn(async (sql) => {
+        if (String(sql).includes('SELECT object_key')) {
+          return [
+            [
+              {
+                objectKey: 'community-chat/private/sent-image.png',
+                status: 'delete_pending',
+                messageId: 21,
+              },
+            ],
+            [],
+          ];
+        }
+        throw new Error(`unexpected query: ${sql}`);
+      }),
+      commit: vi.fn(async () => {}),
+      rollback: vi.fn(async () => {}),
+      release: vi.fn(),
+    };
+    const db = {
+      getConnection: vi.fn(async () => connection),
+      query: vi.fn(),
+    };
+
+    await expect(
+      discardCommunityChatImage({
+        user: { id: 'user-1', role: 'user' },
+        imagePublicId: 'sent-image',
+        db,
+        deleteObject: mocks.deleteObject,
+      }),
+    ).rejects.toMatchObject({ code: 'COMMUNITY_CHAT_IMAGE_ALREADY_ATTACHED', status: 409 });
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+    expect(mocks.deleteObject).not.toHaveBeenCalled();
+    expect(db.query).not.toHaveBeenCalled();
   });
 
   it('批量回收过期的未发送图片，并保留删除失败记录供下轮重试', async () => {

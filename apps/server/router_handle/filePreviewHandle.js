@@ -9,6 +9,7 @@ import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 
 const messages = {
   FILE_NOT_FOUND: ['文件不存在或无权限', 'The file was not found'],
+  COMMUNITY_CHAT_FILE_EXPIRED: ['资源已过期', 'The attachment has expired'],
   FILE_PREVIEW_UNSUPPORTED: ['此文件格式暂不支持在线预览', 'This file format cannot be previewed online'],
   FILE_PREVIEW_NOT_READY: ['文件预览仍在生成中', 'The file preview is still being prepared'],
   FILE_PREVIEW_DISABLED: ['文件预览功能暂时关闭', 'File preview is temporarily disabled'],

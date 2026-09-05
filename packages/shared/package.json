@@ -25,6 +25,10 @@
       "types": "./communityChatInlineEmojis.d.ts",
       "default": "./communityChatInlineEmojis.js"
     },
+    "./community-chat-attachments": {
+      "types": "./communityChatAttachments.d.ts",
+      "default": "./communityChatAttachments.js"
+    },
     "./todo-reminder": {
       "types": "./todoReminder.d.ts",
       "default": "./todoReminder.js"

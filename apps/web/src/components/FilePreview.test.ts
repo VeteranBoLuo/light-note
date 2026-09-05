@@ -9,11 +9,16 @@ const filePreviewApiMocks = vi.hoisted(() => ({
   prepareOwnedFilePreview: vi.fn(),
   prepareSharedFilePreview: vi.fn(),
   resolveSharedFilePreview: vi.fn(),
+  resolveCommunityChatFilePreview: vi.fn(),
+  prepareCommunityChatFilePreview: vi.fn(),
 }));
-const commonHttpMocks = vi.hoisted(() => ({ getFileShareDownload: vi.fn() }));
+const commonHttpMocks = vi.hoisted(() => ({ getFileShareDownload: vi.fn(), requestAndroidDownload: vi.fn() }));
+const communityChatApiMocks = vi.hoisted(() => ({ getCommunityChatFileDownload: vi.fn() }));
 
 vi.mock('@/api/filePreviewApi.ts', () => filePreviewApiMocks);
 vi.mock('@/http/common.ts', () => commonHttpMocks);
+vi.mock('@/api/communityChatApi', () => communityChatApiMocks);
+vi.mock('@/composables/useAndroidDownloadProgress', () => ({ announceNativeDownloadStart: vi.fn() }));
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),
@@ -54,8 +59,21 @@ vi.mock('@/components/cloudSpace/PdfPreview.vue', () => ({
 
 vi.mock('@/components/cloudSpace/ArchivePreview.vue', () => ({
   default: {
-    props: ['fileId', 'previewTicket'],
-    template: '<div class="archive-preview-stub" :data-file-id="fileId" :data-ticket="previewTicket" />',
+    props: ['fileId', 'previewTicket', 'communityChatPublicId'],
+    emits: ['error'],
+    template: `
+      <div
+        class="archive-preview-stub"
+        :data-file-id="fileId"
+        :data-ticket="previewTicket"
+        :data-community-chat-public-id="communityChatPublicId"
+      >
+        <button
+          class="archive-preview-expire"
+          @click="$emit('error', { status: 410, message: 'expired' })"
+        />
+      </div>
+    `,
   },
 }));
 
@@ -89,7 +107,8 @@ const revokeObjectUrl = vi.fn();
 
 beforeEach(() => {
   Object.values(filePreviewApiMocks).forEach((mock) => mock.mockReset());
-  commonHttpMocks.getFileShareDownload.mockReset();
+  Object.values(commonHttpMocks).forEach((mock) => mock.mockReset());
+  communityChatApiMocks.getCommunityChatFileDownload.mockReset();
   resetMobileOverlayHistoryForTests();
   window.history.replaceState({}, '', '/');
   vi.spyOn(window.history, 'back').mockImplementation(() => {});
@@ -465,6 +484,103 @@ describe('FilePreview Word anchors', () => {
 });
 
 describe('FilePreview derived previews', () => {
+  it('聊天文件通过专用鉴权来源复用派生预览，不回落到个人云空间接口', async () => {
+    filePreviewApiMocks.resolveCommunityChatFilePreview.mockResolvedValue({
+      fileId: '42',
+      strategy: 'converted_pdf',
+      previewType: 'converted-pdf',
+      formatId: 'legacy-word',
+      status: 'ready',
+      errorCode: '',
+      pollAfterMs: 0,
+      previewUrl: 'https://files.example/chat-derived.pdf?signature=test',
+    });
+    communityChatApiMocks.getCommunityChatFileDownload.mockResolvedValue({
+      status: 200,
+      data: { downloadUrl: 'https://files.example/chat-source.doc?signature=test' },
+    });
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      setup() {
+        return () =>
+          h(FilePreview, {
+            visible: true,
+            previewAccess: { kind: 'community_chat_file', publicId: 'file-public-1' },
+            fileInfo: {
+              id: 'file-public-1',
+              fileName: 'legacy.doc',
+              fileType: 'application/msword',
+              category: 'word',
+            },
+          });
+      },
+    });
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    await vi.waitFor(() =>
+      expect(document.body.querySelector<HTMLElement>('.pdf-preview-stub')?.dataset.src).toBe(
+        'https://files.example/chat-derived.pdf?signature=test',
+      ),
+    );
+    expect(filePreviewApiMocks.resolveCommunityChatFilePreview).toHaveBeenCalledWith('file-public-1');
+    expect(filePreviewApiMocks.resolveOwnedFilePreview).not.toHaveBeenCalled();
+    expect(filePreviewApiMocks.prepareOwnedFilePreview).not.toHaveBeenCalled();
+    expect(document.body.querySelector('.file-preview-backlinks')).toBeNull();
+  });
+
+  it('聊天压缩包浏览过程中到期时通知聊天层关闭预览', async () => {
+    filePreviewApiMocks.resolveCommunityChatFilePreview.mockResolvedValue({
+      fileId: '43',
+      strategy: 'archive_manifest',
+      previewType: 'archive',
+      formatId: 'archive',
+      status: 'ready',
+      errorCode: '',
+      pollAfterMs: 0,
+    });
+    communityChatApiMocks.getCommunityChatFileDownload.mockResolvedValue({
+      status: 200,
+      data: { downloadUrl: 'https://files.example/chat-archive.zip?signature=test' },
+    });
+    const sourceExpired = vi.fn();
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      setup() {
+        return () =>
+          h(FilePreview, {
+            visible: true,
+            previewAccess: { kind: 'community_chat_file', publicId: 'archive-public-1' },
+            fileInfo: {
+              id: 'archive-public-1',
+              fileName: 'archive.zip',
+              fileType: 'application/zip',
+              category: 'compress',
+            },
+            onSourceExpired: sourceExpired,
+          });
+      },
+    });
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    await vi.waitFor(() => expect(document.body.querySelector('.archive-preview-expire')).not.toBeNull());
+    expect(document.body.querySelector<HTMLElement>('.archive-preview-stub')?.dataset.communityChatPublicId).toBe(
+      'archive-public-1',
+    );
+    document.body.querySelector<HTMLButtonElement>('.archive-preview-expire')?.click();
+    await vi.waitFor(() => expect(sourceExpired).toHaveBeenCalledTimes(1));
+    expect(document.body.querySelector('.preview-error')).toBeNull();
+  });
+
   it('prepares a legacy Office document and reuses the local PDF renderer', async () => {
     filePreviewApiMocks.resolveOwnedFilePreview.mockResolvedValue({
       fileId: 'legacy-1',
@@ -597,6 +713,85 @@ describe('FilePreview derived previews', () => {
     expect(filePreviewApiMocks.resolveOwnedFilePreview).not.toHaveBeenCalled();
     expect(document.body.querySelector('.preview-controls')).not.toBeNull();
     expect(document.body.querySelector('.file-preview-backlinks')).toBeNull();
+  });
+});
+
+describe('FilePreview community chat downloads', () => {
+  it('从预览内下载时重新获取短期签名，避免复用已过期 URL', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, body: null, text: async () => 'chat attachment' })),
+    );
+    communityChatApiMocks.getCommunityChatFileDownload
+      .mockResolvedValueOnce({ status: 200, data: { downloadUrl: 'https://files.example/source-old.txt' } })
+      .mockResolvedValueOnce({ status: 200, data: { downloadUrl: 'https://files.example/source-fresh.txt' } });
+    commonHttpMocks.requestAndroidDownload.mockReturnValue(true);
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      setup() {
+        return () =>
+          h(FilePreview, {
+            visible: true,
+            previewAccess: { kind: 'community_chat_file', publicId: 'file-public-1' },
+            fileInfo: {
+              id: 'file-public-1',
+              fileName: 'notes.txt',
+              fileType: 'text/plain',
+              category: 'text',
+            },
+          });
+      },
+    });
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    await vi.waitFor(() => expect(document.body.querySelector('.preview-controls button')).not.toBeNull());
+    document.body.querySelector<HTMLButtonElement>('.preview-controls button')?.click();
+
+    await vi.waitFor(() =>
+      expect(commonHttpMocks.requestAndroidDownload).toHaveBeenCalledWith(
+        'https://files.example/source-fresh.txt',
+        'notes.txt',
+      ),
+    );
+    expect(communityChatApiMocks.getCommunityChatFileDownload).toHaveBeenCalledTimes(2);
+  });
+
+  it('服务端返回 410 时通知聊天层立即收起预览并更新过期卡片', async () => {
+    communityChatApiMocks.getCommunityChatFileDownload.mockRejectedValue(
+      Object.assign(new Error('expired'), { status: 410 }),
+    );
+    const sourceExpired = vi.fn();
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      setup() {
+        return () =>
+          h(FilePreview, {
+            visible: true,
+            previewAccess: { kind: 'community_chat_file', publicId: 'file-public-1' },
+            fileInfo: {
+              id: 'file-public-1',
+              fileName: 'notes.txt',
+              fileType: 'text/plain',
+              category: 'text',
+            },
+            onSourceExpired: sourceExpired,
+          });
+      },
+    });
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    await vi.waitFor(() => expect(sourceExpired).toHaveBeenCalledTimes(1));
+    expect(document.body.querySelector('.preview-error')).toBeNull();
   });
 });
 

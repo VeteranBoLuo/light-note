@@ -120,6 +120,7 @@ describe('communityChatAccessService', () => {
       user: { id: 'user-1', role: 'user' },
       env: {
         ...PUBLIC_ENV,
+        COMMUNITY_CHAT_FILES_ENABLED: '1',
         COMMUNITY_CHAT_POLLS_ENABLED: '1',
         COMMUNITY_CHAT_READ_RECEIPTS_ENABLED: '1',
       },
@@ -133,6 +134,7 @@ describe('communityChatAccessService', () => {
       memberRole: 'member',
       notificationsDefaultEnabled: true,
       notificationsEnabled: true,
+      filesEnabled: true,
       pollsEnabled: true,
       pollSelectionModes: ['single', 'multiple'],
       readReceiptsEnabled: true,
