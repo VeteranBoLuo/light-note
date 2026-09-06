@@ -1,17 +1,4 @@
 export default {
-  imageOptimization: {
-    expired: 'Image expired',
-    viewOriginal: 'View original',
-    original: 'Original',
-    preview: 'Preview',
-    preparing: 'Preparing preview',
-    failed: 'Preview unavailable. You can view the original.',
-    animated: 'Animated · View original to play',
-    retry: 'Retry preview',
-    uploadOriginal: 'Upload original',
-    optimizing: 'Optimizing image',
-    originalFailed: 'Original failed to load. Please retry.',
-  },
   organizeWizard: {
     navigation: 'Organizing steps',
     steps: {

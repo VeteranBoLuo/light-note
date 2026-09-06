@@ -1,9 +1,8 @@
 import pool from '../../db/index.js';
-import { imagePreviewsEnabled } from './image.js';
 import { inspectAllFilePreviewRuntimes } from './runtime.js';
 
 const requiredColumns = {
-  file_preview_artifacts: ['file_id', 'strategy', 'strategy_version', 'source_etag', 'status', 'manifest_json', 'source_object_key', 'output_mode', 'image_width', 'image_height', 'image_animated'],
+  file_preview_artifacts: ['file_id', 'strategy', 'strategy_version', 'source_etag', 'status', 'manifest_json'],
   file_preview_jobs: ['artifact_id', 'status', 'attempts', 'available_at', 'locked_at', 'output_object_key'],
 };
 
@@ -36,7 +35,6 @@ export async function checkFilePreviewRuntime() {
   const runtimes = await inspectAllFilePreviewRuntimes({ force: true });
   const runtimeReady =
     (!runtimes.archive.config.archiveEnabled || runtimes.archive.ready) &&
-    (!runtimes.office.config.officeEnabled || runtimes.office.ready) &&
-    ((!imagePreviewsEnabled('cloud_file') && !imagePreviewsEnabled('community_chat_image')) || runtimes.image.ready);
+    (!runtimes.office.config.officeEnabled || runtimes.office.ready);
   return { ok: !missing.length && runtimeReady, schema: { ok: !missing.length, missing }, runtimes };
 }

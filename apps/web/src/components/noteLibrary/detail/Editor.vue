@@ -1,6 +1,5 @@
 <template>
   <div id="editor-container" class="note-editor" :class="{ 'is-readonly': readonly, 'is-mobile': isMobile }">
-    <span v-if="optimizingImages" role="status" class="note-image-optimizing">{{ t('imageOptimization.optimizing') }}</span>
     <!-- HTML 模式：TinyMCE -->
     <template v-if="currentType === 'html'">
       <div id="editor-toolbar" class="note-editor-toolbar" v-show="!readonly">
@@ -695,7 +694,6 @@
 </template>
 
 <script setup lang="ts">
-  import { prepareNoteImage, noteImageOptimizationEnabled } from '@/utils/prepareNoteImage';
   import {
     computed,
     defineAsyncComponent,
@@ -2702,46 +2700,29 @@
   }
 
   const NOTE_IMAGE_UPLOAD_CONCURRENCY = 3;
-  const uploadOriginalImage = ref(false);
-  const optimizingImages = ref(0);
-  let imageUploadGeneration = 0;
-  let imageUploadDisposed = false;
-  watch(() => [props.noteId, user.id, user.adminContext?.id], () => { imageUploadGeneration++; uploadOriginalImage.value = false; });
-  onBeforeUnmount(() => { imageUploadDisposed = true; imageUploadGeneration++; });
 
   async function prepareNoteImageUploadNoteId() {
     if (props.imageUploadMode === 'base64') return '';
     let noteId = props.noteId;
-    const actor = `${user.id}:${user.adminContext?.id || ''}`;
     if (!noteId && typeof props.ensureNoteId === 'function') {
       noteId = await (props.ensureNoteId as () => Promise<string>)();
-      await nextTick();
-    }
-    if (imageUploadDisposed || actor !== `${user.id}:${user.adminContext?.id || ''}` || (props.noteId && noteId !== props.noteId)) {
-      throw new Error('NOTE_IMAGE_TARGET_CHANGED');
     }
     return noteId || '';
   }
 
   async function uploadNoteImageFile(file: Blob, fileName: string, preparedNoteId?: string) {
-    const uploadOriginal = uploadOriginalImage.value;
-    const noteId = preparedNoteId ?? await prepareNoteImageUploadNoteId();
-    if (imageUploadDisposed || (props.noteId && noteId !== props.noteId)) throw new Error('NOTE_IMAGE_TARGET_CHANGED');
-    const expected = imageUploadGeneration;
-    let prepared;
-    optimizingImages.value++;
-    try { prepared = await prepareNoteImage(file, fileName, uploadOriginal); }
-    finally { optimizingImages.value--; }
-    if (imageUploadDisposed || expected !== imageUploadGeneration) throw new Error('NOTE_IMAGE_TARGET_CHANGED');
+    let noteId = preparedNoteId ?? props.noteId;
+    if (preparedNoteId === undefined && !noteId && typeof props.ensureNoteId === 'function') {
+      noteId = await (props.ensureNoteId as () => Promise<string>)();
+    }
     const formData = new FormData();
-    formData.append('file', prepared.file, prepared.fileName);
+    formData.append('file', file, fileName);
     formData.append('noteId', noteId || '');
     const res = await apiBasePost('/api/note/uploadImage', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
     });
-    if (imageUploadDisposed || expected !== imageUploadGeneration) throw new Error('NOTE_IMAGE_TARGET_CHANGED');
     if (res.data?.noteId) emits('setNoteId', res.data.noteId);
     if (!res.data?.url) throw new Error('NOTE_IMAGE_UPLOAD_FAILED');
     return String(res.data.url);
@@ -3532,7 +3513,6 @@
     ];
 
     const insertActions: EditorToolbarAction[] = [
-      ...(props.imageUploadMode !== 'base64' && noteImageOptimizationEnabled() ? [action('uploadOriginalImage', t('imageOptimization.uploadOriginal'), uploadOriginalImage.value && !isMobile.value ? icon.filterPanel.check : icon.noteDetail.toolbar.image, { selected: uploadOriginalImage.value })] : []),
       action('insertTable', t('noteDetail.editor.table'), icon.noteDetail.toolbar.table),
       action('insertImage', t('noteDetail.editor.image'), icon.noteDetail.toolbar.image, {
         disabled: disabled || (isMarkdown ? markdownImageUploading.value : richImageUploading.value),
@@ -4087,7 +4067,6 @@
 
   function handleEditorToolbarAction(action: EditorToolbarAction) {
     if (action.disabled) return;
-    if (action.key === 'uploadOriginalImage') { uploadOriginalImage.value = !uploadOriginalImage.value; return; }
     if (action.key === 'shortcuts') {
       shortcutHelpVisible.value = true;
       return;
@@ -5797,22 +5776,7 @@
     overflow: hidden;
   }
 
-  .note-image-optimizing {
-    position: absolute;
-    right: 12px;
-    bottom: 12px;
-    z-index: 5;
-    padding: 6px 10px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 8px;
-    background: var(--card-background);
-    color: var(--desc-color);
-    font-size: 12px;
-    pointer-events: none;
-  }
-
   #editor-container.note-editor {
-    position: relative;
     --note-editor-content-padding-top: 12px;
     --note-editor-content-line-height: 1.65;
     --note-markdown-font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Courier New', monospace;

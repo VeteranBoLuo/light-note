@@ -73,16 +73,6 @@ describe('OBS 二进制下载', () => {
     });
   });
 
-  it('limits both declared and actual stream bytes without changing unlimited callers', async () => {
-    const content = Readable.from([Buffer.alloc(4), Buffer.alloc(4)]);
-    mockObjectResult(content, 4);
-    await expect(getObjectBufferFromObs('image', { maxBytes: 6 })).rejects.toMatchObject({ code: 'FILE_SIZE_INVALID' });
-    const oversized = Readable.from([Buffer.alloc(8)]);
-    mockObjectResult(oversized, 8);
-    await expect(getObjectBufferFromObs('image', { maxBytes: 6 })).rejects.toMatchObject({ code: 'FILE_SIZE_INVALID' });
-    expect(oversized.destroyed).toBe(true);
-  });
-
   it('可以直接上传内存中的 UTF-8 示例文档', async () => {
     sdk.putObject.mockImplementationOnce((params, callback) => {
       callback(null, { CommonMsg: { Status: 200 } });

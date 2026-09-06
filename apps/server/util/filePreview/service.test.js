@@ -9,8 +9,6 @@ const obsMocks = vi.hoisted(() => ({
   getObjectMetadataFromObs: vi.fn(),
   putObjectBodyToObs: vi.fn(),
 }));
-const imageMocks = vi.hoisted(() => ({ convertImagePreview: vi.fn() }));
-vi.mock('./image.js', async (importOriginal) => ({ ...await importOriginal(), convertImagePreview: imageMocks.convertImagePreview }));
 const officeMocks = vi.hoisted(() => ({ convertOfficeToPdf: vi.fn() }));
 const archiveMocks = vi.hoisted(() => ({
   buildArchiveDirectoryPage: vi.fn(),
@@ -28,7 +26,7 @@ vi.mock('./runtime.js', () => ({
     officeBin: 'soffice',
     limits: {},
   }),
-  inspectFilePreviewRuntime: vi.fn(async () => ({ ready: true, config: { limits: {} } })),
+  inspectFilePreviewRuntime: vi.fn(),
 }));
 
 const {
@@ -36,7 +34,6 @@ const {
   cleanupStaleFilePreviewArtifacts,
   deleteFilePreviewArtifactsForSource,
   resolveFilePreview,
-  prepareFilePreview,
   runSingleFilePreviewJob,
 } = await import('./service.js');
 
@@ -127,11 +124,7 @@ function arrangeConvertedWorker({ staleCompletion = false, sourceAvailable = tru
   });
   const claimConnection = connection(claimQuery);
   const completeConnection = connection(completeQuery);
-  poolMocks.getConnection.mockResolvedValueOnce(claimConnection);
-  if (String(jobOverrides.strategy || '').startsWith('image_')) {
-    poolMocks.getConnection.mockResolvedValueOnce(connection(vi.fn(async sql => String(sql).includes('GET_LOCK') ? [[{ acquired: 1 }]] : [[]])));
-  }
-  poolMocks.getConnection.mockResolvedValueOnce(completeConnection).mockResolvedValue(completeConnection);
+  poolMocks.getConnection.mockResolvedValueOnce(claimConnection).mockResolvedValueOnce(completeConnection);
   poolMocks.query.mockResolvedValue([{ affectedRows: 1 }]);
   return { claimConnection, completeConnection, getLeaseOwner: () => leaseOwner };
 }
@@ -144,84 +137,6 @@ describe('file preview service', () => {
     obsMocks.putObjectBodyToObs.mockResolvedValue(undefined);
     obsMocks.deleteObjectFromObs.mockResolvedValue(undefined);
     officeMocks.convertOfficeToPdf.mockResolvedValue(Buffer.from('%PDF-preview'));
-    imageMocks.convertImagePreview.mockResolvedValue({ mode: 'derived', buffer: Buffer.from('webp'), width: 720, height: 480 });
-  });
-
-  const imageJob = { strategy: 'image_thumbnail', file_name: 'image.jpg', file_type: 'image/jpeg', format_id: 'raster-image', source_object_key: 'source-key' };
-
-  it('commits image metadata while preserving exact SQL placeholder counts', async () => {
-    const arranged = arrangeConvertedWorker({ jobOverrides: imageJob });
-    await runSingleFilePreviewJob('image-worker');
-    expect(imageMocks.convertImagePreview).toHaveBeenCalledWith({ buffer: sourceBuffer, strategy: 'image_thumbnail' });
-    expect(obsMocks.putObjectBodyToObs).toHaveBeenCalledWith(expect.stringMatching(/\.webp$/), Buffer.from('webp'), 'image/webp');
-    for (const [sql, params] of arranged.completeConnection.query.mock.calls) {
-      expect((String(sql).match(/\?/g) || []).length).toBe((params || []).length);
-    }
-  });
-
-  it('source display mode stores no original key in artifact or pending output fields', async () => {
-    imageMocks.convertImagePreview.mockResolvedValue({ mode: 'source', width: 2, height: 3, animated: false });
-    const arranged = arrangeConvertedWorker({ jobOverrides: imageJob });
-    await runSingleFilePreviewJob('image-worker');
-    expect(obsMocks.putObjectBodyToObs).not.toHaveBeenCalled();
-    expect(obsMocks.deleteObjectFromObs).not.toHaveBeenCalled();
-    const update = arranged.completeConnection.query.mock.calls.find(([sql]) => sql.includes("SET status = 'ready'"));
-    expect(update[1][0]).toBeNull();
-    expect(update[1]).toEqual(expect.arrayContaining(['source', 2, 3]));
-  });
-
-  it('deletes a newly encoded image if its source was removed before publication', async () => {
-    arrangeConvertedWorker({ jobOverrides: imageJob, sourceAvailable: false });
-    await runSingleFilePreviewJob('image-worker');
-    expect(obsMocks.deleteObjectFromObs).toHaveBeenCalledWith(obsMocks.putObjectBodyToObs.mock.calls[0][0]);
-    expect(obsMocks.deleteObjectFromObs).not.toHaveBeenCalledWith('source-key');
-  });
-
-  it('requeues lock contention without consuming retries or decoding pixels', async () => {
-    const claim = connection(vi.fn(async sql => sql.includes('SELECT j.id AS job_id') ? [[convertedJob(imageJob)]] : [{ affectedRows: 1 }]));
-    const lock = connection(vi.fn(async () => [[{ acquired: 0 }]]));
-    poolMocks.getConnection.mockReset().mockResolvedValueOnce(claim).mockResolvedValueOnce(lock);
-    await runSingleFilePreviewJob('image-worker');
-    expect(imageMocks.convertImagePreview).not.toHaveBeenCalled();
-    expect(poolMocks.query).toHaveBeenCalledWith(expect.stringContaining('attempts = GREATEST(0, attempts - 1)'), expect.any(Array));
-    expect(lock.release).toHaveBeenCalled();
-  });
-
-  it('keeps a failed replacement cleanup referenced and retryable instead of orphaning OBS objects', async () => {
-    const source = { id: 42, create_by: 'user-1', file_name: 'image.jpg', file_type: 'image/jpeg', file_size: sourceBuffer.length, obs_key: 'new-source-key' };
-    const old = { ...convertedJob(imageJob), status: 'ready', artifact_object_key: 'old-derived.webp' };
-    poolMocks.query.mockImplementation(async sql => sql.includes('FROM files WHERE') ? [[source]] : [[old]]);
-    const query = vi.fn(async sql => {
-      if (sql.includes('FROM files WHERE')) return [[source]];
-      if (sql.includes('SELECT * FROM file_preview_artifacts')) return [[old]];
-      if (sql.includes('SELECT output_object_key')) return [[{ output_object_key: null }]];
-      return [{ affectedRows: 1 }];
-    });
-    const conn = connection(query);
-    poolMocks.getConnection.mockReset().mockResolvedValue(conn);
-    obsMocks.deleteObjectFromObs.mockRejectedValueOnce(new Error('offline'));
-    await expect(prepareFilePreview({ ownerUserId: 'user-1', fileId: 42, strategy: 'image_thumbnail' })).rejects.toMatchObject({ code: 'FILE_PREVIEW_CLEANUP_PENDING' });
-    expect(query).toHaveBeenCalledWith(expect.stringContaining("SET status = 'failed'"), ['FILE_PREVIEW_CLEANUP_PENDING', old.id]);
-    expect(query.mock.calls.some(([sql]) => sql.includes('artifact_object_key = NULL'))).toBe(false);
-    expect(conn.commit).toHaveBeenCalled();
-    expect(obsMocks.deleteObjectFromObs).toHaveBeenCalledWith('old-derived.webp');
-    expect(obsMocks.deleteObjectFromObs).not.toHaveBeenCalledWith('new-source-key');
-  });
-
-  it('resolves the winning image job when simultaneous prepares contend on the unique key', async () => {
-    const source = { id: 42, create_by: 'user-1', file_name: 'image.jpg', file_type: 'image/jpeg', file_size: sourceBuffer.length, obs_key: 'source-key' };
-    const artifact = { ...convertedJob(imageJob), status: 'queued' };
-    poolMocks.query.mockImplementation(async sql => sql.includes('FROM files WHERE') ? [[source]] : [[artifact]]);
-    const conn = connection(vi.fn(async sql => {
-      if (sql.includes('FROM files WHERE')) return [[source]];
-      if (sql.includes('SELECT * FROM file_preview_artifacts')) return [[]];
-      if (sql.includes('INSERT INTO file_preview_artifacts')) throw Object.assign(new Error(), { code: 'ER_LOCK_DEADLOCK' });
-      return [{ affectedRows: 1 }];
-    }));
-    poolMocks.getConnection.mockReset().mockResolvedValue(conn);
-    await expect(prepareFilePreview({ ownerUserId: 'user-1', fileId: 42, strategy: 'image_thumbnail' })).resolves.toMatchObject({ status: 'queued' });
-    expect(conn.rollback).toHaveBeenCalled();
-    expect(conn.release).toHaveBeenCalled();
   });
 
   it('binds a converted PDF upload to a unique database lease and commits the private object key', async () => {
@@ -477,4 +392,29 @@ describe('file preview service', () => {
       42,
     ]);
   });
+  it('不再领取退役的图片派生任务', async () => {
+    const query = vi.fn(async () => [[]]);
+    poolMocks.getConnection.mockResolvedValue(connection(query));
+    await expect(runSingleFilePreviewJob('worker')).resolves.toBe(false);
+    expect(query.mock.calls.find(([sql]) => String(sql).includes('SELECT j.id AS job_id'))[0]).toContain("AND a.strategy IN ('archive_manifest', 'converted_pdf')");
+    expect(obsMocks.getObjectBufferFromObs).not.toHaveBeenCalled();
+  });
+
+  it('回收退役图片缓存时只删派生对象，直显原件不进入删除集合', async () => {
+    poolMocks.query.mockImplementation(async sql => {
+      const text = String(sql);
+      if (text.includes('SELECT id, output_object_key')) return [[]];
+      if (text.includes('SELECT a.id, a.artifact_object_key')) return [[
+        { id: 20, artifact_object_key: 'file-previews/photo.webp', output_object_key: null, source_object_key: 'original.jpg' },
+        { id: 21, artifact_object_key: null, output_object_key: null, source_object_key: 'small-original.png', output_mode: 'source' },
+      ]];
+      return [{ affectedRows: 1 }];
+    });
+    await expect(cleanupStaleFilePreviewArtifacts()).resolves.toBe(2);
+    expect(obsMocks.deleteObjectFromObs.mock.calls).toEqual([['file-previews/photo.webp']]);
+    const claims = poolMocks.query.mock.calls.filter(([sql]) => String(sql).includes("SET a.status = 'failed'"));
+    expect(claims).toHaveLength(2);
+    for (const [sql] of claims) expect(sql).toContain("a.strategy IN ('image_thumbnail', 'image_display')");
+  });
+
 });

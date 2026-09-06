@@ -4,10 +4,8 @@ export type FilePreviewJobStatus = 'missing' | 'queued' | 'processing' | 'ready'
 
 export interface FilePreviewState {
   fileId: string;
-  strategy: 'archive_manifest' | 'converted_pdf' | 'image_thumbnail' | 'image_display';
-  mode?: 'source' | 'derived';
-  animated?: boolean;
-  previewType: 'archive' | 'converted-pdf' | 'image';
+  strategy: 'archive_manifest' | 'converted_pdf';
+  previewType: 'archive' | 'converted-pdf';
   formatId: string;
   status: FilePreviewJobStatus;
   errorCode: string;
@@ -58,12 +56,12 @@ function unwrap<T>(response: any): T {
   });
 }
 
-export async function resolveOwnedFilePreview(fileId: string, strategy?: 'image_display'): Promise<FilePreviewState> {
-  return unwrap(await apiBasePost('/api/file/preview/resolve', { fileId, strategy }, { silent: true }));
+export async function resolveOwnedFilePreview(fileId: string): Promise<FilePreviewState> {
+  return unwrap(await apiBasePost('/api/file/preview/resolve', { fileId }, { silent: true }));
 }
 
-export async function prepareOwnedFilePreview(fileId: string, retry = false, strategy?: 'image_display'): Promise<FilePreviewState> {
-  return unwrap(await apiBasePost('/api/file/preview/prepare', { fileId, retry, strategy }, { silent: true }));
+export async function prepareOwnedFilePreview(fileId: string, retry = false): Promise<FilePreviewState> {
+  return unwrap(await apiBasePost('/api/file/preview/prepare', { fileId, retry }, { silent: true }));
 }
 
 export async function listOwnedArchivePreview(
@@ -77,9 +75,8 @@ export async function prepareSharedFilePreview(
   token: string,
   accessCode = '',
   retry = false,
-  previewTicket?: string,
 ): Promise<FilePreviewState> {
-  return unwrap(await apiBasePost('/api/file/share/preview/prepare', { token, accessCode, retry, previewTicket }, { silent: true }));
+  return unwrap(await apiBasePost('/api/file/share/preview/prepare', { token, accessCode, retry }, { silent: true }));
 }
 
 export async function resolveSharedFilePreview(previewTicket: string): Promise<FilePreviewState> {

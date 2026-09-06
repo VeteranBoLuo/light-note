@@ -19,10 +19,6 @@ vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
   default: { template: '<span class="svg-icon-stub" />' },
 }));
 
-vi.mock('@/components/imagePreview/DerivedImage.vue', () => ({
-  default: { props: ['source', 'resourceId', 'originalUrl', 'alt'], template: '<img :alt="alt" />' },
-}));
-
 const { default: ChatMessageAttachments } = await import('./ChatMessageAttachments.vue');
 const { default: ChatPendingAttachments } = await import('./ChatPendingAttachments.vue');
 

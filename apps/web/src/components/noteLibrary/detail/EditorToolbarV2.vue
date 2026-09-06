@@ -247,7 +247,6 @@
             label: item.label,
             icon: item.icon,
             disabled: item.disabled,
-            active: item.selected,
             function: () => {
               if (!item.disabled) componentEmit('run', item);
             },

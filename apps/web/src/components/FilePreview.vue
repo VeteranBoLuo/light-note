@@ -273,12 +273,7 @@
         </div>
 
         <!-- 预览控制栏：悬浮在内容区内，避免额外占用预览高度 -->
-        <div v-if="!isHtmlFullscreen && ((!loading && (showNext || sourceDownloadUrl)) || useCloudImagePreview)" class="preview-controls" :class="{ 'has-image-actions': useCloudImagePreview }">
-          <div v-if="useCloudImagePreview" class="preview-control-group image-preview-action-group">
-            <span role="status">{{ t(viewingOriginal ? 'imageOptimization.original' : previewExpired ? 'imageOptimization.expired' : previewOriginalFailed ? 'imageOptimization.originalFailed' : error ? 'imageOptimization.failed' : previewAnimated ? 'imageOptimization.animated' : derivedReady ? 'imageOptimization.preview' : 'imageOptimization.preparing') }}</span>
-            <BButton v-if="!viewingOriginal && !previewExpired" size="small" :loading="originalLoading" @click="showOriginalImage">{{ t('imageOptimization.viewOriginal') }}</BButton>
-            <BButton v-if="error" size="small" @click="startPreview(fileInfo, true)">{{ t('imageOptimization.retry') }}</BButton>
-          </div>
+        <div v-if="!loading && !isHtmlFullscreen && (showNext || sourceDownloadUrl)" class="preview-controls">
           <div v-if="showNext" class="preview-control-group">
             <BTooltip :title="t('cloudSpace.previewPanel.previous')">
               <BButton size="small" @click="handlePrev" class="action-btn">
@@ -329,12 +324,9 @@
 </template>
 
 <script setup lang="ts">
-  import { EMPTY_IMAGE, imagePreviewsEnabled, fetchImagePreviews } from '@/api/imagePreviewApi';
-  import { apiBasePost as imagePreviewPost } from '@/http/request';
   import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
   import type { CSSProperties } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { useUserStore } from '@/store';
   import VideoPreview from '@/components/base/VideoPreview.vue';
   import PdfPreview from '@/components/cloudSpace/PdfPreview.vue';
   import ArchivePreview from '@/components/cloudSpace/ArchivePreview.vue';
@@ -587,17 +579,8 @@
     markdownContent.value = enrichMarkdownHeadings(sanitized);
   }
 
-  const useCloudImagePreview = computed(() => previewType.value === 'image' && props.previewAccess?.kind !== 'community_chat_file' && imagePreviewsEnabled('cloud'));
-  const viewingOriginal = ref(false);
-  const originalLoading = ref(false);
-  const previewAnimated = ref(false);
-  const previewOriginalFailed = ref(false);
-  const previewExpired = ref(false);
-  let imageGeneration = 0;
-  let imageUrlRefreshed = false;
   const sourceDownloadUrl = computed(() => sharedSourceFileUrl.value || props.fileInfo.fileUrl || '');
   const effectiveFileUrl = computed(() => {
-    if (useCloudImagePreview.value && !viewingOriginal.value) return derivedPreviewUrl.value || EMPTY_IMAGE;
     if (previewType.value === 'converted-pdf') return derivedPreviewUrl.value;
     return sourceDownloadUrl.value;
   });
@@ -622,7 +605,6 @@
         return;
       }
       if (!newVisible) {
-        imageGeneration++;
         cancelPreviewPolling();
         textAbortController?.abort();
         textAbortController = null;
@@ -651,15 +633,6 @@
     }
   }
 
-  const previewUser = useUserStore();
-  watch(() => [previewUser.id, previewUser.role, previewUser.adminContext?.id, previewUser.visitorWorkspace], () => {
-    imageGeneration++;
-    cancelPreviewPolling();
-    resetDerivedPreviewState();
-    viewingOriginal.value = false;
-    if (props.visible) emit('update:visible', false);
-  });
-
   watch(
     () => props.fileInfo?.id,
     (fileId, previousFileId) => {
@@ -679,8 +652,6 @@
 
   // 开始预览
   async function startPreview(file: typeof props.fileInfo, retryDerived = false) {
-    const expectedGeneration = ++imageGeneration;
-    viewingOriginal.value = false; previewExpired.value = false; originalLoading.value = false; previewOriginalFailed.value = false; previewAnimated.value = false; imageUrlRefreshed = false;
     cancelPreviewPolling();
     textAbortController?.abort();
     textAbortController = null;
@@ -691,13 +662,8 @@
     markdownContent.value = '';
     resetImageView();
     releaseHtmlBlobUrl();
-    if (!retryDerived) resetDerivedPreviewState();
+    resetDerivedPreviewState();
     try {
-      if (useCloudImagePreview.value) {
-        if (!retryDerived) resetDerivedPreviewState();
-        await loadDerivedPreview(retryDerived);
-        return;
-      }
       if (previewType.value === 'archive' || previewType.value === 'converted-pdf') {
         await loadDerivedPreview(retryDerived);
         return;
@@ -746,8 +712,6 @@
         loading.value = false;
       }
     } catch (err) {
-      if (expectedGeneration !== imageGeneration || !props.visible) return;
-      previewExpired.value = previewRequestStatus(err) === 410 || String((err as any)?.code || '').includes('EXPIRED');
       if (props.previewAccess?.kind === 'community_chat_file' && previewRequestStatus(err) === 410) {
         loading.value = false;
         emit('source-expired');
@@ -803,34 +767,19 @@
   }
 
   async function loadDerivedPreview(retryDerived: boolean) {
-    const expectedGeneration = imageGeneration;
     const expectedFileId = activePreviewFileId;
     const pollingStartedAt = Date.now();
     const shareAccess = props.previewAccess?.kind === 'share' ? props.previewAccess : null;
     const chatAccess = props.previewAccess?.kind === 'community_chat_file' ? props.previewAccess : null;
     let state: FilePreviewState;
-    const readOwnedImage = async (prepare = false): Promise<FilePreviewState> => {
-      const response = await fetchImagePreviews('cloud', [expectedFileId], 'image_display', prepare, retryDerived);
-      const item = response.items[0];
-      return { fileId: expectedFileId, strategy: 'image_display', previewType: 'image', formatId: 'raster-image',
-        status: 'failed', errorCode: 'IMAGE_PREVIEW_UNAVAILABLE', pollAfterMs: 2000, ...item };
-    };
-    if (useCloudImagePreview.value && !shareAccess) {
-      const thumbs = await fetchImagePreviews('cloud', [expectedFileId], 'image_thumbnail').catch(() => null);
-      if (expectedGeneration !== imageGeneration || !props.visible) return;
-      if (thumbs && !thumbs.enabled) { viewingOriginal.value = true; return; }
-      if (thumbs?.items[0]?.previewUrl) derivedPreviewUrl.value = thumbs.items[0].previewUrl;
-    }
     if (shareAccess) {
       state = await prepareSharedFilePreview(
         shareAccess.token,
         String(shareAccess.accessCode || '').trim(),
         retryDerived,
-        ...(sharePreviewTicket.value ? [sharePreviewTicket.value] as [string] : []),
       );
-      if (expectedGeneration !== imageGeneration || !props.visible) return;
-      sharePreviewTicket.value = String(state.previewTicket || sharePreviewTicket.value || '');
-      sharedSourceFileUrl.value = String(state.sourceDownloadUrl || sharedSourceFileUrl.value || '');
+      sharePreviewTicket.value = String(state.previewTicket || '');
+      sharedSourceFileUrl.value = String(state.sourceDownloadUrl || '');
     } else if (chatAccess) {
       state = await resolveCommunityChatFilePreview(chatAccess.publicId);
       if (state.status === 'missing' || (state.status === 'failed' && retryDerived)) {
@@ -840,8 +789,6 @@
       if (downloadResponse?.status === 200) {
         sharedSourceFileUrl.value = String(downloadResponse.data?.downloadUrl || '');
       }
-    } else if (useCloudImagePreview.value) {
-      state = await readOwnedImage(true);
     } else {
       state = await resolveOwnedFilePreview(expectedFileId);
       if (state.status === 'missing' || (state.status === 'failed' && retryDerived)) {
@@ -850,17 +797,12 @@
     }
 
     for (let pollCount = 0; ; pollCount += 1) {
-      if (expectedGeneration !== imageGeneration || expectedFileId !== activePreviewFileId || !props.visible || viewingOriginal.value) return;
+      if (expectedFileId !== activePreviewFileId || !props.visible) return;
       if (state.status === 'ready') {
         derivedReady.value = true;
-        if (state.previewType === 'converted-pdf' || state.previewType === 'image') {
-          if (state.previewType === 'image') previewAnimated.value = Boolean(state.animated);
+        if (state.previewType === 'converted-pdf') {
           if (!state.previewUrl) throw new Error(t('cloudSpace.previewPanel.derivedPreviewFailed'));
           derivedPreviewUrl.value = state.previewUrl;
-          if (state.previewType === 'image' && state.mode === 'source') {
-            sharedSourceFileUrl.value = state.previewUrl;
-            viewingOriginal.value = true;
-          }
           // PDF 保持加载态，交给 PdfPreview 的 rendered/error 事件结算。
         } else {
           loading.value = false;
@@ -872,17 +814,16 @@
         Object.assign(failure, { code: state.errorCode });
         throw failure;
       }
-      if ((state.previewType === 'image' ? Date.now() - pollingStartedAt >= 30000 : hasFilePreviewPollingTimedOut(state.previewType, pollingStartedAt))) {
+      if (hasFilePreviewPollingTimedOut(state.previewType, pollingStartedAt)) {
         throw new Error(t('cloudSpace.previewPanel.derivedPreviewTimeout'));
       }
-      await waitForPreviewPoll((state.previewType === 'image' ? 2000 : getFilePreviewPollDelay(pollCount, state.pollAfterMs)));
-      if (expectedGeneration !== imageGeneration || expectedFileId !== activePreviewFileId || !props.visible || viewingOriginal.value) return;
-      if (document.hidden && state.previewType === 'image') continue;
+      await waitForPreviewPoll(getFilePreviewPollDelay(pollCount, state.pollAfterMs));
+      if (expectedFileId !== activePreviewFileId || !props.visible) return;
       state = shareAccess
         ? await resolveSharedFilePreview(sharePreviewTicket.value)
         : chatAccess
           ? await resolveCommunityChatFilePreview(chatAccess.publicId)
-          : useCloudImagePreview.value ? await readOwnedImage() : await resolveOwnedFilePreview(expectedFileId);
+          : await resolveOwnedFilePreview(expectedFileId);
     }
   }
 
@@ -991,16 +932,6 @@
   }
 
   function onError(err?: any) {
-    if (useCloudImagePreview.value && viewingOriginal.value && derivedPreviewUrl.value && derivedPreviewUrl.value !== sourceDownloadUrl.value) {
-      viewingOriginal.value = false; previewOriginalFailed.value = true; loading.value = false;
-      return;
-    }
-    if (useCloudImagePreview.value && !viewingOriginal.value && !imageUrlRefreshed) {
-      imageUrlRefreshed = true;
-      const expected = imageGeneration;
-      void loadDerivedPreview(false).catch(() => { if (expected === imageGeneration && props.visible) { loading.value = false; error.value = true; } });
-      return;
-    }
     console.error('预览加载失败:', err);
     loading.value = false;
     error.value = true;
@@ -1008,7 +939,6 @@
   }
 
   function onImageLoad(event: Event) {
-    if (useCloudImagePreview.value && effectiveFileUrl.value === EMPTY_IMAGE) return;
     const image = event.currentTarget as HTMLImageElement | null;
     if (image) {
       imageNaturalSize.value = {
@@ -1162,39 +1092,9 @@
     return Number(requestError?.status || requestError?.response?.status || requestError?.response?.data?.status || 0);
   }
 
-  async function showOriginalImage() {
-    if (originalLoading.value) return;
-    const expected = imageGeneration;
-    originalLoading.value = true; previewOriginalFailed.value = false;
-    try {
-      let url = sourceDownloadUrl.value;
-      if (props.previewAccess?.kind === 'share') {
-        if (!sharePreviewTicket.value) throw new Error('IMAGE_PREVIEW_NOT_READY');
-        const response = await imagePreviewPost('/api/file/share/preview/original', { previewTicket: sharePreviewTicket.value }, { silent: true });
-        if (response.status !== 200) throw new Error('IMAGE_ORIGINAL_UNAVAILABLE');
-        url = String(response.data?.downloadUrl || '');
-      } else {
-        const response = await imagePreviewPost('/api/file/downloadFileById', { id: props.fileInfo?.id }, { silent: true });
-        if (response.status !== 200) throw new Error('IMAGE_ORIGINAL_UNAVAILABLE');
-        url = String(response.data?.downloadUrl || '');
-      }
-      if (!url) throw new Error('IMAGE_ORIGINAL_UNAVAILABLE');
-      const image = new Image();
-      await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error('IMAGE_ORIGINAL_UNAVAILABLE')); image.src = url; });
-      if (expected !== imageGeneration || !props.visible) return;
-      sharedSourceFileUrl.value = url; viewingOriginal.value = true; loading.value = false; error.value = false;
-      cancelPreviewPolling();
-    } catch { if (expected === imageGeneration) previewOriginalFailed.value = true; }
-    finally { if (expected === imageGeneration) originalLoading.value = false; }
-  }
-
   async function downloadFile() {
     let downloadUrl = sourceDownloadUrl.value;
     try {
-      if (props.previewAccess?.kind === 'share' && useCloudImagePreview.value) {
-        const result = await getFileShareDownload(props.previewAccess.token, props.previewAccess.accessCode || '');
-        downloadUrl = result.downloadUrl;
-      }
       if (props.previewAccess?.kind === 'community_chat_file') {
         const response = await getCommunityChatFileDownload(props.previewAccess.publicId);
         downloadUrl = String(response?.data?.downloadUrl || '');
@@ -1550,7 +1450,6 @@
   });
 
   onUnmounted(() => {
-    imageGeneration++;
     cancelPreviewPolling();
     textAbortController?.abort();
     textAbortController = null;
@@ -2178,19 +2077,6 @@
         }
 
         .preview-controls {
-          &.has-image-actions {
-            width: calc(100% - 16px);
-            flex-wrap: wrap;
-            justify-content: center;
-            overflow: visible;
-            .image-preview-action-group {
-              flex-basis: 100%;
-              justify-content: center;
-              flex-wrap: wrap;
-              font-size: 12px;
-              .b_btn { min-height: 44px; padding: 0 12px; white-space: nowrap; }
-            }
-          }
           bottom: max(10px, env(safe-area-inset-bottom));
           max-width: calc(100% - 16px);
           padding: 6px;

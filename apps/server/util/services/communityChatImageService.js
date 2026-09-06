@@ -176,11 +176,6 @@ function publicImage(image) {
 
 async function removeTrackedObject({ publicId, objectKey, messageId = null, db, deleteObject }) {
   try {
-    const [sources] = await db.query('SELECT id FROM community_chat_message_images WHERE public_id = ?', [publicId]);
-    if (sources[0]?.id) {
-      const { deleteFilePreviewArtifactsForSource } = await import('../filePreview/service.js');
-      await deleteFilePreviewArtifactsForSource({ sourceType: 'community_chat_image', fileId: sources[0].id, db, deleteObject });
-    }
     if (objectKey) await deleteObject(objectKey);
     if (messageId === null || messageId === undefined) {
       await db.query(
@@ -324,11 +319,6 @@ export async function uploadCommunityChatImage({
           'The image upload state expired. Select the image again.',
         );
       }
-      void (async () => {
-        const [images] = await db.query('SELECT id FROM community_chat_message_images WHERE public_id = ?', [publicId]);
-        const { warmImagePreview } = await import('../filePreview/warmImage.js');
-        if (images[0]?.id) warmImagePreview(user.id, images[0].id, 'community_chat_image');
-      })().catch(() => undefined);
       return publicImage({
         publicId,
         fileName,
@@ -356,7 +346,6 @@ export async function getCommunityChatImageDownload({
   env = process.env,
   db = pool,
   createSignedUrl = createDownloadSignedUrl,
-  returnSource = false,
 }) {
   const normalizedPublicId = normalizePublicId(imagePublicId);
   const { memberRole } = await assertCommunityChatReadAccess({ user, env, db });
@@ -364,7 +353,7 @@ export async function getCommunityChatImageDownload({
   const canViewRecalled = memberRole === 'admin' || memberRole === 'moderator';
   const image = await queryFirst(
     db,
-    `SELECT image.id, image.owner_user_id AS ownerUserId, image.public_id AS publicId, image.object_key AS objectKey, image.file_name AS fileName,
+    `SELECT image.public_id AS publicId, image.object_key AS objectKey, image.file_name AS fileName,
             image.content_type AS contentType, image.file_size AS fileSize,
             image.width, image.height, image.status, image.message_id AS messageId,
             image.expires_at AS expiresAt, image.expires_at <= NOW() AS isExpired,
@@ -426,7 +415,6 @@ export async function getCommunityChatImageDownload({
     throw chatError('COMMUNITY_CHAT_IMAGE_EXPIRED', 410, '图片已过期', 'The image has expired');
   }
   // OBS 只接受整数秒 TTL，预留 1 秒覆盖查询与签名耗时，保证 URL 不越过资源截止点。
-  if (returnSource) return image;
   const expires = Math.min(300, remainingSeconds - 1);
   const signed = createSignedUrl({ objectKey: image.objectKey, expires });
   if (!signed?.url) {

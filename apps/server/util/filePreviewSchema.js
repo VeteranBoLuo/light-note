@@ -8,16 +8,11 @@ const statements = [
     source_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'cloud_file',
     file_id BIGINT UNSIGNED NOT NULL,
     owner_user_id VARCHAR(255) NOT NULL,
-    strategy ENUM('archive_manifest', 'converted_pdf', 'image_thumbnail', 'image_display') NOT NULL,
+    strategy ENUM('archive_manifest', 'converted_pdf') NOT NULL,
     strategy_version SMALLINT UNSIGNED NOT NULL,
     format_id VARCHAR(40) NOT NULL,
     source_etag VARCHAR(160) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     source_size BIGINT UNSIGNED NOT NULL,
-    source_object_key VARCHAR(1024) NULL,
-    output_mode VARCHAR(16) NOT NULL DEFAULT 'derived',
-    image_width INT UNSIGNED NOT NULL DEFAULT 0,
-    image_height INT UNSIGNED NOT NULL DEFAULT 0,
-    image_animated TINYINT UNSIGNED NOT NULL DEFAULT 0,
     status ENUM('queued', 'processing', 'ready', 'failed') NOT NULL DEFAULT 'queued',
     artifact_object_key VARCHAR(1024) NULL,
     artifact_size BIGINT UNSIGNED NOT NULL DEFAULT 0,
@@ -88,25 +83,11 @@ async function ensurePreviewSourceContract() {
   }
 }
 
-
-async function ensureImagePreviewContract() {
-  const [rows] = await pool.query(`SELECT COLUMN_NAME AS name, COLUMN_TYPE AS type FROM information_schema.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'file_preview_artifacts'`);
-  const columns = new Map(rows.map(row => [row.name, String(row.type)]));
-  if (!columns.has('source_object_key')) await pool.query("ALTER TABLE file_preview_artifacts ADD COLUMN source_object_key VARCHAR(1024) NULL");
-  if (!columns.has('output_mode')) await pool.query("ALTER TABLE file_preview_artifacts ADD COLUMN output_mode VARCHAR(16) NOT NULL DEFAULT 'derived'");
-  if (!columns.has('image_width')) await pool.query("ALTER TABLE file_preview_artifacts ADD COLUMN image_width INT UNSIGNED NOT NULL DEFAULT 0");
-  if (!columns.has('image_height')) await pool.query("ALTER TABLE file_preview_artifacts ADD COLUMN image_height INT UNSIGNED NOT NULL DEFAULT 0");
-  if (!columns.has('image_animated')) await pool.query("ALTER TABLE file_preview_artifacts ADD COLUMN image_animated TINYINT UNSIGNED NOT NULL DEFAULT 0");
-  if (!columns.get('strategy')?.includes('image_display')) await pool.query("ALTER TABLE file_preview_artifacts MODIFY COLUMN strategy ENUM('archive_manifest','converted_pdf','image_thumbnail','image_display') NOT NULL");
-}
-
 export function ensureFilePreviewSchema() {
   if (!ensurePromise) {
     ensurePromise = (async () => {
       for (const sql of statements) await pool.query(sql);
       await ensurePreviewSourceContract();
-      await ensureImagePreviewContract();
     })().catch((error) => {
       ensurePromise = null;
       throw error;

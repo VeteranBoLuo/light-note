@@ -7,10 +7,8 @@ const mocks = vi.hoisted(() => ({
   putObject: vi.fn(),
   deleteObject: vi.fn(),
   createSignedUrl: vi.fn(),
-  deletePreviews: vi.fn(),
 }));
 
-vi.mock('../filePreview/service.js', () => ({ deleteFilePreviewArtifactsForSource: mocks.deletePreviews }));
 vi.mock('../obsClient.js', () => ({
   putObjectToObs: mocks.putObject,
   deleteObjectFromObs: mocks.deleteObject,
@@ -339,7 +337,6 @@ describe('communityChatImageService', () => {
     const db = {
       getConnection: vi.fn(async () => connection),
       query: vi.fn(async (sql) => {
-        if (String(sql).includes('SELECT id FROM community_chat_message_images')) return [[{ id: 17 }], []];
         if (String(sql).includes('DELETE FROM community_chat_message_images')) return [{ affectedRows: 1 }, []];
         throw new Error(`unexpected query: ${sql}`);
       }),
@@ -353,7 +350,6 @@ describe('communityChatImageService', () => {
     });
 
     expect(result).toEqual({ publicId: 'image-1', discarded: true, cleanupPending: false });
-    expect(mocks.deletePreviews).toHaveBeenCalledWith(expect.objectContaining({ sourceType: 'community_chat_image', fileId: 17 }));
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(mocks.deleteObject).toHaveBeenCalledWith('community-chat/private/image-1.png');
     expect(db.query).toHaveBeenCalledWith(expect.stringContaining("status IN ('delete_pending', 'deleting')"), [
@@ -414,7 +410,6 @@ describe('communityChatImageService', () => {
             [],
           ];
         }
-        if (text.includes('SELECT id FROM community_chat_message_images')) return [[{ id: 17 }], []];
         if (text.includes("SET status = 'deleting'")) return [{ affectedRows: 1 }, []];
         if (text.includes("SET status = 'delete_pending'")) return [{ affectedRows: 1 }, []];
         if (text.includes('DELETE FROM community_chat_message_images')) return [{ affectedRows: 1 }, []];

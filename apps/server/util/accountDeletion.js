@@ -248,20 +248,6 @@ async function collectCleanupArtifacts(connection, tables, userId) {
     }
   }
 
-  if (tables.has('community_chat_message_images')) {
-    const [rows] = await connection.query('SELECT object_key FROM community_chat_message_images WHERE owner_user_id = ?', [userId]);
-    objectKeys.push(...rows.map(row => row.object_key).filter(Boolean));
-  }
-  if (tables.has('file_preview_artifacts')) {
-    const [rows] = await connection.query('SELECT artifact_object_key AS object_key FROM file_preview_artifacts WHERE owner_user_id = ?', [userId]);
-    objectKeys.push(...rows.map(row => row.object_key).filter(Boolean));
-    if (tables.has('file_preview_jobs')) {
-      const [pending] = await connection.query(`SELECT j.output_object_key AS object_key FROM file_preview_jobs j
-        JOIN file_preview_artifacts a ON a.id = j.artifact_id WHERE a.owner_user_id = ?`, [userId]);
-      objectKeys.push(...pending.map(row => row.object_key).filter(Boolean));
-    }
-  }
-
   if (tables.has('ai_document_sources')) {
     const [rows] = await connection.query(
       `SELECT object_key
@@ -695,15 +681,6 @@ async function purgeFeatureRequests(connection, tables, userId) {
 }
 
 export async function purgeOwnedResources(connection, tables, userId) {
-  if (tables.has('community_chat_message_images')) {
-    await connection.query(`UPDATE community_chat_message_images SET status = 'expired', object_key = NULL,
-      expires_at = NOW() WHERE owner_user_id = ?`, [userId]);
-  }
-  if (tables.has('file_preview_artifacts')) {
-    if (tables.has('file_preview_jobs')) await connection.query(`DELETE j FROM file_preview_jobs j
-      JOIN file_preview_artifacts a ON a.id = j.artifact_id WHERE a.owner_user_id = ?`, [userId]);
-    await connection.query('DELETE FROM file_preview_artifacts WHERE owner_user_id = ?', [userId]);
-  }
   if (tables.has('note_resource_refs')) {
     const targetClauses = [];
     const params = [userId];

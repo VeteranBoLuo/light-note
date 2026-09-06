@@ -119,15 +119,9 @@ export const getObjectMetadataFromObs = async (objectKey) => {
   };
 };
 
-function assertDownloadLimit(size, maxBytes) {
-  if (size > maxBytes) throw Object.assign(new Error('FILE_SIZE_INVALID'), { code: 'FILE_SIZE_INVALID' });
-}
-
-async function readObsBinaryContent(content, maxBytes) {
-  if (Buffer.isBuffer(content) || content instanceof Uint8Array) {
-    assertDownloadLimit(content.length, maxBytes);
-    return Buffer.from(content);
-  }
+async function readObsBinaryContent(content) {
+  if (Buffer.isBuffer(content)) return Buffer.from(content);
+  if (content instanceof Uint8Array) return Buffer.from(content);
   if (!content || typeof content[Symbol.asyncIterator] !== 'function') {
     const error = new Error('OBS_DOWNLOAD_INVALID_CONTENT: OBS 未返回二进制下载流');
     error.code = 'OBS_DOWNLOAD_INVALID_CONTENT';
@@ -143,14 +137,13 @@ async function readObsBinaryContent(content, maxBytes) {
       throw error;
     }
     const binaryChunk = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    totalBytes += binaryChunk.length;
-    assertDownloadLimit(totalBytes, maxBytes);
     chunks.push(binaryChunk);
+    totalBytes += binaryChunk.length;
   }
   return Buffer.concat(chunks, totalBytes);
 }
 
-export const getObjectBufferFromObs = async (objectKey, { maxBytes = Infinity } = {}) => {
+export const getObjectBufferFromObs = async (objectKey) => {
   const result = await wrapObsCall(obsClient.getObject.bind(obsClient), {
     Bucket: bucketName,
     Key: objectKey,
@@ -158,12 +151,8 @@ export const getObjectBufferFromObs = async (objectKey, { maxBytes = Infinity } 
     SaveAsStream: true,
   });
   const interfaceResult = result?.InterfaceResult || {};
+  const buffer = await readObsBinaryContent(interfaceResult.Content);
   const contentLength = Number(interfaceResult.ContentLength);
-  if (contentLength > maxBytes) {
-    interfaceResult.Content?.destroy?.();
-    assertDownloadLimit(contentLength, maxBytes);
-  }
-  const buffer = await readObsBinaryContent(interfaceResult.Content, maxBytes);
   if (Number.isFinite(contentLength) && contentLength >= 0 && buffer.length !== contentLength) {
     const error = new Error(
       `OBS_DOWNLOAD_SIZE_MISMATCH: OBS 文件下载不完整（应为 ${contentLength} 字节，实际 ${buffer.length} 字节）`,

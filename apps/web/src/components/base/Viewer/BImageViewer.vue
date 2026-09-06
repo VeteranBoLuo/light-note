@@ -127,11 +127,8 @@
         </BTooltip>
       </div>
 
-      <div v-if="showToolbar" class="b-image-viewer__footer">
-        <div v-if="$slots['image-actions']" class="b-image-viewer__image-actions">
-          <slot name="image-actions" :image="currentImage" />
-        </div>
       <div
+        v-if="showToolbar"
         class="b-image-viewer__toolbar"
         role="toolbar"
         :aria-label="t('common.imageViewer.tools')"
@@ -198,7 +195,6 @@
           </BTooltip>
         </template>
       </div>
-      </div>
       <span class="b-image-viewer__position" aria-live="polite">{{ positionLabel }}</span>
     </section>
   </BModal>
@@ -244,7 +240,6 @@
     },
   );
 
-  const emit = defineEmits<{ 'image-error': [id: string] }>();
   const visible = defineModel<boolean>('visible', { default: false });
   const { t } = useI18n();
   const isMobileLayout = useMobileLayout();
@@ -335,7 +330,7 @@
       imageLayout.value.stageWidth > viewportSize.value.width + 1 ||
       imageLayout.value.stageHeight > viewportSize.value.height + 1,
   );
-  const canDownloadCurrent = computed(() => canSaveImage(currentImage.value?.downloadSrc || currentImage.value?.src, isLightNoteAndroidApp()));
+  const canDownloadCurrent = computed(() => canSaveImage(currentImage.value?.src, isLightNoteAndroidApp()));
   const viewerModalClass = computed(() =>
     [
       'b-image-viewer-modal',
@@ -620,7 +615,6 @@
   }
 
   function handleImageError() {
-    if (currentImage.value) emit('image-error', currentImage.value.id);
     imageLoaded.value = false;
     imageFailed.value = true;
   }
@@ -632,7 +626,7 @@
   }
 
   async function saveCurrentImage() {
-    const src = currentImage.value?.downloadSrc || currentImage.value?.src;
+    const src = currentImage.value?.src;
     if (!src || saving.value) return;
     const fileName = deriveImageFileName(src);
     const inApp = isLightNoteAndroidApp();
@@ -1117,13 +1111,6 @@
 
   .b-image-viewer__nav.b_btn:disabled {
     opacity: 0.22;
-  }
-
-  .b-image-viewer__image-actions {
-    padding: 8px 12px;
-    background: var(--image-viewer-chrome-bg);
-    color: var(--image-viewer-text-color);
-    border-top: 1px solid var(--image-viewer-divider-color);
   }
 
   .b-image-viewer__toolbar {

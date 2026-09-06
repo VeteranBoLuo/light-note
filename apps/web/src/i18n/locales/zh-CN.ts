@@ -1,17 +1,4 @@
 export default {
-  imageOptimization: {
-    expired: '图片已过期',
-    viewOriginal: '查看原图',
-    original: '原图',
-    preview: '预览图',
-    preparing: '正在准备预览',
-    failed: '预览暂不可用，可查看原图',
-    animated: '动图 · 查看原图播放',
-    retry: '重试预览',
-    uploadOriginal: '上传原图',
-    optimizing: '正在优化图片',
-    originalFailed: '原图加载失败，请重试',
-  },
   organizeWizard: {
     navigation: '整理步骤',
     steps: {

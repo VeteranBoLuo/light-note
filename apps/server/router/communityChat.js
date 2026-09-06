@@ -1,4 +1,3 @@
-import { resolveChatImagePreviews, prepareChatImagePreviews } from '../router_handle/imagePreviewHandle.js';
 import express from 'express';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import multer from 'multer';
@@ -166,8 +165,9 @@ router.post('/messages/:publicId/delete', governanceWriteLimiter, handle.deleteM
 router.post('/messages/:publicId/save-sticker', imageWriteLimiter, handle.saveMessageSticker);
 router.post('/messages/:publicId/report', governanceWriteLimiter, handle.reportMessage);
 router.post('/messages/:publicId/block-author', governanceWriteLimiter, handle.blockMessageAuthor);
-router.post('/image-previews/resolve', resolveChatImagePreviews);
-router.post('/image-previews/prepare', imageWriteLimiter, prepareChatImagePreviews);
+// 已打开的旧客户端收到关闭信号后回到原图链路，不再准备派生任务。
+router.post('/image-previews/resolve', (_req, res) => res.send({ status: 200, data: { enabled: false, items: [] } }));
+router.post('/image-previews/prepare', (_req, res) => res.send({ status: 200, data: { enabled: false, items: [] } }));
 router.get('/images/:publicId', handle.image);
 router.post('/images/:publicId/discard', imageWriteLimiter, handle.discardImage);
 router.get('/blocks', handle.blocks);

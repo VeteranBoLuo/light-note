@@ -225,11 +225,6 @@ SELECT '[14] missing_core_column' AS check_name, expected.n AS detail FROM (
   SELECT 'file_preview_artifacts', 'source_type', 'file_preview_artifacts.source_type' UNION ALL
   SELECT 'file_preview_artifacts', 'file_id', 'file_preview_artifacts.file_id' UNION ALL
   SELECT 'file_preview_artifacts', 'strategy', 'file_preview_artifacts.strategy' UNION ALL
-  SELECT 'file_preview_artifacts', 'source_object_key', 'file_preview_artifacts.source_object_key' UNION ALL
-  SELECT 'file_preview_artifacts', 'output_mode', 'file_preview_artifacts.output_mode' UNION ALL
-  SELECT 'file_preview_artifacts', 'image_width', 'file_preview_artifacts.image_width' UNION ALL
-  SELECT 'file_preview_artifacts', 'image_height', 'file_preview_artifacts.image_height' UNION ALL
-  SELECT 'file_preview_artifacts', 'image_animated', 'file_preview_artifacts.image_animated' UNION ALL
   SELECT 'file_preview_artifacts', 'source_etag', 'file_preview_artifacts.source_etag' UNION ALL
   SELECT 'file_preview_artifacts', 'status', 'file_preview_artifacts.status' UNION ALL
   SELECT 'file_preview_artifacts', 'manifest_json', 'file_preview_artifacts.manifest_json' UNION ALL
@@ -3537,5 +3532,3 @@ SELECT 'missing_organize_usage_index' AS check_name
 FROM (SELECT 1) expected
 WHERE NOT EXISTS (SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE()
  AND table_name='ai_executions' AND index_name='idx_ai_execution_organize');
-
-SELECT '[image-preview] strategy_enum_missing' AS check_name, column_type AS detail FROM information_schema.COLUMNS WHERE table_schema = DATABASE() AND table_name = 'file_preview_artifacts' AND column_name = 'strategy' AND (column_type NOT LIKE '%image_thumbnail%' OR column_type NOT LIKE '%image_display%');

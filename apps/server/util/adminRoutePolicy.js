@@ -152,7 +152,6 @@ declare(ADMIN_POLICIES.READ, 'file', [
   ['POST', '/file/share/download'],
   ['POST', '/file/share/preview/prepare'],
   ['POST', '/file/share/preview/resolve'],
-  ['POST', '/file/share/preview/original'],
   ['POST', '/file/share/preview/archive'],
 ]);
 

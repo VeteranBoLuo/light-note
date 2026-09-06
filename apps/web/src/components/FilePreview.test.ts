@@ -1,6 +1,3 @@
-vi.mock('@/store', () => ({ useUserStore: () => ({ id: 'test', adminContext: null }) }));
-vi.mock('@/api/imagePreviewApi', () => ({ EMPTY_IMAGE: 'data:image/gif;base64,AA==', imagePreviewsEnabled: () => false, fetchImagePreviews: vi.fn() }));
-vi.mock('@/http/request', () => ({ apiBasePost: vi.fn() }));
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, ref } from 'vue';
 import FilePreview from './FilePreview.vue';

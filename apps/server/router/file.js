@@ -1,5 +1,3 @@
-import { warmImagePreview } from '../util/filePreview/warmImage.js';
-import { resolveCloudImagePreviews, prepareCloudImagePreviews } from '../router_handle/imagePreviewHandle.js';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import multer from 'multer';
@@ -250,7 +248,6 @@ router.post('/confirmManagedUpload', async (req, res) => {
       inboxSource: req.body?.inboxSource || 'quick_capture',
       request: req,
     });
-    warmImagePreview(req.user.id, data.fileId);
     return res.send(resultData(data));
   } catch (error) {
     if (error?.code) {
@@ -401,7 +398,6 @@ router.post('/confirmUpload', async (req, res) => {
         newlyCreatedFiles.map((result) => ensureMeaningfulCreateEvent(req.user.id, 'file', result.fileId)),
       );
     }
-    for (const result of results) if (result.fileId) warmImagePreview(req.user.id, result.fileId);
     res.send(resultData(results));
     recordFirstOwnResource(req, 'file'); // 激活里程碑:首次自建文件(直传回调写库成功)
     if (!req.suppressUserRewards) {
@@ -652,8 +648,9 @@ router.post('/queryTotalFileSize', async (req, res) => {
 
 router.post('/updateFile', fileHandle.updateFile);
 router.post('/getFileInfo', fileHandle.getFileInfo);
-router.post('/image-previews/resolve', resolveCloudImagePreviews);
-router.post('/image-previews/prepare', localProcessingRateLimiter, prepareCloudImagePreviews);
+// 已打开的旧客户端收到关闭信号后回到原图链路，不再准备派生任务。
+router.post('/image-previews/resolve', (_req, res) => res.send({ status: 200, data: { enabled: false, items: [] } }));
+router.post('/image-previews/prepare', (_req, res) => res.send({ status: 200, data: { enabled: false, items: [] } }));
 router.post('/preview/resolve', filePreviewHandle.resolveOwnedFilePreview);
 router.post('/preview/prepare', localProcessingRateLimiter, (req, res) => {
   if (!ensureUserOrAdminPolicy(req, res, ['content_write'])) return;
@@ -679,7 +676,6 @@ router.post('/share/rotate', (req, res) => {
 router.post('/share/resolve', fileShareAccessLimiter, fileShareHandle.resolveFileShare);
 router.post('/share/download', fileShareAccessLimiter, fileShareHandle.downloadFileShare);
 router.post('/share/preview/prepare', fileShareAccessLimiter, fileShareHandle.prepareFileSharePreview);
-router.post('/share/preview/original', fileSharePreviewLimiter, fileShareHandle.getFileSharePreviewOriginal);
 router.post('/share/preview/resolve', fileSharePreviewLimiter, fileShareHandle.resolveFileSharePreview);
 router.post('/share/preview/archive', fileSharePreviewLimiter, fileShareHandle.listFileShareArchivePreview);
 

@@ -21,10 +21,8 @@
         >
           <SvgIcon :src="icon.noteDetail.toolbar.image" size="22" aria-hidden="true" />
         </span>
-        <DerivedImage
-          source="chat"
-          :resource-id="attachment.publicId"
-          :original-url="attachment.url"
+        <img
+          :src="attachment.url"
           :alt="t('communityChat.image.messageAlt', { name: authorName })"
           :width="positiveDimension(attachment.width)"
           :height="positiveDimension(attachment.height)"
@@ -87,7 +85,6 @@
 </template>
 
 <script setup lang="ts">
-  import DerivedImage from '@/components/imagePreview/DerivedImage.vue';
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { CommunityChatAttachment } from '@/api/communityChatApi';
@@ -238,7 +235,7 @@
     pointer-events: none;
   }
 
-  .chat-attachments__image :deep(img) {
+  .chat-attachments__image img {
     position: absolute;
     inset: 0;
     z-index: 1;
@@ -252,11 +249,11 @@
     transition: opacity 0.12s ease-out;
   }
 
-  .chat-attachments__image.is-ready :deep(img) {
+  .chat-attachments__image.is-ready img {
     opacity: 1;
   }
 
-  .chat-attachments__images.has-1 .chat-attachments__image :deep(img) {
+  .chat-attachments__images.has-1 .chat-attachments__image img {
     object-fit: contain;
   }
 

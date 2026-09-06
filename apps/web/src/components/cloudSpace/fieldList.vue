@@ -37,11 +37,9 @@
               @update:checked="(val: boolean) => toggleRow(item.id, val)"
             />
           </span>
-          <DerivedImage
+          <img
             v-if="isPreviewableImage(item)"
-            source="cloud"
-            :resource-id="String(item.id)"
-            :original-url="item.fileUrl"
+            :src="item.fileUrl"
             class="file-card-thumb"
             :alt="item.fileName"
             loading="lazy"
@@ -717,7 +715,6 @@
   </div>
 </template>
 <script setup lang="ts">
-  import DerivedImage from '@/components/imagePreview/DerivedImage.vue';
   import { useResourceSelection } from '@/composables/useResourceSelection';
   import type { SelectionOperation } from '@/store/resourceSelection';
   import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue';
@@ -2588,7 +2585,7 @@
     border-bottom: 1px solid color-mix(in srgb, var(--folder-list-border-color) 76%, transparent);
   }
 
-  :deep(.file-card-thumb) {
+  .file-card-thumb {
     width: calc(100% - var(--file-card-preview-inset, 0px));
     height: calc(100% - var(--file-card-preview-inset, 0px));
     border-radius: var(--file-card-preview-radius, 0);

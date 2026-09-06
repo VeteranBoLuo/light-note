@@ -316,7 +316,6 @@ async function mountWorkspace(options: { rooms?: any[]; access?: any } = {}) {
 }
 
 beforeEach(() => {
-  vi.stubEnv('VITE_CHAT_IMAGE_PREVIEWS_ENABLED', 'false');
   vi.clearAllMocks();
   vi.spyOn(document, 'hasFocus').mockReturnValue(true);
   mocks.createClientRequestId.mockReturnValue('request-fixed-0001');

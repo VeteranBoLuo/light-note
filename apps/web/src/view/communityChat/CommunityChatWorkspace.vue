@@ -820,7 +820,6 @@
 </template>
 
 <script setup lang="ts">
-  import { imagePreviewsEnabled } from '@/api/imagePreviewApi';
   import {
     COMMUNITY_CHAT_ATTACHMENT_MAX_COUNT,
     COMMUNITY_CHAT_ATTACHMENT_MAX_TOTAL_BYTES,
@@ -1947,7 +1946,6 @@
   }
 
   function prewarmInitialViewportImages(messages: CommunityChatMessage[], focusPublicId = '') {
-    if (imagePreviewsEnabled('chat')) return;
     const candidates = initialViewportImages(messages, focusPublicId);
     priorityMessageImageIds.value = new Set(candidates.map((imageItem) => imageItem.publicId));
     for (const imageItem of candidates) {
