@@ -240,7 +240,46 @@ export function useResourcePickerSearch(options: UseResourcePickerSearchOptions 
     return loadMore();
   }
 
+  // 独立收集当前查询的完整候选，不依赖滚动加载，也不在失败时返回部分选择。
+  async function collectMatching(maximum: number, selectedKeys: string[] = []) {
+    if (!orderedBrowse || loading.value || searchFailed.value) return null;
+    const version = requestId;
+    const types = [...browseTypes];
+    const keyword = browseKeyword;
+    const sort = browseSort;
+    const collected = new Map(results.value.map((item) => [resourceItemKey(item), item]));
+    const selection = new Set(selectedKeys);
+    const checkLimit = () => {
+      for (const key of collected.keys()) selection.add(key);
+      if (selection.size > maximum) throw new Error('selection-limit');
+    };
+    checkLimit();
+    let cursor = nextCursor;
+    let more = hasMore.value;
+    const seenCursors = new Set<string>();
+    while (more && cursor) {
+      const cursorKey = JSON.stringify(cursor);
+      if (seenCursors.has(cursorKey)) throw new Error('pagination-stalled');
+      seenCursors.add(cursorKey);
+      const data = await fetchGlobalSearch(keyword, singleTypePageSize, false, {
+        sort,
+        types,
+        paginationMode: 'ordered',
+        cursor,
+        includeMetadata: false,
+      });
+      if (version !== requestId) return null;
+      for (const item of normalizeItems(data.items || [], types)) collected.set(resourceItemKey(item), item);
+      checkLimit();
+      cursor = data.nextCursor || null;
+      more = Boolean(data.hasMore);
+      if (more && !cursor) throw new Error('pagination-stalled');
+    }
+    return version === requestId ? [...collected.values()] : null;
+  }
+
   function search(keyword: string) {
+    requestId += 1;
     clearDebounce();
     debounceTimer = window.setTimeout(() => void searchNow(keyword), debounceMs);
   }
@@ -282,6 +321,7 @@ export function useResourcePickerSearch(options: UseResourcePickerSearchOptions 
     searchNow,
     loadMore,
     retryLoadMore,
+    collectMatching,
     moveActive,
     reset,
   };

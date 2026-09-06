@@ -39,7 +39,7 @@ const ENUM_SORT_VALUES_BY_REQUEST_FIELD = [
   {
     method: 'POST',
     pattern: /\/featureRequest\/listPublic\/?$/i,
-    field: 'body.sort',
+    field: 'body.filters.sort',
     values: new Set(['updated', 'newest', 'popular']),
   },
   {

@@ -53,6 +53,13 @@ vi.mock('@/components/aiSkills/AiUsageDetailModal.vue', () => ({
   },
 }));
 
+vi.mock('./AiUsageRunModal.vue', () => ({
+  default: {
+    props: ['visible', 'run'],
+    template: '<div v-if="visible" class="run-detail-stub">{{ run.organizeRunId }}</div>',
+  },
+}));
+
 const { default: AiUsageCenter } = await import('./AiUsageCenter.vue');
 
 let cleanup: (() => void) | undefined;
@@ -129,6 +136,23 @@ afterEach(() => {
 });
 
 describe('AiUsageCenter', () => {
+  it('整理记录打开整次详情并正确显示暂停状态', async () => {
+    const data = payload();
+    data.items[0] = {
+      ...data.items[0],
+      organizeRunId: 'run-1',
+      resourceCount: 40,
+      status: 'paused',
+      labelKey: 'organizeRun',
+    } as any;
+    requestMocks.apiBasePost.mockResolvedValue({ status: 200, data });
+    const host = mountCenter();
+    await vi.waitFor(() => expect(host.textContent).toContain('settings.ai.usage.status.paused'));
+    expect(requestMocks.apiBasePost.mock.calls[0][1].groupOrganize).toBe(true);
+    host.querySelector<HTMLButtonElement>('.usage-record')?.click();
+    await vi.waitFor(() => expect(host.querySelector('.run-detail-stub')?.textContent).toBe('run-1'));
+    expect(host.querySelector('.detail-stub')).toBeNull();
+  });
   it('刷新中只显示 BButton 的加载反馈，不叠加第二个刷新图标', () => {
     requestMocks.apiBasePost.mockImplementation(() => new Promise(() => {}));
     const host = mountCenter();

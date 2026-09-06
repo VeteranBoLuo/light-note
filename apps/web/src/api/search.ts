@@ -375,8 +375,8 @@ export function clearGlobalSearchCache() {
   suggestCache.clear();
 }
 
-export function previewSearchBatchSelection(selection: BatchSelection) {
-  return apiBasePost('/api/search/batchSelectionPreview', { selection });
+export function previewSearchBatchSelection(selection: BatchSelection, includeResolvedItems = false) {
+  return apiBasePost('/api/search/batchSelectionPreview', { selection, ...(includeResolvedItems ? { includeResolvedItems } : {}) });
 }
 
 export function batchAddSearchResourcesToInbox(selection: BatchSelection) {

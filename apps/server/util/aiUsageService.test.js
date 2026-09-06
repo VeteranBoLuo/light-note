@@ -1,3 +1,5 @@
+import { AI_BILLING_ACTIONS } from './aiBillingCatalog.js';
+import { AI_USAGE_MODULE_KEYS } from '@lightnote/shared/ai-usage-modules';
 import { describe, expect, it, vi } from 'vitest';
 import {
   buildAiUsageModuleFilter,
@@ -7,6 +9,17 @@ import {
 } from './aiUsageService.js';
 
 describe('aiUsageService', () => {
+  it('所有计费动作的模块都可展示和筛选，整理与简报不再落入其他', () => {
+    for (const action of AI_BILLING_ACTIONS) {
+      expect(AI_USAGE_MODULE_KEYS).toContain(action.module);
+      expect(normalizeAiUsageQuery({ module: action.module }).module).toBe(action.module);
+      expect(buildAiUsageModuleFilter(action.module).params).toContain(action.id);
+    }
+    expect(buildAiUsageModuleFilter('organize').params).toContain('organize_resource_metadata');
+    expect(buildAiUsageModuleFilter('routine').params).toContain('skill_routine_daily_brief');
+    expect(buildAiUsageModuleFilter('other').sql).toContain('NOT');
+    expect(buildAiUsageModuleFilter('general').sql).not.toContain('IN ()');
+  });
   it('查询参数只接受稳定白名单', () => {
     expect(normalizeAiUsageQuery({ days: 30, page: 2, pageSize: 10, module: 'NOTE' })).toEqual({
       days: 30,

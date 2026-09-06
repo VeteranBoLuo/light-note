@@ -88,6 +88,15 @@ export async function inspectFilePreviewRuntime(
   { env = process.env, force = false, runner = execFileAsync } = {},
 ) {
   const config = getFilePreviewRuntimeConfig(env);
+  if (['image_thumbnail', 'image_display'].includes(strategy)) {
+    const bin = String(env.NOTE_IMAGE_MAGICK_BIN || 'convert');
+    const key = `image:${bin}`;
+    const cached = runtimeCache.get(key);
+    if (!force && cached && Date.now() - cached.checkedAt < RUNTIME_CACHE_MS) return { ...cached.result, bin, config };
+    const result = await inspectBinary(bin, ['-size', '1x1', 'xc:transparent', 'webp:-'], 'IMAGE_RUNTIME_UNAVAILABLE', runner);
+    runtimeCache.set(key, { checkedAt: Date.now(), result });
+    return { ...result, bin, config };
+  }
   const archive = strategy === FILE_PREVIEW_STRATEGY.ARCHIVE_MANIFEST;
   const featureEnabled = archive ? config.archiveEnabled : config.officeEnabled;
   const bin = archive ? config.sevenZipBin : config.officeBin;
@@ -105,9 +114,10 @@ export async function inspectFilePreviewRuntime(
 }
 
 export async function inspectAllFilePreviewRuntimes(options = {}) {
-  const [archive, office] = await Promise.all([
+  const [archive, office, image] = await Promise.all([
     inspectFilePreviewRuntime(FILE_PREVIEW_STRATEGY.ARCHIVE_MANIFEST, options),
     inspectFilePreviewRuntime(FILE_PREVIEW_STRATEGY.CONVERTED_PDF, options),
+    inspectFilePreviewRuntime('image_thumbnail', options),
   ]);
-  return { archive, office, ready: archive.ready && office.ready };
+  return { archive, office, image, ready: archive.ready && office.ready && image.ready };
 }

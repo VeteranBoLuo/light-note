@@ -1,6 +1,12 @@
 <template>
   <div class="settings-page" ref="pageRef">
-    <div class="settings-container">
+    <div
+      class="settings-container"
+      :class="{
+        'is-desktop': !bookmark.isMobile,
+        'is-full-desktop': bookmark.isDesktop,
+      }"
+    >
       <!-- 移动端子页顶栏:只有「返回 + 当前分类」。不重复「设置 / 外观、语言…」那段大标题,
            手机上纵向空间宝贵,标题已由这一行承担。 -->
       <header v-if="isMobileSubPage" class="settings-subhead">
@@ -9,7 +15,7 @@
         </BButton>
         <h1 class="settings-subhead-title">{{ currentSectionTitle }}</h1>
       </header>
-      <header v-else class="settings-hero">
+      <header v-else-if="bookmark.isMobile" class="settings-hero">
         <BButton class="settings-back" @click="goBack">
           <svg-icon :src="icon.arrow_left" size="16" />
           <span>{{ t('common.back') }}</span>
@@ -20,18 +26,29 @@
 
       <SettingsMobileIndex v-if="showMobileIndex" :sections="mobileIndexRows" @select="openSection" />
 
-      <!-- 锚点条只服务桌面长页:移动端已按分类拆成子页,不渲染也就不必观察 -->
-      <nav v-if="!bookmark.isMobile" class="settings-anchors">
-        <BButton
-          v-for="a in anchors"
-          :key="a.id"
-          class="anchor-chip"
-          :class="{ active: activeAnchor === a.id }"
-          :aria-pressed="activeAnchor === a.id"
-          @click="scrollToSection(a.id)"
-          >{{ a.label }}</BButton
-        >
-      </nav>
+      <aside v-if="!bookmark.isMobile" class="settings-desktop-sidebar">
+        <BButton class="settings-back" @click="goBack">
+          <SvgIcon :src="icon.arrow_left" size="16" aria-hidden="true" />
+          <span>{{ t('common.back') }}</span>
+        </BButton>
+        <h1 class="settings-title">{{ t('settings.title') }}</h1>
+        <nav class="settings-desktop-nav" :aria-label="t('settings.title')">
+          <BButton
+            v-for="section in desktopNavigationRows"
+            :key="section.id"
+            class="settings-desktop-nav__item"
+            :class="{ active: desktopSection === section.id }"
+            :aria-current="desktopSection === section.id ? 'page' : undefined"
+            @click="openDesktopSection(section.id)"
+          >
+            <span class="settings-desktop-nav__icon" :class="`is-${section.tone}`" aria-hidden="true">
+              <SvgIcon :src="section.icon" size="17" />
+            </span>
+            <span>{{ section.title }}</span>
+            <SvgIcon class="settings-desktop-nav__arrow" :src="icon.arrow_right" size="13" aria-hidden="true" />
+          </BButton>
+        </nav>
+      </aside>
 
       <div v-if="!showMobileIndex" class="settings-body" :class="{ 'is-mobile-sub': isMobileSubPage }">
         <!-- 外观 -->
@@ -126,6 +143,19 @@
           </div>
 
           <div class="fields">
+            <div v-if="!isGuestUser()" class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('growth.dailyReviewTitle') }}</span>
+                <span class="field-desc">{{ t('settings.dailyReviewDesc') }}</span>
+              </div>
+              <BSwitch
+                :checked="user.preferences.dailyReviewEnabled !== false"
+                :disabled="Boolean(user.adminContext)"
+                :aria-label="t('growth.dailyReviewTitle')"
+                @change="set('dailyReviewEnabled', $event)"
+              />
+            </div>
+
             <!-- 只对桌面端有意义：移动端 Logo 固定回「今日」，不读这项偏好 -->
             <div v-if="!bookmark.isMobile && !isGuestUser()" class="field">
               <div class="field-head">
@@ -337,7 +367,11 @@
 
         <!-- 安装到设备:桌面专属。移动端「我的」里已有安装入口(带状态摘要),
              设置里不再放第二个,所以这一块连目录项一起从移动端去掉(见 settingsRegistry 的 SettingsIndexSectionId)。 -->
-        <section v-if="!isAndroidApp && !bookmark.isMobile" class="settings-card" id="set-install">
+        <section
+          v-if="!isAndroidApp && !bookmark.isMobile && sectionVisible('general')"
+          class="settings-card"
+          id="set-install"
+        >
           <div class="card-head">
             <span class="card-icon card-icon--install">
               <SvgIcon :src="icon.pwa.install" size="20" aria-hidden="true" />
@@ -363,7 +397,7 @@
         </section>
 
         <!-- 全局快捷键 -->
-        <section v-if="!bookmark.isMobile" class="settings-card" id="set-shortcuts">
+        <section v-if="!bookmark.isMobile && sectionVisible('general')" class="settings-card" id="set-shortcuts">
           <div class="card-head">
             <span class="card-icon card-icon--shortcuts">
               <SvgIcon :src="icon.settings.shortcuts" size="20" />
@@ -412,6 +446,17 @@
                 :checked="user.preferences.notificationsInApp !== false"
                 :aria-label="t('settings.notificationsInApp')"
                 @change="set('notificationsInApp', $event)"
+              />
+            </div>
+            <div v-if="!isGuestUser()" class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.notificationsOrganize') }}</span>
+                <span class="field-desc">{{ t('settings.notificationsOrganizeDesc') }}</span>
+              </div>
+              <BSwitch
+                :checked="user.preferences.notificationsOrganize !== false"
+                :aria-label="t('settings.notificationsOrganize')"
+                @change="set('notificationsOrganize', $event)"
               />
             </div>
             <div v-if="!isGuestUser()" class="field community-chat-notification-field">
@@ -543,27 +588,119 @@
           </div>
         </section>
 
-        <!-- AI 用量只有一个总入口；额度、明细和规则在独立页呈现，避免设置长页被账本撑高。 -->
-        <section v-if="sectionVisible('ai')" class="settings-card settings-card--ai-entry" id="set-ai">
-          <BButton
-            class="ai-usage-entry"
-            :aria-label="t('settings.ai.entryTitle')"
-            v-click-log="{ module: 'AI 用量与计费', operation: '打开页面【设置】' }"
-            @click="openAiUsage"
-          >
-            <span class="card-icon card-icon--appearance" aria-hidden="true">
-              <SvgIcon :src="icon.settings.ai" size="20" />
+        <!-- AI 用量与例行任务共用设置壳；默认先展示用量，避免从设置跳出上下文。 -->
+        <section v-if="sectionVisible('ai')" class="settings-card settings-card--ai" id="set-ai">
+          <div v-if="!isMobileSubPage" class="card-head">
+            <span class="card-icon card-icon--appearance">
+              <SvgIcon :src="icon.settings.ai" size="20" aria-hidden="true" />
             </span>
-            <span class="ai-usage-entry__copy">
-              <strong>{{ t('settings.ai.entryTitle') }}</strong>
-              <span>{{ t('settings.ai.entryDescription') }}</span>
+            <div class="card-head-text">
+              <h2 class="card-title">{{ t('settings.ai.title') }}</h2>
+              <p class="card-sub">{{ t('settings.ai.description') }}</p>
+            </div>
+          </div>
+          <div class="ai-settings-tabs" role="tablist" :aria-label="t('settings.ai.title')">
+            <BButton
+              class="ai-settings-tab"
+              :class="{ active: aiSettingsPanel === 'usage' }"
+              role="tab"
+              :aria-selected="aiSettingsPanel === 'usage'"
+              @click="selectAiSettingsPanel('usage')"
+            >
+              {{ t('settings.ai.usageTab') }}
+            </BButton>
+            <BButton
+              class="ai-settings-tab"
+              :class="{ active: aiSettingsPanel === 'routines' }"
+              role="tab"
+              :aria-selected="aiSettingsPanel === 'routines'"
+              @click="selectAiSettingsPanel('routines')"
+            >
+              {{ t('settings.ai.routinesTab') }}
+              <BChip tone="pin">{{ t('settings.ai.newBadge') }}</BChip>
+            </BButton>
+          </div>
+          <AiUsagePage v-if="aiSettingsPanel === 'usage'" class="settings-embedded-content" embedded />
+          <div v-else class="fields">
+            <div v-if="dailyBriefPreferenceWritable" class="field ai-daily-brief-field">
+              <div class="field-head">
+                <span class="ai-field-title-row">
+                  <span class="field-label">{{ t('settings.ai.dailyBriefTitle') }}</span>
+                  <BChip tone="success">{{ t('settings.ai.defaultEnabled') }}</BChip>
+                </span>
+                <span class="field-desc" :class="{ 'is-error': dailyBriefPreferenceError }">
+                  {{ dailyBriefPreferenceDescription }}
+                </span>
+              </div>
+              <BSwitch
+                :checked="dailyBriefEnabled"
+                :disabled="dailyBriefPreferenceLoading || dailyBriefPreferenceSaving || !dailyBriefFeatureEnabled"
+                :aria-label="t('settings.ai.dailyBriefTitle')"
+                @change="setDailyBriefEnabled"
+              />
+              <div class="ai-brief-details">
+                <span class="ai-brief-icon" aria-hidden="true">
+                  <SvgIcon :src="icon.common.magicWand" size="18" />
+                </span>
+                <div class="ai-brief-detail">
+                  <strong>{{ t('settings.ai.triggerTitle') }}</strong>
+                  <span>{{ t('settings.ai.triggerDescription') }}</span>
+                </div>
+                <div class="ai-brief-detail">
+                  <strong>{{ t('settings.ai.scopeTitle') }}</strong>
+                  <span>{{ t('settings.ai.scopeDescription') }}</span>
+                </div>
+                <div class="ai-brief-detail">
+                  <strong>{{ t('settings.ai.formatTitle') }}</strong>
+                  <span>{{ t('settings.ai.formatDescription') }}</span>
+                </div>
+              </div>
+            </div>
+            <div v-if="dailyBriefPreferenceWritable && dailyBriefEnabled" class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.ai.dailyBriefAutoTitle') }}</span>
+                <span class="field-desc">{{ t('settings.ai.dailyBriefAutoDescription') }}</span>
+              </div>
+              <BSwitch
+                :checked="dailyBriefAutoUpdate"
+                :disabled="dailyBriefPreferenceLoading || dailyBriefPreferenceSaving || !dailyBriefFeatureEnabled"
+                :aria-label="t('settings.ai.dailyBriefAutoTitle')"
+                @change="setDailyBriefAutoUpdate"
+              />
+            </div>
+            <div v-if="dailyBriefPreferenceWritable" class="ai-routine-boundary">
+              <div class="ai-routine-boundary__head">
+                <span>
+                  <strong>{{ t('settings.ai.boundaryTitle') }}</strong>
+                  <small>{{ t('settings.ai.boundaryDescription') }}</small>
+                </span>
+                <BChip tone="neutral">{{ t('settings.ai.singleRoutine') }}</BChip>
+              </div>
+              <div class="ai-routine-boundary__items">
+                <span>{{ t('settings.ai.boundaryFacts') }}</span>
+                <span>{{ t('settings.ai.boundaryNoGuess') }}</span>
+                <span>{{ t('settings.ai.boundaryControl') }}</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 积分概览和明细也在设置壳内呈现；独立旧路由仅保留兼容。 -->
+        <section v-if="sectionVisible('points')" class="settings-card settings-card--points" id="set-points">
+          <div v-if="!isMobileSubPage" class="card-head">
+            <span class="card-icon card-icon--appearance">
+              <SvgIcon :src="icon.growth.coin" size="20" aria-hidden="true" />
             </span>
-            <SvgIcon class="ai-usage-entry__arrow" :src="icon.arrow_right" size="16" aria-hidden="true" />
-          </BButton>
+            <div class="card-head-text">
+              <h2 class="card-title">{{ t('growth.pointsUsagePageTitle') }}</h2>
+              <p class="card-sub">{{ t('growth.pointsUsagePageDescription') }}</p>
+            </div>
+          </div>
+          <PointsUsagePage class="settings-embedded-content" embedded />
         </section>
 
         <!-- 浏览器收集：完整扩展与轻量书签栏入口并列，避免把能力不同的两种方式混成一个按钮。 -->
-        <section v-if="!bookmark.isMobile" class="settings-card" id="set-quicksave">
+        <section v-if="!bookmark.isMobile && sectionVisible('general')" class="settings-card" id="set-quicksave">
           <div class="card-head">
             <span class="card-icon card-icon--appearance">
               <SvgIcon :src="icon.settings.shortcuts" size="20" aria-hidden="true" />
@@ -642,7 +779,7 @@
         </section>
 
         <!-- 数据导出 / 备份 -->
-        <section v-if="!bookmark.isMobile" class="settings-card" id="set-export">
+        <section v-if="!bookmark.isMobile && sectionVisible('privacy')" class="settings-card" id="set-export">
           <div class="card-head">
             <span class="card-icon card-icon--appearance">📦</span>
             <div class="card-head-text">
@@ -727,7 +864,7 @@
         </section>
 
         <!-- 低频开发者资源放在设置页脚，不占普通用户的产品导航。 -->
-        <div v-if="!bookmark.isMobile" class="settings-foot">
+        <div v-if="!bookmark.isMobile && sectionVisible('privacy')" class="settings-foot">
           <span>{{ t('settings.footHint') }}</span>
           <span aria-hidden="true">·</span>
           <BButton
@@ -746,18 +883,19 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
+  import { computed, ref, onMounted, nextTick, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import { bookmarkStore, useUserStore } from '@/store';
   import { updatePreference, isGuestUser } from '@/utils/savePreference';
-  import { scrollIntoContainer } from '@/utils/zoom';
   import { recordOperation } from '@/api/commonApi.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { apiBasePost } from '@/http/request';
   import AccountSecurity from '@/components/settings/AccountSecurity.vue';
+  import AiUsagePage from '@/view/aiUsage/AiUsagePage.vue';
+  import PointsUsagePage from '@/view/pointsUsage/PointsUsagePage.vue';
   import CommunityChatNotificationSettingsPanel from '@/components/communityChat/CommunityChatNotificationSettingsPanel.vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
@@ -782,10 +920,9 @@
   import { APP_FILING_NUMBER, MIIT_QUERY_URL } from '@/config/androidRelease.ts';
   import { BROWSER_EXTENSION_LANDING_PATH, openChromeWebStore } from '@/config/browserExtension.ts';
   import SettingsMobileIndex, { type SettingsIndexRow } from './SettingsMobileIndex.vue';
+  import { useDailyBriefPreference } from './useDailyBriefPreference';
   import {
-    SETTINGS_SECTION_ANCHOR,
     countEnabledNotifications,
-    isSettingsSectionVisible,
     parseSettingsSection,
     visibleSettingsSections,
     type SettingsEnv,
@@ -796,30 +933,12 @@
   const router = useRouter();
   const route = useRoute();
   const bookmark = bookmarkStore();
+  const user = useUserStore();
   const isAndroidApp = isLightNoteAndroidApp();
 
-  // 设置页锚点导航:区块多、页面长,顶部 sticky 锚点条一键跳转。游客隐藏「账号与安全」锚点,与该区块 v-if 一致。
-  const anchors = computed(() => {
-    const list = [
-      { id: 'set-appearance', label: t('settings.appearance') },
-      { id: 'set-general', label: t('settings.general') },
-    ];
-    if (!isAndroidApp) list.push({ id: 'set-install', label: t('settings.installTitle') });
-    if (!bookmark.isMobile) list.push({ id: 'set-shortcuts', label: t('settings.shortcutsTitle') });
-    list.push({ id: 'set-notification', label: t('settings.notification') });
-    if (!isGuestUser()) list.push({ id: 'set-account', label: '账号与安全' });
-    if (!isGuestUser()) list.push({ id: 'set-ai', label: t('settings.ai.title') });
-    if (!bookmark.isMobile) {
-      list.push(
-        { id: 'set-quicksave', label: t('settings.browserCaptureTitle') },
-        { id: 'set-export', label: t('settings.exportTitle') },
-      );
-    }
-    list.push({ id: 'set-privacy', label: t('settings.privacyTitle') });
-    return list;
-  });
+  const pageRef = ref<HTMLElement | null>(null);
   /*
-   * 移动端「目录 + 子页」状态机。
+   * 桌面左侧目录和移动端「目录 + 子页」共用 route.query.section。
    *
    * 唯一状态来源是 route.query.section —— 不另存 expandedSection 之类的组件状态,
    * 否则会出现「URL 指向通知、组件却展开 AI」。这么定下来后刷新、深链接、
@@ -828,134 +947,49 @@
    *   无 section        → 紧凑目录(SettingsMobileIndex)
    *   有合法 section    → 只渲染对应那一个区块
    *
-   * 桌面端不参与:mobileSection 恒为 null,继续渲染完整长页 + 锚点。
+   * 桌面无 section 时默认外观；移动无 section 时仍显示紧凑目录。
    */
   const settingsEnv = computed<SettingsEnv>(() => ({ isGuest: isGuestUser() }));
-  const mobileSection = computed(() =>
-    bookmark.isMobile ? parseSettingsSection(route.query.section, settingsEnv.value) : null,
+  const parsedSection = computed(() => parseSettingsSection(route.query.section, settingsEnv.value));
+  const desktopSection = computed<SettingsIndexSectionId>(
+    () => parsedSection.value || visibleSettingsSections(settingsEnv.value)[0]?.id || 'appearance',
   );
+  const mobileSection = computed(() => (bookmark.isMobile ? parsedSection.value : null));
   const isMobileSubPage = computed(() => mobileSection.value !== null);
   const showMobileIndex = computed(() => bookmark.isMobile && mobileSection.value === null);
-  /** 桌面端渲染全部区块;移动端只渲染当前子页那一个 */
-  function sectionVisible(id: SettingsIndexSectionId) {
-    if (!isSettingsSectionVisible(id, settingsEnv.value)) return false;
-    return !bookmark.isMobile || mobileSection.value === id;
+
+  function sectionIcon(iconKey: string) {
+    if (iconKey === 'points') return icon.growth.coin;
+    return (icon.settings as Record<string, string>)[iconKey] || icon.nullImg;
   }
 
-  function scrollToSection(id: string, behavior: ScrollBehavior = 'smooth') {
-    const page = pageRef.value;
-    const el = document.getElementById(id);
-    if (!page || !el) return;
-    // 固定框子路由里 scrollIntoView 定位不到 .settings-page;统一用 scrollIntoContainer(内部已换算界面缩放 zoom,见 utils/zoom.ts)
-    scrollIntoContainer(page, el, 16, behavior);
-  }
-
-  // scrollspy:高亮当前滚动到的区块。root 必须是滚动容器 .settings-page(子路由在固定框内滚动,非 window)。
-  const activeAnchor = ref('set-appearance');
-  const pageRef = ref<HTMLElement | null>(null);
-  let anchorSpy: IntersectionObserver | null = null;
-  let deepLinkLayoutObserver: ResizeObserver | null = null;
-  let deepLinkStopTimer = 0;
-  let deepLinkTargetAnchor = '';
-  const deepLinkRetryTimers = new Set<number>();
-
-  function stopDeepLinkAlignment() {
-    deepLinkLayoutObserver?.disconnect();
-    deepLinkLayoutObserver = null;
-    window.clearTimeout(deepLinkStopTimer);
-    deepLinkStopTimer = 0;
-    deepLinkRetryTimers.forEach((timer) => window.clearTimeout(timer));
-    deepLinkRetryTimers.clear();
-    deepLinkTargetAnchor = '';
-  }
-
-  /**
-   * 深链接必须等异步设置项（例如设备列表）稳定后仍能落到目标区块。
-   * 这里以 section→anchor 映射为唯一事实源，并观察整张设置正文的尺寸变化，
-   * 因而适用于所有设置分类，不针对 AI 用量写死偏移量或延迟。
-   */
-  function alignDesktopDeepLink(rawSection: unknown) {
-    if (bookmark.isMobile) return;
-    const section = parseSettingsSection(rawSection, settingsEnv.value);
-    if (!section) return;
-    const anchor = SETTINGS_SECTION_ANCHOR[section];
-    stopDeepLinkAlignment();
-    deepLinkTargetAnchor = anchor;
-    activeAnchor.value = anchor;
-    nextTick(() => {
-      const align = () => {
-        activeAnchor.value = anchor;
-        scrollToSection(anchor, 'auto');
-      };
-      align();
-      const body = pageRef.value?.querySelector<HTMLElement>('.settings-body');
-      if (body && typeof ResizeObserver !== 'undefined') {
-        deepLinkLayoutObserver = new ResizeObserver(align);
-        deepLinkLayoutObserver.observe(body);
-      }
-      // ResizeObserver 覆盖布局变化；几个有界重试兼容旧 WebView 以及只改内容、不改尺寸的异步组件。
-      for (const delay of [160, 480, 960, 1600, 3000, 5000, 8000]) {
-        const timer = window.setTimeout(() => {
-          deepLinkRetryTimers.delete(timer);
-          align();
-        }, delay);
-        deepLinkRetryTimers.add(timer);
-      }
-      // 设备列表等设置项可能依赖慢网络；保持有界观察，用户开始操作时会立即取消。
-      deepLinkStopTimer = window.setTimeout(stopDeepLinkAlignment, 10_000);
-    });
-  }
-  // 滚到容器底部时强制高亮最后一项:底部几个区块因判定带够不到,IntersectionObserver 永远轮不到(scrollspy 通病)。
-  // 只在到底时改高亮、不碰滚动,故不会造成"点多次"(那是 zoom 定位偏移导致的,已修)。
-  // scrollTop/clientHeight/scrollHeight 均为布局坐标、不受界面缩放 zoom 影响,此处无需换算。
-  const onPageScroll = () => {
-    const page = pageRef.value;
-    if (!page) return;
-    if (deepLinkTargetAnchor) {
-      activeAnchor.value = deepLinkTargetAnchor;
-      return;
-    }
-    if (page.scrollTop + page.clientHeight >= page.scrollHeight - 4) {
-      activeAnchor.value = anchors.value[anchors.value.length - 1].id;
-    }
-  };
-  // ScrollSpy 和锚点条只为桌面长页服务:移动端已按分类拆成子页,一页只有一个区块,
-  // 既没有锚点条可高亮,也不该为此挂观察器和滚动监听。
-  onMounted(() => {
-    if (bookmark.isMobile) return;
-    anchorSpy = new IntersectionObserver(
-      (entries) => {
-        if (deepLinkTargetAnchor) {
-          activeAnchor.value = deepLinkTargetAnchor;
-          return;
-        }
-        for (const e of entries) {
-          if (e.isIntersecting) activeAnchor.value = (e.target as HTMLElement).id;
-        }
-      },
-      { root: pageRef.value, rootMargin: '-12% 0px -78% 0px', threshold: 0 },
-    );
-    anchors.value.forEach((a) => {
-      const el = document.getElementById(a.id);
-      if (el) anchorSpy!.observe(el);
-    });
-    pageRef.value?.addEventListener('scroll', onPageScroll, { passive: true });
-    pageRef.value?.addEventListener('wheel', stopDeepLinkAlignment, { passive: true });
-    pageRef.value?.addEventListener('pointerdown', stopDeepLinkAlignment, { passive: true });
-    alignDesktopDeepLink(route.query.section);
-  });
-  watch(
-    () => route.query.section,
-    (section, previous) => {
-      if (section !== previous) alignDesktopDeepLink(section);
-    },
+  const desktopNavigationRows = computed(() =>
+    visibleSettingsSections(settingsEnv.value).map((meta) => ({
+      ...meta,
+      icon: sectionIcon(meta.iconKey),
+      title: t(meta.titleKey),
+    })),
   );
-  onBeforeUnmount(() => {
-    anchorSpy?.disconnect();
-    stopDeepLinkAlignment();
-    pageRef.value?.removeEventListener('scroll', onPageScroll);
-    pageRef.value?.removeEventListener('wheel', stopDeepLinkAlignment);
-    pageRef.value?.removeEventListener('pointerdown', stopDeepLinkAlignment);
+
+  /** 两端都只渲染当前分类，桌面右侧不再是超长设置页。 */
+  function sectionVisible(id: SettingsIndexSectionId) {
+    return bookmark.isMobile ? mobileSection.value === id : desktopSection.value === id;
+  }
+
+  function openDesktopSection(id: SettingsIndexSectionId) {
+    const targetPanel = id === 'ai' ? 'usage' : undefined;
+    if (desktopSection.value === id && route.query.section === id && route.query.panel === targetPanel) return;
+    const query = { ...route.query, section: id, panel: targetPanel };
+    if (!targetPanel) delete query.panel;
+    void router.replace({ path: '/settings', query });
+  }
+
+  // 切换桌面分类时将右侧内容回到顶部；选中态始终来自 URL。
+  watch(desktopSection, () => {
+    if (bookmark.isMobile) return;
+    nextTick(() => {
+      if (pageRef.value) pageRef.value.scrollTop = 0;
+    });
   });
 
   /*
@@ -971,16 +1005,57 @@
     indexScrollTop.value = pageRef.value?.scrollTop ?? 0;
     if (id === 'ai') {
       recordOperation({ module: 'AI 用量与计费', operation: '打开页面【设置】' });
-      router.push('/ai-usage');
-      return;
     }
     enteredFromIndex = true;
-    router.push({ path: '/settings', query: { section: id } });
+    router.push({ path: '/settings', query: { section: id, ...(id === 'ai' ? { panel: 'usage' } : {}) } });
   }
 
-  function openAiUsage() {
-    router.push('/ai-usage');
+  const aiSettingsPanel = computed<'usage' | 'routines'>(() =>
+    route.query.panel === 'routines' ? 'routines' : 'usage',
+  );
+
+  function selectAiSettingsPanel(panel: 'usage' | 'routines') {
+    if (aiSettingsPanel.value === panel && route.query.panel === panel) return;
+    void router.replace({ path: '/settings', query: { ...route.query, section: 'ai', panel } });
   }
+
+  const dailyBriefPreferenceOwnerKey = computed(() =>
+    [
+      user.id || 'visitor',
+      user.role || '',
+      user.adminContext?.id || '',
+      user.adminContext?.subjectUserId || '',
+      user.adminContext?.mode || '',
+    ].join('|'),
+  );
+  const dailyBriefPreferenceWritable = computed(
+    () => Boolean(user.id && user.role !== 'visitor') && !user.adminContext,
+  );
+  const {
+    enabled: dailyBriefEnabled,
+    autoUpdate: dailyBriefAutoUpdate,
+    featureEnabled: dailyBriefFeatureEnabled,
+    loading: dailyBriefPreferenceLoading,
+    saving: dailyBriefPreferenceSaving,
+    error: dailyBriefPreferenceError,
+    description: dailyBriefPreferenceDescription,
+    load: loadDailyBriefPreference,
+    setEnabled: setDailyBriefEnabled,
+    setAutoUpdate: setDailyBriefAutoUpdate,
+  } = useDailyBriefPreference({
+    ownerKey: dailyBriefPreferenceOwnerKey,
+    writable: dailyBriefPreferenceWritable,
+  });
+
+  watch(
+    [parsedSection, aiSettingsPanel, dailyBriefPreferenceOwnerKey],
+    ([section, panel]) => {
+      if (section === 'ai' && panel === 'routines' && dailyBriefPreferenceWritable.value) {
+        void loadDailyBriefPreference();
+      }
+    },
+    { immediate: true },
+  );
 
   function backToIndex() {
     // 走 back() 才能让浏览器/Android 的前进后退保持一致;深链接进来时历史里没有目录页,只能 replace
@@ -1005,7 +1080,6 @@
       });
     }
   });
-  const user = useUserStore();
   // 移动端按移动语义解析：偏好是 resourceCenter 等移动端不支持的值时，要落到实际生效的那一项
   const selectedHomePage = computed(() =>
     bookmark.isMobile ? getMobileHomePreference(user.preferences) : getHomePagePreference(user.preferences),
@@ -1039,29 +1113,22 @@
    * 桌面锚点继续用短标题。summary 全部来自上面的实时 computed。
    */
   const mobileIndexRows = computed<SettingsIndexRow[]>(() => {
-    const copy: Record<SettingsIndexSectionId, { title: string; summary: string }> = {
-      appearance: { title: t('settings.mobileIndex.appearance'), summary: appearanceSummary.value },
-      general: { title: t('settings.mobileIndex.general'), summary: t('settings.mobileIndex.generalSummary') },
-      notification: { title: t('settings.notification'), summary: notificationSummary.value },
-      ai: { title: t('settings.ai.title'), summary: aiSummary.value },
-      account: { title: t('settings.accountSecurityTitle'), summary: t('settings.accountSecurityDesc') },
-      privacy: { title: t('settings.privacyTitle'), summary: t('settings.mobileIndex.privacySummary') },
-    };
-    const icons: Record<SettingsIndexSectionId, string> = {
-      appearance: icon.settings.appearance,
-      general: icon.settings.general,
-      notification: icon.settings.notification,
-      ai: icon.settings.ai,
-      account: icon.settings.account,
-      privacy: icon.settings.privacy,
+    const summaries: Record<SettingsIndexSectionId, string> = {
+      appearance: appearanceSummary.value,
+      general: t('settings.mobileIndex.generalSummary'),
+      notification: notificationSummary.value,
+      ai: aiSummary.value,
+      points: t('growth.pointsUsagePageDescription'),
+      account: t('settings.accountSecurityDesc'),
+      privacy: t('settings.mobileIndex.privacySummary'),
     };
     return visibleSettingsSections(settingsEnv.value).map((meta) => ({
       id: meta.id,
       group: meta.group,
       tone: meta.tone,
-      icon: icons[meta.id],
-      title: copy[meta.id].title,
-      summary: copy[meta.id].summary,
+      icon: sectionIcon(meta.iconKey),
+      title: t(meta.mobileTitleKey),
+      summary: summaries[meta.id],
     }));
   });
 
@@ -1388,72 +1455,15 @@
      绝不能用 min-height:100vh —— 那会把元素撑出视口 60px 且底部被裁、无滚动条。 */
   .settings-page {
     height: 100%;
-    overflow-y: auto;
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
     padding: 28px 24px 64px;
     box-sizing: border-box;
     background: var(--background-color);
     color: var(--text-color);
   }
 
-  /* 侧边竖排锚点导航:PC 下浮在居中内容(max-width 680)左侧空白区,不占内容宽度、不遮挡任何元素;窄屏无空间则隐藏。 */
-  .settings-anchors {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    /* 用「视口中心 + transform 偏移」定位到居中内容(max-width 680)左侧空白:
-       340(内容半宽) + 132(自身宽) + 16(间距) = 488。刻意避开 100vw——它在界面缩放(<html> zoom)下取值
-       会与 fixed 的 zoom 二次缩放叠加,导致锚点栏右移遮住内容;而视口中心与内容在同一 zoom 上下文等比缩放,
-       相对位置恒定,放大/缩小都不遮元素。zoom=1 时与原 calc 结果等价。 */
-    transform: translate(-488px, -50%);
-    z-index: 6;
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    width: 132px;
-    max-height: 74vh;
-    overflow-y: auto;
-    scrollbar-width: none;
-  }
-  .settings-anchors::-webkit-scrollbar {
-    display: none;
-  }
-  .anchor-chip {
-    text-align: left;
-    padding: 7px 12px;
-    border-radius: 8px;
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--desc-color);
-    font-size: 13px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    cursor: pointer;
-    transition:
-      color 0.15s,
-      background 0.15s;
-  }
-  .anchor-chip:hover {
-    color: var(--text-color);
-    background: color-mix(in srgb, var(--card-border-color) 28%, transparent);
-  }
-  .anchor-chip.active {
-    color: var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
-    font-weight: 600;
-  }
-  /* 窄屏(容器两侧无足够空间)隐藏侧边导航,内容照常滚动 */
-  @media (max-width: 1040px) {
-    .settings-anchors {
-      display: none;
-    }
-  }
-  /* 点击锚点定位时略留顶部空隙 */
-  .settings-card {
-    scroll-margin-top: 16px;
-  }
-
-  /* 单列居中:设置项聚焦"偏好"本身;账号/帮助等入口不再重复(已在个人中心),布局更清爽。 */
+  /* 移动仍使用原来的单列目录；只有桌面端扩展为目录 + 内容两列。 */
   .settings-container {
     max-width: 680px;
     margin: 0 auto;
@@ -1461,12 +1471,138 @@
     flex-direction: column;
     gap: 18px;
   }
+
+  .settings-container.is-desktop {
+    width: min(100%, 1180px);
+    max-width: 1180px;
+    display: grid;
+    grid-template-columns: minmax(210px, 240px) minmax(0, 1fr);
+    align-items: start;
+    gap: 22px;
+  }
+
+  /* 完整桌面才使用原型中的宽画布；平板继续沿用上面的紧凑双栏。 */
+  .settings-container.is-full-desktop {
+    width: min(100%, 1380px);
+    max-width: 1380px;
+    grid-template-columns: 244px minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .settings-desktop-sidebar {
+    position: sticky;
+    top: 0;
+    min-width: 0;
+    padding: 16px 12px 12px;
+    border: 1px solid color-mix(in srgb, var(--card-border-color) 68%, transparent);
+    border-radius: 16px;
+    background: var(--workbench-subcard-bg);
+    box-shadow: 0 12px 28px -24px color-mix(in srgb, var(--text-color) 34%, transparent);
+  }
+
+  .settings-container.is-full-desktop .settings-desktop-sidebar {
+    min-height: 520px;
+    padding: 18px 13px 14px;
+    border-color: var(--surface-border-color, var(--card-border-color));
+    border-radius: 14px;
+    background: var(--card-background);
+    box-shadow: none;
+    box-sizing: border-box;
+  }
+
+  .settings-desktop-sidebar .settings-title {
+    margin: 2px 8px 14px;
+    font-size: 22px;
+  }
+
+  .settings-desktop-sidebar .settings-back {
+    margin: 0 4px 12px;
+  }
+
+  .settings-desktop-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .settings-desktop-nav__item {
+    width: 100%;
+    min-height: 44px;
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 6px 9px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    color: var(--desc-color);
+    background: transparent !important;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: left;
+  }
+
+  .settings-desktop-nav__item:hover,
+  .settings-desktop-nav__item:focus-visible {
+    border-color: var(--card-border-color);
+    color: var(--text-color);
+    background: var(--menu-item-h-bg-color) !important;
+  }
+
+  .settings-desktop-nav__item.active {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 9%, var(--workbench-subcard-bg)) !important;
+    font-weight: 700;
+  }
+
+  .settings-desktop-nav__icon {
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid color-mix(in srgb, var(--resource-note-color) 24%, transparent);
+    border-radius: 8px;
+    color: var(--resource-note-color);
+    background: color-mix(in srgb, var(--resource-note-color) 9%, transparent);
+  }
+
+  .settings-desktop-nav__icon.is-purple {
+    border-color: color-mix(in srgb, var(--primary-color) 28%, transparent);
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 9%, transparent);
+  }
+
+  .settings-desktop-nav__arrow {
+    margin-left: auto;
+    opacity: 0;
+    transform: translateX(-2px);
+    transition:
+      opacity 0.16s ease,
+      transform 0.16s ease;
+  }
+
+  .settings-desktop-nav__item.active .settings-desktop-nav__arrow,
+  .settings-desktop-nav__item:hover .settings-desktop-nav__arrow,
+  .settings-desktop-nav__item:focus-visible .settings-desktop-nav__arrow {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
   /* 卡片设为 container:字段按"卡片宽"而非"视口宽"决定是否堆叠,缩放/窄窗下不错位。 */
   .settings-body {
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 18px;
     container-type: inline-size;
+  }
+
+  @media (max-width: 920px) {
+    .settings-container.is-desktop {
+      grid-template-columns: minmax(184px, 210px) minmax(0, 1fr);
+      gap: 14px;
+    }
   }
 
   /* ---- hero ---- */
@@ -1519,6 +1655,14 @@
     box-shadow:
       0 1px 2px rgba(0, 0, 0, 0.03),
       0 12px 28px -22px rgba(30, 35, 70, 0.35);
+  }
+
+  .settings-container.is-full-desktop .settings-card {
+    padding: 20px 22px 8px;
+    border-color: var(--surface-border-color, var(--card-border-color));
+    border-radius: 14px;
+    background: var(--card-background);
+    box-shadow: none;
   }
   .card-head {
     display: flex;
@@ -1640,31 +1784,241 @@
     color: var(--desc-color);
   }
 
-  .settings-card--ai-entry {
-    padding: 0;
-    overflow: hidden;
+  .field-desc.is-error {
+    color: var(--danger-color, #d14343);
   }
 
-  .settings-card--ai-entry .ai-usage-entry {
+  .settings-card--ai .ai-usage-field {
+    padding: 0;
+  }
+
+  .ai-settings-tabs {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 2px 0;
+    border-bottom: 1px solid var(--surface-divider-color, var(--card-border-color));
+  }
+
+  .ai-settings-tab {
+    width: auto;
+    min-width: 0;
+    min-height: 40px;
+    gap: 7px;
+    padding: 0 10px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    color: var(--desc-color);
+    background: transparent !important;
+    font-size: 13px;
+  }
+
+  .ai-settings-tab:hover,
+  .ai-settings-tab:focus-visible {
+    color: var(--text-color);
+  }
+
+  .ai-settings-tab.active {
+    border-bottom-color: var(--primary-color);
+    color: var(--primary-color);
+    font-weight: 700;
+  }
+
+  .ai-field-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ai-daily-brief-field {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .ai-brief-details {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 36px repeat(3, minmax(0, 1fr));
+    align-items: start;
+    gap: 14px;
+    padding-top: 15px;
+    border-top: 1px solid var(--surface-divider-color, var(--card-border-color));
+  }
+
+  .ai-brief-icon {
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 25%, transparent);
+    border-radius: 9px;
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 9%, var(--card-background));
+  }
+
+  .ai-brief-detail {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .ai-brief-detail strong {
+    font-size: 12px;
+    font-weight: 650;
+  }
+
+  .ai-brief-detail span {
+    color: var(--desc-color);
+    font-size: 11px;
+    line-height: 1.45;
+  }
+
+  .ai-routine-boundary {
+    padding: 17px 18px;
+    border: 1px solid var(--surface-border-color, var(--card-border-color));
+    border-radius: 13px;
+    background: var(--card-background);
+  }
+
+  .ai-routine-boundary__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 13px;
+    border-bottom: 1px solid var(--surface-divider-color, var(--card-border-color));
+  }
+
+  .ai-routine-boundary__head > span {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .ai-routine-boundary__head strong {
+    font-size: 14px;
+    font-weight: 650;
+  }
+
+  .ai-routine-boundary__head small,
+  .ai-routine-boundary__items span {
+    color: var(--desc-color);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .ai-routine-boundary__items {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    padding-top: 13px;
+  }
+
+  .ai-routine-boundary__items span {
+    position: relative;
+    padding-left: 14px;
+  }
+
+  .ai-routine-boundary__items span::before {
+    position: absolute;
+    top: 0.55em;
+    left: 0;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    content: '';
+  }
+
+  /* AI 分类在完整桌面改为“页头 + 两张设置卡”，避免像旧设置页只加了两行开关。 */
+  .settings-container.is-full-desktop .settings-card--ai {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .settings-container.is-full-desktop .settings-card--ai .card-head {
+    padding: 5px 2px 16px;
+    border-bottom-color: var(--surface-divider-color, var(--card-border-color));
+  }
+
+  .settings-container.is-full-desktop .settings-card--ai .ai-settings-tabs {
+    padding-top: 2px;
+  }
+
+  .settings-container.is-full-desktop .settings-card--ai .fields {
+    gap: 14px;
+    padding-top: 16px;
+  }
+
+  .settings-embedded-content {
+    margin-top: 16px;
+  }
+
+  .settings-container.is-full-desktop .settings-card--points {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .settings-container.is-full-desktop .settings-card--points .card-head {
+    padding: 5px 2px 16px;
+    border-bottom-color: var(--surface-divider-color, var(--card-border-color));
+  }
+
+  .settings-container.is-full-desktop .settings-card--ai .field {
+    min-height: 84px;
+    padding: 17px 18px;
+    border: 1px solid var(--surface-border-color, var(--card-border-color));
+    border-radius: 13px;
+    background: var(--card-background);
+    box-sizing: border-box;
+  }
+
+  .settings-container.is-full-desktop .settings-card--ai .field + .field {
+    border-top: 1px solid var(--surface-border-color, var(--card-border-color));
+  }
+
+  .settings-container.is-full-desktop .settings-card--ai .ai-daily-brief-field {
+    border-color: color-mix(in srgb, var(--primary-color) 24%, var(--surface-border-color));
+  }
+
+  .settings-container.is-full-desktop .settings-card--ai .ai-usage-field {
+    min-height: 0;
+    padding: 0;
+  }
+
+  .settings-card--ai .ai-usage-entry {
     width: 100%;
     height: auto;
-    min-height: 76px;
+    min-height: 70px;
     justify-content: flex-start;
-    gap: 12px;
-    padding: 14px 16px;
+    gap: 10px;
+    padding: 13px 0;
     border: 0;
-    border-radius: 0;
+    border-radius: 9px;
     background: transparent;
     color: var(--text-color);
     text-align: left;
     white-space: normal;
   }
 
-  .settings-card--ai-entry .ai-usage-entry:hover {
+  .settings-container.is-full-desktop .settings-card--ai .ai-usage-entry {
+    min-height: 84px;
+    padding: 17px 18px;
+    border-radius: 12px;
+  }
+
+  .settings-card--ai .ai-usage-entry:hover {
     background: var(--primary-btn-bg-color);
   }
 
-  .settings-card--ai-entry .ai-usage-entry:focus-visible {
+  .settings-card--ai .ai-usage-entry:focus-visible {
     outline-offset: -2px;
   }
 
@@ -1690,6 +2044,25 @@
   .ai-usage-entry__arrow {
     flex: 0 0 auto;
     color: var(--desc-color);
+  }
+
+  @media (max-width: 1100px) {
+    .ai-brief-details {
+      grid-template-columns: 36px minmax(0, 1fr);
+    }
+
+    .ai-brief-icon {
+      grid-column: 1;
+      grid-row: 1 / span 3;
+    }
+
+    .ai-brief-detail {
+      grid-column: 2;
+    }
+
+    .ai-routine-boundary__items {
+      grid-template-columns: 1fr;
+    }
   }
 
   .pwa-settings-actions {
@@ -1889,6 +2262,10 @@
        放进轨道后会漏到轨道外侧、每个字段都糊一片。这里收成贴合的一层。 */
     .seg-btn.active {
       box-shadow: 0 1px 3px color-mix(in srgb, var(--primary-color) 32%, transparent);
+    }
+
+    .settings-embedded-content {
+      margin-top: 12px;
     }
   }
 

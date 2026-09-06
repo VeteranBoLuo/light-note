@@ -1,3 +1,4 @@
+import { imagePreviewDescriptor } from '../util/filePreview/image.js';
 import { resolveFilePreviewFormat } from '@lightnote/shared';
 import pool from '../db/index.js';
 import { L, generateUUID, resultData } from '../util/common.js';
@@ -314,7 +315,7 @@ async function authorizePublicShare(req, res, { eventType, countColumn, previewO
       publicError(req, res, 403, 'SHARE_CODE_INVALID', '提取码错误', 'The access code is incorrect');
       return null;
     }
-    if (previewOnly && !resolveFilePreviewFormat({ fileName: row.file_name, fileType: row.file_type })) {
+    if (previewOnly && !resolveFilePreviewFormat({ fileName: row.file_name, fileType: row.file_type }) && !isSharedImage(row)) {
       await appendShareEvent(connection, req, row.id, eventType, 'preview_unsupported');
       await connection.commit();
       publicError(
@@ -427,7 +428,20 @@ export async function downloadFileShare(req, res) {
   return res.send(resultData({ downloadUrl: url, fileName: row.file_name, expiresIn }));
 }
 
+function isSharedImage(row) {
+  try { imagePreviewDescriptor(row, 'image_display'); return true; } catch { return false; }
+}
+
 export async function prepareFileSharePreview(req, res) {
+  if (req.body?.previewTicket) {
+    const existing = await authorizePreviewTicket(req, res);
+    if (!existing) return;
+    try {
+      const state = await prepareFilePreview({ ownerUserId: existing.file_owner_id, fileId: existing.file_id,
+        strategy: isSharedImage(existing) ? 'image_display' : undefined, accessExpiresAt: existing.expires_at, retry: req.body?.retry === true });
+      return res.send(resultData({ ...state, previewTicket: req.body.previewTicket }));
+    } catch (error) { return sendPreviewError(req, res, error, 'share-retry'); }
+  }
   const row = await authorizePublicShare(req, res, {
     eventType: 'downloaded',
     countColumn: 'download_count',
@@ -440,6 +454,10 @@ export async function prepareFileSharePreview(req, res) {
         ownerUserId: row.file_owner_id,
         fileId: row.file_id,
         retry: req.body?.retry === true,
+        ...(isSharedImage(row) ? { strategy: 'image_display', accessExpiresAt: row.expires_at } : {}),
+      }).catch(error => {
+        if (!isSharedImage(row)) throw error;
+        return { fileId: String(row.file_id), strategy: 'image_display', previewType: 'image', status: 'failed', errorCode: 'IMAGE_PREVIEW_UNAVAILABLE' };
       }),
       issueFilePreviewShareTicket({
         shareId: row.id,
@@ -450,7 +468,7 @@ export async function prepareFileSharePreview(req, res) {
     const sourceObjectKey = row.obs_key || buildObjectKey(row.file_owner_id, row.file_name);
     const { url: sourceDownloadUrl, expiresIn: sourceUrlExpiresIn } = createDownloadSignedUrl({
       objectKey: sourceObjectKey,
-      expires: 600,
+      expires: isSharedImage(row) ? sharedImageUrlTtl(row) : 600,
     });
     return res.send(
       resultData({
@@ -470,7 +488,7 @@ export async function resolveFileSharePreview(req, res) {
   const row = await authorizePreviewTicket(req, res);
   if (!row) return;
   try {
-    const state = await resolveFilePreview({ ownerUserId: row.file_owner_id, fileId: row.file_id });
+    const state = await resolveFilePreview({ ownerUserId: row.file_owner_id, fileId: row.file_id, ...(isSharedImage(row) ? { strategy: 'image_display', accessExpiresAt: row.expires_at } : {}) });
     return res.send(resultData(state));
   } catch (error) {
     return sendPreviewError(req, res, error, 'share-resolve');
@@ -493,5 +511,22 @@ export async function listFileShareArchivePreview(req, res) {
     return res.send(resultData(data));
   } catch (error) {
     return sendPreviewError(req, res, error, 'share-archive-list');
+  }
+}
+
+function sharedImageUrlTtl(row) {
+  const remaining = row.expires_at ? Math.floor((new Date(row.expires_at).getTime() - Date.now()) / 1000) - 1 : 300;
+  if (!Number.isFinite(remaining) || remaining < 1) throw Object.assign(new Error('SHARE_EXPIRED'), { code: 'SHARE_EXPIRED', status: 410 });
+  return Math.min(300, remaining);
+}
+
+export async function getFileSharePreviewOriginal(req, res) {
+  try {
+    const row = await authorizePreviewTicket(req, res);
+    if (!row) return;
+    const { url, expiresIn } = createDownloadSignedUrl({ objectKey: row.obs_key || buildObjectKey(row.file_owner_id, row.file_name), expires: sharedImageUrlTtl(row) });
+    return res.send(resultData({ downloadUrl: url, expiresIn }));
+  } catch (error) {
+    return sendPreviewError(req, res, error);
   }
 }

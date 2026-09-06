@@ -15,6 +15,28 @@ function createPersistence() {
 }
 
 describe('aiExecution', () => {
+  it('整理关联只接受受信任配置，不读取客户端 body', async () => {
+    const id = '2394cf3b-bb27-40fb-a1af-e5ce89c48c99';
+    for (const trusted of [true, false]) {
+      const persistence = createPersistence();
+      await runAiExecution(
+        {
+          request: { user: { id: 'u1', role: 'user' }, headers: {}, body: { organizeRunId: id, organizeItemId: id } },
+          skillId: 'organize.metadata',
+          taskType: 'organize_resource_metadata',
+          persistence,
+          ...(trusted ? { organizeRunId: id, organizeItemId: id } : {}),
+        },
+        async () => {
+          expect(getActiveAiExecution()).toMatchObject({
+            organizeRunId: trusted ? id : null,
+            organizeItemId: trusted ? id : null,
+          });
+          return {};
+        },
+      );
+    }
+  });
   it('账号 AI 限制在根执行统一失败关闭，不依赖业务 URL 且不触发额度或 Provider', async () => {
     const persistence = createPersistence();
     const quota = { reserve: vi.fn(), reconcile: vi.fn() };
@@ -252,6 +274,61 @@ describe('aiExecution', () => {
       errorCode: 'AI_ORGANIZE_PARTIAL',
       chargedTokens: 13,
     });
+  });
+
+  it('单项整理切片只占单项预算，并发执行后各自按真实用量结算', async () => {
+    let availableTokens = 12_000;
+    const quota = {
+      reserve: vi.fn(async (_request, options) => {
+        const reserved = Number(options.reserveTokens || 0);
+        if (reserved > availableTokens) return { blocked: true, reserved: 0, reservationKey: options.requestId };
+        availableTokens -= reserved;
+        return { blocked: false, reserved, reservationKey: options.requestId };
+      }),
+      reconcile: vi.fn(async (handle, chargedTokens) => {
+        availableTokens += Number(handle.reserved || 0) - Number(chargedTokens || 0);
+        return true;
+      }),
+    };
+    let releaseProvider;
+    const bothProvidersStarted = new Promise((resolve) => {
+      releaseProvider = resolve;
+    });
+    const client = vi.fn(async () => {
+      if (client.mock.calls.length === 2) releaseProvider();
+      await bothProvidersStarted;
+      return {
+        content: 'ok',
+        usage: { promptTokens: 8, completionTokens: 2, totalTokens: 10 },
+        usageStatus: 'reported',
+      };
+    });
+    const gateway = createAiGateway({ completeClient: client, streamClient: vi.fn() });
+    const runSlice = (requestId) =>
+      runAiExecution(
+        {
+          requestId,
+          request: { user: { id: 'u1', role: 'user' }, headers: {}, body: {} },
+          taskType: 'organize_note_tags',
+          skillId: 'note.organize_tags',
+          surface: 'organize_center',
+          reservationTokens: 5_000,
+          maxUserProviderCalls: 1,
+          maxPlatformProviderCalls: 0,
+          persistence: createPersistence(),
+        },
+        () => gateway.complete([], { maxTokens: 600, trace: { stage: 'organize_note_tags' } }),
+        { quota },
+      );
+
+    await expect(
+      Promise.all([runSlice('494d41e8-bb75-489f-a548-40a77ceebda6'), runSlice('6c02958c-77c5-4d65-85da-e9e721e381d8')]),
+    ).resolves.toHaveLength(2);
+
+    expect(client).toHaveBeenCalledTimes(2);
+    expect(quota.reserve.mock.calls.map((call) => call[1].reserveTokens)).toEqual([5_000, 5_000]);
+    expect(quota.reconcile.mock.calls.map((call) => call[1])).toEqual([10, 10]);
+    expect(availableTokens).toBe(11_980);
   });
 
   it('一次用户动作只占位和结算一次，并累计所有 Provider Span', async () => {

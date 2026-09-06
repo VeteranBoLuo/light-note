@@ -145,6 +145,7 @@
   import icon from '@/config/icon';
   import { FILE_TYPE_COLOR_HEX, RESOURCE_COLOR_CSS_VAR, RESOURCE_COLOR_HEX } from '@/config/resourceColor';
   import {
+    getTrendCurveSegments,
     getTrendMotionDirection,
     getTrendMotionPhase,
     getTrendMotionPoint,
@@ -187,9 +188,7 @@
     activeTrendRange.value === 'month' ? t('workbench.chart.trendMonth') : t('workbench.chart.trendSevenDays'),
   );
   const trendHint = computed(() =>
-    activeTrendRange.value === 'month'
-      ? t('workbench.chart.trendHintMonth')
-      : t('workbench.chart.trendHintSevenDays'),
+    activeTrendRange.value === 'month' ? t('workbench.chart.trendHintMonth') : t('workbench.chart.trendHintSevenDays'),
   );
   const cardThemeClass = computed(() => (props.themeKey === 'night' ? 'chart-card--night' : 'chart-card--day'));
   const trendRef = ref<HTMLElement | null>(null);
@@ -432,11 +431,16 @@
     if (!points.length) return;
     ctx.beginPath();
     ctx.moveTo(points[0].x, points[0].y);
-    for (let i = 0; i < points.length - 1; i += 1) {
-      // 工作台数据经常出现 0 → 峰值 → 0。旧的贝塞尔控制点会越过相邻日期，
-      // 在低点处画出回勾；这里使用稳定的日期折线，保证每个点都严格落在对应日期。
-      ctx.lineTo(points[i + 1].x, points[i + 1].y);
-    }
+    getTrendCurveSegments(points).forEach((segment) => {
+      ctx.bezierCurveTo(
+        segment.control1.x,
+        segment.control1.y,
+        segment.control2.x,
+        segment.control2.y,
+        segment.end.x,
+        segment.end.y,
+      );
+    });
   }
 
   function drawTrend() {

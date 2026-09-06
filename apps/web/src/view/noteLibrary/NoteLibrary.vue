@@ -1,5 +1,6 @@
 <template>
   <ResourcePageShell
+    class="note-library-shell"
     :title="$t('note.title')"
     :subtitle="$t('note.subtitle')"
     accent="note"
@@ -45,17 +46,7 @@
           {{ $t('note.templateManager.title') }}
         </BButton>
         <ViewModeToggle />
-        <BButton
-          class="note-action-button note-batch-toggle"
-          :class="{ 'is-batch-active': batchMode }"
-          :aria-label="$t(batchMode ? 'note.exitBatch' : 'note.batchAction')"
-          @click="toggleBatchMode"
-        >
-          <span class="note-batch-toggle__labels" aria-hidden="true">
-            <span :class="{ 'is-visible': !batchMode }">{{ $t('note.batchAction') }}</span>
-            <span :class="{ 'is-visible': batchMode }">{{ $t('note.exitBatch') }}</span>
-          </span>
-        </BButton>
+        <BBatchToggle class="note-batch-toggle" @click="toggleBatchMode" :active="batchMode" />
         <TagFilterSelector :all-tags="visibleNoteTags" @select="handleTagFilterSelect" />
         <div class="note-search" v-click-log="OPERATION_LOG_MAP.noteLibrary.searchNote">
           <BInput v-model:value="searchValue" :placeholder="$t('note.searchNote')" clearable>
@@ -64,7 +55,14 @@
             </template>
           </BInput>
         </div>
+        <BDropdown v-if="bookmark.isDesktop" trigger="click" align="right" :menu-options="noteAiMenuOptions">
+          <BButton class="note-action-button note-ai-button" v-click-log="OPERATION_LOG_MAP.noteLibrary.aiOrganize">
+            <SvgIcon :src="icon.ai.organize" size="17" />
+            {{ $t('note.ai.title') }}
+          </BButton>
+        </BDropdown>
         <BButton
+          v-else
           class="note-action-button note-ai-button"
           @click="openGlobalAiOrganize"
           v-click-log="OPERATION_LOG_MAP.noteLibrary.aiOrganize"
@@ -320,6 +318,9 @@
           >
             <note-card
               :note="note"
+              :selected="selection.ids.value.includes(String(note.id))"
+              :selection-disabled="selection.busy.value || loading || refreshing"
+              @update:selected="(checked) => selection.toggle(note, checked)"
               :batch-mode="batchMode"
               :tree-read-enabled="noteTreeReadEnabled"
               :tree-write-enabled="noteTreeWriteEnabled"
@@ -391,6 +392,9 @@
             >
               <note-list-item
                 :note="note"
+                :selected="selection.ids.value.includes(String(note.id))"
+                :selection-disabled="selection.busy.value || loading || refreshing"
+                @update:selected="(checked) => selection.toggle(note, checked)"
                 :batch-mode="batchMode"
                 :tree-read-enabled="noteTreeReadEnabled"
                 :tree-write-enabled="noteTreeWriteEnabled"
@@ -479,6 +483,15 @@
       :sections="batchExportSections"
       :note="$t('note.batchExportArchiveHint', { count: selectedVisibleCount })"
     />
+    <ActionCardModal
+      v-if="singleNoteExportModalVisible"
+      v-model:visible="singleNoteExportModalVisible"
+      mask-closable
+      :title="$t('noteDetail.exportNote')"
+      width="min(680px, 88vw)"
+      :sections="singleNoteExportSections"
+      :note="$t('noteDetail.exportNoteDesc')"
+    />
 
     <!-- 智能打标签(笔记):自动为未打标签的笔记推荐标签 -->
     <AiOrganizeModal
@@ -486,10 +499,13 @@
       v-model:visible="aiOrgVisible"
       init-type="note"
       :selected-ids="selectedAiOrganizeIds"
+      :selection-operation="selection.operation()"
       @applied="init"
     />
     <NoteAiDialog v-model:visible="noteAiVisible" :notes="noteAiItems" />
     <ResourceBatchActionBar
+      selection-module="notes"
+      :selection-visible-count="selection.visibleSelected.value"
       :open="batchMode"
       :mobile="bookmark.isMobile"
       :summary="batchActionSummary"
@@ -508,9 +524,10 @@
       <template #leading>
         <span class="batch-action-select-all" @click.stop>
           <BCheckbox
+            controlled
             :checked="allVisibleChecked"
             :indeterminate="someVisibleChecked"
-            :disabled="!viewNoteList.length"
+            :disabled="!viewNoteList.length || selection.busy.value || loading || refreshing"
             :aria-label="$t(allVisibleChecked ? 'note.unselectAllCurrent' : 'note.selectAllCurrent')"
             @change="setAllVisibleChecked"
           />
@@ -545,6 +562,7 @@
       v-model:open="outcomeDrawerOpen"
       :resources="outcomeResources"
       :quick-actions="noteOutcomeQuickActions"
+      :initial-quick-action-id="outcomeInitialQuickActionId"
       surface="note_library"
     />
     <NoteTagConfig
@@ -558,6 +576,7 @@
       v-model:visible="moveNoteVisible"
       :note="activeMoveNote"
       :notes="activeMoveNotes"
+      :selection-operation="moveSelectionOperation"
       @moved="handleNoteMoved"
     />
     <NoteAttachPagesModal
@@ -618,9 +637,13 @@
 </template>
 
 <script lang="ts" setup>
+  import { MAX_NOTE_BATCH_ACTION_ITEMS } from '@lightnote/shared/resource-selection';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import router from '@/router';
+  import { useResourceSelection } from '@/composables/useResourceSelection';
+  import type { SelectionOperation } from '@/store/resourceSelection';
+  import { runOrderedBatch } from '@/utils/orderedBatch';
   import { apiBasePost } from '@/http/request.ts';
   import { computed, defineAsyncComponent, nextTick, onActivated, onBeforeUnmount, ref, watch } from 'vue';
   import { storeToRefs } from 'pinia';
@@ -638,6 +661,7 @@
   import NoteOutlineList from '@/components/noteLibrary/detail/NoteOutlineList.vue';
   import { preloadNoteEditorRuntime } from '@/components/noteLibrary/detail/editorRuntimeLoader';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BBatchToggle from '@/components/base/BasicComponents/BBatchToggle.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
@@ -821,7 +845,6 @@
     selectDirectory: selectTreeDirectory,
     toggleExpanded: toggleTreeNodeBase,
   } = useNoteTree({ enabled: noteTreeReadEnabled });
-
   async function loadNoteTreeFeatureSnapshot() {
     const requestScope = noteCacheScope.value;
     let next = { ...DISABLED_NOTE_TREE_FEATURES } as NoteTreeFeatures;
@@ -938,17 +961,42 @@
   const activeTagNote = ref<any | null>(null);
   const activeMoveNote = ref<any | null>(null);
   const activeMoveNotes = ref<any[]>([]);
+  const moveSelectionOperation = ref<SelectionOperation | null>(null);
   const moveNoteVisible = ref(false);
   const activeAttachTarget = ref<{ id: string; title?: string } | null>(null);
   const attachPagesVisible = ref(false);
   const activeRenameNote = ref<{ id: string; title?: string; revision?: number } | null>(null);
   const renameNoteVisible = ref(false);
-  const batchMode = ref(false);
+  const selection = useResourceSelection(
+    'notes',
+    noteList,
+    'note',
+    computed(() => loading.value || refreshing.value),
+  );
+  const batchMode = selection.mode;
+  let exportOperation: SelectionOperation | null = null;
   const batchExportModalVisible = ref(false);
   const batchExporting = ref(false);
+  const singleNoteExportModalVisible = ref(false);
+  const singleNoteExporting = ref(false);
+  const activeExportNote = ref<any | null>(null);
   const batchInboxMutating = ref(false);
   const outcomeDrawerOpen = ref(false);
+  const outcomeInitialQuickActionId = ref('');
   const outcomeResources = ref<ResourceOutcomeResource[]>([]);
+  watch([outcomeDrawerOpen, aiOrgVisible, moveNoteVisible, batchExportModalVisible, batchExporting], (values) => {
+    if (!values.some(Boolean)) selection.finish();
+  });
+  watch(selection.active, (active) => {
+    if (!active) {
+      outcomeDrawerOpen.value = false;
+      aiOrgVisible.value = false;
+      moveNoteVisible.value = false;
+      batchExportModalVisible.value = false;
+      batchExporting.value = false;
+      exportOperation = null;
+    }
+  });
   const mobilePageActionsOpen = ref(false);
   const mobileNoteActionsOpen = ref(false);
   const activeMobileNote = ref<any | null>(null);
@@ -1294,6 +1342,12 @@
           ]
         : []),
       { key: 'share', label: t('noteShare.shareAction'), icon: icon.share },
+      {
+        key: 'export',
+        label: t('noteDetail.export'),
+        icon: icon.noteDetail.exportLine,
+        disabled: singleNoteExporting.value,
+      },
       { key: 'note-actions-divider', divider: true },
       { key: 'delete', label: t('common.delete'), icon: icon.table_delete, danger: true },
     ];
@@ -1856,27 +1910,32 @@
 
   function openMoveNote(note: any) {
     if (!noteTreeWriteEnabled.value || blockGuestWrite('move-note')) return;
+    moveSelectionOperation.value = null;
     activeMoveNotes.value = [];
     activeMoveNote.value = note;
     moveNoteVisible.value = true;
   }
 
-  function openBatchMove() {
+  async function openBatchMove() {
     if (!noteTreeWriteEnabled.value || blockGuestWrite('move-note')) return;
-    const selected = getSelectedNotes();
-    if (!selected.length) return;
+    const op = await selection.prepare(undefined, MAX_NOTE_BATCH_ACTION_ITEMS);
+    if (!op) return;
+    const selected = op.items;
     mobileBatchActionsOpen.value = false;
     activeMoveNote.value = null;
+    moveSelectionOperation.value = op;
     activeMoveNotes.value = [...selected];
     moveNoteVisible.value = true;
   }
 
   async function handleNoteMoved(result: NoteTreeMoveResult | null) {
+    const operation = moveSelectionOperation.value;
     const wasBatchMove = activeMoveNotes.value.length > 0;
     moveNoteVisible.value = false;
-    if (wasBatchMove) exitBatch();
+    if (wasBatchMove) selection.finish();
     noteLibraryCache.invalidateMovedNoteLists(noteCacheScope.value, result);
     await Promise.all([refreshTree(), reloadNotes()]);
+    if (operation && !selection.current(operation)) return;
     activeMoveNote.value = null;
     activeMoveNotes.value = [];
   }
@@ -1898,6 +1957,7 @@
     else if (action === 'attach') openAttachPages(note);
     else if (action === 'move') openMoveNote(note);
     else if (action === 'share') openNoteShare(note);
+    else if (action === 'export') openSingleNoteExport(note);
     else if (action === 'delete') deleteSingleNote(note);
   }
 
@@ -1913,6 +1973,7 @@
       | 'attach'
       | 'move'
       | 'share'
+      | 'export'
       | 'delete',
     note: any,
   ) {
@@ -2250,7 +2311,7 @@
       !debouncedSearch.value &&
       router.currentRoute.value.query.tag == null &&
       visibleDragNoteList.value.length > (noteTreeReadEnabled.value ? 0 : 1) &&
-      !noteList.value.some((note) => note.isCheck === true),
+      !selection.items.value.length,
   );
   watch(
     () => searchValue.value,
@@ -2292,7 +2353,6 @@
       if (cached) {
         restoreListSnapshot(cached);
         if (!forceRefresh && Date.now() - cached.updatedAt <= NOTE_LIBRARY_LIST_FRESH_MS) {
-          if (batchMode.value) exitBatch();
           if (returnScrollSnapshot) scheduleMobileReturnScrollRestore(returnScrollSnapshot, true);
           else if (bookmark.isMobile) scheduleMobileListScrollReset();
           return;
@@ -2306,7 +2366,6 @@
         parentId === previous[4] &&
         tag !== previous[2];
       const soft = Boolean(cached) || (onlyTagChanged && visibleDragNoteList.value.length > 0);
-      if (batchMode.value) exitBatch();
       void reloadNotes(soft);
       if (bookmark.isMobile) {
         if (returnScrollSnapshot) scheduleMobileReturnScrollRestore(returnScrollSnapshot, false);
@@ -2408,10 +2467,6 @@
   watch(
     viewNoteList,
     (val) => {
-      const visibleIds = new Set(val.map((note) => String(note.id)));
-      noteList.value.forEach((note) => {
-        if (!visibleIds.has(String(note.id))) note.isCheck = false;
-      });
       visibleDragNoteList.value = [...val];
     },
     { immediate: true },
@@ -2456,7 +2511,7 @@
     return allTags.value.filter((tag) => Number(tag.noteCount || 0) > 0);
   });
 
-  const selectedVisibleCount = computed(() => viewNoteList.value.filter((data) => data.isCheck === true).length);
+  const selectedVisibleCount = computed(() => selection.items.value.length);
   const mobilePageActions = computed<MobilePageActionItem[]>(() => [
     {
       key: 'templates',
@@ -2486,6 +2541,7 @@
         key: item.key,
         label: item.label,
         icon: item.icon,
+        disabled: Boolean(item.disabled),
         danger: Boolean(item.danger),
         dividerBefore,
       };
@@ -2513,15 +2569,9 @@
       disabled: selectedVisibleCount.value < 1,
     },
     {
-      key: 'addTags',
-      label: t('note.batchAddTags'),
-      icon: icon.manage_categoryBtn_tag,
-      disabled: selectedVisibleCount.value < 1,
-    },
-    {
-      key: 'removeTags',
-      label: t('note.batchRemoveTags'),
-      icon: icon.manage_categoryBtn_tag,
+      key: 'manageTags',
+      label: t('resourceCenter.manageResourceTags'),
+      icon: icon.resource.tag,
       disabled: selectedVisibleCount.value < 1,
     },
     ...(noteTreeWriteEnabled.value
@@ -2566,16 +2616,10 @@
         ]
       : []),
     {
-      key: 'addTags',
-      label: t('note.batchAddTags'),
-      icon: icon.manage_categoryBtn_tag,
-      function: () => openBatchTags('add'),
-    },
-    {
-      key: 'removeTags',
-      label: t('note.batchRemoveTags'),
-      icon: icon.manage_categoryBtn_tag,
-      function: () => openBatchTags('remove'),
+      key: 'manageTags',
+      label: t('resourceCenter.manageResourceTags'),
+      icon: icon.resource.tag,
+      function: openBatchTags,
     },
     {
       key: 'export',
@@ -2587,6 +2631,32 @@
 
   const noteAiVisible = ref(false);
   const noteAiItems = ref<any[]>([]);
+  const noteAiMenuOptions = computed(() => [
+    {
+      key: 'smartTagging',
+      label: t('note.ai.smartTagging'),
+      icon: icon.ai.organize,
+      function: openNoteAiSuggestions,
+    },
+    {
+      key: 'summarize',
+      label: t('note.ai.summarizeSelected'),
+      icon: icon.ai.summary,
+      function: () => openSelectedOutcomeAction('summarize', 1),
+    },
+    {
+      key: 'compare',
+      label: t('note.ai.compareSelected'),
+      icon: icon.toolbox.comparison,
+      function: () => openSelectedOutcomeAction('compare', 2),
+    },
+    {
+      key: 'create',
+      label: t('note.ai.createFromSelected'),
+      icon: icon.ai.materials,
+      function: () => openSelectedOutcomeAction('create', 2),
+    },
+  ]);
   const batchActionSummary = computed(() =>
     selectedVisibleCount.value
       ? t('note.selectedCount', { count: selectedVisibleCount.value })
@@ -2597,10 +2667,10 @@
       id: 'summarize',
       label: t('ai.entry.summarizeSelected'),
       description: t('resourceOutcome.quickSummaryDescription'),
-      skillId: 'search.summarize_selected',
+      skillId: 'note.batch_summarize',
       input: { instruction: t('ai.entry.summarizeSelectedInstruction') },
       minItems: 1,
-      maxItems: 10,
+      maxItems: 20,
       supportedTypes: ['note'],
       requireReadable: true,
       icon: icon.ai.materials,
@@ -2610,7 +2680,7 @@
       id: 'compare',
       label: t('ai.entry.compareSelected'),
       description: t('resourceOutcome.quickCompareDescription'),
-      skillId: 'search.compare_selected',
+      skillId: 'note.batch_compare',
       input: { instruction: t('ai.entry.compareSelectedInstruction') },
       minItems: 2,
       maxItems: 10,
@@ -2618,6 +2688,19 @@
       requireReadable: true,
       icon: icon.toolbox.comparison,
       generatedNoteTitle: t('resourceOutcome.quickGeneratedNoteTitle'),
+    },
+    {
+      id: 'create',
+      label: t('note.ai.createFromSelected'),
+      description: t('note.ai.createFromSelectedDescription'),
+      skillId: 'note.create_from_sources',
+      input: { instruction: t('note.ai.createFromSelectedInstruction') },
+      minItems: 2,
+      maxItems: 20,
+      supportedTypes: ['note'],
+      requireReadable: true,
+      icon: icon.ai.materials,
+      generatedNoteTitle: t('note.ai.generatedNoteTitle'),
     },
   ]);
 
@@ -2635,48 +2718,93 @@
     openNotesAi([note]);
   }
 
+  async function openNoteAiSuggestions() {
+    if (!bookmark.isDesktop) {
+      openGlobalAiOrganize();
+      return;
+    }
+    if (blockGuestWrite('ai-organize')) return;
+    const op = getSelectedNotes().length ? await selection.prepare() : null;
+    if (getSelectedNotes().length && !op) return;
+    const resourceIds = (op?.items || []).map((note) => String(note.id || '').trim()).filter(Boolean);
+    if (resourceIds.length > 20) {
+      message.info(t('ai.materialLimit', { count: 20 }));
+      selection.finish();
+      return;
+    }
+    try {
+      if (resourceIds.length) {
+        sessionStorage.setItem(
+          'light-note:organize-ai-suggestion-seed:v1',
+          JSON.stringify({ resourceType: 'note', resourceIds }),
+        );
+      } else {
+        sessionStorage.removeItem('light-note:organize-ai-suggestion-seed:v1');
+      }
+    } catch (error) {
+      console.warn('[note-library] failed to hand off the AI suggestion selection', error);
+      selection.finish(op);
+      message.error(t('note.ai.selectionHandoffFailed'));
+      return;
+    }
+    void router.push({ path: '/organize', query: { issue: 'ai_suggestions' } });
+  }
+
+  function openSelectedOutcomeAction(actionId: 'summarize' | 'compare' | 'create', minItems: number) {
+    const selectedCount = getSelectedNotes().length;
+    if (selectedCount < minItems) {
+      if (!batchMode.value) enterBatch();
+      message.info(t('note.ai.selectForAction', { count: minItems }));
+      return;
+    }
+    const maxItems = actionId === 'compare' ? 10 : 20;
+    if (selectedCount > maxItems) {
+      message.info(t('ai.materialLimit', { count: maxItems }));
+      return;
+    }
+    openSelectedOutcomeDrawer(actionId);
+  }
+
   function openGlobalAiOrganize() {
+    if (bookmark.isDesktop) {
+      openNoteAiSuggestions();
+      return;
+    }
     selectedAiOrganizeIds.value = [];
     aiOrgVisible.value = true;
   }
 
-  function openSelectedAiOrganize() {
-    const selectedIds = getSelectedNotes()
-      .map((note) => String(note.id || '').trim())
-      .filter(Boolean);
+  async function openSelectedAiOrganize() {
+    if (bookmark.isDesktop) {
+      await openNoteAiSuggestions();
+      return;
+    }
+    const op = await selection.prepare();
+    if (!op) return;
+    const selectedIds = op.items.map((note) => String(note.id || '').trim()).filter(Boolean);
     if (!selectedIds.length) return;
+    if (bookmark.isDesktop) {
+      openNoteAiSuggestions();
+      return;
+    }
     selectedAiOrganizeIds.value = selectedIds;
     mobileBatchActionsOpen.value = false;
     aiOrgVisible.value = true;
   }
-  const allVisibleChecked = computed(
-    () => viewNoteList.value.length > 0 && selectedVisibleCount.value === viewNoteList.value.length,
-  );
-  const someVisibleChecked = computed(() => selectedVisibleCount.value > 0 && !allVisibleChecked.value);
-
+  const allVisibleChecked = selection.allVisible;
+  const someVisibleChecked = selection.someVisible;
   function setAllVisibleChecked(nextChecked: boolean) {
-    viewNoteList.value.forEach((note) => {
-      note.isCheck = nextChecked;
-    });
+    selection.selectVisible(nextChecked);
   }
-
   function clearSelectedNotes() {
-    setAllVisibleChecked(false);
+    selection.clear();
   }
-
   function exitBatch() {
     mobileBatchActionsOpen.value = false;
     outcomeDrawerOpen.value = false;
-    noteList.value.forEach((data) => {
-      data.isCheck = false;
-    });
     batchMode.value = false;
   }
-
   function enterBatch() {
-    noteList.value.forEach((data) => {
-      data.isCheck = false;
-    });
     batchMode.value = true;
   }
 
@@ -2747,8 +2875,7 @@
     if (action.key === 'outcome') openSelectedOutcomeDrawer();
     else if (action.key === 'inbox') void addSelectedNotesToInbox();
     else if (action.key === 'smartOrganize') openSelectedAiOrganize();
-    else if (action.key === 'addTags') openBatchTags('add');
-    else if (action.key === 'removeTags') openBatchTags('remove');
+    else if (action.key === 'manageTags') openBatchTags();
     else if (action.key === 'move') openBatchMove();
     else if (action.key === 'export') openBatchExportModal();
     else if (action.key === 'clear') clearSelectedNotes();
@@ -2756,14 +2883,14 @@
   }
 
   function getSelectedNotes() {
-    return viewNoteList.value.filter((data) => data.isCheck === true);
+    return selection.items.value;
   }
 
   async function addSelectedNotesToInbox() {
     if (batchInboxMutating.value) return;
-    const selectedIds = getSelectedNotes()
-      .map((note) => String(note.id || '').trim())
-      .filter(Boolean);
+    const op = await selection.prepare();
+    if (!op) return;
+    const selectedIds = op.items.map((note) => String(note.id || '').trim()).filter(Boolean);
     if (!selectedIds.length) {
       message.warning(t('resourceOutcome.batch.selectFirst'));
       return;
@@ -2776,19 +2903,22 @@
         selectedIds.map((resourceId) => ({ resourceType: 'note' as const, resourceId })),
         '笔记库',
       );
-      if (!ok) return;
+      if (!ok || !selection.current(op)) return;
       selectedIds.forEach((noteId) => {
         if (previewNoteId.value === noteId) previewPendingLocallyChanged = true;
         syncNotePendingState(noteId, true);
         invalidateNoteDetailPrefetch(user, noteId);
       });
     } finally {
+      selection.finish(op);
       batchInboxMutating.value = false;
     }
   }
 
-  function openSelectedOutcomeDrawer() {
-    const selected = getSelectedNotes();
+  async function openSelectedOutcomeDrawer(initialQuickActionId = '') {
+    const op = await selection.prepare();
+    if (!op) return;
+    const selected = op.items;
     if (!selected.length) {
       message.warning(t('resourceOutcome.batch.selectFirst'));
       return;
@@ -2799,28 +2929,157 @@
       title: String(note.title || t('note.untitled')),
       quickReadable: true,
     }));
+    outcomeInitialQuickActionId.value = initialQuickActionId;
     mobileBatchActionsOpen.value = false;
     noteAiVisible.value = false;
     outcomeDrawerOpen.value = true;
     recordOperation({ module: '笔记库', operation: `用所选笔记生成与处理【${outcomeResources.value.length}篇】` });
   }
 
-  function openBatchTags(mode: 'add' | 'remove') {
-    const selected = getSelectedNotes();
-    if (!selected.length) return;
-    sessionStorage.setItem(
-      'resource-center-batch-items',
-      JSON.stringify(selected.map((note) => ({ id: String(note.id), type: 'note', title: String(note.title || '') }))),
-    );
-    router.push({
-      path: '/search/batch-tags',
-      query: { mode, from: router.currentRoute.value.fullPath },
-    });
+  function openBatchTags() {
+    void selection.openTags('add');
   }
 
-  function openBatchExportModal() {
-    if (!getSelectedNotes().length || batchExporting.value) return;
+  async function openBatchExportModal() {
+    if (batchExporting.value) return;
+    const operation = await selection.prepare(undefined, MAX_NOTE_BATCH_ACTION_ITEMS);
+    if (!operation || !selection.current(operation)) return;
+    exportOperation = operation;
     batchExportModalVisible.value = true;
+  }
+
+  function openSingleNoteExport(note: any) {
+    const noteId = String(note?.id || '').trim();
+    if (!noteId || singleNoteExporting.value) return;
+    activeExportNote.value = { ...note, id: noteId };
+    singleNoteExportModalVisible.value = true;
+  }
+
+  const singleNoteExportSections = computed(() => [
+    {
+      key: 'format',
+      title: '',
+      actions:
+        activeExportNote.value?.type === 'drawing'
+          ? [
+              {
+                key: 'original',
+                label: t('note.drawingExportJson'),
+                description: t('note.drawingExportJsonDesc'),
+                onClick: () => void exportSingleNote('original'),
+              },
+            ]
+          : [
+              {
+                key: 'pdf',
+                label: t('noteDetail.exportAsPdf'),
+                description: t('noteDetail.exportAsPdfDesc'),
+                onClick: () => void exportSingleNote('pdf'),
+              },
+              {
+                key: 'html',
+                label: t('noteDetail.exportAsHtml'),
+                description: t('noteDetail.exportAsHtmlDesc'),
+                onClick: () => void exportSingleNote('html'),
+              },
+              {
+                key: 'markdown',
+                label: t('noteDetail.exportAsMd'),
+                description: t('noteDetail.exportAsMdDesc'),
+                onClick: () => void exportSingleNote('markdown'),
+              },
+            ],
+    },
+  ]);
+
+  const singleNoteExportMimeTypes = {
+    html: 'text/html',
+    md: 'text/markdown',
+    pdf: 'application/pdf',
+    json: 'application/json',
+  } as const;
+
+  async function deliverSingleNoteExport(
+    entry: { fileName: string; format: keyof typeof singleNoteExportMimeTypes; content: string | Blob },
+    noteId: string,
+  ) {
+    const mimeType = singleNoteExportMimeTypes[entry.format];
+    if (isLightNoteAndroidApp()) {
+      const outcome = await deliverExportViaAndroidBridge({
+        noteId,
+        content: entry.content,
+        fileName: entry.fileName,
+        format: entry.format,
+        mimeType,
+      });
+      if (outcome.ok) return true;
+      message.warning(
+        outcome.reason === 'too_large'
+          ? outcome.message || t('noteDetail.exportTooLargeInApp')
+          : outcome.message || t('noteDetail.exportUnavailableInApp'),
+      );
+      return false;
+    }
+
+    const result = await deliverGeneratedFile({
+      content: entry.content,
+      fileName: entry.fileName,
+      mimeType,
+      preferShare: bookmark.isMobile || bookmark.isTablet,
+    });
+    if (result === 'cancelled') return false;
+    if (result === 'unavailable') {
+      message.warning(t('noteDetail.exportUnavailableInApp'));
+      return false;
+    }
+    message.success(t(result === 'shared' ? 'noteDetail.exportShared' : 'noteDetail.exportDownloaded'));
+    return true;
+  }
+
+  async function exportSingleNote(mode: NoteBatchExportMode) {
+    const target = activeExportNote.value;
+    const noteId = String(target?.id || '').trim();
+    if (!noteId || singleNoteExporting.value) return;
+    singleNoteExportModalVisible.value = false;
+    singleNoteExporting.value = true;
+    const closePreparing = message.loading(t('noteDetail.exportPreparing'), 0);
+    let preparingClosed = false;
+    const stopPreparing = () => {
+      if (preparingClosed) return;
+      preparingClosed = true;
+      closePreparing();
+    };
+    try {
+      const response = await apiBasePost('/api/note/getNotesForExport', { ids: [noteId] }, { silent: true });
+      const note = response.status === 200 && Array.isArray(response.data?.notes) ? response.data.notes[0] : null;
+      if (!note) {
+        message.error(response.msg || t('noteDetail.exportFailed'));
+        return;
+      }
+      const { buildBatchNoteExportEntries } = await import('@/utils/noteBatchExport');
+      const { entries } = await buildBatchNoteExportEntries([note], mode, {
+        fallbackTitle: t('noteDetail.unnamedDoc'),
+        lang: locale.value,
+      });
+      const entry = entries[0];
+      if (!entry) {
+        message.error(t('noteDetail.exportFailed'));
+        return;
+      }
+      stopPreparing();
+      const delivered = await deliverSingleNoteExport(entry, noteId);
+      if (!delivered) return;
+      recordOperation({
+        module: '笔记库',
+        operation: `导出笔记成功【${note.title || target.title || noteId}/${entry.format}】`,
+      });
+    } catch (error) {
+      console.error('单篇笔记导出失败:', error);
+      message.error(t('noteDetail.exportFailed'));
+    } finally {
+      stopPreparing();
+      singleNoteExporting.value = false;
+    }
   }
 
   const batchExportSections = computed(() => [
@@ -2857,7 +3116,12 @@
     },
   ]);
 
-  async function deliverBatchExportArchive(blob: Blob, fileName: string, noteId: string) {
+  async function deliverBatchExportArchive(
+    blob: Blob,
+    fileName: string,
+    noteId: string,
+    operation: SelectionOperation,
+  ) {
     if (isLightNoteAndroidApp()) {
       const outcome = await deliverExportViaAndroidBridge({
         noteId,
@@ -2866,6 +3130,7 @@
         format: 'zip',
         mimeType: 'application/zip',
       });
+      if (!selection.current(operation)) return false;
       if (outcome.ok) {
         return true;
       }
@@ -2883,6 +3148,7 @@
       mimeType: 'application/zip',
       preferShare: bookmark.isMobile || bookmark.isTablet,
     });
+    if (!selection.current(operation)) return false;
     if (result === 'cancelled') return false;
     if (result === 'unavailable') {
       message.warning(t('note.batchExportUnavailableInApp'));
@@ -2892,8 +3158,9 @@
   }
 
   async function exportSelectedNotes(mode: NoteBatchExportMode) {
-    const selected = getSelectedNotes();
-    if (!selected.length || batchExporting.value) return;
+    const op = exportOperation;
+    if (!op || !selection.current(op) || batchExporting.value) return;
+    const selected = op.items;
     batchExportModalVisible.value = false;
     batchExporting.value = true;
     const selectedIds = selected.map((note) => String(note.id));
@@ -2907,6 +3174,7 @@
 
     try {
       const response = await apiBasePost('/api/note/getNotesForExport', { ids: selectedIds }, { silent: true });
+      if (!selection.current(op)) return;
       const notes = response.status === 200 && Array.isArray(response.data?.notes) ? response.data.notes : [];
       if (!notes.length) {
         message.error(response.msg || t('note.batchExportFailed'));
@@ -2918,6 +3186,7 @@
         fallbackTitle: t('noteDetail.unnamedDoc'),
         lang: locale.value,
       });
+      if (!selection.current(op)) return;
       if (!archive.blob || !archive.entries.length) {
         message.error(t('note.batchExportFailed'));
         return;
@@ -2925,8 +3194,8 @@
 
       stopPreparing();
       const fileName = `lightnote-notes-${new Date().toISOString().slice(0, 10)}.zip`;
-      const delivered = await deliverBatchExportArchive(archive.blob, fileName, String(notes[0].id));
-      if (!delivered) return;
+      const delivered = await deliverBatchExportArchive(archive.blob, fileName, String(notes[0].id), op);
+      if (!delivered || !selection.current(op)) return;
       recordOperation({
         module: '笔记库',
         operation: `批量导出笔记成功【${archive.entries.length}篇/${mode}】`,
@@ -2937,84 +3206,75 @@
         message.success(t('note.batchExportSuccess', { count: archive.entries.length }));
       }
     } catch (error) {
-      console.error('批量导出笔记失败:', error);
-      message.error(t('note.batchExportFailed'));
+      if (selection.current(op)) {
+        console.error('批量导出笔记失败:', error);
+        message.error(t('note.batchExportFailed'));
+      }
     } finally {
       stopPreparing();
-      batchExporting.value = false;
+      selection.finish(op);
+      if (exportOperation === op) {
+        exportOperation = null;
+        batchExporting.value = false;
+      }
     }
   }
 
   async function batchDeleteNote() {
     if (blockGuestWrite('delete-note')) return;
-    const selectedNotes = viewNoteList.value.filter((data) => data.isCheck);
-    if (!selectedNotes.length) return;
-    if (!noteTreeSubtreeTrashEnabled.value) {
-      Alert.alert({
-        title: t('common.defaultTitle'),
-        content: t('note.deleteBatchTreeConfirm', { total: selectedNotes.length }),
-        okText: t('note.moveItemsToTrash', { count: selectedNotes.length }),
-        async onOk() {
-          const res = await apiBasePost('/api/note/delNote', {
-            ids: selectedNotes.map((note) => String(note.id)),
-          });
-          if (res.status === 409 && res.data?.code === 'NOTE_HAS_CHILDREN') {
-            message.warning(res.msg || t('note.deleteScopeChanged'));
+    const op = await selection.prepare(undefined, MAX_NOTE_BATCH_ACTION_ITEMS);
+    if (!op) return;
+    const selectedNotes = op.items;
+    let scope: ReturnType<typeof collapseNoteDeletePreviews> | null = null;
+    if (noteTreeSubtreeTrashEnabled.value) {
+      try {
+        const results = await runOrderedBatch(selectedNotes, (note) => fetchNoteDeletePreview(note.id));
+        if (!selection.current(op)) return;
+        if (results.some((result) => result.status === 'rejected')) throw new Error('preview failed');
+        scope = collapseNoteDeletePreviews(
+          results.map((result) => (result as { status: 'fulfilled'; value: NoteDeletePreview }).value),
+        );
+      } catch {
+        if (selection.current(op)) message.error(t('note.deletePreviewFailed'));
+        selection.finish(op);
+        return;
+      }
+    }
+    const total = scope?.totalCount || selectedNotes.length;
+    Alert.alert({
+      title: t('common.defaultTitle'),
+      content: t('note.deleteBatchTreeConfirm', { total }),
+      okText: t('note.moveItemsToTrash', { count: total }),
+      onCancel: () => selection.finish(op),
+      async onOk() {
+        if (!selection.current(op)) return;
+        try {
+          const res = scope
+            ? await apiBasePost('/api/note/deleteNoteSubtree', {
+                items: scope.items.map((item) => ({ id: item.id, expectedDescendantCount: item.descendantCount })),
+              })
+            : await apiBasePost('/api/note/delNote', { ids: selectedNotes.map((note) => note.id) });
+          if (!selection.current(op)) return;
+          if (isDeleteScopeConflict(res) || (res.status === 409 && res.data?.code === 'NOTE_HAS_CHILDREN')) {
+            message.warning(t('note.deleteScopeChanged'));
             return;
           }
           if (res.status !== 200) return;
-          recordOperation({ module: '笔记库', operation: `批量删除笔记成功【${selectedNotes.length}篇】` });
-          if (noteTreeReadEnabled.value) {
+          const deletedCount = Number(res.data?.deletedCount ?? total);
+          recordOperation({ module: '笔记库', operation: `批量删除笔记成功【${deletedCount}篇】` });
+          if (noteTreeReadEnabled.value)
             void recordNoteTreeProductEvent('note_tree_subtree_deleted', {
               surface: noteTreeSurface(),
-              subtreeSize: selectedNotes.length,
+              subtreeSize: deletedCount,
               result: 'success',
             });
-          }
           message.success(t('common.deleteSuccess'));
-          exitBatch();
-          await init();
-        },
-      });
-      return;
-    }
-    let previews: NoteDeletePreview[];
-    try {
-      previews = await Promise.all(selectedNotes.map((note) => fetchNoteDeletePreview(note.id)));
-    } catch (error) {
-      console.warn('[note-library] batch delete preview failed', error);
-      message.error(t('note.deletePreviewFailed'));
-      return;
-    }
-    const scope = collapseNoteDeletePreviews(previews);
-    if (!scope.items.length) return;
-    Alert.alert({
-      title: t('common.defaultTitle'),
-      content: t('note.deleteBatchTreeConfirm', { total: scope.totalCount }),
-      okText: t('note.moveItemsToTrash', { count: scope.totalCount }),
-      async onOk() {
-        const res = await apiBasePost('/api/note/deleteNoteSubtree', {
-          items: scope.items.map((item) => ({
-            id: item.id,
-            expectedDescendantCount: item.descendantCount,
-          })),
-        });
-        if (isDeleteScopeConflict(res)) {
-          message.warning(t('note.deleteScopeChanged'));
-          void batchDeleteNote();
-          return;
-        }
-        if (res.status === 200) {
-          const deletedCount = Number(res.data?.deletedCount || scope.totalCount);
-          recordOperation({ module: '笔记库', operation: `批量删除笔记成功【${deletedCount}篇】` });
-          void recordNoteTreeProductEvent('note_tree_subtree_deleted', {
-            surface: noteTreeSurface(),
-            subtreeSize: deletedCount,
-            result: 'success',
-          });
-          message.success(t('common.deleteSuccess'));
-          exitBatch();
-          await init();
+          await selection.reconcile(op);
+          if (selection.current(op)) await init();
+        } catch {
+          /* 请求层处理失败提示，选择保留。 */
+        } finally {
+          selection.finish(op);
         }
       },
     });
@@ -3079,6 +3339,12 @@
 </script>
 
 <style lang="less" scoped>
+  @media (min-width: 1200px) {
+    .note-library-shell {
+      background: var(--background-color);
+    }
+  }
+
   .note-library-wrapper {
     width: 100%;
     height: 100%;
@@ -3455,36 +3721,11 @@
     background: color-mix(in srgb, var(--primary-color, #615ced) 14%, var(--menu-body-bg-color));
   }
 
-  .note-batch-toggle {
-    flex: 0 0 auto;
-    border: 1px solid transparent;
-  }
-
-  .note-batch-toggle__labels {
-    display: grid;
-  }
-
-  .note-batch-toggle__labels > span {
-    grid-area: 1 / 1;
-    visibility: hidden;
-  }
-
-  .note-batch-toggle__labels > span.is-visible {
-    visibility: visible;
-  }
-
-  .note-batch-toggle.is-batch-active {
-    border: 1px solid var(--desc-color);
-    color: var(--text-color);
-    background: var(--menu-body-bg-color);
-  }
-
-  @media (hover: hover) and (pointer: fine) {
-    .note-batch-toggle.is-batch-active:hover {
-      border-color: var(--text-color);
-      color: var(--text-color);
-      background: var(--primary-btn-h-bg-color);
-    }
+  .note-ai-button.is-active {
+    border-color: var(--primary-color, #615ced);
+    color: var(--primary-color, #615ced);
+    outline: 2px solid var(--primary-btn-bg-color);
+    outline-offset: -2px;
   }
 
   .note-mobile-actions {

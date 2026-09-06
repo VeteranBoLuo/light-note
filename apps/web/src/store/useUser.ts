@@ -46,6 +46,7 @@ interface UserInfo {
     theme: 'day' | 'night' | 'system' | string; // 主题
     noteViewMode: 'card' | 'list'; // 笔记展示模式：卡片/列表
     noteSidebarMode?: 'directory' | 'tags'; // 笔记库默认侧栏：目录/标签
+    dailyReviewEnabled?: boolean; // 工作台每日回顾入口，默认开启
     noteDirectEdit?: boolean; // PC 点击已有笔记时是否跳过预览直接编辑
     noteParentOpenMode?: 'children' | 'preview'; // PC 点击父页面时打开子页面目录或预览当前页面
     lang?: 'zh-CN' | 'en-US'; // 语言
@@ -62,6 +63,7 @@ interface UserInfo {
     notifyLevelUp?: boolean; // 升级提醒通知推送
     notifyOpinionReply?: boolean; // 反馈回复通知推送
     notifyFeatureRequest?: boolean; // 共建轻笺建议进度通知
+    notificationsOrganize?: boolean; // 长时间整理完成后的站内通知，默认开启
     notificationsInApp?: boolean; // 待办等站内通知总开关
     notificationsEmail?: boolean; // 待办等邮件通知总开关
     notificationsBrowser?: boolean; // 前台页面浏览器系统通知
@@ -121,6 +123,7 @@ const createDefaultUserState = (): UserState => ({
     hideEmptyTags: false, // 首页标签列表是否隐藏空标签(默认不隐藏)
     notifyFeatureRequest: true,
     notificationsInApp: true,
+    notificationsOrganize: true,
     notificationsEmail: true,
     notificationsBrowser: false,
     notificationsDnd: false,

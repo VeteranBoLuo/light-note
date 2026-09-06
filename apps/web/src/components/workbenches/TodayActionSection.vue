@@ -19,7 +19,7 @@
         </div>
         <div class="today-actions__skeleton-rows">
           <div
-            v-for="index in contained ? 5 : 3"
+            v-for="index in contained ? 4 : 3"
             :key="`today-action-skeleton-${index}`"
             class="today-actions__skeleton-row"
           >
@@ -110,8 +110,23 @@
       </div>
 
       <div v-if="!visibleTodos.length && !visibleInbox.length" class="today-actions__empty">
-        <strong>{{ t('workbench.today.allDoneTitle') }}</strong>
-        <span>{{ t('workbench.today.allDoneDesc') }}</span>
+        <span class="today-actions__empty-icon" aria-hidden="true">
+          <SvgIcon :src="icon.message.success" size="20" />
+        </span>
+        <div class="today-actions__empty-copy">
+          <strong>{{ t('workbench.today.allDoneTitle') }}</strong>
+          <span>{{ t('workbench.today.allDoneDesc') }}</span>
+        </div>
+        <BButton
+          v-if="showEmptyAction"
+          type="primary"
+          size="small"
+          class="today-actions__empty-action"
+          @click="emit('quickCreate')"
+        >
+          <SvgIcon :src="icon.common.add" size="14" aria-hidden="true" />
+          {{ t('workbench.panel.quickCreate') }}
+        </BButton>
       </div>
     </div>
 
@@ -174,10 +189,17 @@
       contained?: boolean;
       compactEmpty?: boolean;
       compactActions?: boolean;
+      showEmptyAction?: boolean;
     }>(),
-    { showHeader: true, contained: false, compactEmpty: false, compactActions: false },
+    {
+      showHeader: true,
+      contained: false,
+      compactEmpty: false,
+      compactActions: false,
+      showEmptyAction: false,
+    },
   );
-  const emit = defineEmits<{ refresh: [] }>();
+  const emit = defineEmits<{ refresh: []; quickCreate: [] }>();
 
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -213,11 +235,11 @@
   );
 
   /**
-   * 桌面工作台把行动区当作摘要而非完整列表，五条是整个区域的共同预算。
-   * 两组同时存在时，待办按「逾期 → 今天到期」优先展示，但最多占四条，
+   * 桌面工作台把行动区当作摘要而非完整列表，四条是整个区域的共同预算。
+   * 两组同时存在时，待办按「逾期 → 今天到期」优先展示，但最多占三条，
    * 始终给待整理保留一条；移动端继续走页面主滚动并展示接口返回的全部明细。
    */
-  const CONTAINED_ACTION_LIMIT = 5;
+  const CONTAINED_ACTION_LIMIT = 4;
   const visibleTodos = computed(() => {
     if (!props.contained) return localTodos.value;
     const todoLimit = localInbox.value.length ? CONTAINED_ACTION_LIMIT - 1 : CONTAINED_ACTION_LIMIT;
@@ -439,7 +461,7 @@
   }
 
   /* 桌面工作台使用单一紧凑外框；条目在 contained 模式下采用明确行高，
-     让 5 条摘要完整显示且不产生内部滚动。 */
+     让 4 条摘要完整显示且不产生内部滚动。 */
   .today-actions--contained {
     width: 100%;
     min-height: 100%;
@@ -470,14 +492,7 @@
   }
 
   .today-actions--contained .today-actions__group-head {
-    padding-block: 8px;
-    border-bottom: 0;
-    background: linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--primary-color) 5%, var(--menu-body-bg-color, var(--background-color))) 0%,
-      color-mix(in srgb, var(--primary-color) 2%, var(--menu-body-bg-color, var(--background-color))) 68%,
-      var(--menu-body-bg-color, var(--background-color)) 100%
-    );
+    display: none;
   }
 
   .today-actions--contained .today-action-row {
@@ -492,11 +507,18 @@
     align-content: center;
     border: 0;
     border-radius: 0;
+    background:
+      radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--primary-color) 8%, transparent), transparent 52%),
+      var(--menu-body-bg-color, var(--card-background));
   }
 
   .today-actions--contained .today-actions__loading {
     padding: 0;
     box-sizing: border-box;
+  }
+
+  .today-actions--contained .today-actions__skeleton-head {
+    display: none;
   }
 
   .today-actions__header {
@@ -652,13 +674,31 @@
   .today-actions__empty {
     display: grid;
     justify-items: center;
-    gap: 4px;
+    gap: 9px;
     min-width: 0;
     padding: 22px 14px;
     box-sizing: border-box;
     border: 1px dashed var(--card-border-color);
     border-radius: 14px;
     text-align: center;
+  }
+
+  .today-actions__empty-icon {
+    width: 38px;
+    height: 38px;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid color-mix(in srgb, var(--success-color, #07865c) 24%, var(--card-border-color));
+    border-radius: 12px;
+    color: var(--success-color, #07865c);
+    background: color-mix(in srgb, var(--success-color, #07865c) 8%, var(--card-background));
+  }
+
+  .today-actions__empty-copy {
+    min-width: 0;
+    display: grid;
+    justify-items: center;
+    gap: 3px;
 
     strong {
       color: var(--text-color);
@@ -671,18 +711,44 @@
     }
   }
 
+  .today-actions__empty-action {
+    gap: 6px;
+  }
+
   .today-actions--compact-empty .today-actions__empty {
     padding: 10px 12px;
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr);
     justify-items: start;
-    gap: 3px;
+    align-items: center;
+    gap: 9px;
     text-align: left;
 
-    span {
+    .today-actions__empty-icon {
+      width: 32px;
+      height: 32px;
+      grid-row: 1;
+    }
+
+    .today-actions__empty-copy {
+      grid-column: 2;
+      justify-items: start;
+    }
+
+    .today-actions__empty-copy span {
       min-width: 0;
       line-height: 1.45;
       overflow-wrap: anywhere;
     }
+
+    .today-actions__empty-action {
+      grid-column: 1 / -1;
+    }
+  }
+
+  :global(html.light-note-mobile-rendering .today-actions__empty-icon) {
+    border-color: var(--success-color, #07865c);
+    background: var(--card-background);
+    box-shadow: none;
   }
 
   .today-actions__loading {

@@ -24,18 +24,16 @@
             <template #prefix>
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
-            <template v-if="!bookmark.isMobile" #suffix>
-              <b-tooltip :title="hideEmptyTags ? $t('home.hideEmptyTags') : $t('home.showEmptyTags')">
-                <BSwitch v-model:checked="hideEmptyTags" />
-              </b-tooltip>
-            </template>
           </b-input>
+          <div v-if="!bookmark.isMobile" class="desktop-empty-tag-toggle">
+            <span>{{ $t(hideEmptyTags ? 'home.onlyTagsWithBookmarks' : 'home.showAllTags') }}</span>
+            <BSwitch v-model:checked="hideEmptyTags" />
+          </div>
           <div v-if="bookmark.isMobile" class="mobile-empty-tag-toggle">
             <span>{{ $t('home.hideEmptyTags') }}</span>
             <BSwitch v-model:checked="hideEmptyTags" />
           </div>
           <BButton
-            v-if="bookmark.isMobile"
             class="filter-all-entry"
             :class="{ active: bookmark.type === 'all' }"
             :aria-current="bookmark.type === 'all' ? 'true' : undefined"
@@ -90,7 +88,7 @@
               size="16"
               aria-hidden="true"
             />
-            <span v-if="bookmark.isMobile" class="tag-item-count">{{ item.bookmarkList?.length || 0 }}</span>
+            <span class="tag-item-count">{{ item.bookmarkList?.length || 0 }}</span>
           </div>
         </BActionMenu>
         <b-input v-else class="edit-input" v-model:value="newName" @keydown.esc="cancelRename(<TagInterface>item)">
@@ -128,6 +126,15 @@
         </div>
       </template>
     </b-list>
+    <footer v-if="!bookmark.tagLoading && !bookmark.isMobile" class="filter-panel-footer">
+      <span>{{
+        $t('home.bookmarkDirectorySummary', {
+          tags: bookmark.tagList.length,
+          untagged: bookmarkCoverage.untaggedBookmarkCount,
+        })
+      }}</span>
+      <BButton size="small" @click="router.push('/manage/tagMg')">{{ $t('home.manageTags') }}</BButton>
+    </footer>
   </div>
 </template>
 
@@ -154,6 +161,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { recordOperation } from '@/api/commonApi.ts';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
+  import { summarizeBookmarkCoverage } from '@/utils/bookmarkCoverage';
 
   const tagName = ref('');
   const hasBookmark = (tag: TagInterface) => Array.isArray(tag.bookmarkList) && tag.bookmarkList.length > 0;
@@ -175,6 +183,15 @@
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const router = useRouter();
+  const bookmarkCoverage = computed(() =>
+    summarizeBookmarkCoverage(
+      bookmark.tagList,
+      Math.max(Number(user.bookmarkTotal) || 0, bookmark.bookmarkList.length),
+    ),
+  );
+  const managementQuery = computed(() =>
+    String(router.currentRoute.value.query.mode || '') === 'manage' ? { mode: 'manage' } : {},
+  );
   const tagMenuTriggers: BActionMenuTrigger[] = ['hover', 'contextmenu'];
   const tagContextMenu = computed<BActionMenuItem[]>(() => [
     { key: 'addBookmark', label: t('home.menuAddBookmark'), icon: icon.manage_categoryBtn_bookmark },
@@ -273,7 +290,9 @@
       bookmark.refreshData();
     } else {
       bookmark.type = 'normal';
-      await navigateFromMobileFilter(() => router.push({ path: `/home/${tag.id}` }));
+      await navigateFromMobileFilter(() =>
+        router.push({ path: `/home/${tag.id}`, query: managementQuery.value }),
+      );
       bookmark.refreshData();
     }
   }
@@ -282,7 +301,7 @@
     bookmark.type = 'all';
     bookmark.tagData = null;
     bookmark.bookmarkSearch = '';
-    await navigateFromMobileFilter(() => router.replace('/home'));
+    await navigateFromMobileFilter(() => router.replace({ path: '/home', query: managementQuery.value }));
     bookmark.refreshData();
   }
   function onStart() {
@@ -382,6 +401,8 @@
     min-width: 0;
     width: 100%;
     height: 100%;
+    display: flex;
+    flex-direction: column;
   }
 
   .header-input {
@@ -389,6 +410,8 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
+    flex: 1 1 auto;
+    overflow: hidden;
   }
   .header-input :deep(.category-body) {
     min-height: 0;
@@ -440,6 +463,7 @@
   }
 
   .filter-all-entry,
+  .desktop-empty-tag-toggle,
   .mobile-empty-tag-toggle {
     width: 100%;
     min-width: 0;
@@ -503,6 +527,45 @@
     font-size: 12px;
   }
 
+  .desktop-empty-tag-toggle {
+    min-height: 28px;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0 7px;
+    color: var(--desc-color);
+    font-size: 11px;
+  }
+
+  .filter-panel-footer {
+    min-width: 0;
+    min-height: 42px;
+    flex: 0 0 auto;
+    margin-top: 6px;
+    padding: 7px 2px 0;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border-top: 1px solid var(--surface-divider-color);
+    color: var(--desc-color);
+    font-size: 10.5px;
+  }
+
+  .filter-panel-footer > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .filter-panel-footer :deep(.b_btn) {
+    min-height: 28px;
+    padding-inline: 8px;
+    border-radius: 7px;
+    white-space: nowrap;
+  }
+
   .tag-item-name {
     min-width: 0;
     flex: 1;
@@ -521,6 +584,12 @@
   // 此前实际回退成页面默认 16px。桌面端在这里与笔记、云空间侧栏统一为紧凑扫描密度；
   // 移动抽屉继续由下方规则保留 54px 触控高度和更舒展的字号。
   @media (min-width: 768px) {
+    .filter-all-entry {
+      min-height: 38px;
+      margin: 2px 0 6px;
+      border-radius: 9px;
+    }
+
     .category-item {
       position: relative;
       height: 34px;

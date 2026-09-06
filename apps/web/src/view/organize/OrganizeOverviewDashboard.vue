@@ -1,376 +1,183 @@
 <template>
-  <div class="organize-dashboard">
-    <nav class="organize-dashboard__metrics" :aria-label="t('organize.overview.metricNavigation')">
-      <BButton
-        v-for="metric in metricTabs"
-        :key="metric.key"
-        class="organize-dashboard-metric"
-        :class="`is-${metric.key}`"
-        @click="emit('select', metric.key)"
+  <div class="governance-summary">
+    <header class="governance-summary__heading">
+      <div
+        ><h2>{{ t('organize.overview.resourceGovernance') }}</h2
+        ><p>{{ t('organize.summaryView.description') }}</p></div
       >
-        <span class="organize-dashboard-metric__icon">
-          <SvgIcon :src="metric.icon" size="16" aria-hidden="true" />
-        </span>
-        <span>{{ metric.label }}</span>
-        <strong>{{ metric.count }}</strong>
-      </BButton>
-    </nav>
+      <div class="governance-summary__updated"
+        ><small v-if="summary">{{ t('organize.overview.updatedAt', { time: updatedAt }) }}</small
+        ><BButton size="small" @click="emit('refresh')">{{ t('organize.refresh') }}</BButton></div
+      >
+    </header>
 
-    <div class="organize-dashboard__sections">
-      <BCard class="organize-dashboard-card organize-dashboard-pending" variant="raised" padding="0" radius="14px">
-        <header class="organize-dashboard-card__header">
-          <div>
-            <div class="organize-dashboard-card__title-line">
-              <h2>{{ t('organize.views.pending') }}</h2>
-              <span class="organize-dashboard-card__count">{{ pendingCount }}</span>
-            </div>
-            <p>{{ t('organize.overview.pendingPreviewDescription') }}</p>
-          </div>
-          <BButton size="small" class="organize-dashboard-card__more" @click="emit('select', 'pending')">
-            {{ t('organize.overview.viewAll') }}
-          </BButton>
-        </header>
-
-        <div class="organize-dashboard-pending__body">
-          <div class="organize-dashboard-pending__list">
-            <div v-if="pendingPreview?.state === 'error'" class="organize-dashboard-state is-error" role="status">
-              {{ t('organize.overview.previewUnavailable') }}
-            </div>
-            <div v-else-if="!pendingItems.length" class="organize-dashboard-state">
-              {{ t('organize.overview.pendingEmpty') }}
-            </div>
-            <TodayActionSection
-              v-else
-              class="organize-dashboard-pending__actions"
-              :overdue-todos="emptyTodos"
-              :due-today-todos="emptyTodos"
-              :inbox-items="pendingItems"
-              :inbox-total="pendingTotalNumber"
-              :show-header="false"
-              @refresh="emit('refresh')"
-            />
-          </div>
-
-          <aside class="organize-dashboard-insight organize-dashboard-pending__composition">
-            <header class="organize-dashboard-aside-title">
-              <SvgIcon :src="icon.contextMenu.inbox" size="17" aria-hidden="true" />
-              <div>
-                <h3>{{ t('organize.overview.pendingComposition') }}</h3>
-                <p>{{ t('organize.overview.pendingCompositionDescription') }}</p>
-              </div>
-            </header>
-            <OrganizeDonutChart
-              :total="pendingTotalNumber"
-              :items="pendingChartItems"
-              :center-label="t('organize.views.pending')"
-              :center-value="pendingCount"
-              :empty-label="t('organize.overview.noChartData')"
-              :aria-label="t('organize.overview.pendingCompositionAria', { count: pendingTotalNumber })"
-            />
-          </aside>
-        </div>
-      </BCard>
-
-      <BCard class="organize-dashboard-card organize-dashboard-governance" variant="card" padding="0" radius="14px">
-        <header class="organize-dashboard-card__header">
-          <div>
-            <div class="organize-dashboard-card__title-line">
-              <span class="organize-dashboard-title-icon is-governance">
-                <SvgIcon :src="icon.ai.organize" size="17" aria-hidden="true" />
-              </span>
-              <h2>{{ t('organize.overview.resourceGovernance') }}</h2>
-            </div>
-            <p>{{ t('organize.overview.resourceGovernanceDescription') }}</p>
-          </div>
-        </header>
-
-        <div class="organize-dashboard-governance__body">
-          <div class="organize-dashboard-governance__previews">
-            <section class="organize-dashboard-preview is-untagged">
-              <header class="organize-dashboard-card__header is-compact">
-                <div>
-                  <div class="organize-dashboard-card__title-line">
-                    <span class="organize-dashboard-title-icon is-untagged">
-                      <SvgIcon :src="icon.resource.tag" size="17" aria-hidden="true" />
-                    </span>
-                    <h3>{{ t('organize.views.untagged') }}</h3>
-                    <span class="organize-dashboard-card__count">{{ untaggedCount }}</span>
-                  </div>
-                  <p>{{ t('organize.overview.untaggedPreviewDescription') }}</p>
-                </div>
-                <BButton size="small" class="organize-dashboard-card__more" @click="emit('select', 'untagged')">
-                  {{ t('organize.overview.viewAll') }}
-                </BButton>
-              </header>
-              <OverviewPreviewState
-                :state="untaggedPreview?.state"
-                :empty="untaggedItems.length === 0"
-                :empty-label="t('organize.overview.untaggedEmpty')"
-              >
-                <ul class="organize-dashboard-compact-list">
-                  <li v-for="item in untaggedItems" :key="`${item.resourceType}:${item.resourceId}`">
-                    <BButton class="organize-dashboard-compact-row" @click="openResource(item)">
-                      <span class="organize-dashboard-resource__icon" :class="`is-${item.resourceType}`">
-                        <SvgIcon :src="resourceIcon(item.resourceType)" size="15" aria-hidden="true" />
-                      </span>
-                      <span class="organize-dashboard-compact-row__copy">
-                        <strong :title="item.title">{{ item.title || t('organize.overview.untitled') }}</strong>
-                        <small>{{ resourceTypeLabel(item.resourceType) }}</small>
-                      </span>
-                      <span class="organize-dashboard-compact-row__meta">{{ formatShortDate(item.updatedAt) }}</span>
-                    </BButton>
-                  </li>
-                </ul>
-              </OverviewPreviewState>
-            </section>
-
-            <section class="organize-dashboard-preview is-duplicate">
-              <header class="organize-dashboard-card__header is-compact">
-                <div>
-                  <div class="organize-dashboard-card__title-line">
-                    <span class="organize-dashboard-title-icon is-duplicate">
-                      <SvgIcon :src="icon.resource.bookmark" size="17" aria-hidden="true" />
-                    </span>
-                    <h3>{{ t('organize.views.duplicateBookmark') }}</h3>
-                    <span class="organize-dashboard-card__count">{{ duplicateCount }}</span>
-                  </div>
-                  <p>{{ t('organize.overview.duplicatePreviewDescription') }}</p>
-                </div>
-                <BButton
-                  size="small"
-                  class="organize-dashboard-card__more"
-                  @click="emit('select', 'duplicate_bookmark')"
-                >
-                  {{ t('organize.overview.viewAll') }}
-                </BButton>
-              </header>
-              <OverviewPreviewState
-                :state="duplicatePreview?.state"
-                :empty="duplicateItems.length === 0"
-                :empty-label="t('organize.overview.duplicateEmpty')"
-              >
-                <ul class="organize-dashboard-compact-list">
-                  <li v-for="item in duplicateItems" :key="item.groupKey">
-                    <BButton class="organize-dashboard-compact-row" @click="emit('select', 'duplicate_bookmark')">
-                      <span class="organize-dashboard-resource__icon is-bookmark">
-                        <SvgIcon :src="icon.resource.bookmark" size="15" aria-hidden="true" />
-                      </span>
-                      <span class="organize-dashboard-compact-row__copy">
-                        <strong :title="item.url">{{ displayUrl(item.url) }}</strong>
-                        <small>{{ t('organize.duplicate.groupTitle', { count: item.memberCount }) }}</small>
-                      </span>
-                      <span class="organize-dashboard-compact-row__badge">{{ item.memberCount }}</span>
-                    </BButton>
-                  </li>
-                </ul>
-              </OverviewPreviewState>
-            </section>
-
-            <section class="organize-dashboard-preview is-health">
-              <header class="organize-dashboard-card__header is-compact">
-                <div>
-                  <div class="organize-dashboard-card__title-line">
-                    <span class="organize-dashboard-title-icon is-health">
-                      <SvgIcon :src="icon.bookmarkManage.healthCheck" size="17" aria-hidden="true" />
-                    </span>
-                    <h3>{{ t('organize.views.bookmarkHealth') }}</h3>
-                    <span class="organize-dashboard-card__count">{{ healthCount }}</span>
-                  </div>
-                  <p>{{ t('organize.overview.healthPreviewDescription') }}</p>
-                </div>
-                <BButton size="small" class="organize-dashboard-card__more" @click="emit('select', 'bookmark_health')">
-                  {{ t('organize.overview.viewAll') }}
-                </BButton>
-              </header>
-              <OverviewPreviewState
-                :state="healthPreview?.state"
-                :empty="healthItems.length === 0"
-                :empty-label="t('organize.overview.healthEmpty')"
-              >
-                <ul class="organize-dashboard-health-list is-main-preview">
-                  <li v-for="item in healthItems" :key="item.id">
-                    <BButton class="organize-dashboard-health-row" @click="openHealthResource(item)">
-                      <span class="organize-dashboard-health-row__copy">
-                        <strong :title="item.name">{{ item.name || t('organize.overview.untitled') }}</strong>
-                        <small>{{ t('organize.health.httpCode', { code: item.observedCode || '404/410' }) }}</small>
-                      </span>
-                      <BChip tone="danger" size="small">{{
-                        item.observedCode || t('organize.views.bookmarkHealth')
-                      }}</BChip>
-                    </BButton>
-                  </li>
-                </ul>
-              </OverviewPreviewState>
-            </section>
-          </div>
-
-          <aside class="organize-dashboard-governance__insights">
-            <section class="organize-dashboard-insight organize-dashboard-health">
-              <header class="organize-dashboard-aside-title">
-                <SvgIcon :src="icon.bookmarkManage.healthCheck" size="17" aria-hidden="true" />
-                <div>
-                  <h3>{{ t('organize.overview.healthStatus') }}</h3>
-                  <p>{{ t('organize.overview.healthCoverageDescription') }}</p>
-                </div>
-              </header>
-
-              <div v-if="healthCoverage" class="organize-dashboard-health__coverage">
-                <div>
-                  <span>{{ t('organize.overview.healthCoverage') }}</span>
-                  <strong>
-                    {{
-                      t('organize.overview.healthCoverageValue', {
-                        checked: healthCoverage.checked,
-                        total: healthCoverage.total,
-                      })
-                    }}
-                  </strong>
-                </div>
-                <BProgress
-                  size="small"
-                  :percent="healthCoveragePercent"
-                  :aria-label="
-                    t('organize.overview.healthCoverageAria', {
-                      checked: healthCoverage.checked,
-                      total: healthCoverage.total,
-                    })
-                  "
-                />
-              </div>
-              <div v-else class="organize-dashboard-state">{{ t('organize.overview.noChartData') }}</div>
-
-              <div v-if="healthCoverage" class="organize-dashboard-health__stack" aria-hidden="true">
-                <span
-                  v-for="item in healthStatusItems"
-                  :key="item.key"
-                  :class="`is-${item.key}`"
-                  :style="{ width: `${item.percent}%` }"
-                ></span>
-              </div>
-              <ul v-if="healthCoverage" class="organize-dashboard-legend is-health">
-                <li v-for="item in healthStatusItems" :key="item.key">
-                  <span class="organize-dashboard-legend__dot" :class="`is-${item.key}`"></span>
-                  <span>{{ item.label }}</span>
-                  <strong>{{ item.value }}</strong>
-                </li>
-              </ul>
-            </section>
-
-            <section class="organize-dashboard-insight organize-dashboard-governance__comparison">
-              <header class="organize-dashboard-aside-title">
-                <SvgIcon :src="icon.ai.organize" size="17" aria-hidden="true" />
-                <div>
-                  <h3>{{ t('organize.overview.governanceComparison') }}</h3>
-                  <p>{{ t('organize.overview.governanceOverlapHint') }}</p>
-                </div>
-              </header>
-              <ul class="organize-dashboard-bars">
-                <li v-for="item in governanceBars" :key="item.key">
-                  <div>
-                    <span>{{ item.label }}</span>
-                    <strong>{{ item.display }}</strong>
-                  </div>
-                  <span class="organize-dashboard-bars__track" aria-hidden="true">
-                    <span :class="`is-${item.key}`" :style="{ width: `${item.percent}%` }"></span>
-                  </span>
-                </li>
-              </ul>
-              <small v-if="summary" class="organize-dashboard-updated">
-                {{ t('organize.overview.updatedAt', { time: formatDate(summary.generatedAt) }) }}
-              </small>
-            </section>
-          </aside>
-        </div>
-      </BCard>
-
-      <BCard class="organize-dashboard-card organize-dashboard-knowledge-card" variant="card" padding="0" radius="14px">
-        <header class="organize-dashboard-card__header">
-          <div>
-            <div class="organize-dashboard-card__title-line">
-              <span class="organize-dashboard-title-icon is-knowledge">
-                <SvgIcon :src="icon.toolbox.conceptMap" size="17" aria-hidden="true" />
-              </span>
-              <h3>{{ t('organize.views.knowledgeStructure') }}</h3>
-              <span class="organize-dashboard-card__count">{{ knowledgeFindingCount }}</span>
-            </div>
-            <p>{{ t('organize.overview.knowledgePreviewDescription') }}</p>
-          </div>
-          <BButton size="small" class="organize-dashboard-card__more" @click="emit('select', 'knowledge_structure')">
-            {{ t('organize.overview.viewAll') }}
-          </BButton>
-        </header>
-        <div v-if="knowledgeLoading && !knowledgeStructure" class="organize-dashboard-state">
-          {{ t('organize.knowledge.loading') }}
-        </div>
-        <div v-else-if="knowledgeError && !knowledgeStructure" class="organize-dashboard-state is-error">
-          {{ t('organize.overview.previewUnavailable') }}
-        </div>
-        <div v-else-if="knowledgeStructure" class="organize-dashboard-knowledge">
-          <div class="organize-dashboard-knowledge__summary">
-            <span class="organize-dashboard-knowledge__score" :class="knowledgeHealthClass">
-              <strong>{{ knowledgeStructure.healthScore }}</strong
-              ><small>/100</small>
-            </span>
-            <span>
-              <strong>{{ t('organize.knowledge.healthLabel') }}</strong>
-              <small>{{
-                t('organize.knowledge.summaryLine', {
-                  total: knowledgeStructure.totalNotes,
-                  depth: knowledgeStructure.maxDepth,
-                })
-              }}</small>
-            </span>
-          </div>
-          <ul v-if="knowledgePreviewItems.length" class="organize-dashboard-knowledge__issues">
-            <li v-for="item in knowledgePreviewItems.slice(0, 2)" :key="`${item.kind}:${item.noteId}`">
-              <span>{{ t(`organize.knowledge.issue.${item.kind}`) }}</span>
-              <strong :title="item.title">{{ item.title }}</strong>
-            </li>
-          </ul>
-          <div v-else class="organize-dashboard-knowledge__empty">
-            {{ t('organize.knowledge.emptyTitle') }}
-          </div>
-          <small v-if="knowledgeError" class="organize-dashboard-knowledge__stale">
-            {{ t('organize.knowledge.stale') }}
-          </small>
-        </div>
+    <div class="governance-summary__metrics">
+      <BCard
+        v-for="metric in metrics"
+        :key="metric.key"
+        class="governance-summary__metric"
+        padding="20px"
+        radius="12px"
+      >
+        <div class="governance-summary__metric-title"
+          ><SvgIcon :src="metric.icon" size="17" /><h3>{{ metric.label }}</h3></div
+        >
+        <div class="governance-summary__value"
+          ><strong>{{ metric.display }}</strong
+          ><span>{{ t(metric.unit) }}</span></div
+        >
+        <p>{{
+          metric.display === '—'
+            ? t('organize.summaryView.unavailable')
+            : metric.value === 0
+              ? t('organize.summaryView.clear')
+              : metric.description
+        }}</p>
+        <BButton class="governance-summary__link" size="small" @click="emit('select', metric.key)"
+          >{{ t('organize.summaryView.details') }} <span aria-hidden="true">→</span></BButton
+        >
       </BCard>
     </div>
+    <p class="governance-summary__scope">{{ t('organize.overview.governanceOverlapHint') }}</p>
 
-    <div v-if="error" class="organize-dashboard-warning" role="status">
-      {{ t('organize.staleSummaryHint') }}
+    <div class="governance-summary__charts">
+      <BCard class="governance-summary__panel" padding="24px" radius="12px">
+        <header
+          ><div
+            ><h3>{{ t('organize.summaryView.untaggedComposition') }}</h3
+            ><p>{{ t('organize.summaryView.untaggedDescription') }}</p></div
+          ><SvgIcon :src="icon.resource.tag" size="20"
+        /></header>
+        <OrganizeDonutChart
+          v-if="untaggedTypes"
+          :items="untaggedTypes"
+          :total="untaggedTotal"
+          :center-value="untaggedTotal"
+          :aria-label="t('organize.summaryView.untaggedComposition')"
+        />
+        <div v-else class="governance-summary__empty" role="status">{{
+          t('organize.summaryView.compositionUnavailable')
+        }}</div>
+        <footer>{{
+          untaggedTotal === 0 && untaggedTypes
+            ? t('organize.overview.untaggedEmpty')
+            : t('organize.summaryView.typeScope')
+        }}</footer>
+      </BCard>
+      <BCard class="governance-summary__panel" padding="24px" radius="12px">
+        <header
+          ><div
+            ><h3>{{ t('organize.overview.healthStatus') }}</h3
+            ><p>{{ t('organize.overview.healthCoverageDescription') }}</p></div
+          ><SvgIcon :src="icon.bookmarkManage.healthCheck" size="20"
+        /></header>
+        <template v-if="coverage">
+          <div class="governance-summary__coverage"
+            ><span>{{ t('organize.overview.healthCoverage') }}</span
+            ><strong>{{
+              t('organize.overview.healthCoverageValue', { checked: coverage.checked, total: coverage.total })
+            }}</strong></div
+          >
+          <BProgress
+            size="small"
+            :percent="coveragePercent"
+            :aria-label="
+              t('organize.overview.healthCoverageAria', { checked: coverage.checked, total: coverage.total })
+            "
+          />
+          <ul class="governance-summary__health"
+            ><li v-for="status in healthStatuses" :key="status.key"
+              ><span :style="{ background: status.color }" aria-hidden="true"></span><span>{{ status.label }}</span
+              ><strong>{{ status.value }}</strong></li
+            ></ul
+          >
+        </template>
+        <div v-else class="governance-summary__empty" role="status">{{ t('organize.summaryView.unavailable') }}</div>
+        <footer>{{ t('organize.summaryView.healthScope') }}</footer>
+      </BCard>
+      <BCard class="governance-summary__panel" padding="24px" radius="12px">
+        <header
+          ><div
+            ><h3>{{ t('organize.summaryView.structureComposition') }}</h3
+            ><p>{{ t('organize.summaryView.structureDescription') }}</p></div
+          ><SvgIcon :src="icon.toolbox.conceptMap" size="20"
+        /></header>
+        <template v-if="knowledgeStructure">
+          <div class="governance-summary__structure-facts"
+            ><span
+              ><strong>{{ knowledgeStructure.totalNotes }}</strong
+              >{{ t('organize.summaryView.notes') }}</span
+            ><span
+              ><strong>{{ knowledgeStructure.affectedNoteCount }}</strong
+              >{{ t('organize.summaryView.affectedNotes') }}</span
+            ></div
+          >
+          <ul v-if="structureIssues.length" class="governance-summary__bars"
+            ><li v-for="issue in structureIssues" :key="issue.kind"
+              ><div
+                ><span>{{ t(`organize.knowledge.issue.${issue.kind}`) }}</span
+                ><strong>{{ issue.count }}</strong></div
+              ><span class="governance-summary__track" aria-hidden="true"
+                ><span :style="{ width: `${issue.width}%` }"></span></span></li
+          ></ul>
+          <div v-else class="governance-summary__empty">{{ t('organize.knowledge.emptyTitle') }}</div>
+        </template>
+        <div v-else class="governance-summary__empty" role="status"
+          ><BLoading v-if="knowledgeLoading" :loading="true" inline />{{
+            t(knowledgeLoading ? 'organize.knowledge.loading' : 'organize.summaryView.unavailable')
+          }}</div
+        >
+        <footer>{{
+          t(knowledgeError && knowledgeStructure ? 'organize.knowledge.stale' : 'organize.summaryView.structureScope')
+        }}</footer>
+      </BCard>
+      <BCard class="governance-summary__panel" padding="24px" radius="12px">
+        <header
+          ><div
+            ><h3>{{ t('organize.overview.pendingComposition') }}</h3
+            ><p>{{ t('organize.summaryView.pendingDescription') }}</p></div
+          ><SvgIcon :src="icon.contextMenu.inbox" size="20"
+        /></header>
+        <OrganizeDonutChart
+          v-if="pendingTypes && pendingTotal > 0"
+          :items="pendingTypes"
+          :total="pendingTotal"
+          :center-value="pendingTotal"
+          :center-label="t('organize.views.pending')"
+          :aria-label="t('organize.overview.pendingComposition')"
+        />
+        <div
+          v-else-if="summary?.pendingShortcut.state === 'ready' && pendingTotal === 0"
+          class="governance-summary__empty governance-summary__empty--clear"
+          ><strong>0</strong><span>{{ t('organize.overview.pendingEmpty') }}</span></div
+        >
+        <div v-else class="governance-summary__empty" role="status">{{ t('organize.summaryView.unavailable') }}</div>
+        <footer
+          ><BButton size="small" class="governance-summary__link" @click="emit('select', 'pending')"
+            >{{ t('organize.summaryView.pendingDetails') }} <span aria-hidden="true">→</span></BButton
+          ></footer
+        >
+      </BCard>
     </div>
+    <p v-if="error" class="governance-summary__warning" role="status">{{ t('organize.staleSummaryHint') }}</p>
   </div>
 </template>
-
 <script setup lang="ts">
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { useRouter } from 'vue-router';
-  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
-  import BChip from '@/components/base/BasicComponents/BChip.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BProgress from '@/components/base/BasicComponents/BProgress.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import TodayActionSection from '@/components/workbenches/TodayActionSection.vue';
-  import OrganizeDonutChart from '@/view/organize/OrganizeDonutChart.vue';
-  import OverviewPreviewState from '@/view/organize/OverviewPreviewState.vue';
+  import OrganizeDonutChart from './OrganizeDonutChart.vue';
+  import icon from '@/config/icon';
   import type {
-    BookmarkHealthOverviewItem,
-    DuplicateBookmarkOverviewItem,
-    KnowledgeStructureIssue,
-    KnowledgeStructureSummary,
     OrganizeIssueType,
     OrganizeResourceType,
     OrganizeSummary,
-    PendingOverviewItem,
-    UntaggedOverviewItem,
+    KnowledgeStructureSummary,
   } from '@/api/organizeApi';
-  import { resolveResourceRoute } from '@/utils/resourceNavigation';
-  import icon from '@/config/icon';
-
-  type DashboardView = 'pending' | OrganizeIssueType;
-
   const props = defineProps<{
     summary: OrganizeSummary | null;
     knowledgeStructure: KnowledgeStructureSummary | null;
@@ -378,993 +185,405 @@
     knowledgeError?: boolean;
     error?: boolean;
   }>();
-
-  const emit = defineEmits<{
-    select: [view: DashboardView];
-    refresh: [];
-  }>();
-
+  const emit = defineEmits<{ select: [view: 'pending' | OrganizeIssueType]; refresh: [] }>();
   const { t, locale } = useI18n();
-  const router = useRouter();
-
-  function safeCount(value: unknown) {
-    const number = Number(value);
-    return Number.isFinite(number) ? Math.max(0, Math.floor(number)) : 0;
-  }
-
-  function displayCount(value: number | null | undefined, hasMore = false) {
-    if (value === null || value === undefined || !Number.isFinite(Number(value))) return '—';
-    return `${safeCount(value)}${hasMore ? '+' : ''}`;
-  }
-
-  const pendingPreview = computed(() => props.summary?.previews?.pending);
-  const untaggedPreview = computed(() => props.summary?.previews?.untagged);
-  const duplicatePreview = computed(() => props.summary?.previews?.duplicateBookmark);
-  const healthPreview = computed(() => props.summary?.previews?.bookmarkHealth);
-  const pendingItems = computed<PendingOverviewItem[]>(() => pendingPreview.value?.items?.slice(0, 5) || []);
-  const emptyTodos: [] = [];
-  const untaggedItems = computed<UntaggedOverviewItem[]>(() => untaggedPreview.value?.items?.slice(0, 3) || []);
-  const duplicateItems = computed<DuplicateBookmarkOverviewItem[]>(
-    () => duplicatePreview.value?.items?.slice(0, 3) || [],
-  );
-  const healthItems = computed<BookmarkHealthOverviewItem[]>(() => healthPreview.value?.items?.slice(0, 3) || []);
-
-  const pendingTotalNumber = computed(() => safeCount(props.summary?.pendingShortcut.count));
-  const pendingCount = computed(() => displayCount(props.summary?.pendingShortcut.count));
-  const untaggedCount = computed(() =>
-    displayCount(props.summary?.issues.untagged.findingCount, props.summary?.issues.untagged.hasMore),
-  );
-  const duplicateCount = computed(() =>
-    displayCount(
-      props.summary?.issues.duplicateBookmark.groupCount ?? props.summary?.issues.duplicateBookmark.findingCount,
-      props.summary?.issues.duplicateBookmark.hasMore,
-    ),
-  );
-  const healthCount = computed(() =>
-    displayCount(props.summary?.issues.bookmarkHealth.findingCount, props.summary?.issues.bookmarkHealth.hasMore),
-  );
-  const knowledgeFindingCount = computed(() => displayCount(props.knowledgeStructure?.findingCount));
-  const knowledgePreviewItems = computed<KnowledgeStructureIssue[]>(
-    () => props.knowledgeStructure?.preview.items || [],
-  );
-  const knowledgeHealthClass = computed(() => {
-    const score = safeCount(props.knowledgeStructure?.healthScore);
-    return score >= 80 ? 'is-good' : score >= 60 ? 'is-attention' : 'is-risk';
+  const count = (value: unknown) => Math.max(0, Number(value) || 0);
+  const display = (value: number | null | undefined, more = false) =>
+    value == null ? '—' : `${count(value).toLocaleString(locale.value)}${more ? '+' : ''}`;
+  const updatedAt = computed(() => {
+    const date = new Date(props.summary?.generatedAt || '');
+    return Number.isNaN(date.getTime())
+      ? '—'
+      : date.toLocaleString(locale.value, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   });
-
-  const metricTabs = computed(() => [
-    {
-      key: 'pending' as const,
-      label: t('organize.views.pending'),
-      icon: icon.contextMenu.inbox,
-      count: pendingCount.value,
-    },
-    {
-      key: 'untagged' as const,
-      label: t('organize.views.untagged'),
-      icon: icon.resource.tag,
-      count: untaggedCount.value,
-    },
-    {
-      key: 'duplicate_bookmark' as const,
-      label: t('organize.views.duplicateBookmark'),
-      icon: icon.resource.bookmark,
-      count: duplicateCount.value,
-    },
-    {
-      key: 'bookmark_health' as const,
-      label: t('organize.views.bookmarkHealth'),
-      icon: icon.bookmarkManage.healthCheck,
-      count: healthCount.value,
-    },
-    {
-      key: 'knowledge_structure' as const,
-      label: t('organize.views.knowledgeStructure'),
-      icon: icon.toolbox.conceptMap,
-      count: knowledgeFindingCount.value,
-    },
-  ]);
-
-  const pendingChartItems = computed(() => {
-    const totals = props.summary?.pendingShortcut.typeTotals;
+  const metrics = computed(() =>
+    [
+      {
+        key: 'untagged' as const,
+        label: t('organize.views.untagged'),
+        icon: icon.resource.tag,
+        value: props.summary?.issues.untagged.findingCount,
+        more: props.summary?.issues.untagged.hasMore,
+        unit: 'organize.summaryView.resources',
+        description: t('organize.summaryView.untaggedMetric'),
+      },
+      {
+        key: 'duplicate_bookmark' as const,
+        label: t('organize.views.duplicateBookmark'),
+        icon: icon.resource.bookmark,
+        value:
+          props.summary?.issues.duplicateBookmark.groupCount ?? props.summary?.issues.duplicateBookmark.findingCount,
+        more: props.summary?.issues.duplicateBookmark.hasMore,
+        unit: 'organize.summaryView.groups',
+        description: t('organize.summaryView.duplicateMetric'),
+      },
+      {
+        key: 'bookmark_health' as const,
+        label: t('organize.views.bookmarkHealth'),
+        icon: icon.bookmarkManage.healthCheck,
+        value: props.summary?.issues.bookmarkHealth.findingCount,
+        more: props.summary?.issues.bookmarkHealth.hasMore,
+        unit: 'organize.summaryView.bookmarks',
+        description: t('organize.summaryView.healthMetric'),
+      },
+      {
+        key: 'knowledge_structure' as const,
+        label: t('organize.views.knowledgeStructure'),
+        icon: icon.toolbox.conceptMap,
+        value: props.knowledgeStructure?.findingCount,
+        unit: 'organize.summaryView.issues',
+        description: t('organize.summaryView.structureMetric'),
+      },
+    ].map((metric) => ({ ...metric, display: display(metric.value, metric.more) })),
+  );
+  function typeChart(totals?: Record<OrganizeResourceType, number> | null) {
+    if (!totals) return null;
+    return (['bookmark', 'note', 'file'] as const).map((type) => ({
+      key: type,
+      label: t(`resourceCenter.types.${type}`),
+      value: count(totals[type]),
+      color:
+        type === 'bookmark'
+          ? 'var(--primary-color)'
+          : type === 'note'
+            ? 'var(--resource-note-color)'
+            : 'var(--resource-file-color)',
+    }));
+  }
+  const untaggedTypes = computed(() =>
+    typeChart(props.summary?.issues.untagged.state === 'ready' ? props.summary.issues.untagged.typeTotals : null),
+  );
+  const untaggedTotal = computed(() => untaggedTypes.value?.reduce((sum, item) => sum + item.value, 0) ?? 0);
+  const pendingTypes = computed(() =>
+    typeChart(props.summary?.pendingShortcut.state === 'ready' ? props.summary.pendingShortcut.typeTotals : null),
+  );
+  const pendingTotal = computed(() => count(props.summary?.pendingShortcut.count));
+  const coverage = computed(() =>
+    props.summary?.issues.bookmarkHealth.state === 'ready' ? props.summary.issues.bookmarkHealth.coverage : null,
+  );
+  const coveragePercent = computed(() =>
+    coverage.value?.total ? Math.min(100, (100 * coverage.value.checked) / coverage.value.total) : 0,
+  );
+  const healthStatuses = computed(() => {
+    const health = props.summary?.issues.bookmarkHealth;
     return [
       {
-        key: 'bookmark',
-        label: t('resourceCenter.types.bookmark'),
-        value: safeCount(totals?.bookmark),
+        key: 'normal',
+        label: t('organize.overview.healthNormal'),
+        value: count(health?.alive),
+        color: 'var(--success-color)',
+      },
+      {
+        key: 'user',
+        label: t('organize.overview.healthUserNormal'),
+        value: count(health?.userNormalCount),
         color: 'var(--primary-color)',
       },
       {
-        key: 'note',
-        label: t('resourceCenter.types.note'),
-        value: safeCount(totals?.note),
-        color: 'var(--resource-note-color, #00a884)',
-      },
-      {
-        key: 'file',
-        label: t('resourceCenter.types.file'),
-        value: safeCount(totals?.file),
-        color: 'var(--resource-file-color, #ff8a00)',
-      },
-    ];
-  });
-
-  const healthCoverage = computed(() => props.summary?.issues.bookmarkHealth.coverage || null);
-  const healthCoveragePercent = computed(() => {
-    const coverage = healthCoverage.value;
-    if (!coverage || safeCount(coverage.total) === 0) return 0;
-    return (Math.min(safeCount(coverage.checked), safeCount(coverage.total)) / safeCount(coverage.total)) * 100;
-  });
-  const healthStatusItems = computed(() => {
-    const total = safeCount(healthCoverage.value?.total);
-    const issue = props.summary?.issues.bookmarkHealth;
-    const normal = safeCount(issue?.alive);
-    const userNormal = safeCount(issue?.userNormalCount);
-    const suspect = safeCount(issue?.findingCount);
-    const unknown = safeCount(issue?.unknownCount);
-    const unchecked = safeCount(issue?.unchecked ?? Math.max(total - safeCount(healthCoverage.value?.checked), 0));
-    return [
-      { key: 'normal', label: t('organize.overview.healthNormal'), value: normal },
-      { key: 'user_normal', label: t('organize.overview.healthUserNormal'), value: userNormal },
-      { key: 'suspect', label: t('organize.views.bookmarkHealth'), value: suspect },
-      { key: 'unknown', label: t('organize.overview.healthUnknown'), value: unknown },
-      { key: 'unchecked', label: t('organize.overview.healthUnchecked'), value: unchecked },
-    ].map((item) => ({ ...item, percent: total > 0 ? (Math.min(item.value, total) / total) * 100 : 0 }));
-  });
-
-  const governanceBars = computed(() => {
-    const candidates = [
-      {
-        key: 'untagged',
-        label: t('organize.views.untagged'),
-        value: props.summary?.issues.untagged.affectedResourceCount,
-        hasMore: props.summary?.issues.untagged.hasMore,
-      },
-      {
-        key: 'duplicate',
-        label: t('organize.views.duplicateBookmark'),
-        value: props.summary?.issues.duplicateBookmark.affectedResourceCount,
-        hasMore: props.summary?.issues.duplicateBookmark.hasMore,
-      },
-      {
-        key: 'health',
+        key: 'suspect',
         label: t('organize.views.bookmarkHealth'),
-        value: props.summary?.issues.bookmarkHealth.affectedResourceCount,
-        hasMore: props.summary?.issues.bookmarkHealth.hasMore,
+        value: count(health?.findingCount),
+        color: 'var(--danger-color)',
       },
       {
-        key: 'knowledge',
-        label: t('organize.views.knowledgeStructure'),
-        value: props.knowledgeStructure?.affectedNoteCount,
-        hasMore: false,
+        key: 'unknown',
+        label: t('organize.overview.healthUnknown'),
+        value: count(health?.unknownCount),
+        color: 'var(--warning-color)',
+      },
+      {
+        key: 'unchecked',
+        label: t('organize.overview.healthUnchecked'),
+        value: count(health?.unchecked),
+        color: 'var(--desc-color)',
       },
     ];
-    const max = Math.max(1, ...candidates.map((item) => safeCount(item.value)));
-    return candidates.map((item) => ({
-      ...item,
-      display: displayCount(item.value, item.hasMore),
-      percent:
-        item.value === null || item.value === undefined || safeCount(item.value) === 0
-          ? 0
-          : Math.max(4, (safeCount(item.value) / max) * 100),
-    }));
   });
-
-  function resourceIcon(type: OrganizeResourceType) {
-    return icon.resource[type];
-  }
-
-  function resourceTypeLabel(type: OrganizeResourceType) {
-    return t(`resourceCenter.types.${type}`);
-  }
-
-  function formatDate(value?: string | null) {
-    if (!value) return t('organize.unknownTime');
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return t('organize.unknownTime');
-    return new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
-  }
-
-  function formatShortDate(value?: string | null) {
-    if (!value) return '';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '';
-    return new Intl.DateTimeFormat(locale.value, { month: 'short', day: 'numeric' }).format(date);
-  }
-
-  function displayUrl(value: string) {
-    try {
-      return new URL(value).hostname.replace(/^www\./, '') || value;
-    } catch {
-      return value || t('organize.overview.untitled');
-    }
-  }
-
-  function openResource(item: PendingOverviewItem | UntaggedOverviewItem) {
-    const target = resolveResourceRoute({ type: item.resourceType, id: item.resourceId, title: item.title });
-    if (target) void router.push(target);
-  }
-
-  function openHealthResource(item: BookmarkHealthOverviewItem) {
-    const target = resolveResourceRoute({ type: 'bookmark', id: item.id, title: item.name });
-    if (target) void router.push(target);
-  }
+  const structureIssues = computed(() => {
+    const items = (props.knowledgeStructure?.issueCounts || [])
+      .filter((item) => item.count > 0)
+      .sort((a, b) => b.count - a.count);
+    const max = Math.max(1, ...items.map((item) => item.count));
+    return items.map((item) => ({ ...item, width: (100 * item.count) / max }));
+  });
 </script>
-
 <style scoped lang="less">
-  .organize-dashboard {
+  .governance-summary {
+    --summary-surface: var(--surface-card-bg);
     display: grid;
-    gap: 14px;
-  }
-
-  .organize-dashboard__metrics {
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 10px;
-  }
-
-  .organize-dashboard-metric.b_btn {
-    width: 100%;
-    height: 44px;
-    display: grid;
-    grid-template-columns: 24px minmax(0, 1fr) auto;
-    gap: 8px;
-    padding: 0 12px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 11px;
+    gap: 20px;
+    min-width: 0;
     color: var(--text-color);
-    background: var(--card-background);
-    text-align: left;
-    transition:
-      color 0.16s ease,
-      border-color 0.16s ease,
-      background-color 0.16s ease;
   }
-
-  .organize-dashboard-metric.b_btn:hover,
-  .organize-dashboard-metric.b_btn:focus-visible {
-    border-color: var(--primary-color);
-    color: var(--primary-color);
-    background: var(--workspace-panel-bg-color);
+  :global([data-theme='night'] .governance-summary) {
+    --summary-surface: var(--surface-panel-bg);
   }
-
-  .organize-dashboard-metric__icon {
-    width: 24px;
-    height: 24px;
-    display: grid;
-    place-items: center;
-    border-radius: 7px;
-    color: var(--primary-color);
-    background: var(--workspace-panel-bg-color);
-  }
-
-  .organize-dashboard-metric.is-untagged .organize-dashboard-metric__icon {
-    color: var(--resource-tag-color, #ec4899);
-  }
-
-  .organize-dashboard-metric.is-bookmark_health .organize-dashboard-metric__icon {
-    color: var(--danger-color, #fe2c55);
-  }
-
-  .organize-dashboard-metric.is-knowledge_structure .organize-dashboard-metric__icon,
-  .organize-dashboard-title-icon.is-knowledge {
-    color: var(--success-color, #168a61);
-  }
-
-  .organize-dashboard-metric strong,
-  .organize-dashboard-card__count,
-  .organize-dashboard-legend strong,
-  .organize-dashboard-bars strong {
-    font-variant-numeric: tabular-nums;
-  }
-
-  .organize-dashboard-metric strong {
-    min-width: 26px;
-    padding: 1px 7px;
-    border-radius: 999px;
-    color: var(--primary-color);
-    background: var(--workspace-panel-bg-color);
-    font-size: 12px;
-    text-align: center;
-  }
-
-  .organize-dashboard__sections {
-    min-width: 0;
-    display: grid;
-    gap: 14px;
-  }
-
-  .organize-dashboard-card {
-    overflow: hidden;
-  }
-
-  .organize-dashboard-pending__body,
-  .organize-dashboard-governance__body {
-    min-width: 0;
-    display: grid;
-    grid-template-columns: minmax(0, 1.8fr) minmax(280px, 0.72fr);
-  }
-
-  .organize-dashboard-pending__list,
-  .organize-dashboard-governance__previews {
-    min-width: 0;
-  }
-
-  .organize-dashboard-pending__list {
-    display: grid;
-    align-content: start;
-    padding: 8px 12px 12px;
-  }
-
-  .organize-dashboard-pending__composition,
-  .organize-dashboard-governance__insights {
-    border-left: 1px solid var(--surface-divider-color);
-    background: var(--workspace-panel-bg-color);
-  }
-
-  .organize-dashboard-insight {
-    min-width: 0;
-    padding: 16px;
-    box-sizing: border-box;
-  }
-
-  .organize-dashboard-pending__actions :deep(.today-actions__group) {
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-  }
-
-  .organize-dashboard-pending__actions :deep(.today-actions__group-head) {
-    display: none;
-  }
-
-  .organize-dashboard-pending__actions :deep(.today-action-row) {
-    min-height: 52px;
-    padding-inline: 4px;
-  }
-
-  .organize-dashboard-pending__actions :deep(.today-action-row:first-child) {
-    border-top: 0;
-  }
-
-  .organize-dashboard-governance__previews {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .organize-dashboard-preview {
-    min-width: 0;
-  }
-
-  .organize-dashboard-preview.is-untagged {
-    grid-row: 1 / span 2;
-    border-right: 1px solid var(--surface-divider-color);
-  }
-
-  .organize-dashboard-preview.is-duplicate {
-    border-bottom: 1px solid var(--surface-divider-color);
-  }
-
-  .organize-dashboard-governance__insights {
-    display: grid;
-    align-content: start;
-  }
-
-  .organize-dashboard-governance__comparison {
-    border-top: 1px solid var(--surface-divider-color);
-  }
-
-  .organize-dashboard-card__header {
-    min-width: 0;
-    min-height: 72px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    padding: 14px 16px 12px;
-    border-bottom: 1px solid var(--surface-divider-color);
-  }
-
-  .organize-dashboard-card__header.is-compact {
-    min-height: 68px;
-  }
-
-  .organize-dashboard-card__header > div,
-  .organize-dashboard-aside-title > div {
-    min-width: 0;
-  }
-
-  .organize-dashboard-card__title-line {
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .organize-dashboard-card__title-line h2,
-  .organize-dashboard-card__title-line h3,
-  .organize-dashboard-aside-title h3 {
+  .governance-summary h2,
+  .governance-summary h3,
+  .governance-summary p {
     margin: 0;
-    color: var(--text-color);
-    line-height: 1.35;
   }
-
-  .organize-dashboard-card__title-line h2 {
-    font-size: 17px;
+  .governance-summary h2 {
+    font-size: 22px;
+    line-height: 1.4;
   }
-
-  .organize-dashboard-card__title-line h3,
-  .organize-dashboard-aside-title h3 {
+  .governance-summary h3 {
     font-size: 15px;
+    line-height: 1.4;
   }
-
-  .organize-dashboard-card__header p,
-  .organize-dashboard-aside-title p {
-    margin: 3px 0 0;
+  .governance-summary p,
+  .governance-summary footer,
+  .governance-summary small {
     color: var(--desc-color);
     font-size: 12px;
-    line-height: 1.45;
+    line-height: 1.6;
   }
-
-  .organize-dashboard-card__count {
-    color: var(--desc-color);
-    font-size: 12px;
-    font-weight: 650;
-  }
-
-  .organize-dashboard-card__more.b_btn {
-    flex: 0 0 auto;
-    border: 1px solid transparent;
-    color: var(--primary-color);
-    background: transparent;
-  }
-
-  .organize-dashboard-card__more.b_btn:hover,
-  .organize-dashboard-card__more.b_btn:focus-visible {
-    border-color: var(--primary-color);
-    background: var(--workspace-panel-bg-color);
-  }
-
-  .organize-dashboard-compact-row__copy strong,
-  .organize-dashboard-health-row__copy strong {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .organize-dashboard-resource__icon,
-  .organize-dashboard-title-icon {
-    width: 28px;
-    height: 28px;
-    display: grid;
-    place-items: center;
-    flex: 0 0 auto;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 8px;
-    color: var(--resource-bookmark-color, var(--primary-color));
-    background: var(--workspace-panel-bg-color);
-  }
-
-  .organize-dashboard-resource__icon.is-note {
-    color: var(--resource-note-color, #00a884);
-  }
-
-  .organize-dashboard-resource__icon.is-file {
-    color: var(--resource-file-color, #ff8a00);
-  }
-
-  .organize-dashboard-title-icon.is-untagged {
-    color: var(--resource-tag-color, #ec4899);
-  }
-
-  .organize-dashboard-title-icon.is-duplicate {
-    color: var(--resource-bookmark-color, var(--primary-color));
-  }
-
-  .organize-dashboard-title-icon.is-health {
-    color: var(--danger-color, #fe2c55);
-  }
-
-  .organize-dashboard-compact-list,
-  .organize-dashboard-health-list,
-  .organize-dashboard-legend,
-  .organize-dashboard-bars {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .organize-dashboard-compact-list {
-    padding: 5px 12px 9px;
-  }
-
-  .organize-dashboard-knowledge {
-    min-height: 112px;
-    display: grid;
-    grid-template-columns: minmax(150px, 0.8fr) minmax(0, 1fr);
-    align-items: center;
-    gap: 12px;
-    padding: 10px 16px 12px;
-  }
-
-  .organize-dashboard-knowledge__summary {
-    min-width: 0;
+  .governance-summary__heading,
+  .governance-summary__updated {
     display: flex;
     align-items: center;
-    gap: 10px;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
   }
-
-  .organize-dashboard-knowledge__summary > span:last-child {
+  .governance-summary__heading p {
+    margin-top: 6px;
+  }
+  .governance-summary__metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .governance-summary__metric,
+  .governance-summary__panel {
+    --b-card-background: var(--summary-surface);
+    --b-card-shadow: none;
     min-width: 0;
-    display: grid;
-    gap: 3px;
   }
-
-  .organize-dashboard-knowledge__summary > span:last-child > strong {
-    font-size: 12px;
+  .governance-summary__metric-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
-
-  .organize-dashboard-knowledge__summary > span:last-child > small {
-    color: var(--desc-color);
-    font-size: 10px;
-    line-height: 1.45;
+  .governance-summary__metric-title > :first-child,
+  .governance-summary__panel header > :last-child {
+    color: var(--primary-color);
+    flex-shrink: 0;
   }
-
-  .organize-dashboard-knowledge__score {
-    width: 48px;
-    height: 48px;
-    display: grid;
-    grid-template-columns: auto auto;
-    place-content: center;
+  .governance-summary__value {
+    display: flex;
     align-items: baseline;
-    flex: 0 0 auto;
-    border: 2px solid currentColor;
-    border-radius: 50%;
-    color: var(--success-color, #168a61);
-    background: var(--card-background);
+    gap: 8px;
+    margin: 18px 0 6px;
   }
-
-  .organize-dashboard-knowledge__score.is-attention {
-    color: var(--warning-color, #d97706);
-  }
-
-  .organize-dashboard-knowledge__score.is-risk {
-    color: var(--danger-color, #fe2c55);
-  }
-
-  .organize-dashboard-knowledge__score strong {
-    font-size: 17px;
+  .governance-summary__value strong {
+    font-size: 32px;
+    font-weight: 600;
+    line-height: 1.1;
     font-variant-numeric: tabular-nums;
   }
-
-  .organize-dashboard-knowledge__score small {
-    font-size: 8px;
+  .governance-summary__value span {
+    font-size: 12px;
+    color: var(--desc-color);
   }
-
-  .organize-dashboard-knowledge__issues {
-    min-width: 0;
-    display: grid;
-    gap: 7px;
-    margin: 0;
+  .governance-summary__link.b_btn {
     padding: 0;
-    list-style: none;
-  }
-
-  .organize-dashboard-knowledge__issues li {
-    min-width: 0;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: 7px;
-    font-size: 11px;
-  }
-
-  .organize-dashboard-knowledge__issues span {
-    color: var(--primary-color);
-  }
-
-  .organize-dashboard-knowledge__issues strong {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .organize-dashboard-knowledge__empty,
-  .organize-dashboard-knowledge__stale {
-    color: var(--desc-color);
-    font-size: 11px;
-  }
-
-  .organize-dashboard-knowledge__stale {
-    grid-column: 1 / -1;
-    color: var(--danger-color, #fe2c55);
-  }
-
-  .organize-dashboard-compact-row.b_btn,
-  .organize-dashboard-health-row.b_btn {
-    width: 100%;
-    height: auto;
-    min-height: 44px;
-    padding: 5px 4px;
-    border: 1px solid transparent;
-    border-radius: 9px;
-    color: var(--text-color);
     background: transparent;
-    text-align: left;
-    white-space: normal;
-    transition:
-      color 0.16s ease,
-      border-color 0.16s ease,
-      background-color 0.16s ease;
-  }
-
-  .organize-dashboard-compact-row.b_btn {
-    display: grid;
-    grid-template-columns: 28px minmax(0, 1fr) auto;
-    gap: 8px;
-  }
-
-  .organize-dashboard-compact-row.b_btn:hover,
-  .organize-dashboard-compact-row.b_btn:focus-visible,
-  .organize-dashboard-health-row.b_btn:hover,
-  .organize-dashboard-health-row.b_btn:focus-visible {
-    border-color: var(--surface-border-color);
-    color: var(--primary-color);
-    background: var(--workspace-panel-bg-color);
-  }
-
-  .organize-dashboard-compact-row__copy,
-  .organize-dashboard-health-row__copy {
-    min-width: 0;
-    display: grid;
-    gap: 1px;
-  }
-
-  .organize-dashboard-compact-row__copy strong,
-  .organize-dashboard-health-row__copy strong {
-    font-size: 12px;
-    font-weight: 600;
-  }
-
-  .organize-dashboard-compact-row__copy small,
-  .organize-dashboard-health-row__copy small,
-  .organize-dashboard-compact-row__meta {
+    border: 0;
     color: var(--desc-color);
-    font-size: 11px;
-  }
-
-  .organize-dashboard-compact-row__badge {
-    min-width: 23px;
-    padding: 1px 6px;
-    border-radius: 999px;
-    color: var(--primary-color);
-    background: var(--workspace-panel-bg-color);
-    font-size: 11px;
-    text-align: center;
-  }
-
-  .organize-dashboard-aside-title {
-    min-width: 0;
-    display: grid;
-    grid-template-columns: 20px minmax(0, 1fr);
-    align-items: start;
+    height: 32px;
     gap: 8px;
-    color: var(--primary-color);
-  }
-
-  .organize-dashboard-pending__composition :deep(.organize-donut-chart) {
-    grid-template-columns: 112px minmax(0, 1fr);
-    gap: 12px;
-    margin-top: 14px;
-  }
-
-  .organize-dashboard-pending__composition :deep(.organize-donut-chart__visual) {
-    width: 112px;
-  }
-
-  .organize-dashboard-pending__composition :deep(.organize-donut-chart__legend) {
-    gap: 7px;
-  }
-
-  .organize-dashboard-pending__composition :deep(.organize-donut-chart__legend-item) {
-    grid-template-columns: 8px minmax(0, 1fr) auto minmax(36px, auto);
-    gap: 6px;
-    font-size: 11px;
-  }
-
-  .organize-dashboard-health__coverage {
-    display: grid;
-    gap: 8px;
-    margin-top: 14px;
-  }
-
-  .organize-dashboard-health__coverage > div {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    color: var(--desc-color);
     font-size: 12px;
   }
-
-  .organize-dashboard-health__coverage strong {
-    color: var(--text-color);
-  }
-
-  .organize-dashboard-health__stack {
-    height: 7px;
-    display: flex;
-    margin-top: 14px;
-    overflow: hidden;
-    border-radius: 999px;
-    background: var(--surface-divider-color);
-  }
-
-  .organize-dashboard-health__stack > span {
-    min-width: 0;
-    height: 100%;
-  }
-
-  .organize-dashboard-health__stack .is-normal,
-  .organize-dashboard-legend__dot.is-normal {
-    background: var(--success-color, #20a464);
-  }
-
-  .organize-dashboard-health__stack .is-user_normal,
-  .organize-dashboard-legend__dot.is-user_normal {
-    background: var(--primary-color);
-  }
-
-  .organize-dashboard-health__stack .is-suspect,
-  .organize-dashboard-legend__dot.is-suspect {
-    background: var(--danger-color, #fe2c55);
-  }
-
-  .organize-dashboard-health__stack .is-unknown,
-  .organize-dashboard-legend__dot.is-unknown {
-    background: var(--warning-color, #f59e0b);
-  }
-
-  .organize-dashboard-health__stack .is-unchecked,
-  .organize-dashboard-legend__dot.is-unchecked {
-    background: var(--desc-color);
-  }
-
-  .organize-dashboard-legend {
-    display: grid;
-    gap: 7px;
+  .governance-summary__metric .governance-summary__link {
     margin-top: 12px;
   }
-
-  .organize-dashboard-legend li {
-    min-width: 0;
+  .governance-summary__link.b_btn:hover {
+    color: var(--primary-color);
+  }
+  .governance-summary__link.b_btn:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 4px;
+    border-radius: 4px;
+  }
+  .governance-summary__scope {
+    margin-top: -10px !important;
+  }
+  .governance-summary__charts {
     display: grid;
-    grid-template-columns: 8px minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 8px;
-    color: var(--desc-color);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+    align-items: start;
+  }
+  .governance-summary__panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 330px;
+  }
+  .governance-summary__panel header {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 22px;
+  }
+  .governance-summary__panel header p {
+    margin-top: 6px;
+  }
+  .governance-summary__panel footer {
+    border-top: 1px solid var(--surface-divider-color);
+    padding-top: 14px;
+    margin-top: auto;
+  }
+  .governance-summary__panel :deep(.organize-donut-chart) {
+    margin: 0 0 24px;
+    grid-template-columns: 140px minmax(0, 1fr);
+    gap: 24px;
+  }
+  .governance-summary__panel :deep(.organize-donut-chart__visual) {
+    width: 140px;
+  }
+  .governance-summary__panel :deep(.organize-donut-chart__legend-item) {
     font-size: 12px;
   }
-
-  .organize-dashboard-legend__dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 999px;
-  }
-
-  .organize-dashboard-legend strong {
-    color: var(--text-color);
-  }
-
-  .organize-dashboard-health-list.is-main-preview {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 4px 10px;
-    padding: 5px 12px 9px;
-  }
-
-  .organize-dashboard-health-row.b_btn {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px;
-  }
-
-  .organize-dashboard-bars {
-    display: grid;
-    gap: 12px;
-    margin-top: 15px;
-  }
-
-  .organize-dashboard-bars li {
-    display: grid;
-    gap: 6px;
-  }
-
-  .organize-dashboard-bars li > div {
+  .governance-summary__coverage {
     display: flex;
     justify-content: space-between;
-    gap: 8px;
-    color: var(--desc-color);
+    gap: 10px;
     font-size: 12px;
+    margin-bottom: 10px;
+    color: var(--desc-color);
   }
-
-  .organize-dashboard-bars strong {
+  .governance-summary__coverage strong {
     color: var(--text-color);
   }
-
-  .organize-dashboard-bars__track {
-    height: 6px;
-    overflow: hidden;
-    border-radius: 999px;
-    background: var(--surface-divider-color);
-  }
-
-  .organize-dashboard-bars__track > span {
-    height: 100%;
-    display: block;
-    border-radius: inherit;
-    background: var(--primary-color);
-  }
-
-  .organize-dashboard-bars__track > .is-untagged {
-    background: var(--resource-tag-color, #ec4899);
-  }
-
-  .organize-dashboard-bars__track > .is-health {
-    background: var(--danger-color, #fe2c55);
-  }
-
-  .organize-dashboard-bars__track > .is-knowledge {
-    background: var(--success-color, #168a61);
-  }
-
-  .organize-dashboard-updated {
-    display: block;
-    margin-top: 14px;
-    color: var(--desc-color);
-    font-size: 11px;
-  }
-
-  .organize-dashboard-state {
-    min-height: 84px;
+  .governance-summary__health,
+  .governance-summary__bars {
+    list-style: none;
+    padding: 0;
+    margin: 18px 0 20px;
     display: grid;
-    place-items: center;
-    padding: 14px;
-    box-sizing: border-box;
+    gap: 12px;
+  }
+  .governance-summary__health li {
+    display: grid;
+    grid-template-columns: 8px 1fr auto;
+    gap: 10px;
+    align-items: center;
+    font-size: 12px;
+    color: var(--desc-color);
+  }
+  .governance-summary__health li > span:first-child {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+  }
+  .governance-summary__health strong {
+    color: var(--text-color);
+    font-variant-numeric: tabular-nums;
+  }
+  .governance-summary__structure-facts {
+    display: flex;
+    gap: 24px;
     color: var(--desc-color);
     font-size: 12px;
-    text-align: center;
   }
-
-  .organize-dashboard-state.is-error,
-  .organize-dashboard-warning {
-    color: var(--danger-color, #fe2c55);
+  .governance-summary__structure-facts strong {
+    font-size: 22px;
+    margin-right: 6px;
+    color: var(--text-color);
+    font-variant-numeric: tabular-nums;
   }
-
-  .organize-dashboard-warning {
-    padding: 9px 12px;
-    border: 1px solid var(--danger-color, #fe2c55);
-    border-radius: 10px;
-    background: var(--card-background);
+  .governance-summary__bars li > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
     font-size: 12px;
+    margin-bottom: 7px;
   }
-
-  @media (max-width: 1180px) {
-    .organize-dashboard-pending__body,
-    .organize-dashboard-governance__body {
-      grid-template-columns: 1fr;
-    }
-
-    .organize-dashboard-pending__composition,
-    .organize-dashboard-governance__insights {
-      border-top: 1px solid var(--surface-divider-color);
-      border-left: 0;
-    }
-
-    .organize-dashboard-governance__insights {
+  .governance-summary__track {
+    display: block;
+    height: 6px;
+    background: var(--surface-divider-color);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .governance-summary__track > span {
+    display: block;
+    height: 100%;
+    background: var(--primary-color);
+    border-radius: inherit;
+  }
+  .governance-summary__empty {
+    min-height: 160px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: var(--desc-color);
+    font-size: 13px;
+    line-height: 1.7;
+    padding: 16px;
+    gap: 12px;
+    flex: 1;
+  }
+  .governance-summary__empty--clear strong {
+    font-size: 42px;
+    font-weight: 600;
+    color: var(--text-color);
+  }
+  .governance-summary__warning {
+    color: var(--danger-color) !important;
+  }
+  @media (max-width: 1200px) {
+    .governance-summary__metrics {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-
-    .organize-dashboard-governance__comparison {
-      border-top: 0;
-      border-left: 1px solid var(--surface-divider-color);
+    .governance-summary__panel :deep(.organize-donut-chart) {
+      grid-template-columns: 110px minmax(0, 1fr);
+      gap: 14px;
+    }
+    .governance-summary__panel :deep(.organize-donut-chart__visual) {
+      width: 110px;
     }
   }
-
-  @media (max-width: 900px) and (min-width: 768px) {
-    .organize-dashboard__metrics {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .organize-dashboard-governance__previews,
-    .organize-dashboard-governance__insights {
+  @media (max-width: 950px) {
+    .governance-summary__charts {
       grid-template-columns: 1fr;
     }
-
-    .organize-dashboard-preview.is-untagged {
-      grid-row: auto;
-      border-right: 0;
-      border-bottom: 1px solid var(--surface-divider-color);
-    }
-
-    .organize-dashboard-governance__comparison {
-      border-top: 1px solid var(--surface-divider-color);
-      border-left: 0;
-    }
   }
-
   @media (max-width: 767px) {
-    .organize-dashboard {
+    .governance-summary {
+      gap: 16px;
+    }
+    .governance-summary__metrics {
       gap: 10px;
     }
-
-    .organize-dashboard__metrics {
-      display: none;
+    .governance-summary__metric {
+      --b-card-padding: 16px !important;
     }
-
-    .organize-dashboard-pending__body,
-    .organize-dashboard-governance__body,
-    .organize-dashboard-governance__previews,
-    .organize-dashboard-governance__insights {
-      grid-template-columns: 1fr;
-      gap: 10px;
+    .governance-summary__panel {
+      --b-card-padding: 20px !important;
+      min-height: 0;
     }
-
-    .organize-dashboard-card__header {
-      min-height: 66px;
-      padding: 11px 12px 9px;
+    .governance-summary__value strong {
+      font-size: 28px;
     }
-
-    .organize-dashboard-card__more.b_btn {
+    .governance-summary__link.b_btn {
       min-height: 44px;
     }
-
-    .organize-dashboard-pending__composition :deep(.organize-donut-chart__visual) {
-      display: none;
+    .governance-summary__metric-title {
+      gap: 6px;
     }
-
-    .organize-dashboard-pending__composition :deep(.organize-donut-chart) {
-      grid-template-columns: 1fr;
+    .governance-summary__metric-title h3 {
+      font-size: 13px;
     }
-
-    .organize-dashboard-pending__composition,
-    .organize-dashboard-governance__insights {
-      border-top: 1px solid var(--surface-divider-color);
-      border-left: 0;
+    .governance-summary__updated {
+      width: 100%;
     }
-
-    .organize-dashboard-preview.is-untagged {
-      grid-row: auto;
-      border-right: 0;
-      border-bottom: 1px solid var(--surface-divider-color);
-    }
-
-    .organize-dashboard-governance__comparison {
-      border-top: 1px solid var(--surface-divider-color);
-      border-left: 0;
-    }
-
-    .organize-dashboard-health-list.is-main-preview {
-      grid-template-columns: 1fr;
-    }
-
-    .organize-dashboard-knowledge {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  :global(html.light-note-mobile-rendering .organize-dashboard-card),
-  :global(html.light-note-mobile-rendering .organize-dashboard-metric),
-  :global(html.light-note-mobile-rendering .organize-dashboard-compact-row),
-  :global(html.light-note-mobile-rendering .organize-dashboard-health-row) {
-    box-shadow: none;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .organize-dashboard-metric.b_btn,
-    .organize-dashboard-compact-row.b_btn,
-    .organize-dashboard-health-row.b_btn {
-      transition: none;
+    .governance-summary__panel footer {
+      margin-top: 8px;
     }
   }
 </style>

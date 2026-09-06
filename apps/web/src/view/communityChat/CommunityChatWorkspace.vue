@@ -497,7 +497,9 @@
             <span aria-hidden="true">
               <SvgIcon :src="icon.file_upload" size="22" />
             </span>
-            <strong>{{ t('communityChat.attachment.dropHint') }}</strong>
+            <strong>{{
+              t(props.access.filesEnabled ? 'communityChat.attachment.dropHint' : 'communityChat.image.dropHint')
+            }}</strong>
           </div>
 
           <ChatPendingAttachments
@@ -646,8 +648,10 @@
                 <BButton
                   class="community-composer__attach"
                   :disabled="attachmentUploadDisabled"
-                  :aria-label="t('communityChat.attachment.add')"
-                  :title="t('communityChat.attachment.add')"
+                  :aria-label="
+                    t(props.access.filesEnabled ? 'communityChat.attachment.add' : 'communityChat.image.add')
+                  "
+                  :title="t(props.access.filesEnabled ? 'communityChat.attachment.add' : 'communityChat.image.add')"
                 >
                   <SvgIcon :src="icon.file_upload" size="19" aria-hidden="true" />
                 </BButton>
@@ -661,9 +665,7 @@
               >
                 <SvgIcon :src="icon.communityChat.poll" size="19" aria-hidden="true" />
               </BButton>
-              <span class="community-composer__upload-hint">{{
-                t(bookmark.isMobile ? 'communityChat.attachment.inputHintMobile' : 'communityChat.attachment.inputHint')
-              }}</span>
+              <span class="community-composer__upload-hint">{{ attachmentInputHint }}</span>
             </div>
             <div class="community-composer__actions">
               <span :class="{ 'is-near-limit': draftLength > 1800 }">{{ draftLength }}/2000</span>
@@ -818,6 +820,7 @@
 </template>
 
 <script setup lang="ts">
+  import { imagePreviewsEnabled } from '@/api/imagePreviewApi';
   import {
     COMMUNITY_CHAT_ATTACHMENT_MAX_COUNT,
     COMMUNITY_CHAT_ATTACHMENT_MAX_TOTAL_BYTES,
@@ -1189,6 +1192,8 @@
   const AVATAR_MOTION_SCROLL_IDLE_MS = 140;
   const INITIAL_IMAGE_PRIORITY_MESSAGE_COUNT = 8;
   const INITIAL_IMAGE_PRIORITY_MAX = 4;
+  const DEFAULT_IMAGE_ATTACHMENT_LIMIT = 4;
+  const COMMUNITY_CHAT_IMAGE_UPLOAD_CONCURRENCY = 4;
   const INITIAL_BOTTOM_ANCHOR_WINDOW_MS = 6000;
   const INITIAL_BOTTOM_ANCHOR_CHECK_MS = 120;
   const COMMUNITY_CHAT_ATTACHMENT_LIMIT = COMMUNITY_CHAT_ATTACHMENT_MAX_COUNT;
@@ -1293,11 +1298,32 @@
   const canManagePinnedMessage = computed(
     () => props.access.memberRole === 'admin' || props.access.memberRole === 'moderator',
   );
+  const imageAttachmentLimit = computed<number | null>(() => {
+    if (props.access.imageAttachmentLimit === null) return null;
+    const value = Math.floor(Number(props.access.imageAttachmentLimit));
+    return Number.isFinite(value) && value > 0 ? value : DEFAULT_IMAGE_ATTACHMENT_LIMIT;
+  });
+  const attachmentInputHint = computed(() => {
+    const mobile = bookmark.isMobile;
+    if (imageAttachmentLimit.value === null) {
+      return t(mobile ? 'communityChat.image.inputHintUnlimitedMobile' : 'communityChat.image.inputHintUnlimited');
+    }
+    if (!props.access.filesEnabled) {
+      return t(mobile ? 'communityChat.image.inputHintMobile' : 'communityChat.image.inputHint', {
+        count: imageAttachmentLimit.value,
+      });
+    }
+    return t(mobile ? 'communityChat.attachment.inputHintMobile' : 'communityChat.attachment.inputHint');
+  });
   const attachmentUploadBusy = computed(
     () => !canPostCurrentRoom.value || sending.value || attachmentUploadsInFlight.value > 0,
   );
   const attachmentUploadDisabled = computed(
-    () => attachmentUploadBusy.value || pendingAttachments.value.length >= COMMUNITY_CHAT_ATTACHMENT_LIMIT,
+    () =>
+      attachmentUploadBusy.value ||
+      (pendingAttachments.value.length >= COMMUNITY_CHAT_ATTACHMENT_LIMIT &&
+        (imageAttachmentLimit.value !== null ||
+          pendingAttachments.value.some((attachment) => attachment.kind === 'file'))),
   );
   const realtimeEnabled = computed(() => Boolean(props.access.realtimeEnabled && props.access.canRead));
   const realtimeIdentityKey = computed(() => `${currentUser.id || 'guest'}:${currentUser.role || 'visitor'}`);
@@ -1921,6 +1947,7 @@
   }
 
   function prewarmInitialViewportImages(messages: CommunityChatMessage[], focusPublicId = '') {
+    if (imagePreviewsEnabled('chat')) return;
     const candidates = initialViewportImages(messages, focusPublicId);
     priorityMessageImageIds.value = new Set(candidates.map((imageItem) => imageItem.publicId));
     for (const imageItem of candidates) {
@@ -2450,6 +2477,17 @@
     assignChatMessagesIfChanged([...preservedOlder, ...items, ...pending]);
   }
 
+  function countNewMessagesFromLatestPage(items: CommunityChatMessage[], existingIds: Set<string>) {
+    let latestKnownIndex = -1;
+    for (let index = items.length - 1; index >= 0; index -= 1) {
+      if (!existingIds.has(items[index].publicId)) continue;
+      latestKnownIndex = index;
+      break;
+    }
+    const candidates = latestKnownIndex >= 0 ? items.slice(latestKnownIndex + 1) : items;
+    return candidates.filter((item) => !existingIds.has(item.publicId)).length;
+  }
+
   async function markLatestRead() {
     if (!props.access.authenticated) return;
     const roomSlug = selectedRoomSlug.value;
@@ -2670,7 +2708,9 @@
       const page = response.data as CommunityChatMessagePage;
       syncCommunityClock(page.serverTime);
       prewarmInitialViewportImages(page.items || [], page.focusPublicId || '');
-      const newMessageCount = (page.items || []).filter((item) => !existingIds.has(item.publicId)).length;
+      const latestItems = page.items || [];
+      const newMessageCount = countNewMessagesFromLatestPage(latestItems, existingIds);
+      const viewportAnchor = messageViewport.shouldFollowLatest() ? null : captureMessageViewportAnchor();
       replaceLatestWindow(page);
       lastAuthorityRefreshAt = Date.now();
       loadError.value = false;
@@ -2689,8 +2729,11 @@
           nextAfter.value = null;
           void clearFocusMessageRoute();
         }
-      } else if (newMessageCount > 0) {
-        pendingNewMessageCount.value += newMessageCount;
+      } else {
+        // 权威最新页可能补入当前定位窗口之前的旧消息。更新 DOM 后恢复可视锚点，不能只保留原始
+        // scrollTop，否则新增内容会把已定位消息整体推到视口下方。
+        await restoreMessageViewportAnchor(viewportAnchor);
+        if (newMessageCount > 0) pendingNewMessageCount.value += newMessageCount;
       }
     } catch {
       // 后台轮询失败时保留旧消息，不闪空态也不打扰用户。
@@ -3957,16 +4000,39 @@
     }
   }
 
+  async function uploadPendingAttachments(
+    draftSession: ReturnType<typeof createCommunityChatDraftSession>,
+    roomSlug: string,
+    attachments: CommunityChatPendingAttachment[],
+  ) {
+    for (let index = 0; index < attachments.length; index += COMMUNITY_CHAT_IMAGE_UPLOAD_CONCURRENCY) {
+      const batch = attachments.slice(index, index + COMMUNITY_CHAT_IMAGE_UPLOAD_CONCURRENCY);
+      await Promise.all(batch.map((attachment) => uploadPendingAttachment(draftSession, roomSlug, attachment)));
+    }
+  }
+
   async function handleAttachmentFiles(selected: unknown) {
     const files = Array.isArray(selected) ? selected.filter((item): item is File => item instanceof File) : [];
     if (!files.length || attachmentUploadBusy.value) return;
     const draftSession = composerDraftSession.value;
-    const available = Math.max(0, COMMUNITY_CHAT_ATTACHMENT_LIMIT - draftSession.pendingAttachments.length);
+    const imageOnlySelection = files.every((file) => communityChatAttachmentKind(file) === 'image');
+    const imageOnlyDraft = draftSession.pendingAttachments.every((attachment) => attachment.kind === 'image');
+    const unlimitedImages = imageAttachmentLimit.value === null && imageOnlySelection && imageOnlyDraft;
+    const attachmentLimit = unlimitedImages ? null : COMMUNITY_CHAT_ATTACHMENT_LIMIT;
+    const available =
+      attachmentLimit === null ? files.length : Math.max(0, attachmentLimit - draftSession.pendingAttachments.length);
+    const limitWarning =
+      imageOnlySelection && imageOnlyDraft
+        ? () =>
+            message.warning(
+              t('communityChat.image.limit', { count: imageAttachmentLimit.value ?? COMMUNITY_CHAT_ATTACHMENT_LIMIT }),
+            )
+        : () => message.warning(t('communityChat.attachment.limit'));
     if (!available) {
-      message.warning(t('communityChat.attachment.limit'));
+      limitWarning();
       return;
     }
-    if (files.length > available) message.warning(t('communityChat.attachment.limit'));
+    if (files.length > available) limitWarning();
     const accepted = files.slice(0, available);
     const warnings = new Set<string>();
     let totalSize = draftSession.pendingAttachments.reduce(
@@ -4014,7 +4080,7 @@
     draftSession.pendingClientRequestId = null;
     touchCommunityChatDraftSession(draftSession);
     try {
-      await Promise.all(pending.map((attachment) => uploadPendingAttachment(draftSession, roomSlug, attachment)));
+      await uploadPendingAttachments(draftSession, roomSlug, pending);
       const failed = pending.filter((attachment) =>
         draftSession.pendingAttachments.some(
           (current) => current.localId === attachment.localId && current.state === 'failed',
@@ -5504,21 +5570,31 @@
   }
 
   .community-message {
-    width: min(720px, 86%);
-    margin-bottom: 18px;
+    --community-message-content-width: min(720px, 86%);
+
+    box-sizing: border-box;
+    width: 100%;
+    margin-bottom: 2px;
+    padding: 8px 10px;
+    border-radius: 12px;
+    background-color: transparent;
     display: flex;
     align-items: flex-start;
     gap: 15px;
+    transition: background-color 0.16s ease;
+  }
+
+  .community-message.is-focused {
+    background-color: var(--mobile-selected-bg, var(--workspace-panel-bg-color));
   }
 
   .community-message.is-own {
-    margin-left: auto;
     flex-direction: row-reverse;
   }
 
   .community-message.is-recall-compact {
-    width: 100%;
-    margin: 1px auto 13px;
+    margin: 1px auto 5px;
+    padding: 4px 10px;
     justify-content: center;
   }
 
@@ -5563,7 +5639,7 @@
 
   .community-message__body {
     min-width: 0;
-    max-width: calc(100% - 50px);
+    max-width: calc(var(--community-message-content-width) - 50px);
     display: grid;
     gap: 5px;
   }
@@ -5817,33 +5893,6 @@
     text-decoration: underline;
     text-decoration-color: rgba(255, 255, 255, 0.68);
     text-underline-offset: 2px;
-  }
-
-  .community-message.is-focused .community-message__content {
-    outline: 2px solid var(--primary-color);
-    outline-offset: 3px;
-  }
-
-  .community-message.is-focused .community-message__recalled {
-    outline: 2px solid var(--primary-color);
-    outline-offset: 3px;
-  }
-
-  .community-message.is-focused .community-message__recall-line {
-    outline: 2px solid var(--primary-color);
-    outline-offset: 3px;
-    border-radius: 7px;
-  }
-
-  .community-message.is-focused :deep(.chat-poll-card) {
-    outline: 2px solid var(--primary-color);
-    outline-offset: 3px;
-  }
-
-  .community-message.is-focused :deep(.chat-attachments) {
-    outline: 2px solid var(--primary-color);
-    outline-offset: 3px;
-    border-radius: 13px;
   }
 
   .community-message__actions {
@@ -6352,18 +6401,20 @@
     }
 
     .community-message {
-      width: 94%;
-      margin-bottom: 14px;
+      --community-message-content-width: 94%;
+
+      margin-bottom: 2px;
+      padding: 6px;
       gap: 7px;
     }
 
     .community-message.is-recall-compact {
-      width: 100%;
-      margin-bottom: 10px;
+      margin-bottom: 2px;
+      padding: 4px 6px;
     }
 
     .community-message__body {
-      max-width: calc(100% - 45px);
+      max-width: calc(var(--community-message-content-width) - 45px);
     }
 
     .community-message__avatar {
@@ -6471,7 +6522,7 @@
     }
 
     .community-message {
-      width: 97%;
+      --community-message-content-width: 97%;
     }
 
     .community-composer__upload-hint {
@@ -6480,8 +6531,10 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .community-message-skeleton span {
+    .community-message-skeleton span,
+    .community-message {
       animation: none;
+      transition: none;
     }
   }
 </style>

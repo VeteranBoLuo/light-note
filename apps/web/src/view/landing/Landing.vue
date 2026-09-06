@@ -1130,6 +1130,8 @@
     position: absolute;
     border-radius: 50%;
     filter: blur(120px);
+    /* 关键帧被系统减弱动态效果或初始化保护临时禁用时，也保持与动画首帧一致。 */
+    opacity: 0.12;
     animation: orbFloat 12s ease-in-out infinite alternate;
   }
   @keyframes orbFloat {
@@ -1665,6 +1667,8 @@
     letter-spacing: 16px;
     background: linear-gradient(135deg, #615ced 0%, #00a884 30%, #ff8a00 60%, #ec4899 100%);
     background-size: 300% auto;
+    /* 避免动画暂停时从 `0% center` 回退为浏览器默认的 `0% 0%`。 */
+    background-position: 0% center;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     animation: shimmer 5s ease-in-out infinite;

@@ -1,3 +1,4 @@
+import { MAX_NOTE_BATCH_ACTION_ITEMS } from '@lightnote/shared/resource-selection';
 import pool from '../db/index.js';
 import { normalizeMarkdownBlockquoteEntities, normalizeNoteType } from '@lightnote/shared';
 import {
@@ -1412,7 +1413,7 @@ export const getNoteDetail = async (req, res) => {
   }
 };
 
-const BATCH_NOTE_EXPORT_LIMIT = 100;
+const BATCH_NOTE_EXPORT_LIMIT = MAX_NOTE_BATCH_ACTION_ITEMS;
 
 // 批量导出只读取转换所需的最小字段，一次请求替代逐篇 getNoteDetail，避免列表选择较多时产生请求风暴。
 export const getNotesForExport = async (req, res) => {
@@ -1532,7 +1533,7 @@ export const delNote = async (req, res) => {
         (Array.isArray(req.body?.ids) ? req.body.ids : []).map((id) => String(id ?? '').trim()).filter(Boolean),
       ),
     ];
-    if (ids.length === 0 || ids.length > 100) {
+    if (ids.length === 0 || ids.length > MAX_NOTE_BATCH_ACTION_ITEMS) {
       return res.send(resultData(null, 400, '无效的请求参数'));
     }
 

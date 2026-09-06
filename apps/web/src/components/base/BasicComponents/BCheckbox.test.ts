@@ -10,7 +10,14 @@ afterEach(() => {
 });
 
 function mountCheckbox(
-  options: { modelValue?: boolean; checked?: boolean; disabled?: boolean; indeterminate?: boolean } = {},
+  options: {
+    modelValue?: boolean;
+    checked?: boolean;
+    disabled?: boolean;
+    indeterminate?: boolean;
+    controlled?: boolean;
+    reject?: boolean;
+  } = {},
 ) {
   const host = document.createElement('div');
   document.body.append(host);
@@ -26,11 +33,14 @@ function mountCheckbox(
             ...(options.modelValue === undefined ? {} : { modelValue: modelValue.value }),
             ...(options.checked === undefined ? {} : { checked: checked.value }),
             disabled: options.disabled,
+            controlled: options.controlled,
             indeterminate: options.indeterminate,
             'onUpdate:modelValue': (value: boolean) => {
+              if (options.reject) return;
               modelValue.value = value;
             },
             'onUpdate:checked': (value: boolean) => {
+              if (options.reject) return;
               checked.value = value;
             },
             onChange,
@@ -48,6 +58,14 @@ function mountCheckbox(
 }
 
 describe('BCheckbox semantics', () => {
+  it('受控模式下父层拒绝超限选择时不显示假勾选', async () => {
+    const { host, onChange } = mountCheckbox({ checked: false, controlled: true, reject: true });
+    const checkbox = host.querySelector<HTMLElement>('[role="checkbox"]')!;
+    checkbox.click();
+    await nextTick();
+    expect(onChange).toHaveBeenCalledWith(true);
+    expect(checkbox.getAttribute('aria-checked')).toBe('false');
+  });
   it('preserves an initial v-model value and toggles with Space', async () => {
     const { host, modelValue, onChange } = mountCheckbox({ modelValue: true });
     const checkbox = host.querySelector<HTMLElement>('[role="checkbox"]');

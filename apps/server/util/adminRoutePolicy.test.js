@@ -198,6 +198,36 @@ describe('adminRoutePolicyMiddleware', () => {
     }
   });
 
+  it('整理 AI 的动态批次详情可代管只读，创建与复审动作在两种代管模式都失败关闭', () => {
+    for (const mode of ['readonly', 'maintain']) {
+      const detailNext = vi.fn();
+      const detailRes = createRes();
+      adminRoutePolicyMiddleware(
+        createReq('/organize/ai-suggestions/batches/batch-1', 'GET', mode),
+        detailRes,
+        detailNext,
+      );
+      expect(detailNext).toHaveBeenCalledTimes(1);
+      expect(detailRes.json).not.toHaveBeenCalled();
+
+      for (const [method, path] of [
+        ['POST', '/organize/ai-suggestions/batches'],
+        ['PUT', '/organize/ai-suggestions/batches/batch-1/suggestions/suggestion-1'],
+        ['POST', '/organize/ai-suggestions/batches/batch-1/suggestions/suggestion-1/accept'],
+        ['POST', '/organize/ai-suggestions/batches/batch-1/suggestions/suggestion-1/ignore'],
+      ]) {
+        const next = vi.fn();
+        const res = createRes();
+        adminRoutePolicyMiddleware(createReq(path, method, mode), res, next);
+        expect(next).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.json).toHaveBeenCalledWith(
+          expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }),
+        );
+      }
+    }
+  });
+
   it('整理中心写操作在 readonly 阻断、maintain 放行，动态资源路径也能命中声明', () => {
     for (const [method, path] of [
       ['POST', '/organize/untagged/ignore'],
@@ -435,6 +465,34 @@ describe('adminRoutePolicyMiddleware', () => {
     }
   });
 
+  it('管理员可读取目标账号已有简报，但不能替目标账号自动生成、手动更新或修改开关', () => {
+    for (const mode of ['readonly', 'maintain']) {
+      for (const path of ['/workbench/daily-brief', '/workbench/daily-brief/preference']) {
+        const next = vi.fn();
+        adminRoutePolicyMiddleware(createReq(path, 'GET', mode), createRes(), next);
+        expect(next).toHaveBeenCalledTimes(1);
+      }
+
+      for (const path of ['/workbench/daily-brief/ensure', '/workbench/daily-brief/refresh']) {
+        const next = vi.fn();
+        const res = createRes();
+        adminRoutePolicyMiddleware(createReq(path, 'POST', mode), res, next);
+        expect(next).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(403);
+      }
+
+      const preferenceNext = vi.fn();
+      const preferenceRes = createRes();
+      adminRoutePolicyMiddleware(
+        createReq('/workbench/daily-brief/preference', 'PUT', mode),
+        preferenceRes,
+        preferenceNext,
+      );
+      expect(preferenceNext).not.toHaveBeenCalled();
+      expect(preferenceRes.status).toHaveBeenCalledWith(403);
+    }
+  });
+
   it('maintain 模式放行可逆内容写入并抑制成长/转化副作用', () => {
     for (const path of ['/bookmark/updateBookmark', '/file/clearFolderFiles']) {
       const next = vi.fn();
@@ -479,4 +537,12 @@ describe('adminRoutePolicyMiddleware', () => {
     expect(next).not.toHaveBeenCalled();
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_CONTEXT_POLICY_MISSING' } }));
   });
+});
+
+it.each(['pause', 'resume'])('整理 %s 不能在管理员代管中消耗目标账号额度', (action) => {
+  const next = vi.fn(),
+    res = createRes();
+  adminRoutePolicyMiddleware(createReq(`/organize/suggestions/runs/run-1/${action}`, 'POST', 'maintain'), res, next);
+  expect(next).not.toHaveBeenCalled();
+  expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }));
 });

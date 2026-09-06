@@ -52,6 +52,18 @@
     "./toolbox-protocol": {
       "types": "./toolboxProtocol.d.ts",
       "default": "./toolboxProtocol.js"
+    },
+    "./organize-capabilities": {
+      "types": "./organizeCapabilities.d.ts",
+      "default": "./organizeCapabilities.js"
+    },
+    "./resource-selection": {
+      "types": "./resourceSelection.d.ts",
+      "default": "./resourceSelection.js"
+    },
+    "./ai-usage-modules": {
+      "types": "./aiUsageModules.d.ts",
+      "default": "./aiUsageModules.js"
     }
   },
   "devDependencies": {

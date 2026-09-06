@@ -70,7 +70,7 @@ export const AFDIAN_SUPPORT_TABLE_SQL = Object.freeze([
     user_id varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
     public_id char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     participate_in_ranking tinyint unsigned NOT NULL DEFAULT 1,
-    show_identity tinyint unsigned NOT NULL DEFAULT 0,
+    show_identity tinyint unsigned NOT NULL DEFAULT 1,
     identity_consented_at datetime DEFAULT NULL,
     admin_hidden tinyint unsigned NOT NULL DEFAULT 0,
     admin_hidden_reason varchar(255) DEFAULT NULL,

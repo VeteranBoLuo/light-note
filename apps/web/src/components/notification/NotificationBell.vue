@@ -1,6 +1,14 @@
 <template>
-  <section v-if="page" class="nt-page">
-    <header class="nt-page__header">
+  <section
+    v-if="page"
+    class="nt-page"
+    :class="{
+      'is-mobile-page': isMobileLayout,
+      'is-desktop-page': !isMobileLayout,
+      'is-wide-desktop-page': bookmark.isDesktop,
+    }"
+  >
+    <header v-if="isMobileLayout" class="nt-page__header">
       <BButton class="nt-page__back" :aria-label="t('common.back')" @click="leaveNotificationPage">
         <SvgIcon :src="icon.arrow_left" size="20" aria-hidden="true" />
       </BButton>
@@ -9,8 +17,36 @@
         {{ t('notification.markAllRead') }}
       </BButton>
     </header>
+    <header v-else class="nt-desktop-header">
+      <div class="nt-desktop-heading">
+        <span class="nt-desktop-heading__icon" aria-hidden="true">
+          <SvgIcon :src="icon.settings.notification" size="21" />
+        </span>
+        <span class="nt-desktop-heading__copy">
+          <span class="nt-desktop-heading__title-row">
+            <h1>{{ t('notification.pageTitle') }}</h1>
+            <span v-if="unreadTotal > 0" class="nt-desktop-unread">
+              {{ t('notification.unreadCount', { count: unreadTotal }) }}
+            </span>
+          </span>
+          <p>{{ t('notification.pageSubtitle') }}</p>
+        </span>
+      </div>
+      <div class="nt-desktop-actions">
+        <BButton @click="openNotificationPreferences">
+          <SvgIcon :src="icon.userCenter.settingsGear" size="16" aria-hidden="true" />
+          {{ t('notification.preferences') }}
+        </BButton>
+        <BButton type="primary" :disabled="unreadTotal <= 0" @click="onMarkAll">
+          <SvgIcon :src="icon.settings.notificationReadAll" size="16" aria-hidden="true" />
+          {{ t('notification.markAllRead') }}
+        </BButton>
+      </div>
+    </header>
     <NotificationCenterPanel
-      mobile
+      :mobile="isMobileLayout"
+      :desktop-page="!isMobileLayout"
+      :wide-desktop-page="bookmark.isDesktop"
       :show-header="false"
       :items="items"
       :groups="groupedItems"
@@ -31,6 +67,7 @@
       @item-click="onItemClick"
       @complete-todo="completeReminderTodo"
       @more="openNotificationActions"
+      @delete="onDelete"
       @load-more="loadMore"
     />
   </section>
@@ -55,28 +92,34 @@
     </BTooltip>
 
     <template #content>
-      <NotificationCenterPanel
-        :items="items"
-        :groups="groupedItems"
-        :tabs="tabs"
-        :active-tab="activeTab"
-        :unread-total="unreadTotal"
-        :total="total"
-        :loading="loading"
-        :completing-todo-id="completingTodoId"
-        :tab-unread="tabUnread"
-        :render-title="renderTitle"
-        :render-content="renderContent"
-        :format-time="fmtTime"
-        :todo-id="getTodoId"
-        :todo-action-state="todoActionState"
-        @mark-all="onMarkAll"
-        @switch-tab="switchTab"
-        @item-click="onItemClick"
-        @complete-todo="completeReminderTodo"
-        @delete="onDelete"
-        @load-more="loadMore"
-      />
+      <div class="nt-popover-content">
+        <NotificationCenterPanel
+          :items="items"
+          :groups="groupedItems"
+          :tabs="tabs"
+          :active-tab="activeTab"
+          :unread-total="unreadTotal"
+          :total="total"
+          :loading="loading"
+          :completing-todo-id="completingTodoId"
+          :tab-unread="tabUnread"
+          :render-title="renderTitle"
+          :render-content="renderContent"
+          :format-time="fmtTime"
+          :todo-id="getTodoId"
+          :todo-action-state="todoActionState"
+          @mark-all="onMarkAll"
+          @switch-tab="switchTab"
+          @item-click="onItemClick"
+          @complete-todo="completeReminderTodo"
+          @delete="onDelete"
+          @load-more="loadMore"
+        />
+        <BButton class="nt-open-page" @click="openNotificationPage">
+          {{ t('notification.viewAll') }}
+          <SvgIcon :src="icon.arrow_right" size="14" aria-hidden="true" />
+        </BButton>
+      </div>
     </template>
   </BPopover>
   <template v-else>
@@ -116,7 +159,7 @@
   import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
-  import { inboxStore, useUserStore } from '@/store';
+  import { bookmarkStore, inboxStore, useUserStore } from '@/store';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import { useNotification, type NotificationItem } from '@/composables/useNotification.ts';
@@ -139,6 +182,7 @@
   const { t, locale } = useI18n();
   const router = useRouter();
   const user = useUserStore();
+  const bookmark = bookmarkStore();
   const inbox = inboxStore();
   const isMobileLayout = useMobileLayout();
   const { unreadTotal, unreadByType, refreshUnread, fetchList, markRead, markAllRead, deleteNotifications } =
@@ -159,16 +203,48 @@
   const currentPage = ref(1);
   const pageSize = 20;
 
-  const tabs = computed(() => [
-    { value: 'all', label: t('notification.tabAll') },
-    { value: 'todo_reminder', label: t('notification.tabTodo') },
-    { value: 'system', label: t('notification.tabSystem') },
-    { value: 'opinion_reply', label: t('notification.tabFeedback') },
+  const WIDE_NOTIFICATION_GROUPS = Object.freeze({
+    growth: ['level_up', 'streak_risk'],
+    ai_routine: ['daily_brief', 'ai_routine'],
+  });
+  const WIDE_PRIMARY_TYPES = new Set([
+    'todo_reminder',
+    ...WIDE_NOTIFICATION_GROUPS.growth,
+    ...WIDE_NOTIFICATION_GROUPS.ai_routine,
+    'community_chat',
   ]);
+  const useWidePageCategories = computed(() => props.page && bookmark.isDesktop);
+
+  const tabs = computed(() =>
+    useWidePageCategories.value
+      ? [
+          { value: 'all', label: t('notification.tabAll') },
+          { value: 'todo_reminder', label: t('notification.tabTodoReminder') },
+          { value: 'growth', label: t('notification.tabGrowth') },
+          { value: 'ai_routine', label: t('notification.tabAiRoutine') },
+          { value: 'community_chat', label: t('notification.tabCommunityChat') },
+          { value: 'system_group', label: t('notification.tabSystem') },
+        ]
+      : [
+          { value: 'all', label: t('notification.tabAll') },
+          { value: 'todo_reminder', label: t('notification.tabTodo') },
+          { value: 'system', label: t('notification.tabSystem') },
+          { value: 'opinion_reply', label: t('notification.tabFeedback') },
+        ],
+  );
   // 各 tab 未读角标:全部=总数,其余=该类型未读数
   // 「其他」tab 兜底:非三大已知类型(如 streak_risk 签到提醒)都归它,与后端 list 口径一致
   function tabUnread(v: string): number {
     if (v === 'all') return unreadTotal.value;
+    if (v === 'growth' || v === 'ai_routine') {
+      return WIDE_NOTIFICATION_GROUPS[v].reduce((sum, type) => sum + (unreadByType.value[type] || 0), 0);
+    }
+    if (v === 'system_group') {
+      return Object.entries(unreadByType.value).reduce(
+        (sum, [type, count]) => sum + (WIDE_PRIMARY_TYPES.has(type) ? 0 : Number(count || 0)),
+        0,
+      );
+    }
     return unreadByType.value[v] || 0;
   }
 
@@ -264,6 +340,10 @@
   function openMobileNotifications() {
     void router.push({ name: 'notifications' });
   }
+
+  async function openNotificationPage() {
+    await closePanelThen(() => router.push({ name: 'notifications' }));
+  }
   function handleExternalOpen() {
     if (props.page) {
       void load(true);
@@ -285,6 +365,11 @@
     }
     void router.replace({ name: 'workbenches' });
   }
+
+  function openNotificationPreferences() {
+    void router.push({ path: '/settings', query: { section: 'notification' } });
+  }
+
   async function onMarkAll() {
     const succeeded = await markAllRead();
     if (succeeded) {
@@ -412,6 +497,12 @@
     () => user.id,
     () => refreshUnread(),
   );
+  watch(useWidePageCategories, () => {
+    if (!tabs.value.some((tab) => tab.value === activeTab.value)) {
+      activeTab.value = 'all';
+      if (props.page) void load(true);
+    }
+  });
 </script>
 
 <style scoped lang="less">
@@ -456,6 +547,22 @@
     box-shadow: 0 0 0 1.5px var(--background-color);
   }
 
+  .nt-popover-content {
+    width: 370px;
+    max-width: calc(100vw - 24px);
+  }
+
+  .nt-open-page {
+    width: 100%;
+    min-height: 40px;
+    justify-content: center;
+    gap: 5px;
+    border-width: 1px 0 0;
+    border-radius: 0;
+    color: var(--primary-color);
+    background: var(--card-background);
+  }
+
   .nt-page {
     width: 100%;
     height: 100%;
@@ -465,6 +572,106 @@
     overflow: hidden;
     color: var(--text-color);
     background: var(--surface-page-bg, var(--background-color));
+  }
+
+  .nt-page.is-desktop-page {
+    gap: 14px;
+    padding: 22px clamp(20px, 2.4vw, 44px) 30px;
+    box-sizing: border-box;
+  }
+
+  .nt-page.is-wide-desktop-page {
+    gap: 16px;
+    padding: 24px clamp(32px, 3vw, 52px) 32px;
+  }
+
+  .nt-desktop-header {
+    width: min(100%, 1380px);
+    min-height: 58px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    flex: 0 0 auto;
+  }
+
+  .is-wide-desktop-page .nt-desktop-header {
+    width: min(100%, 1380px);
+    min-height: 62px;
+  }
+
+  .nt-desktop-heading,
+  .nt-desktop-heading__title-row,
+  .nt-desktop-actions {
+    display: flex;
+    align-items: center;
+  }
+
+  .nt-desktop-heading {
+    min-width: 0;
+    gap: 12px;
+  }
+
+  .nt-desktop-heading__icon {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 28%, var(--card-border-color));
+    border-radius: 12px;
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 9%, var(--card-background));
+  }
+
+  .nt-desktop-heading__copy {
+    min-width: 0;
+    display: grid;
+    gap: 5px;
+  }
+
+  .nt-desktop-heading__title-row {
+    gap: 9px;
+  }
+
+  .nt-desktop-heading h1 {
+    margin: 0;
+    font-size: clamp(22px, 2vw, 28px);
+    font-weight: 750;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+  }
+
+  .nt-desktop-heading p {
+    margin: 0;
+    color: var(--desc-color);
+    font-size: 13px;
+  }
+
+  .nt-desktop-unread {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    padding: 1px 8px;
+    border: 1px solid var(--primary-color);
+    border-radius: 999px;
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--card-background));
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .nt-desktop-actions {
+    flex: 0 0 auto;
+    gap: 8px;
+  }
+
+  .nt-desktop-actions :deep(.b_btn) {
+    min-height: 36px;
+    gap: 6px;
   }
 
   .nt-page__header {
@@ -520,6 +727,22 @@
   .nt-page > :deep(.nt-panel) {
     min-height: 0;
     flex: 1 1 auto;
+  }
+
+  .nt-page.is-desktop-page > :deep(.nt-panel) {
+    width: min(100%, 1380px);
+    max-width: none;
+    margin: 0 auto;
+    overflow: hidden;
+    border: 1px solid var(--surface-border-color, var(--card-border-color));
+    border-radius: 16px;
+    background: var(--card-background);
+    box-shadow: 0 18px 42px -34px color-mix(in srgb, var(--text-color) 38%, transparent);
+  }
+
+  .nt-page.is-wide-desktop-page > :deep(.nt-panel) {
+    border-radius: 14px;
+    box-shadow: none;
   }
 </style>
 

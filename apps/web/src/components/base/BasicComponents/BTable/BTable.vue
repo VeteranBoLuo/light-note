@@ -4,6 +4,8 @@
     <div class="table-header" :style="gridStyle">
       <div v-if="props.selectable" class="header-cell" style="width: 50px">
         <BCheckbox
+          :controlled="props.preserveSelection"
+          :disabled="props.selectionDisabled || (props.preserveSelection && props.loading)"
           :indeterminate="isIndeterminate"
           :checked="isAllSelected"
           @change="(checked) => handleSelectAllChange(checked)"
@@ -51,6 +53,8 @@
             >
               <div v-if="props.selectable" class="table-cell" style="width: 50px" @click.stop>
                 <BCheckbox
+                  :controlled="props.preserveSelection"
+                  :disabled="props.selectionDisabled || (props.preserveSelection && props.loading)"
                   :checked="isRowSelected(entry.item)"
                   @change="(checked) => handleRowSelectChange(entry.item, checked)"
                 />
@@ -150,6 +154,8 @@
       type: Boolean,
       default: false,
     },
+    preserveSelection: { type: Boolean, default: false },
+    selectionDisabled: { type: Boolean, default: false },
     selectedRows: {
       type: Array,
       default: () => [],
@@ -352,7 +358,15 @@
   };
 
   const handleSelectAllChange = (checked: boolean) => {
-    const selectedKeys = checked ? props.data.map((item) => item[props.rowKey]) : [];
+    if (props.selectionDisabled || (props.preserveSelection && props.loading)) return;
+    const pageKeys = props.data.map((item) => item[props.rowKey]);
+    const selectedKeys = props.preserveSelection
+      ? checked
+        ? [...new Set([...props.selectedRows, ...pageKeys])]
+        : props.selectedRows.filter((key) => !pageKeys.includes(key))
+      : checked
+        ? pageKeys
+        : [];
     emit('selectionChange', selectedKeys);
   };
 

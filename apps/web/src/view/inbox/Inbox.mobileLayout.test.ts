@@ -122,7 +122,7 @@ describe('移动端待办页签布局', () => {
       /\.inbox-toolbar__right--resources\s*\{[\s\S]*?width:\s*100%;[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) auto;[\s\S]*?flex:\s*1 1 auto;/,
     );
     expect(inboxSource).toMatch(
-      /\.inbox-page--embedded \.inbox-toolbar__right--resources :deep\(\.b-input\),[\s\S]*?\.select-trigger[\s\S]*?> \.b_btn\s*\{[\s\S]*?height:\s*40px;[\s\S]*?min-height:\s*40px;/,
+      /\.inbox-page--embedded \.inbox-toolbar__right--resources :deep\(\.b-input\),[\s\S]*?\.select-trigger[\s\S]*?> \.b_btn:not\(\.b-batch-toggle\)\s*\{[\s\S]*?height:\s*40px;[\s\S]*?min-height:\s*40px;/,
     );
   });
 
@@ -131,7 +131,7 @@ describe('移动端待办页签布局', () => {
     expect(inboxSource).toContain('class="todo-toolbar-control todo-toolbar-control--sort"');
     expect(inboxSource).toContain('class="todo-toolbar-control todo-toolbar-control--batch"');
     expect(inboxSource).toMatch(
-      /\.todo-toolbar-control--search :deep\(\.b-input\),[\s\S]*?\.todo-toolbar-control--sort :deep\(\.select-trigger\),[\s\S]*?\.todo-toolbar-control--batch\.b_btn\s*\{[\s\S]*?height:\s*40px;[\s\S]*?min-height:\s*40px;/,
+      /\.todo-toolbar-control--search :deep\(\.b-input\),[\s\S]*?\.todo-toolbar-control--sort :deep\(\.select-trigger\)\s*\{[\s\S]*?height:\s*40px;[\s\S]*?min-height:\s*40px;/,
     );
   });
 
@@ -139,10 +139,7 @@ describe('移动端待办页签布局', () => {
     expect(inboxSource.match(/v-if="todoView === 'list' && \(todo\.items\.length \|\| pageLoading\)"/g)).toHaveLength(
       2,
     );
-    expect(inboxSource.match(/:aria-pressed="todoSelectionMode"/g)).toHaveLength(2);
-    expect(
-      inboxSource.match(/t\(todoSelectionMode \? 'inbox\.todoBatchCancel' : 'inbox\.todoBatchSelect'\)/g),
-    ).toHaveLength(2);
+    expect(inboxSource.match(/:active="todoSelectionMode"/g)).toHaveLength(2);
     expect(inboxSource).toContain('<ResourceBatchActionBar');
     expect(inboxSource).toContain(':open="isTodoFocused && todoView === \'list\' && todoSelectionMode"');
     expect(inboxSource).toContain(':checked="allTodoItemsSelected"');
@@ -158,8 +155,8 @@ describe('移动端待办页签布局', () => {
     expect(inboxSource).toContain("key: 'delete'");
     expect(inboxSource).not.toContain('<MobileStickyActionBar');
     expect(inboxSource).not.toContain('class="todo-list-toolbar"');
-    expect(inboxSource).toMatch(/\.todo-workspace-toolbar__select\s*\{[\s\S]*?width:\s*80px;/);
-    expect(inboxSource).toMatch(/\.todo-toolbar-control--batch\.b_btn\s*\{[\s\S]*?width:\s*14ch;/);
+    expect(inboxSource).toContain("import BBatchToggle from '@/components/base/BasicComponents/BBatchToggle.vue'");
+    expect(inboxSource).toMatch(/\.todo-toolbar-control--batch\s*\{[\s\S]*?--batch-toggle-height:\s*40px;/);
     expect(inboxSource).toMatch(
       /\.inbox-page--todo-focused\.is-selection-mode \.todo-group-list\s*\{[\s\S]*?padding-bottom:\s*110px/,
     );

@@ -309,6 +309,14 @@ export interface ClaimableItemGroup<T = any> {
   items: T[];
 }
 
+export interface GrowthNextAction {
+  type: string;
+  key: string;
+  action: string;
+  progress: { current: number; target: number } | null;
+  reward?: { exp: number; points: number } | null;
+}
+
 export interface GrowthClaimable {
   count: number;
   daily: ClaimableItemGroup;
@@ -316,13 +324,8 @@ export interface GrowthClaimable {
   achievements: ClaimableItemGroup<Achievement>;
   weekly: ClaimableItemGroup<WeeklyChallenge>;
   today?: { completed: number; total: number; claimableCount: number };
-  nextAction?: {
-    type: string;
-    key: string;
-    action: string;
-    progress: { current: number; target: number } | null;
-    reward?: { exp: number; points: number } | null;
-  } | null;
+  nextAction?: GrowthNextAction | null;
+  nextActions?: GrowthNextAction[];
 }
 
 export interface GrowthTask {

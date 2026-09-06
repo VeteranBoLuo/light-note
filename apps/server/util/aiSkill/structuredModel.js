@@ -1,5 +1,12 @@
-import { requestAi } from '../agent/aiGateway.js';
+import { estimateAiProviderTokens, requestAi } from '../agent/aiGateway.js';
 import { aiSkillError } from './errors.js';
+
+export function estimateStructuredSkillModelTokens({ messages, structuredTool, modelPolicy }) {
+  return estimateAiProviderTokens(messages, {
+    maxTokens: modelPolicy.maxTokens,
+    tools: [{ type: 'function', function: structuredTool }],
+  });
+}
 
 function parseToolArguments(response, toolName) {
   const calls = Array.isArray(response?.toolCalls) ? response.toolCalls : [];
@@ -36,14 +43,16 @@ export async function callStructuredSkillModel({
     signal,
   };
   let response = await requestAi(messages, options);
+  let parsedArguments = null;
   try {
-    return validateArguments(parseToolArguments(response, structuredTool.name));
+    parsedArguments = parseToolArguments(response, structuredTool.name);
+    return validateArguments(parsedArguments);
   } catch (error) {
     const repairable = new Set(repairableErrorCodes);
     if (!repairable.has(error?.code)) throw error;
     const repairInstruction =
       typeof buildRepairInstruction === 'function'
-        ? buildRepairInstruction({ error, toolName: structuredTool.name })
+        ? buildRepairInstruction({ error, toolName: structuredTool.name, invalidArguments: parsedArguments })
         : `上一版没有按协议返回。必须且只能调用 ${structuredTool.name} 一次，不要输出解释文本。`;
     response = await requestAi(
       [

@@ -1,15 +1,18 @@
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import {
-  COMMUNITY_CHAT_ATTACHMENT_MAX_COUNT,
-  COMMUNITY_CHAT_ATTACHMENT_MAX_PENDING_PER_USER,
   COMMUNITY_CHAT_ATTACHMENT_PENDING_HOURS,
   COMMUNITY_CHAT_ATTACHMENT_RETENTION_DAYS,
-  COMMUNITY_CHAT_IMAGE_MAX_BYTES,
 } from '@lightnote/shared/community-chat-attachments';
 import { safeImageSize } from '../safeImageSize.js';
 import pool from '../../db/index.js';
 import { COMMUNITY_CHAT_PRIMARY_ROOM_SLUG } from '../communityChatFeature.js';
+import {
+  COMMUNITY_CHAT_IMAGE_MAX_BYTES,
+  COMMUNITY_CHAT_IMAGE_MAX_COUNT,
+  COMMUNITY_CHAT_IMAGE_MAX_PENDING_PER_USER,
+  resolveCommunityChatPendingImageLimit,
+} from '../communityChatImagePolicy.js';
 import { stableAgentErrorCode } from '../agent/logSafety.js';
 import { createDownloadSignedUrl, deleteObjectFromObs, putObjectToObs } from '../obsClient.js';
 import {
@@ -20,11 +23,10 @@ import {
 } from './communityChatAccessService.js';
 import { assertCommunityChatPostingAllowed } from './communityChatModerationService.js';
 
-export { COMMUNITY_CHAT_IMAGE_MAX_BYTES };
-export const COMMUNITY_CHAT_IMAGE_MAX_COUNT = COMMUNITY_CHAT_ATTACHMENT_MAX_COUNT;
-export const COMMUNITY_CHAT_IMAGE_MAX_PENDING_PER_USER = COMMUNITY_CHAT_ATTACHMENT_MAX_PENDING_PER_USER;
 export const COMMUNITY_CHAT_IMAGE_PENDING_HOURS = COMMUNITY_CHAT_ATTACHMENT_PENDING_HOURS;
 export const COMMUNITY_CHAT_IMAGE_RETENTION_DAYS = COMMUNITY_CHAT_ATTACHMENT_RETENTION_DAYS;
+
+export { COMMUNITY_CHAT_IMAGE_MAX_BYTES, COMMUNITY_CHAT_IMAGE_MAX_COUNT, COMMUNITY_CHAT_IMAGE_MAX_PENDING_PER_USER };
 
 const MAX_IMAGE_PIXELS = 20_000_000;
 const MAX_IMAGE_EDGE = 12_000;
@@ -174,6 +176,11 @@ function publicImage(image) {
 
 async function removeTrackedObject({ publicId, objectKey, messageId = null, db, deleteObject }) {
   try {
+    const [sources] = await db.query('SELECT id FROM community_chat_message_images WHERE public_id = ?', [publicId]);
+    if (sources[0]?.id) {
+      const { deleteFilePreviewArtifactsForSource } = await import('../filePreview/service.js');
+      await deleteFilePreviewArtifactsForSource({ sourceType: 'community_chat_image', fileId: sources[0].id, db, deleteObject });
+    }
     if (objectKey) await deleteObject(objectKey);
     if (messageId === null || messageId === undefined) {
       await db.query(
@@ -254,25 +261,28 @@ export async function uploadCommunityChatImage({
           'Your account is unavailable. Sign in again.',
         );
       }
-      const pending = await queryFirst(
-        connection,
-        `SELECT (
-           (SELECT COUNT(*) FROM community_chat_message_images
-             WHERE owner_user_id = ? AND message_id IS NULL
-               AND status IN ('uploading', 'pending', 'delete_pending', 'deleting')) +
-           (SELECT COUNT(*) FROM community_chat_message_files
-             WHERE owner_user_id = ? AND message_id IS NULL
-               AND status IN ('uploading', 'pending', 'delete_pending', 'deleting'))
-         ) AS pendingCount`,
-        [user.id, user.id],
-      );
-      if (Number(pending?.pendingCount || 0) >= COMMUNITY_CHAT_IMAGE_MAX_PENDING_PER_USER) {
-        throw chatError(
-          'COMMUNITY_CHAT_IMAGE_PENDING_LIMIT',
-          429,
-          '待发送或待清理的图片已达上限，请移除图片或稍后重试',
-          'You have too many pending images. Remove images or try again later.',
+      const pendingImageLimit = resolveCommunityChatPendingImageLimit(user);
+      if (pendingImageLimit !== null) {
+        const pending = await queryFirst(
+          connection,
+          `SELECT (
+             (SELECT COUNT(*) FROM community_chat_message_images
+               WHERE owner_user_id = ? AND message_id IS NULL
+                 AND status IN ('uploading', 'pending', 'delete_pending', 'deleting')) +
+             (SELECT COUNT(*) FROM community_chat_message_files
+               WHERE owner_user_id = ? AND message_id IS NULL
+                 AND status IN ('uploading', 'pending', 'delete_pending', 'deleting'))
+           ) AS pendingCount`,
+          [user.id, user.id],
         );
+        if (Number(pending?.pendingCount || 0) >= pendingImageLimit) {
+          throw chatError(
+            'COMMUNITY_CHAT_IMAGE_PENDING_LIMIT',
+            429,
+            '待发送或待清理的图片已达上限，请移除图片或稍后重试',
+            'You have too many pending images. Remove images or try again later.',
+          );
+        }
       }
       await connection.query(
         `INSERT INTO community_chat_message_images
@@ -314,6 +324,11 @@ export async function uploadCommunityChatImage({
           'The image upload state expired. Select the image again.',
         );
       }
+      void (async () => {
+        const [images] = await db.query('SELECT id FROM community_chat_message_images WHERE public_id = ?', [publicId]);
+        const { warmImagePreview } = await import('../filePreview/warmImage.js');
+        if (images[0]?.id) warmImagePreview(user.id, images[0].id, 'community_chat_image');
+      })().catch(() => undefined);
       return publicImage({
         publicId,
         fileName,
@@ -341,6 +356,7 @@ export async function getCommunityChatImageDownload({
   env = process.env,
   db = pool,
   createSignedUrl = createDownloadSignedUrl,
+  returnSource = false,
 }) {
   const normalizedPublicId = normalizePublicId(imagePublicId);
   const { memberRole } = await assertCommunityChatReadAccess({ user, env, db });
@@ -348,7 +364,7 @@ export async function getCommunityChatImageDownload({
   const canViewRecalled = memberRole === 'admin' || memberRole === 'moderator';
   const image = await queryFirst(
     db,
-    `SELECT image.public_id AS publicId, image.object_key AS objectKey, image.file_name AS fileName,
+    `SELECT image.id, image.owner_user_id AS ownerUserId, image.public_id AS publicId, image.object_key AS objectKey, image.file_name AS fileName,
             image.content_type AS contentType, image.file_size AS fileSize,
             image.width, image.height, image.status, image.message_id AS messageId,
             image.expires_at AS expiresAt, image.expires_at <= NOW() AS isExpired,
@@ -410,6 +426,7 @@ export async function getCommunityChatImageDownload({
     throw chatError('COMMUNITY_CHAT_IMAGE_EXPIRED', 410, '图片已过期', 'The image has expired');
   }
   // OBS 只接受整数秒 TTL，预留 1 秒覆盖查询与签名耗时，保证 URL 不越过资源截止点。
+  if (returnSource) return image;
   const expires = Math.min(300, remainingSeconds - 1);
   const signed = createSignedUrl({ objectKey: image.objectKey, expires });
   if (!signed?.url) {

@@ -1,4 +1,5 @@
 import pool from '../../db/index.js';
+import { MAX_EXPLICIT_RESOURCE_SELECTION } from '@lightnote/shared/resource-selection';
 import { softDeleteOwnedCloudFiles } from './cloudFileDeletionService.js';
 
 export const MAX_CLOUD_FOLDER_DEPTH = 8;
@@ -200,6 +201,34 @@ function chunkItems(items, size = CLOUD_FOLDER_MUTATION_BATCH_SIZE) {
     chunks.push(items.slice(index, index + size));
   }
   return chunks;
+}
+
+/** 以目录快照准备标签操作的显式文件范围；不读取对象地址，也不按当前列表筛选截断。 */
+export async function resolveCloudFolderTagSelection({
+  userId,
+  folderId,
+  includeDescendants = false,
+  database = pool,
+} = {}) {
+  const owner = normalizeOwnerId(userId);
+  const id = normalizeCloudFolderId(folderId);
+  const folders = await loadOwnedFolderSnapshot(database, owner);
+  requireOwnedFolder(folders, id);
+  const folderIds = [String(id), ...(includeDescendants === true ? collectDescendantIds(folders, id) : [])];
+  const resolvedItems = [];
+  for (const ids of chunkItems(folderIds)) {
+    const [rows] = await database.query(
+      `SELECT id, file_name AS title FROM files
+       WHERE create_by = ? AND del_flag = 0 AND folder_id IN (${ids.map(() => '?').join(',')})
+       ORDER BY id ASC LIMIT ?`,
+      [owner, ...ids, MAX_EXPLICIT_RESOURCE_SELECTION + 1 - resolvedItems.length],
+    );
+    resolvedItems.push(...rows.map((row) => ({ id: String(row.id), type: 'file', title: String(row.title || '') })));
+    if (resolvedItems.length > MAX_EXPLICIT_RESOURCE_SELECTION) {
+      throw serviceError('FOLDER_TAG_SELECTION_LIMIT', '文件数量超出单次标签操作上限');
+    }
+  }
+  return { resolvedItems, unavailableItems: [] };
 }
 
 async function loadActiveFileIdsForFolders(connection, userId, folderIds) {

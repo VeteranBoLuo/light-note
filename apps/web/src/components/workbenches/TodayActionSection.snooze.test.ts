@@ -65,6 +65,8 @@ interface MountSectionOptions {
   contained?: boolean;
   inboxItems?: Array<{ resourceType: 'note'; resourceId: string; title: string; collectedAt: string }>;
   inboxTotal?: number;
+  showEmptyAction?: boolean;
+  onQuickCreate?: () => void;
 }
 
 async function mountSection(todos: Record<string, unknown>[], options: MountSectionOptions = {}) {
@@ -78,6 +80,8 @@ async function mountSection(todos: Record<string, unknown>[], options: MountSect
         inboxItems: options.inboxItems || [],
         inboxTotal: options.inboxTotal,
         contained: options.contained,
+        showEmptyAction: options.showEmptyAction,
+        onQuickCreate: options.onQuickCreate,
       }),
   });
   app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
@@ -137,6 +141,20 @@ describe('工作台待整理明细入口', () => {
     await nextTick();
 
     expect(routerPush).toHaveBeenCalledWith({ path: '/organize', query: { issue: 'pending' } });
+  });
+});
+
+describe('工作台今日待处理空态', () => {
+  it('按需展示一个中立的快速创建入口，并把具体资源类型留给完整创建器选择', async () => {
+    const onQuickCreate = vi.fn();
+    const host = await mountSection([], { contained: true, showEmptyAction: true, onQuickCreate });
+    const button = host.querySelector<HTMLButtonElement>('.today-actions__empty-action');
+
+    expect(button?.textContent).toContain('快速创建');
+    button?.click();
+    await nextTick();
+
+    expect(onQuickCreate).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -259,7 +277,7 @@ describe('工作台今日待办 · 明天再看', () => {
 });
 
 describe('桌面工作台行动摘要布局', () => {
-  it('待办与待整理同时存在时总共只展示五条，并为待整理保留位置', async () => {
+  it('待办与待整理同时存在时总共只展示四条，并为待整理保留位置', async () => {
     const host = await mountSection(
       Array.from({ length: 6 }, (_, index) => ({ ...OVERDUE, id: `todo-${index + 1}`, title: `待办 ${index + 1}` })),
       { contained: true, inboxItems: inboxItems(5), inboxTotal: 8 },
@@ -267,19 +285,19 @@ describe('桌面工作台行动摘要布局', () => {
     const groups = host.querySelectorAll('.today-actions__group');
 
     expect(groups).toHaveLength(2);
-    expect(groups[0].querySelectorAll('.today-action-row')).toHaveLength(4);
+    expect(groups[0].querySelectorAll('.today-action-row')).toHaveLength(3);
     expect(groups[1].querySelectorAll('.today-action-row')).toHaveLength(1);
-    expect(host.querySelectorAll('.today-action-row')).toHaveLength(5);
+    expect(host.querySelectorAll('.today-action-row')).toHaveLength(4);
     expect(groups[1].querySelector('.today-actions__group-head span')?.textContent).toBe('8');
   });
 
-  it('只有一条待办时用四条待整理补满摘要预算', async () => {
+  it('只有一条待办时用三条待整理补满摘要预算', async () => {
     const host = await mountSection([OVERDUE], { contained: true, inboxItems: inboxItems(5) });
     const groups = host.querySelectorAll('.today-actions__group');
 
     expect(groups[0].querySelectorAll('.today-action-row')).toHaveLength(1);
-    expect(groups[1].querySelectorAll('.today-action-row')).toHaveLength(4);
-    expect(host.querySelectorAll('.today-action-row')).toHaveLength(5);
+    expect(groups[1].querySelectorAll('.today-action-row')).toHaveLength(3);
+    expect(host.querySelectorAll('.today-action-row')).toHaveLength(4);
   });
 
   it('移动端非 contained 模式继续展示接口返回的全部明细', async () => {

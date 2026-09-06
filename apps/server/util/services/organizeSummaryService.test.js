@@ -235,7 +235,7 @@ describe('organizeSummaryService', () => {
       hasMore: false,
     });
     mocks.listUntaggedResources.mockResolvedValueOnce({
-      items: Array.from({ length: 4 }, (_, index) => ({ resourceType: 'note', resourceId: `note-${index}` })),
+      items: Array.from({ length: 7 }, (_, index) => ({ resourceType: 'note', resourceId: `note-${index}` })),
       hasMore: false,
     });
     mocks.getDuplicateBookmarkSummary.mockResolvedValueOnce({
@@ -354,5 +354,23 @@ describe('organizeSummaryService', () => {
 
     expect(result.issues.bookmarkHealth).toMatchObject({ findingCount: 6000, exact: true, hasMore: false });
     expect(result.totals).toMatchObject({ affectedResourceTotal: 5000, exact: false, hasMore: true });
+  });
+  it('无标签分类聚合保持精确，类型构成不受跨问题去重键上限影响', async () => {
+    mocks.getUntaggedSummary.mockResolvedValue({
+      findingCount: 6000,
+      affectedResourceCount: 6000,
+      typeTotals: { bookmark: 1000, note: 2000, file: 3000 },
+      resourceKeys: ['note:one'],
+      exact: false,
+      hasMore: true,
+    });
+    const result = await getOrganizeSummary('user-1');
+    expect(result.issues.untagged).toMatchObject({
+      findingCount: 6000,
+      exact: true,
+      hasMore: false,
+      typeTotals: { bookmark: 1000, note: 2000, file: 3000 },
+    });
+    expect(result.totals.exact).toBe(false);
   });
 });

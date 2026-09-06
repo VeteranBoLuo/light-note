@@ -126,8 +126,10 @@ export async function getOrganizeSummary(userId) {
       state: 'ready',
       findingCount: value.findingCount,
       affectedResourceCount: value.affectedResourceCount,
-      exact: value.exact,
-      hasMore: value.hasMore,
+      // 分类汇总来自全量聚合；去重键截断只影响跨问题的资源总数。
+      typeTotals: value.typeTotals || null,
+      exact: value.typeTotals ? true : value.exact,
+      hasMore: value.typeTotals ? false : value.hasMore,
       updatedAt: new Date().toISOString(),
       errorCode: null,
     };

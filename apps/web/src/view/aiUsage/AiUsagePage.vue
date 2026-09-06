@@ -1,7 +1,7 @@
 <template>
-  <div class="ai-usage-page">
+  <div class="ai-usage-page" :class="{ 'is-embedded': embedded }">
     <main class="ai-usage-shell">
-      <header class="ai-usage-hero">
+      <header v-if="!embedded" class="ai-usage-hero">
         <BButton class="ai-usage-back" @click="goBack">
           <SvgIcon :src="icon.arrow_left" size="16" aria-hidden="true" />
           <span>{{ t('common.back') }}</span>
@@ -114,6 +114,10 @@
   import { formatAiQuotaTokens, useAiQuotaStatus } from '@/composables/useAiQuotaStatus';
   import icon from '@/config/icon.ts';
 
+  withDefaults(defineProps<{ embedded?: boolean }>(), {
+    embedded: false,
+  });
+
   const { t, locale } = useI18n();
   const router = useRouter();
   const acquireVisible = ref(false);
@@ -199,6 +203,19 @@
     box-sizing: border-box;
     background: var(--background-color);
     color: var(--text-color);
+  }
+
+  .ai-usage-page.is-embedded {
+    height: auto;
+    overflow: visible;
+    padding: 0;
+    background: transparent;
+  }
+
+  .ai-usage-page.is-embedded .ai-usage-shell {
+    width: 100%;
+    max-width: none;
+    gap: 14px;
   }
 
   .ai-usage-shell {

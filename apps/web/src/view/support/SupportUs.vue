@@ -19,55 +19,46 @@
               </div>
               <h1>{{ t('support.heroTitle') }}</h1>
               <p>{{ t('support.heroDescription') }}</p>
+              <div class="support-hero__signals">
+                <BChip tone="success">{{ t('support.heroSignalFree') }}</BChip>
+                <BChip tone="neutral">{{ t('support.heroSignalLeaderboard') }}</BChip>
+              </div>
+              <div class="support-hero__actions">
+                <BButton
+                  class="support-primary-action"
+                  type="primary"
+                  size="large"
+                  :disabled="!supportConfigured || !supportStateReady"
+                  @click="handleSupport"
+                  v-click-log="{ module: '支持轻笺', operation: '前往爱发电赞助' }"
+                >
+                  <SvgIcon :src="icon.support.heart" size="18" aria-hidden="true" />
+                  <span>{{ supportPrimaryActionLabel }}</span>
+                </BButton>
+                <BButton size="large" @click="scrollToLeaderboard">
+                  <span>{{ t('support.viewLeaderboardAction') }}</span>
+                  <SvgIcon :src="icon.arrow_right" size="16" aria-hidden="true" />
+                </BButton>
+              </div>
+              <span v-if="supportConfigured" class="support-hero__caption">{{ supportPrimaryActionHint }}</span>
+              <span v-else class="support-action-card__unavailable" role="status">{{ t('support.unavailable') }}</span>
             </div>
 
-            <BCard class="support-action-card" variant="raised" padding="22px" radius="18px">
-              <span class="support-action-card__label">{{ t('support.platformLabel') }}</span>
-              <strong>{{ t('support.platformName') }}</strong>
-              <p>{{ t('support.platformDescription') }}</p>
-              <BButton
-                class="support-primary-action"
-                type="primary"
-                size="large"
-                :disabled="!supportConfigured || !supportStateReady"
-                @click="handleSupport"
-                v-click-log="{ module: '支持轻笺', operation: '前往爱发电赞助' }"
-              >
-                <SvgIcon :src="icon.support.heart" size="18" aria-hidden="true" />
-                <span>{{ supportPrimaryActionLabel }}</span>
-                <SvgIcon :src="icon.noteTree.openPage" size="16" aria-hidden="true" />
-              </BButton>
-              <span v-if="supportConfigured" class="support-action-card__caption">{{ supportPrimaryActionHint }}</span>
-              <span v-else class="support-action-card__unavailable" role="status">{{ t('support.unavailable') }}</span>
+            <BCard class="support-hero-visual" variant="raised" padding="0" radius="22px">
+              <div class="support-hero-visual__halo" aria-hidden="true"></div>
+              <div class="support-hero-visual__community" aria-hidden="true">
+                <span class="is-left"><SvgIcon :src="icon.settings.account" size="20" /></span>
+                <span class="is-heart"><SvgIcon :src="icon.support.heart" size="34" /></span>
+                <span class="is-right"><SvgIcon :src="icon.settings.account" size="20" /></span>
+              </div>
+              <div class="support-hero-visual__copy">
+                <span>{{ t('support.heroVisualEyebrow') }}</span>
+                <strong>{{ t('support.heroVisualTitle') }}</strong>
+                <p>{{ t('support.heroVisualDescription') }}</p>
+              </div>
             </BCard>
           </div>
         </header>
-
-        <SupportAccountPanel
-          v-if="supportStateReady"
-          :state="supportState"
-          :unlinking="unlinking"
-          :preference-saving="preferenceSaving"
-          @link="handleOAuthLink"
-          @unlink="confirmUnlink"
-          @preference-change="handlePreferenceChange"
-        />
-
-        <BCard as="section" class="support-store-gateway" padding="20px" radius="18px">
-          <span class="support-store-gateway__icon" aria-hidden="true">
-            <SvgIcon :src="icon.support.store" size="23" />
-          </span>
-          <div class="support-store-gateway__copy">
-            <h2>{{ t('support.storeGatewayTitle') }}</h2>
-            <p>{{ t('support.storeGatewayDescription') }}</p>
-          </div>
-          <BButton type="default" size="large" @click="openStore">
-            <span>{{ t('support.storeGatewayAction') }}</span>
-            <SvgIcon :src="icon.arrow_right" size="16" aria-hidden="true" />
-          </BButton>
-        </BCard>
-
-        <SupportLeaderboard :leaderboard="leaderboard" :loading="leaderboardLoading" />
 
         <section class="support-section support-options" aria-labelledby="support-options-title">
           <div class="support-section__heading">
@@ -81,9 +72,13 @@
               :key="option.key"
               as="article"
               class="support-tier-card"
+              :class="{ 'is-recommended': option.key === 'server' }"
               padding="20px"
               radius="18px"
             >
+              <span v-if="option.key === 'server'" class="support-tier-card__recommended">
+                {{ t('support.optionRecommended') }}
+              </span>
               <div class="support-tier-card__header">
                 <span class="support-tier-card__icon" aria-hidden="true">
                   <SvgIcon :src="option.icon" size="21" />
@@ -117,6 +112,34 @@
             <span>{{ t('support.optionsHint') }}</span>
           </p>
         </section>
+
+        <div ref="leaderboardSection">
+          <SupportLeaderboard :leaderboard="leaderboard" :loading="leaderboardLoading" />
+        </div>
+
+        <SupportAccountPanel
+          v-if="supportStateReady"
+          :state="supportState"
+          :unlinking="unlinking"
+          :preference-saving="preferenceSaving"
+          @link="handleOAuthLink"
+          @unlink="confirmUnlink"
+          @preference-change="handlePreferenceChange"
+        />
+
+        <BCard as="section" class="support-store-gateway" padding="20px" radius="18px">
+          <span class="support-store-gateway__icon" aria-hidden="true">
+            <SvgIcon :src="icon.support.store" size="23" />
+          </span>
+          <div class="support-store-gateway__copy">
+            <h2>{{ t('support.storeGatewayTitle') }}</h2>
+            <p>{{ t('support.storeGatewayDescription') }}</p>
+          </div>
+          <BButton type="default" size="large" @click="openStore">
+            <span>{{ t('support.storeGatewayAction') }}</span>
+            <SvgIcon :src="icon.arrow_right" size="16" aria-hidden="true" />
+          </BButton>
+        </BCard>
 
         <section class="support-section" aria-labelledby="support-promises-title">
           <div class="support-section__heading">
@@ -193,6 +216,7 @@
   import { useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import MobileTopBar from '@/components/mobile/MobileTopBar.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
@@ -231,7 +255,7 @@
     linked: false,
     orderCount: 0,
     totalAmount: '0.00',
-    publicPreference: { participateInRanking: true, showIdentity: false, adminHidden: false },
+    publicPreference: { participateInRanking: true, showIdentity: true, adminHidden: false },
     recentOrders: [],
   };
   const supportState = ref<AfdianSupportState>({ ...emptySupportState });
@@ -240,6 +264,7 @@
   const preferenceSaving = ref(false);
   const leaderboard = ref<AfdianLeaderboard | null>(null);
   const leaderboardLoading = ref(true);
+  const leaderboardSection = ref<HTMLElement | null>(null);
 
   const canOpenTrackedSupport = computed(
     () => supportStateReady.value && supportState.value.authenticated && supportState.value.orderSyncAvailable,
@@ -342,6 +367,10 @@
   function openStore() {
     void router.push('/store');
     void recordOperation({ module: '资源商店', operation: '从支持页进入资源商店' });
+  }
+
+  function scrollToLeaderboard() {
+    leaderboardSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function handleSupport() {
@@ -491,7 +520,7 @@
   }
   .support-hero__layout {
     display: grid;
-    grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+    grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
     align-items: center;
     gap: clamp(28px, 5vw, 62px);
   }
@@ -541,36 +570,117 @@
     font-size: 16px;
     line-height: 1.85;
   }
-  .support-action-card {
+  .support-hero__signals {
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 18px;
+  }
+  .support-hero__actions {
+    display: flex;
+    flex-wrap: wrap;
     gap: 10px;
-    border: 1px solid var(--surface-border-color);
+    margin-top: 22px;
   }
-  .support-action-card__label {
-    color: var(--text-color-secondary);
-    font-size: 13px;
-  }
-  .support-action-card strong {
-    font-size: 22px;
-  }
-  .support-action-card p {
-    margin: 0 0 6px;
-    color: var(--text-color-secondary);
-    line-height: 1.65;
-  }
-  .support-primary-action {
-    width: 100%;
+  .support-hero__actions :deep(.b_btn) {
     gap: 8px;
   }
-  .support-action-card__caption,
+  .support-hero__caption,
   .support-action-card__unavailable {
+    margin-top: 10px;
+    color: var(--text-color-secondary);
     font-size: 12px;
     line-height: 1.55;
-    color: var(--text-color-secondary);
   }
   .support-action-card__unavailable {
     color: var(--error-color);
+  }
+  .support-hero-visual {
+    position: relative;
+    min-height: 300px;
+    overflow: hidden;
+    border: 1px solid var(--primary-color);
+    background: var(--card-background);
+  }
+  .support-hero-visual__halo {
+    position: absolute;
+    width: 260px;
+    height: 260px;
+    top: -130px;
+    right: -70px;
+    border-radius: 50%;
+    background: var(--primary-color-light);
+  }
+  .support-hero-visual__community {
+    position: relative;
+    height: 172px;
+  }
+  .support-hero-visual__community::before {
+    content: '';
+    position: absolute;
+    width: 180px;
+    height: 92px;
+    top: 44px;
+    left: 50%;
+    border: 1px solid var(--primary-color);
+    border-bottom-color: transparent;
+    border-radius: 50%;
+    opacity: 0.35;
+    transform: translateX(-50%);
+  }
+  .support-hero-visual__community > span {
+    position: absolute;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--primary-color);
+    border-radius: 50%;
+    color: var(--primary-color);
+    background: var(--card-background);
+    box-shadow: var(--surface-raised-shadow);
+  }
+  .support-hero-visual__community .is-left,
+  .support-hero-visual__community .is-right {
+    width: 48px;
+    height: 48px;
+    top: 76px;
+  }
+  .support-hero-visual__community .is-left {
+    left: 26px;
+  }
+  .support-hero-visual__community .is-right {
+    right: 26px;
+  }
+  .support-hero-visual__community .is-heart {
+    width: 82px;
+    height: 82px;
+    top: 38px;
+    left: 50%;
+    color: var(--button-primary-text-color, #fff);
+    background: var(--primary-color);
+    transform: translateX(-50%);
+  }
+  .support-hero-visual__copy {
+    position: relative;
+    padding: 0 24px 24px;
+    text-align: center;
+  }
+  .support-hero-visual__copy > span {
+    color: var(--primary-color);
+    font-size: 12px;
+    font-weight: 750;
+  }
+  .support-hero-visual__copy strong {
+    display: block;
+    margin-top: 5px;
+    font-size: 21px;
+  }
+  .support-hero-visual__copy p {
+    margin: 7px 0 0;
+    color: var(--text-color-secondary);
+    font-size: 12px;
+    line-height: 1.6;
   }
   .support-store-gateway {
     margin-top: 22px;
@@ -600,6 +710,9 @@
   .support-section {
     margin-top: 44px;
   }
+  .support-options {
+    margin-top: 34px;
+  }
   .support-section__heading {
     margin-bottom: 18px;
   }
@@ -618,6 +731,7 @@
     gap: 16px;
   }
   .support-tier-card {
+    position: relative;
     display: flex;
     flex-direction: column;
     min-height: 320px;
@@ -625,6 +739,23 @@
     transition:
       transform 0.18s ease,
       border-color 0.18s ease;
+  }
+  .support-tier-card.is-recommended {
+    border: 2px solid var(--primary-color);
+    box-shadow: var(--surface-raised-shadow);
+  }
+  .support-tier-card__recommended {
+    position: absolute;
+    top: -12px;
+    right: 18px;
+    padding: 5px 12px;
+    border: 1px solid var(--primary-color);
+    border-radius: 999px;
+    color: var(--button-primary-text-color, #fff);
+    background: var(--primary-color);
+    font-size: 11px;
+    font-weight: 750;
+    line-height: 1;
   }
   .support-tier-card:hover {
     transform: translateY(-2px);
@@ -809,6 +940,13 @@
     .support-hero h1 {
       font-size: 34px;
     }
+    .support-hero__actions,
+    .support-hero__actions :deep(.b_btn) {
+      width: 100%;
+    }
+    .support-hero-visual {
+      min-height: 280px;
+    }
     .support-store-gateway {
       grid-template-columns: auto minmax(0, 1fr);
     }
@@ -824,6 +962,13 @@
     }
     .support-tier-card {
       min-height: 0;
+    }
+    .support-tier-card__recommended {
+      top: 12px;
+      right: 14px;
+    }
+    .support-tier-card.is-recommended .support-tier-card__header {
+      margin-top: 24px;
     }
     .support-tier-card > p {
       min-height: 0;
@@ -842,6 +987,7 @@
 
   html.light-note-mobile-rendering & {
     .support-hero,
+    .support-hero-visual,
     .support-tier-card,
     .support-store-gateway,
     .support-disclosure,

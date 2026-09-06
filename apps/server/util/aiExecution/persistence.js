@@ -12,13 +12,14 @@ function persistenceError(code) {
 }
 
 export async function insertAiExecution(execution, database = pool) {
+  const grouped = Boolean(execution.organizeRunId && execution.organizeItemId);
   try {
     const [result] = await database.query(
       `INSERT INTO ai_executions
         (id, request_id, actor_user_id, subject_user_id, billing_policy, surface, task_type,
          skill_id, skill_version, billing_rule_version, validation_rule_version, status,
-         quota_reservation_key, lease_expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?)`,
+         quota_reservation_key, lease_expires_at${grouped ? ', organize_run_id, organize_item_id' : ''})
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?${grouped ? ', ?, ?' : ''})`,
       [
         execution.id,
         execution.requestId,
@@ -33,6 +34,7 @@ export async function insertAiExecution(execution, database = pool) {
         execution.validationRuleVersion,
         execution.quotaHandle?.reservationKey || null,
         execution.leaseExpiresAt,
+        ...(grouped ? [execution.organizeRunId, execution.organizeItemId] : []),
       ],
     );
     if (!affectedExactlyOne(result)) throw persistenceError('AI_EXECUTION_START_NOT_PERSISTED');

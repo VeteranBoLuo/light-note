@@ -216,11 +216,20 @@ describe('爱发电订单归属合并', () => {
       db: checkoutDb,
     });
     const token = new URL(checkout.url).searchParams.get('custom_order_id');
-    const checkoutParams = checkoutDb.query.mock.calls[0][1];
+    const preferenceCall = checkoutDb.query.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT IGNORE INTO support_public_preferences'),
+    );
+    const checkoutCall = checkoutDb.query.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT INTO support_checkout_intents'),
+    );
+    expect(preferenceCall).toBeTruthy();
+    expect(checkoutCall).toBeTruthy();
+    expect(preferenceCall?.[0]).toContain('VALUES (?, ?, 1, 1, NULL)');
+    const checkoutParams = checkoutCall[1];
     expect(token).toMatch(/^[A-Za-z0-9_-]{32,128}$/);
     expect(checkoutParams).not.toContain(token);
     expect(checkoutParams[1]).toMatch(/^[a-f0-9]{64}$/);
-    expect(checkoutDb.query.mock.calls[0][0]).toContain("'donation'");
+    expect(checkoutCall?.[0]).toContain("'donation'");
     expect(checkoutParams).toContain('support-pure-v2');
 
     const webhookDb = { query: vi.fn().mockResolvedValue([{ affectedRows: 1 }]) };

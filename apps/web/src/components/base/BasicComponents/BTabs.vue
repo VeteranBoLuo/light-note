@@ -14,7 +14,9 @@
       @click="tabChange(tab)"
       @keydown="handleTabKeydown($event, tab, resolvedOptions.indexOf(tab))"
     >
-      <span>{{ tab.label }}</span>
+      <span
+        ><slot name="label" :tab="tab">{{ tab.label }}</slot></span
+      >
       <span v-if="tab.badge !== undefined" class="tab-badge" :class="{ 'is-zero': Number(tab.badge) === 0 }">
         {{ tab.badge }}
       </span>

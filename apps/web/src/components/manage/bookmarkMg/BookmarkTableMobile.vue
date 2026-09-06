@@ -13,6 +13,7 @@
     @add="router.push('/manage/editBookmark/add')"
     @item-click="handleItemClick"
     @retry="retryLoad"
+    @visible-items-change="selectionVisible = $event"
   >
     <template #item="{ data }">
       <span class="bookmark-item-main" :class="{ 'is-batch-mode': batchMode }">
@@ -45,6 +46,8 @@
     </template>
   </PhoneListMg>
   <ResourceBatchActionBar
+    selection-module="bookmarks"
+    :selection-visible-count="selection.visibleSelected.value"
     :open="batchMode"
     mobile
     :summary="batchActionSummary"
@@ -60,9 +63,10 @@
   >
     <template #leading>
       <BCheckbox
+        controlled
         :checked="allBookmarksSelected"
         :indeterminate="someBookmarksSelected"
-        :disabled="!tableData.length"
+        :disabled="!selection.candidates.value.length || selection.busy.value"
         :aria-label="$t(allBookmarksSelected ? 'bookmarkMg.batchDeselectAll' : 'bookmarkMg.batchSelectAll')"
         @change="toggleSelectAll"
       />
@@ -88,7 +92,12 @@
   />
   <LinkHealthModal v-model:visible="healthVisible" />
   <BookmarkSnapshotModal v-model:visible="snapVisible" :bookmark-id="snapBookmarkId" />
-  <AiOrganizeModal v-model:visible="aiOrgVisible" :selected-ids="selectedAiOrganizeIds" @applied="reloadBookmarks" />
+  <AiOrganizeModal
+    v-model:visible="aiOrgVisible"
+    :selected-ids="selectedAiOrganizeIds"
+    :selection-operation="selection.operation()"
+    @applied="reloadBookmarks"
+  />
   <BookmarkAiDialog v-model:visible="bookmarkAiVisible" :bookmarks="bookmarkAiItems" />
   <ResourceOutcomeDrawer
     v-model:open="outcomeDrawerOpen"
@@ -99,6 +108,7 @@
 </template>
 
 <script lang="ts" setup>
+  import { useResourceSelection } from '@/composables/useResourceSelection';
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import router from '@/router';
@@ -132,6 +142,7 @@
   const { t } = useI18n();
 
   const {
+    loading,
     initialLoading,
     loadError,
     bookmarks: tableData,
@@ -141,8 +152,15 @@
   // 列表角标点击 → 弹出网页正文存档 / AI 摘要(与编辑页快照同一弹框)
   const snapVisible = ref(false);
   const snapBookmarkId = ref('');
-  const batchMode = ref(false);
-  const selectedIds = ref<string[]>([]);
+  const batchMode = computed({
+    get: () => selection.mode.value,
+    set: (value) => {
+      selection.mode.value = value;
+    },
+  });
+  const selectionVisible = ref<Record<string, any>[]>([]);
+  const selection = useResourceSelection('bookmarks', selectionVisible, 'bookmark', loading);
+  const selectedIds = selection.ids;
   const mutating = ref(false);
   const pageActionsOpen = ref(false);
   const mobilePageActionsOpen = ref(false);
@@ -155,6 +173,15 @@
   const selectedAiOrganizeIds = ref<string[]>([]);
   const outcomeDrawerOpen = ref(false);
   const outcomeResources = ref<ResourceOutcomeResource[]>([]);
+  watch(selection.active, (active) => {
+    if (!active) {
+      outcomeDrawerOpen.value = false;
+      aiOrgVisible.value = false;
+    }
+  });
+  watch([outcomeDrawerOpen, aiOrgVisible], ([outcome, ai]) => {
+    if (!outcome && !ai) selection.finish();
+  });
   const pageActions = computed<MobilePageActionItem[]>(() => [
     {
       key: 'health',
@@ -186,25 +213,11 @@
       },
     ];
   });
-  const selectedBookmarkItems = computed(() => {
-    const selected = new Set(selectedIds.value);
-    return tableData.value.filter((item) => selected.has(String(item.id)));
-  });
-  watch(
-    () => tableData.value.map((item) => String(item.id)),
-    (bookmarkIds) => {
-      const availableIds = new Set(bookmarkIds);
-      const nextSelection = selectedIds.value.filter((id) => availableIds.has(id));
-      if (nextSelection.length !== selectedIds.value.length) selectedIds.value = nextSelection;
-    },
-    { flush: 'sync' },
+  const selectedBookmarkItems = computed(() =>
+    selection.items.value.map((item) => ({ ...item, name: item.name || item.title, url: item.url || '' })),
   );
-  const allBookmarksSelected = computed(
-    () => tableData.value.length > 0 && tableData.value.every((item) => selectedIds.value.includes(String(item.id))),
-  );
-  const someBookmarksSelected = computed(
-    () => !allBookmarksSelected.value && tableData.value.some((item) => selectedIds.value.includes(String(item.id))),
-  );
+  const allBookmarksSelected = selection.allVisible;
+  const someBookmarksSelected = selection.someVisible;
   const batchActionSummary = computed(() =>
     selectedIds.value.length
       ? t('bookmarkMg.batchSelected', { count: selectedIds.value.length })
@@ -356,12 +369,7 @@
   }
 
   function toggleSelectAll(checked: boolean) {
-    const visibleIds = tableData.value.map((item) => String(item.id));
-    if (!checked) {
-      selectedIds.value = selectedIds.value.filter((id) => !visibleIds.includes(id));
-      return;
-    }
-    selectedIds.value = [...new Set([...selectedIds.value, ...visibleIds])];
+    selection.selectVisible(checked);
   }
 
   function enterBatch() {
@@ -392,23 +400,27 @@
     else if (action.key === 'delete') handleBatchDelete();
   }
 
-  function openSelectedAiOrganize() {
-    const ids = selectedBookmarkItems.value.map((item) => String(item.id));
+  async function openSelectedAiOrganize() {
+    const op = await selection.prepare();
+    if (!op) return;
+    const ids = op.items.map((item) => String(item.id));
     if (!ids.length) return;
     selectedAiOrganizeIds.value = ids;
     mobileBatchActionsOpen.value = false;
     aiOrgVisible.value = true;
   }
 
-  function openSelectedOutcomeDrawer() {
+  async function openSelectedOutcomeDrawer() {
+    const op = await selection.prepare();
+    if (!op) return;
     if (!selectedBookmarkItems.value.length) {
       message.warning(t('resourceOutcome.batch.selectFirst'));
       return;
     }
-    outcomeResources.value = selectedBookmarkItems.value.map((item) => ({
+    outcomeResources.value = op.items.map((item) => ({
       type: 'bookmark',
       id: String(item.id),
-      title: String(item.name || t('bookmarkMg.untitled')),
+      title: String(item.name || item.title || t('bookmarkMg.untitled')),
       quickReadable: true,
     }));
     mobileBatchActionsOpen.value = false;
@@ -420,17 +432,21 @@
     });
   }
 
-  function handleBatchDelete() {
+  async function handleBatchDelete() {
     if (blockGuestWrite('delete-bookmark')) return;
     if (!selectedIds.value.length) {
       message.warning(t('bookmarkMg.batchDeleteNoSelection'));
       return;
     }
-    const ids = [...selectedIds.value];
+    const op = await selection.prepare();
+    if (!op) return;
+    const ids = op.items.map((item) => item.id);
     Alert.alert({
       title: t('bookmarkMg.batchDeleteConfirmTitle'),
       content: t('bookmarkMg.batchDeleteConfirmContent', { count: ids.length }),
+      onCancel: () => selection.finish(op),
       async onOk() {
+        if (!selection.current(op)) return;
         mutating.value = true;
         try {
           const res = await batchDeleteSearchResources(ids.map((id) => ({ id, type: 'bookmark' })));
@@ -438,6 +454,9 @@
             message.error(res?.msg || t('bookmarkMg.batchDeleteFailed'));
             return;
           }
+          if (!selection.current(op)) return;
+          await selection.reconcile(op);
+          if (!selection.current(op)) return;
           const successCount = Number(res?.data?.affectedItemCount || 0);
           const skippedCount = Number(res?.data?.invalidItemCount || 0);
           if (!successCount) {
@@ -457,11 +476,12 @@
               : t('bookmarkMg.batchDeleteSuccess', { count: successCount }),
           );
           clearGlobalSearchCache();
-          exitBatch();
+
           await reloadBookmarks();
         } catch {
           message.error(t('bookmarkMg.batchDeleteFailed'));
         } finally {
+          selection.finish(op);
           mutating.value = false;
         }
       },

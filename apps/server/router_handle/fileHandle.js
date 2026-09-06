@@ -1,7 +1,6 @@
-import path from 'path';
+import { renameOwnedCloudFile } from '../util/services/cloudFileRenameService.js';
 import pool from '../db/index.js';
 import { resultData, insertData, L } from '../util/common.js';
-import { bucketBaseUrl, buildObjectKey, copyObjectInObs, deleteObjectFromObs } from '../util/obsClient.js';
 import { buildSignedDownloadUrl } from '../router/file.js';
 import { getFileExtension, resolveFileCategory } from '../util/fileCategory.js';
 import {
@@ -68,90 +67,24 @@ export const getFileInfo = async (req, res) => {
 
 export const updateFile = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
+  let connection;
   try {
-    const { id, fileName } = req.body;
-
-    // 查询文件信息
-    const sql = 'SELECT * FROM files WHERE id = ? AND create_by = ? AND del_flag = 0';
-    const [results] = await pool.query(sql, [id, req.user.id]);
-
-    if (results.length === 0) {
-      return res.send(resultData(null, 404, '数据库中未找到文件'));
-    }
-
-    const file = results[0];
-
-    const originalExt = path.extname(file.file_name);
-    const newExt = path.extname(fileName);
-    let finalFileName = fileName;
-
-    if (!newExt) {
-      finalFileName = fileName + originalExt;
-    } else if (newExt !== originalExt) {
-      finalFileName = fileName;
-    }
-
-    // 检查文件扩展名
-    if (
-      finalFileName.includes('/') ||
-      finalFileName.includes('\\\\') ||
-      finalFileName.includes('>') ||
-      finalFileName.includes('<')
-    ) {
-      return res.send(resultData(null, 400, '文件名不能包含特殊字符或路径分隔符'));
-    }
-
-    // 查重：同用户下是否存在同名文件（排除自身）
-    const [dupRows] = await pool.query(
-      'SELECT id FROM files WHERE create_by = ? AND file_name = ? AND id != ? AND del_flag = 0',
-      [file.create_by, finalFileName, id],
-    );
-    if (dupRows.length > 0) {
-      return res.send(resultData(null, 400, '已存在同名文件'));
-    }
-
-    const sourceKey = file.obs_key || buildObjectKey(file.create_by, file.file_name);
-    const targetKey = buildObjectKey(file.create_by, finalFileName);
-
-    // 顺序改为 copy → DB 更新 → 删旧:原先「copy 后立即删旧」在 DB 更新失败时会让 DB 仍指向已删对象,文件永久损坏。
-    // 另防同名保存(sourceKey === targetKey):copy 自身后再删除 = 删掉唯一对象。
-    if (sourceKey !== targetKey) {
-      try {
-        await copyObjectInObs(sourceKey, targetKey);
-      } catch (obsError) {
-        console.error('[file] OBS 重命名失败 code=%s', stableAgentErrorCode(obsError));
-        return res.send(resultData(null, 500, '文件重命名暂时失败，请稍后重试'));
-      }
-    }
-
-    const updateSql = 'UPDATE files SET file_name = ?, obs_key = ?, directory = ? WHERE id = ? AND create_by = ?';
-    await pool.query(updateSql, [
-      finalFileName,
-      targetKey,
-      `${bucketBaseUrl}/files/${file.create_by}/`,
-      id,
-      req.user.id,
-    ]);
-    res.send(resultData({ id, fileName: finalFileName }));
-
-    // 文件名和对象映射已提交，先结束用户请求；旧对象清理与 AI 索引失效都不是本次重命名成功的前置条件。
-    // 这样不会把 AI 文档清理的耗时暴露给用户，同时仍保证失败仅留下可安全清理的冗余数据。
-    if (sourceKey !== targetKey) {
-      deleteObjectFromObs(sourceKey).catch((e) =>
-        console.warn('[file] 旧 OBS 对象清理失败(冗余无害) code=%s', stableAgentErrorCode(e)),
-      );
-    }
-    void Promise.allSettled([
-      purgeDocumentSourcesForCloudFiles(pool, req.user.id, [id]),
-      invalidatePersonalKnowledgeCache(req.user.id),
-    ]).then((results) => {
-      if (results.some((result) => result.status === 'rejected')) {
-        console.warn('[file] 重命名后 AI 缓存清理失败');
-      }
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const result = await renameOwnedCloudFile(connection, {
+      userId: req.user.id,
+      id: req.body.id,
+      name: req.body.fileName,
     });
-  } catch (e) {
-    console.error('[file] 修改文件名失败 code=%s', stableAgentErrorCode(e));
-    res.send(resultData(null, 500, '服务器暂时无法处理，请稍后重试'));
+    await connection.commit();
+    res.send(resultData({ id: req.body.id, fileName: result.name }));
+    void Promise.allSettled([result.cleanup(), invalidatePersonalKnowledgeCache(req.user.id)]);
+  } catch (error) {
+    await connection?.rollback();
+    const status = error.status || 500;
+    res.send(resultData(null, status, status >= 500 ? '文件重命名暂时失败，请稍后重试' : error.message));
+  } finally {
+    connection?.release();
   }
 };
 

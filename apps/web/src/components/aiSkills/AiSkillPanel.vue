@@ -14,21 +14,24 @@
       </span>
     </header>
 
-    <div v-if="resourceRefs.length && scopeLabel" class="ai-skill-panel__scope" role="status">
+    <div v-if="scopeLabel && (resourceRefs.length || scopeSelector)" class="ai-skill-panel__scope" role="status">
       {{ scopeLabel }}
     </div>
 
-    <div v-if="skillAvailable && visibleActions.length" class="ai-skill-panel__actions">
-      <BTooltip
-        v-for="action in visibleActions"
-        :key="action.id"
-        :title="action.reason || ''"
-        :disabled="!action.reason"
-      >
-        <BButton size="small" :disabled="interactionDisabled || action.disabled" @click="runAction(action)">
-          {{ action.label }}
-        </BButton>
-      </BTooltip>
+    <div v-if="skillAvailable && visibleActions.length" class="ai-skill-panel__action-section">
+      <span v-if="actionsLabel" class="ai-skill-panel__actions-label">{{ actionsLabel }}</span>
+      <div class="ai-skill-panel__actions">
+        <BTooltip
+          v-for="action in visibleActions"
+          :key="action.id"
+          :title="action.reason || ''"
+          :disabled="!action.reason"
+        >
+          <BButton size="small" :disabled="interactionDisabled || action.disabled" @click="runAction(action)">
+            {{ action.label }}
+          </BButton>
+        </BTooltip>
+      </div>
     </div>
 
     <div
@@ -41,7 +44,7 @@
         type="textarea"
         :rows="promptRows"
         :maxlength="promptMaxLength"
-        :disabled="interactionDisabled"
+        :disabled="promptInteractionDisabled"
         :placeholder="placeholder"
         submit-on-enter
         @enter="runPrompt"
@@ -53,7 +56,7 @@
         v-else
         class="ai-skill-panel__composer-action"
         type="primary"
-        :disabled="interactionDisabled || !prompt.trim()"
+        :disabled="promptInteractionDisabled || !prompt.trim()"
         @click="runPrompt"
       >
         {{ submitLabel }}
@@ -114,6 +117,7 @@
           v-for="action in response.availableActions"
           :key="String(action.id)"
           type="primary"
+          :disabled="interactionDisabled"
           @click="handleResultAction(action, response)"
         >
           {{ String(action.label || t('aiSkills.continue')) }}
@@ -129,7 +133,7 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import type { AiSkillResourceRef, AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
+  import type { AiSkillRequest, AiSkillResourceRef, AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
   import { createAiSkillRequest, executeAiSkill } from '@/api/aiSkillApi';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -151,9 +155,11 @@
       skillId: string;
       surface: string;
       resourceRefs?: readonly AiSkillResourceRef[];
+      scopeSelector?: AiSkillRequest['scope']['selector'];
       scopeResourceCount?: number;
       scopeLabel?: string;
       actions?: readonly AiSkillPanelAction[];
+      actionsLabel?: string;
       showPrompt?: boolean;
       promptKey?: string;
       placeholder?: string;
@@ -171,12 +177,15 @@
       showGrounding?: boolean;
       clearPromptOnSuccess?: boolean;
       reserveResultSpace?: boolean;
+      disabled?: boolean;
+      promptDisabled?: boolean;
     }>(),
     {
       description: '',
       resourceRefs: () => [],
       scopeLabel: '',
       actions: () => [],
+      actionsLabel: '',
       showPrompt: false,
       promptKey: 'question',
       placeholder: '',
@@ -194,6 +203,8 @@
       showGrounding: true,
       clearPromptOnSuccess: false,
       reserveResultSpace: false,
+      disabled: false,
+      promptDisabled: false,
     },
   );
 
@@ -209,6 +220,7 @@
   const error = ref<{ code: string; message: string; title?: string; retryable: boolean } | null>(null);
   const feature = useAiSkillAvailability(() => props.skillId);
   const threads = new Map<string, string>();
+  const recoverableThreadErrorCodes = new Set(['AI_SKILL_THREAD_SCOPE_CONFLICT', 'AI_SKILL_THREAD_UNAVAILABLE']);
   let sequence = 0;
   let controller: AbortController | null = null;
 
@@ -242,7 +254,10 @@
   });
   const errorTitle = computed(() => error.value?.title || t('aiSkills.errorTitle'));
   const scopeKey = computed(() =>
-    props.resourceRefs.map((item) => `${item.type}:${item.id}:${item.version || ''}`).join('|'),
+    [
+      props.resourceRefs.map((item) => `${item.type}:${item.id}:${item.version || ''}`).join('|'),
+      props.scopeSelector ? JSON.stringify(props.scopeSelector) : '',
+    ].join('@'),
   );
   const initialInputKey = computed(() => JSON.stringify(props.initialInput));
   const autoRunAction = computed(() =>
@@ -266,7 +281,10 @@
     });
   });
   const skillAvailable = computed(() => feature.available.value);
-  const interactionDisabled = computed(() => loading.value || feature.loading.value || !skillAvailable.value);
+  const interactionDisabled = computed(
+    () => props.disabled || loading.value || feature.loading.value || !skillAvailable.value,
+  );
+  const promptInteractionDisabled = computed(() => interactionDisabled.value || props.promptDisabled);
   const telemetryDimensions = computed(() => {
     const types = [...new Set(props.resourceRefs.map((item) => item.type))];
     return {
@@ -317,6 +335,7 @@
           threadId: threads.get(threadKey) || null,
           input,
           resourceRefs: props.resourceRefs,
+          scopeSelector: props.scopeSelector,
           surface: props.surface,
         }),
         { signal: requestController.signal },
@@ -328,6 +347,7 @@
       return result;
     } catch (cause: any) {
       if (current !== sequence || requestController.signal.aborted) return null;
+      if (recoverableThreadErrorCodes.has(String(cause?.code || ''))) threads.delete(threadKey);
       const quotaFailure = getAiQuotaErrorPresentation(cause, (key, params) => t(key, params));
       const failure = quotaFailure || {
         code: String(cause?.code || 'AI_SKILL_FAILED'),
@@ -344,7 +364,7 @@
   }
 
   function runAction(action: AiSkillPanelAction) {
-    if (action.disabled || loading.value) return null;
+    if (action.disabled || interactionDisabled.value) return null;
     const input: Record<string, unknown> = { ...props.initialInput, ...(action.input || {}) };
     if (action.promptKey) input[action.promptKey] = action.promptValue ?? prompt.value.trim();
     return execute(action.skillId || props.skillId, input);
@@ -352,7 +372,7 @@
 
   async function runPrompt() {
     const value = prompt.value.trim();
-    if (!value || loading.value) return;
+    if (!value || promptInteractionDisabled.value) return;
     const result = await execute(props.skillId, { ...props.initialInput, [props.promptKey]: value });
     if (result?.status === 'completed' && props.clearPromptOnSuccess && prompt.value.trim() === value) {
       prompt.value = '';
@@ -360,6 +380,7 @@
   }
 
   function handleResultAction(action: Record<string, unknown>, result: AiSkillResponse) {
+    if (interactionDisabled.value) return;
     emit('result-action', action, result);
     void recordAiProductEvent('ai_skill_applied', { ...telemetryDimensions.value, outcome: 'success' });
   }
@@ -394,8 +415,8 @@
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 12px;
-    padding: 15px;
+    gap: var(--ai-skill-panel-gap, 12px);
+    padding: var(--ai-skill-panel-padding, 15px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     color: var(--text-color);
@@ -497,6 +518,18 @@
     white-space: nowrap;
   }
 
+  .ai-skill-panel__action-section {
+    display: grid;
+    flex: 0 0 auto;
+    gap: var(--ai-skill-action-section-gap, 8px);
+  }
+
+  .ai-skill-panel__actions-label {
+    color: var(--desc-color);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
   .ai-skill-panel__actions,
   .ai-skill-panel__sources {
     display: flex;
@@ -506,6 +539,34 @@
 
   .ai-skill-panel__actions {
     flex: 0 0 auto;
+    flex-wrap: var(--ai-skill-actions-wrap, wrap);
+    gap: var(--ai-skill-actions-gap, 7px);
+    overflow-x: var(--ai-skill-actions-overflow-x, visible);
+    scrollbar-width: var(--ai-skill-actions-scrollbar-width, auto);
+  }
+
+  .ai-skill-panel__actions::-webkit-scrollbar {
+    height: var(--ai-skill-actions-scrollbar-height, initial);
+  }
+
+  .ai-skill-panel__actions :deep(.b_btn) {
+    min-height: var(--ai-skill-action-min-height, 34px);
+    height: auto;
+    padding: var(--ai-skill-action-padding, 6px 10px);
+    border-color: var(--surface-border-color);
+    border-radius: 9px;
+    color: var(--text-color);
+    background: var(--workspace-panel-bg-color);
+    font-size: var(--ai-skill-action-font-size, 12px);
+    line-height: 1.35;
+    white-space: var(--ai-skill-action-white-space, normal);
+  }
+
+  .ai-skill-panel__actions :deep(.b_btn:hover),
+  .ai-skill-panel__actions :deep(.b_btn:focus-visible) {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    background: var(--primary-btn-bg-color);
   }
 
   .ai-skill-panel__composer {
@@ -545,9 +606,9 @@
   }
 
   .ai-skill-panel__composer.is-chat :deep(.b-textarea) {
-    min-height: 112px;
-    max-height: 180px;
-    padding: 13px 14px 50px !important;
+    min-height: var(--ai-skill-chat-composer-min-height, 112px);
+    max-height: var(--ai-skill-chat-composer-max-height, 180px);
+    padding: var(--ai-skill-chat-composer-padding, 13px 14px 50px) !important;
     resize: none;
     border: 0 !important;
     border-radius: 15px;
@@ -558,8 +619,8 @@
 
   .ai-skill-panel__composer.is-chat :deep(.b_btn) {
     position: absolute;
-    right: 10px;
-    bottom: 10px;
+    right: var(--ai-skill-chat-composer-action-right, 10px);
+    bottom: var(--ai-skill-chat-composer-action-bottom, 10px);
     width: auto;
     height: 32px;
     padding: 0 14px;
@@ -569,8 +630,8 @@
   }
 
   .ai-skill-panel.is-sidebar .ai-skill-panel__composer.is-chat :deep(.b-textarea) {
-    min-height: 112px;
-    max-height: 180px;
+    min-height: var(--ai-skill-chat-composer-min-height, 112px);
+    max-height: var(--ai-skill-chat-composer-max-height, 180px);
   }
 
   .ai-skill-panel.is-sidebar .ai-skill-panel__composer.is-chat :deep(.b_btn) {

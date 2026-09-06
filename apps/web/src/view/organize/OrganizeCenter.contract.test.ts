@@ -22,13 +22,14 @@ describe('整理中心 2.0 页面契约', () => {
   });
 
   it('待整理与四类治理问题属于同一中心，但概览中保持两套统计语义', () => {
-    expect(source).toContain("type OrganizeView = 'overview' | 'pending' | OrganizeIssueType");
+    expect(source).toContain("type OrganizeView = 'overview' | 'pending' | 'ai_suggestions' | OrganizeIssueType");
+    expect(source).toContain("activeView === 'ai_suggestions' && bookmark.isDesktop");
     expect(source).toContain("activeView === 'pending'");
     expect(source).toContain('<Inbox embedded />');
     expect(source).toContain('summary.value?.pendingShortcut.count');
     expect(dashboardSource).toContain('props.summary?.pendingShortcut.count');
-    expect(dashboardSource).toContain('props.summary?.issues.untagged.affectedResourceCount');
-    expect(dashboardSource).toContain('props.summary?.issues.duplicateBookmark.affectedResourceCount');
+    expect(dashboardSource).toContain('props.summary?.issues.untagged.findingCount');
+    expect(dashboardSource).toContain('props.summary?.issues.duplicateBookmark.groupCount');
     expect(dashboardSource).toContain('props.knowledgeStructure?.findingCount');
   });
 
@@ -36,15 +37,31 @@ describe('整理中心 2.0 页面契约', () => {
     expect(source).toContain("import BInput from '@/components/base/BasicComponents/BInput.vue'");
     expect(source).toContain("import BSelect from '@/components/base/BasicComponents/BSelect.vue'");
     expect(dashboardSource).toContain("import BCard from '@/components/base/BasicComponents/BCard.vue'");
-    expect(dashboardSource).toContain(
-      "import TodayActionSection from '@/components/workbenches/TodayActionSection.vue'",
-    );
+    expect(dashboardSource).toContain("import BLoading from '@/components/base/BasicComponents/BLoading.vue'");
     expect(source).toContain("import BModal from '@/components/base/BasicComponents/BModal/BModal.vue'");
     expect(dashboardSource).toContain("import BProgress from '@/components/base/BasicComponents/BProgress.vue'");
     expect(source).toContain("import icon from '@/config/icon'");
     expect(`${source}\n${dashboardSource}`).not.toMatch(/<(input|select|table)\b/);
     expect(`${source}\n${dashboardSource}`).not.toMatch(/<svg\b|<path\b/);
     expect(donutSource).toContain('aria-hidden="true"');
+  });
+
+  it('无标签资源显式进入批量模式后显示勾选框和共享底部批量栏', () => {
+    expect(source).toContain('@click="toggleUntaggedBatchMode"');
+    expect(source).toMatch(/<BBatchToggle[\s\S]*?:active="untaggedBatchMode"/);
+    expect(source).toContain('v-if="untaggedBatchMode"');
+    expect(source).toContain('@click="handleUntaggedRowSelection(item, $event)"');
+    expect(source).toContain('@keydown.space.self.prevent="handleUntaggedRowSelection(item, $event)"');
+    expect(source).toContain('[role="button"], [role="checkbox"]');
+    expect(source).toContain(':open="activeView === \'untagged\' && untaggedBatchMode"');
+    expect(source).toContain(':primary-disabled="selectedUntaggedItems.length === 0"');
+    expect(source).toContain('<ResourceBatchActionBar');
+    expect(source).toContain(':primary-label="t(\'resourceCenter.manageResourceTags\')"');
+    expect(source).toContain('@primary="openBatchTags(selectedUntaggedItems)"');
+    expect(source).toContain('<MobilePageActionsDrawer');
+    expect(source).toContain("key: 'ignore'");
+    expect(source).toContain("key: 'delete'");
+    expect(source).not.toContain('class="organize-selection-bar"');
   });
 
   it('移动端内部导航横向滚动，不把六个入口压成等宽网格', () => {
@@ -67,7 +84,7 @@ describe('整理中心 2.0 页面契约', () => {
     expect(source).toContain('var(--card-background)');
     expect(source).toContain('var(--text-color)');
     expect(source).toContain('html.light-note-mobile-rendering .organize-nav-item.active');
-    expect(dashboardSource).toContain('html.light-note-mobile-rendering .organize-dashboard-card');
+    expect(dashboardSource).toContain('var(--surface-divider-color)');
     expect(source).toMatch(/\.organize-nav-item\.b_btn\s*\{[\s\S]*?border-left:\s*4px solid transparent/);
     expect(source).toMatch(/\.organize-nav-item\.active\s*\{[\s\S]*?border-left-color:\s*var\(--primary-color\)/);
     expect(source).toMatch(
@@ -83,27 +100,20 @@ describe('整理中心 2.0 页面契约', () => {
     expect(source).not.toMatch(/\.organize-nav-item\.active\s*\{[^}]*padding-left/);
   });
 
-  it('总览使用真实摘要、图表与有界预览，不伪造统一整理进度', () => {
+  it('总览使用服务端全量统计，详情入口按领域跳转', () => {
     expect(source).toContain('<OrganizeOverviewDashboard');
-    expect(dashboardSource).toContain('class="organize-dashboard__sections"');
     expect(dashboardSource).toContain('<OrganizeDonutChart');
-    expect(dashboardSource).toContain('props.summary?.pendingShortcut.typeTotals');
-    expect(dashboardSource).toContain('props.summary?.issues.bookmarkHealth.coverage');
-    expect(dashboardSource).toContain('props.summary?.issues.duplicateBookmark.affectedResourceCount');
-    expect(dashboardSource).toContain('pendingPreview.value?.items?.slice(0, 5)');
-    expect(dashboardSource).toContain('untaggedPreview.value?.items?.slice(0, 3)');
-    expect(dashboardSource).toContain('knowledgeStructure.healthScore');
-    expect(dashboardSource).not.toMatch(/longUnused|completionRate/);
-    expect(dashboardSource).not.toContain("t('organize.refresh')");
+    expect(dashboardSource).toContain('props.summary.pendingShortcut.typeTotals');
+    expect(dashboardSource).toContain('props.summary.issues.untagged.typeTotals');
+    expect(dashboardSource).toContain('props.summary.issues.bookmarkHealth.coverage');
+    expect(dashboardSource).toContain("emit('select', metric.key)");
+    expect(dashboardSource).not.toMatch(/longUnused|completionRate|pendingPreview|untaggedPreview/);
   });
 
-  it('总览按治理主题聚合信息，并复用工作台待整理列表与双操作语义', () => {
-    expect(dashboardSource).toContain('class="organize-dashboard-pending__body"');
-    expect(dashboardSource).toContain('organize-dashboard-pending__composition');
-    expect(dashboardSource).toContain('class="organize-dashboard-governance__body"');
-    expect(dashboardSource).toContain('class="organize-dashboard-governance__insights"');
-    expect(dashboardSource).toContain('<TodayActionSection');
-    expect(dashboardSource).toContain('@refresh="emit(\'refresh\')"');
+  it('总览刷新使用同一摘要入口，待整理详情保留独立语义', () => {
+    expect(dashboardSource).toContain("emit('refresh')");
+    expect(dashboardSource).toContain("emit('select', 'pending')");
+    expect(dashboardSource).toContain("t('organize.overview.governanceOverlapHint')");
     expect(source).toContain('@refresh="refreshSummary"');
   });
 

@@ -18,7 +18,13 @@ vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
 
 let cleanup: (() => void) | undefined;
 
-function mountPanel(mobile: boolean, todoState: 'pending' | 'completed' | 'unavailable' = 'pending', unreadTotal = 1) {
+function mountPanel(
+  mobile: boolean,
+  todoState: 'pending' | 'completed' | 'unavailable' = 'pending',
+  unreadTotal = 1,
+  desktopPage = false,
+  wideDesktopPage = false,
+) {
   const first: NotificationItem = {
     id: 'todo-1',
     type: 'todo_reminder',
@@ -60,6 +66,8 @@ function mountPanel(mobile: boolean, todoState: 'pending' | 'completed' | 'unava
         loading: false,
         completingTodoId: '',
         mobile,
+        desktopPage,
+        wideDesktopPage,
         tabUnread: (value: string) => (value === 'all' || value === 'todo_reminder' ? unreadTotal : 0),
         renderTitle: (item: NotificationItem) => item.title,
         renderContent: (item: NotificationItem) => item.content || '',
@@ -111,11 +119,48 @@ describe('NotificationCenterPanel', () => {
     expect(onMore).not.toHaveBeenCalled();
   });
 
-  it('分组外框只用于移动端列表表面，不套在桌面通知卡片外', () => {
+  it('独立桌面页使用宽屏分组表面，保留已读/未读和删除语义', async () => {
+    const { host, onDelete, first } = mountPanel(false, 'pending', 1, true, true);
+    await nextTick();
+
+    expect(host.querySelector('.nt-panel')?.classList.contains('is-desktop-page')).toBe(true);
+    expect(host.querySelector('.nt-panel')?.classList.contains('is-wide-desktop-page')).toBe(true);
+    expect(host.querySelector('.nt-panel')?.classList.contains('is-mobile')).toBe(false);
+    expect(host.querySelectorAll('.nt-group-surface .nt-item')).toHaveLength(2);
+    expect(host.querySelector('.nt-item.unread .nt-dot')).not.toBeNull();
+    expect(host.querySelector('.nt-item.unread .nt-type-icon')).not.toBeNull();
+    expect(host.querySelector('.nt-tabs')?.getAttribute('role')).toBe('tablist');
+    expect(host.querySelector('.nt-tab.active')?.getAttribute('aria-selected')).toBe('true');
+    (host.querySelector('.nt-item-action') as HTMLButtonElement).click();
+    expect(onDelete).toHaveBeenCalledWith(first);
+  });
+
+  it('完整桌面使用单层日期列表，未读行仍有实色描边、圆点和明确底色', () => {
+    expect(source).toMatch(
+      /\.is-wide-desktop-page \.nt-group-surface\s*\{[\s\S]*?border:\s*0;[\s\S]*?border-top:\s*1px solid var\(--surface-divider-color\)/,
+    );
+    expect(source).toMatch(
+      /\.is-wide-desktop-page \.nt-item\.unread\s*\{[\s\S]*?border-left-color:\s*var\(--primary-color\);[\s\S]*?background:\s*var\(--mobile-selected-bg\)/,
+    );
+    expect(source).toMatch(/\.is-wide-desktop-page \.nt-type-icon\s*\{[\s\S]*?display:\s*inline-flex;/);
+    expect(source).toContain('notificationIcon(item)');
+    expect(source).toContain("icon.ai.summary");
+  });
+
+  it('分组外框只用于移动页和独立桌面页，铃铛 popover 仍保持紧凑', () => {
     expect(source).not.toMatch(/\n  \.nt-group-surface\s*\{/);
     expect(source).toMatch(
       /\.is-mobile \.nt-group-surface\s*\{[\s\S]*?overflow:\s*hidden;[\s\S]*?border:\s*1px solid var\(--surface-border-color\);[\s\S]*?background:\s*var\(--card-background\);/,
     );
+    expect(source).toMatch(
+      /\.is-desktop-page \.nt-group-surface\s*\{[\s\S]*?overflow:\s*hidden;[\s\S]*?border:\s*1px solid var\(--surface-border-color\);/,
+    );
+  });
+
+  it('加载、空数据和分组内容都复用同一面板状态机', () => {
+    expect(source).toContain('v-if="loading && !items.length"');
+    expect(source).toContain('v-else-if="!items.length"');
+    expect(source).toContain('v-for="group in groups"');
   });
 
   it('卡片操作按钮贴近标题首行，避免落到摘要内容区域', () => {

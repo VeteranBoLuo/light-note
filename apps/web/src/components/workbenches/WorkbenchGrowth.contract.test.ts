@@ -5,9 +5,10 @@ import { describe, expect, it } from 'vitest';
 const source = readFileSync(resolve(process.cwd(), 'src/components/workbenches/WorkbenchGrowth.vue'), 'utf8');
 
 describe('工作台成长卡交互契约', () => {
-  it('下一步建议深链到成长任务分区，不复用查看成长的总览入口', () => {
-    expect(source).toContain('class="growth-next" @click="openGrowthTasks"');
-    expect(source).toContain("router.push({ path: '/growth', query: { section: 'tasks' }, hash: '#growth-weekly' })");
+  it('下一步建议按服务端动作解析目的地，保留独立的成长总览入口', () => {
+    expect(source).toContain('@click="executeNextAction"');
+    expect(source).toContain('growthNextActionCommand(nextAction.value)');
+    expect(source).toContain('resolveGrowthActionRoute(action, bookmark.isMobile)');
     expect(source).toContain('class="growth-link"');
     expect(source).toContain('@click="goGrowth"');
   });
@@ -37,5 +38,24 @@ describe('工作台成长卡交互契约', () => {
   it('一键领取成功后根据服务端 receipts 区分任务和成就来源', () => {
     expect(source).toContain('const pendingBreakdown = snapshotClaimableBreakdown()');
     expect(source).toContain('claimSuccessMessage(res.data.receipts, pendingBreakdown)');
+  });
+
+  it('桌面展开态复用统一额度状态展示今日额度、永久余额和积分，不为移动紧凑卡额外请求', () => {
+    expect(source).toContain('useAiQuotaStatus({ autoLoad: false })');
+    expect(source).toContain('if (props.expanded) void loadAiQuota()');
+    expect(source).toContain("t('growth.assetTodayRemaining')");
+    expect(source).toContain("t('growth.assetPermanentBalance')");
+    expect(source).toContain("t('growth.assetPointsLabel')");
+    expect(source).toContain('formatAiQuotaTokens(dailyQuotaRemaining.value, locale.value)');
+    expect(source).toContain('aiQuotaUnavailable.value || dailyQuotaRemaining.value === null');
+  });
+
+  it('额度加载、不可用、不限和结算中均有独立状态，且日额度进度不依赖颜色单独表达', () => {
+    expect(source).toContain("t('growth.assetLoading')");
+    expect(source).toContain("t('growth.assetUnavailableHint')");
+    expect(source).toContain("t('growth.assetUnlimited')");
+    expect(source).toContain("t('growth.assetSettling')");
+    expect(source).toContain('role="progressbar"');
+    expect(source).toContain(':aria-valuenow="aiQuotaRemainingPercent"');
   });
 });

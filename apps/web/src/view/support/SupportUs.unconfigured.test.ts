@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
     linked: false,
     orderCount: 0,
     totalAmount: '0.00',
-    publicPreference: { participateInRanking: true, showIdentity: false, adminHidden: false },
+    publicPreference: { participateInRanking: true, showIdentity: true, adminHidden: false },
     recentOrders: [],
   })),
   getAfdianLeaderboard: vi.fn(async () => ({ scope: 'all_time', items: [], mine: null, totalParticipants: 0 })),

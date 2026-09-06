@@ -34,7 +34,6 @@ describe('请求参数异常检测', () => {
     ['/search/global', 'relevance'],
     ['/api/search/global', 'updated'],
     ['/search/global', 'name'],
-    ['/featureRequest/listPublic', 'popular'],
     ['/bookmark/queryTagSpaces', 'default'],
     ['/api/bookmark/queryTagSpaces', 'recent'],
     ['/bookmark/queryTagSpaces', 'resourceDesc'],
@@ -43,6 +42,37 @@ describe('请求参数异常检测', () => {
     ['/api/bookmark/queryTagSpaceResources', 'added'],
   ])('允许列表接口的合法排序枚举：%s %s', (path, sort) => {
     expect(detectNumericAnomalies(path, { sort, status: 'pending', keyword: '' })).toEqual([]);
+  });
+
+  it.each(['updated', 'newest', 'popular'])('允许共建广场真实载荷中的合法嵌套排序枚举：%s', (sort) => {
+    for (const path of ['/featureRequest/listPublic', '/api/featureRequest/listPublic/']) {
+      expect(detectNumericAnomalies(path, { filters: { sort, keyword: '' } })).toEqual([]);
+    }
+  });
+
+  it('共建广场只豁免真实字段路径中的合法排序枚举', () => {
+    expect(
+      detectNumericAnomalies('/featureRequest/listPublic', { filters: { sort: 'DROP TABLE' } }),
+    ).toEqual([
+      expect.objectContaining({
+        ruleCode: 'NUMERIC_PARAM_ANOMALY',
+        matchedField: 'body.filters.sort',
+      }),
+    ]);
+    expect(detectNumericAnomalies('/featureRequest/listPublic', { sort: 'updated' })).toEqual([
+      expect.objectContaining({
+        ruleCode: 'NUMERIC_PARAM_ANOMALY',
+        matchedField: 'body.sort',
+      }),
+    ]);
+    expect(
+      detectNumericAnomalies('/featureRequest/listPublic', { filters: { sort: 'updated' } }, 'GET'),
+    ).toEqual([
+      expect.objectContaining({
+        ruleCode: 'NUMERIC_PARAM_ANOMALY',
+        matchedField: 'body.filters.sort',
+      }),
+    ]);
   });
 
   it('其他接口的数值排序字段仍会检测非数值内容', () => {

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createApp, defineComponent, h, nextTick, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
+import { createPinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import zhCN from '@/i18n/locales/zh-CN';
 
@@ -84,6 +85,7 @@ describe('NoteMoveModal', () => {
         },
       }),
     );
+    app.use(createPinia());
     app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
     app.directive('auto-scrollbar', {});
     app.mount(host);

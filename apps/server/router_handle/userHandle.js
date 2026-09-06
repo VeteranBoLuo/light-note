@@ -64,7 +64,10 @@ import {
 } from '../util/adminListCursor.js';
 import { seedNewUserCloudFile, seedNewUserWorkspaceData } from '../util/services/newUserSeedService.js';
 import { createBookmarkExactUrlHash } from '../util/services/bookmarkExactUrlService.js';
-import { ensureCommunityChatIdentity } from '../util/services/communityChatIdentityService.js';
+import {
+  ensureCommunityChatIdentity,
+  getCommunityChatIdentityByUserId,
+} from '../util/services/communityChatIdentityService.js';
 import {
   processAccountDeletionRequest,
   requestAccountDeletion,
@@ -88,6 +91,7 @@ import {
   markFeatureAnnouncementSeen as persistFeatureAnnouncementSeen,
   preserveFeatureAnnouncementReads,
 } from '../util/services/featureAnnouncementService.js';
+import { preserveDailyBriefPreference } from '../util/dailyBriefFeature.js';
 let redisClient;
 if (process.platform === 'linux') {
   redisClient = (await import('../util/redisClient.js')).default;
@@ -901,8 +905,14 @@ export const getUserAdminDetail = async (req, res) => {
         return [];
       }
     };
+    const communityIdentityPromise = getCommunityChatIdentityByUserId({ userId: targetUserId }).catch((error) => {
+      unavailableSections.push('communityIdentity');
+      console.warn('[admin-user-detail] section=communityIdentity code=%s', stableAgentErrorCode(error));
+      return null;
+    });
 
     const [
+      communityIdentity,
       resourceRows,
       todoRows,
       opinionRows,
@@ -914,6 +924,7 @@ export const getUserAdminDetail = async (req, res) => {
       contextRows,
       deletionRows,
     ] = await Promise.all([
+      communityIdentityPromise,
       readSection(
         'resources',
         `SELECT
@@ -1047,6 +1058,7 @@ export const getUserAdminDetail = async (req, res) => {
       resultData({
         profile: {
           ...profile,
+          community_id: communityIdentity?.communityId || null,
           status: Number(profile.del_flag) === 1 ? 'banned' : 'active',
           ip: maskAdminIp(profile.ip),
         },
@@ -1141,6 +1153,7 @@ export const saveUserInfo = async (req, res) => {
           return res.send(resultData(null, 404, L(req, '用户不存在', 'User not found')));
         }
         finalBody.preferences = preserveFeatureAnnouncementReads(finalBody.preferences, persistedUser.preferences);
+        finalBody.preferences = preserveDailyBriefPreference(finalBody.preferences, persistedUser.preferences);
         [result] = await connection.query('update user set ? where id=?', [finalBody, id]);
         await connection.commit();
       } catch (error) {

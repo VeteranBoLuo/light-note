@@ -6,7 +6,10 @@
       `is-${layout.mode}`,
       `has-sidebar-${effectiveSidebarPresentation}`,
       `has-ai-${effectiveAiPresentation}`,
-      { 'is-sidebar-open': sidebarOpen, 'is-ai-open': aiOpen },
+      {
+        'is-sidebar-open': sidebarOpen,
+        'is-ai-open': aiOpen,
+      },
     ]"
     :style="shellStyle"
     :data-layout-mode="layout.mode"
@@ -130,6 +133,8 @@
       aiOverlayOpen?: boolean;
       sidebarWidth?: number;
       aiWidth?: number;
+      mainMinWidth?: number;
+      forceDockedPanels?: boolean;
     }>(),
     {
       mobile: false,
@@ -139,6 +144,8 @@
       aiOpen: true,
       sidebarWidth: NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH,
       aiWidth: 328,
+      mainMinWidth: 680,
+      forceDockedPanels: false,
     },
   );
 
@@ -160,7 +167,15 @@
   let resizeStartX = 0;
   let resizeStartWidth = 0;
 
-  const layout = computed(() => resolveNoteWorkspaceLayout(containerWidth.value, props.mobile));
+  const layout = computed(() => {
+    const resolved = resolveNoteWorkspaceLayout(containerWidth.value, props.mobile);
+    if (!props.forceDockedPanels || props.mobile) return resolved;
+    return {
+      mode: 'wide' as const,
+      sidebarPresentation: props.hasSidebar ? ('dock' as const) : ('hidden' as const),
+      aiPresentation: props.hasAi ? ('dock' as const) : ('hidden' as const),
+    };
+  });
   const effectiveSidebarPresentation = computed(() => (props.hasSidebar ? layout.value.sidebarPresentation : 'hidden'));
   const effectiveAiPresentation = computed(() => (props.hasAi ? layout.value.aiPresentation : 'hidden'));
   const sidebarOverlayVisible = computed(
@@ -186,6 +201,7 @@
   const shellStyle = computed(() => ({
     '--note-workspace-sidebar-width': `${Math.min(360, Math.max(220, props.sidebarWidth))}px`,
     '--note-workspace-ai-width': `${Math.max(300, props.aiWidth)}px`,
+    '--note-workspace-main-min-width': `${Math.max(0, props.mainMinWidth)}px`,
   }));
 
   function closeOverlays() {
@@ -287,11 +303,11 @@
   }
 
   .note-workspace-shell.has-sidebar-dock {
-    grid-template-columns: 0 minmax(680px, 1fr);
+    grid-template-columns: 0 minmax(var(--note-workspace-main-min-width), 1fr);
   }
 
   .note-workspace-shell.has-sidebar-dock.is-sidebar-open {
-    grid-template-columns: var(--note-workspace-sidebar-width) minmax(680px, 1fr);
+    grid-template-columns: var(--note-workspace-sidebar-width) minmax(var(--note-workspace-main-min-width), 1fr);
   }
 
   .note-workspace-shell.has-sidebar-rail {
@@ -307,19 +323,22 @@
   }
 
   .note-workspace-shell.has-sidebar-dock.has-ai-dock {
-    grid-template-columns: 0 minmax(680px, 1fr) 0;
+    grid-template-columns: 0 minmax(var(--note-workspace-main-min-width), 1fr) 0;
   }
 
   .note-workspace-shell.has-sidebar-dock.is-sidebar-open.has-ai-dock {
-    grid-template-columns: var(--note-workspace-sidebar-width) minmax(680px, 1fr) 0;
+    grid-template-columns: var(--note-workspace-sidebar-width) minmax(var(--note-workspace-main-min-width), 1fr) 0;
   }
 
   .note-workspace-shell.has-sidebar-dock.has-ai-dock.is-ai-open {
-    grid-template-columns: 0 minmax(680px, 1fr) var(--note-workspace-ai-width);
+    grid-template-columns: 0 minmax(var(--note-workspace-main-min-width), 1fr) var(--note-workspace-ai-width);
   }
 
   .note-workspace-shell.has-sidebar-dock.is-sidebar-open.has-ai-dock.is-ai-open {
-    grid-template-columns: var(--note-workspace-sidebar-width) minmax(680px, 1fr) var(--note-workspace-ai-width);
+    grid-template-columns:
+      var(--note-workspace-sidebar-width)
+      minmax(var(--note-workspace-main-min-width), 1fr)
+      var(--note-workspace-ai-width);
   }
 
   .note-workspace-shell__sidebar,

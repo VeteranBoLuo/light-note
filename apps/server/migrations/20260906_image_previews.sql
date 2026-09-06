@@ -1,0 +1,22 @@
+-- 图片派生扩展：原件与派生对象分离，支持重复执行。
+SET @image_preview_ddl = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'file_preview_artifacts' AND COLUMN_NAME = 'source_object_key') = 0, 'ALTER TABLE file_preview_artifacts ADD COLUMN source_object_key VARCHAR(1024) NULL', 'SELECT 1');
+PREPARE image_preview_stmt FROM @image_preview_ddl;
+EXECUTE image_preview_stmt;
+DEALLOCATE PREPARE image_preview_stmt;
+SET @image_preview_ddl = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'file_preview_artifacts' AND COLUMN_NAME = 'output_mode') = 0, 'ALTER TABLE file_preview_artifacts ADD COLUMN output_mode VARCHAR(16) NOT NULL DEFAULT ''derived''', 'SELECT 1');
+PREPARE image_preview_stmt FROM @image_preview_ddl;
+EXECUTE image_preview_stmt;
+DEALLOCATE PREPARE image_preview_stmt;
+SET @image_preview_ddl = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'file_preview_artifacts' AND COLUMN_NAME = 'image_width') = 0, 'ALTER TABLE file_preview_artifacts ADD COLUMN image_width INT UNSIGNED NOT NULL DEFAULT 0', 'SELECT 1');
+PREPARE image_preview_stmt FROM @image_preview_ddl;
+EXECUTE image_preview_stmt;
+DEALLOCATE PREPARE image_preview_stmt;
+SET @image_preview_ddl = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'file_preview_artifacts' AND COLUMN_NAME = 'image_height') = 0, 'ALTER TABLE file_preview_artifacts ADD COLUMN image_height INT UNSIGNED NOT NULL DEFAULT 0', 'SELECT 1');
+PREPARE image_preview_stmt FROM @image_preview_ddl;
+EXECUTE image_preview_stmt;
+DEALLOCATE PREPARE image_preview_stmt;
+SET @image_preview_ddl = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'file_preview_artifacts' AND COLUMN_NAME = 'image_animated') = 0, 'ALTER TABLE file_preview_artifacts ADD COLUMN image_animated TINYINT UNSIGNED NOT NULL DEFAULT 0', 'SELECT 1');
+PREPARE image_preview_stmt FROM @image_preview_ddl;
+EXECUTE image_preview_stmt;
+DEALLOCATE PREPARE image_preview_stmt;
+ALTER TABLE file_preview_artifacts MODIFY COLUMN strategy ENUM('archive_manifest','converted_pdf','image_thumbnail','image_display') NOT NULL;

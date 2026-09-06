@@ -100,7 +100,7 @@ describe('LotteryDraw 开奖定位', () => {
     expect(mocks.draw).toHaveBeenCalledWith(1, false);
   });
 
-  it('C4 每日惊喜不展示付费保底，切到积分奖池后才显示', async () => {
+  it('每日惊喜也展示付费保底上下文，切到积分奖池后进入计数状态', async () => {
     const host = document.createElement('div');
     document.body.append(host);
     const app = createApp({ render: () => h(LotteryDraw) });
@@ -121,13 +121,15 @@ describe('LotteryDraw 开奖定位', () => {
     };
 
     await nextTick();
-    expect(host.querySelector('.lt-pity-panel')).toBeNull();
+    expect(host.querySelector('.lt-pity-panel')).not.toBeNull();
+    expect(host.querySelector('.lt-pity-panel.is-context')).not.toBeNull();
     expect(host.querySelector('.lt-pity-badge--free')).not.toBeNull();
 
     const paidTab = host.querySelectorAll<HTMLElement>('.lt-pool-tabs [role="tab"]')[1];
     paidTab?.click();
     await nextTick();
     expect(host.querySelector('.lt-pity-panel')).not.toBeNull();
+    expect(host.querySelector('.lt-pity-panel.is-context')).toBeNull();
     expect(host.querySelector('.lt-pity-badge--free')).toBeNull();
   });
 });

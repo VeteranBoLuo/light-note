@@ -1,5 +1,5 @@
 <template>
-  <div v-if="g" class="growth-card">
+  <div v-if="g" class="growth-card" :class="{ 'growth-card--compact': compact }">
     <div class="gc-main">
       <div class="gc-top">
         <div class="gc-badge" :style="{ background: TIER_GRADIENTS[tier] }">
@@ -110,8 +110,10 @@
           }}</b>
         </div>
         <div class="gc-perk">
-          <span class="gc-perk-label">{{ t('growth.streak') }}</span>
-          <b class="gc-perk-val">{{ t('growth.daysVal', { n: g.streak }) }}</b>
+          <span class="gc-perk-label">{{ compact ? t('growth.dailySurprise') : t('growth.streak') }}</span>
+          <b class="gc-perk-val">
+            {{ compact ? t('growth.timesVal', { n: currentRankFreeDraws }) : t('growth.daysVal', { n: g.streak }) }}
+          </b>
         </div>
       </div>
 
@@ -143,6 +145,7 @@
 
       <!-- 所有用户共用顶部签到日历，避免普通用户再多一张独立卡片。 -->
       <SigninCalendar
+        v-if="showCalendar"
         class="gc-calendar"
         wide
         :checkin-days="stats?.checkinDays || []"
@@ -154,7 +157,7 @@
       />
     </div>
 
-    <RankLadder v-if="bookmark.isDesktop" class="gc-ladder" />
+    <RankLadder v-if="bookmark.isDesktop" class="gc-ladder" :compact="compact" />
   </div>
 
   <BModal
@@ -189,13 +192,21 @@
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();
-  const props = withDefaults(defineProps<{ readOnly?: boolean }>(), { readOnly: false });
+  const props = withDefaults(defineProps<{ readOnly?: boolean; showCalendar?: boolean; compact?: boolean }>(), {
+    readOnly: false,
+    showCalendar: true,
+    compact: false,
+  });
   const readOnly = computed(() => props.readOnly);
+  const showCalendar = computed(() => props.showCalendar);
+  const compact = computed(() => props.compact);
   const {
     growth: g,
+    ranks,
     dashboard,
     preferences,
     load,
+    loadRanks,
     loadDashboard,
     loadPreferences,
     doCheckin,
@@ -279,7 +290,7 @@
 
   onMounted(async () => {
     document.addEventListener('scroll', closeEarnPopoverOnScroll, true);
-    await Promise.all([load(true), loadPreferences()]); // 强制拉最新并尊重成长偏好
+    await Promise.all([load(true), loadRanks(), loadPreferences()]); // 强制拉最新并尊重成长偏好
     // 进成长页即视为查看升级通知:提示 + 标记已读(清红点)
     if (g.value?.hasUnreadLevelUp) {
       if (preferences.value?.celebrationEnabled !== false) {
@@ -304,6 +315,9 @@
   const spaceLabel = computed(() => fmtMb(g.value?.spaceMb || 0));
   const bonusSpaceLabel = computed(() => fmtMb(g.value?.spaceBonusMb || 0)); // 已扩容部分,单独标注
   const tokenLabel = computed(() => (g.value?.aiTokenDaily || 0).toLocaleString('en-US'));
+  const currentRankFreeDraws = computed(
+    () => ranks.value.find((rank) => rank.level === (g.value?.level || 1))?.freeDraws || 0,
+  );
   // 今日经验进度百分比(0-100)
   const dailyPercent = computed(() => {
     const cap = g.value?.dailyCap || 0;
@@ -367,9 +381,73 @@
       margin-top: 0;
     }
     .gc-ladder :deep(.rl-list) {
-      flex: 1 1 auto;
+      flex: 0 1 auto;
       min-height: 0;
-      max-height: none;
+      max-height: 216px;
+    }
+    .growth-card--compact {
+      gap: 18px;
+    }
+    .growth-card--compact .gc-main {
+      gap: 7px;
+    }
+    .growth-card--compact .gc-daily {
+      display: none;
+    }
+    .growth-card--compact .gc-protect {
+      margin-top: 0;
+    }
+    .growth-card--compact .gc-top {
+      gap: 10px;
+    }
+    .growth-card--compact .gc-badge {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+    }
+    .growth-card--compact .gc-checkin {
+      height: 32px !important;
+      padding: 0 14px !important;
+    }
+    .growth-card--compact .gc-progress {
+      height: 6px;
+    }
+    .growth-card--compact .gc-tonext {
+      margin-top: -4px;
+      font-size: 10.5px;
+    }
+    .growth-card--compact .gc-perks {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 7px;
+    }
+    .growth-card--compact .gc-perk {
+      min-width: 0;
+      padding: 7px 9px;
+    }
+    .growth-card--compact .gc-perk-label {
+      font-size: 10.5px;
+    }
+    .growth-card--compact .gc-perk-val {
+      font-size: 12.5px;
+    }
+    .growth-card--compact .gc-perk-bonus {
+      overflow: hidden;
+      font-size: 9.5px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .growth-card--compact .gc-protect {
+      min-height: 30px;
+      box-sizing: border-box;
+      padding: 5px 9px;
+      font-size: 11px;
+    }
+    .growth-card--compact .gc-protect-hint {
+      overflow: hidden;
+      font-size: 10px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
   }
   .gc-top {

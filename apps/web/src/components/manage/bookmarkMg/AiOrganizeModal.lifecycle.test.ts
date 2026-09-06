@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, ref } from 'vue';
+import { createPinia } from 'pinia';
 import AiOrganizeModal from './AiOrganizeModal.vue';
 
 const requestMocks = vi.hoisted(() => ({ apiBasePost: vi.fn() }));
@@ -42,22 +43,22 @@ afterEach(() => {
   requestMocks.apiBasePost.mockReset();
 });
 
-function mountInitiallyVisible() {
+function mountInitiallyVisible(visible = ref(true), ids = ref(['note-1', 'note-2'])) {
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp({
     setup() {
-      const visible = ref(true);
       return () =>
         h(AiOrganizeModal, {
           visible: visible.value,
           'onUpdate:visible': (value: boolean) => (visible.value = value),
           initType: 'note',
-          selectedIds: ['note-1', 'note-2'],
+          selectedIds: ids.value,
         });
     },
   });
   app.config.globalProperties.$t = (key: string) => key;
+  app.use(createPinia());
   app.mount(host);
   cleanup = () => {
     app.unmount();
@@ -67,6 +68,42 @@ function mountInitiallyVisible() {
 }
 
 describe('AiOrganizeModal initialization', () => {
+  it('打开后固定材料，关闭再打开后的旧报价不能覆盖新操作层', async () => {
+    let resolveOld!: (value: unknown) => void;
+    requestMocks.apiBasePost.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveOld = resolve;
+      }),
+    );
+    requestMocks.apiBasePost.mockResolvedValueOnce({
+      status: 200,
+      data: {
+        candidateTotal: 0,
+        batchCap: 0,
+        batchIds: [],
+        canRun: false,
+        requestIds: ['new-note'],
+        requestedTotal: 1,
+      },
+    });
+    const visible = ref(true);
+    const ids = ref(['note-1', 'note-2']);
+    const host = mountInitiallyVisible(visible, ids);
+    await vi.waitFor(() => expect(requestMocks.apiBasePost).toHaveBeenCalledTimes(1));
+    ids.value = ['new-note'];
+    await nextTick();
+    expect(requestMocks.apiBasePost).toHaveBeenCalledTimes(1);
+    expect(requestMocks.apiBasePost.mock.calls[0][1].ids).toEqual(['note-1', 'note-2']);
+    visible.value = false;
+    await nextTick();
+    visible.value = true;
+    await vi.waitFor(() => expect(host.textContent).toContain('bookmarkMg.aiOrganizeSelectedNone'));
+    resolveOld({ status: 200, data: { candidateTotal: 2, batchCap: 2, batchIds: ['note-1', 'note-2'], canRun: true } });
+    await nextTick();
+    await nextTick();
+    expect(host.textContent).toContain('bookmarkMg.aiOrganizeSelectedNone');
+    expect(requestMocks.apiBasePost.mock.calls[1][1].ids).toEqual(['new-note']);
+  });
   it('loads the selected scope when deferred rendering mounts it already visible', async () => {
     requestMocks.apiBasePost.mockResolvedValue({
       status: 200,

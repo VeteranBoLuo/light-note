@@ -115,6 +115,8 @@ describe('后台用户管理共享任务流', () => {
     expect(detail).toContain("const returnTo = bookmark.isMobile ? '/userMg' : '/admin/userMg'");
     expect(detail).toContain("emit('preview', userInfo)");
     expect(detail).toContain('adminUserManagement.detail.latestBrowser');
+    expect(detail).toContain('adminUserManagement.detail.communityId');
+    expect(detail).toContain('detail.profile?.communityId');
     expect(desktop).toContain("key: 'browser'");
     expect(desktop).toContain('adminUserManagement.levelShort');
     expect(desktop).toContain('@preview="(record) => openPreview(record, \'readonly\')"');

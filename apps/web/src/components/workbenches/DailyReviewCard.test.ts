@@ -91,10 +91,10 @@ function mutationResponse(nextReview: DailyReviewSnapshot) {
   return { status: 200, data: { ok: true as const, review: nextReview } };
 }
 
-function mountCard(readOnly = false) {
+function mountCard(readOnly = false, compact = false, inline = compact) {
   const host = document.createElement('div');
   document.body.append(host);
-  const app = createApp({ render: () => h(DailyReviewCard, { readOnly }) });
+  const app = createApp({ render: () => h(DailyReviewCard, { readOnly, compact, inline }) });
   app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
   app.directive('click-log', {});
   app.mount(host);
@@ -173,9 +173,9 @@ describe('DailyReviewCard', () => {
     const rootHost = mountCard();
     await settle();
     expect(loadDailyReview).toHaveBeenCalledWith({ ensure: true });
-    rootHost.querySelector<HTMLButtonElement>('.daily-review__skip')?.click();
+    rootHost.querySelector<HTMLButtonElement>('.daily-review__open')?.click();
     await settle();
-    expect(actOnToday).toHaveBeenCalledWith('skip_today');
+    expect(actOnItem).toHaveBeenCalled();
     unmountCard();
 
     vi.clearAllMocks();
@@ -281,7 +281,7 @@ describe('DailyReviewCard', () => {
     expect(actOnItem.mock.invocationCallOrder[0]).toBeLessThan(routerPush.mock.invocationCallOrder[0]);
   });
 
-  it('文件使用正式深链，标签入口只对 active_tag 开放并同样可靠写入', async () => {
+  it('文件使用正式深链，回顾卡不再提供低价值的标签空间旁路入口', async () => {
     review.value = snapshot({
       items: [item({ resourceType: 'file', resourceId: 'file-1', title: '旧文件' })],
     });
@@ -296,10 +296,8 @@ describe('DailyReviewCard', () => {
       items: [item({ reasonCode: 'active_tag', reasonTag: { id: 'tag-1', name: '产品' } })],
     });
     const tagHost = mountCard();
-    tagHost.querySelector<HTMLButtonElement>('.daily-review__tag-space')?.click();
-    await settle();
-    expect(actOnItem).toHaveBeenCalledWith('daily-item-1', 'open_tag_space', { keepalive: true });
-    expect(routerPush).toHaveBeenCalledWith('/tag/tag-1');
+    expect(tagHost.textContent).toContain('你最近又在整理 #产品');
+    expect(tagHost.querySelector('.daily-review__tag-space')).toBeNull();
 
     unmountCard();
     review.value = snapshot({
@@ -515,27 +513,69 @@ describe('DailyReviewCard', () => {
     expect(host.querySelectorAll('.daily-review__notice.is-action-error')).toHaveLength(1);
   });
 
-  it('今天先收起显示可恢复的紧凑条，不改成资源偏好动作', async () => {
-    review.value = snapshot();
-    actOnToday.mockImplementation(async (action: 'skip_today' | 'resume_today') => {
-      const next = snapshot({
-        session: { id: 'session-1', status: action === 'skip_today' ? 'skipped' : 'active', itemCount: 1 },
-      });
+  it('紧凑工作台只显示回顾进度与入口，弹窗一次展示当日三条及各自状态', async () => {
+    review.value = snapshot({
+      session: { id: 'session-1', status: 'active', itemCount: 3 },
+      progress: { done: 2, total: 3, pending: 1 },
+      items: [
+        item({ id: 'daily-item-1', slot: 1, title: '已看笔记', action: 'opened' }),
+        item({ id: 'daily-item-2', slot: 2, title: '待看书签', resourceType: 'bookmark', url: 'https://example.com' }),
+        item({ id: 'daily-item-3', slot: 3, title: '稍后文件', resourceType: 'file', action: 'snoozed' }),
+      ],
+    });
+    const host = mountCard(false, true);
+
+    expect(host.textContent).toContain('2/3');
+    expect(host.textContent).toContain(zhCN.growth.dailyReviewStart);
+    expect(host.textContent).not.toContain('已看笔记');
+    host.querySelector<HTMLButtonElement>('.daily-review__start')?.click();
+    await settle();
+
+    expect(document.body.querySelectorAll('.daily-review-modal__content .daily-review__all-item')).toHaveLength(3);
+    expect(document.body.textContent).toContain('已看笔记');
+    expect(document.body.textContent).toContain('待看书签');
+    expect(document.body.textContent).toContain('稍后文件');
+    expect(document.body.textContent).toContain(zhCN.growth.dailyReviewReviewed);
+    expect(document.body.textContent).toContain(zhCN.growth.dailyReviewSnoozedState);
+    expect(document.body.querySelector('.daily-review-modal__content .daily-review__tag-space')).toBeNull();
+  });
+
+  it('旧收起状态仅保留单行入口，主动开始时恢复并打开弹窗', async () => {
+    review.value = snapshot({ session: { id: 'session-1', status: 'skipped', itemCount: 1 } });
+    actOnToday.mockImplementation(async () => {
+      const next = snapshot();
       review.value = next;
       return mutationResponse(next);
     });
-    const host = mountCard();
-    host.querySelector<HTMLButtonElement>('.daily-review__skip')?.click();
-    await settle();
-
-    expect(actOnToday).toHaveBeenCalledWith('skip_today');
-    expect(host.textContent).toContain(zhCN.growth.dailyReviewSkippedTitle);
-    expect(host.textContent).toContain(zhCN.growth.dailyReviewResumeToday);
-    expect(actOnItem).not.toHaveBeenCalled();
-    host.querySelector<HTMLButtonElement>('.daily-review__resume')?.click();
+    const host = mountCard(false, true);
+    expect(host.querySelector('.daily-review__resume')).toBeNull();
+    expect(host.querySelector('.daily-review__skip')).toBeNull();
+    host.querySelector<HTMLButtonElement>('.daily-review__start')?.click();
     await settle();
     expect(actOnToday).toHaveBeenLastCalledWith('resume_today');
-    expect(host.textContent).toContain('第一条笔记');
+    expect(document.body.querySelector('.daily-review--all')).not.toBeNull();
+  });
+
+  it('桌面保留完整摘要，移动端单行模式由调用方显式指定', () => {
+    review.value = snapshot();
+    const host = mountCard(false, true, false);
+    expect(host.querySelector('.daily-review--summary')).not.toBeNull();
+    expect(host.querySelector('.daily-review--line')).toBeNull();
+    expect(host.textContent).toContain(zhCN.growth.dailyReviewSubtitle);
+    expect(host.querySelector('.daily-review__summary-progress')).not.toBeNull();
+  });
+
+  it('首页空态隐藏，完成态只显示一行结果', async () => {
+    review.value = snapshot({ session: { id: 'session-1', status: 'empty', itemCount: 0 }, items: [] });
+    const host = mountCard(false, true);
+    expect(host.querySelector('.daily-review')).toBeNull();
+    review.value = snapshot({
+      session: { id: 'session-1', status: 'completed', itemCount: 1 },
+      items: [item({ action: 'opened' })],
+    });
+    await settle();
+    expect(host.textContent).toContain(zhCN.growth.dailyReviewDoneShort);
+    expect(host.querySelector('button')).toBeNull();
   });
 
   it('7 天后再看位于次级菜单，永久操作必须经过危险确认', async () => {

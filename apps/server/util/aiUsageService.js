@@ -1,21 +1,12 @@
+import { readGroupedUsage, mapGroupedUsage } from './aiUsageGroups.js';
+import { AI_USAGE_FILTER_MODULE_KEYS as AI_USAGE_MODULES } from '@lightnote/shared/ai-usage-modules';
 import pool from '../db/index.js';
 import { classifyAiProviderStage } from './aiExecution/providerPlan.js';
 import { AI_BILLING_ACTIONS, listPublicAiBillingCatalog, resolveAiBillingAction } from './aiBillingCatalog.js';
 
 const ALLOWED_DAYS = new Set([7, 30, 90]);
 const ALLOWED_PAGE_SIZES = new Set([10, 20, 50, 100]);
-export const AI_USAGE_MODULES = Object.freeze([
-  'all',
-  'note',
-  'bookmark',
-  'file',
-  'todo',
-  'search',
-  'help',
-  'tag',
-  'toolbox',
-  'other',
-]);
+export { AI_USAGE_FILTER_MODULE_KEYS as AI_USAGE_MODULES } from '@lightnote/shared/ai-usage-modules';
 const ALLOWED_MODULES = new Set(AI_USAGE_MODULES);
 const EXECUTION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const REPAIR_REASON_BY_CODE = Object.freeze({
@@ -39,7 +30,16 @@ export function normalizeAiUsageQuery(input = {}) {
   const moduleCandidate = String(input.module || 'all')
     .trim()
     .toLowerCase();
+  const organizeRunId = String(input.organizeRunId || '').trim();
+  if (organizeRunId && !EXECUTION_ID_PATTERN.test(organizeRunId)) {
+    const error = new Error('整理任务标识无效');
+    error.code = 'AI_USAGE_RUN_ID_INVALID';
+    error.status = 400;
+    throw error;
+  }
   return Object.freeze({
+    ...(organizeRunId ? { organizeRunId } : {}),
+    ...(input.groupOrganize === true && !organizeRunId ? { groupOrganize: true } : {}),
     days: ALLOWED_DAYS.has(daysCandidate) ? daysCandidate : 7,
     page: boundedInteger(input.page, 1, 1, 10_000),
     pageSize: ALLOWED_PAGE_SIZES.has(pageSizeCandidate) ? pageSizeCandidate : 20,
@@ -78,6 +78,7 @@ function buildModuleFilter(module, columnPrefix = '') {
   const actions = module === 'other' ? AI_BILLING_ACTIONS : AI_BILLING_ACTIONS.filter((item) => item.module === module);
   const skillIds = [...new Set(actions.map((item) => item.id))];
   const taskTypes = [...new Set(actions.flatMap((item) => item.taskTypes))];
+  if (!actions.length) return { sql: ' AND 1 = 0', params: [] };
   const requestedPrefix = String(columnPrefix || '');
   const prefix = /^[a-z_][a-z0-9_]{0,31}\.$/iu.test(requestedPrefix) ? requestedPrefix : '';
   const knownExpression = `(
@@ -223,19 +224,26 @@ export async function getUserAiUsage(userId, rawQuery = {}, database = pool) {
     const where = `actor_user_id = ?
       AND billing_policy = 'user'
       AND model_called = 1
-      AND created_at >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL ? DAY)${moduleFilter.sql}`;
-    const whereParams = [actorUserId, query.days, ...moduleFilter.params];
+      AND created_at >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL ? DAY)${moduleFilter.sql}${query.organizeRunId ? ' AND organize_run_id = ?' : ''}`;
+    const whereParams = [
+      actorUserId,
+      query.days,
+      ...moduleFilter.params,
+      ...(query.organizeRunId ? [query.organizeRunId] : []),
+    ];
     const [itemsResult, summaryResult, dailyResult, moduleResult] = await Promise.all([
-      database.query(
-        `SELECT id, skill_id, task_type, status, model_called, provider_call_count,
+      query.groupOrganize
+        ? readGroupedUsage(database, where, whereParams, query.pageSize, offset)
+        : database.query(
+            `SELECT id, skill_id, task_type, status, model_called, provider_call_count,
                 provider_tokens, charged_tokens, usage_complete, quota_settlement_status,
                 duration_ms, created_at
            FROM ai_executions
           WHERE ${where}
           ORDER BY created_at DESC, id DESC
           LIMIT ? OFFSET ?`,
-        [...whereParams, query.pageSize, offset],
-      ),
+            [...whereParams, query.pageSize, offset],
+          ),
       database.query(
         `SELECT COUNT(*) AS model_actions,
                 COALESCE(SUM(charged_tokens), 0) AS charged_tokens,
@@ -268,12 +276,13 @@ export async function getUserAiUsage(userId, rawQuery = {}, database = pool) {
         whereParams,
       ),
     ]);
-    const itemRows = Array.isArray(itemsResult?.[0]) ? itemsResult[0] : [];
+    const itemRows = query.groupOrganize ? itemsResult.rows : Array.isArray(itemsResult?.[0]) ? itemsResult[0] : [];
     const summaryRow = summaryResult?.[0]?.[0] || {};
     const dailyRows = Array.isArray(dailyResult?.[0]) ? dailyResult[0] : [];
     const moduleRows = Array.isArray(moduleResult?.[0]) ? moduleResult[0] : [];
     const total = safeNumber(summaryRow.model_actions);
-    const items = itemRows.map(mapUsageItem);
+    const items = itemRows.map((row) => (query.groupOrganize ? mapGroupedUsage(row, mapUsageItem) : mapUsageItem(row)));
+    const listTotal = query.groupOrganize ? itemsResult.total : total;
     const summary = {
       chargedTokens: safeNumber(summaryRow.charged_tokens),
       providerTokens: safeNumber(summaryRow.provider_tokens),
@@ -285,6 +294,7 @@ export async function getUserAiUsage(userId, rawQuery = {}, database = pool) {
 
     return {
       query,
+      ...(query.groupOrganize ? { groupingAvailable: itemsResult.available } : {}),
       summary,
       daily: dailyRows.map((row) => ({
         date: String(row.usage_date || ''),
@@ -297,8 +307,8 @@ export async function getUserAiUsage(userId, rawQuery = {}, database = pool) {
       pagination: {
         page: query.page,
         pageSize: query.pageSize,
-        total,
-        totalPages: Math.max(1, Math.ceil(total / query.pageSize)),
+        total: listTotal,
+        totalPages: Math.max(1, Math.ceil(listTotal / query.pageSize)),
       },
       catalog: listPublicAiBillingCatalog(),
     };

@@ -61,8 +61,16 @@
       </div>
 
       <div class="support-account-panel__privacy">
-        <div>
-          <h3>{{ t('support.rankingPreferenceTitle') }}</h3>
+        <div class="support-account-panel__privacy-copy">
+          <div class="support-account-panel__privacy-title">
+            <h3>{{ t('support.rankingPreferenceTitle') }}</h3>
+            <BChip
+              v-if="state.publicPreference.participateInRanking && state.publicPreference.showIdentity"
+              tone="success"
+            >
+              {{ t('support.rankingPublicBadge') }}
+            </BChip>
+          </div>
           <p>{{ rankingDescription }}</p>
           <p v-if="state.publicPreference.adminHidden" class="support-account-panel__admin-hidden" role="status">
             {{ t('support.rankingAdminHidden') }}
@@ -321,6 +329,13 @@
 
   .support-account-panel__privacy p {
     margin-top: 3px;
+  }
+
+  .support-account-panel__privacy-title {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
   .support-account-panel__privacy-control {

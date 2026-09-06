@@ -69,6 +69,19 @@ afterEach(() => {
 });
 
 describe('BSelect keyboard interaction', () => {
+  it('搜索多选保留可聚焦 combobox 触发器并支持键盘打开', async () => {
+    const { host } = mountSelect(true, { ariaLabel: '选择标签' }, 'multiple');
+    const trigger = host.querySelector<HTMLElement>('.select-trigger')!;
+    expect(trigger.getAttribute('role')).toBe('combobox');
+    expect(trigger.tabIndex).toBe(0);
+    expect(trigger.getAttribute('aria-label')).toBe('选择标签');
+    trigger.focus();
+    pressKey(trigger, 'ArrowDown');
+    await nextTick();
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(document.body.querySelector('.select-search-input')).not.toBeNull();
+  });
+
   it('支持为 Teleport 下拉层附加业务样式类', async () => {
     const { host } = mountSelect(false, {}, 'single', { dropdownClassName: 'time-select-dropdown' });
     host.querySelector<HTMLElement>('.select-trigger')?.click();

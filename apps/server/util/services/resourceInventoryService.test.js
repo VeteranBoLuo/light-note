@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { listUntaggedResources } from './resourceInventoryService.js';
+import { countUntaggedResources, listUntaggedResources } from './resourceInventoryService.js';
 
 describe('resourceInventoryService.listUntaggedResources', () => {
   it('统一按归属、未删除和有效标签关系筛选三类资源，且不读取笔记正文', async () => {
@@ -93,5 +93,49 @@ describe('resourceInventoryService.listUntaggedResources', () => {
       }),
     ).rejects.toMatchObject({ code: 'ORGANIZE_CURSOR_INVALID' });
     expect(db.query).toHaveBeenCalledTimes(1);
+  });
+
+  it('精确计数复用书签、笔记、文件联合口径并排除已忽略项', async () => {
+    const db = { query: vi.fn().mockResolvedValue([[{ total: 17 }]]) };
+
+    await expect(countUntaggedResources(db, { userId: 'user-1' })).resolves.toBe(17);
+    const [sql, params] = db.query.mock.calls[0];
+    expect(sql).toContain("SELECT 'bookmark' AS resource_type");
+    expect(sql).toContain("SELECT 'note' AS resource_type");
+    expect(sql).toContain("SELECT 'file' AS resource_type");
+    expect(sql).toContain('untagged_tag.del_flag = 0');
+    expect(sql).toContain("suppression.issue_type = 'untagged.ignore'");
+    expect(params.at(-1)).toBe('user-1');
+  });
+});
+
+describe('无标签总览统计', () => {
+  it('按完整资源聚合类型，不使用用于跨问题去重的截断键推算数量', async () => {
+    const { getUntaggedSummary } = await import('./resourceInventoryService.js');
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([
+          [
+            { resource_type: 'bookmark', id: '1' },
+            { resource_type: 'note', id: '2' },
+          ],
+        ])
+        .mockResolvedValueOnce([[{ total: 191, bookmarkCount: 3, noteCount: 33, fileCount: 155, revision: 'rev' }]]),
+    };
+    const result = await getUntaggedSummary(db, { userId: 'owner', maxKeys: 1 });
+    expect(result).toMatchObject({
+      findingCount: 191,
+      affectedResourceCount: 191,
+      typeTotals: { bookmark: 3, note: 33, file: 155 },
+      resourceKeys: ['bookmark:1'],
+      exact: false,
+      hasMore: true,
+    });
+    const [sql, params] = db.query.mock.calls[1];
+    expect(sql).toContain("SUM(inventory.resource_type = 'file')");
+    expect(sql).toContain("suppression.issue_type = 'untagged.ignore'");
+    expect(params).toContain('owner');
+    expect(sql).not.toContain('LIMIT');
   });
 });

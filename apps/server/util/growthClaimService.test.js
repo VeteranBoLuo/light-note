@@ -81,6 +81,21 @@ beforeEach(() => {
 });
 
 describe('growthClaimService', () => {
+  it('所有路线完成并领取后保留周报与任务入口，不让建议消失', async () => {
+    mocks.getGrowthDashboard.mockResolvedValueOnce(dashboard({ quests: [{ key: 'daily_note', done: true }] }));
+    mocks.getGrowthTasks.mockResolvedValueOnce(
+      tasks({ allTasks: [{ taskKey: 'first_file', completed: true, claimed: true }] }),
+    );
+    mocks.getWeeklyChallenges.mockResolvedValueOnce(
+      weekly({ challenges: [{ key: 'wk_note', metric: 'note', done: true, claimed: true }] }),
+    );
+    const result = await getGrowthClaimableSnapshot('user-1', { userRole: 'user' });
+    expect(result.nextAction).toMatchObject({ key: 'weekly_report', action: 'open_weekly_report' });
+    expect(result.nextActions).toMatchObject([
+      { key: 'weekly_report', action: 'open_weekly_report' },
+      { key: 'task_center', action: 'open_growth_tasks' },
+    ]);
+  });
   it('显式无效领取范围直接拒绝，不能误退化成领取全部', async () => {
     await expect(claimGrowthRewards('user-1', { scopes: ['weekly', 'unsafe'] })).resolves.toMatchObject({
       ok: false,
@@ -120,20 +135,26 @@ describe('growthClaimService', () => {
     const result = await getGrowthClaimableSnapshot('user-1', { userRole: 'user' });
 
     expect(result.nextAction).toMatchObject({ type: 'growth_task', key: 'first_file', action: 'upload_file' });
+    expect(result.nextActions).toMatchObject([
+      { type: 'growth_task', key: 'first_file', action: 'upload_file' },
+      { type: 'daily_quest', key: 'create', action: 'create_note' },
+    ]);
   });
 
   it('没有待整理资源时不推荐空收件箱，改为下一个当下可执行行动', async () => {
     mocks.getGrowthTasks.mockResolvedValueOnce(
       tasks({
-        allTasks: [
-          { taskKey: 'first_organize', rewardExp: 40, completed: false, claimed: false, claimable: false },
-        ],
+        allTasks: [{ taskKey: 'first_organize', rewardExp: 40, completed: false, claimed: false, claimable: false }],
       }),
     );
 
     const result = await getGrowthClaimableSnapshot('user-1', { userRole: 'user' });
 
     expect(result.nextAction).toMatchObject({ type: 'daily_quest', key: 'create', action: 'create_note' });
+    expect(result.nextActions).toMatchObject([
+      { type: 'daily_quest', key: 'create', action: 'create_note' },
+      { type: 'growth_review', key: 'weekly_report', action: 'open_weekly_report' },
+    ]);
   });
 
   it('有可整理资源时推荐首次整理，直接披露可领取经验而不再显示无信息量的 0/1', async () => {
@@ -142,9 +163,7 @@ describe('growthClaimService', () => {
     );
     mocks.getGrowthTasks.mockResolvedValueOnce(
       tasks({
-        allTasks: [
-          { taskKey: 'first_organize', rewardExp: 40, completed: false, claimed: false, claimable: false },
-        ],
+        allTasks: [{ taskKey: 'first_organize', rewardExp: 40, completed: false, claimed: false, claimable: false }],
       }),
     );
 

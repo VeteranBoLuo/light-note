@@ -80,6 +80,11 @@
               </BLoading>
             </section>
 
+            <OrganizeAiSuggestions
+              v-else-if="activeView === 'ai_suggestions' && bookmark.isDesktop"
+              @refresh-summary="refreshSummary"
+            />
+
             <section v-else-if="activeView === 'pending'" class="organize-issue-view organize-issue-view--pending">
               <header class="organize-view-heading organize-view-heading--compact">
                 <div>
@@ -93,7 +98,11 @@
               </div>
             </section>
 
-            <section v-else-if="activeView === 'untagged'" class="organize-issue-view">
+            <section
+              v-else-if="activeView === 'untagged'"
+              class="organize-issue-view"
+              :class="{ 'organize-issue-view--batch-active': untaggedBatchMode }"
+            >
               <header class="organize-view-heading organize-view-heading--compact">
                 <div>
                   <span class="organize-view-heading__eyebrow">{{ t('organize.governanceEyebrow') }}</span>
@@ -117,28 +126,16 @@
                   :options="resourceTypeOptions"
                   @change="applyUntaggedFilters"
                 />
-                <BButton @click="applyUntaggedFilters">{{ t('organize.search') }}</BButton>
-              </div>
-
-              <div v-if="selectedUntaggedItems.length" class="organize-selection-bar">
-                <BCheckbox
-                  :model-value="allVisibleUntaggedSelected"
-                  :indeterminate="someVisibleUntaggedSelected"
-                  @update:model-value="toggleAllVisibleUntagged"
-                >
-                  {{ t('organize.selectedCount', { count: selectedUntaggedItems.length }) }}
-                </BCheckbox>
-                <div class="organize-selection-bar__actions">
-                  <BButton size="small" type="primary" @click="openBatchTags(selectedUntaggedItems)">
-                    {{ t('organize.untagged.addTags') }}
-                  </BButton>
-                  <BButton size="small" :loading="ignoringUntagged" @click="ignoreSelectedUntagged">
-                    {{ t('organize.untagged.ignore') }}
-                  </BButton>
-                  <BButton size="small" type="danger" @click="confirmDeleteUntagged">
-                    {{ t('organize.moveToTrash') }}
-                  </BButton>
-                </div>
+                <BButton class="organize-filter-bar__submit" @click="applyUntaggedFilters">
+                  {{ t('organize.search') }}
+                </BButton>
+                <BBatchToggle
+                  class="organize-filter-bar__batch"
+                  :disabled="!untaggedBatchMode && (!untaggedItems.length || untaggedList.loading)"
+                  @click="toggleUntaggedBatchMode"
+                  :active="untaggedBatchMode"
+                  style="--batch-toggle-height: 32px"
+                />
               </div>
 
               <OrganizeIssueListState
@@ -154,9 +151,18 @@
                     v-for="item in untaggedItems"
                     :key="untaggedKey(item)"
                     class="organize-resource-row"
+                    :class="{
+                      'is-batch-mode': untaggedBatchMode,
+                      'is-selected': selectedUntaggedKeys.includes(untaggedKey(item)),
+                    }"
                     role="listitem"
+                    :tabindex="untaggedBatchMode ? 0 : undefined"
+                    @click="handleUntaggedRowSelection(item, $event)"
+                    @keydown.enter.self="handleUntaggedRowSelection(item, $event)"
+                    @keydown.space.self.prevent="handleUntaggedRowSelection(item, $event)"
                   >
                     <BCheckbox
+                      v-if="untaggedBatchMode"
                       :model-value="selectedUntaggedKeys.includes(untaggedKey(item))"
                       :aria-label="t('organize.selectResource', { title: item.title || t('inbox.untitled') })"
                       @update:model-value="toggleUntagged(item, $event)"
@@ -623,6 +629,58 @@
         </div>
       </template>
     </BModal>
+
+    <ResourceBatchActionBar
+      :open="activeView === 'untagged' && untaggedBatchMode"
+      :mobile="bookmark.isMobile"
+      :summary="t('organize.selectedCount', { count: selectedUntaggedItems.length })"
+      :aria-label="t('organize.untagged.batchActions')"
+      :clear-label="t('resourceOutcome.batch.clear')"
+      :primary-label="t('resourceCenter.manageResourceTags')"
+      :more-label="t('common.more')"
+      :primary-icon="icon.resource.tag"
+      :show-clear="selectedUntaggedItems.length > 0"
+      :show-more="bookmark.isMobile && selectedUntaggedItems.length > 0"
+      :primary-disabled="selectedUntaggedItems.length === 0"
+      @clear="selectedUntaggedKeys = []"
+      @more="mobileUntaggedActionsOpen = true"
+      @primary="openBatchTags(selectedUntaggedItems)"
+    >
+      <template #leading>
+        <BCheckbox
+          controlled
+          :checked="allVisibleUntaggedSelected"
+          :indeterminate="someVisibleUntaggedSelected"
+          :aria-label="t('organize.untagged.selectAllVisible')"
+          @change="toggleAllVisibleUntagged"
+        />
+      </template>
+      <template #actions>
+        <BButton
+          :disabled="selectedUntaggedItems.length === 0"
+          :loading="ignoringUntagged"
+          @click="ignoreSelectedUntagged"
+        >
+          {{ t('organize.untagged.ignore') }}
+        </BButton>
+        <BButton
+          class="batch-action-delete"
+          :disabled="selectedUntaggedItems.length === 0"
+          @click="confirmDeleteUntagged"
+        >
+          <SvgIcon :src="icon.table_delete" size="16" aria-hidden="true" />
+          {{ t('organize.moveToTrash') }}
+        </BButton>
+      </template>
+    </ResourceBatchActionBar>
+
+    <MobilePageActionsDrawer
+      v-if="bookmark.isMobile"
+      v-model:open="mobileUntaggedActionsOpen"
+      :title="t('organize.selectedCount', { count: selectedUntaggedItems.length })"
+      :actions="mobileUntaggedActions"
+      @action="handleMobileUntaggedAction"
+    />
   </div>
 </template>
 
@@ -631,6 +689,7 @@
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BBatchToggle from '@/components/base/BasicComponents/BBatchToggle.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -642,7 +701,10 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import ResourceCenterSectionNav from '@/components/searchCenter/ResourceCenterSectionNav.vue';
+  import ResourceBatchActionBar from '@/components/resourceActions/ResourceBatchActionBar.vue';
+  import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import OrganizeOverviewDashboard from '@/view/organize/OrganizeOverviewDashboard.vue';
+  import OrganizeAiSuggestions from '@/view/organize/OrganizeSuggestionWorkspace.vue';
   import OrganizeIssueListState from '@/view/organize/OrganizeIssueListState.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import Inbox from '@/view/inbox/Inbox.vue';
@@ -672,7 +734,7 @@
   import { toolboxToolPath } from '@/config/toolbox';
   import icon from '@/config/icon';
 
-  type OrganizeView = 'overview' | 'pending' | OrganizeIssueType;
+  type OrganizeView = 'overview' | 'pending' | 'ai_suggestions' | OrganizeIssueType;
 
   const { t, locale } = useI18n();
   const route = useRoute();
@@ -682,8 +744,10 @@
   const organize = organizeStore();
   const untaggedKeyword = ref('');
   const untaggedType = ref<'all' | OrganizeResourceType>('all');
+  const untaggedBatchMode = ref(false);
   const selectedUntaggedKeys = ref<string[]>([]);
   const ignoringUntagged = ref(false);
+  const mobileUntaggedActionsOpen = ref(false);
   const knowledgeIssueKind = ref<'all' | KnowledgeStructureIssueKind>('all');
   const healthSummary = ref<BookmarkHealthSummary | null>(null);
   const healthSummaryLoading = ref(false);
@@ -710,6 +774,7 @@
   const knowledgeStructureSummary = computed(() => organize.knowledgeStructureSummary);
   const activeView = computed<OrganizeView>(() => {
     const issue = String(route.query.issue || 'overview');
+    if (issue === 'ai_suggestions') return bookmark.isDesktop ? issue : 'overview';
     return ['pending', 'untagged', 'duplicate_bookmark', 'bookmark_health', 'knowledge_structure'].includes(issue)
       ? (issue as OrganizeView)
       : 'overview';
@@ -793,6 +858,16 @@
   const pendingCount = computed(() => displayCount(summary.value?.pendingShortcut.count));
   const issueOptions = computed<Array<{ key: OrganizeView; label: string; icon: string; count: string | null }>>(() => [
     { key: 'overview', label: t('organize.views.overview'), icon: icon.ai.organize, count: null },
+    ...(bookmark.isDesktop
+      ? [
+          {
+            key: 'ai_suggestions' as const,
+            label: t('organize.views.aiSuggestions'),
+            icon: icon.common.magicWand,
+            count: null,
+          },
+        ]
+      : []),
     { key: 'pending', label: t('organize.views.pending'), icon: icon.contextMenu.inbox, count: pendingCount.value },
     {
       key: 'untagged',
@@ -881,6 +956,26 @@
   const someVisibleUntaggedSelected = computed(
     () => selectedUntaggedItems.value.length > 0 && !allVisibleUntaggedSelected.value,
   );
+  const mobileUntaggedActions = computed<MobilePageActionItem[]>(() => [
+    {
+      key: 'clear',
+      label: t('resourceOutcome.batch.clear'),
+      icon: icon.common.close,
+    },
+    {
+      key: 'ignore',
+      label: t('organize.untagged.ignore'),
+      icon: icon.contextMenu.archive,
+      loading: ignoringUntagged.value,
+    },
+    {
+      key: 'delete',
+      label: t('organize.moveToTrash'),
+      icon: icon.table_delete,
+      danger: true,
+      dividerBefore: true,
+    },
+  ]);
   const duplicateDeleteIds = computed(
     () =>
       duplicatePreview.value?.members
@@ -897,13 +992,24 @@
   const selectedKeeperCanSubmit = computed(() => selectedKeeperCanResolve.value && !duplicateTagMergeBlocked.value);
 
   function selectView(view: OrganizeView) {
-    if (view === activeView.value) return;
+    const currentRouteView = String(route.query.issue || 'overview');
+    const targetRouteView = view === 'overview' ? 'overview' : view;
+    if (currentRouteView === targetRouteView) return;
     const query = { ...route.query };
     delete query._rt;
     delete query.resourceType;
     if (view === 'overview') delete query.issue;
     else query.issue = view;
     void router.replace({ path: '/organize', query });
+  }
+
+  async function normalizeUnsupportedRouteView() {
+    if (bookmark.isDesktop || route.query.issue !== 'ai_suggestions') return false;
+    const query = { ...route.query };
+    delete query.issue;
+    delete query.resourceType;
+    await router.replace({ path: '/organize', query });
+    return true;
   }
 
   async function scrollMobileNavigationToActive() {
@@ -1074,8 +1180,34 @@
       : selectedUntaggedKeys.value.filter((value) => value !== key);
   }
 
+  function handleUntaggedRowSelection(item: UntaggedResourceItem, event: MouseEvent | KeyboardEvent) {
+    if (!untaggedBatchMode.value) return;
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    if (target?.closest('button, a, input, textarea, [role="button"], [role="checkbox"]')) return;
+    if (event instanceof MouseEvent) {
+      const selection = window.getSelection?.();
+      if (selection && !selection.isCollapsed) return;
+    }
+    const key = untaggedKey(item);
+    toggleUntagged(item, !selectedUntaggedKeys.value.includes(key));
+  }
+
   function toggleAllVisibleUntagged(selected: boolean) {
     selectedUntaggedKeys.value = selected ? untaggedItems.value.map(untaggedKey) : [];
+  }
+
+  function toggleUntaggedBatchMode() {
+    untaggedBatchMode.value = !untaggedBatchMode.value;
+    if (!untaggedBatchMode.value) {
+      selectedUntaggedKeys.value = [];
+      mobileUntaggedActionsOpen.value = false;
+    }
+  }
+
+  function handleMobileUntaggedAction(action: MobilePageActionItem) {
+    if (action.key === 'clear') selectedUntaggedKeys.value = [];
+    else if (action.key === 'ignore') void ignoreSelectedUntagged();
+    else if (action.key === 'delete') confirmDeleteUntagged();
   }
 
   function openBatchTags(items: UntaggedResourceItem[]) {
@@ -1350,6 +1482,7 @@
     healthSummary.value = null;
     healthSummaryError.value = false;
     organize.resetForOwner(ownerKey);
+    untaggedBatchMode.value = false;
     selectedUntaggedKeys.value = [];
     knowledgeIssueKind.value = 'all';
     await Promise.all([refreshSummary(), refreshKnowledgeStructure(), loadActiveView(true)]);
@@ -1364,11 +1497,17 @@
   });
 
   watch(
-    () => [route.query.issue, route.query._rt],
+    () => [route.query.issue, route.query._rt, bookmark.isDesktop],
     async () => {
       if (!mounted) return;
+      if (await normalizeUnsupportedRouteView()) return;
       void scrollMobileNavigationToActive();
       if (activeView.value !== 'bookmark_health') stopHealthPolling();
+      if (activeView.value !== 'untagged') {
+        untaggedBatchMode.value = false;
+        selectedUntaggedKeys.value = [];
+        mobileUntaggedActionsOpen.value = false;
+      }
       await loadActiveView(true);
       if (route.query._rt) await Promise.all([refreshSummary(), refreshKnowledgeStructure({ silent: true })]);
     },
@@ -1378,6 +1517,7 @@
     document.addEventListener('visibilitychange', handleHealthVisibilityChange);
     organize.resetForOwner(organizeOwnerKey.value);
     mounted = true;
+    if (await normalizeUnsupportedRouteView()) return;
     await Promise.all([refreshSummary(), refreshKnowledgeStructure(), loadActiveView(true)]);
     await scrollMobileNavigationToActive();
   });
@@ -1526,6 +1666,28 @@
     overflow: hidden;
   }
 
+  @media (min-width: 1200px) {
+    .organize-shell {
+      background: var(--background-color);
+    }
+
+    .organize-workspace {
+      grid-template-columns: 220px minmax(0, 1fr);
+      gap: 16px;
+    }
+
+    .organize-sidebar {
+      padding: 12px 10px;
+      border: 1px solid var(--surface-divider-color);
+      border-radius: 14px;
+      background: var(--workspace-panel-bg-color);
+    }
+
+    .organize-sidebar__heading {
+      padding-inline: 7px;
+    }
+  }
+
   .organize-scroll-view,
   .organize-issue-view {
     height: 100%;
@@ -1593,7 +1755,7 @@
   .organize-filter-bar {
     flex: 0 0 auto;
     display: grid;
-    grid-template-columns: minmax(220px, 1fr) 150px auto;
+    grid-template-columns: minmax(220px, 1fr) 150px auto auto;
     gap: 8px;
     margin-bottom: 10px;
   }
@@ -1603,22 +1765,6 @@
     min-width: 0;
   }
 
-  .organize-selection-bar {
-    flex: 0 0 auto;
-    min-height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 10px;
-    padding: 7px 10px;
-    box-sizing: border-box;
-    border: 1px solid var(--primary-color);
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--primary-color) 6%, var(--card-background));
-  }
-
-  .organize-selection-bar__actions,
   .organize-resource-row__actions,
   .organize-duplicate-card__actions,
   .organize-health-row__actions {
@@ -1636,6 +1782,10 @@
 
   .organize-list-state__content {
     min-height: 100%;
+  }
+
+  .organize-issue-view--batch-active {
+    padding-bottom: 96px;
   }
 
   .organize-resource-list,
@@ -1659,7 +1809,27 @@
   }
 
   .organize-resource-row {
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+  }
+
+  .organize-resource-row.is-batch-mode {
     grid-template-columns: auto 40px minmax(0, 1fr) auto;
+    cursor: pointer;
+  }
+
+  .organize-resource-row.is-batch-mode.is-selected {
+    border-color: var(--primary-color);
+  }
+
+  .organize-resource-row.is-batch-mode:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .organize-resource-row.is-batch-mode:hover {
+      border-color: var(--primary-color);
+    }
   }
 
   .organize-resource-row__icon,
@@ -1824,7 +1994,7 @@
     font-size: 14px;
   }
 
-  .organize-health-scan__heading span,
+  .organize-health-scan__heading > div > span,
   .organize-health-scan__coverage,
   .organize-health-scan__progress-copy span,
   .organize-health-scan__results span {
@@ -2394,6 +2564,10 @@
       justify-content: flex-start;
     }
 
+    .organize-resource-row.is-batch-mode .organize-resource-row__actions {
+      grid-column: 3 / -1;
+    }
+
     .organize-knowledge-overview {
       grid-template-columns: 104px minmax(0, 1fr);
     }
@@ -2594,19 +2768,20 @@
     }
 
     .organize-filter-bar > .b_btn {
-      grid-column: 1 / -1;
       width: 100%;
-      min-height: 40px;
+      min-height: 44px;
     }
 
-    .organize-selection-bar {
-      align-items: flex-start;
-      flex-direction: column;
+    .organize-filter-bar__submit {
+      grid-column: 1;
     }
 
-    .organize-selection-bar__actions {
-      width: 100%;
-      justify-content: flex-start;
+    .organize-filter-bar__batch {
+      grid-column: 2;
+    }
+
+    .organize-issue-view--batch-active {
+      padding-bottom: calc(132px + env(safe-area-inset-bottom));
     }
 
     .organize-health-scan {
@@ -2631,6 +2806,10 @@
     }
 
     .organize-resource-row {
+      grid-template-columns: 36px minmax(0, 1fr);
+    }
+
+    .organize-resource-row.is-batch-mode {
       grid-template-columns: auto 36px minmax(0, 1fr);
     }
 
@@ -2647,6 +2826,10 @@
     .organize-health-row__actions {
       grid-column: 2 / -1;
       justify-content: flex-start;
+    }
+
+    .organize-resource-row.is-batch-mode .organize-resource-row__actions {
+      grid-column: 3 / -1;
     }
 
     .organize-resource-row__actions :deep(.b_btn),

@@ -208,6 +208,26 @@ describe('suggestBookmarkMeta cancellation', () => {
     expect(messages[1].content).toContain('confidence >= 0.86');
   });
 
+  it('标签建议缺少显式数组时返回协议失败，空数组才是合法无建议', async () => {
+    mocks.requestAi.mockResolvedValueOnce({ content: '{}' });
+    await expect(
+      suggestTagsFromText({ text: '单一主题内容', userTags: [], includeSuggestionDetails: true }),
+    ).resolves.toBeNull();
+
+    mocks.requestAi.mockResolvedValueOnce({ content: '{"tagSuggestions":[]}' });
+    await expect(
+      suggestTagsFromText({ text: '单一主题内容', userTags: [], includeSuggestionDetails: true }),
+    ).resolves.toEqual({ matchedTagIds: [], newTags: [], suggestions: [] });
+  });
+
+  it('书签持久建议要求显式标签数组，但旧版补全仍可保留有效名称描述', async () => {
+    mocks.requestAi.mockResolvedValue({ content: '{"name":"示例","description":"说明"}' });
+    const input = { url: 'https://example.com', name: '已有名称', description: '已有说明', userTags: [] };
+
+    await expect(suggestBookmarkMeta({ ...input, includeSuggestionDetails: true })).resolves.toBeNull();
+    await expect(suggestBookmarkMeta(input)).resolves.toMatchObject({ name: '示例', description: '说明' });
+  });
+
   it('即使模型返回四个合格候选，用户可见建议也只保留前三个', async () => {
     mocks.requestAi.mockResolvedValueOnce({
       content: JSON.stringify({

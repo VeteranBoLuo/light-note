@@ -183,15 +183,12 @@
               :options="sortOptions"
               @change="search"
             />
-            <BButton
+            <BBatchToggle
               v-if="todoView === 'list' && (todo.items.length || pageLoading)"
               class="todo-toolbar-control todo-toolbar-control--batch"
-              :class="{ 'is-active': todoSelectionMode }"
-              :aria-pressed="todoSelectionMode"
               @click="toggleTodoSelectionMode"
-            >
-              {{ t(todoSelectionMode ? 'inbox.todoBatchCancel' : 'inbox.todoBatchSelect') }}
-            </BButton>
+              :active="todoSelectionMode"
+            />
           </div>
         </template>
       </template>
@@ -217,14 +214,12 @@
             :options="sortOptions"
             @change="search"
           />
-          <BButton
+          <BBatchToggle
             v-if="embedded && (inbox.items.length || pageLoading)"
             class="inbox-resource-batch"
-            :aria-pressed="resourceSelectionMode"
             @click="toggleResourceSelectionMode"
-          >
-            {{ t(resourceSelectionMode ? 'inbox.todoBatchCancel' : 'inbox.todoBatchSelect') }}
-          </BButton>
+            :active="resourceSelectionMode"
+          />
           <BButton v-if="!bookmark.isMobile" type="primary" class="inbox-resource-capture" @click="openCapture">
             <SvgIcon :src="icon.common.plus" size="16" aria-hidden="true" />
             {{ t('inbox.quickCapture') }}
@@ -242,16 +237,13 @@
         :options="todoViewOptions"
         variant="pill"
       />
-      <BButton
+      <BBatchToggle
         v-if="todoView === 'list' && (todo.items.length || pageLoading)"
         class="todo-workspace-toolbar__select"
-        :class="{ 'is-active': todoSelectionMode }"
-        :aria-pressed="todoSelectionMode"
         size="small"
         @click="toggleTodoSelectionMode"
-      >
-        {{ t(todoSelectionMode ? 'inbox.todoBatchCancel' : 'inbox.todoBatchSelect') }}
-      </BButton>
+        :active="todoSelectionMode"
+      />
     </section>
 
     <ResourceBatchActionBar
@@ -640,6 +632,7 @@
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BBatchToggle from '@/components/base/BasicComponents/BBatchToggle.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -1977,7 +1970,7 @@
   }
   .inbox-page--embedded .inbox-toolbar__right--resources :deep(.b-input),
   .inbox-page--embedded .inbox-toolbar__right--resources :deep(.select-trigger),
-  .inbox-page--embedded .inbox-toolbar__right--resources > .b_btn {
+  .inbox-page--embedded .inbox-toolbar__right--resources > .b_btn:not(.b-batch-toggle) {
     height: 40px;
     min-height: 40px;
     box-sizing: border-box;
@@ -2051,18 +2044,10 @@
     flex-shrink: 0;
   }
   .todo-workspace-toolbar__select {
-    width: 80px;
-    min-width: 80px;
     flex-shrink: 0;
     justify-content: center;
     margin-left: auto;
     white-space: nowrap;
-  }
-  .todo-workspace-toolbar__select.is-active,
-  .todo-toolbar-control--batch.is-active {
-    border-color: var(--todo-navigation-color);
-    color: var(--todo-navigation-color);
-    background: var(--mobile-selected-bg, var(--todo-navigation-soft-color)) !important;
   }
   .todo-undo-banner {
     display: flex;
@@ -2236,18 +2221,14 @@
     align-self: stretch;
   }
   .todo-toolbar-control--search :deep(.b-input),
-  .todo-toolbar-control--sort :deep(.select-trigger),
-  .todo-toolbar-control--batch.b_btn {
+  .todo-toolbar-control--sort :deep(.select-trigger) {
     height: 40px;
     min-height: 40px;
     box-sizing: border-box;
     border-radius: 10px;
   }
-  .todo-toolbar-control--batch.b_btn {
-    width: 14ch;
-    min-width: 14ch;
-    justify-content: center;
-    white-space: nowrap;
+  .todo-toolbar-control--batch {
+    --batch-toggle-height: 40px;
   }
   .inbox-toolbar__right--resources {
     width: 100%;
@@ -2260,10 +2241,8 @@
     justify-content: center;
     gap: 6px;
   }
-  .inbox-resource-batch.b_btn {
-    height: 40px;
-    min-height: 40px;
-    white-space: nowrap;
+  .inbox-resource-batch {
+    --batch-toggle-height: 40px;
   }
   .inbox-toolbar__todo-tabs {
     display: flex;
@@ -2858,9 +2837,6 @@
       min-width: 0;
       flex: 1 1 auto;
     }
-    .todo-workspace-toolbar__select {
-      min-height: 36px;
-    }
     .todo-undo-banner {
       flex-wrap: wrap;
     }
@@ -3106,18 +3082,6 @@
       background: var(--card-background);
       box-shadow: 0 4px 12px rgba(42, 45, 80, 0.08);
       font-weight: 700;
-    }
-    .inbox-page--mobile-todo .todo-workspace-toolbar__select {
-      min-height: 44px;
-      padding: 0 6px;
-      color: var(--todo-navigation-color);
-      background: transparent !important;
-      font-weight: 700;
-    }
-    .inbox-page--mobile-todo .todo-workspace-toolbar__select.is-active {
-      border: 1px solid var(--todo-navigation-color);
-      color: var(--todo-navigation-color);
-      background: var(--mobile-selected-bg, var(--todo-navigation-soft-color)) !important;
     }
   }
 </style>

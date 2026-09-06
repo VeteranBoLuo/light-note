@@ -112,6 +112,24 @@ describe('browserBatchDownload', () => {
     expect(submit).toHaveBeenCalledTimes(1);
     expect(wait).not.toHaveBeenCalled();
   });
+  it('仅选一项时，地址请求期间会话失效也不能提交迟到的下载', async () => {
+    let current = true;
+    let ready!: (meta: { downloadUrl: string; fileName: string }) => void;
+    const submit = vi.fn();
+    const result = submitBrowserBatchDownloads({
+      files: [files[0]],
+      resolveMeta: () =>
+        new Promise((resolve) => {
+          ready = resolve;
+        }),
+      isCancelled: () => !current,
+      submit,
+    });
+    current = false;
+    ready(await resolveMeta(files[0]));
+    expect(await result).toMatchObject({ submitted: 0, cancelled: true });
+    expect(submit).not.toHaveBeenCalled();
+  });
 
   it('每个文件使用独立下载链接并在提交后清理临时元素', () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});

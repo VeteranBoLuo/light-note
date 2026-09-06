@@ -44,11 +44,10 @@ export interface NoteLibraryCacheQuery {
 }
 
 function cloneItems(items: any[]) {
-  return (Array.isArray(items) ? items : []).map((item) => ({
-    ...item,
-    ...(Array.isArray(item?.tags) ? { tags: item.tags.map((tag: any) => ({ ...tag })) } : {}),
-    isCheck: false,
-  }));
+  return (Array.isArray(items) ? items : []).map((item) => {
+    const { isCheck: _legacySelection, ...resource } = item;
+    return { ...resource, ...(Array.isArray(item?.tags) ? { tags: item.tags.map((tag: any) => ({ ...tag })) } : {}) };
+  });
 }
 
 function normalizeMoveParentId(value: unknown): string | null | undefined {

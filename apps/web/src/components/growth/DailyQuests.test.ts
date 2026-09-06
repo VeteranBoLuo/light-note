@@ -30,6 +30,7 @@ function mountBonus(
     dailyCap?: number;
     dailyCapReached?: boolean;
     showClaimAction?: boolean;
+    allDone?: boolean;
   } = {},
 ) {
   const host = document.createElement('div');
@@ -38,7 +39,13 @@ function mountBonus(
   const quests = [
     { key: 'checkin', done: true },
     { key: 'daily_bookmark', done: true, random: true, cur: 1, target: 1 },
-    { key: options.questKey ?? 'daily_todo_create', done: false, random: true, cur: 0, target: 1 },
+    {
+      key: options.questKey ?? 'daily_todo_create',
+      done: options.allDone ?? false,
+      random: true,
+      cur: options.allDone ? 1 : 0,
+      target: 1,
+    },
   ];
   const app = createApp({
     setup: () => () =>
@@ -73,10 +80,23 @@ function mountBonus(
     experienceCap: host.querySelector('.dq-exp-cap')?.textContent?.replace(/\s+/g, ' ').trim(),
     experienceCapPercent: host.querySelector('.dq-exp-cap [role="progressbar"]')?.getAttribute('aria-valuenow'),
     claimAction: host.querySelector('.dq-bonus'),
+    completedMessage: host.querySelector('.dq-completed')?.textContent,
+    completedRows: host.querySelectorAll('.dq-item.done').length,
   };
 }
 
 describe('每日任务阶梯奖励', () => {
+  it.each([false, true])('全部完成后保留清单，奖励已领取 %s 时展示对应完成状态', (claimed) => {
+    const result = mountBonus(
+      { exp: 15, points: 40, claimed, claimable: !claimed },
+      { allDone: true, showExperienceSources: false, showClaimAction: false },
+    );
+    expect(result.completedRows).toBe(3);
+    expect(result.completedMessage).toContain('每日任务全部完成');
+    expect(result.completedMessage).toContain(claimed ? '今日奖励已领取' : '已有阶梯奖励可以领取');
+    expect(result.stages).toHaveLength(1);
+    expect(result.claimAction).toBeNull();
+  });
   it('普通用户分别展示 2/3 与 3/3 奖励', () => {
     const result = mountBonus({
       exp: 15,
@@ -160,6 +180,7 @@ describe('每日任务阶梯奖励', () => {
       { showExperienceSources: false },
     );
     expect(result.experienceGuide).toBeUndefined();
+    expect(dailyQuestsSource).toContain("'dq--compact': compact");
   });
 
   it('外层已提供一键领取时可以隐藏重复的单项领取入口', () => {

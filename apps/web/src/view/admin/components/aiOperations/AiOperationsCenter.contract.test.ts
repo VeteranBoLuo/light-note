@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { AI_USAGE_MODULE_KEYS } from '@/components/aiSkills/aiUsageModules';
 
 function source(path: string) {
   return readFileSync(resolve(process.cwd(), path), 'utf8');
@@ -44,7 +45,8 @@ describe('AiOperationsCenter 页面契约', () => {
     }
     expect(component).not.toMatch(/<(?:input|select|button)\b/iu);
     expect(component).not.toMatch(/<svg\b|<path\b/iu);
-    expect(moduleCatalog).toContain("'toolbox'");
+    expect(AI_USAGE_MODULE_KEYS).toContain('toolbox');
+    expect(moduleCatalog).toContain('@lightnote/shared/ai-usage-modules');
   });
 
   it('覆盖加载、全量错误、保留旧数据、空态、更多分页和选中详情状态', () => {

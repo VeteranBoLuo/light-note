@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
     linked: false,
     orderCount: 0,
     totalAmount: '0.00',
-    publicPreference: { participateInRanking: true, showIdentity: false, adminHidden: false },
+    publicPreference: { participateInRanking: true, showIdentity: true, adminHidden: false },
     recentOrders: [],
   })),
   unlinkAfdianAccount: vi.fn(async () => undefined),
@@ -33,10 +33,30 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/config/support', () => ({
   AFDIAN_SUPPORT_CONFIGURED: true,
   AFDIAN_SUPPORT_OPTIONS: [
-    { key: 'coffee', amount: 6, url: 'https://ifdian.net/order/create?plan_id=4415b194930c11f1ac7b5254001e7c00&product_type=0', configured: true },
-    { key: 'server', amount: 18, url: 'https://ifdian.net/order/create?plan_id=a05f9730930c11f1aeb65254001e7c00&product_type=0', configured: true },
-    { key: 'companion', amount: 50, url: 'https://ifdian.net/order/create?plan_id=9fc7a358930c11f1abee52540025c377&product_type=0', configured: true },
-    { key: 'custom', amount: null, url: 'https://ifdian.net/order/create?user_id=9a64b3ac930611f18e8052540025c377', configured: true },
+    {
+      key: 'coffee',
+      amount: 6,
+      url: 'https://ifdian.net/order/create?plan_id=4415b194930c11f1ac7b5254001e7c00&product_type=0',
+      configured: true,
+    },
+    {
+      key: 'server',
+      amount: 18,
+      url: 'https://ifdian.net/order/create?plan_id=a05f9730930c11f1aeb65254001e7c00&product_type=0',
+      configured: true,
+    },
+    {
+      key: 'companion',
+      amount: 50,
+      url: 'https://ifdian.net/order/create?plan_id=9fc7a358930c11f1abee52540025c377&product_type=0',
+      configured: true,
+    },
+    {
+      key: 'custom',
+      amount: null,
+      url: 'https://ifdian.net/order/create?user_id=9a64b3ac930611f18e8052540025c377',
+      configured: true,
+    },
   ],
   openAfdianSupportPage: mocks.openAfdianSupportPage,
   openTrackedAfdianCheckout: mocks.openTrackedAfdianCheckout,
@@ -107,7 +127,9 @@ describe('支持轻笺纯赞助页面', () => {
 
   it('用正向文案区分赞助与购买，并只用跟踪赞助意图打开爱发电', async () => {
     const host = await mountPage();
-    expect(host.querySelector('h1')?.textContent).toContain('轻笺会一直免费');
+    expect(host.querySelector('h1')?.textContent).toContain('每一份支持');
+    expect(host.textContent).toContain('默认公开加入支持者榜');
+    expect(host.querySelector<HTMLElement>('[role="switch"]')?.getAttribute('aria-checked')).toBe('true');
     expect(host.textContent).not.toContain('不赠送');
     expect(host.textContent).not.toContain('纯支持');
     expect(host.querySelector('.support-tier-card__nature')).toBeNull();
@@ -140,6 +162,16 @@ describe('支持轻笺纯赞助页面', () => {
   });
 
   it('保留匿名、公开和退出排行榜控制，且排行榜只描述已确认赞助', async () => {
+    mocks.getAfdianSupportState.mockResolvedValueOnce({
+      authenticated: true,
+      oauthAvailable: true,
+      orderSyncAvailable: true,
+      linked: false,
+      orderCount: 0,
+      totalAmount: '0.00',
+      publicPreference: { participateInRanking: true, showIdentity: false, adminHidden: false },
+      recentOrders: [],
+    });
     const host = await mountPage();
     expect(host.textContent).toContain('当前以匿名支持者展示');
     expect(host.textContent).toContain('这里只展示爱发电已确认收款、并已加入轻笺账号支持记录的真实赞助');
@@ -172,7 +204,7 @@ describe('支持轻笺纯赞助页面', () => {
       linked: false,
       orderCount: 0,
       totalAmount: '0.00',
-      publicPreference: { participateInRanking: true, showIdentity: false, adminHidden: false },
+      publicPreference: { participateInRanking: true, showIdentity: true, adminHidden: false },
       recentOrders: [],
     });
     const host = await mountPage();
@@ -192,7 +224,11 @@ describe('支持轻笺纯赞助页面', () => {
     routeState.query = { afdian: result, source: 'test' };
     await mountPage();
     const messageMock =
-      messageType === 'success' ? mocks.messageSuccess : messageType === 'error' ? mocks.messageError : mocks.messageWarning;
+      messageType === 'success'
+        ? mocks.messageSuccess
+        : messageType === 'error'
+          ? mocks.messageError
+          : mocks.messageWarning;
     await vi.waitFor(() => expect(messageMock).toHaveBeenCalledWith(expected));
     expect(mocks.routerReplace).toHaveBeenCalledWith({ query: { source: 'test' } });
   });

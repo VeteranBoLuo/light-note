@@ -8,6 +8,19 @@ function read(relativePath: string) {
 }
 
 describe('书签管理标签目录契约', () => {
+  it('首页浏览态与嵌入管理态共享同一个目录外壳和 FilterPanel', () => {
+    const home = read('view/home/Home.vue');
+    const management = read('components/manage/bookmarkMg/BookmarkTable.vue');
+    const directory = read('components/home/BookmarkDirectoryPanel.vue');
+    const filter = read('view/home/FilterPanel.vue');
+    expect(home).toContain('<BookmarkDirectoryPanel v-if="!bookmark.isMobile" />');
+    expect(management).toContain('<BookmarkDirectoryPanel v-if="embedded" />');
+    expect(directory).toContain('<FilterPanel />');
+    expect(filter).toContain('class="filter-all-entry"');
+    expect(filter).toContain('class="tag-item-count"');
+    expect(filter).not.toContain('v-if="bookmark.isMobile"\n            class="filter-all-entry"');
+  });
+
   it('复用标签空间目录行，数量来自书签列表，图标来自完整标签事实源', () => {
     const source = read('components/manage/bookmarkMg/BookmarkTable.vue');
     expect(source).toContain('<TagDirectoryRow');
@@ -42,7 +55,7 @@ describe('书签管理标签目录契约', () => {
 
   it('小尺寸桌面仍保留左侧目录，只有更窄的平板布局才折叠', () => {
     const source = read('components/manage/bookmarkMg/BookmarkTable.vue');
-    expect(source).toMatch(/@media \(max-width: 1280px\)[\s\S]*?grid-template-columns:\s*196px minmax\(0, 1fr\)/u);
+    expect(source).toMatch(/@media \(max-width: 1280px\)[\s\S]*?grid-template-columns:\s*228px minmax\(0, 1fr\)/u);
     expect(source).toMatch(/@media \(max-width: 1000px\)[\s\S]*?grid-template-columns:\s*1fr/u);
   });
 });

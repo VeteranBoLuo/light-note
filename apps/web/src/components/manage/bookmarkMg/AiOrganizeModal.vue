@@ -149,6 +149,7 @@
 </template>
 
 <script lang="ts" setup>
+  import { useResourceSelectionStore, type SelectionOperation } from '@/store/resourceSelection';
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { apiBasePost } from '@/http/request.ts';
@@ -162,7 +163,11 @@
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
 
   const visible = defineModel<boolean>('visible');
-  const props = defineProps<{ initType?: 'bookmark' | 'note'; selectedIds?: string[] }>();
+  const props = defineProps<{
+    initType?: 'bookmark' | 'note';
+    selectedIds?: string[];
+    selectionOperation?: SelectionOperation | null;
+  }>();
   const emit = defineEmits<{ (e: 'applied'): void }>();
   const { t } = useI18n();
   const user = useUserStore();
@@ -184,6 +189,15 @@
     pickNew: string[];
   };
 
+  const selectionSession = useResourceSelectionStore();
+  let requestVersion = 0;
+  function currentRequest(version: number) {
+    return (
+      version === requestVersion &&
+      visible.value &&
+      (!props.selectionOperation || selectionSession.isCurrent(props.selectionOperation))
+    );
+  }
   const step = ref<'confirm' | 'running' | 'review' | 'done'>('confirm');
   const quoteLoading = ref(false);
   const quote = ref<any>(null);
@@ -231,6 +245,8 @@
   }
 
   async function loadQuote() {
+    if (props.selectionOperation && !selectionSession.isCurrent(props.selectionOperation)) return;
+    const version = ++requestVersion;
     quote.value = null;
     quoteLoading.value = true;
     try {
@@ -243,16 +259,20 @@
         },
         { silent: true },
       );
+      if (!currentRequest(version)) return;
       if (res?.status === 200) quote.value = res.data;
     } catch {
+      if (!currentRequest(version)) return;
       quote.value = null;
       message.error(t('bookmarkMg.aiOrganizeQuoteFailed'));
     } finally {
-      quoteLoading.value = false;
+      if (currentRequest(version)) quoteLoading.value = false;
     }
   }
 
   async function run() {
+    if (props.selectionOperation && !selectionSession.isCurrent(props.selectionOperation)) return;
+    const version = ++requestVersion;
     if (!quote.value?.batchIds?.length) return;
     step.value = 'running';
     try {
@@ -264,6 +284,7 @@
         },
         { silent: true },
       );
+      if (!currentRequest(version)) return;
       if (res?.status === 200 && res.data?.ok) {
         const processed = Number(res.data?.processed || 0);
         recordOperation({
@@ -281,6 +302,7 @@
         step.value = 'confirm';
       }
     } catch (e: any) {
+      if (!currentRequest(version)) return;
       const partialSuggestions = Array.isArray(e?.data?.suggestions) ? e.data.suggestions : [];
       const quotaFailure = getAiQuotaErrorPresentation(e, (key, params) => t(key, params));
       if (e?.status === 429 && partialSuggestions.length) {
@@ -298,6 +320,8 @@
   }
 
   async function apply() {
+    if (props.selectionOperation && !selectionSession.isCurrent(props.selectionOperation)) return;
+    const version = ++requestVersion;
     if (isReadonlyAdminContext.value || applying.value) return;
     const items = suggestions.value
       .filter((s) => s.include)
@@ -316,6 +340,7 @@
         { items, resourceType: resourceType.value },
         { silent: true },
       );
+      if (!currentRequest(version)) return;
       if (res?.status === 200) {
         appliedCount.value = res.data?.applied || 0;
         if (appliedCount.value > 0) {
@@ -331,9 +356,10 @@
         message.info(res?.msg || t('bookmarkMg.aiOrganizeApplyFailed'));
       }
     } catch {
+      if (!currentRequest(version)) return;
       message.error(t('bookmarkMg.aiOrganizeApplyFailed'));
     } finally {
-      applying.value = false;
+      if (currentRequest(version)) applying.value = false;
     }
   }
 
@@ -367,6 +393,9 @@
   watch(
     visible,
     (v) => {
+      requestVersion++;
+      quoteLoading.value = false;
+      applying.value = false;
       if (v) {
         resourceType.value = props.initType || 'bookmark';
         selectedQueue.value = normalizeSelectedIds(props.selectedIds);
@@ -380,7 +409,7 @@
         void loadQuote();
       }
     },
-    { immediate: true },
+    { immediate: true, flush: 'sync' },
   );
 </script>
 

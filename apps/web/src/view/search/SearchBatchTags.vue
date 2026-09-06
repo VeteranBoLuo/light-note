@@ -6,113 +6,194 @@
     show-back
     @back="goBack"
   >
-    <template #actions>
-      <BButton @click="goBack">{{ t('resourceCenter.cancel') }}</BButton>
-      <BButton type="primary" :loading="submitLoading" :disabled="submitLoading" @click="submitBatch">
-        {{ submitText }}
-      </BButton>
+    <template v-if="!bookmark.isMobile" #actions>
+      <BButton :disabled="submitLoading" @click="goBack">{{ t('resourceCenter.cancel') }}</BButton>
+      <BButton type="primary" :loading="submitLoading" :disabled="cannotSubmit" @click="submitBatch">{{
+        submitText
+      }}</BButton>
     </template>
-    <div class="batch-page" :class="{ 'batch-page--night': user.currentTheme === 'night' }">
-      <section class="batch-layout">
-        <BCard as="article" variant="card" padding="16px" class="panel">
-          <div class="panel-title">{{ t('resourceCenter.batch.selectedResources') }}</div>
-          <div class="panel-subtitle">{{
-            t('resourceCenter.batch.selectedCount', { count: selectedResourceCount })
-          }}</div>
-          <div class="summary-row">
-            <span
-              v-for="entry in typeSummary"
-              :key="entry.type"
-              class="summary-chip"
-              :class="`summary-chip--${entry.type}`"
-            >
-              <span class="summary-chip-dot"></span>
-              <span class="summary-chip-label">{{ getSearchTypeLabel(t, entry.type) }}</span>
-              <span class="summary-chip-count">{{ entry.count }}</span>
-            </span>
+    <div v-auto-scrollbar class="batch-page" :class="{ 'batch-page--mobile': bookmark.isMobile }">
+      <div class="batch-layout">
+        <BCard as="aside" padding="18px" class="resource-panel">
+          <div class="panel-heading">
+            <h2>{{ t('resourceCenter.batch.selectedResources') }}</h2>
+            <span class="resource-total">{{ selectedResourceCount }}</span>
           </div>
-          <div v-if="selection?.mode === 'explicit'" class="item-list">
-            <div v-for="item in items" :key="`${item.type}:${item.id}`" class="item-row">
-              <div class="item-main">
-                <span class="item-type-badge" :class="`item-type-badge--${item.type}`">{{
+          <div class="summary-row">
+            <BChip v-for="entry in typeSummary" :key="entry.type" :tone="entry.type" size="small"
+              >{{ getSearchTypeLabel(t, entry.type) }} · {{ entry.count }}</BChip
+            >
+          </div>
+          <p class="panel-hint">{{ t('resourceCenter.batch.scopeLocked') }}</p>
+          <BButton
+            v-if="bookmark.isMobile && selection?.mode === 'explicit'"
+            class="resource-toggle"
+            @click="showResources = !showResources"
+            >{{
+              t(showResources ? 'resourceCenter.batch.hideResources' : 'resourceCenter.batch.showResources')
+            }}</BButton
+          >
+          <div v-if="selection?.mode === 'explicit' && (!bookmark.isMobile || showResources)" class="item-list">
+            <div v-for="item in previewItems" :key="`${item.type}:${item.id}`" class="item-row">
+              <div class="item-heading">
+                <BChip v-if="typeSummary.length > 1" :tone="item.type" size="small">{{
                   getSearchTypeLabel(t, item.type)
-                }}</span>
-                <span class="item-title text-hidden">{{ item.title || item.id }}</span>
+                }}</BChip>
+                <span class="item-title" :title="item.title">{{ item.title || item.id }}</span>
               </div>
               <div class="item-tags">
-                <span class="item-tags-label">{{ t('resourceCenter.batch.itemTags') }}</span>
-                <div v-if="getItemTags(item).length" class="item-tags-values">
-                  <ResourceTagChip
-                    v-for="tag in getItemTags(item)"
-                    :key="`${item.type}:${item.id}:${tag}`"
-                    :tag="{ name: tag }"
-                    size="medium"
-                    max-width="180px"
-                  />
-                </div>
-                <span v-else class="item-tags-value item-tags-value--empty">-</span>
+                <ResourceTagChip v-for="tag in getItemTags(item)" :key="tag.id" :tag="tag" max-width="150px" />
+                <span v-if="!getItemTags(item).length" class="panel-hint">{{
+                  t('resourceCenter.batch.noItemTags')
+                }}</span>
               </div>
             </div>
-            <div v-if="itemsTruncated" class="empty-tip">
-              {{ t('resourceCenter.batch.previewItemsTruncated', { count: selectedResourceCount }) }}
-            </div>
+            <BButton v-if="items.length > 8" class="resource-toggle" @click="expandResources = !expandResources">{{
+              t(expandResources ? 'resourceCenter.batch.hideResources' : 'resourceCenter.batch.showMoreResources')
+            }}</BButton>
+            <p v-if="itemsTruncated" class="panel-hint">{{
+              t('resourceCenter.batch.previewItemsTruncated', { count: selectedResourceCount })
+            }}</p>
           </div>
-          <div v-else class="empty-tip">
-            {{ t('resourceCenter.batch.allMatchingWorkspaceHint', { count: selectedResourceCount }) }}
-          </div>
+          <p v-else-if="selection?.mode === 'allMatching'" class="panel-hint">{{
+            t('resourceCenter.batch.allMatchingWorkspaceHint', { count: selectedResourceCount })
+          }}</p>
         </BCard>
-
-        <BCard as="article" variant="card" padding="16px" class="panel">
-          <div class="panel-title">{{ t('resourceCenter.batch.selectTags') }}</div>
-          <div class="panel-subtitle">
-            {{ mode === 'remove' ? t('resourceCenter.batch.removeTagHint') : t('resourceCenter.batch.tagHint') }}
+        <BCard as="section" padding="20px" class="tag-panel">
+          <BTabs class="mode-tabs" :active-tab="mode" :options="modeOptions" variant="segment" @change="changeMode" />
+          <p class="panel-hint">{{
+            t(mode === 'remove' ? 'resourceCenter.batch.removeTagHint' : 'resourceCenter.batch.tagHint')
+          }}</p>
+          <div v-if="workspaceLoading" class="workspace-status"
+            ><BLoading inline :loading="true" :title="t('resourceCenter.batch.loadingWorkspace')"
+          /></div>
+          <div v-else-if="workspaceError" class="workspace-status" role="alert">
+            <p>{{ workspaceError }}</p
+            ><BButton @click="loadWorkspaceData">{{ t('common.retry') }}</BButton>
           </div>
-          <div class="tag-list" v-if="displayTagList.length">
-            <ResourceTagChip
-              v-for="tag in displayTagList"
-              :key="tag.id"
-              :tag="tag"
-              class="tag-chip"
-              :class="{ 'tag-chip--selected': selectedTagIds.includes(tag.id) }"
-              size="medium"
-              interactive
-              :selected="selectedTagIds.includes(tag.id)"
-              show-selected-indicator
-              @click="toggleTag(tag.id)"
-            />
-          </div>
-          <div class="empty-tip" v-else>{{ t('resourceCenter.batch.noTags') }}</div>
-
-          <div class="preview-box">
-            <div class="preview-title">{{ t('resourceCenter.batch.previewTitle') }}</div>
-            <div class="preview-line">{{
-              t('resourceCenter.batch.previewResources', { count: selectedResourceCount })
-            }}</div>
-            <div class="preview-line">{{
-              t('resourceCenter.batch.previewTags', { count: selectedTagIds.length })
-            }}</div>
-            <div class="preview-line">
-              {{ t('resourceCenter.batch.previewRelations', { count: previewRelationCount }) }}
+          <template v-else>
+            <div class="tag-search">
+              <BInput
+                v-model:value="tagSearch"
+                clearable
+                :disabled="submitLoading"
+                :placeholder="t('resourceCenter.tagSearchPlaceholder')"
+                :aria-label="t('resourceCenter.tagSearchPlaceholder')"
+              />
             </div>
-          </div>
+            <div class="selection-toolbar">
+              <BCheckbox
+                controlled
+                :model-value="allFilteredSelected"
+                :indeterminate="someFilteredSelected"
+                :disabled="controlsDisabled || !selectableTags.length"
+                @update:model-value="selectFiltered"
+                >{{
+                  t(tagSearch.trim() ? 'resourceCenter.batch.selectMatches' : 'resourceCenter.batch.selectAvailable')
+                }}</BCheckbox
+              >
+              <span>{{ t('resourceCenter.availableTagCount', { count: filteredTags.length }) }}</span>
+            </div>
+            <div v-if="filteredTags.length" class="tag-options">
+              <BCheckbox
+                v-for="tag in filteredTags"
+                :key="tag.id"
+                controlled
+                class="tag-option"
+                :class="{ 'tag-option--selected': selectedTagIds.includes(tag.id) }"
+                :model-value="selectedTagIds.includes(tag.id)"
+                :disabled="controlsDisabled || tagImpact(tag.id) === 0"
+                @update:model-value="toggleTag(tag.id)"
+              >
+                <span class="tag-option-name" :title="tag.name">{{ tag.name }}</span>
+                <span v-if="mode === 'add' && tagImpact(tag.id) === 0" class="tag-option-status">{{
+                  t('resourceCenter.batch.tagAlreadyOnAll')
+                }}</span>
+              </BCheckbox>
+            </div>
+            <p v-else class="empty-tip" role="status">{{
+              t(
+                tagSearch.trim()
+                  ? 'resourceCenter.noTagMatches'
+                  : mode === 'remove'
+                    ? 'resourceCenter.batch.noTagsToRemove'
+                    : 'resourceCenter.batch.noTags',
+              )
+            }}</p>
+            <div class="preview-box" aria-live="polite">
+              <div class="panel-heading"
+                ><h2>{{ t('resourceCenter.selectedTagCount', { count: selectedTagIds.length }) }}</h2
+                ><BButton
+                  size="small"
+                  :disabled="controlsDisabled || !selectedTagIds.length"
+                  @click="selectedTagIds = []"
+                  >{{ t('resourceCenter.batch.clearTags') }}</BButton
+                ></div
+              >
+              <div v-if="selectedTags.length" class="selected-tags">
+                <ResourceTagChip
+                  v-for="tag in selectedTags"
+                  :key="tag.id"
+                  :tag="tag"
+                  class="tag-chip"
+                  :class="{ 'tag-chip--selected': selectedTagIds.includes(tag.id) }"
+                  interactive
+                  selected
+                  show-selected-indicator
+                  :disabled="submitLoading"
+                  max-width="220px"
+                  @click="toggleTag(tag.id)"
+                />
+              </div>
+              <p class="preview-result">{{
+                t(
+                  selectedTagIds.length
+                    ? mode === 'add'
+                      ? 'resourceCenter.batch.previewAdd'
+                      : 'resourceCenter.batch.previewRemove'
+                    : 'resourceCenter.batch.pickTagsHint',
+                  { count: previewRelationCount },
+                )
+              }}</p>
+              <p v-if="selectedTagIds.length" class="panel-hint">{{
+                t('resourceCenter.batch.previewSkipped', { count: skippedRelationCount })
+              }}</p>
+            </div>
+            <p v-if="submitError" class="submit-error" role="alert">{{ submitError }}</p>
+          </template>
         </BCard>
-      </section>
+      </div>
     </div>
+    <MobileStickyActionBar v-if="bookmark.isMobile">
+      <BButton :disabled="submitLoading" @click="goBack">{{ t('resourceCenter.cancel') }}</BButton>
+      <BButton type="primary" :loading="submitLoading" :disabled="cannotSubmit" @click="submitBatch">{{
+        submitText
+      }}</BButton>
+    </MobileStickyActionBar>
   </ResourcePageShell>
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted, ref } from 'vue';
+  import { useResourceSelectionStore } from '@/store/resourceSelection';
+  import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
+  import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
+  import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { apiBasePost } from '@/http/request.ts';
   import { clearGlobalSearchCache, type BatchSelection, type SearchType } from '@/api/search.ts';
-  import { useUserStore } from '@/store';
+  import { bookmarkStore, cloudSpaceStore, useUserStore } from '@/store';
   import { recordOperation } from '@/api/commonApi.ts';
   import { getSearchTypeLabel } from '@/components/searchCenter/searchMeta.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
+  import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import BTabs from '@/components/base/BasicComponents/BTabs.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
+  import MobileStickyActionBar from '@/components/mobile/MobileStickyActionBar.vue';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
 
@@ -134,6 +215,20 @@
   const route = useRoute();
   const router = useRouter();
   const user = useUserStore();
+  const bookmark = bookmarkStore();
+  const cloud = cloudSpaceStore();
+  const selectionStore = useResourceSelectionStore();
+  const token = String(route.query.selectionSession || '');
+  const handoff =
+    token && selectionStore.handoff?.token === token && selectionStore.identity === buildNoteDetailRequestScope(user)
+      ? selectionStore.handoff
+      : null;
+  const sessionValid = () =>
+    !!handoff &&
+    selectionStore.handoff?.token === token &&
+    selectionStore.busy &&
+    selectionStore.isCurrent(handoff.operation) &&
+    selectionStore.identity === buildNoteDetailRequestScope(user);
 
   const items = ref<BatchItem[]>([]);
   const selection = ref<BatchSelection | null>(null);
@@ -145,12 +240,24 @@
   const resourceTagsMap = ref<Record<string, TagItem[]>>({});
   const selectedTagIds = ref<string[]>([]);
   const submitLoading = ref(false);
+  const workspaceLoading = ref(false);
+  const workspaceError = ref('');
+  const submitError = ref('');
+  const tagRelationCounts = ref<Record<string, number>>({});
+  const tagSearch = ref('');
+  const showResources = ref(false);
+  const expandResources = ref(false);
+  let workspaceGeneration = 0;
+  let disposed = false;
 
   const mode = computed<'add' | 'remove'>(() => (route.query.mode === 'remove' ? 'remove' : 'add'));
   const fromPath = computed(() => {
+    if (handoff) return handoff.from;
     const raw = Array.isArray(route.query.from) ? route.query.from[0] : route.query.from;
     const text = String(raw || '/search');
-    return text.startsWith('/search') || text.startsWith('/noteLibrary') || text.startsWith('/organize')
+    return ['/search', '/cloudSpace', '/noteLibrary', '/organize', '/home', '/manage/bookmarkMg'].some(
+      (path) => text.split('?')[0] === path,
+    )
       ? text
       : '/search';
   });
@@ -166,8 +273,57 @@
       (entry) => entry.count > 0,
     ),
   );
-  const previewRelationCount = computed(() => selectedResourceCount.value * selectedTagIds.value.length);
   const displayTagList = computed(() => (mode.value === 'remove' ? selectedResourceTags.value : tagList.value));
+  const filteredTags = computed(() =>
+    displayTagList.value.filter((tag) =>
+      tag.name.toLocaleLowerCase().includes(tagSearch.value.trim().toLocaleLowerCase()),
+    ),
+  );
+  const selectedTags = computed(() => displayTagList.value.filter((tag) => selectedTagIds.value.includes(tag.id)));
+  const previewItems = computed(() => (expandResources.value ? items.value : items.value.slice(0, 8)));
+  const selectableTags = computed(() => filteredTags.value.filter((tag) => tagImpact(tag.id) > 0));
+  const allFilteredSelected = computed(
+    () => selectableTags.value.length > 0 && selectableTags.value.every((tag) => selectedTagIds.value.includes(tag.id)),
+  );
+  const someFilteredSelected = computed(
+    () => !allFilteredSelected.value && selectableTags.value.some((tag) => selectedTagIds.value.includes(tag.id)),
+  );
+  const previewRelationCount = computed(() => selectedTagIds.value.reduce((count, id) => count + tagImpact(id), 0));
+  const skippedRelationCount = computed(
+    () => selectedResourceCount.value * selectedTagIds.value.length - previewRelationCount.value,
+  );
+  const controlsDisabled = computed(
+    () =>
+      workspaceLoading.value || !!workspaceError.value || submitLoading.value || user.adminContext?.mode === 'readonly',
+  );
+  const cannotSubmit = computed(
+    () => controlsDisabled.value || !previewRelationCount.value || !selectedResourceCount.value,
+  );
+  const modeOptions = computed(() => [
+    { key: 'add', label: t('resourceCenter.batch.modeAdd') },
+    { key: 'remove', label: t('resourceCenter.batch.modeRemove') },
+  ]);
+
+  function tagImpact(id: string) {
+    const existing = Math.min(selectedResourceCount.value, Number(tagRelationCounts.value[id] || 0));
+    return mode.value === 'remove' ? existing : selectedResourceCount.value - existing;
+  }
+  function selectFiltered(checked: boolean) {
+    if (controlsDisabled.value) return;
+    const ids = new Set(selectableTags.value.map((tag) => tag.id));
+    selectedTagIds.value = checked
+      ? [...new Set([...selectedTagIds.value, ...ids])]
+      : selectedTagIds.value.filter((id) => !ids.has(id));
+  }
+  function changeMode(value: string) {
+    if (controlsDisabled.value || (value !== 'add' && value !== 'remove') || value === mode.value) return;
+    void router.replace({ query: { ...route.query, mode: value } });
+  }
+  watch(mode, () => {
+    selectedTagIds.value = [];
+    tagSearch.value = '';
+    submitError.value = '';
+  });
 
   function loadBatchStateFromStorage() {
     try {
@@ -208,52 +364,71 @@
   }
 
   async function loadWorkspaceData() {
-    const workspaceRes = await apiBasePost('/api/search/batchResourceTagWorkspace', {
-      selection: selection.value,
-    });
-    if (workspaceRes.status !== 200) {
-      message.error(workspaceRes.msg || t('resourceCenter.batch.submitFailed'));
-      return false;
-    }
-    selectedResourceTags.value = mapTagItems(
-      Array.isArray(workspaceRes.data?.selectedResourceTags) ? workspaceRes.data.selectedResourceTags : [],
-    );
-    tagList.value = mapTagItems(Array.isArray(workspaceRes.data?.allTags) ? workspaceRes.data.allTags : []);
-    resourceTagsMap.value = workspaceRes.data?.resourceTagsMap || {};
-    selectedResourceCount.value = Number(workspaceRes.data?.selectionSummary?.editableCount || 0);
-    selectionTypeCounts.value = {
-      bookmark: Number(workspaceRes.data?.selectionSummary?.typeCounts?.bookmark || 0),
-      note: Number(workspaceRes.data?.selectionSummary?.typeCounts?.note || 0),
-      file: Number(workspaceRes.data?.selectionSummary?.typeCounts?.file || 0),
-      tag: 0,
-    };
-    itemsTruncated.value = Boolean(workspaceRes.data?.itemsTruncated);
-    items.value = Array.isArray(workspaceRes.data?.items)
-      ? workspaceRes.data.items.map((item: any) => ({
-          id: String(item.id || '').trim(),
-          type: String(item.type || '').trim() as SearchType,
-          title:
-            items.value.find((raw) => raw.id === String(item.id || '').trim() && raw.type === item.type)?.title || '',
-        }))
-      : items.value;
-    if (mode.value === 'remove') {
-      selectedTagIds.value = selectedTagIds.value.filter((id) =>
-        selectedResourceTags.value.some((tag) => tag.id === id),
+    if (!selection.value || workspaceLoading.value || submitLoading.value) return;
+    const generation = ++workspaceGeneration;
+    const identity = buildNoteDetailRequestScope(user);
+    workspaceLoading.value = true;
+    workspaceError.value = '';
+    try {
+      const res = await apiBasePost(
+        '/api/search/batchResourceTagWorkspace',
+        { selection: selection.value },
+        { silent: true },
       );
+      if (
+        disposed ||
+        generation !== workspaceGeneration ||
+        identity !== buildNoteDetailRequestScope(user) ||
+        (token && !sessionValid())
+      )
+        return;
+      if (res.status !== 200) {
+        workspaceError.value = t(
+          res.status === 409 ? 'resourceCenter.batch.resourcesChanged' : 'resourceCenter.batch.workspaceFailed',
+        );
+        return;
+      }
+      if (!res.data?.tagRelationCounts || typeof res.data.tagRelationCounts !== 'object') {
+        workspaceError.value = t('resourceCenter.batch.workspaceFailed');
+        return;
+      }
+      selectedResourceTags.value = mapTagItems(res.data.selectedResourceTags || []);
+      tagList.value = mapTagItems(res.data.allTags || []);
+      tagRelationCounts.value = res.data.tagRelationCounts;
+      resourceTagsMap.value = res.data.resourceTagsMap || {};
+      selectedResourceCount.value = Number(res.data.selectionSummary?.editableCount || 0);
+      selectionTypeCounts.value = {
+        bookmark: Number(res.data.selectionSummary?.typeCounts?.bookmark || 0),
+        note: Number(res.data.selectionSummary?.typeCounts?.note || 0),
+        file: Number(res.data.selectionSummary?.typeCounts?.file || 0),
+        tag: 0,
+      };
+      itemsTruncated.value = Boolean(res.data.itemsTruncated);
+      const previous = new Map(items.value.map((item) => [`${item.type}:${item.id}`, item]));
+      items.value = Array.isArray(res.data.items)
+        ? res.data.items.map((item: any) => ({
+            id: String(item.id),
+            type: item.type,
+            title: previous.get(`${item.type}:${item.id}`)?.title || item.title || String(item.id),
+          }))
+        : items.value;
+      selectedTagIds.value = selectedTagIds.value.filter(
+        (id) => displayTagList.value.some((tag) => tag.id === id) && tagImpact(id) > 0,
+      );
+    } catch {
+      if (!disposed && generation === workspaceGeneration && identity === buildNoteDetailRequestScope(user))
+        workspaceError.value = t('resourceCenter.batch.workspaceFailed');
+    } finally {
+      if (generation === workspaceGeneration) workspaceLoading.value = false;
     }
-    return true;
   }
 
   function getItemTags(item: BatchItem) {
-    const key = `${item.type}:${item.id}`;
-    const tags = resourceTagsMap.value[key] || [];
-    return tags
-      .map((tag) => tag.name)
-      .filter(Boolean)
-      .slice(0, 4);
+    return (resourceTagsMap.value[`${item.type}:${item.id}`] || []).slice(0, 4);
   }
 
   function toggleTag(tagId: string) {
+    if (controlsDisabled.value || tagImpact(tagId) <= 0) return;
     if (selectedTagIds.value.includes(tagId)) {
       selectedTagIds.value = selectedTagIds.value.filter((id) => id !== tagId);
     } else {
@@ -262,10 +437,14 @@
   }
 
   function goBack() {
-    router.replace(fromPath.value);
+    if (submitLoading.value) return;
+    const target = router.resolve(fromPath.value);
+    router.replace({ path: target.path, query: { ...target.query, _rt: String(Date.now()) }, hash: target.hash });
   }
 
   async function submitBatch() {
+    if (cannotSubmit.value) return;
+    const identity = buildNoteDetailRequestScope(user);
     if (!selection.value || !selectedResourceCount.value) {
       message.warning(t('resourceCenter.batch.noSelection'));
       return;
@@ -275,15 +454,26 @@
       return;
     }
 
+    if (token && !sessionValid()) {
+      message.info(t('resourceSelection.expired'));
+      goBack();
+      return;
+    }
     submitLoading.value = true;
+    submitError.value = '';
     try {
-      const res = await apiBasePost('/api/search/batchUpdateResourceTags', {
-        action: mode.value,
-        tagIds: selectedTagIds.value,
-        selection: selection.value,
-      });
+      const res = await apiBasePost(
+        '/api/search/batchUpdateResourceTags',
+        {
+          action: mode.value,
+          tagIds: selectedTagIds.value,
+          selection: selection.value,
+        },
+        { silent: true },
+      );
+      if (disposed || identity !== buildNoteDetailRequestScope(user) || (token && !sessionValid())) return;
       if (res.status !== 200) {
-        message.error(res.msg || t('resourceCenter.batch.submitFailed'));
+        submitError.value = t('resourceCenter.batch.submitFailed');
         return;
       }
       const affected = Number(res.data?.affectedRelationCount || 0);
@@ -296,35 +486,64 @@
             : `批量移除标签成功【资源${selectedResourceCount.value}个，关系移除${affected}条】`,
       });
       message.success(t('resourceCenter.batch.submitSuccess', { affected, skipped }));
-      sessionStorage.removeItem(STORAGE_KEY);
+      if (!token) sessionStorage.removeItem(STORAGE_KEY);
       clearGlobalSearchCache();
+      if (fromPath.value.split('?')[0] === '/cloudSpace') void cloud.queryFieldList();
+      submitLoading.value = false;
       const target = router.resolve(fromPath.value);
-      router.replace({
+      await router.replace({
         path: target.path,
         query: {
           ...target.query,
           _rt: String(Date.now()),
         },
       });
+    } catch {
+      if (!disposed && identity === buildNoteDetailRequestScope(user))
+        submitError.value = t('resourceCenter.batch.submitFailed');
     } finally {
       submitLoading.value = false;
     }
   }
 
   onMounted(async () => {
-    const stored = loadBatchStateFromStorage();
+    const stored = token
+      ? sessionValid()
+        ? {
+            items: handoff.operation.items,
+            selection: handoff.operation.selection,
+            selectedCount:
+              handoff.operation.selection.mode === 'allMatching'
+                ? selectionStore.count
+                : handoff.operation.items.length,
+          }
+        : null
+      : fromPath.value.startsWith('/organize')
+        ? loadBatchStateFromStorage()
+        : null;
     if (!stored?.selection || !stored.selectedCount) {
-      message.warning(t('resourceCenter.batch.noSelection'));
+      message.warning(t(token ? 'resourceSelection.expired' : 'resourceCenter.batch.noSelection'));
       router.replace(fromPath.value);
       return;
     }
     items.value = stored.items;
     selection.value = stored.selection;
     selectedResourceCount.value = stored.selectedCount;
-    const ok = await loadWorkspaceData();
-    if (!ok) {
-      router.replace(fromPath.value);
-    }
+    selectionTypeCounts.value = stored.items.reduce(
+      (counts, item) => {
+        counts[item.type] = (counts[item.type] || 0) + 1;
+        return counts;
+      },
+      { bookmark: 0, note: 0, file: 0, tag: 0 },
+    );
+    await loadWorkspaceData();
+  });
+
+  onBeforeRouteLeave(() => !submitLoading.value || (Boolean(token) && !sessionValid()));
+  onBeforeRouteUpdate(() => !submitLoading.value || (Boolean(token) && !sessionValid()));
+  onBeforeUnmount(() => {
+    disposed = true;
+    workspaceGeneration++;
   });
 </script>
 
@@ -332,264 +551,233 @@
   .batch-page {
     height: 100%;
     overflow: auto;
-    padding: 0;
-    box-sizing: border-box;
     color: var(--text-color);
   }
-
   .batch-layout {
-    margin-top: 0;
     display: grid;
-    gap: 16px;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(240px, 0.8fr) minmax(0, 2fr);
+    gap: 20px;
+    align-items: start;
   }
-
-  .panel {
-    --b-card-background: var(--card-background);
-    --b-card-border-color: var(--surface-border-color);
-    --b-card-shadow: var(--surface-card-shadow);
-
-    border-radius: 18px;
-  }
-
-  .panel-title {
-    font-size: 18px;
-    font-weight: 700;
-  }
-
-  .panel-subtitle {
-    margin-top: 6px;
-    color: var(--desc-color);
-    font-size: 13px;
-  }
-
-  .summary-row {
-    margin-top: 12px;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-    gap: 8px;
-  }
-
-  .summary-chip {
-    min-height: 40px;
-    padding: 8px 10px;
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--bl-input-noBorder-bg-color) 88%, var(--card-background));
-    color: var(--text-color);
-    font-size: 12px;
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    align-items: center;
-    gap: 6px;
-    border: 1px solid var(--surface-border-color);
-  }
-
-  .summary-chip-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--resource-bookmark-color);
-  }
-
-  .summary-chip--note .summary-chip-dot {
-    background: var(--resource-note-color);
-  }
-
-  .summary-chip--file .summary-chip-dot {
-    background: var(--resource-file-color);
-  }
-
-  .summary-chip-label {
-    color: var(--desc-color);
+  .resource-panel,
+  .tag-panel {
     min-width: 0;
+    --b-card-shadow: none;
   }
-
-  .summary-chip-count {
-    min-width: 30px;
-    height: 22px;
-    border-radius: 7px;
-    padding: 0 8px;
-    display: inline-flex;
+  .panel-heading {
+    display: flex;
     align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    font-size: 13px;
-    background: color-mix(in srgb, var(--card-background) 90%, transparent);
-  }
-
-  .summary-chip--bookmark .summary-chip-count {
-    color: var(--resource-bookmark-color);
-  }
-
-  .summary-chip--note .summary-chip-count {
-    color: var(--resource-note-color);
-  }
-
-  .summary-chip--file .summary-chip-count {
-    color: var(--resource-file-color);
-  }
-
-  .item-list {
-    margin-top: 12px;
-    max-height: 420px;
-    overflow: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .item-row {
-    min-height: 78px;
-    border-radius: 10px;
-    border: 1px solid var(--surface-border-color);
-    background: var(--workspace-panel-bg-color);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 10px;
-    padding: 12px 14px;
-    transition:
-      border-color 0.2s,
-      background-color 0.2s;
-  }
-
-  .item-row:hover {
-    border-color: color-mix(in srgb, var(--primary-color) 42%, var(--surface-border-color));
-    background: color-mix(in srgb, var(--primary-color) 3%, var(--workspace-panel-bg-color));
-  }
-
-  .item-main {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: baseline;
+    justify-content: space-between;
     gap: 10px;
   }
-
-  .item-type-badge {
-    min-height: 21px;
-    border-radius: 999px;
-    padding: 0 9px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 11px;
-    font-weight: 700;
-    background: color-mix(in srgb, var(--resource-bookmark-color) 15%, transparent);
-    color: var(--resource-bookmark-color);
+  .mode-tabs {
+    width: fit-content;
+    border-radius: 8px;
   }
-
-  .item-type-badge--note {
-    background: color-mix(in srgb, var(--resource-note-color) 15%, transparent);
-    color: var(--resource-note-color);
+  .mode-tabs :deep(.tab.is-active) {
+    border-bottom: 2px solid var(--primary-color);
   }
-
-  .item-type-badge--file {
-    background: color-mix(in srgb, var(--resource-file-color) 15%, transparent);
-    color: var(--resource-file-color);
+  .batch-page--mobile .mode-tabs :deep(.tab) {
+    min-height: 44px;
+    line-height: 44px;
   }
-
-  .item-title {
-    font-size: 20px;
+  h2 {
+    margin: 0;
+    font-size: 15px;
     font-weight: 600;
-    line-height: 1.2;
   }
-
-  .item-tags {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    min-height: 22px;
-    min-width: 0;
-  }
-
-  .item-tags-label {
-    color: var(--text-color);
-    font-size: 12px;
+  .resource-total {
+    font-size: 21px;
     font-weight: 700;
-    flex-shrink: 0;
-    opacity: 0.78;
   }
-
-  .item-tags-values {
+  .summary-row {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    min-width: 0;
+    margin-top: 10px;
   }
-
-  .item-tags-value {
-    min-width: 0;
+  .panel-hint {
+    margin: 10px 0;
+    color: var(--desc-color);
     font-size: 12px;
-    color: var(--desc-color);
+    line-height: 1.6;
   }
-
-  .item-tags-value--empty {
-    opacity: 0.62;
+  .item-list {
+    border-top: 1px solid var(--surface-border-color);
   }
-
-  .tag-list {
-    margin-top: 12px;
-    max-height: 300px;
-    overflow: auto;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+  .item-row {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--surface-border-color);
   }
-
-  .tag-chip {
-    min-height: 30px;
-  }
-
-  .tag-chip.tag-chip--selected.b-chip--tag.b-chip--selected {
-    --b-chip-fg: var(--card-background, var(--background-color));
-    --b-chip-bg: var(--chip-tag-fg);
-    --b-chip-border: var(--chip-tag-fg);
-
-    border-color: var(--chip-tag-fg);
-    border-width: 2px;
-  }
-
-  .preview-box {
-    margin-top: 16px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 12px;
-    padding: 12px;
-    background: var(--workspace-panel-bg-color);
-  }
-
-  .preview-title {
-    font-size: 13px;
-    color: var(--desc-color);
-  }
-
-  .preview-line {
-    margin-top: 6px;
-    font-size: 14px;
-  }
-
-  .empty-tip {
-    margin-top: 12px;
-    color: var(--desc-color);
-  }
-
-  .text-hidden {
+  .item-title {
+    display: block;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-size: 13px;
+    font-weight: 500;
+    flex: 1;
   }
-
-  @media (max-width: 900px) {
-    .batch-page {
-      padding: 12px;
-    }
-
-    .batch-layout {
-      grid-template-columns: 1fr;
-    }
-
-    .batch-header {
-      flex-direction: column;
-      align-items: flex-start;
-    }
+  .item-heading {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .item-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 7px;
+  }
+  .item-tags .panel-hint {
+    margin: 0;
+  }
+  .resource-toggle {
+    margin-top: 10px;
+    width: 100%;
+  }
+  .workspace-status {
+    min-height: 300px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+    text-align: center;
+    color: var(--desc-color);
+  }
+  .tag-search {
+    margin: 18px 0 10px;
+  }
+  .selection-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    color: var(--desc-color);
+  }
+  .tag-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+    gap: 8px;
+  }
+  .tag-option {
+    box-sizing: border-box;
+    min-width: 0;
+    min-height: 44px;
+    padding: 10px 12px;
+    gap: 10px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 10px;
+    background: var(--workspace-panel-bg-color);
+  }
+  .tag-option :deep(.b-checkbox__label) {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+    flex: 1;
+  }
+  .tag-option-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-color);
+    font-size: 13px;
+  }
+  .tag-option-status {
+    color: var(--desc-color);
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .tag-option:hover:not(.is-disabled),
+  .tag-option:focus-visible {
+    border-color: var(--primary-color);
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+  }
+  .tag-option--selected {
+    border-color: var(--primary-color);
+  }
+  .tag-option--selected .tag-option-name {
+    color: var(--primary-color);
+    font-weight: 600;
+  }
+  .tag-option.is-disabled {
+    opacity: 0.65;
+  }
+  .preview-box {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--surface-border-color);
+  }
+  .selected-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .preview-result {
+    margin: 12px 0 0;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .tag-chip.tag-chip--selected.b-chip--tag.b-chip--selected {
+    --b-chip-bg: var(--chip-tag-fg);
+    --b-chip-border: var(--chip-tag-fg);
+    --b-chip-fg: var(--card-background);
+    border-color: var(--chip-tag-fg);
+    border-width: 2px;
+  }
+  .empty-tip {
+    padding: 30px 12px;
+    color: var(--desc-color);
+    text-align: center;
+    font-size: 13px;
+  }
+  .submit-error {
+    padding: 12px;
+    color: var(--error-color);
+    border: 1px solid var(--error-color);
+    border-radius: 8px;
+    font-size: 13px;
+  }
+  .batch-page--mobile {
+    padding-bottom: calc(155px + env(safe-area-inset-bottom));
+  }
+  .batch-page--mobile .batch-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .batch-page--mobile .tag-panel {
+    padding: 14px !important;
+  }
+  .batch-page--mobile .tag-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .batch-page--mobile .tag-option {
+    min-height: 44px;
+    padding: 10px 8px;
+    gap: 6px;
+  }
+  .batch-page--mobile .selection-toolbar {
+    flex-wrap: wrap;
+  }
+  .batch-page--mobile .resource-toggle {
+    min-height: 44px;
+  }
+  .batch-page--mobile .tag-option-name {
+    font-size: 14px;
+  }
+  .batch-page--mobile .tag-option-status {
+    font-size: 12px;
+  }
+  .batch-page--mobile .tag-chip,
+  .batch-page--mobile .preview-box :deep(.b_btn),
+  .batch-page--mobile .selection-toolbar :deep(.b-checkbox) {
+    min-height: 44px;
   }
 </style>

@@ -1,5 +1,5 @@
 <template>
-  <div v-if="ranks.length" class="rank-ladder">
+  <div v-if="ranks.length" class="rank-ladder" :class="{ 'rank-ladder--compact': compact }">
     <div class="rl-heading">
       <div class="rl-head">{{ t('growth.rankLadder') }}</div>
       <p class="rl-hint">{{ t('growth.rankLadderHint') }}</p>
@@ -12,7 +12,7 @@
     </div>
     <div ref="listEl" class="rl-list">
       <div
-        v-for="r in ranks"
+        v-for="r in displayedRanks"
         :key="r.level"
         class="rl-row"
         :class="{ cur: r.level === curLevel, done: r.level < curLevel }"
@@ -27,10 +27,15 @@
         <span class="rl-perk">
           {{ fmtMb(r.spaceMb) }} · {{ fmtToken(r.aiTokenDaily) }} ·
           {{ r.trashDays >= 3650 ? t('growth.trashForever') : t('growth.trashDays', { days: r.trashDays })
-          }}<span v-if="r.freeDraws" class="rl-free">· <SvgIcon :src="icon.growth.reward" size="12" />{{ r.freeDraws }}</span>
+          }}<span v-if="r.freeDraws" class="rl-free"
+            >· <SvgIcon :src="icon.growth.reward" size="12" />{{ r.freeDraws }}</span
+          >
         </span>
       </div>
     </div>
+    <BButton v-if="compact && ranks.length > 3" class="rl-toggle" size="small" @click="showAll = !showAll">
+      {{ showAll ? t('common.collapse') : t('growth.viewAllRanks') }}
+    </BButton>
   </div>
 </template>
 
@@ -40,12 +45,15 @@
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { tierOf, TIER_GRADIENTS } from '@/config/growthTier';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
 
   const { t } = useI18n();
+  const props = withDefaults(defineProps<{ compact?: boolean }>(), { compact: false });
   const { growth, ranks, load, loadRanks } = useGrowth();
   const listEl = ref<HTMLElement | null>(null);
+  const showAll = ref(false);
 
   onMounted(async () => {
     await Promise.all([load(), loadRanks()]);
@@ -53,6 +61,16 @@
 
   const curLevel = computed(() => growth.value?.level || 1);
   const maxLevel = computed(() => ranks.value.length || 15);
+  const compact = computed(() => props.compact);
+  const displayedRanks = computed(() => {
+    if (!compact.value || showAll.value || ranks.value.length <= 3) return ranks.value;
+    const currentIndex = Math.max(
+      0,
+      ranks.value.findIndex((rank) => rank.level === curLevel.value),
+    );
+    const start = Math.min(Math.max(0, currentIndex - 1), Math.max(0, ranks.value.length - 3));
+    return ranks.value.slice(start, start + 3);
+  });
 
   function fmtMb(mb: number) {
     return mb >= 1024 ? `${+(mb / 1024).toFixed(1)}G` : `${mb}M`;
@@ -191,5 +209,60 @@
     color: #d97706;
     font-weight: 600;
     margin-left: 2px;
+  }
+  .rl-toggle.b_btn {
+    width: 100%;
+    min-height: 30px;
+    border-color: var(--card-border-color);
+    color: var(--text-color);
+    background: var(--background-color);
+  }
+  .rank-ladder--compact {
+    gap: 5px;
+    margin-top: 0;
+  }
+  .rank-ladder--compact .rl-head {
+    color: var(--text-color);
+    font-size: 12px;
+  }
+  .rank-ladder--compact .rl-hint {
+    margin-top: 1px;
+    overflow: hidden;
+    font-size: 9.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .rank-ladder--compact .rl-colhead {
+    gap: 6px;
+    margin-bottom: 1px;
+    padding: 0 5px 4px;
+    font-size: 9.5px;
+  }
+  .rank-ladder--compact .rl-list {
+    gap: 2px;
+    padding-right: 0;
+  }
+  .rank-ladder--compact .rl-row {
+    grid-template-columns: 22px minmax(64px, 1fr) auto auto;
+    gap: 6px;
+    min-height: 30px;
+    box-sizing: border-box;
+    padding: 3px 5px;
+    font-size: 11px;
+  }
+  .rank-ladder--compact .rl-lv {
+    width: 20px;
+    height: 20px;
+    font-size: 10px;
+  }
+  .rank-ladder--compact .rl-perk {
+    font-size: 9.5px;
+  }
+  .rank-ladder--compact .rl-exp {
+    font-size: 10px;
+  }
+  .rank-ladder--compact .rl-toggle.b_btn {
+    min-height: 27px;
+    font-size: 10.5px;
   }
 </style>

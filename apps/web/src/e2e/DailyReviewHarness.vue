@@ -7,7 +7,7 @@
     </header>
 
     <section class="daily-review-harness__surface" :data-state="visualState">
-      <DailyReviewCard :read-only="visualState === 'readonly'" />
+      <DailyReviewCard :read-only="visualState === 'readonly'" :compact="compact" :inline="compact && isMobile" />
       <p v-if="visualState === 'visitor'" class="daily-review-harness__visitor-note">
         游客不生成空回顾卡片；页面保留原有登录引导。
       </p>
@@ -17,9 +17,11 @@
 
 <script setup lang="ts">
   import { computed } from 'vue';
+  import { useMobileLayout } from '@/composables/useMobileLayout';
+  const isMobile = useMobileLayout();
   import DailyReviewCard from '@/components/workbenches/DailyReviewCard.vue';
 
-  const props = defineProps<{ visualState: string }>();
+  const props = defineProps<{ visualState: string; compact?: boolean }>();
   const descriptions: Record<string, string> = {
     active: '三条固定内容中的第一条；用于核对进度、主操作、换一条与更多菜单。',
     loading: '首次生成尚未返回，卡片应只显示独立加载状态。',

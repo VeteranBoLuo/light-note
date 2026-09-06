@@ -130,7 +130,7 @@ const EMPTY_STATE: AfdianSupportState = {
   linked: false,
   orderCount: 0,
   totalAmount: '0.00',
-  publicPreference: { participateInRanking: true, showIdentity: false, adminHidden: false },
+  publicPreference: { participateInRanking: true, showIdentity: true, adminHidden: false },
   recentOrders: [],
 };
 

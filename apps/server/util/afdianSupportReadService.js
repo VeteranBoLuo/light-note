@@ -6,7 +6,7 @@ import { recordAdminOperationAudit } from './adminOperationAudit.js';
 
 const DEFAULT_PREFERENCE = Object.freeze({
   participateInRanking: true,
-  showIdentity: false,
+  showIdentity: true,
   adminHidden: false,
 });
 const PUBLIC_LEADERBOARD_LIMIT = 10;
@@ -47,6 +47,23 @@ function orderScopeClause(scope, alias = 'o') {
 
 export function invalidateAfdianLeaderboardCache() {
   leaderboardCache = null;
+}
+
+/**
+ * 仅在用户尚未保存过榜单偏好时落下默认公开记录，并生成不可猜测的头像公开 ID。
+ * INSERT IGNORE 保证匿名、退榜等既有明确选择永远不会被默认值覆盖。
+ * 系统默认不写 identity_consented_at；该时间只记录用户主动保存公开选择的事实。
+ */
+export async function ensureDefaultAfdianPublicPreference({ userId, db = pool }) {
+  const normalizedUserId = String(userId || '').trim();
+  if (!normalizedUserId) throw afdianError('AFDIAN_PREFERENCE_USER_INVALID', '用户标识不合法', 400);
+  await db.query(
+    `INSERT IGNORE INTO support_public_preferences
+      (user_id, public_id, participate_in_ranking, show_identity, identity_consented_at)
+     VALUES (?, ?, 1, 1, NULL)`,
+    [normalizedUserId, crypto.randomUUID()],
+  );
+  invalidateAfdianLeaderboardCache();
 }
 
 export async function getAfdianPublicPreference({ userId, db = pool }) {
@@ -163,7 +180,7 @@ async function loadLeaderboardRows(db) {
             u.alias,
             p.public_id,
             COALESCE(p.participate_in_ranking, 1) AS participate_in_ranking,
-            COALESCE(p.show_identity, 0) AS show_identity,
+            COALESCE(p.show_identity, 1) AS show_identity,
             COALESCE(p.admin_hidden, 0) AS admin_hidden,
             CASE
               WHEN u.head_picture LIKE 'https://%' THEN 1
@@ -434,7 +451,7 @@ export async function queryAfdianAdminSupporters({ page, pageSize, search = '', 
               SUM(COALESCE(e.granted_storage_mb, 0)) AS granted_storage_mb,
               MAX(COALESCE(o.ranking_observed_at, o.verified_at)) AS last_support_at,
               COALESCE(p.participate_in_ranking, 1) AS participate_in_ranking,
-              COALESCE(p.show_identity, 0) AS show_identity,
+              COALESCE(p.show_identity, 1) AS show_identity,
               COALESCE(p.admin_hidden, 0) AS admin_hidden,
               p.admin_hidden_reason
          ${base}

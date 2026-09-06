@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH, resolveNoteWorkspaceLayout } from './noteWorkspaceLayout';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+const shellSource = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/workspace/NoteWorkspaceShell.vue'), 'utf8');
 
 describe('resolveNoteWorkspaceLayout', () => {
   it('统一页面侧栏默认宽度', () => {
@@ -33,5 +37,13 @@ describe('resolveNoteWorkspaceLayout', () => {
       sidebarPresentation: 'hidden',
       aiPresentation: 'hidden',
     });
+  });
+
+  it('工作区允许页面显式启用桌面双停靠，并保留可配置的中栏下限', () => {
+    expect(shellSource).toContain('forceDockedPanels?: boolean');
+    expect(shellSource).toContain("if (!props.forceDockedPanels || props.mobile) return resolved");
+    expect(shellSource).toContain("sidebarPresentation: props.hasSidebar ? ('dock' as const) : ('hidden' as const)");
+    expect(shellSource).toContain("aiPresentation: props.hasAi ? ('dock' as const) : ('hidden' as const)");
+    expect(shellSource).toContain("'--note-workspace-main-min-width'");
   });
 });

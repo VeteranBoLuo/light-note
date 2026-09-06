@@ -9,6 +9,7 @@ import pool from '../db/index.js';
 import { afdianError, getAfdianApiConfig, getAfdianFeatureState } from './afdianConfig.js';
 import { normalizeAfdianOrder, queryAfdianOrders, queryAfdianPublicProfile } from './afdianClient.js';
 import {
+  ensureDefaultAfdianPublicPreference,
   getAfdianPublicPreference,
   getAfdianUserOrders,
   invalidateAfdianLeaderboardCache,
@@ -160,6 +161,7 @@ export async function createAfdianCheckoutIntent({ userId, optionKey, db = pool 
   if (!option) throw afdianError('AFDIAN_CHECKOUT_OPTION_INVALID', '请选择有效的赞助档位');
   const token = crypto.randomBytes(32).toString('base64url');
   const id = crypto.randomUUID();
+  await ensureDefaultAfdianPublicPreference({ userId, db });
   await db.query(
     `INSERT INTO support_checkout_intents
       (id, token_hash, user_id, option_key, intent_type, catalog_version, quoted_amount, expires_at)
@@ -790,6 +792,7 @@ export async function linkAfdianAccount({
           AND (o.provider_user_id = ?${orderPrivateClause})`,
       [userId, userId, userId, userId, ...identityParams],
     );
+    await ensureDefaultAfdianPublicPreference({ userId, db: connection });
     await syncAfdianRewardsForUser(connection, userId);
     await connection.commit();
     invalidateAfdianLeaderboardCache();

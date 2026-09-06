@@ -29,7 +29,7 @@ vi.mock('../util/filePreview/service.js', () => previewMocks);
 vi.mock('../util/filePreview/shareTicket.js', () => ticketMocks);
 vi.mock('../util/agent/logSafety.js', () => ({ stableAgentErrorCode: () => 'SAFE_ERROR' }));
 
-const { prepareFileSharePreview, resolveFileSharePreview } = await import('./fileShareHandle.js');
+const { prepareFileSharePreview, resolveFileSharePreview, getFileSharePreviewOriginal } = await import('./fileShareHandle.js');
 
 function shareRow(overrides = {}) {
   return {
@@ -79,6 +79,21 @@ describe('shared derived file preview handlers', () => {
     previewMocks.prepareFilePreview.mockResolvedValue({ status: 'queued', previewType: 'converted-pdf' });
     previewMocks.resolveFilePreview.mockResolvedValue({ status: 'ready', previewType: 'converted-pdf' });
     ticketMocks.issueFilePreviewShareTicket.mockResolvedValue({ token: 'ticket-value', expiresIn: 900 });
+  });
+
+  it('returns an image ticket even when generation fails and reuses it for original access without recounting', async () => {
+    const row = shareRow({ file_name: 'photo.png', file_type: 'image/png' });
+    const conn = transactionFor(row);
+    previewMocks.prepareFilePreview.mockRejectedValueOnce(new Error('worker unavailable'));
+    const res = response();
+    await prepareFileSharePreview({ body: { token: 't'.repeat(43) }, ip: '127.0.0.1', headers: {} }, res);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200, data: expect.objectContaining({ status: 'failed', previewTicket: 'ticket-value' }) }));
+    const calls = conn.query.mock.calls.length;
+    ticketMocks.readFilePreviewShareTicket.mockResolvedValue({ shareId: row.id, fileId: row.file_id, ownerUserId: row.file_owner_id });
+    poolMocks.query.mockResolvedValue([[row]]);
+    await getFileSharePreviewOriginal({ body: { previewTicket: 'ticket-value' }, headers: {} }, response());
+    expect(conn.query.mock.calls.length).toBe(calls);
+    expect(obsMocks.createDownloadSignedUrl.mock.calls.at(-1)[0].expires).toBeLessThan(60);
   });
 
   it('counts the first prepare as one download and returns a scoped polling ticket', async () => {

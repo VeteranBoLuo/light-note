@@ -43,4 +43,31 @@ describe('tagService', () => {
     expect(normalizeTagDescription('  ')).toBe('');
     expect(normalizeTagDescription(undefined)).toBeUndefined();
   });
+
+  it('同名标签并发命中唯一键时 ensure 回读赢家，显式创建仍返回重复错误', async () => {
+    const duplicate = Object.assign(new Error('duplicate'), { code: 'ER_DUP_ENTRY' });
+    const ensureConnection = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[]])
+        .mockRejectedValueOnce(duplicate)
+        .mockResolvedValueOnce([[{ id: 'tag-winner', name: '项目资料' }]]),
+    };
+
+    await expect(
+      createTag({ userId: 'user-1', name: '项目资料', connection: ensureConnection, existingIsSuccess: true }),
+    ).resolves.toEqual({ id: 'tag-winner', name: '项目资料', isNew: false });
+    expect(ensureConnection.query.mock.calls[2][0]).toContain('FOR UPDATE');
+
+    const createConnection = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[]])
+        .mockRejectedValueOnce(duplicate)
+        .mockResolvedValueOnce([[{ id: 'tag-winner', name: '项目资料' }]]),
+    };
+    await expect(createTag({ userId: 'user-1', name: '项目资料', connection: createConnection })).rejects.toThrow(
+      'TAG_DUPLICATE',
+    );
+  });
 });

@@ -35,10 +35,6 @@ const commonRouter: RouteRecordRaw[] = [
     path: '/settings',
     name: 'settings',
     component: () => import('@/view/settings/Settings.vue'),
-    beforeEnter: (to) =>
-      (Array.isArray(to.query.section) ? to.query.section[0] : to.query.section) === 'ai'
-        ? { name: 'aiUsage', replace: true }
-        : true,
   },
   {
     meta: {

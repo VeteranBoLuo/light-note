@@ -1,5 +1,12 @@
 <template>
-  <BCard as="article" class="package-card" :class="{ 'is-campaign': isCampaign }" padding="18px" radius="16px">
+  <BCard
+    as="article"
+    class="package-card"
+    :class="{ 'is-campaign': isCampaign, 'is-recommended': isRecommended }"
+    padding="20px"
+    radius="18px"
+  >
+    <span v-if="isRecommended" class="package-card__recommendation">{{ t('entitlementStore.recommended') }}</span>
     <div class="package-card__top">
       <span class="package-card__icon" aria-hidden="true">
         <SvgIcon :src="packageIcon" size="20" />
@@ -38,16 +45,16 @@
       <h3>{{ tierLabel }}</h3>
       <p class="package-card__scenario">{{ scenarioLabel }}</p>
       <div class="package-card__benefits">
-        <div class="package-card__benefit-row">
-          <span>{{ t('entitlementStore.baseArrival') }}</span>
-          <strong>{{ formatBenefit(regularItem.base) }}</strong>
-        </div>
         <div
-          class="package-card__benefit-row"
+          class="package-card__benefit-row package-card__benefit-row--primary"
           :class="{ 'is-highlighted': regularItem.firstPurchaseStatus === 'available' && !previewMode }"
         >
           <span>{{ expectedArrivalLabel }}</span>
           <strong>{{ formatBenefit(expectedBenefit) }}</strong>
+        </div>
+        <div class="package-card__benefit-row package-card__benefit-row--base">
+          <span>{{ t('entitlementStore.baseArrival') }}</span>
+          <strong>{{ formatBenefit(regularItem.base) }}</strong>
         </div>
       </div>
       <p class="package-card__status-note">{{ firstPurchaseNote }}</p>
@@ -103,6 +110,7 @@
   const { t, locale } = useI18n();
 
   const isCampaign = computed(() => 'campaignSkuId' in props.item);
+  const isRecommended = computed(() => !isCampaign.value && props.index === 1);
   const campaignItem = computed(() => props.item as SupportCampaignPackage);
   const regularItem = computed(() => props.item as SupportPackage);
   const tierKey = computed(() => ['light', 'regular', 'frequent', 'heavy'][Math.min(Math.max(props.index, 0), 3)]);
@@ -163,15 +171,35 @@
 
 <style scoped lang="less">
   .package-card {
-    min-height: 432px;
+    position: relative;
+    min-height: 446px;
     display: flex;
     flex-direction: column;
     border: 1px solid var(--surface-border-color);
     transition:
-      border-color 0.18s ease;
+      transform 0.18s ease,
+      border-color 0.18s ease,
+      box-shadow 0.18s ease;
+  }
+  .package-card.is-recommended {
+    border: 2px solid var(--primary-color);
+    box-shadow: var(--surface-raised-shadow);
   }
   .package-card.is-campaign {
     min-height: 410px;
+  }
+  .package-card__recommendation {
+    position: absolute;
+    top: -12px;
+    right: 18px;
+    padding: 5px 12px;
+    border: 1px solid var(--primary-color);
+    border-radius: 999px;
+    color: var(--button-primary-text-color, #fff);
+    background: var(--primary-color);
+    font-size: 11px;
+    font-weight: 750;
+    line-height: 1;
   }
   .package-card__top {
     min-height: 38px;
@@ -210,8 +238,9 @@
     font-size: 14px;
   }
   .package-card__price strong {
-    font-size: 38px;
+    font-size: 42px;
     line-height: 1;
+    letter-spacing: -0.035em;
   }
   .package-card h3 {
     margin: 14px 0 0;
@@ -231,7 +260,7 @@
     margin-top: 15px;
   }
   .package-card__benefit-row {
-    padding: 9px 10px;
+    padding: 10px 11px;
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
   }
@@ -247,6 +276,17 @@
     margin-top: 3px;
     font-size: 13px;
     line-height: 1.4;
+  }
+  .package-card__benefit-row--primary {
+    min-height: 58px;
+    background: var(--surface-panel-bg);
+  }
+  .package-card__benefit-row--primary strong {
+    font-size: 15px;
+  }
+  .package-card__benefit-row--base {
+    border-color: transparent;
+    background: transparent;
   }
   .package-card__benefit-row.is-highlighted {
     border-color: var(--primary-color);
@@ -285,7 +325,9 @@
   }
   @media (hover: hover) and (pointer: fine) {
     .package-card:hover {
+      transform: translateY(-3px);
       border-color: var(--primary-color);
+      box-shadow: var(--surface-raised-shadow);
     }
   }
   @media (max-width: 640px) {
@@ -295,6 +337,13 @@
     }
     .package-card__scenario {
       min-height: 0;
+    }
+    .package-card__recommendation {
+      top: 12px;
+      right: 14px;
+    }
+    .package-card.is-recommended .package-card__top {
+      margin-top: 24px;
     }
     .package-card__action-wrap {
       margin-top: 18px;
@@ -310,6 +359,9 @@
     }
     .package-card:hover {
       transform: none;
+      box-shadow: none;
+    }
+    .package-card:not(.is-recommended):hover {
       border-color: var(--surface-border-color);
     }
   }

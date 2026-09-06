@@ -763,3 +763,32 @@ describe('globalSearch 快捷模式', () => {
     expect(res.send.mock.calls.at(-1)?.[0].status).toBe(200);
   });
 });
+
+describe('previewBatchSelection resolved items contract', () => {
+  beforeEach(() => { vi.clearAllMocks(); mocks.pool.query.mockReset(); });
+  it('显式核对使用管理员当前资源主体，且不返回其他账号或软删除资源', async () => {
+    mocks.pool.query.mockResolvedValueOnce([[{ id: 'owned' }]])
+      .mockResolvedValueOnce([[{ id: 'owned', title: 'Note', noteType: 'html' }]]);
+    const res = createResponse();
+    await previewBatchSelection({ user: { id: 'admin' }, resourceUser: { id: 'target' }, body: { includeResolvedItems: true, selection: { mode: 'explicit', items: [{ type: 'note', id: 'owned' }, { type: 'note', id: 'unavailable' }] } } }, res);
+    expect(mocks.pool.query.mock.calls.every(([, args]) => args[0] === 'target')).toBe(true);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200, data: expect.objectContaining({ resolvedItems: [expect.objectContaining({ id: 'owned', noteType: 'html' })], unavailableItems: [{ type: 'note', id: 'unavailable' }] }) }));
+  });
+  it('全部失效也返回 200 的空核对结果', async () => {
+    mocks.pool.query.mockResolvedValueOnce([[]]); const res = createResponse();
+    await previewBatchSelection({ user: { id: 'u' }, body: { includeResolvedItems: true, selection: { mode: 'explicit', items: [{ type: 'file', id: 'gone' }] } } }, res);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200, data: expect.objectContaining({ resolvedItems: [], total: 0 }) }));
+  });
+  it('旧显式协议维持汇总形状，不额外查询资源', async () => {
+    const res = createResponse(); await previewBatchSelection({ user: { id: 'u' }, body: { selection: { mode: 'explicit', items: [{ type: 'note', id: 'a' }] } } }, res);
+    expect(res.send.mock.calls[0][0].status).toBe(200);
+    expect(res.send.mock.calls[0][0].data).not.toHaveProperty('resolvedItems'); expect(mocks.pool.query).not.toHaveBeenCalled();
+  });
+  it('新模式拒绝查询全选展开及超限输入', async () => {
+    for (const selection of [{ mode: 'allMatching', query: {} }, { mode: 'explicit', items: Array.from({ length: 1001 }, (_, i) => ({ type: 'note', id: String(i) })) }]) {
+      const res = createResponse(); await previewBatchSelection({ user: { id: 'u' }, body: { includeResolvedItems: true, selection } }, res);
+      expect(res.send.mock.calls[0][0].status).toBe(400);
+    }
+    expect(mocks.pool.query).not.toHaveBeenCalled();
+  });
+});

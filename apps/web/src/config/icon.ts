@@ -2,6 +2,17 @@ const achievementGlyph = (content: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">${content}</g></svg>`;
 
 export default {
+  organize: {
+    priority: achievementGlyph('<path d="M12 5v9M12 18v.2"/>'),
+    manual: achievementGlyph('<path d="M8.5 8a3.5 3.5 0 1 1 6 2.45C13 11.5 12 12 12 14M12 18v.2"/>'),
+    clock: achievementGlyph('<path d="M12 5v7l4 2"/>'),
+    check: achievementGlyph('<path d="m6 12l4 4 8-9"/>'),
+    spark: achievementGlyph(
+      '<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z"/><path d="M20 2v4M18 4h4"/>',
+    ),
+    bulb: achievementGlyph('<path d="M9 17h6M9.5 21h5M9 14c-5-4-2-11 3-11s8 7 3 11v3H9Z"/>'),
+    file: achievementGlyph('<path d="M6 3h8l4 4v14H6ZM14 3v5h4M9 12h6M9 16h4"/>'),
+  },
   // 头像框结构素材只收敛难以由 CSS 表达的复杂主体；动效和组合关系由 AvatarFramePreview 维护。
   avatarFrame: {
     dragonCrest:
@@ -267,6 +278,8 @@ export default {
   toolkit:
     'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgNDggNDgiPgoJPHBhdGggZD0iTTAgMGg0OHY0OEgweiIgZmlsbD0ibm9uZSIgLz4KCTxwYXRoIGZpbGw9ImN1cnJlbnRDb2xvciIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNMjQgNi4wMDJjLTIuMTk1IDAtMy44OTMuMTM3LTUuMDYxLjI3OWMtLjY5My4wODMtMS4yOC41MjMtMS43NjcgMS42OWE4LjIgOC4yIDAgMCAwLS40NjQgMS41OUE4OSA4OSAwIDAgMSAyNCA5LjI3MmE4OSA4OSAwIDAgMSA3LjI5Mi4yOWE4LjIgOC4yIDAgMCAwLS40NjMtMS41OWMtLjQ4OS0xLjE2Ny0xLjA3NS0xLjYwNy0xLjc2Ny0xLjY5Yy0xLjE2OS0uMTQyLTIuODY3LS4yNzktNS4wNjItLjI3OW0tMTAuOTguMjM0Yy0uNTIyIDEuMjQ4LS44MDIgMi42MDUtLjkzNyAzLjg1Yy0yLjA0OC4zLTMuNzYyLjY0Ny01LjE0Mi45OGMtMy4zODQuODE1LTUuNjY4IDMuNjYyLTUuOTk3IDcuMDE2Yy0uMjMgMi4zNi0uNDQ0IDUuNjYtLjQ0NCA5LjgwM2MwIDQuNTUuMjU3IDguNTguNTEgMTEuNDQzYTcuMjQgNy4yNCAwIDAgMCA2LjY4NiA2LjYyYzMuNDUxLjI2NSA4Ljg4Ni41NSAxNi4zMDQuNTVzMTIuODUzLS4yODUgMTYuMzA0LS41NWE3LjI0IDcuMjQgMCAwIDAgNi42ODYtNi42MmMuMjUzLTIuODYzLjUxLTYuODk0LjUxLTExLjQ0NGMwLTQuMTQyLS4yMTMtNy40NDItLjQ0NC05LjgwM2MtLjMyOS0zLjM1NC0yLjYxMy02LjItNS45OTctNy4wMTZhNTggNTggMCAwIDAtNS4xNDItLjk4Yy0uMTM1LTEuMjQ1LS40MTUtMi42MDItLjkzNy0zLjg1Yy0uODMtMS45ODgtMi40NjUtNC4wNy01LjM3Ny00LjQyM2MtMS4zNDEtLjE2Mi0zLjIyLS4zMTEtNS42MDMtLjMxMXMtNC4yNjIuMTQ5LTUuNjAzLjMxMWMtMi45MTIuMzUzLTQuNTQ2IDIuNDM1LTUuMzc3IDQuNDIzTTI0IDEzLjI3MmMtNy41MyAwLTEyLjkwNC45MDctMTYuMTIyIDEuNjgzYy0xLjYyMi4zOS0yLjc4IDEuNzQ3LTIuOTUzIDMuNTE3QTg3IDg3IDAgMCAwIDQuNiAyMy4xNnExLjAzNy4wOTggMi42MjEuMjE1YzIuNTk2LjE4OSA2LjI3NC4zOTQgMTAuOTE1LjQ5NHEuMDIyLS40NjYuMDUyLS44NTRjLjE4Mi0yLjM4OCAyLjExNi0zLjkxNSA0LjI4OS0zLjk1NmE4MSA4MSAwIDAgMSAzLjA0NiAwYzIuMTczLjA0IDQuMTA3IDEuNTY4IDQuMjg5IDMuOTU2cS4wMy4zODkuMDUyLjg1NGM0LjY0LS4xIDguMzItLjMwNSAxMC45MTUtLjQ5NGExMzcgMTM3IDAgMCAwIDIuNjItLjIxNWE4NyA4NyAwIDAgMC0uMzI0LTQuNjg4Yy0uMTc0LTEuNzctMS4zMzEtMy4xMjYtMi45NTMtMy41MTdjLTMuMjE4LS43NzYtOC41OTEtMS42ODMtMTYuMTIyLTEuNjgzbS01Ljg3IDE0LjU5N3EuMDI0LjU0LjA1OC45OGMuMTgyIDIuMzg3IDIuMTE2IDMuOTE1IDQuMjg5IDMuOTU2YTgxIDgxIDAgMCAwIDMuMDQ2IDBjMi4xNzMtLjA0MSA0LjEwNy0xLjU2OSA0LjI4OS0zLjk1N3EuMDMzLS40NC4wNTgtLjk3OWM0Ljc1LS4xIDguNTI1LS4zMSAxMS4yLS41MDVxMS40MjYtLjEwNSAyLjQyOC0uMTk2bC4wMDIuNzE4YzAgNC40MDQtLjI1IDguMzE0LS40OTQgMTEuMDkxYy0uMTQ0IDEuNjI2LTEuMzkgMi44NTktMy4wMDkgMi45ODNjLTMuMzUuMjU4LTguNjgyLjU0LTE1Ljk5Ny41NHMtMTIuNjQ4LS4yODItMTUuOTk3LS41NGMtMS42Mi0uMTI0LTIuODY2LTEuMzU3LTMuMDA5LTIuOTgzYTEyOCAxMjggMCAwIDEtLjQ5Mi0xMS44MXExLjAwMi4wOTIgMi40MjkuMTk3YzIuNjc0LjE5NSA2LjQ0OS40MDQgMTEuMTk5LjUwNSIgY2xpcC1ydWxlPSJldmVub2RkIiAvPgo8L3N2Zz4K',
   common: {
+    batchSelect:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3.5" width="7" height="7" rx="1.6"/><path d="m4.8 7 1.2 1.2 2.2-2.4M14 7h7"/><rect x="3" y="13.5" width="7" height="7" rx="1.6"/><path d="m4.8 17 1.2 1.2 2.2-2.4M14 17h7"/></svg>',
     close:
       'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjQgMjQiPjxyZWN0IHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSIvPjxwYXRoIGZpbGw9ImN1cnJlbnRDb2xvciIgZD0ibTEyIDEzLjRsLTQuOSA0LjlxLS4yNzUuMjc1LS43LjI3NXQtLjctLjI3NXQtLjI3NS0uN3QuMjc1LS43bDQuOS00LjlsLTQuOS00LjlxLS4yNzUtLjI3NS0uMjc1LS43dC4yNzUtLjd0LjctLjI3NXQuNy4yNzVsNC45IDQuOWw0LjktNC45cS4yNzUtLjI3NS43LS4yNzV0LjcuMjc1dC4yNzUuN3QtLjI3NS43TDEzLjQgMTJsNC45IDQuOXEuMjc1LjI3NS4yNzUuN3QtLjI3NS43dC0uNy4yNzV0LS43LS4yNzV6Ii8+PC9zdmc+',
     calendar:

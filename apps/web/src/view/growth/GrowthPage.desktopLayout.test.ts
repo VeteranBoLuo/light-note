@@ -10,8 +10,8 @@ describe('GrowthPage 宽屏桌面导航布局', () => {
     expect(source).toContain('bookmark.isDesktop && !bookmark.isCompactLayout');
     expect(source).toContain('<aside v-if="useWideDesktopLayout" class="growth-desktop-sidebar">');
     expect(source).toMatch(/<BTabs[\s\S]*?v-if="!useWideDesktopLayout"[\s\S]*?class="growth-section-tabs"/);
-    expect(source).toMatch(/\.growth-workspace--wide\s*\{[\s\S]*?grid-template-columns:\s*220px minmax\(0, 1fr\)/);
-    expect(source).toContain('max-width: 1360px');
+    expect(source).toMatch(/\.growth-workspace--wide\s*\{[\s\S]*?grid-template-columns:\s*208px minmax\(0, 1fr\)/);
+    expect(source).toContain('max-width: 1480px');
   });
 
   it('宽屏把返回、标题和说明纳入同一个固定侧栏，紧凑布局仍显示顶部标题', () => {
@@ -34,20 +34,22 @@ describe('GrowthPage 宽屏桌面导航布局', () => {
     );
   });
 
-  it('奖励二级入口进入左栏，紧凑布局仍保留原有顶部二级 Tab', () => {
-    expect(source).toContain("section.key === 'rewards' && rewardsExpanded");
-    expect(source).toContain('@click="selectRewardSection(rewardSection.key)"');
+  it('宽屏把奖励页扁平化为一级入口，紧凑布局仍保留顶部二级 Tab', () => {
+    expect(source).toContain('v-for="option in desktopNavigationOptions"');
+    expect(source).toContain('@click="selectDesktopNavigation(option)"');
+    expect(source).toContain('key: `reward-${option.key}`');
+    expect(source).not.toContain('growth-side-subnav');
     expect(source).toMatch(
       /<template v-if="activeSection === 'rewards'">[\s\S]*?<BTabs[\s\S]*?v-if="!useWideDesktopLayout"[\s\S]*?class="growth-reward-tabs"/,
     );
   });
 
-  it('C5 功能开启时默认积分中心优先，并保持四个旧深链键兼容', () => {
+  it('奖励页保留五个入口与旧深链兼容', () => {
     expect(source).toContain(
       "const validRewardSections: RewardSection[] = ['center', 'shop', 'lottery', 'inventory', 'ledger']",
     );
     expect(source).toContain('const activeRewardSection = ref<RewardSection>(');
-    expect(source).toContain("enabled && pointsCenterEnabled.value ? 'center' : enabled ? 'inventory' : 'shop'");
+    expect(source).toContain("hasRewardDeepLink ? (routeRewardSection as RewardSection) : 'inventory'");
     expect(source).toMatch(
       /const options:[\s\S]*?key: 'center'[\s\S]*?key: 'inventory'[\s\S]*?key: 'shop'[\s\S]*?key: 'ledger'[\s\S]*?key: 'lottery'/,
     );
@@ -71,13 +73,13 @@ describe('GrowthPage 宽屏桌面导航布局', () => {
     expect(source).toContain("if (section === 'lottery') void scrollLotteryToPreferredPosition()");
   });
 
-  it('当前奖励分区保持选中时，二级入口仍可独立展开和折叠', () => {
-    expect(source).toContain("const rewardsExpanded = ref(activeSection.value === 'rewards')");
-    expect(source).toContain(`:aria-expanded="section.key === 'rewards' ? rewardsExpanded : undefined"`);
+  it('扁平导航不再依赖折叠状态，奖励项直接切换对应页', () => {
+    expect(source).not.toContain('rewardsExpanded');
+    expect(source).not.toContain(':aria-expanded');
+    expect(source).toMatch(/function isDesktopNavigationActive[\s\S]*?option\.reward === activeRewardSection\.value/);
     expect(source).toMatch(
-      /if \(section === 'rewards' && activeSection\.value === 'rewards'\)\s*\{\s*rewardsExpanded\.value = !rewardsExpanded\.value;\s*return;/,
+      /function selectDesktopNavigation[\s\S]*?activeRewardSection\.value = option\.reward;[\s\S]*?selectSection\(option\.section\)/,
     );
-    expect(source).toMatch(/watch\(activeSection,[\s\S]*?rewardsExpanded\.value = section === 'rewards';/);
   });
 
   it('当前项同时使用实色描边、左侧标记和实心图标底表达', () => {
@@ -124,11 +126,56 @@ describe('GrowthPage 宽屏桌面导航布局', () => {
   });
 
   it('工作台周挑战入口定位到任务分区末尾，并在异步挑战数据加载后重新对齐', () => {
-    expect(source).toContain('<section id="growth-weekly" class="growth-panel">');
+    expect(source).toContain('<section v-else-if="taskView === \'weekly\'" id="growth-weekly">');
     expect(source).toContain("if (hash === '#growth-weekly') return 'tasks'");
     expect(source).toContain("block: route.hash === '#growth-weekly' ? 'end' : 'start'");
     expect(source).toContain('@loaded="handleWeeklyLoaded"');
     expect(source).toMatch(/function handleWeeklyLoaded[\s\S]*?route\.hash === '#growth-weekly'[\s\S]*?scrollToHash/);
+  });
+
+  it('概览将知识足迹与签到日历合并，任务页按日常、每周与新手路线切换', () => {
+    expect(source).toContain('class="growth-panel growth-knowledge-panel"');
+    const knowledgeStart = source.indexOf('class="growth-panel growth-knowledge-panel"');
+    const calendarIndex = source.indexOf('<SigninCalendar', knowledgeStart);
+    const heatmapIndex = source.indexOf(
+      '<ActivityHeatmap ref="heatmapRef" class="growth-knowledge-panel__heatmap" />',
+      knowledgeStart,
+    );
+    expect(calendarIndex).toBeGreaterThan(knowledgeStart);
+    expect(heatmapIndex).toBeGreaterThan(calendarIndex);
+    expect(source).toContain(':show-calendar="!useWideDesktopLayout"');
+    expect(source).toContain('v-model:active-tab="taskView"');
+    expect(source).toContain(':options="taskViewOptions"');
+    expect(source).toContain('class="growth-task-summary"');
+  });
+
+  it('共享任务卡不被宽屏 Flex 容器压缩，周任务与新手路线都交由主内容区滚动', () => {
+    expect(source).toMatch(/\.growth-task-center\s*\{[\s\S]*?flex:\s*0 0 auto;[\s\S]*?overflow:\s*hidden;/);
+    expect(source).toMatch(
+      /<div class="growth-task-workspace__main">[\s\S]*?id="growth-weekly"[\s\S]*?id="growth-tasks"/,
+    );
+    expect(source).toMatch(
+      /\.growth-workspace--wide \.growth-main\s*\{[\s\S]*?height:\s*100%;[\s\S]*?overflow-y:\s*auto;/,
+    );
+  });
+
+  it('宽屏概览按原型先展示状态条和等级资产，再并排展示下一步与每日任务', () => {
+    const todayIndex = source.indexOf('<TodayGrowthCard');
+    const growthIndex = source.indexOf('<GrowthCard');
+    const statsIndex = source.indexOf('<GrowthStats');
+    const routineIndex = source.indexOf('class="growth-overview-routine"');
+    const nextActionIndex = source.indexOf('<GrowthNextActionCard', routineIndex);
+    const dailyIndex = source.indexOf('<DailyQuests', routineIndex);
+
+    expect(todayIndex).toBeGreaterThan(-1);
+    expect(growthIndex).toBeGreaterThan(todayIndex);
+    expect(statsIndex).toBeGreaterThan(growthIndex);
+    expect(routineIndex).toBeGreaterThan(statsIndex);
+    expect(nextActionIndex).toBeGreaterThan(routineIndex);
+    expect(dailyIndex).toBeGreaterThan(nextActionIndex);
+    expect(source).toContain(':compact="useWideDesktopLayout"');
+    expect(source).toContain(':show-next-action="!useWideDesktopLayout"');
+    expect(source).toMatch(/\.growth-overview-routine\s*\{[\s\S]*?grid-template-columns:/);
   });
 
   it('成长页只保留成长足迹时间线，不再展示或自动加载旧内容回顾卡', () => {

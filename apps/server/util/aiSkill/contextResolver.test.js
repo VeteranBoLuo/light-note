@@ -17,6 +17,10 @@ function request(resourceRefs) {
   return { scope: { resourceRefs } };
 }
 
+function directoryRequest(selector, resourceRefs = []) {
+  return { scope: { resourceRefs, selector } };
+}
+
 function authenticatedRequest(overrides = {}) {
   return {
     user: { id: 'user-1', role: 'user' },
@@ -244,6 +248,112 @@ describe('resolveAiSkillContext', () => {
         request: request([{ type: 'tag', id: 'tag-1' }]),
         resolveTagScope: vi.fn().mockResolvedValue({
           tag: { id: 'tag-1' },
+          resourceRefs: [{ type: 'note', id: 'n-1' }],
+        }),
+        resolveResourceVersions: vi.fn().mockResolvedValue([]),
+      }),
+    ).rejects.toMatchObject({ code: 'AI_SKILL_SCOPE_RESOURCE_UNAVAILABLE', status: 409 });
+  });
+
+  it('目录范围只接受服务端选择器展开的完整笔记集合', async () => {
+    const directorySkill = {
+      ...skill,
+      id: 'note.ask_directory',
+      contextPolicy: {
+        scopeMode: 'note_directory',
+        selectorType: 'note_directory',
+        resourceTypes: [],
+        minResources: 0,
+        maxResources: 0,
+        expandedResourceTypes: ['note'],
+        minExpandedResources: 1,
+        maxExpandedResources: 50,
+      },
+    };
+    const resolveDirectoryScope = vi.fn().mockResolvedValue({
+      directory: { parentId: 'parent-1', title: '项目资料', includeDescendants: true },
+      resourceRefs: [
+        { type: 'note', id: 'child-1' },
+        { type: 'note', id: 'grandchild-1' },
+      ],
+    });
+    const resolveResourceVersions = vi.fn().mockResolvedValue([
+      { type: 'note', id: 'child-1', version: '2' },
+      { type: 'note', id: 'grandchild-1', version: '4' },
+    ]);
+
+    const context = await resolveAiSkillContext({
+      skill: directorySkill,
+      request: directoryRequest({ type: 'note_directory', parentId: 'parent-1', includeDescendants: true }),
+      req: authenticatedRequest(),
+      resolveDirectoryScope,
+      resolveResourceVersions,
+    });
+
+    expect(resolveDirectoryScope).toHaveBeenCalledWith(undefined, {
+      userId: 'user-1',
+      parentId: 'parent-1',
+      includeDescendants: true,
+    });
+    expect(resolveResourceVersions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-1',
+        resourceRefs: [
+          { type: 'note', id: 'child-1' },
+          { type: 'note', id: 'grandchild-1' },
+        ],
+      }),
+    );
+    expect(context).toMatchObject({
+      scopeSelector: { type: 'note_directory', parentId: 'parent-1', includeDescendants: true },
+      directory: { parentId: 'parent-1', title: '项目资料', includeDescendants: true },
+      resourceRefs: [
+        { type: 'note', id: 'child-1', version: '2' },
+        { type: 'note', id: 'grandchild-1', version: '4' },
+      ],
+    });
+  });
+
+  it('目录范围拒绝客户端展开的分页结果、空目录和解析期间失效的笔记', async () => {
+    const directorySkill = {
+      ...skill,
+      id: 'note.ask_directory',
+      contextPolicy: {
+        scopeMode: 'note_directory',
+        selectorType: 'note_directory',
+        resourceTypes: [],
+        minResources: 0,
+        maxResources: 0,
+        expandedResourceTypes: ['note'],
+        minExpandedResources: 1,
+        maxExpandedResources: 2,
+      },
+    };
+    const selector = { type: 'note_directory', parentId: null, includeDescendants: false };
+    const base = { skill: directorySkill, req: authenticatedRequest() };
+
+    await expect(
+      resolveAiSkillContext({
+        ...base,
+        request: directoryRequest(selector, [{ type: 'note', id: 'page-1' }]),
+      }),
+    ).rejects.toMatchObject({ code: 'AI_SKILL_SCOPE_RESOURCE_REF_FORBIDDEN' });
+    await expect(
+      resolveAiSkillContext({
+        ...base,
+        request: directoryRequest(selector),
+        resolveDirectoryScope: vi.fn().mockResolvedValue({
+          directory: { parentId: null, title: '知识库根目录', includeDescendants: false },
+          resourceRefs: [],
+        }),
+      }),
+    ).rejects.toMatchObject({ code: 'AI_SKILL_SCOPE_SIZE_INVALID' });
+    await expect(
+      resolveAiSkillContext({
+        ...base,
+        request: directoryRequest(selector),
+        resolveDirectoryScope: vi.fn().mockResolvedValue({
+          directory: { parentId: null, title: '知识库根目录', includeDescendants: false },
           resourceRefs: [{ type: 'note', id: 'n-1' }],
         }),
         resolveResourceVersions: vi.fn().mockResolvedValue([]),

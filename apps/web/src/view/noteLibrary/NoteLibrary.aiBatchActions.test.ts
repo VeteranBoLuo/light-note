@@ -80,17 +80,8 @@ describe('笔记库批量 AI 操作语义', () => {
   });
 
   it('桌面批量操作落在悬浮底栏，入口原位切换且其余顶栏控件保持稳定', () => {
-    const batchToggleClassIndex = source.indexOf('class="note-action-button note-batch-toggle"');
-    const batchToggleMarkup = source.slice(
-      source.lastIndexOf('<BButton', batchToggleClassIndex),
-      source.indexOf('</BButton>', batchToggleClassIndex) + '</BButton>'.length,
-    );
-    expect(source).toContain('class="note-action-button note-batch-toggle"');
+    expect(source).toMatch(/<BBatchToggle[\s\S]*?class="note-batch-toggle"[\s\S]*?:active="batchMode"/);
     expect(source).toContain('@click="toggleBatchMode"');
-    expect(batchToggleMarkup).toContain(":aria-label=\"$t(batchMode ? 'note.exitBatch' : 'note.batchAction')\"");
-    expect(batchToggleMarkup).toContain("{{ $t('note.batchAction') }}");
-    expect(batchToggleMarkup).toContain("{{ $t('note.exitBatch') }}");
-    expect(batchToggleMarkup).not.toContain('<SvgIcon');
     expect(source).toContain(':open="batchMode"');
     expect(source).toContain('@primary="openSelectedOutcomeDrawer"');
     expect(source).toContain('@clear="clearSelectedNotes"');
@@ -98,19 +89,13 @@ describe('笔记库批量 AI 操作语义', () => {
     expect(source).toContain(':indeterminate="someVisibleChecked"');
     expect(source).toContain(':menu-options="desktopBatchMoreOptions"');
     expect(source).toMatch(/const desktopBatchMoreOptions = computed\(\(\) => \[[\s\S]*key: 'move'/);
-    expect(source).toMatch(/const desktopBatchMoreOptions = computed\(\(\) => \[[\s\S]*key: 'addTags'/);
-    expect(source).toMatch(/const desktopBatchMoreOptions = computed\(\(\) => \[[\s\S]*key: 'removeTags'/);
+    expect(source).toMatch(/const desktopBatchMoreOptions = computed\(\(\) => \[[\s\S]*key: 'manageTags'/);
+    expect(source).not.toMatch(/key: '(addTags|removeTags)'/);
     expect(source).toMatch(/const desktopBatchMoreOptions = computed\(\(\) => \[[\s\S]*key: 'export'/);
     expect(source).not.toContain("key: 'analyze'");
     expect(source).not.toContain('@click="openBatchTags(\'add\')"');
     expect(source).not.toContain('@click="openBatchTags(\'remove\')"');
     expect(source).not.toContain('@click="openBatchExportModal"');
-    expect(source).toMatch(/\.note-batch-toggle\s*\{[\s\S]*border: 1px solid transparent;/);
-    expect(source).toMatch(/\.note-batch-toggle__labels\s*\{[\s\S]*display: grid;/);
-    expect(source).toMatch(
-      /\.note-batch-toggle__labels > span\s*\{[\s\S]*grid-area: 1 \/ 1;[\s\S]*visibility: hidden;/,
-    );
-    expect(source).toMatch(/\.note-batch-toggle\.is-batch-active\s*\{[\s\S]*border: 1px solid var\(--desc-color\)/);
     expect(source).not.toContain("{{ $t('note.batchDone') }}");
     expect(zhLocaleSource).toContain("exitBatch: '退出批量'");
     expect(enLocaleSource).toContain("exitBatch: 'Exit Batch'");
@@ -127,14 +112,25 @@ describe('笔记库批量 AI 操作语义', () => {
     expect(enLocaleSource).toContain("batchAction: 'Batch Actions'");
   });
 
-  it('智能打标签把当前所选笔记 ID 交给自动打标签弹窗', () => {
+  it('智能打标签在桌面进入可恢复的整理建议流，移动端仍复用原弹窗', () => {
     expect(source).toContain(':selected-ids="selectedAiOrganizeIds"');
     expect(source).toMatch(/function openSelectedAiOrganize\(\)[\s\S]*selectedAiOrganizeIds\.value = selectedIds/);
+    expect(source).toContain("'light-note:organize-ai-suggestion-seed:v1'");
+    expect(source).toContain("query: { issue: 'ai_suggestions' }");
+    expect(source).toMatch(/if \(bookmark\.isDesktop\) \{[\s\S]*openNoteAiSuggestions\(\)/);
     expect(source).toMatch(/action\.key === 'smartOrganize'[\s\S]*openSelectedAiOrganize\(\)/);
+    expect(source).toMatch(/if \(resourceIds\.length > 20\) \{[\s\S]*return;/);
   });
 
-  it('普通态智能打标签保持紫色语义，批量态通过共享底栏调用相同能力', () => {
-    expect(source).toMatch(/class="note-action-button note-ai-button"[\s\S]{0,180}@click="openGlobalAiOrganize"/);
+  it('桌面普通态收敛为一个 AI 菜单，批量态仍通过共享底栏调用智能打标签', () => {
+    expect(source).toMatch(/<BDropdown v-if="bookmark\.isDesktop"[\s\S]*?:menu-options="noteAiMenuOptions"/);
+    expect(source).toMatch(/<BButton\s+v-else[\s\S]*?@click="openGlobalAiOrganize"/);
+    expect(source).toContain(':menu-options="noteAiMenuOptions"');
+    expect(source).toMatch(/const noteAiMenuOptions = computed[\s\S]*key: 'smartTagging'/);
+    expect(source).toMatch(/const noteAiMenuOptions = computed[\s\S]*key: 'summarize'/);
+    expect(source).toMatch(/const noteAiMenuOptions = computed[\s\S]*key: 'compare'/);
+    expect(source).toMatch(/const noteAiMenuOptions = computed[\s\S]*key: 'create'/);
+    expect(source).not.toMatch(/const noteAiMenuOptions = computed[\s\S]*key: 'askDirectory'/);
     expect(source).toMatch(/<ResourceBatchActionBar[\s\S]*?@click="openSelectedAiOrganize"/);
 
     const aiButtonRule = source.match(/\.note-ai-button\s*\{([\s\S]*?)\n\s*\}/)?.[1] || '';
@@ -142,6 +138,32 @@ describe('笔记库批量 AI 操作语义', () => {
     expect(aiButtonRule).toContain('color: var(--primary-color');
     expect(aiButtonRule).toContain('background: color-mix(in srgb, var(--primary-color');
     expect(aiButtonRule).not.toContain('--resource-note-color');
+  });
+
+  it('笔记库暂不常驻目录问答，桌面与移动端都不占用额外侧栏', () => {
+    expect(source).toContain(':has-ai="false"');
+    expect(source).not.toContain(':force-docked-panels="bookmark.isDesktop"');
+    expect(source).not.toContain(':main-min-width="420"');
+    expect(source).not.toContain('skill-id="note.ask_directory"');
+    expect(source).not.toContain('noteDirectoryAiSelector');
+    expect(source).not.toContain('#ai');
+  });
+
+  it('桌面笔记库沿用既有资料墙密度，不因 AI 入口变动改变卡片尺寸和栏宽', () => {
+    expect(source).not.toContain('note-workspace--desktop');
+    expect(source).not.toContain('--note-card-min-width: clamp(320px, 18cqi, 420px)');
+    expect(source).not.toMatch(/:deep\(\.note-card\)[\s\S]{0,180}height:\s*248px/);
+    expect(source).toMatch(
+      /@media \(min-width:\s*1200px\)\s*\{\s*\.note-library-shell\s*\{[^}]*background:\s*var\(--background-color\)/,
+    );
+  });
+
+  it('总结、比较与资料成稿复用笔记专属 Skill，普通入口不展示预计消耗', () => {
+    expect(source).toContain("skillId: 'note.batch_summarize'");
+    expect(source).toContain("skillId: 'note.batch_compare'");
+    expect(source).toContain("skillId: 'note.create_from_sources'");
+    expect(source).toContain(':initial-quick-action-id="outcomeInitialQuickActionId"');
+    expect(source).not.toMatch(/noteAiMenuOptions[\s\S]{0,1400}(estimated|预计消耗)/);
   });
 
   it('加入待整理是批量底栏高频动作，移动及标签等低频动作进入更多菜单', () => {
@@ -194,7 +216,9 @@ describe('笔记库页面树交互接线', () => {
     expect(workspaceShellSource).toContain('v-if="hasSidebar && effectiveSidebarPresentation === \'dock\'"');
     expect(workspaceShellSource).toContain(':class="{ \'is-collapsed\': !sidebarOpen }"');
     expect(workspaceShellSource).toContain('transition: grid-template-columns 240ms');
-    expect(workspaceShellSource).toContain('grid-template-columns: 0 minmax(680px, 1fr)');
+    expect(workspaceShellSource).toContain(
+      'grid-template-columns: 0 minmax(var(--note-workspace-main-min-width), 1fr)',
+    );
     expect(workspaceShellSource).toContain('note-workspace-shell__sidebar-content');
     expect(workspaceShellSource).not.toContain('width: 2px;\n      height: 42px;');
     expect(source).toContain('--note-workspace-divider-color: var(--note-workspace-frame-color)');
@@ -256,7 +280,7 @@ describe('笔记库页面树交互接线', () => {
       /\.note-workspace-shell\.has-ai-dock\s*\{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) 0;/,
     );
     expect(workspaceShellSource).toMatch(
-      /\.note-workspace-shell\.has-sidebar-dock\.has-ai-dock\s*\{[\s\S]*?grid-template-columns: 0 minmax\(680px, 1fr\) 0;/,
+      /\.note-workspace-shell\.has-sidebar-dock\.has-ai-dock\s*\{[\s\S]*?grid-template-columns: 0 minmax\(var\(--note-workspace-main-min-width\), 1fr\) 0;/,
     );
     expect(workspaceShellSource).toMatch(
       /\.note-workspace-shell__ai--dock\s*\{[\s\S]*?opacity 150ms ease[\s\S]*?transform 240ms/,
@@ -672,5 +696,16 @@ describe('笔记库页面树交互接线', () => {
     expect(source).not.toContain("backupKind: 'selected_notes_export'");
     expect(zhLocaleSource).toContain("batchExportOriginal: '按每篇默认格式'");
     expect(enLocaleSource).toContain("batchExportOriginal: 'Use Each Note’s Format'");
+  });
+
+  it('单篇笔记的右键、详情更多和移动端更多共用同一导出入口，并直接交付所选格式', () => {
+    expect(source).toMatch(/key: 'export',[\s\S]{0,140}label: t\('noteDetail\.export'\)/);
+    expect(source).toContain("else if (action === 'export') openSingleNoteExport(note)");
+    expect(source).toContain(':sections="singleNoteExportSections"');
+    expect(source).toContain('buildBatchNoteExportEntries([note], mode');
+    expect(source).toContain('deliverSingleNoteExport(entry, noteId)');
+    expect(source).toContain('icon: icon.noteDetail.exportLine');
+    expect(icon.noteDetail.exportLine).toBeTruthy();
+    expect(icon.noteDetail.exportLine).not.toBe(icon.nullImg);
   });
 });

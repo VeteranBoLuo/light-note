@@ -142,6 +142,8 @@ declare(ADMIN_POLICIES.READ, 'file', [
   ['POST', '/file/queryTotalFileSize'],
   ['POST', '/file/getFileInfo'],
   ['POST', '/file/preview/resolve'],
+  ['POST', '/file/image-previews/resolve'],
+  ['POST', '/file/image-previews/prepare'],
   ['POST', '/file/preview/archive'],
   ['POST', '/file/queryFolder'],
   ['POST', '/file/getFileTags'],
@@ -150,6 +152,7 @@ declare(ADMIN_POLICIES.READ, 'file', [
   ['POST', '/file/share/download'],
   ['POST', '/file/share/preview/prepare'],
   ['POST', '/file/share/preview/resolve'],
+  ['POST', '/file/share/preview/original'],
   ['POST', '/file/share/preview/archive'],
 ]);
 
@@ -184,6 +187,14 @@ declare(ADMIN_POLICIES.READ, 'search', [
   ['POST', '/workbench/summary'],
   // 移动端「今日」轻量聚合，与工作台概览同属只读
   ['POST', '/workbench/today'],
+  ['GET', '/workbench/daily-brief'],
+  ['GET', '/workbench/daily-brief/preference'],
+]);
+
+declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'workbench', [
+  ['POST', '/workbench/daily-brief/ensure'],
+  ['POST', '/workbench/daily-brief/refresh'],
+  ['PUT', '/workbench/daily-brief/preference'],
 ]);
 
 declare(ADMIN_POLICIES.READ, 'inbox', [
@@ -195,11 +206,16 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'inbox', [
   ['POST', '/inbox/complete'],
 ]);
 declare(ADMIN_POLICIES.READ, 'organize', [
+  ['GET', '/organize/suggestions/runs'],
+  ['GET', '/organize/suggestions/runs/:id'],
   ['GET', '/organize/summary'],
   ['GET', '/organize/knowledge-structure/summary'],
   ['GET', '/organize/issues/:issueType'],
   ['GET', '/organize/duplicate-bookmarks/:groupKey/preview'],
   ['GET', '/organize/bookmark-health'],
+  ['POST', '/organize/ai-suggestions/estimate'],
+  ['GET', '/organize/ai-suggestions/batches'],
+  ['GET', '/organize/ai-suggestions/batches/:batchId'],
 ]);
 declare(ADMIN_POLICIES.CONTENT_WRITE, 'organize', [
   ['POST', '/organize/untagged/ignore'],
@@ -212,6 +228,18 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'organize', [
   ['POST', '/organize/bookmark-health/:bookmarkId/recheck'],
   ['POST', '/organize/bookmark-health/:bookmarkId/mark-normal'],
   ['DELETE', '/organize/bookmark-health/:bookmarkId/mark-normal'],
+]);
+declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'organize_ai_suggestions', [
+  ['POST', '/organize/suggestions/previews'],
+  ['POST', '/organize/suggestions/runs/:id/start'],
+  ['POST', '/organize/suggestions/runs/:id/cancel'],
+  ['POST', '/organize/suggestions/runs/:id/pause'],
+  ['POST', '/organize/suggestions/runs/:id/resume'],
+  ['POST', '/organize/suggestions/runs/:id/items/:suggestionId/actions'],
+  ['POST', '/organize/ai-suggestions/batches'],
+  ['PUT', '/organize/ai-suggestions/batches/:batchId/suggestions/:suggestionId'],
+  ['POST', '/organize/ai-suggestions/batches/:batchId/suggestions/:suggestionId/accept'],
+  ['POST', '/organize/ai-suggestions/batches/:batchId/suggestions/:suggestionId/ignore'],
 ]);
 declare(ADMIN_POLICIES.READ, 'todo', [
   ['POST', '/todo/list'],
@@ -696,6 +724,15 @@ function resolvePolicy(method, path) {
     const action = path.endsWith('/retry') ? 'retry' : 'cancel';
     return routePolicies.get(`${method} /resource-governance/jobs/:id/${action}`);
   }
+  if (/^\/organize\/suggestions\/runs\/[^/]+$/.test(path)) {
+    return routePolicies.get(`${method} /organize/suggestions/runs/:id`);
+  }
+  if (/^\/organize\/suggestions\/runs\/[^/]+\/(?:start|cancel|pause|resume)$/.test(path)) {
+    return routePolicies.get(`${method} /organize/suggestions/runs/:id/${path.split('/').pop()}`);
+  }
+  if (/^\/organize\/suggestions\/runs\/[^/]+\/items\/[^/]+\/actions$/.test(path)) {
+    return routePolicies.get(`${method} /organize/suggestions/runs/:id/items/:suggestionId/actions`);
+  }
   if (/^\/organize\/issues\/[^/]+$/.test(path)) {
     return routePolicies.get(`${method} /organize/issues/:issueType`);
   }
@@ -706,6 +743,16 @@ function resolvePolicy(method, path) {
   if (/^\/organize\/bookmark-health\/[^/]+\/(?:recheck|mark-normal)$/.test(path)) {
     const action = path.split('/').pop();
     return routePolicies.get(`${method} /organize/bookmark-health/:bookmarkId/${action}`);
+  }
+  if (/^\/organize\/ai-suggestions\/batches\/[^/]+$/.test(path)) {
+    return routePolicies.get(`${method} /organize/ai-suggestions/batches/:batchId`);
+  }
+  if (/^\/organize\/ai-suggestions\/batches\/[^/]+\/suggestions\/[^/]+$/.test(path)) {
+    return routePolicies.get(`${method} /organize/ai-suggestions/batches/:batchId/suggestions/:suggestionId`);
+  }
+  if (/^\/organize\/ai-suggestions\/batches\/[^/]+\/suggestions\/[^/]+\/(?:accept|ignore)$/.test(path)) {
+    const action = path.split('/').pop();
+    return routePolicies.get(`${method} /organize/ai-suggestions/batches/:batchId/suggestions/:suggestionId/${action}`);
   }
   if (/^\/infra\/logs\/[^/]+$/.test(path)) {
     return routePolicies.get(`${method} /infra/logs/:serviceId`);

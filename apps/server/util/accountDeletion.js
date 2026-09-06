@@ -26,6 +26,12 @@ const DIRECT_DELETE_TABLES = Object.freeze([
   ['resource_tag_relations', 'user_id'],
   ['organize_issue_suppressions', 'user_id'],
   ['organize_action_requests', 'user_id'],
+  ['organize_suggestions', 'user_id'],
+  ['organize_suggestion_items', 'user_id'],
+  ['organize_suggestion_runs', 'user_id'],
+  ['organize_ai_tag_suggestions', 'user_id'],
+  ['organize_ai_tag_batches', 'user_id'],
+  ['workbench_daily_briefs', 'user_id'],
   ['onboarding_seed_resources', 'user_id'],
   ['growth_events', 'user_id'],
   ['user_growth_tasks', 'user_id'],
@@ -242,6 +248,20 @@ async function collectCleanupArtifacts(connection, tables, userId) {
     }
   }
 
+  if (tables.has('community_chat_message_images')) {
+    const [rows] = await connection.query('SELECT object_key FROM community_chat_message_images WHERE owner_user_id = ?', [userId]);
+    objectKeys.push(...rows.map(row => row.object_key).filter(Boolean));
+  }
+  if (tables.has('file_preview_artifacts')) {
+    const [rows] = await connection.query('SELECT artifact_object_key AS object_key FROM file_preview_artifacts WHERE owner_user_id = ?', [userId]);
+    objectKeys.push(...rows.map(row => row.object_key).filter(Boolean));
+    if (tables.has('file_preview_jobs')) {
+      const [pending] = await connection.query(`SELECT j.output_object_key AS object_key FROM file_preview_jobs j
+        JOIN file_preview_artifacts a ON a.id = j.artifact_id WHERE a.owner_user_id = ?`, [userId]);
+      objectKeys.push(...pending.map(row => row.object_key).filter(Boolean));
+    }
+  }
+
   if (tables.has('ai_document_sources')) {
     const [rows] = await connection.query(
       `SELECT object_key
@@ -397,6 +417,20 @@ export async function requestAccountDeletion({ userId, code, confirmation }) {
       'DELETE FROM community_chat_message_read_receipts WHERE user_id = ?',
       [userId],
     );
+
+    // 注销事务从入口起持有 user 行锁；所有后台 AI Provider 外发持有同一把锁，
+    // 因而这里提交前会等待已开始的调用，提交后新调用只能读到 deleted 并失败关闭。
+    // 批次租约另作结果写入围栏，避免旧 Worker 在注销后继续回写或复活批次。
+    if (tables.has('organize_ai_tag_batches')) {
+      await connection.query(
+        `UPDATE organize_ai_tag_batches
+            SET status = 'cancelled', last_error_code = 'ACCOUNT_DELETED',
+                lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL,
+                finished_at = COALESCE(finished_at, NOW())
+          WHERE user_id = ? AND status IN ('queued','running')`,
+        [userId],
+      );
+    }
 
     const [updateResult] = await connection.query(
       `UPDATE user
@@ -661,6 +695,15 @@ async function purgeFeatureRequests(connection, tables, userId) {
 }
 
 export async function purgeOwnedResources(connection, tables, userId) {
+  if (tables.has('community_chat_message_images')) {
+    await connection.query(`UPDATE community_chat_message_images SET status = 'expired', object_key = NULL,
+      expires_at = NOW() WHERE owner_user_id = ?`, [userId]);
+  }
+  if (tables.has('file_preview_artifacts')) {
+    if (tables.has('file_preview_jobs')) await connection.query(`DELETE j FROM file_preview_jobs j
+      JOIN file_preview_artifacts a ON a.id = j.artifact_id WHERE a.owner_user_id = ?`, [userId]);
+    await connection.query('DELETE FROM file_preview_artifacts WHERE owner_user_id = ?', [userId]);
+  }
   if (tables.has('note_resource_refs')) {
     const targetClauses = [];
     const params = [userId];

@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createPinia } from 'pinia';
+import { useUserStore } from '@/store';
 import { createApp, h, nextTick, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
@@ -6,6 +8,7 @@ import type { CommunityChatImage } from '@/api/communityChatApi';
 import viewerSource from './ChatImageViewerModal.vue?raw';
 import ChatImageViewerModal from './ChatImageViewerModal.vue';
 
+vi.mock('@/http/request', () => ({ apiBasePost: vi.fn(async () => ({ status: 200, data: { enabled: true, items: [] } })) }));
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
   default: {
     props: ['src'],
@@ -43,7 +46,7 @@ describe('ChatImageViewerModal', () => {
   it('只负责把聊天图片映射给共享 BImageViewer，不再维护第二套预览状态机', () => {
     expect(viewerSource).toContain('<BImageViewer');
     expect(viewerSource).toContain('id: item.publicId');
-    expect(viewerSource).toContain('src: item.url');
+    expect(viewerSource).toContain('downloadSrc: item.url');
     expect(viewerSource).not.toContain('<BModal');
     expect(viewerSource).not.toContain('handlePointerMove');
     expect(viewerSource).not.toContain('transform 120ms');
@@ -66,6 +69,8 @@ describe('ChatImageViewerModal', () => {
           });
       },
     });
+    const pinia = createPinia();
+    app.use(pinia);
     app.use(
       createI18n({
         legacy: false,
@@ -84,14 +89,17 @@ describe('ChatImageViewerModal', () => {
     };
 
     expect(document.body.querySelector<HTMLImageElement>('.b-image-viewer__image')?.src).toContain(
-      '/api/community-chat/images/image-2',
+      'data:image/gif',
     );
     expect(document.body.textContent).toContain('2 / 2');
 
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true }));
     await nextTick();
     expect(document.body.querySelector<HTMLImageElement>('.b-image-viewer__image')?.src).toContain(
-      '/api/community-chat/images/image-1',
+      'data:image/gif',
     );
+    useUserStore(pinia).id = 'another-account';
+    await nextTick();
+    expect(visible.value).toBe(false);
   });
 });

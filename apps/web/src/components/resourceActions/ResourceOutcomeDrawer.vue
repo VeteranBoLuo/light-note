@@ -76,6 +76,7 @@
             :show-grounding="false"
             :auto-run-action-id="selectedQuickAction.id"
             :icon-src="selectedQuickAction.icon || icon.ai.organize"
+            @result-action="handleQuickResultAction"
           >
             <template #result-actions="{ response, result }">
               <BButton
@@ -337,6 +338,7 @@
 </template>
 
 <script lang="ts">
+  import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
   import type { ToolboxResourceRef } from '@/api/toolbox';
   import type { AiSkillPanelAction } from '@/components/aiSkills/types';
 
@@ -390,7 +392,7 @@
     type ToolboxWorkflowPresentation,
   } from '@/config/toolbox';
   import { useUserStore } from '@/store';
-  import { persistAiMarkdownResultAsNote } from '@/utils/aiNoteDraft';
+  import { persistAiMarkdownResultAsNote, persistAiNotePreview } from '@/utils/aiNoteDraft';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import { toolboxErrorMessageKey } from '@/utils/toolboxErrorPresentation';
 
@@ -413,8 +415,9 @@
       resources: readonly ResourceOutcomeResource[];
       surface: 'cloud_space' | 'search' | 'bookmark_manage' | 'note_library';
       quickActions?: readonly ResourceOutcomeQuickAction[];
+      initialQuickActionId?: string;
     }>(),
-    { quickActions: () => [] },
+    { quickActions: () => [], initialQuickActionId: '' },
   );
   const emit = defineEmits<{
     'update:open': [open: boolean];
@@ -760,6 +763,7 @@
         loadGrowth(true),
         activeQuote.billingMedium === 'ai_quota' ? loadAiQuota({ force: true }) : Promise.resolve(),
       ]);
+      if (version !== stateVersion) return;
       emit('job-created', job.id);
       await closeAndNavigate(`/toolbox/task/${job.id}`);
     } catch (error: any) {
@@ -772,6 +776,7 @@
   }
 
   async function saveQuickResult(response: AiSkillResponse) {
+    const version = stateVersion;
     const action = selectedQuickAction.value;
     if (!action || creatingQuickNote.value) return;
     creatingQuickNote.value = true;
@@ -780,13 +785,34 @@
         response,
         action.generatedNoteTitle || t('resourceOutcome.quickGeneratedNoteTitle'),
       );
-      if (!handoff) return;
+      if (version !== stateVersion || !handoff) return;
       message.success(t('aiSkills.noteCreated'));
       await closeAndNavigate(handoff.route.path);
     } catch (error: any) {
+      if (version !== stateVersion) return;
       message.error(String(error?.message || t('aiSkills.noteCreateFailed')));
     } finally {
-      creatingQuickNote.value = false;
+      if (version === stateVersion) creatingQuickNote.value = false;
+    }
+  }
+
+  async function handleQuickResultAction(action: Record<string, unknown>, response: AiSkillResponse) {
+    const version = stateVersion;
+    if (String(action.id || '') !== 'create_note_from_preview' || creatingQuickNote.value) return;
+    creatingQuickNote.value = true;
+    try {
+      const handoff = await persistAiNotePreview(
+        response,
+        selectedQuickAction.value?.generatedNoteTitle || t('resourceOutcome.quickGeneratedNoteTitle'),
+      );
+      if (version !== stateVersion || !handoff) return;
+      message.success(t('aiSkills.noteCreated'));
+      await closeAndNavigate(handoff.route.path);
+    } catch (error: any) {
+      if (version !== stateVersion) return;
+      message.error(String(error?.message || t('aiSkills.noteCreateFailed')));
+    } finally {
+      if (version === stateVersion) creatingQuickNote.value = false;
     }
   }
 
@@ -808,9 +834,12 @@
   }
 
   async function closeAndNavigate(path: string) {
+    const from = router.currentRoute.value.fullPath;
+    const scope = buildNoteDetailRequestScope(user);
     const visuallyClosed = waitForVisualClose();
     await closeCurrentMobileOverlayThen(closeDrawer, async () => {
       await Promise.race([visuallyClosed, new Promise<void>((resolve) => window.setTimeout(resolve, 260))]);
+      if (from !== router.currentRoute.value.fullPath || scope !== buildNoteDetailRequestScope(user)) return;
       await router.push(path);
     });
   }
@@ -839,15 +868,23 @@
   }
 
   watch(
-    [() => props.open, resourcesKey],
+    [() => props.open, resourcesKey, () => props.initialQuickActionId],
     ([open]) => {
-      if (!open) return;
+      if (!open) {
+        stateVersion += 1;
+        return;
+      }
       resetState();
       resetDrawerScroll();
-      void loadCatalog();
-      if (user.id && user.role !== 'visitor') {
-        void loadGrowth();
-        void loadAiQuota();
+      const initialQuickAction = props.quickActions.find((action) => action.id === props.initialQuickActionId);
+      if (initialQuickAction && !quickActionReason(initialQuickAction)) {
+        selectQuickAction(initialQuickAction);
+      } else {
+        void loadCatalog();
+        if (user.id && user.role !== 'visitor') {
+          void loadGrowth();
+          void loadAiQuota();
+        }
       }
       void recordAiProductEvent('ai_entry_opened', {
         surface: props.surface,
@@ -858,6 +895,15 @@
       });
     },
     { immediate: true },
+  );
+
+  watch(
+    () => buildNoteDetailRequestScope(user),
+    () => {
+      stateVersion += 1;
+      if (props.open) closeDrawer();
+    },
+    { flush: 'sync' },
   );
 
   watch([question, detailLevel, selectedIntent, billingMedium], () => {

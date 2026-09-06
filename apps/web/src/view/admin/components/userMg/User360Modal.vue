@@ -101,6 +101,10 @@
                 ><dd>{{ detail.profile?.alias || '-' }}</dd></div
               >
               <div>
+                <dt>{{ t('adminUserManagement.detail.communityId') }}</dt>
+                <dd class="user-360__community-id" dir="ltr">{{ detail.profile?.communityId || '-' }}</dd>
+              </div>
+              <div>
                 <dt>{{ t('adminUserManagement.detail.loginType') }}</dt>
                 <dd
                   ><BChip tone="neutral" size="small">{{ loginTypeLabel }}</BChip></dd
@@ -682,6 +686,11 @@
     margin: 0;
     overflow-wrap: anywhere;
     font-size: 13px;
+  }
+
+  .user-360__community-id {
+    font-family: var(--font-family-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+    font-variant-numeric: tabular-nums;
   }
 
   .user-360__location {

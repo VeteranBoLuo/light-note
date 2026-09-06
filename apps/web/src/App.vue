@@ -14,28 +14,14 @@
       <div
         v-if="applicationAuthGateVisible"
         class="app-loading"
-        :role="applicationAuthStatus === 'error' ? 'alert' : 'status'"
-        aria-live="polite"
+        :role="applicationAuthStatus === 'error' ? 'alert' : undefined"
+        :aria-live="applicationAuthStatus === 'error' ? 'assertive' : undefined"
       >
-        <div class="loading-container">
-          <BLoading
-            v-if="applicationAuthStatus === 'pending'"
-            :loading="true"
-            inline
-            class="auth-startup-loading"
-            :title="t('app.authRestoring')"
-          />
+        <div v-if="applicationAuthStatus === 'error'" class="loading-container">
           <div class="loading-text">
-            <h2 v-if="applicationAuthStatus === 'error'">{{ t('app.authRestoreFailed') }}</h2>
-            <p>
-              {{ applicationAuthStatus === 'error' ? t('app.authRestoreFailedHint') : t('app.authRestoringHint') }}
-            </p>
-            <BButton
-              v-if="applicationAuthStatus === 'error'"
-              type="primary"
-              class="auth-startup-retry"
-              @click="retryApplicationAuth"
-            >
+            <h2>{{ t('app.authRestoreFailed') }}</h2>
+            <p>{{ t('app.authRestoreFailedHint') }}</p>
+            <BButton type="primary" class="auth-startup-retry" @click="retryApplicationAuth">
               {{ t('common.retry') }}
             </BButton>
           </div>
@@ -55,6 +41,7 @@
         <GuestNudge v-if="nudgeVisible && !publicStandaloneRoute" />
         <AndroidDownloadProgress v-if="isAndroidApp && !publicStandaloneRoute" />
         <DisplayScaleSuggestion v-if="!publicStandaloneRoute" />
+        <ResourceSelectionDrawer v-if="!publicStandaloneRoute" />
         <AdminContextBanner v-if="user.adminContext && !publicStandaloneRoute" />
         <QuickCaptureModal
           v-if="inbox.quickCaptureVisible && !publicStandaloneRoute"
@@ -66,6 +53,8 @@
   </div>
 </template>
 <script setup lang="ts">
+  import ResourceSelectionDrawer from '@/components/resourceActions/ResourceSelectionDrawer.vue';
+  import { useResourceSelectionRuntime } from '@/composables/useResourceSelection';
   import { bookmarkStore, inboxStore, useUserStore } from '@/store';
   import { useGrowth } from '@/composables/useGrowth';
   import { onMounted, onBeforeUnmount, watch, computed, defineAsyncComponent, nextTick, provide, ref } from 'vue';
@@ -94,7 +83,7 @@
     resolveLandingAuthStatus,
     type LandingAuthStatus,
   } from '@/view/landing/landingAuth.ts';
-  import { applyDocumentTheme } from '@/utils/theme.ts';
+  import { applyDocumentTheme, shouldFreezeAnimationsForThemeSync } from '@/utils/theme.ts';
   import AsyncFeatureLoadingOverlay from '@/components/base/AsyncFeatureLoadingOverlay.vue';
   import { isLightNoteAndroidApp, postAndroidAppReady, postAndroidMessage } from '@/utils/androidBridge';
   import { isDefinitiveAuthResultStatus, type ApplicationAuthStatus } from '@/utils/authBootstrap.ts';
@@ -108,7 +97,6 @@
   import { resolveRouteAuthDecision } from '@/utils/authNavigationIntent.ts';
   import { loadUserAuthModal } from '@/utils/userAuthModalLoader.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
 
   const Login = defineAsyncComponent({
     loader: loadUserAuthModal,
@@ -133,6 +121,7 @@
 
   const router = useRouter();
   const user = useUserStore();
+  useResourceSelectionRuntime();
   const bookmark = bookmarkStore();
   const inbox = inboxStore();
   const { guideVisible: pwaGuideVisible } = usePwaInstall();
@@ -633,18 +622,23 @@
 
   // 应用主题样式
   function applyTheme() {
-    // 禁用所有动画
-    document.documentElement.classList.add('disable-animations');
+    const shouldFreezeAnimations = shouldFreezeAnimationsForThemeSync(router.currentRoute.value.name);
+    if (shouldFreezeAnimations) {
+      // 应用内主题切换期间禁用动画，避免组件逐项过渡；预渲染官网需保持持续动画相位稳定。
+      document.documentElement.classList.add('disable-animations');
 
-    // 强制重绘确保样式生效
-    void document.documentElement.offsetWidth;
+      // 强制重绘确保样式生效
+      void document.documentElement.offsetWidth;
+    }
     // 同步 CSS 变量主题与浏览器原生配色；浅色使用 only light，避免鸿蒙等浏览器再次自动暗化页面。
     applyDocumentTheme(user.currentTheme);
 
-    // 下一事件循环恢复动画
-    setTimeout(() => {
-      document.documentElement.classList.remove('disable-animations');
-    }, 0);
+    if (shouldFreezeAnimations) {
+      // 下一事件循环恢复动画
+      setTimeout(() => {
+        document.documentElement.classList.remove('disable-animations');
+      }, 0);
+    }
   }
 
   // 手机布局和桌面布局的路由不一样，切换断点后需要切换对应路由地址
@@ -1169,14 +1163,6 @@
     text-align: center;
     z-index: 1;
     position: relative;
-  }
-
-  .app-loading .auth-startup-loading {
-    justify-content: center;
-    margin-bottom: 14px;
-    color: var(--text-color);
-    font-size: 1.25rem;
-    font-weight: 700;
   }
 
   .loading-text h2 {

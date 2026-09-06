@@ -154,7 +154,8 @@ export async function executeAiSkill(rawRequest, req, dependencies = {}) {
         });
         const modelCalled = prepared.modelCalled !== false && !prepared.result;
         const modelPolicy =
-          (typeof skill.resolveModelPolicy === 'function' ? skill.resolveModelPolicy(input) : null) || skill.modelPolicy;
+          (typeof skill.resolveModelPolicy === 'function' ? skill.resolveModelPolicy(input) : null) ||
+          skill.modelPolicy;
         const sources = prepared.sources || [];
         const coverage = prepared.coverage || { complete: true, warnings: [] };
         const invokeModel = prepared.callModel || callModel;
@@ -171,6 +172,8 @@ export async function executeAiSkill(rawRequest, req, dependencies = {}) {
               signal: dependencies.signal,
               structuredTool: prepared.structuredTool,
               validateArguments: prepared.validateArguments,
+              repairableErrorCodes: prepared.repairableErrorCodes,
+              buildRepairInstruction: prepared.buildRepairInstruction,
               trace: {
                 traceId: request.requestId,
                 taskType: `skill_${skill.id.replace('.', '_')}`,
@@ -197,6 +200,17 @@ export async function executeAiSkill(rawRequest, req, dependencies = {}) {
           },
           error: null,
         });
+        // 固定产物必须在根 Execution 仍处于 running 时完成最终校验和租约围栏写入。
+        // 钩子失败会让根 Execution 进入 failed 并按 0 结算，避免“已扣费但无产物”。
+        if (typeof dependencies.commitValidatedResult === 'function') {
+          await dependencies.commitValidatedResult({
+            response,
+            skill,
+            input,
+            context: scopedContext,
+            request,
+          });
+        }
         await appendTurn({
           thread,
           skill,

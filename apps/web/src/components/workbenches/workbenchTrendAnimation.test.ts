@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getTrendCurveSegments,
   getTrendMotionDirection,
   getTrendMotionPhase,
   getTrendMotionPoint,
@@ -26,15 +27,42 @@ describe('workbenchTrendAnimation', () => {
     expect(getTrendSummaryTiming(2).delay).toBe(130);
   });
 
-  it('移动节点在相邻折线点之间连续插值，不会逐点跳动', () => {
+  it('移动节点沿同一条平滑曲线连续运动，不会逐点跳动', () => {
     const points = [
       { x: 0, y: 20 },
       { x: 100, y: 0 },
       { x: 200, y: 40 },
     ];
 
-    expect(getTrendMotionPoint(points, 0.25)).toEqual({ x: 50, y: 10 });
-    expect(getTrendMotionPoint(points, 0.75)).toEqual({ x: 150, y: 20 });
+    expect(getTrendMotionPoint(points, 0.25)).toEqual({ x: 50, y: 7.5 });
+    expect(getTrendMotionPoint(points, 0.75)).toEqual({ x: 150, y: 15 });
+  });
+
+  it('曲线在峰谷变号处不超出相邻真实数值', () => {
+    const points = [
+      { x: 0, y: 0 },
+      { x: 100, y: 60 },
+      { x: 200, y: 0 },
+      { x: 300, y: 10 },
+    ];
+    const segments = getTrendCurveSegments(points);
+
+    expect(segments).toHaveLength(3);
+    segments.forEach((segment) => {
+      const minimum = Math.min(segment.start.y, segment.end.y);
+      const maximum = Math.max(segment.start.y, segment.end.y);
+      for (let step = 0; step <= 20; step += 1) {
+        const progress = step / 20;
+        const inverse = 1 - progress;
+        const y =
+          inverse ** 3 * segment.start.y +
+          3 * inverse ** 2 * progress * segment.control1.y +
+          3 * inverse * progress ** 2 * segment.control2.y +
+          progress ** 3 * segment.end.y;
+        expect(y).toBeGreaterThanOrEqual(minimum - 0.000001);
+        expect(y).toBeLessThanOrEqual(maximum + 0.000001);
+      }
+    });
   });
 
   it('移动节点使用余弦曲线缓慢往返，并在两端自然减速', () => {

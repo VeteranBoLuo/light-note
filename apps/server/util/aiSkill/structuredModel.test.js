@@ -1,12 +1,57 @@
 import { describe, expect, it, vi } from 'vitest';
-import { aiSkillStructuredModelInternals, callStructuredSkillModel } from './structuredModel.js';
+import { aiSkillStructuredModelInternals, callStructuredSkillModel, estimateStructuredSkillModelTokens } from './structuredModel.js';
 
-vi.mock('../agent/aiGateway.js', () => ({ requestAi: vi.fn() }));
-const { requestAi } = await import('../agent/aiGateway.js');
+vi.mock('../agent/aiGateway.js', () => ({ requestAi: vi.fn(), estimateAiProviderTokens: vi.fn(() => 2048) }));
+const { requestAi, estimateAiProviderTokens } = await import('../agent/aiGateway.js');
 
 const tool = { name: 'submit', description: 'submit', parameters: { type: 'object', properties: {} } };
 
 describe('structured skill model', () => {
+  it('结构化请求估算包含工具 Schema 与输出预算，且不外发模型请求', () => {
+    requestAi.mockClear();
+    const messages = [{ role: 'user', content: '整理资源' }];
+    expect(estimateStructuredSkillModelTokens({ messages, structuredTool: tool, modelPolicy: { maxTokens: 1200 } })).toBe(2048);
+    expect(estimateAiProviderTokens).toHaveBeenCalledWith(messages, {
+      maxTokens: 1200,
+      tools: [{ type: 'function', function: tool }],
+    });
+    expect(requestAi).not.toHaveBeenCalled();
+  });
+  it('向定向修复器传递已解析的完整工具草稿，而不是空 assistant 文本', async () => {
+    requestAi.mockReset();
+    const invalidArguments = { title: 'old title', sections: ['keep context'] };
+    requestAi
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [{ function: { name: 'submit', arguments: JSON.stringify(invalidArguments) } }],
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [{ function: { name: 'submit', arguments: '{"title":"fixed"}' } }],
+      });
+    const buildRepairInstruction = vi.fn(() => 'fix draft');
+    const validateArguments = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        throw Object.assign(new Error('invalid'), { code: 'TEST_INVALID' });
+      })
+      .mockImplementationOnce((args) => args);
+    await expect(
+      callStructuredSkillModel({
+        messages: [],
+        structuredTool: tool,
+        validateArguments,
+        repairableErrorCodes: ['TEST_INVALID'],
+        buildRepairInstruction,
+        modelPolicy: { maxTokens: 500 },
+      }),
+    ).resolves.toEqual({ title: 'fixed' });
+    expect(buildRepairInstruction).toHaveBeenCalledWith(
+      expect.objectContaining({ toolName: 'submit', invalidArguments }),
+    );
+    expect(requestAi).toHaveBeenCalledTimes(2);
+    requestAi.mockReset();
+  });
   it('拒绝多余或错误工具调用', () => {
     expect(() =>
       aiSkillStructuredModelInternals.parseToolArguments(

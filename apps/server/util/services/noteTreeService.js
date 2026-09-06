@@ -1,3 +1,4 @@
+import { MAX_NOTE_BATCH_ACTION_ITEMS } from '@lightnote/shared/resource-selection';
 import pool from '../../db/index.js';
 import { randomUUID } from 'node:crypto';
 import { removeInboxRelations } from '../resourceInbox.js';
@@ -717,7 +718,7 @@ export async function moveOwnedNoteNodes(
   const db = queryDb(connection);
   const normalizedUserId = normalizeId(userId);
   if (!normalizedUserId) throw new NoteTreeError('NOTE_TREE_USER_REQUIRED', '缺少用户身份', 401);
-  const requestedIds = normalizeNoteIdList(ids, { max: 100 });
+  const requestedIds = normalizeNoteIdList(ids, { max: MAX_NOTE_BATCH_ACTION_ITEMS });
   const targetParentId = normalizeParentId(parentId);
   const snapshot = await loadOwnedNoteTree(normalizedUserId, { db, lock: true });
 
@@ -849,8 +850,8 @@ function normalizeNoteIdList(values, { max = null, required = true } = {}) {
 
 function normalizeDeleteItems(items) {
   const rawItems = Array.isArray(items) ? items : [];
-  if (rawItems.length === 0 || rawItems.length > 100) {
-    throw new NoteTreeError('NOTE_TREE_INVALID_DELETE_REQUEST', '删除参数无效', 400, { max: 100 });
+  if (rawItems.length === 0 || rawItems.length > MAX_NOTE_BATCH_ACTION_ITEMS) {
+    throw new NoteTreeError('NOTE_TREE_INVALID_DELETE_REQUEST', '删除参数无效', 400, { max: MAX_NOTE_BATCH_ACTION_ITEMS });
   }
   const normalized = [];
   const seen = new Map();

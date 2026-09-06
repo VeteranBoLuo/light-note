@@ -92,17 +92,19 @@ describe('统一标签模块交互契约', () => {
     expect(settings).not.toContain('tagManageView');
   });
 
-  it('首屏骨架保持目录与主题两栏，关联数据就绪后才出现可选辅助栏', () => {
+  it('首屏骨架与完成态都保留桌面常驻问答栏，窄端沿用原有折叠边界', () => {
     const detail = read('view/tagDetail/TagDetail.vue');
     expect(detail).toContain('class="tag-space-workspace tag-space-workspace--skeleton"');
     expect(detail).toContain('class="tag-directory-rail tag-directory-rail--skeleton"');
     expect(detail).toContain('class="skeleton-profile-card"');
     expect(detail).toContain('class="skeleton-resources-panel"');
-    expect(detail).not.toContain('tag-insight-rail--skeleton');
-    expect(detail).toContain("'has-insights': relatedTags.length > 0");
-    expect(detail).toContain('v-if="relatedTags.length" class="tag-insight-rail"');
+    expect(detail).toContain('class="tag-ai-rail tag-ai-rail--skeleton"');
+    expect(detail).toContain(':class="{ \'has-ai\': bookmark.isDesktop }"');
+    expect(detail).toContain("'has-ai': bookmark.isDesktop");
+    expect(detail).not.toContain('has-insights');
+    expect(detail).not.toContain('tag-insight-rail');
     expect(detail).toMatch(/@media \(max-width: 1260px\)[\s\S]*?\.tag-directory-rail\s*\{[\s\S]*?display:\s*none/u);
-    expect(detail).toMatch(/@media \(max-width: 980px\)[\s\S]*?\.tag-insight-rail\s*\{[\s\S]*?display:\s*none/u);
+    expect(detail).toMatch(/@media \(max-width: 980px\)[\s\S]*?\.tag-ai-rail\s*\{[\s\S]*?display:\s*none/u);
     expect(detail).toMatch(
       /@media \(max-width: 767px\)[\s\S]*?\.skeleton-profile-card\s*\{[\s\S]*?grid-template-columns:\s*1fr/u,
     );
@@ -117,6 +119,20 @@ describe('统一标签模块交互契约', () => {
     expect(detail).toContain('<template #actions>');
     expect(detail).not.toContain('class="tag-profile-actions"');
     expect(detail).not.toContain('class="rail-add"');
+  });
+
+  it('完整桌面按原型保留目录、内容与问答三栏，窄端仍沿用既有折叠边界', () => {
+    const detail = read('view/tagDetail/TagDetail.vue');
+    const zhLocale = read('i18n/locales/zh-CN.ts');
+    expect(detail).toMatch(/\.tag-space-workspace\.has-ai\s*\{[\s\S]*?220px minmax\(0, 1fr\) 360px/u);
+    expect(detail).toMatch(/@media \(max-width: 1500px\)[\s\S]*?196px minmax\(0, 1fr\) 324px/u);
+    expect(detail).toMatch(/@media \(min-width: 1200px\)[\s\S]*?background:\s*var\(--background-color\)/u);
+    expect(detail).toMatch(/<BButton\s+v-if="!bookmark\.isDesktop"[\s\S]*?@click="openTagInAi"/u);
+    expect(zhLocale).toContain("askAi: '问一问'");
+    expect(zhLocale).toContain("aiSkillTitle: '标签问答'");
+    expect(zhLocale).toContain("aiSkillDescription: '只读当前标签资料，每轮自动确认范围。'");
+    expect(detail).toContain("id: 'next-actions'");
+    expect(detail).toContain("id: 'gaps'");
   });
 
   it('左侧目录分页读取全部标签，详情资源默认完整进入触底自动续页', () => {
@@ -137,7 +153,7 @@ describe('统一标签模块交互契约', () => {
 
   it('桌面端复用共享页头基线，页面本身不滚动且目录与资源列表各自滚动', () => {
     const detail = read('view/tagDetail/TagDetail.vue');
-    expect(detail).not.toMatch(/\.tag-space-shell\s*\{[\s\S]*?padding-top:/u);
+    expect(detail).not.toMatch(/\.tag-space-shell\s*\{[^}]*padding-top:/u);
     expect(detail).toMatch(/\.tag-space-detail\s*\{[\s\S]*?overflow:\s*hidden/u);
     expect(detail).toMatch(
       /\.tag-space-workspace\s*\{[\s\S]*?height:\s*100%[\s\S]*?min-height:\s*0[\s\S]*?align-items:\s*stretch/u,
@@ -160,6 +176,9 @@ describe('统一标签模块交互契约', () => {
     expect(detail).toContain('fetchTagSpaceResources({\n          id: tagId');
     expect(detail).toContain('if (sequence !== detailSequence) return');
     expect(detail).toContain(':aria-busy="detailRefreshing"');
+    expect(detail).toContain('v-if="detailRefreshing" class="tag-switching-overlay"');
+    expect(detail).toContain('<BLoading inline loading');
+    expect(detail).toMatch(/\.tag-switching-overlay\s*\{[\s\S]*?background:\s*var\(--background-color\)/u);
     expect(detail).toContain('switchingTagId ?');
     expect(detail).toContain('displayedTagId === String(sidebarTag.id)');
     expect(detail).toContain('const tags = new Map(sidebarTags.value.map');
@@ -172,7 +191,8 @@ describe('统一标签模块交互契约', () => {
     expect(detail).toContain('class="tag-space-workspace"');
     expect(detail).toContain('class="tag-directory-rail"');
     expect(detail).toContain('class="tag-profile-card"');
-    expect(detail).toContain('class="tag-insight-rail"');
+    expect(detail).toContain('class="tag-ai-rail"');
+    expect(detail).not.toContain('class="tag-insight-rail"');
     expect(detail).toContain("value: 'related'");
     expect(detail).toContain('<TagSpaceResourceRow');
     expect(detail).toContain('v-for="group in resourceGroups"');
@@ -181,14 +201,14 @@ describe('统一标签模块交互契约', () => {
     expect(resourceRow).toContain('resource-row-tags');
   });
 
-  it('标签说明只在主档案展示，辅助栏仅在存在关联标签时出现', () => {
+  it('标签说明只在主档案展示，相关标签留在主区页签且问答栏常驻', () => {
     const detail = read('view/tagDetail/TagDetail.vue');
     expect(detail).toContain("'has-custom-icon': tag.iconUrl && !tagIconLoadError");
     expect(detail).toMatch(/\.tag-profile-icon\s*\{[\s\S]*?background:\s*var\(--workspace-panel-bg-color\)/u);
-    expect(detail).toContain("'has-insights': relatedTags.length > 0");
-    expect(detail).toContain('v-if="relatedTags.length" class="tag-insight-rail"');
-    expect(detail).toMatch(/\.tag-space-workspace\.has-insights\s*\{[\s\S]*?grid-template-columns:/u);
-    expect(detail).toContain("t('tagSpace.coUsedTitle')");
+    expect(detail).toContain("'has-ai': bookmark.isDesktop");
+    expect(detail).toContain('v-if="bookmark.isDesktop" class="tag-ai-rail"');
+    expect(detail).not.toContain('has-insights');
+    expect(detail).not.toContain("t('tagSpace.coUsedTitle')");
     expect(detail).not.toContain('insight-card--description');
     expect(detail).not.toContain("t('tagSpace.descriptionTitle')");
     expect(detail).not.toContain("t('tagSpace.similarTagsTitle')");
@@ -246,8 +266,10 @@ describe('统一标签模块交互契约', () => {
     expect(editor).not.toContain("'/api/file/queryFiles'");
   });
 
-  it('标签分析打开后自动执行，隐藏来源角标并允许把同一结果保存为笔记', () => {
+  it('标签问答只携带当前标签选择器，桌面常驻并支持放大、复制与用户确认后存笔记', () => {
     const detail = read('view/tagDetail/TagDetail.vue');
+    const noteDetail = read('view/noteLibrary/NoteDetail.vue');
+    const aiPanel = read('components/aiSkills/AiSkillPanel.vue');
     expect(detail).toContain('skill-id="tag.analyze"');
     expect(detail).toContain("[{ type: 'tag', id: displayedTagId.value }]");
     expect(detail).not.toContain('aiResourceItems.value.slice(0, 20)');
@@ -255,9 +277,53 @@ describe('统一标签模块交互契约', () => {
     expect(detail).toContain(':show-prompt="false"');
     expect(detail).toContain(':show-grounding="false"');
     expect(detail).toContain("tagAiResourceRefs.length ? 'summarize' : ''");
-    expect(detail).toContain('#result-actions');
+    expect(detail).toContain('#result="{ response, result }"');
+    expect(detail).toContain('#result-actions="{ response, result }"');
     expect(detail).toContain('persistAiMarkdownResultAsNote');
     expect(detail).toContain("t('aiSkills.saveAsNote')");
+    expect(detail).toContain('openExpandedTagAnswer(response)');
+    expect(detail).toContain('copyTagAiAnswer(response)');
+    expect(detail).toContain('content-class="tag-ai-preview-modal__content"');
+    expect(detail).toContain('copyTextToClipboard(tagAiAnswerText(response))');
+    expect(detail).toContain('query: { from: route.fullPath }');
+    expect(noteDetail).toContain("if (source.startsWith('/tag/')) return t('tagSpace.backToSpaces')");
+    expect(detail).toContain('class="mobile-tag-ai"');
+    expect(detail).toMatch(/class="mobile-tag-ai"[\s\S]*?@click="openTagInAi"/u);
+    expect(detail).toMatch(/\.mobile-tag-ai\s*\{[\s\S]*?border-color:\s*var\(--primary-color\)/u);
+    expect(detail).toContain('skill-id="tag.ask"');
+    expect(detail).toContain('prompt-key="question"');
+    expect(detail).toContain(':prompt-rows="1"');
+    expect(detail).toContain('presentation="sidebar"');
+    expect(detail).toMatch(/skill-id="tag\.ask"[\s\S]*?:show-grounding="false"/u);
+    expect(detail).toContain(':key="`tag-ai:${requestedTagId}`"');
+    expect(detail).toContain('const requestedTagId = computed(() => currentTagId())');
+    expect(detail).toContain(':disabled="detailRefreshing || !tagAiResourceRefs.length"');
+    expect(detail).toContain(':prompt-disabled="tagAskOverLimit"');
+    expect(detail).toContain('const TAG_ASK_MAX_RESOURCES = AI_SCOPED_CONVERSATION_MAX_RESOURCES');
+    expect(detail).toContain("t('tagManage.aiAskLimit', { count: TAG_ASK_MAX_RESOURCES })");
+    expect(detail).toContain("? t('tagManage.aiNoResources')");
+    expect(detail).not.toContain(':actions-label="t(\'tagManage.aiActionsLabel\')"');
+    expect(detail).toContain('--ai-skill-panel-gap: 9px');
+    expect(detail).toContain('--ai-skill-panel-padding: 13px');
+    expect(detail).toContain('--ai-skill-actions-wrap: nowrap');
+    expect(detail).toContain('--ai-skill-action-min-height: 30px');
+    expect(detail).toContain('--ai-skill-action-padding: 4px');
+    expect(detail).toContain('--ai-skill-action-font-size: 12px');
+    expect(detail).toContain('--ai-skill-chat-composer-min-height: 64px');
+    expect(detail).toContain('--ai-skill-chat-composer-max-height: 104px');
+    expect(detail).toContain('--ai-skill-chat-composer-padding: 10px 66px 10px 12px');
+    expect(detail).toContain('--ai-skill-chat-composer-action-bottom: 8px');
+    expect(detail).toContain('class="skeleton-ai-actions"');
+    expect(detail).toMatch(/\.skeleton-block--ai-composer\s*\{[\s\S]*?height:\s*64px/u);
+    expect(aiPanel).toContain('var(--ai-skill-panel-gap, 12px)');
+    expect(aiPanel).toContain('var(--ai-skill-panel-padding, 15px)');
+    expect(aiPanel).toContain('var(--ai-skill-actions-wrap, wrap)');
+    expect(aiPanel).toContain('var(--ai-skill-action-min-height, 34px)');
+    expect(aiPanel).toContain('var(--ai-skill-chat-composer-min-height, 112px)');
+    expect(aiPanel).toContain('var(--ai-skill-chat-composer-max-height, 180px)');
+    expect(aiPanel).toContain('var(--ai-skill-chat-composer-padding, 13px 14px 50px)');
+    expect(detail).toContain('v-if="!bookmark.isDesktop"');
+    expect(detail).not.toContain('desktopTagAiOpen');
   });
 
   it('旧标签编辑深链兼容重定向到标签空间弹框', () => {

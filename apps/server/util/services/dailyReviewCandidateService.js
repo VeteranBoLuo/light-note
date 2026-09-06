@@ -21,7 +21,7 @@ export function resolveDailyReviewBookmarkUrl(value) {
     : null;
 }
 
-const RESOURCE_DEFINITIONS = Object.freeze([
+export const REVIEW_RESOURCE_DEFINITIONS = Object.freeze([
   {
     type: 'bookmark',
     table: 'bookmark',
@@ -59,6 +59,7 @@ const RESOURCE_DEFINITIONS = Object.freeze([
     liveCondition: 'f.del_flag = 0',
   },
 ]);
+const RESOURCE_DEFINITIONS = REVIEW_RESOURCE_DEFINITIONS;
 
 function assertDate(value) {
   const date = String(value || '');

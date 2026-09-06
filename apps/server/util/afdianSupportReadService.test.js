@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  ensureDefaultAfdianPublicPreference,
   getAfdianAdminOverview,
   getAfdianLeaderboard,
   getAfdianPublicAvatar,
@@ -67,13 +68,21 @@ describe('爱发电赞助读取与公开偏好', () => {
     expect(String(mocks.defaultQuery.mock.calls[0][0])).toContain("ownership_source <> 'conflict'");
   });
 
-  it('没有偏好记录时默认参与榜单但保持匿名', async () => {
+  it('没有偏好记录时默认参与榜单并公开轻笺身份', async () => {
     const db = { query: vi.fn().mockResolvedValue([[], []]) };
     await expect(getAfdianPublicPreference({ userId: 'user-1', db })).resolves.toEqual({
       participateInRanking: true,
-      showIdentity: false,
+      showIdentity: true,
       adminHidden: false,
     });
+  });
+
+  it('默认公开记录只在缺失时插入，不覆盖用户已经保存的匿名或退榜选择', async () => {
+    const db = { query: vi.fn().mockResolvedValue([{ affectedRows: 0 }, []]) };
+    await ensureDefaultAfdianPublicPreference({ userId: 'user-1', db });
+    expect(String(db.query.mock.calls[0][0])).toContain('INSERT IGNORE INTO support_public_preferences');
+    expect(String(db.query.mock.calls[0][0])).toContain('VALUES (?, ?, 1, 1, NULL)');
+    expect(db.query.mock.calls[0][1][0]).toBe('user-1');
   });
 
   it('用户订单统一返回旧 AI、常驻套餐和活动套餐的 AI/空间到账事实', async () => {
@@ -197,7 +206,7 @@ describe('爱发电赞助读取与公开偏好', () => {
     expect(db.query.mock.calls[0][1].slice(2)).toEqual([0, 0, 0]);
   });
 
-  it('累计榜隐藏内部 userId，默认匿名，只有明确同意的身份才公开', async () => {
+  it('累计榜隐藏内部 userId，并保留用户明确选择的匿名展示', async () => {
     invalidateAfdianLeaderboardCache();
     const db = {
       query: vi.fn().mockResolvedValue([

@@ -1,4 +1,6 @@
 export const AI_SKILL_PROTOCOL_VERSION = 1;
+// 标签问答与目录问答共用同一项安全上限。前后端必须从这里读取，避免界面提示与服务端拒绝阈值漂移。
+export const AI_SCOPED_CONVERSATION_MAX_RESOURCES = 50;
 
 export const AI_SKILL_STATUSES = Object.freeze([
   "completed",
@@ -35,8 +37,9 @@ const REQUEST_KEYS = new Set([
   "scope",
   "client",
 ]);
-const SCOPE_KEYS = new Set(["resourceRefs"]);
+const SCOPE_KEYS = new Set(["resourceRefs", "selector"]);
 const RESOURCE_REF_KEYS = new Set(["type", "id", "version"]);
+const SCOPE_SELECTOR_KEYS = new Set(["type", "parentId", "includeDescendants"]);
 const CLIENT_KEYS = new Set(["locale", "timezone", "surface"]);
 const RESPONSE_KEYS = new Set([
   "protocolVersion",
@@ -169,6 +172,55 @@ function normalizeResourceRefs(scope) {
   });
 }
 
+function normalizeScopeSelector(scope) {
+  const selector = scope.selector;
+  if (selector == null) return null;
+  const value = assertPlainObject(
+    selector,
+    "AI_SKILL_SCOPE_SELECTOR_INVALID",
+    "scope.selector",
+  );
+  assertKnownKeys(
+    value,
+    SCOPE_SELECTOR_KEYS,
+    "AI_SKILL_SCOPE_SELECTOR_UNKNOWN_FIELD",
+    "scope.selector",
+  );
+  const type = normalizeString(value.type, {
+    required: true,
+    maxLength: 32,
+    code: "AI_SKILL_SCOPE_SELECTOR_TYPE_INVALID",
+    label: "scope.selector.type",
+  });
+  if (type !== "note_directory") {
+    protocolError(
+      "AI_SKILL_SCOPE_SELECTOR_TYPE_INVALID",
+      `不支持范围选择器 ${type}`,
+    );
+  }
+  const parentId =
+    value.parentId == null || value.parentId === ""
+      ? null
+      : normalizeString(value.parentId, {
+          required: true,
+          maxLength: 128,
+          pattern: SAFE_ID_PATTERN,
+          code: "AI_SKILL_SCOPE_SELECTOR_PARENT_INVALID",
+          label: "scope.selector.parentId",
+        });
+  if (typeof value.includeDescendants !== "boolean") {
+    protocolError(
+      "AI_SKILL_SCOPE_SELECTOR_DESCENDANTS_INVALID",
+      "scope.selector.includeDescendants 必须是布尔值",
+    );
+  }
+  return Object.freeze({
+    type,
+    parentId,
+    includeDescendants: value.includeDescendants,
+  });
+}
+
 function normalizeClient(client) {
   const value = assertPlainObject(
     client ?? {},
@@ -247,6 +299,7 @@ export function validateAiSkillRequest(input) {
     "AI_SKILL_INPUT_INVALID",
     "input",
   );
+  const selector = normalizeScopeSelector(value.scope ?? {});
   return Object.freeze({
     protocolVersion: AI_SKILL_PROTOCOL_VERSION,
     requestId,
@@ -256,6 +309,7 @@ export function validateAiSkillRequest(input) {
     input: Object.freeze({ ...normalizedInput }),
     scope: Object.freeze({
       resourceRefs: Object.freeze(normalizeResourceRefs(value.scope)),
+      ...(selector ? { selector } : {}),
     }),
     client: normalizeClient(value.client),
   });

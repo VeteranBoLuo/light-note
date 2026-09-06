@@ -252,14 +252,13 @@
                   </BButton>
                 </div>
                 <div v-else class="toolbar-actions">
-                  <BButton
+                  <BBatchToggle
                     size="small"
                     class="select-visible-btn"
-                    :disabled="!selectableVisibleItems.length"
+                    :disabled="!batchMode && !selectableVisibleItems.length"
                     @click="toggleBatchMode"
-                  >
-                    {{ batchMode ? t('resourceCenter.batch.exit') : t('resourceCenter.batch.enter') }}
-                  </BButton>
+                    :active="batchMode"
+                  />
                   <BButton
                     size="small"
                     class="clear-btn"
@@ -439,8 +438,7 @@
                 @open="openItem"
                 @analyze="openResourceAi"
                 @inbox="(item) => handleItemMenu('addInbox', item)"
-                @add-tag="(item) => openSingleTagWorkspace(item, 'add')"
-                @remove-tag="(item) => openSingleTagWorkspace(item, 'remove')"
+                @manage-tags="openSingleTagWorkspace"
                 @delete="(item) => handleItemMenu('delete', item)"
               />
             </aside>
@@ -580,13 +578,14 @@
         @open="openInspectedMobileResource"
         @analyze="openInspectedMobileAi"
         @inbox="(item) => handleItemMenu('addInbox', item)"
-        @add-tag="(item) => openSingleTagWorkspace(item, 'add')"
-        @remove-tag="(item) => openSingleTagWorkspace(item, 'remove')"
+        @manage-tags="openSingleTagWorkspace"
         @delete="(item) => handleItemMenu('delete', item)"
       />
     </BDrawer>
 
     <ResourceBatchActionBar
+      selection-module="search"
+      :selection-visible-count="selectionSession.visibleSelected.value"
       v-if="!isKnowledgeMapView"
       :open="batchMode"
       :mobile="bookmark.isMobile"
@@ -607,30 +606,29 @@
       <template #leading>
         <span class="batch-action-select-all" @click.stop>
           <BCheckbox
+            controlled
             :checked="batchSelectAllChecked"
             :indeterminate="batchSelectAllIndeterminate"
-            :disabled="!filteredResultTotal || selectionPreviewLoading"
+            :disabled="!selectableVisibleItems.length || selectionStore.busy || viewState.loading"
             :aria-label="batchSelectAllLabel"
             @change="handleBatchSelectAllChange"
           />
         </span>
       </template>
       <template #actions>
+        <BButton
+          :disabled="selectionStore.busy || viewState.loading || !filteredResultTotal"
+          @click="toggleSelectAllMatching()"
+          >{{ t('resourceSelection.allMatching') }}</BButton
+        >
         <BButton :disabled="!selectedCount" @click="batchAddToInbox">
           <SvgIcon :src="icon.contextMenu.inbox" size="16" aria-hidden="true" />
           {{ t('inbox.addExisting') }}
         </BButton>
-        <BActionMenu
-          :items="desktopBatchTagActions"
-          placement="top-right"
-          :aria-label="t('resourceOutcome.batch.tags')"
-          @select="handleDesktopBatchAction"
-        >
-          <BButton :disabled="!selectedCount">
-            <SvgIcon :src="icon.manage_categoryBtn_tag" size="16" aria-hidden="true" />
-            {{ t('resourceOutcome.batch.tags') }}
-          </BButton>
-        </BActionMenu>
+        <BButton :disabled="!selectedCount" @click="manageBatchTags">
+          <SvgIcon :src="icon.resource.tag" size="16" aria-hidden="true" />
+          {{ t('resourceCenter.manageResourceTags') }}
+        </BButton>
         <BButton class="batch-action-delete" :disabled="!selectedCount" @click="batchDelete">
           <SvgIcon :src="icon.table_delete" size="16" aria-hidden="true" />
           {{ t('resourceCenter.batch.delete') }}
@@ -656,6 +654,9 @@
 </template>
 
 <script setup lang="ts">
+  import { useResourceSelection } from '@/composables/useResourceSelection';
+  import { useResourceSelectionStore } from '@/store/resourceSelection';
+  import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
   import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
   import { openBookmarkUrl } from '@/utils/openBookmark.ts';
@@ -663,13 +664,12 @@
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BBatchToggle from '@/components/base/BasicComponents/BBatchToggle.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
-  import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
-  import type { BActionMenuItem } from '@/components/base/BasicComponents/actionMenu';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -741,7 +741,6 @@
   const isKnowledgeMapView = computed(() => route.path === '/search' && route.query.section === 'map');
 
   const SEARCH_VIEW_STORAGE_KEY = 'resource-center-view-mode';
-  const SEARCH_BATCH_STORAGE_KEY = 'resource-center-batch-items';
   const SEARCH_QUERY_KEYS = ['q', 'type', 'sort', 'view', 'tags', 'date', 'untagged'] as const;
   const SKELETON_DELAY_MS = 140;
   const syncTimer = ref<number | null>(null);
@@ -749,7 +748,11 @@
   const mobileFilterVisible = ref(false);
   const mobileInspectorVisible = ref(false);
   const mobileBatchActionsOpen = ref(false);
-  const batchMode = ref(false);
+  const selectionStore = useResourceSelectionStore();
+  const batchMode = computed({
+    get: () => selectionStore.module === 'search',
+    set: (value) => (value ? selectionStore.start('search', buildNoteDetailRequestScope(user)) : selectionStore.end()),
+  });
   const tagSearch = ref('');
   const showLoadingSkeleton = ref(false);
   const scopeTypesExpanded = ref(true);
@@ -834,17 +837,32 @@
     error: null,
   });
 
-  const selectedIds = ref<string[]>([]);
+  const selectionSession = useResourceSelection(
+    'search',
+    computed(() => viewState.rawItems.filter((item) => isTaggableResourceType(item.type))),
+    undefined,
+    computed(() => viewState.loading),
+  );
+  const selectedIds = selectionSession.ids;
   const searchAiVisible = ref(false);
   const outcomeDrawerOpen = ref(false);
   const outcomeResources = ref<ResourceOutcomeResource[]>([]);
+  watch(outcomeDrawerOpen, (open) => {
+    if (!open) selectionSession.finish();
+  });
   const explicitSearchAiResourceContext = ref<{
     ref: AiSkillResourceRef;
     type: TaggableResourceType;
     title: string;
   } | null>(null);
-  const allMatchingSummary = ref<BatchSelectionSummary | null>(null);
-  const excludedSelectionIds = ref<string[]>([]);
+  const allMatchingSummary = computed(() => selectionStore.query?.summary || null);
+  const excludedSelectionIds = computed({
+    get: () => (selectionStore.query?.excludedItems || []).map(getItemSelectionKey),
+    set: (ids: string[]) => {
+      if (selectionStore.query && !selectionStore.busy)
+        selectionStore.query.excludedItems = ids.map(selectionItemFromKey).filter(Boolean);
+    },
+  });
   const selectionPreviewLoading = ref(false);
 
   // 移动端强制卡片视图:列表视图会把卡片撑得很宽导致横向滚动,且移动端列表/卡片无实质差异
@@ -943,20 +961,20 @@
       ? Math.max(0, Number(allMatchingSummary.value?.total || 0) - excludedSelectionIds.value.length)
       : selectedIds.value.length,
   );
-  const batchSelectAllChecked = computed(
-    () => filteredResultTotal.value > 0 && selectedCount.value === filteredResultTotal.value,
+  const batchSelectAllChecked = computed(() =>
+    allMatchingActive.value
+      ? selectableVisibleItems.value.length > 0 && selectableVisibleItems.value.every(isItemSelected)
+      : selectionSession.allVisible.value,
   );
-  const batchSelectAllIndeterminate = computed(() => selectedCount.value > 0 && !batchSelectAllChecked.value);
+  const batchSelectAllIndeterminate = computed(() =>
+    allMatchingActive.value
+      ? selectableVisibleItems.value.some(isItemSelected) && !batchSelectAllChecked.value
+      : selectionSession.someVisible.value,
+  );
   const batchSelectAllLabel = computed(() =>
-    batchSelectAllChecked.value
-      ? t('resourceCenter.batch.unselectAll')
-      : t('resourceCenter.batch.selectAll', { count: filteredResultTotal.value }),
+    t(batchSelectAllChecked.value ? 'resourceOutcome.batch.unselectAll' : 'resourceOutcome.batch.selectAll'),
   );
-  const selectedExplicitItems = computed(() =>
-    allVisibleItems.value
-      .filter((item) => selectedIds.value.includes(getItemSelectionKey(item)))
-      .filter((item) => isTaggableResourceType(item.type)),
-  );
+  const selectedExplicitItems = selectionSession.items;
   const batchActionSummary = computed(() => {
     if (allMatchingActive.value) {
       return t('resourceCenter.batch.allMatchingSelected', { count: selectedCount.value });
@@ -983,21 +1001,13 @@
     if (!selectedCount.value) return t('resourceOutcome.batch.selectFirst');
     return '';
   });
-  const desktopBatchTagActions = computed<BActionMenuItem[]>(() => [
-    {
-      key: 'addTag',
-      label: t('resourceCenter.batch.addTag'),
-      icon: icon.manage_categoryBtn_tag,
-      disabled: !selectedCount.value,
-    },
-    {
-      key: 'removeTag',
-      label: t('resourceCenter.batch.removeTag'),
-      icon: icon.manage_categoryBtn_tag,
-      disabled: !selectedCount.value,
-    },
-  ]);
   const mobileBatchActions = computed<MobilePageActionItem[]>(() => [
+    {
+      key: 'allMatching',
+      label: t('resourceSelection.allMatching'),
+      icon: icon.filterPanel.check,
+      disabled: selectionStore.busy || viewState.loading || !filteredResultTotal.value,
+    },
     {
       key: 'outcome',
       label: t('resourceOutcome.primaryAction'),
@@ -1018,15 +1028,9 @@
       disabled: selectedCount.value < 1,
     },
     {
-      key: 'addTag',
-      label: t('resourceCenter.batch.addTag'),
-      icon: icon.manage_categoryBtn_tag,
-      disabled: selectedCount.value < 1,
-    },
-    {
-      key: 'removeTag',
-      label: t('resourceCenter.batch.removeTag'),
-      icon: icon.manage_categoryBtn_tag,
+      key: 'manageTags',
+      label: t('resourceCenter.manageResourceTags'),
+      icon: icon.resource.tag,
       disabled: selectedCount.value < 1,
     },
     {
@@ -1079,11 +1083,10 @@
     return keyword ? tagOptions.value.filter((tag) => tag.toLocaleLowerCase().includes(keyword)) : tagOptions.value;
   });
   const selectedSearchAiResourceRefs = computed<AiSkillResourceRef[]>(() =>
-    mappedItems.value
-      .filter((item) => selectedIds.value.includes(getItemSelectionKey(item)))
-      .filter((item) => isTaggableResourceType(item.type))
-      .slice(0, 10)
-      .map((item) => ({ type: item.type as AiSkillResourceRef['type'], id: String(item.id) })),
+    selectionSession.items.value.map((item) => ({
+      type: item.type as AiSkillResourceRef['type'],
+      id: String(item.id),
+    })),
   );
   const searchAiResourceRefs = computed<AiSkillResourceRef[]>(() =>
     explicitSearchAiResourceContext.value
@@ -1462,8 +1465,7 @@
           todo: 0,
         };
       }
-      const validSelection = new Set(viewState.rawItems.map((item) => getItemSelectionKey(item)));
-      selectedIds.value = selectedIds.value.filter((id) => validSelection.has(id));
+
       loadSucceeded = true;
       return true;
     } catch (error) {
@@ -1542,25 +1544,20 @@
   function syncQueryDebounced() {
     if (syncTimer.value) clearTimeout(syncTimer.value);
     reconcileImplicitSortForKeyword();
-    clearBatchSelection();
     viewState.loading = true;
     syncTimer.value = window.setTimeout(syncQueryNow, 250);
   }
 
   function applyQueryState(operation: string) {
-    clearBatchSelection();
     recordOperation({ module: '资源中心', operation });
     syncQueryNow();
   }
 
   function clearBatchSelection() {
-    selectedIds.value = [];
-    allMatchingSummary.value = null;
-    excludedSelectionIds.value = [];
+    selectionSession.clear();
   }
 
   function submitSearch() {
-    clearBatchSelection();
     reconcileImplicitSortForKeyword();
     const q = queryState.keyword.trim();
     if (q) {
@@ -1646,7 +1643,6 @@
    */
   async function refreshData(options: { silent?: boolean } = {}) {
     const silent = Boolean(options.silent);
-    clearBatchSelection();
     clearGlobalSearchCache();
     if (!silent) viewState.loading = true;
     try {
@@ -1674,7 +1670,7 @@
   }
 
   function toggleSelect(item: DisplaySearchItem) {
-    if (!batchMode.value) return;
+    if (!batchMode.value || selectionStore.busy || viewState.loading) return;
     const key = getItemSelectionKey(item);
     if (allMatchingActive.value) {
       if (excludedSelectionIds.value.includes(key)) {
@@ -1707,17 +1703,12 @@
   }
 
   function handleMobileBatchAction(action: MobilePageActionItem) {
-    if (action.key === 'outcome') openBatchOutcomeDrawer();
+    if (action.key === 'allMatching') void toggleSelectAllMatching();
+    else if (action.key === 'outcome') openBatchOutcomeDrawer();
     else if (action.key === 'clear') clearBatchSelection();
     else if (action.key === 'inbox') void batchAddToInbox();
-    else if (action.key === 'addTag') batchAddTag();
-    else if (action.key === 'removeTag') batchRemoveTag();
+    else if (action.key === 'manageTags') manageBatchTags();
     else if (action.key === 'delete') void batchDelete();
-  }
-
-  function handleDesktopBatchAction(key: string) {
-    if (key === 'addTag') batchAddTag();
-    else if (key === 'removeTag') batchRemoveTag();
   }
 
   function selectionItemFromKey(key: string): BatchResourceItem | null {
@@ -1745,73 +1736,97 @@
     };
   }
 
-  function getCurrentBatchSelection(): BatchSelection {
-    if (allMatchingActive.value) return buildAllMatchingSelection();
-    return {
-      mode: 'explicit',
-      items: selectedIds.value.map(selectionItemFromKey).filter((item): item is BatchResourceItem => Boolean(item)),
-    };
-  }
-
   function isItemSelected(item: DisplaySearchItem) {
     const key = getItemSelectionKey(item);
     return allMatchingActive.value ? !excludedSelectionIds.value.includes(key) : selectedIds.value.includes(key);
   }
 
   async function toggleSelectAllMatching() {
+    if (selectionStore.busy || viewState.loading) return;
     if (allMatchingActive.value) {
       clearBatchSelection();
       return;
     }
-    selectionPreviewLoading.value = true;
-    try {
-      const selection = buildAllMatchingSelection();
-      const selectionQueryKey = JSON.stringify(selection.query);
-      const res = await previewSearchBatchSelection(selection);
-      if (selectionQueryKey !== JSON.stringify(buildAllMatchingSelection().query)) return;
-      if (Number(res?.status) !== 200 || !res?.data) {
-        message.error(res?.msg || t('resourceCenter.batch.selectionPrepareFailed'));
+    const op = selectionStore.beginOperation();
+    if (!op) return;
+    const querySelection = buildAllMatchingSelection();
+    const fingerprint = matchingQueryKey();
+    const preview = async () => {
+      if (!selectionStore.isCurrent(op) || fingerprint !== matchingQueryKey()) {
+        selectionStore.finish(op);
         return;
       }
-      allMatchingSummary.value = res.data as BatchSelectionSummary;
-      selectedIds.value = [];
-      excludedSelectionIds.value = [];
-    } catch {
-      message.error(t('resourceCenter.batch.selectionPrepareFailed'));
-    } finally {
-      selectionPreviewLoading.value = false;
-    }
+      selectionPreviewLoading.value = true;
+      try {
+        await selectionSession.replaceWithQuery(
+          querySelection as Extract<BatchSelection, { mode: 'allMatching' }>,
+          op,
+          () => fingerprint === matchingQueryKey(),
+        );
+      } finally {
+        if (selectionStore.isCurrent(op)) selectionPreviewLoading.value = false;
+      }
+    };
+    if (op.items.length) {
+      Alert.alert({
+        title: t('resourceSelection.allMatching'),
+        content: t('resourceSelection.replace', { count: op.items.length }),
+        onOk: preview,
+        onCancel: () => selectionStore.finish(op),
+      });
+    } else await preview();
   }
 
   function handleBatchSelectAllChange(checked: boolean) {
-    if (!checked) {
-      clearBatchSelection();
-      return;
-    }
+    if (selectionStore.busy || viewState.loading) return;
     if (allMatchingActive.value) {
-      excludedSelectionIds.value = [];
-      return;
-    }
-    void toggleSelectAllMatching();
+      const visibleKeys = selectableVisibleItems.value.map(getItemSelectionKey);
+      excludedSelectionIds.value = checked
+        ? excludedSelectionIds.value.filter((key) => !visibleKeys.includes(key))
+        : [...new Set([...excludedSelectionIds.value, ...visibleKeys])];
+    } else selectionSession.selectVisible(checked);
   }
+  function matchingQueryKey(
+    query = buildAllMatchingSelection().mode === 'allMatching' ? (buildAllMatchingSelection() as any).query : {},
+  ) {
+    const { sort: _sort, ...matching } = query;
+    return JSON.stringify({
+      ...matching,
+      types: [...(matching.types || [])].sort(),
+      tags: [...(matching.tags || [])].sort(),
+    });
+  }
+  watch(
+    () => matchingQueryKey(),
+    (key) => {
+      if (selectionStore.query && key !== matchingQueryKey(selectionStore.query.query)) {
+        selectionStore.query = null;
+        selectionStore.busy = false;
+        selectionStore.revision++;
+        message.info(t('resourceSelection.queryChanged'));
+      }
+    },
+  );
 
   function closeSearchAi() {
     searchAiVisible.value = false;
     explicitSearchAiResourceContext.value = null;
   }
 
-  function openBatchOutcomeDrawer() {
+  async function openBatchOutcomeDrawer() {
     if (allMatchingActive.value) {
       message.warning(t('resourceCenter.batch.aiExplicitOnly'));
       return;
     }
+    const op = await selectionSession.prepare();
+    if (!op) return;
     if (!selectedExplicitItems.value.length) {
       message.warning(
         t(selectedCount.value ? 'resourceOutcome.batch.selectionChanged' : 'resourceOutcome.batch.selectFirst'),
       );
       return;
     }
-    outcomeResources.value = selectedExplicitItems.value.map((item) => ({
+    outcomeResources.value = op.items.map((item) => ({
       type: item.type,
       id: String(item.id),
       title: String(item.title || t('inbox.untitled')),
@@ -1858,81 +1873,19 @@
     void closeMobileInspectorThen(() => openResourceAi(snapshot));
   }
 
-  function getSelectedItemsByTypes(types: TaggableResourceType[]) {
-    return allVisibleItems.value
-      .filter((item) => selectedIds.value.includes(getItemSelectionKey(item)))
-      .filter((item) => types.includes(item.type))
-      .map((item) => ({
-        id: item.id,
-        type: item.type,
-        title: item.title,
-      }));
-  }
-
-  function openBatchTagWorkspace(mode: 'add' | 'remove') {
-    const selectedItems = getSelectedItemsByTypes(['bookmark', 'note', 'file']);
-    const editableCount = allMatchingActive.value ? selectedCount.value : selectedItems.length;
-    if (!editableCount) {
-      message.warning(t('resourceCenter.batch.onlyResourceSupported'));
-      return;
-    }
-    sessionStorage.setItem(
-      SEARCH_BATCH_STORAGE_KEY,
-      JSON.stringify({
-        selection: getCurrentBatchSelection(),
-        items: selectedItems,
-        selectedCount: editableCount,
-      }),
-    );
-    router.push({
-      path: '/search/batch-tags',
-      query: { mode, from: route.fullPath },
-    });
-  }
-
-  function openSingleTagWorkspace(item: DisplaySearchItem, mode: 'add' | 'remove') {
+  function openSingleTagWorkspace(item: DisplaySearchItem) {
     if (!isTaggableResourceType(item.type)) return;
-    const selectedItem = { id: String(item.id), type: item.type, title: item.title };
-    sessionStorage.setItem(
-      SEARCH_BATCH_STORAGE_KEY,
-      JSON.stringify({
-        selection: {
-          mode: 'explicit',
-          items: [{ id: selectedItem.id, type: selectedItem.type }],
-        },
-        items: [selectedItem],
-        selectedCount: 1,
-      }),
-    );
-    const returnPath = route.fullPath;
-    recordOperation({
-      module: '资源中心',
-      operation: mode === 'add' ? '进入单项加标签工作页' : '进入单项移除标签工作页',
-    });
-    void closeMobileInspectorThen(() =>
-      router.push({
-        path: '/search/batch-tags',
-        query: { mode, from: returnPath },
-      }),
-    );
+    const selectedItem = { id: String(item.id), type: item.type as TaggableResourceType, title: item.title };
+    void closeMobileInspectorThen(() => selectionSession.openTags('add', [selectedItem]));
   }
 
-  function batchAddTag() {
+  function manageBatchTags() {
     if (!selectedCount.value) {
       message.warning(t('resourceCenter.batch.noSelection'));
       return;
     }
-    recordOperation({ module: '资源中心', operation: '进入批量加标签工作页' });
-    openBatchTagWorkspace('add');
-  }
-
-  function batchRemoveTag() {
-    if (!selectedCount.value) {
-      message.warning(t('resourceCenter.batch.noSelection'));
-      return;
-    }
-    recordOperation({ module: '资源中心', operation: '进入批量移除标签工作页' });
-    openBatchTagWorkspace('remove');
+    recordOperation({ module: '资源中心', operation: '进入批量标签管理工作页' });
+    void selectionSession.openTags('add');
   }
 
   function getSingleDeleteApi(type: TaggableResourceType) {
@@ -1997,7 +1950,10 @@
       return;
     }
     try {
-      const res = await batchAddSearchResourcesToInbox(getCurrentBatchSelection());
+      const op = await selectionSession.prepare();
+      if (!op) return;
+      const res = await batchAddSearchResourcesToInbox(op.selection).finally(() => selectionSession.finish(op));
+      if (!selectionSession.current(op)) return;
       if (Number(res?.status) !== 200) {
         message.error(res?.msg || t('inbox.addFailed'));
         return;
@@ -2016,31 +1972,39 @@
       message.warning(t('resourceCenter.batch.noSelection'));
       return;
     }
-    const selection = getCurrentBatchSelection();
+    const op = await selectionSession.prepare();
+    if (!op) return;
+    const selection = op.selection;
     const requestedCount = selectedCount.value;
     Alert.alert({
       title: t('resourceCenter.batch.deleteConfirmTitle'),
       content: t('resourceCenter.batch.deleteConfirmContent', { count: requestedCount }),
       okText: t('resourceCenter.batch.deleteConfirmOk'),
       cancelText: t('resourceCenter.batch.deleteConfirmCancel'),
+      onCancel: () => selectionSession.finish(op),
       async onOk() {
+        if (!selectionSession.current(op)) return;
         try {
           const res = await batchDeleteSearchResources(selection);
           if (Number(res?.status) !== 200) {
             message.error(res?.msg || t('resourceCenter.batch.deleteFailed'));
             return;
           }
+          if (!selectionSession.current(op)) return;
           const affected = Number(res?.data?.affectedItemCount || 0);
           recordOperation({
             module: '资源中心',
             operation: `批量删除资源成功【选中${requestedCount}条，删除${affected}条】`,
           });
           message.success(t('resourceCenter.batch.deleteSuccess', { count: affected }));
-          clearBatchSelection();
+          await selectionSession.reconcile(op);
+          if (!selectionSession.current(op)) return;
           clearGlobalSearchCache();
           await refreshData();
         } catch (error) {
           message.error(t('resourceCenter.batch.deleteFailed'));
+        } finally {
+          selectionSession.finish(op);
         }
       },
     });
@@ -2048,10 +2012,9 @@
 
   let isInitialRouteLoad = true;
   watch(
-    // 移动抽屉会用同 URL 的 history state 管理返回栈；只在可见 URL 真正变化时重置筛选与批量选择。
+    // 移动抽屉会用同 URL 的 history state 管理返回栈；可见 URL 变化只同步筛选，显式选择由模块会话维护。
     () => route.fullPath,
     () => {
-      clearBatchSelection();
       mobileInspectorVisible.value = false;
       applyRouteState();
       nextTick(() => {
@@ -3000,8 +2963,7 @@
     }
 
     .view-btn,
-    .tagless-btn,
-    .select-visible-btn {
+    .tagless-btn {
       height: 30px;
       min-height: 30px;
       line-height: 1;
@@ -3020,8 +2982,7 @@
     }
 
     .select-visible-btn {
-      color: var(--primary-color);
-      background: color-mix(in srgb, var(--primary-color) 9%, var(--background-color));
+      --batch-toggle-height: 30px;
     }
 
     .tag-chip {
@@ -3148,8 +3109,7 @@
     }
 
     .desktop-result-controls .view-btn,
-    .desktop-result-controls .tagless-btn,
-    .desktop-result-controls .select-visible-btn {
+    .desktop-result-controls .tagless-btn {
       padding-inline: 8px;
     }
   }
@@ -3310,8 +3270,7 @@
       font-size: 12px;
     }
 
-    .tagless-btn,
-    .select-visible-btn {
+    .tagless-btn {
       width: 100%;
       height: 32px;
       min-height: 32px;

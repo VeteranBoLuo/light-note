@@ -67,6 +67,9 @@ describe('后台用户管理增强', () => {
           ],
         ];
       }
+      if (statement.includes('FROM community_chat_user_identities')) {
+        return [[{ userPublicId: '22222222-2222-4222-8222-222222222222', communityId: 'ln_TEST22' }]];
+      }
       if (statement.includes('FROM bookmark WHERE user_id')) {
         return [
           [
@@ -132,6 +135,8 @@ describe('后台用户管理增强', () => {
     });
     expect(payload.data.growth).toMatchObject({ equippedFrame: 'frame_celestial' });
     expect(payload.data.aiUsage).toMatchObject({ requestTotal: 9, tokenTotal: 1000, failedTotal: 1 });
+    expect(payload.data.profile).toMatchObject({ communityId: 'ln_TEST22' });
+    expect(payload.data.profile).not.toHaveProperty('userPublicId');
     expect(payload.data).not.toHaveProperty('aiWorkspace');
     const aiUsageCall = query.mock.calls.find(([sql]) => normalized(sql).includes('FROM ai_executions e'));
     expect(normalized(aiUsageCall[0])).toContain('cost_execution.actor_user_id = ?');

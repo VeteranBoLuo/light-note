@@ -9,7 +9,7 @@ describe('云空间待整理目标删除同步', () => {
   it('单删和批量删除成功后都回传已删除文件 ID', () => {
     expect(listSource).toContain("'filesDeleted'");
     expect(listSource).toContain("emit('filesDeleted', [String(file.id)])");
-    expect(listSource).toContain("emit('filesDeleted', deletingIds)");
+    expect(listSource).toContain("emit('filesDeleted', deletedIds)");
   });
 
   it('已删除当前待整理文件时立即隐藏提示并清理路由上下文', () => {

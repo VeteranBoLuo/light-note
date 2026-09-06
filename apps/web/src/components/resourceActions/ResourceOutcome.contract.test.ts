@@ -113,7 +113,7 @@ describe('资源批量操作与成果抽屉契约', () => {
 
     expect(noteLibrary).toContain('surface="note_library"');
     expect(noteLibrary).toContain('@click="toggleBatchMode"');
-    expect(noteLibrary).toContain("$t(batchMode ? 'note.exitBatch' : 'note.batchAction')");
+    expect(noteLibrary).toMatch(/<BBatchToggle[^>]*:active="batchMode"/);
     expect(noteLibrary).toContain(':show-mobile-primary="false"');
     expect(noteLibrary).toContain('showAdd: () => !batchMode.value');
     expect(noteLibrary).toContain('<NoteAiDialog');

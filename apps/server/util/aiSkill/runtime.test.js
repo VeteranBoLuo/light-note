@@ -1,6 +1,17 @@
 import crypto from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
+import { createAiGateway } from '../agent/aiGateway.js';
 import { executeAiSkill } from './runtime.js';
+
+function createExecutionPersistence() {
+  return {
+    insertAiExecution: vi.fn(),
+    updateAiExecutionReservation: vi.fn(),
+    renewAiExecutionLease: vi.fn(),
+    insertAiProviderSpan: vi.fn(),
+    settleAiExecution: vi.fn(),
+  };
+}
 
 function request() {
   return {
@@ -442,5 +453,89 @@ describe('executeAiSkill', () => {
       'ai_skill_started',
       'ai_skill_scope_rejected',
     ]);
+  });
+
+  it('固定产物交付失败时根 Execution 退款，重试成功只结算最终可交付结果', async () => {
+    const persistence = createExecutionPersistence();
+    const quota = {
+      reserve: vi
+        .fn()
+        .mockResolvedValueOnce({ blocked: false, reserved: 5_000, reservationKey: 'daily-failed' })
+        .mockResolvedValueOnce({ blocked: false, reserved: 5_000, reservationKey: 'daily-ready' }),
+      reconcile: vi.fn().mockResolvedValue(true),
+    };
+    const provider = vi.fn().mockResolvedValue({
+      content: '固定结果',
+      usage: { promptTokens: 8, completionTokens: 2, totalTokens: 10 },
+      usageStatus: 'reported',
+    });
+    const gateway = createAiGateway({ completeClient: provider, streamClient: vi.fn() });
+    const callModel = async ({ messages, modelPolicy, trace }) => {
+      const result = await gateway.complete(messages, { ...modelPolicy, trace });
+      return { kind: 'grounded_markdown', content: result.content };
+    };
+    const skill = {
+      id: 'help.answer',
+      version: 1,
+      domain: 'test',
+      effect: 'read',
+      modelPolicy: { maxTokens: 600, temperature: 0 },
+      validateInput: (input) => input,
+      prepare: async () => ({
+        messages: [{ role: 'user', content: '生成固定结果' }],
+        sources: [],
+        coverage: { complete: true, warnings: [] },
+      }),
+    };
+    const dependencies = {
+      resolveSkill: () => skill,
+      assertDomainEnabled: () => {},
+      resolveContext: async () => resolvedContext('a'.repeat(64)),
+      callModel,
+      persistence,
+      execution: { quota },
+    };
+    const leaseLost = Object.assign(new Error('租约已失效'), {
+      code: 'DAILY_BRIEF_LEASE_LOST',
+      status: 409,
+    });
+
+    await expect(
+      executeAiSkill(
+        request(),
+        { user: { id: 'u-1', role: 'user' }, headers: {}, body: {} },
+        {
+          ...dependencies,
+          commitValidatedResult: async () => {
+            throw leaseLost;
+          },
+        },
+      ),
+    ).rejects.toBe(leaseLost);
+
+    await expect(
+      executeAiSkill(
+        { ...request(), requestId: crypto.randomUUID() },
+        { user: { id: 'u-1', role: 'user' }, headers: {}, body: {} },
+        { ...dependencies, commitValidatedResult: vi.fn().mockResolvedValue(undefined) },
+      ),
+    ).resolves.toMatchObject({ status: 'completed', result: { content: '固定结果' } });
+
+    expect(provider).toHaveBeenCalledTimes(2);
+    expect(quota.reconcile.mock.calls.map(([, tokens]) => tokens)).toEqual([0, 10]);
+    expect(persistence.settleAiExecution.mock.calls.map(([execution]) => execution.status)).toEqual([
+      'failed',
+      'success',
+    ]);
+    expect(persistence.settleAiExecution.mock.calls[0][0]).toMatchObject({
+      errorCode: 'DAILY_BRIEF_LEASE_LOST',
+      chargedTokens: 0,
+      usage: { totalTokens: 10 },
+    });
+    expect(persistence.settleAiExecution.mock.calls[1][0]).toMatchObject({
+      errorCode: null,
+      chargedTokens: 10,
+      usage: { totalTokens: 10 },
+    });
   });
 });

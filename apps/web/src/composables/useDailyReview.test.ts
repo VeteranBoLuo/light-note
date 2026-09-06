@@ -3,6 +3,7 @@ import type { DailyReviewSnapshot } from '@/api/dailyReviewApi.ts';
 
 const mocks = vi.hoisted(() => ({
   user: {
+    preferences: { dailyReviewEnabled: true },
     id: 'user-a',
     role: 'user',
     adminContext: null as null | { id: string; subjectUserId: string; mode: 'readonly' | 'maintain' },
@@ -65,12 +66,29 @@ describe('useDailyReview', () => {
   beforeEach(() => {
     resetDailyReview();
     mocks.user.id = 'user-a';
+    mocks.user.preferences.dailyReviewEnabled = true;
     mocks.user.role = 'user';
     mocks.user.adminContext = null;
     mocks.getTodayDailyReview.mockReset();
     mocks.ensureTodayDailyReview.mockReset();
     mocks.updateDailyReviewItem.mockReset();
     mocks.updateDailyReviewToday.mockReset();
+  });
+
+  it('关闭偏好取消旧请求的展示，且不再生成清单', async () => {
+    const response = deferred<{ status: number; data: DailyReviewSnapshot }>();
+    mocks.ensureTodayDailyReview.mockReturnValue(response.promise);
+    const daily = useDailyReview();
+    const pending = daily.loadDailyReview({ ensure: true });
+    await Promise.resolve();
+    mocks.user.preferences.dailyReviewEnabled = false;
+    await daily.loadDailyReview({ ensure: true });
+    response.resolve({ status: 200, data: snapshot() });
+    await pending;
+    expect(daily.review.value).toBeNull();
+    expect(daily.loading.value).toBe(false);
+    expect(mocks.ensureTodayDailyReview).toHaveBeenCalledTimes(1);
+    expect(mocks.getTodayDailyReview).not.toHaveBeenCalled();
   });
 
   it('合并同账号、同读取模式的并发请求', async () => {

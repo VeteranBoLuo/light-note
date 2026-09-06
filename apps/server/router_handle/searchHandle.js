@@ -1,4 +1,7 @@
 import pool from '../db/index.js';
+import { MAX_EXPLICIT_RESOURCE_SELECTION } from '@lightnote/shared/resource-selection';
+import { resolveExplicitResourceSelection } from '../util/services/resourceSelectionService.js';
+import { resolveCloudFolderTagSelection } from '../util/services/cloudFolderTreeService.js';
 import { resultData, formatDateTime } from '../util/common.js';
 import { resolveFileCategory } from '../util/fileCategory.js';
 import { normalizeTagIds } from '../util/resourceTags.js';
@@ -33,7 +36,7 @@ const SUGGEST_PER_TYPE_LIMIT = 3;
 const TODO_STATUSES = ['pending', 'completed'];
 const TODO_DUE_FILTERS = ['overdue', 'today', '7d', 'none'];
 // 单次批量操作保持为一笔短事务，既覆盖管理页常见的大批量操作，也避免超长 IN 查询拖慢数据库。
-const MAX_BATCH_DELETE_ITEMS = 1000;
+const MAX_BATCH_DELETE_ITEMS = MAX_EXPLICIT_RESOURCE_SELECTION;
 const BATCH_CHUNK_SIZE = 200;
 const TYPE_LABELS = {
   'zh-CN': {
@@ -1318,6 +1321,20 @@ export const previewBatchSelection = async (req, res) => {
   try {
     const userId = (req.resourceUser || req.user)?.id;
     if (!userId) return res.send(resultData(null, 401, '请先登录'));
+    if (req.body?.folderScope) {
+      const resolved = await resolveCloudFolderTagSelection({
+        userId,
+        folderId: req.body.folderScope.folderId,
+        includeDescendants: req.body.folderScope.includeDescendants === true,
+        database: pool,
+      });
+      return res.send(resultData({ mode: 'explicit', ...summarizeSelectionItems(resolved.resolvedItems), ...resolved }));
+    }
+    if (req.body?.includeResolvedItems === true) {
+      if (req.body?.selection?.mode !== 'explicit') return res.send(resultData(null, 400, '只支持核对逐项选择'));
+      const resolved = await resolveExplicitResourceSelection(pool, userId, req.body.selection.items);
+      return res.send(resultData({ mode: 'explicit', ...summarizeSelectionItems(resolved.resolvedItems), ...resolved }));
+    }
     const resolved = await resolveBatchSelection(pool, {
       userId,
       body: req.body,
@@ -1332,6 +1349,11 @@ export const previewBatchSelection = async (req, res) => {
     );
   } catch (error) {
     console.error('[search] batch selection preview failed code=%s', String(error?.code || 'BATCH_PREVIEW_FAILED'));
+    if (error?.code === 'FOLDER_TAG_SELECTION_LIMIT') {
+      return res.send(resultData({ code: error.code }, 400, '文件数量超出单次标签操作上限'));
+    }
+    if (error?.code === 'FOLDER_NOT_FOUND') return res.send(resultData(null, 404, '文件夹不存在或无权限'));
+    if (error?.status === 400) return res.send(resultData(null, 400, '无效的资源选择或超出单次上限'));
     return res.send(resultData(null, 500, '无法准备批量选择，请稍后重试'));
   }
 };
@@ -1397,6 +1419,7 @@ export const getBatchResourceTagWorkspace = async (req, res) => {
     items.forEach((item) => grouped[item.type].push(item.id));
 
     const resourceTagsMap = {};
+    const tagRelationCounts = {};
     const tagDedup = new Map();
     const previewItemKeys = new Set(items.slice(0, 100).map((item) => `${item.type}:${item.id}`));
 
@@ -1406,6 +1429,9 @@ export const getBatchResourceTagWorkspace = async (req, res) => {
       const validIds = [];
       for (const requestedChunk of chunkItems(requestedIds)) {
         validIds.push(...(await queryOwnedResourceIds(connection, { userId, type, ids: requestedChunk })));
+      }
+      if (validIds.length !== requestedIds.length) {
+        return res.send(resultData(null, 409, '部分资源已不可用，请返回重新选择'));
       }
       if (!validIds.length) continue;
       for (const validChunk of chunkItems(validIds)) {
@@ -1431,6 +1457,7 @@ export const getBatchResourceTagWorkspace = async (req, res) => {
         rows.forEach((row) => {
           const key = `${type}:${toText(row.resourceId)}`;
           const tagItem = { id: toText(row.tagId), name: toText(row.tagName) };
+          tagRelationCounts[tagItem.id] = (tagRelationCounts[tagItem.id] || 0) + 1;
           if (previewItemKeys.has(key)) {
             if (!resourceTagsMap[key]) resourceTagsMap[key] = [];
             resourceTagsMap[key].push(tagItem);
@@ -1457,6 +1484,7 @@ export const getBatchResourceTagWorkspace = async (req, res) => {
         selectionSummary: summarizeSelectionItems(items),
         itemsTruncated: items.length > 100,
         resourceTagsMap,
+        tagRelationCounts,
         selectedResourceTags: Array.from(tagDedup.values()),
         allTags: allTags.map((tag) => ({ id: toText(tag.id), name: toText(tag.name) })),
       }),

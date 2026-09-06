@@ -82,53 +82,69 @@ function isActionableForDashboard(action, dashboard) {
   return true;
 }
 
-function nextActionFrom({ dashboard, weekly, tasks }) {
+function nextActionsFrom({ dashboard, weekly, tasks }) {
   // 展开区最多只放 3 项，但“下一步”必须扫描完整路线，不能被前三项已完成/待领取挡住。
   // 同时只推荐当下确实可执行的任务：没有待整理资源时不把用户导向空收件箱。
-  const starter = tasks.allTasks.find((task) => {
-    const action = ACTION_BY_TASK[task.taskKey] || 'open_growth_tasks';
-    return !task.completed && isActionableForDashboard(action, dashboard);
-  });
-  if (starter) {
-    return {
+  const starters = (tasks.allTasks || [])
+    .filter((task) => {
+      const action = ACTION_BY_TASK[task.taskKey] || 'open_growth_tasks';
+      return !task.completed && isActionableForDashboard(action, dashboard);
+    })
+    .map((task) => ({
       type: 'growth_task',
-      key: starter.taskKey,
-      action: ACTION_BY_TASK[starter.taskKey] || 'open_growth_tasks',
+      key: task.taskKey,
+      action: ACTION_BY_TASK[task.taskKey] || 'open_growth_tasks',
       progress: null,
-      reward: { exp: Number(starter.rewardExp || 0), points: 0 },
-    };
-  }
+      reward: { exp: Number(task.rewardExp || 0), points: 0 },
+    }));
 
-  const daily = dashboard.quests.find((quest) => {
-    const action = ACTION_BY_QUEST[quest.key];
-    return !quest.done && action && isActionableForDashboard(action, dashboard);
-  });
-  if (daily) {
-    return {
+  const daily = (dashboard.quests || [])
+    .filter((quest) => {
+      const action = ACTION_BY_QUEST[quest.key];
+      return !quest.done && action && isActionableForDashboard(action, dashboard);
+    })
+    .map((quest) => ({
       type: 'daily_quest',
-      key: daily.key,
-      action: ACTION_BY_QUEST[daily.key],
-      progress: { current: daily.cur, target: daily.target },
-    };
-  }
+      key: quest.key,
+      action: ACTION_BY_QUEST[quest.key],
+      progress: { current: quest.cur, target: quest.target },
+    }));
 
-  const nearestWeekly = weekly.challenges
+  const weeklyActions = (weekly.challenges || [])
     .filter((challenge) => {
       const action = ACTION_BY_WEEKLY[challenge.metric] || 'open_growth_tasks';
       return !challenge.done && isActionableForDashboard(action, dashboard);
     })
-    .sort((left, right) => left.target - left.cur - (right.target - right.cur))[0];
-  if (nearestWeekly) {
-    return {
+    .sort((left, right) => left.target - left.cur - (right.target - right.cur))
+    .map((challenge) => ({
       type: 'weekly_challenge',
-      key: nearestWeekly.key,
-      action: ACTION_BY_WEEKLY[nearestWeekly.metric] || 'open_growth_tasks',
-      progress: { current: nearestWeekly.cur, target: nearestWeekly.target },
-      reward: { exp: 0, points: Number(nearestWeekly.reward || 0) },
-    };
+      key: challenge.key,
+      action: ACTION_BY_WEEKLY[challenge.metric] || 'open_growth_tasks',
+      progress: { current: challenge.cur, target: challenge.target },
+      reward: { exp: 0, points: Number(challenge.reward || 0) },
+    }));
+
+  const candidates = [...starters, ...daily, ...weeklyActions];
+  const unique = [];
+  const seen = new Set();
+  for (const candidate of candidates) {
+    const identity = `${candidate.type}:${candidate.key}`;
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    unique.push(candidate);
+    if (unique.length >= 2) break;
   }
 
-  return { type: 'growth_review', key: 'weekly_report', action: 'open_weekly_report', progress: null };
+  const evergreen = [
+    { type: 'growth_review', key: 'weekly_report', action: 'open_weekly_report', progress: null },
+    { type: 'growth_task', key: 'task_center', action: 'open_growth_tasks', progress: null },
+  ];
+  for (const candidate of evergreen) {
+    if (unique.length >= 2) break;
+    if (unique.some((item) => item.type === candidate.type && item.key === candidate.key)) continue;
+    unique.push(candidate);
+  }
+  return unique.slice(0, 2);
 }
 
 /**
@@ -143,6 +159,7 @@ export async function getGrowthClaimableSnapshot(userId, { userRole = null, db =
       achievements: { count: 0, items: [] },
       weekly: { count: 0, items: [] },
       nextAction: null,
+      nextActions: [],
     };
   }
   const calendar = await getGrowthCalendarContext(userId, { db });
@@ -155,13 +172,15 @@ export async function getGrowthClaimableSnapshot(userId, { userRole = null, db =
   const taskItems = tasks.allTasks.filter((item) => item.claimable);
   const achievementItems = dashboard.achievements.filter((item) => item.claimable);
   const weeklyItems = weekly.challenges.filter((item) => item.claimable);
+  const nextActions = nextActionsFrom({ dashboard, weekly, tasks });
   return {
     count: dailyItems.length + taskItems.length + achievementItems.length + weeklyItems.length,
     daily: { count: dailyItems.length, items: dailyItems },
     growthTasks: { count: taskItems.length, items: taskItems },
     achievements: { count: achievementItems.length, items: achievementItems },
     weekly: { count: weeklyItems.length, items: weeklyItems },
-    nextAction: nextActionFrom({ dashboard, weekly, tasks }),
+    nextAction: nextActions[0] || null,
+    nextActions,
     today: {
       completed: dashboard.questBonus.completedCount,
       total: dashboard.questBonus.total,

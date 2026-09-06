@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, provide, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { LANDING_AUTH_CONTEXT } from './landingAuth.ts';
+import landingSource from './Landing.vue?raw';
 
 const mocks = vi.hoisted(() => ({
   routerPush: vi.fn(() => Promise.resolve()),
@@ -179,6 +180,11 @@ afterEach(() => {
 });
 
 describe('Landing CTA', () => {
+  it('关键帧被禁用时仍保留稳定的首屏光晕与标题渐变位置', () => {
+    expect(landingSource).toMatch(/\.orb\s*\{[^}]*opacity:\s*0\.12;/su);
+    expect(landingSource).toMatch(/\.hero-brand\s*\{[^}]*background-position:\s*0% center;/su);
+  });
+
   it('近期登录用户在身份恢复完成前首次点击也能进入应用', async () => {
     const host = await mountLanding();
     const enterButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) =>

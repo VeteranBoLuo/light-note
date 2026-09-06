@@ -192,6 +192,11 @@ describe('communityChatMessageService', () => {
         [],
       ),
     ).toThrow(expect.objectContaining({ code: 'TOO_MANY_ATTACHMENTS' }));
+    const rootImages = Array.from({ length: 5 }, (_, index) => ({ kind: 'image', publicId: `image-${index}` }));
+    expect(__test__.normalizeAttachmentRefs(rootImages, [], { role: 'root' })).toEqual(rootImages);
+    expect(() => __test__.normalizeAttachmentRefs(rootImages, [], { role: 'user' })).toThrow(
+      expect.objectContaining({ code: 'TOO_MANY_ATTACHMENTS' }),
+    );
     expect(() => __test__.normalizeAttachmentRefs([{ kind: 'file', publicId: filePublicId }], [imagePublicId])).toThrow(
       expect.objectContaining({ code: 'ATTACHMENT_FIELDS_CONFLICT' }),
     );
@@ -2389,6 +2394,15 @@ describe('communityChatMessageService', () => {
     expect(() => __test__.normalizeMentionEveryone('true')).toThrowError(
       expect.objectContaining({ code: 'INVALID_MENTION_EVERYONE' }),
     );
+  });
+
+  it('普通账号每条消息仍限 4 张图片，Root 不套用张数限制', () => {
+    const imagePublicIds = Array.from({ length: 5 }, (_, index) => `image-${index + 1}`);
+
+    expect(() => __test__.normalizeImagePublicIds(imagePublicIds, { role: 'user' })).toThrowError(
+      expect.objectContaining({ code: 'TOO_MANY_IMAGE_ATTACHMENTS' }),
+    );
+    expect(__test__.normalizeImagePublicIds(imagePublicIds, { role: 'root' })).toEqual(imagePublicIds);
   });
 
   it('内联小表情使用共享令牌、按一个字符计数并限制未知项与数量', () => {

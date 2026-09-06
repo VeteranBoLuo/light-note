@@ -10,6 +10,7 @@ import {
 import { resolveCommunityChatOfficialSticker } from '@lightnote/shared/community-chat-stickers';
 import pool from '../../db/index.js';
 import { COMMUNITY_CHAT_PRIMARY_ROOM_SLUG, getCommunityChatFeatureState } from '../communityChatFeature.js';
+import { resolveCommunityChatImageAttachmentLimit } from '../communityChatImagePolicy.js';
 import { levelForExp, rankOf } from '../growth.js';
 import { titleName } from '../points.js';
 import {
@@ -21,7 +22,6 @@ import {
 import { assertCommunityChatPostingAllowed, getCommunityChatBlockedUserIds } from './communityChatModerationService.js';
 import { publishCommunityChatRealtimeEvent } from '../communityChat/realtimeBroker.js';
 import { deliverCommunityChatMessageNotifications } from './communityChatNotificationService.js';
-import { COMMUNITY_CHAT_IMAGE_MAX_COUNT } from './communityChatImageService.js';
 import {
   COMMUNITY_CHAT_ATTACHMENT_MAX_COUNT,
   COMMUNITY_CHAT_ATTACHMENT_MAX_TOTAL_BYTES,
@@ -112,24 +112,25 @@ function normalizeMentionEveryone(value) {
   throw chatError('INVALID_MENTION_EVERYONE', 400, '提及所有人的参数无效', 'Invalid mention-everyone value');
 }
 
-function normalizeImagePublicIds(value) {
+function normalizeImagePublicIds(value, user) {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value)) {
     throw chatError('INVALID_IMAGE_ATTACHMENTS', 400, '图片附件无效', 'Invalid image attachments');
   }
   const normalized = [...new Set(value.map((item) => normalizePublicMessageId(item)))];
-  if (normalized.length > COMMUNITY_CHAT_IMAGE_MAX_COUNT) {
+  const imageAttachmentLimit = resolveCommunityChatImageAttachmentLimit(user);
+  if (imageAttachmentLimit !== null && normalized.length > imageAttachmentLimit) {
     throw chatError(
       'TOO_MANY_IMAGE_ATTACHMENTS',
       400,
-      `每条消息最多发送 ${COMMUNITY_CHAT_IMAGE_MAX_COUNT} 张图片`,
-      `A message can include at most ${COMMUNITY_CHAT_IMAGE_MAX_COUNT} images`,
+      `每条消息最多发送 ${imageAttachmentLimit} 张图片`,
+      `A message can include at most ${imageAttachmentLimit} images`,
     );
   }
   return normalized;
 }
 
-function normalizeAttachmentRefs(value, legacyImagePublicIds) {
+function normalizeAttachmentRefs(value, legacyImagePublicIds, user) {
   if (value === undefined || value === null) {
     return legacyImagePublicIds.map((publicId) => ({ kind: 'image', publicId }));
   }
@@ -148,12 +149,15 @@ function normalizeAttachmentRefs(value, legacyImagePublicIds) {
     seen.add(key);
     return { kind, publicId };
   });
-  if (refs.length > COMMUNITY_CHAT_ATTACHMENT_MAX_COUNT) {
+  const attachmentLimit = refs.every((item) => item.kind === 'image')
+    ? resolveCommunityChatImageAttachmentLimit(user)
+    : COMMUNITY_CHAT_ATTACHMENT_MAX_COUNT;
+  if (attachmentLimit !== null && refs.length > attachmentLimit) {
     throw chatError(
       'TOO_MANY_ATTACHMENTS',
       400,
-      `每条消息最多发送 ${COMMUNITY_CHAT_ATTACHMENT_MAX_COUNT} 个附件`,
-      `A message can include at most ${COMMUNITY_CHAT_ATTACHMENT_MAX_COUNT} attachments`,
+      `每条消息最多发送 ${attachmentLimit} 个附件`,
+      `A message can include at most ${attachmentLimit} attachments`,
     );
   }
   if (legacyImagePublicIds.length) {
@@ -1526,8 +1530,8 @@ export async function createCommunityChatMessage({
   const normalizedMessageKind = normalizeMessageKind(messageKind);
   const normalizedStickerSource = normalizeStickerSource(stickerSource, normalizedMessageKind);
   const normalizedStickerKey = normalizeStickerKey(stickerKey, normalizedMessageKind, normalizedStickerSource);
-  const normalizedImagePublicIds = normalizeImagePublicIds(imagePublicIds);
-  const normalizedAttachmentRefs = normalizeAttachmentRefs(attachmentRefs, normalizedImagePublicIds);
+  const normalizedImagePublicIds = normalizeImagePublicIds(imagePublicIds, user);
+  const normalizedAttachmentRefs = normalizeAttachmentRefs(attachmentRefs, normalizedImagePublicIds, user);
   const normalizedAttachmentImagePublicIds = normalizedAttachmentRefs
     .filter((item) => item.kind === 'image')
     .map((item) => item.publicId);

@@ -72,6 +72,7 @@ export function createAiSkillRequest({
   threadId = null,
   input,
   resourceRefs = [],
+  scopeSelector,
   surface,
 }: {
   skillId: string;
@@ -79,6 +80,7 @@ export function createAiSkillRequest({
   threadId?: string | null;
   input: Record<string, unknown>;
   resourceRefs?: AiSkillRequest['scope']['resourceRefs'];
+  scopeSelector?: AiSkillRequest['scope']['selector'];
   surface: string;
 }): AiSkillRequest {
   const requestId =
@@ -101,7 +103,7 @@ export function createAiSkillRequest({
     skillVersion,
     threadId,
     input,
-    scope: { resourceRefs },
+    scope: { resourceRefs, ...(scopeSelector ? { selector: scopeSelector } : {}) },
     client: { locale: pageLocale || browserLocale || 'zh-CN', timezone, surface },
   };
 }

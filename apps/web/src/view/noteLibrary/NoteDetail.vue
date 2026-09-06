@@ -477,6 +477,7 @@
     if (source.startsWith('/workbenches')) return t('noteDetail.backToWorkbench');
     if (source.startsWith('/inbox')) return t('noteDetail.backToTodo');
     if (source.startsWith('/organize')) return t('noteDetail.backToOrganizer');
+    if (source.startsWith('/tag/')) return t('tagSpace.backToSpaces');
     return t('noteDetail.backToLibrary');
   });
   const detailSourceQuery = () => {

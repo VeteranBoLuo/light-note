@@ -66,6 +66,67 @@ export async function ensureOrganizeSchema() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='整理中心高风险动作幂等结果'
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS organize_ai_tag_batches (
+      id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+      user_id VARCHAR(255) NOT NULL,
+      client_request_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+      group_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+      payload_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+      resource_type VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+      scope_mode VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+      status VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'queued',
+      total INT UNSIGNED NOT NULL DEFAULT 0,
+      processed INT UNSIGNED NOT NULL DEFAULT 0,
+      ready_count INT UNSIGNED NOT NULL DEFAULT 0,
+      failed_count INT UNSIGNED NOT NULL DEFAULT 0,
+      accepted_count INT UNSIGNED NOT NULL DEFAULT 0,
+      ignored_count INT UNSIGNED NOT NULL DEFAULT 0,
+      conflicted_count INT UNSIGNED NOT NULL DEFAULT 0,
+      lease_owner VARCHAR(128) DEFAULT NULL,
+      lease_token CHAR(36) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+      lease_expires_at DATETIME DEFAULT NULL,
+      started_at DATETIME DEFAULT NULL,
+      finished_at DATETIME DEFAULT NULL,
+      last_error_code VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+      create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uk_organize_ai_tag_request (user_id, client_request_id),
+      KEY idx_organize_ai_tag_claim (status, lease_expires_at, create_time),
+      KEY idx_organize_ai_tag_user (user_id, create_time, id)
+    ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='整理中心 AI 标签建议批次'
+  `);
+  await addColumnIfMissing('organize_ai_tag_batches', 'group_id', 'CHAR(36) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL');
+  if (!(await indexExists('organize_ai_tag_batches', 'idx_organize_ai_tag_group'))) {
+    await pool.query('ALTER TABLE organize_ai_tag_batches ADD KEY idx_organize_ai_tag_group (user_id, group_id)');
+  }
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS organize_ai_tag_suggestions (
+      id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+      batch_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+      user_id VARCHAR(255) NOT NULL,
+      resource_type VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+      resource_id VARCHAR(128) NOT NULL,
+      resource_title VARCHAR(255) NOT NULL DEFAULT '',
+      resource_version VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+      source_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+      current_tags_json JSON NOT NULL,
+      recommended_tags_json JSON DEFAULT NULL,
+      accepted_tags_json JSON DEFAULT NULL,
+      reason VARCHAR(500) DEFAULT NULL,
+      status VARCHAR(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'queued',
+      attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+      last_error_code VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+      create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uk_organize_ai_tag_batch_resource (batch_id, resource_type, resource_id),
+      KEY idx_organize_ai_tag_batch_status (batch_id, status, id),
+      KEY idx_organize_ai_tag_user_status (user_id, status, update_time)
+    ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='整理中心逐资源 AI 标签建议'
+  `);
+
   // bookmark_health 的旧列保留一个兼容周期；新读写只以观测与用户覆盖列为权威。
   await pool.query(`
     CREATE TABLE IF NOT EXISTS bookmark_health (
@@ -142,4 +203,9 @@ export async function ensureOrganizeSchema() {
   }
 }
 
-export const ORGANIZE_BACKGROUND_TABLES = Object.freeze(['bookmark_health_scan_jobs', 'bookmark_health_scan_items']);
+export const ORGANIZE_BACKGROUND_TABLES = Object.freeze([
+  'bookmark_health_scan_jobs',
+  'bookmark_health_scan_items',
+  'organize_ai_tag_batches',
+  'organize_ai_tag_suggestions',
+]);

@@ -743,12 +743,13 @@
   }
 
   /* 资源类 Tab 切换时保持弹框稳定：以 7 行笔记输入面板为当前最高基准。
-     只统一初始最小高度，选择文件后仍允许按真实内容向下扩展；待办保持独立高度。 */
+     笔记的字体行盒会产生 0.5px 固有高度，因此向上取整；只统一初始最小高度，
+     选择文件后仍允许按真实内容向下扩展，待办保持独立高度。 */
   @media (min-width: 768px) {
     .capture-workspace.is-bookmark,
     .capture-workspace.is-note,
     .capture-workspace.is-file {
-      min-height: 262px;
+      min-height: 263px;
       box-sizing: border-box;
     }
   }
@@ -916,6 +917,7 @@
   }
   .capture-actions {
     display: flex;
+    align-items: flex-end;
     justify-content: flex-end;
     gap: 8px;
   }

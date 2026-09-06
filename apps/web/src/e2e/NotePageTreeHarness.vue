@@ -108,6 +108,12 @@
                 :key="note.id"
                 :note="note"
                 :batch-mode="batchMode"
+                :selected="selectedIds.includes(note.id)"
+                @update:selected="
+                  selectedIds = $event
+                    ? [...new Set([...selectedIds, note.id])]
+                    : selectedIds.filter((id) => id !== note.id)
+                "
                 @open="noop"
                 @node-type-change="noop"
                 @action="noop"
@@ -119,6 +125,12 @@
                 :key="note.id"
                 :note="note"
                 :batch-mode="batchMode"
+                :selected="selectedIds.includes(note.id)"
+                @update:selected="
+                  selectedIds = $event
+                    ? [...new Set([...selectedIds, note.id])]
+                    : selectedIds.filter((id) => id !== note.id)
+                "
                 @open="noop"
                 @node-type-change="noop"
                 @action="noop"
@@ -185,6 +197,7 @@
   const expandedIds = ref(new Set(['project', 'mobile', 'agent', 'frontend']));
   const drawerOpen = ref(isMobile.value && params.get('drawer') !== '0');
   const viewMode = ref<'card' | 'list'>(isMobile.value ? 'list' : 'card');
+  const selectedIds = ref<string[]>(['positioning']);
   const batchMode = ref(!isMobile.value && params.get('batch') !== '0');
 
   function node(id: string, parentId: string | null, title: string, childCount = 0, matched = false): NoteTreeItem {
@@ -254,7 +267,6 @@
       createTime: '2026-08-01 09:00:00',
       isTop: false,
       isPending: false,
-      isCheck: true,
     },
     {
       id: 'mobile',
@@ -272,7 +284,6 @@
       createTime: '2026-07-29 08:30:00',
       isTop: true,
       isPending: false,
-      isCheck: false,
     },
     {
       id: 'agent',
@@ -287,7 +298,6 @@
       createTime: '2026-07-25 11:15:00',
       isTop: false,
       isPending: true,
-      isCheck: false,
     },
   ]);
 

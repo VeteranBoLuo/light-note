@@ -97,7 +97,7 @@ function buildUntaggedBranch(type, { userId, keyword }) {
       created: 'b.create_time',
       // bookmark 表没有 update_time；列表契约中的 updatedAt 以创建时间回退。
       updated: 'b.create_time',
-      keyword: '(b.name LIKE ? ESCAPE \'\\\\\' OR b.description LIKE ? ESCAPE \'\\\\\' OR b.url LIKE ? ESCAPE \'\\\\\')',
+      keyword: "(b.name LIKE ? ESCAPE '\\\\' OR b.description LIKE ? ESCAPE '\\\\' OR b.url LIKE ? ESCAPE '\\\\')",
       keywordParams: [like, like, like],
     },
     note: {
@@ -110,7 +110,7 @@ function buildUntaggedBranch(type, { userId, keyword }) {
       created: 'n.create_time',
       updated: 'COALESCE(n.update_time, n.create_time)',
       // 整理列表不读取完整正文；正文搜索仍由 SearchCenter 的既有查询负责。
-      keyword: 'n.title LIKE ? ESCAPE \'\\\\\'',
+      keyword: "n.title LIKE ? ESCAPE '\\\\'",
       keywordParams: [like],
     },
     file: {
@@ -118,11 +118,11 @@ function buildUntaggedBranch(type, { userId, keyword }) {
       alias: 'f',
       owner: 'f.create_by',
       title: 'f.file_name',
-      summary: 'COALESCE(f.file_type, \'\')',
+      summary: "COALESCE(f.file_type, '')",
       url: "''",
       created: 'f.create_time',
       updated: 'f.create_time',
-      keyword: '(f.file_name LIKE ? ESCAPE \'\\\\\' OR f.file_type LIKE ? ESCAPE \'\\\\\')',
+      keyword: "(f.file_name LIKE ? ESCAPE '\\\\' OR f.file_type LIKE ? ESCAPE '\\\\')",
       keywordParams: [like, like],
     },
   };
@@ -247,12 +247,52 @@ export async function getUntaggedSummary(db, { userId, maxKeys = 5000 } = {}) {
   );
   const hasMore = rows.length > maxKeys;
   const keys = rows.slice(0, maxKeys).map((row) => `${row.resource_type}:${row.id}`);
+  const totals = await summarizeUntaggedResources(db, { userId });
   return {
-    findingCount: keys.length,
-    affectedResourceCount: keys.length,
+    findingCount: totals.total,
+    affectedResourceCount: totals.total,
+    typeTotals: totals.typeTotals,
     resourceKeys: keys,
     exact: !hasMore,
     hasMore,
+  };
+}
+
+/**
+ * 每日简报等只需要精确数量的消费者也必须复用同一份资源联合查询与忽略规则，
+ * 不能另写一套只统计部分资源类型的“无标签”口径。
+ */
+export async function countUntaggedResources(db, { userId, resourceType: rawResourceType = 'all' } = {}) {
+  return (await summarizeUntaggedResources(db, { userId, resourceType: rawResourceType })).total;
+}
+
+export async function summarizeUntaggedResources(db, { userId, resourceType: rawResourceType = 'all' } = {}) {
+  const resourceType = normalizeOrganizableResourceType(rawResourceType);
+  const inventory = buildUntaggedInventory({ userId, keyword: '', resourceType });
+  const [rows] = await db.query(
+    `SELECT COUNT(*) AS total,
+            COALESCE(SUM(inventory.resource_type = 'bookmark'), 0) AS bookmarkCount,
+            COALESCE(SUM(inventory.resource_type = 'note'), 0) AS noteCount,
+            COALESCE(SUM(inventory.resource_type = 'file'), 0) AS fileCount,
+            CONCAT(COALESCE(SUM(CRC32(JSON_ARRAY(inventory.resource_type, inventory.id))), 0), ':',
+                   BIT_XOR(CRC32(JSON_ARRAY(inventory.resource_type, inventory.id)))) AS revision
+       FROM (${inventory.sql}) inventory
+      WHERE NOT EXISTS (
+        SELECT 1 FROM organize_issue_suppressions suppression
+         WHERE suppression.user_id = ?
+           AND suppression.issue_type = 'untagged.ignore'
+           AND suppression.subject_key = CONCAT(inventory.resource_type, ':', inventory.id)
+      )`,
+    [...inventory.params, userId],
+  );
+  return {
+    total: Math.max(0, Number(rows[0]?.total || 0)),
+    revision: String(rows[0]?.revision || ''),
+    typeTotals: {
+      bookmark: Number(rows[0]?.bookmarkCount || 0),
+      note: Number(rows[0]?.noteCount || 0),
+      file: Number(rows[0]?.fileCount || 0),
+    },
   };
 }
 

@@ -1,4 +1,6 @@
+import { runOrganizeCompletionNotifications } from './util/services/organizeCompletionNotification.js';
 import os from 'node:os';
+import { runSingleSuggestionItem } from './util/services/organizeSuggestionService.js';
 import { ensureAiDocumentSchema } from './util/aiDocumentSchema.js';
 import { cleanupExpiredDocumentSources, runSingleDocumentJob } from './util/aiDocument/service.js';
 import { ensureFilePreviewSchema } from './util/filePreviewSchema.js';
@@ -9,6 +11,8 @@ import { inspectLocalOcrRuntime } from './util/aiDocument/localOcr.js';
 import { stableAgentErrorCode } from './util/agent/logSafety.js';
 import { ensureToolboxSchema } from './util/toolboxSchema.js';
 import { cleanupExpiredToolboxData, runSingleToolboxJob } from './util/toolbox/worker.js';
+import { runSingleOrganizeAiSuggestionBatch } from './util/services/organizeAiSuggestionService.js';
+import { ensureOrganizeSchema } from './util/organizeSchema.js';
 
 const workerId = `${os.hostname()}:${process.pid}`;
 let stopping = false;
@@ -22,6 +26,7 @@ async function run() {
   await ensureCommunityChatSchema();
   await ensureFilePreviewSchema();
   await ensureToolboxSchema();
+  await ensureOrganizeSchema();
   const ocrRuntime = await inspectLocalOcrRuntime();
   if (ocrRuntime.ready) {
     console.log(`[AI 文档] 本地 OCR 已就绪: ${ocrRuntime.languages.join('+')}`);
@@ -36,7 +41,7 @@ async function run() {
     if (state.errorCode === 'FILE_PREVIEW_DISABLED') console.log('[文件预览] %s 预览已通过配置关闭', name);
     else if (!state.ready) console.warn('[文件预览] %s 运行时暂不可用 code=%s', name, state.errorCode);
   }
-  console.log(`[AI 文档/文件预览/知识工具箱] 解析 Worker 已启动: ${workerId}`);
+  console.log(`[AI 文档/文件预览/知识工具箱/整理建议] 解析 Worker 已启动: ${workerId}`);
   while (!stopping) {
     try {
       const now = Date.now();
@@ -46,7 +51,14 @@ async function run() {
         await cleanupExpiredToolboxData();
         lastCleanupAt = now;
       }
-      const queues = [runSingleDocumentJob, runSingleFilePreviewJob, runSingleToolboxJob];
+      const queues = [
+        runSingleDocumentJob,
+        runSingleFilePreviewJob,
+        runSingleToolboxJob,
+        runSingleOrganizeAiSuggestionBatch,
+        runSingleSuggestionItem,
+        runOrganizeCompletionNotifications,
+      ];
       let handled = false;
       for (let offset = 0; offset < queues.length && !handled; offset += 1) {
         const index = (nextQueueIndex + offset) % queues.length;
@@ -59,7 +71,7 @@ async function run() {
       await wait(3000);
     }
   }
-  console.log('[AI 文档/文件预览/知识工具箱] 解析 Worker 已停止');
+  console.log('[AI 文档/文件预览/知识工具箱/整理建议] 解析 Worker 已停止');
 }
 
 function stop() {

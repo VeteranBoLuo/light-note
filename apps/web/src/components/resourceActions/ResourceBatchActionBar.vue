@@ -4,13 +4,22 @@
       <MobileStickyActionBar
         v-if="open && mobile"
         class="resource-batch-action-bar--mobile"
+        :class="{ 'has-selection-session': !!selectionModule }"
         :above-navigation="aboveNavigation"
       >
         <div class="resource-batch-action-bar__selection">
           <span v-if="$slots.leading" class="resource-batch-action-bar__leading">
             <slot name="leading" />
           </span>
-          <div class="resource-batch-action-bar__copy" role="status" aria-live="polite">
+          <BButton
+            v-if="selectionModule"
+            class="resource-batch-action-bar__copy resource-batch-action-bar__review"
+            @click="selectionStore.reviewOpen = true"
+          >
+            <strong>{{ summary }}</strong>
+            <small>{{ selectionScopeDetail }}</small>
+          </BButton>
+          <div v-else class="resource-batch-action-bar__copy" role="status" aria-live="polite">
             <strong>{{ summary }}</strong>
             <small v-if="detail">{{ detail }}</small>
           </div>
@@ -28,8 +37,8 @@
             <BButton
               class="resource-batch-action-bar__primary"
               type="primary"
-              :disabled="primaryDisabled"
-              :loading="primaryLoading"
+              :disabled="primaryDisabled || !!selectionStore?.busy"
+              :loading="primaryLoading || !!selectionStore?.busy"
               @click="emit('primary')"
             >
               <SvgIcon :src="primaryIcon || icon.common.magicWand" size="17" aria-hidden="true" />
@@ -46,15 +55,32 @@
               <SvgIcon :src="icon.ai.materials" size="18" />
             </slot>
           </span>
-          <div class="resource-batch-action-bar__copy" role="status" aria-live="polite">
+          <BButton
+            v-if="selectionModule"
+            class="resource-batch-action-bar__copy resource-batch-action-bar__review"
+            @click="selectionStore.reviewOpen = true"
+          >
+            <strong>{{ summary }}</strong>
+            <small>{{ selectionScopeDetail }}</small>
+          </BButton>
+          <div v-else class="resource-batch-action-bar__copy" role="status" aria-live="polite">
             <strong>{{ summary }}</strong>
             <small v-if="detail">{{ detail }}</small>
           </div>
         </div>
-        <div class="resource-batch-action-bar__actions">
+        <div
+          class="resource-batch-action-bar__actions"
+          :inert="selectionStore?.busy || undefined"
+          :aria-disabled="selectionStore?.busy || undefined"
+        >
           <slot name="actions" />
         </div>
-        <BButton v-if="showClear" class="resource-batch-action-bar__clear" @click="emit('clear')">
+        <BButton
+          v-if="showClear"
+          class="resource-batch-action-bar__clear"
+          :disabled="!!selectionStore?.busy"
+          @click="emit('clear')"
+        >
           {{ clearLabel }}
         </BButton>
         <BTooltip v-if="showPrimary" :title="primaryDisabledReason" :disabled="!primaryDisabledReason">
@@ -62,8 +88,8 @@
             <BButton
               class="resource-batch-action-bar__primary"
               type="primary"
-              :disabled="primaryDisabled"
-              :loading="primaryLoading"
+              :disabled="primaryDisabled || !!selectionStore?.busy"
+              :loading="primaryLoading || !!selectionStore?.busy"
               @click="emit('primary')"
             >
               <SvgIcon :src="primaryIcon || icon.common.magicWand" size="17" aria-hidden="true" />
@@ -77,15 +103,20 @@
 </template>
 
 <script setup lang="ts">
+  import { computed } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import { useResourceSelectionStore, type SelectionModule } from '@/store/resourceSelection';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import MobileStickyActionBar from '@/components/mobile/MobileStickyActionBar.vue';
   import icon from '@/config/icon';
 
-  withDefaults(
+  const props = withDefaults(
     defineProps<{
       open: boolean;
+      selectionModule?: SelectionModule;
+      selectionVisibleCount?: number;
       mobile?: boolean;
       summary: string;
       detail?: string;
@@ -105,6 +136,7 @@
     }>(),
     {
       mobile: false,
+      selectionVisibleCount: 0,
       detail: '',
       ariaLabel: '',
       showClear: true,
@@ -119,6 +151,21 @@
     },
   );
 
+  const selectionStore = props.selectionModule ? useResourceSelectionStore() : null;
+  const translate = props.selectionModule ? useI18n().t : () => '';
+  const selectionScopeDetail = computed(() =>
+    selectionStore?.pendingReconcile
+      ? translate('resourceSelection.pending')
+      : selectionStore?.busy
+        ? translate('resourceSelection.processing')
+        : selectionStore?.query
+          ? translate('resourceSelection.allMatching')
+          : translate('resourceSelection.scope', {
+              visible: props.selectionVisibleCount,
+              other: Math.max(0, (selectionStore?.items.length || 0) - props.selectionVisibleCount),
+            }),
+  );
+
   const emit = defineEmits<{
     clear: [];
     more: [];
@@ -127,21 +174,30 @@
 </script>
 
 <style scoped lang="less">
+  .resource-batch-action-bar__review {
+    text-align: left;
+    height: auto;
+    align-items: flex-start;
+    flex-direction: column;
+    background: transparent;
+  }
   .resource-batch-action-bar {
     position: fixed;
     z-index: 180;
     right: 24px;
     bottom: max(24px, env(safe-area-inset-bottom));
     left: 50%;
-    width: min(940px, calc(100vw - 48px));
-    min-height: 70px;
+    width: max-content;
+    max-width: calc(100vw - 48px);
+    min-height: 50px;
     box-sizing: border-box;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 12px;
-    padding: 10px 12px 10px 16px;
+    gap: 8px;
+    padding: 5px 7px 5px 9px;
     border: 1px solid var(--surface-border-color);
-    border-radius: 18px;
+    border-radius: 15px;
     background: var(--card-background);
     box-shadow: var(--surface-raised-shadow);
     color: var(--text-color);
@@ -153,18 +209,18 @@
     display: flex;
     flex: 1 1 auto;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
   }
 
   .resource-batch-action-bar__leading {
-    width: 36px;
-    height: 36px;
-    flex: 0 0 36px;
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     border: 1px solid var(--surface-border-color);
-    border-radius: 11px;
+    border-radius: 9px;
     background: var(--workspace-panel-bg-color);
     color: var(--primary-color);
   }
@@ -199,15 +255,22 @@
     min-width: 0;
     display: flex;
     flex: 0 1 auto;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+  }
+
+  .resource-batch-action-bar__actions > :deep(*),
+  .resource-batch-action-bar__clear,
+  .resource-batch-action-bar > :deep(.b-tooltip-wrap) {
+    flex-shrink: 0;
   }
 
   .resource-batch-action-bar__actions :deep(.b_btn),
   .resource-batch-action-bar__clear,
   .resource-batch-action-bar__primary {
-    min-height: 42px;
-    border-radius: 11px;
+    min-height: 32px;
+    border-radius: 8px;
     white-space: nowrap;
   }
 
@@ -220,7 +283,7 @@
   }
 
   .resource-batch-action-bar__primary {
-    min-width: 142px;
+    min-width: 116px;
     gap: 7px;
     font-weight: 700;
   }
@@ -268,6 +331,12 @@
 
   .resource-batch-action-bar--mobile .resource-batch-action-bar__copy small {
     display: none;
+  }
+
+  .resource-batch-action-bar--mobile.has-selection-session .resource-batch-action-bar__copy small {
+    display: block;
+    white-space: normal;
+    font-size: 10px;
   }
 
   .resource-batch-action-bar--mobile :deep(.b-tooltip-wrap) {

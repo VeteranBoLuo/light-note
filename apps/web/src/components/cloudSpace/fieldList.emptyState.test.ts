@@ -90,7 +90,7 @@ describe('cloud file empty state layout', () => {
     expect(source).not.toContain('batchDownloadBrowserSubmitted');
     expect(source).toContain('const runZipBatchDownload = async');
     expect(source).toMatch(
-      /if \(selectedFiles\.length === 1\)[\s\S]*?downloadField\(selectedFiles\[0\]\.id\)[\s\S]*?batchDownloadChoiceVisible\.value = true/,
+      /if \(selectedFiles\.length === 1\)[\s\S]*?runAndroidBatchDownload\(selectedFiles\)[\s\S]*?runBrowserSequentialDownloads\(selectedFiles\)[\s\S]*?return;[\s\S]*?batchDownloadChoiceVisible\.value = true/,
     );
   });
 

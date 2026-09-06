@@ -31,13 +31,17 @@
         <div class="file-card-cover">
           <span v-if="batchMode" class="card-checkbox" @click.stop>
             <BCheckbox
-              :checked="selectedRows.includes(item.id)"
+              controlled
+              :checked="selectedRows.includes(String(item.id))"
+              :disabled="selection.busy.value || cloud.loading"
               @update:checked="(val: boolean) => toggleRow(item.id, val)"
             />
           </span>
-          <img
+          <DerivedImage
             v-if="isPreviewableImage(item)"
-            :src="item.fileUrl"
+            source="cloud"
+            :resource-id="String(item.id)"
+            :original-url="item.fileUrl"
             class="file-card-thumb"
             :alt="item.fileName"
             loading="lazy"
@@ -261,7 +265,9 @@
         <div class="flex-align-center" :style="{ position: 'relative', width: fieldNameWidth }">
           <span v-if="batchMode" class="row-checkbox" @click.stop>
             <BCheckbox
-              :checked="selectedRows.includes(item.id)"
+              controlled
+              :checked="selectedRows.includes(String(item.id))"
+              :disabled="selection.busy.value || cloud.loading"
               @update:checked="(val: boolean) => toggleRow(item.id, val)"
             />
           </span>
@@ -579,6 +585,8 @@
     </b-modal>
 
     <ResourceBatchActionBar
+      selection-module="files"
+      :selection-visible-count="selection.visibleSelected.value"
       :open="batchMode"
       :mobile="bookmark.isMobile"
       :summary="batchActionSummary"
@@ -597,7 +605,9 @@
       <template #leading>
         <span class="batch-action-select-all" @click.stop>
           <BCheckbox
+            controlled
             :indeterminate="indeterminate"
+            :disabled="selection.busy.value || cloud.loading"
             :checked="selectAll"
             :aria-label="$t(selectAll ? 'resourceOutcome.batch.unselectAll' : 'resourceOutcome.batch.selectAll')"
             @change="(checked: boolean) => onToggleSelectAll({ target: { checked } })"
@@ -707,6 +717,9 @@
   </div>
 </template>
 <script setup lang="ts">
+  import DerivedImage from '@/components/imagePreview/DerivedImage.vue';
+  import { useResourceSelection } from '@/composables/useResourceSelection';
+  import type { SelectionOperation } from '@/store/resourceSelection';
   import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -902,18 +915,26 @@
     // 接口已确认状态变更,直接本地更新徽标和菜单,不必重新拉取整页文件
     if (ok) file.isPending = !file.isPending;
   }
-  const selectedRows = ref<string[]>([]);
-  const selectAll = ref(false);
+  const selection = useResourceSelection(
+    'files',
+    computed(() => cloud.fileList),
+    'file',
+    computed(() => cloud.loading),
+  );
+  const selectedRows = selection.ids;
+  const selectAll = selection.allVisible;
   const videoDurationLabels = ref<Record<string, string>>({});
   const failedVideoPreviewIds = ref<Set<string>>(new Set());
   const hasSelection = computed(() => selectedRows.value.length > 0);
   const batchDownloadLoading = ref(false);
-  const indeterminate = computed(
-    () => selectedRows.value.length > 0 && selectedRows.value.length < cloud.fileList.length,
-  );
+  const indeterminate = selection.someVisible;
   const mobileBatchActionsOpen = ref(false);
   const outcomeDrawerOpen = ref(false);
   const outcomeResources = ref<ResourceOutcomeResource[]>([]);
+  const outcomeFileSnapshot = ref<any[]>([]);
+  watch(outcomeDrawerOpen, (open) => {
+    if (!open) selection.finish();
+  });
   const batchActionSummary = computed(() =>
     selectedRows.value.length
       ? t('cloudSpace.selectedCount', { count: selectedRows.value.length })
@@ -975,7 +996,7 @@
         },
       ];
     }
-    const selectedFile = cloud.fileList.find((file) => String(file.id) === outcomeResources.value[0]?.id);
+    const selectedFile = outcomeFileSnapshot.value.find((file) => String(file.id) === outcomeResources.value[0]?.id);
     const summaryPresentation = resolveFileAiSummaryPresentation(selectedFile);
     return [
       {
@@ -997,24 +1018,13 @@
   });
   let suppressCardClickUntil = 0;
 
-  const onToggleSelectAll = (e: any) => {
-    const checked = e.target.checked;
-    selectAll.value = checked;
-    selectedRows.value = checked ? cloud.fileList.map((item) => item.id) : [];
-  };
-
+  const onToggleSelectAll = (e: any) => selection.selectVisible(e.target.checked);
   const toggleRow = (id: string, checked: boolean) => {
-    if (checked) {
-      if (!selectedRows.value.includes(id)) selectedRows.value.push(id);
-    } else {
-      selectedRows.value = selectedRows.value.filter((itemId) => itemId !== id);
-    }
-    selectAll.value = cloud.fileList.length > 0 && selectedRows.value.length === cloud.fileList.length;
+    const file = cloud.fileList.find((item) => String(item.id) === String(id));
+    if (file) selection.toggle(file, checked);
   };
-
   function clearSelectedFiles() {
-    selectedRows.value = [];
-    selectAll.value = false;
+    selection.clear();
   }
 
   function handleMobileBatchAction(action: MobilePageActionItem) {
@@ -1025,19 +1035,20 @@
     else if (action.key === 'delete') handleBatchDelete();
   }
 
-  function openSelectedOutcomeDrawer() {
+  async function openSelectedOutcomeDrawer() {
+    const op = await selection.prepare();
+    if (!op) return;
+    outcomeFileSnapshot.value = op.items;
     if (!hasSelection.value) {
       message.warning(t('resourceOutcome.batch.selectFirst'));
       return;
     }
-    outcomeResources.value = cloud.fileList
-      .filter((file) => selectedRows.value.includes(file.id))
-      .map((file) => ({
-        type: 'file' as const,
-        id: String(file.id),
-        title: String(file.fileName || t('cloudSpace.unnamedFile')),
-        quickReadable: isAiDocumentFileNameSupported(file.fileName),
-      }));
+    outcomeResources.value = op.items.map((file) => ({
+      type: 'file' as const,
+      id: String(file.id),
+      title: String(file.fileName || t('cloudSpace.unnamedFile')),
+      quickReadable: isAiDocumentFileNameSupported(file.fileName),
+    }));
     if (!outcomeResources.value.length) {
       message.warning(t('resourceOutcome.batch.selectionChanged'));
       return;
@@ -1199,6 +1210,19 @@
   ]);
   const batchDownloadChoiceVisible = ref(false);
   const batchDownloadChoiceFiles = ref<any[]>([]);
+  watch([batchDownloadChoiceVisible, batchDownloadLoading], ([open, loading]) => {
+    if (!open && !loading) selection.finish();
+  });
+  watch(selection.active, (active) => {
+    if (!active) {
+      batchDownloadChoiceVisible.value = false;
+      batchDownloadCancelled.value = true;
+      batchDownloadAbortController.value?.abort();
+      batchDownloadLoading.value = false;
+      downloadProgress.value.visible = false;
+      outcomeDrawerOpen.value = false;
+    }
+  });
   const batchDownloadZipUnavailable = computed(() => hasAndroidBridge());
   const batchDownloadAbortController = ref<AbortController | null>(null);
   const batchDownloadCancelled = ref(false);
@@ -1274,11 +1298,10 @@
   watch(
     () => cloud.fileList,
     (list) => {
-      // 当列表刷新时，同步全选状态，移除已不存在的选项
+      // 列表刷新仅清理当前视图的媒体展示缓存，不裁剪会话选择。
       const ids = list.map((item) => item.id);
       const stringIds = new Set(ids.map(String));
-      selectedRows.value = selectedRows.value.filter((id) => ids.includes(id));
-      selectAll.value = list.length > 0 && selectedRows.value.length === list.length;
+
       videoDurationLabels.value = Object.fromEntries(
         Object.entries(videoDurationLabels.value).filter(([id]) => stringIds.has(id)),
       );
@@ -1290,8 +1313,7 @@
   watch(
     () => props.clearKey,
     () => {
-      selectedRows.value = [];
-      selectAll.value = false;
+      selection.clear();
     },
   );
 
@@ -1418,15 +1440,17 @@
     tagModalVisible.value = true;
   }
 
-  const handleBatchDelete = () => {
+  const handleBatchDelete = async () => {
     if (blockGuestWrite('delete-file')) return;
     if (!hasSelection.value) {
       message.warning(t('cloudSpace.selectFilesToDelete'));
       return;
     }
 
-    const deletingIds = selectedRows.value.map(String);
-    const selectedFiles = cloud.fileList.filter((item) => deletingIds.includes(String(item.id)));
+    const op = await selection.prepare();
+    if (!op) return;
+    const deletingIds = op.items.map((item) => item.id);
+    const selectedFiles = op.items;
     const previewLimit = 3;
     const previewNames = selectedFiles
       .slice(0, previewLimit)
@@ -1455,33 +1479,40 @@
           <ul>${fileItems}${remainingItem}</ul>
         </div>
       </div>`,
-      onOk() {
-        apiBasePost('/api/file/deleteFileById', { ids: deletingIds }).then((res) => {
-          if (res.status === 200) {
-            const count = res.data?.count || selectedRows.value.length;
-            recordOperation({ module: '云空间', operation: `批量删除文件成功【${count}个】` });
-            message.success(`${t('cloudSpace.batchDeleteSuccess')} ${count} ${t('cloudSpace.files')}`);
-            emit('filesDeleted', deletingIds);
-          } else {
-            message.error(res.msg || t('cloudSpace.deleteFailed'));
-          }
-
-          void cloud.refreshAfterFileMutation();
-          selectedRows.value = [];
-          selectAll.value = false;
-        });
+      onCancel: () => selection.finish(op),
+      async onOk() {
+        if (!selection.current(op)) return;
+        try {
+          const res = await apiBasePost('/api/file/deleteFileById', { ids: deletingIds });
+          if (!selection.current(op) || res.status !== 200) return;
+          const deletedIds = Array.isArray(res.data?.deletedIds) ? res.data.deletedIds.map(String) : [];
+          selection.store.removeConfirmed(
+            op,
+            deletedIds.map((id) => ({ id, type: 'file' as const })),
+          );
+          const count = Number(res.data?.count || 0);
+          recordOperation({ module: '云空间', operation: `批量删除文件成功【${count}个】` });
+          message.success(`${t('cloudSpace.batchDeleteSuccess')} ${count} ${t('cloudSpace.files')}`);
+          emit('filesDeleted', deletedIds);
+          await selection.reconcile(op);
+          if (selection.current(op)) await cloud.refreshAfterFileMutation();
+        } catch {
+          /* 请求层处理失败提示，选择保留。 */
+        } finally {
+          selection.finish(op);
+        }
       },
     });
   };
 
-  const handleBatchMove = () => {
+  const handleBatchMove = async () => {
     if (!hasSelection.value) {
       message.warning(t('cloudSpace.selectFilesToMove'));
       return;
     }
 
-    const selectedFiles = cloud.fileList.filter((item) => selectedRows.value.includes(item.id));
-    emit('moveField', selectedFiles);
+    const op = await selection.prepare();
+    if (op) emit('moveField', op.items, op);
   };
 
   const decodeSafeName = (name?: string) => {
@@ -1556,6 +1587,8 @@
    * 而且不在前端打包就没有体积上限，几十 MB 的选择也不会撑爆 WebView 内存。
    */
   const runAndroidBatchDownload = async (selectedFiles: any[]) => {
+    const operation = selection.operation();
+    const current = () => selection.current(operation);
     batchDownloadLoading.value = true;
     batchDownloadCancelled.value = false;
     downloadProgress.value = {
@@ -1575,19 +1608,23 @@
         files: selectedFiles,
         resolveMeta: getDownloadMeta,
         submit: requestAndroidDownloadWithReceipt,
-        isCancelled: () => batchDownloadCancelled.value,
+        isCancelled: () => batchDownloadCancelled.value || !current(),
         onSubmitted: (done, total) => {
+          if (!current()) return;
           downloadProgress.value.current = done;
           downloadProgress.value.percent = Math.round((done / total) * 100);
         },
       }));
     } finally {
-      batchDownloadLoading.value = false;
-      setTimeout(() => {
-        downloadProgress.value.visible = false;
-      }, 600);
+      if (current()) {
+        batchDownloadLoading.value = false;
+        setTimeout(() => {
+          if (current()) downloadProgress.value.visible = false;
+        }, 600);
+      }
     }
 
+    if (!current()) return;
     const submitted = succeeded + unconfirmed;
     if (cancelled) {
       message.info(
@@ -1612,6 +1649,8 @@
   };
 
   const runBrowserSequentialDownloads = async (selectedFiles: any[]) => {
+    const operation = selection.operation();
+    const current = () => selection.current(operation);
     batchDownloadLoading.value = true;
     batchDownloadCancelled.value = false;
     downloadProgress.value = {
@@ -1630,8 +1669,9 @@
         files: selectedFiles,
         resolveMeta: getDownloadMeta,
         submit: triggerPreparedBrowserDownload,
-        isCancelled: () => batchDownloadCancelled.value,
+        isCancelled: () => batchDownloadCancelled.value || !current(),
         onSettled: (done, total) => {
+          if (!current()) return;
           downloadProgress.value.current = done;
           downloadProgress.value.percent = Math.round((done / total) * 100);
         },
@@ -1643,12 +1683,15 @@
         console.error(`submit browser batch file failed: ${fileName}`, error);
       });
     } finally {
-      batchDownloadLoading.value = false;
-      window.setTimeout(() => {
-        downloadProgress.value.visible = false;
-      }, 600);
+      if (current()) {
+        batchDownloadLoading.value = false;
+        window.setTimeout(() => {
+          if (current()) downloadProgress.value.visible = false;
+        }, 600);
+      }
     }
 
+    if (!current()) return;
     if (cancelled) {
       message.info(
         submitted > 0
@@ -1667,6 +1710,8 @@
   };
 
   const runZipBatchDownload = async (selectedFiles: any[]) => {
+    const operation = selection.operation();
+    const current = () => selection.current(operation);
     batchDownloadLoading.value = true;
     batchDownloadCancelled.value = false;
     batchDownloadAbortController.value = new AbortController();
@@ -1683,11 +1728,12 @@
       const usedNames = new Set<string>();
 
       for (let i = 0; i < selectedFiles.length; i++) {
-        if (batchDownloadCancelled.value) {
+        if (batchDownloadCancelled.value || !current()) {
           throw new Error('BATCH_DOWNLOAD_CANCELLED');
         }
         const file = selectedFiles[i];
         const { downloadUrl, fileName } = await getDownloadMeta(file, i);
+        if (!current() || batchDownloadCancelled.value) throw new Error('BATCH_DOWNLOAD_CANCELLED');
         const response = await fetch(downloadUrl, {
           signal: batchDownloadAbortController.value?.signal,
         });
@@ -1695,6 +1741,7 @@
           throw new Error(t('cloudSpace.downloadFailed'));
         }
         const blob = await response.blob();
+        if (!current() || batchDownloadCancelled.value) throw new Error('BATCH_DOWNLOAD_CANCELLED');
         const uniqueName = buildUniqueName(fileName, usedNames);
         zip.file(uniqueName, blob);
 
@@ -1710,14 +1757,14 @@
           compressionOptions: { level: 6 },
         },
         (metadata) => {
-          if (batchDownloadCancelled.value) {
+          if (batchDownloadCancelled.value || !current()) {
             throw new Error('BATCH_DOWNLOAD_CANCELLED');
           }
           downloadProgress.value.percent = 80 + Math.round((metadata.percent || 0) * 0.2);
         },
       );
 
-      if (batchDownloadCancelled.value) {
+      if (batchDownloadCancelled.value || !current()) {
         throw new Error('BATCH_DOWNLOAD_CANCELLED');
       }
 
@@ -1736,6 +1783,7 @@
       downloadProgress.value.percent = 100;
       recordOperation({ module: '云空间', operation: `批量下载文件成功【${selectedFiles.length}个】` });
     } catch (error) {
+      if (!current()) return;
       if (isBatchDownloadCancelledError(error)) {
         message.info(t('cloudSpace.batchDownloadCancelled'));
       } else {
@@ -1743,17 +1791,20 @@
         message.error(t('cloudSpace.batchDownloadFailed'));
       }
     } finally {
-      batchDownloadLoading.value = false;
-      batchDownloadAbortController.value = null;
-      setTimeout(() => {
-        downloadProgress.value.visible = false;
-      }, 600);
+      if (current()) {
+        batchDownloadLoading.value = false;
+        batchDownloadAbortController.value = null;
+        setTimeout(() => {
+          if (current()) downloadProgress.value.visible = false;
+        }, 600);
+      }
     }
   };
 
   type BatchDownloadMode = 'individual' | 'zip';
 
   const startBatchDownload = async (mode: BatchDownloadMode) => {
+    if (!selection.current()) return;
     const selectedFiles = batchDownloadChoiceFiles.value.slice();
     if (selectedFiles.length < 2 || batchDownloadLoading.value) return;
 
@@ -1787,11 +1838,15 @@
       return;
     }
 
-    const selectedFiles = cloud.fileList.filter((item) => selectedRows.value.includes(item.id));
+    const op = await selection.prepare();
+    if (!op) return;
+    const selectedFiles = op.items;
     if (selectedFiles.length === 1) {
-      const success = await downloadField(selectedFiles[0].id);
-      if (success) {
-        recordOperation({ module: '云空间', operation: `下载文件成功【${selectedFiles[0].fileName}】` });
+      try {
+        if (hasAndroidBridge()) await runAndroidBatchDownload(selectedFiles);
+        else await runBrowserSequentialDownloads(selectedFiles);
+      } finally {
+        selection.finish(op);
       }
       return;
     }
@@ -2533,7 +2588,7 @@
     border-bottom: 1px solid color-mix(in srgb, var(--folder-list-border-color) 76%, transparent);
   }
 
-  .file-card-thumb {
+  :deep(.file-card-thumb) {
     width: calc(100% - var(--file-card-preview-inset, 0px));
     height: calc(100% - var(--file-card-preview-inset, 0px));
     border-radius: var(--file-card-preview-radius, 0);

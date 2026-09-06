@@ -5,6 +5,7 @@ const ORGANIZE_PATH = '/organize';
 const TODO_PATH = '/inbox';
 const KNOWLEDGE_AUDIT_PATH = '/toolbox/knowledge_structure_audit';
 const TOOLBOX_TASK_PATH_PATTERN = /^\/toolbox\/task\/[^/]+$/u;
+const TAG_DETAIL_PATH_PATTERN = /^\/tag\/[^/]+$/u;
 
 interface NoteDeletionFallbackInput {
   currentId: unknown;
@@ -54,6 +55,7 @@ function resolveNoteDetailSourcePath(value: unknown, includeFeatureSources: bool
         parsed.pathname === ORGANIZE_PATH ||
         parsed.pathname === TODO_PATH ||
         parsed.pathname === KNOWLEDGE_AUDIT_PATH ||
+        TAG_DETAIL_PATH_PATTERN.test(parsed.pathname) ||
         TOOLBOX_TASK_PATH_PATTERN.test(parsed.pathname))
     ) {
       return `${parsed.pathname}${parsed.search}${parsed.hash}`;

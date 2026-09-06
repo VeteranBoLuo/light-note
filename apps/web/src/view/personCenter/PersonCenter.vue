@@ -266,13 +266,11 @@
   }
 
   function goAiQuotaDetails() {
-    dismissProfilePopover();
-    router.push('/ai-usage');
+    navigateFromProfile('/settings?section=ai&panel=usage');
   }
 
   function goPointsDetails() {
-    dismissProfilePopover();
-    router.push('/points-usage');
+    navigateFromProfile('/settings?section=points');
   }
 
   function getSettingPopupContainer(trigger: HTMLElement) {
@@ -690,7 +688,14 @@
     margin-top: 10px;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: 82px;
     gap: 8px;
+  }
+
+  .profile-asset-grid > * {
+    height: 82px;
+    min-height: 82px;
+    box-sizing: border-box;
   }
 
   .setting-card {

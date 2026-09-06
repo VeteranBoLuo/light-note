@@ -23,8 +23,8 @@ describe('AI 额度快捷展示契约', () => {
     expect(mobileProfileSource).toContain('entry-source="移动个人中心"');
     expect(desktopProfileSource).toContain('@open-details="goAiQuotaDetails"');
     expect(mobileProfileSource).toContain('@open-details="goAiQuotaDetails"');
-    expect(desktopProfileSource).toContain("router.push('/ai-usage')");
-    expect(mobileProfileSource).toContain("router.push('/ai-usage')");
+    expect(desktopProfileSource).toContain("navigateFromProfile('/settings?section=ai&panel=usage')");
+    expect(mobileProfileSource).toContain("router.push({ path: '/settings', query: { section: 'ai', panel: 'usage' } })");
   });
 
   it('桌面个人中心复用 BPopover 悬停状态机，跳转后不会被残留悬停标记重新打开', () => {
@@ -86,10 +86,11 @@ describe('AI 额度快捷展示契约', () => {
     expect(usagePageSource).toContain("t('settings.ai.quotaSettling'");
   });
 
-  it('详细额度只在独立页读取，设置页保留紧凑入口', () => {
-    expect(settingsSource).toContain('class="ai-usage-entry"');
+  it('详细额度页可独立使用，也可在设置壳内复用', () => {
+    expect(settingsSource).toContain('<AiUsagePage');
+    expect(settingsSource).toContain('embedded />');
     expect(settingsSource).toContain("operation: '打开页面【设置】'");
-    expect(settingsSource).toContain("router.push('/ai-usage')");
+    expect(settingsSource).not.toContain("router.push('/ai-usage')");
     expect(settingsSource).not.toContain('useAiQuotaStatus');
     expect(settingsSource).not.toContain('<AiUsageCenter');
     expect(usagePageSource).toContain('useAiQuotaStatus');

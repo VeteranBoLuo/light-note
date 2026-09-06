@@ -487,6 +487,7 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+    padding-top: 14px;
   }
   .field {
     display: flex;

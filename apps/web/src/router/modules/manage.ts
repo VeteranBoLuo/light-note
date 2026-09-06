@@ -1,6 +1,21 @@
 import { RouteRecordRaw } from 'vue-router';
 import { ALL_ROLES, RoleEnum } from '@/config/bookmarkCfg.ts';
 import { resolveTagSpaceEntryId } from '@/utils/tagSpaceNavigation';
+import { resolveViewportDeviceType } from '@/config/responsive';
+
+export function resolveBookmarkManagementEntry(
+  to: { query?: Record<string, unknown> },
+  viewportWidth = typeof window === 'undefined' ? 1440 : window.innerWidth,
+  coarsePointer =
+    typeof window !== 'undefined' && Boolean(window.matchMedia?.('(pointer: coarse)').matches),
+) {
+  if (resolveViewportDeviceType(viewportWidth, coarsePointer) !== 'desktop') return true;
+  return {
+    name: 'home',
+    query: { ...(to.query || {}), mode: 'manage' },
+    replace: true,
+  };
+}
 
 const manageRouter: RouteRecordRaw = {
   meta: {
@@ -45,6 +60,7 @@ const manageRouter: RouteRecordRaw = {
       path: 'bookmarkMg',
       name: 'bookmarkMg',
       component: () => import('@/view/manage/BookmarkMg.vue'),
+      beforeEnter: (to) => resolveBookmarkManagementEntry(to),
       meta: {
         mobileShell: 'resources',
         mobileTopSwitcher: false,

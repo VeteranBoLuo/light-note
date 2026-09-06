@@ -124,6 +124,10 @@ export function useDailyReview() {
     const user = useUserStore();
     const targetOwnerKey = currentOwnerKey();
     ensureOwner(targetOwnerKey);
+    if (user.preferences?.dailyReviewEnabled === false) {
+      resetOwnerState(targetOwnerKey);
+      return null;
+    }
     const canEnsure = user.role !== 'visitor' && !user.adminContext;
     const mode: DailyReviewLoadMode = options.ensure && canEnsure ? 'ensure' : 'read';
 

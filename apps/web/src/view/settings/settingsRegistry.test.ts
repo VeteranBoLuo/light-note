@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   NOTIFICATION_TOGGLE_KEYS,
   SETTINGS_GROUP_ORDER,
-  SETTINGS_SECTION_ANCHOR,
+  SETTINGS_SECTION_META,
   countEnabledNotifications,
   groupSettingsSections,
   parseSettingsSection,
@@ -14,12 +14,13 @@ const LOGGED_IN: SettingsEnv = { isGuest: false };
 const GUEST: SettingsEnv = { isGuest: true };
 
 describe('visibleSettingsSections', () => {
-  it('登录用户能看到六个分类', () => {
+  it('登录用户能看到七个分类，积分明细纳入设置目录', () => {
     expect(visibleSettingsSections(LOGGED_IN).map((s) => s.id)).toEqual([
       'appearance',
       'general',
       'notification',
       'ai',
+      'points',
       'account',
       'privacy',
     ]);
@@ -38,9 +39,12 @@ describe('visibleSettingsSections', () => {
     expect(ids).toContain('privacy');
   });
 
-  it('每个分类都有对应的 DOM 锚点 id，桌面锚点/滚动定位才不会指空', () => {
-    for (const section of visibleSettingsSections(LOGGED_IN)) {
-      expect(SETTINGS_SECTION_ANCHOR[section.id]).toMatch(/^set-/);
+  it('桌面与移动目录共用每个分类的顺序、图标和文案键', () => {
+    expect(SETTINGS_SECTION_META).toEqual(visibleSettingsSections(LOGGED_IN));
+    for (const section of SETTINGS_SECTION_META) {
+      expect(section.iconKey).toMatch(/^(appearance|general|notification|ai|points|account|privacy)$/);
+      expect(section.titleKey).toMatch(/^(settings|growth)\./);
+      expect(section.mobileTitleKey).toMatch(/^(settings|growth)\./);
     }
   });
 });
@@ -72,7 +76,7 @@ describe('groupSettingsSections', () => {
     const grouped = groupSettingsSections(visibleSettingsSections(LOGGED_IN));
     expect(grouped.map((g) => g.group)).toEqual(SETTINGS_GROUP_ORDER);
     expect(grouped[0].items.map((i) => i.id)).toEqual(['appearance', 'general', 'notification', 'ai']);
-    expect(grouped[1].items.map((i) => i.id)).toEqual(['account']);
+    expect(grouped[1].items.map((i) => i.id)).toEqual(['points', 'account']);
   });
 
   it('分组内所有项都不可见时整组不渲染', () => {
@@ -83,6 +87,10 @@ describe('groupSettingsSections', () => {
 });
 
 describe('countEnabledNotifications', () => {
+  it('整理通知默认开启且纳入通知摘要', () => {
+    expect(NOTIFICATION_TOGGLE_KEYS).toContainEqual({ key: 'notificationsOrganize', defaultOn: true });
+    expect(countEnabledNotifications({ notificationsOrganize: false }).on).toBe(countEnabledNotifications({}).on - 1);
+  });
   it('总数取自清单长度，不写死', () => {
     expect(countEnabledNotifications({}).total).toBe(NOTIFICATION_TOGGLE_KEYS.length);
   });

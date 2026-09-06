@@ -89,6 +89,17 @@ function createExecution(config, identity) {
   return {
     id: crypto.randomUUID(),
     requestId,
+    // 仅受信任整理 Worker 可传入；不从请求 body/query 读取。
+    organizeRunId:
+      config.skillId === 'organize.metadata' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(config.organizeRunId || '')
+        ? config.organizeRunId
+        : null,
+    organizeItemId:
+      config.skillId === 'organize.metadata' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(config.organizeItemId || '')
+        ? config.organizeItemId
+        : null,
     actorUserId: identity.actorUserId,
     subjectUserId: identity.subjectUserId,
     userRole: identity.userRole,

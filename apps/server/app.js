@@ -51,6 +51,7 @@ import { ensureAfdianSupportPackageSchema } from './util/afdianSupportPackageSch
 import { startAfdianReconciliationScheduler } from './util/afdianSupportService.js';
 import { ensureAiBonusWalletSchema } from './util/aiBonusWalletSchema.js';
 import { ensureToolboxSchema } from './util/toolboxSchema.js';
+import { ensureDailyBriefSchema } from './util/dailyBriefSchema.js';
 
 import dotenv from 'dotenv';
 import path from 'path';
@@ -140,6 +141,12 @@ try {
   await ensureToolboxSchema();
 } catch (err) {
   console.error('知识工具箱 Schema 初始化失败 code=%s，终止启动', stableAgentErrorCode(err));
+  process.exit(1);
+}
+try {
+  await ensureDailyBriefSchema();
+} catch (err) {
+  console.error('每日简报 Schema 初始化失败 code=%s，终止启动', stableAgentErrorCode(err));
   process.exit(1);
 }
 try {

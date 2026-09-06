@@ -1,6 +1,22 @@
 <template>
   <div class="bookmark-page">
+    <BookmarkTable
+      v-if="bookmark.isDesktop"
+      v-show="desktopManagementMode"
+      embedded
+      :external-bookmarks="bookmark.bookmarkList"
+      :external-total="bookmark.bookmarkTotal"
+      :external-loading="bookmark.bookmarkLoading"
+      :external-loading-more="bookmark.bookmarkLoadingMore"
+      :external-has-more="bookmark.bookmarkHasMore"
+      :external-load-error="bookmarkLoadError"
+      :management-mode="desktopManagementMode"
+      :reload-bookmarks="reloadEmbeddedManagement"
+      @management-mode-change="setDesktopManagementMode"
+      @load-more="loadMoreBookmarks"
+    />
     <ResourcePageShell
+      v-show="!desktopManagementMode"
       :title="$t('navigation.bookmark')"
       :subtitle="pageSubtitle"
       accent="bookmark"
@@ -10,67 +26,49 @@
       @title-click="resetBookmarkView"
     >
       <template #actions>
-        <template v-if="batchMode">
-          <span class="bookmark-batch-summary">{{
-            $t('bookmarkMg.batchSelected', { count: selectedIds.length })
-          }}</span>
-          <BButton
-            class="bookmark-batch-icon-button"
-            :aria-label="allVisibleSelected ? $t('bookmarkMg.batchDeselectAll') : $t('bookmarkMg.batchSelectAll')"
-            :title="allVisibleSelected ? $t('bookmarkMg.batchDeselectAll') : $t('bookmarkMg.batchSelectAll')"
-            @click="toggleSelectAllVisible"
-          >
-            <SvgIcon :src="allVisibleSelected ? icon.common.close : icon.filterPanel.check" size="17" />
-          </BButton>
-          <BButton
-            type="danger"
-            class="bookmark-batch-icon-button"
-            :disabled="!selectedIds.length"
-            :loading="batchMutating"
-            :aria-label="$t('bookmarkMg.batchDelete')"
-            :title="$t('bookmarkMg.batchDelete')"
-            @click="handleBatchDelete"
-          >
-            <SvgIcon :src="icon.table_delete" size="17" />
-          </BButton>
-          <BButton
-            class="bookmark-batch-icon-button"
-            :aria-label="$t('bookmarkMg.batchCancel')"
-            :title="$t('bookmarkMg.batchCancel')"
-            @click="exitBatch"
-          >
-            <SvgIcon :src="icon.common.close" size="17" />
-          </BButton>
+        <template v-if="batchMode && !bookmark.isMobile">
+          <BBatchToggle class="bookmark-batch-toggle" @click="exitBatch" :active="batchMode" />
         </template>
-        <template v-else>
-          <!-- 移动端不放第二个文本搜索框：找书签统一走顶栏全局搜索，
+        <!-- 移动端不放第二个文本搜索框：找书签统一走顶栏全局搜索，
              这里只保留标签筛选等结构化入口。桌面端仍有自己的搜索框。 -->
-          <div v-if="!bookmark.isMobile" class="bookmark-search-action">
-            <BInput
-              v-model:value="bookmarkSearchInput"
-              :placeholder="$t('home.searchBookmark')"
-              clearable
-              @enter="handleBookmarkSearch"
-              @input="handleBookmarkSearchInput"
-            >
-              <template #prefix>
-                <SvgIcon :src="icon.navigation.search" size="16" />
-              </template>
-            </BInput>
-          </div>
-          <BButton v-if="bookmark.isMobile" class="bookmark-filter-action" @click="bookmark.isFold = false">
-            <SvgIcon :src="icon.cloudSpace.filter" size="16" />
-            {{ $t('home.filterTags') }}
-          </BButton>
-          <BButton class="bookmark-manage-action" @click="openBookmarkManagement">
-            <SvgIcon :src="icon.manage_categoryBtn_bookmark" size="16" />
-            {{ $t('navigation.bookmarkManagement') }}
-          </BButton>
-          <BButton v-if="!bookmark.isMobile" type="primary" class="bookmark-add-action" @click="openAddBookmark">
-            <SvgIcon :src="icon.common.add" size="16" />
-            {{ $t('navigation.newBookmark') }}
-          </BButton>
-        </template>
+        <div v-if="!bookmark.isMobile" class="bookmark-search-action">
+          <BInput
+            v-model:value="bookmarkSearchInput"
+            :placeholder="$t('home.searchBookmark')"
+            clearable
+            @enter="handleBookmarkSearch"
+            @input="handleBookmarkSearchInput"
+          >
+            <template #prefix>
+              <SvgIcon :src="icon.navigation.search" size="16" />
+            </template>
+          </BInput>
+        </div>
+        <BButton v-if="bookmark.isMobile" class="bookmark-filter-action" @click="bookmark.isFold = false">
+          <SvgIcon :src="icon.cloudSpace.filter" size="16" />
+          {{ $t('home.filterTags') }}
+        </BButton>
+        <BButton v-if="!bookmark.isDesktop" class="bookmark-manage-action" @click="openBookmarkManagement">
+          <SvgIcon :src="icon.manage_categoryBtn_bookmark" size="16" />
+          {{ $t('navigation.bookmarkManagement') }}
+        </BButton>
+        <BButton
+          v-if="!bookmark.isMobile && !batchMode"
+          type="primary"
+          class="bookmark-add-action"
+          @click="openAddBookmark"
+        >
+          <SvgIcon :src="icon.common.add" size="16" />
+          {{ $t('navigation.newBookmark') }}
+        </BButton>
+        <div v-if="bookmark.isDesktop" class="bookmark-mode-control">
+          <span>{{ $t('bookmarkMg.managementMode') }}</span>
+          <BSwitch
+            :checked="desktopManagementMode"
+            :aria-label="$t('bookmarkMg.enterManagementMode')"
+            @change="setDesktopManagementMode"
+          />
+        </div>
       </template>
 
       <div
@@ -81,9 +79,7 @@
         @touchend.passive="pullRefresh.onTouchEnd"
         @touchcancel.passive="pullRefresh.onTouchCancel"
       >
-        <aside v-if="!bookmark.isMobile" class="bookmark-side-panel">
-          <FilterPanel />
-        </aside>
+        <BookmarkDirectoryPanel v-if="!bookmark.isMobile" />
         <main class="bookmark-main-panel">
           <ViewPanel
             :batch-mode="batchMode"
@@ -95,6 +91,34 @@
       </div>
     </ResourcePageShell>
 
+    <ResourceBatchActionBar
+      :open="batchMode && !desktopManagementMode"
+      :mobile="bookmark.isMobile"
+      selection-module="bookmarks"
+      :selection-visible-count="selection.visibleSelected.value"
+      :summary="$t('bookmarkMg.batchSelected', { count: selectedIds.length })"
+      :clear-label="$t('resourceOutcome.batch.clear')"
+      :primary-label="$t('common.delete')"
+      :more-label="$t('common.more')"
+      :show-primary="false"
+      :show-more="bookmark.isMobile"
+      @more="mobileBatchActionsOpen = true"
+      @clear="selection.clear()"
+    >
+      <template #leading
+        ><BCheckbox
+          controlled
+          :checked="selection.allVisible.value"
+          :indeterminate="selection.someVisible.value"
+          :disabled="selection.busy.value || bookmark.bookmarkLoading"
+          @change="selection.selectVisible"
+      /></template>
+      <template #actions
+        ><BButton type="danger" :disabled="selection.busy.value || !selectedIds.length" @click="handleBatchDelete">{{
+          $t('common.delete')
+        }}</BButton></template
+      >
+    </ResourceBatchActionBar>
     <BDrawer
       v-if="bookmark.isMobile"
       :open="!bookmark.isFold"
@@ -111,17 +135,27 @@
       :actions="mobilePageActions"
       @action="handleMobilePageAction"
     />
+    <MobilePageActionsDrawer
+      v-model:open="mobileBatchActionsOpen"
+      :title="$t('bookmarkMg.batchSelected', { count: selectedIds.length })"
+      :actions="mobileBatchActions"
+      @action="handleBatchAction"
+    />
     <GuestBrowseNudge />
   </div>
 </template>
 
 <script lang="ts" setup>
   import FilterPanel from '@/view/home/FilterPanel.vue';
+  import BookmarkDirectoryPanel from '@/components/home/BookmarkDirectoryPanel.vue';
   import ViewPanel from '@/view/home/ViewPanel.vue';
+  import { useResourceSelection } from '@/composables/useResourceSelection';
+  import ResourceBatchActionBar from '@/components/resourceActions/ResourceBatchActionBar.vue';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import GuestBrowseNudge from '@/components/home/GuestBrowseNudge.vue';
-  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import { apiQueryPost } from '@/http/request.ts';
   import { loadBookmarkIconsProgressively } from '@/api/commonApi.ts';
@@ -130,7 +164,9 @@
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BBatchToggle from '@/components/base/BasicComponents/BBatchToggle.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
@@ -142,6 +178,8 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
 
+  const BookmarkTable = defineAsyncComponent(() => import('@/components/manage/bookmarkMg/BookmarkTable.vue'));
+
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const router = useRouter();
@@ -151,11 +189,40 @@
   const BOOKMARK_SEARCH_DEBOUNCE_MS = 280;
   const isHomeDrawerLayout = computed(() => bookmark.isMobile);
   const bookmarkSearchInput = ref('');
-  const batchMode = ref(false);
-  const selectedIds = ref<string[]>([]);
+  const selection = useResourceSelection(
+    'bookmarks',
+    computed(() => bookmark.bookmarkList),
+    'bookmark',
+    computed(() => bookmark.bookmarkLoading),
+  );
+  const batchMode = selection.mode;
+  const selectedIds = selection.ids;
+  const mobileBatchActionsOpen = ref(false);
+  const mobileBatchActions = computed<MobilePageActionItem[]>(() => [
+    {
+      key: 'clear',
+      label: t('resourceOutcome.batch.clear'),
+      icon: icon.common.close,
+      disabled: selection.busy.value || !selectedIds.value.length,
+    },
+    {
+      key: 'delete',
+      label: t('bookmarkMg.batchDelete'),
+      icon: icon.table_delete,
+      danger: true,
+      divider: true,
+      disabled: selection.busy.value || !selectedIds.value.length,
+    },
+  ]);
+  function handleBatchAction(action: MobilePageActionItem) {
+    if (action.key === 'delete') void handleBatchDelete();
+    else selection.clear();
+  }
   const batchMutating = ref(false);
+  const bookmarkLoadError = ref(false);
   const mobilePageActionsOpen = ref(false);
   const workspaceRef = ref<HTMLElement | null>(null);
+  const desktopManagementMode = computed(() => bookmark.isDesktop && String(route.query.mode || '') === 'manage');
 
   /*
    * 下拉刷新：书签列表走静默路径（保留旧列表与计数），标签列表复用已有的
@@ -166,11 +233,8 @@
    */
   const pullRefresh = useAndroidPullRefresh({
     enabled: computed(() => !batchMode.value),
-    externalBusy: computed(
-      () => bookmark.bookmarkLoading || bookmark.bookmarkLoadingMore || batchMutating.value,
-    ),
-    getScrollContainer: () =>
-      workspaceRef.value?.querySelector<HTMLElement>('[data-mobile-resource-scroll]') ?? null,
+    externalBusy: computed(() => bookmark.bookmarkLoading || bookmark.bookmarkLoadingMore || batchMutating.value),
+    getScrollContainer: () => workspaceRef.value?.querySelector<HTMLElement>('[data-mobile-resource-scroll]') ?? null,
     onRefresh: () => Promise.all([loadCurrentBookmarkPage({ silent: true }), queryTagList(true)]),
   });
   /* 从后台切回来时补一次数据,复用下拉刷新那条静默路径。提示条由顶栏统一负责,页面不必接线。 */
@@ -212,7 +276,19 @@
   });
 
   function openBookmarkManagement() {
-    router.push('/manage/bookmarkMg');
+    if (!bookmark.isDesktop) {
+      router.push('/manage/bookmarkMg');
+      return;
+    }
+    setDesktopManagementMode(true);
+  }
+
+  function setDesktopManagementMode(enabled: boolean) {
+    if (!bookmark.isDesktop || enabled === desktopManagementMode.value) return;
+    const query = { ...route.query };
+    if (enabled) query.mode = 'manage';
+    else delete query.mode;
+    void router.replace({ name: route.name || 'home', params: route.params, query });
   }
 
   function openAddBookmark() {
@@ -226,7 +302,6 @@
     bookmark.tagData = null;
     bookmark.type = 'all';
     bookmark.isFold = true;
-    exitBatch();
     router.replace('/home').then(() => bookmark.refreshData());
   }
 
@@ -300,17 +375,21 @@
     if (action.key === 'batch') enterBatch();
   }
 
-  function handleBatchDelete() {
+  async function handleBatchDelete() {
     if (blockGuestWrite('delete-bookmark')) return;
     if (!selectedIds.value.length) {
       message.warning(t('bookmarkMg.batchDeleteNoSelection'));
       return;
     }
-    const ids = [...selectedIds.value];
+    const op = await selection.prepare();
+    if (!op) return;
+    const ids = op.items.map((item) => item.id);
     Alert.alert({
       title: t('bookmarkMg.batchDeleteConfirmTitle'),
       content: t('bookmarkMg.batchDeleteConfirmContent', { count: ids.length }),
+      onCancel: () => selection.finish(op),
       async onOk() {
+        if (!selection.current(op)) return;
         batchMutating.value = true;
         try {
           const res = await batchDeleteSearchResources(ids.map((id) => ({ id, type: 'bookmark' })));
@@ -318,6 +397,9 @@
             message.error(res?.msg || t('bookmarkMg.batchDeleteFailed'));
             return;
           }
+          if (!selection.current(op)) return;
+          await selection.reconcile(op);
+          if (!selection.current(op)) return;
           const successCount = Number(res?.data?.affectedItemCount || 0);
           const skippedCount = Number(res?.data?.invalidItemCount || 0);
           if (!successCount) {
@@ -337,11 +419,12 @@
               : t('bookmarkMg.batchDeleteSuccess', { count: successCount }),
           );
           clearGlobalSearchCache();
-          exitBatch();
+
           await bookmark.refreshData();
         } catch {
           message.error(t('bookmarkMg.batchDeleteFailed'));
         } finally {
+          selection.finish(op);
           batchMutating.value = false;
         }
       },
@@ -480,13 +563,14 @@
    * - 不清空列表与计数，也不进 loading —— 旧数据留在屏幕上，顶部指示器负责表达进度；
    * - 不 scrollToTop：下拉本来就发生在顶部，滚动只会打断用户视线；
    * - 不走最小骨架时长，那是为了骨架屏不闪，静默刷新没有骨架。
-   * 请求失败（result 为 null）时同样不写入，于是旧列表与计数原样保留。
+   * 静默请求失败时不写入，旧列表与计数原样保留；普通请求失败则由嵌入管理页展示可重试状态。
    */
   async function loadCurrentBookmarkPage(options: { silent?: boolean } = {}) {
     const silent = Boolean(options.silent);
     const requestSequence = ++bookmarkRequestSequence;
     const requestType = bookmark.type;
     if (!silent) {
+      bookmarkLoadError.value = false;
       bookmark.bookmarkList = [];
       bookmark.bookmarkPage = 0;
       bookmark.bookmarkTotal = 0;
@@ -535,9 +619,14 @@
           user.bookmarkTotal = result.total;
           bookmark.bookmarkAllLoaded = !result.hasMore;
         }
+      } else if (!silent) {
+        bookmarkLoadError.value = true;
       }
       if (!silent) scrollToTop();
       void cacheImages(result?.items || []);
+    } catch (error) {
+      if (!silent && requestSequence === bookmarkRequestSequence) bookmarkLoadError.value = true;
+      console.warn('加载书签失败:', error);
     } finally {
       if (!silent) {
         const elapsed = Date.now() - loadingStart;
@@ -552,8 +641,17 @@
     }
   }
 
+  async function reloadEmbeddedManagement(_options: { refreshIcons?: boolean } = {}) {
+    await Promise.all([loadCurrentBookmarkPage({ silent: false }), queryTagList(true)]);
+    return true;
+  }
+
   const watchedRefreshKey = computed(() => bookmark.refreshKey);
-  watch(() => watchedRefreshKey.value, () => loadCurrentBookmarkPage(), { flush: 'sync' });
+  watch(
+    () => watchedRefreshKey.value,
+    () => loadCurrentBookmarkPage(),
+    { flush: 'sync' },
+  );
 
   watch(
     () => bookmark.refreshTagKey,
@@ -565,6 +663,17 @@
     (type) => {
       if (type !== 'search') bookmarkSearchInput.value = '';
     },
+  );
+
+  watch(
+    () => [route.query.mode, bookmark.isDesktop] as const,
+    ([mode, isDesktop]) => {
+      if (String(mode || '') !== 'manage' || isDesktop) return;
+      const query = { ...route.query };
+      delete query.mode;
+      void router.replace({ path: '/manage/bookmarkMg', query });
+    },
+    { immediate: true },
   );
 
   // 全局搜索「定位」跳转:目标已在当前「全部」列表 → 不重载(避免骨架屏,秒滚动);
@@ -654,17 +763,31 @@
     gap: 7px;
     border-radius: 10px;
   }
+
+  .bookmark-add-action {
+    min-width: 112px;
+    padding: 0 14px;
+    gap: 7px;
+    box-sizing: border-box;
+  }
+
+  .bookmark-mode-control {
+    height: 36px;
+    padding: 0 11px;
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    border: 1px solid var(--surface-border-color, var(--card-border-color));
+    border-radius: 10px;
+    color: var(--text-color);
+    background: var(--card-background);
+    font-size: 13px;
+    white-space: nowrap;
+  }
   .bookmark-batch-summary {
     color: var(--desc-color);
     font-size: 13px;
     white-space: nowrap;
-  }
-  .bookmark-batch-icon-button {
-    width: 38px;
-    min-width: 38px;
-    height: 38px;
-    padding: 0;
-    border-radius: 10px;
   }
 
   .bookmark-workspace {
@@ -677,7 +800,6 @@
     gap: 14px;
   }
 
-  .bookmark-side-panel,
   .bookmark-main-panel {
     min-width: 0;
     min-height: 0;
@@ -688,18 +810,8 @@
     box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--text-color) 38%, transparent);
   }
 
-  .bookmark-side-panel {
-    padding: 12px;
-  }
-
   .bookmark-main-panel {
     position: relative;
-  }
-
-  .bookmark-side-panel :deep(.filter-panel),
-  .bookmark-side-panel :deep(.header-input) {
-    width: 100%;
-    min-width: 0;
   }
 
   .bookmark-mobile-filter {

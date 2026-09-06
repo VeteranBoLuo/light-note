@@ -85,6 +85,7 @@ function mountDrawer(props: Record<string, unknown> = {}) {
           sortEarliest: '最早上传',
           noFoldersToManage: '还没有文件夹，可以从上方新建',
           batchAction: '批量操作',
+          folderTagsAction: '批量管理标签',
           exitBatch: '退出批量',
           batchActionDescription: '选择多个文件后移动、下载或删除',
           folderName: '文件夹名称',
@@ -124,6 +125,28 @@ afterEach(() => {
 });
 
 describe('MobileCloudSpaceActionsDrawer', () => {
+  it.each([true, false])('标签菜单按写权限显示，交接目标文件夹：%s', async (canManageTags) => {
+    const onManageFolderTags = vi.fn();
+    const host = mountDrawer({
+      canManageTags,
+      folders: [{ id: 'folder-1', name: '工作', parentId: null, depth: 1, sort: 0 }],
+      onManageFolderTags,
+    });
+    await nextTick();
+    host.querySelectorAll<HTMLButtonElement>('.mobile-cloud-actions__item')[0].click();
+    await nextTick();
+    host.querySelector<HTMLButtonElement>('.mobile-folder-manager__action')!.click();
+    await nextTick();
+    const action = [...document.querySelectorAll<HTMLButtonElement>('.b-action-menu__item')].find((button) =>
+      button.textContent?.includes('批量管理标签'),
+    );
+    expect(Boolean(action)).toBe(canManageTags);
+    action?.click();
+    if (canManageTags)
+      expect(onManageFolderTags).toHaveBeenCalledWith(expect.objectContaining({ id: 'folder-1', fullPath: '工作' }));
+    else expect(onManageFolderTags).not.toHaveBeenCalled();
+  });
+
   it('在同一个抽屉内切换到命名表单并校验后提交去空格名称', async () => {
     const onCreateFolder = vi.fn();
     const host = mountDrawer({ onCreateFolder });

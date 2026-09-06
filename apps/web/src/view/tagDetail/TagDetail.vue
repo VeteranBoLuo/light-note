@@ -17,7 +17,7 @@
         <SvgIcon :src="icon.table_edit" size="14" aria-hidden="true" />
         {{ t('common.edit') }}
       </BButton>
-      <BButton type="primary" :disabled="!tag || detailRefreshing" @click="openTagInAi">
+      <BButton v-if="!bookmark.isDesktop" type="primary" :disabled="!tag || detailRefreshing" @click="openTagInAi">
         <SvgIcon :src="icon.ai.ask" size="15" aria-hidden="true" />
         {{ t('tagSpace.askAi') }}
       </BButton>
@@ -27,6 +27,7 @@
       <div
         v-if="detailLoading"
         class="tag-space-workspace tag-space-workspace--skeleton"
+        :class="{ 'has-ai': bookmark.isDesktop }"
         aria-busy="true"
         :aria-label="t('common.loading')"
       >
@@ -86,6 +87,24 @@
             </div>
           </BCard>
         </main>
+
+        <aside v-if="bookmark.isDesktop" class="tag-ai-rail tag-ai-rail--skeleton" aria-hidden="true">
+          <BCard variant="card" padding="13px" class="skeleton-ai-panel">
+            <div class="skeleton-ai-heading">
+              <span class="skeleton-block skeleton-block--ai-icon"></span>
+              <div>
+                <span class="skeleton-block skeleton-block--ai-title"></span>
+                <span class="skeleton-block skeleton-block--ai-description"></span>
+              </div>
+            </div>
+            <span class="skeleton-block skeleton-block--ai-scope"></span>
+            <div class="skeleton-ai-actions">
+              <span v-for="index in 3" :key="index" class="skeleton-block skeleton-block--ai-action"></span>
+            </div>
+            <span class="skeleton-block skeleton-block--ai-result"></span>
+            <span class="skeleton-block skeleton-block--ai-composer"></span>
+          </BCard>
+        </aside>
       </div>
 
       <BCard v-else-if="detailError || !tag" variant="card" class="detail-state" role="alert">
@@ -101,7 +120,10 @@
       <div
         v-else
         class="tag-space-workspace"
-        :class="{ 'is-switching': detailRefreshing, 'has-insights': relatedTags.length > 0 }"
+        :class="{
+          'is-switching': detailRefreshing,
+          'has-ai': bookmark.isDesktop,
+        }"
         :aria-busy="detailRefreshing"
       >
         <aside class="tag-directory-rail" :aria-label="t('tagSpace.sidebarTitle')">
@@ -165,6 +187,15 @@
                       @click="editTag()"
                     >
                       <SvgIcon :src="icon.table_edit" size="16" aria-hidden="true" />
+                    </BButton>
+                    <BButton
+                      class="mobile-tag-ai"
+                      :aria-label="t('tagSpace.askAi')"
+                      :title="t('tagSpace.askAi')"
+                      :disabled="detailRefreshing"
+                      @click="openTagInAi"
+                    >
+                      <SvgIcon :src="icon.ai.ask" size="16" aria-hidden="true" />
                     </BButton>
                     <BButton class="mobile-tag-switcher" :disabled="detailRefreshing" @click="openMobileTagDirectory">
                       <span>{{ t('tagSpace.switchTag') }}</span>
@@ -383,21 +414,67 @@
           </BCard>
         </main>
 
-        <aside v-if="relatedTags.length" class="tag-insight-rail">
-          <BCard as="section" variant="card" padding="15px" class="insight-card">
-            <div class="insight-heading">
-              <span class="insight-icon"><SvgIcon :src="icon.resource.tag" size="16" /></span>
-              <strong>{{ t('tagSpace.coUsedTitle') }}</strong>
-            </div>
-            <div class="co-used-tag-list">
-              <BButton v-for="related in relatedTags.slice(0, 5)" :key="related.id" @click="openRelatedTag(related.id)">
-                <span>{{ related.name }}</span>
-                <small>{{ t('tagSpace.sharedResources', { count: related.sharedCount || 0 }) }}</small>
-                <span aria-hidden="true">→</span>
-              </BButton>
-            </div>
-          </BCard>
+        <aside v-if="bookmark.isDesktop" class="tag-ai-rail" :aria-label="t('tagManage.aiSkillTitle')">
+          <AiSkillPanel
+            :key="`tag-ai:${requestedTagId}`"
+            class="tag-ai-panel"
+            :title="t('tagManage.aiSkillTitle')"
+            :description="t('tagManage.aiSkillDescription')"
+            skill-id="tag.ask"
+            prompt-key="question"
+            surface="tag_detail"
+            :resource-refs="tagAiResourceRefs"
+            :scope-resource-count="tag?.counts.total || 0"
+            :scope-label="t('tagManage.aiSkillScope', { count: tag?.counts.total || 0 })"
+            :actions="tagAiActions"
+            :disabled="detailRefreshing || !tagAiResourceRefs.length"
+            :prompt-disabled="tagAskOverLimit"
+            :empty-text="
+              !tagAiResourceRefs.length
+                ? t('tagManage.aiNoResources')
+                : tagAskOverLimit
+                  ? t('tagManage.aiAskLimit', { count: TAG_ASK_MAX_RESOURCES })
+                  : ''
+            "
+            show-prompt
+            :prompt-rows="1"
+            presentation="sidebar"
+            composer-variant="chat"
+            clear-prompt-on-success
+            :show-grounding="false"
+          >
+            <template #result="{ response, result }">
+              <div class="tag-ai-result">
+                <div class="tag-ai-result__tools">
+                  <BButton size="small" @click="openExpandedTagAnswer(response)">
+                    <SvgIcon :src="icon.ai.maximize" size="14" aria-hidden="true" />
+                    {{ t('ai.maximize') }}
+                  </BButton>
+                  <BButton size="small" @click="copyTagAiAnswer(response)">
+                    <SvgIcon :src="icon.common.copy" size="14" aria-hidden="true" />
+                    {{ t('ai.copy') }}
+                  </BButton>
+                  <BButton
+                    v-if="canSaveTagAiResponse(response) && !isReadOnly"
+                    size="small"
+                    type="primary"
+                    :loading="creatingTagNote"
+                    :disabled="creatingTagNote"
+                    @click="createNoteFromTagAnalysis(response)"
+                  >
+                    <SvgIcon :src="icon.resource.note" size="14" aria-hidden="true" />
+                    {{ t('aiSkills.saveAsNote') }}
+                  </BButton>
+                </div>
+                <AiSkillResultContent :result="result" :show-grounding="false" />
+              </div>
+            </template>
+          </AiSkillPanel>
         </aside>
+
+        <div v-if="detailRefreshing" class="tag-switching-overlay" role="status" aria-live="polite">
+          <BLoading inline loading :title="t('common.loading')" />
+        </div>
       </div>
     </div>
 
@@ -429,6 +506,7 @@
       @retry="loadSidebarTags"
     />
     <AiSkillDialog
+      v-if="!bookmark.isDesktop"
       v-model:visible="tagAiVisible"
       :title="t('tagManage.aiSkillTitle')"
       :description="t('tagManage.aiSkillDescription')"
@@ -445,17 +523,54 @@
       :auto-run-action-id="tagAiResourceRefs.length ? 'summarize' : ''"
     >
       <template #result-actions="{ response, result }">
+        <BButton size="small" @click="copyTagAiAnswer(response)">
+          <SvgIcon :src="icon.common.copy" size="14" aria-hidden="true" />
+          {{ t('ai.copy') }}
+        </BButton>
         <BButton
-          v-if="result?.kind === 'grounded_markdown' && response.sources.length"
+          v-if="result?.kind === 'grounded_markdown' && response.sources.length && !isReadOnly"
           type="primary"
           :loading="creatingTagNote"
           :disabled="creatingTagNote"
           @click="createNoteFromTagAnalysis(response)"
         >
+          <SvgIcon :src="icon.resource.note" size="14" aria-hidden="true" />
           {{ t('aiSkills.saveAsNote') }}
         </BButton>
       </template>
     </AiSkillDialog>
+
+    <BModal
+      v-model:visible="tagAiExpandedVisible"
+      :title="t('tagManage.aiSkillTitle')"
+      :show-footer="false"
+      width="min(920px, calc(100vw - 32px))"
+      height="min(760px, calc(100vh - 48px))"
+      content-class="tag-ai-preview-modal__content"
+    >
+      <div v-if="expandedTagAiResponse?.result" class="tag-ai-preview">
+        <div class="tag-ai-preview__tools">
+          <BButton size="small" @click="copyTagAiAnswer(expandedTagAiResponse)">
+            <SvgIcon :src="icon.common.copy" size="14" aria-hidden="true" />
+            {{ t('ai.copy') }}
+          </BButton>
+          <BButton
+            v-if="canSaveTagAiResponse(expandedTagAiResponse) && !isReadOnly"
+            size="small"
+            type="primary"
+            :loading="creatingTagNote"
+            :disabled="creatingTagNote"
+            @click="createNoteFromTagAnalysis(expandedTagAiResponse)"
+          >
+            <SvgIcon :src="icon.resource.note" size="14" aria-hidden="true" />
+            {{ t('aiSkills.saveAsNote') }}
+          </BButton>
+        </div>
+        <div class="tag-ai-preview__body">
+          <AiSkillResultContent :result="expandedTagAiResponse.result" :show-grounding="false" />
+        </div>
+      </div>
+    </BModal>
   </ResourcePageShell>
 </template>
 
@@ -486,6 +601,7 @@
   import BCard from '@/components/base/BasicComponents/BCard.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
   import type {
@@ -500,13 +616,21 @@
   import TagSpaceResourceRow from '@/components/tagSpace/TagSpaceResourceRow.vue';
   import TagEditorDialog from '@/components/manage/tagEditMg/TagEditorDialog.vue';
   import AiSkillDialog from '@/components/aiSkills/AiSkillDialog.vue';
+  import AiSkillPanel from '@/components/aiSkills/AiSkillPanel.vue';
+  import AiSkillResultContent from '@/components/aiSkills/AiSkillResultContent.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
-  import type { AiSkillResourceRef, AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
+  import {
+    AI_SCOPED_CONVERSATION_MAX_RESOURCES,
+    type AiSkillResourceRef,
+    type AiSkillResponse,
+  } from '@lightnote/shared/ai-skill-protocol';
   import type { BaseOptions } from '@/config/bookmarkCfg.ts';
   import { bookmarkStore, useUserStore } from '@/store';
-  import { persistAiMarkdownResultAsNote } from '@/utils/aiNoteDraft';
   import { recordOperation } from '@/api/commonApi';
   import { clearGlobalSearchCache } from '@/api/search';
+  import { persistAiMarkdownResultAsNote } from '@/utils/aiNoteDraft';
+  import { stripAiAnalysisCitations } from '@/utils/aiAnalysisContent';
+  import { copyTextToClipboard } from '@/utils/clipboard';
 
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
   const TagGraphCanvas = defineAsyncComponent(() => import('@/components/tagGraph/TagGraphCanvas.vue'));
@@ -544,6 +668,8 @@
   const filePreviewVisible = ref(false);
   const previewFileInfo = ref<any>({});
   const tagAiVisible = ref(false);
+  const tagAiExpandedVisible = ref(false);
+  const expandedTagAiResponse = ref<AiSkillResponse | null>(null);
   const creatingTagNote = ref(false);
   const tagEditorVisible = ref(false);
   const editingTagId = ref('');
@@ -561,6 +687,7 @@
   let resourceDebounce: ReturnType<typeof setTimeout> | null = null;
   let resourceObserver: IntersectionObserver | null = null;
   let resourceAutoLoadFrame = 0;
+  const TAG_ASK_MAX_RESOURCES = AI_SCOPED_CONVERSATION_MAX_RESOURCES;
 
   const overviewMetrics = computed(() => [
     { key: 'bookmark' as const, label: t('tagSpace.bookmark'), value: tag.value?.counts.bookmark || 0 },
@@ -576,6 +703,9 @@
     })),
   ]);
   const displayedTagId = computed(() => String(tag.value?.id || '').trim());
+  // 路由一旦切换就立即重建问答面板，中止旧标签仍在执行的请求；
+  // displayedTagId 会等新详情返回后才更新，不能作为取消边界。
+  const requestedTagId = computed(() => currentTagId());
   const sidebarTagTotal = computed(() => sidebarTotal.value || Math.max(sidebarTags.value.length, tag.value ? 1 : 0));
   const directorySidebarTags = computed(() => {
     const tags = new Map(sidebarTags.value.map((item) => [String(item.id), item]));
@@ -642,6 +772,7 @@
   const tagAiResourceRefs = computed<AiSkillResourceRef[]>(() =>
     displayedTagId.value && Number(tag.value?.counts.total || 0) > 0 ? [{ type: 'tag', id: displayedTagId.value }] : [],
   );
+  const tagAskOverLimit = computed(() => Number(tag.value?.counts.total || 0) > TAG_ASK_MAX_RESOURCES);
   const tagAiActions = computed(() =>
     tagAiResourceRefs.value.length
       ? [
@@ -652,6 +783,24 @@
             input: {
               instruction: t('tagManage.aiSummarizeInstruction', { tag: String(tag.value?.name || '') }),
             },
+          },
+          {
+            id: 'next-actions',
+            label: t('tagManage.aiNextActions'),
+            skillId: 'tag.ask',
+            disabled: tagAskOverLimit.value,
+            reason: tagAskOverLimit.value ? t('tagManage.aiAskLimit', { count: TAG_ASK_MAX_RESOURCES }) : '',
+            promptKey: 'question',
+            promptValue: t('tagManage.aiNextActionsPrompt', { tag: String(tag.value?.name || '') }),
+          },
+          {
+            id: 'gaps',
+            label: t('tagManage.aiFindGaps'),
+            skillId: 'tag.ask',
+            disabled: tagAskOverLimit.value,
+            reason: tagAskOverLimit.value ? t('tagManage.aiAskLimit', { count: TAG_ASK_MAX_RESOURCES }) : '',
+            promptKey: 'question',
+            promptValue: t('tagManage.aiFindGapsPrompt', { tag: String(tag.value?.name || '') }),
           },
         ]
       : [],
@@ -728,6 +877,8 @@
     suppressResourceWatch = true;
     disconnectResourceObserver();
     tagAiVisible.value = false;
+    tagAiExpandedVisible.value = false;
+    expandedTagAiResponse.value = null;
     filePreviewVisible.value = false;
     if (!preserveContent) {
       tag.value = null;
@@ -869,8 +1020,37 @@
     tagAiVisible.value = true;
   }
 
+  function tagAiAnswerText(response: AiSkillResponse) {
+    const result = response.result;
+    if (!result) return '';
+    if (result.kind === 'grounded_markdown' || result.kind === 'artifact_preview' || result.kind === 'text') {
+      return stripAiAnalysisCitations(String(result.content || '')).trim();
+    }
+    return JSON.stringify(result, null, 2);
+  }
+
+  function canSaveTagAiResponse(response: AiSkillResponse) {
+    return response.result?.kind === 'grounded_markdown' && response.sources.length > 0;
+  }
+
+  function openExpandedTagAnswer(response: AiSkillResponse) {
+    expandedTagAiResponse.value = response;
+    tagAiExpandedVisible.value = true;
+    recordOperation({ module: '标签', operation: '放大查看标签问答结果' });
+  }
+
+  async function copyTagAiAnswer(response: AiSkillResponse) {
+    const copied = await copyTextToClipboard(tagAiAnswerText(response));
+    if (copied) {
+      message.success(t('ai.copied'));
+      recordOperation({ module: '标签', operation: '复制标签问答结果' });
+      return;
+    }
+    message.warning(t('ai.copyFailed'));
+  }
+
   async function createNoteFromTagAnalysis(response: AiSkillResponse) {
-    if (creatingTagNote.value) return;
+    if (creatingTagNote.value || isReadOnly.value || blockGuestWrite('tag-ai-save-note')) return;
     creatingTagNote.value = true;
     try {
       const handoff = await persistAiMarkdownResultAsNote(
@@ -880,7 +1060,12 @@
       if (!handoff) return;
       message.success(t('aiSkills.noteCreated'));
       tagAiVisible.value = false;
-      await router.push(handoff.route);
+      tagAiExpandedVisible.value = false;
+      recordOperation({ module: '标签', operation: '标签问答结果存为笔记' });
+      await router.push({
+        path: handoff.route.path,
+        query: { from: route.fullPath },
+      });
     } catch (error: any) {
       message.error(String(error?.message || t('aiSkills.noteCreateFailed')));
     } finally {
@@ -1030,7 +1215,10 @@
       return;
     }
     if (item.type === 'note') {
-      router.push(`/noteLibrary/${item.id}`);
+      router.push({
+        path: `/noteLibrary/${item.id}`,
+        query: { from: route.fullPath },
+      });
       return;
     }
     if (item.type === 'file') {
@@ -1058,7 +1246,10 @@
       return;
     }
     if (node.type === 'note') {
-      router.push(`/noteLibrary/${node.rawId}`);
+      router.push({
+        path: `/noteLibrary/${node.rawId}`,
+        query: { from: route.fullPath },
+      });
       return;
     }
     if (node.type === 'file') {
@@ -1853,6 +2044,12 @@
     background: transparent;
   }
 
+  @media (min-width: 1200px) {
+    .tag-space-shell {
+      background: var(--background-color);
+    }
+  }
+
   .tag-space-workspace {
     --tag-workspace-heading-offset: 0px;
     --tag-profile-height: 120px;
@@ -1860,17 +2057,18 @@
     height: 100%;
     min-height: 0;
     display: grid;
-    grid-template-columns: 214px minmax(0, 1fr);
+    position: relative;
+    grid-template-columns: 220px minmax(0, 1fr);
     align-items: stretch;
     gap: 18px;
   }
 
-  .tag-space-workspace.has-insights {
-    grid-template-columns: 214px minmax(0, 1fr) 262px;
+  .tag-space-workspace.has-ai {
+    grid-template-columns: 220px minmax(0, 1fr) 360px;
   }
 
   .tag-directory-rail,
-  .tag-insight-rail {
+  .tag-ai-rail {
     position: relative;
     min-width: 0;
     min-height: 0;
@@ -2073,6 +2271,7 @@
 
   .mobile-tag-profile-actions,
   .mobile-tag-edit,
+  .mobile-tag-ai,
   .mobile-tag-switcher {
     display: none;
   }
@@ -2334,9 +2533,38 @@
   }
 
   .resource-stream {
+    --tag-resource-hover-bg: color-mix(
+      in srgb,
+      var(--surface-panel-bg, var(--workspace-panel-bg-color)) 88%,
+      var(--card-background)
+    );
+
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid var(--surface-divider-color, var(--card-border-color));
+    border-radius: 11px;
+    background: var(--card-background);
+  }
+
+  .resource-stream :deep(.tag-space-resource-row) {
+    min-height: 62px;
+    border: 0;
+    border-bottom: 1px solid var(--surface-divider-color, var(--card-border-color));
+    border-radius: 0;
+    background: var(--card-background);
+    box-shadow: none;
+  }
+
+  .resource-stream :deep(.tag-space-resource-row:last-child) {
+    border-bottom: 0;
+  }
+
+  .resource-stream :deep(.tag-space-resource-row:hover),
+  .resource-stream :deep(.tag-space-resource-row:focus-visible) {
+    background: var(--tag-resource-hover-bg);
+    box-shadow: none;
   }
 
   .filtered-resource-stream {
@@ -2407,14 +2635,102 @@
     min-height: 0;
   }
 
-  .tag-insight-rail {
+  .tag-ai-rail {
     height: 100%;
-    padding-top: var(--tag-workspace-heading-offset);
+    min-height: 0;
+  }
+
+  .tag-ai-panel {
+    --ai-skill-panel-gap: 9px;
+    --ai-skill-panel-padding: 13px;
+    --ai-skill-action-section-gap: 0;
+    --ai-skill-actions-wrap: nowrap;
+    --ai-skill-actions-gap: 6px;
+    --ai-skill-actions-overflow-x: auto;
+    --ai-skill-actions-scrollbar-width: none;
+    --ai-skill-actions-scrollbar-height: 0;
+    --ai-skill-action-min-height: 30px;
+    --ai-skill-action-padding: 4px;
+    --ai-skill-action-font-size: 12px;
+    --ai-skill-action-white-space: nowrap;
+    --ai-skill-chat-composer-min-height: 64px;
+    --ai-skill-chat-composer-max-height: 104px;
+    --ai-skill-chat-composer-padding: 10px 66px 10px 12px;
+    --ai-skill-chat-composer-action-right: 8px;
+    --ai-skill-chat-composer-action-bottom: 8px;
+
+    height: 100%;
     box-sizing: border-box;
+  }
+
+  .tag-ai-result {
+    min-width: 0;
+    display: grid;
+    gap: 10px;
+  }
+
+  .tag-ai-result__tools,
+  .tag-ai-preview__tools {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .tag-ai-result__tools {
+    position: sticky;
+    z-index: 2;
+    top: 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--surface-divider-color);
+    background: var(--workspace-panel-bg-color);
+  }
+
+  .tag-ai-result__tools :deep(.b_btn),
+  .tag-ai-preview__tools :deep(.b_btn) {
+    min-height: 30px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding-inline: 8px;
+  }
+
+  .tag-ai-preview {
+    height: 100%;
+    min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+  }
+
+  .tag-ai-preview__tools {
+    flex: 0 0 auto;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--surface-divider-color);
+    background: var(--card-background);
+  }
+
+  .tag-ai-preview__body {
+    min-height: 0;
+    padding: 22px clamp(18px, 5vw, 56px) 32px;
     overflow: auto;
+  }
+
+  :global(.tag-ai-preview-modal__content) {
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .tag-switching-overlay {
+    position: absolute;
+    z-index: 8;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 14px;
+    background: var(--background-color);
   }
 
   .related-panel {
@@ -2423,77 +2739,75 @@
     overflow: auto;
   }
 
-  .insight-card {
-    display: flex;
-    flex-direction: column;
-    gap: 11px;
+  .tag-space-workspace--skeleton {
+    pointer-events: none;
   }
 
-  .insight-heading {
+  .skeleton-ai-panel {
+    height: 100%;
+    box-sizing: border-box;
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  .skeleton-ai-heading {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .skeleton-ai-heading > div {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
     gap: 8px;
   }
 
-  .insight-heading strong {
-    color: var(--text-color);
-    font-size: 13px;
+  .skeleton-block--ai-icon {
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    border-radius: 11px;
   }
 
-  .insight-icon {
-    width: 26px;
-    height: 26px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 auto;
-    border-radius: 8px;
-    color: var(--resource-tag-color, #ec4899);
-    background: var(--workspace-panel-bg-color);
-    font-size: 12px;
-    font-weight: 750;
+  .skeleton-block--ai-title {
+    width: 78px;
+    height: 12px;
   }
 
-  .co-used-tag-list {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
+  .skeleton-block--ai-description {
+    width: 92%;
+    height: 9px;
   }
 
-  .co-used-tag-list :deep(.b_btn) {
-    width: 100%;
-    min-width: 0;
-    min-height: 34px;
-    padding: 6px 5px;
-    justify-content: flex-start;
+  .skeleton-block--ai-scope {
+    width: 136px;
+    height: 27px;
+  }
+
+  .skeleton-ai-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
-    color: var(--desc-color);
-    background: transparent;
   }
 
-  .co-used-tag-list :deep(.b_btn:hover),
-  .co-used-tag-list :deep(.b_btn:focus-visible) {
-    color: var(--primary-color);
-    background: var(--workspace-panel-bg-color);
+  .skeleton-block--ai-action {
+    height: 30px;
+    border-radius: 9px;
   }
 
-  .co-used-tag-list :deep(.b_btn > span:first-child) {
-    min-width: 0;
-    overflow: hidden;
-    flex: 1;
-    color: var(--text-color);
-    text-align: left;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .skeleton-block--ai-result {
+    min-height: 120px;
+    flex: 1 1 auto;
+    border-radius: 10px;
   }
 
-  .co-used-tag-list small {
-    color: var(--desc-color);
-    font-size: 9px;
-  }
-
-  .tag-space-workspace--skeleton {
-    pointer-events: none;
+  .skeleton-block--ai-composer {
+    height: 64px;
+    flex: 0 0 64px;
+    border-radius: 15px;
   }
 
   .skeleton-block {
@@ -2725,12 +3039,12 @@
       --tag-workspace-heading-offset: 0px;
       --tag-profile-height: 112px;
 
-      grid-template-columns: 188px minmax(0, 1fr);
+      grid-template-columns: 196px minmax(0, 1fr);
       gap: 13px;
     }
 
-    .tag-space-workspace.has-insights {
-      grid-template-columns: 188px minmax(0, 1fr) 238px;
+    .tag-space-workspace.has-ai {
+      grid-template-columns: 196px minmax(0, 1fr) 324px;
     }
 
     .workspace-heading {
@@ -2844,10 +3158,6 @@
       padding-top: 10px;
       gap: 14px;
     }
-
-    .insight-card {
-      gap: 8px;
-    }
   }
 
   @media (max-width: 1260px) {
@@ -2855,8 +3165,8 @@
       grid-template-columns: minmax(0, 1fr);
     }
 
-    .tag-space-workspace.has-insights {
-      grid-template-columns: minmax(0, 1fr) 246px;
+    .tag-space-workspace.has-ai {
+      grid-template-columns: minmax(0, 1fr) 310px;
     }
 
     .tag-directory-rail {
@@ -2870,11 +3180,11 @@
 
   @media (max-width: 980px) {
     .tag-space-workspace,
-    .tag-space-workspace.has-insights {
+    .tag-space-workspace.has-ai {
       grid-template-columns: minmax(0, 1fr);
     }
 
-    .tag-insight-rail {
+    .tag-ai-rail {
       display: none;
     }
   }
@@ -2987,7 +3297,8 @@
       gap: 2px;
     }
 
-    .mobile-tag-edit {
+    .mobile-tag-edit,
+    .mobile-tag-ai {
       width: 40px;
       min-width: 40px;
       height: 44px;
@@ -2996,6 +3307,12 @@
       color: var(--desc-color);
       border-color: transparent;
       background: transparent;
+    }
+
+    .mobile-tag-ai {
+      color: var(--primary-color);
+      border-color: var(--primary-color);
+      background: var(--primary-light-1);
     }
 
     .mobile-tag-switcher {
@@ -3013,6 +3330,7 @@
     }
 
     .mobile-tag-edit:focus-visible,
+    .mobile-tag-ai:focus-visible,
     .mobile-tag-switcher:focus-visible {
       border-color: currentColor;
     }

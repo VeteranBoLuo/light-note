@@ -29,9 +29,13 @@ describe('独立 AI 用量页信息架构', () => {
     expect(source).toContain('<EntitlementAcquireModal v-model:visible="acquireVisible" asset="ai" />');
   });
 
-  it('设置页只有单一入口，不再发额度或用量请求', () => {
-    expect(settingsSource).toContain('settings-card--ai-entry');
-    expect(settingsSource).toContain("router.push('/ai-usage')");
+  it('设置页在当前 AI 分类内嵌入完整用量页，不重复实现请求逻辑', () => {
+    expect(settingsSource).toContain('class="settings-card settings-card--ai"');
+    expect(settingsSource).toContain("<AiUsagePage v-if=\"aiSettingsPanel === 'usage'\"");
+    expect(settingsSource).toContain('embedded />');
+    expect(settingsSource).not.toContain('@click="openAiUsage"');
+    expect(source).toContain('withDefaults(defineProps<{ embedded?: boolean }>()');
+    expect(source).toContain('<header v-if="!embedded" class="ai-usage-hero">');
     expect(settingsSource).not.toContain('<AiUsageCenter');
     expect(settingsSource).not.toContain('loadAiQuota');
   });

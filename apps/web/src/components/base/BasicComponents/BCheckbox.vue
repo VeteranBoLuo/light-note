@@ -2,13 +2,13 @@
   <label
     class="b-checkbox"
     :class="{
-      'is-checked': localChecked,
+      'is-checked': renderChecked,
       'is-indeterminate': indeterminate,
       'is-disabled': disabled,
     }"
     role="checkbox"
     :tabindex="disabled ? -1 : 0"
-    :aria-checked="indeterminate ? 'mixed' : localChecked"
+    :aria-checked="indeterminate ? 'mixed' : renderChecked"
     :aria-disabled="disabled || undefined"
     @click="handleClick"
     @keydown.enter.prevent="handleClick"
@@ -30,7 +30,7 @@
           <line x1="5" y1="12" x2="19" y2="12" />
         </svg>
         <svg
-          v-else-if="localChecked"
+          v-else-if="renderChecked"
           class="b-checkbox__icon"
           viewBox="0 0 24 24"
           width="12"
@@ -52,11 +52,12 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, watch } from 'vue';
+  import { computed, ref, watch } from 'vue';
 
   const props = withDefaults(
     defineProps<{
       modelValue?: boolean;
+      controlled?: boolean;
       checked?: boolean;
       value?: string | number;
       label?: string;
@@ -66,6 +67,7 @@
     {
       // 显式保留 undefined，才能区分未传旧 checked 与传入 false；
       // 否则 Vue 会把可选 Boolean 缺省转换为 false，覆盖 modelValue。
+      controlled: false,
       modelValue: undefined,
       checked: undefined,
       indeterminate: false,
@@ -82,6 +84,10 @@
   // 本地状态，乐观更新
   // 优先取 checked（显式绑定），再取 modelValue（v-model 兼容）
   const localChecked = ref(props.checked ?? props.modelValue ?? false);
+
+  const renderChecked = computed(() =>
+    props.controlled ? (props.checked ?? props.modelValue ?? false) : localChecked.value,
+  );
 
   // 外部 prop 变化时同步：分别 watch checked 和 modelValue
   watch(
@@ -100,8 +106,8 @@
 
   function handleClick() {
     if (props.disabled) return;
-    const newVal = !localChecked.value;
-    localChecked.value = newVal;
+    const newVal = !renderChecked.value;
+    if (!props.controlled) localChecked.value = newVal;
     emit('update:modelValue', newVal);
     emit('update:checked', newVal);
     emit('change', newVal);

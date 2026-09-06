@@ -7,8 +7,10 @@ const mocks = vi.hoisted(() => ({
   putObject: vi.fn(),
   deleteObject: vi.fn(),
   createSignedUrl: vi.fn(),
+  deletePreviews: vi.fn(),
 }));
 
+vi.mock('../filePreview/service.js', () => ({ deleteFilePreviewArtifactsForSource: mocks.deletePreviews }));
 vi.mock('../obsClient.js', () => ({
   putObjectToObs: mocks.putObject,
   deleteObjectFromObs: mocks.deleteObject,
@@ -186,6 +188,53 @@ describe('communityChatImageService', () => {
     await expect(fs.stat(file.path)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  it('Root 上传图片时不套用普通账号的待发送图片数量上限', async () => {
+    const file = await tempImage();
+    const connection = {
+      beginTransaction: vi.fn(async () => {}),
+      query: vi.fn(async (sql, params) => {
+        const text = String(sql);
+        if (text.includes('SELECT id FROM user')) {
+          expect(params).toEqual(['root-1']);
+          return [[{ id: 'root-1' }], []];
+        }
+        if (text.includes('COUNT(*) AS pendingCount')) throw new Error('Root 不应查询普通账号待发送上限');
+        if (text.includes('INSERT INTO community_chat_message_images')) return [{ insertId: 9 }, []];
+        throw new Error(`unexpected transaction query: ${sql} ${JSON.stringify(params)}`);
+      }),
+      commit: vi.fn(async () => {}),
+      rollback: vi.fn(async () => {}),
+      release: vi.fn(),
+    };
+    const db = {
+      getConnection: vi.fn(async () => connection),
+      query: vi.fn(async (sql, params) => {
+        const text = String(sql);
+        if (text.includes('FROM community_chat_runtime_policy')) return [[{ postingEnabled: 1 }], []];
+        if (text.includes('FROM community_chat_member_sanctions')) return [[], []];
+        if (text.includes('FROM community_chat_rooms')) return [[{ id: 2 }], []];
+        if (text.includes("SET status = 'pending'")) return [{ affectedRows: 1 }, []];
+        throw new Error(`unexpected query: ${sql} ${JSON.stringify(params)}`);
+      }),
+    };
+
+    await expect(
+      uploadCommunityChatImage({
+        user: { id: 'root-1', role: 'root' },
+        roomSlug: 'general',
+        file,
+        env: PUBLIC_ENV,
+        db,
+        putObject: mocks.putObject,
+        deleteObject: mocks.deleteObject,
+      }),
+    ).resolves.toMatchObject({ publicId: expect.any(String), contentType: 'image/png' });
+
+    expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('COUNT(*) AS pendingCount'))).toBe(false);
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(mocks.putObject).toHaveBeenCalledTimes(1);
+  });
+
   it('读取已绑定图片时复核消息可见性，并把 OBS 路径收敛为短期签名跳转', async () => {
     const db = {
       query: vi.fn(async (sql, params) => {
@@ -290,6 +339,7 @@ describe('communityChatImageService', () => {
     const db = {
       getConnection: vi.fn(async () => connection),
       query: vi.fn(async (sql) => {
+        if (String(sql).includes('SELECT id FROM community_chat_message_images')) return [[{ id: 17 }], []];
         if (String(sql).includes('DELETE FROM community_chat_message_images')) return [{ affectedRows: 1 }, []];
         throw new Error(`unexpected query: ${sql}`);
       }),
@@ -303,6 +353,7 @@ describe('communityChatImageService', () => {
     });
 
     expect(result).toEqual({ publicId: 'image-1', discarded: true, cleanupPending: false });
+    expect(mocks.deletePreviews).toHaveBeenCalledWith(expect.objectContaining({ sourceType: 'community_chat_image', fileId: 17 }));
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(mocks.deleteObject).toHaveBeenCalledWith('community-chat/private/image-1.png');
     expect(db.query).toHaveBeenCalledWith(expect.stringContaining("status IN ('delete_pending', 'deleting')"), [
@@ -363,6 +414,7 @@ describe('communityChatImageService', () => {
             [],
           ];
         }
+        if (text.includes('SELECT id FROM community_chat_message_images')) return [[{ id: 17 }], []];
         if (text.includes("SET status = 'deleting'")) return [{ affectedRows: 1 }, []];
         if (text.includes("SET status = 'delete_pending'")) return [{ affectedRows: 1 }, []];
         if (text.includes('DELETE FROM community_chat_message_images')) return [{ affectedRows: 1 }, []];

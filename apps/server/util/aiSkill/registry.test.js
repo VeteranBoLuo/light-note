@@ -25,8 +25,11 @@ const EXPECTED_SKILLS = Object.freeze([
   ['note.extract_todos', 'note', 'preview'],
   ['file.extract_todos', 'file', 'preview'],
   ['tag.analyze', 'tag', 'read'],
+  ['tag.ask', 'tag', 'read'],
+  ['note.ask_directory', 'note', 'read'],
 ]);
 const EXPECTED_INTERNAL_SKILLS = Object.freeze([
+  ['routine.daily_brief', 'routine', 'read'],
   ['toolbox.idea_to_draft', 'toolbox', 'read'],
   ['toolbox.material_to_note', 'toolbox', 'read'],
   ['toolbox.research_brief', 'toolbox', 'read'],
@@ -92,6 +95,21 @@ describe('AI Skill registry contract', () => {
       });
       expect(policy.maxExpandedResources).toBeGreaterThan(20);
       expect(policy.maxExpandedResources).toBeLessThanOrEqual(500);
+    }
+    if (policy.scopeMode === 'note_directory') {
+      expect(policy).toMatchObject({
+        selectorType: 'note_directory',
+        resourceTypes: [],
+        minResources: 0,
+        maxResources: 0,
+        expandedResourceTypes: ['note'],
+        minExpandedResources: 1,
+      });
+      expect(policy.maxExpandedResources).toBeGreaterThan(20);
+      expect(policy.maxExpandedResources).toBeLessThanOrEqual(500);
+    }
+    if (['tag.ask', 'note.ask_directory'].includes(definition.id)) {
+      expect(definition.providerPlanPolicy.contextAware).toBe(true);
     }
 
     expect(definition.modelPolicy).toEqual(

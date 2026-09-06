@@ -1,6 +1,7 @@
 import pool from '../../db/index.js';
 import { generateUUID } from '../agent/data.js';
 import { COMMUNITY_CHAT_PRIMARY_ROOM_SLUG, getCommunityChatFeatureState } from '../communityChatFeature.js';
+import { resolveCommunityChatImageAttachmentLimit } from '../communityChatImagePolicy.js';
 import { publishCommunityChatRealtimeEvent } from '../communityChat/realtimeBroker.js';
 
 export class CommunityChatError extends Error {
@@ -93,6 +94,7 @@ function baseAccess(feature, user, runtimePolicy) {
     emergencyReadOnly: runtimePolicy.emergencyReadOnly,
     environmentReadOnly: runtimePolicy.environmentReadOnly,
     notificationsDefaultEnabled: feature.notificationsDefaultEnabled,
+    imageAttachmentLimit: resolveCommunityChatImageAttachmentLimit(user),
     rulesVersion: feature.rulesVersion,
     authenticated: isRegistered(user),
     canManage: user?.role === 'root',

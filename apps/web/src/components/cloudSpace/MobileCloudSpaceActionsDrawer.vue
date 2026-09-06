@@ -186,6 +186,7 @@
     defineProps<{
       open: boolean;
       batchMode?: boolean;
+      canManageTags?: boolean;
       creating?: boolean;
       folders?: CloudFolderNode[];
       currentFolderId?: string;
@@ -198,6 +199,7 @@
     }>(),
     {
       batchMode: false,
+      canManageTags: true,
       creating: false,
       folders: () => [],
       currentFolderId: '',
@@ -215,6 +217,7 @@
     'create-folder': [name: string, parentId: string | null];
     'rename-folder': [folder: CloudFolderNode, done: FolderMutationDone];
     'move-folder': [folder: CloudFolderNode];
+    'manage-folder-tags': [folder: CloudFolderNode];
     'clear-folder-files': [folder: CloudFolderNode];
     'delete-folder': [folder: CloudFolderNode];
   }>();
@@ -351,6 +354,9 @@
         icon: icon.common.plus,
         disabled: folder.depth >= props.maxDepth,
       },
+      ...(props.canManageTags
+        ? [{ key: 'tags', label: t('cloudSpace.folderTagsAction'), icon: icon.resource.tag }]
+        : []),
       { key: 'move', label: t('cloudSpace.moveFolder'), icon: icon.noteTree.move },
       { key: 'rename', label: t('cloudSpace.renameFolder'), icon: icon.table_edit },
       { key: 'folder-actions-divider', divider: true },
@@ -367,6 +373,7 @@
   function handleFolderAction(action: string, folder: CloudFolderNode) {
     if (action === 'new-child') openCreateFolderForm(folder);
     if (action === 'move') emit('move-folder', folder);
+    if (action === 'tags') emit('manage-folder-tags', folder);
     if (action === 'rename') openRenameFolderForm(folder);
     if (action === 'clear-files') emit('clear-folder-files', folder);
     if (action === 'delete') requestDeleteFolder(folder);

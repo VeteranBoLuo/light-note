@@ -113,7 +113,7 @@ export declare const SUPPORT_PACKAGE_CATALOG_VERSION: 'support-packages-v3';
 /** 常驻套餐的价格、基础权益和首购范围唯一事实源。 */
 export declare const SUPPORT_PACKAGE_CATALOG: readonly SupportPackageDefinition[];
 
-export type FilePreviewStrategy = 'archive_manifest' | 'converted_pdf';
+export type FilePreviewStrategy = 'archive_manifest' | 'converted_pdf' | 'image_thumbnail' | 'image_display';
 export type DerivedFilePreviewType = 'archive' | 'converted-pdf';
 
 export interface FilePreviewFormatDefinition {
@@ -128,6 +128,8 @@ export interface FilePreviewFormatDefinition {
 export declare const FILE_PREVIEW_STRATEGY: {
   readonly ARCHIVE_MANIFEST: 'archive_manifest';
   readonly CONVERTED_PDF: 'converted_pdf';
+  readonly IMAGE_THUMBNAIL: 'image_thumbnail';
+  readonly IMAGE_DISPLAY: 'image_display';
 };
 
 export declare const FILE_PREVIEW_FORMATS: readonly FilePreviewFormatDefinition[];

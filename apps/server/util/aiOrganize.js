@@ -55,12 +55,13 @@ function buildStrongTagInstruction(userTags) {
 // 模型只负责提出候选；服务端仍以“强相关 + 输入中存在原文依据”为硬门禁。
 // 映射按模型相关性顺序进行，不能再按数据库标签顺序重排后截断。
 function mapTagSuggestion(parsed, userTags, sourceText, { allowSuggestions = true } = {}) {
-  if (!allowSuggestions) return { matchedTagIds: [], newTags: [] };
+  if (!allowSuggestions) return { matchedTagIds: [], newTags: [], suggestions: [] };
   const sourceEvidence = normalizeEvidenceText(sourceText);
   const existingByName = new Map(userTags.map((tag) => [normalizeTagName(tag.name), tag]));
   const candidates = Array.isArray(parsed?.tagSuggestions) ? parsed.tagSuggestions : [];
   const matchedTagIds = [];
   const newTags = [];
+  const suggestions = [];
   const seenNames = new Set();
 
   for (const candidate of candidates) {
@@ -90,10 +91,19 @@ function mapTagSuggestion(parsed, userTags, sourceText, { allowSuggestions = tru
     if (existing) matchedTagIds.push(existing.id);
     else if (candidate.source === 'new') newTags.push(name);
     else continue;
+    suggestions.push({
+      id: existing ? String(existing.id) : null,
+      name: existing ? String(existing.name) : name,
+      source: existing ? 'existing' : 'new',
+      confidence: candidate.confidence,
+      evidence: String(candidate.evidence || '')
+        .trim()
+        .slice(0, 160),
+    });
     seenNames.add(nameKey);
     if (matchedTagIds.length + newTags.length >= AI_TAG_SUGGESTION_CAP) break;
   }
-  return { matchedTagIds, newTags };
+  return { matchedTagIds, newTags, suggestions };
 }
 
 function throwIfAborted(signal) {
@@ -105,7 +115,7 @@ function throwIfAborted(signal) {
 }
 
 // 从纯文本(如笔记标题+正文)推荐标签:只匹配/建议标签,不生成名称描述。供「AI 整理笔记」用。
-export async function suggestTagsFromText({ text, userTags = [], signal, trace }) {
+export async function suggestTagsFromText({ text, userTags = [], signal, trace, includeSuggestionDetails = false }) {
   throwIfAborted(signal);
   const sourceText = String(text || '').slice(0, 2800);
   const userPrompt = [
@@ -131,8 +141,11 @@ export async function suggestTagsFromText({ text, userTags = [], signal, trace }
     },
   );
   const parsed = parseAiJson(content);
-  if (!parsed) return null;
-  return mapTagSuggestion(parsed, userTags, sourceText);
+  // “没有建议”必须由模型显式返回空数组；缺字段或不可解析内容属于协议失败，
+  // 不能伪装成合法空结果并让上层按成功结算。
+  if (!parsed || !Array.isArray(parsed.tagSuggestions)) return null;
+  const mapped = mapTagSuggestion(parsed, userTags, sourceText);
+  return includeSuggestionDetails ? mapped : { matchedTagIds: mapped.matchedTagIds, newTags: mapped.newTags };
 }
 
 /**
@@ -149,6 +162,7 @@ export async function suggestBookmarkMeta({
   userTags = [],
   signal,
   trace,
+  includeSuggestionDetails = false,
 }) {
   throwIfAborted(signal);
   const curName = String(name || '').trim();
@@ -245,12 +259,14 @@ export async function suggestBookmarkMeta({
   );
   const parsed = parseAiJson(content);
   if (!parsed || (!parsed.name && !parsed.description && !Array.isArray(parsed.tagSuggestions))) return null;
-  const { matchedTagIds, newTags } = mapTagSuggestion(parsed, userTags, tagSourceText);
+  if (includeSuggestionDetails && !Array.isArray(parsed.tagSuggestions)) return null;
+  const { matchedTagIds, newTags, suggestions } = mapTagSuggestion(parsed, userTags, tagSourceText);
   return {
     name: String(parsed.name || '').trim(),
     description: String(parsed.description || '').trim(),
     matchedTagIds,
     newTags,
+    ...(includeSuggestionDetails ? { suggestions } : {}),
     metadataSource,
     fetchReason,
     resolvedUrl,

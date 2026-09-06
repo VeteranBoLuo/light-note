@@ -2,6 +2,7 @@ export interface ImageViewerItem {
   /** 同一组图片内稳定且唯一的标识。 */
   id: string;
   src: string;
+  downloadSrc?: string;
   alt?: string;
   fileName?: string;
   /** 已知尺寸可让加载阶段先稳定布局；最终仍以图片 load 事件读到的尺寸为准。 */

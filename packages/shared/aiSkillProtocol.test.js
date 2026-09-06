@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  AI_SCOPED_CONVERSATION_MAX_RESOURCES,
   AI_SKILL_PROTOCOL_VERSION,
   AiSkillProtocolError,
   validateAiSkillRequest,
@@ -22,6 +23,10 @@ const requestFixture = () => ({
 });
 
 describe("aiSkillProtocol", () => {
+  it("前后端共用范围问答资源上限", () => {
+    expect(AI_SCOPED_CONVERSATION_MAX_RESOURCES).toBe(50);
+  });
+
   it("规范化封闭世界的 Skill 请求", () => {
     expect(validateAiSkillRequest(requestFixture())).toEqual(requestFixture());
   });
@@ -44,6 +49,40 @@ describe("aiSkillProtocol", () => {
     expect(() =>
       validateAiSkillRequest({ ...requestFixture(), protocolVersion: 2 }),
     ).toThrowError(/版本不兼容/u);
+  });
+
+  it("规范化笔记目录选择器且不允许客户端扩展未声明字段", () => {
+    const request = validateAiSkillRequest({
+      ...requestFixture(),
+      skillId: "note.ask_directory",
+      scope: {
+        resourceRefs: [],
+        selector: {
+          type: "note_directory",
+          parentId: "note-parent",
+          includeDescendants: true,
+        },
+      },
+    });
+    expect(request.scope.selector).toEqual({
+      type: "note_directory",
+      parentId: "note-parent",
+      includeDescendants: true,
+    });
+    expect(() =>
+      validateAiSkillRequest({
+        ...requestFixture(),
+        scope: {
+          resourceRefs: [],
+          selector: {
+            type: "note_directory",
+            parentId: null,
+            includeDescendants: false,
+            noteIds: ["n-1"],
+          },
+        },
+      }),
+    ).toThrowError(/未知字段/u);
   });
 
   it("要求成功响应有结果、失败响应有错误", () => {

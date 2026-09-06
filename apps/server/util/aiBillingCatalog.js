@@ -52,6 +52,7 @@ function tokenAction({
 }
 
 export const AI_BILLING_ACTIONS = Object.freeze([
+  tokenAction({ id: 'organize.metadata', module: 'organize', labelKey: 'organizeMetadata', taskTypes: ['organize_resource_metadata'], unit: 'item', maxUserProviderCalls: 1, maxPlatformProviderCalls: 1 }),
   tokenAction({
     id: 'search.answer',
     module: 'search',
@@ -204,6 +205,25 @@ export const AI_BILLING_ACTIONS = Object.freeze([
     module: 'tag',
     labelKey: 'tagAnalyze',
     taskTypes: ['skill_tag_analyze'],
+  }),
+  tokenAction({
+    id: 'tag.ask',
+    module: 'tag',
+    labelKey: 'tagAsk',
+    taskTypes: ['skill_tag_ask'],
+  }),
+  tokenAction({
+    id: 'note.ask_directory',
+    module: 'note',
+    labelKey: 'noteAskDirectory',
+    taskTypes: ['skill_note_ask_directory'],
+  }),
+  tokenAction({
+    id: 'routine.daily_brief',
+    module: 'routine',
+    labelKey: 'routineDailyBrief',
+    taskTypes: ['skill_routine_daily_brief'],
+    reservationTokens: 8_000,
   }),
   ...[
     ['idea_to_draft', 'toolboxIdeaToDraft'],

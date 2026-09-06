@@ -47,6 +47,7 @@ export async function resolveOwnedFilePreview(req, res) {
     const data = await resolveFilePreview({
       ownerUserId: req.user.id,
       fileId: fileIdFromRequest(req),
+      strategy: req.body?.strategy === 'image_display' ? 'image_display' : undefined,
       touch: !req.adminContext,
     });
     return res.send(resultData(data));
@@ -60,6 +61,7 @@ export async function prepareOwnedFilePreview(req, res) {
     const data = await prepareFilePreview({
       ownerUserId: req.user.id,
       fileId: fileIdFromRequest(req),
+      strategy: req.body?.strategy === 'image_display' ? 'image_display' : undefined,
       retry: req.body?.retry === true,
     });
     return res.send(resultData(data));

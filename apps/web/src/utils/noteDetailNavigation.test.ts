@@ -49,6 +49,11 @@ describe('resolveNoteDetailReturnPath', () => {
     );
   });
 
+  it('允许标签空间作为明确来源并保留当前视图', () => {
+    expect(resolveNoteDetailReturnPath('/tag/tag-1?view=resources#notes')).toBe('/tag/tag-1?view=resources#notes');
+    expect(resolveNoteDetailReturnPath('/tag/tag-1/extra')).toBe('');
+  });
+
   it('允许待办作为明确来源并保留页签与目标参数', () => {
     expect(resolveNoteDetailReturnPath('/inbox?tab=todo&todoId=todo-1')).toBe(
       '/inbox?tab=todo&todoId=todo-1',

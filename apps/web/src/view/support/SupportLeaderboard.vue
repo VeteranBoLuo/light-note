@@ -12,8 +12,13 @@
     </div>
 
     <BCard class="support-leaderboard__card" padding="0" radius="18px">
-      <div v-if="loading" class="support-leaderboard__state">{{ t('support.leaderboardLoading') }}</div>
+      <div v-if="loading" class="support-leaderboard__state">
+        <BLoading inline loading :title="t('support.leaderboardLoading')" />
+      </div>
       <div v-else-if="!leaderboard?.items.length" class="support-leaderboard__state">
+        <span class="support-leaderboard__empty-icon" aria-hidden="true">
+          <SvgIcon :src="icon.support.heart" size="22" />
+        </span>
         <strong>{{ t('support.leaderboardEmptyTitle') }}</strong>
         <span>{{ t('support.leaderboardEmptyDescription') }}</span>
       </div>
@@ -21,6 +26,7 @@
         <li
           v-for="(item, index) in leaderboard.items"
           :key="`${item.rank}-${item.publicId || 'anonymous'}-${index}`"
+          :class="{ 'is-featured': index < 3 }"
         >
           <span class="support-leaderboard__rank" :class="{ 'is-top': item.rank <= 3 }">{{ item.rank }}</span>
           <img
@@ -55,6 +61,9 @@
 <script setup lang="ts">
   import { useI18n } from 'vue-i18n';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
   import { afdianLeaderboardAvatarUrl, type AfdianLeaderboard } from '@/api/supportApi';
 
   defineProps<{ leaderboard: AfdianLeaderboard | null; loading: boolean }>();
@@ -64,6 +73,7 @@
 <style scoped lang="less">
   .support-leaderboard {
     margin-top: 34px;
+    scroll-margin-top: 18px;
   }
 
   .support-leaderboard__heading {
@@ -99,14 +109,17 @@
   }
 
   ol {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
     margin: 0;
-    padding: 0;
+    padding: 16px;
     list-style: none;
   }
 
   li {
-    min-height: 62px;
-    padding: 10px 16px;
+    min-height: 58px;
+    padding: 10px 0;
     display: grid;
     grid-template-columns: 28px 38px minmax(0, 1fr) auto;
     align-items: center;
@@ -114,8 +127,27 @@
     border-bottom: 1px solid var(--surface-border-color);
   }
 
-  li:last-child {
+  li:nth-child(n + 4) {
+    grid-column: 1 / -1;
+  }
+
+  li:last-child,
+  li.is-featured {
     border-bottom: 0;
+  }
+
+  li.is-featured {
+    position: relative;
+    min-height: 176px;
+    padding: 18px 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 9px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 16px;
+    background: var(--surface-panel-bg);
+    text-align: center;
   }
 
   .support-leaderboard__rank {
@@ -137,6 +169,12 @@
     background: var(--hover-background);
   }
 
+  li.is-featured .support-leaderboard__rank {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+  }
+
   .support-leaderboard__avatar {
     width: 38px;
     height: 38px;
@@ -152,6 +190,13 @@
     background: var(--hover-background);
     font-size: 12px;
     font-weight: 700;
+  }
+
+  li.is-featured .support-leaderboard__avatar {
+    width: 52px;
+    height: 52px;
+    border: 2px solid var(--card-background);
+    box-shadow: 0 0 0 1px var(--primary-color);
   }
 
   .support-leaderboard__identity strong,
@@ -172,6 +217,15 @@
     font-size: 12px;
   }
 
+  li.is-featured .support-leaderboard__identity span {
+    margin-top: 2px;
+  }
+
+  li.is-featured .support-leaderboard__amount {
+    color: var(--primary-color);
+    font-size: 17px;
+  }
+
   .support-leaderboard__amount {
     font-weight: 750;
   }
@@ -190,7 +244,7 @@
   }
 
   .support-leaderboard__state {
-    min-height: 110px;
+    min-height: 150px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -204,6 +258,19 @@
     font-size: 14px;
   }
 
+  .support-leaderboard__empty-icon {
+    width: 42px;
+    height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 3px;
+    border: 1px solid var(--primary-color);
+    border-radius: 14px;
+    color: var(--primary-color);
+    background: var(--primary-color-light);
+  }
+
   .support-leaderboard__footnote {
     margin-left: 2px;
   }
@@ -215,15 +282,48 @@
       gap: 6px;
     }
 
-    li {
-      padding: 10px 12px;
-      grid-template-columns: 26px 34px minmax(0, 1fr) auto;
-      gap: 9px;
+    ol {
+      grid-template-columns: 1fr;
+      padding: 12px;
     }
 
-    .support-leaderboard__avatar {
+    li,
+    li.is-featured {
+      grid-column: 1;
+      min-height: 58px;
+      padding: 10px 12px;
+      display: grid;
+      grid-template-columns: 26px 34px minmax(0, 1fr) auto;
+      gap: 9px;
+      border: 0;
+      border-bottom: 1px solid var(--surface-border-color);
+      border-radius: 0;
+      background: transparent;
+      text-align: left;
+    }
+
+    li.is-featured .support-leaderboard__rank {
+      position: static;
+    }
+
+    .support-leaderboard__avatar,
+    li.is-featured .support-leaderboard__avatar {
       width: 34px;
       height: 34px;
+      border-width: 0;
+      box-shadow: none;
+    }
+
+    li.is-featured .support-leaderboard__amount {
+      font-size: 14px;
+    }
+  }
+
+  html.light-note-mobile-rendering & {
+    .support-leaderboard__card,
+    li.is-featured,
+    li.is-featured .support-leaderboard__avatar {
+      box-shadow: none;
     }
   }
 </style>

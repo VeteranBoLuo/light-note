@@ -26,6 +26,7 @@ describe('爱发电支持模块 Schema', () => {
     expect(AFDIAN_SUPPORT_TABLE_SQL.join('\n')).toContain('UNIQUE KEY uk_support_order_provider (provider_order_no)');
     expect(AFDIAN_SUPPORT_TABLE_SQL.join('\n')).toContain('UNIQUE KEY uk_support_checkout_token (token_hash)');
     expect(AFDIAN_SUPPORT_TABLE_SQL.join('\n')).toContain('CREATE TABLE IF NOT EXISTS support_public_preferences');
+    expect(AFDIAN_SUPPORT_TABLE_SQL.join('\n')).toContain('show_identity tinyint unsigned NOT NULL DEFAULT 1');
     expect(AFDIAN_SUPPORT_TABLE_SQL.join('\n')).toContain('ranking_observed_at datetime DEFAULT NULL');
     expect(AFDIAN_SUPPORT_TABLE_SQL.join('\n')).toContain('provider_created_at datetime DEFAULT NULL');
     expect(AFDIAN_SUPPORT_TABLE_SQL.join('\n')).toContain('order_purpose varchar(24)');
@@ -69,5 +70,6 @@ describe('爱发电支持模块 Schema', () => {
     expect(schemaAssertions).toContain('[59] invalid_support_order_purpose');
     expect(schemaAssertions).toContain('[59] package_intent_wrong_order_purpose');
     expect(schemaAssertions).toContain('[59] donation_has_positive_reward');
+    expect(schemaAssertions).toContain('[48] invalid_afdian_support_identity_default');
   });
 });

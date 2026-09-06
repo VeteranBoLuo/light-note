@@ -13,6 +13,17 @@ export const getConfiguredGlobalRateLimits = () => ({
 
 const requestActor = (req = {}) => req.billingUser || req.user || {};
 
+const STATIC_READ_METHODS = new Set(['GET', 'HEAD']);
+
+export const shouldSkipGeneralRateLimit = (req = {}) => {
+  const method = String(req.method || '').toUpperCase();
+  if (method === 'OPTIONS') return true;
+  if (!STATIC_READ_METHODS.has(method)) return false;
+
+  const pathname = String(req.path || req.originalUrl || req.url || '').split('?', 1)[0];
+  return pathname === '/uploads' || pathname.startsWith('/uploads/');
+};
+
 export const getGlobalRateLimit = (req, limits = getConfiguredGlobalRateLimits()) => {
   const actor = requestActor(req);
   if (actor.role === 'root') return limits.root;
@@ -88,7 +99,7 @@ export const globalRateLimiter = rateLimit({
   keyGenerator: getGlobalRateLimitKey,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => req.method === 'OPTIONS',
+  skip: shouldSkipGeneralRateLimit,
   handler: (req, res) => {
     const resetTime = req.rateLimit?.resetTime?.getTime?.() || Date.now() + 60_000;
     const retryAfter = Math.max(1, Math.ceil((resetTime - Date.now()) / 1000));
@@ -106,7 +117,7 @@ export const earlyAnonymousRateLimiter = rateLimit({
   keyGenerator: (req) => `early-ip:${ipKeyGenerator(req.ip || 'unknown')}`,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => req.method === 'OPTIONS',
+  skip: shouldSkipGeneralRateLimit,
   handler: (req, res) => {
     const resetTime = req.rateLimit?.resetTime?.getTime?.() || Date.now() + 60_000;
     const retryAfter = Math.max(1, Math.ceil((resetTime - Date.now()) / 1000));

@@ -44,15 +44,13 @@
           </BButton>
         </BTooltip>
       </div>
-      <BButton
+      <BBatchToggle
         v-if="!bookmark.isMobile"
         class="batch-toggle-btn"
-        :class="{ active: batchMode }"
         @click="toggleBatchMode"
         v-click-log="{ module: '云空间', operation: batchMode ? '退出批量操作' : '开启批量操作' }"
-      >
-        {{ batchMode ? $t('cloudSpace.exitBatch') : $t('cloudSpace.batchAction') }}
-      </BButton>
+        :active="batchMode"
+      />
       <FileTypeFilter class="cloud-type-filter" />
       <div v-if="!bookmark.isMobile" class="cloud-search-action">
         <BInput
@@ -111,7 +109,12 @@
         </BButton>
       </div>
       <div class="content-area">
-        <CloudFolder v-if="!bookmark.isMobile" @uploadFiles="onUploadFiles" />
+        <CloudFolder
+          v-if="!bookmark.isMobile"
+          :can-manage-tags="user.adminContext?.mode !== 'readonly'"
+          @uploadFiles="onUploadFiles"
+          @manage-tags="openFolderTags"
+        />
         <FieldList
           :view-mode="viewMode"
           :batch-mode="batchMode"
@@ -124,7 +127,12 @@
         />
       </div>
     </div>
-    <MoveFile v-model:visible="moveCfg.moveFileVisible" :files="moveCfg.files" @moved="handleMoveDone" />
+    <MoveFile
+      v-model:visible="moveCfg.moveFileVisible"
+      :files="moveCfg.files"
+      :selection-operation="moveCfg.operation"
+      @moved="handleMoveDone"
+    />
     <MobileCloudFolderDrawer
       v-if="bookmark.isMobile"
       v-model:open="mobileFolderDrawerOpen"
@@ -147,6 +155,13 @@
       v-model:visible="mobileFolderClearVisible"
       :folder="mobileClearingFolder"
       :folders="cloud.folderList"
+    />
+
+    <CloudFolderTagsModal
+      v-model:visible="folderTagsVisible"
+      :folder="taggingFolder"
+      :folders="cloud.folderList"
+      @prepared="openPreparedFolderTags"
     />
 
     <!-- 全屏文件预览 -->
@@ -172,11 +187,13 @@
       :sort-options="cloudSortOptions"
       :before-open-create-folder="allowMobileFolderCreate"
       :before-manage-folders="allowMobileFolderCreate"
+      :can-manage-tags="user.adminContext?.mode !== 'readonly'"
       @batch="toggleBatchMode"
       @sort="changeCloudSort"
       @create-folder="createMobileFolder"
       @rename-folder="renameMobileFolder"
       @move-folder="openMobileFolderMove"
+      @manage-folder-tags="openFolderTags"
       @clear-folder-files="openMobileFolderClear"
       @delete-folder="requestMobileFolderDelete"
     />
@@ -185,6 +202,8 @@
 
 <script lang="ts" setup>
   import icon from '@/config/icon';
+  import { useResourceSelection } from '@/composables/useResourceSelection';
+  import type { SelectedResource, SelectionOperation } from '@/store/resourceSelection';
   import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
   import { bookmarkStore, cloudSpaceStore, useUserStore } from '@/store';
   import HandleBtnGroup from '@/components/cloudSpace/HandleBtnGroup.vue';
@@ -201,6 +220,7 @@
   import FieldList from '@/components/cloudSpace/fieldList.vue';
 
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BBatchToggle from '@/components/base/BasicComponents/BBatchToggle.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
@@ -214,6 +234,7 @@
   import MobileCloudFolderDrawer from '@/components/cloudSpace/MobileCloudFolderDrawer.vue';
   import CloudFolderMoveModal from '@/components/cloudSpace/CloudFolderMoveModal.vue';
   import CloudFolderClearModal from '@/components/cloudSpace/CloudFolderClearModal.vue';
+  import CloudFolderTagsModal from '@/components/cloudSpace/CloudFolderTagsModal.vue';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
@@ -310,7 +331,13 @@
 
   const handleBtnGroup = ref<HandleBtnGroupExposed | null>(null);
   const mobileCloudStorageBar = ref<{ openDetails: (shortfallMb?: number) => void } | null>(null);
-  const batchMode = ref(false);
+  const selection = useResourceSelection(
+    'files',
+    computed(() => cloud.fileList),
+    'file',
+    computed(() => cloud.loading),
+  );
+  const batchMode = selection.mode;
   const mobilePageActionsOpen = ref(false);
   const mobileFolderDrawerOpen = ref(false);
   const cloudContainerRef = ref<HTMLElement | null>(null);
@@ -320,6 +347,33 @@
   const mobileMovingFolder = ref<CloudFolderNode | null>(null);
   const mobileFolderClearVisible = ref(false);
   const mobileClearingFolder = ref<CloudFolderNode | null>(null);
+  const folderTagsVisible = ref(false);
+  const taggingFolder = ref<CloudFolderNode | null>(null);
+
+  function openFolderTags(folder: CloudFolderNode) {
+    if (selection.busy.value || blockGuestWrite('update-file-tags') || user.adminContext?.mode === 'readonly') return;
+    const snapshot = { ...folder };
+    void closeCurrentMobileOverlayThen(
+      () => {
+        mobilePageActionsOpen.value = false;
+      },
+      () => {
+        taggingFolder.value = snapshot;
+        folderTagsVisible.value = true;
+      },
+    );
+  }
+
+  function openPreparedFolderTags(items: SelectedResource[]) {
+    void closeCurrentMobileOverlayThen(
+      () => {
+        folderTagsVisible.value = false;
+      },
+      () => {
+        void selection.openTags('add', items);
+      },
+    );
+  }
 
   function openMobileStorageDetails(shortfallMb: number) {
     mobileCloudStorageBar.value?.openDetails(shortfallMb);
@@ -457,8 +511,7 @@
     };
     cloud.searchFileName = fileName;
     cloud.queryFieldList();
-    clearSelectionKey.value += 1;
-    batchMode.value = false;
+
     if (getRouteFolderId()) {
       void applyFolderFromRoute();
     } else {
@@ -485,8 +538,6 @@
       id: 'all',
     };
     cloud.searchFileName = '';
-    clearSelectionKey.value += 1;
-    batchMode.value = false;
 
     const allTypes = [...CLOUD_FILE_CATEGORY_ORDER];
     const alreadyShowingAllTypes =
@@ -503,6 +554,7 @@
   const moveCfg = reactive({
     moveFileVisible: false,
     files: [],
+    operation: null as SelectionOperation | null,
   });
   const clearSelectionKey = ref(0);
 
@@ -537,7 +589,6 @@
         cloud.folder = { id: createdFolder.id, name: createdFolder.name };
         cloud.expandFolderAncestors(createdFolder.id);
       }
-      clearSelectionKey.value += 1;
       mobilePageActionsOpen.value = false;
       recordOperation({ module: '云空间', operation: `新增文件夹成功【${name}】` });
       message.success(t('cloudSpace.createFolderSuccess', { name }));
@@ -866,7 +917,8 @@
     if (!isOrganizingFromInbox.value) await syncFileRoute('');
   }
 
-  function moveField(fileOrFiles: FileItem | FileItem[]) {
+  function moveField(fileOrFiles: FileItem | FileItem[], operation: SelectionOperation | null = null) {
+    moveCfg.operation = operation;
     const files = Array.isArray(fileOrFiles) ? fileOrFiles : [fileOrFiles];
     recordOperation({ module: '云空间', operation: `打开移动文件弹窗【${files.length}个】` });
     moveCfg.moveFileVisible = true;
@@ -874,7 +926,7 @@
   }
 
   function handleMoveDone() {
-    clearSelectionKey.value += 1;
+    moveCfg.operation = null;
   }
 
   initializeCloudSpace();
@@ -1073,16 +1125,6 @@
     color: var(--resource-file-color, #ff8a00);
     background: var(--menu-body-bg-color);
     box-shadow: 0 2px 7px rgba(15, 23, 42, 0.08);
-  }
-
-  .batch-toggle-btn {
-    height: 36px;
-    border-radius: 10px;
-  }
-
-  .batch-toggle-btn.active {
-    color: var(--resource-file-color, #ff8a00);
-    background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 9%, var(--menu-body-bg-color));
   }
 
   .cloud-search-action {

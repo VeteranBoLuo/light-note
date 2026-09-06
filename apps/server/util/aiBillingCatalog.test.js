@@ -167,4 +167,37 @@ describe('aiBillingCatalog', () => {
     expect(config.providerPlan.stages).not.toHaveProperty('image_recognition');
     expect(config.reservationTokens).toBeGreaterThan(80_000);
   });
+
+  it('标签与目录问答按服务端展开后的完整范围重新编译预占和图片阶段', () => {
+    const tagSkill = resolveAiSkill('tag.ask', 1);
+    const tagRequest = { input: { question: '有什么共性？' }, scope: { resourceRefs: [{ type: 'tag', id: 'tag-1' }] } };
+    const tagContext = {
+      resourceRefs: [
+        ...Array.from({ length: 4 }, (_, index) => ({ type: 'note', id: `n-${index + 1}` })),
+        { type: 'file', id: 'f-1' },
+      ],
+    };
+    const initialTagConfig = createAiSkillExecutionConfig(tagSkill, tagRequest);
+    const expandedTagConfig = createAiSkillExecutionConfig(tagSkill, tagRequest, {}, tagContext);
+    expect(expandedTagConfig.providerPlan.stages.image_recognition).toEqual({ billingScope: 'user', maxCalls: 1 });
+    expect(expandedTagConfig.reservationTokens).toBeGreaterThan(initialTagConfig.reservationTokens);
+
+    const directorySkill = resolveAiSkill('note.ask_directory', 1);
+    const directoryRequest = {
+      input: { question: '当前目录的重点是什么？' },
+      scope: { resourceRefs: [], selector: { type: 'note_directory', parentId: null, includeDescendants: true } },
+    };
+    const directoryContext = {
+      resourceRefs: Array.from({ length: 5 }, (_, index) => ({ type: 'note', id: `d-${index + 1}` })),
+    };
+    const initialDirectoryConfig = createAiSkillExecutionConfig(directorySkill, directoryRequest);
+    const expandedDirectoryConfig = createAiSkillExecutionConfig(
+      directorySkill,
+      directoryRequest,
+      {},
+      directoryContext,
+    );
+    expect(expandedDirectoryConfig.providerPlan.stages).not.toHaveProperty('image_recognition');
+    expect(expandedDirectoryConfig.reservationTokens).toBeGreaterThan(initialDirectoryConfig.reservationTokens);
+  });
 });

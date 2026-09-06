@@ -25,7 +25,7 @@ describe('noteLibraryCache', () => {
     store.writeList(firstKey, { items: [{ id: 'note-a', isCheck: true }], total: 1, page: 1, hasMore: false });
     store.writeList(secondKey, { items: [{ id: 'note-b' }], total: 1, page: 1, hasMore: false });
 
-    expect(store.readList(firstKey)?.items).toEqual([{ id: 'note-a', isCheck: false }]);
+    expect(store.readList(firstKey)?.items).toEqual([{ id: 'note-a' }]);
     expect(store.readList(secondKey)?.items[0]?.id).toBe('note-b');
   });
 
@@ -111,7 +111,7 @@ describe('noteLibraryCache', () => {
     snapshot.items[0].title = 'changed';
     snapshot.items[0].isCheck = true;
 
-    expect(store.readList(key)?.items[0]).toEqual({ id: 'note-a', isCheck: false });
+    expect(store.readList(key)?.items[0]).toEqual({ id: 'note-a' });
   });
 
   it('只同步指定账号快照中的笔记待整理状态，并保留快照新鲜度', () => {

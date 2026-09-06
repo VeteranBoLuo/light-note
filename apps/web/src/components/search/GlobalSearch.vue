@@ -511,7 +511,8 @@
     border-radius: 12px;
     text-align: left;
     white-space: normal;
-    background: transparent;
+    /* 结果行统一承载 hover / 键盘选中背景，避免 BButton 自身的状态色只覆盖左栏。 */
+    background: transparent !important;
   }
   .global-search-result.is-active {
     background: color-mix(in srgb, var(--primary-color) 10%, transparent);
@@ -589,7 +590,7 @@
     height: 28px;
     padding: 0;
     color: var(--desc-color);
-    background: transparent;
+    background: transparent !important;
   }
   .global-search-dialog mark.gs-hl {
     padding: 0 1px;

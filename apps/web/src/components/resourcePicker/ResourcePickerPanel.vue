@@ -33,10 +33,20 @@
           ? t('toolbox.workbench.loadedResults', { loaded: flatItems.length, total: resultTotal })
           : t('toolbox.workbench.currentResults', { count: flatItems.length })
       }}</span>
-      <BButton size="small" :disabled="disabled || !selectableFlatItems.length" @click="selectCurrentResults">
-        {{ t('toolbox.workbench.addCurrentResults') }}
+      <BButton
+        size="small"
+        :loading="collecting"
+        :disabled="disabled || (selectAllMatching ? loading || !resultTotal : !selectableFlatItems.length)"
+        @click="selectCurrentResults"
+      >
+        {{
+          selectAllMatching
+            ? t('organizePicker.selectMatching', { count: resultTotal })
+            : batchLabel || t('toolbox.workbench.addCurrentResults')
+        }}
       </BButton>
     </div>
+    <p v-if="collectionError" class="resource-picker-panel__load-error" role="alert">{{ collectionError }}</p>
 
     <div v-if="searchFailed" class="resource-picker-panel__load-error" role="alert">
       <span>{{ t('toolbox.workbench.resourceSearchFailed') }}</span>
@@ -285,6 +295,9 @@
       scopesDisabled?: boolean;
       /** 工具箱等批量场景可启用；默认单选以保持 @ 提及等现有交互不变。 */
       multiSelect?: boolean;
+      batchLabel?: string;
+      selectAllMatching?: boolean;
+      maxSelection?: number;
       /** 锁定搜索与选择操作，但保留当前结果供用户查看。 */
       disabled?: boolean;
     }>(),
@@ -308,6 +321,7 @@
     select: [value: ResourcePickerItem];
     deselect: [value: ResourcePickerItem];
     'select-many': [value: ResourcePickerItem[]];
+    'batch-loading': [value: boolean];
     'select-scope': [value: AiScopeRef];
     'deselect-scope': [value: AiScopeRef];
     close: [];
@@ -317,6 +331,8 @@
 
   const { t } = useI18n();
   const innerKeyword = ref('');
+  const collecting = ref(false);
+  const collectionError = ref('');
   const panelRef = ref<HTMLElement | null>(null);
   const keywordInputRef = ref<{ focus?: () => void } | null>(null);
   const resultsRef = ref<HTMLElement | null>(null);
@@ -350,6 +366,7 @@
     searchNow,
     loadMore,
     retryLoadMore,
+    collectMatching,
     reset,
   } = useResourcePickerSearch({
     allowedTypes: () => props.allowedTypes,
@@ -564,8 +581,37 @@
     flatItems.value.filter((item) => !resourceSelected(item) && !resourceDisabled(item)),
   );
 
-  function selectCurrentResults() {
-    if (props.disabled || !selectableFlatItems.value.length) return;
+  async function selectCurrentResults() {
+    if (props.disabled || collecting.value) return;
+    if (props.selectAllMatching && virtualizedMode.value) {
+      collecting.value = true;
+      emit('batch-loading', true);
+      collectionError.value = '';
+      const query = innerKeyword.value;
+      const types = (props.allowedTypes || []).join(',');
+      try {
+        const items = await collectMatching(props.maxSelection || 1000, props.selectedResourceKeys);
+        if (items && query === innerKeyword.value && types === (props.allowedTypes || []).join(',')) {
+          emit(
+            'select-many',
+            items.filter((item) => !resourceSelected(item) && !resourceDisabled(item)),
+          );
+        }
+      } catch (error) {
+        if (query === innerKeyword.value && types === (props.allowedTypes || []).join(',')) {
+          collectionError.value = t(
+            error instanceof Error && error.message === 'selection-limit'
+              ? 'organizePicker.limit'
+              : 'organizePicker.selectFailed',
+          );
+        }
+      } finally {
+        collecting.value = false;
+        emit('batch-loading', false);
+      }
+      return;
+    }
+    if (!selectableFlatItems.value.length) return;
     emit('select-many', selectableFlatItems.value);
   }
 
@@ -768,6 +814,7 @@
   );
 
   onBeforeUnmount(() => {
+    emit('batch-loading', false);
     filterTransitionVersion += 1;
     activeFilterTransition = 0;
     preparedAnchorAwaitingFilterChange = false;

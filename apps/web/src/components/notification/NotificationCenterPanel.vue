@@ -1,5 +1,12 @@
 <template>
-  <div class="nt-panel" :class="{ 'is-mobile': mobile }">
+  <div
+    class="nt-panel"
+    :class="{
+      'is-mobile': mobile,
+      'is-desktop-page': desktopPage,
+      'is-wide-desktop-page': wideDesktopPage,
+    }"
+  >
     <div v-if="showHeader" class="nt-head">
       <span class="nt-title">{{ t('notification.title') }}</span>
       <BButton class="nt-markall" :disabled="unreadTotal <= 0" @click="emit('mark-all')">
@@ -8,12 +15,14 @@
       </BButton>
     </div>
 
-    <div class="nt-tabs">
+    <div class="nt-tabs" role="tablist" :aria-label="t('notification.categoryLabel')">
       <BButton
         v-for="tab in tabs"
         :key="tab.value"
         class="nt-tab"
         :class="{ active: activeTab === tab.value }"
+        role="tab"
+        :aria-selected="activeTab === tab.value"
         @click="emit('switch-tab', tab.value)"
       >
         <SvgIcon
@@ -56,6 +65,9 @@
               v-click-log="{ module: '通知中心', operation: `查看通知【${renderTitle(item)}】` }"
             >
               <span class="nt-dot" :class="`type-${item.type}`" aria-hidden="true"></span>
+              <span class="nt-type-icon" :class="`type-${item.type}`" aria-hidden="true">
+                <SvgIcon :src="notificationIcon(item)" size="17" />
+              </span>
               <div class="nt-item-main">
                 <div class="nt-item-title">{{ renderTitle(item) }}</div>
                 <div v-if="renderContent(item)" class="nt-item-content">{{ renderContent(item) }}</div>
@@ -133,6 +145,8 @@
       loading: boolean;
       completingTodoId: string;
       mobile?: boolean;
+      desktopPage?: boolean;
+      wideDesktopPage?: boolean;
       showHeader?: boolean;
       tabUnread: (value: string) => number;
       renderTitle: (item: NotificationItem) => string;
@@ -141,7 +155,7 @@
       todoId: (item: NotificationItem) => string;
       todoActionState: (item: NotificationItem) => 'pending' | 'completed' | 'unavailable';
     }>(),
-    { mobile: false, showHeader: true },
+    { mobile: false, desktopPage: false, wideDesktopPage: false, showHeader: true },
   );
   const emit = defineEmits<{
     'mark-all': [];
@@ -153,6 +167,16 @@
     'load-more': [];
   }>();
   const { t } = useI18n();
+
+  function notificationIcon(item: NotificationItem) {
+    if (item.type === 'todo_reminder') return icon.growth.action;
+    if (item.type === 'level_up') return icon.growth.level;
+    if (item.type === 'streak_risk') return icon.growth.checkin;
+    if (item.type === 'daily_brief' || item.type === 'ai_routine') return icon.ai.summary;
+    if (item.type === 'opinion_reply' || item.type === 'feature_request') return icon.userCenter.menu.feedback;
+    if (item.type === 'community_chat') return icon.ai.conversations;
+    return icon.settings.notification;
+  }
 </script>
 
 <style scoped lang="less">
@@ -316,6 +340,10 @@
     background: var(--surface-border-color);
   }
 
+  .nt-type-icon {
+    display: none;
+  }
+
   .nt-item.unread .nt-dot {
     background: var(--primary-color);
   }
@@ -407,6 +435,204 @@
     margin-top: 8px;
     color: var(--primary-color);
     background: transparent !important;
+  }
+
+  /* 独立桌面页面是宽屏清单；这些规则不会泄漏到铃铛 popover。 */
+  .nt-panel.is-desktop-page {
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--card-background);
+  }
+
+  .is-desktop-page .nt-tabs {
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid var(--surface-divider-color);
+  }
+
+  .is-desktop-page .nt-tab {
+    min-width: 92px;
+    min-height: 36px;
+    flex: 0 0 auto;
+    padding: 0 14px;
+    border-color: var(--surface-border-color);
+    border-radius: 9px;
+    font-size: 13px;
+  }
+
+  .is-desktop-page .nt-tab.active {
+    border: 2px solid var(--primary-color);
+    color: var(--primary-color);
+    background: var(--mobile-selected-bg) !important;
+  }
+
+  .is-desktop-page .nt-list {
+    max-height: none;
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 8px 16px 24px;
+  }
+
+  .is-desktop-page .nt-group-label {
+    padding: 14px 3px 8px;
+    font-size: 13px;
+  }
+
+  .is-desktop-page .nt-group-surface {
+    overflow: hidden;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
+    background: var(--card-background);
+  }
+
+  .is-desktop-page .nt-item {
+    min-height: 78px;
+    gap: 12px;
+    padding: 14px 56px 14px 16px;
+    border-left: 3px solid transparent;
+    transition:
+      border-color 0.16s ease,
+      background-color 0.16s ease;
+  }
+
+  .is-desktop-page .nt-item:hover {
+    background: var(--menu-item-h-bg-color);
+  }
+
+  .is-desktop-page .nt-item.unread {
+    border-left-color: var(--primary-color);
+    background: var(--card-background);
+  }
+
+  .is-desktop-page .nt-item.unread:hover {
+    background: var(--menu-item-h-bg-color);
+  }
+
+  .is-desktop-page .nt-item-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 24px;
+  }
+
+  .is-desktop-page .nt-item-title,
+  .is-desktop-page .nt-item-content,
+  .is-desktop-page .nt-todo-actions {
+    grid-column: 1;
+  }
+
+  .is-desktop-page .nt-item-title {
+    font-size: 14px;
+  }
+
+  .is-desktop-page .nt-item-content {
+    max-width: 920px;
+  }
+
+  .is-desktop-page .nt-item-time {
+    grid-column: 2;
+    grid-row: 1;
+    margin: 1px 0 0;
+    white-space: nowrap;
+  }
+
+  .is-desktop-page .nt-item-action {
+    top: 10px;
+    right: 8px;
+  }
+
+  .is-desktop-page .nt-state {
+    min-height: 320px;
+  }
+
+  /* 原型式宽桌面页：一个外层画布承载日期分组，去掉组内再套卡片的层级。 */
+  .is-wide-desktop-page .nt-tabs {
+    gap: 9px;
+    padding: 13px 16px 12px;
+  }
+
+  .is-wide-desktop-page .nt-tab {
+    min-width: 96px;
+    min-height: 35px;
+    border-radius: 9px;
+  }
+
+  .is-wide-desktop-page .nt-list {
+    padding: 4px 16px 24px;
+  }
+
+  .is-wide-desktop-page .nt-group-label {
+    padding: 15px 4px 8px;
+  }
+
+  .is-wide-desktop-page .nt-group-surface {
+    border: 0;
+    border-top: 1px solid var(--surface-divider-color);
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .is-wide-desktop-page .nt-item {
+    min-height: 70px;
+    padding: 12px 58px 12px 12px;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .is-wide-desktop-page .nt-dot {
+    display: none;
+  }
+
+  .is-wide-desktop-page .nt-type-icon {
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 22%, var(--surface-border-color));
+    border-radius: 9px;
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--card-background));
+  }
+
+  .is-wide-desktop-page .nt-type-icon.type-todo_reminder {
+    color: var(--resource-todo-color, var(--primary-color));
+  }
+
+  .is-wide-desktop-page .nt-type-icon.type-level_up,
+  .is-wide-desktop-page .nt-type-icon.type-streak_risk {
+    color: var(--resource-file-color);
+  }
+
+  .is-wide-desktop-page .nt-type-icon.type-daily_brief,
+  .is-wide-desktop-page .nt-type-icon.type-ai_routine {
+    color: var(--primary-color);
+  }
+
+  .is-wide-desktop-page .nt-type-icon.type-system {
+    color: var(--success-color);
+  }
+
+  .is-wide-desktop-page .nt-type-icon.type-opinion_reply,
+  .is-wide-desktop-page .nt-type-icon.type-feature_request,
+  .is-wide-desktop-page .nt-type-icon.type-community_chat {
+    color: var(--resource-note-color);
+  }
+
+  .is-wide-desktop-page .nt-item.unread {
+    border-left-color: var(--primary-color);
+    background: var(--mobile-selected-bg);
+  }
+
+  .is-wide-desktop-page .nt-item.unread:hover {
+    background: var(--mobile-selected-bg);
   }
 
   .is-mobile .nt-tabs {

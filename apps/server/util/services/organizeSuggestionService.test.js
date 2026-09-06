@@ -1,0 +1,361 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('../../db/index.js', () => ({
+  default: {
+    query: vi.fn(() => {
+      throw Error('Real DB is forbidden in tests');
+    }),
+  },
+}));
+vi.mock('./organizeSuggestionSources.js', () => ({
+  readSuggestionSources: vi.fn(),
+  readSuggestionCandidates: vi.fn(),
+  readCurrentSuggestionSource: vi.fn(),
+}));
+vi.mock('./organizeSuggestionActions.js', () => ({ applySuggestionMutation: vi.fn() }));
+vi.mock('./organizeSuggestionModel.js', () => ({
+  suggestResourceMetadata: vi.fn(),
+  estimateResourceMetadataTokens: vi.fn(() => 2000),
+}));
+vi.mock('../personalKnowledgeSearch.js', () => ({ invalidatePersonalKnowledgeCache: vi.fn().mockResolvedValue() }));
+vi.mock('../aiExecution/context.js', () => ({ getActiveAiExecution: vi.fn(() => ({ providerCallCount: 0 })) }));
+vi.mock('../aiExecution/service.js', () => ({ runAiExecution: vi.fn() }));
+vi.mock('../organizeAiSuggestionFeature.js', () => ({ isOrganizeAiSuggestionsEnabled: vi.fn(() => true) }));
+import {
+  readSuggestionSources,
+  readSuggestionCandidates,
+  readCurrentSuggestionSource,
+} from './organizeSuggestionSources.js';
+import { applySuggestionMutation } from './organizeSuggestionActions.js';
+import { suggestResourceMetadata } from './organizeSuggestionModel.js';
+import { getActiveAiExecution } from '../aiExecution/context.js';
+import { runAiExecution } from '../aiExecution/service.js';
+import { isOrganizeAiSuggestionsEnabled } from '../organizeAiSuggestionFeature.js';
+import {
+  previewSuggestionRun,
+  createSuggestionRun,
+  actOnSuggestion,
+  cancelSuggestionRun,
+  runSingleSuggestionItem,
+} from './organizeSuggestionService.js';
+import { buildSnapshot } from './organizeSuggestionRules.js';
+const requestId = 'c56a4180-65aa-42ec-a945-5fd21dec0538';
+const options = { resourceTypes: ['note'], checks: ['empty', 'duplicate'], scope: 'all' };
+const run = {
+  id: 'run',
+  user_id: 'u',
+  status: 'preview',
+  summary_json: { total: 101, aiTotal: 0 },
+  options_json: options,
+};
+function database(extra) {
+  const c = {
+    beginTransaction: vi.fn(),
+    commit: vi.fn(),
+    rollback: vi.fn(),
+    query: vi.fn(async (sql, p = []) => {
+      if (sql.includes('WHERE run_version=2') || sql.includes('id<>?')) return [[]];
+      if (sql.startsWith('SELECT r.id,r.status')) return extra?.(sql, p) ?? [[{ id: 'run', status: 'running' }]];
+      if (sql.includes('FROM user')) return [[{ id: 'u', role: 'user', del_flag: 0 }]];
+      const result = extra?.(sql, p);
+      if (result !== undefined) return result;
+      if (sql.startsWith('INSERT') || sql.startsWith('UPDATE')) return [{ affectedRows: 1 }];
+      throw Error(`Unexpected SQL: ${sql}`);
+    }),
+  };
+  return c;
+}
+const snap = (id = '1') =>
+  buildSnapshot('note', { id, title: '未命名文档', type: 'html', content: '', update_time: '2020-01-01' });
+beforeEach(() => {
+  vi.clearAllMocks();
+  isOrganizeAiSuggestionsEnabled.mockReturnValue(true);
+});
+describe('整理范围与生命周期', () => {
+  it('预检冻结全部 101 项，两页完整读取而不调用 AI', async () => {
+    readSuggestionCandidates
+      .mockResolvedValueOnce(Array.from({ length: 100 }, (_, i) => snap(String(i + 1))))
+      .mockResolvedValueOnce([snap('101')]);
+    const db = database((sql) => (sql.includes('request_id=?') ? [[]] : undefined));
+    const result = await previewSuggestionRun(db, { userId: 'u', input: options, requestId });
+    expect(result.summary).toMatchObject({ total: 101, ruleTotal: null, aiTotal: null, estimatedTokensUpper: null });
+    expect(readSuggestionCandidates).toHaveBeenCalledTimes(2);
+    expect(readSuggestionCandidates.mock.calls[1][3].after).toBe('100');
+    expect(db.query.mock.calls.filter(([sql]) => sql.startsWith('INSERT INTO organize_suggestion_items'))).toHaveLength(
+      2,
+    );
+    expect(suggestResourceMetadata).not.toHaveBeenCalled();
+    expect(runAiExecution).not.toHaveBeenCalled();
+    expect(db.commit).toHaveBeenCalledOnce();
+  });
+  it('标签与空内容混选时，书签不计入规则检查数量', async () => {
+    const bookmark = buildSnapshot('bookmark', { id: 'b', name: 'Example', tags: [{ id: 't', name: 'Existing' }] });
+    readSuggestionCandidates.mockResolvedValueOnce([bookmark]).mockResolvedValueOnce([snap()]);
+    const db = database((sql) =>
+      sql.includes('request_id=?') ? [[]] : sql.includes('FROM tag WHERE') ? [[]] : undefined,
+    );
+    const result = await previewSuggestionRun(db, {
+      userId: 'u',
+      input: { resourceTypes: ['bookmark', 'note'], checks: ['tags', 'empty'], scope: 'recent' },
+      requestId,
+    });
+    expect(result.summary).toMatchObject({ total: 2, ruleTotal: null });
+    expect(suggestResourceMetadata).not.toHaveBeenCalled();
+  });
+  it('仅标题的新预检不读取书签或文件', async () => {
+    readSuggestionCandidates.mockResolvedValueOnce([snap()]);
+    const db = database((sql) => (sql.includes('request_id=?') ? [[]] : undefined));
+    const result = await previewSuggestionRun(db, {
+      userId: 'u',
+      input: { resourceTypes: ['bookmark', 'note', 'file'], checks: ['title'], scope: 'recent' },
+      requestId,
+    });
+    expect(result.options.resourceTypes).toEqual(['note']);
+    expect(readSuggestionCandidates).toHaveBeenCalledTimes(1);
+    expect(readSuggestionCandidates.mock.calls[0][2]).toBe('note');
+  });
+  it('重复预检请求读取同一冻结范围，参数不同则冲突', async () => {
+    const db = database((sql) =>
+      sql.includes('request_id=?') ? [[{ ...run, options_json: { ...options, items: [] } }]] : undefined,
+    );
+    expect((await previewSuggestionRun(db, { userId: 'u', input: options, requestId })).id).toBe('run');
+    expect(readSuggestionSources).not.toHaveBeenCalled();
+    await expect(
+      previewSuggestionRun(db, { userId: 'u', input: { ...options, scope: 'recent' }, requestId }),
+    ).rejects.toMatchObject({ code: 'ORGANIZE_REQUEST_CONFLICT' });
+  });
+  it('纯规则任务直接完成，重复开始不插入或再分析', async () => {
+    const db = database((sql) => (sql.includes('FROM organize_suggestion_runs') ? [[{ ...run }]] : undefined));
+    expect((await createSuggestionRun(db, { userId: 'u', id: 'run', requestId })).status).toBe('completed');
+    const done = database((sql) =>
+      sql.includes('FROM organize_suggestion_runs') ? [[{ ...run, status: 'completed' }]] : undefined,
+    );
+    await createSuggestionRun(done, { userId: 'u', id: 'run', requestId });
+    expect(done.query.mock.calls.some(([sql]) => sql.startsWith('UPDATE'))).toBe(false);
+    expect(runAiExecution).not.toHaveBeenCalled();
+  });
+  it('AI 关闭时仍交付规则结果，AI 项单独标记失败', async () => {
+    isOrganizeAiSuggestionsEnabled.mockReturnValue(false);
+    const db = database((sql) =>
+      sql.includes('FROM organize_suggestion_runs')
+        ? [[{ ...run, summary_json: { total: 2, aiTotal: 1 } }]]
+        : undefined,
+    );
+    expect((await createSuggestionRun(db, { userId: 'u', id: 'run', requestId })).status).toBe('completed');
+    expect(db.query.mock.calls.some(([sql]) => sql.includes("ai_status='failed'"))).toBe(true);
+  });
+  it('取消仅关闭等待项，保留规则建议和运行中的项', async () => {
+    const db = database((sql) =>
+      sql.includes('FROM organize_suggestion_runs') ? [[{ ...run, status: 'running' }]] : undefined,
+    );
+    await cancelSuggestionRun(db, { userId: 'u', id: 'run' });
+    const changes = db.query.mock.calls.filter(([sql]) => sql.startsWith('UPDATE'));
+    expect(changes[0][0]).toContain("i.ai_status='queued'");
+    expect(changes[1][0]).toContain("ai_status='queued'");
+  });
+  it('旧版本建议不能覆盖外部编辑', async () => {
+    const db = database((sql) => {
+      if (sql.includes('FROM organize_suggestion_runs')) return [[{ ...run, status: 'completed' }]];
+      if (sql.includes('FROM organize_suggestions'))
+        return [[{ item_id: 'i', kind: 'title', status: 'pending', payload_json: { after: '新标题' } }]];
+      if (sql.includes('FROM organize_suggestion_items'))
+        return [[{ id: 'i', resource_type: 'note', resource_id: '1', version_hash: 'old', ai_status: 'completed' }]];
+      if (sql.startsWith('SELECT id FROM note')) return [[{ id: '1' }]];
+    });
+    readCurrentSuggestionSource.mockResolvedValue({ ...snap(), version: 'external' });
+    await expect(
+      actOnSuggestion(db, { userId: 'u', runId: 'run', suggestionId: 's', action: 'apply', requestId }),
+    ).rejects.toMatchObject({ code: 'ORGANIZE_RESOURCE_CHANGED' });
+    expect(applySuggestionMutation).not.toHaveBeenCalled();
+    expect(db.rollback).toHaveBeenCalledOnce();
+  });
+  it('应用成功后更新资源基线，重复应用不会再次写入', async () => {
+    const item = { id: 'i', resource_type: 'note', resource_id: '1', version_hash: 'before', ai_status: 'completed' };
+    let applied = false;
+    const db = database((sql) => {
+      if (sql.includes('FROM organize_suggestion_runs')) return [[{ ...run, status: 'completed' }]];
+      if (sql.startsWith('SELECT * FROM organize_suggestions'))
+        return [
+          [{ item_id: 'i', kind: 'title', status: applied ? 'applied' : 'pending', payload_json: { after: '新标题' } }],
+        ];
+      if (sql.includes('FROM organize_suggestion_items')) return [[item]];
+      if (sql.startsWith('SELECT id FROM note')) return [[{ id: '1' }]];
+      if (sql.includes("SET status='applied'")) {
+        applied = true;
+        return [{ affectedRows: 1 }];
+      }
+    });
+    readCurrentSuggestionSource
+      .mockResolvedValueOnce({ ...snap(), version: 'before' })
+      .mockResolvedValueOnce({ ...snap(), version: 'after' });
+    applySuggestionMutation.mockResolvedValue({ applied: '新标题' });
+    const input = { userId: 'u', runId: 'run', suggestionId: 's', action: 'apply', requestId };
+    await actOnSuggestion(db, input);
+    expect(db.query.mock.calls.find(([sql]) => sql.includes('SET version_hash='))[1][0]).toBe('after');
+    await actOnSuggestion(db, input);
+    expect(applySuggestionMutation).toHaveBeenCalledOnce();
+  });
+  it('未部署新表的 Worker 不调用模型', async () => {
+    const db = database(() => {
+      throw Object.assign(Error('missing'), { code: 'ER_NO_SUCH_TABLE' });
+    });
+    expect(await runSingleSuggestionItem('worker', db)).toBe(false);
+    expect(suggestResourceMetadata).not.toHaveBeenCalled();
+  });
+});
+it('一个资源的标题和标签共享一次外发，交付先于计费完成', async () => {
+  let lease;
+  const source = { ...snap(), version: 'v', source: { title: '未命名文档', text: 'Vue 组件通信' } };
+  readCurrentSuggestionSource.mockResolvedValue(source);
+  const db = database((sql, p) => {
+    if (sql.startsWith('SELECT i.*'))
+      return [
+        [
+          {
+            id: 'i',
+            run_id: 'run',
+            user_id: 'u',
+            resource_type: 'note',
+            resource_id: '1',
+            version_hash: 'v',
+            ai_kinds_json: ['tags', 'title'],
+            ai_status: 'queued',
+          },
+        ],
+      ];
+    if (sql.includes("SET ai_status='running'")) {
+      lease = p[0];
+      return [{ affectedRows: 1 }];
+    }
+    if (sql.includes('FROM organize_suggestion_runs')) return [[run]];
+    if (sql.startsWith('SELECT lease_token')) return [[{ lease_token: lease }]];
+    if (sql.startsWith('SELECT * FROM organize_suggestions'))
+      return [
+        [
+          { id: 't', kind: 'tags', payload_json: { kind: 'tags' } },
+          { id: 'n', kind: 'title', payload_json: { kind: 'title' } },
+        ],
+      ];
+    if (sql.includes('COUNT(*)')) return [[{ total: 0 }]];
+    if (sql.includes('FROM tag')) return [[]];
+  });
+  const model = vi
+    .fn()
+    .mockResolvedValue({ title: { name: 'Vue 通信', evidence: 'Vue' }, tags: [{ id: null, name: 'Vue' }] });
+  const execution = vi.fn(async (_config, callback) => {
+    const value = await callback();
+    expect(db.query.mock.calls.some(([sql, p]) => sql.includes('SET ai_status=?') && p[0] === 'completed')).toBe(true);
+    return value;
+  });
+  await runSingleSuggestionItem('worker', db, {
+    dispatch: async (_db, _id, cb) => cb({ connection: db, user: { id: 'u', role: 'user' } }),
+    restrictions: async () => [],
+    model,
+    runExecution: execution,
+  });
+  expect(model).toHaveBeenCalledOnce();
+  expect(model.mock.calls[0][1]).toEqual(['tags', 'title']);
+  expect(execution).toHaveBeenCalledOnce();
+  expect(execution.mock.calls[0][0]).toMatchObject({ organizeRunId: expect.any(String), organizeItemId: expect.any(String) });
+  const claims = db.query.mock.calls.map(([sql]) => sql).filter((sql) => sql.includes('FOR UPDATE'));
+  expect(claims.length).toBeGreaterThanOrEqual(2);
+  expect(claims.every((sql) => !/SKIP LOCKED|NOWAIT/.test(sql))).toBe(true);
+  expect(db.commit).toHaveBeenCalled();
+});
+it('过期运行租约不再次调用 Provider，避免崩溃重试重复收费', async () => {
+  const db = database((sql) => {
+    if (sql.startsWith('SELECT i.*'))
+      return [[{ id: 'i', run_id: 'run', user_id: 'u', ai_status: 'running', lease_token: 'old' }]];
+    if (sql.includes('FROM organize_suggestion_runs')) return [[run]];
+    if (sql.startsWith('SELECT lease_token')) return [[{ lease_token: 'old' }]];
+    if (sql.startsWith('SELECT * FROM organize_suggestions')) return [[]];
+    if (sql.includes('COUNT(*)')) return [[{ total: 0 }]];
+  });
+  const model = vi.fn();
+  expect(await runSingleSuggestionItem('worker', db, { model })).toBe(true);
+  expect(model).not.toHaveBeenCalled();
+  expect(db.query.mock.calls.find(([sql]) => sql.includes('SET ai_status=?'))[1]).toContain(
+    'ORGANIZE_WORKER_INTERRUPTED',
+  );
+});
+
+describe('新版 AI 暂停与租约边界', () => {
+  function setup({ started = false, stale = false, ended = false, code = 'AI_QUOTA_EXCEEDED' } = {}) {
+    let token;
+    const current = buildSnapshot('note', { id: '1', title: '测试', content: '需要分析的正文', type: 'html' });
+    readCurrentSuggestionSource.mockResolvedValue(current);
+    const live = { ...run, run_version: 2, rule_phase: 'completed', status: ended ? 'ended' : 'running' };
+    const db = database((sql, p) => {
+      if (sql.startsWith('SELECT r.id,r.status')) return [[{ ...live, status: 'running' }]];
+      if (sql.startsWith('SELECT i.*'))
+        return [
+          [
+            {
+              id: 'i',
+              run_id: 'run',
+              user_id: 'u',
+              resource_id: '1',
+              resource_type: 'note',
+              version_hash: current.version,
+              ai_kinds_json: ['tags'],
+              ai_status: 'queued',
+            },
+          ],
+        ];
+      if (sql.includes("SET ai_status='running',lease_token=?")) token = p[0];
+      if (sql.startsWith('SELECT lease_token')) return [[{ lease_token: token }]];
+      if (sql.includes('FROM organize_suggestion_runs')) return [[live]];
+      if (sql.includes('FROM tag')) return [[]];
+      if (sql.startsWith('SELECT * FROM organize_suggestions'))
+        return [[{ id: 's', kind: 'tags', payload_json: { kind: 'tags' } }]];
+      if (sql.includes('COUNT(*)')) return [[{ total: 1 }]];
+      if (sql.includes('AND lease_token=?') && stale) return [{ affectedRows: 0 }];
+    });
+    getActiveAiExecution.mockReturnValue({ providerCallCount: started ? 1 : 0 });
+    const model = vi.fn(async () => {
+      throw Object.assign(new Error('余额不足'), { code });
+    });
+    const dependencies = {
+      dispatch: async (_db, _id, cb) => cb({ connection: db, user: { id: 'u', role: 'user' } }),
+      restrictions: async () => [],
+      model,
+      runExecution: async (_config, cb) => cb(),
+    };
+    return { db, model, dependencies };
+  }
+  it('尚未外发的额度失败退回队列并暂停，不取消其他项', async () => {
+    const { db, dependencies } = setup();
+    await runSingleSuggestionItem('worker', db, dependencies);
+    const updates = db.query.mock.calls.filter(([sql]) => sql.startsWith('UPDATE'));
+    expect(updates.some(([sql, p]) => sql.includes('AND lease_token=?') && p[0] === 'queued')).toBe(true);
+    expect(updates.some(([sql]) => sql.includes("status='paused'"))).toBe(true);
+    expect(updates.some(([sql]) => sql.includes("status='cancelled'"))).toBe(false);
+  });
+  it('已经外发的失败不重新排队，只暂停剩余项目', async () => {
+    const { db, dependencies } = setup({ started: true });
+    await runSingleSuggestionItem('worker', db, dependencies);
+    expect(db.query.mock.calls.some(([sql, p]) => sql.includes('SET ai_status=?') && p[0] === 'failed')).toBe(true);
+    expect(db.query.mock.calls.some(([sql, p]) => sql.includes('SET ai_status=?') && p[0] === 'queued')).toBe(false);
+    expect(db.query.mock.calls.some(([sql]) => sql.includes("status='paused'"))).toBe(true);
+  });
+  it('迟到额度错误不能覆盖新租约或暂停已完成任务', async () => {
+    const { db, dependencies } = setup({ stale: true });
+    await runSingleSuggestionItem('worker', db, dependencies);
+    expect(db.query.mock.calls.some(([sql]) => sql.includes("status='paused'"))).toBe(false);
+  });
+  it('AI 服务超时暂停剩余队列，外发结果不确定的当前项不重试', async () => {
+    const { db, dependencies } = setup({ started: true, code: 'AI_GATEWAY_TIMEOUT' });
+    await runSingleSuggestionItem('worker', db, dependencies);
+    expect(db.query.mock.calls.some(([sql, p]) => sql.includes("status='paused'") && p[0] === 'unavailable')).toBe(
+      true,
+    );
+    expect(db.query.mock.calls.some(([sql, p]) => sql.includes('SET ai_status=?') && p[0] === 'failed')).toBe(true);
+  });
+  it('任务已结束时不被额度错误重新激活', async () => {
+    const { db, dependencies } = setup({ ended: true });
+    await runSingleSuggestionItem('worker', db, dependencies);
+    expect(db.query.mock.calls.some(([sql, p]) => sql.includes('AND lease_token=?') && p[0] === 'cancelled')).toBe(
+      true,
+    );
+    expect(db.query.mock.calls.some(([sql]) => sql.includes("status='paused'"))).toBe(false);
+  });
+});

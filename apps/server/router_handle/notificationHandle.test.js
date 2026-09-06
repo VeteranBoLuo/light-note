@@ -63,6 +63,30 @@ describe('聊天室通知中心可见性与旧客户端兼容', () => {
     vi.clearAllMocks();
   });
 
+  it('宽屏通知中心可以按成长、AI 例程和系统兜底分组筛选', async () => {
+    for (const [type, expectedSql, expectedParams] of [
+      ['growth', 'type IN (?,?)', ['user-1', 'level_up', 'streak_risk']],
+      ['ai_routine', 'type IN (?,?)', ['user-1', 'daily_brief', 'ai_routine']],
+      [
+        'system_group',
+        'type NOT IN (?,?,?,?,?,?)',
+        ['user-1', 'todo_reminder', 'level_up', 'streak_risk', 'daily_brief', 'ai_routine', 'community_chat'],
+      ],
+    ]) {
+      query
+        .mockResolvedValueOnce([[]])
+        .mockResolvedValueOnce([[{ total: 0 }]])
+        .mockResolvedValueOnce([[{ unreadTotal: 0 }]]);
+      const res = mockRes();
+
+      await list({ user: { id: 'user-1', role: 'user' }, body: { type } }, res);
+
+      expect(query.mock.calls.at(-3)[0]).toContain(expectedSql);
+      expect(query.mock.calls.at(-3)[1].slice(0, expectedParams.length)).toEqual(expectedParams);
+      expect(res.send.mock.calls[0][0]).toMatchObject({ status: 200, data: { total: 0 } });
+    }
+  });
+
   it('旧客户端要求完全排除聊天室时，列表、分页总数和未读总数使用同一个排除条件', async () => {
     query
       .mockResolvedValueOnce([[]])

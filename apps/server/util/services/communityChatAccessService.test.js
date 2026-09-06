@@ -53,6 +53,7 @@ describe('communityChatAccessService', () => {
     expect(access).toMatchObject({ status: 'closed', canEnter: false, canRequest: false });
     expect(access.messagingEnabled).toBe(false);
     expect(access.notificationsDefaultEnabled).toBe(true);
+    expect(access.imageAttachmentLimit).toBe(4);
     expect(db.query).not.toHaveBeenCalled();
   });
 
@@ -154,6 +155,30 @@ describe('communityChatAccessService', () => {
       db: bannedDb,
     });
     expect(banned).toMatchObject({ status: 'restricted', canEnter: false, canPost: false });
+  });
+
+  it('只向 Root 下发不限每条消息图片张数的能力', async () => {
+    const db = {
+      query: vi.fn(async (sql) => {
+        if (String(sql).includes('community_chat_runtime_policy')) return [[{ postingEnabled: 1 }], []];
+        if (String(sql).includes('community_chat_members')) return [[], []];
+        if (String(sql).includes('community_chat_user_settings')) return [[], []];
+        throw new Error(`unexpected query: ${sql}`);
+      }),
+    };
+
+    const access = await getCommunityChatAccess({
+      user: { id: 'root-1', role: 'root' },
+      env: PUBLIC_ENV,
+      db,
+    });
+
+    expect(access).toMatchObject({
+      status: 'active',
+      canManage: true,
+      memberRole: 'admin',
+      imageAttachmentLimit: null,
+    });
   });
 
   it('数据库紧急只读时保留公共历史访问，但所有登录身份都不再获得发言权', async () => {

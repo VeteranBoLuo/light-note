@@ -19,8 +19,9 @@ describe('积分资产入口与明细页契约', () => {
       expect(profileSource).toContain('<PointsBalanceSummary');
       expect(profileSource).toContain('<AiQuotaSummary');
       expect(profileSource).toContain('@open-details="goPointsDetails"');
-      expect(profileSource).toContain("router.push('/points-usage')");
     }
+    expect(desktopProfileSource).toContain("navigateFromProfile('/settings?section=points')");
+    expect(mobileProfileSource).toContain("router.push({ path: '/settings', query: { section: 'points' } })");
     expect(desktopProfileSource).toContain('class="profile-asset-grid"');
     expect(mobileProfileSource).toContain('class="profile-card__assets"');
     expect(desktopProfileSource).toMatch(/\.profile-asset-grid\s*\{[\s\S]*?repeat\(2, minmax\(0, 1fr\)\)/);
@@ -60,6 +61,7 @@ describe('积分资产入口与明细页契约', () => {
     expect(usagePageSource).toContain("t('growth.pointsUsageWorkshopAction')");
     expect(usagePageSource).toContain('<BCard');
     expect(usagePageSource).toContain('<BLoading');
+    expect(usagePageSource).toContain('withDefaults(defineProps<{ embedded?: boolean }>()');
   });
 
   it('知识工坊入口明确纯 AI 工具每次只选择一种结算介质', () => {

@@ -148,6 +148,7 @@ describe('账号注销提交', () => {
             { tableName: 'community_chat_poll_votes' },
             { tableName: 'community_chat_poll_multi_votes' },
             { tableName: 'community_chat_message_read_receipts' },
+            { tableName: 'organize_ai_tag_batches' },
             { tableName: 'user' },
           ],
         ];
@@ -159,6 +160,7 @@ describe('账号注销提交', () => {
       if (sql.includes('DELETE FROM community_chat_poll_multi_votes')) return [{ affectedRows: 2 }];
       if (sql.includes('DELETE FROM community_chat_message_read_receipts')) return [{ affectedRows: 1 }];
       if (sql.includes('UPDATE community_chat_messages')) return [{ affectedRows: 1 }];
+      if (sql.includes('UPDATE organize_ai_tag_batches')) return [{ affectedRows: 1 }];
       if (sql.includes('UPDATE user')) return [{ affectedRows: 1 }];
       throw new Error(`未覆盖的测试 SQL: ${sql}`);
     });
@@ -182,8 +184,15 @@ describe('账号注销提交', () => {
       sql.includes('UPDATE community_chat_messages'),
     );
     const anonymizeIndex = connection.query.mock.calls.findIndex(([sql]) => sql.includes("role = 'deleted'"));
+    const cancelOrganizeIndex = connection.query.mock.calls.findIndex(([sql]) =>
+      sql.includes('UPDATE organize_ai_tag_batches'),
+    );
     expect(disableIndex).toBeGreaterThan(-1);
     expect(disableIndex).toBeLessThan(anonymizeIndex);
+    expect(cancelOrganizeIndex).toBeGreaterThan(disableIndex);
+    expect(cancelOrganizeIndex).toBeLessThan(anonymizeIndex);
+    expect(connection.query.mock.calls[cancelOrganizeIndex][0]).toContain("status = 'cancelled'");
+    expect(connection.query.mock.calls[cancelOrganizeIndex][0]).toContain('lease_token = NULL');
     for (const table of [
       'community_chat_poll_votes',
       'community_chat_poll_multi_votes',

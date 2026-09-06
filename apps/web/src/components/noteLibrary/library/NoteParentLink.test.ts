@@ -122,7 +122,7 @@ describe.each([
       ],
     };
     const app = createApp({
-      render: () => h(Component, { note, batchMode: true, onOpen: open, onOpenParent: openParent }),
+      render: () => h(Component, { note, selected: note.isCheck, batchMode: true, 'onUpdate:selected': (value: boolean) => { note.isCheck = value; }, onOpen: open, onOpenParent: openParent }),
     });
     app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
     app.directive('click-log', {});

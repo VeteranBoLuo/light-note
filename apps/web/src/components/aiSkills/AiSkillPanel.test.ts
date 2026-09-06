@@ -164,6 +164,7 @@ describe('AiSkillPanel 自动执行预设动作', () => {
               quotaErrorTitle: '额度不足',
               retryLater: '请稍后重试',
               send: '发送',
+              stop: '停止',
               promptPlaceholder: '请输入',
               sources: '来源 {count}',
               sourceFallback: '来源 {index}',
@@ -244,6 +245,7 @@ describe('AiSkillPanel 自动执行预设动作', () => {
               quotaErrorTitle: '额度不足',
               retryLater: '请稍后重试',
               send: '发送',
+              stop: '停止',
               promptPlaceholder: '请输入',
               sources: '来源 {count}',
               sourceFallback: '来源 {index}',
@@ -312,6 +314,7 @@ describe('AiSkillPanel 自动执行预设动作', () => {
               quotaErrorTitle: '额度不足',
               retryLater: '请稍后重试',
               send: '发送',
+              stop: '停止',
               promptPlaceholder: '请输入',
               sources: '来源 {count}',
               sourceFallback: '来源 {index}',
@@ -340,6 +343,170 @@ describe('AiSkillPanel 自动执行预设动作', () => {
 });
 
 describe('AiSkillPanel 手动提问草稿', () => {
+  it('外部禁用时同时阻止输入、快捷动作和自动执行', async () => {
+    const host = mountPromptPanel({
+      disabled: true,
+      actions: [{ id: 'summarize', label: '分析资料', input: {} }],
+      autoRunActionId: 'summarize',
+    });
+
+    await flushExecution();
+
+    expect(executeAiSkill).not.toHaveBeenCalled();
+    expect((host.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
+    expect(Array.from(host.querySelectorAll('button')).every((button) => button.disabled)).toBe(true);
+  });
+
+  it('外部禁用后也阻止已生成结果中的后续动作', async () => {
+    const response = completedResponse('help.answer');
+    response.availableActions = [{ id: 'apply', label: '应用结果' }];
+    executeAiSkill.mockResolvedValueOnce(response);
+    const disabled = ref(false);
+    const resultAction = vi.fn();
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      render: () =>
+        h(AiSkillPanel, {
+          title: '问问轻笺助手',
+          skillId: 'help.answer',
+          surface: 'help.center',
+          showPrompt: true,
+          disabled: disabled.value,
+          onResultAction: resultAction,
+        }),
+    });
+    app.use(
+      createI18n({
+        legacy: false,
+        locale: 'zh-CN',
+        messages: {
+          'zh-CN': {
+            aiSkills: {
+              processing: '处理中',
+              retry: '重试',
+              unavailableTitle: '暂不可用',
+              unavailableDescription: '请稍后重试',
+              errorTitle: '执行失败',
+              quotaErrorTitle: '额度不足',
+              retryLater: '请稍后重试',
+              send: '发送',
+              stop: '停止',
+              promptPlaceholder: '请输入',
+              sources: '来源 {count}',
+              sourceFallback: '来源 {index}',
+              continue: '继续',
+            },
+          },
+        },
+      }),
+    );
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    const textarea = await enterPrompt(host, '生成结果');
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await flushExecution();
+
+    const apply = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('应用结果'));
+    expect(apply?.disabled).toBe(false);
+
+    disabled.value = true;
+    await nextTick();
+    expect(apply?.disabled).toBe(true);
+    apply?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(resultAction).not.toHaveBeenCalled();
+  });
+
+  it('只禁用问答输入时仍允许执行只读分析动作', async () => {
+    const host = mountPromptPanel({
+      promptDisabled: true,
+      actions: [{ id: 'analyze', label: '分析资料', input: {} }],
+    });
+
+    const textarea = host.querySelector('textarea') as HTMLTextAreaElement;
+    const analyze = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('分析资料'));
+    const submit = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('提问'));
+    expect(textarea.disabled).toBe(true);
+    expect(analyze?.disabled).toBe(false);
+    expect(submit?.disabled).toBe(true);
+
+    analyze?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushExecution();
+    expect(executeAiSkill).toHaveBeenCalledTimes(1);
+  });
+
+  it('目录范围变化后清空旧结果，并把服务端选择器随每次提问发送', async () => {
+    const parentId = ref<string | null>('directory-1');
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      render: () =>
+        h(AiSkillPanel, {
+          title: '问一问当前目录',
+          skillId: 'note.ask_directory',
+          surface: 'note_library',
+          showPrompt: true,
+          resourceRefs: [],
+          scopeSelector: { type: 'note_directory', parentId: parentId.value, includeDescendants: true },
+          scopeLabel: `范围：${parentId.value}`,
+        }),
+    });
+    app.use(
+      createI18n({
+        legacy: false,
+        locale: 'zh-CN',
+        messages: {
+          'zh-CN': {
+            aiSkills: {
+              processing: '处理中',
+              retry: '重试',
+              unavailableTitle: '暂不可用',
+              unavailableDescription: '请稍后重试',
+              errorTitle: '执行失败',
+              quotaErrorTitle: '额度不足',
+              retryLater: '请稍后重试',
+              send: '发送',
+              stop: '停止',
+              promptPlaceholder: '请输入',
+              sources: '来源 {count}',
+              sourceFallback: '来源 {index}',
+            },
+          },
+        },
+      }),
+    );
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    expect(host.textContent).toContain('范围：directory-1');
+    let textarea = await enterPrompt(host, '总结这个目录');
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await flushExecution();
+    expect(executeAiSkill.mock.calls[0][0]).toMatchObject({
+      resourceRefs: [],
+      scopeSelector: { type: 'note_directory', parentId: 'directory-1', includeDescendants: true },
+    });
+    expect(host.textContent).toContain('分析完成');
+
+    parentId.value = 'directory-2';
+    await nextTick();
+    expect(host.textContent).not.toContain('分析完成');
+    expect(host.textContent).toContain('范围：directory-2');
+    textarea = await enterPrompt(host, '再总结一次');
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await flushExecution();
+    expect(executeAiSkill.mock.calls[1][0]).toMatchObject({
+      scopeSelector: { type: 'note_directory', parentId: 'directory-2', includeDescendants: true },
+    });
+  });
+
   it('余额仍有但不足以完成当前任务时展示独立说明，并隐藏无意义的原样重试', async () => {
     executeAiSkill.mockRejectedValueOnce(
       Object.assign(new Error('server message'), {
@@ -404,4 +571,38 @@ describe('AiSkillPanel 手动提问草稿', () => {
     expect(textarea.value).toBe('怎么导出笔记？');
     expect(host.textContent).toContain('暂时无法回答');
   });
+
+  it.each(['AI_SKILL_THREAD_SCOPE_CONFLICT', 'AI_SKILL_THREAD_UNAVAILABLE'])(
+    '连续问答遇到 %s 后废弃旧会话，下一次用户重试重新建会话',
+    async (code) => {
+      const first = completedResponse('note.ask_directory');
+      first.threadId = 'thread-stale';
+      executeAiSkill
+        .mockResolvedValueOnce(first)
+        .mockRejectedValueOnce(Object.assign(new Error('材料范围已变化'), { code }))
+        .mockResolvedValueOnce(completedResponse('note.ask_directory'));
+      const host = mountPromptPanel({
+        skillId: 'note.ask_directory',
+        surface: 'note_library',
+        resourceRefs: [],
+        scopeSelector: { type: 'note_directory', parentId: 'directory-1', includeDescendants: true },
+      });
+
+      let textarea = await enterPrompt(host, '第一个问题');
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await flushExecution();
+      expect(executeAiSkill.mock.calls[0][0]).toMatchObject({ threadId: null });
+
+      textarea = await enterPrompt(host, '材料更新后的问题');
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await flushExecution();
+      expect(executeAiSkill.mock.calls[1][0]).toMatchObject({ threadId: 'thread-stale' });
+      expect(host.textContent).toContain('材料范围已变化');
+
+      textarea = await enterPrompt(host, '重新提问');
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await flushExecution();
+      expect(executeAiSkill.mock.calls[2][0]).toMatchObject({ threadId: null });
+    },
+  );
 });

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/http/request', () => ({ default: vi.fn(), apiBaseGet: vi.fn(), apiBasePost: vi.fn() }));
 const { default: httpRequest, apiBaseGet, apiBasePost } = await import('@/http/request');
-const { AiSkillApiError, aiSkillApiInternals, executeAiSkill, executeAiSkillStream, getAiSkillsConfig } =
+const { AiSkillApiError, aiSkillApiInternals, createAiSkillRequest, executeAiSkill, executeAiSkillStream, getAiSkillsConfig } =
   await import('./aiSkillApi');
 
 const request = {
@@ -45,6 +45,20 @@ describe('aiSkillApi', () => {
     apiBasePost.mockResolvedValue({ status: 200, data: response });
     await expect(executeAiSkill(request)).resolves.toMatchObject({ status: 'completed' });
     expect(apiBasePost).toHaveBeenCalledWith('/api/ai/skills/execute', request, { silent: true });
+  });
+
+  it('目录问答只发送服务端选择器，不把当前第一页笔记冒充完整范围', () => {
+    const scoped = createAiSkillRequest({
+      skillId: 'note.ask_directory',
+      input: { question: '这个目录最近在讨论什么？' },
+      scopeSelector: { type: 'note_directory', parentId: 'directory-1', includeDescendants: true },
+      surface: 'note_library',
+    });
+
+    expect(scoped.scope).toEqual({
+      resourceRefs: [],
+      selector: { type: 'note_directory', parentId: 'directory-1', includeDescendants: true },
+    });
   });
 
   it('业务失败信封统一抛出稳定错误，不让页面把失败当成空结果', async () => {

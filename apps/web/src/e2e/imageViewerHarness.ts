@@ -1,10 +1,11 @@
 import { createApp } from 'vue';
-import { createPinia } from 'pinia';
+import { createPinia, setActivePinia } from 'pinia';
 import { createI18n } from 'vue-i18n';
 import enUS from '@/i18n/locales/en-US';
 import zhCN from '@/i18n/locales/zh-CN';
 import '@/assets/css/index.less';
 import ImageViewerHarness from './ImageViewerHarness.vue';
+
 
 const params = new URLSearchParams(window.location.search);
 const theme = params.get('theme') === 'night' ? 'night' : 'day';
@@ -25,4 +26,9 @@ const i18n = createI18n({
   messages: { 'zh-CN': zhCN, 'en-US': enUS },
 });
 
-createApp(ImageViewerHarness).use(createPinia()).use(i18n).mount('#app');
+const pinia = createPinia();
+setActivePinia(pinia);
+const harness = params.get('entry') === 'optimization'
+  ? (await import('./ImageOptimizationHarness.vue')).default
+  : ImageViewerHarness;
+createApp(harness).use(pinia).use(i18n).mount('#app');

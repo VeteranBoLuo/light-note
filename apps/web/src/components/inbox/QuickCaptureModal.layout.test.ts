@@ -37,8 +37,12 @@ describe('QuickCaptureModal 桌面端布局', () => {
 
   it('书签、笔记和文件共用最高资源面板基准，待办保持独立高度', () => {
     expect(source).toMatch(
-      /@media \(min-width: 768px\)\s*\{[\s\S]*?\.capture-workspace\.is-bookmark,\s*\.capture-workspace\.is-note,\s*\.capture-workspace\.is-file\s*\{[\s\S]*?min-height:\s*262px;/,
+      /@media \(min-width: 768px\)\s*\{[\s\S]*?\.capture-workspace\.is-bookmark,\s*\.capture-workspace\.is-note,\s*\.capture-workspace\.is-file\s*\{[\s\S]*?min-height:\s*263px;/,
     );
-    expect(source).not.toMatch(/\.capture-workspace\.is-todo[^}]*min-height:\s*262px;/);
+    expect(source).not.toMatch(/\.capture-workspace\.is-todo[^}]*min-height:\s*263px;/);
+  });
+
+  it('文件面板有剩余网格空间时操作按钮仍锚定底部', () => {
+    expect(source).toMatch(/\.capture-actions\s*\{[^}]*align-items:\s*flex-end;/);
   });
 });

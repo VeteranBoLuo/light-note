@@ -1,7 +1,7 @@
 <template>
-  <div class="points-usage-page">
+  <div class="points-usage-page" :class="{ 'is-embedded': embedded }">
     <main class="points-usage-shell">
-      <header class="points-usage-hero">
+      <header v-if="!embedded" class="points-usage-hero">
         <BButton class="points-usage-back" @click="goBack">
           <SvgIcon :src="icon.arrow_left" size="16" aria-hidden="true" />
           <span>{{ t('common.back') }}</span>
@@ -88,6 +88,10 @@
   import PointsLedger from '@/components/growth/PointsLedger.vue';
   import icon from '@/config/icon';
 
+  withDefaults(defineProps<{ embedded?: boolean }>(), {
+    embedded: false,
+  });
+
   const { t, locale } = useI18n();
   const router = useRouter();
   const summary = ref<any>(null);
@@ -164,6 +168,19 @@
     box-sizing: border-box;
     background: var(--background-color);
     color: var(--text-color);
+  }
+
+  .points-usage-page.is-embedded {
+    height: auto;
+    overflow: visible;
+    padding: 0;
+    background: transparent;
+  }
+
+  .points-usage-page.is-embedded .points-usage-shell {
+    width: 100%;
+    max-width: none;
+    gap: 14px;
   }
 
   .points-usage-shell {

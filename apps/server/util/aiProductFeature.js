@@ -20,6 +20,7 @@ const SKILL_FLAGS = Object.freeze({
   help: 'AI_SKILL_HELP_ENABLED',
   toolbox: 'AI_SKILL_TOOLBOX_ENABLED',
   tag: 'AI_SKILL_TAG_ENABLED',
+  routine: 'AI_SKILL_ROUTINE_ENABLED',
 });
 
 export function getAiProductFeatureState() {

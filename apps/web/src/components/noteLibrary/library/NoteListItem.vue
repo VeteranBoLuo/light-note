@@ -1,7 +1,7 @@
 <template>
   <div
     class="note-list-item"
-    :class="{ 'is-selected': note.isCheck, 'is-batch-mode': batchMode, 'is-mobile': bookmark.isMobile }"
+    :class="{ 'is-selected': selected, 'is-batch-mode': batchMode, 'is-mobile': bookmark.isMobile }"
     @click="handleItemClick"
     @keydown.enter.self="handleItemClick"
     @pointerdown="prefetchNoteRoute"
@@ -11,7 +11,12 @@
     v-click-log="{ module: '笔记库', operation: `打开笔记【${note.title}】` }"
   >
     <div v-if="!bookmark.isMobile && batchMode" class="note-select-column">
-      <b-checkbox v-model:checked="note.isCheck" @click.stop />
+      <b-checkbox
+        :checked="selected"
+        :disabled="selectionDisabled"
+        @update:checked="(value) => emit('update:selected', value)"
+        @click.stop
+      />
     </div>
     <div class="note-info">
       <div class="note-title-row">
@@ -96,7 +101,12 @@
       这里复用卡片视图那套 emit('action') 契约，父组件的处理函数与渲染器无关。
     -->
     <div v-else class="note-mobile-actions" @click.stop>
-      <b-checkbox v-if="batchMode" v-model:checked="note.isCheck" />
+      <b-checkbox
+        v-if="batchMode"
+        :checked="selected"
+        :disabled="selectionDisabled"
+        @update:checked="(value) => emit('update:selected', value)"
+      />
       <BButton v-else class="note-more-button" :aria-label="$t('common.more')" @click="emit('action', 'more')">
         <SvgIcon :src="icon.common.more" size="18" />
       </BButton>
@@ -124,7 +134,14 @@
   import { prefetchNoteDetail } from '@/api/noteDetailPrefetch';
 
   const props = withDefaults(
-    defineProps<{ note: any; batchMode?: boolean; treeReadEnabled?: boolean; treeWriteEnabled?: boolean }>(),
+    defineProps<{
+      note: any;
+      selected?: boolean;
+      selectionDisabled?: boolean;
+      batchMode?: boolean;
+      treeReadEnabled?: boolean;
+      treeWriteEnabled?: boolean;
+    }>(),
     {
       batchMode: false,
       treeReadEnabled: true,
@@ -156,6 +173,7 @@
   const listTime = computed(() => String(props.note?.updateTime ?? props.note?.createTime ?? '').slice(0, 10));
 
   const emit = defineEmits<{
+    'update:selected': [value: boolean];
     open: [];
     openParent: [noteId: string];
     nodeTypeChange: [tag: any];
@@ -177,7 +195,7 @@
   const parentPathText = computed(() => getNoteParentPathText(props.note || {}));
   const parentTargetId = computed(() => getNoteParentTargetId(props.note || {}));
   function toggleBatchSelection() {
-    props.note.isCheck = !props.note.isCheck;
+    if (!props.selectionDisabled) emit('update:selected', !props.selected);
   }
 
   function handleParentActivate(noteId: string) {

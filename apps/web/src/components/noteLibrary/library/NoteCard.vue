@@ -5,7 +5,7 @@
     @pointerdown="prefetchNoteRoute"
     @focus="prefetchNoteRoute"
     class="note-card"
-    :class="{ 'is-selected': note.isCheck, 'is-batch-mode': batchMode }"
+    :class="{ 'is-selected': selected, 'is-batch-mode': batchMode }"
     role="button"
     tabindex="0"
     v-click-log="{ module: '笔记库', operation: `打开笔记【${note.title}】` }"
@@ -90,7 +90,12 @@
       <div class="note-time">{{ note['updateTime'] ?? note['createTime'] }}</div>
     </div>
     <div v-if="batchMode" class="note-select-control">
-      <b-checkbox v-model:checked="note.isCheck" @click.stop />
+      <b-checkbox
+        :checked="selected"
+        :disabled="selectionDisabled"
+        @update:checked="(value) => emit('update:selected', value)"
+        @click.stop
+      />
     </div>
     <div v-else-if="bookmark.isMobile" class="note-mobile-actions" @click.stop>
       <BButton class="note-more-button" :aria-label="$t('common.more')" @click="emit('action', 'more')">
@@ -125,7 +130,14 @@
     () => import('@/components/noteLibrary/drawing/DrawingNoteThumbnail.vue'),
   );
   const props = withDefaults(
-    defineProps<{ note: any; batchMode?: boolean; treeReadEnabled?: boolean; treeWriteEnabled?: boolean }>(),
+    defineProps<{
+      note: any;
+      selected?: boolean;
+      selectionDisabled?: boolean;
+      batchMode?: boolean;
+      treeReadEnabled?: boolean;
+      treeWriteEnabled?: boolean;
+    }>(),
     {
       batchMode: false,
       treeReadEnabled: true,
@@ -143,6 +155,7 @@
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const emit = defineEmits<{
+    'update:selected': [value: boolean];
     open: [];
     openParent: [noteId: string];
     nodeTypeChange: [tag: any];
@@ -206,7 +219,7 @@
   );
 
   function toggleBatchSelection() {
-    props.note.isCheck = !props.note.isCheck;
+    if (!props.selectionDisabled) emit('update:selected', !props.selected);
   }
 
   function handleParentActivate(noteId: string) {

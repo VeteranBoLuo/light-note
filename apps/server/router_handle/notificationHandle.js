@@ -26,6 +26,38 @@ const COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL = `(
 )`;
 const COMMUNITY_CHAT_EXCLUDED_SQL =
   "type <> 'community_chat' AND COALESCE(source_type, '') <> 'community_chat_message'";
+const NOTIFICATION_TYPE_GROUPS = Object.freeze({
+  growth: Object.freeze(['level_up', 'streak_risk']),
+  ai_routine: Object.freeze(['daily_brief', 'ai_routine']),
+});
+const PRIMARY_NOTIFICATION_TYPES = Object.freeze([
+  'todo_reminder',
+  ...NOTIFICATION_TYPE_GROUPS.growth,
+  ...NOTIFICATION_TYPE_GROUPS.ai_routine,
+  'community_chat',
+]);
+
+function appendNotificationTypeFilter(type, where, params) {
+  if (!type || type === 'all') return;
+  if (type === 'other') {
+    // 旧客户端的「其他」口径保持不变。
+    where.push("type NOT IN ('level_up', 'opinion_reply', 'system')");
+    return;
+  }
+  if (NOTIFICATION_TYPE_GROUPS[type]) {
+    const types = NOTIFICATION_TYPE_GROUPS[type];
+    where.push(`type IN (${types.map(() => '?').join(',')})`);
+    params.push(...types);
+    return;
+  }
+  if (type === 'system_group') {
+    where.push(`type NOT IN (${PRIMARY_NOTIFICATION_TYPES.map(() => '?').join(',')})`);
+    params.push(...PRIMARY_NOTIFICATION_TYPES);
+    return;
+  }
+  where.push('type = ?');
+  params.push(type);
+}
 
 function parseNotificationMeta(meta) {
   if (!meta) return {};
@@ -102,15 +134,7 @@ export const list = async (req, res) => {
     const where = ['user_id = ?', 'del_flag = 0', COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL];
     const params = [userId];
     if (excludeCommunityChat) where.push(COMMUNITY_CHAT_EXCLUDED_SQL);
-    if (type && type !== 'all') {
-      if (type === 'other') {
-        // 「其他」tab 作兜底:除三大已知类型外的所有(如 streak_risk 签到提醒),避免新增类型无处归类
-        where.push("type NOT IN ('level_up', 'opinion_reply', 'system')");
-      } else {
-        where.push('type = ?');
-        params.push(type);
-      }
-    }
+    appendNotificationTypeFilter(type, where, params);
     const whereSql = where.join(' AND ');
 
     const [items] = await pool.query(

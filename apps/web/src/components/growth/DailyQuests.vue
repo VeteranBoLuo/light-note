@@ -1,11 +1,20 @@
 <template>
-  <div class="dq">
+  <div class="dq" :class="{ 'dq--compact': compact }">
     <div class="dq-head">
       <span class="dq-title-wrap"
         ><span class="dq-title">{{ t('growth.dashTasks') }}</span
         ><small>{{ t('growth.dailyResetTime') }}</small></span
       >
       <span class="dq-count" :class="{ allDone }">{{ doneCount }}/{{ quests.length }}</span>
+    </div>
+    <div v-if="allDone" class="dq-completed" role="status">
+      <span class="dq-completed__icon"><SvgIcon :src="icon.growth.action" size="24" /></span>
+      <div>
+        <strong>{{ t('growth.questAllDone') }}</strong>
+        <small v-if="bonus.claimed || bonus.claimable">{{
+          t(bonus.claimed ? 'growth.questClaimedAlready' : 'growth.questAvailableReward')
+        }}</small>
+      </div>
     </div>
     <div class="dq-list">
       <div v-for="q in quests" :key="q.key" class="dq-item" :class="{ done: q.done }">
@@ -151,6 +160,7 @@
       dailyExp?: number;
       dailyCap?: number;
       dailyCapReached?: boolean;
+      compact?: boolean;
     }>(),
     {
       readOnly: false,
@@ -159,10 +169,12 @@
       dailyExp: 0,
       dailyCap: 0,
       dailyCapReached: false,
+      compact: false,
     },
   );
   defineEmits<{ (e: 'claim'): void; (e: 'go', key: string): void }>();
   const { t, te } = useI18n();
+  const compact = computed(() => props.compact);
 
   const QUEST_LABEL_KEYS: Record<string, string> = {
     checkin: 'growth.quest_checkin',
@@ -269,6 +281,34 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+  }
+  .dq-completed {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 10px;
+    background: var(--card-background);
+  }
+  .dq-completed__icon {
+    display: flex;
+    flex: 0 0 auto;
+    color: var(--success-color);
+  }
+  .dq-completed > div {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+  }
+  .dq-completed strong {
+    color: var(--text-color);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .dq-completed small {
+    color: var(--desc-color);
+    font-size: 11px;
   }
   .dq-item {
     display: flex;
@@ -510,6 +550,79 @@
   .dq-claim:disabled {
     opacity: 0.6;
     cursor: default;
+  }
+  .dq--compact {
+    gap: 7px;
+  }
+  .dq--compact .dq-title-wrap {
+    min-width: 0;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 7px;
+  }
+  .dq--compact .dq-title-wrap small {
+    margin-top: 0;
+    overflow: hidden;
+    color: var(--desc-color);
+    font-size: 9.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dq--compact .dq-list {
+    gap: 5px;
+  }
+  .dq--compact .dq-item {
+    min-height: 34px;
+    box-sizing: border-box;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 8px;
+  }
+  .dq--compact .dq-check {
+    width: 16px;
+    height: 16px;
+  }
+  .dq--compact .dq-label {
+    font-size: 11.5px;
+  }
+  .dq--compact .dq-counted {
+    display: none;
+  }
+  .dq--compact .dq-go {
+    min-height: 26px;
+    padding-inline: 8px;
+    font-size: 10px;
+  }
+  .dq--compact .dq-prog,
+  .dq--compact .dq-tag,
+  .dq--compact .dq-count {
+    font-size: 10.5px;
+  }
+  .dq--compact .dq-stages {
+    gap: 6px;
+  }
+  .dq--compact .dq-stage {
+    gap: 6px;
+    padding: 5px 7px;
+    border-radius: 8px;
+  }
+  .dq--compact .dq-stage-dot {
+    width: 20px;
+    height: 20px;
+    flex-basis: 20px;
+  }
+  .dq--compact .dq-stage-main {
+    gap: 0;
+  }
+  .dq--compact .dq-stage-main b {
+    font-size: 10.5px;
+  }
+  .dq--compact .dq-stage-main small,
+  .dq--compact .dq-stage-state {
+    font-size: 9.5px;
+  }
+  .dq--compact .dq-bonus {
+    padding: 6px 8px;
   }
   @media (max-width: 520px) {
     .dq-stages {

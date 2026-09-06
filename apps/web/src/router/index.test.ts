@@ -74,18 +74,16 @@ describe('官网与应用入口路由', () => {
     expect(resolved.meta.mobileBottomNav).not.toBe(true);
   });
 
-  it('AI 用量使用独立登录页，且旧设置深链接会兼容迁移', () => {
+  it('AI 用量保留独立页，桌面 AI 设置深链接留在设置壳内', () => {
     const resolved = router.resolve('/ai-usage');
     expect(resolved.name).toBe('aiUsage');
     expect(resolved.meta.requireAuth).toBe(true);
     expect(resolved.meta.roles).not.toContain('visitor');
 
-    const settingsRecord = router.getRoutes().find((record) => record.name === 'settings');
-    expect(typeof settingsRecord?.beforeEnter).toBe('function');
-    expect((settingsRecord?.beforeEnter as any)?.({ query: { section: 'ai' } })).toEqual({
-      name: 'aiUsage',
-      replace: true,
-    });
+    const settings = router.resolve('/settings?section=ai');
+    expect(settings.name).toBe('settings');
+    expect(settings.query.section).toBe('ai');
+    expect(router.getRoutes().find((record) => record.name === 'settings')?.beforeEnter).toBeUndefined();
   });
 
   it('积分明细使用独立登录页，并与 AI 用量保持同级资产入口', () => {

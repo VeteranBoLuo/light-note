@@ -65,19 +65,10 @@
         <SvgIcon :src="icon.contextMenu.inbox" size="16" aria-hidden="true" />
         {{ t('inbox.addExisting') }}
       </BButton>
-      <BActionMenu
-        class="resource-inspector-tag-menu"
-        :items="tagActions"
-        :triggers="['click']"
-        placement="top-left"
-        :aria-label="t('resourceCenter.manageResourceTags')"
-        @select="handleTagAction"
-      >
-        <BButton block size="large" class="resource-inspector-action--tags">
-          <SvgIcon :src="icon.manage_categoryBtn_tag" size="16" aria-hidden="true" />
-          {{ t('resourceCenter.manageResourceTags') }}
-        </BButton>
-      </BActionMenu>
+      <BButton block size="large" class="resource-inspector-action--tags" @click="emit('manageTags', resource)">
+        <SvgIcon :src="icon.resource.tag" size="16" aria-hidden="true" />
+        {{ t('resourceCenter.manageResourceTags') }}
+      </BButton>
       <BButton
         block
         size="large"
@@ -98,17 +89,14 @@
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
   import icon from '@/config/icon.ts';
-  import type { BActionMenuItem } from '@/components/base/BasicComponents/actionMenu';
   import type { DisplaySearchItem } from '@/components/searchCenter/searchUtils.ts';
 
-  const props = withDefaults(
+  withDefaults(
     defineProps<{
       resource: DisplaySearchItem | null;
       iconSrc: string;
@@ -124,30 +112,10 @@
     open: [resource: DisplaySearchItem];
     analyze: [resource: DisplaySearchItem];
     inbox: [resource: DisplaySearchItem];
-    addTag: [resource: DisplaySearchItem];
-    removeTag: [resource: DisplaySearchItem];
+    manageTags: [resource: DisplaySearchItem];
     delete: [resource: DisplaySearchItem];
   }>();
   const { t } = useI18n();
-
-  const tagActions = computed<BActionMenuItem[]>(() => [
-    {
-      key: 'addTag',
-      label: t('resourceCenter.batch.addTag'),
-      icon: icon.manage_categoryBtn_tag,
-    },
-    {
-      key: 'removeTag',
-      label: t('resourceCenter.batch.removeTag'),
-      icon: icon.manage_categoryBtn_tag,
-    },
-  ]);
-
-  function handleTagAction(action: string) {
-    if (!props.resource) return;
-    if (action === 'addTag') emit('addTag', props.resource);
-    else if (action === 'removeTag') emit('removeTag', props.resource);
-  }
 </script>
 
 <style scoped lang="less">
@@ -312,7 +280,6 @@
     border-top: 1px solid var(--surface-border-color);
   }
 
-  .resource-inspector-actions :deep(.b-action-menu-anchor),
   .resource-inspector-actions :deep(.b_btn) {
     width: 100%;
     min-width: 0;

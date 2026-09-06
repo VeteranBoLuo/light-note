@@ -151,16 +151,17 @@ describe('独立资源商店', () => {
     cleanup = undefined;
   });
 
-  it('用普通用户能理解的文案说明按需购买、账号预计到账和活动套餐', async () => {
+  it('用正向文案突出永久资源、账号预计到账和活动套餐', async () => {
     const host = await mountStore();
     await vi.waitFor(() => expect(host.textContent).toContain('周年组合包'));
-    expect(host.querySelector('h1')?.textContent).toBe('资源商店');
-    expect(host.textContent).toContain('日常使用通常不需要购买');
-    expect(host.textContent).toContain('AI 日额度和云空间容量都会随等级提升');
-    expect(host.textContent).toContain('超高强度使用');
-    expect(host.textContent).toContain('付款前再次核验首购资格');
-    expect(host.textContent).toContain('先看基础到账，再看当前账号对这个套餐的预计到账');
-    expect(host.textContent).toContain('AI 与空间都偶尔不够');
+    expect(host.querySelector('h1')?.textContent).toBe('给灵感和资料，多一点余量');
+    expect(host.textContent).toContain('购买一次 · 永久叠加');
+    expect(host.textContent).toContain('灵感不断档，资料放心存');
+    expect(host.textContent).toContain('本账号权益实时核验');
+    expect(host.textContent).toContain('重点查看当前账号的预计到账');
+    expect(host.textContent).toContain('一次补齐 AI 与空间余量');
+    expect(host.textContent).not.toContain('日常使用通常不需要购买');
+    expect(host.textContent).not.toContain('超高强度使用');
     expect(host.textContent).not.toContain('额外扩展');
     expect(host.textContent).not.toContain('不赠送');
     expect(host.textContent).toContain('预计可享首购加量');
@@ -188,7 +189,7 @@ describe('独立资源商店', () => {
 
     actions[1]?.click();
     await nextTick();
-    expect(document.body.textContent).toContain('AI + 云空间 · 轻量补充');
+    expect(document.body.textContent).toContain('AI + 云空间 · 灵感加油包');
     expect(document.body.textContent).toContain('本次预计到账72万 AI 额度 + 128 MB 云空间');
     expect(document.body.textContent).toContain('当前预计到账包含本账号可享的首购加量');
     document.body.querySelector<HTMLButtonElement>('.checkout-modal__confirm')?.click();
@@ -214,7 +215,7 @@ describe('独立资源商店', () => {
       campaigns: [],
     });
     const host = await mountStore();
-    await vi.waitFor(() => expect(host.textContent).toContain('当前仅供查看'));
+    await vi.waitFor(() => expect(host.textContent).toContain('套餐预览'));
     const cards = host.querySelectorAll<HTMLElement>('.package-card:not(.is-campaign)');
     expect(cards).toHaveLength(4);
     expect([...cards].map((card) => card.textContent)).toEqual([

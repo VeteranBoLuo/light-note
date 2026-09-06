@@ -182,7 +182,7 @@ await router.push('/');
 
 const pinia = createPinia();
 setActivePinia(pinia);
-const app = createApp(DailyReviewHarness, { visualState });
+const app = createApp(DailyReviewHarness, { visualState, compact: params.get('compact') === '1' });
 app.use(pinia);
 app.use(router);
 app.use(

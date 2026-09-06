@@ -18,6 +18,64 @@ const item = (type: string, id: string) => ({ type, id, title: `${type}-${id}` }
 describe('useResourcePickerSearch', () => {
   beforeEach(() => fetchGlobalSearchMock.mockReset());
 
+  it('全选自动收集后续页，去重且不要求先滚动加载', async () => {
+    fetchGlobalSearchMock
+      .mockResolvedValueOnce({
+        items: [item('note', '1')],
+        total: 3,
+        hasMore: true,
+        nextCursor: { type: 'note', offset: 1 },
+      } as any)
+      .mockResolvedValueOnce({
+        items: [item('note', '1'), item('note', '2'), item('note', '3')],
+        hasMore: false,
+      } as any);
+    const picker = useResourcePickerSearch({ allowedTypes: ['note'], exhaustiveSingleType: true });
+    await picker.searchNow('');
+    expect((await picker.collectMatching(4, ['bookmark:x']))?.map((row) => row.id)).toEqual(['1', '2', '3']);
+    expect(picker.results.value).toHaveLength(1);
+  });
+
+  it('全选超限或分页失败时不返回部分结果', async () => {
+    fetchGlobalSearchMock
+      .mockResolvedValueOnce({
+        items: [item('note', '1')],
+        total: 2,
+        hasMore: true,
+        nextCursor: { type: 'note', offset: 1 },
+      } as any)
+      .mockResolvedValueOnce({ items: [item('note', '2')], hasMore: false } as any)
+      .mockRejectedValueOnce(new Error('network'));
+    const picker = useResourcePickerSearch({ allowedTypes: ['note'], exhaustiveSingleType: true });
+    await picker.searchNow('');
+    await expect(picker.collectMatching(2, ['bookmark:x'])).rejects.toThrow('selection-limit');
+    await expect(picker.collectMatching(1000)).rejects.toThrow('network');
+    expect(picker.results.value).toHaveLength(1);
+  });
+
+  it('关闭选择器后不应用在途全选结果', async () => {
+    let finish!: (value: any) => void;
+    fetchGlobalSearchMock
+      .mockResolvedValueOnce({
+        items: [item('note', '1')],
+        total: 2,
+        hasMore: true,
+        nextCursor: { type: 'note', offset: 1 },
+      } as any)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+    const picker = useResourcePickerSearch({ allowedTypes: ['note'], exhaustiveSingleType: true });
+    await picker.searchNow('');
+    const pending = picker.collectMatching(1000);
+    picker.reset();
+    finish({ items: [item('note', '2')], hasMore: false });
+    expect(await pending).toBeNull();
+  });
+
   it('按书签→笔记→文件的固定顺序分组,不与其它类型混排', () => {
     // 搜索接口按类型分段返回,直接截断会只剩书签;这里要保证三类都露出
     const rows = [item('bookmark', 'b1'), item('bookmark', 'b2'), item('note', 'n1'), item('file', 'f1')];

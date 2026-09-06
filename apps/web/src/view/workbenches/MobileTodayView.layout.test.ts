@@ -74,7 +74,7 @@ describe('移动端今日加载布局', () => {
   });
 
   it('首屏稳定后在继续处理与成长卡之间渐进展示共享每日回顾，并纳入所有刷新入口', () => {
-    const reviewIndex = source.indexOf('<DailyReviewCard v-if="todaySettled"');
+    const reviewIndex = source.indexOf('class="mobile-today__daily-review"');
     const continueIndex = source.indexOf('class="mobile-today__continue"');
     const growthIndex = source.indexOf('<WorkbenchGrowth v-if="todaySettled"');
 
@@ -85,7 +85,8 @@ describe('移动端今日加载布局', () => {
     expect(source).toContain(':read-only="growthReadOnly"');
     expect(source.match(/refreshDailyReview\(\)/g)).toHaveLength(6);
     expect(source).not.toContain('loadRecap');
-    expect(source).toMatch(/\.mobile-today__daily-review\s*\{[\s\S]*?margin:\s*14px 0/);
+    expect(source).toContain('<DailyReviewCard :read-only="growthReadOnly" compact inline />');
+    expect(source).toMatch(/\.mobile-today__daily-review\s*\{[\s\S]*?margin:\s*16px 0/);
   });
 
   it('骨架分组与真实待处理列表一样不显示内层外框', () => {

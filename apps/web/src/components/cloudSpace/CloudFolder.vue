@@ -179,7 +179,11 @@
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
   const { t } = useI18n();
-  const emit = defineEmits<{ uploadFiles: [payload: { files: File[]; folderId: string | null }] }>();
+  const emit = defineEmits<{
+    uploadFiles: [payload: { files: File[]; folderId: string | null }];
+    manageTags: [folder: CloudFolderNode];
+  }>();
+  const props = withDefaults(defineProps<{ canManageTags?: boolean }>(), { canManageTags: true });
   const folderMenuTriggers: BActionMenuTrigger[] = ['hover', 'contextmenu'];
   const folderUploadInput = ref<HTMLInputElement | null>(null);
   const uploadTargetFolderId = ref<string | null>(null);
@@ -257,6 +261,9 @@
         disabled: folder.depth >= cloud.folderMaxDepth,
       },
       { key: 'upload', label: t('cloudSpace.uploadFile'), icon: icon.file_upload },
+      ...(props.canManageTags
+        ? [{ key: 'tags', label: t('cloudSpace.folderTagsAction'), icon: icon.resource.tag }]
+        : []),
       { key: 'move', label: t('cloudSpace.moveFolder'), icon: icon.noteTree.move },
       { key: 'rename', label: t('common.reName'), icon: icon.cloudSpace.rename },
       { key: 'folder-actions-divider', divider: true },
@@ -289,6 +296,7 @@
     recordOperation({ module: '云空间', operation: `${source}:${action}文件夹【${folder.fullPath}】` });
     if (action === 'new-child') openCreateFolder(folder);
     if (action === 'upload') openUploadToFolder(folder.id);
+    if (action === 'tags') emit('manageTags', folder);
     if (action === 'move') openMoveFolder(folder);
     if (action === 'rename') openRenameFolder(folder);
     if (action === 'clear-files') openClearFolderFiles(folder);

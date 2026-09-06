@@ -200,7 +200,7 @@
   const placeholderText = computed(() => props.placeholder || t('common.pleaseSelect'));
 
   const isMultiple = computed(() => props.mode === 'multiple');
-  const usesInlineInput = computed(() => props.showSearch || (props.editable && !isMultiple.value));
+  const usesInlineInput = computed(() => !isMultiple.value && (props.showSearch || props.editable));
   const isOpen = ref(false);
   const isHovering = ref(false);
   const searchText = ref('');

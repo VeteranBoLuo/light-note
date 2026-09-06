@@ -255,6 +255,8 @@ export const SUPPORT_PACKAGE_CATALOG = Object.freeze([
 export const FILE_PREVIEW_STRATEGY = Object.freeze({
   ARCHIVE_MANIFEST: 'archive_manifest',
   CONVERTED_PDF: 'converted_pdf',
+  IMAGE_THUMBNAIL: 'image_thumbnail',
+  IMAGE_DISPLAY: 'image_display',
 });
 
 export const FILE_PREVIEW_FORMATS = Object.freeze([

@@ -2,13 +2,14 @@ import crypto from 'node:crypto';
 import { resolvePersonalKnowledgeResourceVersions } from '../personalKnowledgeSearch.js';
 import { resolveAiIdentity } from '../aiIdentity.js';
 import { resolveTagAnalysisScope } from '../services/tagAnalysisScopeService.js';
+import { resolveNoteDirectoryScope } from '../services/noteDirectoryScopeService.js';
 import { aiSkillError } from './errors.js';
 
 export function resolveAiSkillIdentity(req) {
   return resolveAiIdentity(req);
 }
 
-function scopeDigest({ skill, identity, refs, selector = null, tag = null }) {
+function scopeDigest({ skill, identity, refs, selector = null, tag = null, directory = null }) {
   const canonical = {
     skillId: skill.id,
     skillVersion: skill.version,
@@ -16,8 +17,9 @@ function scopeDigest({ skill, identity, refs, selector = null, tag = null }) {
     subjectUserId: identity.subjectUserId,
     adminContextMode: identity.adminContextMode,
     adminContextId: identity.adminContextId,
-    selector: selector ? `${selector.type}:${selector.id}` : null,
+    selector: selector ? { ...selector } : null,
     tag: tag ? { id: tag.id, name: tag.name, description: tag.description } : null,
+    directory: directory ? { ...directory } : null,
     refs: refs.map((ref) => `${ref.type}:${ref.id}:${ref.version || 'current'}`),
   };
   return crypto.createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
@@ -30,6 +32,7 @@ export async function resolveAiSkillContext({
   database,
   resolveResourceVersions = resolvePersonalKnowledgeResourceVersions,
   resolveTagScope = resolveTagAnalysisScope,
+  resolveDirectoryScope = resolveNoteDirectoryScope,
 }) {
   const identity = resolveAiSkillIdentity(req);
   if (!skill.allowedRoles.includes(identity.actorRole)) {
@@ -38,6 +41,9 @@ export async function resolveAiSkillContext({
   const policy = skill.contextPolicy;
   const refs = request.scope.resourceRefs;
   if (policy.scopeMode === 'tag_resources') {
+    if (request.scope.selector) {
+      throw aiSkillError('AI_SKILL_SCOPE_SELECTOR_FORBIDDEN', '标签范围不接受目录选择器');
+    }
     if (refs.length !== 1) {
       throw aiSkillError('AI_SKILL_SCOPE_SIZE_INVALID', '标签分析需要且只能指定一个标签');
     }
@@ -86,6 +92,56 @@ export async function resolveAiSkillContext({
       tag: normalizedTag,
       scopeDigest: scopeDigest({ skill, identity, refs: normalizedRefs, selector, tag: normalizedTag }),
     });
+  }
+  if (policy.scopeMode === 'note_directory') {
+    if (refs.length) {
+      throw aiSkillError('AI_SKILL_SCOPE_RESOURCE_REF_FORBIDDEN', '目录问答不接受客户端展开的笔记列表');
+    }
+    const selector = request.scope.selector;
+    if (!selector || selector.type !== 'note_directory') {
+      throw aiSkillError('AI_SKILL_SCOPE_SELECTOR_REQUIRED', '目录问答需要指定当前笔记目录');
+    }
+    const resolved = await resolveDirectoryScope(database, {
+      userId: identity.subjectUserId,
+      parentId: selector.parentId,
+      includeDescendants: selector.includeDescendants,
+    });
+    if (!resolved) {
+      throw aiSkillError('AI_SKILL_SCOPE_RESOURCE_UNAVAILABLE', '笔记目录不存在、已删除或不属于当前账号', 404);
+    }
+    const candidates = resolved.resourceRefs;
+    if (candidates.length < policy.minExpandedResources || candidates.length > policy.maxExpandedResources) {
+      throw aiSkillError(
+        'AI_SKILL_SCOPE_SIZE_INVALID',
+        candidates.length
+          ? `当前目录包含的笔记超过 ${policy.maxExpandedResources} 篇安全上限，请缩小范围后再问`
+          : '当前目录没有可供问答的笔记',
+      );
+    }
+    const authoritativeRefs = await resolveResourceVersions({
+      userId: identity.subjectUserId,
+      resourceRefs: candidates,
+      database,
+    });
+    if (authoritativeRefs.length !== candidates.length) {
+      throw aiSkillError('AI_SKILL_SCOPE_RESOURCE_UNAVAILABLE', '目录内容刚刚发生变化，请重试', 409);
+    }
+    const normalizedRefs = authoritativeRefs.map(Object.freeze);
+    const directory = Object.freeze({
+      parentId: resolved.directory.parentId,
+      title: String(resolved.directory.title || ''),
+      includeDescendants: resolved.directory.includeDescendants === true,
+    });
+    return Object.freeze({
+      identity,
+      resourceRefs: Object.freeze(normalizedRefs),
+      scopeSelector: Object.freeze({ ...selector }),
+      directory,
+      scopeDigest: scopeDigest({ skill, identity, refs: normalizedRefs, selector, directory }),
+    });
+  }
+  if (request.scope.selector) {
+    throw aiSkillError('AI_SKILL_SCOPE_SELECTOR_FORBIDDEN', '该能力不接受目录选择器');
   }
   if (refs.length < policy.minResources || refs.length > policy.maxResources) {
     throw aiSkillError(

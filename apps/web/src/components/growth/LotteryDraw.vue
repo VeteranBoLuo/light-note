@@ -26,6 +26,21 @@
       </div>
     </header>
 
+    <dl v-if="lottery" class="lt-status-strip" :aria-label="t('growth.lotteryStatusOverview')">
+      <div>
+        <dt>{{ t('growth.myPoints') }}</dt>
+        <dd>{{ points.toLocaleString('en-US') }}</dd>
+      </div>
+      <div>
+        <dt>{{ t('growth.lotteryFreePoolTab') }}</dt>
+        <dd>{{ freeRemaining }}/{{ freeDaily }}</dd>
+      </div>
+      <div>
+        <dt>{{ t('growth.lotteryPaidPityTitle') }}</dt>
+        <dd>{{ pityCurrent }}/{{ pityEvery }}</dd>
+      </div>
+    </dl>
+
     <div v-if="!lottery && (lotteryLoading || !lotteryError)" class="lt-loading">
       <BLoading inline :loading="true" :title="t('growth.lotteryLoading')" />
     </div>
@@ -128,22 +143,25 @@
         </div>
 
         <div
-          v-if="activePoolCountsPity"
           class="lt-pity-panel"
-          :class="{ 'is-due': isPityDue, 'is-triggered': pityTriggered }"
+          :class="{
+            'is-due': isPityDue,
+            'is-triggered': pityTriggered,
+            'is-context': !activePoolCountsPity,
+          }"
         >
           <span class="lt-pity-panel__icon" aria-hidden="true">
             <SvgIcon :src="isPityDue || pityTriggered ? icon.growth.reward : icon.growth.level" :size="20" />
           </span>
           <div class="lt-pity-panel__body">
             <div class="lt-pity-panel__copy">
-              <strong>{{ t('growth.lotteryPityTitle') }}</strong>
-              <span>{{ pityStatusText }}</span>
+              <strong>{{ t('growth.lotteryPaidPityTitle') }}</strong>
+              <span>{{ activePoolCountsPity ? pityStatusText : t('growth.lotteryFreeDoesNotCountPity') }}</span>
             </div>
             <div
               class="lt-progress"
               role="progressbar"
-              :aria-label="t('growth.lotteryPityTitle')"
+              :aria-label="t('growth.lotteryPaidPityTitle')"
               aria-valuemin="0"
               :aria-valuemax="pityEvery"
               :aria-valuenow="pityCurrent"
@@ -634,6 +652,37 @@
     gap: 18px;
   }
 
+  .lt-status-strip {
+    margin: 0 0 14px;
+    padding: 9px 12px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 13px;
+    background: var(--workbench-subcard-bg);
+  }
+
+  .lt-status-strip div {
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+  }
+
+  .lt-status-strip dt {
+    color: var(--desc-color);
+    font-size: 10.5px;
+  }
+
+  .lt-status-strip dd {
+    margin: 0;
+    color: var(--text-color);
+    font-size: 12px;
+    font-weight: 750;
+    font-variant-numeric: tabular-nums;
+  }
+
   .lt-machine,
   .lt-side-card {
     border: 1px solid var(--surface-border-color);
@@ -944,6 +993,16 @@
   .lt-pity-panel.is-triggered {
     border-color: var(--lt-gold-border);
     background: var(--lt-gold-bg);
+  }
+
+  .lt-pity-panel.is-context {
+    border-style: dashed;
+  }
+
+  .lt-pity-panel.is-context .lt-pity-panel__icon {
+    color: var(--desc-color);
+    border-color: var(--surface-border-color);
+    background: var(--background-color);
   }
 
   .lt-pity-badge--free {

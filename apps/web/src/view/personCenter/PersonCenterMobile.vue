@@ -287,11 +287,11 @@
   }
 
   function goAiQuotaDetails() {
-    router.push('/ai-usage');
+    router.push({ path: '/settings', query: { section: 'ai', panel: 'usage' } });
   }
 
   function goPointsDetails() {
-    router.push('/points-usage');
+    router.push({ path: '/settings', query: { section: 'points' } });
   }
 
   function formatCompactNumber(value: number | string | null | undefined) {

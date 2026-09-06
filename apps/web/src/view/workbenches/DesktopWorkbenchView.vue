@@ -27,12 +27,6 @@
             </span>
           </small>
         </div>
-        <div class="header-actions">
-          <BButton type="primary" class="capture-button" @click="openQuickCapture('bookmark')">
-            <SvgIcon :src="icon.common.add" size="17" />
-            <span>{{ t('workbench.header.quickCapture') }}</span>
-          </BButton>
-        </div>
       </header>
 
       <div v-if="workbenchError" class="workbench-error" role="alert" aria-live="assertive">
@@ -57,9 +51,6 @@
       <section class="workbench-first-fold">
         <section class="today-summary" :aria-label="t('workbench.panel.actionOverview')">
           <div class="today-summary-heading">
-            <span class="today-summary-heading__icon" aria-hidden="true">
-              <SvgIcon :src="icon.noteDetail.toolbar.todo" size="22" />
-            </span>
             <span class="today-summary-heading__copy">
               <strong>{{ t('workbench.panel.actionOverview') }}</strong>
               <small>{{ t('workbench.panel.actionOverviewHint') }}</small>
@@ -77,14 +68,11 @@
               :class="`today-summary-item--${item.key}`"
               @click="openTodaySummaryItem(item.key)"
             >
-              <span class="today-summary-item__icon" aria-hidden="true">
-                <SvgIcon :src="item.icon" size="17" />
-              </span>
               <span class="today-summary-item__copy">
                 <span>{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
                 <small>{{ item.hint }}</small>
               </span>
-              <strong>{{ item.value }}</strong>
             </BButton>
           </div>
           <div class="today-summary-body">
@@ -97,9 +85,11 @@
                 :due-today-todos="todayDueTodos"
                 :inbox-items="todayInboxItems"
                 :loading="summaryLoading"
-                :show-header="false"
+                :show-header="true"
+                :show-empty-action="true"
                 contained
-                @refresh="fetchWorkbenchSummary"
+                @refresh="refreshTodayActions"
+                @quick-create="openQuickCapture()"
               />
             </div>
 
@@ -188,10 +178,70 @@
         </aside>
       </section>
 
-      <DailyReviewCard class="workbench-daily-review" :read-only="growthReadOnly" />
+      <section class="workbench-routine-grid">
+        <div class="workbench-routine-grid__brief">
+          <DailyBriefCard
+            v-if="bookmark.isDesktop"
+            ref="dailyBriefCardRef"
+            :eligible="Boolean(user.id && user.role !== 'visitor' && !growthReadOnly)"
+            :owner-key="dailyBriefOwnerKey"
+          />
+        </div>
 
-      <section v-if="growthSectionLoading" class="growth-task-grid growth-task-grid--loading" aria-hidden="true">
-        <article v-for="panel in 2" :key="`growth-panel-skeleton-${panel}`" class="panel-card growth-panel-skeleton">
+        <div class="workbench-routine-grid__review">
+          <DailyReviewCard class="workbench-daily-review" :read-only="growthReadOnly" compact />
+
+          <section
+            v-if="dailyGrowthSectionLoading"
+            class="growth-task-grid growth-task-grid--single"
+            aria-hidden="true"
+          >
+            <article class="panel-card growth-panel-skeleton">
+              <div class="growth-panel-skeleton__header">
+                <span class="skeleton-block growth-panel-skeleton__title"></span>
+                <span class="skeleton-block growth-panel-skeleton__count"></span>
+              </div>
+              <span class="skeleton-block growth-panel-skeleton__bar"></span>
+              <span class="skeleton-block growth-panel-skeleton__hint"></span>
+              <div class="growth-panel-skeleton__list">
+                <span v-for="row in 3" :key="row" class="growth-panel-skeleton__row">
+                  <span class="skeleton-block growth-panel-skeleton__marker"></span>
+                  <span class="growth-panel-skeleton__copy">
+                    <span class="skeleton-block"></span>
+                    <span class="skeleton-block"></span>
+                  </span>
+                  <span class="skeleton-block growth-panel-skeleton__action"></span>
+                </span>
+              </div>
+              <span class="skeleton-block growth-panel-skeleton__footer"></span>
+            </article>
+          </section>
+
+          <section
+            v-else-if="showDailyGrowthTasks"
+            class="growth-task-grid growth-task-grid--single"
+            :aria-label="t('growth.pageTitle')"
+          >
+            <article class="panel-card today-growth-panel">
+              <DailyQuests
+                :quests="dailyGrowthQuests"
+                :bonus="dailyGrowthBonus"
+                :read-only="growthReadOnly"
+                compact
+                :show-claim-action="false"
+                @go="handleDailyQuestAction"
+              />
+            </article>
+          </section>
+        </div>
+      </section>
+
+      <section
+        v-if="growthTaskSectionLoading || showGrowthTasks"
+        class="growth-task-grid growth-task-grid--single workbench-growth-tasks"
+        :aria-label="t('growth.pageTitle')"
+      >
+        <article v-if="growthTaskSectionLoading" class="panel-card growth-panel-skeleton" aria-hidden="true">
           <div class="growth-panel-skeleton__header">
             <span class="skeleton-block growth-panel-skeleton__title"></span>
             <span class="skeleton-block growth-panel-skeleton__count"></span>
@@ -199,7 +249,7 @@
           <span class="skeleton-block growth-panel-skeleton__bar"></span>
           <span class="skeleton-block growth-panel-skeleton__hint"></span>
           <div class="growth-panel-skeleton__list">
-            <span v-for="row in panel === 1 ? 3 : 2" :key="row" class="growth-panel-skeleton__row">
+            <span v-for="row in 2" :key="row" class="growth-panel-skeleton__row">
               <span class="skeleton-block growth-panel-skeleton__marker"></span>
               <span class="growth-panel-skeleton__copy">
                 <span class="skeleton-block"></span>
@@ -210,25 +260,7 @@
           </div>
           <span class="skeleton-block growth-panel-skeleton__footer"></span>
         </article>
-      </section>
-
-      <section
-        v-else-if="showDailyGrowthTasks || showGrowthTasks"
-        class="growth-task-grid"
-        :class="{ 'growth-task-grid--single': !showDailyGrowthTasks || !showGrowthTasks }"
-        :aria-label="t('growth.pageTitle')"
-      >
-        <article v-if="showDailyGrowthTasks" class="panel-card today-growth-panel">
-          <DailyQuests
-            :quests="dailyGrowthQuests"
-            :bonus="dailyGrowthBonus"
-            :read-only="growthReadOnly"
-            :show-claim-action="false"
-            @go="handleDailyQuestAction"
-          />
-        </article>
-
-        <article v-if="showGrowthTasks" class="panel-card today-growth-panel">
+        <article v-else class="panel-card today-growth-panel">
           <GrowthTasks
             :data="growthTasks"
             compact
@@ -408,12 +440,13 @@
   import { apiBasePost } from '@/http/request.ts';
   import { openBookmarkUrl } from '@/utils/openBookmark.ts';
   import { listUpdateLogs, updateLogMarkdownSummaryItems, type UpdateLogItem } from '@/api/updateLogApi.ts';
-  import { cloudSpaceStore, inboxStore, organizeStore, useUserStore } from '@/store';
+  import { bookmarkStore, cloudSpaceStore, inboxStore, organizeStore, useUserStore } from '@/store';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import TodayActionSection from '@/components/workbenches/TodayActionSection.vue';
+  import DailyBriefCard from '@/components/workbenches/DailyBriefCard.vue';
   import DailyReviewCard from '@/components/workbenches/DailyReviewCard.vue';
   import WorkbenchCharts from '@/components/workbenches/WorkbenchCharts.vue';
   import WorkbenchGrowth from '@/components/workbenches/WorkbenchGrowth.vue';
@@ -449,6 +482,7 @@
   const { t } = useI18n();
   const router = useRouter();
   const user = useUserStore();
+  const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
   const inbox = inboxStore();
   const organizer = organizeStore();
@@ -456,6 +490,12 @@
     useGrowth();
   const growthReadOnly = computed(() => Boolean(user.adminContext));
   const { loadDailyReview } = useDailyReview();
+  const dailyBriefCardRef = ref<InstanceType<typeof DailyBriefCard> | null>(null);
+  const dailyBriefOwnerKey = computed(() =>
+    [user.id || 'visitor', user.role || '', user.adminContext?.subjectUserId || '', user.adminContext?.mode || ''].join(
+      '|',
+    ),
+  );
 
   function refreshDailyReview() {
     if (user.role === 'visitor') return Promise.resolve(null);
@@ -465,12 +505,11 @@
   const dailyGrowthBonus = computed(
     () => dashboard.value?.questBonus || { exp: 0, points: 0, claimed: false, claimable: false },
   );
-  // 工作台只承载今天仍需处理的任务：领取统一由上方成长卡的一键领取处理，领取后隐藏任务卡。
-  const showDailyGrowthTasks = computed(() => Boolean(dashboard.value && !dailyGrowthBonus.value.claimed));
+  // 领取后保留完成清单与奖励状态，避免每日回顾下方变成空白。
+  const showDailyGrowthTasks = computed(() => Boolean(dashboard.value));
   const showGrowthTasks = computed(() => Boolean(growthTasks.value?.tasks.some((task) => !task.claimed)));
-  const growthSectionLoading = computed(
-    () => (dashboardLoading.value && !dashboard.value) || (growthTasksLoading.value && !growthTasks.value),
-  );
+  const dailyGrowthSectionLoading = computed(() => dashboardLoading.value && !dashboard.value);
+  const growthTaskSectionLoading = computed(() => growthTasksLoading.value && !growthTasks.value);
 
   const loadingWorkbench = ref(true);
   const loadingUpdateLogs = ref(true);
@@ -705,21 +744,18 @@
       label: t('workbench.today.todoPending'),
       value: inbox.todoPendingTotal,
       hint: t('workbench.today.todoPendingHint'),
-      icon: icon.noteDetail.toolbar.todo,
     },
     {
       key: 'organize',
       label: t('workbench.today.inboxPending'),
       value: organizer.attentionCount ?? inbox.pendingTotal,
       hint: t('workbench.today.inboxPendingHint'),
-      icon: icon.ai.organize,
     },
     {
       key: 'notification',
       label: t('workbench.today.unreadNotification'),
       value: todayStats.value.unreadNotificationTotal,
       hint: t('workbench.today.unreadNotificationHint'),
-      icon: icon.settings.notification,
     },
   ]);
   const actionOverviewTotal = computed(
@@ -813,12 +849,17 @@
     void router.push(target);
   }
 
-  function openQuickCapture(type: ActionCaptureType) {
+  function openQuickCapture(type?: ActionCaptureType) {
     if (blockGuestWrite('workbench-quick-capture', t('inbox.guestPrompt'))) return;
     recordOperation(OPERATION_LOG_MAP.inbox.openCapture);
-    quickActionUsage.value = { ...quickActionUsage.value, [type]: Date.now() };
-    localStorage.setItem('workbench-quick-action-usage', JSON.stringify(quickActionUsage.value));
-    inbox.openQuickCapture(type);
+    if (type) {
+      quickActionUsage.value = { ...quickActionUsage.value, [type]: Date.now() };
+      localStorage.setItem('workbench-quick-action-usage', JSON.stringify(quickActionUsage.value));
+      inbox.openQuickCapture(type);
+      return;
+    }
+    // 空态入口保持中立：打开完整快捷创建器，不替用户擅自决定是书签、笔记、文件还是待办。
+    inbox.openQuickCapture();
   }
 
   function openActiveCollection() {
@@ -999,7 +1040,11 @@
 
   async function refreshWorkbench() {
     if (initRunning.value) return;
-    await init(true);
+    await Promise.all([init(true), dailyBriefCardRef.value?.refresh()]);
+  }
+
+  async function refreshTodayActions() {
+    await Promise.all([fetchWorkbenchSummary({ silent: true }), dailyBriefCardRef.value?.refresh()]);
   }
 
   watch(
@@ -1041,13 +1086,14 @@
     overflow-x: hidden;
     overflow-y: auto;
     scrollbar-gutter: stable;
-    padding: 18px clamp(16px, 1.6vw, 40px) 32px;
+    padding: 14px clamp(18px, 1.8vw, 36px) 32px;
+    background: var(--background-color);
   }
   .workbench-error {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: 12px;
     margin-bottom: 16px;
     padding: 12px 14px;
     border: 1px solid color-mix(in srgb, var(--danger-color, #d14343) 32%, transparent);
@@ -1070,11 +1116,11 @@
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 12px;
   }
 
   .workbench-header {
-    min-height: 54px;
+    min-height: 56px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1150,14 +1196,14 @@
   }
 
   .workbench-heading p {
-    margin-left: 17px;
+    margin: 3px 0 0 17px;
     font-size: 13px;
   }
 
   .workbench-data-scope {
     display: block;
     min-height: 1.4em;
-    margin: 5px 0 0 17px;
+    margin: 3px 0 0 17px;
     color: var(--desc-color);
     font-size: 11px;
     font-variant-numeric: tabular-nums;
@@ -1169,28 +1215,10 @@
     min-width: 12em;
   }
 
-  .header-actions {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .capture-button {
-    height: 36px;
-    gap: 7px;
-    border: 1px solid color-mix(in srgb, var(--card-border-color) 72%, transparent);
-  }
-
-  .capture-button {
-    border-color: transparent;
-  }
-
   .workbench-first-fold {
     min-width: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(330px, 0.29fr);
+    grid-template-columns: minmax(0, 1.36fr) minmax(390px, 1fr);
     align-items: stretch;
     gap: 12px;
   }
@@ -1211,51 +1239,28 @@
   .today-summary {
     position: relative;
     overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--primary-color) 24%, var(--card-border-color));
-    border-radius: 16px;
+    border: 1px solid var(--card-border-color);
+    border-radius: 14px;
     background: var(--card-background);
-    box-shadow:
-      0 8px 24px color-mix(in srgb, var(--primary-color) 9%, transparent),
-      0 2px 6px color-mix(in srgb, var(--text-color) 7%, transparent);
+    box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--text-color) 36%, transparent);
   }
 
   .today-summary::before {
-    content: '';
-    position: absolute;
-    z-index: 1;
-    inset: 0 0 auto;
-    height: 3px;
-    background: linear-gradient(90deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 38%, transparent));
+    content: none;
   }
 
   .today-summary-heading {
     min-width: 0;
-    padding: 13px 16px;
+    min-height: 54px;
+    padding: 9px 14px;
+    box-sizing: border-box;
     display: grid;
-    grid-template-columns: 42px minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: 11px;
-    border-bottom: 1px solid color-mix(in srgb, var(--primary-color) 20%, var(--card-border-color));
-    color: var(--primary-color);
-    background: linear-gradient(
-      100deg,
-      color-mix(in srgb, var(--primary-color) 13%, var(--card-background)),
-      color-mix(in srgb, var(--primary-color) 5%, var(--card-background))
-    );
-  }
-
-  .today-summary-heading__icon,
-  .today-summary-item__icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 11px;
-  }
-
-  .today-summary-heading__icon {
-    width: 42px;
-    height: 42px;
-    background: color-mix(in srgb, var(--primary-color) 13%, transparent);
+    gap: 14px;
+    border-bottom: 1px solid var(--card-border-color);
+    color: var(--text-color);
+    background: var(--card-background);
   }
 
   .today-summary-heading__copy {
@@ -1266,7 +1271,7 @@
 
   .today-summary-heading__copy strong {
     color: var(--text-color);
-    font-size: 15px;
+    font-size: 16px;
     line-height: 1.2;
   }
 
@@ -1287,7 +1292,7 @@
 
   .today-summary-total strong {
     color: var(--primary-color);
-    font-size: 28px;
+    font-size: 30px;
     line-height: 1;
     font-weight: 760;
     font-variant-numeric: tabular-nums;
@@ -1297,18 +1302,17 @@
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 10px;
-    margin: 10px;
-    padding-left: 12px;
-    border-left: 3px solid color-mix(in srgb, var(--primary-color) 55%, transparent);
+    margin: 0;
+    padding: 10px 12px 9px;
   }
 
   .today-summary-body {
-    --today-work-area-height: 280px;
+    --today-work-area-height: 196px;
     display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+    grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
     align-items: stretch;
     gap: 10px;
-    padding: 0 10px 10px;
+    padding: 0 12px 12px;
   }
 
   .today-summary-details {
@@ -1321,6 +1325,49 @@
     gap: 0;
   }
 
+  .today-summary-details :deep(.today-actions__header) {
+    min-height: 30px;
+    padding: 4px 10px;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--surface-divider-color);
+  }
+
+  .today-summary-details :deep(.today-actions__heading) {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .today-summary-details :deep(.today-actions__header strong) {
+    font-size: 12px;
+  }
+
+  .today-summary-details :deep(.today-actions__header span) {
+    max-width: 54%;
+    overflow: hidden;
+    font-size: 9.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .today-summary-details :deep(.today-actions--contained),
+  .today-continue {
+    border-color: var(--card-border-color);
+    background: var(--menu-body-bg-color, var(--card-background));
+  }
+
+  .today-summary-details :deep(.today-actions--contained .today-action-row) {
+    height: 38px;
+    min-height: 38px;
+    padding-block: 3px;
+  }
+
+  .today-summary-details :deep(.today-actions--contained .today-actions__group-head) {
+    display: none;
+  }
+
   .today-continue {
     min-width: 0;
     min-height: var(--today-work-area-height);
@@ -1328,9 +1375,9 @@
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    border: 1px solid color-mix(in srgb, var(--primary-color) 16%, var(--card-border-color));
-    border-radius: 14px;
-    background: var(--menu-body-bg-color, var(--background-color));
+    border: 1px solid var(--card-border-color);
+    border-radius: 12px;
+    background: var(--menu-body-bg-color, var(--card-background));
   }
 
   .today-continue__header {
@@ -1354,16 +1401,14 @@
     --today-accent: var(--primary-color);
     width: 100%;
     min-width: 0;
-    padding: 11px 12px;
-    display: grid;
-    grid-template-columns: 34px minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 10px;
-    border: 1px solid color-mix(in srgb, var(--today-accent) 25%, var(--card-border-color));
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--today-accent) 5%, var(--card-background));
-    color: var(--text-color);
+    min-height: 72px;
     height: auto;
+    padding: 9px 12px;
+    display: block;
+    border: 1px solid var(--card-border-color);
+    border-radius: 11px;
+    background: var(--menu-body-bg-color, var(--card-background));
+    color: var(--text-color);
     text-align: left;
     cursor: pointer;
     transition:
@@ -1374,8 +1419,8 @@
 
   @media (hover: hover) {
     .today-summary-item:hover {
-      border-color: color-mix(in srgb, var(--today-accent) 35%, var(--card-border-color));
-      background: color-mix(in srgb, var(--today-accent) 7%, var(--card-background));
+      border-color: var(--today-accent);
+      background: color-mix(in srgb, var(--today-accent) 3%, var(--menu-body-bg-color, var(--card-background)));
       transform: translateY(-1px);
     }
   }
@@ -1386,28 +1431,23 @@
 
   .today-summary-item--organize {
     --today-accent: var(--resource-note-color, #00a884);
+    border-color: var(--resource-note-color, #00a884);
   }
 
   .today-summary-item--notification {
     --today-accent: var(--resource-bookmark-color, #615ced);
   }
 
-  .today-summary-item__icon {
-    width: 34px;
-    height: 34px;
-    color: var(--today-accent);
-    background: color-mix(in srgb, var(--today-accent) 10%, transparent);
-  }
-
   .today-summary-item__copy {
     min-width: 0;
     display: grid;
-    gap: 3px;
+    gap: 2px;
   }
 
   .today-summary-item__copy > span {
-    color: var(--text-color);
-    font-weight: 650;
+    color: var(--desc-color);
+    font-size: 11px;
+    font-weight: 500;
   }
 
   .today-summary-item__copy small {
@@ -1416,10 +1456,105 @@
     white-space: nowrap;
   }
 
-  .today-summary-item strong {
+  .today-summary-item__copy strong {
     color: var(--today-accent);
-    font-size: 22px;
+    font-size: 21px;
+    line-height: 1.1;
+    font-weight: 750;
     font-variant-numeric: tabular-nums;
+  }
+
+  .workbench-routine-grid {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.14fr);
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .workbench-routine-grid__brief,
+  .workbench-routine-grid__review {
+    min-width: 0;
+    display: grid;
+    align-content: stretch;
+    gap: 12px;
+  }
+
+  .workbench-routine-grid__brief > :deep(.daily-brief-card) {
+    height: 100%;
+    box-sizing: border-box;
+  }
+
+  .workbench-routine-grid__review {
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid var(--card-border-color);
+    border-radius: 14px;
+    background: var(--card-background);
+    box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--text-color) 36%, transparent);
+  }
+
+  .workbench-routine-grid__brief:empty {
+    display: none;
+  }
+
+  .workbench-routine-grid__brief:empty + .workbench-routine-grid__review {
+    grid-column: 1 / -1;
+  }
+
+  .workbench-routine-grid__review :deep(.daily-review) {
+    padding: 11px 12px;
+    border: 0;
+    border-bottom: 1px solid var(--card-border-color);
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .workbench-routine-grid__review :deep(.daily-review__header) {
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .workbench-routine-grid__review :deep(.daily-review__title-icon) {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+  }
+
+  .workbench-routine-grid__review :deep(.daily-review__heading h2) {
+    font-size: 14px;
+  }
+
+  .workbench-routine-grid__review :deep(.daily-review__heading p) {
+    font-size: 10.5px;
+  }
+
+  .workbench-routine-grid__review :deep(.daily-review__loading),
+  .workbench-routine-grid__review :deep(.daily-review__state) {
+    min-height: 82px;
+    margin-top: 8px;
+  }
+
+  .workbench-routine-grid__review :deep(.daily-review__progress-row) {
+    margin-top: 7px;
+  }
+
+  .workbench-routine-grid__review > .growth-task-grid {
+    min-height: 0;
+    padding: 11px 12px;
+  }
+
+  .workbench-routine-grid__review > .growth-task-grid > .panel-card {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .workbench-growth-tasks {
+    min-height: 0;
   }
 
   .summary-grid {
@@ -1443,15 +1578,11 @@
 
   .today-growth-panel {
     height: 100%;
-    min-height: 250px;
-  }
-
-  .growth-task-grid--loading {
-    min-height: 250px;
+    min-height: 160px;
   }
 
   .growth-panel-skeleton {
-    min-height: 250px;
+    min-height: 160px;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -2021,6 +2152,11 @@
 
   .quick-create-panel {
     height: auto;
+    padding: 10px 12px;
+  }
+
+  .quick-create-panel .panel-header {
+    margin-bottom: 7px;
   }
 
   .quick-create-grid {
@@ -2031,9 +2167,9 @@
 
   .quick-create-action {
     width: 100%;
-    height: 58px;
-    padding: 0 10px;
-    gap: 9px;
+    height: 38px;
+    padding: 0 9px;
+    gap: 10px;
     justify-content: flex-start;
     line-height: 1.2;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 64%, transparent);
@@ -2046,8 +2182,8 @@
   }
 
   .quick-create-icon {
-    width: 32px;
-    height: 32px;
+    width: 26px;
+    height: 26px;
     flex: 0 0 auto;
     border-radius: 9px;
     display: flex;
@@ -2077,22 +2213,50 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 4px;
+    gap: 0;
   }
 
   .quick-create-action strong {
     color: var(--text-color);
-    font-size: 12px;
+    font-size: 12.5px;
     font-weight: 650;
   }
 
   .quick-create-action small {
-    max-width: 100%;
-    color: var(--desc-color);
-    font-size: 10px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    display: none;
+  }
+
+  .workbench-first-fold__rail :deep(.growth-card--expanded) {
+    padding: 10px 12px;
+    gap: 6px;
+    border-color: var(--card-border-color);
+    border-radius: 14px;
+    background: var(--card-background);
+    box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--text-color) 36%, transparent);
+  }
+
+  .workbench-first-fold__rail :deep(.growth-card--expanded .growth-progress-area) {
+    min-height: 23px;
+    gap: 3px;
+  }
+
+  .workbench-first-fold__rail :deep(.growth-card--expanded .growth-insight) {
+    padding: 5px;
+  }
+
+  .workbench-first-fold__rail :deep(.growth-card--expanded .growth-insight__icon) {
+    width: 22px;
+    height: 22px;
+  }
+
+  .workbench-first-fold__rail :deep(.growth-card--expanded .growth-next) {
+    min-height: 44px;
+    padding: 5px 8px;
+  }
+
+  .workbench-first-fold__rail :deep(.growth-card--expanded .growth-next__icon) {
+    width: 26px;
+    height: 26px;
   }
 
   .analytics-section {
@@ -2373,9 +2537,37 @@
     }
   }
 
-  @media (max-width: 1380px) {
+  /* 1200–1399 仍是桌面布局：右侧快速创建/成长栏保持首屏可见，
+     只在真正的窄窗才收成上下结构。 */
+  @media (max-width: 1399px) {
+    .today-continue :deep(.tab-container.is-pill) {
+      gap: 2px;
+    }
+
+    .today-continue :deep(.is-pill .tab) {
+      padding-inline: 6px;
+      font-size: 11px;
+    }
+
+    .today-continue :deep(.tab-badge) {
+      min-width: 17px;
+      padding-inline: 4px;
+    }
+  }
+
+  @media (max-width: 1199px) {
     .workbench-first-fold {
       grid-template-columns: minmax(0, 1fr);
+    }
+
+    .workbench-routine-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .workbench-routine-grid__brief,
+    .workbench-routine-grid__review,
+    .workbench-routine-grid__brief:empty + .workbench-routine-grid__review {
+      grid-column: auto;
     }
 
     .workbench-first-fold__rail {
@@ -2414,11 +2606,6 @@
     .workbench-header {
       align-items: flex-start;
       flex-direction: column;
-    }
-
-    .header-actions {
-      width: 100%;
-      justify-content: flex-start;
     }
 
     .summary-grid,

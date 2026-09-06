@@ -500,6 +500,12 @@ describe('知识工具箱前端边界', () => {
     expect(content).toContain('class="global-search-dialog__input"');
     expect(content).toContain('inputRef.value?.focus?.()');
     expect(content).toContain('nextTick(() => triggerElement()?.focus())');
+    expect(content).toMatch(
+      /\.global-search-result__open\.b_btn\s*\{[\s\S]*?background:\s*transparent\s*!important/,
+    );
+    expect(content).toMatch(
+      /\.global-search-result__extra \.b_btn\s*\{[\s\S]*?background:\s*transparent\s*!important/,
+    );
     expect(content).not.toMatch(/<button\b/u);
     expect(content).not.toMatch(/<svg\b/u);
   });

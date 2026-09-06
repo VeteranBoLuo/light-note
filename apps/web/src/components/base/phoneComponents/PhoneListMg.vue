@@ -91,7 +91,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, ref, type PropType } from 'vue';
+  import { computed, ref, watch, type PropType } from 'vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import MobileListRow from '@/components/mobile/MobileListRow.vue';
   import MobileListSurface from '@/components/mobile/MobileListSurface.vue';
@@ -140,10 +140,11 @@
       default: true,
     },
   });
-  defineEmits<{
+  const emit = defineEmits<{
     (event: 'add'): void;
     (event: 'retry'): void;
     (event: 'item-click', item: Record<string, any>): void;
+    (event: 'visible-items-change', items: Record<string, any>[]): void;
   }>();
   const searchValue = ref('');
   const hasSearch = computed(() => Boolean(searchValue.value.trim()));
@@ -158,6 +159,11 @@
       return props.listData;
     }
   });
+  watch(
+    [dataList, () => props.loading, () => props.error],
+    ([items, loading, error]) => emit('visible-items-change', loading || error ? [] : items),
+    { immediate: true, flush: 'sync' },
+  );
 </script>
 
 <style lang="less" scoped>

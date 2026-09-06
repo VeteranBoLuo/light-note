@@ -20,6 +20,8 @@ export interface CommunityChatAccess {
   emergencyReadOnly: boolean;
   environmentReadOnly: boolean;
   notificationsDefaultEnabled: true;
+  /** null 表示当前身份不设置每条消息的图片张数上限；缺省按旧服务端的 4 张处理。 */
+  imageAttachmentLimit?: number | null;
   rulesVersion: string;
   authenticated: boolean;
   canManage: boolean;

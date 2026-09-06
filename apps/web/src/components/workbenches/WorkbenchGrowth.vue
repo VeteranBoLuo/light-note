@@ -78,7 +78,7 @@
         </div>
       </div>
 
-      <BButton v-if="nextAction" class="growth-next" @click="openGrowthTasks">
+      <BButton v-if="nextAction" class="growth-next" :disabled="readOnly" @click="executeNextAction">
         <span class="growth-next__icon" aria-hidden="true">
           <SvgIcon :src="nextActionIcon" size="19" />
         </span>
@@ -104,6 +104,72 @@
         </span>
         <SvgIcon class="growth-next__arrow" :src="icon.ai.sourceArrow" size="15" aria-hidden="true" />
       </BButton>
+
+      <BButton v-else class="growth-next" :disabled="claimableLoading" @click="openAllGrowthTasks">
+        <span class="growth-next__icon" aria-hidden="true">
+          <SvgIcon :src="icon.growth.action" size="19" />
+        </span>
+        <span class="growth-next__copy">
+          <small>{{ t('growth.nextActionLabel') }}</small>
+          <strong>{{ t(claimableError ? 'growth.todayLoadFailed' : 'growth.nextActions.task_center') }}</strong>
+          <span class="growth-next__meta">{{ t(claimableError ? 'common.retry' : 'growth.nextActionExplore') }}</span>
+        </span>
+        <SvgIcon class="growth-next__arrow" :src="icon.ai.sourceArrow" size="15" aria-hidden="true" />
+      </BButton>
+
+      <div class="growth-assets" :aria-label="t('growth.assetSnapshot')" :aria-busy="quotaReading ? 'true' : 'false'">
+        <div class="growth-asset growth-asset--daily">
+          <span class="growth-asset__label">
+            <span class="growth-asset__dot" aria-hidden="true"></span>
+            {{ t('growth.assetTodayRemaining') }}
+          </span>
+          <strong
+            class="growth-asset__value"
+            :class="{ 'growth-asset__value--loading': quotaReading }"
+            :title="dailyQuotaDisplay"
+          >
+            {{ dailyQuotaDisplay }}
+          </strong>
+          <small class="growth-asset__hint" :title="dailyQuotaHint">{{ dailyQuotaHint }}</small>
+          <span
+            v-if="dailyQuotaMeterAvailable"
+            class="growth-asset__meter"
+            role="progressbar"
+            :aria-label="t('growth.assetTodayRemaining')"
+            :aria-valuenow="aiQuotaRemainingPercent"
+            aria-valuemin="0"
+            aria-valuemax="100"
+          >
+            <span :style="{ width: `${aiQuotaRemainingPercent}%` }"></span>
+          </span>
+        </div>
+
+        <div class="growth-asset growth-asset--permanent">
+          <span class="growth-asset__label">
+            <span class="growth-asset__dot" aria-hidden="true"></span>
+            {{ t('growth.assetPermanentBalance') }}
+          </span>
+          <strong
+            class="growth-asset__value"
+            :class="{ 'growth-asset__value--loading': quotaReading }"
+            :title="permanentBalanceDisplay"
+          >
+            {{ permanentBalanceDisplay }}
+          </strong>
+          <small class="growth-asset__hint" :title="permanentBalanceHint">{{ permanentBalanceHint }}</small>
+        </div>
+
+        <div class="growth-asset growth-asset--points">
+          <span class="growth-asset__label">
+            <span class="growth-asset__dot" aria-hidden="true"></span>
+            {{ t('growth.assetPointsLabel') }}
+          </span>
+          <strong class="growth-asset__value" :title="pointsDisplay">{{ pointsDisplay }}</strong>
+          <small class="growth-asset__hint" :title="t('growth.assetPointsHint')">
+            {{ t('growth.assetPointsHint') }}
+          </small>
+        </div>
+      </div>
     </template>
 
     <div class="growth-footer">
@@ -157,6 +223,8 @@
   import { bookmarkStore, useUserStore } from '@/store';
   import icon from '@/config/icon.ts';
   import { useGrowthClaimFeedback } from '@/composables/useGrowthClaimFeedback';
+  import { formatAiQuotaTokens, useAiQuotaStatus } from '@/composables/useAiQuotaStatus';
+  import { growthNextActionCommand, resolveGrowthActionRoute } from '@/utils/growthNavigation';
 
   const props = withDefaults(
     defineProps<{
@@ -169,7 +237,7 @@
     },
   );
 
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const router = useRouter();
   const user = useUserStore();
   const bookmark = bookmarkStore();
@@ -177,6 +245,8 @@
   const {
     growth: g,
     claimable: claimableData,
+    claimableLoading,
+    claimableError,
     claimingRewards,
     load,
     loadDashboard,
@@ -185,6 +255,13 @@
     doCheckin,
   } = useGrowth();
   const checking = ref(false);
+  const {
+    status: aiQuotaStatus,
+    loading: aiQuotaLoading,
+    unavailable: aiQuotaUnavailable,
+    remainingPercent: aiQuotaRemainingPercent,
+    load: loadAiQuota,
+  } = useAiQuotaStatus({ autoLoad: false });
   const claimable = computed(() => Number(claimableData.value?.count || 0));
   const { claimAllTooltip, snapshotClaimableBreakdown, claimSuccessMessage } = useGrowthClaimFeedback(claimableData);
   const dailyProgress = computed(() => ({
@@ -200,6 +277,7 @@
   const dailyCap = computed(() => Number(g.value?.dailyCap ?? 200));
   const nextAction = computed(() => claimableData.value?.nextAction || null);
   const nextActionIcon = computed(() => {
+    if (nextAction.value?.type === 'weekly_challenge') return icon.growth.checkin;
     const action = nextAction.value?.action || '';
     if (action.includes('todo')) return icon.growth.action;
     if (action.includes('inbox')) return icon.contextMenu.inbox;
@@ -214,6 +292,71 @@
     const key = `growth.nextActions.${nextAction.value.key}`;
     const translated = t(key);
     return translated === key ? t(`growth.nextActionTypes.${nextAction.value.type}`) : translated;
+  });
+
+  function finiteMetric(value: unknown) {
+    if (value === null || value === '' || typeof value === 'undefined' || typeof value === 'boolean') return null;
+    const amount = Number(value);
+    return Number.isFinite(amount) ? Math.max(0, amount) : null;
+  }
+
+  const quotaReading = computed(() => aiQuotaLoading.value || (!aiQuotaStatus.value && !aiQuotaUnavailable.value));
+  const quotaExempt = computed(() => Boolean(aiQuotaStatus.value?.exempt));
+  const dailyQuotaRemaining = computed(
+    () => finiteMetric(aiQuotaStatus.value?.dailyRemaining) ?? finiteMetric(aiQuotaStatus.value?.remaining),
+  );
+  const dailyQuotaTotal = computed(
+    () => finiteMetric(aiQuotaStatus.value?.dailyQuota) ?? finiteMetric(aiQuotaStatus.value?.quota),
+  );
+  const dailyQuotaUsed = computed(
+    () => finiteMetric(aiQuotaStatus.value?.dailyUsed) ?? finiteMetric(aiQuotaStatus.value?.used),
+  );
+  const permanentBalance = computed(() => finiteMetric(aiQuotaStatus.value?.bonusTokens));
+  const reservedQuota = computed(() => finiteMetric(aiQuotaStatus.value?.pendingReservedTokens) || 0);
+  const points = computed(() => finiteMetric(g.value?.points));
+  const dailyQuotaMeterAvailable = computed(
+    () =>
+      !quotaReading.value &&
+      !quotaExempt.value &&
+      !aiQuotaUnavailable.value &&
+      dailyQuotaRemaining.value !== null &&
+      Number(dailyQuotaTotal.value || 0) > 0,
+  );
+
+  const dailyQuotaDisplay = computed(() => {
+    if (quotaReading.value) return t('growth.assetLoading');
+    if (quotaExempt.value) return t('growth.assetUnlimited');
+    if (aiQuotaUnavailable.value || dailyQuotaRemaining.value === null) return t('growth.assetUnavailable');
+    return formatAiQuotaTokens(dailyQuotaRemaining.value, locale.value);
+  });
+  const dailyQuotaHint = computed(() => {
+    if (quotaReading.value) return t('growth.assetLoadingHint');
+    if (quotaExempt.value) return t('growth.assetUnlimitedHint');
+    if (aiQuotaUnavailable.value || dailyQuotaRemaining.value === null) return t('growth.assetUnavailableHint');
+    if (reservedQuota.value > 0) return t('growth.assetSettling');
+    if (dailyQuotaUsed.value !== null) {
+      return t('growth.assetDailyUsed', { n: formatAiQuotaTokens(dailyQuotaUsed.value, locale.value) });
+    }
+    if (dailyQuotaTotal.value !== null) {
+      return t('growth.assetDailyTotal', { n: formatAiQuotaTokens(dailyQuotaTotal.value, locale.value) });
+    }
+    return t('growth.assetDailyHint');
+  });
+  const permanentBalanceDisplay = computed(() => {
+    if (quotaReading.value) return t('growth.assetLoading');
+    if (quotaExempt.value) return t('growth.assetNotRequired');
+    if (aiQuotaUnavailable.value || permanentBalance.value === null) return t('growth.assetUnavailable');
+    return formatAiQuotaTokens(permanentBalance.value, locale.value);
+  });
+  const permanentBalanceHint = computed(() => {
+    if (quotaReading.value) return t('growth.assetLoadingHint');
+    if (quotaExempt.value) return t('growth.assetUnlimitedHint');
+    if (aiQuotaUnavailable.value || permanentBalance.value === null) return t('growth.assetUnavailableHint');
+    return t('growth.assetPermanentHint');
+  });
+  const pointsDisplay = computed(() => {
+    if (points.value === null) return t('growth.assetUnavailable');
+    return new Intl.NumberFormat(locale.value, { maximumFractionDigits: 0 }).format(points.value);
   });
 
   async function onClaimAll() {
@@ -244,8 +387,25 @@
     router.push('/growth');
   }
 
-  function openGrowthTasks() {
-    router.push({ path: '/growth', query: { section: 'tasks' }, hash: '#growth-weekly' });
+  function openAllGrowthTasks() {
+    if (claimableError.value) {
+      void loadClaimable();
+      return;
+    }
+    void router.push(resolveGrowthActionRoute('open_growth_tasks', bookmark.isMobile)!);
+  }
+
+  function executeNextAction() {
+    if (readOnly.value || !nextAction.value) return;
+    const action = growthNextActionCommand(nextAction.value);
+    if (action === 'profile') {
+      if (bookmark.isMobile) void router.push('/myInfo');
+      else window.dispatchEvent(new CustomEvent('light-note:open-profile'));
+      return;
+    }
+    void router.push(
+      resolveGrowthActionRoute(action, bookmark.isMobile) || { path: '/growth', query: { section: 'tasks' } },
+    );
   }
 
   async function onCheckin() {
@@ -283,6 +443,7 @@
   onMounted(() => {
     load();
     loadClaimable();
+    if (props.expanded) void loadAiQuota();
   });
 </script>
 
@@ -563,6 +724,116 @@
 
   .growth-next__arrow {
     color: var(--primary-color);
+  }
+
+  .growth-assets {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 13%, var(--card-border-color));
+    border-radius: 11px;
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--primary-color) 4%, var(--card-background)),
+      color-mix(in srgb, var(--resource-file-color, #ff8a00) 2.5%, var(--card-background))
+    );
+  }
+
+  .growth-asset {
+    --growth-asset-accent: var(--primary-color);
+
+    position: relative;
+    min-width: 0;
+    min-height: 61px;
+    padding: 7px 9px;
+    box-sizing: border-box;
+    display: grid;
+    align-content: center;
+    gap: 3px;
+  }
+
+  .growth-asset + .growth-asset {
+    border-left: 1px solid var(--surface-divider-color);
+  }
+
+  .growth-asset--daily {
+    padding-bottom: 10px;
+  }
+
+  .growth-asset--permanent {
+    --growth-asset-accent: var(--resource-note-color, #00a884);
+  }
+
+  .growth-asset--points {
+    --growth-asset-accent: var(--resource-file-color, #ff8a00);
+  }
+
+  .growth-asset__label {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    overflow: hidden;
+    color: var(--desc-color);
+    font-size: 9.5px;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .growth-asset__dot {
+    width: 5px;
+    height: 5px;
+    flex: 0 0 auto;
+    border: 1px solid color-mix(in srgb, var(--growth-asset-accent) 42%, var(--card-background));
+    border-radius: 999px;
+    background: var(--growth-asset-accent);
+  }
+
+  .growth-asset__value {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-color);
+    font-size: 15px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.05;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .growth-asset__value--loading {
+    color: var(--desc-color);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .growth-asset__hint {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--desc-color);
+    font-size: 8.5px;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .growth-asset__meter {
+    position: absolute;
+    right: 9px;
+    bottom: 5px;
+    left: 9px;
+    height: 3px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--card-border-color) 66%, transparent);
+  }
+
+  .growth-asset__meter > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 55%, #22d3ee));
+    transition: width 0.35s ease;
   }
 
   .growth-footer {

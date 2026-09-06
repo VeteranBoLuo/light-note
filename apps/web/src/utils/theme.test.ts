@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { applyDocumentTheme, normalizeResolvedTheme } from '@/utils/theme';
+import { applyDocumentTheme, normalizeResolvedTheme, shouldFreezeAnimationsForThemeSync } from '@/utils/theme';
 
 describe('document theme', () => {
   beforeEach(() => {
@@ -32,5 +32,11 @@ describe('document theme', () => {
     applyDocumentTheme('unexpected');
     expect(document.documentElement.dataset.theme).toBe('day');
     expect(document.documentElement.style.getPropertyValue('color-scheme')).toBe('only light');
+  });
+
+  it('官网预渲染首屏同步主题时不重置持续动画', () => {
+    expect(shouldFreezeAnimationsForThemeSync('landing')).toBe(false);
+    expect(shouldFreezeAnimationsForThemeSync('workbench')).toBe(true);
+    expect(shouldFreezeAnimationsForThemeSync(undefined)).toBe(true);
   });
 });

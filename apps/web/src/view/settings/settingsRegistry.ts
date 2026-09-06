@@ -1,44 +1,34 @@
 /**
- * 移动端设置目录的事实表：有哪些分类、归在哪一组、什么运行环境下可见。
+ * 设置分类的唯一事实表：桌面左侧目录与移动端设置目录共用。
  *
- * 从 Settings.vue 抽出来是为了能直接测：这里出错的表现是入口消失、
- * 深链接打不开或分组顺序乱掉，比样式更该被锁住。
- * 桌面端不读这张表 —— 它继续走 anchors + 长页，两套结构互不影响。
+ * 从 Settings.vue 抽出后，分类顺序、图标、文案键与环境显隐都不再由两端各维护一份。
+ * 这里出错的表现是入口消失、深链接打不开或分组顺序乱掉，所以必须可直接测试。
  */
 
-export type SettingsSectionId = 'appearance' | 'general' | 'notification' | 'ai' | 'account' | 'install' | 'privacy';
+export type SettingsSectionId =
+  | 'appearance'
+  | 'general'
+  | 'notification'
+  | 'ai'
+  | 'points'
+  | 'account'
+  | 'install'
+  | 'privacy';
 
-/**
- * 进入移动端目录的分类。
- *
- * `install` 刻意排除：移动端「我的」里已经有一个安装入口（PersonCenterMobile 的 pwa.install，
- * 自带状态摘要和 App 内隐藏），设置里再放一行就是同一件事的第二个入口。
- * 桌面端没有这个入口，所以 Settings.vue 的 `#set-install` 区块只在桌面端继续渲染 ——
- * 删的是移动端的重复项，不是安装能力本身。
- */
+/** 两端共用的一级分类；桌面独有的安装/快捷键等能力归入「通用」，不再自成目录项。 */
 export type SettingsIndexSectionId = Exclude<SettingsSectionId, 'install'>;
 
 export type SettingsSectionGroup = 'preferences' | 'account' | 'rules';
 
-/**
- * 分类 → 页面里的 DOM id。
- * 桌面锚点和 scrollspy 一直用 `set-xxx`，改名会连带动到桌面，所以只做映射不做重命名。
- * 只列目录内的分类：桌面独有的 `set-install` 锚点在 Settings.vue 自己拼，不从这里取。
- */
-export const SETTINGS_SECTION_ANCHOR: Record<SettingsIndexSectionId, string> = {
-  appearance: 'set-appearance',
-  general: 'set-general',
-  notification: 'set-notification',
-  ai: 'set-ai',
-  account: 'set-account',
-  privacy: 'set-privacy',
-};
-
 export type SettingsSectionMeta = {
   id: SettingsIndexSectionId;
   group: SettingsSectionGroup;
-  /** icon.ts 里的键路径，由调用方按 SvgIcon 取值注入，避免这里依赖 icon 模块 */
-  iconKey: string;
+  /** icon.settings 下的键，由调用方按 SvgIcon 取值，避免本文件依赖图标模块 */
+  iconKey: 'appearance' | 'general' | 'notification' | 'ai' | 'points' | 'account' | 'privacy';
+  /** 桌面目录用的简短标题 */
+  titleKey: string;
+  /** 移动目录用的标题，可比桌面标题更完整 */
+  mobileTitleKey: string;
   tone: 'purple' | 'green';
 };
 
@@ -46,13 +36,63 @@ export type SettingsSectionMeta = {
  * 目录展示顺序即数组顺序：先「偏好设置」（用得最多、每天都可能改），
  * 再「账号与设备」，最后「规则与数据」（基本只读一次）。
  */
-const SECTION_META: SettingsSectionMeta[] = [
-  { id: 'appearance', group: 'preferences', iconKey: 'appearance', tone: 'purple' },
-  { id: 'general', group: 'preferences', iconKey: 'general', tone: 'green' },
-  { id: 'notification', group: 'preferences', iconKey: 'notification', tone: 'green' },
-  { id: 'ai', group: 'preferences', iconKey: 'ai', tone: 'purple' },
-  { id: 'account', group: 'account', iconKey: 'account', tone: 'green' },
-  { id: 'privacy', group: 'rules', iconKey: 'privacy', tone: 'green' },
+export const SETTINGS_SECTION_META: SettingsSectionMeta[] = [
+  {
+    id: 'appearance',
+    group: 'preferences',
+    iconKey: 'appearance',
+    titleKey: 'settings.appearance',
+    mobileTitleKey: 'settings.mobileIndex.appearance',
+    tone: 'purple',
+  },
+  {
+    id: 'general',
+    group: 'preferences',
+    iconKey: 'general',
+    titleKey: 'settings.general',
+    mobileTitleKey: 'settings.mobileIndex.general',
+    tone: 'green',
+  },
+  {
+    id: 'notification',
+    group: 'preferences',
+    iconKey: 'notification',
+    titleKey: 'settings.notification',
+    mobileTitleKey: 'settings.notification',
+    tone: 'green',
+  },
+  {
+    id: 'ai',
+    group: 'preferences',
+    iconKey: 'ai',
+    titleKey: 'settings.ai.title',
+    mobileTitleKey: 'settings.ai.title',
+    tone: 'purple',
+  },
+  {
+    id: 'points',
+    group: 'account',
+    iconKey: 'points',
+    titleKey: 'growth.pointsUsagePageTitle',
+    mobileTitleKey: 'growth.pointsUsagePageTitle',
+    tone: 'purple',
+  },
+  {
+    id: 'account',
+    group: 'account',
+    iconKey: 'account',
+    titleKey: 'settings.accountSecurityTitle',
+    mobileTitleKey: 'settings.accountSecurityTitle',
+    tone: 'green',
+  },
+  {
+    id: 'privacy',
+    group: 'rules',
+    iconKey: 'privacy',
+    titleKey: 'settings.privacyTitle',
+    mobileTitleKey: 'settings.privacyTitle',
+    tone: 'green',
+  },
 ];
 
 export const SETTINGS_GROUP_ORDER: SettingsSectionGroup[] = ['preferences', 'account', 'rules'];
@@ -67,13 +107,13 @@ export type SettingsEnv = {
 };
 
 export function isSettingsSectionVisible(id: SettingsIndexSectionId, env: SettingsEnv): boolean {
-  if (id === 'account' || id === 'ai') return !env.isGuest;
+  if (id === 'account' || id === 'ai' || id === 'points') return !env.isGuest;
   return true;
 }
 
 /** 当前环境下可进入的分类，顺序与目录一致 */
 export function visibleSettingsSections(env: SettingsEnv): SettingsSectionMeta[] {
-  return SECTION_META.filter((meta) => isSettingsSectionVisible(meta.id, env));
+  return SETTINGS_SECTION_META.filter((meta) => isSettingsSectionVisible(meta.id, env));
 }
 
 /**
@@ -84,7 +124,7 @@ export function visibleSettingsSections(env: SettingsEnv): SettingsSectionMeta[]
 export function parseSettingsSection(raw: unknown, env: SettingsEnv): SettingsIndexSectionId | null {
   const value = Array.isArray(raw) ? raw[0] : raw;
   if (typeof value !== 'string') return null;
-  const meta = SECTION_META.find((item) => item.id === value);
+  const meta = SETTINGS_SECTION_META.find((item) => item.id === value);
   if (!meta) return null;
   return isSettingsSectionVisible(meta.id, env) ? meta.id : null;
 }
@@ -107,6 +147,7 @@ export function groupSettingsSections<T extends { group: SettingsSectionGroup }>
  */
 export const NOTIFICATION_TOGGLE_KEYS: { key: string; defaultOn: boolean }[] = [
   { key: 'notificationsInApp', defaultOn: true },
+  { key: 'notificationsOrganize', defaultOn: true },
   { key: 'notificationsEmail', defaultOn: true },
   { key: 'notificationsBrowser', defaultOn: false },
   { key: 'weeklyReport', defaultOn: true },

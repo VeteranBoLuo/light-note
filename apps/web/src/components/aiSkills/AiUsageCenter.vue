@@ -129,6 +129,9 @@
           </div>
         </div>
 
+        <p v-if="data?.groupingAvailable === false" class="usage-empty">{{
+          t('settings.ai.usage.groupingUnavailable')
+        }}</p>
         <div v-if="data?.items.length" class="usage-records">
           <BButton
             v-for="item in data.items"
@@ -155,6 +158,9 @@
               <div class="record-meta">
                 <span>{{ formatDateTime(item.createdAt) }}</span>
                 <span>{{ moduleLabel(item.module) }}</span>
+                <span v-if="item.organizeRunId">{{
+                  t('settings.ai.usage.runResources', { n: item.resourceCount })
+                }}</span>
                 <span>{{ t('settings.ai.usage.providerCalls', { n: item.providerCallCount }) }}</span>
               </div>
               <small v-if="item.platformCoveredTokens > 0" class="record-covered">
@@ -258,6 +264,7 @@
       </div>
     </div>
 
+    <AiUsageRunModal v-model:visible="runDetailVisible" :run="selectedUsage" :days="days" />
     <AiUsageDetailModal v-model:visible="detailVisible" :execution="selectedUsage" />
   </section>
 </template>
@@ -273,6 +280,7 @@
   import BPagination from '@/components/base/BasicComponents/BPagination.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
+  import AiUsageRunModal from './AiUsageRunModal.vue';
   import AiUsageDetailModal from '@/components/aiSkills/AiUsageDetailModal.vue';
   import { AI_USAGE_FILTER_MODULE_KEYS, aiUsageModuleKey } from '@/components/aiSkills/aiUsageModules';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -289,6 +297,8 @@
 
   interface UsageItem {
     id: string;
+    organizeRunId?: string;
+    resourceCount?: number;
     actionId: string;
     module: string;
     labelKey: string;
@@ -316,6 +326,7 @@
   }
 
   interface UsageResponse {
+    groupingAvailable?: boolean;
     query: { days: number; page: number; pageSize: number; module: string };
     summary: UsageSummary;
     daily: Array<{ date: string; chargedTokens: number; providerTokens: number; actions: number }>;
@@ -329,6 +340,7 @@
   const activeTab = ref('details');
   const days = ref(7);
   const moduleFilter = ref('all');
+  const runDetailVisible = ref(false);
   const page = ref(1);
   const pageSize = ref(20);
   const loading = ref(false);
@@ -397,7 +409,13 @@
     try {
       const response = await apiBasePost(
         '/api/chat/aiUsage',
-        { days: days.value, module: moduleFilter.value, page: page.value, pageSize: pageSize.value },
+        {
+          days: days.value,
+          module: moduleFilter.value,
+          page: page.value,
+          pageSize: pageSize.value,
+          groupOrganize: true,
+        },
         { silent: true },
       );
       if (current !== requestSequence) return;
@@ -432,7 +450,8 @@
 
   function openDetail(item: UsageItem) {
     selectedUsage.value = item;
-    detailVisible.value = true;
+    if (item.organizeRunId) runDetailVisible.value = true;
+    else detailVisible.value = true;
     recordOperation({
       module: 'AI 用量与计费',
       operation: `查看调用详情【${operationModuleLabel(item.module)}】`,
@@ -454,6 +473,9 @@
       help: '帮助',
       tag: '标签',
       toolbox: '知识工坊',
+      organize: 'AI 整理',
+      routine: '今日简报',
+      general: '通用',
     };
     return labels[module] || '其他';
   }
@@ -489,19 +511,21 @@
 
   function statusTone(status: string) {
     if (status === 'success') return 'success';
-    if (status === 'aborted') return 'neutral';
+    if (status === 'aborted' || status === 'paused' || status === 'running') return 'neutral';
     if (status === 'partial' || status === 'quota_blocked') return 'warning';
     return 'error';
   }
 
   function statusLabel(status: string) {
-    const key = ['success', 'partial', 'aborted', 'quota_blocked', 'running'].includes(status) ? status : 'failed';
+    const key = ['success', 'partial', 'aborted', 'quota_blocked', 'running', 'paused'].includes(status)
+      ? status
+      : 'failed';
     return t(`settings.ai.usage.status.${key}`);
   }
 
   function statusIcon(status: string) {
     if (status === 'success') return icon.message.success;
-    if (status === 'aborted') return icon.common.stop;
+    if (status === 'aborted' || status === 'paused') return icon.common.stop;
     if (status === 'partial' || status === 'quota_blocked') return icon.message.warning;
     if (status === 'running') return icon.message.loading;
     return icon.message.error;

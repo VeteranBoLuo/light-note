@@ -9,7 +9,11 @@ import i18n, { prepareInitialLocale } from '@/i18n';
 import { initializePwaInstall } from '@/composables/usePwaInstall';
 import { isAndroidWebViewRuntime, isLightNoteAndroidApp } from '@/utils/androidBridge';
 import { installRenderingProfileSync } from '@/config/renderingProfile';
-import { waitForApplicationMountReadiness } from '@/utils/appMountReadiness';
+import {
+  captureContinuousAnimationHandoff,
+  hasPrerenderedApplicationContent,
+  waitForApplicationMountReadiness,
+} from '@/utils/appMountReadiness';
 
 // Android 系统 WebView 的部分旧版本会把 color-mix() 与多层阴影渲染成实心黑框。
 // 原生壳会在 UA 中追加 LightNoteAndroid；`; wv)` 保留给旧调试包与系统 WebView。
@@ -25,7 +29,10 @@ if (document.documentElement.classList.contains('light-note-mobile-rendering')) 
   document.documentElement.style.setProperty('--ln-aux-zoom', '1');
 }
 
-// 创建vue实例
+const appRoot = document.querySelector<HTMLElement>('#app');
+if (!appRoot) throw new Error('Application root not found');
+const hasPrerenderedContent = hasPrerenderedApplicationContent(appRoot);
+
 const app = createApp(App);
 const pinia = createPinia();
 
@@ -41,9 +48,6 @@ if (!isAndroidApp) {
   initializePwaInstall();
 }
 async function mountApplication() {
-  const appRoot = document.querySelector<HTMLElement>('#app');
-  if (!appRoot) throw new Error('Application root not found');
-
   // 公开页的构建产物已经包含完整首屏。保留它直到语言与首路由分包同时就绪，
   // 避免 Vue 先清空预渲染内容、再等待异步 RouterView 而产生明显白闪。
   await waitForApplicationMountReadiness({
@@ -51,7 +55,13 @@ async function mountApplication() {
     prepareLocale: prepareInitialLocale,
     waitForInitialRoute: () => router.isReady(),
   });
+  // 客户端 mount 会重建预渲染节点。同步移交持续动画相位，避免慢网络下已经运行数秒的
+  // 光晕与标题动画在接管瞬间跳回首帧；空壳应用和不支持 Web Animations API 的浏览器无操作。
+  const restoreContinuousAnimations = hasPrerenderedContent
+    ? captureContinuousAnimationHandoff(appRoot)
+    : undefined;
   app.mount(appRoot);
+  restoreContinuousAnimations?.();
 }
 
 void mountApplication();

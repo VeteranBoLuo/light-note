@@ -1,5 +1,16 @@
 export type ResolvedTheme = 'day' | 'night';
 
+/**
+ * 主题同步时是否需要短暂冻结应用动画。
+ *
+ * 官网首页由静态预渲染首屏交给 Vue 接管，且首屏光晕、渐变标题使用持续关键帧动画。
+ * 若在接管后再切换 `disable-animations`，关键帧属性会瞬间回退到静态默认值，浏览器一旦
+ * 在这个事件循环绘制就会形成概率性闪屏。官网自身固定使用深色视觉，不需要这层冻结。
+ */
+export function shouldFreezeAnimationsForThemeSync(routeName: unknown): boolean {
+  return routeName !== 'landing';
+}
+
 export function normalizeResolvedTheme(theme: unknown): ResolvedTheme {
   return theme === 'night' ? 'night' : 'day';
 }

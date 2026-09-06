@@ -1,4 +1,5 @@
 export declare const AI_SKILL_PROTOCOL_VERSION: 1;
+export declare const AI_SCOPED_CONVERSATION_MAX_RESOURCES: 50;
 export type AiSkillStatus =
   "completed" | "preview_ready" | "needs_confirmation" | "failed" | "cancelled";
 export type AiSkillResultKind =
@@ -16,6 +17,14 @@ export interface AiSkillResourceRef {
   version?: string;
 }
 
+export interface AiSkillNoteDirectorySelector {
+  type: "note_directory";
+  parentId: string | null;
+  includeDescendants: boolean;
+}
+
+export type AiSkillScopeSelector = AiSkillNoteDirectorySelector;
+
 export interface AiSkillRequest {
   protocolVersion: 1;
   requestId: string;
@@ -23,7 +32,10 @@ export interface AiSkillRequest {
   skillVersion: number;
   threadId: string | null;
   input: Record<string, unknown>;
-  scope: { resourceRefs: readonly AiSkillResourceRef[] };
+  scope: {
+    resourceRefs: readonly AiSkillResourceRef[];
+    selector?: AiSkillScopeSelector;
+  };
   client: { locale: string; timezone: string; surface: string };
 }
 

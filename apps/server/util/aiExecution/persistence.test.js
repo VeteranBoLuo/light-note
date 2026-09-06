@@ -23,6 +23,15 @@ function database() {
 }
 
 describe('aiExecution persistence', () => {
+  it('整理任务和资源关联与 Execution 原子写入，不改变单次请求去重键', async () => {
+    const db = database();
+    await insertAiExecution(execution({ requestId: 'lease', organizeRunId: 'run', organizeItemId: 'item' }), db);
+    expect(db.query.mock.calls[0][0]).toContain('organize_run_id, organize_item_id');
+    expect(db.query.mock.calls[0][1]).toEqual(expect.arrayContaining(['lease', 'run', 'item']));
+    const plain = database();
+    await insertAiExecution(execution(), plain);
+    expect(plain.query.mock.calls[0][0]).not.toContain('organize_run_id');
+  });
   it('根执行落库规则版本与租约，终态原子清空租约', async () => {
     const db = database();
     const leaseExpiresAt = new Date('2026-08-25T12:00:00.000Z');

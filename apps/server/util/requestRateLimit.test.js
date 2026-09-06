@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getGlobalRateLimit, getGlobalRateLimitKey } from './requestRateLimit.js';
+import { getGlobalRateLimit, getGlobalRateLimitKey, shouldSkipGeneralRateLimit } from './requestRateLimit.js';
 
 const limits = { visitor: 30, authenticated: 60, root: 120 };
 
@@ -32,5 +32,26 @@ describe('global request rate limit', () => {
     };
     expect(getGlobalRateLimit(req, limits)).toBe(120);
     expect(getGlobalRateLimitKey(req)).toBe('account:root-user');
+  });
+
+  it.each([
+    ['GET', '/uploads'],
+    ['GET', '/uploads/bookmark-icon.png'],
+    ['HEAD', '/uploads/note-cover.webp?version=2'],
+  ])('does not count public upload reads: %s %s', (method, path) => {
+    expect(shouldSkipGeneralRateLimit({ method, path })).toBe(true);
+  });
+
+  it.each([
+    ['POST', '/uploads/bookmark-icon.png'],
+    ['GET', '/uploads-private/bookmark-icon.png'],
+    ['GET', '/api/uploads/bookmark-icon.png'],
+    ['POST', '/toolbox/uploads'],
+  ])('keeps non-static or non-read requests rate limited: %s %s', (method, path) => {
+    expect(shouldSkipGeneralRateLimit({ method, path })).toBe(false);
+  });
+
+  it('continues to skip preflight requests', () => {
+    expect(shouldSkipGeneralRateLimit({ method: 'OPTIONS', path: '/api/bookmark/getBookmarkList' })).toBe(true);
   });
 });

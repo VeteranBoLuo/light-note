@@ -2,11 +2,41 @@
   <section
     v-if="showCard"
     class="daily-review"
-    :class="{ 'daily-review--compact': isTerminal }"
+    :class="{
+      'daily-review--compact': !displayAll && (isTerminal || compact),
+      'daily-review--line': inline && !displayAll,
+      'daily-review--summary': compact && !inline && !isTerminal,
+      'daily-review--all': displayAll,
+    }"
     :aria-label="t('growth.dailyReviewTitle')"
     :aria-busy="loading || Boolean(actionKey) || undefined"
   >
-    <template v-if="isTerminal">
+    <div v-if="inline && !displayAll" class="daily-review__line">
+      <span v-if="isCompleted && !error && !actionError" class="daily-review__line-completed" role="status">
+        <SvgIcon :src="icon.message.success" size="17" aria-hidden="true" />
+        {{ t(allAvailableItemsReviewed ? 'growth.dailyReviewDoneShort' : 'growth.dailyReviewHandledShort') }}
+      </span>
+      <template v-else>
+        <span class="daily-review__line-label"
+          >{{ t('growth.dailyReviewTitle') }}
+          <span v-if="review && !isEmpty"> · {{ progress.done }}/{{ progress.total }}</span>
+        </span>
+        <BButton v-if="error && !review" size="small" :loading="loading" @click="retryLoad">
+          {{ t('common.retry') }}
+        </BButton>
+        <BButton
+          v-else
+          class="daily-review__start"
+          size="small"
+          :loading="loading || Boolean(actionKey)"
+          :disabled="!review"
+          @click="openDetails"
+        >
+          {{ t(error || actionError ? 'growth.dailyReviewCheckStatus' : 'growth.dailyReviewStart') }}
+        </BButton>
+      </template>
+    </div>
+    <template v-else-if="isTerminal && !displayAll">
       <div class="daily-review__compact-state" :class="isSkipped ? 'is-skipped' : 'is-completed'" role="status">
         <span class="daily-review__state-icon" :class="isSkipped ? 'is-skipped' : 'is-success'" aria-hidden="true">
           <SvgIcon :src="isSkipped ? icon.noteTemplate.review : icon.message.success" size="19" />
@@ -27,28 +57,27 @@
           <span>{{ terminalDescription }}</span>
         </div>
         <time class="daily-review__date" :datetime="review?.date || undefined">{{ reviewDateLabel }}</time>
-        <BButton
-          v-if="isSkipped && !readOnly"
-          class="daily-review__resume"
-          size="small"
-          :loading="actionKey === 'today:resume_today'"
-          :disabled="Boolean(actionKey)"
-          @click="resumeToday"
-        >
-          {{ t('growth.dailyReviewResumeToday') }}
+        <BButton v-if="compact && orderedItems.length" size="small" @click="openDetails">
+          {{ t('growth.dailyReviewViewDetails') }}
         </BButton>
       </div>
     </template>
 
     <template v-else>
       <header class="daily-review__header">
-        <span class="daily-review__title-icon" aria-hidden="true">
+        <span v-if="!displayAll" class="daily-review__title-icon" aria-hidden="true">
           <SvgIcon :src="icon.noteTemplate.review" size="21" />
         </span>
         <div class="daily-review__heading">
           <div class="daily-review__title-row">
-            <h2>{{ t('growth.dailyReviewTitle') }}</h2>
+            <h2 v-if="!displayAll">{{ t('growth.dailyReviewTitle') }}</h2>
             <BChip v-if="readOnly" tone="neutral">{{ t('growth.dailyReviewReadOnly') }}</BChip>
+            <BChip v-if="displayAll && completionRewardExp > 0" class="daily-review__reward" tone="success">
+              {{ t('growth.dailyReviewRewardGranted', { exp: completionRewardExp }) }}
+            </BChip>
+            <BChip v-else-if="displayAll && completionRewardSettled" class="daily-review__reward" tone="neutral">
+              {{ t('growth.dailyReviewRewardCapReached') }}
+            </BChip>
             <BChip v-else-if="canEarnReward" class="daily-review__reward-preview" tone="neutral">
               {{ t('growth.dailyReviewRewardPreview', { exp: configuredRewardExp }) }}
             </BChip>
@@ -59,12 +88,12 @@
       </header>
     </template>
 
-    <div v-if="error && review" class="daily-review__notice is-stale" role="status">
+    <div v-if="error && review && !inline" class="daily-review__notice is-stale" role="status">
       <span>{{ t('growth.dailyReviewStale') }}</span>
       <BButton size="small" :loading="loading" @click="retryLoad">{{ t('common.retry') }}</BButton>
     </div>
 
-    <div v-if="actionError && review" class="daily-review__notice is-action-error" role="alert">
+    <div v-if="actionError && review && !inline" class="daily-review__notice is-action-error" role="alert">
       <span>
         <strong>{{ t('growth.dailyReviewSyncFailedTitle') }}</strong>
         {{ syncFailureDesc }}
@@ -74,7 +103,107 @@
       </BButton>
     </div>
 
-    <template v-if="!isTerminal">
+    <template v-if="displayAll">
+      <div v-if="loading && !review" class="daily-review__loading">
+        <BLoading inline :loading="true" :title="t('growth.dailyReviewLoading')" />
+      </div>
+
+      <div v-else-if="error && !review" class="daily-review__state daily-review__state--error" role="alert">
+        <span class="daily-review__state-icon is-error" aria-hidden="true">
+          <SvgIcon :src="icon.message.error" size="19" />
+        </span>
+        <div>
+          <strong>{{ t('growth.dailyReviewLoadFailedTitle') }}</strong>
+          <span>{{ t('growth.dailyReviewLoadFailedDesc') }}</span>
+        </div>
+        <BButton class="daily-review__retry" size="small" :loading="loading" @click="retryLoad">
+          {{ t('common.retry') }}
+        </BButton>
+      </div>
+
+      <div v-else-if="isEmpty" class="daily-review__state daily-review__state--empty">
+        <span class="daily-review__state-icon is-empty" aria-hidden="true">
+          <SvgIcon :src="icon.noteDetail.history" size="21" />
+        </span>
+        <div>
+          <strong>{{ t('growth.dailyReviewEmptyTitle') }}</strong>
+          <span>{{ t('growth.dailyReviewEmptyDesc') }}</span>
+        </div>
+      </div>
+
+      <template v-else>
+        <div class="daily-review__progress-row daily-review__progress-row--all">
+          <span>{{ t('growth.dailyReviewProgress', { done: progress.done, total: progress.total }) }}</span>
+          <BProgress
+            class="daily-review__progress"
+            size="small"
+            :percent="progressPercent"
+            :aria-label="t('growth.dailyReviewProgress', { done: progress.done, total: progress.total })"
+          />
+        </div>
+
+        <div class="daily-review__all-list">
+          <article
+            v-for="item in orderedItems"
+            :key="item.id"
+            class="daily-review__all-item"
+            :class="[`is-${item.resourceType}`, { 'is-reviewed': isItemReviewed(item) }]"
+          >
+            <span class="daily-review__resource-icon" aria-hidden="true">
+              <SvgIcon :src="itemIcon(item)" size="20" />
+            </span>
+            <div class="daily-review__item-main">
+              <div class="daily-review__item-meta">
+                <BChip :tone="item.resourceType">{{ itemTypeLabel(item) }}</BChip>
+                <time v-if="itemDateIso(item)" :datetime="itemDateIso(item)">{{ itemDateText(item) }}</time>
+              </div>
+              <h3>{{ item.title || t('growth.dailyReviewUntitled') }}</h3>
+              <p class="daily-review__reason">{{ itemReason(item) }}</p>
+            </div>
+            <BButton
+              v-if="item.action === 'pending'"
+              class="daily-review__open"
+              size="small"
+              :loading="actionKey === actionId(item, 'open')"
+              :disabled="!canOpen(item) || Boolean(actionKey)"
+              :title="canOpen(item) ? '' : t('growth.dailyReviewUnavailable')"
+              @click="openItem(item)"
+            >
+              {{ t('growth.dailyReviewOpen') }}
+            </BButton>
+            <BChip v-else :tone="isItemReviewed(item) ? 'success' : 'neutral'">
+              {{ itemActionLabel(item) }}
+            </BChip>
+          </article>
+        </div>
+      </template>
+    </template>
+
+    <template v-else-if="compact && !inline && !isTerminal">
+      <div v-if="loading && !review" class="daily-review__summary-state" role="status">
+        <BLoading inline :loading="true" :title="t('growth.dailyReviewLoading')" />
+      </div>
+      <div v-else-if="error && !review" class="daily-review__summary-state is-error" role="alert">
+        <span>{{ t('growth.dailyReviewLoadFailedDesc') }}</span>
+        <BButton size="small" :loading="loading" @click="retryLoad">{{ t('common.retry') }}</BButton>
+      </div>
+      <div v-else-if="isEmpty" class="daily-review__summary-state">
+        <span>{{ t('growth.dailyReviewEmptyDesc') }}</span>
+      </div>
+      <div v-else-if="currentItem" class="daily-review__summary-body">
+        <div class="daily-review__summary-progress">
+          <span>{{ t('growth.dailyReviewProgress', { done: progress.done, total: progress.total }) }}</span>
+          <BProgress size="small" :percent="progressPercent"
+            :aria-label="t('growth.dailyReviewProgress', { done: progress.done, total: progress.total })" />
+        </div>
+        <div class="daily-review__summary-action">
+          <span>{{ t('growth.dailyReviewOpenDetailsHint') }}</span>
+          <BButton type="primary" size="small" @click="openDetails">{{ t('growth.dailyReviewStart') }}</BButton>
+        </div>
+      </div>
+    </template>
+
+    <template v-else-if="!isTerminal && !compact">
       <div v-if="loading && !review" class="daily-review__loading">
         <BLoading inline :loading="true" :title="t('growth.dailyReviewLoading')" />
       </div>
@@ -132,15 +261,6 @@
           </div>
           <div class="daily-review__primary-actions">
             <BButton
-              v-if="currentItem.reasonCode === 'active_tag' && currentItem.reasonTag?.id"
-              class="daily-review__tag-space"
-              :disabled="Boolean(actionKey)"
-              @click="openTagSpace(currentItem)"
-            >
-              <SvgIcon :src="icon.resource.tag" size="15" aria-hidden="true" />
-              {{ t('growth.dailyReviewOpenTagSpace') }}
-            </BButton>
-            <BButton
               type="primary"
               class="daily-review__open"
               :loading="actionKey === actionId(currentItem, 'open')"
@@ -165,16 +285,6 @@
             }}
           </div>
           <div class="daily-review__actions">
-            <BButton
-              v-if="!readOnly"
-              class="daily-review__skip"
-              size="small"
-              :loading="actionKey === 'today:skip_today'"
-              :disabled="Boolean(actionKey)"
-              @click="skipToday"
-            >
-              {{ t('growth.dailyReviewSkipToday') }}
-            </BButton>
             <BButton
               v-if="pendingItems.length > 1"
               class="daily-review__next"
@@ -208,6 +318,17 @@
       </template>
     </template>
   </section>
+
+  <BModal
+    v-if="compact"
+    v-model:visible="detailsVisible"
+    :title="t('growth.dailyReviewTitle')"
+    :show-footer="false"
+    width="860px"
+    content-class="daily-review-modal__content"
+  >
+    <DailyReviewCard v-if="detailsVisible" :read-only="readOnly" display-all />
+  </BModal>
 </template>
 
 <script setup lang="ts">
@@ -218,6 +339,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BProgress from '@/components/base/BasicComponents/BProgress.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
@@ -235,7 +357,14 @@
   import { openBookmarkUrl } from '@/utils/openBookmark.ts';
   import { resolveResourceRoute } from '@/utils/resourceNavigation.ts';
 
-  const props = withDefaults(defineProps<{ readOnly?: boolean }>(), { readOnly: false });
+  defineOptions({ name: 'DailyReviewCard' });
+
+  const props = withDefaults(defineProps<{ readOnly?: boolean; compact?: boolean; inline?: boolean; displayAll?: boolean }>(), {
+    readOnly: false,
+    compact: false,
+    inline: false,
+    displayAll: false,
+  });
   const { t, locale } = useI18n();
   const router = useRouter();
   const user = useUserStore();
@@ -253,6 +382,10 @@
   } = useDailyReview();
   const currentIndex = ref(0);
   const actionKey = ref('');
+  const detailsVisible = ref(false);
+  const inline = computed(() => props.inline);
+  const compact = computed(() => props.compact);
+  const displayAll = computed(() => props.displayAll);
 
   const identityKey = computed(() =>
     [
@@ -262,6 +395,7 @@
       user.adminContext?.subjectUserId || '',
       user.adminContext?.mode || '',
       readOnly.value ? 'readonly' : 'writable',
+      String(user.preferences?.dailyReviewEnabled !== false),
     ].join('|'),
   );
   const isVisitor = computed(() => user.role === 'visitor' || Boolean(review.value?.isVisitor));
@@ -309,7 +443,8 @@
       : t('growth.dailyReviewProcessedDesc');
   });
   const showCard = computed(() => {
-    if (isVisitor.value) return false;
+    if (isVisitor.value || user.preferences?.dailyReviewEnabled === false) return false;
+    if (inline.value && isEmpty.value && !error.value && !actionError.value) return false;
     if ((loading.value && !review.value) || (error.value && !review.value)) return true;
     const status = review.value?.session?.status;
     return status === 'active' || status === 'empty' || status === 'completed' || status === 'skipped';
@@ -341,7 +476,8 @@
     identityKey,
     () => {
       currentIndex.value = 0;
-      if (user.role === 'visitor') return;
+      detailsVisible.value = false;
+      if (user.role === 'visitor' || user.preferences?.dailyReviewEnabled === false) return;
       void loadDailyReview({ ensure: !readOnly.value });
     },
     { immediate: true },
@@ -409,6 +545,26 @@
       day: 'numeric',
       timeZone: 'UTC',
     }).format(calendarDateAsUtc(date));
+  }
+
+  function itemDateIso(item: DailyReviewItem) {
+    return itemCalendarDate(item)?.iso || '';
+  }
+
+  function itemDateText(item: DailyReviewItem) {
+    const date = itemCalendarDate(item);
+    return date ? itemDateLabel(date) : '';
+  }
+
+  function isItemReviewed(item: DailyReviewItem) {
+    return item.action === 'opened' || item.action === 'opened_tag_space';
+  }
+
+  function itemActionLabel(item: DailyReviewItem) {
+    if (isItemReviewed(item)) return t('growth.dailyReviewReviewed');
+    if (item.action === 'snoozed') return t('growth.dailyReviewSnoozedState');
+    if (item.action === 'dismissed') return t('growth.dailyReviewDismissedState');
+    return t('growth.dailyReviewPendingState');
   }
 
   function itemReason(item: DailyReviewItem) {
@@ -514,14 +670,6 @@
     void syncRequest;
   }
 
-  function openTagSpace(item: DailyReviewItem) {
-    if (item.reasonCode !== 'active_tag' || !item.reasonTag?.id) return;
-    const syncRequest = startItemAction(item, 'open_tag_space', true);
-    void router.push(`/tag/${encodeURIComponent(item.reasonTag.id)}`);
-    recordOperation({ module: '每日回顾', operation: '进入推荐标签空间' });
-    void syncRequest;
-  }
-
   function showNext() {
     if (pendingItems.value.length < 2 || actionKey.value) return;
     currentIndex.value = (currentIndex.value + 1) % pendingItems.value.length;
@@ -555,38 +703,23 @@
     if (key === 'dismiss') confirmDismiss();
   }
 
-  async function skipToday() {
-    if (readOnly.value || actionKey.value) return;
-    const key = 'today:skip_today';
-    actionKey.value = key;
-    try {
-      const response = await actOnToday('skip_today');
-      if (response?.status === 200 && response.data?.ok) {
-        message.success(t('growth.dailyReviewSkipped'));
-        recordOperation({ module: '每日回顾', operation: '今天先收起' });
+  async function openDetails() {
+    if (actionKey.value) return;
+    const owner = identityKey.value;
+    const date = review.value?.date;
+    // 兼容旧客户端收起的会话；只有用户主动进入回顾时才恢复。
+    if (isSkipped.value && !readOnly.value) {
+      actionKey.value = 'today:resume_today';
+      try {
+        const response = await actOnToday('resume_today');
+        if (response?.status !== 200 || !response.data?.ok) return;
+      } catch {
+        return;
+      } finally {
+        actionKey.value = '';
       }
-    } catch (writeError) {
-      console.warn('收起每日回顾失败:', writeError);
-    } finally {
-      if (actionKey.value === key) actionKey.value = '';
     }
-  }
-
-  async function resumeToday() {
-    if (readOnly.value || actionKey.value) return;
-    const key = 'today:resume_today';
-    actionKey.value = key;
-    try {
-      const response = await actOnToday('resume_today');
-      if (response?.status === 200 && response.data?.ok) {
-        message.success(t('growth.dailyReviewResumed'));
-        recordOperation({ module: '每日回顾', operation: '重新展开今日回顾' });
-      }
-    } catch (writeError) {
-      console.warn('重新展开每日回顾失败:', writeError);
-    } finally {
-      if (actionKey.value === key) actionKey.value = '';
-    }
+    if (owner === identityKey.value && date === review.value?.date) detailsVisible.value = true;
   }
 
   async function retryAction() {
@@ -633,9 +766,92 @@
     padding-bottom: 13px;
   }
 
+  .daily-review--summary {
+    min-height: 118px;
+    display: flex;
+    flex-direction: column;
+  }
+  .daily-review__summary-state {
+    min-height: 52px;
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: var(--desc-color);
+    font-size: 12px;
+    text-align: center;
+  }
+  .daily-review__summary-state.is-error { color: var(--danger-color); }
+  .daily-review__summary-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 8px;
+    padding-top: 8px;
+  }
+  .daily-review__summary-progress {
+    display: grid;
+    grid-template-columns: auto minmax(100px, 1fr);
+    align-items: center;
+    gap: 10px;
+    color: var(--desc-color);
+    font-size: 11px;
+  }
+  .daily-review__summary-action {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .daily-review__summary-action > span {
+    color: var(--desc-color);
+    font-size: 11px;
+  }
+
+  .daily-review.daily-review--all {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .daily-review--all::before {
+    display: none;
+  }
+
+  .daily-review--all .daily-review__header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+
+  .daily-review--all .daily-review__date {
+    grid-column: auto;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .daily-review--all .daily-review__heading p {
+    margin-top: 5px;
+  }
+
+  :global(.daily-review-modal__content) {
+    padding: 16px;
+    overflow: auto;
+  }
+
+  :global(.daily-review-modal__content .daily-review) {
+    border: 0;
+    box-shadow: none;
+  }
+
   .daily-review__compact-state {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
     align-items: center;
     gap: 11px;
     min-height: 40px;
@@ -668,6 +884,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
 
   .daily-review__header {
     display: grid;
@@ -855,6 +1072,74 @@
     max-width: 100%;
   }
 
+  .daily-review__progress-row--all {
+    grid-template-columns: auto minmax(120px, 240px);
+    margin-top: 12px;
+  }
+
+  .daily-review__all-list {
+    display: grid;
+    margin-top: 10px;
+    border-top: 1px solid var(--surface-border-color, var(--card-border-color));
+  }
+
+  .daily-review__all-item {
+    --review-accent: var(--primary-color);
+
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--surface-border-color, var(--card-border-color));
+  }
+
+  .daily-review__all-item.is-note {
+    --review-accent: var(--resource-note-color, #00a884);
+  }
+
+  .daily-review__all-item.is-bookmark {
+    --review-accent: var(--resource-bookmark-color, #615ced);
+  }
+
+  .daily-review__all-item.is-file {
+    --review-accent: var(--resource-file-color, #ff8a00);
+  }
+
+  .daily-review__all-item .daily-review__resource-icon {
+    width: 36px;
+    height: 36px;
+    border: 0;
+    border-radius: 9px;
+  }
+
+  .daily-review__all-item > .daily-review__open {
+    height: 32px;
+    min-height: 32px;
+    padding: 0 10px;
+    color: var(--primary-color);
+  }
+
+  .daily-review__all-item h3 {
+    margin: 3px 0 0;
+    overflow: hidden;
+    color: var(--text-color);
+    font-size: 13px;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .daily-review__all-item .daily-review__reason {
+    margin-top: 2px;
+    overflow: hidden;
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+
   .daily-review__item {
     --review-accent: var(--primary-color);
 
@@ -928,12 +1213,10 @@
   }
 
   .daily-review__open,
-  .daily-review__tag-space,
   .daily-review__next {
     gap: 5px;
   }
 
-  .daily-review__tag-space,
   .daily-review__next {
     color: var(--primary-color);
   }
@@ -963,16 +1246,13 @@
     background: var(--primary-color);
   }
 
-  .daily-review__skip {
-    color: var(--desc-color);
-  }
 
   .daily-review__more {
     width: 32px;
     padding: 0;
   }
 
-  :global(html.light-note-mobile-rendering .daily-review) {
+  :global(html.light-note-mobile-rendering .daily-review:not(.daily-review--all):not(.daily-review--line)) {
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
   }
 
@@ -981,7 +1261,7 @@
     background: var(--menu-body-bg-color, var(--card-background));
   }
 
-  @media (max-width: 640px) {
+  @media (max-width: 767px) {
     .daily-review {
       padding: 14px 12px 12px;
       border-radius: 16px;
@@ -1002,11 +1282,7 @@
       margin-top: 0;
     }
 
-    .daily-review__compact-state .daily-review__resume {
-      grid-column: 2 / -1;
-      width: 100%;
-      min-height: 44px;
-    }
+
 
     .daily-review__header {
       grid-template-columns: 38px minmax(0, 1fr);
@@ -1043,6 +1319,19 @@
       gap: 10px;
       padding: 12px 10px;
     }
+
+    .daily-review__all-item h3 {
+      display: -webkit-box;
+      white-space: normal;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+
+    .daily-review__all-item .daily-review__item-meta {
+      flex-wrap: wrap;
+      gap: 4px 6px;
+    }
+
 
     .daily-review__resource-icon {
       width: 40px;
@@ -1108,6 +1397,44 @@
     .daily-review__more {
       padding: 0;
     }
+  }
+
+  .daily-review.daily-review--line {
+    padding: 8px 12px;
+    border-radius: 12px;
+    box-shadow: none;
+  }
+
+  .daily-review--line::before {
+    display: none;
+  }
+
+  .daily-review__line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 32px;
+    font-size: 13px;
+  }
+
+  .daily-review__line-label {
+    color: var(--text-color);
+  }
+  .daily-review__line-label > span {
+    color: var(--desc-color);
+  }
+  .daily-review__line-completed {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--success-color);
+  }
+  .daily-review__line :deep(.b_btn) {
+    flex-shrink: 0;
+    height: 32px;
+    min-height: 32px;
+    color: var(--primary-color);
   }
 
   @media (prefers-reduced-motion: reduce) {

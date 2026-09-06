@@ -20,69 +20,58 @@
               <BChip tone="success">{{ t('entitlementStore.permanentBenefit') }}</BChip>
               <BChip tone="neutral">{{ t('entitlementStore.firstPurchasePerPackage') }}</BChip>
             </div>
+            <BButton class="store-hero__action" type="primary" size="large" @click="scrollToCatalog">
+              <span>{{ t('entitlementStore.heroAction') }}</span>
+              <SvgIcon :src="icon.arrow_right" size="16" aria-hidden="true" />
+            </BButton>
           </div>
 
-          <BCard
-            as="section"
-            class="store-account"
-            padding="18px"
-            radius="18px"
-            :aria-label="t('entitlementStore.accountSummaryAria')"
-          >
-            <div class="store-account__heading">
-              <span class="store-account__icon" aria-hidden="true">
-                <SvgIcon :src="icon.support.store" size="19" />
-              </span>
-              <div>
-                <strong>{{ t('entitlementStore.accountTitle') }}</strong>
-                <span v-if="stateReady && !stateError && storeState.authenticated">{{ accountName }}</span>
-              </div>
+          <BCard as="section" class="store-hero-visual" variant="raised" padding="0" radius="22px">
+            <div class="store-hero-visual__glow" aria-hidden="true"></div>
+            <div class="store-hero-visual__icons" aria-hidden="true">
+              <span class="store-hero-visual__icon is-ai"><SvgIcon :src="icon.growth.ai" size="28" /></span>
+              <span class="store-hero-visual__icon is-store"><SvgIcon :src="icon.support.store" size="30" /></span>
+              <span class="store-hero-visual__icon is-storage"><SvgIcon :src="icon.growth.storage" size="28" /></span>
             </div>
-            <div v-if="!stateReady || stateLoading" class="store-account__state">
-              <BLoading inline loading :title="t('entitlementStore.accountLoading')" />
+            <div class="store-hero-visual__copy">
+              <span>{{ t('entitlementStore.heroVisualEyebrow') }}</span>
+              <strong>{{ t('entitlementStore.heroVisualTitle') }}</strong>
+              <p>{{ t('entitlementStore.heroVisualDescription') }}</p>
             </div>
-            <div v-else-if="stateError" class="store-account__state is-error" role="alert">
-              <SvgIcon :src="icon.message.error" size="18" aria-hidden="true" />
-              <div>
-                <strong>{{ t('entitlementStore.stateUnavailable') }}</strong>
-                <span>{{ t('entitlementStore.stateLoadFailed') }}</span>
-              </div>
-              <BButton size="small" :loading="stateLoading" @click="loadState">{{ t('common.retry') }}</BButton>
+            <div class="store-hero-visual__account" :class="{ 'is-error': stateError }">
+              <BLoading
+                v-if="!stateReady || stateLoading"
+                inline
+                loading
+                :title="t('entitlementStore.accountLoading')"
+              />
+              <template v-else-if="stateError">
+                <SvgIcon :src="icon.message.error" size="17" aria-hidden="true" />
+                <span class="store-hero-visual__account-copy">
+                  <strong>{{ t('entitlementStore.stateUnavailable') }}</strong>
+                  <small>{{ t('entitlementStore.stateLoadFailed') }}</small>
+                </span>
+                <BButton size="small" :loading="stateLoading" @click="loadState">{{ t('common.retry') }}</BButton>
+              </template>
+              <template v-else>
+                <SvgIcon :src="icon.message.success" size="17" aria-hidden="true" />
+                <span>{{ heroAccountSummary }}</span>
+              </template>
             </div>
-            <div v-else-if="!storeState.authenticated" class="store-account__state">
-              <SvgIcon :src="icon.settings.privacy" size="19" aria-hidden="true" />
-              <div>
-                <strong>{{ t('entitlementStore.accountGuestTitle') }}</strong>
-                <span>{{ t('entitlementStore.accountGuestDescription') }}</span>
-              </div>
-            </div>
-            <template v-else>
-              <div class="store-account__metrics">
-                <div v-for="item in summaryCards" :key="item.key">
-                  <span>{{ item.label }}</span>
-                  <strong>{{ item.value }}</strong>
-                </div>
-              </div>
-              <p class="store-account__caption">
-                {{
-                  storeState.orderCount
-                    ? t('entitlementStore.accountSummaryDescription')
-                    : t('entitlementStore.accountEmptyDescription')
-                }}
-              </p>
-            </template>
           </BCard>
         </header>
 
-        <BCard as="section" class="store-cost-note" padding="15px 18px" radius="16px">
-          <span class="store-cost-note__icon" aria-hidden="true"><SvgIcon :src="icon.message.info" size="19" /></span>
-          <p>
-            <strong>{{ t('entitlementStore.costNoticeTitle') }}</strong>
-            <span>{{ t('entitlementStore.costNoticeBody') }}</span>
-          </p>
-        </BCard>
+        <section class="store-assurance" :aria-label="t('entitlementStore.assuranceAria')">
+          <div v-for="item in assuranceItems" :key="item.key" class="store-assurance__item">
+            <span aria-hidden="true"><SvgIcon :src="item.icon" size="19" /></span>
+            <div>
+              <strong>{{ item.title }}</strong>
+              <p>{{ item.description }}</p>
+            </div>
+          </div>
+        </section>
 
-        <section class="store-section" aria-labelledby="store-catalog-title">
+        <section ref="catalogSection" class="store-section store-catalog" aria-labelledby="store-catalog-title">
           <div class="store-section__heading">
             <div>
               <h2 id="store-catalog-title">{{ t('entitlementStore.catalogTitle') }}</h2>
@@ -284,6 +273,7 @@
   const stateError = ref(false);
   const checkoutModalVisible = ref(false);
   const selectedItem = ref<StoreItem | null>(null);
+  const catalogSection = ref<HTMLElement | null>(null);
   const requestedCategory = String(route.query.category || '');
   const activeCategory = ref<SupportPackageCategory>(
     ['ai', 'storage', 'combo'].includes(requestedCategory) ? (requestedCategory as SupportPackageCategory) : 'ai',
@@ -302,17 +292,31 @@
     if (!storeState.value.authenticated || !user.id) return t('entitlementStore.confirm.currentAccount');
     return user.alias || user.userName || t('entitlementStore.confirm.currentAccount');
   });
-  const summaryCards = computed(() => [
-    { key: 'orders', label: t('entitlementStore.summaryOrders'), value: String(storeState.value.orderCount) },
+  const heroAccountSummary = computed(() => {
+    if (!storeState.value.authenticated) return t('entitlementStore.heroAccountGuest');
+    if (storeState.value.orderCount > 0) {
+      return t('entitlementStore.heroAccountPurchased', { count: storeState.value.orderCount });
+    }
+    return t('entitlementStore.heroAccountReady');
+  });
+  const assuranceItems = computed(() => [
     {
-      key: 'ai',
-      label: t('entitlementStore.summaryAi'),
-      value: formatAiQuotaTokens(storeState.value.grantedTokens, locale.value),
+      key: 'permanent',
+      icon: icon.message.success,
+      title: t('entitlementStore.assurancePermanentTitle'),
+      description: t('entitlementStore.assurancePermanentDescription'),
     },
     {
-      key: 'storage',
-      label: t('entitlementStore.summaryStorage'),
-      value: formatStorage(storeState.value.grantedStorageMb),
+      key: 'arrival',
+      icon: icon.growth.reward,
+      title: t('entitlementStore.assuranceArrivalTitle'),
+      description: t('entitlementStore.assuranceArrivalDescription'),
+    },
+    {
+      key: 'choice',
+      icon: icon.settings.privacy,
+      title: t('entitlementStore.assuranceChoiceTitle'),
+      description: t('entitlementStore.assuranceChoiceDescription'),
     },
   ]);
   const purchaseSteps = computed(() => [
@@ -387,6 +391,9 @@
     if (order.rewardStorageMb && order.rewardTokens) return icon.growth.reward;
     if (order.rewardStorageMb) return icon.growth.storage;
     return icon.growth.ai;
+  }
+  function scrollToCatalog() {
+    catalogSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   function canCheckout(item: StoreItem) {
     if (

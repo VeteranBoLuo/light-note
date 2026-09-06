@@ -101,6 +101,14 @@ function ensureSuccess<T>(response: any): T {
   return response.data as T;
 }
 
+/** 与书签编辑器共用完整标签列表，供本地搜索和关联选择。 */
+export async function fetchSelectableTags(): Promise<Array<{ id: string; name: string }>> {
+  const response = await apiBasePost('/api/bookmark/queryTagList', {}, { silent: true, feedback: false });
+  const items = ensureSuccess<Array<{ id: string; name: string }>>(response);
+  if (!Array.isArray(items)) throw new Error('TAG_LIST_INVALID');
+  return items.map((tag) => ({ id: String(tag.id), name: tag.name }));
+}
+
 export async function fetchTagSpaces(params: {
   keyword?: string;
   filter?: TagSpaceFilter;

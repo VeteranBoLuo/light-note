@@ -225,6 +225,11 @@ SELECT '[14] missing_core_column' AS check_name, expected.n AS detail FROM (
   SELECT 'file_preview_artifacts', 'source_type', 'file_preview_artifacts.source_type' UNION ALL
   SELECT 'file_preview_artifacts', 'file_id', 'file_preview_artifacts.file_id' UNION ALL
   SELECT 'file_preview_artifacts', 'strategy', 'file_preview_artifacts.strategy' UNION ALL
+  SELECT 'file_preview_artifacts', 'source_object_key', 'file_preview_artifacts.source_object_key' UNION ALL
+  SELECT 'file_preview_artifacts', 'output_mode', 'file_preview_artifacts.output_mode' UNION ALL
+  SELECT 'file_preview_artifacts', 'image_width', 'file_preview_artifacts.image_width' UNION ALL
+  SELECT 'file_preview_artifacts', 'image_height', 'file_preview_artifacts.image_height' UNION ALL
+  SELECT 'file_preview_artifacts', 'image_animated', 'file_preview_artifacts.image_animated' UNION ALL
   SELECT 'file_preview_artifacts', 'source_etag', 'file_preview_artifacts.source_etag' UNION ALL
   SELECT 'file_preview_artifacts', 'status', 'file_preview_artifacts.status' UNION ALL
   SELECT 'file_preview_artifacts', 'manifest_json', 'file_preview_artifacts.manifest_json' UNION ALL
@@ -1868,6 +1873,14 @@ LEFT JOIN information_schema.columns actual
  AND actual.column_name=expected.col
 WHERE actual.column_name IS NULL;
 
+SELECT '[48] invalid_afdian_support_identity_default' AS check_name,
+  CONCAT('support_public_preferences.show_identity actual=', IFNULL(actual.column_default, 'NULL')) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name='support_public_preferences'
+  AND actual.column_name='show_identity'
+  AND NOT (actual.is_nullable='NO' AND actual.column_default='1');
+
 -- 50) Agent Turn Contract V2 shadow trace 必须可持久化（期望 0 行）
 SELECT '[50] missing_agent_turn_contract_trace_column' AS check_name,
   'agent_logs.turn_contract_trace' AS detail
@@ -3361,3 +3374,168 @@ FROM (
 ) attachment
 WHERE attachment.status='expired' AND attachment.object_key IS NOT NULL
 LIMIT 100;
+-- 68) 每日简报与 AI 标签建议的幂等产物、租约和复审字段必须完整（期望 0 行）
+SELECT '[68] missing_daily_brief_or_ai_suggestion_table' AS check_name, expected.table_name AS detail
+FROM (
+  SELECT 'tag' table_name UNION ALL
+  SELECT 'workbench_daily_briefs' UNION ALL
+  SELECT 'organize_ai_tag_batches' UNION ALL
+  SELECT 'organize_ai_tag_suggestions'
+) expected
+LEFT JOIN information_schema.tables actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.table_name
+WHERE actual.table_name IS NULL;
+
+SELECT '[68] missing_daily_brief_or_ai_suggestion_column' AS check_name,
+       CONCAT(expected.table_name, '.', expected.column_name) AS detail
+FROM (
+  SELECT 'tag' table_name, 'active_name' column_name UNION ALL
+  SELECT 'workbench_daily_briefs', 'facts_json' UNION ALL
+  SELECT 'workbench_daily_briefs', 'brief_json' UNION ALL
+  SELECT 'workbench_daily_briefs', 'lease_expires_at' UNION ALL
+  SELECT 'organize_ai_tag_batches', 'group_id' UNION ALL
+  SELECT 'organize_ai_tag_batches', 'client_request_id' UNION ALL
+  SELECT 'organize_ai_tag_batches', 'payload_hash' UNION ALL
+  SELECT 'organize_ai_tag_batches', 'lease_token' UNION ALL
+  SELECT 'organize_ai_tag_suggestions', 'source_hash' UNION ALL
+  SELECT 'organize_ai_tag_suggestions', 'current_tags_json' UNION ALL
+  SELECT 'organize_ai_tag_suggestions', 'recommended_tags_json' UNION ALL
+  SELECT 'organize_ai_tag_suggestions', 'accepted_tags_json'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.table_name
+ AND actual.column_name=expected.column_name
+WHERE actual.column_name IS NULL;
+
+SELECT '[68] invalid_tag_active_name_generated_column' AS check_name,
+       COALESCE(CONCAT(actual.data_type, ':', actual.extra), 'missing') AS detail
+FROM (SELECT 1 AS singleton) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='tag'
+ AND actual.column_name='active_name'
+WHERE actual.column_name IS NULL
+   OR actual.data_type <> 'varchar'
+   OR UPPER(actual.extra) NOT LIKE '%STORED GENERATED%';
+
+SELECT '[68] missing_daily_brief_or_ai_suggestion_index' AS check_name,
+       CONCAT(expected.table_name, '.', expected.index_name) AS detail
+FROM (
+  SELECT 'tag' table_name, 'uk_tag_active_user_name' index_name UNION ALL
+  SELECT 'workbench_daily_briefs', 'uk_workbench_daily_brief_user_date' UNION ALL
+  SELECT 'organize_ai_tag_batches', 'uk_organize_ai_tag_request' UNION ALL
+  SELECT 'organize_ai_tag_batches', 'idx_organize_ai_tag_claim' UNION ALL
+  SELECT 'organize_ai_tag_suggestions', 'uk_organize_ai_tag_batch_resource'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.table_name
+ AND actual.index_name=expected.index_name
+WHERE actual.index_name IS NULL;
+
+SELECT '[68] invalid_tag_active_name_unique_index' AS check_name,
+       COALESCE(CONCAT(actual.non_unique, ':', actual.index_columns), 'missing') AS detail
+FROM (SELECT 1 AS singleton) expected
+LEFT JOIN (
+  SELECT MIN(non_unique) AS non_unique,
+         GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') AS index_columns
+  FROM information_schema.statistics
+  WHERE table_schema = DATABASE()
+    AND table_name = 'tag'
+    AND index_name = 'uk_tag_active_user_name'
+) actual ON 1 = 1
+WHERE actual.non_unique IS NULL OR actual.non_unique <> 0 OR actual.index_columns <> 'user_id,active_name';
+
+SELECT '[68] invalid_daily_brief_or_ai_suggestion_table_format' AS check_name,
+       CONCAT(expected.table_name, ':', COALESCE(actual.engine, 'missing'), ':', COALESCE(actual.row_format, 'missing')) AS detail
+FROM (
+  SELECT 'tag' table_name UNION ALL
+  SELECT 'workbench_daily_briefs' UNION ALL
+  SELECT 'organize_ai_tag_batches' UNION ALL
+  SELECT 'organize_ai_tag_suggestions'
+) expected
+LEFT JOIN information_schema.tables actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.table_name
+WHERE actual.table_name IS NULL
+   OR UPPER(actual.engine) <> 'INNODB'
+   OR UPPER(actual.row_format) <> 'DYNAMIC';
+
+SELECT '[68] invalid_daily_brief_or_ai_suggestion_index_shape' AS check_name,
+       CONCAT(expected.table_name, '.', expected.index_name, ':',
+              COALESCE(actual.non_unique, 'missing'), ':', COALESCE(actual.index_columns, 'missing')) AS detail
+FROM (
+  SELECT 'workbench_daily_briefs' table_name, 'uk_workbench_daily_brief_user_date' index_name,
+         0 non_unique, 'user_id,brief_date' index_columns UNION ALL
+  SELECT 'workbench_daily_briefs', 'idx_workbench_daily_brief_lease', 1, 'status,lease_expires_at' UNION ALL
+  SELECT 'organize_ai_tag_batches', 'idx_organize_ai_tag_group', 1, 'user_id,group_id' UNION ALL
+  SELECT 'organize_ai_tag_batches', 'uk_organize_ai_tag_request', 0, 'user_id,client_request_id' UNION ALL
+  SELECT 'organize_ai_tag_batches', 'idx_organize_ai_tag_claim', 1, 'status,lease_expires_at,create_time' UNION ALL
+  SELECT 'organize_ai_tag_batches', 'idx_organize_ai_tag_user', 1, 'user_id,create_time,id' UNION ALL
+  SELECT 'organize_ai_tag_suggestions', 'uk_organize_ai_tag_batch_resource', 0,
+         'batch_id,resource_type,resource_id' UNION ALL
+  SELECT 'organize_ai_tag_suggestions', 'idx_organize_ai_tag_batch_status', 1, 'batch_id,status,id' UNION ALL
+  SELECT 'organize_ai_tag_suggestions', 'idx_organize_ai_tag_user_status', 1, 'user_id,status,update_time'
+) expected
+LEFT JOIN (
+  SELECT table_name, index_name, MIN(non_unique) AS non_unique,
+         GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') AS index_columns
+  FROM information_schema.statistics
+  WHERE table_schema=DATABASE()
+    AND table_name IN ('workbench_daily_briefs','organize_ai_tag_batches','organize_ai_tag_suggestions')
+  GROUP BY table_name, index_name
+) actual
+  ON actual.table_name=expected.table_name AND actual.index_name=expected.index_name
+WHERE actual.index_name IS NULL
+   OR actual.non_unique <> expected.non_unique
+   OR actual.index_columns <> expected.index_columns;
+
+-- 通用整理任务独立迁移：结构、幂等与队列索引门禁。
+SELECT '[organize-workspace] missing_column' AS check_name, CONCAT(e.tab,'.',e.col) AS detail FROM (
+  SELECT 'organize_suggestion_runs' tab, 'options_json' col UNION ALL
+  SELECT 'organize_suggestion_runs','request_id' UNION ALL
+  SELECT 'organize_suggestion_runs','summary_json' UNION ALL
+  SELECT 'organize_suggestion_runs','start_request_id' UNION ALL
+  SELECT 'organize_suggestion_items','version_hash' UNION ALL
+  SELECT 'organize_suggestion_items','snapshot_json' UNION ALL
+  SELECT 'organize_suggestion_items','lease_token' UNION ALL
+  SELECT 'organize_suggestion_items','ai_kinds_json' UNION ALL
+  SELECT 'organize_suggestions','payload_json' UNION ALL
+  SELECT 'organize_suggestions','applied_request_id'
+) e LEFT JOIN information_schema.columns c ON c.table_schema=DATABASE() AND c.table_name=e.tab AND c.column_name=e.col WHERE c.column_name IS NULL;
+SELECT '[organize-workspace] index_contract' AS check_name, CONCAT(e.tab,'.',e.idx) AS detail FROM (
+ SELECT 'organize_suggestion_runs' tab,'uk_organize_run_request' idx,0 non_unique,'user_id,request_id' cols UNION ALL
+ SELECT 'organize_suggestion_runs','idx_organize_runs_queue',1,'status,created_at,id' UNION ALL
+ SELECT 'organize_suggestion_runs','uk_organize_run_start',0,'user_id,start_request_id' UNION ALL
+ SELECT 'organize_suggestion_items','uk_organize_run_resource',0,'run_id,resource_type,resource_id' UNION ALL
+ SELECT 'organize_suggestion_items','idx_organize_item_queue',1,'ai_status,lease_expires_at,run_id' UNION ALL
+ SELECT 'organize_suggestions','uk_organize_item_kind',0,'item_id,kind'
+) e LEFT JOIN (SELECT table_name,index_name,non_unique,GROUP_CONCAT(column_name ORDER BY seq_in_index) cols FROM information_schema.statistics WHERE table_schema=DATABASE() GROUP BY table_name,index_name,non_unique) s ON s.table_name=e.tab AND s.index_name=e.idx WHERE s.index_name IS NULL OR s.non_unique<>e.non_unique OR s.cols<>e.cols;
+
+-- 通用整理阶段与暂停续跑：旧任务默认 v1，不回填检查结果。
+SELECT '[organize-lifecycle] missing_column' AS check_name, CONCAT(e.tab,'.',e.col) AS detail FROM (
+ SELECT 'organize_suggestion_runs' tab,'run_version' col UNION ALL
+ SELECT 'organize_suggestion_runs','started_at' UNION ALL
+ SELECT 'organize_suggestion_runs','rule_phase' UNION ALL
+ SELECT 'organize_suggestion_runs','pause_reason' UNION ALL
+ SELECT 'organize_suggestion_runs','rule_lease_token' UNION ALL
+ SELECT 'organize_suggestion_runs','rule_lease_expires_at' UNION ALL
+ SELECT 'organize_suggestion_items','rule_status'
+) e LEFT JOIN information_schema.columns c ON c.table_schema=DATABASE() AND c.table_name=e.tab AND c.column_name=e.col WHERE c.column_name IS NULL;
+SELECT '[organize-lifecycle] index_contract' AS check_name, CONCAT(e.tab,'.',e.idx) AS detail FROM (
+ SELECT 'organize_suggestion_runs' tab,'idx_organize_rule_queue' idx,'run_version,rule_phase,rule_lease_expires_at' cols UNION ALL
+ SELECT 'organize_suggestion_items','idx_organize_rule_items','run_id,rule_status,id'
+) e LEFT JOIN (SELECT table_name,index_name,GROUP_CONCAT(column_name ORDER BY seq_in_index) cols FROM information_schema.statistics WHERE table_schema=DATABASE() GROUP BY table_name,index_name) s ON s.table_name=e.tab AND s.index_name=e.idx WHERE s.index_name IS NULL OR s.cols<>e.cols;
+
+-- 整次整理用量关联：旧调用允许 NULL，任务关联与调用计费独立。
+SELECT 'missing_organize_usage_column' AS check_name, expected.column_name AS detail
+FROM (SELECT 'organize_run_id' AS column_name UNION ALL SELECT 'organize_item_id') expected
+LEFT JOIN information_schema.columns actual ON actual.table_schema=DATABASE()
+ AND actual.table_name='ai_executions' AND actual.column_name=expected.column_name
+WHERE actual.column_name IS NULL;
+SELECT 'missing_organize_usage_index' AS check_name
+FROM (SELECT 1) expected
+WHERE NOT EXISTS (SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE()
+ AND table_name='ai_executions' AND index_name='idx_ai_execution_organize');
+
+SELECT '[image-preview] strategy_enum_missing' AS check_name, column_type AS detail FROM information_schema.COLUMNS WHERE table_schema = DATABASE() AND table_name = 'file_preview_artifacts' AND column_name = 'strategy' AND (column_type NOT LIKE '%image_thumbnail%' OR column_type NOT LIKE '%image_display%');

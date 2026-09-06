@@ -4,6 +4,61 @@ import { buildObjectUrl, createDownloadSignedUrl } from '../util/obsClient.js';
 import { getFileExtension, resolveFileCategory } from '../util/fileCategory.js';
 import { listTodoPage, queryTodoPendingCount } from '../util/services/todoService.js';
 import { listInboxResources } from '../util/resourceInbox.js';
+import { ensureNotVisitor } from '../util/auth.js';
+import { isDailyBriefFeatureEnabled } from '../util/dailyBriefFeature.js';
+import {
+  ensureDailyBrief,
+  getDailyBrief,
+  getDailyBriefPreference,
+  refreshDailyBrief,
+  updateDailyBriefPreference,
+} from '../util/services/dailyBriefService.js';
+
+function workbenchSubject(req) {
+  return req.resourceUser || req.user || null;
+}
+
+function sendDailyBriefError(res, error) {
+  const status = [400, 401, 403, 404, 409, 429, 503].includes(Number(error?.status)) ? Number(error.status) : 500;
+  const code = String(error?.code || 'DAILY_BRIEF_SERVICE_FAILED');
+  if (status >= 500) {
+    // 严格白名单：不得输出 error/message/details 整体，里面可能带待修复的私人草稿。
+    const details = error?.details || {};
+    const knownReasons = new Set([
+      'DRAFT_SHAPE',
+      'INSIGHTS_SHAPE',
+      'INSIGHT_SHAPE',
+      'FACT_IDS_INVALID',
+      'TEXT_EMPTY',
+      'TEXT_TOO_LONG',
+      'TOKEN_SYNTAX',
+      'TOKEN_UNKNOWN_FACT',
+      'TOKEN_UNDECLARED_FACT',
+      'TOKEN_SAMPLE_UNAVAILABLE',
+      'CONNECTION_EVIDENCE_REQUIRED',
+      'POSITIVE_FACT_REQUIRED',
+      'NUMERIC_LITERAL',
+    ]);
+    const reason = knownReasons.has(details.reason) ? details.reason : 'UNCLASSIFIED';
+    const field = /^(?:draft|headline|recommendation|insights(?:\[[0-4]\](?:\.(?:text|factIds))?)?)$/u.test(
+      details.field || '',
+    ) ? details.field : 'unknown';
+    const lengths = ['actualLength', 'maxLength', 'unknownFactCount']
+      .filter((key) => Number.isSafeInteger(details[key]) && details[key] >= 0)
+      .map((key) => `${key}=${details[key]}`)
+      .join(' ');
+    console.error('[daily-brief] request failed code=%s reason=%s field=%s %s', code, reason, field, lengths);
+    if (reason === 'NUMERIC_LITERAL' && details.numericSummary) {
+      const summary = details.numericSummary;
+      console.error('[daily-brief] numeric classification sourceLiteral=%s countLiteral=%s englishNumberWord=%s literalCount=%s',
+        summary.sourceLiteral === true, summary.countLiteral === true, summary.englishNumberWord === true,
+        Number.isSafeInteger(summary.literalCount) ? summary.literalCount : 0);
+    }
+  }
+  return res
+    .status(status)
+    .send(resultData({ code }, status, status >= 500 ? '每日简报暂时不可用，请稍后重试' : error.message));
+}
 
 function dayLabel(date) {
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -282,10 +337,7 @@ async function queryHotTags(userId) {
   );
   return rows.map((item, index) => ({
     ...item,
-    resourceTotal:
-      Number(item.bookmarkCount || 0) +
-      Number(item.noteCount || 0) +
-      Number(item.fileCount || 0),
+    resourceTotal: Number(item.bookmarkCount || 0) + Number(item.noteCount || 0) + Number(item.fileCount || 0),
     index: index + 1,
   }));
 }
@@ -460,5 +512,60 @@ export const getWorkbenchSummary = async (req, res) => {
   } catch (error) {
     console.error('获取工作台聚合数据失败:', error);
     res.send(resultData(null, 500, '获取工作台聚合数据失败'));
+  }
+};
+
+/** 只读查询：不会创建简报，也不会访问 AI Provider。 */
+export const getWorkbenchDailyBrief = async (req, res) => {
+  const current = workbenchSubject(req);
+  if (!current?.id)
+    return res.status(401).send(resultData({ code: 'DAILY_BRIEF_AUTH_REQUIRED' }, 401, '登录后才能查看每日简报'));
+  try {
+    return res.send(resultData(await getDailyBrief(pool, { userId: current.id, check: req.query?.check === '1' })));
+  } catch (error) {
+    return sendDailyBriefError(res, error);
+  }
+};
+
+/** 根据账号当日事实新鲜度自动生成，冷却与幂等由服务端统一裁决。 */
+export const ensureWorkbenchDailyBrief = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  const current = req.user;
+  try {
+    return res.send(resultData(await ensureDailyBrief(pool, { userId: current.id, req })));
+  } catch (error) {
+    return sendDailyBriefError(res, error);
+  }
+};
+
+/** 用户明确触发的当日 AI 简报更新；仍受 AI 限频与服务端生成租约约束。 */
+export const refreshWorkbenchDailyBrief = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    return res.send(resultData(await refreshDailyBrief(pool, { userId: req.user.id, req })));
+  } catch (error) {
+    return sendDailyBriefError(res, error);
+  }
+};
+
+export const getWorkbenchDailyBriefPreference = async (req, res) => {
+  const current = workbenchSubject(req);
+  if (!current?.id)
+    return res.status(401).send(resultData({ code: 'DAILY_BRIEF_AUTH_REQUIRED' }, 401, '登录后才能查看每日简报设置'));
+  try {
+    const preference = await getDailyBriefPreference(pool, current.id);
+    return res.send(resultData({ featureEnabled: isDailyBriefFeatureEnabled(), enabled: preference.enabled, autoUpdate: preference.autoUpdate }));
+  } catch (error) {
+    return sendDailyBriefError(res, error);
+  }
+};
+
+export const putWorkbenchDailyBriefPreference = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const preference = await updateDailyBriefPreference(pool, req.user.id, req.body?.enabled, req.body?.autoUpdate);
+    return res.send(resultData({ featureEnabled: isDailyBriefFeatureEnabled(), ...preference }));
+  } catch (error) {
+    return sendDailyBriefError(res, error);
   }
 };

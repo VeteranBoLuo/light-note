@@ -108,6 +108,7 @@
 
 <script lang="ts" setup>
   import { computed, ref, watch } from 'vue';
+  import { useResourceSelectionStore, type SelectionOperation } from '@/store/resourceSelection';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
@@ -128,10 +129,16 @@
     type FlatNoteTreeItem,
   } from '@/utils/noteTree';
 
-  const props = withDefaults(defineProps<{ note?: any | null; notes?: any[] }>(), {
-    note: null,
-    notes: () => [],
-  });
+  const props = withDefaults(
+    defineProps<{ note?: any | null; notes?: any[]; selectionOperation?: SelectionOperation | null }>(),
+    {
+      note: null,
+      selectionOperation: null,
+      notes: () => [],
+    },
+  );
+  const selectionStore = useResourceSelectionStore();
+  const operationValid = (op = props.selectionOperation) => !op || selectionStore.isCurrent(op);
   const visible = defineModel<boolean>('visible', { default: false });
   const emit = defineEmits<{ moved: [result: any] }>();
   const { t } = useI18n();
@@ -327,7 +334,9 @@
   }
 
   async function confirmMove(shareExposureAcknowledged = false) {
-    if (saving.value || loading.value || selectedIds.value.size === 0 || !canConfirmMove.value) return;
+    if (!visible.value || saving.value || loading.value || selectedIds.value.size === 0 || !canConfirmMove.value) return;
+    const operation = props.selectionOperation;
+    if (!operationValid(operation)) return;
     const startedAt = Date.now();
     const telemetryBase = {
       surface: (bookmark.isMobile ? 'mobile' : 'desktop') as 'mobile' | 'desktop',
@@ -365,8 +374,14 @@
             },
             { silent: true },
           );
+      if (!operationValid(operation)) return;
       if (response.status !== 200) {
-        if (requestNoteShareExposureConfirmation(response, () => confirmMove(true))) return;
+        if (
+          requestNoteShareExposureConfirmation(response, () => {
+            if (operationValid(operation)) void confirmMove(true);
+          })
+        )
+          return;
         void recordNoteTreeProductEvent('note_tree_move_rejected', {
           ...telemetryBase,
           durationMs: Date.now() - startedAt,

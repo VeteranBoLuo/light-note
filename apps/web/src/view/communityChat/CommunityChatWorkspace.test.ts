@@ -154,6 +154,7 @@ const access = {
   emergencyReadOnly: false,
   environmentReadOnly: false,
   notificationsDefaultEnabled: true,
+  imageAttachmentLimit: 4,
   rulesVersion: 'rules-v1',
   authenticated: true,
   canManage: false,
@@ -315,6 +316,7 @@ async function mountWorkspace(options: { rooms?: any[]; access?: any } = {}) {
 }
 
 beforeEach(() => {
+  vi.stubEnv('VITE_CHAT_IMAGE_PREVIEWS_ENABLED', 'false');
   vi.clearAllMocks();
   vi.spyOn(document, 'hasFocus').mockReturnValue(true);
   mocks.createClientRequestId.mockReturnValue('request-fixed-0001');
@@ -1547,6 +1549,110 @@ describe('CommunityChatWorkspace', () => {
     expect(host.textContent).toContain('订阅缝隙内的新消息');
   });
 
+  it('通知深链定位在首次实时补读后保持可视锚点，补入的旧消息不计为新消息', async () => {
+    WorkspaceRealtimeSocket.instances = [];
+    vi.stubGlobal('WebSocket', WorkspaceRealtimeSocket);
+    mocks.route.query = { message: 'message-focus' };
+    const firstPage = deferred<any>();
+    const latestPage = deferred<any>();
+    mocks.getMessages.mockReturnValueOnce(firstPage.promise).mockReturnValueOnce(latestPage.promise);
+    mocks.scrollIntoContainer.mockImplementationOnce((container: HTMLElement) => {
+      container.scrollTop = 80;
+    });
+
+    const host = await mountWorkspace({ access: { ...access, realtimeEnabled: true } });
+    const messageList = host.querySelector<HTMLElement>('.community-message-list');
+    expect(messageList).not.toBeNull();
+    if (!messageList) return;
+    let scrollTop = 0;
+    Object.defineProperties(messageList, {
+      scrollHeight: {
+        configurable: true,
+        get: () => (host.querySelector('[data-message-public-id="message-backfill"]') ? 800 : 600),
+      },
+      clientHeight: { configurable: true, value: 400 },
+      scrollTop: {
+        configurable: true,
+        get: () => scrollTop,
+        set: (value: number) => {
+          scrollTop = value;
+        },
+      },
+    });
+
+    const socket = WorkspaceRealtimeSocket.instances[0];
+    socket.open();
+    socket.message('room.subscribed', { roomSlug: 'general' });
+    firstPage.resolve({
+      data: {
+        roomSlug: 'general',
+        items: [
+          chatMessage({ publicId: 'message-before', content: '目标前消息', createdAt: '2026-08-09T09:58:00.000Z' }),
+          chatMessage({ publicId: 'message-focus', content: '通知目标', createdAt: '2026-08-09T10:00:00.000Z' }),
+          chatMessage({ publicId: 'message-known-latest', content: '已知最新', createdAt: '2026-08-09T10:01:00.000Z' }),
+        ],
+        hasMore: true,
+        nextBefore: 'message-before',
+        nextAfter: null,
+        focusPublicId: 'message-focus',
+        hasNewer: false,
+      },
+    });
+    await vi.waitFor(() => expect(mocks.getMessages).toHaveBeenCalledTimes(2));
+    await flushAsync();
+    expect(scrollTop).toBe(80);
+
+    const rect = (top: number, bottom: number): DOMRect =>
+      ({
+        x: 0,
+        y: top,
+        width: 600,
+        height: bottom - top,
+        top,
+        right: 600,
+        bottom,
+        left: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    vi.spyOn(messageList, 'getBoundingClientRect').mockReturnValue(rect(100, 500));
+    const messageBefore = host.querySelector<HTMLElement>('[data-message-public-id="message-before"]');
+    const focusedMessage = host.querySelector<HTMLElement>('[data-message-public-id="message-focus"]');
+    expect(messageBefore).not.toBeNull();
+    expect(focusedMessage).not.toBeNull();
+    if (!messageBefore || !focusedMessage) return;
+    vi.spyOn(messageBefore, 'getBoundingClientRect').mockReturnValue(rect(0, 50));
+    vi.spyOn(focusedMessage, 'getBoundingClientRect').mockImplementation(() =>
+      host.querySelector('[data-message-public-id="message-backfill"]') ? rect(320, 380) : rect(120, 180),
+    );
+
+    latestPage.resolve({
+      data: {
+        roomSlug: 'general',
+        items: [
+          chatMessage({
+            publicId: 'message-backfill',
+            content: '最新页补入的旧消息',
+            createdAt: '2026-08-09T09:57:00.000Z',
+          }),
+          chatMessage({ publicId: 'message-before', content: '目标前消息', createdAt: '2026-08-09T09:58:00.000Z' }),
+          chatMessage({ publicId: 'message-focus', content: '通知目标', createdAt: '2026-08-09T10:00:00.000Z' }),
+          chatMessage({ publicId: 'message-known-latest', content: '已知最新', createdAt: '2026-08-09T10:01:00.000Z' }),
+        ],
+        hasMore: false,
+        nextBefore: null,
+        focusPublicId: null,
+        hasNewer: false,
+      },
+    });
+    await flushAsync();
+    await flushAsync();
+
+    expect(scrollTop).toBe(280);
+    expect(host.querySelector('[data-message-public-id="message-focus"]')?.classList.contains('is-focused')).toBe(true);
+    expect(host.textContent).toContain('最新页补入的旧消息');
+    expect(host.querySelector('.community-message-list__new')).toBeNull();
+  });
+
   it('进入真实频道后读取消息并推进已读，用户文本始终按纯文本渲染', async () => {
     mocks.getMessages.mockResolvedValueOnce({
       data: {
@@ -1797,6 +1903,59 @@ describe('CommunityChatWorkspace', () => {
     expect(mocks.routerReplace).toHaveBeenCalledWith({ query: { from: 'note' } });
     expect(mocks.getMessages).toHaveBeenNthCalledWith(2, 'general', { limit: 30 });
     expect(host.querySelector('.community-message-list__new')).toBeNull();
+  });
+
+  it('图文消息定位使用带稳定留白的消息行背景，不显示定位条或给子内容套框', async () => {
+    mocks.route.query = { message: 'message-1' };
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        roomSlug: 'general',
+        items: [
+          chatMessage({
+            content: '正文与图片属于同一条消息',
+            images: [
+              {
+                publicId: 'image-focus-1',
+                url: '/api/community-chat/images/image-focus-1',
+                contentType: 'image/png',
+                fileSize: 12,
+                width: 640,
+                height: 480,
+              },
+            ],
+          }),
+        ],
+        hasMore: false,
+        nextBefore: null,
+        nextAfter: 'message-1',
+        focusPublicId: 'message-1',
+        hasNewer: true,
+      },
+    });
+
+    const host = await mountWorkspace();
+    const focusedMessage = host.querySelector<HTMLElement>('[data-message-public-id="message-1"]');
+    const payload = focusedMessage?.querySelector<HTMLElement>('.community-message__payload');
+
+    expect(focusedMessage?.classList.contains('is-focused')).toBe(true);
+    expect(payload?.closest('.community-message')).toBe(focusedMessage);
+    expect(payload?.querySelector('.community-message__content')).not.toBeNull();
+    expect(payload?.querySelector('.community-message__images')).not.toBeNull();
+    expect(workspaceSource).toMatch(
+      /\.community-message\.is-focused\s*\{[^}]*background-color:\s*var\(--mobile-selected-bg,\s*var\(--workspace-panel-bg-color\)\);/u,
+    );
+    expect(workspaceSource).toMatch(
+      /\.community-message\s*\{[^}]*box-sizing:\s*border-box;[^}]*margin-bottom:\s*2px;[^}]*padding:\s*8px 10px;/u,
+    );
+    expect(workspaceSource).toMatch(
+      /@media \(max-width:\s*767px\)\s*\{[\s\S]*?\.community-message\s*\{[^}]*margin-bottom:\s*2px;[^}]*padding:\s*6px;/u,
+    );
+    expect(workspaceSource).not.toMatch(/\.community-message\.is-focused\s*\{[^}]*padding:/u);
+    expect(workspaceSource).not.toMatch(/\.community-message(?:\.is-focused)?::(?:before|after)/u);
+    expect(workspaceSource).not.toMatch(
+      /\.community-message\.is-focused \.community-message__(?:content|images|recalled|recall-line)\s*\{[^}]*outline:/u,
+    );
+    expect(workspaceSource).not.toMatch(/\.community-message\.is-focused :deep\(\.chat-poll-card\)\s*\{[^}]*outline:/u);
   });
 
   it('定位历史消息后向下滚动会连续加载更新消息，不必整页跳回最新消息', async () => {
@@ -3978,6 +4137,67 @@ describe('CommunityChatWorkspace', () => {
     await flushAsync();
     expect(mocks.discardFile).toHaveBeenCalledWith('file-cancelled');
     expect(host.textContent).not.toContain('cancel-me.txt');
+  });
+
+  it('普通账号仍只接收前 4 张图片，Root 可一次添加更多图片', async () => {
+    let sequence = 0;
+    mocks.uploadImage.mockImplementation(async () => {
+      sequence += 1;
+      return {
+        status: 200,
+        data: {
+          publicId: `image-limit-${sequence}`,
+          url: `/api/community-chat/images/image-limit-${sequence}`,
+          contentType: 'image/png',
+          fileSize: 12,
+          width: 640,
+          height: 480,
+        },
+      };
+    });
+    const files = Array.from(
+      { length: 5 },
+      (_, index) => new File([`image-${index}`], `photo-${index}.png`, { type: 'image/png' }),
+    );
+
+    const memberHost = await mountWorkspace({ access: { ...access, filesEnabled: false } });
+    expect(memberHost.textContent).toContain('最多 4 张');
+    const memberFileInput = Array.from(document.body.querySelectorAll<HTMLInputElement>('.b-upload-native-input')).find(
+      (item) => item.multiple,
+    );
+    if (!memberFileInput) throw new Error('missing member chat image input');
+    Object.defineProperty(memberFileInput, 'files', { configurable: true, value: files });
+    memberFileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    await vi.waitFor(() => expect(mocks.uploadImage).toHaveBeenCalledTimes(4));
+    await flushAsync();
+
+    expect(memberHost.querySelectorAll('.chat-pending-attachment')).toHaveLength(4);
+    expect(mocks.messageWarning).toHaveBeenCalledWith('每条消息最多发送 4 张图片');
+
+    cleanup?.();
+    cleanup = undefined;
+    clearCommunityChatDraftMemory();
+    mocks.user.id = 'root-1';
+    mocks.user.role = 'root';
+    mocks.uploadImage.mockClear();
+    sequence = 0;
+    const rootHost = await mountWorkspace({
+      access: { ...access, filesEnabled: false, canManage: true, memberRole: 'admin', imageAttachmentLimit: null },
+    });
+    expect(rootHost.textContent).toContain('张数不限');
+    const rootFileInput = Array.from(document.body.querySelectorAll<HTMLInputElement>('.b-upload-native-input')).find(
+      (item) => item.multiple,
+    );
+    if (!rootFileInput) throw new Error('missing root chat image input');
+    Object.defineProperty(rootFileInput, 'files', { configurable: true, value: files });
+    rootFileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    await vi.waitFor(() => expect(mocks.uploadImage).toHaveBeenCalledTimes(5));
+    await flushAsync();
+
+    expect(rootHost.querySelectorAll('.chat-pending-attachment')).toHaveLength(5);
+    expect(
+      rootHost.querySelector<HTMLButtonElement>('.community-composer__attach[aria-label="添加图片"]')?.disabled,
+    ).toBe(false);
   });
 
   it('移动端点击聊天图片先打开消息操作抽屉，再由查看大图进入统一查看器', async () => {

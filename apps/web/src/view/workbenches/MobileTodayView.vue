@@ -109,7 +109,9 @@
       </div>
     </section>
 
-    <DailyReviewCard v-if="todaySettled" class="mobile-today__daily-review" :read-only="growthReadOnly" />
+    <div v-if="todaySettled" class="mobile-today__daily-review">
+      <DailyReviewCard :read-only="growthReadOnly" compact inline />
+    </div>
 
     <WorkbenchGrowth v-if="todaySettled" class="mobile-today__growth-card" compact-today />
 
@@ -532,7 +534,11 @@
   }
 
   .mobile-today__daily-review {
-    margin: 14px 0;
+    margin: 16px 0;
+  }
+
+  .mobile-today__daily-review:empty {
+    display: none;
   }
 
   .mobile-today__pending {
