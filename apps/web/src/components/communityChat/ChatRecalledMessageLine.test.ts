@@ -31,7 +31,7 @@ afterEach(() => {
 });
 
 function mountLine(props: Record<string, unknown> = {}) {
-  const emitted = { surfaceClick: 0, viewOriginal: 0 };
+  const emitted = { surfaceClick: 0, reedit: 0, viewOriginal: 0 };
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp(ChatRecalledMessageLine, {
@@ -42,6 +42,9 @@ function mountLine(props: Record<string, unknown> = {}) {
     },
     onViewOriginal: () => {
       emitted.viewOriginal += 1;
+    },
+    onReedit: () => {
+      emitted.reedit += 1;
     },
   });
   app.mount(host);
@@ -74,5 +77,17 @@ describe('ChatRecalledMessageLine', () => {
     host.querySelector<HTMLElement>('.community-message__recall-line')?.click();
     await nextTick();
     expect(emitted.surfaceClick).toBe(1);
+  });
+
+  it('重新编辑只在允许时显示，且不触发系统行点击', async () => {
+    const { host, emitted } = mountLine({ canReedit: true });
+    const button = host.querySelector<HTMLButtonElement>('.community-message__recall-reedit');
+
+    expect(button?.textContent).toContain('communityChat.recall.reedit');
+    button?.click();
+    await nextTick();
+
+    expect(emitted.reedit).toBe(1);
+    expect(emitted.surfaceClick).toBe(0);
   });
 });

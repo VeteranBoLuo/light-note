@@ -30,11 +30,28 @@ export function useGrowthClaimFeedback(claimable: Readonly<Ref<GrowthClaimable |
     return { ...breakdown.value };
   }
 
-  function claimSuccessMessage(receipts: unknown, fallback: GrowthClaimBreakdown): string {
-    const receiptBreakdown = resolveClaimedBreakdown(receipts);
+  function claimSuccessMessage(
+    result: { receipts?: unknown; claimed?: number; exp?: number; points?: number; frames?: unknown[] },
+    fallback: GrowthClaimBreakdown,
+  ): string {
+    const receiptBreakdown = resolveClaimedBreakdown(result.receipts);
     const claimedBreakdown = growthClaimBreakdownTotal(receiptBreakdown) > 0 ? receiptBreakdown : fallback;
     const sources = formatSources(claimedBreakdown);
-    return sources ? t('growth.claimAllSuccessBySource', { sources }) : '';
+    const rewards = {
+      exp: Number(result.exp || 0),
+      points: Number(result.points || 0),
+      frames: Array.isArray(result.frames) ? result.frames.length : 0,
+    };
+    if (sources) {
+      return t(rewards.frames ? 'growth.claimAllSuccessBySourceWithFrames' : 'growth.claimAllSuccessBySource', {
+        sources,
+        ...rewards,
+      });
+    }
+    return t(rewards.frames ? 'growth.claimAllSuccessWithFrames' : 'growth.claimAllSuccess', {
+      n: Number(result.claimed || 0),
+      ...rewards,
+    });
   }
 
   return {

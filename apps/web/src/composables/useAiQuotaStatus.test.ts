@@ -1,5 +1,5 @@
-import { nextTick } from 'vue';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { effectScope, nextTick } from 'vue';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   apiBasePost: vi.fn(),
@@ -17,15 +17,56 @@ vi.mock('@/store', async () => {
   return { useUserStore: () => mocks.user };
 });
 
-import { resetAiQuotaStatusCacheForTest, useAiQuotaStatus } from './useAiQuotaStatus';
+import { resetAiQuotaStatusCacheForTest, useAiQuotaStatus as createAiQuotaStatus } from './useAiQuotaStatus';
 
 describe('useAiQuotaStatus', () => {
+  const scopes: ReturnType<typeof effectScope>[] = [];
+  function useAiQuotaStatus(options: { autoLoad?: boolean }) {
+    const scope = effectScope();
+    scopes.push(scope);
+    return scope.run(() => createAiQuotaStatus(options))!;
+  }
+  afterEach(() => scopes.splice(0).forEach((scope) => scope.stop()));
   beforeEach(() => {
     resetAiQuotaStatusCacheForTest();
     mocks.apiBasePost.mockReset();
     mocks.user.id = 'user-1';
     mocks.user.role = 'user';
     mocks.user.adminContext = null;
+  });
+
+  it('游客的可用额度为零且不请求额度接口，登录后重新读取真实余额', async () => {
+    mocks.user.role = 'visitor';
+    const quota = useAiQuotaStatus({ autoLoad: false });
+    await quota.load();
+    expect(quota.loginRequired.value).toBe(true);
+    expect(quota.status.value).toMatchObject({ quota: 0, remaining: 0, availableRemaining: 0 });
+    expect(quota.remainingPercent.value).toBe(0);
+    expect(mocks.apiBasePost).not.toHaveBeenCalled();
+
+    mocks.apiBasePost.mockResolvedValue({ status: 200, data: { used: 10, quota: 100, remaining: 90 } });
+    mocks.user.role = 'user';
+    await nextTick();
+    await vi.waitFor(() => expect(quota.status.value?.remaining).toBe(90));
+    expect(quota.loginRequired.value).toBe(false);
+  });
+
+  it('退出登录后忽略旧账号尚未返回的余额', async () => {
+    let resolveRequest!: (value: unknown) => void;
+    mocks.apiBasePost.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRequest = resolve;
+      }),
+    );
+    const quota = useAiQuotaStatus({ autoLoad: false });
+    const loading = quota.load();
+    mocks.user.role = 'visitor';
+    await nextTick();
+    resolveRequest({ status: 200, data: { used: 0, quota: 50_000, remaining: 50_000 } });
+    await loading;
+    expect(quota.status.value?.remaining).toBe(0);
+    expect(quota.loading.value).toBe(false);
+    expect(quota.unavailable.value).toBe(false);
   });
 
   it('同一身份的并发读取只请求一次统一额度接口', async () => {

@@ -1,9 +1,5 @@
 <template>
-  <div
-    v-if="user.adminContext"
-    class="admin-context-banner"
-    :class="`mode-${user.adminContext.mode}`"
-  >
+  <div v-if="user.adminContext" class="admin-context-banner" :class="`mode-${user.adminContext.mode}`">
     <div class="admin-context-copy">
       <strong>{{ modeTitle }}</strong>
       <span>{{ subjectLabel }}</span>
@@ -22,10 +18,7 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import userApi from '@/api/userApi.ts';
   import useUserStore from '@/store/useUser.ts';
-  import {
-    clearAdminLoginPreview,
-    getAdminLoginPreviewReturnUrl,
-  } from '@/utils/authStorage.ts';
+  import { clearAdminLoginPreview, getAdminLoginPreviewReturnUrl } from '@/utils/authStorage.ts';
 
   const { t } = useI18n();
   const user = useUserStore();
@@ -35,9 +28,7 @@
   let leaving = false;
 
   const modeTitle = computed(() =>
-    user.adminContext?.mode === 'maintain'
-      ? t('guest.adminContextMaintain')
-      : t('guest.adminContextReadonly'),
+    user.adminContext?.mode === 'maintain' ? t('guest.adminContextMaintain') : t('guest.adminContextReadonly'),
   );
   const subjectLabel = computed(() =>
     t('guest.adminContextSubject', {
@@ -95,9 +86,8 @@
   .admin-context-banner {
     position: fixed;
     top: 8px;
-    left: 50%;
+    right: clamp(260px, 18vw, 360px);
     z-index: 200;
-    transform: translateX(-50%);
     display: flex;
     align-items: center;
     gap: 16px;
@@ -125,9 +115,17 @@
     color: var(--desc-color);
     font-variant-numeric: tabular-nums;
   }
+  @media (min-width: 768px) and (max-width: 1399px) {
+    .admin-context-banner {
+      top: 66px;
+      right: 16px;
+    }
+  }
   @media (max-width: 768px) {
     .admin-context-banner {
       top: 6px;
+      right: auto;
+      left: 10px;
       width: calc(100vw - 20px);
       justify-content: space-between;
     }

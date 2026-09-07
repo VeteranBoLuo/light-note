@@ -1,3 +1,4 @@
+import { createOrganizeHandoff, clearOrganizeHandoff } from '@/utils/organizeHandoff';
 import { computed, onScopeDispose, watch, type Ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
@@ -22,6 +23,7 @@ export function useResourceSelectionRuntime() {
   watch(
     () => buildNoteDetailRequestScope(user),
     (scope) => {
+      clearOrganizeHandoff();
       if (store.module && store.identity !== scope) store.end();
     },
     { flush: 'sync' },
@@ -201,6 +203,24 @@ export function useResourceSelection(
     }
   }
 
+  async function openOrganize() {
+    const op = await prepare(undefined, 1000);
+    if (!op || !current(op)) return;
+    let token: string | undefined;
+    try {
+      token = createOrganizeHandoff(op);
+      const failure = await router.push({
+        path: '/organize',
+        query: { issue: 'ai_suggestions', organizeSelection: token },
+      });
+      if (!failure) return;
+    } catch {
+      message.error(t('organizeWizard.handoffFailed'));
+    }
+    if (token) clearOrganizeHandoff(token);
+    finish(op);
+  }
+
   async function openTags(action: 'add' | 'remove', explicitItems?: SelectedResource[]) {
     const transient = !active.value;
     if (transient && explicitItems?.length) mode.value = true;
@@ -250,6 +270,7 @@ export function useResourceSelection(
     finish,
     reconcile,
     openTags,
+    openOrganize,
     replaceWithQuery,
   };
 }

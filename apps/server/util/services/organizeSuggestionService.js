@@ -20,7 +20,11 @@ import { getActiveAiExecution } from '../aiExecution/context.js';
 import { withActiveUserAiDispatch, lockActiveUserForUpdate } from '../aiOutboundDispatchGuard.js';
 import { getActiveSecurityRestrictions } from '../security/services/securityRestrictionService.js';
 import { isOrganizeAiSuggestionsEnabled } from '../organizeAiSuggestionFeature.js';
-import { suggestResourceMetadata, estimateResourceMetadataTokens } from './organizeSuggestionModel.js';
+import {
+  suggestResourceMetadata,
+  estimateResourceMetadataTokens,
+  prepareResourceMetadata,
+} from './organizeSuggestionModel.js';
 import { applySuggestionMutation } from './organizeSuggestionActions.js';
 import { invalidatePersonalKnowledgeCache } from '../personalKnowledgeSearch.js';
 import { json, transaction } from './organizeSuggestionStorage.js';
@@ -292,23 +296,36 @@ async function finishItem(c, job, status, result, errorCode = null) {
     const payload = json(row.payload_json);
     const value = result?.[row.kind];
     const hasValue = Array.isArray(value) ? value.length > 0 : Boolean(value);
-    const nextStatus = status === 'completed' ? (hasValue ? 'pending' : 'insufficient') : status;
+    const covered = row.kind === 'tags' && result?.tagOutcome === 'already_associated';
+    const nextStatus =
+      status === 'completed' ? (hasValue ? 'pending' : covered ? 'not_applicable' : 'insufficient') : status;
     const after = row.kind === 'title' ? value?.name || null : value || null;
     await c.query('UPDATE organize_suggestions SET status=?,payload_json=? WHERE id=?', [
       nextStatus,
       JSON.stringify({
         ...payload,
         after,
+        ...(row.kind === 'tags' && result?.tagOutcome ? { reasonCode: result.tagOutcome } : {}),
         reason:
           status === 'completed'
             ? hasValue
               ? row.kind === 'title'
                 ? value.evidence
                 : '根据资料内容建议的核心主题标签'
-              : '没有充分依据，可手动补充'
+              : row.kind === 'tags'
+                ? result?.fetchReason && result?.tagOutcome !== 'already_associated'
+                  ? '网页暂时无法读取，已按现有书签信息分析，未发现可追加标签'
+                  : {
+                      already_associated: '推荐主题已由现有标签覆盖，无需追加',
+                      filtered: '生成的标签未通过依据校验，可手动补充',
+                      no_suggestion: '没有发现适合追加的主题标签，可手动补充',
+                    }[result?.tagOutcome] || '没有充分依据，可手动补充'
+                : '没有充分依据，可手动补充'
             : errorCode === 'ORGANIZE_RESOURCE_CHANGED'
               ? '资料已变化，请重新整理'
-              : '分析未完成，请重新整理',
+              : String(errorCode || '').startsWith('BOOKMARK_PAGE_')
+                ? '网页暂时无法读取，请完善书签信息后重新整理'
+                : '分析未完成，请重新整理',
       }),
       row.id,
     ]);
@@ -385,11 +402,28 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
       }
     }
     if (!isOrganizeAiSuggestionsEnabled()) throw suggestionError('ORGANIZE_AI_DISABLED', 'AI 建议暂不可用', 503);
+    // 网页读取不持有外发用户锁；进入外发屏障后再次复核准备期间的变化。
+    const prepared =
+      current.type === 'bookmark' ? await (dependencies.prepare || prepareResourceMetadata)(current) : null;
     const dispatch = dependencies.dispatch || withActiveUserAiDispatch;
     await dispatch(db, job.user_id, async ({ connection, user }) => {
       const restrictions = await (dependencies.restrictions || getActiveSecurityRestrictions)(job.user_id);
       if (restrictions.some((r) => ['full_lock', 'login_lock', 'ai_lock'].includes(r.restriction_type)))
         throw suggestionError('AI_ACCESS_RESTRICTED', 'AI 权限暂不可用', 403);
+      if (current.type === 'bookmark') {
+        const liveRun = await ownedRun(connection, job.user_id, job.run_id);
+        const [leases] = await connection.query(
+          "SELECT lease_token FROM organize_suggestion_items WHERE id=? AND ai_status='running' AND lease_expires_at>NOW()",
+          [job.id],
+        );
+        if (leases[0]?.lease_token !== job.lease_token)
+          throw suggestionError('ORGANIZE_LEASE_LOST', '执行租约已失效', 409);
+        if (!['running', 'paused'].includes(liveRun.status))
+          throw suggestionError('ORGANIZE_RUN_ENDED', '整理已结束', 409);
+        const latest = await readCurrentSuggestionSource(connection, job.user_id, job.resource_type, job.resource_id);
+        if (!latest || latest.version !== current.version)
+          throw suggestionError('ORGANIZE_RESOURCE_CHANGED', '资料已变化，请重新整理', 409);
+      }
       const [tags] = await connection.query('SELECT id,name FROM tag WHERE user_id=? AND del_flag=0', [job.user_id]);
       const request = {
         user,
@@ -411,12 +445,17 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
           identity: user,
           subjectIdentity: user,
           surface: 'organize_center',
-          reservationTokens: estimateResourceMetadataTokens(current, json(job.ai_kinds_json), tags),
+          reservationTokens: estimateResourceMetadataTokens(current, json(job.ai_kinds_json), tags, prepared),
           maxUserProviderCalls: 1,
         }),
         async () => {
           executionRecord = getActiveAiExecution();
-          const result = await (dependencies.model || suggestResourceMetadata)(current, json(job.ai_kinds_json), tags);
+          const result = await (dependencies.model || suggestResourceMetadata)(
+            current,
+            json(job.ai_kinds_json),
+            tags,
+            prepared,
+          );
           // Provider 成果在根 Execution 成功前入库，使用外发屏障事务保证注销互斥。
           const delivered = await transaction(db, (c) => finishItem(c, job, 'completed', result));
           if (!delivered) throw suggestionError('ORGANIZE_LEASE_LOST', '执行租约已失效', 409);

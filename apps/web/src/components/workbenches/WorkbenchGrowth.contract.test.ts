@@ -37,7 +37,7 @@ describe('工作台成长卡交互契约', () => {
 
   it('一键领取成功后根据服务端 receipts 区分任务和成就来源', () => {
     expect(source).toContain('const pendingBreakdown = snapshotClaimableBreakdown()');
-    expect(source).toContain('claimSuccessMessage(res.data.receipts, pendingBreakdown)');
+    expect(source).toContain('claimSuccessMessage(res.data, pendingBreakdown)');
   });
 
   it('桌面展开态复用统一额度状态展示今日额度、永久余额和积分，不为移动紧凑卡额外请求', () => {

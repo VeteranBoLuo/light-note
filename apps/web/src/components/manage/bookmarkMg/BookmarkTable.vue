@@ -25,14 +25,6 @@
         {{ $t('bookmarkMg.healthCheck') }}
       </BButton>
       <BButton
-        class="resource-action resource-action--ai"
-        @click="openGlobalAiOrganize"
-        v-click-log="OPERATION_LOG_MAP.bookmarkMg.aiOrganize"
-      >
-        <SvgIcon :src="icon.ai.organize" color="currentColor" size="18" />
-        {{ $t('bookmarkMg.aiOrganizeBtn') }}
-      </BButton>
-      <BButton
         class="resource-action resource-action--primary"
         type="primary"
         @click="router.push({ path: `/manage/editBookmark/add` })"
@@ -564,12 +556,6 @@
       />
       <LinkHealthModal v-model:visible="healthVisible" />
       <BookmarkSnapshotModal v-model:visible="snapVisible" :bookmark-id="snapBookmarkId" />
-      <AiOrganizeModal
-        v-model:visible="aiOrgVisible"
-        :selected-ids="selectedAiOrganizeIds"
-        :selection-operation="selection.operation()"
-        @applied="init"
-      />
       <BookmarkAiDialog v-model:visible="bookmarkAiVisible" :bookmarks="bookmarkAiItems" />
       <ResourceBatchActionBar
         selection-module="bookmarks"
@@ -642,7 +628,6 @@
   import icon from '@/config/icon.ts';
   import LinkHealthModal from '@/components/manage/bookmarkMg/LinkHealthModal.vue';
   import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
-  import AiOrganizeModal from '@/components/manage/bookmarkMg/AiOrganizeModal.vue';
   import BookmarkCapabilityBadge from '@/components/manage/bookmarkMg/BookmarkCapabilityBadge.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BUpload from '@/components/base/BasicComponents/BUpload.vue';
@@ -771,7 +756,6 @@
   const selectedRows = selection.ids;
   const bookmarkAiVisible = ref(false);
   const bookmarkAiItems = ref<BookmarkInterface[]>([]);
-  const selectedAiOrganizeIds = ref<string[]>([]);
   const outcomeDrawerOpen = ref(false);
   const outcomeResources = ref<ResourceOutcomeResource[]>([]);
   const importExportModalVisible = ref(false);
@@ -783,14 +767,12 @@
     }
   });
   const healthVisible = ref(false);
-  const aiOrgVisible = ref(false); // 智能打标签弹框
-  watch([outcomeDrawerOpen, aiOrgVisible], ([outcome, ai]) => {
-    if (!outcome && !ai) selection.finish();
+  watch(outcomeDrawerOpen, (outcome) => {
+    if (!outcome) selection.finish();
   });
   watch(selection.active, (active) => {
     if (!active) {
       outcomeDrawerOpen.value = false;
-      aiOrgVisible.value = false;
       importExportModalVisible.value = false;
     }
   });
@@ -919,18 +901,8 @@
     bookmarkAiVisible.value = true;
   }
 
-  function openGlobalAiOrganize() {
-    selectedAiOrganizeIds.value = [];
-    aiOrgVisible.value = true;
-  }
-
   async function openSelectedAiOrganize() {
-    const op = await selection.prepare();
-    if (!op) return;
-    const selectedIds = op.items.map((item) => String(item.id));
-    if (!selectedIds.length) return;
-    selectedAiOrganizeIds.value = selectedIds;
-    aiOrgVisible.value = true;
+    await selection.openOrganize();
   }
   const showImportExportModal = async () => {
     if (isImporting.value) {

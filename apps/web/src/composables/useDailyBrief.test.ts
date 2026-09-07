@@ -34,13 +34,14 @@ const initial = (): DailyBriefState => ({
   },
 });
 let dispose: (() => void) | undefined;
-function mount() {
+function mount(passiveInitially = false) {
   const ownerKey = ref('user-1');
   const eligible = ref(true);
+  const passive = ref(passiveInitially);
   let model!: ReturnType<typeof useDailyBrief>;
   const app = createApp({
     setup() {
-      model = useDailyBrief({ ownerKey, eligible });
+      model = useDailyBrief({ ownerKey, eligible, passive });
       return () => h('div');
     },
   });
@@ -51,7 +52,7 @@ function mount() {
     app.unmount();
     host.remove();
   };
-  return { model, ownerKey, eligible };
+  return { model, ownerKey, eligible, passive };
 }
 async function settle() {
   for (let n = 0; n < 15; n++) await Promise.resolve();
@@ -157,7 +158,10 @@ describe('今日简报前台调度', () => {
     await vi.advanceTimersByTimeAsync(61_000);
     expect(get).toHaveBeenCalledTimes(4);
     expect(ensure).not.toHaveBeenCalled();
-    await model.update();
+    const updateRequest = model.update();
+    expect(model.updating.value).toBe(true);
+    await updateRequest;
+    expect(model.updating.value).toBe(false);
     expect(manual).toHaveBeenCalledTimes(1);
   });
 
@@ -203,5 +207,31 @@ describe('今日简报前台调度', () => {
     const calls = get.mock.calls.length;
     await vi.advanceTimersByTimeAsync(60 * 60_000);
     expect(get).toHaveBeenCalledTimes(calls);
+  });
+
+  it('管理员预览只读取已保存简报，不检查新鲜度、生成或手动更新', async () => {
+    const { model } = mount(true);
+    await settle();
+    expect(get.mock.calls).toEqual([[]]);
+    expect(model.state.value?.brief?.headline).toBe('上一版');
+    expect(ensure).not.toHaveBeenCalled();
+    await model.update();
+    expect(manual).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(get.mock.calls.at(-1)).toEqual([]);
+    expect(get.mock.calls.some(([options]) => options?.check)).toBe(false);
+    expect(ensure).not.toHaveBeenCalled();
+    expect(manual).not.toHaveBeenCalled();
+  });
+
+  it('管理员预览遇到未生成状态时保持空结果，不代替目标用户创建简报', async () => {
+    get.mockResolvedValue(ok({ ...initial(), status: 'not_generated', brief: null, shouldGenerate: true }));
+    const { model } = mount(true);
+    await settle();
+    expect(model.state.value).toMatchObject({ status: 'not_generated', brief: null, shouldGenerate: true });
+    expect(get.mock.calls).toEqual([[]]);
+    expect(ensure).not.toHaveBeenCalled();
+    expect(manual).not.toHaveBeenCalled();
   });
 });

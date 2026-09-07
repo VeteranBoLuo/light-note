@@ -161,10 +161,12 @@
                 <ChatRecalledMessageLine
                   v-if="chatMessage.status === 'recalled' && !isRecalledMessageExpanded(chatMessage)"
                   :label="recalledMessageLabel(chatMessage)"
+                  :can-reedit="canReeditRecalledMessage(chatMessage)"
                   :can-view-original="chatMessage.canViewRecalledContent"
                   :action-items="recalledMessageMenuItems(chatMessage)"
                   :busy="messageActionBusyId === chatMessage.publicId"
                   @surface-click="handleMessageTap($event, chatMessage)"
+                  @reedit="reeditRecalledMessage(chatMessage)"
                   @view-original="toggleRecalledMessageOriginal(chatMessage)"
                   @action="(action) => handleMessageAction(action, chatMessage)"
                 />
@@ -1124,6 +1126,7 @@
   const unblockingId = ref('');
   const messageActionBusyId = ref('');
   const recalledExpandedMessageIds = ref(new Set<string>());
+  const recalledDraftSnapshots = ref(new Map<string, CommunityChatReeditDraftSnapshot>());
   const mobileMessageActionsVisible = ref(false);
   const mobileMessageActionTarget = ref<CommunityChatMessage | null>(null);
   const mobileMessageActionImageTarget = ref<CommunityChatImage | null>(null);
@@ -1207,6 +1210,15 @@
   const READ_RECEIPT_COUNT_BATCH_MAX = 100;
   const BACK_TO_BOTTOM_DESKTOP_THRESHOLD = 128;
   const BACK_TO_BOTTOM_MOBILE_THRESHOLD = 320;
+  const COMMUNITY_CHAT_REEDIT_WINDOW_MS = 5 * 60 * 1000;
+
+  interface CommunityChatReeditDraftSnapshot {
+    content: string;
+    replyTarget: CommunityChatMessageReply | null;
+    mentionTargets: CommunityChatDraftMentionTarget[];
+    mentionEveryone: boolean;
+    expiresAt: number;
+  }
 
   const currentRoom = computed(() => props.rooms.find((room) => room.slug === selectedRoomSlug.value) || null);
   const pendingNewMessageDisplayCount = computed(() =>
@@ -1544,6 +1556,77 @@
       chatMessage.recalledByAdmin ? 'communityChat.recall.adminPlaceholder' : 'communityChat.recall.memberPlaceholder',
       { name: authorName(chatMessage) },
     );
+  }
+
+  function createReeditDraftSnapshot(chatMessage: CommunityChatMessage): CommunityChatReeditDraftSnapshot | null {
+    const messageKind = chatMessage.messageKind || 'text';
+    if (
+      !chatMessage.isOwn ||
+      chatMessage.status !== 'active' ||
+      messageKind !== 'text' ||
+      chatMessage.sticker ||
+      chatMessage.poll ||
+      Boolean(chatMessage.images?.length) ||
+      Boolean(chatMessage.attachments?.length) ||
+      !String(chatMessage.content || '').trim()
+    ) {
+      return null;
+    }
+
+    const mentionItems = Array.isArray(chatMessage.mentionItems) ? chatMessage.mentionItems : [];
+    const mentionNames = Array.isArray(chatMessage.mentions) ? chatMessage.mentions : [];
+    if (mentionNames.length !== mentionItems.length) return null;
+
+    return {
+      content: chatMessage.content,
+      replyTarget: chatMessage.reply ? { ...chatMessage.reply } : null,
+      mentionTargets: mentionItems.map((item) => ({
+        key: `user:${item.userPublicId}`,
+        userPublicId: item.userPublicId,
+        communityId: item.communityId,
+        name: item.displayName,
+      })),
+      mentionEveryone: Boolean(chatMessage.mentionEveryone),
+      expiresAt: 0,
+    };
+  }
+
+  function canReeditRecalledMessage(chatMessage: CommunityChatMessage) {
+    if (!chatMessage.isOwn || chatMessage.status !== 'recalled') return false;
+    const snapshot = recalledDraftSnapshots.value.get(chatMessage.publicId);
+    return Boolean(snapshot && snapshot.expiresAt > communityClock.value);
+  }
+
+  function pruneExpiredReeditDraftSnapshots() {
+    const next = new Map(
+      [...recalledDraftSnapshots.value].filter(([, snapshot]) => snapshot.expiresAt > communityClock.value),
+    );
+    if (next.size !== recalledDraftSnapshots.value.size) recalledDraftSnapshots.value = next;
+  }
+
+  function refreshRecallClock() {
+    recallClock.value = Date.now();
+    pruneExpiredReeditDraftSnapshots();
+  }
+
+  function reeditRecalledMessage(chatMessage: CommunityChatMessage) {
+    if (!canReeditRecalledMessage(chatMessage)) return;
+    const snapshot = recalledDraftSnapshots.value.get(chatMessage.publicId);
+    if (!snapshot) return;
+
+    const draftSession = composerDraftSession.value;
+    draftSession.text = snapshot.content;
+    draftSession.replyTarget = snapshot.replyTarget ? { ...snapshot.replyTarget } : null;
+    draftSession.mentionTargets = snapshot.mentionTargets.map((target) => ({ ...target }));
+    draftSession.mentionEveryone = snapshot.mentionEveryone;
+    draftSession.pendingClientRequestId = null;
+    touchCommunityChatDraftSession(draftSession);
+    closeMentionSuggestions();
+    void nextTick(() => {
+      composerInput.value?.focus();
+      composerInput.value?.setSelectionRange(snapshot.content.length, snapshot.content.length);
+      syncComposerInputHeight();
+    });
   }
 
   function isRecalledMessageExpanded(chatMessage: CommunityChatMessage) {
@@ -3378,10 +3461,21 @@
 
   async function recallMessage(chatMessage: CommunityChatMessage) {
     if (messageActionBusyId.value) return;
+    const reeditSnapshot = createReeditDraftSnapshot(chatMessage);
     messageActionBusyId.value = chatMessage.publicId;
     try {
       const response = await recallCommunityChatMessage(chatMessage.publicId);
       if (response?.status !== 200) throw new Error('COMMUNITY_CHAT_RECALL_FAILED');
+      if (reeditSnapshot) {
+        const recalledAt = new Date(String(response.data?.recalledAt || '')).getTime();
+        const recallBaseTime = Number.isFinite(recalledAt) ? recalledAt : communityClock.value;
+        const nextSnapshots = new Map(recalledDraftSnapshots.value);
+        nextSnapshots.set(chatMessage.publicId, {
+          ...reeditSnapshot,
+          expiresAt: recallBaseTime + COMMUNITY_CHAT_REEDIT_WINDOW_MS,
+        });
+        recalledDraftSnapshots.value = nextSnapshots;
+      }
       mobileMessageActionsVisible.value = false;
       if (replyTarget.value?.publicId === chatMessage.publicId) cancelReply();
       void recordOperation({
@@ -4948,6 +5042,7 @@
       resetReadReceiptVisibilityTracking();
       return;
     }
+    refreshRecallClock();
     readReceiptForegroundActive = typeof document.hasFocus !== 'function' || document.hasFocus();
     void refreshLatest();
     if (readReceiptForegroundActive) {
@@ -4964,6 +5059,7 @@
   function handleReadReceiptWindowFocus() {
     readReceiptForegroundActive = document.visibilityState === 'visible';
     if (readReceiptForegroundActive) {
+      refreshRecallClock();
       scheduleVisibleReadReceipts();
       void refreshReadReceiptCounts();
     }
@@ -4980,7 +5076,7 @@
       void refreshReadReceiptCounts();
     }, 8000);
     recallClockTimer = window.setInterval(() => {
-      recallClock.value = Date.now();
+      refreshRecallClock();
     }, 5000);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     document.addEventListener('pointerdown', handleDocumentPointerDown, true);

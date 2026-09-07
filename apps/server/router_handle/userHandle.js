@@ -418,14 +418,14 @@ export const registerUser = async (req, res) => {
       role: 'user', // 角色服务端强制写死,不信任客户端
       alias: rawAlias ? rawAlias.slice(0, 20) : L(req, '默认昵称', 'Default Nickname'),
     };
-    // homePage 默认 'bookmark'：新用户注册后（及以后登录）直接进入书签工作区。
+    // 新账号默认工作台；已有账号的首页偏好及缺省回退保持不变。
     // 公开官网固定使用根路径 /，不再作为应用内默认首页选项。
     params.preferences = JSON.stringify({
       theme: 'day',
       noteViewMode: 'card',
       noteSidebarMode: 'directory',
       noteParentOpenMode: 'children',
-      homePage: 'bookmark',
+      homePage: 'workbench',
       lang: detectLangFromReq(req),
     });
     if (params.password) {
@@ -1729,7 +1729,7 @@ export const handleUserDatabaseOperation = async (githubUser, req, { duplicateRe
           noteViewMode: 'card',
           noteSidebarMode: 'directory',
           noteParentOpenMode: 'children',
-          homePage: 'bookmark',
+          homePage: 'workbench',
           lang: detectLangFromReq(req),
         });
         await connection.query(

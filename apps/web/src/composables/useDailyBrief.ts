@@ -7,7 +7,11 @@ const POLL_INTERVAL_MS = 2500;
 const MAX_POLL_ATTEMPTS = 72;
 
 /** 页面生命周期只调度检查；生成资格、冷却、账号日预算与幂等均由服务端裁决。 */
-export function useDailyBrief(options: { eligible: MaybeRefOrGetter<boolean>; ownerKey: MaybeRefOrGetter<string> }) {
+export function useDailyBrief(options: {
+  eligible: MaybeRefOrGetter<boolean>;
+  ownerKey: MaybeRefOrGetter<string>;
+  passive?: MaybeRefOrGetter<boolean>;
+}) {
   const state = ref<DailyBriefState | null>(null);
   const loading = ref(false);
   const updating = ref(false);
@@ -23,6 +27,7 @@ export function useDailyBrief(options: { eligible: MaybeRefOrGetter<boolean>; ow
 
   const visible = () => document.visibilityState === 'visible';
   const eligible = () => Boolean(toValue(options.eligible)) && !disposed;
+  const passive = () => Boolean(options.passive !== undefined && toValue(options.passive));
   function clearTimer() {
     if (timer) clearTimeout(timer);
     timer = undefined;
@@ -49,7 +54,13 @@ export function useDailyBrief(options: { eligible: MaybeRefOrGetter<boolean>; ow
   }
   function schedule() {
     clearTimer();
-    if (!eligible() || !visible() || !state.value?.enabled || !state.value.featureEnabled) return;
+    if (!eligible() || !visible()) return;
+    if (passive()) {
+      // 管理员预览只轮询已持久化产物，不做事实新鲜度检查，更不会进入生成接口。
+      timer = setTimeout(() => void refresh(), CHECK_INTERVAL_MS);
+      return;
+    }
+    if (!state.value?.enabled || !state.value.featureEnabled) return;
     const generating = state.value.status === 'generating';
     let delay = generating ? POLL_INTERVAL_MS : CHECK_INTERVAL_MS;
     for (const raw of [state.value.nextDateAt, state.value.nextRefreshAt]) {
@@ -63,6 +74,7 @@ export function useDailyBrief(options: { eligible: MaybeRefOrGetter<boolean>; ow
   }
   async function execute(manual: boolean, sequence: number) {
     loading.value = !state.value?.brief;
+    updating.value = manual;
     errorCode.value = '';
     confirmedCurrent.value = false;
     clearTimer();
@@ -71,6 +83,10 @@ export function useDailyBrief(options: { eligible: MaybeRefOrGetter<boolean>; ow
       let next = responseState(await getDailyBrief());
       if (sequence !== generation) return;
       apply(next);
+      if (passive()) {
+        pollAttempts = 0;
+        return;
+      }
       if (!eligible() || !visible() || !next.enabled || !next.featureEnabled) return;
       if (next.status === 'generating') {
         if (++pollAttempts >= MAX_POLL_ATTEMPTS) {
@@ -139,9 +155,9 @@ export function useDailyBrief(options: { eligible: MaybeRefOrGetter<boolean>; ow
   });
   document.addEventListener('visibilitychange', handleVisibility);
   watch(
-    () => [toValue(options.eligible), toValue(options.ownerKey)] as const,
-    ([allowed, owner]) => {
-      if (!allowed || owner !== activeOwner) {
+    () => [toValue(options.eligible), toValue(options.ownerKey), passive()] as const,
+    ([allowed, owner, isPassive], previous) => {
+      if (!allowed || owner !== activeOwner || (previous && previous[2] !== isPassive)) {
         generation += 1;
         clearTimer();
         state.value = null;
@@ -163,5 +179,13 @@ export function useDailyBrief(options: { eligible: MaybeRefOrGetter<boolean>; ow
     clearTimer();
     document.removeEventListener('visibilitychange', handleVisibility);
   });
-  return { state, loading, updating, errorCode, confirmedCurrent, refresh, update: () => refresh(true) };
+  return {
+    state,
+    loading,
+    updating,
+    errorCode,
+    confirmedCurrent,
+    refresh,
+    update: () => (passive() ? Promise.resolve() : refresh(true)),
+  };
 }

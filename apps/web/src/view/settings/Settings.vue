@@ -696,7 +696,13 @@
               <p class="card-sub">{{ t('growth.pointsUsagePageDescription') }}</p>
             </div>
           </div>
-          <PointsUsagePage class="settings-embedded-content" embedded />
+          <div v-if="pointsLoginRequired" class="field">
+            <div class="field-head">
+              <span class="field-label">{{ t('personCenter.pointsLoginRequired') }}</span>
+            </div>
+            <BButton @click="bookmark.isShowLogin = true">{{ t('personCenter.loginRegister') }}</BButton>
+          </div>
+          <PointsUsagePage v-else class="settings-embedded-content" embedded />
         </section>
 
         <!-- 浏览器收集：完整扩展与轻量书签栏入口并列，避免把能力不同的两种方式混成一个按钮。 -->
@@ -950,7 +956,12 @@
    * 桌面无 section 时默认外观；移动无 section 时仍显示紧凑目录。
    */
   const settingsEnv = computed<SettingsEnv>(() => ({ isGuest: isGuestUser() }));
-  const parsedSection = computed(() => parseSettingsSection(route.query.section, settingsEnv.value));
+  const pointsLoginRequired = computed(
+    () => settingsEnv.value.isGuest && parseSettingsSection(route.query.section, { isGuest: false }) === 'points',
+  );
+  const parsedSection = computed(() =>
+    pointsLoginRequired.value ? 'points' : parseSettingsSection(route.query.section, settingsEnv.value),
+  );
   const desktopSection = computed<SettingsIndexSectionId>(
     () => parsedSection.value || visibleSettingsSections(settingsEnv.value)[0]?.id || 'appearance',
   );
@@ -1134,6 +1145,7 @@
 
   /** 子页顶栏标题:与目录行同源，避免两处各写一份而说法不一致 */
   const currentSectionTitle = computed(() => {
+    if (pointsLoginRequired.value) return t('growth.pointsUsagePageTitle');
     const current = mobileSection.value;
     if (!current) return t('settings.title');
     return mobileIndexRows.value.find((row) => row.id === current)?.title ?? t('settings.title');

@@ -39,7 +39,7 @@
         <strong v-else class="ai-quota-summary__status">{{ statusText }}</strong>
       </span>
       <BProgress
-        v-if="status && !status.exempt && !unavailable"
+        v-if="!loginRequired && status && !status.exempt && !unavailable"
         size="small"
         :percent="remainingPercent"
         :aria-label="accessibleLabel"
@@ -78,7 +78,7 @@
     'open-details': [];
   }>();
   const { t, locale } = useI18n();
-  const { status, loading, unavailable, remainingPercent, load } = useAiQuotaStatus({ autoLoad: false });
+  const { status, loading, unavailable, loginRequired, remainingPercent, load } = useAiQuotaStatus({ autoLoad: false });
 
   watch(
     () => props.active,
@@ -89,7 +89,7 @@
   );
 
   const quotaBreakdown = computed(() => {
-    if (!status.value || status.value.exempt || unavailable.value) return null;
+    if (loginRequired.value || !status.value || status.value.exempt || unavailable.value) return null;
     if (
       Number.isFinite(status.value.dailyRemaining) &&
       Number.isFinite(status.value.dailyQuota) &&
@@ -103,6 +103,7 @@
     return null;
   });
   const statusText = computed(() => {
+    if (loginRequired.value) return t('personCenter.aiQuotaLoginRequired');
     if (loading.value && !status.value) return t('personCenter.aiQuotaLoading');
     if (unavailable.value || !status.value) return t('personCenter.aiQuotaUnavailable');
     if (status.value.exempt) return t('personCenter.aiQuotaUnlimited');
@@ -112,6 +113,7 @@
     });
   });
   const pendingReservationText = computed(() => {
+    if (loginRequired.value) return '';
     const amount = Number(status.value?.pendingReservedTokens || 0);
     if (!Number.isFinite(amount) || amount <= 0) return '';
     return t('personCenter.aiQuotaSettling', {

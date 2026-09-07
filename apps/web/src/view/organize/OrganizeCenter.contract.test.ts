@@ -25,7 +25,7 @@ describe('整理中心 2.0 页面契约', () => {
 
   it('待整理与四类治理问题属于同一中心，但概览中保持两套统计语义', () => {
     expect(source).toContain("type OrganizeView = 'overview' | 'pending' | 'ai_suggestions' | OrganizeIssueType");
-    expect(source).toContain("activeView === 'ai_suggestions' && bookmark.isDesktop");
+    expect(source).toContain("activeView === 'ai_suggestions'");
     expect(source).toContain("activeView === 'pending'");
     expect(source).toContain('<Inbox embedded />');
     expect(source).toContain('summary.value?.pendingShortcut.count');

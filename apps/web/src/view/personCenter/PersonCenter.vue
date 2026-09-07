@@ -266,10 +266,18 @@
   }
 
   function goAiQuotaDetails() {
+    if (user.role === 'visitor') {
+      handleExitLogin();
+      return;
+    }
     navigateFromProfile('/settings?section=ai&panel=usage');
   }
 
   function goPointsDetails() {
+    if (user.role === 'visitor') {
+      handleExitLogin();
+      return;
+    }
     navigateFromProfile('/settings?section=points');
   }
 

@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   getDashboard: vi.fn(),
   getClaimable: vi.fn(),
   claimAll: vi.fn(),
+  getWeekly: vi.fn(),
   getRecap: vi.fn(),
   updateRecapState: vi.fn(),
 }));
@@ -28,6 +29,7 @@ vi.mock('@/api/growthApi.ts', () => ({
     getDashboard: mocks.getDashboard,
     getClaimable: mocks.getClaimable,
     claimAll: mocks.claimAll,
+    getWeekly: mocks.getWeekly,
     getRecap: mocks.getRecap,
     updateRecapState: mocks.updateRecapState,
   },
@@ -72,6 +74,7 @@ describe('useGrowth load', () => {
     mocks.getDashboard.mockReset();
     mocks.getClaimable.mockReset();
     mocks.claimAll.mockReset();
+    mocks.getWeekly.mockReset();
     mocks.getRecap.mockReset();
     mocks.updateRecapState.mockReset();
     mocks.getInventory.mockResolvedValue({ status: 200, data: { items: [] } });
@@ -85,6 +88,33 @@ describe('useGrowth load', () => {
         weekly: { count: 0, items: [] },
       },
     });
+  });
+
+  it('任务页与周挑战面板同时加载时合并请求，完成后允许刷新', async () => {
+    const pending = deferred<any>();
+    mocks.getWeekly.mockReturnValueOnce(pending.promise);
+    const first = useGrowth().loadWeekly();
+    const second = useGrowth().loadWeekly();
+    expect(first).toBe(second);
+    expect(mocks.getWeekly).toHaveBeenCalledTimes(1);
+    pending.resolve({ status: 200, data: { challenges: [{ done: true }] } });
+    await first;
+    expect(useGrowth().weekly.value?.challenges).toHaveLength(1);
+    mocks.getWeekly.mockResolvedValueOnce({ status: 200, data: { challenges: [] } });
+    await useGrowth().loadWeekly();
+    expect(mocks.getWeekly).toHaveBeenCalledTimes(2);
+  });
+
+  it('切换账号不复用旧周挑战请求，晚到旧响应不能覆盖新账号', async () => {
+    const old = deferred<any>();
+    mocks.getWeekly.mockReturnValueOnce(old.promise);
+    const request = useGrowth().loadWeekly();
+    mocks.user.id = 'user-b';
+    mocks.getWeekly.mockResolvedValueOnce({ status: 200, data: { challenges: [{ key: 'new' }] } });
+    await useGrowth().loadWeekly();
+    old.resolve({ status: 200, data: { challenges: [{ key: 'old' }] } });
+    expect(await request).toBeNull();
+    expect(useGrowth().weekly.value?.challenges[0].key).toBe('new');
   });
 
   it('合并同一账号同时发起的成长请求', async () => {

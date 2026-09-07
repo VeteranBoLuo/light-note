@@ -3,6 +3,7 @@ import type { OrganizeAiSuggestionTag } from './organizeApi';
 export type ResourceType = 'bookmark' | 'note' | 'file';
 export type CheckKind = 'tags' | 'title' | 'empty' | 'duplicate';
 export interface RunOptions {
+  tagMode?: 'untagged' | 'append';
   resourceTypes: ResourceType[];
   checks: CheckKind[];
   scope: 'recent' | 'all' | 'selected' | 'untagged';

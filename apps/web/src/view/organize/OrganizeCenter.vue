@@ -86,7 +86,7 @@
             </section>
 
             <OrganizeAiSuggestions
-              v-else-if="activeView === 'ai_suggestions' && bookmark.isDesktop"
+              v-else-if="activeView === 'ai_suggestions'"
               @refresh-summary="refreshSummary"
               @run-status="updateAiNavStatus"
             />
@@ -781,7 +781,7 @@
   const knowledgeStructureSummary = computed(() => organize.knowledgeStructureSummary);
   const activeView = computed<OrganizeView>(() => {
     const issue = String(route.query.issue || 'overview');
-    if (issue === 'ai_suggestions') return bookmark.isDesktop ? issue : 'overview';
+    if (issue === 'ai_suggestions') return issue;
     return ['pending', 'untagged', 'duplicate_bookmark', 'bookmark_health', 'knowledge_structure'].includes(issue)
       ? (issue as OrganizeView)
       : 'overview';
@@ -885,7 +885,7 @@
   }
   async function pollAiNav() {
     clearTimeout(aiNavTimer);
-    if (!aiNavActive || document.hidden || !bookmark.isDesktop) return;
+    if (!aiNavActive || document.hidden) return;
     const generation = ++aiNavGeneration;
     try {
       // 仅轮询轻量任务列表；暂停时也能感知其他标签页的继续操作。
@@ -933,16 +933,12 @@
   const pendingCount = computed(() => displayCount(summary.value?.pendingShortcut.count));
   const issueOptions = computed<Array<{ key: OrganizeView; label: string; icon: string; count: string | null }>>(() => [
     { key: 'overview', label: t('organize.views.overview'), icon: icon.ai.organize, count: null },
-    ...(bookmark.isDesktop
-      ? [
-          {
-            key: 'ai_suggestions' as const,
-            label: t('organize.views.aiSuggestions'),
-            icon: icon.common.magicWand,
-            count: null,
-          },
-        ]
-      : []),
+    {
+      key: 'ai_suggestions',
+      label: t('organize.views.aiSuggestions'),
+      icon: icon.common.magicWand,
+      count: null,
+    },
     { key: 'pending', label: t('organize.views.pending'), icon: icon.contextMenu.inbox, count: pendingCount.value },
     {
       key: 'untagged',
@@ -1072,19 +1068,11 @@
     if (currentRouteView === targetRouteView) return;
     const query = { ...route.query };
     delete query._rt;
+    delete query.organizeSelection;
     delete query.resourceType;
     if (view === 'overview') delete query.issue;
     else query.issue = view;
     void router.replace({ path: '/organize', query });
-  }
-
-  async function normalizeUnsupportedRouteView() {
-    if (bookmark.isDesktop || route.query.issue !== 'ai_suggestions') return false;
-    const query = { ...route.query };
-    delete query.issue;
-    delete query.resourceType;
-    await router.replace({ path: '/organize', query });
-    return true;
   }
 
   async function scrollMobileNavigationToActive() {
@@ -1575,7 +1563,6 @@
     () => [route.query.issue, route.query._rt, bookmark.isDesktop],
     async () => {
       if (!mounted) return;
-      if (await normalizeUnsupportedRouteView()) return;
       void scrollMobileNavigationToActive();
       if (activeView.value !== 'bookmark_health') stopHealthPolling();
       if (activeView.value !== 'untagged') {
@@ -1592,7 +1579,6 @@
     document.addEventListener('visibilitychange', handleHealthVisibilityChange);
     organize.resetForOwner(organizeOwnerKey.value);
     mounted = true;
-    if (await normalizeUnsupportedRouteView()) return;
     await Promise.all([refreshSummary(), refreshKnowledgeStructure(), loadActiveView(true)]);
     await scrollMobileNavigationToActive();
   });

@@ -40,8 +40,11 @@
       <div
         v-if="suggestion.kind === 'tags' && Array.isArray(suggestion.after) && suggestion.after.length"
         class="suggestion-change"
-        ><span>{{ t('organizeWorkspace.noTags') }}</span
-        ><span aria-hidden="true">→</span
+        ><template v-if="beforeTags.length"
+          ><ResourceTagChip v-for="tag in beforeTags" :key="tag.name" :tag="{ ...tag, id: tag.id || tag.name }"
+        /></template>
+        <span v-else>{{ t('organizeWorkspace.noTags') }}</span>
+        <span>{{ beforeTags.length ? t('organizeWizard.appendTags') : '→' }}</span
         ><ResourceTagChip v-for="tag in suggestion.after" :key="tag.name" :tag="{ ...tag, id: tag.id || tag.name }"
       /></div>
       <p>{{ suggestion.reason }}</p>
@@ -141,6 +144,7 @@
     error = ref(''),
     title = ref(''),
     tags = ref<OrganizeAiSuggestionTag[]>([]);
+  const beforeTags = computed(() => (Array.isArray(props.suggestion.before) ? props.suggestion.before : []));
   const isMetadata = computed(() => ['tags', 'title'].includes(props.suggestion.kind));
   const manual = computed(
     () => isMetadata.value && ['insufficient', 'no_suggestion'].includes(props.suggestion.status),

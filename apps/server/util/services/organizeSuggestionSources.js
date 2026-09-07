@@ -111,6 +111,7 @@ export async function readSuggestionSources(
     );
     rows.forEach((r) => {
       const archive = archives.find((a) => String(a.bookmark_id) === String(r.id));
+      r.original_description = r.description || '';
       r.description = [r.description, archive?.content].filter(Boolean).join('\n');
     });
   }

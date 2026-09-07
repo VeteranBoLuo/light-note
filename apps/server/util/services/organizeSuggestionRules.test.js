@@ -106,12 +106,44 @@ describe('多类型整理规则', () => {
 });
 
 it('标题预检只冻结笔记，混合资源的 AI 项目按适用性裁剪', () => {
-  expect(normalizeRunInput({ resourceTypes: ['bookmark', 'note', 'file'], checks: ['title'], scope: 'all' }))
-    .toMatchObject({ resourceTypes: ['note'], checks: ['title'] });
+  expect(
+    normalizeRunInput({ resourceTypes: ['bookmark', 'note', 'file'], checks: ['title'], scope: 'all' }),
+  ).toMatchObject({ resourceTypes: ['note'], checks: ['title'] });
   expect(() => normalizeRunInput({ resourceTypes: ['file'], checks: ['title'] })).toThrow('没有适用');
-  expect(normalizeRunInput({ resourceTypes: ['bookmark', 'note', 'file'], checks: ['title'], scope: 'selected',
-    items: [{ type: 'file', id: 'f' }, { type: 'note', id: 'n' }] }).items).toEqual([{ type: 'note', id: 'n' }]);
+  expect(
+    normalizeRunInput({
+      resourceTypes: ['bookmark', 'note', 'file'],
+      checks: ['title'],
+      scope: 'selected',
+      items: [
+        { type: 'file', id: 'f' },
+        { type: 'note', id: 'n' },
+      ],
+    }).items,
+  ).toEqual([{ type: 'note', id: 'n' }]);
   const bookmark = buildSnapshot('bookmark', { id: 'b', name: '', description: 'Useful text' });
   expect(findings([bookmark], ['title', 'tags'])[0].aiKinds).not.toContain('title');
   expect(findings([note({ content: 'Useful text' })], ['title'])[0].aiKinds).toEqual(['title']);
+});
+
+it.each(['bookmark', 'note'])('显式追加模式让已有标签的 %s 继续分析，旧任务仍跳过', (type) => {
+  const snapshot = buildSnapshot(
+    type,
+    { id: '1', name: 'Vue', title: 'Vue', type: 'html', content: '<p>Vue 组件开发</p>', description: 'Vue 组件开发' },
+    [{ id: 't', name: 'Vue' }],
+  );
+  expect(buildRuleSuggestions([snapshot], ['tags'])[0].aiKinds).toEqual([]);
+  expect(buildRuleSuggestions([snapshot], ['tags'], { tagMode: 'append' })[0].aiKinds).toEqual(['tags']);
+});
+it('追加模式只接受显式范围并在归一化后保留，旧选项不改变幂等形状', () => {
+  const input = {
+    resourceTypes: ['bookmark'],
+    checks: ['tags'],
+    scope: 'selected',
+    items: [{ type: 'bookmark', id: 'b' }],
+  };
+  expect(normalizeRunInput({ ...input, tagMode: 'append' }).tagMode).toBe('append');
+  expect(normalizeRunInput(input)).not.toHaveProperty('tagMode');
+  expect(() => normalizeRunInput({ ...input, scope: 'all', items: [], tagMode: 'append' })).toThrow();
+  expect(() => normalizeRunInput({ ...input, tagMode: 'replace' })).toThrow();
 });

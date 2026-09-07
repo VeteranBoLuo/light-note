@@ -1,5 +1,12 @@
 export default {
   organizeWizard: {
+    appendTags: 'Add',
+    appendTagsHint: 'Suggest additional topic tags for selected resources while keeping existing tags.',
+    preparingConfirmation: 'Confirming selected resources…',
+    retryPreview: 'Retry scope confirmation',
+    handoffFailed: 'Could not open the organize center. Please try again.',
+    handoffExpired: 'This selection has expired. Return to the source page and select the resources again.',
+
     navigation: 'Organizing steps',
     steps: {
       resources: 'Resources',
@@ -3572,6 +3579,7 @@ export default {
       adminDescription: 'Administrators can recall a message while preserving its audit copy',
       placeholder: 'This message was recalled',
       ownPlaceholder: 'You recalled a message',
+      reedit: 'Edit again',
       memberPlaceholder: '“{name}” recalled a message',
       adminPlaceholder: 'An administrator recalled a message from “{name}”',
       adminVisible: 'Original message for Root review',
@@ -5090,6 +5098,16 @@ export default {
     title: 'Workbench',
     subtitle: 'Resume recent work, handle items that need organizing, and create new content quickly.',
     dailyBrief: {
+      guestSubtitle: 'Connect tasks, bookmarks and notes to find your next step.',
+      viewTodos: 'View tasks',
+
+      sampleHeadline: 'Turn your collected reading into a learning plan you can put into practice today.',
+      sampleTodo: 'Two tasks are due today: organize reading notes and plan this week’s learning. Spend 15 minutes extracting three key ideas, then put one into your weekly plan to reduce switching between notes and tasks.',
+      sampleContent: 'Your three recent saves focus on concentration and learning. Spaced repetition supports retention, while active recall strengthens understanding. Together, they outline a path from reading to lasting knowledge.',
+      sampleConnection: 'The recently saved review methods complement your reading notes: one explains how to remember more, while the other records what you have understood. Together, they connect reading, reflection and review.',
+      sampleOrganize: 'Four bookmarks still need tags. Three relate to learning methods and fit one topic; the travel guide belongs separately. Grouping by purpose is easier to maintain than creating many narrow tags at once.',
+      sampleRecommendation: 'Two priorities stand out today: move your existing learning tasks forward and give untagged bookmarks a clear home. Your current collection already offers enough material for the next step.',
+
       title: 'Daily Brief',
       subtitle: "AI is connecting today's actions, recent additions, and organizing signals.",
       settings: 'Brief Settings',
@@ -5108,10 +5126,15 @@ export default {
       budgetPaused: 'Today’s automatic update limit has been reached. You can still update manually.',
       manualTitle: 'Your daily brief, on demand',
       manualHint: 'Auto-update is off. Generate an AI summary of your current work when you need it.',
+      previewMode: 'View only',
+      previewEmptyTitle: 'No brief saved for this user today',
+      previewEmptyHint: 'Admin preview only shows saved results and never generates or updates a brief.',
       generateAction: 'Generate brief',
       justGenerated: 'just now',
       aiRecommendation: 'AI suggestion',
       sharedTag: 'Connection basis: shared tag “{tag}”',
+      reviewAiSuggestions: 'Review AI suggestions',
+      organizeUntagged: 'Organize untagged content',
       recentSource: 'Recent',
       olderSource: 'Earlier',
       markers: {
@@ -7246,6 +7269,7 @@ export default {
     points: 'Points',
     pointsLoading: 'Loading…',
     pointsUnavailable: 'Temporarily unavailable',
+    pointsLoginRequired: 'Sign in to view',
     pointsDetailHint: 'View earned and used history',
     assetOverview: 'Points and AI quota',
     quickAccess: 'Quick access',
@@ -7257,6 +7281,7 @@ export default {
     growthProgress: 'Current level progress',
     resourceOverview: 'Account resource overview',
     aiQuotaLabel: 'AI quota',
+    aiQuotaLoginRequired: 'Sign in to use',
     aiQuotaLoading: 'Loading…',
     aiQuotaRemaining: '{amount} remaining',
     aiQuotaBreakdown: 'Today {daily} · Permanent {permanent}',
@@ -8692,7 +8717,8 @@ export default {
     claimAllCount: 'Claim {n} rewards',
     claimAllTooltip: 'Ready to claim: {sources}',
     claimAllTooltipFallback: '{n} growth rewards are ready to claim',
-    claimAllSuccessBySource: 'Claimed: {sources}',
+    claimAllSuccessBySource: 'Claimed: {sources}, +{exp} EXP, +{points} points',
+    claimAllSuccessBySourceWithFrames: 'Claimed: {sources}, +{exp} EXP, +{points} points, and {frames} avatar frame(s)',
     claimSources: {
       daily: 'Daily tasks ×{n}',
       growthTasks: 'Growth tasks ×{n}',

@@ -255,7 +255,10 @@ it('一个资源的标题和标签共享一次外发，交付先于计费完成'
   expect(model).toHaveBeenCalledOnce();
   expect(model.mock.calls[0][1]).toEqual(['tags', 'title']);
   expect(execution).toHaveBeenCalledOnce();
-  expect(execution.mock.calls[0][0]).toMatchObject({ organizeRunId: expect.any(String), organizeItemId: expect.any(String) });
+  expect(execution.mock.calls[0][0]).toMatchObject({
+    organizeRunId: expect.any(String),
+    organizeItemId: expect.any(String),
+  });
   const claims = db.query.mock.calls.map(([sql]) => sql).filter((sql) => sql.includes('FOR UPDATE'));
   expect(claims.length).toBeGreaterThanOrEqual(2);
   expect(claims.every((sql) => !/SKIP LOCKED|NOWAIT/.test(sql))).toBe(true);
@@ -358,4 +361,74 @@ describe('新版 AI 暂停与租约边界', () => {
     );
     expect(db.query.mock.calls.some(([sql]) => sql.includes("status='paused'"))).toBe(false);
   });
+});
+
+it.each(['unchanged', 'changed', 'ended', 'lease_lost'])('书签材料在外发锁外准备，外发前复核 %s', async (state) => {
+  const current = buildSnapshot('bookmark', { id: 'b', name: '字体页面', description: '', url: 'https://example.com' });
+  readCurrentSuggestionSource.mockResolvedValue(current);
+  if (state === 'changed')
+    readCurrentSuggestionSource
+      .mockResolvedValueOnce(current)
+      .mockResolvedValueOnce({ ...current, version: 'new-version' });
+  let lease;
+  const db = database((sql, p) => {
+    if (sql.startsWith('SELECT r.id,r.status')) return [[{ id: 'run', status: 'running', run_version: 2 }]];
+    if (sql.startsWith('SELECT i.*'))
+      return [
+        [
+          {
+            id: 'i',
+            run_id: 'run',
+            user_id: 'u',
+            resource_type: 'bookmark',
+            resource_id: 'b',
+            version_hash: current.version,
+            ai_kinds_json: ['tags'],
+            ai_status: 'queued',
+          },
+        ],
+      ];
+    if (sql.includes("SET ai_status='running'")) {
+      lease = p[0];
+      return [{ affectedRows: 1 }];
+    }
+    if (sql.includes('FROM organize_suggestion_runs'))
+      return [[{ ...run, status: state === 'ended' ? 'ended' : 'running' }]];
+    if (sql.startsWith('SELECT lease_token')) return [[{ lease_token: state === 'lease_lost' ? 'other' : lease }]];
+    if (sql.startsWith('SELECT * FROM organize_suggestions'))
+      return [[{ id: 't', kind: 'tags', payload_json: { kind: 'tags' } }]];
+    if (sql.includes('COUNT(*)')) return [[{ total: 0 }]];
+    if (sql.includes('FROM tag')) return [[]];
+  });
+  let inDispatch = false;
+  const prepared = { pageInfo: '开源字体项目' };
+  const prepare = vi.fn(async () => {
+    expect(inDispatch).toBe(false);
+    return prepared;
+  });
+  const model = vi.fn(async (_snapshot, _kinds, _tags, evidence) => {
+    expect(inDispatch).toBe(true);
+    expect(evidence).toBe(prepared);
+    return { tags: [], tagOutcome: 'already_associated' };
+  });
+  const runExecution = vi.fn(async (_config, callback) => callback());
+  await runSingleSuggestionItem('worker', db, {
+    prepare,
+    model,
+    runExecution,
+    restrictions: async () => [],
+    dispatch: async (_db, _id, callback) => {
+      inDispatch = true;
+      return callback({ connection: db, user: { id: 'u', role: 'user' } });
+    },
+  });
+  expect(prepare).toHaveBeenCalledOnce();
+  expect(runExecution).toHaveBeenCalledTimes(state === 'unchanged' ? 1 : 0);
+  expect(model).toHaveBeenCalledTimes(state === 'unchanged' ? 1 : 0);
+  if (state === 'unchanged')
+    expect(
+      db.query.mock.calls.some(
+        ([sql, p]) => sql.startsWith('UPDATE organize_suggestions SET status=') && p[0] === 'not_applicable',
+      ),
+    ).toBe(true);
 });

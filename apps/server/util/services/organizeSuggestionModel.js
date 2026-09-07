@@ -1,3 +1,4 @@
+import { prepareBookmarkMeta, suggestPreparedBookmarkMeta, estimateBookmarkMetaTokens } from '../aiOrganize.js';
 import { callStructuredSkillModel, estimateStructuredSkillModelTokens } from '../aiSkill/structuredModel.js';
 import { suggestionError, normalizeName } from './organizeSuggestionRules.js';
 function metadataRequest(snapshot, kinds, tags) {
@@ -7,9 +8,7 @@ function metadataRequest(snapshot, kinds, tags) {
       .toLowerCase()
       .replace(/\s+/gu, '');
   const evidence = normalize(
-    [snapshot.source.title, snapshot.source.text, snapshot.source.folder, snapshot.source.url]
-      .filter(Boolean)
-      .join('\n'),
+    [snapshot.source.title, snapshot.source.text, snapshot.source.folder].filter(Boolean).join('\n'),
   );
   return {
     messages: [
@@ -97,9 +96,45 @@ function metadataRequest(snapshot, kinds, tags) {
     },
   };
 }
-export function estimateResourceMetadataTokens(snapshot, kinds, tags) {
+export function estimateResourceMetadataTokens(snapshot, kinds, tags, prepared) {
+  if (snapshot.type === 'bookmark') return estimateBookmarkMetaTokens(prepared, tags);
   return estimateStructuredSkillModelTokens(metadataRequest(snapshot, kinds, tags));
 }
-export async function suggestResourceMetadata(snapshot, kinds, tags) {
-  return callStructuredSkillModel(metadataRequest(snapshot, kinds, tags));
+export async function prepareResourceMetadata(snapshot) {
+  return snapshot.type === 'bookmark' ? prepareBookmarkMeta(snapshot.bookmarkMeta) : null;
+}
+
+export function filterAssociatedTags(result, snapshot) {
+  const normalize = (v) => normalizeName(v).toLowerCase();
+  const associated = snapshot.tags || [];
+  const candidates = result.tags || [];
+  const tags = candidates.filter(
+    (tag) =>
+      !associated.some(
+        (existing) =>
+          (tag.id && String(existing.id) === String(tag.id)) || normalize(existing.name) === normalize(tag.name),
+      ),
+  );
+  return { ...result, tags, tagOutcome: candidates.length && !tags.length ? 'already_associated' : result.tagOutcome };
+}
+
+export async function suggestResourceMetadata(snapshot, kinds, tags, prepared) {
+  if (snapshot.type === 'bookmark') {
+    const result = await suggestPreparedBookmarkMeta(prepared, { userTags: tags, includeSuggestionDetails: true });
+    if (!result) throw suggestionError('AI_SKILL_STRUCTURED_OUTPUT_INVALID', '生成结果格式无效', 502);
+    return filterAssociatedTags(
+      { title: null, tags: result.suggestions, tagOutcome: result.tagOutcome, fetchReason: result.fetchReason },
+      snapshot,
+    );
+  }
+  const request = metadataRequest(snapshot, kinds, tags);
+  let tagOutcome;
+  const validate = request.validateArguments;
+  request.validateArguments = (value) => {
+    const result = validate(value);
+    tagOutcome = result.tags.length ? 'suggested' : value.tags.length ? 'filtered' : 'no_suggestion';
+    return result;
+  };
+  const result = await callStructuredSkillModel(request);
+  return filterAssociatedTags({ ...result, tagOutcome }, snapshot);
 }

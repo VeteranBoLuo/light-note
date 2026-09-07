@@ -42,6 +42,16 @@
         </BButton>
       </div>
 
+      <div class="workbench-brief">
+        <DailyBriefCard
+          v-if="bookmark.isDesktop"
+          ref="dailyBriefCardRef"
+          :eligible="Boolean(user.id && user.role !== 'visitor')"
+          :owner-key="dailyBriefOwnerKey"
+          :read-only="growthReadOnly"
+        />
+      </div>
+
       <!--
         这一块统计的是「全部未完成待办 + 整理中心全部待处理事项」，不是今天的范围，所以标题用
         「待处理总览」而不是「今日待处理」—— 后者会让人以为它该等于顶栏待办角标
@@ -179,18 +189,10 @@
       </section>
 
       <section class="workbench-routine-grid">
-        <div class="workbench-routine-grid__brief">
-          <DailyBriefCard
-            v-if="bookmark.isDesktop"
-            ref="dailyBriefCardRef"
-            :eligible="Boolean(user.id && user.role !== 'visitor' && !growthReadOnly)"
-            :owner-key="dailyBriefOwnerKey"
-          />
-        </div>
-
         <div class="workbench-routine-grid__review">
-          <DailyReviewCard class="workbench-daily-review" :read-only="growthReadOnly" compact />
-
+          <DailyReviewCard class="workbench-daily-review" :read-only="growthReadOnly" />
+        </div>
+        <div v-if="dailyGrowthSectionLoading || showDailyGrowthTasks" class="workbench-routine-grid__tasks">
           <section
             v-if="dailyGrowthSectionLoading"
             class="growth-task-grid growth-task-grid--single"
@@ -1467,12 +1469,12 @@
   .workbench-routine-grid {
     min-width: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.14fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: stretch;
     gap: 12px;
   }
 
-  .workbench-routine-grid__brief,
+  .workbench-routine-grid__tasks,
   .workbench-routine-grid__review {
     min-width: 0;
     display: grid;
@@ -1480,35 +1482,32 @@
     gap: 12px;
   }
 
-  .workbench-routine-grid__brief > :deep(.daily-brief-card) {
-    height: 100%;
-    box-sizing: border-box;
-  }
-
-  .workbench-routine-grid__review {
-    grid-template-rows: auto minmax(0, 1fr);
-    gap: 0;
-    overflow: hidden;
-    border: 1px solid var(--card-border-color);
-    border-radius: 14px;
-    background: var(--card-background);
-    box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--text-color) 36%, transparent);
-  }
-
-  .workbench-routine-grid__brief:empty {
+  .workbench-brief:empty,
+  .workbench-routine-grid__review:empty {
     display: none;
   }
 
-  .workbench-routine-grid__brief:empty + .workbench-routine-grid__review {
+  .workbench-routine-grid__review:empty + .workbench-routine-grid__tasks,
+  .workbench-routine-grid__review:last-child {
     grid-column: 1 / -1;
   }
 
   .workbench-routine-grid__review :deep(.daily-review) {
     padding: 11px 12px;
-    border: 0;
-    border-bottom: 1px solid var(--card-border-color);
-    border-radius: 0;
     box-shadow: none;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .workbench-routine-grid__review :deep(.daily-review__item),
+  .workbench-routine-grid__review :deep(.daily-review__state),
+  .workbench-routine-grid__review :deep(.daily-review__loading),
+  .workbench-routine-grid__review :deep(.daily-review__compact-state) {
+    flex: 1 0 auto;
+  }
+
+  .workbench-routine-grid__review :deep(.daily-review__footer) {
+    margin-top: 12px;
   }
 
   .workbench-routine-grid__review :deep(.daily-review__header) {
@@ -1540,16 +1539,12 @@
     margin-top: 7px;
   }
 
-  .workbench-routine-grid__review > .growth-task-grid {
+  .workbench-routine-grid__tasks > .growth-task-grid {
     min-height: 0;
-    padding: 11px 12px;
   }
 
-  .workbench-routine-grid__review > .growth-task-grid > .panel-card {
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
+  .workbench-routine-grid__tasks > .growth-task-grid > .panel-card {
+    padding: 16px;
     box-shadow: none;
   }
 
@@ -2564,9 +2559,8 @@
       grid-template-columns: minmax(0, 1fr);
     }
 
-    .workbench-routine-grid__brief,
-    .workbench-routine-grid__review,
-    .workbench-routine-grid__brief:empty + .workbench-routine-grid__review {
+    .workbench-routine-grid__tasks,
+    .workbench-routine-grid__review {
       grid-column: auto;
     }
 

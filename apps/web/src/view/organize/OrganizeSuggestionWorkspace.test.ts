@@ -1,10 +1,13 @@
 import { apiBasePost } from '@/http/request';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { createApp, h, nextTick, type App } from 'vue';
+import { createApp, h, nextTick, reactive, type App } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createPinia } from 'pinia';
 import zh from '@/i18n/locales/zh-CN';
+const navigation = vi.hoisted(() => ({ currentRoute: { value: { query: {} as Record<string, string> } } }));
 const api = vi.hoisted(() => ({
+  replace: vi.fn().mockResolvedValue(undefined),
+  alert: vi.fn(),
   previewRun: vi.fn(),
   startRun: vi.fn(),
   getRun: vi.fn(),
@@ -15,7 +18,7 @@ const api = vi.hoisted(() => ({
   actOnRunSuggestion: vi.fn(),
 }));
 vi.mock('@/components/base/BasicComponents/BModal/Alert', () => ({
-  default: { alert: (options: any) => options.onOk() },
+  default: { alert: api.alert },
 }));
 vi.mock('@/api/organizeSuggestionApi', () => api);
 vi.mock('@/http/request', async (original) => ({
@@ -35,15 +38,20 @@ vi.mock('@/components/resourcePicker/ResourcePickerPanel.vue', () => ({
 vi.mock('@/api/tagSpace', () => ({ fetchSelectableTags: vi.fn().mockResolvedValue([{ id: 't', name: 'Vue' }]) }));
 vi.mock('vue-router', () => ({
   useRouter: () => ({
+    currentRoute: navigation.currentRoute,
     push: vi.fn(),
+    replace: api.replace,
     resolve: (route: any) => ({
       href: route.path + (route.query ? '?' + new URLSearchParams(route.query).toString() : ''),
     }),
   }),
 }));
-vi.mock('@/utils/common', () => ({ generateUUID: () => 'c56a4180-65aa-42ec-a945-5fd21dec0538' }));
+vi.mock('@/utils/common', () => ({ generateUUID: () => crypto.randomUUID() }));
 import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
 import Workspace from './OrganizeSuggestionWorkspace.vue';
+import { createOrganizeHandoff, clearOrganizeHandoff } from '@/utils/organizeHandoff';
+import type { SelectionOperation } from '@/store/resourceSelection';
+vi.mock('@/store', () => ({ useUserStore: () => ({ id: 'organize-test' }) }));
 const result = () => ({
   id: 'r',
   status: 'completed',
@@ -100,7 +108,11 @@ async function toScope() {
   await settle();
 }
 beforeEach(() => {
+  navigation.currentRoute = reactive({ value: { query: {} as Record<string, string> } });
   vi.clearAllMocks();
+  api.alert.mockImplementation((options: any) => options.onOk());
+  navigation.currentRoute.value.query = {};
+  clearOrganizeHandoff();
   api.listRuns.mockResolvedValue(ok([]));
   api.getRun.mockResolvedValue(ok(result()));
   api.previewRun.mockResolvedValue(ok({ ...result(), status: 'preview' }));
@@ -597,7 +609,7 @@ it('暂停动作按服务端能力显示，重复点击不会重复请求；恢�
   expect(api.resumeRun).toHaveBeenCalledWith('r');
 });
 
-it('刷新恢复当前类型、展开与收起选择，不重新创建任务', async () => {
+it('重新进入忽略旧本地展开记录，不重新创建任务', async () => {
   const row = { ...result(), id: 'persist-run' };
   api.listRuns.mockResolvedValue(ok([row]));
   api.getRun.mockResolvedValue(ok(row));
@@ -613,7 +625,7 @@ it('刷新恢复当前类型、展开与收起选择，不重新创建任务', a
   await mount();
   expect(api.getRun).toHaveBeenLastCalledWith(
     'persist-run',
-    expect.objectContaining({ resourceType: 'note', kind: 'empty' }),
+    expect.objectContaining({ resourceType: 'bookmark', kind: '' }),
   );
   expect(api.startRun).not.toHaveBeenCalled();
 });
@@ -675,4 +687,213 @@ it('文件在本页使用专用预览组件，不打开新标签页', async () =
   expect(document.querySelector('.file-preview-test')?.textContent).toBe('文档.pdf');
   expect(opened).not.toHaveBeenCalled();
   opened.mockRestore();
+});
+
+function shortcut(type: 'note' | 'bookmark' = 'note', count = 25) {
+  const operation = {
+    identity: 'organize-test|||||',
+    items: Array.from({ length: count }, (_, i) => ({ type, id: String(i), title: '资料' })),
+  } as SelectionOperation;
+  navigation.currentRoute.value.query.organizeSelection = createOrganizeHandoff(operation);
+  api.previewRun.mockImplementation(async (options) =>
+    ok({
+      ...result(),
+      status: 'preview',
+      options,
+      summary: { ...result().summary, total: count, types: { [type]: count } },
+    }),
+  );
+}
+it.each(['note', 'bookmark'] as const)('%s 批量交接超过20项仍完整直达确认，自动预检不启动AI', async (type) => {
+  shortcut(type);
+  await mount();
+  expect(api.previewRun).toHaveBeenCalledOnce();
+  expect(api.previewRun.mock.calls[0][0]).toMatchObject({
+    resourceTypes: [type],
+    checks: ['tags'],
+    scope: 'selected',
+    tagMode: 'append',
+  });
+  expect(api.previewRun.mock.calls[0][0].items).toHaveLength(25);
+  expect(document.querySelector('[aria-current="step"]')?.textContent).toContain('确认');
+  expect(button('开始整理 25 项')).toBeTruthy();
+  expect(document.body.textContent).not.toContain('用量说明');
+  expect(document.body.textContent).not.toContain('查看用量明细');
+  expect(api.startRun).not.toHaveBeenCalled();
+  document.querySelector<HTMLButtonElement>('.wizard-nav li:nth-child(2) button')!.click();
+  await settle();
+  expect(document.querySelector('[aria-label="标签建议"]')?.getAttribute('aria-pressed')).toBe('true');
+  expect(document.querySelector('[aria-label="重复检查"]')?.getAttribute('aria-pressed')).toBe('false');
+});
+it('快捷预检失败停留确认页，可以重试同一范围', async () => {
+  shortcut();
+  api.previewRun.mockRejectedValueOnce(new Error('范围确认失败'));
+  await mount();
+  expect(document.querySelector('[aria-current="step"]')?.textContent).toContain('确认');
+  expect(button('开始整理 0 项').disabled).toBe(true);
+  button('重试范围确认').click();
+  await settle();
+  expect(api.previewRun).toHaveBeenCalledTimes(2);
+  expect(api.startRun).not.toHaveBeenCalled();
+  expect(button('开始整理 25 项')).toBeTruthy();
+});
+it('刷新或错误身份的交接不自动预检，也不会扩大成默认范围', async () => {
+  navigation.currentRoute.value.query.organizeSelection = 'expired';
+  await mount();
+  expect(api.previewRun).not.toHaveBeenCalled();
+  expect(document.querySelector('.run-wizard')).toBeNull();
+  expect(api.startRun).not.toHaveBeenCalled();
+});
+
+it('快捷预检关闭后丢弃迟到结果，再次打开从正常第一步开始', async () => {
+  shortcut();
+  let resolve!: (value: any) => void;
+  api.previewRun.mockReturnValueOnce(
+    new Promise((yes) => {
+      resolve = yes;
+    }),
+  );
+  await mount();
+  expect(document.body.textContent).toContain('正在确认所选资料范围');
+  button('关闭').click();
+  await settle();
+  resolve(ok({ ...result(), status: 'preview' }));
+  await settle();
+  expect(document.querySelector('.run-wizard')).toBeNull();
+  button('重新整理').click();
+  await settle();
+  expect(document.querySelector('[aria-current="step"]')?.textContent).toContain('选资源');
+  expect(api.startRun).not.toHaveBeenCalled();
+});
+it('快捷入口主动改成非显式范围时恢复无标签模式，并重新预检', async () => {
+  shortcut();
+  await mount();
+  button('上一步').click();
+  await settle();
+  button('更改范围').click();
+  await settle();
+  button('最近新增').click();
+  await settle();
+  button('确认整理范围').click();
+  await settle();
+  expect(api.previewRun).toHaveBeenCalledTimes(2);
+  expect(api.previewRun.mock.calls[1][0]).toMatchObject({
+    checks: ['tags'],
+    scope: 'recent',
+    items: [],
+    tagMode: 'untagged',
+  });
+});
+
+it('已有标签的追加建议展示原标签，不误写成无标签或替换', async () => {
+  const row = result();
+  row.items = [
+    {
+      id: 'i',
+      aiStatus: 'completed',
+      ruleStatus: 'completed',
+      resource: {
+        id: 'b',
+        type: 'bookmark',
+        title: '字体',
+        source: { folder: '' },
+        tags: [{ id: 't1', name: '原标签' }],
+      },
+      suggestions: [
+        {
+          id: 's',
+          kind: 'tags',
+          status: 'pending',
+          before: [{ id: 't1', name: '原标签' }],
+          after: [{ id: 't2', name: '开源项目' }],
+          reason: '有内容依据',
+        },
+      ],
+    },
+  ] as any;
+  api.listRuns.mockResolvedValue(ok([row]));
+  api.getRun.mockResolvedValue(ok(row));
+  await mount();
+  const change = document.querySelector('.suggestion-change');
+  expect(change?.textContent).toContain('原标签');
+  expect(change?.textContent).toContain('追加');
+  expect(change?.textContent).toContain('开源项目');
+  expect(change?.textContent).not.toContain('无标签');
+});
+
+it('保留的页面收到下一次批量交接后重新预检，旧 token 不会重复消费', async () => {
+  shortcut('note');
+  await mount();
+  expect(api.previewRun).toHaveBeenCalledOnce();
+  button('关闭').click();
+  await settle();
+  shortcut('bookmark', 30);
+  await settle();
+  expect(api.previewRun).toHaveBeenCalledTimes(2);
+  expect(api.previewRun.mock.calls[1][0]).toMatchObject({ resourceTypes: ['bookmark'], tagMode: 'append' });
+  expect(button('开始整理 30 项')).toBeTruthy();
+  expect(api.startRun).not.toHaveBeenCalled();
+});
+
+it('进入快捷确认及取消替换都不结束已有任务', async () => {
+  shortcut();
+  const running = { ...result(), id: 'old', status: 'running', canEnd: true };
+  api.listRuns.mockResolvedValue(ok([running]));
+  api.getRun.mockResolvedValue(ok(running));
+  api.alert.mockImplementation(() => {});
+  await mount();
+  expect(api.startRun).not.toHaveBeenCalled();
+  expect(api.cancelRun).not.toHaveBeenCalled();
+  button('开始整理 25 项').click();
+  await settle();
+  expect(api.alert).toHaveBeenCalledOnce();
+  expect(api.startRun).not.toHaveBeenCalled();
+  expect(api.cancelRun).not.toHaveBeenCalled();
+  button('关闭').click();
+  await settle();
+  api.alert.mock.calls[0][0].onOk();
+  await settle();
+  expect(api.startRun).not.toHaveBeenCalled();
+});
+
+it('分析中的资源产生建议后自动展开，主动收起后轮询不重开', async () => {
+  const row = {
+    ...result(),
+    items: [
+      {
+        id: 'late',
+        aiStatus: 'running',
+        resource: { id: 'b', type: 'bookmark', title: '字体', source: { folder: '' }, guards: {} },
+        suggestions: [],
+      },
+    ],
+  };
+  api.listRuns.mockResolvedValue(ok([row]));
+  api.getRun.mockResolvedValue(ok(row));
+  await mount();
+  const finished = {
+    ...row,
+    items: [
+      {
+        ...row.items[0],
+        aiStatus: 'completed',
+        suggestions: [{ id: 's', kind: 'tags', status: 'pending', reason: '内容依据' }],
+      },
+    ],
+  };
+  api.getRun.mockResolvedValue(ok(finished));
+  button('刷新').click();
+  await settle();
+  expect(document.querySelector('.resource-detail-toggle')?.getAttribute('aria-expanded')).toBe('true');
+  document.querySelector<HTMLButtonElement>('.resource-detail-toggle')!.click();
+  await settle();
+  button('刷新').click();
+  await settle();
+  expect(document.querySelector('.resource-detail-toggle')?.getAttribute('aria-expanded')).toBe('false');
+});
+it('消费交接后替换当前历史地址，移除一次性参数', async () => {
+  shortcut();
+  await mount();
+  expect(api.replace).toHaveBeenCalledWith(expect.objectContaining({ query: {} }));
+  expect(api.startRun).not.toHaveBeenCalled();
 });

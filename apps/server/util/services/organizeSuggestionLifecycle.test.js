@@ -203,8 +203,8 @@ it('Schema 迁移为旧任务保留已完成阶段，不回填旧取消任务', 
   }
   expect(migration).toContain('run_version INT NOT NULL DEFAULT 1');
   expect(migration).toContain("rule_status VARCHAR(24) NOT NULL DEFAULT ''completed''");
-  expect(migration).toContain("information_schema.COLUMNS");
-  expect(migration).toContain("information_schema.STATISTICS");
+  expect(migration).toContain('information_schema.COLUMNS');
+  expect(migration).toContain('information_schema.STATISTICS');
   expect(migration).not.toMatch(/UPDATE|DELETE|TRUNCATE/);
 });
 it('资源变化后重查剩余元信息和关联重复成员，不重写已应用建议', async () => {
@@ -252,4 +252,77 @@ it('资源变化后重查剩余元信息和关联重复成员，不重写已应�
     ([sql, p]) => sql.startsWith('UPDATE organize_suggestions') && p.at(-1) === 'duplicate',
   );
   expect(duplicates.every(([, p]) => JSON.parse(p[1]).reason.includes('正文不同'))).toBe(true);
+});
+
+it('追加标签模式在资料变化重查时保留，已有标签不被改成跳过', async () => {
+  const current = buildSnapshot('note', { id: '1', title: 'Vue', content: '<p>Vue 组件开发</p>', type: 'html' }, [
+    { id: 't', name: 'Vue' },
+  ]);
+  const row = {
+    ...run(),
+    status: 'running',
+    rule_phase: 'completed',
+    options_json: { ...options, scope: 'selected', checks: ['tags'], tagMode: 'append' },
+  };
+  const record = {
+    id: 'i1',
+    resource_id: '1',
+    resource_type: 'note',
+    rule_status: 'completed',
+    snapshot_json: current,
+    lease_token: 'lease',
+  };
+  const db = dbFor((sql) =>
+    sql.includes('FROM organize_suggestion_runs')
+      ? [[row]]
+      : sql.includes('FROM organize_suggestion_items')
+        ? [[record]]
+        : sql.includes('FROM organize_suggestions')
+          ? [[{ id: 's1', kind: 'tags', status: 'running' }]]
+          : undefined,
+  );
+  expect(
+    await refreshPendingSource(db, { id: 'i1', run_id: 'r', user_id: 'u', lease_token: 'lease' }, current),
+  ).toEqual(['tags']);
+});
+
+it('书签追加任务续跑使用准备后的材料估算额度，保留已关联标签的任务模式', async () => {
+  const row = {
+    ...run(),
+    status: 'paused',
+    rule_phase: 'completed',
+    options_json: { ...options, scope: 'selected', tagMode: 'append' },
+  };
+  const snapshot = buildSnapshot('bookmark', {
+    id: 'b',
+    name: '字体页面',
+    description: '',
+    url: 'https://example.com',
+    tags: [{ id: 't', name: '工具' }],
+  });
+  readSuggestionSources.mockResolvedValue([snapshot]);
+  const db = dbFor((sql) => {
+    if (sql.includes('FROM user')) return [[{ id: 'u', role: 'user' }]];
+    if (sql.includes('FROM organize_suggestion_items'))
+      return [[{ resource_type: 'bookmark', resource_id: 'b', ai_kinds_json: ['tags'] }]];
+    if (sql.includes('FROM organize_suggestion_runs')) return [[row]];
+    if (sql.includes('FROM tag')) return [[]];
+  });
+  const prepare = vi.fn(async () => {
+    expect(db.beginTransaction).not.toHaveBeenCalled();
+    return {
+      url: 'https://example.com',
+      pageInfo: { title: '字体页面', content: '公开字体内容' },
+      metadataSource: 'webpage',
+    };
+  });
+  const resumed = await resumeV2(
+    db,
+    { userId: 'u', id: 'r' },
+    { prepare, restrictions: async () => [], quota: async () => ({ remaining: 100000 }) },
+  );
+  expect(resumed.status).toBe('running');
+  expect(prepare).toHaveBeenCalledWith(snapshot);
+  expect(row.options_json.tagMode).toBe('append');
+  expect(db.query.mock.calls.some(([sql]) => sql.includes('SET options_json'))).toBe(false);
 });

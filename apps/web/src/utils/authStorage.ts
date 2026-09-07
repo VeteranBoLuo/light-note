@@ -13,7 +13,13 @@ export function isAdminLoginPreview(): boolean {
     return false;
   }
   const hasPreviewQuery = new URLSearchParams(window.location.search).get(PREVIEW_FLAG_KEY) === '1';
-  return hasPreviewQuery;
+  try {
+    // 查询参数只负责把当前标签页带入预览；进入应用后业务路由可能会重写 query，
+    // 已建立的短时上下文必须继续以 sessionStorage 为准，直到退出或失效流程统一清理。
+    return hasPreviewQuery || window.sessionStorage.getItem(PREVIEW_FLAG_KEY) === '1';
+  } catch {
+    return hasPreviewQuery;
+  }
 }
 
 export function getAdminContextToken(): string {
@@ -48,11 +54,7 @@ export function getAdminLoginPreviewReturnUrl(): string {
   return normalizeAdminLoginPreviewReturnUrl(window.sessionStorage.getItem(PREVIEW_RETURN_TO_KEY));
 }
 
-export function setAdminLoginPreview(
-  token: string,
-  preferences?: Partial<UserPreferences> | null,
-  returnTo?: string,
-) {
+export function setAdminLoginPreview(token: string, preferences?: Partial<UserPreferences> | null, returnTo?: string) {
   window.sessionStorage.setItem(PREVIEW_FLAG_KEY, '1');
   window.sessionStorage.setItem(PREVIEW_TOKEN_KEY, token);
   window.sessionStorage.setItem(PREVIEW_RETURN_TO_KEY, normalizeAdminLoginPreviewReturnUrl(returnTo));

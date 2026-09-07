@@ -488,7 +488,7 @@ app.use(
 const user = useUserStore(pinia);
 user.setUserInfo({
   id: 'visual-user',
-  role: RoleEnum.USER,
+  role: state === 'visitor' ? RoleEnum.VISITOR : RoleEnum.USER,
   userName: '视觉验收用户',
   alias: '视觉验收用户',
   preferences: { theme, lang: locale, noteViewMode: 'card' },

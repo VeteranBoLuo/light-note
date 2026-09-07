@@ -18,7 +18,9 @@
       <span class="points-balance-summary__copy">
         <span>{{ t('personCenter.points') }}</span>
         <strong>{{ balanceText }}</strong>
-        <small v-if="!loading && !unavailable">{{ t('personCenter.pointsDetailHint') }}</small>
+        <small v-if="!loading && !unavailable">{{
+          t(loginRequired ? 'personCenter.pointsLoginRequired' : 'personCenter.pointsDetailHint')
+        }}</small>
       </span>
     </span>
     <SvgIcon class="points-balance-summary__arrow" :src="icon.arrow_right" size="15" aria-hidden="true" />
@@ -31,6 +33,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
+  import { isGuestUser } from '@/utils/savePreference';
 
   const props = withDefaults(
     defineProps<{
@@ -50,13 +53,21 @@
     'open-details': [];
   }>();
   const { t, locale } = useI18n();
-  const unavailable = computed(() => props.points == null || !Number.isFinite(Number(props.points)));
+  const loginRequired = computed(() => isGuestUser());
+  const loading = computed(() => !loginRequired.value && props.loading);
+  const unavailable = computed(
+    () => !loginRequired.value && (props.points == null || !Number.isFinite(Number(props.points))),
+  );
   const balanceText = computed(() => {
+    if (loginRequired.value) return '0';
     if (props.loading && props.points == null) return t('personCenter.pointsLoading');
     if (unavailable.value) return t('personCenter.pointsUnavailable');
     return Number(props.points).toLocaleString(locale.value);
   });
-  const accessibleLabel = computed(() => `${t('personCenter.points')}，${balanceText.value}`);
+  const accessibleLabel = computed(
+    () =>
+      `${t('personCenter.points')}，${balanceText.value}，${t(loginRequired.value ? 'personCenter.pointsLoginRequired' : 'personCenter.pointsDetailHint')}`,
+  );
 </script>
 
 <style scoped lang="less">

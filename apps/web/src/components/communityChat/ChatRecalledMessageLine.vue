@@ -2,6 +2,14 @@
   <div class="community-message__recall-line" @click="emit('surfaceClick', $event)">
     <span role="status">{{ label }}</span>
     <BButton
+      v-if="canReedit"
+      size="small"
+      class="community-message__recall-reedit"
+      @click.stop="emit('reedit')"
+    >
+      {{ t('communityChat.recall.reedit') }}
+    </BButton>
+    <BButton
       v-if="canViewOriginal"
       size="small"
       class="community-message__recall-audit-action"
@@ -36,18 +44,21 @@
   withDefaults(
     defineProps<{
       label: string;
+      canReedit?: boolean;
       canViewOriginal?: boolean;
       actionItems?: BActionMenuItem[];
       busy?: boolean;
     }>(),
     {
       canViewOriginal: false,
+      canReedit: false,
       actionItems: () => [],
       busy: false,
     },
   );
   const emit = defineEmits<{
     surfaceClick: [event: MouseEvent];
+    reedit: [];
     viewOriginal: [];
     action: [action: string];
   }>();
@@ -75,6 +86,7 @@
     overflow-wrap: anywhere;
   }
 
+  .community-message__recall-reedit,
   .community-message__recall-audit-action,
   .community-message__recall-more :deep(.b_btn) {
     min-width: 0;
@@ -106,6 +118,12 @@
     .community-message__recall-line {
       min-height: 32px;
       padding-inline: 8px;
+    }
+
+    .community-message__recall-reedit {
+      min-height: 44px;
+      height: 44px;
+      margin-block: -6px;
     }
 
     .community-message__recall-more {

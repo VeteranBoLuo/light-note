@@ -3,10 +3,11 @@
     v-if="showCard"
     class="daily-review"
     :class="{
-      'daily-review--compact': !displayAll && (isTerminal || compact),
+      'daily-review--compact': !displayAll && !showCompletedDesktop && (isTerminal || compact),
       'daily-review--line': inline && !displayAll,
       'daily-review--summary': compact && !inline && !isTerminal,
       'daily-review--all': displayAll,
+      'daily-review--completed-desktop': showCompletedDesktop,
     }"
     :aria-label="t('growth.dailyReviewTitle')"
     :aria-busy="loading || Boolean(actionKey) || undefined"
@@ -36,7 +37,7 @@
         </BButton>
       </template>
     </div>
-    <template v-else-if="isTerminal && !displayAll">
+    <template v-else-if="isTerminal && !displayAll && !showCompletedDesktop">
       <div class="daily-review__compact-state" :class="isSkipped ? 'is-skipped' : 'is-completed'" role="status">
         <span class="daily-review__state-icon" :class="isSkipped ? 'is-skipped' : 'is-success'" aria-hidden="true">
           <SvgIcon :src="isSkipped ? icon.noteTemplate.review : icon.message.success" size="19" />
@@ -60,6 +61,14 @@
         <BButton v-if="compact && orderedItems.length" size="small" @click="openDetails">
           {{ t('growth.dailyReviewViewDetails') }}
         </BButton>
+        <BButton
+          v-else-if="isSkipped && !readOnly && orderedItems.length"
+          size="small"
+          :loading="Boolean(actionKey)"
+          @click="openDetails"
+        >
+          {{ t('growth.dailyReviewStart') }}
+        </BButton>
       </div>
     </template>
 
@@ -72,10 +81,10 @@
           <div class="daily-review__title-row">
             <h2 v-if="!displayAll">{{ t('growth.dailyReviewTitle') }}</h2>
             <BChip v-if="readOnly" tone="neutral">{{ t('growth.dailyReviewReadOnly') }}</BChip>
-            <BChip v-if="displayAll && completionRewardExp > 0" class="daily-review__reward" tone="success">
+            <BChip v-if="(displayAll || showCompletedDesktop) && completionRewardExp > 0" class="daily-review__reward" tone="success">
               {{ t('growth.dailyReviewRewardGranted', { exp: completionRewardExp }) }}
             </BChip>
-            <BChip v-else-if="displayAll && completionRewardSettled" class="daily-review__reward" tone="neutral">
+            <BChip v-else-if="(displayAll || showCompletedDesktop) && completionRewardSettled" class="daily-review__reward" tone="neutral">
               {{ t('growth.dailyReviewRewardCapReached') }}
             </BChip>
             <BChip v-else-if="canEarnReward" class="daily-review__reward-preview" tone="neutral">
@@ -103,7 +112,7 @@
       </BButton>
     </div>
 
-    <template v-if="displayAll">
+    <template v-if="displayAll || showCompletedDesktop">
       <div v-if="loading && !review" class="daily-review__loading">
         <BLoading inline :loading="true" :title="t('growth.dailyReviewLoading')" />
       </div>
@@ -142,6 +151,10 @@
           />
         </div>
 
+        <p v-if="showCompletedDesktop" class="daily-review__completion-summary" role="status">
+          <strong>{{ t(allAvailableItemsReviewed ? 'growth.dailyReviewCompletedTitle' : 'growth.dailyReviewHandledShort') }}</strong>
+          <span>{{ terminalDescription }}</span>
+        </p>
         <div class="daily-review__all-list">
           <article
             v-for="item in orderedItems"
@@ -414,6 +427,7 @@
   });
   const isEmpty = computed(() => review.value?.session?.status === 'empty');
   const isCompleted = computed(() => review.value?.session?.status === 'completed');
+  const showCompletedDesktop = computed(() => isCompleted.value && !compact.value && !inline.value && !displayAll.value);
   const isSkipped = computed(() => review.value?.session?.status === 'skipped');
   const isTerminal = computed(() => isCompleted.value || isSkipped.value);
   const configuredRewardExp = computed(() => Math.max(0, Number(review.value?.session?.reward?.rewardExp || 0)));
@@ -719,7 +733,7 @@
         actionKey.value = '';
       }
     }
-    if (owner === identityKey.value && date === review.value?.date) detailsVisible.value = true;
+    if (compact.value && owner === identityKey.value && date === review.value?.date) detailsVisible.value = true;
   }
 
   async function retryAction() {
@@ -750,7 +764,7 @@
     border-radius: 16px;
     color: var(--text-color);
     background: var(--card-background);
-    box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--text-color) 38%, transparent);
+    box-shadow: none;
   }
 
   .daily-review::before {
@@ -1077,6 +1091,35 @@
     margin-top: 12px;
   }
 
+  .daily-review__completion-summary {
+    margin: 10px 0 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    color: var(--text-color);
+    font-size: 13px;
+
+    span {
+      color: var(--desc-color);
+      font-size: 12px;
+    }
+  }
+
+  .daily-review--completed-desktop .daily-review__all-item {
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    padding: 11px 0;
+  }
+
+  .daily-review--completed-desktop .daily-review__all-item .daily-review__resource-icon {
+    width: 24px;
+    height: 24px;
+  }
+
+  .daily-review--completed-desktop .daily-review__all-item .daily-review__item-meta,
+  .daily-review--completed-desktop .daily-review__all-item .daily-review__reason {
+    display: none;
+  }
+
   .daily-review__all-list {
     display: grid;
     margin-top: 10px;
@@ -1253,7 +1296,7 @@
   }
 
   :global(html.light-note-mobile-rendering .daily-review:not(.daily-review--all):not(.daily-review--line)) {
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+    box-shadow: none;
   }
 
   :global(html.light-note-mobile-rendering .daily-review__title-icon),

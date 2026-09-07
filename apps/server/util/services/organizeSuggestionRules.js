@@ -36,6 +36,9 @@ export function normalizeRunInput(input = {}) {
   const scope = input.scope || 'recent';
   if (!['recent', 'all', 'selected', 'untagged'].includes(scope))
     throw suggestionError('ORGANIZE_SCOPE_INVALID', '处理范围无效');
+  const tagMode = input.tagMode || 'untagged';
+  if (!['untagged', 'append'].includes(tagMode) || (tagMode === 'append' && scope !== 'selected'))
+    throw suggestionError('ORGANIZE_OPTIONS_INVALID', '追加标签仅支持明确选择的资料');
   const items = Array.isArray(input.items)
     ? [
         ...new Map(
@@ -56,7 +59,13 @@ export function normalizeRunInput(input = {}) {
   const applicableItems = items.filter((item) => applicableTypes.includes(item.type));
   if (!applicableTypes.length || (scope === 'selected' && !applicableItems.length))
     throw suggestionError('ORGANIZE_CHECKS_NOT_APPLICABLE', '所选资料没有适用的整理项目，请重新选择');
-  return { resourceTypes: applicableTypes, checks, scope, items: applicableItems };
+  return {
+    resourceTypes: applicableTypes,
+    checks,
+    scope,
+    items: applicableItems,
+    ...(tagMode === 'append' ? { tagMode } : {}),
+  };
 }
 export function inspectNote(row) {
   if (row.type === 'drawing') return { supported: false, empty: false, hasText: false, text: '', contentHash: null };
@@ -149,6 +158,15 @@ export function buildSnapshot(type, row, tags = [], now = Date.now()) {
     title,
     tags,
     source,
+    ...(type === 'bookmark'
+      ? {
+          bookmarkMeta: {
+            url: row.url,
+            name: row.name || '',
+            description: row.original_description ?? row.description ?? '',
+          },
+        }
+      : {}),
     version: hash([versionData, tags.map((t) => [t.id, t.name]).sort()]),
     modifiedAt: row.update_time || row.create_time,
     guards,
@@ -172,7 +190,7 @@ export function buildSnapshot(type, row, tags = [], now = Date.now()) {
     size: type === 'file' ? Number(row.file_size) : undefined,
   };
 }
-export function buildRuleSuggestions(snapshots, checks) {
+export function buildRuleSuggestions(snapshots, checks, { tagMode = 'untagged' } = {}) {
   const titles = new Map(),
     duplicates = new Map();
   for (const s of snapshots) {
@@ -197,7 +215,7 @@ export function buildRuleSuggestions(snapshots, checks) {
     const sameTitle = titles.get(`${s.type}:${normalizeName(s.title).toLowerCase()}`) || [];
     const aiKinds = [];
     if (checks.includes('tags') && supportsOrganizeCheck(s.type, 'tags')) {
-      if (s.tags.length) add('tags', 'not_applicable', '已有标签，本次仅补齐无标签资料');
+      if (s.tags.length && tagMode !== 'append') add('tags', 'not_applicable', '已有标签，本次仅补齐无标签资料');
       else if (s.unsupported || s.empty || (s.type === 'note' && !s.hasTitleEvidence))
         add('tags', 'insufficient', '没有可用于分析的内容，可手动添加标签');
       else {

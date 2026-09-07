@@ -301,10 +301,18 @@
   }
 
   function goAiQuotaDetails() {
+    if (user.role === 'visitor') {
+      handleExitLogin();
+      return;
+    }
     router.push({ path: '/settings', query: { section: 'ai', panel: 'usage' } });
   }
 
   function goPointsDetails() {
+    if (user.role === 'visitor') {
+      handleExitLogin();
+      return;
+    }
     router.push({ path: '/settings', query: { section: 'points' } });
   }
 

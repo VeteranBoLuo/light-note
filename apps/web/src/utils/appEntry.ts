@@ -26,7 +26,7 @@ export function getRuntimeApplicationHomePath(
 
 /**
  * 新账号注册完成后的落点。
- * 移动端与其它入口一致进入「今日」；桌面端固定书签首页，
+ * 移动端与其它入口一致进入「今日」；桌面端固定工作台，
  * 不继承设备最近资料路径或账号默认首页，避免新账号被上一个账号的本地记录带走。
  */
 export function getRuntimePostRegistrationPath(
@@ -37,7 +37,7 @@ export function getRuntimePostRegistrationPath(
   if (isMobileLayout || runtime === 'android-app') {
     return MOBILE_TODAY_PATH;
   }
-  return '/home';
+  return '/workbenches';
 }
 
 /**

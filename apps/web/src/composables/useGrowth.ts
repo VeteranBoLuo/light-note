@@ -400,6 +400,7 @@ const shop = ref<Shop | null>(null);
 const inventory = ref<Inventory | null>(null);
 const lottery = ref<LotteryStatus | null>(null);
 const weekly = ref<WeeklyData | null>(null);
+let weeklyRequest: { generation: number; promise: Promise<WeeklyData | null> } | null = null;
 const recap = ref<RecapData | null>(null);
 const growthTasks = ref<GrowthTasksData | null>(null);
 const claimable = ref<GrowthClaimable | null>(null);
@@ -983,16 +984,24 @@ export function useGrowth() {
   }
 
   // 每周挑战:进度 + 领取
-  async function loadWeekly() {
+  function loadWeekly(): Promise<WeeklyData | null> {
     ensureGrowthOwner(useUserStore().id || 'visitor');
     const generation = ownerGeneration;
-    try {
-      const res = await growthApi.getWeekly();
-      if (generation === ownerGeneration && res?.status === 200 && res.data) weekly.value = res.data as WeeklyData;
-    } catch (err) {
-      console.warn('加载每周挑战失败:', err);
-    }
-    return generation === ownerGeneration ? weekly.value : null;
+    if (weeklyRequest?.generation === generation) return weeklyRequest.promise;
+    const promise = (async () => {
+      try {
+        const res = await growthApi.getWeekly();
+        if (generation === ownerGeneration && res?.status === 200 && res.data) weekly.value = res.data as WeeklyData;
+      } catch (err) {
+        console.warn('加载每周挑战失败:', err);
+      }
+      return generation === ownerGeneration ? weekly.value : null;
+    })();
+    weeklyRequest = { generation, promise };
+    void promise.finally(() => {
+      if (weeklyRequest?.promise === promise) weeklyRequest = null;
+    });
+    return promise;
   }
   async function claimWeekly(key: string) {
     const uid = useUserStore().id || 'visitor';

@@ -67,9 +67,8 @@ ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkOcrRuntime.js"
 echo "🔎  检查通用网页 Chromium 渲染运行时与低权限配置…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkWebPageRendererRuntime.js"
 
-echo "♻️  pm2 restart ${PM2}…"
-ssh -i "$KEY" "$HOST" "pm2 restart $PM2 --update-env && \
-  if pm2 describe '$DOCUMENT_WORKER_PM2' >/dev/null 2>&1; then \
+echo "♻️  先重启 Worker，再重启 ${PM2}…"
+ssh -i "$KEY" "$HOST" "if pm2 describe '$DOCUMENT_WORKER_PM2' >/dev/null 2>&1; then \
     pm2 restart '$DOCUMENT_WORKER_PM2' --update-env; \
   else \
     cd '$REMOTE' && pm2 start documentWorker.js --name '$DOCUMENT_WORKER_PM2'; \
@@ -84,7 +83,7 @@ ssh -i "$KEY" "$HOST" "pm2 restart $PM2 --update-env && \
   else \
     cd '$REMOTE' && pm2 start resourceGovernanceWorker.js --name '$RESOURCE_GOVERNANCE_WORKER_PM2'; \
   fi && \
-  pm2 save"
+  pm2 restart $PM2 --update-env && pm2 save"
 
 echo "⏳  等待后端重启就绪并健康检查(重启窗口会短暂 502,属正常)…"
 code=000

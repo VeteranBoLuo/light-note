@@ -546,6 +546,7 @@
     load,
     loadDashboard,
     loadGrowthTasks,
+    loadWeekly,
     loadLottery,
     loadClaimable,
     claimAllRewards,
@@ -582,8 +583,8 @@
     {
       key: 'weekly',
       label: t('growth.taskTabWeekly', {
-        done: weeklyChallengeDoneCount.value,
-        total: weeklyChallengeCount.value,
+        done: weekly.value ? weeklyChallengeDoneCount.value : '—',
+        total: weekly.value ? weeklyChallengeCount.value : '—',
       }),
       icon: icon.common.calendar,
     },
@@ -772,15 +773,7 @@
       if (res?.status === 200 && res.data?.ok) {
         const claimed = Number(res.data.claimed || 0);
         if (claimed > 0) {
-          const sourceMessage = claimSuccessMessage(res.data.receipts, pendingBreakdown);
-          message.success(
-            sourceMessage ||
-              t('growth.claimAllSuccess', {
-                n: claimed,
-                exp: Number(res.data.exp || 0),
-                points: Number(res.data.points || 0),
-              }),
-          );
+          message.success(claimSuccessMessage(res.data, pendingBreakdown));
           recordOperation({ module: '成长', operation: '一键领取成长奖励成功' });
         } else {
           message.info(t('growth.claimAllEmpty'));
@@ -867,7 +860,7 @@
   onMounted(() => {
     void load(); // 任务分区也需要今日经验与每日上限；共享请求会与概览卡片自动合并。
     void Promise.all([loadDashboard(), loadClaimable(), loadPreferences()]);
-    if (activeSection.value === 'tasks') void loadGrowthTasks(true);
+    if (activeSection.value === 'tasks') void Promise.all([loadGrowthTasks(true), loadWeekly()]);
     if (activeSection.value === 'rewards' || (activeSection.value === 'overview' && useWideDesktopLayout.value)) {
       void loadLottery();
     }
@@ -896,7 +889,7 @@
   useForegroundRefresh({
     refresh: () => {
       const requests: Array<Promise<unknown>> = [loadDashboard(), load(true), loadClaimable()];
-      if (activeSection.value === 'tasks') requests.push(loadGrowthTasks(true));
+      if (activeSection.value === 'tasks') requests.push(loadGrowthTasks(true), loadWeekly());
       if (activeSection.value === 'rewards' || (activeSection.value === 'overview' && useWideDesktopLayout.value)) {
         requests.push(loadLottery());
       }
@@ -947,7 +940,7 @@
         hash: sectionForHash(route.hash) === section ? route.hash : '',
       });
     }
-    if (section === 'tasks') void loadGrowthTasks();
+    if (section === 'tasks') void Promise.all([loadGrowthTasks(), loadWeekly()]);
     if (section === 'rewards' || (section === 'overview' && useWideDesktopLayout.value)) void loadLottery();
   });
 

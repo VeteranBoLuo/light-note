@@ -25,6 +25,13 @@
       <BButton size="small" :loading="loading" @click="loadToday">{{ t('common.retry') }}</BButton>
     </div>
 
+    <DailyBriefCard
+      class="mobile-today__brief"
+      :eligible="Boolean(user.id && user.role !== 'visitor')"
+      :owner-key="dailyBriefOwnerKey"
+      :read-only="growthReadOnly"
+    />
+
     <section class="mobile-today__pending" :aria-label="t('workbench.panel.todaySummary')">
       <div class="mobile-today__pending-head">
         <strong>{{ t('workbench.panel.todaySummary') }}</strong>
@@ -148,6 +155,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import TodayActionSection from '@/components/workbenches/TodayActionSection.vue';
   import DailyReviewCard from '@/components/workbenches/DailyReviewCard.vue';
+  import DailyBriefCard from '@/components/workbenches/DailyBriefCard.vue';
   import WorkbenchGrowth from '@/components/workbenches/WorkbenchGrowth.vue';
   import DailyQuests from '@/components/growth/DailyQuests.vue';
   import GrowthTasks from '@/components/growth/GrowthTasks.vue';
@@ -187,6 +195,9 @@
   const scrollRef = ref<HTMLElement | null>(null);
   const { dashboard, growthTasks, loadDashboard, loadGrowthTasks, loadClaimable } = useGrowth();
   const growthReadOnly = computed(() => Boolean(user.adminContext));
+  const dailyBriefOwnerKey = computed(() =>
+    [user.id || 'visitor', user.role || '', user.adminContext?.subjectUserId || '', user.adminContext?.mode || ''].join('|'),
+  );
   const { loadDailyReview } = useDailyReview();
 
   function refreshDailyReview() {
@@ -539,6 +550,10 @@
 
   .mobile-today__daily-review:empty {
     display: none;
+  }
+
+  .mobile-today__brief {
+    margin-bottom: 14px;
   }
 
   .mobile-today__pending {

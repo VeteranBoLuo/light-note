@@ -20,6 +20,7 @@
     </Teleport>
 
     <div ref="content" class="wizard-content">
+      <p v-if="step === 3 && busy && !preview" role="status">{{ t('organizeWizard.preparingConfirmation') }}</p>
       <header class="wizard-heading">
         <h3 ref="heading" tabindex="-1">{{ t(`organizeWizard.headings.${steps[step]}`) }}</h3>
         <p>{{ t(`organizeWizard.descriptions.${steps[step]}`) }}</p>
@@ -66,7 +67,13 @@
                 modelValue.checks.includes(check) ? '✓' : ''
               }}</span></span
             >
-            <small>{{ t(`organizeWizard.checkHints.${check}`) }}</small>
+            <small>{{
+              t(
+                check === 'tags' && modelValue.tagMode === 'append'
+                  ? 'organizeWizard.appendTagsHint'
+                  : `organizeWizard.checkHints.${check}`,
+              )
+            }}</small>
             <span class="option-bottom"
               ><span class="check-method">{{
                 t(check === 'tags' || check === 'title' ? 'organizeWizard.ai' : 'organizeWizard.rule')
@@ -215,17 +222,6 @@
         <p v-if="!preview.summary.total" class="wizard-hint">{{ t('organizeWizard.noResources') }}</p>
         <p class="wizard-hint">{{ t('organizeWorkspace.confirmHint') }}</p>
         <p class="wizard-hint">{{ t('organizeLifecycle.billing') }}</p>
-        <BButton :aria-expanded="showUsage" @click="showUsage = !showUsage"
-          >{{ t('organizeLifecycle.usage')
-          }}<SvgIcon
-            :src="icon.noteTree.chevron"
-            size="16"
-            :style="{ transform: showUsage ? 'rotate(180deg)' : undefined }"
-        /></BButton>
-        <div v-if="showUsage" class="wizard-hint"
-          ><p>{{ t('organizeLifecycle.usageDetails') }}</p
-          ><BButton @click="router.push('/ai-usage')">{{ t('organizeLifecycle.viewUsage') }}</BButton></div
-        >
       </template>
       <p v-if="excludedTypes.length && step > 0 && step < 3" class="wizard-hint" role="status">{{
         t('organizeWizard.excluded', { names: resourceNames(excludedTypes) })
@@ -239,6 +235,9 @@
           ? t('organizePicker.footer', { count: effectiveItems.length })
           : footerHint
       }}</p>
+      <BButton v-if="step === 3 && !preview && error" :disabled="busy" @click="emit('preview', modelValue)">{{
+        t('organizeWizard.retryPreview')
+      }}</BButton>
       <div
         ><BButton v-if="step > 0" :disabled="busy" @click="goBack(step - 1)">{{
           t('organizeWizard.previous')
@@ -256,7 +255,6 @@
 </template>
 
 <script setup lang="ts">
-  import { useRouter } from 'vue-router';
   import { computed, nextTick, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { applicableOrganizeResources, supportsOrganizeCheck } from '@lightnote/shared/organize-capabilities';
@@ -273,6 +271,7 @@
     busy: boolean;
     error: string;
     headerTarget?: HTMLElement | null;
+    initialStep?: number;
   }>();
   const emit = defineEmits<{
     'update:modelValue': [value: RunOptions];
@@ -282,7 +281,7 @@
     start: [];
   }>();
   const { t } = useI18n();
-  const step = ref(0),
+  const step = ref(props.initialStep || 0),
     heading = ref<HTMLElement | null>(null),
     content = ref<HTMLElement | null>(null);
   const steps = ['resources', 'checks', 'scope', 'confirm'] as const;
@@ -303,8 +302,6 @@
     reviewSelection = ref(false),
     browseType = ref('bookmark'),
     selectionError = ref('');
-  const showUsage = ref(false);
-  const router = useRouter();
   const selectedNames = ref<Record<string, string>>({});
   const selectionLoading = ref(false);
   watch(
@@ -353,15 +350,17 @@
           : !!props.preview?.summary.total,
   );
   const footerHint = computed(() =>
-    !canContinue.value
-      ? t(`organizeWizard.required.${steps[step.value]}`)
-      : step.value === 0
-        ? t('organizeWizard.resourceCount', { count: props.modelValue.resourceTypes.length })
-        : step.value === 1
-          ? t('organizeWizard.checkCount', {
-              count: props.modelValue.checks.filter((check) => availableChecks.value.includes(check)).length,
-            })
-          : t(step.value === 2 ? 'organizeWizard.previewFree' : 'organizeWizard.reviewFirst'),
+    props.busy && step.value === 3 && !props.preview
+      ? t('organizeWizard.preparingConfirmation')
+      : !canContinue.value
+        ? t(`organizeWizard.required.${steps[step.value]}`)
+        : step.value === 0
+          ? t('organizeWizard.resourceCount', { count: props.modelValue.resourceTypes.length })
+          : step.value === 1
+            ? t('organizeWizard.checkCount', {
+                count: props.modelValue.checks.filter((check) => availableChecks.value.includes(check)).length,
+              })
+            : t(step.value === 2 ? 'organizeWizard.previewFree' : 'organizeWizard.reviewFirst'),
   );
   const nextLabel = computed(() =>
     step.value < 2
@@ -375,7 +374,9 @@
     selectionError.value = '';
     emit('update:preview', null);
     emit('clear-error');
-    emit('update:modelValue', { ...props.modelValue, ...patch });
+    const next = { ...props.modelValue, ...patch };
+    if (next.scope !== 'selected') next.tagMode = 'untagged';
+    emit('update:modelValue', next);
   }
   function toggleResource(type: ResourceType) {
     const resourceTypes = props.modelValue.resourceTypes.includes(type)
@@ -441,6 +442,7 @@
     (value) => {
       if (value) step.value = 3;
     },
+    { immediate: true },
   );
   watch(step, async () => {
     await nextTick();
@@ -474,7 +476,9 @@
     flex: 1;
     min-width: 0;
   }
-  .wizard-nav li:last-child { flex: 0 0 auto; }
+  .wizard-nav li:last-child {
+    flex: 0 0 auto;
+  }
   .wizard-nav li:not(:last-child)::after {
     content: '';
     flex: 1;
@@ -814,10 +818,18 @@
       padding: 20px 28px;
       gap: 14px;
     }
-    .wizard-heading { gap: 6px; }
-    .wizard-context { padding: 8px 14px; }
-    .scope-option.b_btn { padding: 14px 18px; }
-    .wizard-footer { padding: 14px 28px; }
+    .wizard-heading {
+      gap: 6px;
+    }
+    .wizard-context {
+      padding: 8px 14px;
+    }
+    .scope-option.b_btn {
+      padding: 14px 18px;
+    }
+    .wizard-footer {
+      padding: 14px 28px;
+    }
   }
   @media (max-width: 520px) {
     .wizard-nav {

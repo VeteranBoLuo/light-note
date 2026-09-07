@@ -112,32 +112,13 @@ describe('笔记库批量 AI 操作语义', () => {
     expect(enLocaleSource).toContain("batchAction: 'Batch Actions'");
   });
 
-  it('智能打标签在桌面进入可恢复的整理建议流，移动端仍复用原弹窗', () => {
-    expect(source).toContain(':selected-ids="selectedAiOrganizeIds"');
-    expect(source).toMatch(/function openSelectedAiOrganize\(\)[\s\S]*selectedAiOrganizeIds\.value = selectedIds/);
-    expect(source).toContain("'light-note:organize-ai-suggestion-seed:v1'");
-    expect(source).toContain("query: { issue: 'ai_suggestions' }");
-    expect(source).toMatch(/if \(bookmark\.isDesktop\) \{[\s\S]*openNoteAiSuggestions\(\)/);
+  it('桌面与移动批量智能打标签统一交接整理中心，页面级 AI 菜单移除', () => {
+    expect(source).not.toContain('AiOrganizeModal');
+    expect(source).not.toContain('noteAiMenuOptions');
+    expect(source).not.toContain('openGlobalAiOrganize');
+    expect(source).toContain('await selection.openOrganize()');
     expect(source).toMatch(/action\.key === 'smartOrganize'[\s\S]*openSelectedAiOrganize\(\)/);
-    expect(source).toMatch(/if \(resourceIds\.length > 20\) \{[\s\S]*return;/);
-  });
-
-  it('桌面普通态收敛为一个 AI 菜单，批量态仍通过共享底栏调用智能打标签', () => {
-    expect(source).toMatch(/<BDropdown v-if="bookmark\.isDesktop"[\s\S]*?:menu-options="noteAiMenuOptions"/);
-    expect(source).toMatch(/<BButton\s+v-else[\s\S]*?@click="openGlobalAiOrganize"/);
-    expect(source).toContain(':menu-options="noteAiMenuOptions"');
-    expect(source).toMatch(/const noteAiMenuOptions = computed[\s\S]*key: 'smartTagging'/);
-    expect(source).toMatch(/const noteAiMenuOptions = computed[\s\S]*key: 'summarize'/);
-    expect(source).toMatch(/const noteAiMenuOptions = computed[\s\S]*key: 'compare'/);
-    expect(source).toMatch(/const noteAiMenuOptions = computed[\s\S]*key: 'create'/);
-    expect(source).not.toMatch(/const noteAiMenuOptions = computed[\s\S]*key: 'askDirectory'/);
     expect(source).toMatch(/<ResourceBatchActionBar[\s\S]*?@click="openSelectedAiOrganize"/);
-
-    const aiButtonRule = source.match(/\.note-ai-button\s*\{([\s\S]*?)\n\s*\}/)?.[1] || '';
-    expect(aiButtonRule).toContain('border: 1px solid var(--primary-color');
-    expect(aiButtonRule).toContain('color: var(--primary-color');
-    expect(aiButtonRule).toContain('background: color-mix(in srgb, var(--primary-color');
-    expect(aiButtonRule).not.toContain('--resource-note-color');
   });
 
   it('笔记库暂不常驻目录问答，桌面与移动端都不占用额外侧栏', () => {

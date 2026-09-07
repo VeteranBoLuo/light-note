@@ -1,5 +1,12 @@
 export default {
   organizeWizard: {
+    appendTags: '追加',
+    appendTagsHint: '为所选资料推荐可追加的主题标签，保留已有标签。',
+    preparingConfirmation: '正在确认所选资料范围…',
+    retryPreview: '重试范围确认',
+    handoffFailed: '未能进入整理中心，请重试',
+    handoffExpired: '本次选择已失效，请返回来源页面重新勾选',
+
     navigation: '整理步骤',
     steps: {
       resources: '选资源',
@@ -3326,6 +3333,7 @@ export default {
       adminDescription: '管理员可撤回消息并保留审核原文',
       placeholder: '该消息已撤回',
       ownPlaceholder: '你撤回了一条消息',
+      reedit: '重新编辑',
       memberPlaceholder: '“{name}”撤回了一条消息',
       adminPlaceholder: '管理员撤回了“{name}”的一条消息',
       adminVisible: 'Root 审核原消息',
@@ -4781,6 +4789,16 @@ export default {
     title: '工作台',
     subtitle: '从最近内容继续工作，集中处理待整理事项，并快速创建新内容。',
     dailyBrief: {
+      guestSubtitle: '串联待办、收藏与笔记，找到今天值得推进的一步',
+      viewTodos: '查看待办',
+
+      sampleHeadline: '今天适合把「收集资料」往前推进一步，变成可以实践的学习计划。',
+      sampleTodo: '今天有 2 项待办，「整理读书笔记」与「制定本周学习计划」可以一起推进。先用 15 分钟提炼笔记中的 3 个要点，再选一个放进本周计划，减少在资料和任务之间来回切换。',
+      sampleContent: '最近收藏的 3 篇文章聚焦专注与学习。「间隔复习」关注记忆的保持，「主动回忆」强调对知识的理解，两者共同构成了从阅读到长期掌握的学习路径。',
+      sampleConnection: '新收藏的复习方法与已有的读书笔记主题相呼应：前者解释怎样记得更牢，后者记录已经理解的内容。这些资料逐渐串起了「阅读、提炼、回顾」的知识脉络。',
+      sampleOrganize: '还有 4 条收藏未添加标签，其中 3 条与学习方法有关，适合归入同一个主题；另一条旅行攻略可单独整理。先按用途分组，比一次建立很多细碎标签更容易坚持。',
+      sampleRecommendation: '今天的重点可以收拢为两件事：推进已有的学习待办，让计划更具体；为零散收藏补齐标签，让相关资料更容易汇聚。已有内容足够支撑下一步，不必急着继续收集。',
+
       title: '今日简报',
       subtitle: 'AI 正在结合今天的行动、沉淀与整理状态生成简报。',
       settings: '简报设置',
@@ -4798,10 +4816,15 @@ export default {
       budgetPaused: '今日自动更新已达保护上限，仍可手动更新。',
       manualTitle: '按需生成你的今日简报',
       manualHint: '自动更新已关闭，点击后由 AI 汇总当前行动与资料。',
+      previewMode: '仅查看',
+      previewEmptyTitle: '目标用户今天还没有简报',
+      previewEmptyHint: '管理员预览只展示已保存结果，不会生成或更新简报。',
       generateAction: '生成简报',
       justGenerated: '刚刚',
       aiRecommendation: 'AI 建议',
       sharedTag: '关联依据：共同标签「{tag}」',
+      reviewAiSuggestions: '审核 AI 建议',
+      organizeUntagged: '整理无标签内容',
       recentSource: '近期资料',
       olderSource: '较早资料',
       markers: {
@@ -6887,6 +6910,7 @@ export default {
     points: '积分',
     pointsLoading: '读取中…',
     pointsUnavailable: '暂时无法获取',
+    pointsLoginRequired: '登录后查看',
     pointsDetailHint: '查看获得与使用明细',
     assetOverview: '积分与 AI 额度',
     quickAccess: '常用入口',
@@ -6898,6 +6922,7 @@ export default {
     growthProgress: '当前等级成长进度',
     resourceOverview: '账号资源概览',
     aiQuotaLabel: 'AI 额度',
+    aiQuotaLoginRequired: '登录后使用',
     aiQuotaLoading: '读取中…',
     aiQuotaRemaining: '剩余 {amount}',
     aiQuotaBreakdown: '今日 {daily} · 永久 {permanent}',
@@ -8267,7 +8292,8 @@ export default {
     claimAllCount: '一键领取 {n} 项',
     claimAllTooltip: '可领取构成：{sources}',
     claimAllTooltipFallback: '共有 {n} 项成长奖励可领取',
-    claimAllSuccessBySource: '领取成功：{sources}',
+    claimAllSuccessBySource: '领取成功：{sources}，经验 +{exp}，积分 +{points}',
+    claimAllSuccessBySourceWithFrames: '领取成功：{sources}，经验 +{exp}，积分 +{points}，头像框 +{frames}',
     claimSources: {
       daily: '日常任务 ×{n}',
       growthTasks: '成长任务 ×{n}',

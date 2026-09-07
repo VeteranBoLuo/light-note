@@ -73,7 +73,9 @@
         <strong>撤回消息 · 紧凑系统行</strong>
         <span>本人、他人和管理员代撤回不再占用头像与空白气泡空间。</span>
       </div>
-      <article><ChatRecalledMessageLine label="你撤回了一条消息" :action-items="recallActions" /></article>
+      <article>
+        <ChatRecalledMessageLine label="你撤回了一条消息" can-reedit :action-items="recallActions" />
+      </article>
       <article><ChatRecalledMessageLine label="“薄荷”撤回了一条消息" /></article>
       <article>
         <ChatRecalledMessageLine label="管理员撤回了“薄荷”的一条消息" can-view-original />

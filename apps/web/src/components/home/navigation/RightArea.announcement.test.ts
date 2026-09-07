@@ -2,12 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
-import {
-  featureAnnouncementSeenVersion,
-  featureAnnouncementStorageKey,
-  KNOWLEDGE_WORKSHOP_ANNOUNCEMENT_ID,
-} from '@/utils/featureAnnouncements';
-
 const mocks = vi.hoisted(() => ({
   routerPush: vi.fn(() => Promise.resolve()),
   recordOperation: vi.fn(),
@@ -94,84 +88,25 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('更多菜单的知识工坊上新提示', () => {
-  it('打开菜单或点击其他入口不会消除，只有点击知识工坊才同时清除两处红点', async () => {
+describe('知识工坊常规入口', () => {
+  it.each(['user', 'visitor'])('%s 打开、访问和刷新后均无上新红点，也不再写入已读', async (role) => {
+    user.role = role;
+    user.id = role === 'visitor' ? '' : 'user-1';
     const host = await mountRightArea();
-    expect(host.querySelector('.more-menu-trigger__unread-dot')).not.toBeNull();
-    expect(host.querySelector('.test-menu-dot')).not.toBeNull();
-
+    expect(host.querySelector('.more-menu-trigger')?.getAttribute('aria-label')).toBe(zhCN.navigation.moreEntries);
+    expect(host.querySelector('.more-menu-trigger__unread-dot')).toBeNull();
+    expect(host.querySelector('.test-menu-dot')).toBeNull();
     host.querySelector<HTMLElement>('.more-menu-trigger')?.click();
-    host.querySelector<HTMLElement>('[data-label="官网"]')?.click();
-    await nextTick();
-    expect(host.querySelector('.more-menu-trigger__unread-dot')).not.toBeNull();
-    expect(host.querySelector('.test-menu-dot')).not.toBeNull();
-
     host.querySelector<HTMLElement>('[data-label="知识工坊"]')?.click();
     await nextTick();
-    expect(host.querySelector('.more-menu-trigger__unread-dot')).toBeNull();
-    expect(host.querySelector('.test-menu-dot')).toBeNull();
-    expect(featureAnnouncementSeenVersion(user.preferences, KNOWLEDGE_WORKSHOP_ANNOUNCEMENT_ID)).toBe(
-      'knowledge-workshop-v1',
-    );
-    expect(mocks.markAnnouncementSeen).toHaveBeenCalledWith({
-      announcementId: 'knowledge-workshop',
-      version: 'knowledge-workshop-v1',
-    });
     expect(mocks.routerPush).toHaveBeenCalledWith('/toolbox');
-  });
-
-  it('清空浏览器存储后仍按账号服务端偏好保持已读', async () => {
-    const host = await mountRightArea();
-    host.querySelector<HTMLElement>('[data-label="知识工坊"]')?.click();
-    await nextTick();
-    cleanup?.();
-    cleanup = undefined;
-    localStorage.clear();
-
-    const remounted = await mountRightArea();
-    expect(remounted.querySelector('.more-menu-trigger__unread-dot')).toBeNull();
-    expect(remounted.querySelector('.test-menu-dot')).toBeNull();
-  });
-
-  it('服务端已读回写失败时，本机刷新后也不会恢复红点', async () => {
-    mocks.markAnnouncementSeen.mockRejectedValueOnce(new Error('network unavailable'));
-    const host = await mountRightArea();
-    host.querySelector<HTMLElement>('[data-label="知识工坊"]')?.click();
-    await nextTick();
-    await Promise.resolve();
-
-    expect(
-      localStorage.getItem(featureAnnouncementStorageKey(KNOWLEDGE_WORKSHOP_ANNOUNCEMENT_ID, 'guest-device-1')),
-    ).toBe('knowledge-workshop-v1');
-
-    cleanup?.();
-    cleanup = undefined;
-    user.preferences = {};
-    const remounted = await mountRightArea();
-    expect(remounted.querySelector('.more-menu-trigger__unread-dot')).toBeNull();
-    expect(remounted.querySelector('.test-menu-dot')).toBeNull();
-  });
-
-  it('游客只在当前浏览器本地记录已读，不调用账号接口', async () => {
-    user.id = '';
-    user.role = 'visitor';
-    const host = await mountRightArea();
-
-    host.querySelector<HTMLElement>('[data-label="知识工坊"]')?.click();
-    await nextTick();
-
-    expect(host.querySelector('.more-menu-trigger__unread-dot')).toBeNull();
     expect(mocks.markAnnouncementSeen).not.toHaveBeenCalled();
-    expect(
-      localStorage.getItem(featureAnnouncementStorageKey(KNOWLEDGE_WORKSHOP_ANNOUNCEMENT_ID, 'guest-device-1')),
-    ).toBe('knowledge-workshop-v1');
-  });
-
-  it('绝对失效时间后新老账号都不展示红点', async () => {
-    vi.setSystemTime(new Date('2026-09-14T16:00:00.000Z'));
-    const host = await mountRightArea();
-
-    expect(host.querySelector('.more-menu-trigger__unread-dot')).toBeNull();
-    expect(host.querySelector('.test-menu-dot')).toBeNull();
+    expect(user.preferences).toEqual({});
+    expect(localStorage.length).toBe(0);
+    cleanup?.();
+    cleanup = undefined;
+    const remounted = await mountRightArea();
+    expect(remounted.querySelector('.more-menu-trigger__unread-dot')).toBeNull();
+    expect(remounted.querySelector('.test-menu-dot')).toBeNull();
   });
 });

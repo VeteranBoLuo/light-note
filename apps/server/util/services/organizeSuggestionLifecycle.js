@@ -6,7 +6,7 @@ import { lockActiveUserForUpdate } from '../aiOutboundDispatchGuard.js';
 import { isOrganizeAiSuggestionsEnabled } from '../organizeAiSuggestionFeature.js';
 import { getActiveSecurityRestrictions } from '../security/services/securityRestrictionService.js';
 import { getStatusForUser } from '../aiQuota.js';
-import { estimateResourceMetadataTokens } from './organizeSuggestionModel.js';
+import { estimateResourceMetadataTokens, prepareResourceMetadata } from './organizeSuggestionModel.js';
 
 const resumable = ['preparing', 'running', 'paused'];
 export const isRunV2 = (run) => Number(run?.run_version) >= 2;
@@ -214,11 +214,13 @@ export async function resumeV2(db, { userId, id }, dependencies = {}) {
   if (remaining.length && !quota.exempt && quota.enforcing !== false) {
     const next = remaining[0];
     const sources = await readSuggestionSources(db, userId, next.resource_type, { ids: [next.resource_id], limit: 1 });
+    const prepared =
+      sources[0]?.type === 'bookmark' ? await (dependencies.prepare || prepareResourceMetadata)(sources[0]) : null;
     const [tags] = await db.query('SELECT id,name FROM tag WHERE user_id=? AND del_flag=0', [userId]);
     if (
       sources.length &&
       Number(quota.availableRemaining ?? quota.remaining ?? 0) <
-        estimateResourceMetadataTokens(sources[0], json(next.ai_kinds_json), tags)
+        estimateResourceMetadataTokens(sources[0], json(next.ai_kinds_json), tags, prepared)
     )
       throw suggestionError('ORGANIZE_QUOTA_PAUSED', '额度不足以继续下一项，已有结果保留', 409);
   }
@@ -351,6 +353,7 @@ export async function runRuleBatch(db) {
         entries = buildRuleSuggestions(
           all.map((i) => json(i.snapshot_json)),
           json(live.options_json).checks,
+          json(live.options_json),
         ).map((entry, index) => ({ ...entry, itemId: all[index].id }));
         await writeSuggestions(c, claim, entries);
         await insertBatches(
@@ -439,7 +442,7 @@ export async function refreshPendingSource(db, job, current) {
         i.id === job.id ? current : relatedIds.has(i.id) ? refreshedSources.get(i.resource_id) : json(i.snapshot_json),
       )
       .filter(Boolean);
-    const entry = buildRuleSuggestions(snapshots, json(live.options_json).checks).find(
+    const entry = buildRuleSuggestions(snapshots, json(live.options_json).checks, json(live.options_json)).find(
       (e) => e.snapshot.type === current.type && e.snapshot.id === current.id,
     );
     if (!entry) throw suggestionError('ORGANIZE_RESOURCE_CHANGED', '资料已变化', 409);
@@ -455,7 +458,7 @@ export async function refreshPendingSource(db, job, current) {
         previous.id,
       ]);
     }
-    const refreshed = buildRuleSuggestions(snapshots, json(live.options_json).checks);
+    const refreshed = buildRuleSuggestions(snapshots, json(live.options_json).checks, json(live.options_json));
     for (const resource of refreshed) {
       const owner = items.find(
         (i) => i.resource_type === resource.snapshot.type && i.resource_id === resource.snapshot.id,

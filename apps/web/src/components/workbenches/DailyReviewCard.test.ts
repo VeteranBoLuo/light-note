@@ -144,6 +144,22 @@ describe('DailyReviewCard', () => {
     document.body.querySelectorAll('.b-action-menu-panel').forEach((element) => element.remove());
   });
 
+  it('桌面直接恢复旧收起会话，显示当前资料而不打开回顾弹框', async () => {
+    review.value = snapshot({ session: { id: 'session-1', status: 'skipped', itemCount: 1 } });
+    actOnToday.mockImplementation(async () => {
+      review.value = snapshot();
+      return mutationResponse(review.value);
+    });
+    const host = mountCard(false, false, false);
+    Array.from(host.querySelectorAll('button')).find((button) =>
+      button.textContent?.trim() === zhCN.growth.dailyReviewStart,
+    )?.click();
+    await settle();
+    expect(actOnToday).toHaveBeenCalledWith('resume_today');
+    expect(host.querySelector('.daily-review__item')?.textContent).toContain('第一条笔记');
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
   it('首次读取显示局部加载和错误重试，访客不渲染空卡', async () => {
     loading.value = true;
     const loadingHost = mountCard();
@@ -353,7 +369,7 @@ describe('DailyReviewCard', () => {
     warn.mockRestore();
   });
 
-  it('最后一条真实打开后显示实际到账奖励的紧凑完成态', async () => {
+  it('最后一条真实打开后保留桌面标题、进度和资料清单，并显示实际到账奖励', async () => {
     review.value = snapshot();
     const completed = snapshot({
       session: {
@@ -378,7 +394,10 @@ describe('DailyReviewCard', () => {
     expect(host.textContent).toContain(zhCN.growth.dailyReviewCompletedDesc);
     expect(host.textContent).toContain('+5 EXP 已到账');
     expect(host.querySelector('.daily-review__reward')).not.toBeNull();
-    expect(host.querySelector('.daily-review--compact')).not.toBeNull();
+    expect(host.querySelector('.daily-review--compact')).toBeNull();
+    expect(host.querySelector('.daily-review__header')).not.toBeNull();
+    expect(host.querySelector('.daily-review__progress-row')).not.toBeNull();
+    expect(host.querySelectorAll('.daily-review__all-item')).toHaveLength(completed.items.length);
     expect(host.querySelector('.daily-review__open')).toBeNull();
   });
 

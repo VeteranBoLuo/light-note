@@ -69,7 +69,7 @@ describe('AI 额度快捷展示契约', () => {
     expect(summarySource).toContain('daily: formatAiQuotaTokens(status.value.dailyRemaining');
     expect(summarySource).toContain('permanent: formatAiQuotaTokens(status.value.bonusTokens');
     expect(summarySource).toContain(':percent="remainingPercent"');
-    expect(summarySource).toContain('v-if="status && !status.exempt && !unavailable"');
+    expect(summarySource).toContain('v-if="!loginRequired && status && !status.exempt && !unavailable"');
     expect(summarySource).toMatch(/\.ai-quota-summary__primary-value strong\s*\{[\s\S]*?font-size:\s*13px;/);
     expect(summarySource).toMatch(
       /\.ai-quota-summary__secondary-value strong\s*\{[\s\S]*?color:\s*var\(--desc-color\);/,

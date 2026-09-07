@@ -95,30 +95,24 @@ describe('桌面工作台头部布局稳定性', () => {
     expect(desktopSource).not.toContain('loadRecap');
   });
 
-  it('今日简报与每日回顾、任务组成第二组桌面分栏，关闭简报时回顾区自动占满', () => {
+  it('简报通栏置顶，回顾与任务使用独立卡片并复用非弹框回顾', () => {
     const routineStart = desktopSource.indexOf('<section class="workbench-routine-grid">');
-    const briefIndex = desktopSource.indexOf('class="workbench-routine-grid__brief"');
+    const briefIndex = desktopSource.indexOf('class="workbench-brief"');
     const reviewColumnIndex = desktopSource.indexOf('<div class="workbench-routine-grid__review">');
     const resourceOverviewIndex = desktopSource.indexOf(
       '<section class="primary-grid" :aria-label="t(\'workbench.panel.resourceOverview\')">',
     );
 
     expect(routineStart).toBeGreaterThan(-1);
-    expect(briefIndex).toBeGreaterThan(routineStart);
+    expect(briefIndex).toBeLessThan(routineStart);
     expect(reviewColumnIndex).toBeGreaterThan(briefIndex);
     expect(resourceOverviewIndex).toBeGreaterThan(reviewColumnIndex);
     expect(desktopSource).toMatch(
-      /\.workbench-routine-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1\.14fr\)/,
+      /\.workbench-routine-grid\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/,
     );
-    expect(desktopSource).toMatch(
-      /\.workbench-routine-grid__brief:empty \+ \.workbench-routine-grid__review\s*\{[\s\S]*?grid-column:\s*1 \/ -1/,
-    );
-    expect(desktopSource).toMatch(
-      /\.workbench-routine-grid__brief > :deep\(\.daily-brief-card\)\s*\{[\s\S]*?height:\s*100%/,
-    );
-    expect(desktopSource).toMatch(
-      /\.workbench-routine-grid__review\s*\{[\s\S]*?grid-template-rows:\s*auto minmax\(0, 1fr\)/,
-    );
+    expect(desktopSource).toContain('.workbench-brief:empty');
+    expect(desktopSource).toContain('class="workbench-routine-grid__tasks"');
+    expect(desktopSource).toContain('<DailyReviewCard class="workbench-daily-review" :read-only="growthReadOnly" />');
     expect(desktopSource).not.toContain('height: 206px');
   });
 
@@ -129,9 +123,10 @@ describe('桌面工作台头部布局稳定性', () => {
 
     expect(desktopSource).toContain("import DailyBriefCard from '@/components/workbenches/DailyBriefCard.vue'");
     expect(desktopSource).toContain('v-if="bookmark.isDesktop"');
-    expect(briefIndex).toBeGreaterThan(firstFoldIndex);
+    expect(briefIndex).toBeLessThan(firstFoldIndex);
     expect(briefIndex).toBeLessThan(reviewIndex);
-    expect(desktopSource).toContain(':eligible="Boolean(user.id && user.role !== \'visitor\' && !growthReadOnly)"');
+    expect(desktopSource).toContain(':eligible="Boolean(user.id && user.role !== \'visitor\')"');
+    expect(desktopSource).toContain(':read-only="growthReadOnly"');
     expect(desktopSource).toContain('dailyBriefCardRef.value?.refresh()');
   });
 

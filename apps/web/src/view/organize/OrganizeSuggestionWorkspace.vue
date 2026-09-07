@@ -273,6 +273,7 @@
       <template #header-actions><div ref="wizardHeader" /></template>
       <OrganizeRunWizard
         :header-target="wizardHeader"
+        :initial-step="initialStep"
         v-if="drawer"
         v-model="draft"
         v-model:preview="preview"
@@ -286,8 +287,20 @@
   </section>
 </template>
 <script setup lang="ts">
+  import { useUserStore } from '@/store';
+  import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
+  import { consumeOrganizeHandoff } from '@/utils/organizeHandoff';
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
-  import { defineAsyncComponent, computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import {
+    defineAsyncComponent,
+    computed,
+    onActivated,
+    onBeforeUnmount,
+    onDeactivated,
+    onMounted,
+    ref,
+    watch,
+  } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import { apiBasePost } from '@/http/request';
@@ -350,6 +363,10 @@
   const switching = ref(false),
     displayedKind = ref('all');
   const controlling = ref(false);
+  const initialStep = ref(0);
+  const starting = ref(false);
+  const user = useUserStore();
+  let draftSequence = 0;
   const drawer = ref(false),
     draft = ref(defaults()),
     preview = ref<SuggestionRun | null>(null),
@@ -362,28 +379,25 @@
     previewKey = '';
   const expanded = ref(new Set<string>());
   const openGroups = ref(new Set(['priority', 'manual']));
+  let viewState: {
+    id?: string;
+    type?: string;
+    kind?: string;
+    views?: Record<string, { expanded: string[]; groups: string[] }>;
+  } = {};
+  const detailChoices = new Map<string, boolean>();
+  const detailKey = (id: string) => `${run.value?.id}:${resourceType.value}:${kind.value}:${id}`;
   function storedView() {
-    try {
-      return JSON.parse(sessionStorage.getItem('light-note:organize-view:v2') || '{}');
-    } catch {
-      return {};
-    }
+    return viewState;
   }
   function saveView() {
     if (!run.value) return;
-    try {
-      const previous = storedView();
-      const views = previous.id === run.value.id ? previous.views || {} : {};
-      views[`${resourceType.value}:${kind.value}`] = {
-        expanded: [...expanded.value],
-        groups: [...openGroups.value],
-        seen: items.value.map((i) => i.id),
-      };
-      sessionStorage.setItem(
-        'light-note:organize-view:v2',
-        JSON.stringify({ id: run.value.id, type: resourceType.value, kind: kind.value, views }),
-      );
-    } catch {}
+    const views = viewState.id === run.value.id ? viewState.views || {} : {};
+    views[`${resourceType.value}:${kind.value}`] = {
+      expanded: [...expanded.value],
+      groups: [...openGroups.value],
+    };
+    viewState = { id: run.value.id, type: resourceType.value, kind: kind.value, views };
   }
   function toggleGroup(key: string) {
     const next = new Set(openGroups.value);
@@ -496,6 +510,7 @@
     if (next.has(id)) next.delete(id);
     else next.add(id);
     expanded.value = next;
+    detailChoices.set(detailKey(id), next.has(id));
     saveView();
   }
   const countStatuses = (statuses: string[]) =>
@@ -602,16 +617,10 @@
       ? e.message
       : t('organize.actionFailed');
   const keyOf = (i: { type: string; id: string | number }) => `${i.type}:${i.id}`;
-  function addSelection(item: { type: string; id: string | number }) {
-    if (
-      !draft.value.resourceTypes.includes(item.type as ResourceType) ||
-      draft.value.items.some((i) => keyOf(i) === keyOf(item)) ||
-      draft.value.items.length >= 1000
-    )
-      return;
-    draft.value.items.push({ type: item.type as ResourceType, id: String(item.id) });
-  }
   function resetDraft() {
+    draftSequence++;
+    initialStep.value = 0;
+    draftBusy.value = false;
     draft.value = defaults();
     preview.value = null;
     previewRequest = '';
@@ -619,27 +628,58 @@
     draftError.value = '';
     drawer.value = true;
   }
+  watch(
+    drawer,
+    (open) => {
+      if (!open) {
+        draftSequence++;
+        draftBusy.value = false;
+        preview.value = null;
+      }
+    },
+    { flush: 'sync' },
+  );
+  watch(
+    () => buildNoteDetailRequestScope(user),
+    () => {
+      starting.value = false;
+      drawer.value = false;
+      draft.value = defaults();
+    },
+    { flush: 'sync' },
+  );
   function closeDrawer() {
-    if (!draftBusy.value) drawer.value = false;
+    if (starting.value) return;
+    drawer.value = false;
   }
   async function preflight(options: RunOptions) {
     if (draftBusy.value || !options.resourceTypes.length || !options.checks.length) return;
+    const ticket = ++draftSequence;
+    const identity = buildNoteDetailRequestScope(user);
     draftBusy.value = true;
     draftError.value = '';
     const key = JSON.stringify(options);
+    const current = () =>
+      !disposed && drawer.value && ticket === draftSequence && identity === buildNoteDetailRequestScope(user);
     if (previewKey !== key) {
       previewKey = key;
       previewRequest = generateUUID();
     }
     try {
-      preview.value = readResponse(await previewRun(options, previewRequest));
+      const result = readResponse(await previewRun(options, previewRequest));
+      if (current()) preview.value = result;
     } catch (e) {
-      draftError.value = failure(e);
+      if (current()) draftError.value = failure(e);
     } finally {
-      draftBusy.value = false;
+      if (current()) draftBusy.value = false;
     }
   }
   function start() {
+    if (!preview.value || draftBusy.value) return;
+    const previewId = preview.value.id;
+    const startCurrent = (replaceRunId?: string) => {
+      if (drawer.value && preview.value?.id === previewId) void startConfirmed(replaceRunId);
+    };
     if (run.value?.canEnd) {
       const oldId = run.value.id;
       Alert.alert({
@@ -647,16 +687,22 @@
         content: t('organizeLifecycle.replaceHint'),
         okText: t('organizeLifecycle.replaceStart'),
         cancelText: t('common.cancel'),
-        onOk: () => startConfirmed(oldId),
+        onOk: () => startCurrent(oldId),
       });
-    } else void startConfirmed();
+    } else startCurrent();
   }
   async function startConfirmed(replaceRunId?: string) {
     if (!preview.value || draftBusy.value) return;
+    const ticket = ++draftSequence;
+    const identity = buildNoteDetailRequestScope(user);
+    const current = () => !disposed && ticket === draftSequence && identity === buildNoteDetailRequestScope(user);
+    starting.value = true;
     draftBusy.value = true;
     draftError.value = '';
     try {
       const created = readResponse(await startRun(preview.value.id, replaceRunId)) as SuggestionRun;
+      if (!current()) return;
+      starting.value = false;
       drawer.value = false;
       run.value = created;
       resourceType.value = created.options.resourceTypes[0];
@@ -664,9 +710,12 @@
       await loadPage();
       emit('refresh-summary');
     } catch (e) {
-      draftError.value = failure(e);
+      if (current()) draftError.value = failure(e);
     } finally {
-      draftBusy.value = false;
+      if (current()) {
+        starting.value = false;
+        draftBusy.value = false;
+      }
     }
   }
   async function loadLatest() {
@@ -679,10 +728,10 @@
         run.value = result[0];
         const saved = storedView();
         resourceType.value =
-          saved.id === result[0].id && result[0].options.resourceTypes.includes(saved.type)
-            ? saved.type
+          saved.id === result[0].id && result[0].options.resourceTypes.includes(saved.type as ResourceType)
+            ? (saved.type as ResourceType)
             : result[0].options.resourceTypes[0];
-        if (saved.id === result[0].id && ['all', ...checks].includes(saved.kind)) kind.value = saved.kind;
+        if (saved.id === result[0].id && ['all', ...checks].includes(saved.kind || '')) kind.value = saved.kind || 'all';
       }
       if (run.value) await loadPage();
     } catch (e) {
@@ -731,13 +780,14 @@
       displayedKind.value = requestedKind;
       const saved = storedView();
       const view = saved.id === id ? saved.views?.[`${requestedType}:${requestedKind}`] : null;
-      const previousIds = new Set(view?.seen || items.value.map((item) => item.id));
       if (switching.value || !items.value.length) {
         expanded.value = new Set(view?.expanded || []);
         openGroups.value = new Set(view?.groups || ['priority', 'manual']);
       }
       for (const item of result.items || []) {
-        if (!previousIds.has(item.id) && ['priority', 'manual'].includes(groupFor(item))) expanded.value.add(item.id);
+        const choice = detailChoices.get(detailKey(item.id));
+        if (choice ?? ['priority', 'manual'].includes(groupFor(item))) expanded.value.add(item.id);
+        else if (choice === false) expanded.value.delete(item.id);
       }
       switching.value = false;
       items.value = append
@@ -810,23 +860,53 @@
     () => run.value?.status,
     (status) => emit('run-status', status || ''),
   );
+  let active = false;
+  let lastHandoffToken: string | undefined;
+  function receiveHandoff() {
+    if (!active) return;
+    const token = router.currentRoute.value.query.organizeSelection;
+    if (typeof token !== 'string' || token === lastHandoffToken) return;
+    lastHandoffToken = token;
+    const options = consumeOrganizeHandoff(token, buildNoteDetailRequestScope(user));
+    const route = router.currentRoute.value;
+    const query = { ...route.query };
+    delete query.organizeSelection;
+    void router.replace({ path: route.path, query, hash: route.hash }).catch(() => {});
+    if (!options) {
+      message.warning(t('organizeWizard.handoffExpired'));
+    } else {
+      resetDraft();
+      initialStep.value = 3;
+      draft.value = options;
+      void preflight(options);
+    }
+  }
+  watch(() => router.currentRoute.value.query.organizeSelection, receiveHandoff);
   onMounted(() => {
+    active = true;
     void loadLatest();
     document.addEventListener('visibilitychange', visibility);
-    try {
-      const key = 'light-note:organize-ai-suggestion-seed:v1';
-      const raw = sessionStorage.getItem(key);
-      if (raw) {
-        sessionStorage.removeItem(key);
-        const seed = JSON.parse(raw);
-        if (resourceTypes.includes(seed.resourceType) && Array.isArray(seed.resourceIds)) {
-          resetDraft();
-          draft.value.resourceTypes = [seed.resourceType];
-          draft.value.scope = 'selected';
-          seed.resourceIds.forEach((id: string) => addSelection({ type: seed.resourceType, id }));
-        }
-      }
-    } catch {}
+    receiveHandoff();
+  });
+  onActivated(() => {
+    const returning = !active;
+    active = true;
+    if (returning) void loadLatest();
+    receiveHandoff();
+  });
+  onDeactivated(() => {
+    active = false;
+    sequence++;
+    viewState = {};
+    detailChoices.clear();
+    expanded.value = new Set();
+    openGroups.value = new Set(['priority', 'manual']);
+    switching.value = true;
+    draftSequence++;
+    drawer.value = false;
+    draftBusy.value = false;
+    starting.value = false;
+    clearTimeout(timer);
   });
   onBeforeUnmount(() => {
     disposed = true;

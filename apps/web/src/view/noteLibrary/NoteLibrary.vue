@@ -55,21 +55,6 @@
             </template>
           </BInput>
         </div>
-        <BDropdown v-if="bookmark.isDesktop" trigger="click" align="right" :menu-options="noteAiMenuOptions">
-          <BButton class="note-action-button note-ai-button" v-click-log="OPERATION_LOG_MAP.noteLibrary.aiOrganize">
-            <SvgIcon :src="icon.ai.organize" size="17" />
-            {{ $t('note.ai.title') }}
-          </BButton>
-        </BDropdown>
-        <BButton
-          v-else
-          class="note-action-button note-ai-button"
-          @click="openGlobalAiOrganize"
-          v-click-log="OPERATION_LOG_MAP.noteLibrary.aiOrganize"
-        >
-          <SvgIcon :src="icon.ai.organize" size="17" />
-          {{ $t('bookmarkMg.aiOrganizeBtn') }}
-        </BButton>
         <BButton
           v-if="!noteTreeReadEnabled && (!currentParentId || noteTreeWriteEnabled)"
           type="primary"
@@ -493,15 +478,6 @@
       :note="$t('noteDetail.exportNoteDesc')"
     />
 
-    <!-- 智能打标签(笔记):自动为未打标签的笔记推荐标签 -->
-    <AiOrganizeModal
-      v-if="aiOrgVisible"
-      v-model:visible="aiOrgVisible"
-      init-type="note"
-      :selected-ids="selectedAiOrganizeIds"
-      :selection-operation="selection.operation()"
-      @applied="init"
-    />
     <NoteAiDialog v-model:visible="noteAiVisible" :notes="noteAiItems" />
     <ResourceBatchActionBar
       selection-module="notes"
@@ -748,9 +724,6 @@
   const NoteShareModal = createDeferredLibraryFeature(
     () => import('@/components/noteLibrary/share/NoteShareModal.vue'),
   );
-  const AiOrganizeModal = createDeferredLibraryFeature(
-    () => import('@/components/manage/bookmarkMg/AiOrganizeModal.vue'),
-  );
   const ActionCardModal = createDeferredLibraryFeature(() => import('@/components/base/ActionCardModal.vue'));
   const NewNotePickerModal = createDeferredLibraryFeature(
     () => import('@/components/noteLibrary/library/NewNotePickerModal.vue'),
@@ -956,8 +929,6 @@
   let noteRequestSeq = 0;
   const showTypePicker = ref(false);
   const createParentOverride = ref<string | null | undefined>(undefined);
-  const aiOrgVisible = ref(false); // 智能打标签(笔记)弹框
-  const selectedAiOrganizeIds = ref<string[]>([]);
   const tagConfigVisible = ref(false);
   const activeTagNote = ref<any | null>(null);
   const activeMoveNote = ref<any | null>(null);
@@ -985,13 +956,12 @@
   const outcomeDrawerOpen = ref(false);
   const outcomeInitialQuickActionId = ref('');
   const outcomeResources = ref<ResourceOutcomeResource[]>([]);
-  watch([outcomeDrawerOpen, aiOrgVisible, moveNoteVisible, batchExportModalVisible, batchExporting], (values) => {
+  watch([outcomeDrawerOpen, moveNoteVisible, batchExportModalVisible, batchExporting], (values) => {
     if (!values.some(Boolean)) selection.finish();
   });
   watch(selection.active, (active) => {
     if (!active) {
       outcomeDrawerOpen.value = false;
-      aiOrgVisible.value = false;
       moveNoteVisible.value = false;
       batchExportModalVisible.value = false;
       batchExporting.value = false;
@@ -2522,11 +2492,6 @@
       dividerBefore: true,
     },
     {
-      key: 'aiOrganize',
-      label: t('bookmarkMg.aiOrganizeBtn'),
-      icon: icon.ai.organize,
-    },
-    {
       key: 'batch',
       label: t(batchMode.value ? 'note.exitBatch' : 'inbox.mobileBatchSelect'),
       icon: icon.filterPanel.check,
@@ -2634,32 +2599,6 @@
 
   const noteAiVisible = ref(false);
   const noteAiItems = ref<any[]>([]);
-  const noteAiMenuOptions = computed(() => [
-    {
-      key: 'smartTagging',
-      label: t('note.ai.smartTagging'),
-      icon: icon.ai.organize,
-      function: openNoteAiSuggestions,
-    },
-    {
-      key: 'summarize',
-      label: t('note.ai.summarizeSelected'),
-      icon: icon.ai.summary,
-      function: () => openSelectedOutcomeAction('summarize', 1),
-    },
-    {
-      key: 'compare',
-      label: t('note.ai.compareSelected'),
-      icon: icon.toolbox.comparison,
-      function: () => openSelectedOutcomeAction('compare', 2),
-    },
-    {
-      key: 'create',
-      label: t('note.ai.createFromSelected'),
-      icon: icon.ai.materials,
-      function: () => openSelectedOutcomeAction('create', 2),
-    },
-  ]);
   const batchActionSummary = computed(() =>
     selectedVisibleCount.value
       ? t('note.selectedCount', { count: selectedVisibleCount.value })
@@ -2721,78 +2660,10 @@
     openNotesAi([note]);
   }
 
-  async function openNoteAiSuggestions() {
-    if (!bookmark.isDesktop) {
-      openGlobalAiOrganize();
-      return;
-    }
-    if (blockGuestWrite('ai-organize')) return;
-    const op = getSelectedNotes().length ? await selection.prepare() : null;
-    if (getSelectedNotes().length && !op) return;
-    const resourceIds = (op?.items || []).map((note) => String(note.id || '').trim()).filter(Boolean);
-    if (resourceIds.length > 20) {
-      message.info(t('ai.materialLimit', { count: 20 }));
-      selection.finish();
-      return;
-    }
-    try {
-      if (resourceIds.length) {
-        sessionStorage.setItem(
-          'light-note:organize-ai-suggestion-seed:v1',
-          JSON.stringify({ resourceType: 'note', resourceIds }),
-        );
-      } else {
-        sessionStorage.removeItem('light-note:organize-ai-suggestion-seed:v1');
-      }
-    } catch (error) {
-      console.warn('[note-library] failed to hand off the AI suggestion selection', error);
-      selection.finish(op);
-      message.error(t('note.ai.selectionHandoffFailed'));
-      return;
-    }
-    void router.push({ path: '/organize', query: { issue: 'ai_suggestions' } });
-  }
-
-  function openSelectedOutcomeAction(actionId: 'summarize' | 'compare' | 'create', minItems: number) {
-    const selectedCount = getSelectedNotes().length;
-    if (selectedCount < minItems) {
-      if (!batchMode.value) enterBatch();
-      message.info(t('note.ai.selectForAction', { count: minItems }));
-      return;
-    }
-    const maxItems = actionId === 'compare' ? 10 : 20;
-    if (selectedCount > maxItems) {
-      message.info(t('ai.materialLimit', { count: maxItems }));
-      return;
-    }
-    openSelectedOutcomeDrawer(actionId);
-  }
-
-  function openGlobalAiOrganize() {
-    if (bookmark.isDesktop) {
-      openNoteAiSuggestions();
-      return;
-    }
-    selectedAiOrganizeIds.value = [];
-    aiOrgVisible.value = true;
-  }
-
   async function openSelectedAiOrganize() {
-    if (bookmark.isDesktop) {
-      await openNoteAiSuggestions();
-      return;
-    }
-    const op = await selection.prepare();
-    if (!op) return;
-    const selectedIds = op.items.map((note) => String(note.id || '').trim()).filter(Boolean);
-    if (!selectedIds.length) return;
-    if (bookmark.isDesktop) {
-      openNoteAiSuggestions();
-      return;
-    }
-    selectedAiOrganizeIds.value = selectedIds;
+    if (blockGuestWrite('ai-organize')) return;
     mobileBatchActionsOpen.value = false;
-    aiOrgVisible.value = true;
+    await selection.openOrganize();
   }
   const allVisibleChecked = selection.allVisible;
   const someVisibleChecked = selection.someVisible;
@@ -2822,8 +2693,6 @@
       void router.push(hubPath);
     } else if (action.key === 'templates') {
       void openTemplateManager();
-    } else if (action.key === 'aiOrganize') {
-      openGlobalAiOrganize();
     } else if (action.key === 'batch') {
       if (batchMode.value) exitBatch();
       else enterBatch();
@@ -3715,25 +3584,6 @@
     border-radius: 10px;
   }
 
-  .note-ai-button {
-    border: 1px solid var(--primary-color, #615ced);
-    color: var(--primary-color, #615ced);
-    background: color-mix(in srgb, var(--primary-color, #615ced) 8%, var(--menu-body-bg-color));
-  }
-
-  .note-ai-button:hover,
-  .note-ai-button:active {
-    color: var(--primary-color, #615ced);
-    background: color-mix(in srgb, var(--primary-color, #615ced) 14%, var(--menu-body-bg-color));
-  }
-
-  .note-ai-button.is-active {
-    border-color: var(--primary-color, #615ced);
-    color: var(--primary-color, #615ced);
-    outline: 2px solid var(--primary-btn-bg-color);
-    outline-offset: -2px;
-  }
-
   .note-mobile-actions {
     width: 100%;
     display: flex;
@@ -4174,13 +4024,6 @@
   }
 
   @media (max-width: 1200px) {
-    .note-ai-button {
-      font-size: 0;
-      width: 36px;
-      min-width: 36px;
-      padding: 0;
-    }
-
     .note-search {
       width: 180px;
     }
@@ -4228,23 +4071,6 @@
 
     .note-action-button {
       height: 34px;
-    }
-
-    .note-mobile-actions .note-ai-button {
-      width: 100%;
-      min-width: 0;
-      height: 36px;
-      padding: 0 10px;
-      justify-content: center;
-      color: var(--primary-color, #615ced);
-      background: color-mix(in srgb, var(--primary-color, #615ced) 8%, var(--menu-body-bg-color));
-      font-size: 14px;
-    }
-
-    .note-mobile-actions .note-ai-button:hover,
-    .note-mobile-actions .note-ai-button:active {
-      color: var(--primary-color, #615ced);
-      background: color-mix(in srgb, var(--primary-color, #615ced) 14%, var(--menu-body-bg-color));
     }
   }
 

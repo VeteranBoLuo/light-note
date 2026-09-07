@@ -41,7 +41,9 @@ describe('积分资产入口与明细页契约', () => {
     expect(balanceSource).toContain(':aria-busy="loading"');
     expect(balanceSource).toContain("'open-details': []");
     expect(balanceSource).toContain('min-height: 68px');
-    expect(balanceSource).toContain("t('personCenter.pointsDetailHint')");
+    expect(balanceSource).toContain(
+      "t(loginRequired ? 'personCenter.pointsLoginRequired' : 'personCenter.pointsDetailHint')",
+    );
     expect(balanceSource).not.toContain('<BProgress');
     expect(balanceSource).not.toContain('text-overflow: ellipsis');
     expect(balanceSource).not.toContain('<button');

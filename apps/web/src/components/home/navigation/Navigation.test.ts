@@ -199,14 +199,6 @@ describe('Navigation', () => {
     expect(settingsSource).toContain('https://boluo66.top/toolkit/');
   });
 
-  it('知识工坊上新提示只在点击该入口后消除', () => {
-    expect(rightAreaSource).toContain('class="more-menu-trigger__unread-dot"');
-    expect(rightAreaSource).toContain('unread: knowledgeWorkshopUnread.value');
-    expect(rightAreaSource).toContain('markLocalFeatureAnnouncementSeen(KNOWLEDGE_WORKSHOP_ANNOUNCEMENT_ID,');
-    expect(rightAreaSource).toContain('.markFeatureAnnouncementSeen({');
-    expect(rightAreaSource).not.toMatch(/function officialSiteClick\(\)[\s\S]*?markLocalFeatureAnnouncementSeen/u);
-  });
-
   it('标签详情也保持标签一级导航选中语义', () => {
     expect(navigationSource).toContain("route.path.startsWith('/tag/')");
   });

@@ -366,10 +366,7 @@
       const res = await claimAllRewards();
       if (res?.status === 200 && res.data?.ok) {
         if (res.data.claimed > 0) {
-          const sourceMessage = claimSuccessMessage(res.data.receipts, pendingBreakdown);
-          message.success(
-            sourceMessage || t('growth.claimAllOkMixed', { exp: res.data.exp || 0, points: res.data.points || 0 }),
-          );
+          message.success(claimSuccessMessage(res.data, pendingBreakdown));
           recordOperation({
             module: '工作台',
             operation: '一键领取成长奖励成功',

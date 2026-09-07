@@ -5,6 +5,7 @@ import {
   clearAdminLoginPreview,
   clearLoginHistory,
   getAdminContextToken,
+  getAdminLoginPreviewPreferences,
   getAdminLoginPreviewUrl,
   getAdminLoginPreviewReturnUrl,
   hasLoggedInBefore,
@@ -27,15 +28,23 @@ describe('管理员预览前端令牌隔离', () => {
     window.name = '';
   });
 
-  it('后台页面不会读取上下文令牌，整页预览通过非敏感查询标识读取', () => {
+  it('整页预览在业务路由移除查询标识后仍持续使用同标签页令牌', () => {
     setAdminLoginPreview('secret-context-token', { lang: 'zh-CN' }, '/admin/userMg?status=active');
-    expect(isAdminLoginPreview()).toBe(false);
-    expect(getAdminContextToken()).toBe('');
     expect(localStorage.getItem('adminContextToken')).toBeNull();
     window.history.replaceState({}, '', '/home?adminLoginPreview=1');
     expect(isAdminLoginPreview()).toBe(true);
     expect(getAdminContextToken()).toBe('secret-context-token');
+    window.history.replaceState({}, '', '/home');
+    expect(isAdminLoginPreview()).toBe(true);
+    expect(getAdminContextToken()).toBe('secret-context-token');
+    expect(getAdminLoginPreviewPreferences()).toEqual({ lang: 'zh-CN' });
     expect(getAdminLoginPreviewReturnUrl()).toBe('/admin/userMg?status=active');
+  });
+
+  it('没有当前标签页预览材料时不会仅凭普通应用地址启用上下文', () => {
+    window.history.replaceState({}, '', '/home');
+    expect(isAdminLoginPreview()).toBe(false);
+    expect(getAdminContextToken()).toBe('');
   });
 
   it('预览 URL 只携带非敏感标识，不包含原始 token', () => {
@@ -47,9 +56,7 @@ describe('管理员预览前端令牌隔离', () => {
 
   it('返回地址只接受本站用户管理路径，并随本地材料一起清理', () => {
     expect(normalizeAdminLoginPreviewReturnUrl('/userMg#users')).toBe('/userMg#users');
-    expect(normalizeAdminLoginPreviewReturnUrl('/admin/userMg?status=banned')).toBe(
-      '/admin/userMg?status=banned',
-    );
+    expect(normalizeAdminLoginPreviewReturnUrl('/admin/userMg?status=banned')).toBe('/admin/userMg?status=banned');
     expect(normalizeAdminLoginPreviewReturnUrl('https://evil.example/userMg')).toBe('/admin/userMg');
     expect(normalizeAdminLoginPreviewReturnUrl('/admin')).toBe('/admin/userMg');
 

@@ -3083,6 +3083,333 @@ describe('CommunityChatWorkspace', () => {
     expect(mocks.messageSuccess).toHaveBeenCalledWith(zhCN.communityChat.recall.success);
   });
 
+  it('本人撤回纯文字后在五分钟内可回填 Emoji、提及和回复，并保留当前附件', async () => {
+    const now = new Date();
+    const content = `修正这句🙂${COMMUNITY_CHAT_INLINE_EMOJIS[0].token}`;
+    const reply = {
+      publicId: 'message-reply',
+      content: '原回复内容',
+      status: 'active',
+      authorName: '菠萝',
+      hasImages: false,
+    };
+    const activeMessage = chatMessage({
+      content,
+      messageKind: 'text',
+      isOwn: true,
+      canRecall: true,
+      recallDeadlineAt: new Date(now.getTime() + 60_000).toISOString(),
+      mentions: ['薄荷'],
+      mentionItems: [
+        {
+          userPublicId: '11111111-1111-4111-8111-111111111111',
+          communityId: 'ln_MINT01',
+          displayName: '薄荷',
+        },
+      ],
+      reply,
+    });
+    const recalledResponse = {
+      data: {
+        roomSlug: 'general',
+        items: [
+          chatMessage({
+            content: '',
+            messageKind: 'text',
+            status: 'recalled',
+            isOwn: true,
+            recalledAt: now.toISOString(),
+          }),
+        ],
+        hasMore: false,
+        nextBefore: null,
+        focusPublicId: null,
+        hasNewer: false,
+        realtimeEnabled: false,
+        pollingAfterMs: 8000,
+        serverTime: now.toISOString(),
+      },
+    };
+    mocks.getMessages.mockResolvedValue(recalledResponse);
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        ...recalledResponse.data,
+        items: [activeMessage],
+      },
+    });
+    mocks.recallMessage.mockResolvedValueOnce({
+      status: 200,
+      data: { publicId: 'message-1', status: 'recalled', recalledAt: now.toISOString() },
+    });
+
+    const host = await mountWorkspace();
+    const draftSession = getCommunityChatDraftSession('user-1:user', 'general');
+    const pendingAttachment = {
+      localId: 'local-file-1',
+      publicId: 'file-1',
+      kind: 'file' as const,
+      fileName: 'draft.txt',
+      fileType: 'text/plain',
+      fileSize: 12,
+      availability: 'available' as const,
+      expiresAt: null,
+      state: 'ready' as const,
+      progress: 100,
+    };
+    draftSession.text = '当前草稿';
+    draftSession.mentionTargets = [{ key: 'user:old', name: '旧提及', userPublicId: 'old' }];
+    draftSession.pendingAttachments = [pendingAttachment];
+    await flushAsync();
+
+    const recallButton = host.querySelector<HTMLButtonElement>(
+      `.community-message__actions button[aria-label="${zhCN.communityChat.recall.action}"]`,
+    );
+    expect(recallButton).not.toBeNull();
+    expect(recallButton?.disabled).toBe(false);
+    recallButton?.click();
+    mocks.alert.mock.calls[0][0].footer[1].function();
+    await flushAsync();
+
+    const reeditButton = host.querySelector<HTMLButtonElement>('.community-message__recall-reedit');
+    expect(reeditButton?.textContent).toContain(zhCN.communityChat.recall.reedit);
+    reeditButton?.click();
+    await flushAsync();
+
+    expect(draftSession.text).toBe(content);
+    expect(draftSession.replyTarget).toEqual(reply);
+    expect(draftSession.mentionTargets).toEqual([
+      {
+        key: 'user:11111111-1111-4111-8111-111111111111',
+        userPublicId: '11111111-1111-4111-8111-111111111111',
+        communityId: 'ln_MINT01',
+        name: '薄荷',
+      },
+    ]);
+    expect(draftSession.pendingAttachments).toEqual([pendingAttachment]);
+  });
+
+  it('重新编辑可恢复 @所有人', async () => {
+    const now = new Date();
+    const activeMessage = chatMessage({
+      content: '请大家查看',
+      messageKind: 'text',
+      isOwn: true,
+      canRecall: true,
+      mentionEveryone: true,
+      recallDeadlineAt: new Date(now.getTime() + 60_000).toISOString(),
+    });
+    const recalledMessage = {
+      ...activeMessage,
+      content: '',
+      status: 'recalled',
+      recalledAt: now.toISOString(),
+      canRecall: false,
+    };
+    mocks.getMessages.mockResolvedValue({
+      data: {
+        roomSlug: 'general',
+        items: [recalledMessage],
+        hasMore: false,
+        nextBefore: null,
+        focusPublicId: null,
+        hasNewer: false,
+        serverTime: now.toISOString(),
+      },
+    });
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        roomSlug: 'general',
+        items: [activeMessage],
+        hasMore: false,
+        nextBefore: null,
+        focusPublicId: null,
+        hasNewer: false,
+        serverTime: now.toISOString(),
+      },
+    });
+    mocks.recallMessage.mockResolvedValue({
+      status: 200,
+      data: { status: 'recalled', recalledAt: now.toISOString() },
+    });
+
+    const host = await mountWorkspace();
+    host
+      .querySelector<HTMLButtonElement>(
+        `.community-message__actions button[aria-label="${zhCN.communityChat.recall.action}"]`,
+      )
+      ?.click();
+    mocks.alert.mock.calls.at(-1)[0].footer[1].function();
+    await flushAsync();
+    host.querySelector<HTMLButtonElement>('.community-message__recall-reedit')?.click();
+    await flushAsync();
+    expect(getCommunityChatDraftSession('user-1:user', 'general').mentionEveryone).toBe(true);
+
+    cleanup?.();
+    cleanup = undefined;
+    const remountedHost = await mountWorkspace();
+    expect(remountedHost.querySelector('.community-message__recall-reedit')).toBeNull();
+  });
+
+  it('撤回请求失败时不保留重新编辑快照', async () => {
+    const now = new Date();
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        roomSlug: 'general',
+        items: [
+          chatMessage({
+            content: '撤回失败内容',
+            messageKind: 'text',
+            isOwn: true,
+            canRecall: true,
+            recallDeadlineAt: new Date(now.getTime() + 60_000).toISOString(),
+          }),
+        ],
+        hasMore: false,
+        nextBefore: null,
+        focusPublicId: null,
+        hasNewer: false,
+        serverTime: now.toISOString(),
+      },
+    });
+    mocks.recallMessage.mockRejectedValueOnce(new Error('recall failed'));
+
+    const host = await mountWorkspace();
+    host
+      .querySelector<HTMLButtonElement>(
+        `.community-message__actions button[aria-label="${zhCN.communityChat.recall.action}"]`,
+      )
+      ?.click();
+    mocks.alert.mock.calls.at(-1)[0].footer[1].function();
+    await flushAsync();
+
+    expect(host.querySelector('.community-message__recall-reedit')).toBeNull();
+    expect(mocks.messageError).toHaveBeenCalled();
+  });
+
+  it('服务端撤回时间已超过五分钟时不显示重新编辑', async () => {
+    const now = new Date();
+    const activeMessage = chatMessage({
+      content: '已过期内容',
+      messageKind: 'text',
+      isOwn: true,
+      canRecall: true,
+      recallDeadlineAt: new Date(now.getTime() + 60_000).toISOString(),
+    });
+    mocks.getMessages.mockResolvedValue({
+      data: {
+        roomSlug: 'general',
+        items: [{ ...activeMessage, content: '', status: 'recalled', canRecall: false }],
+        hasMore: false,
+        nextBefore: null,
+        focusPublicId: null,
+        hasNewer: false,
+        serverTime: now.toISOString(),
+      },
+    });
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        roomSlug: 'general',
+        items: [activeMessage],
+        hasMore: false,
+        nextBefore: null,
+        focusPublicId: null,
+        hasNewer: false,
+        serverTime: now.toISOString(),
+      },
+    });
+    mocks.recallMessage.mockResolvedValueOnce({
+      status: 200,
+      data: {
+        status: 'recalled',
+        recalledAt: new Date(now.getTime() - 6 * 60 * 1000).toISOString(),
+      },
+    });
+
+    const host = await mountWorkspace();
+    host
+      .querySelector<HTMLButtonElement>(
+        `.community-message__actions button[aria-label="${zhCN.communityChat.recall.action}"]`,
+      )
+      ?.click();
+    mocks.alert.mock.calls.at(-1)[0].footer[1].function();
+    await flushAsync();
+
+    expect(host.querySelector('.community-message__recall-reedit')).toBeNull();
+  });
+
+  it.each([
+    {
+      label: '附件消息',
+      overrides: {
+        images: [
+          {
+            publicId: 'image-1',
+            url: '/api/community-chat/images/image-1',
+            contentType: 'image/png',
+            fileSize: 12,
+            width: 16,
+            height: 16,
+          },
+        ],
+      },
+    },
+    {
+      label: '贴图消息',
+      overrides: { messageKind: 'sticker', sticker: { source: 'official', key: 'hello', url: '/hello.png' } },
+    },
+    {
+      label: '投票消息',
+      overrides: { messageKind: 'poll', poll: { options: [] } },
+    },
+    {
+      label: '提及身份不完整的旧消息',
+      overrides: { mentions: ['旧成员'] },
+    },
+  ])('不为$label提供重新编辑入口', async ({ overrides }) => {
+    const now = new Date();
+    const activeMessage = chatMessage({
+      content: '待撤回内容',
+      messageKind: 'text',
+      isOwn: true,
+      canRecall: true,
+      recallDeadlineAt: new Date(now.getTime() + 60_000).toISOString(),
+      ...overrides,
+    });
+    mocks.getMessages.mockResolvedValue({
+      data: {
+        roomSlug: 'general',
+        items: [{ ...activeMessage, content: '', status: 'recalled', canRecall: false }],
+        hasMore: false,
+        nextBefore: null,
+        focusPublicId: null,
+        hasNewer: false,
+        serverTime: now.toISOString(),
+      },
+    });
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        roomSlug: 'general',
+        items: [activeMessage],
+        hasMore: false,
+        nextBefore: null,
+        focusPublicId: null,
+        hasNewer: false,
+        serverTime: now.toISOString(),
+      },
+    });
+
+    const host = await mountWorkspace();
+    host
+      .querySelector<HTMLButtonElement>(
+        `.community-message__actions button[aria-label="${zhCN.communityChat.recall.action}"]`,
+      )
+      ?.click();
+    mocks.alert.mock.calls.at(-1)[0].footer[1].function();
+    await flushAsync();
+
+    expect(host.querySelector('.community-message__recall-reedit')).toBeNull();
+  });
+
   it('超过两分钟仍显示撤回入口，点击后解释时间限制且不请求服务端', async () => {
     mocks.getMessages.mockResolvedValueOnce({
       data: {

@@ -92,12 +92,6 @@
   />
   <LinkHealthModal v-model:visible="healthVisible" />
   <BookmarkSnapshotModal v-model:visible="snapVisible" :bookmark-id="snapBookmarkId" />
-  <AiOrganizeModal
-    v-model:visible="aiOrgVisible"
-    :selected-ids="selectedAiOrganizeIds"
-    :selection-operation="selection.operation()"
-    @applied="reloadBookmarks"
-  />
   <BookmarkAiDialog v-model:visible="bookmarkAiVisible" :bookmarks="bookmarkAiItems" />
   <ResourceOutcomeDrawer
     v-model:open="outcomeDrawerOpen"
@@ -132,7 +126,6 @@
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import { OPERATION_LOG_MAP } from '@/config/logMap';
   import BookmarkAiDialog from '@/components/manage/bookmarkMg/BookmarkAiDialog.vue';
-  import AiOrganizeModal from '@/components/manage/bookmarkMg/AiOrganizeModal.vue';
   import ResourceBatchActionBar from '@/components/resourceActions/ResourceBatchActionBar.vue';
   import ResourceOutcomeDrawer, {
     type ResourceOutcomeQuickAction,
@@ -169,18 +162,15 @@
   const activeBookmark = ref<BookmarkInterface | null>(null);
   const bookmarkAiVisible = ref(false);
   const bookmarkAiItems = ref<BookmarkInterface[]>([]);
-  const aiOrgVisible = ref(false);
-  const selectedAiOrganizeIds = ref<string[]>([]);
   const outcomeDrawerOpen = ref(false);
   const outcomeResources = ref<ResourceOutcomeResource[]>([]);
   watch(selection.active, (active) => {
     if (!active) {
       outcomeDrawerOpen.value = false;
-      aiOrgVisible.value = false;
     }
   });
-  watch([outcomeDrawerOpen, aiOrgVisible], ([outcome, ai]) => {
-    if (!outcome && !ai) selection.finish();
+  watch(outcomeDrawerOpen, (outcome) => {
+    if (!outcome) selection.finish();
   });
   const pageActions = computed<MobilePageActionItem[]>(() => [
     {
@@ -401,13 +391,8 @@
   }
 
   async function openSelectedAiOrganize() {
-    const op = await selection.prepare();
-    if (!op) return;
-    const ids = op.items.map((item) => String(item.id));
-    if (!ids.length) return;
-    selectedAiOrganizeIds.value = ids;
     mobileBatchActionsOpen.value = false;
-    aiOrgVisible.value = true;
+    await selection.openOrganize();
   }
 
   async function openSelectedOutcomeDrawer() {

@@ -85,6 +85,7 @@ export function useAiQuotaStatus(options: { autoLoad?: boolean } = {}) {
   const status = ref<AiQuotaStatus | null>(null);
   const loading = ref(false);
   const unavailable = ref(false);
+  const loginRequired = computed(() => !user.id || user.id === 'visitor' || user.role === 'visitor');
   let hasRequested = false;
   const identityKey = computed(() =>
     [
@@ -97,6 +98,12 @@ export function useAiQuotaStatus(options: { autoLoad?: boolean } = {}) {
 
   async function load({ force = false }: { force?: boolean } = {}) {
     hasRequested = true;
+    if (loginRequired.value) {
+      status.value = { used: 0, quota: 0, remaining: 0, availableRemaining: 0 };
+      loading.value = false;
+      unavailable.value = false;
+      return status.value;
+    }
     const requestedIdentity = identityKey.value;
     loading.value = true;
     unavailable.value = false;
@@ -126,14 +133,14 @@ export function useAiQuotaStatus(options: { autoLoad?: boolean } = {}) {
 
   const remainingPercent = computed(() => {
     // 登录用户的 quota/remaining 包含永久加油余额，进度条只表示每天会重置的等级额度。
-    // 游客和旧响应没有拆分字段时才回退到总额度，避免永久余额很大时进度条长期看似“满格”。
+    // 旧响应没有拆分字段时才回退到总额度，避免永久余额很大时进度条长期看似“满格”。
     const quota = Number(status.value?.dailyQuota ?? status.value?.quota ?? 0);
     const remaining = Number(status.value?.dailyRemaining ?? status.value?.remaining ?? 0);
     if (!Number.isFinite(quota) || quota <= 0) return 0;
     return Math.min(100, Math.max(0, Math.round((remaining / quota) * 100)));
   });
 
-  return { status, loading, unavailable, remainingPercent, load };
+  return { status, loading, unavailable, loginRequired, remainingPercent, load };
 }
 
 export function resetAiQuotaStatusCacheForTest() {

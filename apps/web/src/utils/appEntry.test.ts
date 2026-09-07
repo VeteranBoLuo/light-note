@@ -33,6 +33,9 @@ describe('应用入口路径策略', () => {
   });
 
   it('普通桌面浏览器和桌面 PWA 按账号应用首页偏好进入', () => {
+    expect(getRuntimeApplicationHomePath({ homePage: 'bookmark' }, false, { runtime: 'browser' })).toBe('/home');
+    expect(getRuntimeApplicationHomePath(undefined, false, { runtime: 'browser' })).toBe('/home');
+    expect(getRuntimeApplicationHomePath({ homePage: 'workbench' }, false, { runtime: 'browser' })).toBe('/workbenches');
     expect(getRuntimeApplicationHomePath({ homePage: 'cloudSpace' }, false, { runtime: 'browser' })).toBe(
       '/cloudSpace',
     );
@@ -64,13 +67,14 @@ describe('应用入口路径策略', () => {
     );
   });
 
-  it('注册成功后移动端进今日、桌面端进书签', () => {
+  it('注册成功后移动端进今日、桌面端进工作台', () => {
     mobileNavigation.setLastMobileResourcePath('/noteLibrary');
 
     expect(getRuntimePostRegistrationPath(true, { runtime: 'browser' })).toBe('/workbenches');
     expect(getRuntimePostRegistrationPath(false, { runtime: 'android-app' })).toBe('/workbenches');
-    // 桌面端不继承最近资料页签，固定书签首页
-    expect(getRuntimePostRegistrationPath(false, { runtime: 'browser' })).toBe('/home');
+    // 桌面端不继承最近资料页签，固定工作台
+    expect(getRuntimePostRegistrationPath(false, { runtime: 'browser' })).toBe('/workbenches');
+    expect(getRuntimePostRegistrationPath(false, { runtime: 'pwa-standalone' })).toBe('/workbenches');
   });
 
   it('桌面浏览器/PWA 退出回官网，APK/移动 PWA 留在今日', () => {

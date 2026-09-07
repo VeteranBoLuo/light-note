@@ -6,26 +6,34 @@
         <div class="daily-brief-card__title-row">
           <h2>{{ t('workbench.dailyBrief.title') }}</h2>
           <BChip v-if="briefInsights.length" tone="primary">{{ briefInsights.length }}</BChip>
+          <BChip v-if="readOnly" tone="neutral">{{ t('workbench.dailyBrief.previewMode') }}</BChip>
         </div>
-        <p v-if="readyBrief">
-          {{ t('workbench.dailyBrief.generatedMeta', { time: generatedTime }) }} ·
-          {{ t(state?.autoUpdate === false ? 'workbench.dailyBrief.manualMode' : 'workbench.dailyBrief.autoMode') }}
+        <p v-if="guestSample">{{ t('workbench.dailyBrief.guestSubtitle') }}</p>
+        <p
+          v-else-if="readyBrief"
+          role="status"
+          :title="t('workbench.dailyBrief.generatedMeta', { time: generatedTime })"
+        >
+          <template v-if="statusText">{{ statusText }}</template>
+          <template v-else>
+            {{ t('workbench.dailyBrief.generatedMeta', { time: generatedTime }) }} ·
+            {{ t(state?.autoUpdate === false ? 'workbench.dailyBrief.manualMode' : 'workbench.dailyBrief.autoMode') }}
+          </template>
         </p>
         <p v-else>{{ t('workbench.dailyBrief.subtitle') }}</p>
       </div>
-      <div class="daily-brief-card__actions">
+      <div v-if="!readOnly && !guestSample" class="daily-brief-card__actions">
         <BButton
           v-if="readyBrief"
           size="small"
           class="daily-brief-card__update"
           :loading="briefUpdating"
           :disabled="busy"
+          :title="t('workbench.dailyBrief.updateAction')"
+          :aria-label="t('workbench.dailyBrief.updateAction')"
           @click="update"
         >
-          {{ briefUpdating ? t('workbench.dailyBrief.updatingAction') : t('workbench.dailyBrief.updateAction') }}
-        </BButton>
-        <BButton size="small" class="daily-brief-card__settings" @click="openSettings">
-          {{ t('workbench.dailyBrief.settings') }}
+          <SvgIcon v-if="!briefUpdating" :src="icon.infrastructure.refresh" size="18" aria-hidden="true" />
         </BButton>
       </div>
     </header>
@@ -61,7 +69,7 @@
             <strong>{{ t('workbench.dailyBrief.failedTitle') }}</strong>
             <span>{{ errorMessage || t('workbench.dailyBrief.failedHint') }}</span>
           </div>
-          <BButton type="primary" size="small" :loading="briefUpdating" @click="update">
+          <BButton v-if="!readOnly" type="primary" size="small" :loading="briefUpdating" @click="update">
             {{ t('workbench.dailyBrief.retryAction') }}
           </BButton>
         </div>
@@ -72,16 +80,12 @@
       </div>
     </div>
 
-    <div v-else-if="readyBrief" class="daily-brief-card__narrative">
+    <div v-else-if="displayBrief" class="daily-brief-card__narrative">
       <div v-if="errorMessage || state?.status === 'failed'" class="daily-brief-card__refresh-error" role="alert">
         <SvgIcon :src="icon.message.warning" size="14" />
         <span>{{ errorMessage || t('workbench.dailyBrief.refreshFailedHint') }}</span>
       </div>
-      <div v-else-if="statusText" class="daily-brief-card__freshness" role="status">
-        <span class="daily-brief-card__status-dot" aria-hidden="true"></span>
-        {{ statusText }}
-      </div>
-      <p class="daily-brief-card__headline">{{ readyBrief.headline }}</p>
+      <p class="daily-brief-card__headline">{{ displayBrief.headline }}</p>
 
       <div class="daily-brief-card__insights">
         <article
@@ -98,6 +102,17 @@
                 t('workbench.dailyBrief.changed')
               }}</small>
             </p>
+            <div v-if="organizeActions(insight).length" class="daily-brief-insight__organize-actions">
+              <BButton
+                v-for="action in organizeActions(insight)"
+                :key="action.id"
+                size="small"
+                @click="router.push(action.route)"
+              >
+                {{ t(`workbench.dailyBrief.${action.label}`) }}
+                <SvgIcon :src="icon.ai.sourceArrow" size="13" />
+              </BButton>
+            </div>
             <div v-if="insight.sources?.length" class="daily-brief-insight__sources">
               <span>{{ t('workbench.dailyBrief.sharedTag', { tag: insight.tagName }) }}</span>
               <BButton
@@ -126,9 +141,13 @@
     <div v-else class="daily-brief-card__state">
       <div class="daily-brief-card__state-surface">
         <div class="daily-brief-card__state-main">
-          <strong>{{ t('workbench.dailyBrief.manualTitle') }}</strong>
-          <span>{{ t('workbench.dailyBrief.manualHint') }}</span>
-          <BButton type="primary" size="small" @click="update">{{ t('workbench.dailyBrief.generateAction') }}</BButton>
+          <strong>{{
+            t(readOnly ? 'workbench.dailyBrief.previewEmptyTitle' : 'workbench.dailyBrief.manualTitle')
+          }}</strong>
+          <span>{{ t(readOnly ? 'workbench.dailyBrief.previewEmptyHint' : 'workbench.dailyBrief.manualHint') }}</span>
+          <BButton v-if="!readOnly" type="primary" size="small" @click="update">
+            {{ t('workbench.dailyBrief.generateAction') }}
+          </BButton>
         </div>
       </div>
     </div>
@@ -146,25 +165,57 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
-  import { resolveBriefSourceTarget } from '@/utils/dailyBriefNavigation';
+  import { resolveBriefSourceTarget, resolveBriefOrganizeActions } from '@/utils/dailyBriefNavigation';
 
-  const props = defineProps<{ eligible: boolean; ownerKey: string }>();
+  const props = withDefaults(defineProps<{ eligible: boolean; ownerKey: string; readOnly?: boolean }>(), {
+    readOnly: false,
+  });
   const { t, locale } = useI18n();
   const router = useRouter();
+  const guestSample = computed(() => !props.eligible && !props.readOnly);
+  const readOnly = computed(() => props.readOnly);
   const { state, loading, updating, errorCode, confirmedCurrent, refresh, update } = useDailyBrief({
     eligible: () => props.eligible,
     ownerKey: () => props.ownerKey,
+    passive: () => readOnly.value,
   });
   const readyBrief = computed<DailyBrief | null>(() => (state.value?.brief?.version === 2 ? state.value.brief : null));
+  // 示例仅参与展示，不写入账号简报状态，也不触发生成。
+  const displayBrief = computed(() =>
+    guestSample.value
+      ? {
+          headline: t('workbench.dailyBrief.sampleHeadline'),
+          insights: [
+            { id: 'sample-todo', factIds: ['todo_today'], text: t('workbench.dailyBrief.sampleTodo') },
+            {
+              id: 'sample-content',
+              factIds: ['bookmark_created_today'],
+              text: t('workbench.dailyBrief.sampleContent'),
+            },
+            {
+              id: 'sample-connection',
+              factIds: ['resource_connection'],
+              text: t('workbench.dailyBrief.sampleConnection'),
+            },
+            { id: 'sample-organize', factIds: ['organize_untagged'], text: t('workbench.dailyBrief.sampleOrganize') },
+          ],
+          recommendation: t('workbench.dailyBrief.sampleRecommendation'),
+        }
+      : readyBrief.value,
+  );
   const briefUpdating = computed(() => updating.value || state.value?.status === 'generating');
   const busy = computed(() => loading.value || briefUpdating.value);
   const showCard = computed(
     () =>
-      props.eligible &&
-      (loading.value || Boolean(errorCode.value) || Boolean(state.value?.featureEnabled && state.value?.enabled)),
+      guestSample.value ||
+      (props.eligible &&
+        (readOnly.value ||
+          loading.value ||
+          Boolean(errorCode.value) ||
+          Boolean(state.value?.featureEnabled && state.value?.enabled))),
   );
-  const briefInsights = computed<DailyBriefInsight[]>(() => readyBrief.value?.insights || []);
-  const briefRecommendation = computed(() => readyBrief.value?.recommendation || '');
+  const briefInsights = computed<DailyBriefInsight[]>(() => displayBrief.value?.insights || []);
+  const briefRecommendation = computed(() => displayBrief.value?.recommendation || '');
   const errorMessage = computed(() => {
     if (state.value?.pauseReason === 'quota') return t('workbench.dailyBrief.quotaPaused');
     if (errorCode.value || state.value?.status === 'failed')
@@ -196,8 +247,15 @@
   function insightChanged(insight: DailyBriefInsight) {
     return insight.factIds.some((id) => state.value?.staleFactIds?.includes(id));
   }
-  function openSettings() {
-    void router.push({ path: '/settings', query: { section: 'ai', panel: 'routines' } });
+  function organizeActions(insight: DailyBriefInsight) {
+    if (guestSample.value) {
+      const actions: Record<string, Array<{ id: string; label: string; route: string }>> = {
+        'sample-todo': [{ id: 'todos', label: 'viewTodos', route: '/inbox?tab=todo' }],
+        'sample-organize': [{ id: 'untagged', label: 'organizeUntagged', route: '/organize?issue=untagged' }],
+      };
+      return actions[insight.id] || [];
+    }
+    return resolveBriefOrganizeActions(insight, readyBrief.value, readOnly.value);
   }
   function openSource(source: NonNullable<DailyBriefInsight['sources']>[number]) {
     const target = resolveBriefSourceTarget(source);
@@ -219,10 +277,10 @@
 </script>
 
 <style scoped lang="less">
-  /* AI 叙事区与工作台右侧例行卡共享同一高度基线。 */
+  /* 通栏简报完整展示；高度由内容决定，不与相邻业务卡片绑定。 */
   .daily-brief-card {
     min-width: 0;
-    height: 100%;
+    height: auto;
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -290,10 +348,8 @@
 
   .daily-brief-card__update {
     color: var(--primary-color);
-  }
-
-  .daily-brief-card__settings {
-    color: var(--desc-color);
+    min-width: 36px;
+    min-height: 36px;
   }
 
   .daily-brief-card__state {
@@ -404,24 +460,6 @@
     line-height: 1.45;
   }
 
-  .daily-brief-card__freshness {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 6px;
-    color: var(--desc-color);
-    font-size: 11px;
-    line-height: 1.5;
-  }
-
-  .daily-brief-card__status-dot {
-    width: 6px;
-    height: 6px;
-    flex: 0 0 auto;
-    border-radius: 50%;
-    background: var(--primary-color);
-  }
-
   .daily-brief-insight__changed {
     display: inline-block;
     margin-left: 6px;
@@ -443,9 +481,11 @@
 
   .daily-brief-card__insights {
     min-height: 0;
-    overflow-y: auto;
+    overflow: visible;
     flex: 1 1 auto;
     display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 24px;
     align-content: start;
   }
 
@@ -473,6 +513,31 @@
     }
   }
 
+  .daily-brief-insight__organize-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    margin-top: 5px;
+    padding: 2px;
+
+    :deep(.b_btn) {
+      height: auto;
+      min-height: 28px;
+      padding: 2px 4px;
+      gap: 4px;
+      color: var(--info-color);
+      background: transparent;
+      font-size: 11px;
+      line-height: 1.5;
+      white-space: normal;
+
+      &:hover {
+        background: transparent;
+        text-decoration: underline;
+      }
+    }
+  }
+
   .daily-brief-insight {
     min-width: 0;
     padding: 6px 0;
@@ -485,6 +550,10 @@
 
   .daily-brief-insight:last-child {
     border-bottom: 0;
+  }
+
+  .daily-brief-insight:only-child {
+    grid-column: 1 / -1;
   }
 
   .daily-brief-insight__marker {
@@ -518,7 +587,7 @@
 
   .daily-brief-card__recommendation {
     min-width: 0;
-    margin-top: auto;
+    margin-top: 12px;
     padding: 8px 10px;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
@@ -546,18 +615,22 @@
   }
 
   @media (max-width: 760px) {
+    .daily-brief-card__insights {
+      grid-template-columns: minmax(0, 1fr);
+    }
     .daily-brief-card__header {
-      grid-template-columns: 34px minmax(0, 1fr);
+      grid-template-columns: 34px minmax(0, 1fr) auto;
     }
     .daily-brief-card__actions {
-      grid-column: 1 / -1;
+      grid-column: auto;
     }
     .daily-brief-card__heading p {
-      white-space: normal;
+      white-space: nowrap;
     }
     .daily-brief-card__recommendation {
       grid-template-columns: 1fr;
       gap: 2px;
+      margin-top: 8px;
     }
   }
 
