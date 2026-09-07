@@ -56,6 +56,7 @@ describe('growthTaskSchema', () => {
     expect(pool.query.mock.calls[8][0]).toContain("'first_note' AS task_key");
     expect(pool.query.mock.calls[8][0]).toContain("'first_bookmark' AS task_key");
     expect(pool.query.mock.calls[8][0]).toContain("'first_todo' AS task_key");
+    expect(pool.query.mock.calls[8][0]).toContain("osr.resource_type = 'todo'");
     expect(pool.query.mock.calls[9][0]).toContain('INSERT IGNORE INTO user_growth_tasks');
     expect(pool.query.mock.calls[9][0]).toContain('claimed_at');
     expect(pool.query.mock.calls[9][0]).toContain("'profile_avatar' AS task_key");
@@ -65,5 +66,6 @@ describe('growthTaskSchema', () => {
     expect(pool.query.mock.calls[9][0]).toContain('FROM note');
     expect(pool.query.mock.calls[9][0]).toContain('FROM bookmark');
     expect(pool.query.mock.calls[9][0]).toContain('onboarding_seed_resources');
+    expect(pool.query.mock.calls[9][0]).toContain("osr.resource_type = 'todo'");
   });
 });

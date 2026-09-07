@@ -135,6 +135,76 @@ describe('routine.daily_brief', () => {
     },
   );
 
+  it.each([
+    ['`', '`'],
+    ['‘', '’'],
+  ])('完整标题支持引用边界 %s %s，边界外数字仍拦截', (open, close) => {
+    const sample = 'Review 2026.09 One';
+    const text = `回看 ${open}${sample}${close}。`;
+    expect(validateDailyBriefArguments(draft(text), withSample(sample)).insights[0].text).toBe(
+      `回看 ${open}{{todo_due_today.sample}}${close}。`,
+    );
+    expect(() => validateDailyBriefArguments(draft(`${text}共 99 项。`), withSample(sample))).toThrow();
+    expect(() => validateDailyBriefArguments(draft(`回看 ${open}2026${close}。`), withSample(sample))).toThrow();
+    expect(() => validateDailyBriefArguments(draft(text), facts)).toThrow();
+    const ambiguous = withSample(sample);
+    ambiguous.find((fact) => fact.id === 'note_created_today').samples = [sample];
+    expect(() => validateDailyBriefArguments({ ...draft('处理待办'), headline: text }, ambiguous)).toThrow();
+  });
+
+  it('同一次平台修复获得所有字段的数字问题，而不是只看到首个失败字段', async () => {
+    vi.mocked(requestAi).mockReset();
+    const bad = {
+      headline: '今天 1 项重点',
+      insights: [
+        { factIds: ['todo_due_today'], text: '有 99 项待办。' },
+        { factIds: ['note_created_today'], text: 'Read two notes.' },
+      ],
+      recommendation: '预计提升 3.5%。',
+    };
+    const response = (args) => ({
+      content: '',
+      toolCalls: [
+        {
+          function: {
+            name: 'submit_daily_brief_narrative',
+            arguments: JSON.stringify(args),
+          },
+        },
+      ],
+    });
+    vi.mocked(requestAi)
+      .mockResolvedValueOnce(response(bad))
+      .mockImplementationOnce(async (messages) => {
+        const diagnostic = JSON.parse(messages.at(-1).content.split('\n').at(-1));
+        expect(diagnostic.fieldIssues).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ field: 'headline', numericLiterals: ['1'] }),
+            expect.objectContaining({ field: 'recommendation', numericLiterals: ['3.5'] }),
+            expect.objectContaining({
+              field: 'insights[0].text',
+              numericLiterals: ['99'],
+              allowedPlaceholders: ['{{todo_due_today.count}}', '{{todo_due_today.sample}}'],
+            }),
+            expect.objectContaining({
+              field: 'insights[1].text',
+              numericLiterals: ['two'],
+              allowedPlaceholders: ['{{note_created_today.count}}'],
+            }),
+          ]),
+        );
+        expect(diagnostic.fieldIssues).toHaveLength(4);
+        return response(draft('处理 {{todo_due_today.count}} 项待办。'));
+      });
+    const input = validateDailyBriefInput({ date: '2026-09-07', timezone: 'Asia/Shanghai', locale: 'zh-CN', facts });
+    const prepared = await routineDailyBriefSkill.prepare({ input });
+    await expect(
+      callStructuredSkillModel({ ...prepared, modelPolicy: routineDailyBriefSkill.modelPolicy }),
+    ).resolves.toMatchObject({ insights: [{ text: '处理 {{todo_due_today.count}} 项待办。' }] });
+    expect(requestAi).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(requestAi).mock.calls[1][1].billingScope).toBe('platform');
+  });
+
   it('不归一化部分标题、未声明来源或存在歧义的来源', () => {
     expect(() => validateDailyBriefArguments(draft('先处理《2026 年》。'), withSample('2026 年复盘'))).toThrow();
     const scopedFacts = withSample('2026 年复盘');

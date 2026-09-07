@@ -139,16 +139,6 @@ describe('ResourceCenterSectionNav', () => {
     expect(router.currentRoute.value.fullPath).toBe('/search?section=map');
   });
 
-  it('移动端把三个一级入口纳入同一组三段式导航', async () => {
-    const { host } = await mountNav('/search?section=map');
-    const tablist = host.querySelector<HTMLElement>('.resource-center-section-bar');
-    const tabs = host.querySelectorAll<HTMLElement>('[role="tab"]');
-
-    expect(tablist?.getAttribute('role')).toBe('tablist');
-    expect(tabs).toHaveLength(3);
-    expect(Array.from(tabs).map((tab) => tab.getAttribute('aria-selected'))).toEqual(['false', 'false', 'true']);
-  });
-
   it('一级导航的相邻状态保留间距，选中面不叠加短下划线或角标描边', () => {
     expect(source).toContain('class="section-nav-item__icon"');
     expect(source).toContain('class="knowledge-map-view__icon"');

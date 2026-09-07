@@ -1,23 +1,26 @@
 <template>
   <div class="run-wizard" :aria-busy="busy || undefined">
-    <nav class="wizard-nav" :aria-label="t('organizeWizard.navigation')">
-      <ol>
-        <li v-for="(name, index) in steps" :key="name" :class="{ current: step === index, complete: step > index }">
-          <BButton
-            :disabled="busy || index > step"
-            :aria-current="step === index ? 'step' : undefined"
-            @click="goBack(index)"
-          >
-            <span class="step-number" aria-hidden="true">{{ step > index ? '✓' : index + 1 }}</span>
-            <span>{{ t(`organizeWizard.steps.${name}`) }}</span>
-          </BButton>
-        </li>
-      </ol>
-    </nav>
+    <Teleport :to="headerTarget || 'body'" :disabled="!headerTarget">
+      <nav class="wizard-nav" :aria-label="t('organizeWizard.navigation')">
+        <ol>
+          <li v-for="(name, index) in steps" :key="name" :class="{ current: step === index, complete: step > index }">
+            <BButton
+              :disabled="busy || index > step"
+              :aria-current="step === index ? 'step' : undefined"
+              @click="goBack(index)"
+            >
+              <span class="step-number" aria-hidden="true"
+                >{{ step > index ? '✓' : index + 1 }}<span class="step-total">/4</span></span
+              >
+              <span>{{ t(`organizeWizard.steps.${name}`) }}</span>
+            </BButton>
+          </li>
+        </ol>
+      </nav>
+    </Teleport>
 
     <div ref="content" class="wizard-content">
       <header class="wizard-heading">
-        <span class="wizard-eyebrow">{{ t('organizeWizard.stepCount', { current: step + 1 }) }}</span>
         <h3 ref="heading" tabindex="-1">{{ t(`organizeWizard.headings.${steps[step]}`) }}</h3>
         <p>{{ t(`organizeWizard.descriptions.${steps[step]}`) }}</p>
       </header>
@@ -204,9 +207,11 @@
         <p v-if="preview.summary.skipped" class="wizard-hint">{{
           t('organizeWorkspace.skipped', { count: preview.summary.skipped })
         }}</p>
-        <p v-if="!preview.summary.aiEnabled && preview.options.checks.some(check => ['tags', 'title'].includes(check))" class="wizard-hint">{{
-          t('organizeWorkspace.aiDisabled')
-        }}</p>
+        <p
+          v-if="!preview.summary.aiEnabled && preview.options.checks.some((check) => ['tags', 'title'].includes(check))"
+          class="wizard-hint"
+          >{{ t('organizeWorkspace.aiDisabled') }}</p
+        >
         <p v-if="!preview.summary.total" class="wizard-hint">{{ t('organizeWizard.noResources') }}</p>
         <p class="wizard-hint">{{ t('organizeWorkspace.confirmHint') }}</p>
         <p class="wizard-hint">{{ t('organizeLifecycle.billing') }}</p>
@@ -262,7 +267,13 @@
   import icon from '@/config/icon';
   import type { RunOptions, SuggestionRun, ResourceType, CheckKind } from '@/api/organizeSuggestionApi';
 
-  const props = defineProps<{ modelValue: RunOptions; preview: SuggestionRun | null; busy: boolean; error: string }>();
+  const props = defineProps<{
+    modelValue: RunOptions;
+    preview: SuggestionRun | null;
+    busy: boolean;
+    error: string;
+    headerTarget?: HTMLElement | null;
+  }>();
   const emit = defineEmits<{
     'update:modelValue': [value: RunOptions];
     'update:preview': [value: null];
@@ -446,44 +457,60 @@
     flex-direction: column;
   }
   .wizard-nav {
-    padding: 24px 28px 20px;
-    border-bottom: 1px solid var(--surface-border-color);
+    padding: 0;
+    width: 380px;
   }
   .wizard-nav ol {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    display: flex;
+    align-items: center;
+    justify-content: center;
     list-style: none;
     margin: 0;
     padding: 0;
   }
   .wizard-nav li {
-    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
   }
+  .wizard-nav li:last-child { flex: 0 0 auto; }
   .wizard-nav li:not(:last-child)::after {
     content: '';
-    position: absolute;
-    top: 16px;
-    left: calc(50% + 22px);
-    width: calc(100% - 44px);
-    height: 1px;
-    background: var(--surface-border-color);
+    flex: 1;
+    min-width: 18px;
+    margin: 0 8px;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--desc-color);
+    opacity: 0.45;
+  }
+  .wizard-nav li.complete::after {
+    background: var(--primary-color);
+    opacity: 0.7;
   }
   .wizard-nav .b_btn {
     background: transparent;
-    width: 100%;
+    width: auto;
+    flex-shrink: 0;
+    justify-content: center;
     height: auto;
     padding: 0;
     display: flex;
-    flex-direction: column;
-    gap: 8px;
+    flex-direction: row;
+    gap: 5px;
     font-size: 12px;
     line-height: 1.4;
     color: var(--desc-color);
     opacity: 1;
   }
+  .step-total {
+    display: none;
+  }
   .step-number {
-    width: 32px;
-    height: 32px;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
     display: grid;
     place-items: center;
     border: 1px solid var(--surface-border-color);
@@ -781,6 +808,17 @@
     height: 40px;
     border-radius: 8px;
   }
+  // 桌面浏览器工具栏会压缩可用高度；缩短间距，让四个范围选项完整容纳。
+  @media (min-width: 601px) and (max-height: 850px) {
+    .wizard-content {
+      padding: 20px 28px;
+      gap: 14px;
+    }
+    .wizard-heading { gap: 6px; }
+    .wizard-context { padding: 8px 14px; }
+    .scope-option.b_btn { padding: 14px 18px; }
+    .wizard-footer { padding: 14px 28px; }
+  }
   @media (max-width: 520px) {
     .wizard-nav {
       padding: 20px 16px;
@@ -855,5 +893,38 @@
   }
   .picker-toolbar :deep(.tab) {
     padding: 7px 10px;
+  }
+</style>
+
+<style scoped>
+  @media (max-width: 600px) {
+    .wizard-nav {
+      width: auto;
+      padding: 0;
+      border: 0;
+    }
+    .wizard-nav ol {
+      display: block;
+    }
+    .wizard-nav li:not(.current) {
+      display: none;
+    }
+    .wizard-nav li::after {
+      display: none;
+    }
+    .wizard-nav .b_btn {
+      padding: 0 8px;
+    }
+    .wizard-nav .current .step-number {
+      width: auto;
+      min-width: 38px;
+      display: flex;
+      justify-content: center;
+      gap: 2px;
+      border-radius: 12px;
+    }
+    .wizard-nav .step-total {
+      display: inline;
+    }
   }
 </style>

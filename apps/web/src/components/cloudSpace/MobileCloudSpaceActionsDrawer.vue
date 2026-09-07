@@ -7,6 +7,7 @@
     body-padding="0"
     :mobile-centered-header="hasSubView"
     @close="closeDrawer"
+    @after-close="handleAfterClose"
   >
     <template #header-leading>
       <BButton
@@ -32,7 +33,19 @@
     </template>
 
     <div v-if="!hasSubView" class="mobile-cloud-actions" role="menu" :aria-label="drawerTitle">
-      <BButton class="mobile-cloud-actions__item" role="menuitem" @click="openManageFolders">
+      <BButton
+        v-for="action in resourceHubActions"
+        :key="action.key"
+        class="mobile-cloud-actions__item"
+        role="menuitem"
+        @click="selectResourceHubAction(action.key)"
+      >
+        <span class="mobile-cloud-actions__icon" aria-hidden="true">
+          <SvgIcon :src="action.icon" size="21" />
+        </span>
+        <span class="mobile-cloud-actions__copy"><strong>{{ action.label }}</strong></span>
+      </BButton>
+      <BButton class="mobile-cloud-actions__item has-divider" role="menuitem" @click="openManageFolders">
         <span class="mobile-cloud-actions__icon mobile-cloud-actions__icon--folder" aria-hidden="true">
           <SvgIcon :src="icon.common.folder" size="22" />
         </span>
@@ -163,7 +176,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, nextTick, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
   import type { BActionMenuItem } from '@/components/base/BasicComponents/actionMenu';
@@ -174,6 +187,8 @@
   import icon from '@/config/icon';
   import type { CloudFolderNode } from '@/types/cloudFolder';
   import { flattenCloudFolderTree, normalizeCloudFolderList } from '@/utils/cloudFolderTree';
+  import { createMobileResourceHubActions, mobileResourceHubPath } from '@/utils/mobileResourceHubActions';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
 
   type DrawerView = 'actions' | 'sort' | 'create-folder' | 'manage-folders' | 'rename-folder';
   interface SortOption {
@@ -220,15 +235,19 @@
     'manage-folder-tags': [folder: CloudFolderNode];
     'clear-folder-files': [folder: CloudFolderNode];
     'delete-folder': [folder: CloudFolderNode];
+    navigate: [path: '/search' | '/organize'];
   }>();
 
   const { t } = useI18n();
+  const resourceHubActions = computed(() => createMobileResourceHubActions(t));
   const view = ref<DrawerView>('actions');
   const folderName = ref('');
   const folderNameError = ref('');
   const editingFolder = ref<CloudFolderNode | null>(null);
   const createParent = ref<CloudFolderNode | null>(null);
   const renamePending = ref(false);
+  const navigationHandoffPending = ref(false);
+  let resolveVisualClose: (() => void) | null = null;
   const folderInputRef = ref<InstanceType<typeof BInput> | null>(null);
   const folderInputId = `mobile-cloud-folder-name-${Math.random().toString(36).slice(2)}`;
   const isCreateFolderView = computed(() => view.value === 'create-folder');
@@ -246,7 +265,9 @@
       ? renamePending.value || String(props.folderMutationId) === String(editingFolder.value?.id || '')
       : props.creating,
   );
-  const isBusy = computed(() => formSubmitting.value || Boolean(props.folderMutationId));
+  const isBusy = computed(
+    () => formSubmitting.value || Boolean(props.folderMutationId) || navigationHandoffPending.value,
+  );
   const drawerTitle = computed(() => {
     if (isCreateFolderView.value) return t(createParent.value ? 'cloudSpace.newSubfolder' : 'cloudSpace.newFolder');
     if (isSortView.value) return t('cloudSpace.sort');
@@ -286,6 +307,35 @@
     if (props.beforeManageFolders && !props.beforeManageFolders()) return;
     resetFolderForm();
     view.value = 'manage-folders';
+  }
+
+  function waitForVisualClose() {
+    return new Promise<void>((resolve) => {
+      resolveVisualClose = resolve;
+    });
+  }
+
+  function handleAfterClose() {
+    resolveVisualClose?.();
+    resolveVisualClose = null;
+  }
+
+  async function selectResourceHubAction(key: string) {
+    const path = mobileResourceHubPath(key);
+    if (!path || isBusy.value) return;
+    navigationHandoffPending.value = true;
+    const visuallyClosed = waitForVisualClose();
+    try {
+      await closeCurrentMobileOverlayThen(
+        () => emit('update:open', false),
+        async () => {
+          await visuallyClosed;
+          emit('navigate', path);
+        },
+      );
+    } finally {
+      navigationHandoffPending.value = false;
+    }
   }
 
   function openRenameFolderForm(folder: CloudFolderNode) {
@@ -390,6 +440,7 @@
       if (!open) resetDrawer();
     },
   );
+  onBeforeUnmount(handleAfterClose);
 </script>
 
 <style lang="less" scoped>
@@ -400,6 +451,7 @@
   }
 
   .mobile-cloud-actions__item {
+    position: relative;
     width: 100%;
     min-height: 64px;
     height: auto;
@@ -413,6 +465,20 @@
 
   .mobile-cloud-actions__item:active {
     border-color: var(--resource-file-color, #ff8a00);
+  }
+
+  .mobile-cloud-actions__item.has-divider {
+    margin-top: 10px;
+  }
+
+  .mobile-cloud-actions__item.has-divider::before {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 5px);
+    left: 0;
+    height: 1px;
+    background: var(--mobile-row-divider, var(--surface-divider-color));
+    content: '';
   }
 
   .mobile-cloud-actions__icon {

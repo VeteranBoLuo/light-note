@@ -2,14 +2,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LOGIN_HISTORY_STORAGE_KEYS, LOGIN_HISTORY_TTL_MS } from '@/config/appEntryBootstrap';
 import {
-  ADMIN_LOGIN_PREVIEW_FRAME_NAME,
   clearAdminLoginPreview,
   clearLoginHistory,
   getAdminContextToken,
   getAdminLoginPreviewUrl,
+  getAdminLoginPreviewReturnUrl,
   hasLoggedInBefore,
   isAdminLoginPreview,
   markLoggedIn,
+  normalizeAdminLoginPreviewReturnUrl,
   setAdminLoginPreview,
 } from './authStorage';
 
@@ -26,20 +27,15 @@ describe('管理员预览前端令牌隔离', () => {
     window.name = '';
   });
 
-  it('父级后台即使共享 sessionStorage 也不会读取上下文令牌', () => {
-    setAdminLoginPreview('secret-context-token', { lang: 'zh-CN' });
+  it('后台页面不会读取上下文令牌，整页预览通过非敏感查询标识读取', () => {
+    setAdminLoginPreview('secret-context-token', { lang: 'zh-CN' }, '/admin/userMg?status=active');
     expect(isAdminLoginPreview()).toBe(false);
     expect(getAdminContextToken()).toBe('');
     expect(localStorage.getItem('adminContextToken')).toBeNull();
-  });
-
-  it('只有命名预览 iframe 才读取 sessionStorage 令牌', () => {
-    setAdminLoginPreview('secret-context-token');
-    window.name = ADMIN_LOGIN_PREVIEW_FRAME_NAME;
+    window.history.replaceState({}, '', '/home?adminLoginPreview=1');
     expect(isAdminLoginPreview()).toBe(true);
     expect(getAdminContextToken()).toBe('secret-context-token');
-    clearAdminLoginPreview();
-    expect(getAdminContextToken()).toBe('');
+    expect(getAdminLoginPreviewReturnUrl()).toBe('/admin/userMg?status=active');
   });
 
   it('预览 URL 只携带非敏感标识，不包含原始 token', () => {
@@ -47,6 +43,20 @@ describe('管理员预览前端令牌隔离', () => {
     const url = getAdminLoginPreviewUrl('/home');
     expect(url).toContain('adminLoginPreview=1');
     expect(url).not.toContain('secret-context-token');
+  });
+
+  it('返回地址只接受本站用户管理路径，并随本地材料一起清理', () => {
+    expect(normalizeAdminLoginPreviewReturnUrl('/userMg#users')).toBe('/userMg#users');
+    expect(normalizeAdminLoginPreviewReturnUrl('/admin/userMg?status=banned')).toBe(
+      '/admin/userMg?status=banned',
+    );
+    expect(normalizeAdminLoginPreviewReturnUrl('https://evil.example/userMg')).toBe('/admin/userMg');
+    expect(normalizeAdminLoginPreviewReturnUrl('/admin')).toBe('/admin/userMg');
+
+    setAdminLoginPreview('token', null, '/userMg');
+    expect(getAdminLoginPreviewReturnUrl()).toBe('/userMg');
+    clearAdminLoginPreview();
+    expect(getAdminLoginPreviewReturnUrl()).toBe('/admin/userMg');
   });
 });
 

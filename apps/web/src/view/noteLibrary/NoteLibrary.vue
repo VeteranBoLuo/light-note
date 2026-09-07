@@ -697,6 +697,7 @@
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { useMobileNavigationState } from '@/composables/useMobileNavigationState';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
+  import { createMobileResourceHubActions, mobileResourceHubPath } from '@/utils/mobileResourceHubActions';
   import ResourceBatchActionBar from '@/components/resourceActions/ResourceBatchActionBar.vue';
   import ResourceOutcomeDrawer, {
     type ResourceOutcomeQuickAction,
@@ -2513,10 +2514,12 @@
 
   const selectedVisibleCount = computed(() => selection.items.value.length);
   const mobilePageActions = computed<MobilePageActionItem[]>(() => [
+    ...createMobileResourceHubActions(t),
     {
       key: 'templates',
       label: t('note.templateManager.title'),
       icon: icon.noteDetail.template,
+      dividerBefore: true,
     },
     {
       key: 'aiOrganize',
@@ -2814,7 +2817,10 @@
   }
 
   function handleMobilePageAction(action: MobilePageActionItem) {
-    if (action.key === 'templates') {
+    const hubPath = mobileResourceHubPath(action.key);
+    if (hubPath) {
+      void router.push(hubPath);
+    } else if (action.key === 'templates') {
       void openTemplateManager();
     } else if (action.key === 'aiOrganize') {
       openGlobalAiOrganize();

@@ -196,6 +196,7 @@
       @manage-folder-tags="openFolderTags"
       @clear-folder-files="openMobileFolderClear"
       @delete-folder="requestMobileFolderDelete"
+      @navigate="(path) => router.push(path)"
     />
   </ResourcePageShell>
 </template>

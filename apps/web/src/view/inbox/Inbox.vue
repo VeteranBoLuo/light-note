@@ -88,8 +88,6 @@
       </article>
     </section>
 
-    <ResourceCenterSectionNav v-if="!embedded && !isTodoFocused && isMobileResourceInbox" class="section-switcher" />
-
     <aside
       v-if="!embedded && !isTodoFocused && !bookmark.isMobile"
       class="resource-inbox-scope"

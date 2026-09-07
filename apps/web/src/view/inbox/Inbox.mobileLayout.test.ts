@@ -31,7 +31,8 @@ describe('移动端待办页签布局', () => {
     expect(inboxSource).toMatch(
       /@media \(min-width: 768px\) and \(max-width: 980px\)[\s\S]*?\.resource-inbox-scope,[\s\S]*?\.resource-inbox-inspector\s*\{[\s\S]*?display:\s*none/,
     );
-    expect(inboxSource).toContain('v-if="!embedded && !isTodoFocused && isMobileResourceInbox"');
+    expect(inboxSource).toContain('<ResourceCenterTopBar');
+    expect(inboxSource).toContain('v-if="isMobileResourceInbox && !embedded"');
   });
 
   it('桌面待整理与资源中心其他视图保持相同标题和正文纵向基线', () => {

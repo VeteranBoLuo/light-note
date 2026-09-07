@@ -7,6 +7,7 @@ import { type BaseFormItem } from '@/config/formConfig.ts';
 import formRenders from '@/components/base/BasicComponents/BForm/FormRenders.vue';
 import { useAdminCursorList } from '@/composables/useAdminCursorList.ts';
 import { useUserStore } from '@/store';
+import { getAdminLoginPreviewUrl, setAdminLoginPreview } from '@/utils/authStorage.ts';
 
 export type AdminUserSortField = 'lastActiveTime' | 'createTime';
 export type AdminUserSortOrder = 'asc' | 'desc';
@@ -149,6 +150,29 @@ export function createAdminUserActionReceipt(
     return { tone: 'warning' as const, content: parts.join(' · ') };
   }
   return { tone: 'success' as const, content: parts.join(' · ') };
+}
+
+export async function startAdminUserContextNavigation({
+  record,
+  mode,
+  returnTo,
+  startAdminContext = (targetUserId, targetMode) => userApi.startAdminContext(targetUserId, targetMode),
+  storeAdminContext = setAdminLoginPreview,
+  navigateToPreview = (url) => window.location.assign(url),
+}: {
+  record: any;
+  mode: 'readonly' | 'maintain';
+  returnTo: string;
+  startAdminContext?: (targetUserId: string, mode: 'readonly' | 'maintain') => Promise<any>;
+  storeAdminContext?: typeof setAdminLoginPreview;
+  navigateToPreview?: (url: string) => void;
+}) {
+  const res = await startAdminContext(record.id, mode);
+  const token = String(res.data?.contextToken || '');
+  if (res.status !== 200 || !token) return { started: false, message: res.msg || '' };
+  storeAdminContext(token, record.preferences, returnTo);
+  navigateToPreview(getAdminLoginPreviewUrl('/home'));
+  return { started: true, message: '' };
 }
 
 export function useAdminUserManagementList({
@@ -327,9 +351,7 @@ export function useAdminUserOperations({
 }) {
   const editData = ref<any>();
   const editVisible = ref(false);
-  const previewVisible = ref(false);
-  const previewUser = ref<any>(null);
-  const previewMode = ref<'readonly' | 'maintain'>('readonly');
+  const previewOpeningUserId = ref('');
   const selectedRecord = ref<any>(null);
   const detailVisible = ref(false);
   const remarkVisible = ref(false);
@@ -394,14 +416,25 @@ export function useAdminUserOperations({
     editVisible.value = true;
   }
 
-  function openPreview(record: any, mode: 'readonly' | 'maintain') {
+  async function openPreview(record: any, mode: 'readonly' | 'maintain') {
     if (!record?.id) {
       message.warning(t('guest.adminContextMissingUser'));
       return;
     }
-    previewUser.value = record;
-    previewMode.value = mode;
-    previewVisible.value = true;
+    if (previewOpeningUserId.value) return;
+    previewOpeningUserId.value = String(record.id);
+    try {
+      const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      const result = await startAdminUserContextNavigation({ record, mode, returnTo });
+      if (!result.started) {
+        message.error(result.message || t('guest.adminContextStartFailed'));
+        return;
+      }
+    } catch (error: any) {
+      message.error(error?.message || t('guest.adminContextStartFailed'));
+    } finally {
+      previewOpeningUserId.value = '';
+    }
   }
 
   function maintainAsUser(record: any) {
@@ -412,7 +445,7 @@ export function useAdminUserOperations({
     Alert.alert({
       title: t('guest.adminContextMaintainConfirmTitle'),
       content: t('guest.adminContextMaintainConfirm', { name: adminUserLabel(record) }),
-      onOk: () => openPreview(record, 'maintain'),
+      onOk: () => void openPreview(record, 'maintain'),
     });
   }
 
@@ -480,9 +513,7 @@ export function useAdminUserOperations({
   return {
     editData,
     editVisible,
-    previewVisible,
-    previewUser,
-    previewMode,
+    previewOpeningUserId,
     selectedRecord,
     detailVisible,
     remarkVisible,

@@ -152,6 +152,13 @@ async function reconcileRootGrowthTasks() {
        WHERE t.del_flag = 0
          AND COALESCE(u.del_flag, 0) = 0
          AND u.role = 'root'
+         AND NOT EXISTS (
+           SELECT 1
+           FROM onboarding_seed_resources osr
+           WHERE osr.user_id = t.user_id
+             AND osr.resource_type = 'todo'
+             AND osr.resource_id = t.id
+         )
        GROUP BY t.user_id
      ) root_tasks
      ON DUPLICATE KEY UPDATE
@@ -198,10 +205,17 @@ async function backfillHistoricalGrowthTasks() {
          )
        GROUP BY b.user_id
        UNION ALL
-       SELECT user_id, 'first_todo' AS task_key, MIN(create_time) AS completed_at
-       FROM todo_items
-       WHERE del_flag = 0
-       GROUP BY user_id
+       SELECT t.user_id, 'first_todo' AS task_key, MIN(t.create_time) AS completed_at
+       FROM todo_items t
+       WHERE t.del_flag = 0
+         AND NOT EXISTS (
+           SELECT 1
+           FROM onboarding_seed_resources osr
+           WHERE osr.user_id = t.user_id
+             AND osr.resource_type = 'todo'
+             AND osr.resource_id = t.id
+         )
+       GROUP BY t.user_id
      ) historical_tasks`,
   );
 }

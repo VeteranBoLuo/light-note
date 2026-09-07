@@ -79,4 +79,66 @@ describe('VideoPreview', () => {
     expect(onError.mock.calls[0][0]).toBeInstanceOf(Error);
     expect(onError.mock.calls[0][0].message).toBe('cloudSpace.previewPanel.mediaLoadFailed');
   });
+
+  it('toggles desktop playback with plain Space and consumes page scrolling', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+    const host = mountVideoPreview();
+    const video = host.querySelector('video') as HTMLVideoElement;
+    video.dispatchEvent(new Event('loadedmetadata'));
+    Object.defineProperty(video, 'paused', { configurable: true, value: true });
+
+    const playEvent = new KeyboardEvent('keydown', { key: ' ', code: 'Space', cancelable: true, bubbles: true });
+    document.dispatchEvent(playEvent);
+    await nextTick();
+    expect(play).toHaveBeenCalledOnce();
+    expect(playEvent.defaultPrevented).toBe(true);
+
+    Object.defineProperty(video, 'paused', { configurable: true, value: false });
+    const pauseEvent = new KeyboardEvent('keydown', { key: ' ', code: 'Space', cancelable: true, bubbles: true });
+    document.dispatchEvent(pauseEvent);
+    expect(pause).toHaveBeenCalledOnce();
+    expect(pauseEvent.defaultPrevented).toBe(true);
+  });
+
+  it('ignores editable targets, repeated keys, modifiers and mobile layout', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    const host = mountVideoPreview();
+    const video = host.querySelector('video') as HTMLVideoElement;
+    video.dispatchEvent(new Event('loadedmetadata'));
+    Object.defineProperty(video, 'paused', { configurable: true, value: true });
+
+    const input = document.createElement('input');
+    host.append(input);
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', repeat: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', ctrlKey: true }));
+    expect(play).not.toHaveBeenCalled();
+
+    cleanup?.();
+    cleanup = undefined;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    const mobileHost = mountVideoPreview();
+    mobileHost.querySelector('video')?.dispatchEvent(new Event('loadedmetadata'));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space' }));
+    await nextTick();
+    expect(play).not.toHaveBeenCalled();
+  });
+
+  it('keeps the stable playback failure feedback for Space', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockRejectedValue(new Error('browser detail'));
+    const onError = vi.fn();
+    const host = mountVideoPreview({ onError });
+    const video = host.querySelector('video') as HTMLVideoElement;
+    video.dispatchEvent(new Event('loadedmetadata'));
+    Object.defineProperty(video, 'paused', { configurable: true, value: true });
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space' }));
+    await Promise.resolve();
+    await nextTick();
+    expect(onError.mock.calls.at(-1)?.[0]?.message).toBe('cloudSpace.previewPanel.mediaPlayFailed');
+  });
 });

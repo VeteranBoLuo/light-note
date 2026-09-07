@@ -52,6 +52,24 @@ describe('resolveBookmarkUrlInput', () => {
     });
   });
 
+  it.each(['12', 'https:12', '2130706433', '127.1', '0x7f.0.0.1'])(
+    '拒绝被 URL 标准解释为 IPv4 的含混简写: %s',
+    (input) => {
+      expect(resolveBookmarkUrlInput(input).state).toBe('invalid');
+    },
+  );
+
+  it('保留显式点分十进制 IPv4 地址', () => {
+    expect(
+      resolveBookmarkUrlInput('http://192.0.2.12/path', {
+        allowTextExtraction: false,
+      }),
+    ).toMatchObject({
+      state: 'valid',
+      canonicalUrl: 'http://192.0.2.12/path',
+    });
+  });
+
   it('从小红书整段分享文案提取候选时直接给出可在 App 内打开的 HTTPS 地址', () => {
     const resolution = resolveBookmarkUrlInput(
       'GPT5.6 过度防御给气笑了😅显着他会SHA256 最近真的被... http://xhslink.cn/o/7rNw5RKnE8e 复制后打开【小红书】查看笔记！',

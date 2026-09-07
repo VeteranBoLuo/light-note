@@ -163,10 +163,22 @@
           </MobileListSurface>
         </section>
 
-        <section v-if="user.role === 'root'" class="profile-section">
+        <section class="profile-section">
           <h2>{{ t('personCenter.managementTools') }}</h2>
           <MobileListSurface>
-            <MobileListRow interactive @click="goToProfileModule('/admin')">
+            <MobileListRow
+              v-for="entry in mobileManagementEntries"
+              :key="entry.name"
+              interactive
+              @click="goToProfileModule(entry.mobilePath || entry.path)"
+            >
+              <template #leading
+                ><span class="profile-entry-icon"><SvgIcon :src="entry.icon" size="20" /></span
+              ></template>
+              <template #title>{{ t(entry.labelKey) }}</template>
+              <template #trailing><SvgIcon class="profile-row-arrow" :src="icon.arrow_right" size="17" /></template>
+            </MobileListRow>
+            <MobileListRow v-if="user.role === 'root'" interactive @click="goToProfileModule('/admin')">
               <template #leading
                 ><span class="profile-entry-icon"><SvgIcon :src="icon.user_admin" size="20" /></span
               ></template>
@@ -174,7 +186,7 @@
               <template #subtitle>{{ t('personCenter.logs_user_mg') }}</template>
               <template #trailing><SvgIcon class="profile-row-arrow" :src="icon.arrow_right" size="17" /></template>
             </MobileListRow>
-            <MobileListRow interactive @click="goToProfileModule('/serverManagement')">
+            <MobileListRow v-if="user.role === 'root'" interactive @click="goToProfileModule('/serverManagement')">
               <template #leading
                 ><span class="profile-entry-icon"><SvgIcon :src="icon.infrastructure.server" size="20" /></span
               ></template>
@@ -234,6 +246,7 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import {
     MOBILE_PERSON_CENTER_COMMUNICATION_ENTRIES,
+    MOBILE_PERSON_CENTER_MANAGEMENT_ENTRIES,
     MOBILE_PERSON_CENTER_QUICK_ENTRIES,
   } from '@/config/personCenterEntries';
 
@@ -247,6 +260,7 @@
 
   const user = useUserStore();
   const mobileQuickEntries = MOBILE_PERSON_CENTER_QUICK_ENTRIES;
+  const mobileManagementEntries = MOBILE_PERSON_CENTER_MANAGEMENT_ENTRIES;
   const mobileCommunicationEntries = MOBILE_PERSON_CENTER_COMMUNICATION_ENTRIES;
   const { growth: growthInfo, loading: growthLoading, load: loadGrowth } = useGrowth();
   const equippedFrameId = computed(() => {

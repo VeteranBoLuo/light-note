@@ -64,7 +64,7 @@ describe('newUserSeedService', () => {
     putObjectBodyToObs.mockReset();
   });
 
-  it('按语言生成小而完整的四类示例内容', () => {
+  it('按语言生成示例资源与三条上手待办', () => {
     const zh = buildNewUserSeedContent({ lang: 'zh-CN', siteUrl: 'https://demo.test/' });
     const en = buildNewUserSeedContent({ lang: 'en-US', siteUrl: 'https://demo.test/' });
 
@@ -75,6 +75,11 @@ describe('newUserSeedService', () => {
     expect(zh.tags).toHaveLength(4);
     expect(zh.bookmarks).toHaveLength(3);
     expect(zh.notes).toHaveLength(5);
+    expect(zh.todos).toEqual([
+      expect.objectContaining({ title: '收藏第一个网页' }),
+      expect.objectContaining({ title: '写下第一篇笔记' }),
+      expect.objectContaining({ title: '上传第一份文件' }),
+    ]);
     expect(zh.cloud.files).toHaveLength(2);
     expect(zh.cloud.files).toEqual(
       expect.arrayContaining([
@@ -97,6 +102,11 @@ describe('newUserSeedService', () => {
       cloud: { folderName: 'Light Note Examples' },
     });
     expect(en.cloud.files).toHaveLength(2);
+    expect(en.todos).toEqual([
+      expect.objectContaining({ title: 'Save your first webpage' }),
+      expect.objectContaining({ title: 'Write your first note' }),
+      expect.objectContaining({ title: 'Upload your first file' }),
+    ]);
     expect(en.notes.some((note) => note.type === 'markdown')).toBe(true);
     for (const seed of [zh, en]) {
       const drawing = seed.notes.find((note) => note.key === 'drawing-demo');
@@ -151,7 +161,7 @@ describe('newUserSeedService', () => {
       created: true,
       version: NEW_USER_SEED_VERSION,
       folderId: 42,
-      counts: { tags: 4, bookmarks: 3, notes: 5, folders: 1 },
+      counts: { tags: 4, bookmarks: 3, notes: 5, todos: 3, folders: 1 },
     });
     expect(connection.beginTransaction).toHaveBeenCalledTimes(1);
     expect(connection.commit).toHaveBeenCalledTimes(1);
@@ -161,6 +171,7 @@ describe('newUserSeedService', () => {
     const tagInserts = connection.query.mock.calls.filter(([sql]) => sql === 'INSERT INTO tag SET ?');
     const bookmarkInserts = connection.query.mock.calls.filter(([sql]) => sql === 'INSERT INTO bookmark SET ?');
     const noteInserts = connection.query.mock.calls.filter(([sql]) => sql === 'INSERT INTO note SET ?');
+    const todoInserts = connection.query.mock.calls.filter(([sql]) => sql === 'INSERT INTO todo_items SET ?');
     const relationInserts = connection.query.mock.calls.filter(([sql]) =>
       compactSql(sql).startsWith('INSERT IGNORE INTO resource_tag_relations'),
     );
@@ -172,7 +183,8 @@ describe('newUserSeedService', () => {
     expect(bookmarkInserts).toHaveLength(3);
     expect(noteInserts).toHaveLength(5);
     expect(relationInserts).toHaveLength(8);
-    expect(seedMarkerInserts).toHaveLength(12);
+    expect(todoInserts).toHaveLength(3);
+    expect(seedMarkerInserts).toHaveLength(15);
     expect(seedMarkerInserts.map(([, values]) => values[1]).sort()).toEqual([
       'bookmark',
       'bookmark',
@@ -186,6 +198,9 @@ describe('newUserSeedService', () => {
       'tag',
       'tag',
       'tag',
+      'todo',
+      'todo',
+      'todo',
     ]);
     expect(new Set(tagInserts.map(([, [row]]) => row.id)).size).toBe(4);
     expect(tagInserts.every(([, [row]]) => row.icon_url.startsWith('data:image/svg+xml;base64,'))).toBe(true);
@@ -203,6 +218,12 @@ describe('newUserSeedService', () => {
       'markdown',
       'markdown',
     ]);
+    expect(todoInserts.map(([, [row]]) => row.title)).toEqual([
+      '收藏第一个网页',
+      '写下第一篇笔记',
+      '上传第一份文件',
+    ]);
+    expect(todoInserts.every(([, [row]]) => row.priority === 1 && row.due_at == null)).toBe(true);
     // 富文本示例里的引用占位符必须替换成指向本账号种子资源的真实引用链接，且不留占位符残留
     const richTextNote = noteInserts.map(([, [row]]) => row).find((row) => row.title === '富文本样式示例');
     expect(richTextNote).toBeDefined();

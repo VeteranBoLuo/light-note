@@ -37,7 +37,8 @@ const userApi = {
     return apiBasePost('/api/user/logout');
   },
   startAdminContext(targetUserId: string, mode: 'readonly' | 'maintain') {
-    return apiBasePost('/api/user/adminContext/start', { targetUserId, mode });
+    // 启动失败由用户管理入口统一反馈，避免请求层与页面重复弹出同一条错误。
+    return apiBasePost('/api/user/adminContext/start', { targetUserId, mode }, { silent: true });
   },
   getAdminContextStatus() {
     return apiBaseGet('/api/user/adminContext/status');

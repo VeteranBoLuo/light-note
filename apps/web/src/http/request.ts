@@ -5,7 +5,12 @@ import useUserStore from '@/store/useUser';
 import { getBrowserType, getLogDeviceId, getLogFingerprint, getUserOsInfo } from '@/utils/common.ts';
 import { resolveLightNoteRuntime } from '@/utils/appRuntime.ts';
 import { getLightNoteAndroidVersion } from '@/utils/androidBridge.ts';
-import { clearAdminLoginPreview, getAdminContextToken, getAdminLoginPreviewPreferences } from '@/utils/authStorage.ts';
+import {
+  clearAdminLoginPreview,
+  getAdminContextToken,
+  getAdminLoginPreviewPreferences,
+  getAdminLoginPreviewReturnUrl,
+} from '@/utils/authStorage.ts';
 import { buildQueryRequestData, type QueryData } from '@/http/queryRequest.ts';
 
 // 常量定义
@@ -224,10 +229,11 @@ request.interceptors.response.use(
         'ADMIN_CONTEXT_FORBIDDEN',
       ]);
       if (invalidAdminContextCodes.has(adminContextCode)) {
+        const returnTo = getAdminLoginPreviewReturnUrl();
         clearAdminLoginPreview();
         window.dispatchEvent(
           new CustomEvent('light-note:admin-context-expired', {
-            detail: { code: adminContextCode, msg: error.response.data?.msg },
+            detail: { code: adminContextCode, msg: error.response.data?.msg, returnTo },
           }),
         );
         return Promise.reject({

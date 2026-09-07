@@ -335,6 +335,9 @@ describe('getAdminOverviewSnapshot 首屏快照', () => {
     expect(resourceSql).toContain('bookmark_owner.del_flag = 0');
     expect(resourceSql).toContain("role <> 'visitor'");
     expect(resourceSql).toContain("role NOT IN ('root', 'test')");
+    const todoSql = String(query.mock.calls.find(([sql]) => String(sql).includes('FROM todo_items'))?.[0]);
+    expect(todoSql).toContain("osr.resource_type = 'todo'");
+    expect(todoSql).toContain('AS createdToday');
 
     const activitySql = String(query.mock.calls.find(([sql]) => String(sql).includes('AS activeToday'))?.[0]);
     expect(activitySql).toContain('COUNT(DISTINCT CASE');
@@ -426,6 +429,7 @@ describe('getAdminOverviewTrend 历史分析', () => {
       expect(baselineCall?.[0]).toContain('COUNT(DISTINCT api_log.user_id)');
       expect(baselineCall?.[0]).toContain('"routeMatched":true');
       expect(baselineCall?.[0]).toContain('onboarding_seed_resources');
+      expect(baselineCall?.[0]).toContain("osr.resource_type = 'todo'");
       expect(baselineCall?.[1]).toEqual(
         Array.from({ length: 7 }, () => ['2026-08-05', '2026-08-12', '17:40:30']).flat(),
       );

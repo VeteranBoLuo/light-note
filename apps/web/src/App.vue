@@ -71,7 +71,13 @@
   import { getRuntimeApplicationHomePath, getRuntimeGuestEntryPath } from '@/utils/appEntry.ts';
   import { resolveLightNoteRuntime, shouldRedirectLandingToApplication } from '@/utils/appRuntime.ts';
   import { useI18n } from 'vue-i18n';
-  import { getAdminLoginPreviewPreferences, isAdminLoginPreview, markLoggedIn } from '@/utils/authStorage.ts';
+  import {
+    clearAdminLoginPreview,
+    getAdminLoginPreviewPreferences,
+    isAdminLoginPreview,
+    markLoggedIn,
+    normalizeAdminLoginPreviewReturnUrl,
+  } from '@/utils/authStorage.ts';
   import { resolvePassiveAuthUi } from '@/utils/authUiPolicy.ts';
   import { showPreviewGuide } from '@/composables/useGuestGuard';
   import DisplayScaleSuggestion from '@/components/base/DisplayScaleSuggestion.vue';
@@ -965,6 +971,7 @@
     window.addEventListener('light-note:user-banned', handleUserBanned);
     window.addEventListener('light-note:auth-session', handleAuthSession);
     window.addEventListener('light-note:preview-blocked', handlePreviewBlocked);
+    window.addEventListener('light-note:admin-context-expired', handleAdminContextExpired);
     window.addEventListener('online', handleLandingAuthRecoverySignal);
     window.addEventListener('online', syncOnlineStatus);
     window.addEventListener('offline', syncOnlineStatus);
@@ -977,6 +984,14 @@
     if (skipRouter.includes(<string>router.currentRoute.value.name)) {
       bookmark.isShowLogin = false;
     }
+  }
+
+  function handleAdminContextExpired(event: Event) {
+    if (!isAdminLoginPreview()) return;
+    const detail = (event as CustomEvent<{ msg?: string; returnTo?: string }>).detail;
+    clearAdminLoginPreview();
+    message.warning(detail?.msg || t('guest.adminContextExpired'));
+    window.location.replace(normalizeAdminLoginPreviewReturnUrl(detail?.returnTo));
   }
 
   async function notifyAndroidInitialViewReady() {
@@ -1014,6 +1029,7 @@
     window.removeEventListener('light-note:user-banned', handleUserBanned);
     window.removeEventListener('light-note:auth-session', handleAuthSession);
     window.removeEventListener('light-note:preview-blocked', handlePreviewBlocked);
+    window.removeEventListener('light-note:admin-context-expired', handleAdminContextExpired);
     window.removeEventListener('online', handleLandingAuthRecoverySignal);
     window.removeEventListener('online', syncOnlineStatus);
     window.removeEventListener('offline', syncOnlineStatus);

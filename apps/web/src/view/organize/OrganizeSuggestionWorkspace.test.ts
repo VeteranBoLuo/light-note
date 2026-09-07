@@ -1,3 +1,4 @@
+import { apiBasePost } from '@/http/request';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, type App } from 'vue';
 import { createI18n } from 'vue-i18n';
@@ -17,6 +18,13 @@ vi.mock('@/components/base/BasicComponents/BModal/Alert', () => ({
   default: { alert: (options: any) => options.onOk() },
 }));
 vi.mock('@/api/organizeSuggestionApi', () => api);
+vi.mock('@/http/request', async (original) => ({
+  ...(await original<typeof import('@/http/request')>()),
+  apiBasePost: vi.fn(),
+}));
+vi.mock('@/components/FilePreview.vue', () => ({
+  default: { props: ['fileInfo', 'visible'], template: '<div class="file-preview-test">{{ fileInfo.fileName }}</div>' },
+}));
 vi.mock('@/components/resourcePicker/ResourcePickerPanel.vue', () => ({
   default: {
     props: ['allowedTypes', 'exhaustiveSingleType', 'pageScroll', 'selectedResourceKeys'],
@@ -25,7 +33,14 @@ vi.mock('@/components/resourcePicker/ResourcePickerPanel.vue', () => ({
   },
 }));
 vi.mock('@/api/tagSpace', () => ({ fetchSelectableTags: vi.fn().mockResolvedValue([{ id: 't', name: 'Vue' }]) }));
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock('vue-router', () => ({
+  useRouter: () => ({
+    push: vi.fn(),
+    resolve: (route: any) => ({
+      href: route.path + (route.query ? '?' + new URLSearchParams(route.query).toString() : ''),
+    }),
+  }),
+}));
 vi.mock('@/utils/common', () => ({ generateUUID: () => 'c56a4180-65aa-42ec-a945-5fd21dec0538' }));
 import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
 import Workspace from './OrganizeSuggestionWorkspace.vue';
@@ -299,7 +314,7 @@ it('使用 HTTP 返回的驼峰字段统计整次 AI 完成数量，而非当前
   api.getRun.mockResolvedValue(ok(run));
   await mount();
   const metrics = document.querySelectorAll('.workspace-metric');
-  expect(metrics[1].textContent).toMatch(/22\s*\/ 22/);
+  expect(metrics[1].textContent).toContain('已完成全部 22 项分析');
   expect(metrics[1].textContent).toContain('60 项中，22 项需要内容分析');
   expect(button('结束本次整理')).toBeUndefined();
 });
@@ -601,4 +616,63 @@ it('刷新恢复当前类型、展开与收起选择，不重新创建任务', a
     expect.objectContaining({ resourceType: 'note', kind: 'empty' }),
   );
   expect(api.startRun).not.toHaveBeenCalled();
+});
+
+it.each([
+  ['bookmark', 'https://example.com/page', 'https://example.com/page'],
+  ['note', '', '/noteLibrary/n?from=%2Forganize%3Fissue%3Dai_suggestions'],
+])('资源图标和标题打开 %s，不改变检查展开状态', async (type, url, expected) => {
+  const run = {
+    ...result(),
+    items: [
+      {
+        id: 'i',
+        aiStatus: 'not_needed',
+        resource: { id: 'n', type, url, title: '测试资料', source: { folder: '' }, guards: {}, tags: [] },
+        suggestions: [],
+      },
+    ],
+  };
+  api.listRuns.mockResolvedValue(ok([run]));
+  api.getRun.mockResolvedValue(ok(run));
+  const opened = vi.spyOn(window, 'open').mockReturnValue(null);
+  await mount();
+  await openGroup('clear');
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  const before = document.querySelector('.workspace-resource')?.textContent;
+  (document.querySelector('.resource-symbol.b_btn') as HTMLButtonElement).click();
+  (document.querySelector('.resource-title-link') as HTMLButtonElement).click();
+  expect(opened).toHaveBeenCalledTimes(2);
+  const actual = opened.mock.calls[0];
+  expect(decodeURI(String(actual[0]))).toBe(expected);
+  expect(actual.slice(1)).toEqual(['_blank', 'noopener,noreferrer']);
+  expect(document.querySelector('.workspace-resource')?.textContent).toBe(before);
+  opened.mockRestore();
+});
+
+it('文件在本页使用专用预览组件，不打开新标签页', async () => {
+  const run = {
+    ...result(),
+    items: [
+      {
+        id: 'i',
+        aiStatus: 'not_needed',
+        resource: { id: 'f', type: 'file', title: '文档.pdf', source: { folder: '' }, guards: {}, tags: [] },
+        suggestions: [],
+      },
+    ],
+  };
+  api.listRuns.mockResolvedValue(ok([run]));
+  api.getRun.mockResolvedValue(ok(run));
+  vi.mocked(apiBasePost).mockResolvedValue(ok({ id: 'f', file_name: '文档.pdf', file_type: 'pdf' }) as any);
+  const opened = vi.spyOn(window, 'open').mockReturnValue(null);
+  await mount();
+  await openGroup('clear');
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  (document.querySelector('.resource-title-link') as HTMLButtonElement).click();
+  await settle();
+  expect(apiBasePost).toHaveBeenCalledWith('/api/file/getFileInfo', { id: 'f' }, { silent: true, feedback: false });
+  expect(document.querySelector('.file-preview-test')?.textContent).toBe('文档.pdf');
+  expect(opened).not.toHaveBeenCalled();
+  opened.mockRestore();
 });

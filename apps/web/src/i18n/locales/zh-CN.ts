@@ -106,6 +106,7 @@ export default {
     limit: '本次加入将超过 1000 项，未加入任何资料。请减少选择后重试。',
   },
   organizeWorkspace: {
+    openOriginal: { bookmark: '新标签页打开网页', note: '新标签页打开笔记', file: '预览文件' },
     groups: {
       priority: '优先处理',
       manual: '需要手动补充',
@@ -132,8 +133,12 @@ export default {
     manualAction: { tags: '添加标签', title: '填写标题' },
 
     scanLabel: '已检查资源',
-    aiLabel: 'AI 分析',
+    aiLabel: 'AI 分析进度',
     aiNotNeeded: '无需 AI 分析',
+    aiProcessedProgress: '已处理 {done} 项，共 {total} 项',
+    aiPausedProgress: '已处理 {done} / {total} 项 · 已暂停',
+    aiAllFinished: '已完成全部 {total} 项分析',
+    aiFinishedWithFailures: '处理结束：成功 {done} 项、失败 {failed} 项',
     aiScope: '{total} 项中，{count} 项需要内容分析',
     reviewLabel: '待审核建议',
     suggestionUnit: '条',

@@ -40,6 +40,13 @@ export const PERSON_CENTER_ENTRIES = {
     icon: icon.navigation.search,
     tone: 'neutral',
   },
+  organize: {
+    name: 'organize',
+    labelKey: 'resourceCenter.sections.organize',
+    path: '/organize',
+    icon: icon.ai.organize,
+    tone: 'neutral',
+  },
   settings: {
     name: 'settings',
     labelKey: 'settings.title',
@@ -112,8 +119,10 @@ export const MOBILE_PERSON_CENTER_QUICK_ENTRIES = [
   PERSON_CENTER_ENTRIES.growth,
   PERSON_CENTER_ENTRIES.entitlementStore,
   PERSON_CENTER_ENTRIES.resourceCenter,
-  PERSON_CENTER_ENTRIES.trash,
+  PERSON_CENTER_ENTRIES.organize,
 ] as const;
+
+export const MOBILE_PERSON_CENTER_MANAGEMENT_ENTRIES = [PERSON_CENTER_ENTRIES.trash] as const;
 
 export const MOBILE_PERSON_CENTER_COMMUNICATION_ENTRIES = [
   PERSON_CENTER_ENTRIES.coBuild,

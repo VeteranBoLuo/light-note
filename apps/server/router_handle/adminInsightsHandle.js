@@ -204,8 +204,18 @@ export async function getAdminProductInsights(req, res) {
         `SELECT COUNT(DISTINCT t.user_id) AS users, COUNT(*) AS events
            FROM todo_items t
            JOIN user u ON u.id = t.user_id AND u.role = 'user' AND u.del_flag = '0'
-          WHERE t.del_flag = 0 AND t.update_time >= DATE_SUB(NOW(), INTERVAL ? DAY)`,
-        [periodDays],
+          WHERE t.del_flag = 0
+            AND t.update_time >= DATE_SUB(NOW(), INTERVAL ? DAY)
+            AND (
+              NOT EXISTS (
+                SELECT 1 FROM onboarding_seed_resources osr
+                 WHERE osr.user_id = t.user_id
+                   AND osr.resource_type = 'todo'
+                   AND osr.resource_id = t.id
+              )
+              OR (t.status = 'completed' AND t.completed_at >= DATE_SUB(NOW(), INTERVAL ? DAY))
+            )`,
+        [periodDays, periodDays],
       ),
       optionalQuery(
         'ai',

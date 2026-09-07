@@ -93,7 +93,7 @@ describe('后台产品洞察与治理快照', () => {
     expect(JSON.stringify(res.body)).not.toContain('user_id');
   });
 
-  it('书签、笔记和云文件采用统计均排除注册时自动生成的示例资源', async () => {
+  it('资源与待办采用统计排除注册种子，但保留种子待办的真实完成行为', async () => {
     const res = response();
     await getAdminProductInsights({ user: { role: 'root' }, body: { periodDays: 30, cohortWeeks: 8 } }, res);
 
@@ -112,6 +112,11 @@ describe('后台产品洞察与治理快照', () => {
       expect(sql).toContain(`osr.resource_type = '${expected.type}'`);
       expect(sql).toContain(`osr.resource_id = ${expected.resource}`);
     }
+    const todoSql = sqlStatements.find((statement) => statement.includes('FROM todo_items t'));
+    expect(todoSql).toContain("osr.resource_type = 'todo'");
+    expect(todoSql).toContain('osr.resource_id = t.id');
+    expect(todoSql).toContain("t.status = 'completed'");
+    expect(todoSql).toContain('t.completed_at >= DATE_SUB');
   });
 
   it('周期只接受明确档位，百分比在空分母时稳定为 0', () => {

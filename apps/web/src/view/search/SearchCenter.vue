@@ -1,6 +1,6 @@
 <template>
   <div class="search-center-route">
-    <!-- 资源中心一级导航：查找 / 整理中心 / 全局图谱。 -->
+    <!-- 移动端资源中心是独立二级页；整理中心从资料模块入口进入，图谱仅保留桌面端。 -->
     <ResourceCenterTopBar
       v-if="bookmark.isMobile && !isKnowledgeMapView"
       :keyword="queryState.keyword"
@@ -40,10 +40,6 @@
           'search-page--batch': batchMode,
         }"
       >
-        <div v-if="bookmark.isMobile" class="search-page-topbar">
-          <ResourceCenterSectionNav class="section-switcher" />
-        </div>
-
         <template v-if="!isKnowledgeMapView">
           <section class="search-layout">
             <aside v-if="!bookmark.isMobile" class="resource-scope-pane" :aria-label="t('resourceCenter.scopeTitle')">
@@ -738,7 +734,9 @@
   const inbox = inboxStore();
   const { addResourcesToInbox } = useInboxEnqueue();
   const { t } = useI18n();
-  const isKnowledgeMapView = computed(() => route.path === '/search' && route.query.section === 'map');
+  const isKnowledgeMapView = computed(
+    () => !bookmark.isMobile && route.path === '/search' && route.query.section === 'map',
+  );
 
   const SEARCH_VIEW_STORAGE_KEY = 'resource-center-view-mode';
   const SEARCH_QUERY_KEYS = ['q', 'type', 'sort', 'view', 'tags', 'date', 'untagged'] as const;
@@ -2793,13 +2791,6 @@
       padding: 0;
     }
 
-    .search-page-topbar {
-      flex: 0 0 auto;
-      min-height: 34px;
-      display: flex;
-      align-items: center;
-    }
-
     .section-switcher {
       margin-bottom: 0;
     }
@@ -3148,10 +3139,6 @@
       display: none;
     }
 
-    .search-page-topbar {
-      margin-bottom: 8px;
-    }
-
     /* 页面自带 56px 顶栏后，正文容器不能再按整屏高度撑开 */
     .search-center-route {
       display: flex;
@@ -3313,15 +3300,6 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-  }
-
-  .search-page--mobile .search-page-topbar {
-    flex: 0 0 auto;
-    margin-bottom: 6px;
-  }
-
-  .search-page--mobile .section-switcher {
-    margin-bottom: 0;
   }
 
   .search-page--mobile .resource-center-map {

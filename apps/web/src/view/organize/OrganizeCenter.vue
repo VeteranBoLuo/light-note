@@ -9,12 +9,10 @@
       :show-header="!bookmark.isMobile"
     >
       <template #actions>
-        <ResourceCenterSectionNav />
+        <ResourceCenterSectionNav v-if="!bookmark.isMobile" />
       </template>
 
       <div class="organize-page">
-        <ResourceCenterSectionNav v-if="bookmark.isMobile" class="organize-resource-tabs" />
-
         <div class="organize-workspace">
           <aside v-if="!bookmark.isMobile" class="organize-sidebar" :aria-label="t('organize.navigationLabel')">
             <div class="organize-sidebar__heading">
@@ -31,6 +29,13 @@
             >
               <SvgIcon :src="item.icon" size="16" aria-hidden="true" />
               <span>{{ item.label }}</span>
+              <span
+                v-if="item.key === 'ai_suggestions' && aiNavLabel"
+                class="organize-ai-status"
+                :class="{ paused: aiNavStatus === 'paused' }"
+                role="status"
+                >{{ aiNavLabel }}</span
+              >
               <span v-if="item.count !== null" class="organize-nav-item__count">{{ item.count }}</span>
             </BButton>
           </aside>
@@ -83,6 +88,7 @@
             <OrganizeAiSuggestions
               v-else-if="activeView === 'ai_suggestions' && bookmark.isDesktop"
               @refresh-summary="refreshSummary"
+              @run-status="updateAiNavStatus"
             />
 
             <section v-else-if="activeView === 'pending'" class="organize-issue-view organize-issue-view--pending">
@@ -704,6 +710,7 @@
   import ResourceBatchActionBar from '@/components/resourceActions/ResourceBatchActionBar.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import OrganizeOverviewDashboard from '@/view/organize/OrganizeOverviewDashboard.vue';
+  import { listRuns } from '@/api/organizeSuggestionApi';
   import OrganizeAiSuggestions from '@/view/organize/OrganizeSuggestionWorkspace.vue';
   import OrganizeIssueListState from '@/view/organize/OrganizeIssueListState.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -854,6 +861,74 @@
   function showMobileNavigationCount(value: string | null) {
     return value !== null && value !== '—' && value !== '0' && value !== '0+';
   }
+
+  const aiNavStatus = ref('');
+  const aiNavLabel = computed(() => {
+    if (aiNavStatus.value === 'paused') return t('organizeLifecycle.states.paused');
+    if (aiNavStatus.value === 'preparing') return t('organizeLifecycle.states.preparing');
+    if (aiNavStatus.value === 'running') return t('organizeWorkspace.status.running');
+    return '';
+  });
+  let aiNavTimer: ReturnType<typeof setTimeout> | undefined;
+  let aiNavGeneration = 0;
+  let aiNavActive = false;
+  function stopAiNavPolling() {
+    aiNavActive = false;
+    aiNavGeneration++;
+    clearTimeout(aiNavTimer);
+  }
+  function updateAiNavStatus(status: string) {
+    aiNavStatus.value = status;
+    aiNavGeneration++;
+    clearTimeout(aiNavTimer);
+    if (aiNavActive && !document.hidden) aiNavTimer = setTimeout(pollAiNav, 5000);
+  }
+  async function pollAiNav() {
+    clearTimeout(aiNavTimer);
+    if (!aiNavActive || document.hidden || !bookmark.isDesktop) return;
+    const generation = ++aiNavGeneration;
+    try {
+      // 仅轮询轻量任务列表；暂停时也能感知其他标签页的继续操作。
+      {
+        const response = await listRuns();
+        if (generation !== aiNavGeneration || !aiNavActive) return;
+        if (response.status === 200 && Array.isArray(response.data)) aiNavStatus.value = response.data[0]?.status || '';
+      }
+    } catch {
+      /* 暂时断网保留最近确认状态，下一轮重新检查。 */
+    } finally {
+      if (generation === aiNavGeneration && aiNavActive && !document.hidden) aiNavTimer = setTimeout(pollAiNav, 5000);
+    }
+  }
+  function resumeAiNavPolling() {
+    aiNavActive = true;
+    void pollAiNav();
+  }
+  function aiNavVisibility() {
+    if (document.hidden) {
+      clearTimeout(aiNavTimer);
+      aiNavGeneration++;
+    } else if (aiNavActive) void pollAiNav();
+  }
+  watch(organizeOwnerKey, () => {
+    aiNavStatus.value = '';
+    aiNavGeneration++;
+    if (aiNavActive) void pollAiNav();
+  });
+  watch(activeView, () => {
+    aiNavGeneration++;
+    if (aiNavActive) void pollAiNav();
+  });
+  onMounted(() => {
+    document.addEventListener('visibilitychange', aiNavVisibility);
+    resumeAiNavPolling();
+  });
+  onActivated(resumeAiNavPolling);
+  onDeactivated(stopAiNavPolling);
+  onBeforeUnmount(() => {
+    stopAiNavPolling();
+    document.removeEventListener('visibilitychange', aiNavVisibility);
+  });
 
   const pendingCount = computed(() => displayCount(summary.value?.pendingShortcut.count));
   const issueOptions = computed<Array<{ key: OrganizeView; label: string; icon: string; count: string | null }>>(() => [
@@ -1545,6 +1620,21 @@
 </script>
 
 <style scoped lang="less">
+  .organize-ai-status {
+    margin-left: auto;
+    flex-shrink: 0;
+    padding: 2px 7px;
+    border: 1px solid var(--primary-color);
+    border-radius: 20px;
+    color: var(--primary-color);
+    font-size: 10px;
+    line-height: 18px;
+    white-space: nowrap;
+  }
+  .organize-ai-status.paused {
+    color: var(--desc-color);
+    border-color: var(--desc-color);
+  }
   .organize-center-route {
     width: 100%;
     height: 100%;
@@ -2541,8 +2631,7 @@
     overflow: hidden auto;
   }
 
-  .organize-mobile-nav,
-  .organize-resource-tabs {
+  .organize-mobile-nav {
     display: none;
   }
 
@@ -2585,13 +2674,6 @@
     .organize-page {
       display: flex;
       flex-direction: column;
-    }
-
-    .organize-resource-tabs {
-      width: 100%;
-      display: grid;
-      margin: 0 0 8px;
-      flex: 0 0 auto;
     }
 
     .organize-workspace {

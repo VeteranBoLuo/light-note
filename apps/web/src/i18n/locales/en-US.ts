@@ -110,6 +110,7 @@ export default {
     limit: 'This would exceed 1000 items. Nothing was added. Reduce your selection and try again.',
   },
   organizeWorkspace: {
+    openOriginal: { bookmark: 'Open website in new tab', note: 'Open note in new tab', file: 'Preview file' },
     groups: {
       priority: 'Ready for review',
       manual: 'Needs your input',
@@ -136,8 +137,12 @@ export default {
     manualAction: { tags: 'Add tags', title: 'Set title' },
 
     scanLabel: 'Resources checked',
-    aiLabel: 'AI analysis',
+    aiLabel: 'AI analysis progress',
     aiNotNeeded: 'No AI needed',
+    aiProcessedProgress: '{done} processed out of {total}',
+    aiPausedProgress: '{done} of {total} processed · Paused',
+    aiAllFinished: 'All {total} analyses completed',
+    aiFinishedWithFailures: 'Finished: {done} succeeded, {failed} failed',
     aiScope: '{count} of {total} resources need content analysis',
     reviewLabel: 'Suggestions to review',
     suggestionUnit: 'suggestions',

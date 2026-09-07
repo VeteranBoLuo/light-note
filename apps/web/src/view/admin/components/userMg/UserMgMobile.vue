@@ -146,7 +146,6 @@
     >
       <BForm form-id="userEditForm" :form-data="editData" :fields="formFields" />
     </BModal>
-    <UserPreviewModal v-model:visible="previewVisible" :user-info="previewUser" :mode="previewMode" />
     <User360Modal
       v-model:visible="detailVisible"
       :user-info="selectedRecord"
@@ -190,7 +189,6 @@
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import GrowthAdminModal from '@/components/growth/GrowthAdminModal.vue';
   import router from '@/router';
-  import UserPreviewModal from '@/view/admin/components/userMg/UserPreviewModal.vue';
   import User360Modal from '@/view/admin/components/userMg/User360Modal.vue';
   import AdminUserRemarkModal from '@/view/admin/components/userMg/AdminUserRemarkModal.vue';
   import AdminRiskActionModal from '@/components/admin/AdminRiskActionModal.vue';
@@ -228,9 +226,7 @@
   const {
     editData,
     editVisible,
-    previewVisible,
-    previewUser,
-    previewMode,
+    previewOpeningUserId,
     selectedRecord,
     detailVisible,
     remarkVisible,
@@ -259,7 +255,13 @@
   const mobileActions = computed<MobilePageActionItem[]>(() => [
     { key: 'detail', label: t('adminUserManagement.mobile.viewDetail'), icon: icon.navigation.user },
     { key: 'remark', label: t('adminUserManagement.remarkAction'), icon: icon.table_edit },
-    { key: 'preview', label: t('guest.userPreviewEntry'), icon: icon.navigation.portal },
+    {
+      key: 'preview',
+      label: t('guest.userPreviewEntry'),
+      icon: icon.navigation.portal,
+      loading: previewOpeningUserId.value === String(actionUser.value?.id || ''),
+      disabled: Boolean(previewOpeningUserId.value),
+    },
     { key: 'maintain', label: t('guest.adminContextMaintainEntry'), icon: icon.user_admin },
     { key: 'growth', label: t('adminUserManagement.growthAction'), icon: icon.userCenter.growth },
     { key: 'edit', label: t('common.edit'), icon: icon.table_edit },

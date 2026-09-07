@@ -95,6 +95,8 @@
               <BButton
                 class="usermg-icon-btn dom-hover"
                 :aria-label="`${t('guest.userPreviewEntry')}：${record.alias || record.email || record.id}`"
+                :loading="previewOpeningUserId === String(record.id)"
+                :disabled="Boolean(previewOpeningUserId)"
                 @click.stop="loginAsUser(record)"
               >
                 <svg-icon :src="icon.navigation.user" size="16" />
@@ -141,7 +143,6 @@
     </div>
   </BModal>
 
-  <UserPreviewModal v-model:visible="previewVisible" :user-info="previewUser" :mode="previewMode" />
   <AdminUserRemarkModal v-model:visible="remarkVisible" :user="remarkUser" @saved="onRemarkSaved" />
   <GrowthAdminModal
     v-model:visible="growthAdminVisible"
@@ -175,7 +176,6 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
-  import UserPreviewModal from '@/view/admin/components/userMg/UserPreviewModal.vue';
   import User360Modal from '@/view/admin/components/userMg/User360Modal.vue';
   import AdminUserRemarkModal from '@/view/admin/components/userMg/AdminUserRemarkModal.vue';
   import GrowthAdminModal from '@/components/growth/GrowthAdminModal.vue';
@@ -208,9 +208,7 @@
   const {
     editData,
     editVisible,
-    previewVisible,
-    previewUser,
-    previewMode,
+    previewOpeningUserId,
     selectedRecord,
     detailVisible,
     remarkVisible,

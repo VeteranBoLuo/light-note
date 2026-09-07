@@ -24,6 +24,13 @@
       tag-id="add"
       @saved="handleTagCreated"
     />
+    <MobilePageActionsDrawer
+      v-if="bookmark.isMobile"
+      v-model:open="mobilePageActionsOpen"
+      :title="t('common.more')"
+      :actions="mobilePageActions"
+      @action="handleMobilePageAction"
+    />
   </div>
 </template>
 
@@ -40,6 +47,9 @@
   import BCard from '@/components/base/BasicComponents/BCard.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import TagEditorDialog from '@/components/manage/tagEditMg/TagEditorDialog.vue';
+  import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
+  import { useMobileTopBar } from '@/composables/useMobileTopBar';
+  import { createMobileResourceHubActions, mobileResourceHubPath } from '@/utils/mobileResourceHubActions';
 
   const { t } = useI18n();
   const route = useRoute();
@@ -49,8 +59,24 @@
   const loading = ref(true);
   const loadError = ref(false);
   const tagEditorVisible = ref(false);
+  const mobilePageActionsOpen = ref(false);
   const creationHandled = ref(false);
   const isReadOnly = computed(() => user.adminContext?.mode === 'readonly');
+  const mobilePageActions = computed<MobilePageActionItem[]>(() => createMobileResourceHubActions(t));
+
+  useMobileTopBar(['tagMg'], {
+    onAuxiliaryAction: () => (mobilePageActionsOpen.value = true),
+    auxiliaryActionLabel: () => t('common.more'),
+    auxiliaryActionIcon: () => icon.common.more,
+    onAdd: createTag,
+    addLabel: () => t('tagSpace.createTag'),
+    showAdd: () => !isReadOnly.value,
+  });
+
+  function handleMobilePageAction(action: MobilePageActionItem) {
+    const path = mobileResourceHubPath(action.key);
+    if (path) void router.push(path);
+  }
 
   async function enterTagSpace() {
     loading.value = true;

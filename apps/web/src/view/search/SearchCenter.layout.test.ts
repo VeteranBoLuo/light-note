@@ -82,6 +82,14 @@ describe('资源中心 2.0 工作区边界', () => {
     expect(source).toMatch(/\.result-scroll-area\s*\{[\s\S]*?overflow:\s*hidden auto/);
   });
 
+  it('移动端把资源中心作为独立页面，并禁用桌面全局图谱视图', () => {
+    expect(source).toContain('<template v-if="!bookmark.isMobile" #actions>');
+    expect(source).not.toContain('class="search-page-topbar"');
+    expect(source).toMatch(
+      /const isKnowledgeMapView = computed\([\s\S]*?!bookmark\.isMobile && route\.path === '\/search' && route\.query\.section === 'map'/,
+    );
+  });
+
   it('桌面与移动端复用同一个资源检查器，移动端先打开底部抽屉再执行操作', () => {
     expect(source.match(/<ResourceInspectorPanel/g)).toHaveLength(2);
     expect(source).toContain(':open="mobileInspectorVisible"');

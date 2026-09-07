@@ -101,6 +101,27 @@
 
 ---
 
+**🧭 更多工作空间**
+
+从每日工作台推进事务，在资源中心统一处理资料，再用整理中心、标签管理、成长体系和聊天室串联长期使用。
+
+<table>
+  <tr>
+    <td align="center" width="50%"><b>工作台</b><br><img src="apps/web/public/screenshots/work.png" alt="轻笺工作台" width="100%" /></td>
+    <td align="center" width="50%"><b>资源中心</b><br><img src="apps/web/public/screenshots/resource.png" alt="轻笺资源中心" width="100%" /></td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><b>整理中心</b><br><img src="apps/web/public/screenshots/organize.png" alt="轻笺整理中心" width="100%" /></td>
+    <td align="center" width="50%"><b>标签管理</b><br><img src="apps/web/public/screenshots/tag-manage.png" alt="轻笺标签管理" width="100%" /></td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><b>成长中心</b><br><img src="apps/web/public/screenshots/growth.png" alt="轻笺成长中心" width="100%" /></td>
+    <td align="center" width="50%"><b>聊天室</b><br><img src="apps/web/public/screenshots/talk.png" alt="轻笺聊天室" width="100%" /></td>
+  </tr>
+</table>
+
+---
+
 **💡 [共建轻笺](https://boluo66.top/co-build)**
 
 公开查看用户建议、开发者回复与真实进度，了解哪些需求正在规划、开发或已经上线；登录后也可以提交建议和参与投票。

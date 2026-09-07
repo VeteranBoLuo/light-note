@@ -1518,6 +1518,12 @@ function buildAdminOverviewScope(hideInternal) {
       AND osr.resource_type = 'file'
       AND osr.resource_id = CAST(files.id AS CHAR)
   )`;
+  const notOnboardingTodo = ` AND NOT EXISTS (
+    SELECT 1 FROM onboarding_seed_resources osr
+    WHERE osr.user_id = todo_items.user_id
+      AND osr.resource_type = 'todo'
+      AND osr.resource_id = todo_items.id
+  )`;
   return {
     irSql,
     notIntRole,
@@ -1528,6 +1534,7 @@ function buildAdminOverviewScope(hideInternal) {
     notOnboardingBookmark,
     notOnboardingNote,
     notOnboardingFile,
+    notOnboardingTodo,
   };
 }
 
@@ -1614,7 +1621,12 @@ async function queryAdminOverviewSnapshot({ hideInternal, now = new Date() }) {
       .query(
         `SELECT
              COUNT(*) AS total,
-             COALESCE(SUM(create_time >= ?), 0) AS createdToday,
+             COALESCE(SUM(create_time >= ? AND NOT EXISTS (
+               SELECT 1 FROM onboarding_seed_resources osr
+                WHERE osr.user_id = todo_items.user_id
+                  AND osr.resource_type = 'todo'
+                  AND osr.resource_id = todo_items.id
+             )), 0) AS createdToday,
              COALESCE(SUM(status = 'pending'), 0) AS pending,
              COALESCE(SUM(status = 'pending' AND due_at >= NOW() AND due_at < DATE_ADD(?, INTERVAL 1 DAY)), 0) AS dueToday,
              COALESCE(SUM(status = 'pending' AND due_at < NOW()), 0) AS overdue,
@@ -1806,7 +1818,7 @@ async function queryAdminOverviewTrend({ days, hideInternal, now = new Date() })
            SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'todos' AS kind, COUNT(*) AS c
            FROM todo_items
            WHERE del_flag = 0
-             AND create_time >= ? AND create_time < ? AND TIME(create_time) <= ?${scope.notIntUser}
+             AND create_time >= ? AND create_time < ? AND TIME(create_time) <= ?${scope.notIntUser}${scope.notOnboardingTodo}
            GROUP BY d
            UNION ALL
            SELECT DATE_FORMAT(api_log.request_time, '%Y-%m-%d') AS d, 'activeUsers' AS kind,

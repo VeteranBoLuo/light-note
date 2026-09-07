@@ -596,9 +596,10 @@
   let navigationFeedbackSlowTimer: number | null = null;
   let disposeLandingStartupPreload: (() => void) | null = null;
 
-  // 桌面截图是 2940x1846，移动端预览是就地生成的 1:1 舞台。
-  // 比例跟着每张预览走，窄屏才不会让宽截图在为 1:1 设计的容器里留出大片空白。
-  const DESKTOP_SHOT_ASPECT = '2940 / 1846';
+  // 新版桌面截图是 2940x1770，共建页保留 2940x1846 旧图，移动端预览是就地生成的 1:1 舞台。
+  // 比例跟着每张预览走，窄屏才不会裁掉宽截图两侧或留出大片空白。
+  const DESKTOP_SHOT_ASPECT = '2940 / 1770';
+  const LEGACY_DESKTOP_SHOT_ASPECT = '2940 / 1846';
   const MOBILE_STAGE_ASPECT = '1.16 / 1';
   const previewItems = computed(() => [
     {
@@ -639,7 +640,7 @@
       src: '/screenshots/require-900.webp',
       srcset: '/screenshots/require-900.webp 900w, /screenshots/require-1800.webp 1800w',
       sizes: '(max-width: 767px) calc(100vw - 48px), min(46vw, 900px)',
-      aspect: DESKTOP_SHOT_ASPECT,
+      aspect: LEGACY_DESKTOP_SHOT_ASPECT,
     },
   ]);
 
@@ -1413,7 +1414,8 @@
   .mockup-carousel {
     overflow: hidden;
     width: 100%;
-    aspect-ratio: 2940 / 1846;
+    aspect-ratio: var(--preview-aspect, 2940 / 1770);
+    transition: aspect-ratio 0.32s ease;
   }
   .mockup-slides {
     display: flex;
@@ -2703,7 +2705,6 @@
       order: 2;
       /* 比例跟随当前预览：宽截图按自身比例撑高，移动端舞台保持 1.16:1 */
       aspect-ratio: var(--preview-aspect, 1.16 / 1);
-      transition: aspect-ratio 0.32s ease;
       background: #11111a;
       border-top: 1px solid rgba(255, 255, 255, 0.04);
     }

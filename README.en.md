@@ -99,6 +99,27 @@ Scope-bound AI capabilities live inside notes, bookmarks, files, tasks, Resource
 
 ---
 
+**🧭 More workspaces**
+
+Move the day forward from the daily workspace, manage material in Resource Center, and connect long-term organization through Organize Center, tag management, growth, and community chat.
+
+<table>
+  <tr>
+    <td align="center" width="50%"><b>Workspace</b><br><img src="apps/web/public/screenshots/work.png" alt="LightNote workspace" width="100%" /></td>
+    <td align="center" width="50%"><b>Resource Center</b><br><img src="apps/web/public/screenshots/resource.png" alt="LightNote Resource Center" width="100%" /></td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><b>Organize Center</b><br><img src="apps/web/public/screenshots/organize.png" alt="LightNote Organize Center" width="100%" /></td>
+    <td align="center" width="50%"><b>Tag management</b><br><img src="apps/web/public/screenshots/tag-manage.png" alt="LightNote tag management" width="100%" /></td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><b>Growth Center</b><br><img src="apps/web/public/screenshots/growth.png" alt="LightNote Growth Center" width="100%" /></td>
+    <td align="center" width="50%"><b>Community chat</b><br><img src="apps/web/public/screenshots/talk.png" alt="LightNote community chat" width="100%" /></td>
+  </tr>
+</table>
+
+---
+
 **💡 [Co-build LightNote](https://boluo66.top/co-build)**
 
 See user suggestions, developer replies, and real progress in public. Follow what is planned, in development, or already shipped — then sign in to submit ideas and vote.

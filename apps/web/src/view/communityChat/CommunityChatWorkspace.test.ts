@@ -1994,8 +1994,11 @@ describe('CommunityChatWorkspace', () => {
       });
 
     const host = await mountWorkspace();
-    await new Promise((resolve) => window.setTimeout(resolve, 30));
-    await flushAsync();
+    // 历史消息定位会保持两帧“程序化导航中”，显式等待该边界，避免全仓并发测试时
+    // 固定 30ms 定时器先于 requestAnimationFrame 执行而误判为用户滚动。
+    await flushAnimationFrame();
+    await flushAnimationFrame();
+    await flushAnimationFrame();
     expect(mocks.markRead).not.toHaveBeenCalled();
     const messageList = host.querySelector<HTMLElement>('.community-message-list');
     expect(messageList).not.toBeNull();

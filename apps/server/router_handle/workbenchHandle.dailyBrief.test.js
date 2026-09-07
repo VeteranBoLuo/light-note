@@ -34,7 +34,13 @@ describe('每日简报失败诊断', () => {
     const error = Object.assign(new Error('private model text'), {
       code: 'AI_SKILL_DAILY_BRIEF_OUTPUT_INVALID',
       status: 502,
-      details: { ...metadata, invalidText: 'private draft', invalidDraft: { headline: 'secret title' } },
+      details: {
+        ...metadata,
+        invalidText: 'private draft',
+        invalidDraft: { headline: 'secret title' },
+        numericLiterals: ['private-number'],
+        fieldIssues: [{ field: 'headline', numericLiterals: ['secret-number'] }],
+      },
     });
     refreshDailyBrief.mockRejectedValueOnce(error);
     const logger = vi.spyOn(console, 'error').mockImplementation(() => {});

@@ -15,9 +15,11 @@ const mobileNavStyle = source.slice(
 );
 
 describe('整理中心 2.0 页面契约', () => {
-  it('作为资源中心子视图复用一级页头，内部再表达整理任务', () => {
+  it('桌面复用资源中心页头，移动端作为独立整理页面', () => {
     expect(source).toContain(':title="t(\'resourceCenter.title\')"');
     expect(source).toContain(':subtitle="t(\'resourceCenter.subtitle\')"');
+    expect(source).toContain('<ResourceCenterSectionNav v-if="!bookmark.isMobile" />');
+    expect(source).not.toContain('organize-resource-tabs');
     expect(source).toContain("t('organize.navigationLabel')");
   });
 
@@ -74,10 +76,6 @@ describe('整理中心 2.0 页面契约', () => {
     expect(mobileNavStyle).toMatch(/overflow-x:\s*auto/);
     expect(source).toMatch(/\.organize-mobile-nav__item[\s\S]*?flex:\s*0 0 auto/);
     expect(mobileNavStyle).not.toContain('grid-template-columns');
-  });
-
-  it('移动端一级导航与查找、全局图谱保持同一纵向基线', () => {
-    expect(source).toMatch(/\.organize-resource-tabs\s*\{[\s\S]*?display:\s*grid;[\s\S]*?margin:\s*0 0 8px;/);
   });
 
   it('页面使用共享主题 Token 和移动渲染基线，选中态包含实色指示线', () => {

@@ -1,6 +1,6 @@
 <template>
   <div
-    v-if="user.adminContext && !isEmbeddedPreview"
+    v-if="user.adminContext"
     class="admin-context-banner"
     :class="`mode-${user.adminContext.mode}`"
   >
@@ -16,21 +16,23 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import userApi from '@/api/userApi.ts';
   import useUserStore from '@/store/useUser.ts';
-  import { ADMIN_LOGIN_PREVIEW_FRAME_NAME, clearAdminLoginPreview } from '@/utils/authStorage.ts';
+  import {
+    clearAdminLoginPreview,
+    getAdminLoginPreviewReturnUrl,
+  } from '@/utils/authStorage.ts';
 
   const { t } = useI18n();
   const user = useUserStore();
   const now = ref(Date.now());
   const ending = ref(false);
   let timer: number | null = null;
-  const isEmbeddedPreview =
-    typeof window !== 'undefined' && window.name === ADMIN_LOGIN_PREVIEW_FRAME_NAME;
+  let leaving = false;
 
   const modeTitle = computed(() =>
     user.adminContext?.mode === 'maintain'
@@ -54,34 +56,38 @@
   });
 
   async function endContext() {
-    if (ending.value) return;
+    if (ending.value || leaving) return;
     ending.value = true;
+    const returnTo = getAdminLoginPreviewReturnUrl();
     try {
       await userApi.endAdminContext();
     } catch {
       // 服务端已过期时也允许本地安全退出。
     } finally {
       clearAdminLoginPreview();
-      window.parent?.postMessage({ type: 'light-note:admin-context-closed' }, window.location.origin);
       message.success(t('guest.adminContextEnded'));
-      ending.value = false;
+      leavePreview(returnTo);
     }
   }
 
-  function handleExpired(event: Event) {
-    const msg = (event as CustomEvent<{ msg?: string }>).detail?.msg;
-    message.warning(msg || t('guest.adminContextExpired'));
-    window.parent?.postMessage({ type: 'light-note:admin-context-closed' }, window.location.origin);
+  function leavePreview(returnTo: string) {
+    if (leaving) return;
+    leaving = true;
+    window.location.replace(returnTo);
   }
 
   onMounted(() => {
-    if (isEmbeddedPreview) return;
     timer = window.setInterval(() => (now.value = Date.now()), 1000);
-    window.addEventListener('light-note:admin-context-expired', handleExpired);
+  });
+  watch(secondsLeft, (value, previous) => {
+    if (value !== 0 || previous === 0 || leaving) return;
+    const returnTo = getAdminLoginPreviewReturnUrl();
+    clearAdminLoginPreview();
+    message.warning(t('guest.adminContextExpired'));
+    leavePreview(returnTo);
   });
   onBeforeUnmount(() => {
     if (timer !== null) window.clearInterval(timer);
-    window.removeEventListener('light-note:admin-context-expired', handleExpired);
   });
 </script>
 

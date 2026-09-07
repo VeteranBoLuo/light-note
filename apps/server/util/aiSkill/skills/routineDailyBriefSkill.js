@@ -79,6 +79,8 @@ function normalizeQuotedSamples(text, facts) {
     ['《', '》'],
     ['「', '」'],
     ['“', '”'],
+    ['‘', '’'],
+    ['`', '`'],
     ['"', '"'],
     ["'", "'"],
   ];
@@ -131,6 +133,13 @@ function narrativeTemplate(value, field, limits, facts) {
       reason: 'NUMERIC_LITERAL',
       // 仅用于本次受控修复，不记录或向客户端返回模型原文。
       invalidText: text,
+      // 仅随本次草稿交给平台修复，不进入持久化日志。
+      numericLiterals: [
+        ...new Set([
+          ...[...withoutTokens.matchAll(/\p{Number}+(?:[.,:/-]\p{Number}+)*/gu)].map((match) => match[0]),
+          ...[...withoutTokens.matchAll(new RegExp(ENGLISH_NUMBER_WORD.source, 'giu'))].map((match) => match[0]),
+        ]),
+      ].slice(0, 24),
       numericSummary: {
         // 只记录来源归类，不记录数字、资源标题或正文。
         sourceLiteral: facts.some((fact) =>
@@ -149,6 +158,44 @@ function narrativeTemplate(value, field, limits, facts) {
     });
   }
   return text;
+}
+
+// 一次修复机会应看到全部字段问题，不能修完首处才暴露下一处。
+// 复用正式正文校验，避免另建一套宽松的数字判断。
+function collectNarrativeIssues(draft, facts) {
+  if (!plainObject(draft)) return [];
+  const fields = [
+    ['headline', draft.headline, TEXT_LIMITS.headline, facts],
+    ['recommendation', draft.recommendation, TEXT_LIMITS.recommendation, facts],
+    ...(Array.isArray(draft.insights) ? draft.insights.slice(0, DAILY_BRIEF_FACT_IDS.length) : []).map(
+      (insight, index) => [
+        `insights[${index}].text`,
+        insight?.text,
+        TEXT_LIMITS.insight,
+        facts.filter((fact) => Array.isArray(insight?.factIds) && insight.factIds.includes(fact.id)),
+      ],
+    ),
+  ];
+  return fields.flatMap(([field, value, limits, scopedFacts]) => {
+    try {
+      const text = narrativeTemplate(value, field, limits, scopedFacts);
+      assertNarrativePlaceholders(text, new Map(scopedFacts.map((fact) => [fact.id, fact])), null, field);
+      return [];
+    } catch (error) {
+      return [
+        {
+          field,
+          code: error.code,
+          reason: error.details?.reason,
+          numericLiterals: error.details?.numericLiterals,
+          allowedPlaceholders: scopedFacts.flatMap((fact) => [
+            `{{${fact.id}.count}}`,
+            ...(fact.samples?.length ? [`{{${fact.id}.sample}}`] : []),
+          ]),
+        },
+      ];
+    }
+  });
 }
 
 function assertNarrativePlaceholders(text, factsById, declaredFactIds = null, fieldPath = 'draft') {
@@ -382,6 +429,7 @@ const routineDailyBriefSkill = Object.freeze({
         const diagnostic = {
           ...error.details,
           requirement: error.message,
+          fieldIssues: collectNarrativeIssues(invalidArguments, input.facts),
           // 超长草稿不截断成不完整 JSON；事实输入始终仍在原始 messages 中。
           ...(draftData.length <= 16000 ? { invalidDraft: invalidArguments } : { draftOmitted: 'too_long' }),
         };

@@ -6,6 +6,7 @@ import {
   DESKTOP_PERSON_CENTER_PRIMARY_ENTRIES,
   DESKTOP_PERSON_CENTER_SECONDARY_ENTRIES,
   MOBILE_PERSON_CENTER_COMMUNICATION_ENTRIES,
+  MOBILE_PERSON_CENTER_MANAGEMENT_ENTRIES,
   MOBILE_PERSON_CENTER_QUICK_ENTRIES,
   PERSON_CENTER_ENTRIES,
 } from '@/config/personCenterEntries';
@@ -32,13 +33,16 @@ describe('personal center menu contract', () => {
     expect(PERSON_CENTER_ENTRIES.trash.tone).toBe('neutral');
   });
 
-  it('shares entry semantics across desktop and mobile without changing mobile trash routing', () => {
+  it('移动端常用入口以整理中心替换回收站，并把回收站下沉到管理工具', () => {
     expect(MOBILE_PERSON_CENTER_QUICK_ENTRIES.map((entry) => entry.name)).toEqual([
       'growth',
       'entitlementStore',
       'resourceCenter',
-      'trash',
+      'organize',
     ]);
+    expect(PERSON_CENTER_ENTRIES.organize.path).toBe('/organize');
+    expect(PERSON_CENTER_ENTRIES.organize.icon).toBe(icon.ai.organize);
+    expect(MOBILE_PERSON_CENTER_MANAGEMENT_ENTRIES.map((entry) => entry.name)).toEqual(['trash']);
     expect(PERSON_CENTER_ENTRIES.trash.mobilePath).toBe('/ptrash');
     expect(MOBILE_PERSON_CENTER_COMMUNICATION_ENTRIES.map((entry) => entry.name)).toEqual([
       'coBuild',
@@ -75,7 +79,9 @@ describe('personal center menu contract', () => {
 
   it('keeps visitor, signed-in and unread-growth states explicit', () => {
     expect(desktopSource).toContain("user.role === 'visitor' ? icon.navigation.user : icon.userCenter.menu.logout");
-    expect(desktopSource).toContain("user.role === 'visitor' ? t('personCenter.loginRegister') : t('personCenter.logout')");
+    expect(desktopSource).toContain(
+      "user.role === 'visitor' ? t('personCenter.loginRegister') : t('personCenter.logout')",
+    );
     expect(desktopSource).toContain("menuItem.name === 'growth' && growthInfo?.hasUnreadLevelUp");
   });
 });

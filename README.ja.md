@@ -97,6 +97,27 @@
 
 ---
 
+**🧭 さらに広がるワークスペース**
+
+毎日のワークスペースで作業を進め、リソースセンターで資料をまとめ、整理センター、タグ管理、成長システム、コミュニティチャットへつなげます。
+
+<table>
+  <tr>
+    <td align="center" width="50%"><b>ワークスペース</b><br><img src="apps/web/public/screenshots/work.png" alt="LightNote ワークスペース" width="100%" /></td>
+    <td align="center" width="50%"><b>リソースセンター</b><br><img src="apps/web/public/screenshots/resource.png" alt="LightNote リソースセンター" width="100%" /></td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><b>整理センター</b><br><img src="apps/web/public/screenshots/organize.png" alt="LightNote 整理センター" width="100%" /></td>
+    <td align="center" width="50%"><b>タグ管理</b><br><img src="apps/web/public/screenshots/tag-manage.png" alt="LightNote タグ管理" width="100%" /></td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><b>成長センター</b><br><img src="apps/web/public/screenshots/growth.png" alt="LightNote 成長センター" width="100%" /></td>
+    <td align="center" width="50%"><b>コミュニティチャット</b><br><img src="apps/web/public/screenshots/talk.png" alt="LightNote コミュニティチャット" width="100%" /></td>
+  </tr>
+</table>
+
+---
+
 **💡 [LightNote を共に育てる](https://boluo66.top/co-build)**
 
 ユーザーからの提案、開発者の返信、実際の進捗を公開しています。計画中・開発中・リリース済みの要望を確認でき、ログイン後は提案の投稿や投票もできます。

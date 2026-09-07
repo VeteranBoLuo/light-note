@@ -70,16 +70,14 @@
             <strong v-if="run.summary.aiTotal === null" class="metric-text">{{
               t('organizeLifecycle.undetermined')
             }}</strong>
-            <strong v-else-if="run.summary.aiTotal"
-              >{{ run.progress ? aiDone : '—' }}<small> / {{ run.summary.aiTotal }}</small></strong
-            >
+            <strong v-else-if="run.summary.aiTotal" class="metric-text">{{ aiProgressText }}</strong>
             <strong v-else class="metric-text">{{ t('organizeWorkspace.aiNotNeeded') }}</strong>
+            <BProgress v-if="run.summary.aiTotal && run.progress" :percent="aiPercent" />
             <small>{{
               run.summary.aiTotal === null
                 ? t('organizeLifecycle.scanning')
                 : t('organizeWorkspace.aiScope', { total: run.summary.total, count: run.summary.aiTotal })
             }}</small>
-            <BProgress v-if="activeAi && run.summary.aiTotal !== null" :percent="aiPercent" />
             <small v-if="aiOther" class="workspace-ai-warning">{{ aiOther }}</small>
           </div>
           <div class="workspace-metric">
@@ -163,10 +161,20 @@
                 :class="{ 'is-quiet': !primarySuggestions(item).length }"
                 class="workspace-resource"
                 ><header
-                  ><span class="resource-symbol" :class="item.resource.type"
-                    ><SvgIcon :src="resourceIcons[item.resource.type]" size="21" /></span
+                  ><BButton
+                    class="resource-symbol"
+                    :class="item.resource.type"
+                    :loading="openingFile === item.id"
+                    :aria-label="
+                      resourceOpenLabel(item) + '：' + (item.resource.title || t('organizeWorkspace.unnamed'))
+                    "
+                    @click.stop="openOriginal(item)"
+                    ><SvgIcon :src="resourceIcons[item.resource.type]" size="21" /></BButton
                   ><div class="resource-identity"
-                    ><h4>{{ item.resource.title || t('organizeWorkspace.unnamed') }}</h4
+                    ><h4
+                      ><BButton class="resource-title-link" @click.stop="openOriginal(item)">{{
+                        item.resource.title || t('organizeWorkspace.unnamed')
+                      }}</BButton></h4
                     ><small
                       >{{ item.resource.source.folder || t('organizeWorkspace.root')
                       }}<template v-if="item.resource.type === 'file'">
@@ -249,6 +257,12 @@
         </div>
       </div>
     </section>
+    <FilePreview
+      v-if="previewFile && filePreviewVisible"
+      v-model:visible="filePreviewVisible"
+      :file-info="previewFile"
+      @close="filePreviewVisible = false"
+    />
     <BDrawer
       :open="drawer"
       :title="t('organize.aiSuggestions.regenerate')"
@@ -256,7 +270,9 @@
       body-padding="0"
       @close="closeDrawer"
     >
+      <template #header-actions><div ref="wizardHeader" /></template>
       <OrganizeRunWizard
+        :header-target="wizardHeader"
         v-if="drawer"
         v-model="draft"
         v-model:preview="preview"
@@ -271,8 +287,16 @@
 </template>
 <script setup lang="ts">
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
-  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { defineAsyncComponent, computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { useRouter } from 'vue-router';
+  import { apiBasePost } from '@/http/request';
+  const FilePreview = defineAsyncComponent(() =>
+    import('@/components/FilePreview.vue').then((module) => module.default),
+  );
+  import { resolveResourceRoute } from '@/utils/resourceNavigation';
+  import { resolveBookmarkUrlInput } from '@lightnote/shared';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
@@ -301,7 +325,8 @@
     type WorkspaceItem,
   } from '@/api/organizeSuggestionApi';
   const { t, locale } = useI18n(),
-    emit = defineEmits<{ 'refresh-summary': [] }>();
+    emit = defineEmits<{ 'refresh-summary': []; 'run-status': [status: string] }>();
+  const wizardHeader = ref<HTMLElement | null>(null);
   const resourceTypes: ResourceType[] = ['bookmark', 'note', 'file'],
     checks: CheckKind[] = ['tags', 'title', 'empty', 'duplicate'];
   const resourceIcons = { bookmark: icon.resource.bookmark, note: icon.resource.note, file: icon.organize.file };
@@ -408,6 +433,64 @@
       badge: run.value?.summary.types[type] || 0,
     })),
   );
+  const router = useRouter();
+  const resourceOpenLabel = (item: WorkspaceItem) => t(`organizeWorkspace.openOriginal.${item.resource.type}`);
+  const filePreviewVisible = ref(false);
+  const previewFile = ref<{
+    id: string;
+    fileName: string;
+    fileType: string;
+    fileUrl?: string;
+    category?: string;
+  } | null>(null);
+  const openingFile = ref('');
+  async function openOriginal(item: WorkspaceItem) {
+    if (item.resource.type === 'file') {
+      if (openingFile.value) return;
+      openingFile.value = item.id;
+      try {
+        const response = await apiBasePost(
+          '/api/file/getFileInfo',
+          { id: item.resource.id },
+          { silent: true, feedback: false },
+        );
+        if (disposed) return;
+        if (response.status !== 200 || !response.data) {
+          message.warning(t('cloudSpace.fileUnavailable'));
+          return;
+        }
+        const file = response.data;
+        previewFile.value = {
+          ...file,
+          id: String(file.id),
+          fileName: file.fileName || file.file_name || '',
+          fileType: file.fileType || file.file_type || '',
+          fileUrl: file.fileUrl || file.file_url || '',
+        };
+        filePreviewVisible.value = true;
+      } catch {
+        if (!disposed) message.warning(t('cloudSpace.fileUnavailable'));
+      } finally {
+        openingFile.value = '';
+      }
+      return;
+    }
+    let href = '';
+    if (item.resource.type === 'bookmark') {
+      href = resolveBookmarkUrlInput(item.resource.url || item.resource.source.url || '', {
+        allowTextExtraction: false,
+      }).canonicalUrl;
+      if (!href) {
+        message.warning(t('bookmarkUrl.invalid'));
+        return;
+      }
+    } else {
+      const target = resolveResourceRoute(item.resource, { noteReturnPath: '/organize?issue=ai_suggestions' });
+      if (!target) return;
+      href = router.resolve(target).href;
+    }
+    window.open(href, '_blank', 'noopener,noreferrer');
+  }
   function toggleDetails(id: string) {
     const next = new Set(expanded.value);
     if (next.has(id)) next.delete(id);
@@ -452,8 +535,24 @@
       .filter((p) => ['failed', 'conflict'].includes(p.aiStatus))
       .reduce((n, p) => n + Number(p.total), 0),
   );
+  const aiProcessed = computed(() => aiDone.value + aiFailed.value);
+  const aiProgressText = computed(() => {
+    const current = run.value;
+    if (!current?.progress) return t('organizeLifecycle.undetermined');
+    if (current.status === 'completed' && aiFailed.value)
+      return t('organizeWorkspace.aiFinishedWithFailures', { done: aiDone.value, failed: aiFailed.value });
+    if (current.status === 'completed' && aiDone.value === current.summary.aiTotal)
+      return t('organizeWorkspace.aiAllFinished', { total: current.summary.aiTotal });
+    return t(
+      current.status === 'paused' ? 'organizeWorkspace.aiPausedProgress' : 'organizeWorkspace.aiProcessedProgress',
+      {
+        done: aiProcessed.value,
+        total: current.summary.aiTotal,
+      },
+    );
+  });
   const aiPercent = computed(() =>
-    run.value?.summary.aiTotal ? Math.round((aiDone.value / run.value.summary.aiTotal) * 100) : 100,
+    run.value?.summary.aiTotal ? Math.min(100, Math.round((aiProcessed.value / run.value.summary.aiTotal) * 100)) : 100,
   );
   const runStatusLabel = computed(() => {
     if (['preparing', 'paused', 'ended'].includes(run.value?.status || ''))
@@ -707,6 +806,10 @@
     switching.value = true;
     void loadPage();
   });
+  watch(
+    () => run.value?.status,
+    (status) => emit('run-status', status || ''),
+  );
   onMounted(() => {
     void loadLatest();
     document.addEventListener('visibilitychange', visibility);
@@ -1104,6 +1207,32 @@
     align-items: center;
     gap: 11px;
     padding: 12px 5px;
+  }
+  .resource-title-link.b_btn {
+    height: auto;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .resource-title-link.b_btn:hover {
+    color: var(--primary-color);
+    text-decoration: underline;
+  }
+  .resource-title-link.b_btn:focus-visible,
+  .resource-symbol.b_btn:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 3px;
+  }
+  .resource-symbol.b_btn {
+    padding: 0;
+    border: 0;
+  }
+  .resource-symbol.b_btn:hover {
+    box-shadow: inset 0 0 0 1px var(--primary-color);
   }
   .resource-symbol {
     display: grid;

@@ -172,6 +172,7 @@
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { RESOURCE_LIST_PAGE_SIZE, mergeResourcePage } from '@/utils/resourcePagination';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
+  import { createMobileResourceHubActions, mobileResourceHubPath } from '@/utils/mobileResourceHubActions';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { batchDeleteSearchResources, clearGlobalSearchCache } from '@/api/search.ts';
@@ -244,10 +245,12 @@
       !batchMode.value && !bookmark.bookmarkLoading && !bookmark.bookmarkLoadingMore && !batchMutating.value,
   });
   const mobilePageActions = computed<MobilePageActionItem[]>(() => [
+    ...createMobileResourceHubActions(t),
     {
       key: 'batch',
       label: t('bookmarkMg.batchSelect'),
       icon: icon.filterPanel.check,
+      dividerBefore: true,
     },
   ]);
   const allVisibleSelected = computed(
@@ -372,7 +375,9 @@
   }
 
   function handleMobilePageAction(action: MobilePageActionItem) {
-    if (action.key === 'batch') enterBatch();
+    const hubPath = mobileResourceHubPath(action.key);
+    if (hubPath) void router.push(hubPath);
+    else if (action.key === 'batch') enterBatch();
   }
 
   async function handleBatchDelete() {

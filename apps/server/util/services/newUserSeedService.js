@@ -9,6 +9,7 @@ import { insertResourceTagRelations, RESOURCE_TYPE } from '../resourceTags.js';
 import { sanitizePersistedNoteContent } from '../noteHtmlSanitizer.js';
 import { NEW_USER_DRAWING_NOTE_EXAMPLE_SCENE } from './newUserDrawingNoteExample.js';
 import { createBookmarkExactUrlHash } from './bookmarkExactUrlService.js';
+import { createTodo } from './todoService.js';
 
 export const NEW_USER_SEED_VERSION = ONBOARDING_SEED_VERSION;
 
@@ -118,6 +119,11 @@ function buildChineseSeed(siteUrl) {
         description: '轻笺的开源仓库、更新记录与协作入口。',
         tagKeys: ['read-later'],
       },
+    ],
+    todos: [
+      { key: 'first-bookmark', title: '收藏第一个网页', description: '保存一篇稍后想看的网页，并按需要添加标签。' },
+      { key: 'first-note', title: '写下第一篇笔记', description: '记录一个想法、计划或学习摘要。' },
+      { key: 'first-file', title: '上传第一份文件', description: '把常用资料上传到云空间，之后可以继续分类整理。' },
     ],
     notes: [
       {
@@ -281,6 +287,11 @@ function buildEnglishSeed(siteUrl) {
         description: 'The open-source repository, release history, and contribution entry point.',
         tagKeys: ['read-later'],
       },
+    ],
+    todos: [
+      { key: 'first-bookmark', title: 'Save your first webpage', description: 'Save a page to revisit and add a tag if useful.' },
+      { key: 'first-note', title: 'Write your first note', description: 'Capture an idea, plan, or learning summary.' },
+      { key: 'first-file', title: 'Upload your first file', description: 'Add a useful file to cloud storage and organize it later.' },
     ],
     notes: [
       {
@@ -501,7 +512,7 @@ export async function seedNewUserWorkspaceData({ userId, lang = 'zh-CN', siteUrl
         created: false,
         version: NEW_USER_SEED_VERSION,
         folderId,
-        counts: { tags: 0, bookmarks: 0, notes: 0, folders: 0 },
+        counts: { tags: 0, bookmarks: 0, notes: 0, todos: 0, folders: 0 },
       };
     }
 
@@ -588,6 +599,27 @@ export async function seedNewUserWorkspaceData({ userId, lang = 'zh-CN', siteUrl
       });
     }
 
+    for (const [index, todo] of content.todos.entries()) {
+      const created = await createTodo(
+        connection,
+        userId,
+        {
+          title: todo.title,
+          description: todo.description,
+          priority: 1,
+          dueAt: null,
+          reminder: null,
+          sortOrder: (index + 1) * 1000,
+        },
+        { invalidateSearch: false, suppressUserRewards: true },
+      );
+      await markOnboardingSeedResource(connection, {
+        userId,
+        resourceType: 'todo',
+        resourceId: created.id,
+      });
+    }
+
     const [folderInsert] = await connection.query('INSERT INTO folders SET ?', [
       {
         create_by: userId,
@@ -608,6 +640,7 @@ export async function seedNewUserWorkspaceData({ userId, lang = 'zh-CN', siteUrl
         tags: content.tags.length,
         bookmarks: content.bookmarks.length,
         notes: content.notes.length,
+        todos: content.todos.length,
         folders: 1,
       },
     };

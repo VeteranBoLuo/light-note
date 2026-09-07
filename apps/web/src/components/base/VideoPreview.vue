@@ -8,6 +8,7 @@
         playsinline
         @loadedmetadata="handleLoaded"
         @play="hasStarted = true"
+        @pause="hasStarted = false"
         @ended="hasStarted = false"
         @error="handleError"
       >
@@ -27,11 +28,13 @@
 </template>
 
 <script setup lang="ts">
-  import { nextTick, ref, watch } from 'vue';
+  import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
+  import { isEditableShortcutTarget } from '@/config/keyboardShortcuts';
+  import { useMobileLayout } from '@/composables/useMobileLayout';
 
   const { t } = useI18n();
   const props = defineProps<{
@@ -42,6 +45,7 @@
   const videoPlayer = ref<HTMLVideoElement | null>(null);
   const loaded = ref(false);
   const hasStarted = ref(false);
+  const isMobileLayout = useMobileLayout();
   const emit = defineEmits<{
     loaded: [];
     error: [error: Error];
@@ -66,6 +70,33 @@
       emit('error', new Error(t('cloudSpace.previewPanel.mediaPlayFailed')));
     }
   }
+
+  function handlePlaybackShortcut(event: KeyboardEvent) {
+    const isSpace = event.key === ' ' || event.key === 'Spacebar' || event.code === 'Space';
+    if (
+      !isSpace ||
+      isMobileLayout.value ||
+      !loaded.value ||
+      event.defaultPrevented ||
+      event.repeat ||
+      event.isComposing ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      isEditableShortcutTarget(event.target)
+    ) {
+      return;
+    }
+    event.preventDefault();
+    const video = videoPlayer.value;
+    if (!video) return;
+    if (video.paused || video.ended) void playVideo();
+    else video.pause();
+  }
+
+  onMounted(() => document.addEventListener('keydown', handlePlaybackShortcut));
+  onBeforeUnmount(() => document.removeEventListener('keydown', handlePlaybackShortcut));
 
   watch(
     () => [props.videoUrl, props.mimeType],

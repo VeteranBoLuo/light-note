@@ -48,7 +48,7 @@ describe('bookmark URL deterministic resolver', () => {
     });
   });
 
-  it.each(['javascript:alert(1)', '不是网址', 'https://user:pass@example.com'])('拒绝非法地址: %s', (input) => {
+  it.each(['javascript:alert(1)', '不是网址', '12', 'https://user:pass@example.com'])('拒绝非法地址: %s', (input) => {
     expect(inspectBookmarkUrl(input).state).toBe('invalid');
   });
 

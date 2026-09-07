@@ -4,17 +4,16 @@ import { LOGIN_HISTORY_STORAGE_KEYS, LOGIN_HISTORY_TTL_MS } from '@/config/appEn
 const PREVIEW_FLAG_KEY = 'adminLoginPreview';
 const PREVIEW_TOKEN_KEY = 'adminContextToken';
 const PREVIEW_PREFERENCES_KEY = 'adminLoginPreviewPreferences';
+const PREVIEW_RETURN_TO_KEY = 'adminLoginPreviewReturnTo';
 
-export const ADMIN_LOGIN_PREVIEW_FRAME_NAME = 'admin-login-preview-frame';
+const ADMIN_USER_MANAGEMENT_PATHS = new Set(['/admin/userMg', '/userMg']);
 
 export function isAdminLoginPreview(): boolean {
   if (typeof window === 'undefined') {
     return false;
   }
   const hasPreviewQuery = new URLSearchParams(window.location.search).get(PREVIEW_FLAG_KEY) === '1';
-  const isNamedPreviewFrame = window.name === ADMIN_LOGIN_PREVIEW_FRAME_NAME;
-  const isMarkedPreviewFrame = window.self !== window.top && window.sessionStorage.getItem(PREVIEW_FLAG_KEY) === '1';
-  return hasPreviewQuery || isNamedPreviewFrame || isMarkedPreviewFrame;
+  return hasPreviewQuery;
 }
 
 export function getAdminContextToken(): string {
@@ -32,9 +31,31 @@ export function getAdminLoginPreviewPreferences(): Partial<UserPreferences> {
   }
 }
 
-export function setAdminLoginPreview(token: string, preferences?: Partial<UserPreferences> | null) {
+export function normalizeAdminLoginPreviewReturnUrl(value: unknown): string {
+  if (typeof window === 'undefined') return '/admin/userMg';
+  try {
+    const url = new URL(String(value || ''), window.location.origin);
+    if (url.origin !== window.location.origin || !ADMIN_USER_MANAGEMENT_PATHS.has(url.pathname)) {
+      return '/admin/userMg';
+    }
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return '/admin/userMg';
+  }
+}
+
+export function getAdminLoginPreviewReturnUrl(): string {
+  return normalizeAdminLoginPreviewReturnUrl(window.sessionStorage.getItem(PREVIEW_RETURN_TO_KEY));
+}
+
+export function setAdminLoginPreview(
+  token: string,
+  preferences?: Partial<UserPreferences> | null,
+  returnTo?: string,
+) {
   window.sessionStorage.setItem(PREVIEW_FLAG_KEY, '1');
   window.sessionStorage.setItem(PREVIEW_TOKEN_KEY, token);
+  window.sessionStorage.setItem(PREVIEW_RETURN_TO_KEY, normalizeAdminLoginPreviewReturnUrl(returnTo));
   if (preferences) {
     window.sessionStorage.setItem(PREVIEW_PREFERENCES_KEY, JSON.stringify(preferences));
   } else {
@@ -46,6 +67,7 @@ export function clearAdminLoginPreview() {
   window.sessionStorage.removeItem(PREVIEW_FLAG_KEY);
   window.sessionStorage.removeItem(PREVIEW_TOKEN_KEY);
   window.sessionStorage.removeItem(PREVIEW_PREFERENCES_KEY);
+  window.sessionStorage.removeItem(PREVIEW_RETURN_TO_KEY);
 }
 
 export function getAdminLoginPreviewUrl(path = '/home'): string {

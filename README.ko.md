@@ -97,6 +97,27 @@
 
 ---
 
+**🧭 더 많은 작업 공간**
+
+매일 작업 공간에서 하루를 추진하고, 리소스 센터에서 자료를 통합 관리하며, 정리 센터·태그 관리·성장 시스템·커뮤니티 채팅으로 장기적인 활용을 이어 갑니다.
+
+<table>
+  <tr>
+    <td align="center" width="50%"><b>작업 공간</b><br><img src="apps/web/public/screenshots/work.png" alt="LightNote 작업 공간" width="100%" /></td>
+    <td align="center" width="50%"><b>리소스 센터</b><br><img src="apps/web/public/screenshots/resource.png" alt="LightNote 리소스 센터" width="100%" /></td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><b>정리 센터</b><br><img src="apps/web/public/screenshots/organize.png" alt="LightNote 정리 센터" width="100%" /></td>
+    <td align="center" width="50%"><b>태그 관리</b><br><img src="apps/web/public/screenshots/tag-manage.png" alt="LightNote 태그 관리" width="100%" /></td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><b>성장 센터</b><br><img src="apps/web/public/screenshots/growth.png" alt="LightNote 성장 센터" width="100%" /></td>
+    <td align="center" width="50%"><b>커뮤니티 채팅</b><br><img src="apps/web/public/screenshots/talk.png" alt="LightNote 커뮤니티 채팅" width="100%" /></td>
+  </tr>
+</table>
+
+---
+
 **💡 [함께 만드는 LightNote](https://boluo66.top/co-build)**
 
 사용자 제안, 개발자 답변, 실제 진행 상황을 공개합니다. 계획 중·개발 중·출시된 요구 사항을 확인하고, 로그인 후에는 제안을 등록하거나 투표할 수 있습니다.

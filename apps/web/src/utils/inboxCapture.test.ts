@@ -32,6 +32,7 @@ describe('inboxCapture', () => {
     expect(detectInboxCaptureType('https://example.com', [file])).toBe('file');
     expect(detectInboxCaptureType('https://example.com')).toBe('bookmark');
     expect(detectInboxCaptureType('# 随手记录')).toBe('note');
+    expect(detectInboxCaptureType('12')).toBe('note');
   });
 
   it('Markdown 笔记保留原文并从首个非空行生成安全短标题', () => {

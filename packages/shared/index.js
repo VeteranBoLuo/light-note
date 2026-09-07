@@ -495,6 +495,17 @@ function parseHttpUrlCandidate(
     .toLowerCase();
   const isIpv4 = /^\d{1,3}(?:\.\d{1,3}){3}$/u.test(hostname);
   const isIpv6 = hostname.includes(':');
+  // WHATWG URL 会把 `12`、`https:12` 这类普通数字文本解释为 IPv4
+  // 简写（例如 `0.0.0.12`）。书签输入不支持这种含义含混的历史写法：
+  // IPv4 必须显式写出点分十进制，避免快速记录在输入数字时误切到书签。
+  const rawAuthority = input
+    .replace(/^[a-z][a-z\d+.-]*:/iu, '')
+    .replace(/^\/\//u, '')
+    .split(/[/?#]/u, 1)[0];
+  const rawIpv4Host = rawAuthority.replace(/:\d{1,5}$/u, '');
+  const hasCanonicalIpv4Input =
+    /^(?:0|[1-9]\d{0,2})(?:\.(?:0|[1-9]\d{0,2})){3}$/u.test(rawIpv4Host);
+  if (isIpv4 && !hasCanonicalIpv4Input) return null;
   if (!hostname.includes('.') && hostname !== 'localhost' && !isIpv4 && !isIpv6)
     return null;
   if (parsed.protocol === 'http:' && HTTPS_UPGRADE_HOSTS.has(hostname)) {

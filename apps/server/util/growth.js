@@ -634,7 +634,9 @@ export async function getDailyQuestState(
             AND NOT EXISTS (SELECT 1 FROM onboarding_seed_resources osr
               WHERE osr.user_id=f.create_by AND osr.resource_type='file' AND osr.resource_id=CAST(f.id AS CHAR))) AS files,
         (SELECT COUNT(*) FROM todo_items td
-          WHERE td.user_id = ? AND td.del_flag = 0 AND ${dailyCondition('td.create_time')}) AS todosCreated,
+          WHERE td.user_id = ? AND td.del_flag = 0 AND ${dailyCondition('td.create_time')}
+            AND NOT EXISTS (SELECT 1 FROM onboarding_seed_resources osr
+              WHERE osr.user_id=td.user_id AND osr.resource_type='todo' AND osr.resource_id=td.id)) AS todosCreated,
         (SELECT COUNT(*) FROM todo_items td
           WHERE td.user_id = ? AND td.del_flag = 0 AND td.status = 'completed'
             AND ${dailyCondition('td.completed_at')}) AS todosCompleted,

@@ -505,6 +505,13 @@
       @create="createTag"
       @retry="loadSidebarTags"
     />
+    <MobilePageActionsDrawer
+      v-if="bookmark.isMobile"
+      v-model:open="mobilePageActionsOpen"
+      :title="t('common.more')"
+      :actions="mobilePageActions"
+      @action="handleMobilePageAction"
+    />
     <AiSkillDialog
       v-if="!bookmark.isDesktop"
       v-model:visible="tagAiVisible"
@@ -613,6 +620,7 @@
   import TagGraphPanel from '@/components/tagGraph/TagGraphPanel.vue';
   import TagDirectoryRow from '@/components/tagSpace/TagDirectoryRow.vue';
   import MobileTagDirectoryDrawer from '@/components/tagSpace/MobileTagDirectoryDrawer.vue';
+  import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import TagSpaceResourceRow from '@/components/tagSpace/TagSpaceResourceRow.vue';
   import TagEditorDialog from '@/components/manage/tagEditMg/TagEditorDialog.vue';
   import AiSkillDialog from '@/components/aiSkills/AiSkillDialog.vue';
@@ -631,6 +639,7 @@
   import { persistAiMarkdownResultAsNote } from '@/utils/aiNoteDraft';
   import { stripAiAnalysisCitations } from '@/utils/aiAnalysisContent';
   import { copyTextToClipboard } from '@/utils/clipboard';
+  import { createMobileResourceHubActions, mobileResourceHubPath } from '@/utils/mobileResourceHubActions';
 
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
   const TagGraphCanvas = defineAsyncComponent(() => import('@/components/tagGraph/TagGraphCanvas.vue'));
@@ -654,6 +663,7 @@
   const sidebarLoading = ref(false);
   const sidebarError = ref(false);
   const mobileTagDirectoryVisible = ref(false);
+  const mobilePageActionsOpen = ref(false);
   const activeType = ref<TagSpaceResourceFilter>('all');
   const resourceSort = ref<TagSpaceResourceSort>('updated');
   const resourceKeyword = ref('');
@@ -764,11 +774,19 @@
     { value: 'added', label: t('tagSpace.sortByAdded') },
   ]);
   const isReadOnly = computed(() => user.adminContext?.mode === 'readonly');
+  const mobilePageActions = computed<MobilePageActionItem[]>(() => createMobileResourceHubActions(t));
   useMobileTopBar(['tagDetail'], {
+    onAuxiliaryAction: () => (mobilePageActionsOpen.value = true),
+    auxiliaryActionLabel: () => t('common.more'),
+    auxiliaryActionIcon: () => icon.common.more,
     onAdd: createTag,
     addLabel: () => t('tagSpace.createTag'),
     showAdd: () => !isReadOnly.value,
   });
+  function handleMobilePageAction(action: MobilePageActionItem) {
+    const path = mobileResourceHubPath(action.key);
+    if (path) void router.push(path);
+  }
   const tagAiResourceRefs = computed<AiSkillResourceRef[]>(() =>
     displayedTagId.value && Number(tag.value?.counts.total || 0) > 0 ? [{ type: 'tag', id: displayedTagId.value }] : [],
   );

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   adminUserMobileSort,
   adminUserRequestSort,
@@ -8,6 +8,7 @@ import {
   normalizeAdminUserListContext,
   readAdminUserListContext,
   saveAdminUserListContext,
+  startAdminUserContextNavigation,
 } from './useAdminUserManagement';
 
 function createStorage() {
@@ -99,6 +100,50 @@ describe('后台用户管理共享任务流', () => {
     expect(warning.content).toContain('adminUserManagement.receipt.sessionCleanupPending');
   });
 
+  it('上下文创建成功后保存材料并整页进入应用', async () => {
+    let resolveStart: (value: any) => void = () => undefined;
+    const startAdminContext = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveStart = resolve;
+        }),
+    );
+    const storeAdminContext = vi.fn();
+    const navigateToPreview = vi.fn();
+    const started = startAdminUserContextNavigation({
+      record: { id: 'user-1', preferences: { lang: 'en-US' } },
+      mode: 'readonly',
+      returnTo: '/admin/userMg',
+      startAdminContext,
+      storeAdminContext,
+      navigateToPreview,
+    });
+    expect(startAdminContext).toHaveBeenCalledOnce();
+    resolveStart({ status: 200, data: { contextToken: 'context-token' } });
+    await started;
+
+    expect(storeAdminContext).toHaveBeenCalledWith(
+      'context-token',
+      { lang: 'en-US' },
+      '/admin/userMg',
+    );
+    expect(navigateToPreview).toHaveBeenCalledWith(expect.stringContaining('/home?adminLoginPreview=1'));
+  });
+
+  it('上下文启动返回异常材料时停留在后台', async () => {
+    const navigateToPreview = vi.fn();
+    const result = await startAdminUserContextNavigation({
+      record: { id: 'user-1' },
+      mode: 'maintain',
+      returnTo: '/admin/userMg',
+      startAdminContext: vi.fn().mockResolvedValue({ status: 200, data: {} }),
+      storeAdminContext: vi.fn(),
+      navigateToPreview,
+    });
+    expect(result.started).toBe(false);
+    expect(navigateToPreview).not.toHaveBeenCalled();
+  });
+
   it('桌面与移动页面共用业务状态，用户详情跳转日志时携带安全返回路径', () => {
     const base = resolve(process.cwd(), 'src/view/admin/components');
     const desktop = readFileSync(resolve(base, 'userMg/UserMg.vue'), 'utf8');
@@ -110,6 +155,7 @@ describe('后台用户管理共享任务流', () => {
       expect(source).toContain('useAdminUserManagementList');
       expect(source).toContain('useAdminUserOperations');
       expect(source).not.toContain('deleteUserById');
+      expect(source).not.toContain('UserPreviewModal');
     }
     expect(detail).toContain('closeCurrentMobileOverlayThen(close');
     expect(detail).toContain("const returnTo = bookmark.isMobile ? '/userMg' : '/admin/userMg'");
@@ -121,6 +167,12 @@ describe('后台用户管理共享任务流', () => {
     expect(desktop).toContain('adminUserManagement.levelShort');
     expect(desktop).toContain('@preview="(record) => openPreview(record, \'readonly\')"');
     expect(mobile).toContain('@preview="(record) => openPreview(record, \'readonly\')"');
+    expect(readFileSync(resolve(base, 'userMg/useAdminUserManagement.ts'), 'utf8')).toContain(
+      "navigateToPreview(getAdminLoginPreviewUrl('/home'))",
+    );
+    expect(readFileSync(resolve(base, 'userMg/useAdminUserManagement.ts'), 'utf8')).toContain(
+      'if (previewOpeningUserId.value) return',
+    );
     expect(operationLog).toContain("value === '/admin/userMg' || value === '/userMg'");
     expect(operationLog).toContain('goBackToUserManagement');
   });
