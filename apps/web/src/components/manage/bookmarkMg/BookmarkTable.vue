@@ -33,6 +33,13 @@
         <SvgIcon :src="icon.common.add" color="currentColor" size="16" />
         {{ $t('navigation.newBookmark') }}
       </BButton>
+      <BBatchToggle
+        v-if="!bookmark.isMobile"
+        class="card-selection-toggle"
+        :active="selectionMode"
+        :disabled="selection.busy.value"
+        @click="toggleSelectionMode"
+      />
       <div v-if="embedded" class="bookmark-mode-control">
         <span>{{ $t('bookmarkMg.managementMode') }}</span>
         <BSwitch
@@ -210,10 +217,10 @@
                   </BButton>
                 </div>
                 <BBatchToggle
+                  v-if="bookmark.isMobile"
                   size="small"
-                  class="card-selection-toggle"
-                  @click="toggleSelectionMode"
                   :active="selectionMode"
+                  @click="toggleSelectionMode"
                 />
                 <b-input
                   v-model:value="tableSearchValue"
@@ -587,6 +594,10 @@
           </span>
         </template>
         <template #actions>
+          <BButton :disabled="!selectedRows.length || selection.busy.value" @click="selection.openTags('add')">
+            <SvgIcon :src="icon.resource.tag" size="16" aria-hidden="true" />
+            {{ $t('resourceCenter.batch.manageTags') }}
+          </BButton>
           <BButton :disabled="!selectedRows.length" @click="openSelectedAiOrganize">
             <SvgIcon :src="icon.ai.organize" size="16" aria-hidden="true" />
             {{ $t('bookmarkMg.aiOrganizeBtn') }}
@@ -752,7 +763,9 @@
     iconBatchIsActive.value ? Math.max(3, iconBatchProgressPercent.value) : iconBatchProgressPercent.value,
   );
   const selectionVisible = ref<any[]>([]);
-  const selection = useResourceSelection('bookmarks', selectionVisible, 'bookmark', loading);
+  const selection = useResourceSelection('bookmarks', selectionVisible, 'bookmark', loading, () =>
+    props.embedded && !props.managementMode ? true : init({ refreshIcons: false }),
+  );
   const selectedRows = selection.ids;
   const bookmarkAiVisible = ref(false);
   const bookmarkAiItems = ref<BookmarkInterface[]>([]);

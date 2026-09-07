@@ -204,9 +204,10 @@ describe('跨目录选择：组件、路由、请求闭环', () => {
     x.selection.selectVisible(true);
     mocks.preview.mockResolvedValueOnce(success(['single']));
     await x.selection.openTags('add', [{ id: 'single', type: 'note', title: 'single' }]);
-    expect(x.router.currentRoute.value.query.selectionSession).toBeTruthy();
+    expect(x.router.currentRoute.value.fullPath).toBe('/noteLibrary?parent=A');
+    expect(x.store.handoff?.drawer).toBe(true);
     expect(x.store.handoff?.operation.items.map((i) => i.id)).toEqual(['single']);
-    await x.router.replace('/noteLibrary?parent=B');
+    x.store.closeTags(x.store.handoff!.token);
     expect(x.selection.ids.value).toEqual(['a', 'b']);
     expect(x.store.busy).toBe(false);
   });

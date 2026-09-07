@@ -89,7 +89,7 @@ describe('笔记库批量 AI 操作语义', () => {
     expect(source).toContain(':indeterminate="someVisibleChecked"');
     expect(source).toContain(':menu-options="desktopBatchMoreOptions"');
     expect(source).toMatch(/const desktopBatchMoreOptions = computed\(\(\) => \[[\s\S]*key: 'move'/);
-    expect(source).toMatch(/const desktopBatchMoreOptions = computed\(\(\) => \[[\s\S]*key: 'manageTags'/);
+    expect(source).toMatch(/const desktopBatchMoreOptions = computed\(\(\) => \[[\s\S]*key: 'inbox'/);
     expect(source).not.toMatch(/key: '(addTags|removeTags)'/);
     expect(source).toMatch(/const desktopBatchMoreOptions = computed\(\(\) => \[[\s\S]*key: 'export'/);
     expect(source).not.toContain("key: 'analyze'");
@@ -147,9 +147,9 @@ describe('笔记库批量 AI 操作语义', () => {
     expect(source).not.toMatch(/noteAiMenuOptions[\s\S]{0,1400}(estimated|预计消耗)/);
   });
 
-  it('加入待整理是批量底栏高频动作，移动及标签等低频动作进入更多菜单', () => {
-    expect(source).toMatch(/<ResourceBatchActionBar[\s\S]*?@click="addSelectedNotesToInbox"/);
-    expect(source).toContain('<SvgIcon :src="icon.contextMenu.inbox" size="16"');
+  it('管理标签直接展示，加入待整理进入更多菜单', () => {
+    expect(source).toMatch(/<ResourceBatchActionBar[\s\S]*?@click="openBatchTags"/);
+    expect(source).toContain('<SvgIcon :src="icon.resource.tag" size="16"');
     expect(source).toMatch(
       /function addSelectedNotesToInbox\(\)[\s\S]*addResourcesToInbox\([\s\S]*resourceType: 'note'/,
     );

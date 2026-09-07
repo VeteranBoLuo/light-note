@@ -337,6 +337,7 @@
     computed(() => cloud.fileList),
     'file',
     computed(() => cloud.loading),
+    () => cloud.refreshLoadedFiles(),
   );
   const batchMode = selection.mode;
   const mobilePageActionsOpen = ref(false);

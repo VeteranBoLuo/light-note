@@ -474,4 +474,37 @@ describe('BDrawer compositor cleanup', () => {
     expect(onClose).toHaveBeenCalledOnce();
     expect(open.value).toBe(false);
   });
+  it('提交锁定时关闭按钮、Escape、遮罩和移动返回均不关闭，解锁后可返回', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    const locked = ref(true);
+    const onClose = vi.fn();
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      setup() {
+        return () => h(BDrawer, { open: true, title: '标签', closeDisabled: locked.value, onClose });
+      },
+    });
+    const pinia = createPinia();
+    app.use(pinia).use(createI18n({ legacy: false, locale: 'en', messages: { en: { common: { close: 'Close' } } } }));
+    bookmarkStore(pinia).screenWidth = 390;
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+    await nextTick();
+    expect(document.querySelector<HTMLButtonElement>('.b-drawer-close')!.disabled).toBe(true);
+    document.querySelector<HTMLElement>('.b-drawer-mask')!.click();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
+    await nextTick();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(window.history.state?.[MOBILE_OVERLAY_HISTORY_STATE_KEY]).toBeTruthy();
+    locked.value = false;
+    await nextTick();
+    window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
+    await nextTick();
+    expect(onClose).toHaveBeenCalledOnce();
+  });
 });

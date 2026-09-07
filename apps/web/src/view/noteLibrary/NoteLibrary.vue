@@ -510,13 +510,9 @@
         </span>
       </template>
       <template #actions>
-        <BButton
-          :disabled="!selectedVisibleCount || batchInboxMutating"
-          :loading="batchInboxMutating"
-          @click="addSelectedNotesToInbox"
-        >
-          <SvgIcon :src="icon.contextMenu.inbox" size="16" aria-hidden="true" />
-          {{ $t('inbox.addExisting') }}
+        <BButton :disabled="!selectedVisibleCount || selection.busy.value" @click="openBatchTags">
+          <SvgIcon :src="icon.resource.tag" size="16" aria-hidden="true" />
+          {{ $t('resourceCenter.batch.manageTags') }}
         </BButton>
         <BButton :disabled="!selectedVisibleCount" @click="openSelectedAiOrganize">
           <SvgIcon :src="icon.ai.organize" size="16" aria-hidden="true" />
@@ -944,6 +940,10 @@
     noteList,
     'note',
     computed(() => loading.value || refreshing.value),
+    () => {
+      noteLibraryCache.markListsStale(noteCacheScope.value);
+      return Promise.all([queryNotePage(1, false, true, true), getAllTags(true)]);
+    },
   );
   const batchMode = selection.mode;
   let exportOperation: SelectionOperation | null = null;
@@ -2126,10 +2126,12 @@
     return true;
   }
 
-  async function queryNotePage(targetPage: number, append = false, soft = false) {
+  async function queryNotePage(targetPage: number, append = false, soft = false, preserveLoaded = false) {
+    const loadedPages = preserveLoaded ? Math.max(1, notePage.value) : 1;
     const requestSeq = append ? noteRequestSeq : ++noteRequestSeq;
     const requestCacheKey = currentListCacheKey.value;
-    const returnScrollSnapshot = !append && soft && targetPage === 1 ? matchingMobileReturnScroll() : null;
+    const returnScrollSnapshot =
+      !preserveLoaded && !append && soft && targetPage === 1 ? matchingMobileReturnScroll() : null;
     const preservedItems = returnScrollSnapshot ? [...noteList.value] : [];
     const preservedPage = returnScrollSnapshot
       ? Math.max(notePage.value, returnScrollSnapshot.loadedPage)
@@ -2141,28 +2143,41 @@
       if (soft) refreshing.value = true;
       else loading.value = true;
       loadingMore.value = false;
-      if (!returnScrollSnapshot) {
+      if (!returnScrollSnapshot && !preserveLoaded) {
         notePage.value = 0;
         noteHasMore.value = false;
       }
     }
 
     try {
-      const res = await apiBasePost(
-        '/api/note/queryNoteList',
-        {
-          page: targetPage,
-          pageSize: RESOURCE_LIST_PAGE_SIZE,
-          // v2 让服务端返回已生成的纯文本摘要/首图位置，并省略正文前缀。
-          // 旧服务端会忽略该字段，客户端仍保留 content 解析兜底，支持滚动发布。
-          previewVersion: 2,
-          ...(noteTreeReadEnabled.value ? { parentId: currentParentId.value } : {}),
-          keyword: debouncedSearch.value,
-          tagId: getActiveNoteTagId(),
-        },
-        // 列表有本地骨架/软刷新状态，不再同时点亮全局顶部请求条。
-        { feedback: false },
-      );
+      const requestPage = (page: number) =>
+        apiBasePost(
+          '/api/note/queryNoteList',
+          {
+            page,
+            pageSize: RESOURCE_LIST_PAGE_SIZE,
+            // v2 让服务端返回已生成的纯文本摘要/首图位置，并省略正文前缀。
+            // 旧服务端会忽略该字段，客户端仍保留 content 解析兜底，支持滚动发布。
+            previewVersion: 2,
+            ...(noteTreeReadEnabled.value ? { parentId: currentParentId.value } : {}),
+            keyword: debouncedSearch.value,
+            tagId: getActiveNoteTagId(),
+          },
+          // 列表有本地骨架/软刷新状态，不再同时点亮全局顶部请求条。
+          { feedback: false },
+        );
+      const res = await requestPage(targetPage);
+      if (preserveLoaded && res.status === 200 && Array.isArray(res.data?.items)) {
+        const refreshedItems = [...res.data.items];
+        for (let page = 2; page <= loadedPages && res.data.hasMore; page++) {
+          if (requestSeq !== noteRequestSeq) return false;
+          const next = await requestPage(page);
+          if (requestSeq !== noteRequestSeq) return false;
+          if (next.status !== 200 || !Array.isArray(next.data?.items)) return false;
+          refreshedItems.push(...next.data.items);
+          res.data = { ...next.data, items: refreshedItems };
+        }
+      }
       if (requestSeq !== noteRequestSeq) return false;
       if (res.status !== 200) {
         message.error(t('note.loadFailed'));
@@ -2584,10 +2599,11 @@
         ]
       : []),
     {
-      key: 'manageTags',
-      label: t('resourceCenter.manageResourceTags'),
-      icon: icon.resource.tag,
-      function: openBatchTags,
+      key: 'inbox',
+      label: t('inbox.addExisting'),
+      icon: icon.contextMenu.inbox,
+      disabled: batchInboxMutating.value,
+      function: addSelectedNotesToInbox,
     },
     {
       key: 'export',

@@ -613,17 +613,21 @@
         </span>
       </template>
       <template #actions>
+        <BButton :disabled="!hasSelection || selection.busy.value" @click="selection.openTags('add')">
+          <SvgIcon :src="icon.resource.tag" size="16" aria-hidden="true" />
+          {{ $t('resourceCenter.batch.manageTags') }}
+        </BButton>
         <BButton :disabled="!hasSelection" @click="handleBatchMove">
           <SvgIcon :src="icon.cloudSpace.moveFile" size="16" aria-hidden="true" />
-          {{ $t('cloudSpace.batchMove') }}
+          {{ $t('resourceCenter.batch.moveShort') }}
         </BButton>
         <BButton :disabled="!hasSelection" :loading="batchDownloadLoading" @click="handleBatchDownload">
           <SvgIcon :src="icon.cloudSpace.download" size="16" aria-hidden="true" />
-          {{ $t('cloudSpace.batchDownload') }}
+          {{ $t('cloudSpace.download') }}
         </BButton>
         <BButton class="batch-action-delete" :disabled="!hasSelection" @click="handleBatchDelete">
           <SvgIcon :src="icon.table_delete" size="16" aria-hidden="true" />
-          {{ $t('cloudSpace.batchDelete') }}
+          {{ $t('common.delete') }}
         </BButton>
       </template>
     </ResourceBatchActionBar>
@@ -939,6 +943,12 @@
   );
   const mobileBatchActions = computed<MobilePageActionItem[]>(() => [
     {
+      key: 'tags',
+      label: t('resourceCenter.batch.manageTags'),
+      icon: icon.resource.tag,
+      disabled: !hasSelection.value || selection.busy.value,
+    },
+    {
       key: 'outcome',
       label: t('resourceOutcome.primaryAction'),
       icon: icon.common.magicWand,
@@ -1025,7 +1035,8 @@
   }
 
   function handleMobileBatchAction(action: MobilePageActionItem) {
-    if (action.key === 'outcome') openSelectedOutcomeDrawer();
+    if (action.key === 'tags') void selection.openTags('add');
+    else if (action.key === 'outcome') openSelectedOutcomeDrawer();
     else if (action.key === 'clear') clearSelectedFiles();
     else if (action.key === 'move') handleBatchMove();
     else if (action.key === 'download') void handleBatchDownload();

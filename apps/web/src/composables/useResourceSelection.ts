@@ -39,12 +39,34 @@ export function useResourceSelection(
   visible: Ref<any[]>,
   type?: SelectedResource['type'],
   loading: Ref<boolean> = computed(() => false),
+  onTagsUpdated?: () => unknown,
 ) {
   const store = useResourceSelectionStore();
   const user = useUserStore();
   const router = useRouter();
   const { t } = useI18n();
   const active = computed(() => store.module === owner && store.identity === buildNoteDetailRequestScope(user));
+  watch(
+    () => store.tagUpdate,
+    () => {
+      if (active.value && onTagsUpdated) {
+        const identity = store.identity;
+        const session = store.session;
+        const reportFailure = () => {
+          if (active.value && store.identity === identity) message.warning(t('resourceCenter.batch.refreshFailed'));
+        };
+        void Promise.resolve()
+          .then(() =>
+            active.value && store.identity === identity && store.session === session ? onTagsUpdated() : undefined,
+          )
+          .then((result) => {
+            if (result === false || (Array.isArray(result) && result.some((value) => value === false))) reportFailure();
+          })
+          .catch(reportFailure);
+      }
+    },
+    { flush: 'sync' },
+  );
   const candidates = computed(() =>
     loading.value
       ? []
@@ -230,20 +252,10 @@ export function useResourceSelection(
       if (transient && active.value && store.session === startedSession) store.end();
       return;
     }
-    const token = store.handoffTags(op, router.currentRoute.value.fullPath, transient);
-    try {
-      const failure = await router.push({
-        path: '/search/batch-tags',
-        query: { mode: action, selectionSession: token, from: router.currentRoute.value.fullPath },
-      });
-      if (!failure) return;
-    } catch {
-      // 路由加载失败仍保留选择，只结束本次子操作。
-    }
-    if (store.isCurrent(op)) {
-      store.handoff = null;
-      finish(op);
-      if (transient) store.end();
+    store.handoffTags(op, router.currentRoute.value.fullPath, transient);
+    if (store.handoff) {
+      store.handoff.mode = action;
+      store.handoff.drawer = true;
     }
   }
   onScopeDispose(() => {

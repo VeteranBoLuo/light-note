@@ -177,6 +177,51 @@ export default defineStore('dom', {
         if (!append) void this.getUsedSpace();
       }
     },
+    async refreshLoadedFiles() {
+      // 标签操作不改变排序或文件范围，保留已展开的分页，避免列表缩回第一页。
+      const requestVersion = ++this.fileRequestVersion;
+      const pages = Math.max(1, this.filePage);
+      const filters = {
+        fileName: this.searchFileName,
+        category: this.typeCheckValue,
+        folderId: this.folder?.id ?? 'all',
+      };
+      const sort = this.fileSort;
+      const items: any[] = [];
+      let payload: any;
+      try {
+        for (let page = 1; page <= pages; page++) {
+          const response = await apiQueryPost('/api/file/queryFiles', {
+            pageSize: RESOURCE_LIST_PAGE_SIZE,
+            currentPage: page,
+            filters,
+            sort,
+          });
+          if (
+            requestVersion !== this.fileRequestVersion ||
+            response?.status !== 200 ||
+            !Array.isArray(response.data?.items)
+          )
+            return false;
+          payload = response.data;
+          items.push(...payload.items);
+          if (!payload.hasMore) break;
+        }
+        if (requestVersion !== this.fileRequestVersion || !payload) return false;
+        this.fileList = mergeResourcePage([], items);
+        this.filePage = Number(payload.page || pages);
+        this.fileTotal = Number(payload.total || 0);
+        this.fileHasMore = Boolean(payload.hasMore);
+        return true;
+      } catch {
+        return false;
+      } finally {
+        if (requestVersion === this.fileRequestVersion) {
+          this.loading = false;
+          this.loadingMore = false;
+        }
+      }
+    },
     loadMoreFiles() {
       return this.queryFieldList({ append: true });
     },

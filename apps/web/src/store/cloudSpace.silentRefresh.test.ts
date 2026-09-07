@@ -191,3 +191,46 @@ describe('账号身份切换', () => {
     expect(cloud.loading).toBe(true);
   });
 });
+
+describe('标签完成后的已加载范围刷新', () => {
+  it('完整加载原页数后一次更新，不回到第一页或提前清空', async () => {
+    const cloud = cloudSpaceStore();
+    cloud.fileList = [file('old')] as any;
+    cloud.filePage = 2;
+    cloud.fileHasMore = true;
+    apiQueryPost.mockImplementation(async (_url, body) => {
+      expect(cloud.fileList[0].id).toBe('old');
+      expect(cloud.loading).toBe(false);
+      return {
+        status: 200,
+        data: { items: [file(String(body.currentPage))], page: body.currentPage, total: 3, hasMore: true },
+      };
+    });
+    expect(await cloud.refreshLoadedFiles()).toBe(true);
+    expect(cloud.fileList.map((item) => item.id)).toEqual(['1', '2']);
+    expect(cloud.filePage).toBe(2);
+    expect(apiQueryPost.mock.calls.map((call) => call[1].currentPage)).toEqual([1, 2]);
+  });
+  it('后续页失败时保留旧列表与分页，切换身份后丢弃旧响应', async () => {
+    const cloud = cloudSpaceStore();
+    cloud.fileList = [file('old')] as any;
+    cloud.filePage = 2;
+    apiQueryPost
+      .mockResolvedValueOnce({ status: 200, data: { items: [file('new')], page: 1, hasMore: true } })
+      .mockResolvedValueOnce({ status: 500 });
+    expect(await cloud.refreshLoadedFiles()).toBe(false);
+    expect(cloud.fileList[0].id).toBe('old');
+    expect(cloud.filePage).toBe(2);
+    let resolve!: (value: any) => void;
+    apiQueryPost.mockReturnValueOnce(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    const pending = cloud.refreshLoadedFiles();
+    cloud.reset({ showLoading: true });
+    resolve({ status: 200, data: { items: [file('stale')], page: 1, hasMore: false } });
+    expect(await pending).toBe(false);
+    expect(cloud.fileList).toEqual([]);
+  });
+});

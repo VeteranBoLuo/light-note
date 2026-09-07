@@ -41,6 +41,7 @@
         <GuestNudge v-if="nudgeVisible && !publicStandaloneRoute" />
         <AndroidDownloadProgress v-if="isAndroidApp && !publicStandaloneRoute" />
         <DisplayScaleSuggestion v-if="!publicStandaloneRoute" />
+        <ResourceBatchTagsHost v-if="!publicStandaloneRoute" />
         <ResourceSelectionDrawer v-if="!publicStandaloneRoute" />
         <AdminContextBanner v-if="user.adminContext && !publicStandaloneRoute" />
         <QuickCaptureModal
@@ -53,6 +54,7 @@
   </div>
 </template>
 <script setup lang="ts">
+  import ResourceBatchTagsHost from '@/components/resourceActions/ResourceBatchTagsHost.vue';
   import ResourceSelectionDrawer from '@/components/resourceActions/ResourceSelectionDrawer.vue';
   import { useResourceSelectionRuntime } from '@/composables/useResourceSelection';
   import { bookmarkStore, inboxStore, useUserStore } from '@/store';

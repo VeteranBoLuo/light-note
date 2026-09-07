@@ -840,6 +840,7 @@
     computed(() => viewState.rawItems.filter((item) => isTaggableResourceType(item.type))),
     undefined,
     computed(() => viewState.loading),
+    () => loadData(true, SKELETON_DELAY_MS, false, true, true),
   );
   const selectedIds = selectionSession.ids;
   const searchAiVisible = ref(false);
@@ -1403,7 +1404,14 @@
    *   顶部指示器负责表达进度。游标仍要重置（刷新等于回到第一页），
    *   但 rawItems 不清空，请求失败时结果原样保留。
    */
-  async function loadData(force = false, skeletonDelayMs = SKELETON_DELAY_MS, append = false, silent = false) {
+  async function loadData(
+    force = false,
+    skeletonDelayMs = SKELETON_DELAY_MS,
+    append = false,
+    silent = false,
+    preserveLoaded = false,
+  ) {
+    const loadedCount = preserveLoaded ? viewState.rawItems.length : 0;
     if (append && (viewState.loading || viewState.loadingMore || !viewState.hasMore)) return false;
     const seq = append ? requestSeq : ++requestSeq;
     const previousPagination =
@@ -1445,6 +1453,31 @@
         includeMetadata: !append,
         separateTagMatches: true,
       });
+      if (preserveLoaded) {
+        const refreshedItems = normalizeSearchResultItems(res);
+        while (res.hasMore && res.nextCursor && refreshedItems.length < loadedCount) {
+          if (seq !== requestSeq) return false;
+          const next = await fetchGlobalSearch(queryState.keyword, SEARCH_PAGE_SIZE, true, {
+            type: queryState.types.length === 1 ? queryState.types[0] : 'all',
+            types: selectedTypes.value,
+            sort: queryState.sort,
+            date: queryState.date,
+            tags: queryState.tags,
+            untagged: queryState.untagged,
+            paginationMode: 'ordered',
+            cursor: res.nextCursor,
+            includeMetadata: false,
+            separateTagMatches: true,
+          });
+          if (seq !== requestSeq) return false;
+          refreshedItems.push(...normalizeSearchResultItems(next));
+          const unchangedCursor = res.nextCursor === next.nextCursor;
+          res.nextCursor = next.nextCursor;
+          res.hasMore = next.hasMore;
+          if (unchangedCursor) break;
+        }
+        res.items = refreshedItems;
+      }
       if (seq !== requestSeq) return false;
       const normalizedItems = normalizeSearchResultItems(res);
       viewState.rawItems = append

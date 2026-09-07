@@ -26,9 +26,6 @@
       @title-click="resetBookmarkView"
     >
       <template #actions>
-        <template v-if="batchMode && !bookmark.isMobile">
-          <BBatchToggle class="bookmark-batch-toggle" @click="exitBatch" :active="batchMode" />
-        </template>
         <!-- 移动端不放第二个文本搜索框：找书签统一走顶栏全局搜索，
              这里只保留标签筛选等结构化入口。桌面端仍有自己的搜索框。 -->
         <div v-if="!bookmark.isMobile" class="bookmark-search-action">
@@ -61,6 +58,13 @@
           <SvgIcon :src="icon.common.add" size="16" />
           {{ $t('navigation.newBookmark') }}
         </BButton>
+        <BBatchToggle
+          v-if="!bookmark.isMobile"
+          class="bookmark-batch-toggle"
+          :active="batchMode"
+          :disabled="selection.busy.value"
+          @click="toggleDesktopBatch"
+        />
         <div v-if="bookmark.isDesktop" class="bookmark-mode-control">
           <span>{{ $t('bookmarkMg.managementMode') }}</span>
           <BSwitch
@@ -113,11 +117,15 @@
           :disabled="selection.busy.value || bookmark.bookmarkLoading"
           @change="selection.selectVisible"
       /></template>
-      <template #actions
-        ><BButton type="danger" :disabled="selection.busy.value || !selectedIds.length" @click="handleBatchDelete">{{
+      <template #actions>
+        <BButton :disabled="selection.busy.value || !selectedIds.length" @click="selection.openTags('add')">
+          <SvgIcon :src="icon.resource.tag" size="16" aria-hidden="true" />
+          {{ $t('resourceCenter.batch.manageTags') }}
+        </BButton>
+        <BButton type="danger" :disabled="selection.busy.value || !selectedIds.length" @click="handleBatchDelete">{{
           $t('common.delete')
-        }}</BButton></template
-      >
+        }}</BButton>
+      </template>
     </ResourceBatchActionBar>
     <BDrawer
       v-if="bookmark.isMobile"
@@ -195,11 +203,24 @@
     computed(() => bookmark.bookmarkList),
     'bookmark',
     computed(() => bookmark.bookmarkLoading),
+    () => (desktopManagementMode.value ? true : refreshBookmarkTags()),
   );
   const batchMode = selection.mode;
   const selectedIds = selection.ids;
   const mobileBatchActionsOpen = ref(false);
   const mobileBatchActions = computed<MobilePageActionItem[]>(() => [
+    {
+      key: 'manageTags',
+      label: t('resourceCenter.batch.manageTags'),
+      icon: icon.resource.tag,
+      disabled: selection.busy.value || !selectedIds.value.length,
+    },
+    {
+      key: 'smartOrganize',
+      label: t('bookmarkMg.aiOrganizeBtn'),
+      icon: icon.ai.organize,
+      disabled: selection.busy.value || !selectedIds.value.length,
+    },
     {
       key: 'clear',
       label: t('resourceOutcome.batch.clear'),
@@ -216,7 +237,9 @@
     },
   ]);
   function handleBatchAction(action: MobilePageActionItem) {
-    if (action.key === 'delete') void handleBatchDelete();
+    if (action.key === 'manageTags') void selection.openTags('add');
+    else if (action.key === 'smartOrganize') void selection.openOrganize();
+    else if (action.key === 'delete') void handleBatchDelete();
     else selection.clear();
   }
   const batchMutating = ref(false);
@@ -362,6 +385,18 @@
       return;
     }
     selectedIds.value = [...new Set([...selectedIds.value, ...visibleIds])];
+  }
+
+  async function toggleDesktopBatch() {
+    if (batchMode.value) return exitBatch();
+    if (bookmark.isDesktop && !desktopManagementMode.value) {
+      await router.replace({
+        name: route.name || 'home',
+        params: route.params,
+        query: { ...route.query, mode: 'manage' },
+      });
+    }
+    enterBatch();
   }
 
   function enterBatch() {
@@ -570,8 +605,10 @@
    * - 不走最小骨架时长，那是为了骨架屏不闪，静默刷新没有骨架。
    * 静默请求失败时不写入，旧列表与计数原样保留；普通请求失败则由嵌入管理页展示可重试状态。
    */
-  async function loadCurrentBookmarkPage(options: { silent?: boolean } = {}) {
+  async function loadCurrentBookmarkPage(options: { silent?: boolean; preserveLoaded?: boolean } = {}) {
     const silent = Boolean(options.silent);
+    const loadedPages = options.preserveLoaded ? bookmark.bookmarkPage : 1;
+    const filterParams = getBookmarkRequestParams();
     const requestSequence = ++bookmarkRequestSequence;
     const requestType = bookmark.type;
     if (!silent) {
@@ -614,7 +651,15 @@
         return;
       }
 
-      if (requestSequence !== bookmarkRequestSequence) return;
+      if (result && options.preserveLoaded && filterParams) {
+        for (let page = 2; page <= loadedPages && result.hasMore; page++) {
+          if (requestSequence !== bookmarkRequestSequence) return false;
+          const next = await fetchBookmarkList(requestType, filterParams, page);
+          if (!next) return false;
+          result = { ...next, items: mergeResourcePage(result.items, next.items) };
+        }
+      }
+      if (requestSequence !== bookmarkRequestSequence) return false;
       if (result) {
         bookmark.bookmarkList = result.items;
         bookmark.bookmarkPage = result.page;
@@ -629,9 +674,11 @@
       }
       if (!silent) scrollToTop();
       void cacheImages(result?.items || []);
+      return Boolean(result);
     } catch (error) {
       if (!silent && requestSequence === bookmarkRequestSequence) bookmarkLoadError.value = true;
       console.warn('加载书签失败:', error);
+      return false;
     } finally {
       if (!silent) {
         const elapsed = Date.now() - loadingStart;
@@ -646,7 +693,16 @@
     }
   }
 
+  async function refreshBookmarkTags() {
+    const [updated] = await Promise.all([
+      loadCurrentBookmarkPage({ silent: true, preserveLoaded: true }),
+      queryTagList(true),
+    ]);
+    return updated;
+  }
+
   async function reloadEmbeddedManagement(_options: { refreshIcons?: boolean } = {}) {
+    if (_options.refreshIcons === false) return refreshBookmarkTags();
     await Promise.all([loadCurrentBookmarkPage({ silent: false }), queryTagList(true)]);
     return true;
   }

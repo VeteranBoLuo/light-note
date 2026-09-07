@@ -58,6 +58,7 @@
             <BButton
               v-if="mobileCenteredHeader"
               class="b-drawer-close b-drawer-close--leading"
+              :disabled="closeDisabled"
               :aria-label="closeLabel || t('common.close')"
               @click="handleClose"
             >
@@ -70,6 +71,7 @@
             <BButton
               v-if="!mobileCenteredHeader"
               class="b-drawer-close"
+              :disabled="closeDisabled"
               :aria-label="closeLabel || t('common.close')"
               @click="handleClose"
             >
@@ -114,6 +116,7 @@
       height?: string;
       placement?: 'right' | 'bottom';
       maskClosable?: boolean;
+      closeDisabled?: boolean;
       fullScreen?: boolean;
       mobileFullScreen?: boolean;
       mobileCenteredHeader?: boolean;
@@ -140,6 +143,7 @@
       height: 'min(76dvh, 640px)',
       placement: 'right',
       maskClosable: true,
+      closeDisabled: false,
       fullScreen: false,
       mobileFullScreen: false,
       mobileCenteredHeader: false,
@@ -280,6 +284,10 @@
 
   function closeFromMobileHistory() {
     historyHandle = null;
+    if (props.closeDisabled) {
+      historyHandle = registerMobileOverlayHistory(closeFromMobileHistory);
+      return;
+    }
     emit('close');
   }
 
@@ -355,6 +363,7 @@
   }
 
   function handleClose() {
+    if (props.closeDisabled) return;
     if (historyHandle && requestMobileOverlayHistoryClose(historyHandle)) return;
     historyHandle = null;
     emit('close');

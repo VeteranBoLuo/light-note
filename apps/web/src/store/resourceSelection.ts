@@ -79,7 +79,26 @@ export const useResourceSelectionStore = defineStore('resourceSelection', () => 
     summary: BatchSelectionSummary;
     excludedItems: BatchResourceItem[];
   } | null>(null);
-  const handoff = ref<{ token: string; from: string; operation: SelectionOperation; transient: boolean } | null>(null);
+  const handoff = ref<{
+    token: string;
+    from: string;
+    operation: SelectionOperation;
+    transient: boolean;
+    drawer?: boolean;
+    mode?: 'add' | 'remove';
+  } | null>(null);
+  const tagUpdate = ref(0);
+  function completeTags(token: string) {
+    if (handoff.value?.token === token && isCurrent(handoff.value.operation)) tagUpdate.value++;
+  }
+  function closeTags(token: string) {
+    const current = handoff.value;
+    if (!current || current.token !== token) return;
+    handoff.value = null;
+    if (!isCurrent(current.operation)) return;
+    if (current.transient) end();
+    else finish(current.operation);
+  }
   let request = 0;
   const keys = computed(() => new Set(items.value.map(resourceSelectionKey)));
   const count = computed(() =>
@@ -182,6 +201,7 @@ export const useResourceSelectionStore = defineStore('resourceSelection', () => 
       end();
       return;
     }
+    if (handoff.value?.drawer) return;
     if (handoff.value?.transient) {
       end();
       return;
@@ -202,6 +222,9 @@ export const useResourceSelectionStore = defineStore('resourceSelection', () => 
     pendingReconcile,
     query,
     handoff,
+    tagUpdate,
+    completeTags,
+    closeTags,
     keys,
     count,
     start,

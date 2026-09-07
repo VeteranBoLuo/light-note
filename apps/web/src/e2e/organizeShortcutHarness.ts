@@ -10,12 +10,19 @@ import { useResourceSelection, useResourceSelectionRuntime } from '@/composables
 import { bookmarkStore } from '@/store';
 import Workspace from '@/view/organize/OrganizeSuggestionWorkspace.vue';
 import Center from '@/view/organize/OrganizeCenter.vue';
+import MainLayout from '@/view/index.vue';
 import BButton from '@/components/base/BasicComponents/BButton.vue';
 import type { RunOptions, SuggestionRun } from '@/api/organizeSuggestionApi';
 import '@/assets/css/index.less';
 
 // 本地验收只使用固定资料和内存响应，不访问数据库或模型。
 const params = new URLSearchParams(location.search);
+if (params.has('layout')) {
+  for (const element of [document.documentElement, document.body, document.getElementById('app')!]) {
+    element.style.height = '100%';
+    element.style.margin = '0';
+  }
+}
 const counters = ref({ previews: 0, starts: 0 });
 const type = params.get('type') === 'bookmark' ? 'bookmark' : 'note';
 const state = params.get('state') || 'success';
@@ -27,7 +34,8 @@ request.defaults.adapter = async (config) => {
   const url = String(config.url);
   const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
   let data: unknown = [];
-  if (url.endsWith('/batchSelectionPreview')) data = { resolvedItems: resources, unavailableItems: [] };
+  if (url.endsWith('/summary')) data = null;
+  else if (url.endsWith('/batchSelectionPreview')) data = { resolvedItems: resources, unavailableItems: [] };
   else if (url.endsWith('/previews')) {
     counters.value.previews++;
     await new Promise((resolve) => setTimeout(resolve, state === 'loading' ? 5000 : 100));
@@ -99,8 +107,21 @@ const Source = defineComponent({
 const router = createRouter({
   history: createMemoryHistory(),
   routes: [
-    { path: '/', component: Source },
-    { path: '/organize', component: params.has('center') ? Center : Workspace },
+    ...(params.has('layout')
+      ? [
+          {
+            path: '/',
+            component: MainLayout,
+            children: [
+              { path: '', component: Source },
+              { path: 'organize', name: 'organizeCenter', component: Center },
+            ],
+          },
+        ]
+      : [
+          { path: '/', component: Source },
+          { path: '/organize', component: params.has('center') ? Center : Workspace },
+        ]),
   ],
 });
 const app = createApp({
@@ -114,12 +135,13 @@ const app = createApp({
     sync();
     window.addEventListener('resize', sync);
     return () =>
-      h('div', [
-        h(
-          'p',
-          { style: 'margin:0;padding:8px', role: 'status' },
-          `预检 ${counters.value.previews} 次 · 启动 ${counters.value.starts} 次`,
-        ),
+      h('div', { style: 'height:100%' }, [
+        !params.has('layout') &&
+          h(
+            'p',
+            { style: 'margin:0;padding:8px', role: 'status' },
+            `预检 ${counters.value.previews} 次 · 启动 ${counters.value.starts} 次`,
+          ),
         h(RouterView),
       ]);
   },

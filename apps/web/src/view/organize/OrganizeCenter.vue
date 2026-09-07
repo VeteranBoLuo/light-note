@@ -687,10 +687,22 @@
       :actions="mobileUntaggedActions"
       @action="handleMobileUntaggedAction"
     />
+    <ResourceBatchTagsDrawer
+      v-if="tagDrawerSnapshot"
+      :selection="tagDrawerSnapshot.selection"
+      :initial-items="tagDrawerSnapshot.items"
+      :count="tagDrawerSnapshot.items.length"
+      :is-current="tagDrawerIsCurrent"
+      @updated="refreshAfterTags"
+      @close="tagDrawerSnapshot = null"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
+  import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
+  import ResourceBatchTagsDrawer from '@/components/resourceActions/ResourceBatchTagsDrawer.vue';
+  import type { BatchSelection } from '@/api/search';
   import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
@@ -1273,22 +1285,28 @@
     else if (action.key === 'delete') confirmDeleteUntagged();
   }
 
+  const tagDrawerSnapshot = ref<{
+    selection: BatchSelection;
+    items: Array<{ id: string; type: 'bookmark' | 'note' | 'file'; title: string }>;
+    identity: string;
+  } | null>(null);
+  const tagDrawerIsCurrent = () =>
+    !!tagDrawerSnapshot.value && tagDrawerSnapshot.value.identity === buildNoteDetailRequestScope(user);
   function openBatchTags(items: UntaggedResourceItem[]) {
     const resources = items.map((item) => ({
-      id: item.resourceId,
+      id: String(item.resourceId),
       type: item.resourceType,
       title: item.title,
     }));
-    if (!resources.length) return;
-    sessionStorage.setItem(
-      'resource-center-batch-items',
-      JSON.stringify({
-        selection: { mode: 'explicit', items: resources.map(({ id, type }) => ({ id, type })) },
-        items: resources,
-        selectedCount: resources.length,
-      }),
-    );
-    void router.push({ path: '/search/batch-tags', query: { mode: 'add', from: route.fullPath } });
+    if (!resources.length || tagDrawerSnapshot.value) return;
+    tagDrawerSnapshot.value = {
+      selection: { mode: 'explicit', items: resources.map(({ id, type }) => ({ id, type })) },
+      items: resources,
+      identity: buildNoteDetailRequestScope(user),
+    };
+  }
+  async function refreshAfterTags() {
+    await Promise.all([loadUntagged(true), refreshSummary()]);
   }
 
   async function ignoreSelectedUntagged() {
