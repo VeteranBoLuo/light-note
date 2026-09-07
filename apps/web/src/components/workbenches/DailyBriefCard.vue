@@ -1,5 +1,25 @@
 <template>
-  <article v-if="showCard" class="daily-brief-card" :aria-busy="busy || undefined">
+  <article v-if="compact && showCard" v-bind="$attrs" class="daily-brief-card daily-brief-card--summary">
+    <header class="daily-brief-card__header">
+      <span class="daily-brief-card__ai-mark" aria-hidden="true">AI</span>
+      <div class="daily-brief-card__heading">
+        <div class="daily-brief-card__title-row"><h2>{{ t('workbench.dailyBrief.title') }}</h2></div>
+        <p role="status">{{ guestSample ? t('workbench.dailyBrief.guestSubtitle') : statusText || (readyBrief ? t('workbench.dailyBrief.generatedMeta', { time: generatedTime }) : t('workbench.dailyBrief.subtitle')) }}</p>
+      </div>
+      <BButton v-if="!readOnly && !guestSample" size="small" :loading="briefUpdating" :disabled="busy" :aria-label="t('workbench.dailyBrief.updateAction')" @click="update">
+        <SvgIcon v-if="!briefUpdating" :src="icon.infrastructure.refresh" size="18" aria-hidden="true" />
+      </BButton>
+    </header>
+    <div class="daily-brief-card__summary-copy">
+      <p class="daily-brief-card__headline">{{ displayBrief?.headline || t(errorMessage ? 'workbench.dailyBrief.failedTitle' : 'workbench.dailyBrief.subtitle') }}</p>
+      <BButton size="small" @click="detailsVisible = true">
+        {{ t('workbench.dailyBrief.viewBrief') }}<span v-if="briefInsights.length"> · {{ briefInsights.length }}</span>
+        <SvgIcon :src="icon.ai.sourceArrow" size="13" aria-hidden="true" />
+      </BButton>
+    </div>
+  </article>
+  <component :is="compact ? BModal : BriefInline" v-model:visible="detailsVisible" :title="t('workbench.dailyBrief.title')" :show-footer="false" content-class="daily-brief-detail-content" fullscreen-mobile>
+  <article v-if="showCard" v-bind="compact ? {} : $attrs" class="daily-brief-card" :class="{ 'daily-brief-card--detail': compact }" :aria-busy="busy || undefined">
     <header class="daily-brief-card__header">
       <span class="daily-brief-card__ai-mark" aria-hidden="true">AI</span>
       <div class="daily-brief-card__heading">
@@ -125,6 +145,7 @@
               >
                 {{ t(index === 0 ? 'workbench.dailyBrief.recentSource' : 'workbench.dailyBrief.olderSource') }} ·
                 {{ source.title }}
+                <SvgIcon :src="icon.ai.sourceArrow" size="13" aria-hidden="true" />
               </BButton>
             </div>
           </div>
@@ -152,10 +173,12 @@
       </div>
     </div>
   </article>
+  </component>
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, defineComponent, ref, watch } from 'vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import type { DailyBrief, DailyBriefInsight } from '@/api/dailyBriefApi';
@@ -167,9 +190,14 @@
   import icon from '@/config/icon';
   import { resolveBriefSourceTarget, resolveBriefOrganizeActions } from '@/utils/dailyBriefNavigation';
 
-  const props = withDefaults(defineProps<{ eligible: boolean; ownerKey: string; readOnly?: boolean }>(), {
+  const props = withDefaults(defineProps<{ eligible: boolean; ownerKey: string; readOnly?: boolean; compact?: boolean }>(), {
     readOnly: false,
+    compact: false,
   });
+  defineOptions({ inheritAttrs: false });
+  const BriefInline = defineComponent({ inheritAttrs: false, setup: (_, { slots }) => () => slots.default?.() });
+  const detailsVisible = ref(false);
+  watch(() => props.ownerKey, () => { detailsVisible.value = false; });
   const { t, locale } = useI18n();
   const router = useRouter();
   const guestSample = computed(() => !props.eligible && !props.readOnly);
@@ -277,6 +305,14 @@
 </script>
 
 <style scoped lang="less">
+  .daily-brief-card__summary-copy {
+    padding: 0 13px 12px;
+    :deep(.b_btn) {
+      padding: 2px 0;
+      color: var(--info-color);
+      background: transparent;
+    }
+  }
   /* 通栏简报完整展示；高度由内容决定，不与相邻业务卡片绑定。 */
   .daily-brief-card {
     min-width: 0;
@@ -297,6 +333,28 @@
     align-items: center;
     gap: 9px;
     padding: 11px 13px 9px;
+  }
+
+  :global(.modal-view.is-mobile-fullscreen .modal-content.daily-brief-detail-content) {
+    overflow-y: auto;
+  }
+
+  .daily-brief-card--detail {
+    padding: 16px;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+  }
+
+  .daily-brief-card--detail .daily-brief-card__header {
+    padding: 0 0 12px;
+  }
+
+  .daily-brief-card--detail .daily-brief-card__narrative,
+  .daily-brief-card--detail .daily-brief-card__state {
+    padding-left: 0;
+    padding-right: 0;
   }
 
   .daily-brief-card__ai-mark {
@@ -506,10 +564,20 @@
     }
     :deep(button) {
       max-width: 100%;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      height: auto;
+      min-height: 28px;
+      padding: 2px 4px;
+      gap: 4px;
+      color: var(--info-color);
+      background: transparent;
+      white-space: normal;
       font-size: 11px;
+      line-height: 1.5;
+
+      &:hover {
+        background: transparent;
+        text-decoration: underline;
+      }
     }
   }
 
@@ -615,6 +683,18 @@
   }
 
   @media (max-width: 760px) {
+    .daily-brief-insight {
+      display: block;
+    }
+    .daily-brief-insight__marker {
+      float: left;
+      margin: 1px 7px 0 0;
+    }
+    .daily-brief-insight__sources,
+    .daily-brief-insight__organize-actions {
+      clear: both;
+      margin-top: 4px;
+    }
     .daily-brief-card__insights {
       grid-template-columns: minmax(0, 1fr);
     }

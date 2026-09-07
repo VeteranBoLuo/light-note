@@ -25,12 +25,14 @@
       <BButton size="small" :loading="loading" @click="loadToday">{{ t('common.retry') }}</BButton>
     </div>
 
+    <div class="mobile-today__brief">
     <DailyBriefCard
-      class="mobile-today__brief"
+      compact
       :eligible="Boolean(user.id && user.role !== 'visitor')"
       :owner-key="dailyBriefOwnerKey"
       :read-only="growthReadOnly"
     />
+    </div>
 
     <section class="mobile-today__pending" :aria-label="t('workbench.panel.todaySummary')">
       <div class="mobile-today__pending-head">
@@ -554,6 +556,9 @@
 
   .mobile-today__brief {
     margin-bottom: 14px;
+  }
+  .mobile-today__brief:empty {
+    display: none;
   }
 
   .mobile-today__pending {

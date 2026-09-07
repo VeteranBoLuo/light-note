@@ -5098,6 +5098,7 @@ export default {
     title: 'Workbench',
     subtitle: 'Resume recent work, handle items that need organizing, and create new content quickly.',
     dailyBrief: {
+      viewBrief: 'View daily brief',
       guestSubtitle: 'Connect tasks, bookmarks and notes to find your next step.',
       viewTodos: 'View tasks',
 

@@ -38,7 +38,9 @@ describe('今日简报展示契约', () => {
   });
   it('通栏简报自然增高、保留完整AI叙事及加载失败面板', () => {
     expect(card).toContain('height: auto;');
-    expect(card).not.toContain('overflow-y: auto;');
+    const narrativeStyle = card.match(/\.daily-brief-card__narrative\s*\{([^}]+)\}/)?.[1];
+    expect(narrativeStyle).toBeTruthy();
+    expect(narrativeStyle).not.toContain('overflow-y: auto;');
     expect(card).toContain('displayBrief.value?.insights || []');
     expect(card).toContain("(loading || state?.status === 'generating') && !readyBrief");
     expect(card).toContain('daily-brief-card__refresh-error');

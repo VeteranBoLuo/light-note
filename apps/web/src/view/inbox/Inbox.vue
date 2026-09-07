@@ -1317,11 +1317,11 @@
     let refreshed = false;
     let inboxCountsReady = false;
     if (inbox.filterType === 'todo') {
-      // 四象限首次作为默认视图进入时，store 的 effectiveStatus 仍可能是 all；
-      // 显式使用当前状态页签，避免“未完成”高亮却混入已完成待办。
+      // 列表与四象限按当前页签查询；议程和日历读取全量并保留页签选择。
       refreshed = await todo.refreshList({
         silent,
-        ...(todoView.value === 'matrix' ? { status: todo.status } : {}),
+        status: todoViewUsesStatusFilter(todoView.value) ? todo.status : 'all',
+        preserveStatus: !todoViewUsesStatusFilter(todoView.value),
       });
       inboxCountsReady = await inbox.refreshCount();
     } else if (inbox.filterType === 'all') {

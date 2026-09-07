@@ -4789,6 +4789,7 @@ export default {
     title: '工作台',
     subtitle: '从最近内容继续工作，集中处理待整理事项，并快速创建新内容。',
     dailyBrief: {
+      viewBrief: '查看今日简报',
       guestSubtitle: '串联待办、收藏与笔记，找到今天值得推进的一步',
       viewTodos: '查看待办',
 
